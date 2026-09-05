@@ -6,9 +6,10 @@
  * file. Change the function in both places; the funnel test compares them.
  */
 
-export const AUTH_TOKEN_KEY = 'xenoos_auth_token';
 export const ONBOARDING_PATH = '/onboarding';
+export const ONBOARDING_WELCOME_PATH = '/overview/welcome';
 export const ONBOARDING_DONE_KEY = 'xeno_onboarding_done';
+export const ONBOARDING_WELCOME_DONE_KEY = 'xeno_onboarding_welcome_done';
 export const ONBOARDING_NEXT_KEY = 'xeno_onboarding_next';
 export const RETURN_URL_KEY = 'xeno_return_url';
 
@@ -68,6 +69,17 @@ export function destinationAfterOnboarding(fallback = '/overview') {
 
 export function isExternalOnboardingNext(next) {
   return typeof next === 'string' && /^https?:\/\//.test(next);
+}
+
+/** Route an internal post-onboarding destination through the one-time welcome. */
+export function welcomePathForDestination(destination = '/overview') {
+  const safe = isAllowedOnboardingNext(destination) && !isExternalOnboardingNext(destination)
+    ? destination
+    : '/overview';
+  if (safe === ONBOARDING_WELCOME_PATH || safe.startsWith(`${ONBOARDING_WELCOME_PATH}?`)) {
+    return ONBOARDING_WELCOME_PATH;
+  }
+  return `${ONBOARDING_WELCOME_PATH}?next=${encodeURIComponent(safe)}`;
 }
 
 /**

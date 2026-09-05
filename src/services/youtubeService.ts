@@ -555,7 +555,7 @@ export interface CommentsResponse {
 // ============================================
 
 const getAuthHeaders = (): HeadersInit => {
-  const token = localStorage.getItem('xenoos_auth_token');
+  const token = getAccessToken();
   return {
     'Content-Type': 'application/json',
     ...(token ? { Authorization: `Bearer ${token}` } : {}),
@@ -1192,3 +1192,4 @@ class YouTubeService {
 // Create and export singleton instance
 export const youtubeService = new YouTubeService();
 export default youtubeService;
+import { getAccessToken } from '../lib/authSession';

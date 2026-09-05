@@ -210,11 +210,15 @@ test('a per-seat SKU can never be sold as a personal subscription', () => {
 test('the WORKSPACE webhook branch attributes the purchase', () => {
   /* It did not, so a Team purchase driven by a download was recorded as caused
    * by nothing. */
-  const branch = billing.slice(billing.indexOf('const wsId = session.metadata?.xenoWorkspaceId;'));
-  const set = branch.indexOf('await setWorkspacePlan(');
-  const attr = branch.indexOf("attributeDownloadIntent(pool, session, 'team')");
+  const branch = billing.slice(billing.indexOf("if (session.mode === 'subscription')"));
+  const set = branch.indexOf('await reconcileSubscription(pool, provider, session.subscription, session.customer, session.metadata)');
+  const attr = branch.indexOf('attributeDownloadIntent(pool, session, result.plan)');
   assert.ok(attr > -1, 'a Team purchase is attributed to nothing');
   assert.ok(set > -1 && set < attr, 'the Team purchase is attributed before the plan lands');
+  const start = billing.indexOf('async function reconcileSubscription(');
+  const reconciliation = billing.slice(start, billing.indexOf('\nexport async function getCheckoutStatus', start));
+  assert.match(reconciliation, /const workspaceId = metadata.xenoWorkspaceId/);
+  assert.ok(reconciliation.indexOf('await setWorkspacePlan(client, workspaceId') < reconciliation.lastIndexOf("await client.query('COMMIT')"));
 });
 
 /* ── 7 · Membership means the same thing here as everywhere else ─────────── */

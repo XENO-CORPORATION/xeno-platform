@@ -192,7 +192,7 @@ export const CollaborationProvider: React.FC<{ children: React.ReactNode }> = ({
 
   // Get auth token
   const getToken = useCallback(() => {
-    return localStorage.getItem('xenoos_auth_token');
+    return getAccessToken();
   }, []);
 
   // Connect to WebSocket
@@ -797,3 +797,4 @@ export const useCollaboration = (): CollaborationContextType => {
 };
 
 export default CollaborationContext;
+import { getAccessToken } from '../lib/authSession';

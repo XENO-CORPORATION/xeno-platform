@@ -26,10 +26,10 @@ router.get('/stats', authMiddleware, async (req, res) => {
 
     const to = new Date();
     const from = new Date(to.getTime() - 30 * 24 * 3600 * 1000);
-    let usage = { rows: [] };
-    try { usage = await usageSummary(req.db, uid, { from, to, groupBy: 'surface' }); } catch { /* usage optional */ }
+    let usage = null;
+    try { usage = await usageSummary(req.db, uid, { from, to, groupBy: 'surface' }); } catch { /* reported as unavailable below */ }
 
-    const requests30d = usage.rows.reduce((a, r) => a + (r.events || 0), 0);
+    const requests30d = usage ? usage.rows.reduce((a, r) => a + (r.events || 0), 0) : null;
 
     res.json({
       success: true,
@@ -39,7 +39,8 @@ router.get('/stats', authMiddleware, async (req, res) => {
         plan: plan.plan,
         workspace_count: wsCount,
         requests_30d: requests30d,
-        usage_by_surface: usage.rows.map((r) => ({
+        usage_available: Boolean(usage),
+        usage_by_surface: (usage?.rows || []).map((r) => ({
           surface: r.key || 'other',
           events: r.events || 0,
           credits: Math.floor((r.costMicro || 0) / 1_000_000),

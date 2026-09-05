@@ -55,7 +55,7 @@ export interface GenerationsResponse {
 // ============================================
 
 const getAuthHeaders = (): HeadersInit => {
-  const token = localStorage.getItem('xenoos_auth_token');
+  const token = getAccessToken();
   return {
     'Content-Type': 'application/json',
     ...(token ? { Authorization: `Bearer ${token}` } : {}),
@@ -79,7 +79,7 @@ export const generationHistoryService = {
    * Check if user is authenticated
    */
   isAuthenticated(): boolean {
-    return !!localStorage.getItem('xenoos_auth_token');
+    return !!getAccessToken();
   },
 
   /**
@@ -178,3 +178,4 @@ export const generationHistoryService = {
 };
 
 export default generationHistoryService;
+import { getAccessToken } from '../lib/authSession';

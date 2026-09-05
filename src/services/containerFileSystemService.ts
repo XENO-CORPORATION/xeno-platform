@@ -51,13 +51,13 @@ class ContainerFileSystemService {
 
   // Check if user is authenticated
   isAuthenticated(): boolean {
-    const token = localStorage.getItem('xenoos_auth_token');
+    const token = getAccessToken();
     return !!token && token.trim() !== '';
   }
 
   // Get authorization headers
   private getHeaders() {
-    const token = localStorage.getItem('xenoos_auth_token');
+    const token = getAccessToken();
     if (!token) {
       console.warn('⚠️ No authentication token found in localStorage');
     }
@@ -436,3 +436,4 @@ class ContainerFileSystemService {
 export const containerFileSystemService = new ContainerFileSystemService();
 
 export default containerFileSystemService;
+import { getAccessToken } from '../lib/authSession';

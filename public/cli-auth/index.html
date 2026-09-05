@@ -752,28 +752,19 @@
     return;
   }
 
-  var TOKEN_KEY = 'xeno_token';
-  var token = null;
-
-  // OAuth providers bounce back here with ?token=<jwt>&isNew=<bool>. Capture
-  // the token, persist it like a normal email/password login, and strip those
-  // params so a refresh doesn't carry them around.
-  var oauthToken = qs.get('token');
-  if (oauthToken) {
-    try { localStorage.setItem(TOKEN_KEY, oauthToken); } catch (e) {}
-    token = oauthToken;
+  // Remove credentials produced by legacy deployments without consuming them.
+  // Current web OAuth returns with an opaque, HttpOnly browser session cookie.
+  if (qs.has('token') || qs.has('isNew')) {
     qs.delete('token');
     qs.delete('isNew');
     var clean = window.location.pathname + (qs.toString() ? '?' + qs.toString() : '');
     window.history.replaceState({}, '', clean);
-  } else {
-    try { token = localStorage.getItem(TOKEN_KEY); } catch (e) { token = null; }
   }
   var currentUser = null;
 
   // Wire OAuth provider buttons. The platform's /api/auth/<provider> endpoint
-  // takes a returnUrl, signs the user in, then redirects back to that URL
-  // with ?token=<jwt>&isNew=<bool> appended.
+  // takes a same-origin returnUrl, signs the user in, sets the opaque browser
+  // session cookie, and redirects back without exposing a credential in the URL.
   var returnUrl = '/cli-auth?session=' + encodeURIComponent(sessionId);
   ['google', 'github', 'twitter'].forEach(function (p) {
     var btn = $('oauth-' + p);
@@ -785,13 +776,22 @@
     if (el) el.textContent = msg || '';
   }
 
+  function csrfToken() {
+    var match = document.cookie.match(/(?:^|;\s*)(?:__Host-)?xeno_csrf=([^;]+)/);
+    return match ? decodeURIComponent(match[1]) : '';
+  }
+
   async function api(path, opts) {
     opts = opts || {};
     var headers = opts.headers || {};
     headers['Content-Type'] = 'application/json';
-    if (opts.auth && token) headers['Authorization'] = 'Bearer ' + token;
+    var method = (opts.method || 'GET').toUpperCase();
+    if (!['GET', 'HEAD', 'OPTIONS'].includes(method)) {
+      var csrf = csrfToken();
+      if (csrf) headers['x-xeno-csrf'] = csrf;
+    }
     var res = await fetch(path, {
-      method: opts.method || 'GET',
+      method: method,
       headers: headers,
       body: opts.body ? JSON.stringify(opts.body) : undefined,
       credentials: 'same-origin'
@@ -812,16 +812,11 @@
     $('avatar').textContent = initial;
   }
 
-  async function checkToken() {
-    if (!token) return false;
-    var r = await api('/api/auth/me', { auth: true });
+  async function checkSession() {
+    var r = await api('/api/auth/me');
     if (r.ok && r.data && r.data.user) {
       renderUser(r.data.user);
       return true;
-    }
-    if (r.status === 401) {
-      try { localStorage.removeItem(TOKEN_KEY); } catch (e) {}
-      token = null;
     }
     return false;
   }
@@ -836,12 +831,11 @@
     try {
       var r = await api('/api/auth/login', {
         method: 'POST',
+        headers: { 'x-xeno-session-mode': 'browser' },
         body: { email: $('email').value.trim(), password: $('password').value }
       });
-      if (r.ok && r.data && r.data.token) {
-        token = r.data.token;
-        try { localStorage.setItem(TOKEN_KEY, token); } catch (e) {}
-        if (r.data.user) renderUser(r.data.user);
+      if (r.ok && r.data && r.data.user) {
+        renderUser(r.data.user);
         show('authorize');
       } else {
         var msg = (r.data && (r.data.error || r.data.message)) || 'Sign in failed.';
@@ -864,7 +858,6 @@
     try {
       var r = await api('/api/auth/cli/complete', {
         method: 'POST',
-        auth: true,
         body: { session_id: sessionId }
       });
       if (r.ok && r.data && r.data.redirect_uri) {
@@ -873,8 +866,6 @@
         return;
       }
       if (r.status === 401) {
-        try { localStorage.removeItem(TOKEN_KEY); } catch (e) {}
-        token = null;
         show('login');
         return;
       }
@@ -905,7 +896,7 @@
   // ----- Bootstrap -----
   (async function () {
     show('loading');
-    var signedIn = await checkToken();
+    var signedIn = await checkSession();
     if (signedIn) {
       show('authorize');
     } else {

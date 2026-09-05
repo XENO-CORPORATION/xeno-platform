@@ -1,6 +1,7 @@
 import path from 'path';
 import { fileURLToPath } from 'url';
 import dotenv from 'dotenv';
+import { isLocalPreview } from './services/runtimePolicy.js';
 import http from 'http';
 
 // Determine the directory name for ES Modules
@@ -8,7 +9,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 // Explicitly configure dotenv to load the .env file from the project root
-dotenv.config({ path: path.resolve(__dirname, '../../.env') });
+if (!isLocalPreview()) dotenv.config({ path: path.resolve(__dirname, '../../.env') });
 
 import express from 'express';
 import cors from 'cors';
@@ -87,6 +88,7 @@ import handleRoutes from './routes/handleRoutes.js';
 import { oidcAuth } from './middleware/oidcAuth.js';
 import { discovery as oidcDiscovery } from './utils/oidcProvider.js';
 import { databaseMiddleware } from './middleware/database.js';
+import { browserSessionMiddleware } from './middleware/browserSession.js';
 import blogRoutes from './routes/blogRoutes.js';
 import learnRoutes from './routes/learnRoutes.js';
 import forumRoutes from './routes/forumRoutes.js';
@@ -94,7 +96,9 @@ import { requireActivated } from './services/accountActivation.js';
 import agentRoutes from './routes/agentRoutes.js';
 import { authMiddleware, optionalAuthMiddleware } from './middleware/auth.js';
 import { initCleanupService } from './services/cleanupService.js';
-import { runMigrations } from './services/migrationService.js';
+import { startDownloadCleanup } from './services/downloadService.js';
+import { startConversionWorker } from './services/conversionWorker.js';
+import { runRequiredStartupMigrations } from './services/startupSchema.js';
 import { startScheduledTasksWorker } from './workers/chatScheduledWorker.js';
 import { startLibraryIngestionWorker } from './workers/libraryIngestionWorker.js';
 import { reasoningCapabilityForModel, reasoningEffortForModel } from './lib/chatModelCapabilities.js';
@@ -111,9 +115,6 @@ import { requestLoggerMiddleware, logger } from './middleware/requestLogger.js';
 import { staticCacheMiddleware, apiCacheMiddleware, securityHeadersMiddleware } from './middleware/cdnOptimization.js';
 import { authLimiter as perEndpointAuthLimiter, llmLimiter, imageGenLimiter, uploadLimiter, clientIp } from './middleware/rateLimiter.js';
 import { rateLimitKey } from './utils/clientIp.js';
-import { runAllMigrations } from './services/migrationRunner.js';
-import { migrateAccountV2 } from './database/migrate-account-v2.js';
-import { migrateOidcClients } from './database/migrate-oidc-clients.js';
 import { sweepExpiredHolds, MICRO_PER_CREDIT } from './utils/creditLedgerV2.js';
 import { seedMarketplace } from './database/seeds/marketplace-seed.js';
 import { seedForum } from './database/seeds/forum-seed.js';
@@ -176,6 +177,14 @@ const pool = new Pool({
   max: 10,
   idleTimeoutMillis: 30000,
   connectionTimeoutMillis: 10000,
+});
+
+// An idle pg client emits its connection failure through the Pool. Without an
+// error listener EventEmitter promotes a transient database restart to an
+// uncaught exception, and the process-wide handler deliberately exits. Keep the
+// server alive; pg discards the failed client and reconnects on the next query.
+pool.on('error', (error) => {
+  console.error('Unexpected error on idle PostgreSQL client:', error.message);
 });
 
 // Create uploads directory if it doesn't exist
@@ -283,6 +292,10 @@ app.use('/api/', globalLimiter);
 // that defaulted to enforcing would have locked out every user at once the
 // moment it was added.
 app.use('/api/', databaseMiddleware, requireSupportedClient);
+// Resolve the browser's opaque HttpOnly BFF session before any API router.
+// This injects a two-minute, process-local bearer for the existing unified
+// auth middleware and enforces double-submit CSRF on unsafe cookie requests.
+app.use('/api/', browserSessionMiddleware(pool));
 app.use('/api/client-policy', databaseMiddleware, clientPolicyRoutes);
 
 // Strict rate limiter for auth endpoints: 10 requests per 15 minutes per IP
@@ -4020,11 +4033,7 @@ process.on('uncaughtException', (error) => {
   setTimeout(() => process.exit(1), 1000);
 });
 
-// Initialize cleanup service for old conversions
-initCleanupService();
-
-// Readiness gate: /api/ready reports not-ready (503) until every startup migration
-// has succeeded, so a load balancer never routes traffic to a half-migrated schema.
+// The listener and workers remain stopped until the required schema is ready.
 app.locals.migrationsReady = false;
 
 /**
@@ -4036,10 +4045,7 @@ app.locals.migrationsReady = false;
  * best-effort (not schema-critical), so its failure does not block readiness.
  */
 async function runStartupMigrations() {
-  await runMigrations(pool);       // legacy schema files (youtube/office-canvas)
-  await runAllMigrations(pool);    // versioned *.sql runner (rethrows on first failure)
-  await migrateAccountV2(pool);    // account/ledger v2 (additive, idempotent) — creates oauth_clients
-  await migrateOidcClients(pool);  // OIDC first-party clients + loopback column (additive, idempotent)
+  await runRequiredStartupMigrations(pool);
   await seedMarketplace(pool).catch(err => console.error('[Seed] marketplace warning (non-fatal):', err.message));
   // The Forum needs its SPACES to exist before anything works — with no spaces a
   // deploy yields an empty page and every post fails with "unknown space".
@@ -4048,8 +4054,21 @@ async function runStartupMigrations() {
   await seedForum(pool).catch(err => console.error('[Seed] forum warning (non-fatal):', err.message));
 }
 
-runStartupMigrations()
-  .then(() => {
+try {
+  await runStartupMigrations();
+} catch (err) {
+  console.error('FATAL: startup migrations failed — refusing to serve traffic:', err);
+  process.exit(1);
+}
+
+// Nothing below this boundary can serve requests, perform scheduled work or
+// announce readiness while migrations are pending, deferred or rejected.
+app.locals.migrationsReady = true;
+if (!isLocalPreview()) {
+startConversionWorker();
+initCleanupService();
+startDownloadCleanup();
+{
     app.locals.migrationsReady = true;
     console.log('✅ Database migrations complete — readiness gate open');
     // Phantom-hold sweeper: void expired credit_holds every 15 min so stranded holds do
@@ -4089,13 +4108,7 @@ runStartupMigrations()
       .catch((e) => console.error('[Retention] error:', e.message));
     setInterval(sweepRet, RETENTION_SWEEP_INTERVAL_MS).unref();
     sweepRet();
-  })
-  .catch(err => {
-    // FAIL CLOSED: a broken/half-applied schema must not serve traffic. Exit non-zero
-    // so the orchestrator restarts (and /api/ready stays 503 in the meantime).
-    console.error('FATAL: startup migrations failed — refusing to serve traffic:', err);
-    process.exit(1);
-  });
+}
 
 // Initialize background job queues
 initBackgroundJobs(pool).catch(err => {
@@ -4117,9 +4130,12 @@ if (process.env.NODE_ENV !== 'production' || process.env.CHAT_EMBEDDED_WORKERS =
   startScheduledTasksWorker(pool);
   startLibraryIngestionWorker(pool);
 }
+} else {
+  console.log('[Local preview] Background processing, notifications and file cleanup are disabled');
+}
 
 // Start main server
-server.listen(PORT, () => {
+server.listen(PORT, process.env.BACKEND_HOST, () => {
   console.log(`🚀 XenoStudio Main Server running on port ${PORT}`);
   console.log(`🔌 WebSocket server available at ws://localhost:${PORT}`);
   console.log(`📁 File uploads available at: http://localhost:${PORT}/uploads/`);

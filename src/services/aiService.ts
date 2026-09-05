@@ -6,7 +6,7 @@
  * (api.xenostudio.ai) — the only place provider keys live. This replaces every
  * direct browser→provider call (openrouter.ai / Gemini SDK / OpenAI SDK) and the
  * VITE_*_KEY / hardcoded keys those used. Mirrors the auth pattern of
- * billingService.ts and xenoProxyRequest.ts (Bearer 'xenoos_auth_token', /api).
+ * billingService.ts and xenoProxyRequest.ts (same-origin BFF session, /api).
  */
 
 const API_BASE = '/api';
@@ -68,7 +68,7 @@ export class BYOKKeyMissingError extends Error {
 }
 
 function authHeaders(): Record<string, string> {
-  const t = localStorage.getItem('xenoos_auth_token');
+  const t = getAccessToken();
   return t ? { Authorization: `Bearer ${t}` } : {};
 }
 
@@ -134,3 +134,4 @@ export async function estimateChat(opts: {
     return { credits: 0, metered: false, path: opts.path || 'premium' };
   }
 }
+import { getAccessToken } from '../lib/authSession';

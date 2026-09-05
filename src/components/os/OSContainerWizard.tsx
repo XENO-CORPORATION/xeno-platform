@@ -148,7 +148,7 @@ const OSContainerWizard: React.FC = () => {
       }
       try {
         const res = await fetch('/api/containers/check-limit', {
-          headers: { 'Authorization': `Bearer ${localStorage.getItem('xenoos_auth_token')}` }
+          headers: { 'Authorization': `Bearer ${getAccessToken()}` }
         });
         const data = await res.json();
         if (data.success) setContainerLimit(data.data);
@@ -261,7 +261,7 @@ const OSContainerWizard: React.FC = () => {
       const response = await fetch('/api/containers/create', {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${localStorage.getItem('xenoos_auth_token')}`,
+          'Authorization': `Bearer ${getAccessToken()}`,
           'Content-Type': 'application/json'
         },
         body: JSON.stringify({
@@ -935,3 +935,4 @@ const OSContainerWizard: React.FC = () => {
 };
 
 export default OSContainerWizard;
+import { getAccessToken } from '../../lib/authSession';

@@ -1,5 +1,64 @@
 # Tickets
 
+## AUTH-1 — Replace browser bearer persistence with the canonical secure session boundary
+
+Status: Implemented locally — production qualification pending
+
+### Description
+
+Make the platform's own web login comply with the locked XENO account contract: no persistent
+browser bearer, no credential in a web redirect URL, one server-held session authority, CSRF
+protection for mutations, rotation, and revocation. Preserve the existing provider and desktop/CLI
+handoffs while legacy browser sessions migrate once without being written back to storage.
+
+### Acceptance criteria
+
+- Browser login and registration set an opaque HttpOnly session cookie and return no token.
+- Web OAuth callbacks set the session cookie and redirect without a token query parameter.
+- Unsafe cookie-authenticated requests require matching cookie, request, and server-held CSRF proof.
+- Refresh rotates both secrets; logout revokes the session and clears both cookies.
+- A legacy persisted bearer is removed immediately and is accepted only for one-release migration.
+- The localhost development route uses the same authentication gate as production; no dev bypass.
+- Provider policy, OIDC, token-confusion, DPoP/broker, browser/PostgreSQL, typecheck, and build gates pass.
+- Production is not called qualified until the exact deployed revision passes live Google/OIDC,
+  resource-server, cross-product SSO, and logout-propagation checks.
+
+### Known authority work
+
+- Reconcile the locked `@xeno/account` package name with the implemented and skill-authoritative
+  `@xeno-corporation/account` name before publishing the SDK.
+- Restore or replace the two 2026-08-27 auth execution/inventory briefs referenced by the auth skill.
+
+## Issue #8 — Rebuild the Overview control plane and workspace sidebar
+
+Status: Implemented locally — rendered and regression verified
+Estimate: 1–2 days
+
+### Description
+
+Rebuild `/overview` as XENO's ecosystem control plane, using the supplied dashboard, split-sidebar, and workspace-switcher references as the visual contract. Preserve XENO's real routes, workspace state, account state, projects, scheduled automations, and metered usage instead of copying the references' fictional product data.
+
+### Acceptance criteria
+
+- The shell uses a permanent 52-pixel icon rail, a collapsible contextual sidebar, and one shared 56-pixel header row.
+- The expanded sidebar matches the reference density, spacing, borders, active states, footer placement, and mobile behavior.
+- The workspace switcher lists the real available workspaces, identifies the active workspace, switches through `WorkspaceContext`, and exposes existing team, billing, invite, and workspace actions.
+- The overview header provides a command entry point, the signed-in account's real credit balance, and the existing top-up action.
+- The dashboard contains XENO-specific quick starts, real metered usage summaries, and a recent-work surface backed by existing project and scheduled-task services.
+- API failure, loading, and genuine empty results remain distinguishable. No invented activity, usage, project, automation, or billing data is rendered.
+- Dynamic UI is implemented as accessible code components; reference crops are used only for measurement and comparison.
+- The viewport shell remains non-scrollable with one explicit inner scroll owner, and the 52-pixel rail does not render one pixel wider through border geometry.
+- Desktop, collapsed-sidebar, workspace-menu, keyboard, and mobile states are visually and interactively verified against the running `/overview` route.
+- No dependency or backend contract is introduced.
+
+### Verification requested by Andreia
+
+- Compare the expanded and collapsed sidebar geometry against the supplied reference.
+- Verify the workspace menu opens, lists real workspaces, switches the active workspace, and closes predictably.
+- Verify every visible navigation row reaches an existing XENO route.
+- Verify dashboard cards and tables show real values or an honest empty/error state, never fabricated examples.
+- Verify the overview remains usable at desktop and mobile widths and that focus does not scroll the whole application shell.
+
 ## Issue #7 — Improve the ChatWithLLM empty state
 
 Status: Implemented locally — awaiting review

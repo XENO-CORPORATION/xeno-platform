@@ -15,6 +15,7 @@
  */
 
 export type DownloadState = 'signin' | 'onboarding' | 'plan' | 'unavailable' | 'ready';
+import { getAccessToken } from './authSession';
 
 export interface IntentEnvelope {
   token: string;
@@ -29,12 +30,11 @@ export interface IntentEnvelope {
 }
 
 const API = '/api';
-const TOKEN_KEY = 'xenoos_auth_token';
 const ANON_KEY = 'xeno_anon_id';
 
 function authHeaders(): Record<string, string> {
   try {
-    const t = localStorage.getItem(TOKEN_KEY);
+    const t = getAccessToken();
     return t ? { Authorization: `Bearer ${t}` } : {};
   } catch {
     return {};

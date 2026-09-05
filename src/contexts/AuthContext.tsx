@@ -6,9 +6,10 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { authService, User, AuthResponse } from '../services/authService';
 import {
-  AUTH_TOKEN_KEY, ONBOARDING_NEXT_KEY, ONBOARDING_PATH,
+  ONBOARDING_NEXT_KEY, ONBOARDING_PATH,
   isAllowedOnboardingNext, stashReturnUrl, peekReturnUrl, consumeReturnUrl,
 } from '../lib/onboardingHandoff.js';
+import { setAccessToken } from '../lib/authSession';
 
 interface AuthContextType {
   user: User | null;
@@ -85,10 +86,11 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
           return;
         }
 
-        // Handle OAuth success - store token and validate
+        // Legacy desktop/web callbacks may still contain a token during the
+        // migration window. Keep it only in memory; current web callbacks use
+        // the opaque HttpOnly browser session and no URL credential.
         if (oauthToken) {
-          // Store the token
-          localStorage.setItem(AUTH_TOKEN_KEY, oauthToken);
+          setAccessToken(oauthToken);
 
           // Clean up URL (remove token from URL for security)
           window.history.replaceState({}, '', window.location.pathname);
@@ -116,18 +118,13 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
           return;
         }
 
-        // Normal token validation flow
-        const storedUser = authService.getCurrentUser();
-        if (storedUser && authService.isAuthenticated()) {
-          // Validate the stored session
-          const isValid = await authService.validateSession();
-          if (isValid) {
-            setUser(storedUser);
-          } else {
-            // Clear invalid session
-            authService.logout();
-            setUser(null);
-          }
+        // Cookie-backed sessions survive reload without exposing a bearer to
+        // JavaScript, so always ask the server instead of gating on storage.
+        const isValid = await authService.validateSession();
+        if (isValid) {
+          setUser(authService.getCurrentUser());
+        } else {
+          setUser(null);
         }
       } catch (error) {
         console.error('Auth initialization error:', error);
@@ -165,9 +162,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     let cancelled = false;
     (async () => {
       try {
-        const token = localStorage.getItem(AUTH_TOKEN_KEY);
         const r = await fetch('/api/auth/activation-status', {
-          headers: token ? { Authorization: `Bearer ${token}` } : {},
         });
         const d = await r.json().catch(() => null);
         if (cancelled || !d?.activated) return;

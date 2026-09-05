@@ -258,10 +258,14 @@ test('attribution happens AFTER the plan is granted', () => {
   /* The resume page is polling. Attributing first would let it observe the
    * attribution while still being refused — a visible flicker of "we took your
    * money and you still cannot download". */
-  const set = billing.indexOf("await setPlan(pool, uid, { plan, status: 'active', subId: session.subscription || null });");
-  const attr = billing.indexOf('await attributeDownloadIntent(pool, session, plan);');
+  const set = billing.indexOf('await reconcileSubscription(pool, provider, session.subscription, session.customer, session.metadata)');
+  const attr = billing.indexOf('await attributeDownloadIntent(pool, session, result.plan);');
   assert.ok(set > -1 && attr > -1, 'the subscription branch changed shape — re-verify the ordering');
   assert.ok(set < attr, 'the intent is attributed before the plan is granted');
+  const reconcileStart = billing.indexOf('async function reconcileSubscription(');
+  const reconcile = billing.slice(reconcileStart, billing.indexOf('\nexport async function getCheckoutStatus', reconcileStart));
+  assert.ok(reconcile.indexOf('await setPlan(client, owner, state)') < reconcile.lastIndexOf("await client.query('COMMIT')"));
+  assert.ok(reconcile.lastIndexOf("await client.query('COMMIT')") < reconcile.indexOf('return { handled: true, plan }'));
 });
 
 test('attribution can never fail a payment', () => {

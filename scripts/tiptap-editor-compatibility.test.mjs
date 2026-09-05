@@ -6,7 +6,7 @@ import { JSDOM } from 'jsdom';
 import react from '@vitejs/plugin-react';
 import { createServer } from 'vite';
 
-test('Tiptap 3 mounts both production editors and pagination without a runtime crash', async (t) => {
+test('Tiptap 3 mounts production editors and preserves controlled video-prompt updates', async (t) => {
   const vite = await createServer({
     appType: 'custom',
     configFile: false,
@@ -38,9 +38,10 @@ test('Tiptap 3 mounts both production editors and pagination without a runtime c
     dom.window.close();
   });
 
-  const [{ default: TipTapEditor }, { default: PaginatedTipTapEditor }] = await Promise.all([
+  const [{ default: TipTapEditor }, { default: PaginatedTipTapEditor }, { default: VideoPromptEditor }] = await Promise.all([
     vite.ssrLoadModule('/src/components/playground/Office/TipTapEditor.tsx'),
     vite.ssrLoadModule('/src/components/playground/Office/PaginatedTipTapEditor.tsx'),
+    vite.ssrLoadModule('/src/components/playground/Generation/components/VideoPromptEditor.tsx'),
   ]);
 
   for (const EditorComponent of [TipTapEditor, PaginatedTipTapEditor]) {
@@ -61,4 +62,20 @@ test('Tiptap 3 mounts both production editors and pagination without a runtime c
     root.unmount();
     host.remove();
   }
+
+  const host = document.createElement('div');
+  document.body.append(host);
+  const root = createRoot(host);
+  const changes = [];
+  const props = { onChange: value => changes.push(value) };
+  try {
+    root.render(React.createElement(VideoPromptEditor, { ...props, value: 'Initial video prompt' }));
+    await new Promise(resolve => setTimeout(resolve, 100));
+    assert.match(host.textContent, /Initial video prompt/);
+    changes.length = 0;
+    root.render(React.createElement(VideoPromptEditor, { ...props, value: 'Reused video prompt' }));
+    await new Promise(resolve => setTimeout(resolve, 100));
+    assert.match(host.textContent, /Reused video prompt/);
+    assert.deepEqual(changes, [], 'external values must not echo through onChange');
+  } finally { root.unmount(); host.remove(); }
 });

@@ -2,6 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import { officeCanvasService, OfficeCanvas, CanvasVersionConflictError } from '../../services/officeCanvasService';
+import { evaluateArithmeticExpression } from '../../lib/safeArithmetic.mjs';
 import {
   Plus,
   Type,
@@ -508,7 +509,7 @@ const CanvasPlanningVisual: React.FC = () => {
       return;
     }
 
-    const token = localStorage.getItem('xenoos_auth_token');
+    const token = getAccessToken();
     if (!token) return;
 
     const ws = new WebSocket(getCanvasWsUrl());
@@ -2661,7 +2662,15 @@ const CanvasPlanningVisual: React.FC = () => {
               <Calculator size={16} className="text-blue-400" />
               <span className="text-sm font-medium text-white/80">Calculator</span>
             </div>
-            <input type="text" value={node.calcExpression} onChange={(e) => setNodes(nodes.map(n => n.id === node.id ? { ...n, calcExpression: e.target.value, calcResult: String(eval(e.target.value)) } : n))} className="w-full bg-white/5 border border-white/10 rounded p-3 text-white/90 font-mono text-lg focus:outline-none focus:border-blue-500/50 mb-3" placeholder="2 + 2" />
+            <input type="text" value={node.calcExpression} onChange={(e) => {
+              const expression = e.target.value;
+              const result = evaluateArithmeticExpression(expression);
+              setNodes(nodes.map(n => n.id === node.id ? {
+                ...n,
+                calcExpression: expression,
+                calcResult: result === null ? 'Invalid expression' : String(result),
+              } : n));
+            }} className="w-full bg-white/5 border border-white/10 rounded p-3 text-white/90 font-mono text-lg focus:outline-none focus:border-blue-500/50 mb-3" placeholder="2 + 2" />
             <div className="text-3xl font-bold text-blue-400 text-center">{node.calcResult}</div>
           </div>
         )}
@@ -3653,3 +3662,4 @@ const CanvasPlanningVisual: React.FC = () => {
 };
 
 export default CanvasPlanningVisual;
+import { getAccessToken } from '../../lib/authSession';

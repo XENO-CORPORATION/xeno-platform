@@ -1,0 +1,338 @@
+/* Full-viewport platform workbench. The outer shell owns the viewport while
+   each page owns its scroll and uses the available working canvas. */
+[data-overview-shell] .xeno-platform-page {
+  position: relative;
+  height: 100%;
+  min-width: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  padding: 0 0 32px;
+  overscroll-behavior: contain;
+  background: var(--xeno-theme-surface);
+}
+
+[data-overview-shell] .xeno-platform-page-header {
+  position: sticky;
+  z-index: 18;
+  top: 0;
+  box-sizing: border-box;
+  width: 100%;
+  max-width: none;
+  min-height: 82px;
+  margin: 0;
+  padding: 17px 24px 15px;
+  border-bottom: 1px solid var(--xeno-theme-border);
+  background: var(--xeno-theme-surface);
+}
+
+[data-overview-shell] .xeno-platform-page-header h1 { margin-top: 2px; font-size: 22px; }
+[data-overview-shell] .xeno-platform-page-header p { max-width: 68ch; }
+
+[data-overview-shell] .xeno-platform-page .xeno-data-card,
+[data-overview-shell] .xeno-platform-page .xeno-capability-list,
+[data-overview-shell] .xeno-platform-page .xeno-settings-grid,
+[data-overview-shell] .xeno-platform-page .xeno-integration-grid,
+[data-overview-shell] .xeno-platform-page .xeno-settings-tabs,
+[data-overview-shell] .xeno-platform-page .xeno-invite-bar,
+[data-overview-shell] .xeno-platform-page .xeno-inline-error,
+[data-overview-shell] .xeno-platform-page .xeno-inline-success,
+[data-overview-shell] .xeno-platform-page .xeno-project-toolbar,
+[data-overview-shell] .xeno-platform-page .xeno-project-board,
+[data-overview-shell] .xeno-platform-page .xeno-usage-metrics,
+[data-overview-shell] .xeno-platform-page .xeno-usage-grid {
+  width: auto;
+  max-width: none;
+  margin-left: 24px;
+  margin-right: 24px;
+}
+
+[data-overview-shell] .xeno-account-tabs {
+  display: flex;
+  width: 100%;
+  min-height: 48px;
+  box-sizing: border-box;
+  align-items: stretch;
+  gap: 3px;
+  margin: 0 0 22px;
+  padding: 0 20px;
+  overflow-x: auto;
+  border-bottom: 1px solid var(--xeno-theme-border);
+  background: var(--xeno-theme-surface);
+  scrollbar-width: none;
+}
+
+[data-overview-shell] .xeno-account-tabs::-webkit-scrollbar { display: none; }
+[data-overview-shell] .xeno-account-tabs button {
+  position: relative;
+  display: inline-flex;
+  min-width: max-content;
+  align-items: center;
+  gap: 7px;
+  padding: 0 12px;
+  border: 0;
+  background: transparent;
+  color: var(--xeno-theme-text-muted);
+  cursor: pointer;
+  font-size: 11px;
+}
+[data-overview-shell] .xeno-account-tabs button:hover { color: var(--xeno-theme-text); }
+[data-overview-shell] .xeno-account-tabs button::after {
+  position: absolute;
+  right: 10px;
+  bottom: -1px;
+  left: 10px;
+  height: 2px;
+  background: transparent;
+  content: "";
+}
+[data-overview-shell] .xeno-account-tabs button.is-active { color: var(--xeno-theme-text); font-weight: 650; }
+[data-overview-shell] .xeno-account-tabs button.is-active::after { background: var(--xeno-theme-text); }
+
+[data-overview-shell] .xeno-account-page .xeno-settings-grid,
+[data-overview-shell] .xeno-account-page .xeno-profile-layout,
+[data-overview-shell] .xeno-account-page .xeno-session-card,
+[data-overview-shell] .xeno-account-page .xeno-inline-error,
+[data-overview-shell] .xeno-account-page .xeno-inline-success {
+  width: calc(100% - 48px);
+  max-width: 1560px;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+[data-overview-shell] .xeno-profile-layout { grid-template-columns: 250px minmax(0, 1fr); }
+[data-overview-shell] .xeno-profile-layout > .xeno-profile-fields { margin-right: 0; margin-left: 0; }
+[data-overview-shell] .xeno-profile-summary,
+[data-overview-shell] .xeno-data-card,
+[data-overview-shell] .xeno-settings-card,
+[data-overview-shell] .xeno-integration-card { border-radius: 6px; box-shadow: none; }
+[data-overview-shell] .xeno-settings-grid { grid-template-columns: minmax(0, 1.4fr) minmax(320px, .8fr); }
+[data-overview-shell] .xeno-settings-card:first-child { grid-row: span 2; }
+[data-overview-shell] .xeno-settings-card { min-height: 162px; box-sizing: border-box; }
+[data-overview-shell] .xeno-integration-grid { grid-template-columns: repeat(3, minmax(260px, 1fr)); }
+[data-overview-shell] .xeno-project-list { min-height: 300px; }
+
+[data-overview-shell] .xeno-project-toolbar {
+  position: sticky;
+  z-index: 12;
+  top: 82px;
+  margin-top: 14px;
+  padding: 10px 0;
+  background: var(--xeno-theme-surface);
+}
+
+[data-overview-shell] .xeno-project-list > header,
+[data-overview-shell] .xeno-project-list > button {
+  grid-template-columns: minmax(320px, 1.4fr) minmax(140px, .5fr) 120px 150px;
+}
+
+[data-overview-shell] .xeno-sticky-savebar {
+  position: sticky;
+  z-index: 16;
+  bottom: 16px;
+  display: flex;
+  width: calc(100% - 48px);
+  max-width: 1560px;
+  min-height: 54px;
+  box-sizing: border-box;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin: 22px auto 0;
+  padding: 9px 10px 9px 16px;
+  border: 1px solid var(--xeno-theme-border);
+  border-radius: 7px;
+  background: var(--xeno-theme-surface);
+  box-shadow: 0 12px 32px var(--xeno-theme-shadow);
+  color: var(--xeno-theme-text-muted);
+  font-size: 11px;
+}
+[data-overview-shell] .xeno-sticky-savebar > div { display: flex; gap: 8px; }
+
+[data-overview-shell] .xeno-drawer-backdrop {
+  display: flex;
+  justify-content: flex-end;
+  background: var(--xeno-theme-overlay);
+}
+
+[data-overview-shell] .xeno-detail-drawer {
+  position: relative;
+  display: flex;
+  width: min(720px, 52vw);
+  height: 100dvh;
+  flex-direction: column;
+  overflow: hidden;
+  border-left: 1px solid var(--xeno-theme-border);
+  box-shadow: -18px 0 48px var(--xeno-theme-shadow);
+  animation: xeno-drawer-enter .18s ease-out;
+}
+
+@keyframes xeno-drawer-enter {
+  from { transform: translateX(24px); opacity: .7; }
+}
+
+[data-overview-shell] .xeno-detail-drawer > header { min-height: 82px; box-sizing: border-box; padding: 16px 20px; }
+[data-overview-shell] .xeno-detail-drawer > section { min-height: 0; flex: 1; overflow-y: auto; padding: 22px 24px 40px; }
+[data-overview-shell] .xeno-detail-drawer > form { min-height: 0; overflow-y: auto; }
+[data-overview-shell] .xeno-detail-drawer > header > button {
+  display: grid;
+  width: 34px;
+  height: 34px;
+  place-items: center;
+  border-radius: 5px;
+  color: var(--xeno-theme-text-muted);
+}
+[data-overview-shell] .xeno-detail-drawer > header > button:hover { background: var(--xeno-theme-control-hover); }
+[data-overview-shell] .xeno-detail-drawer.is-fullpage { width: calc(100vw - 64px); max-width: none; }
+[data-overview-shell] .xeno-drawer-layout-control { position: relative; flex: 0 0 auto; }
+[data-overview-shell] .xeno-drawer-layout-control > button {
+  display: grid;
+  width: 34px;
+  height: 34px;
+  place-items: center;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--xeno-theme-text-muted);
+  cursor: pointer;
+}
+[data-overview-shell] .xeno-drawer-layout-control > button:hover { background: var(--xeno-theme-control-hover); }
+[data-overview-shell] .xeno-drawer-layout-menu {
+  position: absolute;
+  z-index: 4;
+  top: 40px;
+  right: 0;
+  width: 210px;
+  padding: 7px;
+  border: 1px solid var(--xeno-theme-border);
+  border-radius: 7px;
+  background: var(--xeno-theme-surface);
+  box-shadow: 0 14px 34px var(--xeno-theme-shadow);
+}
+[data-overview-shell] .xeno-drawer-layout-menu > span { display: block; padding: 5px 8px 7px; color: var(--xeno-theme-text-muted); font-size: 9px; text-transform: uppercase; letter-spacing: .06em; }
+[data-overview-shell] .xeno-drawer-layout-menu > button {
+  display: grid;
+  width: 100%;
+  min-height: 38px;
+  grid-template-columns: 22px 1fr 18px;
+  align-items: center;
+  padding: 0 8px;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--xeno-theme-text);
+  cursor: pointer;
+  text-align: left;
+  font-size: 11px;
+}
+[data-overview-shell] .xeno-drawer-layout-menu > button:hover { background: var(--xeno-theme-control-hover); color: var(--xeno-theme-text); }
+
+[data-overview-shell] .xeno-drawer-tabs {
+  display: flex;
+  min-height: 46px;
+  align-items: stretch;
+  gap: 4px;
+  padding: 0 18px;
+  border-bottom: 1px solid var(--xeno-theme-border);
+}
+[data-overview-shell] .xeno-drawer-tabs button {
+  position: relative;
+  padding: 0 11px;
+  border: 0;
+  background: transparent;
+  color: var(--xeno-theme-text-muted);
+  cursor: pointer;
+  font-size: 11px;
+}
+[data-overview-shell] .xeno-drawer-tabs button.is-active { color: var(--xeno-theme-text); font-weight: 650; }
+[data-overview-shell] .xeno-drawer-tabs button.is-active::after {
+  position: absolute;
+  right: 8px;
+  bottom: -1px;
+  left: 8px;
+  height: 2px;
+  background: var(--xeno-theme-text);
+  content: "";
+}
+[data-overview-shell] .xeno-drawer-tabs button:disabled { cursor: default; opacity: .5; }
+[data-overview-shell] .xeno-drawer-tabs > span { align-self: center; margin-left: auto; color: var(--xeno-theme-text-muted); font-size: 9px; text-transform: uppercase; letter-spacing: .06em; }
+
+[data-overview-shell] .xeno-drawer-hero { display: grid; grid-template-columns: 44px 1fr; gap: 14px; align-items: start; margin: 24px 0; }
+[data-overview-shell] .xeno-drawer-hero .xeno-integration-logo { width: 44px; height: 44px; }
+[data-overview-shell] .xeno-drawer-hero h3 { margin: 4px 0 6px; color: var(--xeno-theme-text); font-size: 18px; }
+[data-overview-shell] .xeno-drawer-hero p { margin: 0; }
+[data-overview-shell] .xeno-drawer-facts { margin: 0; border: 1px solid var(--xeno-theme-border); border-radius: 6px; overflow: hidden; }
+[data-overview-shell] .xeno-drawer-facts > div { display: grid; grid-template-columns: 150px 1fr; align-items: center; gap: 18px; min-height: 52px; padding: 0 14px; border-bottom: 1px solid var(--xeno-theme-border); }
+[data-overview-shell] .xeno-drawer-facts > div:last-child { border-bottom: 0; }
+[data-overview-shell] .xeno-drawer-facts dt { display: flex; align-items: center; gap: 6px; color: var(--xeno-theme-text-muted); font-size: 10px; }
+[data-overview-shell] .xeno-drawer-facts dd { min-width: 0; margin: 0; overflow-wrap: anywhere; color: var(--xeno-theme-text); font-size: 11px; font-weight: 600; }
+
+[data-overview-shell] .xeno-command-backdrop { padding: clamp(58px, 8vh, 92px) 16px 16px; background: var(--xeno-theme-overlay); }
+[data-overview-shell] .xeno-command-dialog {
+  display: flex;
+  width: min(860px, calc(100vw - 32px));
+  max-height: min(720px, 82vh);
+  flex-direction: column;
+  border-radius: 9px;
+}
+[data-overview-shell] .xeno-command-input-row { min-height: 62px; box-sizing: border-box; padding: 0 18px; }
+[data-overview-shell] .xeno-command-input-row input { font-size: 15px; }
+[data-overview-shell] .xeno-command-groups { min-height: 48px; box-sizing: border-box; padding: 9px 16px; }
+[data-overview-shell] .xeno-command-groups button.is-active { border-color: var(--xeno-theme-border); background: var(--xeno-theme-active); color: var(--xeno-theme-text); }
+[data-overview-shell] .xeno-command-results { min-height: 260px; max-height: 520px; padding: 9px; }
+[data-overview-shell] .xeno-command-results > button { min-height: 58px; padding: 9px 11px; }
+[data-overview-shell] .xeno-command-dialog footer { min-height: 38px; box-sizing: border-box; align-items: center; }
+
+@media (min-width: 1500px) {
+  [data-overview-shell] .xeno-platform-page-header { padding-right: 30px; padding-left: 30px; }
+  [data-overview-shell] .xeno-billing-content { margin-inline: 30px; }
+  [data-overview-shell] .xeno-platform-page .xeno-data-card,
+  [data-overview-shell] .xeno-platform-page .xeno-capability-list,
+  [data-overview-shell] .xeno-platform-page .xeno-integration-grid,
+  [data-overview-shell] .xeno-platform-page .xeno-settings-tabs,
+  [data-overview-shell] .xeno-platform-page .xeno-invite-bar,
+  [data-overview-shell] .xeno-platform-page .xeno-project-toolbar,
+  [data-overview-shell] .xeno-platform-page .xeno-project-board,
+  [data-overview-shell] .xeno-platform-page .xeno-usage-metrics,
+  [data-overview-shell] .xeno-platform-page .xeno-usage-grid { margin-right: 30px; margin-left: 30px; }
+}
+
+@media (max-width: 1100px) {
+  [data-overview-shell] .xeno-integration-grid { grid-template-columns: repeat(2, minmax(240px, 1fr)); }
+  [data-overview-shell] .xeno-settings-grid { grid-template-columns: 1fr; }
+  [data-overview-shell] .xeno-settings-card:first-child { grid-row: auto; }
+  [data-overview-shell] .xeno-detail-drawer { width: min(640px, 72vw); }
+}
+
+@media (max-width: 760px) {
+  [data-overview-shell] .xeno-platform-page { padding: 0 0 20px; }
+  [data-overview-shell] .xeno-platform-page-header { min-height: 72px; padding: 13px 14px; }
+  [data-overview-shell] .xeno-platform-page-header p { display: none; }
+  [data-overview-shell] .xeno-account-tabs { min-height: 44px; margin-bottom: 16px; padding: 0 8px; }
+  [data-overview-shell] .xeno-account-tabs button { padding: 0 9px; }
+  [data-overview-shell] .xeno-account-tabs button span { display: none; }
+  /* Session security actions must remain reachable on phones. */
+  [data-overview-shell] .xeno-session-row { flex-wrap: wrap; }
+  [data-overview-shell] .xeno-session-row > span:nth-child(2) { flex-basis: calc(100% - 56px); }
+  [data-overview-shell] .xeno-session-row .xeno-row-action:not(.is-danger) { display: inline-flex; margin-left: auto; }
+  [data-overview-shell] .xeno-platform-page .xeno-data-card,
+  [data-overview-shell] .xeno-platform-page .xeno-capability-list,
+  [data-overview-shell] .xeno-platform-page .xeno-settings-grid,
+  [data-overview-shell] .xeno-platform-page .xeno-integration-grid,
+  [data-overview-shell] .xeno-platform-page .xeno-settings-tabs,
+  [data-overview-shell] .xeno-platform-page .xeno-invite-bar,
+  [data-overview-shell] .xeno-platform-page .xeno-inline-error,
+  [data-overview-shell] .xeno-platform-page .xeno-inline-success,
+  [data-overview-shell] .xeno-platform-page .xeno-project-toolbar,
+  [data-overview-shell] .xeno-platform-page .xeno-project-board,
+  [data-overview-shell] .xeno-platform-page .xeno-usage-metrics,
+  [data-overview-shell] .xeno-platform-page .xeno-usage-grid,
+  [data-overview-shell] .xeno-account-page .xeno-profile-layout,
+  [data-overview-shell] .xeno-account-page .xeno-session-card { width: auto; margin-right: 14px; margin-left: 14px; }
+  [data-overview-shell] .xeno-integration-grid { grid-template-columns: 1fr; }
+  [data-overview-shell] .xeno-project-toolbar { top: 72px; }
+  [data-overview-shell] .xeno-detail-drawer { width: 100vw; }
+  [data-overview-shell] .xeno-detail-drawer.is-fullpage { width: 100vw; }
+  [data-overview-shell] .xeno-sticky-savebar { width: calc(100% - 28px); bottom: 8px; margin-top: 16px; }
+  [data-overview-shell] .xeno-sticky-savebar > span { display: none; }
+  [data-overview-shell] .xeno-drawer-facts > div { grid-template-columns: 110px 1fr; }
+}

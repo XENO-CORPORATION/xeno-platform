@@ -1,7 +1,8 @@
 // XenoOS Authentication Service
 // Real authentication with database integration
 
-import { AUTH_TOKEN_KEY, ONBOARDING_DONE_KEY, ONBOARDING_NEXT_KEY } from '../lib/onboardingHandoff.js';
+import { ONBOARDING_DONE_KEY, ONBOARDING_NEXT_KEY, ONBOARDING_WELCOME_DONE_KEY } from '../lib/onboardingHandoff.js';
+import { clearAuthSession, getAccessToken, getLegacyAccessToken, hasAuthSession, setAccessToken, setAuthSession } from '../lib/authSession';
 
 const API_BASE = '/api';
 
@@ -39,21 +40,14 @@ export interface RegisterRequest {
 }
 
 class AuthService {
-  private token: string | null = null;
-
-  constructor() {
-    // Load token from localStorage on initialization
-    this.token = localStorage.getItem(AUTH_TOKEN_KEY);
-  }
-
   // Check if user is authenticated
   isAuthenticated(): boolean {
-    return !!this.token;
+    return hasAuthSession();
   }
 
   // Get current token
   getToken(): string | null {
-    return this.token;
+    return getAccessToken();
   }
 
   // Get current user
@@ -76,6 +70,7 @@ class AuthService {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          'X-Xeno-Session-Mode': 'browser',
         },
         body: JSON.stringify(credentials),
       });
@@ -83,8 +78,8 @@ class AuthService {
       const data = await response.json();
 
       if (response.ok && data.success) {
-        this.token = data.token;
-        localStorage.setItem(AUTH_TOKEN_KEY, data.token);
+        setAccessToken(null);
+        setAuthSession(true);
         localStorage.setItem('xenoos_user', JSON.stringify(data.user));
         return data;
       } else {
@@ -109,6 +104,7 @@ class AuthService {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          'X-Xeno-Session-Mode': 'browser',
         },
         body: JSON.stringify(userData),
       });
@@ -116,8 +112,8 @@ class AuthService {
       const data = await response.json();
 
       if (response.ok && data.success) {
-        this.token = data.token;
-        localStorage.setItem(AUTH_TOKEN_KEY, data.token);
+        setAccessToken(null);
+        setAuthSession(true);
         localStorage.setItem('xenoos_user', JSON.stringify(data.user));
         return data;
       } else {
@@ -137,20 +133,22 @@ class AuthService {
 
   // Logout user
   logout(): void {
-    this.token = null;
-    localStorage.removeItem(AUTH_TOKEN_KEY);
+    void fetch(`${API_BASE}/auth/logout`, { method: 'POST' }).catch(() => {});
+    clearAuthSession();
     localStorage.removeItem('xenoos_user');
     try {
       sessionStorage.removeItem(ONBOARDING_DONE_KEY);
+      sessionStorage.removeItem(ONBOARDING_WELCOME_DONE_KEY);
       sessionStorage.removeItem(ONBOARDING_NEXT_KEY);
     } catch { /* private-mode sessionStorage can throw */ }
   }
 
   // Get auth headers for API requests
   getAuthHeaders(): Record<string, string> {
-    if (this.token) {
+    const token = getAccessToken();
+    if (token) {
       return {
-        'Authorization': `Bearer ${this.token}`,
+        'Authorization': `Bearer ${token}`,
         'Content-Type': 'application/json'
       };
     }
@@ -159,15 +157,16 @@ class AuthService {
 
   // Validate current session and update user data
   async validateSession(): Promise<boolean> {
-    // Check for token in localStorage (might have been set by OAuth)
-    const storedToken = localStorage.getItem(AUTH_TOKEN_KEY);
-    if (storedToken && !this.token) {
-      this.token = storedToken;
-    }
-
-    if (!this.token) return false;
-
     try {
+      // Convert a pre-migration bearer into the opaque BFF cookie once. The
+      // request interceptor supplies the in-memory legacy token.
+      if (getLegacyAccessToken()) {
+        const migrated = await fetch(`${API_BASE}/auth/browser-session`, {
+          method: 'POST',
+          headers: { 'X-Xeno-Session-Mode': 'browser' },
+        });
+        if (migrated.ok) setAccessToken(null);
+      }
       const response = await fetch(`${API_BASE}/auth/validate`, {
         method: 'GET',
         headers: this.getAuthHeaders(),
@@ -176,11 +175,13 @@ class AuthService {
       if (response.ok) {
         const data = await response.json();
         if (data.success && data.user) {
+          setAuthSession(true);
           // Update stored user data
           localStorage.setItem('xenoos_user', JSON.stringify(data.user));
         }
         return true;
       }
+      clearAuthSession();
       return false;
     } catch {
       return false;
@@ -206,7 +207,7 @@ class AuthService {
 
   // Update user profile
   async updateProfile(data: { display_name?: string; username?: string; avatar_url?: string }): Promise<AuthResponse> {
-    if (!this.token) {
+    if (!hasAuthSession()) {
       return { success: false, error: 'Not authenticated' };
     }
 
@@ -240,7 +241,7 @@ class AuthService {
 
   // Change password
   async changePassword(currentPassword: string, newPassword: string): Promise<{ success: boolean; message?: string; error?: string }> {
-    if (!this.token) {
+    if (!hasAuthSession()) {
       return { success: false, error: 'Not authenticated' };
     }
 
@@ -286,7 +287,7 @@ class AuthService {
     };
     error?: string;
   }> {
-    if (!this.token) {
+    if (!hasAuthSession()) {
       return { success: false, error: 'Not authenticated' };
     }
 
@@ -322,7 +323,7 @@ class AuthService {
     remaining_credits?: number;
     error?: string;
   }> {
-    if (!this.token) {
+    if (!hasAuthSession()) {
       return { success: false, error: 'Not authenticated' };
     }
 
@@ -364,7 +365,7 @@ class AuthService {
 
   // Delete account
   async deleteAccount(password: string): Promise<{ success: boolean; message?: string; error?: string }> {
-    if (!this.token) {
+    if (!hasAuthSession()) {
       return { success: false, error: 'Not authenticated' };
     }
 
@@ -398,7 +399,7 @@ class AuthService {
 
   // Refresh user data from server
   async refreshUser(): Promise<AuthResponse> {
-    if (!this.token) {
+    if (!hasAuthSession()) {
       return { success: false, error: 'Not authenticated' };
     }
 
@@ -430,7 +431,7 @@ class AuthService {
 
   // Claim bonus credits
   async claimBonusCredits(): Promise<{ success: boolean; message?: string; credits?: number; error?: string; bonus_amount?: number }> {
-    if (!this.token) {
+    if (!hasAuthSession()) {
       return { success: false, error: 'Not authenticated' };
     }
 

@@ -19,7 +19,7 @@
 
 /**
  * @param {{id:string, kind:'credits'|'subscription', price:number, currency:string, interval?:string}} item
- * @param {{active?:boolean, unit_amount?:number, currency?:string, type?:string, recurring?:{interval?:string}}} price
+ * @param {{active?:boolean, unit_amount?:number, currency?:string, type?:string, billing_scheme?:string, custom_unit_amount?:unknown, transform_quantity?:unknown, recurring?:{interval?:string, interval_count?:number, usage_type?:string}|null}} price
  * @returns {string[]} human-readable problems; empty means they agree
  */
 export function priceIssues(item, price) {
@@ -29,6 +29,13 @@ export function priceIssues(item, price) {
   /* Stripe's `active:false` still retrieves fine, so an archived price is a
    * silent 400 at checkout rather than a visible misconfiguration. */
   if (price.active === false) issues.push('the Price is ARCHIVED in Stripe');
+  else if (price.active !== true) issues.push('the Price is not explicitly active');
+
+  // Checkout sends one unit or the team's seat count: no tiers, usage reporting,
+  // customer-selected amounts or quantity conversions exist in this catalog.
+  if (price.billing_scheme !== 'per_unit') issues.push('billing_scheme must be per_unit for fixed catalogue prices');
+  if (price.custom_unit_amount != null) issues.push('custom_unit_amount lets the customer change the catalogue price');
+  if (price.transform_quantity != null) issues.push('transform_quantity changes the billed unit or seat count');
 
   const expected = Math.round(item.price * 100);
   if (price.unit_amount !== expected) {
@@ -46,10 +53,14 @@ export function priceIssues(item, price) {
     } else if (item.interval && price.recurring?.interval !== item.interval) {
       issues.push(`renews ${price.recurring?.interval}ly but the catalogue says ${item.interval}ly`);
     }
+    if (price.recurring?.interval_count !== 1) issues.push('interval_count must be 1 for the advertised monthly or annual term');
+    if (price.recurring?.usage_type !== 'licensed') issues.push('usage_type must be licensed, not metered or unknown');
   } else if (price.type !== 'one_time') {
     /* The mirror image, and the more expensive one: a credit pack on a recurring
      * price bills the customer again every month for a one-off purchase. */
     issues.push('is RECURRING on a credit pack — buyers would be billed again every period');
+  } else if (price.recurring !== null) {
+    issues.push('a one-time credit pack must have recurring=null');
   }
 
   return issues;

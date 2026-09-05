@@ -39,12 +39,19 @@ function Panel({
       role="button"
       tabIndex={0}
       aria-label={`Launch ${label}`}
+      onKeyDown={(event) => {
+        if (event.key === 'Enter' || event.key === ' ') {
+          event.preventDefault();
+          event.currentTarget.click();
+        }
+      }}
       className={`group/panel relative flex min-h-0 min-w-0 cursor-pointer flex-col overflow-hidden rounded-[8px] border border-white/[0.07] bg-[#0f0f0f] transition-colors duration-200 ease-out hover:border-white/[0.30] hover:bg-[#141417] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-white/40 ${className}`}
     >
       <div className="flex h-10 shrink-0 items-center justify-between border-b border-white/[0.05] px-4">
         <div className="flex items-center gap-2 text-[10.5px] font-semibold uppercase tracking-[0.16em] text-[#948d83]">
           {Icon ? <Icon className="h-3 w-3 text-[#9b948a]" /> : <span className="h-1.5 w-1.5 rounded-[2px] bg-white/40" />}
           <span>{label}</span>
+          <span className="text-[8px] normal-case tracking-normal text-neutral-400">Illustrated preview</span>
         </div>
         <div className="flex items-center gap-2 text-[#5d5850]">
           {trailing}

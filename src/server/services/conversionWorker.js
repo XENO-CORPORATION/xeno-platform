@@ -30,6 +30,10 @@ export const conversionQueue = new Bull('file-conversions', redisUrl, {
 /**
  * Process conversion jobs
  */
+let workerStarted = false;
+export function startConversionWorker() {
+  if (workerStarted) return;
+  workerStarted = true;
 conversionQueue.process(2, async (job) => { // Process 2 jobs concurrently
   const { conversionId, fileId, inputPath, outputFormat, settings, userId } = job.data;
   
@@ -85,6 +89,8 @@ conversionQueue.process(2, async (job) => { // Process 2 jobs concurrently
     throw error;
   }
 });
+
+}
 
 /**
  * Determine file type from path

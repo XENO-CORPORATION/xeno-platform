@@ -17,9 +17,64 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
+import { installBillingProviderFixture, boundBillingPool } from './fixtures/billing-provider-fixture.mjs';
+
+process.env.STRIPE_SECRET_KEY = 'sk_test_fixture';
+process.env.STRIPE_PUBLISHABLE_KEY = 'pk_test_fixture';
+process.env.STRIPE_EXPECTED_ACCOUNT_ID = 'acct_fixture';
+process.env.STRIPE_EXPECTED_MODE = 'test';
+const accountFixture = installBillingProviderFixture();
 
 const billing = readFileSync('src/server/services/billingService.js', 'utf8');
 const email = readFileSync('src/server/services/emailService.js', 'utf8');
+
+test('all checkout paths validate consent and use purchase-bound provider idempotency', () => {
+  assert.equal((billing.match(/await requireCheckoutConsent\(pool, user.id, item.id, consentId\)/g) || []).length, 2);
+  assert.equal((billing.match(/idempotencyKey: `xeno-checkout:\$\{consentId\}`/g) || []).length, 2);
+  assert.doesNotMatch(billing, /if \(await consentReady/);
+});
+
+test('checkout status authorizes before Stripe and never infers fulfillment from a redirect', async () => {
+  const { readCheckoutStatus } = await import('../src/server/services/checkoutStatus.js');
+  let calls = 0;
+  const session = { id: 'cs_test_owned', metadata: { xenoUserId: 'owner', itemId: 'credits_small' }, mode: 'payment', status: 'complete', payment_status: 'unpaid' };
+  const provider = { checkout: { sessions: { retrieve: async () => { calls++; return session; } } } };
+  await assert.rejects(readCheckoutStatus({ query: async () => ({ rows: [] }) }, provider, 'other', 'cs_test_owned'), { status: 404 });
+  assert.equal(calls, 0);
+  let fulfillmentRows = [];
+  const pool = { query: async sql => ({ rows: sql.includes('checkout_consents') ? [{ item_id: 'credits_small' }] : fulfillmentRows }) };
+  await assert.rejects(readCheckoutStatus(pool, provider, 'owner', '../other'), { status: 404 });
+  assert.equal(calls, 0);
+  assert.deepEqual(await readCheckoutStatus(pool, provider, 'owner', 'cs_test_owned'), { state: 'processing' });
+  session.payment_status = 'paid';
+  assert.deepEqual(await readCheckoutStatus(pool, provider, 'owner', 'cs_test_owned'), { state: 'fulfilling' });
+  fulfillmentRows = [{ '?column?': 1 }];
+  assert.deepEqual(await readCheckoutStatus(pool, provider, 'owner', 'cs_test_owned'), { state: 'fulfilled' });
+  session.metadata.xenoUserId = 'another';
+  await assert.rejects(readCheckoutStatus(pool, provider, 'owner', 'cs_test_owned'), { status: 404 });
+  session.metadata.xenoUserId = 'owner';
+  session.metadata.itemId = 'different';
+  await assert.rejects(readCheckoutStatus(pool, provider, 'owner', 'cs_test_owned'), { status: 404 });
+  session.metadata.itemId = 'credits_small';
+  session.status = 'expired'; session.payment_status = 'unpaid';
+  assert.deepEqual(await readCheckoutStatus(pool, provider, 'owner', 'cs_test_owned'), { state: 'expired' });
+  session.status = 'open';
+  assert.deepEqual(await readCheckoutStatus(pool, provider, 'owner', 'cs_test_owned'), { state: 'open' });
+});
+
+test('unpaid or unknown checkout settlement never activates plans or grants credits', async () => {
+  const { handleEvent } = await import('../src/server/services/billingService.js');
+  const pool = boundBillingPool();
+  for (const mode of ['subscription', 'payment']) {
+    for (const payment_status of ['unpaid', undefined, 'unknown']) {
+      for (const type of ['checkout.session.completed', 'checkout.session.async_payment_succeeded']) {
+        assert.deepEqual(await handleEvent(pool, accountFixture.event('evt_unsettled', type, { mode, payment_status,
+          customer: 'cus_test', client_reference_id: 'test-user', metadata: { credits: 1000 } })),
+          { handled: true, reason: 'payment not settled' });
+      }
+    }
+  }
+});
 
 /* ── 1 · Disputes reach a human ──────────────────────────────────────────── */
 
@@ -82,13 +137,13 @@ test('🔴 nobody can unsubscribe from a dispute alert', () => {
 /* ── 2 · The descriptor ──────────────────────────────────────────────────── */
 
 test('a statement descriptor is always set', () => {
-  assert.ok(billing.includes('statement_descriptor: statementDescriptor()'),
+  assert.ok(billing.includes('statement_descriptor_suffix: statementDescriptor()'),
     'no statement descriptor — the charge shows whatever Stripe derives, which is the unrecognisable case');
   const fn = billing.slice(billing.indexOf('function statementDescriptor()'));
   /* BOTH fallbacks. There are two — the env default and the post-clamp guard —
    * so counting them is what catches one being removed. A value stripped to
    * nothing by the clamp must still not reach Stripe empty. */
-  const fallbacks = (fn.slice(0, 500).match(/\|\| 'XENOSTUDIO'/g) || []).length;
+  const fallbacks = (fn.slice(0, 350).match(/'XENOSTUDIO'/g) || []).length;
   assert.equal(fallbacks, 2,
     `expected an env default AND a post-clamp fallback, found ${fallbacks} — an empty or fully-stripped value would reach Stripe`);
 });
@@ -97,7 +152,8 @@ test('the descriptor is CLAMPED to what Stripe accepts', () => {
   /* Stripe caps at 22 chars and rejects < > \\ ' " * — a violation is refused at
    * session creation, turning a cosmetic setting into a checkout outage. */
   const fn = billing.slice(billing.indexOf('function statementDescriptor()'), billing.indexOf('function statementDescriptor()') + 400);
-  assert.ok(/slice\(0, 22\)/.test(fn), 'the descriptor is no longer length-clamped — Stripe will refuse the session');
+  assert.ok(/slice\(0, 10\)/.test(fn), 'the suffix must leave room for the account prefix and separator');
+  assert.ok(fn.includes('/[a-zA-Z]/.test(suffix)'));
 
   const m = fn.match(/raw\.replace\((\/\[[^\]]+\]\/g)/);
   assert.ok(m, 'the descriptor no longer strips rejected characters');

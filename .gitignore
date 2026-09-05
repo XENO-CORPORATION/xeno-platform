@@ -36,10 +36,25 @@ art/
 .dev-logs/
 tmp-*
 
+# Regenerated DOM-test bundle, not application source.
+scripts/harness/.lazy-route.generated.mjs
+scripts/harness/.account-nav.generated.mjs
+scripts/harness/.command-keyboard.generated.mjs
+
 # DR: Postgres backup dumps live under backups/ on the server checkout — never commit them
 backups/
 *.dump
 *.dump.partial
+
+# Runtime user uploads are persistent data, never product source.
+src/server/uploads/
+
+# Generated audit reports and verified-input caches are retained on disk and
+# linked from release-evidence receipts, never shipped as application source.
+.compliance/
+
+# Repository recovery metadata is not product content. Keep local copies intact.
+.git.backup/
 
 # Private dev-access secrets. These patterns existed ONLY in the copy of
 # .gitignore on xeno-platform-001 and were never committed — found 2026-07-30

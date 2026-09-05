@@ -125,6 +125,16 @@ test('share and customization persistence is fail-closed', () => {
   assert.match(sql, /CREATE TABLE IF NOT EXISTS chat_plugin_installations/i);
 });
 
+test('customization APIs project canonical persistence columns into their public response shape', () => {
+  const routeSource = readFileSync(join(ROOT, 'src', 'server', 'routes', 'chatRoutes.js'), 'utf8');
+  assert.match(routeSource, /connector_key, state AS status, updated_at FROM chat_connector_connections/i);
+  assert.match(routeSource, /listing_id, installed_version AS version, enabled, entitlement_status/i);
+  assert.match(routeSource, /Failed to list connectors:/i);
+  assert.match(routeSource, /Failed to list plugins:/i);
+  assert.doesNotMatch(routeSource, /connector_key, status, updated_at FROM chat_connector_connections/i);
+  assert.doesNotMatch(routeSource, /listing_id, version, enabled, entitlement_status/i);
+});
+
 test('interactive context records are request and response bound before single-use persistence', () => {
   assert.match(sql, /CREATE TABLE IF NOT EXISTS chat_generation_contexts/i);
   assert.match(sql, /request_hash TEXT NOT NULL/i);

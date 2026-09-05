@@ -91,6 +91,31 @@ export interface WorkspaceMember {
   };
 }
 
+export interface OperationalTeam {
+  id: string; workspace_id: string; name: string; description: string; version: number;
+  projects: Array<{ id: string; name: string; is_archived: boolean }>;
+  agents: Array<{ id: string; name: string; status: string }>;
+}
+export interface WorkspaceTeamsResult {
+  teams: OperationalTeam[];
+  projects: Array<{ id: string; name: string }>;
+  available_agents: Array<{ id: string; name: string }>;
+  can_manage: boolean;
+}
+export interface TeamDraft {
+  name: string; description: string; project_ids: string[]; agent_ids: string[]; version?: number;
+}
+export const getWorkspaceTeams = (workspaceId: string) =>
+  apiFetch<WorkspaceTeamsResult>(`/workspaces/${workspaceId}/teams`, { headers: { 'x-xeno-workspace': workspaceId } });
+export const saveOperationalTeam = (workspaceId: string, draft: TeamDraft, teamId?: string) =>
+  apiFetch<{ id: string }>(`/workspaces/${workspaceId}/teams${teamId ? `/${teamId}` : ''}`, {
+    method: teamId ? 'PUT' : 'POST', headers: { 'x-xeno-workspace': workspaceId }, body: JSON.stringify(draft),
+  });
+export const archiveOperationalTeam = (workspaceId: string, team: OperationalTeam) =>
+  apiFetch<{ id: string }>(`/workspaces/${workspaceId}/teams/${team.id}`, {
+    method: 'DELETE', headers: { 'x-xeno-workspace': workspaceId }, body: JSON.stringify({ version: team.version }),
+  });
+
 export interface WorkspaceInvite {
   id: string;
   workspace_id: string;
@@ -107,10 +132,15 @@ export interface WorkspaceInvite {
 
 export interface Project {
   id: string;
-  workspace_id: string;
+  workspace_id: string | null;
   name: string;
   description: string | null;
-  status: string;
+  custom_instructions?: string | null;
+  settings?: Record<string, unknown>;
+  is_archived?: boolean;
+  file_count?: number | string;
+  chat_count?: number | string;
+  capabilities?: Record<string, boolean>;
   created_at: string;
   updated_at: string;
 }
@@ -123,6 +153,19 @@ export interface Notification {
   read: boolean;
   created_at: string;
   metadata: Record<string, unknown>;
+}
+
+export interface AccountSession {
+  id: string;
+  created_at: string;
+  last_active_at: string | null;
+  expires_at: string;
+  ip_address: string | null;
+  user_agent: string | null;
+  device_type: string | null;
+  browser: string | null;
+  os: string | null;
+  current: boolean;
 }
 
 // ─── API helpers ───
@@ -149,7 +192,7 @@ const apiFetch = async <T>(path: string, options: RequestInit = {}): Promise<T> 
   // (header-only — it does NOT read the session cookie), so attach the same
   // localStorage token the rest of the app uses. Without this, every
   // accountService call (account/billing/workspaces/projects) 401s.
-  const token = typeof localStorage !== 'undefined' ? localStorage.getItem('xenoos_auth_token') : null;
+  const token = typeof localStorage !== 'undefined' ? getAccessToken() : null;
   const workspace = typeof localStorage !== 'undefined' ? localStorage.getItem('xeno_active_workspace_id') : null;
   const res = await fetch(`/api${path}`, {
     ...options,
@@ -195,6 +238,12 @@ export const getAccountOverview = () =>
 
 export const getNotifications = () =>
   apiFetch<{ success: true; notifications: Notification[] }>('/account/notifications');
+
+export const getAccountSessions = () =>
+  apiFetch<{ success: true; sessions: AccountSession[] }>('/account/sessions');
+
+export const revokeAccountSession = (sessionId: string) =>
+  apiFetch<{ success: true; revoked_session_id: string }>(`/account/sessions/${sessionId}`, { method: 'DELETE' });
 
 // ─── Billing ───
 
@@ -324,17 +373,26 @@ export const getWorkspaceAudit = (workspaceId: string, limit = 100) =>
 
 export const listProjects = (workspaceId?: string) =>
   apiFetch<{ success: true; projects: Project[] }>(
-    `/projects${workspaceId ? `?workspace_id=${workspaceId}` : ''}`
+    `/chat/projects${workspaceId ? `?workspace_id=${workspaceId}` : ''}`
   );
 
 export const createProject = (name: string, workspaceId: string, description?: string) =>
-  apiFetch<{ success: true; project: Project }>('/projects', {
+  apiFetch<{ success: true; project: Project }>('/chat/projects', {
     method: 'POST',
     body: JSON.stringify({ name, workspace_id: workspaceId, description }),
   });
 
-export const updateProject = (projectId: string, updates: { name?: string; description?: string; status?: string }) =>
-  apiFetch<{ success: true; project: Project }>(`/projects/${projectId}`, {
-    method: 'PATCH',
+export const updateProject = (projectId: string, updates: { name?: string; description?: string; custom_instructions?: string; settings?: Record<string, unknown>; is_archived?: boolean }) =>
+  apiFetch<{ success: true; project: Project }>(`/chat/projects/${projectId}`, {
+    method: 'PUT',
     body: JSON.stringify(updates),
   });
+
+export const updateWorkspace = (workspaceId: string, updates: { name?: string; slug?: string }) =>
+  apiFetch<{ success: true; workspace: Workspace }>(`/workspaces/${workspaceId}`, {
+    method: 'PATCH', body: JSON.stringify(updates),
+  });
+
+export const archiveProject = (projectId: string) =>
+  apiFetch<{ success: true }>(`/chat/projects/${projectId}`, { method: 'DELETE' });
+import { getAccessToken } from '../lib/authSession';

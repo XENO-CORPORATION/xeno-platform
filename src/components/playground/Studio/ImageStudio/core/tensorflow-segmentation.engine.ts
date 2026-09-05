@@ -1126,7 +1126,7 @@ export class TensorFlowSegmentationEngine {
     const ctx = canvas.getContext('2d')!;
     
     // Create ImageData from RGBA mask data
-    const imageData = new ImageData(maskData, maskWidth, maskHeight);
+    const imageData = new ImageData(new Uint8ClampedArray(maskData), maskWidth, maskHeight);
     
     // Draw to canvas and resize
     canvas.width = maskWidth;
@@ -1226,4 +1226,4 @@ export class TensorFlowSegmentationEngine {
     
     return mask;
   }
-} 
+}

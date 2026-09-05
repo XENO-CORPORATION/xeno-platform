@@ -14,7 +14,8 @@
  * Moved verbatim: nothing here was ever interpolated, it was static CSS inside a template literal.
  */
 
-/* Chat LLM owns these tokens. They do not affect the rest of XENO. */
+/* Named fallbacks for standalone/portal Chat surfaces. The authenticated platform root now owns
+   the runtime values and applies the exact 21-stop palette through platformTheme.ts. */
 .chat-theme-dark {
   --chat-canvas: #0a0a0a;
   --chat-surface: #171717;
@@ -117,8 +118,8 @@
    name: everything the library's stylesheets consume for colour has a --chat- twin. They
    were designed to the same list and never wired together.
 
-   Direction matters. The chat is the source of truth — it owns the theme switcher and the
-   three palettes — so --xeno-* inherits from --chat-*, never the reverse.
+   Direction matters. The platform is the source of truth; it publishes both vocabularies from one
+   semantic palette. This local bridge remains a compatibility layer for Chat internals.
 
    Written before a single library component rendered here, so that the first one adopted
    would arrive already wearing the right theme instead of the adoption also being a palette

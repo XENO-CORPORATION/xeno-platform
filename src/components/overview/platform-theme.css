@@ -1,0 +1,320 @@
+/* Authenticated platform theme contract. Product editors can keep their own
+   canvas themes; the platform shell and its account/workspace surfaces share
+   this neutral semantic palette. */
+[data-overview-shell] {
+  --xeno-shell-ink: var(--xeno-theme-text);
+  --xeno-shell-muted: var(--xeno-theme-text-muted);
+  --xeno-shell-subtle: var(--xeno-theme-text-soft);
+  --xeno-shell-border: var(--xeno-theme-border);
+  --xeno-shell-border-soft: color-mix(in srgb, var(--xeno-theme-border) 72%, transparent);
+  --xeno-shell-surface: var(--xeno-theme-surface);
+  --xeno-shell-canvas: var(--xeno-theme-canvas);
+  --xeno-shell-hover: var(--xeno-theme-hover);
+  --xeno-shell-active: var(--xeno-theme-active);
+  --xeno-shell-hover-ink: var(--xeno-theme-text-hover);
+  --xeno-shell-accent: var(--xeno-theme-inverse);
+  --xeno-shell-success: var(--xeno-theme-text-muted);
+  --xeno-shell-warning: var(--xeno-theme-text-muted);
+  --xeno-shell-danger: var(--xeno-theme-text);
+  --primary-bg: var(--xeno-theme-canvas);
+  background: var(--xeno-theme-canvas);
+  color: var(--xeno-theme-text);
+  color-scheme: light;
+}
+
+[data-overview-shell]:is([data-theme="dark"], [data-theme="dim"]) {
+  color-scheme: dark;
+}
+
+[data-overview-shell] {
+  --xeno-shell-hover: var(--xeno-theme-nav-hover);
+  --xeno-shell-active: var(--xeno-theme-nav-active);
+  --xeno-shell-hover-ink: var(--xeno-theme-text-hover);
+}
+
+[data-overview-shell] :where(input, select, textarea, button) { font-family: inherit; }
+[data-overview-shell] :where(input, select, textarea) { color-scheme: inherit; }
+[data-overview-shell] :where(input, select, textarea)::placeholder { color: var(--xeno-theme-text-soft); }
+[data-overview-shell] :where(button, a[href], input, select, textarea):focus-visible {
+  outline: 2px solid var(--xeno-theme-focus-ring);
+  outline-offset: 2px;
+}
+[data-overview-shell] :where(button, input, select, textarea):disabled {
+  cursor: not-allowed;
+  opacity: .5;
+}
+[data-overview-shell]:is([data-theme="dark"], [data-theme="dim"]) .xeno-rail-mark { filter: invert(1); }
+
+/* Shell, navigation, menus and dashboard chrome. */
+[data-overview-shell] :where(
+  .xeno-overview-sidebar,
+  .xeno-sidebar-rail,
+  .xeno-sidebar-panel,
+  .xeno-workspace-menu,
+  .xeno-account-menu,
+  .xeno-dashboard-header,
+  .xeno-start-card,
+  .xeno-metric-card,
+  .xeno-work-table-wrap,
+  .xeno-community-card,
+  .xeno-icon-button,
+  .xeno-credit-pill,
+  .xeno-secondary-button
+) {
+  border-color: var(--xeno-theme-border);
+  background: var(--xeno-theme-surface);
+  color: var(--xeno-theme-text);
+}
+
+[data-overview-shell] .xeno-sidebar-rail,
+[data-overview-shell] :where(.xeno-command-button, .xeno-dashboard-command, .xeno-work-table th) {
+  background: var(--xeno-theme-surface-subtle);
+}
+[data-overview-shell] :where(.xeno-overview-dashboard, .xeno-dashboard-scroll) { background: var(--xeno-theme-canvas); }
+[data-overview-shell] :where(.xeno-workspace-trigger, .xeno-rail-button, .xeno-collapse-button, .xeno-side-nav-row, .xeno-account-trigger) { color: var(--xeno-theme-text-muted); }
+[data-overview-shell] :where(.xeno-workspace-trigger:hover, .xeno-workspace-trigger[aria-expanded="true"], .xeno-rail-button:hover, .xeno-rail-button:focus-visible, .xeno-rail-button.is-active, .xeno-collapse-button:hover, .xeno-side-nav-row:hover, .xeno-side-nav-row.is-active, .xeno-account-trigger:hover, .xeno-workspace-menu-row:hover, .xeno-workspace-menu-row.is-selected, .xeno-workspace-menu-group button:hover, .xeno-account-menu > button:hover) {
+  background: var(--xeno-theme-nav-hover);
+  color: var(--xeno-theme-text);
+}
+[data-overview-shell] :where(.xeno-workspace-menu-row, .xeno-workspace-menu-group button, .xeno-account-menu > button, .xeno-community-card strong, .xeno-account-trigger strong, .xeno-account-menu-header strong, .xeno-breadcrumb strong, .xeno-section-title, .xeno-start-card-title, .xeno-metric-main strong, .xeno-work-name, .xeno-work-table td) { color: var(--xeno-theme-text); }
+[data-overview-shell] :where(.xeno-workspace-menu-row small, .xeno-account-menu-header small, .xeno-side-section-heading, .xeno-nav-badge, .xeno-community-card small, .xeno-account-trigger small, .xeno-breadcrumb, .xeno-start-card p, .xeno-metric-kicker, .xeno-metric-line, .xeno-work-table th) { color: var(--xeno-theme-text-muted); }
+[data-overview-shell] :where(.xeno-workspace-menu, .xeno-account-menu) { box-shadow: 0 18px 45px var(--xeno-theme-shadow), 0 2px 8px var(--xeno-theme-shadow); }
+[data-overview-shell] .xeno-dashboard-header { background: color-mix(in srgb, var(--xeno-theme-surface) 96%, transparent); }
+[data-overview-shell] :where(.xeno-command-button, .xeno-dashboard-command) { border-color: var(--xeno-theme-border); color: var(--xeno-theme-text-soft); }
+[data-overview-shell] :where(.xeno-command-button:hover, .xeno-dashboard-command:hover) { background: var(--xeno-theme-nav-hover); color: var(--xeno-theme-text-hover); }
+[data-overview-shell] :where(.xeno-start-card:hover, .xeno-community-card:hover, .xeno-work-table tbody tr:hover) { background: var(--xeno-theme-row-hover); }
+[data-overview-shell] :where(.xeno-secondary-button:hover, .xeno-icon-button:hover) { background: var(--xeno-theme-control-hover); }
+[data-overview-shell] :where(.xeno-workspace-mark, .xeno-rail-avatar) { border-color: var(--xeno-theme-border-strong); background: var(--xeno-theme-inverse); color: var(--xeno-theme-inverse-text); }
+[data-overview-shell] .xeno-overview-dashboard .xeno-primary-button { border-color: var(--xeno-theme-inverse); background: var(--xeno-theme-inverse) !important; background-color: var(--xeno-theme-inverse) !important; color: var(--xeno-theme-inverse-text); }
+[data-overview-shell] .xeno-overview-dashboard .xeno-primary-button:hover { background: color-mix(in srgb, var(--xeno-theme-inverse) 84%, var(--xeno-theme-surface)) !important; background-color: color-mix(in srgb, var(--xeno-theme-inverse) 84%, var(--xeno-theme-surface)) !important; }
+
+/* Dashboard controls need a direct selector and an explicit background-color.
+   The global form reset is loaded after component CSS and otherwise turns
+   button-backed cards and controls transparent during a theme change. */
+[data-overview-shell] .xeno-dashboard-command {
+  border-color: var(--xeno-theme-border);
+  background: var(--xeno-theme-surface-subtle);
+  background-color: var(--xeno-theme-surface-subtle);
+  color: var(--xeno-theme-text-soft);
+}
+[data-overview-shell] .xeno-start-card,
+[data-overview-shell] .xeno-secondary-button,
+[data-overview-shell] .xeno-icon-button {
+  border-color: var(--xeno-theme-border);
+  background: var(--xeno-theme-surface);
+  background-color: var(--xeno-theme-surface);
+}
+[data-overview-shell] .xeno-start-card { color: var(--xeno-theme-text); }
+[data-overview-shell] .xeno-secondary-button,
+[data-overview-shell] .xeno-icon-button { color: var(--xeno-theme-text-muted); }
+[data-overview-shell] .xeno-card-icon,
+[data-overview-shell] .xeno-metric-kicker span:first-child {
+  border-color: var(--xeno-theme-border);
+  background: var(--xeno-theme-surface-muted);
+  color: var(--xeno-theme-text);
+}
+[data-overview-shell] .xeno-dashboard-command:hover,
+[data-overview-shell] .xeno-secondary-button:hover,
+[data-overview-shell] .xeno-icon-button:hover {
+  background: var(--xeno-theme-control-hover);
+  background-color: var(--xeno-theme-control-hover);
+  color: var(--xeno-theme-text);
+}
+[data-overview-shell] .xeno-start-card:hover {
+  background: var(--xeno-theme-row-hover);
+  background-color: var(--xeno-theme-row-hover);
+}
+[data-overview-shell] .xeno-work-table th {
+  border-color: var(--xeno-theme-border);
+  background: var(--xeno-theme-surface-subtle);
+  color: var(--xeno-theme-text-muted);
+}
+
+/* Sidebar footer actions are button-backed surfaces too. Keep their complete
+   normal and hover states above the global transparent-button reset. */
+[data-overview-shell] .xeno-sidebar-bottom {
+  border-color: var(--xeno-theme-border);
+}
+[data-overview-shell] .xeno-community-card {
+  border-color: var(--xeno-theme-border);
+  background: var(--xeno-theme-surface-subtle);
+  background-color: var(--xeno-theme-surface-subtle);
+  color: var(--xeno-theme-text-muted);
+}
+[data-overview-shell] .xeno-community-card:hover,
+[data-overview-shell] .xeno-account-trigger:hover {
+  background: var(--xeno-theme-nav-hover);
+  background-color: var(--xeno-theme-nav-hover);
+  color: var(--xeno-theme-text);
+}
+[data-overview-shell] .xeno-community-card strong,
+[data-overview-shell] .xeno-account-trigger strong {
+  color: var(--xeno-theme-text);
+}
+[data-overview-shell] .xeno-community-card small,
+[data-overview-shell] .xeno-account-trigger small {
+  color: var(--xeno-theme-text-muted);
+}
+[data-overview-shell] .xeno-account-avatar {
+  border-color: var(--xeno-theme-border-strong);
+  background: var(--xeno-theme-surface-muted);
+  color: var(--xeno-theme-text);
+}
+
+/* Account, workspace and resource pages. */
+[data-overview-shell] .xeno-platform-page {
+  background: var(--xeno-theme-surface);
+  color: var(--xeno-theme-text);
+}
+[data-overview-shell] .xeno-platform-page-header {
+  border-color: var(--xeno-theme-border);
+  background: color-mix(in srgb, var(--xeno-theme-surface) 97%, transparent);
+}
+[data-overview-shell] .xeno-project-toolbar { background: color-mix(in srgb, var(--xeno-theme-surface) 97%, transparent); }
+[data-overview-shell] :where(.xeno-account-tabs, .xeno-drawer-tabs) { border-color: var(--xeno-theme-border); background: var(--xeno-theme-surface); }
+[data-overview-shell] :where(.xeno-account-tabs button, .xeno-drawer-tabs button) { color: var(--xeno-theme-text-muted); }
+[data-overview-shell] :where(.xeno-account-tabs button:hover, .xeno-account-tabs button.is-active, .xeno-drawer-tabs button.is-active) { color: var(--xeno-theme-text); }
+[data-overview-shell] :where(.xeno-account-tabs button.is-active::after, .xeno-drawer-tabs button.is-active::after) { background: var(--xeno-theme-text); }
+
+[data-overview-shell] :where(
+  .xeno-profile-summary,
+  .xeno-data-card,
+  .xeno-settings-card,
+  .xeno-integration-card,
+  .xeno-billing-plan-card,
+  .xeno-credit-card,
+  .xeno-capability-list,
+  .xeno-resource-state,
+  .xeno-resource-preview,
+  .xeno-project-board > div,
+  .xeno-sticky-savebar,
+  .xeno-detail-drawer,
+  .xeno-drawer-layout-menu,
+  .xeno-drawer-facts,
+  .xeno-command-dialog
+) {
+  border-color: var(--xeno-theme-border);
+  background: var(--xeno-theme-surface-raised);
+  color: var(--xeno-theme-text);
+}
+
+[data-overview-shell] .xeno-platform-page :where(h1, h2, h3, h4, strong, b, dt, dd, label) { color: var(--xeno-theme-text); }
+[data-overview-shell] .xeno-platform-page :where(p, small, time, .xeno-page-eyebrow, .xeno-billing-subtitle, .xeno-billing-meta, .xeno-billing-note) { color: var(--xeno-theme-text-muted); }
+[data-overview-shell] .xeno-platform-page :where(input, select, textarea) {
+  border-color: var(--xeno-theme-border);
+  background: var(--xeno-theme-surface);
+  color: var(--xeno-theme-text);
+}
+[data-overview-shell] .xeno-platform-page :where(input, select, textarea):focus { border-color: var(--xeno-theme-border-strong); outline-color: var(--xeno-theme-text); }
+[data-overview-shell] :where(.xeno-page-button, .xeno-row-action, .xeno-project-toolbar button) {
+  border-color: var(--xeno-theme-border);
+  background: var(--xeno-theme-surface);
+  color: var(--xeno-theme-text-muted);
+}
+[data-overview-shell] :where(.xeno-page-button, .xeno-row-action, .xeno-project-toolbar button):hover { background: var(--xeno-theme-control-hover); color: var(--xeno-theme-text); }
+[data-overview-shell] :where(.xeno-page-button.is-primary, .xeno-project-toolbar button.is-active) { border-color: var(--xeno-theme-inverse); background: var(--xeno-theme-inverse); color: var(--xeno-theme-inverse-text); }
+[data-overview-shell] :where(.xeno-profile-form label, .xeno-session-row, .xeno-notification-row, .xeno-audit-row, .xeno-capability-list > article, .xeno-drawer-facts > div, .xeno-project-calendar > button) { border-color: var(--xeno-theme-border); }
+[data-overview-shell] :where(.xeno-project-list > header, .xeno-resource-preview-bar, .xeno-resource-preview-head, .xeno-kind-pill) { border-color: var(--xeno-theme-border); background: var(--xeno-theme-surface-subtle); color: var(--xeno-theme-text-muted); }
+[data-overview-shell] :where(.xeno-project-list > button, .xeno-project-board button, .xeno-project-calendar > button, .xeno-credit-pack) { border-color: var(--xeno-theme-border); background: var(--xeno-theme-surface); color: var(--xeno-theme-text-muted); }
+[data-overview-shell] :where(.xeno-project-list > button:hover, .xeno-project-board button:hover, .xeno-project-calendar > button:hover, .xeno-credit-pack:hover) { background: var(--xeno-theme-row-hover); }
+[data-overview-shell] :where(.xeno-project-list > button i, .xeno-data-icon, .xeno-resource-icon) { border-color: var(--xeno-theme-border); background: var(--xeno-theme-surface-muted); color: var(--xeno-theme-text); }
+[data-overview-shell] :where(.xeno-entitlement-grid, .xeno-workspace-edit, .xeno-session-row, .xeno-project-list > button) { border-color: var(--xeno-theme-border); }
+
+/* Overlays, command menu and switchable resource drawers. */
+[data-overview-shell] :where(.xeno-drawer-backdrop, .xeno-command-backdrop) { background: var(--xeno-theme-overlay); }
+[data-overview-shell] .xeno-detail-drawer { box-shadow: -18px 0 48px var(--xeno-theme-shadow); }
+[data-overview-shell] :where(.xeno-detail-drawer > header > button, .xeno-drawer-layout-control > button) { color: var(--xeno-theme-text-muted); }
+[data-overview-shell] :where(.xeno-detail-drawer > header > button:hover, .xeno-drawer-layout-control > button:hover, .xeno-drawer-layout-menu > button:hover) { background: var(--xeno-theme-control-hover); color: var(--xeno-theme-text); }
+[data-overview-shell] :where(.xeno-command-results > button:hover, .xeno-command-results > button.is-active) { background: var(--xeno-theme-row-hover); color: var(--xeno-theme-text); }
+[data-overview-shell] :where(.xeno-drawer-layout-menu > span, .xeno-drawer-tabs > span, .xeno-drawer-facts dt) { color: var(--xeno-theme-text-soft); }
+[data-overview-shell] :where(.xeno-drawer-layout-menu > button, .xeno-drawer-facts dd, .xeno-drawer-hero h3, .xeno-command-input-row input, .xeno-command-results > button, .xeno-command-results > button strong) { color: var(--xeno-theme-text); }
+[data-overview-shell] .xeno-drawer-layout-menu { box-shadow: 0 14px 34px var(--xeno-theme-shadow); }
+[data-overview-shell] .xeno-sticky-savebar { box-shadow: 0 12px 32px var(--xeno-theme-shadow); color: var(--xeno-theme-text-muted); }
+[data-overview-shell] :where(.xeno-command-input-row, .xeno-command-groups, .xeno-command-dialog footer) { border-color: var(--xeno-theme-border); background: var(--xeno-theme-surface-raised); }
+[data-overview-shell] .xeno-command-groups button { border-color: transparent; background: transparent; color: var(--xeno-theme-text-muted); }
+[data-overview-shell] .xeno-command-results { background: var(--xeno-theme-surface-raised); }
+[data-overview-shell] .xeno-command-input-row input,
+[data-overview-shell] .xeno-command-results > button,
+[data-overview-shell] .xeno-command-results > button strong {
+  color: var(--xeno-theme-text);
+}
+[data-overview-shell] .xeno-command-input-row button,
+[data-overview-shell] .xeno-command-results > button small,
+[data-overview-shell] .xeno-command-results > button em,
+[data-overview-shell] .xeno-command-results > button kbd {
+  color: var(--xeno-theme-text-muted);
+}
+[data-overview-shell] .xeno-command-results > button:hover,
+[data-overview-shell] .xeno-command-results > button.is-active {
+  background: var(--xeno-theme-row-hover);
+  color: var(--xeno-theme-text);
+}
+[data-overview-shell] .xeno-command-groups button.is-active {
+  border-color: var(--xeno-theme-border);
+  background: var(--xeno-theme-active);
+  color: var(--xeno-theme-text);
+}
+[data-overview-shell] .xeno-command-dialog footer {
+  border-color: var(--xeno-theme-border);
+  background: var(--xeno-theme-surface-subtle);
+  color: var(--xeno-theme-text-muted);
+}
+[data-overview-shell] .xeno-command-icon,
+[data-overview-shell] .xeno-command-dialog kbd {
+  border-color: var(--xeno-theme-border);
+  background: var(--xeno-theme-surface-muted);
+  color: var(--xeno-theme-text-muted);
+}
+
+/* Higher-specificity interaction contracts prevent legacy component rules from
+   winning over the shared theme in dark and custom appearances. */
+[data-overview-shell] .xeno-project-list > button:hover,
+[data-overview-shell] .xeno-project-board button:hover,
+[data-overview-shell] .xeno-project-calendar > button:hover,
+[data-overview-shell] .xeno-credit-pack:hover,
+[data-overview-shell] .xeno-integration-card:hover {
+  background: var(--xeno-theme-row-hover);
+}
+[data-overview-shell] .xeno-settings-tabs button:hover,
+[data-overview-shell] .xeno-drawer-tabs button:hover {
+  color: var(--xeno-theme-text);
+}
+[data-overview-shell] .xeno-settings-tabs button.is-active,
+[data-overview-shell] .xeno-account-tabs button.is-active,
+[data-overview-shell] .xeno-drawer-tabs button.is-active {
+  border-bottom-color: var(--xeno-theme-text);
+  color: var(--xeno-theme-text);
+}
+[data-overview-shell] .xeno-range-picker {
+  background: var(--xeno-theme-surface-muted);
+}
+[data-overview-shell] .xeno-range-picker button {
+  color: var(--xeno-theme-text-muted);
+}
+[data-overview-shell] .xeno-range-picker button:hover {
+  background: var(--xeno-theme-control-hover);
+  color: var(--xeno-theme-text);
+}
+[data-overview-shell] .xeno-range-picker button.is-active,
+[data-overview-shell] .xeno-project-toolbar button.is-active,
+[data-overview-shell] .xeno-page-button.is-primary,
+[data-overview-shell] .xeno-resource-state button.is-primary {
+  border-color: var(--xeno-theme-inverse);
+  background: var(--xeno-theme-inverse);
+  color: var(--xeno-theme-inverse-text);
+}
+[data-overview-shell] .xeno-platform-page :where(input, select, textarea):focus {
+  border-color: var(--xeno-theme-border-strong);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--xeno-theme-focus-ring) 30%, transparent);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-overview-shell] *,
+  [data-overview-shell] *::before,
+  [data-overview-shell] *::after { scroll-behavior: auto !important; animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; }
+}
+[data-overview-shell] input[type="range"],
+[data-overview-shell] input[type="checkbox"],
+[data-overview-shell] input[type="radio"] {
+  accent-color: var(--xeno-theme-text);
+}

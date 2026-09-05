@@ -90,7 +90,7 @@ export class ContainerService {
     autoStart: boolean = true
   ): Promise<ContainerCreationResponse | { success: false; error: string }> {
     try {
-      const token = localStorage.getItem('xenoos_auth_token');
+      const token = getAccessToken();
       if (!token) {
         throw new Error('No authentication token found');
       }
@@ -137,7 +137,7 @@ export class ContainerService {
         limit: limit.toString(),
       });
 
-      const token = localStorage.getItem('xenoos_auth_token');
+      const token = getAccessToken();
       if (!token) {
         throw new Error('Authentication required');
       }
@@ -207,7 +207,7 @@ export class ContainerService {
    */
   static async startContainer(containerId: string): Promise<ContainerOperationResult> {
     try {
-      const token = localStorage.getItem('xenoos_auth_token');
+      const token = getAccessToken();
       if (!token) {
         throw new Error('No authentication token found');
       }
@@ -278,7 +278,7 @@ export class ContainerService {
    */
   static async deleteContainer(containerId: string): Promise<ContainerOperationResult> {
     try {
-      const token = localStorage.getItem('xenoos_auth_token');
+      const token = getAccessToken();
       if (!token) {
         throw new Error('Authentication required');
       }
@@ -422,7 +422,7 @@ export class ContainerService {
     error?: string;
   }> {
     try {
-      const token = localStorage.getItem('xenoos_auth_token');
+      const token = getAccessToken();
       if (!token) {
         throw new Error('Authentication required');
       }
@@ -544,3 +544,4 @@ export const useContainerService = () => {
 };
 
 export default ContainerService;
+import { getAccessToken } from '../lib/authSession';

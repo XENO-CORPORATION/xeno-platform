@@ -174,6 +174,7 @@ export const Plus = /* @__PURE__ */ glyph(GPlus);
 export const Globe = /* @__PURE__ */ glyph(GGlobe);
 export const File = /* @__PURE__ */ glyph(GFile);
 export const Download = /* @__PURE__ */ glyph(GDownload);
+export const ArrowRight = /* @__PURE__ */ glyph(GArrowRight);
 export const ArrowUp = /* @__PURE__ */ glyph(GArrowUp);
 export const Send = /* @__PURE__ */ glyph(GSend);
 export const Link = /* @__PURE__ */ glyph(GLink);

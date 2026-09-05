@@ -46,7 +46,7 @@ type QueueUpdateCallback = (update: any) => void;
 const videoModelRegistry: Record<string, VideoModelDefinition> = {
   'fal-ai/minimax/video-01-live': {
     provider: 'xeno',
-    xenoModelId: 'minimax-video-02',
+    xenoModelId: 'fal-ai/minimax/video-01-live',
     isTextToVideo: true,
     isImageToVideo: false,
     defaultSettings: {
@@ -57,7 +57,7 @@ const videoModelRegistry: Record<string, VideoModelDefinition> = {
   },
   'fal-ai/veo2': {
     provider: 'xeno',
-    xenoModelId: 'google-veo3',
+    xenoModelId: 'fal-ai/veo2',
     isTextToVideo: true,
     isImageToVideo: false,
     defaultSettings: {
@@ -68,7 +68,7 @@ const videoModelRegistry: Record<string, VideoModelDefinition> = {
   },
   'fal-ai/wan-t2v': {
     provider: 'xeno',
-    xenoModelId: 'wan-2-6',
+    xenoModelId: 'fal-ai/wan-t2v',
     isTextToVideo: true,
     isImageToVideo: false,
     defaultSettings: {
@@ -79,7 +79,7 @@ const videoModelRegistry: Record<string, VideoModelDefinition> = {
   },
   'fal-ai/hunyuan-video': {
     provider: 'xeno',
-    xenoModelId: 'wan-2-6',
+    xenoModelId: 'fal-ai/hunyuan-video',
     isTextToVideo: true,
     isImageToVideo: false,
     defaultSettings: {
@@ -90,7 +90,7 @@ const videoModelRegistry: Record<string, VideoModelDefinition> = {
   },
   'fal-ai/luma-dream-machine/ray-2': {
     provider: 'xeno',
-    xenoModelId: 'runway-gen45',
+    xenoModelId: 'fal-ai/luma-dream-machine/ray-2',
     isTextToVideo: true,
     isImageToVideo: false,
     defaultSettings: {
@@ -101,7 +101,7 @@ const videoModelRegistry: Record<string, VideoModelDefinition> = {
   },
   'fal-ai/pika/v2.2/text-to-video': {
     provider: 'xeno',
-    xenoModelId: 'pixverse-5-5',
+    xenoModelId: 'fal-ai/pika/v2.2/text-to-video',
     isTextToVideo: true,
     isImageToVideo: false,
     defaultSettings: {
@@ -113,7 +113,7 @@ const videoModelRegistry: Record<string, VideoModelDefinition> = {
   },
   'fal-ai/kling-video/v1.6/pro/image-to-video': {
     provider: 'xeno',
-    xenoModelId: 'kling-26',
+    xenoModelId: 'fal-ai/kling-video/v1.6/pro/image-to-video',
     isTextToVideo: false,
     isImageToVideo: true,
     defaultSettings: {
@@ -123,7 +123,7 @@ const videoModelRegistry: Record<string, VideoModelDefinition> = {
   },
   'fal-ai/kling-video/v2/master/image-to-video': {
     provider: 'xeno',
-    xenoModelId: 'kling-30',
+    xenoModelId: 'fal-ai/kling-video/v2/master/image-to-video',
     isTextToVideo: false,
     isImageToVideo: true,
     defaultSettings: {
@@ -182,6 +182,13 @@ async function generateVideo(
     return { success: false, error: `Video model ${modelId} not found.`, videos: [] };
   }
 
+  if (typeof settings.prompt !== 'string' || !settings.prompt.trim()) {
+    return { success: false, error: 'Please enter a prompt.', videos: [] };
+  }
+  if (modelDefinition.isImageToVideo && !settings.image_url) {
+    return { success: false, error: 'This model requires an input image.', videos: [] };
+  }
+
   const mergedSettings: VideoModelSettings = {
     ...modelDefinition.defaultSettings,
     ...settings,
@@ -204,11 +211,12 @@ async function generateVideo(
       const result = await postXenoRequest('/videos/generate', {
         ...xenoInput,
         wait: true,
+        requestId: crypto.randomUUID(),
       });
 
       const generationTime = (Date.now() - startTime) / 1000;
 
-      if (!result || !result.data || result.data.length === 0) {
+      if (!result || !Array.isArray(result.data) || result.data.length === 0) {
         return {
           success: false,
           error: 'Received invalid response or no video from Xeno AI.',
@@ -217,8 +225,13 @@ async function generateVideo(
         };
       }
 
+      if (result.model && result.model !== modelDefinition.xenoModelId) {
+        return { success: false, error: 'The provider returned a different model than requested. Contact support with the request record.', videos: [],
+          metadata: { requestedModel: modelDefinition.xenoModelId, returnedModel: result.model } };
+      }
+
       const videoData = result.data[0];
-      if (!videoData.url) {
+      if (!videoData || typeof videoData.url !== 'string' || !/^(https:\/\/|data:video\/)/i.test(videoData.url)) {
         return {
           success: false,
           error: 'No video URL in response from Xeno AI.',

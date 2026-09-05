@@ -202,7 +202,11 @@ services:
       # never paste a literal secret into this file.
       - STRIPE_SECRET_KEY=${STRIPE_SECRET_KEY:-}
       - STRIPE_PUBLISHABLE_KEY=${STRIPE_PUBLISHABLE_KEY:-}
+      # Read-only preflight pins; never infer the intended account from its key.
+      - STRIPE_EXPECTED_ACCOUNT_ID=${STRIPE_EXPECTED_ACCOUNT_ID:-}
+      - STRIPE_EXPECTED_MODE=${STRIPE_EXPECTED_MODE:-}
       - STRIPE_WEBHOOK_SECRET=${STRIPE_WEBHOOK_SECRET:-}
+      - STRIPE_BILLING_PORTAL_CONFIGURATION=${STRIPE_BILLING_PORTAL_CONFIGURATION:-}
       - STRIPE_AUTOMATIC_TAX=${STRIPE_AUTOMATIC_TAX:-}
       # What the customer sees on their bank statement. An unrecognised line is
       # the most common cause of a "what is this?" chargeback.

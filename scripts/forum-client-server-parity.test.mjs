@@ -29,6 +29,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
+import ts from 'typescript';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const srcPath = (...p) => join(HERE, '..', 'src', ...p);
@@ -69,20 +70,51 @@ function clientPaths() {
   return [...out].filter((p) => p.startsWith('/'));
 }
 
-function serverPaths() {
+function regexPathShape(pattern) {
+  assert.ok(pattern.source.startsWith('^') && pattern.source.endsWith('$'), 'route regex must be anchored');
+  assert.doesNotMatch(pattern.flags, /[gy]/, 'stateful route regex is unsupported');
+  const shape = pattern.source.slice(1, -1)
+    .replace(/\(\?<\w+>(?:\\.|[^()])*\)/g, '*')
+    .replace(/\\\//g, '/')
+    .replace(/\/\?$/, '');
+  assert.match(shape, /^\/(?:[\w-]+|\*)(?:\/(?:[\w-]+|\*))*$/, 'unsupported route regex shape; extend the reader explicitly');
+  return normalize(shape);
+}
+
+function serverPaths(text = ROUTES) {
   // 🔴 `put` was missing from this list, and its absence reported a REAL route
   // as a missing endpoint: the client's thread mute/watch toggle uses PUT, the
   // server mounts PUT, and the checker said the feature was unreachable.
   //
   // I nearly filed that as a defect. Verifying the claim before reporting it is
   // what caught it — a checker's first finding is a claim about the checker.
-  const flat = singleQuoted(ROUTES);
   const out = new Set();
-  for (const m of flat.matchAll(/router\.(?:get|post|put|patch|delete|all)\(\s*'([^']+)'/g)) {
-    out.add(normalize(m[1]));
-  }
+  const source = ts.createSourceFile('forumRoutes.js', text, ts.ScriptTarget.Latest, true, ts.ScriptKind.JS);
+  const visit = node => {
+    if (ts.isCallExpression(node) && ts.isPropertyAccessExpression(node.expression) &&
+        node.expression.expression.getText(source) === 'router' && /^(get|post|put|patch|delete|all)$/.test(node.expression.name.text)) {
+      const arg = node.arguments[0];
+      const patterns = arg && ts.isArrayLiteralExpression(arg) ? arg.elements : [arg];
+      for (const pattern of patterns) {
+        if (pattern && ts.isStringLiteralLike(pattern)) out.add(normalize(pattern.text));
+        else if (pattern && ts.isRegularExpressionLiteral(pattern)) {
+          const raw = pattern.getText(source), last = raw.lastIndexOf('/');
+          out.add(regexPathShape(new RegExp(raw.slice(1, last), raw.slice(last + 1))));
+        } else throw new Error('Cannot read Forum route pattern: ' + (pattern?.getText(source) ?? 'missing'));
+      }
+    }
+    ts.forEachChild(node, visit);
+  };
+  visit(source);
   return [...out];
 }
+
+test('route reader handles named captures and refuses unreadable patterns', () => {
+  assert.equal(regexPathShape(/^\/(?<targetType>threads|posts)\/(?<id>[^/]+)\/vote\/?$/i), '/*/*/vote');
+  assert.throws(() => regexPathShape(/^(a|b)$/), /unsupported/);
+  assert.throws(() => serverPaths('router.post(dynamicPath, handler);'), /Cannot read/);
+  assert.deepEqual(serverPaths('router.get(["/one/:id", "/two/:id"], handler);'), ['/one/*', '/two/*']);
+});
 
 test('both extractors actually parse something', () => {
   // If either silently matched nothing, the comparison below would pass by

@@ -8,8 +8,8 @@
  *
  * Design invariants:
  *  - FEATURE-FLAGGED: with no STRIPE_SECRET_KEY the whole surface is disabled and
- *    every endpoint returns 503 — the server still boots and every other product
- *    is unaffected. Drop in keys → live, no code change.
+ *    write endpoints return 503 — the server still boots and other products are
+ *    unaffected. Keys additionally require explicit account/mode and DB binding.
  *  - IDEMPOTENT: Stripe redelivers webhooks. Every credit-granting event is
  *    guarded by `billing_events(event_id PRIMARY KEY)` — a redelivered event is a
  *    no-op, so a customer is never double-credited.
@@ -19,13 +19,29 @@
  *    prices/plans are managed in the Stripe dashboard, not in code.
  */
 import Stripe from 'stripe';
-import { consentReady, findUsableConsent, consumeConsent } from './checkoutConsent.js';
+import { requireCheckoutConsent, consumeConsent } from './checkoutConsent.js';
+import { readCheckoutStatus } from './checkoutStatus.js';
 import { siteOrigin } from '../config/hosts.js';
 import { addGrantTx, clawbackTx, getBalanceV2, MICRO_PER_CREDIT } from '../utils/creditLedgerV2.js';
+import { priceIssues } from '../utils/priceAgreement.js';
+import { billingAccountConfig, billingBindingError, verifyBillingAccount, canonicalBillingEvent, requireBillingDatabaseBinding } from '../utils/billingAccountBinding.js';
 
 const SECRET = process.env.STRIPE_SECRET_KEY || '';
 const PUBLISHABLE = process.env.STRIPE_PUBLISHABLE_KEY || '';
 const WEBHOOK_SECRET = process.env.STRIPE_WEBHOOK_SECRET || '';
+// Keep the pins and key snapshot together for the lifetime of this client.
+const ACCOUNT_ENV = { STRIPE_SECRET_KEY: SECRET, STRIPE_PUBLISHABLE_KEY: PUBLISHABLE,
+  STRIPE_EXPECTED_ACCOUNT_ID: process.env.STRIPE_EXPECTED_ACCOUNT_ID,
+  STRIPE_EXPECTED_MODE: process.env.STRIPE_EXPECTED_MODE };
+
+async function requireAccount(pool, { sale = false, item = null } = {}) {
+  const config = billingAccountConfig(ACCOUNT_ENV);
+  const evidence = await verifyBillingAccount(stripe, config, { sale });
+  if (evidence.verificationNotExposed) console.warn('[billing] Verification details were not exposed; Dashboard review remains necessary. Enabled capabilities are not KYC approval.');
+  if (item) await requireCheckoutPrice(item);
+  await requireBillingDatabaseBinding(pool, config);
+  return config;
+}
 
 /**
  * Stripe client — null until a secret key is configured (feature flag).
@@ -39,7 +55,7 @@ const WEBHOOK_SECRET = process.env.STRIPE_WEBHOOK_SECRET || '';
 const stripe = SECRET ? new Stripe(SECRET, { apiVersion: '2025-02-24.acacia', maxNetworkRetries: 2 }) : null;
 
 export function isEnabled() {
-  return Boolean(stripe);
+  try { billingAccountConfig(ACCOUNT_ENV); return Boolean(stripe); } catch { return false; }
 }
 
 // ── Catalog ─────────────────────────────────────────────────────────────────
@@ -119,6 +135,35 @@ export function getCatalog() {
 // fallback (used when Stripe is off, the price is unconfigured, or the lookup errors).
 const _priceCache = new Map();
 const PRICE_TTL_MS = 5 * 60 * 1000;
+const CHECKOUT_PRICE_TIMEOUT_MS = 10_000;
+
+// A display cache or manual deployment preflight cannot authorize a purchase.
+// Recheck before either producer creates a customer/session or consumes consent.
+async function requireCheckoutPrice(item) {
+  let timer;
+  try {
+    if (!stripe) throw new Error('billing disabled');
+    const price = await Promise.race([
+      Promise.resolve().then(() => stripe.prices.retrieve(item.priceId, {}, {
+        timeout: CHECKOUT_PRICE_TIMEOUT_MS, maxNetworkRetries: 0,
+      })),
+      new Promise((_, reject) => {
+        timer = setTimeout(() => reject(new Error('price deadline')), CHECKOUT_PRICE_TIMEOUT_MS);
+      }),
+    ]);
+    if (price?.livemode !== billingAccountConfig(ACCOUNT_ENV).livemode) throw billingBindingError();
+    if (priceIssues({ ...item, currency: CURRENCY }, price).length) throw new Error('price mismatch');
+  } catch {
+    // Existing route handlers log and return message: never attach provider data.
+    const error = new Error('This purchase is temporarily unavailable. Please try again later.');
+    error.status = 503;
+    error.code = 'billing_price_unavailable';
+    throw error;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 async function livePriceFor(priceId) {
   if (!stripe || !priceId) return null;
   const hit = _priceCache.get(priceId);
@@ -520,7 +565,7 @@ function checkoutReturn(base, itemId, downloadIntent) {
     };
   }
   return {
-    successUrl: `${base}/overview/billing?billing=success&item=${itemId}`,
+    successUrl: `${base}/overview/billing?billing=success&item=${itemId}&session_id={CHECKOUT_SESSION_ID}`,
     cancelUrl: `${base}/overview/billing?billing=cancel`,
   };
 }
@@ -528,20 +573,20 @@ function checkoutReturn(base, itemId, downloadIntent) {
 /**
  * The card-statement descriptor.
  *
- * Stripe caps this at 22 characters and rejects < > \ ' " * — a value that
- * violates either is refused at session creation, which would turn a cosmetic
- * setting into a checkout outage. Clamped here rather than trusted.
+ * Card payments use a suffix, not the non-card statement_descriptor field.
+ * Reserve 10 characters for the account prefix and two for Stripe's separator.
  */
 function statementDescriptor() {
   const raw = process.env.STRIPE_STATEMENT_DESCRIPTOR || 'XENOSTUDIO';
-  return raw.replace(/[<>\\'"*]/g, '').trim().slice(0, 22) || 'XENOSTUDIO';
+  const suffix = raw.replace(/[^a-zA-Z0-9 .-]/g, '').trim().slice(0, 10);
+  return /[a-zA-Z]/.test(suffix) ? suffix : 'XENOSTUDIO';
 }
 
 export async function createCheckout(pool, user, itemId, { origin, downloadIntent = null, consentId = null } = {}) {
   const item = CATALOG.map(resolveItem).find((i) => i.id === itemId);
   if (!item) { const e = new Error('unknown item'); e.status = 400; throw e; }
   if (!item.available) { const e = new Error(`item "${itemId}" has no configured price (set ${item.priceEnv})`); e.status = 400; throw e; }
-  if (item.kind === 'subscription' && !isOffered(item)) {
+  if (item.kind === 'subscription' && !isOfferable(item)) {
     const e = new Error('That subscription price is no longer offered');
     e.status = 409;
     e.code = 'price_not_offered';
@@ -570,19 +615,9 @@ export async function createCheckout(pool, user, itemId, { origin, downloadInten
    *
    * Refusing here rather than warning is deliberate: a sale made without it is
    * not a slightly-weaker sale, it is a sale we cannot make final. */
-  if (await consentReady(pool)) {
-    const usable = consentId
-      ? consentId
-      : await findUsableConsent(pool, user.id, item.id);
-    if (!usable) {
-      const e = new Error('Consent to immediate performance is required before purchase');
-      e.status = 400;
-      e.code = 'consent_required';
-      throw e;
-    }
-    // eslint-disable-next-line no-param-reassign
-    consentId = usable;
-  }
+  consentId = await requireCheckoutConsent(pool, user.id, item.id, consentId);
+
+  await requireAccount(pool, { sale: true, item });
 
   const customer = await getOrCreateCustomer(pool, user);
 
@@ -595,6 +630,9 @@ export async function createCheckout(pool, user, itemId, { origin, downloadInten
     cancel_url: cancelUrl,
     allow_promotion_codes: true,
     ...taxCheckoutFields(),
+    ...(item.kind === 'subscription' ? { subscription_data: { metadata: {
+      xenoUserId: String(user.id), itemId: item.id,
+    } } } : {}),
     // Metadata rides on the session (and, for one-time, is what the webhook reads
     // to know how many credits to grant).
     /* xenoDownloadIntent rides here because the webhook is the ONLY place that
@@ -617,7 +655,7 @@ export async function createCheckout(pool, user, itemId, { origin, downloadInten
      * case this exists to prevent. Stripe caps it at 22 characters and rejects
      * < > \ ' " * — so it is truncated and stripped rather than trusted. */
     ...(item.kind === 'subscription' ? {} : {
-      payment_intent_data: { statement_descriptor: statementDescriptor() },
+      payment_intent_data: { statement_descriptor_suffix: statementDescriptor() },
     }),
 
     /* ── Invoices ──────────────────────────────────────────────────────────
@@ -645,7 +683,7 @@ export async function createCheckout(pool, user, itemId, { origin, downloadInten
       ...(consentId ? { xenoConsentId: String(consentId) } : {}),
       ...(downloadIntent ? { xenoDownloadIntent: String(downloadIntent) } : {}),
     },
-  });
+  }, { idempotencyKey: `xeno-checkout:${consentId}` });
   await consumeConsent(pool, consentId, session.id);
   return { url: session.url, id: session.id };
 }
@@ -666,7 +704,7 @@ export async function createWorkspaceSeatCheckout(pool, user, {
     throw e;
   }
   if (!item.available) { const e = new Error(`Team price is not configured (set ${item.priceEnv})`); e.status = 400; throw e; }
-  if (!isOffered(item)) {
+  if (!isOfferable(item)) {
     const e = new Error('That Team price is no longer offered');
     e.status = 409;
     e.code = 'price_not_offered';
@@ -684,17 +722,9 @@ export async function createWorkspaceSeatCheckout(pool, user, {
    * A control that covers one of two payment paths is not a weaker control, it
    * is an absent one for the path it misses — and the missed path is the one
    * where the money is. Same fail-closed treatment as the personal route. */
-  if (await consentReady(pool)) {
-    const usable = consentId || await findUsableConsent(pool, user.id, item.id);
-    if (!usable) {
-      const e = new Error('Consent to immediate performance is required before purchase');
-      e.status = 400;
-      e.code = 'consent_required';
-      throw e;
-    }
-    // eslint-disable-next-line no-param-reassign
-    consentId = usable;
-  }
+  consentId = await requireCheckoutConsent(pool, user.id, item.id, consentId);
+
+  await requireAccount(pool, { sale: true, item });
 
   const seatReturn = checkoutReturn(base, item.id, downloadIntent);
   const customer = await getOrCreateCustomer(pool, user);
@@ -719,7 +749,7 @@ export async function createWorkspaceSeatCheckout(pool, user, {
       ...(consentId ? { xenoConsentId: String(consentId) } : {}),
       ...(downloadIntent ? { xenoDownloadIntent: String(downloadIntent) } : {}),
     },
-  });
+  }, { idempotencyKey: `xeno-checkout:${consentId}` });
   await consumeConsent(pool, consentId, session.id);
   return { url: session.url, id: session.id };
 }
@@ -738,13 +768,20 @@ async function setWorkspacePlan(pool, workspaceId, { plan, status, subId = null,
 
 /** Stripe billing portal (manage/cancel subscription, update card). */
 export async function createPortal(pool, user, { origin }) {
+  const config = await requireAccount(pool);
   await ensureSchema(pool);
   const uid = String(user.id);
   const found = await pool.query('SELECT stripe_customer_id FROM billing_customers WHERE user_id = $1', [uid]);
   const customer = found.rows[0]?.stripe_customer_id;
   if (!customer) { const e = new Error('no billing customer yet'); e.status = 404; throw e; }
   const base = process.env.BILLING_APP_URL || origin || siteOrigin();
-  const portal = await stripe.billingPortal.sessions.create({ customer, return_url: `${base}/overview/billing` });
+  const configuration = process.env.STRIPE_BILLING_PORTAL_CONFIGURATION || '';
+  if (config.livemode && !/^bpc_[A-Za-z0-9]+$/.test(configuration)) throw billingBindingError();
+  const portal = await stripe.billingPortal.sessions.create({
+    customer,
+    return_url: `${base}/overview/billing`,
+    ...(configuration ? { configuration } : {}),
+  });
   return { url: portal.url };
 }
 
@@ -760,6 +797,69 @@ export async function getSummary(pool, user) {
     currentPeriodEnd: ent.currentPeriodEnd,
     entitlements: ent.entitlements,
   };
+}
+
+/** Reconcile the current Stripe resource, not an out-of-order webhook snapshot.
+ * Serialize by customer so parallel renewals/cancellations cannot overwrite a
+ * newer read. Team invoices update workspace seats, never a personal plan.
+ */
+async function reconcileSubscription(pool, provider, subscriptionId, customerId, fallbackMetadata = {}) {
+  const subId = typeof subscriptionId === 'string' ? subscriptionId : subscriptionId?.id;
+  const customer = typeof customerId === 'string' ? customerId : customerId?.id;
+  if (!subId || !customer) throw new Error('Subscription reconciliation requires subscription and customer IDs');
+  await ensureSchema(pool);
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1, 0))', [`billing-subscription:${customer}`]);
+    const sub = await provider.subscriptions.retrieve(subId, {}, { timeout: 10000, maxNetworkRetries: 1 });
+    if (sub.id !== subId || (typeof sub.customer === 'string' ? sub.customer : sub.customer?.id) !== customer) {
+      throw new Error('Subscription customer does not match the billing event');
+    }
+    const owner = (await client.query('SELECT user_id FROM billing_customers WHERE stripe_customer_id = $1', [customer])).rows[0]?.user_id;
+    if (!owner) throw new Error('Subscription billing owner is not mapped yet');
+    const metadata = { ...fallbackMetadata, ...sub.metadata };
+    if (metadata.xenoUserId && metadata.xenoUserId !== String(owner)) throw new Error('Subscription owner metadata mismatch');
+    const workspaceId = metadata.xenoWorkspaceId;
+    const current = workspaceId
+      ? (await client.query("SELECT metadata->'billing'->>'stripe_subscription_id' AS sub_id FROM workspaces WHERE id=$1 FOR UPDATE", [workspaceId])).rows[0]
+      : (await client.query('SELECT stripe_subscription_id AS sub_id FROM xeno_account_plans WHERE user_id=$1 FOR UPDATE', [String(owner)])).rows[0];
+    if (workspaceId && !current) throw new Error('Subscription workspace no longer exists');
+    // An event from a replaced subscription must not cancel or downgrade its successor.
+    if (current?.sub_id && current.sub_id !== subId) {
+      const bound = await provider.subscriptions.retrieve(current.sub_id, {}, { timeout: 10000, maxNetworkRetries: 1 });
+      if (!Number.isFinite(sub.created) || !Number.isFinite(bound.created) || sub.created <= bound.created) {
+        await client.query('COMMIT');
+        return { handled: true, reason: 'superseded subscription' };
+      }
+    }
+    const item = sub.items?.data?.[0];
+    const mappedPlan = planForPriceId(item?.price?.id) || planForItemId(metadata.itemId);
+    const ended = sub.status === 'canceled' || sub.status === 'incomplete_expired';
+    // A retired price must never prevent revoking its canceled subscription.
+    if (!ended && (!mappedPlan || (workspaceId && mappedPlan !== 'team') || (!workspaceId && mappedPlan === 'team'))) {
+      throw new Error('Subscription price is not mapped to its account or workspace scope');
+    }
+    const plan = ended ? 'free' : mappedPlan;
+    const state = { plan, status: sub.status, subId, periodEnd: periodEndFromSub(sub) };
+    if (workspaceId) {
+      const seats = Number(item?.quantity);
+      if (!ended && (!Number.isInteger(seats) || seats < 1)) throw new Error('Invalid subscription seat count');
+      await setWorkspacePlan(client, workspaceId, { ...state, seats: ended ? null : seats });
+    } else {
+      await setPlan(client, owner, state);
+    }
+    await client.query('COMMIT');
+    return { handled: true, plan };
+  } catch (error) {
+    await client.query('ROLLBACK').catch(() => {});
+    throw error;
+  } finally { client.release(); }
+}
+
+export async function getCheckoutStatus(pool, user, sessionId) {
+  await requireAccount(pool);
+  return readCheckoutStatus(pool, stripe, user.id, sessionId);
 }
 
 // ── Webhook ──────────────────────────────────────────────────────────────────
@@ -792,16 +892,26 @@ async function grantCreditsForEvent(pool, event, userId, credits, session) {
   try {
     await client.query('BEGIN');
     if (await claimEventTx(client, event, userId)) {
-      await addGrantTx(client, String(userId), { amountMicro, kind: 'paid', sourceRef: `stripe:${event.id}` });
-      const pi = session?.payment_intent ? String(session.payment_intent) : null;
+      // Stripe can deliver different event IDs for the SAME purchase. Claim the
+      // checkout as well as the event, including zero-total promotional orders.
+      if (!session?.id) throw new Error('Credit fulfillment requires a checkout session ID');
+      const firstCheckout = await claimEventTx(client, { id: `checkout:${session.id}`, type: 'xeno.checkout.fulfilled' }, userId);
+      const pi = typeof session.payment_intent === 'string' ? session.payment_intent : session.payment_intent?.id;
+      let firstPayment = true;
       if (pi) {
-        await client.query(
+        const charge = await client.query(
           `INSERT INTO billing_charges (payment_intent, user_id, credits_micro, event_id)
-           VALUES ($1,$2,$3,$4) ON CONFLICT (payment_intent) DO NOTHING`,
+           VALUES ($1,$2,$3,$4) ON CONFLICT (payment_intent) DO NOTHING RETURNING payment_intent`,
           [pi, String(userId), String(amountMicro), event.id],
         );
+        firstPayment = charge.rows.length > 0;
       }
-      console.log(`💳 [billing] granted ${credits} credits to user ${userId} (top-up ${event.id})`);
+      // The charge claim also protects purchases fulfilled before checkout-level
+      // idempotency was introduced. All claims and ledger writes commit together.
+      if (firstCheckout && firstPayment) {
+        await addGrantTx(client, String(userId), { amountMicro, kind: 'paid', sourceRef: `stripe:checkout:${session.id}` });
+        console.log(`💳 [billing] granted ${credits} credits to user ${userId} (top-up ${event.id})`);
+      }
     }
     await client.query('COMMIT');
   } catch (e) { await client.query('ROLLBACK').catch(() => {}); throw e; } finally { client.release(); }
@@ -940,7 +1050,11 @@ async function attributeDownloadIntent(pool, session, plan) {
   }
 }
 
-export async function handleEvent(pool, event) {
+export async function handleEvent(pool, event, { provider = stripe } = {}) {
+  const config = billingAccountConfig(ACCOUNT_ENV);
+  await verifyBillingAccount(provider, config);
+  event = await canonicalBillingEvent(provider, config, event);
+  await requireBillingDatabaseBinding(pool, config);
   const obj = event.data.object;
   switch (event.type) {
     // Fires when a Checkout completes — for BOTH subscriptions and one-time packs.
@@ -949,6 +1063,10 @@ export async function handleEvent(pool, event) {
     case 'checkout.session.completed':
     case 'checkout.session.async_payment_succeeded': {
       const session = obj;
+      // Completion is not settlement: delayed payments must not grant a plan or credits.
+      if (!['paid', 'no_payment_required'].includes(session.payment_status)) {
+        return { handled: true, reason: 'payment not settled' };
+      }
       const uid = session.metadata?.xenoUserId || session.client_reference_id;
       // Persist the customer↔user mapping (needed for renewal/lifecycle events).
       if (session.customer && uid) {
@@ -961,27 +1079,8 @@ export async function handleEvent(pool, event) {
       if (!uid) return { handled: false, reason: 'no uid on session' };
 
       if (session.mode === 'subscription') {
-        const wsId = session.metadata?.xenoWorkspaceId;
-        if (wsId) {
-          // Per-seat Team subscription → set the WORKSPACE plan + seat limit.
-          const seats = Number(session.metadata?.seats || 1);
-          await setWorkspacePlan(pool, wsId, { plan: 'team', status: 'active', subId: session.subscription || null, seats });
-          console.log(`💳 [billing] workspace ${wsId} → team plan, ${seats} seats (checkout ${event.id})`);
-          /* AFTER the plan lands, same ordering as the personal branch: the
-           * resume page is polling, and attributing first would let it observe
-           * the attribution while still being refused. */
-          await attributeDownloadIntent(pool, session, 'team');
-        } else {
-          // Personal subscription → set the user PLAN (from the item metadata; no credit grant).
-          const plan = planForItemId(session.metadata?.itemId) || 'pro';
-          await setPlan(pool, uid, { plan, status: 'active', subId: session.subscription || null });
-          console.log(`💳 [billing] user ${uid} → plan '${plan}' (checkout ${event.id})`);
-          /* AFTER setPlan, deliberately. The resume page is polling for the plan,
-           * and attributing before granting would let it observe the attribution
-           * while still being refused — a visible flicker of "we took your money
-           * and you still cannot download". */
-          await attributeDownloadIntent(pool, session, plan);
-        }
+        const result = await reconcileSubscription(pool, provider, session.subscription, session.customer, session.metadata);
+        if (!result.reason) await attributeDownloadIntent(pool, session, result.plan);
       } else if (session.mode === 'payment') {
         // One-time top-up pack → GRANT credits (atomic claim+grant, idempotent).
         // Grant on any SETTLED session: 'paid' (card / async-settled) or
@@ -995,71 +1094,20 @@ export async function handleEvent(pool, event) {
       return { handled: true };
     }
 
-    // Subscription paid (first payment + every renewal) → keep plan active, refresh period.
-    // NOTE: subscriptions do NOT grant credits — credits are separate top-ups only.
+    // Invoice and subscription events all reconcile the same current resource.
+    // A late failed invoice cannot undo a successful retry, and Team renewal
+    // events cannot accidentally fund the owner's personal account.
     case 'invoice.paid':
-    case 'invoice.payment_succeeded': {
-      const invoice = obj;
-      const uid = await userIdForCustomer(pool, invoice.customer);
-      if (!uid) return { handled: false, reason: 'no user for customer' };
-      const subId = subIdFromInvoice(invoice);
-      if (subId) {
-        const periodEnd = periodEndFromInvoice(invoice);
-        const cur = await getPlan(pool, uid);
-        const plan = cur.plan === 'free' ? 'pro' : cur.plan; // safety if checkout event was missed
-        await setPlan(pool, uid, { plan, status: 'active', subId, periodEnd });
-      }
-      return { handled: true };
-    }
-
-    // Subscription created/changed (upgrade, downgrade, cancel-at-period-end) → sync plan/status.
-    case 'customer.subscription.created':
-    case 'customer.subscription.updated': {
-      const sub = obj;
-      const wsId = sub.metadata?.xenoWorkspaceId;
-      if (wsId) {
-        // Workspace per-seat sub → sync plan/status + seat quantity (add/remove-seat proration).
-        const seats = sub.items?.data?.[0]?.quantity ?? Number(sub.metadata?.seats || 1);
-        const periodEnd = periodEndFromSub(sub);
-        await setWorkspacePlan(pool, wsId, { plan: 'team', status: sub.status, subId: sub.id, seats, periodEnd });
-        console.log(`💳 [billing] workspace ${wsId} → team status '${sub.status}', ${seats} seats (${event.type})`);
-        return { handled: true };
-      }
-      const uid = await userIdForCustomer(pool, sub.customer);
-      if (!uid) return { handled: false, reason: 'no user for customer' };
-      const priceId = sub.items?.data?.[0]?.price?.id;
-      const plan = planForPriceId(priceId) || 'pro';
-      const periodEnd = periodEndFromSub(sub);
-      await setPlan(pool, uid, { plan, status: sub.status, subId: sub.id, periodEnd });
-      console.log(`💳 [billing] user ${uid} → plan '${plan}' status '${sub.status}' (sub ${event.type})`);
-      return { handled: true };
-    }
-
-    // Subscription ended → downgrade to free.
-    case 'customer.subscription.deleted': {
-      const sub = obj;
-      const wsId = sub.metadata?.xenoWorkspaceId;
-      if (wsId) {
-        await setWorkspacePlan(pool, wsId, { plan: 'free', status: 'canceled', subId: sub.id });
-        console.log(`💳 [billing] workspace ${wsId} → free (subscription canceled)`);
-        return { handled: true };
-      }
-      const uid = await userIdForCustomer(pool, sub.customer);
-      if (!uid) return { handled: false, reason: 'no user for customer' };
-      await setPlan(pool, uid, { plan: 'free', status: 'canceled', subId: sub.id });
-      console.log(`💳 [billing] user ${uid} → free (subscription canceled)`);
-      return { handled: true };
-    }
-
-    // Payment failed → mark past_due (Stripe retries; grace period keeps plan for now).
+    case 'invoice.payment_succeeded':
     case 'invoice.payment_failed': {
-      const invoice = obj;
-      const uid = await userIdForCustomer(pool, invoice.customer);
-      if (!uid) return { handled: false, reason: 'no user for customer' };
-      const cur = await getPlan(pool, uid);
-      await setPlan(pool, uid, { plan: cur.plan, status: 'past_due', subId: invoice.subscription || null });
-      return { handled: true };
+      const subId = subIdFromInvoice(obj);
+      if (!subId) return { handled: true, reason: 'invoice has no subscription' };
+      return reconcileSubscription(pool, provider, subId, obj.customer);
     }
+    case 'customer.subscription.created':
+    case 'customer.subscription.updated':
+    case 'customer.subscription.deleted':
+      return reconcileSubscription(pool, provider, obj.id, obj.customer);
 
     // Refund → claw back the proportional credits (idempotent on the event id).
     case 'charge.refunded': {

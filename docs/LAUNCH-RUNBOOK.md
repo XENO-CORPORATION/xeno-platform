@@ -14,8 +14,15 @@ npm run compliance:preflight    # can we legally take money?
 npm run billing:preflight       # will the money actually arrive correctly?
 ```
 
-Both exit non-zero while something is missing. **Neither will pass today**, and
-that is correct — they are the map.
+Both exit non-zero while something is missing. Run them against the intended
+environment and retain the date and revision; a local environment result is not
+a production measurement. Neither command alone grants launch approval.
+
+**2026-09-04 continuation:** see [live readiness evidence](release-evidence/2026-09-04-live-readiness.md).
+The intended live XENOSYSTEM account and the deployed test account differ. Local
+runtime binding and deployment guards are implemented; they are not deployed.
+Existing test customer mappings and an active provider-side test subscription
+must be reconciled before the live key is used. Do not treat step 8 as a key swap.
 
 ---
 
@@ -24,10 +31,10 @@ that is correct — they are the map.
 **Why first:** everything downstream references it, and it is the longest
 lead-time item because a lawyer has to read it.
 
-Your `src/pages/Terms.tsx` today contains **zero** occurrences of "renew",
-"cancel" or "withdraw" — measured, not estimated. For an auto-renewing
-subscription sold to EU consumers, all three are required pre-contractual
-information.
+The original audit found these sections missing. The 2026-09-04 local source
+preflight now finds renewal, cancellation and withdrawal wording in
+`src/pages/Terms.tsx`. That closes the source-presence defect, not legal review
+or deployed-content verification. Retain all three requirements below.
 
 Add three sections. Draft below; **have them reviewed**, do not ship as-is.
 
@@ -77,8 +84,9 @@ Terms failures.
 
 ## Step 2 — Privacy: name your processors
 
-`src/pages/Privacy.tsx` does not mention **Stripe**. GDPR Art. 13 requires naming
-the recipients of personal data, and a payment processor plainly is one.
+The original audit found Stripe missing from `src/pages/Privacy.tsx`. The
+2026-09-04 local preflight now finds Stripe, erasure and lawful-basis wording.
+Processor accuracy and legal review remain separate acceptance requirements.
 
 Add a sub-processor list. At minimum, from what this platform actually uses:
 
@@ -110,15 +118,17 @@ security logging.
 Bring them these facts:
 
 - German **Einzelunternehmen**, sole proprietor
-- USt-IdNr **applied for, not issued** (your Impressum says *"ist beantragt"*)
+- Current identification and tax posture from [TAX-POSTURE.md](./TAX-POSTURE.md)
+  and the actual Impressum; the earlier "applied for, not issued" observation
+  is superseded by that record. Re-verify before publishing new identity claims.
 - Selling **B2C digital services** across the EU — place of supply is the
   customer's country
 - Expected volume, and whether you are under the EU-wide **€10,000** cross-border
   threshold
 - Whether **Kleinunternehmerregelung (§ 19 UStG)** applies to you
 
-Ask them exactly: **OSS registration, or not? And what do I charge until the
-USt-IdNr arrives?**
+Confirm the current OSS position, permitted selling territories and the tax
+treatment for this entity; do not infer these from a green source preflight.
 
 ⚠️ Do not guess this. Under-collected VAT is paid out of revenue you have already
 spent, and it accrues from the first sale.
@@ -170,8 +180,10 @@ is granted, and they are locked out of software they just paid for.
 
 ## Step 6 — Put it on the box
 
-Edit `/mnt/projects/xeno-platform/docker-compose.yml` **surgically**, then
-`up -d backend`.
+Prepare the reviewed main-contained artifact and guarded deployment plan with
+`node scripts/deploy-platform.mjs backend` (dry-run). Runtime secrets remain
+host-local; deployment must preserve them. Follow the release guide and obtain
+the action-time go/no-go before applying the candidate or changing providers.
 
 🔴 **Never overwrite that file from the repo.** On 2026-08-24 exactly that
 destroyed four box-only values — signup closed for everyone, forum email stopped,
@@ -181,6 +193,7 @@ changing. Values now live in the box's `.env` and compose reads them via
 
 ```
 STRIPE_SECRET_KEY  STRIPE_PUBLISHABLE_KEY  STRIPE_WEBHOOK_SECRET
+STRIPE_EXPECTED_ACCOUNT_ID  STRIPE_EXPECTED_MODE=test|live
 STRIPE_AUTOMATIC_TAX=true  BILLING_APP_URL  BILLING_CURRENCY=eur
 STRIPE_STATEMENT_DESCRIPTOR=XENOSTUDIO  DISPUTE_ALERT_EMAIL=...
 SUBJECT_HASH_SECRET=<32+ random bytes>
@@ -198,7 +211,22 @@ Three of those are new and each exists for a reason that only shows up later:
 🔴 `SUBJECT_HASH_SECRET` is the one to do now rather than later, because the cost
 of getting it wrong grows with every sale. Today it orphans an empty table.
 
-Then, **inside the container**:
+The preflight and the new local runtime guard require explicit account/mode pins
+and matching secret/publishable-key modes. Live sales require the qualified
+capability policy, including the nullable own-account requirements treatment in
+[stripe-account-cutover.md](specs/stripe-account-cutover.md). Missing verification
+details are not KYC approval. Set pins to the approved environment, never infer
+them from the key being checked. XENOSYSTEM's live account is
+`acct_1TwgCrLBe83UKv9x`; a sandbox requires its own verified ID.
+
+The runtime guard binds the database to one account/mode, refuses silent adoption
+of legacy mappings, and re-reads canonical events through the pinned account.
+It is local source, not a deployed migration. See
+[runtime binding](specs/billing-runtime-account-binding.md). Do not deploy it
+without preparing the existing-data adoption/cutover and old-writer shutdown.
+
+Then, **inside the container**, with the matching billing service and validator
+modules already present in the reviewed artifact:
 
 ```bash
 sudo docker cp scripts/billing-preflight.mjs xenostudio-backend:/app/
@@ -236,15 +264,18 @@ skip it and then it cannot report the one finding that matters.
 
 ---
 
-> 🔴 **Most of this is now automated: `node scripts/paid-loop-proof.mjs --confirm`**
-> (run it inside the backend container, where the env lives). It walks consent →
-> createCheckout → subscription → webhook → plan → entitlement → cancel →
-> refusal against REAL Stripe test mode and the REAL database, then deletes
-> everything it created and verifies it is gone. 11 assertions.
+> **Start with `node scripts/paid-loop-proof.mjs` for its offline plan.**
+> After explicit approval, `--confirm` exercises consent → checkout session →
+> direct test subscription → delivered plan/entitlement → cancellation/refusal.
+> It requires an explicitly marked disposable loopback database and a test-only
+> provider key; never run it against the production or ordinary preview database.
+> See [the target contract](specs/paid-loop-harness-safety.md). External resources
+> are settled and customer deletion verified; disposable database audit evidence
+> and Stripe historical records are retained, not claimed erased.
 >
-> It uses `pm_card_visa`, Stripe's named test token — no card data anywhere — so
-> what remains for a human below is the hosted Checkout page itself, which is
-> Stripe's UI rather than our code.
+> `pm_card_visa` is a provider test fixture. This harness does **not** complete
+> hosted Checkout, renewals, delayed payments, refunds, delivered receipts or
+> browser relogin. Every journey below still requires its own evidence.
 
 ## Step 7 — Test mode, and walk the WHOLE loop
 
@@ -278,11 +309,17 @@ box rather than in a test.
 
 ## Step 8 — Go live
 
-Swap to `sk_live_`, **re-create the webhook** (the signing secret differs per
-endpoint), **re-check the webhook EVENT LIST**, re-run both preflights, and buy
-**one real plan with a real card**
-before telling anyone. Refund it afterwards — `charge.refunded` is handled, so
-that exercises the clawback path too.
+Use the reviewed account-aware cutover plan, not a key-only swap. Inventory both
+database and Stripe-side mappings, subscriptions and in-flight events; preserve
+old-account evidence and reconcile it explicitly. Create the target live catalog,
+portal and webhook only after the exact change set is approved. Signing secrets
+differ per endpoint. Re-check account/mode, price and webhook-event agreement,
+backup/restore, monitoring and deployed guards before enabling sales.
+
+A real-card purchase and refund require their own approved amount and payer.
+Verify checkout, signed delivery, ledger, entitlements and receipts on the deployed
+artifact. After accepting real money, rollback must retain and reconcile new
+transactions; restoring an old database snapshot is not a safe payment rollback.
 
 
 🔴 **A new endpoint does not inherit the old event list.** In test mode the
@@ -297,8 +334,9 @@ does not cover it, so running it after creating the live endpoint is the check.
 
 ## Step 9 — Only now, decide about discovery
 
-The site is `noindex` sitewide and 198 of 218 accounts are suspended. Both are
-deliberate. Lifting them is a growth decision, not a launch blocker — and it is
+The original audit recorded sitewide `noindex` and 198 of 218 accounts suspended;
+those counts are historical, not a current inventory. The restrictions were
+deliberate. Lifting them is a separate cohort/growth decision, and it is
 the right last step, because it is the only one that is hard to undo.
 
 ---

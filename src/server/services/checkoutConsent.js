@@ -36,14 +36,9 @@ export const CONSENT_HASH = crypto.createHash('sha256').update(CONSENT_TEXT, 'ut
 /** The three acknowledgements, each a distinct act. */
 export const REQUIRED = Object.freeze(['immediatePerformance', 'withdrawalAcknowledged', 'termsAccepted']);
 
-let ready = null;
 export async function consentReady(pool) {
-  if (ready) return ready;
-  ready = pool
-    .query("SELECT to_regclass('public.checkout_consents') AS t")
-    .then((r) => Boolean(r.rows[0]?.t))
-    .catch(() => false);
-  return ready;
+  const result = await pool.query("SELECT to_regclass('public.checkout_consents') AS t");
+  return Boolean(result.rows[0]?.t);
 }
 
 /**
@@ -105,34 +100,46 @@ export async function recordConsent(pool, {
  *   we no longer show. Honouring it would mean claiming agreement to words they
  *   never saw.
  */
-export async function findUsableConsent(pool, userId, itemId, { maxAgeMs = 60 * 60 * 1000 } = {}) {
+export async function findUsableConsent(pool, userId, itemId, { maxAgeMs = 60 * 60 * 1000, consentId = null } = {}) {
+  if (!Number.isFinite(maxAgeMs) || maxAgeMs <= 0) throw new Error('Invalid consent freshness window');
   const r = await pool.query(
     `SELECT id, consent_hash, consented_at FROM checkout_consents
       WHERE user_id = $1 AND item_id = $2 AND consumed_at IS NULL
+        AND ($3::text IS NULL OR id::text = $3)
+        AND immediate_performance = TRUE AND withdrawal_acknowledged = TRUE AND terms_accepted = TRUE
+        AND consented_at BETWEEN NOW() - ($4::double precision * INTERVAL '1 millisecond') AND NOW()
       ORDER BY consented_at DESC LIMIT 1`,
-    [String(userId), String(itemId)],
+    [String(userId), String(itemId), consentId == null ? null : String(consentId), maxAgeMs],
   );
   const row = r.rows[0];
   if (!row) return null;
   if (row.consent_hash !== CONSENT_HASH) return null;
-  if (Date.now() - new Date(row.consented_at).getTime() > maxAgeMs) return null;
+  // Creation and expiry use the same database clock, not two hosts' wall clocks.
   return row.id;
+}
+
+/** Both checkout routes validate supplied IDs as strictly as discovered ones. */
+export async function requireCheckoutConsent(pool, userId, itemId, consentId = null) {
+  if (!(await consentReady(pool))) {
+    throw Object.assign(new Error('Checkout consent storage is unavailable'), { status: 503, code: 'consent_unavailable' });
+  }
+  const usable = await findUsableConsent(pool, userId, itemId, { consentId });
+  if (!usable) {
+    throw Object.assign(new Error('A current consent for this account and purchase is required'), { status: 400, code: 'consent_required' });
+  }
+  return usable;
 }
 
 /** Bind a consent to the session it authorised, and spend it. */
 export async function consumeConsent(pool, consentId, checkoutSessionId) {
-  if (!consentId) return;
-  try {
-    await pool.query(
-      'UPDATE checkout_consents SET consumed_at = NOW(), checkout_session_id = $2 WHERE id = $1 AND consumed_at IS NULL',
-      [consentId, checkoutSessionId || null],
-    );
-  } catch (e) {
-    /* A consent that was given but whose bookkeeping failed is still a consent —
-     * the row exists with its text and timestamp, which is what has to be
-     * demonstrable. Failing the PURCHASE here would refuse a customer who did
-     * everything right, over a write that only links two records. */
-    console.error('[Consent] failed to mark consumed:', e.message);
+  if (!consentId || !checkoutSessionId) throw new Error('Checkout consent binding requires both IDs');
+  const result = await pool.query(
+    `UPDATE checkout_consents SET consumed_at = COALESCE(consumed_at, NOW()), checkout_session_id = $2
+      WHERE id = $1 AND (consumed_at IS NULL OR checkout_session_id = $2) RETURNING id`,
+    [consentId, checkoutSessionId],
+  );
+  if (!result.rows.length) {
+    throw Object.assign(new Error('Consent already belongs to another checkout'), { status: 409, code: 'consent_consumed' });
   }
 }
 

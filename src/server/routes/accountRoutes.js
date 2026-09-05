@@ -106,4 +106,44 @@ router.get('/notifications', authMiddleware, async (req, res) => {
   }
 });
 
+// GET /api/account/sessions — user-owned session inventory. Bearer tokens and
+// token hashes never leave the server; the current row is identified from the
+// already-verified sid claim attached by authMiddleware.
+router.get('/sessions', authMiddleware, async (req, res) => {
+  try {
+    const { rows } = await req.db.query(
+      `SELECT id, created_at, last_active_at, expires_at, ip_address,
+              user_agent, device_type, browser, os
+         FROM user_sessions
+        WHERE user_id = $1 AND expires_at > NOW()
+        ORDER BY last_active_at DESC NULLS LAST, created_at DESC`,
+      [req.user.id],
+    );
+    res.json({
+      success: true,
+      sessions: rows.map((row) => ({ ...row, current: Boolean(req.auth?.sid && row.id === req.auth.sid) })),
+    });
+  } catch (err) {
+    console.error('[account] sessions error:', err.message);
+    res.status(500).json({ success: false, error: 'Failed to load sessions' });
+  }
+});
+
+// DELETE /api/account/sessions/:id — exact, owner-scoped revocation. Reading the
+// list again is the client-side completion proof; a missing id is not reported
+// as success because that would hide stale or cross-account requests.
+router.delete('/sessions/:id', authMiddleware, async (req, res) => {
+  try {
+    const removed = await req.db.query(
+      'DELETE FROM user_sessions WHERE id = $1 AND user_id = $2 RETURNING id',
+      [req.params.id, req.user.id],
+    );
+    if (!removed.rowCount) return res.status(404).json({ success: false, error: 'Session not found' });
+    res.json({ success: true, revoked_session_id: removed.rows[0].id });
+  } catch (err) {
+    console.error('[account] session revoke error:', err.message);
+    res.status(500).json({ success: false, error: 'Failed to revoke session' });
+  }
+});
+
 export default router;

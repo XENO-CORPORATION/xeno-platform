@@ -61,7 +61,7 @@ const ActivateAccount = () => {
     try { return JSON.parse(localStorage.getItem('xenoos_user') || '{}').email || null; }
     catch { return null; }
   })();
-  const token = typeof window !== 'undefined' ? localStorage.getItem('xenoos_auth_token') : null;
+  const token = typeof window !== 'undefined' ? getAccessToken() : null;
 
   useEffect(() => { setIsVisible(true); }, []);
   useEffect(() => { if (phase === 'waiting') inputRef.current?.focus(); }, [phase]);
@@ -317,3 +317,4 @@ const ActivateAccount = () => {
 };
 
 export default ActivateAccount;
+import { getAccessToken } from '../lib/authSession';

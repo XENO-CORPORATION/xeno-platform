@@ -467,15 +467,25 @@ const extractFormats = (formats) => {
     .slice(0, 10); // Limit to 10 formats
 };
 
-// Start cleanup interval. A throw here used to take down the whole API.
-const cleanupTimer = setInterval(() => {
-  try {
-    cleanupOldDownloads();
-  } catch (err) {
-    console.error('[downloadService] cleanup interval failed:', err);
-  }
-}, 15 * 60 * 1000);
-if (typeof cleanupTimer.unref === 'function') cleanupTimer.unref();
+// Importing routes must not start destructive background work before the API's
+// schema gate. The entrypoint owns lifecycle, including repeated-start safety.
+let cleanupTimer;
+export function startDownloadCleanup() {
+  if (cleanupTimer) return;
+  cleanupTimer = setInterval(() => {
+    try {
+      cleanupOldDownloads();
+    } catch (err) {
+      console.error('[downloadService] cleanup interval failed:', err);
+    }
+  }, 15 * 60 * 1000);
+  cleanupTimer.unref?.();
+}
+
+export function stopDownloadCleanup() {
+  if (cleanupTimer) clearInterval(cleanupTimer);
+  cleanupTimer = undefined;
+}
 
 export default {
   fetchMediaInfo,

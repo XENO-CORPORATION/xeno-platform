@@ -6,7 +6,8 @@ import TextEditor from './TextEditor';
 import TaskManager from './TaskManager';
 import { HardDrive, Terminal, Settings as SettingsIcon, Palette, FileText, Activity } from 'lucide-react';
 import { FileSyncDemo } from '../../FileSyncDemo';
-import ImageStudio from '../../playground/Studio/ImageStudio/components/ImageStudio';
+import { lazyRoute } from '../../platform/lazyRoute';
+const ImageStudio = lazyRoute(() => import('../../playground/Studio/ImageStudio/components/ImageStudio'));
 import { useCollaboration, WindowOperation } from '../../../contexts/CollaborationContext';
 
 interface WindowManagerProps {

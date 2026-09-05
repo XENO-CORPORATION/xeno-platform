@@ -12,7 +12,7 @@ import crypto from 'crypto';
 import fetch from 'node-fetch';
 import Redis from 'ioredis';
 import { siteOrigin, siteUrl, mailDomain } from '../config/hosts.js';
-import { addGrant, MICRO_PER_CREDIT } from '../utils/creditLedgerV2.js';
+import { addGrant, addGrantTx, MICRO_PER_CREDIT } from '../utils/creditLedgerV2.js';
 import { deductCredits } from '../utils/creditTransactions.js';
 import { sendEmail, sendWelcomeEmail } from '../services/emailService.js';
 import { recordSecurityEvent, EVENTS } from '../services/securityEvents.js';
@@ -27,6 +27,8 @@ import {
 import { describeClient } from '../utils/userAgent.js';
 import { optOut } from '../services/emailPreferences.js';
 import { resolveOAuthLandingPath } from '../lib/onboardingHandoff.js';
+import { browserSessionCookies } from '../middleware/browserSession.js';
+import { creditsView, wholeCredits } from '../utils/accountViews.js';
 import {
   requireRegistrationOpen,
   assertRegistrationAllowed,
@@ -103,9 +105,10 @@ function buildOAuthRedirectUrl(returnUrl, token, isNew) {
     const sep = dest.includes("?") ? "&" : "?";
     return `${dest}${sep}token=${token}&isNew=${isNew}`;
   }
-  // Respect any existing query string on dest (e.g. /cli-auth?session=XXX).
+  // Web auth is cookie-backed: never place a bearer in browser history, logs,
+  // referrers, or copied URLs. Preserve only the non-sensitive new-user flag.
   const sep = dest.includes("?") ? "&" : "?";
-  return `${FRONTEND_URL}${dest}${sep}token=${token}&isNew=${isNew}`;
+  return `${FRONTEND_URL}${dest}${sep}isNew=${isNew}`;
 }
 
 // For desktop app: serve an HTML page that triggers the deep link
@@ -341,30 +344,88 @@ function newAccountToken() {
 
 // Issue a session-backed JWT: mint sid, sign the token with it, and record the
 // session row (id = sid, token_hash = sha256(jwt) — NEVER the plaintext JWT).
-// If the session write fails we fall back LOUDLY to a stateless (no-sid) token so
-// login still succeeds — a sid token without its row would be dead on arrival.
+// The row is part of the credential. If it cannot be persisted, authentication
+// fails closed; issuing a sid-less fallback would create an unrevokable token.
 async function issueSessionToken(db, user, req) {
   const sid = uuidv4();
   const token = generateToken(user, sid);
+  // device_type / browser / os are columns that have existed since the baseline
+  // and were NEVER written, so every session row in production is blank in all
+  // three and the "your devices" list cannot name a device. Derived here from the
+  // User-Agent we are already storing — no new data is collected.
+  const ua = req.get('User-Agent');
+  const client = describeClient(ua);
+  await db.query(
+    `INSERT INTO user_sessions (id, user_id, token_hash, expires_at, ip_address, user_agent, device_type, browser, os)
+     VALUES ($1, $2, $3, NOW() + INTERVAL '7 days', $4, $5, $6, $7, $8)`,
+    // clientIp(req), not req.ip: `trust proxy` is set and req.ip STILL resolved to
+    // the Docker bridge gateway for every real session ever recorded here.
+    [sid, user.id, hashToken(token), clientIp(req), ua, client.deviceType, client.browser, client.os]
+  );
+  return token;
+}
+
+const browserCookieOptions = () => ({
+  secure: process.env.NODE_ENV === 'production',
+  sameSite: 'strict',
+  path: '/',
+  maxAge: 7 * 24 * 60 * 60 * 1000,
+});
+
+function clearBrowserSessionCookies(res) {
+  const { maxAge: _maxAge, ...options } = browserCookieOptions();
+  res.clearCookie(browserSessionCookies.session, { ...options, httpOnly: true });
+  res.clearCookie(browserSessionCookies.csrf, { ...options, httpOnly: false });
+}
+
+async function issueBrowserSession(db, user, req, res) {
+  const sid = uuidv4();
+  const sessionSecret = crypto.randomBytes(32).toString('base64url');
+  const csrfSecret = crypto.randomBytes(32).toString('base64url');
+  const ua = req.get('User-Agent');
+  const device = describeClient(ua);
+  const transaction = typeof db.connect === 'function' ? await db.connect() : db;
+  await transaction.query('BEGIN');
   try {
-    // device_type / browser / os are columns that have existed since the baseline
-    // and were NEVER written, so every session row in production is blank in all
-    // three and the "your devices" list cannot name a device. Derived here from the
-    // User-Agent we are already storing — no new data is collected.
-    const ua = req.get('User-Agent');
-    const client = describeClient(ua);
-    await db.query(
+    await transaction.query(
       `INSERT INTO user_sessions (id, user_id, token_hash, expires_at, ip_address, user_agent, device_type, browser, os)
        VALUES ($1, $2, $3, NOW() + INTERVAL '7 days', $4, $5, $6, $7, $8)`,
-      // clientIp(req), not req.ip: `trust proxy` is set and req.ip STILL resolved to
-      // the Docker bridge gateway for every real session ever recorded here.
-      [sid, user.id, hashToken(token), clientIp(req), ua, client.deviceType, client.browser, client.os]
+      [sid, user.id, hashToken(sessionSecret), clientIp(req), ua, device.deviceType, device.browser, device.os],
     );
-    return token;
-  } catch (sessionError) {
-    console.error('[auth] SESSION WRITE FAILED — issuing stateless fallback token (revocation unavailable for it):', sessionError.message);
-    return generateToken(user); // legacy stateless token; ages out in <= JWT_EXPIRES_IN
+    await transaction.query(
+      'INSERT INTO browser_session_state (sid, csrf_hash) VALUES ($1, $2)',
+      [sid, hashToken(csrfSecret)],
+    );
+    await transaction.query('COMMIT');
+  } catch (error) {
+    await transaction.query('ROLLBACK').catch(() => {});
+    throw error;
+  } finally {
+    if (transaction !== db) transaction.release();
   }
+  const options = browserCookieOptions();
+  res.cookie(browserSessionCookies.session, sessionSecret, { ...options, httpOnly: true });
+  res.cookie(browserSessionCookies.csrf, csrfSecret, { ...options, httpOnly: false });
+}
+
+function wantsBrowserSession(req) {
+  return String(req.get('x-xeno-session-mode') || '').toLowerCase() === 'browser';
+}
+
+async function issueLoginCredential(db, user, req, res) {
+  if (wantsBrowserSession(req)) {
+    await issueBrowserSession(db, user, req, res);
+    return null;
+  }
+  return issueSessionToken(db, user, req);
+}
+
+async function issueOAuthCredential(db, user, req, res, returnUrl) {
+  if (String(returnUrl || '').startsWith('xeno://')) {
+    return issueSessionToken(db, user, req);
+  }
+  await issueBrowserSession(db, user, req, res);
+  return null;
 }
 
 // Is a decoded sid-token's session gone/expired? Legacy tokens (no sid) are never
@@ -555,7 +616,7 @@ router.post('/register', requireRegistrationOpen, async (req, res) => {
     }
 
     // Session-backed token (sid claim + user_sessions row; plaintext JWT never stored).
-    const token = await issueSessionToken(req.db, user, req);
+    const token = await issueLoginCredential(req.db, user, req, res);
 
     // Issue an email-verification token + send the verification email. Non-fatal: a
     // mail-transport hiccup must never fail an otherwise-successful registration, and
@@ -686,7 +747,7 @@ router.post('/login', async (req, res) => {
     await recordSecurityEvent(req.db, EVENTS.LOGIN, { userId: user.id, req, metadata: { method: 'password' } });
 
     // Session-backed token (sid claim + user_sessions row; plaintext JWT never stored).
-    const token = await issueSessionToken(req.db, user, req);
+    const token = await issueLoginCredential(req.db, user, req, res);
 
     res.json({
       success: true,
@@ -868,6 +929,81 @@ router.post('/resend-verification', async (req, res) => {
   }
 });
 
+// POST /api/auth/refresh - rotate the opaque browser session and CSRF secret.
+// The browser-session middleware has already authenticated the cookie and
+// enforced double-submit CSRF before this handler runs.
+router.post('/refresh', async (req, res) => {
+  if (!req.browserSession?.sid) {
+    return res.status(401).json({ success: false, error: 'Browser session required' });
+  }
+  const sessionSecret = crypto.randomBytes(32).toString('base64url');
+  const csrfSecret = crypto.randomBytes(32).toString('base64url');
+  const transaction = typeof req.db.connect === 'function' ? await req.db.connect() : req.db;
+  try {
+    await transaction.query('BEGIN');
+    const updated = await transaction.query(
+      `UPDATE user_sessions
+          SET token_hash = $1, expires_at = NOW() + INTERVAL '7 days', last_active_at = NOW()
+        WHERE id = $2 AND user_id = $3 AND expires_at > NOW()
+        RETURNING id`,
+      [hashToken(sessionSecret), req.browserSession.sid, req.browserSession.userId],
+    );
+    if (!updated.rows.length) {
+      await transaction.query('ROLLBACK');
+      clearBrowserSessionCookies(res);
+      return res.status(401).json({ success: false, error: 'Session expired or revoked' });
+    }
+    await transaction.query(
+      'UPDATE browser_session_state SET csrf_hash = $1, rotated_at = NOW() WHERE sid = $2',
+      [hashToken(csrfSecret), req.browserSession.sid],
+    );
+    await transaction.query('COMMIT');
+    const options = browserCookieOptions();
+    res.cookie(browserSessionCookies.session, sessionSecret, { ...options, httpOnly: true });
+    res.cookie(browserSessionCookies.csrf, csrfSecret, { ...options, httpOnly: false });
+    return res.json({ success: true, authenticated: true });
+  } catch (error) {
+    await transaction.query('ROLLBACK').catch(() => {});
+    console.error('Browser session refresh error:', error.message);
+    return res.status(500).json({ success: false, error: 'Session refresh failed' });
+  } finally {
+    if (transaction !== req.db) transaction.release();
+  }
+});
+
+// One-release bridge for tabs that signed in before browser BFF sessions
+// shipped. It accepts the existing bearer once, creates an opaque cookie
+// session, and returns no credential. The client deletes the persisted token
+// before this request and retains it only in memory until the exchange ends.
+router.post('/browser-session', async (req, res) => {
+  try {
+    if (!wantsBrowserSession(req)) {
+      return res.status(400).json({ success: false, error: 'Browser session mode required' });
+    }
+    const token = req.headers.authorization?.replace(/^Bearer\s+/i, '');
+    if (!token) return res.status(401).json({ success: false, error: 'Authentication required' });
+    const decoded = jwt.verify(token, JWT_SECRET, { algorithms: ['HS256'] });
+    if (await sessionRevoked(req.db, decoded)) {
+      return res.status(401).json({ success: false, error: 'Session expired or revoked' });
+    }
+    const { rows } = await req.db.query(
+      `SELECT id, username, email, display_name, avatar_url, created_at,
+              email_verified, is_active, credits, bonus_credits_claimed
+         FROM users WHERE id = $1 AND is_active = true`,
+      [decoded.userId],
+    );
+    if (!rows.length) return res.status(401).json({ success: false, error: 'Invalid token' });
+    await issueBrowserSession(req.db, rows[0], req, res);
+    return res.json({ success: true, user: rows[0] });
+  } catch (error) {
+    if (error.name === 'JsonWebTokenError' || error.name === 'TokenExpiredError') {
+      return res.status(401).json({ success: false, error: 'Invalid or expired token' });
+    }
+    console.error('Browser session migration error:', error.message);
+    return res.status(500).json({ success: false, error: 'Session migration failed' });
+  }
+});
+
 // GET /api/auth/validate - Validate current session
 router.get('/validate', async (req, res) => {
   try {
@@ -971,6 +1107,7 @@ router.post('/logout', async (req, res) => {
       });
     }
 
+    clearBrowserSessionCookies(res);
     res.json({
       success: true,
       message: 'Logged out successfully'
@@ -978,6 +1115,7 @@ router.post('/logout', async (req, res) => {
 
   } catch (error) {
     console.error('Logout error:', error);
+    clearBrowserSessionCookies(res);
     res.json({
       success: true,
       message: 'Logged out successfully'
@@ -1344,9 +1482,13 @@ router.get('/usage', async (req, res) => {
       return res.status(401).json({ success: false, error: 'Session expired or revoked' });
     }
 
-    // Get user credits info
+    // Account metadata plus the canonical double-entry ledger view. The former
+    // implementation inferred total use as `1000 - users.credits`, which breaks
+    // as soon as an account buys credits and made funded balances report zero
+    // usage. The ledger owns balance and lifetimes; the user row only owns the
+    // welcome-bonus flag and membership date.
     const userResult = await req.db.query(
-      'SELECT id, credits, bonus_credits_claimed, created_at FROM users WHERE id = $1',
+      'SELECT id, bonus_credits_claimed, created_at FROM users WHERE id = $1',
       [decoded.userId]
     );
 
@@ -1359,32 +1501,30 @@ router.get('/usage', async (req, res) => {
 
     const user = userResult.rows[0];
 
-    // Get usage history from credit_usage table if it exists
-    let usageHistory = [];
-    try {
-      const usageResult = await req.db.query(`
-        SELECT feature, credits_used, created_at
-        FROM credit_usage
-        WHERE user_id = $1
-        ORDER BY created_at DESC
-        LIMIT 50
-      `, [decoded.userId]);
-      usageHistory = usageResult.rows;
-    } catch (e) {
-      // Table might not exist yet, that's okay
-      console.log('credit_usage table not found, returning empty history');
-    }
-
-    // Calculate usage statistics
-    const totalCreditsEarned = user.bonus_credits_claimed ? 1000 : 0;
-    const creditsUsed = totalCreditsEarned - (user.credits || 0);
+    const [credits, usageResult] = await Promise.all([
+      creditsView(req.db, decoded.userId),
+      req.db.query(
+        `SELECT COALESCE(NULLIF(description,''), reference_type, 'metered_action') AS feature,
+                (-amount)::bigint AS credits_used_micro, created_at
+           FROM credit_transactions
+          WHERE user_id = $1 AND type = 'debit' AND amount < 0
+          ORDER BY created_at DESC
+          LIMIT 100`,
+        [decoded.userId],
+      ),
+    ]);
+    const usageHistory = usageResult.rows.map((entry) => ({
+      feature: entry.feature,
+      credits_used: wholeCredits(entry.credits_used_micro),
+      created_at: entry.created_at,
+    }));
 
     res.json({
       success: true,
       usage: {
-        current_credits: user.credits || 0,
-        total_credits_earned: totalCreditsEarned,
-        credits_used: creditsUsed > 0 ? creditsUsed : 0,
+        current_credits: credits.balance,
+        total_credits_earned: credits.lifetime_earned,
+        credits_used: credits.lifetime_spent,
         bonus_claimed: user.bonus_credits_claimed,
         member_since: user.created_at,
         history: usageHistory
@@ -1598,45 +1738,64 @@ router.post('/claim-bonus', async (req, res) => {
       });
     }
 
-    // Check if user has already claimed welcome credits
+    // Idempotent by contract: a refresh, network retry, or two open tabs must
+    // converge on one grant and the same authoritative ledger balance.
     if (user.bonus_credits_claimed) {
-      return res.status(400).json({
-        success: false,
-        error: 'Welcome credits have already been claimed'
-      });
+      const credits = await creditsView(req.db, user.id);
+      return res.json({ success: true, already_claimed: true, credits: credits.balance, welcome_amount: 1000 });
+    }
+
+    const onboarding = await req.db.query(
+      `SELECT 1 FROM user_onboarding
+        WHERE user_id = $1 AND (completed_at IS NOT NULL OR skipped_at IS NOT NULL)`,
+      [user.id],
+    );
+    if (onboarding.rows.length === 0) {
+      return res.status(409).json({ success: false, error: 'Complete onboarding before receiving welcome credits' });
     }
 
     // Award welcome credits into the CANONICAL v2 ledger (credit_accounts) via
-    // addGrant, which also mirrors users.credits (mirrorLegacy). Previously this
+    // addGrantTx, which also mirrors users.credits (mirrorLegacy). Previously this
     // only SET users.credits, leaving the v2 ledger the chat meter / api-proxy /
     // Hub actually read at zero → false 402 "Insufficient credits" despite a shown
     // balance. Claim atomically first (WHERE bonus_credits_claimed = false) so
     // concurrent calls can't double-grant; roll the claim back if the grant throws.
     const WELCOME_BONUS_CREDITS = 1000;
-    const claim = await req.db.query(
-      'UPDATE users SET bonus_credits_claimed = true WHERE id = $1 AND bonus_credits_claimed = false RETURNING id',
-      [user.id]
-    );
-    if (claim.rows.length === 0) {
-      return res.status(400).json({ success: false, error: 'Welcome credits have already been claimed' });
-    }
+    const client = await req.db.connect();
+    let clientReleased = false;
     try {
-      await addGrant(req.db, user.id, {
+      await client.query('BEGIN');
+      const claim = await client.query(
+        'UPDATE users SET bonus_credits_claimed = true WHERE id = $1 AND bonus_credits_claimed = false RETURNING id',
+        [user.id],
+      );
+      if (claim.rows.length === 0) {
+        await client.query('ROLLBACK');
+        client.release();
+        clientReleased = true;
+        const credits = await creditsView(req.db, user.id);
+        return res.json({ success: true, already_claimed: true, credits: credits.balance, welcome_amount: 1000 });
+      }
+      await addGrantTx(client, user.id, {
         amountMicro: WELCOME_BONUS_CREDITS * MICRO_PER_CREDIT,
         kind: 'free',
         sourceRef: `welcome-bonus:${user.id}`,
       });
+      await client.query('COMMIT');
     } catch (grantErr) {
-      await req.db.query('UPDATE users SET bonus_credits_claimed = false WHERE id = $1', [user.id]).catch(() => {});
+      await client.query('ROLLBACK').catch(() => {});
       throw grantErr;
+    } finally {
+      // The early idempotent return releases explicitly before reading through
+      // the pool; all other paths release here.
+      if (!clientReleased) client.release();
     }
-    const after = await req.db.query('SELECT credits FROM users WHERE id = $1', [user.id]);
-    const newCredits = after.rows[0]?.credits ?? WELCOME_BONUS_CREDITS;
+    const credits = await creditsView(req.db, user.id);
 
     res.json({
       success: true,
       message: 'Welcome credits claimed successfully!',
-      credits: newCredits,
+      credits: credits.balance,
       welcome_amount: 1000
     });
 
@@ -1759,10 +1918,8 @@ router.get('/google/callback', async (req, res) => {
 
     // Session-backed JWT (sid claim + unified user_sessions row; same issuer as
     // password login so revocation works identically for OAuth sign-ins).
-    const jwtToken = await issueSessionToken(req.db, user, req);
-
-    // Redirect with token
     const returnUrl = stateData.returnUrl || '/overview';
+    const jwtToken = await issueOAuthCredential(req.db, user, req, res, returnUrl);
     handleOAuthRedirect(res, returnUrl, jwtToken, isNew);
 
   } catch (error) {
@@ -1895,9 +2052,8 @@ router.get('/github/callback', async (req, res) => {
 
     // Session-backed JWT (sid claim + unified user_sessions row; same issuer as
     // password login so revocation works identically for OAuth sign-ins).
-    const jwtToken = await issueSessionToken(req.db, user, req);
-
     const returnUrl = stateData.returnUrl || '/overview';
+    const jwtToken = await issueOAuthCredential(req.db, user, req, res, returnUrl);
     handleOAuthRedirect(res, returnUrl, jwtToken, isNew);
 
   } catch (error) {
@@ -2019,9 +2175,8 @@ router.get('/twitter/callback', async (req, res) => {
 
     // Session-backed JWT (sid claim + unified user_sessions row; same issuer as
     // password login so revocation works identically for OAuth sign-ins).
-    const jwtToken = await issueSessionToken(req.db, user, req);
-
     const returnUrl = stateData.returnUrl || '/overview';
+    const jwtToken = await issueOAuthCredential(req.db, user, req, res, returnUrl);
     handleOAuthRedirect(res, returnUrl, jwtToken, isNew);
 
   } catch (error) {
@@ -2462,7 +2617,7 @@ router.post('/register-with-handle', requireRegistrationOpen, async (req, res) =
     }
 
     // Session-backed token (sid claim + user_sessions row; plaintext JWT never stored).
-    const token = await issueSessionToken(req.db, user, req);
+    const token = await issueLoginCredential(req.db, user, req, res);
 
     console.log(`[register-with-handle] created account ${address} (${user.id})`);
     res.json({ success: true, token, user: { ...user, xenoAddress: address } });
@@ -2514,7 +2669,7 @@ router.get('/onboarding', async (req, res) => {
   try {
     const { rows } = await req.db.query(
       `SELECT display_name, heard_from, role, interests, starting_point, workspace,
-              completed_at, skipped_at
+              completed_at, skipped_at, welcome_acknowledged_at
          FROM user_onboarding WHERE user_id = $1`,
       [user.id],
     );
@@ -2524,6 +2679,7 @@ router.get('/onboarding', async (req, res) => {
       // One boolean for the client to branch on. Skipping counts as done —
       // re-presenting a flow somebody explicitly dismissed is nagging.
       done: Boolean(row && (row.completed_at || row.skipped_at)),
+      welcomeAcknowledged: Boolean(row?.welcome_acknowledged_at),
       onboarding: row,
     });
   } catch (err) {
@@ -2531,7 +2687,32 @@ router.get('/onboarding', async (req, res) => {
     // Fail OPEN, unlike the activation gate. The worst case here is that a
     // user sees a skippable survey twice; failing closed would wall them out
     // of the product over a survey table, which is far worse.
-    res.json({ success: true, done: true, onboarding: null, degraded: true });
+    res.json({ success: true, done: true, welcomeAcknowledged: true, onboarding: null, degraded: true });
+  }
+});
+
+/** Record that the one-time post-onboarding welcome has handed off to product. */
+router.post('/onboarding/welcome/acknowledge', async (req, res) => {
+  const user = await resolveUser(req);
+  if (!user) return res.status(401).json({ success: false, error: 'Authentication required' });
+
+  try {
+    const { rows } = await req.db.query(
+      `UPDATE user_onboarding
+          SET welcome_acknowledged_at = COALESCE(welcome_acknowledged_at, NOW()),
+              updated_at = NOW()
+        WHERE user_id = $1
+          AND (completed_at IS NOT NULL OR skipped_at IS NOT NULL)
+      RETURNING welcome_acknowledged_at`,
+      [user.id],
+    );
+    if (rows.length === 0) {
+      return res.status(409).json({ success: false, error: 'Onboarding is not complete' });
+    }
+    return res.json({ success: true, welcomeAcknowledgedAt: rows[0].welcome_acknowledged_at });
+  } catch (err) {
+    console.error('[onboarding] welcome acknowledgement failed:', err.message);
+    return res.status(500).json({ success: false, error: 'Could not save welcome progress' });
   }
 });
 

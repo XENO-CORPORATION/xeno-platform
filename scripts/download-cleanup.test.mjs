@@ -7,7 +7,7 @@
  * the interval path cannot call unlink on a directory.
  *
  * Does NOT import downloadService.js: that file mkdir's cookies/ and
- * starts the interval.
+ * creates its directories. Cleanup is explicitly started by the API after migrations.
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';

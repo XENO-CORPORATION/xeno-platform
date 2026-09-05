@@ -1,0 +1,19 @@
+{
+  "schemaVersion": 1,
+  "scope": "Exact additional first-party package identities, not license exceptions or contributor-rights signoff. Existing @xenosystem scope is declared separately.",
+  "entries": [
+    {
+      "name": "xeno-ai",
+      "version": "0.1.1",
+      "resolved": "https://registry.npmjs.org/xeno-ai/-/xeno-ai-0.1.1.tgz",
+      "integrity": "sha512-6r17tnl2ctLgwLUwwSjOInX7rWfqHjP1zfCXsy2K/CQ/q/iF23Ir6P9qmvaH+Jla97WFgyKjX9l+SbAjF85SgA==",
+      "repository": "xeno-corporation/xeno-js",
+      "declaredLicense": "MIT",
+      "sourceCommit": "d21128a0cb42d3202e3bfb5d397e56a1388638cf",
+      "sourceManifestGitBlob": "b562a5fab7bb96f6f930d271a0d41d59fbc48954",
+      "sourceManifestSha256": "dc86c430ad3aab9be5d317de7b6c8497e7fcbd9f3d2b18ee37d9df3f6c7bd32e",
+      "sourceManifestUrl": "https://api.github.com/repos/XENO-CORPORATION/xeno-js/contents/package.json?ref=d21128a0cb42d3202e3bfb5d397e56a1388638cf",
+      "evidence": "Authenticated GitHub lookup on 2026-09-05 verified the private XENO-CORPORATION/xeno-js repository and exact published gitHead. Source package.json identifies xeno-ai 0.1.1 as the official XENO SDK; its Git blob hash was independently recomputed. Repository identity is not a contributor-rights assignment."
+    }
+  ]
+}

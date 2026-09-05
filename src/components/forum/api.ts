@@ -7,10 +7,10 @@
  * (SPEC D9).
  */
 
-const TOKEN_KEY = 'xenoos_auth_token';
+import { clearAuthSession, getAccessToken } from '../../lib/authSession';
 
 export function authToken(): string | null {
-  try { return localStorage.getItem(TOKEN_KEY); } catch { return null; }
+  return getAccessToken();
 }
 
 export function isSignedIn(): boolean {
@@ -28,7 +28,7 @@ export function isSignedIn(): boolean {
  * server had already stopped honouring.)
  */
 export function clearStaleSession(): void {
-  try { localStorage.removeItem(TOKEN_KEY); } catch { /* storage unavailable */ }
+  clearAuthSession();
 }
 
 export interface ForumApiError extends Error {

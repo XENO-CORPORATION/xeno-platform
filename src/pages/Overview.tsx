@@ -1,74 +1,80 @@
 import React, { useState, createContext, useContext, useEffect } from 'react';
+import { lazyRoute } from '../components/platform/lazyRoute';
 import { BrowserRouter as Router, Routes, Route, Navigate, useLocation, useNavigate } from 'react-router-dom';
-import { useAuth } from '../contexts/AuthContext';
 import OverviewTaskbar from '../components/overview/OverviewTaskbar';
 import OSAuthInterface from '../components/os/OSAuthInterface';
 import DisplayContainer from '../components/layout/DisplayContainer';
-import EmptyState from '../components/overview/EmptyState';
 import TopUpModal from '../components/overview/TopUpModal';
 import CreateLabModal from '../components/overview/CreateLabModal';
 import WelcomeCreditBonusModal from '../components/modals/WelcomeCreditBonusModal';
 import Overview from '../components/overview/Overview';
 import CanvasView from '../components/canvas/CanvasView';
 import WindowManager, { useWindowManager, createFileExplorerWindow, createSettingsWindow } from '../components/os/desktop/WindowManager';
-import { Beaker, Image, Video, ArrowUpRight, BrainCircuit, Palette, Sparkles, MessageSquare } from 'lucide-react';
 
 // Import playground interfaces with gallery
-import ImageGenerationInterface from '../components/playground/Generation/ImageGenerationInterface';
-import ImageGenerationInterface2 from '../components/playground/Generation/ImageGenerationInterface2';
-import ImageGenerationInterface2Copy from '../components/playground/Generation/ImageGenerationInterface2Copy';
-import ImageUpscaleInterface from '../components/playground/Enhance/ImageEnhanceInterface';
-import VideoUpscaleInterface from '../components/playground/Enhance/VideoEnhanceInterface';
-import MultiChatContainer from '../components/playground/Chat/MultiChatContainer';
-import ChatWithVoice from '../components/playground/Chat/ChatWithVoice';
-import SearchChatInterface from '../components/playground/Chat/SearchChatInterface';
+const ImageGenerationInterface = lazyRoute(() => import('../components/playground/Generation/ImageGenerationInterface'));
+const ImageGenerationInterface2 = lazyRoute(() => import('../components/playground/Generation/ImageGenerationInterface2'));
+const ImageGenerationInterface2Copy = lazyRoute(() => import('../components/playground/Generation/ImageGenerationInterface2Copy'));
+const ImageUpscaleInterface = lazyRoute(() => import('../components/playground/Enhance/ImageEnhanceInterface'));
+const VideoUpscaleInterface = lazyRoute(() => import('../components/playground/Enhance/VideoEnhanceInterface'));
+const MultiChatContainer = lazyRoute(() => import('../components/playground/Chat/MultiChatContainer'));
+const ChatWithVoice = lazyRoute(() => import('../components/playground/Chat/ChatWithVoice'));
+const SearchChatInterface = lazyRoute(() => import('../components/playground/Chat/SearchChatInterface'));
 const ThreeDGenerationInterface = React.lazy(() => import('../components/playground/Generation/ThreeDGenerationInterface'));
-import AudioGenerationInterface from '../components/playground/Generation/AudioGenerationInterface';
-import VideoGenerationInterface from '../components/playground/Generation/VideoGenerationInterface';
-import VideoGenerationInterface2 from '../components/playground/Generation/VideoGenerationInterface2';
+const AudioGenerationInterface = lazyRoute(() => import('../components/playground/Generation/AudioGenerationInterface'));
+const VideoGenerationInterface = lazyRoute(() => import('../components/playground/Generation/VideoGenerationInterface'));
+const VideoGenerationInterface2 = lazyRoute(() => import('../components/playground/Generation/VideoGenerationInterface2'));
 // Add imports for the new training components
-import LoRaImageTrainComponent from '../components/playground/Train/LoRaImageTrainInterface';
-import LoRaVideoTrainComponent from '../components/playground/Train/LoRaVideoTrainInterface';
-import TextLLMTrainComponent from '../components/playground/Train/TextLLMTrainInterface';
+const LoRaImageTrainComponent = lazyRoute(() => import('../components/playground/Train/LoRaImageTrainInterface'));
+const LoRaVideoTrainComponent = lazyRoute(() => import('../components/playground/Train/LoRaVideoTrainInterface'));
+const TextLLMTrainComponent = lazyRoute(() => import('../components/playground/Train/TextLLMTrainInterface'));
 // Import new Search sub-interfaces
-import GeneralSearchInterface from '../components/playground/Search/GeneralSearchInterface';
-import FinanceSearchInterface from '../components/playground/Search/FinanceSearchInterface';
-import ShoppingSearchInterface from '../components/playground/Search/ShoppingSearchInterface';
+const GeneralSearchInterface = lazyRoute(() => import('../components/playground/Search/GeneralSearchInterface'));
+const FinanceSearchInterface = lazyRoute(() => import('../components/playground/Search/FinanceSearchInterface'));
+const ShoppingSearchInterface = lazyRoute(() => import('../components/playground/Search/ShoppingSearchInterface'));
 // Import new Studio interfaces
-import ImageStudioInterface from '../components/playground/Studio/ImageStudio';
+const ImageStudioInterface = lazyRoute(() => import('../components/playground/Studio/ImageStudio'));
 // Lazy load VideoStudio interface (the chat interface, not the canvas)
 const VideoStudioInterface = React.lazy(() =>
   import('../components/playground/Studio/VideoStudioInterface')
 );
-import AudioStudioInterface from '../components/playground/Studio/AudioStudioInterface';
+const AudioStudioInterface = lazyRoute(() => import('../components/playground/Studio/AudioStudioInterface'));
 // Import Office components
-import CanvasPlanning from '../components/office/CanvasPlanning';
-import CanvasPlanningVisual from '../components/office/CanvasPlanningVisual';
-import PDFChatInterface from '../components/playground/Office/PDFChatInterface';
-import WordChatInterface from '../components/playground/Office/WordChatInterface';
+const CanvasPlanning = lazyRoute(() => import('../components/office/CanvasPlanning'));
+const CanvasPlanningVisual = lazyRoute(() => import('../components/office/CanvasPlanningVisual'));
+const PDFChatInterface = lazyRoute(() => import('../components/playground/Office/PDFChatInterface'));
+const WordChatInterface = lazyRoute(() => import('../components/playground/Office/WordChatInterface'));
 // Import IOPaint interface
-import ImageInpaintingStudio from '../components/ImageInpainting/ImageInpaintingStudio';
+const ImageInpaintingStudio = lazyRoute(() => import('../components/ImageInpainting/ImageInpaintingStudio'));
 // Import Tools interfaces
-import ConvertToolsInterface from '../components/playground/Tools/ConvertToolsInterface';
-import ConversionHistory from '../components/playground/Tools/ConversionHistory';
-import CompressToolsInterface from '../components/playground/Tools/CompressToolsInterface';
-import ImgToolsInterface from '../components/playground/Tools/ImgToolsInterface';
-import PDFToolsInterface from '../components/playground/Tools/PDFToolsInterface';
-import ShareToolsInterface from '../components/playground/Tools/ShareToolsInterface';
+const ConvertToolsInterface = lazyRoute(() => import('../components/playground/Tools/ConvertToolsInterface'));
+const ConversionHistory = lazyRoute(() => import('../components/playground/Tools/ConversionHistory'));
+const CompressToolsInterface = lazyRoute(() => import('../components/playground/Tools/CompressToolsInterface'));
+const ImgToolsInterface = lazyRoute(() => import('../components/playground/Tools/ImgToolsInterface'));
+const PDFToolsInterface = lazyRoute(() => import('../components/playground/Tools/PDFToolsInterface'));
+const ShareToolsInterface = lazyRoute(() => import('../components/playground/Tools/ShareToolsInterface'));
 // Import Download interface
-import DownloadToolsInterface from '../components/playground/Download/DownloadToolsInterface';
+const DownloadToolsInterface = lazyRoute(() => import('../components/playground/Download/DownloadToolsInterface'));
 // Import Account pages
 import ProfilePage from '../components/account/ProfilePage';
 import SettingsPage from '../components/account/SettingsPage';
 import UsageAnalyticsPage from '../components/account/UsageAnalyticsPage';
 import BillingPage from '../components/account/BillingPage';
 import TeamPage from '../components/account/TeamPage';
+import WorkspaceTeamsPage from '../components/account/WorkspaceTeamsPage';
+import NotificationsPage from '../components/account/NotificationsPage';
+import IntegrationsPage from '../components/account/IntegrationsPage';
+import ProjectsPage from '../components/account/ProjectsPage';
+import PlatformCommandPalette from '../components/platform/PlatformCommandPalette';
+import ResourceState from '../components/platform/ResourceState';
+import '../components/overview/platform-workbench.css';
+import '../components/overview/platform-theme.css';
+import { usePlatformTheme } from '../platform/platformTheme';
 // Import Content Creation pages
-import YouTubeChannelManager from '../components/youtube/YouTubeChannelManager';
-import AllChannelsPage from '../components/youtube/AllChannelsPage';
-import VideoDetailPage from '../components/youtube/VideoDetailPage';
+const YouTubeChannelManager = lazyRoute(() => import('../components/youtube/YouTubeChannelManager'));
+const AllChannelsPage = lazyRoute(() => import('../components/youtube/AllChannelsPage'));
+const VideoDetailPage = lazyRoute(() => import('../components/youtube/VideoDetailPage'));
 
-// Mock data for labs
 interface Lab {
   id: string;
   name: string;
@@ -77,22 +83,6 @@ interface Lab {
   status?: 'active' | 'maintenance' | 'coming-soon';
   lastModified: Date;
 }
-
-const mockLabs: Lab[] = [
-  // Uncomment to see populated labs
-  /*
-  {
-    id: 'lab-1',
-    name: 'Image Classification Lab',
-    lastModified: new Date('2023-05-15')
-  },
-  {
-    id: 'lab-2',
-    name: 'Video Generation Workflow',
-    lastModified: new Date('2023-06-20')
-  },
-  */
-];
 
 // Layout context for sidebar state
 interface LayoutContextType {
@@ -114,29 +104,37 @@ const ProviderKeysPortalRedirect: React.FC = () => {
   );
 };
 
+const CapabilityHandoff: React.FC<{ title: string; detail: string; productPath: string }> = ({ title, detail, productPath }) => {
+  const navigate = useNavigate();
+  return <main className="xeno-platform-page"><ResourceState kind="unavailable" layout="page" previewLabel="XENO / Product boundary" title={title} detail={detail} actionLabel="Open product" onRetry={() => navigate(productPath)} secondaryActionLabel="Back to dashboard" onSecondaryAction={() => navigate('/overview')} /></main>;
+};
+
 // Create a separate component for the main content to use WindowManager hook
 const OverviewContent: React.FC = () => {
   const navigate = useNavigate();
   const location = useLocation();
-  const { user } = useAuth();
-  const [labs] = useState(mockLabs);
+  const {
+    preference: platformThemePreference,
+    resolvedTheme: platformTheme,
+    brightness: platformThemeBrightness,
+    themeStyle: platformThemeStyle,
+  } = usePlatformTheme();
+  // Labs remain empty until the server exposes a durable Lab resource contract.
+  const labs: Lab[] = [];
   const [isTopUpModalOpen, setIsTopUpModalOpen] = useState(false);
   const [isCreateLabModalOpen, setIsCreateLabModalOpen] = useState(false);
-  const [isWelcomeModalOpen, setIsWelcomeModalOpen] = useState(false);
-  // Taskbar is always collapsed
-  const isSidebarCollapsed = true;
+  const [isCommandPaletteOpen, setIsCommandPaletteOpen] = useState(false);
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(
+    () => localStorage.getItem('xeno_overview_sidebar_collapsed') === 'true',
+  );
   const [isCleanMode, setIsCleanMode] = useState(localStorage.getItem('isCleanMode') === 'true');
+  const legacyWelcomePreview = import.meta.env.DEV
+    && location.pathname === '/overview'
+    && new URLSearchParams(location.search).get('welcome') === '1';
   const isImageGenerationCopyRoute = location.pathname === '/overview/generation/image2-copy' || location.pathname.endsWith('/generation/image2-copy');
   
   // Window management integration
   const { openWindow } = useWindowManager();
-
-  // Check if user should see welcome modal
-  useEffect(() => {
-    if (user && user.credits === 0 && !user.bonus_credits_claimed) {
-      setIsWelcomeModalOpen(true);
-    }
-  }, [user]);
 
   // Handle creating a new lab
   const handleCreateLab = () => {
@@ -166,16 +164,10 @@ const OverviewContent: React.FC = () => {
   // Create lab modal controls
   const closeCreateLabModal = () => setIsCreateLabModalOpen(false);
   
-  // Welcome modal controls
-  const closeWelcomeModal = () => setIsWelcomeModalOpen(false);
-  const handleWelcomeClaim = () => {
-    // Modal will handle the API call and close itself
-    // This could trigger a user data refresh if needed
-    console.log('Welcome credits claimed!');
+  const handleSidebarCollapseChange = (collapsed: boolean) => {
+    setIsSidebarCollapsed(collapsed);
+    localStorage.setItem('xeno_overview_sidebar_collapsed', String(collapsed));
   };
-  // Handle sidebar collapse state changes
-  // Remove collapse handler, always collapsed
-  const handleSidebarCollapseChange = () => {};
   // Handle interface mode toggle
   const toggleInterfaceMode = () => {
     const newMode = !isCleanMode;
@@ -194,6 +186,17 @@ const OverviewContent: React.FC = () => {
     return () => {
       window.removeEventListener('interface_mode_changed', handleInterfaceModeChange as EventListener);
     };
+  }, []);
+
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'k') {
+        event.preventDefault();
+        setIsCommandPaletteOpen(true);
+      }
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
   }, []);
 
   const [isTaskbarHidden, setIsTaskbarHidden] = useState(false);
@@ -225,7 +228,11 @@ const OverviewContent: React.FC = () => {
   return (
     <div
       data-overview-shell
+      data-theme={platformTheme}
+      data-theme-preference={platformThemePreference}
+      data-theme-brightness={platformThemeBrightness}
       style={{
+        ...platformThemeStyle,
         height: '100dvh',
         width: '100vw',
         display: 'flex',
@@ -240,13 +247,14 @@ const OverviewContent: React.FC = () => {
     >
       <LayoutContext.Provider value={{ isSidebarCollapsed }}>
         {/* Left Taskbar - Original taskbar with OS button and AI interfaces */}
-        <div style={{ transition: 'transform 0.35s cubic-bezier(0.25, 0.1, 0.25, 1), margin 0.35s cubic-bezier(0.25, 0.1, 0.25, 1)', transform: isTaskbarHidden ? 'translateX(-100%)' : 'translateX(0)', marginRight: isTaskbarHidden ? '-52px' : '0', zIndex: 60, position: 'relative' }}>
+        <div style={{ transition: 'transform 0.35s cubic-bezier(0.25, 0.1, 0.25, 1), margin 0.35s cubic-bezier(0.25, 0.1, 0.25, 1)', transform: isTaskbarHidden ? 'translateX(-100%)' : 'translateX(0)', marginRight: isTaskbarHidden ? (isSidebarCollapsed ? '-52px' : '-300px') : '0', zIndex: 60, position: 'relative' }}>
         <OverviewTaskbar
           labs={labs}
           onCreateLab={handleCreateLab}
           onCollapseChange={handleSidebarCollapseChange}
           onToggleInterface={toggleInterfaceMode}
           isCleanMode={isCleanMode}
+          onOpenCommandPalette={() => setIsCommandPaletteOpen(true)}
         />
         </div>
         
@@ -257,28 +265,12 @@ const OverviewContent: React.FC = () => {
             {/* Full-screen canvas view - no header or sidebar */}
             <Route path="/labs/:labId/canvas" element={<CanvasView />} />
             {/* Main overview home */}
-            <Route path="/" element={<Overview />} />
+            <Route path="/" element={legacyWelcomePreview
+              ? <Navigate to="/overview/welcome?preview=1" replace />
+              : <Overview onAddCredits={openTopUpModal} onOpenCommandPalette={() => setIsCommandPaletteOpen(true)} />} />
+            <Route path="welcome" element={<WelcomeCreditBonusModal />} />
             {/* Labs empty state */}
-            <Route path="/labs" element={
-              <div className="h-full">
-                {labs.length === 0 ? (
-                  <EmptyState
-                    title="Welcome to XenoStudio"
-                    description="Get started by creating your first AI workflow lab. Connect AI components to build intelligent systems with drag-and-drop simplicity."
-                    buttonText="Create your first lab"
-                    onAction={handleCreateLab}
-                    icon={<Beaker size={32} className="text-white/40" />}
-                  />
-                ) : (
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-0">
-                    {/* Lab cards would go here */}
-                    <div className="bg-white/5 rounded-xl border border-white/10 p-6">
-                      <h2 className="text-lg font-semibold text-white">Lab card placeholder</h2>
-                    </div>
-                  </div>
-                )}
-              </div>
-            } />
+            <Route path="/labs" element={<CapabilityHandoff title="Labs need a durable service contract" detail="No Lab records are invented in the browser. Use Projects for persisted agent work until Lab create, read, update, and delete routes are shipped." productPath="/overview/projects" />} />
             {/* New direct feature routes (no playground) */}
             <Route path="generation/image" element={<ImageGenerationInterface />} />
             <Route path="generation/image2" element={<ImageGenerationInterface2 />} />
@@ -303,8 +295,8 @@ const OverviewContent: React.FC = () => {
             <Route path="chat/c/:conversationId" element={<MultiChatContainer />} />
             <Route path="chat/projects" element={<MultiChatContainer />} />
             <Route path="chat/projects/:projectId" element={<MultiChatContainer />} />
-            <Route path="projects" element={<MultiChatContainer />} />
-            <Route path="projects/:projectId" element={<MultiChatContainer />} />
+            <Route path="projects" element={<ProjectsPage />} />
+            <Route path="projects/:projectId" element={<ProjectsPage />} />
             <Route path="chat/library" element={<MultiChatContainer />} />
             <Route path="chat/library/:libraryItemId" element={<MultiChatContainer />} />
             <Route path="library" element={<MultiChatContainer />} />
@@ -335,8 +327,8 @@ const OverviewContent: React.FC = () => {
             <Route path="office/canvas" element={<CanvasPlanningVisual />} />
             <Route path="office/canvas/:canvasId" element={<CanvasPlanningVisual />} />
             <Route path="office/word" element={<WordChatInterface />} />
-            <Route path="office/spreadsheet" element={<div className="w-full h-full flex items-center justify-center"><h1 className="text-xl font-bold text-white">Spreadsheet - Coming Soon</h1></div>} />
-            <Route path="office/presentation" element={<div className="w-full h-full flex items-center justify-center"><h1 className="text-xl font-bold text-white">Presentation - Coming Soon</h1></div>} />
+            <Route path="office/spreadsheet" element={<CapabilityHandoff title="Spreadsheets live in XENO Sheets" detail="This platform route does not own a spreadsheet document service. Open the product surface instead of editing a disposable imitation here." productPath="/products/sheets" />} />
+            <Route path="office/presentation" element={<CapabilityHandoff title="Presentations live in XENO Slides" detail="This platform route does not own presentation persistence or export. Open the product surface instead of showing a non-functional editor." productPath="/products/slides" />} />
             <Route path="office/pdf" element={<PDFChatInterface />} />
             {/* Tools routes */}
             <Route path="tools/convert" element={<ConvertToolsInterface />} />
@@ -356,9 +348,9 @@ const OverviewContent: React.FC = () => {
             <Route path="content-creation/youtube/all-channels" element={<AllChannelsPage />} />
             <Route path="content-creation/youtube/video" element={<VideoDetailPage />} />
             <Route path="content-creation/youtube" element={<YouTubeChannelManager />} />
-            <Route path="content-creation/tiktok" element={<div className="w-full h-full flex items-center justify-center"><div className="text-center"><h1 className="text-2xl font-bold text-white mb-2">TikTok Channel Manager</h1><p className="text-white/60">Manage your TikTok accounts, post content, and monitor engagement</p></div></div>} />
-            <Route path="content-creation/automations" element={<div className="w-full h-full flex items-center justify-center"><div className="text-center"><h1 className="text-2xl font-bold text-white mb-2">Content Automations</h1><p className="text-white/60">Create automated workflows for cross-platform posting and content distribution</p></div></div>} />
-            <Route path="content-creation/scheduler" element={<div className="w-full h-full flex items-center justify-center"><div className="text-center"><h1 className="text-2xl font-bold text-white mb-2">Content Scheduler</h1><p className="text-white/60">Schedule and manage your posts across all connected platforms</p></div></div>} />
+            <Route path="content-creation/tiktok" element={<CapabilityHandoff title="TikTok management belongs to XENO Post" detail="No TikTok account or publishing API is connected to this route. Open XENO Post for the shipping social command-center contract." productPath="/products/post" />} />
+            <Route path="content-creation/automations" element={<CapabilityHandoff title="Content automation belongs to XENO Post" detail="This route has no scheduler or connector write path. Open the product that owns authenticated publishing workflows." productPath="/products/post" />} />
+            <Route path="content-creation/scheduler" element={<CapabilityHandoff title="Scheduling belongs to XENO Post" detail="This route does not persist or publish scheduled posts. Open XENO Post for server-backed scheduling." productPath="/products/post" />} />
             {/* Account settings routes */}
             <Route path="profile" element={<ProfilePage />} />
             <Route path="settings" element={<SettingsPage />} />
@@ -367,11 +359,14 @@ const OverviewContent: React.FC = () => {
             <Route path="ai-keys" element={<ProviderKeysPortalRedirect />} />
             <Route path="billing" element={<BillingPage />} />
             <Route path="team" element={<TeamPage />} />
+            <Route path="teams" element={<WorkspaceTeamsPage />} />
             <Route path="team/:tab" element={<TeamPage />} />
+            <Route path="notifications" element={<NotificationsPage />} />
+            <Route path="integrations" element={<IntegrationsPage />} />
             <Route path="subscription" element={<BillingPage />} />
-            <Route path="help" element={<div className="h-full flex items-center justify-center"><h1 className="text-xl font-bold text-white">Help Center - Coming Soon</h1></div>} />
+            <Route path="help" element={<Navigate to="/help" replace />} />
             {/* Individual lab routes */}
-            <Route path="labs/:labId" element={<div><h1 className="text-xl font-bold text-white">Lab Editor</h1></div>} />
+            <Route path="labs/:labId" element={<CapabilityHandoff title="This lab is not a persisted resource" detail="The platform has no server-confirmed lab record for this route. Use Projects for persisted agent work while the Lab service contract is implemented." productPath="/overview/projects" />} />
             {/* Redirects from old playground routes to new routes */}
             <Route path="playground/generation/image" element={<Navigate to="generation/image" replace />} />
             <Route path="playground/generation/3d" element={<Navigate to="generation/3d" replace />} />
@@ -401,11 +396,7 @@ const OverviewContent: React.FC = () => {
         {/* Modals at root */}
         <TopUpModal isOpen={isTopUpModalOpen} onClose={closeTopUpModal} />
         <CreateLabModal isOpen={isCreateLabModalOpen} onClose={closeCreateLabModal} />
-        <WelcomeCreditBonusModal
-          isOpen={isWelcomeModalOpen}
-          onClose={closeWelcomeModal}
-          onClaim={handleWelcomeClaim}
-        />
+        <PlatformCommandPalette open={isCommandPaletteOpen} onClose={() => setIsCommandPaletteOpen(false)} onNavigate={navigate} />
       </LayoutContext.Provider>
     </div>
   );

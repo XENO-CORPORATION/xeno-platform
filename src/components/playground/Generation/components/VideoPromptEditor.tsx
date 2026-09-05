@@ -160,7 +160,7 @@ const VideoPromptEditor = forwardRef<VideoPromptEditorHandle, VideoPromptEditorP
     useEffect(() => {
       if (!editor) return;
       if (value !== editor.getText()) {
-        editor.commands.setContent(value || '', false);
+        editor.commands.setContent(value || '', { emitUpdate: false });
       }
       // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [value, editor]);

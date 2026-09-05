@@ -403,20 +403,14 @@
     });
   }
 
-  var TOKEN_KEY = 'xeno_token';
-  var token = null;
-
   var qs = new URLSearchParams(window.location.search);
-  var oauthToken = qs.get('token');
-  if (oauthToken) {
-    try { localStorage.setItem(TOKEN_KEY, oauthToken); } catch (e) {}
-    token = oauthToken;
+  // Remove credentials produced by legacy deployments without consuming them.
+  // Current web OAuth returns with an opaque, HttpOnly browser session cookie.
+  if (qs.has('token') || qs.has('isNew')) {
     qs.delete('token');
     qs.delete('isNew');
     var clean = window.location.pathname + (qs.toString() ? '?' + qs.toString() : '');
     window.history.replaceState({}, '', clean);
-  } else {
-    try { token = localStorage.getItem(TOKEN_KEY); } catch (e) { token = null; }
   }
 
   ['google', 'github', 'twitter'].forEach(function (p) {
@@ -429,13 +423,22 @@
     if (el) el.textContent = msg || '';
   }
 
+  function csrfToken() {
+    var match = document.cookie.match(/(?:^|;\s*)(?:__Host-)?xeno_csrf=([^;]+)/);
+    return match ? decodeURIComponent(match[1]) : '';
+  }
+
   async function api(path, opts) {
     opts = opts || {};
     var headers = opts.headers || {};
     headers['Content-Type'] = 'application/json';
-    if (opts.auth && token) headers['Authorization'] = 'Bearer ' + token;
+    var method = (opts.method || 'GET').toUpperCase();
+    if (!['GET', 'HEAD', 'OPTIONS'].includes(method)) {
+      var csrf = csrfToken();
+      if (csrf) headers['x-xeno-csrf'] = csrf;
+    }
     var res = await fetch(path, {
-      method: opts.method || 'GET',
+      method: method,
       headers: headers,
       body: opts.body ? JSON.stringify(opts.body) : undefined,
       credentials: 'same-origin'
@@ -450,16 +453,11 @@
     $('signed-in-as').textContent = name;
   }
 
-  async function checkToken() {
-    if (!token) return false;
-    var r = await api('/api/auth/me', { auth: true });
+  async function checkSession() {
+    var r = await api('/api/auth/me');
     if (r.ok && r.data && r.data.user) {
       renderUser(r.data.user);
       return true;
-    }
-    if (r.status === 401) {
-      try { localStorage.removeItem(TOKEN_KEY); } catch (e) {}
-      token = null;
     }
     return false;
   }
@@ -494,12 +492,11 @@
     try {
       var r = await api('/api/auth/login', {
         method: 'POST',
+        headers: { 'x-xeno-session-mode': 'browser' },
         body: { email: $('email').value.trim(), password: $('password').value }
       });
-      if (r.ok && r.data && r.data.token) {
-        token = r.data.token;
-        try { localStorage.setItem(TOKEN_KEY, token); } catch (e) {}
-        if (r.data.user) renderUser(r.data.user);
+      if (r.ok && r.data && r.data.user) {
+        renderUser(r.data.user);
         show('code');
         setTimeout(function () { $('user-code').focus(); }, 50);
       } else {
@@ -529,7 +526,6 @@
     try {
       var r = await api('/api/auth/cli/device-code/verify', {
         method: 'POST',
-        auth: true,
         body: { user_code: formatted }
       });
       if (r.ok) {
@@ -537,8 +533,6 @@
         return;
       }
       if (r.status === 401) {
-        try { localStorage.removeItem(TOKEN_KEY); } catch (e) {}
-        token = null;
         show('login');
         return;
       }
@@ -558,7 +552,7 @@
   // ----- Bootstrap -----
   (async function () {
     show('loading');
-    var signedIn = await checkToken();
+    var signedIn = await checkSession();
     if (signedIn) {
       show('code');
       setTimeout(function () { $('user-code').focus(); }, 50);

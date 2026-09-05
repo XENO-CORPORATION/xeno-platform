@@ -1,0 +1,403 @@
+{
+  "schemaVersion": 1,
+  "sourceAudit": "20260905T055411Z",
+  "scope": "Remaining prior asset findings after eight exact generated replacements were registered. This is a pending-work inventory, not an accepted asset registry.",
+  "referenceMethod": "Exact literal mentions in src text files; dynamic references, comments and build inlining need human/code review. No mentions is not proof of non-use. All files are retained.",
+  "entries": [
+    {
+      "path": "icons/menu-icon.svg",
+      "sha256": "b9f659ddca9a9d4e02b135e8168cd858f66e20bbfc12f5e69860f032f21fa18c",
+      "bytes": 256,
+      "category": "identity-or-icon",
+      "status": "source-and-rights-evidence-required",
+      "literalMentions": [],
+      "copiedPublicArtifact": null
+    },
+    {
+      "path": "icons/more-icon.svg",
+      "sha256": "4d141bbfdafdf1e7496bbb31728b1e97d43d0a0f3eeb223aa492fb9f1397e9dd",
+      "bytes": 940,
+      "category": "identity-or-icon",
+      "status": "source-and-rights-evidence-required",
+      "literalMentions": [],
+      "copiedPublicArtifact": null
+    },
+    {
+      "path": "icons/search-icon.svg",
+      "sha256": "d890fd508453f65a8d97ec0f384f9985e66b8927e202039fcddee9749da58530",
+      "bytes": 1348,
+      "category": "identity-or-icon",
+      "status": "source-and-rights-evidence-required",
+      "literalMentions": [],
+      "copiedPublicArtifact": null
+    },
+    {
+      "path": "public/canvas-workspace-demo.jpg",
+      "sha256": "3bfb40023069cbe776b63f017566ad011f622fcf5fc89451866b8c7e089f7580",
+      "bytes": 614214,
+      "category": "media",
+      "status": "source-and-rights-evidence-required",
+      "literalMentions": [],
+      "copiedPublicArtifact": {
+        "path": "dist/canvas-workspace-demo.jpg",
+        "sha256": "3bfb40023069cbe776b63f017566ad011f622fcf5fc89451866b8c7e089f7580"
+      }
+    },
+    {
+      "path": "public/favicon-v2.svg",
+      "sha256": "4da493e8e97e3764032d8b196587043303d71dc8869015821c3d34d0e4b0a526",
+      "bytes": 1235,
+      "category": "identity-or-icon",
+      "status": "source-and-rights-evidence-required",
+      "literalMentions": [],
+      "copiedPublicArtifact": {
+        "path": "dist/favicon-v2.svg",
+        "sha256": "4da493e8e97e3764032d8b196587043303d71dc8869015821c3d34d0e4b0a526"
+      }
+    },
+    {
+      "path": "public/favicon.svg",
+      "sha256": "4da493e8e97e3764032d8b196587043303d71dc8869015821c3d34d0e4b0a526",
+      "bytes": 1235,
+      "category": "identity-or-icon",
+      "status": "source-and-rights-evidence-required",
+      "literalMentions": [],
+      "copiedPublicArtifact": {
+        "path": "dist/favicon.svg",
+        "sha256": "4da493e8e97e3764032d8b196587043303d71dc8869015821c3d34d0e4b0a526"
+      }
+    },
+    {
+      "path": "public/flux-logo.svg",
+      "sha256": "6f2f0a00949a2111e163a51c1fef11d9478cc957b4e2cd4a507bafec1d96928d",
+      "bytes": 37315,
+      "category": "identity-or-icon",
+      "status": "source-and-rights-evidence-required",
+      "literalMentions": [
+        "src/components/playground/Generation/ImageGenerationInterface2.tsx",
+        "src/components/playground/Generation/ImageGenerationInterface2Copy.tsx"
+      ],
+      "copiedPublicArtifact": {
+        "path": "dist/flux-logo.svg",
+        "sha256": "6f2f0a00949a2111e163a51c1fef11d9478cc957b4e2cd4a507bafec1d96928d"
+      }
+    },
+    {
+      "path": "public/hero-assets/hero-abstract.webp",
+      "sha256": "eb2b4d34ffd1b4e454ef8bca2710501d0ea0ad4db72757d9ca9277d6b597ba46",
+      "bytes": 32896,
+      "category": "media",
+      "status": "source-and-rights-evidence-required",
+      "literalMentions": [],
+      "copiedPublicArtifact": {
+        "path": "dist/hero-assets/hero-abstract.webp",
+        "sha256": "eb2b4d34ffd1b4e454ef8bca2710501d0ea0ad4db72757d9ca9277d6b597ba46"
+      }
+    },
+    {
+      "path": "public/hero-assets/hero-architecture.jpg",
+      "sha256": "aee4aeb9dddf093bc32cb0e1780dd94eb0a5af5038b95b01089dcc1b1370c927",
+      "bytes": 148949,
+      "category": "media",
+      "status": "source-and-rights-evidence-required",
+      "literalMentions": [],
+      "copiedPublicArtifact": {
+        "path": "dist/hero-assets/hero-architecture.jpg",
+        "sha256": "aee4aeb9dddf093bc32cb0e1780dd94eb0a5af5038b95b01089dcc1b1370c927"
+      }
+    },
+    {
+      "path": "public/hero-assets/hero-city.webp",
+      "sha256": "d03d38b978c478d233ff5b77b7ffbea26e23e63863eac564442e77d19194c880",
+      "bytes": 160380,
+      "category": "media",
+      "status": "source-and-rights-evidence-required",
+      "literalMentions": [],
+      "copiedPublicArtifact": {
+        "path": "dist/hero-assets/hero-city.webp",
+        "sha256": "d03d38b978c478d233ff5b77b7ffbea26e23e63863eac564442e77d19194c880"
+      }
+    },
+    {
+      "path": "public/hero-assets/hero-fluid.jpg",
+      "sha256": "7967ae220dae4c764bcda66a6c9448eed44cdae784a93f591f79bbbffca69d1f",
+      "bytes": 108440,
+      "category": "media",
+      "status": "source-and-rights-evidence-required",
+      "literalMentions": [],
+      "copiedPublicArtifact": {
+        "path": "dist/hero-assets/hero-fluid.jpg",
+        "sha256": "7967ae220dae4c764bcda66a6c9448eed44cdae784a93f591f79bbbffca69d1f"
+      }
+    },
+    {
+      "path": "public/hero-assets/hero-nature.webp",
+      "sha256": "b4bffe82ade0a6b038d6e2e5177594eaa362b08c79d068af66404ea4475add38",
+      "bytes": 97434,
+      "category": "media",
+      "status": "source-and-rights-evidence-required",
+      "literalMentions": [],
+      "copiedPublicArtifact": {
+        "path": "dist/hero-assets/hero-nature.webp",
+        "sha256": "b4bffe82ade0a6b038d6e2e5177594eaa362b08c79d068af66404ea4475add38"
+      }
+    },
+    {
+      "path": "public/hero-assets/hero-neural.jpg",
+      "sha256": "cc1e31bf274ff609c76c11fb22ca5557712edfe7d0c82317175b2c2f9b20ed51",
+      "bytes": 262683,
+      "category": "media",
+      "status": "source-and-rights-evidence-required",
+      "literalMentions": [],
+      "copiedPublicArtifact": {
+        "path": "dist/hero-assets/hero-neural.jpg",
+        "sha256": "cc1e31bf274ff609c76c11fb22ca5557712edfe7d0c82317175b2c2f9b20ed51"
+      }
+    },
+    {
+      "path": "public/hero-assets/hero-portrait.jpg",
+      "sha256": "0caff5e6bd08ed42cb5200c17c805ac8f77bf1e80d2aa0c3dc1cd87ec4edf120",
+      "bytes": 208979,
+      "category": "media",
+      "status": "source-and-rights-evidence-required",
+      "literalMentions": [],
+      "copiedPublicArtifact": {
+        "path": "dist/hero-assets/hero-portrait.jpg",
+        "sha256": "0caff5e6bd08ed42cb5200c17c805ac8f77bf1e80d2aa0c3dc1cd87ec4edf120"
+      }
+    },
+    {
+      "path": "public/hero-assets/hero-portrait.webp",
+      "sha256": "bebe902e516210be472ed8131ff1a02a61565029306aac411e56e15da722e9eb",
+      "bytes": 43854,
+      "category": "media",
+      "status": "source-and-rights-evidence-required",
+      "literalMentions": [],
+      "copiedPublicArtifact": {
+        "path": "dist/hero-assets/hero-portrait.webp",
+        "sha256": "bebe902e516210be472ed8131ff1a02a61565029306aac411e56e15da722e9eb"
+      }
+    },
+    {
+      "path": "public/hero-assets/hero-ui.webp",
+      "sha256": "aa46bc9a8bd1f7ebd36171ef41a412bd3c0772e8458175f928f97bfd0a522833",
+      "bytes": 66054,
+      "category": "media",
+      "status": "source-and-rights-evidence-required",
+      "literalMentions": [],
+      "copiedPublicArtifact": {
+        "path": "dist/hero-assets/hero-ui.webp",
+        "sha256": "aa46bc9a8bd1f7ebd36171ef41a412bd3c0772e8458175f928f97bfd0a522833"
+      }
+    },
+    {
+      "path": "public/hero-assets/hero-workspace.jpg",
+      "sha256": "9bd240165e00b157f25516408560a15ee56f7db33311fa2bf95b2d92952143ba",
+      "bytes": 191729,
+      "category": "media",
+      "status": "source-and-rights-evidence-required",
+      "literalMentions": [],
+      "copiedPublicArtifact": {
+        "path": "dist/hero-assets/hero-workspace.jpg",
+        "sha256": "9bd240165e00b157f25516408560a15ee56f7db33311fa2bf95b2d92952143ba"
+      }
+    },
+    {
+      "path": "public/hero-bg.jpg",
+      "sha256": "22b95b6b17c2e612163208140690dc9696dfd40b8d9ae24aeddef093bfbee01c",
+      "bytes": 3406541,
+      "category": "media",
+      "status": "source-and-rights-evidence-required",
+      "literalMentions": [],
+      "copiedPublicArtifact": {
+        "path": "dist/hero-bg.jpg",
+        "sha256": "22b95b6b17c2e612163208140690dc9696dfd40b8d9ae24aeddef093bfbee01c"
+      }
+    },
+    {
+      "path": "public/hero-bg.mp4",
+      "sha256": "04968e9e159b3f65a60020c6a4c2b6a5f1c294eb2d5b9ff999dee96ff78b59c1",
+      "bytes": 3300177,
+      "category": "media",
+      "status": "source-and-rights-evidence-required",
+      "literalMentions": [
+        "src/components/landing/HeroSection.tsx",
+        "src/components/layouts/AuthLayout.tsx",
+        "src/pages/Auth.tsx",
+        "src/pages/Contact.tsx",
+        "src/pages/Help.tsx"
+      ],
+      "copiedPublicArtifact": {
+        "path": "dist/hero-bg.mp4",
+        "sha256": "04968e9e159b3f65a60020c6a4c2b6a5f1c294eb2d5b9ff999dee96ff78b59c1"
+      }
+    },
+    {
+      "path": "public/landing-v2/xeno-hero-plate.png",
+      "sha256": "eea7ce2fa180391de3fa8486d3d322ad7d6bdea02fd0abd8e913f6885c4f37f8",
+      "bytes": 1321408,
+      "category": "media",
+      "status": "source-and-rights-evidence-required",
+      "literalMentions": [],
+      "copiedPublicArtifact": {
+        "path": "dist/landing-v2/xeno-hero-plate.png",
+        "sha256": "eea7ce2fa180391de3fa8486d3d322ad7d6bdea02fd0abd8e913f6885c4f37f8"
+      }
+    },
+    {
+      "path": "public/landing-v2/xeno-hero-portal-balanced.png",
+      "sha256": "7699ec11a541c04c3317ca727d9482ba757aaab030a4294b9d0ef3dfba6aa789",
+      "bytes": 1396839,
+      "category": "media",
+      "status": "source-and-rights-evidence-required",
+      "literalMentions": [
+        "src/components/landing-v2/HeroSection.tsx"
+      ],
+      "copiedPublicArtifact": {
+        "path": "dist/landing-v2/xeno-hero-portal-balanced.png",
+        "sha256": "7699ec11a541c04c3317ca727d9482ba757aaab030a4294b9d0ef3dfba6aa789"
+      }
+    },
+    {
+      "path": "public/landing-v2/xeno-hero-portal-centered.png",
+      "sha256": "dbb6a9007063d9a82056e2a8cf7ed72fa495d5dbb0347c94b6850d12f2708965",
+      "bytes": 1371710,
+      "category": "media",
+      "status": "source-and-rights-evidence-required",
+      "literalMentions": [],
+      "copiedPublicArtifact": {
+        "path": "dist/landing-v2/xeno-hero-portal-centered.png",
+        "sha256": "dbb6a9007063d9a82056e2a8cf7ed72fa495d5dbb0347c94b6850d12f2708965"
+      }
+    },
+    {
+      "path": "public/landing-v2/xeno-hero-portal-clean.png",
+      "sha256": "95ca00ef15a74d0f5d47feef3c820ff3bd4d7e07fa08cd83643e8ec5a06110c2",
+      "bytes": 1132144,
+      "category": "media",
+      "status": "source-and-rights-evidence-required",
+      "literalMentions": [],
+      "copiedPublicArtifact": {
+        "path": "dist/landing-v2/xeno-hero-portal-clean.png",
+        "sha256": "95ca00ef15a74d0f5d47feef3c820ff3bd4d7e07fa08cd83643e8ec5a06110c2"
+      }
+    },
+    {
+      "path": "public/landing-v3/gen/img-1.png",
+      "sha256": "9d31520a89aa01f9664659bc527398782ae4200e73cc3155999ea103e533b37c",
+      "bytes": 2218077,
+      "category": "media",
+      "status": "source-and-rights-evidence-required",
+      "literalMentions": [
+        "src/components/landing-v3/HeroSection.tsx"
+      ],
+      "copiedPublicArtifact": {
+        "path": "dist/landing-v3/gen/img-1.png",
+        "sha256": "9d31520a89aa01f9664659bc527398782ae4200e73cc3155999ea103e533b37c"
+      }
+    },
+    {
+      "path": "public/landing-v3/gen/img-2.png",
+      "sha256": "dcc91dc0577788ea870aa573117a5de20bc1a4c3471facb47275664e9da21048",
+      "bytes": 2068369,
+      "category": "media",
+      "status": "source-and-rights-evidence-required",
+      "literalMentions": [],
+      "copiedPublicArtifact": {
+        "path": "dist/landing-v3/gen/img-2.png",
+        "sha256": "dcc91dc0577788ea870aa573117a5de20bc1a4c3471facb47275664e9da21048"
+      }
+    },
+    {
+      "path": "public/landing-v3/gen/img-3.png",
+      "sha256": "b74a19660c8139fbecb379b66a977cac5ff6c34285eac4bc110fcbced6551c37",
+      "bytes": 1677713,
+      "category": "media",
+      "status": "source-and-rights-evidence-required",
+      "literalMentions": [],
+      "copiedPublicArtifact": {
+        "path": "dist/landing-v3/gen/img-3.png",
+        "sha256": "b74a19660c8139fbecb379b66a977cac5ff6c34285eac4bc110fcbced6551c37"
+      }
+    },
+    {
+      "path": "public/landing-v3/gen/img-4.png",
+      "sha256": "d45548d51b4a7c958eb1d9132cccf1d9ac41e2a3ac99ce296f8e8a77c47120c2",
+      "bytes": 2507663,
+      "category": "media",
+      "status": "source-and-rights-evidence-required",
+      "literalMentions": [],
+      "copiedPublicArtifact": {
+        "path": "dist/landing-v3/gen/img-4.png",
+        "sha256": "d45548d51b4a7c958eb1d9132cccf1d9ac41e2a3ac99ce296f8e8a77c47120c2"
+      }
+    },
+    {
+      "path": "public/logo.svg",
+      "sha256": "fcf634df6d6961fcb5f6c20ddddabc06b8f9188bc97b31bdf26133c8c9704960",
+      "bytes": 1170,
+      "category": "identity-or-icon",
+      "status": "source-and-rights-evidence-required",
+      "literalMentions": [
+        "src/components/auth/AuthMark.tsx",
+        "src/components/auth/XenoGlyph.tsx",
+        "src/pages/Auth.tsx",
+        "src/pages/Contact.tsx",
+        "src/pages/Help.tsx",
+        "src/pages/Impressum.tsx",
+        "src/pages/Privacy.tsx",
+        "src/pages/Terms.tsx",
+        "src/pages/Withdrawal.tsx"
+      ],
+      "copiedPublicArtifact": {
+        "path": "dist/logo.svg",
+        "sha256": "fcf634df6d6961fcb5f6c20ddddabc06b8f9188bc97b31bdf26133c8c9704960"
+      }
+    },
+    {
+      "path": "public/share/earth-map.jpg",
+      "sha256": "2faa400d1eade3bc44caf6750d1b772bd9bbb6d87362c02bc7c3304e78fa0a9d",
+      "bytes": 512606,
+      "category": "media",
+      "status": "source-and-rights-evidence-required",
+      "literalMentions": [],
+      "copiedPublicArtifact": {
+        "path": "dist/share/earth-map.jpg",
+        "sha256": "2faa400d1eade3bc44caf6750d1b772bd9bbb6d87362c02bc7c3304e78fa0a9d"
+      }
+    },
+    {
+      "path": "public/xeno-logo-original.png",
+      "sha256": "fcf634df6d6961fcb5f6c20ddddabc06b8f9188bc97b31bdf26133c8c9704960",
+      "bytes": 1170,
+      "category": "identity-or-icon",
+      "status": "source-and-rights-evidence-required",
+      "literalMentions": [],
+      "copiedPublicArtifact": {
+        "path": "dist/xeno-logo-original.png",
+        "sha256": "fcf634df6d6961fcb5f6c20ddddabc06b8f9188bc97b31bdf26133c8c9704960"
+      }
+    },
+    {
+      "path": "public/xeno-logo.svg",
+      "sha256": "fcf634df6d6961fcb5f6c20ddddabc06b8f9188bc97b31bdf26133c8c9704960",
+      "bytes": 1170,
+      "category": "identity-or-icon",
+      "status": "source-and-rights-evidence-required",
+      "literalMentions": [
+        "src/components/forum/ForumHeader.tsx",
+        "src/components/landing/Footer.tsx",
+        "src/components/landing/Header.tsx",
+        "src/components/landing-v2/Footer.tsx",
+        "src/components/landing-v2/Header.tsx",
+        "src/components/landing-v3/Footer.tsx",
+        "src/components/landing-v3/Header.tsx",
+        "src/components/overview/OverviewTaskbar.tsx"
+      ],
+      "copiedPublicArtifact": {
+        "path": "dist/xeno-logo.svg",
+        "sha256": "fcf634df6d6961fcb5f6c20ddddabc06b8f9188bc97b31bdf26133c8c9704960"
+      }
+    }
+  ]
+}

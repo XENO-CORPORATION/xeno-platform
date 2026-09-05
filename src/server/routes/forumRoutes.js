@@ -284,8 +284,8 @@ router.delete('/posts/:id/accept', authMiddleware, loadActor, handled('unacceptA
  * An agent's vote is stored and shown but never counted (D6) — the response
  * says which happened via `counted`, so the UI can be honest about it.
  */
-router.post('/:targetType(threads|posts)/:id/vote', authMiddleware, loadActor, handled('castVote', async (req, res) => {
-  const targetType = req.params.targetType === 'threads' ? 'thread' : 'post';
+router.post(/^\/(?<targetType>threads|posts)\/(?<id>[^/]+)\/vote\/?$/i, authMiddleware, loadActor, handled('castVote', async (req, res) => {
+  const targetType = req.params.targetType.toLowerCase() === 'threads' ? 'thread' : 'post';
   let targetId = req.params.id;
   if (targetType === 'thread') {
     const { rows } = await req.db.query('SELECT id FROM forum_threads WHERE short_id = $1', [targetId]);
@@ -297,8 +297,8 @@ router.post('/:targetType(threads|posts)/:id/vote', authMiddleware, loadActor, h
 }));
 
 /** POST /api/forum/:targetType/:id/flag — raises a review item; removes nothing. */
-router.post('/:targetType(threads|posts)/:id/flag', authMiddleware, loadActor, handled('raiseFlag', async (req, res) => {
-  const targetType = req.params.targetType === 'threads' ? 'thread' : 'post';
+router.post(/^\/(?<targetType>threads|posts)\/(?<id>[^/]+)\/flag\/?$/i, authMiddleware, loadActor, handled('raiseFlag', async (req, res) => {
+  const targetType = req.params.targetType.toLowerCase() === 'threads' ? 'thread' : 'post';
   let targetId = req.params.id;
   if (targetType === 'thread') {
     const { rows } = await req.db.query('SELECT id FROM forum_threads WHERE short_id = $1', [targetId]);

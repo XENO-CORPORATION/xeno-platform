@@ -131,7 +131,7 @@ export const ContainerProvider: React.FC<ContainerProviderProps> = ({ children }
       if (sharedContainerId) {
         console.log('🤝 ContainerContext: Using shared container:', sharedContainerId);
         // Get auth token from localStorage
-        const token = localStorage.getItem('xenoos_auth_token');
+        const token = getAccessToken();
         // Fetch the shared container info
         const response = await fetch(`/api/containers/${sharedContainerId}`, {
           credentials: 'include',
@@ -486,3 +486,4 @@ export const ContainerProvider: React.FC<ContainerProviderProps> = ({ children }
     </ContainerContext.Provider>
   );
 };
+import { getAccessToken } from '../lib/authSession';

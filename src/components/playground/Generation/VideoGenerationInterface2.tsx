@@ -1,8 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Video, Send, Download, Copy, Share2, Trash2, Sparkles, Play, Pause, Clock, Image, RotateCw, Info, X, AlertCircle, Wand2, Settings, ChevronDown, RefreshCw, Camera, Minus, ZoomIn, ZoomOut, Move, Maximize, Minimize, DownloadCloud, Film, Image as ImageIcon, Plus } from 'lucide-react';
-import { checkApiTokens, API_TOKENS } from '../../../config/apiConfig';
-import ApiTokenNotice from '../../common/ApiTokenNotice';
-import { analyzeImageWithGemini, initializeGeminiSDK } from '../../../services/geminiService';
+import { hasAuthSession } from '../../../lib/authSession';
+import { analyzeImageWithGemini } from '../../../services/geminiService';
 import videoGenerationService from '../../../services/videoGenerationService';
 import generationHistoryService from '../../../services/generationHistoryService';
 import VideoPromptEditor, { VideoPromptEditorHandle } from './components/VideoPromptEditor';
@@ -17,16 +16,6 @@ interface UploadedReference {
 }
 
 const MAX_REFERENCES = 6;
-
-// V2 preview mode: when on, Generate drops in a sample video so the result card can be
-// previewed with a real playing video (no backend). Set to false for real generation.
-const DEMO_MOCK_GENERATION_ENABLED = true;
-const DEMO_SAMPLE_VIDEOS = [
-  'https://storage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4',
-  'https://storage.googleapis.com/gtv-videos-bucket/sample/ElephantsDream.mp4',
-  'https://storage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4',
-  'https://storage.googleapis.com/gtv-videos-bucket/sample/Sintel.mp4',
-];
 
 // Stacked reference-pile geometry (mirrors Dreamina's reference group):
 // cards overlap into a tilted pile at rest and fan out into a row on hover.
@@ -930,12 +919,6 @@ const VideoGenerationInterface2: React.FC<VideoGenerationInterfaceProps> = ({
   const [negativePrompt, setNegativePrompt] = useState('');
   const [selectedMode, setSelectedMode] = useState('text-to-video');
   
-  const [apiTokenAvailable, setApiTokenAvailable] = useState<boolean>(false);
-  const [isCheckingToken, setIsCheckingToken] = useState<boolean>(true);
-
-  // Gemini SDK status
-  const [geminiInitialized, setGeminiInitialized] = useState<boolean>(false);
-
   // State for clean mode specific settings popup
   const [showAdvancedSettings, setShowAdvancedSettings] = useState(false);
   // Mount/visible states drive the settings popover's slide-up / slide-down animation.
@@ -987,98 +970,20 @@ const VideoGenerationInterface2: React.FC<VideoGenerationInterfaceProps> = ({
     return () => clearTimeout(t);
   }, [uploadedReferences]);
   
-  // Initialize token from URL if present
-  React.useEffect(() => {
-    // Check URL for token parameter
-    const params = new URLSearchParams(window.location.search);
-    const tokenFromUrl = params.get('xeno_token');
-    if (tokenFromUrl) {
-      window.XENO_API_KEY = tokenFromUrl;
-      // Update API_TOKENS object
-      if (API_TOKENS) {
-        API_TOKENS.XENO_API_KEY = tokenFromUrl;
-      }
-      // Remove token from URL to avoid exposing it
-      const url = new URL(window.location.href);
+  // Discard obsolete URL credentials without reading or importing their value.
+  useEffect(() => {
+    const url = new URL(window.location.href);
+    if (url.searchParams.has('xeno_token')) {
       url.searchParams.delete('xeno_token');
       window.history.replaceState({}, document.title, url.toString());
     }
   }, []);
 
-  // Check for API token availability immediately on initial render
-  React.useEffect(() => {
-    // API is now proxied through backend - no client-side key needed
-  }, []);
-
-  // Check API token and initialize Gemini SDK on mount
-  useEffect(() => {
-    setIsCheckingToken(true);
-    const checkToken = async () => {
-      // Gemini vision (image -> prompt) is being migrated to the secure,
-      // metered backend. No provider key is read or injected on the client:
-      // the hardcoded key, the VITE_GEMINI_API_TOKEN read, and the
-      // window/API_TOKENS key assignments were removed. The SDK-init block
-      // below is now a no-op until a backend endpoint exists.
-      const tokens = checkApiTokens();
-      const hasReplicateToken = tokens.replicate;
-      setApiTokenAvailable(hasReplicateToken);
-      setIsCheckingToken(false);
-      
-      // Initialize Gemini SDK
-      if (API_TOKENS.GEMINI_API_TOKEN) {
-        const initialized = initializeGeminiSDK(API_TOKENS.GEMINI_API_TOKEN);
-        console.log('Gemini SDK initialized:', initialized);
-        setGeminiInitialized(initialized);
-      } else {
-        console.log('No Gemini API token available');
-        setGeminiInitialized(false);
-      }
-    };
-    checkToken();
-  }, []);
-  
-  const handleTokenSaved = () => {
-    // Recheck token availability
-    const tokens = checkApiTokens();
-    const hasReplicateToken = tokens.replicate;
-    setApiTokenAvailable(hasReplicateToken);
-    
-    // Initialize Gemini SDK if token is available
-    if (API_TOKENS.GEMINI_API_TOKEN) {
-      const initialized = initializeGeminiSDK(API_TOKENS.GEMINI_API_TOKEN);
-      setGeminiInitialized(initialized);
-    }
-    
-    if (hasReplicateToken) {
-      // If token is now available, clear any error and start a new session
-      setGenerationError(null);
-    }
-  };
-
+  const generationInFlight = useRef(false);
   const handleGenerate = async () => {
+    if (generationInFlight.current) return;
     if (!prompt.trim()) {
       notifications.error('Please enter a prompt');
-      return;
-    }
-
-    // DEMO PREVIEW: skip real generation; add a sample video so the result card
-    // can be previewed with a playing video (no backend / token required).
-    if (DEMO_MOCK_GENERATION_ENABLED) {
-      setIsGenerating(true);
-      setGenerationError(null);
-      const chosen = DEMO_SAMPLE_VIDEOS[Math.floor(Math.random() * DEMO_SAMPLE_VIDEOS.length)];
-      await new Promise((r) => setTimeout(r, 1100));
-      setHistory((prev) => [
-        {
-          id: Date.now().toString(),
-          prompt,
-          video: chosen,
-          timestamp: new Date(),
-          metadata: { model: selectedModel, duration, aspectRatio },
-        },
-        ...prev,
-      ]);
-      setIsGenerating(false);
       return;
     }
 
@@ -1087,13 +992,12 @@ const VideoGenerationInterface2: React.FC<VideoGenerationInterfaceProps> = ({
       return;
     }
 
-    // Check if API token is available
-    const tokens = checkApiTokens();
-    if (!tokens.replicate) {
-      notifications.error("API token is missing. Please add your API token to continue.");
+    // The backend owns provider credentials and enforces credits/entitlements.
+    if (!hasAuthSession()) {
+      notifications.error('Sign in to XENO before generating a video.');
       return;
     }
-
+    generationInFlight.current = true;
     setIsGenerating(true);
     setGenerationError(null);
     setErrorDetails(null);
@@ -1231,69 +1135,7 @@ const VideoGenerationInterface2: React.FC<VideoGenerationInterfaceProps> = ({
           notifications.error(`Error: ${result.error || 'Video generation failed'}`);
         }
       } else {
-        // For other models, use the existing mock implementation
-        
-        // Mock video URLs - in a real app, these would come from your API
-        const mockVideos = [
-          "https://storage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4",
-          "https://storage.googleapis.com/gtv-videos-bucket/sample/ElephantsDream.mp4",
-          "https://storage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4",
-          "https://storage.googleapis.com/gtv-videos-bucket/sample/ForBiggerEscapes.mp4",
-          "https://storage.googleapis.com/gtv-videos-bucket/sample/ForBiggerFun.mp4",
-          "https://storage.googleapis.com/gtv-videos-bucket/sample/ForBiggerJoyrides.mp4",
-          "https://storage.googleapis.com/gtv-videos-bucket/sample/ForBiggerMeltdowns.mp4",
-          "https://storage.googleapis.com/gtv-videos-bucket/sample/Sintel.mp4"
-        ];
-        
-        // Simulate API delay for mock models
-        await new Promise(resolve => setTimeout(resolve, 3000));
-        
-        // Create an array of generated videos based on numGenerations
-        const generatedVideos: string[] = [];
-        const videosToGenerate = Math.min(numGenerations, 4); // Cap at 4 videos maximum
-        
-        // Use a set to ensure we don't get duplicate videos
-        const usedIndices = new Set<number>();
-        
-        for (let i = 0; i < videosToGenerate; i++) {
-          let randomIndex;
-          do {
-            randomIndex = Math.floor(Math.random() * mockVideos.length);
-          } while (usedIndices.has(randomIndex) && usedIndices.size < mockVideos.length);
-          
-          usedIndices.add(randomIndex);
-          generatedVideos.push(mockVideos[randomIndex]);
-        }
-        
-        // Use the first video as the main video for history and selection
-        const primaryVideo = generatedVideos[0];
-        
-        // Add to history
-        const newHistoryItem = {
-          id: Date.now().toString(),
-          prompt,
-          video: primaryVideo,
-          timestamp: new Date(),
-          metadata: {
-            model: selectedModel,
-            duration,
-            aspectRatio,
-            mode: selectedMode,
-            generatedCount: videosToGenerate
-          }
-        };
-        
-        // Update the UI with all generated videos
-        setHistory(prev => [newHistoryItem, ...prev]);
-        setSelectedVideo(primaryVideo);
-        setPreviewVideos(generatedVideos);
-        
-        // Initialize play state for the first video
-        const initialPlayState: {[key: string]: boolean} = {};
-        initialPlayState['video-0'] = true;
-        setIsPlaying(initialPlayState);
-        
-        notifications.success(`${videosToGenerate} video${videosToGenerate > 1 ? 's' : ''} generated successfully`);
+        throw new Error(`Video model ${selectedModel} is not connected to generation yet. No video was generated.`);
       }
     } catch (error) {
       console.error('Error generating video:', error);
@@ -1302,6 +1144,7 @@ const VideoGenerationInterface2: React.FC<VideoGenerationInterfaceProps> = ({
       setGenerationError(errorMessage);
       notifications.error(`Error: ${errorMessage}`);
     } finally {
+      generationInFlight.current = false;
       setIsGenerating(false);
     }
   };
@@ -1359,11 +1202,6 @@ const VideoGenerationInterface2: React.FC<VideoGenerationInterfaceProps> = ({
   // uploaded reference still seeds the prompt when the model can't take an image.
   const analyzeReferenceForTextModel = async (dataUrl: string, fileName: string) => {
     try {
-      if (!geminiInitialized && API_TOKENS.GEMINI_API_TOKEN) {
-        const initialized = initializeGeminiSDK(API_TOKENS.GEMINI_API_TOKEN);
-        setGeminiInitialized(initialized);
-        if (!initialized) throw new Error('Failed to initialize Gemini SDK');
-      }
       const imageDescription = await analyzeImageWithGemini(dataUrl);
       if (imageDescription) {
         setPrompt(imageDescription);
@@ -1373,7 +1211,7 @@ const VideoGenerationInterface2: React.FC<VideoGenerationInterfaceProps> = ({
     } catch (error) {
       console.error('Error calling Gemini vision API:', error);
       setPrompt((prev) => prev || `Please add a description for the uploaded image "${fileName}".`);
-      notifications.error('Could not analyze image with Gemini. Please check your API key.');
+      notifications.error('Image analysis is unavailable. Describe the image in your prompt; no provider key is needed in the browser.');
     }
   };
 
@@ -1499,12 +1337,6 @@ const VideoGenerationInterface2: React.FC<VideoGenerationInterfaceProps> = ({
   // Main return statement with conditional rendering
   return (
   <div className="flex flex-col h-full w-full min-w-0 min-h-0">
-      {!apiTokenAvailable && (
-        <ApiTokenNotice 
-          serviceKey="replicate" 
-          onTokenSaved={handleTokenSaved}
-        />
-      )}
       
       {isCleanMode ? (
         // --- Clean Mode Interface ---

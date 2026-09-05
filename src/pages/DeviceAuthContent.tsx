@@ -4,6 +4,7 @@ import AuthMark from '../components/auth/AuthMark';
 import { ArrowLeft, KeyRound } from 'lucide-react';
 import { getAuthApp } from '../lib/authApps';
 import { authPath } from '../lib/authRouting.js';
+import { useAuth } from '../contexts/AuthContext';
 
 /* ──────────────────────────────────────────────────────────────────────
  * /activate is the RFC 8628 verification URI. /auth/:app/device remains a
@@ -23,7 +24,7 @@ const DeviceAuthContent: React.FC<{ protocol?: 'oidc' | 'legacy' }> = ({ protoco
   } | null>(null);
   const [isVisible, setIsVisible] = useState(false);
 
-  const authed = typeof window !== 'undefined' && !!localStorage.getItem('xenoos_auth_token');
+  const { isAuthenticated: authed, isLoading: authLoading } = useAuth();
 
   useEffect(() => {
     const t = setTimeout(() => setIsVisible(true), 50);
@@ -32,12 +33,12 @@ const DeviceAuthContent: React.FC<{ protocol?: 'oidc' | 'legacy' }> = ({ protoco
 
   // Not signed in → hand off to the branded login, returning here once authed.
   useEffect(() => {
-    if (!authed) {
+    if (!authLoading && !authed) {
       const here = `${location.pathname}${location.search}`;
       const clientHint = protocol === 'legacy' ? (appSlug ?? 'cli') : undefined;
       window.location.replace(authPath('signin', `?returnUrl=${encodeURIComponent(here)}`, clientHint));
     }
-  }, [authed, appSlug, location.pathname, location.search, protocol]);
+  }, [authed, authLoading, appSlug, location.pathname, location.search, protocol]);
 
   // Auto-format to XXXX-XXXX as the user types.
   const onCodeChange = (v: string) => {
@@ -50,8 +51,7 @@ const DeviceAuthContent: React.FC<{ protocol?: 'oidc' | 'legacy' }> = ({ protoco
     e.preventDefault();
     const userCode = code.replace(/[^A-Z0-9]/gi, '');
     if (userCode.length !== 8) { setStatus('Enter the full 8-character code.'); return; }
-    const tok = localStorage.getItem('xenoos_auth_token');
-    if (!tok) { setStatus('Your session expired — please reload.'); return; }
+    if (!authed) { setStatus('Your session expired — please reload.'); return; }
     setStatus('verifying');
     try {
       const endpoint = protocol === 'oidc'
@@ -59,7 +59,7 @@ const DeviceAuthContent: React.FC<{ protocol?: 'oidc' | 'legacy' }> = ({ protoco
         : '/api/auth/cli/device-code/verify';
       const r = await fetch(endpoint, {
         method: 'POST',
-        headers: { 'content-type': 'application/json', authorization: `Bearer ${tok}` },
+        headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ user_code: code.toUpperCase() }),
       });
       const d = await r.json().catch(() => ({}));
@@ -83,7 +83,7 @@ const DeviceAuthContent: React.FC<{ protocol?: 'oidc' | 'legacy' }> = ({ protoco
     }
   };
 
-  if (!authed) return null; // redirecting to the branded login
+  if (authLoading || !authed) return null; // checking or redirecting
 
   const displayName = authorization?.client_name
     || (protocol === 'legacy' ? legacyAuthApp.displayName : 'your XENO device');

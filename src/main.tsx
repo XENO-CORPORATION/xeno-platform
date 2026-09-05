@@ -16,8 +16,10 @@ import './index.css';
 import { SiteGateProvider } from './contexts/SiteGateContext.tsx';
 import { SiteGateWrapper } from './components/auth/SiteGate.tsx';
 import { installActivationInterceptor } from './lib/activationInterceptor';
+import { installAuthenticatedFetch } from './lib/authSession';
 
 // Installed before the first render so no early request can slip past it.
+installAuthenticatedFetch();
 installActivationInterceptor();
 
 // Development fixtures are an explicit bootstrap-only adapter. Vite erases this

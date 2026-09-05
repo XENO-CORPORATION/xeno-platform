@@ -115,6 +115,7 @@ router.get('/settings', async (req, res) => {
           },
           appearance: {
             theme: 'dark',
+            themeBrightness: 0,
             fontSize: 'medium',
           },
           models: {
@@ -171,14 +172,18 @@ router.patch('/settings', async (req, res) => {
       return res.status(401).json({ success: false, error: 'Unauthorized' });
     }
 
-    const { path, value } = req.body;
-    if (!path) {
-      return res.status(400).json({ success: false, error: 'Path required' });
+    const { path, value, updates } = req.body;
+    const requestedUpdates = Array.isArray(updates) ? updates : path ? [{ path, value }] : [];
+    if (requestedUpdates.length === 0) {
+      return res.status(400).json({ success: false, error: 'At least one setting update is required' });
     }
 
-    let pathSegments;
+    let normalizedUpdates;
     try {
-      pathSegments = normalizeSettingPath(path);
+      normalizedUpdates = requestedUpdates.map((update) => ({
+        pathSegments: normalizeSettingPath(update?.path),
+        value: update?.value,
+      }));
     } catch {
       return res.status(400).json({ success: false, error: 'Invalid setting path' });
     }
@@ -199,7 +204,10 @@ router.patch('/settings', async (req, res) => {
       'SELECT settings FROM user_settings WHERE user_id = $1 FOR UPDATE',
       [userId]
     );
-    const nextSettings = setNestedSetting(current.rows[0]?.settings, pathSegments, value);
+    const nextSettings = normalizedUpdates.reduce(
+      (settings, update) => setNestedSetting(settings, update.pathSegments, update.value),
+      current.rows[0]?.settings,
+    );
     const result = await client.query(
       `UPDATE user_settings
           SET settings = $2::jsonb, updated_at = NOW()

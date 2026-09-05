@@ -73,7 +73,7 @@ export class WebContextRequestError extends Error {
 }
 
 function authHeaders(): HeadersInit {
-  const token = localStorage.getItem('xenoos_auth_token');
+  const token = getAccessToken();
   const workspace = localStorage.getItem('xeno_active_workspace_id');
   return {
     'content-type': 'application/json',
@@ -207,3 +207,4 @@ export const webContextService = {
     return result;
   },
 };
+import { getAccessToken } from '../lib/authSession';

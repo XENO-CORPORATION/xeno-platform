@@ -18,6 +18,15 @@ const XENO_PACKAGES = fs.existsSync(localPackages)
 
 const xeno = (p: string) => path.join(XENO_PACKAGES, p);
 
+// Keep the browser on a same-origin `/api` contract in every environment. Local
+// qualification can point that proxy at a local backend without exposing a
+// backend URL (or any credentials) in the client bundle. The hosted platform
+// remains the default so the existing development workflow is unchanged.
+const developmentApiTarget = process.env.XENO_DEV_API_TARGET?.trim() || 'https://xenostudio.ai';
+if (!/^https?:\/\/[^\s]+$/i.test(developmentApiTarget)) {
+  throw new Error('XENO_DEV_API_TARGET must be an absolute http(s) URL');
+}
+
 // https://vitejs.dev/config/
 export default defineConfig({
   plugins: [react()],
@@ -87,7 +96,7 @@ export default defineConfig({
       // General /api proxy - points to our backend server
       // Note: File uploads bypass this proxy and go directly to backend due to Vite's 1MB body limit
       '/api': {
-        target: process.env.DOCKER_ENV ? 'http://backend:8080' : (process.env.NODE_ENV === 'production' ? 'http://backend:8080' : 'https://xenostudio.ai'),
+        target: process.env.DOCKER_ENV ? 'http://backend:8080' : (process.env.NODE_ENV === 'production' ? 'http://backend:8080' : developmentApiTarget),
         changeOrigin: true,
         secure: false,
         configure: (proxy, options) => {

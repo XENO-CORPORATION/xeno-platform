@@ -21,6 +21,7 @@ import { authMiddleware } from '../middleware/auth.js';
 const JWT_SECRET = process.env.JWT_SECRET || 'xenostudio-super-secret-jwt-key-change-in-production';
 
 const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL });
+let server;
 let pass = 0, fail = 0;
 const ok = (c, m) => { if (c) { pass++; console.log(`  ✓ ${m}`); } else { fail++; console.log(`  ✗ ${m}`); } };
 const sha256 = (t) => crypto.createHash('sha256').update(String(t)).digest('hex');
@@ -88,7 +89,7 @@ async function main() {
   const app = express();
   app.use((req, _res, next) => { req.db = pool; next(); });
   app.get('/api/v2/me', authMiddleware, (req, res) => res.json({ success: true, user: req.user }));
-  const server = app.listen(0);
+  server = app.listen(0, '127.0.0.1');
   await new Promise((r) => server.once('listening', r));
   const base = `http://127.0.0.1:${server.address().port}`;
   const get = async (headers = {}) => {
@@ -135,8 +136,13 @@ async function main() {
   ok(r9.status === 401, 'missing token → 401');
 
   console.log(`\n${fail === 0 ? '✅' : '❌'} api-key-auth: ${pass} passed, ${fail} failed`);
-  server.close();
-  await pool.end();
-  process.exit(fail === 0 ? 0 : 1);
+  process.exitCode = fail === 0 ? 0 : 1;
 }
-main().catch((e) => { console.error('FATAL', e); process.exit(1); });
+main().catch((e) => { console.error('FATAL', e); process.exitCode = 1; }).finally(async () => {
+  // Do not force process exit while libuv is closing the HTTP/fetch handles.
+  try {
+    if (server?.listening) await new Promise((resolve, reject) => server.close(error => error ? reject(error) : resolve()));
+  } finally {
+    await pool.end();
+  }
+}).catch((e) => { console.error('Cleanup failed', e); process.exitCode = 1; });

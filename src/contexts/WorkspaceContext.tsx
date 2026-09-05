@@ -3,47 +3,13 @@ import { useAuth } from './AuthContext';
 import {
   listWorkspaces,
   selectWorkspace as apiSelectWorkspace,
+  createWorkspace as apiCreateWorkspace,
   getWorkspaceMembers,
   AccountApiError,
   ACCOUNT_UUID_RE,
   type Workspace,
   type WorkspaceMember,
 } from '../services/accountService';
-
-// Fallback data when API is unavailable (dev mode / no backend)
-const DEV_WORKSPACES: Workspace[] = [
-  {
-    id: 'ws-personal',
-    owner_user_id: 'dev-user',
-    workspace_type: 'personal',
-    name: 'Personal',
-    slug: 'personal',
-    status: 'active',
-    created_at: new Date().toISOString(),
-    updated_at: new Date().toISOString(),
-    metadata: {},
-    member_role: 'owner',
-  },
-  {
-    id: 'ws-team',
-    owner_user_id: 'dev-user',
-    workspace_type: 'team',
-    name: 'XENO Corporation',
-    slug: 'xeno-corporation',
-    status: 'active',
-    created_at: new Date().toISOString(),
-    updated_at: new Date().toISOString(),
-    metadata: {},
-    member_role: 'owner',
-    member_count: 4,
-  },
-];
-
-const DEV_MEMBERS: WorkspaceMember[] = [
-  { id: 'm1', user_id: 'dev-user', member_role: 'owner', member_status: 'active', created_at: new Date().toISOString(), user: { username: 'alice', email: 'alice@example.com', display_name: 'Alice', avatar_url: null } },
-  { id: 'm2', user_id: 'u2', member_role: 'admin', member_status: 'active', created_at: new Date().toISOString(), user: { username: 'alex', email: 'alex@xeno.dev', display_name: 'Alex', avatar_url: null } },
-  { id: 'm3', user_id: 'u3', member_role: 'member', member_status: 'active', created_at: new Date().toISOString(), user: { username: 'maria', email: 'maria@xeno.dev', display_name: 'Maria', avatar_url: null } },
-];
 
 interface WorkspaceContextType {
   // State
@@ -55,6 +21,7 @@ interface WorkspaceContextType {
 
   // Actions
   switchWorkspace: (workspaceId: string) => Promise<void>;
+  createWorkspace: (name: string) => Promise<Workspace>;
   refreshWorkspaces: () => Promise<void>;
   refreshMembers: () => Promise<void>;
 
@@ -85,7 +52,7 @@ export const WorkspaceProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   const [error, setError] = useState<string | null>(null);
 
   const refreshWorkspaces = useCallback(async () => {
-    if (!isAuthenticated && !import.meta.env.DEV) return;
+    if (!isAuthenticated) return;
     setIsLoading(true);
     setError(null);
     try {
@@ -113,19 +80,11 @@ export const WorkspaceProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       if (savedId && !ACCOUNT_UUID_RE.test(savedId)) {
         localStorage.removeItem(ACTIVE_WORKSPACE_KEY);
       }
-      if (import.meta.env.DEV) {
-        console.warn('[WorkspaceContext] API unavailable, using fallback data');
-        setWorkspaces(DEV_WORKSPACES);
-        if (!activeWorkspace) {
-          setActiveWorkspace(DEV_WORKSPACES[1] ?? DEV_WORKSPACES[0]);
-        }
-      } else {
-        console.warn('[WorkspaceContext] workspaces unavailable:', message);
-        setWorkspaces([]);
-        setActiveWorkspace(null);
-        setMembers([]);
-        setError(message);
-      }
+      console.warn('[WorkspaceContext] workspaces unavailable:', message);
+      setWorkspaces([]);
+      setActiveWorkspace(null);
+      setMembers([]);
+      setError(message);
     } finally {
       setIsLoading(false);
     }
@@ -133,47 +92,50 @@ export const WorkspaceProvider: React.FC<{ children: React.ReactNode }> = ({ chi
 
   const refreshMembers = useCallback(async () => {
     if (!activeWorkspace) return;
-    if (!ACCOUNT_UUID_RE.test(activeWorkspace.id)) {
-      if (import.meta.env.DEV) {
-        setMembers(activeWorkspace.workspace_type === 'team' ? DEV_MEMBERS : DEV_MEMBERS.slice(0, 1));
-      } else {
-        setMembers([]);
-      }
-      return;
-    }
+    if (!ACCOUNT_UUID_RE.test(activeWorkspace.id)) { setMembers([]); return; }
     try {
       const res = await getWorkspaceMembers(activeWorkspace.id);
       setMembers(res.members);
-    } catch {
-      if (import.meta.env.DEV) {
-        setMembers(activeWorkspace.workspace_type === 'team' ? DEV_MEMBERS : DEV_MEMBERS.slice(0, 1));
-      } else {
-        setMembers([]);
-      }
+    } catch (err) {
+      setMembers([]);
+      setError(err instanceof Error ? err.message : 'Could not load workspace members');
     }
   }, [activeWorkspace?.id]);
 
   const switchWorkspace = useCallback(async (workspaceId: string) => {
     const target = workspaces.find(w => w.id === workspaceId);
-    if (!target) return;
-
+    if (!target) throw new Error('Workspace is not available to this account');
+    setError(null);
     try {
-      if (ACCOUNT_UUID_RE.test(workspaceId)) {
-        await apiSelectWorkspace(workspaceId);
-      }
-    } catch {
-      // API unavailable — still switch locally
+      await apiSelectWorkspace(workspaceId);
+      setActiveWorkspace(target);
+      localStorage.setItem(ACTIVE_WORKSPACE_KEY, workspaceId);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'The server did not confirm the workspace switch';
+      setError(message);
+      throw err;
     }
-    setActiveWorkspace(target);
-    localStorage.setItem(ACTIVE_WORKSPACE_KEY, workspaceId);
   }, [workspaces]);
 
-  // Load workspaces on auth, or immediately in dev mode
+  const createWorkspace = useCallback(async (name: string) => {
+    setError(null);
+    try {
+      const result = await apiCreateWorkspace(name, 'team');
+      await apiSelectWorkspace(result.workspace.id);
+      setWorkspaces((current) => [...current.filter((item) => item.id !== result.workspace.id), result.workspace]);
+      setActiveWorkspace(result.workspace);
+      localStorage.setItem(ACTIVE_WORKSPACE_KEY, result.workspace.id);
+      return result.workspace;
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'The server did not confirm workspace creation';
+      setError(message);
+      throw err;
+    }
+  }, []);
+
+  // Workspaces only exist as server-confirmed authenticated resources.
   useEffect(() => {
     if (isAuthenticated) {
-      refreshWorkspaces();
-    } else if (import.meta.env.DEV) {
-      // Dev mode without auth — load fallback data
       refreshWorkspaces();
     } else {
       setWorkspaces([]);
@@ -202,6 +164,7 @@ export const WorkspaceProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         isLoading,
         error,
         switchWorkspace,
+        createWorkspace,
         refreshWorkspaces,
         refreshMembers,
         isOwner,

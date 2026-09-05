@@ -6,9 +6,10 @@
  * server runs untranspiled, so the shared rule cannot be written in TS —
  * hence a hand-written declaration rather than a rename.
  */
-export const AUTH_TOKEN_KEY: string;
 export const ONBOARDING_PATH: string;
+export const ONBOARDING_WELCOME_PATH: string;
 export const ONBOARDING_DONE_KEY: string;
+export const ONBOARDING_WELCOME_DONE_KEY: string;
 export const ONBOARDING_NEXT_KEY: string;
 export const RETURN_URL_KEY: string;
 
@@ -20,6 +21,7 @@ export function isAllowedOnboardingNext(next: string | null | undefined): next i
 export function consumeOnboardingNext(): string | null;
 export function destinationAfterOnboarding(fallback?: string): string;
 export function isExternalOnboardingNext(next: string | null | undefined): boolean;
+export function welcomePathForDestination(destination?: string): string;
 export function isStashableReturnUrl(raw: string | null | undefined): boolean;
 export function isPrivilegedReturnUrl(raw: string | null | undefined): boolean;
 export function stashReturnUrl(raw: string | null | undefined): void;

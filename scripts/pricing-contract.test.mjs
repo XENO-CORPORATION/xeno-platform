@@ -107,7 +107,7 @@ test('Team checkout is workspace-bound from UI through server authority', () => 
     'workspace checkout loses its exact price or consent');
   assert.match(billingServer, /if \(item\.perSeat\)[\s\S]*workspace_required/,
     'generic checkout can still sell a personal Team subscription');
-  assert.match(billingServer, /createWorkspaceSeatCheckout[\s\S]*!isOffered\(item\)/,
+  assert.match(billingServer, /createWorkspaceSeatCheckout[\s\S]*!isOfferable\(item\)/,
     'workspace checkout can sell a closed Team price');
 });
 

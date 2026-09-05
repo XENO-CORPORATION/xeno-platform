@@ -367,7 +367,7 @@ const ChatUpdateCarousel: React.FC<ChatUpdateCarouselProps> = ({
        * #d8d8de ink on #2b2b2b, instead of the theme the user picked. So colour is the only thing
        * this element owes the button, and `secondary` reads exactly these four.
        *
-       * The values still come from the shell via the helper above, NOT from `useChatTheme()`. That
+       * The values still come from the platform shell via the helper above. That
        * hook reads localStorage and refreshes on the `storage` event, which fires for OTHER tabs —
        * change the theme in this one and the chip would keep the old palette until a reload. The two
        * sibling routes can use it because they mount with their own theme; this chip lives inside the

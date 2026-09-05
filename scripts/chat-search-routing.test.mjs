@@ -27,7 +27,8 @@ test('search compose variables match the service configuration contract', () => 
 });
 
 test('standalone Search sends authenticated requests through platform proxies', () => {
-  assert.match(searchChat, /localStorage\.getItem\('xenoos_auth_token'\)/);
+  assert.match(searchChat, /getAccessToken\(\)/);
+  assert.doesNotMatch(searchChat, /localStorage\.(?:getItem|setItem)\([^)]*xenoos_auth_token/);
   assert.match(searchChat, /Authorization: `Bearer \$\{token\}`/);
   assert.match(searchChat, /endpoint = '\/api\/v2\/engine\/google-search'/);
   assert.match(searchChat, /endpoint = '\/api\/v2\/engine\/brave-search'/);

@@ -75,13 +75,12 @@ const AuthContent: React.FC<{ mode?: AuthMode }> = ({ mode = 'signin' }) => {
   const cliSession = new URLSearchParams(location.search).get('session');
   const [cliStatus, setCliStatus] = useState('');
   const finalizeCli = async () => {
-    const tok = localStorage.getItem('xenoos_auth_token');
-    if (!cliSession || !tok || cliStatus === 'authorizing') return;
+    if (!cliSession || !user || cliStatus === 'authorizing') return;
     setCliStatus('authorizing');
     try {
       const r = await fetch('/api/auth/cli/complete', {
         method: 'POST',
-        headers: { 'content-type': 'application/json', authorization: `Bearer ${tok}` },
+        headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ session_id: cliSession }),
       });
       const d = await r.json();
@@ -135,7 +134,7 @@ const AuthContent: React.FC<{ mode?: AuthMode }> = ({ mode = 'signin' }) => {
   // `user` so it re-fires once the social/restored session resolves, not just on
   // mount (finalizeCli is idempotent via its 'authorizing' guard).
   useEffect(() => {
-    if (cliSession && (user || localStorage.getItem('xenoos_auth_token'))) finalizeCli();
+    if (cliSession && user) finalizeCli();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user]);
 
@@ -369,6 +368,7 @@ const AuthContent: React.FC<{ mode?: AuthMode }> = ({ mode = 'signin' }) => {
               <button
                 key={social.icon}
                 type="button"
+                aria-label={`Continue with ${social.provider === 'twitter' ? 'X' : social.provider[0].toUpperCase() + social.provider.slice(1)}`}
                 onClick={() => {
                   // Redirect to OAuth endpoint — carry the unified-auth returnUrl
                   // (OIDC authorize / cli handoff) through social sign-in too.
@@ -453,10 +453,8 @@ const AuthContent: React.FC<{ mode?: AuthMode }> = ({ mode = 'signin' }) => {
           >
             <div className="overflow-hidden">
           <form onSubmit={handleSubmit} className="space-y-4">
-            {/* Full Name - with smooth transition */}
-            <div className={`transition-all duration-400 ease-out overflow-hidden ${
-              activeTab === 'signup' ? 'max-h-24 opacity-100' : 'max-h-0 opacity-0'
-            }`}>
+            {/* Do not leave sign-up controls in the sign-in accessibility tree. */}
+            {activeTab === 'signup' ? <div className="overflow-hidden">
               <div className="pb-4">
                 <label className="block text-sm font-medium text-white/60 mb-2">
                   Full Name
@@ -474,7 +472,7 @@ const AuthContent: React.FC<{ mode?: AuthMode }> = ({ mode = 'signin' }) => {
                   />
                 </div>
               </div>
-            </div>
+            </div> : null}
 
             {/* Email Field */}
             <div

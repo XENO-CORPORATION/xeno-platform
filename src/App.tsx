@@ -39,11 +39,12 @@ import Refunds from './pages/Refunds';
 import Cookies from './pages/Cookies';
 import Withdrawal from './pages/Withdrawal';
 import Impressum from './pages/Impressum';
-import OverviewPage from './pages/Overview';
+import { lazyRoute } from './components/platform/lazyRoute';
+const OverviewPage = lazyRoute(() => import('./pages/Overview'));
 import SharedChatView from './pages/SharedChatView';
 import OSAuthInterface, { OSStateProvider } from './components/os/OSAuthInterface';
-import OSHomeInterface from './components/os/OSHomeInterface';
-import { OSAuthWithContainers } from './components/dashboard/OSAuthWithContainers';
+const OSHomeInterface = lazyRoute(() => import('./components/os/OSHomeInterface'));
+const OSAuthWithContainers = lazyRoute(() => import('./components/dashboard/OSAuthWithContainers').then(module => ({ default: module.OSAuthWithContainers })));
 import OSContainerWizard from './components/os/OSContainerWizard';
 import JoinSession from './components/os/JoinSession';
 import { AuthProvider } from './contexts/AuthContext';
@@ -66,7 +67,7 @@ import ResetPassword from './pages/ResetPassword';
 import VerifyEmail from './pages/VerifyEmail';
 
 // Import MultiChatContainer for standalone xeno-chat.com domain
-import MultiChatContainer from './components/playground/Chat/MultiChatContainer';
+const MultiChatContainer = lazyRoute(() => import('./components/playground/Chat/MultiChatContainer'));
 
 
 // Lazy load StudioVideoCanvas for standalone canvas page

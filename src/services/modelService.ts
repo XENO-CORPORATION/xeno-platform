@@ -65,7 +65,7 @@ export const fetchModels = async (): Promise<ModelsResponse> => {
 
   // /api/models is auth-gated — send the platform bearer token (same key the
   // rest of the app uses). Without it the endpoint 401s and the picker is empty.
-  const token = localStorage.getItem('xenoos_auth_token');
+  const token = getAccessToken();
   const response = await fetch('/api/models', {
     headers: token ? { Authorization: `Bearer ${token}` } : {},
   });
@@ -124,3 +124,4 @@ export const clearModelsCache = (): void => {
 // empty fallback means a transient loading/empty picker rather than fabricated
 // model ids that don't exist on the endpoint.
 export const FALLBACK_MODELS: GroupedModels[] = [];
+import { getAccessToken } from '../lib/authSession';

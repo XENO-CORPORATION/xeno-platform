@@ -2,7 +2,7 @@ export async function postXenoRequest<T = any>(
   path: string,
   payload: Record<string, any>
 ): Promise<T> {
-  const token = localStorage.getItem('xenoos_auth_token');
+  const token = getAccessToken();
 
   const requestOnce = async (body: Record<string, any>) => {
     const response = await fetch(`/api/xeno${path}`, {
@@ -39,3 +39,4 @@ export async function postXenoRequest<T = any>(
 
   return data as T;
 }
+import { getAccessToken } from '../lib/authSession';

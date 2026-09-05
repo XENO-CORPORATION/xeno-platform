@@ -48,6 +48,17 @@ router.get('/summary', authMiddleware, async (req, res) => {
   }
 });
 
+/** Read-only, owner-bound settlement status for one checkout return. */
+router.get('/checkout/:sessionId/status', authMiddleware, requireEnabled, async (req, res) => {
+  res.set('Cache-Control', 'no-store');
+  try {
+    res.json({ success: true, ...(await billing.getCheckoutStatus(req.db, req.user, req.params.sessionId)) });
+  } catch (err) {
+    console.error('[billing] checkout status error:', err.message);
+    res.status(err.status === 404 ? 404 : 502).json({ success: false, error: err.status === 404 ? 'Checkout not found' : 'Checkout status is temporarily unavailable' });
+  }
+});
+
 /** The user's plan + feature entitlements — the gate every product reads. */
 router.get('/entitlements', authMiddleware, async (req, res) => {
   try {
@@ -237,7 +248,7 @@ export async function stripeWebhook(req, res) {
   } catch (err) {
     console.error('[billing] webhook handler error:', err.message);
     // 500 → Stripe will retry; the idempotency guard makes retries safe.
-    return res.status(500).send('handler error');
+    return res.status(err.code === 'billing_account_unavailable' ? 503 : 500).send('handler error');
   }
 }
 

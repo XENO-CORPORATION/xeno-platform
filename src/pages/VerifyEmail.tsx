@@ -11,7 +11,7 @@ const VerifyEmail = () => {
   const [message, setMessage] = useState('');
 
   // Resend flow (only available when a JWT is present in storage)
-  const hasToken = typeof window !== 'undefined' && !!localStorage.getItem('xenoos_auth_token');
+  const hasToken = typeof window !== 'undefined' && !!getAccessToken();
   const [resending, setResending] = useState(false);
   const [resendMessage, setResendMessage] = useState('');
 
@@ -60,7 +60,7 @@ const VerifyEmail = () => {
   }, []);
 
   const handleResend = async () => {
-    const jwt = localStorage.getItem('xenoos_auth_token');
+    const jwt = getAccessToken();
     if (!jwt || resending) return;
     setResending(true);
     setResendMessage('');
@@ -191,3 +191,4 @@ const VerifyEmail = () => {
 };
 
 export default VerifyEmail;
+import { getAccessToken } from '../lib/authSession';

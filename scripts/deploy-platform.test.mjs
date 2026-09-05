@@ -1,14 +1,59 @@
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { readFileSync, mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { execFileSync } from 'node:child_process';
 import test from 'node:test';
+import { assertMainContained, readDirtyPaths } from './lib/deploy-source-guard.mjs';
 
-const deploy = readFileSync(new URL('./deploy-platform.mjs', import.meta.url), 'utf8');
+test('deployment requires a real main-contained commit, not a clean topic branch', (t) => {
+  const cwd = mkdtempSync(join(tmpdir(), 'xeno-deploy-guard-test-'));
+  t.after(() => rmSync(cwd, { recursive: true, force: true }));
+  const git = (...args) => execFileSync('git', args, { cwd, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }).trim();
+  git('init', '-b', 'main');
+  git('config', 'user.name', 'Release Guard Fixture');
+  git('config', 'user.email', 'release-guard@xeno.test');
+  git('-c', 'commit.gpgsign=false', 'commit', '--allow-empty', '-m', 'reviewed');
+  const reviewed = git('rev-parse', 'HEAD');
+  assert.throws(() => assertMainContained(cwd), /Cannot resolve origin\/main/);
+  git('update-ref', 'refs/remotes/origin/main', reviewed);
+  assert.equal(assertMainContained(cwd).head, reviewed);
+  git('-c', 'commit.gpgsign=false', 'commit', '--allow-empty', '-m', 'unmerged');
+  assert.throws(() => assertMainContained(cwd), /not contained/);
+  const next = git('rev-parse', 'HEAD');
+  git('update-ref', 'refs/remotes/origin/main', next);
+  git('checkout', '--detach', reviewed);
+  assert.equal(assertMainContained(cwd).main, next);
+  git('switch', '-c', 'divergent');
+  git('-c', 'commit.gpgsign=false', 'commit', '--allow-empty', '-m', 'divergent');
+  assert.throws(() => assertMainContained(cwd), /not contained/);
+});
+
+test('source verification fails closed on Git errors', () => {
+  assert.throws(() => readDirtyPaths('.', ['src'], () => ({ status: 128, stdout: '' })), /Cannot verify worktree/);
+  assert.throws(() => assertMainContained('.', () => ({ status: null })), /Cannot resolve/);
+  let calls = 0;
+  assert.throws(() => assertMainContained('.', () => ++calls < 3
+    ? { status: 0, stdout: 'a'.repeat(40) } : { status: 128 }), /Cannot verify main ancestry/);
+  assert.equal(readDirtyPaths('.', ['src'], () => ({ status: 0, stdout: ' M src/a.js\n' })), 'M src/a.js');
+});
+
+const deploy = readFileSync(new URL('./deploy-platform.mjs', import.meta.url), 'utf8').replace(/\r\n/g, '\n');
 const remote = readFileSync(new URL('./remote-deploy.sh', import.meta.url), 'utf8');
 const dockerignore = readFileSync(new URL('../.dockerignore', import.meta.url), 'utf8');
 const compose = readFileSync(new URL('../docker-compose.yml', import.meta.url), 'utf8');
 const backendDockerfile = readFileSync(new URL('../Dockerfile.backend', import.meta.url), 'utf8');
 const backendDockerignore = readFileSync(new URL('../Dockerfile.backend.dockerignore', import.meta.url), 'utf8');
 const frontendDockerfile = readFileSync(new URL('../Dockerfile.frontend', import.meta.url), 'utf8');
+
+test('main ancestry precedes uploads and allow-dirty cannot bypass it', () => {
+  const gate = deploy.indexOf('assertMainContained(REPO_ROOT)');
+  assert.ok(gate > deploy.indexOf('if (opts.rollback)'));
+  assert.ok(gate < deploy.indexOf('for (const s of services) {\n  const dirty'));
+  assert.ok(gate < deploy.indexOf("run('ssh'" , deploy.indexOf('// --- execute')));
+  assert.match(deploy, /writeFileSync\(remoteScript, execFileSync\('git', \['show', `\$\{fullSha\}:scripts\/remote-deploy\.sh`\]/);
+  assert.doesNotMatch(deploy, /run\('scp', \['-q', join\(REPO_ROOT, 'scripts'/);
+});
 
 test('backend deploy ships the Docker context policy with every source archive', () => {
   assert.match(

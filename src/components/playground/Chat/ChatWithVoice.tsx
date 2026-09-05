@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Button, IconButton } from '@xenosystem/elements-react';
-import { useChatTheme } from './chatTheme';
+import { usePlatformTheme } from '../../../platform/platformTheme';
 import { Mic, MicOff, Loader, StopCircle, Play, AlertTriangle, Check, MessageSquare, MessageSquareDecl, ArrowRightDecl, CheckDecl, CopyDecl, PauseDecl, PlayDecl, Trash2Decl } from '@/lib/icons';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -121,8 +121,9 @@ const useMicrophoneSetup = (setAvailableMicrophones: React.Dispatch<React.SetSta
 };
 
 const ChatWithVoice: React.FC = () => {
-  // Read-only: this surface has no switcher, it wears whatever the chat's slider was left on.
-  const { themeClass, themeStyle } = useChatTheme();
+  // The platform owns appearance; voice inherits the same semantic palette as every route.
+  const { resolvedTheme, themeStyle } = usePlatformTheme();
+  const themeClass = `chat-theme-${resolvedTheme}`;
 
   const [microphoneStatus, setMicrophoneStatus] = useState<MicrophoneStatus>('idle');
   const [assistantStatus, setAssistantStatus] = useState<AssistantStatus>('idle');

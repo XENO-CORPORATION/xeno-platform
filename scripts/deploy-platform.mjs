@@ -42,11 +42,12 @@
  */
 
 import { execFileSync, spawnSync } from 'node:child_process';
-import { mkdtempSync, rmSync } from 'node:fs';
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { dirname } from 'node:path';
+import { assertMainContained, readDirtyPaths } from './lib/deploy-source-guard.mjs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = join(__dirname, '..');
@@ -115,14 +116,12 @@ function run(cmd, args, { capture = false } = {}) {
 // paths in HEAD only (git archive errors on a missing pathspec)
 function existingInHead(paths) {
   return paths.filter((p) => {
-    const r = spawnSync('git', ['cat-file', '-e', `HEAD:${p}`], { cwd: REPO_ROOT });
+    const r = spawnSync('git', ['cat-file', '-e', `${fullSha}:${p}`], { cwd: REPO_ROOT });
     return r.status === 0;
   });
 }
 function dirtyPaths(paths) {
-  // any tracked change (staged or unstaged) under the shipped paths?
-  const out = spawnSync('git', ['status', '--porcelain', '--', ...paths], { cwd: REPO_ROOT, encoding: 'utf8' });
-  return (out.stdout || '').trim();
+  return readDirtyPaths(REPO_ROOT, paths);
 }
 
 // --- preflight ------------------------------------------------------------
@@ -152,9 +151,19 @@ if (opts.rollback) {
   process.exit(0);
 }
 
+// This gate also applies to build-only and cannot be bypassed by --allow-dirty.
+try {
+  const source = assertMainContained(REPO_ROOT);
+  if (source.head !== fullSha) throw new Error('HEAD changed during release preflight; retry with a stable checkout.');
+  ok(`Release commit is contained in origin/main ${source.main.slice(0, 12)}`);
+} catch (err) {
+  console.error(`${C.red}✗ ${err.message}${C.rst}`);
+  process.exit(1);
+}
+
 // Clean-worktree guard (deploy ships committed bytes only).
 for (const s of services) {
-  const dirty = dirtyPaths(PATHS[s]);
+  const dirty = dirtyPaths([...PATHS[s], 'scripts/deploy-platform.mjs', 'scripts/remote-deploy.sh', 'scripts/lib/deploy-source-guard.mjs']);
   if (dirty && !opts.allowDirty) {
     console.error(`${C.red}✗ Uncommitted changes under ${s} paths — they would NOT ship (deploy uses git archive HEAD).${C.rst}`);
     console.error(dirty);
@@ -171,7 +180,7 @@ ok(`Shipping ${shipPaths.length} path(s) at HEAD ${sha}: ${shipPaths.join(', ')}
 // --- dry-run: print the plan and stop -------------------------------------
 if (!opts.execute) {
   step('DRY-RUN plan (no changes will be made):');
-  log(`  1. git archive HEAD -> deploy-${sha}.tar  (paths above)`);
+  log(`  1. git archive ${fullSha} -> deploy-${sha}.tar  (paths above)`);
   log(`  2. scp tar + scripts/remote-deploy.sh -> ${opts.host}:${REMOTE_TMP}/`);
   for (const s of services) {
     log(`  3.${s}. ssh ${opts.host}: sudo bash remote-deploy.sh --service ${s} --sha ${sha} --mode ${opts.buildOnly ? 'build-only' : 'swap'}${opts.noCache ? ' --no-cache' : ''}`);
@@ -191,7 +200,7 @@ let remoteStageProvisioned = false;
 try {
   step(`Packing git archive HEAD (${sha}) -> tar`);
   // git archive writes committed bytes only (LF; core.autocrlf=true).
-  run('git', ['archive', '--format=tar', '-o', tarLocal, 'HEAD', '--', ...shipPaths]);
+  run('git', ['archive', '--format=tar', '-o', tarLocal, fullSha, '--', ...shipPaths]);
   ok(`packed ${tarLocal}`);
 
   step(`Provisioning ${opts.host}:${REMOTE_TMP}`);
@@ -199,8 +208,11 @@ try {
   remoteStageProvisioned = true;
 
   step('Shipping tar + remote-deploy.sh');
+  // Ship the reviewed controller bytes too, not a potentially edited local script.
+  const remoteScript = join(stage, 'remote-deploy.sh');
+  writeFileSync(remoteScript, execFileSync('git', ['show', `${fullSha}:scripts/remote-deploy.sh`], { cwd: REPO_ROOT }));
   run('scp', ['-q', tarLocal, `${opts.host}:${REMOTE_TMP}/deploy-${sha}.tar`]);
-  run('scp', ['-q', join(REPO_ROOT, 'scripts', 'remote-deploy.sh'), `${opts.host}:${REMOTE_TMP}/remote-deploy.sh`]);
+  run('scp', ['-q', remoteScript, `${opts.host}:${REMOTE_TMP}/remote-deploy.sh`]);
   ok('shipped');
 
   const mode = opts.buildOnly ? 'build-only' : 'swap';

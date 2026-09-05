@@ -51,7 +51,7 @@ export function useChatHistory({ interfaceId, onError }: UseChatHistoryOptions):
   // Check authentication status
   useEffect(() => {
     const checkAuth = () => {
-      const hasToken = !!localStorage.getItem('xenoos_auth_token');
+      const hasToken = !!getAccessToken();
       setIsAuthenticated(hasToken);
     };
 
@@ -358,3 +358,4 @@ export function useChatHistory({ interfaceId, onError }: UseChatHistoryOptions):
 }
 
 export default useChatHistory;
+import { getAccessToken } from '../lib/authSession';

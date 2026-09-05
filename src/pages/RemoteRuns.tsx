@@ -17,7 +17,7 @@ type RemoteEvent = {
 };
 
 const authHeaders = (): Record<string, string> => {
-  const token = localStorage.getItem('xenoos_auth_token');
+  const token = getAccessToken();
   return token ? { Authorization: `Bearer ${token}` } : {};
 };
 
@@ -244,3 +244,4 @@ export default function RemoteRuns() {
     </main>
   );
 }
+import { getAccessToken } from '../lib/authSession';

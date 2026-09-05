@@ -130,8 +130,11 @@ if (!consentSvc) {
      * all there and could never fire. A gate that sees the shape of a check
      * rather than its input is the same mechanism-not-outcome miss this file
      * exists to prevent. */
-    const looksUp = /findUsableConsent\(pool, user\.id, item\.id\)/.test(body);
-    if (looksUp && /e\.code = 'consent_required'/.test(body) && /if \(!usable\)/.test(body)) {
+    const consentService = read('src/server/services/checkoutConsent.js');
+    const looksUp = /await requireCheckoutConsent\(pool, user\.id, item\.id, consentId\)/.test(body);
+    if (looksUp && /await findUsableConsent\(pool, userId, itemId, \{ consentId \}\)/.test(consentService)
+      && /if \(!usable\)/.test(consentService) && /code: 'consent_required'/.test(consentService)
+      && /code: 'consent_unavailable'/.test(consentService)) {
       ok(`${label} refuses without consent (fails closed)`);
     } else {
       fail(`${label} does NOT require consent`,

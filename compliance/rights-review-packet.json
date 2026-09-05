@@ -1,0 +1,270 @@
+{
+  "schemaVersion": 1,
+  "status": "awaiting-human-source-and-rights-evidence",
+  "note": "Facts and questions only. No ownership assignment, license exception or determination is signed here. The six-author question and asset-origin question were sent to the user; no answer has been received in this continuation.",
+  "authors": [
+    "659\temilian-bnkrsys <emilian@bnkrsys.com>",
+    "   229\tandreia-bnkrsys <andreia@bnkrsys.com>",
+    "   189\tEmilian Cristea <195258836+emiliancristea@users.noreply.github.com>",
+    "     1\tEmilian <emilian@xeno-studio.com>",
+    "     1\tEmilian Cristea <emilian.cristea@example.com>",
+    "     1\tXeno Platform <dev@xenostudio.ai>"
+  ],
+  "prospectiveCommitAuthor": "emilian-bnkrsys <emilian@bnkrsys.com> 1788599349 +0200",
+  "assets": [
+    {
+      "path": "icons/menu-icon.svg",
+      "sha256": "b9f659ddca9a9d4e02b135e8168cd858f66e20bbfc12f5e69860f032f21fa18c",
+      "category": "identity-or-icon"
+    },
+    {
+      "path": "icons/more-icon.svg",
+      "sha256": "4d141bbfdafdf1e7496bbb31728b1e97d43d0a0f3eeb223aa492fb9f1397e9dd",
+      "category": "identity-or-icon"
+    },
+    {
+      "path": "icons/search-icon.svg",
+      "sha256": "d890fd508453f65a8d97ec0f384f9985e66b8927e202039fcddee9749da58530",
+      "category": "identity-or-icon"
+    },
+    {
+      "path": "public/canvas-workspace-demo.jpg",
+      "sha256": "3bfb40023069cbe776b63f017566ad011f622fcf5fc89451866b8c7e089f7580",
+      "category": "media"
+    },
+    {
+      "path": "public/favicon-v2.svg",
+      "sha256": "4da493e8e97e3764032d8b196587043303d71dc8869015821c3d34d0e4b0a526",
+      "category": "identity-or-icon"
+    },
+    {
+      "path": "public/favicon.svg",
+      "sha256": "4da493e8e97e3764032d8b196587043303d71dc8869015821c3d34d0e4b0a526",
+      "category": "identity-or-icon"
+    },
+    {
+      "path": "public/flux-logo.svg",
+      "sha256": "6f2f0a00949a2111e163a51c1fef11d9478cc957b4e2cd4a507bafec1d96928d",
+      "category": "identity-or-icon"
+    },
+    {
+      "path": "public/hero-assets/hero-abstract.webp",
+      "sha256": "eb2b4d34ffd1b4e454ef8bca2710501d0ea0ad4db72757d9ca9277d6b597ba46",
+      "category": "media"
+    },
+    {
+      "path": "public/hero-assets/hero-architecture.jpg",
+      "sha256": "aee4aeb9dddf093bc32cb0e1780dd94eb0a5af5038b95b01089dcc1b1370c927",
+      "category": "media"
+    },
+    {
+      "path": "public/hero-assets/hero-city.webp",
+      "sha256": "d03d38b978c478d233ff5b77b7ffbea26e23e63863eac564442e77d19194c880",
+      "category": "media"
+    },
+    {
+      "path": "public/hero-assets/hero-fluid.jpg",
+      "sha256": "7967ae220dae4c764bcda66a6c9448eed44cdae784a93f591f79bbbffca69d1f",
+      "category": "media"
+    },
+    {
+      "path": "public/hero-assets/hero-nature.webp",
+      "sha256": "b4bffe82ade0a6b038d6e2e5177594eaa362b08c79d068af66404ea4475add38",
+      "category": "media"
+    },
+    {
+      "path": "public/hero-assets/hero-neural.jpg",
+      "sha256": "cc1e31bf274ff609c76c11fb22ca5557712edfe7d0c82317175b2c2f9b20ed51",
+      "category": "media"
+    },
+    {
+      "path": "public/hero-assets/hero-portrait.jpg",
+      "sha256": "0caff5e6bd08ed42cb5200c17c805ac8f77bf1e80d2aa0c3dc1cd87ec4edf120",
+      "category": "media"
+    },
+    {
+      "path": "public/hero-assets/hero-portrait.webp",
+      "sha256": "bebe902e516210be472ed8131ff1a02a61565029306aac411e56e15da722e9eb",
+      "category": "media"
+    },
+    {
+      "path": "public/hero-assets/hero-ui.webp",
+      "sha256": "aa46bc9a8bd1f7ebd36171ef41a412bd3c0772e8458175f928f97bfd0a522833",
+      "category": "media"
+    },
+    {
+      "path": "public/hero-assets/hero-workspace.jpg",
+      "sha256": "9bd240165e00b157f25516408560a15ee56f7db33311fa2bf95b2d92952143ba",
+      "category": "media"
+    },
+    {
+      "path": "public/hero-bg.jpg",
+      "sha256": "22b95b6b17c2e612163208140690dc9696dfd40b8d9ae24aeddef093bfbee01c",
+      "category": "media"
+    },
+    {
+      "path": "public/hero-bg.mp4",
+      "sha256": "04968e9e159b3f65a60020c6a4c2b6a5f1c294eb2d5b9ff999dee96ff78b59c1",
+      "category": "media"
+    },
+    {
+      "path": "public/landing-v2/xeno-hero-plate.png",
+      "sha256": "eea7ce2fa180391de3fa8486d3d322ad7d6bdea02fd0abd8e913f6885c4f37f8",
+      "category": "media"
+    },
+    {
+      "path": "public/landing-v2/xeno-hero-portal-balanced.png",
+      "sha256": "7699ec11a541c04c3317ca727d9482ba757aaab030a4294b9d0ef3dfba6aa789",
+      "category": "media"
+    },
+    {
+      "path": "public/landing-v2/xeno-hero-portal-centered.png",
+      "sha256": "dbb6a9007063d9a82056e2a8cf7ed72fa495d5dbb0347c94b6850d12f2708965",
+      "category": "media"
+    },
+    {
+      "path": "public/landing-v2/xeno-hero-portal-clean.png",
+      "sha256": "95ca00ef15a74d0f5d47feef3c820ff3bd4d7e07fa08cd83643e8ec5a06110c2",
+      "category": "media"
+    },
+    {
+      "path": "public/landing-v3/gen/img-1.png",
+      "sha256": "9d31520a89aa01f9664659bc527398782ae4200e73cc3155999ea103e533b37c",
+      "category": "media"
+    },
+    {
+      "path": "public/landing-v3/gen/img-2.png",
+      "sha256": "dcc91dc0577788ea870aa573117a5de20bc1a4c3471facb47275664e9da21048",
+      "category": "media"
+    },
+    {
+      "path": "public/landing-v3/gen/img-3.png",
+      "sha256": "b74a19660c8139fbecb379b66a977cac5ff6c34285eac4bc110fcbced6551c37",
+      "category": "media"
+    },
+    {
+      "path": "public/landing-v3/gen/img-4.png",
+      "sha256": "d45548d51b4a7c958eb1d9132cccf1d9ac41e2a3ac99ce296f8e8a77c47120c2",
+      "category": "media"
+    },
+    {
+      "path": "public/logo.svg",
+      "sha256": "fcf634df6d6961fcb5f6c20ddddabc06b8f9188bc97b31bdf26133c8c9704960",
+      "category": "identity-or-icon"
+    },
+    {
+      "path": "public/share/earth-map.jpg",
+      "sha256": "2faa400d1eade3bc44caf6750d1b772bd9bbb6d87362c02bc7c3304e78fa0a9d",
+      "category": "media"
+    },
+    {
+      "path": "public/xeno-logo-original.png",
+      "sha256": "fcf634df6d6961fcb5f6c20ddddabc06b8f9188bc97b31bdf26133c8c9704960",
+      "category": "identity-or-icon"
+    },
+    {
+      "path": "public/xeno-logo.svg",
+      "sha256": "fcf634df6d6961fcb5f6c20ddddabc06b8f9188bc97b31bdf26133c8c9704960",
+      "category": "identity-or-icon"
+    }
+  ],
+  "missing": [
+    {
+      "name": "boolbase",
+      "version": "1.0.0",
+      "license": "ISC",
+      "integrity": "sha512-JZOSA7Mo9sNGB8+UjSgzdLtokWAky1zbztM3WRLCbZ70/3cTANmQmOdR7y2g+J0e2WXywy1yS468tY+IruqEww==",
+      "resolved": "https://registry.npmjs.org/boolbase/-/boolbase-1.0.0.tgz"
+    },
+    {
+      "name": "dingbat-to-unicode",
+      "version": "1.0.1",
+      "license": "BSD-2-Clause",
+      "integrity": "sha512-98l0sW87ZT58pU4i61wa2OHwxbiYSbuxsCBozaVnYX2iCnr3bLM3fIes1/ej7h1YdOKuKt/MLs706TVnALA65w==",
+      "resolved": "https://registry.npmjs.org/dingbat-to-unicode/-/dingbat-to-unicode-1.0.1.tgz"
+    },
+    {
+      "name": "eastasianwidth",
+      "version": "0.2.0",
+      "license": "MIT",
+      "integrity": "sha512-I88TYZWc9XiYHRQ4/3c5rjjfgkjhLyW2luGIheGERbNQ6OY7yTybanSpDXZa8y7VUP9YmDcYa+eyq4ca7iLqWA==",
+      "resolved": "https://registry.npmjs.org/eastasianwidth/-/eastasianwidth-0.2.0.tgz"
+    },
+    {
+      "name": "guid-typescript",
+      "version": "1.0.9",
+      "license": "ISC",
+      "integrity": "sha512-Y8T4vYhEfwJOTbouREvG+3XDsjr8E3kIr7uf+JZ0BYloFsttiHU0WfvANVsR7TxNUJa/WpCnw/Ino/p+DeBhBQ==",
+      "resolved": "https://registry.npmjs.org/guid-typescript/-/guid-typescript-1.0.9.tgz"
+    },
+    {
+      "name": "highlightjs-vue",
+      "version": "1.0.0",
+      "license": "CC0-1.0",
+      "integrity": "sha512-PDEfEF102G23vHmPhLyPboFCD+BkMGu+GuJe2d9/eH4FsCwvgBpnc9n0pGE+ffKdph38s6foEZiEjdgHdzp+IA==",
+      "resolved": "https://registry.npmjs.org/highlightjs-vue/-/highlightjs-vue-1.0.0.tgz"
+    },
+    {
+      "name": "react-remove-scroll-bar",
+      "version": "2.3.8",
+      "license": "MIT",
+      "integrity": "sha512-9r+yi9+mgU33AKcj6IbT9oRCO78WriSj6t/cF8DWBZJ9aOGPOTEDvdUDz1FwKim7QXWwmHqtdHnRJfhAxEG46Q==",
+      "resolved": "https://registry.npmjs.org/react-remove-scroll-bar/-/react-remove-scroll-bar-2.3.8.tgz"
+    },
+    {
+      "name": "split-ca",
+      "version": "1.0.1",
+      "license": "ISC",
+      "integrity": "sha512-Q5thBSxp5t8WPTTJQS59LrGqOZqOsrhDGDVm8azCqIBjSBd7nd9o2PM+mDulQQkh8h//4U6hFZnc/mul8t5pWQ==",
+      "resolved": "https://registry.npmjs.org/split-ca/-/split-ca-1.0.1.tgz"
+    },
+    {
+      "name": "tr46",
+      "version": "0.0.3",
+      "license": "MIT",
+      "integrity": "sha512-N3WMsuqV66lT30CrXNbEjx4GEwlow3v6rr4mCcv6prnfwhS01rkgyFdjPNBYd9br7LpXV1+Emh01fHnq2Gdgrw==",
+      "resolved": "https://registry.npmjs.org/tr46/-/tr46-0.0.3.tgz"
+    }
+  ],
+  "sourceReviews": [
+    {
+      "path": "src/content/docs/post.ts",
+      "observedLicense": "AGPL-3.0-only AND (AGPL-3.0-only AND AGPL-3.0-or-later)",
+      "sha256": "1b335549330454111c554e4e8e5c0da817d67975476d64ffac74e3bd4e0aee6f",
+      "question": "Confirm the origin and whether this is XENO-authored product documentation rather than incorporated third-party implementation."
+    },
+    {
+      "path": "src/content/products/anima.ts",
+      "observedLicense": "AGPL-3.0-only",
+      "sha256": "b4248e8d3bf251cd035d00f591e6b3a592b8bdea870276c81046a7f6d9e7fe75",
+      "question": "Confirm the origin and whether this is XENO-authored product documentation rather than incorporated third-party implementation."
+    },
+    {
+      "path": "src/content/products/post.ts",
+      "observedLicense": "AGPL-3.0-only",
+      "sha256": "2825848a99dbb9a9cb0723a65c498c9b6d6412079d7393251c171049fdd4907f",
+      "question": "Confirm the origin and whether this is XENO-authored product documentation rather than incorporated third-party implementation."
+    },
+    {
+      "path": "src/content/products/use.ts",
+      "observedLicense": "AGPL-3.0-only",
+      "sha256": "3ba9ab174119b698891bbe1883fb4afbbffdcf40c318c5bc1f7e64a486f6eaea",
+      "question": "Confirm the origin and whether this is XENO-authored product documentation rather than incorporated third-party implementation."
+    },
+    {
+      "path": "src/content/products/sheets.ts",
+      "observedLicense": "GPL-3.0-only",
+      "sha256": "6cb21f8a8fc15ec65a4bd62ad8139ccc033581e960f2893515fca0ffe6d42603",
+      "question": "Confirm the origin and whether this is XENO-authored product documentation rather than incorporated third-party implementation."
+    }
+  ],
+  "additionalConflict": {
+    "package": "highlightjs-vue@1.0.0",
+    "archiveDeclaration": "CC0-1.0",
+    "currentRepositoryLicense": "BSD-3-Clause",
+    "repositoryCommit": "3bd37d8fc50f5a8f5919e8c7ac1f7ac76088594b",
+    "licenseGitBlob": "41f68db2cfd7e9ffb0723e712e2d6e007002f6f6",
+    "licenseUrl": "https://github.com/highlightjs/highlightjs-vue/blob/3bd37d8fc50f5a8f5919e8c7ac1f7ac76088594b/LICENSE",
+    "question": "Establish which grant applies to the installed archive; do not automatically substitute the current repository license."
+  }
+}

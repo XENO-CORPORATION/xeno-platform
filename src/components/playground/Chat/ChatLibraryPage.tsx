@@ -98,7 +98,7 @@ const itemIcon = (item: LibraryItemRecord) => {
 
 const authHeaders = (): HeadersInit => {
   if (typeof window === 'undefined') return {};
-  const token = localStorage.getItem('xenoos_auth_token');
+  const token = getAccessToken();
   return token ? { Authorization: `Bearer ${token}` } : {};
 };
 
@@ -624,3 +624,4 @@ const ChatLibraryPage: React.FC<ChatLibraryPageProps> = ({ pageLeft = 0, viewerL
 };
 
 export default ChatLibraryPage;
+import { getAccessToken } from '../../../lib/authSession';

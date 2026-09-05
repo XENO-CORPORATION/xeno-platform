@@ -9,7 +9,6 @@ interface Persona {
   icon: LucideIcon;
   apps: string[];
   image: string;
-  fallback: string;
   span: string;
 }
 
@@ -20,7 +19,6 @@ const personas: Persona[] = [
     icon: Megaphone,
     apps: ['Gen', 'Pixel', 'Motion', 'Post'],
     image: '/landing-v3/usecases/marketing.png',
-    fallback: 'radial-gradient(ellipse at 70% 35%, rgba(170,140,255,0.28), transparent 60%), linear-gradient(165deg,#171420,#070707 72%)',
     span: 'md:col-span-2 lg:col-span-4',
   },
   {
@@ -29,7 +27,6 @@ const personas: Persona[] = [
     icon: PenTool,
     apps: ['Canvas', 'Pixel', '3D'],
     image: '/landing-v3/usecases/product-design.png',
-    fallback: 'radial-gradient(ellipse at 65% 40%, rgba(120,100,200,0.24), transparent 60%), linear-gradient(165deg,#11101a,#070707 72%)',
     span: 'lg:col-span-2',
   },
   {
@@ -38,7 +35,6 @@ const personas: Persona[] = [
     icon: Clapperboard,
     apps: ['Motion', 'Sound', 'Gen'],
     image: '/landing-v3/usecases/content-creation.png',
-    fallback: 'radial-gradient(ellipse at 65% 40%, rgba(255,140,90,0.18), transparent 60%), linear-gradient(165deg,#1a1410,#070707 72%)',
     span: 'lg:col-span-2',
   },
   {
@@ -47,7 +43,6 @@ const personas: Persona[] = [
     icon: Gamepad2,
     apps: ['Engine', '3D', 'Sound'],
     image: '/landing-v3/usecases/game-dev.png',
-    fallback: 'radial-gradient(ellipse at 65% 40%, rgba(110,170,255,0.20), transparent 60%), linear-gradient(165deg,#0e1320,#070707 72%)',
     span: 'lg:col-span-2',
   },
   {
@@ -56,7 +51,6 @@ const personas: Persona[] = [
     icon: Building2,
     apps: ['Architect', '3D', 'Canvas'],
     image: '/landing-v3/usecases/architecture.png',
-    fallback: 'radial-gradient(ellipse at 65% 45%, rgba(220,200,160,0.18), transparent 60%), linear-gradient(165deg,#181614,#070707 72%)',
     span: 'lg:col-span-2',
   },
   {
@@ -65,7 +59,6 @@ const personas: Persona[] = [
     icon: Users,
     apps: ['Office', 'Comms', 'Workflow', 'Agent'],
     image: '/landing-v3/usecases/business.png',
-    fallback: 'radial-gradient(ellipse at 75% 50%, rgba(150,200,200,0.18), transparent 55%), linear-gradient(165deg,#10171a,#070707 72%)',
     span: 'md:col-span-2 lg:col-span-6',
   },
 ];
@@ -89,9 +82,9 @@ const UseCasesShowcase: React.FC = () => {
               'group relative flex min-h-[clamp(210px,25vh,280px)] flex-col overflow-hidden rounded-[16px] border border-white/[0.07] p-[clamp(20px,1.7vw,32px)] transition-all duration-300 hover:-translate-y-1 hover:border-white/[0.18]',
               p.span,
             )}
-            style={{ background: p.fallback }}
+            style={{ background: 'linear-gradient(165deg, #191919, #070707 72%)' }}
           >
-            {/* background image */}
+            {/* AI-generated decorative artwork; generation evidence lives in compliance/. */}
             <img
               src={p.image}
               alt=""
@@ -128,6 +121,9 @@ const UseCasesShowcase: React.FC = () => {
           </Reveal>
         ))}
       </div>
+      <p className="mt-4 text-center text-xs text-neutral-400">
+        AI-generated concept artwork. Product interfaces and availability are shown on each product page.
+      </p>
     </section>
   );
 };

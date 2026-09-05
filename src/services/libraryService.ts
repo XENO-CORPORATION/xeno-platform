@@ -29,7 +29,7 @@ export interface LibraryAssetRef {
 }
 
 const authHeaders = (json = false): HeadersInit => {
-  const token = typeof window === 'undefined' ? null : localStorage.getItem('xenoos_auth_token');
+  const token = typeof window === 'undefined' ? null : getAccessToken();
   return {
     ...(json ? { 'Content-Type': 'application/json' } : {}),
     ...(token ? { Authorization: `Bearer ${token}` } : {}),
@@ -116,3 +116,4 @@ export function libraryItemToAssetRef(item: LibraryItemRecord): LibraryAssetRef 
     contentUrl: item.preview_url || `/api/library/assets/${assetId}/content`,
   };
 }
+import { getAccessToken } from '../lib/authSession';

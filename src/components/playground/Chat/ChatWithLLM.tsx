@@ -6,19 +6,19 @@ import { Button, IconButton, ListRow, MenuItem, MessageBubble, Spinner, Tab, Tex
 // point, the resolution beside it. This component still OWNS the switcher — it is the only thing that
 // writes these keys — but owning a setting never meant being the only place allowed to read it.
 import {
-  CHAT_THEME_STORAGE_KEY,
-  CHAT_THEME_BRIGHTNESS_STORAGE_KEY,
   THEME_BRIGHTNESS_STEP,
   VISUAL_CHAT_THEME_OPTIONS,
-  buildChatThemeStyle,
   getThemePreviewTokens,
-  getClosestVisualTheme,
   getRelativeLuminance,
   getVisualThemePosition,
   normalizeThemeBrightness,
-  type ChatTheme,
-  type ResolvedChatTheme,
 } from './chatTheme';
+import {
+  buildPlatformThemeStyle,
+  savePlatformTheme,
+  usePlatformTheme,
+  type PlatformThemePreference,
+} from '../../../platform/platformTheme';
 import ChatEmptyState, { ComposerRevealControls, type ChatEmptyStateTool } from './ChatEmptyState';
 import ChatModelSelector from './ChatModelSelector';
 import ChatShareModal from './ChatShareModal';
@@ -67,13 +67,13 @@ import { DropdownMenu , DropdownMenuContent, DropdownMenuItem, DropdownMenuSepar
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter, DialogClose } from '@/components/ui/dialog';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 
-// Attach the web-session bearer token (same 'xenoos_auth_token' key the rest of the
-// app uses) to auth-gated, same-origin backend routes (/api/chat/generate,
+// Attach the browser-session marker and active workspace to auth-gated,
+// same-origin backend routes (/api/chat/generate,
 // /api/piston/*, /api/fetch-metadata, /api/v2/engine/*) so they don't 401.
 // Spread-conditional: a logged-out caller sends no Authorization header (and
 // correctly gets 401) rather than a literal "Bearer null".
 function withAuthHeaders(extra: Record<string, string> = {}): Record<string, string> {
-  const token = typeof localStorage !== 'undefined' ? localStorage.getItem('xenoos_auth_token') : null;
+  const token = typeof localStorage !== 'undefined' ? getAccessToken() : null;
   const workspace = typeof localStorage !== 'undefined' ? localStorage.getItem('xeno_active_workspace_id') : null;
   const h: Record<string, string> = { ...extra };
   if (token) h.Authorization = `Bearer ${token}`;
@@ -2483,39 +2483,13 @@ const ChatWithLLM: React.FC<ChatWithLLMProps> = ({
   type ProjectsSort = 'updated' | 'created' | 'name';
   const [projectsSort, setProjectsSort] = useState<ProjectsSort>('updated');
   const [isProjectsSortOpen, setIsProjectsSortOpen] = useState(false);
-  const [chatTheme, setChatTheme] = useState<ChatTheme>(() => {
-    if (typeof window === 'undefined') return 'dark';
-
-    try {
-      const storedTheme = localStorage.getItem(CHAT_THEME_STORAGE_KEY);
-      return storedTheme === 'system' || storedTheme === 'custom' || storedTheme === 'dark' || storedTheme === 'dim' || storedTheme === 'light'
-        ? storedTheme
-        : 'dark';
-    } catch {
-      return 'dark';
-    }
-  });
-  const [chatThemeBrightness, setChatThemeBrightness] = useState<number>(() => {
-    if (typeof window === 'undefined') return 0;
-
-    try {
-      const storedBrightness = localStorage.getItem(CHAT_THEME_BRIGHTNESS_STORAGE_KEY);
-      const parsedBrightness = storedBrightness === null ? Number.NaN : Number(storedBrightness);
-      if (Number.isFinite(parsedBrightness)) return normalizeThemeBrightness(parsedBrightness);
-
-      const storedTheme = localStorage.getItem(CHAT_THEME_STORAGE_KEY);
-      if (storedTheme === 'dim') return 50;
-      if (storedTheme === 'light') return 100;
-      return 0;
-    } catch {
-      return 0;
-    }
-  });
-  const [systemTheme, setSystemTheme] = useState<Extract<ResolvedChatTheme, 'dark' | 'light'>>(() =>
-    typeof window !== 'undefined' && window.matchMedia?.('(prefers-color-scheme: dark)').matches
-      ? 'dark'
-      : 'light'
-  );
+  const {
+    preference: chatTheme,
+    brightness: chatThemeBrightness,
+    resolvedTheme: resolvedChatTheme,
+    resolvedPosition: platformThemePosition,
+    themeStyle: platformThemeStyle,
+  } = usePlatformTheme();
   const [isThemeMenuOpen, setIsThemeMenuOpen] = useState(false);
   const [isThemeMenuMounted, setIsThemeMenuMounted] = useState(false);
   const [isThemeMenuShown, setIsThemeMenuShown] = useState(false);
@@ -2537,57 +2511,31 @@ const ChatWithLLM: React.FC<ChatWithLLMProps> = ({
   const [isTaskbarHidden, setIsTaskbarHidden] = useState(false);
   const historySidebarRef = useRef<HTMLDivElement>(null);
 
-  useEffect(() => {
-    try {
-      localStorage.setItem(CHAT_THEME_STORAGE_KEY, chatTheme);
-      localStorage.setItem(CHAT_THEME_BRIGHTNESS_STORAGE_KEY, String(chatThemeBrightness));
-    } catch {
-      // Theme preference is optional when browser storage is unavailable.
-    }
-  }, [chatTheme, chatThemeBrightness]);
-
-  useEffect(() => {
-    if (typeof window === 'undefined' || !window.matchMedia) return;
-
-    const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
-    const updateSystemTheme = (event: MediaQueryListEvent | MediaQueryList) => {
-      setSystemTheme(event.matches ? 'dark' : 'light');
-    };
-
-    updateSystemTheme(mediaQuery);
-    mediaQuery.addEventListener('change', updateSystemTheme);
-    return () => mediaQuery.removeEventListener('change', updateSystemTheme);
-  }, []);
-
-  const resolvedChatTheme: ResolvedChatTheme = chatTheme === 'system'
-    ? systemTheme
-    : chatTheme === 'custom'
-      ? getClosestVisualTheme(chatThemeBrightness)
-      : chatTheme;
   // Top-bar theme control uses the half-circle mark (matches Temporary / Settings chrome).
   const ThemeTriggerIcon = ManualThemeIcon;
-  const displayedThemeSliderPosition = themePreviewPosition ?? (
-    chatTheme === 'system' ? getVisualThemePosition(systemTheme) :
-      chatTheme === 'custom' ? chatThemeBrightness : getVisualThemePosition(chatTheme)
-  );
+  const displayedThemeSliderPosition = themePreviewPosition ?? platformThemePosition;
   const chatThemePreviewStyle = useMemo<React.CSSProperties>(() => {
-    const previewPosition = themePreviewPosition ?? (chatTheme === 'custom' ? chatThemeBrightness : null);
-    if (previewPosition === null) return {};
-
-    return buildChatThemeStyle(previewPosition) as React.CSSProperties;
-  }, [chatTheme, chatThemeBrightness, themePreviewPosition]);
-  const handleChatThemeChange = useCallback((nextTheme: ChatTheme, closeMenu = true) => {
-    if (nextTheme !== 'system' && nextTheme !== 'custom') {
-      setChatThemeBrightness(getVisualThemePosition(nextTheme));
-    }
-    setChatTheme(nextTheme);
+    if (themePreviewPosition === null) return platformThemeStyle;
+    return buildPlatformThemeStyle(themePreviewPosition);
+  }, [platformThemeStyle, themePreviewPosition]);
+  const handleChatThemeChange = useCallback((nextTheme: PlatformThemePreference, closeMenu = true) => {
+    const nextBrightness = nextTheme === 'custom'
+      ? chatThemeBrightness
+      : nextTheme === 'system'
+        ? platformThemePosition
+        : getVisualThemePosition(nextTheme);
     setThemePreviewPosition(null);
     if (closeMenu) setIsThemeMenuOpen(false);
-  }, []);
+    void savePlatformTheme(nextTheme, nextBrightness).catch((error) => {
+      console.error('Failed to save platform theme:', error);
+    });
+  }, [chatThemeBrightness, platformThemePosition]);
   const commitThemeSliderPosition = useCallback((position: number) => {
-    setChatThemeBrightness(normalizeThemeBrightness(position));
-    setChatTheme('custom');
+    const nextBrightness = normalizeThemeBrightness(position);
     setThemePreviewPosition(null);
+    void savePlatformTheme('custom', nextBrightness).catch((error) => {
+      console.error('Failed to save platform theme:', error);
+    });
   }, []);
 
   // Appearance popover: same mount → paint closed → show enter / reverse on exit as card modals.
@@ -5541,7 +5489,7 @@ interface QueueState {
     const loadHistory = async () => {
       setIsHistoryLoading(true);
       const storageKey = `chatHistory_${sharedInterfaceId}`;
-      const token = localStorage.getItem('xenoos_auth_token');
+      const token = getAccessToken();
       const isAuthenticated = !!token;
       setIsDbAuthenticated(isAuthenticated);
 
@@ -5628,7 +5576,7 @@ interface QueueState {
   // --- NEW: Load/Save User Settings from Database ---
   useEffect(() => {
     const loadSettings = async () => {
-      const token = localStorage.getItem('xenoos_auth_token');
+      const token = getAccessToken();
       if (!token) return;
 
       try {
@@ -5656,7 +5604,7 @@ interface QueueState {
 
   // Save settings to database when they change
   const saveSettingsToDb = useCallback(async (settingPath: string, value: unknown) => {
-    const token = localStorage.getItem('xenoos_auth_token');
+    const token = getAccessToken();
     if (!token) return;
 
     try {
@@ -5701,7 +5649,7 @@ interface QueueState {
   // --- NEW: Load/Save Recent Files from Database ---
   useEffect(() => {
     const loadRecentFiles = async () => {
-      const token = localStorage.getItem('xenoos_auth_token');
+      const token = getAccessToken();
 
       if (token) {
         // Load from database if authenticated
@@ -5750,7 +5698,7 @@ interface QueueState {
 
   // Track file usage in database
   const trackFileUsage = useCallback(async (file: { name: string; type: string; size: number; preview?: string }) => {
-    const token = localStorage.getItem('xenoos_auth_token');
+    const token = getAccessToken();
     if (!token) return;
 
     try {
@@ -5768,7 +5716,7 @@ interface QueueState {
 
   useEffect(() => {
     // Save recent files to localStorage as fallback (for non-authenticated users)
-    const token = localStorage.getItem('xenoos_auth_token');
+    const token = getAccessToken();
     if (!token && recentFiles.length > 0) {
       try {
         const recentFilesKey = `recentFiles_${interfaceId}`;
@@ -9631,7 +9579,7 @@ Keep the summary under 500 words. Preserve essential context needed to continue 
   const handleXenoSearchRetry = async (messageIdToRegenerate: string) => {
     const targetMessageIndex = messages.findIndex((message) => message.id === messageIdToRegenerate);
     const historyForRegeneration = targetMessageIndex >= 0 ? messages.slice(0, targetMessageIndex) : [];
-    const lastUserMessage = historyForRegeneration.at(-1);
+    const lastUserMessage = historyForRegeneration[historyForRegeneration.length - 1];
     if (!lastUserMessage || lastUserMessage.sender !== 'user') {
       console.error('Cannot retry Web Context research: preceding user turn is missing.');
       return;
@@ -13606,7 +13554,9 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
               overscroll-behavior: none;
               -webkit-overflow-scrolling: touch;
               touch-action: pan-y;
-              position: fixed;
+              /* The relative interface slot already owns the available viewport.
+                 A fixed child escapes it and renders underneath the platform rail. */
+              position: absolute;
               inset: 0;
             }
             .chat-top-bar {
@@ -19469,3 +19419,4 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
 };
 
 export default ChatWithLLM;
+import { getAccessToken } from '../../../lib/authSession';

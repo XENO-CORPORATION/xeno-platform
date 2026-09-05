@@ -119,7 +119,7 @@ export interface ApiResponse<T> {
 // ============================================
 
 const getAuthHeaders = (): HeadersInit => {
-  const token = localStorage.getItem('xenoos_auth_token');
+  const token = getAccessToken();
   const workspace = localStorage.getItem('xeno_active_workspace_id');
   return {
     'Content-Type': 'application/json',
@@ -520,7 +520,7 @@ export const chatService = {
 
   // Check if user is authenticated
   isAuthenticated(): boolean {
-    return !!localStorage.getItem('xenoos_auth_token');
+    return !!getAccessToken();
   },
 
   // Convert legacy message format to new format
@@ -1195,3 +1195,4 @@ export const chatService = {
 };
 
 export default chatService;
+import { getAccessToken } from '../lib/authSession';

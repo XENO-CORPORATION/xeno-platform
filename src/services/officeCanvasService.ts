@@ -33,7 +33,7 @@ export interface OfficeCanvasCollaborator {
 }
 
 const getAuthHeaders = (): Record<string, string> => {
-  const token = localStorage.getItem('xenoos_auth_token');
+  const token = getAccessToken();
   return {
     'Content-Type': 'application/json',
     ...(token ? { Authorization: `Bearer ${token}` } : {})
@@ -167,3 +167,4 @@ export const officeCanvasService = {
     return data.collaborators;
   }
 };
+import { getAccessToken } from '../lib/authSession';

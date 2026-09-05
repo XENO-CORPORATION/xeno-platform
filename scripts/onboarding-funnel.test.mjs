@@ -7,12 +7,13 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import {
-  AUTH_TOKEN_KEY,
   ONBOARDING_PATH,
+  ONBOARDING_WELCOME_PATH,
   resolveOAuthLandingPath,
   isAllowedOnboardingNext,
   resolveActivationContinue,
   isPrivilegedReturnUrl,
+  welcomePathForDestination,
 } from '../src/lib/onboardingHandoff.js';
 import {
   resolveOAuthLandingPath as resolveOAuthLandingPathServer,
@@ -27,12 +28,17 @@ const authCtx = readFileSync('src/contexts/AuthContext.tsx', 'utf8');
 const gate = readFileSync('src/components/auth/ProtectedRoute.tsx', 'utf8');
 const activate = readFileSync('src/pages/ActivateAccount.tsx', 'utf8');
 const oauth = readFileSync('src/server/routes/authRoutes.js', 'utf8');
+const welcome = readFileSync('src/components/modals/WelcomeCreditBonusModal.tsx', 'utf8');
+const welcomeCss = readFileSync('src/components/modals/welcome-credit-bonus.css', 'utf8');
+const overview = readFileSync('src/pages/Overview.tsx', 'utf8');
+const welcomeMigration = readFileSync(
+  'src/server/database/migrations/20260903120000-onboarding-welcome-handoff.sql',
+  'utf8',
+);
 
-test('the session key is the real one — getItem("token") would 401 every save', () => {
-  assert.equal(AUTH_TOKEN_KEY, 'xenoos_auth_token');
-  assert.match(page, /AUTH_TOKEN_KEY/);
-  assert.equal(page.includes("getItem('token')"), false,
-    'Onboarding still reads localStorage.token — that key is never written');
+test('onboarding uses the cookie-session bridge and never reads a persisted bearer', () => {
+  assert.match(page, /getAccessToken\(\)/);
+  assert.doesNotMatch(page, /localStorage\.(?:getItem|setItem)\([^)]*(?:xenoos_auth_token|['"]token['"])/);
 });
 
 test('a new website OAuth lands on onboarding; a returning one does not', () => {
@@ -110,6 +116,8 @@ test('OAuth isNew without a pending returnUrl goes to onboarding, not a console.
 test('protected routes ask GET /onboarding — otherwise OAuth still skips the UI', () => {
   assert.match(gate, /\/api\/auth\/onboarding/);
   assert.match(gate, /Navigate to=\{ONBOARDING_PATH\}/);
+  assert.doesNotMatch(gate, /import\.meta\.env\.DEV\s*\|\|\s*!isAuthenticated/,
+    'development auth remains in the checking state forever');
 });
 
 test('next= is allowlisted — an open redirect is refused', () => {
@@ -156,4 +164,68 @@ test('a non-OK onboarding read fails OPEN — a 401 must not wall the product', 
 test('user_onboarding.user_id is UUID — INTEGER cannot FK to users.id and the boot dies', () => {
   assert.match(onboardingSql, /user_id\s+UUID\s+PRIMARY KEY REFERENCES users\(id\)/);
   assert.equal(onboardingSql.includes('INTEGER PRIMARY KEY REFERENCES users'), false);
+});
+
+test('completed onboarding hands internal destinations to a dedicated welcome route', () => {
+  assert.equal(welcomePathForDestination('/overview/projects'),
+    `${ONBOARDING_WELCOME_PATH}?next=%2Foverview%2Fprojects`);
+  assert.equal(welcomePathForDestination('https://evil.example'),
+    `${ONBOARDING_WELCOME_PATH}?next=%2Foverview`);
+  assert.match(page, /navigate\(welcomePathForDestination\(to\), \{ replace: true \}\)/);
+  assert.match(overview, /<Route path="welcome" element=\{<WelcomeCreditBonusModal \/>\}/);
+  assert.doesNotMatch(overview, /isWelcomeModalOpen|user\.credits === 0/);
+});
+
+test('the routed welcome automatically provisions the real ledger grant', () => {
+  assert.match(welcome, /className="xeno-welcome"/);
+  assert.match(welcome, /authService\.claimBonusCredits\(\)/);
+  assert.match(welcome, /xeno:credits-updated/);
+  assert.match(welcome, /\/api\/auth\/onboarding\/welcome\/acknowledge/);
+  assert.match(welcome, /Enter workspace/);
+  assert.doesNotMatch(welcome, /role="dialog"|aria-modal|Activate welcome balance/);
+});
+
+test('the welcome surface does not revive stale subscription prices or unlimited-credit claims', () => {
+  assert.doesNotMatch(welcome, /\$19|\$99|Unlimited credits|Premium models|or upgrade for more/);
+  assert.doesNotMatch(welcome, /Review plan and billing/);
+});
+
+test('the welcome surface shares the canonical dark auth and onboarding visual grammar', () => {
+  assert.doesNotMatch(welcome, /<AuthMark \/>|xeno-welcome-header|Workspace ready/);
+  assert.match(welcome, /from '\.\.\/\.\.\/lib\/icons'/);
+  assert.doesNotMatch(welcome, /from 'lucide-react'/);
+  assert.match(welcomeCss, /--welcome-ground:\s*var\(--xeno-theme-canvas\)/);
+  assert.match(welcomeCss, /grid-template-rows:\s*minmax\(0, 1fr\)/);
+  assert.match(welcomeCss, /grid-template-columns:\s*minmax\(0, 1fr\) clamp\(400px, 34vw, 520px\)/);
+  assert.doesNotMatch(welcomeCss, /grid-template-columns:\s*minmax\(0,\s*1\.36fr\)\s+minmax\(350px,\s*0\.64fr\)/);
+  assert.doesNotMatch(welcomeCss, /xeno-welcome-header|welcome-shell-row/);
+  assert.match(welcomeCss, /--welcome-recessed:\s*var\(--xeno-theme-surface\)/);
+  assert.match(welcomeCss, /--welcome-dialog:\s*var\(--xeno-theme-surface-raised\)/);
+  assert.match(welcomeCss, /\.xeno-welcome-access\s*\{[\s\S]*?background:\s*var\(--welcome-ground\)/);
+  assert.match(welcome, /className="xeno-welcome-launch-shell"/);
+  assert.match(welcome, /className="xeno-welcome-access-shell"/);
+  assert.match(welcomeCss, /\.xeno-welcome-launch-shell\s*\{[\s\S]*?gap:\s*2px;[\s\S]*?padding:\s*4px;[\s\S]*?border:\s*1px solid var\(--welcome-border\)/);
+  assert.match(welcomeCss, /\.xeno-welcome-starts\s*\{[\s\S]*?gap:\s*1px;[\s\S]*?background:\s*var\(--welcome-border\)/);
+  assert.match(welcomeCss, /\.xeno-welcome-starts > button:hover\s*\{[\s\S]*?background:\s*var\(--welcome-dialog\)/);
+  assert.match(welcomeCss, /\.xeno-welcome-starts > button:focus-visible\s*\{[\s\S]*?background:\s*var\(--welcome-dialog\);[\s\S]*?outline:\s*2px solid var\(--welcome-border-strong\)/);
+  assert.doesNotMatch(welcomeCss, /\.xeno-welcome-starts > button:(?:hover|focus-visible)[^\{]*\{[^\}]*?(?:border|box-shadow|transform)\s*:/);
+  assert.match(welcomeCss, /\.xeno-welcome-access-shell\s*\{[\s\S]*?gap:\s*2px;[\s\S]*?padding:\s*4px;[\s\S]*?border:\s*1px solid var\(--welcome-border\)/);
+  assert.doesNotMatch(welcomeCss, /rgba\(17,\s*17,\s*21|radial-gradient/);
+  assert.match(welcomeCss, /border-radius:\s*6px/);
+  assert.doesNotMatch(welcomeCss, /#f7f7f8|#fafafa|box-shadow/);
+});
+
+test('the welcome preview is development-only and cannot mutate account state', () => {
+  assert.match(welcome, /isPreview = import\.meta\.env\.DEV/);
+  assert.match(welcome, /if \(isPreview\)/);
+  assert.match(overview, /legacyWelcomePreview = import\.meta\.env\.DEV/);
+});
+
+test('welcome state is server-owned, idempotent, and preserves established users', () => {
+  assert.match(oauth, /welcomeAcknowledged: Boolean\(row\?\.welcome_acknowledged_at\)/);
+  assert.match(oauth, /router\.post\('\/onboarding\/welcome\/acknowledge'/);
+  assert.match(oauth, /already_claimed: true/);
+  assert.match(oauth, /addGrantTx\(client, user\.id/);
+  assert.match(welcomeMigration, /ADD COLUMN IF NOT EXISTS welcome_acknowledged_at/);
+  assert.match(welcomeMigration, /WHERE welcome_acknowledged_at IS NULL/);
 });

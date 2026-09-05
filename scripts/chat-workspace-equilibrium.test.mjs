@@ -5,13 +5,15 @@ import test from 'node:test';
 const read = (relativePath) => readFile(new URL(`../${relativePath}`, import.meta.url), 'utf8');
 
 test('the overview shell cannot be focus-scrolled as one oversized surface', async () => {
-  const [overview, taskbar] = await Promise.all([
+  const [overview, taskbar, shellStyles] = await Promise.all([
     read('src/pages/Overview.tsx'),
     read('src/components/overview/OverviewTaskbar.tsx'),
+    read('src/components/overview/overview-shell.css'),
   ]);
 
   assert.match(overview, /data-overview-shell[\s\S]*?overflow: 'clip'/);
-  assert.match(taskbar, /data-overview-taskbar-scroll[\s\S]*?min-h-0[\s\S]*?overflow-y-auto/);
+  assert.match(taskbar, /className="xeno-sidebar-scroll"/);
+  assert.match(shellStyles, /\.xeno-sidebar-scroll\s*\{[^}]*min-height:\s*0[^}]*flex:\s*1[^}]*overflow-y:\s*auto/);
 });
 
 test('chat panels feed one workspace inset contract', async () => {

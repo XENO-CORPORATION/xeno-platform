@@ -116,7 +116,7 @@ function pickRelease(releases, { version, channel }) {
   );
 }
 
-router.get('/:slug/download/:os/:version?', async (req, res) => {
+router.get('/:slug/download/:os{/:version}', async (req, res) => {
   const slug = String(req.params.slug || '').toLowerCase();
   const osParam = String(req.params.os || '').toLowerCase();
   const os = OS_ALIASES[osParam];

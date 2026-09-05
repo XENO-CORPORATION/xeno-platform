@@ -2222,7 +2222,7 @@ router.get('/browserless-status', async (req, res) => {
  * When a Nuxt/Vue app tries to load ./chunk.js and the browser resolves it to /api/browser/chunk.js,
  * this route catches it and redirects to the correct proxied URL using the original script's directory
  */
-router.get('/*', async (req, res) => {
+router.get(/^\/(.*)$/, async (req, res) => {
   const referer = req.get('Referer') || '';
   const requestedPath = req.path;
 

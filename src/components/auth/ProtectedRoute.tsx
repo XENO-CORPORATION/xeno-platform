@@ -9,7 +9,8 @@ import React, { useEffect, useState } from 'react';
 import { Navigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import {
-  AUTH_TOKEN_KEY, ONBOARDING_DONE_KEY, ONBOARDING_PATH,
+  ONBOARDING_DONE_KEY, ONBOARDING_PATH, ONBOARDING_WELCOME_DONE_KEY,
+  ONBOARDING_WELCOME_PATH, welcomePathForDestination,
 } from '../../lib/onboardingHandoff.js';
 
 interface ProtectedRouteProps {
@@ -23,47 +24,64 @@ const ProtectedRoute: React.FC<ProtectedRouteProps> = ({
 }) => {
   const { isAuthenticated, isLoading } = useAuth();
   const location = useLocation();
-  const [onboarding, setOnboarding] = useState<'checking' | 'needed' | 'done'>('checking');
+  const [onboarding, setOnboarding] = useState<'checking' | 'needed' | 'welcome' | 'done'>('checking');
 
   useEffect(() => {
-    if (import.meta.env.DEV || !isAuthenticated) {
+    if (!isAuthenticated) {
       setOnboarding('checking');
       return;
     }
-    if (typeof sessionStorage !== 'undefined' && sessionStorage.getItem(ONBOARDING_DONE_KEY) === '1') {
+    const isWelcomePreview = import.meta.env.DEV
+      && location.pathname === ONBOARDING_WELCOME_PATH
+      && new URLSearchParams(location.search).get('preview') === '1';
+    if (isWelcomePreview) {
+      setOnboarding('done');
+      return;
+    }
+    if (
+      typeof sessionStorage !== 'undefined'
+      && sessionStorage.getItem(ONBOARDING_DONE_KEY) === '1'
+      && sessionStorage.getItem(ONBOARDING_WELCOME_DONE_KEY) === '1'
+    ) {
       setOnboarding('done');
       return;
     }
     let cancelled = false;
     (async () => {
       try {
-        const token = localStorage.getItem(AUTH_TOKEN_KEY);
-        const res = await fetch('/api/auth/onboarding', {
-          headers: token ? { Authorization: `Bearer ${token}` } : {},
-        });
+        const res = await fetch('/api/auth/onboarding');
         const data = await res.json().catch(() => null);
         if (cancelled) return;
         if (!res.ok) {
+          sessionStorage.setItem(ONBOARDING_WELCOME_DONE_KEY, '1');
           setOnboarding('done');
           return;
         }
         if (data?.done) {
           sessionStorage.setItem(ONBOARDING_DONE_KEY, '1');
-          setOnboarding('done');
+          if (data?.welcomeAcknowledged) {
+            sessionStorage.setItem(ONBOARDING_WELCOME_DONE_KEY, '1');
+            setOnboarding('done');
+          } else if (location.pathname === ONBOARDING_WELCOME_PATH) {
+            setOnboarding('done');
+          } else if (location.pathname.startsWith('/overview')) {
+            setOnboarding('welcome');
+          } else {
+            setOnboarding('done');
+          }
         } else {
           setOnboarding('needed');
         }
       } catch {
         // Fail open: a dead survey table must not wall someone out of the product.
-        if (!cancelled) setOnboarding('done');
+        if (!cancelled) {
+          sessionStorage.setItem(ONBOARDING_WELCOME_DONE_KEY, '1');
+          setOnboarding('done');
+        }
       }
     })();
     return () => { cancelled = true; };
-  }, [isAuthenticated]);
-
-  // DEV BYPASS: VPS auth endpoints returning 502 — skip auth locally
-  // TODO: remove before deploying
-  if (import.meta.env.DEV) return <>{children}</>;
+  }, [isAuthenticated, location.pathname, location.search]);
 
   if (isLoading) {
     return (
@@ -99,6 +117,10 @@ const ProtectedRoute: React.FC<ProtectedRouteProps> = ({
 
   if (onboarding === 'needed') {
     return <Navigate to={ONBOARDING_PATH} replace />;
+  }
+
+  if (onboarding === 'welcome') {
+    return <Navigate to={welcomePathForDestination(`${location.pathname}${location.search}`)} replace />;
   }
 
   return <>{children}</>;

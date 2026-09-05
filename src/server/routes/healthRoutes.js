@@ -13,6 +13,7 @@ import fsp from 'node:fs/promises';
 import nodePath from 'node:path';
 import { updatesOrigin } from '../config/hosts.js';
 import { decrypt, isConfigured } from '../utils/secretBox.js';
+import { isLocalPreview } from '../services/runtimePolicy.js';
 
 const router = Router();
 
@@ -93,6 +94,7 @@ router.get('/ready', async (req, res) => {
   const status = allHealthy ? 'ready' : 'not_ready';
   res.status(allHealthy ? 200 : 503).json({
     status,
+    ...(isLocalPreview() ? { preview: { instance: process.env.XENO_PREVIEW_INSTANCE, backgroundWork: false } } : {}),
     timestamp: new Date().toISOString(),
     checks,
   });

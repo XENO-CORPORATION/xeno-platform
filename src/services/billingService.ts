@@ -1,15 +1,15 @@
 // Frontend billing client — talks to /api/billing (Stripe Checkout → credit ledger).
-// Same-origin API; JWT from localStorage ('xenoos_auth_token'), matching authService.
+// Same-origin API; browser auth is an opaque HttpOnly BFF session.
 
 const API_BASE = '/api';
 
 function authHeaders(): Record<string, string> {
-  const t = localStorage.getItem('xenoos_auth_token');
+  const t = getAccessToken();
   return t ? { Authorization: `Bearer ${t}` } : {};
 }
 
 export function isAuthed(): boolean {
-  return !!localStorage.getItem('xenoos_auth_token');
+  return !!getAccessToken();
 }
 
 export interface BillingItem {
@@ -82,6 +82,16 @@ export async function getLivePriceMap(): Promise<Record<string, { price: number;
 }
 
 export interface ConsentText { text: string; hash: string; }
+
+export type CheckoutState = 'open' | 'expired' | 'processing' | 'fulfilling' | 'fulfilled';
+export async function getCheckoutStatus(sessionId: string): Promise<CheckoutState | null> {
+  try {
+    const res = await fetch(`${API_BASE}/billing/checkout/${encodeURIComponent(sessionId)}/status`, { headers: authHeaders(), cache: 'no-store' });
+    if (!res.ok) return null;
+    const data = await res.json();
+    return data.success && ['open', 'expired', 'processing', 'fulfilling', 'fulfilled'].includes(data.state) ? data.state : null;
+  } catch { return null; }
+}
 
 /**
  * The exact wording the buyer must agree to.
@@ -244,3 +254,4 @@ export async function getBillingSummary(): Promise<BillingSummary | null> {
     return null;
   }
 }
+import { getAccessToken } from '../lib/authSession';

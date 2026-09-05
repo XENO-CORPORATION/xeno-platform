@@ -19,9 +19,10 @@ import {
   INPUT_CLS, cx,
 } from '../components/onboarding/OnboardingPieces';
 import {
-  AUTH_TOKEN_KEY, ONBOARDING_DONE_KEY, destinationAfterOnboarding,
-  consumeOnboardingNext, isExternalOnboardingNext,
+  ONBOARDING_DONE_KEY, ONBOARDING_WELCOME_DONE_KEY, destinationAfterOnboarding,
+  consumeOnboardingNext, isExternalOnboardingNext, welcomePathForDestination,
 } from '../lib/onboardingHandoff.js';
+import { getAccessToken } from '../lib/authSession';
 import { startCheckout as startPersonalCheckout, startTeamCheckout } from '../services/billingService';
 
 /* ═══════════════════════════════════════════════════════════════════════════
@@ -320,7 +321,7 @@ const Onboarding: React.FC = () => {
    * unmounted the old one — so every change was a hard cut. */
   const t = useStepTransition(step);
 
-  const token = () => localStorage.getItem(AUTH_TOKEN_KEY);
+  const token = () => getAccessToken();
 
   /* Never show this to somebody who already finished or dismissed it —
    * including on a plain reload, which is how you see a flow twice. */
@@ -334,7 +335,7 @@ const Onboarding: React.FC = () => {
           sessionStorage.setItem(ONBOARDING_DONE_KEY, '1');
           const to = destinationAfterOnboarding('/overview');
           if (isExternalOnboardingNext(to)) { window.location.replace(to); return; }
-          navigate(to, { replace: true });
+          navigate(data?.welcomeAcknowledged ? to : welcomePathForDestination(to), { replace: true });
           return;
         }
       } catch {
@@ -388,12 +389,13 @@ const Onboarding: React.FC = () => {
 
   const leaveTo = (fallbackPath: string) => {
     sessionStorage.setItem(ONBOARDING_DONE_KEY, '1');
+    sessionStorage.removeItem(ONBOARDING_WELCOME_DONE_KEY);
     const next = consumeOnboardingNext();
     // A portal return wins over a product tile — they came here to finish
     // the account, not to be stranded on a marketing page.
     const to = (next && isExternalOnboardingNext(next)) ? next : fallbackPath;
     if (isExternalOnboardingNext(to)) { window.location.replace(to); return; }
-    navigate(to, { replace: true });
+    navigate(welcomePathForDestination(to), { replace: true });
   };
 
   const finish = async (product?: { slug: string; launchPath?: string; delivery: string }) => {

@@ -24,6 +24,7 @@ const chat = read('src', 'components', 'playground', 'Chat', 'ChatWithLLM.tsx');
 const image = read('src', 'components', 'library', 'LibraryAssetImage.tsx');
 const viewer = read('src', 'components', 'library', 'LibraryAssetViewer.tsx');
 const overviewTaskbar = read('src', 'components', 'overview', 'OverviewTaskbar.tsx');
+const overviewShellStyles = read('src', 'components', 'overview', 'overview-shell.css');
 const styles = read('src', 'index.css');
 const app = read('src', 'App.tsx');
 const legacyMigration = read('src', 'server', 'migrate-legacy-library-images.js');
@@ -191,10 +192,10 @@ test('Library image history is a semantic right-side rail', () => {
   assert.doesNotMatch(viewer, /overflow-y-auto border-r border-white\/10/);
 });
 
-test('Overview taskbar divider sits on the right edge without changing rail width', () => {
-  assert.match(overviewTaskbar, /relative box-border h-screen/);
-  assert.match(overviewTaskbar, /data-overview-taskbar-divider="right"/);
-  assert.match(overviewTaskbar, /absolute inset-y-0 right-0 z-10 w-px bg-white\/10/);
+test('Overview sidebar owns the full viewport and keeps the permanent rail at 52px', () => {
+  assert.match(overviewTaskbar, /<aside className=\{`xeno-overview-sidebar/);
+  assert.match(overviewShellStyles, /\.xeno-overview-sidebar\s*\{[\s\S]*?height:\s*100dvh/);
+  assert.match(overviewShellStyles, /\.xeno-sidebar-rail\s*\{[\s\S]*?width:\s*52px;[\s\S]*?box-sizing:\s*border-box;[\s\S]*?border-right:/);
   assert.doesNotMatch(overviewTaskbar, /backdrop-blur-md border-r border-white\/10/);
 });
 

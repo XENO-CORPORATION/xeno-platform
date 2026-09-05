@@ -6,7 +6,7 @@ import { getGroupedModels, GroupedModels, Model, FALLBACK_MODELS } from '@/servi
 import { chatService, Conversation as DbConversation, ChatMessage as DbChatMessage } from '@/services/chatService';
 import { chatComplete } from '@/services/aiService';
 import XenoBrowser, { XenoBrowserRef } from '../Browser/XenoBrowser';
-import { useChatTheme } from './chatTheme';
+import { usePlatformTheme } from '../../../platform/platformTheme';
 
 // Helper to format large token counts
 const formatTokens = (tokens: number): string => {
@@ -157,10 +157,9 @@ const DEFAULT_MODEL: Model = {
 };
 
 const SearchChatInterface: React.FC = () => {
-  // Whatever the user set on the chat's brightness slider. Read-only here — this surface has no
-  // switcher of its own, it just wears the answer. Both halves are needed: the class is the base
-  // palette, the style is the exact stop when that stop has no name.
-  const { themeClass, themeStyle } = useChatTheme();
+  // The platform owns appearance; this route is a read-only consumer of the same semantic palette.
+  const { resolvedTheme, themeStyle } = usePlatformTheme();
+  const themeClass = `chat-theme-${resolvedTheme}`;
 
   // State
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -542,7 +541,7 @@ IMPORTANT:
       body = { query, count: 10 };
     }
 
-    const token = typeof localStorage !== 'undefined' ? localStorage.getItem('xenoos_auth_token') : null;
+    const token = typeof localStorage !== 'undefined' ? getAccessToken() : null;
     const response = await fetch(endpoint, {
       method: 'POST',
       headers: {
@@ -2098,3 +2097,4 @@ Based on these search results, provide a helpful, accurate, and concise answer t
 };
 
 export default SearchChatInterface;
+import { getAccessToken } from '../../../lib/authSession';

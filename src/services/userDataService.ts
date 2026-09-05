@@ -1,3 +1,5 @@
+import { getAccessToken } from '../lib/authSession';
+
 // User Data Service - API integration for settings, files, and usage tracking
 // Replaces localStorage-based storage with database persistence
 
@@ -15,7 +17,8 @@ export interface UserSettings {
     fontSize?: 'small' | 'medium' | 'large';
   };
   appearance?: {
-    theme?: 'dark' | 'light';
+    theme?: 'system' | 'custom' | 'dark' | 'dim' | 'light';
+    themeBrightness?: number;
     fontSize?: 'small' | 'medium' | 'large';
   };
   models?: {
@@ -78,7 +81,7 @@ export interface UsageSummary {
 // ============================================
 
 const getAuthHeaders = (): HeadersInit => {
-  const token = localStorage.getItem('xenoos_auth_token');
+  const token = getAccessToken();
   return {
     'Content-Type': 'application/json',
     ...(token ? { Authorization: `Bearer ${token}` } : {}),
@@ -165,6 +168,23 @@ export const userDataService = {
       return data.settings || {};
     } catch (error) {
       console.error('Failed to update setting:', error);
+      throw error;
+    }
+  },
+
+  // Update related settings in one server-side transaction.
+  async updateSettingsBatch(updates: Array<{ path: string; value: unknown }>): Promise<UserSettings> {
+    try {
+      const response = await fetch(`${API_BASE}/settings`, {
+        method: 'PATCH',
+        headers: getAuthHeaders(),
+        body: JSON.stringify({ updates }),
+      });
+
+      const data = await handleResponse<{ settings: UserSettings }>(response);
+      return data.settings || {};
+    } catch (error) {
+      console.error('Failed to update settings batch:', error);
       throw error;
     }
   },
@@ -324,7 +344,7 @@ export const userDataService = {
 
   // Check if user is authenticated
   isAuthenticated(): boolean {
-    return !!localStorage.getItem('xenoos_auth_token');
+    return !!getAccessToken();
   },
 
   // Migrate localStorage data to database

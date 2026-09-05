@@ -96,7 +96,7 @@ router.get('/client_info', async (req, res) => {
 
 // GET /oauth2/authorize — browser entry point for "Sign in with XENO". This IS
 // the XENO auth screen (served on the xenostudio.ai origin, like Google's consent
-// page): if the user already has a session (localStorage 'xenoos_auth_token') it
+// page): if the user already has an opaque HttpOnly browser session it
 // auto-continues; otherwise it shows a sign-in / create-account form, signs them
 // in against /api/auth/*, then continues — so the user never hits a dead end.
 // First-party clients auto-approve the grant (Identity Plan §2.3).
@@ -189,11 +189,15 @@ button:hover{opacity:.92}button:disabled{opacity:.55;cursor:default}
   function showForm(msg){show($('loader'),false);show($('cardWrap'),true);$('err').textContent=msg||''}
   function fail(msg){$('err').textContent=msg;$('submit').disabled=false;$('submit').textContent=mode==='signup'?'Create account & continue':'Sign in & continue'}
 
-  function continueWith(tok){
+  function csrf(){
+    var hit=document.cookie.split(';').map(function(v){return v.trim()}).find(function(v){return v.indexOf('__Host-xeno_csrf=')===0||v.indexOf('xeno_csrf=')===0});
+    return hit?decodeURIComponent(hit.slice(hit.indexOf('=')+1)):'';
+  }
+  function continueWith(){
     setStatus('Signing you in…');
-    fetch('/api/oauth2/authorize',{method:'POST',headers:{'content-type':'application/json','authorization':'Bearer '+tok},
+    fetch('/api/oauth2/authorize',{method:'POST',credentials:'same-origin',headers:{'content-type':'application/json','x-xeno-csrf':csrf()},
       body:JSON.stringify({client_id:p.get('client_id'),redirect_uri:p.get('redirect_uri'),scope:p.get('scope'),code_challenge:p.get('code_challenge'),code_challenge_method:p.get('code_challenge_method'),state:p.get('state'),nonce:p.get('nonce'),prompt:p.get('prompt'),max_age:p.get('max_age'),acr_values:p.get('acr_values')})})
-    .then(function(r){ if(r.status===401){ localStorage.removeItem('xenoos_auth_token'); toAuth(); throw 0;} return r.json(); })
+    .then(function(r){ if(r.status===401){ toAuth(); throw 0;} return r.json(); })
     .then(function(d){ if(d&&d.redirect){ location.href=d.redirect; } else { showForm((d&&(d.error_description||d.error))||'Authorization failed'); } })
     .catch(function(e){ if(e!==0) showForm('Error: '+(e&&e.message||e)); });
   }
@@ -217,28 +221,17 @@ button:hover{opacity:.92}button:disabled{opacity:.55;cursor:default}
     var body=mode==='signup'
       ? {email:email,password:password,username:email.split('@')[0].slice(0,20),display_name:name||email.split('@')[0]}
       : {email:email,password:password};
-    fetch(url,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(body)})
+    fetch(url,{method:'POST',credentials:'same-origin',headers:{'content-type':'application/json','x-xeno-session-mode':'browser'},body:JSON.stringify(body)})
       .then(function(r){return r.json()}).then(function(d){
-        if(d&&d.token){ localStorage.setItem('xenoos_auth_token',d.token); continueWith(d.token); }
+        if(d&&d.success){ continueWith(); }
         else { fail((d&&d.error)||'Sign-in failed. Check your details and try again.'); }
       }).catch(function(e){ fail('Network error: '+(e&&e.message||e)); });
   };
 
-  // Entry: already signed in → continue; else show the sign-in form.
-  // Accept a token handed back in the URL (?token=…) by the social-login
-  // callback (buildOAuthRedirectUrl appends it to returnUrl), so "Sign in with
-  // GitHub/Google/X" completes the grant instead of bouncing to the form. Mirror
-  // AuthContext: persist it, strip it from the visible URL, then continue.
-  var urlTok=p.get('token');
-  if(urlTok){
-    try{ localStorage.setItem('xenoos_auth_token',urlTok); }catch(e){}
-    try{ history.replaceState(null,'',location.pathname+location.search.replace(/[?&]token=[^&]*/,'').replace(/[?&]isNew=[^&]*/,'').replace(/^&/,'?')); }catch(e){}
-    continueWith(urlTok);
-  } else {
-    var tok=localStorage.getItem('xenoos_auth_token');
-    if(p.get('prompt')==='login'&&p.get('stepup_complete')!=='1'){ toAuth(); }
-    else if(tok){ continueWith(tok); } else { toAuth(); }
-  }
+  // Entry: the server-held cookie is the only browser credential. Attempt the
+  // grant and let a 401 hand the user to the canonical login screen.
+  if(p.get('prompt')==='login'&&p.get('stepup_complete')!=='1'){ toAuth(); }
+  else { continueWith(); }
 })();
 </script></body></html>`);
 });

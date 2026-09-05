@@ -1639,7 +1639,7 @@ ${currentHtml}
     URL.revokeObjectURL(url);
   };
 
-  // Export to DOCX using backend API (html-to-docx runs on server)
+  // Export to DOCX using the backend's docx + Cheerio conversion route.
   const downloadDocx = async () => {
     try {
       // Call backend API to convert HTML to DOCX

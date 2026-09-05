@@ -1,4 +1,5 @@
 import express from 'express';
+import { chatWorkspaceScope } from '../middleware/chatWorkspaceScope.js';
 import crypto from 'crypto';
 import fs from 'fs';
 import { workspaceFromReq, isWorkspaceMember, UUID_RE } from '../utils/workspaceContext.js';
@@ -114,6 +115,7 @@ async function rejectUnownedChatReferences(req, res, {
 }
 
 const router = express.Router();
+router.use(chatWorkspaceScope);
 
 async function persistWebContextReceipt(db, { userId, conversationId, userMessageId, result }) {
   if (result.sources.length === 0) return null;
@@ -483,6 +485,13 @@ router.get('/conversations', async (req, res) => {
 
     const params = [interface_id];
 
+    if (req.chatWorkspaceId) {
+      params.push(req.chatWorkspaceId);
+      query += ` AND (c.workspace_id = $2::uuid OR EXISTS (
+        SELECT 1 FROM chat_projects p WHERE p.id=c.project_id AND p.workspace_id=$2::uuid
+      ))`;
+    }
+
     if (!include_archived || include_archived === 'false') {
       query += ` AND c.is_archived = FALSE`;
     }
@@ -571,7 +580,7 @@ router.post('/conversations', async (req, res) => {
     const { title = 'New Chat', model_id, system_prompt, persona_id, interface_id = 'playground', project_id } = req.body;
 
     if (project_id) await requireResourceRelation(req.db, userPrincipal(userId), 'project', project_id, 'reviewer');
-    const wsCtx = workspaceFromReq(req);
+    const wsCtx = req.chatWorkspaceId;
     const wsId = (wsCtx && await isWorkspaceMember(req.db, wsCtx, userId)) ? wsCtx : null;
     const conversation = await withTransaction(req.db, async (tx) => {
       const project = project_id
@@ -2289,17 +2298,22 @@ router.delete('/skills/:id', async (req, res) => {
 // ============================================
 
 router.get('/customize/connectors', async (req, res) => {
-  const userId = req.user?.id;
-  if (!userId) return res.status(401).json({ success: false, error: 'Unauthorized' });
-  const qualified = new Map(CHAT_PROJECT_CONTRACTS.catalogs.connectors.map((entry) => [entry.key, entry]));
-  const { rows } = await req.db.query(
-    'SELECT id, connector_key, status, updated_at FROM chat_connector_connections WHERE user_id = $1 ORDER BY updated_at DESC',
-    [userId],
-  );
-  res.json({
-    success: true,
-    connectors: rows.filter((row) => qualified.has(row.connector_key)).map((row) => ({ ...qualified.get(row.connector_key), ...row })),
-  });
+  try {
+    const userId = req.user?.id;
+    if (!userId) return res.status(401).json({ success: false, error: 'Unauthorized' });
+    const qualified = new Map(CHAT_PROJECT_CONTRACTS.catalogs.connectors.map((entry) => [entry.key, entry]));
+    const { rows } = await req.db.query(
+      'SELECT id, connector_key, state AS status, updated_at FROM chat_connector_connections WHERE user_id = $1 ORDER BY updated_at DESC',
+      [userId],
+    );
+    return res.json({
+      success: true,
+      connectors: rows.filter((row) => qualified.has(row.connector_key)).map((row) => ({ ...qualified.get(row.connector_key), ...row })),
+    });
+  } catch (error) {
+    console.error('Failed to list connectors:', error);
+    return res.status(500).json({ success: false, error: 'Internal server error' });
+  }
 });
 
 router.put('/customize/connectors/:key', async (req, res) => {
@@ -2311,17 +2325,22 @@ router.put('/customize/connectors/:key', async (req, res) => {
 });
 
 router.get('/customize/plugins', async (req, res) => {
-  const userId = req.user?.id;
-  if (!userId) return res.status(401).json({ success: false, error: 'Unauthorized' });
-  const qualified = new Map(CHAT_PROJECT_CONTRACTS.catalogs.plugins.map((entry) => [entry.listingId, entry]));
-  const { rows } = await req.db.query(
-    'SELECT id, listing_id, version, enabled, entitlement_status, updated_at FROM chat_plugin_installations WHERE user_id = $1 ORDER BY updated_at DESC',
-    [userId],
-  );
-  res.json({
-    success: true,
-    plugins: rows.filter((row) => qualified.has(row.listing_id)).map((row) => ({ ...qualified.get(row.listing_id), ...row })),
-  });
+  try {
+    const userId = req.user?.id;
+    if (!userId) return res.status(401).json({ success: false, error: 'Unauthorized' });
+    const qualified = new Map(CHAT_PROJECT_CONTRACTS.catalogs.plugins.map((entry) => [entry.listingId, entry]));
+    const { rows } = await req.db.query(
+      'SELECT id, listing_id, installed_version AS version, enabled, entitlement_status, updated_at FROM chat_plugin_installations WHERE user_id = $1 ORDER BY updated_at DESC',
+      [userId],
+    );
+    return res.json({
+      success: true,
+      plugins: rows.filter((row) => qualified.has(row.listing_id)).map((row) => ({ ...qualified.get(row.listing_id), ...row })),
+    });
+  } catch (error) {
+    console.error('Failed to list plugins:', error);
+    return res.status(500).json({ success: false, error: 'Internal server error' });
+  }
 });
 
 router.put('/customize/plugins/:listingId', async (req, res) => {
@@ -2341,6 +2360,10 @@ router.get('/projects', async (req, res) => {
     const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 50, 1), 100);
     const offset = Math.max(parseInt(req.query.offset, 10) || 0, 0);
     const includeArchived = req.query.include_archived === 'true';
+    const requestedWorkspaceId = req.chatWorkspaceId;
+    if (requestedWorkspaceId && !UUID_RE.test(String(requestedWorkspaceId))) {
+      return res.status(400).json({ success: false, error: 'Invalid workspace id' });
+    }
 
     const { rows: candidates } = await req.db.query(
       `SELECT p.*, 
@@ -2348,8 +2371,9 @@ router.get('/projects', async (req, res) => {
               (SELECT COUNT(*) FROM chat_conversations WHERE project_id = p.id) AS chat_count
        FROM chat_projects p
        WHERE ($1::boolean OR p.is_archived = FALSE)
+         AND ($2::uuid IS NULL OR p.workspace_id = $2::uuid)
        ORDER BY p.updated_at DESC`,
-      [includeArchived]
+      [includeArchived, requestedWorkspaceId]
     );
     const authorized = [];
     for (const project of candidates) {
@@ -2411,7 +2435,7 @@ router.post('/projects', async (req, res) => {
 
     const project = await createAuthorizedProject(req.db, {
       principal: userPrincipal(userId),
-      workspaceId: workspaceFromReq(req),
+      workspaceId: req.chatWorkspaceId,
       name,
       description,
       customInstructions: custom_instructions,
