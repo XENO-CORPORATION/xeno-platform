@@ -1,0 +1,95 @@
+{
+  "schemaVersion": 1,
+  "status": "generation-evidence-recorded-not-legal-signoff",
+  "scope": "Eight landing paths replaced with five text-only original generated illustrations. Four legacy v2 hero aliases intentionally share one composition. Other pending assets are not cleared.",
+  "entries": [
+    {
+      "path": "public/landing-v2/xeno-hero-plate.png",
+      "prompt": "Use case: stylized-concept. Asset type: XENO creative software platform decorative website hero, widescreen 16:9. Create a new original architectural abstraction: a sculptural graphite ribbon curves through a dark charcoal studio, forming an open asymmetric passage with fine silver edge light and softly illuminated frosted glass planes. Premium restrained monochrome, subtle physically realistic roughness, deep blacks with readable shadows, elegant negative space for HTML text. Distinct original geometry, not any existing logo or artwork. No words, letters, logos, watermarks, UI panels, fake software screens or identifiable buildings. Full bleed single image, not a collage.",
+      "sourceOutput": "exec-518402cd-6d75-4773-9ab8-353e868c75ad.png",
+      "generator": "OpenAI image_gen built-in (Codex)",
+      "generationDate": "2026-09-05",
+      "referenceImages": [],
+      "usage": "Decorative illustration; not a screenshot, customer work or output produced by a XENO model.",
+      "visualInspection": "Inspected tool output; grayscale original composition, no visible text, logos or software UI.",
+      "sha256": "cfcfa44c03ea27fa2ab8ad00094d740499a76857aa171376e335d71671c6d711"
+    },
+    {
+      "path": "public/landing-v2/xeno-hero-portal-balanced.png",
+      "prompt": "Use case: stylized-concept. Asset type: XENO creative software platform decorative website hero, widescreen 16:9. Create a new original architectural abstraction: a sculptural graphite ribbon curves through a dark charcoal studio, forming an open asymmetric passage with fine silver edge light and softly illuminated frosted glass planes. Premium restrained monochrome, subtle physically realistic roughness, deep blacks with readable shadows, elegant negative space for HTML text. Distinct original geometry, not any existing logo or artwork. No words, letters, logos, watermarks, UI panels, fake software screens or identifiable buildings. Full bleed single image, not a collage.",
+      "sourceOutput": "exec-518402cd-6d75-4773-9ab8-353e868c75ad.png",
+      "generator": "OpenAI image_gen built-in (Codex)",
+      "generationDate": "2026-09-05",
+      "referenceImages": [],
+      "usage": "Decorative illustration; not a screenshot, customer work or output produced by a XENO model.",
+      "visualInspection": "Inspected tool output; grayscale original composition, no visible text, logos or software UI.",
+      "sha256": "cfcfa44c03ea27fa2ab8ad00094d740499a76857aa171376e335d71671c6d711"
+    },
+    {
+      "path": "public/landing-v2/xeno-hero-portal-centered.png",
+      "prompt": "Use case: stylized-concept. Asset type: XENO creative software platform decorative website hero, widescreen 16:9. Create a new original architectural abstraction: a sculptural graphite ribbon curves through a dark charcoal studio, forming an open asymmetric passage with fine silver edge light and softly illuminated frosted glass planes. Premium restrained monochrome, subtle physically realistic roughness, deep blacks with readable shadows, elegant negative space for HTML text. Distinct original geometry, not any existing logo or artwork. No words, letters, logos, watermarks, UI panels, fake software screens or identifiable buildings. Full bleed single image, not a collage.",
+      "sourceOutput": "exec-518402cd-6d75-4773-9ab8-353e868c75ad.png",
+      "generator": "OpenAI image_gen built-in (Codex)",
+      "generationDate": "2026-09-05",
+      "referenceImages": [],
+      "usage": "Decorative illustration; not a screenshot, customer work or output produced by a XENO model.",
+      "visualInspection": "Inspected tool output; grayscale original composition, no visible text, logos or software UI.",
+      "sha256": "cfcfa44c03ea27fa2ab8ad00094d740499a76857aa171376e335d71671c6d711"
+    },
+    {
+      "path": "public/landing-v2/xeno-hero-portal-clean.png",
+      "prompt": "Use case: stylized-concept. Asset type: XENO creative software platform decorative website hero, widescreen 16:9. Create a new original architectural abstraction: a sculptural graphite ribbon curves through a dark charcoal studio, forming an open asymmetric passage with fine silver edge light and softly illuminated frosted glass planes. Premium restrained monochrome, subtle physically realistic roughness, deep blacks with readable shadows, elegant negative space for HTML text. Distinct original geometry, not any existing logo or artwork. No words, letters, logos, watermarks, UI panels, fake software screens or identifiable buildings. Full bleed single image, not a collage.",
+      "sourceOutput": "exec-518402cd-6d75-4773-9ab8-353e868c75ad.png",
+      "generator": "OpenAI image_gen built-in (Codex)",
+      "generationDate": "2026-09-05",
+      "referenceImages": [],
+      "usage": "Decorative illustration; not a screenshot, customer work or output produced by a XENO model.",
+      "visualInspection": "Inspected tool output; grayscale original composition, no visible text, logos or software UI.",
+      "sha256": "cfcfa44c03ea27fa2ab8ad00094d740499a76857aa171376e335d71671c6d711"
+    },
+    {
+      "path": "public/landing-v3/gen/img-1.png",
+      "prompt": "Use case: stylized-concept. Original decorative illustration for a creative software gallery. Widescreen macro photograph-like render of a black volcanic mineral sculpture split by a fine silver seam, intricate rough stone and brushed metal textures, controlled studio lighting, restrained black charcoal silver palette, surprising original asymmetric composition. No text, no logos, no watermark, no UI. Not a product screenshot.",
+      "sourceOutput": "exec-056609ec-c29f-44c4-8600-48551aa7ef38.png",
+      "generator": "OpenAI image_gen built-in (Codex)",
+      "generationDate": "2026-09-05",
+      "referenceImages": [],
+      "usage": "Decorative illustration; not a screenshot, customer work or output produced by a XENO model.",
+      "visualInspection": "Inspected tool output; grayscale original composition, no visible text, logos or software UI.",
+      "sha256": "1fc418f3ec7a86d6147215c2b6a9a781bf8b0ec4166efbf471233a812633c5d0"
+    },
+    {
+      "path": "public/landing-v3/gen/img-2.png",
+      "prompt": "Use case: stylized-concept. Original decorative landscape illustration for creative software gallery. Widescreen view of an invented mountainous coastal landscape at dusk, fine silver surf curling around angular black rocks, mist and layered graphite mountains, realistic tactile detail, strictly monochrome, elegant quiet cinematic composition. No real identifiable landmark, text, logos, watermark or UI. Not a product screenshot.",
+      "sourceOutput": "exec-8013f6dc-aeea-48c6-80b8-71331d5c83b6.png",
+      "generator": "OpenAI image_gen built-in (Codex)",
+      "generationDate": "2026-09-05",
+      "referenceImages": [],
+      "usage": "Decorative illustration; not a screenshot, customer work or output produced by a XENO model.",
+      "visualInspection": "Inspected tool output; grayscale original composition, no visible text, logos or software UI.",
+      "sha256": "98f962334e932b23304beed777fa066c2b69d4809be814f94bfd6e44ff366862"
+    },
+    {
+      "path": "public/landing-v3/gen/img-3.png",
+      "prompt": "Use case: product-mockup. Original unbranded industrial design concept for a creative software gallery. Widescreen studio still life of an asymmetric machined graphite desktop sound sculpture with concentric perforations and a detached frosted-glass shell, precise silver bevels, black background, photorealistic materials. Invented form not resembling a known commercial product. Black white silver only. No text logo watermark screen or UI. Decorative concept, not a product screenshot.",
+      "sourceOutput": "exec-c4a31011-c67c-4061-b4a7-b6b86ebb1a63.png",
+      "generator": "OpenAI image_gen built-in (Codex)",
+      "generationDate": "2026-09-05",
+      "referenceImages": [],
+      "usage": "Decorative illustration; not a screenshot, customer work or output produced by a XENO model.",
+      "visualInspection": "Inspected tool output; grayscale original composition, no visible text, logos or software UI.",
+      "sha256": "1ddeeff2eb44858310761c49e20e9352cd0e2f2423fa322ebdbcb628912ef511"
+    },
+    {
+      "path": "public/landing-v3/gen/img-4.png",
+      "prompt": "Use case: stylized-concept. Original decorative artwork for a creative software gallery. Widescreen dynamic macro sculpture of folded liquid silver suspended above matte charcoal sand, thin flowing metallic membranes and intricate ripples, physically convincing studio reflections, dark negative space, strictly grayscale monochrome. Entirely original composition. No text logos watermark or UI. Not a product screenshot.",
+      "sourceOutput": "exec-b1376975-2d25-4376-a666-4097ecd2cea1.png",
+      "generator": "OpenAI image_gen built-in (Codex)",
+      "generationDate": "2026-09-05",
+      "referenceImages": [],
+      "usage": "Decorative illustration; not a screenshot, customer work or output produced by a XENO model.",
+      "visualInspection": "Inspected tool output; grayscale original composition, no visible text, logos or software UI.",
+      "sha256": "be317b5ad7488f970d31374e68533db12cd83a687b56d3c8e1db2c7e7a5151c6"
+    }
+  ]
+}

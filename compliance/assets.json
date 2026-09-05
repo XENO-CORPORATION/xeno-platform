@@ -81,6 +81,86 @@
       "evidence": "compliance/generated-assets-2026-09-04.json",
       "rightsEvidence": "docs/release-evidence/openai-output-rights-basis-2026-09-05.md",
       "note": "Generated for this user's XENO project from text-only prompts; decorative illustration, not a product screenshot or XENO model output."
+    },
+    {
+      "path": "public/landing-v2/xeno-hero-plate.png",
+      "sha256": "cfcfa44c03ea27fa2ab8ad00094d740499a76857aa171376e335d71671c6d711",
+      "origin": "ai-generated",
+      "generator": "OpenAI image_gen built-in (Codex)",
+      "rights": "Provider output-rights assignment, subject to applicable terms and law; not an assertion of exclusive copyright or third-party clearance.",
+      "evidence": "compliance/generated-assets-2026-09-05.json",
+      "rightsEvidence": "docs/release-evidence/openai-output-rights-basis-2026-09-05.md",
+      "note": "Decorative illustration; not a screenshot, customer work or output produced by a XENO model."
+    },
+    {
+      "path": "public/landing-v2/xeno-hero-portal-balanced.png",
+      "sha256": "cfcfa44c03ea27fa2ab8ad00094d740499a76857aa171376e335d71671c6d711",
+      "origin": "ai-generated",
+      "generator": "OpenAI image_gen built-in (Codex)",
+      "rights": "Provider output-rights assignment, subject to applicable terms and law; not an assertion of exclusive copyright or third-party clearance.",
+      "evidence": "compliance/generated-assets-2026-09-05.json",
+      "rightsEvidence": "docs/release-evidence/openai-output-rights-basis-2026-09-05.md",
+      "note": "Decorative illustration; not a screenshot, customer work or output produced by a XENO model."
+    },
+    {
+      "path": "public/landing-v2/xeno-hero-portal-centered.png",
+      "sha256": "cfcfa44c03ea27fa2ab8ad00094d740499a76857aa171376e335d71671c6d711",
+      "origin": "ai-generated",
+      "generator": "OpenAI image_gen built-in (Codex)",
+      "rights": "Provider output-rights assignment, subject to applicable terms and law; not an assertion of exclusive copyright or third-party clearance.",
+      "evidence": "compliance/generated-assets-2026-09-05.json",
+      "rightsEvidence": "docs/release-evidence/openai-output-rights-basis-2026-09-05.md",
+      "note": "Decorative illustration; not a screenshot, customer work or output produced by a XENO model."
+    },
+    {
+      "path": "public/landing-v2/xeno-hero-portal-clean.png",
+      "sha256": "cfcfa44c03ea27fa2ab8ad00094d740499a76857aa171376e335d71671c6d711",
+      "origin": "ai-generated",
+      "generator": "OpenAI image_gen built-in (Codex)",
+      "rights": "Provider output-rights assignment, subject to applicable terms and law; not an assertion of exclusive copyright or third-party clearance.",
+      "evidence": "compliance/generated-assets-2026-09-05.json",
+      "rightsEvidence": "docs/release-evidence/openai-output-rights-basis-2026-09-05.md",
+      "note": "Decorative illustration; not a screenshot, customer work or output produced by a XENO model."
+    },
+    {
+      "path": "public/landing-v3/gen/img-1.png",
+      "sha256": "1fc418f3ec7a86d6147215c2b6a9a781bf8b0ec4166efbf471233a812633c5d0",
+      "origin": "ai-generated",
+      "generator": "OpenAI image_gen built-in (Codex)",
+      "rights": "Provider output-rights assignment, subject to applicable terms and law; not an assertion of exclusive copyright or third-party clearance.",
+      "evidence": "compliance/generated-assets-2026-09-05.json",
+      "rightsEvidence": "docs/release-evidence/openai-output-rights-basis-2026-09-05.md",
+      "note": "Decorative illustration; not a screenshot, customer work or output produced by a XENO model."
+    },
+    {
+      "path": "public/landing-v3/gen/img-2.png",
+      "sha256": "98f962334e932b23304beed777fa066c2b69d4809be814f94bfd6e44ff366862",
+      "origin": "ai-generated",
+      "generator": "OpenAI image_gen built-in (Codex)",
+      "rights": "Provider output-rights assignment, subject to applicable terms and law; not an assertion of exclusive copyright or third-party clearance.",
+      "evidence": "compliance/generated-assets-2026-09-05.json",
+      "rightsEvidence": "docs/release-evidence/openai-output-rights-basis-2026-09-05.md",
+      "note": "Decorative illustration; not a screenshot, customer work or output produced by a XENO model."
+    },
+    {
+      "path": "public/landing-v3/gen/img-3.png",
+      "sha256": "1ddeeff2eb44858310761c49e20e9352cd0e2f2423fa322ebdbcb628912ef511",
+      "origin": "ai-generated",
+      "generator": "OpenAI image_gen built-in (Codex)",
+      "rights": "Provider output-rights assignment, subject to applicable terms and law; not an assertion of exclusive copyright or third-party clearance.",
+      "evidence": "compliance/generated-assets-2026-09-05.json",
+      "rightsEvidence": "docs/release-evidence/openai-output-rights-basis-2026-09-05.md",
+      "note": "Decorative illustration; not a screenshot, customer work or output produced by a XENO model."
+    },
+    {
+      "path": "public/landing-v3/gen/img-4.png",
+      "sha256": "be317b5ad7488f970d31374e68533db12cd83a687b56d3c8e1db2c7e7a5151c6",
+      "origin": "ai-generated",
+      "generator": "OpenAI image_gen built-in (Codex)",
+      "rights": "Provider output-rights assignment, subject to applicable terms and law; not an assertion of exclusive copyright or third-party clearance.",
+      "evidence": "compliance/generated-assets-2026-09-05.json",
+      "rightsEvidence": "docs/release-evidence/openai-output-rights-basis-2026-09-05.md",
+      "note": "Decorative illustration; not a screenshot, customer work or output produced by a XENO model."
     }
   ]
 }
