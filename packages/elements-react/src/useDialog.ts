@@ -167,7 +167,12 @@ export function useDialog<T extends HTMLElement = HTMLDivElement>({
         return
       }
       const active = document.activeElement
-      if (e.shiftKey && active === first) {
+      // The panel itself owns initial focus. Shift+Tab from there must not
+      // escape behind the modal; the same applies after a control is disabled.
+      if (active === panel || !list.includes(active as HTMLElement)) {
+        e.preventDefault()
+        ;(e.shiftKey ? last : first).focus()
+      } else if (e.shiftKey && active === first) {
         e.preventDefault()
         last.focus()
       } else if (!e.shiftKey && active === last) {

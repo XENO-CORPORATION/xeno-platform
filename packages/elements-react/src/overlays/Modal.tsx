@@ -1,4 +1,4 @@
-import { useId, useRef } from 'react'
+import { useCallback, useId, useRef } from 'react'
 import type {
   HTMLAttributes,
   MouseEvent as ReactMouseEvent,
@@ -33,6 +33,8 @@ export interface ModalProps extends Omit<HTMLAttributes<HTMLDivElement>, 'title'
   readonly open: boolean
   /** Called on Esc, on a scrim click, and by the header close button. */
   readonly onClose: () => void
+  /** Keep an in-flight operation visible; disable close, Escape and scrim dismissal together. */
+  readonly dismissDisabled?: boolean
   /** Header heading. When present it labels the dialog via `aria-labelledby`. */
   readonly title?: ReactNode
   /** The scrollable body content. */
@@ -48,6 +50,7 @@ export interface ModalProps extends Omit<HTMLAttributes<HTMLDivElement>, 'title'
 export function Modal({
   open,
   onClose,
+  dismissDisabled = false,
   title,
   children,
   footer,
@@ -58,7 +61,10 @@ export function Modal({
 }: ModalProps): ReactElement | null {
   const titleId = useId()
   const scrimArmed = useRef(false)
-  const { panelProps } = useDialog<HTMLDivElement>({ open, onClose })
+  const requestClose = useCallback(() => {
+    if (!dismissDisabled) onClose()
+  }, [dismissDisabled, onClose])
+  const { panelProps } = useDialog<HTMLDivElement>({ open, onClose: requestClose })
 
   if (!open) return null
 
@@ -68,7 +74,7 @@ export function Modal({
     scrimArmed.current = e.target === e.currentTarget
   }
   const onScrimClick = (e: ReactMouseEvent<HTMLDivElement>): void => {
-    if (e.target === e.currentTarget && scrimArmed.current) onClose()
+    if (e.target === e.currentTarget && scrimArmed.current) requestClose()
     scrimArmed.current = false
   }
 
@@ -98,7 +104,8 @@ export function Modal({
             icon={X}
             aria-label={closeLabel}
             className="xeno-modal-close"
-            onClick={onClose}
+            disabled={dismissDisabled}
+            onClick={requestClose}
           />
         </div>
         <div className="xeno-modal-body">{children}</div>

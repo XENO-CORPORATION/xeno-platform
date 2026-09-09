@@ -56,6 +56,9 @@
  *
  * DEFAULT = separated, because `DESIGN_SYSTEM.md` §"Panel Structure" requires it.
  */
+/* Explicit scopes must resolve color aliases where their .xeno palette exists.
+   Root defaults alone resolve missing palette variables before inheritance. */
+[data-style='industrial'],
 :root {
   /* ── CHROME: construction, not colour ──────────────────────────────────────────────────────
    * A THIRD axis, orthogonal to `data-theme` (colour ramp) and `data-surface` (density). It has to

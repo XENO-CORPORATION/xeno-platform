@@ -292,7 +292,11 @@ test('workspace-bound reads discard stale responses and clear prior workspace co
   assert.match(projects, /const generation = \+\+loadGeneration\.current/);
   assert.match(projects, /activeWorkspaceId\.current !== workspaceId \|\| generation !== loadGeneration\.current/);
   assert.match(projects, /loadedWorkspaceId === activeWorkspace\?\.id/);
-  assert.ok((projects.match(/if \(activeWorkspaceId\.current !== workspaceId\) return/g) || []).length >= 3);
+  // Creation retains its workspace guard; modal actions additionally bind a
+  // selection generation. Their A→B→A and same-workspace races run in the DOM suite.
+  assert.match(projects, /if \(activeWorkspaceId\.current !== workspaceId\) return/);
+  assert.match(projects, /const stillCurrent = \(\) => activeWorkspaceId\.current === action\.workspaceId && loadGeneration\.current === generation && actionContext\.current\.generation === contextGeneration/);
+  assert.ok((projects.match(/if \(!stillCurrent\(\)\) return/g) || []).length >= 3);
 });
 test('unavailable usage remains unavailable instead of becoming a false zero', () => {
   assert.match(dashboardRoute, /const requests30d = usage \?[^;]+: null;/);

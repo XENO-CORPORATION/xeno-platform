@@ -192,7 +192,7 @@ router.get('/health', async (req, res) => {
     const dir = process.env.BACKUP_DIR || '/app/backups';
     const names = (await fsp.readdir(dir)).filter((n) => n.endsWith('.dump'));
     if (names.length === 0) {
-      checks.backup = { status: 'error', error: 'no dump found', dir };
+      checks.backup = { status: 'error', error: 'no dump found' };
     } else {
       let newest = 0;
       for (const name of names) {
@@ -206,7 +206,7 @@ router.get('/health', async (req, res) => {
   } catch (err) {
     // An unreadable or unmounted directory is itself worth surfacing — silence
     // here is precisely the failure mode this check exists to remove.
-    checks.backup = { status: 'unknown', error: String((err && err.code) || err) };
+    checks.backup = { status: 'unknown', error: 'backup_unavailable' };
   }
 
   /*
@@ -262,7 +262,7 @@ router.get('/health', async (req, res) => {
       secretBoxCache = { at: Date.now(), value: checks.secretbox };
     }
   } catch (err) {
-    checks.secretbox = { status: 'unknown', error: String((err && err.code) || err) };
+    checks.secretbox = { status: 'unknown', error: 'secretbox_unavailable' };
   }
 
   const uptimeSeconds = Math.floor((Date.now() - SERVER_START_TIME) / 1000);
