@@ -43,6 +43,14 @@ RUN rm -rf node_modules && \
 RUN mkdir -p uploads sam2-uploads storage conversions downloads src/server/uploads extractor-jobs && \
     chown -R appuser:appgroup uploads sam2-uploads storage conversions downloads src/server extractor-jobs
 
+# Which commit this image was built from, baked in LAST so a new SHA does not
+# invalidate the apk and npm layers above. Passed by scripts/remote-deploy.sh;
+# empty on a local build, which is why the value is written verbatim and the
+# server reports "unknown" rather than inventing one.
+ARG XENO_SOURCE_REVISION=""
+LABEL org.opencontainers.image.revision=$XENO_SOURCE_REVISION
+RUN printf '%s' "$XENO_SOURCE_REVISION" > /app/.xeno-revision &&     chown appuser:appgroup /app/.xeno-revision
+
 # SECURITY: Switch to non-root user
 USER appuser
 

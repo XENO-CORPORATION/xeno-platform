@@ -203,7 +203,12 @@ fi
 
 # --- 4. Build (build-before-swap — old container keeps serving) ------------
 log "building $SERVICE ..."
-build_dc build $NOCACHE "$SERVICE"
+# The deploy SHA is baked into the artifact, not just into an image TAG. A tag is
+# metadata on the registry side and the RUNNING container does not report it:
+# measured 2026-09-09, xenostudio-backend carried no revision label and no
+# revision file, so "which commit is live" was unanswerable from the box — and
+# every post-deploy gate is a claim about a revision nobody can name.
+build_dc build $NOCACHE --build-arg "XENO_SOURCE_REVISION=$SHA" "$SERVICE"
 docker tag "$IMAGE:latest" "$IMAGE:$SHA" || true
 NEW_ID="$(docker image inspect --format '{{.Id}}' "$IMAGE:latest" 2>/dev/null || echo unknown)"
 log "built $SERVICE -> $IMAGE:latest ($NEW_ID), also tagged :$SHA"

@@ -134,7 +134,11 @@ test('candidate images build only from the isolated git archive, never the mutab
   assert.match(remote, /tar xf "\$TAR" -C "\$CANDIDATE_ROOT"/);
   assert.doesNotMatch(remote, /tar xf "\$TAR" --overwrite/);
   assert.match(remote, /build_dc\(\).*--project-name xeno-platform.*--project-directory "\$CANDIDATE_ROOT".*"\$CANDIDATE_ROOT\/docker-compose\.yml"/);
-  assert.match(remote, /build_dc build \$NOCACHE "\$SERVICE"/);
+  // The build line gained --build-arg XENO_SOURCE_REVISION on 2026-09-09. What
+  // this assertion protects is the ISOLATION — that the build runs through
+  // build_dc, which is pinned above to the candidate directory — so it matches
+  // the parts that carry that meaning rather than the whole literal line.
+  assert.match(remote, /build_dc build \$NOCACHE .*"\$SERVICE"/);
   const installCompose = remote.indexOf('installed candidate Compose definition after image qualification');
   const dependencyGate = remote.indexOf('production dependency graph PASSED inside');
   const swap = remote.indexOf('dc up -d --no-deps --force-recreate "$SERVICE"');
@@ -168,8 +172,13 @@ test('extractor service and deploy PID limits remain consistent for production C
 
 test('every service extraction preserves hardened backend bind-mount ownership before any swap', () => {
   const ownershipGate = remote.indexOf('WRITABLE_MOUNTS=(');
-  const build = remote.indexOf('dc build $NOCACHE "$SERVICE"');
+  // Anchored on the invocation, not the whole argument list: the build line
+  // gained --build-arg XENO_SOURCE_REVISION and this silently became indexOf
+  // -1, which is the shape that makes an ordering assertion meaningless.
+  const build = remote.indexOf('build_dc build ');
   const swap = remote.indexOf('dc up -d --no-deps --force-recreate "$SERVICE"');
+  assert.ok(build >= 0, 'expected the candidate build invocation');
+  assert.ok(swap >= 0, 'expected the swap invocation');
   assert.ok(ownershipGate >= 0, 'expected an explicit writable-mount ownership gate');
   assert.ok(ownershipGate < build, 'bind mounts must be repaired before the candidate build completes');
   assert.ok(ownershipGate < swap, 'bind mounts must be repaired before the backend swap');
@@ -207,4 +216,33 @@ test('the scoped Web Context token is readable only by root and the backend runt
   assert.match(remote, /chown root:1001 "\$WEB_CONTEXT_TOKEN"/);
   assert.match(remote, /chmod 0440 "\$WEB_CONTEXT_TOKEN"/);
   assert.doesNotMatch(remote, /chmod 0?44[4-7] "\$WEB_CONTEXT_TOKEN"/);
+});
+
+/*
+ * "Which commit is live" was unanswerable from the box until 2026-09-09: the
+ * running backend image carried no revision label and no revision file, and the
+ * deploy SHA existed only as an image TAG, which a running container does not
+ * report. Every post-deploy gate, rollback decision and incident timeline is a
+ * claim about a revision — so the revision has to travel inside the artifact,
+ * not alongside it.
+ */
+test('the deploy bakes its SHA into the image, not just into a tag', () => {
+  const dockerfile = readFileSync(new URL('../Dockerfile.backend', import.meta.url), 'utf8');
+  const remote = readFileSync(new URL('./remote-deploy.sh', import.meta.url), 'utf8');
+  const health = readFileSync(new URL('../src/server/routes/healthRoutes.js', import.meta.url), 'utf8');
+
+  assert.match(dockerfile, /^ARG XENO_SOURCE_REVISION=/m, 'the image accepts a revision');
+  assert.match(dockerfile, /LABEL org\.opencontainers\.image\.revision=\$XENO_SOURCE_REVISION/,
+    'the standard label carries it, so `docker inspect` answers without running the container');
+  assert.match(dockerfile, /\.xeno-revision/, 'the running filesystem carries it too');
+  assert.match(remote, /--build-arg "XENO_SOURCE_REVISION=\$SHA"/,
+    'the deploy passes the SHA it already knows — it was tagging with it and throwing it away');
+  assert.match(health, /revision: sourceRevision\(\)/, 'the endpoint reports it');
+  assert.match(health, /'unknown'/,
+    'an unknown revision is reported as unknown; a fabricated one is worse than none');
+
+  // Baked LAST, or every commit invalidates the apk and npm layers above it.
+  const revisionAt = dockerfile.indexOf('ARG XENO_SOURCE_REVISION');
+  assert.ok(revisionAt > dockerfile.indexOf('npm ci'),
+    'the revision layer must come after the dependency install, not before it');
 });

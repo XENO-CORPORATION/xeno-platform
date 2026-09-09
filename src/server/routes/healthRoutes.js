@@ -9,6 +9,7 @@
 
 import { Router } from 'express';
 import Redis from 'ioredis';
+import fs from 'node:fs';
 import fsp from 'node:fs/promises';
 import nodePath from 'node:path';
 import { updatesOrigin } from '../config/hosts.js';
@@ -270,6 +271,7 @@ router.get('/health', async (req, res) => {
   res.status(overallStatus === 'ok' ? 200 : 503).json({
     status: overallStatus,
     timestamp: new Date().toISOString(),
+    revision: sourceRevision(),
     uptime: {
       seconds: uptimeSeconds,
       human: formatUptime(uptimeSeconds),
@@ -281,6 +283,28 @@ router.get('/health', async (req, res) => {
 // --------------------------------------------------------------------------
 // Helpers
 // --------------------------------------------------------------------------
+/*
+ * Which commit this build came from. Written by Dockerfile.backend from the
+ * --build-arg that scripts/remote-deploy.sh passes.
+ *
+ * Measured 2026-09-09: the running image carried no revision label and no
+ * revision file, so "which commit is live" could not be answered from the box
+ * at all — and every post-deploy gate, rollback decision and incident timeline
+ * is a claim about a revision nobody can name. A commit SHA is not a secret.
+ *
+ * Reported as 'unknown' when absent. A local or older build genuinely does not
+ * know, and saying so is the point: an invented value would be worse than none.
+ */
+let revisionCache;
+function sourceRevision() {
+  if (revisionCache === undefined) {
+    try {
+      revisionCache = fs.readFileSync('/app/.xeno-revision', 'utf8').trim() || 'unknown';
+    } catch { revisionCache = 'unknown'; }
+  }
+  return revisionCache;
+}
+
 function formatUptime(seconds) {
   const d = Math.floor(seconds / 86400);
   const h = Math.floor((seconds % 86400) / 3600);
