@@ -29,7 +29,7 @@ import { optOut } from '../services/emailPreferences.js';
 import { resolveOAuthLandingPath } from '../lib/onboardingHandoff.js';
 import { browserSessionCookies } from '../middleware/browserSession.js';
 import { issuePreviewSession } from '../middleware/previewSession.js';
-import { PREVIEW_MODE } from '../../lib/previewPolicy.mjs';
+import { PREVIEW_MODE } from '../lib/previewPolicy.mjs';
 import { creditsView, wholeCredits } from '../utils/accountViews.js';
 import {
   requireRegistrationOpen,

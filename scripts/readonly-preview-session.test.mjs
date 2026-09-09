@@ -21,7 +21,7 @@ import crypto from 'node:crypto';
 import express from 'express';
 import {
   PREVIEW_COOKIE, PREVIEW_CSRF_COOKIE, PREVIEW_MODE, previewOperation,
-} from '../src/lib/previewPolicy.mjs';
+} from '../src/server/lib/previewPolicy.mjs';
 import { previewSessionMiddleware } from '../src/server/middleware/previewSession.js';
 
 const WORKSPACE = '11111111-2222-4333-8444-555555555555';

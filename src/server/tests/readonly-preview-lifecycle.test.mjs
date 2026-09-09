@@ -34,7 +34,7 @@ import { databaseMiddleware } from '../middleware/database.js';
 import { browserSessionMiddleware } from '../middleware/browserSession.js';
 import { previewSessionMiddleware } from '../middleware/previewSession.js';
 import { runAllMigrations } from '../services/migrationRunner.js';
-import { PREVIEW_COOKIE, PREVIEW_CSRF_COOKIE, PREVIEW_MODE } from '../../lib/previewPolicy.mjs';
+import { PREVIEW_COOKIE, PREVIEW_CSRF_COOKIE, PREVIEW_MODE } from '../lib/previewPolicy.mjs';
 
 if (!process.env.DATABASE_URL) throw new Error('DATABASE_URL is required');
 const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL });

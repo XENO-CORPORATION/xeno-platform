@@ -1,6 +1,6 @@
 import crypto from 'node:crypto';
 import { PREVIEW_COOKIE, PREVIEW_CSRF_COOKIE, PREVIEW_MODE, PREVIEW_POLICY_VERSION,
-  PREVIEW_LIFETIME_SECONDS, previewOperation } from '../../lib/previewPolicy.mjs';
+  PREVIEW_LIFETIME_SECONDS, previewOperation } from '../lib/previewPolicy.mjs';
 
 const contexts = new WeakMap();
 export const previewPrincipal = req => contexts.get(req);
