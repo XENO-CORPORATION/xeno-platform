@@ -152,13 +152,33 @@ try {
     }
     return { container: containerId, port: connection.port };
   });
+// Every DB-backed suite under src/server/tests. Reachability is gated by
+// scripts/gates-are-reachable.test.mjs: eight of these ran nowhere at all until
+// 2026-09-09 — not here, not in CI, not from any npm script — including the DPoP
+// exchange, the OIDC authority policy and three ledger suites.
+// Deliberately NOT exported. Importing this file spins up Docker containers and
+// creates databases — running it IS the side effect — so the reachability gate
+// reads this array out of the source text instead of importing it.
+const BACKEND_SUITES = [
+  'ledger-v2', 'ledger-chain', 'ledger-billing', 'ledger-correctness',
+  'media-metering', 'wallet-service', 'authz-v2', 'oidc-v2', 'erasure',
+  'account-recovery', 'auth-token-confusion', 'api-key-auth', 'browser-bff-session',
+  'credit-mirror-drift', 'dpop-token-exchange', 'fresh-db-boot',
+  'ledger-audit-fixes', 'service-ledger',
+];
+
+const BACKEND_EVIDENCE = {
+  'browser-bff-session': 'browser BFF session: opaque cookie, no browser bearer, CSRF, and revocation passed',
+  'credit-mirror-drift': 'PASS: users.credits == round(credit_accounts.balance) for every account; no false lock-outs.',
+  'dpop-token-exchange': 'DPoP + broker token exchange: sender, actor, scope, lifetime, and replay gates passed',
+  'fresh-db-boot': 'RESULT: PASS',
+};
+
   if (backendOnly) {
     // Match the independently seeded CI suites: never share their minimal schemas.
     // No provider credentials are inherited, and registration opens only in these children.
     let failures = 0;
-    for (const suite of ['ledger-v2', 'ledger-chain', 'ledger-billing', 'ledger-correctness',
-      'media-metering', 'wallet-service', 'authz-v2', 'oidc-v2', 'erasure',
-      'account-recovery', 'auth-token-confusion', 'api-key-auth', 'browser-bff-session']) {
+    for (const suite of BACKEND_SUITES) {
       const database = `xeno_qual_${randomBytes(16).toString('hex')}`;
       await createDatabase(database);
       try {
@@ -167,11 +187,13 @@ try {
             env: { ...childEnvironment(process.env, scratch, urlFor(database)), REGISTRATION_OPEN: 'true' },
             cwd: scratch, timeout: 180_000, log: suite,
           });
-          if (suite === 'browser-bff-session') {
-            if (!output.includes('browser BFF session: opaque cookie, no browser bearer, CSRF, and revocation passed')) {
-              throw new Error('Missing BFF lifecycle success evidence');
-            }
-            return { lifecycle: 'passed' };
+          const evidence = BACKEND_EVIDENCE[suite];
+          if (evidence) {
+            // These suites predate the shared summary line. Requiring their exact
+            // positive sentence is what makes a SKIP distinguishable from a pass:
+            // credit-mirror-drift prints "SKIP: DATABASE_URL not set" and exits 0.
+            if (!output.includes(evidence)) throw new Error(`${suite}: missing success evidence`);
+            return { evidence: 'passed' };
           }
           return parseBackendSummary(output, 0, suite);
         });

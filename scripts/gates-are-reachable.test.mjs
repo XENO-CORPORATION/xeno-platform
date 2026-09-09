@@ -100,6 +100,50 @@ test('no *.test.mjs is ORPHANED — on disk but unreachable from npm test', () =
   );
 });
 
+test('no src/server/tests suite is ORPHANED — reachable from no runner at all', () => {
+  /* The gate above only ever looked at scripts/. Measured on 2026-09-09, EIGHT
+   * suites under src/server/tests were reachable from nothing — not the local
+   * qualifier, not a workflow, not an npm script: credit-mirror-drift,
+   * dpop-token-exchange, fresh-db-boot, hosts, ledger-audit-fixes,
+   * oidc-authority-policy, register-oidc-client and service-ledger. Two of the
+   * three ledger suites and the DPoP sender-constraint exchange are in that
+   * list, so "money and auth are covered" was true of the files and false of
+   * every runner.
+   *
+   * Three runners exist and a suite need only be named by one:
+   *   - the npm test chain (no database available),
+   *   - scripts/qualify-platform-local.mjs --backend-only (a real Postgres),
+   *   - a GitHub workflow.
+   * The qualifier's list is read as TEXT, never imported: importing that file
+   * starts Docker containers, so running it is the side effect. */
+  const qualifier = fs.readFileSync(path.join(ROOT, 'scripts/qualify-platform-local.mjs'), 'utf8');
+  const declared = qualifier.match(/const BACKEND_SUITES = \[([\s\S]*?)\];/);
+  assert.ok(declared, 'BACKEND_SUITES is no longer declared where this gate reads it');
+  const named = new Set([...declared[1].matchAll(/'([^']+)'/g)].map((m) => m[1]));
+
+  const workflowDir = path.join(ROOT, '.github/workflows');
+  const workflows = fs.existsSync(workflowDir)
+    ? fs.readdirSync(workflowDir).map((f) => fs.readFileSync(path.join(workflowDir, f), 'utf8')).join(' ')
+    : '';
+  const chain = Object.values(pkg.scripts).join(' ');
+
+  const orphans = fs
+    .readdirSync(path.join(ROOT, 'src/server/tests'))
+    .filter((f) => f.endsWith('.test.mjs'))
+    .map((f) => f.replace(/\.test\.mjs$/, ''))
+    .filter((suite) => !named.has(suite)
+      && !workflows.includes(`${suite}.test.mjs`) && !workflows.includes(`"${suite} `)
+      && !workflows.includes(` ${suite} `) && !workflows.includes(` ${suite}"`)
+      && !chain.includes(`${suite}.test.mjs`));
+
+  assert.deepEqual(
+    orphans,
+    [],
+    `backend suites no runner executes: ${orphans.join(', ')}. Name each in ` +
+      `BACKEND_SUITES, a workflow, or the npm chain — a suite nobody runs is not coverage.`,
+  );
+});
+
 test('the chain has not silently shrunk', () => {
   /* A floor, not an equality. Equality would fail on every legitimate
    * addition and teach people to edit the number without reading why.
