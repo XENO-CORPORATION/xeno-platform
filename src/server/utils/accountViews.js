@@ -19,10 +19,12 @@ export async function creditsView(db, userId) {
     'SELECT balance, lifetime_earned, lifetime_spent, is_frozen FROM credit_accounts WHERE user_id = $1',
     [userId],
   )).rows[0] || {};
+  if (db.previewReadOnly && acct.balance === undefined) throw new Error('Credit account is not initialized');
   // getBalanceV2 gives the authoritative available balance (and lazily seeds the
   // row from the legacy mirror if the account has none yet).
   let availableMicro = acct.balance ?? 0;
-  try { const b = await getBalanceV2(db, userId); availableMicro = b.availableMicro ?? availableMicro; } catch { /* fall back to the row */ }
+  try { const b = await getBalanceV2(db, userId); availableMicro = b.availableMicro ?? availableMicro; }
+  catch (error) { if (db.previewReadOnly) throw error; /* legacy views retain their row fallback */ }
   return {
     balance: whole(availableMicro),
     lifetime_earned: whole(acct.lifetime_earned),

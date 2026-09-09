@@ -34,7 +34,7 @@ pool.on('error', (err) => {
  * Database middleware - adds db connection to request object
  */
 export const databaseMiddleware = (req, res, next) => {
-  req.db = pool;
+  req.db = req.previewReadDb || pool;
   next();
 };
 

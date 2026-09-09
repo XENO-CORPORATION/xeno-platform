@@ -440,7 +440,7 @@ async function setPlan(pool, userId, { plan, status, subId = null, periodEnd = n
 
 /** The user's effective plan (active sub → its plan; otherwise free). */
 export async function getPlan(pool, userId) {
-  await ensureSchema(pool);
+  if (!pool.previewReadOnly) await ensureSchema(pool);
   const r = await pool.query(
     'SELECT plan, status, current_period_end FROM xeno_account_plans WHERE user_id = $1',
     [String(userId)],

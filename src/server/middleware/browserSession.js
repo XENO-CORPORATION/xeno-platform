@@ -46,7 +46,7 @@ export function browserSessionMiddleware(pool) {
         `SELECT us.id AS sid, us.user_id, bss.csrf_hash
            FROM user_sessions us
            JOIN browser_session_state bss ON bss.sid = us.id
-          WHERE us.token_hash = $1 AND us.expires_at > NOW()
+          WHERE us.token_hash = $1 AND us.expires_at > NOW() AND bss.purpose = 'standard'
           LIMIT 1`,
         [digest(sessionToken)],
       );

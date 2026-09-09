@@ -5,6 +5,7 @@
 
 import jwt from 'jsonwebtoken';
 import crypto from 'crypto';
+import { previewPrincipal } from './previewSession.js';
 import {
   getKeyByKid, isAccessToken, isOidcSessionActive, ACCESS_TOKEN_AUDIENCE, ACCESS_TOKEN_TYP,
 } from '../utils/oidcProvider.js';
@@ -116,6 +117,8 @@ async function resolveApiKeyUser(req, rawKey) {
  * @returns {{ user: object } | { status: number, error: string }}
  */
 export async function resolveAuthedUser(req) {
+  const preview = previewPrincipal(req);
+  if (preview) return { user: preview.user, auth: { kind: 'preview', sid: preview.sid } };
   const token = req.headers.authorization?.replace(/^(?:Bearer|DPoP)\s+/i, '');
   if (!token) return { status: 401, error: 'Authentication token required' };
 

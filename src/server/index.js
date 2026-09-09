@@ -89,6 +89,7 @@ import { oidcAuth } from './middleware/oidcAuth.js';
 import { discovery as oidcDiscovery } from './utils/oidcProvider.js';
 import { databaseMiddleware } from './middleware/database.js';
 import { browserSessionMiddleware } from './middleware/browserSession.js';
+import { previewSessionMiddleware } from './middleware/previewSession.js';
 import blogRoutes from './routes/blogRoutes.js';
 import learnRoutes from './routes/learnRoutes.js';
 import forumRoutes from './routes/forumRoutes.js';
@@ -216,6 +217,8 @@ const upload = multer({
 
 // Create Express app with increased limits for image processing
 const app = express();
+// Preview authority is checked before normalization, logging and every router.
+app.use(previewSessionMiddleware(pool));
 const PORT = process.env.BACKEND_PORT || 8090;
 const JWT_DEFAULT_SECRET = 'xenostudio-super-secret-jwt-key-change-in-production';
 const JWT_SECRET = process.env.JWT_SECRET || JWT_DEFAULT_SECRET;

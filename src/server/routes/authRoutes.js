@@ -28,6 +28,8 @@ import { describeClient } from '../utils/userAgent.js';
 import { optOut } from '../services/emailPreferences.js';
 import { resolveOAuthLandingPath } from '../lib/onboardingHandoff.js';
 import { browserSessionCookies } from '../middleware/browserSession.js';
+import { issuePreviewSession } from '../middleware/previewSession.js';
+import { PREVIEW_MODE } from '../../lib/previewPolicy.mjs';
 import { creditsView, wholeCredits } from '../utils/accountViews.js';
 import {
   requireRegistrationOpen,
@@ -413,6 +415,10 @@ function wantsBrowserSession(req) {
 }
 
 async function issueLoginCredential(db, user, req, res) {
+  if (req.get('x-xeno-session-mode') === PREVIEW_MODE) {
+    await issuePreviewSession(db, user, req, res);
+    return null;
+  }
   if (wantsBrowserSession(req)) {
     await issueBrowserSession(db, user, req, res);
     return null;

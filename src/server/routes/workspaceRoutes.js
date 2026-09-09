@@ -237,7 +237,7 @@ router.patch('/:id', wrapId(async (req, res) => {
 
 // GET /api/workspaces — the caller's workspaces (auto-creates a personal one).
 router.get('/', wrap(async (req, res) => {
-  await ensurePersonalWorkspace(req.db, req.user);
+  if (!req.db.previewReadOnly) await ensurePersonalWorkspace(req.db, req.user);
   const rows = (await req.db.query(
     `SELECT DISTINCT w.* FROM workspaces w
        JOIN relationship_tuples rt
