@@ -151,11 +151,34 @@ Nothing below is a code task; none of it can be completed from this session.
 7. **The six mailboxes** still outstanding from 2026-09-06: `privacy@`, `security@`,
    `dpo@`, `billing@`, `support@`, `team@` (only `legal@` exists).
 
-## 7. Recommended next code task, before any deployment
+## 7. The deployed artifact now carries its own revision
 
-Stamp the deployed artifact with its source revision. Today the running image
-carries no label and no revision file, so "which commit is live" is unanswerable —
-and every remaining gate in REL-1 (deployed smoke, rollback, post-deploy
-verification) is a claim about a revision nobody can name. It is a one-line
-`--label org.opencontainers.image.revision` in the build plus an assertion in
-`deploy-platform.mjs`, and it makes every later step verifiable instead of asserted.
+Done in this pass rather than recommended. The deploy already knew the SHA — it
+passes `--sha` to `remote-deploy.sh` and tags the image with it — and then threw it
+away, because a tag is registry-side metadata that a running container does not
+report.
+
+It now travels inside the artifact: a `--build-arg`, the standard
+`org.opencontainers.image.revision` label so `docker inspect` answers without
+running anything, and `/app/.xeno-revision` so the process can report its own
+identity. `GET /api/health` returns it. Baked in the last layer, asserted, so a new
+commit does not invalidate the apk and npm layers above it. An absent revision
+reports `unknown` — a local build genuinely does not know, and an invented value
+would be worse than none.
+
+This is a prerequisite for the rest of REL-1, not a nicety: deployed smoke,
+rollback and post-deploy verification are all claims about a revision, and until
+now none of them could name one. **The next deploy is what makes it true of
+production**; the currently running image still carries nothing.
+
+## 8. Verification for this pass
+
+- Default regression: **1,553 tests, 1,530 passed, 0 failed, 23 environment skips.**
+- Backend qualification (real PostgreSQL, isolated containers): **19/19 suites,
+  `passed-local-only`, zero failures** — up from 13 suites before this pass.
+- TypeScript and the reachability, import-boundary and deploy gates all clean.
+- Every new gate was proven to fail before being trusted: five mutations on the
+  preview boundary, two on the lifecycle suite, one on backend-suite reachability,
+  one on the image-import boundary, two on the revision stamping.
+
+None of it is deployed. No production state was changed by this session.
