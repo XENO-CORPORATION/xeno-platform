@@ -164,7 +164,7 @@ const BACKEND_SUITES = [
   'media-metering', 'wallet-service', 'authz-v2', 'oidc-v2', 'erasure',
   'account-recovery', 'auth-token-confusion', 'api-key-auth', 'browser-bff-session',
   'credit-mirror-drift', 'dpop-token-exchange', 'fresh-db-boot',
-  'ledger-audit-fixes', 'service-ledger',
+  'ledger-audit-fixes', 'service-ledger', 'readonly-preview-lifecycle',
 ];
 
 const BACKEND_EVIDENCE = {
@@ -172,6 +172,7 @@ const BACKEND_EVIDENCE = {
   'credit-mirror-drift': 'PASS: users.credits == round(credit_accounts.balance) for every account; no false lock-outs.',
   'dpop-token-exchange': 'DPoP + broker token exchange: sender, actor, scope, lifetime, and replay gates passed',
   'fresh-db-boot': 'RESULT: PASS',
+  'readonly-preview-lifecycle': 'readonly-preview-lifecycle: read purity, no lazy writes',
 };
 
   if (backendOnly) {

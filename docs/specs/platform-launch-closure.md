@@ -228,3 +228,43 @@ unvalidated content-credential blocks, which are leads rather than rights proof.
 ScanCode, Syft and tracked snippet coverage completed; ORT timed out and its owned
 container cleanup passed. No untracked-WIP or public-release clearance is claimed.
 Full [registration evidence and remaining actions](../release-evidence/2026-09-05-generated-asset-registration.md).
+
+## Continuation 2026-09-09 — candidate reconciliation, unreachable gates, preview qualification
+
+Full receipt: [2026-09-09 launch continuation](../release-evidence/2026-09-09-launch-continuation.md).
+
+The candidate did not contain the 09-08 repairs (it branched a day earlier), and that
+work was still uncommitted. Both are fixed: preserved as `e86b719`, ported as `be9ddcd`.
+
+**Eight suites under `src/server/tests/` were reachable from no runner** — not the npm
+chain, not the qualifier, not any workflow — including `dpop-token-exchange`,
+`service-ledger` and `ledger-audit-fixes`. All eight are wired now; two were broken and
+are repaired (`fresh-db-boot` asserted an 82-table production snapshot against a
+205-table schema; `credit-mirror-drift` reported a pass having audited nothing).
+`gates-are-reachable` now covers that directory, mutation-checked.
+
+**DATA-1 addendum:** the qualifier itself was intermittently red on green assertions.
+Five suites called `process.exit()` while libuv was still closing handles, aborting the
+process *after* a clean run — `authz-v2` did it in 2 of 5 runs. A launch gate that is red
+at random gets ignored, so this is a gate-integrity defect, not a test-tidiness one.
+Fixed by setting `process.exitCode` and letting the loop drain; verified 8/8 and 3/3 per
+suite.
+
+**AUTH-preview (new row):** server-enforced read-only preview sessions are implemented
+and locally qualified — 18 HTTP tests mutation-checked five ways, plus a real-Postgres
+lifecycle suite in the qualifier. Off by default; **not deployed and not authorised for
+deployment**. The Postgres suite found a defect no fake could: a `timestamp` /
+`timestamptz` round-trip through JavaScript made every preview session expire at the
+moment it was issued on any host east of UTC.
+
+**Production measured read-only today**, correcting three assumptions in the rows above:
+`STRIPE_AUTOMATIC_TAX=true` and `SUBJECT_HASH_SECRET` are set in production, so the local
+preflight's blocker and one advisory are local-env artefacts. But production runs **test**
+Stripe keys, `STRIPE_EXPECTED_ACCOUNT_ID` / `STRIPE_EXPECTED_MODE` are **unset** so the
+account-binding guard is inert there, the deployed image carries **no source revision**,
+and **signup has been closed since 2026-08-29** (`REGISTRATION_OPEN_UNTIL=2026-08-28`,
+verified live at 403 `registration_closed`).
+
+**HIER-1 stays blocked, verified rather than assumed:** `xeno-agent-interface` holds 49
+uncommitted files on `chore/xenosystem-scope-adopt`, untouched since 2026-08-26. The
+blocker is coordination with that session's owner.

@@ -18,7 +18,17 @@ import * as accountV2 from '../database/migrate-account-v2.js';
 
 const migrateAccountV2 = accountV2.migrateAccountV2 || accountV2.default;
 
-// Authoritative prod table set (pg_dump --schema-only of xenostudio, PG 15.17).
+// Production's table set as of the pg_dump this was written from (PG 15.17).
+//
+// It is a FLOOR, not an equality. Read as equality it asserted "the schema has
+// exactly these 82 tables", which is a MEASUREMENT -- and by 2026-09-09 the
+// schema had 205, so the suite could only fail. It had never run: nothing
+// referenced it, so nothing ever reported the rot.
+//
+// The two properties worth gating survive and are now checked properly:
+//   - every table production has is creatable from an empty database (missing),
+//   - a second boot changes nothing (compared between the two boots, exactly).
+// Growth is reported, never failed; a new migration is not a regression.
 const EXPECTED = ["analytics_daily_stats","analytics_events","api_jobs","api_keys","api_usage_logs","background_jobs","billing_customers","billing_events","billing_payment_transactions","billing_project_policies","billing_projects","billing_subscriptions","billing_workspace_budgets","billing_workspace_members","billing_workspaces","blog_posts","chat_conversations","chat_messages","chat_personas","chat_share_acceptances","chat_shared_conversations","containers","credit_accounts","credit_grants","credit_holds","credit_transactions","email_logs","email_verifications","external_api_keys","external_identity_links","image_assets","image_generations","image_project_sessions","image_projects","inhouse_daily_usage","ledger_compensation_failures","marketplace_app_reviews","marketplace_creator_earnings","marketplace_developer_api_keys","marketplace_developers","marketplace_entitlements","marketplace_listing_pricing","marketplace_listing_versions","marketplace_listings","marketplace_payouts","marketplace_submissions","marketplace_transactions","oauth_accounts","oauth_authorization_codes","oauth_clients","oauth_device_codes","oauth_refresh_tokens","office_canvas_collaborators","office_canvases","oidc_signing_keys","password_resets","pricing_tiers","rate_limits","relationship_tuples","schema_migrations","security_events","spend_caps","tutorials","user_files","user_sessions","user_settings","user_usage","users","webhook_deliveries","webhooks","workspace_audit","workspace_invites","workspaces","xeno_account_plans","xeno_remote_run_events","xeno_remote_runs","youtube_analytics_cache","youtube_channel_group_members","youtube_channel_groups","youtube_channel_languages","youtube_channels","youtube_daily_snapshots","youtube_oauth_states","youtube_videos_cache"];
 
 async function tableSet(pool) {
@@ -43,8 +53,8 @@ function diff(actual) {
   const a = new Set(actual);
   const e = new Set(EXPECTED);
   const missing = EXPECTED.filter(t => !a.has(t));
-  const extra = actual.filter(t => !e.has(t));
-  return { missing, extra };
+  const added = actual.filter(t => !e.has(t));
+  return { missing, added };
 }
 
 async function main() {
@@ -55,10 +65,9 @@ async function main() {
     await runSequence(pool, 'FIRST BOOT');
     const after1 = await tableSet(pool);
     const d1 = diff(after1);
-    console.log(`\n[FIRST BOOT] public tables: ${after1.length} (expected ${EXPECTED.length})`);
+    console.log(`\n[FIRST BOOT] public tables: ${after1.length} (baseline ${EXPECTED.length}, added since ${d1.added.length})`);
     console.log(`[FIRST BOOT] missing: ${JSON.stringify(d1.missing)}`);
-    console.log(`[FIRST BOOT] extra:   ${JSON.stringify(d1.extra)}`);
-    const pass1 = after1.length === EXPECTED.length && d1.missing.length === 0 && d1.extra.length === 0;
+    const pass1 = d1.missing.length === 0;
     console.log(`[FIRST BOOT] ${pass1 ? 'PASS ✅' : 'FAIL ❌'}`);
     ok = ok && pass1;
 
@@ -66,10 +75,16 @@ async function main() {
     await runSequence(pool, 'SECOND BOOT');
     const after2 = await tableSet(pool);
     const d2 = diff(after2);
-    console.log(`\n[SECOND BOOT] public tables: ${after2.length} (expected ${EXPECTED.length})`);
+    console.log(`\n[SECOND BOOT] public tables: ${after2.length} (baseline ${EXPECTED.length}, added since ${d2.added.length})`);
     console.log(`[SECOND BOOT] missing: ${JSON.stringify(d2.missing)}`);
-    console.log(`[SECOND BOOT] extra:   ${JSON.stringify(d2.extra)}`);
-    const pass2 = after2.length === EXPECTED.length && d2.missing.length === 0 && d2.extra.length === 0;
+    // Idempotency is an EXACT check between the two boots -- the property this
+    // suite exists for, and unlike a snapshot of production it cannot rot.
+    const drift = [
+      ...after2.filter(t => !after1.includes(t)).map(t => `+${t}`),
+      ...after1.filter(t => !after2.includes(t)).map(t => `-${t}`),
+    ];
+    console.log(`[SECOND BOOT] change vs first boot: ${JSON.stringify(drift)}`);
+    const pass2 = d2.missing.length === 0 && drift.length === 0;
     console.log(`[SECOND BOOT] ${pass2 ? 'PASS ✅ (no already-exists errors)' : 'FAIL ❌'}`);
     ok = ok && pass2;
   } catch (err) {

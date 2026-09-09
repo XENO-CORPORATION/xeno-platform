@@ -27,12 +27,22 @@ export async function issuePreviewSession(db, user, req, res) {
   let expires;
   try {
     await client.query('BEGIN');
-    const result = await client.query(`INSERT INTO user_sessions (id,user_id,token_hash,expires_at,user_agent)
-      VALUES ($1,$2,$3,NOW() + $4 * INTERVAL '1 second',$5) RETURNING expires_at`,
+    await client.query(`INSERT INTO user_sessions (id,user_id,token_hash,expires_at,user_agent)
+      VALUES ($1,$2,$3,NOW() + $4 * INTERVAL '1 second',$5)`,
       [sid, user.id, hash(token), PREVIEW_LIFETIME_SECONDS, req.get('user-agent')]);
-    expires = result.rows[0].expires_at;
-    await client.query(`INSERT INTO browser_session_state(sid,csrf_hash,purpose,absolute_expires_at)
-      VALUES ($1,$2,'preview_readonly',$3)`, [sid, hash(csrf), expires]);
+    /* Both deadlines are computed by the DATABASE, from one clock, and the cap
+     * is read back from its own timestamptz column.
+     *
+     * The first version carried user_sessions.expires_at through JavaScript into
+     * this row. That column is `timestamp WITHOUT time zone` while this one is
+     * `timestamptz`, so the value was written as local wall-clock, parsed back as
+     * a local Date, and re-stored as an instant — losing the UTC offset. On any
+     * host east of UTC that made a 60-minute session expire the moment it was
+     * issued; on a UTC box the two agreed and it looked correct. */
+    const state = await client.query(`INSERT INTO browser_session_state(sid,csrf_hash,purpose,absolute_expires_at)
+      VALUES ($1,$2,'preview_readonly',NOW() + $3 * INTERVAL '1 second') RETURNING absolute_expires_at`,
+      [sid, hash(csrf), PREVIEW_LIFETIME_SECONDS]);
+    expires = state.rows[0].absolute_expires_at;
     await client.query('COMMIT');
   } catch (error) { await client.query('ROLLBACK').catch(() => {}); throw error; }
   finally { client.release(); }

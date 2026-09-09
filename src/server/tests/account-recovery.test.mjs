@@ -165,8 +165,17 @@ async function main() {
   ok((await pool.query('SELECT count(*)::int n FROM email_verifications WHERE user_id=$1', [id1])).rows[0].n === beforeV + 1, 'resend-verification issued a fresh token');
 
   console.log(`\n${fail === 0 ? '✅' : '❌'} account-recovery: ${pass} passed, ${fail} failed`);
-  server.close();
+  // Await the close, and drop keep-alive sockets first. An unawaited
+  // server.close() followed by pool.end() and process.exit() aborts inside
+  // libuv on Windows -- "Assertion failed: !(handle->flags & UV_HANDLE_CLOSING)"
+  // -- AFTER every assertion has passed, so a green suite is recorded as a
+  // failed one. Intermittent, which is worse: a launch gate that is red at
+  // random gets ignored.
+  server.closeAllConnections?.();
+  await new Promise((resolve) => server.close(resolve));
   await pool.end();
-  process.exit(fail === 0 ? 0 : 1);
+  // Set the code and let the loop drain. process.exit() races libuv's handle
+  // teardown and aborts AFTER every assertion has passed.
+  process.exitCode = fail === 0 ? 0 : 1;
 }
 main().catch((e) => { console.error('FATAL', e); process.exit(1); });

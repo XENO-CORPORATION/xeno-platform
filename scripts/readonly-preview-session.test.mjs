@@ -11,7 +11,7 @@
  * Everything here runs over real HTTP against the real middleware. The database
  * is the only synthetic part; the real-Postgres lifecycle (rotation under
  * concurrency, absolute expiry, read purity against live tables) is
- * src/server/tests/readonly-preview-session.test.mjs, which the local qualifier
+ * src/server/tests/readonly-preview-lifecycle.test.mjs, which the local qualifier
  * runs against a real server.
  */
 
