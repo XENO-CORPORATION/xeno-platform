@@ -141,7 +141,7 @@
     "qualify:platform-local": "node scripts/qualify-platform-local.mjs",
     "qualify:backend-local": "node scripts/qualify-platform-local.mjs --backend-only",
     "compliance:refresh-npm-licenses": "node scripts/refresh-npm-license-evidence.mjs",
-    "test:compliance-license-evidence": "node scripts/npm-license-evidence.test.mjs && node --test scripts/generated-asset-evidence.test.mjs"
+    "test:compliance-license-evidence": "node scripts/npm-license-evidence.test.mjs && node --test scripts/generated-asset-evidence.test.mjs scripts/recovered-package-licenses.test.mjs"
   },
   "dependencies": {
     "@babel/standalone": "^7.29.7",
