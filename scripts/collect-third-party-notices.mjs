@@ -5,6 +5,7 @@ import { lockedPackageEvidence, sha256 } from './lib/npm-package-evidence.mjs';
 import { upstreamNotices } from './lib/npm-upstream-notices.mjs';
 import { recordedFirstPartyPackage } from './lib/first-party-package-evidence.mjs';
 import { hasReferencedLicense, referencedPackageLicense } from './lib/referenced-package-licenses.mjs';
+import { recoveredLicense } from './lib/recovered-package-licenses.mjs';
 
 export function bundledNoticeTexts(files) {
   const named = files.filter((file) => /\/(?:licen[cs]e|copying|notice|copyright)(?:[._-].*)?$/i.test(file.path));
@@ -58,6 +59,10 @@ export async function collectNotices(root) {
           continue;
         }
         let files = bundledNoticeTexts(pack.files);
+        if (!files.length) {
+          const recovered = recoveredLicense(name, item, pack.manifest);
+          if (recovered) { files = recovered.files; record.recoveredSource = recovered.provenance; }
+        }
         if (!files.length && hasReferencedLicense(name)) {
           const detailed = await lockedPackageEvidence(item, name, path.join(root, '.compliance/npm-tarballs'), { includeLicenseHeaders: true });
           const referenced = referencedPackageLicense(name, item, detailed.manifest, detailed.licenseHeaders);

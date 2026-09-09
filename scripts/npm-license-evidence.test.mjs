@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import './recovered-package-licenses.test.mjs';
 import { createHash } from 'node:crypto';
 import { createRequire } from 'node:module';
 import { readFile, mkdtemp, writeFile, rm, rmdir } from 'node:fs/promises';
