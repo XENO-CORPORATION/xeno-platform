@@ -51,3 +51,50 @@ emitted id into `billingService.js` is required before this API-created portal
 policy is the runtime authority. The webhook receipt contains the
 `STRIPE_WEBHOOK_SECRET` value and must be copied through the approved secret-store
 workflow without printing it.
+
+## Measured state — 2026-09-10
+
+Read-only inventory of `acct_1TwgCrLBe83UKv9x`, taken today with the live secret
+key from `~/.xeno-secrets`:
+
+| | |
+|---|---|
+| account | `charges_enabled: true`, `payouts_enabled: true`, DE, default currency EUR |
+| products | **0** |
+| prices | **0** |
+| webhook endpoints | **0** |
+| portal configurations | **0** |
+
+The account is fully activated and completely empty. The offline plan resolves to
+**10 EUR prices**, one webhook at `https://xenostudio.ai/api/billing/webhook`
+carrying 11 events, and one portal configuration returning to `/overview/billing`.
+
+**Stage 1 was attempted on 2026-09-10 and refused, correctly, writing nothing.**
+The inventory above was re-taken afterwards and is unchanged — zero of everything —
+so the refusal happened before the first mutation, as designed.
+
+The refusal is `live_publishable_key_required`: `provisionLiveSetup` demands a
+strict `pk_live_` **before** it creates anything. That ordering is the useful part.
+The publishable key exists only in the Stripe dashboard — no API returns it — so
+without that check the tool would happily create ten live prices, a live webhook
+and a portal config, and then leave the operator unable to complete the cutover.
+It refuses to start a migration it cannot finish.
+
+🔴 **So the single blocking input is `pk_live_…` from Developers → API keys.** It is
+not a secret: a publishable key is embedded in client-side JavaScript by design and
+is safe to paste. The live *secret* key is already in `~/.xeno-secrets` as
+`STRIPE_XENOSYSTEM_LIVE_KEY`.
+
+### What production carries today
+
+Measured inside the container, not read from `.env`:
+
+`sk_test_` / `pk_test_`, a webhook secret, all ten `STRIPE_PRICE_*`,
+`STRIPE_AUTOMATIC_TAX=true`, and `DISPUTE_ALERT_EMAIL=billing@xenostudio.ai`
+(that mailbox now exists — created 2026-09-06).
+
+**Unset, and each one is a guard that is therefore not running:**
+`STRIPE_EXPECTED_ACCOUNT_ID`, `STRIPE_EXPECTED_MODE`,
+`STRIPE_BILLING_PORTAL_CONFIGURATION`. Nothing currently pins which Stripe account
+or mode the deployed backend may use. Set all three as part of the cutover, not
+after it — the point of the pin is to be in place before the keys change.
