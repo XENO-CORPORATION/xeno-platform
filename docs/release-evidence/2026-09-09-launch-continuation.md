@@ -279,3 +279,132 @@ would have quietly admitted the next real one.
 - Prerendering survived the deploy — `/product/canvas` serves 6,673 bytes with its own
   `<title>`, against the 4,936-byte SPA shell. Checked by **content**, because this SPA
   answers 200 for paths that do not exist and a status code proves nothing here.
+
+---
+
+## 10. Continuation, 2026-09-10 (second pass) — payload and licence evidence
+
+### PERF-1: the entry chunk is 1.44 MB, down from 2.99 MB
+
+The first PERF-1 implementation took the entry from 7.17 MB to 2.99 MB by
+deferring the workspace and creative routes. This pass took it to **1,444,418
+bytes raw / 366,151 gzip / 294,123 brotli** — 1.55 MB off the payload every
+first-time visitor downloads before anything renders.
+
+It began with a measurement rather than a guess, and that mattered: the answer
+was not where a guess would have pointed. `scripts/entry-chunk-inventory.mjs`
+reads rollup's own module accounting through the REAL `vite.config.ts`, so it
+reports the build that actually ships:
+
+| bytes | package |
+| --- | --- |
+| 599,560 | katex |
+| 319,193 | framer-motion |
+| 273,415 | parse5 (via rehype-raw) |
+| 112,452 | react-syntax-highlighter |
+| ~400,000 | unified / micromark / mdast / hast |
+| ~500,000 | all sixteen `src/content/docs/*.ts` |
+
+None of it is reachable from the homepage, and every byte of it was on the
+homepage. Two independent causes, and the first is the more interesting one:
+
+- **`ProductLanding` asked `getProductDocs(slug)` for one boolean** — does this
+  product have documentation? — and that import pulls the docs registry, which
+  imports all sixteen content modules. Half a megabyte of prose on the
+  most-visited route on the site, to evaluate a `!!`. Nothing failed. The page
+  was correct, every test was green, and the only symptom was a number nobody
+  was looking at. It now asks `src/content/docs/_slugs.ts`, which imports
+  nothing.
+- The docs and forum routes were eager, so the whole markdown toolchain shipped
+  to every visitor. Eleven routes now go through the existing `lazyRoute`.
+
+**`/` stays eager deliberately.** Deferring the route a first-time visitor
+actually lands on trades a smaller download for a blank frame plus a second
+round trip, which is worse on exactly the connection this is meant to help.
+`/v1` and `/v2` are preserved older homepages and are not that route.
+
+Total emitted JavaScript is unchanged at 13.9 MB. The code moved; it did not
+vanish — and the smoke asserts both halves of that, so a build with the code
+simply deleted could not pass.
+
+### Three gates, because the win is easy to lose by accident
+
+- **`scripts/check-entry-budget.mjs`**, wired into `npm run build` immediately
+  after `vite build`, because that is the only place the OUTCOME exists. A
+  source-level rule ("these routes must stay lazy") is a MECHANISM, and this
+  repo has already shipped a gate that pinned a mechanism while the mechanism
+  itself was the bug. Fails over budget; fails when there is no build at all,
+  rather than passing on nothing.
+- **`scripts/docs-slug-registry.test.mjs`**. `_slugs.ts` is a hand-written copy
+  of a derived fact, which is the shape that rots, so the comparison runs in
+  BOTH directions: a product with docs missing from the list is a link that
+  never appears; one in the list without docs is a link to a 404.
+- **`scripts/smoke-route-render.mjs`** (release-time — it needs a served build).
+  Drives the real bundle in a real browser and asserts the Suspense fallback is
+  gone, the route's own content is on screen, and katex is ABSENT from `/` while
+  ProductDocs, DocsSearch, katex and the highlighter themes arrive on
+  `/docs/hub`. Swapping those two expectations turns both red; `/` fetches
+  exactly one chunk.
+
+Verified against **production** after deploying, not only locally: every route
+renders and the deferred chunks arrive on demand.
+
+One existing gate had to be repaired, and it went red for the right reason with
+the wrong assertion. `scripts/forum-moderation-ui.test.mjs` required the literal
+eager import line, so it failed a change that left the page exactly as reachable
+and faster. It now checks the two things it always claimed to — App reaches the
+module, the module is bound to the URL — and is verified red both when the route
+is removed and when the module becomes unreachable.
+
+### Licence evidence: six unresolved packages now have six stated reasons
+
+`scripts/recover-package-license.mjs` attempts the recovery mechanically:
+verified tarball -> declared repository -> immutable commit -> a shipped file
+that hashes **identically** at that commit -> the licence text there.
+
+**The byte match is the whole point.** Text from a repository is evidence for a
+published artifact only if the two are shown to be the same code. Without it, a
+record asserts "a licence exists in a repository that shares a name with this
+package" — which is not a fact about what we ship, and is indistinguishable from
+one that is.
+
+Its success path is proven rather than assumed: `--verify` rebuilds an existing
+record and requires agreement, and it reproduces **both** hand-made records
+exactly — `boolbase@1.0.0` and `tr46@0.0.3`, integrity, commit, licence text and
+the overlapping runtime proof. Without that this would be a builder whose happy
+path had never once run.
+
+None of the six recovered, and each failed differently:
+
+| package | blocker |
+| --- | --- |
+| `dingbat-to-unicode@1.0.1` | built `dist`; nothing matches tag `js-1.0.1` |
+| `eastasianwidth@0.2.0` | **binding FOUND** (`0f2098de`, 2017-12-28) — the licence file was added 2024-06-05 |
+| `guid-typescript@1.0.9` | repo moved to `snico-dev`, no tags, no licence at all |
+| `highlightjs-vue@1.0.0` | built `dist`, plus CC0-1.0 declared against a BSD-3-Clause repository |
+| `react-remove-scroll-bar@2.3.8` | upstream tags stop at v2.3.7; 2.3.8 is untagged |
+| `split-ca@1.0.1` | tag resolves (`4fb87455`); no licence has ever existed upstream — and the repo is `bushong1`, not the `Tarnasa` the packet guessed |
+
+`eastasianwidth` is the one worth reading twice: **the bytes are bound and a
+record was still not written**, because pairing 2024 licence text with 2017
+bytes is the precise claim this evidence store exists to prevent. It is a human
+question, and it is now recorded as one rather than as a silence.
+
+A false negative was fixed on the way: the licence-filename list missed
+`MIT-LICENSE.txt`, so `eastasianwidth` read as "no licence anywhere" when the
+repository has one. A refusal that says "no licence file" is worth checking by
+eye before believing.
+
+**No determination is signed.** The packet still reads
+`awaiting-human-source-and-rights-evidence`, because it should.
+
+### Verification for this pass
+
+- `npm test`: **1,595 tests, 1,573 passed, 0 failed, 22 environment skips.**
+- `tsc --noEmit` clean.
+- Every new gate mutation-checked: two directions on the slug registry, an
+  under-budget and a no-build case on the entry budget, a swap of both chunk
+  expectations on the route smoke, three softenings on the licence builder, and
+  two on the repaired routing gate.
+- Deployed: frontend `e80af0c`, verified from the CDN and by driving production
+  in a browser.
