@@ -317,9 +317,30 @@ async function hashPassword(password) {
 const ABSENT_PASSWORD_HASH = bcrypt.hashSync(crypto.randomBytes(32).toString('hex'), 10);
 
 /**
+ * Does this stored value represent a password the user actually set?
+ *
+ * 🔴 An account created through Google DOES have a `password_hash`, and that is
+ * the thing everything here got wrong. `users.password_hash` is NOT NULL, so
+ * `findOrCreateOAuthUser` writes `crypto.randomBytes(32).toString('hex')` into
+ * it — a 64-character hex string, which is TRUTHY and is not a bcrypt hash.
+ *
+ * So `!user.password_hash` — the obvious way to ask "has this user got a
+ * password?" — is false for every OAuth account that has ever existed. Measured
+ * on production 2026-09-10: 26 accounts, 21 bcrypt, 5 with exactly this 64-hex
+ * placeholder, 0 empty, 0 null. The column's NOT NULL constraint guarantees
+ * there will never be a null to catch.
+ *
+ * One predicate, used by both callers below, so the login path and the recovery
+ * email can never disagree about whether a password exists.
+ */
+const BCRYPT_HASH = /^\$2[aby]?\$\d{2}\$/;
+export function hasUsablePassword(hashedPassword) {
+  return typeof hashedPassword === 'string' && BCRYPT_HASH.test(hashedPassword);
+}
+
+/**
  * Verify a password against a stored hash.
  *
- * An account created through Google has NO password_hash, and
  * `bcrypt.compare(password, null)` throws "Illegal arguments" rather than
  * returning false. That threw inside the login handler's try, so an OAuth-only
  * account attempting password login got a 500 instead of "Invalid email or
@@ -329,9 +350,16 @@ const ABSENT_PASSWORD_HASH = bcrypt.hashSync(crypto.randomBytes(32).toString('he
  *
  * Returning false immediately would be a TIMING oracle in place of a status-code
  * one, so the absent case still pays for a full bcrypt comparison.
+ *
+ * ⚠️ The placeholder case is the one that mattered and was missed. A 64-hex
+ * string is not null and not empty, so it used to reach the real
+ * `bcrypt.compare`, which rejects a malformed hash in MICROSECONDS while a
+ * genuine comparison costs ~100 ms. That is the same timing oracle this function
+ * exists to close, left open for exactly the accounts it was written to protect.
+ * Routing every unusable hash through the dummy comparison closes it.
  */
 async function verifyPassword(password, hashedPassword) {
-  if (typeof hashedPassword !== 'string' || hashedPassword.length === 0) {
+  if (!hasUsablePassword(hashedPassword)) {
     await bcrypt.compare(String(password ?? ''), ABSENT_PASSWORD_HASH);
     return false;
   }
@@ -851,7 +879,12 @@ router.post('/forgot-password', async (req, res) => {
      * understood on the first read.
      */
     if (user && user.is_active) {
-      const settingFirstPassword = !user.password_hash;
+      /* NOT `!user.password_hash` — that is false for every OAuth account,
+       * because the NOT NULL column holds a 64-hex placeholder rather than
+       * nothing. Written that way, this variant could never fire for the users
+       * it was built for: a Google user asking to recover would be told "your
+       * current password still works", about a password they have never had. */
+      const settingFirstPassword = !hasUsablePassword(user.password_hash);
       const resetToken = newAccountToken();
       await req.db.query(
         `INSERT INTO password_resets (user_id, token_hash, expires_at)

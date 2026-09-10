@@ -85,8 +85,20 @@ test('a missing password hash is a failed login, never a 500 and never a timing 
     authRoutes.indexOf('async function verifyPassword'),
     authRoutes.indexOf('async function verifyPassword') + 700,
   );
-  assert.match(verify, /typeof hashedPassword !== 'string' \|\| hashedPassword\.length === 0/,
-    'the absent-hash case is handled before bcrypt sees it');
+  /* This asserted the literal `typeof hashedPassword !== 'string' ||
+   * hashedPassword.length === 0` until 2026-09-10. The NAME of the test was
+   * right and that expression turned out to be too narrow to satisfy it: an
+   * OAuth account's hash is neither absent nor empty — `users.password_hash` is
+   * NOT NULL, so signup writes a 64-hex placeholder — and a malformed hash
+   * reaches bcrypt, which rejects it in microseconds against ~100 ms for a real
+   * comparison. The timing tell this test is named after was open for exactly
+   * the accounts it was written to protect.
+   *
+   * So it now asserts the OUTCOME: every unusable hash, placeholder included,
+   * goes through the dummy comparison. `hasUsablePassword` is checked against
+   * real data shapes in scripts/oauth-password-shape.test.mjs. */
+  assert.match(verify, /if \(!hasUsablePassword\(hashedPassword\)\)/,
+    'the unusable-hash case — absent, empty, OR the OAuth placeholder — is handled before bcrypt sees it');
   assert.match(verify, /await bcrypt\.compare\([\s\S]*?ABSENT_PASSWORD_HASH\)/,
     'the absent case still pays for a full comparison, or the status oracle just '
     + 'becomes a timing oracle');

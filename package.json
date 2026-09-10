@@ -21,7 +21,7 @@
     "test:entitlements": "node --test scripts/entitlement-enforcement.test.mjs",
     "test:email-log-status": "node --test scripts/email-log-status.test.mjs",
     "test:email": "node --test scripts/welcome-email.test.mjs scripts/email-chrome.test.mjs",
-    "test:account": "node --test scripts/spend-cap-enforcement.test.mjs scripts/security-events.test.mjs scripts/user-agent.test.mjs",
+    "test:account": "node --test scripts/spend-cap-enforcement.test.mjs scripts/security-events.test.mjs scripts/user-agent.test.mjs scripts/oauth-password-shape.test.mjs",
     "test:deindex-gate": "node --test scripts/deindex-gate.test.mjs",
     "test:registration-gate": "node --test scripts/registration-gate.test.mjs scripts/client-ip.test.mjs",
     "test:forum-ranker": "node --test scripts/forum-ranker.test.mjs",
