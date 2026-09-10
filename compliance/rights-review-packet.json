@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "status": "awaiting-human-source-and-rights-evidence",
-  "note": "Facts and questions only. No ownership assignment, license exception or determination is signed here. The six-author question and asset-origin question were sent to the user; no answer has been received in this continuation.",
+  "note": "Facts and questions only. No ownership assignment, license exception or determination is signed here. The six-author question and asset-origin question were sent to the user; no answer has been received in this continuation. 2026-09-10: recoveryAttempts records a mechanical attempt at all six unresolved packages. None succeeded, each for a different and now-stated reason; the questions above are what a human has to answer. No determination is signed here either.",
   "authors": [
     "659\temilian-bnkrsys <emilian@bnkrsys.com>",
     "   229\tandreia-bnkrsys <andreia@bnkrsys.com>",
@@ -266,5 +266,68 @@
     "licenseGitBlob": "41f68db2cfd7e9ffb0723e712e2d6e007002f6f6",
     "licenseUrl": "https://github.com/highlightjs/highlightjs-vue/blob/3bd37d8fc50f5a8f5919e8c7ac1f7ac76088594b/LICENSE",
     "question": "Establish which grant applies to the installed archive; do not automatically substitute the current repository license."
+  },
+  "recoveryAttempts": {
+    "date": "2026-09-10",
+    "tool": "scripts/recover-package-license.mjs",
+    "method": "Verified tarball -> declared repository -> immutable commit -> byte-for-byte match of a shipped file at that commit -> licence text at that same commit. The byte match is what makes the repository evidence for the artifact; without it the record would only assert that a licence exists in a repository sharing a name with the package.",
+    "provenOnKnownGood": "The builder reproduces both existing hand-made records exactly — boolbase@1.0.0 and tr46@0.0.3 — including integrity, commit, licence text and the overlapping runtime proof. That is the only evidence that its success path works at all, since none of the six below reached it.",
+    "outcome": "None of the six could be recovered mechanically, and each for a DIFFERENT reason. These are now specific human questions rather than an unexplained gap.",
+    "packages": [
+      {
+        "package": "dingbat-to-unicode@1.0.1",
+        "declared": "BSD-2-Clause",
+        "repository": "mwilliamson/dingbat-to-unicode",
+        "pin": "tag js-1.0.1 -> b27f259b49907f99b1b9097abba5a9668106b779",
+        "blocker": "no-byte-binding",
+        "detail": "The package ships a BUILT dist/index.js. No shipped file matches the repository at that commit, so the repository cannot stand as evidence for these bytes. GitHub reports no licence file on the repository at all.",
+        "question": "Accept the manifest BSD-2-Clause declaration as the grant for a built artifact, or ask the author for a licence file?"
+      },
+      {
+        "package": "eastasianwidth@0.2.0",
+        "declared": "MIT",
+        "repository": "komagata/eastasianwidth",
+        "pin": "commit 0f2098de9bdeb4afd5bde03d580a28cbbf06e43b (2017-12-28)",
+        "blocker": "licence-text-postdates-the-release",
+        "detail": "This is the ONE package where the byte binding exists: the published eastasianwidth.js matches that commit exactly (sha256 2672ae17e3d91c24...). The repository has no tags, so the commit was found by comparing candidates against the published bytes. But there is no licence file at that commit — MIT-LICENSE.txt was added in 1d41951a59d63fb2d77cda021050fc070cae424a on 2024-06-05, roughly six and a half years after the release we install.",
+        "question": "Is the later MIT-LICENSE.txt admissible as the author stating the terms of an earlier release, or does the manifest declaration have to stand alone? A record was NOT written, because pairing 2024 text with 2017 bytes is exactly the kind of claim this evidence store exists to prevent."
+      },
+      {
+        "package": "guid-typescript@1.0.9",
+        "declared": "ISC",
+        "repository": "snico-dev/guid-typescript (moved; the manifest still names NicolasDeveloper/guid-typescript, which 301-redirects)",
+        "pin": "none — the repository carries no tags",
+        "blocker": "no-immutable-pin",
+        "detail": "No tag resolves to a commit for 1.0.9, and GitHub reports no licence file on the repository. A branch name is not a pin, so nothing was recorded.",
+        "question": "Establish the commit this version was published from, or treat the ISC declaration as the whole grant."
+      },
+      {
+        "package": "highlightjs-vue@1.0.0",
+        "declared": "CC0-1.0",
+        "repository": "highlightjs/highlightjs-vue",
+        "pin": "commit 3bd37d8fc50f5a8f5919e8c7ac1f7ac76088594b",
+        "blocker": "no-byte-binding + declaration-conflict",
+        "detail": "Ships a built dist/highlightjs-vue.cjs.js which matches nothing at that commit. It also reproduces the conflict already recorded in additionalConflict from the other direction: the manifest declares CC0-1.0 and the repository is BSD-3-Clause. The tool now refuses this class outright — recording BSD text under a CC0 identifier would assert a grant nobody made.",
+        "question": "Unchanged from additionalConflict: establish which grant applies to the installed archive. Do not substitute the current repository licence."
+      },
+      {
+        "package": "react-remove-scroll-bar@2.3.8",
+        "declared": "MIT",
+        "repository": "theKashey/react-remove-scroll-bar",
+        "pin": "none — upstream tags stop at v2.3.7",
+        "blocker": "no-immutable-pin",
+        "detail": "2.3.8 was published without a corresponding tag. The package is also built (main = dist/es5/index.js), so even with a pin a byte binding is unlikely. The repository does carry an MIT LICENSE, which agrees with the declaration — the gap is the pin, not the licence identity.",
+        "question": "Ask the author which commit 2.3.8 was cut from, or accept the MIT declaration plus the repository LICENSE without a byte binding and say so explicitly in the record."
+      },
+      {
+        "package": "split-ca@1.0.1",
+        "declared": "ISC",
+        "repository": "bushong1/split-ca (the packet previously guessed Tarnasa/split-ca, which does not exist)",
+        "pin": "tag v1.0.1 -> 4fb87455c8af37396803be25c9fbca74af84a69b",
+        "blocker": "no-licence-text-upstream",
+        "detail": "The tag resolves cleanly, but there is no licence file at that commit and GitHub reports no licence on the repository at HEAD either. The ISC declaration in package.json appears to be the only grant that has ever existed.",
+        "question": "Accept the manifest ISC declaration as the grant, or replace the dependency. It is one small module in the backend tree."
+      }
+    ]
   }
 }
