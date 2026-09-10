@@ -545,17 +545,33 @@ const templates = {
     `),
   }),
 
-  password_reset: ({ displayName, resetUrl, expiresIn }) => ({
-    subject: 'Reset your XENO password',
-    html: wrapInLayout('Password Reset', `
-      ${mailHeading('Reset your password')}
-      ${mailText(`Hi ${escapeHtml(displayName)}, we received a request to set a new password on your XENO account.`)}
-      ${mailButton(resetUrl, 'Choose a new password')}
+  /*
+   * One template, two situations.
+   *
+   * `settingFirstPassword` is true for an account created through Google, which
+   * has never had a password. Telling that person to "reset your password" is
+   * confusing in the one email that has to be understood on the first read — and
+   * it hides the thing they most need to know, which is that adding a password
+   * does not take Google away from them.
+   *
+   * Only the words change. Same endpoint, same single-use token, same expiry.
+   */
+  password_reset: ({ displayName, resetUrl, expiresIn, settingFirstPassword }) => ({
+    subject: settingFirstPassword ? 'Set a password for your XENO account' : 'Reset your XENO password',
+    html: wrapInLayout(settingFirstPassword ? 'Set a password' : 'Password Reset', `
+      ${mailHeading(settingFirstPassword ? 'Set a password for your account' : 'Reset your password')}
+      ${mailText(settingFirstPassword
+        ? `Hi ${escapeHtml(displayName)}, your XENO account signs in with Google today and has no password yet. This link adds one.`
+        : `Hi ${escapeHtml(displayName)}, we received a request to set a new password on your XENO account.`)}
+      ${settingFirstPassword ? mailText('You keep both. Afterwards you can sign in with Google <em>or</em> with your email and password — it is the same account either way.') : ''}
+      ${mailButton(resetUrl, settingFirstPassword ? 'Set a password' : 'Choose a new password')}
       ${mailFallbackLink(resetUrl)}
       ${hairline(14, 12)}
       ${mailText(`This link works once and expires in ${escapeHtml(String(expiresIn || '1 hour'))}. Anyone who has it can set your password, so treat it like the password itself.`, { muted: true })}
-      ${mailText('If you did not ask for this, nothing has changed and you can ignore this email. Your current password still works.', { muted: true })}
-    `, 'Set a new password on your XENO account.'),
+      ${mailText(settingFirstPassword
+        ? 'If you did not ask for this, nothing has changed and you can ignore this email. Your account still signs in with Google exactly as before.'
+        : 'If you did not ask for this, nothing has changed and you can ignore this email. Your current password still works.', { muted: true })}
+    `, settingFirstPassword ? 'Add a password to your XENO account — Google keeps working.' : 'Set a new password on your XENO account.'),
   }),
 
   email_verification: ({ displayName, verifyUrl, expiresIn }) => ({

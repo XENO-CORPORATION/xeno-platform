@@ -164,6 +164,54 @@ async function main() {
   ok(resend.status === 200 && resend.json.success, 'resend-verification (authed, unverified) → 200');
   ok((await pool.query('SELECT count(*)::int n FROM email_verifications WHERE user_id=$1', [id1])).rows[0].n === beforeV + 1, 'resend-verification issued a fresh token');
 
+  // ---- B2d: a Google account can ADD a password and then sign in either way ----
+  //
+  // 162 of 218 real accounts arrived through "Sign in with Google" and have no
+  // password_hash. Until 2026-09-10 /forgot-password required one, so every one
+  // of them asked to recover, was told "a link is on its way", and got nothing.
+  // The generic response is there to stop enumeration, and it made a total dead
+  // end indistinguishable from a working flow.
+  const oauthOnly = (await pool.query(
+    `INSERT INTO users (username, email, display_name, email_verified)
+     VALUES ('googler', 'googler@t.example', 'Googler', true) RETURNING id`)).rows[0].id;
+  const noHash = (await pool.query('SELECT password_hash FROM users WHERE id=$1', [oauthOnly])).rows[0].password_hash;
+  ok(noHash === null, 'the fixture account has no password, like a real Google signup');
+
+  // bcrypt.compare(password, null) THROWS. That threw inside the login handler's
+  // try, so this used to be a 500 while a wrong password was a 401 — a status
+  // oracle for which accounts have no password set.
+  const preLogin = await post('/login', { email: 'googler@t.example', password: 'anything123' });
+  ok(preLogin.status === 401, 'password login against a password-less account → 401, not 500');
+  ok(preLogin.json.error === 'Invalid email or password',
+    'and it is the same message a wrong password gets — no oracle');
+
+  const fOauth = await post('/forgot-password', { email: 'googler@t.example' });
+  ok(fOauth.status === 200 && fOauth.json.success === true, 'forgot-password (Google account) → generic 200');
+  const oauthTokens = (await pool.query('SELECT count(*)::int n FROM password_resets WHERE user_id=$1', [oauthOnly])).rows[0].n;
+  ok(oauthTokens === 1, 'forgot-password ISSUED a token for the password-less account (the fix)');
+
+  await pool.query('UPDATE password_resets SET token_hash=$2 WHERE user_id=$1', [oauthOnly, sha256('SET_MY_FIRST')]);
+  const setFirst = await post('/reset-password', { token: 'SET_MY_FIRST', password: 'firstpassword1' });
+  ok(setFirst.status === 200 && setFirst.json.success, 'reset-password sets a FIRST password → 200');
+
+  const afterLogin = await post('/login', { email: 'googler@t.example', password: 'firstpassword1' });
+  ok(afterLogin.status === 200 && afterLogin.json.token, 'email+password login now works → 200');
+  ok(afterLogin.json.user && afterLogin.json.user.id === oauthOnly,
+    'and it signs in to the SAME account, not a second one — this is the whole point');
+
+  // The provider link is a separate row keyed on user_id, so adding a password
+  // cannot detach it. Prove the row still resolves to the same user.
+  await pool.query(`CREATE TABLE IF NOT EXISTS oauth_accounts (
+    id uuid PRIMARY KEY DEFAULT gen_random_uuid(), user_id uuid REFERENCES users(id) ON DELETE CASCADE,
+    provider text NOT NULL, provider_user_id text NOT NULL, created_at timestamptz DEFAULT now())`);
+  await pool.query(`INSERT INTO oauth_accounts (user_id, provider, provider_user_id)
+    VALUES ($1,'google','g-12345')`, [oauthOnly]);
+  const linked = (await pool.query(
+    `SELECT u.id FROM users u JOIN oauth_accounts o ON o.user_id = u.id
+      WHERE o.provider='google' AND o.provider_user_id='g-12345'`)).rows[0];
+  ok(linked && linked.id === oauthOnly,
+    'Google still resolves to the same account after a password was added');
+
   console.log(`\n${fail === 0 ? '✅' : '❌'} account-recovery: ${pass} passed, ${fail} failed`);
   // Await the close, and drop keep-alive sockets first. An unawaited
   // server.close() followed by pool.end() and process.exit() aborts inside

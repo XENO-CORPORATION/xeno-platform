@@ -116,7 +116,7 @@
     "install-server": "powershell -Command \"cd src/server; npm install\"",
     "xeno-api": "cd libs/xeno-edit/server && cargo run --release",
     "build:libs": "node scripts/build-shared-libs.mjs",
-    "test:activation": "node --test scripts/account-activation.test.mjs",
+    "test:activation": "node --test scripts/account-activation.test.mjs scripts/oauth-password-recovery.test.mjs",
     "test:auth-routing": "node --test scripts/auth-routing.test.mjs scripts/express-route-compatibility.test.mjs",
     "test:linked-surfaces": "node --test src/server/tests/linked-surfaces.test.mjs",
     "test:server-contracts": "node src/server/tests/hosts.test.mjs && node src/server/tests/oidc-authority-policy.test.mjs && node src/server/tests/register-oidc-client.test.mjs",

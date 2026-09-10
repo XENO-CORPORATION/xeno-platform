@@ -310,7 +310,31 @@ async function hashPassword(password) {
 }
 
 // Verify password utility
+/**
+ * A bcrypt hash of a value nobody can supply, used only to burn the same time a
+ * real comparison would. Generated once per process.
+ */
+const ABSENT_PASSWORD_HASH = bcrypt.hashSync(crypto.randomBytes(32).toString('hex'), 10);
+
+/**
+ * Verify a password against a stored hash.
+ *
+ * An account created through Google has NO password_hash, and
+ * `bcrypt.compare(password, null)` throws "Illegal arguments" rather than
+ * returning false. That threw inside the login handler's try, so an OAuth-only
+ * account attempting password login got a 500 instead of "Invalid email or
+ * password" -- both a worse error and an oracle, because a 500 for one address
+ * and a 401 for another tells an attacker which accounts exist without a
+ * password.
+ *
+ * Returning false immediately would be a TIMING oracle in place of a status-code
+ * one, so the absent case still pays for a full bcrypt comparison.
+ */
 async function verifyPassword(password, hashedPassword) {
+  if (typeof hashedPassword !== 'string' || hashedPassword.length === 0) {
+    await bcrypt.compare(String(password ?? ''), ABSENT_PASSWORD_HASH);
+    return false;
+  }
   return await bcrypt.compare(password, hashedPassword);
 }
 
@@ -807,9 +831,27 @@ router.post('/forgot-password', async (req, res) => {
       [normalizedEmail]
     );
     const user = rows[0];
-    // Only issue a reset for an active, password-capable account (OAuth-only users have
-    // no password_hash). Every other case returns the identical generic response.
-    if (user && user.is_active && user.password_hash) {
+    /*
+     * An ACTIVE account gets a link, whether or not it already has a password.
+     *
+     * This used to require `user.password_hash`, which excluded every account
+     * created through Google -- 162 of 218 of them. Those users asked to recover
+     * their account, were told "a link is on its way", and nothing ever arrived:
+     * a silent dead end, and the generic response meant nobody could tell it
+     * apart from a working one.
+     *
+     * Sending it is safe precisely because the link goes TO the address on the
+     * account, and for a Google account that address is one the provider already
+     * verified. Anyone who can read that inbox can complete a Google sign-in
+     * anyway, so this grants no access that was not already reachable.
+     *
+     * `settingFirstPassword` only changes what the email SAYS. The link, the
+     * token and the endpoint are identical -- "reset your password" is confusing
+     * to someone who has never had one, and this is the one email that has to be
+     * understood on the first read.
+     */
+    if (user && user.is_active) {
+      const settingFirstPassword = !user.password_hash;
       const resetToken = newAccountToken();
       await req.db.query(
         `INSERT INTO password_resets (user_id, token_hash, expires_at)
@@ -820,6 +862,7 @@ router.post('/forgot-password', async (req, res) => {
         displayName: user.display_name || user.email,
         resetUrl: `${APP_URL}/reset-password?token=${resetToken}`,
         expiresIn: '1 hour',
+        settingFirstPassword,
       }, user.id);
     }
     return res.json(generic);
