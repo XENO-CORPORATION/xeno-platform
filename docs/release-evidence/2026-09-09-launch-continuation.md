@@ -150,8 +150,29 @@ Nothing below is a code task; none of it can be completed from this session.
    empty body answers 400 rather than 403 `registration_closed`.
 5. **Search indexing**: the site is deliberately de-indexed. Reopening is a decision.
 6. **Deployment approval** for the candidate.
-7. **The six mailboxes** still outstanding from 2026-09-06: `privacy@`, `security@`,
-   `dpo@`, `billing@`, `support@`, `team@` (only `legal@` exists).
+7. ~~**The six mailboxes** still outstanding~~ — **WRONG, and corrected 2026-09-10.**
+   All six exist and have since 2026-09-06: `privacy@`, `security@`, `dpo@`,
+   `billing@`, `support@`, `team@`, alongside `legal@` and eleven more. Measured in
+   `xm_mailbox` on `xeno-mail-001`, not inferred.
+
+   🔴 **This entry was carried forward from the 09-08 register and repeated twice
+   without being measured** — including into a "what is left" list on 09-10, which is
+   the single most expensive recurring error in this workspace and was committed here
+   by the session that had spent the day correcting other instances of it.
+
+   ⚠️ **And the first attempt to check it also said MISSING.** The Cloudflare API
+   query looked for per-address `to` matchers and found none, because delivery is a
+   **catch-all** rule (`XENO Mail catch-all`, matcher `all`) routing every address to
+   the `xeno-mail-inbound` Email Worker, which posts the raw MIME to mail-core.
+   Catch-alls are stored on a separate endpoint. *Absence by one route is not
+   absence* — the same lesson this file records for the pipe DACL and the blank
+   compaction row.
+
+   Proven working, not just configured: `support@xenostudio.ai` holds **7 delivered
+   messages, newest 2026-09-09**, so the whole chain — Cloudflare MX → catch-all →
+   worker → mail-core → mailbox — demonstrably carries real mail. The other five are
+   empty because nobody has written to them, which is a different fact from not
+   working.
 
 ## 7. The deployed artifact now carries its own revision
 
