@@ -29,8 +29,21 @@ const APP = codeOnly(read('App.tsx'));
 // ── reachability ───────────────────────────────────────────────────────────
 
 test('the page is ROUTED — not merely written', () => {
-  assert.match(APP, /import ForumModeration from '\.\/pages\/ForumModeration'/,
-    'App.tsx must import it.');
+  /* Two facts, and only two: App.tsx can reach the module, and the module is
+   * bound to the URL. HOW it reaches it is not this gate's business.
+   *
+   * The first version required the literal `import ForumModeration from
+   * './pages/ForumModeration'`, and went red when the route was DEFERRED — a
+   * change that made the page load faster for everyone and left it exactly as
+   * reachable. That gate pinned a MECHANISM while claiming to check an OUTCOME,
+   * which is the same defect as the extension catalog's `externalUrl ===
+   * undefined`: it fails a correct change and would pass a broken one that
+   * happened to keep the import. A page imported and never routed satisfies half
+   * of it; both halves below are needed, and neither cares about eagerness. */
+  assert.match(APP, /(?:import\s+ForumModeration\s+from|ForumModeration\s*=\s*lazyRoute\()/,
+    'App.tsx must reach ./pages/ForumModeration — eagerly or through lazyRoute.');
+  assert.match(APP, /\.\/pages\/ForumModeration'/,
+    'whichever form it takes, it must name the real module path.');
   assert.match(APP, /<Route path="\/forum\/moderation" element=\{<ForumModeration \/>\} \/>/,
     'a page with no route is a file, not a feature — and this repo has shipped '
     + 'that shape eight times.');

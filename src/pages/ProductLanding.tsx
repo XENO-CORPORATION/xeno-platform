@@ -18,7 +18,7 @@ import {
 } from '../lib/productCatalog';
 import { downloadClickHandler } from '../lib/startDownload';
 import type { ProductContent, Media } from '../content/products/_types';
-import { getProductDocs } from '../content/docs';
+import { hasProductDocs } from '../content/docs/_slugs';
 import ForumThreadsWidget from '../components/product/ForumThreadsWidget';
 
 type OS = 'windows' | 'mac' | 'linux';
@@ -151,7 +151,7 @@ const ProductLanding: React.FC<{ product: Product; content: ProductContent }> = 
   );
 
   const notice = experimentalNotice(product);
-  const hasDocs = !!getProductDocs(product.slug);
+  const hasDocs = hasProductDocs(product.slug);
   const secondaryLink = 'inline-flex items-center gap-1.5 rounded-[6px] border border-white/[0.10] px-5 py-3 text-[13px] font-medium text-[#d8d2ca] transition-colors hover:border-white/25 hover:bg-white/[0.03]';
   const Secondary = (
     <>

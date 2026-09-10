@@ -3,10 +3,7 @@ import PlatformNotifications from './components/platform/Notifications';
 import { ConfirmActionHost } from './components/platform/confirmAction';
 import { Routes, Route, Navigate, useLocation, useParams } from 'react-router-dom';
 
-import Home from "./pages/Home";
-import Home2 from "./pages/Home2";
 import Home3 from "./pages/Home3";
-import Marketplace from "./pages/Marketplace";
 import ProductPage from "./pages/ProductPage";
 import ProductReleases from "./pages/ProductReleases";
 import ProductReleaseDetail from "./pages/ProductReleaseDetail";
@@ -18,18 +15,11 @@ import Blog from "./pages/Blog";
 import BlogPost from "./pages/BlogPost";
 import Learn from "./pages/Learn";
 import LearnTutorial from "./pages/LearnTutorial";
-import Forum from "./pages/Forum";
-import ForumThread from "./pages/ForumThread";
-import ForumNew from "./pages/ForumNew";
-import ForumModeration from './pages/ForumModeration';
-import RemoteRuns from "./pages/RemoteRuns";
 import Privacy from './pages/Privacy';
 import Terms from './pages/Terms';
 import Features from './pages/Features';
 import Pricing from './pages/Pricing';
 import Roadmap from './pages/Roadmap';
-import DocsHome from './pages/DocsHome';
-import ProductDocs, { ProductDocsRedirect } from './pages/ProductDocs';
 import Templates from './pages/Templates';
 import ApiReference from './pages/ApiReference';
 import About from './pages/About';
@@ -43,6 +33,33 @@ import Withdrawal from './pages/Withdrawal';
 import Impressum from './pages/Impressum';
 import { lazyRoute } from './components/platform/lazyRoute';
 const OverviewPage = lazyRoute(() => import('./pages/Overview'));
+
+/* Deferred routes, chosen from a measurement of the entry chunk rather than from
+ * a guess about which page "looks heavy" (scripts/entry-chunk-inventory.mjs).
+ *
+ * The docs and forum routes are what pulled the markdown toolchain — katex at
+ * ~600 KB, parse5 at ~273 KB via rehype-raw, react-syntax-highlighter, and the
+ * whole unified/micromark/mdast pipeline — into the bundle every visitor
+ * downloads, along with all sixteen src/content/docs modules. None of it is
+ * reachable from the homepage, and every byte of it was on the homepage.
+ *
+ * `/` stays EAGER on purpose: deferring the route a first-time visitor actually
+ * lands on trades a smaller download for a blank frame plus a second round trip,
+ * which is worse on exactly the connection this is meant to help. `/v1` and `/v2`
+ * are preserved older homepages and are not that route. */
+const Home = lazyRoute(() => import('./pages/Home'));
+const Home2 = lazyRoute(() => import('./pages/Home2'));
+const Marketplace = lazyRoute(() => import('./pages/Marketplace'));
+const Forum = lazyRoute(() => import('./pages/Forum'));
+const ForumThread = lazyRoute(() => import('./pages/ForumThread'));
+const ForumNew = lazyRoute(() => import('./pages/ForumNew'));
+const ForumModeration = lazyRoute(() => import('./pages/ForumModeration'));
+const RemoteRuns = lazyRoute(() => import('./pages/RemoteRuns'));
+const DocsHome = lazyRoute(() => import('./pages/DocsHome'));
+const ProductDocs = lazyRoute(() => import('./pages/ProductDocs'));
+const ProductDocsRedirect = lazyRoute(
+  () => import('./pages/ProductDocs').then((m) => ({ default: m.ProductDocsRedirect })),
+);
 import SharedChatView from './pages/SharedChatView';
 import OSAuthInterface, { OSStateProvider } from './components/os/OSAuthInterface';
 const OSHomeInterface = lazyRoute(() => import('./components/os/OSHomeInterface'));
