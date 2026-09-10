@@ -1,92 +1,107 @@
 {
   "schemaVersion": 1,
-  "status": "awaiting-source-and-rights-evidence",
+  "status": "resolved-by-owner-confirmation-and-generation-records",
   "replacementEvidence": "generated-assets-2026-09-04.json records eight new landing-v3 illustrations. Their exact byte hashes, prompts and provider output-rights basis are now registered in assets.json and openai-output-rights-basis-2026-09-05.md. This is provenance documentation, not legal signoff. All other paths below remain unverified; existing logos are preserved, not automatically cleared.",
-  "note": "Git introduction records establish repository history only. They do not prove authorship, provider terms, stock-media permissions, or trademark rights. These records intentionally are not accepted asset declarations.",
+  "note": "Git introduction records establish repository history only. They do not prove authorship, provider terms, stock-media permissions, or trademark rights. These records intentionally are not accepted asset declarations.\n\n2026-09-10: every pattern below was re-checked BY HASH against the two records written since, and all 49 files they expand to are covered — 23 by the project owner's 2026-09-05 confirmation and 26 by assets.json as AI-generated, each with a generator, a stated rights basis and evidence. Nothing was outstanding; this file had simply not been re-read since those records were written, which is the failure it now exists to prevent rather than repeat.\n\nThe patterns are KEPT rather than deleted. They are what scripts/asset-provenance-coverage.test.mjs watches: a new file under any of them whose hash is in neither record fails the build. That forward guard is the point — public/landing-v3/ is exactly where a stock image would land and look ordinary.\n\nStill not asserted here: trademark, and whether the owner confirmation or the provider output-rights basis is sufficient for any particular use. Those are unchanged and unsigned.",
   "assets": [
     {
       "path": "icons/*.svg",
       "repositoryHistory": "git commit 3153fcde23ec3630223a9cc2a848df22eec6a413",
-      "status": "unverified",
-      "requiredEvidence": "Original design or generation record and applicable terms, or upstream source plus redistribution permission."
+      "status": "resolved",
+      "fileCount": 3,
+      "resolvedBy": "owner-confirmation"
     },
     {
       "path": "public/canvas-workspace-demo.jpg",
       "repositoryHistory": "git commit acea6df666d5987c49ff2a58a8af787214a17689",
-      "status": "unverified",
-      "requiredEvidence": "Original design or generation record and applicable terms, or upstream source plus redistribution permission."
+      "status": "resolved",
+      "fileCount": 1,
+      "resolvedBy": "owner-confirmation"
     },
     {
       "path": "public/favicon*.svg",
       "repositoryHistory": "git commits acea6df666d5987c49ff2a58a8af787214a17689 and ddcd2b13ca9f73b412401d56809e2bfe7fd71f69",
-      "status": "unverified",
-      "requiredEvidence": "Original design or generation record and applicable terms, or upstream source plus redistribution permission."
+      "status": "resolved",
+      "fileCount": 2,
+      "resolvedBy": "owner-confirmation"
     },
     {
       "path": "public/flux-logo.svg",
       "repositoryHistory": "git commit d9ef645c3d23f5624fd55081f2d432ae790d94cc",
-      "status": "unverified",
-      "requiredEvidence": "Original design or generation record and applicable terms, or upstream source plus redistribution permission."
+      "status": "resolved",
+      "fileCount": 1,
+      "resolvedBy": "owner-confirmation"
     },
     {
       "path": "public/logo.svg",
       "repositoryHistory": "git commit acea6df666d5987c49ff2a58a8af787214a17689",
-      "status": "unverified",
-      "requiredEvidence": "Original design or generation record and applicable terms, or upstream source plus redistribution permission."
+      "status": "resolved",
+      "fileCount": 1,
+      "resolvedBy": "owner-confirmation"
     },
     {
       "path": "public/xeno-logo-original.png",
       "repositoryHistory": "git commit ddcd2b13ca9f73b412401d56809e2bfe7fd71f69",
-      "status": "unverified",
-      "requiredEvidence": "Original design or generation record and applicable terms, or upstream source plus redistribution permission."
+      "status": "resolved",
+      "fileCount": 1,
+      "resolvedBy": "owner-confirmation"
     },
     {
       "path": "public/xeno-logo.svg",
       "repositoryHistory": "git commit ddcd2b13ca9f73b412401d56809e2bfe7fd71f69",
-      "status": "unverified",
-      "requiredEvidence": "Original design or generation record and applicable terms, or upstream source plus redistribution permission."
+      "status": "resolved",
+      "fileCount": 1,
+      "resolvedBy": "owner-confirmation"
     },
     {
       "path": "public/hero-assets/*",
       "repositoryHistory": "git commit f11937624171c40942164b0b643f695cd38d6868",
-      "status": "unverified",
-      "requiredEvidence": "Original design or generation record and applicable terms, or upstream source plus redistribution permission."
+      "status": "resolved",
+      "fileCount": 10,
+      "resolvedBy": "owner-confirmation"
     },
     {
       "path": "public/hero-bg.*",
       "repositoryHistory": "git commit acea6df666d5987c49ff2a58a8af787214a17689",
-      "status": "unverified",
-      "requiredEvidence": "Original design or generation record and applicable terms, or upstream source plus redistribution permission."
+      "status": "resolved",
+      "fileCount": 2,
+      "resolvedBy": "owner-confirmation"
     },
     {
       "path": "public/landing-v2/*",
       "repositoryHistory": "git commit 988eea4931e4e1083e0117ea68a608820f292fb1",
-      "status": "unverified",
-      "requiredEvidence": "Original design or generation record and applicable terms, or upstream source plus redistribution permission."
+      "status": "resolved",
+      "fileCount": 4,
+      "resolvedBy": "assets.json"
     },
     {
       "path": "public/landing-v3/*",
       "repositoryHistory": "git commits 988eea4931e4e1083e0117ea68a608820f292fb1 and 93fc6f902402b31a324385a64ff6134a91af7bb2",
-      "status": "unverified",
-      "requiredEvidence": "Original design or generation record and applicable terms, or upstream source plus redistribution permission."
+      "status": "resolved",
+      "fileCount": 12,
+      "resolvedBy": "assets.json"
     },
     {
       "path": "public/landing-v3/gen/*",
       "repositoryHistory": "git commit 93fc6f902402b31a324385a64ff6134a91af7bb2",
-      "status": "unverified",
-      "requiredEvidence": "Original design or generation record and applicable terms, or upstream source plus redistribution permission."
+      "status": "resolved",
+      "fileCount": 4,
+      "resolvedBy": "assets.json"
     },
     {
       "path": "public/landing-v3/usecases/*",
       "repositoryHistory": "git commit 93fc6f902402b31a324385a64ff6134a91af7bb2",
-      "status": "unverified",
-      "requiredEvidence": "Original design or generation record and applicable terms, or upstream source plus redistribution permission."
+      "status": "resolved",
+      "fileCount": 6,
+      "resolvedBy": "assets.json"
     },
     {
       "path": "public/share/earth-map.jpg",
       "repositoryHistory": "git commit cb60fa5535f9885391c523444bbea70e3baa3963",
-      "status": "unverified",
-      "requiredEvidence": "Original design or generation record and applicable terms, or upstream source plus redistribution permission."
+      "status": "resolved",
+      "fileCount": 1,
+      "resolvedBy": "owner-confirmation"
     }
-  ]
+  ],
+  "resolvedOn": "2026-09-10"
 }
