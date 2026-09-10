@@ -559,3 +559,128 @@ swapped unnoticed.
   test: `recovered-package-licenses.test.mjs` required `undefined` for tr46,
   which achieved the opposite of its own name. It now asserts the outcome and is
   strictly stronger.
+
+---
+
+## 12. Continuation, 2026-09-10 (fourth pass) — AUTH-1 run for real, and what it found
+
+### The journey, end to end, against production
+
+Not reasoned about — run. `dev@xenostudio.ai` (a mailbox we own) was registered
+on live production and taken through every step:
+
+| step | result |
+| --- | --- |
+| `POST /api/auth/register` | 201, account created, 50 credits |
+| verification email | delivered in **~12 s** through the real chain: platform → Resend → Cloudflare MX → catch-all → `xeno-mail-inbound` Worker → mail-core → mailbox |
+| `POST /api/auth/verify-email` | 200, `email_verified = t` |
+| `POST /api/auth/forgot-password` | correct copy for an account that HAS a password |
+| `POST /api/auth/reset-password` + login | 200, new password works |
+| **OAuth-shaped account** | see below |
+
+The account was then deleted.
+
+### 🔴 An OAuth account HAS a password_hash, and nothing in authRoutes knew that
+
+`users.password_hash` is **NOT NULL**, so `findOrCreateOAuthUser` writes
+`crypto.randomBytes(32).toString('hex')` into it — 64 hex characters, **truthy**,
+not a bcrypt hash. Every "does this user have a password?" test was spelled
+`!user.password_hash`, which is **false for every OAuth account that has ever
+existed**.
+
+Measured on production: 26 accounts — 21 bcrypt, 5 with exactly that placeholder,
+0 empty, 0 null. The constraint guarantees there will never be a null to catch.
+
+**Proven live before the fix.** The test account was shaped like a Google signup
+and asked for recovery. Production replied:
+
+> "Your current password still works."
+
+About a password it has never had. The `settingFirstPassword` variant — written
+precisely so that *"reset your password" is not shown to someone who has never
+had one* — could never fire.
+
+**And a second consequence that was invisible.** A malformed hash reached
+`bcrypt.compare`, which rejects it in **microseconds** against ~100 ms for a real
+comparison. That is a timing oracle separating OAuth-only accounts from password
+accounts — exactly what `ABSENT_PASSWORD_HASH` was added to close, left open for
+the accounts it was written to protect.
+
+One predicate now, `hasUsablePassword`, used by both callers, so the login path
+and the recovery email cannot disagree.
+
+**After deploying, the same account asked again:**
+
+> **SET A PASSWORD FOR YOUR ACCOUNT** — "your XENO account signs in with Google
+> today and has no password yet. This link adds one. You keep both. Afterwards
+> you can sign in with Google or with your email and password — it is the same
+> account either way."
+
+Then the password was set and used to log in: **same user id**, `password_hash`
+now `$2a$`, 60 chars. That is the journey the register asked for, demonstrated
+rather than asserted.
+
+⚠️ This was the **eighth** built-tested-unreachable instance in this ecosystem —
+and the first introduced and found within a single session. The feature was
+correct; its trigger condition described data that does not exist.
+
+⚠️ A third gate had to be repaired for the same reason as two earlier today:
+`oauth-password-recovery.test.mjs` was NAMED *"never a 500 and never a timing
+tell"* and asserted the literal null-or-empty expression, which was too narrow to
+meet its own name. It now asserts the outcome.
+
+### The 13 GB is gone
+
+`backups/chat-cutover/` — 13 pre-flight dumps from the cutover attempts of
+2026-08-29 and 08-31 — removed. Not blind: the cutover is verified live (12
+`chat_*` tables, 8 conversations, 49 messages), the nightly series brackets the
+whole window, and the newest nightly was confirmed a valid `PGDMP` readable by
+`pg_restore -l` (1,589 TOC entries) **before** anything was deleted. A manifest of
+every removed file and its size is left at
+`backups/chat-cutover-REMOVED-20260910.manifest.txt`.
+
+Disk: **91% → 80%**, 12 GB → 24 GB free. All 14 nightly dumps intact.
+
+### 🔴 The finding that matters more than the 13 GB
+
+While measuring it: **no database backup has ever left this machine.**
+
+```
+R2_REMOTE in cron:         0
+rclone installed:          NO
+offsite lines ever logged: 0
+```
+
+All 14 restore points sit on `/dev/sda1` — the same disk as the running database
+— and that disk is `smb-vmstore:120/vm-120-disk-0.raw`, a file on a CIFS share
+that is **86.9% full**. That is not a backup; it is fourteen copies filed beside
+the original. `pg-backup.sh` already contains the offsite code and has simply
+never been switched on.
+
+Not switched on here, because it is a real decision rather than a cron edit: the
+`xeno-hub-releases` bucket is **public**, so dumps cannot go there, and a dump
+carries password hashes, emails and the ledger — so it needs a private bucket and
+encryption before it leaves.
+
+### Stripe: complete, and waiting on exactly one credential
+
+`node scripts/stripe-live-setup.mjs` (no arguments = offline plan, writes
+nothing) reports `status: UNEXECUTED`, a validated 10-item catalog, all prices
+`tax_behavior: inclusive`, a webhook plan subscribing to **11 events** (disputes,
+refunds, checkout, subscriptions, invoices) and a fully configured billing portal
+with business profile and return URL. Creation is idempotency-keyed and staged in
+two steps.
+
+Its single precondition is `live_publishable_key_required` — a `pk_live_` key,
+obtainable only from the Stripe dashboard.
+
+### A note on method
+
+Five separate checks in this pass returned a confident wrong answer before the
+right one: a mailbox query that errored on the reserved word `to`, a Cloudflare
+query that looked for per-address rules when delivery is a catch-all, two shell
+escapes that mangled `$2%` into a false negative, and a Stripe probe using
+guessed field names (`enabled_events`, `return_url`) instead of the real ones.
+
+Every one read as *absence*. None was. The habit that caught them each time was
+the same: when a check reports nothing, confirm the check can report something.
