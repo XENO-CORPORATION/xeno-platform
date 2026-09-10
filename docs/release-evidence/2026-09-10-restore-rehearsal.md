@@ -73,3 +73,36 @@ have started applying immediately; it simply had not yet.
 
 Stating it the other way round would have been the more flattering version and the
 false one.
+
+## Resolved same day — the dangling xeno-post volumes
+
+Established before touching anything:
+
+| | platform box (stale) | xeno-post-001 (live) |
+|---|---|---|
+| `xeno-post_postgres-data` | 48 MB, last written **2026-06-21** | 68 MB, written **today** |
+| `xeno-post_redis-data` | 60 MB, last written **2026-06-21** | 3.5 MB, current |
+| `xeno-post_media-data` | 4 KB, **no files at all** | 284 KB |
+| containers referencing them | **none** | 5, all healthy |
+
+Leftovers from June, when xeno-post ran on the platform box before moving to its
+own VM. Superseded by a database that has been taking writes continuously since —
+restoring the stale copy would be actively harmful, not a recovery.
+
+Archived first anyway, because the removal should be reversible even when the
+reasoning is sound: `/mnt/projects/_archive/xeno-post-platformbox-leftovers-20260910.tar.gz`,
+10.3 MB, 1,482 entries, verified to contain both data directories before anything
+was deleted.
+
+Then removed **by name, one at a time** — never `docker volume prune`, which was
+the entire hazard. Afterwards: **0 dangling volumes**, all 6 `xeno-platform_*`
+volumes intact, and xeno-post-001 unchanged with 5 healthy containers and
+post.xenostudio.ai answering 200.
+
+The hazard is gone rather than documented: a routine `docker volume prune` on this
+host can no longer delete another product's database, because there is nothing
+dangling left for it to take.
+
+⚠️ Still open on this box: the **13 GB of chat-cutover dumps**. Those are backup
+data from a completed migration, and deleting 13 GB of dumps is the operator's
+call, not mine. Disk is at 87%.
