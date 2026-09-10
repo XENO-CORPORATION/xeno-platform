@@ -1,4 +1,5 @@
 import React, { useEffect } from 'react';
+import PlatformNotifications from './components/platform/Notifications';
 import { Routes, Route, Navigate, useLocation, useParams } from 'react-router-dom';
 
 import Home from "./pages/Home";
@@ -135,6 +136,10 @@ function App() {
   if (isXenoChatDomain) {
     return (
       <AuthProvider>
+        {/* Mounted in BOTH shells. A notification surface that exists in only one
+            of them fails silently in the other, which is how the Hub unsigned
+            badge ended up telling exactly the wrong half of its audience. */}
+        <PlatformNotifications />
         <Routes>
           {/* Standalone Chat Interface - Full viewport */}
           <Route path="/" element={
@@ -162,6 +167,7 @@ function App() {
   // Default: the full xenostudio.ai experience
   return (
     <AuthProvider>
+      <PlatformNotifications />
       <WorkspaceProvider>
       <CollaborationProvider>
         <OSStateProvider>

@@ -7,6 +7,7 @@ import generationHistoryService from '../../../services/generationHistoryService
 import VideoPromptEditor, { VideoPromptEditorHandle } from './components/VideoPromptEditor';
 import VideoResultCard from './components/VideoResultCard';
 import VideoExpandedReel from './components/VideoExpandedReel';
+import { notify } from '../../platform/Notifications';
 
 // A single image reference in the prompt composer. Mirrors the multi-reference
 // pattern used by the polished image interface (ImageGenerationInterface2Copy).
@@ -42,7 +43,7 @@ const creditCostPerVideo = (model: string): number => {
 const notifications = {
   error: (message: string) => {
     console.error(`Error: ${message}`);
-    alert("Error: " + message);
+    notify.error("Error: " + message);
   },
   success: (message: React.ReactNode, options?: any) => {
     if (typeof message === 'string') {
@@ -50,7 +51,7 @@ const notifications = {
     } else {
       console.log('Operation completed successfully');
     }
-    alert("Success: " + message);
+    notify.success("Success: " + message);
   }
 };
 

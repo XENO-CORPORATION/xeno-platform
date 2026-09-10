@@ -1,5 +1,6 @@
 import React, { useState, useRef } from 'react';
 import { FileImage, Upload, Download, RotateCw, Crop, Palette, Sliders, Eye, Scissors } from 'lucide-react';
+import { notify } from '../../platform/Notifications';
 
 const ImgToolsInterface: React.FC = () => {
   const [selectedImage, setSelectedImage] = useState<File | null>(null);
@@ -34,7 +35,7 @@ const ImgToolsInterface: React.FC = () => {
     // Simulate image processing
     setTimeout(() => {
       setIsProcessing(false);
-      alert('Image processing completed! (This is a demo)');
+      notify.success('Image processing completed! (This is a demo)');
     }, 2000);
   };
 

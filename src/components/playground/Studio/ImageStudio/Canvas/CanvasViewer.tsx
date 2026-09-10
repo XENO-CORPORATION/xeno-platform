@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
+import { notify } from '../../../../platform/Notifications';
 import { 
   Send, Paperclip, Settings, Palette, History, 
   Plus, X, Trash2, Edit3, Copy, ThumbsUp, ThumbsDown,
@@ -2232,7 +2233,7 @@ const CanvasViewer: React.FC<CanvasViewerProps> = ({
     } catch (error) {
       console.error('🖼️ Reframe operation failed:', error);
       // Show error message to user (you can replace this with a proper toast notification)
-      alert('Failed to reframe image. Please try again.');
+      notify.error('Failed to reframe image. Please try again.');
     } finally {
       setIsReframing(false);
       // Always close the reframe input to prevent infinite loops

@@ -10,6 +10,7 @@ import {
   ChevronLeft, ChevronRight, Grid, List, MoreVertical
 } from 'lucide-react';
 import ConversionService from '../../../services/conversionService';
+import { notify } from '../../platform/Notifications';
 
 interface ConversionRecord {
   id: string;
@@ -89,7 +90,7 @@ const ConversionHistory: React.FC = () => {
       await conversionService.downloadConvertedFile(conversion.id, filename);
     } catch (error) {
       console.error('Download failed:', error);
-      alert('Failed to download file');
+      notify.error('Failed to download file');
     }
   };
 
@@ -104,11 +105,11 @@ const ConversionHistory: React.FC = () => {
         setSelectedIds(prev => prev.filter(id => id !== conversionId));
         await loadData(); // Reload to update storage
       } else {
-        alert('Failed to delete conversion: ' + result.error);
+        notify.error('Failed to delete conversion: ' + result.error);
       }
     } catch (error) {
       console.error('Delete failed:', error);
-      alert('Failed to delete conversion');
+      notify.error('Failed to delete conversion');
     } finally {
       setIsDeleting(false);
     }
@@ -128,7 +129,7 @@ const ConversionHistory: React.FC = () => {
       await loadData();
     } catch (error) {
       console.error('Batch delete failed:', error);
-      alert('Failed to delete some conversions');
+      notify.error('Failed to delete some conversions');
     } finally {
       setIsDeleting(false);
     }

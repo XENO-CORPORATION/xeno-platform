@@ -5,6 +5,7 @@ import { ImageModelSettings, GeneratedImage } from '../../nodes/image-models/Ima
 import { API_TOKENS } from '../../../config/apiConfig';
 import { generateImagePrompt, GeneratedPromptResult, analyzeImageWithGemini } from '../../../services/geminiService';
 import { useLayout } from '../../../pages/Overview';
+import { notify } from '../../platform/Notifications';
 
 // Create a custom event for when an image is generated
 export const IMAGE_GENERATED_EVENT = 'image_generated';
@@ -41,7 +42,7 @@ interface GalleryItem {
 const notifications = {
   error: (message: string) => {
     console.error(`Error: ${message}`);
-    alert("Error: " + message);
+    notify.error("Error: " + message);
   },
   success: (message: React.ReactNode, options?: any) => {
     if (typeof message === 'string') {

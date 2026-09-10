@@ -3,6 +3,7 @@ import { UploadCloud, FileText, BrainCircuit, Settings, X, Info, RotateCw, Downl
 // TODO: Create and import a LoRa training service
 import { checkApiTokens, API_TOKENS } from '../../../config/apiConfig';
 import ApiTokenNotice from '../../common/ApiTokenNotice';
+import { notify } from '../../platform/Notifications';
 
 // Mock service for LoRa Image Training
 type MockBaseModelId = 'sd-1.5' | 'sdxl-1.0'; // Example base model IDs
@@ -128,7 +129,7 @@ interface TrainingRun {
 
 // Simple notification helper (reuse)
 const notifications = {
-  error: (message: string) => { console.error(`Error: ${message}`); alert("Error: " + message); },
+  error: (message: string) => { console.error(`Error: ${message}`); notify.error("Error: " + message); },
   success: (message: string) => { console.log(`Success: ${message}`); /* No alert */ }
 };
 

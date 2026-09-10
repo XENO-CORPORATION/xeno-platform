@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { LogOut, Settings, User, Power, Grid3X3 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { ContainerService } from '../../services/containerService';
+import { notify } from '../platform/Notifications';
 
 // OS State Context
 interface OSStateContextType {
@@ -225,11 +226,11 @@ const OSAuthInterface: React.FC<{ onClose: () => void }> = ({ onClose }) => {
         navigate('/os/home');
       } else {
         console.error('Failed to start container:', result.error);
-        alert(`Failed to start container: ${result.error}`);
+        notify.error(`Failed to start container: ${result.error}`);
       }
     } catch (error) {
       console.error('Error starting container:', error);
-      alert(`Error starting container: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      notify.error(`Error starting container: ${error instanceof Error ? error.message : 'Unknown error'}`);
     } finally {
       setIsSubmitting(false);
     }
@@ -263,11 +264,11 @@ const OSAuthInterface: React.FC<{ onClose: () => void }> = ({ onClose }) => {
         console.log('Container deleted successfully');
       } else {
         console.error('Failed to delete container:', result.error);
-        alert(`Failed to delete container: ${result.error}`);
+        notify.error(`Failed to delete container: ${result.error}`);
       }
     } catch (error) {
       console.error('Delete container error:', error);
-      alert('Failed to delete container. Please try again.');
+      notify.error('Failed to delete container. Please try again.');
     } finally {
       setIsDeleting(false);
       setShowDeleteConfirm(false);

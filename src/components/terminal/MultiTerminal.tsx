@@ -6,6 +6,7 @@
 import React, { useState, useCallback, useRef, useEffect } from 'react';
 import { Terminal } from './Terminal';
 import { Plus, X, Settings, Download, Upload, Terminal as TerminalIcon } from 'lucide-react';
+import { notify } from '../platform/Notifications';
 
 interface TerminalTab {
   id: string;
@@ -283,7 +284,7 @@ export const MultiTerminal: React.FC<MultiTerminalProps> = ({
           }
         } catch (error) {
           console.error('Error importing terminal configuration:', error);
-          alert('Invalid configuration file');
+          notify.error('Invalid configuration file');
         }
       };
       reader.readAsText(file);

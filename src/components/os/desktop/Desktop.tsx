@@ -14,6 +14,7 @@ import { useWindowManager, createFileExplorerWindow, createTerminalWindow, creat
 import { useContainer } from '../../../contexts/ContainerContext';
 import { useCollaboration } from '../../../contexts/CollaborationContext';
 import { containerFileSystemService } from '../../../services/containerFileSystemService';
+import { notify } from '../../platform/Notifications';
 
 export type IconSize = 'small' | 'medium' | 'large';
 
@@ -266,7 +267,7 @@ const Desktop: React.FC = () => {
       }
     } catch (error) {
       console.error('Failed to delete:', error);
-      alert('Failed to delete item');
+      notify.error('Failed to delete item');
     }
   };
 
@@ -298,7 +299,7 @@ const Desktop: React.FC = () => {
       }
     } catch (error) {
       console.error('Failed to rename:', error);
-      alert('Failed to rename item');
+      notify.error('Failed to rename item');
     }
   };
 

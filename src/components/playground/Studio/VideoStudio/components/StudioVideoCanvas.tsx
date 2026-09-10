@@ -12,6 +12,7 @@ import { videoStudioService, VideoProject } from '../../../../../services/videoS
 import { authService } from '../../../../../services/authService';
 import ProjectManager from './ProjectManager';
 import { VideoFile } from '../core/types';
+import { notify } from '../../../../platform/Notifications';
 
 const StudioVideoCanvas: React.FC = () => {
   const { projectId } = useParams<{ projectId?: string }>();
@@ -311,14 +312,14 @@ const StudioVideoCanvas: React.FC = () => {
       console.log('✅ Project saved');
     } else {
       console.error('❌ Save failed:', result.error);
-      alert(`Failed to save project: ${result.error}`);
+      notify.error(`Failed to save project: ${result.error}`);
     }
   };
 
   // Start rendering
   const handleStartRender = async () => {
     if (!currentProject) {
-      alert('No active project to render');
+      notify.error('No active project to render');
       return;
     }
 
@@ -427,11 +428,11 @@ const StudioVideoCanvas: React.FC = () => {
         };
         setAssetLibrary(prev => [...prev, newAsset]);
       } else {
-        alert(`Failed to upload asset: ${result.error}`);
+        notify.error(`Failed to upload asset: ${result.error}`);
       }
     } catch (error) {
       console.error('Upload error:', error);
-      alert('Failed to upload asset');
+      notify.error('Failed to upload asset');
     }
   };
 

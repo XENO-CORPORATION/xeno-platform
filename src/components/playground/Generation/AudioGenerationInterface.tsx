@@ -3,12 +3,13 @@ import { Music, Wand2, Info, Download, Loader, Settings, PlayCircle, PauseCircle
 import { checkApiTokens, API_TOKENS } from '../../../config/apiConfig';
 import ApiTokenNotice from '../../common/ApiTokenNotice';
 import { generateAudio, isAudioModelSupported, MINIMAX_VOICES, MINIMAX_EMOTIONS, ORPHEUS_VOICES, ORPHEUS_EMOTIVE_TAGS, ELEVENLABS_VOICES, RESEMBLE_AI_VOICES, AudioModelSettings } from '../../../services/audioGenerationService';
+import { notify } from '../../platform/Notifications';
 
 // Simple notification helper to avoid dependency issues
 const notifications = {
   error: (message: string) => {
     console.error(`Error: ${message}`);
-    alert("Error: " + message);
+    notify.error("Error: " + message);
   },
   success: (message: React.ReactNode, options?: any) => {
     if (typeof message === 'string') {
@@ -16,7 +17,7 @@ const notifications = {
     } else {
       console.log('Operation completed successfully');
     }
-    alert("Success: " + message);
+    notify.success("Success: " + message);
   }
 };
 

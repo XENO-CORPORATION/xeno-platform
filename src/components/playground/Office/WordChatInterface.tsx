@@ -20,6 +20,7 @@ import { chatService, Conversation as DBConversation, ChatMessage as DBChatMessa
 import { chatComplete } from '@/services/aiService';
 import TurndownService from 'turndown';
 import { saveAs } from 'file-saver';
+import { notify } from '../../platform/Notifications';
 
 // Word interface ID for database storage
 const WORD_INTERFACE_ID = 'word-processor';
@@ -1667,7 +1668,7 @@ ${currentHtml}
       saveAs(blob, 'document.docx');
     } catch (error) {
       console.error('Error creating DOCX:', error);
-      alert('Failed to create DOCX file. Error: ' + (error as Error).message);
+      notify.error('Failed to create DOCX file. Error: ' + (error as Error).message);
     }
   };
 

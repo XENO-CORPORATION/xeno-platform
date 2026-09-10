@@ -1,3 +1,4 @@
+import { notify } from '../components/platform/Notifications';
 /**
  * File Conversion Service
  * Handles file upload and conversion operations
@@ -271,7 +272,7 @@ class ConversionService {
       window.URL.revokeObjectURL(url);
     } catch (error) {
       console.error('Download converted file error:', error);
-      alert(`Failed to download file: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      notify.error(`Failed to download file: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   }
 

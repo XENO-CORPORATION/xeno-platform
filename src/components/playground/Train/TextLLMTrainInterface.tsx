@@ -3,6 +3,7 @@ import { UploadCloud, FileText, BrainCircuit, Settings, X, Info, RotateCw, Downl
 // TODO: Create and import a real LLM fine-tuning service
 import { checkApiTokens, API_TOKENS } from '../../../config/apiConfig';
 import ApiTokenNotice from '../../common/ApiTokenNotice';
+import { notify } from '../../platform/Notifications';
 
 // Mock service for Text LLM Fine-tuning
 type MockTextBaseModelId = 'llama-3-8b' | 'gemma-7b' | 'mistral-7b'; // Example LLM base model IDs
@@ -153,7 +154,7 @@ interface TextTrainHistoryItem {
 
 // Simple notification helper (reuse)
 const notifications = {
-  error: (message: string) => { console.error(`Error: ${message}`); alert("Error: " + message); },
+  error: (message: string) => { console.error(`Error: ${message}`); notify.error("Error: " + message); },
   success: (message: string) => { console.log(`Success: ${message}`); /* No alert */ }
 };
 

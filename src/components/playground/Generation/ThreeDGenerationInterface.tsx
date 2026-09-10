@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import '@google/model-viewer';
 import { Box, Wand2, Info, Download, Loader, Settings, ChevronDown, Copy, Share2, Trash2, X, Send, Play, Upload, Image as ImageIcon } from 'lucide-react';
 import { generate3DModel, type ThreeDGenerationSettings, type ThreeDGenerationResult } from '../../../services/threeDGenerationService';
+import { notify } from '../../platform/Notifications';
 
 // Mock API token check
 const checkApiTokens = () => {
@@ -552,13 +553,13 @@ const ThreeDGenerationInterface: React.FC<ThreeDGenerationInterfaceProps> = ({
 
     // Validate file type
     if (!file.type.startsWith('image/')) {
-      alert('Please select an image file.');
+      notify.error('Please select an image file.');
       return;
     }
 
     // Validate file size (max 10MB)
     if (file.size > 10 * 1024 * 1024) {
-      alert('Image file size must be less than 10MB.');
+      notify.error('Image file size must be less than 10MB.');
       return;
     }
 
@@ -616,12 +617,12 @@ const ThreeDGenerationInterface: React.FC<ThreeDGenerationInterfaceProps> = ({
     if (!file) return;
 
     if (!file.type.startsWith('image/')) {
-      alert('Please select an image file.');
+      notify.error('Please select an image file.');
       return;
     }
 
     if (file.size > 10 * 1024 * 1024) {
-      alert('Image file size must be less than 10MB.');
+      notify.error('Image file size must be less than 10MB.');
       return;
     }
 
@@ -701,33 +702,33 @@ const ThreeDGenerationInterface: React.FC<ThreeDGenerationInterfaceProps> = ({
     // Check model-specific requirements
     if (selectedModel === 'fal-ai/triposr') {
       if (!imageUrl) {
-        alert('Please upload an image for TripoSR before generating');
+        notify.error('Please upload an image for TripoSR before generating');
         return;
       }
     } else if (selectedModel === 'fal-ai/hunyuan3d/v2') {
       if (!hunyuan3dUploadedImage || !hunyuan3dImageUrl) {
-        alert('Please upload an image for Hunyuan3D v2 before generating');
+        notify.error('Please upload an image for Hunyuan3D v2 before generating');
         return;
       }
     } else if (selectedModel === 'fal-ai/hyper3d/rodin') {
       if (hyper3dGenerationMode === 'text') {
     if (!prompt.trim()) {
-          alert('Please enter a text prompt for text-to-3D generation');
+          notify.error('Please enter a text prompt for text-to-3D generation');
           return;
         }
       } else if (hyper3dGenerationMode === 'image') {
         if (hyper3dUploadedImages.length === 0) {
-          alert('Please upload at least one image for image-to-3D generation');
+          notify.error('Please upload at least one image for image-to-3D generation');
           return;
         }
       } else if (hyper3dGenerationMode === 'mixed') {
         if (!prompt.trim() && hyper3dUploadedImages.length === 0) {
-          alert('Please provide either a text prompt or upload images for mixed mode generation');
+          notify.error('Please provide either a text prompt or upload images for mixed mode generation');
           return;
         }
       }
     } else if (!prompt.trim()) {
-      alert('Please enter a prompt before generating');
+      notify.error('Please enter a prompt before generating');
       return;
     }
 
@@ -781,11 +782,11 @@ const ThreeDGenerationInterface: React.FC<ThreeDGenerationInterfaceProps> = ({
         setCurrentPreview(newItem);
         setHistory3D(prev => [newItem, ...prev]);
 
-        alert(`3D model generated successfully! ${texturedMesh ? 'Textured mesh' : 'White mesh'} in GLB format.`);
+        notify.success(`3D model generated successfully! ${texturedMesh ? 'Textured mesh' : 'White mesh'} in GLB format.`);
 
       } catch (error) {
         console.error('Error generating 3D model:', error);
-        alert(`Error generating 3D model: ${error instanceof Error ? error.message : 'Unknown error'}`);
+        notify.error(`Error generating 3D model: ${error instanceof Error ? error.message : 'Unknown error'}`);
       } finally {
         setIsGenerating(false);
       }
@@ -836,11 +837,11 @@ const ThreeDGenerationInterface: React.FC<ThreeDGenerationInterfaceProps> = ({
         setCurrentPreview(newItem);
         setHistory3D(prev => [newItem, ...prev]);
 
-        alert(`3D model generated successfully! Format: ${triposrOutputFormat.toUpperCase()}`);
+        notify.success(`3D model generated successfully! Format: ${triposrOutputFormat.toUpperCase()}`);
 
       } catch (error) {
         console.error('Error generating 3D model:', error);
-        alert(`Error generating 3D model: ${error instanceof Error ? error.message : 'Unknown error'}`);
+        notify.error(`Error generating 3D model: ${error instanceof Error ? error.message : 'Unknown error'}`);
       } finally {
         setIsGenerating(false);
       }
@@ -912,11 +913,11 @@ const ThreeDGenerationInterface: React.FC<ThreeDGenerationInterfaceProps> = ({
         setCurrentPreview(newItem);
         setHistory3D(prev => [newItem, ...prev]);
 
-        alert(`3D model generated successfully! Format: ${geometryFileFormat.toUpperCase()}`);
+        notify.success(`3D model generated successfully! Format: ${geometryFileFormat.toUpperCase()}`);
 
       } catch (error) {
         console.error('Error generating 3D model:', error);
-        alert(`Error generating 3D model: ${error instanceof Error ? error.message : 'Unknown error'}`);
+        notify.error(`Error generating 3D model: ${error instanceof Error ? error.message : 'Unknown error'}`);
       } finally {
         setIsGenerating(false);
       }
@@ -926,7 +927,7 @@ const ThreeDGenerationInterface: React.FC<ThreeDGenerationInterfaceProps> = ({
 
     // --- MOCK API CALL for other models ---
     if (!apiTokenAvailable) {
-      alert('API token required to generate 3D models');
+      notify.error('API token required to generate 3D models');
       return;
     }
 
@@ -1021,21 +1022,21 @@ const ThreeDGenerationInterface: React.FC<ThreeDGenerationInterfaceProps> = ({
     // Validate files
     const invalidFiles = files.filter(file => !file.type.startsWith('image/'));
     if (invalidFiles.length > 0) {
-      alert('Please select only image files.');
+      notify.error('Please select only image files.');
       return;
     }
 
     // Validate file sizes (max 10MB each)
     const oversizedFiles = files.filter(file => file.size > 10 * 1024 * 1024);
     if (oversizedFiles.length > 0) {
-      alert('Each image must be less than 10MB.');
+      notify.error('Each image must be less than 10MB.');
       return;
     }
 
     // Limit to 5 images max for practical UI reasons
     const totalImages = hyper3dUploadedImages.length + files.length;
     if (totalImages > 5) {
-      alert('Maximum 5 images allowed. Please remove some images first.');
+      notify.error('Maximum 5 images allowed. Please remove some images first.');
       return;
     }
 
@@ -2060,7 +2061,7 @@ const ThreeDGenerationInterface: React.FC<ThreeDGenerationInterfaceProps> = ({
                   <button
                     className="p-2 text-white/70 hover:text-white hover:bg-white/10 rounded-lg transition-colors"
                     title="Copy Model URL"
-                    onClick={() => navigator.clipboard.writeText(currentPreview.url).then(() => alert('Link copied!'))} // Add notification feedback
+                    onClick={() => navigator.clipboard.writeText(currentPreview.url).then(() => notify.success('Link copied!'))} // Add notification feedback
                   >
                     <Copy size={18} />
                   </button>
@@ -2068,7 +2069,7 @@ const ThreeDGenerationInterface: React.FC<ThreeDGenerationInterfaceProps> = ({
                   <button
                     className="p-2 text-white/70 hover:text-white hover:bg-white/10 rounded-lg transition-colors"
                     title="Share (Placeholder)"
-                    onClick={() => alert(`Sharing 3D model (URL: ${currentPreview.url})`)}
+                    onClick={() => notify.error(`Sharing 3D model (URL: ${currentPreview.url})`)}
                   >
                     <Share2 size={18} />
                   </button>

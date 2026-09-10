@@ -1,4 +1,5 @@
 import * as React from 'react';
+import { notify } from '../../platform/Notifications';
 import {
   Folder,
   FileText,
@@ -714,7 +715,7 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
             setEditingItem(null);
           } else {
             console.error('❌ Failed to create folder:', result.error);
-            alert(`Failed to create folder: ${result.error}`);
+            notify.error(`Failed to create folder: ${result.error}`);
           }
         } else {
           // Create file in container filesystem
@@ -743,12 +744,12 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
             setEditingItem(null);
           } else {
             console.error('❌ Failed to create file:', result.error);
-            alert(`Failed to create file: ${result.error}`);
+            notify.error(`Failed to create file: ${result.error}`);
           }
         }
       } catch (error) {
         console.error('❌ Error creating item:', error);
-        alert(`Error: ${error instanceof Error ? error.message : 'Unknown error'}`);
+        notify.error(`Error: ${error instanceof Error ? error.message : 'Unknown error'}`);
       }
     } else {
       // If name is empty, cancel

@@ -1,5 +1,6 @@
 import React, { useRef, useEffect, useState, useCallback } from 'react';
 import { X, Pipette, Palette, Copy, Check, Save } from 'lucide-react';
+import { notify } from '../../../../../platform/Notifications';
 
 interface ColorPickerModalProps {
   isVisible: boolean;
@@ -335,7 +336,7 @@ const ColorPickerModal: React.FC<ColorPickerModalProps> = ({
   // Eyedropper functionality
   const handleEyedropper = useCallback(async () => {
     if (!('EyeDropper' in window)) {
-      alert('Eyedropper not supported in this browser');
+      notify.error('Eyedropper not supported in this browser');
       return;
     }
 

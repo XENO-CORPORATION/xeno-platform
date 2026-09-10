@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { Share, Upload, Link, QrCode, Clock, Users, Mail, MessageCircle, Copy, Eye } from 'lucide-react';
+import { notify } from '../../platform/Notifications';
 
 const ShareToolsInterface: React.FC = () => {
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
@@ -40,7 +41,7 @@ const ShareToolsInterface: React.FC = () => {
 
   const copyToClipboard = (text: string) => {
     navigator.clipboard.writeText(text);
-    alert('Copied to clipboard!');
+    notify.success('Copied to clipboard!');
   };
 
   const formatFileSize = (bytes: number) => {

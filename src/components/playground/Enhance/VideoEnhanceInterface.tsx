@@ -4,6 +4,7 @@ import { Video, Send, Download, Trash2, Sparkles, Plus, X, Info, RotateCw, Setti
 import { checkApiTokens, API_TOKENS } from '../../../config/apiConfig';
 import ApiTokenNotice from '../../common/ApiTokenNotice';
 import { useLayout } from '../../../pages/Overview';
+import { notify } from '../../platform/Notifications';
 
 // Mock service for video upscaling
 type MockVideoModelId = 'real-esrgan-video-x4plus' | 'real-esrgan-video-general-x4v3' | 'rife-4.6' | 'rife-4.15-lite' | 'topaz-proteus' | 'topaz-artemis' | 'waifu2x-video' | 'video-ai-enhancer' | 'frame-interpolation-ai' | 'dain-video' | 'st-gcn-video'; // Extended video model IDs
@@ -118,7 +119,7 @@ export const VIDEO_UPSCALED_EVENT = 'video_upscaled';
 const notifications = {
   error: (message: string) => {
     console.error(`Error: ${message}`);
-    alert("Error: " + message);
+    notify.error("Error: " + message);
   },
   success: (message: string) => {
     console.log(`Success: ${message}`);

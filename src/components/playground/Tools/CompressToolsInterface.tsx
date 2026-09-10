@@ -1,5 +1,6 @@
 import React, { useState, useRef } from 'react';
 import { Archive, Upload, Download, Gauge, Settings, FileText, Package, Zap, HardDrive, Shield, CheckCircle, X } from 'lucide-react';
+import { notify } from '../../platform/Notifications';
 
 const CompressToolsInterface: React.FC = () => {
   const [selectedFiles, setSelectedFiles] = useState<FileList | null>(null);
@@ -68,7 +69,7 @@ const CompressToolsInterface: React.FC = () => {
     setTimeout(() => {
       setIsCompressing(false);
       setCompressionProgress(100);
-      alert('Compression completed! (This is a demo)');
+      notify.success('Compression completed! (This is a demo)');
       setTimeout(() => setCompressionProgress(0), 1000);
     }, 3000);
   };

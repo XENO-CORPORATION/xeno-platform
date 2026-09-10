@@ -4,6 +4,7 @@ import { Image, Send, Download, Trash2, Sparkles, Plus, X, Info, RotateCw, Wand2
 // import imageUpscaleService from '../../../services/imageUpscaleService';
 
 import { postXenoRequest } from '../../../services/xenoProxyRequest';
+import { notify } from '../../platform/Notifications';
 
 const recraftUpscaleService = {
   async upscale(imageUrl: string, modelType: 'creative' | 'crisp', options: { sync_mode?: boolean; enable_safety_checker?: boolean } = {}) {
@@ -641,7 +642,7 @@ export const IMAGE_UPSCALED_EVENT = 'image_upscaled';
 const notifications = {
   error: (message: string) => {
     console.error(`Error: ${message}`);
-    alert("Error: " + message);
+    notify.error("Error: " + message);
   },
   success: (message: string) => {
     console.log(`Success: ${message}`);

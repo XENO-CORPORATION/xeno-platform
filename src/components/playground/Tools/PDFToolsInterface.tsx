@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { FileType, Upload, Download, Scissors, Merge, Lock, Unlock, Eye, FileText } from 'lucide-react';
+import { notify } from '../../platform/Notifications';
 
 const PDFToolsInterface: React.FC = () => {
   const [selectedFiles, setSelectedFiles] = useState<FileList | null>(null);
@@ -28,7 +29,7 @@ const PDFToolsInterface: React.FC = () => {
     // Simulate PDF processing
     setTimeout(() => {
       setIsProcessing(false);
-      alert('PDF processing completed! (This is a demo)');
+      notify.success('PDF processing completed! (This is a demo)');
     }, 2500);
   };
 

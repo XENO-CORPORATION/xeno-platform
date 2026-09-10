@@ -6,6 +6,7 @@ import * as xenoImageService from '../../../services/xenoImageService';
 import { useGenerationHistory } from './hooks/useGenerationHistory';
 import GenerationHistory from './components/GenerationHistory';
 import { generationHistoryService, type GenerationRecord } from '../../../services/generationHistoryService';
+import { notify } from '../../platform/Notifications';
 
 interface AspectRatio {
   value: string;
@@ -1053,7 +1054,7 @@ const ImageGenerationInterface2: React.FC = () => {
     const imageCount = gen.image_urls?.length || 0;
 
     if (imageCount === 0) {
-      alert('No images to download');
+      notify.error('No images to download');
       setOpenMoreMenu(null);
       return;
     }
@@ -1109,7 +1110,7 @@ const ImageGenerationInterface2: React.FC = () => {
       }
     } catch (error) {
       console.error('Failed to download images:', error);
-      alert('Failed to download images. Please try again.');
+      notify.error('Failed to download images. Please try again.');
     }
     setOpenMoreMenu(null);
   };
@@ -2542,7 +2543,7 @@ const ImageGenerationInterface2: React.FC = () => {
                               </button>
                               <button
                                 onClick={() => {
-                                  alert('Report submitted. Thank you for your feedback.');
+                                  notify.success('Report submitted. Thank you for your feedback.');
                                   setOpenMoreMenu(null);
                                 }}
                                 className="w-full flex items-center gap-2 px-3 py-2 text-xs text-white/70 hover:text-white hover:bg-white/10 transition-all"

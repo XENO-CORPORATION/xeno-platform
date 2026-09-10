@@ -3,6 +3,7 @@ import { UploadCloud, Video, BrainCircuit, Settings, X, Info, RotateCw, Download
 // TODO: Create and import a real LoRa video training service
 import { checkApiTokens, API_TOKENS } from '../../../config/apiConfig';
 import ApiTokenNotice from '../../common/ApiTokenNotice';
+import { notify } from '../../platform/Notifications';
 
 // Mock service for LoRa Video Training
 type MockVideoBaseModelId = 'svd' | 'svd-xt' | 'animatediff-v1.5'; // Example video base model IDs
@@ -132,7 +133,7 @@ interface VideoTrainingRun {
 
 // Simple notification helper (reuse)
 const notifications = {
-  error: (message: string) => { console.error(`Error: ${message}`); alert("Error: " + message); },
+  error: (message: string) => { console.error(`Error: ${message}`); notify.error("Error: " + message); },
   success: (message: string) => { console.log(`Success: ${message}`); /* No alert */ }
 };
 

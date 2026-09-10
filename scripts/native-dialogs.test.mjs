@@ -6,7 +6,7 @@
  * to look like one, and on a destructive action give the reader a browser chrome
  * they have been trained to dismiss without reading.
  *
- * This is a RATCHET rather than a ban because there are 106 of them across 45
+ * This is a RATCHET rather than a ban because there were 106 of them across 45
  * files, and a ban would either fail on day one or need an allowlist — and an
  * allowlist is where the next one goes to be forgotten. A ceiling that only ever
  * decreases converts a large cleanup into a monotone one: every commit is free to
@@ -17,10 +17,11 @@
  *   confirm (29) + prompt (12) — a decision the user makes. ActionDialog already
  *   covers both shapes, so these are conversions.
  *
- *   alert (65) — a notification. There is no toast/notification primitive in
- *   @xenosystem/elements-react, so these need a shared control built first.
- *   Converting them one-by-one into bespoke local banners is how 47 files end up
- *   with 47 different error styles.
+ *   alert (0) — DONE 2026-09-10. A notification, not a decision. sonner was
+ *   already a dependency and Pricing.tsx already called toast.error, and no
+ *   <Toaster/> was mounted anywhere, so that call rendered nothing. Mounting one
+ *   (src/components/platform/Notifications.tsx) fixed a silent failure on the
+ *   payment path and gave all 65 somewhere to go.
  *
  * Lower a ceiling in the same commit that removes the calls. Do not lower one
  * speculatively — a ceiling below the real count fails the next honest commit and
@@ -41,7 +42,7 @@ const SRC = path.join(ROOT, 'src');
  * `_old_backup` trees are excluded — they are dead code kept for reference, and
  * counting them would make the ratchet move when somebody deletes a corpse.
  */
-const CEILING = { confirm: 29, prompt: 12, alert: 65 };
+const CEILING = { confirm: 29, prompt: 12, alert: 0 };
 
 function sourceFiles(dir) {
   const out = [];
@@ -97,8 +98,13 @@ test('the ratchet is measuring something, not passing on an empty scan', () => {
   // control: if the scanner breaks, this fails rather than reporting success.
   const files = sourceFiles(SRC);
   assert.ok(files.length > 300, `expected the whole src tree, scanned ${files.length} files`);
-  const { total } = countCalls('alert');
-  assert.ok(total > 0, 'zero alerts found — the scanner is broken, not the codebase clean');
+  // Pointed at a kind that still has instances. It was `alert`, and when alert
+  // reached zero this control started failing — correctly: a control that asserts
+  // "something exists" has to name something that does, or it silently becomes a
+  // test of nothing the moment the cleanup succeeds. Move it again when confirm
+  // reaches zero; do not delete it.
+  const { total } = countCalls('confirm');
+  assert.ok(total > 0, 'zero confirms found — the scanner is broken, not the codebase clean');
 });
 
 test('comments and strings are not counted as calls', () => {
@@ -111,6 +117,31 @@ test('comments and strings are not counted as calls', () => {
   `);
   const hits = (sample.match(/(^|[^.\w$])(?:window\s*\.\s*)?confirm\s*\(/g) || []).length;
   assert.equal(hits, 1, 'only the real call should count');
+});
+
+test('the notification surface is mounted in EVERY shell, not just one', () => {
+  /* App.tsx returns from two places: a standalone chat shell and the full
+   * application. A Toaster in one of them fails silently in the other, and
+   * "silently" is the whole problem — that is exactly how Hub's unsigned badge
+   * came to be shown to the wrong half of its audience.
+   *
+   * There was no Toaster in either until 2026-09-10, so Pricing.tsx's
+   * toast.error('Could not start checkout') rendered nothing at all. */
+  const app = fs.readFileSync(path.join(SRC, 'App.tsx'), 'utf8');
+  const mounts = (app.match(/<PlatformNotifications\s*\/>/g) || []).length;
+  const returns = (app.match(/^\s*return \(\s*$/gm) || []).length;
+  assert.ok(returns >= 2, `expected App to render from more than one branch, found ${returns}`);
+  assert.equal(mounts, returns,
+    `PlatformNotifications is mounted ${mounts} times for ${returns} render branches — `
+    + 'a notification surface missing from one shell fails silently in that shell');
+
+  const surface = fs.readFileSync(path.join(SRC, 'components/platform/Notifications.tsx'), 'utf8');
+  assert.match(surface, /usePlatformTheme/,
+    'it must follow the platform theme, not next-themes — that reads a Next.js '
+    + "library's idea of 'system' in a Vite app and drifts from every other surface");
+  assert.match(surface, /closeButton/, 'an error the reader cannot dismiss is a nuisance');
+  assert.doesNotMatch(code(surface), /(^|[^.\w$])(?:window\s*\.\s*)?(confirm|prompt|alert)\s*\(/,
+    'the replacement must not itself reach for a browser dialog');
 });
 
 test('ActionDialog is the sanctioned replacement and covers both decision shapes', () => {

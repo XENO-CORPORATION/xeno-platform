@@ -4,12 +4,13 @@ import { checkApiTokens, API_TOKENS } from '../../../config/apiConfig';
 import ApiTokenNotice from '../../common/ApiTokenNotice';
 import { analyzeImageWithGemini } from '../../../services/geminiService';
 import videoGenerationService from '../../../services/videoGenerationService';
+import { notify } from '../../platform/Notifications';
 
 // Simple notification helper to avoid dependency issues
 const notifications = {
   error: (message: string) => {
     console.error(`Error: ${message}`);
-    alert("Error: " + message);
+    notify.error("Error: " + message);
   },
   success: (message: React.ReactNode, options?: any) => {
     if (typeof message === 'string') {
@@ -17,7 +18,7 @@ const notifications = {
     } else {
       console.log('Operation completed successfully');
     }
-    alert("Success: " + message);
+    notify.success("Success: " + message);
   }
 };
 
@@ -1102,7 +1103,7 @@ const VideoGenerationInterface: React.FC<VideoGenerationInterfaceProps> = ({
         }
       } catch (error) {
         console.error("Error in file processing:", error);
-        alert("Error processing file");
+        notify.error("Error processing file");
       } finally {
         setIsProcessingImage(false);
       }
@@ -1110,7 +1111,7 @@ const VideoGenerationInterface: React.FC<VideoGenerationInterfaceProps> = ({
 
     reader.onerror = () => {
       console.error("Error reading file");
-      alert("Error reading file");
+      notify.error("Error reading file");
       setIsProcessingImage(false);
     };
 
