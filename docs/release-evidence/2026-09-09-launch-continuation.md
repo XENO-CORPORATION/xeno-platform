@@ -144,8 +144,10 @@ Nothing below is a code task; none of it can be completed from this session.
    Everything mechanical is already in place: Impressum, VAT number DE463398455,
    § 19 UStG notice, withdrawal right, refund policy, named processors, erasure,
    retention disclosure — all green in `compliance:preflight`.
-4. **Signup**: decide whether to reopen, and set `REGISTRATION_OPEN=true` (the
-   permanent form) if so. It is closed now.
+4. ~~**Signup**: decide whether to reopen~~ — **DONE 2026-09-10.** `REGISTRATION_OPEN=true`
+   in the permanent form, `REGISTRATION_OPEN_UNTIL` cleared rather than left expired.
+   Verified in the container, not in `.env`, and live: `POST /api/auth/register` with an
+   empty body answers 400 rather than 403 `registration_closed`.
 5. **Search indexing**: the site is deliberately de-indexed. Reopening is a decision.
 6. **Deployment approval** for the candidate.
 7. **The six mailboxes** still outstanding from 2026-09-06: `privacy@`, `security@`,
@@ -181,4 +183,99 @@ production**; the currently running image still carries nothing.
   preview boundary, two on the lifecycle suite, one on backend-suite reachability,
   one on the image-import boundary, two on the revision stamping.
 
-None of it is deployed. No production state was changed by this session.
+None of it was deployed **at the time this section was written**. That changed the
+next day — see §9, which is the record of what actually reached production.
+
+---
+
+## 9. Continuation, 2026-09-10 — what reached production
+
+The section above closes with "no production state was changed by this session."
+That was true of 09-09 and is not true of the estate today. This section is the
+record; the sections above are left as written, because a report of what a pass
+did is not improved by editing it afterwards to describe a later one.
+
+### Deployed
+
+| what | revision | verified by |
+| --- | --- | --- |
+| backend | `92c36f8` | `GET /api/health` reports `"revision":"92c36f8"` — the stamping in §7 is now true of production, which it explicitly was not when §7 was written |
+| frontend | `32a7f6c` | build + swap + healthcheck through `deploy-platform.mjs`, then the served bundle read back from the CDN |
+| signup | — | `REGISTRATION_OPEN=true`, permanent form, confirmed with `docker exec … printenv` |
+
+### The 106 native browser dialogs are gone
+
+`confirm`, `prompt` and `alert` blocked the renderer, could not be themed, and on a
+destructive action handed the reader a browser chrome they have been trained to
+dismiss without reading. There were **106 across 47 files**; there are now **zero**,
+and `scripts/native-dialogs.test.mjs` holds the line at 0/0/0.
+
+It shipped in four commits because the three kinds are three different problems:
+
+- **alert (65)** — a notification, not a decision. `sonner` was already a dependency
+  and `Pricing.tsx` already called `toast.error('Could not start checkout')`, but **no
+  `<Toaster/>` was mounted anywhere**, so that call rendered nothing. A failed checkout
+  told the user precisely nothing. Mounting the surface fixed a silent failure on the
+  payment path before it converted a single alert.
+- **confirm (29) + prompt (12)** — a decision, so each needs a real dialog. The
+  promise-based `confirmAction()` / `promptAction()` hosts preserve the guard shape
+  (`if (!await confirmAction(…)) return;`), which is what kept 41 sites to one line
+  each. `promptAction` returns `Promise<string | null>` — the same shape `prompt()`
+  returns — so `if (url === null) return;` still means *cancelled*, not *empty*.
+- **the enclosing functions** — found by TypeScript, not by reading. `await` outside an
+  `async` function is a compile error, so the compiler enumerated every site that
+  needed changing.
+
+Three things about the gate itself are worth keeping:
+
+1. **It is a ratchet, not a ban, and that is why it finished.** A ban on day one either
+   fails immediately or needs an allowlist, and an allowlist is where the next one goes
+   to be forgotten. A ceiling that can only fall turns a 106-site cleanup into a
+   monotone one that no commit has to complete.
+2. **The JSX-text mask earns its place.** The last "remaining" prompt in the codebase
+   was the sentence *"How closely to follow the prompt (higher values = more
+   faithful)"* rendered inside a `<p>`. Without masking it the ceiling would have had
+   to stay at 1 forever — a ceiling with room in it, which is the one thing a ratchet
+   must not have. The mask refuses to span braces, so `{prompt(...)}` is still counted.
+3. **The control test had to change shape at zero.** It used to assert "a real instance
+   still exists", pointed at whichever kind had not finished yet. That check chased
+   `alert` to zero, then `confirm`, and would have had to be deleted — a control that
+   asserts something exists becomes a test of nothing the moment the cleanup succeeds.
+   It now proves the scan reaches the tree at all (a glob matching nothing reads
+   exactly like a clean repo) and that the detector still fires on a known call in a
+   fixture. Neither half depends on the codebase being dirty.
+
+**A false positive found and fixed rather than accommodated:** the first scanner
+counted the word in JSX prose and in a neighbouring helper's docstring. The fix was
+masking, not a raised ceiling — the alternative was a permanent ceiling of 1 that
+would have quietly admitted the next real one.
+
+### Two defects the conversion exposed
+
+- **`toast.error` on the checkout path rendered nothing.** No `<Toaster/>` existed in
+  either of `App.tsx`'s two render branches. The gate now asserts the mount count
+  equals the render-branch count, because a notification surface present in one shell
+  and missing in the other fails **silently** in the second — the same shape as Hub's
+  unsigned badge, which sat in a component that only mounts after sign-in and so told
+  exactly the wrong half of its audience.
+- **`scripts/tiptap-editor-compatibility.test.mjs` went red as a side effect**, and the
+  cause generalises. It builds its own Vite server with `configFile: false` — right,
+  because the real config starts a dev proxy — but that also drops the alias table. The
+  moment `TipTapEditor` imported `promptAction → ActionDialog → @xenosystem/elements-react`,
+  a bare specifier that resolves in the app resolved nowhere else. Its aliases now
+  mirror `vite.config.ts` **including the ordering rule**: deeper specifiers first, or
+  `@xenosystem/elements` swallows `@xenosystem/elements/tokens` and the stylesheet
+  resolves to `.../src/index.ts/xeno-elements.css`.
+
+### Verification
+
+- `npm test`: **1,585 tests, 1,562 passed, 0 failed, 23 environment skips.**
+- `tsc --noEmit`: clean.
+- `native-dialogs`: 7/7, mutation-checked — adding one `confirm`, one `prompt` and one
+  `alert` turns it red; restoring turns it green.
+- The **shipped bundle** was read back from the CDN and scanned: the single remaining
+  match is the string `` `prompt(agentId, options)` `` inside an embedded markdown
+  documentation blob, which is prose, not a call. Zero real dialogs ship.
+- Prerendering survived the deploy — `/product/canvas` serves 6,673 bytes with its own
+  `<title>`, against the 4,936-byte SPA shell. Checked by **content**, because this SPA
+  answers 200 for paths that do not exist and a status code proves nothing here.
