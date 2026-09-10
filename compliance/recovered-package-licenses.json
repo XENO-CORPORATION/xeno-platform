@@ -59,7 +59,10 @@
           "sha256": "eeed1ca176eebad5c73870e233cfff03981fecd319c969475dfa3633036c336b",
           "text": "The MIT License (MIT)\n\nCopyright (c) 2016 Sebastian Mayr\n\nPermission is hereby granted, free of charge, to any person obtaining a copy\nof this software and associated documentation files (the \"Software\"), to deal\nin the Software without restriction, including without limitation the rights\nto use, copy, modify, merge, publish, distribute, sublicense, and/or sell\ncopies of the Software, and to permit persons to whom the Software is\nfurnished to do so, subject to the following conditions:\n\nThe above copyright notice and this permission notice shall be included in all\ncopies or substantial portions of the Software.\n\nTHE SOFTWARE IS PROVIDED \"AS IS\", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR\nIMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,\nFITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE\nAUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER\nLIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,\nOUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE\nSOFTWARE.\n"
         }
-      ]
+      ],
+      "componentNotes": {
+        "lib/mappingTable.json": "GENERATED, not authored. The repository’s own scripts/generateMappingTable.js (present at this commit) fetches http://www.unicode.org/Public/idna/latest/IdnaMappingTable.txt and reduces it to code-point ranges with their IDNA status, which is why the file is absent from the source tree. It is therefore DERIVED FROM UNICODE CONSORTIUM DATA, which carries its own terms (the Unicode License Agreement for Data Files and Software) that neither this package nor its repository mentions. The MIT grant recorded here covers tr46’s own code and is separately proven by the matching runtime files; it makes no claim about this table. Measured 2026-09-10; tr46 and whatwg-url are ABSENT from the built client bundle, so this concerns code we run rather than code we distribute to browsers."
+      }
     }
   ]
 }

@@ -796,29 +796,6 @@
     },
     {
       "lockfile": "package-lock.json",
-      "path": "node_modules/duck",
-      "name": "duck",
-      "version": "0.1.12",
-      "license": "BSD-2-Clause",
-      "source": "package/LICENSE",
-      "resolution": "reviewed-exact-text",
-      "resolved": "https://registry.npmjs.org/duck/-/duck-0.1.12.tgz",
-      "integrity": "sha512-wkctla1O6VfP89gQ+J/yDesM0S7B7XLXjKGzXxMDVFg7uEn706niAtyYovKbyq1oT9YwDcly721/iUWoc8MVRg==",
-      "files": [
-        {
-          "path": "package/LICENSE",
-          "sha256": "6663bbd049205d38a496ccacb412a151980b444627d38de218b3b809aef330f1",
-          "text": "Copyright (c) 2013, Michael Williamson\nAll rights reserved.\n\nRedistribution and use in source and binary forms, with or without\nmodification, are permitted provided that the following conditions are met: \n\n1. Redistributions of source code must retain the above copyright notice, this\n   list of conditions and the following disclaimer. \n2. Redistributions in binary form must reproduce the above copyright notice,\n   this list of conditions and the following disclaimer in the documentation\n   and/or other materials provided with the distribution. \n\nTHIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS \"AS IS\" AND\nANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED\nWARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE\nDISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE LIABLE FOR\nANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES\n(INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;\nLOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND\nON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT\n(INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS\nSOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.\n"
-        },
-        {
-          "path": "package/package.json",
-          "sha256": "e0f9cf20de14c69ac18db77a34c2c485f6a677e15b2076b997249e70e0b39eae",
-          "text": "{\n    \"name\": \"duck\",\n    \"version\": \"0.1.12\",\n    \"author\": \"Michael Williamson <mike@zwobble.org>\",\n    \"description\": \"Rich matchers inspired by Hamcrest. Useful for generating helpful assertion failure messages in tests.\",\n    \"license\": \"BSD\",\n    \"repository\": {\n        \"type\": \"git\",\n        \"url\": \"https://github.com/mwilliamson/duck.js.git\"\n    },\n    \"keywords\": [\n        \"test\",\n        \"assert\",\n        \"matcher\",\n        \"assertThat\"\n    ],\n    \"dependencies\": {\n        \"underscore\": \"^1.13.1\"\n    },\n    \"devDependencies\": {\n        \"nodeunit\": \"~0.8.0\"\n    }\n}\n"
-        }
-      ]
-    },
-    {
-      "lockfile": "package-lock.json",
       "path": "node_modules/fill-range",
       "name": "fill-range",
       "version": "7.1.1",

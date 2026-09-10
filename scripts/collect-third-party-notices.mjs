@@ -6,6 +6,7 @@ import { upstreamNotices } from './lib/npm-upstream-notices.mjs';
 import { recordedFirstPartyPackage } from './lib/first-party-package-evidence.mjs';
 import { hasReferencedLicense, referencedPackageLicense } from './lib/referenced-package-licenses.mjs';
 import { recoveredLicense } from './lib/recovered-package-licenses.mjs';
+import { declaredOnlyLicense } from './lib/declared-package-licenses.mjs';
 
 export function bundledNoticeTexts(files) {
   const named = files.filter((file) => /\/(?:licen[cs]e|copying|notice|copyright)(?:[._-].*)?$/i.test(file.path));
@@ -61,7 +62,11 @@ export async function collectNotices(root) {
         let files = bundledNoticeTexts(pack.files);
         if (!files.length) {
           const recovered = recoveredLicense(name, item, pack.manifest);
-          if (recovered) { files = recovered.files; record.recoveredSource = recovered.provenance; }
+          if (recovered) {
+            files = recovered.files;
+            record.recoveredSource = recovered.provenance;
+            if (recovered.unresolvedComponents) record.unresolvedComponents = recovered.unresolvedComponents;
+          }
         }
         if (!files.length && hasReferencedLicense(name)) {
           const detailed = await lockedPackageEvidence(item, name, path.join(root, '.compliance/npm-tarballs'), { includeLicenseHeaders: true });
@@ -76,6 +81,15 @@ export async function collectNotices(root) {
             files = upstream.files;
             record.upstream = upstream.provenance;
           } catch (error) { record.upstreamError = error.message; }
+        }
+        /* LAST, and deliberately so. Some publishers name a licence and never
+         * write the text down, so no amount of searching finds a document that
+         * was never authored. Recording that honestly beats leaving a hole,
+         * which reads as an oversight rather than as a finding — but only ever
+         * after the three stronger routes above have produced nothing. */
+        if (!files.length) {
+          const declared = declaredOnlyLicense(name, item, pack.manifest, pack.files);
+          if (declared) { files = declared.files; record.declaredOnly = declared.provenance; }
         }
         records.push({ ...record, status: files.length ? 'text-collected' : 'missing-license-text', files,
           ...(files.length ? {} : { availableEvidence: pack.files.map(({ path, sha256 }) => ({ path, sha256 })) }) });
@@ -97,6 +111,34 @@ export async function collectNotices(root) {
     `Unresolved package texts: ${missing.length}. Copyleft and non-npm obligations require separate review.`, ''];
   for (const record of records.filter((record) => record.status !== 'first-party-scope')) {
     lines.push(`## ${record.name}@${record.version}`, '', `Declared license: ${record.license}`, '', `Source: ${record.resolved}`, '');
+    /* A declaration-only entry looks identical to a publisher-supplied one once
+     * its text is on the page, and that confusion is the single thing this
+     * evidence store exists to prevent. Say so HERE, where a reader of the
+     * notices file will see it — not only in the JSON nobody opens. */
+    /* A component under other terms is the finding, not a footnote. It surfaces
+     * here because the alternative — rejecting the whole record — hid a proven
+     * grant AND the component both, which is how this one went unnoticed. */
+    if (record.unresolvedComponents) {
+      lines.push('> **This package embeds material that its own license does not cover.**', '>');
+      for (const component of record.unresolvedComponents) {
+        lines.push(`> - \`${component.path}\` — ${component.status}`, ...(component.note ? [`>   ${component.note}`] : []));
+      }
+      lines.push('>', '> The license below is established for the package\'s own code and makes no claim about', '> the above.', '');
+    }
+    if (record.declaredOnly) {
+      const { declaredCopyrightHolder, holderSource } = record.declaredOnly.record;
+      lines.push(
+        `> The publisher declared **${record.license}** in package.json and published no license text —`,
+        '> none in the archive, none in its published source headers, and none at any upstream commit',
+        '> that could be bound to these bytes.',
+        '>',
+        `> Copyright holder, as declared by the publisher: **${declaredCopyrightHolder}**`,
+        `> (source: ${holderSource})`,
+        '>',
+        '> The text below is the canonical SPDX text of that license, reproduced with its placeholders',
+        '> left intact. **It was not supplied by the publisher** and is not represented as their words.',
+        '');
+    }
     for (const file of record.files) lines.push(`### ${file.path}`, '', ...(file.url ? [`Source text: ${file.url}`, ''] : []), ...file.text.trimEnd().split('\n').map((line) => `    ${line}`), '');
     if (!record.files.length) lines.push(`UNRESOLVED: ${record.error ?? 'No qualifying license text found in the archive or immutable upstream source.'}`, '');
   }

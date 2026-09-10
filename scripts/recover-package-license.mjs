@@ -73,7 +73,20 @@ if (!NAME) {
   process.exit(2);
 }
 
-const die = (message) => { console.error(`\n✗ ${NAME}: ${message}\n`); process.exit(1); };
+/* A refusal is a normal outcome here, not a crash, so it unwinds instead of
+ * calling process.exit(). Exiting with a fetch still in flight aborts libuv —
+ * "Assertion failed: !(handle->flags & UV_HANDLE_CLOSING)" — which replaces a
+ * clean exit code and a one-line reason with a native crash dump and exit 127.
+ * In a compliance tool that is worse than untidy: an operator cannot then tell
+ * a deliberate refusal from a broken run. */
+class Refusal extends Error {}
+const die = (message) => { throw new Refusal(message); };
+process.on('uncaughtException', (error) => {
+  console.error(`
+✗ ${NAME}: ${error instanceof Refusal ? error.message : error.stack}
+`);
+  process.exitCode = 1;
+});
 
 /* ── the artifact we actually ship ──────────────────────────────────────── */
 
