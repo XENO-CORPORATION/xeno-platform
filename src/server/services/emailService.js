@@ -36,55 +36,212 @@ const ESSENTIAL_TEMPLATES = new Set(['password_reset', 'email_verification', 'di
 
 // --------------------------------------------------------------------------
 // XENO branded email wrapper
+//
+// There used to be TWO shells here: this one, and a much better one written
+// later for `welcome`. The comment on that one explained why it did not reuse
+// this -- the welcome mail has a structure no other template has, and bending a
+// shared layout to fit it would drag those decisions into password resets.
+// That reasoning is right about the BODY and wrong about the CHROME, and the
+// cost of the split was not cosmetic:
+//
+//   this shell put every rule in a <style> block, including `.btn`. Gmail
+//   clips long messages and strips the head, and Outlook renders through
+//   Word -- so in a large share of real inboxes the "Reset Password" button
+//   arrived as an unstyled link, in the one email a locked-out person has to
+//   be able to act on.
+//
+// So the shell is now shared and every rule that matters is inline; the bodies
+// stay separate, which is what that comment was actually protecting.
 // --------------------------------------------------------------------------
-function wrapInLayout(title, bodyContent) {
+
+const SITE = 'https://xenostudio.ai';
+const SANS = "-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif";
+
+/**
+ * The one XENO email shell -- DESIGN_SYSTEM 3.1 plate anatomy, in the form
+ * xeno-motion ships it: an outer #08080a plate holding a #1a1a1a header, a
+ * #111111 body and a #1a1a1a footer, each 4px radius, separated by a 2px gap.
+ *
+ * The gap is what makes the header read as a TAB above its body rather than a
+ * stripe inside a card. Email has no CSS gap, so the 2px is a spacer row.
+ *
+ * What a real mail client removes, and therefore what this cannot use: no
+ * flexbox or grid (tables are the only layout primitive that works anywhere),
+ * no SVG, no webfonts, and no hero image -- most clients block remote images by
+ * default, so an identity that lives in a PNG is one a large share of readers
+ * never see.
+ */
+function wrapChrome(title, bodyContent, options = {}) {
+  const preheader = options.preheader || '';
+  const footerNote = options.footerNote || '';
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="color-scheme" content="dark">
+  <meta name="supported-color-schemes" content="dark">
   <title>${title}</title>
-  <style>
-    body { margin: 0; padding: 0; background-color: #08080a; font-family: -apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', Roboto, sans-serif; }
-    .container { max-width: 600px; margin: 0 auto; padding: 40px 20px; }
-    .card { background-color: #0b0b0d; border: 1px solid rgba(255,255,255,0.06); border-radius: 6px; padding: 32px; }
-    .logo { text-align: center; margin-bottom: 24px; }
-    .logo-text { color: white; font-size: 20px; font-weight: 700; letter-spacing: 3px; text-decoration: none; }
-    h1 { color: rgba(255,255,255,0.90); font-size: 22px; font-weight: 600; margin: 0 0 16px 0; }
-    p { color: rgba(255,255,255,0.50); font-size: 15px; line-height: 1.6; margin: 0 0 16px 0; }
-    .btn { display: inline-block; background: white; color: #08080a; padding: 12px 28px; border-radius: 6px; text-decoration: none; font-weight: 600; font-size: 14px; margin: 8px 0; }
-    .muted { color: rgba(255,255,255,0.30); font-size: 12px; }
-    .divider { border: none; border-top: 1px solid rgba(255,255,255,0.06); margin: 24px 0; }
-    .footer { text-align: center; margin-top: 32px; }
-    .footer p { color: rgba(255,255,255,0.25); font-size: 12px; }
-    .highlight { color: rgba(255,255,255,0.90); font-weight: 600; }
-    .stat-row { display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid rgba(255,255,255,0.06); }
-    .stat-label { color: rgba(255,255,255,0.45); font-size: 14px; }
-    .stat-value { color: rgba(255,255,255,0.90); font-size: 14px; font-weight: 600; }
-    table.stats { width: 100%; border-collapse: collapse; margin: 16px 0; }
-    table.stats td { padding: 8px 0; border-bottom: 1px solid rgba(255,255,255,0.06); }
-    table.stats td.label { color: rgba(255,255,255,0.45); font-size: 14px; }
-    table.stats td.value { color: rgba(255,255,255,0.90); font-size: 14px; font-weight: 600; text-align: right; }
-  </style>
 </head>
-<body>
-  <div class="container">
-    <div class="logo">
-      <a href="https://xenostudio.ai" class="logo-text">XENO</a>
-    </div>
-    <div class="card">
-      ${bodyContent}
-    </div>
-    <div class="footer">
-      <p>XENO Corporation</p>
-      <p>This email was sent by xenostudio.ai. If you did not expect this email, you can safely ignore it.</p>
-    </div>
-  </div>
+<body style="margin:0; padding:0; background-color:#060608;">
+  <!-- Preheader: the grey line an inbox shows after the subject. Left empty it
+       fills with whatever text comes first, which is usually the wordmark. -->
+  <div style="display:none; max-height:0; overflow:hidden; opacity:0;">${escapeHtml(preheader)}</div>
+
+  <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="background-color:#060608;">
+    <tr>
+      <td align="center" style="padding:24px 14px 40px;">
+
+        <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="600" style="width:600px; max-width:600px; background-color:#08080a; border:1px solid rgba(255,255,255,0.05); border-radius:6px;">
+          <tr><td style="padding:6px;">
+
+            <!-- HEADER BAR -->
+            <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="background-color:#1a1a1a; border-radius:4px;">
+              <tr>
+                <td style="padding:9px 12px;" align="center">
+                  <a href="${SITE}" style="font-family:${SANS}; font-size:11px; font-weight:700; letter-spacing:0.34em; color:#d8d8de; text-decoration:none;">XENO</a>
+                </td>
+              </tr>
+            </table>
+
+            <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%"><tr><td height="2" style="height:2px; font-size:0; line-height:0;">&nbsp;</td></tr></table>
+
+            <!-- BODY -->
+            <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="background-color:#111111; border-radius:4px;">
+              <tr><td style="padding:26px 24px 24px;">
+                ${bodyContent}
+              </td></tr>
+            </table>
+
+            <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%"><tr><td height="2" style="height:2px; font-size:0; line-height:0;">&nbsp;</td></tr></table>
+
+            <!-- FOOTER BAR -- same species as the header, so the shell closes
+                 the way it opened. -->
+            <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="background-color:#1a1a1a; border-radius:4px;">
+              <tr>
+                <td align="center" style="padding:10px 14px; font-family:${SANS}; font-size:10px; line-height:1.75; color:#5d5d63;">
+                  <a href="${SITE}/impressum" style="color:#7f7f86; text-decoration:none;">Impressum</a>
+                  &nbsp;<span style="color:#3a3a3f;">&middot;</span>&nbsp;
+                  <a href="${SITE}/privacy" style="color:#7f7f86; text-decoration:none;">Privacy</a>
+                  &nbsp;<span style="color:#3a3a3f;">&middot;</span>&nbsp;
+                  <a href="${SITE}/terms" style="color:#7f7f86; text-decoration:none;">Terms</a>
+                  <br>${footerNote}
+                </td>
+              </tr>
+            </table>
+
+          </td></tr>
+        </table>
+
+      </td>
+    </tr>
+  </table>
 </body>
 </html>`;
 }
 
-const SITE = 'https://xenostudio.ai';
+/** Transactional shell. Same chrome as the welcome mail; different body rules. */
+function wrapInLayout(title, bodyContent, preheader = '') {
+  return wrapChrome(title, bodyContent, {
+    preheader,
+    footerNote: 'XENO Studio &middot; sent to the address on your XENO account',
+  });
+}
+
+// -- Body pieces, inline-styled --------------------------------------------
+// Every one of these is inline because a <style> block is the part of an email
+// a client is most likely to throw away. Nothing here depends on a class.
+
+function mailHeading(text) {
+  return `<h1 style="margin:0 0 14px; font-family:${SANS}; font-size:19px; line-height:1.3; font-weight:600; color:#f2f2f5;">${text}</h1>`;
+}
+
+function mailText(html, options = {}) {
+  const colour = options.muted ? '#7f7f86' : '#acacb4';
+  const size = options.muted ? '11.5px' : '13.5px';
+  const align = options.align || 'left';
+  return `<p style="margin:0 0 12px; font-family:${SANS}; font-size:${size}; line-height:1.65; color:${colour}; text-align:${align};">${html}</p>`;
+}
+
+/**
+ * A bulletproof button: a table cell with a background, not a styled anchor.
+ *
+ * The padding is on the CELL and repeated on the anchor, so the shape survives
+ * whether or not the client honours padding on an inline element -- which
+ * Outlook does not.
+ */
+function mailButton(href, label) {
+  return `
+  <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:18px 0 6px;">
+    <tr>
+      <td align="center" style="background-color:#f2f2f5; border-radius:4px;">
+        <a href="${escapeHtml(href)}" style="display:block; padding:11px 22px; font-family:${SANS}; font-size:12.5px; font-weight:600; color:#08080a; text-decoration:none;">${label}</a>
+      </td>
+    </tr>
+  </table>`;
+}
+
+/**
+ * The same destination as the button, spelled out.
+ *
+ * A button is an anchor with no visible URL, and the person reading a password
+ * reset is exactly the person who should be able to see where it goes before
+ * clicking. It is also the fallback when a client refuses to draw the button.
+ */
+function mailFallbackLink(href) {
+  return `<p style="margin:0 0 4px; font-family:${SANS}; font-size:10.5px; line-height:1.6; color:#5d5d63; word-break:break-all;">Or paste this into your browser:<br><span style="color:#7f7f86;">${escapeHtml(href)}</span></p>`;
+}
+
+/**
+ * The receipt currency.
+ *
+ * It said `$` and the platform charges EUR: BILLING_CURRENCY defaults to `eur`
+ * and every Stripe price is `tax_behavior: inclusive` in euro (docs/TAX-POSTURE.md).
+ * A receipt naming the wrong currency is not a typo -- it is the document the
+ * customer keeps for their own books.
+ */
+const RECEIPT_CURRENCY = (process.env.BILLING_CURRENCY || 'eur').toUpperCase();
+const CURRENCY_SYMBOL = { EUR: '€', USD: '$', GBP: '£' };
+
+function formatMoney(amountMinorUnits) {
+  const value = (Number(amountMinorUnits || 0) / 100).toFixed(2);
+  const symbol = CURRENCY_SYMBOL[RECEIPT_CURRENCY];
+  return escapeHtml(symbol ? `${symbol}${value}` : `${value} ${RECEIPT_CURRENCY}`);
+}
+
+/**
+ * Why this receipt shows no VAT line.
+ *
+ * docs/TAX-POSTURE.md, LOCKED: the entity is Kleinunternehmer under sec. 19
+ * Abs. 1 UStG and charges no VAT. That document also states the obligation this
+ * line discharges -- "a seller who charges no VAT must say why: an invoice with
+ * no VAT line and no explanation is indistinguishable from one where the VAT was
+ * simply left off." The Impressum already carries it; the receipt is the
+ * document a customer actually files, so it carries it too, in the same words.
+ *
+ * At crossover into Regelbesteuerung this line must go, on the same day the
+ * Impressum notice goes. Both are named in the crossover checklist.
+ */
+const VAT_NOTICE = 'Als Kleinunternehmer im Sinne von &sect; 19 Abs. 1 Umsatzsteuergesetz wird keine '
+  + 'Umsatzsteuer berechnet und daher auch nicht in Rechnungen ausgewiesen.';
+
+/** A thread title as a link. Inline, so it survives a stripped style block. */
+function mailThreadLink(url, title) {
+  return `<a href="${escapeHtml(url)}" style="color:#e4e4e8; font-weight:600; text-decoration:none; border-bottom:1px solid rgba(255,255,255,0.18);">${escapeHtml(title)}</a>`;
+}
+
+function mailStats(rows) {
+  return `
+  <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="margin:14px 0 6px; background-color:#1a1a1a; border-radius:4px;">
+    ${rows.map(([label, value]) => `
+    <tr>
+      <td style="padding:10px 14px; font-family:${SANS}; font-size:11.5px; color:#7f7f86;">${label}</td>
+      <td align="right" style="padding:10px 14px; font-family:${SANS}; font-size:12px; font-weight:600; color:#e4e4e8;">${value}</td>
+    </tr>`).join('')}
+  </table>`;
+}
+
+
 
 /**
  * The onboarding shell — a second layout, used only by `welcome`.
@@ -117,81 +274,10 @@ const SITE = 'https://xenostudio.ai';
  * letter-spaced type and the ornament is table borders; both always render.
  */
 function wrapWelcome(title, bodyContent) {
-  return `<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta name="color-scheme" content="dark">
-  <meta name="supported-color-schemes" content="dark">
-  <title>${title}</title>
-</head>
-<body style="margin:0; padding:0; background-color:#060608;">
-  <!-- Preheader: the grey line an inbox shows after the subject. Left empty it
-       fills with whatever text comes first, which is usually the wordmark. -->
-  <div style="display:none; max-height:0; overflow:hidden; opacity:0;">Your account is ready — three steps to get moving.</div>
-
-  <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="background-color:#060608;">
-    <tr>
-      <td align="center" style="padding:24px 14px 40px;">
-
-        <!-- ── THE SHELL ──────────────────────────────────────────────
-             Copied from xeno-motion's dialog anatomy, which is the
-             DESIGN_SYSTEM §3.1 pattern in shipped form:
-
-               outer   #08080a, 6px radius, 6px padding
-               blocks  #1a1a1a header / #111111 body / #1a1a1a footer,
-                       4px radius each, separated by a 2px gap
-
-             The gap is why the header reads as a TAB above its body
-             rather than a stripe inside a card. Email has no CSS gap, so
-             the 2px is a spacer row — same result, older mechanism. -->
-        <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="600" style="width:600px; max-width:600px; background-color:#08080a; border:1px solid rgba(255,255,255,0.05); border-radius:6px;">
-          <tr><td style="padding:6px;">
-
-            <!-- HEADER BAR -->
-            <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="background-color:#1a1a1a; border-radius:4px;">
-              <tr>
-                <td style="padding:9px 12px;" align="center">
-                  <a href="${SITE}" style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif; font-size:11px; font-weight:700; letter-spacing:0.34em; color:#d8d8de; text-decoration:none;">XENO</a>
-                </td>
-              </tr>
-            </table>
-
-            <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%"><tr><td height="2" style="height:2px; font-size:0; line-height:0;">&nbsp;</td></tr></table>
-
-            <!-- BODY -->
-            <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="background-color:#111111; border-radius:4px;">
-              <tr><td style="padding:26px 24px 24px;">
-                ${bodyContent}
-              </td></tr>
-            </table>
-
-            <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%"><tr><td height="2" style="height:2px; font-size:0; line-height:0;">&nbsp;</td></tr></table>
-
-            <!-- FOOTER BAR — same species as the header, so the shell closes
-                 the way it opened. -->
-            <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="background-color:#1a1a1a; border-radius:4px;">
-              <tr>
-                <td align="center" style="padding:10px 14px; font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif; font-size:10px; line-height:1.75; color:#5d5d63;">
-                  <a href="${SITE}/impressum" style="color:#7f7f86; text-decoration:none;">Impressum</a>
-                  &nbsp;<span style="color:#3a3a3f;">&middot;</span>&nbsp;
-                  <a href="${SITE}/privacy" style="color:#7f7f86; text-decoration:none;">Privacy</a>
-                  &nbsp;<span style="color:#3a3a3f;">&middot;</span>&nbsp;
-                  <a href="${SITE}/terms" style="color:#7f7f86; text-decoration:none;">Terms</a>
-                  <br>XENO Studio &middot; sent because you created an account at xenostudio.ai
-                </td>
-              </tr>
-            </table>
-
-          </td></tr>
-        </table>
-
-      </td>
-    </tr>
-  </table>
-</body>
-</html>`;
+  return wrapChrome(title, bodyContent, {
+    preheader: 'Your account is ready \u2014 three steps to get moving.',
+    footerNote: 'XENO Studio &middot; sent because you created an account at xenostudio.ai',
+  });
 }
 
 /** A hairline rule. The diamond ornament is gone — Motion's chrome has no
@@ -337,10 +423,11 @@ function answerBlock(authorName, authorKind, authorOwner, excerpt) {
  */
 function forumFooter(unsubUrl) {
   return `
-      <hr class="divider">
-      <p class="muted">You are getting this because you took part in this thread.
-        ${unsubUrl ? `<a href="${escapeHtml(unsubUrl)}" style="color: rgba(255,255,255,0.45);">Turn off Forum email</a>. Security email like password resets will still reach you.` : ''}</p>
-      <p class="muted"><a href="${SITE}/forum" style="color: rgba(255,255,255,0.35);">XENO Forum</a> &middot; <a href="${SITE}/privacy" style="color: rgba(255,255,255,0.35);">Privacy</a></p>`;
+      ${hairline(14, 12)}
+      ${mailText(`You are getting this because you took part in this thread.${unsubUrl
+        ? ` <a href="${escapeHtml(unsubUrl)}" style="color:#acacb4;">Turn off Forum email</a>. Security email like password resets will still reach you.`
+        : ''}`, { muted: true })}
+      ${mailText(`<a href="${SITE}/forum" style="color:#7f7f86;">XENO Forum</a> &middot; <a href="${SITE}/privacy" style="color:#7f7f86;">Privacy</a>`, { muted: true })}`;
 }
 
 // --------------------------------------------------------------------------
@@ -461,76 +548,65 @@ const templates = {
   password_reset: ({ displayName, resetUrl, expiresIn }) => ({
     subject: 'Reset your XENO password',
     html: wrapInLayout('Password Reset', `
-      <h1>Password Reset</h1>
-      <p>Hi ${escapeHtml(displayName)},</p>
-      <p>We received a request to reset your password. Click the button below to create a new password.</p>
-      <p style="text-align: center;">
-        <a href="${resetUrl}" class="btn">Reset Password</a>
-      </p>
-      <hr class="divider">
-      <p class="muted">This link expires in ${expiresIn || '1 hour'}. If you didn't request this, ignore this email.</p>
-      <p class="muted">For security, do not share this link with anyone.</p>
-    `),
+      ${mailHeading('Reset your password')}
+      ${mailText(`Hi ${escapeHtml(displayName)}, we received a request to set a new password on your XENO account.`)}
+      ${mailButton(resetUrl, 'Choose a new password')}
+      ${mailFallbackLink(resetUrl)}
+      ${hairline(14, 12)}
+      ${mailText(`This link works once and expires in ${escapeHtml(String(expiresIn || '1 hour'))}. Anyone who has it can set your password, so treat it like the password itself.`, { muted: true })}
+      ${mailText('If you did not ask for this, nothing has changed and you can ignore this email. Your current password still works.', { muted: true })}
+    `, 'Set a new password on your XENO account.'),
   }),
 
   email_verification: ({ displayName, verifyUrl, expiresIn }) => ({
     subject: 'Verify your XENO email',
     html: wrapInLayout('Verify your email', `
-      <h1>Verify your email</h1>
-      <p>Hi ${escapeHtml(displayName)},</p>
-      <p>Confirm this email address to secure your XENO account and enable password recovery.</p>
-      <p style="text-align: center;">
-        <a href="${verifyUrl}" class="btn">Verify Email</a>
-      </p>
-      <hr class="divider">
-      <p class="muted">This link expires in ${expiresIn || '24 hours'}. If you didn't create a XENO account, you can safely ignore this email.</p>
-    `),
+      ${mailHeading('Confirm your email address')}
+      ${mailText(`Hi ${escapeHtml(displayName)}, confirming this address secures your XENO account and is what makes password recovery possible later.`)}
+      ${mailButton(verifyUrl, 'Confirm this address')}
+      ${mailFallbackLink(verifyUrl)}
+      ${hairline(14, 12)}
+      ${mailText(`This link expires in ${escapeHtml(String(expiresIn || '24 hours'))}. If you did not create a XENO account, you can safely ignore this email.`, { muted: true })}
+    `, 'Confirm your address to secure your XENO account.'),
   }),
 
   receipt: ({ displayName, amount, credits, transactionId, date }) => ({
     subject: `XENO receipt — ${credits} credits`,
     html: wrapInLayout('Purchase Receipt', `
-      <h1>Purchase Receipt</h1>
-      <p>Hi ${escapeHtml(displayName)}, thank you for your purchase.</p>
-      <table class="stats">
-        <tr><td class="label">Credits purchased</td><td class="value">${credits}</td></tr>
-        <tr><td class="label">Amount</td><td class="value">$${(amount / 100).toFixed(2)}</td></tr>
-        <tr><td class="label">Transaction ID</td><td class="value" style="font-size: 12px;">${transactionId}</td></tr>
-        <tr><td class="label">Date</td><td class="value">${date || new Date().toLocaleDateString()}</td></tr>
-      </table>
-      <hr class="divider">
-      <p class="muted">This is your receipt for tax purposes. Questions? Contact support@xenostudio.ai</p>
-    `),
+      ${mailHeading('Your receipt')}
+      ${mailText(`Hi ${escapeHtml(displayName)}, thank you for your purchase.`)}
+      ${mailStats([
+        ['Credits purchased', escapeHtml(String(credits))],
+        ['Amount', formatMoney(amount)],
+        ['Transaction', `<span style="font-family:ui-monospace,'Cascadia Mono',Consolas,monospace; font-size:11px;">${escapeHtml(String(transactionId))}</span>`],
+        ['Date', escapeHtml(String(date || new Date().toISOString().slice(0, 10)))],
+      ])}
+      ${hairline(14, 12)}
+      ${mailText(VAT_NOTICE, { muted: true })}
+      ${mailText('Keep this for your records. Questions? <a href="mailto:billing@xenostudio.ai" style="color:#acacb4;">billing@xenostudio.ai</a>', { muted: true })}
+    `, 'Your XENO receipt.'),
   }),
 
   credits_low: ({ displayName, currentCredits, threshold }) => ({
     subject: 'XENO — Your credits are running low',
     html: wrapInLayout('Low Credits', `
-      <h1>Credits Running Low</h1>
-      <p>Hi ${escapeHtml(displayName)},</p>
-      <p>You have <span class="highlight">${currentCredits} credits</span> remaining (threshold: ${threshold}).</p>
-      <p>Top up your credits to continue using AI generation, editing, and video tools.</p>
-      <p style="text-align: center;">
-        <a href="https://xenostudio.ai/settings" class="btn">Add Credits</a>
-      </p>
-    `),
+      ${mailHeading('Your credits are running low')}
+      ${mailText(`Hi ${escapeHtml(displayName)}, you have <strong style="color:#e4e4e8;">${escapeHtml(String(currentCredits))} credits</strong> left \u2014 below the ${escapeHtml(String(threshold))} you asked to be warned at.`)}
+      ${mailText('Generation, editing and video all draw on the same balance, so a long render is the usual way the last of it goes.')}
+      ${mailButton(`${SITE}/settings`, 'Top up')}
+    `, 'Your XENO credit balance is running low.'),
   }),
 
   new_version: ({ displayName, appName, version, releaseNotes, downloadUrl }) => ({
     subject: `${appName} ${version} is now available`,
     html: wrapInLayout(`${appName} Update`, `
-      <h1>${escapeHtml(appName)} ${escapeHtml(version)}</h1>
-      <p>Hi ${escapeHtml(displayName)},</p>
-      <p>A new version of ${escapeHtml(appName)} is available.</p>
-      ${releaseNotes ? `
-        <hr class="divider">
-        <p style="color: rgba(255,255,255,0.45); font-size: 13px; text-transform: uppercase; letter-spacing: 1px;">What's new</p>
-        <p>${escapeHtml(releaseNotes)}</p>
-      ` : ''}
-      <p style="text-align: center;">
-        <a href="${downloadUrl || 'https://xenostudio.ai/download'}" class="btn">Download Update</a>
-      </p>
-    `),
+      ${mailHeading(`${escapeHtml(appName)} ${escapeHtml(version)}`)}
+      ${mailText(`Hi ${escapeHtml(displayName)}, a new version of ${escapeHtml(appName)} is available.`)}
+      ${releaseNotes ? `${hairline(4, 12)}
+      <p style="margin:0 0 8px; font-family:${SANS}; font-size:10px; font-weight:600; letter-spacing:0.2em; text-transform:uppercase; color:#7f7f86;">What&rsquo;s new</p>
+      ${mailText(escapeHtml(releaseNotes))}` : ''}
+      ${mailButton(downloadUrl || `${SITE}/download`, 'Download the update')}
+    `, `${escapeHtml(appName)} ${escapeHtml(version)} is available.`),
   }),
 
   // ------------------------------------------------------------------------
@@ -571,52 +647,41 @@ const templates = {
     // "New reply on the XENO Forum" is a subject about us; this one is about them.
     subject: `Answered: ${threadTitle}`,
     html: wrapInLayout('You have an answer', `
-      <h1>Your question was answered</h1>
-      <p>Hi ${escapeHtml(displayName)}, someone answered
-         <a href="${escapeHtml(threadUrl)}" class="highlight" style="text-decoration: none;">${escapeHtml(threadTitle)}</a>.</p>
+      ${mailHeading('Your question was answered')}
+      ${mailText(`Hi ${escapeHtml(displayName)}, someone answered ${mailThreadLink(threadUrl, threadTitle)}.`)}
 
       ${answerBlock(authorName, authorKind, authorOwner, excerpt)}
 
-      <p style="text-align: center;">
-        <a href="${escapeHtml(threadUrl)}" class="btn">Read the full answer</a>
-      </p>
-      <p class="muted" style="text-align: center;">If it solved your problem, accept it — that is what makes
-         the next person's search find it instead of asking again.</p>
+      ${mailButton(threadUrl, 'Read the full answer')}
+      ${mailText('If it solved your problem, accept it \u2014 that is what makes the next person&rsquo;s search find it instead of asking again.', { muted: true })}
       ${forumFooter(unsubUrl)}
-    `),
+    `, `${authorName || 'Someone'} answered your question.`),
   }),
 
   /** Your answer was accepted. The only "reward" the Forum hands out, and it is not a number. */
   forum_accepted: ({ displayName, threadTitle, threadUrl, askerName, unsubscribeUrl: unsubUrl }) => ({
     subject: `Your answer was accepted: ${threadTitle}`,
     html: wrapInLayout('Answer accepted', `
-      <h1>Your answer was accepted</h1>
-      <p>Hi ${escapeHtml(displayName)}, ${escapeHtml(askerName || 'the person who asked')} accepted your answer on
-         <a href="${escapeHtml(threadUrl)}" class="highlight" style="text-decoration: none;">${escapeHtml(threadTitle)}</a>.</p>
-      <p>It is now the answer anyone — or any agent — searching this problem will find first.
-         That is the entire point of writing it down.</p>
-      <p style="text-align: center;">
-        <a href="${escapeHtml(threadUrl)}" class="btn">View the thread</a>
-      </p>
+      ${mailHeading('Your answer was accepted')}
+      ${mailText(`Hi ${escapeHtml(displayName)}, ${escapeHtml(askerName || 'the person who asked')} accepted your answer on ${mailThreadLink(threadUrl, threadTitle)}.`)}
+      ${mailText('It is now the answer anyone \u2014 or any agent \u2014 searching this problem will find first. That is the entire point of writing it down.')}
+      ${mailButton(threadUrl, 'View the thread')}
       ${forumFooter(unsubUrl)}
-    `),
+    `, 'It is now the first thing anyone searching this problem will find.'),
   }),
 
   /** Someone replied to you in a thread you are part of. Lower-stakes than an answer. */
   forum_reply: ({ displayName, threadTitle, threadUrl, authorName, authorKind, authorOwner, excerpt, unsubscribeUrl: unsubUrl }) => ({
     subject: `New reply: ${threadTitle}`,
     html: wrapInLayout('New reply', `
-      <h1>New reply</h1>
-      <p>Hi ${escapeHtml(displayName)}, there is a new reply on
-         <a href="${escapeHtml(threadUrl)}" class="highlight" style="text-decoration: none;">${escapeHtml(threadTitle)}</a>.</p>
+      ${mailHeading('New reply')}
+      ${mailText(`Hi ${escapeHtml(displayName)}, there is a new reply on ${mailThreadLink(threadUrl, threadTitle)}.`)}
 
       ${answerBlock(authorName, authorKind, authorOwner, excerpt)}
 
-      <p style="text-align: center;">
-        <a href="${escapeHtml(threadUrl)}" class="btn">Open the thread</a>
-      </p>
+      ${mailButton(threadUrl, 'Open the thread')}
       ${forumFooter(unsubUrl)}
-    `),
+    `, `${authorName || 'Someone'} replied in a thread you are part of.`),
   }),
 
   /**
@@ -639,36 +704,31 @@ const templates = {
   dispute_opened: (d) => ({
     subject: `⚠️ Card dispute opened — ${d.amount || 'unknown amount'} — respond by ${d.dueBy || 'ASAP'}`,
     html: wrapInLayout('Card dispute opened', `
-      <h1 style="margin:0 0 16px;font-size:20px;">A customer disputed a payment</h1>
-      <p style="margin:0 0 16px;">Stripe has opened a dispute. <strong>You must respond before the
-      deadline or the dispute is lost automatically</strong>, including the fee.</p>
-      <table style="width:100%;border-collapse:collapse;margin:0 0 16px;">
-        <tr><td style="padding:6px 0;">Amount</td><td style="padding:6px 0;"><strong>${d.amount || '—'}</strong></td></tr>
-        <tr><td style="padding:6px 0;">Reason</td><td style="padding:6px 0;">${d.reason || '—'}</td></tr>
-        <tr><td style="padding:6px 0;">Respond by</td><td style="padding:6px 0;"><strong>${d.dueBy || 'see Stripe'}</strong></td></tr>
-        <tr><td style="padding:6px 0;">Customer</td><td style="padding:6px 0;">${d.customerEmail || 'unknown'}</td></tr>
-        <tr><td style="padding:6px 0;">Dispute</td><td style="padding:6px 0;">${d.disputeId || '—'}</td></tr>
-      </table>
-      <p style="margin:0 0 16px;">The customer's credit account has been frozen automatically.</p>
-      <p style="margin:0;"><a href="${d.url || 'https://dashboard.stripe.com/disputes'}"
-        style="display:inline-block;background:#fff;color:#000;padding:10px 18px;border-radius:8px;text-decoration:none;font-weight:600;">Open in Stripe</a></p>
-    `),
+      ${mailHeading('A customer disputed a payment')}
+      ${mailText('Stripe has opened a dispute. <strong style="color:#e4e4e8;">You must respond before the deadline or the dispute is lost automatically</strong>, including the fee.')}
+      ${mailStats([
+        ['Amount', `<strong>${escapeHtml(String(d.amount || '\u2014'))}</strong>`],
+        ['Reason', escapeHtml(String(d.reason || '\u2014'))],
+        ['Respond by', `<strong>${escapeHtml(String(d.dueBy || 'see Stripe'))}</strong>`],
+        ['Customer', escapeHtml(String(d.customerEmail || 'unknown'))],
+        ['Dispute', `<span style="font-family:ui-monospace,'Cascadia Mono',Consolas,monospace; font-size:11px;">${escapeHtml(String(d.disputeId || '\u2014'))}</span>`],
+      ])}
+      ${mailText('The customer&rsquo;s credit account has been frozen automatically.')}
+      ${mailButton(d.url || 'https://dashboard.stripe.com/disputes', 'Open in Stripe')}
+    `, `Respond by ${d.dueBy || 'the Stripe deadline'} or the dispute is lost automatically.`),
   }),
 
   forum_mention: ({ displayName, threadTitle, threadUrl, authorName, authorKind, authorOwner, excerpt, unsubscribeUrl: unsubUrl }) => ({
     subject: `${authorName} mentioned you: ${threadTitle}`,
     html: wrapInLayout('You were mentioned', `
-      <h1>You were mentioned</h1>
-      <p>Hi ${escapeHtml(displayName)}, ${escapeHtml(authorName || 'someone')} named you in
-         <a href="${escapeHtml(threadUrl)}" class="highlight" style="text-decoration: none;">${escapeHtml(threadTitle)}</a>.</p>
+      ${mailHeading('You were mentioned')}
+      ${mailText(`Hi ${escapeHtml(displayName)}, ${escapeHtml(authorName || 'someone')} named you in ${mailThreadLink(threadUrl, threadTitle)}.`)}
 
       ${answerBlock(authorName, authorKind, authorOwner, excerpt)}
 
-      <p style="text-align: center;">
-        <a href="${escapeHtml(threadUrl)}" class="btn">Open the thread</a>
-      </p>
+      ${mailButton(threadUrl, 'Open the thread')}
       ${forumFooter(unsubUrl)}
-    `),
+    `, `${authorName || 'Someone'} named you in a thread.`),
   }),
 };
 
