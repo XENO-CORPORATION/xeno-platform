@@ -4,6 +4,7 @@
  */
 
 import React, { useState, useEffect } from 'react';
+import { confirmAction } from '../../platform/confirmAction';
 import {
   RefreshCw, Download, Trash2, Clock, Check, AlertCircle, X,
   HardDrive, Zap, TrendingUp, Filter, Search, Calendar,
@@ -95,7 +96,7 @@ const ConversionHistory: React.FC = () => {
   };
 
   const handleDelete = async (conversionId: string) => {
-    if (!confirm('Are you sure you want to delete this conversion?')) return;
+    if (!await confirmAction({ title: 'Delete', detail: 'Are you sure you want to delete this conversion?', destructive: true })) return;
 
     setIsDeleting(true);
     try {
@@ -117,7 +118,7 @@ const ConversionHistory: React.FC = () => {
 
   const handleBatchDelete = async () => {
     if (selectedIds.length === 0) return;
-    if (!confirm(`Are you sure you want to delete ${selectedIds.length} conversion(s)?`)) return;
+    if (!await confirmAction({ title: 'Delete', detail: `Are you sure you want to delete ${selectedIds.length} conversion(s)?`, destructive: true })) return;
 
     setIsDeleting(true);
     try {

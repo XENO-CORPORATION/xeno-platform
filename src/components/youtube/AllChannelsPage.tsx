@@ -4,6 +4,7 @@
  */
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { confirmAction } from '../platform/confirmAction';
 import { useNavigate, useParams } from 'react-router-dom';
 import {
   Youtube, Plus, ArrowLeft, Loader2, Users, Eye, Video,
@@ -412,7 +413,7 @@ const AllChannelsPage: React.FC = () => {
 
   const handleDisconnect = async (channelId: string, e: React.MouseEvent) => {
     e.stopPropagation();
-    if (!confirm('Are you sure you want to disconnect this channel?')) return;
+    if (!await confirmAction({ title: 'Disconnect', detail: 'Are you sure you want to disconnect this channel?', destructive: true })) return;
     try {
       await youtubeService.disconnectChannel(channelId);
       await refreshData();
@@ -463,7 +464,7 @@ const AllChannelsPage: React.FC = () => {
 
   const handleDeleteGroup = async (groupId: string, e: React.MouseEvent) => {
     e.stopPropagation();
-    if (!confirm('Delete this group? Channels will not be deleted.')) return;
+    if (!await confirmAction({ title: 'Delete', detail: 'Delete this group? Channels will not be deleted.', destructive: true })) return;
     try {
       await youtubeService.deleteGroup(groupId);
       if (selectedGroup === groupId) handleGroupSelect(null);
@@ -607,7 +608,7 @@ const AllChannelsPage: React.FC = () => {
 
   const handleDisconnectFromContext = async () => {
     if (!contextMenu) return;
-    if (!confirm('Are you sure you want to disconnect this channel?')) return;
+    if (!await confirmAction({ title: 'Disconnect', detail: 'Are you sure you want to disconnect this channel?', destructive: true })) return;
     try {
       await youtubeService.disconnectChannel(contextMenu.channelId);
       await refreshData();

@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect, useMemo, useCallback } from 'react';
+import { confirmAction } from '../../platform/confirmAction';
 import ReactDOM from 'react-dom';
 import { Virtuoso } from 'react-virtuoso';
 import { DndContext, pointerWithin, PointerSensor, useSensor, useSensors, useDraggable, useDroppable, type DragEndEvent, DragOverlay, type DragStartEvent } from '@dnd-kit/core';
@@ -2717,7 +2718,7 @@ const [mobileViewerPromptExpanded, setMobileViewerPromptExpanded] = useState(fal
 
   // Delete a generation
   const handleDeleteGeneration = async (genId: string) => {
-    if (!confirm('Are you sure you want to delete this generation?')) {
+    if (!await confirmAction({ title: 'Delete', detail: 'Are you sure you want to delete this generation?', destructive: true })) {
       return false;
     }
 

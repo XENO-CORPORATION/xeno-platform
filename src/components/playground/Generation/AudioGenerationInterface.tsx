@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { confirmAction } from '../../platform/confirmAction';
 import { Music, Wand2, Info, Download, Loader, Settings, PlayCircle, PauseCircle, Volume2, Send, Trash2, RotateCw, Minus, Plus, ChevronDown, Sparkles, Film, RefreshCw, Headphones, Mic, Upload, X, Square, StopCircle } from 'lucide-react';
 import { checkApiTokens, API_TOKENS } from '../../../config/apiConfig';
 import ApiTokenNotice from '../../common/ApiTokenNotice';
@@ -1121,8 +1122,8 @@ const AudioGenerationInterface: React.FC = () => {
   };
 
   // Handle clearing history
-  const handleClearHistory = () => {
-    if (confirm('Are you sure you want to clear your audio generation history?')) {
+  const handleClearHistory = async () => {
+    if (await confirmAction({ title: 'Clear', detail: 'Are you sure you want to clear your audio generation history?', destructive: true })) {
       setHistory([]);
       setGeneratedAudio(null);
       setIsPlaying(false);

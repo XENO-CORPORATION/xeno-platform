@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { promptAction } from '../../platform/confirmAction';
 import { Save, FolderOpen, FilePlus, AlertCircle, Check } from 'lucide-react';
 import { containerFileSystemService } from '../../../services/containerFileSystemService';
 
@@ -42,7 +43,7 @@ const TextEditor: React.FC<TextEditorProps> = ({ initialPath }) => {
   const handleSave = async () => {
     if (!filePath) {
       // TODO: Implement Save As dialog
-      const newPath = prompt('Enter file path to save (e.g., /home/user/newfile.txt):');
+      const newPath = await promptAction({ title: 'Save as', detail: 'Where should this file be written?', fieldLabel: 'File path', initialValue: '/home/user/newfile.txt', confirmLabel: 'Save' });
       if (!newPath) return;
       setFilePath(newPath);
       await saveFile(newPath, content);
@@ -94,8 +95,8 @@ const TextEditor: React.FC<TextEditorProps> = ({ initialPath }) => {
         </button>
         <button 
           className="p-1.5 hover:bg-[#3e3e3e] rounded transition-colors text-gray-300"
-          onClick={() => {
-            const path = prompt('Enter file path to open:');
+          onClick={async () => {
+            const path = await promptAction({ title: 'Open file', detail: 'Which file should be opened?', fieldLabel: 'File path', confirmLabel: 'Open' });
             if (path) loadFile(path);
           }}
           title="Open File"

@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { confirmAction } from '../../platform/confirmAction';
 import '@google/model-viewer';
 import { Box, Wand2, Info, Download, Loader, Settings, ChevronDown, Copy, Share2, Trash2, X, Send, Play, Upload, Image as ImageIcon } from 'lucide-react';
 import { generate3DModel, type ThreeDGenerationSettings, type ThreeDGenerationResult } from '../../../services/threeDGenerationService';
@@ -995,8 +996,8 @@ const ThreeDGenerationInterface: React.FC<ThreeDGenerationInterfaceProps> = ({
   };
   
   // Function to clear history
-  const handleClearHistory = () => {
-    if (confirm('Are you sure you want to clear your 3D generation history?')) {
+  const handleClearHistory = async () => {
+    if (await confirmAction({ title: 'Clear', detail: 'Are you sure you want to clear your 3D generation history?', destructive: true })) {
       setHistory3D([]);
       setCurrentPreview(null);
     }

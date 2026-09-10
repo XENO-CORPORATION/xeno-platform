@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
+import { confirmAction } from '../platform/confirmAction';
 import { Plus, BrainCircuit, Image, Video, Trash2, ZoomIn, ZoomOut, ChevronLeft, ChevronRight, PlayCircle, RotateCw, Zap, ArrowUpRight, Search, X, VideoIcon } from 'lucide-react';
 import AgentPanel, { NodeTemplate } from './AgentPanel';
 import NodeConfigPanel from './NodeConfigPanel';
@@ -903,10 +904,10 @@ const NodeEditor: React.FC<NodeEditorProps> = ({ className = '' }) => {
   };
 
   // Clear canvas
-  const handleClearCanvas = () => {
+  const handleClearCanvas = async () => {
     if (nodes.length === 0 && containers.length === 0) return;
     
-    if (confirm('Are you sure you want to clear the canvas? This action cannot be undone.')) {
+    if (await confirmAction({ title: 'Clear', detail: 'Are you sure you want to clear the canvas? This action cannot be undone.', destructive: true })) {
       setNodes([]);
       setConnections([]);
       setContainers([]);

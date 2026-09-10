@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { confirmAction } from '../../platform/confirmAction';
 import { UploadCloud, FileText, BrainCircuit, Settings, X, Info, RotateCw, Download, Trash2, CheckCircle, Loader } from 'lucide-react'; // Adjusted icons
 // TODO: Create and import a LoRa training service
 import { checkApiTokens, API_TOKENS } from '../../../config/apiConfig';
@@ -347,8 +348,8 @@ const LoRaImageTrainComponent: React.FC = () => {
       // ...etc
   };
 
-  const handleClearHistory = () => {
-    if (confirm('Are you sure you want to clear the training history?')) {
+  const handleClearHistory = async () => {
+    if (await confirmAction({ title: 'Clear', detail: 'Are you sure you want to clear the training history?', destructive: true })) {
       setHistory([]);
       setSelectedHistoryRun(null);
       setTrainingProgress(null);

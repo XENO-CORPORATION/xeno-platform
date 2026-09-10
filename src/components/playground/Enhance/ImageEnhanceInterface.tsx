@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { confirmAction } from '../../platform/confirmAction';
 import { Image, Send, Download, Trash2, Sparkles, Plus, X, Info, RotateCw, Wand2, Settings, ArrowUpRight, ZoomIn, ZoomOut, Maximize, Minus } from 'lucide-react';
 // TODO: Create and import an imageUpscaleService similar to imageGenerationService
 // import imageUpscaleService from '../../../services/imageUpscaleService';
@@ -1479,8 +1480,8 @@ const ImageEnhanceComponent: React.FC = () => {
          .finally(() => setIsLoading(false));
   };
 
-  const handleClearHistory = () => {
-    if (confirm('Are you sure you want to clear the upscale history?')) {
+  const handleClearHistory = async () => {
+    if (await confirmAction({ title: 'Clear', detail: 'Are you sure you want to clear the upscale history?', destructive: true })) {
       setHistory([]);
       setSelectedHistoryItem(null);
       // Optionally clear preview if not showing the current input

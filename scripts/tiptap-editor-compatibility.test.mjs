@@ -3,8 +3,32 @@ import test from 'node:test';
 import React, { createRef } from 'react';
 import { createRoot } from 'react-dom/client';
 import { JSDOM } from 'jsdom';
+import path from 'node:path';
 import react from '@vitejs/plugin-react';
 import { createServer } from 'vite';
+
+/*
+ * The server is built here rather than loaded from vite.config.ts on purpose —
+ * the real config starts a dev proxy and discovers dependencies, neither of
+ * which this test wants. But `configFile: false` also drops the alias table, so
+ * the moment a production editor reached a component importing
+ * `@xenosystem/elements-react`, the module graph broke with "Cannot find module"
+ * — a bare specifier that resolves in the app and nowhere else.
+ *
+ * Mirrors vite.config.ts, INCLUDING its ordering rule: the deeper specifiers
+ * come first, or `@xenosystem/elements` swallows `@xenosystem/elements/tokens`
+ * and the stylesheet resolves to `.../src/index.ts/xeno-elements.css`.
+ */
+const xeno = (p) => path.resolve('packages', p);
+const XENO_ALIASES = {
+  '@xenosystem/elements-react/xeno-elements.css': xeno('elements-react/src/xeno-elements.css'),
+  '@xenosystem/elements/schema': xeno('elements/src/schema.ts'),
+  '@xenosystem/elements/tokens': xeno('elements/src/tokens/index.ts'),
+  '@xenosystem/elements/elements': xeno('elements/src/elements'),
+  '@xenosystem/elements': xeno('elements/src/index.ts'),
+  '@xenosystem/generate': xeno('generate/src/index.ts'),
+  '@xenosystem/elements-react': xeno('elements-react/src/index.ts'),
+};
 
 test('Tiptap 3 mounts production editors and preserves controlled video-prompt updates', async (t) => {
   const vite = await createServer({
@@ -12,6 +36,7 @@ test('Tiptap 3 mounts production editors and preserves controlled video-prompt u
     configFile: false,
     optimizeDeps: { noDiscovery: true },
     plugins: [react()],
+    resolve: { alias: XENO_ALIASES, dedupe: ['react', 'react-dom'] },
     server: { middlewareMode: true },
   });
   const dom = new JSDOM('<!doctype html><html><body><div id="root"></div></body></html>', {

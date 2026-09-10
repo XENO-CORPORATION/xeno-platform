@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { confirmAction } from '../../platform/confirmAction';
 import { Video, Send, Download, Copy, Share2, Trash2, Sparkles, Play, Pause, Clock, Image, RotateCw, Info, X, AlertCircle, Wand2, Settings, ChevronDown, RefreshCw, Camera, Minus, ZoomIn, ZoomOut, Move, Maximize, Minimize, DownloadCloud, Film, Image as ImageIcon } from 'lucide-react';
 import { checkApiTokens, API_TOKENS } from '../../../config/apiConfig';
 import ApiTokenNotice from '../../common/ApiTokenNotice';
@@ -1137,8 +1138,8 @@ const VideoGenerationInterface: React.FC<VideoGenerationInterfaceProps> = ({
     // setPrompt('');
   };
 
-  const handleClearHistory = () => {
-    if (confirm('Are you sure you want to clear your generation history?')) {
+  const handleClearHistory = async () => {
+    if (await confirmAction({ title: 'Clear', detail: 'Are you sure you want to clear your generation history?', destructive: true })) {
       setHistory([]);
       setSelectedVideo(null);
       setPreviewVideos([]);

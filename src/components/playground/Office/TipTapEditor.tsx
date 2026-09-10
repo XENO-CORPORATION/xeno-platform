@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, forwardRef, useImperativeHandle } from 'react';
+import { promptAction } from '../../platform/confirmAction';
 import { useEditor, EditorContent, Editor } from '@tiptap/react';
 export type { Editor } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
@@ -420,10 +421,10 @@ const TipTapEditor = forwardRef<TipTapEditorRef, TipTapEditorProps>(
       },
     }));
 
-    const setLink = useCallback(() => {
+    const setLink = useCallback(async () => {
       if (!editor) return;
       const previousUrl = editor.getAttributes('link').href;
-      const url = window.prompt('URL', previousUrl);
+      const url = await promptAction({ title: 'Link', detail: 'Where should this link point?', fieldLabel: 'URL', initialValue: previousUrl, confirmLabel: 'Apply' });
       if (url === null) return;
       if (url === '') {
         editor.chain().focus().extendMarkRange('link').unsetLink().run();
@@ -432,9 +433,9 @@ const TipTapEditor = forwardRef<TipTapEditorRef, TipTapEditorProps>(
       editor.chain().focus().extendMarkRange('link').setLink({ href: url }).run();
     }, [editor]);
 
-    const addImage = useCallback(() => {
+    const addImage = useCallback(async () => {
       if (!editor) return;
-      const url = window.prompt('Image URL');
+      const url = await promptAction({ title: 'Insert image', detail: 'Paste the address of the image.', fieldLabel: 'Image URL', confirmLabel: 'Insert' });
       if (url) {
         editor.chain().focus().setImage({ src: url }).run();
       }
@@ -791,10 +792,10 @@ TipTapEditor.displayName = 'TipTapEditor';
 export const EditorToolbar: React.FC<{ editor: Editor | null }> = ({ editor }) => {
   const [linkUrl, setLinkUrl] = React.useState('');
 
-  const setLink = React.useCallback(() => {
+  const setLink = React.useCallback(async () => {
     if (!editor) return;
     const previousUrl = editor.getAttributes('link').href;
-    const url = window.prompt('URL', previousUrl);
+    const url = await promptAction({ title: 'Link', detail: 'Where should this link point?', fieldLabel: 'URL', initialValue: previousUrl, confirmLabel: 'Apply' });
     if (url === null) return;
     if (url === '') {
       editor.chain().focus().extendMarkRange('link').unsetLink().run();
@@ -803,9 +804,9 @@ export const EditorToolbar: React.FC<{ editor: Editor | null }> = ({ editor }) =
     editor.chain().focus().extendMarkRange('link').setLink({ href: url }).run();
   }, [editor]);
 
-  const addImage = React.useCallback(() => {
+  const addImage = React.useCallback(async () => {
     if (!editor) return;
-    const url = window.prompt('Image URL');
+    const url = await promptAction({ title: 'Insert image', detail: 'Paste the address of the image.', fieldLabel: 'Image URL', confirmLabel: 'Insert' });
     if (url) {
       editor.chain().focus().setImage({ src: url }).run();
     }

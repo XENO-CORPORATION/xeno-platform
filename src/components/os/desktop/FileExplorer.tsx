@@ -1,4 +1,5 @@
 import * as React from 'react';
+import { confirmAction, promptAction } from '../../platform/confirmAction';
 import { notify } from '../../platform/Notifications';
 import {
   Folder,
@@ -757,7 +758,7 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
     }
   }, [editingItem, currentPath, handleCancelEdit, loadContainerDirectory]);
 
-  const handleContextMenuAction = React.useCallback((action: string) => {
+  const handleContextMenuAction = React.useCallback(async (action: string) => {
     if (!contextMenu) return;
 
     const { selectedItems, contextType } = contextMenu;
@@ -812,7 +813,7 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
 
           const itemNames = itemsToDelete.map(item => item.name);
 
-          if (confirm(`Delete ${itemsToDelete.length} item(s)?\n\n${itemNames.join('\n')}`)) {
+          if (await confirmAction({ title: 'Delete', detail: `Delete ${itemsToDelete.length} item(s)?\n\n${itemNames.join('\n')}`, destructive: true })) {
             // Delete items from the file system (use async IIFE)
             (async () => {
               for (const item of itemsToDelete) {
@@ -850,7 +851,7 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
 
       case 'rename':
         if (selectedItem) {
-          const newName = prompt('Enter new name:', selectedItem.name);
+          const newName = await promptAction({ title: 'Rename', detail: `Rename “${selectedItem.name}”.`, fieldLabel: 'New name', initialValue: selectedItem.name, confirmLabel: 'Rename' });
           if (newName && newName !== selectedItem.name) {
             console.log('Renaming', selectedItem.name, 'to', newName);
             // TODO: Implement actual rename
@@ -2276,9 +2277,9 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
                         return (
                           <div key={item.id} className="relative group">
                             <button
-                              onClick={() => {
+                              onClick={async () => {
                                 // Show warning before allowing access to system volume
-                                if (window.confirm('⚠️ System Volume contains container system files. Modifying these files may break your container. Continue?')) {
+                                if (await confirmAction({ title: 'Confirm', detail: '⚠️ System Volume contains container system files. Modifying these files may break your container. Continue?' })) {
                                   navigateFromSidebar(item);
                                 }
                               }}
@@ -2838,10 +2839,10 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
                     <div
                       key={volume.id}
                       className="group relative bg-[rgba(42,42,42,0.6)] border border-white/10 rounded-lg p-4 hover:bg-[rgba(52,52,52,0.8)] hover:border-white/20 transition-all cursor-pointer"
-                      onClick={() => {
+                      onClick={async () => {
                         if (volume.isSystemVolume) {
                           // Show warning before allowing access to system volume
-                          if (window.confirm('⚠️ System Volume contains container system files. Modifying these files may break your container. Continue?')) {
+                          if (await confirmAction({ title: 'Confirm', detail: '⚠️ System Volume contains container system files. Modifying these files may break your container. Continue?' })) {
                             navigateFromSidebar(volume);
                           }
                         } else {

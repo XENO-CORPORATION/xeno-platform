@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
+import { confirmAction } from '../../platform/confirmAction';
 import JSZip from 'jszip';
 import imageGenerationService from '../../../services/imageGenerationService';
 import { ImageModelSettings } from '../../nodes/image-models/ImageModelInterface';
@@ -1038,7 +1039,7 @@ const ImageGenerationInterface2: React.FC = () => {
 
   // Delete a generation
   const handleDeleteGeneration = async (genId: string) => {
-    if (confirm('Are you sure you want to delete this generation?')) {
+    if (await confirmAction({ title: 'Delete', detail: 'Are you sure you want to delete this generation?', destructive: true })) {
       if (genId.startsWith('local-')) {
         setLocalGenerations(prev => prev.filter(gen => gen.id !== genId));
       } else {

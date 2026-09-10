@@ -6,16 +6,23 @@
  * to look like one, and on a destructive action give the reader a browser chrome
  * they have been trained to dismiss without reading.
  *
- * This is a RATCHET rather than a ban because there were 106 of them across 45
- * files, and a ban would either fail on day one or need an allowlist — and an
+ * It began as a RATCHET rather than a ban, because there were 106 of them across
+ * 47 files and a ban would have failed on day one or needed an allowlist — and an
  * allowlist is where the next one goes to be forgotten. A ceiling that only ever
- * decreases converts a large cleanup into a monotone one: every commit is free to
- * lower it, none can raise it, and nobody has to finish the job in one go.
+ * decreases converts a large cleanup into a monotone one.
  *
- * They split into two pieces of work, and only one of them is mechanical:
+ * ✅ It reached zero on 2026-09-10, so it is now a ban in effect. The ratchet
+ * shape is kept rather than rewritten as a flat assertion: the ceilings document
+ * what the numbers were, and a future addition fails against 0 exactly as it
+ * would against any other number.
  *
- *   confirm (29) + prompt (12) — a decision the user makes. ActionDialog already
- *   covers both shapes, so these are conversions.
+ * They were two pieces of work, and only one was mechanical:
+ *
+ *   confirm (29) + prompt (12) — a decision. Converted via confirmAction() /
+ *   promptAction(), which preserve the guard shape (`if (!await confirmAction(…))
+ *   return;`) so each site stayed a one-line change. TypeScript found every
+ *   enclosing function that needed `async`: `await` outside one is a compile
+ *   error, so the compiler was the checker rather than a reviewer's eye.
  *
  *   alert (0) — DONE 2026-09-10. A notification, not a decision. sonner was
  *   already a dependency and Pricing.tsx already called toast.error, and no
@@ -42,7 +49,7 @@ const SRC = path.join(ROOT, 'src');
  * `_old_backup` trees are excluded — they are dead code kept for reference, and
  * counting them would make the ratchet move when somebody deletes a corpse.
  */
-const CEILING = { confirm: 29, prompt: 12, alert: 0 };
+const CEILING = { confirm: 0, prompt: 0, alert: 0 };
 
 function sourceFiles(dir) {
   const out = [];
@@ -55,14 +62,26 @@ function sourceFiles(dir) {
   return out;
 }
 
-/** Strip comments and strings so a mention is never miscounted as a call. */
+/**
+ * Strip comments, strings and JSX text so a mention is never miscounted as a call.
+ *
+ * The JSX pass earns its place: the last "remaining" prompt in the codebase was
+ * the sentence "How closely to follow the prompt (higher values = more faithful)"
+ * rendered inside a <p>. That is text, not code, and without this the ratchet
+ * would have had to carry a ceiling of 1 forever — a ceiling with room in it,
+ * which is the one thing a ratchet must not have.
+ *
+ * The pattern deliberately refuses to span braces, so `{prompt(...)}` — an actual
+ * expression embedded in JSX — is NOT masked. Only literal text is.
+ */
 function code(text) {
   return text
     .replace(/\/\*[\s\S]*?\*\//g, ' ')
     .replace(/(^|[^:])\/\/[^\n]*/g, '$1 ')
     .replace(/`(?:\\.|[^`\\])*`/g, '``')
     .replace(/'(?:\\.|[^'\\\n])*'/g, "''")
-    .replace(/"(?:\\.|[^"\\\n])*"/g, '""');
+    .replace(/"(?:\\.|[^"\\\n])*"/g, '""')
+    .replace(/>[^<>{}]*</g, (m) => '>' + ' '.repeat(m.length - 2) + '<');
 }
 
 function countCalls(kind) {
@@ -94,17 +113,29 @@ for (const [kind, ceiling] of Object.entries(CEILING)) {
 }
 
 test('the ratchet is measuring something, not passing on an empty scan', () => {
-  // A glob that matches nothing reads exactly like a clean repo. This is the
-  // control: if the scanner breaks, this fails rather than reporting success.
+  /* Every ceiling is now zero, so "a real instance still exists" can no longer be
+   * the control — that check chased alert to zero, then confirm to zero, and would
+   * have had to be deleted. The durable control has two halves that do not depend
+   * on the codebase being dirty:
+   *
+   *   1. the scan reaches the tree at all (a glob matching nothing reads exactly
+   *      like a clean repo), and
+   *   2. the detector still fires on a KNOWN call, proved against a fixture. */
   const files = sourceFiles(SRC);
   assert.ok(files.length > 300, `expected the whole src tree, scanned ${files.length} files`);
-  // Pointed at a kind that still has instances. It was `alert`, and when alert
-  // reached zero this control started failing — correctly: a control that asserts
-  // "something exists" has to name something that does, or it silently becomes a
-  // test of nothing the moment the cleanup succeeds. Move it again when confirm
-  // reaches zero; do not delete it.
-  const { total } = countCalls('confirm');
-  assert.ok(total > 0, 'zero confirms found — the scanner is broken, not the codebase clean');
+
+  const fixture = code(`
+    function handler() {
+      if (confirm('really?')) doThing();
+      const name = window.prompt('Name');
+      alert('done');
+    }
+  `);
+  for (const kind of ['confirm', 'prompt', 'alert']) {
+    const pattern = new RegExp(`(^|[^.\\w$])(?:window\\s*\\.\\s*)?${kind}\\s*\\(`, 'g');
+    assert.equal((fixture.match(pattern) || []).length, 1,
+      `the detector no longer finds a real ${kind}() call — the scanner is broken, not the codebase clean`);
+  }
 });
 
 test('comments and strings are not counted as calls', () => {

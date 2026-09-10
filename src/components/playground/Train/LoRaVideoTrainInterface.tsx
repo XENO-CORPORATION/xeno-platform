@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { confirmAction } from '../../platform/confirmAction';
 import { UploadCloud, Video, BrainCircuit, Settings, X, Info, RotateCw, Download, Trash2, CheckCircle, Loader } from 'lucide-react'; // Changed icon to Video
 // TODO: Create and import a real LoRa video training service
 import { checkApiTokens, API_TOKENS } from '../../../config/apiConfig';
@@ -395,8 +396,8 @@ const LoRaVideoTrainComponent: React.FC = () => {
       }
   };
 
-  const handleClearHistory = () => {
-    if (confirm('Are you sure you want to clear the video training history?')) {
+  const handleClearHistory = async () => {
+    if (await confirmAction({ title: 'Clear', detail: 'Are you sure you want to clear the video training history?', destructive: true })) {
       setHistory([]);
       setSelectedHistoryRun(null);
       setTrainingProgress(null);

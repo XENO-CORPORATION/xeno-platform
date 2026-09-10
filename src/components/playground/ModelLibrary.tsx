@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { confirmAction } from '../platform/confirmAction';
 import { Search, Filter, ArrowDown, ArrowUp, Download, Trash2, Play, Code, RotateCw, BrainCircuit, Palette, Star, Calendar, Clock, Sparkles, CheckCircle2, X, PlayCircle, Tag, Info, ChevronRight, ArrowRight, Box } from 'lucide-react';
 
 interface ModelItem {
@@ -137,10 +138,10 @@ const ModelLibrary: React.FC<ModelLibraryProps> = ({
     setSortDirection(prev => prev === 'asc' ? 'desc' : 'asc');
   };
   
-  const handleDelete = (item: ModelItem, e: React.MouseEvent) => {
+  const handleDelete = async (item: ModelItem, e: React.MouseEvent) => {
     e.stopPropagation();
     if (onDelete) {
-      if (confirm(`Are you sure you want to delete "${item.name}"?`)) {
+      if (await confirmAction({ title: 'Delete', detail: `Are you sure you want to delete "${item.name}"?`, destructive: true })) {
         onDelete(item);
       }
     }

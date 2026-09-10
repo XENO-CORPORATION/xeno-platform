@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
+import { confirmAction, promptAction } from '../platform/confirmAction';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import { officeCanvasService, OfficeCanvas, CanvasVersionConflictError } from '../../services/officeCanvasService';
@@ -819,7 +820,9 @@ const CanvasPlanningVisual: React.FC = () => {
         await navigator.clipboard.writeText(url);
         setSyncStatus('Invite link copied');
       } catch {
-        window.prompt('Copy this share link:', url);
+        // Clipboard write was refused (permissions, or a non-secure context).
+        // The field is selectable, which is the whole job the prompt was doing.
+        await promptAction({ title: 'Copy this share link', detail: 'The clipboard was not available, so here is the link to copy.', fieldLabel: 'Share link', initialValue: url, confirmLabel: 'Done' });
         setSyncStatus('Share link ready');
       }
       await refreshCanvases();
@@ -831,7 +834,7 @@ const CanvasPlanningVisual: React.FC = () => {
 
   const deleteCurrentCanvas = async () => {
     if (!currentCanvasId) return;
-    if (!window.confirm('Delete this canvas permanently?')) return;
+    if (!await confirmAction({ title: 'Delete', detail: 'Delete this canvas permanently?', destructive: true })) return;
 
     try {
       await officeCanvasService.deleteCanvas(currentCanvasId);

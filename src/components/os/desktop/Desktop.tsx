@@ -1,4 +1,5 @@
 import * as React from 'react';
+import { confirmAction, promptAction } from '../../platform/confirmAction';
 import { useNavigate } from 'react-router-dom';
 import { Folder, FileText, Terminal, Settings, HardDrive, Trash2, Wifi, Activity } from 'lucide-react';
 import DesktopIcon from './DesktopIcon';
@@ -200,7 +201,7 @@ const Desktop: React.FC = () => {
 
   // File operations
   const handleNewFolder = async () => {
-    const name = prompt('Folder name:', 'New Folder');
+    const name = await promptAction({ title: 'New folder', detail: 'Name the new folder.', fieldLabel: 'Folder name', initialValue: 'New Folder', confirmLabel: 'Create' });
     if (name) {
       await containerFileSystemService.createDirectory(desktopPath, name);
       refreshDesktop();
@@ -219,7 +220,7 @@ const Desktop: React.FC = () => {
   };
 
   const handleNewFile = async () => {
-    const name = prompt('File name:', 'New Text Document.txt');
+    const name = await promptAction({ title: 'New file', detail: 'Name the new file.', fieldLabel: 'File name', initialValue: 'New Text Document.txt', confirmLabel: 'Create' });
     if (name) {
       await containerFileSystemService.createFile(desktopPath, name, '');
       refreshDesktop();
@@ -243,7 +244,7 @@ const Desktop: React.FC = () => {
       return;
     }
 
-    const confirmed = confirm(`Are you sure you want to delete "${icon.name}"?`);
+    const confirmed = await confirmAction({ title: 'Delete', detail: `Are you sure you want to delete "${icon.name}"?`, destructive: true });
     if (!confirmed) return;
 
     try {
@@ -277,7 +278,7 @@ const Desktop: React.FC = () => {
       return;
     }
 
-    const newName = prompt('Enter new name:', icon.name);
+    const newName = await promptAction({ title: 'Rename', detail: `Rename “${icon.name}”.`, fieldLabel: 'New name', initialValue: icon.name, confirmLabel: 'Rename' });
     if (!newName || newName === icon.name) return;
 
     try {

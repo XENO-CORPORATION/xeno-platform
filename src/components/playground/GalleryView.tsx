@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { confirmAction } from '../platform/confirmAction';
 import { Search, Filter, ArrowDown, ArrowUp, Download, Copy, Share2, Trash2, RotateCw, Calendar, Clock, Tag, Grid3X3, Grid2X2, X, Play } from 'lucide-react';
 
 interface GalleryItem {
@@ -109,10 +110,10 @@ const GalleryView: React.FC<GalleryViewProps> = ({
     setSortDirection(prev => prev === 'asc' ? 'desc' : 'asc');
   };
   
-  const handleDelete = (item: GalleryItem, e: React.MouseEvent) => {
+  const handleDelete = async (item: GalleryItem, e: React.MouseEvent) => {
     e.stopPropagation();
     if (onDelete) {
-      if (confirm(`Are you sure you want to delete this ${item.type}?`)) {
+      if (await confirmAction({ title: 'Delete', detail: `Are you sure you want to delete this ${item.type}?`, destructive: true })) {
         onDelete(item);
       }
     }

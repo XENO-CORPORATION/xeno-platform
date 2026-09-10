@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { confirmAction } from '../../platform/confirmAction';
 import { Video, Send, Download, Trash2, Sparkles, Plus, X, Info, RotateCw, Settings, ArrowUpRight, Wand2, Zap, Film, Monitor, Cpu } from 'lucide-react';
 // TODO: Create and import a videoUpscaleService
 import { checkApiTokens, API_TOKENS } from '../../../config/apiConfig';
@@ -806,8 +807,8 @@ const VideoUpscaleInterface: React.FC = () => {
     }
   };
   
-  const handleClearHistory = () => {
-    if (confirm('Are you sure you want to clear the upscale history?')) {
+  const handleClearHistory = async () => {
+    if (await confirmAction({ title: 'Clear', detail: 'Are you sure you want to clear the upscale history?', destructive: true })) {
       setHistory([]);
       setSelectedHistoryItem(null);
        if (previewVideo !== inputVideo) {

@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { confirmAction } from '../../platform/confirmAction';
 import { UploadCloud, FileText, BrainCircuit, Settings, X, Info, RotateCw, Download, Trash2, CheckCircle, Loader, BookOpen } from 'lucide-react'; // Added BookOpen
 // TODO: Create and import a real LLM fine-tuning service
 import { checkApiTokens, API_TOKENS } from '../../../config/apiConfig';
@@ -465,8 +466,8 @@ export function TextLLMTrainComponent() {
       }
   };
 
-  const handleClearHistory = () => {
-    if (confirm('Are you sure you want to clear the LLM fine-tuning history?')) {
+  const handleClearHistory = async () => {
+    if (await confirmAction({ title: 'Clear', detail: 'Are you sure you want to clear the LLM fine-tuning history?', destructive: true })) {
       setHistory([]);
       setSelectedHistoryRun(null);
       setTrainingProgress(null);

@@ -2,6 +2,7 @@
 // Demonstrates how to use WebSocket file sync in the XenoStudio interface
 
 import React, { useState, useEffect } from 'react';
+import { confirmAction } from './platform/confirmAction';
 import { useWebSocket, useFileSync } from '../hooks/useWebSocket';
 import { authService } from '../services/authService';
 
@@ -100,8 +101,8 @@ export function FileSyncDemo() {
   };
 
   // Handle file delete
-  const handleDeleteFile = (filePath: string) => {
-    if (confirm(`Are you sure you want to delete ${filePath}?`)) {
+  const handleDeleteFile = async (filePath: string) => {
+    if (await confirmAction({ title: 'Delete', detail: `Are you sure you want to delete ${filePath}?`, destructive: true })) {
       deleteFile(filePath);
     }
   };

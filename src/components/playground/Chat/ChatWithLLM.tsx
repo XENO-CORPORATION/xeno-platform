@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect, useLayoutEffect, useCallback, useMemo } from 'react';
+import { confirmAction } from '../../platform/confirmAction';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { createPortal } from 'react-dom'; // Import createPortal
 import { Button, IconButton, ListRow, MenuItem, MessageBubble, Spinner, Tab, Textarea, TextInput, useDialog, useGooPill, useMenu, useTabs } from '@xenosystem/elements-react';
@@ -3660,9 +3661,7 @@ const ChatWithLLM: React.FC<ChatWithLLMProps> = ({
   const retryProjectScheduledRun = useCallback(async (runId: string, status: string) => {
     try {
       const acknowledgeDuplicateCharge = status === 'reconciliation_required';
-      if (acknowledgeDuplicateCharge && !window.confirm(
-        'The prior model request may already have been accepted. Retrying can create another provider charge. Retry this same logical run?',
-      )) return;
+      if (acknowledgeDuplicateCharge && !await confirmAction({ title: 'Confirm', detail: 'The prior model request may already have been accepted. Retrying can create another provider charge. Retry this same logical run?', })) return;
       const run = await chatService.retryScheduledRun(runId, acknowledgeDuplicateCharge);
       setProjectScheduledPreview((current) => current ? {
         ...current,

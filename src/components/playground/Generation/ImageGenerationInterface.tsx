@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { confirmAction } from '../../platform/confirmAction';
 import { Image, Send, Download, Copy, Share2, Trash2, Sparkles, Plus, X, Info, AlertCircle, RotateCw, Wand2, Settings, ChevronDown, RefreshCw, Triangle, PenTool, Camera, Minus, ZoomIn, ZoomOut, Move, Maximize, Minimize, DownloadCloud, ChevronRight } from 'lucide-react';
 import imageGenerationService from '../../../services/imageGenerationService';
 import { ImageModelSettings, GeneratedImage } from '../../nodes/image-models/ImageModelInterface';
@@ -1565,8 +1566,8 @@ const FullImageGenerationInterface: React.FC = () => {
     }
   }, [selectedImage]);
 
-  const handleClearHistory = () => {
-    if (confirm('Are you sure you want to clear your generation history?')) {
+  const handleClearHistory = async () => {
+    if (await confirmAction({ title: 'Clear', detail: 'Are you sure you want to clear your generation history?', destructive: true })) {
       setHistory([]);
       setSelectedImage(null);
     }

@@ -5,6 +5,7 @@
  */
 
 import React, { useState, useEffect, useRef } from 'react';
+import { confirmAction } from '../../platform/confirmAction';
 import {
   X,
   Copy,
@@ -173,7 +174,7 @@ const CollaborationModal: React.FC<CollaborationModalProps> = ({ isOpen, onClose
   };
 
   const handleEndSession = async () => {
-    if (window.confirm('End this session? All participants will be disconnected.')) {
+    if (await confirmAction({ title: 'End session', detail: 'End this session? All participants will be disconnected.', destructive: true })) {
       await endSession();
       onClose();
     }

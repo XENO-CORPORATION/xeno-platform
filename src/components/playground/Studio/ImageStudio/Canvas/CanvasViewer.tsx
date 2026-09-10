@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
+import { confirmAction } from '../../../../platform/confirmAction';
 import { notify } from '../../../../platform/Notifications';
 import { 
   Send, Paperclip, Settings, Palette, History, 
@@ -2565,10 +2566,10 @@ const CanvasViewer: React.FC<CanvasViewerProps> = ({
   };
 
   // NEW: File menu handlers
-  const handleNewFile = () => {
+  const handleNewFile = async () => {
     console.log('📄 New File clicked');
     if (hasUnsavedChanges) {
-      const confirmed = window.confirm('You have unsaved changes. Create a new file?');
+      const confirmed = await confirmAction({ title: 'Unsaved changes', detail: 'You have unsaved changes. Create a new file?', destructive: true });
       if (!confirmed) return;
     }
     // Reset to blank canvas
