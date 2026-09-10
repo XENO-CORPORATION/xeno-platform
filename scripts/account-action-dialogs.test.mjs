@@ -24,7 +24,7 @@ before(async () => {
   await build({
     stdin: { contents: `export { default as Projects } from './src/components/account/ProjectsPage';
       export { default as Settings } from './src/components/account/SettingsPage';
-      export { default as Dialog } from './src/components/platform/AccountActionDialog';`, resolveDir: process.cwd() },
+      export { default as Dialog } from './src/components/platform/ActionDialog';`, resolveDir: process.cwd() },
     bundle: true, format: 'esm', jsx: 'automatic', logLevel: 'error',
     external: ['react', 'react-dom', 'react-router-dom'], outfile: 'scripts/harness/.account-actions.generated.mjs',
     alias: {

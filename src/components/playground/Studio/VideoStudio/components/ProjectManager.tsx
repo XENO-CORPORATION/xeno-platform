@@ -4,6 +4,7 @@
  */
 
 import React, { useState, useEffect } from 'react';
+import ActionDialog from '../../../../platform/ActionDialog';
 import { X, Search, Trash2, FolderOpen, Clock, Film, Settings } from 'lucide-react';
 import { videoStudioService, VideoProject } from '../../../../../services/videoStudioService';
 
@@ -19,6 +20,9 @@ const ProjectManager: React.FC<ProjectManagerProps> = ({ isOpen, onClose, onLoad
   const [searchTerm, setSearchTerm] = useState('');
   const [filterStatus, setFilterStatus] = useState<string>('all');
   const [error, setError] = useState<string | null>(null);
+  // The project awaiting a delete confirmation. A dialog replaces window.confirm:
+  // a browser dialog on a destructive action is the one people dismiss unread.
+  const [pendingDelete, setPendingDelete] = useState<{ id: string; title: string } | null>(null);
 
   // Load projects when modal opens
   useEffect(() => {
@@ -51,23 +55,19 @@ const ProjectManager: React.FC<ProjectManagerProps> = ({ isOpen, onClose, onLoad
     }
   };
 
-  const handleDeleteProject = async (projectId: string, projectTitle: string) => {
-    const confirmed = window.confirm(`Delete project "${projectTitle}"?\n\nThis action cannot be undone.`);
-    if (!confirmed) return;
+  const handleDeleteProject = (projectId: string, projectTitle: string) => {
+    setPendingDelete({ id: projectId, title: projectTitle });
+  };
 
-    try {
-      const result = await videoStudioService.deleteProject(projectId);
-      if (result.success) {
-        // Remove from list
-        setProjects(prev => prev.filter(p => p.id !== projectId));
-        console.log('✅ Project deleted');
-      } else {
-        alert(`Failed to delete project: ${result.error}`);
-      }
-    } catch (err) {
-      console.error('Delete error:', err);
-      alert('Error deleting project');
-    }
+  /*
+   * Throwing is how the dialog learns it failed: it keeps itself open, shows the
+   * reason in place and leaves the button pressable. The previous alert() told
+   * the user the same thing in a box that had already lost the context.
+   */
+  const confirmDeleteProject = async (projectId: string) => {
+    const result = await videoStudioService.deleteProject(projectId);
+    if (!result.success) throw new Error(result.error || 'The project could not be deleted.');
+    setProjects(prev => prev.filter(p => p.id !== projectId));
   };
 
   const handleLoadProject = (project: VideoProject) => {
@@ -281,6 +281,11 @@ const ProjectManager: React.FC<ProjectManagerProps> = ({ isOpen, onClose, onLoad
           </button>
         </div>
       </div>
+    {pendingDelete ? <ActionDialog key={pendingDelete.id} title="Delete project" destructive
+      detail={`Delete “${pendingDelete.title}”? This cannot be undone.`}
+      confirmLabel="Delete project"
+      onConfirm={() => confirmDeleteProject(pendingDelete.id)}
+      onClose={() => setPendingDelete(null)} /> : null}
     </div>
   );
 };

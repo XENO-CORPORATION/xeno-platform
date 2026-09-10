@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react';
+import ActionDialog from '../components/platform/ActionDialog';
 import { Link, useParams } from 'react-router-dom';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -99,6 +100,20 @@ function VoteBox({ score, advisory, onVote, disabled }: {
   );
 }
 
+/**
+ * The reasons the Forum accepts. These are the API's vocabulary, not ours to
+ * improvise: `api.flag` posts whatever it is given, and the server rejects
+ * anything outside this set.
+ */
+const FLAG_REASONS = [
+  { value: 'spam', label: 'Spam' },
+  { value: 'abuse', label: 'Abuse or harassment' },
+  { value: 'off_topic', label: 'Off topic' },
+  { value: 'duplicate', label: 'Duplicate' },
+  { value: 'low_quality', label: 'Low quality' },
+  { value: 'other', label: 'Something else' },
+];
+
 const ForumThread: React.FC = () => {
   const { shortId } = useParams<{ shortId: string }>();
   const [thread, setThread] = useState<ForumThreadDetail | null>(null);
@@ -194,6 +209,15 @@ const ForumThread: React.FC = () => {
   // the thread you came here to read.
   const [following, setFollowing] = useState<Set<string>>(new Set());
   const [pendingTag, setPendingTag] = useState<string | null>(null);
+  /*
+   * The post awaiting a flag reason.
+   *
+   * This was a window.prompt whose message listed the six accepted values in
+   * parentheses and then took free text. Anyone who typed "it's spam" sent a
+   * reason the API does not accept, so the parenthetical was doing a control's
+   * job. A closed set of answers belongs in a control that can only produce them.
+   */
+  const [pendingFlag, setPendingFlag] = useState<string | null>(null);
   useEffect(() => {
     if (!signedIn) { setFollowing(new Set()); return; }
     api.getSubscriptions()
@@ -462,8 +486,7 @@ const ForumThread: React.FC = () => {
                 <button
                   type="button"
                   onClick={() => {
-                    const reason = window.prompt('Why are you flagging this? (spam, abuse, off_topic, duplicate, low_quality, other)');
-                    if (reason) act(() => api.flag('posts', post.id, reason.trim()));
+                    setPendingFlag(post.id);
                   }}
                   aria-label="Flag for review"
                   className="cursor-pointer rounded-md p-1 text-[#57575e] transition-colors hover:bg-white/[0.05] hover:text-[#a8a8b1]"
@@ -640,6 +663,13 @@ const ForumThread: React.FC = () => {
             </div>
           )}
         </div>
+    {pendingFlag ? <ActionDialog key={pendingFlag} title="Flag for review"
+      detail="A moderator sees the post and your reason. Flagging is not a vote — it is a request for a person to look."
+      fieldLabel="Why are you flagging this?"
+      choices={FLAG_REASONS}
+      confirmLabel="Send to moderators"
+      onConfirm={async (reason) => { await api.flag('posts', pendingFlag, reason); }}
+      onClose={() => setPendingFlag(null)} /> : null}
     </ForumShell>
   );
 };
