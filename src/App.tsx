@@ -1,5 +1,6 @@
 import React, { useEffect } from 'react';
 import PlatformNotifications from './components/platform/Notifications';
+import { ConfirmActionHost } from './components/platform/confirmAction';
 import { Routes, Route, Navigate, useLocation, useParams } from 'react-router-dom';
 
 import Home from "./pages/Home";
@@ -140,6 +141,7 @@ function App() {
             of them fails silently in the other, which is how the Hub unsigned
             badge ended up telling exactly the wrong half of its audience. */}
         <PlatformNotifications />
+        <ConfirmActionHost />
         <Routes>
           {/* Standalone Chat Interface - Full viewport */}
           <Route path="/" element={
@@ -168,6 +170,7 @@ function App() {
   return (
     <AuthProvider>
       <PlatformNotifications />
+      <ConfirmActionHost />
       <WorkspaceProvider>
       <CollaborationProvider>
         <OSStateProvider>
