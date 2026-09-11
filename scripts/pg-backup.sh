@@ -135,7 +135,26 @@ if [ -n "$R2_REMOTE" ]; then
     if gpg --batch --yes --trust-model always            --recipient "$BACKUP_GPG_RECIPIENT"            --output "$ENCFILE" --encrypt "$OUTFILE" 2>>"$LOGFILE"; then
       # Refuse to ship something that is not actually an OpenPGP message — a
       # zero-byte or truncated artifact would upload happily and restore never.
-      if [ -s "$ENCFILE" ] && gpg --batch --list-packets "$ENCFILE" >/dev/null 2>>"$LOGFILE"; then
+      #
+      # 🔴 --list-only IS LOAD-BEARING. Plain `--list-packets` ATTEMPTS DECRYPTION,
+      # so on this host — which by design holds no secret key — it always exits 2
+      # and the guard could never pass. That is worse than no guard: it refused a
+      # perfectly good 693 MB artifact on 2026-09-11 and would have silently kept
+      # every backup onsite forever while logging a plausible warning.
+      # `--list-only` parses the packet structure WITHOUT decrypting: exit 0, and
+      # it still proves a pubkey-encrypted session packet is present.
+      #
+      # Size is checked too: a truncated upload is the failure mode that looks
+      # most like success. The dump is already compressed, so the ciphertext is
+      # within a few percent of it; half is a generous floor that still catches
+      # a stream cut short.
+      ENC_OK=0
+      if [ -s "$ENCFILE" ]          && gpg --batch --list-only --list-packets "$ENCFILE" 2>/dev/null | grep -q 'pubkey enc packet'; then
+        PLAIN_SZ=$(wc -c <"$OUTFILE"); ENC_SZ=$(wc -c <"$ENCFILE")
+        if [ "$ENC_SZ" -gt $(( PLAIN_SZ / 2 )) ]; then ENC_OK=1
+        else log "WARN: ciphertext is $ENC_SZ bytes against a $PLAIN_SZ byte dump — truncated?"; fi
+      fi
+      if [ "$ENC_OK" -eq 1 ]; then
         if rclone copy "$ENCFILE" "$R2_REMOTE" 2>>"$LOGFILE"; then
           log "OK: encrypted offsite copy pushed -> $R2_REMOTE ($(du -h "$ENCFILE" | cut -f1))"
         else
