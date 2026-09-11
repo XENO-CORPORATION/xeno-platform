@@ -25,15 +25,27 @@ const Terms: React.FC = () => {
           {/* Description of Service */}
           <section>
             <h2>2. Description of Service</h2>
+            {/*
+              Corrected 2026-09-11. This list claimed a "Social Media Hub for
+              publishing content to connected platforms". That feature does not
+              exist — there is no publishing route in the server, and every row in
+              `oauth_accounts` is provider `google` (sign-in). What the service
+              actually is had also drifted: it described a content-creation tool,
+              not the creative + productivity platform this now sells. Keep this
+              list matched to what a customer can actually buy and use; it is the
+              definition of the thing they are contracting for.
+            */}
             <p>
-              XENOsystem is a content creation platform that provides:
+              XENOsystem is an AI-powered creative and productivity platform. Depending on your
+              plan and credit balance, it provides:
             </p>
             <ul>
-              <li>AI-powered image and video generation tools</li>
-              <li>Video editing and enhancement capabilities</li>
-              <li>Social Media Hub for publishing content to connected platforms (YouTube, TikTok, Instagram, etc.)</li>
-              <li>Content management and organization features</li>
-              <li>Cloud-based storage and processing</li>
+              <li>AI generation and editing for images, video, audio and text</li>
+              <li>Desktop and web applications for creative and productivity work</li>
+              <li>An assistant and agents that can carry out tasks on your instruction</li>
+              <li>A tool that fetches publicly accessible media from a link you supply</li>
+              <li>Cloud storage, processing and synchronisation for your work</li>
+              <li>Prepaid credits and subscription plans that determine what is available to you</li>
             </ul>
           </section>
 
@@ -65,38 +77,38 @@ const Terms: React.FC = () => {
           </section>
 
           {/* Connected Platforms */}
+          {/*
+            Rewritten 2026-09-11 alongside §2. This section governed connecting
+            social accounts and posting on the user's behalf — a capability the
+            product does not have (no publishing route anywhere in the server;
+            every `oauth_accounts` row is provider `google`, i.e. sign-in). Terms
+            granting rights over a feature that does not exist are not harmless
+            boilerplate: they ARE the contract, and a reader comparing them to the
+            product finds a document nobody checked. What remains is what is real.
+          */}
           <section>
-            <h2>4. Connected Platforms</h2>
+            <h2>4. Third-party services</h2>
+
+            <h3>Signing in with Google</h3>
             <p>
-              Our Social Media Hub feature allows you to connect third-party social media accounts
-              (such as YouTube, TikTok, and Instagram) to publish content directly from XENOsystem.
+              You may sign in with Google instead of using a password. Doing so shares your email
+              address and basic profile information with us, and nothing further. You can remove
+              that connection at any time from your account settings; we then delete the
+              associated authorization tokens.
             </p>
 
-            <h3>Authorization</h3>
+            <h3>Downloading media from a link</h3>
             <p>
-              When you connect a social media account, you authorize XENOsystem to post content
-              to that platform on your behalf when you explicitly request publication. We will
-              only take actions that you specifically initiate.
+              The Service can fetch publicly accessible media from a URL you supply. This requires
+              no account connection and no credentials for the site the link points to. You are
+              responsible for having the right to download the material you request, and for
+              complying with the terms of the site it comes from.
             </p>
 
-            <h3>Platform Compliance</h3>
-            <ul>
-              <li>You must comply with each connected platform's terms of service and community guidelines</li>
-              <li>You are responsible for ensuring your content meets platform requirements</li>
-              <li>We are not responsible for actions taken by third-party platforms, including content removal or account suspension</li>
-            </ul>
-
-            <h3>Disconnection</h3>
+            <h3>Third-party changes</h3>
             <p>
-              You can disconnect any connected platform at any time through your account settings.
-              Upon disconnection, we will immediately revoke our access and delete associated
-              authorization tokens.
-            </p>
-
-            <h3>Third-Party Changes</h3>
-            <p>
-              We are not responsible for changes to third-party platform APIs, policies, or
-              availability. Such changes may affect the functionality of connected platform features.
+              We are not responsible for changes to third-party APIs, policies or availability.
+              Such changes may affect the functionality of features that depend on them.
             </p>
           </section>
 
@@ -114,8 +126,9 @@ const Terms: React.FC = () => {
             <p>
               By using the Service, you grant XENOsystem a limited, non-exclusive, royalty-free
               license to process, store, display, and transmit your User Content as necessary to
-              provide the Service. This includes publishing content to connected platforms when you
-              request it.
+              provide the Service — for example, to run an AI generation you asked for, to store
+              your work, and to sync it between your devices. The licence exists only to operate
+              the Service for you, and it ends when you delete the content or your account.
             </p>
 
             <h3>Your Responsibilities</h3>

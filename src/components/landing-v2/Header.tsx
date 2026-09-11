@@ -27,13 +27,13 @@ const Header: React.FC<HeaderProps> = ({ onGetStarted, visible = true }) => {
         }`}
       >
         <div className="mx-auto flex h-[78px] w-full max-w-[1920px] items-center justify-between px-7 sm:px-10 lg:px-[4.7vw]">
-          <Link to="/v2" className="group flex items-center gap-4" aria-label="XENO AI home">
+          <Link to="/v2" className="group flex items-center gap-4" aria-label="XENOsystem home">
             <img
               src="/xeno-logo.svg"
               alt=""
               className="h-9 w-9 object-contain invert drop-shadow-[0_0_14px_rgba(255,255,255,0.26)] transition-transform duration-300 group-hover:scale-105"
             />
-            <span className="text-[22px] font-medium uppercase tracking-[0.36em] text-white/90">XENO AI</span>
+            <span className="text-[22px] font-medium uppercase tracking-[0.36em] text-white/90">XENOsystem</span>
           </Link>
 
           <nav className="hidden items-center gap-[2.25vw] lg:flex">

@@ -57,7 +57,7 @@ const Footer: React.FC = () => {
           <div className="col-span-2 md:col-span-2">
             <Link to="/" className="mb-[clamp(14px,1.6vh,20px)] flex items-center gap-2.5">
               <img src="/xeno-logo.svg" alt="" className="h-6 w-6 invert" />
-              <span className="text-[clamp(14px,1vw,16px)] font-semibold tracking-tight text-white">XENO AI</span>
+              <span className="text-[clamp(14px,1vw,16px)] font-semibold tracking-tight text-white">XENOsystem</span>
             </Link>
             <p className="mb-[clamp(16px,1.8vh,22px)] max-w-[280px] text-[clamp(12px,0.85vw,13.5px)] leading-[1.55] text-[#807970]">
               The complete AI workspace for creation, code, media, workflows and intelligent agents.

@@ -37,11 +37,10 @@ const Privacy: React.FC = () => {
               <li>Profile information you choose to provide</li>
             </ul>
 
-            <h3>Connected Platform Data</h3>
+            <h3>Sign-in provider data</h3>
             <ul>
-              <li>OAuth tokens from connected social platforms (YouTube, TikTok, Instagram, etc.)</li>
-              <li>Basic profile information from connected accounts (as authorized by you)</li>
-              <li>Platform user IDs necessary for publishing content on your behalf</li>
+              <li>OAuth tokens from Google, if you choose "Sign in with Google"</li>
+              <li>Basic profile information from that account (email address, display name), as authorized by you</li>
             </ul>
 
             <h3>Content You Create</h3>
@@ -61,36 +60,43 @@ const Privacy: React.FC = () => {
           </section>
 
           {/* Third-Party Platform Integrations */}
+          {/*
+            Rewritten 2026-09-11. This section described a "Social Media Hub" that
+            connected third-party social accounts and published on the user's
+            behalf. No such feature exists: there is no publishing route anywhere
+            in the server, `youtube_channels` holds zero rows, and every row in
+            `oauth_accounts` is provider `google` — i.e. sign-in, not posting.
+            A privacy policy describes processing that actually happens; claiming
+            to collect credentials we never receive is wrong even though it errs
+            toward over-disclosure, and it invites a reader to conclude the
+            document was never checked against the product. What IS real is below.
+            If a publishing feature ever ships, this is where it gets disclosed
+            BEFORE it launches.
+          */}
           <section>
-            <h2>3. Third-Party Platform Integrations</h2>
+            <h2>3. Third-party integrations</h2>
+
+            <h3>Signing in with Google</h3>
             <p>
-              XENOsystem's Social Media Hub feature allows you to connect your social media accounts
-              to publish content directly from our platform. Here's what you need to know:
+              You can create an account with an email address and password, or sign in with Google.
+              If you sign in with Google we receive your email address and basic profile
+              information, and nothing else — we do not gain access to your Gmail, Drive,
+              YouTube channel, contacts or any other Google service.
             </p>
 
-            <h3>Platforms We Connect To</h3>
-            <ul>
-              <li>YouTube (Google)</li>
-              <li>TikTok</li>
-              <li>Instagram</li>
-              <li>Other social platforms as they become available</li>
-            </ul>
+            <h3>Downloading media from a link</h3>
+            <p>
+              The platform includes a tool that fetches publicly accessible media from a URL you
+              supply. It works from the link alone: you never connect an account, and we never
+              ask for, receive or store credentials for the site the link points to. We do not
+              post anything on your behalf, and we have no access to private posts, messages,
+              followers or analytics.
+            </p>
+            <p>
+              You are responsible for having the right to download the material you request.
+            </p>
 
-            <h3>What We Access</h3>
-            <ul>
-              <li>Basic profile information (username, profile picture, account ID)</li>
-              <li>Permission to post content on your behalf when you explicitly request it</li>
-            </ul>
-
-            <h3>What We Do NOT Access</h3>
-            <ul>
-              <li>Private messages or direct messages</li>
-              <li>Followers or following lists (unless specifically required and authorized)</li>
-              <li>Analytics or insights data (unless specifically authorized)</li>
-              <li>Content from other users or your feed</li>
-            </ul>
-
-            <h3>How We Handle OAuth Tokens</h3>
+            <h3>How we handle OAuth tokens</h3>
             <ul>
               {/*
                 Do not restore an "encrypted at rest" claim here without first
@@ -102,19 +108,11 @@ const Privacy: React.FC = () => {
                 claims are accurate; this one was not, and it sat in a document
                 that Art. 13 GDPR makes binding.
               */}
-              <li>OAuth tokens are held in access-restricted storage, separate from your profile</li>
-              <li>Tokens are only used to perform actions you explicitly request</li>
-              <li>We never share your tokens with third parties</li>
-              <li>Tokens are immediately deleted when you disconnect a platform</li>
+              <li>Sign-in tokens are held in access-restricted storage, separate from your profile</li>
+              <li>They are used only to authenticate you</li>
+              <li>We never share them with third parties</li>
+              <li>They are deleted when you disconnect Google from your account or delete your account</li>
             </ul>
-
-            <h3>Your Control</h3>
-            <p>
-              You can disconnect any connected platform at any time through your account settings.
-              When you disconnect a platform, we immediately revoke our access and delete the
-              associated OAuth tokens. We only post content when you explicitly click "Publish"
-              or take similar intentional action.
-            </p>
           </section>
 
           {/* How We Use Data */}

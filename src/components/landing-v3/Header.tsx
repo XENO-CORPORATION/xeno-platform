@@ -15,7 +15,7 @@ function Wordmark() {
   };
   return (
     <span ref={ref} onMouseMove={onMove} className="group/wm relative inline-block text-[17px] font-semibold tracking-tight">
-      <span className="text-white">XENO AI</span>
+      <span className="text-white">XENOsystem</span>
       <span
         aria-hidden="true"
         className="pointer-events-none absolute inset-0 opacity-0 transition-opacity duration-300 ease-out group-hover/wm:opacity-100"
@@ -28,7 +28,7 @@ function Wordmark() {
           WebkitTextFillColor: 'transparent',
         }}
       >
-        XENO AI
+        XENOsystem
       </span>
     </span>
   );
@@ -497,7 +497,7 @@ const Header: React.FC<HeaderProps> = ({ onGetStarted, visible = true }) => {
         <div className="relative flex h-[56px] w-full items-center justify-between px-[1.4vw]">
           {/* ── Left: Logo + breadcrumb ─────────────────────────────── */}
           <div className="flex items-center gap-8">
-            <Link to="/" className="group flex items-center gap-2.5" aria-label="XENO AI home">
+            <Link to="/" className="group flex items-center gap-2.5" aria-label="XENOsystem home">
               <img
                 src="/xeno-logo.svg"
                 alt=""
