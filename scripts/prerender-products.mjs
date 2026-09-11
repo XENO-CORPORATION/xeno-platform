@@ -18,6 +18,7 @@ import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { pathToFileURL } from 'node:url';
 import { siteOrigin } from '../src/server/config/hosts.js';
+import { loadSupport, supportBodyHtml, renderSupportBody } from './lib/support-page.mjs';
 
 const DIST = 'dist';
 const SITE = siteOrigin();
@@ -100,7 +101,7 @@ function headFor(p, { title, desc, canonical }) {
     `<meta name="description" content="${esc(desc)}">`,
     `<link rel="canonical" href="${canonical}">`,
     `<meta property="og:type" content="website">`,
-    `<meta property="og:site_name" content="XENO Studio">`,
+    `<meta property="og:site_name" content="XENOsystem">`,
     `<meta property="og:title" content="${esc(title)}">`,
     `<meta property="og:description" content="${esc(desc)}">`,
     `<meta property="og:url" content="${canonical}">`,
@@ -120,7 +121,7 @@ function docJsonld({ title, desc, canonical, productName }) {
     name: title,
     description: desc,
     about: productName,
-    isPartOf: { '@type': 'WebSite', name: 'XENO Studio', url: SITE },
+    isPartOf: { '@type': 'WebSite', name: 'XENOsystem', url: SITE },
     url: canonical,
   });
 }
@@ -131,7 +132,7 @@ function docHeadFor({ title, desc, canonical, productName }) {
     `<meta name="description" content="${esc(desc)}">`,
     `<link rel="canonical" href="${canonical}">`,
     `<meta property="og:type" content="article">`,
-    `<meta property="og:site_name" content="XENO Studio">`,
+    `<meta property="og:site_name" content="XENOsystem">`,
     `<meta property="og:title" content="${esc(title)}">`,
     `<meta property="og:description" content="${esc(desc)}">`,
     `<meta property="og:url" content="${canonical}">`,
@@ -152,7 +153,7 @@ function privacyHeadFor({ title, desc, canonical, productName }) {
     name: title,
     description: desc,
     about: productName,
-    isPartOf: { '@type': 'WebSite', name: 'XENO Studio', url: SITE },
+    isPartOf: { '@type': 'WebSite', name: 'XENOsystem', url: SITE },
     url: canonical,
   });
   return [
@@ -160,7 +161,7 @@ function privacyHeadFor({ title, desc, canonical, productName }) {
     `<meta name="description" content="${esc(desc)}">`,
     `<link rel="canonical" href="${canonical}">`,
     `<meta property="og:type" content="website">`,
-    `<meta property="og:site_name" content="XENO Studio">`,
+    `<meta property="og:site_name" content="XENOsystem">`,
     `<meta property="og:title" content="${esc(title)}">`,
     `<meta property="og:description" content="${esc(desc)}">`,
     `<meta property="og:url" content="${canonical}">`,
@@ -194,6 +195,7 @@ async function main() {
   const { PRODUCTS } = await loadCatalog();
   const { getProductContent } = await loadContent();
   const { allDocRoutes, allDocProducts } = await loadDocs();
+  const support = await loadSupport();
 
   const urls = ['/products'];
   let pages = 0;
@@ -243,10 +245,10 @@ async function main() {
   // ── Docs ──────────────────────────────────────────────────────────────
   // Unified docs hub.
   writePage('docs', renderPage(template, null, docHeadFor({
-    title: 'XENO Studio docs',
+    title: 'XENOsystem docs',
     desc: 'Guides and reference for every XENO app, agent, and API — from your first render to a production agent workflow.',
     canonical: `${SITE}/docs`,
-    productName: 'XENO Studio',
+    productName: 'XENOsystem',
   })));
   urls.push('/docs');
   pages++;
@@ -279,12 +281,12 @@ async function main() {
   // /products index page (generic head — it's a grid, not one app).
   const idxDesc = 'The XENO ecosystem — creative, office, agent, and developer tools, all AI-native.';
   const indexHead = [
-    `<title>Products — XENO Studio</title>`,
+    `<title>Products — XENOsystem</title>`,
     `<meta name="description" content="${esc(idxDesc)}">`,
     `<link rel="canonical" href="${SITE}/products">`,
     `<meta property="og:type" content="website">`,
-    `<meta property="og:site_name" content="XENO Studio">`,
-    `<meta property="og:title" content="Products — XENO Studio">`,
+    `<meta property="og:site_name" content="XENOsystem">`,
+    `<meta property="og:title" content="Products — XENOsystem">`,
     `<meta property="og:description" content="${esc(idxDesc)}">`,
     `<meta property="og:url" content="${SITE}/products">`,
     `<meta property="og:image" content="${OG_IMAGE}">`,
@@ -312,19 +314,37 @@ async function main() {
   // archive, not for Google.
   for (const [route, title, desc] of [
     ['terms', 'Terms of Service',
-     'The terms you agree to when you use XENO Studio — accounts, your content, acceptable use, and how the agreement ends.'],
+     'The terms you agree to when you use XENOsystem — accounts, your content, acceptable use, and how the agreement ends.'],
     ['privacy', 'Privacy Policy',
-     'What XENO Studio collects, how it is used, and what we never do with it — including that we do not train models on your content without your explicit consent.'],
+     'What XENOsystem collects, how it is used, and what we never do with it — including that we do not train models on your content without your explicit consent.'],
   ]) {
     writePage(route, renderPage(template, null, privacyHeadFor({
-      title: `${title} — XENO Studio`,
+      title: `${title} — XENOsystem`,
       desc,
       canonical: `${SITE}/${route}`,
-      productName: 'XENO Studio',
+      productName: 'XENOsystem',
     })));
     urls.push(`/${route}`);
     pages++;
   }
+
+  // ── Support centre ──────────────────────────────────────────────────────
+  //
+  // 🔴 Unlike every route above, this one ships its ANSWERS in the HTML, not
+  // just a title — see scripts/lib/support-page.mjs. The body is generated from
+  // src/content/support.ts, the same module the React page renders, so the two
+  // surfaces cannot drift into disagreeing about what support says.
+  writePage('support', renderSupportBody(
+    renderPage(template, null, privacyHeadFor({
+      title: 'Support — XENOsystem',
+      desc: 'Help with billing and charges, your account, downloads and installation, and privacy — plus how to reach a person.',
+      canonical: `${SITE}/support`,
+      productName: 'XENOsystem',
+    })),
+    supportBodyHtml(support),
+  ));
+  urls.push('/support');
+  pages++;
 
   // sitemap.xml — DISABLED 2026-08-11 while the site is being de-indexed.
   //

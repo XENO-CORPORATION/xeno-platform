@@ -17,6 +17,7 @@ import Learn from "./pages/Learn";
 import LearnTutorial from "./pages/LearnTutorial";
 import Privacy from './pages/Privacy';
 import Terms from './pages/Terms';
+import Support from './pages/Support';
 import Features from './pages/Features';
 import Pricing from './pages/Pricing';
 import Roadmap from './pages/Roadmap';
@@ -284,6 +285,9 @@ function App() {
             {/* Public Legal Pages - No auth required */}
             <Route path="/privacy" element={<Privacy />} />
             <Route path="/terms" element={<Terms />} />
+            {/* Support centre. Public and unauthenticated on purpose: somebody
+                reading a bank statement has no account open, and may not have one. */}
+            <Route path="/support" element={<Support />} />
             {/* Marketing / resource / legal pages (footer) */}
             <Route path="/features" element={<Features />} />
             <Route path="/pricing" element={<Pricing />} />
