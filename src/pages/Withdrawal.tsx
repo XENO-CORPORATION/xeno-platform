@@ -31,7 +31,7 @@
  */
 import React from 'react';
 import { Link } from 'react-router-dom';
-import { ArrowLeft } from 'lucide-react';
+import MarketingPage from '../components/marketing/MarketingPage';
 
 const PROVIDER = {
   name: 'Emilian-Vasile Cristea',
@@ -43,39 +43,18 @@ const PROVIDER = {
 };
 
 const Block: React.FC<{ children: React.ReactNode }> = ({ children }) => (
-  <div className="p-6 bg-white/[0.02] border border-white/[0.06] rounded-xl text-white/70 leading-relaxed space-y-4">
+  <div className="rounded-[16px] border border-white/[0.07] bg-[#101010] p-[clamp(18px,1.8vw,28px)] space-y-4">
     {children}
   </div>
 );
 
 const Withdrawal: React.FC = () => (
-  <div className="min-h-screen h-full bg-[#08080a] text-white font-['Inter',sans-serif] flex flex-col">
-    <header className="border-b border-white/[0.05]">
-      <div className="max-w-4xl mx-auto px-6 py-6 flex items-center justify-between">
-        <Link to="/" className="flex items-center gap-3">
-          <img src="/logo.svg" alt="Xeno" className="w-8 h-8 rounded-lg object-contain invert" />
-          <span className="text-lg font-semibold text-white">Xeno Studio</span>
-        </Link>
-        <Link to="/" className="flex items-center gap-2 text-sm text-white/50 hover:text-white transition-colors">
-          <ArrowLeft size={16} />
-          Back to Home
-        </Link>
-      </div>
-    </header>
-
-    <main className="flex-1 max-w-4xl mx-auto px-6 py-12 lg:py-16 w-full">
-      <div className="mb-10">
-        <h1 className="text-4xl lg:text-5xl font-bold mb-4">Widerrufsbelehrung</h1>
-        <p className="text-white/40 text-sm">
-          Gesetzliche Muster-Widerrufsbelehrung gemäß Art. 246a § 1 Abs. 2 EGBGB, Anlage 1 ·
-          Model withdrawal instructions for consumers
-        </p>
-      </div>
-
+  <MarketingPage eyebrow="Legal" title="Widerrufsbelehrung" subtitle={"Gesetzliche Muster-Widerrufsbelehrung gemäß Art. 246a § 1 Abs. 2 EGBGB, Anlage 1 · Model withdrawal instructions for consumers"}>
+      <div className="legal-prose">
       <div className="space-y-10">
         {/* ── German: the operative version ───────────────────────────────── */}
         <section>
-          <h2 className="text-2xl font-semibold mb-4 text-white">Widerrufsrecht</h2>
+          <h2>Widerrufsrecht</h2>
           <Block>
             <p>
               Sie haben das Recht, binnen vierzehn Tagen ohne Angabe von Gründen diesen Vertrag zu
@@ -89,7 +68,7 @@ const Withdrawal: React.FC = () => (
               <p>{PROVIDER.street}</p>
               <p>{PROVIDER.city}</p>
               <p>{PROVIDER.country}</p>
-              <p className="mt-2">Telefon: {PROVIDER.phone}</p>
+              <p>Telefon: {PROVIDER.phone}</p>
               <p>E-Mail: {PROVIDER.email}</p>
             </div>
             <p>
@@ -106,7 +85,7 @@ const Withdrawal: React.FC = () => (
         </section>
 
         <section>
-          <h2 className="text-2xl font-semibold mb-4 text-white">Folgen des Widerrufs</h2>
+          <h2>Folgen des Widerrufs</h2>
           <Block>
             <p>
               Wenn Sie diesen Vertrag widerrufen, haben wir Ihnen alle Zahlungen, die wir von Ihnen
@@ -127,7 +106,7 @@ const Withdrawal: React.FC = () => (
 
         {/* 🔴 The clause that actually applies to this product. */}
         <section>
-          <h2 className="text-2xl font-semibold mb-4 text-white">
+          <h2>
             Vorzeitiges Erlöschen des Widerrufsrechts
           </h2>
           <Block>
@@ -136,7 +115,7 @@ const Withdrawal: React.FC = () => (
               die nicht auf einem körperlichen Datenträger geliefert werden, erlischt gemäß
               § 356 Abs. 5 BGB, wenn wir mit der Ausführung des Vertrags begonnen haben, nachdem Sie
             </p>
-            <ol className="list-decimal list-inside space-y-2 text-white/70">
+            <ol>
               <li>
                 ausdrücklich zugestimmt haben, dass wir mit der Ausführung des Vertrags vor Ablauf der
                 Widerrufsfrist beginnen, und
@@ -161,14 +140,14 @@ const Withdrawal: React.FC = () => (
 
         {/* ── Anlage 2 ────────────────────────────────────────────────────── */}
         <section>
-          <h2 className="text-2xl font-semibold mb-4 text-white">Muster-Widerrufsformular</h2>
-          <p className="text-white/50 text-sm mb-4">
+          <h2>Muster-Widerrufsformular</h2>
+          <p>
             Anlage 2 zu Art. 246a § 1 Abs. 2 Satz 1 Nr. 1 EGBGB. Wenn Sie den Vertrag widerrufen
             wollen, füllen Sie bitte dieses Formular aus und senden Sie es zurück — die Verwendung ist
             freiwillig.
           </p>
           <Block>
-            <p className="text-white/50 text-sm">An:</p>
+            <p>An:</p>
             <div className="pl-4 border-l border-white/[0.12] text-white/80">
               <p>{PROVIDER.name}</p>
               <p>{PROVIDER.street}</p>
@@ -188,16 +167,16 @@ const Withdrawal: React.FC = () => (
               <p>__________________________________________________</p>
               <p>Unterschrift des/der Verbraucher(s) (nur bei Mitteilung auf Papier)</p>
               <p>Datum: _______________</p>
-              <p className="text-white/40 text-sm pt-2">(*) Unzutreffendes streichen.</p>
+              <p>(*) Unzutreffendes streichen.</p>
             </div>
           </Block>
         </section>
 
         {/* ── English, clearly marked as non-operative ────────────────────── */}
         <section>
-          <h2 className="text-2xl font-semibold mb-4 text-white">In English</h2>
+          <h2>In English</h2>
           <div className="p-6 bg-white/[0.02] border border-white/[0.06] rounded-xl text-white/70 leading-relaxed space-y-4">
-            <p className="text-white/50 text-sm">
+            <p>
               ⚠️ A convenience translation. The German text above is the legally binding version,
               because it reproduces the statutory model instruction. Where the two differ, the German
               governs.
@@ -228,7 +207,7 @@ const Withdrawal: React.FC = () => (
           </div>
         </section>
 
-        <p className="text-white/40 text-sm">
+        <p>
           See also the{' '}
           <Link to="/terms" className="text-white/70 underline underline-offset-2">Terms of Service</Link>,{' '}
           <Link to="/refunds" className="text-white/70 underline underline-offset-2">Refund Policy</Link>{' '}
@@ -237,19 +216,8 @@ const Withdrawal: React.FC = () => (
           The refund policy may be more generous than this statutory right; it is never less.
         </p>
       </div>
-    </main>
-
-    <footer className="border-t border-white/[0.05]">
-      <div className="max-w-4xl mx-auto px-6 py-8 flex flex-col md:flex-row items-center justify-between gap-4">
-        <p className="text-sm text-white/30">© {new Date().getFullYear()} Xeno Studio. All rights reserved.</p>
-        <div className="flex items-center gap-6 text-sm text-white/40">
-          <Link to="/privacy" className="hover:text-white transition-colors">Privacy</Link>
-          <Link to="/terms" className="hover:text-white transition-colors">Terms</Link>
-          <Link to="/impressum" className="hover:text-white transition-colors">Impressum</Link>
-        </div>
-      </div>
-    </footer>
-  </div>
+    </div>
+  </MarketingPage>
 );
 
 export default Withdrawal;

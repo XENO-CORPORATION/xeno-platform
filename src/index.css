@@ -100,6 +100,98 @@
   padding-right: max(20px, 2vw);
 }
 
+/* ── Long-form document typography ──────────────────────────────────────────
+ *
+ * Wrap authored document markup in <div className="legal-prose"> inside a
+ * <MarketingPage> (components/marketing/MarketingPage.tsx) — that shell already
+ * supplies the Header, Footer, hero and page chrome for every secondary page.
+ * Used by: privacy, terms, impressum, withdrawal.
+ *
+ * 🔴 Applied by DESCENDANT SELECTOR, never by a class on each element. Those
+ * documents are hundreds of lines of authored markup; styling them per element
+ * is precisely how thirteen public pages ended up with thirteen type scales and
+ * a different grey for body copy on each. One rule set moves all of them, and
+ * the markup stays semantic.
+ *
+ * Colours are the landing-v3 ramp (primitives.tsx T): #ece7df titles, #948d83
+ * body, #756f66 dim — so a document reads as the same product as the homepage.
+ */
+.legal-prose {
+  color: #948d83;
+  font-size: clamp(13px, 0.92vw, 15px);
+  line-height: 1.75;
+}
+.legal-prose > * + * { margin-top: clamp(28px, 3.4vh, 48px); }
+
+.legal-prose h2 {
+  color: #ece7df;
+  font-size: clamp(1.15rem, 1.5vw, 1.6rem);
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  line-height: 1.25;
+  margin-bottom: clamp(12px, 1.6vh, 18px);
+}
+.legal-prose h3 {
+  color: #d8d2ca;
+  font-size: clamp(0.95rem, 1.05vw, 1.1rem);
+  font-weight: 600;
+  line-height: 1.35;
+  margin-top: clamp(18px, 2.2vh, 28px);
+  margin-bottom: clamp(8px, 1vh, 12px);
+}
+.legal-prose h4 {
+  color: #d8d2ca;
+  font-size: clamp(0.9rem, 1vw, 1rem);
+  font-weight: 600;
+  margin-top: clamp(16px, 2vh, 24px);
+  margin-bottom: 6px;
+}
+.legal-prose p { margin-bottom: clamp(10px, 1.3vh, 16px); }
+.legal-prose p:last-child { margin-bottom: 0; }
+
+.legal-prose ul,
+.legal-prose ol {
+  margin: clamp(10px, 1.3vh, 16px) 0;
+  padding-left: 1.15em;
+}
+.legal-prose ul { list-style: disc; }
+.legal-prose ol { list-style: decimal; }
+.legal-prose li { margin-bottom: 7px; padding-left: 0.2em; }
+.legal-prose li::marker { color: #69635b; }
+
+.legal-prose strong { color: #d8d2ca; font-weight: 600; }
+
+.legal-prose a {
+  color: #cfc8bf;
+  text-decoration: underline;
+  text-decoration-color: rgba(255, 255, 255, 0.22);
+  text-underline-offset: 4px;
+  transition: color 0.15s, text-decoration-color 0.15s;
+}
+.legal-prose a:hover {
+  color: #ffffff;
+  text-decoration-color: rgba(255, 255, 255, 0.6);
+}
+
+/* A document section — the numbered blocks these policies are built from. */
+.legal-prose section + section { margin-top: clamp(30px, 3.8vh, 52px); }
+
+/* Tables appear in the withdrawal + impressum pages. Keep them readable on a
+   phone without letting a wide one blow out the page. */
+.legal-prose table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: clamp(12px, 0.85vw, 13.5px);
+}
+.legal-prose th,
+.legal-prose td {
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  padding: 10px 12px;
+  text-align: left;
+  vertical-align: top;
+}
+.legal-prose th { color: #d8d2ca; font-weight: 600; }
+
 :root {
   color-scheme: dark;
   /* Colors */
