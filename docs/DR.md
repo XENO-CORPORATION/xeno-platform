@@ -360,3 +360,89 @@ before writing anything, because re-encrypting under a wrong key destroys the or
 3. Run the verification block above; require `failed: 0`.
 4. Only then let traffic in. If the key is missing, `encrypt()` throws by design, so
    channel connection fails loudly instead of silently reverting to plaintext.
+
+---
+
+## Offsite database backup — 2026-09-11
+
+**Before this date no dump had ever left the box.** Nightly `pg-backup.sh` has run
+since 2026-07-14 and produces verified local dumps, but `R2_REMOTE` was unset and
+rclone was not installed, so all 14 restore points sat on the same disk as the
+database — a CIFS share on the operator's workstation, and that host's own volume
+is at 83%. One disk loss took the database and every backup of it together.
+
+### What is in place now
+
+| | |
+|---|---|
+| Bucket | `xeno-db-backups` (Cloudflare R2, WEUR) — **private**, managed public domain disabled and verified |
+| Encryption | GPG 4096-bit RSA, fingerprint `12B1F40DEC4D7172AC76E395E0C0668AFE3DCE5C` |
+| Public half | imported on `xeno-platform-001` (encrypt only) |
+| Private half | `~/.xeno-secrets` → `XENO_DB_BACKUP_GPG_PRIVATE_B64` on the operator workstation. **Never on the server.** |
+| Script | `scripts/pg-backup.sh` encrypts before upload; refuses to upload plaintext |
+
+🔴 **The box cannot decrypt its own backups, by design.** `gpg --list-secret-keys`
+on `xeno-platform-001` must stay EMPTY. A compromised server therefore cannot read
+its own history, and losing the server does not lose the ability to restore.
+
+⚠️ **The private key must ALSO be in a password manager.** `~/.xeno-secrets` is one
+machine and is explicitly not a backup. If that workstation dies and the key exists
+nowhere else, every offsite backup becomes unreadable — a worse failure than having
+no offsite backup at all, because it looks safe.
+
+### 🔴 Restoring needs pgvector
+
+Found by doing it: a stock `postgres:15` fails the restore with **2,607 errors**,
+starting `extension "vector" is not available`. Production runs
+`pgvector/pgvector:0.8.6-pg15-bookworm`. Restore into that image, or the backup is
+useless at the exact moment it is needed.
+
+### The restore, proven 2026-09-11 (not asserted)
+
+```bash
+# 1. decrypt, on a machine that has the PRIVATE key — never on the server
+export GNUPGHOME=$(mktemp -d); chmod 700 "$GNUPGHOME"
+grep -m1 '^XENO_DB_BACKUP_GPG_PRIVATE_B64=' ~/.xeno-secrets | cut -d= -f2- \
+  | base64 -d | gpg --batch --quiet --import
+gpg --batch --decrypt xenostudio-<stamp>.dump.gpg > restore.dump
+
+# 2. restore into a PRODUCTION-SHAPED postgres (pgvector, matching major version)
+docker run -d --name restore-proof -e POSTGRES_PASSWORD=x -e POSTGRES_DB=restoretest \
+  pgvector/pgvector:0.8.6-pg15-bookworm
+docker cp restore.dump restore-proof:/tmp/d.dump
+docker exec restore-proof pg_restore -U postgres -d restoretest \
+  --no-owner --no-privileges /tmp/d.dump      # expect exit 0, zero stderr
+
+# 3. tear down and SHRED the plaintext — it is a production database
+docker rm -f restore-proof && shred -u restore.dump
+```
+
+Result on 2026-09-11 against the real 693 MB dump: **exit 0, zero errors**, and
+point-in-time row counts **identical** to production for `users`,
+`credit_accounts` and `credit_transactions`. The only tables absent were the two
+created hours *after* that dump was taken.
+
+### ⏸ The one step that is operator-only
+
+The offsite copy cannot run until `xeno-platform-001` has an R2 credential scoped
+to `xeno-db-backups`. Creating an R2 API token is a dashboard action — the
+Cloudflare API token here can manage buckets but cannot mint S3 credentials.
+
+🔴 **Do NOT reuse the existing account credential.** It can write to
+`xeno-hub-releases`, whose moving pointers (`version.json`, `releases.json`,
+`latest*.yml`) have **no object versioning** — a compromised box with that key
+could destroy the release channel irrecoverably (ABSOLUTE RULE §2b). Scope the new
+token to this one bucket, Object Read & Write.
+
+Then, on the box:
+
+```
+# in /mnt/projects/xeno-platform/.env  (and nowhere world-readable)
+R2_REMOTE=r2backup:xeno-db-backups
+BACKUP_GPG_RECIPIENT=12B1F40DEC4D7172AC76E395E0C0668AFE3DCE5C
+# plus an rclone remote `r2backup` (type s3, provider Cloudflare) with the scoped key
+```
+
+Verify by running the script once by hand and reading `backups/backup.log` for
+`OK: encrypted offsite copy pushed`, then confirm the object is actually in the
+bucket — a log line is not the same as an object.
