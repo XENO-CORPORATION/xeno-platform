@@ -684,3 +684,85 @@ guessed field names (`enabled_events`, `return_url`) instead of the real ones.
 
 Every one read as *absence*. None was. The habit that caught them each time was
 the same: when a check reports nothing, confirm the check can report something.
+
+## 13. Continuation, 2026-09-11 — live Stripe closed, and the two refusals test mode never showed
+
+Item 1 is done. A real `credits_small` checkout on production now returns a
+`cs_live_` session and the Stripe pay page renders (HTTP 200). A `pro_monthly`
+subscription checkout does the same. It took clearing two refusals that only a
+live key produces — neither appears in test mode, and neither is in any unit
+test, because both are properties of the live *account*, not the request shape.
+
+### The account-binding guard threw on every call (fixed 03d9294, deployed)
+
+Before any of this, the sale-readiness guard could not run: it called
+`provider.accounts.retrieve(undefined, {}, options)`, which stripe-node 17 (the
+backend's SDK) rejects, while the tests exercised stripe-node 22. Corrected to
+`accounts.retrieveCurrent({}, options)` in both the guard and the reconciliation
+helper; the binding-guard test now loads the backend's own SDK copy so the two
+versions cannot diverge unseen again. The DB binding row
+(`billing_account_binding` → acct_1TwgCrLBe83UKv9x | live) was then created.
+
+### Refusal 1 — Managed Payments vs our withdrawal notice (fixed 4cec536, deployed)
+
+Stripe enables **Managed Payments** by default, which makes Stripe the seller of
+record — and Stripe then refuses `custom_text`, because our 14-day-withdrawal
+notice is a statement about *our* contract with the buyer, not Stripe's. That is
+not a bug to route around: the entire locked posture (Kleinunternehmer § 19, our
+Impressum, our terms, our withdrawal wording) assumes **we** are the seller. So
+the checkout now states it per request — `managed_payments: { enabled: false }` —
+rather than depending on a dashboard default nobody in the repo can see.
+
+While fixing it: `consent_collection` + the notice + the seller are one unit,
+now `sellerOfRecordFields()`, spread into **both** checkout paths. The Team
+(per-seat) path required our consent row and carried none of the three — the
+buyer of the most expensive item saw no withdrawal notice at checkout. A control
+on one of two paths is absent on the other. Pinned per item in the checkout-price
+runner; mutation-checked both ways.
+
+### Refusal 2 — Stripe Tax needs every line item classified (fixed e802b0b)
+
+Straight after: *"You must specify a tax code in all line items to calculate
+taxes."* Stripe Tax is deliberately ON with zero registrations
+(docs/TAX-POSTURE.md — 0 % on every sale, plus threshold monitoring), and it will
+not compute 0 % on an unclassified line. The live-setup plan now sets
+`tax_code: txcd_10000000` (Electronically Supplied Services) on every **product**,
+where Stripe reads it. `reconcile()` treats an absent code as *repairable* — the
+ten products provisioned earlier that day had none — and updates them in place; a
+*different* code is a mismatch and is never overwritten. Applied live: **10 tax
+codes repaired, nothing created.**
+
+### Two live-setup repairs found the same morning
+
+- `assertWebhook` demanded `endpoint.connect === false`; the live API **omits**
+  the field for an ordinary endpoint, so the check threw *after* the endpoint was
+  created and *before* its signing secret was committed — orphaning a live
+  endpoint whose secret Stripe shows exactly once. Now `!== true`.
+- the POSIX secret sink's commit called `truncateSync` (path form) on a
+  descriptor and `writeFileSync` at the current position — it had never executed
+  successfully. Now `ftruncateSync` + `writeSync` at position 0. Every test
+  reached it through a fixture sink, which is how it hid.
+
+### State now
+
+- `sk_live` / `pk_live` / `whsec` and the 13 live price/config ids are in the
+  box `.env` (backup `.env.bak-prelive-20260911-125248`); backend redeployed at
+  `e802b0b`'s predecessor `4cec536` and holding the live keys.
+- The webhook endpoint `we_1UETpfLBe83UKv9xKG8IZUK4` is live; the WSL receipt
+  that held its signing secret has been deleted now that the secret is on the box.
+- The test account `dev@xenostudio.ai` created for this proof was deleted, along
+  with its consents, live Stripe-customer row and session. Its three
+  `credit_*` ledger rows (a 50M free-tier grant) are **retained** — the ledger is
+  append-only by design (§4.2), the rows carry no FK to `users`, and a deleted
+  user id authenticates as nobody, so the balance is unspendable audit history.
+- Full suite green: **1595 pass, 0 fail.**
+
+### Still open on billing (not blockers)
+
+- Stripe `support_email` is unset (offered support@xenostudio.ai — operator/dash).
+- The box now holds **live** keys. Any doc still saying xenostudio.ai billing is
+  in "test mode" is stale.
+- Managed Payments remains available as a *different commercial arrangement*
+  (Stripe as merchant of record, cross-border VAT handled by Stripe) — adopting
+  it would change the Impressum, the terms and who the customer contracts with,
+  so it is a deliberate decision, not a checkout toggle.
