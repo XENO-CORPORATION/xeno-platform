@@ -132,6 +132,12 @@ if (scenario === 'valid') {
     }
     assert.equal(new URL(params.success_url).origin, options.origin);
     assert.equal(new URL(params.cancel_url).origin, options.origin);
+    // Merchant of record. The withdrawal notice is a statement about OUR contract
+    // with the buyer, so it may only ride on a session where we are the seller —
+    // Stripe's Managed Payments default makes Stripe the seller and rejects the
+    // notice outright (live, 2026-09-11). Both halves, together, on every item.
+    assert.deepEqual(params.managed_payments, { enabled: false }, `${id}: we must be the merchant of record`);
+    assert.match(params.custom_text?.terms_of_service_acceptance?.message ?? '', /right of withdrawal/, `${id}: withdrawal notice`);
     assert.deepEqual(request, { idempotencyKey: 'xeno-checkout:consent_fixture' });
     assert.deepEqual(fixture.consumed, [{ consent: 'consent_fixture', session: 'cs_fixture' }]);
   }

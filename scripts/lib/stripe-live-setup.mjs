@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { closeSync, existsSync, fstatSync, fsyncSync, lstatSync, openSync, readFileSync, realpathSync, truncateSync, writeFileSync } from 'node:fs';
+import { closeSync, existsSync, fstatSync, fsyncSync, ftruncateSync, lstatSync, openSync, readFileSync, realpathSync, writeFileSync, writeSync } from 'node:fs';
 import { dirname, isAbsolute, resolve } from 'node:path';
 import { billingAccountConfig, verifyBillingAccount } from '../../src/server/utils/billingAccountBinding.js';
 import { priceIssues } from '../../src/server/utils/priceAgreement.js';
@@ -114,7 +114,13 @@ function assertPrice(price, product, plan, item) {
 }
 function assertWebhook(endpoint, plan) {
   demand(endpoint?.object === 'webhook_endpoint' && validId(endpoint.id, 'we') && endpoint.status === 'enabled'
-    && endpoint.livemode === true && endpoint.connect === false && endpoint.url === plan.webhook.url
+    /* `connect !== true`, not `=== false`: the live API OMITS the field for an
+     * ordinary endpoint. Demanding an explicit false threw AFTER the endpoint had
+     * been created and BEFORE its secret was committed — on 2026-09-11 that
+     * orphaned a live endpoint whose signing secret Stripe will never show again.
+     * The property that matters is "not a Connect endpoint", which absent and
+     * false both satisfy. */
+    && endpoint.livemode === true && endpoint.connect !== true && endpoint.url === plan.webhook.url
     && endpoint.api_version === API_VERSION && metadataMatches(endpoint, baseMetadata(plan))
     && sameArray([...endpoint.enabled_events].sort(), [...plan.webhook.events].sort()), 'webhook_mismatch');
 }
@@ -294,7 +300,20 @@ export function createPosixSecretSink(file, { platform = process.platform } = {}
         fd = openSync(target, 'r+');
         demand(fstatSync(fd).isFile() && (fstatSync(fd).mode & 0o077) === 0, 'secret_file_not_owner_only');
       }
-      truncateSync(fd, 0); writeFileSync(fd, `${JSON.stringify(receipt)}\n`, { encoding: 'utf8' }); fsyncSync(fd);
+      /* 🔴 This line had never executed successfully before 2026-09-11. It read
+       * `truncateSync(fd, 0)` — the PATH form, which throws ERR_INVALID_ARG_TYPE on
+       * a descriptor — so the one step that persists the signing secret crashed
+       * every time it was reached, AFTER Stripe had created the endpoint. Stripe
+       * shows a webhook secret exactly once; a crash here orphans the endpoint.
+       * Every test reached this through a fixture sink, which is how it hid.
+       *
+       * And `writeFileSync(fd, …)` writes at the descriptor's CURRENT position.
+       * In the same-process path that position is the end of the pending receipt
+       * `reserve` just wrote, so a truncate-then-write would have produced a file
+       * of NULs followed by JSON. `writeSync` at an explicit position 0 does not. */
+      ftruncateSync(fd, 0);
+      writeSync(fd, `${JSON.stringify(receipt)}\n`, 0, 'utf8');
+      fsyncSync(fd);
       closeSync(fd); fd = null;
     },
   };

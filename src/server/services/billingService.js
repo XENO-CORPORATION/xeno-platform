@@ -546,6 +546,46 @@ function taxCheckoutFields() {
 }
 
 /**
+ * Who the buyer is contracting with, on every Checkout Session.
+ *
+ * 🔴 WE are the merchant of record, and `managed_payments` is what says so.
+ * Stripe enables "Managed Payments" by default on this account — Stripe itself
+ * becomes the seller, applies its own terms, handles tax as merchant of record,
+ * and consequently REFUSES `custom_text`: the withdrawal notice below would be
+ * a statement about a contract Stripe, not we, are party to. The first live
+ * checkout on 2026-09-11 failed on exactly that.
+ *
+ * The whole locked posture (docs/TAX-POSTURE.md — Kleinunternehmer § 19, our
+ * Impressum, our terms, our withdrawal wording, tax_behavior inclusive, zero
+ * Stripe tax registrations) assumes we are the seller. Managed Payments is a
+ * different commercial arrangement, not a checkout option; switching to it
+ * changes the Impressum, the terms and who the customer contracts with. Decide
+ * that deliberately if ever — do not let a dashboard default decide it. Passing
+ * it per request means the CODE states the arrangement rather than depending on
+ * an account setting nobody can see from here.
+ *
+ * The three fields are one unit: Stripe collects ToS acceptance (belt and
+ * braces beside our own consent row — ours is the evidence we control and can
+ * produce years later; Stripe's is the one a card network sees in a
+ * chargeback), the notice is what that acceptance acknowledges, and the seller
+ * is who the notice binds. 🔴 ONE function for BOTH checkout paths: the Team
+ * path already required our consent row and still carried none of this — the
+ * buyer of the most expensive item saw no withdrawal notice at checkout. A
+ * control on one of two paths is absent on the other.
+ */
+function sellerOfRecordFields() {
+  return {
+    consent_collection: { terms_of_service: 'required' },
+    managed_payments: { enabled: false },
+    custom_text: {
+      terms_of_service_acceptance: {
+        message: 'You are asking for immediate access, which means you lose the 14-day right of withdrawal for this digital content.',
+      },
+    },
+  };
+}
+
+/**
  * Where Stripe sends someone back to.
  *
  * 🔴 Same-origin path only, and built HERE rather than accepted from the client.
@@ -640,9 +680,6 @@ export async function createCheckout(pool, user, itemId, { origin, downloadInten
      * no referrer — the metadata is the single channel by which "this
      * subscription was bought to get Pixel" can survive the trip through
      * Stripe. Without it the purchase is attributable to nothing. */
-    /* Stripe collects its own ToS acceptance too. Belt and braces on purpose:
-     * ours is the evidence we control and can produce years later; Stripe's is
-     * the one a card network sees during a chargeback. */
     /* ── What the customer sees on their bank statement ────────────────
      *
      * 🔴 An unrecognisable descriptor is a leading cause of chargebacks, and a
@@ -672,12 +709,7 @@ export async function createCheckout(pool, user, itemId, { origin, downloadInten
       invoice_creation: { enabled: true },
     }),
 
-    consent_collection: { terms_of_service: 'required' },
-    custom_text: {
-      terms_of_service_acceptance: {
-        message: 'You are asking for immediate access, which means you lose the 14-day right of withdrawal for this digital content.',
-      },
-    },
+    ...sellerOfRecordFields(),
     metadata: {
       xenoUserId: String(user.id), itemId: item.id, credits: String(item.credits), kind: item.kind,
       ...(consentId ? { xenoConsentId: String(consentId) } : {}),
@@ -742,6 +774,7 @@ export async function createWorkspaceSeatCheckout(pool, user, {
     cancel_url: seatReturn.cancelUrl,
     allow_promotion_codes: true,
     ...taxCheckoutFields(),
+    ...sellerOfRecordFields(),
     subscription_data: { metadata: { xenoWorkspaceId: String(workspaceId), seats: String(qty) } },
     metadata: {
       xenoUserId: String(user.id), itemId: item.id, kind: 'subscription',

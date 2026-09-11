@@ -57,8 +57,15 @@ function fixture() {
     },
     webhookEndpoints: {
       list: async args => { reads.push('webhooks'); return page(webhooks, args); },
-      create: async (args, options) => { writes.push(['webhook', args, options]); const stored = { ...args,
-        object: 'webhook_endpoint', id: `we_${webhooks.length + 1}`, status: 'enabled', livemode: true };
+      create: async (args, options) => { writes.push(['webhook', args, options]);
+        /* The real API does NOT echo `connect` back for an ordinary endpoint — the
+         * field is simply absent from the response. This fixture used to spread
+         * the request into the response, which is how a `connect === false`
+         * assertion passed here and threw against Stripe, orphaning a live
+         * endpoint on 2026-09-11. The response is shaped like the API, not like
+         * the request. */
+        const { connect, ...echoed } = args;
+        const stored = { ...echoed, object: 'webhook_endpoint', id: `we_${webhooks.length + 1}`, status: 'enabled', livemode: true };
         webhooks.push(stored); return { ...stored, secret: 'whsec_fixture' }; },
     },
     billingPortal: { configurations: {
