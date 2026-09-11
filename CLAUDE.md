@@ -154,6 +154,46 @@ What it means for work started from this side:
   rendered identically — with 864 tests green.
 - **When the base moves, merge it in — never rebase.** Someone else's history is not ours to rewrite.
 
+## 🎨 EVERY page uses the site's design system — never hand-roll chrome
+
+**DIRECTIVE 2026-09-11.** A new or edited public page composes the EXISTING shell.
+Do not write a `<header>`, a `<footer>`, a background colour or a type scale by hand.
+
+| Need | Use | Never |
+|---|---|---|
+| Any secondary public page (legal, policy, resource, marketing) | **`components/marketing/MarketingPage`** — `eyebrow` / `title` / `subtitle` / `updated` / `heroAlign` / `heroActions` / `contentMaxWidth`. Gives Header, Footer, radial hero glow, `Reveal`, the v3 type scale | a bespoke `<header>` with a logo and a "Back to Home" link |
+| Long-form authored document markup inside it | wrap in **`<div className="legal-prose">`** (`src/index.css`) — one descendant rule set styles every `h2`/`h3`/`p`/`ul`/`li`/`a`/`table` | a Tailwind class on each element |
+| A bespoke landing-style page (`/`, `/support`) | compose `landing-v3/Header` + `Footer` + `primitives` (`T`, `Reveal`, `Eyebrow`, `cx`) directly, as `Home3` does | inventing a parallel shell |
+
+**The tokens are `landing-v3/primitives.tsx` `T`** — `#060606` page, `#101010`/`#151515` cards,
+`border-white/[0.06]`, text ramp `#ece7df` title → `#948d83` body → `#69635b` dim. Fluid
+`clamp()` type. `Reveal` for scroll-in, staggered `delay={i * 70}`.
+
+🔴 **BEFORE building a shell, grep for one.** On 2026-09-11 a session built
+`landing-v3/PageShell` and only then found `MarketingPage`, which 14 pages already used —
+the inventory had grepped page files for `landing-v3/Header` and missed that those pages
+inherit it *through* the shell. The duplicate was deleted. **Grep for the CAPABILITY
+(`Header`, `Footer`, "shell", "layout") across `components/`, not for the symptom.**
+
+⚠️ **Text inputs take NO focus ring.** The global `:focus-visible` outline sits *outside*
+the field and reads as a stray stroke — `outline-none ring-0` plus a border/fill change.
+(Mandated by the LOCKED `DESIGN_SYSTEM.md`; this is a spec violation, not a preference.)
+
+⚠️ **Restyling a legal page must never reword it.** Prove it: diff the rendered text
+against `HEAD` and confirm the only removals are chrome. `Withdrawal.tsx` is **statutory** —
+its own header explains that reproducing the prescribed wording loosely loses the safe
+harbour. Link statutory text, never restate it.
+
+⚠️ **A page that renders only under JavaScript is indistinguishable from an unfinished one.**
+The prerender injects `<head>` only, so `/privacy` is a correct title over an empty
+`#root`. Where a page's *content* must exist for a non-JS reader — `/support`, handed to
+Stripe and card-network partners whose rule is "placeholder or under-construction sites
+aren't supported" — generate the body too, from the SAME source the React page renders
+(`src/content/support.ts` → `scripts/lib/support-page.mjs`). Never two copies.
+
+Authority: `../xeno-elements/DESIGN_SYSTEM.md` (LOCKED) and
+`../xeno-design-guide/XENO CHROME - CONSTRUCTION PLAYBOOK.md` (the callable HOW).
+
 ## Related references
 
 - `security-guide/SKILL.md` — **the callable lockdown procedure** (`xeno-secure-website`): close every account-creation path, make suspension real, de-index correctly, deploy without an outage. Host-agnostic — covers `xeno-post-001`'s no-source-tree GHCR shape and `xeno-mail-001`'s verdaccio shape too.
