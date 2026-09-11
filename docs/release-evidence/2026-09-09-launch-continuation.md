@@ -766,3 +766,110 @@ codes repaired, nothing created.**
   (Stripe as merchant of record, cross-border VAT handled by Stripe) — adopting
   it would change the Impressum, the terms and who the customer contracts with,
   so it is a deliberate decision, not a checkout toggle.
+
+## 14. Continuation, 2026-09-11 (second pass) — money is provisioned, and switched off
+
+Item 1 is not just closed, it is now *closeable on purpose*. The decision made
+this pass: **everything else proven first, money last** — so live billing sits
+fully provisioned behind one switch rather than being half-configured.
+
+### The switch
+
+`SALES_OPEN=true` opens checkout; anything else — missing, empty, `TRUE`, `1`,
+`" true"` — answers **503 `sales_closed`**. Fail-closed, and the asymmetry is the
+point: an outage that stops sales is recoverable, an env var that silently starts
+charging cards is not. Same posture as `REGISTRATION_OPEN`.
+
+Before it existed, `isEnabled()` only meant *"Stripe keys are present"*, so the
+only way to stop selling was to pull the live keys — which also breaks the portal
+customers cancel through, breaks webhook signature verification, and unbinds the
+account, then has to be reassembled correctly under pressure. Being **able** to
+take money and **choosing** to are different facts; only the second is a switch.
+
+### 🔴 The finding that shaped it
+
+The gate was going to go on the billing routes. It went into the service instead,
+because there are **two** functions that create a Checkout Session and they are
+reached from **different route files**:
+
+| creator | reached from | had a guard? |
+|---|---|---|
+| `createCheckout` | `routes/billingRoutes.js` | yes (`requireEnabled`) |
+| `createWorkspaceSeatCheckout` | **`routes/workspaceRoutes.js`** | **no** |
+
+A route-level switch would have left the **Team seat path — the most expensive
+item on the price list — selling with the shop shut.** That is
+`registrationGate`'s "two closed doors and one open one", and the same shape as
+the xeno-post approval bypass where `create`/`update` called the gate and
+`publishNow` did not.
+
+So `scripts/sales-gate.test.mjs` asserts the **coverage set, not the mechanism**:
+it extracts every function in the service containing `checkout.sessions.create`
+and requires each to call `assertSalesOpen()` *before* reaching the provider. A
+new checkout creator fails the build until it is gated. Mutation-checked three
+ways — ungate the seat path, move the guard after the provider call, wrongly gate
+the portal. (The fourth attempt passed and the mutation was wrong, not the test:
+inserting the guard immediately *before* the create call still satisfies the
+ordering assertion.)
+
+**Deliberately not closed:** the billing portal (how a customer cancels, updates
+a card, downloads invoices — trapping paying customers to stop new sales is a
+worse outcome), the webhook (Stripe retries for days; an in-flight payment must
+still settle, grant credits and send its receipt), and spending credits already
+bought. Their own test pins this so nobody "tidies" the gate onto them.
+
+`getConfig()` now returns `enabled` (wired to a provider) and `salesOpen`
+(willing to charge) as separate facts, so a deliberately shut shop does not
+render as a broken one.
+
+⚠️ **The checkout-price suite went red the instant the gate landed** — all eight
+scenarios. That is the good kind of failure: it proved the gate sits on the live
+code path rather than beside it. Those fixtures now set `SALES_OPEN=true`,
+because they exercise checkout, not the switch.
+
+### Verified live, in the container
+
+```
+docker exec xenostudio-backend printenv | grep SALES_OPEN   → SALES_OPEN=   (closed)
+GET  /api/billing/config    → enabled: true, salesOpen: false
+POST /api/billing/consent   → 503 {"code":"sales_closed"}
+POST /api/billing/checkout  → 503 {"code":"sales_closed"}   (with a valid token)
+```
+
+Checked **inside the container**, never by grepping `.env`: compose reads `.env`
+for `${}` substitution only, and that gap silently disabled `REGISTRATION_OPEN`,
+`RESEND_API_KEY` and all five `STRIPE_*` keys on 2026-08-24. `SALES_OPEN` is
+forwarded in `docker-compose.yml`.
+
+The probe account created for that proof was deleted afterwards.
+
+### Also closed this pass
+
+- **Public details on Stripe**, verified by reading the account back over the
+  API rather than from the dashboard summary: `business_profile.name` is
+  **XENOSYSTEM** (the stale `BUNKERVERSE` is gone), statement descriptor
+  **XENOSYSTEM** / short **XENO**, support email, URL, phone and address set,
+  VAT `DE463398455`, MCC 5734, `charges_enabled` and `payouts_enabled` true,
+  **zero requirements currently due or past due**.
+- **The statement descriptor lives in two places** — Stripe, and
+  `src/content/support.ts`, which is what tells a cardholder what the charge is.
+  Moving it to `XENOSYSTEM` without updating the page would have left the support
+  page confidently wrong on the one question it exists to answer. Both moved
+  together; the gate that caught it had the old value hardcoded, so it now
+  asserts shape and presence instead of a literal that legitimately changes.
+
+### Where this is written down
+
+`docs/BILLING-GO-LIVE.md` §6 is the operator procedure (open, prove, close, and
+what the switch does not touch). `CLAUDE.md` §💳 carries the state and the three
+traps. This section is the record.
+
+### The one thing that should block flipping it
+
+**No offsite database backup has ever existed.** `R2_REMOTE` is unset, rclone is
+not installed, and the 14 restore points sit on the same disk as the database —
+a CIFS share on the operator's own workstation at ~87% full.
+`scripts/pg-backup.sh` already contains the offsite path, switched off. Today
+that is a hygiene item; the moment the switch is flipped it is customer and
+payment records with exactly one copy. It needs a private bucket and an
+encryption decision.

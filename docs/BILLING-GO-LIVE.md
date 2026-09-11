@@ -1,8 +1,37 @@
 # Turning billing on
 
-**Everything in this file except §2 is code, and it is done.** What is left is
-account work in the Stripe dashboard and six environment variables on the box —
-genuinely operator-only, because it requires the Stripe account.
+> ## 🟢 STATUS 2026-09-11 — PROVISIONED AND PROVEN. SALES DELIBERATELY CLOSED.
+>
+> **Everything in this file is now DONE, including §2, which was the operator
+> half.** Live Stripe is fully provisioned and a real live checkout has been
+> driven end to end. Money is then held behind ONE switch, on purpose: the
+> launch order is *everything else proven first, money last*.
+>
+> | | |
+> |---|---|
+> | Stripe account | `acct_1TwgCrLBe83UKv9x` · live · `charges_enabled` and `payouts_enabled` true, **zero requirements outstanding** |
+> | Catalogue | 10 live products + prices, `tax_behavior: inclusive`, all classified `txcd_10000000` |
+> | Webhook | `we_1UETpfLBe83UKv9xKG8IZUK4`, 11 events, signing secret on the box |
+> | Portal | `bpc_1UETmFLBe83UKv9xrI9qZuIZ` |
+> | Account binding | `billing_account_binding` = acct_1TwgCrLBe83UKv9x / live |
+> | Merchant of record | **us** — `managed_payments: { enabled: false }` on every session |
+> | Statement descriptor | `XENOSYSTEM` (short `XENO`) — mirrored on `/support` |
+> | Public details | trading name, support email/URL/phone/address, VAT `DE463398455` |
+> | **Sales** | 🔴 **CLOSED** — `SALES_OPEN` unset. Checkout answers 503 `sales_closed` |
+>
+> **Proven live, not assumed:** a `credits_small` and a `pro_monthly` checkout both
+> returned a `cs_live_` session and the Stripe pay page rendered (HTTP 200);
+> afterwards, with the switch closed, `POST /api/billing/consent` and
+> `POST /api/billing/checkout` both answer **503 `sales_closed`**.
+>
+> **To take money: §6.** Everything before it is history — kept because it
+> records why each piece is shaped the way it is, and because §3–§4 are still the
+> right checks to re-run after any billing change.
+
+**Everything in this file except §2 was code, and it is done.** §2 was account
+work in the Stripe dashboard plus environment variables on the box — genuinely
+operator-only, because it requires the Stripe account. **§2 is now complete;**
+what it describes is what was actually created.
 
 ## Why this became urgent
 
@@ -31,7 +60,7 @@ That is a deliberate, reversible state, and it is not a shippable one.
 `CATALOG` in `billingService.js` is the single source of truth. Nothing else in
 the codebase states a price, which is why there is no list of amounts here.
 
-## 2 · What the operator has to do
+## 2 · What the operator has to do — ✅ DONE 2026-09-11
 
 ### 2a · Create the Prices
 
@@ -132,9 +161,96 @@ endpoint**), re-run the preflight, and buy one real plan with a real card before
 telling anyone. Refund it afterwards — `charge.refunded` is handled, so that
 also exercises the clawback path.
 
+## 6 · The sales switch — the only thing between here and revenue
+
+Provisioning is done. Being *able* to take money and *choosing* to are different
+facts, and only the second is a switch:
+`src/server/middleware/salesGate.js`.
+
+```
+SALES_OPEN=true    → checkout works, money moves
+anything else      → 503 sales_closed   (missing, empty, 'TRUE', '1', ' true')
+```
+
+🔴 **Fail-closed, and the asymmetry is the point.** An outage that stops sales is
+recoverable; an env var that silently starts charging cards is not. Same posture
+as `REGISTRATION_OPEN` and the ecosystem's signing resolver.
+
+### To open the shop
+
+```bash
+ssh xeno-platform-001
+sudo cp /mnt/projects/xeno-platform/.env /mnt/projects/xeno-platform/.env.bak-presale-$(date -u +%Y%m%d-%H%M%S)
+# set SALES_OPEN=true in /mnt/projects/xeno-platform/.env
+cd /mnt/projects/xeno-platform && sudo docker compose up -d backend
+```
+
+### Then PROVE it, in this order
+
+```bash
+# 1. the value actually reached the container — NOT a grep of .env
+sudo docker exec xenostudio-backend printenv | grep SALES_OPEN     # → SALES_OPEN=true
+
+# 2. the public config agrees
+curl -s https://xenostudio.ai/api/billing/config | grep -o '"salesOpen":[a-z]*'
+```
+
+Then buy one real thing with a real card, confirm the plan lands in
+`xeno_account_plans`, and refund it — `charge.refunded` is handled, so the refund
+exercises the clawback path too.
+
+🔴 **`.env` ALONE IS NOT ENOUGH.** docker-compose reads `.env` for `${}`
+**substitution** only; a variable not also listed in the service's `environment:`
+block reaches no container. That gap silently disabled `REGISTRATION_OPEN`,
+`RESEND_API_KEY` and all five `STRIPE_*` keys on 2026-08-24, and every one of
+them degraded to a plausible-looking state rather than an error. `SALES_OPEN` is
+forwarded in `docker-compose.yml` — keep it there. **Verify with `docker exec
+printenv`, never by reading `.env`.**
+
+### To close it again
+
+Unset it (or set anything else) and restart. Reversible in one line, which is
+exactly why it is an env var and not a code change.
+
+### What the switch deliberately does NOT close
+
+| Stays open | Why |
+|---|---|
+| Billing **portal** | how a customer cancels, updates a card, downloads invoices. Trapping paying customers to stop new sales is a worse outcome than the one being prevented |
+| **Webhook** | Stripe retries for days. An in-flight payment must still settle, grant its credits and send its receipt |
+| Spending credits already bought | they were paid for |
+
+Pinned by `scripts/sales-gate.test.mjs`, which fails if any of those get gated.
+
+⚠️ **The gate is in the SERVICE, not on the routes, and that is load-bearing.**
+Two functions create a Checkout Session and they are reached from two different
+route files — `createCheckout` from `billingRoutes.js`, which has a guard, and
+`createWorkspaceSeatCheckout` from `workspaceRoutes.js`, which does not. A
+route-level switch would have left the **Team seat path, the most expensive item
+sold, still selling with the shop shut.** The test therefore asserts the
+**coverage set**: every function containing `checkout.sessions.create` must call
+`assertSalesOpen()` *before* reaching the provider, so a new checkout path fails
+the build until it is gated.
+
 ## What is still open after all of this
 
 Billing being live does **not** close the download gate's other two doors. The
 public CDN and the updater feed are still open, and locking them is Phase 3c —
 gated on a grant-aware Hub reaching users, not on Stripe. See
 `docs/DOWNLOAD-GATE.md`.
+
+Open on the billing surface itself, none of it blocking the switch:
+
+- **No offsite database backup has ever existed.** `R2_REMOTE` is unset, rclone
+  is not installed, and the restore points sit on the same disk as the database.
+  The moment the switch is flipped this stops being a hygiene item and starts
+  being customer and payment records with one copy. `scripts/pg-backup.sh`
+  already contains the offsite path, switched off; it needs a private bucket and
+  an encryption decision.
+- **`business_profile.product_description` reads unset** via the API even though
+  the dashboard shows one. Stripe reports no outstanding requirements, so it is
+  not blocking — but a partner review may ask.
+- **Managed Payments remains available** as a different commercial arrangement
+  (Stripe as merchant of record, cross-border VAT handled by Stripe). Adopting it
+  would change the Impressum, the terms and who the customer contracts with — a
+  deliberate decision, never a dashboard default. See `docs/TAX-POSTURE.md`.

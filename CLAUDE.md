@@ -154,6 +154,58 @@ What it means for work started from this side:
   rendered identically — with 864 tests green.
 - **When the base moves, merge it in — never rebase.** Someone else's history is not ours to rewrite.
 
+## 💳 Billing is LIVE-provisioned and SALES ARE CLOSED BY A SWITCH (2026-09-11)
+
+**Read `docs/BILLING-GO-LIVE.md` before touching anything that takes money.**
+
+Stripe is fully live on `acct_1TwgCrLBe83UKv9x` — 10 products + prices, portal,
+webhook, account binding, tax codes, `charges_enabled` and `payouts_enabled` true,
+**zero requirements outstanding** — and a real live checkout has been driven end to
+end. Money is then held behind one env var, deliberately: **everything else proven
+first, money last.**
+
+```
+SALES_OPEN=true   → checkout works
+anything else     → 503 sales_closed      ← current state
+```
+
+🔴 **The gate is in the SERVICE (`middleware/salesGate.js`, called from
+`billingService.js`), NOT on the routes.** Two functions create a Checkout Session
+and they are reached from two different route files — `createCheckout` from
+`billingRoutes.js` and `createWorkspaceSeatCheckout` from **`workspaceRoutes.js`,
+which has no billing guard at all**. A route-level switch leaves the Team seat
+path — the most expensive item sold — selling with the shop shut. Same shape as
+`registrationGate`'s "two closed doors and one open one".
+`scripts/sales-gate.test.mjs` asserts the **coverage set**: every function
+containing `checkout.sessions.create` must call `assertSalesOpen()` before
+reaching the provider, so a new checkout path fails the build until it is gated.
+
+⚠️ **Deliberately NOT gated:** the billing portal (customers must be able to
+cancel and get invoices), the webhook (Stripe retries for days; in-flight
+payments must still settle), and spending credits already bought. A test pins all
+three — do not "tidy" the gate onto them.
+
+⚠️ **`getConfig()` returns `enabled` AND `salesOpen` as separate facts** —
+wired-to-a-provider vs willing-to-charge. Collapsing them makes a deliberately
+shut shop render as a broken one.
+
+⚠️ **Setting `SALES_OPEN` in `.env` alone does nothing** — compose reads `.env`
+for `${}` substitution only, so it must stay listed in the service's
+`environment:` block. Verify with
+`docker exec xenostudio-backend printenv | grep SALES_OPEN`, never by grepping
+`.env`. That exact gap silently disabled `REGISTRATION_OPEN`, `RESEND_API_KEY`
+and all five `STRIPE_*` keys on 2026-08-24.
+
+🔴 **WE are the merchant of record.** Every checkout session passes
+`managed_payments: { enabled: false }` — Stripe's Managed Payments default makes
+*Stripe* the seller and then refuses our 14-day withdrawal notice. The whole
+locked posture (`docs/TAX-POSTURE.md`: Kleinunternehmer § 19, our Impressum, our
+terms) assumes we are the seller. Do not let a dashboard default decide it.
+
+⚠️ **The statement descriptor lives in TWO places and they must agree** — Stripe
+(`XENOSYSTEM` / short `XENO`) and `src/content/support.ts`, which is what tells a
+cardholder what the charge is. Change one, change the other.
+
 ## 🎨 EVERY page uses the site's design system — never hand-roll chrome
 
 **DIRECTIVE 2026-09-11.** A new or edited public page composes the EXISTING shell.
