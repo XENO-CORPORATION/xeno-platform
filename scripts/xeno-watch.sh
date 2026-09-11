@@ -28,7 +28,10 @@
 set -uo pipefail
 
 TARGET_URL="${XENO_WATCH_URL:-https://xenostudio.ai/api/ready}"
-ALERT_TO="${XENO_ALERT_TO:-support@xenostudio.ai}"
+# ops@, not support@ — support@ is the customer-facing address (Stripe billing support
+# from 2026-09-11). Seven uptime alerts in three days had made it unreadable for the
+# one class of mail it exists for.
+ALERT_TO="${XENO_ALERT_TO:-ops@xenostudio.ai}"
 ALERT_FROM="${XENO_ALERT_FROM:-XENO Watch <alerts@xenostudio.ai>}"
 STATE_DIR="/var/lib/xeno-watch"
 STATE_FILE="$STATE_DIR/state"
