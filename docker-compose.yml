@@ -191,6 +191,12 @@ services:
       # in .env — compose reads .env for ${} substitution only, and a value that is
       # not listed in this block reaches no container. That gap silently disabled
       # REGISTRATION_OPEN and all five STRIPE_* keys on 2026-08-24.
+      # Extra site origins ACCEPTED for CORS and redirect allowlists. An
+      # allowlist, never an identity: widening it is safe and individually
+      # revertible, and it does NOT make the new host canonical. The OIDC issuer
+      # is a separate, one-way decision (config/hosts.js: an issuer is not
+      # dual-homeable — OIDC Core §3.1.3.7 requires exact `iss` equality).
+      - XENO_ALIAS_SITE_ORIGINS=${XENO_ALIAS_SITE_ORIGINS:-}
       - SALES_OPEN=${SALES_OPEN:-}
       - REGISTRATION_OPEN=${REGISTRATION_OPEN:-}
       - REGISTRATION_OPEN_UNTIL=${REGISTRATION_OPEN_UNTIL:-}
