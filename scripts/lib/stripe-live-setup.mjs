@@ -8,6 +8,16 @@ export const LIVE_ACCOUNT = 'acct_1TwgCrLBe83UKv9x';
 export const API_VERSION = '2025-02-24.acacia';
 export const WEBHOOK_URL = 'https://xenostudio.ai/api/billing/webhook';
 export const PORTAL_RETURN_URL = 'https://xenostudio.ai/overview/billing';
+/* Stripe Tax needs every line item classified, or a live Checkout refuses with
+ * "You must specify a tax code in all line items to calculate taxes" — the
+ * second live refusal of 2026-09-11, right after Managed Payments. Test mode
+ * never said a word. docs/TAX-POSTURE.md keeps Stripe Tax ON with zero
+ * registrations (0 % everywhere, threshold monitoring), so today the code
+ * decides nothing and the day a registration exists it decides the rate. One
+ * code for the whole catalog — everything we sell is an electronically supplied
+ * service — set on the PRODUCT, where Stripe reads it, rather than as an
+ * account-wide default that nothing in this repo could see or assert. */
+export const TAX_CODE = 'txcd_10000000'; // General — Electronically Supplied Services
 const MARKER = 'platform-live-billing-v1';
 const MAX_PAGES = 100;
 const WEBHOOK_REPLAY_WINDOW_MS = 60 * 60 * 1000;
@@ -105,7 +115,8 @@ const sameArray = (left, right) => Array.isArray(left) && left.length === right.
 
 function assertProduct(product, plan, item) {
   demand(product?.object === 'product' && validId(product.id, 'prod') && product.active === true
-    && product.livemode === true && product.name === item.name && metadataMatches(product, itemMetadata(plan, item)), 'product_mismatch');
+    && product.livemode === true && product.name === item.name && product.tax_code === TAX_CODE
+    && metadataMatches(product, itemMetadata(plan, item)), 'product_mismatch');
 }
 function assertPrice(price, product, plan, item) {
   demand(price?.object === 'price' && validId(price.id, 'price') && price.livemode === true
@@ -159,7 +170,14 @@ function reconcile(plan, inventory) {
     demand(metadataMatches(product, baseMetadata(plan)), 'foreign_or_stale_owned_product');
     const entry = entries.get(product.metadata.xenoCatalogId);
     demand(entry && !entry.product, 'ambiguous_or_unknown_product');
-    assertProduct(product, plan, entry.item); entry.product = product;
+    if (product.tax_code == null) {
+      /* Provisioned before the catalog carried a tax code (the ten live products
+       * of 2026-09-11). ABSENT is repairable — the stage below sets it and
+       * re-verifies. A DIFFERENT code is a mismatch like any other and is never
+       * overwritten: someone chose it, and this script does not out-vote them. */
+      assertProduct({ ...product, tax_code: TAX_CODE }, plan, entry.item); entry.taxCodeMissing = true;
+    } else assertProduct(product, plan, entry.item);
+    entry.product = product;
   }
   for (const price of inventory.prices) {
     if (!owned(price)) { demand(!ownedProductIds.has(typeof price.product === 'string' ? price.product : price.product?.id), 'unowned_price_on_owned_product'); continue; }
@@ -191,7 +209,7 @@ function idempotencyKey(plan, kind, id = '') {
 }
 
 function productParams(plan, item) {
-  return { name: item.name, active: true, metadata: itemMetadata(plan, item) };
+  return { name: item.name, active: true, tax_code: TAX_CODE, metadata: itemMetadata(plan, item) };
 }
 function priceParams(plan, item, productId) {
   return { product: productId, currency: item.currency, unit_amount: item.unit_amount,
@@ -217,9 +235,15 @@ export async function provisionLiveSetup({ stripe, catalog, billingSource, env, 
   const accountEvidence = await verifyBillingAccount(stripe, config, { sale: true });
   let state = reconcile(plan, await readInventory(stripe));
   const created = { products: 0, prices: 0, portals: 0, webhooks: 0 };
+  const repaired = { taxCodes: 0 };
 
   if (stage === 'catalog-portal') {
     for (const entry of state.entries) {
+      if (entry.product && entry.taxCodeMissing) {
+        entry.product = await stripe.products.update(entry.product.id, { tax_code: TAX_CODE },
+          { idempotencyKey: idempotencyKey(plan, 'product-tax-code', entry.item.id) });
+        assertProduct(entry.product, plan, entry.item); entry.taxCodeMissing = false; repaired.taxCodes++;
+      }
       if (!entry.product) {
         entry.product = await stripe.products.create(productParams(plan, entry.item), { idempotencyKey: idempotencyKey(plan, 'product', entry.item.id) });
         assertProduct(entry.product, plan, entry.item); created.products++;
@@ -234,14 +258,14 @@ export async function provisionLiveSetup({ stripe, catalog, billingSource, env, 
       assertPortal(state.portal, plan); created.portals++;
     }
     state = reconcile(plan, await readInventory(stripe));
-    demand(state.entries.every(entry => entry.product && entry.price) && state.portal, 'catalog_or_portal_incomplete');
-    return safeResult(plan, state, created, { accountVerificationNotExposed: accountEvidence.verificationNotExposed,
+    demand(state.entries.every(entry => entry.product && entry.price && !entry.taxCodeMissing) && state.portal, 'catalog_or_portal_incomplete');
+    return safeResult(plan, state, created, { repaired, accountVerificationNotExposed: accountEvidence.verificationNotExposed,
       nextStage: 'webhook' });
   }
 
   demand(secretSink && typeof secretSink.inspect === 'function' && typeof secretSink.reserve === 'function'
     && typeof secretSink.commit === 'function', 'secure_secret_sink_required');
-  demand(state.entries.every(entry => entry.product && entry.price) && state.portal, 'catalog_portal_prerequisite');
+  demand(state.entries.every(entry => entry.product && entry.price && !entry.taxCodeMissing) && state.portal, 'catalog_portal_prerequisite');
   const receipt = await secretSink.inspect({ account: LIVE_ACCOUNT, catalogDigest: plan.catalogDigest });
   if (state.webhook && receipt?.status === 'complete') {
     demand(receipt.account === LIVE_ACCOUNT && receipt.catalogDigest === plan.catalogDigest

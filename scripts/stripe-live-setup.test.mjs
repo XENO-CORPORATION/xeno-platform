@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import {
-  API_VERSION, LIVE_ACCOUNT, WEBHOOK_URL, createPosixSecretSink, deriveBillingEvents,
+  API_VERSION, LIVE_ACCOUNT, TAX_CODE, WEBHOOK_URL, createPosixSecretSink, deriveBillingEvents,
   liveSetupPlan, provisionLiveSetup, validateLiveEnvironment,
 } from './lib/stripe-live-setup.mjs';
 
@@ -47,6 +47,8 @@ function fixture() {
       list: async args => { reads.push('products'); return page(products, args); },
       create: async (args, options) => { writes.push(['product', args, options]); const value = { ...args,
         object: 'product', id: `prod_${products.length + 1}`, livemode: true }; products.push(value); return value; },
+      update: async (id, args, options) => { writes.push(['product-update', args, options]);
+        const value = products.find(product => product.id === id); Object.assign(value, args); return value; },
     },
     prices: {
       list: async args => { reads.push('prices'); return page(prices, args); },
@@ -137,6 +139,8 @@ test('catalog and portal create exact live shapes, paginate, reread, and rerun i
   assert.deepEqual(first.created, { products: 2, prices: 2, portals: 1, webhooks: 0 });
   assert.deepEqual(Object.keys(first.environment).sort(), ['STRIPE_PRICE_PACK', 'STRIPE_PRICE_PLAN']);
   assert.match(first.portalConfigurationId, /^bpc_/); assert.equal(first.nextStage, 'webhook');
+  const productWrites = f.writes.filter(([kind]) => kind === 'product');
+  assert.ok(productWrites.length === 2 && productWrites.every(([, value]) => value.tax_code === TAX_CODE), 'every product is classified for tax');
   const priceWrites = f.writes.filter(([kind]) => kind === 'price');
   assert.ok(priceWrites.every(([, value]) => value.currency === 'eur' && value.tax_behavior === 'inclusive' && value.billing_scheme === 'per_unit'));
   assert.deepEqual(priceWrites.find(([, value]) => value.recurring)?.[1].recurring,
@@ -157,6 +161,28 @@ for (const patch of [{ unit_amount: 999 }, { tax_behavior: 'exclusive' }, { live
     await assert.rejects(f.run()); assert.equal(f.writes.length, 0);
   });
 }
+
+test('a product provisioned before tax codes is repaired in place, and a different code is refused', async () => {
+  // The ten live products of 2026-09-11 exist without a tax_code; the stage must
+  // set it (Stripe Tax refuses a live checkout otherwise) — ABSENT is repairable.
+  const f = fixture(); await f.run();
+  for (const product of f.products) delete product.tax_code;
+  f.writes.length = 0;
+  const result = await f.run();
+  assert.deepEqual(result.repaired, { taxCodes: 2 });
+  assert.deepEqual(result.created, { products: 0, prices: 0, portals: 0, webhooks: 0 }, 'repair creates nothing new');
+  const updates = f.writes.filter(([kind]) => kind === 'product-update');
+  assert.equal(updates.length, 2);
+  assert.ok(updates.every(([, value]) => value.tax_code === TAX_CODE));
+  assert.ok(f.products.every(product => product.tax_code === TAX_CODE), 'every product ends classified');
+
+  // A DIFFERENT code was chosen by someone; this script does not out-vote it.
+  const g = fixture(); await g.run();
+  for (const product of g.products) product.tax_code = 'txcd_99999999';
+  g.writes.length = 0;
+  await assert.rejects(g.run(), /product_mismatch/);
+  assert.equal(g.writes.length, 0);
+});
 
 for (const corruption of ['duplicate-product', 'stale-product', 'unowned-name', 'unowned-price', 'unowned-webhook', 'unowned-portal']) {
   test(`ownership ambiguity refuses before writes: ${corruption}`, async () => {
