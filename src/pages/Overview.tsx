@@ -364,7 +364,7 @@ const OverviewContent: React.FC = () => {
             <Route path="notifications" element={<NotificationsPage />} />
             <Route path="integrations" element={<IntegrationsPage />} />
             <Route path="subscription" element={<BillingPage />} />
-            <Route path="help" element={<Navigate to="/help" replace />} />
+            <Route path="help" element={<Navigate to="/support" replace />} />
             {/* Individual lab routes */}
             <Route path="labs/:labId" element={<CapabilityHandoff title="This lab is not a persisted resource" detail="The platform has no server-confirmed lab record for this route. Use Projects for persisted agent work while the Lab service contract is implemented." productPath="/overview/projects" />} />
             {/* Redirects from old playground routes to new routes */}

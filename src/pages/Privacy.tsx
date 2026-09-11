@@ -4,19 +4,19 @@ import MarketingPage from '../components/marketing/MarketingPage';
 
 const Privacy: React.FC = () => {
   return (
-    <MarketingPage eyebrow="Legal" title="Privacy Policy" updated="December 2024">
+    <MarketingPage eyebrow="Legal" title="Privacy Policy" updated="September 2026">
       <div className="legal-prose">
           {/* Introduction */}
           <section>
             <h2>1. Introduction</h2>
             <p>
-              Welcome to Xeno Studio ("we," "our," or "us"). Xeno Studio is a content creation platform
+              Welcome to XENOsystem ("we," "our," or "us"). XENOsystem is a content creation platform
               that provides AI-powered tools for image generation, video editing, and social media publishing.
               This Privacy Policy explains how we collect, use, disclose, and safeguard your information
               when you use our website at xenostudio.ai and our services.
             </p>
             <p>
-              By using Xeno Studio, you agree to the collection and use of information in accordance with
+              By using XENOsystem, you agree to the collection and use of information in accordance with
               this policy. If you do not agree with our policies and practices, please do not use our services.
             </p>
           </section>
@@ -64,7 +64,7 @@ const Privacy: React.FC = () => {
           <section>
             <h2>3. Third-Party Platform Integrations</h2>
             <p>
-              Xeno Studio's Social Media Hub feature allows you to connect your social media accounts
+              XENOsystem's Social Media Hub feature allows you to connect your social media accounts
               to publish content directly from our platform. Here's what you need to know:
             </p>
 
@@ -375,7 +375,11 @@ const Privacy: React.FC = () => {
               exercise your rights, please contact us at:
             </p>
             <div className="mt-4 p-6 bg-white/[0.02] border border-white/[0.06] rounded-xl">
-              <p>Xeno Studio</p>
+              <p><strong>Emilian-Vasile Cristea</strong></p>
+              <p>trading as XENOsystem</p>
+              <p>Hauptstraße 112</p>
+              <p>97909 Stadtprozelten</p>
+              <p>Germany</p>
               <p>Email: privacy@xenostudio.ai</p>
             </div>
           </section>

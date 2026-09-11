@@ -4,16 +4,16 @@ import MarketingPage from '../components/marketing/MarketingPage';
 
 const Terms: React.FC = () => {
   return (
-    <MarketingPage eyebrow="Legal" title="Terms of Service" updated="December 2024">
+    <MarketingPage eyebrow="Legal" title="Terms of Service" updated="September 2026">
       <div className="legal-prose">
           {/* Acceptance of Terms */}
           <section>
             <h2>1. Acceptance of Terms</h2>
             <p>
-              By accessing or using Xeno Studio ("the Service"), you agree to be bound by these
+              By accessing or using XENOsystem ("the Service"), you agree to be bound by these
               Terms of Service ("Terms"). If you do not agree to these Terms, you may not access
               or use the Service. These Terms constitute a legally binding agreement between you
-              and Xeno Studio.
+              and XENOsystem.
             </p>
             <p>
               We may modify these Terms at any time. If we make material changes, we will notify
@@ -26,7 +26,7 @@ const Terms: React.FC = () => {
           <section>
             <h2>2. Description of Service</h2>
             <p>
-              Xeno Studio is a content creation platform that provides:
+              XENOsystem is a content creation platform that provides:
             </p>
             <ul>
               <li>AI-powered image and video generation tools</li>
@@ -69,12 +69,12 @@ const Terms: React.FC = () => {
             <h2>4. Connected Platforms</h2>
             <p>
               Our Social Media Hub feature allows you to connect third-party social media accounts
-              (such as YouTube, TikTok, and Instagram) to publish content directly from Xeno Studio.
+              (such as YouTube, TikTok, and Instagram) to publish content directly from XENOsystem.
             </p>
 
             <h3>Authorization</h3>
             <p>
-              When you connect a social media account, you authorize Xeno Studio to post content
+              When you connect a social media account, you authorize XENOsystem to post content
               to that platform on your behalf when you explicitly request publication. We will
               only take actions that you specifically initiate.
             </p>
@@ -112,7 +112,7 @@ const Terms: React.FC = () => {
 
             <h3>License Grant</h3>
             <p>
-              By using the Service, you grant Xeno Studio a limited, non-exclusive, royalty-free
+              By using the Service, you grant XENOsystem a limited, non-exclusive, royalty-free
               license to process, store, display, and transmit your User Content as necessary to
               provide the Service. This includes publishing content to connected platforms when you
               request it.
@@ -154,7 +154,7 @@ const Terms: React.FC = () => {
             <h2>7. Intellectual Property</h2>
             <p>
               The Service, including its original content, features, and functionality, is owned
-              by Xeno Studio and is protected by international copyright, trademark, patent, trade
+              by XENOsystem and is protected by international copyright, trademark, patent, trade
               secret, and other intellectual property laws. Our trademarks and trade dress may not
               be used in connection with any product or service without our prior written consent.
             </p>
@@ -260,7 +260,7 @@ const Terms: React.FC = () => {
           <section>
             <h2>11. Indemnification</h2>
             <p>
-              You agree to indemnify, defend, and hold harmless Xeno Studio, its officers,
+              You agree to indemnify, defend, and hold harmless XENOsystem, its officers,
               directors, employees, and agents from any claims, damages, losses, liabilities,
               costs, and expenses (including reasonable attorneys' fees) arising out of or
               related to your use of the Service, your User Content, or your violation of
@@ -319,7 +319,7 @@ const Terms: React.FC = () => {
           <section>
             <h2>15. General Provisions</h2>
             <ul>
-              <li><strong className="text-white/80">Entire Agreement:</strong> These Terms constitute the entire agreement between you and Xeno Studio regarding the Service.</li>
+              <li><strong className="text-white/80">Entire Agreement:</strong> These Terms constitute the entire agreement between you and XENOsystem regarding the Service.</li>
               <li><strong className="text-white/80">Severability:</strong> If any provision is found unenforceable, the remaining provisions will continue in effect.</li>
               <li><strong className="text-white/80">Waiver:</strong> Our failure to enforce any right or provision shall not constitute a waiver of such right or provision.</li>
               <li><strong className="text-white/80">Assignment:</strong> You may not assign these Terms without our prior written consent.</li>
@@ -333,7 +333,7 @@ const Terms: React.FC = () => {
               If you have any questions about these Terms of Service, please contact us at:
             </p>
             <div className="mt-4 p-6 bg-white/[0.02] border border-white/[0.06] rounded-xl">
-              <p>Xeno Studio</p>
+              <p>XENOsystem</p>
               <p>Email: legal@xenostudio.ai</p>
             </div>
           </section>

@@ -80,7 +80,6 @@ import ActivateAccount from './pages/ActivateAccount';
 import Onboarding from './pages/Onboarding';
 import DownloadResume from './pages/DownloadResume';
 import DeviceAuthContent from './pages/DeviceAuthContent';
-import HelpContent from './pages/HelpContent';
 import ContactContent from './pages/ContactContent';
 import ForgotPassword from './pages/ForgotPassword';
 import ResetPassword from './pages/ResetPassword';
@@ -278,7 +277,9 @@ function App() {
               <Route path="/forgot-password" element={<ForgotPassword />} />
               <Route path="/reset-password" element={<ResetPassword />} />
               <Route path="/verify-email" element={<VerifyEmail />} />
-              <Route path="/help" element={<HelpContent />} />
+              {/* /support supersedes the old 5-FAQ /help page (2026-09-11). Kept as a
+                  redirect, not deleted: the path is linked from older builds and email. */}
+              <Route path="/help" element={<Navigate to="/support" replace />} />
               <Route path="/contact" element={<ContactContent />} />
             </Route>
 

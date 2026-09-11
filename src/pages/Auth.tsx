@@ -382,7 +382,7 @@ const Auth = () => {
         <footer className="hidden lg:flex items-center justify-between px-12 xl:px-20 py-6 border-t border-white/[0.04]">
           <p className="text-xs text-white/30">© 2026 Xeno. All rights reserved.</p>
           <div className="flex items-center gap-6">
-            <Link to="/help" className="text-xs text-white/30 hover:text-white/60 transition-colors">Help</Link>
+            <Link to="/support" className="text-xs text-white/30 hover:text-white/60 transition-colors">Help</Link>
             <Link to="/contact" className="text-xs text-white/30 hover:text-white/60 transition-colors">Contact</Link>
           </div>
         </footer>
