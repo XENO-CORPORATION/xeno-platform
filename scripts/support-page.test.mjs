@@ -58,7 +58,7 @@ test('required coverage is anchored OUTSIDE the content module', () => {
     );
   }
   for (const [topic, needle] of [
-    ['the statement descriptor', /XENOSTUDIO/],
+    ['the statement descriptor', new RegExp(support.STATEMENT_DESCRIPTOR_LONG)],
     ['cancelling a subscription', /cancel/i],
     ['refunds', /refund/i],
     ['why no VAT is charged', /Kleinunternehmer/],
@@ -73,8 +73,17 @@ test('required coverage is anchored OUTSIDE the content module', () => {
 test('the charge question — the reason this URL exists — is answerable without JS', () => {
   // Someone arriving from a bank statement must find the descriptor and a
   // contact address in the HTML itself.
-  assert.match(body, /XENOSTUDIO/, 'the long statement descriptor must appear');
-  assert.match(body, /\bXENO\b/, 'the short statement descriptor must appear');
+  /* Assert the SHAPE and that both reach the page, never a frozen literal. The
+   * descriptor legitimately changes (XENOSTUDIO -> XENOSYSTEM, 2026-09-11 when it
+   * moved to the trading name), and a test pinning yesterday's value fails on the
+   * day it is corrected rather than the day it breaks. What must hold: a real
+   * descriptor is exported, and it actually reaches the page a cardholder reads.
+   * The values themselves come from Stripe - see the note in content/support.ts. */
+  for (const key of ['STATEMENT_DESCRIPTOR', 'STATEMENT_DESCRIPTOR_LONG']) {
+    const value = support[key];
+    assert.match(value ?? '', /^[A-Z0-9 *.-]{2,22}$/, `${key} must be a card-statement string`);
+    assert.ok(body.includes(value), `${key} (${value}) must appear on the page`);
+  }
   assert.ok(body.includes(`mailto:${support.SUPPORT_EMAIL}`), 'a contact address must be reachable');
   assert.match(body, /dispute/i, 'it must tell the reader they need not go to their bank first');
 });

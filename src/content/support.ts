@@ -48,10 +48,20 @@ export interface SupportSection {
   items: SupportItem[];
 }
 
-/** Shown on the card statement. Sourced from the live Stripe account's
- *  settings.payments.statement_descriptor / card_payments prefix, not guessed. */
+/* Shown on the card statement. These MUST match the live Stripe account's
+ * settings.payments.statement_descriptor and the card_payments prefix — this page
+ * exists so somebody staring at a bank statement can identify the charge, so a
+ * stale string here is worse than no page at all.
+ *
+ * 🔴 CHANGING THE DESCRIPTOR IN STRIPE MEANS CHANGING IT HERE, IN THE SAME
+ * BREATH. Set to XENOSYSTEM on 2026-09-11 when the account's descriptor moved
+ * from XENOSTUDIO to the trading name; safe to switch cleanly because the
+ * account had processed zero charges, so no historical statement shows the old
+ * string. Re-derive with:
+ *   stripe.accounts.retrieveCurrent() -> settings.payments.statement_descriptor
+ */
 export const STATEMENT_DESCRIPTOR = 'XENO';
-export const STATEMENT_DESCRIPTOR_LONG = 'XENOSTUDIO';
+export const STATEMENT_DESCRIPTOR_LONG = 'XENOSYSTEM';
 
 export const SUPPORT_EMAIL = 'support@xenostudio.ai';
 export const SECURITY_EMAIL = 'security@xenostudio.ai';
