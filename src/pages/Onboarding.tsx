@@ -298,7 +298,15 @@ const Onboarding: React.FC = () => {
   const [saving, setSaving] = useState(false);
   const [checking, setChecking] = useState(true);
   const [answers, setAnswers] = useState<Answers>({
-    workspace: null, displayName: '', heardFrom: '', role: null, marketingOptIn: true,
+    workspace: null, displayName: '', heardFrom: '', role: null,
+    /* 🔴 FALSE, and it must stay false. A pre-ticked box is not consent:
+     * GDPR Art. 4(11) requires a clear affirmative action, and the CJEU settled
+     * it in Planet49 (C-673/17). For a German seller § 7 UWG applies to the
+     * email itself on top of that. This defaulted to TRUE until 2026-09-12,
+     * which means every account created before then opted in by not noticing.
+     * The payment consents in CheckoutConsent.tsx were already unticked — the
+     * pattern was understood, this screen just missed it. */
+    marketingOptIn: false,
   });
   const [billing, setBilling] = useState<{
     enabled: boolean; currency: string; catalog: CatalogItem[];
@@ -745,7 +753,7 @@ const Onboarding: React.FC = () => {
                       autoFocus
                       value={answers.displayName}
                       onChange={(e) => setAnswers((a) => ({ ...a, displayName: e.target.value }))}
-                      placeholder="Emilian"
+                      placeholder="Alex"
                       className={INPUT_CLS}
                     />
                   </Field>

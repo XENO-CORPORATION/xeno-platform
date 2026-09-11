@@ -144,7 +144,7 @@ function wrapChrome(title, bodyContent, options = {}) {
 function wrapInLayout(title, bodyContent, preheader = '') {
   return wrapChrome(title, bodyContent, {
     preheader,
-    footerNote: 'XENO Studio &middot; sent to the address on your XENO account',
+    footerNote: 'XENOsystem &middot; sent to the address on your XENO account',
   });
 }
 
@@ -276,7 +276,7 @@ function mailStats(rows) {
 function wrapWelcome(title, bodyContent) {
   return wrapChrome(title, bodyContent, {
     preheader: 'Your account is ready \u2014 three steps to get moving.',
-    footerNote: 'XENO Studio &middot; sent because you created an account at xenostudio.ai',
+    footerNote: 'XENOsystem &middot; sent because you created an account at xenostudio.ai',
   });
 }
 
@@ -574,11 +574,24 @@ const templates = {
     `, settingFirstPassword ? 'Add a password to your XENO account — Google keeps working.' : 'Set a new password on your XENO account.'),
   }),
 
-  email_verification: ({ displayName, verifyUrl, expiresIn }) => ({
+  /* 🔴 THIS MAIL MUST CARRY THE CODE, because it is the one the product tells
+   * people to open. The activation screen says "We sent a six-digit code …
+   * enter it below", and until 2026-09-12 the code existed only in the WELCOME
+   * mail while this one — the message actually titled "Verify your XENO email" —
+   * held a link and nothing else. Walking the signup as a new user is what
+   * surfaced it: the instruction on screen could not be followed with the email
+   * it pointed at.
+   *
+   * `activationCode` is OPTIONAL and the block is omitted when absent: the code
+   * is minted once per signup and shared with the welcome mail, so a caller that
+   * has no code (a resend of address-verification alone) still sends a working
+   * link rather than an empty box. */
+  email_verification: ({ displayName, verifyUrl, expiresIn, activationCode }) => ({
     subject: 'Verify your XENO email',
     html: wrapInLayout('Verify your email', `
       ${mailHeading('Confirm your email address')}
       ${mailText(`Hi ${escapeHtml(displayName)}, confirming this address secures your XENO account and is what makes password recovery possible later.`)}
+      ${activationCode ? codeBlock(activationCode, verifyUrl) : ''}
       ${mailButton(verifyUrl, 'Confirm this address')}
       ${mailFallbackLink(verifyUrl)}
       ${hairline(14, 12)}
@@ -889,7 +902,7 @@ export async function sendEmail(db, template, toEmail, data, userId = null) {
  * 160 of the platform's 221 accounts were created that way, so wiring only the
  * password path would have missed nearly three quarters of new users.
  */
-export function sendWelcomeEmail(db, user) {
+export function sendWelcomeEmail(db, user, { activationCode = null } = {}) {
   if (!user?.email) return;
   const displayName = user.display_name || user.displayName || user.username || '';
 
@@ -906,7 +919,12 @@ export function sendWelcomeEmail(db, user) {
   // Mint the code ONCE, outside the retry. A retry must resend the SAME code —
   // minting per attempt would invalidate the code carried by the message that
   // did arrive, so a transient failure would silently break a working email.
-  const codePromise = mintCode(db, user.id, bcrypt).catch((e) => {
+  // A caller that already minted a code passes it in, so the welcome mail and
+  // the verification mail carry the SAME code. Minting a second one here would
+  // invalidate the first and break whichever message the user happens to open.
+  const codePromise = activationCode
+    ? Promise.resolve(activationCode)
+    : mintCode(db, user.id, bcrypt).catch((e) => {
     // A code we could not mint must not stop the mail: the link still works,
     // and an email with one route in beats no email at all.
     console.error(`[Email] could not mint an activation code for ${user.email}:`, e?.message || e);
