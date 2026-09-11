@@ -9,6 +9,12 @@ for (const scenario of ['valid', 'reject', 'cache', 'consent', 'missing', 'deadl
       encoding: 'utf8', timeout: 15000,
       env: {
         SYSTEMROOT: process.env.SYSTEMROOT || '',
+        /* These scenarios exercise the CHECKOUT path, so the shop has to be open
+         * for them to reach it. Worth noting that they all failed the moment the
+         * sales gate landed, which is the good kind of failure: it proved the
+         * gate is genuinely on the live code path rather than beside it.
+         * The gate's own behaviour is covered by scripts/sales-gate.test.mjs. */
+        SALES_OPEN: 'true',
         STRIPE_SECRET_KEY: scenario === 'missing' ? '' : scenario === 'portal' ? 'sk_live_fixture' : 'sk_test_fixture',
         STRIPE_PUBLISHABLE_KEY: scenario === 'portal' ? 'pk_live_fixture' : 'pk_test_fixture',
         STRIPE_EXPECTED_MODE: scenario === 'portal' ? 'live' : 'test', STRIPE_EXPECTED_ACCOUNT_ID: 'acct_fixture',

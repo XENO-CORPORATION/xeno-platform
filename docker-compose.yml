@@ -186,6 +186,12 @@ services:
       # ⚠️ A value in .env does NOT reach a container on its own. Compose reads
       # .env for ${} SUBSTITUTION only; without a line here the value is simply
       # never passed. That distinction is the whole bug.
+      # Sales switch. Fail-closed: anything but the exact string 'true' means no
+      # checkout (src/server/middleware/salesGate.js). Forwarded HERE and not only
+      # in .env — compose reads .env for ${} substitution only, and a value that is
+      # not listed in this block reaches no container. That gap silently disabled
+      # REGISTRATION_OPEN and all five STRIPE_* keys on 2026-08-24.
+      - SALES_OPEN=${SALES_OPEN:-}
       - REGISTRATION_OPEN=${REGISTRATION_OPEN:-}
       - REGISTRATION_OPEN_UNTIL=${REGISTRATION_OPEN_UNTIL:-}
       - REGISTRATION_ALLOWLIST=${REGISTRATION_ALLOWLIST:-}

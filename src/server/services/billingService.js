@@ -24,6 +24,7 @@ import { readCheckoutStatus } from './checkoutStatus.js';
 import { siteOrigin } from '../config/hosts.js';
 import { addGrantTx, clawbackTx, getBalanceV2, MICRO_PER_CREDIT } from '../utils/creditLedgerV2.js';
 import { priceIssues } from '../utils/priceAgreement.js';
+import { assertSalesOpen, salesOpen } from '../middleware/salesGate.js';
 import { billingAccountConfig, billingBindingError, verifyBillingAccount, canonicalBillingEvent, requireBillingDatabaseBinding } from '../utils/billingAccountBinding.js';
 
 const SECRET = process.env.STRIPE_SECRET_KEY || '';
@@ -243,7 +244,12 @@ export async function getPublicCatalog() {
 
 export async function getConfig() {
   return {
-    enabled: isEnabled(), publishableKey: PUBLISHABLE, currency: CURRENCY,
+    enabled: isEnabled(),
+    /* Distinct from `enabled` on purpose. `enabled` = this server is WIRED to a
+     * payment provider; `salesOpen` = it is willing to charge today. Collapsing
+     * them would make a deliberately-closed shop look like a broken one. */
+    salesOpen: salesOpen(),
+    publishableKey: PUBLISHABLE, currency: CURRENCY,
     catalog: await getPublicCatalog(),
     /* The FREE tier, shipped alongside the sellable ones.
      *
@@ -623,6 +629,13 @@ function statementDescriptor() {
 }
 
 export async function createCheckout(pool, user, itemId, { origin, downloadIntent = null, consentId = null } = {}) {
+  /* 🔴 FIRST LINE OF EVERY MONEY PATH. Being provisioned to take money and
+   * choosing to take it are different facts; see middleware/salesGate.js. This
+   * sits inside the service, not on the route, because the two checkout
+   * creators are reached from two different route files and only one of them
+   * carried a guard. */
+  assertSalesOpen();
+
   const item = CATALOG.map(resolveItem).find((i) => i.id === itemId);
   if (!item) { const e = new Error('unknown item'); e.status = 400; throw e; }
   if (!item.available) { const e = new Error(`item "${itemId}" has no configured price (set ${item.priceEnv})`); e.status = 400; throw e; }
@@ -728,6 +741,13 @@ export async function createCheckout(pool, user, itemId, { origin, downloadInten
 export async function createWorkspaceSeatCheckout(pool, user, {
   workspaceId, seats, origin, itemId = 'team_seat', downloadIntent = null, consentId = null,
 }) {
+  /* 🔴 FIRST LINE OF EVERY MONEY PATH. Being provisioned to take money and
+   * choosing to take it are different facts; see middleware/salesGate.js. This
+   * sits inside the service, not on the route, because the two checkout
+   * creators are reached from two different route files and only one of them
+   * carried a guard. */
+  assertSalesOpen();
+
   const item = CATALOG.map(resolveItem).find((i) => i.id === itemId);
   if (!item || item.plan !== 'team' || !item.perSeat) {
     const e = new Error('unknown Team price');

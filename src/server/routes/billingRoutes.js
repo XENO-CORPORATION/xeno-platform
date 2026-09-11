@@ -19,6 +19,7 @@ import { getEffectiveEntitlements } from '../services/effectivePlan.js';
 import { recordConsent, CONSENT_TEXT, CONSENT_HASH } from '../services/checkoutConsent.js';
 import { rateLimitKey } from '../utils/clientIp.js';
 import { creditsView, subscriptionView } from '../utils/accountViews.js';
+import { requireSalesOpen } from '../middleware/salesGate.js';
 
 const router = express.Router();
 
@@ -172,7 +173,7 @@ router.get('/consent-text', (req, res) => {
  * make "when did they agree?" answerable only as "at some point during a
  * payment".
  */
-router.post('/consent', requireEnabled, authMiddleware, async (req, res) => {
+router.post('/consent', requireEnabled, requireSalesOpen, authMiddleware, async (req, res) => {
   try {
     const id = await recordConsent(req.db, {
       userId: req.user.id,
@@ -211,7 +212,7 @@ router.post('/checkout', requireEnabled, authMiddleware, async (req, res) => {
     res.json({ success: true, url });
   } catch (err) {
     console.error('[billing] checkout error:', err.message);
-    res.status(err.status || 500).json({ success: false, error: err.message || 'Checkout failed' });
+    res.status(err.status || 500).json({ success: false, error: err.message || 'Checkout failed', ...(err.code ? { code: err.code } : {}) });
   }
 });
 
