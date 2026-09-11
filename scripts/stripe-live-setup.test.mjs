@@ -27,7 +27,22 @@ function fixture() {
   const account = { object: 'account', id: LIVE_ACCOUNT, charges_enabled: true, payouts_enabled: true,
     details_submitted: true, type: 'standard', controller: { type: 'account' }, capabilities: { card_payments: 'active' } };
   const stripe = {
-    accounts: { retrieve: async (...args) => { reads.push('account'); assert.equal(args.length, 3); return account; } },
+    accounts: { retrieveCurrent: async (...args) => {
+      reads.push('account');
+      /* Until 2026-09-11 this asserted `args.length === 3` — pinning the exact
+       * argument shape that stripe-node 17 REJECTS. A stub cannot know what the
+       * real SDK accepts, so it must assert the outcomes that matter and nothing
+       * about arity: no account id in the first position (which would select a
+       * Connect account), and the retry override present so the read cannot
+       * escape boundedBillingRead's deadline. The real parser is exercised in
+       * scripts/billing-account-binding.test.mjs against a stub transport. */
+      const [params, options] = args;
+      assert.ok(params == null || (typeof params === 'object' && !('id' in params)),
+        'own-account retrieval must never pass an account id');
+      assert.ok(args.every((a) => typeof a !== 'string'), 'no positional string — that would be a Connect account id');
+      assert.equal(options?.maxNetworkRetries, 0, 'the per-call retry override must reach the SDK');
+      return account;
+    } },
     products: {
       list: async args => { reads.push('products'); return page(products, args); },
       create: async (args, options) => { writes.push(['product', args, options]); const value = { ...args,

@@ -1,6 +1,18 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import Stripe from 'stripe';
+import { createRequire } from 'node:module';
+import { readFileSync } from 'node:fs';
+/* 🔴 TWO COPIES OF STRIPE-NODE, and the guard runs on the one this file did not
+ * import. `import Stripe from 'stripe'` above resolves from scripts/ to the ROOT
+ * node_modules (22.x). The backend — src/server, which is all the Docker image
+ * installs — has its own (17.x). Their argument handling for accounts.retrieve()
+ * differs in ways that made the guard throw on every production call while this
+ * suite stayed green. So the guard is exercised below on the BACKEND's copy, and a
+ * test pins that the copy under test is the copy that ships. */
+const backendRequire = createRequire(new URL('../src/server/package.json', import.meta.url));
+const BackendStripe = backendRequire('stripe');
+const backendStripeVersion = JSON.parse(readFileSync(new URL('../src/server/node_modules/stripe/package.json', import.meta.url), 'utf8')).version;
 import { billingAccountConfig, verifyBillingAccount, canonicalBillingEvent, requireBillingDatabaseBinding, boundedBillingRead } from '../src/server/utils/billingAccountBinding.js';
 import { installBillingProviderFixture, boundBillingPool } from './fixtures/billing-provider-fixture.mjs';
 
@@ -9,7 +21,7 @@ const env = { STRIPE_SECRET_KEY: 'sk_test_fixture', STRIPE_PUBLISHABLE_KEY: 'pk_
 const config = billingAccountConfig(env);
 const fail = { code: 'billing_account_unavailable', status: 503 };
 const account = { object: 'account', id: 'acct_fixture' };
-const providerFor = response => ({ accounts: { retrieve: async () => response } });
+const providerFor = response => ({ accounts: { retrieveCurrent: async () => response } });
 const live = billingAccountConfig({ ...env, STRIPE_SECRET_KEY: 'rk_live_fixture', STRIPE_PUBLISHABLE_KEY: 'pk_live_fixture', STRIPE_EXPECTED_MODE: 'live' });
 const ready = { ...account, charges_enabled: true, payouts_enabled: true, details_submitted: true,
   type: 'standard', controller: { type: 'account' }, capabilities: { card_payments: 'active' } };
@@ -26,12 +38,64 @@ test('explicit pins and secret/publishable mode are mandatory; failures never ec
 });
 
 test('authenticated account request uses current-account endpoint and real SDK request options', async () => {
-  const provider = new Stripe('sk_test_fixture');
-  provider.accounts._makeRequest = async (method, path, params, options) => {
-    assert.equal(method, 'GET'); assert.equal(path, '/v1/account'); assert.deepEqual(params, {});
-    assert.deepEqual(options, { timeout: 10000, maxNetworkRetries: 0 }); return account;
+  /* 🔴 Until 2026-09-11 this test overrode `accounts._makeRequest` — which sits
+   * AFTER stripe-node's argument validation — on the ROOT copy of the SDK. Two
+   * gaps, either of which alone was enough: the validation that was rejecting
+   * the guard in production was the one step skipped, and the SDK being skipped
+   * on was not the SDK the backend runs. It was green while the guard could not
+   * execute at all.
+   *
+   * The seam is now `_requestSender._request`, which `_makeRequest` reaches only
+   * after parsing and validating the arguments, on the BACKEND's copy. Everything
+   * above the seam is the real SDK code the production client runs. */
+  const provider = new BackendStripe('sk_test_fixture', { maxNetworkRetries: 2 });
+  let seen;
+  provider._requestSender._request = (method, host, path, data, authenticator, options, usage, callback) => {
+    seen = { method, path, data, options };
+    callback(null, account);
   };
   await verifyBillingAccount(provider, config);
+  assert.equal(seen.method, 'GET');
+  assert.equal(seen.path, '/v1/account', 'own account — never /v1/accounts/{id}, and never options leaked into the query string');
+  assert.ok(seen.data == null || Object.keys(seen.data).length === 0, 'no params — nothing that could be read as a Connect account id');
+  assert.equal(seen.options.settings?.timeout, 10000, 'the per-call timeout reaches the transport as a SETTING');
+  assert.equal(seen.options.settings?.maxNetworkRetries, 0,
+    'the per-call retry override must beat the client default of 2, or a read can outlive the 10 s bound');
+});
+
+test('the call form is correct on BOTH copies of stripe-node, and the copy under test is the copy that ships', async () => {
+  /* The measurement that decided the fix, kept as a gate. For accounts.retrieve()
+   * no single argument form is right under both 17 and 22 — one throws where the
+   * other leaks options into the query string. retrieveCurrent({}, options) is
+   * correct on both because its path has no {id} parameter to be ambiguous about.
+   * If a future stripe-node changes that, this is where it shows up — not as a
+   * 503 on every checkout. */
+  for (const [label, Ctor] of [['root', Stripe], ['backend', BackendStripe]]) {
+    const provider = new Ctor('sk_test_fixture', { maxNetworkRetries: 2 });
+    let seen;
+    provider._requestSender._request = (m, h, path, data, a, options, u, cb) => { seen = { path, settings: options?.settings }; cb(null, account); };
+    await verifyBillingAccount(provider, config);
+    assert.equal(seen.path, '/v1/account', `${label}: options leaked into the path`);
+    assert.equal(seen.settings?.maxNetworkRetries, 0, `${label}: retry override lost`);
+    assert.equal(seen.settings?.timeout, 10000, `${label}: timeout lost`);
+  }
+
+  /* And the structural fact behind the whole incident: the version the tests run
+   * on must be the version the image installs. Two copies is a hazard that this
+   * repo keeps for reasons of its own (scripts/ uses the root one); what is not
+   * acceptable is for them to drift silently. Bump both together. */
+  const rootVersion = JSON.parse(readFileSync(new URL('../node_modules/stripe/package.json', import.meta.url), 'utf8')).version;
+  const declaredBackend = JSON.parse(readFileSync(new URL('../src/server/package.json', import.meta.url), 'utf8')).dependencies.stripe;
+  assert.match(declaredBackend, /^\^?\d+\./, 'src/server/package.json must declare stripe');
+  assert.equal(backendStripeVersion.split('.')[0], declaredBackend.replace(/^\^/, '').split('.')[0],
+    'the installed backend stripe-node does not match what src/server/package.json declares');
+  if (rootVersion.split('.')[0] !== backendStripeVersion.split('.')[0]) {
+    /* Not failed — RECORDED, so it is visible in every run. Failing would block
+     * unrelated work on a version-alignment decision; hiding it is how this
+     * incident happened. */
+    console.log(`  NOTE: stripe-node majors differ — root ${rootVersion}, backend ${backendStripeVersion}. `
+      + 'Every billing gate in scripts/ that imports "stripe" directly is testing the root copy, not the one that ships.');
+  }
 });
 
 test('fresh account identity refuses unknown/mismatch/exception on every call', async () => {
@@ -39,7 +103,7 @@ test('fresh account identity refuses unknown/mismatch/exception on every call', 
     await assert.rejects(verifyBillingAccount(providerFor(response), config), fail);
   }
   let calls = 0;
-  const provider = { accounts: { retrieve: async () => { calls++; if (calls > 1) throw new Error('SECRET_SENTINEL'); return account; } } };
+  const provider = { accounts: { retrieveCurrent: async () => { calls++; if (calls > 1) throw new Error('SECRET_SENTINEL'); return account; } } };
   await verifyBillingAccount(provider, config);
   await assert.rejects(verifyBillingAccount(provider, config), error => error.code === fail.code && !error.message.includes('SENTINEL') && error.cause === undefined);
   assert.equal(calls, 2);

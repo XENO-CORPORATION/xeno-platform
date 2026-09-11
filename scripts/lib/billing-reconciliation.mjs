@@ -167,7 +167,10 @@ export async function reconcileBilling({ provider, env, readSnapshot, maxPages =
       }
     }
   }
-  try { await read(options => provider.accounts.retrieve(undefined, {}, options)).then(account => {
+  try { await read(options => /* retrieveCurrent, not retrieve: see billingAccountBinding.js — the
+   * id-or-params form is read differently by stripe-node 17 and 22 and this one
+   * threw on the version the backend ships. */
+    provider.accounts.retrieveCurrent({}, options)).then(account => {
     if (account?.object !== 'account' || account.id !== config.accountId) throw fail('account_changed');
   }); } catch { issue('final_account_verification_failed'); }
   report.obligations.nonterminalSubscriptions = Object.entries(report.subscriptions)

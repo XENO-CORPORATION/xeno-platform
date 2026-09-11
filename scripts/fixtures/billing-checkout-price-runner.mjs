@@ -26,8 +26,11 @@ const hooks = `
 `;
 register('data:text/javascript,' + encodeURIComponent(hooks), import.meta.url);
 fixture.Stripe = class {
-  accounts = { retrieve: async () => {
+  accounts = { retrieveCurrent: async (params, options) => {
     fixture.log.push('account');
+    // Outcomes only, never arity — see billingAccountBinding.js for why.
+    if (params && Object.keys(params).length) throw new Error('own-account read must not carry params');
+    if (options?.maxNetworkRetries !== 0) throw new Error('own-account read must carry the retry override');
     if (fixture.account === 'throw') throw new Error(sentinel);
     return fixture.account;
   } };

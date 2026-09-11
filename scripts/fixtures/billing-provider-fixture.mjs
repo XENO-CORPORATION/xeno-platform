@@ -8,9 +8,14 @@ export function installBillingProviderFixture() {
   const calls = [];
   const account = { object: 'account', id: 'acct_fixture' };
   const provider = {
-    accounts: { retrieve: async (id, params, options) => {
+    accounts: { retrieveCurrent: async (params, options) => {
       calls.push('account');
-      if (id !== undefined || Object.keys(params).length || options.timeout !== 10000 || options.maxNetworkRetries !== 0) throw new Error('wrong authenticated-account request');
+      /* Until 2026-09-11 this stub required `(undefined, {}, options)` — the exact
+       * argument shape stripe-node 17 rejects. A stub cannot know what the real SDK
+       * accepts, so it asserts only the outcomes that matter: nothing that could be
+       * an account id, and the retry override present. */
+      if (params && Object.keys(params).length) throw new Error('wrong authenticated-account request');
+      if (options?.timeout !== 10000 || options?.maxNetworkRetries !== 0) throw new Error('wrong authenticated-account request');
       return structuredClone(account);
     } },
     events: { retrieve: async id => {

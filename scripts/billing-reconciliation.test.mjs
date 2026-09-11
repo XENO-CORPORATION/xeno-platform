@@ -10,7 +10,7 @@ const snapshot = (customers = [], patch = {}) => ({ counts: { ...blankCounts, bi
 const empty = { object: 'list', data: [], has_more: false };
 function provider(overrides = {}) {
   return {
-    accounts: { retrieve: async () => ({ object: 'account', id: 'acct_fixture' }) },
+    accounts: { retrieveCurrent: async () => ({ object: 'account', id: 'acct_fixture' }) },
     customers: { retrieve: async id => ({ object: 'customer', id, livemode: false }) },
     subscriptions: { list: async () => empty }, paymentIntents: { list: async () => empty },
     checkout: { sessions: { list: async () => empty } }, ...overrides,
@@ -32,7 +32,7 @@ test('configuration and authenticated account mismatch fail before DB/provider i
     const result = await reconcileBilling({ provider: provider(), env: badEnv, readSnapshot: async () => { snapshots++; return snapshot(); } });
     assert.equal(result.complete, false); assert.deepEqual(result.issues, ['configuration_invalid']);
   }
-  const mismatch = provider({ accounts: { retrieve: async () => ({ object: 'account', id: 'acct_other' }) } });
+  const mismatch = provider({ accounts: { retrieveCurrent: async () => ({ object: 'account', id: 'acct_other' }) } });
   const result = await reconcileBilling({ provider: mismatch, env, readSnapshot: async () => { snapshots++; return snapshot(); } });
   assert.deepEqual(result.issues, ['account_verification_failed']); assert.equal(snapshots, 0);
 });
@@ -108,7 +108,7 @@ test('page and global request caps refuse apparently successful partial inventor
 
 test('final account drift refuses completeness', async () => {
   let calls = 0;
-  const p = provider({ accounts: { retrieve: async () => ({ object: 'account', id: ++calls === 1 ? 'acct_fixture' : 'acct_other' }) } });
+  const p = provider({ accounts: { retrieveCurrent: async () => ({ object: 'account', id: ++calls === 1 ? 'acct_fixture' : 'acct_other' }) } });
   const result = await reconcileBilling({ provider: p, env, readSnapshot: async () => snapshot() });
   assert.deepEqual(result.issues, ['final_account_verification_failed']); assert.equal(result.complete, false);
 });

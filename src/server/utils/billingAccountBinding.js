@@ -29,8 +29,31 @@ export async function boundedBillingRead(read) {
 }
 
 export async function verifyBillingAccount(provider, config, { sale = false } = {}) {
-  // Undefined first argument selects the authenticated account, never a Connect ID.
-  const account = await boundedBillingRead(options => provider.accounts.retrieve(undefined, {}, options));
+  /* `retrieveCurrent` — GET /v1/account with NO id parameter — plus explicit empty
+   * params and then the per-call options.
+   *
+   * 🔴 The obvious call, `accounts.retrieve(...)`, has an id-or-params first
+   * argument, and stripe-node 17 and 22 read that ambiguity DIFFERENTLY:
+   *
+   *   retrieve(undefined, {}, options)   22: correct     17: THROWS "Unknown arguments"
+   *   retrieve({}, options)              22: options sent as ?query=params   17: correct
+   *   retrieve(options)                  22: options DROPPED                 17: correct
+   *
+   * No single form of retrieve() is right under both. This guard was written as
+   * the first form, tested against 22 (the ROOT node_modules) and deployed against
+   * 17 (src/server, which is what the backend image installs) — where it threw on
+   * every call and surfaced as billing_account_unavailable. Nobody saw it because
+   * with the EXPECTED_* variables unset in production it had never executed there.
+   * Found 2026-09-11, the first time it ran against a real key.
+   *
+   * retrieveCurrent({}, options) is measured CORRECT under both versions: path
+   * /v1/account, and the options land in request settings rather than the query
+   * string. The per-call maxNetworkRetries: 0 is load-bearing — the backend client
+   * is built with maxNetworkRetries: 2, and retries could carry a read past the
+   * 10 s bound this wrapper promises. scripts/billing-account-binding.test.mjs
+   * proves this against the backend's OWN copy of the SDK and asserts the two
+   * copies are the same version, so the divergence cannot go quiet again. */
+  const account = await boundedBillingRead(options => provider.accounts.retrieveCurrent({}, options));
   if (account?.object !== 'account' || account.id !== config.accountId) throw billingBindingError();
   if (sale && config.livemode) {
     const requirements = account.requirements;
