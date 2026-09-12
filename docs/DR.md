@@ -60,6 +60,38 @@ that never says "resolved" leaves you guessing.
 healthy → all-clear delivered (HTTP 200); a forced real failure → alert delivered;
 the same state repeated → nothing sent; back to healthy → all-clear delivered.
 
+## 0c. The backend runs TWO replicas (2026-09-12)
+
+`xenostudio-backend` is gone as a container name. The service runs N replicas,
+named `xeno-platform-backend-1`, `-2`, ... — so **anything that needs to find it
+must resolve the compose service LABEL**, not a name:
+
+```sh
+docker ps -q --filter "label=com.docker.compose.service=backend"
+```
+
+`scripts/dr-alert.sh` and `scripts/drift-check.sh` already do. A hardcoded name
+does not error — it silently checks nothing, which is the failure worth knowing
+about.
+
+⚠️ **The cron entry MUST pass `EXPECT_BACKENDS=2`.** Without it the alerter
+defaults to 1 and a dead replica reads as healthy. That is armed, and was proven
+by killing a replica: the alert fired.
+
+**Proven when this shipped**, by doing it rather than reasoning about it:
+exactly one leader (backend-1 acquired, backend-2 did not, and only the leader
+started the sweeps); nginx really round-robins (44 and 46 requests across the
+pair); and killing the leader cost **zero requests** — 10/10 probes returned 200
+while it died, and the standby took leadership.
+
+🔴 **A killed replica does NOT come back by itself.** `restart: unless-stopped`
+is set, but Docker deliberately ignores restart policies for an explicit API
+stop, and compose is not a supervisor the way swarm or k8s is. So a replica lost
+to an operator kill stays down and the pair silently degrades to one. That is
+exactly what the `EXPECT_BACKENDS` check exists to catch, and it is the honest
+reason not to treat two replicas as self-healing — recovery is
+`docker compose up -d --no-deps backend`.
+
 ## 0a. The storage substrate underneath this box — measured 2026-09-12
 
 🔴 **This VM pauses under you, and it did yesterday.** `xeno-platform-001` is
