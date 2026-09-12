@@ -279,8 +279,45 @@ if [ "$SERVICE" = "chat-workers" ]; then
   log "matched chat-extractor healthcheck PASSED"
 fi
 
-log "swapping in new $SERVICE container ..."
-dc up -d --no-deps --force-recreate "$SERVICE"
+# --- 5b. Swap ---------------------------------------------------------------
+# A service running N>1 replicas is swapped ONE AT A TIME, so a peer on the
+# previous image keeps serving throughout. `up -d --force-recreate` recreates
+# every replica at once, which reopens exactly the gap replicas exist to close.
+replica_ids() { docker ps -q --filter "label=com.docker.compose.service=$SERVICE"; }
+replica_count() { replica_ids | grep -c . || true; }
+
+wait_container_healthy() {   # $1 = container id, $2 = tries
+  _c="$1"; _n="${2:-60}"
+  while [ "$_n" -gt 0 ]; do
+    _st="$(docker inspect -f '{{if .State.Health}}{{.State.Health.Status}}{{else}}{{.State.Status}}{{end}}' "$_c" 2>/dev/null || echo gone)"
+    case "$_st" in healthy|running) return 0 ;; esac
+    _n=$((_n - 1)); sleep 2
+  done
+  return 1
+}
+
+N_REPLICAS="$(replica_count)"
+if [ "${N_REPLICAS:-1}" -gt 1 ]; then
+  log "rolling swap: $SERVICE has $N_REPLICAS replicas — recreating one at a time"
+  for _old in $(replica_ids); do
+    _name="$(docker inspect -f '{{.Name}}' "$_old" | tr -d /)"
+    log "  retiring $_name (peers keep serving)"
+    docker rm -f "$_old" >/dev/null 2>&1 || true
+    # compose recreates the missing replica from the NEW :latest image
+    dc up -d --no-deps --no-build "$SERVICE"
+    _new="$(replica_ids | head -1)"
+    for _c in $(replica_ids); do
+      if ! wait_container_healthy "$_c" 60; then
+        log "  replica $(echo "$_c" | cut -c1-12) did not become healthy — aborting roll"
+        break 2
+      fi
+    done
+    log "  replaced $_name; $(replica_count) replica(s) healthy"
+  done
+else
+  log "swapping in new $SERVICE container ..."
+  dc up -d --no-deps --force-recreate "$SERVICE"
+fi
 
 # --- 6. Healthcheck gate ---------------------------------------------------
 # backend waits through migrations, so give it longer.
