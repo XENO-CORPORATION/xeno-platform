@@ -16,7 +16,11 @@
 set -eu
 
 LOG="${DRIFT_LOG:-/mnt/projects/xeno-platform/backups/drift-check.log}"
-BACKEND="${BACKEND_CONTAINER:-xenostudio-backend}"
+# The backend runs as N replicas, so it has no container_name. Resolve it by
+# the compose service label and take the first — any replica has the same
+# image and environment, which is all this check reads.
+BACKEND="${BACKEND_CONTAINER:-$(docker ps -q --filter "label=com.docker.compose.service=backend" 2>/dev/null | head -1)}"
+[ -n "$BACKEND" ] || BACKEND=xenostudio-backend  # pre-scale fallback
 TS="$(date '+%Y-%m-%dT%H:%M:%S%z')"
 
 if [ "$(id -u)" -eq 0 ]; then DOCKER="docker"; else DOCKER="sudo docker"; fi

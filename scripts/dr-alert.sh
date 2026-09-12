@@ -78,9 +78,25 @@ D="$(df --output=pcent / 2>/dev/null | tail -1 | tr -dc '0-9')"
 [ -n "${D:-}" ] && [ "$D" -ge "$DISK_PCT" ] && add "Root filesystem is ${D}% full (limit ${DISK_PCT}%)."
 
 # 7. The containers that matter.
-for c in xenostudio-postgres xenostudio-backend xenostudio-frontend; do
+# Singleton services still have a container_name and are checked by it. The
+# backend does NOT: it runs as N replicas, so compose names them backend-1,
+# backend-2, ... and a hardcoded name would silently check nothing.
+for c in xenostudio-postgres xenostudio-frontend; do
   st="$($DOCKER inspect -f '{{if .State.Health}}{{.State.Health.Status}}{{else}}{{.State.Status}}{{end}}' "$c" 2>/dev/null || echo missing)"
   case "$st" in healthy|running) ;; *) add "Container $c is '$st'." ;; esac
+done
+
+# Backend replicas, resolved by the compose service label so this works at any
+# replica count and survives a rename.
+BACKENDS="$($DOCKER ps -q --filter "label=com.docker.compose.service=backend" 2>/dev/null)"
+BACKEND_N="$(printf '%s
+' "$BACKENDS" | grep -c . || true)"
+if [ "${BACKEND_N:-0}" -lt "${EXPECT_BACKENDS:-1}" ]; then
+  add "Only ${BACKEND_N:-0} backend replica(s) running, expected ${EXPECT_BACKENDS:-1} — a replica died and nothing restarted it."
+fi
+for c in $BACKENDS; do
+  st="$($DOCKER inspect -f '{{if .State.Health}}{{.State.Health.Status}}{{else}}{{.State.Status}}{{end}}' "$c" 2>/dev/null || echo missing)"
+  case "$st" in healthy|running) ;; *) add "Backend replica $(echo "$c" | cut -c1-12) is '$st'." ;; esac
 done
 
 # 8. The actual product, from outside the container.
@@ -107,7 +123,10 @@ fi
 log "state changed -> ${SUBJ}"
 
 [ -z "$ALERT_TO" ] && { log "ERROR: no recipient (set $BASE/.alert-email); alert NOT sent"; exit 1; }
-KEY="$($DOCKER exec xenostudio-backend printenv RESEND_API_KEY 2>/dev/null || true)"
+# Any replica carries the same environment; take the first.
+KEY_SRC="$(printf '%s
+' "$BACKENDS" | head -1)"
+KEY="$([ -n "$KEY_SRC" ] && $DOCKER exec "$KEY_SRC" printenv RESEND_API_KEY 2>/dev/null || true)"
 [ -z "${KEY:-}" ] && { log "ERROR: RESEND_API_KEY unavailable; alert NOT sent"; exit 1; }
 
 RESP="$(curl -sS -m 20 -o /dev/null -w '%{http_code}' -X POST https://api.resend.com/emails \
