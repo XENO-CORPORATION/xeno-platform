@@ -280,44 +280,37 @@ if [ "$SERVICE" = "chat-workers" ]; then
 fi
 
 # --- 5b. Swap ---------------------------------------------------------------
-# A service running N>1 replicas is swapped ONE AT A TIME, so a peer on the
-# previous image keeps serving throughout. `up -d --force-recreate` recreates
-# every replica at once, which reopens exactly the gap replicas exist to close.
-replica_ids() { docker ps -q --filter "label=com.docker.compose.service=$SERVICE"; }
-replica_count() { replica_ids | grep -c . || true; }
+# 🔴 PLAIN DOCKER COMPOSE CANNOT ROLL REPLICAS ONE AT A TIME. `up -d` reconciles
+# EVERY replica of a service, so retiring one and calling `up` recreates the
+# peers too. A one-at-a-time loop was tried on 2026-09-12 and failed exactly
+# that way: it retired backend-1, compose then recreated backend-2 as well and
+# created backend-3, and the loop died on a container id that no longer existed.
+# It cost 4 seconds of 502s — worse than the all-at-once swap it replaced.
+#
+# So the swap is honest about what compose can do: recreate, then gate on EVERY
+# replica being healthy before declaring success. A brief gap remains while the
+# replicas restart together.
+#
+# The real fix is not a cleverer loop. It is two INDEPENDENTLY DEPLOYABLE
+# services (backend-a / backend-b) sharing config through a YAML anchor, both
+# carrying the network alias `backend` so nginx still resolves the pair — then
+# `up -d --no-deps backend-a` touches exactly one. That is a compose refactor,
+# not a deploy-script change, and it is what closes the last of P0.2/P0.4.
+log "swapping in new $SERVICE container(s) ..."
+dc up -d --no-deps --force-recreate "$SERVICE"
 
-wait_container_healthy() {   # $1 = container id, $2 = tries
-  _c="$1"; _n="${2:-60}"
-  while [ "$_n" -gt 0 ]; do
+# Gate on EVERY replica, not just whichever one answers the published port. With
+# N>1 a port check can pass while a peer is dead.
+for _c in $(docker ps -q --filter "label=com.docker.compose.service=$SERVICE"); do
+  _tries=60
+  while [ "$_tries" -gt 0 ]; do
     _st="$(docker inspect -f '{{if .State.Health}}{{.State.Health.Status}}{{else}}{{.State.Status}}{{end}}' "$_c" 2>/dev/null || echo gone)"
-    case "$_st" in healthy|running) return 0 ;; esac
-    _n=$((_n - 1)); sleep 2
+    case "$_st" in healthy|running) break ;; esac
+    _tries=$((_tries - 1)); sleep 2
   done
-  return 1
-}
-
-N_REPLICAS="$(replica_count)"
-if [ "${N_REPLICAS:-1}" -gt 1 ]; then
-  log "rolling swap: $SERVICE has $N_REPLICAS replicas — recreating one at a time"
-  for _old in $(replica_ids); do
-    _name="$(docker inspect -f '{{.Name}}' "$_old" | tr -d /)"
-    log "  retiring $_name (peers keep serving)"
-    docker rm -f "$_old" >/dev/null 2>&1 || true
-    # compose recreates the missing replica from the NEW :latest image
-    dc up -d --no-deps --no-build "$SERVICE"
-    _new="$(replica_ids | head -1)"
-    for _c in $(replica_ids); do
-      if ! wait_container_healthy "$_c" 60; then
-        log "  replica $(echo "$_c" | cut -c1-12) did not become healthy — aborting roll"
-        break 2
-      fi
-    done
-    log "  replaced $_name; $(replica_count) replica(s) healthy"
-  done
-else
-  log "swapping in new $SERVICE container ..."
-  dc up -d --no-deps --force-recreate "$SERVICE"
-fi
+  _n="$(docker inspect -f '{{.Name}}' "$_c" 2>/dev/null | tr -d / || echo "$_c")"
+  log "  replica $_n: $_st"
+done
 
 # --- 6. Healthcheck gate ---------------------------------------------------
 # backend waits through migrations, so give it longer.
