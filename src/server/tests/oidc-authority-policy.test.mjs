@@ -43,7 +43,17 @@ test('XENO Post is registered against its reachable API callback', () => {
     id: 'xeno-post',
     name: 'XENO Post',
     loopback: false,
-    redirects: ['https://post.xenostudio.ai/api/v1/platform/xeno/callback'],
+    /* BOTH hosts, and the order matches the seed. xeno-post is mid-rebrand and
+     * reachable on either origin; the seed's upsert REPLACES this array, so a
+     * host missing here is a host that stops being able to sign in. Updated
+     * 2026-09-12 — d64ad3d added the xenosystem host to the seed and left this
+     * assertion on the old single-host list, which put `npm test` red on main.
+     * deepEqual is kept deliberately: this is an authority policy, and "some of
+     * the right redirects" is not a property worth asserting. */
+    redirects: [
+      'https://post.xenosystem.ai/api/v1/platform/xeno/callback',
+      'https://post.xenostudio.ai/api/v1/platform/xeno/callback',
+    ],
   });
 });
 
