@@ -1,0 +1,107 @@
+#!/usr/bin/env bash
+#
+# xeno-host-alert — tell a human when a XENO guest is down, paused, or unreachable.
+#
+# WHY THIS LIVES ON THE PROXMOX HOST AND NOT IN THE VM
+#   xeno-platform-001 runs dr-alert.sh, which covers "the box is up but something
+#   is broken". It structurally cannot report the box being GONE — a monitor
+#   inside a paused VM is paused too. This runs one layer below the guests, so a
+#   guest freezing is fully visible from here.
+#
+#   That is not hypothetical: VM 120 (the money box) was paused by a storage
+#   fault on 2026-09-11 13:14 and nobody was told. 119 such events across 24 VMs
+#   are on record. xeno-vm-iowatch already RESUMES them within ~30s; it has no
+#   notification path, so recovery has always been silent.
+#
+# SEPARATION OF CONCERNS — deliberately two programs, not one:
+#   xeno-vm-iowatch  ACTS   (resumes an io-error guest; runs every 30s)
+#   xeno-host-alert  NOTIFIES (never touches a guest; runs every 5 min)
+#   A watchdog that also mails is a watchdog that can be wedged by a mail
+#   timeout, and this one is the safety net for 28 VMs.
+#
+# Mails only on a CHANGE of state, plus an explicit all-clear.
+#
+set -uo pipefail
+
+TAG=xeno-host-alert
+STATE=/var/lib/$TAG
+KEYFILE=/etc/xeno-alert.key
+ALERT_TO="${ALERT_TO:-emilian@bnkrsys.com}"
+ALERT_FROM="${ALERT_FROM:-XENO Infra <noreply@xenostudio.ai>}"
+IOWATCH_STATE=/var/lib/xeno-vm-iowatch
+# The guests worth waking a human for. Others are covered by the resume counter.
+WATCH_VMIDS="${WATCH_VMIDS:-119 120 115}"
+SITES="${SITES:-https://xenostudio.ai/ https://api.xenostudio.ai/health}"
+
+mkdir -p "$STATE"
+log() { logger -t "$TAG" -- "$*"; [ -t 1 ] && echo "$*"; }
+
+PROBLEMS=""
+add() { PROBLEMS+="- $1"$'\n'; }
+
+# --- 1. guest run state ------------------------------------------------------
+# `timeout` for the same reason the watchdog uses it: a guest wedged on dead
+# storage can make `qm` hang, and a hung monitor reports nothing at all.
+for vmid in $WATCH_VMIDS; do
+  [ -e "/etc/pve/qemu-server/${vmid}.conf" ] || continue
+  name=$(awk -F': ' '/^name:/{print $2}' "/etc/pve/qemu-server/${vmid}.conf" 2>/dev/null)
+  qmp=$(timeout 15 qm status "$vmid" --verbose 2>/dev/null | awk '/^qmpstatus:/{print $2}')
+  case "${qmp:-unknown}" in
+    running) ;;
+    io-error) add "VM $vmid (${name:-?}) is PAUSED BY A STORAGE FAULT (io-error). xeno-vm-iowatch should resume it within 30s — if this persists, it is not resuming." ;;
+    paused)   add "VM $vmid (${name:-?}) is PAUSED. The watchdog ignores 'paused' on purpose, so this is either a human or a failed resume." ;;
+    unknown)  add "VM $vmid (${name:-?}) status could not be read — 'qm status' timed out or the guest is gone." ;;
+    *)        add "VM $vmid (${name:-?}) qmpstatus is '$qmp' (expected 'running')." ;;
+  esac
+done
+
+# --- 2. NEW pause events since the last check -------------------------------
+# These self-heal, so they never show up as a bad state at check time — but a
+# money box freezing is worth knowing about even when it came back by itself.
+TOTAL=0
+for f in "$IOWATCH_STATE"/*.count; do
+  [ -e "$f" ] || continue
+  TOTAL=$(( TOTAL + $(cat "$f" 2>/dev/null || echo 0) ))
+done
+PREV=$(cat "$STATE/resume-total" 2>/dev/null || echo "$TOTAL")
+echo "$TOTAL" > "$STATE/resume-total"
+if [ "$TOTAL" -gt "$PREV" ]; then
+  add "$(( TOTAL - PREV )) new storage-fault pause(s) across the estate since the last check (lifetime total ${TOTAL}). Guests were auto-resumed; the share at 192.168.2.210 is dropping connections."
+fi
+
+# --- 3. the products, checked from OUTSIDE the guests ------------------------
+for url in $SITES; do
+  code=$(curl -fsS -m 20 -o /dev/null -w '%{http_code}' "$url" 2>/dev/null || echo 000)
+  case "$code" in 2*|3*) ;; *) add "$url returned HTTP ${code} (checked from the hypervisor, so this is not a VM-local network problem)." ;; esac
+done
+
+# --- state change -----------------------------------------------------------
+NOW=$(printf '%s' "$PROBLEMS" | md5sum | cut -d' ' -f1)
+WAS=$(cat "$STATE/hash" 2>/dev/null || echo none)
+[ "$NOW" = "$WAS" ] && exit 0
+printf '%s' "$NOW" > "$STATE/hash"
+
+if [ -n "$PROBLEMS" ]; then
+  SUBJ="[XENO INFRA] $(hostname): $(printf '%s' "$PROBLEMS" | grep -c '^- ') problem(s)"
+  BODY="Detected $(date '+%Y-%m-%d %H:%M:%S %Z') on $(hostname) (the Proxmox host, below the guests):
+
+${PROBLEMS}
+This monitor runs on the hypervisor, so it sees guests that cannot report for
+themselves. It never touches a guest — xeno-vm-iowatch does the resuming."
+else
+  SUBJ="[XENO INFRA] $(hostname): all clear"
+  BODY="All monitored guests running and all endpoints answering at $(date '+%Y-%m-%d %H:%M:%S %Z')."
+fi
+log "state changed -> $SUBJ"
+
+KEY=$(tr -d '\r\n' < "$KEYFILE" 2>/dev/null)
+[ -z "$KEY" ] && { log "ERROR: no API key at $KEYFILE; alert NOT sent"; exit 1; }
+PAYLOAD=$(ALERT_FROM="$ALERT_FROM" ALERT_TO="$ALERT_TO" SUBJ="$SUBJ" BODY="$BODY" python3 -c '
+import json,os
+print(json.dumps({"from":os.environ["ALERT_FROM"],"to":[os.environ["ALERT_TO"]],
+                  "subject":os.environ["SUBJ"],"text":os.environ["BODY"]}))')
+CODE=$(curl -sS -m 20 -o /dev/null -w '%{http_code}' -X POST https://api.resend.com/emails \
+  -H "Authorization: Bearer ${KEY}" -H 'Content-Type: application/json' --data "$PAYLOAD" 2>/dev/null || echo 000)
+unset KEY
+case "$CODE" in 2*) log "alert delivered to ${ALERT_TO} (HTTP $CODE)";; *) log "ERROR: Resend returned HTTP ${CODE}; alert NOT delivered";; esac
+exit 0

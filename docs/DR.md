@@ -18,10 +18,27 @@ anything.** `heartbeat.sh` was correct, ran every five minutes, and wrote
 above it was silent in the same way: a stalled WAL shipper would have been
 discovered at restore time.
 
-| half | what it catches | what it CANNOT catch |
-|---|---|---|
-| `dr-alert.sh` (cron `*/15`, **armed**) | box is UP, something is broken | the box being gone |
-| `heartbeat.sh` (cron `*/5`, **inert**) | box/network is gone | anything subtle while it still pings |
+| layer | where it runs | catches | cannot catch |
+|---|---|---|---|
+| `dr-alert.sh` (cron `*/15`, **armed**) | inside the VM | box UP, something broken | the box being gone |
+| `xeno-host-alert` (timer `*/5`, **armed**) | **the Proxmox host** | guest paused / down / unreachable | the node itself dying |
+| `heartbeat.sh` (cron `*/5`, **inert**) | inside the VM | node/site/network gone | anything subtle while it still pings |
+
+🔴 **The middle row is the one that actually fired in anger.** VM 120 was paused
+by a storage fault on 2026-09-11 13:14 and nobody was told, because the only
+monitor lived inside the VM that was paused. `xeno-host-alert` runs one layer
+below the guests on `bnkr-node-001`, so a frozen guest is fully visible — and it
+reports NEW pause events even when `xeno-vm-iowatch` already resumed them, since
+a money box freezing is worth knowing about even when it self-heals.
+
+⚠️ **Two programs on purpose:** `xeno-vm-iowatch` *acts* (resumes, every 30s),
+`xeno-host-alert` *notifies* (never touches a guest, every 5 min). A watchdog
+that also mails is a watchdog that a mail timeout can wedge, and that one is the
+safety net for 28 VMs.
+
+⚠️ Its Resend key is cached at `/etc/xeno-alert.key` (0600, root) rather than
+read from the platform container — **an alerting path that depends on the thing
+it monitors is broken by design.**
 
 🔴 **A monitor running on the machine it watches cannot report that machine being
 down.** That is why both exist and why the second one is not optional. It needs
