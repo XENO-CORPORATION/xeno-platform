@@ -3,16 +3,25 @@ FROM node:22-alpine3.22@sha256:cd7807368cf24826297cbad5dca1a44972ccfd770647db52a
 
 # Install FFmpeg, ImageMagick, Python3, and yt-dlp for media downloads
 # Also install dumb-init for proper signal handling
+# 2026-09-12: a sha256 pin on the ClamAV definitions was removed from the RUN
+# below. It was a GATE THAT COULD NOT PASS: freshclam fetches the CURRENT
+# definitions and daily.cvd changes every day by design, so hashes recorded
+# once matched only on the day they were written. Every build afterwards
+# succeeded purely from Docker's layer cache, and the first build after a
+# `docker builder prune` failed - which is what made the production image
+# unbuildable from source, and is the real reason this box was a snowflake.
+#
+# Integrity is not lost: CVD files are DIGITALLY SIGNED by ClamAV and freshclam
+# verifies that signature before writing them. The sha256 layer added nothing
+# except a daily expiry. The `test -s` calls keep the build honest about
+# freshclam having actually produced the files.
 RUN apk add --no-cache ffmpeg imagemagick python3 py3-pip dumb-init \
       clamav=1.4.3-r0 poppler-utils=25.04.0-r0 \
       tesseract-ocr=5.5.0-r2 tesseract-ocr-data-eng=5.5.0-r2 font-dejavu=2.37-r6 \
     && pip3 install --break-system-packages yt-dlp \
     && freshclam --datadir=/var/lib/clamav \
-    && printf '%s  %s\n' \
-      '6d4aa01f219e988060fc419f495d07f27e0cdf1a2cccc065971da922c76f7ffb' '/var/lib/clamav/bytecode.cvd' \
-      'a32c46bdc47b84932cabcc7687bc8d6624cee7acb0c1990041c771adb07a60b5' '/var/lib/clamav/daily.cvd' \
-      '0b2182d229f46981ec8f535382222f7c9dfdd656b250ad47988b910a8d302365' '/var/lib/clamav/main.cvd' \
-      | sha256sum -c -
+    && test -s /var/lib/clamav/daily.cvd \
+    && test -s /var/lib/clamav/main.cvd
 
 # SECURITY: Create non-root user early (before COPY --chown)
 RUN addgroup -g 1001 -S appgroup && \
