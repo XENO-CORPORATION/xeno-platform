@@ -125,6 +125,55 @@ those lines were connection strings. `xeno_gateway_runtime` and
 host-to-host without passing through a terminal. **Grep for the KEY and extract
 the field — never print a matching line from a file that holds credentials.**
 
+## 0e. Secrets are backed up too — they were not (2026-09-12)
+
+🔴 **The database was recoverable and the means to USE it were not.**
+`pg-backup.sh` made the money ledger restorable to any five-minute point,
+offsite and encrypted. It backed up no secret at all — and without `STRIPE_*`,
+`JWT_ACCESS_SECRET`, `POSTGRES_PASSWORD` and the other 92 variables, a restored
+database is rows no application can open. Those variables were single-copy on a
+VM that a storage fault had paused the day before.
+
+`scripts/secrets-backup.sh` (nightly 03:45) closes it over the same proven path:
+GPG to the DR public key, then rclone to `r2backup:.../secrets/<host>/`.
+
+**Where secrets live — the inventory, because nobody had one:**
+
+| host | path | what |
+|---|---|---|
+| xeno-platform-001 | `/mnt/projects/xeno-platform/.env` | 95 vars, 18 of them `STRIPE_*` |
+| xeno-platform-001 | `.../secrets/` | docker secrets dir |
+| xeno-private-api-001 | `/home/bunker/apps/xeno-api-proxy/.env` | 86 vars, every provider credential |
+| bnkr-node-001 | `/etc/xeno-alert.key` | Resend key for host alerting |
+| operator workstation | `~/.xeno-secrets` | 45 keys — the LOCKED root store |
+
+⚠️ **The gateway never gets R2 credentials.** It encrypts its own secrets with
+only the PUBLIC key and the platform box uploads the blob. Spreading write
+credentials to a second host to back up secrets would have been the opposite of
+the point.
+
+### Restoring (PROVEN, not assumed)
+
+The private half is deliberately absent from every server — verified: the
+platform box is **refused** when it tries to decrypt its own backup. It is also
+NOT in the workstation's GPG keyring; it lives at rest in `~/.xeno-secrets` as
+`XENO_DB_BACKUP_GPG_PRIVATE_B64`, so a restore imports it first:
+
+```sh
+K=$(grep -m1 '^XENO_DB_BACKUP_GPG_PRIVATE_B64=' ~/.xeno-secrets | cut -d= -f2-)
+printf '%s' "$K" | base64 -d | gpg --batch --import      # never echo $K
+unset K
+gpg --batch --decrypt --output secrets.tar.gz <blob>.gpg
+tar xzf secrets.tar.gz                                    # payload/MANIFEST.txt says where each file goes
+```
+
+🔴 **The first restore attempt FAILED** — neither the server nor the
+workstation keyring could decrypt, because the key was only ever at rest in the
+store. A backup nobody can open is worse than none, and that is exactly the
+shape that stays invisible until the day it matters. Proven end to end
+afterwards: **95 variables recovered, 18 of them Stripe keys.** Delete the
+imported key again when finished so the workstation is left as found.
+
 ## 0a. The storage substrate underneath this box — measured 2026-09-12
 
 🔴 **This VM pauses under you, and it did yesterday.** `xeno-platform-001` is
