@@ -46,10 +46,12 @@ const OverviewPage = lazyRoute(() => import('./pages/Overview'));
  *
  * `/` stays EAGER on purpose: deferring the route a first-time visitor actually
  * lands on trades a smaller download for a blank frame plus a second round trip,
- * which is worse on exactly the connection this is meant to help. `/v1` and `/v2`
- * are preserved older homepages and are not that route. */
+ * which is worse on exactly the connection this is meant to help. `/v1` is a
+ * preserved older homepage and is not that route. (`/v2` and its landing-v2
+ * components were removed 2026-09-12: a second, unmaintained copy of the
+ * marketing chrome, which read no auth state at all — so it still told a
+ * signed-in visitor to sign in after the real header was fixed.) */
 const Home = lazyRoute(() => import('./pages/Home'));
-const Home2 = lazyRoute(() => import('./pages/Home2'));
 const Marketplace = lazyRoute(() => import('./pages/Marketplace'));
 const Forum = lazyRoute(() => import('./pages/Forum'));
 const ForumThread = lazyRoute(() => import('./pages/ForumThread'));
@@ -196,7 +198,6 @@ function App() {
             <Route path="/" element={<Home3 />} />
             <Route path="/v3" element={<Home3 />} />{/* alias — keep existing links working */}
             <Route path="/v1" element={<Home />} />{/* previous homepage, preserved */}
-            <Route path="/v2" element={<Home2 />} />
             <Route path="/marketplace" element={<Marketplace />} />
             {/* Product pages — registry-driven, one template for all products */}
             <Route path="/products" element={<ProductsIndex />} />

@@ -157,7 +157,6 @@ test('user-facing source no longer sends people directly to the legacy auth URL'
   const paths = [
     'src/components/landing-v3/HeroSection.tsx',
     'src/components/landing-v3/CreateWithoutLimitsSection.tsx',
-    'src/components/landing-v2/Header.tsx',
     'src/pages/ProductPage.tsx',
     'src/pages/ProductLanding.tsx',
     'src/components/layouts/AuthLayout.tsx',
