@@ -10,6 +10,39 @@ credit ledger (`credit_accounts`, `credit_transactions`, `credit_grants`,
 
 ---
 
+## 0b. Alerting — two halves, and neither covers the other
+
+Added 2026-09-12. Before this, **nothing on this box notified anybody of
+anything.** `heartbeat.sh` was correct, ran every five minutes, and wrote
+`external alerting is NOT active` into a log file no human reads. Every control
+above it was silent in the same way: a stalled WAL shipper would have been
+discovered at restore time.
+
+| half | what it catches | what it CANNOT catch |
+|---|---|---|
+| `dr-alert.sh` (cron `*/15`, **armed**) | box is UP, something is broken | the box being gone |
+| `heartbeat.sh` (cron `*/5`, **inert**) | box/network is gone | anything subtle while it still pings |
+
+🔴 **A monitor running on the machine it watches cannot report that machine being
+down.** That is why both exist and why the second one is not optional. It needs
+one thing: a ping URL from any external heartbeat monitor (Healthchecks.io,
+BetterStack, UptimeRobot) written into `.heartbeat-url`. Until then the
+"box is gone" case is uncovered.
+
+`dr-alert.sh` checks: WAL backlog, `pg_stat_archiver.failed_count`, nightly dump
+age, **physical base backup age**, offsite freshness read back from R2 (so the
+whole chain is proven, not just the local end), disk pressure, container health,
+and the live site returning 200. Recipient is `.alert-email`; sender is the
+already-verified `noreply@xenostudio.ai`.
+
+It mails **only on a change of state**, including an explicit all-clear — a
+monitor that mails every 15 minutes is one people filter into a folder, and one
+that never says "resolved" leaves you guessing.
+
+**Verified in both directions on install**, which is the only reason to trust it:
+healthy → all-clear delivered (HTTP 200); a forced real failure → alert delivered;
+the same state repeated → nothing sent; back to healthy → all-clear delivered.
+
 ## 0a. The storage substrate underneath this box — measured 2026-09-12
 
 🔴 **This VM pauses under you, and it did yesterday.** `xeno-platform-001` is
