@@ -31,10 +31,10 @@ remount `hard`. Measured today, in `/etc/pve/storage.cfg` *and* in
 **What the kernel actually says**, which names the real cause:
 
 ```
-CIFS: VFS: \192.168.2.210 sends on sock ... stuck for 15 seconds   (repeatedly)
-CIFS: VFS: \192.168.2.210 Error -104 sending data on socket to server   (ECONNRESET)
-CIFS: VFS: \192.168.2.210 Error -32  sending data on socket to server   (EPIPE, x many)
-CIFS: VFS: \192.168.2.210 has not responded in 180 seconds. Reconnecting...
+CIFS: VFS: \\192.168.2.210 sends on sock ... stuck for 15 seconds   (repeatedly)
+CIFS: VFS: \\192.168.2.210 Error -104 sending data on socket to server   (ECONNRESET)
+CIFS: VFS: \\192.168.2.210 Error -32  sending data on socket to server   (EPIPE, x many)
+CIFS: VFS: \\192.168.2.210 has not responded in 180 seconds. Reconnecting...
 ```
 
 The server stops reading, then **resets the TCP connection**. `hard` means
