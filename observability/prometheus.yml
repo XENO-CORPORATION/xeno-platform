@@ -1,0 +1,30 @@
+# Prometheus for xeno-platform.
+#
+# Scrapes the backend replicas by DNS. Docker's embedded DNS returns an A record
+# per replica for the service name, so this discovers however many are running
+# without a list to maintain — the same property nginx relies on.
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+  external_labels:
+    host: xeno-platform-001
+
+rule_files:
+  - /etc/prometheus/slo-rules.yml
+
+scrape_configs:
+  - job_name: xeno-backend
+    metrics_path: /metrics
+    dns_sd_configs:
+      - names: ['backend']
+        type: A
+        port: 8080
+    relabel_configs:
+      # __address__ is the container IP; keep it as the instance so a burning
+      # SLO can be traced to ONE replica rather than to "the backend".
+      - source_labels: [__address__]
+        target_label: instance
+
+  - job_name: prometheus
+    static_configs:
+      - targets: ['127.0.0.1:9090']

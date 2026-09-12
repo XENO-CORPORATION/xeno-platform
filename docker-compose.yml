@@ -678,7 +678,36 @@ services:
       timeout: 10s
       retries: 3
 
+  # Metrics store for the SLOs in observability/slo-rules.yml.
+  # Bound to LOOPBACK only: this is operational detail, and the site is
+  # deliberately de-indexed and closed. Reach it with an SSH tunnel.
+  prometheus:
+    image: prom/prometheus:v3.1.0
+    container_name: xenostudio-prometheus
+    restart: unless-stopped
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      # 15 days AND a size cap: / on this box runs ~82% full and an
+      # observability stack must never be the thing that fills it.
+      - --storage.tsdb.retention.time=15d
+      - --storage.tsdb.retention.size=4GB
+      - --web.listen-address=0.0.0.0:9090
+    volumes:
+      - ./observability/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./observability/slo-rules.yml:/etc/prometheus/slo-rules.yml:ro
+      - prometheus_data:/prometheus
+    ports:
+      - "127.0.0.1:9090:9090"
+    networks:
+      - xenostudio-network
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 1G
+
 volumes:
+  prometheus_data:
   postgres_data:
     driver: local
   redis_data:

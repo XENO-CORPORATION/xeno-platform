@@ -1,0 +1,57 @@
+# SLOs and their error budgets.
+#
+# 🔴 An SLO is a DECISION, not a dashboard: it is the line at which you stop
+# shipping features and fix reliability. These are deliberately modest — a
+# platform on ONE Proxmox node with no HA cannot honestly promise more, and an
+# SLO nobody can meet gets ignored exactly like a gate that cannot pass.
+#
+#   Availability  99.5% of API requests non-5xx over 30 days
+#                 -> error budget 0.5% = ~3h 39m of full outage per 30 days
+#   Latency       95% of API requests under 1s over 30 days
+#
+# Alerts fire on BURN RATE, not on a single bad minute: a 14.4x burn over 1h
+# consumes 2% of a 30-day budget in that hour and is the standard fast-burn
+# signal from the Google SRE workbook. A slow 6x burn over 6h catches the
+# degradation that never trips a spike alert.
+groups:
+  - name: xeno-slo
+    rules:
+      - record: job:xeno_http_requests:rate5m
+        expr: sum(rate(xeno_http_requests_total[5m]))
+      - record: job:xeno_http_errors:rate5m
+        expr: sum(rate(xeno_http_requests_total{status=~"5.."}[5m]))
+      - record: job:xeno_error_ratio:rate5m
+        expr: job:xeno_http_errors:rate5m / clamp_min(job:xeno_http_requests:rate5m, 0.001)
+
+      - alert: XenoAvailabilityFastBurn
+        expr: job:xeno_error_ratio:rate5m > (14.4 * 0.005)
+        for: 5m
+        labels: { severity: page, slo: availability }
+        annotations:
+          summary: "Availability budget burning 14.4x — ~2% of the 30d budget per hour"
+
+      - alert: XenoAvailabilitySlowBurn
+        expr: job:xeno_error_ratio:rate5m > (6 * 0.005)
+        for: 30m
+        labels: { severity: ticket, slo: availability }
+        annotations:
+          summary: "Availability budget burning 6x — degradation a spike alert would miss"
+
+      - alert: XenoLatencySLOBreach
+        expr: >
+          (sum(rate(xeno_http_request_duration_seconds_bucket{le="1"}[30m]))
+           / clamp_min(sum(rate(xeno_http_request_duration_seconds_count[30m])), 0.001)) < 0.95
+        for: 15m
+        labels: { severity: ticket, slo: latency }
+        annotations:
+          summary: "Under 95% of requests completing in 1s over 30m"
+
+      # 🔴 Not an SLO, but the invariant no request metric can show: the
+      # background work must run on EXACTLY ONE replica. Two means duplicate
+      # emails and concurrent retention sweeps; zero means the sweeps stopped.
+      - alert: XenoBackgroundLeaderWrong
+        expr: sum(xeno_background_leader) != 1
+        for: 5m
+        labels: { severity: page, slo: correctness }
+        annotations:
+          summary: "sum(xeno_background_leader) != 1 — background work is duplicated or stopped"
