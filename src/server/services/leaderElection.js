@@ -49,16 +49,31 @@ export function createLeaderElection(pool, options = {}) {
 
   const isLeader = () => leader;
 
-  /** Register work that must run on exactly one replica. */
+  /**
+   * Register work that must run on exactly one replica.
+   *
+   * 🔴 Registration can happen AFTER leadership is already held — index.js
+   * registers five jobs one after another and the lock is usually acquired
+   * before the first of them. So this starts only the jobs that have not
+   * started yet. An earlier version re-ran the whole list on every
+   * registration, which double-started the Forum mailer in a SINGLE replica —
+   * the exact duplicate-work failure this module exists to prevent, caused by
+   * the module itself. It was visible as two "sweep every 120s" lines from one
+   * container.
+   */
   function whenLeader(startFn) {
     onLeadFns.push(startFn);
-    if (leader) runStarts();
+    if (leader) startPending();
     return () => {};
   }
 
-  function runStarts() {
-    const stops = [];
+  const started = new Set();
+  const stops = [];
+
+  function startPending() {
     for (const fn of onLeadFns) {
+      if (started.has(fn)) continue;
+      started.add(fn);
       try {
         const stop = fn();
         if (typeof stop === 'function') stops.push(stop);
@@ -67,9 +82,10 @@ export function createLeaderElection(pool, options = {}) {
       }
     }
     teardown = () => {
-      for (const stop of stops) {
+      for (const stop of stops.splice(0)) {
         try { stop(); } catch { /* a failed stop must not block demotion */ }
       }
+      started.clear();
     };
   }
 
@@ -83,7 +99,7 @@ export function createLeaderElection(pool, options = {}) {
       if (rows[0]?.ok) {
         leader = true;
         logger.log(`[Leader] acquired '${key}' — this replica runs the background work`);
-        runStarts();
+        startPending();
       }
     } catch (err) {
       // A failed probe must not kill the process, and must not leave a broken

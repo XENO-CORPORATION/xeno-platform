@@ -29,6 +29,31 @@ test('exactly ONE of two replicas becomes leader', async () => {
   await a.stop(); await b.stop();
 });
 
+test('MULTIPLE jobs on one election each start EXACTLY ONCE', async () => {
+  /*
+   * 🔴 The regression this pins, found in production logs rather than here.
+   * index.js registers five jobs in a row and the lock is normally acquired
+   * before the first of them, so every later registration ran the whole list
+   * again: job 1 started five times. It showed up as two "[ForumNotifyEmail]
+   * sweep every 120s" lines from a SINGLE container — the exact duplicate work
+   * this module exists to prevent, caused by the module.
+   *
+   * The original tests missed it because each election registered ONE job.
+   */
+  const e = createLeaderElection(pool, { key: `${KEY}-multi`, pollMs: 200, logger: { log() {}, error() {} } });
+  const runs = [0, 0, 0, 0, 0];
+  e.start();
+  await settle(500);
+  assert.equal(e.isLeader(), true, 'should hold the lock before registering');
+
+  // Register AFTER leadership — the ordering that produced the bug.
+  for (let i = 0; i < runs.length; i += 1) e.whenLeader(() => { runs[i] += 1; return () => {}; });
+  await settle(300);
+
+  assert.deepEqual(runs, [1, 1, 1, 1, 1], `each job must start exactly once, got ${JSON.stringify(runs)}`);
+  await e.stop();
+});
+
 test('a standby TAKES OVER when the leader stops — the reason this is a lock, not a flag', async () => {
   const a = createLeaderElection(pool, { key: KEY, pollMs: 200, logger: { log() {}, error() {} } });
   const b = createLeaderElection(pool, { key: KEY, pollMs: 200, logger: { log() {}, error() {} } });
