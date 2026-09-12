@@ -9,6 +9,7 @@
  */
 
 import { v4 as uuidv4 } from 'uuid';
+import { recordRequest } from '../services/metrics.js';
 
 // --------------------------------------------------------------------------
 // Logger utility — lightweight structured logger (Pino-like JSON output)
@@ -122,6 +123,19 @@ export function requestLoggerMiddleware(req, res, next) {
       contentLength: res.getHeader('content-length'),
       userId: req.user?.id,
     };
+
+    // RED metrics come from the SAME numbers this log line already computed —
+    // one source, so a dashboard and a log can never disagree about a request.
+    // req.route?.path is the Express PATTERN ('/c/:id'), which is already the
+    // bounded label we want; req.path is the concrete URL and only a fallback.
+    try {
+      recordRequest({
+        method: req.method,
+        route: req.route?.path || req.originalUrl?.split('?')[0] || req.path,
+        statusCode: res.statusCode,
+        durationMs,
+      });
+    } catch { /* metrics must never break a response */ }
 
     if (res.statusCode >= 500) {
       req.log.error('request_error', logData);

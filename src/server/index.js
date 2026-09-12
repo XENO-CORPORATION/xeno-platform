@@ -103,6 +103,7 @@ import { runRequiredStartupMigrations } from './services/startupSchema.js';
 import { startScheduledTasksWorker } from './workers/chatScheduledWorker.js';
 import { startLibraryIngestionWorker } from './workers/libraryIngestionWorker.js';
 import { createLeaderElection } from './services/leaderElection.js';
+import { render as renderMetrics } from './services/metrics.js';
 import { reasoningCapabilityForModel, reasoningEffortForModel } from './lib/chatModelCapabilities.js';
 import { registerManagedLibraryFile } from './services/libraryAssets.js';
 import { assembleProjectContext } from './services/chatProjectContext.js';
@@ -2911,6 +2912,22 @@ app.get('/health', async (req, res) => {
   }
 });
 
+// 🔴 REGISTERED BEFORE THE 404 CATCH-ALL BELOW. Express matches in
+// registration order, so a route added after it is unreachable and answers
+// 404 forever with nothing to show it was ever wrong.
+// Prometheus scrape target. Deliberately NOT under /api: nginx proxies /api/*
+// to the public internet, and request metrics plus a build SHA are operational
+// detail, not a public surface. Prometheus runs on the same Docker network and
+// scrapes each replica container directly.
+//
+// isLeader is passed in because it is the one gauge that MUST differ between
+// replicas — two replicas reporting 1 means the background work is running
+// twice, and no request metric would ever show that.
+app.get('/metrics', (_req, res) => {
+  res.set('Content-Type', 'text/plain; version=0.0.4; charset=utf-8');
+  res.send(renderMetrics({ isLeader: () => backgroundLeader.isLeader() }));
+});
+
 // Handle 404 - with proxy redirect for relative URLs from proxied pages
 app.use((req, res) => {
   const referer = req.get('Referer') || '';
@@ -4050,6 +4067,7 @@ process.on('uncaughtException', (error) => {
 // sweeps just stop and nothing says so. See services/leaderElection.js.
 const backgroundLeader = createLeaderElection(pool);
 backgroundLeader.start();
+
 
 app.locals.migrationsReady = false;
 
