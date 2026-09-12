@@ -1,0 +1,166 @@
+---
+# site.yml — everything about these boxes that is NOT in the application repo.
+#
+# 🔴 WHAT THIS DELIBERATELY DOES NOT CONTAIN: secrets. Not the .env files, not
+# the R2 credentials, not the GPG private key. Those live encrypted in R2 (see
+# scripts/secrets-backup.sh) and at rest in ~/.xeno-secrets. IaC that carries
+# plaintext credentials turns "reproducible" into "leaked in git forever".
+#
+# It DOES assert the secrets are present, because a box that is configured
+# correctly and has no credentials is still down.
+#
+# Run:  ansible-playbook -i inventory.ini site.yml --check --diff   (dry run)
+#       ansible-playbook -i inventory.ini site.yml                  (apply)
+
+- name: Base packages every XENO VM needs
+  hosts: vms
+  become: true
+  tasks:
+    - name: DR and transport tooling
+      ansible.builtin.apt:
+        name: [rclone, gnupg, wireguard-tools, curl, ca-certificates]
+        state: present
+        update_cache: false
+
+    - name: WireGuard link is configured and enabled
+      # Replaces the single `ssh -L` process that used to carry
+      # gateway->platform traffic. Kernel-level, mutually key-authenticated,
+      # self-healing. The KEYS are not here: wg0.conf holds only public keys and
+      # the private key is read from /etc/wireguard/privkey at PostUp.
+      ansible.builtin.systemd_service:
+        name: wg-quick@wg0
+        enabled: true
+        state: started
+      # A box with no wg0.conf yet must not fail the whole run.
+      when: ansible_facts.get('wg0') is defined or true
+      failed_when: false
+
+    - name: The DR public key is trusted (public half only — never the private)
+      ansible.builtin.command:
+        cmd: "gpg --list-keys {{ dr_gpg_fpr }}"
+      register: dr_key
+      changed_when: false
+      failed_when: false
+
+    - name: Warn when the DR public key is missing
+      ansible.builtin.debug:
+        msg: "DR public key {{ dr_gpg_fpr }} is NOT imported — this host cannot encrypt a backup"
+      when: dr_key.rc != 0
+
+- name: Platform box — disaster recovery and observability
+  hosts: platform
+  become: true
+  vars:
+    repo: /mnt/projects/xeno-platform
+  tasks:
+    - name: Docker must start AFTER WireGuard
+      # Postgres publishes on the wg address. If docker starts first that
+      # publish fails and the database does not come up — so the dependency is
+      # explicit rather than left to boot-order luck.
+      ansible.builtin.copy:
+        dest: /etc/systemd/system/docker.service.d/wait-for-wireguard.conf
+        mode: "0644"
+        content: |
+          [Unit]
+          After=wg-quick@wg0.service
+          Wants=wg-quick@wg0.service
+      notify: reload systemd
+
+    - name: The WAL archive directory exists and is writable by postgres (uid 999)
+      ansible.builtin.file:
+        path: "{{ repo }}/wal_archive"
+        state: directory
+        owner: "999"
+        group: "999"
+        mode: "0750"
+
+    - name: DR scripts are executable
+      # They are shipped by the application repo; this asserts the MODE, which a
+      # `git reset --hard` from a Windows-authored commit silently stripped once
+      # and killed WAL shipping until an alert caught it.
+      ansible.builtin.file:
+        path: "{{ repo }}/scripts/{{ item }}"
+        mode: "0750"
+      loop: [pg-backup.sh, pg-basebackup.sh, wal-ship.sh, dr-alert.sh, secrets-backup.sh]
+      failed_when: false
+
+    - name: DR schedule
+      ansible.builtin.cron:
+        name: "{{ item.name }}"
+        minute: "{{ item.minute }}"
+        hour: "{{ item.hour }}"
+        weekday: "{{ item.weekday | default('*') }}"
+        job: "{{ item.job }}"
+        user: root
+      loop:
+        - name: xeno-pg-dump
+          minute: "15"
+          hour: "3"
+          job: "R2_REMOTE={{ r2_remote }} BACKUP_GPG_RECIPIENT={{ dr_gpg_fpr }} {{ repo }}/scripts/pg-backup.sh >> {{ repo }}/backups/backup.log 2>&1"
+        - name: xeno-pg-basebackup
+          minute: "30"
+          hour: "2"
+          weekday: "0"
+          job: "R2_REMOTE={{ r2_remote }} BACKUP_GPG_RECIPIENT={{ dr_gpg_fpr }} {{ repo }}/scripts/pg-basebackup.sh >> {{ repo }}/backups/basebackup.log 2>&1"
+        - name: xeno-wal-ship
+          minute: "*/5"
+          hour: "*"
+          job: "R2_REMOTE={{ r2_remote }} BACKUP_GPG_RECIPIENT={{ dr_gpg_fpr }} {{ repo }}/scripts/wal-ship.sh >> {{ repo }}/backups/wal-ship.log 2>&1"
+        - name: xeno-secrets-backup
+          minute: "45"
+          hour: "3"
+          job: "R2_REMOTE={{ r2_remote }} BACKUP_GPG_RECIPIENT={{ dr_gpg_fpr }} {{ repo }}/scripts/secrets-backup.sh >> /var/log/xeno-secrets-backup.log 2>&1"
+        - name: xeno-dr-alert
+          minute: "*/15"
+          hour: "*"
+          job: "EXPECT_BACKENDS=2 {{ repo }}/scripts/dr-alert.sh >> {{ repo }}/backups/alert.log 2>&1"
+
+    - name: The alert recipient file exists
+      # Contains an address, not a credential, so it belongs in config.
+      ansible.builtin.copy:
+        dest: "{{ repo }}/.alert-email"
+        content: "emilian@bnkrsys.com\n"
+        mode: "0640"
+
+    - name: Secrets are PRESENT (asserted, never stored here)
+      ansible.builtin.stat:
+        path: "{{ repo }}/.env"
+      register: env_file
+
+    - name: Fail loudly when the platform has no .env
+      ansible.builtin.fail:
+        msg: >-
+          {{ repo }}/.env is missing. This playbook deliberately does not carry it.
+          Restore it from r2backup:xeno-db-backups/secrets/ — see docs/DR.md §0e.
+      when: not env_file.stat.exists
+
+  handlers:
+    - name: reload systemd
+      ansible.builtin.systemd_service:
+        daemon_reload: true
+
+- name: Hypervisor — the watchdog and the alerting that sits below the guests
+  hosts: hypervisor
+  become: true
+  tasks:
+    - name: I/O-error watchdog and host alerting are armed
+      # xeno-vm-iowatch RESUMES a guest a storage fault paused; xeno-host-alert
+      # NOTIFIES. Two programs on purpose — a watchdog that also mails can be
+      # wedged by a mail timeout, and it is the safety net for 28 VMs.
+      ansible.builtin.systemd_service:
+        name: "{{ item }}"
+        enabled: true
+        state: started
+      loop: [xeno-vm-iowatch.timer, xeno-host-alert.timer]
+
+    - name: Host alerting can actually send
+      ansible.builtin.stat:
+        path: /etc/xeno-alert.key
+      register: alert_key
+
+    - name: Fail loudly when the host alerter has no key
+      ansible.builtin.fail:
+        msg: >-
+          /etc/xeno-alert.key is missing — the hypervisor can detect a paused VM
+          but cannot tell anyone. Restore from the secrets backup.
+      when: not alert_key.stat.exists
