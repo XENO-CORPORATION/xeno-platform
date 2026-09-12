@@ -6,6 +6,7 @@ const read = (p) => readFileSync(new URL(p, import.meta.url), 'utf8');
 const ONBOARDING = read('../src/pages/Onboarding.tsx');
 const EMAIL = read('../src/server/services/emailService.js');
 const AUTH = read('../src/server/routes/authRoutes.js');
+const HEADER = read('../src/components/landing-v3/Header.tsx');
 
 /*
  * Four things a brand-new user hits in the first two minutes, each found by
@@ -75,4 +76,28 @@ test('no placeholder puts a real person\'s name in front of a stranger', () => {
   // The name field suggested "Emilian" — the founder — to every new signup.
   assert.ok(!/placeholder="Emilian"/.test(ONBOARDING),
     'the onboarding name placeholder must be a generic example');
+});
+
+test('the marketing header reflects whether you are signed in', () => {
+  /*
+   * 🔴 It rendered "Sign in" unconditionally, so a signed-in user landing on the
+   * homepage — the most likely first surface of a RETURN visit — was told to
+   * sign in. Reported from real use, not caught by any test, because nothing
+   * crashes: the page is simply wrong about who you are.
+   */
+  assert.match(HEADER, /useAuth\(\)/, 'the header must read auth state');
+  assert.match(HEADER, /isAuthenticated \?/, 'and branch on it');
+  assert.match(HEADER, /to="\/overview"/, 'a signed-in visitor gets a way into the workspace');
+
+  /*
+   * isLoading is not optional polish. The session resolves asynchronously, so
+   * without it a returning user sees "Sign in", then watches it change — which
+   * reads as a bug even though the end state is right.
+   */
+  assert.match(HEADER, /isLoading \?/, 'the header must not render a signed-out CTA while auth is unresolved');
+
+  // Both breakpoints. A desktop-only fix leaves the phone wrong, and the mobile
+  // menu is a separate render tree that is easy to miss.
+  assert.ok((HEADER.match(/Open workspace/g) || []).length >= 2,
+    'desktop AND mobile menus must both reflect the signed-in state');
 });

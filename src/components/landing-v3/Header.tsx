@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { ArrowUpRight, ChevronDown, Download, Menu, X } from 'lucide-react';
 import { slugify } from '../../lib/productCatalog';
+import { useAuth } from '../../contexts/AuthContext';
 
 /* XENO wordmark with a soft light that follows the cursor, masked inside the glyphs */
 function Wordmark() {
@@ -450,6 +451,18 @@ function NavDropdown({ entry, onOpen, onClose }: { entry: NavEntry; onOpen: () =
  * ────────────────────────────────────────────────────────────────────── */
 
 const Header: React.FC<HeaderProps> = ({ onGetStarted, visible = true }) => {
+  /* 🔴 The marketing header used to render "Sign in" unconditionally — so a
+   * signed-in user visiting the homepage was told to sign in, on the one surface
+   * most likely to be someone's first return visit. Safe to read auth here:
+   * BOTH shells in App.tsx wrap <Routes> in <AuthProvider>, and useAuth throws
+   * outside one.
+   *
+   * `isLoading` matters as much as `isAuthenticated`. The session is confirmed
+   * asynchronously, so rendering the signed-out CTA while that is in flight
+   * makes a returning user watch the header say "Sign in" and then change its
+   * mind. Render nothing in that slot until it is known. */
+  const { isAuthenticated, isLoading, user } = useAuth();
+  const accountName = user?.display_name || user?.username || 'workspace';
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [scrimOn, setScrimOn] = useState(false);
   const [hasScrolled, setHasScrolled] = useState(false);
@@ -536,13 +549,25 @@ const Header: React.FC<HeaderProps> = ({ onGetStarted, visible = true }) => {
 
           {/* ── Right: Sign in + Download ───────────────────────────── */}
           <div className="hidden items-center gap-5 lg:flex">
-            <button
-              type="button"
-              onClick={onGetStarted}
-              className="text-[13px] font-normal text-[#b6afa5] transition-colors hover:text-white"
-            >
-              Sign in
-            </button>
+            {isLoading ? (
+              <span aria-hidden="true" className="h-[18px] w-[52px] rounded-[4px] bg-white/[0.04]" />
+            ) : isAuthenticated ? (
+              <Link
+                to="/overview"
+                className="text-[13px] font-normal text-[#b6afa5] transition-colors hover:text-white"
+                title={`Signed in as ${accountName}`}
+              >
+                Open workspace
+              </Link>
+            ) : (
+              <button
+                type="button"
+                onClick={onGetStarted}
+                className="text-[13px] font-normal text-[#b6afa5] transition-colors hover:text-white"
+              >
+                Sign in
+              </button>
+            )}
             <Link
               to="/product/hub/download"
               className="group inline-flex h-[36px] items-center gap-2.5 rounded-[5px] border border-white/20 bg-transparent px-5 text-[12px] font-medium text-white transition-colors hover:border-white/45 hover:bg-white/[0.04]"
@@ -583,13 +608,23 @@ const Header: React.FC<HeaderProps> = ({ onGetStarted, visible = true }) => {
           </nav>
 
           <div className="grid gap-3">
-            <button
-              type="button"
-              onClick={() => { setIsMobileMenuOpen(false); onGetStarted(); }}
-              className="h-12 rounded-[6px] border border-white/10 text-sm font-medium text-[#b6afa5]"
-            >
-              Sign in
-            </button>
+            {isLoading ? null : isAuthenticated ? (
+              <Link
+                to="/overview"
+                onClick={() => setIsMobileMenuOpen(false)}
+                className="flex h-12 items-center justify-center rounded-[6px] border border-white/10 text-sm font-medium text-[#b6afa5]"
+              >
+                Open workspace
+              </Link>
+            ) : (
+              <button
+                type="button"
+                onClick={() => { setIsMobileMenuOpen(false); onGetStarted(); }}
+                className="h-12 rounded-[6px] border border-white/10 text-sm font-medium text-[#b6afa5]"
+              >
+                Sign in
+              </button>
+            )}
             <Link
               to="/product/hub/download"
               onClick={() => setIsMobileMenuOpen(false)}
