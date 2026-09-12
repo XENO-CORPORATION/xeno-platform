@@ -10,6 +10,69 @@ credit ledger (`credit_accounts`, `credit_transactions`, `credit_grants`,
 
 ---
 
+## 0. Two backups, two different questions — you need BOTH
+
+Added 2026-09-12. Until then this document described only the nightly `pg_dump`,
+which meant the recovery point was **up to 24 hours**, and on a box that takes
+money that was the largest single gap in the platform.
+
+| | `pg-backup.sh` (nightly 03:15) | `pg-basebackup.sh` (weekly Sun 02:30) + `wal-ship.sh` (every 5 min) |
+|---|---|---|
+| Kind | **logical** (`pg_dump -Fc`) | **physical** base backup + continuous WAL |
+| Answers | "give me yesterday's database" | "give me 10:42:07 this morning" |
+| Recovery point | up to 24 h | **~5 minutes** (`archive_timeout=300`) |
+| Portable across major versions | yes | no — same PG major only |
+
+🔴 **A `pg_dump` cannot be a PITR restore point.** WAL replays onto a *physical*
+copy of the cluster; there is nothing in a logical dump to replay onto. That is
+why both exist and why neither is redundant. Deleting either one silently
+removes a recovery capability.
+
+### How the pieces fit
+
+```
+postgres (archive_mode=on, archive_timeout=300)
+  └─ archive_command writes .tmp.<seg> then mv's it   ← atomic: a partial
+     into ./wal_archive                                  segment can never ship
+        └─ wal-ship.sh (cron */5)  gpg → r2backup:xeno-db-backups/wal/ → rm local
+pg-basebackup.sh (cron Sun 02:30)  gpg → r2backup:xeno-db-backups/base/
+```
+
+### Restoring to a point in time
+
+Take the newest `base-*.tar.gz` and every WAL segment from that point forward,
+then in a scratch cluster (never over production):
+
+```sh
+tar xzf base-<stamp>.tar.gz -C $DATA
+cat >>$DATA/postgresql.conf <<'CONF'
+restore_command = 'cp /pitr_wal/%f %p'
+recovery_target_time = '2026-09-12 10:34:02+00'
+recovery_target_action = 'promote'
+recovery_target_inclusive = false
+CONF
+touch $DATA/recovery.signal
+docker run -d --name pitr-verify -v $DATA:/var/lib/postgresql/data   -v $WAL:/pitr_wal:ro -e POSTGRES_PASSWORD=x <same image> postgres -c archive_mode=off
+```
+
+Then verify **selectivity**, not just that it started: a restore that contains
+everything proves only that the tar was readable. The 2026-09-12 verification
+wrote one row before the target instant and one after, and the recovered cluster
+held exactly the first — replay stopped where it was told.
+
+⚠️ **Decryption cannot happen on the box, by design.** `gpg --list-secret-keys`
+on `xeno-platform-001` returns **nothing**; only the public half
+(`12B1F40D…`) is installed, so a compromised server can write backups it can
+never read. A real offsite restore therefore runs wherever the private key is
+held, not here. The mechanism above was proven on-box against the *local*
+unencrypted artifacts; the encrypted round-trip is proven separately by the
+dump restore in §2.
+
+⚠️ **If WAL shipping stalls, `pg_wal` grows behind it and a full disk stops the
+database.** `wal-ship.sh` logs `ALERT:` once the local archive passes 2 GB.
+`/` on this box runs ~87% full, so that alert has real headroom but not much —
+check `backups/wal-ship.log` when investigating any disk-space warning.
+
 ## 1. What is backed up, where, retention
 
 | | |

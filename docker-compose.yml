@@ -3,12 +3,21 @@ services:
   postgres:
     image: pgvector/pgvector:0.8.6-pg15-bookworm@sha256:a947c45cdc5906a1bc951f20a8709e321256343ee0f251e4ae00b5e7def4e6da
     container_name: xenostudio-postgres
+    command:
+      - postgres
+      - -c
+      - archive_mode=on
+      - -c
+      - archive_command=test ! -f /wal_archive/%f && cp %p /wal_archive/.tmp.%f && mv /wal_archive/.tmp.%f /wal_archive/%f
+      - -c
+      - archive_timeout=300
     environment:
       - POSTGRES_DB=xenostudio
       - POSTGRES_USER=postgres
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:?POSTGRES_PASSWORD required}
     volumes:
       - postgres_data:/var/lib/postgresql/data
+      - ./wal_archive:/wal_archive
     ports:
       - "127.0.0.1:5433:5432"
     networks:
