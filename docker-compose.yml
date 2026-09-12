@@ -20,6 +20,12 @@ services:
       - ./wal_archive:/wal_archive
     ports:
       - "127.0.0.1:5433:5432"
+      # Reachable from xeno-private-api-001 over the WireGuard link (wg0),
+      # which replaces the single `ssh -L` process that used to carry this.
+      # Mutual key auth and encryption happen at the network layer, so no
+      # service had to have its own auth rewritten. docker.service is ordered
+      # After=wg-quick@wg0 so this publish cannot fail at boot.
+      - "10.99.0.1:5433:5432"
     networks:
       - xenostudio-network
     restart: unless-stopped
