@@ -1,0 +1,2782 @@
+/**
+ * XenoStudio Authentication API Routes
+ * Production-grade JWT-based authentication with OAuth support
+ * Providers: Google, GitHub, Twitter/X
+ */
+
+import express from 'express';
+import bcrypt from 'bcryptjs';
+import jwt from 'jsonwebtoken';
+import { v4 as uuidv4 } from 'uuid';
+import crypto from 'crypto';
+import fetch from 'node-fetch';
+import Redis from 'ioredis';
+import { deductCredits, grantCredits, getCreditSnapshot, logUsage } from '../utils/creditTransactions.js';
+import { getOrCreateBillingRuntimeContext, getUserBillingProfile, resolveRequestedBillingRuntimeContext } from '../utils/billingRuntime.js';
+
+const router = express.Router();
+let authSecuritySchemaReady = false;
+
+// ============================================
+// API KEY PROVISIONING (xeno-private-api-001)
+// ============================================
+const XENO_API_PROXY_URL = process.env.XENO_API_PROXY_URL || '';
+const INTERNAL_API_SECRET = process.env.INTERNAL_API_SECRET || '';
+
+/**
+ * Provision an API key for a user via the internal provisioning endpoint.
+ * Returns the raw API key string, or null if provisioning fails/skipped.
+ * Never throws — login must succeed even if provisioning fails.
+ */
+async function provisionApiKey(db, userId, email, displayName) {
+  if (!XENO_API_PROXY_URL || !INTERNAL_API_SECRET) {
+    return null;
+  }
+
+  try {
+    // Check if user already has a cached key
+    const cached = await db.query(
+      'SELECT api_key FROM users WHERE id = $1 AND api_key IS NOT NULL',
+      [userId]
+    );
+    if (cached.rows.length > 0 && cached.rows[0].api_key) {
+      return cached.rows[0].api_key;
+    }
+
+    // Call the provisioning endpoint
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 5000);
+
+    const response = await fetch(`${XENO_API_PROXY_URL}/internal/provision-key`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Internal-Secret': INTERNAL_API_SECRET,
+      },
+      body: JSON.stringify({ userId, email, name: displayName }),
+      signal: controller.signal,
+    });
+
+    clearTimeout(timeout);
+
+    if (!response.ok) {
+      console.error('[ApiKeyProvision] HTTP ' + response.status);
+      return null;
+    }
+
+    const data = await response.json();
+    if (data.success && data.provisioned && data.apiKey) {
+      // Cache the key in the users table
+      await db.query(
+        'UPDATE users SET api_key = $1 WHERE id = $2',
+        [data.apiKey, userId]
+      );
+      return data.apiKey;
+    }
+
+    // Key already exists on the remote side but we don't have it cached.
+    // This means the user may need to use the portal to view/regenerate their key.
+    if (data.success && data.exists) {
+      return null;
+    }
+
+    return null;
+  } catch (error) {
+    console.error('[ApiKeyProvision] Error:', error.message || error);
+    return null;
+  }
+}
+
+
+
+// ============================================
+// REDIS CONNECTION (Production)
+// ============================================
+// Use REDIS_URL from env, or fallback to Docker service name, or localhost for dev
+const REDIS_URL = process.env.REDIS_URL || 'redis://xenostudio-redis:6379';
+const redis = new Redis(REDIS_URL, {
+  maxRetriesPerRequest: 3,
+  retryDelayOnFailover: 100,
+  enableReadyCheck: true,
+  lazyConnect: true
+});
+
+redis.on('error', (err) => console.error('Redis OAuth Error:', err.message));
+redis.on('connect', () => console.log('✅ Redis connected for OAuth state management'));
+
+// OAuth state TTL (10 minutes)
+const OAUTH_STATE_TTL = 600;
+const MFA_CHALLENGE_TTL = 600;
+
+// ============================================
+// OAUTH CONFIGURATION
+// ============================================
+const OAUTH_CONFIG = {
+  google: {
+    clientId: process.env.GOOGLE_CLIENT_ID,
+    clientSecret: process.env.GOOGLE_CLIENT_SECRET,
+    authUrl: 'https://accounts.google.com/o/oauth2/v2/auth',
+    tokenUrl: 'https://oauth2.googleapis.com/token',
+    userInfoUrl: 'https://www.googleapis.com/oauth2/v2/userinfo',
+    scopes: ['openid', 'email', 'profile'],
+    callbackUrl: process.env.GOOGLE_CALLBACK_URL || 'https://xenostudio.ai/api/auth/google/callback'
+  },
+  github: {
+    clientId: process.env.GITHUB_CLIENT_ID,
+    clientSecret: process.env.GITHUB_CLIENT_SECRET,
+    authUrl: 'https://github.com/login/oauth/authorize',
+    tokenUrl: 'https://github.com/login/oauth/access_token',
+    userInfoUrl: 'https://api.github.com/user',
+    userEmailsUrl: 'https://api.github.com/user/emails',
+    scopes: ['user:email', 'read:user'],
+    callbackUrl: process.env.GITHUB_CALLBACK_URL || 'https://xenostudio.ai/api/auth/github/callback'
+  },
+  twitter: {
+    clientId: process.env.TWITTER_CLIENT_ID,
+    clientSecret: process.env.TWITTER_CLIENT_SECRET,
+    authUrl: 'https://twitter.com/i/oauth2/authorize',
+    tokenUrl: 'https://api.twitter.com/2/oauth2/token',
+    userInfoUrl: 'https://api.twitter.com/2/users/me',
+    scopes: ['users.read', 'tweet.read', 'offline.access'],
+    callbackUrl: process.env.TWITTER_CALLBACK_URL || 'https://xenostudio.ai/api/auth/twitter/callback'
+  }
+};
+
+// Frontend URL for redirects after OAuth
+const FRONTEND_URL = process.env.AUTH_FRONTEND_URL || 'https://xenostudio.ai';
+
+function appendParamsToReturnUrl(returnUrl, params = {}) {
+  const base = returnUrl || '/overview';
+  const target = base.startsWith('xeno://')
+    ? base
+    : `${FRONTEND_URL}${base}`;
+  const url = new URL(target, FRONTEND_URL);
+
+  Object.entries(params).forEach(([key, value]) => {
+    if (value === undefined || value === null) {
+      return;
+    }
+    url.searchParams.set(key, String(value));
+  });
+
+  return base.startsWith('xeno://')
+    ? `${base}${base.includes('?') ? '&' : '?'}${url.searchParams.toString()}`
+    : url.toString();
+}
+
+// For desktop app: serve an HTML page that triggers the deep link
+// Browsers block 302 redirects to custom protocols (xeno://)
+function handleOAuthRedirect(res, returnUrl, token, isNew) {
+  const targetUrl = appendParamsToReturnUrl(returnUrl, {
+    token,
+    isNew,
+  });
+  if (returnUrl && returnUrl.startsWith("xeno://")) {
+    res.send(`<!DOCTYPE html>
+<html><head><meta charset="utf-8"><title>Redirecting to XENO...</title>
+<meta http-equiv="refresh" content="0;url=${targetUrl}">
+<style>body{background:#08080a;color:#fff;font-family:Inter,system-ui,sans-serif;display:flex;align-items:center;justify-content:center;height:100vh;margin:0}
+.c{text-align:center}.s{width:20px;height:20px;border:2px solid rgba(255,255,255,0.1);border-top-color:rgba(255,255,255,0.5);border-radius:50%;animation:s .6s linear infinite;margin:16px auto}
+@keyframes s{to{transform:rotate(360deg)}}p{color:rgba(255,255,255,0.4);font-size:13px;margin-top:12px}a{color:rgba(255,255,255,0.6)}</style>
+</head><body><div class="c"><div class="s"></div><p>Opening XENO Desktop...</p>
+<p style="margin-top:24px"><a href="${targetUrl}">Click here if the app didn&apos;t open</a></p></div>
+</body></html>`);
+  } else {
+    res.redirect(targetUrl);
+  }
+}
+
+function handleOAuthChallengeRedirect(res, returnUrl, params = {}) {
+  const targetUrl = appendParamsToReturnUrl(returnUrl, params);
+  if (returnUrl && returnUrl.startsWith('xeno://')) {
+    res.send(`<!DOCTYPE html>
+<html><head><meta charset="utf-8"><title>Redirecting to XENO...</title>
+<meta http-equiv="refresh" content="0;url=${targetUrl}">
+<style>body{background:#08080a;color:#fff;font-family:Inter,system-ui,sans-serif;display:flex;align-items:center;justify-content:center;height:100vh;margin:0}
+.c{text-align:center}.s{width:20px;height:20px;border:2px solid rgba(255,255,255,0.1);border-top-color:rgba(255,255,255,0.5);border-radius:50%;animation:s .6s linear infinite;margin:16px auto}
+@keyframes s{to{transform:rotate(360deg)}}p{color:rgba(255,255,255,0.4);font-size:13px;margin-top:12px}a{color:rgba(255,255,255,0.6)}</style>
+</head><body><div class="c"><div class="s"></div><p>Completing secure sign-in...</p>
+<p style="margin-top:24px"><a href="${targetUrl}">Click here if the app didn&apos;t open</a></p></div>
+</body></html>`);
+  } else {
+    res.redirect(targetUrl);
+  }
+}
+
+// ============================================
+// OAUTH HELPER FUNCTIONS
+// ============================================
+
+// Generate cryptographically secure state token
+function generateState() {
+  return crypto.randomBytes(32).toString('hex');
+}
+
+// Generate PKCE code verifier for Twitter OAuth 2.0
+function generateCodeVerifier() {
+  return crypto.randomBytes(32).toString('base64url');
+}
+
+// Generate PKCE code challenge from verifier
+function generateCodeChallenge(verifier) {
+  return crypto.createHash('sha256').update(verifier).digest('base64url');
+}
+
+// Store OAuth state in Redis
+async function storeOAuthState(state, data) {
+  await redis.setex(`oauth:state:${state}`, OAUTH_STATE_TTL, JSON.stringify(data));
+}
+
+// Get and delete OAuth state from Redis (one-time use)
+async function consumeOAuthState(state) {
+  const key = `oauth:state:${state}`;
+  const data = await redis.get(key);
+  if (data) {
+    await redis.del(key);
+    return JSON.parse(data);
+  }
+  return null;
+}
+
+function parseJsonObject(value) {
+  if (!value) {
+    return {};
+  }
+
+  if (typeof value === 'string') {
+    try {
+      return JSON.parse(value);
+    } catch {
+      return {};
+    }
+  }
+
+  if (typeof value === 'object' && !Array.isArray(value)) {
+    return value;
+  }
+
+  return {};
+}
+
+async function getUserMfaConfig(db, userId) {
+  const result = await db.query(
+    `SELECT preferences
+     FROM users
+     WHERE id = $1
+     LIMIT 1`,
+    [userId]
+  );
+
+  const preferences = parseJsonObject(result.rows[0]?.preferences);
+  const security = preferences.security && typeof preferences.security === 'object'
+    ? preferences.security
+    : {};
+  const totp = security.totp && typeof security.totp === 'object'
+    ? security.totp
+    : {};
+
+  const enabled = Boolean(
+    totp.enabled
+    || security.mfa_enabled
+    || security.mfaEnabled
+  );
+  const secret = typeof totp.secret === 'string'
+    ? totp.secret.trim()
+    : (typeof security.mfa_secret === 'string' ? security.mfa_secret.trim() : '');
+
+  return {
+    enabled: enabled && Boolean(secret),
+    configured: Boolean(secret),
+    method: 'totp',
+    secret,
+    label: typeof totp.label === 'string' ? totp.label : 'Authenticator app',
+  };
+}
+
+function decodeBase32Secret(secret) {
+  const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
+  const normalized = String(secret || '')
+    .toUpperCase()
+    .replace(/=+$/g, '')
+    .replace(/[^A-Z2-7]/g, '');
+
+  let bits = '';
+  for (const char of normalized) {
+    const index = alphabet.indexOf(char);
+    if (index === -1) {
+      continue;
+    }
+    bits += index.toString(2).padStart(5, '0');
+  }
+
+  const bytes = [];
+  for (let offset = 0; offset + 8 <= bits.length; offset += 8) {
+    bytes.push(parseInt(bits.slice(offset, offset + 8), 2));
+  }
+
+  return Buffer.from(bytes);
+}
+
+function generateTotpCode(secret, timestamp = Date.now(), periodSeconds = 30) {
+  const secretBuffer = decodeBase32Secret(secret);
+  const counter = Math.floor(timestamp / 1000 / periodSeconds);
+  const counterBuffer = Buffer.alloc(8);
+  counterBuffer.writeBigUInt64BE(BigInt(counter));
+
+  const digest = crypto.createHmac('sha1', secretBuffer).update(counterBuffer).digest();
+  const offset = digest[digest.length - 1] & 0x0f;
+  const code = (
+    ((digest[offset] & 0x7f) << 24)
+    | ((digest[offset + 1] & 0xff) << 16)
+    | ((digest[offset + 2] & 0xff) << 8)
+    | (digest[offset + 3] & 0xff)
+  ) % 1000000;
+
+  return String(code).padStart(6, '0');
+}
+
+function verifyTotpCode(secret, code, options = {}) {
+  const window = Number(options.window ?? 1);
+  const sanitizedCode = String(code || '').replace(/\s+/g, '');
+  if (!/^\d{6}$/.test(sanitizedCode)) {
+    return false;
+  }
+
+  for (let offset = -window; offset <= window; offset += 1) {
+    const candidate = generateTotpCode(secret, Date.now() + (offset * 30000));
+    if (candidate === sanitizedCode) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+async function createMfaChallenge({ userId, authMethod, provider = null, returnUrl = '/overview', isNew = false }) {
+  const challengeId = crypto.randomUUID();
+  await redis.setex(
+    `auth:mfa:${challengeId}`,
+    MFA_CHALLENGE_TTL,
+    JSON.stringify({
+      userId,
+      authMethod,
+      provider,
+      returnUrl,
+      isNew: Boolean(isNew),
+      createdAt: Date.now(),
+    })
+  );
+
+  return challengeId;
+}
+
+async function getMfaChallenge(challengeId) {
+  const raw = await redis.get(`auth:mfa:${challengeId}`);
+  if (!raw) {
+    return null;
+  }
+
+  return parseJsonObject(raw);
+}
+
+async function consumeMfaChallenge(challengeId) {
+  const key = `auth:mfa:${challengeId}`;
+  const raw = await redis.get(key);
+  if (!raw) {
+    return null;
+  }
+
+  await redis.del(key);
+  return parseJsonObject(raw);
+}
+
+// Find or create user from OAuth profile
+async function findOrCreateOAuthUser(db, provider, profile) {
+  const { id: providerId, email, name, avatar, username } = profile;
+
+  // First, check if this OAuth account is already linked
+  const existingOAuth = await db.query(
+    'SELECT user_id FROM oauth_accounts WHERE provider = $1 AND provider_user_id = $2',
+    [provider, providerId]
+  );
+
+  if (existingOAuth.rows.length > 0) {
+    // Get the linked user
+    const userResult = await db.query(
+      `SELECT id, username, email, display_name, avatar_url, created_at,
+              email_verified, is_active, credits, bonus_credits_claimed, status, role, plan
+       FROM users WHERE id = $1`,
+      [existingOAuth.rows[0].user_id]
+    );
+
+    if (userResult.rows.length > 0) {
+      // Update last login
+      await db.query('UPDATE users SET last_login = NOW() WHERE id = $1', [userResult.rows[0].id]);
+      return { user: userResult.rows[0], isNew: false };
+    }
+  }
+
+  // Check if user exists with this email
+  let user = null;
+  if (email) {
+    const emailResult = await db.query(
+      `SELECT id, username, email, display_name, avatar_url, created_at,
+              email_verified, is_active, credits, bonus_credits_claimed, status, role, plan
+       FROM users WHERE email = $1`,
+      [email.toLowerCase()]
+    );
+
+    if (emailResult.rows.length > 0) {
+      user = emailResult.rows[0];
+    }
+  }
+
+  // Create new user if doesn't exist
+  let isNew = false;
+  if (!user) {
+    const userId = uuidv4();
+    const generatedUsername = username || email?.split('@')[0] || `user_${providerId.substring(0, 8)}`;
+
+    // Check if username exists, if so, append random suffix
+    let finalUsername = generatedUsername.toLowerCase().replace(/[^a-z0-9_]/g, '_');
+    const usernameCheck = await db.query('SELECT id FROM users WHERE username = $1', [finalUsername]);
+    if (usernameCheck.rows.length > 0) {
+      finalUsername = `${finalUsername}_${crypto.randomBytes(4).toString('hex')}`;
+    }
+
+    // OAuth users don't use password login initially, but schema requires password_hash
+    const oauthPlaceholderPassword = crypto.randomBytes(32).toString('hex');
+    const oauthPasswordHash = await hashPassword(oauthPlaceholderPassword);
+
+    const insertResult = await db.query(
+      `INSERT INTO users (id, username, email, password_hash, display_name, avatar_url, email_verified, is_active, status, role, plan, credits, bonus_credits_claimed, created_at, updated_at, last_login)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, NOW(), NOW(), NOW())
+       RETURNING id, username, email, display_name, avatar_url, created_at, email_verified, is_active, credits, bonus_credits_claimed, status, role, plan`,
+      [userId, finalUsername, email?.toLowerCase(), oauthPasswordHash, name || finalUsername, avatar, true, true, 'active', 'user', 'free', 0, false]
+    );
+
+    user = insertResult.rows[0];
+    isNew = true;
+  } else {
+    // Update last login for existing user
+    await db.query('UPDATE users SET last_login = NOW() WHERE id = $1', [user.id]);
+  }
+
+  // Link OAuth account to user (upsert)
+  await db.query(
+    `INSERT INTO oauth_accounts (user_id, provider, provider_user_id, provider_email, provider_username, provider_avatar_url, provider_name, created_at, updated_at)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, NOW(), NOW())
+     ON CONFLICT (provider, provider_user_id) DO UPDATE SET
+       provider_email = EXCLUDED.provider_email,
+       provider_username = EXCLUDED.provider_username,
+       provider_avatar_url = EXCLUDED.provider_avatar_url,
+       provider_name = EXCLUDED.provider_name,
+       updated_at = NOW()`,
+    [user.id, provider, providerId, email, username, avatar, name]
+  );
+
+  // Log security event
+  try {
+    await db.query(
+      `INSERT INTO security_events (user_id, event_type, metadata, created_at)
+       VALUES ($1, $2, $3, NOW())`,
+      [user.id, isNew ? 'oauth_signup' : 'oauth_login', JSON.stringify({ provider, providerId })]
+    );
+  } catch (e) {
+    console.log('Could not log security event:', e.message);
+  }
+
+  return { user, isNew };
+}
+
+// JWT secret key (in production, use environment variable)
+const JWT_SECRET = process.env.JWT_SECRET || 'xenostudio-super-secret-jwt-key-change-in-production';
+const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || '7d';
+
+// Hash password utility
+async function hashPassword(password) {
+  return await bcrypt.hash(password, 10);
+}
+
+// Verify password utility
+async function verifyPassword(password, hashedPassword) {
+  return await bcrypt.compare(password, hashedPassword);
+}
+
+// Generate JWT token
+function generateToken(user, extraClaims = {}) {
+  return jwt.sign(
+    {
+      userId: user.id,
+      email: user.email,
+      username: user.username,
+      jti: uuidv4(),
+      ...extraClaims,
+    },
+    JWT_SECRET,
+    { expiresIn: JWT_EXPIRES_IN }
+  );
+}
+
+function hashAccessToken(token) {
+  return crypto.createHash('sha256').update(String(token || '')).digest('hex');
+}
+
+function inferDeviceType(userAgent = '') {
+  const value = String(userAgent || '').toLowerCase();
+  if (!value) return 'unknown';
+  if (value.includes('ipad') || value.includes('tablet')) return 'tablet';
+  if (value.includes('mobile') || value.includes('iphone') || value.includes('android')) return 'mobile';
+  return 'desktop';
+}
+
+function inferBrowser(userAgent = '') {
+  const value = String(userAgent || '');
+  if (!value) return 'Unknown';
+  if (/Edg\//i.test(value)) return 'Edge';
+  if (/Chrome\//i.test(value) && !/Edg\//i.test(value)) return 'Chrome';
+  if (/Firefox\//i.test(value)) return 'Firefox';
+  if (/Safari\//i.test(value) && !/Chrome\//i.test(value)) return 'Safari';
+  return 'Unknown';
+}
+
+async function ensureAuthSecurityTables(db) {
+  if (authSecuritySchemaReady) {
+    return;
+  }
+
+  await db.query(`
+    CREATE TABLE IF NOT EXISTS security_events (
+      id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+      user_id uuid REFERENCES users(id) ON DELETE CASCADE,
+      event_type varchar(64) NOT NULL,
+      ip_address inet,
+      user_agent text,
+      metadata jsonb NOT NULL DEFAULT '{}'::jsonb,
+      created_at timestamp without time zone NOT NULL DEFAULT NOW()
+    )
+  `);
+  await db.query(`
+    CREATE INDEX IF NOT EXISTS security_events_user_id_created_at_idx
+      ON security_events (user_id, created_at DESC)
+  `);
+  await db.query(`
+    CREATE INDEX IF NOT EXISTS security_events_event_type_idx
+      ON security_events (event_type)
+  `);
+
+  await db.query(`
+    CREATE TABLE IF NOT EXISTS oauth_accounts (
+      id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+      user_id uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      provider varchar(32) NOT NULL,
+      provider_user_id varchar(255) NOT NULL,
+      provider_email varchar(255),
+      provider_username varchar(255),
+      provider_avatar_url varchar(500),
+      provider_name varchar(255),
+      access_token text,
+      refresh_token text,
+      token_expires_at timestamp without time zone,
+      raw_profile jsonb,
+      created_at timestamp without time zone NOT NULL DEFAULT NOW(),
+      updated_at timestamp without time zone NOT NULL DEFAULT NOW(),
+      UNIQUE (provider, provider_user_id)
+    )
+  `);
+  await db.query(`ALTER TABLE user_sessions ADD COLUMN IF NOT EXISTS session_token VARCHAR(512)`);
+  await db.query(`ALTER TABLE user_sessions ADD COLUMN IF NOT EXISTS access_token_hash VARCHAR(255)`);
+  await db.query(`ALTER TABLE user_sessions ADD COLUMN IF NOT EXISTS last_seen_at TIMESTAMP`);
+  await db.query(`ALTER TABLE user_sessions ADD COLUMN IF NOT EXISTS revoked_at TIMESTAMP`);
+  await db.query(`ALTER TABLE user_sessions ADD COLUMN IF NOT EXISTS revoked_reason VARCHAR(255)`);
+  await db.query(`ALTER TABLE user_sessions ADD COLUMN IF NOT EXISTS device_type VARCHAR(64)`);
+  await db.query(`ALTER TABLE user_sessions ADD COLUMN IF NOT EXISTS browser VARCHAR(128)`);
+  await db.query(`ALTER TABLE user_sessions ADD COLUMN IF NOT EXISTS metadata JSONB DEFAULT '{}'::jsonb`);
+  await db.query(`ALTER TABLE user_sessions ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP DEFAULT NOW()`);
+  await db.query(`
+    CREATE INDEX IF NOT EXISTS user_sessions_user_id_expires_at_idx
+      ON user_sessions (user_id, expires_at DESC)
+  `);
+  await db.query(`
+    CREATE INDEX IF NOT EXISTS user_sessions_access_token_hash_idx
+      ON user_sessions (access_token_hash)
+  `);
+  await db.query(`
+    CREATE INDEX IF NOT EXISTS user_sessions_revoked_at_idx
+      ON user_sessions (revoked_at)
+  `);
+
+  authSecuritySchemaReady = true;
+}
+
+async function logSecurityEvent(db, {
+  userId,
+  eventType,
+  ipAddress = null,
+  userAgent = null,
+  metadata = {},
+}) {
+  await ensureAuthSecurityTables(db);
+  await db.query(
+    `INSERT INTO security_events (user_id, event_type, ip_address, user_agent, metadata, created_at)
+     VALUES ($1::uuid, $2::varchar, $3::inet, $4::text, $5::jsonb, NOW())`,
+    [userId, eventType, ipAddress, userAgent, JSON.stringify(metadata || {})]
+  );
+}
+
+async function createTrackedSession(db, userId, token, req, metadata = {}) {
+  await ensureAuthSecurityTables(db);
+  const userAgent = req.get('User-Agent') || null;
+  const tokenHash = await bcrypt.hash(token, 10);
+  const accessTokenHash = hashAccessToken(token);
+
+  const result = await db.query(
+    `INSERT INTO user_sessions (
+       user_id,
+       token_hash,
+       session_token,
+       access_token_hash,
+       expires_at,
+       created_at,
+       updated_at,
+       last_seen_at,
+       ip_address,
+       user_agent,
+       device_type,
+       browser,
+       metadata
+     )
+     VALUES (
+       $1::uuid,
+       $2::varchar,
+       $3::varchar,
+       $4::varchar,
+       NOW() + INTERVAL '7 days',
+       NOW(),
+       NOW(),
+       NOW(),
+       $5::inet,
+       $6::text,
+       $7::varchar,
+       $8::varchar,
+       $9::jsonb
+     )
+     RETURNING id::text as id`,
+    [
+      userId,
+      tokenHash,
+      token,
+      accessTokenHash,
+      req.ip || null,
+      userAgent,
+      inferDeviceType(userAgent),
+      inferBrowser(userAgent),
+      JSON.stringify(metadata || {}),
+    ]
+  );
+
+  return result.rows[0] || null;
+}
+
+async function findSessionByToken(db, userId, token) {
+  await ensureAuthSecurityTables(db);
+  const accessTokenHash = hashAccessToken(token);
+  const result = await db.query(
+    `SELECT
+       id::text as id,
+       user_id::text as "userId",
+       token_hash as "tokenHash",
+       session_token as "sessionToken",
+       access_token_hash as "accessTokenHash",
+       expires_at as "expiresAt",
+       created_at as "createdAt",
+       updated_at as "updatedAt",
+       last_seen_at as "lastSeenAt",
+       ip_address::text as "ipAddress",
+       user_agent as "userAgent",
+       device_type as "deviceType",
+       browser,
+       revoked_at as "revokedAt",
+       revoked_reason as "revokedReason",
+       metadata
+     FROM user_sessions
+     WHERE user_id = $1::uuid
+       AND expires_at > NOW()
+       AND revoked_at IS NULL
+       AND (
+         session_token = $2::varchar
+         OR access_token_hash = $3::varchar
+       )
+     ORDER BY created_at DESC
+     LIMIT 1`,
+    [userId, token, accessTokenHash]
+  );
+
+  return result.rows[0] || null;
+}
+
+async function authenticateJwtRequest(db, token, options = {}) {
+  if (!token) {
+    throw new Error('Authentication required');
+  }
+
+  await ensureAuthSecurityTables(db);
+  const decoded = jwt.verify(token, JWT_SECRET);
+  const result = await db.query(
+    `SELECT id, username, email, display_name, avatar_url,
+            created_at, email_verified, is_active, last_login, credits, bonus_credits_claimed, role, plan
+     FROM users
+     WHERE id = $1
+       AND is_active = true
+     LIMIT 1`,
+    [decoded.userId]
+  );
+
+  const user = result.rows[0] || null;
+  if (!user) {
+    throw new Error('Invalid token');
+  }
+
+  const session = await findSessionByToken(db, user.id, token);
+  if (options.requireSession && !session) {
+    throw new Error('Invalid session');
+  }
+
+  if (session && options.touchSession !== false) {
+    await db.query(
+      `UPDATE user_sessions
+       SET last_seen_at = NOW(),
+           updated_at = NOW()
+       WHERE id = $1::uuid`,
+      [session.id]
+    );
+  }
+
+  return { decoded, user, session };
+}
+
+async function listSecuritySessions(db, userId, currentToken) {
+  await ensureAuthSecurityTables(db);
+  const currentSession = currentToken ? await findSessionByToken(db, userId, currentToken) : null;
+  const result = await db.query(
+    `SELECT
+       id::text as id,
+       expires_at as "expiresAt",
+       created_at as "createdAt",
+       updated_at as "updatedAt",
+       last_seen_at as "lastSeenAt",
+       ip_address::text as "ipAddress",
+       user_agent as "userAgent",
+       device_type as "deviceType",
+       browser,
+       metadata
+     FROM user_sessions
+     WHERE user_id = $1::uuid
+       AND expires_at > NOW()
+       AND revoked_at IS NULL
+     ORDER BY created_at DESC`,
+    [userId]
+  );
+
+  return result.rows.map((row) => ({
+    ...row,
+    isCurrent: currentSession ? row.id === currentSession.id : false,
+  }));
+}
+
+async function revokeSecuritySession(db, userId, sessionId, reason = 'manual_revoke') {
+  await ensureAuthSecurityTables(db);
+  const result = await db.query(
+    `UPDATE user_sessions
+     SET revoked_at = NOW(),
+         revoked_reason = $3::varchar,
+         updated_at = NOW()
+     WHERE id = $1::uuid
+       AND user_id = $2::uuid
+       AND revoked_at IS NULL
+     RETURNING id::text as id`,
+    [sessionId, userId, reason]
+  );
+
+  return result.rows[0] || null;
+}
+
+async function revokeAllOtherSecuritySessions(db, userId, currentToken, reason = 'revoke_all_other_sessions') {
+  await ensureAuthSecurityTables(db);
+  const currentSession = currentToken ? await findSessionByToken(db, userId, currentToken) : null;
+  const result = await db.query(
+    `UPDATE user_sessions
+     SET revoked_at = NOW(),
+         revoked_reason = $3::varchar,
+         updated_at = NOW()
+     WHERE user_id = $1::uuid
+       AND revoked_at IS NULL
+       AND expires_at > NOW()
+       AND ($2::uuid IS NULL OR id <> $2::uuid)
+     RETURNING id::text as id`,
+    [userId, currentSession?.id || null, reason]
+  );
+
+  return {
+    revokedCount: result.rowCount || 0,
+    currentSessionId: currentSession?.id || null,
+  };
+}
+
+async function listSecurityEvents(db, userId, options = {}) {
+  await ensureAuthSecurityTables(db);
+  const limit = Math.max(1, Math.min(Number(options.limit) || 50, 200));
+  const eventTypes = Array.isArray(options.eventTypes) ? options.eventTypes.filter(Boolean) : [];
+  const result = await db.query(
+    `SELECT
+       id::text as id,
+       event_type as "eventType",
+       ip_address::text as "ipAddress",
+       user_agent as "userAgent",
+       metadata,
+       created_at as "createdAt"
+     FROM security_events
+     WHERE user_id = $1::uuid
+       AND ($2::text[] IS NULL OR event_type = ANY($2::text[]))
+     ORDER BY created_at DESC
+     LIMIT $3`,
+    [userId, eventTypes.length > 0 ? eventTypes : null, limit]
+  );
+
+  return result.rows;
+}
+
+const PLATFORM_RUNTIME_BILLING_OPTIONS = {
+  projectSlug: 'default-platform-project',
+  projectName: 'Default Platform Project',
+  source: 'xeno-platform-web',
+};
+
+async function buildAuthUserPayload(db, user) {
+  const billingProfile = user?.id
+    ? await getUserBillingProfile(db, user.id, PLATFORM_RUNTIME_BILLING_OPTIONS)
+    : null;
+
+  return {
+    id: user.id,
+    username: user.username,
+    email: user.email,
+    display_name: user.display_name,
+    avatar_url: user.avatar_url,
+    created_at: user.created_at,
+    email_verified: user.email_verified,
+    is_active: user.is_active,
+    last_login: user.last_login ?? null,
+    credits: billingProfile?.currentCredits ?? Number(user.credits || 0),
+    bonus_credits_claimed: Boolean(user.bonus_credits_claimed),
+    role: user.role ?? null,
+    plan: user.plan ?? null,
+    workspace: billingProfile?.workspace
+      ? {
+          id: billingProfile.workspace.id,
+          name: billingProfile.workspace.name,
+          slug: billingProfile.workspace.slug,
+          type: billingProfile.workspace.workspaceType,
+        }
+      : null,
+    default_project: billingProfile?.project
+      ? {
+          id: billingProfile.project.id,
+          name: billingProfile.project.name,
+          slug: billingProfile.project.slug,
+        }
+      : null,
+  };
+}
+
+function getBearerToken(req) {
+  const authorization = req.headers.authorization || '';
+  return authorization.startsWith('Bearer ') ? authorization.slice(7) : null;
+}
+
+function isAuthError(error) {
+  return (
+    error?.name === 'JsonWebTokenError' ||
+    error?.name === 'TokenExpiredError' ||
+    error?.message === 'Authentication required' ||
+    error?.message === 'Invalid token' ||
+    error?.message === 'Invalid session'
+  );
+}
+
+function sendAuthError(res, error) {
+  if (error?.name === 'TokenExpiredError') {
+    return res.status(401).json({
+      success: false,
+      error: 'Token expired'
+    });
+  }
+
+  return res.status(401).json({
+    success: false,
+    error: error?.message || 'Invalid or expired token'
+  });
+}
+
+function isRuntimeSelectionError(error) {
+  return /requested (workspace|project)|does not belong/i.test(error?.message || '');
+}
+
+async function requireAuthenticatedUser(req, options = {}) {
+  const token = getBearerToken(req);
+  if (!token) {
+    throw new Error('Authentication required');
+  }
+
+  const auth = await authenticateJwtRequest(req.db, token, {
+    requireSession: options.requireSession !== false,
+    touchSession: options.touchSession !== false,
+  });
+
+  return {
+    token,
+    ...auth,
+  };
+}
+
+function sanitizeSession(session) {
+  if (!session) {
+    return null;
+  }
+
+  return {
+    id: session.id,
+    expiresAt: session.expiresAt,
+    createdAt: session.createdAt,
+    updatedAt: session.updatedAt,
+    lastSeenAt: session.lastSeenAt,
+    ipAddress: session.ipAddress,
+    userAgent: session.userAgent,
+    deviceType: session.deviceType,
+    browser: session.browser,
+    metadata: session.metadata || {},
+  };
+}
+
+// POST /api/auth/init - Initialize database tables
+router.post('/init', async (req, res) => {
+  try {
+    const adminUserId = '9bcd1624-e26b-46ec-81f5-17d9b575c992';
+    const adminEmail = 'admin@xenostudio.local';
+    const legacyAdminEmail = 'admin@xenostudio.ai';
+
+    // Create users table
+    await req.db.query(`
+      CREATE TABLE IF NOT EXISTS users (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        username VARCHAR(50) UNIQUE NOT NULL,
+        email VARCHAR(255) UNIQUE NOT NULL,
+        password_hash VARCHAR(255) NOT NULL,
+        display_name VARCHAR(255) NOT NULL,
+        avatar_url VARCHAR(500),
+        created_at TIMESTAMP DEFAULT NOW(),
+        updated_at TIMESTAMP DEFAULT NOW(),
+        last_login TIMESTAMP,
+        email_verified BOOLEAN DEFAULT FALSE,
+        is_active BOOLEAN DEFAULT TRUE,
+        reset_token VARCHAR(255),
+        reset_token_expires TIMESTAMP
+      )
+    `);
+
+    // Add missing columns to existing users table if they don't exist
+    try {
+      await req.db.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS last_login TIMESTAMP`);
+      await req.db.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS email_verified BOOLEAN DEFAULT FALSE`);
+      await req.db.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS is_active BOOLEAN DEFAULT TRUE`);
+      await req.db.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS password_hash VARCHAR(255)`);
+      await req.db.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS reset_token VARCHAR(255)`);
+      await req.db.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS reset_token_expires TIMESTAMP`);
+    } catch (error) {
+      console.log('Note: Some columns may already exist in users table');
+    }
+
+    // Create sessions table for additional security
+    await req.db.query(`
+      CREATE TABLE IF NOT EXISTS user_sessions (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        user_id UUID REFERENCES users(id) ON DELETE CASCADE,
+        token_hash VARCHAR(255) NOT NULL,
+        session_token VARCHAR(512),
+        expires_at TIMESTAMP NOT NULL,
+        created_at TIMESTAMP DEFAULT NOW(),
+        ip_address INET,
+        user_agent TEXT
+      )
+    `);
+
+    // Ensure existing deployments have session_token column used by login/register routes
+    await req.db.query(`ALTER TABLE user_sessions ADD COLUMN IF NOT EXISTS session_token VARCHAR(512)`);
+    await ensureAuthSecurityTables(req.db);
+
+    // Check if default admin user exists
+    const adminCheck = await req.db.query(
+      'SELECT id FROM users WHERE id = $1 OR email IN ($2, $3)',
+      [adminUserId, adminEmail, legacyAdminEmail]
+    );
+    
+    // Create/update default admin user with stable ID and credentials
+    const adminPassword = await hashPassword('xenostudio123');
+    await req.db.query(`
+      INSERT INTO users (id, username, email, password_hash, display_name, email_verified, is_active)
+      VALUES ($1, $2, $3, $4, $5, $6, $7)
+      ON CONFLICT (id) DO UPDATE SET
+        username = EXCLUDED.username,
+        password_hash = EXCLUDED.password_hash,
+        display_name = EXCLUDED.display_name,
+        email_verified = EXCLUDED.email_verified,
+        is_active = EXCLUDED.is_active
+    `, [adminUserId, 'admin', adminEmail, adminPassword, 'XenoStudio Admin', true, true]);
+
+    console.log('✅ Default admin user ensured: admin@xenostudio.local / xenostudio123');
+
+    res.json({
+      success: true,
+      message: 'Database initialized successfully',
+      timestamp: new Date().toISOString()
+    });
+
+  } catch (error) {
+    console.error('Database initialization error:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Database initialization failed',
+      message: error.message
+    });
+  }
+});
+
+// POST /api/auth/register - Register new user
+router.post('/register', async (req, res) => {
+  try {
+    const { username, email, password, display_name } = req.body;
+
+    // Validation
+    if (!username || !email || !password || !display_name) {
+      return res.status(400).json({
+        success: false,
+        error: 'All fields are required'
+      });
+    }
+
+    if (password.length < 6) {
+      return res.status(400).json({
+        success: false,
+        error: 'Password must be at least 6 characters long'
+      });
+    }
+
+    // Check if user already exists
+    const existingUser = await req.db.query(
+      'SELECT id FROM users WHERE email = $1 OR username = $2',
+      [email.toLowerCase(), username.toLowerCase()]
+    );
+
+    if (existingUser.rows.length > 0) {
+      return res.status(400).json({
+        success: false,
+        error: 'User with this email or username already exists'
+      });
+    }
+
+    // Hash password and create user
+    const passwordHash = await hashPassword(password);
+    const userId = uuidv4();
+
+    const result = await req.db.query(`
+      INSERT INTO users (id, username, email, password_hash, display_name, credits, bonus_credits_claimed, created_at, updated_at, last_login)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, NOW(), NOW(), NOW())
+      RETURNING id, username, email, display_name, avatar_url, created_at, last_login, email_verified, is_active, credits, bonus_credits_claimed, role, plan
+    `, [userId, username.toLowerCase(), email.toLowerCase(), passwordHash, display_name, 0, false]);
+
+    const user = result.rows[0];
+    const token = generateToken(user);
+
+    await createTrackedSession(req.db, user.id, token, req, {
+      authMethod: 'password',
+      origin: 'register',
+    });
+    await logSecurityEvent(req.db, {
+      userId: user.id,
+      eventType: 'register',
+      ipAddress: req.ip || null,
+      userAgent: req.get('User-Agent') || null,
+      metadata: {
+        email: user.email,
+        username: user.username,
+      },
+    });
+
+    const authUser = await buildAuthUserPayload(req.db, user);
+
+    // Provision API key for new user
+    const apiKey = await provisionApiKey(req.db, user.id, user.email, user.display_name);
+
+    res.status(201).json({
+      success: true,
+      user: authUser,
+      token,
+      apiKey: apiKey || undefined,
+      message: 'User registered successfully'
+    });
+
+  } catch (error) {
+    console.error('Registration error:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Registration failed',
+      message: error.message
+    });
+  }
+});
+
+// POST /api/auth/login - User login
+router.post('/login', async (req, res) => {
+  try {
+    const { email, password } = req.body;
+
+    if (!email || !password) {
+      return res.status(400).json({
+        success: false,
+        error: 'Email and password are required'
+      });
+    }
+
+    const normalizedEmail = email.toLowerCase();
+    const emailCandidates = normalizedEmail === 'admin@xenostudio.local'
+      ? ['admin@xenostudio.local', 'admin@xenostudio.ai']
+      : [normalizedEmail];
+
+    // Find user by email
+    const result = await req.db.query(`
+      SELECT id, username, email, password_hash, display_name, avatar_url, 
+             created_at, email_verified, is_active, last_login, credits, bonus_credits_claimed, role, plan
+      FROM users 
+      WHERE email = ANY($1::text[])
+      LIMIT 1
+    `, [emailCandidates]);
+
+    if (result.rows.length === 0) {
+      return res.status(401).json({
+        success: false,
+        error: 'Invalid email or password'
+      });
+    }
+
+    const user = result.rows[0];
+
+    // Check if user is active
+    if (!user.is_active) {
+      return res.status(401).json({
+        success: false,
+        error: 'Account is deactivated'
+      });
+    }
+
+    // Verify password
+    const passwordValid = await verifyPassword(password, user.password_hash);
+    if (!passwordValid) {
+      return res.status(401).json({
+        success: false,
+        error: 'Invalid email or password'
+      });
+    }
+
+    const mfaConfig = await getUserMfaConfig(req.db, user.id);
+    if (mfaConfig.enabled) {
+      const challengeId = await createMfaChallenge({
+        userId: user.id,
+        authMethod: 'password',
+        returnUrl: '/overview',
+        isNew: false,
+      });
+
+      return res.json({
+        success: false,
+        mfa_required: true,
+        challenge_id: challengeId,
+        message: 'MFA verification required',
+      });
+    }
+
+    // Update last login
+    await req.db.query('UPDATE users SET last_login = NOW() WHERE id = $1', [user.id]);
+
+    // Generate token
+    const token = generateToken(user);
+
+    await createTrackedSession(req.db, user.id, token, req, {
+      authMethod: 'password',
+      origin: 'login',
+    });
+    await logSecurityEvent(req.db, {
+      userId: user.id,
+      eventType: 'login',
+      ipAddress: req.ip || null,
+      userAgent: req.get('User-Agent') || null,
+      metadata: {
+        email: user.email,
+        username: user.username,
+      },
+    });
+
+    const authUser = await buildAuthUserPayload(req.db, user);
+
+    // Provision API key (non-blocking for login success)
+    const apiKey = await provisionApiKey(req.db, user.id, user.email, user.display_name);
+
+    res.json({
+      success: true,
+      user: authUser,
+      token,
+      apiKey: apiKey || undefined,
+      message: 'Login successful'
+    });
+
+  } catch (error) {
+    console.error('Login error:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Login failed',
+      message: error.message
+    });
+  }
+});
+
+// GET /api/auth/validate - Validate current session
+router.get('/validate', async (req, res) => {
+  try {
+    const { user, session } = await requireAuthenticatedUser(req, { requireSession: true });
+    const authUser = await buildAuthUserPayload(req.db, user);
+
+    // Provision API key if not already cached
+    const apiKey = await provisionApiKey(req.db, user.id, user.email, user.display_name);
+
+    res.json({
+      success: true,
+      user: authUser,
+      session: sanitizeSession(session),
+      apiKey: apiKey || undefined,
+      message: 'Token is valid'
+    });
+
+  } catch (error) {
+    if (isAuthError(error)) {
+      return sendAuthError(res, error);
+    }
+
+    console.error('Token validation error:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Token validation failed',
+      message: error.message
+    });
+  }
+});
+
+router.get('/mfa/challenge/:challengeId', async (req, res) => {
+  try {
+    const challenge = await getMfaChallenge(req.params.challengeId);
+    if (!challenge?.userId) {
+      return res.status(404).json({
+        success: false,
+        error: 'MFA challenge not found or expired',
+      });
+    }
+
+    const userResult = await req.db.query(
+      `SELECT email
+       FROM users
+       WHERE id = $1
+       LIMIT 1`,
+      [challenge.userId]
+    );
+
+    const email = userResult.rows[0]?.email || '';
+    const maskedEmail = email
+      ? `${email.slice(0, 2)}***${email.includes('@') ? email.slice(email.indexOf('@')) : ''}`
+      : null;
+
+    res.json({
+      success: true,
+      challenge: {
+        id: req.params.challengeId,
+        authMethod: challenge.authMethod,
+        provider: challenge.provider || null,
+        returnUrl: challenge.returnUrl || '/overview',
+        isNew: Boolean(challenge.isNew),
+        maskedEmail,
+      },
+    });
+  } catch (error) {
+    console.error('MFA challenge lookup error:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to load MFA challenge',
+      message: error.message,
+    });
+  }
+});
+
+router.post('/mfa/verify', async (req, res) => {
+  try {
+    const { challenge_id, code } = req.body || {};
+    if (!challenge_id || !code) {
+      return res.status(400).json({
+        success: false,
+        error: 'challenge_id and code are required',
+      });
+    }
+
+    const challenge = await getMfaChallenge(challenge_id);
+    if (!challenge?.userId) {
+      return res.status(400).json({
+        success: false,
+        error: 'MFA challenge not found or expired',
+      });
+    }
+
+    const mfaConfig = await getUserMfaConfig(req.db, challenge.userId);
+    if (!mfaConfig.enabled || !mfaConfig.secret) {
+      await consumeMfaChallenge(challenge_id);
+      return res.status(400).json({
+        success: false,
+        error: 'MFA is no longer configured for this account',
+      });
+    }
+
+    const valid = verifyTotpCode(mfaConfig.secret, code, { window: 1 });
+    if (!valid) {
+      return res.status(401).json({
+        success: false,
+        error: 'Invalid verification code',
+      });
+    }
+
+    const consumed = await consumeMfaChallenge(challenge_id);
+    if (!consumed?.userId) {
+      return res.status(400).json({
+        success: false,
+        error: 'MFA challenge not found or expired',
+      });
+    }
+
+    const userResult = await req.db.query(
+      `SELECT id, username, email, display_name, avatar_url,
+              created_at, email_verified, is_active, last_login, credits, bonus_credits_claimed, role, plan
+       FROM users
+       WHERE id = $1
+         AND is_active = true
+       LIMIT 1`,
+      [consumed.userId]
+    );
+
+    const user = userResult.rows[0] || null;
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        error: 'User not found',
+      });
+    }
+
+    await req.db.query('UPDATE users SET last_login = NOW() WHERE id = $1', [user.id]);
+
+    const token = generateToken(user, consumed.provider ? { authProvider: consumed.provider } : {});
+    await createTrackedSession(req.db, user.id, token, req, {
+      authMethod: consumed.authMethod || 'password',
+      provider: consumed.provider || null,
+      origin: 'mfa_verify',
+    });
+    await logSecurityEvent(req.db, {
+      userId: user.id,
+      eventType: 'mfa_verified',
+      ipAddress: req.ip || null,
+      userAgent: req.get('User-Agent') || null,
+      metadata: {
+        authMethod: consumed.authMethod || 'password',
+        provider: consumed.provider || null,
+      },
+    });
+
+    const authUser = await buildAuthUserPayload(req.db, user);
+    const apiKey = await provisionApiKey(req.db, user.id, user.email, user.display_name);
+
+    res.json({
+      success: true,
+      user: authUser,
+      token,
+      apiKey: apiKey || undefined,
+      returnUrl: consumed.returnUrl || '/overview',
+      isNew: Boolean(consumed.isNew),
+      message: 'MFA verification successful',
+    });
+  } catch (error) {
+    console.error('MFA verify error:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to verify MFA challenge',
+      message: error.message,
+    });
+  }
+});
+
+// POST /api/auth/logout - Logout (invalidate session)
+router.post('/logout', async (req, res) => {
+  try {
+    const { user, session } = await requireAuthenticatedUser(req, { requireSession: true });
+
+    if (session) {
+      await revokeSecuritySession(req.db, user.id, session.id, 'logout');
+      await logSecurityEvent(req.db, {
+        userId: user.id,
+        eventType: 'logout',
+        ipAddress: req.ip || null,
+        userAgent: req.get('User-Agent') || null,
+        metadata: {
+          sessionId: session.id,
+        },
+      });
+    }
+
+    res.json({
+      success: true,
+      message: 'Logged out successfully'
+    });
+
+  } catch (error) {
+    if (isAuthError(error)) {
+      return sendAuthError(res, error);
+    }
+    console.error('Logout error:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Logout failed',
+      message: error.message
+    });
+  }
+});
+
+// GET /api/auth/security/overview - Security center overview
+router.get('/security/overview', async (req, res) => {
+  try {
+    const { token, user, session } = await requireAuthenticatedUser(req, { requireSession: true });
+    const [sessions, recentEvents, linkedAccountsResult, mfaConfig] = await Promise.all([
+      listSecuritySessions(req.db, user.id, token),
+      listSecurityEvents(req.db, user.id, { limit: 10 }),
+      req.db.query(
+        `SELECT provider, provider_email, provider_username, created_at
+         FROM oauth_accounts
+         WHERE user_id = $1
+         ORDER BY created_at ASC`,
+        [user.id]
+      ),
+      getUserMfaConfig(req.db, user.id),
+    ]);
+
+    res.json({
+      success: true,
+      security: {
+        currentSession: sanitizeSession(session),
+        sessionCount: sessions.length,
+        sessions,
+        recentEvents,
+        linkedAccounts: linkedAccountsResult.rows.map((row) => ({
+          provider: row.provider,
+          email: row.provider_email,
+          username: row.provider_username,
+          linkedAt: row.created_at,
+        })),
+        mfa: {
+          enabled: mfaConfig.enabled,
+          factors: mfaConfig.enabled
+            ? [{ type: mfaConfig.method, label: mfaConfig.label, provider: 'local' }]
+            : [],
+          recoveryCodesRemaining: 0,
+        },
+      }
+    });
+  } catch (error) {
+    if (isAuthError(error)) {
+      return sendAuthError(res, error);
+    }
+
+    console.error('Security overview error:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to load security overview',
+      message: error.message
+    });
+  }
+});
+
+// GET /api/auth/security/sessions - List active sessions
+router.get('/security/sessions', async (req, res) => {
+  try {
+    const { token, user } = await requireAuthenticatedUser(req, { requireSession: true });
+    const sessions = await listSecuritySessions(req.db, user.id, token);
+
+    res.json({
+      success: true,
+      sessions,
+    });
+  } catch (error) {
+    if (isAuthError(error)) {
+      return sendAuthError(res, error);
+    }
+
+    console.error('Security sessions error:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to list active sessions',
+      message: error.message
+    });
+  }
+});
+
+// DELETE /api/auth/security/sessions/:sessionId - Revoke one session
+router.delete('/security/sessions/:sessionId', async (req, res) => {
+  try {
+    const { user, session: currentSession } = await requireAuthenticatedUser(req, { requireSession: true });
+    const { sessionId } = req.params;
+    const revoked = await revokeSecuritySession(req.db, user.id, sessionId, 'manual_revoke');
+
+    if (!revoked) {
+      return res.status(404).json({
+        success: false,
+        error: 'Session not found'
+      });
+    }
+
+    await logSecurityEvent(req.db, {
+      userId: user.id,
+      eventType: 'session_revoked',
+      ipAddress: req.ip || null,
+      userAgent: req.get('User-Agent') || null,
+      metadata: {
+        sessionId,
+        revokedByCurrentSession: currentSession?.id || null,
+        revokedCurrentSession: currentSession?.id === sessionId,
+      },
+    });
+
+    res.json({
+      success: true,
+      revoked_session_id: sessionId,
+      revoked_current_session: currentSession?.id === sessionId,
+    });
+  } catch (error) {
+    if (isAuthError(error)) {
+      return sendAuthError(res, error);
+    }
+
+    console.error('Security session revoke error:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to revoke session',
+      message: error.message
+    });
+  }
+});
+
+// POST /api/auth/security/sessions/revoke-all - Revoke all other sessions
+router.post('/security/sessions/revoke-all', async (req, res) => {
+  try {
+    const { token, user, session } = await requireAuthenticatedUser(req, { requireSession: true });
+    const revoked = await revokeAllOtherSecuritySessions(req.db, user.id, token, 'manual_revoke_all_other_sessions');
+
+    await logSecurityEvent(req.db, {
+      userId: user.id,
+      eventType: 'all_other_sessions_revoked',
+      ipAddress: req.ip || null,
+      userAgent: req.get('User-Agent') || null,
+      metadata: {
+        currentSessionId: session?.id || null,
+        revokedCount: revoked.revokedCount,
+      },
+    });
+
+    res.json({
+      success: true,
+      revoked_count: revoked.revokedCount,
+      current_session_id: revoked.currentSessionId,
+    });
+  } catch (error) {
+    if (isAuthError(error)) {
+      return sendAuthError(res, error);
+    }
+
+    console.error('Security revoke-all error:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to revoke other sessions',
+      message: error.message
+    });
+  }
+});
+
+// GET /api/auth/security/events - Security activity feed
+router.get('/security/events', async (req, res) => {
+  try {
+    const { user } = await requireAuthenticatedUser(req, { requireSession: true });
+    const limit = Number(req.query.limit) || 50;
+    const eventTypes = String(req.query.types || '')
+      .split(',')
+      .map((value) => value.trim())
+      .filter(Boolean);
+    const events = await listSecurityEvents(req.db, user.id, {
+      limit,
+      eventTypes,
+    });
+
+    res.json({
+      success: true,
+      events,
+    });
+  } catch (error) {
+    if (isAuthError(error)) {
+      return sendAuthError(res, error);
+    }
+
+    console.error('Security events error:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to load security events',
+      message: error.message
+    });
+  }
+});
+
+// GET /api/auth/security/login-history - Login-focused event history
+router.get('/security/login-history', async (req, res) => {
+  try {
+    const { user } = await requireAuthenticatedUser(req, { requireSession: true });
+    const limit = Number(req.query.limit) || 25;
+    const events = await listSecurityEvents(req.db, user.id, {
+      limit,
+      eventTypes: [
+        'register',
+        'login',
+        'logout',
+        'oauth_login',
+        'oauth_signup',
+        'password_changed',
+      ],
+    });
+
+    res.json({
+      success: true,
+      history: events,
+    });
+  } catch (error) {
+    if (isAuthError(error)) {
+      return sendAuthError(res, error);
+    }
+
+    console.error('Login history error:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to load login history',
+      message: error.message
+    });
+  }
+});
+
+// POST /api/auth/migrate - Migrate existing user table and create necessary tables
+router.post('/migrate', async (req, res) => {
+  try {
+    console.log('🔧 Starting database migration for authentication system...');
+    const adminUserId = '9bcd1624-e26b-46ec-81f5-17d9b575c992';
+    const adminEmail = 'admin@xenostudio.local';
+    const legacyAdminEmail = 'admin@xenostudio.ai';
+
+    // Step 1: Drop and recreate user_sessions table to ensure correct schema
+    try {
+      await req.db.query(`DROP TABLE IF EXISTS user_sessions`);
+      await req.db.query(`
+        CREATE TABLE user_sessions (
+          id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+          user_id UUID NOT NULL,
+          token_hash VARCHAR(255) NOT NULL,
+          session_token VARCHAR(512),
+          expires_at TIMESTAMP NOT NULL,
+          created_at TIMESTAMP DEFAULT NOW(),
+          ip_address INET,
+          user_agent TEXT
+        )
+      `);
+      console.log('✅ user_sessions table recreated with correct schema');
+    } catch (error) {
+      console.error('Error recreating user_sessions table:', error);
+      throw error;
+    }
+
+    // Step 2: Add missing columns to existing users table
+    await req.db.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS last_login TIMESTAMP`);
+    await req.db.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS email_verified BOOLEAN DEFAULT FALSE`);
+    await req.db.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS is_active BOOLEAN DEFAULT TRUE`);
+    await req.db.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS password_hash VARCHAR(255)`);
+    await req.db.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS reset_token VARCHAR(255)`);
+    await req.db.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS reset_token_expires TIMESTAMP`);
+    await req.db.query(`ALTER TABLE user_sessions ADD COLUMN IF NOT EXISTS session_token VARCHAR(512)`);
+    await ensureAuthSecurityTables(req.db);
+    console.log('✅ User table columns added/verified');
+    
+    // Step 3: Check if admin user exists and update/create it
+    const adminCheck = await req.db.query(
+      'SELECT id FROM users WHERE id = $1 OR email IN ($2, $3)',
+      [adminUserId, adminEmail, legacyAdminEmail]
+    );
+    
+    if (adminCheck.rows.length === 0) {
+      // Create new admin user
+      const adminPasswordHash = await hashPassword('xenostudio123');
+      
+      await req.db.query(`
+        INSERT INTO users (id, username, email, password_hash, display_name, email_verified, is_active)
+        VALUES ($1, $2, $3, $4, $5, $6, $7)
+        ON CONFLICT (id) DO UPDATE SET 
+          username = EXCLUDED.username,
+          password_hash = EXCLUDED.password_hash,
+          display_name = EXCLUDED.display_name,
+          email_verified = EXCLUDED.email_verified,
+          is_active = EXCLUDED.is_active
+      `, [adminUserId, 'admin', adminEmail, adminPasswordHash, 'XenoStudio Admin', true, true]);
+      console.log('✅ Admin user created');
+    } else {
+      // Update existing admin user with hashed password
+      const adminPasswordHash = await hashPassword('xenostudio123');
+      await req.db.query(`
+        UPDATE users 
+        SET password_hash = $1, email_verified = true, is_active = true, username = 'admin', display_name = 'XenoStudio Admin'
+        WHERE id = $2 OR email IN ($3, $4)
+      `, [adminPasswordHash, adminUserId, adminEmail, legacyAdminEmail]);
+      console.log('✅ Admin user updated');
+    }
+
+    res.json({
+      success: true,
+      message: 'Database migration completed successfully',
+      details: {
+        adminCredentials: {
+          email: 'admin@xenostudio.local',
+          password: 'xenostudio123'
+        }
+      }
+    });
+
+  } catch (error) {
+    console.error('Migration error:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Migration failed',
+      message: error.message
+    });
+  }
+});
+
+// GET /api/auth/me - Get current user profile
+router.get('/me', async (req, res) => {
+  try {
+    const { user } = await requireAuthenticatedUser(req, { requireSession: true });
+    const authUser = await buildAuthUserPayload(req.db, user);
+
+    res.json({
+      success: true,
+      user: authUser
+    });
+
+  } catch (error) {
+    if (isAuthError(error)) {
+      return sendAuthError(res, error);
+    }
+
+    console.error('Profile fetch error:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to fetch user profile',
+      message: error.message
+    });
+  }
+});
+
+// PUT /api/auth/profile - Update user profile
+router.put('/profile', async (req, res) => {
+  try {
+    const { user } = await requireAuthenticatedUser(req, { requireSession: true });
+    const { display_name, username, avatar_url } = req.body;
+
+    // Build dynamic update query
+    const updates = [];
+    const values = [];
+    let paramCount = 1;
+
+    if (display_name !== undefined) {
+      updates.push(`display_name = $${paramCount}`);
+      values.push(display_name);
+      paramCount++;
+    }
+
+    if (username !== undefined) {
+      // Check if username is already taken
+      const existingUser = await req.db.query(
+        'SELECT id FROM users WHERE username = $1 AND id != $2',
+        [username.toLowerCase(), user.id]
+      );
+      if (existingUser.rows.length > 0) {
+        return res.status(400).json({
+          success: false,
+          error: 'Username is already taken'
+        });
+      }
+      updates.push(`username = $${paramCount}`);
+      values.push(username.toLowerCase());
+      paramCount++;
+    }
+
+    if (avatar_url !== undefined) {
+      updates.push(`avatar_url = $${paramCount}`);
+      values.push(avatar_url);
+      paramCount++;
+    }
+
+    if (updates.length === 0) {
+      return res.status(400).json({
+        success: false,
+        error: 'No fields to update'
+      });
+    }
+
+    updates.push(`updated_at = NOW()`);
+    values.push(user.id);
+
+    const result = await req.db.query(`
+      UPDATE users
+      SET ${updates.join(', ')}
+      WHERE id = $${paramCount}
+      RETURNING id, username, email, display_name, avatar_url, created_at, email_verified, is_active, credits, bonus_credits_claimed, role, plan
+    `, values);
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({
+        success: false,
+        error: 'User not found'
+      });
+    }
+
+    const updatedUser = result.rows[0];
+    await logSecurityEvent(req.db, {
+      userId: updatedUser.id,
+      eventType: 'profile_updated',
+      ipAddress: req.ip || null,
+      userAgent: req.get('User-Agent') || null,
+      metadata: {
+        updatedFields: {
+          display_name: display_name !== undefined,
+          username: username !== undefined,
+          avatar_url: avatar_url !== undefined,
+        },
+      },
+    });
+    const authUser = await buildAuthUserPayload(req.db, updatedUser);
+
+    res.json({
+      success: true,
+      user: authUser,
+      message: 'Profile updated successfully'
+    });
+
+  } catch (error) {
+    if (isAuthError(error)) {
+      return sendAuthError(res, error);
+    }
+
+    console.error('Profile update error:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to update profile',
+      message: error.message
+    });
+  }
+});
+
+// PUT /api/auth/password - Change password
+router.put('/password', async (req, res) => {
+  try {
+    const { token, user: authUser, session } = await requireAuthenticatedUser(req, { requireSession: true });
+    const { current_password, new_password } = req.body;
+
+    if (!current_password || !new_password) {
+      return res.status(400).json({
+        success: false,
+        error: 'Current password and new password are required'
+      });
+    }
+
+    if (new_password.length < 6) {
+      return res.status(400).json({
+        success: false,
+        error: 'New password must be at least 6 characters long'
+      });
+    }
+
+    // Get current user with password hash
+    const userResult = await req.db.query(
+      'SELECT id, password_hash FROM users WHERE id = $1',
+      [authUser.id]
+    );
+
+    if (userResult.rows.length === 0) {
+      return res.status(404).json({
+        success: false,
+        error: 'User not found'
+      });
+    }
+
+    const passwordUser = userResult.rows[0];
+
+    // Verify current password
+    const passwordValid = await verifyPassword(current_password, passwordUser.password_hash);
+    if (!passwordValid) {
+      return res.status(400).json({
+        success: false,
+        error: 'Current password is incorrect'
+      });
+    }
+
+    // Hash new password and update
+    const newPasswordHash = await hashPassword(new_password);
+    await req.db.query(
+      'UPDATE users SET password_hash = $1, updated_at = NOW() WHERE id = $2',
+      [newPasswordHash, authUser.id]
+    );
+    const revoked = await revokeAllOtherSecuritySessions(req.db, authUser.id, token, 'password_changed');
+    await logSecurityEvent(req.db, {
+      userId: authUser.id,
+      eventType: 'password_changed',
+      ipAddress: req.ip || null,
+      userAgent: req.get('User-Agent') || null,
+      metadata: {
+        currentSessionId: session?.id || null,
+        revokedOtherSessions: revoked.revokedCount,
+      },
+    });
+
+    res.json({
+      success: true,
+      message: 'Password changed successfully',
+      revoked_other_sessions: revoked.revokedCount
+    });
+
+  } catch (error) {
+    if (isAuthError(error)) {
+      return sendAuthError(res, error);
+    }
+
+    console.error('Password change error:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to change password',
+      message: error.message
+    });
+  }
+});
+
+// GET /api/auth/usage - Get usage statistics
+router.get('/usage', async (req, res) => {
+  try {
+    const { user: authUser } = await requireAuthenticatedUser(req, { requireSession: true });
+    const snapshot = await getCreditSnapshot(req.db, authUser.id);
+
+    const userResult = await req.db.query(
+      'SELECT id, credits, bonus_credits_claimed, created_at FROM users WHERE id = $1',
+      [authUser.id]
+    );
+
+    if (userResult.rows.length === 0 || !snapshot) {
+      return res.status(404).json({
+        success: false,
+        error: 'User not found'
+      });
+    }
+
+    const usageUser = userResult.rows[0];
+
+    // Get usage history from credit_usage table if it exists
+    let usageHistory = [];
+    try {
+      const usageResult = await req.db.query(`
+        SELECT feature, credits_used, created_at
+        FROM credit_usage
+        WHERE user_id = $1
+        ORDER BY created_at DESC
+        LIMIT 50
+      `, [usageUser.id]);
+      usageHistory = usageResult.rows;
+    } catch (e) {
+      // Table might not exist yet, that's okay
+      console.log('credit_usage table not found, returning empty history');
+    }
+
+    const billingProfile = await getUserBillingProfile(req.db, usageUser.id, PLATFORM_RUNTIME_BILLING_OPTIONS);
+
+    // Prefer canonical ledger/account values when available.
+    const totalCreditsEarned = billingProfile?.account
+      ? Number(billingProfile.account.lifetime_earned || 0) / 1000000
+      : (usageUser.bonus_credits_claimed ? 1000 : 0);
+    const creditsUsed = billingProfile?.account
+      ? Number(billingProfile.account.lifetime_spent || 0) / 1000000
+      : Math.max(0, totalCreditsEarned - (snapshot.currentCredits || 0));
+
+    res.json({
+      success: true,
+      usage: {
+        current_credits: snapshot.currentCredits,
+        total_credits_earned: totalCreditsEarned,
+        credits_used: creditsUsed > 0 ? creditsUsed : 0,
+        bonus_claimed: usageUser.bonus_credits_claimed,
+        member_since: usageUser.created_at,
+        history: usageHistory,
+        workspace: billingProfile?.workspace
+          ? {
+              id: billingProfile.workspace.id,
+              name: billingProfile.workspace.name,
+              slug: billingProfile.workspace.slug,
+            }
+          : null,
+        default_project: billingProfile?.project
+          ? {
+              id: billingProfile.project.id,
+              name: billingProfile.project.name,
+              slug: billingProfile.project.slug,
+            }
+          : null,
+      }
+    });
+
+  } catch (error) {
+    if (isAuthError(error)) {
+      return sendAuthError(res, error);
+    }
+
+    console.error('Usage fetch error:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to fetch usage data',
+      message: error.message
+    });
+  }
+});
+
+// POST /api/auth/use-credits - Deduct credits for a feature
+router.post('/use-credits', async (req, res) => {
+  try {
+    const { user } = await requireAuthenticatedUser(req, { requireSession: true });
+    const { feature, amount, workspace_id, project_id } = req.body;
+
+    if (!feature || !amount || amount <= 0) {
+      return res.status(400).json({
+        success: false,
+        error: 'Feature and positive amount are required'
+      });
+    }
+
+    const billingContext = await resolveRequestedBillingRuntimeContext(
+      req.db,
+      user.id,
+      {
+        workspaceId: typeof workspace_id === 'string' ? workspace_id : null,
+        projectId: typeof project_id === 'string' ? project_id : null,
+      },
+      PLATFORM_RUNTIME_BILLING_OPTIONS
+    );
+
+    const debit = await deductCredits(req.db, user.id, Number(amount), {
+      feature,
+      referenceType: 'auth_use_credits',
+      description: `Auth credits usage for ${feature}`,
+      metadata: {
+        source: 'authRoutes',
+        surface: 'xeno_platform_web',
+        feature,
+        amount: Number(amount),
+        workspace_id: billingContext?.workspace?.id ?? null,
+        project_id: billingContext?.project?.id ?? null,
+      }
+    });
+
+    if (!debit.success) {
+      return res.status(400).json({
+        success: false,
+        error: debit.error || 'Insufficient credits',
+        current_credits: debit.currentCredits ?? 0,
+        required: amount
+      });
+    }
+
+    await logUsage(req.db, user.id, feature, Number(amount), {
+      source: 'authRoutes',
+      surface: 'xeno_platform_web',
+      workspace_id: billingContext?.workspace?.id ?? null,
+      project_id: billingContext?.project?.id ?? null,
+    });
+
+    res.json({
+      success: true,
+      message: 'Credits deducted successfully',
+      credits_used: Number(amount),
+      remaining_credits: debit.newBalance,
+      billing_context: {
+        workspace: billingContext?.workspace ?? null,
+        project: billingContext?.project ?? null,
+      },
+    });
+
+  } catch (error) {
+    if (isAuthError(error)) {
+      return sendAuthError(res, error);
+    }
+
+    console.error('Credit usage error:', error);
+    res.status(isRuntimeSelectionError(error) ? 400 : 500).json({
+      success: false,
+      error: isRuntimeSelectionError(error) ? error.message : 'Failed to use credits',
+      message: error.message
+    });
+  }
+});
+
+// DELETE /api/auth/account - Delete user account
+router.delete('/account', async (req, res) => {
+  try {
+    const { user: authUser } = await requireAuthenticatedUser(req, { requireSession: true });
+    const { password } = req.body;
+
+    if (!password) {
+      return res.status(400).json({
+        success: false,
+        error: 'Password is required to delete account'
+      });
+    }
+
+    // Get user and verify password
+    const userResult = await req.db.query(
+      'SELECT id, password_hash FROM users WHERE id = $1',
+      [authUser.id]
+    );
+
+    if (userResult.rows.length === 0) {
+      return res.status(404).json({
+        success: false,
+        error: 'User not found'
+      });
+    }
+
+    const accountUser = userResult.rows[0];
+    const passwordValid = await verifyPassword(password, accountUser.password_hash);
+
+    if (!passwordValid) {
+      return res.status(400).json({
+        success: false,
+        error: 'Incorrect password'
+      });
+    }
+
+    // Delete user sessions first
+    await req.db.query('DELETE FROM user_sessions WHERE user_id = $1', [authUser.id]);
+
+    // Delete user (this will cascade to related tables if set up)
+    await req.db.query('DELETE FROM users WHERE id = $1', [authUser.id]);
+
+    res.json({
+      success: true,
+      message: 'Account deleted successfully'
+    });
+
+  } catch (error) {
+    if (isAuthError(error)) {
+      return sendAuthError(res, error);
+    }
+
+    console.error('Account deletion error:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to delete account',
+      message: error.message
+    });
+  }
+});
+
+// POST /api/auth/claim-bonus - Claim one-time bonus credits
+router.post('/claim-bonus', async (req, res) => {
+  try {
+    const { user } = await requireAuthenticatedUser(req, { requireSession: true });
+
+    // Check if user has already claimed welcome credits
+    if (user.bonus_credits_claimed) {
+      return res.status(400).json({
+        success: false,
+        error: 'Welcome credits have already been claimed'
+      });
+    }
+
+    const billingContext = await getOrCreateBillingRuntimeContext(req.db, user.id, PLATFORM_RUNTIME_BILLING_OPTIONS);
+
+    const grant = await grantCredits(req.db, user.id, 1000, {
+      referenceType: 'welcome_bonus',
+      description: 'Welcome credits claimed successfully',
+      metadata: {
+        source: 'authRoutes',
+        surface: 'xeno_platform_web',
+        type: 'welcome_bonus',
+        workspace_id: billingContext?.workspace?.id ?? null,
+        project_id: billingContext?.project?.id ?? null,
+      }
+    });
+
+    await req.db.query(
+      'UPDATE users SET bonus_credits_claimed = true, updated_at = NOW() WHERE id = $1',
+      [user.id]
+    );
+
+    res.json({
+      success: true,
+      message: 'Welcome credits claimed successfully!',
+      credits: grant.newBalance,
+      welcome_amount: 1000,
+      workspace: billingContext?.workspace ?? null,
+      default_project: billingContext?.project ?? null,
+    });
+
+  } catch (error) {
+    if (isAuthError(error)) {
+      return sendAuthError(res, error);
+    }
+
+    console.error('Bonus claim error:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to claim bonus credits'
+    });
+  }
+});
+
+// ============================================
+// OAUTH ROUTES - GOOGLE
+// ============================================
+
+// GET /api/auth/google - Initiate Google OAuth
+router.get('/google', async (req, res) => {
+  try {
+    const config = OAUTH_CONFIG.google;
+    if (!config.clientId) {
+      return res.status(500).json({ success: false, error: 'Google OAuth not configured' });
+    }
+
+    const state = generateState();
+    const returnUrl = req.query.returnUrl || '/overview';
+
+    // Store state in Redis
+    await storeOAuthState(state, { provider: 'google', returnUrl, createdAt: Date.now() });
+
+    const params = new URLSearchParams({
+      client_id: config.clientId,
+      redirect_uri: config.callbackUrl,
+      response_type: 'code',
+      scope: config.scopes.join(' '),
+      state: state,
+      access_type: 'offline',
+      prompt: 'consent'
+    });
+
+    res.redirect(`${config.authUrl}?${params.toString()}`);
+  } catch (error) {
+    console.error('Google OAuth init error:', error);
+    res.redirect(`${FRONTEND_URL}/auth?error=oauth_failed`);
+  }
+});
+
+// GET /api/auth/google/callback - Google OAuth callback
+router.get('/google/callback', async (req, res) => {
+  try {
+    const { code, state, error: oauthError } = req.query;
+
+    if (oauthError) {
+      console.error('Google OAuth error:', oauthError);
+      return res.redirect(`${FRONTEND_URL}/auth?error=access_denied`);
+    }
+
+    if (!code || !state) {
+      return res.redirect(`${FRONTEND_URL}/auth?error=invalid_request`);
+    }
+
+    // Verify state from Redis
+    const stateData = await consumeOAuthState(state);
+    if (!stateData || stateData.provider !== 'google') {
+      return res.redirect(`${FRONTEND_URL}/auth?error=invalid_state`);
+    }
+
+    const config = OAUTH_CONFIG.google;
+
+    // Exchange code for tokens
+    const tokenResponse = await fetch(config.tokenUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({
+        client_id: config.clientId,
+        client_secret: config.clientSecret,
+        code: code,
+        grant_type: 'authorization_code',
+        redirect_uri: config.callbackUrl
+      })
+    });
+
+    const tokens = await tokenResponse.json();
+    if (!tokens.access_token) {
+      console.error('Google token error:', tokens);
+      return res.redirect(`${FRONTEND_URL}/auth?error=token_failed`);
+    }
+
+    // Get user info
+    const userResponse = await fetch(config.userInfoUrl, {
+      headers: { Authorization: `Bearer ${tokens.access_token}` }
+    });
+
+    const googleUser = await userResponse.json();
+    if (!googleUser.id) {
+      return res.redirect(`${FRONTEND_URL}/auth?error=user_fetch_failed`);
+    }
+
+    // Find or create user
+    const { user, isNew } = await findOrCreateOAuthUser(req.db, 'google', {
+      id: googleUser.id,
+      email: googleUser.email,
+      name: googleUser.name,
+      avatar: googleUser.picture,
+      username: googleUser.email?.split('@')[0]
+    });
+
+    const mfaConfig = await getUserMfaConfig(req.db, user.id);
+    if (mfaConfig.enabled) {
+      const challengeId = await createMfaChallenge({
+        userId: user.id,
+        authMethod: 'oauth',
+        provider: 'google',
+        returnUrl: stateData.returnUrl || '/overview',
+        isNew,
+      });
+
+      return handleOAuthChallengeRedirect(res, stateData.returnUrl || '/overview', {
+        mfa_required: 1,
+        challenge: challengeId,
+        provider: 'google',
+      });
+    }
+
+    // Generate JWT
+    const jwtToken = generateToken(user, { authProvider: 'google' });
+
+    await createTrackedSession(req.db, user.id, jwtToken, req, {
+      authMethod: 'oauth',
+      provider: 'google',
+      origin: 'oauth_callback',
+    });
+
+    // Redirect with token
+    const returnUrl = stateData.returnUrl || '/overview';
+    handleOAuthRedirect(res, returnUrl, jwtToken, isNew);
+
+  } catch (error) {
+    console.error('Google OAuth callback error:', error);
+    res.redirect(`${FRONTEND_URL}/auth?error=callback_failed`);
+  }
+});
+
+// ============================================
+// OAUTH ROUTES - GITHUB
+// ============================================
+
+// GET /api/auth/github - Initiate GitHub OAuth
+router.get('/github', async (req, res) => {
+  try {
+    const config = OAUTH_CONFIG.github;
+    if (!config.clientId) {
+      return res.status(500).json({ success: false, error: 'GitHub OAuth not configured' });
+    }
+
+    const state = generateState();
+    const returnUrl = req.query.returnUrl || '/overview';
+
+    await storeOAuthState(state, { provider: 'github', returnUrl, createdAt: Date.now() });
+
+    const params = new URLSearchParams({
+      client_id: config.clientId,
+      redirect_uri: config.callbackUrl,
+      scope: config.scopes.join(' '),
+      state: state
+    });
+
+    res.redirect(`${config.authUrl}?${params.toString()}`);
+  } catch (error) {
+    console.error('GitHub OAuth init error:', error);
+    res.redirect(`${FRONTEND_URL}/auth?error=oauth_failed`);
+  }
+});
+
+// GET /api/auth/github/callback - GitHub OAuth callback
+router.get('/github/callback', async (req, res) => {
+  try {
+    const { code, state, error: oauthError } = req.query;
+
+    if (oauthError) {
+      console.error('GitHub OAuth error:', oauthError);
+      return res.redirect(`${FRONTEND_URL}/auth?error=access_denied`);
+    }
+
+    if (!code || !state) {
+      return res.redirect(`${FRONTEND_URL}/auth?error=invalid_request`);
+    }
+
+    const stateData = await consumeOAuthState(state);
+    if (!stateData || stateData.provider !== 'github') {
+      return res.redirect(`${FRONTEND_URL}/auth?error=invalid_state`);
+    }
+
+    const config = OAUTH_CONFIG.github;
+
+    // Exchange code for token
+    const tokenResponse = await fetch(config.tokenUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+        'Accept': 'application/json'
+      },
+      body: new URLSearchParams({
+        client_id: config.clientId,
+        client_secret: config.clientSecret,
+        code: code,
+        redirect_uri: config.callbackUrl
+      })
+    });
+
+    const tokens = await tokenResponse.json();
+    if (!tokens.access_token) {
+      console.error('GitHub token error:', tokens);
+      return res.redirect(`${FRONTEND_URL}/auth?error=token_failed`);
+    }
+
+    // Get user info
+    const userResponse = await fetch(config.userInfoUrl, {
+      headers: {
+        Authorization: `Bearer ${tokens.access_token}`,
+        Accept: 'application/vnd.github.v3+json',
+        'User-Agent': 'XenoStudio'
+      }
+    });
+
+    const githubUser = await userResponse.json();
+    if (!githubUser.id) {
+      return res.redirect(`${FRONTEND_URL}/auth?error=user_fetch_failed`);
+    }
+
+    // Get primary email if not public
+    let email = githubUser.email;
+    if (!email) {
+      try {
+        const emailsResponse = await fetch(config.userEmailsUrl, {
+          headers: {
+            Authorization: `Bearer ${tokens.access_token}`,
+            Accept: 'application/vnd.github.v3+json',
+            'User-Agent': 'XenoStudio'
+          }
+        });
+        const emails = await emailsResponse.json();
+        const primaryEmail = emails.find(e => e.primary && e.verified);
+        email = primaryEmail?.email || emails[0]?.email;
+      } catch (e) {
+        console.log('Could not fetch GitHub emails:', e.message);
+      }
+    }
+
+    // Find or create user
+    const { user, isNew } = await findOrCreateOAuthUser(req.db, 'github', {
+      id: String(githubUser.id),
+      email: email,
+      name: githubUser.name || githubUser.login,
+      avatar: githubUser.avatar_url,
+      username: githubUser.login
+    });
+
+    const mfaConfig = await getUserMfaConfig(req.db, user.id);
+    if (mfaConfig.enabled) {
+      const challengeId = await createMfaChallenge({
+        userId: user.id,
+        authMethod: 'oauth',
+        provider: 'github',
+        returnUrl: stateData.returnUrl || '/overview',
+        isNew,
+      });
+
+      return handleOAuthChallengeRedirect(res, stateData.returnUrl || '/overview', {
+        mfa_required: 1,
+        challenge: challengeId,
+        provider: 'github',
+      });
+    }
+
+    // Generate JWT
+    const jwtToken = generateToken(user, { authProvider: 'github' });
+
+    await createTrackedSession(req.db, user.id, jwtToken, req, {
+      authMethod: 'oauth',
+      provider: 'github',
+      origin: 'oauth_callback',
+    });
+
+    const returnUrl = stateData.returnUrl || '/overview';
+    handleOAuthRedirect(res, returnUrl, jwtToken, isNew);
+
+  } catch (error) {
+    console.error('GitHub OAuth callback error:', error);
+    res.redirect(`${FRONTEND_URL}/auth?error=callback_failed`);
+  }
+});
+
+// ============================================
+// OAUTH ROUTES - TWITTER/X (OAuth 2.0 with PKCE)
+// ============================================
+
+// GET /api/auth/twitter - Initiate Twitter OAuth
+router.get('/twitter', async (req, res) => {
+  try {
+    const config = OAUTH_CONFIG.twitter;
+    if (!config.clientId) {
+      return res.status(500).json({ success: false, error: 'Twitter OAuth not configured' });
+    }
+
+    const state = generateState();
+    const codeVerifier = generateCodeVerifier();
+    const codeChallenge = generateCodeChallenge(codeVerifier);
+    const returnUrl = req.query.returnUrl || '/overview';
+
+    // Store state and PKCE verifier in Redis
+    await storeOAuthState(state, {
+      provider: 'twitter',
+      returnUrl,
+      codeVerifier,
+      createdAt: Date.now()
+    });
+
+    const params = new URLSearchParams({
+      response_type: 'code',
+      client_id: config.clientId,
+      redirect_uri: config.callbackUrl,
+      scope: config.scopes.join(' '),
+      state: state,
+      code_challenge: codeChallenge,
+      code_challenge_method: 'S256'
+    });
+
+    res.redirect(`${config.authUrl}?${params.toString()}`);
+  } catch (error) {
+    console.error('Twitter OAuth init error:', error);
+    res.redirect(`${FRONTEND_URL}/auth?error=oauth_failed`);
+  }
+});
+
+// GET /api/auth/twitter/callback - Twitter OAuth callback
+router.get('/twitter/callback', async (req, res) => {
+  try {
+    const { code, state, error: oauthError } = req.query;
+
+    if (oauthError) {
+      console.error('Twitter OAuth error:', oauthError);
+      return res.redirect(`${FRONTEND_URL}/auth?error=access_denied`);
+    }
+
+    if (!code || !state) {
+      return res.redirect(`${FRONTEND_URL}/auth?error=invalid_request`);
+    }
+
+    const stateData = await consumeOAuthState(state);
+    if (!stateData || stateData.provider !== 'twitter') {
+      return res.redirect(`${FRONTEND_URL}/auth?error=invalid_state`);
+    }
+
+    const config = OAUTH_CONFIG.twitter;
+    const basicAuth = Buffer.from(`${config.clientId}:${config.clientSecret}`).toString('base64');
+
+    // Exchange code for token with PKCE verifier
+    const tokenResponse = await fetch(config.tokenUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+        'Authorization': `Basic ${basicAuth}`
+      },
+      body: new URLSearchParams({
+        code: code,
+        grant_type: 'authorization_code',
+        redirect_uri: config.callbackUrl,
+        code_verifier: stateData.codeVerifier
+      })
+    });
+
+    const tokens = await tokenResponse.json();
+    if (!tokens.access_token) {
+      console.error('Twitter token error:', tokens);
+      return res.redirect(`${FRONTEND_URL}/auth?error=token_failed`);
+    }
+
+    // Get user info
+    const userResponse = await fetch(`${config.userInfoUrl}?user.fields=profile_image_url,name,username`, {
+      headers: { Authorization: `Bearer ${tokens.access_token}` }
+    });
+
+    const twitterData = await userResponse.json();
+    const twitterUser = twitterData.data;
+
+    if (!twitterUser?.id) {
+      console.error('Twitter user fetch error:', twitterData);
+      return res.redirect(`${FRONTEND_URL}/auth?error=user_fetch_failed`);
+    }
+
+    // Find or create user (Twitter doesn't provide email in v2 API by default)
+    const { user, isNew } = await findOrCreateOAuthUser(req.db, 'twitter', {
+      id: twitterUser.id,
+      email: null, // Twitter v2 API doesn't provide email without elevated access
+      name: twitterUser.name,
+      avatar: twitterUser.profile_image_url?.replace('_normal', '_400x400'),
+      username: twitterUser.username
+    });
+
+    const mfaConfig = await getUserMfaConfig(req.db, user.id);
+    if (mfaConfig.enabled) {
+      const challengeId = await createMfaChallenge({
+        userId: user.id,
+        authMethod: 'oauth',
+        provider: 'twitter',
+        returnUrl: stateData.returnUrl || '/overview',
+        isNew,
+      });
+
+      return handleOAuthChallengeRedirect(res, stateData.returnUrl || '/overview', {
+        mfa_required: 1,
+        challenge: challengeId,
+        provider: 'twitter',
+      });
+    }
+
+    // Generate JWT
+    const jwtToken = generateToken(user, { authProvider: 'twitter' });
+
+    await createTrackedSession(req.db, user.id, jwtToken, req, {
+      authMethod: 'oauth',
+      provider: 'twitter',
+      origin: 'oauth_callback',
+    });
+
+    const returnUrl = stateData.returnUrl || '/overview';
+    handleOAuthRedirect(res, returnUrl, jwtToken, isNew);
+
+  } catch (error) {
+    console.error('Twitter OAuth callback error:', error);
+    res.redirect(`${FRONTEND_URL}/auth?error=callback_failed`);
+  }
+});
+
+// ============================================
+// OAUTH ACCOUNT MANAGEMENT
+// ============================================
+
+// GET /api/auth/linked-accounts - Get user's linked OAuth accounts
+router.get('/linked-accounts', async (req, res) => {
+  try {
+    const { user } = await requireAuthenticatedUser(req, { requireSession: true });
+
+    const result = await req.db.query(
+      `SELECT provider, provider_email, provider_username, provider_avatar_url, created_at
+       FROM oauth_accounts WHERE user_id = $1`,
+      [user.id]
+    );
+
+    res.json({
+      success: true,
+      accounts: result.rows.map(acc => ({
+        provider: acc.provider,
+        email: acc.provider_email,
+        username: acc.provider_username,
+        avatar: acc.provider_avatar_url,
+        linkedAt: acc.created_at
+      }))
+    });
+
+  } catch (error) {
+    if (isAuthError(error)) {
+      return sendAuthError(res, error);
+    }
+    console.error('Linked accounts error:', error);
+    res.status(500).json({ success: false, error: 'Failed to fetch linked accounts' });
+  }
+});
+
+// DELETE /api/auth/linked-accounts/:provider - Unlink OAuth account
+router.delete('/linked-accounts/:provider', async (req, res) => {
+  try {
+    const { user } = await requireAuthenticatedUser(req, { requireSession: true });
+    const { provider } = req.params;
+
+    if (!['google', 'github', 'twitter'].includes(provider)) {
+      return res.status(400).json({ success: false, error: 'Invalid provider' });
+    }
+
+    // Check if user has password set (can't unlink last auth method)
+    const userResult = await req.db.query(
+      'SELECT password_hash FROM users WHERE id = $1',
+      [user.id]
+    );
+
+    const accountsResult = await req.db.query(
+      'SELECT COUNT(*) as count FROM oauth_accounts WHERE user_id = $1',
+      [user.id]
+    );
+
+    const hasPassword = userResult.rows[0]?.password_hash;
+    const oauthCount = parseInt(accountsResult.rows[0]?.count || 0);
+
+    if (!hasPassword && oauthCount <= 1) {
+      return res.status(400).json({
+        success: false,
+        error: 'Cannot unlink last authentication method. Please set a password first.'
+      });
+    }
+
+    await req.db.query(
+      'DELETE FROM oauth_accounts WHERE user_id = $1 AND provider = $2',
+      [user.id, provider]
+    );
+    await logSecurityEvent(req.db, {
+      userId: user.id,
+      eventType: 'oauth_unlinked',
+      ipAddress: req.ip || null,
+      userAgent: req.get('User-Agent') || null,
+      metadata: {
+        provider,
+      },
+    });
+
+    res.json({ success: true, message: `${provider} account unlinked successfully` });
+
+  } catch (error) {
+    if (isAuthError(error)) {
+      return sendAuthError(res, error);
+    }
+    console.error('Unlink account error:', error);
+    res.status(500).json({ success: false, error: 'Failed to unlink account' });
+  }
+});
+
+export default router;

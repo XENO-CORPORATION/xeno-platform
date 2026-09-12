@@ -1,0 +1,149 @@
+import express from 'express';
+import {
+  createBillingProject,
+  createBillingWorkspace,
+  getAccountOverview,
+  listBillingProjects,
+  listBillingWorkspaces,
+  updateBillingProject,
+} from '../utils/billingRuntime.js';
+
+const router = express.Router();
+
+const PLATFORM_ACCOUNT_OPTIONS = {
+  projectSlug: 'default-platform-project',
+  projectName: 'Default Platform Project',
+  source: 'xeno-platform-account-api',
+};
+
+router.get('/account/overview', async (req, res) => {
+  try {
+    const overview = await getAccountOverview(req.db, req.user.id, PLATFORM_ACCOUNT_OPTIONS);
+
+    if (!overview) {
+      return res.status(404).json({
+        success: false,
+        error: 'Account overview not found',
+      });
+    }
+
+    res.json({
+      success: true,
+      overview,
+    });
+  } catch (error) {
+    console.error('Account overview error:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to fetch account overview',
+      message: error.message,
+    });
+  }
+});
+
+router.get('/workspaces', async (req, res) => {
+  try {
+    const workspaces = await listBillingWorkspaces(req.db, req.user.id, PLATFORM_ACCOUNT_OPTIONS);
+    res.json({
+      success: true,
+      workspaces,
+    });
+  } catch (error) {
+    console.error('List workspaces error:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to fetch workspaces',
+      message: error.message,
+    });
+  }
+});
+
+router.post('/workspaces', async (req, res) => {
+  try {
+    const workspace = await createBillingWorkspace(req.db, req.user.id, req.body || {}, PLATFORM_ACCOUNT_OPTIONS);
+    res.status(201).json({
+      success: true,
+      workspace: workspace.workspace,
+      project: workspace.project,
+    });
+  } catch (error) {
+    const status = /required|not found/i.test(error.message) ? 400 : 500;
+    console.error('Create workspace error:', error);
+    res.status(status).json({
+      success: false,
+      error: error.message || 'Failed to create workspace',
+    });
+  }
+});
+
+router.get('/projects', async (req, res) => {
+  try {
+    const workspaceId = typeof req.query.workspace_id === 'string'
+      ? req.query.workspace_id
+      : null;
+
+    const result = await listBillingProjects(
+      req.db,
+      req.user.id,
+      { workspaceId },
+      PLATFORM_ACCOUNT_OPTIONS
+    );
+
+    res.json({
+      success: true,
+      workspace: result.workspace,
+      projects: result.projects,
+    });
+  } catch (error) {
+    console.error('List projects error:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to fetch projects',
+      message: error.message,
+    });
+  }
+});
+
+router.post('/projects', async (req, res) => {
+  try {
+    const result = await createBillingProject(req.db, req.user.id, req.body || {}, PLATFORM_ACCOUNT_OPTIONS);
+    res.status(201).json({
+      success: true,
+      workspace: result.workspace,
+      project: result.project,
+    });
+  } catch (error) {
+    const status = /required|not found/i.test(error.message) ? 400 : 500;
+    console.error('Create project error:', error);
+    res.status(status).json({
+      success: false,
+      error: error.message || 'Failed to create project',
+    });
+  }
+});
+
+router.patch('/projects/:projectId', async (req, res) => {
+  try {
+    const project = await updateBillingProject(
+      req.db,
+      req.user.id,
+      req.params.projectId,
+      req.body || {},
+      PLATFORM_ACCOUNT_OPTIONS
+    );
+
+    res.json({
+      success: true,
+      project,
+    });
+  } catch (error) {
+    const status = /required|not found|cannot be archived/i.test(error.message) ? 400 : 500;
+    console.error('Update project error:', error);
+    res.status(status).json({
+      success: false,
+      error: error.message || 'Failed to update project',
+    });
+  }
+});
+
+export default router;

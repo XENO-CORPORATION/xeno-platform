@@ -1,0 +1,412 @@
+import express from 'express';
+import {
+  acceptBillingWorkspaceInvite,
+  createBillingProject,
+  createBillingWorkspace,
+  declineBillingWorkspaceInvite,
+  getAccountOverview,
+  getBillingWorkspaceInvites,
+  getBillingWorkspaceMembers,
+  inviteBillingWorkspaceMember,
+  listPendingBillingWorkspaceInvites,
+  listBillingProjects,
+  listBillingWorkspaces,
+  removeBillingWorkspaceMember,
+  revokeBillingWorkspaceInvite,
+  selectBillingWorkspace,
+  transferBillingWorkspaceOwnership,
+  updateBillingWorkspaceMember,
+  updateBillingProject,
+} from '../utils/billingRuntime.js';
+
+const router = express.Router();
+
+const PLATFORM_ACCOUNT_OPTIONS = {
+  projectSlug: 'default-platform-project',
+  projectName: 'Default Platform Project',
+  source: 'xeno-platform-account-api',
+};
+
+router.get('/account/overview', async (req, res) => {
+  try {
+    const overview = await getAccountOverview(req.db, req.user.id, PLATFORM_ACCOUNT_OPTIONS);
+
+    if (!overview) {
+      return res.status(404).json({
+        success: false,
+        error: 'Account overview not found',
+      });
+    }
+
+    res.json({
+      success: true,
+      overview,
+    });
+  } catch (error) {
+    console.error('Account overview error:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to fetch account overview',
+      message: error.message,
+    });
+  }
+});
+
+router.get('/workspaces', async (req, res) => {
+  try {
+    const workspaces = await listBillingWorkspaces(req.db, req.user.id, PLATFORM_ACCOUNT_OPTIONS);
+    res.json({
+      success: true,
+      workspaces,
+    });
+  } catch (error) {
+    console.error('List workspaces error:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to fetch workspaces',
+      message: error.message,
+    });
+  }
+});
+
+router.post('/workspaces', async (req, res) => {
+  try {
+    const workspace = await createBillingWorkspace(req.db, req.user.id, req.body || {}, PLATFORM_ACCOUNT_OPTIONS);
+    res.status(201).json({
+      success: true,
+      workspace: workspace.workspace,
+      project: workspace.project,
+    });
+  } catch (error) {
+    const status = /required|not found/i.test(error.message) ? 400 : 500;
+    console.error('Create workspace error:', error);
+    res.status(status).json({
+      success: false,
+      error: error.message || 'Failed to create workspace',
+    });
+  }
+});
+
+router.post('/workspaces/:workspaceId/select', async (req, res) => {
+  try {
+    const result = await selectBillingWorkspace(
+      req.db,
+      req.user.id,
+      req.params.workspaceId,
+      {
+        ...PLATFORM_ACCOUNT_OPTIONS,
+        projectId: typeof req.body?.projectId === 'string' ? req.body.projectId : null,
+      }
+    );
+
+    res.json({
+      success: true,
+      workspace: result.workspace,
+      project: result.project,
+    });
+  } catch (error) {
+    const status = /not found/i.test(error.message) ? 400 : 500;
+    console.error('Select workspace error:', error);
+    res.status(status).json({
+      success: false,
+      error: error.message || 'Failed to select workspace',
+    });
+  }
+});
+
+router.get('/workspaces/:workspaceId/members', async (req, res) => {
+  try {
+    const result = await getBillingWorkspaceMembers(req.db, req.user.id, req.params.workspaceId);
+    res.json({
+      success: true,
+      workspace: result.workspace,
+      members: result.members,
+    });
+  } catch (error) {
+    const status = /not found/i.test(error.message) ? 400 : 500;
+    console.error('List workspace members error:', error);
+    res.status(status).json({
+      success: false,
+      error: error.message || 'Failed to fetch workspace members',
+    });
+  }
+});
+
+router.get('/workspaces/:workspaceId/invites', async (req, res) => {
+  try {
+    const result = await getBillingWorkspaceInvites(req.db, req.user.id, req.params.workspaceId);
+    res.json({
+      success: true,
+      workspace: result.workspace,
+      invites: result.invites,
+    });
+  } catch (error) {
+    const status = /not found/i.test(error.message) ? 400 : 500;
+    console.error('List workspace invites error:', error);
+    res.status(status).json({
+      success: false,
+      error: error.message || 'Failed to fetch workspace invites',
+    });
+  }
+});
+
+router.get('/workspace-invites', async (req, res) => {
+  try {
+    const result = await listPendingBillingWorkspaceInvites(req.db, req.user.id);
+    res.json({
+      success: true,
+      invites: result.invites,
+    });
+  } catch (error) {
+    console.error('List pending workspace invites error:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message || 'Failed to fetch pending workspace invites',
+    });
+  }
+});
+
+router.post('/workspace-invites/:inviteId/accept', async (req, res) => {
+  try {
+    const result = await acceptBillingWorkspaceInvite(
+      req.db,
+      req.user.id,
+      req.params.inviteId,
+      {
+        ...PLATFORM_ACCOUNT_OPTIONS,
+        setActive: req.body?.setActive !== false,
+      }
+    );
+
+    res.json({
+      success: true,
+      workspace: result.workspace,
+      project: result.project,
+      invite: result.invite,
+      invites: result.invites,
+    });
+  } catch (error) {
+    const status = /not found|expired/i.test(error.message) ? 400 : 500;
+    console.error('Accept workspace invite error:', error);
+    res.status(status).json({
+      success: false,
+      error: error.message || 'Failed to accept workspace invite',
+    });
+  }
+});
+
+router.post('/workspace-invites/:inviteId/decline', async (req, res) => {
+  try {
+    const result = await declineBillingWorkspaceInvite(req.db, req.user.id, req.params.inviteId);
+    res.json({
+      success: true,
+      invite: result.invite,
+      invites: result.invites,
+    });
+  } catch (error) {
+    const status = /not found|expired/i.test(error.message) ? 400 : 500;
+    console.error('Decline workspace invite error:', error);
+    res.status(status).json({
+      success: false,
+      error: error.message || 'Failed to decline workspace invite',
+    });
+  }
+});
+
+router.post('/workspaces/:workspaceId/invites', async (req, res) => {
+  try {
+    const result = await inviteBillingWorkspaceMember(
+      req.db,
+      req.user.id,
+      req.params.workspaceId,
+      req.body || {}
+    );
+
+    res.status(201).json({
+      success: true,
+      workspace: result.workspace,
+      invite: result.invite,
+    });
+  } catch (error) {
+    const status = /required|pending|already|cannot|only|not found/i.test(error.message) ? 400 : 500;
+    console.error('Create workspace invite error:', error);
+    res.status(status).json({
+      success: false,
+      error: error.message || 'Failed to create workspace invite',
+    });
+  }
+});
+
+router.delete('/workspaces/:workspaceId/invites/:inviteId', async (req, res) => {
+  try {
+    const result = await revokeBillingWorkspaceInvite(
+      req.db,
+      req.user.id,
+      req.params.workspaceId,
+      req.params.inviteId
+    );
+
+    res.json({
+      success: true,
+      workspace: result.workspace,
+      invite: result.invite,
+    });
+  } catch (error) {
+    const status = /only|not found/i.test(error.message) ? 400 : 500;
+    console.error('Revoke workspace invite error:', error);
+    res.status(status).json({
+      success: false,
+      error: error.message || 'Failed to revoke workspace invite',
+    });
+  }
+});
+
+router.patch('/workspaces/:workspaceId/members/:memberId', async (req, res) => {
+  try {
+    const result = await updateBillingWorkspaceMember(
+      req.db,
+      req.user.id,
+      req.params.workspaceId,
+      req.params.memberId,
+      req.body || {}
+    );
+
+    res.json({
+      success: true,
+      workspace: result.workspace,
+      member: result.member,
+      members: result.members,
+    });
+  } catch (error) {
+    const status = /required|not found|only/i.test(error.message) ? 400 : 500;
+    console.error('Update workspace member error:', error);
+    res.status(status).json({
+      success: false,
+      error: error.message || 'Failed to update workspace member',
+    });
+  }
+});
+
+router.delete('/workspaces/:workspaceId/members/:memberId', async (req, res) => {
+  try {
+    const result = await removeBillingWorkspaceMember(
+      req.db,
+      req.user.id,
+      req.params.workspaceId,
+      req.params.memberId,
+      PLATFORM_ACCOUNT_OPTIONS
+    );
+
+    res.json({
+      success: true,
+      workspace: result.workspace,
+      removedMember: result.removedMember,
+      members: result.members,
+    });
+  } catch (error) {
+    const status = /not found|allowed/i.test(error.message) ? 400 : 500;
+    console.error('Remove workspace member error:', error);
+    res.status(status).json({
+      success: false,
+      error: error.message || 'Failed to remove workspace member',
+    });
+  }
+});
+
+router.post('/workspaces/:workspaceId/owner-transfer', async (req, res) => {
+  try {
+    const result = await transferBillingWorkspaceOwnership(
+      req.db,
+      req.user.id,
+      req.params.workspaceId,
+      req.body?.memberId
+    );
+
+    res.json({
+      success: true,
+      workspace: result.workspace,
+      transferredMember: result.transferredMember,
+      previousOwnerUserId: result.previousOwnerUserId,
+      members: result.members,
+    });
+  } catch (error) {
+    const status = /not found|personal|only/i.test(error.message) ? 400 : 500;
+    console.error('Transfer workspace ownership error:', error);
+    res.status(status).json({
+      success: false,
+      error: error.message || 'Failed to transfer workspace ownership',
+    });
+  }
+});
+
+router.get('/projects', async (req, res) => {
+  try {
+    const workspaceId = typeof req.query.workspace_id === 'string'
+      ? req.query.workspace_id
+      : null;
+
+    const result = await listBillingProjects(
+      req.db,
+      req.user.id,
+      { workspaceId },
+      PLATFORM_ACCOUNT_OPTIONS
+    );
+
+    res.json({
+      success: true,
+      workspace: result.workspace,
+      projects: result.projects,
+    });
+  } catch (error) {
+    console.error('List projects error:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to fetch projects',
+      message: error.message,
+    });
+  }
+});
+
+router.post('/projects', async (req, res) => {
+  try {
+    const result = await createBillingProject(req.db, req.user.id, req.body || {}, PLATFORM_ACCOUNT_OPTIONS);
+    res.status(201).json({
+      success: true,
+      workspace: result.workspace,
+      project: result.project,
+    });
+  } catch (error) {
+    const status = /required|not found/i.test(error.message) ? 400 : 500;
+    console.error('Create project error:', error);
+    res.status(status).json({
+      success: false,
+      error: error.message || 'Failed to create project',
+    });
+  }
+});
+
+router.patch('/projects/:projectId', async (req, res) => {
+  try {
+    const project = await updateBillingProject(
+      req.db,
+      req.user.id,
+      req.params.projectId,
+      req.body || {},
+      PLATFORM_ACCOUNT_OPTIONS
+    );
+
+    res.json({
+      success: true,
+      project,
+    });
+  } catch (error) {
+    const status = /required|not found|cannot be archived/i.test(error.message) ? 400 : 500;
+    console.error('Update project error:', error);
+    res.status(status).json({
+      success: false,
+      error: error.message || 'Failed to update project',
+    });
+  }
+});
+
+export default router;

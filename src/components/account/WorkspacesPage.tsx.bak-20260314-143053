@@ -1,0 +1,1174 @@
+import React, { useEffect, useMemo, useState } from 'react';
+import {
+  Building2,
+  CheckCircle2,
+  CreditCard,
+  FolderKanban,
+  Loader2,
+  Mail,
+  Plus,
+  Shield,
+  UserPlus,
+  XCircle,
+} from 'lucide-react';
+import { authService } from '../../services/authService';
+
+type Workspace = {
+  id: string;
+  name: string;
+  slug: string;
+  workspaceType: string;
+  status: string;
+  memberRole: string;
+  memberStatus: string;
+  projectsCount: number;
+  membersCount: number;
+  isActive: boolean;
+};
+
+type WorkspaceMember = {
+  id: string;
+  userId: string;
+  email: string;
+  username: string;
+  memberRole: string;
+  memberStatus: string;
+  createdAt: string;
+  isOwner: boolean;
+};
+
+type WorkspaceInvite = {
+  id: string;
+  invitedEmail: string;
+  invitedUserId: string | null;
+  memberRole: string;
+  inviteStatus: string;
+  expiresAt: string;
+  acceptedAt?: string | null;
+  createdAt: string;
+  invitedByUsername: string;
+  latestDeliveryStatus?: string | null;
+  latestDeliveryAction?: string | null;
+  latestDeliveryAt?: string | null;
+  deliveryAttemptsCount?: number;
+  deliveryHistory?: Array<{
+    id: string;
+    deliveryAction: string;
+    deliveryStatus: string;
+    deliveryTarget: string;
+    provider?: string | null;
+    detail?: string | null;
+    createdAt: string;
+  }>;
+};
+
+type PendingWorkspaceInvite = WorkspaceInvite & {
+  workspaceId: string;
+  workspaceName: string;
+  workspaceSlug: string;
+  workspaceType: string;
+};
+
+type Overview = {
+  currentWorkspace: {
+    id: string;
+    name: string;
+    slug: string;
+  } | null;
+  currentProject: {
+    id: string;
+    name: string;
+    slug: string;
+  } | null;
+  balance: {
+    currentCredits: number;
+  };
+  summary: {
+    workspaceCount: number;
+    projectCount: number;
+    activeApiKeysCount: number;
+  };
+};
+
+type WorkspaceBudget = {
+  dailyBudgetCredits: number;
+  monthlyBudgetCredits: number;
+  alertThresholdPercent: number | null;
+  updatedAt: string | null;
+  updatedByUserId: string | null;
+};
+
+type WorkspaceAuditEvent = {
+  id: string;
+  actorUsername?: string | null;
+  actorEmail?: string | null;
+  targetUsername?: string | null;
+  targetEmail?: string | null;
+  inviteEmail?: string | null;
+  eventType: string;
+  createdAt: string;
+  metadata?: Record<string, unknown>;
+};
+
+const WorkspacesPage: React.FC = () => {
+  const [overview, setOverview] = useState<Overview | null>(null);
+  const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
+  const [members, setMembers] = useState<WorkspaceMember[]>([]);
+  const [invites, setInvites] = useState<WorkspaceInvite[]>([]);
+  const [pendingInvites, setPendingInvites] = useState<PendingWorkspaceInvite[]>([]);
+  const [selectedWorkspaceId, setSelectedWorkspaceId] = useState('');
+  const [workspaceBudget, setWorkspaceBudget] = useState<WorkspaceBudget | null>(null);
+  const [auditEvents, setAuditEvents] = useState<WorkspaceAuditEvent[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [detailsLoading, setDetailsLoading] = useState(false);
+  const [isCreating, setIsCreating] = useState(false);
+  const [isInviting, setIsInviting] = useState(false);
+  const [isSavingBudget, setIsSavingBudget] = useState(false);
+  const [workspaceName, setWorkspaceName] = useState('');
+  const [inviteEmail, setInviteEmail] = useState('');
+  const [inviteRole, setInviteRole] = useState<'member' | 'admin'>('member');
+  const [dailyBudgetCredits, setDailyBudgetCredits] = useState('');
+  const [monthlyBudgetCredits, setMonthlyBudgetCredits] = useState('');
+  const [alertThresholdPercent, setAlertThresholdPercent] = useState('80');
+  const [showCreate, setShowCreate] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [inviteActionId, setInviteActionId] = useState<string | null>(null);
+  const [memberActionId, setMemberActionId] = useState<string | null>(null);
+
+  const jsonHeaders = useMemo(
+    () => ({
+      ...authService.getAuthHeaders(),
+      'Content-Type': 'application/json',
+    }),
+    []
+  );
+
+  const selectedWorkspace = workspaces.find((workspace) => workspace.id === selectedWorkspaceId) || null;
+  const currentUserId = authService.getCurrentUser()?.id || null;
+  const canManageSelectedWorkspace = Boolean(
+    selectedWorkspace && ['owner', 'admin'].includes(selectedWorkspace.memberRole)
+  );
+  const canInviteToSelectedWorkspace = Boolean(
+    selectedWorkspace
+      && selectedWorkspace.workspaceType !== 'personal'
+      && canManageSelectedWorkspace
+  );
+  const canEditMemberRole = (member) => Boolean(
+    selectedWorkspace
+      && selectedWorkspace.memberRole === 'owner'
+      && !member.isOwner
+      && member.userId !== currentUserId
+  );
+  const canRemoveMember = (member) => {
+    if (!selectedWorkspace || member.isOwner) {
+      return false;
+    }
+
+    if (member.userId === currentUserId) {
+      return selectedWorkspace.workspaceType !== 'personal';
+    }
+
+    if (selectedWorkspace.memberRole === 'owner') {
+      return true;
+    }
+
+    return selectedWorkspace.memberRole === 'admin' && member.memberRole === 'member';
+  };
+  const canTransferOwnership = (member) => Boolean(
+    selectedWorkspace
+      && selectedWorkspace.workspaceType !== 'personal'
+      && selectedWorkspace.memberRole === 'owner'
+      && !member.isOwner
+      && member.userId !== currentUserId
+  );
+
+  const fetchOverview = async () => {
+    const response = await fetch('/api/account/overview', {
+      headers: authService.getAuthHeaders(),
+    });
+    const data = await response.json();
+
+    if (!response.ok) {
+      throw new Error(data.error || 'Failed to load account overview');
+    }
+
+    return data.overview as Overview;
+  };
+
+  const fetchWorkspaces = async () => {
+    const response = await fetch('/api/workspaces', {
+      headers: authService.getAuthHeaders(),
+    });
+    const data = await response.json();
+
+    if (!response.ok) {
+      throw new Error(data.error || 'Failed to load workspaces');
+    }
+
+    return data.workspaces as Workspace[];
+  };
+
+  const fetchWorkspaceDetails = async (workspaceId: string) => {
+    const [membersResponse, invitesResponse, budgetResponse, auditResponse] = await Promise.all([
+      fetch(`/api/workspaces/${workspaceId}/members`, {
+        headers: authService.getAuthHeaders(),
+      }),
+      fetch(`/api/workspaces/${workspaceId}/invites`, {
+        headers: authService.getAuthHeaders(),
+      }),
+      fetch(`/api/workspaces/${workspaceId}/budget`, {
+        headers: authService.getAuthHeaders(),
+      }),
+      fetch(`/api/workspaces/${workspaceId}/audit?limit=25`, {
+        headers: authService.getAuthHeaders(),
+      }),
+    ]);
+
+    const membersData = await membersResponse.json();
+    const invitesData = await invitesResponse.json();
+    const budgetData = await budgetResponse.json();
+    const auditData = await auditResponse.json();
+
+    if (!membersResponse.ok) {
+      throw new Error(membersData.error || 'Failed to load workspace members');
+    }
+
+    if (!invitesResponse.ok) {
+      throw new Error(invitesData.error || 'Failed to load workspace invites');
+    }
+
+    if (!budgetResponse.ok) {
+      throw new Error(budgetData.error || 'Failed to load workspace budget');
+    }
+
+    return {
+      members: (membersData.members || []) as WorkspaceMember[],
+      invites: (invitesData.invites || []) as WorkspaceInvite[],
+      budget: (budgetData.budget || null) as WorkspaceBudget | null,
+      auditEvents: auditResponse.ok ? (auditData.events || []) as WorkspaceAuditEvent[] : [],
+    };
+  };
+
+  const fetchPendingInvites = async () => {
+    const response = await fetch('/api/workspace-invites', {
+      headers: authService.getAuthHeaders(),
+    });
+    const data = await response.json();
+
+    if (!response.ok) {
+      throw new Error(data.error || 'Failed to load pending workspace invites');
+    }
+
+    return (data.invites || []) as PendingWorkspaceInvite[];
+  };
+
+  const loadWorkspaceDetails = async (workspaceId: string) => {
+    if (!workspaceId) {
+      setMembers([]);
+      setInvites([]);
+      setWorkspaceBudget(null);
+      setAuditEvents([]);
+      return;
+    }
+
+    setDetailsLoading(true);
+    setError(null);
+
+    try {
+      const detailData = await fetchWorkspaceDetails(workspaceId);
+      setMembers(detailData.members);
+      setInvites(detailData.invites);
+      setWorkspaceBudget(detailData.budget);
+      setAuditEvents(detailData.auditEvents);
+    } catch (detailError) {
+      setError(detailError instanceof Error ? detailError.message : 'Failed to load workspace details');
+    } finally {
+      setDetailsLoading(false);
+    }
+  };
+
+  const loadData = async (preferredWorkspaceId?: string) => {
+    setLoading(true);
+    setError(null);
+
+    try {
+      const [overviewData, workspaceData, pendingInviteData] = await Promise.all([
+        fetchOverview(),
+        fetchWorkspaces(),
+        fetchPendingInvites(),
+      ]);
+
+      const workspaceId = preferredWorkspaceId
+        || overviewData.currentWorkspace?.id
+        || workspaceData[0]?.id
+        || '';
+
+      setOverview(overviewData);
+      setWorkspaces(workspaceData);
+      setPendingInvites(pendingInviteData);
+      setSelectedWorkspaceId(workspaceId);
+
+      if (workspaceId) {
+        const detailData = await fetchWorkspaceDetails(workspaceId);
+        setMembers(detailData.members);
+        setInvites(detailData.invites);
+        setWorkspaceBudget(detailData.budget);
+        setAuditEvents(detailData.auditEvents);
+      } else {
+        setMembers([]);
+        setInvites([]);
+        setWorkspaceBudget(null);
+        setAuditEvents([]);
+      }
+    } catch (loadError) {
+      setError(loadError instanceof Error ? loadError.message : 'Failed to load workspaces');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadData();
+  }, []);
+
+  useEffect(() => {
+    setDailyBudgetCredits(
+      workspaceBudget?.dailyBudgetCredits ? String(workspaceBudget.dailyBudgetCredits) : ''
+    );
+    setMonthlyBudgetCredits(
+      workspaceBudget?.monthlyBudgetCredits ? String(workspaceBudget.monthlyBudgetCredits) : ''
+    );
+    setAlertThresholdPercent(
+      workspaceBudget?.alertThresholdPercent ? String(workspaceBudget.alertThresholdPercent) : '80'
+    );
+  }, [workspaceBudget?.dailyBudgetCredits, workspaceBudget?.monthlyBudgetCredits, workspaceBudget?.alertThresholdPercent]);
+
+  const handleCreateWorkspace = async () => {
+    if (!workspaceName.trim()) {
+      setError('Workspace name is required');
+      return;
+    }
+
+    setIsCreating(true);
+    setError(null);
+
+    try {
+      const response = await fetch('/api/workspaces', {
+        method: 'POST',
+        headers: jsonHeaders,
+        body: JSON.stringify({
+          name: workspaceName.trim(),
+          setActive: true,
+        }),
+      });
+
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to create workspace');
+      }
+
+      setWorkspaceName('');
+      setShowCreate(false);
+      await authService.validateSession();
+      await loadData(data.workspace?.id);
+    } catch (createError) {
+      setError(createError instanceof Error ? createError.message : 'Failed to create workspace');
+    } finally {
+      setIsCreating(false);
+    }
+  };
+
+  const handleSelectWorkspace = async (workspaceId: string) => {
+    setError(null);
+
+    try {
+      const response = await fetch(`/api/workspaces/${workspaceId}/select`, {
+        method: 'POST',
+        headers: jsonHeaders,
+        body: JSON.stringify({}),
+      });
+
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to switch workspace');
+      }
+
+      await authService.validateSession();
+      await loadData(workspaceId);
+    } catch (selectError) {
+      setError(selectError instanceof Error ? selectError.message : 'Failed to switch workspace');
+    }
+  };
+
+  const handleInviteMember = async () => {
+    if (!selectedWorkspaceId || !inviteEmail.trim()) {
+      setError('Invite email is required');
+      return;
+    }
+
+    setIsInviting(true);
+    setError(null);
+
+    try {
+      const response = await fetch(`/api/workspaces/${selectedWorkspaceId}/invites`, {
+        method: 'POST',
+        headers: jsonHeaders,
+        body: JSON.stringify({
+          email: inviteEmail.trim(),
+          memberRole: inviteRole,
+        }),
+      });
+
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to create invite');
+      }
+
+      setInviteEmail('');
+      setInviteRole('member');
+      await loadWorkspaceDetails(selectedWorkspaceId);
+    } catch (inviteError) {
+      setError(inviteError instanceof Error ? inviteError.message : 'Failed to create invite');
+    } finally {
+      setIsInviting(false);
+    }
+  };
+
+  const handleRevokeInvite = async (inviteId: string) => {
+    if (!selectedWorkspaceId) {
+      return;
+    }
+
+    setError(null);
+
+    try {
+      const response = await fetch(`/api/workspaces/${selectedWorkspaceId}/invites/${inviteId}`, {
+        method: 'DELETE',
+        headers: authService.getAuthHeaders(),
+      });
+
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to revoke invite');
+      }
+
+      await loadWorkspaceDetails(selectedWorkspaceId);
+    } catch (revokeError) {
+      setError(revokeError instanceof Error ? revokeError.message : 'Failed to revoke invite');
+    }
+  };
+
+  const handleResendInvite = async (inviteId: string) => {
+    if (!selectedWorkspaceId) {
+      return;
+    }
+
+    setInviteActionId(inviteId);
+    setError(null);
+
+    try {
+      const response = await fetch(`/api/workspaces/${selectedWorkspaceId}/invites/${inviteId}/resend`, {
+        method: 'POST',
+        headers: jsonHeaders,
+        body: JSON.stringify({}),
+      });
+
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to resend invite');
+      }
+
+      await loadWorkspaceDetails(selectedWorkspaceId);
+    } catch (resendError) {
+      setError(resendError instanceof Error ? resendError.message : 'Failed to resend invite');
+    } finally {
+      setInviteActionId(null);
+    }
+  };
+
+  const handleAcceptPendingInvite = async (inviteId) => {
+    setInviteActionId(inviteId);
+    setError(null);
+
+    try {
+      const response = await fetch(`/api/workspace-invites/${inviteId}/accept`, {
+        method: 'POST',
+        headers: jsonHeaders,
+        body: JSON.stringify({ setActive: true }),
+      });
+
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to accept invite');
+      }
+
+      await authService.validateSession();
+      await loadData(data.workspace?.id);
+    } catch (acceptError) {
+      setError(acceptError instanceof Error ? acceptError.message : 'Failed to accept invite');
+    } finally {
+      setInviteActionId(null);
+    }
+  };
+
+  const handleDeclinePendingInvite = async (inviteId) => {
+    setInviteActionId(inviteId);
+    setError(null);
+
+    try {
+      const response = await fetch(`/api/workspace-invites/${inviteId}/decline`, {
+        method: 'POST',
+        headers: jsonHeaders,
+        body: JSON.stringify({}),
+      });
+
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to decline invite');
+      }
+
+      await loadData(selectedWorkspaceId);
+    } catch (declineError) {
+      setError(declineError instanceof Error ? declineError.message : 'Failed to decline invite');
+    } finally {
+      setInviteActionId(null);
+    }
+  };
+
+  const handleUpdateMemberRole = async (member, nextRole) => {
+    if (!selectedWorkspaceId || member.memberRole === nextRole) {
+      return;
+    }
+
+    setMemberActionId(member.id);
+    setError(null);
+
+    try {
+      const response = await fetch(`/api/workspaces/${selectedWorkspaceId}/members/${member.id}`, {
+        method: 'PATCH',
+        headers: jsonHeaders,
+        body: JSON.stringify({ memberRole: nextRole }),
+      });
+
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to update member role');
+      }
+
+      await loadData(selectedWorkspaceId);
+    } catch (memberError) {
+      setError(memberError instanceof Error ? memberError.message : 'Failed to update member role');
+    } finally {
+      setMemberActionId(null);
+    }
+  };
+
+  const handleRemoveMember = async (member) => {
+    if (!selectedWorkspaceId) {
+      return;
+    }
+
+    setMemberActionId(member.id);
+    setError(null);
+
+    try {
+      const response = await fetch(`/api/workspaces/${selectedWorkspaceId}/members/${member.id}`, {
+        method: 'DELETE',
+        headers: authService.getAuthHeaders(),
+      });
+
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to remove member');
+      }
+
+      await authService.validateSession();
+      await loadData(member.userId === currentUserId ? undefined : selectedWorkspaceId);
+    } catch (memberError) {
+      setError(memberError instanceof Error ? memberError.message : 'Failed to remove member');
+    } finally {
+      setMemberActionId(null);
+    }
+  };
+
+  const handleTransferOwnership = async (member) => {
+    if (!selectedWorkspaceId || !selectedWorkspace) {
+      return;
+    }
+
+    const confirmed = window.confirm(
+      `Transfer ownership of "${selectedWorkspace.name}" to ${member.email}? You will remain an admin on this workspace.`
+    );
+
+    if (!confirmed) {
+      return;
+    }
+
+    setMemberActionId(member.id);
+    setError(null);
+
+    try {
+      const response = await fetch(`/api/workspaces/${selectedWorkspaceId}/owner-transfer`, {
+        method: 'POST',
+        headers: jsonHeaders,
+        body: JSON.stringify({ memberId: member.id }),
+      });
+
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to transfer workspace ownership');
+      }
+
+      await authService.validateSession();
+      await loadData(selectedWorkspaceId);
+    } catch (transferError) {
+      setError(transferError instanceof Error ? transferError.message : 'Failed to transfer workspace ownership');
+    } finally {
+      setMemberActionId(null);
+    }
+  };
+
+  const handleSaveBudget = async () => {
+    if (!selectedWorkspaceId) {
+      return;
+    }
+
+    setIsSavingBudget(true);
+    setError(null);
+
+    try {
+      const response = await fetch(`/api/workspaces/${selectedWorkspaceId}/budget`, {
+        method: 'PATCH',
+        headers: jsonHeaders,
+        body: JSON.stringify({
+          dailyBudgetCredits: dailyBudgetCredits === '' ? null : Number(dailyBudgetCredits),
+          monthlyBudgetCredits: monthlyBudgetCredits === '' ? null : Number(monthlyBudgetCredits),
+          alertThresholdPercent: alertThresholdPercent === '' ? null : Number(alertThresholdPercent),
+        }),
+      });
+
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to update workspace budget');
+      }
+
+      setWorkspaceBudget(data.budget || null);
+      await loadWorkspaceDetails(selectedWorkspaceId);
+    } catch (budgetError) {
+      setError(budgetError instanceof Error ? budgetError.message : 'Failed to update workspace budget');
+    } finally {
+      setIsSavingBudget(false);
+    }
+  };
+
+  const handleInspectWorkspace = async (workspaceId: string) => {
+    setSelectedWorkspaceId(workspaceId);
+    await loadWorkspaceDetails(workspaceId);
+  };
+
+  if (loading) {
+    return (
+      <div className="h-full bg-[#121212] flex items-center justify-center">
+        <Loader2 size={24} className="text-white/40 animate-spin" />
+      </div>
+    );
+  }
+
+  return (
+    <div className="h-full bg-[#121212] overflow-auto">
+      <div className="max-w-6xl mx-auto px-6 py-8 space-y-6">
+        <div className="flex items-center justify-between gap-4">
+          <div className="flex items-center gap-4">
+            <div className="p-3 bg-[#19191a] border border-[#3a3a3d] rounded-xl">
+              <Building2 size={20} className="text-white/70" />
+            </div>
+            <div>
+              <h1 className="text-xl font-semibold text-white">Workspaces</h1>
+              <p className="text-white/40 text-sm">Switch billing ownership, manage members, and track pending invites.</p>
+            </div>
+          </div>
+
+          <button
+            onClick={() => setShowCreate((value) => !value)}
+            className="inline-flex items-center gap-2 px-4 py-2 bg-white text-[#121212] rounded-lg text-sm font-medium hover:bg-white/90 transition-colors"
+          >
+            <Plus size={16} />
+            New Workspace
+          </button>
+        </div>
+
+        {error && (
+          <div className="px-4 py-3 bg-red-500/10 border border-red-500/20 rounded-lg text-sm text-red-400">
+            {error}
+          </div>
+        )}
+
+        {showCreate && (
+          <div className="bg-[#19191a] border border-[#2a2a2d] rounded-xl p-5">
+            <div className="text-sm font-medium text-white mb-3">Create workspace</div>
+            <div className="flex flex-col md:flex-row gap-3">
+              <input
+                type="text"
+                value={workspaceName}
+                onChange={(event) => setWorkspaceName(event.target.value)}
+                className="flex-1 px-4 py-3 bg-[#121212] border border-[#3a3a3d] rounded-lg text-white text-sm outline-none focus:border-white/30 transition-colors"
+                placeholder="Workspace name"
+              />
+              <button
+                onClick={handleCreateWorkspace}
+                disabled={isCreating}
+                className="px-4 py-3 bg-white text-[#121212] rounded-lg text-sm font-medium hover:bg-white/90 transition-colors disabled:opacity-50 inline-flex items-center justify-center gap-2"
+              >
+                {isCreating && <Loader2 size={14} className="animate-spin" />}
+                Create
+              </button>
+            </div>
+            <div className="text-xs text-white/30 mt-3">
+              New team workspaces start with a default runtime project and become the active billing context.
+            </div>
+          </div>
+        )}
+
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+          <div className="bg-[#19191a] border border-[#2a2a2d] rounded-xl p-5">
+            <div className="flex items-center gap-2 text-white/40 text-xs uppercase tracking-wide mb-2">
+              <Building2 size={14} />
+              Active Workspace
+            </div>
+            <div className="text-white text-base font-medium">
+              {overview?.currentWorkspace?.name || 'No active workspace'}
+            </div>
+            <div className="text-white/30 text-xs font-mono mt-1">
+              {overview?.currentWorkspace?.slug || 'n/a'}
+            </div>
+          </div>
+
+          <div className="bg-[#19191a] border border-[#2a2a2d] rounded-xl p-5">
+            <div className="flex items-center gap-2 text-white/40 text-xs uppercase tracking-wide mb-2">
+              <FolderKanban size={14} />
+              Active Project
+            </div>
+            <div className="text-white text-base font-medium">
+              {overview?.currentProject?.name || 'No active project'}
+            </div>
+            <div className="text-white/30 text-xs font-mono mt-1">
+              {overview?.currentProject?.slug || 'n/a'}
+            </div>
+          </div>
+
+          <div className="bg-[#19191a] border border-[#2a2a2d] rounded-xl p-5">
+            <div className="flex items-center gap-2 text-white/40 text-xs uppercase tracking-wide mb-2">
+              <CreditCard size={14} />
+              Available Credits
+            </div>
+            <div className="text-white text-base font-medium">
+              {(overview?.balance?.currentCredits || 0).toLocaleString()}
+            </div>
+            <div className="text-white/30 text-xs mt-1">
+              Shared canonical balance
+            </div>
+          </div>
+
+          <div className="bg-[#19191a] border border-[#2a2a2d] rounded-xl p-5">
+            <div className="flex items-center gap-2 text-white/40 text-xs uppercase tracking-wide mb-2">
+              <Shield size={14} />
+              Account Scope
+            </div>
+            <div className="text-white text-base font-medium">
+              {overview?.summary.workspaceCount || 0} workspaces
+            </div>
+            <div className="text-white/30 text-xs mt-1">
+              {overview?.summary.projectCount || 0} canonical projects
+            </div>
+          </div>
+        </div>
+
+        {pendingInvites.length > 0 && (
+          <div className="bg-[#19191a] border border-[#2a2a2d] rounded-xl p-5 space-y-3">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <div className="text-sm font-medium text-white">Pending Workspace Invites</div>
+                <div className="text-xs text-white/40 mt-1">
+                  Accept or decline team access before it affects your active workspace.
+                </div>
+              </div>
+              <div className="text-xs text-white/30">{pendingInvites.length} pending</div>
+            </div>
+
+            {pendingInvites.map((invite) => (
+              <div key={invite.id} className="bg-[#121212] border border-[#2a2a2d] rounded-lg p-3">
+                <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+                  <div className="min-w-0">
+                    <div className="text-sm font-medium text-white truncate">{invite.workspaceName}</div>
+                    <div className="text-xs text-white/40 mt-1">
+                      {invite.workspaceType} / {invite.memberRole} / invited by {invite.invitedByUsername}
+                    </div>
+                    <div className="text-[11px] text-white/30 font-mono mt-1">{invite.workspaceSlug}</div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => handleDeclinePendingInvite(invite.id)}
+                      disabled={inviteActionId === invite.id}
+                      className="inline-flex items-center gap-2 px-3 py-2 bg-white/5 border border-white/10 text-white/70 rounded-lg text-xs font-medium hover:text-white hover:border-white/20 disabled:opacity-50 transition-colors"
+                    >
+                      {inviteActionId === invite.id ? <Loader2 size={13} className="animate-spin" /> : <XCircle size={13} />}
+                      Decline
+                    </button>
+                    <button
+                      onClick={() => handleAcceptPendingInvite(invite.id)}
+                      disabled={inviteActionId === invite.id}
+                      className="inline-flex items-center gap-2 px-3 py-2 bg-white text-[#121212] rounded-lg text-xs font-medium hover:bg-white/90 disabled:opacity-50 transition-colors"
+                    >
+                      {inviteActionId === invite.id ? <Loader2 size={13} className="animate-spin" /> : <CheckCircle2 size={13} />}
+                      Accept
+                    </button>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+
+        <div className="grid grid-cols-1 xl:grid-cols-[1.2fr,0.8fr] gap-6">
+          <div className="space-y-4">
+            {workspaces.map((workspace) => {
+              const isSelected = workspace.id === selectedWorkspaceId;
+              return (
+                <div
+                  key={workspace.id}
+                  className={`bg-[#19191a] border rounded-xl p-5 transition-colors ${
+                    isSelected ? 'border-white/20' : 'border-[#2a2a2d]'
+                  }`}
+                >
+                  <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-4">
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2 mb-2 flex-wrap">
+                        <div className="text-base font-medium text-white">{workspace.name}</div>
+                        <span className="px-2 py-0.5 rounded-full bg-white/10 border border-white/10 text-[10px] uppercase tracking-wide text-white/60">
+                          {workspace.workspaceType}
+                        </span>
+                        {workspace.isActive && (
+                          <span className="px-2 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-[10px] uppercase tracking-wide text-emerald-400">
+                            Active
+                          </span>
+                        )}
+                      </div>
+                      <div className="text-white/30 text-xs font-mono">{workspace.slug}</div>
+                      <div className="flex items-center gap-6 mt-4 text-xs text-white/40 flex-wrap">
+                        <span>Role: {workspace.memberRole}</span>
+                        <span>Projects: {workspace.projectsCount}</span>
+                        <span>Members: {workspace.membersCount}</span>
+                        <span>Status: {workspace.status}</span>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      {!workspace.isActive && (
+                        <button
+                          onClick={() => handleSelectWorkspace(workspace.id)}
+                          className="inline-flex items-center gap-2 px-3 py-2 bg-white text-[#121212] rounded-lg text-xs font-medium hover:bg-white/90 transition-colors"
+                        >
+                          <CheckCircle2 size={14} />
+                          Set Active
+                        </button>
+                      )}
+                      <button
+                        onClick={() => handleInspectWorkspace(workspace.id)}
+                        className={`inline-flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-medium border transition-colors ${
+                          isSelected
+                            ? 'bg-white/10 border-white/15 text-white'
+                            : 'bg-[#121212] border-[#2a2a2d] text-white/70 hover:text-white hover:border-white/15'
+                        }`}
+                      >
+                        <Building2 size={14} />
+                        {isSelected ? 'Selected' : 'Manage'}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          <div className="bg-[#19191a] border border-[#2a2a2d] rounded-xl p-5 h-fit">
+            <div className="flex items-center justify-between gap-3 mb-4">
+              <div>
+                <div className="text-sm font-medium text-white">
+                  {selectedWorkspace?.name || 'Workspace Details'}
+                </div>
+                <div className="text-xs text-white/40 mt-1">
+                  {selectedWorkspace
+                    ? `${selectedWorkspace.workspaceType} workspace • ${selectedWorkspace.memberRole}`
+                    : 'Select a workspace to inspect members and invites'}
+                </div>
+              </div>
+              {detailsLoading && <Loader2 size={16} className="text-white/40 animate-spin" />}
+            </div>
+
+            {selectedWorkspace && (
+              <>
+                <div className="space-y-3 mb-5">
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="text-[11px] uppercase tracking-wide text-white/40">Workspace Budget</div>
+                    <div className="text-[11px] text-white/30">Stored on canonical workspace metadata</div>
+                  </div>
+
+                  <div className="bg-[#121212] border border-[#2a2a2d] rounded-lg p-3 space-y-3">
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                      <div>
+                        <div className="text-[11px] uppercase tracking-wide text-white/30 mb-2">Daily Budget</div>
+                        <input
+                          type="number"
+                          min="0"
+                          value={dailyBudgetCredits}
+                          disabled={!canManageSelectedWorkspace}
+                          onChange={(event) => setDailyBudgetCredits(event.target.value)}
+                          className="w-full px-3 py-2.5 bg-[#0f0f11] border border-[#2a2a2d] rounded-lg text-white text-sm outline-none focus:border-white/20 transition-colors disabled:opacity-60"
+                          placeholder="Unlimited"
+                        />
+                      </div>
+                      <div>
+                        <div className="text-[11px] uppercase tracking-wide text-white/30 mb-2">Monthly Budget</div>
+                        <input
+                          type="number"
+                          min="0"
+                          value={monthlyBudgetCredits}
+                          disabled={!canManageSelectedWorkspace}
+                          onChange={(event) => setMonthlyBudgetCredits(event.target.value)}
+                          className="w-full px-3 py-2.5 bg-[#0f0f11] border border-[#2a2a2d] rounded-lg text-white text-sm outline-none focus:border-white/20 transition-colors disabled:opacity-60"
+                          placeholder="Unlimited"
+                        />
+                      </div>
+                      <div>
+                        <div className="text-[11px] uppercase tracking-wide text-white/30 mb-2">Alert Threshold %</div>
+                        <input
+                          type="number"
+                          min="1"
+                          max="100"
+                          value={alertThresholdPercent}
+                          disabled={!canManageSelectedWorkspace}
+                          onChange={(event) => setAlertThresholdPercent(event.target.value)}
+                          className="w-full px-3 py-2.5 bg-[#0f0f11] border border-[#2a2a2d] rounded-lg text-white text-sm outline-none focus:border-white/20 transition-colors disabled:opacity-60"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="flex items-center justify-between gap-3 text-[11px] text-white/35">
+                      <div>
+                        Updated: {workspaceBudget?.updatedAt ? new Date(workspaceBudget.updatedAt).toLocaleString() : 'Never'}
+                      </div>
+                      {canManageSelectedWorkspace && (
+                        <button
+                          onClick={handleSaveBudget}
+                          disabled={isSavingBudget}
+                          className="inline-flex items-center gap-2 px-3 py-2 bg-white text-[#121212] rounded-lg text-xs font-medium hover:bg-white/90 disabled:opacity-50 transition-colors"
+                        >
+                          {isSavingBudget && <Loader2 size={13} className="animate-spin" />}
+                          Save Budget
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="space-y-3 mb-5">
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="text-[11px] uppercase tracking-wide text-white/40">Members</div>
+                    {selectedWorkspace.workspaceType !== 'personal' && selectedWorkspace.memberRole === 'owner' && (
+                      <div className="text-[11px] text-white/30">
+                        Owner transfer demotes your access to admin.
+                      </div>
+                    )}
+                  </div>
+                  {members.length === 0 ? (
+                    <div className="text-sm text-white/40">No members found.</div>
+                  ) : (
+                    members.map((member) => (
+                      <div key={member.id} className="bg-[#121212] border border-[#2a2a2d] rounded-lg p-3">
+                        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+                          <div className="min-w-0">
+                            <div className="text-sm font-medium text-white truncate">{member.username}</div>
+                            <div className="text-xs text-white/40 truncate">{member.email}</div>
+                          </div>
+                          <div className="flex items-center gap-2 md:justify-end">
+                            {canTransferOwnership(member) && (
+                              <button
+                                onClick={() => handleTransferOwnership(member)}
+                                disabled={memberActionId === member.id}
+                                className="inline-flex items-center gap-1 px-2.5 py-1.5 bg-amber-500/10 border border-amber-500/20 text-amber-300 hover:text-amber-200 hover:border-amber-500/30 rounded-lg text-[11px] transition-colors disabled:opacity-50"
+                              >
+                                {memberActionId === member.id ? <Loader2 size={12} className="animate-spin" /> : <Shield size={12} />}
+                                Make Owner
+                              </button>
+                            )}
+                            {canEditMemberRole(member) ? (
+                              <select
+                                value={member.memberRole}
+                                disabled={memberActionId === member.id}
+                                onChange={(event) => handleUpdateMemberRole(member, event.target.value)}
+                                className="px-2.5 py-1.5 bg-[#0f0f11] border border-[#2a2a2d] rounded-lg text-[11px] text-white outline-none focus:border-white/20 transition-colors"
+                              >
+                                <option value="member">member</option>
+                                <option value="admin">admin</option>
+                              </select>
+                            ) : (
+                              <div className="text-right text-[11px] text-white/40 min-w-[70px]">
+                                <div>{member.memberRole}</div>
+                                <div>{member.isOwner ? 'owner' : member.memberStatus}</div>
+                              </div>
+                            )}
+                            {canRemoveMember(member) && (
+                              <button
+                                onClick={() => handleRemoveMember(member)}
+                                disabled={memberActionId === member.id}
+                                className="inline-flex items-center gap-1 px-2.5 py-1.5 bg-white/5 border border-white/10 text-white/60 hover:text-white hover:border-white/20 rounded-lg text-[11px] transition-colors disabled:opacity-50"
+                              >
+                                {memberActionId === member.id ? <Loader2 size={12} className="animate-spin" /> : <XCircle size={12} />}
+                                {member.userId === currentUserId ? 'Leave' : 'Remove'}
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="text-[11px] uppercase tracking-wide text-white/40">Invites</div>
+                    {selectedWorkspace.workspaceType === 'personal' && (
+                      <div className="text-[11px] text-white/30">Personal workspaces do not accept invites</div>
+                    )}
+                  </div>
+
+                  {canInviteToSelectedWorkspace && (
+                    <div className="bg-[#121212] border border-[#2a2a2d] rounded-lg p-3 space-y-3">
+                      <div className="text-xs text-white/50">Invite member</div>
+                      <input
+                        type="email"
+                        value={inviteEmail}
+                        onChange={(event) => setInviteEmail(event.target.value)}
+                        placeholder="member@example.com"
+                        className="w-full px-3 py-2.5 bg-[#0f0f11] border border-[#2a2a2d] rounded-lg text-white text-sm outline-none focus:border-white/20 transition-colors"
+                      />
+                      <div className="flex gap-3">
+                        <select
+                          value={inviteRole}
+                          onChange={(event) => setInviteRole(event.target.value as 'member' | 'admin')}
+                          className="px-3 py-2.5 bg-[#0f0f11] border border-[#2a2a2d] rounded-lg text-white text-sm outline-none focus:border-white/20 transition-colors"
+                        >
+                          <option value="member">Member</option>
+                          <option value="admin">Admin</option>
+                        </select>
+                        <button
+                          onClick={handleInviteMember}
+                          disabled={isInviting}
+                          className="flex-1 inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-white text-[#121212] rounded-lg text-sm font-medium hover:bg-white/90 disabled:opacity-50 transition-colors"
+                        >
+                          {isInviting ? <Loader2 size={14} className="animate-spin" /> : <UserPlus size={14} />}
+                          Send Invite
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
+                  {invites.length === 0 ? (
+                    <div className="text-sm text-white/40">No pending or historical invites for this workspace.</div>
+                  ) : (
+                    invites.map((invite) => (
+                      <div key={invite.id} className="bg-[#121212] border border-[#2a2a2d] rounded-lg p-3">
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="min-w-0">
+                            <div className="flex items-center gap-2">
+                              <Mail size={13} className="text-white/40" />
+                              <div className="text-sm font-medium text-white truncate">{invite.invitedEmail}</div>
+                            </div>
+                            <div className="text-xs text-white/40 mt-1">
+                              {invite.memberRole} • {invite.inviteStatus} • invited by {invite.invitedByUsername}
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            {canInviteToSelectedWorkspace && !['accepted', 'revoked'].includes(invite.inviteStatus) && (
+                              <button
+                                onClick={() => handleResendInvite(invite.id)}
+                                disabled={inviteActionId === invite.id}
+                                className="inline-flex items-center gap-1 px-2.5 py-1.5 bg-white/5 border border-white/10 text-white/60 hover:text-white hover:border-white/20 rounded-lg text-[11px] transition-colors disabled:opacity-50"
+                              >
+                                {inviteActionId === invite.id ? <Loader2 size={12} className="animate-spin" /> : <Mail size={12} />}
+                                Resend
+                              </button>
+                            )}
+                            {invite.inviteStatus === 'pending' && canInviteToSelectedWorkspace && (
+                              <button
+                                onClick={() => handleRevokeInvite(invite.id)}
+                                className="inline-flex items-center gap-1 px-2.5 py-1.5 bg-white/5 border border-white/10 text-white/60 hover:text-white hover:border-white/20 rounded-lg text-[11px] transition-colors"
+                              >
+                                <XCircle size={12} />
+                                Revoke
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                        <div className="mt-3 pt-3 border-t border-[#2a2a2d] space-y-2">
+                          <div className="flex items-center justify-between gap-3 text-[11px] text-white/35">
+                            <span>
+                              Latest delivery: {invite.latestDeliveryStatus || 'not recorded'}
+                              {invite.latestDeliveryAt ? ` at ${new Date(invite.latestDeliveryAt).toLocaleString()}` : ''}
+                            </span>
+                            <span>{invite.deliveryAttemptsCount || 0} attempt(s)</span>
+                          </div>
+                          {(invite.deliveryHistory || []).map((delivery) => (
+                            <div key={delivery.id} className="text-[11px] text-white/35 flex items-center justify-between gap-3">
+                              <span>
+                                {delivery.deliveryAction} • {delivery.deliveryStatus} • {new Date(delivery.createdAt).toLocaleString()}
+                              </span>
+                              <span className="truncate">{delivery.deliveryTarget}</span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+
+                <div className="space-y-3 mt-5">
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="text-[11px] uppercase tracking-wide text-white/40">Workspace Audit</div>
+                    <div className="text-[11px] text-white/30">
+                      {auditEvents.length > 0 ? `${auditEvents.length} recent event(s)` : 'Owner/admin scope'}
+                    </div>
+                  </div>
+
+                  {auditEvents.length === 0 ? (
+                    <div className="text-sm text-white/40">No visible audit history for this workspace.</div>
+                  ) : (
+                    auditEvents.map((event) => (
+                      <div key={event.id} className="bg-[#121212] border border-[#2a2a2d] rounded-lg p-3">
+                        <div className="flex items-start justify-between gap-3">
+                          <div>
+                            <div className="text-sm font-medium text-white">{event.eventType}</div>
+                            <div className="text-xs text-white/40 mt-1">
+                              Actor: {event.actorUsername || event.actorEmail || 'system'}
+                              {event.targetUsername || event.targetEmail ? ` • Target: ${event.targetUsername || event.targetEmail}` : ''}
+                              {event.inviteEmail ? ` • Invite: ${event.inviteEmail}` : ''}
+                            </div>
+                          </div>
+                          <div className="text-[11px] text-white/30 whitespace-nowrap">
+                            {new Date(event.createdAt).toLocaleString()}
+                          </div>
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+export default WorkspacesPage;
