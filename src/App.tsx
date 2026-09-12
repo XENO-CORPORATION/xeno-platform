@@ -46,12 +46,16 @@ const OverviewPage = lazyRoute(() => import('./pages/Overview'));
  *
  * `/` stays EAGER on purpose: deferring the route a first-time visitor actually
  * lands on trades a smaller download for a blank frame plus a second round trip,
- * which is worse on exactly the connection this is meant to help. `/v1` is a
- * preserved older homepage and is not that route. (`/v2` and its landing-v2
- * components were removed 2026-09-12: a second, unmaintained copy of the
- * marketing chrome, which read no auth state at all — so it still told a
- * signed-in visitor to sign in after the real header was fixed.) */
-const Home = lazyRoute(() => import('./pages/Home'));
+ * which is worse on exactly the connection this is meant to help.
+ *
+ * There is now exactly ONE homepage. `/v1` and `/v2` — with their whole
+ * `components/landing/` and `components/landing-v2/` chromes — were removed
+ * 2026-09-12. Each was a second, unmaintained copy of the marketing shell,
+ * and both had drifted: neither header read auth state at all (zero useAuth
+ * references in either), so a signed-in visitor still got an acquisition CTA
+ * — v2's literally said "Sign in" — after the real header was fixed to know
+ * who you are. `/v3` stays as an alias for `/` — it renders the SAME component,
+ * so it is a spelling of the live homepage, not a copy that can rot. */
 const Marketplace = lazyRoute(() => import('./pages/Marketplace'));
 const Forum = lazyRoute(() => import('./pages/Forum'));
 const ForumThread = lazyRoute(() => import('./pages/ForumThread'));
@@ -197,7 +201,6 @@ function App() {
             {/* Landing Page — the v3 redesign is now the default homepage */}
             <Route path="/" element={<Home3 />} />
             <Route path="/v3" element={<Home3 />} />{/* alias — keep existing links working */}
-            <Route path="/v1" element={<Home />} />{/* previous homepage, preserved */}
             <Route path="/marketplace" element={<Marketplace />} />
             {/* Product pages — registry-driven, one template for all products */}
             <Route path="/products" element={<ProductsIndex />} />
@@ -217,10 +220,19 @@ function App() {
             {/* Legacy /download retired → the Hub download page (client-side, so
                 in-app links like the header Download button land there too). */}
             <Route path="/download" element={<Navigate to="/product/hub/download" replace />} />
-            {/* /product/extension/download retired: its release feed (R2
-                apps/extension/releases.json) was withdrawn and now 404s, so the
-                page could only render an error. Falls through to the generic
-                /product/:slug/download, which redirects to the product page. */}
+            {/* /product/extension/download is UNROUTED, and the reason recorded
+                here no longer holds. It said the R2 feed
+                (apps/extension/releases.json) "was withdrawn and now 404s", so
+                the page could only render an error. Measured 2026-09-12: that
+                feed answers 200 and serves stable 1.2.0. src/pages/
+                ExtensionDownload.tsx still exists (618 lines), and both
+                server/services/extensionReleaseService.js and
+                scripts/publish-extension-releases.mjs name it as the consumer
+                they keep their shape in parity with — so a live pipeline feeds
+                a page nothing can reach. Restoring the route is a product
+                decision (the catalog has extension at delivery:'soon' with an
+                externalUrl), not a cleanup; until it is made this falls through
+                to /product/:slug/download, which redirects to the product page. */}
             <Route path="/releases/:version" element={<ReleaseNotes />} />
             <Route path="/blog" element={<Blog />} />
             <Route path="/blog/:slug" element={<BlogPost />} />
