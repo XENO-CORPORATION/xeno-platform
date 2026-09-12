@@ -103,6 +103,28 @@ done
 CODE="$(curl -fsS -m 15 -o /dev/null -w '%{http_code}' "$SITE_URL" 2>/dev/null || echo 000)"
 [ "$CODE" != "200" ] && add "$SITE_URL returned HTTP ${CODE}."
 
+# 9. SLO burn, read from Prometheus. Prometheus evaluates the rules in
+# observability/slo-rules.yml but runs no Alertmanager, so a firing alert would
+# reach nobody at all. Rather than stand up a second delivery stack, the firing
+# set is folded into the mail path that is already proven to work.
+PROM="${PROM_URL:-http://127.0.0.1:9090}"
+FIRING="$(curl -fsS -m 10 "$PROM/api/v1/alerts" 2>/dev/null | python3 -c 'import json,sys
+try:
+    d = json.load(sys.stdin)
+except Exception:
+    sys.exit(0)
+for a in d.get("data", {}).get("alerts", []):
+    if a.get("state") == "firing":
+        l = a.get("labels", {})
+        print("%s [%s] %s" % (l.get("alertname", "?"), l.get("severity", "?"),
+                              a.get("annotations", {}).get("summary", "")))' 2>/dev/null || true)"
+if [ -n "${FIRING:-}" ]; then
+  OLDIFS="$IFS"; IFS="$(printf '
+_')"; IFS="${IFS%_}"
+  for _l in $FIRING; do [ -n "$_l" ] && add "SLO alert firing: $_l"; done
+  IFS="$OLDIFS"
+fi
+
 # ---- state change detection -------------------------------------------------
 NOW_HASH="$(printf '%s' "$PROBLEMS" | md5sum | cut -d' ' -f1)"
 WAS_HASH="$(cat "$STATE" 2>/dev/null || echo none)"
