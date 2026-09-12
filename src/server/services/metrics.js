@@ -114,6 +114,22 @@ export function render(opts = {}) {
     out.push(`xeno_background_leader ${opts.isLeader() ? 1 : 0}`);
   }
 
+  // Circuit-breaker state per upstream. 0=closed 1=half-open 2=open. A breaker
+  // that opened and nobody noticed is the same as no breaker: the calls fail
+  // fast, the symptom disappears from latency, and the cause is invisible.
+  if (typeof opts.breakers === 'function') {
+    const snap = opts.breakers() || [];
+    if (snap.length) {
+      out.push('# TYPE xeno_upstream_breaker_state gauge');
+      out.push('# TYPE xeno_upstream_inflight gauge');
+      const code = { closed: 0, 'half-open': 1, open: 2 };
+      for (const b of snap) {
+        out.push(`xeno_upstream_breaker_state${fmtLabels({ target: b.target })} ${code[b.state] ?? 0}`);
+        out.push(`xeno_upstream_inflight${fmtLabels({ target: b.target })} ${b.inFlight}`);
+      }
+    }
+  }
+
   const mem = process.memoryUsage();
   out.push('# TYPE xeno_process_resident_memory_bytes gauge');
   out.push(`xeno_process_resident_memory_bytes ${mem.rss}`);

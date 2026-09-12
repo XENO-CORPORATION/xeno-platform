@@ -16,6 +16,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { isOptedOut, unsubscribeUrl } from './emailPreferences.js';
 import bcrypt from 'bcryptjs';
 import { activationUrl, mintCode } from './accountActivation.js';
+import { upstreamFetch } from './upstream.js';
 
 /**
  * Templates that are SECURITY / ACCOUNT-RECOVERY mail and are therefore never
@@ -805,7 +806,11 @@ export async function sendEmail(db, template, toEmail, data, userId = null) {
   try {
     // Production: send via Resend API
     if (process.env.RESEND_API_KEY) {
-      const resendResponse = await fetch('https://api.resend.com/emails', {
+      // Guarded: a wedged mail API used to hold a worker indefinitely. NOT
+      // idempotent — a retry here sends the customer a second email, and the
+      // caller already implements its own bounded resend loop.
+      const resendResponse = await upstreamFetch('https://api.resend.com/emails', {
+        target: 'resend', timeoutMs: 20000, idempotent: false, maxConcurrent: 6,
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${process.env.RESEND_API_KEY}`,

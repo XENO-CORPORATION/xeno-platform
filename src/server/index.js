@@ -104,6 +104,7 @@ import { startScheduledTasksWorker } from './workers/chatScheduledWorker.js';
 import { startLibraryIngestionWorker } from './workers/libraryIngestionWorker.js';
 import { createLeaderElection } from './services/leaderElection.js';
 import { render as renderMetrics } from './services/metrics.js';
+import { breakerSnapshot } from './services/upstream.js';
 import { reasoningCapabilityForModel, reasoningEffortForModel } from './lib/chatModelCapabilities.js';
 import { registerManagedLibraryFile } from './services/libraryAssets.js';
 import { assembleProjectContext } from './services/chatProjectContext.js';
@@ -2925,7 +2926,10 @@ app.get('/health', async (req, res) => {
 // twice, and no request metric would ever show that.
 app.get('/metrics', (_req, res) => {
   res.set('Content-Type', 'text/plain; version=0.0.4; charset=utf-8');
-  res.send(renderMetrics({ isLeader: () => backgroundLeader.isLeader() }));
+  res.send(renderMetrics({
+    isLeader: () => backgroundLeader.isLeader(),
+    breakers: () => breakerSnapshot(),
+  }));
 });
 
 // Handle 404 - with proxy redirect for relative URLs from proxied pages

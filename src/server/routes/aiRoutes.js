@@ -15,6 +15,7 @@ import { byokEnabled, resolveInferenceRoute } from '../services/providerCredenti
 import { mintGrant } from '../services/inferenceGrants.js';
 import { requestSurface } from '../utils/requestSurface.js';
 import { recordInferenceUsage } from '../utils/recordInferenceUsage.js';
+import { upstreamFetch } from '../services/upstream.js';
 
 const router = express.Router();
 const __filename = fileURLToPath(import.meta.url);
@@ -82,7 +83,20 @@ function serializeLocalModelCatalogModel(model) {
 /** In-house path: proxy to a self-hosted xeno-rt OpenAI-compatible server. */
 async function callInhouse(baseUrl, model, messages, temperature, max_tokens, extra = {}) {
   const url = `${String(baseUrl).replace(/\/$/, '')}/v1/chat/completions`;
-  const response = await fetch(url, {
+  // 🔴 Through upstreamFetch, not bare fetch. Node's fetch has NO default
+  // timeout, so an inference server that accepts the connection and then stops
+  // talking held this request forever — and every held request occupies a
+  // worker, so one sick provider quietly starved every other one. The bulkhead
+  // is the part that actually prevents that; the breaker just stops us queueing
+  // behind a target already known to be down.
+  //
+  // NOT idempotent: a completion may be metered and billed, so a retry could
+  // charge twice. Timeouts are generous because inference legitimately is slow.
+  const response = await upstreamFetch(url, {
+    target: 'xeno-rt',
+    timeoutMs: Number(process.env.XENO_RT_TIMEOUT_MS || 120000),
+    idempotent: false,
+    maxConcurrent: Number(process.env.XENO_RT_MAX_CONCURRENT || 8),
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
