@@ -10,6 +10,58 @@ credit ledger (`credit_accounts`, `credit_transactions`, `credit_grants`,
 
 ---
 
+## 0a. The storage substrate underneath this box — measured 2026-09-12
+
+🔴 **This VM pauses under you, and it did yesterday.** `xeno-platform-001` is
+VM 120 on `bnkr-node-001`, and its disk
+(`smb-vmstore:120/vm-120-disk-0.raw`, 120 GB, **fully allocated, not sparse**)
+lives on a CIFS share. When that share stalls, QEMU faults the guest to
+`io-error` — **paused, while `qm list` still reports it as `running`.** VM 120
+was paused on 2026-09-11 13:14 and recovered only because the
+`xeno-vm-iowatch` watchdog resumed it. Estate-wide: **119 resume events across
+24 VMs.**
+
+🔴 **The fix the workspace `CLAUDE.md` prescribes is ALREADY APPLIED AND DID NOT
+WORK.** That file says the cause is a `soft` mount and the durable fix is to
+remount `hard`. Measured today, in `/etc/pve/storage.cfg` *and* in
+`/proc/mounts`, **`smb-vmstore` is already `hard`** — and the freezes continued
+(three VMs inside 17 seconds on 2026-09-11). Anyone reading that entry will
+"apply" a fix that is in place. Do not.
+
+**What the kernel actually says**, which names the real cause:
+
+```
+CIFS: VFS: \192.168.2.210 sends on sock ... stuck for 15 seconds   (repeatedly)
+CIFS: VFS: \192.168.2.210 Error -104 sending data on socket to server   (ECONNRESET)
+CIFS: VFS: \192.168.2.210 Error -32  sending data on socket to server   (EPIPE, x many)
+CIFS: VFS: \192.168.2.210 has not responded in 180 seconds. Reconnecting...
+```
+
+The server stops reading, then **resets the TCP connection**. `hard` means
+"retry a timeout forever"; it does not help when the peer resets the socket —
+in-flight I/O fails during the 180-second reconnect, and that is the pause.
+**So this was never a mount-option problem and tuning mount options will not
+fix it.** The fault is at `192.168.2.210`.
+
+⚠️ **What `.210` is remains genuinely unresolved.** The workspace `CLAUDE.md`
+calls it the operator's own Windows workstation sharing `E:\`; `XENO
+INFRASTRUCTURE - INVENTORY.md` calls it a NAS appliance with port 445 only.
+Probed from the node: **445 open, 22 closed, 3389 closed**, no NetBIOS reply,
+anonymous SMB `NT_STATUS_ACCESS_DENIED`. That is consistent with the inventory
+and does not confirm either. It cannot be diagnosed remotely — root-causing the
+stall needs access to that machine.
+
+### The one lever that removes this box from the blast radius
+
+`local-lvm` on the node has **254 GB free** (832 GB, 69.5% used). VM 120's disk
+is 120 GB fully allocated, so `qm move-disk 120 scsi0 local-lvm` — an **online**
+move, no downtime — takes the money box off the network share entirely.
+
+⚠️ **It is a real trade, not a free win:** it leaves ~134 GB of thin-pool
+headroom shared with the **14 other VMs already on `local-lvm`**, and a full LVM
+thin pool is a data-loss hazard rather than an outage. 25 VMs sit on the share;
+this moves exactly one. Decide it deliberately.
+
 ## 0. Two backups, two different questions — you need BOTH
 
 Added 2026-09-12. Until then this document described only the nightly `pg_dump`,
