@@ -538,7 +538,22 @@ router.post('/register', requireRegistrationOpen, async (req, res) => {
     `, [userId, username.toLowerCase(), email.toLowerCase(), passwordHash, display_name, 0, false]);
 
     const user = result.rows[0];
-    sendWelcomeEmail(req.db, user);
+
+    /* Mint the activation code ONCE and hand it to BOTH mails.
+     *
+     * 🔴 The two are not alternatives — a new account receives a welcome mail and
+     * an address-verification mail, and the activation screen says "we sent a
+     * six-digit code". Until 2026-09-12 only the welcome mail carried it, so a
+     * user who opened the message actually titled "Verify your XENO email" found
+     * a link and no code, and the on-screen instruction could not be followed.
+     *
+     * Minting twice would be worse than the bug: each mint invalidates the last,
+     * so whichever mail arrived first would stop working. One code, both mails. */
+    const activationCode = await mintActivationCode(req.db, user.id, bcrypt).catch((e) => {
+      console.warn('[register] activation code mint failed:', e?.message || e);
+      return null;   // both mails still send; their links continue to work
+    });
+    sendWelcomeEmail(req.db, user, { activationCode });
 
     // Grant Free-tier starter credits (kind:'free' → drawn down before paid credits)
     // so a new user can actually try premium generation. Non-fatal on failure.
@@ -571,6 +586,7 @@ router.post('/register', requireRegistrationOpen, async (req, res) => {
         displayName: user.display_name || user.email,
         verifyUrl: `${APP_URL}/verify-email?token=${verifyToken}`,
         expiresIn: '24 hours',
+        activationCode,            // same code as the welcome mail — see above
       }, user.id);
     } catch (verifyErr) {
       console.warn('[register] verification email failed:', verifyErr.message);

@@ -473,12 +473,13 @@ const templates = {
     `),
   }),
 
-  email_verification: ({ displayName, verifyUrl, expiresIn }) => ({
+  email_verification: ({ displayName, verifyUrl, expiresIn, activationCode }) => ({
     subject: 'Verify your XENO email',
     html: wrapInLayout('Verify your email', `
       <h1>Verify your email</h1>
       <p>Hi ${escapeHtml(displayName)},</p>
       <p>Confirm this email address to secure your XENO account and enable password recovery.</p>
+      ${activationCode ? codeBlock(activationCode, verifyUrl) : ''}
       <p style="text-align: center;">
         <a href="${verifyUrl}" class="btn">Verify Email</a>
       </p>
@@ -813,7 +814,7 @@ export async function sendEmail(db, template, toEmail, data, userId = null) {
  * 160 of the platform's 221 accounts were created that way, so wiring only the
  * password path would have missed nearly three quarters of new users.
  */
-export function sendWelcomeEmail(db, user) {
+export function sendWelcomeEmail(db, user, { activationCode = null } = {}) {
   if (!user?.email) return;
   const displayName = user.display_name || user.displayName || user.username || '';
 
@@ -830,12 +831,19 @@ export function sendWelcomeEmail(db, user) {
   // Mint the code ONCE, outside the retry. A retry must resend the SAME code —
   // minting per attempt would invalidate the code carried by the message that
   // did arrive, so a transient failure would silently break a working email.
-  const codePromise = mintCode(db, user.id, bcrypt).catch((e) => {
-    // A code we could not mint must not stop the mail: the link still works,
-    // and an email with one route in beats no email at all.
-    console.error(`[Email] could not mint an activation code for ${user.email}:`, e?.message || e);
-    return null;
-  });
+  // 🔴 REUSE a supplied code rather than minting a second one. Registration now
+  // mints ONCE and sends the same code to both the welcome mail and the
+  // verification mail. Each mint invalidates the previous code, so minting here
+  // as well would kill whichever message arrived first — worse than the bug it
+  // was meant to fix. Only mint when nobody handed us one.
+  const codePromise = activationCode
+    ? Promise.resolve(activationCode)
+    : mintCode(db, user.id, bcrypt).catch((e) => {
+        // A code we could not mint must not stop the mail: the link still works,
+        // and an email with one route in beats no email at all.
+        console.error(`[Email] could not mint an activation code for ${user.email}:`, e?.message || e);
+        return null;
+      });
 
   const attempt = async (n) => sendEmail(db, 'welcome', user.email, {
     activationCode: await codePromise,

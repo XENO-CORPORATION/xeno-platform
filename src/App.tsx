@@ -1,8 +1,6 @@
 import React, { useEffect } from 'react';
 import { Routes, Route, Navigate, useLocation, useParams } from 'react-router-dom';
 
-import Home from "./pages/Home";
-import Home2 from "./pages/Home2";
 import Home3 from "./pages/Home3";
 import Marketplace from "./pages/Marketplace";
 import ProductPage from "./pages/ProductPage";
@@ -168,8 +166,11 @@ function App() {
             {/* Landing Page — the v3 redesign is now the default homepage */}
             <Route path="/" element={<Home3 />} />
             <Route path="/v3" element={<Home3 />} />{/* alias — keep existing links working */}
-            <Route path="/v1" element={<Home />} />{/* previous homepage, preserved */}
-            <Route path="/v2" element={<Home2 />} />
+            {/* `/v1` and `/v2` removed 2026-09-12: each was a second, unmaintained
+                copy of the marketing chrome, and both had drifted — neither header
+                read auth state, so a signed-in visitor still got a cold acquisition
+                CTA. `/v3` stays because it renders the SAME component as `/`, so it
+                is a spelling of the live homepage, not a copy that can rot. */}
             <Route path="/marketplace" element={<Marketplace />} />
             {/* Product pages — registry-driven, one template for all products */}
             <Route path="/products" element={<ProductsIndex />} />
