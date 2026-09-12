@@ -911,6 +911,7 @@ const VideoStudio: React.FC = () => {
       const result = await videoStudioService.createProject(backendSettings);
 
       if (result.success && result.project) {
+        const project = result.project;
         console.log('✅ Project created successfully!');
         console.log('📊 Project ID:', result.project.id);
         console.log('📊 Project from DB:', {
@@ -929,7 +930,7 @@ const VideoStudio: React.FC = () => {
 
         setCurrentProject(result.project);
         setIsProjectSettingsOpen(false);
-        setProjectHistory(prev => [result.project, ...prev.filter(project => project.id !== result.project.id)]);
+        setProjectHistory(prev => [project, ...prev.filter(existing => existing.id !== project.id)]);
 
         // Open canvas inline instead of navigating
         setHasCanvasProject(true);
@@ -2387,7 +2388,7 @@ const VideoStudio: React.FC = () => {
                       setSelectedClipId(clipId);
                       setSelectedClipName(clipName);
                       // Find the clip in the timeline and get its effects
-                      const clip = timelineSnapshot.tracks
+                      const clip = timelineSnapshot?.tracks
                         .flatMap(track => track.clips)
                         .find(c => c.id === clipId);
                       setSelectedClipEffects(clip?.effects || []);

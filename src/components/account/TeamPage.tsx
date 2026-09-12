@@ -235,10 +235,18 @@ const TeamPage: React.FC = () => {
       if (membersRes.status === 'fulfilled') setMembers(membersRes.value.members);
       else throw new Error('members');
       if (invitesRes.status === 'fulfilled') setInvites(invitesRes.value.invites);
-    } catch {
-      console.warn('[TeamPage] API unavailable, using fallback data');
-      setMembers(DEV_MEMBERS);
-      setInvites(DEV_INVITES);
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Could not load team data';
+      if (import.meta.env.DEV) {
+        console.warn('[TeamPage] API unavailable, using fallback data');
+        setMembers(DEV_MEMBERS);
+        setInvites(DEV_INVITES);
+      } else {
+        console.warn('[TeamPage] team data unavailable:', message);
+        setMembers([]);
+        setInvites([]);
+        setError(message);
+      }
     } finally {
       setIsLoading(false);
       setIsRefreshing(false);
@@ -433,6 +441,20 @@ const TeamPage: React.FC = () => {
           </button>
         )}
       </div>
+
+      {error && (
+        <div className="mx-2 mb-2 flex items-center gap-2 rounded-md border border-amber-400/20 bg-amber-400/5 px-3 py-2 text-[12px] text-amber-200/80">
+          <AlertTriangle size={13} className="shrink-0" />
+          <span className="min-w-0 flex-1">Team data is unavailable: {error}</span>
+          <button
+            type="button"
+            onClick={() => void loadData(true)}
+            className="shrink-0 text-amber-100/70 transition-colors hover:text-amber-100"
+          >
+            Retry
+          </button>
+        </div>
+      )}
 
 
       {/* ═══ Invite form — pinned sub-header ═══ */}

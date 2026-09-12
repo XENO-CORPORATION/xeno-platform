@@ -62,7 +62,7 @@ function InlineComposer({ spaces, onPosted, initial = '\u2022' }: { spaces: Foru
   if (!api.isSignedIn()) {
     return (
       <div className="rounded-md border border-white/10 bg-[#060608] px-4 py-3.5 text-[13px] text-[#a8a8b1]">
-        <a href="/auth" className="text-[#e5e5e9] font-medium hover:text-white">Sign in</a>{' '}
+        <a href="/login" className="text-[#e5e5e9] font-medium hover:text-white">Sign in</a>{' '}
         to post. Reading never needs an account.
       </div>
     );
@@ -542,7 +542,7 @@ const Forum: React.FC = () => {
           ) : surface === 'feed' ? (
             !signedIn ? (
               <div className="mx-4 rounded-md border border-white/10 bg-[#060608] px-4 py-3.5 text-[13px] text-[#a8a8b1]">
-                <a href="/auth" className="text-[#e5e5e9] font-medium hover:text-white">Sign in</a>{' '}
+                <a href="/login" className="text-[#e5e5e9] font-medium hover:text-white">Sign in</a>{' '}
                 for a personal feed. The Record is readable by anyone.
               </div>
             ) : (

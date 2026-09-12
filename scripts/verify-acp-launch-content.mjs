@@ -23,7 +23,7 @@ const forbidText = (label, haystack, needle) => {
 requireText('catalog', catalog, "slug: 'acp'");
 requireText('catalog', catalog, "status: 'beta'");
 requireText('catalog', catalog, "delivery: 'cli'");
-// ACP migrated to the @xenosystem scope (npm `latest` is @xenosystem/acp@0.1.1;
+// ACP migrated to the @xenosystem scope (npm `latest` is @xenosystem/acp@0.2.5;
 // @xeno-corporation/xeno-acp is frozen at 0.1.0). This gate asserted the OLD
 // name long after the catalog moved, so it failed on the corrected content —
 // and its product-page check passed only because a comment explaining the
@@ -55,8 +55,8 @@ for (const needle of ['0.1.0-alpha', 'private alpha', '@xeno-acp/']) {
   forbidText('release notes', releaseNotes, needle);
 }
 
-// npm `latest` is 0.1.1; the page states 0.1.1. This assertion still read 0.1.0.
-requireText('prerendered product', prerenderedProduct, 'XENO ACP 0.1.1');
+// npm `latest` is 0.2.5; the page must state the same installable release.
+requireText('prerendered product', prerenderedProduct, 'XENO ACP 0.2.5');
 requireText('prerendered product', prerenderedProduct, '"operatingSystem":"Windows, Linux"');
 forbidText('prerendered product', prerenderedProduct, 'Windows, macOS, Linux');
 requireText('prerendered installation docs', prerenderedInstall, 'Install the public npm packages');
@@ -69,5 +69,5 @@ if (failures.length > 0) {
 
 console.log('XENO ACP launch-content verification passed.');
 console.log('- catalog: beta / cli / npm / Windows+Linux');
-console.log('- landing, docs, and release notes: public 0.1.0 package scope');
+console.log('- landing and docs: public 0.2.5 package scope; historical 0.1.0 notes preserved');
 console.log('- prerender: route metadata and platform schema');

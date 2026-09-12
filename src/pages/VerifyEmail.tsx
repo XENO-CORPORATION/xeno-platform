@@ -175,7 +175,7 @@ const VerifyEmail = () => {
                 </>
               ) : (
                 <Link
-                  to="/auth"
+                  to="/login"
                   className="group mt-8 w-full py-4 bg-white text-black text-sm font-semibold rounded-[6px] flex items-center justify-center gap-0 transition-all duration-300 ease-out hover:bg-white/90 hover:shadow-lg hover:shadow-white/10 active:scale-[0.98] overflow-hidden"
                 >
                   <span className="transition-transform duration-300 group-hover:-translate-x-1">Sign in</span>

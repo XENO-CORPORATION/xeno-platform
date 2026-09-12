@@ -5,4 +5,4 @@ export { default as RightPanel } from './RightPanel';
 export { default as BottomPanel } from './BottomPanel';
 
 // Legacy exports for backward compatibility
-export { default as SidePanel } from './LeftBottomPanel/LeftBottomPanelTabs';
+export { default as SidePanel } from './SidePanel';

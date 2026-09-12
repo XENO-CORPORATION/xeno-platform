@@ -239,7 +239,7 @@ export function useChatHistory({ interfaceId, onError }: UseChatHistoryOptions):
           role: message.role || 'user',
           content: message.content || message.text || '',
           model_id: message.model_id || message.modelId,
-          thinking: message.thinking || message.thinkingContent,
+          thinking: message.thinking,
           has_thinking: message.has_thinking || message.hasThinking,
           attachments: message.attachments || message.files,
         });

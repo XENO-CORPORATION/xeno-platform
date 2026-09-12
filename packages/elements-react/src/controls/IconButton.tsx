@@ -1,6 +1,6 @@
 import type { ButtonHTMLAttributes, ReactElement } from 'react'
 import { forwardRef } from 'react'
-import type { Availability, ElementDeclaration } from '@xenosystem/elements/schema'
+import type { Availability, ElementDeclaration, ElementState } from '@xenosystem/elements/schema'
 import { XenoElement } from '../XenoElement.js'
 import { sizeAttr, iconPx, cx, type ControlSizeToken } from './util.js'
 import type { ButtonVariant } from './Button.js'
@@ -37,6 +37,8 @@ export interface IconButtonProps extends Omit<ButtonHTMLAttributes<HTMLButtonEle
    * happen.
    */
   readonly iconSize?: number
+  /** Discrete state for a morphing or selectable glyph owned by this button. */
+  readonly iconState?: Partial<ElementState>
 }
 
 /**
@@ -54,6 +56,7 @@ export const IconButton = forwardRef<HTMLButtonElement, IconButtonProps>(functio
     busy = false,
     enter = false,
     iconSize,
+    iconState,
     disabled = false,
     className,
     type = 'button',
@@ -75,7 +78,7 @@ export const IconButton = forwardRef<HTMLButtonElement, IconButtonProps>(functio
       {...sizeAttr(size)}
       {...rest}
     >
-      <XenoElement decl={icon} size={iconSize ?? iconPx(size)} />
+      <XenoElement decl={icon} size={iconSize ?? iconPx(size)} {...(iconState ? { state: iconState } : {})} />
     </button>
   )
 })

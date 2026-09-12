@@ -124,7 +124,7 @@ const StudioVideoCanvas: React.FC = () => {
             setTimelineSnapshot(result.project.timeline_data);
 
             // Set canvas duration from project or timeline data (convert to number)
-            const projectDuration = parseFloat(result.project.duration) || result.project.timeline_data.duration || 30;
+            const projectDuration = Number(result.project.duration) || result.project.timeline_data.duration || 30;
             console.log('⏱️ Setting canvas duration to:', projectDuration, '(type:', typeof projectDuration, ')');
             setCanvasDuration(projectDuration);
 
@@ -135,7 +135,7 @@ const StudioVideoCanvas: React.FC = () => {
           } else {
             console.log('⚠️ No timeline data found, using defaults');
             // Default duration if no timeline data (convert to number)
-            const defaultDuration = parseFloat(result.project.duration) || 30;
+            const defaultDuration = Number(result.project.duration) || 30;
             console.log('⏱️ Setting default canvas duration to:', defaultDuration, '(type:', typeof defaultDuration, ')');
             setCanvasDuration(defaultDuration);
             setCanvasCurrentTime(0);
@@ -391,15 +391,27 @@ const StudioVideoCanvas: React.FC = () => {
   };
 
   // Handle asset upload
-  const handleAssetUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
-    const files = event.target.files;
-    if (!files || files.length === 0 || !currentProject) return;
+  const handleAssetUpload = async (files: File[]) => {
+    if (files.length === 0 || !currentProject) return;
 
     const file = files[0];
 
     try {
       // Upload asset
-      const result = await videoStudioService.uploadAsset(currentProject.id, file);
+      const assetType: 'video' | 'image' | 'audio' = file.type.startsWith('image/')
+        ? 'image'
+        : file.type.startsWith('audio/')
+          ? 'audio'
+          : 'video';
+      const result = await videoStudioService.uploadAsset({
+        project_id: currentProject.id,
+        name: file.name,
+        type: assetType,
+        format: file.name.split('.').pop()?.toLowerCase() || assetType,
+        file_url: URL.createObjectURL(file),
+        file_size: file.size,
+        source: 'upload',
+      });
 
       if (result.success && result.asset) {
         // Add to asset library
@@ -892,16 +904,12 @@ const StudioVideoCanvas: React.FC = () => {
 
                     {/* Timeline */}
                     <div className="flex-1 rounded-lg overflow-hidden shadow-2xl border border-white/10 bg-[#09090b] min-w-0 min-h-0 relative flex flex-col">
-                      <BottomPanel
-                        tracks={timelineSnapshot?.tracks || []}
+                      <VideoTimeline
+                        videos={assetLibrary}
                         currentTime={canvasCurrentTime}
-                        duration={canvasDuration}
                         onTimeChange={handleTimeChange}
-                        onTracksChange={(tracks) => {
-                          if (timelineSnapshot) {
-                            setTimelineSnapshot({ ...timelineSnapshot, tracks });
-                          }
-                        }}
+                        projectDuration={canvasDuration}
+                        onStateChange={handleTimelineChange}
                       />
                       {/* Size Indicator */}
                       {isResizing === 'bottom' && (
@@ -1061,8 +1069,9 @@ const StudioVideoCanvas: React.FC = () => {
         {/* Project Manager Modal */}
         {isProjectManagerOpen && (
           <ProjectManager
+            isOpen
             onClose={() => setIsProjectManagerOpen(false)}
-            onSelectProject={(project) => {
+            onLoadProject={(project) => {
               navigate(`/studio/video/canvas/${project.id}`);
               setIsProjectManagerOpen(false);
             }}

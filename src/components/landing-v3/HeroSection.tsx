@@ -484,7 +484,7 @@ const dashboardFeatures = [
   { title: '20+ AI models',    sub: 'Leading frontier models in one workspace', icon: Layers },
   { title: 'Private by design', sub: 'Your data is encrypted and never used to train', icon: ShieldCheck },
   { title: 'Local + cloud',    sub: 'Run anywhere with complete flexibility', icon: Monitor },
-  { title: '1000 free credits', sub: 'Start building immediately, no payment required', icon: Sparkles },
+  { title: 'Free workspace',    sub: 'Start building immediately, no payment required', icon: Sparkles },
 ];
 
 /* ──────────────────────────────────────────────────────────────────────
@@ -523,7 +523,7 @@ function ComingSoon({ title, blurb }: { title: string; blurb?: string }) {
         <div className="text-[22px] font-semibold text-white">{title}</div>
         {blurb && <p className="mx-auto mt-2.5 max-w-[400px] text-[14px] leading-relaxed text-[#948d83]">{blurb}</p>}
       </div>
-      <a href="/auth" className="rounded-[8px] bg-white px-5 py-2.5 text-[13px] font-semibold text-black transition-colors hover:bg-white/90">
+      <a href="/signup" className="rounded-[8px] bg-white px-5 py-2.5 text-[13px] font-semibold text-black transition-colors hover:bg-white/90">
         Get notified — sign up free
       </a>
     </div>
@@ -666,7 +666,7 @@ const HeroSection: React.FC = () => {
               </p>
               <div className="mt-[clamp(18px,2.6vh,32px)] flex flex-col gap-2.5">
                 <a
-                  href="/auth"
+                  href="/signup"
                   className="group inline-flex h-[clamp(44px,5vh,56px)] w-full items-center justify-center gap-2 rounded-[5px] bg-white px-5 text-[clamp(12.5px,0.9vw,15px)] font-semibold text-black transition-colors hover:bg-white/95"
                 >
                   Get Started Free

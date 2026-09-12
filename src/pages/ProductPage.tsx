@@ -63,7 +63,7 @@ const LeanProductPage: React.FC<{ product: Product }> = ({ product }) => {
 
   return (
     <div className="flex min-h-screen flex-col bg-[#060606] text-white font-['Inter',sans-serif] overflow-x-clip antialiased">
-      <Header onGetStarted={() => navigate('/auth')} visible={true} />
+      <Header onGetStarted={() => navigate('/login')} visible={true} />
 
       <main className="flex-1">
         {/* ── Hero ─────────────────────────────────────────── */}
@@ -96,7 +96,7 @@ const LeanProductPage: React.FC<{ product: Product }> = ({ product }) => {
                       not general availability — so keep the notify path rather than
                       implying this is the finished thing. */}
                   {product.delivery === 'soon' && (
-                    <Link to="/auth" className="inline-flex items-center gap-1.5 rounded-[9px] border border-white/15 px-5 py-3 text-[13px] font-medium text-white transition-colors hover:bg-white/[0.06]">
+                    <Link to="/signup" className="inline-flex items-center gap-1.5 rounded-[9px] border border-white/15 px-5 py-3 text-[13px] font-medium text-white transition-colors hover:bg-white/[0.06]">
                       <Bell className="h-3.5 w-3.5" />Notify me when it ships
                     </Link>
                   )}
@@ -105,7 +105,7 @@ const LeanProductPage: React.FC<{ product: Product }> = ({ product }) => {
 
               {!product.externalUrl && product.delivery === 'web' && (
                 <div className="flex flex-wrap items-center gap-3">
-                  <Link to={product.launchPath ?? '/auth'} className="inline-flex items-center gap-2 rounded-[9px] bg-white px-5 py-3 text-[14px] font-semibold text-black transition-colors hover:bg-white/90">
+                  <Link to={product.launchPath ?? '/login'} className="inline-flex items-center gap-2 rounded-[9px] bg-white px-5 py-3 text-[14px] font-semibold text-black transition-colors hover:bg-white/90">
                     Open {product.name}<ArrowUpRight className="h-4 w-4" />
                   </Link>
                   <span className="text-[12.5px] text-[#69635b]">Runs in your browser — no install</span>
@@ -142,7 +142,7 @@ const LeanProductPage: React.FC<{ product: Product }> = ({ product }) => {
 
               {!product.externalUrl && product.delivery === 'soon' && (
                 <div className="flex flex-wrap items-center gap-3">
-                  <Link to="/auth" className="inline-flex items-center gap-2 rounded-[9px] bg-white px-5 py-3 text-[14px] font-semibold text-black transition-colors hover:bg-white/90">
+                  <Link to="/signup" className="inline-flex items-center gap-2 rounded-[9px] bg-white px-5 py-3 text-[14px] font-semibold text-black transition-colors hover:bg-white/90">
                     <Bell className="h-4 w-4" />Get notified
                   </Link>
                   {product.repo && product.repoPublic && <a href={`https://github.com/XENO-CORPORATION/${product.repo}`} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1.5 rounded-[9px] border border-white/15 px-5 py-3 text-[13px] font-medium text-white transition-colors hover:bg-white/[0.06]"><Github className="h-3.5 w-3.5" />Follow development</a>}

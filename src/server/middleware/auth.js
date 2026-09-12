@@ -6,7 +6,7 @@
 import jwt from 'jsonwebtoken';
 import crypto from 'crypto';
 import {
-  getKeyByKid, isAccessToken, ACCESS_TOKEN_AUDIENCE, ACCESS_TOKEN_TYP,
+  getKeyByKid, isAccessToken, isOidcSessionActive, ACCESS_TOKEN_AUDIENCE, ACCESS_TOKEN_TYP,
 } from '../utils/oidcProvider.js';
 
 const JWT_DEFAULT_SECRET = 'xenostudio-super-secret-jwt-key-change-in-production';
@@ -116,7 +116,7 @@ async function resolveApiKeyUser(req, rawKey) {
  * @returns {{ user: object } | { status: number, error: string }}
  */
 export async function resolveAuthedUser(req) {
-  const token = req.headers.authorization?.replace('Bearer ', '');
+  const token = req.headers.authorization?.replace(/^(?:Bearer|DPoP)\s+/i, '');
   if (!token) return { status: 401, error: 'Authentication token required' };
 
   // ADDITIVE branch: a token that is NOT JWT-shaped can only be an API key.
@@ -129,6 +129,7 @@ export async function resolveAuthedUser(req) {
 
   let userId = null;
   let sid = null;
+  let authContext = null;
   const header = jwt.decode(token, { complete: true })?.header;
   if (header && header.alg !== 'HS256' && header.kid) {
     const key = await getKeyByKid(req.db, header.kid);
@@ -146,6 +147,11 @@ export async function resolveAuthedUser(req) {
       return { status: 401, error: 'Invalid authentication token' };
     }
     userId = payload.sub;
+    sid = payload.sid || null;
+    authContext = {
+      kind: 'oidc', sid, authEpoch: payload.auth_epoch, authTime: payload.auth_time,
+      clientId: payload.client_id, scope: payload.scope || '', dpopJkt: payload.cnf?.jkt || null,
+    };
   } else {
     const decoded = jwt.verify(token, JWT_SECRET, { algorithms: ['HS256'] });
     // Legacy platform session tokens carry NEITHER `aud` NOR `typ` (authRoutes
@@ -163,6 +169,7 @@ export async function resolveAuthedUser(req) {
     }
     userId = decoded.userId;
     sid = decoded.sid || null;
+    authContext = { kind: 'legacy', sid, authTime: decoded.auth_time || decoded.iat || null };
   }
   if (!userId) return { status: 401, error: 'Invalid authentication token' };
 
@@ -170,7 +177,11 @@ export async function resolveAuthedUser(req) {
   // user_sessions row (id = sid) exists and is unexpired — logout/password-reset/
   // account-deletion delete the row and the token dies instantly. Tokens WITHOUT
   // a sid (issued pre-deploy) keep the old stateless behavior and age out in <=7d.
-  if (sid) {
+  if (sid && authContext?.kind === 'oidc') {
+    if (!await isOidcSessionActive(req.db, {
+      sid, userId, authEpoch: authContext.authEpoch,
+    })) return { status: 401, error: 'Session expired or revoked' };
+  } else if (sid) {
     // Validity check AND liveness touch in one round-trip.
     //
     // `last_active_at` had been DEAD since roughly January 2026: nothing in the
@@ -206,7 +217,7 @@ export async function resolveAuthedUser(req) {
     [userId],
   );
   if (result.rows.length === 0) return { status: 401, error: 'Invalid or expired token' };
-  return { user: result.rows[0] };
+  return { user: result.rows[0], auth: authContext };
 }
 
 /**
@@ -228,6 +239,7 @@ export const authMiddleware = async (req, res, next) => {
       return res.status(resolved.status).json({ success: false, error: resolved.error });
     }
     req.user = resolved.user;
+    req.auth = resolved.auth || null;
     next();
 
   } catch (error) {
@@ -258,7 +270,7 @@ export const authMiddleware = async (req, res, next) => {
  */
 export const optionalAuthMiddleware = async (req, res, next) => {
   try {
-    const token = req.headers.authorization?.replace('Bearer ', '');
+    const token = req.headers.authorization?.replace(/^(?:Bearer|DPoP)\s+/i, '');
 
     if (token) {
       // Unified resolution (incl. the sid session-revocation check) so a

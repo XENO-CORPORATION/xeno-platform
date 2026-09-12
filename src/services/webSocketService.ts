@@ -95,7 +95,7 @@ export class WebSocketService {
       this.ws = null;
     }
     this.isConnected = false;
-    this.clientId = null;
+    this.clientIdValue = null;
   }
 
   // Authenticate with session token

@@ -61,6 +61,7 @@ export interface VideoAnalytics {
   watch_time_minutes: number;
   likes: number;
   comments: number;
+  shares?: number;
   average_view_duration: number;
 }
 
@@ -85,6 +86,7 @@ export interface DailyAnalytics {
   subscribers_net: number;
   likes: number;
   comments: number;
+  shares?: number;
 }
 
 export interface ChannelVideo {

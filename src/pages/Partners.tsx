@@ -26,7 +26,7 @@ const Partners: React.FC = () => (
           },
           {
             title: 'Affiliates',
-            desc: 'Refer creators and earn on the credits and subscriptions they bring — with clean tracking and timely payouts.',
+            desc: 'Refer creators and earn on qualifying subscriptions — with clean tracking and timely payouts.',
           },
           {
             title: 'Education',
@@ -34,7 +34,7 @@ const Partners: React.FC = () => (
           },
           {
             title: 'Startups program',
-            desc: 'Early-stage teams get credits and support to build their product and content on XENO from day one.',
+            desc: 'Early-stage teams get platform access and support to build their product and content on XENO from day one.',
           },
         ]}
       />
@@ -45,7 +45,7 @@ const Partners: React.FC = () => (
         items={[
           'One integrated platform — reach creators across image, video, audio, design, and agents from a single integration.',
           'A growing marketplace — sell to an audience that is already buying tools, models, and agents.',
-          'Fair, transparent economics — clear revenue share, credits-based metering, and reliable payouts.',
+          'Fair, transparent economics — clear revenue share, usage-based metering where applicable, and reliable payouts.',
           'Open and documented — standard formats and APIs mean less custom glue and less lock-in for everyone.',
           'Build alongside us — direct access to the team, early roadmap visibility, and co-marketing for strong partners.',
         ]}

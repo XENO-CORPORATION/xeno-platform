@@ -695,6 +695,10 @@ const WordChatInterface: React.FC = () => {
                     model_id: selectedModel.id,
                   });
 
+                  if (!dbConversation) {
+                    throw new Error('Conversation creation returned no record');
+                  }
+
                   // Add messages to the conversation
                   for (const msg of conv.messages) {
                     await chatService.addMessage(dbConversation.id, {
@@ -1326,6 +1330,9 @@ const WordChatInterface: React.FC = () => {
             interface_id: WORD_INTERFACE_ID,
             model_id: selectedModel.id,
           });
+          if (!dbConversation) {
+            throw new Error('Conversation creation returned no record');
+          }
           conversationId = dbConversation.id;
           setActiveConversationId(conversationId);
           console.log(`✅ [Word] Created new conversation: ${conversationId}`);

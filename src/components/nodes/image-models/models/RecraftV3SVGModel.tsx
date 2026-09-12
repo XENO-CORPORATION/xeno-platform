@@ -35,11 +35,11 @@ export class RecraftV3SVGModel extends BaseImageModel {
     style: 'any'
   };
   
-  async generateImage(prompt: string, settings: ImageModelSettings): Promise<{ imageUrl: string; metadata?: any }> {
+  async generateImage(prompt: string, settings: ImageModelSettings): Promise<ImageGenerationResponse> {
     console.log("Generating SVG with Recraft V3 SVG model...");
     console.log("Prompt:", prompt);
     console.log("Model details:", this.id, this.name);
-    console.log("API endpoint:", API_ENDPOINTS.REPLICATE_API);
+    console.log("API endpoint:", API_ENDPOINTS.XENO_API);
     
     // Ensure we use the exact format required for size parameter
     const size = settings.size || 
@@ -103,4 +103,4 @@ export class RecraftV3SVGModel extends BaseImageModel {
       }
     };
   }
-} 
+}

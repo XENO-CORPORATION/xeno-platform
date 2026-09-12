@@ -1693,7 +1693,7 @@ router.get('/google', async (req, res) => {
     res.redirect(`${config.authUrl}?${params.toString()}`);
   } catch (error) {
     console.error('Google OAuth init error:', error);
-    res.redirect(`${FRONTEND_URL}/auth?error=oauth_failed`);
+    res.redirect(`${FRONTEND_URL}/login?error=oauth_failed`);
   }
 });
 
@@ -1704,17 +1704,17 @@ router.get('/google/callback', async (req, res) => {
 
     if (oauthError) {
       console.error('Google OAuth error:', oauthError);
-      return res.redirect(`${FRONTEND_URL}/auth?error=access_denied`);
+      return res.redirect(`${FRONTEND_URL}/login?error=access_denied`);
     }
 
     if (!code || !state) {
-      return res.redirect(`${FRONTEND_URL}/auth?error=invalid_request`);
+      return res.redirect(`${FRONTEND_URL}/login?error=invalid_request`);
     }
 
     // Verify state from Redis
     const stateData = await consumeOAuthState(state);
     if (!stateData || stateData.provider !== 'google') {
-      return res.redirect(`${FRONTEND_URL}/auth?error=invalid_state`);
+      return res.redirect(`${FRONTEND_URL}/login?error=invalid_state`);
     }
 
     const config = OAUTH_CONFIG.google;
@@ -1735,7 +1735,7 @@ router.get('/google/callback', async (req, res) => {
     const tokens = await tokenResponse.json();
     if (!tokens.access_token) {
       console.error('Google token error:', tokens);
-      return res.redirect(`${FRONTEND_URL}/auth?error=token_failed`);
+      return res.redirect(`${FRONTEND_URL}/login?error=token_failed`);
     }
 
     // Get user info
@@ -1745,7 +1745,7 @@ router.get('/google/callback', async (req, res) => {
 
     const googleUser = await userResponse.json();
     if (!googleUser.id) {
-      return res.redirect(`${FRONTEND_URL}/auth?error=user_fetch_failed`);
+      return res.redirect(`${FRONTEND_URL}/login?error=user_fetch_failed`);
     }
 
     // Find or create user
@@ -1771,10 +1771,10 @@ router.get('/google/callback', async (req, res) => {
     // loop against a door that is never going to open.
     if (error instanceof AccountCreationBlockedError || error instanceof AccountSuspendedError) {
       console.warn('Google OAuth refused:', error.code);
-      return res.redirect(`${FRONTEND_URL}/auth?error=${error.code}`);
+      return res.redirect(`${FRONTEND_URL}/login?error=${error.code}`);
     }
     console.error('Google OAuth callback error:', error);
-    res.redirect(`${FRONTEND_URL}/auth?error=callback_failed`);
+    res.redirect(`${FRONTEND_URL}/login?error=callback_failed`);
   }
 });
 
@@ -1805,7 +1805,7 @@ router.get('/github', async (req, res) => {
     res.redirect(`${config.authUrl}?${params.toString()}`);
   } catch (error) {
     console.error('GitHub OAuth init error:', error);
-    res.redirect(`${FRONTEND_URL}/auth?error=oauth_failed`);
+    res.redirect(`${FRONTEND_URL}/login?error=oauth_failed`);
   }
 });
 
@@ -1816,16 +1816,16 @@ router.get('/github/callback', async (req, res) => {
 
     if (oauthError) {
       console.error('GitHub OAuth error:', oauthError);
-      return res.redirect(`${FRONTEND_URL}/auth?error=access_denied`);
+      return res.redirect(`${FRONTEND_URL}/login?error=access_denied`);
     }
 
     if (!code || !state) {
-      return res.redirect(`${FRONTEND_URL}/auth?error=invalid_request`);
+      return res.redirect(`${FRONTEND_URL}/login?error=invalid_request`);
     }
 
     const stateData = await consumeOAuthState(state);
     if (!stateData || stateData.provider !== 'github') {
-      return res.redirect(`${FRONTEND_URL}/auth?error=invalid_state`);
+      return res.redirect(`${FRONTEND_URL}/login?error=invalid_state`);
     }
 
     const config = OAUTH_CONFIG.github;
@@ -1848,7 +1848,7 @@ router.get('/github/callback', async (req, res) => {
     const tokens = await tokenResponse.json();
     if (!tokens.access_token) {
       console.error('GitHub token error:', tokens);
-      return res.redirect(`${FRONTEND_URL}/auth?error=token_failed`);
+      return res.redirect(`${FRONTEND_URL}/login?error=token_failed`);
     }
 
     // Get user info
@@ -1862,7 +1862,7 @@ router.get('/github/callback', async (req, res) => {
 
     const githubUser = await userResponse.json();
     if (!githubUser.id) {
-      return res.redirect(`${FRONTEND_URL}/auth?error=user_fetch_failed`);
+      return res.redirect(`${FRONTEND_URL}/login?error=user_fetch_failed`);
     }
 
     // Get primary email if not public
@@ -1903,10 +1903,10 @@ router.get('/github/callback', async (req, res) => {
   } catch (error) {
     if (error instanceof AccountCreationBlockedError || error instanceof AccountSuspendedError) {
       console.warn('GitHub OAuth refused:', error.code);
-      return res.redirect(`${FRONTEND_URL}/auth?error=${error.code}`);
+      return res.redirect(`${FRONTEND_URL}/login?error=${error.code}`);
     }
     console.error('GitHub OAuth callback error:', error);
-    res.redirect(`${FRONTEND_URL}/auth?error=callback_failed`);
+    res.redirect(`${FRONTEND_URL}/login?error=callback_failed`);
   }
 });
 
@@ -1948,7 +1948,7 @@ router.get('/twitter', async (req, res) => {
     res.redirect(`${config.authUrl}?${params.toString()}`);
   } catch (error) {
     console.error('Twitter OAuth init error:', error);
-    res.redirect(`${FRONTEND_URL}/auth?error=oauth_failed`);
+    res.redirect(`${FRONTEND_URL}/login?error=oauth_failed`);
   }
 });
 
@@ -1959,16 +1959,16 @@ router.get('/twitter/callback', async (req, res) => {
 
     if (oauthError) {
       console.error('Twitter OAuth error:', oauthError);
-      return res.redirect(`${FRONTEND_URL}/auth?error=access_denied`);
+      return res.redirect(`${FRONTEND_URL}/login?error=access_denied`);
     }
 
     if (!code || !state) {
-      return res.redirect(`${FRONTEND_URL}/auth?error=invalid_request`);
+      return res.redirect(`${FRONTEND_URL}/login?error=invalid_request`);
     }
 
     const stateData = await consumeOAuthState(state);
     if (!stateData || stateData.provider !== 'twitter') {
-      return res.redirect(`${FRONTEND_URL}/auth?error=invalid_state`);
+      return res.redirect(`${FRONTEND_URL}/login?error=invalid_state`);
     }
 
     const config = OAUTH_CONFIG.twitter;
@@ -1992,7 +1992,7 @@ router.get('/twitter/callback', async (req, res) => {
     const tokens = await tokenResponse.json();
     if (!tokens.access_token) {
       console.error('Twitter token error:', tokens);
-      return res.redirect(`${FRONTEND_URL}/auth?error=token_failed`);
+      return res.redirect(`${FRONTEND_URL}/login?error=token_failed`);
     }
 
     // Get user info
@@ -2005,7 +2005,7 @@ router.get('/twitter/callback', async (req, res) => {
 
     if (!twitterUser?.id) {
       console.error('Twitter user fetch error:', twitterData);
-      return res.redirect(`${FRONTEND_URL}/auth?error=user_fetch_failed`);
+      return res.redirect(`${FRONTEND_URL}/login?error=user_fetch_failed`);
     }
 
     // Find or create user (Twitter doesn't provide email in v2 API by default)
@@ -2027,10 +2027,10 @@ router.get('/twitter/callback', async (req, res) => {
   } catch (error) {
     if (error instanceof AccountCreationBlockedError || error instanceof AccountSuspendedError) {
       console.warn('Twitter OAuth refused:', error.code);
-      return res.redirect(`${FRONTEND_URL}/auth?error=${error.code}`);
+      return res.redirect(`${FRONTEND_URL}/login?error=${error.code}`);
     }
     console.error('Twitter OAuth callback error:', error);
-    res.redirect(`${FRONTEND_URL}/auth?error=callback_failed`);
+    res.redirect(`${FRONTEND_URL}/login?error=callback_failed`);
   }
 });
 
@@ -2213,7 +2213,7 @@ function activationPage({ site, ok, userId, token, title, body }) {
       <input type="hidden" name="u" value="${esc(userId)}">
       <input type="hidden" name="t" value="${esc(token)}">
       <button type="submit" style="width:100%;padding:11px 14px;background:#e8e8ee;color:#111;border:0;border-radius:4px;font-size:13.5px;font-weight:600;cursor:pointer;">Activate my account</button>
-    </form>` : `<a href="${esc(site)}/auth" style="display:block;text-align:center;padding:11px 14px;border:1px solid rgba(255,255,255,.2);border-radius:4px;color:#d8d8de;text-decoration:none;font-size:13.5px;">Go to sign in</a>`}
+    </form>` : `<a href="${esc(site)}/login" style="display:block;text-align:center;padding:11px 14px;border:1px solid rgba(255,255,255,.2);border-radius:4px;color:#d8d8de;text-decoration:none;font-size:13.5px;">Go to sign in</a>`}
   </div>
   <p style="margin:14px 0 0;text-align:center;color:#5d5d63;font-size:11px;">You can also enter the 6-digit code from the email instead.</p>
 </div></body></html>`;
@@ -2263,16 +2263,16 @@ router.post('/activate', async (req, res) => {
     const userId = String(req.body?.u || req.query.u || '').trim();
     const token = String(req.body?.t || req.query.t || '').trim();
     if (!userId || !token || !verifyActivationToken(userId, token)) {
-      return res.redirect(302, `${site}/auth?activation=invalid`);
+      return res.redirect(302, `${site}/login?activation=invalid`);
     }
     const { rows } = await req.db.query('SELECT id FROM users WHERE id = $1', [userId]);
-    if (!rows.length) return res.redirect(302, `${site}/auth?activation=invalid`);
+    if (!rows.length) return res.redirect(302, `${site}/login?activation=invalid`);
 
     await activateAccount(req.db, userId, { method: 'email_link', ip: clientIp(req) });
     return res.redirect(302, `${site}/auth/activate?activated=1`);
   } catch (e) {
     console.error('[activate] error:', e?.message || e);
-    return res.redirect(302, `${site}/auth?activation=error`);
+    return res.redirect(302, `${site}/login?activation=error`);
   }
 });
 

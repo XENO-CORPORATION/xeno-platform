@@ -150,10 +150,10 @@ test('the app count is MEASURED, not written or guessed', () => {
 });
 
 test('free and paid state the SAME count, to opposite ends', () => {
-  /* The symmetry is the argument: the apps are Layer 1 in the pricing standard
-   * and free on both sides, and what is bought is the connection between them.
-   * Two different counts would read as two different products — a smaller XENO
-   * and a bigger one — which is exactly the framing the standard rejects. */
+  /* The count is the same catalog on both sides; the account owner's 2026-08-24
+   * distribution override changes what a new Free account may DOWNLOAD, not
+   * which products exist. Free therefore says they are mapped and preserves
+   * existing installs; paid says they share one paid workspace. */
   const verdicts = [...page.matchAll(/verdict: `All \$\{workspaceApps\}([^`]*)`/g)].map((m) => m[1]);
   assert.equal(verdicts.length, 2, 'both tiers no longer state the measured count');
   assert.notEqual(verdicts[0], verdicts[1], 'the two tiers say the same thing, so the count argues nothing');
@@ -367,7 +367,8 @@ test('the footer promises nothing the product cannot do yet', () => {
   // "Cancel any time" under a button that cannot charge is the kind of small
   // lie that makes a reader distrust everything else on the page.
   const card = pieces.slice(pieces.indexOf('export const PlanCard'), pieces.indexOf('/* \u2500\u2500 Field'));
-  assert.match(card, /available \? 'Cancel any time/, 'the reassurance is not conditional on being sellable');
+  assert.match(card, /available\s*\?\s*\(footerNote \|\| 'Cancel any time/,
+    'the reassurance or its surface-specific equivalent is not conditional on being sellable');
   assert.match(card, /Payments open shortly/, 'an unsellable plan has no honest footer line');
 });
 
@@ -684,18 +685,23 @@ test('checkout availability is THREE-state, so a dropped request is not a refusa
 });
 
 test('a KNOWN-disabled checkout says so instead of offering a dead button', () => {
-  /* ⚠️ Assert the GUARDED BRANCH, not the file. Two call sites carry this
-   * string (the plan CTA and the credit packs), so a file-level check stayed
-   * green with the plan CTA's guard replaced by `if (false)`. Fourth time this
-   * exact shape fooled a gate in this session — a substring is satisfied by any
-   * line, including the one you were not thinking about. */
+  /* ⚠️ Assert the GUARDED BRANCH, not just a file-level string. A substring can
+   * be satisfied by an unrelated line, including the one you were not thinking
+   * about. */
   const guard = pricingPage.indexOf("if (checkout.availability === 'disabled') {");
   assert.ok(guard > -1, 'the plan CTA no longer branches on checkout being disabled');
   const branch = pricingPage.slice(guard, guard + 900);
   assert.ok(branch.includes('Not yet purchasable'),
     'the disabled branch no longer says so — the CTA looks live with no checkout behind it');
-  assert.ok(pricingPage.includes("const off = checkout.availability === 'disabled'"),
-    'the credit packs stopped checking, so they still offer a Buy that cannot complete');
+});
+
+test('the public pricing page sells subscriptions, never credit packs', () => {
+  assert.doesNotMatch(pricingPage, /CREDIT_PACKS|CreditPackCard|credit packs|Buy credits|free credits/i,
+    'the main platform pricing page started marketing the API usage currency again');
+  assert.match(pricingPage, /Platform subscriptions and API usage are separate/,
+    'the pricing page no longer explains where subscription pricing ends and API billing begins');
+  assert.match(pricingPage, /to="\/api-reference"/,
+    'managed inference no longer routes visitors to the dedicated developer surface');
 });
 
 test('the disabled state is DEFINITE — never triggered by unknown', () => {

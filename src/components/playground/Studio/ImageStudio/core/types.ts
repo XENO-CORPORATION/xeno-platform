@@ -118,6 +118,7 @@ export interface ChatMessage {
     thinkingContent?: string; // New field for thinking content
     imageData?: string; // Added field for storing generated image data (base64)
     isGeneratingImage?: boolean; // Flag for image generation in progress
+    timestamp?: Date;
     userImageAttachment?: { file?: File; name: string; type: string; base64Data?: string; }; // Updated for serialization
     userFileAttachment?: { file?: File; name: string; type: string; content?: string; encoding?: 'text' | 'base64' }; // Updated for serialization
     isCancelled?: boolean; // New field to indicate if the AI response was cancelled
@@ -186,4 +187,4 @@ export interface ConversationImageState {
   conversationResponseId?: string; // Main conversation response ID
   contexts: Map<string, ImageContext>; // Map of context ID to context data
   nextContextId: string; // Next available context ID (A, B, C...)
-} 
+}

@@ -25,6 +25,41 @@ import { R2Publisher } from './lib/r2-upload.mjs'
 
 const R2_REMOTE = 'r2:xeno-hub-releases'
 
+const USAGE = `Usage: node scripts/publish-tool-packages.mjs [options]
+
+Publish signed XENO runtime packages to the Hub tools registry.
+
+Options:
+  --packages <directory>   Package directory (default: ../xeno-tools/dist-packages)
+  --dry-run                Verify and preview without uploading
+  --allow-new-registry     Permit creating a registry when none exists
+  --allow-downgrade        Permit replacing a newer live package entry
+  -h, --help               Show this help without reading packages or contacting R2`
+
+const BOOLEAN_OPTIONS = new Set(['--dry-run', '--allow-new-registry', '--allow-downgrade'])
+
+function validateCliArgs(argv) {
+  let help = false
+  for (let i = 0; i < argv.length; i += 1) {
+    const token = argv[i]
+    if (token === '--help' || token === '-h') {
+      help = true
+      continue
+    }
+    if (BOOLEAN_OPTIONS.has(token)) continue
+    if (token === '--packages') {
+      const value = argv[i + 1]
+      if (!value || value.startsWith('-')) {
+        throw new Error('--packages requires a directory value')
+      }
+      i += 1
+      continue
+    }
+    throw new Error(`unknown argument: ${token}`)
+  }
+  return { help }
+}
+
 /**
  * The trust list MUST match xeno-hub/src/main/services/tools/toolPackageVerifier.ts. If these
  * drift, the failure is asymmetric and nasty: publish succeeds and every client refuses the
@@ -158,6 +193,17 @@ async function fetchLiveRegistry({ allowMissing = false } = {}) {
 }
 
 async function main() {
+  let cli
+  try {
+    cli = validateCliArgs(process.argv.slice(2))
+  } catch (error) {
+    fail(`${error.message}\n\n${USAGE}`)
+  }
+  if (cli.help) {
+    console.log(USAGE)
+    return
+  }
+
   const dryRun = Boolean(arg('dry-run', false))
   // Both default OFF: the safe behaviour must be the one you get by typing nothing.
   const allowNewRegistry = Boolean(arg('allow-new-registry', false))

@@ -613,7 +613,7 @@ const AudioGenerationInterface: React.FC = () => {
     // API is now proxied through backend
     setApiTokenAvailable(true);
 
-    if (hasToken) {
+    if (apiTokenAvailable) {
       // If token is now available, clear any error and start a new session
       console.log('Audio generation API token is now available');
     }
@@ -2435,4 +2435,4 @@ const AudioGenerationInterface: React.FC = () => {
   );
 };
 
-export default AudioGenerationInterface; 
+export default AudioGenerationInterface;

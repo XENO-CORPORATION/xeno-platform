@@ -28,6 +28,7 @@ import * as cheerio from 'cheerio';
 import FormData from 'form-data';
 import pg from 'pg';
 import { createHash, randomBytes, randomUUID } from 'crypto';
+import { buildUntrustedProjectDataMessage, inertProviderMessageText } from './services/chatProjectPrompt.js';
 import jwt from 'jsonwebtoken';
 import { WebSocketServer as WebSocket } from 'ws';
 import chokidar from 'chokidar';
@@ -45,6 +46,7 @@ import conversionRoutes from './routes/conversionRoutes.js';
 import videoRoutes from './routes/videoRoutes.js';
 import imageRoutes, { imagePublicRoutes } from './routes/imageRoutes.js';
 import chatRoutes from './routes/chatRoutes.js';
+import libraryRoutes from './routes/libraryRoutes.js';
 import tokenizerRoutes from './routes/tokenizerRoutes.js';
 import userDataRoutes from './routes/userDataRoutes.js';
 import browserRoutes from './routes/browserRoutes.js';
@@ -94,6 +96,10 @@ import { authMiddleware, optionalAuthMiddleware } from './middleware/auth.js';
 import { initCleanupService } from './services/cleanupService.js';
 import { runMigrations } from './services/migrationService.js';
 import { startScheduledTasksWorker } from './workers/chatScheduledWorker.js';
+import { startLibraryIngestionWorker } from './workers/libraryIngestionWorker.js';
+import { reasoningCapabilityForModel, reasoningEffortForModel } from './lib/chatModelCapabilities.js';
+import { registerManagedLibraryFile } from './services/libraryAssets.js';
+import { assembleProjectContext } from './services/chatProjectContext.js';
 
 // Round 8: Infrastructure imports
 import healthRoutes from './routes/healthRoutes.js';
@@ -310,6 +316,7 @@ const generationLimiter = rateLimit({
   message: { success: false, error: 'Generation rate limit exceeded. Please wait before trying again.' },
 });
 app.use('/api/chat/generate', generationLimiter);
+app.use('/api/chat/web-context', generationLimiter);
 app.use('/api/xeno/', generationLimiter);
 
 // ── Retire legacy un-metered provider endpoints (Blocker #4b / LEAK-8) ─────────
@@ -622,8 +629,15 @@ console.log('🎨 Image Studio routes integrated: /api/image/*');
 // Create a conditional auth middleware that skips auth for public paths
 const chatAuthMiddleware = (req, res, next) => {
   console.log('[ChatAuth] Path:', req.path, 'Original URL:', req.originalUrl);
-  // Skip auth for init endpoint only (generate requires auth to prevent abuse)
+  // Shared conversation reads are deliberately public: the 256-bit share token is
+  // the bearer capability. Accepting a share remains authenticated, as do all
+  // mutation routes. Keep this method + exact-path check narrow so
+  // /share/:token/accept never inherits the public exemption.
   const publicPaths = ['/init'];
+  const isPublicShareRead = req.method === 'GET' && /^\/share\/[^/]+$/.test(req.path);
+  if (isPublicShareRead) {
+    return optionalAuthMiddleware(req, res, next);
+  }
   if (publicPaths.some(path => req.path === path || req.path.startsWith(path))) {
     console.log('[ChatAuth] Skipping auth for public path:', req.path);
     return next();
@@ -634,6 +648,11 @@ const chatAuthMiddleware = (req, res, next) => {
 };
 app.use('/api/chat', databaseMiddleware, chatAuthMiddleware, chatRoutes);
 console.log('💬 Chat routes integrated: /api/chat/*');
+
+// Canonical account asset plane. Chat keeps compatibility aliases, while every
+// product can consume this route without depending on chat internals.
+app.use('/api/library', databaseMiddleware, libraryRoutes);
+console.log('📚 Library routes integrated: /api/library/*');
 
 // Tokenizer routes - no auth required (public utility)
 app.use('/api/tokenize', tokenizerRoutes);
@@ -798,13 +817,6 @@ let modelsCache = null;
 let modelsCacheTimestamp = 0;
 const MODELS_CACHE_DURATION = 30 * 60 * 1000; // 30 minutes
 
-// Reasoning-capable model detection — matches BOTH bare XENO-API ids ('gemini-3-flash',
-// 'deepseek-v3.2', 'o3') and legacy 'company/model' (OpenRouter-style) ids, so the
-// reasoning param is set correctly regardless of id shape.
-function isReasoningCapableModel(id = '') {
-  return /deepseek|qwen|grok-|gemini-2\.5|gemini-3|(^|\/)o[134](\b|-)|claude-(sonnet|opus|haiku)-4|claude-3\.7-sonnet/i.test(String(id));
-}
-
 // Companies to include and their prefixes
 const COMPANY_PREFIXES = {
   'OpenAI': 'openai/',
@@ -859,10 +871,7 @@ app.get('/api/models', databaseMiddleware, authMiddleware, async (req, res) => {
       const latestModels = models.slice(0, 40).map(model => {
         const id = String(model.id).toLowerCase();
 
-        let supportsReasoning = 'disabled';
-        if (/deepseek|gemini-3|gemini-2\.5|grok-3|grok-4|claude-(sonnet|opus|haiku)-4|(^|\/)o[134]\b|thinking|-r1\b/.test(id)) {
-          supportsReasoning = 'toggleable';
-        }
+        const supportsReasoning = reasoningCapabilityForModel(id);
         const supportsVision = /gemini|gpt-5|gpt-4o|claude|pixtral|vision|llama-4|grok-4/.test(id);
 
         return {
@@ -940,11 +949,16 @@ app.get('/api/test-db', async (req, res) => {
 const ALLOWED_UPLOAD_MIMES = new Set([
   'image/jpeg', 'image/png', 'image/gif', 'image/webp', 'image/svg+xml',
   'application/pdf', 'text/plain', 'application/json',
+  'text/csv', 'text/markdown', 'text/html', 'application/xml',
+  'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  'application/vnd.ms-excel', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  'application/vnd.ms-powerpoint', 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+  'application/zip', 'application/octet-stream',
   'video/mp4', 'video/webm', 'audio/mpeg', 'audio/wav', 'audio/mp4',
 ]);
 const MAX_UPLOAD_SIZE = 100 * 1024 * 1024; // 100MB
 
-app.post('/api/upload', databaseMiddleware, authMiddleware, upload.single('image'), (req, res) => {
+app.post('/api/upload', databaseMiddleware, authMiddleware, upload.single('image'), async (req, res) => {
   if (!req.file) {
     return res.status(400).json({ error: 'No file uploaded' });
   }
@@ -962,19 +976,38 @@ app.post('/api/upload', databaseMiddleware, authMiddleware, upload.single('image
     return res.status(400).json({ error: 'File exceeds maximum size of 100MB' });
   }
 
-  const filePath = req.file.path;
-  const fileUrl = `${req.protocol}://${req.get('host')}/uploads/${path.basename(filePath)}`;
+  try {
+    const filePath = req.file.path;
+    const fileUrl = `${req.protocol}://${req.get('host')}/uploads/${path.basename(filePath)}`;
+    const stored = await registerManagedLibraryFile(req.db, {
+      userId: req.user.id,
+      filename: path.basename(filePath),
+      originalName: req.file.originalname,
+      mimeType: req.file.mimetype,
+      fileSize: req.file.size,
+      storagePath: filePath,
+      metadata: { source: req.body?.source || 'upload' },
+    });
+    const libraryId = stored.id;
 
-  res.json({
-    success: true,
-    message: 'File uploaded successfully',
-    file: {
-      name: req.file.originalname,
-      size: req.file.size,
-      type: req.file.mimetype,
-      url: fileUrl
-    }
-  });
+    res.json({
+      success: true,
+      message: 'File uploaded successfully',
+      file: {
+        id: libraryId,
+        name: req.file.originalname,
+        size: req.file.size,
+        type: req.file.mimetype,
+        url: fileUrl,
+        content_url: `/api/library/assets/${libraryId}/content`,
+        created_at: stored.created_at,
+      }
+    });
+  } catch (error) {
+    try { fs.unlinkSync(req.file.path); } catch { /* best-effort orphan cleanup */ }
+    console.error('Failed to persist uploaded file:', error);
+    res.status(500).json({ success: false, error: 'Failed to persist uploaded file' });
+  }
 });
 
 // Define a list of models that use the standard chat completions endpoint
@@ -1152,12 +1185,36 @@ app.post('/api/chat/generate', databaseMiddleware, authMiddleware, async (req, r
                         return res.status(500).json({ error: 'Image generation failed. Please try again.' });
                     }
                 }
+                const imageBuffer = Buffer.from(outImageData, 'base64');
+                const storedName = `${randomUUID()}-xeno-generated.png`;
+                const storedPath = path.join(uploadsDir, storedName);
+                let libraryItemId = null;
+                try {
+                    await fs.promises.writeFile(storedPath, imageBuffer);
+                    const stored = await registerManagedLibraryFile(req.db, {
+                        userId: imgUserId,
+                        filename: storedName,
+                        originalName: `XENO image ${new Date().toISOString().replace(/[:.]/g, '-')}.png`,
+                        mimeType: 'image/png',
+                        fileSize: imageBuffer.length,
+                        storagePath: storedPath,
+                        metadata: { source: 'chat-generation', prompt: imagePrompt, model: modelLabel },
+                    });
+                    libraryItemId = stored.id;
+                } catch (persistError) {
+                    try { await fs.promises.unlink(storedPath); } catch { /* no file or best-effort cleanup */ }
+                    console.error('[imggen] failed to persist generated image in account library:', persistError.message);
+                    if (imgCharged) await refundImgCharge();
+                    return res.status(500).json({ error: 'Image generation could not be saved. Please try again.' });
+                }
                 await logCreditUsage(req.db, imgUserId, 'image:gpt-image-2', imgCost, { route: '/api/chat/generate:image' }).catch(() => {});
                 return res.json({
                     imageData: outImageData,
                     modelIdUsed: modelLabel,
                     responseId: respId,               // opaque token — preserves the ImageStudio contract
                     imageGenerationCallId: callId,    // opaque token — preserves the ImageStudio contract
+                    libraryItemId,
+                    libraryContentUrl: `/api/library/assets/${libraryItemId}/content`,
                     entitlement: gateMeta(imgEnt),
                 });
             };
@@ -1577,7 +1634,7 @@ app.post('/api/chat/generate', databaseMiddleware, authMiddleware, async (req, r
 
     try {
         // <<< RECEIVE effectiveReasoningState >>>
-        const { messages, systemPrompt, selectedModelId, effectiveReasoningState } = req.body; 
+        const { messages, systemPrompt, selectedModelId, effectiveReasoningState, conversationId, projectId } = req.body;
 
         // Basic validation
         if (messages === undefined || !Array.isArray(messages) || selectedModelId === undefined || effectiveReasoningState === undefined) {
@@ -1592,9 +1649,59 @@ app.post('/api/chat/generate', databaseMiddleware, authMiddleware, async (req, r
 
         // 1. Format messages for OpenRouter (similar to OpenAI standard)
         let apiMessages = [];
+        let projectContext = null;
+        let projectContextRecordId = null;
+        let projectContextRequestHash = null;
         
         // Handle System Prompt (potentially add reasoning/table instructions if needed)
         let finalSystemPromptContent = systemPrompt ? systemPrompt.trim() : null;
+        if (projectId || conversationId) {
+            if (!projectId || !conversationId) {
+                return res.status(400).json({ error: 'Project generation requires projectId and conversationId.' });
+            }
+            const lastUser = [...messages].reverse().find((message) => message.role === 'user');
+            const query = Array.isArray(lastUser?.parts)
+                ? (lastUser.parts.find((part) => part.type === 'text')?.text || '')
+                : (typeof lastUser?.content === 'string' ? lastUser.content : '');
+            try {
+                projectContext = await assembleProjectContext({
+                    db: req.db,
+                    principal: { type: 'user', id: req.user.id },
+                    projectId,
+                    conversationId,
+                    query,
+                    modelId: selectedModelId,
+                    maxInputTokens: 16_000,
+                    requiredRelation: 'reviewer',
+                });
+                projectContextRecordId = randomUUID();
+                projectContextRequestHash = createHash('sha256').update(JSON.stringify({
+                    conversationId,
+                    projectId,
+                    modelId: selectedModelId,
+                    query,
+                    messages,
+                })).digest('hex');
+                await req.db.query(
+                    `INSERT INTO chat_generation_contexts(
+                       id, conversation_id, project_id, user_id, request_hash, context_manifest, safe_sources
+                     ) VALUES($1,$2,$3,$4,$5,$6::jsonb,$7::jsonb)`,
+                    [
+                        projectContextRecordId,
+                        conversationId,
+                        projectId,
+                        req.user.id,
+                        projectContextRequestHash,
+                        JSON.stringify(projectContext.manifest),
+                        JSON.stringify(projectContext.manifest.sources),
+                    ],
+                );
+            } catch (contextError) {
+                const status = contextError.status || (contextError.code === 'invalid_id' ? 400 : 404);
+                return res.status(status).json({ error: contextError.message, code: contextError.code || 'project_context_failed' });
+            }
+            finalSystemPromptContent = [finalSystemPromptContent, projectContext.instructions].filter(Boolean).join('\n\n');
+        }
         // const useReasoning = req.body.useReasoning === true; // <<< REMOVE old flag check >>>
         
         // <<< USE effectiveReasoningState for prompt instructions >>>
@@ -1602,7 +1709,7 @@ app.post('/api/chat/generate', databaseMiddleware, authMiddleware, async (req, r
             console.log(`Effective Reasoning State is TRUE for ${selectedModelId}. Checking for marker instructions.`);
             // Add appropriate instructions based on model type
             // Models that use native API reasoning field - NO marker instructions needed
-            const usesNativeReasoningField = isReasoningCapableModel(selectedModelId);
+            const usesNativeReasoningField = reasoningCapabilityForModel(selectedModelId) !== 'disabled';
 
             // Legacy models that need marker instructions in prompt
             const isPotentiallyGeminiStyle = false; // Now handled by native reasoning
@@ -1652,6 +1759,9 @@ app.post('/api/chat/generate', databaseMiddleware, authMiddleware, async (req, r
         // Add the final system prompt if it exists
         if (finalSystemPromptContent) {
              apiMessages.push({ role: "system", content: finalSystemPromptContent });
+        }
+        if (projectContext?.contentBlocks?.length) {
+             apiMessages.push(buildUntrustedProjectDataMessage(projectContext.contentBlocks));
         }
         
         // <<< NEW: Intelligent Image Referral Logic >>>
@@ -1904,25 +2014,12 @@ app.post('/api/chat/generate', databaseMiddleware, authMiddleware, async (req, r
 
         // Add reasoning parameter for reasoning-capable models when reasoning is enabled
         if (effectiveReasoningState) {
-            // Models that support OpenRouter's reasoning parameter
-            const reasoningModels = [
-                'anthropic/claude-3.7-sonnet:thinking',
-                'deepseek/deepseek-r1',
-                'google/gemini-2.5-flash-preview-05-20:thinking',
-                'google/gemini-2.5-pro-preview',
-                'x-ai/grok-3-beta',
-                'x-ai/grok-3-mini-beta'
-            ];
-
-            // Check if model needs reasoning parameter
-            const modelNeedsReasoning = reasoningModels.includes(selectedModelId) || isReasoningCapableModel(selectedModelId);
-
-            if (modelNeedsReasoning) {
-                // OpenRouter expects reasoning to be an object, not a boolean
-                bodyPayload.reasoning = {
-                    effort: "high" // Can be "high", "medium", or "low"
-                };
-                console.log(`   -> Added reasoning: {effort: "high"} parameter for model ${selectedModelId}`);
+            const reasoningEffort = reasoningEffortForModel(selectedModelId, true);
+            if (reasoningEffort) {
+                // XENO API's preferred OpenAI-compatible field. Fixed-effort aliases
+                // deliberately omit it because the model ID already selects effort.
+                bodyPayload.reasoning_effort = reasoningEffort;
+                console.log(`   -> Added reasoning_effort: "${reasoningEffort}" for model ${selectedModelId}`);
             }
         }
         bodyPayload.model = normalizeXenoModelId(bodyPayload.model);
@@ -1982,30 +2079,8 @@ app.post('/api/chat/generate', databaseMiddleware, authMiddleware, async (req, r
         console.log('OpenRouter API Response (content truncated if long):', JSON.stringify(dataForLogging));
 
         // Extract text - structure follows OpenAI standard
-        let outputText = data.choices?.[0]?.message?.content;
+        let outputText = inertProviderMessageText(data.choices?.[0]?.message);
         let returnedImageData = null;
-
-        if (Array.isArray(outputText)) {
-            outputText = outputText
-                .map(part => (typeof part === 'string' ? part : part?.text || (part?.type === 'text' ? part.text : '')))
-                .filter(Boolean)
-                .join('\n');
-        }
-
-        if (outputText === null || outputText === undefined || outputText === '') {
-            const rawMsg = data.choices?.[0]?.message;
-            if (rawMsg) {
-                if (typeof rawMsg.reasoning_content === 'string' && rawMsg.reasoning_content.trim()) {
-                    outputText = rawMsg.reasoning_content;
-                } else if (typeof rawMsg.reasoning === 'string' && rawMsg.reasoning.trim()) {
-                    outputText = rawMsg.reasoning;
-                } else if (typeof rawMsg.refusal === 'string' && rawMsg.refusal.trim()) {
-                    outputText = rawMsg.refusal;
-                } else if (Array.isArray(rawMsg.tool_calls) && rawMsg.tool_calls.length > 0) {
-                    outputText = rawMsg.tool_calls.map(tc => tc.function?.arguments || tc.function?.name || 'tool_call').join('\n');
-                }
-            }
-        }
 
         // If the model did not return text content (or tried tool calling), check if the prompt is an image request and auto-generate via gpt-image-2
         if ((!outputText || outputText.trim() === '') && xenoImageClient) {
@@ -2066,7 +2141,7 @@ app.post('/api/chat/generate', databaseMiddleware, authMiddleware, async (req, r
             // Reasoning was requested for this call.
             // Check for special fields first (Qwen/Deepseek R1/Gemini Pro/Grok/Claude 3.7)
             // Models that may return reasoning in a separate field
-            const modelProvidesSeparateReasoning = isReasoningCapableModel(selectedModelId);
+            const modelProvidesSeparateReasoning = reasoningCapabilityForModel(selectedModelId) !== 'disabled';
                 
             if (modelProvidesSeparateReasoning) {
                 const reasoningContent = data.choices?.[0]?.message?.reasoning;
@@ -2301,6 +2376,16 @@ app.post('/api/chat/generate', databaseMiddleware, authMiddleware, async (req, r
             finalResponse.imageData = returnedImageData;
             finalResponse.modelIdUsed = 'gpt-image-2';
         }
+        if (projectContext) {
+            const responseHash = createHash('sha256').update(String(finalResponse.text || '')).digest('hex');
+            await req.db.query(
+                `UPDATE chat_generation_contexts SET response_hash=$2
+                 WHERE id=$1 AND request_hash=$3 AND response_hash IS NULL`,
+                [projectContextRecordId, responseHash, projectContextRequestHash],
+            );
+            finalResponse.projectContextId = projectContextRecordId;
+            finalResponse.projectSources = projectContext.manifest.sources;
+        }
 
         // Return the final response object
         console.log("Final response object being sent to frontend:", finalResponse);
@@ -2392,7 +2477,7 @@ app.post('/api/v2/engine/dynamic-search', databaseMiddleware, authMiddleware, as
   const { query, max_pages = 10, index_results = true } = req.body;
 
   const pythonServiceUrl = process.env.NODE_ENV === 'production'
-    ? 'http://xeno-search-service:8000/api/v2/engine/dynamic-search'
+    ? 'http://xeno-search:8000/api/v2/engine/dynamic-search'
     : 'http://localhost:8000/api/v2/engine/dynamic-search';
 
   if (!query) {
@@ -2428,6 +2513,40 @@ app.post('/api/v2/engine/dynamic-search', databaseMiddleware, authMiddleware, as
     }
   }
 });
+
+/**
+ * Authenticated provider-specific search proxies. Provider credentials stay in
+ * the internal xeno-search container and are never sent to the browser.
+ */
+for (const provider of ['google', 'brave']) {
+  app.post(`/api/v2/engine/${provider}-search`, databaseMiddleware, authMiddleware, async (req, res) => {
+    const { query } = req.body;
+    if (!query || typeof query !== 'string') {
+      return res.status(400).json({ error: 'Search query is required.' });
+    }
+
+    const serviceUrl = process.env.NODE_ENV === 'production'
+      ? `http://xeno-search:8000/api/v2/engine/${provider}-search`
+      : `http://localhost:8000/api/v2/engine/${provider}-search`;
+
+    try {
+      const body = provider === 'google'
+        ? { query, num_results: Math.min(Math.max(parseInt(req.body.num_results, 10) || 10, 1), 50) }
+        : { query, count: Math.min(Math.max(parseInt(req.body.count, 10) || 10, 1), 50) };
+      const response = await postJsonToService(serviceUrl, body, { timeoutMs: 45000 });
+      if (!response.ok) {
+        const detail = response.data?.detail || response.data?.error || `${provider} search service error`;
+        return res.status(response.status || 500).json({ error: detail });
+      }
+      return res.json(response.data);
+    } catch (error) {
+      console.error(`[${provider} Search] Error:`, error.message);
+      return res.status(error.isNoResponse ? 503 : 500).json({
+        error: error.isNoResponse ? `${provider} Search service unreachable.` : 'Internal server error.'
+      });
+    }
+  });
+}
 
 // API endpoint to fetch metadata from a URL
 app.post('/api/fetch-metadata', databaseMiddleware, authMiddleware, async (req, res) => {
@@ -3991,8 +4110,13 @@ startNotificationEmailSweep(pool);
 // Loop D push half. The delivery engine it feeds had ZERO producers before this
 // line existed — see forumWebhookPush.js.
 startWebhookPushSweep(pool);
-// Start chat scheduled automation background worker
-startScheduledTasksWorker(pool);
+// Development can embed these loops for convenience. Production runs them in
+// the explicit chat-workers service so an API restart cannot silently own or
+// erase correctness-critical worker health.
+if (process.env.NODE_ENV !== 'production' || process.env.CHAT_EMBEDDED_WORKERS === 'true') {
+  startScheduledTasksWorker(pool);
+  startLibraryIngestionWorker(pool);
+}
 
 // Start main server
 server.listen(PORT, () => {

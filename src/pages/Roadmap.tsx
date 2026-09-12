@@ -13,7 +13,7 @@ const Roadmap: React.FC = () => (
       <FeatureGrid
         cols={2}
         items={[
-          { title: 'XENO Hub', desc: 'The desktop launcher is released — install apps, manage updates, and keep credits and settings in sync across machines.' },
+          { title: 'XENO Hub', desc: 'The desktop launcher is released — install apps, manage updates, and keep your account and settings in sync across machines.' },
           { title: 'XENO Pixel', desc: 'The AI-native image editor: brush engine, layers, viewport, and in-canvas generative tools, in active development.' },
           { title: 'Image, video & audio generation', desc: 'Generate from a prompt on the unified inference runtime, with GGUF and CUDA support and an OpenAI-compatible API.' },
           { title: 'Marketplace', desc: 'A unified catalog for apps, panels, plugins, models, and agents — buy, subscribe, rent, or publish and earn.' },

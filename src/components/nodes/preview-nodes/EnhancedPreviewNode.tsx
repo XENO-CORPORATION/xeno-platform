@@ -42,7 +42,7 @@ const EnhancedPreviewNode: React.FC<EnhancedPreviewNodeProps> = (props) => {
     theme: 'dark'
   });
   const [previewContentUrl, setPreviewContentUrl] = useState<string | null>(contentUrl || null);
-  const [refreshTimer, setRefreshTimer] = useState<number | null>(null);
+  const [refreshTimer, setRefreshTimer] = useState<ReturnType<typeof setInterval> | null>(null);
   const [refreshingPreview, setRefreshingPreview] = useState<boolean>(false);
 
   // Load the model implementation when the selected model changes
@@ -225,4 +225,4 @@ const EnhancedPreviewNode: React.FC<EnhancedPreviewNodeProps> = (props) => {
   );
 };
 
-export default EnhancedPreviewNode; 
+export default EnhancedPreviewNode;

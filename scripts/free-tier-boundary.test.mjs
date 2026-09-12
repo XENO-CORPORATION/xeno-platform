@@ -226,10 +226,12 @@ test('grants() is a boolean check, not a truthy one', () => {
   assert.equal(grants(entitlementsFor('free'), 'cloudSync'), false);
   assert.equal(grants(undefined, 'cloudSync'), false);
 
-  // teamSeats is a NUMBER in the table. Returning 5 here would pass every
+  // teamSeats is a NUMBER in the table. Returning 25 here would pass every
   // `if (grants(...))` and fail every `=== true`, which is the exact bug this
-  // test exists to prevent.
-  assert.equal(grants(entitlementsFor('team'), 'teamSeats'), true);
+  // test exists to prevent. Team quantity is workspace billing state, so the
+  // fixed numeric entitlement belongs only to Studio.
+  assert.equal(grants(entitlementsFor('studio'), 'teamSeats'), true);
+  assert.equal(grants(entitlementsFor('team'), 'teamSeats'), false);
   assert.equal(grants(entitlementsFor('pro'), 'teamSeats'), false);
 });
 

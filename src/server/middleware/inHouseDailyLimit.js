@@ -99,7 +99,7 @@ export async function enforceInHouseDailyLimit(db, userId) {
 export function limitExceededBody(verdict) {
   return {
     error: 'inhouse_daily_limit_exceeded',
-    message: `You've reached your plan's in-house inference cap of ${verdict.limit} requests per day. The counter resets at midnight UTC (${verdict.resetAt}). Upgrade to Pro for unlimited in-house inference.`,
+    message: `You've reached your plan's in-house inference cap of ${verdict.limit} requests per day. The counter resets at midnight UTC (${verdict.resetAt}). Everything and higher plans remove this daily cap where in-house inference is available.`,
     limit: verdict.limit,
     used: verdict.count,
     resetAt: verdict.resetAt,

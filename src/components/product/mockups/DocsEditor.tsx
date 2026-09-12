@@ -5,6 +5,7 @@ import {
   Link, BookOpen, Palette, PanelLeft, MessageSquare, History, Sparkles,
   RefreshCw, FileText, Expand, Languages, PenTool, ChevronDown, X, Cloud,
 } from 'lucide-react';
+import type { LucideIcon } from 'lucide-react';
 
 /* High-fidelity XENO Docs editor mockup — the hero's representative content
  * (NN/g: the hero visual must be the real product). Recreated in the landing-v3
@@ -16,7 +17,7 @@ import {
 const V = 'rgb(var(--acc))';
 
 /** one 28×28 toolbar button */
-function TB({ icon: Icon, active }: { icon: React.ComponentType<{ size?: number }>; active?: boolean }) {
+function TB({ icon: Icon, active }: { icon: LucideIcon; active?: boolean }) {
   return (
     <span
       className={`grid h-[26px] w-[26px] shrink-0 place-items-center rounded-[3px] ${

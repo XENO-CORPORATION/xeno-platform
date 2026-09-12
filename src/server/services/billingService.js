@@ -313,7 +313,9 @@ const PLAN_ENTITLEMENTS = {
    * tier exists - an agent that spans 26 applications is the one capability
    * neither an app vendor nor a model vendor can assemble. */
   pro:    { plan: 'pro',    canUse: true,  canDownload: true,  commercial: true,  maxResolution: '4k',       priority: true,  inHouseDailyLimit: null, privateProjects: true,  teamSeats: 0,  cloudSync: true,  crossApp: true,  agents: true,  collaboration: false, watermark: false },
-  team:   { plan: 'team',   canUse: true,  canDownload: true,  commercial: true,  maxResolution: '4k',       priority: true,  inHouseDailyLimit: null, privateProjects: true,  teamSeats: 5,  cloudSync: true,  crossApp: true,  agents: true,  collaboration: true,  watermark: false },
+  /* Team seats are purchased as Stripe quantity; the live limit is stored on
+   * the workspace, so the static entitlement must not invent an included five. */
+  team:   { plan: 'team',   canUse: true,  canDownload: true,  commercial: true,  maxResolution: '4k',       priority: true,  inHouseDailyLimit: null, privateProjects: true,  teamSeats: 0,  cloudSync: true,  crossApp: true,  agents: true,  collaboration: true,  watermark: false },
   studio: { plan: 'studio', canUse: true,  canDownload: true,  commercial: true,  maxResolution: '4k',       priority: true,  inHouseDailyLimit: null, privateProjects: true,  teamSeats: 25, cloudSync: true,  crossApp: true,  agents: true,  collaboration: true,  watermark: false },
 
   // Staff / internal-service accounts (prod has real users with plan='internal').
@@ -539,6 +541,24 @@ export async function createCheckout(pool, user, itemId, { origin, downloadInten
   const item = CATALOG.map(resolveItem).find((i) => i.id === itemId);
   if (!item) { const e = new Error('unknown item'); e.status = 400; throw e; }
   if (!item.available) { const e = new Error(`item "${itemId}" has no configured price (set ${item.priceEnv})`); e.status = 400; throw e; }
+  if (item.kind === 'subscription' && !isOffered(item)) {
+    const e = new Error('That subscription price is no longer offered');
+    e.status = 409;
+    e.code = 'price_not_offered';
+    throw e;
+  }
+  /* A Team price is a WORKSPACE subscription whose Stripe quantity is the
+   * workspace's paid seat limit. Selling it through this personal path loses
+   * both facts: quantity is forced to one and the webhook has no workspace id,
+   * so it grants a personal `team` plan instead of funding a workspace. Refuse
+   * the malformed sale at the authority boundary; callers must use
+   * createWorkspaceSeatCheckout. */
+  if (item.perSeat) {
+    const e = new Error('Team checkout requires a workspace and seat count');
+    e.status = 400;
+    e.code = 'workspace_required';
+    throw e;
+  }
 
   const base = process.env.BILLING_APP_URL || origin || siteOrigin();
   const { successUrl, cancelUrl } = checkoutReturn(base, item.id, downloadIntent);
@@ -635,9 +655,23 @@ export async function createCheckout(pool, user, itemId, { origin, downloadInten
  * rides on BOTH the session metadata (for checkout.session.completed) and the
  * subscription metadata (for renewal/quantity-change events).
  */
-export async function createWorkspaceSeatCheckout(pool, user, { workspaceId, seats, origin, downloadIntent = null, consentId = null }) {
-  const item = CATALOG.map(resolveItem).find((i) => i.id === 'team_seat');
-  if (!item?.available) { const e = new Error('team seat price not configured (set STRIPE_PRICE_TEAM_SEAT_MONTHLY)'); e.status = 400; throw e; }
+export async function createWorkspaceSeatCheckout(pool, user, {
+  workspaceId, seats, origin, itemId = 'team_seat', downloadIntent = null, consentId = null,
+}) {
+  const item = CATALOG.map(resolveItem).find((i) => i.id === itemId);
+  if (!item || item.plan !== 'team' || !item.perSeat) {
+    const e = new Error('unknown Team price');
+    e.status = 400;
+    e.code = 'invalid_team_price';
+    throw e;
+  }
+  if (!item.available) { const e = new Error(`Team price is not configured (set ${item.priceEnv})`); e.status = 400; throw e; }
+  if (!isOffered(item)) {
+    const e = new Error('That Team price is no longer offered');
+    e.status = 409;
+    e.code = 'price_not_offered';
+    throw e;
+  }
   const qty = Math.max(1, Math.floor(Number(seats) || 1));
   const base = process.env.BILLING_APP_URL || origin || siteOrigin();
   /* 🔴 CONSENT IS REQUIRED HERE TOO, and it was not.
@@ -662,7 +696,7 @@ export async function createWorkspaceSeatCheckout(pool, user, { workspaceId, sea
     consentId = usable;
   }
 
-  const seatReturn = checkoutReturn(base, 'team_seat', downloadIntent);
+  const seatReturn = checkoutReturn(base, item.id, downloadIntent);
   const customer = await getOrCreateCustomer(pool, user);
   const session = await stripe.checkout.sessions.create({
     mode: 'subscription',
@@ -680,7 +714,7 @@ export async function createWorkspaceSeatCheckout(pool, user, { workspaceId, sea
     ...taxCheckoutFields(),
     subscription_data: { metadata: { xenoWorkspaceId: String(workspaceId), seats: String(qty) } },
     metadata: {
-      xenoUserId: String(user.id), itemId: 'team_seat', kind: 'subscription',
+      xenoUserId: String(user.id), itemId: item.id, kind: 'subscription',
       xenoWorkspaceId: String(workspaceId), seats: String(qty),
       ...(consentId ? { xenoConsentId: String(consentId) } : {}),
       ...(downloadIntent ? { xenoDownloadIntent: String(downloadIntent) } : {}),

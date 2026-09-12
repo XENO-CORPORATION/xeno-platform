@@ -72,20 +72,23 @@ const ShoppingSearchInterface: React.FC = () => {
     try {
       const response = await xenoSearchService.searchShopping({
         query: searchQuery,
-        search_type: searchType,
+        search_type: 'shopping',
+        filters: { mode: searchType },
         num_results: 10
       });
       
       const convertedResults: ShoppingResult[] = response.products?.map((product, index) => ({
         id: `${Date.now()}-${index}`,
-        title: product.title,
-        price: product.price,
-        originalPrice: product.original_price,
-        discount: product.discount,
+        title: product.title || product.brand || 'Product',
+        price: `$${product.price.toFixed(2)}`,
+        originalPrice: product.originalPrice === undefined ? undefined : `$${product.originalPrice.toFixed(2)}`,
+        discount: product.originalPrice && product.originalPrice > product.price
+          ? `${Math.round((1 - product.price / product.originalPrice) * 100)}% off`
+          : undefined,
         rating: product.rating || 4.0,
-        reviewCount: product.review_count || 0,
-        imageUrl: product.image_url || '',
-        url: product.url,
+        reviewCount: product.reviewCount || 0,
+        imageUrl: product.imageUrl || '',
+        url: product.url || '',
         source: product.source || 'Online Store',
         availability: product.availability || 'In Stock',
         timestamp: new Date().toLocaleString()
@@ -94,8 +97,7 @@ const ShoppingSearchInterface: React.FC = () => {
       setSearchResults(convertedResults);
     } catch (error) {
       console.error('Shopping search failed:', error);
-      const mockResults = generateMockResults(searchQuery);
-      setSearchResults(mockResults);
+      setSearchResults([]);
     } finally {
       setIsSearching(false);
     }
@@ -544,4 +546,4 @@ const ShoppingSearchInterface: React.FC = () => {
   );
 };
 
-export default ShoppingSearchInterface; 
+export default ShoppingSearchInterface;

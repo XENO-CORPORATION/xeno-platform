@@ -12,6 +12,10 @@ export interface VideoFile {
     height: number;
   };
   createdAt: Date;
+  type?: string;
+  thumbnail?: string;
+  width?: number;
+  height?: number;
 }
 
 export interface VideoProject {
@@ -21,6 +25,8 @@ export interface VideoProject {
   videos: VideoFile[];
   createdAt: Date;
   updatedAt: Date;
+  lastModified?: Date;
+  project_metadata?: Record<string, unknown>;
 }
 
 export interface VideoStudioSettings {

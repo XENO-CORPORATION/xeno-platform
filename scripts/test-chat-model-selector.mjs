@@ -66,9 +66,7 @@ try {
   let selectedModelId = null;
   const waitForInlineMotion = async () => {
     await act(async () => {
-            // The inline tray now closes by replaying the gooey chain backwards, which takes
-      // longer than the old slide-out keyframe it replaced.
-      await new Promise((resolve) => setTimeout(resolve, 1100));
+      await new Promise((resolve) => setTimeout(resolve, 900));
     });
   };
 
@@ -120,11 +118,30 @@ try {
     onOpenChange: (isOpen) => inlineOpenStates.push(isOpen),
   });
   const inlineTrigger = document.querySelector('[aria-label^="Select model"]');
+  assert.ok(
+    document.querySelector('[data-inline-model-selector="true"]')?.className.includes('justify-end'),
+    'The provider rail and active-model trigger should stay grouped at the same edge.',
+  );
+  assert.ok(
+    inlineTrigger.className.includes('min-w-[8.5rem]'),
+    'The desktop active-model trigger should have enough width to identify the model.',
+  );
   await act(async () => {
     inlineTrigger.click();
   });
   assert.ok(document.querySelector('[data-inline-model-actions]'), 'The empty-chat selector should show provider choices inline instead of over the composer.');
   assert.equal(document.querySelectorAll('[data-inline-model-provider]').length, 1, 'The inline selector should start with providers, not a long model list.');
+  assert.ok(document.querySelector('[data-inline-model-rail]'), 'The inline selector should reveal its catalog as one stable rail.');
+  assert.ok(document.querySelector('[data-gooey-rail="model"]'), 'The inline model rail should retain its gooey chain.');
+  assert.equal(
+    document.querySelector('[data-gooey-rail="model"]')?.getAttribute('data-gooey-preserve-geometry'),
+    'true',
+    'The gooey model rail should keep the real controls at their final geometry.',
+  );
+  assert.ok(
+    [...document.querySelectorAll('[data-inline-model-chip]')].every((button) => 'gooeyChip' in button.dataset),
+    'Every inline model pill should participate in the liquid skin hand-off.',
+  );
   assert.deepEqual(inlineOpenStates, [true], 'Opening the inline selector should notify its composer parent.');
 
   const xenoProviderButton = document.querySelector('[data-inline-model-provider="XENO"]');
@@ -174,6 +191,28 @@ try {
   assert.equal(selectedModelId, 'xeno/model-6', 'Selecting a provider model should keep the existing model selection behavior.');
   assert.equal(document.querySelector('[data-inline-model-actions]'), null, 'The provider rail should close after selection.');
   assert.deepEqual(providerOpenStates, [true, false], 'Selecting a provider model should close the parent composer tray.');
+
+  let handledOpenRequests = 0;
+  const externallyOpenedStates = [];
+  await renderSelector(modelA, {
+    groupedModels: providerGroupedModels,
+    isInlineTray: true,
+    openRequestKey: 1,
+    onOpenRequestHandled: () => {
+      handledOpenRequests += 1;
+    },
+    onOpenChange: (isOpen) => externallyOpenedStates.push(isOpen),
+    triggerId: 'canonical-model-selector-trigger',
+  });
+  await act(async () => {
+    await Promise.resolve();
+  });
+  const remotelyOpenedTrigger = document.querySelector('#canonical-model-selector-trigger');
+  assert.ok(remotelyOpenedTrigger, 'The canonical selector trigger should expose a stable target id.');
+  assert.equal(remotelyOpenedTrigger.getAttribute('aria-expanded'), 'true', 'An external opener should open the canonical selector.');
+  assert.ok(document.querySelector('[data-inline-model-actions]'), 'An external opener should reveal the same inline provider rail.');
+  assert.equal(handledOpenRequests, 1, 'The selector should acknowledge each external open request exactly once.');
+  assert.deepEqual(externallyOpenedStates, [true], 'An external opener should synchronize the composer tray state.');
 
   await act(async () => {
     root.unmount();

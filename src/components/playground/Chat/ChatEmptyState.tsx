@@ -21,9 +21,9 @@ import {
 import {
   AGENT_CHAIN,
   chainDurationMs,
+  MODEL_CHAIN,
   reverseDelays,
   GOOEY_FILTER_ID,
-  MODEL_CHAIN,
   TAB_CHAIN,
   TAB_REVEAL,
   runGooey,
@@ -39,7 +39,9 @@ interface ChatEmptyStateProps {
   hideToolRail?: boolean;
   activeMode: ChatMode;
   canAnalyzeDocument: boolean;
+  modelSelectorOpenRequestKey?: number | null;
   modelSelector?: (options: { isInlineTray: boolean; onOpenChange: (isOpen: boolean) => void }) => React.ReactNode;
+  onModelSelectorOpenChange?: (isOpen: boolean) => void;
   onAgentActionSelect: (actionId: AgentHubMockActionId) => void;
   onModeChange: (mode: ChatMode) => void;
   onUploadFile: () => void;
@@ -153,7 +155,9 @@ const ChatEmptyState: React.FC<ChatEmptyStateProps> = ({
   hideToolRail = false,
   activeMode,
   canAnalyzeDocument,
+  modelSelectorOpenRequestKey = null,
   modelSelector,
+  onModelSelectorOpenChange,
   onAgentActionSelect,
   onModeChange,
   onUploadFile,
@@ -207,7 +211,25 @@ const ChatEmptyState: React.FC<ChatEmptyStateProps> = ({
     if (isRevealOpen) setIsRevealRowVisible(true);
   }, [isRevealOpen]);
 
-  // The mode tabs + model chip climb straight out of the box, staggered left → right.
+  // The top-bar model chip is only a remote opener for the selector that lives here.
+  // Bring its floating row into view first; if Agents currently owns the row, return to
+  // Chat so the canonical model selector can mount and consume the same request.
+  useEffect(() => {
+    if (modelSelectorOpenRequestKey === null) return;
+
+    setIsRevealOpen(true);
+    setIsRevealRowVisible(true);
+    if (activeMode === 'agents') onModeChange('chat');
+  }, [activeMode, modelSelectorOpenRequestKey, onModeChange]);
+
+  useEffect(() => {
+    onModelSelectorOpenChange?.(isModelTrayOpen);
+  }, [isModelTrayOpen, onModelSelectorOpenChange]);
+
+  // The row is one continuous liquid path: its first control pulls out of the bottom-left
+  // reveal trigger, then each control unfolds from the previous one toward the top-right.
+  // Closing reverses the CLOCK but preserves that topology, so every control melts back
+  // through the same neighbour and the final one returns to the trigger.
   // Layout effect, not a plain one: the row is already visible by the time effects run,
   // so anything deferred past paint shows the tabs at rest for a frame before they drop
   // back into the box to climb out again.
@@ -229,18 +251,23 @@ const ChatEmptyState: React.FC<ChatEmptyStateProps> = ({
     }
 
     const direction = isRevealOpen ? 'in' : 'out';
-    const delays = items.map((_, index) => (
-      (direction === 'in' ? index : items.length - 1 - index) * TAB_REVEAL.staggerMs
-    ));
+    const entranceDelays = items.map((_, index) => index * TAB_REVEAL.staggerMs);
+    const delays = direction === 'in' ? entranceDelays : reverseDelays(entranceDelays);
+    const fromSelector = row.dataset.gooeyFrom;
+    const fromEl = fromSelector
+      ? revealRootRef.current?.querySelector<HTMLElement>(fromSelector) ?? null
+      : null;
 
     setIsMelting(true);
     const cancel = runGooey({
       skin,
       items,
       delays,
+      orderDelays: entranceDelays,
       durationMs: TAB_REVEAL.durationMs,
-      chain: false,
+      chain: true,
       direction,
+      fromEl,
       onSettled: () => {
         setIsMelting(false);
         if (direction !== 'out') return;
@@ -259,7 +286,8 @@ const ChatEmptyState: React.FC<ChatEmptyStateProps> = ({
   }, [isRevealOpen, isRevealRowVisible]);
 
   // The rails (agent actions, model chips) render themselves; watch for the DOM landing
-  // and chain them out of whatever control opened them.
+  // and chain their filtered skin out of whatever control opened them. Model controls
+  // keep their real geometry fixed because their rail can overflow horizontally.
   useLayoutEffect(() => {
     if (!isRevealOpen) return;
 
@@ -301,6 +329,7 @@ const ChatEmptyState: React.FC<ChatEmptyStateProps> = ({
           orderDelays: entrance,
           durationMs: config.durationMs,
           chain: true,
+          preserveItemGeometry: rail.dataset.gooeyPreserveGeometry === 'true',
           direction: 'out',
           fromEl: fromSelector ? row.querySelector<HTMLElement>(fromSelector) : null,
           clip: rail.closest<HTMLElement>('[data-gooey-clip]'),
@@ -332,6 +361,7 @@ const ChatEmptyState: React.FC<ChatEmptyStateProps> = ({
         delays,
         durationMs: config.durationMs,
         chain: true,
+        preserveItemGeometry: rail.dataset.gooeyPreserveGeometry === 'true',
         fromEl,
         // The Agents tab is replaced by the rail it opens, so by now it is gone —
         // fall back to the rect captured just before the swap.
@@ -347,8 +377,9 @@ const ChatEmptyState: React.FC<ChatEmptyStateProps> = ({
       if (!(node instanceof HTMLElement)) return null;
       const state = node.dataset.agentActionsState ?? node.dataset.inlineModelActionsState;
       if (state !== 'closing') return null;
-      // Agents marks the rail itself; the model tray marks the scroll box around it.
-      return node.matches('[data-gooey-rail]') ? node : node.querySelector('[data-gooey-rail]');
+      return node.matches('[data-gooey-rail]')
+        ? node
+        : node.querySelector<HTMLElement>('[data-gooey-rail]');
     };
 
     const observer = new window.MutationObserver((records) => {
@@ -377,7 +408,7 @@ const ChatEmptyState: React.FC<ChatEmptyStateProps> = ({
       // checkpoint of the commit that made the change — still before paint. Deferring it
       // by even one task let the browser paint the chips at rest first: the whole rail
       // flashed into view fully formed, vanished, and only then animated.
-      rails.forEach(runRail);
+      rails.forEach((rail) => runRail(rail));
     });
 
     observer.observe(row, {
@@ -386,7 +417,7 @@ const ChatEmptyState: React.FC<ChatEmptyStateProps> = ({
       attributes: true,
       attributeFilter: ['data-agent-actions-state', 'data-inline-model-actions-state'],
     });
-    row.querySelectorAll<HTMLElement>('[data-gooey-rail]').forEach(runRail);
+    row.querySelectorAll<HTMLElement>('[data-gooey-rail]').forEach((rail) => runRail(rail));
 
     return () => {
       observer.disconnect();
@@ -668,11 +699,15 @@ const ChatEmptyState: React.FC<ChatEmptyStateProps> = ({
           key={`${action.id}-${agentActionsEpoch}`}
           variant="secondary"
           size="md"
-          iconSize={13}
           leadingIcon={agentActionIconById[action.id]}
           className="chat-mode-action whitespace-nowrap"
           data-mock-action="true"
-          data-gooey-chip
+          ref={(button) => {
+            // React's component prop types reject arbitrary data attributes even though
+            // Button forwards them. A commit-time ref still marks the node before the
+            // MutationObserver microtask drives the rail entrance.
+            if (button) button.dataset.gooeyChip = 'true';
+          }}
           onClick={() => closeAgentActions(() => onAgentActionSelect(action.id))}
         >
           {action.label}
@@ -759,7 +794,7 @@ const ChatEmptyState: React.FC<ChatEmptyStateProps> = ({
                           sees. The contract carries the weight; a call site should not restate it,
                           because a restated number is one that can be restated WRONG. */}
                       <Icon size={13} aria-hidden="true" />
-                      <span>{mode.label}</span>
+                      <span data-chat-mode-label>{mode.label}</span>
                     </span>
                   </button>
                 );
@@ -969,6 +1004,9 @@ const ChatEmptyState: React.FC<ChatEmptyStateProps> = ({
         <div
           ref={revealRowRef}
           data-composer-reveal-row
+          data-gooey-dir="ltr"
+          data-gooey-from="[data-composer-reveal-trigger]"
+          data-gooey-path="bottom-left-to-top-right"
           data-reveal-state={isRevealRowVisible ? 'open' : 'closed'}
         >
           {modeControls}
@@ -985,7 +1023,7 @@ const ChatEmptyState: React.FC<ChatEmptyStateProps> = ({
     return (
       <div
         data-conversation-composer-frame
-        className="relative flex w-full flex-col overflow-visible [container-type:inline-size]"
+        className="relative flex w-full flex-col overflow-visible [container-type:inline-size] [container-name:chat-composer]"
       >
         {composerReveal}
       </div>
@@ -998,7 +1036,7 @@ const ChatEmptyState: React.FC<ChatEmptyStateProps> = ({
       // The floating mode row is out of flow, so it reserves no space of its own and used
       // to open straight into the title. The gap here has to clear it: 34px of chips plus
       // the 16px it floats above the box, plus breathing room.
-      className="relative flex w-full flex-col items-center gap-12 overflow-visible [container-type:inline-size] md:gap-14"
+      className="relative flex w-full flex-col items-center gap-12 overflow-visible [container-type:inline-size] [container-name:chat-composer] md:gap-14"
     >
       <div className="flex flex-col items-center">
         <div

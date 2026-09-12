@@ -129,6 +129,21 @@
   color: var(--xeno-danger);
   border-color: var(--xeno-danger);
 }
+.xeno-btn[data-variant='danger'][data-emphasis='outline'] {
+  color: var(--xeno-danger);
+  border-color: var(--xeno-danger);
+}
+.xeno-btn[data-variant='danger'][data-emphasis='solid'] {
+  color: var(--xeno-style-btn-primary-fg);
+  background: var(--xeno-danger);
+  border-color: var(--xeno-danger);
+}
+.xeno-btn[data-variant='danger'][data-emphasis='solid']:hover:not(:disabled) {
+  color: var(--xeno-style-btn-primary-fg);
+  background:
+    linear-gradient(var(--xeno-hover), var(--xeno-hover)),
+    var(--xeno-danger);
+}
 
 /* SELECTION reads as the text colour, whatever the variant's rest is.
  *
@@ -166,6 +181,49 @@
   animation: xeno-btn-enter var(--xeno-dur-entrance) var(--xeno-ease) both;
 }
 
+/* A label-first button can keep its glyph tucked under the label until the user reaches for it.
+   The icon stays out of flow so the resting box is label-sized; hover/focus opens exactly one
+   icon-sized gutter on the requested edge. */
+.xeno-btn[data-icon-reveal] {
+  --xeno-btn-reveal-dur: 600ms;
+  position: relative;
+  overflow: hidden;
+  transition:
+    padding var(--xeno-btn-reveal-dur) var(--xeno-ease),
+    background var(--xeno-dur) ease,
+    border-color var(--xeno-dur) ease,
+    color var(--xeno-dur) ease,
+    opacity var(--xeno-dur) ease,
+    scale var(--xeno-btn-press-dur) var(--xeno-btn-press-ease);
+}
+.xeno-btn[data-icon-reveal] > .xeno-element {
+  position: absolute;
+  opacity: 0;
+  transition: opacity var(--xeno-btn-reveal-dur) var(--xeno-ease), transform var(--xeno-btn-reveal-dur) var(--xeno-ease);
+}
+.xeno-btn[data-icon-reveal='leading'] > .xeno-element:first-child {
+  left: var(--xeno-padx, 12px);
+  transform: translateX(calc(var(--xeno-icon, 16px) + var(--xeno-gap, 6px)));
+}
+.xeno-btn[data-icon-reveal='trailing'] > .xeno-element:last-child {
+  right: var(--xeno-padx, 12px);
+  transform: translateX(calc(0px - var(--xeno-icon, 16px) - var(--xeno-gap, 6px)));
+}
+.xeno-btn[data-icon-reveal='leading']:is(:hover, :focus-visible) {
+  padding-left: calc(var(--xeno-padx, 12px) + var(--xeno-icon, 16px) + var(--xeno-gap, 6px));
+}
+.xeno-btn[data-icon-reveal='trailing']:is(:hover, :focus-visible) {
+  padding-right: calc(var(--xeno-padx, 12px) + var(--xeno-icon, 16px) + var(--xeno-gap, 6px));
+}
+.xeno-btn[data-icon-reveal]:is(:hover, :focus-visible) > .xeno-element {
+  opacity: 1;
+  transform: translateX(0);
+}
+.xeno-btn-label {
+  position: relative;
+  z-index: 1;
+}
+
 /* Confirmed — the copy→check acknowledgement: the swapped glyph brightens and pops in. */
 @keyframes xeno-confirm-pop {
   from {
@@ -187,6 +245,10 @@
   width: var(--xeno-h, 32px);
   padding: 0;
   aspect-ratio: 1 / 1;
+}
+
+.xeno-textarea[data-mono] {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
 }
 
 /* Toggle button (button-style on/off).

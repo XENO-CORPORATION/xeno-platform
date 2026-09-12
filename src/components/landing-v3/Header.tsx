@@ -1,4 +1,4 @@
-import React, { useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { ArrowUpRight, ChevronDown, Download, Menu, X } from 'lucide-react';
 import { slugify } from '../../lib/productCatalog';
@@ -201,7 +201,7 @@ const navItems: NavEntry[] = [
       {
         label: 'Create',
         items: [
-          { label: 'Become a creator', href: '/marketplace?tab=sell', subtitle: 'Publish & earn credits' },
+          { label: 'Become a creator', href: '/marketplace?tab=sell', subtitle: 'Publish & earn' },
           { label: 'Publish a panel', href: '/marketplace?tab=sell', subtitle: 'Ship with the Panel SDK' },
           { label: 'Sell a Mind', href: '/marketplace?tab=sell', subtitle: 'Monetize your agents' },
           { label: 'Developer docs', href: '/learn', subtitle: 'Build for the platform' },
@@ -239,7 +239,7 @@ const navItems: NavEntry[] = [
     ],
   },
   { label: 'Docs', href: '/docs' },
-  { label: 'Pricing', href: '#pricing' },
+  { label: 'Pricing', href: '/pricing' },
   { label: 'Blog', href: '/blog' },
 ];
 
@@ -452,12 +452,20 @@ function NavDropdown({ entry, onOpen, onClose }: { entry: NavEntry; onOpen: () =
 const Header: React.FC<HeaderProps> = ({ onGetStarted, visible = true }) => {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [scrimOn, setScrimOn] = useState(false);
+  const [hasScrolled, setHasScrolled] = useState(false);
   const closeT = useRef<ReturnType<typeof setTimeout> | null>(null);
   const openScrim = () => { if (closeT.current) clearTimeout(closeT.current); setScrimOn(true); };
   const closeScrim = (delay = 150) => {
     if (closeT.current) clearTimeout(closeT.current);
     closeT.current = setTimeout(() => setScrimOn(false), delay);
   };
+
+  useEffect(() => {
+    const syncScrolledState = () => setHasScrolled(window.scrollY > 16);
+    syncScrolledState();
+    window.addEventListener('scroll', syncScrolledState, { passive: true });
+    return () => window.removeEventListener('scroll', syncScrolledState);
+  }, []);
 
   return (
     <>
@@ -470,11 +478,22 @@ const Header: React.FC<HeaderProps> = ({ onGetStarted, visible = true }) => {
       />
 
       <header
+        data-scrolled={hasScrolled ? 'true' : 'false'}
         onMouseLeave={() => closeScrim(150)}
         className={`fixed inset-x-0 top-0 z-50 transition-all duration-500 ${
           visible ? 'translate-y-0 opacity-100' : '-translate-y-4 opacity-0 pointer-events-none'
         }`}
       >
+        {/* Keep backdrop-filter off the header ancestor: fixed mega-menus live
+            inside it, and a filtered ancestor would become their containing block. */}
+        <div
+          aria-hidden="true"
+          className={`pointer-events-none absolute inset-0 border-b transition-[background-color,border-color,box-shadow,backdrop-filter] duration-300 motion-reduce:transition-none ${
+            hasScrolled
+              ? 'border-white/[0.08] bg-[rgba(6,6,6,0.92)] shadow-[0_14px_38px_rgba(0,0,0,0.32)] backdrop-blur-xl'
+              : 'border-transparent bg-transparent shadow-none backdrop-blur-none'
+          }`}
+        />
         <div className="relative flex h-[56px] w-full items-center justify-between px-[1.4vw]">
           {/* ── Left: Logo + breadcrumb ─────────────────────────────── */}
           <div className="flex items-center gap-8">
@@ -488,11 +507,11 @@ const Header: React.FC<HeaderProps> = ({ onGetStarted, visible = true }) => {
             </Link>
 
             <nav className="hidden items-center gap-2 text-[9.5px] font-semibold tracking-[0.22em] md:flex">
-              <a href="#explore" className="text-[#756f66] transition-colors hover:text-[#b6afa5]">EXPLORE</a>
+              <a href="/#explore" className="text-[#756f66] transition-colors hover:text-[#b6afa5]">EXPLORE</a>
               <span className="text-[#46423b]">/</span>
-              <a href="#create" className="text-[#756f66] transition-colors hover:text-[#b6afa5]">CREATE</a>
+              <a href="/#create" className="text-[#756f66] transition-colors hover:text-[#b6afa5]">CREATE</a>
               <span className="text-[#46423b]">/</span>
-              <a href="#innovate" className="text-[#e8e3dc] transition-colors hover:text-white">INNOVATE</a>
+              <a href="/#innovate" className="text-[#e8e3dc] transition-colors hover:text-white">INNOVATE</a>
             </nav>
           </div>
 
@@ -525,7 +544,7 @@ const Header: React.FC<HeaderProps> = ({ onGetStarted, visible = true }) => {
               Sign in
             </button>
             <Link
-              to="/download"
+              to="/product/hub/download"
               className="group inline-flex h-[36px] items-center gap-2.5 rounded-[5px] border border-white/20 bg-transparent px-5 text-[12px] font-medium text-white transition-colors hover:border-white/45 hover:bg-white/[0.04]"
             >
               Download
@@ -572,7 +591,7 @@ const Header: React.FC<HeaderProps> = ({ onGetStarted, visible = true }) => {
               Sign in
             </button>
             <Link
-              to="/download"
+              to="/product/hub/download"
               onClick={() => setIsMobileMenuOpen(false)}
               className="flex h-12 items-center justify-center gap-2 rounded-[6px] border border-white/20 text-sm font-medium text-white"
             >

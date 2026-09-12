@@ -78,7 +78,7 @@ e2e
 screenshots
 videos
 
-# Data folders
+# Host runtime data must never enter the backend/worker build context.
 storage
 conversions
 uploads
@@ -87,6 +87,10 @@ test-upload.bin
 src/server/uploads
 src/server/sam2-uploads
 src/server/storage
+src/server/conversions
+src/server/downloads
+src/server/extractor-jobs
+src/server/node_modules
 
 # Loose build artifacts
 dist-container-index-*.js

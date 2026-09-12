@@ -27,6 +27,10 @@ export interface ProductDocs {
   productName: string;
   /** Short line shown on the docs home card + product docs header. */
   tagline?: string;
+  /** Exact product/package version this documentation was reconciled against. */
+  version?: string;
+  /** ISO date of the latest shipped-behavior reconciliation. */
+  updated?: string;
   sections: DocSection[];
   /** Optional SEO overrides for the product docs index. */
   seo?: { title?: string; description?: string };

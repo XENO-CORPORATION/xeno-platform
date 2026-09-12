@@ -45,6 +45,15 @@ const setCachedTokens = (text: string, modelId: string, tokens: number): void =>
   }
 };
 
+async function parseTokenizerJson(response: Response): Promise<Record<string, unknown>> {
+  const raw = await response.text();
+  try {
+    return raw ? JSON.parse(raw) : {};
+  } catch {
+    throw new Error(`Tokenizer API error: ${response.status}. Non-JSON response.`);
+  }
+}
+
 /**
  * Count tokens for a single text string
  */
@@ -70,14 +79,14 @@ export const countTokens = async (text: string, modelId: string = 'gpt-4'): Prom
       throw new Error(`Tokenizer API error: ${response.status}`);
     }
 
-    const data = await response.json();
+    const data = await parseTokenizerJson(response);
 
     if (data.success) {
-      setCachedTokens(text, modelId, data.tokens);
-      return data.tokens;
+      setCachedTokens(text, modelId, data.tokens as number);
+      return data.tokens as number;
     }
 
-    throw new Error(data.error || 'Unknown error');
+    throw new Error((typeof data.error === 'string' && data.error) || 'Unknown error');
   } catch (error) {
     console.warn('[TokenizerService] Error counting tokens, using estimate:', error);
     // Fallback to rough estimate if API fails
@@ -116,12 +125,12 @@ export const countTokensBatch = async (texts: string[], modelId: string = 'gpt-4
       throw new Error(`Tokenizer API error: ${response.status}`);
     }
 
-    const data = await response.json();
+    const data = await parseTokenizerJson(response);
 
     if (data.success && Array.isArray(data.tokens)) {
       // Fill in the results and cache
       uncachedIndices.forEach((originalIndex, i) => {
-        const tokenCount = data.tokens[i];
+        const tokenCount = (data.tokens as number[])[i];
         results[originalIndex] = tokenCount;
         setCachedTokens(texts[originalIndex], modelId, tokenCount);
       });
@@ -129,7 +138,7 @@ export const countTokensBatch = async (texts: string[], modelId: string = 'gpt-4
       return results as number[];
     }
 
-    throw new Error(data.error || 'Unknown error');
+    throw new Error((typeof data.error === 'string' && data.error) || 'Unknown error');
   } catch (error) {
     console.warn('[TokenizerService] Error counting batch tokens, using estimates:', error);
     // Fallback to rough estimates
@@ -183,18 +192,18 @@ export const countMessageTokens = async (
       throw new Error(`Tokenizer API error: ${response.status}`);
     }
 
-    const data = await response.json();
+    const data = await parseTokenizerJson(response);
 
     if (data.success) {
       return {
-        messageTokens: data.messageTokens,
-        systemTokens: data.systemTokens,
-        total: data.total,
-        overhead: data.overhead
+        messageTokens: data.messageTokens as number[],
+        systemTokens: data.systemTokens as number,
+        total: data.total as number,
+        overhead: data.overhead as number
       };
     }
 
-    throw new Error(data.error || 'Unknown error');
+    throw new Error((typeof data.error === 'string' && data.error) || 'Unknown error');
   } catch (error) {
     console.warn('[TokenizerService] Error counting message tokens, using estimates:', error);
     // Fallback to rough estimates

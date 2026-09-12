@@ -9,6 +9,7 @@
 import express from 'express';
 import { mailDomain } from '../config/hosts.js';
 import { eraseSubject } from '../utils/gdprErasure.js';
+import { normalizeLinkedSurfaces } from '../utils/linkedSurfaces.js';
 
 const router = express.Router();
 
@@ -69,7 +70,7 @@ router.get('/', async (req, res) => {
       displayName: u.display_name ?? null,
       avatarUrl: u.avatar_url ?? null,
       emailVerified: u.email_verified ?? false,
-      linkedSurfaces: links.rows.map((r) => r.source_system).filter(Boolean),
+      linkedSurfaces: normalizeLinkedSurfaces(links.rows),
     });
   } catch (e) {
     console.error('[v2/me] error:', e.message);

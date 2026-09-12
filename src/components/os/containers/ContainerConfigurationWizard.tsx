@@ -10,11 +10,11 @@ import {
   Server, 
   HardDrive, 
   Cpu, 
-  Memory, 
+  MemoryStick,
   Users, 
   Code, 
   Shield, 
-  Backup, 
+  DatabaseBackup,
   Headphones,
   Check,
   X,
@@ -60,7 +60,7 @@ const ContainerConfigurationWizard: React.FC<ContainerConfigurationWizardProps> 
   });
 
   const [monthlyPrice, setMonthlyPrice] = useState(0);
-  const [validation, setValidation] = useState({ valid: true, errors: [] });
+  const [validation, setValidation] = useState<{ valid: boolean; errors: string[] }>({ valid: true, errors: [] });
   const [stepValidationErrors, setStepValidationErrors] = useState<string[]>([]);
 
   // Update price whenever config changes
@@ -393,7 +393,7 @@ const ResourcesStep: React.FC<{
       {/* Memory */}
       <div>
         <div className="flex items-center gap-2 mb-2">
-          <Memory className="w-5 h-5 text-gray-400" />
+          <MemoryStick className="w-5 h-5 text-gray-400" />
           <label className="text-sm font-medium text-gray-300">
             Memory: {config.memory}GB
           </label>
@@ -607,7 +607,7 @@ const FeaturesStep: React.FC<{
       key: 'backups',
       name: 'Automated Backups',
       price: 5,
-      icon: <Backup className="w-6 h-6" />,
+      icon: <DatabaseBackup className="w-6 h-6" />,
       color: 'text-green-400',
       description: 'Daily automated backups with 30-day retention',
     },

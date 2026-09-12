@@ -150,10 +150,11 @@ const FLIP: Record<string, CSSProperties> = {
  */
 const glyph =
   (decl: ElementDeclaration, flip?: 'x' | 'y') =>
-  ({ size = 24, style, ...rest }: IconProps) => (
+  ({ size = 24, strokeWidth, style, ...rest }: IconProps) => (
     <XenoElement
       decl={decl}
       size={typeof size === 'string' ? Number.parseFloat(size) : size}
+      strokeWidth={typeof strokeWidth === 'string' ? Number.parseFloat(strokeWidth) : strokeWidth}
       style={flip ? { ...FLIP[flip], ...style } : style}
       {...rest}
     />
@@ -461,12 +462,14 @@ export const Smile = /* @__PURE__ */ glyph(GSmile);
  * see the declaration for why the two are drawn from the same three strokes. */
 export const NextDismiss = ({
   size = 24,
+  strokeWidth,
   state,
   ...rest
 }: IconProps & { readonly state?: Partial<ElementState> }) => (
   <XenoElement
     decl={GNextDismiss}
     size={typeof size === 'string' ? Number.parseFloat(size) : size}
+    strokeWidth={typeof strokeWidth === 'string' ? Number.parseFloat(strokeWidth) : strokeWidth}
     {...(state ? { state } : {})}
     {...rest}
   />

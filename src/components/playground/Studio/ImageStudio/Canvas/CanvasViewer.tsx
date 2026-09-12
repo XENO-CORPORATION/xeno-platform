@@ -541,7 +541,8 @@ const CanvasViewer: React.FC<CanvasViewerProps> = ({
     layersButton: true,
     tabButton: true,
     closeButton: true,
-    paletteButton: true
+    paletteButton: true,
+    rulers: true,
   });
 
   // NEW: Smart save/close button state
@@ -2577,7 +2578,6 @@ const CanvasViewer: React.FC<CanvasViewerProps> = ({
         ctx.fillStyle = activeProjectSettings?.backgroundColor || '#ffffff';
         ctx.fillRect(0, 0, canvas.width, canvas.height);
         setCurrentImageUrl(canvas.toDataURL('image/png'));
-        resetEditHistory();
       }
     }
     setIsFileDropdownOpen(false);
@@ -2658,10 +2658,7 @@ const CanvasViewer: React.FC<CanvasViewerProps> = ({
           width: canvas.width,
           height: canvas.height
         },
-        history: {
-          edits: editHistory.length,
-          currentIndex: currentEditIndex
-        },
+        history: { edits: 0, currentIndex: -1 },
         metadata: {
           created: Date.now(),
           lastModified: Date.now(),
@@ -2720,6 +2717,11 @@ const CanvasViewer: React.FC<CanvasViewerProps> = ({
             name: projectData.project.name,
             width: projectData.project.width,
             height: projectData.project.height,
+            unit: projectData.project.unit || 'px',
+            resolution: projectData.project.resolution || 72,
+            colorMode: projectData.project.colorMode || 'RGB',
+            colorProfile: projectData.project.colorProfile || 'sRGB',
+            pixelAspectRatio: projectData.project.pixelAspectRatio || '1.0',
             backgroundColor: projectData.project.backgroundColor
           });
         }
@@ -4148,6 +4150,20 @@ const CanvasViewer: React.FC<CanvasViewerProps> = ({
     
     return smoothedPoints;
   };
+
+  const drawSmoothStroke = (
+    ctx: CanvasRenderingContext2D,
+    points: Array<{ x: number; y: number; pressure: number }>,
+  ) => {
+    const smoothed = smoothStroke(points);
+    if (smoothed.length === 1) {
+      drawBrushStroke(ctx, smoothed[0].x, smoothed[0].y);
+      return;
+    }
+    for (let index = 1; index < smoothed.length; index += 1) {
+      drawLine(ctx, smoothed[index - 1], smoothed[index]);
+    }
+  };
   
   // Create layer canvas with proper dimensions
   const createNewLayerCanvas = (width: number, height: number): HTMLCanvasElement => {
@@ -5239,15 +5255,6 @@ const CanvasViewer: React.FC<CanvasViewerProps> = ({
         onBringToFront={() => bringPanelToFront('brush')}
         isOnTop={isPanelOnTop('brush')}
         onHover={setIsHoveringUI}
-        canvasRef={canvasRef}
-        imageObj={imageObj}
-        scale={scale}
-        translateX={translateX}
-        translateY={translateY}
-        onBrushStroke={(strokeData) => {
-          console.log('🎨 BRUSH STROKE:', strokeData);
-          // Handle brush stroke data here - perfect cursor alignment
-        }}
       />
 
       {/* Remove Modal */}
@@ -5408,7 +5415,7 @@ const CanvasViewer: React.FC<CanvasViewerProps> = ({
                   title="Original image"
                 >
                   <img
-                    src={imageUrl}
+                    src={imageUrl || undefined}
                     alt="Current image"
                     className={`w-10 h-10 object-cover rounded-md transition-all duration-300 aspect-square ${
                       currentActiveImageUrl === imageUrl 

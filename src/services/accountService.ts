@@ -127,6 +127,23 @@ export interface Notification {
 
 // ─── API helpers ───
 
+export const ACCOUNT_UUID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+export class AccountApiError extends Error {
+  readonly status: number;
+  readonly code?: string;
+  readonly remedy?: string;
+
+  constructor(message: string, opts: { status: number; code?: string; remedy?: string }) {
+    super(message);
+    this.name = 'AccountApiError';
+    this.status = opts.status;
+    this.code = opts.code;
+    this.remedy = opts.remedy;
+  }
+}
+
 const apiFetch = async <T>(path: string, options: RequestInit = {}): Promise<T> => {
   // The backend's authMiddleware authenticates via `Authorization: Bearer <jwt>`
   // (header-only — it does NOT read the session cookie), so attach the same
@@ -139,19 +156,36 @@ const apiFetch = async <T>(path: string, options: RequestInit = {}): Promise<T> 
     headers: {
       'Content-Type': 'application/json',
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      ...(workspace ? { 'x-xeno-workspace': workspace } : {}),
+      ...(workspace && ACCOUNT_UUID_RE.test(workspace) ? { 'x-xeno-workspace': workspace } : {}),
       ...options.headers,
     },
     credentials: 'include',
   });
 
-  const data = await res.json();
-
-  if (!res.ok || !data.success) {
-    throw new Error(data.error || data.message || `API error ${res.status}`);
+  const raw = await res.text();
+  let data: Record<string, unknown> = {};
+  try {
+    data = raw ? JSON.parse(raw) : {};
+  } catch {
+    throw new AccountApiError(`API error ${res.status}. Non-JSON response.`, {
+      status: res.status,
+    });
   }
 
-  return data;
+  if (!res.ok || !data.success) {
+    throw new AccountApiError(
+      (typeof data.error === 'string' && data.error) ||
+        (typeof data.message === 'string' && data.message) ||
+        `API error ${res.status}`,
+      {
+        status: res.status,
+        code: typeof data.code === 'string' ? data.code : undefined,
+        remedy: typeof data.remedy === 'string' ? data.remedy : undefined,
+      },
+    );
+  }
+
+  return data as T;
 };
 
 // ─── Account ───
@@ -189,17 +223,31 @@ export const createWorkspace = (name: string, type: 'personal' | 'team' = 'team'
     body: JSON.stringify({ name, workspace_type: type }),
   });
 
-export const selectWorkspace = (workspaceId: string) =>
-  apiFetch<{ success: true }>(`/workspaces/${workspaceId}/select`, {
+export const selectWorkspace = (workspaceId: string) => {
+  if (!ACCOUNT_UUID_RE.test(workspaceId)) {
+    return Promise.reject(new AccountApiError('Invalid workspace id', {
+      status: 400,
+      code: 'invalid_workspace_id',
+    }));
+  }
+  return apiFetch<{ success: true }>(`/workspaces/${workspaceId}/select`, {
     method: 'POST',
   });
+};
 
 // ─── Workspace Members ───
 
-export const getWorkspaceMembers = (workspaceId: string) =>
-  apiFetch<{ success: true; workspace: Workspace; members: WorkspaceMember[] }>(
+export const getWorkspaceMembers = (workspaceId: string) => {
+  if (!ACCOUNT_UUID_RE.test(workspaceId)) {
+    return Promise.reject(new AccountApiError('Invalid workspace id', {
+      status: 400,
+      code: 'invalid_workspace_id',
+    }));
+  }
+  return apiFetch<{ success: true; workspace: Workspace; members: WorkspaceMember[] }>(
     `/workspaces/${workspaceId}/members`
   );
+};
 
 export const updateWorkspaceMember = (workspaceId: string, memberId: string, role: string) =>
   apiFetch<{ success: true }>(`/workspaces/${workspaceId}/members/${memberId}`, {

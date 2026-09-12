@@ -73,6 +73,9 @@ export const PlanCard: React.FC<{
   locked?: string[];
   /** Small line under the price — "per seat", "billed monthly". */
   note?: string;
+  /** Optional public-page positioning line. Onboarding omits it because the
+   * selected workspace already supplies the concrete context. */
+  description?: string;
   /** The founding-price promise: what it becomes for later customers, and that
    *  this one is kept. Rendered in the BODY, not the header — the header
    *  reserves a fixed height so three plates stay aligned, and a second
@@ -87,10 +90,16 @@ export const PlanCard: React.FC<{
   available?: boolean;
   busy?: boolean;
   onSelect?: () => void;
+  /** Public pricing can preserve a tier's canonical action wording while the
+   * onboarding default remains "Choose {label}". */
+  ctaLabel?: string;
+  /** Small trust line under the action. Defaults to the checkout wording used
+   * by onboarding; Free can instead state that no card is required. */
+  footerNote?: string;
   style?: React.CSSProperties;
 }> = ({
-  label, price, interval, features, locked = [], note, promise, unlock, badge,
-  highlighted, current, available, busy, onSelect, style,
+  label, price, interval, features, locked = [], note, description, promise, unlock, badge,
+  highlighted, current, available, busy, onSelect, ctaLabel, footerNote, style,
 }) => (
   /* ═══════════════════════════════════════════════════════════════════════
    * THE PAYMENT CARD.
@@ -202,6 +211,11 @@ export const PlanCard: React.FC<{
 
     {/* ── Body plate — what happens to their workspace, then the detail ── */}
     <div className="flex flex-1 flex-col rounded-b-[8px] px-4 py-4" style={{ background: '#111111' }}>
+      {description && (
+        <p className="mb-4 min-h-[38px] text-[12.5px] leading-relaxed text-white/[0.42]">
+          {description}
+        </p>
+      )}
       {unlock && (
         /* THE line that connects the money to the thing they just chose.
          *
@@ -321,14 +335,16 @@ export const PlanCard: React.FC<{
                 : 'py-2.5 border border-white/20 bg-transparent text-white hover:border-white/40 hover:bg-white/[0.06]',
             )}
           >
-            {busy ? 'Opening checkout…' : available ? `Choose ${label}` : 'Not yet available'}
+            {busy ? 'Opening checkout…' : available ? (ctaLabel || `Choose ${label}`) : 'Not yet available'}
           </button>
           <p className="pb-0.5 pt-2 text-center text-[10.5px] leading-tight text-white/25">
             {/* Says what is true in the state the product is ACTUALLY in.
                 Stripe is not configured yet, and "Cancel any time" under a
                 button that cannot charge is the kind of small lie that makes
                 a reader distrust the rest of the page. */}
-            {available ? 'Cancel any time · Secure checkout' : 'Payments open shortly · nothing to do yet'}
+            {available
+              ? (footerNote || 'Cancel any time · Secure checkout')
+              : 'Payments open shortly · nothing to do yet'}
           </p>
         </>
       )}

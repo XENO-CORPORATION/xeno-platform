@@ -18,6 +18,7 @@ interface AudioTabProps {
   onParameterChange?: (parameterId: string, value: number) => void;
   onKeyframeAdd?: (parameterId: string) => void;
   onReset?: (parameterId: string) => void;
+  onMuteToggle?: () => void;
 }
 
 const AudioTab: React.FC<AudioTabProps> = ({
@@ -25,7 +26,8 @@ const AudioTab: React.FC<AudioTabProps> = ({
   clipName = 'No Clip Selected',
   onParameterChange,
   onKeyframeAdd,
-  onReset
+  onReset,
+  onMuteToggle,
 }) => {
   const [isMuted, setIsMuted] = useState(false);
 
@@ -281,7 +283,7 @@ const AudioTab: React.FC<AudioTabProps> = ({
             <div className="text-[10px] text-white/60 mt-0.5">Audio Controls</div>
           </div>
           <button
-            onClick={() => setIsMuted(!isMuted)}
+            onClick={() => { setIsMuted(!isMuted); onMuteToggle?.(); }}
             className={`p-1.5 rounded transition-all flex-shrink-0 ml-2 ${
               isMuted
                 ? 'text-red-400 bg-red-500/20'

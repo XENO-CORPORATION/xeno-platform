@@ -16,18 +16,18 @@ interface UpgradePromptProps {
 // v2: the free/paid boundary is the connected Platform (server-backed features),
 // not cosmetics. No watermark copy — the standalone tool is clean and unwatermarked.
 const COPY: Record<string, { title: string; sub: string }> = {
-  cloudSync: { title: 'Sync across your devices', sub: 'Pro adds cloud sync + multi-device — your projects everywhere.' },
-  crossApp: { title: 'Connect your workflows', sub: 'Pro unlocks cross-app workflows across the XENO platform.' },
-  agents: { title: 'Put agents to work', sub: 'Pro unlocks agents & automation across your projects.' },
+  cloudSync: { title: 'Sync across your devices', sub: 'Everything adds cloud sync + multi-device — your projects everywhere.' },
+  crossApp: { title: 'Connect your workflows', sub: 'Everything unlocks cross-app workflows across the XENO platform.' },
+  agents: { title: 'Put agents to work', sub: 'Everything unlocks agents & automation across your projects.' },
   collaboration: { title: 'Work together in real time', sub: 'Team adds real-time collaboration, shared workspaces, and roles.' },
-  resolution: { title: 'Unlock 4K managed generation', sub: "You're on standard resolution. Pro generates up to 4K on managed models." },
-  credits: { title: 'Running low on credits', sub: 'Upgrade to Pro or top up — Pro includes unlimited in-house generation.' },
-  commercial: { title: 'Use your work commercially', sub: 'Free is personal-use. Pro adds a commercial-use license.' },
-  general: { title: 'Upgrade to Pro', sub: 'Cloud sync · cross-app · agents · commercial license — €24/mo.' },
+  resolution: { title: 'Unlock 4K managed generation', sub: "You're on standard resolution. Everything generates up to 4K on managed models." },
+  credits: { title: 'Running low on credits', sub: 'Top up your managed-inference balance, or compare plan features.' },
+  commercial: { title: 'Use your work commercially', sub: 'Free is personal-use. Everything adds a commercial-use license.' },
+  general: { title: 'Choose Everything', sub: 'Cloud sync · cross-app · agents · commercial license.' },
 };
 
 /**
- * Free→Pro upgrade nudge. Renders ONLY for Free-plan users (self-resolves the plan),
+ * Free→Everything upgrade nudge. Renders ONLY for Free-plan users (self-resolves the plan),
  * so it can be dropped anywhere without gating logic at the call site. Links to the
  * central billing page.
  */
@@ -37,7 +37,7 @@ const UpgradePrompt: React.FC<UpgradePromptProps> = ({ context = 'general', vari
 
   useEffect(() => { getBillingSummary().then(setSummary).catch(() => {}); }, []);
 
-  // Only Free users see the nudge (Pro/Team already have everything).
+  // Only Free users see the nudge (Everything/Team/Studio already have it).
   if (dismissed || !summary || (summary.plan && summary.plan !== 'free')) return null;
 
   const c = COPY[context] || COPY.general;
@@ -50,7 +50,7 @@ const UpgradePrompt: React.FC<UpgradePromptProps> = ({ context = 'general', vari
         className={`inline-flex items-center gap-1.5 text-[12px] font-medium rounded-full px-2.5 py-1 transition-colors ${className}`}
         style={{ color: ACCENT, background: 'rgba(255, 255, 255,0.12)' }}
       >
-        <Sparkles className="w-3 h-3" /> {c.title} — go Pro
+        <Sparkles className="w-3 h-3" /> {c.title}
       </button>
     );
   }

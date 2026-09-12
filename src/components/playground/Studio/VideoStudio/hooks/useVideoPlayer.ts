@@ -170,3 +170,5 @@ export const useVideoPlayer = () => {
     }
   };
 };
+
+export type UseVideoPlayerReturn = ReturnType<typeof useVideoPlayer>;

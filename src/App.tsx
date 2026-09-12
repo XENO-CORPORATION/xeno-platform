@@ -1,5 +1,5 @@
 import React, { useEffect } from 'react';
-import { Routes, Route, Navigate } from 'react-router-dom';
+import { Routes, Route, Navigate, useLocation, useParams } from 'react-router-dom';
 
 import Home from "./pages/Home";
 import Home2 from "./pages/Home2";
@@ -54,6 +54,7 @@ import ProtectedRoute from './components/auth/ProtectedRoute';
 // Auth layout with shared video panel
 import AuthLayout from './components/layouts/AuthLayout';
 import AuthContent from './pages/AuthContent';
+import AuthRouteAlias from './pages/AuthRouteAlias';
 import ActivateAccount from './pages/ActivateAccount';
 import Onboarding from './pages/Onboarding';
 import DownloadResume from './pages/DownloadResume';
@@ -79,6 +80,38 @@ const isXenoChatDomain = typeof window !== 'undefined' &&
   (window.location.hostname === 'xeno-chat.com' ||
    window.location.hostname === 'www.xeno-chat.com' ||
    window.location.hostname === 'chat.xeno-studio.com');
+
+/**
+ * Keep the compact conversation URLs shareable without asking OverviewPage's
+ * nested router to match a path outside `/overview/*`. A same-page chat can
+ * safely use `/c/:id`, but a hard reload must first enter the canonical route
+ * so the conversation component mounts and hydrates the persisted messages.
+ */
+const ConversationRouteRedirect: React.FC = () => {
+  const { conversationId } = useParams<{ conversationId?: string }>();
+  const target = conversationId
+    ? `/overview/chat/llm/${encodeURIComponent(conversationId)}`
+    : '/overview/chat/llm';
+  return <Navigate to={target} replace />;
+};
+
+const LibraryRouteRedirect: React.FC = () => {
+  const location = useLocation();
+  return <Navigate to={`/overview/chat/library${location.search}`} replace />;
+};
+
+/**
+ * Project workspaces use a compact URL while navigating inside chat. A hard
+ * reload must enter Overview's nested router so the same workspace component
+ * mounts, reloads the account-owned project, and restores its backend data.
+ */
+const ProjectRouteRedirect: React.FC = () => {
+  const { projectId } = useParams<{ projectId?: string }>();
+  const target = projectId
+    ? `/overview/chat/projects/${encodeURIComponent(projectId)}`
+    : '/overview/chat/projects';
+  return <Navigate to={target} replace />;
+};
 
 function App() {
   // Fix iOS Safari 100vh issue
@@ -113,7 +146,9 @@ function App() {
 
           {/* Authentication Page */}
           <Route element={<AuthLayout />}>
-            <Route path="/auth" element={<AuthContent />} />
+            <Route path="/login" element={<AuthContent mode="signin" />} />
+            <Route path="/signup" element={<AuthContent mode="signup" />} />
+            <Route path="/auth" element={<AuthRouteAlias />} />
           </Route>
 
           {/* Catch-all: redirect to chat */}
@@ -196,11 +231,21 @@ function App() {
                 redirect away the one page that knows how to finish the job. */}
             <Route path="/download/resume" element={<DownloadResume />} />
 
+            {/* RFC 8628 verification URI. The provider emits /activate, so it
+                must be a real route rather than falling through to home. */}
             <Route element={<AuthLayout />}>
-              <Route path="/auth" element={<AuthContent />} />
-              {/* Unified branded sign-in per app (XENO UNIFIED AUTH spec) */}
-              <Route path="/auth/:app" element={<AuthContent />} />
-              <Route path="/auth/:app/device" element={<DeviceAuthContent />} />
+              <Route path="/activate" element={<DeviceAuthContent protocol="oidc" />} />
+            </Route>
+
+            <Route element={<AuthLayout />}>
+              <Route path="/login" element={<AuthContent mode="signin" />} />
+              <Route path="/signup" element={<AuthContent mode="signup" />} />
+              {/* Backward-compatible aliases. Canonical human routes are
+                  /login and /signup; protocol routes remain /api/oauth2/*. */}
+              <Route path="/auth" element={<AuthRouteAlias />} />
+              <Route path="/auth/:app" element={<AuthRouteAlias />} />
+              {/* Old CLI clients still use this custom device-code surface. */}
+              <Route path="/auth/:app/device" element={<DeviceAuthContent protocol="legacy" />} />
               {/* Password reset + email verification — public (the token is the credential) */}
               <Route path="/forgot-password" element={<ForgotPassword />} />
               <Route path="/reset-password" element={<ResetPassword />} />
@@ -246,19 +291,13 @@ function App() {
             } />
 
             {/* Direct Conversation and Sub-surface Routes */}
-            <Route path="/c/:conversationId" element={
-              <ProtectedRoute>
-                <OverviewPage />
-              </ProtectedRoute>
-            } />
-            <Route path="/c" element={
-              <ProtectedRoute>
-                <OverviewPage />
-              </ProtectedRoute>
-            } />
-            <Route path="/projects" element={<Navigate to="/overview/chat/projects" replace />} />
+            <Route path="/c/:conversationId" element={<ConversationRouteRedirect />} />
+            <Route path="/c" element={<ConversationRouteRedirect />} />
+            <Route path="/projects/:projectId" element={<ProjectRouteRedirect />} />
+            <Route path="/projects" element={<ProjectRouteRedirect />} />
             <Route path="/scheduled" element={<Navigate to="/overview/chat/scheduled" replace />} />
-            <Route path="/artifacts" element={<Navigate to="/overview/chat/artifacts" replace />} />
+            <Route path="/library" element={<LibraryRouteRedirect />} />
+            <Route path="/artifacts" element={<LibraryRouteRedirect />} />
             <Route path="/customize" element={<Navigate to="/overview/chat/customize" replace />} />
 
             {/* Public Shared Conversation Viewer (no auth required) */}
@@ -268,9 +307,7 @@ function App() {
             {/* /chat -> the overview chat */}
             <Route path="/chat" element={<Navigate to="/overview/chat/llm" replace />} />
             <Route path="/chat/c/:conversationId" element={
-              <ProtectedRoute>
-                <OverviewPage />
-              </ProtectedRoute>
+              <ConversationRouteRedirect />
             } />
 
             {/* Test comparison routes for user evaluation */}

@@ -58,7 +58,6 @@ import { useAuth } from '../../../contexts/AuthContext';
 import { useContainer } from '../../../contexts/ContainerContext';
 import { useCollaboration } from '../../../contexts/CollaborationContext';
 import { useWindowManager, createTextEditorWindow } from './WindowManager';
-import { initialMockFileSystem, mockNetworkDevices, mockShareInvitations, mockSharedResources, mockSharedByMeResources, mockRecentFiles, mockSharedFolders } from './mockData';
 
 export interface FileSystemItem {
   id: string;
@@ -279,7 +278,7 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
   });
 
   // Active view state
-  const [activeView, setActiveView] = React.useState<'local' | 'network' | 'shared' | 'recent'>('local');
+  const [activeView, setActiveView] = React.useState<'local' | 'network' | 'shared' | 'recent' | 'this-container'>('local');
 
   // Selected sidebar item state
   const [selectedSidebarItem, setSelectedSidebarItem] = React.useState<string | null>(null);
@@ -791,7 +790,7 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
         break;
 
       case 'delete':
-        const itemsToDelete = selectedItems.size > 0 ? Array.from(selectedItems) : (selectedItem ? [selectedItem] : []);
+        const itemsToDelete = selectedItems.length > 0 ? selectedItems : (selectedItem ? [selectedItem] : []);
         if (itemsToDelete.length > 0) {
           // Get all current items (context + temp)
           const currentAllItems = [...tempItems, ...(contextFileSystem || []).map(item => ({
@@ -800,7 +799,7 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
             type: item.type,
             path: item.path,
             size: item.size,
-            modified: item.modified,
+            modified: item.modified ? new Date(item.modified) : undefined,
             icon: item.type === 'folder'
               ? <Folder size={16} className="text-blue-500" />
               : item.name.endsWith('.txt')
@@ -810,16 +809,12 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
               : <FileText size={16} className="text-gray-400" />
           }))];
 
-          const itemNames = itemsToDelete.map(id => {
-            const item = currentAllItems.find(i => i.id === id);
-            return item?.name || id;
-          });
+          const itemNames = itemsToDelete.map(item => item.name);
 
           if (confirm(`Delete ${itemsToDelete.length} item(s)?\n\n${itemNames.join('\n')}`)) {
             // Delete items from the file system (use async IIFE)
             (async () => {
-              for (const itemId of itemsToDelete) {
-                const item = currentAllItems.find(i => i.id === itemId);
+              for (const item of itemsToDelete) {
                 if (item) {
                   try {
                     await deleteFile(item.path);
@@ -912,7 +907,7 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
           type: item.type,
           path: item.path,
           size: item.size,
-          modified: item.modified,
+          modified: item.modified ? new Date(item.modified) : undefined,
           icon: null
         }))];
         const allItemIds = new Set(currentAllItems.map(item => item.id));
@@ -1458,7 +1453,7 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
       type: item.type,
       path: item.path,
       size: item.size,
-      modified: item.modified,
+      modified: item.modified ? new Date(item.modified) : undefined,
       icon: item.type === 'folder'
         ? <Folder size={16} className="text-blue-500" />
         : item.name.endsWith('.txt')
@@ -1500,7 +1495,7 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
         type: i.type,
         path: i.path,
         size: i.size,
-        modified: i.modified,
+        modified: i.modified ? new Date(i.modified) : undefined,
         icon: null
       }))];
       const currentFilteredItems = searchQuery
@@ -2773,9 +2768,9 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
                           key={item.id}
                           data-network-item
                           className={`flex items-center px-4 py-3 border-b border-white/5 transition-colors ${!isSelecting ? 'hover:bg-white/5' : ''} cursor-pointer ${
-                            selectedItem?.id === item.id ? 'bg-white/10' : ''
+                            selectedItem === item.id ? 'bg-white/10' : ''
                           }`}
-                          onClick={() => setSelectedItem(item)}
+                          onClick={() => setSelectedItem(item.id)}
                           onDoubleClick={() => {
                             if (item.type === 'folder') {
                               // Navigate into folder
@@ -2862,9 +2857,9 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
                           <h3 className="text-white font-medium text-sm">{volume.name}</h3>
                           <div className="flex justify-between items-center mt-1">
                             <p className="text-white/60 text-xs">{volume.description}</p>
-                            {volume.storageInfo && (
+                            {(volume.isSystemVolume ? storageData?.system : storageData?.user) && (
                               <span className="text-white/50 text-xs">
-                                {volume.storageInfo.used || '0 B'} / {volume.storageInfo.total || 'Unknown'}
+                                {formatFileSize((volume.isSystemVolume ? storageData?.system : storageData?.user)?.used) || '0 B'} / {formatFileSize((volume.isSystemVolume ? storageData?.system : storageData?.user)?.total) || 'Unknown'}
                               </span>
                             )}
                           </div>
@@ -2885,8 +2880,8 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
                                 : 'bg-blue-400'
                             }`}
                             style={{
-                              width: volume.storageInfo?.percentage
-                                ? `${volume.storageInfo.percentage}%`
+                              width: (volume.isSystemVolume ? storageData?.system : storageData?.user)?.percentage
+                                ? `${(volume.isSystemVolume ? storageData?.system : storageData?.user)?.percentage}%`
                                 : (volume.isSystemVolume ? '75%' : '15%')
                             }}
                           ></div>

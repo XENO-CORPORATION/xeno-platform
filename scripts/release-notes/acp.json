@@ -8,11 +8,29 @@
       "@xenosystem/acp-agent",
       "@xenosystem/acp-provider-manager"
     ],
-    "derivedFrom": "xeno-acp @ dbe9bdfe20d914c101a7c15f850928d2b9ff5b8a (branch chore/xenosystem-publish-fixes), docs/CHANGELOG-XACP.md section '0.1.1 - npm scope migration to @xenosystem'",
+    "derivedFrom": "xeno-acp @ 854da71e789bc4bf4eb597045f671772f69f4fd5, docs/CHANGELOG-XACP.md plus RELEASE_NOTES-0.2.4.md and RELEASE_NOTES-0.2.5.md",
     "why": "xeno-acp keeps its release notes in docs/CHANGELOG-XACP.md, not in a RELEASE_NOTES module, so this file is the notes source publish-cli-releases.mjs reads for the acp slug. Update it from the product CHANGELOG when a new version is published.",
     "note": "0.1.0 is deliberately absent. It is already live in apps/acp/releases.json and is preserved by the publisher's merge; re-deriving it here would overwrite the authored launch entry with a weaker one."
   },
 
+  "0.2.5": {
+    "title": "Lossless continuation state and secret-safe packaging",
+    "type": "patch",
+    "notes": [
+      "Resolves @xenosystem/agent-sdk 0.9.16 so ACP sessions inherit lossless concurrent recent-session updates, XENO_AGENT_HOME isolation, and final PowerShell stdout draining.",
+      "Keeps the deterministic stderr-redaction fixture secret-shaped at runtime without embedding a static credential-shaped string in shipped artifacts.",
+      "Retains the packaged ACP CLI, provider policy, and stdio initialization contract introduced in 0.2.4."
+    ]
+  },
+  "0.2.4": {
+    "title": "Runnable ACP package and unbounded continuation",
+    "type": "patch",
+    "notes": [
+      "Ships the complete runnable ACP agent runtime, including provider-policy templates and every asset required by the installed CLI.",
+      "Consumes @xenosystem/agent-sdk 0.9.15 so ACP sessions inherit durable recent-session indexing and unbounded managed-operation continuation.",
+      "Verifies all four public packages as isolated registry-shaped artifacts before publication."
+    ]
+  },
   "0.1.1": {
     "title": "npm scope migration to @xenosystem",
     "type": "patch",

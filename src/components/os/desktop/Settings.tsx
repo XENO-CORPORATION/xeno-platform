@@ -153,7 +153,7 @@ const Settings: React.FC = () => {
         const containersResult = await ContainerService.listContainers(1, 1);
         console.log('📦 Containers result:', containersResult);
         
-        if (containersResult && containersResult.containers && containersResult.containers.length > 0) {
+        if ('containers' in containersResult && containersResult.containers.length > 0) {
           const activeContainer = containersResult.containers[0]; // Get the most recent container
           console.log('🎯 Active container found:', activeContainer);
           setContainerInfo(activeContainer);
@@ -181,9 +181,9 @@ const Settings: React.FC = () => {
             } else if (storageStats.size && storageStats.free) {
               totalBytes = storageStats.size;
               usedBytes = totalBytes - storageStats.free;
-            } else if (activeContainer.resource_limits?.storage_gb) {
+            } else if (activeContainer.config?.storage) {
               // Fallback to container limits
-              totalBytes = activeContainer.resource_limits.storage_gb * 1024 * 1024 * 1024;
+              totalBytes = activeContainer.config.storage * 1024 * 1024 * 1024;
               usedBytes = Math.floor(totalBytes * 0.4); // Assume 40% used
             } else {
               // Default fallback
@@ -219,7 +219,7 @@ const Settings: React.FC = () => {
           } else {
             console.log('⚠️ Stats failed, creating mock storage data...');
             // Mock storage data with realistic breakdown
-            const totalStorage = activeContainer.resource_limits?.storage_gb || activeContainer.config?.storage || 10;
+            const totalStorage = activeContainer.config?.storage || 10;
             const usedStorage = Math.floor(totalStorage * (0.3 + Math.random() * 0.4)); // 30-70% used
             console.log('📏 Mock storage calculations:', { totalStorage, usedStorage });
             

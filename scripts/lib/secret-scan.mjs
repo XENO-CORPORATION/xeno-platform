@@ -77,7 +77,15 @@ export function loadPatterns(extraPath = process.env.XENO_SECRET_PATTERNS) {
   const byId = new Map();
   for (const p of base.patterns ?? []) {
     if (!p?.id || !p?.re) continue;
-    byId.set(p.id, { id: p.id, name: p.name ?? p.id, re: p.re, flags: p.flags ?? 'g', note: p.note, builtin: true });
+    byId.set(p.id, {
+      id: p.id,
+      name: p.name ?? p.id,
+      re: p.re,
+      flags: p.flags ?? 'g',
+      note: p.note,
+      ignoreSha256: Array.isArray(p.ignoreSha256) ? p.ignoreSha256 : [],
+      builtin: true,
+    });
   }
   // The overlay is ADDITIVE ONLY. Re-using a built-in id would silently swap that
   // pattern's regex — a way to disable the xeno-platform-key rule from an environment
@@ -92,7 +100,14 @@ export function loadPatterns(extraPath = process.env.XENO_SECRET_PATTERNS) {
         );
         continue;
       }
-      byId.set(p.id, { id: p.id, name: p.name ?? p.id, re: p.re, flags: p.flags ?? 'g', note: p.note });
+      byId.set(p.id, {
+        id: p.id,
+        name: p.name ?? p.id,
+        re: p.re,
+        flags: p.flags ?? 'g',
+        note: p.note,
+        ignoreSha256: [],
+      });
     }
   }
   // Compile once; `g` regexes are stateful, so each scan resets lastIndex.
@@ -116,6 +131,11 @@ export function scanText(text, patterns, where = {}) {
     p.rx.lastIndex = 0;
     let m;
     while ((m = p.rx.exec(text)) !== null) {
+      const matchSha256 = createHash('sha256').update(m[0]).digest('hex');
+      if (p.ignoreSha256?.includes(matchSha256)) {
+        if (m[0].length === 0) p.rx.lastIndex += 1;
+        continue;
+      }
       out.push({ patternId: p.id, pattern: p.name, ...redact(m[0]), offset: m.index, ...where });
       if (m[0].length === 0) p.rx.lastIndex += 1;
       if (out.length > 200) return out; // a flood is already a hard fail

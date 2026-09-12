@@ -587,7 +587,7 @@ function DemoChatInterface() {
         {/* Input area */}
         <div className="shrink-0 px-6 pb-4">
           <div className="max-w-3xl mx-auto group/input relative">
-            <p className="absolute -top-6 left-0 right-0 text-center text-[10px] text-white/0 group-hover/input:text-white/15 transition-colors duration-300 pointer-events-none">Demo preview · <a href="/auth" className="underline hover:text-white/25 pointer-events-auto cursor-pointer">Sign up</a> to use the full interface</p>
+            <p className="absolute -top-6 left-0 right-0 text-center text-[10px] text-white/0 group-hover/input:text-white/15 transition-colors duration-300 pointer-events-none">Demo preview · <a href="/signup" className="underline hover:text-white/25 pointer-events-auto cursor-pointer">Sign up</a> to use the full interface</p>
             <div className="bg-[#111113] border border-[#1e1e21] rounded-2xl p-3 md:p-4 pointer-events-auto">
               <textarea
                 className="w-full text-[13px] text-white/80 placeholder-white/20 mb-3 min-h-[20px] max-h-[120px] bg-transparent border-none outline-none ring-0 focus:ring-0 focus:outline-none resize-none"
@@ -645,7 +645,7 @@ function DemoPlaceholder({ item }: { item: BentoItem }) {
       </div>
       <div className="text-white/60 text-lg font-semibold">{item.label}</div>
       <div className="text-white/25 text-sm text-center max-w-md">{item.desc}</div>
-      <a href="/auth" className="mt-2 px-6 py-2 rounded-md bg-white text-[#08080a] text-sm font-semibold hover:bg-white/90 transition-colors">
+      <a href="/signup" className="mt-2 px-6 py-2 rounded-md bg-white text-[#08080a] text-sm font-semibold hover:bg-white/90 transition-colors">
         Try {item.label}
       </a>
       <p className="text-white/15 text-xs">Press ESC to go back</p>
@@ -891,7 +891,7 @@ const HeroSection: React.FC = () => {
               Where humans imagine and AI builds.
             </h1>
             <div className="mt-5 flex items-center justify-center gap-3">
-              <a href="/auth" className="inline-flex items-center gap-2 rounded-md bg-white px-6 py-2 text-sm font-semibold text-[#08080a] hover:bg-white/90 transition-colors">
+              <a href="/signup" className="inline-flex items-center gap-2 rounded-md bg-white px-6 py-2 text-sm font-semibold text-[#08080a] hover:bg-white/90 transition-colors">
                 Get Started Free
               </a>
               <a href="#products" className="inline-flex items-center gap-2 rounded-md border border-white/15 px-6 py-2 text-sm font-medium text-white/80 hover:bg-white/[0.06] transition-colors">
@@ -954,7 +954,7 @@ const HeroSection: React.FC = () => {
           <span className="text-lg text-white/30" style={{ fontFamily: "'Playfair Display', serif", fontStyle: 'italic' }}>with</span>
           <span className="mt-3 select-none font-extrabold uppercase leading-[0.9] tracking-tight text-white" style={{ fontSize: 'clamp(4rem, 12vw, 10rem)' }}>XENO</span>
           <p className="mt-8 text-base text-white/40 md:text-lg">The complete visual AI platform.</p>
-          <a href="/auth" className="mt-10 inline-flex items-center gap-2 rounded-full bg-white px-7 py-3 text-sm font-medium text-[#08080a] transition-opacity hover:opacity-90">
+          <a href="/signup" className="mt-10 inline-flex items-center gap-2 rounded-full bg-white px-7 py-3 text-sm font-medium text-[#08080a] transition-opacity hover:opacity-90">
             Get Started <span aria-hidden="true">&rarr;</span>
           </a>
         </div>

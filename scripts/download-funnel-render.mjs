@@ -99,9 +99,9 @@ try {
     });
     check(clicked, 'the Download button is clickable');
 
-    await page.waitForFunction(() => location.pathname.startsWith('/auth'), { timeout: 20000 })
-      .then(() => pass('an anonymous click lands on /auth — not a dead end, not a silent failure'))
-      .catch(() => fail(`an anonymous click did not reach /auth (at ${page.url()})`));
+    await page.waitForFunction(() => location.pathname === '/login', { timeout: 20000 })
+      .then(() => pass('an anonymous click lands on /login — not a dead end, not a silent failure'))
+      .catch(() => fail(`an anonymous click did not reach /login (at ${page.url()})`));
 
     check(intentPosted, 'the click recorded a download intent');
 
@@ -153,7 +153,7 @@ try {
         const el = [...document.querySelectorAll('a')].find((e) => /continue/i.test(e.textContent || ''));
         return el ? el.getAttribute('href') : null;
       });
-      check(Boolean(cta && cta.includes('/auth')), `the CTA leads to /auth (${cta || 'none'})`);
+      check(Boolean(cta && cta.includes('/login')), `the CTA leads to /login (${cta || 'none'})`);
     }
 
     /* 🔴 Snapshot BEFORE the deliberate 404 below. The unknown-token navigation

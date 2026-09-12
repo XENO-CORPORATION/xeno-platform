@@ -98,7 +98,7 @@ router.get('/canvases/:canvasId', async (req, res) => {
 });
 
 // PUT /api/office-canvas/canvases/:canvasId
-router.put('/canvases/:canvasId', async (req, res) => {
+router.put('/canvases/:canvasId', requireEntitlement('cloudSync'), async (req, res) => {
   try {
     const userId = req.user.id;
     const { canvasId } = req.params;

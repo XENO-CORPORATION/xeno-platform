@@ -16,6 +16,7 @@ export interface User {
   is_active: boolean;
   credits: number;
   bonus_credits_claimed: boolean;
+  plan?: string;
 }
 
 export interface AuthResponse {

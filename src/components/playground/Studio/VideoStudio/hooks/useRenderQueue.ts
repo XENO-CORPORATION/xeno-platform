@@ -58,6 +58,9 @@ export function useRenderQueue(options: RenderQueueOptions = {}) {
 
       // Start the render job via API
       const response = await videoStudioService.startRender(projectId, renderSettings);
+      if (!response.success || !response.job) {
+        throw new Error(response.error || 'Render service did not return a job');
+      }
 
       const jobId = response.job.id;
 
@@ -162,6 +165,10 @@ export function useRenderQueue(options: RenderQueueOptions = {}) {
     for (const jobId of activeJobArray) {
       try {
         const status = await videoStudioService.getRenderStatus(jobId);
+        if (!status.success || !status.job) {
+          throw new Error(status.error || `Render job ${jobId} has no status payload`);
+        }
+        const remoteJob = status.job;
 
         setJobs((prev) => {
           const newJobs = new Map(prev);
@@ -171,14 +178,14 @@ export function useRenderQueue(options: RenderQueueOptions = {}) {
 
           const updatedJob: RenderJob = {
             ...existingJob,
-            status: status.job.status,
-            progress: status.job.progress || 0,
-            currentFrame: status.job.current_frame,
-            totalFrames: status.job.total_frames,
-            outputUrl: status.job.output_url,
-            errorMessage: status.job.error_message,
-            startedAt: status.job.started_at ? new Date(status.job.started_at) : existingJob.startedAt,
-            completedAt: status.job.completed_at ? new Date(status.job.completed_at) : undefined
+            status: remoteJob.status,
+            progress: remoteJob.progress || 0,
+            currentFrame: remoteJob.current_frame,
+            totalFrames: remoteJob.total_frames,
+            outputUrl: remoteJob.output_url,
+            errorMessage: remoteJob.error_message,
+            startedAt: remoteJob.started_at ? new Date(remoteJob.started_at) : existingJob.startedAt,
+            completedAt: remoteJob.completed_at ? new Date(remoteJob.completed_at) : undefined
           };
 
           newJobs.set(jobId, updatedJob);

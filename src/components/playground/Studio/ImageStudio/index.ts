@@ -1,7 +1,8 @@
 // Core functionality
 export * from './core/types';
 export * from './core/utils';
-export * from './core/segmentation.engine';
+export { TensorFlowSegmentationEngine, SAM2SegmentationEngine } from './core/segmentation.engine';
+export type { DeepLabConfig } from './core/segmentation.engine';
 export * from './core/styles';
 
 // Components
@@ -16,4 +17,4 @@ export * from './hooks/useImageStudio';
 export * from './hooks/useConversationHistory';
 
 // Main component export
-export { default } from './components/ImageStudio'; 
+export { default } from './components/ImageStudio';

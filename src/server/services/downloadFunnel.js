@@ -350,7 +350,7 @@ export function nextPathFor(state, token) {
        * onboarding for a NEW account — resolveOAuthLandingPath() sends a new
        * account with a deep-link returnUrl directly to that link, skipping
        * onboarding, so returnUrl alone would silently drop the profile step. */
-      return `/auth?returnUrl=${encodeURIComponent(resume)}&next=${encodeURIComponent(resume)}`;
+      return `/login?returnUrl=${encodeURIComponent(resume)}&next=${encodeURIComponent(resume)}`;
     case STATES.ONBOARDING:
       return `/onboarding?next=${encodeURIComponent(resume)}`;
     case STATES.PLAN:

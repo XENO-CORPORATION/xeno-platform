@@ -52,7 +52,7 @@ function Clip({ l, w, kind, label, sel, wave, dissolveR }: {
         <svg className="absolute inset-x-0 bottom-0 h-[52%] w-full" preserveAspectRatio="none" viewBox="0 0 100 24">
           <path
             d="M0 12 L3 8 L6 15 L9 5 L12 17 L15 9 L18 13 L21 4 L24 18 L27 10 L30 14 L33 6 L36 16 L39 8 L42 13 L45 5 L48 17 L51 9 L54 14 L57 7 L60 15 L63 10 L66 13 L69 6 L72 16 L75 9 L78 14 L81 5 L84 17 L87 10 L90 13 L93 8 L96 15 L99 11"
-            fill="none" stroke={c.wave} strokeWidth="1.1"
+            fill="none" stroke={'wave' in c ? c.wave : undefined} strokeWidth="1.1"
           />
         </svg>
       )}

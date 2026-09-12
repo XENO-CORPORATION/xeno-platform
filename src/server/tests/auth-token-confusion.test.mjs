@@ -48,7 +48,7 @@ const pkce = () => {
   return { v, c: crypto.createHash('sha256').update(v).digest('base64url') };
 };
 
-const REDIRECT = 'https://post.xenostudio.ai/auth/callback';
+const REDIRECT = 'https://post.xenostudio.ai/api/v1/platform/xeno/callback';
 
 async function main() {
   // ── schema: the additive account-v2 migration + the legacy tables it assumes ──

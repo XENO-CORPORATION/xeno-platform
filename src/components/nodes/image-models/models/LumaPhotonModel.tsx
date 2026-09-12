@@ -43,7 +43,7 @@ export class LumaPhotonModel extends BaseImageModel {
       console.log("Luma Photon settings:", replicateSettings);
       console.log("Model:", XenoModels.LUMA_PHOTON.model);
       console.log("Version:", XenoModels.LUMA_PHOTON.version);
-      console.log("API Endpoint:", API_ENDPOINTS.REPLICATE_API);
+      console.log("API Endpoint:", API_ENDPOINTS.XENO_API);
       
       // Call Replicate API
       const result = await generateImage(
@@ -226,4 +226,4 @@ export class LumaPhotonModel extends BaseImageModel {
       </>
     );
   }
-} 
+}

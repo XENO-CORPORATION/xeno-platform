@@ -44,6 +44,7 @@ export interface VideoProject {
   
   is_public: boolean;
   share_token?: string;
+  project_metadata?: Record<string, unknown>;
 }
 
 export interface VideoAsset {
@@ -741,28 +742,12 @@ function getInstance(): VideoStudioService {
 }
 
 // Export singleton getter and class
-export const videoStudioService = {
-  get instance() {
-    return getInstance();
+export const videoStudioService: VideoStudioService = new Proxy({} as VideoStudioService, {
+  get(_target, property: keyof VideoStudioService) {
+    const instance = getInstance();
+    const value = instance[property];
+    return typeof value === 'function' ? value.bind(instance) : value;
   },
-  // Proxy all methods to the singleton instance
-  createProject: (...args: any[]) => getInstance().createProject(...args),
-  getProjects: (...args: any[]) => getInstance().getProjects(...args),
-  getProject: (...args: any[]) => getInstance().getProject(...args),
-  updateProject: (...args: any[]) => getInstance().updateProject(...args),
-  deleteProject: (...args: any[]) => getInstance().deleteProject(...args),
-  uploadAsset: (...args: any[]) => getInstance().uploadAsset(...args),
-  getAssets: (...args: any[]) => getInstance().getAssets(...args),
-  startRender: (...args: any[]) => getInstance().startRender(...args),
-  getRenderStatus: (...args: any[]) => getInstance().getRenderStatus(...args),
-  cancelRender: (...args: any[]) => getInstance().cancelRender(...args),
-  pollRenderStatus: (...args: any[]) => getInstance().pollRenderStatus(...args),
-  exportProject: (...args: any[]) => getInstance().exportProject(...args),
-  saveSession: (...args: any[]) => getInstance().saveSession(...args),
-  getSessions: (...args: any[]) => getInstance().getSessions(...args),
-  estimateCredits: (...args: any[]) => getInstance().estimateCredits(...args),
-  formatFileSize: (...args: any[]) => getInstance().formatFileSize(...args),
-  formatDuration: (...args: any[]) => getInstance().formatDuration(...args),
-};
+});
 
 export default videoStudioService;

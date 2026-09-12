@@ -12,6 +12,7 @@ export interface UserSettings {
     wideMode?: boolean;
     alignment?: 'center' | 'left' | 'right';
     showTokenCount?: boolean;
+    fontSize?: 'small' | 'medium' | 'large';
   };
   appearance?: {
     theme?: 'dark' | 'light';
@@ -130,7 +131,7 @@ export const userDataService = {
       return data.settings || {};
     } catch (error) {
       console.error('Failed to get user settings:', error);
-      return {};
+      throw error;
     }
   },
 

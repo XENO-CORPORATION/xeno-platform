@@ -5,7 +5,7 @@ const Features: React.FC = () => (
   <MarketingPage
     eyebrow="FEATURES"
     title="One platform for every kind of creation"
-    subtitle="XENO is an AI-native creative and productivity ecosystem. Generate, edit, design, and automate with tools that share one account, one credit balance, and one workspace — so your work flows between them instead of fighting them."
+    subtitle="XENO is an AI-native creative and productivity ecosystem. Generate, edit, design, and automate with tools that share one account and one workspace — so your work flows between them instead of fighting them."
     updated="June 2026"
   >
     <Section title="Everything you can do with XENO">
@@ -16,7 +16,7 @@ const Features: React.FC = () => (
           { title: 'Edit with Pixel, Motion & Sound', desc: 'A professional image editor, video editor, and DAW — Photoshop, Premiere, and Audition reimagined around AI from the ground up.' },
           { title: 'Design with Canvas', desc: 'UI and product design with components, variants, auto-layout, tokens, and multiplayer. A Figma replacement built on the same engine as everything else.' },
           { title: 'Automate with agents', desc: 'The Agent CLI and embedded AI agents run real tasks across your tools — generating, editing, and assembling work on your behalf.' },
-          { title: 'Launch with Hub', desc: 'The XENO Hub desktop launcher installs every app, manages updates, and keeps your credits and settings in sync across machines.' },
+          { title: 'Launch with Hub', desc: 'The XENO Hub desktop launcher installs every app, manages updates, and keeps your account and settings in sync across machines.' },
           { title: 'Extend via Marketplace', desc: 'Install apps, panels, plugins, models, and agents — or publish your own and earn. One catalog, one entitlement system.' },
         ]}
       />
@@ -40,7 +40,7 @@ const Features: React.FC = () => (
       <CheckList
         items={[
           'One account across every app, on desktop and in the cloud.',
-          'One credit balance — buy credits once and spend them on any AI action, in any tool.',
+          'One account and entitlement model across every tool, with clear boundaries between local and hosted work.',
           'One workspace where files, assets, and projects move between apps without conversion.',
           'Shared engine for rendering, color, and formats, so a Pixel layer, a Canvas frame, and a Motion clip all speak the same language.',
           'Real-time multiplayer and agent collaboration built into the foundation, not bolted on.',

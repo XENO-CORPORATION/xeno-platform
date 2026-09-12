@@ -4,6 +4,8 @@ import {
   listWorkspaces,
   selectWorkspace as apiSelectWorkspace,
   getWorkspaceMembers,
+  AccountApiError,
+  ACCOUNT_UUID_RE,
   type Workspace,
   type WorkspaceMember,
 } from '../services/accountService';
@@ -101,12 +103,28 @@ export const WorkspaceProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         localStorage.setItem(ACTIVE_WORKSPACE_KEY, target.id);
       }
     } catch (err: unknown) {
-      console.warn('[WorkspaceContext] API unavailable, using fallback data');
-      // Fallback to dev data so UI is always functional
-      setWorkspaces(DEV_WORKSPACES);
-      if (!activeWorkspace) {
-        // Default to team workspace so TeamPage renders content in dev
-        setActiveWorkspace(DEV_WORKSPACES[1] ?? DEV_WORKSPACES[0]);
+      const message =
+        err instanceof AccountApiError
+          ? err.message
+          : err instanceof Error
+            ? err.message
+            : 'Could not load workspaces';
+      const savedId = localStorage.getItem(ACTIVE_WORKSPACE_KEY);
+      if (savedId && !ACCOUNT_UUID_RE.test(savedId)) {
+        localStorage.removeItem(ACTIVE_WORKSPACE_KEY);
+      }
+      if (import.meta.env.DEV) {
+        console.warn('[WorkspaceContext] API unavailable, using fallback data');
+        setWorkspaces(DEV_WORKSPACES);
+        if (!activeWorkspace) {
+          setActiveWorkspace(DEV_WORKSPACES[1] ?? DEV_WORKSPACES[0]);
+        }
+      } else {
+        console.warn('[WorkspaceContext] workspaces unavailable:', message);
+        setWorkspaces([]);
+        setActiveWorkspace(null);
+        setMembers([]);
+        setError(message);
       }
     } finally {
       setIsLoading(false);
@@ -115,11 +133,23 @@ export const WorkspaceProvider: React.FC<{ children: React.ReactNode }> = ({ chi
 
   const refreshMembers = useCallback(async () => {
     if (!activeWorkspace) return;
+    if (!ACCOUNT_UUID_RE.test(activeWorkspace.id)) {
+      if (import.meta.env.DEV) {
+        setMembers(activeWorkspace.workspace_type === 'team' ? DEV_MEMBERS : DEV_MEMBERS.slice(0, 1));
+      } else {
+        setMembers([]);
+      }
+      return;
+    }
     try {
       const res = await getWorkspaceMembers(activeWorkspace.id);
       setMembers(res.members);
     } catch {
-      setMembers(activeWorkspace.workspace_type === 'team' ? DEV_MEMBERS : DEV_MEMBERS.slice(0, 1));
+      if (import.meta.env.DEV) {
+        setMembers(activeWorkspace.workspace_type === 'team' ? DEV_MEMBERS : DEV_MEMBERS.slice(0, 1));
+      } else {
+        setMembers([]);
+      }
     }
   }, [activeWorkspace?.id]);
 
@@ -128,7 +158,9 @@ export const WorkspaceProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     if (!target) return;
 
     try {
-      await apiSelectWorkspace(workspaceId);
+      if (ACCOUNT_UUID_RE.test(workspaceId)) {
+        await apiSelectWorkspace(workspaceId);
+      }
     } catch {
       // API unavailable — still switch locally
     }

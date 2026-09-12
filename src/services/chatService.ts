@@ -2,6 +2,22 @@
 // Replaces localStorage-based chat history with database persistence
 
 const API_BASE = '/api/chat';
+import {
+  libraryService,
+  type LibraryItemRecord,
+  type LibrarySort,
+  type LibrarySource,
+  type LibraryTab,
+} from './libraryService';
+export type { LibraryAssetRef, LibraryItemRecord, LibrarySort, LibrarySource, LibraryTab } from './libraryService';
+
+/** Same shape as server `UUID_RE`. Local `convo-<ts>` ids must never hit the API. */
+export const PERSISTED_CONVERSATION_ID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+export function isPersistedConversationId(id: string | null | undefined): id is string {
+  return typeof id === 'string' && PERSISTED_CONVERSATION_ID_RE.test(id);
+}
 
 // ============================================
 // TYPES
@@ -20,6 +36,8 @@ export interface ChatMessage {
   prompt_tokens?: number;
   completion_tokens?: number;
   total_tokens?: number;
+  context_record_id?: string;
+  project_sources?: ProjectSourceReference[];
   created_at?: string;
   message_index?: number;
   // Legacy fields for compatibility
@@ -36,6 +54,20 @@ export interface ChatAttachment {
   name: string;
   content: string;
   mimeType?: string;
+  asset_id?: string;
+  content_url?: string;
+  size_bytes?: number;
+}
+
+export interface ProjectSourceReference {
+  asset_id: string;
+  chunk_id: string;
+  ordinal: number;
+  locator: Record<string, unknown>;
+  display_name: string;
+  mime_type?: string;
+  digest?: string;
+  token_count?: number;
 }
 
 export interface Conversation {
@@ -51,6 +83,7 @@ export interface Conversation {
   last_message_at?: string;
   is_archived?: boolean;
   message_count?: number;
+  project_id?: string | null;
   messages?: ChatMessage[];
   // Legacy fields for compatibility
   timestamp?: number;
@@ -92,16 +125,24 @@ const getAuthHeaders = (): HeadersInit => {
     'Content-Type': 'application/json',
     ...(token ? { Authorization: `Bearer ${token}` } : {}),
     // Phase 5: active workspace → conversations get tagged with workspace_id + a parent tuple.
-    ...(workspace ? { 'x-xeno-workspace': workspace } : {}),
+    ...(isPersistedConversationId(workspace) ? { 'x-xeno-workspace': workspace } : {}),
   };
 };
 
 const handleResponse = async <T>(response: Response): Promise<T> => {
-  const data = await response.json();
-  if (!response.ok || !data.success) {
-    throw new Error(data.error || 'Request failed');
+  const raw = await response.text();
+  let data: { success?: boolean; error?: string };
+  try {
+    data = raw ? JSON.parse(raw) : {};
+  } catch {
+    throw new Error(
+      `API request failed with status ${response.status}. Non-JSON response.`,
+    );
   }
-  return data;
+  if (!response.ok || !data.success) {
+    throw new Error(data.error || `Request failed with status ${response.status}`);
+  }
+  return data as T;
 };
 
 // ============================================
@@ -146,6 +187,9 @@ export const chatService = {
 
   // Get single conversation with messages
   async getConversation(id: string): Promise<Conversation | null> {
+    if (!isPersistedConversationId(id)) {
+      return null;
+    }
     try {
       const response = await fetch(`${API_BASE}/conversations/${id}`, {
         headers: getAuthHeaders(),
@@ -166,6 +210,7 @@ export const chatService = {
     system_prompt?: string;
     persona_id?: string;
     interface_id?: string;
+    project_id?: string;
   }): Promise<Conversation | null> {
     try {
       const response = await fetch(`${API_BASE}/conversations`, {
@@ -189,10 +234,14 @@ export const chatService = {
       title?: string;
       model_id?: string;
       system_prompt?: string;
-      persona_id?: string;
+      persona_id?: string | null;
       is_archived?: boolean;
+      project_id?: string | null;
     }
   ): Promise<Conversation | null> {
+    if (!isPersistedConversationId(id)) {
+      return null;
+    }
     try {
       const response = await fetch(`${API_BASE}/conversations/${id}`, {
         method: 'PUT',
@@ -210,6 +259,9 @@ export const chatService = {
 
   // Delete conversation
   async deleteConversation(id: string, permanent = false): Promise<boolean> {
+    if (!isPersistedConversationId(id)) {
+      return false;
+    }
     try {
       const response = await fetch(
         `${API_BASE}/conversations/${id}?permanent=${permanent}`,
@@ -241,8 +293,12 @@ export const chatService = {
       prompt_tokens?: number;
       completion_tokens?: number;
       total_tokens?: number;
+      context_record_id?: string;
     }
   ): Promise<ChatMessage | null> {
+    if (!isPersistedConversationId(conversationId)) {
+      return null;
+    }
     try {
       const response = await fetch(
         `${API_BASE}/conversations/${conversationId}/messages`,
@@ -266,6 +322,9 @@ export const chatService = {
     conversationId: string,
     messages: ChatMessage[]
   ): Promise<ChatMessage[]> {
+    if (!isPersistedConversationId(conversationId)) {
+      return [];
+    }
     try {
       const response = await fetch(
         `${API_BASE}/conversations/${conversationId}/messages/batch`,
@@ -491,30 +550,29 @@ export const chatService = {
   // ============================================
 
   // Create a share link for a conversation
-  async createShareLink(conversationId: string, expiresInDays = 7): Promise<{
+  async createShareLink(
+    conversationId: string,
+    expiresInDays = 7,
+    visibility: 'public' | 'workspace' = 'public',
+  ): Promise<{
     share_token: string;
     share_url: string;
     expires_at: string;
     conversation_title: string;
   } | null> {
-    try {
-      const response = await fetch(`${API_BASE}/conversations/${conversationId}/share`, {
-        method: 'POST',
-        headers: getAuthHeaders(),
-        body: JSON.stringify({ expires_in_days: expiresInDays }),
-      });
+    const response = await fetch(`${API_BASE}/conversations/${conversationId}/share`, {
+      method: 'POST',
+      headers: getAuthHeaders(),
+      body: JSON.stringify({ expires_in_days: expiresInDays, visibility }),
+    });
 
-      const result = await handleResponse<{ share: {
-        share_token: string;
-        share_url: string;
-        expires_at: string;
-        conversation_title: string;
-      } }>(response);
-      return result.share || null;
-    } catch (error) {
-      console.error('Failed to create share link:', error);
-      return null;
-    }
+    const result = await handleResponse<{ share: {
+      share_token: string;
+      share_url: string;
+      expires_at: string;
+      conversation_title: string;
+    } }>(response);
+    return result.share || null;
   },
 
   // Get shared conversation details (no auth required)
@@ -525,6 +583,7 @@ export const chatService = {
     model_id: string;
     system_prompt: string;
     owner_name: string;
+    created_at: string;
     expires_at: string;
     messages: ChatMessage[];
   } | null> {
@@ -561,18 +620,13 @@ export const chatService = {
 
   // Revoke all share links for a conversation
   async revokeShareLinks(conversationId: string): Promise<boolean> {
-    try {
-      const response = await fetch(`${API_BASE}/conversations/${conversationId}/share`, {
-        method: 'DELETE',
-        headers: getAuthHeaders(),
-      });
+    const response = await fetch(`${API_BASE}/conversations/${conversationId}/share`, {
+      method: 'DELETE',
+      headers: getAuthHeaders(),
+    });
 
-      await handleResponse<{ success: boolean }>(response);
-      return true;
-    } catch (error) {
-      console.error('Failed to revoke share links:', error);
-      return false;
-    }
+    await handleResponse<{ success: boolean }>(response);
+    return true;
   },
 
   // List all share links for a conversation
@@ -598,6 +652,50 @@ export const chatService = {
   },
 
   // ============================================
+  // ACCOUNT LIBRARY API
+  // ============================================
+
+  async getLibraryItems(params?: {
+    tab?: LibraryTab;
+    sort?: LibrarySort;
+    query?: string;
+    limit?: number;
+  }): Promise<LibraryItemRecord[]> {
+    try {
+      return await libraryService.list(params);
+    } catch (error) {
+      console.error('Failed to get account library:', error);
+      throw error;
+    }
+  },
+
+  async deleteLibraryItem(source: LibrarySource, id: string): Promise<boolean> {
+    try {
+      return await libraryService.delete(source, id);
+    } catch (error) {
+      console.error('Failed to delete library item:', error);
+      throw error;
+    }
+  },
+
+  async uploadLibraryFile(file: File, source = 'library'): Promise<{
+    id: string;
+    name: string;
+    size: number;
+    type: string;
+    content_url: string;
+  }> {
+    const asset = await libraryService.upload(file, source);
+    return {
+      id: asset.assetId,
+      name: asset.name,
+      size: asset.size || file.size,
+      type: asset.mimeType,
+      content_url: asset.contentUrl,
+    };
+  },
+
+  // ============================================
   // ARTIFACTS API
   // ============================================
 
@@ -615,7 +713,7 @@ export const chatService = {
       return result.artifacts || [];
     } catch (error) {
       console.error('Failed to get artifacts:', error);
-      return [];
+      throw error;
     }
   },
 
@@ -628,7 +726,7 @@ export const chatService = {
       return result.artifact || null;
     } catch (error) {
       console.error('Failed to get artifact:', error);
-      return null;
+      throw error;
     }
   },
 
@@ -651,7 +749,7 @@ export const chatService = {
       return result.artifact || null;
     } catch (error) {
       console.error('Failed to create artifact:', error);
-      return null;
+      throw error;
     }
   },
 
@@ -665,7 +763,7 @@ export const chatService = {
       return true;
     } catch (error) {
       console.error('Failed to delete artifact:', error);
-      return false;
+      throw error;
     }
   },
 
@@ -673,12 +771,13 @@ export const chatService = {
   // SCHEDULED AUTOMATION TASKS API
   // ============================================
 
-  async getScheduledTasks(params?: { status?: string; sort?: string; query?: string }): Promise<any[]> {
+  async getScheduledTasks(params?: { status?: string; sort?: string; query?: string; project_id?: string }): Promise<any[]> {
     try {
       const qs = new URLSearchParams();
       if (params?.status) qs.set('status', params.status);
       if (params?.sort) qs.set('sort', params.sort);
       if (params?.query) qs.set('query', params.query);
+      if (params?.project_id) qs.set('project_id', params.project_id);
 
       const response = await fetch(`${API_BASE}/scheduled?${qs.toString()}`, {
         headers: getAuthHeaders(),
@@ -687,7 +786,7 @@ export const chatService = {
       return result.tasks || [];
     } catch (error) {
       console.error('Failed to get scheduled tasks:', error);
-      return [];
+      throw error;
     }
   },
 
@@ -699,6 +798,11 @@ export const chatService = {
     model_id?: string;
     conversation_id?: string;
     project_id?: string;
+    next_run_at?: string;
+    schedule_kind?: 'once' | 'recurring';
+    timezone?: string;
+    dtstart_local?: string;
+    rrule?: string;
   }): Promise<any | null> {
     try {
       const response = await fetch(`${API_BASE}/scheduled`, {
@@ -710,7 +814,7 @@ export const chatService = {
       return result.task || null;
     } catch (error) {
       console.error('Failed to create scheduled task:', error);
-      return null;
+      throw error;
     }
   },
 
@@ -732,7 +836,7 @@ export const chatService = {
       return result.task || null;
     } catch (error) {
       console.error('Failed to update scheduled task:', error);
-      return null;
+      throw error;
     }
   },
 
@@ -746,7 +850,7 @@ export const chatService = {
       return true;
     } catch (error) {
       console.error('Failed to delete scheduled task:', error);
-      return false;
+      throw error;
     }
   },
 
@@ -760,8 +864,37 @@ export const chatService = {
       return result.result || null;
     } catch (error) {
       console.error('Failed to run scheduled task:', error);
-      return null;
+      throw error;
     }
+  },
+
+  async previewScheduledTask(data: {
+    schedule_kind: 'once' | 'recurring';
+    timezone: string;
+    dtstart_local: string;
+    rrule?: string;
+    limit?: number;
+  }): Promise<string[]> {
+    const response = await fetch(`${API_BASE}/scheduled/preview`, {
+      method: 'POST',
+      headers: getAuthHeaders(),
+      body: JSON.stringify(data),
+    });
+    const result = await handleResponse<{ occurrences: string[] }>(response);
+    return Array.isArray(result.occurrences) ? result.occurrences : [];
+  },
+
+  async getScheduledRuns(id: string): Promise<any[]> {
+    const response = await fetch(`${API_BASE}/scheduled/${id}/runs`, { headers: getAuthHeaders() });
+    return (await handleResponse<{ runs: any[] }>(response)).runs || [];
+  },
+
+  async retryScheduledRun(id: string, acknowledgeDuplicateCharge = false): Promise<any> {
+    const response = await fetch(`${API_BASE}/scheduled-runs/${id}/retry`, {
+      method: 'POST', headers: getAuthHeaders(),
+      body: JSON.stringify({ acknowledge_duplicate_charge: acknowledgeDuplicateCharge }),
+    });
+    return (await handleResponse<{ run: any }>(response)).run;
   },
 
   // ============================================
@@ -781,7 +914,7 @@ export const chatService = {
       return result.skills || [];
     } catch (error) {
       console.error('Failed to get skills:', error);
-      return [];
+      throw error;
     }
   },
 
@@ -805,7 +938,7 @@ export const chatService = {
       return result.skill || null;
     } catch (error) {
       console.error('Failed to create skill:', error);
-      return null;
+      throw error;
     }
   },
 
@@ -825,7 +958,7 @@ export const chatService = {
       return result.skill || null;
     } catch (error) {
       console.error('Failed to update skill:', error);
-      return null;
+      throw error;
     }
   },
 
@@ -839,7 +972,7 @@ export const chatService = {
       return true;
     } catch (error) {
       console.error('Failed to delete skill:', error);
-      return false;
+      throw error;
     }
   },
 
@@ -847,16 +980,18 @@ export const chatService = {
   // PROJECTS & FILES API
   // ============================================
 
-  async getProjects(): Promise<any[]> {
+  async getProjects(params?: { include_archived?: boolean }): Promise<any[]> {
     try {
-      const response = await fetch(`${API_BASE}/projects`, {
+      const query = new URLSearchParams();
+      if (params?.include_archived) query.set('include_archived', 'true');
+      const response = await fetch(`${API_BASE}/projects?${query.toString()}`, {
         headers: getAuthHeaders(),
       });
       const result = await handleResponse<{ projects: any[] }>(response);
       return result.projects || [];
     } catch (error) {
       console.error('Failed to get projects:', error);
-      return [];
+      throw error;
     }
   },
 
@@ -876,7 +1011,7 @@ export const chatService = {
       return result.project || null;
     } catch (error) {
       console.error('Failed to create project:', error);
-      return null;
+      throw error;
     }
   },
 
@@ -897,7 +1032,7 @@ export const chatService = {
       return result.project || null;
     } catch (error) {
       console.error('Failed to update project:', error);
-      return null;
+      throw error;
     }
   },
 
@@ -911,7 +1046,7 @@ export const chatService = {
       return true;
     } catch (error) {
       console.error('Failed to delete project:', error);
-      return false;
+      throw error;
     }
   },
 
@@ -924,7 +1059,7 @@ export const chatService = {
       return result.files || [];
     } catch (error) {
       console.error('Failed to get project files:', error);
-      return [];
+      throw error;
     }
   },
 
@@ -932,7 +1067,7 @@ export const chatService = {
     name: string;
     file_type?: string;
     file_size?: number;
-    content_text: string;
+    storage_key?: string;
   }): Promise<any | null> {
     try {
       const response = await fetch(`${API_BASE}/projects/${projectId}/files`, {
@@ -944,7 +1079,7 @@ export const chatService = {
       return result.file || null;
     } catch (error) {
       console.error('Failed to add project file:', error);
-      return null;
+      throw error;
     }
   },
 
@@ -958,8 +1093,58 @@ export const chatService = {
       return true;
     } catch (error) {
       console.error('Failed to delete project file:', error);
-      return false;
+      throw error;
     }
+  },
+
+  async getProjectAccess(id: string): Promise<any[]> {
+    const response = await fetch(`${API_BASE}/projects/${id}/access`, { headers: getAuthHeaders() });
+    return (await handleResponse<{ grants: any[] }>(response)).grants || [];
+  },
+
+  async grantProjectAccessByEmail(id: string, email: string, relation: 'viewer' | 'reviewer' | 'editor' | 'admin'): Promise<any> {
+    const response = await fetch(`${API_BASE}/projects/${id}/access/user/by-email`, {
+      method: 'PUT',
+      headers: getAuthHeaders(),
+      body: JSON.stringify({ email, relation }),
+    });
+    return (await handleResponse<{ grant: any }>(response)).grant;
+  },
+
+  async revokeProjectAccess(id: string, subject: string): Promise<void> {
+    const separator = subject.indexOf(':');
+    if (separator < 1) throw new Error('Invalid project access subject.');
+    const subjectType = subject.slice(0, separator);
+    const subjectId = subject.slice(separator + 1);
+    const response = await fetch(`${API_BASE}/projects/${id}/access/${encodeURIComponent(subjectType)}/${encodeURIComponent(subjectId)}`, {
+      method: 'DELETE',
+      headers: getAuthHeaders(),
+    });
+    await handleResponse<{ success: boolean }>(response);
+  },
+
+  async getConnectors(): Promise<any[]> {
+    const response = await fetch(`${API_BASE}/customize/connectors`, { headers: getAuthHeaders() });
+    return (await handleResponse<{ connectors: any[] }>(response)).connectors || [];
+  },
+
+  async setConnectorStatus(key: string, status: string): Promise<any> {
+    const response = await fetch(`${API_BASE}/customize/connectors/${encodeURIComponent(key)}`, {
+      method: 'PUT', headers: getAuthHeaders(), body: JSON.stringify({ status }),
+    });
+    return (await handleResponse<{ connector: any }>(response)).connector;
+  },
+
+  async getPlugins(): Promise<any[]> {
+    const response = await fetch(`${API_BASE}/customize/plugins`, { headers: getAuthHeaders() });
+    return (await handleResponse<{ plugins: any[] }>(response)).plugins || [];
+  },
+
+  async setPluginInstalled(listingId: string, installed: boolean): Promise<any> {
+    const response = await fetch(`${API_BASE}/customize/plugins/${encodeURIComponent(listingId)}`, {
+      method: 'PUT', headers: getAuthHeaders(), body: JSON.stringify({ installed }),
+    });
+    return (await handleResponse<{ plugin: any }>(response)).plugin;
   },
 
   // ============================================
@@ -975,7 +1160,7 @@ export const chatService = {
       return result.memories || [];
     } catch (error) {
       console.error('Failed to get memories:', error);
-      return [];
+      throw error;
     }
   },
 
@@ -990,7 +1175,7 @@ export const chatService = {
       return result.memory || null;
     } catch (error) {
       console.error('Failed to add memory:', error);
-      return null;
+      throw error;
     }
   },
 
@@ -1004,7 +1189,7 @@ export const chatService = {
       return true;
     } catch (error) {
       console.error('Failed to delete memory:', error);
-      return false;
+      throw error;
     }
   },
 };

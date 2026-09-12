@@ -19,13 +19,13 @@ import {
   type ChatTheme,
   type ResolvedChatTheme,
 } from './chatTheme';
-import './chatMock'; // DEV-only offline mock backend (self-installs a fetch interceptor)
 import ChatEmptyState, { ComposerRevealControls, type ChatEmptyStateTool } from './ChatEmptyState';
 import ChatModelSelector from './ChatModelSelector';
 import ChatShareModal from './ChatShareModal';
 import { isOutlineDebugOn, OUTLINE_DEBUG_CSS } from './outlineDebug';
-import ChatArtifactsPage from './ChatArtifactsPage';
+  import ChatLibraryPage from './ChatLibraryPage';
 import ChatScheduledPage from './ChatScheduledPage';
+import { createScheduledTask, deleteScheduledTask, listScheduledTasks, previewScheduledOccurrences, setScheduledTaskStatus } from './chatScheduled';
 import ChatGlobalSettingsPage from './ChatGlobalSettingsPage';
 import ChatCustomizePage from './ChatCustomizePage';
 import ChatSettingsModal from './ChatSettingsModal';
@@ -43,17 +43,21 @@ import {
   getChatProfile,
 } from './chatSkillsLibrary';
 import { buildChatSystemPrompt, CHAT_MODE_PLACEHOLDERS, modeUsesXenoSearch, type ChatMode } from './chatModeConfig';
+import { reasoningCapabilityForModel } from '@/server/lib/chatModelCapabilities.js';
 import CodeBlockWithHeader from './CodeBlockWithHeader';
 import ThinkingAnimation, { ThinkingAnimationInline } from './ThinkingAnimation';
 import ThinkingStatus from './ThinkingStatus';
 import { chatComplete } from '@/services/aiService';
 import { getGroupedModels, GroupedModels, Model } from '@/services/modelService';
-import { chatService } from '@/services/chatService';
+import { chatService, isPersistedConversationId } from '@/services/chatService';
+import { libraryService, type LibraryAssetRef } from '@/services/libraryService';
+import LibraryAssetImage from '@/components/library/LibraryAssetImage';
+import LibraryAssetViewer, { type LibraryViewerItem } from '@/components/library/LibraryAssetViewer';
 import { countMessageTokens, estimateTokens as quickEstimateTokens } from '@/services/tokenizerService';
 import { userDataService } from '@/services/userDataService';
 import { xenoSearchService, type XenoSearchSource, type WebSocketProgress } from '@/services/xenoSearchService';
-import type { Conversation as DBConversation, ChatMessage as DBChatMessage } from '@/services/chatService';
-import { ArrowUp, Clock, X, ChevronDown, ChevronRight, Plus, Download, Brain, Folder, FolderUp, Link, File, FileClock, FileImage, FileText, FilePenLine, MessageSquare, MessagesSquare, Check, Copy, Search, ExternalLink, Info, Target, MessageSquareX, Image, Stop, Mic, Globe, Settings, TrendingUp, CheckCircle, Pencil, Hand, Pin, Monitor, Archive, Shapes, PanelLeftOpen, Star, Contrast, UserRoundX, RefreshDecl, CopyDecl, CheckDecl, EditDecl, ThumbsUpDecl, ThumbsDownDecl, InfoDecl, XDecl, SearchDecl, PanelLeftCloseDecl, ArrowUpRightDecl, FolderDecl, TrashDecl, BriefcaseDecl, GearDecl, PlusDecl, BookmarkDecl, ArchiveDecl, LayersDecl, StarDecl, FeatherDecl, TargetDecl, SmileDecl, BrainCircuitDecl, MessageSquareXDecl, QuoteDecl, ImageDecl, WandSparklesDecl, FileXDecl, ContrastDecl, UserRoundXDecl, MenuDecl, ShareDecl, MoreVerticalDecl, PaperclipDecl, ChevronDownDecl, ChevronRightDecl, WrapTextDecl, FolderUpDecl, FileClockDecl, PanelRightOpenDecl, PanelRightCloseDecl, MessageSquarePlusDecl, PanelLeftOpenDecl, ArrowRightDecl, CalendarDecl, ClockDecl, BrainDecl, SlidersDecl } from '@/lib/icons';
+import type { Conversation as DBConversation, ChatAttachment as DBChatAttachment, ChatMessage as DBChatMessage, ProjectSourceReference } from '@/services/chatService';
+import { ArrowUp, Clock, X, ChevronDown, ChevronRight, Plus, Download, Brain, Folder, FolderUp, Link, File, FileClock, FileImage, FileText, FilePenLine, MessageSquare, MessagesSquare, Check, Copy, Search, ExternalLink, Info, Target, MessageSquareX, Image, Stop, Mic, Globe, Settings, TrendingUp, CheckCircle, Pencil, Hand, Pin, Monitor, Archive, Library, PanelLeftOpen, Star, Contrast, UserRoundX, RefreshDecl, CopyDecl, CheckDecl, EditDecl, ThumbsUpDecl, ThumbsDownDecl, InfoDecl, XDecl, SearchDecl, PanelLeftCloseDecl, ArrowUpRightDecl, FolderDecl, TrashDecl, BriefcaseDecl, GearDecl, PlusDecl, BookmarkDecl, ArchiveDecl, LayersDecl, StarDecl, FeatherDecl, TargetDecl, SmileDecl, BrainCircuitDecl, MessageSquareXDecl, QuoteDecl, ImageDecl, WandSparklesDecl, FileXDecl, ContrastDecl, UserRoundXDecl, MenuDecl, ShareDecl, MoreVerticalDecl, PaperclipDecl, ChevronDownDecl, ChevronRightDecl, WrapTextDecl, FolderUpDecl, FileClockDecl, PanelRightOpenDecl, PanelRightCloseDecl, MessageSquarePlusDecl, PanelLeftOpenDecl, ArrowRightDecl, CalendarDecl, ClockDecl, BrainDecl, SlidersDecl } from '@/lib/icons';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import rehypeRaw from 'rehype-raw';
@@ -74,7 +78,7 @@ function withAuthHeaders(extra: Record<string, string> = {}): Record<string, str
   const h: Record<string, string> = { ...extra };
   if (token) h.Authorization = `Bearer ${token}`;
   // Phase 5: active workspace context → pooled billing + resource tenancy on the backend.
-  if (workspace) h['x-xeno-workspace'] = workspace;
+  if (workspace && isPersistedConversationId(workspace)) h['x-xeno-workspace'] = workspace;
   return h;
 }
 
@@ -82,6 +86,10 @@ function withAuthHeaders(extra: Record<string, string> = {}): Record<string, str
 // Uses a REAL endpoint model id — no fabricated fallback.
 /** Matches history sidebar `duration-300` close before floating chrome enters. */
 const HISTORY_SIDEBAR_CLOSE_MS = 300;
+/** One width owner for every surface that yields to the conversation history. */
+const HISTORY_SIDEBAR_WIDTH_PX = 260;
+/** One width owner for body-portaled workspaces that must preserve the XENO rail. */
+const TASKBAR_WIDTH_PX = 52;
 
 const DEFAULT_MODEL: Model = {
   id: "gpt-5.6-terra",
@@ -130,25 +138,7 @@ const modelHasReasoningCapability = (modelId: string, model?: Model): 'alwaysOn'
     return model.supportsReasoning;
   }
 
-  // Fallback to ID-based detection for models without metadata
-  const id = modelId.toLowerCase();
-
-  // Always-on reasoning models (can't be disabled)
-  if (id.includes('deepseek') && (id.includes('r1') || id.includes('v3'))) return 'alwaysOn';
-  if (id.includes('openai/o1') || id.includes('openai/o3') || id.includes('openai/o4')) return 'alwaysOn';
-  if (id.includes('qwen') && id.includes('thinking')) return 'alwaysOn';
-  if (id.includes(':thinking')) return 'alwaysOn'; // Any model with :thinking suffix
-
-  // Toggleable reasoning models (reasoning controlled via API parameters)
-  if (id.includes('gemini-2.5') || id.includes('gemini-3')) return 'toggleable';
-  if (id.includes('grok-3') || id.includes('grok-4')) return 'toggleable';
-  if (id.includes('claude-sonnet-4') || id.includes('claude-opus-4') || id.includes('claude-haiku-4')) return 'toggleable';
-  if (id.includes('claude-3.7-sonnet') && !id.includes(':thinking')) return 'toggleable';
-  if (id.includes('deepseek/')) return 'toggleable';
-  if (id.includes('qwen/')) return 'toggleable';
-
-  // All other models don't have explicit reasoning
-  return 'disabled';
+  return reasoningCapabilityForModel(modelId);
 };
 
 // Models that use :thinking suffix for reasoning (legacy approach)
@@ -266,9 +256,22 @@ const estimateTokens = (text: string): number => {
 interface AttachedFile {
   id: string;
   name: string;
-    type: string; // Mime type or simple type like 'image', 'pdf', 'doc'
-    fileObject?: File; // Optional: Store the actual File object if needed later
+  type: string; // Mime type or simple type like 'image', 'pdf', 'doc'
+  fileObject?: File; // Optional: Store the actual File object if needed later
+  assetId?: string;
+  contentUrl?: string;
+  size?: number;
 }
+
+type MessageImageAttachment = {
+  file?: File;
+  name: string;
+  type: string;
+  base64Data?: string;
+  assetId?: string;
+  contentUrl?: string;
+  size?: number;
+};
 
 // Interface for Chat Message state - Revert to simpler version
 interface ChatMessage {
@@ -284,6 +287,7 @@ interface ChatMessage {
     isDotPlaceholder?: boolean; // Flag for temporary pulsing dot placeholder
     thinkingDuration?: number; // Added thinking duration in seconds
     modelIdUsed?: string; // Added ID of model that generated the message (if thinking)
+    modelId?: string; // Legacy persisted-message field.
     searchInfo?: {
         queries: string[];
         sources: { uri: string; title: string }[]; // Full source list from API
@@ -301,17 +305,100 @@ interface ChatMessage {
     thinkingContent?: string; // New field for thinking content
     imageData?: string; // Added field for storing generated image data (base64)
     isGeneratingImage?: boolean; // Flag for image generation in progress
-    userImageAttachment?: { file?: File; name: string; type: string; base64Data?: string; }; // Updated for serialization (first image; kept for older history)
+    userImageAttachment?: MessageImageAttachment; // Updated for serialization (first image; kept for older history)
     /** All image attachments for a user turn — rendered above the text bubble by aspect ratio. */
-    userImageAttachments?: { file?: File; name: string; type: string; base64Data?: string; }[];
-    userFileAttachment?: { file?: File; name: string; type: string; content?: string; encoding?: 'text' | 'base64' }; // Updated for serialization
+    userImageAttachments?: MessageImageAttachment[];
+    userFileAttachment?: { file?: File; name: string; type: string; content?: string; encoding?: 'text' | 'base64'; assetId?: string; contentUrl?: string; size?: number }; // Updated for serialization
+    generatedImageAsset?: LibraryAssetRef;
     isCancelled?: boolean; // New field to indicate if the AI response was cancelled
     isXenoSearchCancelled?: boolean; // New field to indicate if cancelled due to Xeno Search failure
     answerTokenCount?: number; // NEW: Token count for the AI's answer
     isLoading?: boolean; // NEW: Flag for search loading state
     isXenoDeepSearchContainer?: boolean; // New flag to identify deep search containers
     isStreaming?: boolean; // True while the answer is being revealed (typewriter); actions hidden until done
+    projectSources?: ProjectSourceReference[];
+    projectContextId?: string;
 }
+
+const messageLibraryAttachments = (message: ChatMessage): DBChatAttachment[] => {
+  const images = message.userImageAttachments?.length
+    ? message.userImageAttachments
+    : message.userImageAttachment ? [message.userImageAttachment] : [];
+  const persisted: DBChatAttachment[] = images.filter((image) => image.assetId).map((image) => ({
+    type: 'image',
+    name: image.name,
+    content: '',
+    mimeType: image.type,
+    asset_id: image.assetId,
+    content_url: image.contentUrl,
+    size_bytes: image.size,
+  }));
+  if (message.userFileAttachment?.assetId) {
+    persisted.push({
+      type: 'document',
+      name: message.userFileAttachment.name,
+      content: '',
+      mimeType: message.userFileAttachment.type,
+      asset_id: message.userFileAttachment.assetId,
+      content_url: message.userFileAttachment.contentUrl,
+      size_bytes: message.userFileAttachment.size,
+    });
+  }
+  if (message.generatedImageAsset?.assetId) {
+    persisted.push({
+      type: 'image',
+      name: message.generatedImageAsset.name,
+      content: '',
+      mimeType: message.generatedImageAsset.mimeType,
+      asset_id: message.generatedImageAsset.assetId,
+      content_url: message.generatedImageAsset.contentUrl,
+      size_bytes: message.generatedImageAsset.size,
+    });
+  }
+  return persisted;
+};
+
+const dbMessageToLocal = (msg: DBChatMessage, index: number): ChatMessage => {
+  const isAi = msg.role === 'assistant';
+  const attachments = Array.isArray(msg.attachments) ? msg.attachments : [];
+  const images = attachments.filter((attachment) => attachment.type === 'image' && attachment.asset_id).map((attachment) => ({
+    name: attachment.name,
+    type: attachment.mimeType || 'image/*',
+    assetId: attachment.asset_id,
+    contentUrl: attachment.content_url || `/api/library/assets/${attachment.asset_id}/content`,
+    size: attachment.size_bytes,
+  }));
+  const file = attachments.find((attachment) => attachment.type !== 'image' && attachment.asset_id);
+  const generated = isAi ? images[0] : undefined;
+  return {
+    id: msg.id || `msg-${index}`,
+    sender: isAi ? 'ai' : 'user',
+    text: msg.content,
+    parsedAnswer: isAi ? msg.content : undefined,
+    modelId: msg.model_id,
+    modelIdUsed: msg.model_id,
+    thinkingContent: msg.thinking,
+    hasThinking: msg.has_thinking,
+    timestamp: msg.created_at ? new Date(msg.created_at).getTime() : undefined,
+    userImageAttachment: !isAi ? images[0] : undefined,
+    userImageAttachments: !isAi && images.length ? images : undefined,
+    userFileAttachment: !isAi && file ? {
+      name: file.name,
+      type: file.mimeType || 'application/octet-stream',
+      assetId: file.asset_id,
+      contentUrl: file.content_url || `/api/library/assets/${file.asset_id}/content`,
+      size: file.size_bytes,
+    } : undefined,
+    generatedImageAsset: generated ? {
+      assetId: generated.assetId!,
+      name: generated.name,
+      mimeType: generated.type,
+      size: generated.size,
+      contentUrl: generated.contentUrl!,
+    } : undefined,
+    projectSources: Array.isArray(msg.project_sources) ? msg.project_sources : undefined,
+  };
+};
 
 // --- NEW: Interface for Conversation History Item ---
 interface Conversation {
@@ -1595,7 +1682,7 @@ interface XenoSearchResultsData {
     query: string;
     search_type: 'normal' | 'deep'; // More specific typing
     summary?: string; // AI-generated overall summary
-    sources?: XenoSource[];
+    sources: XenoSource[];
     error?: string;
     processing_time?: number; // Enhanced: Track performance
     num_results?: number; // Enhanced: Track requested vs actual results
@@ -1632,151 +1719,8 @@ type VoiceInputMode = 'tap' | 'hold';
 const VOICE_INPUT_MODE_STORAGE_KEY = 'xeno-chat-voice-input-mode';
 const PROJECTS_PAGE_OPEN_STORAGE_KEY = 'xeno-chat-projects-page-open';
 const ACTIVE_PROJECT_ID_STORAGE_KEY = 'xeno-chat-active-project-id';
-// v1 prototype limit: project files are stored in localStorage, so keep them small.
-const PROJECT_FILE_MAX_BYTES = 1024 * 1024; // 1 MB per file
 /** How many project files show in the rail before expanding via the "8/20" control. */
 const PROJECT_FILES_PREVIEW_LIMIT = 8;
-/** Demo files for empty projects — 20 total so the header count can read 8/20. */
-const MOCK_PROJECT_FILES = [
-  {
-    id: 'mock-file-1',
-    name: 'project-brief.md',
-    type: 'text/markdown',
-    size: 4200,
-    addedAt: Date.UTC(2026, 6, 20),
-    encoding: 'text' as const,
-    content:
-      'Prefer concise answers. Document pigments and binders carefully. Ask before recommending any irreversible treatment.',
-  },
-  {
-    id: 'mock-file-2',
-    name: 'palette.tokens.json',
-    type: 'application/json',
-    size: 1800,
-    addedAt: Date.UTC(2026, 6, 18),
-    encoding: 'text' as const,
-    content: '{ "canvas": "#121212", "ink": "#e7e7e2", "muted": "#8a8a86" }',
-  },
-  {
-    id: 'mock-file-3',
-    name: 'restoration-notes.txt',
-    type: 'text/plain',
-    size: 9600,
-    addedAt: Date.UTC(2026, 6, 14),
-    encoding: 'text' as const,
-    content:
-      'Surface cleaning test on lower-right corner looked stable. No bloom after 48h. Next: varnish solubility check.',
-  },
-  {
-    id: 'mock-file-4',
-    name: 'client-feedback.md',
-    type: 'text/markdown',
-    size: 3100,
-    addedAt: Date.UTC(2026, 6, 12),
-    encoding: 'text' as const,
-    content: 'Client wants a calmer tone in written updates. Avoid jargon unless they ask for technical detail.',
-  },
-  {
-    id: 'mock-file-5',
-    name: 'reference-scan.png',
-    type: 'image/png',
-    size: 240000,
-    addedAt: Date.UTC(2026, 6, 10),
-    encoding: 'base64' as const,
-    content: 'Image attachment — open for preview.',
-  },
-  {
-    id: 'mock-file-6',
-    name: 'condition-report.pdf',
-    type: 'application/pdf',
-    size: 512000,
-    addedAt: Date.UTC(2026, 6, 8),
-    encoding: 'base64' as const,
-    content: 'PDF condition report — open for details.',
-  },
-  {
-    id: 'mock-file-7',
-    name: 'materials-list.csv',
-    type: 'text/csv',
-    size: 2200,
-    addedAt: Date.UTC(2026, 6, 5),
-    encoding: 'text' as const,
-    content: 'item,qty\nCotton swabs,120\nIsopropanol,2L\nJapanese tissue,1 pack',
-  },
-  {
-    id: 'mock-file-8',
-    name: 'timeline.md',
-    type: 'text/markdown',
-    size: 1500,
-    addedAt: Date.UTC(2026, 6, 2),
-    encoding: 'text' as const,
-    content: 'Week 1 documentation · Week 2 cleaning tests · Week 3 client review.',
-  },
-  ...Array.from({ length: 12 }, (_, index) => {
-    const n = index + 9;
-    return {
-      id: `mock-file-${n}`,
-      name: `context-note-${n}.md`,
-      type: 'text/markdown',
-      size: 900 + n * 80,
-      addedAt: Date.UTC(2026, 5, Math.max(1, 28 - index)),
-      encoding: 'text' as const,
-      content: `Sample context file ${n} — open for details.`,
-    };
-  }),
-];
-/** Demo files for View files in chat when the conversation has no attachments yet. */
-const MOCK_CHAT_FILES: {
-  key: string;
-  name: string;
-  kind: 'file' | 'image';
-  content: string;
-}[] = [
-  {
-    key: 'mock-chat-file-1',
-    name: 'condition-notes.md',
-    kind: 'file',
-    content:
-      '# Condition notes\n\nSurface cleaning test on the lower-right looked stable.\nNo bloom after 48h.\n\nNext: varnish solubility check before any consolidant.',
-  },
-  {
-    key: 'mock-chat-file-2',
-    name: 'palette-swatch.png',
-    kind: 'image',
-    content:
-      '[Image: palette-swatch.png]\n\nPreview is available in the message bubble.',
-  },
-  {
-    key: 'mock-chat-file-3',
-    name: 'client-brief.txt',
-    kind: 'file',
-    content:
-      'Client wants a calmer tone in written updates.\nAvoid jargon unless they ask for technical detail.\nPrefer short paragraphs and clear next steps.',
-  },
-  {
-    key: 'mock-chat-file-4',
-    name: 'materials.csv',
-    kind: 'file',
-    content: 'item,qty\nCotton swabs,120\nIsopropanol,2L\nJapanese tissue,1 pack\nGellan gum,50g',
-  },
-  {
-    key: 'mock-chat-file-5',
-    name: 'reference-detail.jpg',
-    kind: 'image',
-    content:
-      '[Image: reference-detail.jpg]\n\nPreview is available in the message bubble.',
-  },
-];
-
-/** Demo instructions when a project has none saved yet. */
-const MOCK_PROJECT_INSTRUCTIONS =
-  'Prefer concise answers. Use conservation vocabulary carefully. When unsure about materials, ask before recommending treatments. Keep tone calm and professional for client-facing drafts.';
-/** Demo scheduled tasks — click opens a themed preview modal until scheduling is wired. */
-const MOCK_PROJECT_SCHEDULED = [
-  { id: 'mock-sched-1', title: 'Weekly condition check-in', cadence: 'Every Monday · 09:00', mark: 'Mon' },
-  { id: 'mock-sched-2', title: 'Draft client progress note', cadence: 'Every Friday · 16:00', mark: 'Fri' },
-  { id: 'mock-sched-3', title: 'Refresh materials inventory', cadence: '1st of month · 10:00', mark: '1st' },
-];
 
 type ProjectScheduleKind = 'once' | 'daily' | 'weekly' | 'monthly';
 
@@ -1820,6 +1764,59 @@ const markFromScheduleDraft = (draft: ProjectScheduleDraft): string => {
   if (draft.kind === 'daily') return 'Day';
   const day = draft.date.split('-')[2];
   return day ?? 'New';
+};
+
+const firstRunFromScheduleDraft = (draft: ProjectScheduleDraft, now = new Date()): Date => {
+  const [hour = 9, minute = 0] = draft.time.split(':').map(Number);
+  const atSelectedTime = (date: Date) => {
+    date.setHours(hour, minute, 0, 0);
+    return date;
+  };
+
+  if (draft.kind === 'once') {
+    const [year, month, day] = draft.date.split('-').map(Number);
+    return atSelectedTime(new Date(year, month - 1, day));
+  }
+
+  if (draft.kind === 'daily') {
+    const next = atSelectedTime(new Date(now));
+    if (next <= now) next.setDate(next.getDate() + 1);
+    return next;
+  }
+
+  if (draft.kind === 'weekly') {
+    const next = atSelectedTime(new Date(now));
+    const currentMondayIndex = next.getDay() === 0 ? 6 : next.getDay() - 1;
+    let daysUntil = draft.weekday - currentMondayIndex;
+    if (daysUntil < 0 || (daysUntil === 0 && next <= now)) daysUntil += 7;
+    next.setDate(next.getDate() + daysUntil);
+    return next;
+  }
+
+  const next = atSelectedTime(new Date(now.getFullYear(), now.getMonth(), 1));
+  if (next <= now) next.setMonth(next.getMonth() + 1);
+  return next;
+};
+
+const detectedScheduleTimezone = (): string => {
+  try {
+    return Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
+  } catch {
+    return 'UTC';
+  }
+};
+
+const scheduleContractFromDraft = (draft: ProjectScheduleDraft, timezone: string) => {
+  const next = firstRunFromScheduleDraft(draft);
+  const pad = (value: number) => String(value).padStart(2, '0');
+  const dtstartLocal = `${next.getFullYear()}-${pad(next.getMonth() + 1)}-${pad(next.getDate())}T${pad(next.getHours())}:${pad(next.getMinutes())}:00`;
+  const scheduleKind = draft.kind === 'once' ? 'once' as const : 'recurring' as const;
+  const rrule = draft.kind === 'once'
+    ? undefined
+    : draft.kind === 'weekly'
+      ? `FREQ=WEEKLY;BYDAY=${['MO', 'TU', 'WE', 'TH', 'FR', 'SA', 'SU'][draft.weekday]}`
+      : draft.kind === 'monthly' ? 'FREQ=MONTHLY' : 'FREQ=DAILY';
+  return { scheduleKind, timezone, dtstartLocal, rrule, next };
 };
 
 const SCHEDULE_CAL_WEEKDAYS = ['Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa', 'Su'] as const;
@@ -2181,6 +2178,28 @@ const formatProjectScheduleLabel = (draft: ProjectScheduleDraft): string => {
   return `${label} · ${time}`;
 };
 
+const formatScheduleOccurrence = (iso: string, timezone: string): string => {
+  try {
+    return new Intl.DateTimeFormat(undefined, {
+      timeZone: timezone,
+      dateStyle: 'medium',
+      timeStyle: 'short',
+    }).format(new Date(iso));
+  } catch {
+    return iso;
+  }
+};
+
+const scheduleTimezoneOffsets = (occurrences: string[], timezone: string): string[] => {
+  const formatter = new Intl.DateTimeFormat('en-US', {
+    timeZone: timezone,
+    timeZoneName: 'shortOffset',
+  });
+  return [...new Set(occurrences.map((iso) =>
+    formatter.formatToParts(new Date(iso)).find((part) => part.type === 'timeZoneName')?.value || timezone,
+  ))];
+};
+
 const formatScheduleDateYmd = (date: Date): string => {
   const yyyy = date.getFullYear();
   const mm = String(date.getMonth() + 1).padStart(2, '0');
@@ -2242,6 +2261,7 @@ const PROJECT_NAME_MAX_CHARS = 36;
 const PROJECT_SETTINGS_SECTIONS = [
   { id: 'general', label: 'General' },
   { id: 'instructions', label: 'Instructions' },
+  { id: 'members', label: 'Members' },
   { id: 'danger', label: 'Danger zone' },
 ] as const;
 type ProjectSettingsSection = (typeof PROJECT_SETTINGS_SECTIONS)[number]['id'];
@@ -2681,11 +2701,28 @@ const ChatWithLLM: React.FC<ChatWithLLMProps> = ({
 
   const [isReasonToggled, setIsReasonToggled] = useState(true);
   const [isSearchToggled, setIsSearchToggled] = useState(false);
-  const [searchProvider, setSearchProvider] = useState<'google' | 'brave'>('google');
-  const [isSearchProviderDropdownOpen, setIsSearchProviderDropdownOpen] = useState(false);
   const [selectedModel, setSelectedModel] = useState<Model>(DEFAULT_MODEL);
   const [groupedModels, setGroupedModels] = useState<GroupedModels[]>([]);
   const [isModelsLoading, setIsModelsLoading] = useState(true);
+  const [modelSelectorOpenRequestKey, setModelSelectorOpenRequestKey] = useState<number | null>(null);
+  const [isComposerModelSelectorOpen, setIsComposerModelSelectorOpen] = useState(false);
+  const modelSelectorOpenCounterRef = useRef(0);
+  const modelSelectorControlId = React.useId();
+  const selectedModelProviderName = useMemo(() => {
+    const groupedProvider = groupedModels.find((group) =>
+      group.models.some((model) => model.id === selectedModel.id)
+    )?.companyName;
+    const inferredProvider = getCompanyNameFromModelId(selectedModel.id);
+
+    return groupedProvider ?? (inferredProvider === 'Other' ? 'Model' : inferredProvider);
+  }, [groupedModels, selectedModel.id]);
+  const requestComposerModelSelector = useCallback(() => {
+    modelSelectorOpenCounterRef.current += 1;
+    setModelSelectorOpenRequestKey(modelSelectorOpenCounterRef.current);
+  }, []);
+  const acknowledgeComposerModelSelectorRequest = useCallback(() => {
+    setModelSelectorOpenRequestKey(null);
+  }, []);
   const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
   const [isSettingsModalMounted, setIsSettingsModalMounted] = useState(false);
   const [isSettingsModalShown, setIsSettingsModalShown] = useState(false);
@@ -2706,6 +2743,7 @@ const ChatWithLLM: React.FC<ChatWithLLMProps> = ({
   const [isAttachMenuOpen, setIsAttachMenuOpen] = useState(false);
   const [isRecentFilesOpen, setIsRecentFilesOpen] = useState(false);
   const [attachedFiles, setAttachedFiles] = useState<AttachedFile[]>([]);
+  const [isUploadingAttachments, setIsUploadingAttachments] = useState(false);
   const [recentFiles, setRecentFiles] = useState<Array<{
     id: string;
     name: string;
@@ -2713,6 +2751,8 @@ const ChatWithLLM: React.FC<ChatWithLLMProps> = ({
     size: number;
     lastUsed: number;
     preview?: string;
+    assetId?: string;
+    contentUrl?: string;
   }>>([]);
   const [recentFilesSearchQuery, setRecentFilesSearchQuery] = useState('');
   const [isMessageSearchOpen, setIsMessageSearchOpen] = useState(false);
@@ -2922,7 +2962,7 @@ const ChatWithLLM: React.FC<ChatWithLLMProps> = ({
     activeConversationIdRef.current = activeConversationId;
   }, [activeConversationId]);
 
-  // URL Route parameter synchronization (e.g. /c/:conversationId, /projects, /scheduled, /artifacts, etc.)
+  // URL Route parameter synchronization (e.g. /c/:conversationId, /projects, /scheduled, /library, etc.)
   useEffect(() => {
     const path = window.location.pathname;
     if (path.startsWith('/projects') || path.startsWith('/overview/chat/projects')) {
@@ -2934,7 +2974,7 @@ const ChatWithLLM: React.FC<ChatWithLLMProps> = ({
       }
     } else if (path.startsWith('/scheduled') || path.startsWith('/overview/chat/scheduled')) {
       openScheduledPage();
-    } else if (path.startsWith('/artifacts') || path.startsWith('/overview/chat/artifacts')) {
+    } else if (path.startsWith('/library') || path.startsWith('/overview/chat/library') || path.startsWith('/artifacts') || path.startsWith('/overview/chat/artifacts')) {
       openArtifactsPage();
     } else if (path.startsWith('/customize') || path.startsWith('/overview/chat/customize')) {
       openCustomizePage();
@@ -2962,7 +3002,7 @@ const ChatWithLLM: React.FC<ChatWithLLMProps> = ({
         openScheduledPage();
         return;
       }
-      if (path.startsWith('/artifacts') || path.startsWith('/overview/chat/artifacts')) {
+      if (path.startsWith('/library') || path.startsWith('/overview/chat/library') || path.startsWith('/artifacts') || path.startsWith('/overview/chat/artifacts')) {
         openArtifactsPage();
         return;
       }
@@ -3019,7 +3059,7 @@ const ChatWithLLM: React.FC<ChatWithLLMProps> = ({
     return () => window.clearTimeout(timer);
   }, [isHistorySearchOpen, isHistorySearchMounted]);
 
-  // A file uploaded into a project (v1: content lives in localStorage, small text only).
+  // A project relation to one canonical account/workspace Library asset.
   type ProjectFile = {
     id: string;
     name: string;
@@ -3028,13 +3068,28 @@ const ChatWithLLM: React.FC<ChatWithLLMProps> = ({
     addedAt: number;
     encoding: 'text' | 'base64';
     content: string; // extracted text ('text') or metadata note ('base64')
+    assetId?: string;
+    contentUrl?: string;
+    ingestionState?: 'quarantined' | 'scanning' | 'queued' | 'extracting' | 'ready' | 'unsupported' | 'failed';
+    ingestionError?: string;
   };
-  // TEMPORARY chat-history Projects entry (local only — full project model later)
+  // Project rail projection of the account-owned scheduled task record.
   type ProjectScheduledTask = {
     id: string;
     title: string;
     cadence: string;
     mark: string;
+    prompt?: string;
+    status?: 'active' | 'paused';
+    nextRunAt?: number;
+    runs?: Array<{
+      id: string;
+      status: string;
+      scheduledFor: number;
+      attemptCount: number;
+      modelId?: string;
+      error?: string;
+    }>;
   };
   type ChatHistoryProject = {
     id: string;
@@ -3047,9 +3102,17 @@ const ChatWithLLM: React.FC<ChatWithLLMProps> = ({
     files?: ProjectFile[];
     instructions?: string;
     scheduledTasks?: ProjectScheduledTask[];
+    capabilities?: {
+      viewer: boolean;
+      reviewer: boolean;
+      editor: boolean;
+      admin: boolean;
+      owner: boolean;
+    };
   };
   const chatProjectsStorageKey = 'chatProjects_playground';
   const [chatProjects, setChatProjects] = useState<ChatHistoryProject[]>(() => {
+    if (chatService.isAuthenticated()) return [];
     try {
       const saved = localStorage.getItem(chatProjectsStorageKey);
       if (!saved) return [];
@@ -3095,12 +3158,8 @@ const ChatWithLLM: React.FC<ChatWithLLMProps> = ({
   const [isProjectFilePreviewShown, setIsProjectFilePreviewShown] = useState(false);
   const [projectFilePreviewCopied, setProjectFilePreviewCopied] = useState(false);
   /** Centered themed detail when opening a scheduled task from the project rail. */
-  const [projectScheduledPreview, setProjectScheduledPreview] = useState<{
-    id: string;
-    title: string;
-    cadence: string;
-    mark: string;
-  } | null>(null);
+  const [projectScheduledPreview, setProjectScheduledPreview] =
+    useState<ProjectScheduledTask | null>(null);
   const [isProjectScheduledPreviewOpen, setIsProjectScheduledPreviewOpen] =
     useState(false);
   const [isProjectScheduledPreviewMounted, setIsProjectScheduledPreviewMounted] =
@@ -3116,8 +3175,19 @@ const ChatWithLLM: React.FC<ChatWithLLMProps> = ({
     useState(false);
   const [projectScheduledCreateTitle, setProjectScheduledCreateTitle] =
     useState('');
+  const [projectScheduledCreatePrompt, setProjectScheduledCreatePrompt] =
+    useState('');
+  const [isProjectScheduledCreating, setIsProjectScheduledCreating] = useState(false);
   const [projectScheduledCreateSchedule, setProjectScheduledCreateSchedule] =
     useState<ProjectScheduleDraft>(() => createDefaultScheduleDraft());
+  const [projectScheduledCreateTimezone, setProjectScheduledCreateTimezone] =
+    useState<string>(() => detectedScheduleTimezone());
+  const [projectScheduledOccurrences, setProjectScheduledOccurrences] =
+    useState<string[]>([]);
+  const [projectScheduledPreviewError, setProjectScheduledPreviewError] =
+    useState<string | null>(null);
+  const [isProjectScheduledPreviewLoading, setIsProjectScheduledPreviewLoading] =
+    useState(false);
   const [isProjectScheduledWhenOpen, setIsProjectScheduledWhenOpen] =
     useState(false);
   const [isProjectScheduledWhenMounted, setIsProjectScheduledWhenMounted] =
@@ -3162,6 +3232,15 @@ const ChatWithLLM: React.FC<ChatWithLLMProps> = ({
     projectId: string;
     section: ProjectSettingsSection;
   } | null>(null);
+  const [projectAccessGrants, setProjectAccessGrants] = useState<Array<{
+    relation: string;
+    subject: string;
+    identity?: { display_name?: string; username?: string; email?: string } | null;
+  }>>([]);
+  const [projectAccessEmail, setProjectAccessEmail] = useState('');
+  const [projectAccessRole, setProjectAccessRole] = useState<'viewer' | 'reviewer' | 'editor' | 'admin'>('viewer');
+  const [projectAccessLoading, setProjectAccessLoading] = useState(false);
+  const [projectAccessNotice, setProjectAccessNotice] = useState<string | null>(null);
   /* Hoisted here rather than into `renderProjectSettingsModal`, which is a render FUNCTION and not a
      component — hooks called inside it would run conditionally, because it returns null when no project
      is open. Two instances, one per breakpoint's tablist, sharing the panel. */
@@ -3194,6 +3273,7 @@ const ChatWithLLM: React.FC<ChatWithLLMProps> = ({
   const [pendingProjectAssignConversationId, setPendingProjectAssignConversationId] = useState<string | null>(null);
 
   useEffect(() => {
+    if (chatService.isAuthenticated()) return;
     localStorage.setItem(chatProjectsStorageKey, JSON.stringify(chatProjects));
   }, [chatProjects, chatProjectsStorageKey]);
 
@@ -3202,31 +3282,58 @@ const ChatWithLLM: React.FC<ChatWithLLMProps> = ({
     if (!chatService.isAuthenticated()) return;
     let isSubscribed = true;
 
-    chatService.getProjects().then((serverProjects) => {
-      if (!isSubscribed || !Array.isArray(serverProjects) || serverProjects.length === 0) return;
-      setChatProjects((prev) => {
-        const newProjects: ChatHistoryProject[] = serverProjects.map((p) => ({
-          id: p.id,
-          name: (p.name ?? '').slice(0, PROJECT_NAME_MAX_CHARS) || 'Untitled project',
-          description: p.description || '',
-          instructions: p.custom_instructions || '',
-          files: [],
-          updatedAt: p.updated_at ? new Date(p.updated_at).getTime() : Date.now(),
+    void (async () => {
+      try {
+        const serverProjects = await chatService.getProjects({ include_archived: true });
+        const projects = await Promise.all(serverProjects.map(async (p) => {
+          const [serverFiles, serverTasks] = await Promise.all([
+            chatService.getProjectFiles(p.id),
+            listScheduledTasks({ projectId: p.id }),
+          ]);
+          const settings = p.settings && typeof p.settings === 'object' ? p.settings : {};
+          return {
+            id: p.id,
+            name: (p.name ?? '').slice(0, PROJECT_NAME_MAX_CHARS) || 'Untitled project',
+            description: p.description || '',
+            instructions: p.custom_instructions || '',
+            isStarred: Boolean(settings.isStarred),
+            isArchived: Boolean(p.is_archived),
+            capabilities: p.capabilities,
+            files: serverFiles.map((file) => ({
+              id: file.id,
+              name: file.name,
+              type: file.file_type || 'application/octet-stream',
+              size: Number(file.file_size || 0),
+              addedAt: file.created_at ? new Date(file.created_at).getTime() : Date.now(),
+              encoding: 'base64' as const,
+              content: '',
+              assetId: file.storage_key || undefined,
+              contentUrl: file.content_url || undefined,
+              ingestionState: file.ingestion_state || undefined,
+              ingestionError: file.error_message || file.error_code || undefined,
+            })),
+            scheduledTasks: serverTasks.map((task) => ({
+              id: task.id,
+              title: task.title,
+              cadence: task.cadenceLabel,
+              mark: task.cadence === 'weekly' ? 'Wk' : task.cadence === 'monthly' ? 'Mo' : task.cadence === 'daily' ? 'Day' : '1x',
+              prompt: task.prompt,
+              status: task.status,
+              nextRunAt: task.nextRunAt,
+            })),
+            createdAt: p.created_at ? new Date(p.created_at).getTime() : Date.now(),
+            updatedAt: p.updated_at ? new Date(p.updated_at).getTime() : Date.now(),
+          } satisfies ChatHistoryProject;
         }));
-        const merged = [...prev];
-        for (const np of newProjects) {
-          const idx = merged.findIndex((p) => p.id === np.id);
-          if (idx >= 0) {
-            merged[idx] = { ...merged[idx], name: np.name, description: np.description, instructions: np.instructions };
-          } else {
-            merged.push(np);
-          }
+        if (isSubscribed) setChatProjects(projects);
+      } catch (err) {
+        console.error('[ChatWithLLM] Failed to load projects from backend:', err);
+        if (isSubscribed) {
+          setChatProjects([]);
+          setProjectFileNotice('Projects could not be loaded. Refresh to try again.');
         }
-        return merged;
-      });
-    }).catch((err) => {
-      console.warn('[ChatWithLLM] Failed to sync projects from backend:', err);
-    });
+      }
+    })();
 
     return () => {
       isSubscribed = false;
@@ -3273,29 +3380,60 @@ const ChatWithLLM: React.FC<ChatWithLLMProps> = ({
     return () => window.clearTimeout(timer);
   }, [isCreateProjectModalOpen, isCreateProjectModalMounted]);
 
-  const handleToggleProjectStar = useCallback((projectId: string) => {
-    setChatProjects((prev) =>
-      prev.map((project) =>
-        project.id === projectId
-          ? { ...project, isStarred: !project.isStarred }
-          : project,
-      ),
-    );
+  const handleToggleProjectStar = useCallback(async (projectId: string) => {
+    const project = chatProjects.find((item) => item.id === projectId);
+    if (!project) return;
+    if (project.capabilities && !project.capabilities.editor) {
+      setProjectFileNotice('You can view this project, but you cannot edit it.');
+      return;
+    }
+    const isStarred = !project.isStarred;
+    try {
+      const updated = await chatService.updateProject(projectId, { settings: { isStarred } });
+      if (!updated) throw new Error('Project update was not saved.');
+      setChatProjects((prev) => prev.map((item) => item.id === projectId ? { ...item, isStarred } : item));
+      setProjectFileNotice(null);
+    } catch (error) {
+      console.error('[ChatWithLLM] Failed to star project:', error);
+      setProjectFileNotice('The project could not be updated. Try again.');
+    }
     setOpenProjectMenuId(null);
-  }, []);
+  }, [chatProjects]);
 
-  const handleToggleProjectArchive = useCallback((projectId: string) => {
-    setChatProjects((prev) =>
-      prev.map((project) =>
-        project.id === projectId
-          ? { ...project, isArchived: !project.isArchived }
-          : project,
-      ),
-    );
+  const handleToggleProjectArchive = useCallback(async (projectId: string) => {
+    const project = chatProjects.find((item) => item.id === projectId);
+    if (!project) return;
+    if (project.capabilities && !project.capabilities.editor) {
+      setProjectFileNotice('You can view this project, but you cannot edit it.');
+      return;
+    }
+    const isArchived = !project.isArchived;
+    try {
+      const updated = await chatService.updateProject(projectId, { is_archived: isArchived });
+      if (!updated) throw new Error('Project archive state was not saved.');
+      setChatProjects((prev) => prev.map((item) => item.id === projectId ? { ...item, isArchived } : item));
+      setProjectFileNotice(null);
+    } catch (error) {
+      console.error('[ChatWithLLM] Failed to archive project:', error);
+      setProjectFileNotice('The project could not be archived. Try again.');
+    }
     setOpenProjectMenuId(null);
-  }, []);
+  }, [chatProjects]);
 
-  const handleDeleteProject = useCallback((projectId: string) => {
+  const handleDeleteProject = useCallback(async (projectId: string) => {
+    const project = chatProjects.find((item) => item.id === projectId);
+    if (project?.capabilities && !project.capabilities.admin) {
+      setProjectFileNotice('Project admin access is required.');
+      return;
+    }
+    try {
+      const deleted = await chatService.deleteProject(projectId);
+      if (!deleted) throw new Error('Project was not deleted.');
+    } catch (error) {
+      console.error('[ChatWithLLM] Failed to delete project:', error);
+      setProjectFileNotice('The project could not be deleted. Try again.');
+      return;
+    }
     setChatProjects((prev) => prev.filter((project) => project.id !== projectId));
     setOpenProjectMenuId(null);
     setActiveProjectId((current) => {
@@ -3307,62 +3445,94 @@ const ChatWithLLM: React.FC<ChatWithLLMProps> = ({
       }
       return null;
     });
-  }, []);
-
-  // Read one File into a serializable ProjectFile. Text files keep their content
-  // (viewable); anything else is stored as metadata only (no preview in v1).
-  const readProjectFile = useCallback((file: File): Promise<ProjectFile> => {
-    const base: Omit<ProjectFile, 'encoding' | 'content'> = {
-      id: `file-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-      name: file.name,
-      type: file.type || 'application/octet-stream',
-      size: file.size,
-      addedAt: Date.now(),
-    };
-    const isText =
-      file.type.startsWith('text/') ||
-      /\.(txt|md|markdown|csv|json|html?|css|js|jsx|ts|tsx|py|xml|yml|yaml|log)$/i.test(file.name);
-    if (!isText) {
-      return Promise.resolve({
-        ...base,
-        encoding: 'base64',
-        content: 'Preview unavailable in this prototype (non-text file).',
-      });
-    }
-    return file.text().then((text) => ({ ...base, encoding: 'text', content: text }));
-  }, []);
+  }, [chatProjects]);
 
   const handleAddProjectFiles = useCallback(
     async (projectId: string, fileList: FileList | null) => {
       if (!fileList || fileList.length === 0) return;
       const files = Array.from(fileList);
-      const tooBig = files.filter((f) => f.size > PROJECT_FILE_MAX_BYTES);
-      const accepted = files.filter((f) => f.size <= PROJECT_FILE_MAX_BYTES);
-
-      if (tooBig.length > 0) {
-        setProjectFileNotice(
-          `Skipped ${tooBig.length} file(s) over 1 MB (${tooBig
-            .map((f) => f.name)
-            .join(', ')}). This prototype stores files in the browser, so keep them small.`,
-        );
-      } else {
-        setProjectFileNotice(null);
+      if (!chatService.isAuthenticated()) {
+        setProjectFileNotice('Sign in to add files to a project.');
+        return;
       }
-      if (accepted.length === 0) return;
-
-      const parsed = await Promise.all(accepted.map(readProjectFile));
-      setChatProjects((prev) =>
-        prev.map((project) =>
-          project.id === projectId
-            ? { ...project, files: [...parsed, ...(project.files ?? [])], updatedAt: Date.now() }
-            : project,
-        ),
-      );
+      const project = chatProjects.find((item) => item.id === projectId);
+      if (project?.capabilities && !project.capabilities.editor) {
+        setProjectFileNotice('Project editor access is required to add assets.');
+        return;
+      }
+      try {
+        const persisted = await Promise.all(files.map(async (file) => {
+          const asset = await libraryService.upload(file, 'project');
+          const serverFile = await chatService.addProjectFile(projectId, {
+            name: asset.name || file.name,
+            file_type: asset.mimeType || file.type,
+            file_size: asset.size ?? file.size,
+            storage_key: asset.assetId,
+          });
+          if (!serverFile) throw new Error(`Project file ${file.name} was not linked.`);
+          return {
+            id: serverFile.id,
+            name: serverFile.name ?? file.name,
+            type: serverFile.file_type ?? file.type ?? 'application/octet-stream',
+            size: Number(serverFile.file_size ?? file.size),
+            addedAt: serverFile.created_at ? new Date(serverFile.created_at).getTime() : Date.now(),
+            encoding: 'base64' as const,
+            content: '',
+            assetId: serverFile.storage_key ?? asset.assetId,
+            contentUrl: serverFile.content_url ?? asset.contentUrl,
+            ingestionState: serverFile.ingestion_state || 'quarantined',
+            ingestionError: serverFile.error_message || serverFile.error_code || undefined,
+          };
+        }));
+        setProjectFileNotice(null);
+        setChatProjects((prev) =>
+          prev.map((project) => project.id === projectId
+            ? { ...project, files: [...persisted, ...(project.files ?? [])], updatedAt: Date.now() }
+            : project),
+        );
+      } catch (error) {
+        console.error('[ChatWithLLM] Failed to add project files:', error);
+        setProjectFileNotice('One or more files could not be uploaded. Nothing local was substituted.');
+      }
     },
-    [readProjectFile],
+    [chatProjects],
   );
 
-  const handleRemoveProjectFile = useCallback((projectId: string, fileId: string) => {
+  const handleRetryProjectFile = useCallback(async (projectId: string, file: ProjectFile) => {
+    if (!file.assetId) return;
+    const project = chatProjects.find((item) => item.id === projectId);
+    if (project?.capabilities && !project.capabilities.editor) {
+      setProjectFileNotice('Project editor access is required to retry ingestion.');
+      return;
+    }
+    try {
+      await libraryService.retryIngestion(file.assetId);
+      setChatProjects((current) => current.map((project) => project.id === projectId
+        ? { ...project, files: (project.files ?? []).map((entry) => entry.id === file.id
+          ? { ...entry, ingestionState: 'queued', ingestionError: undefined }
+          : entry) }
+        : project));
+      setProjectFileNotice('The file was queued for another secure ingestion attempt.');
+    } catch (error) {
+      console.error('[ChatWithLLM] Failed to retry project file ingestion:', error);
+      setProjectFileNotice('The file could not be queued for another ingestion attempt.');
+    }
+  }, [chatProjects]);
+
+  const handleRemoveProjectFile = useCallback(async (projectId: string, fileId: string) => {
+    const project = chatProjects.find((item) => item.id === projectId);
+    if (project?.capabilities && !project.capabilities.editor) {
+      setProjectFileNotice('Project editor access is required to remove assets.');
+      return;
+    }
+    try {
+      const deleted = await chatService.deleteProjectFile(projectId, fileId);
+      if (!deleted) throw new Error('Project file was not removed.');
+    } catch (error) {
+      console.error('[ChatWithLLM] Failed to remove project file:', error);
+      setProjectFileNotice('The file could not be removed from this project.');
+      return;
+    }
     setChatProjects((prev) =>
       prev.map((project) =>
         project.id === projectId
@@ -3370,7 +3540,7 @@ const ChatWithLLM: React.FC<ChatWithLLMProps> = ({
           : project,
       ),
     );
-  }, []);
+  }, [chatProjects]);
 
   const openProjectFilePreview = useCallback(
     (file: {
@@ -3378,16 +3548,34 @@ const ChatWithLLM: React.FC<ChatWithLLMProps> = ({
       content?: string;
       encoding?: 'text' | 'base64';
       type?: string;
+      size?: number;
+      assetId?: string;
+      contentUrl?: string;
     }) => {
       setIsContextPanelOpen(false);
       setIsEditingContextPanel(false);
       setIsProjectScheduledPreviewOpen(false);
+      if (file.assetId && file.contentUrl) {
+        const item: LibraryViewerItem = {
+          id: `project:${file.assetId}`,
+          name: file.name,
+          asset: {
+            assetId: file.assetId,
+            name: file.name,
+            mimeType: file.type || 'application/octet-stream',
+            size: file.size,
+            contentUrl: file.contentUrl,
+          },
+        };
+        setLibraryViewerSelection({ items: [item], activeId: item.id });
+        return;
+      }
       const raw = file.content?.trim() ?? '';
       let content = raw;
       if (!content) {
-        content = 'No preview available for this file.';
+        content = 'Preview unavailable. This file remains available from your Library.';
       } else if (file.encoding === 'base64' && file.type?.startsWith('image/')) {
-        content = raw || 'Image attachment — binary preview not shown in this mock.';
+        content = raw;
       } else if (file.encoding === 'base64') {
         content = raw || 'Binary file — text preview not available.';
       }
@@ -3439,14 +3627,72 @@ const ChatWithLLM: React.FC<ChatWithLLMProps> = ({
   }, [projectFilePreview]);
 
   const openProjectScheduledPreview = useCallback(
-    (task: { id: string; title: string; cadence: string; mark: string }) => {
+    (task: ProjectScheduledTask) => {
       setIsContextPanelOpen(false);
       setIsProjectFilePreviewOpen(false);
       setProjectScheduledPreview(task);
       setIsProjectScheduledPreviewOpen(true);
+      if (chatService.isAuthenticated()) {
+        void chatService.getScheduledRuns(task.id).then((runs) => {
+          setProjectScheduledPreview((current) => current?.id === task.id ? {
+            ...current,
+            runs: runs.map((run) => ({
+              id: run.id,
+              status: run.status,
+              scheduledFor: new Date(run.scheduled_for).getTime(),
+              attemptCount: Number(run.attempt_count || 0),
+              modelId: run.model_id || undefined,
+              error: run.error_message || run.error_code || undefined,
+            })),
+          } : current);
+        }).catch((error) => {
+          console.error('[ChatWithLLM] Failed to load scheduled run history:', error);
+          setProjectFileNotice('Scheduled run history could not be loaded.');
+        });
+      }
     },
     [],
   );
+
+  const retryProjectScheduledRun = useCallback(async (runId: string, status: string) => {
+    try {
+      const acknowledgeDuplicateCharge = status === 'reconciliation_required';
+      if (acknowledgeDuplicateCharge && !window.confirm(
+        'The prior model request may already have been accepted. Retrying can create another provider charge. Retry this same logical run?',
+      )) return;
+      const run = await chatService.retryScheduledRun(runId, acknowledgeDuplicateCharge);
+      setProjectScheduledPreview((current) => current ? {
+        ...current,
+        runs: current.runs?.map((entry) => entry.id === runId
+          ? { ...entry, status: run.status, error: undefined }
+          : entry),
+      } : current);
+    } catch (error) {
+      console.error('[ChatWithLLM] Failed to retry scheduled run:', error);
+      setProjectFileNotice('The scheduled run could not be retried.');
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!projectSettings || activeProjectSection !== 'members') return;
+    const project = chatProjects.find((item) => item.id === projectSettings.projectId);
+    if (!project?.capabilities?.admin) {
+      setProjectAccessGrants([]);
+      setProjectAccessNotice('Project admin access is required to manage members.');
+      return;
+    }
+    let subscribed = true;
+    setProjectAccessLoading(true);
+    setProjectAccessNotice(null);
+    void chatService.getProjectAccess(project.id)
+      .then((grants) => { if (subscribed) setProjectAccessGrants(grants); })
+      .catch((error) => {
+        console.error('[ChatWithLLM] Failed to load project access:', error);
+        if (subscribed) setProjectAccessNotice('Members could not be loaded.');
+      })
+      .finally(() => { if (subscribed) setProjectAccessLoading(false); });
+    return () => { subscribed = false; };
+  }, [activeProjectSection, chatProjects, projectSettings]);
 
   const closeProjectScheduledPreview = useCallback(() => {
     setIsProjectScheduledPreviewOpen(false);
@@ -3505,7 +3751,11 @@ const ChatWithLLM: React.FC<ChatWithLLMProps> = ({
     const draft = createDefaultScheduleDraft();
     setIsProjectScheduledPreviewOpen(false);
     setProjectScheduledCreateTitle('');
+    setProjectScheduledCreatePrompt('');
     setProjectScheduledCreateSchedule(draft);
+    setProjectScheduledCreateTimezone(detectedScheduleTimezone());
+    setProjectScheduledOccurrences([]);
+    setProjectScheduledPreviewError(null);
     resetProjectScheduledWhenPanel();
     resetProjectScheduleDatePanel();
     resetProjectScheduleTimePanel();
@@ -3549,6 +3799,8 @@ const ChatWithLLM: React.FC<ChatWithLLMProps> = ({
     const timer = window.setTimeout(() => {
       setIsProjectScheduledCreateMounted(false);
       setProjectScheduledCreateTitle('');
+      setProjectScheduledCreatePrompt('');
+      setIsProjectScheduledCreating(false);
       setProjectScheduledCreateSchedule(createDefaultScheduleDraft());
     }, SCHEDULE_CREATE_MODAL_MS);
     return () => window.clearTimeout(timer);
@@ -3739,6 +3991,47 @@ const ChatWithLLM: React.FC<ChatWithLLMProps> = ({
     setIsProjectScheduleTimeOpen((open) => !open);
   }, []);
 
+  useEffect(() => {
+    let cancelled = false;
+    if (!isProjectScheduledCreateOpen || !projectScheduledCreateTimezone.trim()) {
+      setProjectScheduledOccurrences([]);
+      setProjectScheduledPreviewError(projectScheduledCreateTimezone.trim() ? null : 'A timezone is required.');
+      return;
+    }
+    const timer = window.setTimeout(() => {
+      const contract = scheduleContractFromDraft(
+        projectScheduledCreateSchedule,
+        projectScheduledCreateTimezone.trim(),
+      );
+      setIsProjectScheduledPreviewLoading(true);
+      setProjectScheduledPreviewError(null);
+      void previewScheduledOccurrences(contract)
+        .then((occurrences) => {
+          if (!cancelled) {
+            setProjectScheduledOccurrences(occurrences);
+            if (occurrences.length === 0) setProjectScheduledPreviewError('This schedule has no future occurrence.');
+          }
+        })
+        .catch((error) => {
+          if (!cancelled) {
+            setProjectScheduledOccurrences([]);
+            setProjectScheduledPreviewError(error instanceof Error ? error.message : 'The schedule is invalid.');
+          }
+        })
+        .finally(() => {
+          if (!cancelled) setIsProjectScheduledPreviewLoading(false);
+        });
+    }, 180);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+  }, [
+    isProjectScheduledCreateOpen,
+    projectScheduledCreateSchedule,
+    projectScheduledCreateTimezone,
+  ]);
+
   const setProjectScheduleTimePart = useCallback(
     (part: 'hour12' | 'minute' | 'meridiem', value: string) => {
       setProjectScheduledCreateSchedule((prev) => {
@@ -3758,27 +4051,52 @@ const ChatWithLLM: React.FC<ChatWithLLMProps> = ({
     [],
   );
 
-  const submitProjectScheduledCreate = useCallback(() => {
+  const submitProjectScheduledCreate = useCallback(async () => {
     const title = projectScheduledCreateTitle.trim();
-    if (!title || !activeProjectId) return;
+    const prompt = projectScheduledCreatePrompt.trim();
+    if (!title || !prompt || !activeProjectId || isProjectScheduledCreating) return;
+    const activeProject = chatProjects.find((item) => item.id === activeProjectId);
+    if (activeProject?.capabilities && !activeProject.capabilities.editor) {
+      setProjectFileNotice('Project editor access is required to create schedules.');
+      return;
+    }
     const cadence = formatProjectScheduleLabel(projectScheduledCreateSchedule);
     const mark = markFromScheduleDraft(projectScheduledCreateSchedule);
-    const task: ProjectScheduledTask = {
-      id: `sched-${Date.now().toString(36)}`,
-      title,
-      cadence,
-      mark,
-    };
+    const scheduleContract = scheduleContractFromDraft(
+      projectScheduledCreateSchedule,
+      projectScheduledCreateTimezone.trim(),
+    );
+    if (!projectScheduledCreateTimezone.trim() || projectScheduledOccurrences.length === 0 || projectScheduledPreviewError) return;
+    setIsProjectScheduledCreating(true);
+    try {
+      const created = await createScheduledTask({
+        title,
+        prompt,
+        cadence: projectScheduledCreateSchedule.kind,
+        cadenceLabel: cadence,
+        projectId: activeProjectId,
+        nextRunAt: scheduleContract.next.getTime(),
+        scheduleKind: scheduleContract.scheduleKind,
+        timezone: scheduleContract.timezone,
+        dtstartLocal: scheduleContract.dtstartLocal,
+        rrule: scheduleContract.rrule,
+        modelId: selectedModel.id,
+      });
+      const task: ProjectScheduledTask = {
+        id: created.id,
+        title: created.title,
+        cadence,
+        mark,
+        prompt: created.prompt,
+        status: created.status,
+        nextRunAt: created.nextRunAt,
+      };
     setChatProjects((prev) =>
       prev.map((project) => {
         if (project.id !== activeProjectId) return project;
-        const existing =
-          (project.scheduledTasks?.length ?? 0) > 0
-            ? (project.scheduledTasks ?? [])
-            : [...MOCK_PROJECT_SCHEDULED];
         return {
           ...project,
-          scheduledTasks: [task, ...existing],
+          scheduledTasks: [task, ...(project.scheduledTasks ?? [])],
           updatedAt: Date.now(),
         };
       }),
@@ -3786,20 +4104,76 @@ const ChatWithLLM: React.FC<ChatWithLLMProps> = ({
     closeProjectScheduledCreate();
     setProjectScheduledPreview(task);
     setIsProjectScheduledPreviewOpen(true);
+    } catch (error) {
+      console.error('[ChatWithLLM] Failed to create scheduled project task:', error);
+      setProjectFileNotice('The scheduled task could not be saved.');
+    } finally {
+      setIsProjectScheduledCreating(false);
+    }
   }, [
     activeProjectId,
     closeProjectScheduledCreate,
     projectScheduledCreateSchedule,
     projectScheduledCreateTitle,
+    projectScheduledCreatePrompt,
+    projectScheduledCreateTimezone,
+    projectScheduledOccurrences.length,
+    projectScheduledPreviewError,
+    isProjectScheduledCreating,
+    selectedModel.id,
+    chatProjects,
   ]);
+
+  const toggleProjectScheduledStatus = useCallback(async (task: ProjectScheduledTask) => {
+    const project = chatProjects.find((item) => item.id === activeProjectId);
+    if (project?.capabilities && !project.capabilities.editor) {
+      setProjectFileNotice('Project editor access is required to change schedules.');
+      return;
+    }
+    const nextStatus = task.status === 'paused' ? 'active' : 'paused';
+    try {
+      await setScheduledTaskStatus(task.id, nextStatus);
+      setChatProjects((prev) => prev.map((project) => ({
+        ...project,
+        scheduledTasks: project.scheduledTasks?.map((item) =>
+          item.id === task.id ? { ...item, status: nextStatus } : item,
+        ),
+      })));
+      setProjectScheduledPreview((current) =>
+        current?.id === task.id ? { ...current, status: nextStatus } : current,
+      );
+      setProjectFileNotice(null);
+    } catch (error) {
+      console.error('[ChatWithLLM] Failed to update scheduled project task:', error);
+      setProjectFileNotice('The scheduled task could not be updated.');
+    }
+  }, [activeProjectId, chatProjects]);
+
+  const removeProjectScheduledTask = useCallback(async (taskId: string) => {
+    const project = chatProjects.find((item) => item.id === activeProjectId);
+    if (project?.capabilities && !project.capabilities.editor) {
+      setProjectFileNotice('Project editor access is required to delete schedules.');
+      return;
+    }
+    try {
+      await deleteScheduledTask(taskId);
+      setChatProjects((prev) => prev.map((project) => ({
+        ...project,
+        scheduledTasks: project.scheduledTasks?.filter((item) => item.id !== taskId),
+      })));
+      closeProjectScheduledPreview();
+      setProjectFileNotice(null);
+    } catch (error) {
+      console.error('[ChatWithLLM] Failed to delete scheduled project task:', error);
+      setProjectFileNotice('The scheduled task could not be deleted.');
+    }
+  }, [activeProjectId, chatProjects, closeProjectScheduledPreview]);
 
   const openProjectSettings = useCallback(
     (project: ChatHistoryProject, section: ProjectSettingsSection = 'general') => {
       setSettingsNameDraft(project.name.slice(0, PROJECT_NAME_MAX_CHARS));
       setSettingsDescriptionDraft(project.description ?? '');
-      // The rail shows demo instructions when none are saved, so the editor opens on the same
-      // text the user is looking at rather than on an empty box.
-      setInstructionsDraft(project.instructions ?? MOCK_PROJECT_INSTRUCTIONS);
+      setInstructionsDraft(project.instructions ?? '');
       setOpenProjectMenuId(null);
       setIsProjectsSortOpen(false);
       setProjectSettings({ projectId: project.id, section });
@@ -3837,6 +4211,9 @@ const ChatWithLLM: React.FC<ChatWithLLMProps> = ({
       setSettingsNameDraft('');
       setSettingsDescriptionDraft('');
       setInstructionsDraft('');
+      setProjectAccessGrants([]);
+      setProjectAccessEmail('');
+      setProjectAccessNotice(null);
     }, SCHEDULE_CREATE_MODAL_MS);
     return () => window.clearTimeout(timer);
   }, [isProjectSettingsOpen, isProjectSettingsMounted]);
@@ -3845,49 +4222,125 @@ const ChatWithLLM: React.FC<ChatWithLLMProps> = ({
    * Name, description and instructions are drafts committed together. File and schedule changes
    * are immediate actions, so they are deliberately not part of this save.
    */
-  const saveProjectSettings = useCallback(() => {
+  const saveProjectSettings = useCallback(async () => {
     if (!projectSettings) return;
     const { projectId } = projectSettings;
     const name = settingsNameDraft.trim().slice(0, PROJECT_NAME_MAX_CHARS);
     const description = settingsDescriptionDraft.trim();
     const instructions = instructionsDraft.trim();
+    const currentProject = chatProjects.find((project) => project.id === projectId);
+    if (!currentProject) return;
+    if (currentProject.capabilities && !currentProject.capabilities.editor) {
+      setProjectFileNotice('Project editor access is required to change settings.');
+      return;
+    }
+    try {
+      const updated = await chatService.updateProject(projectId, {
+        name: name || currentProject.name,
+        description,
+        custom_instructions: instructions,
+      });
+      if (!updated) throw new Error('Project settings were not saved.');
     setChatProjects((prev) =>
       prev.map((project) =>
         project.id === projectId
           ? {
               ...project,
-              name: name || project.name,
-              description: description || undefined,
-              instructions: instructions || undefined,
-              updatedAt: Date.now(),
+              name: updated.name,
+              description: updated.description || undefined,
+              instructions: updated.custom_instructions || undefined,
+              updatedAt: updated.updated_at ? new Date(updated.updated_at).getTime() : Date.now(),
             }
           : project,
       ),
     );
     closeProjectSettings();
+    } catch (error) {
+      console.error('[ChatWithLLM] Failed to save project settings:', error);
+      setProjectFileNotice('Project settings could not be saved.');
+    }
   }, [
     projectSettings,
+    chatProjects,
     settingsNameDraft,
     settingsDescriptionDraft,
     instructionsDraft,
     closeProjectSettings,
   ]);
 
-  const createChatProject = useCallback((name?: string, description?: string) => {
+  const grantProjectMember = useCallback(async () => {
+    if (!projectSettings || !projectAccessEmail.trim() || projectAccessLoading) return;
+    setProjectAccessLoading(true);
+    setProjectAccessNotice(null);
+    try {
+      const grant = await chatService.grantProjectAccessByEmail(
+        projectSettings.projectId,
+        projectAccessEmail.trim(),
+        projectAccessRole,
+      );
+      setProjectAccessGrants((current) => [
+        grant,
+        ...current.filter((entry) => entry.subject !== grant.subject),
+      ]);
+      setProjectAccessEmail('');
+      setProjectAccessNotice('Project access saved.');
+    } catch (error) {
+      console.error('[ChatWithLLM] Failed to grant project access:', error);
+      setProjectAccessNotice('Project access was not saved. Check the account email and try again.');
+    } finally {
+      setProjectAccessLoading(false);
+    }
+  }, [projectAccessEmail, projectAccessLoading, projectAccessRole, projectSettings]);
+
+  const revokeProjectMember = useCallback(async (subject: string) => {
+    if (!projectSettings || projectAccessLoading) return;
+    setProjectAccessLoading(true);
+    setProjectAccessNotice(null);
+    try {
+      await chatService.revokeProjectAccess(projectSettings.projectId, subject);
+      setProjectAccessGrants((current) => current.filter((entry) => entry.subject !== subject));
+      setProjectAccessNotice('Project access revoked.');
+    } catch (error) {
+      console.error('[ChatWithLLM] Failed to revoke project access:', error);
+      setProjectAccessNotice('Project access could not be revoked.');
+    } finally {
+      setProjectAccessLoading(false);
+    }
+  }, [projectAccessLoading, projectSettings]);
+
+  const createChatProject = useCallback(async (name?: string, description?: string) => {
     const projectName =
       (name ?? newChatProjectName).trim().slice(0, PROJECT_NAME_MAX_CHARS) || 'Untitled project';
     const projectDescription = (description ?? newChatProjectDescription).trim();
-    const now = Date.now();
-    const project: ChatHistoryProject = {
-      id: `project-${now}`,
-      name: projectName,
-      description: projectDescription || undefined,
-      createdAt: now,
-      updatedAt: now,
-    };
-    setChatProjects((prev) => [project, ...prev]);
-    closeCreateProjectModal();
-    return project;
+    if (!chatService.isAuthenticated()) {
+      setProjectFileNotice('Sign in to create a project.');
+      return null;
+    }
+    try {
+      const server = await chatService.createProject({
+        name: projectName,
+        description: projectDescription || undefined,
+      });
+      if (!server) throw new Error('Project was not created.');
+      const now = Date.now();
+      const project: ChatHistoryProject = {
+        id: server.id,
+        name: server.name || projectName,
+        description: server.description || undefined,
+        instructions: server.custom_instructions || undefined,
+        createdAt: server.created_at ? new Date(server.created_at).getTime() : now,
+        updatedAt: server.updated_at ? new Date(server.updated_at).getTime() : now,
+        files: [],
+        scheduledTasks: [],
+      };
+      setChatProjects((prev) => [project, ...prev]);
+      closeCreateProjectModal();
+      return project;
+    } catch (err) {
+      console.error('[ChatWithLLM] Failed to create project on backend:', err);
+      setProjectFileNotice('The project could not be created.');
+      return null;
+    }
   }, [closeCreateProjectModal, newChatProjectDescription, newChatProjectName]);
 
   const openProjectsPage = useCallback(() => {
@@ -3922,8 +4375,8 @@ const ChatWithLLM: React.FC<ChatWithLLMProps> = ({
     setIsChatsCatalogOpen(false);
     setIsChatsCatalogFilterOpen(false);
     setIsProjectsSortOpen(false);
-    if (typeof window !== 'undefined' && window.location.pathname !== '/artifacts' && window.location.pathname !== '/overview/chat/artifacts') {
-      window.history.pushState({ view: 'artifacts' }, '', '/artifacts');
+    if (typeof window !== 'undefined' && window.location.pathname !== '/library' && window.location.pathname !== '/overview/chat/library') {
+      window.history.pushState({ view: 'library' }, '', '/library');
     }
     try {
       localStorage.setItem(PROJECTS_PAGE_OPEN_STORAGE_KEY, 'false');
@@ -4224,7 +4677,41 @@ const ChatWithLLM: React.FC<ChatWithLLMProps> = ({
   const [isFullScreenImageShown, setIsFullScreenImageShown] = useState(false);
   const [fullScreenImageUrl, setFullScreenImageUrl] = useState<string | null>(null);
   const [viewerShowsDownloadButton, setViewerShowsDownloadButton] = useState(false); // New state for download button visibility
+  const [libraryViewerSelection, setLibraryViewerSelection] = useState<{ items: LibraryViewerItem[]; activeId: string } | null>(null);
   // --- END Full-screen Image Viewer STATE ---
+
+  const conversationLibraryViewerItems = useMemo<LibraryViewerItem[]>(() => messages.flatMap((message) => {
+    const output: LibraryViewerItem[] = [];
+    if (message.generatedImageAsset) {
+      output.push({ id: `${message.id}:generated`, name: message.generatedImageAsset.name, asset: message.generatedImageAsset, context: 'Chat' });
+    }
+    const images = message.userImageAttachments?.length
+      ? message.userImageAttachments
+      : message.userImageAttachment ? [message.userImageAttachment] : [];
+    images.forEach((image, index) => {
+      if (!image.assetId || !image.contentUrl) return;
+      output.push({
+        id: `${message.id}:attachment:${index}`,
+        name: image.name,
+        asset: { assetId: image.assetId, name: image.name, mimeType: image.type, size: image.size, contentUrl: image.contentUrl },
+        context: 'Chat',
+      });
+    });
+    (message.projectSources || []).forEach((source) => {
+      output.push({
+        id: `${message.id}:project-source:${source.chunk_id}`,
+        name: source.display_name || 'Project source',
+        asset: {
+          assetId: source.asset_id,
+          name: source.display_name || 'Project source',
+          mimeType: source.mime_type || 'application/octet-stream',
+          contentUrl: `/api/library/assets/${source.asset_id}/content`,
+        },
+        context: 'Project sources',
+      });
+    });
+    return output;
+  }), [messages]);
 
   // Must sit below the useState above — otherwise TDZ crashes the whole chat (black screen).
   useEffect(() => {
@@ -4345,6 +4832,14 @@ const ChatWithLLM: React.FC<ChatWithLLMProps> = ({
   const isResizingContextPanel = useRef(false);
   const initialMouseX = useRef(0);
   const initialPanelWidth = useRef(0);
+
+  // The chat has three horizontal zones: history | workspace | context. Every
+  // surface below reads these same insets, so opening a panel cannot leave the
+  // header, messages and composer centered against different rectangles.
+  const historyWorkspaceInsetPx =
+    !isMultiInterface && isHistoryOpen && !isMobile ? HISTORY_SIDEBAR_WIDTH_PX : 0;
+  const contextWorkspaceInsetPx =
+    !isMultiInterface && isContextPanelOpen ? contextPanelWidth : 0;
 
   // --- NEW: State for the animated ellipsis text ---
   const [ellipsisText, setEllipsisText] = useState('.');
@@ -5003,47 +5498,20 @@ interface QueueState {
             include_archived: true,
           });
 
-          if (conversations && conversations.length > 0) {
-            // Convert database format to local format
-            const localFormat: Conversation[] = conversations.map(conv => ({
+          const localFormat: Conversation[] = (conversations ?? []).map(conv => ({
               id: conv.id,
               title: conv.title,
               timestamp: conv.created_at ? new Date(conv.created_at).getTime() : Date.now(),
               messages: [], // Messages loaded on demand
               systemPrompt: conv.system_prompt,
               isArchived: Boolean(conv.is_archived),
+              projectId: conv.project_id ?? null,
             }));
-            setConversationHistory(localFormat);
-            console.log("Chat history loaded from database.");
-          } else {
-            // No database history, check localStorage for migration
-            const savedHistory = localStorage.getItem(storageKey);
-            if (savedHistory) {
-              try {
-                const parsedHistory: Conversation[] = JSON.parse(savedHistory);
-                if (Array.isArray(parsedHistory) && parsedHistory.length > 0) {
-                  setConversationHistory(parsedHistory);
-                  console.log("Chat history loaded from localStorage (ready for sync).");
-                }
-              } catch (error) {
-                console.error("Error parsing localStorage history:", error);
-              }
-            }
-          }
+          setConversationHistory(localFormat);
+          console.log("Chat history loaded from database.");
         } catch (error) {
-          console.error("Error loading from database, falling back to localStorage:", error);
-          // Fallback to localStorage
-          const savedHistory = localStorage.getItem(storageKey);
-          if (savedHistory) {
-            try {
-              const parsedHistory: Conversation[] = JSON.parse(savedHistory);
-              if (Array.isArray(parsedHistory)) {
-                setConversationHistory(parsedHistory);
-              }
-            } catch (parseError) {
-              console.error("Error parsing localStorage history:", parseError);
-            }
-          }
+          console.error("Error loading chat history from database:", error);
+          setConversationHistory([]);
         }
       } else {
         // Not authenticated, use localStorage
@@ -5085,7 +5553,7 @@ interface QueueState {
   // rows are dead in production — between sending the first message and the answer arriving — is real but
   // is a change to the send path, not to this.
   useEffect(() => {
-    if (!CHAT_DEMO_ENABLED || isHistoryLoading) return;
+    if (!CHAT_DEMO_ENABLED || chatService.isAuthenticated() || isHistoryLoading) return;
     if (activeConversationId || messages.length === 0) return;
     const firstUserMessage = messages.find((message) => message.sender === 'user');
     const demoConversation: Conversation = {
@@ -5117,6 +5585,10 @@ interface QueueState {
           if (settings.chat.alignment) {
             setChatAlignment(settings.chat.alignment);
           }
+          if (settings.chat.fontSize) {
+            setChatFontSize(settings.chat.fontSize);
+            try { localStorage.setItem('xeno_chat_font_size', settings.chat.fontSize); } catch { /* storage optional */ }
+          }
         }
         console.log("User settings loaded from database.");
       } catch (error) {
@@ -5140,24 +5612,35 @@ interface QueueState {
   }, []);
 
   // Debounced setting save
-  const settingsSaveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const settingsSaveTimeoutsRef = useRef<Map<string, NodeJS.Timeout>>(new Map());
   const debouncedSaveSetting = useCallback((path: string, value: unknown) => {
-    if (settingsSaveTimeoutRef.current) {
-      clearTimeout(settingsSaveTimeoutRef.current);
-    }
-    settingsSaveTimeoutRef.current = setTimeout(() => {
+    const pending = settingsSaveTimeoutsRef.current.get(path);
+    if (pending) clearTimeout(pending);
+    const timeout = setTimeout(() => {
+      settingsSaveTimeoutsRef.current.delete(path);
       saveSettingsToDb(path, value);
     }, 500);
+    settingsSaveTimeoutsRef.current.set(path, timeout);
   }, [saveSettingsToDb]);
+
+  useEffect(() => () => {
+    for (const timeout of settingsSaveTimeoutsRef.current.values()) clearTimeout(timeout);
+    settingsSaveTimeoutsRef.current.clear();
+  }, []);
 
   // Watch for settings changes and save to database
   useEffect(() => {
-    debouncedSaveSetting('chat,wideMode', isWideChatEnabled);
+    debouncedSaveSetting('chat.wideMode', isWideChatEnabled);
   }, [isWideChatEnabled, debouncedSaveSetting]);
 
   useEffect(() => {
-    debouncedSaveSetting('chat,alignment', chatAlignment);
+    debouncedSaveSetting('chat.alignment', chatAlignment);
   }, [chatAlignment, debouncedSaveSetting]);
+
+  useEffect(() => {
+    try { localStorage.setItem('xeno_chat_font_size', chatFontSize); } catch { /* storage optional */ }
+    debouncedSaveSetting('chat.fontSize', chatFontSize);
+  }, [chatFontSize, debouncedSaveSetting]);
   // --- END User Settings ---
 
   // --- NEW: Load/Save Recent Files from Database ---
@@ -5671,9 +6154,8 @@ interface QueueState {
    * project) looks it up by id, so for those seconds the controls were live-looking and dead.
    *
    * The database branch is the reason this is a function rather than a line in the send path: when the
-   * user is authenticated the id has to come BACK from the server, and creating a local one first would
-   * take that branch away and quietly stop persisting the thread. The local id is the fallback, same as
-   * it always was.
+     * user is authenticated the id has to come BACK from the server. An authenticated failure remains an
+     * unsaved on-screen draft and never receives a fake UUID-looking identity or enters durable Recents.
    *
    * The ref is written before the state, because the send already in flight closed over the old value.
    */
@@ -5721,6 +6203,7 @@ interface QueueState {
             model_id: selectedModel.id,
             system_prompt: savedSystemPrompt || undefined,
             interface_id: sharedInterfaceId,
+            project_id: projectId,
           });
           if (dbConversation) {
             // For AI messages, save parsedAnswer (what is displayed) rather than the raw text.
@@ -5732,13 +6215,17 @@ interface QueueState {
                 model_id: msg.modelIdUsed || msg.modelId,
                 thinking: msg.thinkingContent,
                 has_thinking: !!msg.thinkingContent,
+                attachments: messageLibraryAttachments(msg),
+                context_record_id: msg.projectContextId,
               })),
             );
             return register(dbConversation.id);
           }
+          throw new Error('Conversation creation returned no durable record.');
         } catch (error) {
           console.error('Error creating conversation in database:', error);
-          // Fall through to the local id.
+          setProjectFileNotice('This chat is still an unsaved draft because the server could not create it.');
+          return null;
         }
       }
       return register(`convo-${now}`);
@@ -5761,7 +6248,7 @@ interface QueueState {
     xenoContext?: { summary?: string; sources?: XenoSource[] },
     // <<< NEW: Add direct xenoSearchInfo parameter >>>
     xenoSearchInfo?: ChatMessage['searchInfo']
-  ): Promise<ChatMessage | { refinedPromptText: string; modelIdUsed: string } | { imageData: string; modelIdUsed: string } | undefined> => {
+  ): Promise<ChatMessage | { refinedPromptText: string; modelIdUsed: string } | { imageData: string; modelIdUsed: string; libraryItemId?: string; libraryContentUrl?: string } | undefined> => {
 
     // *** DIAGNOSTIC LOGGING: Track task parameter value ***
     console.log(`>>> [FETCHAIRESPONSE ENTRY] Received taskArg:`, taskArg);
@@ -5894,25 +6381,39 @@ interface QueueState {
                 messagePayload.parts.push({ type: 'text', text: textContent });
             }
 
-            // Add user image attachment if present
-            if (msg.sender === 'user' && msg.userImageAttachment && msg.userImageAttachment.file) {
+            // Resolve Library references only at the model boundary. Chat storage keeps
+            // stable asset ids/URLs; base64 exists only for the provider request.
+            const userImages = msg.userImageAttachments?.length
+              ? msg.userImageAttachments
+              : msg.userImageAttachment ? [msg.userImageAttachment] : [];
+            for (const image of msg.sender === 'user' ? userImages : []) {
                 try {
-                    const base64Image = await fileToBase64(msg.userImageAttachment.file);
-                    const base64Data = base64Image.split(',')[1];
+                    let base64Data = image.base64Data;
+                    if (!base64Data && image.file) base64Data = (await fileToBase64(image.file)).split(',')[1];
+                    if (!base64Data && image.assetId && image.contentUrl) {
+                      const blob = await libraryService.fetchAssetBlob({ assetId: image.assetId, contentUrl: image.contentUrl });
+                      base64Data = (await fileToBase64(new globalThis.File([blob], image.name, { type: image.type }))).split(',')[1];
+                    }
+                    if (!base64Data) throw new Error('Image bytes unavailable');
                     messagePayload.parts.push({
                         type: 'image',
-                        media_type: msg.userImageAttachment.type,
+                        media_type: image.type,
                         data: base64Data
                     });
                 } catch (error) {
                     console.error("Error converting user image to base64 for API payload:", error);
-                    messagePayload.parts.push({ type: 'text', text: `[Error processing image: ${msg.userImageAttachment.name}]` });
+                    messagePayload.parts.push({ type: 'text', text: `[Error processing image: ${image.name}]` });
                 }
             }
             
             // Add user file attachment if present (separate condition to allow both image and file)
-            if (msg.sender === 'user' && msg.userFileAttachment && msg.userFileAttachment.file) {
-                const file = msg.userFileAttachment.file;
+            if (msg.sender === 'user' && msg.userFileAttachment && (msg.userFileAttachment.file || msg.userFileAttachment.assetId)) {
+                let file = msg.userFileAttachment.file;
+                if (!file && msg.userFileAttachment.assetId && msg.userFileAttachment.contentUrl) {
+                  const blob = await libraryService.fetchAssetBlob({ assetId: msg.userFileAttachment.assetId, contentUrl: msg.userFileAttachment.contentUrl });
+                  file = new globalThis.File([blob], msg.userFileAttachment.name, { type: msg.userFileAttachment.type });
+                }
+                if (!file) throw new Error(`Library file unavailable: ${msg.userFileAttachment.name}`);
                 const isCommonTextType = file.type.startsWith('text/') ||
                                      [ '.md', '.json', '.csv', '.xml', '.html', '.css', '.js', '.ts', '.jsx', '.tsx', '.py', '.java', '.c', '.cpp', '.cs', '.php', '.rb', '.go', '.swift', '.kt', '.rs', '.toml', '.yaml', '.yml'].some(ext => file.name.toLowerCase().endsWith(ext));
 
@@ -5949,12 +6450,17 @@ interface QueueState {
             }
 
             // NEW: Add AI-generated image if present in an AI message
-            if (msg.sender === 'ai' && msg.imageData) {
+            if (msg.sender === 'ai' && (msg.imageData || msg.generatedImageAsset)) {
                 // console.log(`[API Prep] Adding AI-generated image to payload for AI message ID ${msg.id}`);
+                let generatedData = msg.imageData;
+                if (!generatedData && msg.generatedImageAsset) {
+                  const blob = await libraryService.fetchAssetBlob(msg.generatedImageAsset);
+                  generatedData = (await fileToBase64(new globalThis.File([blob], msg.generatedImageAsset.name, { type: msg.generatedImageAsset.mimeType }))).split(',')[1];
+                }
                 messagePayload.parts.push({
                     type: 'image',
                     media_type: 'image/png',
-                    data: msg.imageData
+                    data: generatedData || ''
                 });
             }
 
@@ -5987,6 +6493,8 @@ interface QueueState {
         systemPrompt: finalSystemPrompt || undefined,
         selectedModelId: actualModelIdForApi,
         effectiveReasoningState: effectiveReasoningState,
+        conversationId: isPersistedConversationId(activeConversationId) ? activeConversationId : undefined,
+        projectId: activeProjectId || undefined,
         useSearchTool: undefined as (boolean | undefined),
         task: taskArg // Ensure taskArg is used here
     };
@@ -6067,7 +6575,9 @@ interface QueueState {
             // console.log(`[fetchAiResponse] Received image data directly from backend.`);
             return { 
                 imageData: data.imageData,
-                modelIdUsed: data.modelIdUsed || 'gpt-image-2' // Default to gpt-image-2 if not specified
+                modelIdUsed: data.modelIdUsed || 'gpt-image-2', // Default to gpt-image-2 if not specified
+                libraryItemId: data.libraryItemId,
+                libraryContentUrl: data.libraryContentUrl,
             };
         }
         // --- END NEW: Handle Image Generation Response Directly ---
@@ -6268,6 +6778,8 @@ interface QueueState {
             searchInfo: finalSearchInfoToUse, // Use the determined search info
             markerToSourceIndices: markerMap,
             uniqueSourcesUsed: sourcesUsed,
+            projectSources: Array.isArray(data.projectSources) ? data.projectSources : undefined,
+            projectContextId: typeof data.projectContextId === 'string' ? data.projectContextId : undefined,
             thinkingContent: thinking ?? undefined,
             imageData: data.imageData || undefined, // Handle potential image data from API
             isGeneratingImage: taskArg === 'image' ? false : undefined, // Set generating flag based on task
@@ -6342,10 +6854,13 @@ interface QueueState {
                     // Save parsedAnswer (the displayed content) as content, not raw text
                     chatService.addMessage(conversationId, {
                         role: 'assistant',
-                        content: updatedMessage.parsedAnswer || updatedMessage.text,
+                        content: updatedMessage.projectContextId
+                            ? updatedMessage.text
+                            : (updatedMessage.parsedAnswer || updatedMessage.text),
                         model_id: updatedMessage.modelIdUsed || updatedMessage.modelId,
                         thinking: updatedMessage.thinkingContent,
                         has_thinking: !!updatedMessage.thinkingContent,
+                        context_record_id: updatedMessage.projectContextId,
                     }).catch(error => {
                         console.error("Error adding message to database:", error);
                     });
@@ -6577,7 +7092,7 @@ interface QueueState {
         'image',
         undefined,
         undefined
-      ) as { imageData: string; modelIdUsed: string } | undefined; // Adjusted expected type
+      ) as { imageData: string; modelIdUsed: string; libraryItemId?: string; libraryContentUrl?: string } | undefined;
 
       // Check for abort *after* fetchAiResponse has completed or aborted
       if (controllerForThisRequest?.signal.aborted) {
@@ -6602,6 +7117,13 @@ interface QueueState {
       }
 
       if (aiImageResponse?.imageData) {
+           const generatedImageAsset = aiImageResponse.libraryItemId ? {
+             assetId: aiImageResponse.libraryItemId,
+             name: `XENO image ${new Date().toISOString().replace(/[:.]/g, '-')}.png`,
+             mimeType: 'image/png',
+             contentUrl: aiImageResponse.libraryContentUrl || `/api/library/assets/${aiImageResponse.libraryItemId}/content`,
+           } satisfies LibraryAssetRef : undefined;
+           const completedText = `Image generated for prompt: "${prompt}"`;
            // console.log(`[ChatWithLLM] Image data received via fetchAiResponse for message ${messageId}`);
              setMessages(prevMessages =>
                 prevMessages.map(msg =>
@@ -6613,11 +7135,41 @@ interface QueueState {
                         text: msg.text?.includes('Initializing') || msg.text?.includes('Generating image') ? `Image generated for prompt: \"${prompt}\"` : msg.text,
                         parsedAnswer: msg.text?.includes('Initializing') || msg.text?.includes('Generating image') ? `Image generated for prompt: \"${prompt}\"` : msg.parsedAnswer,
                         modelIdUsed: aiImageResponse.modelIdUsed || imageModelId,
+                        generatedImageAsset,
                         isCancelled: false
                     }
                     : msg
                 )
             );
+           const persistedImageMessage: ChatMessage = {
+             id: messageId,
+             sender: 'ai',
+             text: completedText,
+             parsedAnswer: completedText,
+             timestamp: Date.now(),
+             modelIdUsed: aiImageResponse.modelIdUsed || imageModelId,
+             imageData: aiImageResponse.imageData,
+             generatedImageAsset,
+           };
+           const conversationId = activeConversationIdRef.current ?? activeConversationId;
+           if (conversationId) {
+             setConversationHistory((history) => history.map((conversation) => conversation.id === conversationId
+               ? {
+                   ...conversation,
+                   messages: conversation.messages.some((entry) => entry.id === messageId)
+                     ? conversation.messages.map((entry) => entry.id === messageId ? persistedImageMessage : entry)
+                     : [...conversation.messages, persistedImageMessage],
+                 }
+               : conversation));
+             if (isDbAuthenticated) {
+               void chatService.addMessage(conversationId, {
+                 role: 'assistant',
+                 content: completedText,
+                 model_id: persistedImageMessage.modelIdUsed,
+                 attachments: messageLibraryAttachments(persistedImageMessage),
+               }).catch((error) => console.error('Error saving generated Library image message:', error));
+             }
+           }
       } else { // Covers undefined aiImageResponse (not aborted) or if it returned text/error
             const errorTextFromResponse = (aiImageResponse as any)?.text; // Attempt to get text if it was an error object from fetchAiResponse
             const errorMsg = errorTextFromResponse || 'Error generating image: Unexpected response or format.';
@@ -6664,7 +7216,7 @@ interface QueueState {
   const handleGenerate = async (inputOverride?: string) => {
     const composerText = inputOverride ?? inputValue;
     const canSend = composerText.trim() || attachedFiles.length > 0;
-    if (!canSend || isLoading) return;
+    if (!canSend || isLoading || isUploadingAttachments) return;
     if (isContextLimitReached) return;
 
     // Prepare the new user message
@@ -6676,11 +7228,14 @@ interface QueueState {
 
     // --- Prepare newUserMessage with potential image/file attachment ---
     const imageAttachmentsPayload = filesToSend
-      .filter((f) => f.fileObject && f.type.startsWith('image/'))
+      .filter((f) => f.type.startsWith('image/'))
       .map((f) => ({
-        file: f.fileObject as File,
+        file: f.fileObject,
         name: f.name,
         type: f.type,
+        assetId: f.assetId,
+        contentUrl: f.contentUrl,
+        size: f.size,
       }));
     const userImageAttachmentsPayload =
       imageAttachmentsPayload.length > 0 ? imageAttachmentsPayload : undefined;
@@ -6688,12 +7243,15 @@ interface QueueState {
 
     let userFileAttachmentPayload: ChatMessage['userFileAttachment'] = undefined;
     // Allow file attachment regardless of whether there's also an image
-      const firstNonImageFile = filesToSend.find(f => f.fileObject && !f.type.startsWith('image/'));
-      if (firstNonImageFile && firstNonImageFile.fileObject) {
+      const firstNonImageFile = filesToSend.find(f => !f.type.startsWith('image/'));
+      if (firstNonImageFile) {
         userFileAttachmentPayload = {
           file: firstNonImageFile.fileObject,
           name: firstNonImageFile.name,
           type: firstNonImageFile.type,
+          assetId: firstNonImageFile.assetId,
+          contentUrl: firstNonImageFile.contentUrl,
+          size: firstNonImageFile.size,
         };
       console.log('Attaching non-image file to user message:', firstNonImageFile.name);
     }
@@ -6731,6 +7289,7 @@ interface QueueState {
       chatService.addMessage(activeConversationIdRef.current, {
         role: 'user',
         content: newUserMessage.text,
+        attachments: messageLibraryAttachments(newUserMessage),
       }).catch(error => {
         console.error("Error adding user message to database:", error);
       });
@@ -6767,12 +7326,7 @@ interface QueueState {
     let extractedDirectPrompt: string | null = null;
     let isPotentialImageRefinement: boolean = false;
 
-    // 1. Direct mode check: if user is in image mode, prompt is directly an image prompt
-    if (emptyStateMode === 'image') {
-        extractedDirectPrompt = userTextToSend;
-    }
-
-    // 2. Direct visual / image generation intent check (e.g. "Create a cozy rainy-night café in a watercolor style", "draw a cat", "generate an image of a sunset")
+    // Direct visual / image generation intent check (e.g. "Create a cozy rainy-night café in a watercolor style", "draw a cat", "generate an image of a sunset")
     if (!extractedDirectPrompt && !isLikelyCodeOrLongText) {
         const isImageAction = /^(create|generate|draw|paint|sketch|render|make|illustrate|design)\b/i.test(userTextForProcessing);
         const hasVisualTerm = /\b(image|photo|picture|drawing|illustration|art|portrait|painting|sketch|graphic|wallpaper|watercolor|cafe|cyberpunk|anime|scenery|landscape|scene|avatar|logo|render|3d)\b/i.test(userTextForProcessing);
@@ -7220,26 +7774,38 @@ Please provide a comprehensive, well-structured response using this deep search 
 
                 try {
                     // Reset search progress
-                    const providerName = searchProvider === 'google' ? 'Google' : 'Brave';
-                    setSearchProgress({ message: `Searching with ${providerName}...`, progress: 0 });
+                    setSearchProgress({ message: 'Searching with XENO Search...', progress: 0 });
 
-                    // Use the multi-provider search helper
-                    const searchResult = await performProviderSearch(
+                    // Provider selection is a server concern. The authenticated XENO Search
+                    // route fans out over the configured engines and survives one provider
+                    // failing; the retired direct Google/Brave browser routes do not.
+                    const searchResult = await performXenoSearch(
                         enhancedQuery.query.trim(),
-                        searchProvider,
                         Math.min(Math.max(XENO_SEARCH_CONFIG.defaultNumResults, 1), XENO_SEARCH_CONFIG.maxNumResults)
                     );
 
-                    // Create a compatible data structure
-                    const xenoData = {
-                        sources: searchResult.sources,
-                        summary: searchResult.summary,
-                        error: searchResult.error
-                    };
+                    const xenoData = searchResult;
 
-                    // Check if we have sources before updating the search results message
+                    if (xenoData.error) {
+                        console.error("Xeno Search Error:", xenoData.error);
+                        setMessages(prev => prev.map(msg =>
+                            msg.id === searchResultsMessageId
+                                ? {
+                                    ...msg,
+                                    isLoading: false,
+                                    isError: true,
+                                    text: `🔍 Search failed: ${xenoData.error}`
+                                  }
+                                : msg
+                        ));
+                        setPendingXenoSearchInfo(null);
+                        return;
+                    }
+
+                    // Check if we have sources before updating the search results message.
+                    // Errors are handled first so the placeholder is never removed before
+                    // it can be converted into a visible failure state.
                     const hasSearchSources = xenoData.sources && xenoData.sources.length > 0;
-
                     if (hasSearchSources) {
                         // Update the search results message with Xeno results
                         setMessages(prev => prev.map(msg =>
@@ -7264,27 +7830,7 @@ Please provide a comprehensive, well-structured response using this deep search 
                         setMessages(prev => prev.filter(msg => msg.id !== searchResultsMessageId));
                     }
 
-                    if (xenoData.error) {
-                        console.error("Xeno Search Error:", xenoData.error);
-
-                        // Show error message from service
-                        const errorMessage = `🔍 Search failed: ${xenoData.error}`;
-
-                        // Update search results message to show error state
-                        setMessages(prev => prev.map(msg =>
-                            msg.id === searchResultsMessageId
-                                ? {
-                                    ...msg,
-                                    isLoading: false,
-                                    isError: true,
-                                    text: errorMessage
-                                  }
-                                : msg
-                        ));
-
-                        setPendingXenoSearchInfo(null); // Clear if there was an error
-                        return; // Exit early, don't call fetchAiResponse
-                    } else {
+                    {
                         // Performance monitoring based on guide recommendations
                         const searchDuration = Date.now() - searchStartTime;
                         console.log(`[Xeno Search] Completed successfully in ${searchDuration}ms. Found ${xenoData.sources?.length || 0} sources.`);
@@ -7381,7 +7927,7 @@ Please provide a well-structured response using this search context and any mult
                         } else {
                             // No sources - don't augment prompt, let AI answer naturally
                             console.log('[Xeno Search] No sources found, AI will answer without search context');
-                            xenoContextForLLM = null;
+                            xenoContextForLLM = undefined;
                         }
 
                         // console.log('[ChatWithLLM HandleGenerate] Xeno Search successful, transformed searchInfo prepared.');
@@ -7492,19 +8038,7 @@ Please provide a well-structured response using this search context and any mult
         const fullConversation = await chatService.getConversation(conversationId);
         if (fullConversation && fullConversation.messages) {
           // Convert database message format to local format
-          const localMessages: ChatMessage[] = fullConversation.messages.map((msg: DBChatMessage, index: number) => {
-            const isAi = msg.role === 'assistant';
-            return {
-              id: msg.id || `msg-${index}`,
-              sender: isAi ? 'ai' as const : 'user' as const,
-              text: msg.content,
-              parsedAnswer: isAi ? msg.content : undefined,
-              modelId: msg.model_id,
-              modelIdUsed: msg.model_id,
-              thinkingContent: msg.thinking,
-              hasThinking: msg.has_thinking,
-            };
-          });
+          const localMessages: ChatMessage[] = fullConversation.messages.map(dbMessageToLocal);
           setMessages(localMessages);
 
           // Update cache in conversation history
@@ -7523,8 +8057,9 @@ Please provide a well-structured response using this search context and any mult
                   title: fullConversation.title || 'Conversation',
                   timestamp: fullConversation.created_at ? new Date(fullConversation.created_at).getTime() : Date.now(),
                   messages: localMessages,
-                  systemPrompt: fullConversation.system_prompt,
-                  isArchived: Boolean(fullConversation.is_archived),
+                   systemPrompt: fullConversation.system_prompt,
+                   isArchived: Boolean(fullConversation.is_archived),
+                   projectId: fullConversation.project_id ?? null,
                 },
                 ...prevHistory
               ];
@@ -7584,19 +8119,7 @@ Please provide a well-structured response using this search context and any mult
       const fullConversation = await chatService.getConversation(activeConversationId);
       if (fullConversation && fullConversation.messages) {
         // Convert database message format to local format
-        const localMessages: ChatMessage[] = fullConversation.messages.map((msg: DBChatMessage, index: number) => {
-          const isAi = msg.role === 'assistant';
-          return {
-            id: msg.id || `msg-${index}`,
-            sender: isAi ? 'ai' as const : 'user' as const,
-            text: msg.content,
-            parsedAnswer: isAi ? msg.content : undefined,
-            modelId: msg.model_id,
-            modelIdUsed: msg.model_id,
-            thinkingContent: msg.thinking,
-            hasThinking: msg.has_thinking,
-          };
-        });
+        const localMessages: ChatMessage[] = fullConversation.messages.map(dbMessageToLocal);
         setMessages(localMessages);
 
         // Update cache in conversation history
@@ -7637,6 +8160,7 @@ Please provide a well-structured response using this search context and any mult
           timestamp: conv.created_at ? new Date(conv.created_at).getTime() : Date.now(),
           messages: [],
           systemPrompt: conv.system_prompt,
+          projectId: conv.project_id ?? null,
         }));
         setSelectorConversations(localFormat);
       } else {
@@ -7963,7 +8487,7 @@ Please provide a well-structured response using this search context and any mult
     } else {
       patchConversation(conversationId, { isArchived: false });
     }
-    if (isDbAuthenticated) {
+    if (isDbAuthenticated && isPersistedConversationId(conversationId)) {
       try {
         await chatService.updateConversation(conversationId, { is_archived: archived });
       } catch (error) {
@@ -7972,7 +8496,17 @@ Please provide a well-structured response using this search context and any mult
     }
   };
 
-  const handleAssignConversationToProject = (conversationId: string, projectId: string | null) => {
+  const handleAssignConversationToProject = async (conversationId: string, projectId: string | null) => {
+    if (isDbAuthenticated && isPersistedConversationId(conversationId)) {
+      try {
+        const updated = await chatService.updateConversation(conversationId, { project_id: projectId });
+        if (!updated) throw new Error('Conversation project was not saved.');
+      } catch (error) {
+        console.error('[ChatWithLLM] Failed to assign conversation to project:', error);
+        setProjectFileNotice('The chat could not be moved to that project.');
+        return;
+      }
+    }
     patchConversation(conversationId, { projectId });
     if (projectId) {
       const now = Date.now();
@@ -7984,11 +8518,11 @@ Please provide a well-structured response using this search context and any mult
     }
   };
 
-  const submitCreateProjectModal = () => {
+  const submitCreateProjectModal = async () => {
     const assignId = pendingProjectAssignConversationId;
-    const project = createChatProject();
-    if (assignId) {
-      handleAssignConversationToProject(assignId, project.id);
+    const project = await createChatProject();
+    if (assignId && project) {
+      await handleAssignConversationToProject(assignId, project.id);
     }
   };
 
@@ -8440,8 +8974,8 @@ Keep the summary under 500 words. Preserve essential context needed to continue 
         data-create-project-dialog=""
         style={{
           left:
-            (isTaskbarHidden ? 0 : 52) +
-            (!isMultiInterface && isHistoryOpen && !isMobile ? 260 : 0),
+            (isTaskbarHidden ? 0 : TASKBAR_WIDTH_PX) +
+            historyWorkspaceInsetPx,
           backgroundColor: isCreateProjectModalShown
             ? 'color-mix(in srgb, var(--chat-text) 28%, transparent)'
             : 'color-mix(in srgb, var(--chat-text) 0%, transparent)',
@@ -8535,7 +9069,7 @@ Keep the summary under 500 words. Preserve essential context needed to continue 
                 onKeyDown={(event) => {
                   if (event.key === 'Enter' && canCreate) {
                     event.preventDefault();
-                    submitCreateProjectModal();
+                    void submitCreateProjectModal();
                   }
                 }}
                 placeholder="Name your project"
@@ -8841,6 +9375,81 @@ Keep the summary under 500 words. Preserve essential context needed to continue 
               </div>
             )}
 
+            {activeSection === 'members' && (
+              <div className="space-y-4 pt-2 sm:pt-3">
+                {!project.capabilities?.admin ? (
+                  <p className="text-[12.5px] leading-relaxed text-[var(--chat-muted)]">
+                    Project admin access is required to manage members.
+                  </p>
+                ) : (
+                  <>
+                    <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_8rem_auto]">
+                      <TextInput
+                        size="lg"
+                        fontSize={13}
+                        type="email"
+                        value={projectAccessEmail}
+                        onChange={(event) => setProjectAccessEmail(event.target.value)}
+                        placeholder="Account email"
+                        aria-label="Account email"
+                      />
+                      <select
+                        value={projectAccessRole}
+                        onChange={(event) => setProjectAccessRole(event.target.value as typeof projectAccessRole)}
+                        className="h-9 rounded-lg border bg-[var(--chat-control)] px-2.5 text-[13px] text-[var(--chat-text)] outline-none"
+                        style={{ borderColor: 'var(--chat-border)' }}
+                        aria-label="Project role"
+                      >
+                        <option value="viewer">Viewer</option>
+                        <option value="reviewer">Reviewer</option>
+                        <option value="editor">Editor</option>
+                        <option value="admin">Admin</option>
+                      </select>
+                      <Button
+                        variant="primary"
+                        size="lg"
+                        disabled={!projectAccessEmail.trim() || projectAccessLoading}
+                        onClick={() => void grantProjectMember()}
+                      >
+                        Add
+                      </Button>
+                    </div>
+                    {projectAccessNotice && (
+                      <p className="text-[12px] text-[var(--chat-muted)]">{projectAccessNotice}</p>
+                    )}
+                    <div className="divide-y rounded-xl border" style={{ borderColor: 'var(--chat-border)' }}>
+                      {projectAccessLoading && projectAccessGrants.length === 0 ? (
+                        <p className="p-3 text-[12px] text-[var(--chat-muted)]">Loading members…</p>
+                      ) : projectAccessGrants.filter((grant) => grant.relation !== 'parent').length === 0 ? (
+                        <p className="p-3 text-[12px] text-[var(--chat-muted)]">No direct member grants.</p>
+                      ) : projectAccessGrants.filter((grant) => grant.relation !== 'parent').map((grant) => (
+                        <div key={`${grant.relation}:${grant.subject}`} className="flex items-center gap-3 p-3">
+                          <div className="min-w-0 flex-1">
+                            <p className="truncate text-[13px] font-medium text-[var(--chat-text)]">
+                              {grant.identity?.display_name || grant.identity?.username || grant.identity?.email || grant.subject}
+                            </p>
+                            <p className="truncate text-[11.5px] text-[var(--chat-muted)]">
+                              {grant.identity?.email || grant.subject} · {grant.relation}
+                            </p>
+                          </div>
+                          {grant.relation !== 'owner' && (
+                            <Button
+                              variant="secondary"
+                              size="sm"
+                              disabled={projectAccessLoading}
+                              onClick={() => void revokeProjectMember(grant.subject)}
+                            >
+                              Revoke
+                            </Button>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </>
+                )}
+              </div>
+            )}
+
             {activeSection === 'danger' && (
               <div className="space-y-2 pt-2 sm:pt-3">
                 <h3 className="text-[13px] font-semibold text-[var(--chat-danger)]">Danger zone</h3>
@@ -8855,7 +9464,7 @@ Keep the summary under 500 words. Preserve essential context needed to continue 
                     handleDeleteProject(project.id);
                     closeProjectSettings();
                   }}
-                  style={{ borderColor: 'var(--chat-danger)' }}
+                  emphasis="outline"
                 >
                   Delete project
                 </Button>
@@ -8867,7 +9476,7 @@ Keep the summary under 500 words. Preserve essential context needed to continue 
             className="flex flex-shrink-0 flex-col-reverse gap-2 border-t px-4 py-3 sm:flex-row sm:justify-end sm:gap-2 sm:px-5 sm:py-3.5"
             style={{ borderColor: 'var(--chat-border)' }}
           >
-            {activeSection === 'danger' ? (
+            {activeSection === 'danger' || activeSection === 'members' ? (
               <Button
                 variant="secondary"
                 size="lg"
@@ -9043,25 +9652,25 @@ Keep the summary under 500 words. Preserve essential context needed to continue 
             : (msg.parsedAnswer || msg.text || '')
         }));
 
-        // First, get conversation-only token count (for compress threshold)
-        const conversationResult = await countMessageTokens(
-          normalizedMessages,
+        // One call. A second /messages hit after a 502 is what turned a
+        // dead origin into a 1 Hz storm (nginx 2026-08-25 15:39).
+        const includeInput = Boolean(inputValue.trim());
+        const result = await countMessageTokens(
+          includeInput
+            ? [...normalizedMessages, { role: 'user', content: inputValue }]
+            : normalizedMessages,
           selectedModel?.id || 'gpt-4',
           savedSystemPrompt
         );
-        setConversationTokenCount(conversationResult.total);
-
-        // Then get total including input
-        if (inputValue.trim()) {
-          const messagesWithInput = [...normalizedMessages, { role: 'user', content: inputValue }];
-          const totalResult = await countMessageTokens(
-            messagesWithInput,
-            selectedModel?.id || 'gpt-4',
-            savedSystemPrompt
+        setRealTokenCount(result.total);
+        if (includeInput && result.messageTokens.length > 0) {
+          const withoutInput = result.messageTokens.slice(0, -1);
+          const extraOverhead = 4;
+          setConversationTokenCount(
+            withoutInput.reduce((a, b) => a + b, 0) + result.systemTokens + Math.max(0, result.overhead - extraOverhead)
           );
-          setRealTokenCount(totalResult.total);
         } else {
-          setRealTokenCount(conversationResult.total);
+          setConversationTokenCount(result.total);
         }
       } catch (error) {
         console.warn('[TokenCount] Error fetching real token count:', error);
@@ -9220,25 +9829,45 @@ Keep the summary under 500 words. Preserve essential context needed to continue 
   };
   
   // Handle file selection from the hidden input
-  const handleFileSelected = (event: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileSelected = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const files = event.target.files;
     if (files && files.length > 0) {
-        const newFiles: AttachedFile[] = Array.from(files).map(file => ({
-            id: `${file.name}-${file.lastModified}-${file.size}`,
-            name: file.name,
-            type: file.type || 'unknown',
-            fileObject: file 
-        }));
+        // Selection is the moment the browser has the real bytes. Persist them now;
+        // the old recent-file callback only wrote metadata and was never invoked,
+        // which made attachments disappear from every other device.
+        setIsUploadingAttachments(true);
+        let newFiles: AttachedFile[] = [];
+        try {
+          newFiles = await Promise.all(Array.from(files).map(async (file) => {
+            const asset = await libraryService.upload(file, 'chat-attachment');
+            return {
+              id: asset.assetId,
+              name: asset.name,
+              type: asset.mimeType || file.type || 'application/octet-stream',
+              fileObject: file,
+              assetId: asset.assetId,
+              contentUrl: asset.contentUrl,
+              size: asset.size || file.size,
+            };
+          }));
+        } catch (error) {
+          console.error('Failed to save chat attachment to Library:', error);
+          return;
+        } finally {
+          setIsUploadingAttachments(false);
+        }
         
         // Add files to recent files list
         const now = Date.now();
-        const newRecentFiles = Array.from(files).map(file => ({
-          id: `${file.name}-${file.lastModified}-${file.size}`,
+        const newRecentFiles = newFiles.map((file) => ({
+          id: file.id,
           name: file.name,
-          type: file.type || 'unknown',
-          size: file.size,
+          type: file.type,
+          size: file.size || 0,
           lastUsed: now,
-          preview: file.type.startsWith('image/') ? URL.createObjectURL(file) : undefined
+          assetId: file.assetId,
+          contentUrl: file.contentUrl,
+          preview: file.fileObject && file.type.startsWith('image/') ? URL.createObjectURL(file.fileObject) : undefined
         }));
 
         setRecentFiles(prev => {
@@ -9280,6 +9909,10 @@ Keep the summary under 500 words. Preserve essential context needed to continue 
   // Handle re-attaching a recent file
   const handleReattachRecentFile = async (recentFile: typeof recentFiles[0]) => {
     console.log('[Recent Files] Re-attaching file:', recentFile.name);
+    if (!recentFile.assetId || !recentFile.contentUrl) {
+      console.warn('[Recent Files] Legacy metadata-only item cannot be attached; choose the file again so it enters Library.');
+      return;
+    }
     
     // Create a new AttachedFile object without the actual File object
     // Since we can't recreate the File object from localStorage data,
@@ -9288,6 +9921,9 @@ Keep the summary under 500 words. Preserve essential context needed to continue 
       id: `recent-${recentFile.id}-${Date.now()}`,
       name: recentFile.name,
       type: recentFile.type,
+      assetId: recentFile.assetId,
+      contentUrl: recentFile.contentUrl,
+      size: recentFile.size,
       // Note: fileObject will be undefined for recent files
       // The UI should handle this gracefully by showing metadata only
     };
@@ -9771,7 +10407,7 @@ Keep the summary under 500 words. Preserve essential context needed to continue 
     // Toggle like status
     setFeedbackStatusMap(prev => {
       const currentStatus = prev[messageId];
-      const newStatus = currentStatus === 'liked' ? null : 'liked';
+      const newStatus: 'liked' | null = currentStatus === 'liked' ? null : 'liked';
       const newMap = { ...prev, [messageId]: newStatus };
       // Persist to localStorage
       try {
@@ -9787,7 +10423,7 @@ Keep the summary under 500 words. Preserve essential context needed to continue 
     // Toggle dislike status
     setFeedbackStatusMap(prev => {
       const currentStatus = prev[messageId];
-      const newStatus = currentStatus === 'disliked' ? null : 'disliked';
+      const newStatus: 'disliked' | null = currentStatus === 'disliked' ? null : 'disliked';
       const newMap = { ...prev, [messageId]: newStatus };
       // Persist to localStorage
       try {
@@ -10199,7 +10835,7 @@ Keep the summary under 500 words. Preserve essential context needed to continue 
 
   // Image Generation Component
   const ImageContainer: React.FC<{ message: ChatMessage }> = ({ message }) => {
-    if (!message.isGeneratingImage && !message.imageData) {
+    if (!message.isGeneratingImage && !message.imageData && !message.generatedImageAsset) {
       return null;
     }
 
@@ -10224,6 +10860,10 @@ Keep the summary under 500 words. Preserve essential context needed to continue 
     };
 
     const handleImageClick = () => {
+      if (message.generatedImageAsset) {
+        setLibraryViewerSelection({ items: conversationLibraryViewerItems, activeId: `${message.id}:generated` });
+        return;
+      }
       if (message.imageData) {
         const imageUrl = getImageUrl();
         setFullScreenImageUrl(imageUrl);
@@ -10238,10 +10878,11 @@ Keep the summary under 500 words. Preserve essential context needed to continue 
       <div className="w-full max-w-[440px] aspect-square rounded-2xl overflow-hidden bg-[#111114] border border-[#222228] shadow-2xl my-3 transition-all duration-300">
         {message.isGeneratingImage && !message.imageData ? (
           <DotMatrixImagePlaceholder prompt={promptText} />
-        ) : message.imageData ? (
+        ) : (message.imageData || message.generatedImageAsset) ? (
           <div className="relative group w-full h-full overflow-hidden">
-            <img
-              src={getImageUrl()}
+            <LibraryAssetImage
+              asset={message.generatedImageAsset}
+              sourceUrl={message.imageData ? getImageUrl() : undefined}
               alt="AI generated image"
               className="w-full h-full object-cover cursor-pointer transition-transform duration-300 group-hover:scale-[1.02]"
               onClick={handleImageClick}
@@ -10261,15 +10902,14 @@ Keep the summary under 500 words. Preserve essential context needed to continue 
                   <Search size={13} />
                   <span>View Full</span>
                 </button>
-                <a
-                  href={getImageUrl()}
-                  download="xeno-gpt-image-2.png"
-                  onClick={(e) => e.stopPropagation()}
+                <button
+                  type="button"
+                  onClick={(event) => { event.stopPropagation(); handleImageClick(); }}
                   className="flex items-center gap-1.5 px-3 py-1.5 bg-white/10 hover:bg-white/20 backdrop-blur-md border border-white/20 rounded-lg text-xs text-white font-medium transition-colors"
                 >
                   <Download size={13} />
-                  <span>Save</span>
-                </a>
+                  <span>Open Library</span>
+                </button>
               </div>
             </div>
           </div>
@@ -10721,7 +11361,7 @@ Keep the summary under 500 words. Preserve essential context needed to continue 
     // console.log("Attempting to delete conversation:", conversationIdToDelete);
 
     // Delete from database if authenticated
-    if (isDbAuthenticated) {
+    if (isDbAuthenticated && isPersistedConversationId(conversationIdToDelete)) {
       try {
         await chatService.deleteConversation(conversationIdToDelete);
         console.log("Deleted conversation from database:", conversationIdToDelete);
@@ -10760,7 +11400,7 @@ Keep the summary under 500 words. Preserve essential context needed to continue 
       // console.log("Saving title for:", editingConversationId, "New title:", editTitleText);
 
       // Update in database if authenticated
-      if (isDbAuthenticated) {
+      if (isDbAuthenticated && isPersistedConversationId(editingConversationId)) {
         try {
           await chatService.updateConversation(editingConversationId, {
             title: editTitleText.trim(),
@@ -11233,7 +11873,14 @@ Keep the summary under 500 words. Preserve essential context needed to continue 
           name: string;
           type: string;
           base64Data?: string;
+          assetId?: string;
+          contentUrl?: string;
+          size?: number;
         }) => {
+          if (attachment.assetId && attachment.contentUrl) {
+            const { file: _file, base64Data: _base64Data, ...libraryReference } = attachment;
+            return libraryReference;
+          }
           if (attachment.file instanceof File) {
             const base64Url = await fileToBase64(attachment.file);
             return {
@@ -11282,7 +11929,11 @@ Keep the summary under 500 words. Preserve essential context needed to continue 
         }
 
         // Serialize file attachments
-        if (message.userFileAttachment && message.userFileAttachment.file instanceof File) {
+        if (message.userFileAttachment?.assetId && message.userFileAttachment.contentUrl) {
+            delete message.userFileAttachment.file;
+            delete message.userFileAttachment.content;
+            delete message.userFileAttachment.encoding;
+        } else if (message.userFileAttachment && message.userFileAttachment.file instanceof File) {
             try {
                 const liveFileObject = message.userFileAttachment.file;
                 if (isCommonTextFile(liveFileObject)) {
@@ -11523,36 +12174,25 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
     }
   };
 
-  // Multi-provider search helper function (Google & Brave only)
-  const performProviderSearch = async (
+  // One authenticated platform seam; the search service owns provider fan-out.
+  const performXenoSearch = async (
     query: string,
-    provider: 'google' | 'brave',
     numResults: number = 10
-  ): Promise<{ sources: XenoSource[]; summary?: string; error?: string }> => {
+  ): Promise<XenoSearchResultsData> => {
     try {
-      console.log(`[Search] Performing ${provider} search for: "${query}"`);
-
-      // Use Google or Brave search endpoints
-      const endpoint = provider === 'google'
-        ? '/api/v2/engine/google-search'
-        : '/api/v2/engine/brave-search';
-
-      const body = provider === 'google'
-        ? { query, num_results: numResults }
-        : { query, count: numResults };
-
-      const response = await fetch(endpoint, {
+      console.log(`[Search] Performing XENO Search for: "${query}"`);
+      const response = await fetch('/api/xeno-search', {
         method: 'POST',
         headers: withAuthHeaders({ 'Content-Type': 'application/json' }),
-        body: JSON.stringify(body)
+        body: JSON.stringify({ query, search_type: 'normal', num_results: numResults })
       });
 
       if (!response.ok) {
-        throw new Error(`${provider} search failed: ${response.status}`);
+        throw new Error(`XENO Search failed: ${response.status}`);
       }
 
       const data = await response.json();
-      const results = data.results || [];
+      const results = data.sources || data.results || [];
 
       // Transform results to XenoSource format
       const sources: XenoSource[] = results.map((r: any) => ({
@@ -11562,13 +12202,23 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
         summary: r.description || r.snippet || ''
       }));
 
-      console.log(`[${provider} Search] Found ${sources.length} results`);
-      return { sources };
-    } catch (error) {
-      console.error(`[${provider} Search] Error:`, error);
+      console.log(`[XENO Search] Found ${sources.length} results`);
       return {
+        query: typeof data.query === 'string' ? data.query : query,
+        search_type: data.search_type === 'deep' ? 'deep' : 'normal',
+        sources,
+        summary: data.summary,
+        processing_time: data.processing_time ?? data.processing_time_ms,
+        num_results: numResults,
+      };
+    } catch (error) {
+      console.error('[XENO Search] Error:', error);
+      return {
+        query,
+        search_type: 'normal',
         sources: [],
-        error: error instanceof Error ? error.message : 'Search failed'
+        error: error instanceof Error ? error.message : 'Search failed',
+        num_results: numResults,
       };
     }
   };
@@ -11612,19 +12262,18 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
             ? [message.userImageAttachment]
             : [];
       images.forEach((image, index) => {
-        if (!image?.name && !image?.file && !image?.base64Data) return;
+        if (!image?.name && !image?.file && !image?.base64Data && !image?.assetId) return;
         items.push({
           key: `${message.id}-image-${index}`,
           name: image.name || 'Image',
           kind: 'image',
-          content: image.base64Data
+          content: image.base64Data || image.assetId
             ? `[Image: ${image.name || 'attachment'}]\n\nPreview is available in the message bubble.`
             : `[Image: ${image.name || 'attachment'}]`,
         });
       });
     }
-    // Empty chats show mock files so the list + preview can be judged visually.
-    return items.length > 0 ? items : MOCK_CHAT_FILES;
+    return items;
   }, [messages]);
 
   const chatFilesSelected = useMemo(
@@ -11858,6 +12507,14 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
     !isCustomizePageOpen &&
     !activeProjectId &&
     !isChatsCatalogOpen;
+  const showCurrentModelInTopBar =
+    !isMultiInterface &&
+    !isProjectsPageOpen &&
+    !isArtifactsPageOpen &&
+    !isGlobalSettingsPageOpen &&
+    !isScheduledPageOpen &&
+    !isCustomizePageOpen &&
+    !isChatsCatalogOpen;
 
   /**
    * The scroll-to-bottom pill, for the composer to host inside its floating mode row.
@@ -11898,6 +12555,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
             hideToolRail={options?.forceCompact}
             activeMode={emptyStateMode}
             canAnalyzeDocument={modelSupportsFileUpload(selectedModel)}
+            modelSelectorOpenRequestKey={modelSelectorOpenRequestKey}
             modelSelector={({ isInlineTray, onOpenChange }) => (
               <ChatModelSelector
                 groupedModels={groupedModels}
@@ -11906,11 +12564,15 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                 isMinimal
                 isLoading={isModelsLoading}
                 isReasoningActive={modelHasReasoningCapability(selectedModel.id, selectedModel) !== 'disabled' && isReasonToggled}
+                openRequestKey={modelSelectorOpenRequestKey}
+                onOpenRequestHandled={acknowledgeComposerModelSelectorRequest}
                 onOpenChange={onOpenChange}
                 onSelect={handleModelSelect}
                 selectedModel={selectedModel}
+                triggerId={modelSelectorControlId}
               />
             )}
+            onModelSelectorOpenChange={setIsComposerModelSelectorOpen}
             onAgentActionSelect={handleEmptyStateAgentAction}
             onModeChange={handleEmptyStateModeChange}
             onUploadFile={handleUploadFile}
@@ -13411,12 +14073,16 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
         ref={chatContainerRef}
         className={`chat-themed xeno-icon-hosts chat-theme-${resolvedChatTheme} relative flex h-full flex-col overflow-hidden main-content-transition ${isMobile ? 'chat-mobile-container' : ''} ${isMobile && isHistoryOpen ? 'chat-sidebar-open' : ''}`}
         data-chat-theme-preference={chatTheme}
+        data-chat-history-open={historyWorkspaceInsetPx > 0 ? 'true' : 'false'}
+        data-chat-context-open={contextWorkspaceInsetPx > 0 ? 'true' : 'false'}
         style={{
           paddingRight: '0px',
           backgroundColor: 'var(--chat-canvas)',
           color: 'var(--chat-text)',
+          '--chat-history-inset': `${historyWorkspaceInsetPx}px`,
+          '--chat-context-inset': `${contextWorkspaceInsetPx}px`,
           ...chatThemePreviewStyle,
-        }}
+        } as React.CSSProperties}
         onTouchStart={handleTouchStart}
         onTouchEnd={handleTouchEnd}
       >
@@ -13465,7 +14131,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                 className="animate-chat-history-chrome-enter-delay -ml-1 flex h-9 items-center font-display text-[1.05rem] font-medium leading-normal tracking-tight text-[var(--chat-muted)]"
                 aria-current="page"
               >
-                Artifacts
+                Library
               </span>
             )}
             {isGlobalSettingsPageOpen && (
@@ -13511,8 +14177,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
             })
             .sort((a, b) => b.timestamp - a.timestamp);
           const selectedCount = chatsCatalogSelectedIds.length;
-          const catalogLeft =
-            !isMultiInterface && isHistoryOpen && !isMobile ? 260 : 0;
+          const catalogLeft = historyWorkspaceInsetPx;
           const exitCatalogSelection = () => {
             setIsChatsCatalogSelecting(false);
             setChatsCatalogSelectedIds([]);
@@ -13847,8 +14512,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
           );
         })()}
         {isProjectsPageOpen && (() => {
-          const pageLeft =
-            !isMultiInterface && isHistoryOpen && !isMobile ? 260 : 0;
+          const pageLeft = historyWorkspaceInsetPx;
           const query = projectsPageSearch.trim().toLowerCase();
           const sortLabels: Record<ProjectsSort, string> = {
             updated: 'Last updated',
@@ -14198,17 +14862,21 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
           );
         })()}
         {isArtifactsPageOpen && (
-          <ChatArtifactsPage
-            pageLeft={!isMultiInterface && isHistoryOpen && !isMobile ? 260 : 0}
+          <ChatLibraryPage
+            pageLeft={historyWorkspaceInsetPx}
+            viewerLeft={(isTaskbarHidden ? 0 : TASKBAR_WIDTH_PX) + historyWorkspaceInsetPx}
             onClose={() => {
               setIsArtifactsPageOpen(false);
               setHistoryNavView('chats');
+              if (typeof window !== 'undefined') {
+                window.history.pushState({ view: 'chats' }, '', '/chat');
+              }
             }}
           />
         )}
         {isScheduledPageOpen && (
           <ChatScheduledPage
-            pageLeft={!isMultiInterface && isHistoryOpen && !isMobile ? 260 : 0}
+            pageLeft={historyWorkspaceInsetPx}
             onClose={() => {
               setIsScheduledPageOpen(false);
               setHistoryNavView('chats');
@@ -14217,7 +14885,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
         )}
         {isGlobalSettingsPageOpen && (
           <ChatGlobalSettingsPage
-            pageLeft={!isMultiInterface && isHistoryOpen && !isMobile ? 260 : 0}
+            pageLeft={historyWorkspaceInsetPx}
             onClose={() => {
               setIsGlobalSettingsPageOpen(false);
               setHistoryNavView('chats');
@@ -14316,25 +14984,19 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
         {activeProjectId && (() => {
           const project = chatProjects.find((p) => p.id === activeProjectId);
           if (!project) return null;
-          const pageLeft =
-            !isMultiInterface && isHistoryOpen && !isMobile ? 260 : 0;
+          const pageLeft = historyWorkspaceInsetPx;
           const description =
             project.description?.trim() || 'No description yet.';
           const hasLongDescription = description.length > 160;
           const projectChats = conversationHistory
             .filter((convo) => convo.projectId === project.id)
             .sort((a, b) => b.timestamp - a.timestamp);
-          const realProjectFiles = project.files ?? [];
-          // Empty projects show mock files so the grid + "See all" can be judged visually.
-          const projectFiles =
-            realProjectFiles.length > 0 ? realProjectFiles : MOCK_PROJECT_FILES;
+          const projectFiles = project.files ?? [];
           const visibleProjectFiles = isProjectFilesExpanded
             ? projectFiles
             : projectFiles.slice(0, PROJECT_FILES_PREVIEW_LIMIT);
           const hasHiddenProjectFiles = projectFiles.length > PROJECT_FILES_PREVIEW_LIMIT;
-          const realScheduled = project.scheduledTasks ?? [];
-          const projectScheduled =
-            realScheduled.length > 0 ? realScheduled : MOCK_PROJECT_SCHEDULED;
+          const projectScheduled = project.scheduledTasks ?? [];
           return (
             <div
               className="absolute inset-0 z-[46] main-content-transition overflow-hidden"
@@ -14342,7 +15004,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                 left: pageLeft,
                 right:
                   isContextPanelOpen && !isMultiInterface
-                    ? contextPanelWidth
+                    ? contextWorkspaceInsetPx
                     : 0,
                 backgroundColor: 'var(--chat-canvas)',
                 color: 'var(--chat-text)',
@@ -14483,7 +15145,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                 <div className="min-h-0 flex-1 overflow-y-auto px-3 py-3 hide-scrollbar">
                   {(() => {
                     const displayInstructions =
-                      project.instructions?.trim() || MOCK_PROJECT_INSTRUCTIONS;
+                      project.instructions?.trim() || 'No project instructions yet.';
                     const railShellStyle: React.CSSProperties = {
                       backgroundColor:
                         'color-mix(in srgb, var(--chat-canvas) 88%, var(--chat-muted))',
@@ -14649,13 +15311,15 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                             <div className="px-1 pb-1.5 pt-0.5">
                               <div className="grid grid-cols-2 gap-1.5">
                                 {visibleProjectFiles.map((file) => {
-                                  const isMockFile = file.id.startsWith('mock-file-');
                                   const baseName = file.name.includes('.')
                                     ? file.name.slice(0, file.name.lastIndexOf('.'))
                                     : file.name;
                                   const previewText =
-                                    file.content?.trim() ||
-                                    `${getProjectFileExtension(file.name).toUpperCase()} file`;
+                                    file.ingestionState === 'failed'
+                                      ? (file.ingestionError || 'Ingestion failed')
+                                      : file.ingestionState && !['ready', 'unsupported'].includes(file.ingestionState)
+                                        ? `Secure scan: ${file.ingestionState}`
+                                        : `${getProjectFileExtension(file.name).toUpperCase()} file`;
                                   return (
                                     <div
                                       key={file.id}
@@ -14672,6 +15336,9 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                                             type: file.type,
                                             content: file.content,
                                             encoding: file.encoding,
+                                            size: file.size,
+                                            assetId: file.assetId,
+                                            contentUrl: file.contentUrl,
                                           })
                                         }
                                         className="flex h-[3.35rem] w-full flex-col overflow-hidden rounded-lg border px-2 py-1.5 text-left transition-[transform,opacity] duration-150 ease-out hover:opacity-90 active:scale-[0.98]"
@@ -14685,8 +15352,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                                           {previewText}
                                         </span>
                                       </button>
-                                      {!isMockFile && (
-                                        <IconButton
+                                      <IconButton
                                           icon={XDecl}
                                           variant="ghost"
                                           size="xs"
@@ -14695,8 +15361,20 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                                           onClick={() => handleRemoveProjectFile(project.id, file.id)}
                                           aria-label={`Remove ${file.name}`}
                                           title="Remove"
-                                        />
-                                      )}
+                                      />
+                                      {file.ingestionState === 'failed' && file.assetId ? (
+                                        <button
+                                          type="button"
+                                          className="absolute bottom-0.5 right-1 rounded px-1 text-[9px] font-medium text-[var(--chat-text)] hover:underline"
+                                          onClick={(event) => {
+                                            event.stopPropagation();
+                                            void handleRetryProjectFile(project.id, file);
+                                          }}
+                                          title="Retry secure ingestion"
+                                        >
+                                          Retry
+                                        </button>
+                                      ) : null}
                                     </div>
                                   );
                                 })}
@@ -14725,6 +15403,11 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                             />
                           </div>
                           <div className="flex flex-col gap-1.5 px-1 pb-1.5 pt-0.5">
+                            {projectScheduled.length === 0 && (
+                              <div className="rounded-lg border px-2.5 py-3 text-center text-[10.5px] leading-relaxed text-[var(--chat-muted)]" style={railChipStyle}>
+                                No scheduled tasks yet.
+                              </div>
+                            )}
                             {projectScheduled.map((task) => (
                               /* Stays hand-written — the project sidebar's card shape, the fourth of
                                  them: a bordered tile stacking a title over a cadence line, sized by
@@ -14768,7 +15451,8 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
             isMultiInterface ? 'flex-col px-2 py-1' : 'items-center px-0'
           }`}
           style={{
-            right: isContextPanelOpen && !isMultiInterface ? `${contextPanelWidth}px` : '0px',
+            left: `${historyWorkspaceInsetPx}px`,
+            right: `${contextWorkspaceInsetPx}px`,
             backgroundColor: 'var(--chat-canvas)',
             ...(!isMultiInterface ? { height: CHAT_CHROME_BAR_HEIGHT_PX } : null),
           }}
@@ -14776,14 +15460,46 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
           {/* Buttons row */}
           <div className="relative flex h-full w-full flex-shrink-0 items-center justify-between">
           {/* Left side - System Prompt, Clear/Save (history opens from floating chrome / sidebar) */}
-          <div ref={leftButtonsRef} className={`chat-top-bar-buttons relative flex items-center ${isMultiInterface ? 'gap-1' : 'gap-2 md:gap-2'} transition-all duration-300 ease-in-out`}
-            style={{ marginLeft: !isMultiInterface && isHistoryOpen && !isMobile ? '260px' : '0px' }}>
+          <div ref={leftButtonsRef} className={`chat-top-bar-buttons relative flex min-w-0 items-center ${isMultiInterface ? 'gap-1' : 'gap-2 md:gap-2'} transition-all duration-300 ease-in-out`}>
               {/* Spacer: floating icon/XENO (z-60) sits here when history chrome is visible. */}
               {!isMultiInterface && showClosedHistoryChrome && (
                 <div
                   className={`h-9 flex-shrink-0 ${isProjectsPageOpen || isArtifactsPageOpen || isGlobalSettingsPageOpen || isScheduledPageOpen ? 'w-[13.5rem]' : 'w-[8.25rem]'}`}
                   aria-hidden="true"
                 />
+              )}
+              {showCurrentModelInTopBar && (
+                <button
+                  type="button"
+                  data-chat-current-model
+                  data-selection={isComposerModelSelectorOpen ? 'on' : 'off'}
+                  className={topBarBtnClass(
+                    isComposerModelSelectorOpen,
+                    'hidden min-w-0 max-w-[15rem] gap-2 px-3 text-xs sm:flex',
+                  )}
+                  aria-expanded={isComposerModelSelectorOpen}
+                  aria-controls={modelSelectorControlId}
+                  aria-label={`Open model selector. Current model: ${selectedModel.name}`}
+                  title={`Current model: ${selectedModel.name}`}
+                  onClick={() => {
+                    requestComposerModelSelector();
+                    setIsChatMoreMenuOpen(false);
+                    setIsSharePreviewOpen(false);
+                    setIsThemeMenuOpen(false);
+                  }}
+                >
+                  <Brain size={15} className="flex-shrink-0" />
+                  <span data-chat-model-provider className="hidden flex-shrink-0 text-[10px] font-semibold uppercase tracking-[0.08em] text-[var(--chat-muted)] lg:inline">
+                    {selectedModelProviderName}
+                  </span>
+                  <span className="min-w-0 truncate font-medium text-[var(--chat-text)]">
+                    {selectedModel.name}
+                  </span>
+                  <ChevronDown
+                    size={12}
+                    className={`flex-shrink-0 transition-transform duration-150 ${isComposerModelSelectorOpen ? 'rotate-180' : ''}`}
+                  />
+                </button>
               )}
               {/* System Prompt — multi-interface only; main chat opens it from ⋯ */}
               {isMultiInterface && (
@@ -15035,8 +15751,8 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
               ) : (
                 <>
                   <Copy size={13} className="opacity-70 group-hover:opacity-100 flex-shrink-0 transition-opacity" />
-                  <span className="hidden sm:inline">Copy Session Transcript</span>
-                  <span className="inline sm:hidden">Transcript</span>
+                  <span data-chat-transcript-label="long" className="hidden sm:inline">Copy Session Transcript</span>
+                  <span data-chat-transcript-label="short" className="inline sm:hidden">Transcript</span>
                 </>
               )}
             </button>
@@ -15084,7 +15800,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                     setIsThemeMenuOpen(false);
                   }}
                 >
-                  <span className="hidden sm:inline-flex items-center gap-1">
+                  <span data-chat-temporary-label className="hidden sm:inline-flex items-center gap-1">
                     <span className="font-medium leading-none">Temporary</span>
                     <span className="leading-none text-[12px] text-[var(--chat-muted)]">Preview</span>
                   </span>
@@ -15581,7 +16297,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                   <div className="my-1 border-t border-[var(--chat-border)]" />
 
                   <MenuItem
-                    onSelect={(event) => {
+                    onClick={(event) => {
                       openCustomizePage(event.currentTarget);
                       setIsChatMoreMenuOpen(false);
                     }}
@@ -15745,8 +16461,9 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
           translate="no"
           className="hide-scrollbar flex-grow w-full overflow-y-auto px-2 pt-16 pb-56 md:pb-60 main-content-transition notranslate"
           style={{
-            // Match composer clearance when history is open so the column stays centered.
-            paddingLeft: !isMultiInterface && isHistoryOpen && !isMobile ? 260 : undefined,
+            // Match both panel clearances so messages and composer share one centre line.
+            paddingLeft: historyWorkspaceInsetPx || undefined,
+            paddingRight: contextWorkspaceInsetPx || undefined,
           }}
         >
                         {/* `clip`, not `hidden`: it contains the same overflow, but `hidden`
@@ -15939,9 +16656,14 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                                                  : message.userImageAttachment
                                                    ? [message.userImageAttachment]
                                                    : []
-                                             ).filter((img) => img.file || img.base64Data);
+                                             ).filter((img) => img.file || img.base64Data || img.assetId);
 
                                              const openUserImageFullView = (img: typeof imageAttachments[number]) => {
+                                               if (img.assetId) {
+                                                 const activeIndex = imageAttachments.indexOf(img);
+                                                 setLibraryViewerSelection({ items: conversationLibraryViewerItems, activeId: `${message.id}:attachment:${activeIndex}` });
+                                                 return;
+                                               }
                                                const url = img.base64Data
                                                  ? `data:${img.type};base64,${img.base64Data}`
                                                  : img.file
@@ -15960,7 +16682,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                                                imageAttachments.length > 0 ||
                                                Boolean(
                                                  message.userFileAttachment &&
-                                                   (message.userFileAttachment.file || message.userFileAttachment.content),
+                                                   (message.userFileAttachment.file || message.userFileAttachment.content || message.userFileAttachment.assetId),
                                                );
 
                                              return (
@@ -15981,7 +16703,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                                                          ? `data:${img.type};base64,${img.base64Data}`
                                                          : img.file
                                                            ? URL.createObjectURL(img.file)
-                                                           : '';
+                                                           : img.contentUrl || '';
                                                        if (!src) return null;
                                                        /* Stays hand-written: a 148 x 200 image card.
                                                           Its whole surface is the picture — no ink, no
@@ -15998,8 +16720,9 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                                                            aria-label={`View ${img.name} full size`}
                                                            className="block h-[200px] w-[148px] flex-shrink-0 overflow-hidden rounded-xl focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--chat-muted)]"
                                                          >
-                                                           <img
-                                                             src={src}
+                                                           <LibraryAssetImage
+                                                             asset={img.assetId && img.contentUrl ? { assetId: img.assetId, name: img.name, mimeType: img.type, size: img.size, contentUrl: img.contentUrl } : undefined}
+                                                             sourceUrl={src}
                                                              alt={img.name}
                                                              className="h-full w-full cursor-pointer object-cover transition-opacity hover:opacity-95"
                                                            />
@@ -16009,7 +16732,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                                              </div>
                                            )}
 
-                                           {message.userFileAttachment && (message.userFileAttachment.file || message.userFileAttachment.content) && (
+                                           {message.userFileAttachment && (message.userFileAttachment.file || message.userFileAttachment.content || message.userFileAttachment.assetId) && (
                                             /* A BUTTON, not a `<div onClick>`. It opens the file in
                                                 the context panel, so a keyboard has to reach it —
                                                 and did not. `text-left` because a button centres its
@@ -16030,6 +16753,8 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                                                       fileObject: message.userFileAttachment.file
                                                     };
                                                     handleShowFileInContextPanel(fileToShow);
+                                                  } else if (message.userFileAttachment.assetId) {
+                                                    void libraryService.createSignedLink(message.userFileAttachment.assetId).then((url) => window.open(url, '_blank', 'noopener'));
                                                   } else {
                                                     handleShowFileInContextPanel(message.userFileAttachment as any);
                                                   }
@@ -16180,7 +16905,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                                                                   const match = /language-(\w+)/.exec(className || ""); 
                                                                   if (!inline) { 
                                                                       const codeString = String(children).replace(/\n$/, ""); 
-                                                                      if (codeString.includes("\n")) { 
+                                                                      if (match || codeString.includes("\n")) { 
                                                                       const blockIndex = node?.position?.start?.line ?? (node?.index ?? Date.now());
                                                                       const codeBlockId = `${message.id}-thinking-code-${blockIndex}`;
                                                                       return <CodeBlockWithHeader
@@ -16380,6 +17105,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                                            !message.isLoading &&
                                            !message.isGeneratingImage &&
                                            !message.imageData &&
+                                           !message.generatedImageAsset &&
                                            message.sender === 'ai' &&
                                            !message.isThinkingPlaceholder &&
                                            !message.isDotPlaceholder &&
@@ -16400,7 +17126,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                                               </div>
                                           )}
 
-                                          {(message.isGeneratingImage || message.imageData) && (
+                                          {(message.isGeneratingImage || message.imageData || message.generatedImageAsset) && (
                                               <ImageContainer message={message} />
                                           )}
 
@@ -16417,7 +17143,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
       const match = /language-(\w+)/.exec(className || "");
       if (!inline) {
         const codeString = String(children).replace(/\n$/, "");
-        if (codeString.includes("\n")) {
+        if (match || codeString.includes("\n")) {
                                                               const blockIndex = node?.position?.start?.line ?? (node?.index ?? Date.now());
                                                               const codeBlockId = `${message.id}-code-${blockIndex}`;
 
@@ -16449,6 +17175,33 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
 </ReactMarkdown>
                                                {/* Streaming caret removed to match the XENO model (no vertical caret). */}
                                                </div>
+                                          )}
+                                          {!message.isError && !message.isStreaming && Boolean(message.projectSources?.length) && (
+                                            <div className="mt-3 rounded-xl border border-[var(--chat-border)] bg-[var(--chat-surface)]/55 p-2.5" data-project-sources={message.projectSources!.length}>
+                                              <div className="mb-1.5 flex items-center gap-2 px-1 text-xs font-medium text-[var(--chat-muted)]">
+                                                <Library size={13} aria-hidden="true" />
+                                                <span>Project sources</span>
+                                                <span aria-label={`${message.projectSources!.length} sources`}>· {message.projectSources!.length}</span>
+                                              </div>
+                                              <div className="flex flex-wrap gap-1.5">
+                                                {message.projectSources!.map((source, sourceIndex) => {
+                                                  const page = typeof source.locator?.page === 'number' ? ` · p. ${source.locator.page}` : '';
+                                                  const activeId = `${message.id}:project-source:${source.chunk_id}`;
+                                                  return (
+                                                    <button
+                                                      key={source.chunk_id}
+                                                      type="button"
+                                                      onClick={() => setLibraryViewerSelection({ items: conversationLibraryViewerItems, activeId })}
+                                                      className="inline-flex max-w-full items-center gap-1.5 rounded-lg border border-[var(--chat-border)] bg-[var(--chat-control)] px-2.5 py-1.5 text-left text-xs text-[var(--chat-text)] transition-colors hover:bg-[var(--chat-hover)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--chat-accent)]"
+                                                      aria-label={`Open project source ${sourceIndex + 1}: ${source.display_name}`}
+                                                    >
+                                                      <FileText size={13} className="shrink-0 text-[var(--chat-muted)]" aria-hidden="true" />
+                                                      <span className="truncate">{sourceIndex + 1}. {source.display_name}{page}</span>
+                                                    </button>
+                                                  );
+                                                })}
+                                              </div>
+                                            </div>
                                           )}
                                       </div>
                                        
@@ -16578,8 +17331,8 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
           )
         }`}
              style={{
-               left: !isMultiInterface && isHistoryOpen && !isMobile ? '260px' : '0px',
-               right: isContextPanelOpen && !isMultiInterface ? `${contextPanelWidth}px` : '0px',
+               left: `${historyWorkspaceInsetPx}px`,
+               right: `${contextWorkspaceInsetPx}px`,
              }}
         >
           {/* Subtle mask so message text fades gently before it reaches the floating composer. */}
@@ -16826,15 +17579,65 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                   </div>
                   <div>
                     <p className="text-[11px] font-medium uppercase tracking-wide text-[var(--chat-muted)]">
-                      Mark
+                      Instructions
                     </p>
-                    <p className="mt-1 font-mono text-[12px] uppercase tracking-[0.12em] text-[var(--chat-muted)]">
-                      {projectScheduledPreview.mark}
+                    <p className="mt-1 whitespace-pre-wrap text-[12.5px] leading-relaxed text-[var(--chat-text)]">
+                      {projectScheduledPreview.prompt || projectScheduledPreview.title}
                     </p>
                   </div>
-                  <p className="text-[11.5px] leading-relaxed text-[var(--chat-muted)]">
-                    Preview only — edit and run land when the scheduler is live.
-                  </p>
+                  <div>
+                    <p className="text-[11px] font-medium uppercase tracking-wide text-[var(--chat-muted)]">
+                      Recent runs
+                    </p>
+                    <div className="mt-1.5 flex max-h-40 flex-col gap-1 overflow-y-auto">
+                      {projectScheduledPreview.runs === undefined ? (
+                        <p className="text-[11px] text-[var(--chat-muted)]">Loading run history…</p>
+                      ) : projectScheduledPreview.runs.length === 0 ? (
+                        <p className="text-[11px] text-[var(--chat-muted)]">No runs yet.</p>
+                      ) : projectScheduledPreview.runs.map((run) => (
+                        <div key={run.id} className="flex items-center justify-between gap-2 rounded-md border px-2 py-1.5" style={{ borderColor: 'var(--chat-border)' }}>
+                          <div className="min-w-0">
+                            <span className="block text-[10.5px] font-medium capitalize text-[var(--chat-text)]">{run.status.replace(/_/g, ' ')}</span>
+                            <span className="block truncate text-[9.5px] text-[var(--chat-muted)]">
+                              {new Date(run.scheduledFor).toLocaleString()} · attempt {run.attemptCount}{run.modelId ? ` · ${run.modelId}` : ''}
+                            </span>
+                            {run.error ? <span className="block truncate text-[9.5px] text-red-400">{run.error}</span> : null}
+                          </div>
+                          {['failed', 'reconciliation_required'].includes(run.status) ? (
+                            <Button variant="secondary" size="sm" onClick={() => void retryProjectScheduledRun(run.id, run.status)}>
+                              Retry
+                            </Button>
+                          ) : null}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                  <div className="flex items-center justify-between gap-3 rounded-lg border px-3 py-2" style={{ borderColor: 'var(--chat-border)' }}>
+                    <div>
+                      <span className="block text-[11px] font-medium uppercase tracking-wide text-[var(--chat-muted)]">Status</span>
+                      <span className="mt-0.5 block text-[12px] font-medium capitalize text-[var(--chat-text)]">
+                        {projectScheduledPreview.status || 'active'}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                      <Button
+                        variant="secondary"
+                        size="sm"
+                        onClick={() => void toggleProjectScheduledStatus(projectScheduledPreview)}
+                      >
+                        {projectScheduledPreview.status === 'paused' ? 'Resume' : 'Pause'}
+                      </Button>
+                      <IconButton
+                        icon={TrashDecl}
+                        variant="ghost"
+                        size="sm"
+                        iconSize={14}
+                        onClick={() => void removeProjectScheduledTask(projectScheduledPreview.id)}
+                        aria-label="Delete scheduled task"
+                        title="Delete scheduled task"
+                      />
+                    </div>
+                  </div>
                 </div>
               </div>
             </div>,
@@ -16927,6 +17730,22 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                           event.preventDefault();
                           submitProjectScheduledCreate();
                         }
+                      }}
+                    />
+                  </label>
+                  <label className="block">
+                    <span className="mb-1.5 block text-[11px] font-medium uppercase tracking-wide text-[var(--chat-muted)]">
+                      Instructions
+                    </span>
+                    <textarea
+                      value={projectScheduledCreatePrompt}
+                      onChange={(event) => setProjectScheduledCreatePrompt(event.target.value)}
+                      placeholder="What should XENO do when this task runs?"
+                      rows={3}
+                      className="w-full resize-none rounded-lg border bg-transparent px-3 py-2 text-[13px] leading-relaxed text-[var(--chat-text)] outline-none placeholder:text-[var(--chat-muted)]"
+                      style={{
+                        borderColor: 'var(--chat-border)',
+                        backgroundColor: 'var(--chat-surface)',
                       }}
                     />
                   </label>
@@ -17566,6 +18385,67 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                     )}
                     </div>
                   </div>
+                  <label className="block">
+                    <span className="mb-1.5 block text-[11px] font-medium uppercase tracking-wide text-[var(--chat-muted)]">
+                      Timezone
+                    </span>
+                    <input
+                      type="text"
+                      value={projectScheduledCreateTimezone}
+                      onChange={(event) => setProjectScheduledCreateTimezone(event.target.value)}
+                      placeholder="Europe/Berlin"
+                      required
+                      aria-describedby="project-schedule-timezone-note"
+                      className="h-9 w-full rounded-md border bg-transparent px-3 font-mono text-[12px] text-[var(--chat-text)] outline-none placeholder:text-[var(--chat-muted)]"
+                      style={{
+                        borderColor: projectScheduledPreviewError ? 'var(--chat-danger)' : 'var(--chat-border)',
+                        backgroundColor: 'var(--chat-surface)',
+                      }}
+                    />
+                  </label>
+                  <div
+                    id="project-schedule-timezone-note"
+                    className="rounded-lg border px-3 py-2.5"
+                    style={{ borderColor: 'var(--chat-border)', backgroundColor: 'var(--chat-surface)' }}
+                    aria-live="polite"
+                  >
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-[11px] font-medium uppercase tracking-wide text-[var(--chat-muted)]">
+                        Next occurrences
+                      </span>
+                      <span className="font-mono text-[10.5px] text-[var(--chat-muted)]">
+                        {projectScheduledCreateTimezone || 'Timezone required'}
+                      </span>
+                    </div>
+                    {isProjectScheduledPreviewLoading ? (
+                      <p className="mt-2 text-[12px] text-[var(--chat-muted)]">Checking timezone rules…</p>
+                    ) : projectScheduledPreviewError ? (
+                      <p className="mt-2 text-[12px] text-[var(--chat-danger)]" role="alert">
+                        {projectScheduledPreviewError}
+                      </p>
+                    ) : (
+                      <>
+                        <ol className="mt-2 grid gap-1 text-[11.5px] text-[var(--chat-text)]">
+                          {projectScheduledOccurrences.map((iso, index) => (
+                            <li key={iso} className="flex gap-2">
+                              <span className="w-4 flex-shrink-0 font-mono text-[var(--chat-muted)]">{index + 1}.</span>
+                              <time dateTime={iso}>{formatScheduleOccurrence(iso, projectScheduledCreateTimezone)}</time>
+                            </li>
+                          ))}
+                        </ol>
+                        {projectScheduledOccurrences.length > 0 && (() => {
+                          const offsets = scheduleTimezoneOffsets(projectScheduledOccurrences, projectScheduledCreateTimezone);
+                          return (
+                            <p className="mt-2 border-t pt-2 text-[10.5px] leading-relaxed text-[var(--chat-muted)]" style={{ borderColor: 'var(--chat-border)' }}>
+                              {offsets.length > 1
+                                ? `DST transition is visible in this preview (${offsets.join(' → ')}); the selected local wall-clock time is preserved.`
+                                : `Timezone offset ${offsets[0] || projectScheduledCreateTimezone}; daylight-saving gaps are skipped and overlaps use the first occurrence.`}
+                            </p>
+                          );
+                        })()}
+                      </>
+                    )}
+                  </div>
                   <div className="flex justify-end gap-2 pt-1">
                     {/* `secondary md` — a `--chat-control` fill with text ink, 32px of box, and it
                         gains the variant's hairline. The same conversion as the create-project
@@ -17585,9 +18465,17 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                       variant="primary"
                       size="md"
                       onClick={submitProjectScheduledCreate}
-                      disabled={!projectScheduledCreateTitle.trim()}
+                      disabled={
+                        !projectScheduledCreateTitle.trim() ||
+                        !projectScheduledCreatePrompt.trim() ||
+                        !projectScheduledCreateTimezone.trim() ||
+                        projectScheduledOccurrences.length === 0 ||
+                        Boolean(projectScheduledPreviewError) ||
+                        isProjectScheduledPreviewLoading ||
+                        isProjectScheduledCreating
+                      }
                     >
-                      Add
+                      {isProjectScheduledCreating ? 'Adding…' : 'Add'}
                     </Button>
                   </div>
                 </div>
@@ -18099,6 +18987,15 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
             />,
             document.body,
           )}
+        {libraryViewerSelection && createPortal(
+          <LibraryAssetViewer
+            items={libraryViewerSelection.items}
+            activeId={libraryViewerSelection.activeId}
+            leftInset={(isTaskbarHidden ? 0 : TASKBAR_WIDTH_PX) + historyWorkspaceInsetPx}
+            onClose={() => setLibraryViewerSelection(null)}
+          />,
+          document.body,
+        )}
 
         {/* History Sidebar - Slides in from left */}
         {/* In multi-interface mode: render inside the interface container */}
@@ -18109,7 +19006,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
           // Desktop clip: animate with translateX inside a viewport that starts at the taskbar edge,
           // so the panel never paints under the left navigation during open/close.
           // Taskbar is w-13 (52px). Sit flush against it — no floating 12px frame.
-          const historyLeftInset = isTaskbarHidden ? 0 : 52;
+          const historyLeftInset = isTaskbarHidden ? 0 : TASKBAR_WIDTH_PX;
           const historySurfaceStyle: React.CSSProperties = {
             backgroundColor: 'var(--chat-surface)',
             color: 'var(--chat-text)',
@@ -18568,8 +19465,8 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                           data-goo-row="" className={historyNavItemClass(historyNavView === 'artifacts' || isArtifactsPageOpen)}
                           onClick={openArtifactsPage}
                         >
-                          <Shapes size={16} className="flex-shrink-0" />
-                          <span>Artifacts</span>
+                          <Library size={16} className="flex-shrink-0" />
+                          <span>Library</span>
                       </button>
                       {/* Stays hand-written — one of the seven nav rows decided above. */}
                       <button
@@ -18828,7 +19725,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                         {historyNavView === 'artifacts' && !isArtifactsPageOpen && (
                           <div className="px-3 py-8 text-center">
                             <p className="text-[12px] text-[var(--chat-muted)]">
-                              Artifacts open in the main panel.
+                              Library opens in the main panel.
                             </p>
                           </div>
                         )}
@@ -18865,7 +19762,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                 style={{
                   top: '12px',
                   bottom: '12px',
-                  left: isHistoryOpen ? '12px' : '-260px',
+                  left: isHistoryOpen ? '12px' : `-${HISTORY_SIDEBAR_WIDTH_PX}px`,
                   pointerEvents: isHistoryOpen ? 'auto' : 'none',
                   ...historySurfaceStyle,
                 }}
@@ -18881,11 +19778,12 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
             return createPortal(
               <div
                 ref={historySidebarRef}
-                className={`chat-themed xeno-icon-hosts chat-theme-${resolvedChatTheme} chat-history-sidebar fixed z-[50] w-[260px] border rounded-lg overflow-hidden transition-all duration-300 ease-in-out ${!isHistoryOpen ? 'chat-history-sidebar-closed' : ''}`}
+                className={`chat-themed xeno-icon-hosts chat-theme-${resolvedChatTheme} chat-history-sidebar fixed z-[50] border rounded-lg overflow-hidden transition-all duration-300 ease-in-out ${!isHistoryOpen ? 'chat-history-sidebar-closed' : ''}`}
                 data-chat-theme-preference={chatTheme}
                 style={{
                   top: '12px',
                   bottom: '12px',
+                  width: HISTORY_SIDEBAR_WIDTH_PX,
                   left: isHistoryOpen ? '12px' : '-100%',
                   pointerEvents: isHistoryOpen ? 'auto' : 'none',
                   ...historySurfaceStyle,
@@ -18908,7 +19806,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                 top: 0,
                 bottom: 0,
                 left: historyLeftInset,
-                width: 260,
+                width: HISTORY_SIDEBAR_WIDTH_PX,
                 overflow: 'hidden',
                 pointerEvents: isHistoryOpen ? 'auto' : 'none',
               }}

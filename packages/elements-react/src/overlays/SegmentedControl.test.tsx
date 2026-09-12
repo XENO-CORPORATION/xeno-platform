@@ -1,5 +1,6 @@
 import { renderToStaticMarkup } from 'react-dom/server'
 import { describe, it, expect } from 'vitest'
+import Search from '../../../elements/src/elements/search'
 import { SegmentedControl, type SegmentedOption } from './SegmentedControl.js'
 
 const html = (el: Parameters<typeof renderToStaticMarkup>[0]) => renderToStaticMarkup(el)
@@ -31,6 +32,18 @@ describe('SegmentedControl', () => {
 
   it('emits size metrics straight from the size token', () => {
     expect(html(<SegmentedControl value="day" options={options} size="sm" />)).toContain('data-xeno-size="sm"')
+  })
+
+  it('renders an optional glyph slot at the requested size', () => {
+    const out = html(
+      <SegmentedControl
+        value="day"
+        iconSize={14}
+        options={[{ value: 'day', label: 'Day', icon: Search }]}
+      />,
+    )
+    expect(out).toContain('data-glyph="search"')
+    expect(out).toContain('width="14"')
   })
 
   it('hands the thumb its count and index so CSS can place it without measuring', () => {

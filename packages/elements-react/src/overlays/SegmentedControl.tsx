@@ -1,5 +1,7 @@
 import { useState, type CSSProperties, type HTMLAttributes, type ReactElement } from 'react'
-import { sizeAttr, cx, type ControlSizeToken } from '../controls/util.js'
+import type { ElementDeclaration } from '@xenosystem/elements/schema'
+import { XenoElement } from '../XenoElement.js'
+import { sizeAttr, iconPx, cx, type ControlSizeToken } from '../controls/util.js'
 
 /**
  * `<SegmentedControl>` — a single-select of connected options inside one bordered track (a rounded
@@ -13,6 +15,7 @@ import { sizeAttr, cx, type ControlSizeToken } from '../controls/util.js'
 export interface SegmentedOption {
   readonly value: string
   readonly label: string
+  readonly icon?: ElementDeclaration
   readonly disabled?: boolean
 }
 
@@ -21,6 +24,7 @@ export interface SegmentedControlProps extends Omit<HTMLAttributes<HTMLDivElemen
   readonly onValueChange?: (value: string) => void
   readonly options: readonly SegmentedOption[]
   readonly size?: ControlSizeToken
+  readonly iconSize?: number
 }
 
 export function SegmentedControl({
@@ -28,6 +32,7 @@ export function SegmentedControl({
   onValueChange,
   options,
   size = 'md',
+  iconSize,
   className,
   ...rest
 }: SegmentedControlProps): ReactElement {
@@ -90,6 +95,7 @@ export function SegmentedControl({
               if (!selected) onValueChange?.(o.value)
             }}
           >
+            {o.icon && <XenoElement decl={o.icon} size={iconSize ?? iconPx(size)} aria-hidden="true" />}
             {o.label}
           </button>
         )

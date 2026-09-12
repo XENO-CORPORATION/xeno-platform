@@ -1,14 +1,23 @@
 services:
   # PostgreSQL Database
   postgres:
-    image: postgres:15-alpine
+    image: pgvector/pgvector:0.8.6-pg15-bookworm@sha256:a947c45cdc5906a1bc951f20a8709e321256343ee0f251e4ae00b5e7def4e6da
     container_name: xenostudio-postgres
+    command:
+      - postgres
+      - -c
+      - archive_mode=on
+      - -c
+      - archive_command=test ! -f /wal_archive/%f && cp %p /wal_archive/.tmp.%f && mv /wal_archive/.tmp.%f /wal_archive/%f
+      - -c
+      - archive_timeout=300
     environment:
       - POSTGRES_DB=xenostudio
       - POSTGRES_USER=postgres
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:?POSTGRES_PASSWORD required}
     volumes:
       - postgres_data:/var/lib/postgresql/data
+      - ./wal_archive:/wal_archive
     ports:
       - "127.0.0.1:5433:5432"
     networks:
@@ -115,6 +124,10 @@ services:
       - CONVERSION_RETENTION_DAYS=7
       # XENO-API-only: no third-party provider keys. All inference → api.xenostudio.ai (XENO_API_KEY).
       - XENO_API_KEY=${XENO_API_KEY}
+      - XENO_EMBEDDING_BASE_URL=${XENO_EMBEDDING_BASE_URL:-}
+      - XENO_EMBEDDING_API_KEY=${XENO_EMBEDDING_API_KEY:-}
+      - XENO_EMBEDDING_TIMEOUT_MS=${XENO_EMBEDDING_TIMEOUT_MS:-10000}
+      - XENO_EMBEDDING_HEALTH_TIMEOUT_MS=${XENO_EMBEDDING_HEALTH_TIMEOUT_MS:-2000}
       - XENO_REMOTE_RUNNER_COMMAND=${XENO_REMOTE_RUNNER_COMMAND}
       - XENO_REMOTE_RUNNER_ARGS_JSON=${XENO_REMOTE_RUNNER_ARGS_JSON}
       - XENO_REMOTE_RUNNER_CWD=${XENO_REMOTE_RUNNER_CWD}
@@ -165,6 +178,12 @@ services:
       - AUTH_FRONTEND_URL=${AUTH_FRONTEND_URL}
       - COOKIE_DOMAIN=${COOKIE_DOMAIN}
       - XENO_FLOW_URL=http://host.docker.internal:8090
+      # Authenticated Research runs only through the canonical Web Context service.
+      # Credentials are file-mounted; production code rejects plaintext token envs.
+      - XENO_CHAT_WEB_CONTEXT_ENABLED=${XENO_CHAT_WEB_CONTEXT_ENABLED:-false}
+      - XENO_WEB_CONTEXT_URL=${XENO_WEB_CONTEXT_URL:-https://web-context.xenostudio.ai}
+      - XENO_WEB_CONTEXT_TOKEN_FILE=/run/secrets/xeno_web_context_token
+      - XENO_CHAT_WEB_CONTEXT_MAX_COST_USD=${XENO_CHAT_WEB_CONTEXT_MAX_COST_USD:-0.02}
       # ── Settings that fail SILENTLY when absent ──────────────────────
       # 🔴 Every one of these was set in the box's .env on 2026-08-24 and reached
       # NO container, because the `${VAR}` line that reads it was never restored
@@ -176,6 +195,18 @@ services:
       # ⚠️ A value in .env does NOT reach a container on its own. Compose reads
       # .env for ${} SUBSTITUTION only; without a line here the value is simply
       # never passed. That distinction is the whole bug.
+      # Sales switch. Fail-closed: anything but the exact string 'true' means no
+      # checkout (src/server/middleware/salesGate.js). Forwarded HERE and not only
+      # in .env — compose reads .env for ${} substitution only, and a value that is
+      # not listed in this block reaches no container. That gap silently disabled
+      # REGISTRATION_OPEN and all five STRIPE_* keys on 2026-08-24.
+      # Extra site origins ACCEPTED for CORS and redirect allowlists. An
+      # allowlist, never an identity: widening it is safe and individually
+      # revertible, and it does NOT make the new host canonical. The OIDC issuer
+      # is a separate, one-way decision (config/hosts.js: an issuer is not
+      # dual-homeable — OIDC Core §3.1.3.7 requires exact `iss` equality).
+      - XENO_ALIAS_SITE_ORIGINS=${XENO_ALIAS_SITE_ORIGINS:-}
+      - SALES_OPEN=${SALES_OPEN:-}
       - REGISTRATION_OPEN=${REGISTRATION_OPEN:-}
       - REGISTRATION_OPEN_UNTIL=${REGISTRATION_OPEN_UNTIL:-}
       - REGISTRATION_ALLOWLIST=${REGISTRATION_ALLOWLIST:-}
@@ -192,7 +223,11 @@ services:
       # never paste a literal secret into this file.
       - STRIPE_SECRET_KEY=${STRIPE_SECRET_KEY:-}
       - STRIPE_PUBLISHABLE_KEY=${STRIPE_PUBLISHABLE_KEY:-}
+      # Read-only preflight pins; never infer the intended account from its key.
+      - STRIPE_EXPECTED_ACCOUNT_ID=${STRIPE_EXPECTED_ACCOUNT_ID:-}
+      - STRIPE_EXPECTED_MODE=${STRIPE_EXPECTED_MODE:-}
       - STRIPE_WEBHOOK_SECRET=${STRIPE_WEBHOOK_SECRET:-}
+      - STRIPE_BILLING_PORTAL_CONFIGURATION=${STRIPE_BILLING_PORTAL_CONFIGURATION:-}
       - STRIPE_AUTOMATIC_TAX=${STRIPE_AUTOMATIC_TAX:-}
       # What the customer sees on their bank statement. An unrecognised line is
       # the most common cause of a "what is this?" chargeback.
@@ -229,6 +264,7 @@ services:
       - "host.docker.internal:host-gateway"
     volumes:
       - ./src/server/uploads:/app/uploads
+      - ./src/server/uploads:/app/src/server/uploads
       - ./src/server/sam2-uploads:/app/sam2-uploads
       - ./src/server/storage:/app/storage
       - ./conversions:/app/conversions
@@ -238,6 +274,7 @@ services:
       # it; this is the observation path. `:ro` because the API has no business
       # being able to modify or delete a backup.
       - ./backups:/app/backups:ro
+      - ./secrets:/run/secrets:ro
       - /var/run/docker.sock:/var/run/docker.sock
       # Video Studio storage
       - ./storage/videos:/app/storage/videos
@@ -272,6 +309,113 @@ services:
       options:
         max-size: "100m"
         max-file: "10"
+
+  # Untrusted document extraction has no network namespace. Requests and
+  # bounded results cross a filesystem queue; source bytes are mounted read-only.
+  chat-extractor:
+    build:
+      context: .
+      dockerfile: Dockerfile.backend
+    command: ["npm", "run", "start:chat-extractor"]
+    environment:
+      - NODE_ENV=production
+      - CHAT_EXTRACTOR_QUEUE_DIR=/app/extractor-jobs
+      - CHAT_EXTRACTOR_INPUT_ROOTS=/app/uploads,/app/src/server/uploads,/app/storage
+    network_mode: "none"
+    read_only: true
+    tmpfs:
+      - /tmp:size=512m,mode=1777
+    volumes:
+      - ./src/server/uploads:/app/uploads:ro
+      - ./src/server/uploads:/app/src/server/uploads:ro
+      - ./src/server/storage:/app/storage:ro
+      - chat_extractor_jobs:/app/extractor-jobs
+    restart: unless-stopped
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    pids_limit: 128
+    healthcheck:
+      test: ["CMD", "node", "-e", "const f=require('fs');const s=f.statSync('/app/extractor-jobs/heartbeat');process.exit(Date.now()-s.mtimeMs<30000?0:1)"]
+      interval: 10s
+      timeout: 3s
+      start_period: 10s
+      retries: 3
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 1G
+          pids: 128
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "25m"
+        max-file: "3"
+
+  # Durable Chat project workers. These are deliberately a separate process
+  # from the API so scheduler/ingestion health and restarts are observable.
+  chat-workers:
+    build:
+      context: .
+      dockerfile: Dockerfile.backend
+    command: ["npm", "run", "start:chat-workers"]
+    environment:
+      - NODE_ENV=production
+      - DB_HOST=postgres
+      - DB_PORT=5432
+      - DB_NAME=xenostudio
+      - DB_USER=postgres
+      - DB_PASSWORD=${POSTGRES_PASSWORD:?POSTGRES_PASSWORD required}
+      - DATABASE_URL=postgresql://postgres:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD required}@postgres:5432/xenostudio
+      - REDIS_URL=redis://:${REDIS_PASSWORD:?REDIS_PASSWORD required}@redis:6379
+      - XENO_API_KEY=${XENO_API_KEY}
+      - SCHEDULED_RUN_TOKEN_SECRET=${SCHEDULED_RUN_TOKEN_SECRET:?SCHEDULED_RUN_TOKEN_SECRET required}
+      - XENO_EMBEDDING_BASE_URL=${XENO_EMBEDDING_BASE_URL:-}
+      - XENO_EMBEDDING_API_KEY=${XENO_EMBEDDING_API_KEY:-}
+      - XENO_EMBEDDING_TIMEOUT_MS=${XENO_EMBEDDING_TIMEOUT_MS:-10000}
+      - XENO_EMBEDDING_HEALTH_TIMEOUT_MS=${XENO_EMBEDDING_HEALTH_TIMEOUT_MS:-2000}
+      - LEDGER_V2_ENABLED=true
+      - LEDGER_SERVICE_TOKEN=${LEDGER_SERVICE_TOKEN}
+      - JWT_SECRET=${JWT_SECRET}
+      - LIBRARY_CONTENT_SECRET=${LIBRARY_CONTENT_SECRET:-}
+      - CHAT_WORKER_HEALTH_PORT=8081
+      - CHAT_SCHEDULER_ENABLED=${CHAT_SCHEDULER_ENABLED:-0}
+      - CHAT_INGESTION_ENABLED=${CHAT_INGESTION_ENABLED:-0}
+      - CHAT_EXTRACTOR_MODE=filesystem-queue
+      - CHAT_EXTRACTOR_QUEUE_DIR=/app/extractor-jobs
+    volumes:
+      - ./src/server/uploads:/app/uploads
+      - ./src/server/uploads:/app/src/server/uploads
+      - ./src/server/storage:/app/storage
+      - chat_extractor_jobs:/app/extractor-jobs
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
+      chat-extractor:
+        condition: service_healthy
+    networks:
+      - xenostudio-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('http').get('http://127.0.0.1:8081/ready',r=>process.exit(r.statusCode===200?0:1)).on('error',()=>process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      start_period: 15s
+      retries: 3
+    deploy:
+      resources:
+        limits:
+          cpus: '2.0'
+          memory: 2G
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "50m"
+        max-file: "5"
 
   # Proxy Server for external APIs (commented out - no Dockerfile)
   # proxy:
@@ -313,16 +457,16 @@ services:
       - LOGGING_LEVEL=INFO
       - LOGGING_FORMAT=json
       # Search configuration - Add your API keys here!
-      - SEARXNG_INSTANCE_URL=https://searx.tiekoetter.com
-      - BRAVE_API_KEY=${BRAVE_API_KEY:-}
+      - SEARCH_ENGINES=["duckduckgo","brave"]
+      - BRAVE_SEARCH_API_KEY=${BRAVE_API_KEY:-}
       # Google Custom Search (get from https://developers.google.com/custom-search)
       - GOOGLE_API_KEY=${GOOGLE_API_KEY:-}
-      - GOOGLE_CX=${GOOGLE_CX:-}
+      - GOOGLE_CX=${GOOGLE_SEARCH_CX:-}
       # Bing Search (get from https://azure.microsoft.com/en-us/services/cognitive-services/bing-web-search-api/)
       - BING_API_KEY=${BING_API_KEY:-}
       # NLP/ML configuration
       - SUMMARIZATION_MODEL=sshleifer/distilbart-cnn-12-6
-      - ENABLE_SEMANTIC_SEARCH=true
+      - SEMANTIC_SEARCH_ENABLED=true
       # CORS - allow from frontend and backend (JSON format for pydantic-settings v2)
       - CORS_ORIGINS=["http://backend:8080","https://xenostudio.ai"]
       # Meilisearch configuration (for Xeno Search Engine)
@@ -540,6 +684,8 @@ volumes:
   xeno_search_logs:
     driver: local
   meilisearch_data:
+    driver: local
+  chat_extractor_jobs:
     driver: local
 
 networks:

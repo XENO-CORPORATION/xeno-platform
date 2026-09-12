@@ -195,7 +195,7 @@ const Help = () => {
           <p className="text-xs text-white/30">© 2026 Xeno. All rights reserved.</p>
           <div className="flex items-center gap-6">
             <Link to="/contact" className="text-xs text-white/30 hover:text-white/60 transition-colors">Contact</Link>
-            <Link to="/auth" className="text-xs text-white/30 hover:text-white/60 transition-colors">Sign In</Link>
+            <Link to="/login" className="text-xs text-white/30 hover:text-white/60 transition-colors">Sign In</Link>
           </div>
         </footer>
       </div>

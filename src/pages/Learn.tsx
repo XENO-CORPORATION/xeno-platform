@@ -157,7 +157,7 @@ export default function Learn() {
 
   return (
     <div className="flex min-h-screen flex-col bg-[#08080a] text-white font-['Inter',sans-serif] antialiased">
-      <Header onGetStarted={() => navigate('/auth')} visible={true} />
+      <Header onGetStarted={() => navigate('/login')} visible={true} />
 
       <main className="flex-1 pt-[46px]">
         <div className="max-w-5xl mx-auto px-6 pt-20 pb-12">

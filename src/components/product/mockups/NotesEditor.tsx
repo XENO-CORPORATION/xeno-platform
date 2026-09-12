@@ -4,6 +4,7 @@ import {
   Bold, Italic, Underline, Strikethrough, Code, Heading1, Heading2, List, ListOrdered,
   CheckSquare, Quote, Sparkles, Link2, FileText,
 } from 'lucide-react';
+import type { LucideIcon } from 'lucide-react';
 import { Reveal } from '../../landing-v3/primitives';
 
 /* High-fidelity XENO Notes mockup — the hero's "representative content" (NN/g:
@@ -16,7 +17,7 @@ import { Reveal } from '../../landing-v3/primitives';
  * [[wiki-link]], the active page, and the AI summary callout — so the theme
  * switch recolors exactly the parts that make Notes different. */
 
-function ToolBtn({ icon: Icon, active }: { icon: React.ComponentType<{ className?: string; strokeWidth?: number }>; active?: boolean }) {
+function ToolBtn({ icon: Icon, active }: { icon: LucideIcon; active?: boolean }) {
   return (
     <span className={`grid h-6 w-6 place-items-center rounded ${active ? 'bg-white/[0.1] text-[#d8d2ca]' : 'text-[#5d5850]'}`}>
       <Icon className="h-3.5 w-3.5" strokeWidth={1.5} />

@@ -1,11 +1,11 @@
 /**
  * Share-conversation contract.
  *
- * UI calls these functions only. Today they are in-memory mocks; a real backend
- * replaces the bodies without changing ChatShareModal.
+ * UI calls these functions only. The server is authoritative; the in-memory
+ * map is merely a projection of links successfully issued by the server.
  */
 
-export type ShareVisibility = 'private' | 'team' | 'public';
+export type ShareVisibility = 'team' | 'public';
 
 export type SharePreviewMessage = {
   id: string;
@@ -33,26 +33,23 @@ export type SocialPlatform = 'linkedin' | 'x' | 'facebook' | 'reddit';
 
 import { chatService } from '@/services/chatService';
 
-/** Session-only store so Delete link works without a backend. */
-const mockLinksByConversation = new Map<string, ShareLink>();
-
-const randomId = (): string => {
-  if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) {
-    return crypto.randomUUID().replace(/-/g, '').slice(0, 12);
-  }
-  return `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`;
-};
+/** Session projection of server-issued links; never an authority. */
+const linksByConversation = new Map<string, ShareLink>();
 
 /**
  * Creates (or replaces) a share link for a conversation snapshot.
- * Tries server-side database share first, falling back to local link if offline/unauthenticated.
+ * A link is returned only after the server persisted its hashed-token record.
  */
 export const createShareLink = async (
   input: CreateShareLinkInput,
 ): Promise<ShareLink> => {
+  if (!chatService.isAuthenticated()) throw new Error('Sign in to create a share link.');
   try {
-    if (chatService.isAuthenticated()) {
-      const serverShare = await chatService.createShareLink(input.conversationId);
+      const serverShare = await chatService.createShareLink(
+        input.conversationId,
+        7,
+        input.visibility === 'team' ? 'workspace' : 'public',
+      );
       if (serverShare && serverShare.share_token) {
         const link: ShareLink = {
           id: serverShare.share_token,
@@ -62,39 +59,29 @@ export const createShareLink = async (
           messageCount: input.messageCount,
           createdAt: Date.now(),
         };
-        mockLinksByConversation.set(input.conversationId, link);
+        linksByConversation.set(input.conversationId, link);
         return link;
       }
-    }
   } catch (err) {
-    console.warn('[chatShare] Backend share link creation failed, using local link', err);
+    console.error('[chatShare] Backend share link creation failed', err);
+    throw err;
   }
-
-  const id = randomId();
-  const link: ShareLink = {
-    id,
-    url: `https://share.xenostudio.ai/c/${id}`,
-    visibility: input.visibility,
-    conversationId: input.conversationId,
-    messageCount: input.messageCount,
-    createdAt: Date.now(),
-  };
-  mockLinksByConversation.set(input.conversationId, link);
-  return link;
+  throw new Error('The share link was not created.');
 };
 
 export const getActiveShareLink = (conversationId: string): ShareLink | null =>
-  mockLinksByConversation.get(conversationId) ?? null;
+  linksByConversation.get(conversationId) ?? null;
 
 export const deleteShareLink = async (conversationId: string): Promise<void> => {
+  if (!chatService.isAuthenticated()) throw new Error('Sign in to revoke a share link.');
   try {
-    if (chatService.isAuthenticated()) {
-      await chatService.revokeShareLinks(conversationId);
-    }
+    const revoked = await chatService.revokeShareLinks(conversationId);
+    if (!revoked) throw new Error('Share revocation was not saved.');
   } catch (err) {
-    console.warn('[chatShare] Backend share revocation failed', err);
+    console.error('[chatShare] Backend share revocation failed', err);
+    throw err;
   }
-  mockLinksByConversation.delete(conversationId);
+  linksByConversation.delete(conversationId);
 };
 
 export const buildSocialShareUrl = (
@@ -124,11 +111,6 @@ export const VISIBILITY_OPTIONS: {
   label: string;
   description: string;
 }[] = [
-  {
-    id: 'private',
-    label: 'Keep private',
-    description: 'Only you have access',
-  },
   {
     id: 'team',
     label: 'Share with your team',

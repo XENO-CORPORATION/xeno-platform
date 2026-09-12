@@ -1,23 +1,23 @@
 import React, { useState, useEffect } from 'react';
 import { ArrowLeft, KeyRound, Mail, User, Eye, EyeOff, Github, ArrowRight, ChevronDown, Check, X } from 'lucide-react';
-import { Link, useNavigate, useLocation, useParams } from 'react-router-dom';
+import { Link, useNavigate, useLocation } from 'react-router-dom';
 import AuthMark from '../components/auth/AuthMark';
 import { useAuth } from '../contexts/AuthContext';
 import { getAuthApp } from '../lib/authApps';
+import {
+  authClientId,
+  authPath,
+  authReturnUrl,
+  locationReturnPath,
+  type AuthMode,
+} from '../lib/authRouting.js';
 import { stashReturnUrl, consumeReturnUrl } from '../lib/onboardingHandoff.js';
 
-/** Same-origin path guard for returnUrl (open-redirect protection). */
-function safeReturnUrl(raw: string | null): string | null {
-  return raw && raw.startsWith('/') && !raw.startsWith('//') ? raw : null;
-}
-
-const AuthContent = () => {
-  const { app: appSlug } = useParams();
+const AuthContent: React.FC<{ mode?: AuthMode }> = ({ mode = 'signin' }) => {
   const [showEmailForm, setShowEmailForm] = useState(false);
   const [passwordFocused, setPasswordFocused] = useState(false);
 
-  const authApp = getAuthApp(appSlug);
-  const [activeTab, setActiveTab] = useState<'signin' | 'signup'>('signin');
+  const [activeTab, setActiveTab] = useState<AuthMode>(mode);
   const [showPassword, setShowPassword] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [email, setEmail] = useState('');
@@ -62,6 +62,13 @@ const AuthContent = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const { login, register, user } = useAuth();
+  const returnUrl = authReturnUrl(location.search);
+  const clientId = authClientId(location.search);
+  const fallbackAuthApp = getAuthApp(clientId ?? undefined);
+  const [registeredClientName, setRegisteredClientName] = useState<string | null>(null);
+  const authApp = registeredClientName
+    ? { displayName: registeredClientName, productPath: fallbackAuthApp?.productPath }
+    : fallbackAuthApp;
 
   // Unified-auth CLI/Hub browser-session mode: /auth/cli?session=… hands the
   // signed-in user back to the local app by completing the cli-auth session.
@@ -90,6 +97,39 @@ const AuthContent = () => {
     return () => clearTimeout(timer);
   }, []);
 
+  useEffect(() => {
+    setActiveTab(mode);
+  }, [mode]);
+
+  useEffect(() => {
+    const canonical = authPath(mode, location.search);
+    if (`${location.pathname}${location.search}` !== canonical) {
+      navigate(canonical, { replace: true, state: location.state });
+    }
+  }, [location.pathname, location.search, location.state, mode, navigate]);
+
+  // The registered OIDC client is the source of truth for the consent label.
+  // Static presentation is only a loading/legacy fallback, never authority.
+  useEffect(() => {
+    setRegisteredClientName(null);
+    if (!clientId) return;
+    const controller = new AbortController();
+    fetch(`/api/oauth2/client_info?client_id=${encodeURIComponent(clientId)}`, {
+      signal: controller.signal,
+      headers: { accept: 'application/json' },
+    })
+      .then(async (response) => response.ok ? response.json() : null)
+      .then((data) => {
+        if (data?.client_id === clientId && typeof data?.name === 'string') {
+          setRegisteredClientName(data.name);
+        }
+      })
+      .catch((error) => {
+        if (error?.name !== 'AbortError') setRegisteredClientName(null);
+      });
+    return () => controller.abort();
+  }, [clientId]);
+
   // Already signed in (or auth just landed via social ?token, which AuthContext
   // stores) with a CLI session waiting → auto-complete (first-party). Depends on
   // `user` so it re-fires once the social/restored session resolves, not just on
@@ -105,6 +145,7 @@ const AuthContent = () => {
     setTabTransition(true);
     setTimeout(() => {
       setActiveTab(tab);
+      navigate(authPath(tab, location.search), { state: location.state });
       setTimeout(() => setTabTransition(false), 50);
     }, 150);
   };
@@ -159,7 +200,6 @@ const AuthContent = () => {
         // /api/oauth2/authorize page, or a cli-auth handoff), send the user
         // straight back there instead of the dashboard — a full-page load so
         // the backend authorize route continues the grant.
-        const returnUrl = safeReturnUrl(new URLSearchParams(location.search).get('returnUrl'));
         // A NEW account always activates first. Jumping to returnUrl here
         // used to consume the OIDC grant, then the activation interceptor
         // dumped them on /auth/activate with nothing to resume.
@@ -173,7 +213,7 @@ const AuthContent = () => {
           window.location.href = returnUrl;
           return;
         }
-        const from = (location.state as any)?.from?.pathname || '/overview';
+        const from = locationReturnPath((location.state as any)?.from, '/overview');
         navigate(from, { replace: true });
       } else {
         if (activeTab === 'signin') {
@@ -332,10 +372,10 @@ const AuthContent = () => {
                 onClick={() => {
                   // Redirect to OAuth endpoint — carry the unified-auth returnUrl
                   // (OIDC authorize / cli handoff) through social sign-in too.
-                  const returnUrl = safeReturnUrl(new URLSearchParams(location.search).get('returnUrl'))
+                  const socialReturnUrl = returnUrl
                     || (cliSession ? location.pathname + location.search : null)
-                    || (location.state as any)?.from?.pathname || '/overview';
-                  window.location.href = `/api/auth/${social.provider}?returnUrl=${encodeURIComponent(returnUrl)}`;
+                    || locationReturnPath((location.state as any)?.from, '/overview');
+                  window.location.href = `/api/auth/${social.provider}?returnUrl=${encodeURIComponent(socialReturnUrl)}`;
                 }}
                 className={`flex items-center justify-center py-3 rounded-[6px] border border-white/[0.08] bg-white/[0.02] hover:bg-white/[0.08] hover:border-white/[0.15] hover:scale-105 active:scale-95 transition-all duration-300 ease-out group ${
                   isVisible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4'

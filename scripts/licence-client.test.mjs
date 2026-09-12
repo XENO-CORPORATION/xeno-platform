@@ -26,6 +26,42 @@ const doc = readFileSync('docs/LICENCE-ENFORCEMENT.md', 'utf8');
  * refusal" on first run. Collapse whitespace once, here. */
 const docFlat = doc.replace(/\s+/g, ' ');
 
+/* ── 0 · The promise this file makes about itself ───────────────────────── */
+
+test('🔴 NEVER THROWS — every caller-supplied callback is guarded', () => {
+  /* The header says "One check. Never throws — a licence check that can crash the app it
+   * protects has inverted the relationship." It was not true: `readCache()` was awaited on the
+   * FIRST line, outside the try, so a cache callback that rejects escaped.
+   *
+   * That is not hypothetical — a product's cache callback touches the disk, and a full volume,
+   * a locked file or a permissions change all reject. `startLicence` calls
+   * `void checkLicence(opts)`, so it surfaced as an unhandled rejection rather than as anything
+   * a product could act on. Found 2026-08-27 by xeno-motion writing a test for the promise
+   * while adopting this file.
+   *
+   * `writeCache` matters for a second, worse reason: in the 401 branch a rejection would fall
+   * to the OUTER catch — the network-error path — and hand back 'licensed' from grace. An
+   * explicit refusal inverted into a pass is precisely what this file exists to prevent. */
+  const body = src.slice(src.indexOf('export async function checkLicence'));
+
+  const readCacheCall = body.indexOf('opts.readCache()');
+  assert.ok(readCacheCall > -1, 'readCache is no longer called');
+  const beforeRead = body.slice(0, readCacheCall);
+  assert.ok(
+    beforeRead.lastIndexOf('try {') > -1,
+    'readCache() is called OUTSIDE a try — a rejecting cache escapes a function that promises never to throw',
+  );
+
+  for (const m of body.matchAll(/opts\.writeCache\(/g)) {
+    const before = body.slice(0, m.index);
+    const openTry = before.lastIndexOf('try {');
+    assert.ok(
+      openTry > -1 && before.slice(openTry).split('catch').length <= 2,
+      'a writeCache call is not guarded — a failed write can invert an explicit refusal into a pass',
+    );
+  }
+});
+
 /* ── 1 · The fail directions, which are the whole design ─────────────────── */
 
 test('an EXPLICIT refusal (401/403) fails CLOSED, with no grace', () => {

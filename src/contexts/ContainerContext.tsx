@@ -17,6 +17,8 @@ export interface FileSystemItem {
   description?: string;
   isSystemVolume?: boolean;
   isUserVolume?: boolean;
+  view?: 'local' | 'network' | 'shared' | 'recent' | 'this-container';
+  sharedType?: 'with-me' | 'by-me';
 }
 
 export interface StorageInfo {
@@ -203,7 +205,10 @@ export const ContainerProvider: React.FC<ContainerProviderProps> = ({ children }
 
       if (result.success && result.data) {
         // Extract items array from the result data structure
-        const fileSystemData = result.data.items || [];
+        const fileSystemData: FileSystemItem[] = (result.data.items || []).map((item) => ({
+          ...item,
+          modified: item.modified.toISOString(),
+        }));
         setFileSystem(fileSystemData);
         setCurrentPath(path);
       } else {
@@ -324,8 +329,8 @@ export const ContainerProvider: React.FC<ContainerProviderProps> = ({ children }
 
       // API call
       const result = type === 'folder'
-        ? await containerFileSystemService.createDirectory(`${path}/${name}`)
-        : await containerFileSystemService.createFile(`${path}/${name}`, '');
+        ? await containerFileSystemService.createDirectory(path, name)
+        : await containerFileSystemService.createFile(path, name, '');
 
       if (!result.success) {
         // Revert optimistic update
@@ -350,7 +355,7 @@ export const ContainerProvider: React.FC<ContainerProviderProps> = ({ children }
       setFileSystem(prev => prev.filter(item => item.path !== path));
 
       // API call
-      const result = await containerFileSystemService.deleteFile(path);
+      const result = await containerFileSystemService.delete(path, true);
 
       if (!result.success) {
         // Revert optimistic update

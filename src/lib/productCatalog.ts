@@ -94,10 +94,10 @@ export const PRODUCTS: Product[] = [
   { slug: 'hub', name: 'XENO Hub', tagline: 'The all-in-one launcher for every XENO app, agent and credit.', category: 'Platform', status: 'shipping', delivery: 'desktop', operatingSystem: 'Windows', repo: 'xeno-hub' },
 
   // ── Generate (web, in-app) ────────────────────────────────
-  { slug: 'image', name: 'XENO Image', tagline: 'Generate images from a prompt with 20+ frontier models.', category: 'Generate', status: 'shipping', delivery: 'web', launchPath: '/auth' },
-  { slug: 'video', name: 'XENO Video', tagline: 'Generate and edit video with AI pipelines.', category: 'Generate', status: 'shipping', delivery: 'web', launchPath: '/auth' },
-  { slug: 'audio', name: 'XENO Audio', tagline: 'Generate voice, music and sound effects.', category: 'Generate', status: 'shipping', delivery: 'web', launchPath: '/auth' },
-  { slug: '3d-gen', name: 'XENO 3D Gen', tagline: 'Generate 3D models and scenes from a prompt.', category: 'Generate', status: 'beta', delivery: 'web', launchPath: '/auth' },
+  { slug: 'image', name: 'XENO Image', tagline: 'Generate images from a prompt with 20+ frontier models.', category: 'Generate', status: 'shipping', delivery: 'web', launchPath: '/login' },
+  { slug: 'video', name: 'XENO Video', tagline: 'Generate and edit video with AI pipelines.', category: 'Generate', status: 'shipping', delivery: 'web', launchPath: '/login' },
+  { slug: 'audio', name: 'XENO Audio', tagline: 'Generate voice, music and sound effects.', category: 'Generate', status: 'shipping', delivery: 'web', launchPath: '/login' },
+  { slug: '3d-gen', name: 'XENO 3D Gen', tagline: 'Generate 3D models and scenes from a prompt.', category: 'Generate', status: 'beta', delivery: 'web', launchPath: '/login' },
 
   // ── Create ────────────────────────────────────────────────
   { slug: 'pixel', name: 'XENO Pixel', tagline: 'AI-native image editing, design and upscaling.', category: 'Create', status: 'beta', delivery: 'desktop', operatingSystem: 'Windows', repo: 'xeno-pixel' },
@@ -106,7 +106,7 @@ export const PRODUCTS: Product[] = [
   // "nothing here ships yet". coming-soon/soon is correct — but do not let the
   // page copy imply a designed product. See src/content/products/photo.ts.
   { slug: 'photo', name: 'XENO Photo', tagline: 'RAW import, organize, retouch and cloud sync.', category: 'Create', status: 'coming-soon', delivery: 'soon', repo: 'xeno-photo' },
-  { slug: 'motion', name: 'XENO Motion', tagline: 'Video editing, motion graphics and AI pipelines.', category: 'Create', status: 'beta', delivery: 'desktop', operatingSystem: 'Windows', repo: 'xeno-motion' },
+  { slug: 'motion', name: 'XENO Motion', tagline: 'Video editing, motion graphics and AI pipelines.', category: 'Create', status: 'beta', delivery: 'desktop', operatingSystem: 'Windows, Linux', repo: 'xeno-motion' },
   { slug: 'sound', name: 'XENO Sound', tagline: 'Audio editing, music and voice production.', category: 'Create', status: 'beta', delivery: 'desktop', operatingSystem: 'Windows', repo: 'xeno-sound' },
 
   // ── Design ────────────────────────────────────────────────
@@ -198,7 +198,7 @@ export const PRODUCTS: Product[] = [
   { slug: 'extension', name: 'XENO Extension', tagline: 'Bring the XENO agent to Chrome and Edge.', category: 'Connect', status: 'beta', delivery: 'soon', operatingSystem: 'Chrome, Edge, Brave (Chromium)', r2: 'extension', repo: 'xeno-extension', signing: 'none', externalUrl: 'https://updates.xenostudio.ai/apps/extension/extension-stable-v1.2.0/xeno-browser-agent-stable-1.2.0.zip', externalLabel: 'Download 1.2.0 — load unpacked' },
 
   // ── Build ─────────────────────────────────────────────────
-  { slug: 'engine', name: 'XENO Engine', tagline: 'ECS game engine, physics and multiplayer.', category: 'Build', status: 'coming-soon', delivery: 'soon', repo: 'xeno-engine' },
+  { slug: 'engine', name: 'XENO Engine', tagline: 'ECS game engine, physics and multiplayer.', category: 'Build', status: 'beta', delivery: 'desktop', operatingSystem: 'Windows', repo: 'xeno-engine' },
   { slug: 'workflow', name: 'XENO Workflow', tagline: 'Visual node-based automation pipelines.', category: 'Build', status: 'beta', delivery: 'desktop', operatingSystem: 'Windows, Linux', repo: 'xeno-workflow' },
   { slug: 'use', name: 'XENO Use', tagline: "The agent's hands across every device.", category: 'Build', status: 'coming-soon', delivery: 'soon', repo: 'xeno-use' },
   { slug: 'apps', name: 'XENO Apps', tagline: 'No-code custom apps and internal tools.', category: 'Build', status: 'coming-soon', delivery: 'soon', repo: 'xeno-apps' },
@@ -229,7 +229,7 @@ export const PRODUCTS: Product[] = [
   { slug: 'agent', name: 'XENO Agent', tagline: 'The agent-native workspace for building software.', category: 'Develop', status: 'beta', delivery: 'desktop', operatingSystem: 'Windows, Linux', repo: 'xeno-agent-interface' },
   // Migrated 2026-08-09, in ONE pass as the previous note here required: this
   // install command, every sample in src/content/docs/sdk.ts, and the product
-  // page all name @xenosystem/agent-sdk together. npm `latest` is 0.9.0;
+  // page all name @xenosystem/agent-sdk together. npm `latest` is 0.9.17;
   // @xeno-corporation/xeno-agent-sdk is frozen at 0.7.0.
   // The /ui samples were REWRITTEN, not renamed — that subpath no longer ships
   // React (`AgentChatPanel`/`AgentStatusBar`/`useAgent` exist nowhere in the
@@ -237,7 +237,7 @@ export const PRODUCTS: Product[] = [
   // mountAgentUi, createAgentUiView, dispatchAgentUiAction. The SDK declares
   // NO peer dependencies, so any "React is an optional peer" claim is false.
   { slug: 'sdk', name: 'XENO SDK', tagline: 'Embed XENO agents into any app.', category: 'Develop', status: 'beta', delivery: 'cli', install: 'npm install @xenosystem/agent-sdk', repo: 'xeno-agent-sdk' },
-  // ACP moved to the @xenosystem npm scope. npm `latest` is @xenosystem/acp@0.1.1;
+  // ACP moved to the @xenosystem npm scope. npm `latest` is @xenosystem/acp@0.2.11;
   // @xeno-corporation/xeno-acp is frozen at 0.1.0. The page, this install command
   // and the R2 feed must all name the SAME identity — @xenosystem — or a visitor
   // installs the older scope by following our own instructions.

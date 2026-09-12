@@ -49,7 +49,7 @@ function ReleaseNotes() {
       .catch(() => setLoading(false));
   }, [version]);
 
-  const handleGetStarted = () => navigate('/auth');
+  const handleGetStarted = () => navigate('/login');
 
   const allPlatforms = (['windows', 'mac', 'linux'] as const).filter(
     (p) => release && release.assets[p].length > 0

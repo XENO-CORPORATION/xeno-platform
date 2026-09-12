@@ -21,6 +21,10 @@
 #   PG_DB         database to dump         (default xenostudio)
 #   PG_USER       postgres role            (default postgres)
 #   R2_REMOTE     rclone remote:path for offsite copy (default empty = disabled)
+#   BACKUP_GPG_RECIPIENT
+#                 GPG key id/fingerprint to encrypt TO before upload. REQUIRED
+#                 whenever R2_REMOTE is set — without it the offsite copy is
+#                 skipped rather than sent in the clear.
 #
 set -eu
 # pipefail is not in the POSIX sh spec but bash/dash-on-Ubuntu support it; enable if available.
@@ -34,6 +38,7 @@ PG_CONTAINER="${PG_CONTAINER:-xenostudio-postgres}"
 PG_DB="${PG_DB:-xenostudio}"
 PG_USER="${PG_USER:-postgres}"
 R2_REMOTE="${R2_REMOTE:-}"
+BACKUP_GPG_RECIPIENT="${BACKUP_GPG_RECIPIENT:-}"
 LOGFILE="${BACKUP_DIR}/backup.log"
 
 # Use plain `docker` when root (cron), otherwise elevate with sudo for a manual run.
@@ -104,19 +109,65 @@ mv "$TMPFILE" "$OUTFILE"
 SIZE="$(du -h "$OUTFILE" | cut -f1)"
 log "OK: verified dump written -> $OUTFILE ($SIZE)"
 
-# ---- offsite (optional, future-proof) --------------------------------------
-# Only attempts when rclone is installed AND R2_REMOTE is set. Its absence is NOT
-# an error — local rotated dumps are the current deliverable; offsite is opt-in.
+# ---- offsite ---------------------------------------------------------------
+# A dump carries password hashes, email addresses and the whole credit ledger, so
+# it is ENCRYPTED BEFORE IT LEAVES THIS MACHINE. Never upload $OUTFILE itself.
+#
+# 🔴 THE BOX HOLDS ONLY THE PUBLIC KEY. It can encrypt its own backups and cannot
+# read them back. Two properties fall out of that, and both are the point:
+#   - a compromised server cannot decrypt its own history, and
+#   - losing this box does not lose the ability to restore, because the private
+#     half lives in the operator's ~/.xeno-secrets (and a password manager),
+#     never here. `gpg --list-secret-keys` on this host must stay EMPTY.
+#
+# Encryption is REQUIRED once BACKUP_GPG_RECIPIENT is set: if gpg is missing or
+# the encrypt fails we skip the upload rather than fall back to plaintext. A
+# backup that quietly ships unencrypted is worse than one that does not ship.
 if [ -n "$R2_REMOTE" ]; then
-  if command -v rclone >/dev/null 2>&1; then
-    if rclone copy "$OUTFILE" "$R2_REMOTE" 2>>"$LOGFILE"; then
-      log "OK: offsite copy pushed -> $R2_REMOTE"
-    else
-      # Do not fail the whole run: the local verified dump already exists.
-      log "WARN: rclone copy to '$R2_REMOTE' failed; local dump retained."
-    fi
-  else
+  if ! command -v rclone >/dev/null 2>&1; then
     log "WARN: R2_REMOTE set but rclone not installed; skipping offsite copy."
+  elif [ -z "$BACKUP_GPG_RECIPIENT" ]; then
+    log "WARN: R2_REMOTE set but BACKUP_GPG_RECIPIENT is not; refusing to upload a PLAINTEXT dump."
+  elif ! command -v gpg >/dev/null 2>&1; then
+    log "WARN: BACKUP_GPG_RECIPIENT set but gpg is missing; refusing to upload a PLAINTEXT dump."
+  else
+    ENCFILE="${OUTFILE}.gpg"
+    if gpg --batch --yes --trust-model always            --recipient "$BACKUP_GPG_RECIPIENT"            --output "$ENCFILE" --encrypt "$OUTFILE" 2>>"$LOGFILE"; then
+      # Refuse to ship something that is not actually an OpenPGP message — a
+      # zero-byte or truncated artifact would upload happily and restore never.
+      #
+      # 🔴 --list-only IS LOAD-BEARING. Plain `--list-packets` ATTEMPTS DECRYPTION,
+      # so on this host — which by design holds no secret key — it always exits 2
+      # and the guard could never pass. That is worse than no guard: it refused a
+      # perfectly good 693 MB artifact on 2026-09-11 and would have silently kept
+      # every backup onsite forever while logging a plausible warning.
+      # `--list-only` parses the packet structure WITHOUT decrypting: exit 0, and
+      # it still proves a pubkey-encrypted session packet is present.
+      #
+      # Size is checked too: a truncated upload is the failure mode that looks
+      # most like success. The dump is already compressed, so the ciphertext is
+      # within a few percent of it; half is a generous floor that still catches
+      # a stream cut short.
+      ENC_OK=0
+      if [ -s "$ENCFILE" ]          && gpg --batch --list-only --list-packets "$ENCFILE" 2>/dev/null | grep -q 'pubkey enc packet'; then
+        PLAIN_SZ=$(wc -c <"$OUTFILE"); ENC_SZ=$(wc -c <"$ENCFILE")
+        if [ "$ENC_SZ" -gt $(( PLAIN_SZ / 2 )) ]; then ENC_OK=1
+        else log "WARN: ciphertext is $ENC_SZ bytes against a $PLAIN_SZ byte dump — truncated?"; fi
+      fi
+      if [ "$ENC_OK" -eq 1 ]; then
+        if rclone copy "$ENCFILE" "$R2_REMOTE" 2>>"$LOGFILE"; then
+          log "OK: encrypted offsite copy pushed -> $R2_REMOTE ($(du -h "$ENCFILE" | cut -f1))"
+        else
+          log "WARN: rclone copy to '$R2_REMOTE' failed; local dump retained."
+        fi
+      else
+        log "WARN: encrypted artifact failed its own sanity check; NOT uploading."
+      fi
+      rm -f "$ENCFILE"
+    else
+      log "WARN: gpg encryption failed; NOT uploading (refusing plaintext)."
+      rm -f "$ENCFILE"
+    fi
   fi
 fi
 

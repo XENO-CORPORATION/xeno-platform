@@ -65,8 +65,25 @@ function discoverMigrations() {
       name: match[2],
       filename: f,
       filepath: path.join(MIGRATIONS_DIR, f),
+      requirement: fs.readFileSync(path.join(MIGRATIONS_DIR, f), 'utf8')
+        .match(/^--\s*REQUIRES:\s*(.+)$/im)?.[1]?.trim() || null,
     };
   }).filter(Boolean);
+}
+
+async function requirementSatisfied(pool, requirement) {
+  if (!requirement) return true;
+  const pgvector = /^pgvector>=(\d+)\.(\d+)\.(\d+)$/.exec(requirement);
+  if (!pgvector) throw new Error(`Unknown migration requirement: ${requirement}`);
+  const { rows } = await pool.query(
+    `SELECT default_version FROM pg_available_extensions WHERE name='vector'`,
+  );
+  const available = rows[0]?.default_version?.split('.').map(Number);
+  if (!available || available.length < 3) return false;
+  const required = pgvector.slice(1).map(Number);
+  return available[0] > required[0]
+    || (available[0] === required[0] && available[1] > required[1])
+    || (available[0] === required[0] && available[1] === required[1] && available[2] >= required[2]);
 }
 
 // --------------------------------------------------------------------------
@@ -107,7 +124,13 @@ export async function runAllMigrations(pool) {
   console.log(`[Migrations] ${pending.length} pending migration(s) to apply...`);
 
   let appliedCount = 0;
+  const skipped = [];
   for (const migration of pending) {
+    if (!await requirementSatisfied(pool, migration.requirement)) {
+      skipped.push({ version: migration.version, requirement: migration.requirement });
+      console.warn(`[Migrations] Deferred: ${migration.version} requires ${migration.requirement}`);
+      continue;
+    }
     const { up } = parseMigration(migration.filepath);
 
     const client = await pool.connect();
@@ -132,7 +155,7 @@ export async function runAllMigrations(pool) {
   }
 
   console.log(`[Migrations] ${appliedCount} migration(s) applied successfully.`);
-  return { applied: appliedCount, total: migrations.length };
+  return { applied: appliedCount, total: migrations.length, skipped };
 }
 
 // --------------------------------------------------------------------------

@@ -1,4 +1,5 @@
 import express from 'express';
+import { normalizeSettingPath, setNestedSetting } from '../utils/userSettings.js';
 
 const router = express.Router();
 
@@ -163,6 +164,7 @@ router.put('/settings', async (req, res) => {
 
 // PATCH /api/user-data/settings - Partially update user settings
 router.patch('/settings', async (req, res) => {
+  let client;
   try {
     const userId = req.user?.id;
     if (!userId) {
@@ -174,25 +176,48 @@ router.patch('/settings', async (req, res) => {
       return res.status(400).json({ success: false, error: 'Path required' });
     }
 
-    // Use jsonb_set to update nested values
-    // Path should be like 'chat.wideMode' or 'appearance.theme'
-    const pathArray = `{${path.replace(/\./g, ',')}}`;
+    let pathSegments;
+    try {
+      pathSegments = normalizeSettingPath(path);
+    } catch {
+      return res.status(400).json({ success: false, error: 'Invalid setting path' });
+    }
 
-    const result = await req.db.query(
+    // A single locked transaction is required here. jsonb_set('{}',
+    // '{chat,wideMode}', ...) cannot create the missing intermediate `chat`
+    // object, and a read/merge/write through the pool would lose concurrent
+    // preference changes. Create the row, lock it, merge, then write it back.
+    client = await req.db.connect();
+    await client.query('BEGIN');
+    await client.query(
       `INSERT INTO user_settings (user_id, settings, updated_at)
-       VALUES ($1, jsonb_set('{}', $2::text[], $3::jsonb), NOW())
-       ON CONFLICT (user_id)
-       DO UPDATE SET
-         settings = jsonb_set(COALESCE(user_settings.settings, '{}'), $2::text[], $3::jsonb),
-         updated_at = NOW()
-       RETURNING settings`,
-      [userId, pathArray, JSON.stringify(value)]
+       VALUES ($1, '{}'::jsonb, NOW())
+       ON CONFLICT (user_id) DO NOTHING`,
+      [userId]
     );
+    const current = await client.query(
+      'SELECT settings FROM user_settings WHERE user_id = $1 FOR UPDATE',
+      [userId]
+    );
+    const nextSettings = setNestedSetting(current.rows[0]?.settings, pathSegments, value);
+    const result = await client.query(
+      `UPDATE user_settings
+          SET settings = $2::jsonb, updated_at = NOW()
+        WHERE user_id = $1
+        RETURNING settings`,
+      [userId, JSON.stringify(nextSettings)]
+    );
+    await client.query('COMMIT');
 
     res.json({ success: true, settings: result.rows[0].settings });
   } catch (error) {
+    if (client) {
+      try { await client.query('ROLLBACK'); } catch { /* preserve original error */ }
+    }
     console.error('Error patching user settings:', error);
     res.status(500).json({ success: false, error: error.message });
+  } finally {
+    client?.release();
   }
 });
 
@@ -240,7 +265,7 @@ router.post('/files', async (req, res) => {
       return res.status(401).json({ success: false, error: 'Unauthorized' });
     }
 
-    const { filename, original_name, file_type, mime_type, file_size, storage_path, storage_type, metadata } = req.body;
+    const { filename, original_name, file_type, mime_type, file_size, storage_type, metadata } = req.body;
 
     if (!filename) {
       return res.status(400).json({ success: false, error: 'Filename required' });
@@ -250,7 +275,17 @@ router.post('/files', async (req, res) => {
       `INSERT INTO user_files (user_id, filename, original_name, file_type, mime_type, file_size, storage_path, storage_type, metadata)
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
        RETURNING *`,
-      [userId, filename, original_name || filename, file_type, mime_type, file_size, storage_path, storage_type || 'local', metadata || {}]
+      [
+        userId,
+        filename,
+        original_name || filename,
+        file_type,
+        mime_type,
+        file_size,
+        null,
+        storage_type === 'platform-upload' ? 'client-reference' : (storage_type || 'client-reference'),
+        metadata || {},
+      ]
     );
 
     res.json({ success: true, file: result.rows[0] });

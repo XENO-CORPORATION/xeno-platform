@@ -1,20 +1,26 @@
 import React, { useEffect, useState } from 'react';
-import { Link, useParams } from 'react-router-dom';
+import { Link, useLocation, useParams } from 'react-router-dom';
 import AuthMark from '../components/auth/AuthMark';
 import { ArrowLeft, KeyRound } from 'lucide-react';
 import { getAuthApp } from '../lib/authApps';
+import { authPath } from '../lib/authRouting.js';
 
 /* ──────────────────────────────────────────────────────────────────────
- * Device-code entry for the unified /auth/:app/device surface (CLI/Hub from
- * another device). Per "XENO UNIFIED AUTH - SPEC.md" Phase 2: reuses the
- * branded /auth/:app login (via returnUrl) for sign-in, then verifies the
- * one-time code against /api/auth/cli/device-code/verify. Backend unchanged.
+ * /activate is the RFC 8628 verification URI. /auth/:app/device remains a
+ * compatibility surface for the pre-OIDC CLI device-code implementation.
  * ────────────────────────────────────────────────────────────────────── */
-const DeviceAuthContent = () => {
+const DeviceAuthContent: React.FC<{ protocol?: 'oidc' | 'legacy' }> = ({ protocol = 'oidc' }) => {
   const { app: appSlug } = useParams();
-  const authApp = getAuthApp(appSlug) ?? getAuthApp('cli')!;
-  const [code, setCode] = useState('');
+  const location = useLocation();
+  const legacyAuthApp = getAuthApp(appSlug) ?? getAuthApp('cli')!;
+  const initialCode = new URLSearchParams(location.search).get('code') || '';
+  const [code, setCode] = useState(() => formatCode(initialCode));
   const [status, setStatus] = useState<'idle' | 'verifying' | 'connected' | string>('idle');
+  const [authorization, setAuthorization] = useState<{
+    client_id: string;
+    client_name: string;
+    scope: string[];
+  } | null>(null);
   const [isVisible, setIsVisible] = useState(false);
 
   const authed = typeof window !== 'undefined' && !!localStorage.getItem('xenoos_auth_token');
@@ -27,15 +33,17 @@ const DeviceAuthContent = () => {
   // Not signed in → hand off to the branded login, returning here once authed.
   useEffect(() => {
     if (!authed) {
-      const here = `/auth/${appSlug ?? 'cli'}/device`;
-      window.location.href = `/auth/${appSlug ?? 'cli'}?returnUrl=${encodeURIComponent(here)}`;
+      const here = `${location.pathname}${location.search}`;
+      const clientHint = protocol === 'legacy' ? (appSlug ?? 'cli') : undefined;
+      window.location.replace(authPath('signin', `?returnUrl=${encodeURIComponent(here)}`, clientHint));
     }
-  }, [authed, appSlug]);
+  }, [authed, appSlug, location.pathname, location.search, protocol]);
 
   // Auto-format to XXXX-XXXX as the user types.
   const onCodeChange = (v: string) => {
-    const clean = v.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 8);
-    setCode(clean.length > 4 ? `${clean.slice(0, 4)}-${clean.slice(4)}` : clean);
+    setCode(formatCode(v));
+    setAuthorization(null);
+    if (status !== 'idle') setStatus('idle');
   };
 
   const verify = async (e: React.FormEvent) => {
@@ -46,16 +54,29 @@ const DeviceAuthContent = () => {
     if (!tok) { setStatus('Your session expired — please reload.'); return; }
     setStatus('verifying');
     try {
-      const r = await fetch('/api/auth/cli/device-code/verify', {
+      const endpoint = protocol === 'oidc'
+        ? (authorization ? '/api/oauth2/device/approve' : '/api/oauth2/device/inspect')
+        : '/api/auth/cli/device-code/verify';
+      const r = await fetch(endpoint, {
         method: 'POST',
         headers: { 'content-type': 'application/json', authorization: `Bearer ${tok}` },
         body: JSON.stringify({ user_code: code.toUpperCase() }),
       });
       const d = await r.json().catch(() => ({}));
-      if (r.ok && d.status === 'ok') { setStatus('connected'); return; }
+      if (protocol === 'oidc' && r.ok && !authorization && d.client_id && d.client_name) {
+        setAuthorization({
+          client_id: d.client_id,
+          client_name: d.client_name,
+          scope: typeof d.scope === 'string' ? d.scope.split(/\s+/).filter(Boolean) : [],
+        });
+        setStatus('idle');
+        return;
+      }
+      if (r.ok && (d.status === 'ok' || d.ok === true)) { setStatus('connected'); return; }
       setStatus(d.error === 'invalid_code' ? 'That code is invalid. Check it and try again.'
         : d.error === 'expired' ? 'That code has expired. Start again from your terminal.'
         : d.error === 'already_used' ? 'That code was already used.'
+        : d.error_description === 'invalid or expired user_code' ? 'That code is invalid or expired. Start again from your device.'
         : (d.error || 'Verification failed — please try again.'));
     } catch {
       setStatus('Network error — please try again.');
@@ -63,6 +84,9 @@ const DeviceAuthContent = () => {
   };
 
   if (!authed) return null; // redirecting to the branded login
+
+  const displayName = authorization?.client_name
+    || (protocol === 'legacy' ? legacyAuthApp.displayName : 'your XENO device');
 
   return (
     <>
@@ -80,11 +104,13 @@ const DeviceAuthContent = () => {
               semantic-only. The registry's per-app accent is retired hue
               (#a760ff and friends) and must not paint product chrome. */}
             <span className="grid h-9 w-9 shrink-0 place-items-center rounded-[4px] border border-white/[0.12] bg-white/[0.06] text-sm font-bold text-white/85">
-              {authApp.displayName.replace(/^XENO\s+/, '').charAt(0)}
+              {displayName.replace(/^XENO\s+/, '').charAt(0).toUpperCase() || 'X'}
             </span>
             <div className="min-w-0">
-              <div className="text-sm font-semibold leading-tight">Connect {authApp.displayName}</div>
-              <div className="truncate text-xs text-white/40">Enter the code shown in your terminal.</div>
+              <div className="text-sm font-semibold leading-tight">Connect {displayName}</div>
+              <div className="truncate text-xs text-white/40">
+                {authorization ? 'Confirm the registered client and requested access.' : 'Enter the code shown on your device.'}
+              </div>
             </div>
           </div>
 
@@ -110,10 +136,24 @@ const DeviceAuthContent = () => {
               {status !== 'idle' && status !== 'verifying' && (
                 <p className="mt-2 text-sm text-red-400">{status}</p>
               )}
+              {authorization && (
+                <div className="mt-4 rounded-[6px] border border-white/[0.1] bg-white/[0.03] p-4">
+                  <p className="text-sm text-white/75">
+                    Approve only if you started <span className="font-semibold text-white">{authorization.client_name}</span> on your device.
+                  </p>
+                  <div className="mt-3 flex flex-wrap gap-1.5">
+                    {authorization.scope.map((scope) => (
+                      <span key={scope} className="rounded-[4px] border border-white/[0.1] px-2 py-1 text-xs text-white/45">
+                        {scope}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
               <button type="submit" disabled={status === 'verifying'} className="mt-5 w-full rounded-[6px] bg-white py-3 text-sm font-semibold text-black transition-colors hover:bg-white/90 disabled:opacity-60">
-                {status === 'verifying' ? 'Connecting…' : 'Connect'}
+                {status === 'verifying' ? 'Checking…' : authorization ? `Approve ${authorization.client_name}` : 'Continue'}
               </button>
-              <p className="mt-4 text-center text-xs text-white/30">Device codes are a common phishing target. Never share yours.</p>
+              <p className="mt-4 text-center text-xs text-white/30">Device codes are a common phishing target. Never share yours or approve a request you did not start.</p>
             </form>
           )}
         </div>
@@ -123,3 +163,8 @@ const DeviceAuthContent = () => {
 };
 
 export default DeviceAuthContent;
+
+function formatCode(value: string): string {
+  const clean = value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 8);
+  return clean.length > 4 ? `${clean.slice(0, 4)}-${clean.slice(4)}` : clean;
+}

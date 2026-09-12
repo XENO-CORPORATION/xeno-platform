@@ -115,7 +115,7 @@ test('a browser navigation is sent somewhere it can act', () => {
   /* A bare 401 in a browser tab is a dead end. HTML gets the sign-in page with
    * a returnUrl; everything else gets JSON it can branch on. */
   assert.ok(route.includes('wantsHtml(req)'), 'the route no longer distinguishes a navigation from an API call');
-  assert.ok(route.includes('/auth?returnUrl='), 'a browser navigation is not sent anywhere it can act');
+  assert.ok(route.includes('/login?returnUrl='), 'a browser navigation is not sent anywhere it can act');
   assert.ok(route.includes('download_grant_required'), 'the JSON refusal lost its code');
 });
 
@@ -189,7 +189,7 @@ test('a refused download leads somewhere actionable, never to a dead end', async
 
   assert.equal(nextPathFor(STATES.PLAN, 'tok').split('?')[0], '/pricing',
     'a refused download no longer offers a way to fix it');
-  assert.ok(nextPathFor(STATES.SIGNIN, 'tok').startsWith('/auth'),
+  assert.ok(nextPathFor(STATES.SIGNIN, 'tok').startsWith('/login'),
     'a signed-out download no longer offers sign-in');
 
   /* And the client must actually FOLLOW that instruction rather than inventing

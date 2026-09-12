@@ -910,7 +910,7 @@ const OSContainerWizard: React.FC = () => {
             <div className="justify-self-end">
               <button 
                 onClick={() => currentStep === 5 ? handleInstall() : setCurrentStep(c => c + 1)}
-                disabled={isInstalling || (containerLimit && !containerLimit.canCreateNewContainer)}
+                disabled={isInstalling || Boolean(containerLimit && !containerLimit.canCreateNewContainer)}
                 className={`
                   group relative px-8 py-3 rounded-lg text-sm font-semibold transition-all flex items-center gap-3 overflow-hidden border
                   ${isInstalling || (containerLimit && !containerLimit.canCreateNewContainer)

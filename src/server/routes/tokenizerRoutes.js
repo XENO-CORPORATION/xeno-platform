@@ -6,6 +6,15 @@
  * - Claude typically uses ~8% more tokens than GPT-4 for the same text
  * - Gemini and other models vary as well
  * We apply adjustment factors to account for these differences.
+ *
+ * ── WASM encodings are bounded ────────────────────────────────────────────
+ * dqbd/tiktoken#35: each `encoding_for_model()` / `get_encoding()` allocates
+ * a WASM encoder that JS GC cannot free. ~188 allocations irrecoverably
+ * crash the Node process (Connection reset → Cloudflare 502).
+ * dqbd/tiktoken#69: `free()` then reuse of the SAME instance is also fatal.
+ *
+ * So we cache ONE encoding per family (max 3), never per modelId. On encode
+ * failure we evict, free the stale instance, recreate, and retry once.
  */
 
 import express from 'express';
@@ -13,7 +22,15 @@ import { encoding_for_model, get_encoding } from 'tiktoken';
 
 const router = express.Router();
 
-// Cache encodings for performance
+/** A conversation longer than this is estimated client-side, not loaded into WASM. */
+const MAX_TOKENIZE_CHARS = 200_000;
+
+const ENCODING_FAMILY = {
+  GPT4: 'gpt-4',
+  GPT35: 'gpt-3.5-turbo',
+  CL100K: 'cl100k_base',
+};
+
 const encodingCache = new Map();
 
 /**
@@ -33,45 +50,72 @@ const MODEL_ADJUSTMENT_FACTORS = {
   'default': 1.05     // Conservative default
 };
 
-/**
- * Get adjustment factor for a model
- */
 const getAdjustmentFactor = (modelId) => {
-  const provider = modelId.split('/')[0]?.toLowerCase();
+  const provider = String(modelId || '').split('/')[0]?.toLowerCase();
   return MODEL_ADJUSTMENT_FACTORS[provider] || MODEL_ADJUSTMENT_FACTORS['default'];
 };
 
-/**
- * Get the appropriate encoding for a model
- * Falls back to cl100k_base (GPT-4/Claude compatible) for unknown models
- */
-const getEncodingForModel = (modelId) => {
-  // Check cache first
-  if (encodingCache.has(modelId)) {
-    return encodingCache.get(modelId);
-  }
+function encodingFamilyFor(modelId) {
+  const id = String(modelId || '');
+  if (id.includes('gpt-4') || id.includes('gpt-5')) return ENCODING_FAMILY.GPT4;
+  if (id.includes('gpt-3.5')) return ENCODING_FAMILY.GPT35;
+  return ENCODING_FAMILY.CL100K;
+}
 
-  let encoding;
+function createEncoding(family) {
+  if (family === ENCODING_FAMILY.GPT4) return encoding_for_model('gpt-4');
+  if (family === ENCODING_FAMILY.GPT35) return encoding_for_model('gpt-3.5-turbo');
+  return get_encoding('cl100k_base');
+}
 
-  try {
-    // Map model prefixes to tiktoken model names
-    if (modelId.includes('gpt-4') || modelId.includes('gpt-5')) {
-      encoding = encoding_for_model('gpt-4');
-    } else if (modelId.includes('gpt-3.5')) {
-      encoding = encoding_for_model('gpt-3.5-turbo');
-    } else {
-      // For Claude, Gemini, DeepSeek, etc. - use cl100k_base
-      // This is the most widely compatible encoding
-      encoding = get_encoding('cl100k_base');
-    }
-  } catch (error) {
-    console.warn(`[Tokenizer] Could not get encoding for model ${modelId}, using cl100k_base:`, error.message);
-    encoding = get_encoding('cl100k_base');
-  }
-
-  encodingCache.set(modelId, encoding);
+function getEncodingForFamily(family) {
+  const cached = encodingCache.get(family);
+  if (cached) return cached;
+  const encoding = createEncoding(family);
+  encodingCache.set(family, encoding);
   return encoding;
-};
+}
+
+function recreateEncoding(family) {
+  const stale = encodingCache.get(family);
+  encodingCache.delete(family);
+  if (stale) {
+    try {
+      stale.free();
+    } catch {
+      // Already dead — creating a fresh instance is the recovery.
+    }
+  }
+  return getEncodingForFamily(family);
+}
+
+function encodeText(family, text) {
+  const encoding = getEncodingForFamily(family);
+  try {
+    return encoding.encode(text);
+  } catch (error) {
+    console.warn(`[Tokenizer] encode failed for ${family}, recreating:`, error.message);
+    return recreateEncoding(family).encode(text);
+  }
+}
+
+function charCountOf(value) {
+  if (typeof value === 'string') return value.length;
+  if (Array.isArray(value)) {
+    return value.reduce((n, item) => n + (typeof item === 'string' ? item.length : 0), 0);
+  }
+  return 0;
+}
+
+function rejectIfTooLarge(res, chars) {
+  if (chars <= MAX_TOKENIZE_CHARS) return false;
+  res.status(413).json({
+    success: false,
+    error: 'Tokenize payload too large',
+    code: 'tokenize_payload_too_large',
+  });
+  return true;
+}
 
 /**
  * POST /api/tokenize/count
@@ -99,16 +143,15 @@ router.post('/count', async (req, res) => {
       });
     }
 
-    const encoding = getEncodingForModel(modelId);
+    if (rejectIfTooLarge(res, charCountOf(text))) return;
 
-    // Get adjustment factor for this model
+    const family = encodingFamilyFor(modelId);
     const adjustmentFactor = getAdjustmentFactor(modelId);
 
-    // Handle array of texts
     if (Array.isArray(text)) {
       const tokenCounts = text.map(t => {
         if (typeof t !== 'string') return 0;
-        const rawCount = encoding.encode(t).length;
+        const rawCount = encodeText(family, t).length;
         return Math.ceil(rawCount * adjustmentFactor);
       });
 
@@ -120,7 +163,6 @@ router.post('/count', async (req, res) => {
       });
     }
 
-    // Handle single text
     if (typeof text !== 'string') {
       return res.status(400).json({
         success: false,
@@ -128,7 +170,7 @@ router.post('/count', async (req, res) => {
       });
     }
 
-    const rawTokenCount = encoding.encode(text).length;
+    const rawTokenCount = encodeText(family, text).length;
     const tokenCount = Math.ceil(rawTokenCount * adjustmentFactor);
 
     return res.json({
@@ -176,25 +218,27 @@ router.post('/messages', async (req, res) => {
       });
     }
 
-    const encoding = getEncodingForModel(modelId);
+    const prompt = typeof systemPrompt === 'string' ? systemPrompt : '';
+    const chars = messages.reduce((n, msg) => {
+      const content = (msg && (msg.content || msg.text)) || '';
+      return n + (typeof content === 'string' ? content.length : 0);
+    }, 0) + prompt.length;
+    if (rejectIfTooLarge(res, chars)) return;
 
-    // Get adjustment factor for this model
+    const family = encodingFamilyFor(modelId);
     const adjustmentFactor = getAdjustmentFactor(modelId);
 
-    // Count tokens per message (with adjustment)
     const messageTokens = messages.map(msg => {
-      const content = msg.content || msg.text || '';
-      const rawCount = encoding.encode(content).length;
+      const content = (msg && (msg.content || msg.text)) || '';
+      if (typeof content !== 'string' || content.length === 0) return 0;
+      const rawCount = encodeText(family, content).length;
       return Math.ceil(rawCount * adjustmentFactor);
     });
 
-    // Count system prompt tokens (with adjustment)
-    const rawSystemTokens = systemPrompt ? encoding.encode(systemPrompt).length : 0;
+    const rawSystemTokens = prompt ? encodeText(family, prompt).length : 0;
     const systemTokens = Math.ceil(rawSystemTokens * adjustmentFactor);
 
-    // Estimate overhead (role markers, message separators, etc.)
-    // Approximately 4 tokens per message for structure (also adjusted)
-    const rawOverhead = messages.length * 4 + (systemPrompt ? 4 : 0);
+    const rawOverhead = messages.length * 4 + (prompt ? 4 : 0);
     const overhead = Math.ceil(rawOverhead * adjustmentFactor);
 
     const total = messageTokens.reduce((a, b) => a + b, 0) + systemTokens + overhead;

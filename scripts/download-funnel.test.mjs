@@ -213,9 +213,9 @@ test('the pricing page bounces to returnUrl, not the ignored `return`', () => {
   /* AuthContent.tsx reads `returnUrl`. The old `return` was silently dropped, so
    * every signed-out visitor who clicked a plan CTA authenticated and then never
    * came back to pricing — a lost sale on the page that takes money. */
-  assert.ok(!/\/auth\?return=/.test(pricingPage),
-    'Pricing still bounces to /auth?return=, which AuthContent ignores');
-  assert.ok(pricingPage.includes('/auth?returnUrl='), 'Pricing lost its sign-in return entirely');
+  assert.ok(!/\/login\?return=/.test(pricingPage),
+    'Pricing still bounces to /login?return=, which AuthContent ignores');
+  assert.ok(pricingPage.includes('/login?returnUrl='), 'Pricing lost its sign-in return entirely');
 });
 
 test('every non-ready state has somewhere to go', () => {

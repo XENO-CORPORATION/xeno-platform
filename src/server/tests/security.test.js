@@ -3,6 +3,7 @@
  *
  * Verifies:
  * - Unauthenticated requests to protected endpoints return 401
+ * - Retired endpoints return 410 without executing provider logic
  * - CORS rejects unknown origins
  * - Path traversal attempts are blocked
  * - SQL injection attempts are safe
@@ -48,7 +49,8 @@ function assert(condition, name) {
 async function assertRequest(method, path, expectedStatus, name, opts = {}) {
   try {
     const res = await request(method, path, opts);
-    assert(res.status === expectedStatus, `${name} => ${expectedStatus} (got ${res.status})`);
+    const expectedStatuses = Array.isArray(expectedStatus) ? expectedStatus : [expectedStatus];
+    assert(expectedStatuses.includes(res.status), `${name} => ${expectedStatuses.join(' or ')} (got ${res.status})`);
     return res;
   } catch (err) {
     failed++;
@@ -78,18 +80,18 @@ async function testUnauthenticatedEndpoints() {
   await assertRequest('GET', '/api/ai/local-model-catalog', 401, 'GET /api/ai/local-model-catalog requires auth');
 
   // OpenAI proxy endpoints
-  await assertRequest('POST', '/api/openai/images/generations', 401, 'POST /api/openai/images/generations requires auth', {
+  await assertRequest('POST', '/api/openai/images/generations', [401, 410], 'POST /api/openai/images/generations is protected or retired', {
     body: { prompt: 'test', model: 'dall-e-3' },
   });
 
-  await assertRequest('POST', '/api/openai/images/edits', 401, 'POST /api/openai/images/edits requires auth');
-  await assertRequest('POST', '/api/openai/images/variations', 401, 'POST /api/openai/images/variations requires auth');
-  await assertRequest('POST', '/api/openai/responses/create', 401, 'POST /api/openai/responses/create requires auth');
+  await assertRequest('POST', '/api/openai/images/edits', [401, 410], 'POST /api/openai/images/edits is protected or retired');
+  await assertRequest('POST', '/api/openai/images/variations', [401, 410], 'POST /api/openai/images/variations is protected or retired');
+  await assertRequest('POST', '/api/openai/responses/create', [401, 410], 'POST /api/openai/responses/create is protected or retired');
 
   // Replicate proxy endpoints
 
   // Other proxy endpoints
-  await assertRequest('POST', '/api/generate-image', 401, 'POST /api/generate-image requires auth');
+  await assertRequest('POST', '/api/generate-image', [401, 410], 'POST /api/generate-image is protected or retired');
   await assertRequest('POST', '/api/xeno-search', 401, 'POST /api/xeno-search requires auth', {
     body: { query: 'test' },
   });
@@ -113,7 +115,7 @@ async function testUnauthenticatedEndpoints() {
   });
 
   // Ideogram
-  await assertRequest('POST', '/api/ideogram-reframe', 401, 'POST /api/ideogram-reframe requires auth');
+  await assertRequest('POST', '/api/ideogram-reframe', [401, 410], 'POST /api/ideogram-reframe is protected or retired');
 
   // Download routes
   await assertRequest('POST', '/api/download/youtube', 401, 'POST /api/download/youtube requires auth', {

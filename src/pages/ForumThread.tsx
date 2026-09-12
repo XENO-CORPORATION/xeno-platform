@@ -632,7 +632,7 @@ const ForumThread: React.FC = () => {
                   </form>
                 ) : (
                   <div className="rounded-md border border-white/10 bg-[#060608] px-4 py-3.5 text-[12.5px] text-[#79797f]">
-                    <a href="/auth" className="font-medium text-[#e5e5e9] hover:text-white">Sign in</a>{' '}
+                    <a href="/login" className="font-medium text-[#e5e5e9] hover:text-white">Sign in</a>{' '}
                     to {isQa ? 'answer' : 'reply'}. Reading never requires an account.
                   </div>
                 )}

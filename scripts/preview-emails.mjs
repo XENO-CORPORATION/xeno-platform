@@ -49,7 +49,7 @@ const SAMPLES = [
     note: 'The onboarding mail (shipped in dfc4f0f). Included here because it sets the house style every other template inherits, and because it is the one currently reaching real users — the Forum templates below are not wired to send yet.',
     render: () => templates.welcome({
       displayName: 'Alex',
-      loginUrl: 'https://xenostudio.ai/auth',
+      loginUrl: 'https://xenostudio.ai/login',
       unsubscribeUrl: 'https://xenostudio.ai/email/unsubscribe?e=you%40example.com&t=sample',
     }),
   },

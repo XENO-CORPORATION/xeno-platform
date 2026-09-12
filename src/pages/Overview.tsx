@@ -22,11 +22,6 @@ import VideoUpscaleInterface from '../components/playground/Enhance/VideoEnhance
 import MultiChatContainer from '../components/playground/Chat/MultiChatContainer';
 import ChatWithVoice from '../components/playground/Chat/ChatWithVoice';
 import SearchChatInterface from '../components/playground/Chat/SearchChatInterface';
-import ChatArtifactsPage from '../components/playground/Chat/ChatArtifactsPage';
-import ChatCustomizePage from '../components/playground/Chat/ChatCustomizePage';
-import ChatScheduledPage from '../components/playground/Chat/ChatScheduledPage';
-import ChatGlobalSettingsPage from '../components/playground/Chat/ChatGlobalSettingsPage';
-import ChatSkillsWorkspace from '../components/playground/Chat/ChatSkillsWorkspace';
 const ThreeDGenerationInterface = React.lazy(() => import('../components/playground/Generation/ThreeDGenerationInterface'));
 import AudioGenerationInterface from '../components/playground/Generation/AudioGenerationInterface';
 import VideoGenerationInterface from '../components/playground/Generation/VideoGenerationInterface';
@@ -228,7 +223,21 @@ const OverviewContent: React.FC = () => {
   }, [isTaskbarHidden]);
 
   return (
-    <div style={{ height: '100vh', width: '100vw', display: 'flex', flexDirection: 'row', overflow: 'hidden', margin: 0, padding: 0 }}>
+    <div
+      data-overview-shell
+      style={{
+        height: '100dvh',
+        width: '100vw',
+        display: 'flex',
+        flexDirection: 'row',
+        // `hidden` creates a scroll container. Focusing a taskbar item below the
+        // fold then scrolls this WHOLE shell, taking the chat header with it.
+        // `clip` contains painting without exposing a programmatic scrollport.
+        overflow: 'clip',
+        margin: 0,
+        padding: 0,
+      }}
+    >
       <LayoutContext.Provider value={{ isSidebarCollapsed }}>
         {/* Left Taskbar - Original taskbar with OS button and AI interfaces */}
         <div style={{ transition: 'transform 0.35s cubic-bezier(0.25, 0.1, 0.25, 1), margin 0.35s cubic-bezier(0.25, 0.1, 0.25, 1)', transform: isTaskbarHidden ? 'translateX(-100%)' : 'translateX(0)', marginRight: isTaskbarHidden ? '-52px' : '0', zIndex: 60, position: 'relative' }}>
@@ -295,16 +304,20 @@ const OverviewContent: React.FC = () => {
             <Route path="chat/projects/:projectId" element={<MultiChatContainer />} />
             <Route path="projects" element={<MultiChatContainer />} />
             <Route path="projects/:projectId" element={<MultiChatContainer />} />
-            <Route path="chat/artifacts" element={<ChatArtifactsPage />} />
-            <Route path="chat/artifacts/:artifactId" element={<ChatArtifactsPage />} />
-            <Route path="artifacts" element={<ChatArtifactsPage />} />
-            <Route path="artifacts/:artifactId" element={<ChatArtifactsPage />} />
-            <Route path="chat/customize" element={<ChatCustomizePage />} />
-            <Route path="customize" element={<ChatCustomizePage />} />
-            <Route path="chat/scheduled" element={<ChatScheduledPage />} />
-            <Route path="scheduled" element={<ChatScheduledPage />} />
-            <Route path="chat/settings" element={<ChatGlobalSettingsPage />} />
-            <Route path="chat/skills" element={<ChatSkillsWorkspace />} />
+            <Route path="chat/library" element={<MultiChatContainer />} />
+            <Route path="chat/library/:libraryItemId" element={<MultiChatContainer />} />
+            <Route path="library" element={<MultiChatContainer />} />
+            <Route path="library/:libraryItemId" element={<MultiChatContainer />} />
+            <Route path="chat/artifacts" element={<MultiChatContainer />} />
+            <Route path="chat/artifacts/:artifactId" element={<MultiChatContainer />} />
+            <Route path="artifacts" element={<MultiChatContainer />} />
+            <Route path="artifacts/:artifactId" element={<MultiChatContainer />} />
+            <Route path="chat/customize" element={<MultiChatContainer />} />
+            <Route path="customize" element={<MultiChatContainer />} />
+            <Route path="chat/scheduled" element={<MultiChatContainer />} />
+            <Route path="scheduled" element={<MultiChatContainer />} />
+            <Route path="chat/settings" element={<MultiChatContainer />} />
+            <Route path="chat/skills" element={<MultiChatContainer />} />
             <Route path="chat/multi" element={<MultiChatContainer />} />
             {/* XENO: voice mode route disabled — voice de-scoped (no direct provider calls) */}
             {/* <Route path="chat/voice" element={<ChatWithVoice />} /> */}

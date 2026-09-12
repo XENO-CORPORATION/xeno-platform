@@ -69,6 +69,14 @@ CREATE TABLE IF NOT EXISTS oauth_authorization_codes (
 );
 CREATE INDEX IF NOT EXISTS idx_oauth_codes_expiry ON oauth_authorization_codes (expires_at);
 
+CREATE TABLE IF NOT EXISTS oauth_authorization_context (
+  code       text PRIMARY KEY,
+  auth_time  timestamptz NOT NULL,
+  prompt     varchar(32),
+  acr        text,
+  created_at timestamptz NOT NULL DEFAULT now()
+);
+
 CREATE TABLE IF NOT EXISTS oauth_refresh_tokens (
   id          uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   token_hash  text NOT NULL UNIQUE,          -- sha256 of the opaque token
@@ -83,6 +91,56 @@ CREATE TABLE IF NOT EXISTS oauth_refresh_tokens (
   created_at  timestamptz NOT NULL DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS idx_oauth_rt_family ON oauth_refresh_tokens (family_id);
+
+-- OIDC access-token revocation without changing the live users/refresh tables.
+-- Every minted SID is registered here with the user's revocation epoch. Access
+-- validation requires an unrevoked row whose epoch still matches the user row.
+CREATE TABLE IF NOT EXISTS oauth_user_auth_epochs (
+  user_id     uuid PRIMARY KEY,
+  epoch       bigint NOT NULL DEFAULT 0,
+  changed_at  timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS oauth_session_state (
+  sid         uuid PRIMARY KEY,
+  user_id     uuid NOT NULL,
+  auth_epoch  bigint NOT NULL,
+  auth_time   timestamptz NOT NULL,
+  dpop_jkt    text,
+  expires_at  timestamptz NOT NULL,
+  revoked_at  timestamptz,
+  created_at  timestamptz NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_oauth_session_user
+  ON oauth_session_state (user_id, revoked_at, expires_at);
+
+CREATE TABLE IF NOT EXISTS oauth_dpop_replays (
+  jkt         text NOT NULL,
+  jti         text NOT NULL,
+  htm         varchar(16) NOT NULL,
+  htu         text NOT NULL,
+  expires_at  timestamptz NOT NULL,
+  created_at  timestamptz NOT NULL DEFAULT now(),
+  PRIMARY KEY (jkt, jti)
+);
+
+CREATE TABLE IF NOT EXISTS oauth_broker_installations (
+  installation_id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id          uuid NOT NULL,
+  public_jwk       jsonb NOT NULL,
+  jkt              text NOT NULL,
+  revoked_at       timestamptz,
+  created_at       timestamptz NOT NULL DEFAULT now(),
+  UNIQUE (user_id, jkt)
+);
+
+CREATE TABLE IF NOT EXISTS oauth_broker_assertion_replays (
+  installation_id uuid NOT NULL,
+  jti              text NOT NULL,
+  expires_at       timestamptz NOT NULL,
+  created_at       timestamptz NOT NULL DEFAULT now(),
+  PRIMARY KEY (installation_id, jti)
+);
 
 CREATE TABLE IF NOT EXISTS oauth_device_codes (
   device_code   text PRIMARY KEY,

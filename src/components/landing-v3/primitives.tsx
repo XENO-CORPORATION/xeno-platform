@@ -35,12 +35,14 @@ export function Reveal({
   delay = 0,
   y = 14,
   as: Tag = 'div',
+  style,
 }: {
   children: React.ReactNode;
   className?: string;
   delay?: number;
   y?: number;
   as?: 'div' | 'section' | 'li' | 'article' | 'span';
+  style?: React.CSSProperties;
 }) {
   const ref = useRef<HTMLElement | null>(null);
   const [shown, setShown] = useState(false);
@@ -97,13 +99,14 @@ export function Reveal({
         shown ? 'opacity-100' : 'opacity-0',
         className,
       )}
-      style={
-        settled
-          ? undefined // no transform, no will-change → back on the crisp ClearType path
+      style={{
+        ...style,
+        ...(settled
+          ? {} // no transform, no will-change → back on the crisp ClearType path
           : shown
             ? { transform: 'translateY(0)', transitionDelay: `${d}ms` }
-            : { transform: `translateY(${y}px)`, transitionDelay: `${d}ms` }
-      }
+            : { transform: `translateY(${y}px)`, transitionDelay: `${d}ms` }),
+      }}
     >
       {children}
     </Comp>

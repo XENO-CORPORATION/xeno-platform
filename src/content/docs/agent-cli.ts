@@ -11,6 +11,8 @@ const agentCli: ProductDocs = {
   slug: 'agent-cli',
   productName: 'XENO Agent CLI',
   tagline: 'The terminal AI coding agent — read, edit, and run with your permission, any model, fully auditable.',
+  version: '0.5.41',
+  updated: '2026-08-30',
   seo: {
     title: 'XENO Agent CLI documentation',
     description:
@@ -49,7 +51,7 @@ The CLI is **Layer 3 (Agent & Automation)** of the XENO ecosystem. It consumes t
 - [Quickstart](/docs/agent-cli/quickstart) — your first chat and your first \`run\`
 - [Authentication & API keys](/docs/agent-cli/authentication)
 
-> XENO Agent CLI is proprietary software, © 2026 XENO Corporation. It is currently in beta (v0.4.x).`,
+> XENO Agent CLI is proprietary software, © 2026 XENO Corporation. It is currently in beta (v0.5.x).`,
         },
         {
           slug: 'installation',
@@ -105,7 +107,7 @@ xeno update
 
 \`xeno update\` reports the resolved install command, how to roll back, the active release channel, and the native checksum URL.
 
-> **Not yet available:** Homebrew and WinGet packages are planned but not shipping today — use npm or the install scripts.
+> **Not yet available:** Homebrew and WinGet packages are planned but not shipping today — use npm.
 
 Next: [Quickstart →](/docs/agent-cli/quickstart)`,
         },
@@ -152,7 +154,10 @@ xeno chat --model claude-sonnet-4-6      # pick a model
 xeno chat --permission-mode acceptEdits  # auto-accept edits, still ask for commands
 xeno run --bg "run the full test suite"  # background run
 xeno run --delegate "refactor the payments module"  # planner→executor→reviewer
+xeno --interface                         # open this workspace's latest session in XENO Agent
 \`\`\`
+
+Use \`xeno --interface --resume <session-id>\` when you want an exact session rather than the latest one for the current workspace. XENO Agent attaches to that durable SDK session; it does not create a transcript copy.
 
 ## Next steps
 
@@ -209,6 +214,63 @@ Configuration resolves in this order (highest wins): **CLI flags → environment
     {
       title: 'Core concepts',
       pages: [
+        {
+          slug: 'chat-and-agent-modes',
+          title: 'Chat and Agent modes',
+          description: 'One terminal interface with different workspace authority and matching graphical handoff.',
+          body: `# Chat and Agent modes
+
+XENO Agent CLI exposes the same canonical modes as the graphical XENO Agent surface.
+
+| Command | Workspace authority | Intended use |
+|---|---|---|
+| \`xeno chat\` | Private Host-managed workspace; no project grant | Conversation, research, writing, and non-project tools |
+| \`xeno agent\` | Exact current or explicitly supplied project folder | Files, commands, Git, review, testing, and project-aware agents |
+
+Both commands open the same XENO terminal interface. Chat is branded **XENO CHAT** and cannot be promoted to project authority by saved settings or a legacy \`--mode\` value. Agent mode requires a real project root and persists that grant with the session.
+
+Resume preserves the original mode. A Chat command refuses a project-bound Agent session; resume that session with \`xeno agent --resume <id>\`. The current shell directory alone never changes persisted authority.
+
+Open the matching graphical surface with \`xeno chat --interface\` or \`xeno agent --interface\`. The desktop must acknowledge the exact nonce-bound resume request; merely starting an incompatible older app is not reported as success.
+
+Related: [Sessions, checkpoints & resume](/docs/agent-cli/sessions) · [XENO Agent modes](/docs/agent/chat-and-agent-modes).`,
+        },
+        {
+          slug: 'goal-loop-handoff',
+          title: 'Goal, Loop, and Handoff',
+          description: 'Durable objectives, unbounded continuation, verification, and single-writer execution transfer.',
+          body: `# Goal, Loop, and Handoff
+
+The CLI is a client of the Agent SDK coordination store. It does not own a second Goal, Loop, or Handoff format.
+
+## Goals
+
+\`\`\`powershell
+xeno goal set --session session-123 "Ship only when every release gate passes"
+xeno goal status --session session-123 --json
+xeno run --goal "Ship only when every release gate passes" "Implement and verify the change"
+\`\`\`
+
+Goal execution is unbounded by default. Use \`--goal-max-turns\` or \`goal set --max-turns\` only for a deliberate operator limit. Exhaustion is not success: completion requires verifier evidence for the declared criteria.
+
+## Loops
+
+\`\`\`powershell
+xeno loop start --session session-123 --kind agentic-development --json
+xeno loop status --session session-123 --json
+xeno loop pause --session session-123 <loop-id>
+xeno loop resume --session session-123 <loop-id>
+xeno loop stop --session session-123 <loop-id>
+\`\`\`
+
+Kinds are \`scheduled\`, \`agentic-development\`, and \`goal-continuation\`. Development and continuation loops have no implicit iteration ceiling. Failed iterations remain durable evidence for the next inspect-repair-retest pass.
+
+## Live handoff
+
+Inside the TUI, run \`/handoff status\` or \`/handoff prepare terminal-b\`. Preparation flushes the transcript, relinquishes its writer lock, and prints the exact target resume command. The target claims a live lease, advances the fencing epoch, and prevents the source from appending or executing further work.
+
+Read-only \`xeno handoff status <session-id> --json\` is safe. Stateless commands cannot impersonate a live owner or mint execution authority.`,
+        },
         {
           slug: 'agent-loop',
           title: 'The agent loop & tools',
@@ -379,6 +441,9 @@ Sessions are stored under \`~/.xeno-agent/sessions/<id>/\` with a JSONL transcri
 \`\`\`bash
 xeno sessions              # list sessions
 xeno chat --resume         # resume the most recent session
+xeno chat --resume <id>    # resume an exact session in the terminal
+xeno --interface           # open this workspace's latest session in XENO Agent
+xeno --interface --resume <id>  # open an exact session in XENO Agent
 xeno chat --checkpoint     # start from a checkpoint
 \`\`\`
 
@@ -503,6 +568,7 @@ Run \`xeno --help\` for the full, version-accurate list. The most common command
 | Command | Purpose |
 |---------|---------|
 | \`xeno chat\` | Interactive session (default) |
+| \`xeno --interface [--resume [id]]\` | Open the latest or exact durable session in XENO Agent |
 | \`xeno run <prompt>\` | One-shot task |
 | \`xeno login\` / \`logout\` / \`auth\` | Authentication |
 | \`xeno update\` | Update the CLI |
@@ -513,6 +579,9 @@ Run \`xeno --help\` for the full, version-accurate list. The most common command
 | \`xeno remote\` | Remote execution |
 | \`xeno app-server\` | JSON-RPC / HTTP bridge |
 | \`xeno sessions\` | Session management |
+| \`xeno goal\` | Manage persistent evidence-gated goals |
+| \`xeno loop\` | Manage durable scheduled, development, and goal-continuation loops |
+| \`xeno handoff\` | Inspect or administer durable execution handoffs |
 | \`xeno doctor\` / \`bug-report\` | Diagnostics |
 | \`xeno config\` | Edit configuration |
 | \`xeno usage\` / \`cost\` | Usage and cost |
@@ -526,7 +595,7 @@ Run \`xeno --help\` for the full, version-accurate list. The most common command
 | \`-k, --api-key\` | \`$XENO_API_KEY\` | API key |
 | \`--base-url\` | XENO API | OpenAI-compatible endpoint |
 | \`--max-tokens\` | 8192 | Max output tokens |
-| \`--max-iterations\` | 50 | Loop cap |
+| \`--max-iterations\` | unbounded | Optional explicit loop cap |
 | \`--mode\` | agent | \`agent\` or \`chat\` |
 | \`--permission-mode\` | default | \`default\` / \`acceptEdits\` / \`bypassPermissions\` |
 | \`--delegate\` | off | Delegate to planner/executor/reviewer |
@@ -574,7 +643,7 @@ Slash commands work inside an interactive \`xeno chat\` session. Type \`/help\` 
 \`/audit\` · \`/approvals\` · \`/approved-tools\` · \`/permissions\`
 
 ## Extensibility
-\`/mcp\` · \`/skills\` · \`/plugins\` · \`/agents\` · \`/delegate\` · \`/goal\` · \`/workflow\`
+\`/mcp\` · \`/skills\` · \`/plugins\` · \`/agents\` · \`/delegate\` · \`/goal\` · \`/handoff\` · \`/workflow\`
 
 ## Utilities
 \`/doctor\` · \`/bug-report\` · \`/config\` · \`/init\` · \`/review\` · \`/release-notes\` · \`/terminal-setup\` · \`/login\` · \`/logout\`

@@ -67,6 +67,7 @@ import {
   Search,
   CheckCheck
 } from 'lucide-react';
+import type { LucideIcon } from 'lucide-react';
 
 type NodeType =
   // Existing
@@ -286,7 +287,7 @@ const DARK_COLORS = [
 interface NodeMetadata {
   type: NodeType;
   name: string;
-  icon: React.ComponentType<{ size?: number; className?: string }>;
+  icon: LucideIcon;
   color: string;
   category: 'Basic' | 'Content & Media' | 'Interactive' | 'Organization' | 'Collaboration' | 'Smart';
   keywords: string[]; // For better search
@@ -674,7 +675,7 @@ const CanvasPlanningVisual: React.FC = () => {
   };
 
   const applyCanvasState = (canvas: OfficeCanvas) => {
-    const canvasState = canvas.canvas_state || {};
+    const canvasState = canvas.canvas_state || { nodes: [], connections: [] };
     const hydratedNodes = Array.isArray(canvasState.nodes)
       ? canvasState.nodes.map(hydrateNodeDates)
       : defaultCanvasNodes;
@@ -1565,7 +1566,6 @@ const CanvasPlanningVisual: React.FC = () => {
       else if (e.key === 'Escape') {
         setSelectedNodeId(null);
         setEditingNodeId(null);
-        setShowBlockMenu(false);
         setShowColorPicker(false);
       }
     };
@@ -3583,6 +3583,7 @@ const CanvasPlanningVisual: React.FC = () => {
                   y,
                   width: 400,
                   height: 400,
+                  content: '',
                 };
 
                 setNodes([...nodes, baseNode]);
