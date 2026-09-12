@@ -102,6 +102,7 @@ import { startConversionWorker } from './services/conversionWorker.js';
 import { runRequiredStartupMigrations } from './services/startupSchema.js';
 import { startScheduledTasksWorker } from './workers/chatScheduledWorker.js';
 import { startLibraryIngestionWorker } from './workers/libraryIngestionWorker.js';
+import { createLeaderElection } from './services/leaderElection.js';
 import { reasoningCapabilityForModel, reasoningEffortForModel } from './lib/chatModelCapabilities.js';
 import { registerManagedLibraryFile } from './services/libraryAssets.js';
 import { assembleProjectContext } from './services/chatProjectContext.js';
@@ -4000,6 +4001,10 @@ app.use((err, req, res, next) => {
 function gracefulShutdown(signal) {
   console.log(`\n${signal} received. Starting graceful shutdown...`);
 
+  // Hand leadership over BEFORE draining: a standby should pick the background
+  // work up while this replica is still finishing its in-flight requests.
+  void backgroundLeader.stop();
+
   // Stop accepting new connections
   server.close(async () => {
     console.log('HTTP server closed.');
@@ -4037,6 +4042,15 @@ process.on('uncaughtException', (error) => {
 });
 
 // The listener and workers remain stopped until the required schema is ready.
+// 🔴 EXACTLY ONE replica runs the recurring background work. Without this, a
+// second replica means customers get every Forum notification twice, and — the
+// quieter half — two retention sweepers delete concurrently while two hold
+// sweepers void the same credit holds. A Postgres advisory lock rather than a
+// config flag, because a flag cannot fail over: if the flagged replica dies the
+// sweeps just stop and nothing says so. See services/leaderElection.js.
+const backgroundLeader = createLeaderElection(pool);
+backgroundLeader.start();
+
 app.locals.migrationsReady = false;
 
 /**
@@ -4080,8 +4094,11 @@ startDownloadCleanup();
     const sweepHolds = () => sweepExpiredHolds(pool)
       .then((n) => { if (n) console.log(`[HoldSweeper] voided ${n} expired hold(s)`); })
       .catch((e) => console.error('[HoldSweeper] error:', e.message));
-    setInterval(sweepHolds, 15 * 60 * 1000).unref();
-    sweepHolds();
+    backgroundLeader.whenLeader(() => {
+      const t = setInterval(sweepHolds, 15 * 60 * 1000);
+      t.unref(); sweepHolds();
+      return () => clearInterval(t);
+    });
 
     // Download-intent sweeper. `expires_at` was in the schema with nothing
     // reading it; expiry is now enforced on read (so the deadline is real at
@@ -4094,8 +4111,11 @@ startDownloadCleanup();
         if (marked || deleted) console.log(`[FunnelSweeper] expired ${marked}, pruned ${deleted}`);
       })
       .catch((e) => console.error('[FunnelSweeper] error:', e.message));
-    setInterval(sweepIntents, 30 * 60 * 1000).unref();
-    sweepIntents();
+    backgroundLeader.whenLeader(() => {
+      const t = setInterval(sweepIntents, 30 * 60 * 1000);
+      t.unref(); sweepIntents();
+      return () => clearInterval(t);
+    });
 
     // Data retention. Four tables added for the download funnel and the version
     // floor grow one row per user action; none of them had an end, which is a
@@ -4109,8 +4129,11 @@ startDownloadCleanup();
         if (parts.length) console.log(`[Retention] pruned ${parts.join(' ')}`);
       })
       .catch((e) => console.error('[Retention] error:', e.message));
-    setInterval(sweepRet, RETENTION_SWEEP_INTERVAL_MS).unref();
-    sweepRet();
+    backgroundLeader.whenLeader(() => {
+      const t = setInterval(sweepRet, RETENTION_SWEEP_INTERVAL_MS);
+      t.unref(); sweepRet();
+      return () => clearInterval(t);
+    });
 }
 
 // Initialize background job queues
@@ -4122,10 +4145,10 @@ initBackgroundJobs(pool).catch(err => {
 // is exactly "true" — mailing real users is a switch somebody throws, never a
 // side effect of a deploy. This call is what makes the bridge REACHABLE; the
 // service being correct is not the same as it running.
-startNotificationEmailSweep(pool);
+backgroundLeader.whenLeader(() => startNotificationEmailSweep(pool));
 // Loop D push half. The delivery engine it feeds had ZERO producers before this
 // line existed — see forumWebhookPush.js.
-startWebhookPushSweep(pool);
+backgroundLeader.whenLeader(() => startWebhookPushSweep(pool));
 // Development can embed these loops for convenience. Production runs them in
 // the explicit chat-workers service so an API restart cannot silently own or
 // erase correctness-critical worker health.
