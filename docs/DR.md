@@ -92,6 +92,39 @@ exactly what the `EXPECT_BACKENDS` check exists to catch, and it is the honest
 reason not to treat two replicas as self-healing — recovery is
 `docker compose up -d --no-deps backend`.
 
+## 0d. The gateway link is WireGuard, not an SSH tunnel (2026-09-12)
+
+`xeno-private-api-001` (.224) reached this box through a single `ssh -L`
+process forwarding Postgres and the platform API. One PID: if it died, both went
+with it. It also ran `StrictHostKeyChecking=no`, so a swapped host key was
+accepted silently — a fragile trust boundary as well as a single point of
+failure.
+
+**wg0 replaces it.** `10.99.0.1` (platform) <-> `10.99.0.2` (gateway). Both ends
+authenticate each other by public key, it lives in the kernel rather than a
+process, and it re-establishes itself with no supervision.
+
+⚠️ **WireGuard rather than per-service mTLS, deliberately.** The live traffic on
+that tunnel was POSTGRES, so per-service mTLS would have meant rewriting the
+money database's authentication — the riskiest possible way to solve a transport
+problem. At the network layer, no service's auth config changes at all.
+
+Postgres publishes on `10.99.0.1:5433` as well as loopback, and **docker.service
+is ordered `After=wg-quick@wg0`** so that publish cannot fail at boot and take
+the database down with it.
+
+Verify: `sudo wg show wg0` on either box (a recent handshake means mutual auth
+is live), and `ss -tn | grep 10.99.0.1:5433` on .224 to see the real traffic.
+`127.0.0.1:15433` should have **zero** listeners; if it comes back, something
+restarted the retired pm2 process `xeno-platform-tunnel`.
+
+🔴 **Two database passwords were rotated during this work** because I exposed
+them: grepping the gateway `.env` for a port number printed whole lines, and
+those lines were connection strings. `xeno_gateway_runtime` and
+`xeno_gateway_maintenance` both have new passwords, set on the box and streamed
+host-to-host without passing through a terminal. **Grep for the KEY and extract
+the field — never print a matching line from a file that holds credentials.**
+
 ## 0a. The storage substrate underneath this box — measured 2026-09-12
 
 🔴 **This VM pauses under you, and it did yesterday.** `xeno-platform-001` is
