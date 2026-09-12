@@ -38,6 +38,12 @@ if [ -z "$BACKUP_GPG_RECIPIENT" ]; then log "ERROR: BACKUP_GPG_RECIPIENT unset; 
 command -v rclone >/dev/null 2>&1 || { log "ERROR: rclone not installed"; exit 1; }
 command -v gpg    >/dev/null 2>&1 || { log "ERROR: gpg not installed"; exit 1; }
 
+# One choke point for every R2 write in this chain — see scripts/lib/r2-put.sh
+# for why a plain `rclone copy` reported failure on 100% of successful uploads.
+# shellcheck source=lib/r2-put.sh
+. "$(cd "$(dirname "$0")" && pwd)/lib/r2-put.sh"
+
+
 SHIPPED=0; FAILED=0
 for f in "$WAL_DIR"/*; do
   [ -f "$f" ] || continue
@@ -54,11 +60,14 @@ for f in "$WAL_DIR"/*; do
     rm -f "$enc"; FAILED=$((FAILED+1)); continue
   fi
 
-  if rclone copy "$enc" "$R2_REMOTE/wal/" 2>>"$LOGFILE"; then
+  # 🔴 The raw segment is deleted ONLY after r2_put confirms the object is both
+  # STORED and byte-verified against R2. Deleting on a bare upload exit code is
+  # how a WAL gap gets created silently.
+  if r2_put "$enc" "$R2_REMOTE/wal/" 2>>"$LOGFILE"; then
     rm -f "$f" "$enc"
     SHIPPED=$((SHIPPED+1))
   else
-    log "WARN: rclone copy failed for $base; retaining raw segment for the next run"
+    log "WARN: R2 put/verify failed for $base; retaining raw segment for the next run"
     rm -f "$enc"; FAILED=$((FAILED+1))
   fi
 done

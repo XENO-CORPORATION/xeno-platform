@@ -16,6 +16,12 @@
 # Runs on ANY host; it backs up whatever of the known paths exists there.
 #
 set -eu
+
+# One choke point for every R2 write in this chain — see scripts/lib/r2-put.sh
+# for why a plain `rclone copy` reported failure on 100% of successful uploads.
+# shellcheck source=lib/r2-put.sh
+. "$(cd "$(dirname "$0")" && pwd)/lib/r2-put.sh"
+
 (set -o pipefail) 2>/dev/null && set -o pipefail || true
 
 R2_REMOTE="${R2_REMOTE:-}"
@@ -75,7 +81,7 @@ gpg --batch --yes --trust-model always --recipient "$BACKUP_GPG_RECIPIENT" \
     --output "$ENC" --encrypt "$ARCHIVE" 2>>"$LOGFILE" || fail "gpg encryption failed"
 rm -f "$ARCHIVE"   # never leave the plaintext archive on disk
 
-if rclone copy "$ENC" "$R2_REMOTE/secrets/$HOST/" 2>>"$LOGFILE"; then
+if r2_put "$ENC" "$R2_REMOTE/secrets/$HOST/" 2>>"$LOGFILE"; then
   log "OK: $FOUND secret path(s) from $HOST -> $R2_REMOTE/secrets/$HOST/ ($(du -h "$ENC" | cut -f1))"
 else
   rm -rf "$WORK"; fail "rclone upload failed"

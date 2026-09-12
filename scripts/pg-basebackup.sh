@@ -13,6 +13,12 @@
 # Runs on the box from cron, as root.
 #
 set -eu
+
+# One choke point for every R2 write in this chain — see scripts/lib/r2-put.sh
+# for why a plain `rclone copy` reported failure on 100% of successful uploads.
+# shellcheck source=lib/r2-put.sh
+. "$(cd "$(dirname "$0")" && pwd)/lib/r2-put.sh"
+
 (set -o pipefail) 2>/dev/null && set -o pipefail || true
 
 BASE_DIR="${BASE_DIR:-/mnt/projects/xeno-platform/backups/base}"
@@ -66,8 +72,8 @@ if [ -n "$R2_REMOTE" ]; then
     ENC="${OUT}.gpg"
     if gpg --batch --yes --trust-model always --recipient "$BACKUP_GPG_RECIPIENT" \
            --output "$ENC" --encrypt "$OUT" 2>>"$LOGFILE" \
-       && rclone copy "$ENC" "$R2_REMOTE/base/" 2>>"$LOGFILE"; then
-      log "OK: encrypted base backup pushed -> $R2_REMOTE/base/ ($(du -h "$ENC" | cut -f1))"
+       && r2_put "$ENC" "$R2_REMOTE/base/" 2>>"$LOGFILE"; then
+      log "OK: encrypted base backup pushed and VERIFIED -> $R2_REMOTE/base/ ($(du -h "$ENC" | cut -f1))"
     else
       log "WARN: offsite push failed; local base backup retained."
     fi

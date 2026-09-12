@@ -27,6 +27,12 @@
 #                 skipped rather than sent in the clear.
 #
 set -eu
+
+# One choke point for every R2 write in this chain — see scripts/lib/r2-put.sh
+# for why a plain `rclone copy` reported failure on 100% of successful uploads.
+# shellcheck source=lib/r2-put.sh
+. "$(cd "$(dirname "$0")" && pwd)/lib/r2-put.sh"
+
 # pipefail is not in the POSIX sh spec but bash/dash-on-Ubuntu support it; enable if available.
 # shellcheck disable=SC3040
 (set -o pipefail) 2>/dev/null && set -o pipefail || true
@@ -155,10 +161,10 @@ if [ -n "$R2_REMOTE" ]; then
         else log "WARN: ciphertext is $ENC_SZ bytes against a $PLAIN_SZ byte dump — truncated?"; fi
       fi
       if [ "$ENC_OK" -eq 1 ]; then
-        if rclone copy "$ENCFILE" "$R2_REMOTE" 2>>"$LOGFILE"; then
+        if r2_put "$ENCFILE" "$R2_REMOTE" 2>>"$LOGFILE"; then
           log "OK: encrypted offsite copy pushed -> $R2_REMOTE ($(du -h "$ENCFILE" | cut -f1))"
         else
-          log "WARN: rclone copy to '$R2_REMOTE' failed; local dump retained."
+          log "WARN: R2 put/verify to '$R2_REMOTE' failed; local dump retained."
         fi
       else
         log "WARN: encrypted artifact failed its own sanity check; NOT uploading."
