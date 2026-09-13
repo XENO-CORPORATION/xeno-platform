@@ -75,7 +75,7 @@ test('every mode sends a capability statement, unconditionally', () => {
   );
 });
 
-test('no mode tells the model the web is unreachable', () => {
+test('no mode teaches the model to narrate a tool it cannot invoke', () => {
   const code = stripComments(CONFIG);
   const block = code.match(/const SEARCH_CAPABILITY[\s\S]*?\n\};/);
   assert.ok(block, 'SEARCH_CAPABILITY must exist');
@@ -83,24 +83,47 @@ test('no mode tells the model the web is unreachable', () => {
     assert.match(block[0], new RegExp(`${mode}:`), `SEARCH_CAPABILITY must cover ${mode}`);
   }
   /*
-   * ⚠️ A PROHIBITION is not an ASSERTION, and the first version of this check could not tell
-   * them apart. It matched "never claim you have no access to the web" — an instruction NOT to
-   * say the thing — and reported it as the defect. The phrase being present is meaningless;
-   * what matters is whether it is negated.
+   * 🔴 REWRITTEN 2026-09-13, because the first version asserted the wrong thing.
    *
-   * So: find each denial phrase and look at what precedes it. Only an unnegated one is a fault.
+   * It forbade any mode from saying it cannot search, on the theory that such a denial was
+   * always the defect. That encoded a belief about the product — "search is reachable from
+   * everywhere" — which the code disproves: `toggleXenoSearch` and `toggleSearch` are both
+   * defined in ChatWithLLM.tsx and CALLED BY NOTHING, so there is no search control in the
+   * composer and Chat genuinely cannot search today.
+   *
+   * A gate that forbids a true statement pushes the prompt toward a false one. And it did: the
+   * text it approved told users to find a control that does not exist, after which the model
+   * fabricated `*[Running search...]*` and then invented a technical failure to explain why no
+   * results appeared.
+   *
+   * ⚠️ So the invariant is NOT "never say you cannot search". It is:
+   *   - never narrate running a tool (that is the fabrication), and
+   *   - always name the route that DOES work, so a refusal is not a dead end.
+   *
+   * When the tool loop lands (docs/CHAT-TOOL-CALLING-PLAN.md) the Chat text changes again — and
+   * it must change only AFTER the tool is reachable, which is what the final checklist item in
+   * that plan is for.
    */
-  const DENIAL = /(no (web |internet )?access|cannot (search|browse)|unable to (search|browse))/gi;
-  const asserted = [...block[0].matchAll(DENIAL)].filter((m) => {
-    const before = block[0].slice(Math.max(0, m.index - 60), m.index).toLowerCase();
-    return !/(never|not|don't|do not|avoid|rather than)\s[^.]*$/.test(before);
+  const FABRICATION = /(\[?(running|performing|executing) (a )?search|let me search|i'?ll search now|i have (enabled|activated) search)/gi;
+  const fabricated = [...block[0].matchAll(FABRICATION)].filter((m) => {
+    const before = block[0].slice(Math.max(0, m.index - 70), m.index).toLowerCase();
+    return !/(never|not|don'?t|do not|avoid|must not)\s[^.]*$/.test(before);
   });
   assert.deepEqual(
-    asserted.map((m) => m[0]), [],
-    'a mode that cannot search must say where the user CAN search, never that the web is out of ' +
-    'reach — that flat denial is the reported defect. (A phrase prefixed by "never claim…" is an ' +
-    'instruction against it and is fine.)',
+    fabricated.map((m) => m[0]), [],
+    'the prompt must never model narrating a search. The reported defect was the model emitting ' +
+    '"*[Running search...]*" and then inventing a failure, for a tool it could not invoke.',
   );
+
+  // Every mode must point at a route that actually works, so "I can't" is never a dead end.
+  for (const mode of MODES) {
+    const line = block[0].match(new RegExp(`${mode}: \\[([\\s\\S]*?)\\]`))?.[1] ?? '';
+    assert.match(
+      line, /Research/,
+      `the ${mode} statement must name the route that does work (Research), so a refusal gives ` +
+      'the user somewhere to go instead of ending the conversation.',
+    );
+  }
   assert.match(block[0], /Research/, 'the deeper pass must be named so the model can point at it');
 });
 
@@ -151,6 +174,44 @@ test('the two depths are really different server-side', () => {
     `deep (${ms(deep)}ms) must allow more time than quick (${ms(quick)}ms), or the tiers are ` +
     'one tier with two names',
   );
+});
+
+test('the prompt cannot promise a control that is not rendered', () => {
+  /*
+   * 🔴 THE GATE THAT WOULD HAVE CAUGHT THE FABRICATION.
+   *
+   * The prompt told users to turn search on with "the search control beside the composer".
+   * `toggleXenoSearch` and `toggleSearch` are both defined in ChatWithLLM.tsx and called by
+   * NOTHING — there is no such control. So the user could not comply, and the model, believing
+   * it had a capability, emitted "*[Running search...]*" and then invented a technical failure.
+   *
+   * ⚠️ The capability docblock already said "Do not add a capability to this text before it is
+   * wired." It was added anyway, in the same edit that wrote the warning. A warning beside the
+   * thing does not enforce the thing — only a check does.
+   *
+   * So: if the prompt points at a toggle, that toggle must have a caller. This is deliberately
+   * about REACHABILITY, not existence: a handler nothing invokes is exactly as useless to a user
+   * as a handler that was never written.
+   */
+  const config = stripComments(CONFIG);
+  const chatSource = stripComments(CHAT);
+
+  const promisesAToggle = /search control|toggle|turn it on|enable search/i.test(config);
+  if (!promisesAToggle) return; // nothing claimed, nothing to verify
+
+  for (const handler of ['toggleXenoSearch', 'toggleSearch']) {
+    const declared = new RegExp(`const ${handler}\\s*=`).test(chatSource);
+    if (!declared) continue;
+    // A caller is any mention that is not the declaration itself.
+    const mentions = (chatSource.match(new RegExp(handler, 'g')) || []).length;
+    assert.ok(
+      mentions > 1,
+      `the capability statement points users at a search control, but ${handler} is declared and ` +
+      'never called — so no such control is rendered and the instruction cannot be followed. ' +
+      'Either wire the control or stop promising it. (This is the exact 2026-09-13 defect: the ' +
+      'model then fabricated "*[Running search...]*" and invented a failure.)',
+    );
+  }
 });
 
 test('the identity names the product, not the underlying model', () => {

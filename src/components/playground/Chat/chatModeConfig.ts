@@ -79,24 +79,26 @@ export const XENO_IDENTITY = [
  */
 const SEARCH_CAPABILITY: Readonly<Record<ChatMode, string>> = {
   chat: [
-    'Web search is available here whenever the user turns it on (the search control beside the composer),',
-    'and it is a quick lookup: a small number of searches to answer a specific question.',
-    'If a question needs live or post-training information, say search is available and offer to run it —',
-    'never claim you have no access to the web.',
-    'For a broad question needing many sources and a written-up answer, point the user at XENO Research.',
+    'You have NO tool you can invoke in this mode — you cannot search, browse, or run anything.',
+    'XENO does search the web, but only in Research mode, which the user selects with the Research tab',
+    'above the composer; the search then runs before your turn and its results arrive in your context.',
+    'So: never say you are searching, never narrate running a search, and never claim a search failed.',
+    'If a question needs live or post-training information, say plainly that this mode cannot search and',
+    'that the Research tab will — then answer what you can from training, flagging that it may be dated.',
   ].join(' '),
   research: [
-    'You are in XENO Research mode: a deeper pass than a quick lookup — search widely across multiple',
-    'sources, synthesise them into a written answer, and cite the sources you used.',
-    'Prefer breadth and corroboration over a single result.',
+    'You are in XENO Research mode. The search has ALREADY RUN before this turn and its results are in',
+    'your context — you are not calling a tool and must not narrate searching.',
+    'Ground your answer in those sources, cite them, and prefer corroboration over a single result.',
+    'If no sources are present, say so rather than inventing a search.',
   ].join(' '),
   code: [
-    'Web search is off in Code mode. If live information is needed, say so and tell the user that Chat mode',
-    'can search on demand, and XENO Research runs the deeper multi-source pass.',
+    'You have no tool you can invoke in this mode, and no web access. If live information is needed, say',
+    'so plainly and tell the user that the Research tab searches the web with cited sources.',
   ].join(' '),
   agents: [
-    'Web search depends on the agent selected. Do not assert that the web is unreachable —',
-    'Chat mode searches on demand and XENO Research runs the deeper multi-source pass.',
+    'You have no tool you can invoke in this mode. Do not narrate searching or running anything.',
+    'If live information is needed, tell the user the Research tab searches the web with cited sources.',
   ].join(' '),
 };
 
