@@ -1,0 +1,87 @@
+/**
+ * The composer shows focus on its OWN border, and never as a floating white rectangle.
+ *
+ * ## The defect this pins, reported from the running site 2026-09-13
+ *
+ * Focusing the chat input painted a hard white box inside the dark composer. It was the global
+ * `:focus-visible` rule in `src/index.css` — `outline: 2px solid rgba(255,255,255,.5)` at
+ * `outline-offset: 2px` — tracing the TEXTAREA, which is a transparent, borderless element inset
+ * from the shell. So the ring floated in space, attached to no visible edge, around the text but
+ * above the controls row. No comparable product ships that.
+ *
+ * The textarea already carried `outline-none focus:ring-0 focus:shadow-none` and they could not
+ * win: Tailwind utilities and `:focus-visible` are both specificity (0,1,0), so source order
+ * decides and `index.css` loads last. `.focus-self` (0,2,0) is the repo's existing opt-out.
+ *
+ * ## Why this file exists when `scripts/focus-visible.test.mjs` already guards the class
+ *
+ * 🔴 That gate MISSED this, measured — deleting the replacement rule while keeping `focus-self`
+ * left it green. It asks whether the FILE contains `focus:(border|bg|ring|shadow)` anywhere, and
+ * `ChatWithLLM.tsx` is ~20,000 lines with many unrelated `focus:` utilities, so the answer is
+ * yes no matter what the composer does. A file-level regex cannot answer an element-level
+ * question; it passes vacuously exactly where the file is large enough to matter.
+ *
+ * So this gate asserts the PAIR, on the composer specifically: the opt-out exists AND the
+ * replacement exists, and the replacement targets the shell rather than the field.
+ *
+ * Mutation-checked 2026-09-13, each failing alone with a green control:
+ *   delete the `:focus-within` rule but keep `focus-self`   → test 2 fails
+ *   drop `focus-self` from the textarea                     → test 1 fails
+ *   point the replacement at the textarea instead of shell  → test 3 fails
+ */
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
+const CHAT = readFileSync(join(ROOT, 'src', 'components', 'playground', 'Chat', 'ChatWithLLM.tsx'), 'utf8');
+const CSS = readFileSync(join(ROOT, 'src', 'index.css'), 'utf8');
+
+/** The one textarea that is the composer's message field — found by its ref, not by position. */
+function composerTextarea() {
+  const at = CHAT.indexOf('ref={textareaRef}');
+  assert.notEqual(at, -1, 'the composer textarea must still be driven by textareaRef');
+  const open = CHAT.lastIndexOf('<textarea', at);
+  const close = CHAT.indexOf('/>', at);
+  assert.ok(open !== -1 && close !== -1 && close > open, 'could not bound the composer textarea');
+  return CHAT.slice(open, close + 2);
+}
+
+test('the composer field opts out of the global floating ring', () => {
+  assert.match(
+    composerTextarea(),
+    /className=\{`focus-self\b/,
+    'the composer textarea must carry `focus-self`, or the global :focus-visible outline draws a ' +
+    'white rectangle inside the dark composer. `outline-none` cannot do it — same specificity, ' +
+    'and index.css loads last.',
+  );
+});
+
+test('the ring is REPLACED on the shell, not merely removed', () => {
+  // The whole reason `.focus-self` is dangerous: index.css's own note says using it on an element
+  // with no focus state deletes the only indicator a keyboard user has.
+  assert.match(
+    CHAT,
+    /\[data-chat-composer-shell\]:focus-within\s*\{[^}]*border-color:/,
+    'focus-self hides the ring, so the composer shell MUST paint its own focus state. Expected a ' +
+    '`[data-chat-composer-shell]:focus-within { border-color: … }` rule.',
+  );
+});
+
+test('the replacement is on the shell, which is the visible edge', () => {
+  const rule = CHAT.match(/\[data-chat-composer-shell\]:focus-within\s*\{[^}]*\}/)?.[0] ?? '';
+  assert.ok(rule, 'no shell focus rule found');
+  // An indicator on the transparent inner field or the textarea reproduces the original defect
+  // in a different place: a stroke with no relationship to a box the user can see.
+  assert.doesNotMatch(rule, /outline:/, 'the replacement must not be another floating outline');
+  assert.match(rule, /border-color:\s*var\(/, 'the focus border must come from a theme token, not a literal');
+});
+
+test('the global ring still exists for everything else', () => {
+  // Deleting it outright would be a real accessibility regression — the repo found inputs whose
+  // ONLY focus affordance is that outline. The composer opts out; the site does not.
+  assert.match(CSS, /:focus-visible\s*\{[^}]*outline:\s*2px/, 'the global focus ring is gone');
+  assert.match(CSS, /\.focus-self:focus-visible\s*\{\s*outline:\s*none/, 'the .focus-self opt-out is gone');
+});

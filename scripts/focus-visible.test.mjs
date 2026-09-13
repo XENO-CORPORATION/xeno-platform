@@ -33,11 +33,37 @@ function walk(dir) {
   return out;
 }
 
+/**
+ * ⚠️ The scanned set was a hardcoded list of onboarding/auth files, and it is why this gate did
+ * not see the chat composer at all. A coverage set that names files cannot cover a file added
+ * later — the same shape as a control tested through one of its three call sites. Whenever
+ * `focus-self` is used somewhere new, that directory belongs here.
+ */
 const FILES = walk('src/components/onboarding')
+  .concat(walk('src/components/playground/Chat'))
   .concat(['src/pages/Onboarding.tsx', 'src/pages/ActivateAccount.tsx', 'src/pages/AuthContent.tsx']);
 
 test('the scan covers something — this gate can fail', () => {
   assert.ok(FILES.length >= 6, `only ${FILES.length} files scanned; the walk is broken`);
+});
+
+/**
+ * 🔴 The coverage set must contain every file that uses the class.
+ *
+ * Without this, adding `focus-self` to an unscanned file passes silently — which is exactly
+ * what the chat composer would have done on 2026-09-13. Asserting the MECHANISM (the list is
+ * non-empty) is not asserting the OUTCOME (nothing escapes it).
+ */
+test('no file outside the scanned set uses focus-self', () => {
+  const scanned = new Set(FILES.map((f) => f.replace(/\\/g, '/')));
+  const escaped = walk('src')
+    .filter((f) => !scanned.has(f.replace(/\\/g, '/')))
+    .filter((f) => readFileSync(f, 'utf8').includes('focus-self'));
+  assert.deepEqual(
+    escaped, [],
+    `These use focus-self but are not scanned by this gate, so nothing checks that they replace\n` +
+    `the ring they hide. Add their directory to FILES:\n  ${escaped.join('\n  ')}`,
+  );
 });
 
 test('focus-self is only used where a focus treatment exists', () => {
