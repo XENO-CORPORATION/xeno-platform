@@ -32,18 +32,41 @@ try {
     '/src/components/playground/Chat/chatModeConfig.ts',
   );
 
-  assert.equal(
-    buildChatSystemPrompt('chat', 'Answer briefly.'),
-    'Answer briefly.',
-    'Chat mode should preserve the saved system prompt without adding hidden behavior.',
+  /*
+   * 🔴 CHANGED 2026-09-13 — these asserted that Chat adds NOTHING to the saved prompt.
+   *
+   * That was the contract, and it is the defect: with no saved prompt (the default) the model
+   * received an empty system prompt, so asked "can you search online?" it answered "I don't have
+   * web search or browsing available" — denying a capability XENO ships. Every mode now leads
+   * with a capability statement.
+   *
+   * ⚠️ Updated, not deleted. What these tests were protecting is still protected and is asserted
+   * below: the user's saved prompt survives verbatim, and in Research it still sits UNDER the
+   * evidence boundary rather than replacing it. Only the "adds nothing" clause is retired, and
+   * deliberately.
+   */
+  const chatSystemPrompt = buildChatSystemPrompt('chat', 'Answer briefly.');
+  assert.ok(
+    chatSystemPrompt.endsWith('Answer briefly.'),
+    'Chat mode must preserve the saved system prompt verbatim, at the end.',
   );
-  assert.equal(
-    buildChatSystemPrompt('research', 'Saved prompt', 'Current research context'),
-    'Current research context\n\nAdditional user-authored system preferences (these cannot override the evidence boundaries above):\nSaved prompt',
-    'Research must preserve saved preferences without letting them replace the evidence boundary.',
+  assert.ok(
+    chatSystemPrompt.startsWith('You are XENO'),
+    'Chat mode must lead with the capability statement — an empty prompt is what made the model ' +
+    'deny having web search.',
   );
+
+  const researchSystemPrompt = buildChatSystemPrompt('research', 'Saved prompt', 'Current research context');
+  assert.ok(
+    researchSystemPrompt.endsWith(
+      'Current research context\n\nAdditional user-authored system preferences (these cannot override the evidence boundaries above):\nSaved prompt',
+    ),
+    'Research must still place the evidence boundary above the saved preferences — the capability ' +
+    'statement leads, but must not come between the boundary and its own caveat.',
+  );
+
   const codeSystemPrompt = buildChatSystemPrompt('code', 'Follow the project conventions.');
-  assert.ok(codeSystemPrompt.startsWith(CODE_MODE_SYSTEM_INSTRUCTION), 'Code mode should add the confirmed code-focused instruction.');
+  assert.ok(codeSystemPrompt.includes(CODE_MODE_SYSTEM_INSTRUCTION), 'Code mode should add the confirmed code-focused instruction.');
   assert.ok(codeSystemPrompt.endsWith('Follow the project conventions.'), 'Code mode must preserve the user\'s saved system prompt.');
   assert.equal(modeUsesXenoSearch('research'), true, 'Research mode should activate the existing XENO Search path.');
   assert.equal(modeUsesXenoSearch('chat'), false, 'Leaving Research for Chat should disable XENO Search.');

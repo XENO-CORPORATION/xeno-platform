@@ -4845,7 +4845,44 @@ const ChatWithLLM: React.FC<ChatWithLLMProps> = ({
 
   const handleEmptyStateModeChange = useCallback((mode: ChatMode) => {
     setEmptyStateMode(mode);
-    setIsXenoSearchEnabled(modeUsesXenoSearch(mode));
+    /*
+     * 🔴 Research TURNS SEARCH ON. It does not turn it OFF anywhere else.
+     *
+     * This was `setIsXenoSearchEnabled(modeUsesXenoSearch(mode))`, which force-cleared the
+     * toggle on every switch to Chat, Code or Agents. So a user who deliberately enabled search
+     * and then changed tabs silently lost it, and Chat could never search at all — even though
+     * the whole pipeline (enhanced query, cited sources, deep mode) was built and working.
+     *
+     * That is what produced the 2026-09-13 transcript: asked "can you search online?" in Chat,
+     * the model said it had no web access. It was right about the state and wrong about the
+     * product, because the state was imposed rather than chosen.
+     *
+     * Research still guarantees search — it is the always-searching mode. Every other mode now
+     * keeps whatever the user chose, which is the only reading under which the toggle means
+     * anything in those modes.
+     */
+    if (modeUsesXenoSearch(mode)) setIsXenoSearchEnabled(true);
+    /*
+     * 🔴 Research IS the deep pass. `isXenoDeepMode` was declared, threaded all the way to the
+     * server, validated there — and set by NOTHING. Permanently false, so Research ran the
+     * identical quick search as Chat and the two tiers were one tier wearing two names.
+     *
+     * The budgets it selects are real and already deployed
+     * (`src/server/services/chatWebContext.js`):
+     *
+     *   quick  25s operation / 2 attempts / 3 concurrent
+     *   deep   90s operation / 3 attempts / 4 concurrent
+     *
+     * That matches how Anthropic splits the same two tiers — checked 2026-09-13: web search is
+     * "one or two tool calls" for a quick lookup, Research is "five or more tool calls over 1-3
+     * minutes" across "multiple sources", and Research LAYERS on search rather than replacing it
+     * ("You must have web search turned on for research to function"). Hence both lines here:
+     * Research turns search on AND raises the depth.
+     *
+     * Leaving Research means dropping back to quick — the depth belongs to the mode, so a user
+     * who switches to Chat must not silently keep paying a 90s budget.
+     */
+    setIsXenoDeepMode(modeUsesXenoSearch(mode));
   }, []);
 
   const handleEmptyStateAgentAction = useCallback(() => {
