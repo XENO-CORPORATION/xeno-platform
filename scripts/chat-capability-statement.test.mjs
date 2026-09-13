@@ -49,6 +49,9 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+// The budgets are the source of truth for which surfaces have a tool — imported, not restated,
+// so the prompt rules below cannot drift from what the server actually offers.
+import { TOOL_BUDGETS } from '../src/server/utils/chatToolLoop.js';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const CONFIG = readFileSync(join(ROOT, 'src', 'components', 'playground', 'Chat', 'chatModeConfig.ts'), 'utf8');
@@ -106,8 +109,25 @@ test('no mode teaches the model to narrate a tool it cannot invoke', () => {
    */
   const FABRICATION = /(\[?(running|performing|executing) (a )?search|let me search|i'?ll search now|i have (enabled|activated) search)/gi;
   const fabricated = [...block[0].matchAll(FABRICATION)].filter((m) => {
-    const before = block[0].slice(Math.max(0, m.index - 70), m.index).toLowerCase();
-    return !/(never|not|don'?t|do not|avoid|must not)\s[^.]*$/.test(before);
+    /*
+     * ⚠️ Scan back to the start of the SENTENCE, not a fixed window.
+     *
+     * The first version looked back 70 characters, which was enough for "never claim you have no
+     * access" but not for a prohibition that lists examples:
+     *
+     *   Do NOT narrate the call ("let me search…", "[running search]"); just make it…
+     *
+     * There the negation is ~25 chars from the first example and ~45 from the second, but the
+     * window also has to clear the quotes and punctuation between them — and a fixed span either
+     * misses a distant negation or reaches into the previous sentence and invents one. Sentence
+     * boundaries are the honest unit: a "do not" only governs its own sentence.
+     */
+    const sentenceStart = Math.max(
+      block[0].lastIndexOf('.', m.index),
+      block[0].lastIndexOf(';', m.index),
+    );
+    const before = block[0].slice(sentenceStart + 1, m.index).toLowerCase();
+    return !/\b(never|not|don'?t|do not|avoid|must not)\b/.test(before);
   });
   assert.deepEqual(
     fabricated.map((m) => m[0]), [],
@@ -115,14 +135,35 @@ test('no mode teaches the model to narrate a tool it cannot invoke', () => {
     '"*[Running search...]*" and then inventing a failure, for a tool it could not invoke.',
   );
 
-  // Every mode must point at a route that actually works, so "I can't" is never a dead end.
+  /*
+   * Every mode must leave the user somewhere to go — but WHAT that means changed when Chat
+   * gained the tool (2026-09-13).
+   *
+   * 🔴 This previously required every statement to name "Research" as an escape route. That was
+   * correct while Chat could not search: a refusal needed a destination. Now Chat searches, so
+   * a mode that HAS the tool owes no escape route at all — demanding one would push the prompt
+   * back toward "I can't, go elsewhere", which is the opposite of the fix.
+   *
+   * So the rule is conditional on the wiring, not fixed: a mode WITHOUT a tool budget must name
+   * the route that has one; a mode WITH a budget need not. The budgets are the source of truth,
+   * read from the server module rather than restated here, so the two cannot drift.
+   */
   for (const mode of MODES) {
     const line = block[0].match(new RegExp(`${mode}: \\[([\\s\\S]*?)\\]`))?.[1] ?? '';
-    assert.match(
-      line, /Research/,
-      `the ${mode} statement must name the route that does work (Research), so a refusal gives ` +
-      'the user somewhere to go instead of ending the conversation.',
-    );
+    const hasTool = Object.hasOwn(TOOL_BUDGETS, mode);
+    if (hasTool) {
+      assert.match(
+        line, /web_search/,
+        `${mode} has a tool budget, so its statement must tell the model the web_search tool ` +
+        'exists — otherwise the tool is declared to the provider and never used.',
+      );
+    } else {
+      assert.match(
+        line, /Research/,
+        `${mode} has no tool budget, so its statement must name the route that does work ` +
+        '(Research), or a refusal ends the conversation with nowhere to go.',
+      );
+    }
   }
   assert.match(block[0], /Research/, 'the deeper pass must be named so the model can point at it');
 });

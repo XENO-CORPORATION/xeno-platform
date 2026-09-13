@@ -106,6 +106,18 @@ function enabled(env) {
   return String(env.XENO_CHAT_WEB_CONTEXT_ENABLED || '').toLowerCase() === 'true';
 }
 
+/**
+ * Is web search actually configured on this deployment?
+ *
+ * Exported so the chat endpoint can decide whether to offer the `web_search` TOOL at all,
+ * reading the same flag this service gates itself on rather than a second copy of the check.
+ *
+ * 🔴 Two copies of an availability test is how a model comes to be handed a tool the server
+ * cannot run — the fabrication defect of 2026-09-13, one layer down. If the flag is off the
+ * tool must never be declared, so the model refuses honestly instead of calling into nothing.
+ */
+export const webSearchAvailable = (env = process.env) => enabled(env);
+
 function safeHttpsUrl(value) {
   try {
     const url = new URL(value);
