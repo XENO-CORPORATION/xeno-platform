@@ -142,6 +142,40 @@ test('reduced motion gets the TRUE radius, not the counter-scaled one', () => {
   );
 });
 
+test('the metaball blur is pinned — it IS the blob corner radius', () => {
+  /*
+   * 🔴 `stdDeviation` reads like a cosmetic melt knob and is actually the corner radius of
+   * every blob. The alpha crunch thresholds a BLURRED shape, so the blur rounds corners
+   * geometrically on top of whatever `border-radius` declared.
+   *
+   * Measured in Chromium at 4x against a real 53x32 mode tab, all at a declared 8px:
+   *
+   *   stdDeviation   5      4     3     2     1    ~0    unfiltered button
+   *   painted      11.25  11.0   9.0   8.0   7.0   6.5         6.5
+   *
+   * It shipped at 5, so every travelling chip painted a corner ~3px rounder than the button it
+   * lands beside. Reported twice by eye; invisible to a CSS-level check because the distortion
+   * happens at PAINT time, downstream of border-radius.
+   *
+   * ⚠️ Lowering the DECLARED radius cannot compensate — at `border-radius: 0` the blob still
+   * painted 10.25px, because the blur imposes a floor. This is the only lever.
+   *
+   * The value is pinned rather than range-checked: anything else is a visible change to every
+   * chip's corner, and should be a decision someone makes against a fresh measurement.
+   */
+  const EMPTY_STATE = readFileSync(
+    join(ROOT, 'src', 'components', 'playground', 'Chat', 'ChatEmptyState.tsx'), 'utf8',
+  );
+  const blurs = [...EMPTY_STATE.matchAll(/<feGaussianBlur[^>]*stdDeviation="([\d.]+)"/g)].map((m) => m[1]);
+  assert.equal(blurs.length, 1, `expected exactly one gooey blur, found ${blurs.length}`);
+  assert.equal(
+    blurs[0], '2',
+    `the metaball blur is ${blurs[0]}, not 2. That changes the PAINTED corner of every gooey ` +
+    'chip (5 -> 11.25px against an 8px button). If this is deliberate, re-measure the painted ' +
+    'radius against the real control and update this gate with the new numbers.',
+  );
+});
+
 test('the CSS fallback radius agrees with the controls it stands in for', () => {
   // It was 10px while every mode tab is rounded-lg -> --radius: 0.5rem -> 8px. The fallback is
   // only reachable if a control reports no radius, but a wrong one misleads whoever reads the
