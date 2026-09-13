@@ -56,6 +56,8 @@ import { workspaceRoutes, workspaceInviteRoutes } from './routes/workspaceRoutes
 import { resolveBillingAccountId } from './services/walletService.js';
 import { xenoModelCatalog, PROVIDER_LABELS, prettyModelName, xenoChatCompletion, normalizeXenoModelId, XENO_API_BASE, XENO_API_KEY, xenoApiConfigured } from './utils/xenoChat.js';
 import { meterPremiumChat, meterMediaGeneration } from './utils/inferenceMeter.js';
+import { runToolLoop, toolsForSurface, TOOL_BUDGETS } from './utils/chatToolLoop.js';
+import { chatWebContextService, webSearchAvailable } from './services/chatWebContext.js';
 import { estimateMessageTokens, getCreditCost } from './utils/creditCosts.js';
 import { deductCredits, refundCredits, logUsage as logCreditUsage } from './utils/creditTransactions.js';
 import { resolveEntitlements, gateMeta } from './utils/entitlementGate.js';
@@ -1660,6 +1662,19 @@ app.post('/api/chat/generate', databaseMiddleware, authMiddleware, async (req, r
         // <<< RECEIVE effectiveReasoningState >>>
         const { messages, systemPrompt, selectedModelId, effectiveReasoningState, conversationId, projectId } = req.body;
 
+        /*
+         * Which surface this turn is, and therefore which tool budget applies.
+         *
+         * 🔴 Validated against a known list, never trusted as sent. The budget bounds how many
+         * metered upstream calls one user message can cost (Chat 10, Research 50, ~+1 for the
+         * final answer), so an arbitrary string here would be a spend control set by the client.
+         * Anything unrecognised falls back to 'chat', the smaller budget.
+         */
+        const requestedSurface = typeof req.body?.chatSurface === 'string' ? req.body.chatSurface : '';
+        const chatSurface = Object.hasOwn(TOOL_BUDGETS, requestedSurface) ? requestedSurface : 'chat';
+        /** Reported back so the client can show what the turn actually did. */
+        let toolLoopStats = null;
+
         // Basic validation
         if (messages === undefined || !Array.isArray(messages) || selectedModelId === undefined || effectiveReasoningState === undefined) {
             console.error('Invalid request payload:', req.body);
@@ -2072,28 +2087,85 @@ app.post('/api/chat/generate', databaseMiddleware, authMiddleware, async (req, r
                 try { billingSubjectId = (await resolveBillingAccountId(req.db, req.user.id, String(req.headers['x-xeno-workspace']))).id; }
                 catch (e) { console.warn('[billing] workspace resolve failed, using personal:', e.message); }
             }
-            const metered = await meterPremiumChat(req.db, billingSubjectId, {
-                model: bodyPayload.model, provider: 'xeno', requestId: randomUUID(),
-                estInputTokens: estimateMessageTokens(bodyPayload.messages || []),
-                maxTokens: bodyPayload.max_tokens || 4096,
-                run: async () => {
-                    const response = await fetch(`${XENO_API_BASE}/chat/completions`, {
-                        method: "POST",
-                        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${XENO_API_KEY}` },
-                        body: JSON.stringify(bodyPayload),
-                    });
-                    const responseBody = await response.text();
-                    if (!response.ok) {
-                        let errorData = {};
-                        try { errorData = JSON.parse(responseBody); } catch (e) { errorData = { error: { message: `API request failed with status ${response.status}.` } }; }
-                        const e = new Error(errorData.error?.message || `XENO API Error: Status ${response.status}`);
-                        e.status = response.status;
-                        throw e;
-                    }
-                    return JSON.parse(responseBody);
-                },
-            });
-            data = metered.result;
+            /*
+             * One metered upstream call. The tool loop calls this repeatedly — once per
+             * iteration — so `requestId` MUST differ per call.
+             *
+             * 🔴 `holdId` derives from `requestId` and is idempotent on it (so client retries do
+             * not stack holds). Reuse one id across a loop and the second hold silently collides
+             * with the first: under-billed, or a failed turn depending on settle order. The loop
+             * mints `"<turnId>:<iteration>"` — distinct within the turn, and deterministic so
+             * replaying the same turn re-uses the same holds rather than charging twice.
+             */
+            const callModelOnce = async ({ messages: loopMessages, tools, requestId }) => {
+                const payload = { ...bodyPayload, messages: loopMessages };
+                if (Array.isArray(tools) && tools.length) {
+                    payload.tools = tools;
+                    payload.tool_choice = 'auto';
+                }
+                const metered = await meterPremiumChat(req.db, billingSubjectId, {
+                    model: payload.model, provider: 'xeno', requestId,
+                    estInputTokens: estimateMessageTokens(payload.messages || []),
+                    maxTokens: payload.max_tokens || 4096,
+                    run: async () => {
+                        const response = await fetch(`${XENO_API_BASE}/chat/completions`, {
+                            method: "POST",
+                            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${XENO_API_KEY}` },
+                            body: JSON.stringify(payload),
+                        });
+                        const responseBody = await response.text();
+                        if (!response.ok) {
+                            let errorData = {};
+                            try { errorData = JSON.parse(responseBody); } catch (e) { errorData = { error: { message: `API request failed with status ${response.status}.` } }; }
+                            const e = new Error(errorData.error?.message || `XENO API Error: Status ${response.status}`);
+                            e.status = response.status;
+                            throw e;
+                        }
+                        return JSON.parse(responseBody);
+                    },
+                });
+                return metered.result;
+            };
+
+            /*
+             * The surface decides the budget and whether a tool is offered at all.
+             *
+             * ⚠️ `toolsForSurface` returns [] for anything without a budget, so a mode we have
+             * not wired cannot be handed a tool it cannot run — the fabrication defect one layer
+             * down. A turn where the model never calls the tool costs exactly ONE upstream call,
+             * unchanged from before this landed.
+             */
+            const toolSurface = TOOL_BUDGETS[chatSurface] ? chatSurface : null;
+            if (!toolSurface || !webSearchAvailable()) {
+                data = await callModelOnce({
+                    messages: bodyPayload.messages,
+                    tools: [],
+                    requestId: randomUUID(),
+                });
+            } else {
+                const loop = await runToolLoop({
+                    messages: bodyPayload.messages,
+                    surface: toolSurface,
+                    turnId: `chatgen-${randomUUID()}`,
+                    callModel: callModelOnce,
+                    runSearch: async ({ query, depth }) => chatWebContextService.searchAndFetch({
+                        actorId: req.user.id,
+                        conversationId: conversationId || null,
+                        userMessageId: null,
+                        query,
+                        count: 6,
+                        depth,
+                    }),
+                });
+                data = { choices: [{ message: loop.message, finish_reason: 'stop' }] };
+                toolLoopStats = {
+                    searches: loop.searches,
+                    iterations: loop.iterations,
+                    cappedOut: loop.cappedOut,
+                    sources: loop.sources,
+                };
+                console.log(`[tool-loop] ${toolSurface}: ${loop.searches} search(es), ${loop.iterations} call(s)${loop.cappedOut ? ' (capped)' : ''}`);
+            }
         } catch (err) {
             if (err.http === 402) return res.status(402).json({ error: 'Insufficient credits', message: 'Top up credits to use premium models.' });
             if (err.http === 403) return res.status(403).json({ error: 'Account frozen' });
@@ -2418,6 +2490,30 @@ app.post('/api/chat/generate', databaseMiddleware, authMiddleware, async (req, r
             );
             finalResponse.projectContextId = projectContextRecordId;
             finalResponse.projectSources = projectContext.manifest.sources;
+        }
+
+        /*
+         * What the tool loop actually did.
+         *
+         * 🔴 Without this the searches are INVISIBLE: the answer would cite sources the client
+         * never received and could not render or link. That is how a real capability comes to
+         * look like the fabrication it replaced — the user sees claims about live data with
+         * nothing behind them.
+         *
+         * `cappedOut` travels too, so a truncated answer can be labelled as one rather than
+         * presented as complete.
+         */
+        if (toolLoopStats) {
+            finalResponse.searchInfo = {
+                queries: [],
+                sources: toolLoopStats.sources,
+                supports: [],
+            };
+            finalResponse.toolUse = {
+                searches: toolLoopStats.searches,
+                iterations: toolLoopStats.iterations,
+                cappedOut: toolLoopStats.cappedOut,
+            };
         }
 
         // Return the final response object

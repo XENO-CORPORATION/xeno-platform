@@ -6592,6 +6592,16 @@ interface QueueState {
         conversationId: isPersistedConversationId(generationConversationId) ? generationConversationId : undefined,
         projectId: generationProjectId,
         useSearchTool: undefined as (boolean | undefined),
+        /*
+         * Which surface this turn is, so the server can pick a tool budget.
+         *
+         * The server decides whether to offer the web_search tool and how many searches a turn
+         * may run (Chat is a quick lookup, Research the deep multi-source pass). It cannot infer
+         * that from the messages, and it must NOT be inferred from anything the model says — the
+         * cap is what bounds real credit spend, so it belongs on the request and is validated
+         * server-side against a known list.
+         */
+        chatSurface: emptyStateMode,
         task: taskArg // Ensure taskArg is used here
     };
 
