@@ -1668,10 +1668,26 @@ app.post('/api/chat/generate', databaseMiddleware, authMiddleware, async (req, r
          * 🔴 Validated against a known list, never trusted as sent. The budget bounds how many
          * metered upstream calls one user message can cost (Chat 10, Research 50, ~+1 for the
          * final answer), so an arbitrary string here would be a spend control set by the client.
-         * Anything unrecognised falls back to 'chat', the smaller budget.
+         *
+         * 🔴 ABSENT AND UNKNOWN ARE DIFFERENT INPUTS, and collapsing them shipped a real defect.
+         *
+         * The first version resolved anything unrecognised to 'chat'. That is right for a MISSING
+         * field — an older client, or another caller, gets the ordinary Chat surface and its
+         * smaller budget. It is wrong for a NAMED mode: 'code' and 'agents' are real modes whose
+         * capability statement says "You have no tool you can invoke in this mode, and no web
+         * access", and the fallback handed them `web_search` anyway.
+         *
+         * That is the 2026-09-13 fabrication defect inverted. Then, the prompt promised a tool
+         * that did not exist and the model narrated using it. Here the tool exists in a mode whose
+         * prompt denies it — so the model is told it cannot search while holding something that
+         * searches, and either half can win. A contradiction between the tool list and the prompt
+         * is the bug, in whichever direction it points.
+         *
+         * So: unnamed -> 'chat'; named-but-budgetless -> itself, and it gets no tool. The
+         * capability statement and the tool list are then two views of the same fact.
          */
-        const requestedSurface = typeof req.body?.chatSurface === 'string' ? req.body.chatSurface : '';
-        const chatSurface = Object.hasOwn(TOOL_BUDGETS, requestedSurface) ? requestedSurface : 'chat';
+        const requestedSurface = typeof req.body?.chatSurface === 'string' ? req.body.chatSurface.trim() : '';
+        const chatSurface = requestedSurface || 'chat';
         /** Reported back so the client can show what the turn actually did. */
         let toolLoopStats = null;
 
@@ -2135,7 +2151,7 @@ app.post('/api/chat/generate', databaseMiddleware, authMiddleware, async (req, r
              * down. A turn where the model never calls the tool costs exactly ONE upstream call,
              * unchanged from before this landed.
              */
-            const toolSurface = TOOL_BUDGETS[chatSurface] ? chatSurface : null;
+            const toolSurface = Object.hasOwn(TOOL_BUDGETS, chatSurface) ? chatSurface : null;
             if (!toolSurface || !webSearchAvailable()) {
                 data = await callModelOnce({
                     messages: bodyPayload.messages,

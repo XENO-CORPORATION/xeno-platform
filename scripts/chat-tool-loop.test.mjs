@@ -23,6 +23,7 @@ import {
   runToolLoop,
   parseToolArguments,
   toolsForSurface,
+  budgetFor,
   TOOL_BUDGETS,
   WEB_SEARCH_TOOL,
 } from '../src/server/utils/chatToolLoop.js';
@@ -245,4 +246,55 @@ test('the declared tool is one the loop can actually run', () => {
   assert.deepEqual(toolsForSurface('chat'), [WEB_SEARCH_TOOL]);
   assert.deepEqual(toolsForSurface('research'), [WEB_SEARCH_TOOL]);
   assert.deepEqual(toolsForSurface('code'), [], 'a surface with no budget offers no tools');
+});
+
+test('a prototype-named surface gets NO tool and cannot erase the spend cap', () => {
+  /*
+   * 🔴 Found live, after deploy, 2026-09-13.
+   *
+   * `toolsForSurface` tested `TOOL_BUDGETS[surface]` for truthiness. `TOOL_BUDGETS.constructor`
+   * is a FUNCTION — truthy — so a request carrying `chatSurface: "constructor"` was handed the
+   * tool, and the loop then read its budget off that function: `maxSearches` undefined, making
+   * `searches >= budget.maxSearches` always FALSE.
+   *
+   * That comparison is the only server-side bound on how many metered upstream calls one user
+   * message can cost. It would not have thrown, logged, or looked wrong anywhere — the turn
+   * would simply keep searching for as long as the model kept asking.
+   */
+  for (const name of ['constructor', 'toString', 'valueOf', '__proto__', 'hasOwnProperty']) {
+    assert.deepEqual(
+      toolsForSurface(name), [],
+      `"${name}" is not a surface — a bracket-truthiness test hands it the tool`,
+    );
+    assert.equal(
+      budgetFor(name), TOOL_BUDGETS.chat,
+      `"${name}" must fall back to the SMALLER budget, not to something off Object.prototype`,
+    );
+  }
+
+  // And the cap must be a real number for every value the loop can be handed.
+  for (const name of ['chat', 'research', 'code', '', 'constructor', 'bogus']) {
+    assert.equal(
+      typeof budgetFor(name).maxSearches, 'number',
+      `budgetFor("${name}").maxSearches must be a number, or the cap comparison is vacuous`,
+    );
+  }
+});
+
+test('an unknown surface is capped, even driven by a model that never stops', async () => {
+  // The property above, proven end to end rather than by inspection: hand the loop the
+  // prototype name directly and confirm the turn still terminates at Chat's budget.
+  let calls = 0;
+  const loop = await runToolLoop({
+    messages: [{ role: 'user', content: 'go' }],
+    surface: 'constructor',
+    turnId: 't-proto',
+    callModel: async () => { calls += 1; return searchCall(`q${calls}`); },
+    runSearch: async () => sources(),
+  });
+  assert.ok(
+    loop.searches <= TOOL_BUDGETS.chat.maxSearches,
+    `an unrecognised surface ran ${loop.searches} searches against Chat's cap of ` +
+    `${TOOL_BUDGETS.chat.maxSearches} — the budget fell back to something without a cap`,
+  );
 });

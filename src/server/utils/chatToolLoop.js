@@ -72,8 +72,22 @@ export const WEB_SEARCH_TOOL = Object.freeze({
   },
 });
 
-/** A turn that used no tools must cost exactly one upstream call — no loop overhead. */
-export const toolsForSurface = (surface) => (TOOL_BUDGETS[surface] ? [WEB_SEARCH_TOOL] : []);
+/**
+ * A turn that used no tools must cost exactly one upstream call — no loop overhead.
+ *
+ * 🔴 `Object.hasOwn`, never a truthiness test on the lookup. `TOOL_BUDGETS['constructor']` is a
+ * FUNCTION and therefore truthy, so a bracket test hands a tool to any surface name that collides
+ * with something on Object.prototype — and `budgetFor` below would then read `maxSearches` off
+ * that function as `undefined`, making the cap comparison `searches >= undefined` always false.
+ * The one server-side bound on how many metered calls a single user message can cost would
+ * silently cease to exist, and nothing would look wrong until the bill.
+ */
+export const toolsForSurface = (surface) =>
+  (Object.hasOwn(TOOL_BUDGETS, surface) ? [WEB_SEARCH_TOOL] : []);
+
+/** The budget for a surface, falling back to the SMALLER one for anything unrecognised. */
+export const budgetFor = (surface) =>
+  (Object.hasOwn(TOOL_BUDGETS, surface) ? TOOL_BUDGETS[surface] : TOOL_BUDGETS.chat);
 
 /**
  * Parse one tool call's arguments.
@@ -108,7 +122,7 @@ export function parseToolArguments(raw) {
  * @returns {Promise<{ message, iterations, searches, sources, cappedOut }>}
  */
 export async function runToolLoop({ messages, surface, turnId, callModel, runSearch, onProgress }) {
-  const budget = TOOL_BUDGETS[surface] ?? TOOL_BUDGETS.chat;
+  const budget = budgetFor(surface);
   const tools = toolsForSurface(surface);
 
   const working = [...messages];
