@@ -112,8 +112,62 @@ const setStartVars = (node: HTMLElement, start: StartState, durationMs: number, 
 };
 
 const clearStartVars = (node: HTMLElement) => {
-  ['--gooey-dur', '--gooey-delay', '--gooey-tx', '--gooey-ty', '--gooey-sx', '--gooey-sy']
+  ['--gooey-dur', '--gooey-delay', '--gooey-tx', '--gooey-ty', '--gooey-sx', '--gooey-sy',
+    '--gooey-radius', '--gooey-radius-start']
     .forEach((name) => node.style.removeProperty(name));
+};
+
+/**
+ * A scaled box paints a scaled corner — so counter-scale the radius while it travels.
+ *
+ * ## Measured 2026-09-13, in Chromium against the real tab recipe
+ *
+ *   blob   declared 8px × scale 0.94 → PAINTED 7.52px   (box 50×30)
+ *   button declared 8px × scale 1    → PAINTED 8px      (box 53×32)
+ *
+ * `border-radius` is resolved BEFORE the transform, so a `scale(0.94)` box rounds 6% tighter
+ * than the control it stands in for — visible as the travelling chip having a sharper corner
+ * than the ones that have already landed beside it at full scale.
+ *
+ * 🔴 The radius COPY was never wrong: `getComputedStyle(item).borderRadius` reports 8px and the
+ * blob receives 8px. Reading either number alone says the two agree. Only `declared × scale`
+ * exposes it, which is why this was reported by eye long before any check would have caught it.
+ *
+ * ⚠️ The correction has to ANIMATE, not just be applied at the start. The transform runs from
+ * `scale(sx)` to identity over the same duration, so a fixed `radius / sx` would be right on
+ * frame one and progressively over-rounded until landing — trading a corner that is too sharp
+ * for one that is too soft. Both endpoints are therefore published as custom properties and CSS
+ * transitions `border-radius` on the same curve and delay as the transform, so the PAINTED
+ * corner holds at the button's value for the whole travel.
+ *
+ * Only the blob needs this. The real item is `--bare` while it travels — transparent
+ * background, border and shadow — so it paints no corner to distort.
+ *
+ * `sx` is used rather than `sy` because a horizontal nub squashes mostly in x, and a single
+ * radius cannot honour two axes anyway; picking the dominant one keeps the correction honest
+ * instead of averaging into something that matches neither.
+ */
+const setBlobRadius = (blob: HTMLElement, radius: string, startScale: number) => {
+  const parsed = parseFloat(radius);
+  // A non-px radius (a percentage, or a multi-value shorthand) has no single number to scale.
+  // Leaving it alone is correct: it is already relative to the box, so it scales WITH the box
+  // and never drifts from the control the way an absolute length does.
+  const scalable = Number.isFinite(parsed) && radius.trim().endsWith('px') && startScale > 0;
+
+  // 🔴 Only the two ENDPOINTS are published — `border-radius` itself is never set inline.
+  //
+  // The first version of this set `blob.style.borderRadius = 'var(--gooey-radius-start, …)'`,
+  // and measuring it across the travel showed the radius PINNED at the start value for all
+  // 340ms: an inline declaration outranks every stylesheet rule, so `.chat-gooey-item--up`
+  // could not swap it and nothing ever transitioned. Painted radius went 8.00 → 8.53 as the
+  // scale relaxed to 1 — the original defect inverted, a corner too soft instead of too sharp,
+  // and worse because it lands that way and stays for the eye to compare against its neighbours.
+  //
+  // Both endpoints as custom properties lets the cascade do the work: the base rule starts at
+  // `--gooey-radius-start`, `--up` moves to `--gooey-radius`, and the transition declared on
+  // the same curve and delay as the transform carries it between them.
+  blob.style.setProperty('--gooey-radius', radius);
+  blob.style.setProperty('--gooey-radius-start', scalable ? `${parsed / startScale}px` : radius);
 };
 
 /** Start life as a small blob centred inside `source`. */
@@ -272,7 +326,7 @@ export const runGooey = (options: GooeyRunOptions): (() => void) => {
     blob.style.top = `${rect.top - skinRect.top}px`;
     blob.style.width = `${rect.width}px`;
     blob.style.height = `${rect.height}px`;
-    blob.style.borderRadius = window.getComputedStyle(item).borderRadius;
+    setBlobRadius(blob, window.getComputedStyle(item).borderRadius, start.sx);
     if (itemFills[index]) blob.style.background = itemFills[index];
     setStartVars(blob, start, durationMs, delays[index]);
     setStartVars(item, start, durationMs, delays[index]);
