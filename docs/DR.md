@@ -525,8 +525,9 @@ All `0600` root-only, all verified byte-identical by hash on 2026-07-30.
 > dying. The Hetzner copy is the only one that survives it — different provider, different
 > city, different power and network.
 
-**`xeno-private-api-001` was deliberately excluded.** It holds an SSH tunnel to the
-platform Postgres on `127.0.0.1:15433`, so a key copy there would put the key and the
+**`xeno-private-api-001` was deliberately excluded.** It has a live route to the
+platform Postgres over WireGuard (`10.99.0.1:5433`, which replaced the retired
+`127.0.0.1:15433` SSH tunnel), so a key copy there would put the key and the
 ciphertext it opens on the *same* host — handing a single compromise both halves. Every
 host that does hold a copy was checked to have no route to that database, which is what
 makes a cleartext key file on them low-value: without the ciphertext, it opens nothing.

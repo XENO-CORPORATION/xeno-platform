@@ -129,7 +129,8 @@ prove a rotation took, connect to the container's **docker IP** (e.g. `172.20.0.
 
 **⚠️ LESSON 2 — the api-proxy reaches the ledger via `PLATFORM_DATABASE_URL`, NOT `DATABASE_URL`.**
 On `xeno-private-api-001`, `server.js:268` builds `platformPool` from **`PLATFORM_DATABASE_URL`**
-(`…@127.0.0.1:15433/xenostudio`, the SSH tunnel to the platform ledger — the money path).
+(`…@10.99.0.1:5433/xenostudio` over WireGuard — the money path; until the tunnel was retired it
+was `127.0.0.1:15433` through an SSH tunnel).
 `DATABASE_URL` there is a **different, local** DB (`…@localhost:5432/xeno_platform`) with its **own**
 password (untouched by this rotation; its local Postgres enforces passwords too — it is **not**
 trust). The first rotation edited `DATABASE_URL` (a no-op — it never held the old default) and left
@@ -230,8 +231,10 @@ deploy before the backfill ran.
 
 **Where the key lives:** `SECRET_BOX_KEY` in the box `.env`, passed to the backend service in
 `docker-compose.yml`, replicated to **five copies**, all 0600 root-only and verified
-byte-identical by hash. `xeno-private-api-001` was deliberately excluded: its `15433` tunnel to
-the platform Postgres would put the key and the ciphertext it opens on one host.
+byte-identical by hash. `xeno-private-api-001` was deliberately excluded: its WireGuard route to
+the platform Postgres (`10.99.0.1:5433`, which replaced the retired `15433` tunnel) would put the
+key and the ciphertext it opens on one host. **Retiring the tunnel did not change this** — the
+route moved, it did not go away.
 
 The count is misleading on its own — **four of the five are on one physical machine.**
 `xeno-platform-001` and `xeno-mail-001` are VMs 120 and 132 on `bnkr-node-001`, which runs all 28

@@ -18,7 +18,8 @@
 # WHY IT RUNS FROM THE WORKSTATION
 # --------------------------------
 # No server can do this. The copies deliberately live on hosts that cannot reach
-# each other: xeno-private-api-001 is excluded because its :15433 tunnel would
+# each other: xeno-private-api-001 is excluded because its WireGuard route to the
+# database (10.99.0.1:5433, which replaced the retired :15433 tunnel) would
 # put the key and the ciphertext on one host, and bnkr-node-001 has no SSH trust
 # into the VMs. Granting hosts SSH access to each other would weaken that
 # isolation to solve a monitoring problem — the wrong trade. The operator
