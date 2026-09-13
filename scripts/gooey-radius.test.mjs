@@ -157,6 +157,11 @@ test('the metaball blur is pinned — it IS the blob corner radius', () => {
    * lands beside. Reported twice by eye; invisible to a CSS-level check because the distortion
    * happens at PAINT time, downstream of border-radius.
    *
+   * 🔴 It is ALSO the melt, and dropping it to 2 removed the gooey effect entirely — the alpha
+   * crunch could no longer fuse neighbouring blobs. Measured across a 4px gap, YES down to 3
+   * and no at 2.5. So the two properties conflict and 3 is the boundary: the lowest blur that
+   * still melts, at a 9px corner against the button's 8px.
+   *
    * ⚠️ Lowering the DECLARED radius cannot compensate — at `border-radius: 0` the blob still
    * painted 10.25px, because the blur imposes a floor. This is the only lever.
    *
@@ -169,10 +174,16 @@ test('the metaball blur is pinned — it IS the blob corner radius', () => {
   const blurs = [...EMPTY_STATE.matchAll(/<feGaussianBlur[^>]*stdDeviation="([\d.]+)"/g)].map((m) => m[1]);
   assert.equal(blurs.length, 1, `expected exactly one gooey blur, found ${blurs.length}`);
   assert.equal(
-    blurs[0], '2',
-    `the metaball blur is ${blurs[0]}, not 2. That changes the PAINTED corner of every gooey ` +
-    'chip (5 -> 11.25px against an 8px button). If this is deliberate, re-measure the painted ' +
-    'radius against the real control and update this gate with the new numbers.',
+    blurs[0], '3',
+    [
+      `the metaball blur is ${blurs[0]}, not 3. It sets TWO things at once and they conflict:`,
+      '  stdDeviation   5     4.5    4     3.5    3    2.5    2',
+      '  melts?        YES   YES    YES   YES   YES    no    no',
+      '  painted     11.25  ~10.5  11.0  ~10    9.0   ~8.5   8.0   (button = 8px)',
+      'No value both melts and matches the button. 3 is the lowest blur that still fuses.',
+      'Below it the gooey effect is GONE (shipped as 2 on 2026-09-13, reported the same day);',
+      'above it the corner drifts. Re-measure BOTH properties before changing this.',
+    ].join('\n'),
   );
 });
 

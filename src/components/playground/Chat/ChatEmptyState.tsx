@@ -1010,11 +1010,24 @@ const ChatEmptyState: React.FC<ChatEmptyStateProps> = ({
              * ⚠️ Lowering the DECLARED radius cannot fix it: at `border-radius: 0` the blob still
              * painted 10.25px, because the blur imposes a floor. `stdDeviation` is the only lever.
              *
-             * 2 is the value at which the painted corner equals the button's. Changing it changes
-             * the corner of every chip — re-measure, do not re-guess.
+             * 🔴 IT IS ALSO THE MELT, AND 2 KILLED IT. The same blur feeds the alpha crunch that
+             * fuses neighbouring blobs — the entire point of the filter. Measured across a 4px gap:
+             *
+             *   stdDeviation   5     4.5    4     3.5    3    2.5    2
+             *   melts?        YES   YES    YES   YES   YES    no    no
+             *   painted     11.25  ~10.5  11.0  ~10    9.0   ~8.5   8.0
+             *
+             * So NO value both melts and paints the button's exact 8px. 3 is the boundary: the
+             * lowest blur that still fuses, at a 9px corner — 1px off the button, against 3.25px
+             * off at the original 5. Shipping 2 matched the corner and removed the effect.
+             *
+             * ⚠️ Two earlier probes of this reported BROKEN at EVERY blur INCLUDING 5, and were
+             * simply wrong: they tested 8px and 12px gaps, and even 5 does not bridge those. A
+             * melt probe MUST print its control first — if `stdDeviation: 5` does not fuse, the
+             * probe is broken and no other row in it means anything.
              */}
             <filter id={GOOEY_FILTER_ID} x="-20%" y="-20%" width="140%" height="140%">
-              <feGaussianBlur in="SourceGraphic" stdDeviation="2" result="blur" />
+              <feGaussianBlur in="SourceGraphic" stdDeviation="3" result="blur" />
               <feColorMatrix
                 in="blur"
                 type="matrix"
