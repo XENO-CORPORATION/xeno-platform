@@ -226,10 +226,28 @@ const ChatEmptyState: React.FC<ChatEmptyStateProps> = ({
     onModelSelectorOpenChange?.(isModelTrayOpen);
   }, [isModelTrayOpen, onModelSelectorOpenChange]);
 
-  // The row is one continuous liquid path: its first control pulls out of the bottom-left
-  // reveal trigger, then each control unfolds from the previous one toward the top-right.
-  // Closing reverses the CLOCK but preserves that topology, so every control melts back
-  // through the same neighbour and the final one returns to the trigger.
+  // 🔴 The row RISES OUT OF THE COMPOSER, staggered left to right — it does not chain
+  // sideways out of the "+".
+  //
+  // It used to: `chain: true` with `data-gooey-from="[data-composer-reveal-trigger]"` born the
+  // first chip inside the reveal trigger at the composer's bottom-LEFT corner, and each next
+  // chip inside the one before it. Reported 2026-09-13 with screenshots — the chips slid in
+  // horizontally from the left edge, and on close slid back out sideways, so the row read as
+  // something flying in from off-box rather than as the composer opening up.
+  //
+  // The row sits directly ABOVE the composer, so the honest motion is the one the geometry
+  // already implies: each chip climbs the 46px out of the box it belongs to and settles in
+  // place. `chain: false` is that shape and was already built — `runGooey` starts every item
+  // at `ty: RISE_DISTANCE_PX` below its resting place, and playing the same chain with
+  // `direction: 'out'` reverses the clock, so closing drops them back down into the box.
+  //
+  // ⚠️ This is the SAME argument the model chip below already makes for itself: "chaining it
+  // off the last tab would send it gliding across the whole row." That reasoning was correct
+  // and applied to one control instead of to the row.
+  //
+  // The stagger still runs left to right — `entranceDelays` is index-ordered and untouched —
+  // so the cascade reads in the same direction, it just travels vertically.
+  //
   // Layout effect, not a plain one: the row is already visible by the time effects run,
   // so anything deferred past paint shows the tabs at rest for a frame before they drop
   // back into the box to climb out again.
@@ -253,10 +271,6 @@ const ChatEmptyState: React.FC<ChatEmptyStateProps> = ({
     const direction = isRevealOpen ? 'in' : 'out';
     const entranceDelays = items.map((_, index) => index * TAB_REVEAL.staggerMs);
     const delays = direction === 'in' ? entranceDelays : reverseDelays(entranceDelays);
-    const fromSelector = row.dataset.gooeyFrom;
-    const fromEl = fromSelector
-      ? revealRootRef.current?.querySelector<HTMLElement>(fromSelector) ?? null
-      : null;
 
     setIsMelting(true);
     const cancel = runGooey({
@@ -265,9 +279,9 @@ const ChatEmptyState: React.FC<ChatEmptyStateProps> = ({
       delays,
       orderDelays: entranceDelays,
       durationMs: TAB_REVEAL.durationMs,
-      chain: true,
+      // Rise out of the composer, not sideways out of the "+". See the note above this effect.
+      chain: false,
       direction,
-      fromEl,
       onSettled: () => {
         setIsMelting(false);
         if (direction !== 'out') return;
@@ -1001,12 +1015,15 @@ const ChatEmptyState: React.FC<ChatEmptyStateProps> = ({
           <span className="chat-gooey-body" />
         </div>
 
+        {/* `data-gooey-from` / `data-gooey-path` were removed with the chain (2026-09-13). They
+            declared a bottom-left origin and a left-to-right path that nothing reads any more —
+            the row rises out of the composer. The surviving `gooeyFrom` readers are on the
+            RAILS, a different element. A stale attribute describing motion the code no longer
+            performs is worse than none: the next reader trusts it. */}
         <div
           ref={revealRowRef}
           data-composer-reveal-row
           data-gooey-dir="ltr"
-          data-gooey-from="[data-composer-reveal-trigger]"
-          data-gooey-path="bottom-left-to-top-right"
           data-reveal-state={isRevealRowVisible ? 'open' : 'closed'}
         >
           {modeControls}

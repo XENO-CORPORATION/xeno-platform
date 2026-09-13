@@ -5,6 +5,7 @@ import testUtils from 'react-dom/test-utils';
 import { JSDOM } from 'jsdom';
 import { createServer } from 'vite';
 import { fileURLToPath } from 'node:url';
+import { readFile } from 'node:fs/promises';
 
 const { act } = testUtils;
 const motionStubPath = fileURLToPath(new URL('./framer-motion-test-stub.mjs', import.meta.url));
@@ -263,18 +264,61 @@ try {
   assert.ok(document.querySelector('.chat-gooey-body'), 'The skin needs a body standing in for the box itself.');
   assert.ok(document.querySelector('filter#chat-composer-gooey-filter'), 'The metaball filter should be defined once per composer.');
   assert.equal(revealRow?.dataset.revealState, 'closed', 'The mode row starts hidden.');
-  assert.equal(revealRow?.dataset.gooeyDir, 'ltr', 'The mode row should unfold left to right.');
+  assert.equal(revealRow?.dataset.gooeyDir, 'ltr', 'The mode row should stagger left to right.');
+  /*
+   * 🔴 CHANGED 2026-09-13 — these two assertions pinned the OLD choreography.
+   *
+   * They required `gooeyFrom="[data-composer-reveal-trigger]"` and
+   * `gooeyPath="bottom-left-to-top-right"`: the row chained sideways out of the "+" at the
+   * composer's bottom-left corner. Reported with screenshots — the chips slid in horizontally
+   * from the left edge and slid back out sideways on close, reading as something flying in from
+   * off-box rather than the composer opening up.
+   *
+   * The row sits directly above the composer, so it now RISES out of it (`chain: false`), which
+   * `runGooey` already implemented. The attributes were removed with the chain because nothing
+   * read them any more, and a stale attribute describing motion the code does not perform is
+   * worse than none.
+   *
+   * ⚠️ Updated rather than deleted. The row still owes a motion contract — the assertion is now
+   * that it declares NO chain origin, which is what makes the rise the only possible reading.
+   */
   assert.equal(
     revealRow?.dataset.gooeyFrom,
-    '[data-composer-reveal-trigger]',
-    'The mode row should emerge from the bottom-left composer trigger.',
+    undefined,
+    'The mode row rises out of the composer, so it must declare no chain origin — a leftover ' +
+    'gooeyFrom would describe the sideways chain that was removed.',
   );
   assert.equal(
     revealRow?.dataset.gooeyPath,
-    'bottom-left-to-top-right',
-    'The opening choreography should retain its diagonal bottom-left to top-right contract.',
+    undefined,
+    'The diagonal bottom-left-to-top-right path is retired; the row climbs straight out of the box.',
   );
   assert.equal(revealRoot?.dataset.melting, 'false', 'Nothing is crossing the box edge at rest.');
+
+  /*
+   * The attribute checks above prove the row DECLARES no chain. They do not prove the row is
+   * ANIMATED without one — the two could disagree, and the visible bug lives in the second.
+   *
+   * `runGooey` is called from a layout effect against real geometry, which jsdom does not
+   * produce (every getBoundingClientRect is zero), so the travel itself cannot be observed here.
+   * What can be asserted is the argument: the reveal effect must pass `chain: false`.
+   *
+   * Mutation-checked 2026-09-13: restoring `chain: true` fails this and nothing else.
+   */
+  const emptyStateSource = await readFile(
+    new URL('../src/components/playground/Chat/ChatEmptyState.tsx', import.meta.url),
+    'utf8',
+  );
+  const revealCall = emptyStateSource.match(
+    /durationMs: TAB_REVEAL\.durationMs,[\s\S]{0,240}?chain: (true|false)/,
+  );
+  assert.ok(revealCall, 'Could not find the reveal row runGooey call — has TAB_REVEAL moved?');
+  assert.equal(
+    revealCall[1], 'false',
+    'The mode row must rise out of the composer (chain: false). `chain: true` births each chip ' +
+    'inside the previous one and sends the row gliding sideways out of the "+" — the exact ' +
+    'defect reported 2026-09-13.',
+  );
 
   assert.ok(shell?.className.includes('border'), 'The shell carries the single stroke.');
   assert.ok(!innerColumn?.className.includes('p-3'), 'The inner field owns the padding — the column must not double it.');
