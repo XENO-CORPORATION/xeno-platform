@@ -992,9 +992,29 @@ const ChatEmptyState: React.FC<ChatEmptyStateProps> = ({
       >
         <svg aria-hidden="true" focusable="false" width="0" height="0" className="absolute pointer-events-none">
           <defs>
-            {/* Clean metaball blend: blur and alpha crunch without artificial stroke overlay */}
+            {/* Clean metaball blend: blur and alpha crunch without artificial stroke overlay.
+             *
+             * 🔴 `stdDeviation` IS THE CORNER RADIUS OF EVERY BLOB — it is not only a melt knob.
+             *
+             * The alpha crunch below thresholds a blurred shape, so the blur rounds corners
+             * geometrically, on top of whatever `border-radius` declared. Measured 2026-09-13 in
+             * Chromium at 4x, against a real 53x32 mode tab, all at a declared 8px:
+             *
+             *   stdDeviation   5      4     3     2     1    ~0     unfiltered button
+             *   painted      11.25  11.0   9.0   8.0   7.0   6.5          6.5
+             *
+             * At 5 the travelling chip painted a visibly rounder corner than the buttons it
+             * lands beside — reported twice, and invisible to a CSS-level check because the
+             * distortion happens at PAINT time, downstream of `border-radius`.
+             *
+             * ⚠️ Lowering the DECLARED radius cannot fix it: at `border-radius: 0` the blob still
+             * painted 10.25px, because the blur imposes a floor. `stdDeviation` is the only lever.
+             *
+             * 2 is the value at which the painted corner equals the button's. Changing it changes
+             * the corner of every chip — re-measure, do not re-guess.
+             */}
             <filter id={GOOEY_FILTER_ID} x="-20%" y="-20%" width="140%" height="140%">
-              <feGaussianBlur in="SourceGraphic" stdDeviation="5" result="blur" />
+              <feGaussianBlur in="SourceGraphic" stdDeviation="2" result="blur" />
               <feColorMatrix
                 in="blur"
                 type="matrix"
