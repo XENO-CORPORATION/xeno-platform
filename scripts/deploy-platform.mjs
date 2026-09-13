@@ -199,8 +199,16 @@ const tarLocal = join(stage, `deploy-${sha}.tar`);
 let remoteStageProvisioned = false;
 try {
   step(`Packing git archive HEAD (${sha}) -> tar`);
-  // git archive writes committed bytes only (LF; core.autocrlf=true).
-  run('git', ['archive', '--format=tar', '-o', tarLocal, fullSha, '--', ...shipPaths]);
+  // 🔴 `-c core.autocrlf=false` is load-bearing. `git archive` APPLIES the local
+  // autocrlf setting on export, so on a Windows workstation (autocrlf=true) it wrote
+  // CRLF copies of every file .gitattributes does not pin — measured 2026-09-13:
+  // docker-compose.yml 735 CR, index.js 4205 CR, against 0 in the committed blobs.
+  // Node never cared, which is why nothing broke. What did: every deploy installed a
+  // CRLF compose file on the box, so its checkout always showed docker-compose.yml
+  // modified — which hides genuine drift, and would make `git pull --ff-only` on the
+  // box refuse the first commit that touches compose, stranding the DR scripts and
+  // Prometheus rules that reach the box that way. The old comment here claimed LF.
+  run('git', ['-c', 'core.autocrlf=false', 'archive', '--format=tar', '-o', tarLocal, fullSha, '--', ...shipPaths]);
   ok(`packed ${tarLocal}`);
 
   step(`Provisioning ${opts.host}:${REMOTE_TMP}`);

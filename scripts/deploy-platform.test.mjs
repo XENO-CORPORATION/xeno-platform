@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { readFileSync, mkdtempSync, rmSync } from 'node:fs';
+import { readFileSync, writeFileSync, mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { execFileSync } from 'node:child_process';
@@ -245,4 +245,33 @@ test('the deploy bakes its SHA into the image, not just into a tag', () => {
   const revisionAt = dockerfile.indexOf('ARG XENO_SOURCE_REVISION');
   assert.ok(revisionAt > dockerfile.indexOf('npm ci'),
     'the revision layer must come after the dependency install, not before it');
+});
+
+test('the deploy archive ships committed bytes, whatever the workstation autocrlf says', (t) => {
+  // 🔴 The deploy used to run plain `git archive`, which APPLIES core.autocrlf on
+  // export. From a Windows workstation it shipped CRLF copies of every file not
+  // pinned by .gitattributes (measured: docker-compose.yml 735 CR, index.js 4205 CR,
+  // committed blobs 0), so the box's checkout always showed compose as modified.
+  const deploy = readFileSync(new URL('./deploy-platform.mjs', import.meta.url), 'utf8');
+  assert.match(deploy, /run\('git', \['-c', 'core\.autocrlf=false', 'archive'/,
+    'the archive must be pinned to committed bytes');
+
+  // Reproduce WHY, so this test fails loudly if git ever stops behaving this way
+  // and the flag can be reconsidered — rather than trusting the comment above.
+  const cwd = mkdtempSync(join(tmpdir(), 'xeno-deploy-eol-test-'));
+  t.after(() => rmSync(cwd, { recursive: true, force: true }));
+  const git = (...args) => execFileSync('git', args, { cwd, stdio: ['ignore', 'pipe', 'pipe'] });
+  git('init', '-b', 'main');
+  git('config', 'user.name', 'EOL Fixture');
+  git('config', 'user.email', 'eol@xeno.test');
+  git('config', 'core.autocrlf', 'false');
+  writeFileSync(join(cwd, 'compose.yml'), 'services:\n  a: 1\n');
+  git('add', 'compose.yml');
+  git('-c', 'commit.gpgsign=false', 'commit', '-m', 'lf');
+  git('config', 'core.autocrlf', 'true');
+  const crCount = (tar) => [...tar].filter((b) => b === 13).length;
+  const plain = git('archive', '--format=tar', 'HEAD', '--', 'compose.yml');
+  const pinned = git('-c', 'core.autocrlf=false', 'archive', '--format=tar', 'HEAD', '--', 'compose.yml');
+  assert.ok(crCount(plain) > 0, 'control: plain git archive under autocrlf=true injects CR — if this fails, git changed');
+  assert.equal(crCount(pinned), 0, 'the pinned form must export the committed LF bytes');
 });
