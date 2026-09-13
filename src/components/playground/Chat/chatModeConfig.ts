@@ -73,18 +73,34 @@ export const XENO_IDENTITY = [
  * function." Research is a depth stacked on the search capability, not a different place where
  * search lives.
  *
- * So: search is the capability, Research is the depth. Telling a user to "switch to Research to
- * search" would repeat the original defect in another form — describing the product as more
- * restrictive than it is.
+ * ## ⚠️ THAT IS THE TARGET, NOT TODAY — corrected 2026-09-13 after a second transcript
+ *
+ * An earlier version of this text described the target as if it were the present: it told users
+ * to enable search with "the search control beside the composer". There is no such control —
+ * `toggleXenoSearch` and `toggleSearch` are both declared in ChatWithLLM.tsx and called by
+ * NOTHING. The model, told it had a capability it could not reach, emitted "*[Running search...]*"
+ * and then invented a technical failure to explain the missing results.
+ *
+ * So the text below states what is true NOW: only Research searches, it runs BEFORE the turn as
+ * a pre-turn step (not a tool call), and no mode can invoke anything. The layered model above is
+ * the design being built — see `docs/CHAT-TOOL-CALLING-PLAN.md` — and this text changes only
+ * once the tool is genuinely reachable.
+ *
+ * 🔴 Two rules earned here, both now enforced by `scripts/chat-capability-statement.test.mjs`:
+ *   - never describe a control without checking it has a CALLER, not merely a definition;
+ *   - never teach the model to narrate running a tool.
  */
 const SEARCH_CAPABILITY: Readonly<Record<ChatMode, string>> = {
   chat: [
     'You have NO tool you can invoke in this mode — you cannot search, browse, or run anything.',
-    'XENO does search the web, but only in Research mode, which the user selects with the Research tab',
-    'above the composer; the search then runs before your turn and its results arrive in your context.',
+    'XENO does search the web, but only in Research mode. The user reaches it with the "+" button at the',
+    'bottom-left of the composer, which reveals the mode tabs — then the Research tab. Say it that way:',
+    'the tabs are HIDDEN until "+" is pressed, so "the Research tab above the composer" sends someone',
+    'looking for a control they cannot see. The search then runs before your turn, and its results arrive',
+    'in your context.',
     'So: never say you are searching, never narrate running a search, and never claim a search failed.',
     'If a question needs live or post-training information, say plainly that this mode cannot search and',
-    'that the Research tab will — then answer what you can from training, flagging that it may be dated.',
+    'that Research mode will — then answer what you can from training, flagging that it may be dated.',
   ].join(' '),
   research: [
     'You are in XENO Research mode. The search has ALREADY RUN before this turn and its results are in',
@@ -94,11 +110,11 @@ const SEARCH_CAPABILITY: Readonly<Record<ChatMode, string>> = {
   ].join(' '),
   code: [
     'You have no tool you can invoke in this mode, and no web access. If live information is needed, say',
-    'so plainly and tell the user that the Research tab searches the web with cited sources.',
+    'so plainly and tell the user that Research mode ("+" beside the composer, then the Research tab) searches the web with cited sources.',
   ].join(' '),
   agents: [
     'You have no tool you can invoke in this mode. Do not narrate searching or running anything.',
-    'If live information is needed, tell the user the Research tab searches the web with cited sources.',
+    'If live information is needed, tell the user Research mode ("+" beside the composer, then the Research tab) searches the web with cited sources.',
   ].join(' '),
 };
 
