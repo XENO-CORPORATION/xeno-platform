@@ -12315,7 +12315,11 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                   // Shift+Enter adds a new line (default behavior)
                 }}
                 rows={messages.length === 0 ? 2 : 2}
-                className={`w-full resize-none border-none bg-transparent px-1 text-[15px] leading-6 text-[var(--chat-text)] outline-none placeholder:text-[var(--chat-muted)] focus:outline-none focus:ring-0 focus:shadow-none ${messages.length === 0 ? 'min-h-[3.25rem] pb-2 pt-0.5' : 'min-h-[3rem] max-h-[7.5rem] pb-1 pt-0.5'}`}
+                /* `focus-self` opts out of the global `:focus-visible` ring — see the
+                   `[data-chat-composer-shell]:focus-within` rule, which moves the indicator onto
+                   the shell's own border. The `outline-none`/`focus:ring-0` below cannot do it
+                   alone: same specificity as `:focus-visible`, and index.css loads last. */
+                className={`focus-self w-full resize-none border-none bg-transparent px-1 text-[15px] leading-6 text-[var(--chat-text)] outline-none placeholder:text-[var(--chat-muted)] focus:outline-none focus:ring-0 focus:shadow-none ${messages.length === 0 ? 'min-h-[3.25rem] pb-2 pt-0.5' : 'min-h-[3rem] max-h-[7.5rem] pb-1 pt-0.5'}`}
                 style={{ maxHeight: messages.length === 0 ? '120px' : '120px' }}
               />
             </div>
@@ -12919,6 +12923,32 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
             background-color: var(--chat-composer-fill, var(--chat-elevated)) !important;
             border-color: var(--chat-border) !important;
             box-shadow: var(--chat-composer-shadow) !important;
+          }
+          /* ── Focus lives ON the box, not in a ring floating outside it ──────────────────
+           *
+           * No backticks in this comment: it lives inside a style template literal (spec 5.4b).
+           *
+           * The global :focus-visible in index.css draws outline: 2px solid rgba(255,255,255,.5)
+           * at outline-offset: 2px. On the composer that outline traced the TEXTAREA — an
+           * unstyled transparent element inset from the shell — so focusing the field painted a
+           * hard white rectangle hovering inside the dark box, unrelated to any visible edge. That
+           * is the white container in the 2026-09-13 report, and no comparable product ships one.
+           *
+           * The textarea's own outline-none / focus:ring-0 could not win: Tailwind's utilities and
+           * :focus-visible are both specificity (0,1,0), so source order decides and index.css
+           * loads last. The .focus-self class (0,2,0) is the repo's existing opt-out for this.
+           *
+           * 🔴 The ring is REPLACED, never merely removed. index.css's own note is explicit that
+           * .focus-self on an element with no focus state of its own silently deletes the only
+           * indicator a keyboard user has — and the shell had none: it set border-color and
+           * transitioned it, but nothing ever changed it. So focus now brightens the shell's
+           * border, which is the stroke the user already reads as the composer's edge, and the
+           * existing transition on border-color animates it for free.
+           *
+           * :focus-within, not :focus — the focus is on the textarea, the indicator is on its
+           * ancestor. */
+          .chat-themed [data-chat-composer-shell]:focus-within {
+            border-color: var(--chat-composer-focus-border, var(--chat-muted)) !important;
           }
           .chat-themed .chat-input-container:not([data-empty-composer-input="true"]) {
             background-color: var(--chat-composer-fill, var(--chat-elevated)) !important;
