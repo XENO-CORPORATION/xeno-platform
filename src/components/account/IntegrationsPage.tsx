@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { ChevronRight, Clock3, Plug, Search, ShieldCheck, X } from 'lucide-react';
+import { ChevronRight, Clock3, KeySquare, Plug, Search, ShieldCheck, SquareArrowOutUpRight, X } from 'lucide-react';
 import chatService from '../../services/chatService';
 import ResourceState from '../platform/ResourceState';
 import AccountSettingsNav from './AccountSettingsNav';
@@ -44,6 +44,15 @@ const IntegrationsPage: React.FC = () => {
   return <main className="xeno-platform-page xeno-account-page">
     <header className="xeno-platform-page-header"><div><span className="xeno-page-eyebrow">Workspace</span><h1>Integrations</h1><p>Only connectors qualified by the server and attached to this account appear here.</p></div></header>
     <AccountSettingsNav />
+    {/* Provider keys live on the XENO API platform, not in this service — this is only the way there. */}
+    <div className="xeno-integration-grid">
+      <a className="xeno-integration-card" href="https://api.xenostudio.ai/dashboard/byok" target="_blank" rel="noopener noreferrer">
+        <span className="xeno-integration-logo"><KeySquare size={22} /></span>
+        <span><strong>Bring your own key</strong><small>XENO API platform</small><p>Connect your own provider keys and choose which models use them. Keys are stored on the API platform and never reach this account service.</p></span>
+        <span className="xeno-availability">Opens api.xenostudio.ai</span>
+        <SquareArrowOutUpRight size={15} aria-hidden="true" />
+      </a>
+    </div>
     {items.length ? <div className="xeno-project-toolbar"><label><Search size={15} /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search integrations" /></label></div> : null}
     {state === 'loading' ? <ResourceState kind="loading" title="Loading confirmed integrations" detail="Reading qualified connector records from the account service." />
       : state === 'error' ? <ResourceState kind="error" layout="page" previewLabel="Workspace / Integrations" title="We couldn't load integrations" detail={error} actionLabel="Try again" onRetry={() => void load()} />
