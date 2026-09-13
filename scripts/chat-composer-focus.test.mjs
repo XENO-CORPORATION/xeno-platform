@@ -79,6 +79,66 @@ test('the replacement is on the shell, which is the visible edge', () => {
   assert.match(rule, /border-color:\s*var\(/, 'the focus border must come from a theme token, not a literal');
 });
 
+test('the composer field and its inner box can never paint an edge', () => {
+  /*
+   * Reported 2026-09-13 with a screenshot AFTER the shell-border fix shipped: focusing the
+   * composer still painted a bright square rectangle inside the shell, around the text and
+   * stopping above the controls row.
+   *
+   * 🔴 I could not reproduce it. A themed, focused, real composer measured clean, and both
+   * halves of the earlier fix were verified present in the shipped bundle — so the override was
+   * something the probe did not recreate. What DID reproduce was an adversarial test: inject a
+   * competing stroke at `html body …:focus` specificity, and the textarea's outline came back
+   * as `solid 2px rgb(250,250,250)`. The earlier rules lost on specificity.
+   *
+   * So the invariant is not "we removed a stroke" but "no later rule can add one". Both
+   * elements are suppressed at `html body` specificity, covering outline, ring and border —
+   * verified to win with the competing stroke injected, and unchanged without it.
+   *
+   * ⚠️ `outline: none` alone is not enough: Tailwind's `focus:ring-0` still emits the ring
+   * LAYERS into box-shadow (measured: three, all 0px), so a later rule restoring a non-zero
+   * ring offset would paint a stroke with nothing in the markup to explain it.
+   */
+  /*
+   * ⚠️ Check EVERY selector in the group, not the group as a whole.
+   *
+   * The first version matched `html body … <target> … {` across the rule, which stayed green
+   * when the prefix was stripped from one line — a sibling selector still carried it. A rule
+   * is only as specific as the selector that matches, so a single unprefixed line is a hole.
+   */
+  for (const target of ['[data-empty-composer-input="true"]', '[data-chat-composer-shell] textarea']) {
+    const escaped = target.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    // ⚠️ Skip `:not(<target>)` — that selector EXCLUDES the element, so it is not a suppression
+    // rule and demanding html-body specificity of it fails the control for no reason. The first
+    // version flagged `.chat-input-container:not([data-empty-composer-input="true"])`.
+    const selectorLines = CHAT.split('\n').filter((l) => (
+      new RegExp(escaped).test(l)
+      && /,\s*$|\{\s*$/.test(l)
+      && !new RegExp(`:not\\(\\s*${escaped}`).test(l)
+    ));
+    assert.ok(
+      selectorLines.length > 0,
+      `no suppression selector found for ${target}. Without one a later rule wins on ` +
+      'specificity and the stroke comes back — measured, not hypothetical.',
+    );
+    for (const line of selectorLines) {
+      assert.match(
+        line.trim(), /^html body /,
+        `this selector for ${target} is not at html-body specificity:\n  ${line.trim()}\n` +
+        'One unprefixed line is enough for a competing rule to win — verified by injecting ' +
+        'a stroke at html-body specificity and watching the textarea outline come back.',
+      );
+    }
+    const body = CHAT.slice(CHAT.indexOf(selectorLines[selectorLines.length - 1]));
+    const rule = body.slice(0, body.indexOf('}'));
+    for (const prop of [/outline:\s*0 none transparent/, /box-shadow:\s*none/, /border-color:\s*transparent/]) {
+      assert.match(rule, prop,
+        `${target} must suppress outline, ring (box-shadow) AND border together — suppressing ` +
+        'one leaves the other two able to draw the same visible edge.');
+    }
+  }
+});
+
 test('the global ring still exists for everything else', () => {
   // Deleting it outright would be a real accessibility regression — the repo found inputs whose
   // ONLY focus affordance is that outline. The composer opts out; the site does not.

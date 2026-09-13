@@ -12996,6 +12996,18 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
            *
            * :focus-within, not :focus — the focus is on the textarea, the indicator is on its
            * ancestor. */
+          /* The message field itself never paints an edge either — focus lives on the SHELL.
+             focus-self already removes the global outline; this also kills any ring or border,
+             so no single later rule can reintroduce a stroke around the text. */
+          html body .chat-themed [data-chat-composer-shell] textarea,
+          html body .chat-themed [data-chat-composer-shell] textarea:focus,
+          html body .chat-themed [data-chat-composer-shell] textarea:focus-within,
+          html body .chat-themed [data-chat-composer-shell] textarea:focus-visible {
+            outline: 0 none transparent !important;
+            outline-offset: 0 !important;
+            box-shadow: none !important;
+            border-color: transparent !important;
+          }
           .chat-themed [data-chat-composer-shell]:focus-within {
             /* 🔴 A STEP, not a jump. No backticks in this comment: it lives inside a style
                template literal (spec 5.4b).
@@ -13012,6 +13024,38 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                is my cursor" for a keyboard user, quiet enough that clicking into the box does
                not redraw the composer's outline. Any opaque grey reintroduces the report. */
             border-color: var(--chat-composer-focus-border, rgba(255, 255, 255, 0.22)) !important;
+          }
+          /* ── The inner field draws NOTHING, focused or not ──────────────────────────────
+           *
+           * No backticks in this comment: it lives inside a style template literal (spec 5.4b).
+           *
+           * Reported 2026-09-13 with a screenshot: focusing the composer painted a bright
+           * square rectangle INSIDE the shell, around the text area and stopping above the
+           * controls row. That is this element, and its own markup already says
+           * border-transparent / shadow-none — so something at runtime was overriding it.
+           *
+           * 🔴 I could not reproduce it in a probe: a themed, focused, real composer rendered
+           * clean, and both halves of the earlier fix were verified present in the shipped
+           * bundle. Rather than keep guessing at the override, this states the invariant
+           * directly and at a specificity nothing in this file can beat.
+           *
+           * The composer has exactly ONE stroke — the shell's outer border, which is also the
+           * box the gooey skin is moulded onto. The inner field is a padding box. A second
+           * stroke inside it reads as two nested cards, and appearing only on focus reads as
+           * the browser default this repo removed everywhere else.
+           *
+           * ⚠️ The RING is separately suppressed. Tailwind's focus:ring-0 zeroes the width but
+           * still emits the ring layers into box-shadow (measured: three layers, all 0px), so a
+           * later rule restoring a non-zero --tw-ring-offset-width would paint it with nothing
+           * in the markup to explain why. Covering both means neither can come back alone. */
+          html body .chat-themed [data-empty-composer-input="true"],
+          html body .chat-themed [data-empty-composer-input="true"]:focus,
+          html body .chat-themed [data-empty-composer-input="true"]:focus-within,
+          html body .chat-themed [data-empty-composer-input="true"]:focus-visible {
+            border-color: transparent !important;
+            outline: 0 none transparent !important;
+            outline-offset: 0 !important;
+            box-shadow: none !important;
           }
           .chat-themed .chat-input-container:not([data-empty-composer-input="true"]) {
             background-color: var(--chat-composer-fill, var(--chat-elevated)) !important;
