@@ -37,6 +37,10 @@ export const CLIENT_AUTHORITY = Object.freeze({
   'xeno-comms': COLLAB_PRODUCT,
   'xeno-shell': AGENT_PRODUCT,
   'xeno-anima': AGENT_PRODUCT,
+  // Standalone Agent is a public loopback PKCE client. Keep its authority identical
+  // to the existing agent surfaces; unsupported requested scopes are downscoped by
+  // the provider, never added to the policy by guesswork.
+  'xeno-agent-interface': AGENT_PRODUCT,
   'xeno-rt': ['openid', 'profile', 'inference:run', 'ledger:read', 'ledger:spend'],
   'xeno-agent-cli': AGENT_PRODUCT,
   'xeno-web': WEB,
