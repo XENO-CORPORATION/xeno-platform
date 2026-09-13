@@ -338,9 +338,35 @@ async function assertWithinCaps(client, userId, costMicro) {
   }
 }
 
-/** Mirror the new authoritative balance down to legacy users.credits (whole). */
+/**
+ * The whole-credit value to mirror into legacy `users.credits`, SATURATED to int4.
+ *
+ * 🔴 `users.credits` is a Postgres `integer`. The ledger is bigint end to end and is
+ * the authority; this column is only a derived mirror for legacy readers. Writing a
+ * balance above 2,147,483,647 credits into it threw 22003 INSIDE the money
+ * transaction, so the grant or spend itself failed. Reproduced 2026-09-13 on the live
+ * image: a 2,000,000,000-credit promo grant to an account holding 999,999,999 died
+ * with `value "2999999999" is out of range for type integer`.
+ *
+ * Why saturate rather than widen the column: node-postgres returns `integer` as a
+ * Number and `bigint` as a STRING, so a wider type would silently turn
+ * `row.credits + n` into string concatenation in every reader — here and in the API
+ * gateway, which reads this column directly. Widening is a coordinated migration.
+ * A saturated mirror only ever understates a balance legacy readers should not be
+ * trusting anyway; a thrown mirror refused the money.
+ */
+export const LEGACY_CREDITS_MAX = 2147483647n;
+export const LEGACY_CREDITS_MIN = -2147483648n;
+export function legacyMirrorCredits(balanceMicro) {
+  const whole = BigInt(balanceMicro) / BigInt(MICRO_PER_CREDIT); // truncating BigInt division, as before
+  if (whole > LEGACY_CREDITS_MAX) return LEGACY_CREDITS_MAX;
+  if (whole < LEGACY_CREDITS_MIN) return LEGACY_CREDITS_MIN;
+  return whole;
+}
+
+/** Mirror the new authoritative balance down to legacy users.credits (whole, saturated). */
 async function mirrorLegacy(client, userId, balanceMicro) {
-  const whole = balanceMicro / BigInt(MICRO_PER_CREDIT); // floor for BigInt division
+  const whole = legacyMirrorCredits(balanceMicro);
   await client.query('UPDATE users SET credits = $1 WHERE id = $2', [whole.toString(), userId]);
 }
 
