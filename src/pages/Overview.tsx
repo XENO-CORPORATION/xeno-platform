@@ -1,5 +1,6 @@
 import React, { useState, createContext, useContext, useEffect } from 'react';
 import { lazyRoute } from '../components/platform/lazyRoute';
+import { announceSidebarExpanded, onSidebarCollapseRequest } from '../lib/sidebarExclusion';
 import { BrowserRouter as Router, Routes, Route, Navigate, useLocation, useNavigate } from 'react-router-dom';
 import OverviewTaskbar from '../components/overview/OverviewTaskbar';
 import OSAuthInterface from '../components/os/OSAuthInterface';
@@ -167,7 +168,29 @@ const OverviewContent: React.FC = () => {
   const handleSidebarCollapseChange = (collapsed: boolean) => {
     setIsSidebarCollapsed(collapsed);
     localStorage.setItem('xeno_overview_sidebar_collapsed', String(collapsed));
+    // Expanding claims the single expanded slot; the chat's history panel collapses in response.
+    // Collapsing announces nothing — it frees the slot without forcing anyone else open.
+    if (!collapsed) announceSidebarExpanded('platform');
   };
+
+  /**
+   * Yield the slot when the chat's history panel expands.
+   *
+   * 🔴 This collapses to the icon RAIL, never hides the sidebar — `isTaskbarHidden` is a separate
+   * user action with its own toggle, and conflating them would make opening a chat panel silently
+   * remove the platform navigation entirely.
+   *
+   * The persisted `xeno_overview_sidebar_collapsed` is written here for the same reason the manual
+   * toggle writes it: the two paths must agree, or reloading restores a width the layout rule had
+   * already resolved away.
+   */
+  useEffect(() => onSidebarCollapseRequest('platform', () => {
+    setIsSidebarCollapsed((wasCollapsed) => {
+      if (wasCollapsed) return wasCollapsed;
+      localStorage.setItem('xeno_overview_sidebar_collapsed', 'true');
+      return true;
+    });
+  }), []);
   // Handle interface mode toggle
   const toggleInterfaceMode = () => {
     const newMode = !isCleanMode;

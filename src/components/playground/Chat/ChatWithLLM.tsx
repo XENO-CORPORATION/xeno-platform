@@ -59,6 +59,7 @@ import { userDataService } from '@/services/userDataService';
 import { webContextService, type WebContextProgress, type WebContextSearchResult, type WebContextSource } from '@/services/webContextService';
 import type { Conversation as DBConversation, ChatAttachment as DBChatAttachment, ChatMessage as DBChatMessage, ProjectSourceReference } from '@/services/chatService';
 import { ArrowUp, Clock, X, ChevronDown, ChevronRight, Plus, Download, Brain, Folder, FolderUp, Link, File, FileClock, FileImage, FileText, FilePenLine, MessageSquare, MessagesSquare, Check, Copy, Search, ExternalLink, Info, Target, MessageSquareX, Image, Stop, Mic, Globe, Settings, TrendingUp, CheckCircle, Pencil, Hand, Pin, Monitor, Archive, Library, PanelLeftOpen, Star, Contrast, UserRoundX, RefreshDecl, CopyDecl, CheckDecl, EditDecl, ThumbsUpDecl, ThumbsDownDecl, InfoDecl, XDecl, SearchDecl, PanelLeftCloseDecl, ArrowUpRightDecl, FolderDecl, TrashDecl, BriefcaseDecl, GearDecl, PlusDecl, BookmarkDecl, ArchiveDecl, LayersDecl, StarDecl, FeatherDecl, TargetDecl, SmileDecl, BrainCircuitDecl, MessageSquareXDecl, QuoteDecl, ImageDecl, WandSparklesDecl, FileXDecl, ContrastDecl, UserRoundXDecl, MenuDecl, ShareDecl, MoreVerticalDecl, PaperclipDecl, ChevronDownDecl, ChevronRightDecl, WrapTextDecl, FolderUpDecl, FileClockDecl, PanelRightOpenDecl, PanelRightCloseDecl, MessageSquarePlusDecl, PanelLeftOpenDecl, ArrowRightDecl, CalendarDecl, ClockDecl, BrainDecl, SlidersDecl } from '@/lib/icons';
+import { announceSidebarExpanded, onSidebarCollapseRequest } from '@/lib/sidebarExclusion';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import rehypeRaw from 'rehype-raw';
@@ -89,8 +90,20 @@ function withAuthHeaders(extra: Record<string, string> = {}): Record<string, str
 const HISTORY_SIDEBAR_CLOSE_MS = 300;
 /** One width owner for every surface that yields to the conversation history. */
 const HISTORY_SIDEBAR_WIDTH_PX = 260;
-/** One width owner for body-portaled workspaces that must preserve the XENO rail. */
+/**
+ * One width owner for body-portaled workspaces that must preserve the XENO rail.
+ *
+ * ⚠️ This is the platform sidebar's COLLAPSED width. Its expanded width is 300px
+ * (`overview-shell.css`), and this file has no way to observe that — the history panel is
+ * portalled to `document.body`, so no ancestor's layout contains it. Before 2026-09-13 the two
+ * could be expanded at once and this constant positioned the history panel 248px INSIDE the
+ * platform panel, painting over it. The fix is exclusion, not a second width: `sidebarExclusion`
+ * guarantees the platform sidebar is collapsed to exactly this width whenever the history panel
+ * is open, which is what makes assuming 52 correct rather than merely usual.
+ */
 const TASKBAR_WIDTH_PX = 52;
+/** The `checkMobile` effect's breakpoint, named so the collapse listener cannot drift from it. */
+const MOBILE_BREAKPOINT_PX = 768;
 
 const DEFAULT_MODEL: Model = {
   id: "gpt-5.6-terra",
@@ -2378,6 +2391,42 @@ const ChatWithLLM: React.FC<ChatWithLLMProps> = ({
   });
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const [isHistoryOpen, setIsHistoryOpen] = useState(false);
+
+  /**
+   * Open the history panel and claim the single expanded-sidebar slot.
+   *
+   * 🔴 Every open goes through here, not through `setIsHistoryOpen(true)` directly. There are
+   * three open sites — the chrome button, the mobile swipe, and the catalog — and announcing at
+   * one of them would leave the other two overlapping the platform sidebar. That is the
+   * coverage-set failure this codebase keeps re-learning: test the paths, not the mechanism.
+   * `scripts/sidebar-exclusion.test.mjs` asserts no `setIsHistoryOpen(true)` survives outside
+   * this function.
+   *
+   * Closing deliberately does NOT announce: freeing the slot must not force the platform sidebar
+   * back open, which would make closing one panel look like it opened another.
+   */
+  const openHistorySidebar = useCallback(() => {
+    setIsHistoryOpen(true);
+    announceSidebarExpanded('chat');
+  }, []);
+
+  /**
+   * Yield the slot when the platform sidebar expands.
+   *
+   * Mobile is exempt: there the history panel is a full-width overlay rather than a column beside
+   * the platform rail, so the two never compete for horizontal space and collapsing it would be a
+   * panel closing for no reason the user can see.
+   *
+   * ⚠️ The breakpoint is read at COLLAPSE time rather than closed over. The `isMobile` state is
+   * declared ~300 lines below this effect, so capturing it would read `false` on the first render
+   * regardless of the real viewport; and an effect that re-subscribes whenever it changes would
+   * tear the listener down mid-gesture. It is one measurement — take it when it is needed.
+   * `MOBILE_BREAKPOINT_PX` is the same 768 the `checkMobile` effect uses.
+   */
+  useEffect(() => onSidebarCollapseRequest('chat', () => {
+    if (window.innerWidth <= MOBILE_BREAKPOINT_PX) return;
+    setIsHistoryOpen(false);
+  }), []);
   // Floating PanelLeftOpen + XENO wordmark: wait for history close animation, then enter L→R.
   const [showClosedHistoryChrome, setShowClosedHistoryChrome] = useState(true);
   const [closedHistoryChromeEnterKey, setClosedHistoryChromeEnterKey] = useState(0);
@@ -2664,7 +2713,7 @@ const ChatWithLLM: React.FC<ChatWithLLMProps> = ({
 
   // Detect mobile on mount
   useEffect(() => {
-    const checkMobile = () => setIsMobile(window.innerWidth <= 768);
+    const checkMobile = () => setIsMobile(window.innerWidth <= MOBILE_BREAKPOINT_PX);
     checkMobile();
     window.addEventListener('resize', checkMobile);
     return () => window.removeEventListener('resize', checkMobile);
@@ -2697,11 +2746,11 @@ const ChatWithLLM: React.FC<ChatWithLLMProps> = ({
     const isSwipeRight = deltaX > minSwipeDistance && isHorizontalSwipe && touchStartRef.current.x < leftEdgeZone;
 
     if (isSwipeRight && !isHistoryOpen) {
-      setIsHistoryOpen(true);
+      openHistorySidebar();
     }
 
     touchStartRef.current = null;
-  }, [isMobile, isHistoryOpen]);
+  }, [isMobile, isHistoryOpen, openHistorySidebar]);
 
   const [isReasonToggled, setIsReasonToggled] = useState(true);
   const [isSearchToggled, setIsSearchToggled] = useState(false);
@@ -13696,7 +13745,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
               variant="quiet"
               size="lg"
               iconSize={16}
-              onClick={() => setIsHistoryOpen(true)}
+              onClick={openHistorySidebar}
               aria-label="Open conversation history"
               title="Open history"
             />
