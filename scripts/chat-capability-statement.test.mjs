@@ -214,6 +214,56 @@ test('the prompt cannot promise a control that is not rendered', () => {
   }
 });
 
+test('the route the prompt gives users is the route the UI actually has', () => {
+  /*
+   * A second transcript (2026-09-13, 874b52df) showed the model telling users to "switch on the
+   * Research tab above the composer". The tab exists — but `isRevealRowVisible` starts FALSE, so
+   * the mode tabs are HIDDEN until the "+" is pressed. Someone following that instruction looks
+   * for a control they cannot see.
+   *
+   * ⚠️ Not a fabrication this time — a true statement about a hidden thing, which is its own
+   * failure. The first defect promised a control that does not exist; this one promised a
+   * control that exists and is not visible. Both send the user somewhere with nothing there.
+   *
+   * So the prompt must name the REVEAL step, and this test verifies the reveal is real: the
+   * trigger has a caller, and the row it opens actually renders the mode tabs.
+   */
+  const config = stripComments(CONFIG);
+  const emptyState = stripComments(
+    readFileSync(join(ROOT, 'src', 'components', 'playground', 'Chat', 'ChatEmptyState.tsx'), 'utf8'),
+  );
+
+  /*
+   * ⚠️ Scope this to the SENT TEXT, not the file. The first version matched `"+"` anywhere in
+   * chatModeConfig.ts — and the docblock above SEARCH_CAPABILITY mentions it, so removing the
+   * step from every prompt string still passed. A gate that a comment can satisfy is measuring
+   * the wrong thing.
+   */
+  const capabilityText = stripComments(CONFIG).match(/const SEARCH_CAPABILITY[\s\S]*?\n\};/)?.[0] ?? '';
+  assert.ok(capabilityText, 'SEARCH_CAPABILITY must exist');
+  assert.match(
+    capabilityText, /"\+"/,
+    'the prompt must tell users the mode tabs are behind the "+" — they are hidden at rest ' +
+    '(isRevealRowVisible starts false), so naming the tab alone sends them looking for nothing.',
+  );
+
+  // And the route must be real, not just described.
+  assert.match(
+    emptyState, /onClick=\{reveal\.toggle\}/,
+    'the "+" must actually toggle the reveal, or the instruction is another phantom control',
+  );
+  assert.match(
+    emptyState, /CHAT_MODE_TABS\.map/,
+    'the revealed row must render the mode tabs, or "+ then Research" leads nowhere',
+  );
+  assert.match(
+    /const \[isRevealRowVisible[^;]*;/.exec(emptyState)?.[0] ?? '',
+    /useState\(false\)/,
+    'if the tabs ever default to VISIBLE, this instruction becomes wrong in the other direction ' +
+    '— drop the "+" step from the prompt rather than leaving a stale extra hop.',
+  );
+});
+
 test('the identity names the product, not the underlying model', () => {
   const code = stripComments(CONFIG);
   assert.match(code, /export const XENO_IDENTITY/, 'the identity constant must exist');
