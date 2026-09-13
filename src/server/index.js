@@ -1679,8 +1679,17 @@ app.post('/api/chat/generate', databaseMiddleware, authMiddleware, async (req, r
         
         // Handle System Prompt (potentially add reasoning/table instructions if needed)
         let finalSystemPromptContent = systemPrompt ? systemPrompt.trim() : null;
-        if (projectId || conversationId) {
-            if (!projectId || !conversationId) {
+        // 🔴 Gate on projectId ALONE. The pair used to be `if (projectId || conversationId)` with an
+        // inner `if (!projectId || !conversationId)`, which refused EVERY request carrying a bare
+        // conversationId — and the client sends one for every persisted conversation while sending
+        // projectId only for project-backed ones. So an ordinary saved chat could not generate at
+        // all (introduced 499b527; live: 3 requests, 3× 400, zero 200s).
+        //
+        // A conversationId without a project is the NORMAL case and means plain chat: fall through
+        // with no project context. A projectId without a conversationId is still refused — project
+        // context is assembled and RECORDED against a conversation, so there is nowhere to put it.
+        if (projectId) {
+            if (!conversationId) {
                 return res.status(400).json({ error: 'Project generation requires projectId and conversationId.' });
             }
             const lastUser = [...messages].reverse().find((message) => message.role === 'user');
