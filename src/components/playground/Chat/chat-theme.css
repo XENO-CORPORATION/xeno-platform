@@ -27,6 +27,9 @@
   --chat-surface-text: #fafafa;
   --chat-surface-muted: #a3a3a3;
   --chat-border: rgba(255, 255, 255, 0.10);
+  /* Focus is a STEP above the resting border, never a jump. It was `--chat-muted`
+     (#a3a3a3, opaque) and painted a hard pale stroke around the whole composer. */
+  --chat-composer-focus-border: rgba(255, 255, 255, 0.22);
   --chat-hover: #404040;
   /* Solid fill for project-card date fade — near canvas, not hover gray. */
   --chat-project-preview-fade: #171717;
@@ -57,6 +60,7 @@
   --chat-surface-text: #e7e7e2;
   --chat-surface-muted: #a1a19d;
   --chat-border: rgba(255, 255, 255, 0.12);
+  --chat-composer-focus-border: rgba(255, 255, 255, 0.24);
   --chat-hover: rgba(255, 255, 255, 0.07);
   /* Dim hover is translucent — fade needs a solid match for the preview box. */
   --chat-project-preview-fade: #222225;
@@ -86,6 +90,8 @@
   --chat-surface-text: #0a0a0a;
   --chat-surface-muted: #737373;
   --chat-border: #d4d4d4;
+  /* Light ground: a white alpha would be invisible, so step DARKER instead. */
+  --chat-composer-focus-border: #a8a8a8;
   --chat-hover: #f5f5f5;
   --chat-project-preview-fade: #f5f5f5;
   --chat-top-bar-btn-active: var(--chat-control);

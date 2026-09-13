@@ -12997,7 +12997,21 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
            * :focus-within, not :focus — the focus is on the textarea, the indicator is on its
            * ancestor. */
           .chat-themed [data-chat-composer-shell]:focus-within {
-            border-color: var(--chat-composer-focus-border, var(--chat-muted)) !important;
+            /* 🔴 A STEP, not a jump. No backticks in this comment: it lives inside a style
+               template literal (spec 5.4b).
+
+               This was var(--chat-muted) — #a3a3a3, a solid light grey at FULL opacity, against
+               a resting border of rgba(255,255,255,0.10). Roughly 10x the contrast, which
+               painted a hard pale stroke around the whole box on focus and was reported as
+               "that awful stroke effect is back". Replacing the global focus ring with
+               something equally loud is not replacing it.
+
+               The real value now comes from --chat-composer-focus-border, defined PER THEME in
+               chat-theme.css: about twice the resting border on dark and dim, and a step DARKER
+               on light, where a white alpha would be invisible. Present enough to answer "where
+               is my cursor" for a keyboard user, quiet enough that clicking into the box does
+               not redraw the composer's outline. Any opaque grey reintroduces the report. */
+            border-color: var(--chat-composer-focus-border, rgba(255, 255, 255, 0.22)) !important;
           }
           .chat-themed .chat-input-container:not([data-empty-composer-input="true"]) {
             background-color: var(--chat-composer-fill, var(--chat-elevated)) !important;

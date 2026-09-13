@@ -127,7 +127,10 @@ const SiteGate: React.FC = () => {
         </form>
       </div>
 
-      {/* Shake animation CSS */}
+      {/* Shake animation CSS.
+          No backticks anywhere inside this block, comments included: it is a template literal,
+          so a backtick CLOSES it and everything after is parsed as JavaScript — 300+ cascading
+          TS1005 errors that name the wrong cause. Write identifiers unquoted here. */}
       <style>{`
         @keyframes shake {
           0%, 100% { transform: translateX(0); }
