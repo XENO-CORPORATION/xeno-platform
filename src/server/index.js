@@ -104,6 +104,7 @@ import { startScheduledTasksWorker } from './workers/chatScheduledWorker.js';
 import { startLibraryIngestionWorker } from './workers/libraryIngestionWorker.js';
 import { createLeaderElection } from './services/leaderElection.js';
 import { render as renderMetrics } from './services/metrics.js';
+import { enforceEnv } from './config/requiredEnv.js';
 import { breakerSnapshot } from './services/upstream.js';
 import { reasoningCapabilityForModel, reasoningEffortForModel } from './lib/chatModelCapabilities.js';
 import { registerManagedLibraryFile } from './services/libraryAssets.js';
@@ -223,6 +224,10 @@ const app = express();
 // Preview authority is checked before normalization, logging and every router.
 app.use(previewSessionMiddleware(pool));
 const PORT = process.env.BACKEND_PORT || 8090;
+// Every key this process needs, checked once, before anything serves. A missing
+// REQUIRED key refuses to boot; a missing EXPECTED key boots degraded and is
+// exported on /metrics so an alert fires. See config/requiredEnv.js for why.
+const configCheck = enforceEnv('backend');
 const JWT_DEFAULT_SECRET = 'xenostudio-super-secret-jwt-key-change-in-production';
 const JWT_SECRET = process.env.JWT_SECRET || JWT_DEFAULT_SECRET;
 // SECURITY: never run on a missing/committed-default signing secret in production — with
@@ -2929,6 +2934,7 @@ app.get('/metrics', (_req, res) => {
   res.send(renderMetrics({
     isLeader: () => backgroundLeader.isLeader(),
     breakers: () => breakerSnapshot(),
+    configMissing: () => configCheck.missingExpected,
   }));
 });
 

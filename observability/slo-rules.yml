@@ -55,3 +55,15 @@ groups:
         labels: { severity: page, slo: correctness }
         annotations:
           summary: "sum(xeno_background_leader) != 1 — background work is duplicated or stopped"
+
+      # 🔴 A config key whose absence degrades a feature into a state that looks
+      # deliberate. On 2026-08-24 REGISTRATION_OPEN, RESEND_API_KEY and five STRIPE_*
+      # keys stopped reaching the backend and signup simply read as "closed" for
+      # most of a day. The backend still boots (see config/requiredEnv.js); this is
+      # what makes that loud. The per-key series names which one.
+      - alert: XenoExpectedConfigMissing
+        expr: max(xeno_config_expected_missing_count) > 0
+        for: 5m
+        labels: { severity: page, slo: correctness }
+        annotations:
+          summary: "A backend config key is missing or empty — a feature is silently degraded (see xeno_config_expected_missing{key})"

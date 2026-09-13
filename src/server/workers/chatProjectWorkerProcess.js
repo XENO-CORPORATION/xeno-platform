@@ -1,6 +1,7 @@
 import http from 'http';
 
 import { pool } from '../middleware/database.js';
+import { enforceEnv } from '../config/requiredEnv.js';
 import { startScheduledTasksWorker } from './chatScheduledWorker.js';
 import { startLibraryIngestionWorker } from './libraryIngestionWorker.js';
 import { activeChatWorkerNames, resolveChatWorkerActivation } from './chatWorkerActivation.js';
@@ -19,6 +20,9 @@ const checkDependencies = async () => {
   lastDatabaseCheck = dependencies.checkedAt;
   return dependencies;
 };
+
+// Before the first query: a worker on a committed-default DB password must refuse, not connect.
+enforceEnv('chat-workers');
 
 await pool.query('SELECT 1 FROM chat_scheduled_runs LIMIT 0');
 await pool.query('SELECT 1 FROM library_asset_ingestions LIMIT 0');

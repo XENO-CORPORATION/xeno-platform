@@ -130,6 +130,19 @@ export function render(opts = {}) {
     }
   }
 
+  // 🔴 Keys whose absence degrades a feature into a state that looks deliberate
+  // ("registration is closed", "email is disabled"). The count is ALWAYS emitted,
+  // including 0, so the alert rule has a series to evaluate rather than silence.
+  if (typeof opts.configMissing === 'function') {
+    const missing = opts.configMissing() || [];
+    out.push('# TYPE xeno_config_expected_missing_count gauge');
+    out.push(`xeno_config_expected_missing_count ${missing.length}`);
+    if (missing.length) {
+      out.push('# TYPE xeno_config_expected_missing gauge');
+      for (const key of missing) out.push(`xeno_config_expected_missing${fmtLabels({ key })} 1`);
+    }
+  }
+
   const mem = process.memoryUsage();
   out.push('# TYPE xeno_process_resident_memory_bytes gauge');
   out.push(`xeno_process_resident_memory_bytes ${mem.rss}`);
