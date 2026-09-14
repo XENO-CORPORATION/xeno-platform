@@ -58,7 +58,8 @@ import { xenoModelCatalog, PROVIDER_LABELS, prettyModelName, xenoChatCompletion,
 import { meterPremiumChat, meterMediaGeneration } from './utils/inferenceMeter.js';
 import { runToolLoop, toolsForSurface, TOOL_BUDGETS } from './utils/chatToolLoop.js';
 import { chatWebContextService, webSearchAvailable } from './services/chatWebContext.js';
-import { publishTurnProgress, turnProgressChannel, finishTurnWithProgress, failTurnWithProgress } from './utils/turnProgress.js';
+import { publishTurnProgress, publishTurnDelta, publishTurnReasoning, turnProgressChannel, finishTurnWithProgress, failTurnWithProgress } from './utils/turnProgress.js';
+import { streamCompletion } from './utils/streamingCompletion.js';
 import { toProviderMessages } from './utils/chatMessageParts.js';
 import { estimateMessageTokens, getCreditCost } from './utils/creditCosts.js';
 import { deductCredits, refundCredits, logUsage as logCreditUsage } from './utils/creditTransactions.js';
@@ -2040,6 +2041,28 @@ app.post('/api/chat/generate', databaseMiddleware, authMiddleware, async (req, r
                     estInputTokens: estimateMessageTokens(payload.messages || []),
                     maxTokens: payload.max_tokens || 4096,
                     run: async () => {
+                        /*
+                         * 🔴 STREAM when the client opened a progress channel, buffer otherwise.
+                         *
+                         * `streamCompletion` returns the SAME `{ choices, usage }` a buffered
+                         * call does — which is the whole reason this is a two-line branch rather
+                         * than a rewrite. The ~130 lines of post-processing below read exactly
+                         * `data.choices` and `data.usage` (measured), so every one of them works
+                         * untouched while the user now sees the answer being written.
+                         *
+                         * This is also why the client was NOT migrated to /api/ai/chat/stream:
+                         * that would have meant porting the image-referral heuristic and the
+                         * project-context path to chase a transport. The transport comes here.
+                         */
+                        if (progress) {
+                            return streamCompletion({
+                                url: `${XENO_API_BASE}/chat/completions`,
+                                apiKey: XENO_API_KEY,
+                                payload,
+                                onDelta: (textChunk) => publishTurnDelta(res, textChunk),
+                                onReasoning: (textChunk) => publishTurnReasoning(res, textChunk),
+                            });
+                        }
                         const response = await fetch(`${XENO_API_BASE}/chat/completions`, {
                             method: "POST",
                             headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${XENO_API_KEY}` },

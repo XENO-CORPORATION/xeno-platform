@@ -217,6 +217,19 @@ export async function readGenerateResponse(
       failure = { code: event.data?.code || 'generation_failed', message: event.data?.message || 'Generation failed.' };
     } else if (event.name === 'search_start') {
       onProgress?.({ type: 'search_start', query: event.data?.query, iteration: event.data?.iteration });
+    } else if (event.name === 'delta') {
+      /*
+       * Assistant text, as it is written.
+       *
+       * ⚠️ The caller renders these incrementally, but the FINAL text always comes from the
+       * `result` frame — never from accumulating deltas. A dropped frame (the server does not
+       * block on back-pressure, deliberately, to avoid holding a credit hold open on a slow
+       * client) would otherwise silently truncate the stored message. Deltas are for the eye;
+       * the result is the record.
+       */
+      if (event.data?.text) onProgress?.({ type: 'delta', text: event.data.text });
+    } else if (event.name === 'reasoning') {
+      if (event.data?.text) onProgress?.({ type: 'reasoning', text: event.data.text });
     }
   }
 

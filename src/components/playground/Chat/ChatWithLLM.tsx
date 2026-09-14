@@ -6686,26 +6686,54 @@ interface QueueState {
          * every one of the ~400 downstream lines below is keyed off that shape, so streaming
          * changes WHEN we learn things, never WHAT we get.
          */
+        /*
+         * Live turn rendering.
+         *
+         * 🔴 `streamedText` accumulates for DISPLAY only. The stored message is always taken
+         * from the final `result` payload below — the server does not block on back-pressure
+         * (deliberately: pausing the read would hold a credit hold open on a slow client), so
+         * a dropped frame must never be able to truncate what gets saved.
+         */
+        let streamedText = '';
         const data = await readGenerateResponse(response, (event) => {
-            if (event.type !== 'search_start' || !event.query) return;
-            /*
-             * Show the live query on the existing thinking placeholder.
-             *
-             * ⚠️ It writes `text`, which the placeholder ALREADY renders (it holds the literal
-             * "Thinking" / "Searching"), rather than adding a field. A new field would need a
-             * matching render change, and the placeholder is shared by several flows — the
-             * smaller change is the one that cannot break the others.
-             *
-             * `isThinkingPlaceholder` stays true, so the spinner keeps running: the turn is not
-             * finished, only better described.
-             */
-            const query = String(event.query);
-            const label = query.length > 60 ? `${query.slice(0, 57)}…` : query;
-            setMessages(prev => prev.map(msg =>
-                msg.id === localPlaceholderId && msg.isThinkingPlaceholder
-                    ? { ...msg, text: `Searching: ${label}` }
-                    : msg
-            ));
+            if (event.type === 'search_start' && event.query) {
+                /*
+                 * Show the live query on the existing thinking placeholder.
+                 *
+                 * ⚠️ It writes `text`, which the placeholder ALREADY renders (it holds the
+                 * literal "Thinking" / "Searching"), rather than adding a field. A new field
+                 * would need a matching render change, and the placeholder is shared by several
+                 * flows — the smaller change is the one that cannot break the others.
+                 */
+                const query = String(event.query);
+                const label = query.length > 60 ? `${query.slice(0, 57)}…` : query;
+                setMessages(prev => prev.map(msg =>
+                    msg.id === localPlaceholderId && msg.isThinkingPlaceholder
+                        ? { ...msg, text: `Searching: ${label}` }
+                        : msg
+                ));
+                return;
+            }
+
+            if (event.type === 'delta' && event.text) {
+                streamedText += event.text;
+                /*
+                 * The first delta ENDS the placeholder state: from here the bubble is the
+                 * answer being written, not a spinner. `isDotPlaceholder` clears too, or the
+                 * dots render on top of real text.
+                 */
+                setMessages(prev => prev.map(msg =>
+                    msg.id === localPlaceholderId
+                        ? {
+                            ...msg,
+                            text: streamedText,
+                            isThinkingPlaceholder: false,
+                            isDotPlaceholder: false,
+                            isStreaming: true,
+                        }
+                        : msg
+                ));
+            }
         });
 
         // --- NEW: Handle Refined Prompt Response Directly ---
@@ -6959,8 +6987,20 @@ interface QueueState {
         // First, update the messages state. For a normal text answer, insert it
         // empty + streaming and reveal it word-by-word (typewriter); history/DB
         // below still receives the FULL updatedMessage.
+        /*
+         * 🔴 REAL TOKENS BEAT THE SIMULATION.
+         *
+         * The typewriter exists because "today's real backend returns the whole answer at
+         * once" — its own comment calls this "the exact seam where real SSE token streaming
+         * plugs in later". That is now this turn: if deltas arrived, the user has ALREADY
+         * watched the answer being written.
+         *
+         * Replaying it word-by-word afterwards would blank the finished text and re-reveal
+         * it — the answer visibly rewinding, which reads as a bug and is slower than the
+         * thing it was imitating. So the simulation runs only when nothing streamed.
+         */
         const applyTypewriter =
-            TYPEWRITER_ENABLED && !updatedMessage.imageData && !updatedMessage.isError && !!updatedMessage.parsedAnswer;
+            TYPEWRITER_ENABLED && !streamedText && !updatedMessage.imageData && !updatedMessage.isError && !!updatedMessage.parsedAnswer;
         const fullAnswerForReveal = updatedMessage.parsedAnswer || '';
         setMessages(prevMessages => {
             const base = prevMessages.filter(msg => msg.id !== localPlaceholderId);
