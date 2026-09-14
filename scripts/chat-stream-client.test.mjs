@@ -23,11 +23,16 @@
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import {
   readChatStream,
   applyChatStreamEvent,
   initialChatStreamState,
 } from '../src/components/playground/Chat/chatStream.ts';
+
+const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 
 /** A ReadableStream over exactly the byte chunks given — the boundaries are the test. */
 const streamOfChunks = (chunks) => new ReadableStream({
@@ -397,4 +402,20 @@ test('🔴 a streamed error becomes a thrown Error, not a silent empty answer', 
     'a streamed failure arrives with HTTP 200 — the status was fixed when the first frame ' +
     'went out — so without throwing it reads as success with an empty body',
   );
+});
+
+test('🔴 the payload log names the endpoint it DERIVES, never a typed-in route', () => {
+  /*
+   * This line said "Sending payload to /api/chat/generate" for a turn that went to
+   * /api/ai/chat/stream: the string was hardcoded and the client migrated around it. In a
+   * live incident on 2026-09-14 it was the first evidence available and it pointed at the
+   * wrong route. A debug line that names a route must read it from the same expression the
+   * fetch uses, or it is worse than no line at all.
+   */
+  const source = readFileSync(join(ROOT, 'src', 'components', 'playground', 'Chat', 'ChatWithLLM.tsx'), 'utf8');
+  // The CALL, not the comment above it that quotes the old text.
+  const line = source.split('\n').find((l) => l.includes('console.log') && l.includes('Sending payload to'));
+  assert.ok(line, 'the payload debug line must exist');
+  assert.doesNotMatch(line, /\/api\//, 'the route must not be typed into the message');
+  assert.match(line, /endpointForTask\(/, 'it must come from the same resolver the fetch uses');
 });
