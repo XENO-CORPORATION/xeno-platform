@@ -162,6 +162,50 @@ function projectEvidence(evidence) {
   };
 }
 
+/**
+ * The turn's result when the SEARCH worked but the page fetch did not.
+ *
+ * 🔴 Search and fetch are two operations now, so they can fail independently — and the
+ * search half is the one that carries the answer's substance. Titles, URLs and snippets are
+ * real, citable sources; a model can answer "what is the latest survival game" from them
+ * perfectly well. Throwing away a successful search because the follow-up fetch failed
+ * would bill the user for a turn and hand them nothing, which is the failure this whole
+ * change exists to remove.
+ *
+ * ⚠️ `fetchStatus: 'not-fetched'` is deliberate and load-bearing: the caller can tell a
+ * snippet-only source from a fully-read one, so a degraded turn is visible rather than
+ * silently thinner. Never report it as fetched.
+ */
+function snippetOnlyResult({ requestId, query, searchItems, searchEvidence, search, now = () => Date.now() }) {
+  const terminalReason = search?.terminalReason || 'completed';
+  const sources = searchItems.map((item) => ({
+    ...item,
+    content: '',
+    fetchStatus: 'not-fetched',
+    evidence: null,
+  }));
+  return {
+    requestId,
+    terminalReason,
+    sources,
+    searchEvidence,
+    searchContext: {
+      schema: 'xeno.chat.web-context.v1', operation: 'search-and-fetch', query,
+      requestId, terminalReason,
+      evidenceId: searchEvidence?.evidenceId || null,
+      retrievedAt: searchEvidence?.retrievedAt || new Date(now()).toISOString(),
+      sources: searchItems.map((item) => ({
+        uri: item.url,
+        title: item.title,
+        description: item.description,
+        provider: item.provider,
+        rank: item.rank,
+        fetchStatus: 'not-fetched',
+      })),
+    },
+  };
+}
+
 function upstreamError(error, requestId) {
   const status = Number(error?.status || 0);
   const code = String(error?.code || 'WEB_CONTEXT_UPSTREAM_ERROR');
@@ -223,7 +267,7 @@ export function createChatWebContextService({
       const principal = await account(client, config, signal);
       const idempotencyKey = `chat:${digest(`${actorId}\0${conversationId}\0${userMessageId}\0${query}`).slice(0, 48)}`;
       const upstreamDeadline = new Date(now() + budget.upstreamMs).toISOString();
-      const searchRequest = {
+      const requestBase = {
         contractVersion: CONTRACT_VERSION,
         requestId,
         actor: { id: actorId, kind: 'human' },
@@ -241,13 +285,37 @@ export function createChatWebContextService({
           maxProviderCostUsd: normalizeMaxProviderCost(env.XENO_CHAT_WEB_CONTEXT_MAX_COST_USD),
         },
         policyContext: { allowedPorts: [443], allowedMediaTypes: ['text/html', 'text/plain', 'text/markdown'] },
-        idempotencyKey,
-        query,
-        resultHandling: 'persist',
-        count,
       };
-      const started = await client.searchAndScrape(searchRequest, { signal });
-      const search = started.search;
+
+      /*
+       * ── STEP 1: SEARCH, TRANSIENTLY ───────────────────────────────────────────────────
+       *
+       * 🔴 `resultHandling: 'transient'`, and it is the whole fix. This used to call
+       * `searchAndScrape` — ONE operation that searches and then writes the provider's
+       * result URLs, titles, snippets and search evidence to a durable job. Storing
+       * provider output is a plan-licensing right, and ours is transient-only:
+       *
+       *   403 PROVIDER_STORAGE_NOT_APPROVED
+       *   "approval brave-public-transient-2026-08-29 for provider brave-search does not
+       *    grant the right to persist provider results"
+       *
+       * And that operation cannot be asked to skip storage — it refuses from the other side
+       * with 400 RESULT_HANDLING_NOT_DURABLE. So chat search sat in a deadlock and failed
+       * 100% of the time, which the user saw as "My searches errored out".
+       *
+       * ⚠️ The provider was REFUSING CORRECTLY. It would rather fail loudly than spend a
+       * Brave request and quietly store data the approval forbids. The defect was ours: chat
+       * inherited the Research path, whose durable citations genuinely need those rights.
+       * A chat turn does not — it needs sources in context now, cited in the reply.
+       *
+       * This mirrors `xeno-agent-sdk/src/tools/web-context.ts`, whose WebSearch tool has
+       * always called `search(… resultHandling: "transient")` and has always worked against
+       * this same service and token class. The pattern is not new; chat was the odd caller.
+       */
+      const search = await client.search(
+        { ...requestBase, idempotencyKey, query, resultHandling: 'transient', count },
+        { signal },
+      );
       const searchEvidence = projectEvidence(search?.evidence);
       const searchItems = Array.isArray(search?.items)
         ? search.items.flatMap((item) => {
@@ -261,7 +329,19 @@ export function createChatWebContextService({
             }] : [];
           })
         : [];
-      if (!started.job) {
+
+      /*
+       * ── STEP 2: READ THE PAGES ────────────────────────────────────────────────────────
+       *
+       * Fetching a URL the caller already holds is not provider output, so `batch-scrape`
+       * needs no storage approval — verified against production, 202 → completed, with
+       * artifact text read back. That is why splitting the fused operation recovers page
+       * content rather than costing it: only the SEARCH half was ever licence-restricted.
+       *
+       * A search with no usable results skips this entirely: there is nothing to fetch, and
+       * issuing an empty job would spend a round trip to learn what we already know.
+       */
+      if (searchItems.length === 0) {
         return {
           requestId,
           terminalReason: search?.terminalReason || 'completed',
@@ -275,6 +355,35 @@ export function createChatWebContextService({
           },
         };
       }
+
+      /*
+       * ⚠️ If the page fetch cannot even be STARTED, the turn still has real sources — the
+       * titles, URLs and snippets the search returned. Answering from those is strictly
+       * better than failing a turn the user has been billed for, so this degrades to
+       * snippet-only rather than throwing. `fetchStatus` tells the caller which it got.
+       *
+       * 🔴 The failure arrives as a THROWN client error, not a falsy return — found by the
+       * gate, which fed it the 503 a real upstream sends. Checking only the return value
+       * would have left the degrade path unreachable for the way this actually fails, so the
+       * turn would still have died with the search results sitting unused in hand.
+       *
+       * An abort is re-thrown: the caller went away, so there is no turn left to serve, and
+       * silently "degrading" a cancellation would hide it from the outer handler.
+       */
+      let started;
+      try {
+        started = await client.batchScrape({
+          ...requestBase,
+          idempotencyKey: `${idempotencyKey}:pages`,
+          seedUrls: searchItems.map((item) => ({ url: item.url })),
+        }, { signal });
+      } catch (error) {
+        if (signal?.aborted || error?.name === 'AbortError') throw error;
+        started = null;
+      }
+
+      if (!started?.job) return snippetOnlyResult({ requestId, query, searchItems, searchEvidence, search });
+
       const jobId = String(started.job.jobId);
       const job = await client.waitForJob(jobId, {
         timeoutMs: budget.operationMs,
@@ -285,11 +394,19 @@ export function createChatWebContextService({
         cancelOnTimeout: true,
         cancelConfirmationMs: 2_000,
       });
-      if (job.state === 'failed' || job.state === 'cancelled') {
-        throw new ChatWebContextError('web_context_failed', 'Web research could not retrieve public sources.', {
-          status: 502, retryable: job.state === 'failed', requestId,
+      /*
+       * 🔴 A CANCELLED fetch is still a cancellation — it means the caller aborted, and the
+       * turn is over. But a FAILED one is not fatal any more: the search half succeeded, so
+       * we hold real sources. Throwing here would discard them and produce exactly the
+       * "searches errored out" message the user already saw, for a turn that in fact has
+       * something to say. Degrade to snippets and let the model answer from those.
+       */
+      if (job.state === 'cancelled') {
+        throw new ChatWebContextError('web_context_cancelled', 'Web research was cancelled.', {
+          status: 499, retryable: false, requestId,
         });
       }
+      if (job.state === 'failed') return snippetOnlyResult({ requestId, query, searchItems, searchEvidence, search });
       const results = await client.results(jobId, { limit: count, signal });
       const byUrl = new Map((Array.isArray(results.items) ? results.items : []).map((item) => [safeHttpsUrl(item?.url), item]));
       let totalTextBytes = 0;
