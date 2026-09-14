@@ -393,7 +393,22 @@ router.post('/chat', requireEntitlement('canUse'), async (req, res) => {
 router.post('/chat/stream', requireEntitlement('canUse'), async (req, res) => {
   const {
     model, messages, reasoning, conversationId, systemPrompt, projectId,
-    path: reqPath, requestId, temperature = 0.7, max_tokens = 4096,
+    /*
+     * 🔴 NO DEFAULT TEMPERATURE. Sending one broke every Claude Opus 5 turn in production:
+     *
+     *   400 "Claude Opus 5 does not support temperature. Remove temperature, top_p, top_k."
+     *
+     * A plain "hello" failed with "The inference stream failed." — the default of 0.7 was
+     * applied to a model that rejects sampling parameters outright. `/api/chat/generate`
+     * never had this because it sends NO temperature at all, so the defect arrived with this
+     * route and only for the models that refuse it.
+     *
+     * ⚠️ `undefined` is the correct value here, not a number. It must be OMITTED from the
+     * upstream body rather than sent as any value, which is why the payload below builds the
+     * field conditionally. A "safe" default is still a value, and a model that refuses the
+     * parameter refuses every value of it.
+     */
+    path: reqPath, requestId, temperature, max_tokens = 4096,
   } = req.body || {};
 
   // ── Pre-stream validation → normal HTTP errors (we have not switched to SSE yet).
@@ -923,11 +938,28 @@ router.post('/chat/stream', requireEntitlement('canUse'), async (req, res) => {
      * upstream detail we do not forward.
      */
     await settleBestEffort().catch(() => {});
+    /*
+     * 🔴 LOG THE REASON. This was `void error` — discarded — and it cost a live diagnosis.
+     *
+     * Every Claude Opus 5 turn was failing with "The inference stream failed." and the
+     * server logs said NOTHING, because the upstream's actual message ("Claude Opus 5 does
+     * not support temperature") was thrown away right here. The cause had to be found by
+     * reproducing the call by hand inside the container.
+     *
+     * ⚠️ The CLIENT still gets the generic message — an upstream error can carry provider
+     * detail we do not forward. But swallowing it on the server too leaves nobody able to
+     * see what broke. Generic outward, specific inward.
+     */
+    console.error('[chat/stream] upstream failed', {
+      model,
+      status: error?.status,
+      inBand: Boolean(error?.inBand),
+      message: error?.message,
+    });
     if (!clientGone) {
       await send({ type: 'error', error: 'inference_error', message: 'The inference stream failed.' });
       endStream();
     }
-    void error;
     return;
   }
 
