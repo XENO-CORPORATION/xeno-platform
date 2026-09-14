@@ -54,6 +54,25 @@ case "$SERVICE" in backend|chat-workers|frontend) ;; *) echo "remote-deploy: --s
 case "$MODE" in swap|build-only) ;; *) echo "remote-deploy: --mode must be swap|build-only" >&2; exit 2 ;; esac
 [ -f "$TAR" ] || { echo "remote-deploy: tar not found: $TAR" >&2; exit 2; }
 
+# --- 0. Preflight: the external network the backend joins -------------------
+# 🔴 The backend joins Web Context's own `frontend` network (docker-compose.yml) so chat
+# search reaches the API container directly instead of round-tripping Cloudflare. That
+# network is OWNED by the xeno-web-context compose project and declared `external: true`
+# here, so compose will never create it. If it is missing, `up -d` fails — and the
+# auto-rollback below runs the SAME `up` against the same missing network, so it cannot
+# recover either. Refuse before building or swapping anything.
+#
+# ⚠️ Never create the network from this side. One created here carries none of the
+# web-context project's labels, and compose refuses to manage a network it did not create
+# the next time that stack is deployed — trading this failure for a worse one over there.
+if [ "$SERVICE" = "backend" ] && [ "$MODE" = "swap" ]; then
+  if ! docker network inspect xeno-web-context_frontend >/dev/null 2>&1; then
+    echo "remote-deploy: required network xeno-web-context_frontend is missing." >&2
+    echo "remote-deploy: deploy the xeno-web-context stack first (its docs/DEPLOY-XENO-PLATFORM-001.md), then retry. Refusing to swap." >&2
+    exit 3
+  fi
+fi
+
 cd "$ROOT"
 mkdir -p .deploy/candidates
 LOG="$ROOT/.deploy/deploy.log"

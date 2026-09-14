@@ -189,8 +189,24 @@ services:
       - XENO_FLOW_URL=http://host.docker.internal:8090
       # Authenticated Research runs only through the canonical Web Context service.
       # Credentials are file-mounted; production code rejects plaintext token envs.
+      #
+      # 🔴 DIRECT, never via Cloudflare. Web Context runs on this same host, and routing it
+      # through the public edge cost 151 ms per call against 3 ms direct (measured
+      # 2026-09-14) plus intermittent 502 HTML pages that failed searches mid-turn. The
+      # backend joins Web Context's own `frontend` network (see `networks:` below) and calls
+      # the API container by NAME over plain HTTP — the traffic never leaves the machine.
+      #
+      # ⚠️ The container name, not the `api` alias: `api` is generic enough that a future
+      # platform service could claim it on xenostudio-network, and Docker DNS would then hand
+      # this backend's bearer token to the wrong service with no error at all.
+      #
+      # ⚠️ Plain HTTP is refused in production unless the host is in
+      # XENO_WEB_CONTEXT_INTERNAL_HOSTS and is a single-label container name
+      # (chatWebContext.js). Both lines must stay here: a value in .env alone reaches no
+      # container — compose reads .env for ${} substitution only.
       - XENO_CHAT_WEB_CONTEXT_ENABLED=${XENO_CHAT_WEB_CONTEXT_ENABLED:-false}
-      - XENO_WEB_CONTEXT_URL=${XENO_WEB_CONTEXT_URL:-https://web-context.xenostudio.ai}
+      - XENO_WEB_CONTEXT_URL=${XENO_WEB_CONTEXT_URL:-http://xeno-web-context-api-1:8080}
+      - XENO_WEB_CONTEXT_INTERNAL_HOSTS=${XENO_WEB_CONTEXT_INTERNAL_HOSTS:-xeno-web-context-api-1}
       - XENO_WEB_CONTEXT_TOKEN_FILE=/run/secrets/xeno_web_context_token
       - XENO_CHAT_WEB_CONTEXT_MAX_COST_USD=${XENO_CHAT_WEB_CONTEXT_MAX_COST_USD:-0.02}
       # ── Settings that fail SILENTLY when absent ──────────────────────
@@ -298,6 +314,10 @@ services:
         condition: service_started
     networks:
       - xenostudio-network
+      # Web Context's API, reached directly by container name (see XENO_WEB_CONTEXT_URL).
+      # Only the backend joins: it is the one service that calls Web Context, and every
+      # other service stays off a network that carries its bearer token.
+      - web-context
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "node", "-e", "require('http').get('http://localhost:8080/api/ready', (res) => { process.exit(res.statusCode === 200 ? 0 : 1) }).on('error', () => process.exit(1))"]
@@ -733,3 +753,16 @@ networks:
     ipam:
       config:
         - subnet: 172.20.0.0/16
+  # Web Context's own `frontend` network — the one only its API container sits on. Its
+  # PostgreSQL and object store live on its separate `data` network and stay unreachable.
+  #
+  # 🔴 external: true, and it must stay that way. The xeno-web-context compose project OWNS
+  # this network. A network created from here would carry none of that project's labels,
+  # and compose would refuse to manage it the next time Web Context is deployed.
+  #
+  # ⚠️ Joining from THIS side is deliberate: Web Context's qualified test asserts its own
+  # production overlay never declares `networks:`, so its isolation is not changed at all.
+  # scripts/remote-deploy.sh refuses to swap the backend if this network is missing.
+  web-context:
+    name: xeno-web-context_frontend
+    external: true
