@@ -484,7 +484,16 @@ export function createChatWebContextService({
       const jobId = String(started.job.jobId);
       const job = await client.waitForJob(jobId, {
         timeoutMs: budget.operationMs,
-        pollMs: 350,
+        /*
+         * 🔴 Every poll is a quota-counted request. Web Context enforces a fixed
+         * requests-per-minute window per token, the whole platform shares one token, and a
+         * page job takes ~2–3 s — so at 350 ms a single search spent ~7 polls on top of its
+         * search, job and results calls, and one chat turn (up to 10 searches) blew the
+         * window by itself. Measured 2026-09-14: 5 of 8 searches in one turn came back
+         * web_context_rate_limited, starved by the polls of the searches before them.
+         * At 1 s a search costs ~3 polls; the extra latency is under a second.
+         */
+        pollMs: 1_000,
         signal,
         onProgress,
         cancelOnAbort: true,

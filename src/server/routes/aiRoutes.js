@@ -905,6 +905,14 @@ router.post('/chat/stream', requireEntitlement('canUse'), async (req, res) => {
           case 'search_error':
             // A failed search is REPORTED, never silent, and never fatal: the model gets
             // the failure as a tool result and can say so truthfully in its answer.
+            //
+            // 🔴 And it is logged HERE, with the code. Until 2026-09-14 the client got the
+            // code and the server kept nothing, so an entire turn of rate-limited searches
+            // left no trace on the box — the third silent catch found in one day. The query
+            // is user content and is deliberately not logged.
+            console.warn('[chat/stream] search failed', {
+              requestId: reqIdSeed, iteration: event.iteration, code: event.code,
+            });
             await send({
               type: 'search_error',
               query: event.query,
