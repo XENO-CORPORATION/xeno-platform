@@ -63,6 +63,9 @@ import { streamCompletion } from './utils/streamingCompletion.js';
 import { toProviderMessages } from './utils/chatMessageParts.js';
 import { attachReferencedImage } from './utils/imageReferral.js';
 import { shapeChatResponse } from './utils/chatResponseShape.js';
+import { searchInfoFromAnnotations } from './utils/searchInfo.js';
+import { openProjectContextTurn, closeProjectContextTurn } from './utils/projectContextTurn.js';
+import { autoImageFallback } from './utils/autoImageFallback.js';
 import { estimateMessageTokens, getCreditCost } from './utils/creditCosts.js';
 import { deductCredits, refundCredits, logUsage as logCreditUsage } from './utils/creditTransactions.js';
 import { resolveEntitlements, gateMeta } from './utils/entitlementGate.js';
@@ -1700,43 +1703,27 @@ app.post('/api/chat/generate', databaseMiddleware, authMiddleware, async (req, r
             if (!conversationId) {
                 return res.status(400).json({ error: 'Project generation requires projectId and conversationId.' });
             }
-            const lastUser = [...messages].reverse().find((message) => message.role === 'user');
-            const query = Array.isArray(lastUser?.parts)
-                ? (lastUser.parts.find((part) => part.type === 'text')?.text || '')
-                : (typeof lastUser?.content === 'string' ? lastUser.content : '');
+            /*
+             * Assemble project context and OPEN its audit record.
+             *
+             * 🔴 EXTRACTED to utils/projectContextTurn.js (2026-09-14) so the streaming route
+             * can serve project conversations. Without it that route would answer project
+             * questions from the model's own knowledge — no sources, no record, confidently
+             * wrong, and nothing in the audit trail to show it happened.
+             */
             try {
-                projectContext = await assembleProjectContext({
+                const opened = await openProjectContextTurn({
                     db: req.db,
-                    principal: { type: 'user', id: req.user.id },
+                    userId: req.user.id,
                     projectId,
                     conversationId,
-                    query,
-                    modelId: selectedModelId,
-                    maxInputTokens: 16_000,
-                    requiredRelation: 'reviewer',
-                });
-                projectContextRecordId = randomUUID();
-                projectContextRequestHash = createHash('sha256').update(JSON.stringify({
-                    conversationId,
-                    projectId,
-                    modelId: selectedModelId,
-                    query,
                     messages,
-                })).digest('hex');
-                await req.db.query(
-                    `INSERT INTO chat_generation_contexts(
-                       id, conversation_id, project_id, user_id, request_hash, context_manifest, safe_sources
-                     ) VALUES($1,$2,$3,$4,$5,$6::jsonb,$7::jsonb)`,
-                    [
-                        projectContextRecordId,
-                        conversationId,
-                        projectId,
-                        req.user.id,
-                        projectContextRequestHash,
-                        JSON.stringify(projectContext.manifest),
-                        JSON.stringify(projectContext.manifest.sources),
-                    ],
-                );
+                    selectedModelId,
+                    assemble: assembleProjectContext,
+                });
+                projectContext = opened.context;
+                projectContextRecordId = opened.recordId;
+                projectContextRequestHash = opened.requestHash;
             } catch (contextError) {
                 const status = contextError.status || (contextError.code === 'invalid_id' ? 400 : 404);
                 return res.status(status).json({ error: contextError.message, code: contextError.code || 'project_context_failed' });
@@ -2050,37 +2037,22 @@ app.post('/api/chat/generate', databaseMiddleware, authMiddleware, async (req, r
         let outputText = inertProviderMessageText(data.choices?.[0]?.message);
         let returnedImageData = null;
 
-        // If the model did not return text content (or tried tool calling), check if the prompt is an image request and auto-generate via gpt-image-2
-        if ((!outputText || outputText.trim() === '') && xenoImageClient) {
-            const userMsgs = Array.isArray(req.body.messages) ? req.body.messages : [];
-            const lastUserMsg = [...userMsgs].reverse().find(m => m.role === 'user');
-            const lastPrompt = typeof lastUserMsg?.content === 'string' 
-                ? lastUserMsg.content 
-                : (Array.isArray(lastUserMsg?.parts) ? lastUserMsg.parts.find(p => p.type === 'text')?.text : '');
-
-            if (lastPrompt && /(create|generate|draw|paint|sketch|render|make|illustrate|image|photo|picture|drawing|illustration|art|portrait|painting|wallpaper|watercolor|cafe|cyberpunk|anime)/i.test(lastPrompt)) {
-                try {
-                    console.log(`[AutoImageFallback] LLM returned empty text for image prompt "${lastPrompt.substring(0, 50)}...", generating image via gpt-image-2...`);
-                    const genResponse = await xenoImageClient.image.generate({
-                        model: 'gpt-image-2',
-                        prompt: lastPrompt,
-                        width: 1024,
-                        height: 1024,
-                        n: 1,
-                        response_format: 'b64_json',
-                    });
-                    const imgItem = genResponse?.data?.[0];
-                    if (imgItem) {
-                        const rawB64 = imgItem.b64_json || imgItem.base64 || (typeof imgItem.url === 'string' && imgItem.url.startsWith('data:') ? imgItem.url.split(',')[1] : null);
-                        if (rawB64) {
-                            returnedImageData = rawB64;
-                            outputText = `Generated image with GPT Image 2: "${lastPrompt}"`;
-                        }
-                    }
-                } catch (imgErr) {
-                    console.error('[AutoImageFallback] Failed to generate image via gpt-image-2:', imgErr.message);
-                }
-            }
+        /*
+         * A model asked to draw often returns EMPTY text rather than refusing, so the user
+         * sees a blank reply. Generate the picture instead.
+         *
+         * 🔴 EXTRACTED to utils/autoImageFallback.js (2026-09-14) so the streaming route
+         * behaves the same way — without it that route returns the blank reply, which reads
+         * as the product being broken rather than a model limitation.
+         */
+        const fallbackImage = await autoImageFallback({
+            outputText,
+            messages: req.body.messages,
+            imageClient: xenoImageClient,
+        });
+        if (fallbackImage) {
+            returnedImageData = fallbackImage.imageData;
+            outputText = fallbackImage.outputText;
         }
 
         if (!outputText) {
@@ -2112,46 +2084,16 @@ app.post('/api/chat/generate', databaseMiddleware, authMiddleware, async (req, r
         });
         // --- END RESPONSE FORMATTING --- 
 
-        // <<< START: ADD searchInfo processing for annotations >>>
-        if (data.choices?.[0]?.message?.annotations && Array.isArray(data.choices[0].message.annotations)) {
-            const annotations = data.choices[0].message.annotations;
-            const sources = [];
-            const supports = [];
-            const urlMap = new Map(); // To track unique sources by URL
-
-            annotations.forEach(annotation => {
-                if (annotation.type === 'url_citation' && annotation.url_citation) {
-                    const { url, title, start_index, end_index } = annotation.url_citation;
-                    
-                    let sourceIndex;
-                    if (urlMap.has(url)) {
-                        sourceIndex = urlMap.get(url);
-                    } else {
-                        sourceIndex = sources.length;
-                        sources.push({ uri: url, title: title || url }); // Use URL as title if title is missing
-                        urlMap.set(url, sourceIndex);
-                    }
-                    
-                    if (start_index !== undefined && end_index !== undefined) {
-                        supports.push({
-                            startIndex: start_index,
-                            endIndex: end_index,
-                            sourceIndices: [sourceIndex]
-                        });
-                    }
-                }
-            });
-
-            if (sources.length > 0) {
-                finalResponse.searchInfo = {
-                    queries: [], // Placeholder, as OpenRouter doesn't directly provide the user's search query in annotations
-                    sources: sources,
-                    supports: supports
-                };
-                console.log("   -> Added searchInfo from annotations:", finalResponse.searchInfo);
-            }
-        }
-        // <<< END: ADD searchInfo processing for annotations >>>
+        /*
+         * Citations from the provider's annotations.
+         *
+         * 🔴 EXTRACTED to utils/searchInfo.js (2026-09-14) so the streaming route can produce
+         * them too — without this an answer arrives with its citations stripped, looking like
+         * unsourced assertion. Returns null when there were none, so the field stays OFF the
+         * response rather than shipping an empty shell the client would render as a header.
+         */
+        const annotationSearchInfo = searchInfoFromAnnotations(data);
+        if (annotationSearchInfo) finalResponse.searchInfo = annotationSearchInfo;
 
         // <<< START: ADD usage data to response >>>
         if (data.usage) {
@@ -2169,12 +2111,14 @@ app.post('/api/chat/generate', databaseMiddleware, authMiddleware, async (req, r
             finalResponse.modelIdUsed = 'gpt-image-2';
         }
         if (projectContext) {
-            const responseHash = createHash('sha256').update(String(finalResponse.text || '')).digest('hex');
-            await req.db.query(
-                `UPDATE chat_generation_contexts SET response_hash=$2
-                 WHERE id=$1 AND request_hash=$3 AND response_hash IS NULL`,
-                [projectContextRecordId, responseHash, projectContextRequestHash],
-            );
+            // Close the audit record with a hash of the answer. Guarded so a retry cannot
+            // rewrite a turn that already settled — see the module.
+            await closeProjectContextTurn({
+                db: req.db,
+                recordId: projectContextRecordId,
+                requestHash: projectContextRequestHash,
+                responseText: finalResponse.text || '',
+            });
             finalResponse.projectContextId = projectContextRecordId;
             finalResponse.projectSources = projectContext.manifest.sources;
         }

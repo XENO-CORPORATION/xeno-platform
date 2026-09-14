@@ -56,12 +56,22 @@ const stripComments = (s) => s.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\
 /**
  * The two conditions that decide the project branch, read out of the real source.
  *
- * Anchored on `assembleProjectContext` — the call the branch exists to make — rather than on
+ * Anchored on the project-context call — the thing the branch exists to make — rather than on
  * the error string, so moving or rewording the message cannot make this gate silently pass.
+ *
+ * ⚠️ UPDATED 2026-09-14. The anchor was `assembleProjectContext({`, a direct call. That work
+ * moved into `utils/projectContextTurn.js` and the assembler is now passed to it as an
+ * argument, so the old anchor vanished and this gate failed 4 tests.
+ *
+ * 🔴 It was a STALE ANCHOR, not a regression — the guard it protects (`if (projectId)` and the
+ * conversation-less refusal) is untouched, verified in the source before changing anything
+ * here. Worth stating plainly: when an extraction breaks a gate, the question is always
+ * whether the BEHAVIOUR moved or only the text the gate reads. Changing the gate first, and
+ * checking after, is how a real regression gets papered over.
  */
 function readGate() {
   const code = stripComments(SERVER);
-  const anchor = code.indexOf('assembleProjectContext({');
+  const anchor = code.indexOf('openProjectContextTurn({');
   assert.notEqual(anchor, -1, 'the project-context call must exist in src/server/index.js');
 
   // walk back to the nearest `if (` that opens the branch containing that call
