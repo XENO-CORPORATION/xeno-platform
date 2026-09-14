@@ -16,8 +16,51 @@ import { mintGrant } from '../services/inferenceGrants.js';
 import { requestSurface } from '../utils/requestSurface.js';
 import { recordInferenceUsage } from '../utils/recordInferenceUsage.js';
 import { upstreamFetch } from '../services/upstream.js';
+import { streamToolLoop, addUsage, TOOL_BUDGETS } from '../utils/chatToolLoop.js';
+import { ToolCallAccumulator } from '../utils/streamingToolCalls.js';
+import { chatWebContextService, webSearchAvailable } from '../services/chatWebContext.js';
 
 const router = express.Router();
+
+/**
+ * Normalize one upstream call's usage into what the meter settles from.
+ *
+ * 🔴 `hasOutputUsage: false` is load-bearing and must NOT become a chars/4 estimate: when
+ * the provider reported no usage the meter charges the RESERVED worst case, which is the
+ * existing rule in `meterPremiumChat`. A character estimate looks more precise and
+ * systematically under-bills, because output tokens are rarely 4 chars each.
+ */
+const usageFrom = (usage, estInputTokens, outputChars) => {
+  const hasOutputUsage = usage != null
+    && (usage.completion_tokens != null || usage.total_tokens != null);
+  return {
+    inputTokens: usage?.prompt_tokens ?? estInputTokens,
+    outputTokens: usage?.completion_tokens
+      ?? (usage?.total_tokens != null
+        ? Math.max(0, usage.total_tokens - (usage.prompt_tokens || 0))
+        : Math.ceil(outputChars / 4)),
+    hasOutputUsage,
+  };
+};
+
+/**
+ * The citation projection sent to the client.
+ *
+ * Deliberately narrow: title and url only. The fetched page CONTENT stays server-side —
+ * it is already in the model's context, and shipping it again would multiply the payload
+ * of a 10-search turn for nothing the UI renders.
+ */
+const projectSources = (sources) => {
+  const seen = new Set();
+  const out = [];
+  for (const s of sources) {
+    const url = typeof s?.url === 'string' ? s.url : '';
+    if (!url || seen.has(url)) continue; // one entry per URL across the whole turn
+    seen.add(url);
+    out.push({ url, title: String(s.title || url).slice(0, 300) });
+  }
+  return out;
+};
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const LOCAL_MODEL_CATALOG_PATH = path.resolve(__dirname, '../data/localModelCatalog.json');
@@ -282,21 +325,54 @@ router.post('/chat', requireEntitlement('canUse'), async (req, res) => {
 });
 
 /**
- * POST /api/ai/chat/stream — token-streaming premium chat (SSE).
+ * POST /api/ai/chat/stream — token-streaming premium chat, WITH TOOLS (SSE).
  *
  * Same auth + db middleware + rate limit + premium metering as POST /api/ai/chat,
  * but relays upstream OpenAI SSE chunks to the client as normalized events:
  *   {"type":"delta","text":...}                       ← choices[].delta.content
  *   {"type":"reasoning","text":...}                    ← delta.reasoning / reasoning_content
- *   {"type":"usage","input","output","total","creditsSettled"}  ← final usage chunk
+ *   {"type":"usage","input","output","total","creditsSettled"}  ← summed over all calls
  *   {"type":"done"}  then the OpenAI-compatible  data: [DONE]  sentinel
  *   {"type":"error","error":<code>,"message":...}      ← inference_error mid-stream
  *
- * Metering: hold worst-case BEFORE the stream (402 pre-stream if it fails), settle
- * the hold clamped to real usage on the upstream usage chunk, and — on client
- * disconnect or a mid-stream upstream error — settle best-effort from tokens seen
- * so far OR void the hold. The hold is never left open and never double-settled
- * (meterPremiumChatStream's single-shot controller). byok/inhouse are 501 for now.
+ * ── Tool events (only on a surface with a search budget) ───────────────────────────────
+ *   {"type":"search_start","query","iteration"}        ← the query, BEFORE the wait
+ *   {"type":"search_result","query","count","sources"} ← what came back
+ *   {"type":"search_error","query","code","message"}   ← reported, never fatal
+ *   {"type":"sources","sources":[{url,title}]}         ← deduped citations for the turn
+ *   {"type":"tool_use","searches","iterations","cappedOut"}
+ *
+ * This mirrors what Anthropic, OpenAI and Gemini all do (verified 2026-09-14): the search
+ * runs inside ONE streamed response, and its phases are typed events in the same stream as
+ * the text. The shared invariant is that a search is a phase transition the user can SEE —
+ * query before results, results before prose — not a silent pause the client must guess at.
+ *
+ * 🔴 METERING A MULTI-CALL TURN. A tool turn makes up to `maxSearches + 1` upstream calls
+ * and each is separately billable, so there is ONE HOLD PER CALL, keyed by the same
+ * deterministic `${seed}:${n}` the loop derives its requestId from (holds are idempotent on
+ * that id, so a retried turn re-uses them instead of charging twice). A single hold cannot
+ * pay for eleven calls: `settle` clamps to its own hold, so the excess would be absorbed
+ * silently — an under-bill with nothing to show it. Every hold resolves on every exit path.
+ *
+ * byok/inhouse are 501 for now.
+ *
+ * ⚠️ @unwired — NO CLIENT CALLS THIS ROUTE YET (measured 2026-09-14, repo-wide).
+ *
+ * The chat UI posts to `/api/chat/generate`, the buffering endpoint. Nothing in `src/`
+ * outside this file mentions `/api/ai/chat/stream`, so everything here — including the
+ * tool events above — is currently unreachable from the product.
+ *
+ * Intended consumer: `src/components/playground/Chat/ChatWithLLM.tsx`, whose send path is
+ * built around one awaited `fetch` that returns a finished message. Adopting the stream is
+ * a client-side change of a different shape (an SSE reader, incremental message state, and
+ * a render for the search phases), not a server one — so it is deliberately a separate
+ * piece of work rather than something smuggled into this commit.
+ *
+ * 🔴 Until that lands, the metering below is exercised only by tests. That is the reason
+ * this marker exists rather than a comment: `scripts/chat-stream-reachable.test.mjs` fails
+ * if this declaration is deleted while no consumer exists, AND fails if a consumer is added
+ * and this note is left behind. A money path silently documented as unreachable while live
+ * traffic bills through it would be the worse of the two lies.
  */
 router.post('/chat/stream', requireEntitlement('canUse'), async (req, res) => {
   const {
@@ -368,12 +444,28 @@ router.post('/chat/stream', requireEntitlement('canUse'), async (req, res) => {
   const reqIdSeed = requestId || req.headers['x-request-id'] || randomUUID();
   const estInputTokens = estimateMessageTokens(finalMessages);
 
+  /*
+   * Which surface this turn is, and therefore whether a web_search tool is offered.
+   *
+   * Same rule as /api/chat/generate: a NAMED mode with no budget keeps its own name and
+   * gets no tool, so `code` and `agents` are never handed a tool their capability
+   * statement denies. Only an ABSENT field falls back to 'chat'.
+   */
+  const requestedSurface = typeof req.body?.chatSurface === 'string' ? req.body.chatSurface.trim() : '';
+  const chatSurface = requestedSurface || 'chat';
+  const toolSurface = Object.hasOwn(TOOL_BUDGETS, chatSurface) && webSearchAvailable()
+    ? chatSurface
+    : null;
+
   // ── Phase 1 — hold worst-case BEFORE opening the stream, so an over-budget wallet
   // gets a clean 402 (not a half-open SSE). 403 = frozen; anything else = 500.
+  //
+  // 🔴 The requestId is `${seed}:0` — the id the LOOP will ask for on its first call, so
+  // this pre-placed hold is the one it picks up rather than a second, orphaned reserve.
   let meter;
   try {
     meter = await meterPremiumChatStream(req.db, userId, {
-      model, provider: 'xeno', requestId: reqIdSeed,
+      model, provider: 'xeno', requestId: `${reqIdSeed}:0`,
       estInputTokens, maxTokens: max_tokens, surface: requestSurface(req),
     });
   } catch (error) {
@@ -429,24 +521,88 @@ router.post('/chat/stream', requireEntitlement('canUse'), async (req, res) => {
   let outputChars = 0;   // for a best-effort output-token estimate if usage never arrives
   let usageObj = null;   // upstream usage chunk (include_usage)
   let clientGone = false;
-  let upstream = null;
   let upstreamReader = null;
   const upstreamAbort = new AbortController(); // cancels the underlying fetch on disconnect
+
+  /*
+   * ── Metering a MULTI-CALL turn ──────────────────────────────────────────────────────
+   *
+   * A tool turn is not one upstream call, it is up to `maxSearches + 1` of them, and each
+   * is separately billable. `meterPremiumChatStream` settles CLAMPED TO ITS OWN HOLD, so
+   * one hold sized for a single call cannot pay for eleven — the excess would be silently
+   * absorbed, which is an under-bill, not an error anyone would see.
+   *
+   * So: one hold per iteration, keyed by the SAME deterministic `${seed}:${n}` the loop
+   * already mints for `requestId`. Holds are idempotent on that id, so a retried turn
+   * re-uses its holds instead of charging twice.
+   *
+   * 🔴 EVERY hold must resolve on EVERY exit path — normal end, client disconnect,
+   * upstream error, search failure. `meters` is the list; `resolveAllMeters` walks it, and
+   * each controller is single-shot so a double call is a no-op rather than a double-settle.
+   */
+  const meters = [meter];
+  const meterFor = async (iteration) => {
+    if (iteration < meters.length) return meters[iteration];
+    const next = await meterPremiumChatStream(req.db, userId, {
+      model, provider: 'xeno', requestId: `${reqIdSeed}:${iteration}`,
+      estInputTokens, maxTokens: max_tokens, surface: requestSurface(req),
+    });
+    meters.push(next);
+    return next;
+  };
+
+  /** Settle every open hold from what that call actually used, or void it if it did nothing. */
+  const resolveAllMeters = async (perCallUsage) => {
+    let creditsCharged = 0;
+    for (let i = 0; i < meters.length; i += 1) {
+      const m = meters[i];
+      if (m.settled) continue;
+      const used = perCallUsage?.[i];
+      if (used && (used.outputTokens > 0 || used.inputTokens > 0)) {
+        const res = await m.settle({
+          inputTokens: used.inputTokens,
+          outputTokens: used.outputTokens,
+          hasOutputUsage: used.hasOutputUsage !== false,
+        }).catch(() => null);
+        creditsCharged += res?.creditsCharged ?? 0;
+      } else {
+        // No usage recorded for this call: it never ran, or produced nothing. Void rather
+        // than charge the reserved worst case for work that did not happen.
+        await m.voidHold().catch(() => {});
+      }
+    }
+    return creditsCharged;
+  };
+
+  /** Usage per upstream call, index-aligned with `meters`. */
+  const callUsage = [];
 
   // Resolve the credit hold best-effort: charge from tokens seen so far, or void the
   // reserve if nothing usable streamed. Single-shot via meter.settled (never double-
   // settles). Shared by the disconnect handlers, the in-band error path (B1) and the
   // mid-stream catch so every abnormal exit resolves the hold identically.
   const settleBestEffort = async () => {
-    if (meter.settled) return;
-    if (outputChars > 0) {
-      await meter.settle({
-        inputTokens: usageObj?.prompt_tokens ?? estInputTokens,
-        outputTokens: usageObj?.completion_tokens ?? Math.ceil(outputChars / 4),
-      });
-    } else {
-      await meter.voidHold();
-    }
+    /*
+     * ⚠️ Walks EVERY hold, not just the first.
+     *
+     * On a tool turn there may be several open reserves, and an abnormal exit must not
+     * leave the later ones hanging — they would lock the user's balance until the 120s
+     * expiry with nothing charged. Calls with recorded usage settle from it; the
+     * in-flight one settles from the chars seen so far; anything untouched is voided.
+     */
+    const best = meters.map((_, i) => {
+      const recorded = callUsage[i];
+      if (recorded) return recorded;
+      // The call that was still streaming when the client left: charge what it produced.
+      if (i === meters.length - 1 && outputChars > 0) {
+        return {
+          inputTokens: usageObj?.prompt_tokens ?? estInputTokens,
+          outputTokens: usageObj?.completion_tokens ?? Math.ceil(outputChars / 4),
+        };
+      }
+      return null;
+    });
+    await resolveAllMeters(best);
   };
 
   // Client disconnect OR response-socket error: abort upstream and resolve the hold.
@@ -461,39 +617,45 @@ router.post('/chat/stream', requireEntitlement('canUse'), async (req, res) => {
   req.on('close', resolveOnDisconnect);
   res.on('error', resolveOnDisconnect);
 
-  // ── Open the upstream stream. A failure to even start → void + error event.
-  try {
-    upstream = await xenoChatCompletionStream({
+  /*
+   * ── One upstream streamed call, as an async generator ────────────────────────────────
+   *
+   * Extracted from the old inline relay so the SAME parser serves both the plain path and
+   * each iteration of the tool loop. Yields normalized events:
+   *
+   *   { type:'delta', text }            assistant prose
+   *   { type:'reasoning', text }        thinking, when the provider streams it
+   *   { type:'tool_calls', toolCalls }  emitted ONCE at the end, fully assembled
+   *   { type:'usage', usage }           the final include_usage chunk
+   *
+   * 🔴 Tool calls arrive as FRAGMENTS and are accumulated by index (see
+   * utils/streamingToolCalls.js) — never parsed mid-stream, because a half-arrived
+   * arguments string is not malformed, it is incomplete.
+   */
+  async function* streamOneCall({ messages: callMessages, tools, signal }) {
+    const response = await xenoChatCompletionStream({
       model,
-      messages: finalMessages,
+      messages: callMessages,
       temperature,
       max_tokens,
-      signal: upstreamAbort.signal,
-      // OpenRouter-style reasoning hint (the live catalog is OpenRouter-fronted);
-      // the gateway streams thinking back as delta.reasoning when supported.
-      extra: reasoning ? { reasoning: { effort: 'medium' } } : {},
+      signal,
+      extra: {
+        // OpenRouter-style reasoning hint (the live catalog is OpenRouter-fronted);
+        // the gateway streams thinking back as delta.reasoning when supported.
+        ...(reasoning ? { reasoning: { effort: 'medium' } } : {}),
+        ...(tools?.length ? { tools, tool_choice: 'auto' } : {}),
+      },
     });
-  } catch {
-    await meter.voidHold();
-    if (!clientGone) {
-      await send({ type: 'error', error: 'inference_error', message: 'Upstream inference failed to start.' });
-      endStream();
-    }
-    return;
-  }
+    const reader = response.body?.getReader();
+    if (!reader) throw new Error('Upstream stream has no readable body');
+    upstreamReader = reader;
 
-  // ── Relay loop: parse upstream SSE lines, translate to normalized events.
-  const decoder = new TextDecoder();
-  let buffer = '';
-
-  try {
-    // getReader() is INSIDE the try so a null/again-locked body funnels through the
-    // catch below (which resolves the hold) instead of throwing past the metering.
-    upstreamReader = upstream.body?.getReader();
-    if (!upstreamReader) throw new Error('Upstream stream has no readable body');
+    const decoder = new TextDecoder();
+    const calls = new ToolCallAccumulator();
+    let buffer = '';
 
     for (;;) {
-      const { done, value } = await upstreamReader.read();
+      const { done, value } = await reader.read();
       if (done || clientGone) break;
       buffer += decoder.decode(value, { stream: true });
 
@@ -507,67 +669,204 @@ router.post('/chat/stream', requireEntitlement('canUse'), async (req, res) => {
         let chunk;
         try { chunk = JSON.parse(payload); } catch { continue; }
 
-        // In-band provider error: OpenAI/OpenRouter signal a failed/aborted generation
-        // with a valid-JSON `data: {"error":{…}}` line (no usage/choices) and then close
-        // the stream normally. Without catching it here we would fall through the normal
-        // exit and SETTLE + report success for a truncated/failed completion. Resolve the
-        // hold from tokens seen (or void), emit a GENERIC error (never forward the
-        // provider's message — no upstream detail leak) and end. Checked FIRST, before
-        // usage/delta, so an error line is never mistaken for content.
+        /*
+         * In-band provider error: a valid-JSON `data: {"error":…}` line with no choices,
+         * after which the stream closes NORMALLY. Checked first, before usage/delta, so an
+         * error line is never mistaken for content — without it we would fall through the
+         * normal exit and SETTLE a truncated generation as a success.
+         */
         if (chunk.error) {
-          await settleBestEffort();
-          if (!clientGone) {
-            await send({ type: 'error', error: 'inference_error', message: 'The inference stream failed.' });
-            endStream();
-          }
-          return;
+          const err = new Error('inference_error');
+          err.inBand = true;
+          throw err;
         }
 
-        if (chunk.usage) usageObj = chunk.usage; // include_usage: final chunk
+        if (chunk.usage) yield { type: 'usage', usage: chunk.usage };
 
         const delta = chunk.choices?.[0]?.delta || {};
+        if (Array.isArray(delta.tool_calls)) calls.push(delta.tool_calls);
         if (typeof delta.content === 'string' && delta.content.length) {
-          outputChars += delta.content.length;
-          await send({ type: 'delta', text: delta.content });
+          yield { type: 'delta', text: delta.content };
         }
         const reasoningText = delta.reasoning ?? delta.reasoning_content;
         if (typeof reasoningText === 'string' && reasoningText.length) {
-          await send({ type: 'reasoning', text: reasoningText });
+          yield { type: 'reasoning', text: reasoningText };
         }
       }
     }
-  } catch {
-    // Upstream errored mid-stream (or setup threw): settle best-effort, or void.
+
+    // Assembled only once the stream is closed — this is the point where fragments
+    // become a value, and the only place arguments are read.
+    if (calls.sawAny) yield { type: 'tool_calls', toolCalls: calls.finish() };
+  }
+
+  /*
+   * ── Drive the turn ───────────────────────────────────────────────────────────────────
+   *
+   * Two branches over ONE parser. Without a tool surface this is the plain relay it always
+   * was: exactly one upstream call, one hold, unchanged. With a tool surface the loop may
+   * make several calls, and the search phases become visible events in the same stream —
+   * the shape Anthropic, OpenAI and Gemini all converged on.
+   */
+  const sourcesSeen = [];
+  let sawSearch = false;
+
+  try {
+    if (!toolSurface) {
+      for await (const event of streamOneCall({
+        messages: finalMessages, tools: [], signal: upstreamAbort.signal,
+      })) {
+        if (clientGone) break;
+        if (event.type === 'delta') {
+          outputChars += event.text.length;
+          await send({ type: 'delta', text: event.text });
+        } else if (event.type === 'reasoning') {
+          await send({ type: 'reasoning', text: event.text });
+        } else if (event.type === 'usage') {
+          usageObj = event.usage;
+        }
+      }
+      callUsage[0] = usageFrom(usageObj, estInputTokens, outputChars);
+    } else {
+      /*
+       * 🔴 `iteration` tracks which upstream call we are on, so each gets its OWN hold at
+       * the id the loop derives. The generator below is what the loop calls to run a turn;
+       * it places the hold BEFORE the call and records that call's usage after it, keeping
+       * `meters` and `callUsage` index-aligned.
+       */
+      let iteration = 0;
+      const streamModel = async function* streamModelCall({ messages: loopMessages, tools }) {
+        const index = iteration;
+        await meterFor(index);
+        let callOutputChars = 0;
+        let callUsageObj = null;
+        try {
+          for await (const event of streamOneCall({
+            messages: loopMessages, tools, signal: upstreamAbort.signal,
+          })) {
+            if (event.type === 'delta') callOutputChars += event.text.length;
+            else if (event.type === 'usage') callUsageObj = event.usage;
+            yield event;
+          }
+        } finally {
+          // `finally`, so a throw mid-call still records what that call produced — the
+          // settle path needs it whether the call ended well or badly.
+          callUsage[index] = usageFrom(callUsageObj, estInputTokens, callOutputChars);
+          iteration += 1;
+        }
+      };
+
+      for await (const event of streamToolLoop({
+        messages: finalMessages,
+        surface: toolSurface,
+        turnId: reqIdSeed,
+        streamModel,
+        runSearch: ({ query, depth }) => chatWebContextService.searchAndFetch({
+          actorId: userId,
+          conversationId: conversationId || null,
+          userMessageId: null,
+          query,
+          count: 6,
+          depth,
+          signal: upstreamAbort.signal,
+        }),
+      })) {
+        if (clientGone) break;
+        switch (event.type) {
+          case 'delta':
+            outputChars += event.text.length;
+            await send({ type: 'delta', text: event.text });
+            break;
+          case 'reasoning':
+            await send({ type: 'reasoning', text: event.text });
+            break;
+          case 'search_start':
+            sawSearch = true;
+            // The query, BEFORE the wait — this is what turns a silent pause into a
+            // visible one, and the reason the loop streams at all.
+            await send({ type: 'search_start', query: event.query, iteration: event.iteration });
+            break;
+          case 'search_result':
+            sourcesSeen.push(...event.sources);
+            await send({
+              type: 'search_result',
+              query: event.query,
+              count: event.count,
+              sources: event.sources,
+            });
+            break;
+          case 'search_error':
+            // A failed search is REPORTED, never silent, and never fatal: the model gets
+            // the failure as a tool result and can say so truthfully in its answer.
+            await send({
+              type: 'search_error',
+              query: event.query,
+              code: event.code,
+              message: 'That search could not be completed.',
+            });
+            break;
+          case 'usage':
+            usageObj = addUsage(usageObj, event.usage);
+            break;
+          case 'complete':
+            if (event.sources.length) {
+              await send({ type: 'sources', sources: projectSources(event.sources) });
+            }
+            await send({
+              type: 'tool_use',
+              searches: event.searches,
+              iterations: event.iterations,
+              cappedOut: event.cappedOut,
+            });
+            break;
+          default:
+            break;
+        }
+      }
+    }
+  } catch (error) {
+    /*
+     * Upstream errored mid-stream, in band or otherwise. Resolve EVERY hold best-effort,
+     * then emit a GENERIC error — never the provider's own message, which can carry
+     * upstream detail we do not forward.
+     */
     await settleBestEffort().catch(() => {});
     if (!clientGone) {
       await send({ type: 'error', error: 'inference_error', message: 'The inference stream failed.' });
       endStream();
     }
+    void error;
     return;
   }
 
   // Client vanished mid-stream — the disconnect handler owns metering; nothing to emit.
   if (clientGone) return;
 
-  // ── Normal completion — settle from real usage. If the upstream never sent a usage
-  // chunk, charge the RESERVED worst case (hasOutputUsage:false, clamped) to match
-  // meterPremiumChat rather than a chars/4 estimate that under-bills. The char estimate
-  // stays best-effort only for the disconnect/error paths above.
-  const hasOutputUsage = usageObj != null
-    && (usageObj.completion_tokens != null || usageObj.total_tokens != null);
-  const inputTokens = usageObj?.prompt_tokens ?? estInputTokens;
-  const outputTokens = usageObj?.completion_tokens
-    ?? (usageObj?.total_tokens != null
-      ? Math.max(0, usageObj.total_tokens - (usageObj.prompt_tokens || 0))
-      : Math.ceil(outputChars / 4));
-  const settleRes = await meter.settle({ inputTokens, outputTokens, hasOutputUsage });
+  /*
+   * ── Normal completion — settle EVERY call from its own real usage.
+   *
+   * One hold per upstream call, each settled against what THAT call used. A single settle
+   * would be clamped to a single call's hold, so an 11-call tool turn would silently bill
+   * as one — the excess absorbed with nothing to show it. `resolveAllMeters` also voids
+   * any hold whose call never produced anything.
+   *
+   * `usageFrom` keeps the existing rule intact: no usage chunk means charge the RESERVED
+   * worst case (`hasOutputUsage: false`, clamped) rather than a chars/4 estimate that
+   * under-bills. The char estimate stays best-effort, for the disconnect path only.
+   */
+  const creditsSettled = await resolveAllMeters(callUsage);
+
+  const totalInput = callUsage.reduce((n, u) => n + (u?.inputTokens || 0), 0) || estInputTokens;
+  const totalOutput = callUsage.reduce((n, u) => n + (u?.outputTokens || 0), 0);
 
   await send({
     type: 'usage',
-    input: inputTokens,
-    output: outputTokens,
-    total: inputTokens + outputTokens,
-    creditsSettled: settleRes.creditsCharged ?? 0,
+    input: totalInput,
+    output: totalOutput,
+    total: totalInput + totalOutput,
+    creditsSettled,
+    // Present only on a turn that actually searched, so an ordinary chat is unchanged.
+    ...(sawSearch ? { upstreamCalls: meters.length } : {}),
   });
   await send({ type: 'done' });
   endStream();

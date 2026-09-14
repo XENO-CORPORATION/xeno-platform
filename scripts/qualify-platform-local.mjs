@@ -165,6 +165,14 @@ const BACKEND_SUITES = [
   'account-recovery', 'auth-token-confusion', 'api-key-auth', 'browser-bff-session',
   'credit-mirror-drift', 'dpop-token-exchange', 'fresh-db-boot',
   'ledger-audit-fixes', 'service-ledger', 'readonly-preview-lifecycle',
+  // Registered 2026-09-14: both were on disk and run by NOTHING — not here, not in CI,
+  // not from any npm script. `leader-election` is what stops a second replica from
+  // double-starting background jobs, and the backend runs TWO replicas in production
+  // (xeno-platform-backend-2 and -3), so it is the suite guarding the exact failure that
+  // deployment makes possible. `upstream` covers timeouts, bounded retry and circuit
+  // breakers. Both need a real database — which is why they belong in THIS runner rather
+  // than the npm chain, where they would fail ECONNREFUSED on every developer machine.
+  'leader-election', 'upstream',
 ];
 
 const BACKEND_EVIDENCE = {
