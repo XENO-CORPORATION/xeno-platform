@@ -290,3 +290,29 @@ test('🔴 the chat path persists no provider output — which is what makes tra
     + 'upgraded provider plan, not a code change that quietly starts storing them.',
   );
 });
+
+test('🔴 a failed search is logged on the SERVER with its code', () => {
+  /*
+   * The client already received the code; the box kept nothing. A turn of rate-limited
+   * searches on 2026-09-14 left no trace anywhere on the server — the third silent catch
+   * found that day. The query is user content and must not appear in the log call.
+   */
+  const routes = readFileSync(join(ROOT, 'src', 'server', 'routes', 'aiRoutes.js'), 'utf8');
+  const at = routes.indexOf("case 'search_error':");
+  assert.ok(at > 0);
+  const block = routes.slice(at, routes.indexOf('break;', at));
+  assert.match(block, /console\.warn\('\[chat\/stream\] search failed'/, 'the failure must be logged server-side');
+  assert.match(block, /code: event\.code/, 'with the code, or the log cannot be acted on');
+  assert.doesNotMatch(block, /console\.warn\([^)]*query/s, 'the query is user content and must not be logged');
+});
+
+test('🔴 job polling is no faster than once a second', () => {
+  /*
+   * Every poll is a quota-counted request against a per-token requests-per-minute window
+   * the whole platform shares. At 350 ms one search burned ~7 polls and a single chat turn
+   * exhausted the window on its own: 5 of 8 searches came back rate-limited.
+   */
+  const m = SERVICE.match(/pollMs:\s*([\d_]+)/);
+  assert.ok(m, 'the page job must be polled');
+  assert.ok(Number(m[1].replace(/_/g, '')) >= 1000, `pollMs ${m[1]} — polls are quota-counted; keep them at or above 1 s`);
+});
