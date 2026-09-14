@@ -71,7 +71,30 @@ function normalizeMaxProviderCost(value) {
   return cost;
 }
 
-function normalizeServiceUrl(raw, nodeEnv) {
+/**
+ * Container names that may be reached over plain HTTP in production.
+ *
+ * 🔴 Why this exists: Web Context runs on the SAME host as this backend, yet every chat
+ * search used to leave the machine, cross Cloudflare's edge and come back — 151 ms against
+ * 3 ms direct, measured 2026-09-14, and the source of intermittent 502 HTML pages that made
+ * four of six searches in one turn fail. The backend now joins Web Context's own `frontend`
+ * Docker network and calls the API container by name, so the traffic never touches a wire.
+ *
+ * ⚠️ The HTTPS rule below is still right for everything else, so this is an explicit
+ * ALLOWLIST of names, never a "private IP range" heuristic: `10.x` addresses also carry VPN
+ * and overlay traffic that DOES cross a physical wire, where a plaintext bearer token would
+ * be exposed. A name must be listed here to be exempt.
+ */
+function internalHosts(env) {
+  return new Set(
+    String(env.XENO_WEB_CONTEXT_INTERNAL_HOSTS || '')
+      .split(',')
+      .map((host) => host.trim().toLowerCase())
+      .filter(Boolean),
+  );
+}
+
+function normalizeServiceUrl(raw, nodeEnv, allowedInternalHosts = new Set()) {
   let url;
   try {
     url = new URL(raw);
@@ -82,10 +105,50 @@ function normalizeServiceUrl(raw, nodeEnv) {
   if (url.username || url.password || url.pathname !== '/' || url.search || url.hash) {
     throw new ChatWebContextError('web_context_unavailable', 'Web Context service URL must be an origin only.');
   }
-  if (url.protocol !== 'https:' && !(nodeEnv !== 'production' && loopback && url.protocol === 'http:')) {
+  /*
+   * A Docker service/container name is a single label. Refusing any host containing a dot
+   * (or a colon) means the allowlist cannot be pointed at a public FQDN or a raw IP address
+   * even by mistake — the exemption is structurally confined to container-name resolution.
+   */
+  const internalContainer = url.protocol === 'http:'
+    && !url.hostname.includes('.')
+    && !url.hostname.includes(':')
+    && allowedInternalHosts.has(url.hostname.toLowerCase());
+  if (url.protocol !== 'https:'
+    && !internalContainer
+    && !(nodeEnv !== 'production' && loopback && url.protocol === 'http:')) {
     throw new ChatWebContextError('web_context_unavailable', 'Web Context requires HTTPS outside local development.');
   }
   return url;
+}
+
+/**
+ * Transient upstream failures worth ONE quick retry.
+ *
+ * ⚠️ 429 is deliberately absent. A rate limit is the service asking us to slow down, and a
+ * retry a few hundred milliseconds later just spends quota answering the same refusal. Only
+ * gateway faults (502/503/504) and a request that never got an HTTP status at all — a dropped
+ * connection — are retried. The search carries an idempotency key, so a retry cannot
+ * double-charge the provider.
+ */
+const RETRYABLE_STATUSES = new Set([502, 503, 504]);
+
+function isRetryable(error, signal) {
+  if (signal?.aborted || error?.name === 'AbortError') return false;
+  if (typeof error?.status === 'number') return RETRYABLE_STATUSES.has(error.status);
+  return !(error instanceof ChatWebContextError);
+}
+
+async function withRetry(operation, { signal, sleep, random, attempts = 2 }) {
+  for (let attempt = 1; ; attempt += 1) {
+    try {
+      return await operation();
+    } catch (error) {
+      if (attempt >= attempts || !isRetryable(error, signal)) throw error;
+      // Jittered so concurrent turns that hit the same fault do not retry in lockstep.
+      await sleep(150 + Math.floor(random() * 250));
+    }
+  }
 }
 
 function readToken(env, readFileSync) {
@@ -231,12 +294,14 @@ export function createChatWebContextService({
   readFileSync = fs.readFileSync,
   now = () => Date.now(),
   researchBudgets = RESEARCH_BUDGETS,
+  sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
+  random = Math.random,
 } = {}) {
   let accountCache = null;
 
   function configuration() {
     if (!enabled(env)) throw new ChatWebContextError('web_context_unavailable', 'Web research is not enabled.');
-    const baseUrl = normalizeServiceUrl(env.XENO_WEB_CONTEXT_URL || '', env.NODE_ENV);
+    const baseUrl = normalizeServiceUrl(env.XENO_WEB_CONTEXT_URL || '', env.NODE_ENV, internalHosts(env));
     const token = readToken(env, readFileSync);
     return { baseUrl, token, tokenDigest: digest(token) };
   }
@@ -312,9 +377,17 @@ export function createChatWebContextService({
        * always called `search(… resultHandling: "transient")` and has always worked against
        * this same service and token class. The pattern is not new; chat was the odd caller.
        */
-      const search = await client.search(
-        { ...requestBase, idempotencyKey, query, resultHandling: 'transient', count },
-        { signal },
+      /*
+       * Retried ONCE on a gateway fault or a dropped connection — the idempotency key is the
+       * same on both attempts, so the provider can never be charged twice for one search.
+       * See `withRetry` for why a 429 is deliberately not retried.
+       */
+      const search = await withRetry(
+        () => client.search(
+          { ...requestBase, idempotencyKey, query, resultHandling: 'transient', count },
+          { signal },
+        ),
+        { signal, sleep, random },
       );
       const searchEvidence = projectEvidence(search?.evidence);
       const searchItems = Array.isArray(search?.items)
