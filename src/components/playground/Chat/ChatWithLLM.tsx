@@ -44,6 +44,7 @@ import {
   getChatProfile,
 } from './chatSkillsLibrary';
 import { buildChatSystemPrompt, CHAT_MODE_PLACEHOLDERS, modeUsesXenoSearch, type ChatMode } from './chatModeConfig';
+import { readGenerateResponse } from './chatStream';
 import { reasoningCapabilityForModel } from '@/server/lib/chatModelCapabilities.js';
 import CodeBlockWithHeader from './CodeBlockWithHeader';
 import ThinkingAnimation, { ThinkingAnimationInline } from './ThinkingAnimation';
@@ -6647,16 +6648,32 @@ interface QueueState {
 
         const response = await fetch('/api/chat/generate', {
             method: 'POST',
-            headers: withAuthHeaders({ 'Content-Type': 'application/json' }),
+            /*
+             * Ask for progress frames.
+             *
+             * A tool turn can run several searches over a minute or more, and until this the
+             * client had NOTHING until it finished — so a working turn was indistinguishable
+             * from a hang. With this header the server publishes which query is running, as it
+             * runs, and still ends with the identical response object.
+             *
+             * ⚠️ `Accept` is a REQUEST for a representation, not a promise: the server streams
+             * only when it decides to, and `readGenerateResponse` checks the response's own
+             * content-type rather than assuming. That is what makes this safe against an older
+             * backend — it simply answers JSON and nothing here changes.
+             */
+            headers: withAuthHeaders({
+                'Content-Type': 'application/json',
+                Accept: 'text/event-stream, application/json',
+            }),
             body: JSON.stringify(payload),
             signal: controller.signal, // Pass the signal to fetch
         });
 
         if (!response.ok) {
-            const errorText = await response.text(); 
+            const errorText = await response.text();
             let errorData = {};
             try {
-                errorData = JSON.parse(errorText); 
+                errorData = JSON.parse(errorText);
             } catch (parseError) {
                 errorData = { error: `API request failed with status ${response.status}. Non-JSON response: ${errorText}` };
             }
@@ -6664,7 +6681,32 @@ interface QueueState {
             throw new Error(errorMessageText);
         }
 
-        const data = await response.json();
+        /*
+         * Returns the SAME object `response.json()` did, whichever way the server answered —
+         * every one of the ~400 downstream lines below is keyed off that shape, so streaming
+         * changes WHEN we learn things, never WHAT we get.
+         */
+        const data = await readGenerateResponse(response, (event) => {
+            if (event.type !== 'search_start' || !event.query) return;
+            /*
+             * Show the live query on the existing thinking placeholder.
+             *
+             * ⚠️ It writes `text`, which the placeholder ALREADY renders (it holds the literal
+             * "Thinking" / "Searching"), rather than adding a field. A new field would need a
+             * matching render change, and the placeholder is shared by several flows — the
+             * smaller change is the one that cannot break the others.
+             *
+             * `isThinkingPlaceholder` stays true, so the spinner keeps running: the turn is not
+             * finished, only better described.
+             */
+            const query = String(event.query);
+            const label = query.length > 60 ? `${query.slice(0, 57)}…` : query;
+            setMessages(prev => prev.map(msg =>
+                msg.id === localPlaceholderId && msg.isThinkingPlaceholder
+                    ? { ...msg, text: `Searching: ${label}` }
+                    : msg
+            ));
+        });
 
         // --- NEW: Handle Refined Prompt Response Directly ---
         if (taskArg === 'refine_image_prompt' && data && typeof data.refinedPromptText === 'string') {

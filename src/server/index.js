@@ -58,6 +58,7 @@ import { xenoModelCatalog, PROVIDER_LABELS, prettyModelName, xenoChatCompletion,
 import { meterPremiumChat, meterMediaGeneration } from './utils/inferenceMeter.js';
 import { runToolLoop, toolsForSurface, TOOL_BUDGETS } from './utils/chatToolLoop.js';
 import { chatWebContextService, webSearchAvailable } from './services/chatWebContext.js';
+import { publishTurnProgress, turnProgressChannel, finishTurnWithProgress, failTurnWithProgress } from './utils/turnProgress.js';
 import { estimateMessageTokens, getCreditCost } from './utils/creditCosts.js';
 import { deductCredits, refundCredits, logUsage as logCreditUsage } from './utils/creditTransactions.js';
 import { resolveEntitlements, gateMeta } from './utils/entitlementGate.js';
@@ -1766,6 +1767,21 @@ app.post('/api/chat/generate', databaseMiddleware, authMiddleware, async (req, r
             }
             finalSystemPromptContent = [finalSystemPromptContent, projectContext.instructions].filter(Boolean).join('\n\n');
         }
+
+        /*
+         * Open the progress channel — AFTER every early-return validation, never before.
+         *
+         * 🔴 Writing a frame sends the headers, and from that moment `res.status(...).json(...)`
+         * can no longer set a status or content type: it throws ERR_HTTP_HEADERS_SENT and the
+         * client gets a truncated body with no error at all. The 400/503/404 refusals above must
+         * therefore still answer as ordinary JSON, so this sits below the last of them — the
+         * project-context catch — where the request is known to be one we will actually run.
+         *
+         * Returns null unless the client sent `Accept: text/event-stream`, so every existing
+         * client keeps byte-identical behaviour and this can ship ahead of any client change.
+         */
+        const progress = turnProgressChannel(req, res);
+
         // const useReasoning = req.body.useReasoning === true; // <<< REMOVE old flag check >>>
         
         // <<< USE effectiveReasoningState for prompt instructions >>>
@@ -2164,6 +2180,23 @@ app.post('/api/chat/generate', databaseMiddleware, authMiddleware, async (req, r
                     surface: toolSurface,
                     turnId: `chatgen-${randomUUID()}`,
                     callModel: callModelOnce,
+                    /*
+                     * Progress, streamed while the turn runs.
+                     *
+                     * 🔴 This route ANSWERS with one JSON body — ~130 lines of post-processing
+                     * (reasoning extraction, project-context hashing, image handling, usage) sit
+                     * between the model call and `res.json`, and all of it assumes a complete
+                     * text. So the turn is not converted to a token stream here; instead the
+                     * SEARCH PHASES are published as they happen and the complete response is
+                     * still returned normally.
+                     *
+                     * That is the half that actually fixes the reported problem. A 10-search
+                     * turn was silent for its whole duration and read as a hang; what makes a
+                     * wait legible is seeing WHICH QUERY is running, which is exactly what
+                     * Anthropic, OpenAI and Gemini all surface. Token-level streaming for this
+                     * route is a larger change and is tracked separately.
+                     */
+                    onProgress: (progress) => publishTurnProgress(res, progress),
                     runSearch: async ({ query, depth }) => chatWebContextService.searchAndFetch({
                         actorId: req.user.id,
                         conversationId: conversationId || null,
@@ -2532,14 +2565,38 @@ app.post('/api/chat/generate', databaseMiddleware, authMiddleware, async (req, r
             };
         }
 
-        // Return the final response object
+        /*
+         * Return the final response.
+         *
+         * In stream mode the SAME object goes out as a terminal `result` frame — the two
+         * transports must never disagree on the payload, or the client grows two parsers and
+         * one of them rots. `res.json` here would throw ERR_HTTP_HEADERS_SENT, since progress
+         * frames have already sent the headers.
+         */
         console.log("Final response object being sent to frontend:", finalResponse);
+        if (progress) return finishTurnWithProgress(res, finalResponse);
         return res.json(finalResponse);
 
     } catch (error) {
         console.error('Error in /api/chat/generate route:', error);
         const errorResponsePayload = { error: 'Failed to generate chat response. Please try again.' };
         console.log("[BACKEND CATCH] Sending error to frontend:", errorResponsePayload);
+        /*
+         * 🔴 If progress frames already went out, the status is 200 and the headers are sent —
+         * `res.status(500).json(...)` throws ERR_HTTP_HEADERS_SENT and the client is left with a
+         * truncated stream and no explanation, which is strictly worse than the error we were
+         * trying to report. So a streamed turn reports its failure IN BAND.
+         *
+         * Read off `res.locals`, not the `progress` handle: that const is scoped inside the
+         * `try`, and a throw from ABOVE its declaration would leave it undefined here. The
+         * response object knows the truth in every case.
+         */
+        if (res.locals?.turnProgressOpen) {
+            return failTurnWithProgress(res, {
+                code: 'generation_failed',
+                message: errorResponsePayload.error,
+            });
+        }
         return res.status(500).json(errorResponsePayload);
     }
 });

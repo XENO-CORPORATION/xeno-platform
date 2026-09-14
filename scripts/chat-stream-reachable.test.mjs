@@ -56,13 +56,28 @@ function clientFiles(dir = join(ROOT, 'src'), out = []) {
   return out;
 }
 
-/** Does any client file actually FETCH the streaming route? */
+/**
+ * Does any client file actually FETCH the streaming route?
+ *
+ * ⚠️ A MENTION IS NOT A CALL, and the first version of this could not tell the difference.
+ * It matched the path inside any quotes, so when `chatStream.ts` gained a docblock naming
+ * `/api/ai/chat/stream` as context, the gate reported the route as consumed and demanded
+ * the @unwired marker be removed — which would have deleted a TRUE declaration on the
+ * strength of a comment. Exactly the failure recorded against the capability gate, where a
+ * docblock satisfied a check meant to measure shipped behaviour.
+ *
+ * So comments are stripped first, and the path must appear inside a call.
+ */
 function findConsumers() {
   const hits = [];
   for (const file of clientFiles()) {
-    const source = readFileSync(file, 'utf8');
-    // The path as it would appear in a fetch/axios/EventSource call.
-    if (/['"`][^'"`]*\/api\/ai\/chat\/stream/.test(source)) hits.push(file.slice(ROOT.length + 1));
+    const source = readFileSync(file, 'utf8')
+      .replace(/\/\*[\s\S]*?\*\//g, '')
+      .replace(/^\s*\/\/.*$/gm, '');
+    // fetch('/api/ai/chat/stream'…), new EventSource("…"), axios.post(`…`)
+    if (/(fetch|EventSource|post|get|request)\s*\(\s*['"`][^'"`]*\/api\/ai\/chat\/stream/.test(source)) {
+      hits.push(file.slice(ROOT.length + 1));
+    }
   }
   return hits;
 }
