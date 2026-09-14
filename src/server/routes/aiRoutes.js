@@ -22,6 +22,8 @@ import { chatWebContextService, webSearchAvailable } from '../services/chatWebCo
 import { toProviderMessages, looksLikePartsShape } from '../utils/chatMessageParts.js';
 import { shapeChatResponse } from '../utils/chatResponseShape.js';
 import { searchInfoFromAnnotations } from '../utils/searchInfo.js';
+import { openProjectContextTurn, closeProjectContextTurn } from '../utils/projectContextTurn.js';
+import { assembleProjectContext } from '../services/chatProjectContext.js';
 
 const router = express.Router();
 
@@ -372,11 +374,26 @@ router.post('/chat', requireEntitlement('canUse'), async (req, res) => {
  * here would have SILENTLY DROPPED every attachment — a plausible answer still coming back
  * about a picture the model never saw.
  *
- * That is fixed: `finalMessages` now converts through `toProviderMessages`, the SAME
- * implementation `/api/chat/generate` uses (extracted, not copied). The remaining gap is
- * genuinely client-side now — an SSE reader, incremental message state, and a render for
- * the search phases — plus the image-REFERRAL heuristic, which still lives in
- * `/api/chat/generate` and decides when a past image is re-attached to the current turn.
+ * That is fixed, and so is everything else the server owed. Six pieces of logic that lived
+ * only in `/api/chat/generate` are now shared modules this route calls — the SAME
+ * implementations, extracted rather than copied, because two copies of any of them would
+ * disagree invisibly (each still returns an answer, just a worse one):
+ *
+ *   chatMessageParts     attachments survive — without it every image and PDF is dropped
+ *   imageReferral        "make that one bigger" still sees the picture it refers to
+ *   chatResponseShape    answer/thinking/reasoningProcessed/modelIdUsed
+ *   searchInfo           citations, instead of an answer that reads as unsourced
+ *   projectContextTurn   project grounding AND its audit record
+ *   autoImageFallback    a picture instead of a blank reply when asked to draw
+ *
+ * ⚠️ `task: 'image'` and `refine_image_prompt` deliberately stay on `/api/chat/generate`.
+ * They are not chat turns — the image task is a self-contained handler that writes files,
+ * registers a library item and logs credits, and it returns before the chat path runs at
+ * all. `libraryItemId` and `libraryContentUrl` are therefore image-task fields that a chat
+ * turn cannot produce; they are not missing from here.
+ *
+ * The remaining gap is genuinely client-side now: an SSE reader, incremental message state,
+ * and a render for the search phases.
  *
  * ⚠️ Until a consumer lands, the metering below is exercised only by tests. That is why
  * this is a marker and not a comment: `scripts/chat-stream-reachable.test.mjs` fails if it
@@ -386,7 +403,7 @@ router.post('/chat', requireEntitlement('canUse'), async (req, res) => {
  */
 router.post('/chat/stream', requireEntitlement('canUse'), async (req, res) => {
   const {
-    model, messages, reasoning, conversationId, systemPrompt,
+    model, messages, reasoning, conversationId, systemPrompt, projectId,
     path: reqPath, requestId, temperature = 0.7, max_tokens = 4096,
   } = req.body || {};
 
@@ -445,8 +462,56 @@ router.post('/chat/stream', requireEntitlement('canUse'), async (req, res) => {
     return res.status(503).json({ error: 'inference_error', message: 'The inference service is not configured.' });
   }
 
-  // conversationId is accepted for client bookkeeping/telemetry; the gateway is stateless.
-  void conversationId;
+  /*
+   * ── Project context ──────────────────────────────────────────────────────────────────
+   *
+   * A project-backed conversation grounds its answer in the project's own documents, and
+   * RECORDS which sources were in context. Without this a project question is answered from
+   * the model's own knowledge — no sources, no audit record, confidently wrong, and nothing
+   * in the trail to show it happened.
+   *
+   * 🔴 Gate on `projectId` ALONE, and refuse a project with no conversation. That is not
+   * taste: `chat_generation_contexts.conversation_id` is NOT NULL, so a project turn has
+   * nowhere to record itself without one. The same guard exists on /api/chat/generate, where
+   * getting it wrong as `(projectId || conversationId)` once refused EVERY ordinary saved
+   * chat — an OR to enter and an AND to stay.
+   *
+   * ⚠️ This runs BEFORE the messages are built, because it augments the system prompt, and
+   * before any SSE frame is written, because it can still answer with a normal status.
+   */
+  let projectContext = null;
+  let projectContextRecordId = null;
+  let projectContextRequestHash = null;
+  if (projectId) {
+    if (!conversationId) {
+      return res.status(400).json({ error: 'Project generation requires projectId and conversationId.' });
+    }
+    try {
+      const opened = await openProjectContextTurn({
+        db: req.db,
+        userId,
+        projectId,
+        conversationId,
+        messages,
+        selectedModelId: model,
+        assemble: assembleProjectContext,
+      });
+      projectContext = opened.context;
+      projectContextRecordId = opened.recordId;
+      projectContextRequestHash = opened.requestHash;
+    } catch (contextError) {
+      const status = contextError.status || (contextError.code === 'invalid_id' ? 400 : 404);
+      return res.status(status).json({
+        error: contextError.message,
+        code: contextError.code || 'project_context_failed',
+      });
+    }
+  }
+
+  /** The project's instructions ride on the system prompt, exactly as on the other route. */
+  const effectiveSystemPrompt = projectContext
+    ? [systemPrompt, projectContext.instructions].filter(Boolean).join('\n\n')
+    : systemPrompt;
 
   /*
    * Accept BOTH message shapes.
@@ -463,8 +528,10 @@ router.post('/chat/stream', requireEntitlement('canUse'), async (req, res) => {
    * when at least one message actually carries `parts`.
    */
   const finalMessages = looksLikePartsShape(messages)
-    ? toProviderMessages(messages, { systemPrompt })
-    : (systemPrompt ? [{ role: 'system', content: systemPrompt }, ...messages] : messages);
+    ? toProviderMessages(messages, { systemPrompt: effectiveSystemPrompt })
+    : (effectiveSystemPrompt
+      ? [{ role: 'system', content: effectiveSystemPrompt }, ...messages]
+      : messages);
 
   const reqIdSeed = requestId || req.headers['x-request-id'] || randomUUID();
   const estInputTokens = estimateMessageTokens(finalMessages);
@@ -920,6 +987,29 @@ router.post('/chat/stream', requireEntitlement('canUse'), async (req, res) => {
    * ⚠️ Sent as a terminal frame beside the deltas, not instead of them. The deltas are what
    * the user watches; this is the record the client stores.
    */
+  /*
+   * Close the audit record with a hash of the answer.
+   *
+   * 🔴 A failure here must NOT fail the turn. The answer has been generated, streamed and
+   * BILLED; throwing now would hand the user an error for a turn they already received and
+   * paid for. The row simply stays open — which is honest information (a turn that started
+   * and did not finish recording), and is exactly why the close is a separate UPDATE rather
+   * than part of one write at the end.
+   */
+  if (projectContextRecordId) {
+    await closeProjectContextTurn({
+      db: req.db,
+      recordId: projectContextRecordId,
+      requestHash: projectContextRequestHash,
+      responseText: assembledText,
+    }).catch((error) => {
+      console.error('[chat/stream] project context close failed', {
+        recordId: projectContextRecordId,
+        message: error?.message,
+      });
+    });
+  }
+
   const shaped = shapeChatResponse({
     data: { choices: [{ message: { content: assembledText } }] },
     outputText: assembledText,
@@ -940,6 +1030,10 @@ router.post('/chat/stream', requireEntitlement('canUse'), async (req, res) => {
     // The tool loop's own sources, which are a different thing from provider annotations:
     // these are pages XENO fetched, not pages the model cited.
     ...(sourcesSeen.length ? { toolSources: projectSources(sourcesSeen) } : {}),
+    // Project grounding: the record id lets a client link an answer back to the exact
+    // sources that were in context when it was produced.
+    ...(projectContextRecordId ? { projectContextId: projectContextRecordId } : {}),
+    ...(projectContext ? { projectSources: projectContext.manifest.sources } : {}),
     usage: { prompt_tokens: totalInput, completion_tokens: totalOutput, total_tokens: totalInput + totalOutput },
   });
   await send({ type: 'done' });
