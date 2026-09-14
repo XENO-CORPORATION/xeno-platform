@@ -61,6 +61,8 @@ import { chatWebContextService, webSearchAvailable } from './services/chatWebCon
 import { publishTurnProgress, publishTurnDelta, publishTurnReasoning, turnProgressChannel, finishTurnWithProgress, failTurnWithProgress } from './utils/turnProgress.js';
 import { streamCompletion } from './utils/streamingCompletion.js';
 import { toProviderMessages } from './utils/chatMessageParts.js';
+import { attachReferencedImage } from './utils/imageReferral.js';
+import { shapeChatResponse } from './utils/chatResponseShape.js';
 import { estimateMessageTokens, getCreditCost } from './utils/creditCosts.js';
 import { deductCredits, refundCredits, logUsage as logCreditUsage } from './utils/creditTransactions.js';
 import { resolveEntitlements, gateMeta } from './utils/entitlementGate.js';
@@ -1818,130 +1820,19 @@ app.post('/api/chat/generate', databaseMiddleware, authMiddleware, async (req, r
              apiMessages.push(buildUntrustedProjectDataMessage(projectContext.contentBlocks));
         }
         
-        // <<< NEW: Intelligent Image Referral Logic >>>
-        if (messages.length >= 1 && !req.body.task) { // Only if not an explicit task like image generation/refinement
-            const currentUserMessageIndex = messages.length - 1;
-            const currentUserMessage = messages[currentUserMessageIndex];
-        
-            if (currentUserMessage.role === 'user' && currentUserMessage.parts && Array.isArray(currentUserMessage.parts)) {
-                const userTextPart = currentUserMessage.parts.find(p => p.type === 'text');
-                const userText = userTextPart ? userTextPart.text.toLowerCase() : "";
-                const userTextTrimmed = userText.trim();
-        
-                // Keywords for general image reference
-                const imageReferenceKeywords = [
-                    "that image", "the image", "this image", "an image",
-                    "that picture", "the picture", "this picture", "a picture",
-                    "the photo", "that photo", "this photo", "a photo",
-                    "the generated one", "the one you made", "the one you generated",
-                    "it looks", "about it", "draw it", "generate it", "regarding it",
-                    "what about that", "how about that", "make that", "change that",
-                    "the previous one", "that one", "referring to that", "related to that",
-                    "the cat", "the dog", "the car", // Add common nouns that might follow "the" or "that" when referring to an image subject
-                    "what's in the image", "describe the image", "tell me about the picture",
-                    "details about that", "more on that", "zoom in on that",
-                    "the one with the", "the image of the", "the picture of the"
-                ];
+        /*
+         * Re-attach a previously generated image when the user refers to it.
+         *
+         * 🔴 EXTRACTED to utils/imageReferral.js (2026-09-14) so /api/ai/chat/stream can serve
+         * chat turns without silently losing the behaviour. These 119 lines lived only here, and
+         * a route that lacks them answers "make that one bigger" as if no image existed — it
+         * still answers, which is why nothing would surface the loss.
+         *
+         * Proven equivalent to the inline version across 17 cases before the swap, including one
+         * that pins the 3-turn lookback bound specifically.
+         */
+        attachReferencedImage(messages, { skip: Boolean(req.body.task) });
 
-                // Short phrases/pronouns that, if an AI image was *just* shown, likely refer to it.
-                const immediateReferencePhrases = [
-                    "it", "this", "that", "these", "those", 
-                    "cool", "nice", "cute", "great", "awesome", "love it", "wow",
-                    "so cool", "very nice", "looks great", "how about that one",
-                    "what is it", "what's that", "tell me more"
-                ];
-        
-                let refersToImage = false;
-                let imageToAttach = null;
-                let associatedPromptText = null;
-
-                // Check for immediate reference first if an AI image was the last message
-                if (currentUserMessageIndex > 0) {
-                    const previousMessage = messages[currentUserMessageIndex - 1];
-                    if (previousMessage.role === 'model' && previousMessage.parts?.some(p => p.type === 'image')) {
-                        if (immediateReferencePhrases.some(phrase => userTextTrimmed === phrase || userText.includes(phrase))) {
-                             // More lenient check for immediateReferencePhrases, e.g. "what is it?" or "cool"
-                            if ( (userTextTrimmed.length < 20 && immediateReferencePhrases.includes(userTextTrimmed)) || 
-                                 immediateReferencePhrases.some(phrase => userText.includes(phrase)) ) {
-                                refersToImage = true;
-                                console.log(`   [ImageReferral] Detected immediate reference phrase ("${userTextTrimmed}") to preceding AI image.`);
-                            }
-                        }
-                    }
-                }
-
-                // If not an immediate reference, check general keywords
-                if (!refersToImage) {
-                    if (imageReferenceKeywords.some(keyword => userText.includes(keyword))) {
-                        refersToImage = true;
-                        console.log(`   [ImageReferral] Detected general image reference keyword in ("${userText.substring(0,50)}...")`);
-                    }
-                }
-                
-                // More nuanced check for "it" if not caught by immediate check (e.g., if there was intervening text)
-                if (!refersToImage && userText.includes("it")) {
-                    if (messages.length > 1) {
-                        for (let i = currentUserMessageIndex - 1; i >= Math.max(0, currentUserMessageIndex - 3); i--) { // Check last 3 messages
-                            const prevMessage = messages[i];
-                            if (prevMessage.role === 'model' && (prevMessage.parts?.some(p => p.type === 'image') || prevMessage.parts?.some(p => p.type === 'text' && p.text?.toLowerCase().includes("image")))) {
-                                refersToImage = true;
-                                console.log(`   [ImageReferral] Detected 'it' potentially referring to an image within recent history.`);
-                                break;
-                            }
-                        }
-                    }
-                }
-        
-                if (refersToImage) {
-                    console.log(`   [ImageReferral] User message ("${userText.substring(0,50)}...") considered to refer to an image. Searching for most recent AI image.`);
-                    for (let i = currentUserMessageIndex - 1; i >= 0; i--) {
-                        const prevMessage = messages[i];
-                        if (prevMessage.role === 'model' && prevMessage.parts && Array.isArray(prevMessage.parts)) {
-                            const aiImagePart = prevMessage.parts.find(p => p.type === 'image' && p.data && p.media_type);
-                            const aiTextPart = prevMessage.parts.find(p => p.type === 'text');
-        
-                            if (aiImagePart) {
-                                imageToAttach = {
-                                    type: 'image', 
-                                    media_type: aiImagePart.media_type,
-                                    data: aiImagePart.data
-                                };
-                                if (aiTextPart && aiTextPart.text) {
-                                    associatedPromptText = aiTextPart.text;
-                                }
-                                console.log(`   [ImageReferral] Found AI image in message at index ${i}.`);
-                                if (associatedPromptText) {
-                                     console.log(`   [ImageReferral] Associated prompt/text: "${associatedPromptText.substring(0,100)}"`);
-                                }
-                                break; 
-                            }
-                        }
-                    }
-
-                    if (imageToAttach) {
-                        if (!currentUserMessage.parts) currentUserMessage.parts = [];
-                        
-                        const imageAlreadyExists = currentUserMessage.parts.some(part =>
-                            part.type === 'image' && 
-                            part.data === imageToAttach.data && 
-                            part.media_type === imageToAttach.media_type
-                        );
-        
-                        if (!imageAlreadyExists) {
-                            currentUserMessage.parts.unshift(imageToAttach); // Add to the beginning
-                            console.log(`   [ImageReferral] Successfully prepended image to user's message parts.`);
-                        } else {
-                             console.log("   [ImageReferral] Image part (identical) already exists in current user message. Not re-adding.");
-                        }
-                    } else {
-                        console.log("   [ImageReferral] Referral detected, but no suitable AI image found in history to attach.");
-                    }
-                } else {
-                    console.log(`   [ImageReferral] User message ("${userText.substring(0,50)}...") does not seem to refer to an image. No image attached.`);
-                }
-            }
-        }
-        // <<< END: Intelligent Image Referral Logic >>>
 
         /*
          * Convert the client's parts[] history into OpenAI-shaped messages.
@@ -2201,200 +2092,24 @@ app.post('/api/chat/generate', databaseMiddleware, authMiddleware, async (req, r
 
         // --- START RESPONSE FORMATTING --- 
         let finalResponse = {};
-        const modelIdUsed = selectedModelId; // Use the requested ID
-        
-        // Check if the model is excluded from marker instructions
-        const modelsToExcludeMarkers = [
-            'anthropic/claude-3.5-sonnet',
-            'deepseek/deepseek-chat-v3-0324:free'
-        ];
-        const isModelExcluded = modelsToExcludeMarkers.some(excludedModel => selectedModelId.includes(excludedModel));
-        
-        // If model is excluded, treat as if reasoning is disabled regardless of effectiveReasoningState
-        const effectiveReasoningForResponse = effectiveReasoningState && !isModelExcluded;
-        
-        if (effectiveReasoningForResponse) {
-            console.log(`Handling response with effectiveReasoningState: TRUE for ${modelIdUsed}`);
-            // Reasoning was requested for this call.
-            // Check for special fields first (Qwen/Deepseek R1/Gemini Pro/Grok/Claude 3.7)
-            // Models that may return reasoning in a separate field
-            const modelProvidesSeparateReasoning = reasoningCapabilityForModel(selectedModelId) !== 'disabled';
-                
-            if (modelProvidesSeparateReasoning) {
-                const reasoningContent = data.choices?.[0]?.message?.reasoning;
-                const answerContent = outputText; // Uses the already cleaned outputText
-
-                if (reasoningContent) {
-                    console.log(`   -> Using separate 'reasoning' field from OpenRouter.`);
-                    
-                    try {
-                        // Initial processing: convert literal \n, assign to working vars
-                        let processedThinking = (reasoningContent || '').replace(/\\n/g, '\n');
-                        let processedAnswer = (data.choices?.[0]?.message?.content || '').replace(/\\n/g, '\n');
-
-                        // 1. Clean known malformed/standard think tags from processedThinking FIRST
-                        processedThinking = processedThinking
-                            .replace(/<\/\s*th\.\s*ink\s*>/gi, '') // For specific </th.\ink>
-                            .replace(/<\/\s*think\s*>/gi, '')      // For standard </think>
-                            .replace(/<\s*think\s*>/gi, '')         // For standard <think>
-                            .trim();
-
-                        // 2. Refined logic to separate thinking and answer
-                        const tempThinkingTrimmed = processedThinking.trim(); // Use already tag-cleaned thinking
-                        const tempAnswerTrimmed = processedAnswer.trim();
-
-                        if (tempAnswerTrimmed.length > 0 && tempThinkingTrimmed.endsWith(tempAnswerTrimmed)) {
-                            // Case 1: Answer from content field is present and is a suffix of thinking. Clean thinking.
-                            let potentialThinkingOnly = tempThinkingTrimmed.substring(0, tempThinkingTrimmed.length - tempAnswerTrimmed.length).trim();
-                            if (tempThinkingTrimmed !== tempAnswerTrimmed) { // Avoid emptying if thinking was *only* the answer
-                                processedThinking = potentialThinkingOnly;
-                                console.log(`   -> Cleaned duplicated answer (from content field) from thinking content.`);
-                            }
-                            // processedAnswer remains tempAnswerTrimmed (or rather, will be set from it)
-                        } else if (tempAnswerTrimmed.length === 0 && tempThinkingTrimmed.length > 0) {
-                            // Case 2: Answer from content field is empty, but thinking field has content.
-                            // Attempt to split thinking into actual_thinking and actual_answer (common Qwen pattern).
-                            const parts = tempThinkingTrimmed.split(/\n\n+/); // Split by 2 or more newlines
-                            if (parts.length > 1) {
-                                const potentialAnswerFromThinking = parts.pop().trim(); // Last part is potential answer
-                                const potentialThinkingFromBody = parts.join('\n\n').trim(); // Rest is potential thinking
-
-                                if (potentialAnswerFromThinking.length > 0) {
-                                    processedThinking = potentialThinkingFromBody;
-                                    processedAnswer = potentialAnswerFromThinking; // Overwrite empty processedAnswer
-                                    console.log(`   -> Extracted answer from thinking field as content field was empty/irrelevant.`);
-                                } else {
-                                    // Splitting didn't yield a usable answer, thinking might be just thoughts.
-                                    console.log(`   -> Content field empty, and could not extract distinct answer from thinking. Thinking remains as is.`);
-                                }
-                            } else {
-                                 // No clear \n\n split, thinking might be just thoughts.
-                                 console.log(`   -> Content field empty, no clear \n\n split in thinking. Thinking remains as is.`);
-                            }
-                        }
-                        // If none of the above, processedThinking and processedAnswer retain their current values.
-
-                        // 3. Apply other specific cleanups (quotes, leading backslash)
-                        // These apply to the potentially modified processedThinking and processedAnswer
-                        processedThinking = processedThinking.replace(/^\\(\s*)/, '$1');
-                        processedAnswer = processedAnswer.replace(/^\\(\s*)/, '$1');
-                        
-                        // Clean specific leading quote pattern from answer (e.g., \"\n)
-                        if (processedAnswer.startsWith('\"\n')) { 
-                            processedAnswer = processedAnswer.substring(3);
-                        }
-                        // Remove general outer quotes from answer
-                        processedAnswer = processedAnswer.replace(/^\s*["'](.*)["']\s*$/s, '$1').trim();
-
-                        // 4. Apply final general cleaning (collapse newlines, final trim, markdown emphasis)
-                        let finalThinking = cleanTextContent(processedThinking);
-                        let finalAnswer = cleanTextContent(processedAnswer);
-                        
-                        // Validate that we have meaningful content after processing
-                        if (!finalThinking || finalThinking.trim().length === 0) {
-                            console.warn(`   -> WARNING: Thinking content became empty after processing, falling back to raw reasoning`);
-                            finalThinking = reasoningContent.trim();
-                        }
-                        
-                        if (!finalAnswer || finalAnswer.trim().length === 0) {
-                            console.warn(`   -> WARNING: Answer content became empty after processing, falling back to raw content`);
-                            finalAnswer = (data.choices?.[0]?.message?.content || '').trim();
-                        }
-                        
-                        console.log("   -> Final Qwen/DS-R1 thinking to send:", finalThinking);
-                        console.log("   -> Final Qwen/DS-R1 answer to send:", finalAnswer);
-                        
-                        finalResponse = { 
-                            thinking: finalThinking,
-                            answer: finalAnswer,
-                            modelIdUsed: modelIdUsed,
-                            reasoningProcessed: true  // Indicate that reasoning was processed
-                        };
-                    } catch (processingError) {
-                        console.error(`   -> ERROR processing reasoning field for ${modelIdUsed}:`, processingError);
-                        console.log(`   -> Falling back to raw text due to processing error`);
-                        
-                        // Fallback to raw text when reasoning processing fails
-                        finalResponse = { 
-                            text: outputText.trim(), 
-                            modelIdUsed: modelIdUsed, 
-                            reasoningProcessed: false,
-                            error: "reasoning_processing_failed"
-                        };
-                    }
-                } else {
-                    // Model *should* provide reasoning field but didn't. Fallback to raw text.
-                    console.warn(`   -> ${modelIdUsed} did not provide 'reasoning' field. Sending raw text.`);
-                    
-                    // Enhanced error handling for Qwen3 models
-                    if (selectedModelId.includes('qwen/')) {
-                        console.log(`   -> Qwen model detected, applying enhanced error handling`);
-                        
-                        // Check if outputText contains any content
-                        if (!outputText || outputText.trim().length === 0) {
-                            console.error(`   -> ERROR: Qwen model returned empty response`);
-                            finalResponse = { 
-                                text: "Error: The model returned an empty response. Please try again.", 
-                                modelIdUsed: modelIdUsed, 
-                                reasoningProcessed: false,
-                                error: "empty_response"
-                            };
-                        } else {
-                            // Try to extract meaningful content from the response
-                            let cleanedText = outputText.trim();
-                            
-                            // Remove any malformed XML tags that might be present
-                            cleanedText = cleanedText.replace(/<[^>]*>/g, '').trim();
-                            
-                            // Remove any remaining malformed thinking tags
-                            cleanedText = cleanedText
-                                .replace(/<\/\s*th\.\s*ink\s*>/gi, '')
-                                .replace(/<\/\s*think\s*>/gi, '')
-                                .replace(/<\s*think\s*>/gi, '')
-                                .trim();
-                            
-                            if (cleanedText.length === 0) {
-                                console.error(`   -> ERROR: Qwen model response became empty after cleaning`);
-                                finalResponse = { 
-                                    text: "Error: The model response could not be processed properly. Please try again.", 
-                                    modelIdUsed: modelIdUsed, 
-                                    reasoningProcessed: false,
-                                    error: "processing_failed"
-                                };
-                            } else {
-                                console.log(`   -> Successfully cleaned Qwen response, length: ${cleanedText.length}`);
-                                finalResponse = { 
-                                    text: cleanedText, 
-                                    modelIdUsed: modelIdUsed, 
-                                    reasoningProcessed: false 
-                                };
-                            }
-                        }
-                    } else {
-                        // Non-Qwen models use standard fallback
-                        finalResponse = { 
-                            text: outputText.trim(), 
-                            modelIdUsed: modelIdUsed, 
-                            reasoningProcessed: false 
-                        };
-                    }
-                }
-            } else {
-                 // Model doesn't use separate fields (Gemini, Grok, OpenAI, etc.)
-                 // Send the raw text, frontend parser will handle markers.
-                 console.log(`   -> Model uses markers. Sending raw text for frontend parsing.`);
-                 finalResponse = { text: outputText.trim(), modelIdUsed: modelIdUsed, reasoningProcessed: true }; // outputText is already cleaned
-            }
-        } else {
-             // Reasoning was FALSE for this call OR model is excluded from reasoning.
-             if (effectiveReasoningState && isModelExcluded) {
-                 console.log(`Handling response with effectiveReasoningState: TRUE for ${modelIdUsed} - BUT model is excluded from marker instructions, treating as non-reasoning response`);
-             } else {
-                 console.log(`Handling response with effectiveReasoningState: FALSE for ${modelIdUsed}`);
-             }
-             // Send only the raw text. Frontend will not parse.
-             finalResponse = { text: outputText.trim(), modelIdUsed: modelIdUsed, reasoningProcessed: false }; // outputText is already cleaned
-        }
+        /*
+         * Shape the completion into the response the client expects.
+         *
+         * 🔴 EXTRACTED to utils/chatResponseShape.js (2026-09-14). These ~190 lines produced
+         * `answer` / `thinking` / `reasoningProcessed` / `modelIdUsed` and lived ONLY here, so
+         * /api/ai/chat/stream could not serve a chat turn without the client losing reasoning
+         * display, thinking panes and model attribution.
+         *
+         * Moved verbatim, not retyped: every branch is model-specific handling earned against a
+         * real model behaving badly. Proven equivalent across 12 cases before the swap.
+         */
+        const modelIdUsed = selectedModelId;
+        finalResponse = shapeChatResponse({
+            data,
+            outputText,
+            selectedModelId,
+            effectiveReasoningState,
+        });
         // --- END RESPONSE FORMATTING --- 
 
         // <<< START: ADD searchInfo processing for annotations >>>
