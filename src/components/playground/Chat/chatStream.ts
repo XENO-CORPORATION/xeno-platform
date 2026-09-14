@@ -182,6 +182,64 @@ export function applyChatStreamEvent(
 }
 
 /**
+ * Which endpoint serves this turn.
+ *
+ * 🔴 The two routes are NOT interchangeable, and the split is not arbitrary.
+ *
+ * `/api/ai/chat/stream` serves a CHAT TURN: text, tools, project grounding, citations. It
+ * streams tokens and emits a terminal `result` frame carrying the same fields the other
+ * route returns, built by the same six shared modules.
+ *
+ * `/api/chat/generate` keeps the tasks that are NOT chat turns. `task: 'image'` is a
+ * self-contained handler — it writes a file to disk, registers a library item and logs
+ * credits, then returns before the chat path runs at all. `refine_image_prompt` is a
+ * one-shot transformation whose reply is a prompt, not an answer. Neither produces an
+ * assistant message, and both return fields (`libraryItemId`, `libraryContentUrl`,
+ * `refinedPromptText`) that a chat turn cannot.
+ *
+ * ⚠️ Routing by task rather than by capability is deliberate. "Does this turn need
+ * streaming?" is a judgement that would drift; "is this an image task?" is a fact on the
+ * request. A wrong answer here sends an image generation to a route that cannot persist it.
+ */
+export type ChatTask = 'image' | 'refine_image_prompt' | undefined;
+
+export const CHAT_STREAM_ENDPOINT = '/api/ai/chat/stream';
+
+/**
+ * @internal The endpoint `endpointForTask` returns for image tasks. Exported so the routing
+ * test can assert WHERE an image task goes by name rather than re-typing the path — a test
+ * that hardcodes the string would keep passing if this value changed, which is the one
+ * mistake that matters here (an image generation routed to a route that cannot persist it).
+ * No `src/` module imports it; the component only ever compares against CHAT_STREAM_ENDPOINT.
+ */
+export const CHAT_GENERATE_ENDPOINT = '/api/chat/generate';
+
+export const endpointForTask = (task: ChatTask): string =>
+  (task === 'image' || task === 'refine_image_prompt'
+    ? CHAT_GENERATE_ENDPOINT
+    : CHAT_STREAM_ENDPOINT);
+
+/**
+ * The streaming route's request shape.
+ *
+ * ⚠️ It takes `model`, not `selectedModelId`, and `reasoning`, not
+ * `effectiveReasoningState` — the names differ because that route predates the chat client
+ * and is also an API surface for callers sending OpenAI-shaped requests. Translating here,
+ * in one place, is what keeps the component from carrying two payload shapes.
+ */
+export const streamRequestBody = (payload: Record<string, any>): Record<string, any> => ({
+  model: payload.selectedModelId,
+  messages: payload.messages,
+  reasoning: payload.effectiveReasoningState,
+  systemPrompt: payload.systemPrompt,
+  conversationId: payload.conversationId,
+  projectId: payload.projectId,
+  chatSurface: payload.chatSurface,
+  temperature: payload.temperature,
+  max_tokens: payload.max_tokens,
+});
+
+/**
  * Read `/api/chat/generate` when progress frames were requested.
  *
  * The route answers ONE of two ways, and this hides the difference from the caller:
@@ -284,6 +342,63 @@ async function* readNamedEvents(
   } finally {
     try { reader.releaseLock(); } catch { /* already released */ }
   }
+}
+
+/**
+ * Read a turn from `/api/ai/chat/stream`.
+ *
+ * Returns the SAME object `/api/chat/generate` returns, so the ~400 downstream lines in
+ * `fetchAiResponse` are untouched — they are keyed off that shape, and a second, subtly
+ * different payload would fork all of it.
+ *
+ * ⚠️ This route frames differently from the other one: bare `data:` lines carrying a
+ * `type`, rather than `event:`-named frames. Two readers, deliberately — guessing the
+ * framing from the content is how a parser silently starts dropping a frame kind.
+ *
+ * 🔴 The final text comes from the `result` frame, never from accumulated deltas. The
+ * server does not block on back-pressure (pausing the read would hold a credit hold open on
+ * a slow client), so a dropped delta must not be able to truncate the stored message.
+ * Deltas are for the eye; the result is the record.
+ */
+export async function readStreamedTurn(
+  response: Response,
+  onProgress?: (event: ChatStreamEvent) => void,
+): Promise<any> {
+  if (!response.body) throw new Error('The response had no body.');
+
+  let result: any = null;
+  let failure: string | null = null;
+
+  for await (const event of readChatStream(response.body)) {
+    switch (event.type) {
+      case 'delta':
+      case 'reasoning':
+      case 'search_start':
+      case 'search_result':
+      case 'search_error':
+        onProgress?.(event);
+        break;
+      case 'error':
+        failure = event.message || 'The response failed.';
+        break;
+      default:
+        // `result` is not in ChatStreamEvent — it is this route's terminal payload.
+        if ((event as any).type === 'result') result = event;
+        break;
+    }
+  }
+
+  /*
+   * A streamed failure arrives with HTTP 200 — the status was fixed the moment the first
+   * frame went out — so it must become a thrown Error for the caller's existing catch.
+   * Without this it reads as success with an empty body.
+   */
+  if (failure) throw new Error(failure);
+  if (!result) throw new Error('The response ended before an answer arrived.');
+
+  // Drop the frame's own discriminator so the caller sees exactly the generate-route shape.
+  const { type: _type, ...data } = result;
+  return data;
 }
 
 /** Merge source lists, keeping first-seen order and one entry per URL. */
