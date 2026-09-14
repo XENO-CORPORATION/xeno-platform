@@ -6627,7 +6627,16 @@ interface QueueState {
             }
         });
     }
-    console.log('[ChatWithLLM] Sending payload to /api/chat/generate (images/files truncated):', JSON.stringify(payloadForLogging));
+    /*
+     * 🔴 The endpoint is DERIVED, never typed. This line read "Sending payload to
+     * /api/chat/generate" for a turn that went to /api/ai/chat/stream, because the string was
+     * hardcoded and the client migrated around it. On 2026-09-14 that log was the first
+     * evidence in a live incident and it pointed at the wrong route — the diagnosis only got
+     * back on track because the error text existed in one file and not the other.
+     *
+     * A debug line that names a route must get it from the same expression the fetch uses.
+     */
+    console.log(`[ChatWithLLM] Sending payload to ${endpointForTask(taskArg)} (images/files truncated):`, JSON.stringify(payloadForLogging));
 
     const modelsSupportingSearch = [
         'google/gemini-2.5-flash-preview-05-20',
