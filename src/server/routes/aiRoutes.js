@@ -19,6 +19,7 @@ import { upstreamFetch } from '../services/upstream.js';
 import { streamToolLoop, addUsage, TOOL_BUDGETS } from '../utils/chatToolLoop.js';
 import { ToolCallAccumulator } from '../utils/streamingToolCalls.js';
 import { chatWebContextService, webSearchAvailable } from '../services/chatWebContext.js';
+import { toProviderMessages, looksLikePartsShape } from '../utils/chatMessageParts.js';
 
 const router = express.Router();
 
@@ -356,23 +357,30 @@ router.post('/chat', requireEntitlement('canUse'), async (req, res) => {
  *
  * byok/inhouse are 501 for now.
  *
- * ⚠️ @unwired — NO CLIENT CALLS THIS ROUTE YET (measured 2026-09-14, repo-wide).
+ * ⚠️ @unwired — NO CLIENT CALLS THIS ROUTE YET (re-measured 2026-09-14, repo-wide).
  *
- * The chat UI posts to `/api/chat/generate`, the buffering endpoint. Nothing in `src/`
- * outside this file mentions `/api/ai/chat/stream`, so everything here — including the
- * tool events above — is currently unreachable from the product.
+ * The chat UI posts to `/api/chat/generate`. Nothing in `src/` calls this route, so
+ * everything here — including the tool events above — is still unreachable from the product.
  *
- * Intended consumer: `src/components/playground/Chat/ChatWithLLM.tsx`, whose send path is
- * built around one awaited `fetch` that returns a finished message. Adopting the stream is
- * a client-side change of a different shape (an SSE reader, incremental message state, and
- * a render for the search phases), not a server one — so it is deliberately a separate
- * piece of work rather than something smuggled into this commit.
+ * 🔴 BUT THE BLOCKER THAT KEPT IT UNREACHABLE IS GONE, and a declaration is only honest
+ * while its reason holds. It previously said adopting this route was purely a client-side
+ * change. That was WRONG, and measuring the two endpoints is what showed it: this route
+ * forwarded `messages` upstream untouched, while the chat client sends its own
+ * `{ role, parts[] }` shape with images, PDFs and text attachments. Pointing the client
+ * here would have SILENTLY DROPPED every attachment — a plausible answer still coming back
+ * about a picture the model never saw.
  *
- * 🔴 Until that lands, the metering below is exercised only by tests. That is the reason
- * this marker exists rather than a comment: `scripts/chat-stream-reachable.test.mjs` fails
- * if this declaration is deleted while no consumer exists, AND fails if a consumer is added
- * and this note is left behind. A money path silently documented as unreachable while live
- * traffic bills through it would be the worse of the two lies.
+ * That is fixed: `finalMessages` now converts through `toProviderMessages`, the SAME
+ * implementation `/api/chat/generate` uses (extracted, not copied). The remaining gap is
+ * genuinely client-side now — an SSE reader, incremental message state, and a render for
+ * the search phases — plus the image-REFERRAL heuristic, which still lives in
+ * `/api/chat/generate` and decides when a past image is re-attached to the current turn.
+ *
+ * ⚠️ Until a consumer lands, the metering below is exercised only by tests. That is why
+ * this is a marker and not a comment: `scripts/chat-stream-reachable.test.mjs` fails if it
+ * is deleted while no consumer exists, AND fails if a consumer is added and it is left
+ * behind. A money path documented as unreachable while live traffic bills through it would
+ * be the worse of the two lies.
  */
 router.post('/chat/stream', requireEntitlement('canUse'), async (req, res) => {
   const {
@@ -437,9 +445,24 @@ router.post('/chat/stream', requireEntitlement('canUse'), async (req, res) => {
 
   // conversationId is accepted for client bookkeeping/telemetry; the gateway is stateless.
   void conversationId;
-  const finalMessages = systemPrompt
-    ? [{ role: 'system', content: systemPrompt }, ...messages]
-    : messages;
+
+  /*
+   * Accept BOTH message shapes.
+   *
+   * 🔴 This is what made the route unusable by the product. The XENO chat client sends its
+   * own `{ role, parts[] }` shape carrying images, PDFs and text attachments; this route
+   * forwarded `messages` straight upstream, so pointing the client at it would have silently
+   * DROPPED every attachment — not failed, dropped, with a plausible answer still coming
+   * back about a picture the model never saw.
+   *
+   * `toProviderMessages` is the same implementation `/api/chat/generate` uses (extracted,
+   * not copied — two copies of this conversion would disagree invisibly). API clients that
+   * already send OpenAI-shaped messages are untouched: `looksLikePartsShape` only converts
+   * when at least one message actually carries `parts`.
+   */
+  const finalMessages = looksLikePartsShape(messages)
+    ? toProviderMessages(messages, { systemPrompt })
+    : (systemPrompt ? [{ role: 'system', content: systemPrompt }, ...messages] : messages);
 
   const reqIdSeed = requestId || req.headers['x-request-id'] || randomUUID();
   const estInputTokens = estimateMessageTokens(finalMessages);
