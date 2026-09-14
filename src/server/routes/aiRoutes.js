@@ -20,6 +20,8 @@ import { streamToolLoop, addUsage, TOOL_BUDGETS } from '../utils/chatToolLoop.js
 import { ToolCallAccumulator } from '../utils/streamingToolCalls.js';
 import { chatWebContextService, webSearchAvailable } from '../services/chatWebContext.js';
 import { toProviderMessages, looksLikePartsShape } from '../utils/chatMessageParts.js';
+import { shapeChatResponse } from '../utils/chatResponseShape.js';
+import { searchInfoFromAnnotations } from '../utils/searchInfo.js';
 
 const router = express.Router();
 
@@ -733,6 +735,15 @@ router.post('/chat/stream', requireEntitlement('canUse'), async (req, res) => {
    */
   const sourcesSeen = [];
   let sawSearch = false;
+  /*
+   * The full answer, accumulated for the terminal `result` frame.
+   *
+   * ⚠️ The deltas are what the user WATCHES; this is what the client STORES. They must be
+   * built from the same bytes — accumulating here rather than asking the client to stitch
+   * deltas means a dropped frame cannot truncate the saved message.
+   */
+  let assembledText = '';
+  let assembledAnnotations = null;
 
   try {
     if (!toolSurface) {
@@ -742,6 +753,7 @@ router.post('/chat/stream', requireEntitlement('canUse'), async (req, res) => {
         if (clientGone) break;
         if (event.type === 'delta') {
           outputChars += event.text.length;
+          assembledText += event.text;
           await send({ type: 'delta', text: event.text });
         } else if (event.type === 'reasoning') {
           await send({ type: 'reasoning', text: event.text });
@@ -798,6 +810,7 @@ router.post('/chat/stream', requireEntitlement('canUse'), async (req, res) => {
         switch (event.type) {
           case 'delta':
             outputChars += event.text.length;
+            assembledText += event.text;
             await send({ type: 'delta', text: event.text });
             break;
           case 'reasoning':
@@ -890,6 +903,44 @@ router.post('/chat/stream', requireEntitlement('canUse'), async (req, res) => {
     creditsSettled,
     // Present only on a turn that actually searched, so an ordinary chat is unchanged.
     ...(sawSearch ? { upstreamCalls: meters.length } : {}),
+  });
+
+  /*
+   * ── The chat response fields ─────────────────────────────────────────────────────────
+   *
+   * 🔴 THIS IS WHAT MADE THE ROUTE UNUSABLE BY THE PRODUCT. Measured 2026-09-14: the chat
+   * client reads 13 fields off a turn and this route produced 5, so adopting it meant losing
+   * reasoning display, thinking panes, citations and model attribution — silently, since the
+   * answer still arrived.
+   *
+   * Every one now comes from the SAME module `/api/chat/generate` uses. Extracted rather than
+   * copied: two implementations of these rules would disagree invisibly, because both still
+   * return an answer. A client can read this frame exactly as it reads that route's JSON.
+   *
+   * ⚠️ Sent as a terminal frame beside the deltas, not instead of them. The deltas are what
+   * the user watches; this is the record the client stores.
+   */
+  const shaped = shapeChatResponse({
+    data: { choices: [{ message: { content: assembledText } }] },
+    outputText: assembledText,
+    selectedModelId: model,
+    effectiveReasoningState: Boolean(reasoning),
+  });
+
+  // Citations, when the provider grounded the answer. Absent rather than empty — an empty
+  // shell renders as a sources header with nothing under it.
+  const annotationSearchInfo = searchInfoFromAnnotations({
+    choices: [{ message: { annotations: assembledAnnotations } }],
+  });
+
+  await send({
+    type: 'result',
+    ...shaped,
+    ...(annotationSearchInfo ? { searchInfo: annotationSearchInfo } : {}),
+    // The tool loop's own sources, which are a different thing from provider annotations:
+    // these are pages XENO fetched, not pages the model cited.
+    ...(sourcesSeen.length ? { toolSources: projectSources(sourcesSeen) } : {}),
+    usage: { prompt_tokens: totalInput, completion_tokens: totalOutput, total_tokens: totalInput + totalOutput },
   });
   await send({ type: 'done' });
   endStream();
