@@ -289,3 +289,112 @@ test('a result frame split across chunks still parses', async () => {
   const data = await readGenerateResponse(sseResponse([full.slice(0, cut), full.slice(cut), 'data: [DONE]\n\n']));
   assert.deepEqual(data, payload);
 });
+
+// ─── Task routing: which endpoint serves this turn ────────────────────────────────────
+
+/**
+ * 🔴 A wrong answer here sends an image generation to a route that cannot persist it.
+ *
+ * The two endpoints are not interchangeable. /api/ai/chat/stream serves a CHAT TURN — text,
+ * tools, project grounding, citations. /api/chat/generate keeps `task: 'image'` and
+ * `refine_image_prompt`, which are not chat turns: the image task writes a file, registers a
+ * library item and logs credits before the chat path runs at all, and both return fields
+ * (`libraryItemId`, `libraryContentUrl`, `refinedPromptText`) a chat turn cannot produce.
+ *
+ * Mutation-checked 2026-09-14:
+ *   route image tasks to the stream endpoint  -> the image test fails
+ *   drop projectId from streamRequestBody     -> the project test fails
+ */
+test('🔴 image tasks stay on the route that can persist them', async () => {
+  const { endpointForTask, CHAT_GENERATE_ENDPOINT, CHAT_STREAM_ENDPOINT } =
+    await import('../src/components/playground/Chat/chatStream.ts');
+
+  assert.equal(endpointForTask('image'), CHAT_GENERATE_ENDPOINT,
+    'image generation writes a file, registers a library item and logs credits — the ' +
+    'streaming route does none of that and would drop the result on the floor');
+  assert.equal(endpointForTask('refine_image_prompt'), CHAT_GENERATE_ENDPOINT,
+    'refinement returns a PROMPT, not an assistant message');
+
+  assert.equal(endpointForTask(undefined), CHAT_STREAM_ENDPOINT, 'an ordinary chat turn streams');
+  assert.equal(endpointForTask(''), CHAT_STREAM_ENDPOINT, 'an empty task is still a chat turn');
+});
+
+test('🔴 the streaming request carries everything the turn needs', async () => {
+  const { streamRequestBody } = await import('../src/components/playground/Chat/chatStream.ts');
+
+  const body = streamRequestBody({
+    selectedModelId: 'openai/gpt-5.5',
+    messages: [{ role: 'user', parts: [{ type: 'text', text: 'hi' }] }],
+    effectiveReasoningState: true,
+    systemPrompt: 'You are XENO.',
+    conversationId: 'c1',
+    projectId: 'p1',
+    chatSurface: 'research',
+  });
+
+  // The names differ because that route predates this client and also serves OpenAI-shaped
+  // API callers. Translating in ONE place is what keeps two payload shapes out of the component.
+  assert.equal(body.model, 'openai/gpt-5.5', 'the route takes `model`, not `selectedModelId`');
+  assert.equal(body.reasoning, true, 'and `reasoning`, not `effectiveReasoningState`');
+
+  // Each of these silently loses a capability if dropped.
+  assert.equal(body.projectId, 'p1', 'without it a project turn loses its grounding AND its audit record');
+  assert.equal(body.conversationId, 'c1', 'a project turn cannot be recorded without one');
+  assert.equal(body.chatSurface, 'research', 'the surface is what picks the tool budget server-side');
+  assert.ok(Array.isArray(body.messages), 'the parts[] shape travels as-is; the server converts it');
+});
+
+test('the streamed turn returns the SAME object shape as the JSON route', async () => {
+  const { readStreamedTurn } = await import('../src/components/playground/Chat/chatStream.ts');
+
+  const frames = [
+    frame({ type: 'delta', text: 'Par' }),
+    frame({ type: 'delta', text: 'is' }),
+    frame({
+      type: 'result',
+      answer: 'Paris',
+      thinking: 'considering',
+      reasoningProcessed: true,
+      modelIdUsed: 'deepseek/deepseek-r1',
+      projectContextId: 'rec-1',
+      usage: { total_tokens: 15 },
+    }),
+    'data: [DONE]\n\n',
+  ];
+  const response = new Response(
+    new ReadableStream({
+      start(c) { for (const f of frames) c.enqueue(new TextEncoder().encode(f)); c.close(); },
+    }),
+    { status: 200, headers: { 'content-type': 'text/event-stream' } },
+  );
+
+  const seen = [];
+  const data = await readStreamedTurn(response, (e) => seen.push(e.type));
+
+  assert.equal(data.answer, 'Paris');
+  assert.equal(data.reasoningProcessed, true);
+  assert.equal(data.projectContextId, 'rec-1', 'project linkage must survive the transport');
+  assert.ok(!('type' in data),
+    'the frame discriminator must not leak into the payload — downstream reads a response ' +
+    'object, not an event');
+  assert.deepEqual(seen, ['delta', 'delta'], 'deltas reach the UI as they arrive');
+});
+
+test('🔴 a streamed error becomes a thrown Error, not a silent empty answer', async () => {
+  const { readStreamedTurn } = await import('../src/components/playground/Chat/chatStream.ts');
+  const response = new Response(
+    new ReadableStream({
+      start(c) {
+        c.enqueue(new TextEncoder().encode(frame({ type: 'delta', text: 'partial' })));
+        c.enqueue(new TextEncoder().encode(frame({ type: 'error', error: 'inference_error', message: 'The inference stream failed.' })));
+        c.close();
+      },
+    }),
+    { status: 200, headers: { 'content-type': 'text/event-stream' } },
+  );
+  await assert.rejects(
+    () => readStreamedTurn(response), /inference stream failed/,
+    'a streamed failure arrives with HTTP 200 — the status was fixed when the first frame ' +
+    'went out — so without throwing it reads as success with an empty body',
+  );
+});

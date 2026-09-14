@@ -44,7 +44,7 @@ import {
   getChatProfile,
 } from './chatSkillsLibrary';
 import { buildChatSystemPrompt, CHAT_MODE_PLACEHOLDERS, modeUsesXenoSearch, type ChatMode } from './chatModeConfig';
-import { readGenerateResponse } from './chatStream';
+import { readGenerateResponse, readStreamedTurn, endpointForTask, streamRequestBody, CHAT_STREAM_ENDPOINT } from './chatStream';
 import { reasoningCapabilityForModel } from '@/server/lib/chatModelCapabilities.js';
 import CodeBlockWithHeader from './CodeBlockWithHeader';
 import ThinkingAnimation, { ThinkingAnimationInline } from './ThinkingAnimation';
@@ -6646,26 +6646,39 @@ interface QueueState {
     try {
         const reasoningStateForThisCall = effectiveReasoningState;
 
-        const response = await fetch('/api/chat/generate', {
+        /*
+         * Route by TASK, not by capability.
+         *
+         * A chat turn goes to /api/ai/chat/stream: real token streaming, tools, project
+         * grounding and citations, all from the six modules both routes share.
+         *
+         * `task: 'image'` and `refine_image_prompt` stay on /api/chat/generate. They are not
+         * chat turns — the image task writes a file, registers a library item and logs
+         * credits before the chat path runs at all, and returns fields (`libraryItemId`,
+         * `libraryContentUrl`, `refinedPromptText`) a chat turn cannot produce.
+         *
+         * ⚠️ "Is this an image task?" is a FACT on the request. "Does this turn need
+         * streaming?" would be a judgement, and judgements drift — a wrong answer there sends
+         * an image generation to a route that cannot persist it.
+         */
+        const endpoint = endpointForTask(taskArg);
+        const isStreamedTurn = endpoint === CHAT_STREAM_ENDPOINT;
+
+        const response = await fetch(endpoint, {
             method: 'POST',
             /*
-             * Ask for progress frames.
-             *
-             * A tool turn can run several searches over a minute or more, and until this the
-             * client had NOTHING until it finished — so a working turn was indistinguishable
-             * from a hang. With this header the server publishes which query is running, as it
-             * runs, and still ends with the identical response object.
-             *
-             * ⚠️ `Accept` is a REQUEST for a representation, not a promise: the server streams
-             * only when it decides to, and `readGenerateResponse` checks the response's own
-             * content-type rather than assuming. That is what makes this safe against an older
-             * backend — it simply answers JSON and nothing here changes.
+             * `Accept` is a REQUEST for a representation, not a promise. Both readers check
+             * the RESPONSE before parsing, so an older backend that answers plain JSON still
+             * works and nothing here changes.
              */
             headers: withAuthHeaders({
                 'Content-Type': 'application/json',
                 Accept: 'text/event-stream, application/json',
             }),
-            body: JSON.stringify(payload),
+            // The streaming route names things differently (`model`, `reasoning`) because it
+            // predates this client and also serves OpenAI-shaped API callers. One translation,
+            // in one place, rather than two payload shapes in the component.
+            body: JSON.stringify(isStreamedTurn ? streamRequestBody(payload) : payload),
             signal: controller.signal, // Pass the signal to fetch
         });
 
@@ -6695,7 +6708,12 @@ interface QueueState {
          * a dropped frame must never be able to truncate what gets saved.
          */
         let streamedText = '';
-        const data = await readGenerateResponse(response, (event) => {
+        /*
+         * One handler, two transports. Both readers return the SAME object shape, so the ~400
+         * downstream lines below are keyed off one payload and never fork.
+         */
+        const readTurn = isStreamedTurn ? readStreamedTurn : readGenerateResponse;
+        const data = await readTurn(response, (event) => {
             if (event.type === 'search_start' && event.query) {
                 /*
                  * Show the live query on the existing thinking placeholder.

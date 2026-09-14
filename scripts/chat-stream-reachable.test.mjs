@@ -70,14 +70,45 @@ function clientFiles(dir = join(ROOT, 'src'), out = []) {
  */
 function findConsumers() {
   const hits = [];
-  for (const file of clientFiles()) {
-    const source = readFileSync(file, 'utf8')
+  /*
+   * ⚠️ A LITERAL IS NOT THE ONLY WAY TO CALL A ROUTE — found 2026-09-14, the day the client
+   * actually adopted this endpoint.
+   *
+   * The first version required the path inside a call: `fetch('/api/ai/chat/stream')`. The
+   * real consumer routes by task, so the path lives in an exported constant and the call is
+   * `fetch(endpoint)`. The gate saw no consumer, stayed green, and would have let the
+   * @unwired declaration be deleted OR left stale — it could no longer tell which.
+   *
+   * So a module that DEFINES the path counts as a consumer when something imports the
+   * constant it defines. Indirection is normal; a reachability check that only understands
+   * string literals measures coding style, not reachability.
+   */
+  const PATH = '/api/ai/chat/stream';
+  const files = clientFiles().map((file) => ({
+    file,
+    source: readFileSync(file, 'utf8')
       .replace(/\/\*[\s\S]*?\*\//g, '')
-      .replace(/^\s*\/\/.*$/gm, '');
-    // fetch('/api/ai/chat/stream'…), new EventSource("…"), axios.post(`…`)
-    if (/(fetch|EventSource|post|get|request)\s*\(\s*['"`][^'"`]*\/api\/ai\/chat\/stream/.test(source)) {
-      hits.push(file.slice(ROOT.length + 1));
+      .replace(/^\s*\/\/.*$/gm, ''),
+  }));
+
+  // Constants whose value IS the route, e.g. `export const CHAT_STREAM_ENDPOINT = '/api/...'`
+  const routeConstants = new Set();
+  for (const { source } of files) {
+    for (const m of source.matchAll(
+      new RegExp(`(?:export\\s+)?const\\s+([A-Za-z_$][\\w$]*)\\s*=\\s*['"\`]${PATH}['"\`]`, 'g'),
+    )) {
+      routeConstants.add(m[1]);
     }
+  }
+
+  for (const { file, source } of files) {
+    // Direct: fetch('/api/ai/chat/stream'…), new EventSource("…"), axios.post(`…`)
+    const direct = new RegExp(`(fetch|EventSource|post|get|request)\\s*\\(\\s*['"\`][^'"\`]*${PATH}`).test(source);
+    // Indirect: something IMPORTS the constant that holds the path.
+    const indirect = [...routeConstants].some((name) => (
+      new RegExp(`import\\s*\\{[^}]*\\b${name}\\b[^}]*\\}\\s*from`).test(source)
+    ));
+    if (direct || indirect) hits.push(file.slice(ROOT.length + 1));
   }
   return hits;
 }

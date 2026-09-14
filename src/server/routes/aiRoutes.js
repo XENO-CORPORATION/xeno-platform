@@ -361,23 +361,18 @@ router.post('/chat', requireEntitlement('canUse'), async (req, res) => {
  *
  * byok/inhouse are 501 for now.
  *
- * ⚠️ @unwired — NO CLIENT CALLS THIS ROUTE YET (re-measured 2026-09-14, repo-wide).
+ * ✅ WIRED 2026-09-14. `ChatWithLLM.tsx` routes every chat turn here; `task: 'image'` and
+ * `refine_image_prompt` stay on `/api/chat/generate` because they are not chat turns — the
+ * image task writes a file, registers a library item and logs credits before the chat path
+ * runs at all, and returns fields (`libraryItemId`, `libraryContentUrl`,
+ * `refinedPromptText`) a chat turn cannot produce.
  *
- * The chat UI posts to `/api/chat/generate`. Nothing in `src/` calls this route, so
- * everything here — including the tool events above — is still unreachable from the product.
- *
- * 🔴 BUT THE BLOCKER THAT KEPT IT UNREACHABLE IS GONE, and a declaration is only honest
- * while its reason holds. It previously said adopting this route was purely a client-side
- * change. That was WRONG, and measuring the two endpoints is what showed it: this route
- * forwarded `messages` upstream untouched, while the chat client sends its own
- * `{ role, parts[] }` shape with images, PDFs and text attachments. Pointing the client
- * here would have SILENTLY DROPPED every attachment — a plausible answer still coming back
- * about a picture the model never saw.
- *
- * That is fixed, and so is everything else the server owed. Six pieces of logic that lived
- * only in `/api/chat/generate` are now shared modules this route calls — the SAME
- * implementations, extracted rather than copied, because two copies of any of them would
- * disagree invisibly (each still returns an answer, just a worse one):
+ * 🔴 Getting here took six extractions, because the blocker was never the client. This
+ * route forwarded `messages` upstream untouched while the chat client sends its own
+ * `{ role, parts[] }` shape with images, PDFs and text attachments — adopting it earlier
+ * would have SILENTLY DROPPED every attachment, with a plausible answer still coming back
+ * about a picture the model never saw. Each of these lived only in the other route, and
+ * each fails QUIETLY when absent:
  *
  *   chatMessageParts     attachments survive — without it every image and PDF is dropped
  *   imageReferral        "make that one bigger" still sees the picture it refers to
@@ -386,20 +381,14 @@ router.post('/chat', requireEntitlement('canUse'), async (req, res) => {
  *   projectContextTurn   project grounding AND its audit record
  *   autoImageFallback    a picture instead of a blank reply when asked to draw
  *
- * ⚠️ `task: 'image'` and `refine_image_prompt` deliberately stay on `/api/chat/generate`.
- * They are not chat turns — the image task is a self-contained handler that writes files,
- * registers a library item and logs credits, and it returns before the chat path runs at
- * all. `libraryItemId` and `libraryContentUrl` are therefore image-task fields that a chat
- * turn cannot produce; they are not missing from here.
+ * They are EXTRACTED, not copied: two implementations of any of them would disagree
+ * invisibly, since both still return an answer.
  *
- * The remaining gap is genuinely client-side now: an SSE reader, incremental message state,
- * and a render for the search phases.
- *
- * ⚠️ Until a consumer lands, the metering below is exercised only by tests. That is why
- * this is a marker and not a comment: `scripts/chat-stream-reachable.test.mjs` fails if it
- * is deleted while no consumer exists, AND fails if a consumer is added and it is left
- * behind. A money path documented as unreachable while live traffic bills through it would
- * be the worse of the two lies.
+ * ⚠️ `scripts/chat-stream-reachable.test.mjs` now fails if this route loses its consumer
+ * while claiming to have one, and failed correctly the moment the consumer landed. Its
+ * detector had to learn that a route can be called through a CONSTANT, not only a string
+ * literal — it saw no consumer here at first, which is how a reachability check comes to
+ * measure coding style instead of reachability.
  */
 router.post('/chat/stream', requireEntitlement('canUse'), async (req, res) => {
   const {
