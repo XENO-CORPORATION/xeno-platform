@@ -34,7 +34,14 @@
  * stream helper rather than grow this one.
  */
 
-/** Header value a client sends to opt into progress frames. */
+/**
+ * Header value a client sends to opt into progress frames.
+ *
+ * @internal Read by `wantsTurnProgress` below and asserted by the turn-progress tests.
+ * Exported so the opt-in string has ONE definition rather than being retyped in the
+ * client and the gate — a literal duplicated across a protocol boundary is how the two
+ * sides come to disagree about what turns streaming on.
+ */
 export const TURN_PROGRESS_ACCEPT = 'text/event-stream';
 
 /**

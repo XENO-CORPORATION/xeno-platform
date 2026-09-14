@@ -104,17 +104,3 @@ export class ToolCallAccumulator {
     });
   }
 }
-
-/**
- * Rebuild the assistant message a non-streaming call would have returned.
- *
- * The tool loop replays the assistant's tool-call message verbatim before its results —
- * that is what lets the model see what it asked for. Streaming has no such message, so
- * it must be reconstructed from the accumulated parts, in exactly the shape the
- * non-streaming path produces, or the loop's two code paths diverge on the wire.
- */
-export const assistantMessageFromStream = ({ text, toolCalls }) => {
-  const message = { role: 'assistant', content: text || '' };
-  if (toolCalls?.length) message.tool_calls = toolCalls;
-  return message;
-};

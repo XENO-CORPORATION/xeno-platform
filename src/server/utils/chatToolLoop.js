@@ -286,20 +286,34 @@ export const iterationPlan = ({ searches, budget, tools }) => {
   return { capReached, offerTools: capReached ? [] : tools };
 };
 
-/** A tool result message, in the one shape both loops send back to the provider. */
+/**
+ * A tool result message, in the one shape both loops send back to the provider.
+ *
+ * @internal Exported so the buffering and streaming loops in this file share ONE definition
+ * of what a tool result looks like, and so tests can assert the shape directly. No other
+ * module imports it; the loops are the only callers.
+ */
 export const toolResultMessage = (toolCallId, payload) => ({
   role: 'tool',
   tool_call_id: toolCallId,
   content: JSON.stringify(payload),
 });
 
-/** The payload for a successful search — the same projection in both loops. */
+/**
+ * The payload for a successful search — the same projection in both loops.
+ *
+ * @internal Same reason as above: one definition shared by the two loops in this file.
+ */
 export const searchResultPayload = (query, sources) => ({
   query,
   sources: sources.map((s) => ({ title: s.title, url: s.url, snippet: s.snippet ?? s.text ?? '' })),
 });
 
-/** The payload when the budget is gone: say so, and tell the model what to do instead. */
+/**
+ * The payload when the budget is gone: say so, and tell the model what to do instead.
+ *
+ * @internal Shared by both loops in this file; not imported elsewhere.
+ */
 export const budgetExhaustedPayload = (searches) => ({
   error: 'search budget exhausted for this turn',
   searchesUsed: searches,
@@ -443,6 +457,9 @@ export async function* streamToolLoop({ messages, surface, turnId, streamModel, 
 
 /**
  * The assistant's tool-call message, rebuilt for replay.
+ *
+ * @internal Used by the streaming loop in this file. Exported for tests and for symmetry
+ * with the other message builders above; no other module imports it.
  *
  * It must go back to the provider verbatim before its tool results or the next request is
  * rejected for orphaned tool responses — and `content` must be a string even when the model
