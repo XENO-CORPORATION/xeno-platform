@@ -105,6 +105,40 @@ export function publishTurnProgress(res, progress) {
 }
 
 /**
+ * Publish one chunk of assistant text as it is generated.
+ *
+ * 🔴 Forwarded IMMEDIATELY, including on an iteration that will turn out to be a tool call:
+ * models narrate before searching ("Let me check the current figures"), and that text is
+ * part of the answer. Holding it until the turn resolves is what made a long turn feel dead.
+ *
+ * ⚠️ Deliberately NOT back-pressure aware. `res.write` returning false means the socket
+ * buffer is full, and the honest fix is to await 'drain' — but this is called from inside a
+ * metered upstream read, where pausing would hold a credit hold open on a slow client. A
+ * dropped frame costs a repaint; a stalled read costs money. The final `result` frame
+ * carries the complete text either way, so the client can always reconcile.
+ */
+export function publishTurnDelta(res, text) {
+  if (!res?.locals?.turnProgressOpen) return;
+  if (!text || res.destroyed || res.writableEnded) return;
+  try {
+    res.write(`event: delta\ndata: ${JSON.stringify({ text })}\n\n`);
+  } catch {
+    /* a dead socket must never fail a turn the user is being billed for */
+  }
+}
+
+/** Publish one chunk of reasoning, when the provider streams thinking separately. */
+export function publishTurnReasoning(res, text) {
+  if (!res?.locals?.turnProgressOpen) return;
+  if (!text || res.destroyed || res.writableEnded) return;
+  try {
+    res.write(`event: reasoning\ndata: ${JSON.stringify({ text })}\n\n`);
+  } catch {
+    /* as above */
+  }
+}
+
+/**
  * Finish a turn that opened a progress channel.
  *
  * Sends exactly the object `res.json(...)` would have sent, as a terminal `result` frame,
