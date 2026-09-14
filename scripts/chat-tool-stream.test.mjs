@@ -332,15 +332,46 @@ test('a surface with no budget never streams a tool', async () => {
   assert.deepEqual(offered, [], 'code has no budget, so it must be offered no tool');
 });
 
-test('past the cap the tool is WITHDRAWN, not merely discouraged', () => {
+test('🔴 past the cap the tool STAYS DECLARED; the cap is reported, not enforced by withdrawal', () => {
+  /*
+   * Withdrawing the declaration was "structural" in theory and produced EMPTY answers in
+   * production (2026-09-14): the reseller serving claude-opus-5 returns a bare stop when the
+   * model calls a tool the request did not declare. The budget is enforced in the tool
+   * result instead — see chat-tool-loop.test.mjs — so this pins only the two facts that
+   * remain iterationPlan's job: the cap is REPORTED the moment it is reached, and the tool
+   * list is never emptied.
+   */
   const budget = budgetFor('chat');
   const tools = [{ type: 'function' }];
   assert.deepEqual(
     iterationPlan({ searches: budget.maxSearches, budget, tools }),
-    { capReached: true, offerTools: [] },
-    'a model told "please stop" in prose often tries anyway; removing the declaration is structural',
+    { capReached: true, offerTools: tools },
+    'reaching the cap must be reported, and the declaration must stay — an omitted tool list is the shape that returns nothing',
   );
   assert.equal(iterationPlan({ searches: 0, budget, tools }).offerTools, tools);
+});
+
+test('🔴 the streamed final call keeps the tool and nudges for an answer', async () => {
+  let finalCall = null;
+  let calls = 0;
+  const events = await drain(streamToolLoop({
+    messages: [{ role: 'user', content: 'q' }],
+    surface: 'chat',
+    turnId: 't9b',
+    streamModel: ({ tools, messages, requestId }) => {
+      if (requestId.endsWith(':final')) { finalCall = { tools, last: messages.at(-1) }; return answerStream('final answer'); }
+      calls += 1;
+      return searchCallStream(`q${calls}`);
+    },
+    runSearch: async () => sources(),
+  }));
+  assert.ok(finalCall, 'a model that never stops must reach the final call');
+  assert.equal(finalCall.tools.length, 1, 'the final call must still declare the tool');
+  assert.equal(finalCall.last.role, 'user');
+  assert.match(finalCall.last.content, /budget .* used up/i);
+  const complete = events.find((e) => e.type === 'complete');
+  assert.equal(complete.cappedOut, true);
+  assert.equal(events.filter((e) => e.type === 'delta').map((e) => e.text).join('').slice(-12), 'final answer', 'the turn ends in an answer');
 });
 
 test('Research streams the deep depth', async () => {
