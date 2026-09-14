@@ -156,9 +156,8 @@ export async function runToolLoop({ messages, surface, turnId, callModel, runSea
      * been truncated. That is the caller's only signal that an answer may be incomplete, so a
      * false negative there is worse than no flag at all.
      */
-    const capReached = searches >= budget.maxSearches;
+    const { capReached, offerTools } = iterationPlan({ searches, budget, tools });
     if (capReached) cappedOut = true;
-    const offerTools = capReached ? [] : tools;
 
     onProgress?.({ phase: 'model', iteration: iterations });
     const response = await callModel({ messages: working, tools: offerTools, requestId });
@@ -184,27 +183,19 @@ export async function runToolLoop({ messages, surface, turnId, callModel, runSea
       if (name !== 'web_search') {
         // A tool we never declared. Answer it as a result rather than throwing: the model can
         // recover, and a hard failure here would lose a turn the user already paid for.
-        working.push({ role: 'tool', tool_call_id: id, content: JSON.stringify({ error: `unknown tool: ${name}` }) });
+        working.push(toolResultMessage(id, { error: `unknown tool: ${name}` }));
         continue;
       }
 
       if (searches >= budget.maxSearches) {
         cappedOut = true;
-        working.push({
-          role: 'tool',
-          tool_call_id: id,
-          content: JSON.stringify({
-            error: 'search budget exhausted for this turn',
-            searchesUsed: searches,
-            instruction: 'Answer now using what you already have, and say which parts are uncertain.',
-          }),
-        });
+        working.push(toolResultMessage(id, budgetExhaustedPayload(searches)));
         continue;
       }
 
       const args = parseToolArguments(call?.function?.arguments);
       if (!args.ok) {
-        working.push({ role: 'tool', tool_call_id: id, content: JSON.stringify({ error: args.error }) });
+        working.push(toolResultMessage(id, { error: args.error }));
         continue;
       }
 
@@ -215,14 +206,7 @@ export async function runToolLoop({ messages, surface, turnId, callModel, runSea
         const result = await runSearch({ query: args.query, depth: budget.depth });
         const found = Array.isArray(result?.sources) ? result.sources : [];
         sources.push(...found);
-        working.push({
-          role: 'tool',
-          tool_call_id: id,
-          content: JSON.stringify({
-            query: args.query,
-            sources: found.map((s) => ({ title: s.title, url: s.url, snippet: s.snippet ?? s.text ?? '' })),
-          }),
-        });
+        working.push(toolResultMessage(id, searchResultPayload(args.query, found)));
       } catch (error) {
         /*
          * ⚠️ A failed search is a RESULT, not an exception.
@@ -232,11 +216,7 @@ export async function runToolLoop({ messages, surface, turnId, callModel, runSea
          * with nothing the model could say about it. Handing the failure back lets it tell the
          * truth: the search ran and did not work.
          */
-        working.push({
-          role: 'tool',
-          tool_call_id: id,
-          content: JSON.stringify({ error: `search failed: ${error?.message || 'unknown error'}` }),
-        });
+        working.push(toolResultMessage(id, { error: `search failed: ${error?.message || 'unknown error'}` }));
       }
     }
   }
@@ -255,3 +235,240 @@ export async function runToolLoop({ messages, surface, turnId, callModel, runSea
   if (!finalMessage) throw new Error('upstream returned no message on the final call');
   return { message: finalMessage, iterations: iterations + 1, searches, sources, cappedOut };
 }
+
+/*
+ * ═══════════════════════════════════════════════════════════════════════════════════════
+ * STREAMING
+ *
+ * Same loop, inverted control. `runToolLoop` awaits a whole response per iteration; the
+ * streaming form yields EVENTS as they happen, so the client sees the query before the
+ * search runs and the prose as it is written.
+ *
+ * ## The shape, and why it is this shape
+ *
+ * Checked against how the three major platforms do it (2026-09-14) — they agree, which is
+ * a strong signal for a surface users already have expectations about:
+ *
+ *   Anthropic  server_tool_use (query streams as input_json_delta) -> pause ->
+ *              web_search_tool_result -> text with citations
+ *   OpenAI     output_item.added(web_search_call) -> .in_progress -> .searching ->
+ *              .completed -> output_item.done, citations as separate annotation events
+ *   Gemini     text, then groundingChunks + groundingSupports mapping spans to sources
+ *
+ * The invariant all three encode: a search is a PHASE TRANSITION THE USER CAN SEE, not a
+ * black box. Query visible before results, results before prose, citations attached to
+ * spans rather than dumped at the end. Our events mirror that, in our own vocabulary:
+ *
+ *   search_start  { iteration, query }                 <- the query, before the wait
+ *   search_result { iteration, query, sources, count } <- what came back
+ *   search_error  { iteration, query, code, message }  <- a RESULT, never a thrown turn
+ *   delta         { text }                             <- the answer, token by token
+ *
+ * ## 🔴 Why this is a separate function and not a flag on `runToolLoop`
+ *
+ * The two differ in CONTROL FLOW, not behaviour: one returns a value, the other yields a
+ * sequence. A `streaming: true` parameter would force every branch to do both, which is
+ * how two code paths silently stop agreeing. Instead the DECISIONS both paths share —
+ * which tools to offer, whether the cap is reached, what a tool result looks like — live
+ * in the helpers below and have exactly one implementation each.
+ * ═══════════════════════════════════════════════════════════════════════════════════════
+ */
+
+/**
+ * The per-iteration decision, shared by both loops.
+ *
+ * Past the cap the tool is WITHDRAWN rather than discouraged, and withdrawing it IS
+ * hitting the cap — `cappedOut` must be set here, not when the model next asks, because
+ * once the tool is gone it has nothing to ask with.
+ */
+export const iterationPlan = ({ searches, budget, tools }) => {
+  const capReached = searches >= budget.maxSearches;
+  return { capReached, offerTools: capReached ? [] : tools };
+};
+
+/** A tool result message, in the one shape both loops send back to the provider. */
+export const toolResultMessage = (toolCallId, payload) => ({
+  role: 'tool',
+  tool_call_id: toolCallId,
+  content: JSON.stringify(payload),
+});
+
+/** The payload for a successful search — the same projection in both loops. */
+export const searchResultPayload = (query, sources) => ({
+  query,
+  sources: sources.map((s) => ({ title: s.title, url: s.url, snippet: s.snippet ?? s.text ?? '' })),
+});
+
+/** The payload when the budget is gone: say so, and tell the model what to do instead. */
+export const budgetExhaustedPayload = (searches) => ({
+  error: 'search budget exhausted for this turn',
+  searchesUsed: searches,
+  instruction: 'Answer now using what you already have, and say which parts are uncertain.',
+});
+
+/**
+ * Run the loop, yielding events as they happen.
+ *
+ * @param {object}   o
+ * @param {object[]} o.messages     conversation so far, OpenAI shape
+ * @param {string}   o.surface      'chat' | 'research'
+ * @param {string}   o.turnId       stable id for THIS user turn (drives per-iteration requestIds)
+ * @param {function} o.streamModel  ({ messages, tools, requestId }) => AsyncIterable<
+ *                                    { type:'delta', text } | { type:'tool_calls', toolCalls } |
+ *                                    { type:'usage', usage }>
+ * @param {function} o.runSearch    ({ query, depth }) => { sources: [...] }
+ * @yields { type:'delta'|'search_start'|'search_result'|'search_error'|'usage'|'complete', … }
+ */
+export async function* streamToolLoop({ messages, surface, turnId, streamModel, runSearch }) {
+  const budget = budgetFor(surface);
+  const tools = toolsForSurface(surface);
+
+  const working = [...messages];
+  const sources = [];
+  let searches = 0;
+  let iterations = 0;
+  let cappedOut = false;
+  let lastUsage = null;
+
+  const maxIterations = budget.maxSearches + 1;
+
+  while (iterations < maxIterations) {
+    // Distinct per iteration (holds derive from requestId and are idempotent on it, so a
+    // reused id silently collides), deterministic so a retried turn reuses its holds.
+    const requestId = `${turnId}:${iterations}`;
+    const { capReached, offerTools } = iterationPlan({ searches, budget, tools });
+    if (capReached) cappedOut = true;
+
+    let text = '';
+    let toolCalls = [];
+
+    for await (const event of streamModel({ messages: working, tools: offerTools, requestId })) {
+      if (event.type === 'delta') {
+        /*
+         * 🔴 Forwarded IMMEDIATELY, including on an iteration that will turn out to be a
+         * tool call. Models narrate before searching ("Let me check the current figures")
+         * and that text is part of the answer — holding it back until the turn resolves
+         * is what made the buffered version feel like a hang.
+         */
+        text += event.text;
+        yield { type: 'delta', text: event.text };
+      } else if (event.type === 'tool_calls') {
+        toolCalls = event.toolCalls;
+      } else if (event.type === 'usage') {
+        // Usage accrues ACROSS iterations: each upstream call bills separately, so the
+        // caller needs the sum, not the last one.
+        lastUsage = addUsage(lastUsage, event.usage);
+        yield { type: 'usage', usage: event.usage };
+      }
+    }
+
+    iterations += 1;
+
+    if (toolCalls.length === 0) {
+      yield { type: 'complete', iterations, searches, sources, cappedOut, usage: lastUsage };
+      return;
+    }
+
+    working.push(assistantToolCallMessage(text, toolCalls));
+
+    for (const call of toolCalls) {
+      const name = call?.function?.name;
+      const id = call?.id;
+
+      if (name !== 'web_search') {
+        working.push(toolResultMessage(id, { error: `unknown tool: ${name}` }));
+        continue;
+      }
+
+      if (searches >= budget.maxSearches) {
+        cappedOut = true;
+        working.push(toolResultMessage(id, budgetExhaustedPayload(searches)));
+        continue;
+      }
+
+      const args = parseToolArguments(call?.function?.arguments);
+      if (!args.ok) {
+        working.push(toolResultMessage(id, { error: args.error }));
+        continue;
+      }
+
+      searches += 1;
+      // The query goes out BEFORE the search runs — this is the event that turns a silent
+      // wait into a visible one, and it is the whole reason for streaming this loop.
+      yield { type: 'search_start', iteration: iterations, query: args.query };
+
+      try {
+        const result = await runSearch({ query: args.query, depth: budget.depth });
+        const found = Array.isArray(result?.sources) ? result.sources : [];
+        sources.push(...found);
+        working.push(toolResultMessage(id, searchResultPayload(args.query, found)));
+        yield {
+          type: 'search_result',
+          iteration: iterations,
+          query: args.query,
+          count: found.length,
+          sources: found.map((s) => ({ title: s.title, url: s.url })),
+        };
+      } catch (error) {
+        // A failure is a RESULT on both channels: a tool message so the model can speak to
+        // it truthfully, and an event so the user sees the search was attempted and failed
+        // rather than watching it silently vanish.
+        const message = error?.message || 'unknown error';
+        working.push(toolResultMessage(id, { error: `search failed: ${message}` }));
+        yield {
+          type: 'search_error',
+          iteration: iterations,
+          query: args.query,
+          code: error?.code || 'web_context_unavailable',
+          message,
+        };
+      }
+    }
+  }
+
+  /*
+   * Out of iterations with the model still calling tools: one final pass with no tools, so
+   * the turn ends in an answer rather than in silence.
+   */
+  cappedOut = true;
+  for await (const event of streamModel({ messages: working, tools: [], requestId: `${turnId}:final` })) {
+    if (event.type === 'delta') yield { type: 'delta', text: event.text };
+    else if (event.type === 'usage') {
+      lastUsage = addUsage(lastUsage, event.usage);
+      yield { type: 'usage', usage: event.usage };
+    }
+  }
+  yield { type: 'complete', iterations: iterations + 1, searches, sources, cappedOut, usage: lastUsage };
+}
+
+/**
+ * The assistant's tool-call message, rebuilt for replay.
+ *
+ * It must go back to the provider verbatim before its tool results or the next request is
+ * rejected for orphaned tool responses — and `content` must be a string even when the model
+ * emitted no prose, because a null there is a validation error on several providers.
+ */
+export const assistantToolCallMessage = (text, toolCalls) => ({
+  role: 'assistant',
+  content: text || '',
+  tool_calls: toolCalls,
+});
+
+/**
+ * Sum usage across iterations.
+ *
+ * 🔴 A tool turn makes N upstream calls and EACH reports its own usage. Keeping only the
+ * last one under-reports a 10-search turn as if it were a single call — and usage is what
+ * the settle is computed from, so that is an under-BILL, not just a wrong number.
+ */
+export const addUsage = (total, next) => {
+  if (!next) return total;
+  if (!total) return { ...next };
+  const add = (a, b) => (Number(a) || 0) + (Number(b) || 0);
+  return {
+    ...total,
+    prompt_tokens: add(total.prompt_tokens, next.prompt_tokens),
+    completion_tokens: add(total.completion_tokens, next.completion_tokens),
+    total_tokens: add(total.total_tokens, next.total_tokens),
+  };
+};
