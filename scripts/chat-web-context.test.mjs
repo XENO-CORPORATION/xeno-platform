@@ -36,12 +36,13 @@ function harness({ scopes = REQUIRED_SCOPES, startStatus = 202 } = {}) {
     const body = init.body ? JSON.parse(init.body) : undefined;
     calls.push({ url: url.href, method: init.method || 'GET', headers: init.headers, body });
     if (url.pathname === '/v1/account') return json({ tokenId: 'token-1', tenantId: 'tenant-1', scopes, quota: {} });
-    if (url.pathname === '/v1/search-and-scrape') return json({
-      search: {
-        terminalReason: 'completed',
-        evidence: evidence('https://example.com/', 'search-evidence'),
-        items: [{ url: 'https://example.com/', title: 'Example', description: 'Public source', rank: 1, provider: 'brave' }],
-      },
+    if (url.pathname === '/v1/search') return json({
+      requestId: 'req-1',
+      terminalReason: 'completed',
+      evidence: evidence('https://example.com/', 'search-evidence'),
+      items: [{ url: 'https://example.com/', title: 'Example', description: 'Public source', rank: 1, provider: 'brave' }],
+    });
+    if (url.pathname === '/v1/batch-scrape') return json({
       job: { jobId: 'job-1', operation: 'batch-scrape', state: 'completed', completedPages: 1, failedPages: 0, excludedPages: 0 },
     }, startStatus);
     if (url.pathname === '/v1/jobs/job-1') return json({
@@ -84,7 +85,7 @@ const input = {
 test('search-and-fetch sends one provider-neutral public request and projects safe evidence', async () => {
   const { service, calls } = harness();
   const result = await service.searchAndFetch(input);
-  const start = calls.find((call) => call.url.endsWith('/v1/search-and-scrape'));
+  const start = calls.find((call) => call.url.endsWith('/v1/search'));
   assert.ok(start);
   assert.equal(start.body.purpose, 'xeno-chat-research');
   assert.equal(start.body.classification, 'public');
@@ -102,7 +103,7 @@ test('stable turn identity produces the same upstream idempotency key', async ()
   const { service, calls } = harness();
   await service.searchAndFetch(input);
   await service.searchAndFetch(input);
-  const starts = calls.filter((call) => call.url.endsWith('/v1/search-and-scrape'));
+  const starts = calls.filter((call) => call.url.endsWith('/v1/search'));
   assert.equal(starts.length, 2);
   assert.equal(starts[0].body.idempotencyKey, starts[1].body.idempotencyKey);
   assert.notEqual(starts[0].body.requestId, starts[1].body.requestId);
@@ -114,7 +115,7 @@ test('credentials without the complete Chat authority fail before search', async
     service.searchAndFetch(input),
     (error) => error instanceof ChatWebContextError && error.code === 'web_context_unavailable',
   );
-  assert.equal(calls.some((call) => call.url.endsWith('/v1/search-and-scrape')), false);
+  assert.equal(calls.some((call) => call.url.endsWith('/v1/search')), false);
 });
 
 test('production refuses a plaintext environment token and query bounds are enforced', async () => {
@@ -152,7 +153,7 @@ test('production reads the bearer credential from its mounted token file', async
       authorization.push(init.headers.authorization);
       return new URL(request).pathname === '/v1/account'
         ? json({ tenantId: 'tenant-1', scopes: REQUIRED_SCOPES })
-        : json({ search: { terminalReason: 'completed', items: [] } });
+        : json({ requestId: 'req-1', terminalReason: 'completed', items: [] });
     },
   });
   await service.searchAndFetch(input);
@@ -183,14 +184,15 @@ test('partial jobs preserve terminal counters and bound artifact text', async ()
   const fetchImpl = async (input) => {
     const url = new URL(input);
     if (url.pathname === '/v1/account') return json({ tenantId: 'tenant-1', scopes: REQUIRED_SCOPES });
-    if (url.pathname === '/v1/search-and-scrape') return json({
-      search: {
-        evidence: evidence('https://example.com/', 'search-partial'),
-        items: [
-          { url: 'https://example.com/', title: 'Completed', rank: 1, provider: 'brave' },
-          { url: 'http://insecure.example/', title: 'Discarded', rank: 2, provider: 'brave' },
-        ],
-      },
+    if (url.pathname === '/v1/search') return json({
+      requestId: 'req-1',
+      evidence: evidence('https://example.com/', 'search-partial'),
+      items: [
+        { url: 'https://example.com/', title: 'Completed', rank: 1, provider: 'brave' },
+        { url: 'http://insecure.example/', title: 'Discarded', rank: 2, provider: 'brave' },
+      ],
+    });
+    if (url.pathname === '/v1/batch-scrape') return json({
       job: { jobId: 'job-1', operation: 'batch-scrape', state: 'partial', completedPages: 1, failedPages: 1, excludedPages: 0 },
     }, 202);
     if (url.pathname === '/v1/jobs/job-1') return json({
@@ -226,11 +228,12 @@ test('polling stays deadline-bounded and a timed-out durable job is cancelled ex
   const fetchImpl = async (input, init = {}) => {
     const url = new URL(input);
     if (url.pathname === '/v1/account') return json({ tenantId: 'tenant-1', scopes: REQUIRED_SCOPES });
-    if (url.pathname === '/v1/search-and-scrape') return json({
-      search: {
-        evidence: evidence('https://example.com/', 'search-running'),
-        items: [{ url: 'https://example.com/', title: 'Example', rank: 1, provider: 'brave' }],
-      },
+    if (url.pathname === '/v1/search') return json({
+      requestId: 'req-1',
+      evidence: evidence('https://example.com/', 'search-running'),
+      items: [{ url: 'https://example.com/', title: 'Example', rank: 1, provider: 'brave' }],
+    });
+    if (url.pathname === '/v1/batch-scrape') return json({
       job: { jobId: 'job-1', operation: 'batch-scrape', state: 'running' },
     }, 202);
     if (url.pathname === '/v1/jobs/job-1' && (init.method || 'GET') === 'GET') {
@@ -316,8 +319,12 @@ test('deep Research uses the larger canonical budget and forwards exact progress
     const url = new URL(input);
     calls.push({ path: url.pathname, body: init.body ? JSON.parse(init.body) : undefined });
     if (url.pathname === '/v1/account') return json({ tenantId: 'tenant-1', scopes: REQUIRED_SCOPES });
-    if (url.pathname === '/v1/search-and-scrape') return json({
-      search: { evidence: evidence('https://example.com/', 'search-deep'), items: [] },
+    if (url.pathname === '/v1/search') return json({
+      requestId: 'req-1',
+      evidence: evidence('https://example.com/', 'search-deep'),
+      items: [{ url: 'https://example.com/', title: 'Example', rank: 1, provider: 'brave' }],
+    });
+    if (url.pathname === '/v1/batch-scrape') return json({
       job: { jobId: 'job-deep', operation: 'batch-scrape', state: 'queued' },
     }, 202);
     if (url.pathname === '/v1/jobs/job-deep') {
@@ -339,7 +346,7 @@ test('deep Research uses the larger canonical budget and forwards exact progress
     fetchImpl,
   });
   await service.searchAndFetch({ ...input, depth: 'deep', onProgress: (progress) => observed.push(progress) });
-  const submitted = calls.find((call) => call.path === '/v1/search-and-scrape');
+  const submitted = calls.find((call) => call.path === '/v1/search');
   assert.equal(submitted.body.budget.maxAttempts, 3);
   assert.equal(submitted.body.budget.maxConcurrency, 4);
   assert.equal(observed.length, 2);
