@@ -296,8 +296,24 @@ export function createChatWebContextService({
   researchBudgets = RESEARCH_BUDGETS,
   sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
   random = Math.random,
+  logger = console,
 } = {}) {
   let accountCache = null;
+
+  /**
+   * 🔴 A degrade must be VISIBLE to us, not only to the user.
+   *
+   * Found 2026-09-14: the page-read job was failing on most real sites, every such turn
+   * quietly degraded to snippets, and nothing anywhere said so — the same silent-catch shape
+   * as the `void error` that hid the Opus 5 temperature 400 the same morning. The user got a
+   * thinner answer and we got no signal at all.
+   *
+   * ⚠️ Request id, reason and counters ONLY. Never the query, the result URLs or the user:
+   * a search query is user content, and these logs are retained far longer than the turn.
+   */
+  function logDegraded(reason, requestId, details = {}) {
+    logger.warn('[ChatWebContext] page read degraded to snippets', { requestId, reason, ...details });
+  }
 
   function configuration() {
     if (!enabled(env)) throw new ChatWebContextError('web_context_unavailable', 'Web research is not enabled.');
@@ -444,6 +460,7 @@ export function createChatWebContextService({
        * silently "degrading" a cancellation would hide it from the outer handler.
        */
       let started;
+      let startError = null;
       try {
         started = await client.batchScrape({
           ...requestBase,
@@ -453,9 +470,16 @@ export function createChatWebContextService({
       } catch (error) {
         if (signal?.aborted || error?.name === 'AbortError') throw error;
         started = null;
+        startError = error;
       }
 
-      if (!started?.job) return snippetOnlyResult({ requestId, query, searchItems, searchEvidence, search });
+      if (!started?.job) {
+        logDegraded(startError ? 'page_job_start_failed' : 'page_job_not_created', requestId, {
+          status: startError?.status,
+          code: startError?.code,
+        });
+        return snippetOnlyResult({ requestId, query, searchItems, searchEvidence, search });
+      }
 
       const jobId = String(started.job.jobId);
       const job = await client.waitForJob(jobId, {
@@ -479,7 +503,14 @@ export function createChatWebContextService({
           status: 499, retryable: false, requestId,
         });
       }
-      if (job.state === 'failed') return snippetOnlyResult({ requestId, query, searchItems, searchEvidence, search });
+      if (job.state === 'failed') {
+        logDegraded('page_job_failed', requestId, {
+          completedPages: Number(job.completedPages || 0),
+          failedPages: Number(job.failedPages || 0),
+          excludedPages: Number(job.excludedPages || 0),
+        });
+        return snippetOnlyResult({ requestId, query, searchItems, searchEvidence, search });
+      }
       const results = await client.results(jobId, { limit: count, signal });
       const byUrl = new Map((Array.isArray(results.items) ? results.items : []).map((item) => [safeHttpsUrl(item?.url), item]));
       let totalTextBytes = 0;

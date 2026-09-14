@@ -144,6 +144,7 @@ function harness({ pageJobState = 'completed', failBatchScrape = false } = {}) {
     throw new Error(`unexpected request ${url.href}`);
   };
 
+  const warnings = [];
   const service = createChatWebContextService({
     env: {
       NODE_ENV: 'test',
@@ -152,8 +153,9 @@ function harness({ pageJobState = 'completed', failBatchScrape = false } = {}) {
       XENO_WEB_CONTEXT_TOKEN: 'test-token',
     },
     fetchImpl,
+    logger: { warn: (message, fields) => warnings.push({ message, fields }) },
   });
-  return { service, calls };
+  return { service, calls, warnings };
 }
 
 test('🔴 the search declares resultHandling: transient', async () => {
@@ -223,6 +225,36 @@ test('🔴 a failed page read degrades to snippets instead of losing the turn', 
     );
     assert.equal(result.sources[0].title, 'Example', `${label}: the search result survives`);
   }
+});
+
+test('🔴 a degrade is LOGGED with its reason — never silently, and never with user content', async () => {
+  /*
+   * Found 2026-09-14 in production: the page-read job failed on most real sites and every such
+   * turn quietly degraded to snippets with no signal anywhere. The user got a thinner answer;
+   * we got nothing to act on. Same silent-catch shape as the `void error` that hid the Opus 5
+   * temperature 400 the same morning.
+   */
+  for (const [label, options, reason] of [
+    ['start failed', { failBatchScrape: true }, 'page_job_start_failed'],
+    ['job failed', { pageJobState: 'failed' }, 'page_job_failed'],
+  ]) {
+    const { service, warnings } = harness(options);
+    const result = await service.searchAndFetch(INPUT);
+
+    assert.equal(warnings.length, 1, `${label}: exactly one degrade warning`);
+    assert.equal(warnings[0].fields.reason, reason, `${label}: the log must say WHY it degraded`);
+    assert.equal(warnings[0].fields.requestId, result.requestId, `${label}: and which request, to correlate`);
+
+    const logged = JSON.stringify(warnings[0]);
+    assert.doesNotMatch(logged, /survival/, `${label}: the query is user content and must not be logged`);
+    assert.doesNotMatch(logged, /example\.(com|org)/, `${label}: nor the result URLs`);
+  }
+});
+
+test('a page read that succeeds logs no degrade warning', async () => {
+  const { service, warnings } = harness();
+  await service.searchAndFetch(INPUT);
+  assert.equal(warnings.length, 0, 'a warning on the healthy path trains everyone to ignore the real one');
 });
 
 test('a cancelled page read is still a cancellation', async () => {
