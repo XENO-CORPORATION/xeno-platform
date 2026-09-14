@@ -59,6 +59,7 @@ import { meterPremiumChat, meterMediaGeneration } from './utils/inferenceMeter.j
 import { runToolLoop, toolsForSurface, TOOL_BUDGETS } from './utils/chatToolLoop.js';
 import { chatWebContextService, webSearchAvailable } from './services/chatWebContext.js';
 import { publishTurnProgress, turnProgressChannel, finishTurnWithProgress, failTurnWithProgress } from './utils/turnProgress.js';
+import { toProviderMessages } from './utils/chatMessageParts.js';
 import { estimateMessageTokens, getCreditCost } from './utils/creditCosts.js';
 import { deductCredits, refundCredits, logUsage as logCreditUsage } from './utils/creditTransactions.js';
 import { resolveEntitlements, gateMeta } from './utils/entitlementGate.js';
@@ -471,43 +472,15 @@ app.use(express.text({ limit: '100mb' }));
 app.use('/uploads', express.static(uploadsDir));
 
 
-// Utility function to parse AI response text (FOR HISTORY CLEANING - Make Regex more robust)
-const parseResponseBackend = (fullText) => {
-    // More flexible regexes for cleaning history - allow optional colon, flexible markdown
-    const thinkingRegex = /^\s*(?:#{1,6}[\s]*)?\**?Thinking Process[:]?\**?\s*/im;
-    const answerRegex = /^\s*(?:#{1,6}[\s]*)?\**?Final Answer[:]?\**?\s*/im;
-
-    const trimmedText = fullText.trim();
-    // Find markers using search
-    const thinkingMatchIndex = trimmedText.search(thinkingRegex);
-    const answerMatchIndex = trimmedText.search(answerRegex);
-
-    let finalAnswerContent = trimmedText; // Default to original text
-
-    // Prioritize finding the Final Answer marker for history cleaning
-    if (answerMatchIndex !== -1) {
-        // Found "Final Answer:" marker
-        const answerMarkerMatch = trimmedText.substring(answerMatchIndex).match(answerRegex);
-        const answerStartIndex = answerMatchIndex + (answerMarkerMatch ? answerMarkerMatch[0].length : 0);
-        finalAnswerContent = trimmedText.substring(answerStartIndex).trim();
-        console.log(` -> [HistoryClean] Found 'Final Answer:', extracting content.`);
-    } else if (thinkingMatchIndex !== -1) {
-        // Found "Thinking Process:" but NO "Final Answer:"
-        // Discard this content for history purposes.
-        finalAnswerContent = "";
-        console.warn(` -> [HistoryClean] Found 'Thinking Process:' but no 'Final Answer:', stripping content.`);
-    } else {
-        // Neither marker found, keep the original text
-        // console.log(` -> [HistoryClean] No markers found, keeping original text.`);
-        finalAnswerContent = trimmedText;
-    }
-
-    // Clean excessive newlines and leading/trailing markdown emphasis from the determined answer
-    // const clean = (text) => text ? text.replace(/\n{3,}/g, '\n\n').replace(/^\s*([*_]{1,2})\s*|\s*([*_]{1,2})\s*$/g, '').trim() : '';
-    
-    // For history cleaning, we ONLY care about the cleaned final answer.
-    return { answer: cleanTextContent(finalAnswerContent) }; 
-};
+/*
+ * `parseResponseBackend` lived here and is now `cleanAssistantText` in
+ * utils/chatMessageParts.js — moved, not deleted, when the parts[] conversion was extracted
+ * so a second route could reuse it (2026-09-14).
+ *
+ * ⚠️ Its last caller went with that conversion. Leaving the function behind would leave a
+ * second copy of rules that have MOVED, and the copy is the one that goes stale — this
+ * ecosystem has the scar for it. The module is the single implementation.
+ */
 
 // Utility function to clean text content (collapse newlines, remove leading/trailing markdown emphasis)
 // const cleanTextContentHelper = (text) => text ? text.replace(/\n{3,}/g, '\n\n').replace(/^\s*([*_]{1,2})\s*|\s*([*_]{1,2})\s*$/g, '').trim() : '';
@@ -1969,94 +1942,21 @@ app.post('/api/chat/generate', databaseMiddleware, authMiddleware, async (req, r
         }
         // <<< END: Intelligent Image Referral Logic >>>
 
-        // Add user/assistant messages, conditionally cleaning history if effectiveReasoningState is FALSE
+        /*
+         * Convert the client's parts[] history into OpenAI-shaped messages.
+         *
+         * 🔴 EXTRACTED to utils/chatMessageParts.js (2026-09-14) so a SECOND route can use it.
+         * These ~90 lines lived only here, which is the entire reason /api/ai/chat/stream — a
+         * complete, metered streaming endpoint — could not be used by the product: it forwards
+         * `messages` upstream untouched, so every image, PDF and text attachment would have
+         * vanished with no error. Copying the rules into that route instead would leave two
+         * implementations to disagree, invisibly, since both still return a plausible answer.
+         *
+         * Proven byte-identical to the inline version across 20 cases covering every branch
+         * before the swap, and pinned by scripts/chat-message-parts.test.mjs.
+         */
         console.log(`Processing message history. effectiveReasoningState: ${effectiveReasoningState}`);
-        messages.forEach(msg => {
-            const role = msg.role === 'model' ? 'assistant' : msg.role;
-            let contentParts = []; // Initialize as an array to hold multiple parts
-
-            if (msg.parts && Array.isArray(msg.parts)) {
-                msg.parts.forEach(part => {
-                    if (part.type === 'text' && part.text && part.text.trim() !== '') {
-                        let textForPart = part.text;
-                        if (role === 'assistant') {
-                            // Clean AI history text parts
-                            // console.log(`   - Cleaning history text part from AI. Original: "${textForPart.substring(0, 50)}..."`); // Verbose
-                            const parsedHistory = parseResponseBackend(textForPart);
-                            textForPart = parsedHistory.answer;
-                            // console.log(`   - Cleaned AI history text part: "${textForPart.substring(0, 50)}..."`); // Verbose
-                        }
-                        if (textForPart && textForPart.trim() !== '') {
-                            contentParts.push({ type: 'text', text: textForPart });
-                        }
-                    } else if (part.type === 'image' && part.media_type && part.data) {
-                        if (role === 'user') { // Only add for user role
-                           contentParts.push({
-                                type: 'image_url',
-                                image_url: {
-                                    url: `data:${part.media_type};base64,${part.data}`
-                                }
-                            });
-                            console.log(`   - Added image part for role ${role}: ${part.media_type}`); 
-                        } else {
-                            // Image part from assistant message in history - VisionHeuristic handles this by attaching to next user msg if relevant.
-                            console.log(`   - Skipping image part from assistant message in history for role ${role}: ${part.media_type}. VisionHeuristic should handle context.`);
-                        }
-                    } else if (part.type === 'file' && part.name && part.media_type && part.data_type && part.data) {
-                        if (part.media_type === 'application/pdf' && part.data_type === 'base64') {
-                            if (role === 'user') {
-                                contentParts.push({
-                                    type: 'image_url', // Treat PDF as image_url for OpenRouter
-                                    image_url: {
-                                        url: `data:application/pdf;base64,${part.data}`
-                                    }
-                                });
-                                console.log(`   - Added PDF file part (as image_url) for role ${role}: ${part.name}`);
-                            } else {
-                                console.log(`   - Skipping PDF file part from assistant message in history for role ${role}: ${part.name}`);
-                            }
-                        } else if (part.data_type === 'text') {
-                            const fileTextContent = `Content of file "${part.name}":\n\n${part.data}`;
-                            // No need to clean user-provided file text for history in the same way as AI responses.
-                            contentParts.push({ type: 'text', text: fileTextContent });
-                            console.log(`   - Added text file part for role ${role}: ${part.name}`);
-                        } else {
-                            // For other files, just mention it if it's a user message, or skip if AI
-                            if (role === 'user'){
-                                contentParts.push({ type: 'text', text: `[Attached file: ${part.name} of type ${part.media_type}]` });
-                                console.log(`   - Added placeholder for unprocessable file part for role ${role}: ${part.name}`);
-                            } else {
-                                console.log(`   - Skipping unprocessable AI file part in history: ${part.name}`);
-                            }
-                        }
-                    }
-                });
-            } else if (msg.text && msg.text.trim() !== '') { // Legacy: Handle plain text messages if parts are not present
-                let textContent = msg.text;
-                if (role === 'assistant') {
-                    console.log(`   - Cleaning legacy history message from AI. Original: "${textContent.substring(0, 50)}..."`);
-                    const parsedHistory = parseResponseBackend(textContent);
-                    textContent = parsedHistory.answer;
-                    console.log(`   - Cleaned legacy AI history: "${textContent.substring(0, 50)}..."`);
-                }
-                if (textContent && textContent.trim() !== '') {
-                    contentParts.push({ type: 'text', text: textContent });
-                }
-            }
-
-            // Add to apiMessages if contentParts is not empty
-            if (contentParts.length > 0) {
-                // If only one text part, send as string content, otherwise as array.
-                // OpenRouter prefers string content for simple text messages.
-                if (contentParts.length === 1 && contentParts[0].type === 'text') {
-                    apiMessages.push({ role: role, content: contentParts[0].text });
-                } else {
-                    apiMessages.push({ role: role, content: contentParts });
-                }
-            } else {
-                console.warn(`   - Skipping message for role ${role} as it resulted in no content parts after processing.`);
-            }
-        });
+        apiMessages.push(...toProviderMessages(messages));
 
         // <<< NEW DETAILED LOGGING FOR apiMessages >>>
         console.log('[API Call Prep] Verifying apiMessages before sending to OpenRouter:');
