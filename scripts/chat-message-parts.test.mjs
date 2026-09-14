@@ -213,14 +213,30 @@ test('🔴 the streaming route converts parts[], so attachments survive it', () 
     'the streaming route must IMPORT the shared converter — a second copy of these rules ' +
     'would disagree with /api/chat/generate invisibly, since both still return an answer',
   );
+  /*
+   * ⚠️ Matches the CONVERSION, not the exact prompt variable.
+   *
+   * The first version pinned `{ systemPrompt }` literally and broke when project context
+   * landed and the argument became `{ systemPrompt: effectiveSystemPrompt }` — the project's
+   * instructions have to ride on that prompt. The conversion was untouched; only the name
+   * changed. A gate that pins an identifier fails on a rename and says nothing about whether
+   * the behaviour survived, which is the opposite of useful.
+   */
   assert.match(
-    stripped, /const finalMessages = looksLikePartsShape\(messages\)\s*\?\s*toProviderMessages\(messages, \{ systemPrompt \}\)/,
+    stripped, /const finalMessages = looksLikePartsShape\(messages\)\s*\?\s*toProviderMessages\(messages, \{ systemPrompt[^}]*\}\)/,
     'finalMessages must be CONVERTED when the client sends parts[] — this is the single ' +
     'reason the route was unusable by the product',
   );
-  // And an OpenAI-shaped caller must still pass through untouched.
+  /*
+   * And an OpenAI-shaped caller must still pass through untouched.
+   *
+   * ⚠️ Matches the SHAPE, not the identifier — same lesson as above. This pinned
+   * `systemPrompt` by name and broke when project context renamed it to
+   * `effectiveSystemPrompt`; the passthrough itself never changed. What matters is that the
+   * false branch spreads `...messages` rather than converting them.
+   */
   assert.match(
-    stripped, /:\s*\(systemPrompt \? \[\{ role: 'system', content: systemPrompt \}, \.\.\.messages\] : messages\)/,
+    stripped, /:\s*\(\w+\s*\?\s*\[\{ role: 'system', content: \w+ \}, \.\.\.messages\]\s*:\s*messages\)/,
     'API clients already sending OpenAI messages must not be re-converted',
   );
 });
