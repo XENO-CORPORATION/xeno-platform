@@ -227,8 +227,8 @@ export async function runToolLoop({ messages, surface, turnId, callModel, runSea
    */
   cappedOut = true;
   const finalResponse = await callModel({
-    messages: working,
-    tools: [],
+    messages: [...working, finalAnswerNudge()],
+    tools,
     requestId: `${turnId}:final`,
   });
   const finalMessage = finalResponse?.choices?.[0]?.message;
@@ -277,14 +277,49 @@ export async function runToolLoop({ messages, surface, turnId, callModel, runSea
 /**
  * The per-iteration decision, shared by both loops.
  *
- * Past the cap the tool is WITHDRAWN rather than discouraged, and withdrawing it IS
- * hitting the cap — `cappedOut` must be set here, not when the model next asks, because
- * once the tool is gone it has nothing to ask with.
+ * 🔴 The tool is NEVER withdrawn once it has been used — the cap is enforced through the
+ * tool RESULT instead (`budgetExhaustedPayload`), and `cappedOut` flips the moment the
+ * budget is spent.
+ *
+ * It used to be withdrawn at the cap ("removing the declaration is structural"), and that
+ * reasoning was right in theory and wrong against the provider we actually run on. Found
+ * 2026-09-14 in production: a turn that spent all ten searches ended with an EMPTY answer —
+ * `result.text` was nothing but the narration between searches. Reproduced against the
+ * live gateway, three attempts each at production max_tokens:
+ *
+ *   tool history + tools OMITTED                 -> 1 of 3 returned an empty `stop`
+ *   tool history + tool kept, budget in result   -> 3 of 3 answered
+ *
+ * `claude-opus-5` is served through an OpenAI-compatible reseller behind our gateway.
+ * When the model, mid-search, decides to call the tool again and the request declared no
+ * tools, the reseller's translation emits a single `{delta:{}, finish_reason:"stop"}` —
+ * a 6-second generation surfaced as nothing at all. We cannot fix their translator; we
+ * can stop sending the one request shape that triggers it. Keeping the tool declared is
+ * valid for every OpenAI-shaped provider, so this is not a workaround for one vendor.
+ *
+ * The budget is still enforced HERE, server-side: an over-budget call costs one metered
+ * iteration and gets the exhausted payload, never a search.
  */
 export const iterationPlan = ({ searches, budget, tools }) => {
   const capReached = searches >= budget.maxSearches;
-  return { capReached, offerTools: capReached ? [] : tools };
+  return { capReached, offerTools: tools };
 };
+
+/**
+ * The message appended before the FINAL call, when the iteration budget is gone too.
+ *
+ * That call used to send `tools: []`, which is the exact shape above that the gateway
+ * turns into an empty answer. Keeping the tool declared and asking, in the transcript the
+ * model sees, for an answer now: 3 of 3 answered in the same probe. The nudge is sent to
+ * the model only — it is never persisted or shown to the user.
+ *
+ * @internal Shared by the two loops in this file, like the other message builders; no
+ * other module imports it.
+ */
+export const finalAnswerNudge = () => ({
+  role: 'user',
+  content: 'The search budget for this turn is used up. Answer now from the results you already have, and say which parts are uncertain.',
+});
 
 /**
  * A tool result message, in the one shape both loops send back to the provider.
@@ -445,7 +480,7 @@ export async function* streamToolLoop({ messages, surface, turnId, streamModel, 
    * the turn ends in an answer rather than in silence.
    */
   cappedOut = true;
-  for await (const event of streamModel({ messages: working, tools: [], requestId: `${turnId}:final` })) {
+  for await (const event of streamModel({ messages: [...working, finalAnswerNudge()], tools, requestId: `${turnId}:final` })) {
     if (event.type === 'delta') yield { type: 'delta', text: event.text };
     else if (event.type === 'usage') {
       lastUsage = addUsage(lastUsage, event.usage);

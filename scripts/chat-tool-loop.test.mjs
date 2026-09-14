@@ -97,10 +97,16 @@ test('🔴 the search budget is enforced by the SERVER, not by asking the model'
     messages: [{ role: 'user', content: 'go' }],
     surface: 'chat',
     turnId: 't3',
-    callModel: async ({ tools }) => (
-      // Keep asking to search for as long as the tool is offered; answer only when it is gone.
-      tools.length > 0 ? searchCall(`q${searchesRun}`, `c${searchesRun}`) : answer('done')
-    ),
+    /*
+     * The tool is offered on EVERY call now (see iterationPlan), so a model that never
+     * stops asking is modelled honestly: it keeps calling the tool until the server tells
+     * it, in a tool RESULT, that the budget is gone — and only then answers. That is the
+     * enforcement path, and it must hold against a model that ignores every instruction.
+     */
+    callModel: async ({ messages }) => {
+      const exhausted = messages.some((m) => m.role === 'tool' && /budget exhausted/.test(m.content));
+      return exhausted ? answer('done') : searchCall(`q${searchesRun}`, `c${searchesRun}`);
+    },
     runSearch: async () => { searchesRun += 1; return sources(); },
   });
   assert.equal(
@@ -111,21 +117,66 @@ test('🔴 the search budget is enforced by the SERVER, not by asking the model'
   assert.equal(result.message.content, 'done', 'the turn must still end in an answer');
 });
 
-test('🔴 past the cap the tool is WITHDRAWN, not merely discouraged', async () => {
-  // A model told "please stop" in prose often tries anyway. Removing the declaration is structural.
+test('🔴 past the cap the tool STAYS DECLARED and the budget is enforced in the tool result', async () => {
+  /*
+   * The tool used to be WITHDRAWN at the cap ("removing the declaration is structural").
+   * Right in theory; wrong against the provider we run on. Found 2026-09-14 in production:
+   * a turn that spent all ten searches ended with an EMPTY answer, because `claude-opus-5`
+   * is served through an OpenAI-compatible reseller whose translation returns a bare
+   * `{delta:{}, finish_reason:"stop"}` when the model calls a tool the request did not
+   * declare. Reproduced live, 3 attempts each: tools omitted -> 1 of 3 empty; tool kept
+   * with the budget in the result -> 3 of 3 answered.
+   *
+   * So the cap is enforced through the tool RESULT: an over-budget call gets the exhausted
+   * payload and never a search. That path is exercised by the test above; this one pins
+   * that the declaration is never pulled — including on the final call.
+   */
   const offered = [];
+  const exhaustedResults = [];
+  let calls = 0;
   await runToolLoop({
     messages: [{ role: 'user', content: 'go' }],
     surface: 'chat',
     turnId: 't4',
-    callModel: async ({ tools }) => {
+    callModel: async ({ tools, messages }) => {
       offered.push(tools.length);
-      return tools.length > 0 ? searchCall('q', `c${offered.length}`) : answer('done');
+      for (const m of messages) if (m.role === 'tool' && /budget exhausted/.test(m.content) && !exhaustedResults.includes(m)) exhaustedResults.push(m);
+      // Never stop asking — the loop must end the turn on its own.
+      calls += 1;
+      return searchCall('q', `c${calls}`);
     },
     runSearch: async () => sources(),
   });
   assert.ok(offered.length > 1, 'the loop must have iterated');
-  assert.equal(offered.at(-1), 0, 'the final call must offer no tools at all');
+  assert.ok(offered.every((n) => n === 1), `the tool must be declared on EVERY call, got ${JSON.stringify(offered)}`);
+  assert.ok(exhaustedResults.length >= 1, 'an over-budget call must be answered with the exhausted payload');
+  assert.equal(
+    offered.length, TOOL_BUDGETS.chat.maxSearches + 2,
+    'the loop is bounded: maxSearches + 1 iterations, then exactly one final call',
+  );
+});
+
+test('🔴 the final call keeps the tool and asks for an answer in the transcript', async () => {
+  // The old final call sent `tools: []` — the exact shape the gateway turns into nothing.
+  let finalMessages = null;
+  let finalTools = null;
+  let calls = 0;
+  await runToolLoop({
+    messages: [{ role: 'user', content: 'go' }],
+    surface: 'chat',
+    turnId: 't4b',
+    callModel: async ({ tools, messages, requestId }) => {
+      if (requestId.endsWith(':final')) { finalMessages = messages; finalTools = tools; return answer('done'); }
+      calls += 1;
+      return searchCall('q', `c${calls}`);
+    },
+    runSearch: async () => sources(),
+  });
+  assert.ok(finalMessages, 'a model that never stops must reach the final call');
+  assert.equal(finalTools.length, 1, 'the final call must still declare the tool');
+  const last = finalMessages.at(-1);
+  assert.equal(last.role, 'user');
+  assert.match(last.content, /budget .* used up/i, 'and ask, in the transcript, for the answer now');
 });
 
 test('🔴 every billed call gets a DISTINCT requestId — holds must not collide', async () => {
