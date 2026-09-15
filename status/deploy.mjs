@@ -18,6 +18,9 @@ import { readFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+// The deep schedule is read from the Worker, so the cron that FIRES and the cron the Worker
+// RECOGNISES as its deep pass can never drift apart.
+import { DEEP_CRON, PROBE_MODEL_DEFAULT } from './worker.mjs';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const CONFIRM = process.argv.includes('--confirm');
@@ -27,13 +30,19 @@ const SCRIPT = 'xeno-status';
 const DATABASE = 'xeno-status';
 const ZONE_NAME = 'xenosystem.ai';
 const HOSTNAME = 'status.xenosystem.ai';
-// Every 2 minutes. The healthchecks.io watchdog expects a ping every 5 + 5 grace, so a single
-// missed run never alerts but two consecutive ones do.
-const CRON = '*/2 * * * *';
+// Availability every 2 minutes. The healthchecks.io watchdog expects a ping every 5 + 5 grace,
+// so a single missed run never alerts but two consecutive ones do. The deep chat + search pass
+// runs on DEEP_CRON and is inert until a probe key is configured.
+const CRONS = ['*/2 * * * *', DEEP_CRON];
 const ALERT_EMAIL_TO = 'admin@xenosystem.ai';
 // xenostudio.ai is a verified Resend domain (checked 2026-09-15); an unverified sender is refused.
 const ALERT_EMAIL_FROM = 'XENO Status <noreply@xenostudio.ai>';
 const COMPATIBILITY_DATE = '2026-09-01';
+
+/** An OPTIONAL credential: returns '' instead of throwing when it is absent. */
+function optionalSecret(name) {
+  try { return secret(name); } catch { return ''; }
+}
 
 function secret(name) {
   const line = readFileSync(join(homedir(), '.xeno-secrets'), 'utf8')
@@ -72,8 +81,10 @@ async function main() {
   console.log('XENO Status deploy plan');
   console.log(`  account   ${ACCOUNT_ID}`);
   console.log(`  database  ${DATABASE} (D1) — ${statements.length} idempotent schema statements`);
-  console.log(`  worker    ${SCRIPT} — bindings DB, RESEND_API_KEY*, HEALTHCHECKS_PING_URL*, ALERT_EMAIL_TO, ALERT_EMAIL_FROM   (* secret)`);
-  console.log(`  cron      ${CRON}`);
+  const probeKey = optionalSecret('PROBE_API_KEY');
+  console.log(`  worker    ${SCRIPT} — bindings DB, RESEND_API_KEY*, HEALTHCHECKS_PING_URL*, ALERT_EMAIL_TO, ALERT_EMAIL_FROM, PROBE_MODEL${probeKey ? ', PROBE_API_KEY*' : ''}   (* secret)`);
+  console.log(`  cron      ${CRONS.join('  +  ')}`);
+  console.log(`  deep      ${probeKey ? `ON — chat + web search on ${PROBE_MODEL_DEFAULT}` : 'OFF — no PROBE_API_KEY yet (run status/provision-probe.mjs)'}`);
   console.log(`  domain    https://${HOSTNAME}`);
   if (!CONFIRM) {
     console.log('\nDRY RUN — pass --confirm to apply');
@@ -105,6 +116,10 @@ async function main() {
       { type: 'secret_text', name: 'HEALTHCHECKS_PING_URL', text: secret('HEALTHCHECKS_WATCHDOG_PING_URL') },
       { type: 'plain_text', name: 'ALERT_EMAIL_TO', text: ALERT_EMAIL_TO },
       { type: 'plain_text', name: 'ALERT_EMAIL_FROM', text: ALERT_EMAIL_FROM },
+      { type: 'plain_text', name: 'PROBE_MODEL', text: PROBE_MODEL_DEFAULT },
+      // Bound only when it exists: without it the Worker's deep pass stays inert, and a check
+      // nobody switched on is neither probed nor drawn.
+      ...(probeKey ? [{ type: 'secret_text', name: 'PROBE_API_KEY', text: probeKey }] : []),
     ],
   };
   const form = new FormData();
@@ -113,8 +128,8 @@ async function main() {
   await cf('PUT', `/accounts/${ACCOUNT_ID}/workers/scripts/${SCRIPT}`, form);
   console.log(`✓ worker uploaded ${SCRIPT}`);
 
-  await cf('PUT', `/accounts/${ACCOUNT_ID}/workers/scripts/${SCRIPT}/schedules`, [{ cron: CRON }]);
-  console.log(`✓ cron set ${CRON}`);
+  await cf('PUT', `/accounts/${ACCOUNT_ID}/workers/scripts/${SCRIPT}/schedules`, CRONS.map((cron) => ({ cron })));
+  console.log(`✓ crons set ${CRONS.join(', ')}`);
 
   await cf('PUT', `/accounts/${ACCOUNT_ID}/workers/domains`, {
     hostname: HOSTNAME, service: SCRIPT, zone_id: zoneId, zone_name: ZONE_NAME, environment: 'production',

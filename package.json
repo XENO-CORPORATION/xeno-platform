@@ -172,7 +172,7 @@
     "test:chat-response-shape": "node --test scripts/chat-response-shape.test.mjs",
     "test:stream-project-context": "node --test scripts/stream-project-context.test.mjs",
     "test:stream-sampling-params": "node --test scripts/stream-sampling-params.test.mjs",
-    "test:status-worker": "node --no-warnings --test scripts/status-worker.test.mjs"
+    "test:status-worker": "node --no-warnings --test scripts/status-worker.test.mjs scripts/status-worker-deep.test.mjs"
   },
   "dependencies": {
     "@babel/standalone": "^7.29.7",

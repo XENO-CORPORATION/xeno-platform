@@ -64,17 +64,17 @@ export const utcDay = (ts) => new Date(ts).toISOString().slice(0, 10);
  * single requests; an alert per dropped request trains everyone to ignore alerts, which is
  * worse than having none. `event` is set only on a real transition.
  */
-export function nextState(prev, ok, ts) {
+export function nextState(prev, ok, ts, { failThreshold = FAIL_THRESHOLD, recoverThreshold = RECOVER_THRESHOLD } = {}) {
   const base = prev ?? { status: 'operational', since: ts, consecutiveFail: 0, consecutiveOk: 0 };
   if (ok) {
     const consecutiveOk = base.consecutiveOk + 1;
-    if (base.status === 'down' && consecutiveOk >= RECOVER_THRESHOLD) {
+    if (base.status === 'down' && consecutiveOk >= recoverThreshold) {
       return { state: { status: 'operational', since: ts, consecutiveFail: 0, consecutiveOk }, event: 'resolved' };
     }
     return { state: { ...base, consecutiveFail: 0, consecutiveOk }, event: null };
   }
   const consecutiveFail = base.consecutiveFail + 1;
-  if (base.status === 'operational' && consecutiveFail >= FAIL_THRESHOLD) {
+  if (base.status === 'operational' && consecutiveFail >= failThreshold) {
     return { state: { status: 'down', since: ts, consecutiveFail, consecutiveOk: 0 }, event: 'opened' };
   }
   return { state: { ...base, consecutiveFail, consecutiveOk: 0 }, event: null };
@@ -123,6 +123,160 @@ export async function probe(component, fetchImpl, now = Date.now) {
   }
 }
 
+// ─── Deep checks: a real chat turn and a real web search ────────────────────────────────
+
+/**
+ * The checks that catch a product that is UP AND WRONG.
+ *
+ * Every defect of 2026-09-14 answered HTTP 200: Opus 5 rejecting `temperature`, search
+ * failing on a licensing refusal, a search-heavy turn ending with no answer. None of them is
+ * visible to a status code. These drive the same route a user's browser drives, with the same
+ * model, and judge the ANSWER.
+ *
+ * ⚠️ They cost credits, so they run on their own slower schedule (DEEP_CRON), and they only
+ * exist when a probe key is configured. Without one they are not probed and not drawn —
+ * a component nobody monitors must not appear on a status page as green.
+ *
+ * Each makes a second attempt inside the same run before counting as failed. That in-run
+ * retry is the flap protection, so ONE failed run opens the incident: at a 15-minute cadence,
+ * waiting for two runs would mean half an hour before anyone hears about a broken chat.
+ */
+export const DEEP_CRON = '*/15 * * * *';
+export const DEEP_TIMEOUT_MS = 120_000;
+export const DEEP_RETRY_DELAY_MS = 20_000;
+export const PROBE_MODEL_DEFAULT = 'claude-opus-5';
+export const CHAT_MARKER = 'XENO-STATUS-OK';
+const CHAT_STREAM_URL = 'https://xenostudio.ai/api/ai/chat/stream';
+
+/** Read a chat SSE body into frames. Same framing the product's own client reads. */
+export function parseSseFrames(text) {
+  const frames = [];
+  for (const raw of text.split('\n')) {
+    const line = raw.trim();
+    if (!line.startsWith('data:')) continue;
+    const payload = line.slice(5).trim();
+    if (!payload || payload === '[DONE]') continue;
+    try { frames.push(JSON.parse(payload)); } catch { /* an unreadable frame is skipped, as the client does */ }
+  }
+  return frames;
+}
+
+/** One chat turn through the real route. Returns the frames plus the HTTP status. */
+async function runTurn(env, fetchImpl, prompt) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), DEEP_TIMEOUT_MS);
+  try {
+    const response = await fetchImpl(CHAT_STREAM_URL, {
+      method: 'POST',
+      signal: controller.signal,
+      headers: {
+        authorization: `Bearer ${env.PROBE_API_KEY}`,
+        accept: 'text/event-stream',
+        'content-type': 'application/json',
+        'user-agent': USER_AGENT,
+      },
+      body: JSON.stringify({
+        model: env.PROBE_MODEL || PROBE_MODEL_DEFAULT,
+        messages: [{ role: 'user', content: prompt }],
+        chatSurface: 'chat',
+      }),
+    });
+    const body = await response.text();
+    return { status: response.status, frames: response.ok ? parseSseFrames(body) : [] };
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/** Why an HTTP-level refusal happened, in words the person reading the alert can act on. */
+function httpReason(status) {
+  if (status === 401 || status === 403) return `probe key was rejected (HTTP ${status}) — the probe account may be revoked`;
+  if (status === 402) return 'probe account is out of credits (HTTP 402) — top it up; this is not a product outage';
+  return `chat route answered HTTP ${status}`;
+}
+
+/** The answer a turn produced: the terminal result's text, falling back to the streamed deltas. */
+const answerOf = (frames) => {
+  const result = frames.find((f) => f.type === 'result');
+  const text = typeof result?.text === 'string' ? result.text : '';
+  return text || frames.filter((f) => f.type === 'delta').map((f) => f.text || '').join('');
+};
+
+/** Judge a plain chat turn: it must complete and actually say what it was asked to say. */
+export function judgeChat({ status, frames }) {
+  if (status !== 200) return { ok: false, error: httpReason(status) };
+  const failure = frames.find((f) => f.type === 'error');
+  if (failure) return { ok: false, error: `turn failed: ${failure.message || failure.error || 'unknown error'}` };
+  if (!frames.some((f) => f.type === 'result')) return { ok: false, error: 'turn ended without a result' };
+  const answer = answerOf(frames);
+  if (!answer.trim()) return { ok: false, error: 'turn completed with an EMPTY answer' };
+  if (!answer.includes(CHAT_MARKER)) return { ok: false, error: 'answer did not contain the expected text' };
+  return { ok: true, error: null };
+}
+
+/** Judge a search turn: a search must return sources, and the answer must use them. */
+export function judgeSearch({ status, frames }) {
+  if (status !== 200) return { ok: false, error: httpReason(status) };
+  const failure = frames.find((f) => f.type === 'error');
+  if (failure) return { ok: false, error: `turn failed: ${failure.message || failure.error || 'unknown error'}` };
+  const results = frames.filter((f) => f.type === 'search_result');
+  const errors = frames.filter((f) => f.type === 'search_error');
+  if (!frames.some((f) => f.type === 'search_start')) return { ok: false, error: 'the model never searched' };
+  if (!results.some((r) => Number(r.count) > 0)) {
+    const codes = [...new Set(errors.map((e) => e.code).filter(Boolean))];
+    return { ok: false, error: `no search returned sources${codes.length ? ` (${codes.join(', ')})` : ''}` };
+  }
+  const answer = answerOf(frames);
+  if (!answer.trim()) return { ok: false, error: 'search turn completed with an EMPTY answer' };
+  if (!/\b20\d\d\b/.test(answer)) return { ok: false, error: 'search answer did not contain a year' };
+  return { ok: true, error: null };
+}
+
+/**
+ * Run a deep check with ONE in-run retry. `sleep` is injectable so tests do not wait.
+ * A thrown error (timeout, network) counts as a failed attempt, not a crashed run.
+ */
+export async function runDeepCheck(component, env, fetchImpl, { now = Date.now, sleep = (ms) => new Promise((r) => setTimeout(r, ms)) } = {}) {
+  const started = now();
+  let verdict = { ok: false, error: 'not attempted' };
+  let httpStatus = null;
+  for (let attempt = 1; attempt <= 2; attempt += 1) {
+    try {
+      const turn = await runTurn(env, fetchImpl, component.prompt);
+      httpStatus = turn.status;
+      verdict = component.judge(turn);
+    } catch (error) {
+      verdict = { ok: false, error: error?.name === 'AbortError' ? `timed out after ${DEEP_TIMEOUT_MS} ms` : `network error: ${error?.message || 'unknown'}` };
+    }
+    // An account problem will not fix itself in 20 seconds; do not spend a second turn on it.
+    if (verdict.ok || httpStatus === 401 || httpStatus === 402 || httpStatus === 403) break;
+    if (attempt === 1) await sleep(DEEP_RETRY_DELAY_MS);
+  }
+  return {
+    component: component.id,
+    ok: verdict.ok,
+    httpStatus,
+    latencyMs: Math.max(0, now() - started),
+    error: verdict.error ? String(verdict.error).slice(0, 200) : null,
+  };
+}
+
+export const DEEP_COMPONENTS = Object.freeze([
+  Object.freeze({
+    id: 'chat', name: 'Chat',
+    prompt: `Reply with exactly this text and nothing else: ${CHAT_MARKER}`,
+    judge: judgeChat, failThreshold: 1, recoverThreshold: 1,
+  }),
+  Object.freeze({
+    id: 'web-search', name: 'Web Search',
+    prompt: 'Use web search to find the current year, then reply with only the four-digit year.',
+    judge: judgeSearch, failThreshold: 1, recoverThreshold: 1,
+  }),
+]);
+
+/** Every component the page may draw, and every id an alert may name. */
+export const ALL_COMPONENTS = Object.freeze([...COMPONENTS, ...DEEP_COMPONENTS]);
+
 // ─── Storage ────────────────────────────────────────────────────────────────────────────
 
 export async function loadStates(db) {
@@ -147,7 +301,7 @@ export async function sendAlert(event, env, fetchImpl, now = Date.now) {
   if (!env.RESEND_API_KEY || !env.ALERT_EMAIL_TO || !env.ALERT_EMAIL_FROM) {
     throw new Error('alert delivery is not configured');
   }
-  const component = COMPONENTS.find((c) => c.id === event.component);
+  const component = ALL_COMPONENTS.find((c) => c.id === event.component);
   const name = component?.name ?? event.component;
   const down = event.type === 'opened';
   const subject = down ? `[XENO Status] ${name} is DOWN` : `[XENO Status] ${name} has RECOVERED`;
@@ -155,7 +309,7 @@ export async function sendAlert(event, env, fetchImpl, now = Date.now) {
     down ? `${name} has failed ${FAIL_THRESHOLD} consecutive checks.` : `${name} has passed ${RECOVER_THRESHOLD} consecutive checks again.`,
     '',
     `Component: ${name} (${event.component})`,
-    `Checked:   ${component?.url ?? '-'}`,
+    `Checked:   ${component?.url ?? 'a real chat turn through the product'}`,
     down ? `Reason:    ${event.error ?? 'unknown'}` : `Down for:  ${formatDuration(event.durationMs ?? 0)}`,
     `At:        ${new Date(now()).toISOString()}`,
     '',
@@ -223,19 +377,34 @@ export async function pingWatchdog(env, fetchImpl, failed, log = console) {
 
 // ─── One scheduled run ──────────────────────────────────────────────────────────────────
 
-export async function runScheduled({ db, env, fetchImpl, now = Date.now, log = console }) {
+/**
+ * `mode` selects the component set. 'basic' is the cheap availability sweep every 2 minutes,
+ * and it owns the heartbeat. 'deep' is the credit-spending chat + search pass on DEEP_CRON; with
+ * no probe key configured it does nothing at all, rather than recording failures for checks
+ * nobody has switched on.
+ */
+export async function runScheduled({ db, env, fetchImpl, now = Date.now, log = console, mode = 'basic', sleep }) {
+  if (mode === 'deep' && !env.PROBE_API_KEY) return { events: [], skipped: 'no probe key configured' };
   const ts = now();
   let failure = null;
   const events = [];
+  const components = mode === 'deep' ? DEEP_COMPONENTS : COMPONENTS;
   try {
     const states = await loadStates(db);
-    const results = await Promise.all(COMPONENTS.map((component) => probe(component, fetchImpl, now)));
+    const results = await Promise.all(components.map((component) => (
+      mode === 'deep'
+        ? runDeepCheck(component, env, fetchImpl, { now, ...(sleep ? { sleep } : {}) })
+        : probe(component, fetchImpl, now)
+    )));
     const day = utcDay(ts);
     const statements = [];
 
     for (const r of results) {
       const prev = states.get(r.component);
-      const { state, event } = nextState(prev, r.ok, ts);
+      const definition = components.find((c) => c.id === r.component);
+      const { state, event } = nextState(prev, r.ok, ts, {
+        failThreshold: definition?.failThreshold, recoverThreshold: definition?.recoverThreshold,
+      });
 
       statements.push(db.prepare(
         'INSERT INTO checks (component, ts, ok, http_status, latency_ms, error) VALUES (?, ?, ?, ?, ?, ?)',
@@ -321,7 +490,9 @@ export async function loadModel(db, now = Date.now) {
       .bind(ts - UPTIME_WINDOW_DAYS * DAY_MS).all(),
   ]);
   const stateBy = new Map((states.results || []).map((row) => [row.component, row]));
-  const components = COMPONENTS.map((component) => {
+  // Deep components are drawn only once they have been measured: a check that was never
+  // switched on is absent from the page, never shown as operational.
+  const components = ALL_COMPONENTS.filter((c) => COMPONENTS.includes(c) || stateBy.has(c.id)).map((component) => {
     const rows = (daily.results || []).filter((row) => row.component === component.id);
     const state = stateBy.get(component.id);
     return {
@@ -346,7 +517,7 @@ export async function loadModel(db, now = Date.now) {
     components,
     incidents: (incidents.results || []).map((row) => ({
       component: row.component,
-      name: COMPONENTS.find((c) => c.id === row.component)?.name ?? row.component,
+      name: ALL_COMPONENTS.find((c) => c.id === row.component)?.name ?? row.component,
       startedAt: row.started_at,
       resolvedAt: row.resolved_at,
       summary: row.summary,
@@ -444,7 +615,7 @@ export function renderPage(model) {
   ${componentRows}
   <h2>Past incidents</h2>
   ${incidentRows}
-  <footer>Checked every 2 minutes from outside XENO's own infrastructure. Updated ${escapeHtml(model.generatedAt.replace('T', ' ').slice(0, 19))} UTC.</footer>
+  <footer>Availability is checked every 2 minutes, and chat and web search by a real conversation every 15, from outside XENO's own infrastructure. Updated ${escapeHtml(model.generatedAt.replace('T', ' ').slice(0, 19))} UTC.</footer>
 </main>
 </body>
 </html>`;
@@ -483,7 +654,8 @@ export async function handleFetch(request, env, now = Date.now) {
 
 export default {
   fetch: (request, env) => handleFetch(request, env),
-  scheduled: (_controller, env, ctx) => {
-    ctx.waitUntil(runScheduled({ db: env.DB, env, fetchImpl: fetch }));
+  scheduled: (controller, env, ctx) => {
+    const mode = controller.cron === DEEP_CRON ? 'deep' : 'basic';
+    ctx.waitUntil(runScheduled({ db: env.DB, env, fetchImpl: fetch, mode }));
   },
 };
