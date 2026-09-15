@@ -319,3 +319,19 @@ test('an alias and its canonical name share ONE allowance grant', async () => {
   assert.notEqual(allowanceSourceRef('u1', 'ultra', 42), allowanceSourceRef('u1', 'pro', 43));
   assert.notEqual(allowanceSourceRef('u1', 'ultra', 42), allowanceSourceRef('u2', 'pro', 42));
 });
+
+test('every SELLABLE plan has an allowance decision — swept, not spot-checked', async () => {
+  // `ultra` was found by luck: the gateway session happened to look at the admin account.
+  // A plan that can be sold but has no §8b row falls to the free allowance silently, and
+  // the only symptom is a paying customer refused 429. So sweep the catalog rather than
+  // trusting that someone will notice the next one.
+  const { readFileSync } = await import('node:fs');
+  const { canonicalPlan, PLAN_ALIASES } = await import('../src/server/services/billingService.js');
+  const src = readFileSync(new URL('../src/server/services/billingService.js', import.meta.url), 'utf8');
+  const sellable = [...new Set([...src.matchAll(/plan: '([a-z_]+)'/g)].map((m) => m[1]))];
+  assert.ok(sellable.length >= 3, 'the catalog scrape found almost nothing — it has drifted, fix the pattern');
+  for (const plan of [...sellable, ...Object.keys(PLAN_ALIASES)]) {
+    assert.ok(canonicalPlan(plan) in WEEKLY_ALLOWANCE_CREDITS,
+      `plan '${plan}' can be granted but has no §8b allowance decision — it would resolve to the free tier`);
+  }
+});
