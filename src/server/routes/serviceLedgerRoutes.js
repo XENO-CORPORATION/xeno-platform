@@ -33,6 +33,9 @@ import express from 'express';
 import crypto from 'node:crypto';
 import * as defaultLedger from '../utils/creditLedgerV2.js';
 import * as defaultPricing from '../utils/creditCosts.js';
+import { ensureQuota as defaultEnsureQuota } from '../services/quotaService.js';
+import { getEffectivePlan as defaultGetEffectivePlan } from '../services/effectivePlan.js';
+import { resolvePrincipal as defaultResolvePrincipal } from '../services/agentIdentity.js';
 
 // Same error taxonomy as v2LedgerRoutes.sendErr (kept local so the two files
 // share no mutable surface). 23505 (unique-violation on holdId replay) → 409.
@@ -95,6 +98,9 @@ export function createServiceLedgerRouter({
   ledger = defaultLedger,
   pricing = defaultPricing,
   getServiceToken = () => process.env.LEDGER_SERVICE_TOKEN,
+  ensureQuota = defaultEnsureQuota,
+  getEffectivePlan = defaultGetEffectivePlan,
+  resolvePrincipal = defaultResolvePrincipal,
 } = {}) {
   const router = express.Router();
   router.use(makeRequireServiceToken(getServiceToken));
@@ -179,6 +185,24 @@ export function createServiceLedgerRouter({
     const amount = holdAmount(b);
     if (amount.error) return badRequest(res, amount.error);
     try {
+      // §8b: the weekly allowance is issued LAZILY, on the first call of a window — a
+      // cron that silently stops is a failure mode this ecosystem has already paid for
+      // (the Forum's inbox.scan deadlocked for 48 days while logging success). The grant
+      // is idempotent on its window, so concurrent first calls produce exactly one.
+      // This also installs the burst caps, which is what stops a runaway agent loop
+      // eating a week in minutes.
+      //
+      // 🔴 It must NOT swallow its own failure. An earlier version logged and continued,
+      // which is fail-OPEN twice over: a user whose allowance was never issued is refused
+      // a call they are entitled to, and — worse — an agent whose burst cap was never
+      // written spends against no guard at all, which is the exact runaway this exists to
+      // stop. A quota subsystem that cannot answer is a reason to refuse, not to proceed.
+      await ensureQuota(req.db, userId, (await getEffectivePlan(req.db, userId)).plan, {
+        // An agent has its OWN users row, so it takes its own (tighter) cap. Passing the
+        // human default here would have given every agent its owner's fraction — the one
+        // number the whole burst design turns on.
+        isAgent: (await resolvePrincipal(req.db, userId))?.kind === 'agent',
+      });
       const hold = await ledger.holdV2(req.db, userId, {
         surface,
         holdId,
