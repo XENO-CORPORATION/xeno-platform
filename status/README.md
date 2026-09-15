@@ -43,17 +43,39 @@ channel. If a run fails — the database is unreachable, or an alert cannot be d
 pings `/fail`, which alerts immediately. An incident nobody can be told about is a pipeline
 failure, and it is treated as one.
 
-## What v1 does NOT catch — read this before trusting a green page
+## Deep checks — the ones that catch "up and wrong"
 
-These checks detect a component that is **down**. They do not detect one that is **up and wrong**,
-and every defect that motivated this project returned HTTP 200.
+The availability sweep finds a component that is **down**. Every defect that motivated this
+project was **up and wrong** — each answered HTTP 200. So every 15 minutes (`DEEP_CRON`) the
+Worker also drives the real chat route, as a user's browser does, on the model users actually use:
 
-Catching those needs a synthetic **chat turn** and a real **web search** through the product, which
-needs a platform API key for a probe account. That key has to be created by the operator; it is
-not built into this version, and chat is deliberately **not** listed as a green component until it
-is actually monitored.
+| Check | Passes only if |
+|---|---|
+| **Chat** | the turn completes with a result, no error frame, and the answer contains a marker it was asked to repeat |
+| **Web Search** | the model searched, a search returned sources, and the answer contains a year |
 
-Also still open:
+Each is retried once inside the run; one failed run opens the incident. A 401/402/403 is reported
+as an *account* problem (revoked probe, empty wallet) and is not retried.
+
+**They are OFF until a probe key exists** — not probed, not recorded, and not drawn on the page.
+A check nobody switched on must never appear as green.
+
+### Switching them on
+
+The probe runs as a dedicated **agent** owned by the admin, so its key is separately revocable
+and its usage stays apart from real traffic. Creating that account is an operator action:
+
+```bash
+node status/provision-probe.mjs              # plan — writes nothing
+node status/provision-probe.mjs --confirm    # create it, grant credits, store PROBE_API_KEY
+node status/deploy.mjs --confirm             # hand the key to the Worker; deep checks go live
+```
+
+The key is written straight to `~/.xeno-secrets` and never displayed. `--rotate` revokes the
+existing key and stores a new one. They spend credits — measure a day's usage before shortening
+`DEEP_CRON`.
+
+## Still open
 
 - **Phone push** for urgent alerts (Pushover or ntfy) — needs an account the operator creates.
 - **Prometheus alerts still go nowhere.** The five in-box SLO rules are evaluated with no
