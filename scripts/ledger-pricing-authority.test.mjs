@@ -58,13 +58,16 @@ async function shutdown(server) {
  * globally so a test can make ONE of them fail and assert what the route does about it —
  * see "a hold is refused when the quota subsystem cannot answer".
  */
-function fakeQuota({ ensureQuota, plan = 'pro', kind = 'human' } = {}) {
+function fakeQuota({ ensureQuota, plan = 'pro', kind = 'human', ownerId = 'owner-1' } = {}) {
   const seen = [];
   return {
     seen,
     ensureQuota: ensureQuota || (async (_db, userId, p, opts) => { seen.push({ userId, plan: p, ...opts }); return { metered: true }; }),
     getEffectivePlan: async () => ({ plan }),
-    resolvePrincipal: async () => ({ kind }),
+    // An agent resolves to its OWNER as the billing subject; a human is their own.
+    billingSubjectFor: async (_db, userId) => (kind === 'agent'
+      ? { userId: ownerId, actorUserId: String(userId), isAgent: true }
+      : { userId: String(userId), actorUserId: String(userId), isAgent: false }),
   };
 }
 
@@ -76,7 +79,7 @@ async function withApp(run, quotaOpts) {
   app.use((req, _res, next) => { req.db = {}; next(); });
   app.use('/api/v2/ledger/service', createServiceLedgerRouter({
     ledger, getServiceToken: () => TOKEN,
-    ensureQuota: quota.ensureQuota, getEffectivePlan: quota.getEffectivePlan, resolvePrincipal: quota.resolvePrincipal,
+    ensureQuota: quota.ensureQuota, getEffectivePlan: quota.getEffectivePlan, billingSubjectFor: quota.billingSubjectFor,
   }));
   const server = await new Promise((resolve) => { const s = app.listen(0, '127.0.0.1', () => resolve(s)); });
   const base = `http://127.0.0.1:${server.address().port}`;
@@ -230,21 +233,49 @@ test('a hold issues this window\'s allowance before reserving', () => withApp(as
   assert.equal(quota.seen[0].plan, 'pro', 'the allowance is sized by the EFFECTIVE plan, not a caller-supplied one');
 }));
 
-test('an agent hold installs the AGENT burst cap, not its owner\'s', () => withApp(async ({ call, quota }) => {
-  // An agent has its own `users` row, so it takes its own spend_caps row. Passing the
-  // human default here is the whole burst design failing silently: a runaway loop would
-  // get its owner's fraction of the week before anything stopped it.
+test("an agent's hold is billed to its OWNER, on the owner's one quota", () => withApp(async ({ call, ledger, quota }) => {
+  // 🔴 An agent is a scoped relation off a real user, never an account. It has no wallet,
+  // no plan and no quota of its own. Billing the agent's own id charged a credit_accounts
+  // row nothing funds, and read its plan from a row carrying no subscription — so every
+  // agent silently resolved to 'free' regardless of who owned it. One human, one quota.
   const r = await call('POST', '/api/v2/ledger/service/holds', {
     userId: 'agent-1', holdId: 'h1', operation: 'run', surface: 'xeno_agents', amountMicro: 1000,
   });
   assert.equal(r.status, 200);
-  assert.equal(quota.seen[0].isAgent, true);
+  assert.equal(ledger.calls.find((c) => c[0] === 'hold')[1], 'owner-1', "the money comes off the OWNER's account");
+  assert.equal(quota.seen[0].userId, 'owner-1', "and it draws the OWNER's allowance, not a second one");
+  // The agent is still NAMED, so an owner can see which of their agents spent it.
+  assert.equal(r.json.actorUserId, 'agent-1');
+  assert.equal(r.json.billedUserId, 'owner-1');
 }, { kind: 'agent' }));
 
-test('a human hold is not marked as an agent', () => withApp(async ({ call, quota }) => {
+test('a human is their own billing subject', () => withApp(async ({ call, ledger, quota }) => {
   await call('POST', '/api/v2/ledger/service/holds', { userId: 'u1', holdId: 'h1', operation: 'run', surface: 's', amountMicro: 1000 });
-  assert.equal(quota.seen[0].isAgent, false, 'a human must not be given the tighter agent cap either');
+  assert.equal(ledger.calls.find((c) => c[0] === 'hold')[1], 'u1');
+  assert.equal(quota.seen[0].userId, 'u1');
 }, { kind: 'human' }));
+
+test('settle and void resolve the SAME subject as the hold', () => withApp(async ({ call, ledger }) => {
+  // An agent's hold lives on its owner's account. Settling under the agent's own id would
+  // look for a hold that is not there — the reservation strands until it expires, and the
+  // gateway sees a 404 on a hold it just successfully placed.
+  await call('POST', '/api/v2/ledger/service/holds/h1/settle', {
+    userId: 'agent-1', usage: { model: 'claude-opus-5', inputTokens: 1, outputTokens: 1, measured: true },
+  });
+  await call('POST', '/api/v2/ledger/service/holds/h1/void', { userId: 'agent-1' });
+  assert.equal(ledger.calls.find((c) => c[0] === 'settle')[1], 'owner-1');
+  assert.equal(ledger.calls.find((c) => c[0] === 'void')[1], 'owner-1');
+}, { kind: 'agent' }));
+
+test('a one-shot usage bills the owner and labels the agent', () => withApp(async ({ call, ledger }) => {
+  await call('POST', '/api/v2/ledger/service/usage', {
+    userId: 'agent-1', transactionId: 't1', surface: 'xeno_api', operation: 'chat.completion',
+    usage: { model: 'claude-opus-5', inputTokens: 10, outputTokens: 5, measured: true },
+  });
+  const ev = ledger.calls.find((c) => c[0] === 'usage');
+  assert.equal(ev[1], 'owner-1', 'the debit lands on the owner');
+  assert.equal(ev[2].dimensions.agent_user_id, 'agent-1', 'attribution is a LABEL on the row, not a second wallet');
+}, { kind: 'agent' }));
 
 test('a hold is REFUSED when the quota subsystem cannot answer', () => withApp(async ({ call, ledger }) => {
   // 🔴 Fail-closed on purpose. An earlier version logged and continued, which is fail-open
@@ -266,3 +297,16 @@ test('settle and void never touch the quota path', () => withApp(async ({ call, 
   await call('POST', '/api/v2/ledger/service/holds/h1/void', { userId: 'u1' });
   assert.equal(quota.seen.length, 0);
 }));
+
+test('a one-shot usage is REFUSED when the quota subsystem cannot answer', () => withApp(async ({ call, ledger }) => {
+  // Same rule as the hold, and it needs its own test: the two paths call ensureQuota
+  // separately, so a `.catch` added to one is invisible to the other's gate. A one-shot
+  // debit that proceeds without the burst cap installed is the runaway this exists to stop,
+  // and it is the path a non-streaming completion takes.
+  const r = await call('POST', '/api/v2/ledger/service/usage', {
+    userId: 'u1', transactionId: 't1', surface: 'xeno_api', operation: 'chat.completion',
+    usage: { model: 'claude-opus-5', inputTokens: 10, outputTokens: 5, measured: true },
+  });
+  assert.equal(r.status, 500, 'a quota failure must not read as a successful debit');
+  assert.equal(ledger.calls.filter((c) => c[0] === 'usage').length, 0, 'nothing is metered when the guard is unknown');
+}, { ensureQuota: async () => { throw new Error('quota database unreachable'); } }));

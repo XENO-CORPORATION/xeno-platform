@@ -29,12 +29,12 @@ import { allowanceSnapshot } from '../utils/creditLedgerV2.js';
  *
  * Returns the quota view, so a caller that wants to show it does not query twice.
  */
-export async function ensureQuota(pool, userId, plan, { isAgent = false, now = new Date() } = {}) {
+export async function ensureQuota(pool, userId, plan, { now = new Date() } = {}) {
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
     const result = await issueAllowanceTx(client, userId, plan, { now });
-    await syncBurstCapsTx(client, userId, plan, { isAgent });
+    await syncBurstCapsTx(client, userId, plan);
     await client.query('COMMIT');
     if (result.issued) {
       console.log('[quota] allowance issued', JSON.stringify({
@@ -70,14 +70,14 @@ export async function readQuota(pool, userId, plan, { now = new Date() } = {}) {
 }
 
 /**
- * Reconcile burst caps to the plan. A cap is a `spend_caps` row keyed on `user_id`, and an
- * AGENT HAS ITS OWN `users` ROW (`agent_identities.user_id` ≠ `owner_user_id`) — so an
- * agent takes a tighter cap by the same mechanism, with no new table and no special case
- * in the ledger. `assertWithinCaps` counts live HOLDS as well as settled debits, which is
- * what makes this hold when an agent fans out ten concurrent calls.
+ * Reconcile burst caps to the plan. A cap is a `spend_caps` row keyed on `user_id`, and
+ * `userId` here is always the OWNER (callers resolve it through `billingSubjectFor`) —
+ * so an agent's calls are counted by its owner's cap rather than a separate one. One
+ * account, one ceiling. `assertWithinCaps` counts live HOLDS as well as settled debits,
+ * which is what makes this hold when an agent fans out ten concurrent calls.
  */
-export async function syncBurstCapsTx(client, userId, plan, { isAgent = false } = {}) {
-  const caps = burstCapsFor(plan, { isAgent });
+export async function syncBurstCapsTx(client, userId, plan) {
+  const caps = burstCapsFor(plan);
   for (const cap of caps) {
     await client.query(
       `INSERT INTO spend_caps (user_id, window_sec, limit_micro) VALUES ($1, $2, $3)
