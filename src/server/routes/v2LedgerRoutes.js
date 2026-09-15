@@ -22,22 +22,22 @@ import {
   setSpendCap,
 } from '../utils/creditLedgerV2.js';
 import { check as authzCheck } from '../utils/authzReBAC.js';
-import { getEffectivePlan } from '../services/effectivePlan.js';
-import { readQuota } from '../services/quotaService.js';
+import { accountQuotaView, updateUsageCredits, prepareAccountQuota } from '../services/usageCreditsService.js';
+import { billingSubjectFor } from '../services/agentIdentity.js';
 
 const router = express.Router();
 
 function sendErr(res, err) {
   const map = {
-    INSUFFICIENT_CREDITS: 402,
+    INSUFFICIENT_CREDITS: 402, QUOTA_EXCEEDED: 402, BAD_REQUEST: 400, FORBIDDEN: 403,
     ACCOUNT_FROZEN: 403,
     NOT_FOUND: 404,
     CONFLICT: 409,
     SPEND_CAP_EXCEEDED: 429,
   };
-  const status = map[err.code] || 500;
+  const status = map[err.code] || err.status || 500;
   if (status === 500) console.error('[v2/ledger] error:', err.message);
-  res.status(status).json({ error: { code: err.code || 'PLATFORM_ERROR', message: err.message } });
+  res.status(status).json({ error: { code: err.code || 'PLATFORM_ERROR', message: err.message, resetsAt: err.resetsAt, usageCreditsEnabled: err.usageCreditsEnabled } });
 }
 
 // GET /api/v2/ledger/verify — tamper-evidence: recompute the hash chain (Arch §5)
@@ -106,7 +106,8 @@ router.post('/grants', async (req, res) => {
 // GET /api/v2/ledger/balance
 router.get('/balance', async (req, res) => {
   try {
-    res.json(await getBalanceV2(req.db, req.user.id));
+    const subject = await prepareAccountQuota(req.db, req.user.id);
+    res.json(await getBalanceV2(req.db, subject.userId));
   } catch (err) {
     sendErr(res, err);
   }
@@ -122,21 +123,15 @@ router.get('/balance', async (req, res) => {
  */
 router.get('/quota', async (req, res) => {
   try {
-    const { plan } = await getEffectivePlan(req.db, req.user.id);
-    const q = await readQuota(req.db, req.user.id, plan);
-    res.json({
-      metered: q.metered,
-      plan: q.plan,
-      usedPercent: q.usedPercent,
-      resetsAt: q.resetsAt,
-      exhausted: q.exhausted,
-      // A boolean, never a number: "you can buy more", not "you have N left".
-      topUpAvailable: q.exhausted === true,
-      hasPurchasedCredits: (q.purchasedCredits ?? 0) > 0,
-    });
+    res.json(await accountQuotaView(req.db, req.user.id));
   } catch (err) {
     sendErr(res, err);
   }
+});
+
+router.patch('/usage-credits', async (req, res) => {
+  try { res.json(await updateUsageCredits(req.db, req.user.id, req.body?.enabled)); }
+  catch (err) { sendErr(res, err); }
 });
 
 // POST /api/v2/ledger/usage  (idempotent on transactionId)
@@ -146,7 +141,8 @@ router.post('/usage', async (req, res) => {
     return res.status(400).json({ error: { code: 'BAD_REQUEST', message: 'surface, transactionId, operation required' } });
   }
   try {
-    res.json(await recordUsageV2(req.db, req.user.id, {
+    const subject = await prepareAccountQuota(req.db, req.user.id);
+    res.json(await recordUsageV2(req.db, subject.userId, {
       surface: b.surface,
       transactionId: b.transactionId,
       operation: b.operation,
@@ -169,7 +165,8 @@ router.post('/holds', async (req, res) => {
     return res.status(400).json({ error: { code: 'BAD_REQUEST', message: 'surface, holdId, amountMicro, operation required' } });
   }
   try {
-    res.json(await holdV2(req.db, req.user.id, {
+    const subject = await prepareAccountQuota(req.db, req.user.id);
+    res.json(await holdV2(req.db, subject.userId, {
       surface: b.surface,
       holdId: b.holdId,
       amountMicro: b.amountMicro,
@@ -184,7 +181,8 @@ router.post('/holds', async (req, res) => {
 // POST /api/v2/ledger/holds/:holdId/settle
 router.post('/holds/:holdId/settle', async (req, res) => {
   try {
-    res.json(await settleHoldV2(req.db, req.user.id, req.params.holdId, (req.body || {}).actualCostMicro ?? 0));
+    const subject = await billingSubjectFor(req.db, req.user.id);
+    res.json(await settleHoldV2(req.db, subject.userId, req.params.holdId, (req.body || {}).actualCostMicro ?? 0));
   } catch (err) {
     sendErr(res, err);
   }
@@ -193,7 +191,8 @@ router.post('/holds/:holdId/settle', async (req, res) => {
 // POST /api/v2/ledger/holds/:holdId/void
 router.post('/holds/:holdId/void', async (req, res) => {
   try {
-    res.json(await voidHoldV2(req.db, req.user.id, req.params.holdId));
+    const subject = await billingSubjectFor(req.db, req.user.id);
+    res.json(await voidHoldV2(req.db, subject.userId, req.params.holdId));
   } catch (err) {
     sendErr(res, err);
   }

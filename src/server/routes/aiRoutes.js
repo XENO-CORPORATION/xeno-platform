@@ -314,6 +314,7 @@ router.post('/chat', requireEntitlement('canUse'), async (req, res) => {
       cost_micro: metered.costMicro,
     });
   } catch (error) {
+    if (error.code === 'QUOTA_EXCEEDED') return res.status(402).json({ error: 'QUOTA_EXCEEDED', message: error.message, resetsAt: error.resetsAt });
     if (error.http === 402) {
       const bal = await getBalanceV2(req.db, userId).catch(() => null);
       return res.status(402).json({
@@ -565,6 +566,7 @@ router.post('/chat/stream', requireEntitlement('canUse'), async (req, res) => {
       estInputTokens, maxTokens: max_tokens, surface: requestSurface(req),
     });
   } catch (error) {
+    if (error.code === 'QUOTA_EXCEEDED') return res.status(402).json({ error: 'QUOTA_EXCEEDED', message: error.message, resetsAt: error.resetsAt });
     if (error.http === 402) {
       const bal = await getBalanceV2(req.db, userId).catch(() => null);
       return res.status(402).json({

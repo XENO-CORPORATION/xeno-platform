@@ -42,6 +42,7 @@ import { billingSubjectFor as defaultBillingSubjectFor } from '../services/agent
 function sendErr(res, err) {
   const map = {
     INSUFFICIENT_CREDITS: 402,
+    QUOTA_EXCEEDED: 402,
     ACCOUNT_FROZEN: 403,
     NOT_FOUND: 404,
     CONFLICT: 409,
@@ -54,7 +55,7 @@ function sendErr(res, err) {
   }
   const status = map[err.code] || 500;
   if (status === 500) console.error('[v2/ledger/service] error:', err.message);
-  res.status(status).json({ error: { code: err.code || 'PLATFORM_ERROR', message: err.message } });
+  res.status(status).json({ error: { code: err.code || 'PLATFORM_ERROR', message: err.message, resetsAt: err.resetsAt, usageCreditsEnabled: err.usageCreditsEnabled } });
 }
 
 function badRequest(res, message) {
@@ -165,6 +166,7 @@ export function createServiceLedgerRouter({
       // hold a moment later. A balance that disagrees with the hold it precedes is worse
       // than no balance endpoint at all, because the refusal names the wrong reason.
       const subject = await billingSubjectFor(req.db, userId);
+      await ensureQuota(req.db, subject.userId, (await getEffectivePlan(req.db, subject.userId)).plan);
       const balance = await ledger.getBalanceV2(req.db, subject.userId);
       res.json({ ...balance, billedUserId: subject.userId, actorUserId: subject.actorUserId });
     } catch (err) {

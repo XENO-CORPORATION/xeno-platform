@@ -1,0 +1,61 @@
+#!/usr/bin/env node
+// Explicitly invoked PostgreSQL proof. All writes are TEMPORARY and rolled back.
+import assert from 'node:assert/strict';
+import { pathToFileURL } from 'node:url';
+import pg from 'pg';
+if (!process.argv.includes('--execute')) { console.log('Dry run: temporary-table consent, reservation and reset proof; --execute to run.'); process.exit(0); }
+const modulePath=process.argv.find(x=>x.startsWith('--ledger='))?.slice(9);
+assert.ok(modulePath,'--ledger required');
+const ledger=await import(pathToFileURL(modulePath));
+const c=new pg.Client({host:process.env.DB_HOST,port:Number(process.env.DB_PORT||5432),database:process.env.DB_NAME,user:process.env.DB_USER,password:process.env.DB_PASSWORD});
+await c.connect();
+try {
+ await c.query('BEGIN');await c.query('SET LOCAL search_path=pg_temp,pg_catalog');
+ await c.query("SET LOCAL statement_timeout='10s'");
+ await c.query('CREATE TEMP TABLE users (id uuid PRIMARY KEY,credits integer) ON COMMIT DROP');
+ for(const table of ['credit_accounts','credit_grants','credit_transactions','credit_holds','api_usage_logs','spend_caps'])await c.query(`CREATE TEMP TABLE ${table} (LIKE public.${table} INCLUDING DEFAULTS) ON COMMIT DROP`);
+ await c.query('CREATE TEMP TABLE usage_credit_preferences (user_id uuid PRIMARY KEY,enabled boolean NOT NULL DEFAULT false) ON COMMIT DROP');
+ await c.query('CREATE TEMP TABLE credit_hold_funding (hold_row_id uuid,grant_id uuid,reserved_micro bigint,draw_order integer,PRIMARY KEY(hold_row_id,grant_id)) ON COMMIT DROP');
+ const tx={release(){},async query(sql,p){if(/^(BEGIN|COMMIT|ROLLBACK)$/.test(sql.trim()))return {rows:[]};return c.query(sql,p);}};
+ const pool={connect:async()=>tx,query:(sql,p)=>tx.query(sql,p)};
+ const u='00000000-0000-4000-8000-000000000001';
+ await c.query('INSERT INTO users VALUES ($1,0)',[u]);
+ const {rows:[acct]}=await c.query('INSERT INTO credit_accounts (user_id,balance) VALUES ($1,1150) RETURNING id',[u]);
+ for(const [kind,priority,amount] of [['allowance',5,100],['promo',50,50],['paid',100,1000]])await c.query(`INSERT INTO credit_grants (user_id,account_id,amount_micro,remaining_micro,kind,priority,expires_at) VALUES ($1,$2,$3,$3,$4,$5,CASE WHEN $4::varchar='allowance' THEN now()+interval '1 day' ELSE NULL END)`,[u,acct.id,amount,kind,priority]);
+ const hold=(id,amount)=>ledger.holdV2(pool,u,{holdId:id,amountMicro:amount,surface:'proof',operation:'consent',expiresInSeconds:900});
+ const settle=(id,amount)=>ledger.settleHoldV2(pool,u,id,amount);
+ const usage=(id,amount)=>ledger.recordUsageV2(pool,u,{transactionId:id,costMicro:amount,surface:'proof',operation:'consent'});
+ const left=async kind=>Number((await c.query('SELECT SUM(remaining_micro) AS n FROM credit_grants WHERE kind=$1',[kind])).rows[0].n);
+ await assert.rejects(()=>hold('off-overflow',101),{code:'QUOTA_EXCEEDED'});
+ assert.equal(await left('paid'),1000);console.log('PASS default OFF refuses paid overflow');
+ await hold('allowance',80);
+ await assert.rejects(()=>hold('concurrent',21),{code:'QUOTA_EXCEEDED'});
+ await assert.rejects(()=>usage('competing-direct',21),{code:'QUOTA_EXCEEDED'});
+ console.log('PASS competing hold and usage cannot reuse reserved allowance');
+ await settle('allowance',60);await settle('allowance',60);
+ assert.equal(await left('allowance'),40);assert.equal(await left('paid'),1000);console.log('PASS actual-only settlement and idempotent replay');
+ await c.query('INSERT INTO usage_credit_preferences VALUES ($1,true)',[u]);
+ await hold('overage',100);
+ await c.query('UPDATE usage_credit_preferences SET enabled=false WHERE user_id=$1',[u]);
+ await settle('overage',95);
+ assert.equal(await left('allowance'),0);assert.equal(await left('promo'),0);assert.equal(await left('paid'),995);
+ console.log('PASS admitted ON work settles after OFF using allowance, promo, paid');
+ await assert.rejects(()=>hold('after-off',1),{code:'QUOTA_EXCEEDED'});
+ await assert.rejects(()=>usage('after-off-direct',1),{code:'QUOTA_EXCEEDED'});
+ console.log('PASS OFF stops subsequent hold and direct usage');
+ await c.query('UPDATE usage_credit_preferences SET enabled=true WHERE user_id=$1',[u]);
+ await hold('cancel',20);await ledger.voidHoldV2(pool,u,'cancel');
+ const r=await hold('cancel',20);assert.equal(r.state,'voided');
+ await hold('cancel',20).catch(()=>{});
+ await hold('reopened',10);await ledger.voidHoldV2(pool,u,'reopened');
+ await ledger.holdV2(pool,u,{holdId:'reopened',amountMicro:10,surface:'proof',operation:'consent',reopenVoided:true});
+ await settle('reopened',10);assert.equal(await left('paid'),985);console.log('PASS void releases lot funding and explicit reopen reauthorizes');
+ await c.query('UPDATE usage_credit_preferences SET enabled=false WHERE user_id=$1',[u]);
+ await c.query(`INSERT INTO credit_grants (user_id,account_id,amount_micro,remaining_micro,kind,priority,expires_at) VALUES ($1,$2,100,100,'allowance',5,now()-interval '1 second')`,[u,acct.id]);
+ await assert.rejects(()=>hold('expired-allowance',1),{code:'QUOTA_EXCEEDED'});
+ await c.query(`INSERT INTO credit_grants (user_id,account_id,amount_micro,remaining_micro,kind,priority,expires_at) VALUES ($1,$2,100,100,'allowance',5,now()+interval '7 days')`,[u,acct.id]);
+ await c.query('UPDATE credit_accounts SET balance=balance+100 WHERE user_id=$1',[u]);
+ await hold('new-week',30);await settle('new-week',30);assert.equal(await left('paid'),985);
+ console.log('PASS expired allowance excluded; new weekly allowance works with OFF');
+ const total=await c.query("SELECT COUNT(*) AS n FROM credit_transactions WHERE type='debit'");assert.equal(Number(total.rows[0].n),4);
+} finally {await c.query('ROLLBACK');await c.end();console.log('All temporary proof data rolled back.');}

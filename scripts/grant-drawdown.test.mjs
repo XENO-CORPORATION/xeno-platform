@@ -12,6 +12,14 @@ function ledgerFixture(kinds, cost) {
   const query = async (raw, params = []) => {
     const sql = raw.replace(/\s+/g, ' ').trim();
     if (/^(BEGIN|COMMIT|ROLLBACK)$/.test(sql)) return { rows: [] };
+    if (sql.startsWith('SELECT enabled')) return { rows: [{enabled:true}] };
+    if (sql.startsWith('SELECT grant_id')) return { rows: [] };
+    if (sql.includes('AS reserved')) return { rows: [{reserved:'0'}] };
+    if (sql.startsWith('SELECT g.id')) return { rows: lots.map(row=>({...row,available:row.remaining_micro})) };
+    if (sql.startsWith('UPDATE credit_grants SET remaining_micro=')) {
+      const lot=lots.find(row=>row.id===params[1]);
+      lot.remaining_micro=String(BigInt(lot.remaining_micro)-BigInt(params[0])); writes.push(lot.id);return {rows:[{id:lot.id}]};
+    }
     if (sql.startsWith('SELECT id, remaining_micro, kind FROM credit_grants')) {
       assert.match(sql, /ORDER BY priority ASC, expires_at ASC NULLS LAST, created_at ASC, id ASC FOR UPDATE$/);
       return { rows: lots.map(row => ({ ...row })) };

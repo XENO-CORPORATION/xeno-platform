@@ -15,6 +15,7 @@ import {
   holdV2, settleHoldV2, voidHoldV2, deterministicTxnId, MICRO_PER_CREDIT,
 } from './creditLedgerV2.js';
 import { getChatCostMicro, estimateChatCostMicro } from './creditCosts.js';
+import { prepareAccountQuota } from '../services/usageCreditsService.js';
 
 /**
  * Bounded retry with small linear backoff. Makes the streaming settle/void resilient
@@ -53,7 +54,8 @@ function reportMeterFailure(kind, err, ctx) {
 }
 
 /** Map a ledger error code to an HTTP-shaped error the route can return directly. */
-function meteringError(code) {
+function meteringError(code, original) {
+  if (code === 'QUOTA_EXCEEDED') return Object.assign(new Error(original?.message || 'Weekly limit reached'), { code, http: 402, resetsAt: original?.resetsAt });
   if (code === 'INSUFFICIENT_CREDITS') {
     const e = new Error('Insufficient credits'); e.code = code; e.http = 402; return e;
   }
@@ -77,6 +79,7 @@ function meteringError(code) {
  * @throws  err with err.http (402/403/500) on metering failure; provider errors bubble up after the hold is voided.
  */
 export async function meterPremiumChat(db, userId, opts) {
+  userId = (await prepareAccountQuota(db, userId)).userId;
   const {
     model, provider, requestId,
     estInputTokens = 0, maxTokens = 1024, run,
@@ -102,7 +105,7 @@ export async function meterPremiumChat(db, userId, opts) {
       reopenVoided: reopenVoidedHold,
     });
   } catch (e) {
-    throw meteringError(e.code);
+    throw meteringError(e.code, e);
   }
 
   // Run the provider. Any failure → void the hold (full refund) and bubble up.
@@ -183,6 +186,7 @@ export async function meterPremiumChat(db, userId, opts) {
  *          up AFTER the hold is voided (so the route reports them without a charge).
  */
 export async function meterMediaGeneration(db, userId, opts) {
+  userId = (await prepareAccountQuota(db, userId)).userId;
   const {
     surface, operation, model, provider,
     requestId, unitCostMicro, count = 1, run,
@@ -222,7 +226,7 @@ export async function meterMediaGeneration(db, userId, opts) {
       expiresInSeconds: 900,
     });
   } catch (e) {
-    throw meteringError(e.code);
+    throw meteringError(e.code, e);
   }
 
   // Run the provider (this closure also applies any watermark, so a watermark
@@ -295,6 +299,7 @@ export async function meterMediaGeneration(db, userId, opts) {
  * @throws  err with err.http (402/403/500) if the Phase-1 hold fails (BEFORE any stream).
  */
 export async function meterPremiumChatStream(db, userId, opts) {
+  userId = (await prepareAccountQuota(db, userId)).userId;
   const {
     model, provider, requestId,
     estInputTokens = 0, maxTokens = 1024,
@@ -321,7 +326,7 @@ export async function meterPremiumChatStream(db, userId, opts) {
       expiresInSeconds: 120,
     });
   } catch (e) {
-    throw meteringError(e.code);
+    throw meteringError(e.code, e);
   }
 
   let done = false; // single-shot guard: settle XOR void, exactly once

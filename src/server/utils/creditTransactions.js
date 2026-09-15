@@ -21,6 +21,7 @@
  * the legacy no-idempotency behaviour — no double-charge regression, no dedupe gain).
  */
 import crypto from 'crypto';
+import { prepareAccountQuota } from '../services/usageCreditsService.js';
 import { recordUsageV2, reverseUsage, getBalanceV2, MICRO_PER_CREDIT } from './creditLedgerV2.js';
 
 const wholeFromMicro = (micro) => Math.floor(Number(micro || 0) / MICRO_PER_CREDIT);
@@ -40,6 +41,7 @@ export async function deductCredits(db, userId, amount, meta = {}) {
   const costMicro = Math.round(credits * MICRO_PER_CREDIT);
   const transactionId = meta.transactionId || meta.requestId || `legacy-debit:${crypto.randomUUID()}`;
   try {
+    userId = (await prepareAccountQuota(db, userId)).userId;
     const r = await recordUsageV2(db, userId, {
       surface: meta.surface || 'legacy',
       operation: meta.operation || 'debit',

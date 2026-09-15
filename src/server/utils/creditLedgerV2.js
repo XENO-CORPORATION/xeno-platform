@@ -18,6 +18,7 @@
  *    consistent during the strangler-fig transition.
  */
 import crypto from 'node:crypto';
+import { allocateFunding, saveHoldFunding, consumeFunding, readHoldFunding } from './usageCreditFunding.js';
 
 export const MICRO_PER_CREDIT = 1_000_000;
 const REF_TYPE = 'xeno.usage';
@@ -548,8 +549,8 @@ export async function recordUsageV2(pool, userId, event) {
         throw err;
       }
 
-      const leftover = await drawdownGrants(client, userId, costMicro);  // draw from lots in §4.7 order
-      reportLotDrift('recordUsageV2', { userId, accountId: acct.id, requestedMicro: costMicro, leftoverMicro: leftover });
+      const funding = await allocateFunding(client, userId, costMicro);
+      await consumeFunding(client, funding, costMicro);
       const newBalance = balance - costMicro;
       await client.query(
         'UPDATE credit_accounts SET balance = $1, lifetime_spent = lifetime_spent + $2, updated_at = now() WHERE id = $3',
@@ -607,6 +608,8 @@ export async function holdV2(pool, userId, req) {
         throw err;
       }
       await assertWithinCaps(client, userId, amountMicro);
+      await syncGrants(client, acct, userId);
+      const funding = await allocateFunding(client, userId, amountMicro);
       const expiresAt = new Date(Date.now() + (req.expiresInSeconds ?? 900) * 1000);
       const reopened = await client.query(
         `UPDATE credit_holds
@@ -616,6 +619,7 @@ export async function holdV2(pool, userId, req) {
         [existing.rows[0].id, amountMicro.toString(), expiresAt.toISOString()],
       );
       if (!reopened.rows[0]) throw Object.assign(new Error('voided hold could not be reopened'), { code: 'HOLD_REOPEN_CONFLICT' });
+      await saveHoldFunding(client, reopened.rows[0].id, funding);
       await client.query('COMMIT');
       outcome = { row: reopened.rows[0], balance, held, isFrozen: Boolean(acct.is_frozen) };
     } else if (existing.rows.length > 0) {
@@ -641,12 +645,15 @@ export async function holdV2(pool, userId, req) {
       // did not — so the hold path, which is how hosted agent runs bill, ignored caps
       // entirely even when one was set.
       await assertWithinCaps(client, userId, amountMicro);
+      await syncGrants(client, acct, userId);
+      const funding = await allocateFunding(client, userId, amountMicro);
       const expiresAt = new Date(Date.now() + (req.expiresInSeconds ?? 900) * 1000);
       const row = await client.query(
         `INSERT INTO credit_holds (user_id, account_id, hold_id, surface, operation, amount_micro, expires_at)
          VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING *`,
         [userId, acct.id, req.holdId, req.surface, req.operation, amountMicro.toString(), expiresAt.toISOString()],
       );
+      await saveHoldFunding(client, row.rows[0].id, funding);
       await client.query('COMMIT');
       outcome = { row: row.rows[0], balance, held, isFrozen: Boolean(acct.is_frozen) };
     }
@@ -686,8 +693,16 @@ export async function settleHoldV2(pool, userId, holdId, actualCostMicro) {
       const avail = posted < 0n ? 0n : posted;
       const actual = requested < avail ? requested : avail;
       if (actual > 0n) {
-        const leftover = await drawdownGrants(client, userId, actual); // draw from lots (§4.7)
-        reportLotDrift('settleHoldV2', { userId, accountId: acct.id, requestedMicro: actual, leftoverMicro: leftover });
+        const funding = await readHoldFunding(client, hold.id);
+        if (funding.length) {
+          await consumeFunding(client, funding, actual);
+        }
+        else {
+          // Pre-migration holds were already admitted under the old policy. Finish
+          // them without retroactively applying the new default-off consent.
+          const leftover = await drawdownGrants(client, userId, actual);
+          reportLotDrift('settleHoldV2', { userId, accountId: acct.id, requestedMicro: actual, leftoverMicro: leftover });
+        }
       }
       const newBalance = posted - actual;
       await client.query('UPDATE credit_accounts SET balance=$1, lifetime_spent=lifetime_spent+$2, updated_at=now() WHERE id=$3',

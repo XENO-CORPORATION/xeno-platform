@@ -6699,7 +6699,12 @@ interface QueueState {
             } catch (parseError) {
                 errorData = { error: `API request failed with status ${response.status}. Non-JSON response: ${errorText}` };
             }
-            const errorMessageText = (errorData as any).error || `API request failed with status ${response.status}`;
+            const detail = errorData as { error?: string | { code?: string; message?: string }; message?: string; resetsAt?: string };
+            const code = typeof detail.error === 'object' ? detail.error?.code : detail.error;
+            const message = detail.message || (typeof detail.error === 'object' ? detail.error?.message : detail.error);
+            const errorMessageText = code === 'QUOTA_EXCEEDED'
+              ? `Weekly limit reached. Turn on usage credits in Account > Usage to keep working.${detail.resetsAt ? ` Your weekly quota resets ${new Date(detail.resetsAt).toLocaleString()}.` : ''}`
+              : message || `API request failed with status ${response.status}`;
             throw new Error(errorMessageText);
         }
 
