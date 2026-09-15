@@ -10,7 +10,8 @@
  *   - make the allowance lot outrank paid credits   -> "the allowance is spent before purchased credits"
  *   - drop the window from the grant's source_ref   -> "a refill is idempotent within its window"
  *   - refill a partly-spent allowance to full       -> "a refill never tops up mid-window"
- *   - give an agent its owner's burst fraction      -> "an agent's burst guard is tighter than its owner's"
+ *   - split the burst ceiling per actor kind        -> "there is ONE burst ceiling per account"
+ *   - bill an agent to its own id, not its owner    -> (ledger-pricing-authority.test.mjs)
  *   - return credits from the quota view            -> "the subscriber view carries no credit or token number"
  */
 
@@ -111,24 +112,27 @@ test('an unmetered plan is granted nothing and capped by nothing', async () => {
   assert.deepEqual(burstCapsFor('internal'), [], 'no allowance to protect, so no guard');
 });
 
-test("an agent's burst guard is tighter than its owner's", () => {
-  // An agent is a users row in its own right, so it takes a spend_caps row by the same
-  // mechanism — no new table. A runaway agent burns its own share and stops; the human's
-  // week survives. That is the difference between "my agent misbehaved" and "my agent
-  // cost me my week".
-  const human = burstCapsFor('pro', { isAgent: false });
-  const agent = burstCapsFor('pro', { isAgent: true });
-  assert.equal(human.length, BURST_WINDOWS.length);
-  assert.equal(agent.length, human.length);
-  for (let i = 0; i < human.length; i += 1) {
-    assert.equal(agent[i].windowSec, human[i].windowSec);
-    assert.ok(agent[i].limitMicro < human[i].limitMicro, 'an agent must not be able to spend its owner dry');
+test('there is ONE burst ceiling per account, not one per kind of actor', () => {
+  // 🔴 An earlier version took a second fraction for agents. Rejected by the account owner
+  // 2026-09-15, and it was wrong twice over: it READ as a second quota — the overlapping
+  // limits §8b exists to avoid — and it was incoherent, because an agent has no allowance
+  // of its own to take a fraction OF. It spends its owner's. So the cap belongs to the
+  // account, and whoever spends fast meets the same ceiling.
+  const caps = burstCapsFor('pro');
+  assert.equal(caps.length, BURST_WINDOWS.length);
+  assert.equal(burstCapsFor.length, 1, 'burstCapsFor takes a plan and nothing else — no actor axis');
+  for (const w of BURST_WINDOWS) {
+    assert.ok(!('agentFraction' in w) && !('humanFraction' in w),
+      'a per-actor fraction is a second quota wearing a cap\'s clothes');
+    assert.equal(typeof w.fraction, 'number');
   }
+  // Passing anything as a second argument must not change the answer.
+  assert.deepEqual(burstCapsFor('pro', { isAgent: true }), caps);
 });
 
 test('a burst guard bounds a runaway loop to a fraction of the week', () => {
   const weekly = WEEKLY_ALLOWANCE_CREDITS.pro * MICRO;
-  const [guard] = burstCapsFor('pro', { isAgent: true });
+  const [guard] = burstCapsFor('pro');
   assert.ok(guard.limitMicro > 0, 'a zero cap would refuse the first honest call');
   assert.ok(guard.limitMicro <= weekly * 0.25, 'a loop cannot eat the week before it is stopped');
   assert.equal(guard.windowSec, 5 * 60 * 60);

@@ -333,3 +333,33 @@ export async function retireAgent(db, owner, agentHandle) {
   await db.query(`UPDATE api_keys SET is_active = FALSE WHERE user_id = $1`, [rows[0].user_id]);
   await db.query(`UPDATE users SET is_active = FALSE, status = 'suspended' WHERE id = $1`, [rows[0].user_id]);
 }
+
+/**
+ * WHO PAYS. Resolves any principal to the user whose wallet, plan and quota apply.
+ *
+ * 🔒 An agent is not an account. It is a scoped relation off a real user (`XENO ACCOUNT -
+ * ARCHITECTURE.md` §3), so it has no money, no plan and no quota of its own — it consumes
+ * its owner's. There is ONE quota per human, and everything they run draws on it.
+ *
+ * 🔴 This is not a refinement, it closes a live hole. `getPlan` reads
+ * `xeno_account_plans` by the id it is handed; no agent row carries a subscription, so
+ * EVERY agent resolved to `free` no matter who owned it — a 50-credit week against an
+ * owner's 2000. And the spend went to the agent's own `credit_accounts` row, which nothing
+ * funds, so an agent's cost never appeared on the bill of the person responsible for it.
+ * Both bugs are the same mistake: treating the agent's user id as a billing subject.
+ *
+ * A service principal has no owner — nobody to charge — so it resolves to itself and is
+ * refused elsewhere. The chain terminates at a human by construction: an agent cannot own
+ * an agent (API check plus a DB trigger), so this never needs to walk more than one hop.
+ */
+export async function billingSubjectFor(db, userId) {
+  const principal = await resolvePrincipal(db, userId);
+  if (!principal) return { userId: String(userId), isAgent: false, actorUserId: String(userId) };
+  return {
+    // The wallet, the plan and the quota all belong to this id.
+    userId: principal.owner?.id ? String(principal.owner.id) : String(principal.id),
+    // Who actually made the call — for attribution, never for billing.
+    actorUserId: String(principal.id),
+    isAgent: principal.kind === 'agent',
+  };
+}

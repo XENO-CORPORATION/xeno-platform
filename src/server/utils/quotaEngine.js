@@ -61,15 +61,23 @@ export function allowanceCreditsFor(plan) {
 }
 
 /**
- * Burst guards, in seconds → fraction of the weekly allowance spendable in that window.
+ * The burst guard: seconds → fraction of the weekly allowance spendable in that window.
  *
- * 0.25 over 5 hours means a single agent loop cannot eat more than a quarter of the week
+ * 0.25 over 5 hours means nothing on the account can eat more than a quarter of the week
  * before it is stopped — enough headroom for a heavy real session, far short of a runaway.
- * An AGENT's own guard is tighter than its owner's (see `burstCapsFor`): an agent that
- * misbehaves burns its own share and stops, and the human's week survives.
+ *
+ * 🔴 ONE fraction, not one per actor. An earlier version gave agents a tighter fraction
+ * than humans, and that was wrong twice over. It read as a second quota, which is exactly
+ * the overlapping-limits confusion §8b exists to avoid — and it was incoherent anyway,
+ * because an agent has no allowance of its own to take a fraction OF: it spends its owner's
+ * (see `billingSubjectFor`). The guard belongs to the account, so whoever spends fast
+ * meets the same ceiling, and the owner sees one number.
+ *
+ * Per-agent budgets are a real feature and deliberately NOT this: a budget is something a
+ * human sets on purpose, not a constant in a pricing table that silently throttles.
  */
 export const BURST_WINDOWS = [
-  { windowSec: 5 * 60 * 60, humanFraction: 0.25, agentFraction: 0.10 },
+  { windowSec: 5 * 60 * 60, fraction: 0.25 },
 ];
 
 export const ALLOWANCE_GRANT_KIND = 'allowance';
@@ -104,17 +112,18 @@ export function allowanceSourceRef(userId, plan, windowIndex) {
 }
 
 /**
- * The burst caps an account should carry. An agent is a `users` row in its own right
- * (`agent_identities.user_id` ≠ `owner_user_id`), so it takes a cap row like anyone else
- * — no new table, no new concept, and `assertWithinCaps` already counts LIVE HOLDS, which
- * is what makes it hold under a concurrent agent fan-out.
+ * The burst caps an ACCOUNT carries. Keyed on the owner's user id, because that is whose
+ * allowance is being protected — an agent's spend lands there too (`billingSubjectFor`),
+ * so its calls are counted by the same cap rather than a separate one. `assertWithinCaps`
+ * already counts LIVE HOLDS as well as settled debits, which is what makes this hold when
+ * an agent fans out ten concurrent calls.
  */
-export function burstCapsFor(plan, { isAgent = false } = {}) {
+export function burstCapsFor(plan) {
   const credits = allowanceCreditsFor(plan);
   if (credits == null) return []; // unmetered plan: no allowance to protect
-  return BURST_WINDOWS.map(({ windowSec, humanFraction, agentFraction }) => ({
+  return BURST_WINDOWS.map(({ windowSec, fraction }) => ({
     windowSec,
-    limitMicro: Math.round(credits * MICRO_PER_CREDIT * (isAgent ? agentFraction : humanFraction)),
+    limitMicro: Math.round(credits * MICRO_PER_CREDIT * fraction),
   }));
 }
 

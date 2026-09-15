@@ -35,7 +35,7 @@ import * as defaultLedger from '../utils/creditLedgerV2.js';
 import * as defaultPricing from '../utils/creditCosts.js';
 import { ensureQuota as defaultEnsureQuota } from '../services/quotaService.js';
 import { getEffectivePlan as defaultGetEffectivePlan } from '../services/effectivePlan.js';
-import { resolvePrincipal as defaultResolvePrincipal } from '../services/agentIdentity.js';
+import { billingSubjectFor as defaultBillingSubjectFor } from '../services/agentIdentity.js';
 
 // Same error taxonomy as v2LedgerRoutes.sendErr (kept local so the two files
 // share no mutable surface). 23505 (unique-violation on holdId replay) → 409.
@@ -100,7 +100,7 @@ export function createServiceLedgerRouter({
   getServiceToken = () => process.env.LEDGER_SERVICE_TOKEN,
   ensureQuota = defaultEnsureQuota,
   getEffectivePlan = defaultGetEffectivePlan,
-  resolvePrincipal = defaultResolvePrincipal,
+  billingSubjectFor = defaultBillingSubjectFor,
 } = {}) {
   const router = express.Router();
   router.use(makeRequireServiceToken(getServiceToken));
@@ -197,20 +197,24 @@ export function createServiceLedgerRouter({
       // a call they are entitled to, and — worse — an agent whose burst cap was never
       // written spends against no guard at all, which is the exact runaway this exists to
       // stop. A quota subsystem that cannot answer is a reason to refuse, not to proceed.
-      await ensureQuota(req.db, userId, (await getEffectivePlan(req.db, userId)).plan, {
-        // An agent has its OWN users row, so it takes its own (tighter) cap. Passing the
-        // human default here would have given every agent its owner's fraction — the one
-        // number the whole burst design turns on.
-        isAgent: (await resolvePrincipal(req.db, userId))?.kind === 'agent',
-      });
-      const hold = await ledger.holdV2(req.db, userId, {
+      // 🔴 WHO PAYS is resolved here, and it is not always who called. An agent is a
+      // scoped relation off a real user, so it has no wallet, no plan and no quota of its
+      // own — everything it runs draws on its OWNER's single quota. Billing the agent's
+      // own id (which is what the caller sends) charged a `credit_accounts` row nothing
+      // funds, and resolved the plan from a row carrying no subscription, so every agent
+      // silently became `free`. One human, one wallet, one quota.
+      const subject = await billingSubjectFor(req.db, userId);
+      await ensureQuota(req.db, subject.userId, (await getEffectivePlan(req.db, subject.userId)).plan);
+      const hold = await ledger.holdV2(req.db, subject.userId, {
         surface,
         holdId,
         amountMicro: amount.amountMicro,
         operation,
         expiresInSeconds: b.expiresInSeconds ?? 3600,
       });
-      res.json({ ...hold, amountMicro: amount.amountMicro, pricing: amount.priced });
+      // The agent is still named, for attribution — the owner must be able to see WHICH
+      // of their agents spent this. Attribution is a label; billing is the owner.
+      res.json({ ...hold, amountMicro: amount.amountMicro, pricing: amount.priced, billedUserId: subject.userId, actorUserId: subject.actorUserId });
     } catch (err) {
       sendErr(res, err);
     }
@@ -223,8 +227,12 @@ export function createServiceLedgerRouter({
     const amount = settleAmount(b);
     if (amount.error) return badRequest(res, amount.error);
     try {
-      const settled = await ledger.settleHoldV2(req.db, b.userId, req.params.holdId, amount.actualCostMicro);
-      res.json({ ...settled, pricing: amount.priced });
+      // Same subject as the hold — an agent's hold lives on its OWNER's account, so
+      // settling under the agent's own id would look for a hold that is not there and
+      // strand the reservation until it expired. Resolve identically on every leg.
+      const subject = await billingSubjectFor(req.db, b.userId);
+      const settled = await ledger.settleHoldV2(req.db, subject.userId, req.params.holdId, amount.actualCostMicro);
+      res.json({ ...settled, pricing: amount.priced, billedUserId: subject.userId });
     } catch (err) {
       sendErr(res, err);
     }
@@ -235,7 +243,8 @@ export function createServiceLedgerRouter({
     const b = req.body || {};
     if (!b.userId) return badRequest(res, 'userId required');
     try {
-      res.json(await ledger.voidHoldV2(req.db, b.userId, req.params.holdId));
+      const subject = await billingSubjectFor(req.db, b.userId);
+      res.json(await ledger.voidHoldV2(req.db, subject.userId, req.params.holdId));
     } catch (err) {
       sendErr(res, err);
     }
@@ -261,7 +270,12 @@ export function createServiceLedgerRouter({
     if (inTok === null || outTok === null) return badRequest(res, 'usage.inputTokens and usage.outputTokens must be non-negative integers');
     const costMicro = pricing.getChatCostMicro(model, { inputTokens: inTok, outputTokens: outTok });
     try {
-      const result = await ledger.recordUsageV2(req.db, userId, {
+      // One-shot debits bill the owner too, and carry the agent as a DIMENSION so the
+      // owner can see which of their agents spent it. Attribution is a label on the row;
+      // the money is the owner's either way.
+      const subject = await billingSubjectFor(req.db, userId);
+      await ensureQuota(req.db, subject.userId, (await getEffectivePlan(req.db, subject.userId)).plan);
+      const result = await ledger.recordUsageV2(req.db, subject.userId, {
         transactionId,
         surface,
         operation,
@@ -269,9 +283,12 @@ export function createServiceLedgerRouter({
         costMicro,
         inputTokens: inTok,
         outputTokens: outTok,
-        dimensions: { usage_source: measured === false ? 'estimated' : 'provider' },
+        dimensions: {
+          usage_source: measured === false ? 'estimated' : 'provider',
+          ...(subject.isAgent ? { agent_user_id: subject.actorUserId } : {}),
+        },
       });
-      res.json({ ...result, costMicro, pricing: { model, measured: measured !== false, inputTokens: inTok, outputTokens: outTok } });
+      res.json({ ...result, costMicro, billedUserId: subject.userId, pricing: { model, measured: measured !== false, inputTokens: inTok, outputTokens: outTok } });
     } catch (err) {
       sendErr(res, err);
     }
