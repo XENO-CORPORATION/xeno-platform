@@ -90,6 +90,13 @@ export function useRovingGrid(onEnter?: () => void, resetKey?: unknown) {
   }, []);
 
   const onKeyDown = useCallback((e: React.KeyboardEvent) => {
+    // Editable controls own Space and Enter. This handler bubbles from the whole
+    // step wrapper so a text field such as "How did you hear about XENO?"
+    // must be excluded before the roving switch can activate a card or advance.
+    // A keyboard user expects Space to insert a space, not navigate the survey.
+    const target = e.target as HTMLElement | null;
+    const tag = target?.tagName;
+    if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || target?.isContentEditable) return;
     const els = items();
     if (els.length === 0) return;
     const i = Math.min(active, els.length - 1);
