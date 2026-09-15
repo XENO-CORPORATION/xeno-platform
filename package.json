@@ -136,7 +136,7 @@
     "test:connector-geometry": "node --test scripts/connector-geometry.test.mjs",
     "test:workspace-selection": "node --test scripts/workspace-selection.test.mjs",
     "test:keyboard-flow": "node --test scripts/keyboard-flow.test.mjs",
-    "test:keyboard-grid": "node --test scripts/keyboard-grid.test.mjs",
+    "test:keyboard-grid": "node --test scripts/keyboard-grid.test.mjs scripts/onboarding-input-keyboard.test.mjs",
     "test:focus-visible": "node --test scripts/focus-visible.test.mjs",
     "test:chat-composer-focus": "node --test scripts/chat-composer-focus.test.mjs",
     "test:sidebar-exclusion": "node --test scripts/sidebar-exclusion.test.mjs",
