@@ -59,8 +59,6 @@ async function activeHoldsMicro(client, userId) {
 
 // ── Drawdown lots (Arch §4.7) ───────────────────────────────────────────────
 
-const KIND_RANK = { free: 0, promo: 1, paid: 2 };
-
 /**
  * Lazily migrate an account to lots: if it has balance but no live grants, seed a
  * single 'paid' lot = balance. Keeps existing accounts working under the new model.
@@ -105,9 +103,10 @@ async function drawdownGrants(client, userId, costMicro) {
       FOR UPDATE`,
     [userId],
   );
-  // Stable tiebreak: free-before-paid within equal priority/expiry.
-  const ordered = lots.rows.slice().sort((a, b) => (KIND_RANK[a.kind] ?? 9) - (KIND_RANK[b.kind] ?? 9) || 0);
-  for (const lot of ordered) {
+  // SQL defines the complete drawdown order. A second sort by kind overrides
+  // priority and expiry, spending paid lots before allowance lots despite priority 5.
+  // Grant kind is descriptive; priority, expiry and FIFO determine consumption.
+  for (const lot of lots.rows) {
     if (need <= 0n) break;
     const take = BigInt(lot.remaining_micro) < need ? BigInt(lot.remaining_micro) : need;
     await client.query('UPDATE credit_grants SET remaining_micro = remaining_micro - $1 WHERE id = $2', [take.toString(), lot.id]);
