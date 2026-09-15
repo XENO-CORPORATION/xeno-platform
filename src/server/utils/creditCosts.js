@@ -74,13 +74,30 @@ export function chatTier(modelId = '') {
   if (/llama|deepseek|qwen|mistral|tinyllama|-scout|-maverick/.test(id)) return 'open';
   // Mid proprietary (small/fast frontier). Hyphen-anchor mini/nano so 'geMINI' doesn't match.
   if (/-mini|-nano|flash|haiku|sonnet|gpt-4o|grok-4\.1-fast|grok-3/.test(id)) return 'frontier-mid';
-  // Large frontier (flagship).
-  if (/opus|gpt-5|gpt-4\.|pro|grok-4|-max\b|gemini-\d+(\.\d+)?-pro/.test(id)) return 'frontier-large';
+  // Large frontier (flagship). `gpt-[5-9]`, not `gpt-5`: gpt-6-astra was falling through
+  // to 'default' — the flagship priced as if it were unknown.
+  if (/opus|gpt-[5-9]|gpt-4\.|pro|grok-4|-max\b|gemini-\d+(\.\d+)?-pro/.test(id)) return 'frontier-large';
   return 'default';
 }
 
 function chatRates(modelId) {
   return CHAT_MODEL_OVERRIDES[modelId] || CHAT_TIERS[chatTier(modelId)] || CHAT_TIERS.default;
+}
+
+/** The per-token rates a model is priced at — for callers that display or quote, never for callers that charge. */
+export function chatRatesFor(modelId) {
+  const r = chatRates(modelId);
+  return { inputMicroPerToken: r.input, outputMicroPerToken: r.output, tier: CHAT_MODEL_OVERRIDES[modelId] ? 'override' : chatTier(modelId) };
+}
+
+/** The whole chat price list, for the public pricing surface. */
+export function chatPriceList() {
+  return {
+    unit: 'micro-credits per token',
+    creditEur: 0.01,
+    tiers: CHAT_TIERS,
+    overrides: CHAT_MODEL_OVERRIDES,
+  };
 }
 
 /** Actual premium-chat cost in µcr from real token usage (used at settle time). */
