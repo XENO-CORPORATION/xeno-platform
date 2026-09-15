@@ -1,3 +1,4 @@
+import { installUsageCreditFixture, optInUsageCredits } from './usage-credit-fixture.mjs';
 /**
  * Integration test for Credit Ledger v2 against a real Postgres.
  * Run: DATABASE_URL=postgresql://t:t@127.0.0.1:55455/t node tests/ledger-v2.test.mjs
@@ -41,11 +42,13 @@ CREATE TABLE IF NOT EXISTS api_usage_logs (id uuid PRIMARY KEY DEFAULT gen_rando
 async function main() {
   await pool.query(BASE);
   await migrateAccountV2(pool);
+  await installUsageCreditFixture(pool);
   console.log('✓ migration applied');
 
   // Seed a user with 100 legacy credits.
   const u = await pool.query('INSERT INTO users (credits) VALUES (100) RETURNING id');
   const userId = u.rows[0].id;
+  await optInUsageCredits(pool, userId);
 
   // 1. Balance derives from legacy before any wallet exists.
   let bal = await getBalanceV2(pool, userId);

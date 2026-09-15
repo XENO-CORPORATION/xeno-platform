@@ -1,3 +1,4 @@
+import { installUsageCreditFixture, optInUsageCredits } from './usage-credit-fixture.mjs';
 /**
  * Self-contained integration test for the ledger hash chain (Arch §5).
  * Creates the minimal live-shaped base tables, then exercises debit + hold/settle
@@ -31,9 +32,11 @@ CREATE TABLE IF NOT EXISTS api_usage_logs (
 
 async function main() {
   await pool.query(BASE);
-  await migrateAccountV2(pool); // adds credit_holds + (guarded) hash columns / index
+  await migrateAccountV2(pool);
+  await installUsageCreditFixture(pool);
   const u = await pool.query('INSERT INTO users (credits) VALUES (100) RETURNING id');
   const userId = u.rows[0].id;
+  await optInUsageCredits(pool, userId);
 
   // 1. two debits + a hold/settle → 4 chained entries
   await recordUsageV2(pool, userId, { transactionId: 'txn-1', surface: 'xeno_post', operation: 'ai.caption', costMicro: 5 * MICRO_PER_CREDIT });

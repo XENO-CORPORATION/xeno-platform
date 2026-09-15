@@ -1,3 +1,4 @@
+import { installUsageCreditFixture, optInUsageCredits } from './usage-credit-fixture.mjs';
 /**
  * Ledger correctness test (Blocker #8): DEF-4 backfill lot drift, DEF-5 reversing
  * refund, and the phantom-hold sweeper (INFRA-7.3).
@@ -36,11 +37,16 @@ const lots = async (uid) => Number((await pool.query("SELECT COALESCE(SUM(remain
 const counters = async (uid) => { const r = (await pool.query('SELECT lifetime_earned, lifetime_spent FROM credit_accounts WHERE user_id=$1', [uid])).rows[0]; return { earned: Number(r.lifetime_earned), spent: Number(r.lifetime_spent) }; };
 const txCount = async (uid, type) => Number((await pool.query('SELECT COUNT(*)::int c FROM credit_transactions WHERE user_id=$1 AND type=$2', [uid, type])).rows[0].c);
 const lotKinds = async (uid) => (await pool.query("SELECT kind FROM credit_grants WHERE user_id=$1 ORDER BY created_at", [uid])).rows.map((r) => r.kind);
-const legacyUser = async (credits) => (await pool.query('INSERT INTO users (credits) VALUES ($1) RETURNING id', [credits])).rows[0].id;
+const legacyUser = async (credits = 0) => {
+  const id = (await pool.query('INSERT INTO users (credits) VALUES ($1) RETURNING id', [credits])).rows[0].id;
+  await optInUsageCredits(pool, id);
+  return id;
+};
 
 async function main() {
   await pool.query(BASE);
   await migrateAccountV2(pool);
+  await installUsageCreditFixture(pool);
 
   // ── DEF-4: legacy-seeded grant does not drift Σ(lots) below balance ─────────
   const u1 = await legacyUser(100);              // legacy: users.credits=100, NO credit_accounts row

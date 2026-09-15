@@ -1,6 +1,6 @@
 # Usage-credit consent rollout
 
-Status: implemented and tested on the platform branch; not deployed.
+Status: implemented and tested; production deployment held for gateway coordination.
 
 ## Account contract
 
@@ -36,7 +36,7 @@ Deploy the account UI and backend as a coordinated release. The new UI refuses t
 
 ## Verification performed
 
-- Full `npm test` passed.
+- Full `npm test` passed. All seven real-PostgreSQL money suites passed in separate Docker test databases (166 assertions), including payment/refund/dispute, ledger integrity, media metering and workspace transfers. Legacy test principals explicitly opt in; production defaults remain OFF.
 - Production frontend build and TypeScript checks passed.
 - Funding tests cover missing/default-OFF preferences, ON overflow, quota vs balance refusal, active/legacy reservations, and settlement funding.
 - Owner-only PATCH/GET tests cover human, agent, service, suspended and unknown principals, strict booleans, and audit events.
