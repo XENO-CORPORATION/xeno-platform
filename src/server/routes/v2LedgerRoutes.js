@@ -22,6 +22,8 @@ import {
   setSpendCap,
 } from '../utils/creditLedgerV2.js';
 import { check as authzCheck } from '../utils/authzReBAC.js';
+import { getEffectivePlan } from '../services/effectivePlan.js';
+import { readQuota } from '../services/quotaService.js';
 
 const router = express.Router();
 
@@ -105,6 +107,33 @@ router.post('/grants', async (req, res) => {
 router.get('/balance', async (req, res) => {
   try {
     res.json(await getBalanceV2(req.db, req.user.id));
+  } catch (err) {
+    sendErr(res, err);
+  }
+});
+
+/**
+ * GET /api/v2/ledger/quota — the weekly allowance AS THE SUBSCRIBER SEES IT.
+ *
+ * 🔒 §8b D2: a percentage and a reset time. Credits and tokens are STRIPPED here — §8
+ * keeps the token/compute mapping internal, and a quota bar that moves when you top up
+ * is the confusion this design exists to avoid. `topUpAvailable` is the door (D3): when
+ * the pool is empty the client offers credits at the plan's own rate rather than a wall.
+ */
+router.get('/quota', async (req, res) => {
+  try {
+    const { plan } = await getEffectivePlan(req.db, req.user.id);
+    const q = await readQuota(req.db, req.user.id, plan);
+    res.json({
+      metered: q.metered,
+      plan: q.plan,
+      usedPercent: q.usedPercent,
+      resetsAt: q.resetsAt,
+      exhausted: q.exhausted,
+      // A boolean, never a number: "you can buy more", not "you have N left".
+      topUpAvailable: q.exhausted === true,
+      hasPurchasedCredits: (q.purchasedCredits ?? 0) > 0,
+    });
   } catch (err) {
     sendErr(res, err);
   }

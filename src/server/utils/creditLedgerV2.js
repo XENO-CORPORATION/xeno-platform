@@ -484,6 +484,37 @@ function balanceView(postedMicro, heldMicro, isFrozen = false) {
  * Direct usage debit (idempotent on transactionId). Returns
  * { accepted, duplicate, costMicro, transactionId, balance }.
  */
+/**
+ * Split the live balance into THIS WINDOW'S ALLOWANCE and everything else.
+ *
+ * The quota a subscriber sees is the allowance half; purchased credits are the door that
+ * opens when it empties (§8b D3), and they must never be counted into the percentage —
+ * a user who tops up would otherwise watch their quota bar refill, which is exactly the
+ * confusion Lovable's overlapping grants produce.
+ *
+ * `allowanceMicro` is the lot's ORIGINAL size and `allowanceRemainingMicro` what is left,
+ * so the percentage is computed against what was granted rather than against a balance
+ * that a top-up changes.
+ */
+export async function allowanceSnapshot(pool, userId, sourceRef) {
+  const { rows } = await pool.query(
+    `SELECT
+       COALESCE(SUM(amount_micro)    FILTER (WHERE source_ref = $2), 0)::bigint AS granted,
+       COALESCE(SUM(remaining_micro) FILTER (WHERE source_ref = $2), 0)::bigint AS remaining,
+       COALESCE(SUM(remaining_micro) FILTER (WHERE source_ref IS DISTINCT FROM $2
+                 AND (expires_at IS NULL OR expires_at > now())), 0)::bigint      AS other
+     FROM credit_grants
+     WHERE user_id = $1 AND remaining_micro >= 0`,
+    [userId, sourceRef],
+  );
+  const r = rows[0] || {};
+  return {
+    allowanceMicro: Number(r.granted || 0),
+    allowanceRemainingMicro: Number(r.remaining || 0),
+    purchasedRemainingMicro: Number(r.other || 0),
+  };
+}
+
 export async function recordUsageV2(pool, userId, event) {
   const costMicro = BigInt(Math.max(0, Math.round(event.costMicro ?? 0)));
   const client = await pool.connect();

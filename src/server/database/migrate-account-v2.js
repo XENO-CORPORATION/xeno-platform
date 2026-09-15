@@ -181,6 +181,18 @@ CREATE TABLE IF NOT EXISTS credit_grants (
 );
 CREATE INDEX IF NOT EXISTS idx_grants_drawdown
   ON credit_grants (user_id, priority, expires_at, created_at) WHERE remaining_micro > 0;
+-- One allowance grant per (user, source_ref). The weekly allowance (§8b) names its window
+-- in the source_ref and is issued LAZILY on first use, so N concurrent first calls of a
+-- window all pass the "does it exist?" SELECT before any of them INSERTs. A read cannot
+-- make a write idempotent — only a constraint can.
+--
+-- Scoped to kind='allowance' DELIBERATELY. A unique index runs at startup, and one that
+-- finds pre-existing duplicates throws inside runRequiredStartupMigrations — i.e. it takes
+-- the backend down on deploy. 'allowance' is new here and has zero rows, so this index
+-- cannot fail on historical data; widening it to every source_ref is a separate decision
+-- that needs a duplicate sweep against production first.
+CREATE UNIQUE INDEX IF NOT EXISTS uq_grants_allowance_window
+  ON credit_grants (user_id, source_ref) WHERE kind = 'allowance' AND source_ref IS NOT NULL;
 
 -- Spend caps as a settlement INVARIANT (Arch §4.6): a debit that would exceed the
 -- window cap is rejected, not just alerted.

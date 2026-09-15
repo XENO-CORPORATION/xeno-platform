@@ -38,12 +38,46 @@ function fakeLedger() {
   };
 }
 
-async function withApp(run) {
+/**
+ * Shut a loopback test server down DETERMINISTICALLY.
+ *
+ * 🔴 `server.close()` alone stops accepting new connections and then waits for existing
+ * ones to drain. Node's fetch keeps sockets ALIVE, so a socket can still be open when the
+ * next test starts — and an error on that socket arrives with no test on the stack, which
+ * the runner reports as a FILE-level "test failed" with no name and kills every remaining
+ * test in the file. Seen once in ~100 runs: 4 passed, 14 never ran, and the summary said
+ * "pass 4, fail 1". Closing the connections first removes the race rather than hiding it.
+ */
+async function shutdown(server) {
+  server.closeAllConnections?.();
+  await new Promise((resolve) => server.close(resolve));
+}
+
+/**
+ * The quota dependencies of the hold path, faked. They are injected rather than stubbed
+ * globally so a test can make ONE of them fail and assert what the route does about it —
+ * see "a hold is refused when the quota subsystem cannot answer".
+ */
+function fakeQuota({ ensureQuota, plan = 'pro', kind = 'human' } = {}) {
+  const seen = [];
+  return {
+    seen,
+    ensureQuota: ensureQuota || (async (_db, userId, p, opts) => { seen.push({ userId, plan: p, ...opts }); return { metered: true }; }),
+    getEffectivePlan: async () => ({ plan }),
+    resolvePrincipal: async () => ({ kind }),
+  };
+}
+
+async function withApp(run, quotaOpts) {
   const ledger = fakeLedger();
+  const quota = fakeQuota(quotaOpts);
   const app = express();
   app.use(express.json());
   app.use((req, _res, next) => { req.db = {}; next(); });
-  app.use('/api/v2/ledger/service', createServiceLedgerRouter({ ledger, getServiceToken: () => TOKEN }));
+  app.use('/api/v2/ledger/service', createServiceLedgerRouter({
+    ledger, getServiceToken: () => TOKEN,
+    ensureQuota: quota.ensureQuota, getEffectivePlan: quota.getEffectivePlan, resolvePrincipal: quota.resolvePrincipal,
+  }));
   const server = await new Promise((resolve) => { const s = app.listen(0, '127.0.0.1', () => resolve(s)); });
   const base = `http://127.0.0.1:${server.address().port}`;
   const call = async (method, path, body, token = TOKEN) => {
@@ -53,7 +87,7 @@ async function withApp(run) {
     });
     return { status: r.status, json: await r.json() };
   };
-  try { await run({ call, ledger }); } finally { await new Promise((r) => server.close(r)); }
+  try { await run({ call, ledger, quota }); } finally { await shutdown(server); }
 }
 
 test('a hold is priced by the platform from the model and token budget', () => withApp(async ({ call, ledger }) => {
@@ -149,7 +183,7 @@ test('an unconfigured service token closes the surface — it never opens', asyn
       const r = await fetch(`${base}/api/v2/ledger/service/balance?userId=u1`, { headers: auth ? { Authorization: auth } : {} });
       assert.equal(r.status, 401, `auth=${auth}`);
     }
-  } finally { await new Promise((r) => server.close(r)); }
+  } finally { await shutdown(server); }
 });
 
 test('per-token rates are internal: only the service surface quotes them', async () => {
@@ -182,3 +216,53 @@ test('flagship ids resolve to the flagship tier', () => {
   assert.equal(pricing.chatTier('claude-sonnet-5'), 'frontier-mid');
   assert.equal(pricing.chatTier('deepseek-v4'), 'open');
 });
+
+// ── §8b: the hold path issues the weekly allowance and installs the burst caps ───
+
+test('a hold issues this window\'s allowance before reserving', () => withApp(async ({ call, quota }) => {
+  const r = await call('POST', '/api/v2/ledger/service/holds', {
+    userId: 'u1', holdId: 'h1', operation: 'chat.completion.stream', surface: 'xeno_api',
+    pricing: { model: 'claude-opus-5', estInputTokens: 10, maxOutputTokens: 16 },
+  });
+  assert.equal(r.status, 200, JSON.stringify(r.json));
+  assert.equal(quota.seen.length, 1, 'the lazy refill runs on the admission path, not in a cron');
+  assert.equal(quota.seen[0].userId, 'u1');
+  assert.equal(quota.seen[0].plan, 'pro', 'the allowance is sized by the EFFECTIVE plan, not a caller-supplied one');
+}));
+
+test('an agent hold installs the AGENT burst cap, not its owner\'s', () => withApp(async ({ call, quota }) => {
+  // An agent has its own `users` row, so it takes its own spend_caps row. Passing the
+  // human default here is the whole burst design failing silently: a runaway loop would
+  // get its owner's fraction of the week before anything stopped it.
+  const r = await call('POST', '/api/v2/ledger/service/holds', {
+    userId: 'agent-1', holdId: 'h1', operation: 'run', surface: 'xeno_agents', amountMicro: 1000,
+  });
+  assert.equal(r.status, 200);
+  assert.equal(quota.seen[0].isAgent, true);
+}, { kind: 'agent' }));
+
+test('a human hold is not marked as an agent', () => withApp(async ({ call, quota }) => {
+  await call('POST', '/api/v2/ledger/service/holds', { userId: 'u1', holdId: 'h1', operation: 'run', surface: 's', amountMicro: 1000 });
+  assert.equal(quota.seen[0].isAgent, false, 'a human must not be given the tighter agent cap either');
+}, { kind: 'human' }));
+
+test('a hold is REFUSED when the quota subsystem cannot answer', () => withApp(async ({ call, ledger }) => {
+  // 🔴 Fail-closed on purpose. An earlier version logged and continued, which is fail-open
+  // twice: the user is refused a call their (unissued) allowance would have covered, and an
+  // agent whose burst cap was never written spends against no guard at all.
+  const r = await call('POST', '/api/v2/ledger/service/holds', {
+    userId: 'u1', holdId: 'h1', operation: 'run', surface: 's', amountMicro: 1000,
+  });
+  assert.equal(r.status, 500, 'a quota failure must not read as a successful reservation');
+  assert.equal(ledger.calls.filter((c) => c[0] === 'hold').length, 0, 'no money is reserved when the guard is unknown');
+}, { ensureQuota: async () => { throw new Error('quota database unreachable'); } }));
+
+test('settle and void never touch the quota path', () => withApp(async ({ call, quota }) => {
+  // The allowance is issued at ADMISSION. Re-issuing on the way out would be a second
+  // write on every turn for no new fact, and `void` must stay the cheap cancel path.
+  await call('POST', '/api/v2/ledger/service/holds/h1/settle', {
+    userId: 'u1', usage: { model: 'claude-opus-5', inputTokens: 1, outputTokens: 1, measured: true },
+  });
+  await call('POST', '/api/v2/ledger/service/holds/h1/void', { userId: 'u1' });
+  assert.equal(quota.seen.length, 0);
+}));
