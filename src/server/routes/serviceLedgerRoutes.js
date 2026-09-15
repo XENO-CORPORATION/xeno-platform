@@ -158,7 +158,15 @@ export function createServiceLedgerRouter({
     const userId = typeof req.query.userId === 'string' ? req.query.userId : '';
     if (!userId) return badRequest(res, 'userId required');
     try {
-      res.json(await ledger.getBalanceV2(req.db, userId));
+      // 🔴 The SAME subject as every other leg. This is an admission gate: the gateway
+      // reads it and returns 402 `no_credits` when nothing is available, BEFORE placing a
+      // hold. An agent has no wallet, so reading its own id reports zero — and the call is
+      // refused as broke while its owner's account is funded and would have accepted the
+      // hold a moment later. A balance that disagrees with the hold it precedes is worse
+      // than no balance endpoint at all, because the refusal names the wrong reason.
+      const subject = await billingSubjectFor(req.db, userId);
+      const balance = await ledger.getBalanceV2(req.db, subject.userId);
+      res.json({ ...balance, billedUserId: subject.userId, actorUserId: subject.actorUserId });
     } catch (err) {
       sendErr(res, err);
     }

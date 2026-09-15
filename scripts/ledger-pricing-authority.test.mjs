@@ -310,3 +310,33 @@ test('a one-shot usage is REFUSED when the quota subsystem cannot answer', () =>
   assert.equal(r.status, 500, 'a quota failure must not read as a successful debit');
   assert.equal(ledger.calls.filter((c) => c[0] === 'usage').length, 0, 'nothing is metered when the guard is unknown');
 }, { ensureQuota: async () => { throw new Error('quota database unreachable'); } }));
+
+test('the balance an agent reads is its OWNER\'s — the gate must agree with the hold', () => withApp(async ({ call, ledger }) => {
+  // 🔴 Found by reviewing the gateway's deploy plan, 2026-09-15. This endpoint is an
+  // ADMISSION GATE: the gateway reads it and answers 402 `no_credits` when nothing is
+  // available, before it ever places a hold. It was the one leg that did not resolve the
+  // payer, so an agent read its own (empty) wallet and was refused as broke — while the
+  // hold that would have followed billed its owner's funded account and succeeded.
+  // A gate that disagrees with the operation it guards refuses for the wrong reason.
+  const r = await call('GET', '/api/v2/ledger/service/balance?userId=agent-1');
+  assert.equal(r.status, 200);
+  assert.equal(ledger.calls.find((c) => c[0] === 'balance')[1], 'owner-1');
+  assert.equal(r.json.billedUserId, 'owner-1');
+  assert.equal(r.json.actorUserId, 'agent-1');
+}, { kind: 'agent' }));
+
+test('all four legs resolve ONE subject — balance, hold, settle, usage', () => withApp(async ({ call, ledger }) => {
+  // The coverage set, not the mechanism. Four paths bill money and each resolves the payer
+  // separately, so a fifth added later can quietly skip it — which is exactly how /balance
+  // was missed. Assert every one, so a new leg has to be added here to pass.
+  await call('GET', '/api/v2/ledger/service/balance?userId=agent-1');
+  await call('POST', '/api/v2/ledger/service/holds', { userId: 'agent-1', holdId: 'h1', operation: 'run', surface: 's', amountMicro: 1000 });
+  await call('POST', '/api/v2/ledger/service/holds/h1/settle', { userId: 'agent-1', usage: { model: 'claude-opus-5', inputTokens: 1, outputTokens: 1, measured: true } });
+  await call('POST', '/api/v2/ledger/service/usage', {
+    userId: 'agent-1', transactionId: 't1', surface: 's', operation: 'o',
+    usage: { model: 'claude-opus-5', inputTokens: 1, outputTokens: 1, measured: true },
+  });
+  for (const leg of ['balance', 'hold', 'settle', 'usage']) {
+    assert.equal(ledger.calls.find((c) => c[0] === leg)[1], 'owner-1', `${leg} must bill the owner`);
+  }
+}, { kind: 'agent' }));
