@@ -400,11 +400,28 @@ const PLAN_ENTITLEMENTS = {
  * deliberate exception to that, one name at a time. Do not turn this into a
  * permissive prefix/regex match — the value of the map is that every entry was
  * looked at. */
-const PLAN_ALIASES = { ultra: 'pro' };
+export const PLAN_ALIASES = { ultra: 'pro' };
+
+/**
+ * Resolve a stored plan name to its canonical form. Exported because EVERY consumer of a
+ * plan name must resolve the same way, and a second copy of this map is how two of them
+ * come to disagree — which is exactly what happened: `quotaEngine` keyed its allowance
+ * table on the raw `xeno_account_plans.plan` value, so the one live `ultra` row (the
+ * operator's own account, running the agents) resolved to no entry, fell back to `free`,
+ * and would have been capped at 50 credits a week against a ~460-credit Opus call.
+ *
+ * 🔴 Note what the fallback does NOT do: it does not resolve unknown names to anything
+ * generous. An unrecognised plan stays unrecognised here and the CALLER decides — every
+ * caller's fallback is `free`, so a typo cannot mint a paid account. The alias map is the
+ * deliberate exception, one looked-at name at a time; never make it a prefix or regex.
+ */
+export function canonicalPlan(plan) {
+  return PLAN_ALIASES[plan] || plan;
+}
 
 /** Feature entitlements for a plan (aliases resolved; defaults to free). */
 export function entitlementsFor(plan) {
-  const resolved = PLAN_ALIASES[plan] || plan;
+  const resolved = canonicalPlan(plan);
   return PLAN_ENTITLEMENTS[resolved] || PLAN_ENTITLEMENTS.free;
 }
 

@@ -251,3 +251,71 @@ test('the allowance grant is uniquely indexed in the schema, not merely checked 
   assert.match(ddl, /uq_grants_allowance_window[\s\S]{0,160}WHERE kind = 'allowance'/,
     'scoped to allowance: a broad unique index runs at startup and would take the backend down on historical duplicates');
 });
+
+test('a legacy plan ALIAS resolves to its canonical allowance, not to free', async () => {
+  // 🔴 Found 2026-09-15 by the gateway session, BEFORE #233 deployed. `xeno_account_plans`
+  // stores the RAW plan name, and one live row reads 'ultra' — the operator's own account,
+  // the one running the agents. billingService has aliased ultra→pro since 2026-08-22, but
+  // the allowance table was keyed on the raw value, so `ultra` matched no entry and took the
+  // unknown-plan fallback: 50 credits a week and 12.5 in any 5 hours, against a ~460-credit
+  // Opus call. Every agent call would have been refused 429 within minutes of the deploy.
+  //
+  // The fallback itself is correct and stays: an unrecognised plan must not mint a paid
+  // account. What was missing is that an ALIAS is not an unrecognised plan — it is a known
+  // plan under an old name, and only billingService's map knows which.
+  const { canonicalPlan, PLAN_ALIASES } = await import('../src/server/services/billingService.js');
+  for (const [alias, canonical] of Object.entries(PLAN_ALIASES)) {
+    assert.equal(canonicalPlan(alias), canonical);
+    assert.equal(allowanceCreditsFor(alias), WEEKLY_ALLOWANCE_CREDITS[canonical],
+      `${alias} must draw ${canonical}'s allowance, not the free fallback`);
+    assert.deepEqual(burstCapsFor(alias), burstCapsFor(canonical),
+      `${alias} must carry ${canonical}'s burst guard`);
+  }
+  // The specific live row, named so a future edit to the alias map cannot quietly drop it.
+  assert.equal(allowanceCreditsFor('ultra'), WEEKLY_ALLOWANCE_CREDITS.pro);
+  assert.ok(allowanceCreditsFor('ultra') > WEEKLY_ALLOWANCE_CREDITS.free);
+});
+
+test('there is ONE alias map, not a copy of it in the quota engine', async () => {
+  // Two copies of an alias map is how the quota and the entitlements come to disagree about
+  // the same account — which is the bug above, in the form it would come back.
+  const { readFileSync } = await import('node:fs');
+  const { PLAN_ALIASES } = await import('../src/server/services/billingService.js');
+  const engine = readFileSync(new URL('../src/server/utils/quotaEngine.js', import.meta.url), 'utf8');
+  assert.match(engine, /import \{ canonicalPlan \} from '\.\.\/services\/billingService\.js'/,
+    'the engine must resolve through billingService, the one place aliases are decided');
+  // Check for a hardcoded MAPPING, not for the word. The defect is a second copy of the
+  // map; naming 'ultra' in a comment that explains the bug is not. An earlier version of
+  // this gate failed on its own documentation — a gate asserting against prose.
+  const code = engine.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/[^\n]*/g, '');
+  for (const alias of Object.keys(PLAN_ALIASES)) {
+    // Quoted or bare, an alias appearing in CODE here is a second copy of the map.
+    assert.ok(!new RegExp(`['"\`]?${alias}['"\`]?\\s*:`).test(code),
+      `'${alias}' is mapped inside quotaEngine — aliases are billingService's to decide`);
+    assert.ok(!new RegExp(`['"\`]${alias}['"\`]`).test(code),
+      `'${alias}' is named in quotaEngine code — the engine must not know any plan's old name`);
+  }
+});
+
+test('an alias still cannot mint a plan that does not exist', async () => {
+  // The alias map is the deliberate exception to the free fallback, one looked-at name at a
+  // time. It must never become a prefix or regex match.
+  const { PLAN_ALIASES } = await import('../src/server/services/billingService.js');
+  for (const canonical of Object.values(PLAN_ALIASES)) {
+    assert.ok(canonical in WEEKLY_ALLOWANCE_CREDITS,
+      `alias target '${canonical}' has no §8b allowance decision — the alias would resolve to the free fallback`);
+  }
+});
+
+test('an alias and its canonical name share ONE allowance grant', async () => {
+  // The source_ref IS the grant's identity. Issued under 'ultra' and read back under 'pro'
+  // would MISS: the account reads 0% used and the next call issues a SECOND allowance for
+  // the same week — a user could double their quota by having their plan row renamed.
+  const { PLAN_ALIASES } = await import('../src/server/services/billingService.js');
+  for (const [alias, canonical] of Object.entries(PLAN_ALIASES)) {
+    assert.equal(allowanceSourceRef('u1', alias, 42), allowanceSourceRef('u1', canonical, 42));
+  }
+  // Different weeks stay different grants, and different users never collide.
+  assert.notEqual(allowanceSourceRef('u1', 'ultra', 42), allowanceSourceRef('u1', 'pro', 43));
+  assert.notEqual(allowanceSourceRef('u1', 'ultra', 42), allowanceSourceRef('u2', 'pro', 42));
+});

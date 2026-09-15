@@ -28,6 +28,7 @@
  */
 
 import { addGrantTx, MICRO_PER_CREDIT } from './creditLedgerV2.js';
+import { canonicalPlan } from '../services/billingService.js';
 
 /** Plan → credits granted per 7-day window. `null` = no metered allowance (unlimited). */
 export const WEEKLY_ALLOWANCE_CREDITS = {
@@ -49,8 +50,11 @@ export const WEEKLY_ALLOWANCE_CREDITS = {
  * smallest allowance we offer, and `internal` stays unmetered because it is WRITTEN as null.
  */
 export function allowanceCreditsFor(plan) {
-  if (Object.prototype.hasOwnProperty.call(WEEKLY_ALLOWANCE_CREDITS, plan)) {
-    return WEEKLY_ALLOWANCE_CREDITS[plan];
+  // Resolve legacy/aliased names FIRST, from billingService's one map. The allowance table
+  // is keyed on canonical plans, and `xeno_account_plans.plan` stores the raw value.
+  const resolved = canonicalPlan(plan);
+  if (Object.prototype.hasOwnProperty.call(WEEKLY_ALLOWANCE_CREDITS, resolved)) {
+    return WEEKLY_ALLOWANCE_CREDITS[resolved];
   }
   console.warn('[quota] unknown plan, falling back to free allowance', JSON.stringify({ plan }));
   return WEEKLY_ALLOWANCE_CREDITS.free;
@@ -87,9 +91,16 @@ export function windowFor(now = new Date()) {
   return { index, startsAt, endsAt };
 }
 
-/** The source_ref that makes a refill idempotent: one grant per (user, plan, window). */
+/**
+ * The source_ref that makes a refill idempotent: one grant per (user, plan, window).
+ *
+ * 🔴 The plan is CANONICALISED into the ref. It is the identity of the grant, so an alias
+ * must not produce a second one: issued under 'ultra' and read back under 'pro' is a MISS,
+ * which reads as 0% used and re-issues a whole second allowance for the same week. Storing
+ * the canonical name means renaming a plan row mid-window changes nothing.
+ */
 export function allowanceSourceRef(userId, plan, windowIndex) {
-  return `allowance:${plan}:w${windowIndex}:${userId}`;
+  return `allowance:${canonicalPlan(plan)}:w${windowIndex}:${userId}`;
 }
 
 /**
