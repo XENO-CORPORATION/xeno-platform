@@ -46,7 +46,7 @@ failure, and it is treated as one.
 ## Deep checks — the ones that catch "up and wrong"
 
 The availability sweep finds a component that is **down**. Every defect that motivated this
-project was **up and wrong** — each answered HTTP 200. So every 15 minutes (`DEEP_CRON`) the
+project was **up and wrong** — each answered HTTP 200. So every 30 minutes (`DEEP_CRON`) the
 Worker also drives the real chat route, as a user's browser does, on the model users actually use:
 
 | Check | Passes only if |
@@ -72,8 +72,13 @@ node status/deploy.mjs --confirm             # hand the key to the Worker; deep 
 ```
 
 The key is written straight to `~/.xeno-secrets` and never displayed. `--rotate` revokes the
-existing key and stores a new one. They spend credits — measure a day's usage before shortening
-`DEEP_CRON`.
+existing key and stores a new one.
+
+**Cost, measured 2026-09-15 after the gateway usage fix:** one run (chat + web search) is about
+2.15 credits, so every 30 minutes is ~100 credits a day. The probe holds a sized grant; there is
+no self-resetting allowance in the ledger, so when it runs dry the deep checks fail with a 402,
+which the Worker reports as an *account* incident — visible, never silent. Top up with a promo
+grant on the `status-probe` account. Switched on 2026-09-15 with a 3,000-credit grant.
 
 ## Still open
 
