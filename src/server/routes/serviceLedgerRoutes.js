@@ -14,7 +14,9 @@
  * `default` rate, about 1/50 of cost, while writing straight into this database. Two
  * writers, two price lists, one wallet. Now a caller describes what was consumed
  * (`pricing` on a hold, `usage` on a settle or a one-shot debit) and this file prices it
- * from `../utils/creditCosts.js`, the single table. `amountMicro` / `actualCostMicro` stay
+ * from `../utils/creditCosts.js`, the single table. The table is never published: pricing
+ * standard §8 refuses a public token/compute mapping, so rates leave this process only
+ * behind the service token. `amountMicro` / `actualCostMicro` stay
  * accepted for the one existing caller that still sends them (xeno-agents-api), so this is
  * additive; new callers must not use them.
  *
@@ -157,6 +159,7 @@ export function createServiceLedgerRouter({
   });
 
   // GET /api/v2/ledger/service/quote?model=&estInputTokens=&maxOutputTokens= — what a hold WOULD be.
+  // Service-authenticated on purpose: per-token rates are internal (pricing standard §8).
   router.get('/quote', (req, res) => {
     const r = holdAmount({ pricing: {
       model: req.query.model, estInputTokens: req.query.estInputTokens, maxOutputTokens: req.query.maxOutputTokens,

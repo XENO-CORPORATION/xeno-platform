@@ -14,7 +14,7 @@
  *   - hold uses the caller's amountMicro when pricing is present  -> "a hold is priced by the platform"
  *   - settle prices an unmeasured usage on its tokens              -> "an unmeasured settle charges the reservation"
  *   - one-shot usage ignores the price table                       -> "a one-shot usage is priced by the platform"
- *   - pricing endpoint reads a different table                     -> "the public price list is the same table charging uses"
+ *   - a public route publishes the per-token table                 -> "no server route publishes the per-token table"
  *   - gpt-6 falls back to default tier                             -> "flagship ids resolve to the flagship tier"
  */
 
@@ -22,7 +22,6 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import express from 'express';
 import { createServiceLedgerRouter } from '../src/server/routes/serviceLedgerRoutes.js';
-import { createPricingRouter } from '../src/server/routes/pricingRoutes.js';
 import * as pricing from '../src/server/utils/creditCosts.js';
 
 const TOKEN = 'test-service-token';
@@ -45,7 +44,6 @@ async function withApp(run) {
   app.use(express.json());
   app.use((req, _res, next) => { req.db = {}; next(); });
   app.use('/api/v2/ledger/service', createServiceLedgerRouter({ ledger, getServiceToken: () => TOKEN }));
-  app.use('/api/v2/pricing', createPricingRouter());
   const server = await new Promise((resolve) => { const s = app.listen(0, '127.0.0.1', () => resolve(s)); });
   const base = `http://127.0.0.1:${server.address().port}`;
   const call = async (method, path, body, token = TOKEN) => {
@@ -154,17 +152,28 @@ test('an unconfigured service token closes the surface — it never opens', asyn
   } finally { await new Promise((r) => server.close(r)); }
 });
 
-test('the public price list is the same table charging uses', () => withApp(async ({ call }) => {
-  const list = await call('GET', '/api/v2/pricing/chat', null, '');
-  assert.equal(list.status, 200, 'pricing is public');
-  assert.deepEqual(list.json.tiers, pricing.chatPriceList().tiers);
-  const one = await call('GET', '/api/v2/pricing/chat?model=claude-sonnet-5', null, '');
-  assert.deepEqual(one.json, { model: 'claude-sonnet-5', ...pricing.chatRatesFor('claude-sonnet-5') });
-  const quote = await call('GET', '/api/v2/pricing/chat/quote?model=claude-opus-5&estInputTokens=1000&maxOutputTokens=4096', null, '');
-  assert.equal(quote.json.holdMicro, pricing.estimateChatCostMicro('claude-opus-5', { inputTokens: 1000, maxOutputTokens: 4096 }));
-  const serviceQuote = await call('GET', '/api/v2/ledger/service/quote?model=claude-opus-5&estInputTokens=1000&maxOutputTokens=4096');
-  assert.equal(serviceQuote.json.holdMicro, quote.json.holdMicro, 'the service and public quotes agree');
-}));
+test('per-token rates are internal: only the service surface quotes them', async () => {
+  // 🔒 XENO PRICING - STANDARD & LEDGER.md §8 — "Never expose a token/compute mapping."
+  // A public per-token table shipped for one evening on 2026-09-15 and was removed.
+  await withApp(async ({ call }) => {
+    const q = await call('GET', '/api/v2/ledger/service/quote?model=claude-opus-5&estInputTokens=1000&maxOutputTokens=4096');
+    assert.equal(q.status, 200);
+    assert.equal(q.json.holdMicro, pricing.estimateChatCostMicro('claude-opus-5', { inputTokens: 1000, maxOutputTokens: 4096 }));
+    assert.equal((await call('GET', '/api/v2/ledger/service/quote?model=claude-opus-5', null, '')).status, 401, 'no token, no rates');
+  });
+});
+
+test('no server route publishes the per-token table', async () => {
+  const { readFileSync, readdirSync } = await import('node:fs');
+  const index = readFileSync(new URL('../src/server/index.js', import.meta.url), 'utf8');
+  assert.ok(!/app\.use\(\s*['"]\/api\/v2\/pricing/.test(index), 'a public /api/v2/pricing mount is back');
+  const routes = new URL('../src/server/routes/', import.meta.url);
+  for (const file of readdirSync(routes)) {
+    if (file === 'serviceLedgerRoutes.js') continue;
+    const src = readFileSync(new URL(file, routes), 'utf8');
+    assert.ok(!/chatRatesFor|CHAT_TIERS/.test(src), `${file} reaches the per-token rates outside the service surface`);
+  }
+});
 
 test('flagship ids resolve to the flagship tier', () => {
   assert.equal(pricing.chatTier('gpt-6-astra'), 'frontier-large');
