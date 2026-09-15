@@ -84,21 +84,17 @@ function chatRates(modelId) {
   return CHAT_MODEL_OVERRIDES[modelId] || CHAT_TIERS[chatTier(modelId)] || CHAT_TIERS.default;
 }
 
-/** The per-token rates a model is priced at — for callers that display or quote, never for callers that charge. */
+/**
+ * The per-token rates a model is priced at. INTERNAL ONLY — service-authenticated callers.
+ * 🔒 `XENO PRICING - STANDARD & LEDGER.md` §8: never expose a token/compute mapping publicly;
+ * users see action prices. A visible per-token table is how buyers reverse-engineer the margin.
+ */
 export function chatRatesFor(modelId) {
   const r = chatRates(modelId);
   return { inputMicroPerToken: r.input, outputMicroPerToken: r.output, tier: CHAT_MODEL_OVERRIDES[modelId] ? 'override' : chatTier(modelId) };
 }
 
-/** The whole chat price list, for the public pricing surface. */
-export function chatPriceList() {
-  return {
-    unit: 'micro-credits per token',
-    creditEur: 0.01,
-    tiers: CHAT_TIERS,
-    overrides: CHAT_MODEL_OVERRIDES,
-  };
-}
+
 
 /** Actual premium-chat cost in µcr from real token usage (used at settle time). */
 export function getChatCostMicro(modelId, { inputTokens = 0, outputTokens = 0 } = {}) {
