@@ -334,7 +334,7 @@ export function createChatWebContextService({
     return value;
   }
 
-  async function searchAndFetch({ actorId, conversationId, userMessageId, query: rawQuery, count: rawCount, depth = 'quick', signal, onProgress }) {
+  async function searchAndFetch({ actorId, conversationId, userMessageId, turnId, query: rawQuery, count: rawCount, depth = 'quick', signal, onProgress }) {
     const query = normalizeQuery(rawQuery);
     const count = normalizeCount(rawCount);
     if (!Object.hasOwn(researchBudgets, depth)) {
@@ -346,7 +346,22 @@ export function createChatWebContextService({
     const requestId = crypto.randomUUID();
     try {
       const principal = await account(client, config, signal);
-      const idempotencyKey = `chat:${digest(`${actorId}\0${conversationId}\0${userMessageId}\0${query}`).slice(0, 48)}`;
+      /*
+       * 🔴 The key identifies ONE REQUEST, so it must include what makes a request distinct.
+       *
+       * Research passes a real `userMessageId`, which is per turn. The chat tool loop passed
+       * `null`, so its key was actor + conversation + query — and two DIFFERENT turns asking
+       * the same thing were treated as one request. Found 2026-09-14: a page job that failed
+       * once was returned by replay to every later turn with the same query in that
+       * conversation, in ~1 s, until retention cleared it. A transient failure outlived its
+       * cause, and during verification it looked exactly like a regression.
+       *
+       * `turnId` is appended only when given, so every existing Research key is unchanged.
+       */
+      const identity = turnId
+        ? `${actorId}\0${conversationId}\0${userMessageId}\0${turnId}\0${query}`
+        : `${actorId}\0${conversationId}\0${userMessageId}\0${query}`;
+      const idempotencyKey = `chat:${digest(identity).slice(0, 48)}`;
       const upstreamDeadline = new Date(now() + budget.upstreamMs).toISOString();
       const requestBase = {
         contractVersion: CONTRACT_VERSION,
@@ -459,14 +474,29 @@ export function createChatWebContextService({
        * An abort is re-thrown: the caller went away, so there is no turn left to serve, and
        * silently "degrading" a cancellation would hide it from the outer handler.
        */
+      const startPageJob = (key) => client.batchScrape({
+        ...requestBase,
+        idempotencyKey: key,
+        seedUrls: searchItems.map((item) => ({ url: item.url })),
+      }, { signal });
+
       let started;
       let startError = null;
       try {
-        started = await client.batchScrape({
-          ...requestBase,
-          idempotencyKey: `${idempotencyKey}:pages`,
-          seedUrls: searchItems.map((item) => ({ url: item.url })),
-        }, { signal });
+        started = await startPageJob(`${idempotencyKey}:pages`);
+        /*
+         * 🔴 Never adopt a job that ALREADY failed.
+         *
+         * Idempotency exists so a retried request does not repeat work that succeeded or is
+         * still running. A replayed job that is already terminal-failed is neither: adopting
+         * it hands this request somebody else's old failure without ever trying the pages.
+         * `created: false` plus a failed/cancelled state is exactly that case, so start one
+         * fresh job instead — once, with a distinct key, so this is still bounded.
+         */
+        if (started?.created === false && ['failed', 'cancelled'].includes(started?.job?.state)) {
+          logDegraded('page_job_replayed_failure', requestId, { replayedState: started.job.state });
+          started = await startPageJob(`${idempotencyKey}:pages:retry-${now()}`);
+        }
       } catch (error) {
         if (signal?.aborted || error?.name === 'AbortError') throw error;
         started = null;

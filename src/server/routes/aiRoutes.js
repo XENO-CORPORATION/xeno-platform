@@ -871,6 +871,8 @@ router.post('/chat/stream', requireEntitlement('canUse'), async (req, res) => {
           actorId: userId,
           conversationId: conversationId || null,
           userMessageId: null,
+          // Per-turn: two turns asking the same question are two requests, not one.
+          turnId: reqIdSeed,
           query,
           count: 6,
           depth,
