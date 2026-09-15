@@ -17,7 +17,7 @@
  */
 
 import {
-  WEEKLY_ALLOWANCE_CREDITS, allowanceCreditsFor, allowanceSourceRef, burstCapsFor,
+  WEEKLY_ALLOWANCE_CREDITS, allowanceCreditsFor, allowanceSourceRef,
   issueAllowanceTx, quotaView, windowFor,
 } from '../utils/quotaEngine.js';
 import { allowanceSnapshot } from '../utils/creditLedgerV2.js';
@@ -34,7 +34,6 @@ export async function ensureQuota(pool, userId, plan, { now = new Date() } = {})
   try {
     await client.query('BEGIN');
     const result = await issueAllowanceTx(client, userId, plan, { now });
-    await syncBurstCapsTx(client, userId, plan);
     await client.query('COMMIT');
     if (result.issued) {
       console.log('[quota] allowance issued', JSON.stringify({
@@ -70,22 +69,32 @@ export async function readQuota(pool, userId, plan, { now = new Date() } = {}) {
 }
 
 /**
- * Reconcile burst caps to the plan. A cap is a `spend_caps` row keyed on `user_id`, and
- * `userId` here is always the OWNER (callers resolve it through `billingSubjectFor`) —
- * so an agent's calls are counted by its owner's cap rather than a separate one. One
- * account, one ceiling. `assertWithinCaps` counts live HOLDS as well as settled debits,
- * which is what makes this hold when an agent fans out ten concurrent calls.
+ * 🔴 REMOVED, DELIBERATELY: nothing writes `spend_caps` automatically any more.
+ *
+ * An earlier version of this file wrote a burst cap on every admission, sized as a
+ * fraction of the weekly allowance. Three things were wrong with it, and the gateway
+ * session caught them by measuring real accounts before the deploy:
+ *
+ * 1. 🔒 It violates §8b **D7**, which is locked: *"Spend caps stay USER-SET."* A cap is
+ *    the user's own instruction about their own money. Writing one for them — with
+ *    `ON CONFLICT DO UPDATE` — silently overwrote a limit they had set through
+ *    `POST /api/v2/ledger/spend-caps`, on every single call. A control that edits the
+ *    user's own setting is not a safety rail.
+ * 2. `assertWithinCaps` counts EVERY debit in the window, not allowance spend, so a cap
+ *    derived from the allowance throttled purchased credits too. That inverts the §8b D3
+ *    promise: the door out of an exhausted quota is to buy credits, and this refused the
+ *    people who had.
+ * 3. The size was not merely wrong, it was wrong in KIND. Measured on the live admin
+ *    account: 218,378 credits in five hours against a 2,000-credit weekly pool — 109x the
+ *    entire allowance per window. An account spending that way does not live on its
+ *    allowance at all, so no fraction of the allowance can describe it.
+ *
+ * The runaway-agent risk is real and is NOT addressed by a guessed number. It belongs to
+ * a budget the owner sets (per-agent, deliberately), plus the plan allowance itself, which
+ * already bounds what a subscriber consumes for free. Until that exists, this stays absent
+ * rather than shipping a throttle nobody asked for: an unasked-for limit that refuses paid
+ * traffic is worse than no limit, because the failure is invisible until a customer is
+ * turned away.
  */
-export async function syncBurstCapsTx(client, userId, plan) {
-  const caps = burstCapsFor(plan);
-  for (const cap of caps) {
-    await client.query(
-      `INSERT INTO spend_caps (user_id, window_sec, limit_micro) VALUES ($1, $2, $3)
-       ON CONFLICT (user_id, window_sec) DO UPDATE SET limit_micro = EXCLUDED.limit_micro`,
-      [userId, cap.windowSec, String(cap.limitMicro)],
-    );
-  }
-  return caps;
-}
 
 export { WEEKLY_ALLOWANCE_CREDITS };

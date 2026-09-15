@@ -61,24 +61,32 @@ export function allowanceCreditsFor(plan) {
 }
 
 /**
- * The burst guard: seconds → fraction of the weekly allowance spendable in that window.
+ * 🔴 NO AUTOMATIC BURST GUARD. Deliberately empty, and the reasoning is worth keeping.
  *
- * 0.25 over 5 hours means nothing on the account can eat more than a quarter of the week
- * before it is stopped — enough headroom for a heavy real session, far short of a runaway.
+ * This held `{ windowSec: 5h, fraction: 0.25 }` — a cap derived from the weekly allowance
+ * and written to `spend_caps` on every admission. It never reached production because the
+ * gateway session measured real accounts first. Three independent faults:
  *
- * 🔴 ONE fraction, not one per actor. An earlier version gave agents a tighter fraction
- * than humans, and that was wrong twice over. It read as a second quota, which is exactly
- * the overlapping-limits confusion §8b exists to avoid — and it was incoherent anyway,
- * because an agent has no allowance of its own to take a fraction OF: it spends its owner's
- * (see `billingSubjectFor`). The guard belongs to the account, so whoever spends fast
- * meets the same ceiling, and the owner sees one number.
+ * 1. 🔒 §8b **D7** is locked: *"Spend caps stay USER-SET."* The write used
+ *    `ON CONFLICT DO UPDATE`, so it silently overwrote a limit the user had set on their
+ *    own money, on every call.
+ * 2. `assertWithinCaps` counts EVERY debit in the window, not allowance spend. A cap sized
+ *    off the allowance therefore throttled PURCHASED credits — inverting D3, whose whole
+ *    point is that the door out of an exhausted quota is to buy more.
+ * 3. Wrong in KIND, not size: the live admin account spends 218,378 credits per 5 hours
+ *    against a 2,000-credit weekly pool. No fraction of an allowance describes an account
+ *    that does not live on its allowance.
  *
- * Per-agent budgets are a real feature and deliberately NOT this: a budget is something a
- * human sets on purpose, not a constant in a pricing table that silently throttles.
+ * The runaway-agent risk that motivated it is real, and it is NOT solved by a guessed
+ * constant. It needs a budget the owner sets per agent — a deliberate instruction, not a
+ * default. Until that ships, the allowance itself is the bound on what a subscriber
+ * consumes for free, and paid spend is not throttled at all.
+ *
+ * ⚠️ Keep this array EMPTY rather than deleting the export: `burstCapsFor` still answers,
+ * and a gate asserts nothing writes `spend_caps` automatically. Re-adding a window here
+ * re-introduces all three faults.
  */
-export const BURST_WINDOWS = [
-  { windowSec: 5 * 60 * 60, fraction: 0.25 },
-];
+export const BURST_WINDOWS = [];
 
 export const ALLOWANCE_GRANT_KIND = 'allowance';
 export const ALLOWANCE_PRIORITY = 5; // below free(10)/promo(50)/paid(100): drains FIRST
@@ -112,11 +120,9 @@ export function allowanceSourceRef(userId, plan, windowIndex) {
 }
 
 /**
- * The burst caps an ACCOUNT carries. Keyed on the owner's user id, because that is whose
- * allowance is being protected — an agent's spend lands there too (`billingSubjectFor`),
- * so its calls are counted by the same cap rather than a separate one. `assertWithinCaps`
- * already counts LIVE HOLDS as well as settled debits, which is what makes this hold when
- * an agent fans out ten concurrent calls.
+ * The burst caps a plan implies — currently NONE, because `BURST_WINDOWS` is empty by
+ * decision (see above). Kept as the one place that would compute them, so re-introducing
+ * a guard is a considered edit in a single file rather than a new mechanism somewhere else.
  */
 export function burstCapsFor(plan) {
   const credits = allowanceCreditsFor(plan);

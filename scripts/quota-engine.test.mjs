@@ -10,7 +10,7 @@
  *   - make the allowance lot outrank paid credits   -> "the allowance is spent before purchased credits"
  *   - drop the window from the grant's source_ref   -> "a refill is idempotent within its window"
  *   - refill a partly-spent allowance to full       -> "a refill never tops up mid-window"
- *   - split the burst ceiling per actor kind        -> "there is ONE burst ceiling per account"
+ *   - write a spend cap automatically               -> "NOTHING writes a spend cap automatically"
  *   - bill an agent to its own id, not its owner    -> (ledger-pricing-authority.test.mjs)
  *   - return credits from the quota view            -> "the subscriber view carries no credit or token number"
  */
@@ -23,6 +23,15 @@ import {
 } from '../src/server/utils/quotaEngine.js';
 
 const MICRO = 1_000_000;
+
+/**
+ * Strip comments before a source gate reads code. A gate that greps raw source asserts
+ * against PROSE — an earlier one in this file failed on the comment explaining the bug it
+ * guarded. Written as a helper so the escaping lives in exactly one place.
+ */
+const stripComments = (src) => src
+  .replace(/\/\*[\s\S]*?\*\//g, '')
+  .replace(/\/\/[^\n]*/g, '');
 
 /** A client that records queries and answers the two the engine asks. */
 function fakeClient({ existingRefs = [] } = {}) {
@@ -112,30 +121,27 @@ test('an unmetered plan is granted nothing and capped by nothing', async () => {
   assert.deepEqual(burstCapsFor('internal'), [], 'no allowance to protect, so no guard');
 });
 
-test('there is ONE burst ceiling per account, not one per kind of actor', () => {
-  // 🔴 An earlier version took a second fraction for agents. Rejected by the account owner
-  // 2026-09-15, and it was wrong twice over: it READ as a second quota — the overlapping
-  // limits §8b exists to avoid — and it was incoherent, because an agent has no allowance
-  // of its own to take a fraction OF. It spends its owner's. So the cap belongs to the
-  // account, and whoever spends fast meets the same ceiling.
-  const caps = burstCapsFor('pro');
-  assert.equal(caps.length, BURST_WINDOWS.length);
-  assert.equal(burstCapsFor.length, 1, 'burstCapsFor takes a plan and nothing else — no actor axis');
-  for (const w of BURST_WINDOWS) {
-    assert.ok(!('agentFraction' in w) && !('humanFraction' in w),
-      'a per-actor fraction is a second quota wearing a cap\'s clothes');
-    assert.equal(typeof w.fraction, 'number');
+test('NOTHING writes a spend cap automatically — §8b D7 keeps caps user-set', () => {
+  // 🔒 D7 is locked: "Spend caps stay USER-SET." An earlier version wrote one on every
+  // admission with ON CONFLICT DO UPDATE, silently overwriting the user's own limit on
+  // their own money. Two further faults made it unshippable: assertWithinCaps counts EVERY
+  // debit, so an allowance-derived cap throttled PURCHASED credits (inverting D3's "the
+  // wall always has a door"); and the size was wrong in kind — the live admin account
+  // spends 109x its entire weekly allowance every 5 hours.
+  assert.deepEqual(BURST_WINDOWS, [], 'a window here re-introduces the automatic cap');
+  for (const plan of ['free', 'pro', 'team', 'studio', 'internal', 'bogus']) {
+    assert.deepEqual(burstCapsFor(plan), [], `plan ${plan} must imply no automatic cap`);
   }
-  // Passing anything as a second argument must not change the answer.
-  assert.deepEqual(burstCapsFor('pro', { isAgent: true }), caps);
 });
 
-test('a burst guard bounds a runaway loop to a fraction of the week', () => {
-  const weekly = WEEKLY_ALLOWANCE_CREDITS.pro * MICRO;
-  const [guard] = burstCapsFor('pro');
-  assert.ok(guard.limitMicro > 0, 'a zero cap would refuse the first honest call');
-  assert.ok(guard.limitMicro <= weekly * 0.25, 'a loop cannot eat the week before it is stopped');
-  assert.equal(guard.windowSec, 5 * 60 * 60);
+test('the quota service never touches spend_caps', async () => {
+  // A source gate, because the defect was a WRITE, and a unit test over a pure function
+  // cannot see one. Re-adding the INSERT is the regression this exists to catch.
+  const { readFileSync } = await import('node:fs');
+  const svc = readFileSync(new URL('../src/server/services/quotaService.js', import.meta.url), 'utf8');
+  const code = stripComments(svc);
+  assert.ok(!/INSERT INTO spend_caps/i.test(code), 'the quota path must not write a spend cap');
+  assert.ok(!/spend_caps/i.test(code), 'the quota path must not touch spend_caps at all');
 });
 
 test('the subscriber view carries no credit or token number', () => {
@@ -197,9 +203,6 @@ test('an unknown plan falls back to the free allowance, never to unmetered', () 
   // no allowance, therefore no burst cap, therefore an unguarded wallet.
   for (const bogus of ['enterprise', 'Pro', '', null, undefined]) {
     assert.equal(allowanceCreditsFor(bogus), WEEKLY_ALLOWANCE_CREDITS.free, `plan=${String(bogus)}`);
-    const caps = burstCapsFor(bogus);
-    assert.equal(caps.length, BURST_WINDOWS.length, `plan=${String(bogus)} must still be capped`);
-    assert.ok(caps[0].limitMicro > 0);
   }
   // …and the one plan that IS unmetered stays unmetered, because it is WRITTEN as null.
   assert.equal(allowanceCreditsFor('internal'), null);
