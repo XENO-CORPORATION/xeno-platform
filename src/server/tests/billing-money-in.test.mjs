@@ -1,3 +1,4 @@
+import { installUsageCreditFixture, optInUsageCredits } from './usage-credit-fixture.mjs';
 /**
  * Money-in atomicity + auditability + refund/dispute test (Blocker #2).
  * Exercises billingService.handleEvent end-to-end against a real ledger:
@@ -61,11 +62,16 @@ const balance = async (uid) => (await getBalanceV2(pool, uid)).availableMicro;
 const frozen = async (uid) => (await pool.query('SELECT is_frozen FROM credit_accounts WHERE user_id=$1', [uid])).rows[0]?.is_frozen;
 const txCount = async (uid, type) => Number((await pool.query('SELECT COUNT(*)::int c FROM credit_transactions WHERE user_id=$1 AND type=$2', [uid, type])).rows[0].c);
 const eventCount = async (id) => Number((await pool.query('SELECT COUNT(*)::int c FROM billing_events WHERE event_id=$1', [id])).rows[0].c);
-const newUser = async () => (await pool.query('INSERT INTO users (credits) VALUES (0) RETURNING id')).rows[0].id;
+const newUser = async (credits = 0) => {
+  const id = (await pool.query('INSERT INTO users (credits) VALUES ($1) RETURNING id', [credits])).rows[0].id;
+  await optInUsageCredits(pool, id);
+  return id;
+};
 
 async function main() {
   await pool.query(BASE);
   await migrateAccountV2(pool);
+  await installUsageCreditFixture(pool);
 
   // Exercise the exact legacy inventory SQL in isolated namespaces, including
   // absent optional tables. Each schema is created here and removed here.

@@ -1,3 +1,4 @@
+import { installUsageCreditFixture, installMediaIdentityFixture, newMediaUser } from './usage-credit-fixture.mjs';
 /**
  * Media metering test (Blocker #4 — entitlement holes / charge-model).
  * Exercises meterMediaGeneration against a real v2 ledger:
@@ -33,7 +34,7 @@ const balance = async (uid) => (await getBalanceV2(pool, uid)).availableMicro;
 const heldMicro = async (uid) => Number((await pool.query(
   "SELECT COALESCE(SUM(amount_micro),0)::bigint h FROM credit_holds WHERE user_id=$1 AND state='held'", [uid],
 )).rows[0].h);
-const newUser = async () => (await pool.query('INSERT INTO users (credits) VALUES (0) RETURNING id')).rows[0].id;
+const newUser = () => newMediaUser(pool);
 const grant = async (uid, credits) => addGrant(pool, uid, { amountMicro: C(credits), kind: 'paid', sourceRef: `seed:${uid}` });
 
 // A fake provider that returns `producedCount` items (OpenAI-style { data: [...] }).
@@ -49,6 +50,8 @@ const meter = (uid, opts) => meterMediaGeneration(pool, uid, {
 async function main() {
   await pool.query(BASE);
   await migrateAccountV2(pool);
+  await installUsageCreditFixture(pool);
+  await installMediaIdentityFixture(pool);
 
   // ── 1. cost × count (the image-cost-n hole) ────────────────────────────────
   const u1 = await newUser();

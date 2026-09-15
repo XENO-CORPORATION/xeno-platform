@@ -1,3 +1,4 @@
+import AccountUsageCredits from './AccountUsageCredits';
 import React, { useEffect, useState, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Check, X, Loader2, Sparkles, ExternalLink, Coins, Crown } from 'lucide-react';
@@ -168,6 +169,7 @@ const BillingPage: React.FC = () => {
         </div>
       )}
 
+      <AccountUsageCredits onBuyCredits={() => { setShowPacks(true); requestAnimationFrame(() => document.getElementById('billing-credit-packs')?.scrollIntoView({ block: 'center' })); }} />
       {/* Plan card */}
       <section className="xeno-billing-plan-card">
         <div className="xeno-billing-card-heading">

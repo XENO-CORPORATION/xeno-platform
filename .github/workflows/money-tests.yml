@@ -16,6 +16,9 @@ on:
     branches: ['**']
     paths:
       - 'src/server/utils/creditLedgerV2.js'
+      - 'src/server/utils/usageCreditFunding.js'
+      - 'src/server/services/usageCreditsService.js'
+      - 'src/server/database/migrations/*usage-credit*.sql'
       - 'src/server/utils/creditTransactions.js'
       - 'src/server/utils/inferenceMeter.js'
       - 'src/server/utils/watermark.js'
@@ -71,7 +74,7 @@ jobs:
           SUITES="ledger-v2 ledger-chain ledger-billing ledger-correctness billing-money-in media-metering wallet-service"
           fail=0
           for t in $SUITES; do
-            db="t_${t//-/_}"
+            db="xeno_payment_${t//-/_}"
             echo "──────── $t ($db) ────────"
             psql -h localhost -U postgres -d postgres -v ON_ERROR_STOP=1 -c "DROP DATABASE IF EXISTS $db"
             psql -h localhost -U postgres -d postgres -v ON_ERROR_STOP=1 -c "CREATE DATABASE $db"

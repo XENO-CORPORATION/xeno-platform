@@ -41,6 +41,10 @@ function fakePool({ balance = 1_000_000_000n, held = 0n, caps = [], spentInWindo
     query: async (sql, params = []) => {
       seen.push(sql.replace(/\s+/g, ' ').trim().slice(0, 60));
       if (/^(BEGIN|COMMIT|ROLLBACK)/i.test(sql.trim())) return { rows: [] };
+      if (sql.includes('SUM(remaining_micro)')) return {rows:[{s:String(balance)}]};
+      if (sql.startsWith('SELECT enabled')) return {rows:[{enabled:true}]};
+      if (sql.startsWith('SELECT g.id')) return {rows:[{id:'paid',kind:'paid',available:String(balance)}]};
+      if (sql.includes('AS reserved')) return {rows:[{reserved:'0'}]};
       if (/FROM credit_holds WHERE user_id = \$1 AND hold_id/i.test(sql)) return { rows: existingHold ? [existingHold] : [] };
       if (/SELECT id, balance, is_frozen FROM credit_accounts/i.test(sql)) {
         return { rows: [{ id: 'acct-1', balance: String(balance), is_frozen: false }] };

@@ -1,3 +1,4 @@
+import { installUsageCreditFixture, optInUsageCredits } from './usage-credit-fixture.mjs';
 /**
  * Integration test for walletService (workspace billing, Phase 4) against a real Postgres.
  * Verifies the money-movement surface: micro→whole conversion, idempotent workspace-wallet
@@ -35,6 +36,7 @@ CREATE TABLE IF NOT EXISTS workspaces (id uuid PRIMARY KEY, status varchar(16) D
 async function main() {
   await pool.query(BASE);
   await migrateAccountV2(pool);
+  await installUsageCreditFixture(pool);
   console.log('✓ migration applied');
 
   // ---- wholeFromMicro (pure) ----
@@ -52,6 +54,7 @@ async function main() {
   // ---- transferToWorkspace saga ----
   const userId = crypto.randomUUID();
   await pool.query('INSERT INTO users (id, credits) VALUES ($1, 0)', [userId]);
+  await optInUsageCredits(pool, userId);
   await addGrant(pool, userId, { amountMicro: 100 * MICRO_PER_CREDIT, kind: 'promo', sourceRef: 'seed' });
   ok((await walletBalance(pool, userId)).credits === 100, 'user funded with 100 credits');
 

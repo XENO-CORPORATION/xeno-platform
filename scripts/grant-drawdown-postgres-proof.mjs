@@ -25,6 +25,8 @@ try {
   for (const table of ['credit_accounts', 'credit_grants', 'credit_holds', 'credit_transactions', 'api_usage_logs', 'spend_caps']) {
     await client.query(`CREATE TEMP TABLE ${table} (LIKE public.${table} INCLUDING DEFAULTS) ON COMMIT DROP`);
   }
+  await client.query('CREATE TEMP TABLE usage_credit_preferences (user_id uuid PRIMARY KEY,enabled boolean) ON COMMIT DROP');
+  await client.query('CREATE TEMP TABLE credit_hold_funding (hold_row_id uuid,grant_id uuid,reserved_micro bigint,draw_order integer) ON COMMIT DROP');
   // Ledger transaction controls cannot commit our outer proof transaction.
   const tx = { release() {}, async query(sql, params) {
     if (/^(BEGIN|COMMIT|ROLLBACK)$/.test(sql.trim())) return { rows: [] };
@@ -42,6 +44,7 @@ try {
       await client.query('TRUNCATE users, credit_accounts, credit_grants, credit_holds, credit_transactions, api_usage_logs, spend_caps');
       const uid = '00000000-0000-4000-8000-000000000001';
       await client.query('INSERT INTO users VALUES ($1,0)', [uid]);
+      await client.query('INSERT INTO usage_credit_preferences VALUES ($1,true) ON CONFLICT (user_id) DO UPDATE SET enabled=true',[uid]);
       const { rows: [acct] } = await client.query('INSERT INTO credit_accounts (user_id,balance) VALUES ($1,$2) RETURNING id', [uid, scenario.kinds.length * 100]);
       const ids = [];
       for (let i = 0; i < scenario.kinds.length; i++) {

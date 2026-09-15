@@ -1,3 +1,4 @@
+import { installUsageCreditFixture, optInUsageCredits } from './usage-credit-fixture.mjs';
 /**
  * Billing subsystem test (Arch §4.5/§4.6/§4.7): drawdown lots, spend caps, usage.
  * Run: DATABASE_URL=postgresql://t:t@127.0.0.1:55474/t node tests/ledger-billing.test.mjs
@@ -26,8 +27,10 @@ async function remaining(userId, kind) {
 async function main() {
   await pool.query(BASE);
   await migrateAccountV2(pool);
+  await installUsageCreditFixture(pool);
   const u = await pool.query('INSERT INTO users (credits) VALUES (0) RETURNING id');
   const userId = u.rows[0].id;
+  await optInUsageCredits(pool, userId);
 
   // grants: free (priority 10) + paid (priority 100) → 8 credits
   await addGrant(pool, userId, { amountMicro: C(3), kind: 'free' });

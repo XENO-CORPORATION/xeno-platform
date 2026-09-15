@@ -33,6 +33,9 @@ export async function ensureQuota(pool, userId, plan, { now = new Date() } = {})
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
+    // Serialize first-use refills before the existence check; no aborted-transaction
+    // recovery from a concurrent unique violation is needed.
+    await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1,0))',[`quota:${userId}`]);
     const result = await issueAllowanceTx(client, userId, plan, { now });
     await client.query('COMMIT');
     if (result.issued) {

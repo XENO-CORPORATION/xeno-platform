@@ -57,6 +57,11 @@ export class InsufficientCreditsError extends Error {
   }
 }
 
+/** Distinct from an empty credit balance: the owner has not enabled overage. */
+export class WeeklyQuotaExceededError extends Error {
+  constructor(message: string, public resetsAt?: string) { super(message); this.name = 'WeeklyQuotaExceededError'; }
+}
+
 /** Thrown on 400 no_byok_key — the byok path needs a key the user hasn't added. */
 export class BYOKKeyMissingError extends Error {
   provider: string;
@@ -90,6 +95,9 @@ export async function chatComplete(opts: ChatOptions): Promise<ChatResult> {
 
   const data = await res.json().catch(() => ({} as any));
 
+  if (res.status === 402 && (data.error === 'QUOTA_EXCEEDED' || data.error?.code === 'QUOTA_EXCEEDED')) {
+    throw new WeeklyQuotaExceededError(data.message || data.error?.message || 'Weekly limit reached. Enable usage credits in Account > Usage.', data.resetsAt || data.error?.resetsAt);
+  }
   if (res.status === 402) throw new InsufficientCreditsError(data.message || 'Insufficient credits', data.balance);
   if (res.status === 400 && data.error === 'no_byok_key') throw new BYOKKeyMissingError(data.provider, data.message);
   if (!res.ok) throw new Error(data.error || data.message || `Chat request failed (${res.status})`);
