@@ -141,7 +141,7 @@ export async function probe(component, fetchImpl, now = Date.now) {
  * retry is the flap protection, so ONE failed run opens the incident: at a 15-minute cadence,
  * waiting for two runs would mean half an hour before anyone hears about a broken chat.
  */
-export const DEEP_CRON = '*/15 * * * *';
+export const DEEP_CRON = '*/30 * * * *';
 export const DEEP_TIMEOUT_MS = 120_000;
 export const DEEP_RETRY_DELAY_MS = 20_000;
 export const PROBE_MODEL_DEFAULT = 'claude-opus-5';
@@ -615,7 +615,7 @@ export function renderPage(model) {
   ${componentRows}
   <h2>Past incidents</h2>
   ${incidentRows}
-  <footer>Availability is checked every 2 minutes, and chat and web search by a real conversation every 15, from outside XENO's own infrastructure. Updated ${escapeHtml(model.generatedAt.replace('T', ' ').slice(0, 19))} UTC.</footer>
+  <footer>Availability is checked every 2 minutes, and chat and web search by a real conversation every 30, from outside XENO's own infrastructure. Updated ${escapeHtml(model.generatedAt.replace('T', ' ').slice(0, 19))} UTC.</footer>
 </main>
 </body>
 </html>`;
