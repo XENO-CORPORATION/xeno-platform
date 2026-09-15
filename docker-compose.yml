@@ -307,6 +307,13 @@ services:
       - ./storage/assets:/app/storage/assets
     ports:
       - "127.0.0.1:8080-8081:8080"
+      # Reachable from xeno-private-api-001 over the WireGuard link (wg0), like postgres
+      # above. The inference gateway meters every call through /api/v2/ledger/service/*
+      # — the pricing + ledger authority — and that traffic must not ride through
+      # Cloudflare (rate limits, an edge in the money path). Two replicas take the two
+      # ports; a caller targets 8080 and falls back to 8081 during a rolling restart.
+      # Only wg0 — never the LAN interface.
+      - "10.99.0.1:8080-8081:8080"
     depends_on:
       postgres:
         condition: service_healthy
