@@ -1976,10 +1976,13 @@ app.post('/api/chat/generate', databaseMiddleware, authMiddleware, async (req, r
                     requestId: randomUUID(),
                 });
             } else {
+                // One id for the whole turn: it drives the per-iteration credit holds AND the
+                // Web Context idempotency key, so the two can never disagree about what a turn is.
+                const chatTurnId = `chatgen-${randomUUID()}`;
                 const loop = await runToolLoop({
                     messages: bodyPayload.messages,
                     surface: toolSurface,
-                    turnId: `chatgen-${randomUUID()}`,
+                    turnId: chatTurnId,
                     callModel: callModelOnce,
                     /*
                      * Progress, streamed while the turn runs.
@@ -2002,6 +2005,8 @@ app.post('/api/chat/generate', databaseMiddleware, authMiddleware, async (req, r
                         actorId: req.user.id,
                         conversationId: conversationId || null,
                         userMessageId: null,
+                        // Per-turn: two turns asking the same question are two requests, not one.
+                        turnId: chatTurnId,
                         query,
                         count: 6,
                         depth,
