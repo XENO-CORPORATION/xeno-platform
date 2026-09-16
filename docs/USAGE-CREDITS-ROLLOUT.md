@@ -25,7 +25,7 @@ Settlement consumes the saved allocation, not the current toggle, and only up to
 Gateway candidate `19b80db` maps every HTTP 402 to `no_credits` and discards `resetsAt`. Update the gateway first:
 
 1. Preserve `error.resetsAt` and `usageCreditsEnabled` in its ledger error type.
-2. Handle `QUOTA_EXCEEDED` before the generic 402 branch. Return a distinct `quota_exceeded` error with the reset time and a link to `/overview/usage-analytics`, never an instruction to buy credits when the switch is off.
+2. Handle `QUOTA_EXCEEDED` before the generic 402 branch. Return a distinct `quota_exceeded` error with the reset time and a link to **`https://xenostudio.ai/overview/usage-analytics`** — the FULL host, never a bare path. The gateway runs on `api.xenostudio.ai`, a different host from the site, so a relative `/overview/usage-analytics` resolves against the API host and **404s**; gateway `376903c` fixed exactly that. Never return an instruction to buy credits when the switch is off.
 3. Keep the authenticated actor on balance, hold, settle and void. Never enable credits on an agent's behalf.
 4. Test both 402 classes and prove a refused hold dispatches no provider request.
 5. Media admission must happen before generation. The current gateway's caller-priced debit helper does not itself prove this ordering; verify its call sites. A post-generation refusal cannot prevent incurred cost.
