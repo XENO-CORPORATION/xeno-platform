@@ -56,6 +56,15 @@ export function installAuthenticatedFetch(): void {
       const csrf = readCsrfCookie();
       if (csrf && !headers.has('x-xeno-csrf')) headers.set('x-xeno-csrf', csrf);
     }
+    // Product identity (INFERENCE ROUTING spec D6). The server falls back to
+    // `legacy:xeno_api` when nothing names the caller, and that bucket holds
+    // 99.95% of historical rows — so per-product routing and the usage page
+    // cannot tell this app's traffic from anyone else's until it says who it is.
+    // `xeno-web` is this client's registered `oauth_clients.surface`.
+    //
+    // Stamped HERE rather than per-service for the same reason auth and CSRF
+    // are: a header added at each call site is one a new call site forgets.
+    if (!headers.has('x-xeno-surface')) headers.set('x-xeno-surface', 'xeno-web');
     return nativeFetch(input, { ...init, credentials: init.credentials || 'same-origin', headers });
   };
 }
