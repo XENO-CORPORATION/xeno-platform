@@ -5,11 +5,6 @@
       "measured": "0.1.0 published 2026-03-17",
       "reason": "Same shape — release notes describe a 'workspace UI' with a '3D viewport placeholder'. Scaffold, not product.",
       "retireWhen": "Architect ships real CAD/BIM behaviour behind the UI."
-    },
-    "engine": {
-      "measured": "0.1.0 published 2026-03-17",
-      "reason": "Release notes describe an 'editor scaffold'. No runtime, physics or multiplayer behind it yet.",
-      "retireWhen": "Engine ships a build that can actually run a scene."
     }
   }
 }
