@@ -4,6 +4,51 @@ This is the **XENO platform**: the marketing site + backend + the release
 infrastructure for every XENO product. For the whole ecosystem, see the root
 workspace `../CLAUDE.md`.
 
+## 🔴 CI runs HERE — `npm run ci:local`. Do not wait for GitHub Actions.
+
+**We own the compute.** Actions was only ever the *orchestrator* — it decides when a
+build runs and records that it ran. It never was the thing that could run it, and as of
+2026-09-16 it is not starting jobs for this account at all: every run on `main` and on
+every branch reports `failure` in 3–5 seconds with **zero steps executed**.
+
+⚠️ **That is not a red build, it is NO build** — and the distinction is the whole
+point. A red X meaning "nothing ran" teaches people to ignore red Xs, and it hid two
+real failures here: `erasure.test.mjs` had been broken on `main` since the usage-credit
+work, and `browser-bff-session.test.mjs` — a real-Postgres security test — ran in
+neither workflow at all.
+
+```bash
+npm run ci:local              # every gate CI would run: gates, build, core, money
+npm run ci:local -- --only=core     # gates | build | core | money
+npm run ci:local:drift        # just check this still matches the YAML
+```
+
+It orchestrates its own disposable Postgres (one fresh database per suite, exactly as
+the workflows do), carries the workflows' env, and exits non-zero on failure.
+
+🔴 **Its value is FIDELITY, not convenience — so the parity is CHECKED, not claimed.**
+`--check-drift` reads the `SUITES=` lists straight out of `core-tests.yml` and
+`money-tests.yml` and fails if they disagree with the runner. A local runner that
+checks a *different* set of things than CI is worse than none, because it grants
+confidence it has not earned. It also reports **stranded** server tests — files that
+appear in no workflow suite *and* no `package.json` script. There are 8 today, several
+on the money path; a test that never runs is not coverage, it is the appearance of it.
+
+⚠️ **The env is load-bearing, not decoration.** Omitting `REGISTRATION_OPEN` makes
+`account-recovery` fail with `Cannot read properties of undefined (reading
+'email_verified')` — the signup gate correctly refusing — and omitting `BYOK_ENABLED` /
+`SECRET_BOX_KEY` makes `inference-routing-live` assert *nothing at all*. A replication
+that drops the workflow's env invents failures and, worse, invents passes.
+
+Both gates are mutation-checked: adding a suite to a workflow fails the drift check, and
+a JSX syntax error fails the build gate — the precise defect that reached `main` in
+August and was found only when the production Docker build broke mid-deploy.
+
+**Releasing and deploying never needed Actions either** — `scripts/deploy-platform.mjs`
+and `xeno-release.mjs` are local Node driving SSH and rclone (`XENO BETA RELEASE -
+RUNBOOK.md` §1: *"GitHub is NOT required"*). The durable answer to the orchestration gap
+is `xeno-runner/SPEC.md`.
+
 ## Releasing — BEFORE any release, read `release-guide/` in full.
 
 This repo ships a portable **`release-guide/`** folder — the single source of truth
