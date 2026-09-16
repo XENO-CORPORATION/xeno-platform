@@ -8,6 +8,7 @@ import { migrateAccountV2 } from '../database/migrate-account-v2.js';
 import { recordUsageV2, verifyChainV2, MICRO_PER_CREDIT } from '../utils/creditLedgerV2.js';
 import { eraseSubject } from '../utils/gdprErasure.js';
 import { tablesDDL } from './fixtures/schema.mjs';
+import { installUsageCreditFixture, optInUsageCredits } from './usage-credit-fixture.mjs';
 
 const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL });
 let pass = 0, fail = 0;
@@ -32,8 +33,14 @@ async function main() {
   // all 42 tables — and it is visible, which is the point.
   await pool.query(tablesDDL('user_sessions', 'forum_spaces', 'forum_threads', 'forum_posts'));
   await migrateAccountV2(pool);
+  // This suite builds its own schema rather than running the full migration set,
+  // so the usage-credit consent tables are not here. Spending now consults them,
+  // and a missing table is a hard error rather than a default. Opt in explicitly:
+  // the subject under test is GDPR erasure against the hash chain, not consent.
+  await installUsageCreditFixture(pool);
   const u = await pool.query("INSERT INTO users (email, username, display_name, credits) VALUES ('jane@real.example','jane','Jane Doe',10) RETURNING id");
   const userId = u.rows[0].id;
+  await optInUsageCredits(pool, userId);
   await pool.query("INSERT INTO external_identity_links (source_system, external_email, platform_user_id) VALUES ('xeno_post','jane@real.example',$1)", [userId]);
   // Session rows carry PII (ip, user-agent) and — legacy rows — a PLAINTEXT JWT.
   await pool.query(
