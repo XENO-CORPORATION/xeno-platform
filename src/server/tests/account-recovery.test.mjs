@@ -55,6 +55,7 @@ async function main() {
   // device_type/browser/os, so the session INSERT failed, the app fell back to
   // a stateless token with no sid, and two assertions failed two steps later.
   await pool.query(tableDDL('user_sessions'));
+  await pool.query(tableDDL('security_events'));
   await migrateAccountV2(pool); // credit_grants + uq_credit_txn_ref (the idempotency index)
 
   const app = express();

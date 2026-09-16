@@ -56,7 +56,7 @@ async function main() {
   ok(r.accepted, 'debit within cap accepted');
 
   // usage aggregation
-  const sum = await usageSummary(pool, userId, { from: new Date(Date.now() - 3600e3), to: new Date(Date.now() + 1e3), groupBy: 'surface' });
+  const sum = await usageSummary(pool, userId, { from: new Date(Date.now() - 3600e3), to: new Date(Date.now() + 60e3), groupBy: 'surface' });
   ok(sum.rows.length === 1 && sum.rows[0].key === 'xeno_post' && sum.rows[0].costMicro === C(5), `usage groupBy surface = 5 credits (${sum.rows[0]?.costMicro})`);
 
   console.log(`\n${fail === 0 ? '✅' : '❌'} ledger-billing: ${pass} passed, ${fail} failed`);

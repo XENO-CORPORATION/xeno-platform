@@ -67,7 +67,7 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button
   },
   ref,
 ): ReactElement {
-  const availability: Availability = disabled ? 'disabled' : busy ? 'busy' : 'enabled'
+  const availability: Availability = busy ? 'busy' : disabled ? 'disabled' : 'enabled'
   const glyph = iconSize ?? iconPx(size)
   const revealSide = iconReveal === true ? 'leading' : iconReveal || undefined
   return (
@@ -80,7 +80,7 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button
       data-availability={availability}
       data-enter={enter ? '' : undefined}
       data-icon-reveal={revealSide}
-      disabled={disabled}
+      disabled={disabled || busy}
       aria-busy={busy || undefined}
       {...sizeAttr(size)}
       {...rest}

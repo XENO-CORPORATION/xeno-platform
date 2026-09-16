@@ -59,7 +59,7 @@ const CORE_DB_SUITES = [
   'authz-v2', 'oidc-v2', 'erasure', 'account-recovery',
   'auth-token-confusion', 'api-key-auth', 'browser-bff-session',
   'inference-routing-live', 'dpop-token-exchange', 'readonly-preview-lifecycle',
-  'leader-election', 'fresh-db-boot',
+  'leader-election', 'fresh-db-boot', 'password-change-atomicity',
 ];
 const CORE_NODB_SUITES = ['ai-tools-passthrough', 'entitlement-gate', 'upstream'];
 const MONEY_SUITES = [

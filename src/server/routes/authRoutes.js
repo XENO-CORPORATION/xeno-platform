@@ -15,7 +15,7 @@ import { siteOrigin, siteUrl, mailDomain } from '../config/hosts.js';
 import { addGrant, addGrantTx, MICRO_PER_CREDIT } from '../utils/creditLedgerV2.js';
 import { deductCredits } from '../utils/creditTransactions.js';
 import { sendEmail, sendWelcomeEmail } from '../services/emailService.js';
-import { recordSecurityEvent, EVENTS } from '../services/securityEvents.js';
+import { recordSecurityEvent, recordSecurityEventTransactional, EVENTS } from '../services/securityEvents.js';
 import { clientIp } from '../utils/clientIp.js';
 import {
   verifyActivationToken,
@@ -431,6 +431,37 @@ function clearBrowserSessionCookies(res) {
   const { maxAge: _maxAge, ...options } = browserCookieOptions();
   res.clearCookie(browserSessionCookies.session, { ...options, httpOnly: true });
   res.clearCookie(browserSessionCookies.csrf, { ...options, httpOnly: false });
+}
+
+/**
+ * Revoke outstanding reset links, OIDC session states, refresh tokens, and increment
+ * the OIDC auth epoch transactionally across all credential tables that exist.
+ */
+async function revokeOidcAndResetsTransactional(client, userId) {
+  const check = await client.query(`
+    SELECT
+      to_regclass('public.password_resets') IS NOT NULL AS has_resets,
+      to_regclass('public.oauth_session_state') IS NOT NULL AS has_sessions,
+      to_regclass('public.oauth_refresh_tokens') IS NOT NULL AS has_tokens,
+      to_regclass('public.oauth_user_auth_epochs') IS NOT NULL AS has_epochs
+  `);
+  const { has_resets, has_sessions, has_tokens, has_epochs } = check.rows[0];
+  if (has_resets) {
+    await client.query('UPDATE password_resets SET used_at = NOW() WHERE user_id = $1 AND used_at IS NULL', [userId]);
+  }
+  if (has_sessions) {
+    await client.query('UPDATE oauth_session_state SET revoked_at = COALESCE(revoked_at, NOW()) WHERE user_id = $1', [userId]);
+  }
+  if (has_tokens) {
+    await client.query('UPDATE oauth_refresh_tokens SET revoked = true WHERE user_id = $1', [userId]);
+  }
+  if (has_epochs) {
+    await client.query(
+      `INSERT INTO oauth_user_auth_epochs (user_id, epoch) VALUES ($1, 1)
+       ON CONFLICT (user_id) DO UPDATE SET epoch = oauth_user_auth_epochs.epoch + 1, changed_at = NOW()`,
+      [userId],
+    );
+  }
 }
 
 async function issueBrowserSession(db, user, req, res) {
@@ -934,29 +965,45 @@ router.post('/reset-password', async (req, res) => {
     if (typeof password !== 'string' || password.length < 6) {
       return res.status(400).json({ success: false, error: 'Password must be at least 6 characters long' });
     }
-    // Atomic single-use claim: only an unused, unexpired token flips to used_at and
-    // returns its user, so two concurrent submits can't both reset.
-    const claim = await req.db.query(
-      `UPDATE password_resets SET used_at = NOW()
-       WHERE token_hash = $1 AND used_at IS NULL AND expires_at > NOW()
-       RETURNING user_id`,
-      [hashToken(token)]
-    );
-    if (claim.rows.length === 0) {
-      return res.status(400).json({
-        success: false,
-        error: 'This reset link is invalid or has expired. Please request a new one.',
+    const client = typeof req.db.connect === 'function' ? await req.db.connect() : req.db;
+    try {
+      await client.query('BEGIN');
+      // Atomic single-use claim: only an unused, unexpired token flips to used_at and
+      // returns its user, so two concurrent submits can't both reset.
+      const claim = await client.query(
+        `UPDATE password_resets SET used_at = NOW()
+         WHERE token_hash = $1 AND used_at IS NULL AND expires_at > NOW()
+         RETURNING user_id`,
+        [hashToken(token)]
+      );
+      if (claim.rows.length === 0) {
+        await client.query('ROLLBACK');
+        return res.status(400).json({
+          success: false,
+          error: 'This reset link is invalid or has expired. Please request a new one.',
+        });
+      }
+      const userId = claim.rows[0].user_id;
+      const passwordHash = await hashPassword(password);
+      await client.query('UPDATE users SET password_hash = $1, updated_at = NOW() WHERE id = $2', [passwordHash, userId]);
+      // Security: a reset revokes every existing session (a compromised session must not
+      // survive the recovery) and burns any other outstanding reset tokens for this user.
+      await client.query('DELETE FROM user_sessions WHERE user_id = $1', [userId]);
+      await revokeOidcAndResetsTransactional(client, userId);
+
+      await recordSecurityEventTransactional(client, EVENTS.PASSWORD_RESET, {
+        userId,
+        req,
+        metadata: { method: 'token_reset' },
       });
+
+      await client.query('COMMIT');
+    } catch (error) {
+      await client.query('ROLLBACK').catch(() => {});
+      throw error;
+    } finally {
+      if (client !== req.db) client.release();
     }
-    const userId = claim.rows[0].user_id;
-    const passwordHash = await hashPassword(password);
-    await req.db.query('UPDATE users SET password_hash = $1, updated_at = NOW() WHERE id = $2', [passwordHash, userId]);
-    // Security: a reset revokes every existing session (a compromised session must not
-    // survive the recovery) and burns any other outstanding reset tokens for this user.
-    await req.db.query('DELETE FROM user_sessions WHERE user_id = $1', [userId]).catch((e) => {
-      console.error('[auth] reset-password session revocation failed:', e.message);
-    });
-    await req.db.query('UPDATE password_resets SET used_at = NOW() WHERE user_id = $1 AND used_at IS NULL', [userId]).catch(() => {});
     return res.json({ success: true, message: 'Your password has been reset. You can now sign in with your new password.' });
   } catch (error) {
     console.error('Reset-password error:', error.message);
@@ -1492,43 +1539,46 @@ router.put('/password', async (req, res) => {
       return res.status(400).json({ success: false, error: 'New password must be at least 6 characters long' });
     }
 
-    const userResult = await req.db.query('SELECT id, password_hash FROM users WHERE id = $1', [userId]);
-    if (userResult.rows.length === 0) return res.status(404).json({ success: false, error: 'User not found' });
-    if (!await verifyPassword(current_password, userResult.rows[0].password_hash)) {
-      return res.status(400).json({ success: false, error: 'Current password is incorrect' });
-    }
-
-    const newPasswordHash = await hashPassword(new_password);
-    await req.db.query('UPDATE users SET password_hash = $1, updated_at = NOW() WHERE id = $2', [newPasswordHash, userId]);
-
-    /* Every OTHER session dies; THIS one is re-issued.
-     *
-     * The security requirement is that a stolen credential cannot outlive a password
-     * change — that is about the sessions the user is NOT holding. Deleting the
-     * caller's own session too was over-broad, and it failed in the worst direction:
-     * the request that just proved knowledge of the current password got logged out,
-     * while the tab carried on believing it was signed in. The next click produced a
-     * bare 401 from an unrelated endpoint, so a SUCCESSFUL change presented as a
-     * failure. (Observed in production 2026-09-15: PUT 200 at 18:28:02, then 401s at
-     * 18:28:06 and 18:28:08 from /api/user-data/settings.)
-     *
-     * Re-issuing rather than keeping is what makes this safe: the session id survives
-     * so the user stays where they are, but the cookie SECRETS are replaced, so any
-     * copy of the old cookie is dead. Same mechanism as POST /refresh above.
-     *
-     * A caller with no browser session (a bearer or API key) keeps the strict old
-     * behaviour: nothing to re-issue, so every session goes, including its own.
-     */
-    const currentSid = req.browserSession?.sid || null;
+    const client = typeof req.db.connect === 'function' ? await req.db.connect() : req.db;
     let reissued = false;
-    if (currentSid) {
-      const sessionSecret = crypto.randomBytes(32).toString('base64url');
-      const csrfSecret = crypto.randomBytes(32).toString('base64url');
-      const transaction = typeof req.db.connect === 'function' ? await req.db.connect() : req.db;
-      try {
-        await transaction.query('BEGIN');
-        await transaction.query('DELETE FROM user_sessions WHERE user_id = $1 AND id <> $2', [userId, currentSid]);
-        const rotated = await transaction.query(
+    let sessionSecret = null;
+    let csrfSecret = null;
+    try {
+      await client.query('BEGIN');
+      const userResult = await client.query('SELECT id, password_hash FROM users WHERE id = $1 FOR UPDATE', [userId]);
+      if (userResult.rows.length === 0) {
+        await client.query('ROLLBACK');
+        return res.status(404).json({ success: false, error: 'User not found' });
+      }
+      if (!await verifyPassword(current_password, userResult.rows[0].password_hash)) {
+        await client.query('ROLLBACK');
+        return res.status(400).json({ success: false, error: 'Current password is incorrect' });
+      }
+
+      const newPasswordHash = await hashPassword(new_password);
+      await client.query('UPDATE users SET password_hash = $1, updated_at = NOW() WHERE id = $2', [newPasswordHash, userId]);
+
+      /* Every OTHER session dies; THIS one is re-issued.
+       *
+       * The security requirement is that a stolen credential cannot outlive a password
+       * change — that is about the sessions the user is NOT holding. Deleting the
+       * caller's own session too was over-broad, and it failed in the worst direction:
+       * the request that just proved knowledge of the current password got logged out,
+       * while the tab carried on believing it was signed in.
+       *
+       * Re-issuing rather than keeping is what makes this safe: the session id survives
+       * so the user stays where they are, but the cookie SECRETS are replaced, so any
+       * copy of the old cookie is dead. Same mechanism as POST /refresh above.
+       *
+       * A caller with no browser session (a bearer or API key) keeps the strict old
+       * behaviour: nothing to re-issue, so every session goes, including its own.
+       */
+      const currentSid = req.browserSession?.sid || null;
+      if (currentSid) {
+        sessionSecret = crypto.randomBytes(32).toString('base64url');
+        csrfSecret = crypto.randomBytes(32).toString('base64url');
+        await client.query('DELETE FROM user_sessions WHERE user_id = $1 AND id <> $2', [userId, currentSid]);
+        const rotated = await client.query(
           `UPDATE user_sessions
               SET token_hash = $1, expires_at = NOW() + INTERVAL '7 days', last_active_at = NOW()
             WHERE id = $2 AND user_id = $3 AND expires_at > NOW()
@@ -1538,32 +1588,47 @@ router.put('/password', async (req, res) => {
         if (!rotated.rows.length) {
           // The session vanished mid-request. Fail CLOSED: drop everything rather
           // than leave a session whose secret the caller was never handed.
-          await transaction.query('DELETE FROM user_sessions WHERE user_id = $1', [userId]);
-          await transaction.query('COMMIT');
+          await client.query('DELETE FROM user_sessions WHERE user_id = $1', [userId]);
+          reissued = false;
         } else {
-          await transaction.query(
+          await client.query(
             'UPDATE browser_session_state SET csrf_hash = $1, rotated_at = NOW() WHERE sid = $2',
             [hashToken(csrfSecret), currentSid],
           );
-          await transaction.query('COMMIT');
-          const options = browserCookieOptions();
-          res.cookie(browserSessionCookies.session, sessionSecret, { ...options, httpOnly: true });
-          res.cookie(browserSessionCookies.csrf, csrfSecret, { ...options, httpOnly: false });
           reissued = true;
         }
-      } catch (error) {
-        await transaction.query('ROLLBACK').catch(() => {});
-        throw error;
-      } finally {
-        if (transaction !== req.db) transaction.release();
+      } else {
+        await client.query('DELETE FROM user_sessions WHERE user_id = $1', [userId]);
+        reissued = false;
       }
-    } else {
-      await req.db.query('DELETE FROM user_sessions WHERE user_id = $1', [userId]);
+
+      // Revoke outstanding reset links, OIDC sessions, and refresh tokens
+      await revokeOidcAndResetsTransactional(client, userId);
+
+      // Audit event recorded transactionally inside the transaction
+      await recordSecurityEventTransactional(client, EVENTS.PASSWORD_CHANGED, {
+        userId,
+        req,
+        metadata: {
+          method: 'authenticated_password_change',
+          authKind: resolved.auth?.kind || 'unknown',
+          sessionReissued: reissued,
+        },
+      });
+
+      await client.query('COMMIT');
+    } catch (error) {
+      await client.query('ROLLBACK').catch(() => {});
+      throw error;
+    } finally {
+      if (client !== req.db) client.release();
     }
 
-    await recordSecurityEvent(req.db, EVENTS.PASSWORD_CHANGED, {
-      userId, req, metadata: { method: 'authenticated_password_change', authKind: resolved.auth?.kind || 'unknown', sessionReissued: reissued },
-    });
+    if (reissued && sessionSecret && csrfSecret) {
+      const options = browserCookieOptions();
+      res.cookie(browserSessionCookies.session, sessionSecret, { ...options, httpOnly: true });
+      res.cookie(browserSessionCookies.csrf, csrfSecret, { ...options, httpOnly: false });
+    }
 
     // `signedOut` tells the client which outcome it got, so it never has to infer
     // one from a later 401 on an unrelated request.
@@ -1584,7 +1649,7 @@ router.put('/password', async (req, res) => {
 // POST /api/auth/admin-reset-password - Admin-only recovery for accounts whose email
 // cannot receive mail. This is deliberately separate from the user's current-password
 // change: admin recovery proves admin auth, revokes every session, burns every reset
-// token, and records who initiated it.
+// token, revokes OAuth/OIDC credentials, and records who initiated it transactionally.
 router.post('/admin-reset-password', authMiddleware, requireAdmin, async (req, res) => {
   try {
     const { userId, new_password } = req.body || {};
@@ -1595,7 +1660,7 @@ router.post('/admin-reset-password', authMiddleware, requireAdmin, async (req, r
       return res.status(400).json({ success: false, error: 'New password must be at least 6 characters long' });
     }
     const hash = await hashPassword(new_password);
-    const client = await req.db.connect();
+    const client = typeof req.db.connect === 'function' ? await req.db.connect() : req.db;
     let sessionsRevoked = 0;
     let resetsBurned = 0;
     try {
@@ -1610,14 +1675,22 @@ router.post('/admin-reset-password', authMiddleware, requireAdmin, async (req, r
       const burned = await client.query('UPDATE password_resets SET used_at=NOW() WHERE user_id=$1 AND used_at IS NULL', [userId]);
       sessionsRevoked = revoked.rowCount || 0;
       resetsBurned = burned.rowCount || 0;
+
+      // Revoke outstanding reset links, OIDC sessions, and refresh tokens
+      await revokeOidcAndResetsTransactional(client, userId);
+
+      // Audit event recorded transactionally inside the transaction
+      await recordSecurityEventTransactional(client, EVENTS.PASSWORD_RESET_ADMIN, {
+        userId, req, metadata: { initiatedBy: req.user.id, method: 'admin_initiated', sessionsRevoked, resetsBurned },
+      });
+
       await client.query('COMMIT');
     } catch (error) {
       await client.query('ROLLBACK').catch(() => {});
       throw error;
-    } finally { client.release(); }
-    await recordSecurityEvent(req.db, EVENTS.PASSWORD_RESET_ADMIN, {
-      userId, req, metadata: { initiatedBy: req.user.id, method: 'admin_initiated', sessionsRevoked, resetsBurned },
-    });
+    } finally {
+      if (client !== req.db) client.release();
+    }
     return res.json({ success: true, sessionsRevoked, resetsBurned, message: 'Password reset. All sessions and outstanding reset links were revoked.' });
   } catch (error) {
     console.error('[auth] admin password reset failed:', error.message);
