@@ -42,6 +42,7 @@ export const EVENTS = Object.freeze({
   ACCOUNT_SUSPENDED_BLOCKED: 'account_suspended_blocked', // usable-check refused a sign-in
   PASSWORD_RESET_REQUESTED: 'password_reset_requested',
   PASSWORD_RESET_ADMIN: 'password_reset_admin',
+  PASSWORD_CHANGED: 'password_changed',
   // OIDC / token lifecycle
   TOKEN_ISSUED: 'token_issued',         // an authorization_code or device grant completed
   TOKEN_REFRESHED: 'token_refreshed',

@@ -240,7 +240,7 @@ class AuthService {
   }
 
   // Change password
-  async changePassword(currentPassword: string, newPassword: string): Promise<{ success: boolean; message?: string; error?: string }> {
+  async changePassword(currentPassword: string, newPassword: string): Promise<{ success: boolean; message?: string; error?: string; signedOut?: boolean }> {
     if (!hasAuthSession()) {
       return { success: false, error: 'Not authenticated' };
     }
@@ -258,7 +258,12 @@ class AuthService {
       const data = await response.json();
 
       if (response.ok && data.success) {
-        return { success: true, message: data.message };
+        // The server re-issues THIS session (new cookie secrets, same session) and
+        // revokes the others. `signedOut` says which happened, so the UI never has
+        // to guess from a later 401 on some unrelated request — which is exactly how
+        // a successful change used to present as a failure.
+        if (data.signedOut) clearAuthSession();
+        return { success: true, message: data.message, signedOut: Boolean(data.signedOut) };
       } else {
         return {
           success: false,
