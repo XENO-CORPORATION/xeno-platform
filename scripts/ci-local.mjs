@@ -55,16 +55,17 @@ const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const SERVER = join(ROOT, 'src', 'server');
 const WF = join(ROOT, '.github', 'workflows');
 
-// ── The suite lists. Kept in sync with the workflows by --check-drift below. ──
 const CORE_DB_SUITES = [
   'authz-v2', 'oidc-v2', 'erasure', 'account-recovery',
   'auth-token-confusion', 'api-key-auth', 'browser-bff-session',
-  'inference-routing-live',
+  'inference-routing-live', 'dpop-token-exchange', 'readonly-preview-lifecycle',
+  'leader-election', 'fresh-db-boot',
 ];
-const CORE_NODB_SUITES = ['ai-tools-passthrough', 'entitlement-gate'];
+const CORE_NODB_SUITES = ['ai-tools-passthrough', 'entitlement-gate', 'upstream'];
 const MONEY_SUITES = [
   'ledger-v2', 'ledger-chain', 'ledger-billing', 'ledger-correctness',
   'billing-money-in', 'media-metering', 'wallet-service',
+  'service-ledger', 'ledger-audit-fixes', 'credit-mirror-drift',
 ];
 
 // Mirrors core-tests.yml `env:`. See the ENVIRONMENT note above before trimming.
