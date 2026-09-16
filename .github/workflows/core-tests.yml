@@ -70,6 +70,13 @@ jobs:
       # This does NOT weaken the gate's own tests — scripts/registration-gate.test.mjs
       # sets and restores the env per assertion, so it still proves the closed case.
       REGISTRATION_OPEN: 'true'
+      # BYOK routing is flag-gated and the vault refuses to store an unsealed
+      # secret, so inference-routing-live asserts nothing without both of these.
+      # The key is generated per run and is a TEST key: it never decrypts any
+      # real credential, and production's SECRET_BOX_KEY stays on
+      # xeno-platform-001 only (spec §6.1).
+      BYOK_ENABLED: 'true'
+      SECRET_BOX_KEY: 'Y2ktb25seS10ZXN0LWtleS0zMi1ieXRlcy1sb25nISE='
     steps:
       - uses: actions/checkout@v4
 
@@ -88,7 +95,7 @@ jobs:
         working-directory: src/server
         run: |
           set -euo pipefail
-          SUITES="authz-v2 oidc-v2 erasure account-recovery auth-token-confusion api-key-auth browser-bff-session"
+          SUITES="authz-v2 oidc-v2 erasure account-recovery auth-token-confusion api-key-auth browser-bff-session inference-routing-live"
           fail=0
           for t in $SUITES; do
             db="c_${t//-/_}"
