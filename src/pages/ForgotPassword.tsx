@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { Button } from '@xenosystem/elements-react';
 import { ArrowLeft, ArrowRight, Mail, MailCheck } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import AuthMark from '../components/auth/AuthMark';
@@ -148,26 +149,15 @@ const ForgotPassword = () => {
                   </div>
                 </div>
 
-                <button
+                <Button
                   type="submit"
+                  variant="primary"
+                  size="lg"
                   disabled={isSubmitting}
-                  className={`group w-full mt-2 py-4 bg-white text-black text-sm font-semibold rounded-[6px] flex items-center justify-center gap-0 transition-all duration-300 ease-out hover:bg-white/90 hover:shadow-lg hover:shadow-white/10 active:scale-[0.98] overflow-hidden ${
-                    isSubmitting ? 'opacity-50 cursor-not-allowed' : ''
-                  }`}
+                  className="w-full mt-2"
                 >
-                  {isSubmitting ? (
-                    <div className="w-5 h-5 border-2 border-black/30 border-t-black rounded-[3px] animate-spin" />
-                  ) : (
-                    <>
-                      <span className="transition-transform duration-300 group-hover:-translate-x-1">Send reset link</span>
-                      <ArrowRight
-                        size={16}
-                        strokeWidth={2.5}
-                        className="opacity-0 -ml-4 group-hover:opacity-100 group-hover:ml-2 transition-all duration-300 ease-out"
-                      />
-                    </>
-                  )}
-                </button>
+                  {isSubmitting ? 'Sending…' : 'Send reset link'}
+                </Button>
               </form>
 
               <p className="text-center text-sm text-white/30 mt-8">

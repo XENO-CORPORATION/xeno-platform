@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { Button } from '@xenosystem/elements-react';
 import { ArrowLeft, Mail, User, MessageSquare, Send, CheckCircle } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import AuthMark from '../components/auth/AuthMark';
@@ -172,26 +173,15 @@ const ContactContent = () => {
                 </div>
 
                 {/* Submit Button */}
-                <button
+                <Button
                   type="submit"
+                  variant="primary"
+                  size="lg"
                   disabled={isSubmitting}
-                  className={`group w-full mt-6 py-4 bg-white text-black text-sm font-semibold rounded-[6px] flex items-center justify-center gap-0 transition-all duration-300 ease-out hover:bg-white/90 hover:shadow-lg hover:shadow-white/10 active:scale-[0.98] overflow-hidden ${
-                    isSubmitting ? 'opacity-70 cursor-not-allowed' : ''
-                  } ${isVisible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4'}`}
-                  style={{ transitionDelay: '0.4s' }}
+                  className="w-full mt-6"
                 >
-                  {isSubmitting ? (
-                    <div className="w-5 h-5 border-2 border-black/30 border-t-black rounded-[3px] animate-spin" />
-                  ) : (
-                    <>
-                      <span className="transition-transform duration-300 group-hover:-translate-x-1">Send Message</span>
-                      <Send
-                        size={16}
-                        className="opacity-0 -ml-4 group-hover:opacity-100 group-hover:ml-2 transition-all duration-300 ease-out"
-                      />
-                    </>
-                  )}
-                </button>
+                  {isSubmitting ? 'Sending…' : 'Send Message'}
+                </Button>
               </form>
             )}
           </div>

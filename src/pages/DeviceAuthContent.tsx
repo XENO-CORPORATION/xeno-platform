@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { Button } from '@xenosystem/elements-react';
 import { Link, useLocation, useParams } from 'react-router-dom';
 import AuthMark from '../components/auth/AuthMark';
 import { ArrowLeft, KeyRound } from 'lucide-react';
@@ -150,9 +151,15 @@ const DeviceAuthContent: React.FC<{ protocol?: 'oidc' | 'legacy' }> = ({ protoco
                   </div>
                 </div>
               )}
-              <button type="submit" disabled={status === 'verifying'} className="mt-5 w-full rounded-[6px] bg-white py-3 text-sm font-semibold text-black transition-colors hover:bg-white/90 disabled:opacity-60">
+              <Button
+                type="submit"
+                variant="primary"
+                size="lg"
+                disabled={status === 'verifying'}
+                className="mt-5 w-full"
+              >
                 {status === 'verifying' ? 'Checking…' : authorization ? `Approve ${authorization.client_name}` : 'Continue'}
-              </button>
+              </Button>
               <p className="mt-4 text-center text-xs text-white/30">Device codes are a common phishing target. Never share yours or approve a request you did not start.</p>
             </form>
           )}
