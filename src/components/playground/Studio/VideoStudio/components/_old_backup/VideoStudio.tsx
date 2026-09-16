@@ -1,5 +1,7 @@
 import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { confirmAction } from '@/components/platform/confirmAction';
+import { notify } from '@/components/platform/Notifications';
 import { 
   Send, Paperclip, Settings, Palette, History, 
   Plus, X, Trash2, Edit3, Copy, ThumbsUp, ThumbsDown,
@@ -957,11 +959,11 @@ const VideoStudio: React.FC = () => {
         console.log('🚀 Redirecting to canvas...');
       } else {
         console.error('❌ Failed to create project:', result.error);
-        alert(`Failed to create project: ${result.error}`);
+        notify.error(`Failed to create project: ${result.error}`);
       }
     } catch (error) {
       console.error('❌ Project creation error:', error);
-      alert('An error occurred while creating the project');
+      notify.error('An error occurred while creating the project');
     } finally {
       setIsCreatingProject(false);
     }
@@ -987,21 +989,21 @@ const VideoStudio: React.FC = () => {
       console.log('✅ Project saved manually');
     } else {
       console.error('❌ Save failed:', result.error);
-      alert(`Failed to save project: ${result.error}`);
+      notify.error(`Failed to save project: ${result.error}`);
     }
   };
 
   // Start rendering
   const handleStartRender = async () => {
     if (!currentProject) {
-      alert('No active project to render');
+      notify.error('No active project to render');
       return;
     }
 
     // Check if user is authenticated
     const user = authService.getCurrentUser();
     if (!user) {
-      alert('Please login to render videos');
+      notify.error('Please login to render videos');
       return;
     }
 
@@ -1010,22 +1012,17 @@ const VideoStudio: React.FC = () => {
     
     // Check if user has enough credits
     if (user.credits < estimatedCredits) {
-      alert(`Insufficient credits. Need ${estimatedCredits} credits, you have ${user.credits} credits.`);
+      notify.error(`Insufficient credits. Need ${estimatedCredits} credits, you have ${user.credits} credits.`);
       return;
     }
 
     // Confirm with user
-    const confirmed = window.confirm(
-      `💰 RENDER VIDEO - This will use credits\n\n` +
-      `Project: ${currentProject.title}\n` +
-      `Duration: ${currentProject.duration}s @ ${currentProject.fps}fps\n` +
-      `Resolution: ${currentProject.width}x${currentProject.height}\n` +
-      `Quality: ${currentProject.quality}\n\n` +
-      `💵 Credits needed: ${estimatedCredits}\n` +
-      `💰 Your credits: ${user.credits}\n` +
-      `💵 After render: ${user.credits - estimatedCredits} credits\n\n` +
-      `✨ Note: Creating and editing is FREE. Only rendering costs credits.`
-    );
+    const confirmed = await confirmAction({
+      title: 'Render Video',
+      detail: `Render "${currentProject.title}" (${currentProject.duration}s @ ${currentProject.fps}fps, ${currentProject.width}x${currentProject.height})? This will use ${estimatedCredits} credits (${user.credits} available; ${user.credits - estimatedCredits} remaining). Note: Creating and editing is free; rendering consumes credits.`,
+      confirmLabel: `Render (${estimatedCredits} credits)`,
+      destructive: false,
+    });
 
     if (!confirmed) return;
 
@@ -1068,7 +1065,7 @@ const VideoStudio: React.FC = () => {
           setUserCredits(updatedCredits);
           
           // Show success message
-          alert(`Render complete! Video saved to: ${completedJob.output_url}`);
+          notify.success(`Render complete! Video saved to: ${completedJob.output_url}`);
           
           // Optionally open the video
           if (completedJob.output_url) {
@@ -1077,16 +1074,16 @@ const VideoStudio: React.FC = () => {
         }).catch((error) => {
           console.error('❌ Render failed:', error);
           setIsGenerating(false);
-          alert(`Render failed: ${error.message}`);
+          notify.error(`Render failed: ${error.message}`);
         });
       } else {
         setIsGenerating(false);
-        alert(`Failed to start render: ${result.error}`);
+        notify.error(`Failed to start render: ${result.error}`);
       }
     } catch (error) {
       console.error('❌ Render error:', error);
       setIsGenerating(false);
-      alert('An error occurred while starting the render');
+      notify.error('An error occurred while starting the render');
     }
   };
 
@@ -1094,7 +1091,12 @@ const VideoStudio: React.FC = () => {
   const handleCancelRender = async () => {
     if (!renderJobId) return;
 
-    const confirmed = window.confirm('Cancel rendering?');
+    const confirmed = await confirmAction({
+      title: 'Cancel rendering?',
+      detail: 'Are you sure you want to cancel the current rendering job?',
+      confirmLabel: 'Cancel Render',
+      destructive: true,
+    });
     if (!confirmed) return;
 
     try {
@@ -1122,7 +1124,7 @@ const VideoStudio: React.FC = () => {
 
     } catch (error) {
       console.error('❌ Failed to load project:', error);
-      alert('Failed to load project');
+      notify.error('Failed to load project');
     }
   };
 

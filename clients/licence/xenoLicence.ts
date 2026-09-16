@@ -128,6 +128,7 @@ export async function checkLicence(opts: LicenceOptions): Promise<Licence> {
          * which is what lets it bind builds that predate this file — but an
          * explicit header is unambiguous and survives a UA change. */
         'X-Xeno-Client': `${opts.product}/${opts.version}`,
+        'X-Xeno-Surface': opts.product.startsWith('xeno-') ? opts.product : `xeno-${opts.product}`,
       },
       signal: ctrl.signal,
     });

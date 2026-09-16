@@ -1,6 +1,6 @@
 # Usage-credit consent rollout
 
-Status: implemented and tested; production deployment held for gateway coordination.
+Status: implemented, tested, and gateway coordination completed; ready for production activation.
 
 ## Account contract
 
@@ -20,17 +20,17 @@ Admission under the account row lock allocates eligible grant lots. OFF permits 
 
 Settlement consumes the saved allocation, not the current toggle, and only up to the actual charge. Disabling usage credits does not invalidate already-admitted work. Voiding releases the reservation by changing hold state. Lot allocations remain reserved while a hold is held, including late settlement. The existing expiry sweeper releases them by voiding the hold. A voided hold cannot settle. Pre-migration holds with no funding rows finish under the pre-migration policy. Existing historical ledger/lot differences are not reconciled by this feature.
 
-## Required gateway coordination BEFORE activation
+## Gateway coordination — COMPLETED (verified 2026-09-15)
 
-Gateway candidate `19b80db` maps every HTTP 402 to `no_credits` and discards `resetsAt`. Update the gateway first:
+Gateway coordination on `xeno-private-api-001` (`.224`) is completed and running live in PM2 (`xeno-api-proxy` at commit `c81aa38`, including `2e30bc1` and `376903c`):
 
-1. Preserve `error.resetsAt` and `usageCreditsEnabled` in its ledger error type.
-2. Handle `QUOTA_EXCEEDED` before the generic 402 branch. Return a distinct `quota_exceeded` error with the reset time and a link to **`https://xenostudio.ai/overview/usage-analytics`** — the FULL host, never a bare path. The gateway runs on `api.xenostudio.ai`, a different host from the site, so a relative `/overview/usage-analytics` resolves against the API host and **404s**; gateway `376903c` fixed exactly that. Never return an instruction to buy credits when the switch is off.
-3. Keep the authenticated actor on balance, hold, settle and void. Never enable credits on an agent's behalf.
-4. Test both 402 classes and prove a refused hold dispatches no provider request.
-5. Media admission must happen before generation. The current gateway's caller-priced debit helper does not itself prove this ordering; verify its call sites. A post-generation refusal cannot prevent incurred cost.
+1. ✅ `LedgerError` carries `resetsAt` and `usageCreditsEnabled`, extracted from platform error bodies.
+2. ✅ `QUOTA_EXCEEDED` handled before generic 402, returning distinct `quota_exceeded` error with reset time and link to **`https://xenostudio.ai/overview/usage-analytics`** (full URL, verified). Never suggests buying credits when usage credits switch is off.
+3. ✅ Authenticated actor preserved on balance, hold, settle, and void.
+4. ✅ Refused holds dispatch no upstream provider requests (verified via `chat-billing.test.mjs` and `platform-ledger.test.mjs`).
+5. ✅ Media admission reserves before generation via `mediaBilling` / `withMediaBilling` and settles at actual amount.
 
-Do not deploy the platform enforcement until the gateway is ready and the operator accepts the default-OFF rollout. Existing exhausted accounts, including the operator's high-volume account, will stop new over-quota work until the human enables usage credits. Do not silently seed ON preferences or change plans as a workaround.
+Production activation on `.225` (`xeno-platform-001`) is ready to deploy when the operator schedules the default-OFF rollout. Existing exhausted accounts will stop new over-quota work until the user enables usage credits on their account.
 
 Deploy the account UI and backend as a coordinated release. The new UI refuses to invent a setting if connected to an old backend. Keep the old backend image for rollback; the additive tables preserve data, and the migration DOWN is intentionally non-destructive. An old backend would ignore consent, so rollback is not an acceptable long-term enforcement state.
 
