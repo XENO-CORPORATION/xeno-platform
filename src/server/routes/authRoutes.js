@@ -28,6 +28,7 @@ import { describeClient } from '../utils/userAgent.js';
 import { optOut } from '../services/emailPreferences.js';
 import { resolveOAuthLandingPath } from '../lib/onboardingHandoff.js';
 import { browserSessionCookies } from '../middleware/browserSession.js';
+import { resolveAuthedUser, authMiddleware, requireAdmin } from '../middleware/auth.js';
 import { issuePreviewSession } from '../middleware/previewSession.js';
 import { PREVIEW_MODE } from '../lib/previewPolicy.mjs';
 import { creditsView, wholeCredits } from '../utils/accountViews.js';
@@ -1475,91 +1476,152 @@ router.put('/profile', async (req, res) => {
 // PUT /api/auth/password - Change password
 router.put('/password', async (req, res) => {
   try {
-    const token = req.headers.authorization?.replace('Bearer ', '');
-
-    if (!token) {
-      return res.status(401).json({
-        success: false,
-        error: 'Authentication required'
-      });
-    }
-
-    const decoded = jwt.verify(token, JWT_SECRET, { algorithms: ['HS256'] });
-    if (await sessionRevoked(req.db, decoded)) {
-      return res.status(401).json({ success: false, error: 'Session expired or revoked' });
-    }
+    // Use the same resolver as every other authenticated route. The browser session
+    // middleware injects a short-lived internal bearer before this router runs, so
+    // reloads authenticate through the real session instead of a marker the browser
+    // deliberately removes from the wire.
+    const resolved = await resolveAuthedUser(req);
+    if (!resolved.user) return res.status(resolved.status || 401).json({ success: false, error: resolved.error || 'Authentication required' });
+    const userId = resolved.user.id;
     const { current_password, new_password } = req.body;
 
     if (!current_password || !new_password) {
-      return res.status(400).json({
-        success: false,
-        error: 'Current password and new password are required'
-      });
+      return res.status(400).json({ success: false, error: 'Current password and new password are required' });
+    }
+    if (typeof new_password !== 'string' || new_password.length < 6) {
+      return res.status(400).json({ success: false, error: 'New password must be at least 6 characters long' });
     }
 
-    if (new_password.length < 6) {
-      return res.status(400).json({
-        success: false,
-        error: 'New password must be at least 6 characters long'
-      });
+    const userResult = await req.db.query('SELECT id, password_hash FROM users WHERE id = $1', [userId]);
+    if (userResult.rows.length === 0) return res.status(404).json({ success: false, error: 'User not found' });
+    if (!await verifyPassword(current_password, userResult.rows[0].password_hash)) {
+      return res.status(400).json({ success: false, error: 'Current password is incorrect' });
     }
 
-    // Get current user with password hash
-    const userResult = await req.db.query(
-      'SELECT id, password_hash FROM users WHERE id = $1',
-      [decoded.userId]
-    );
-
-    if (userResult.rows.length === 0) {
-      return res.status(404).json({
-        success: false,
-        error: 'User not found'
-      });
-    }
-
-    const user = userResult.rows[0];
-
-    // Verify current password
-    const passwordValid = await verifyPassword(current_password, user.password_hash);
-    if (!passwordValid) {
-      return res.status(400).json({
-        success: false,
-        error: 'Current password is incorrect'
-      });
-    }
-
-    // Hash new password and update
     const newPasswordHash = await hashPassword(new_password);
-    await req.db.query(
-      'UPDATE users SET password_hash = $1, updated_at = NOW() WHERE id = $2',
-      [newPasswordHash, decoded.userId]
-    );
+    await req.db.query('UPDATE users SET password_hash = $1, updated_at = NOW() WHERE id = $2', [newPasswordHash, userId]);
 
-    // Security: a password change revokes EVERY session (incl. this one) — any
-    // stolen sid-token dies here. The client must sign in again with the new password.
-    await req.db.query('DELETE FROM user_sessions WHERE user_id = $1', [decoded.userId]).catch((e) => {
-      console.error('[auth] password-change session revocation failed:', e.message);
-    });
-
-    res.json({
-      success: true,
-      message: 'Password changed successfully. Please sign in again.'
-    });
-
-  } catch (error) {
-    if (error.name === 'JsonWebTokenError' || error.name === 'TokenExpiredError') {
-      return res.status(401).json({
-        success: false,
-        error: 'Invalid or expired token'
-      });
+    /* Every OTHER session dies; THIS one is re-issued.
+     *
+     * The security requirement is that a stolen credential cannot outlive a password
+     * change — that is about the sessions the user is NOT holding. Deleting the
+     * caller's own session too was over-broad, and it failed in the worst direction:
+     * the request that just proved knowledge of the current password got logged out,
+     * while the tab carried on believing it was signed in. The next click produced a
+     * bare 401 from an unrelated endpoint, so a SUCCESSFUL change presented as a
+     * failure. (Observed in production 2026-09-15: PUT 200 at 18:28:02, then 401s at
+     * 18:28:06 and 18:28:08 from /api/user-data/settings.)
+     *
+     * Re-issuing rather than keeping is what makes this safe: the session id survives
+     * so the user stays where they are, but the cookie SECRETS are replaced, so any
+     * copy of the old cookie is dead. Same mechanism as POST /refresh above.
+     *
+     * A caller with no browser session (a bearer or API key) keeps the strict old
+     * behaviour: nothing to re-issue, so every session goes, including its own.
+     */
+    const currentSid = req.browserSession?.sid || null;
+    let reissued = false;
+    if (currentSid) {
+      const sessionSecret = crypto.randomBytes(32).toString('base64url');
+      const csrfSecret = crypto.randomBytes(32).toString('base64url');
+      const transaction = typeof req.db.connect === 'function' ? await req.db.connect() : req.db;
+      try {
+        await transaction.query('BEGIN');
+        await transaction.query('DELETE FROM user_sessions WHERE user_id = $1 AND id <> $2', [userId, currentSid]);
+        const rotated = await transaction.query(
+          `UPDATE user_sessions
+              SET token_hash = $1, expires_at = NOW() + INTERVAL '7 days', last_active_at = NOW()
+            WHERE id = $2 AND user_id = $3 AND expires_at > NOW()
+            RETURNING id`,
+          [hashToken(sessionSecret), currentSid, userId],
+        );
+        if (!rotated.rows.length) {
+          // The session vanished mid-request. Fail CLOSED: drop everything rather
+          // than leave a session whose secret the caller was never handed.
+          await transaction.query('DELETE FROM user_sessions WHERE user_id = $1', [userId]);
+          await transaction.query('COMMIT');
+        } else {
+          await transaction.query(
+            'UPDATE browser_session_state SET csrf_hash = $1, rotated_at = NOW() WHERE sid = $2',
+            [hashToken(csrfSecret), currentSid],
+          );
+          await transaction.query('COMMIT');
+          const options = browserCookieOptions();
+          res.cookie(browserSessionCookies.session, sessionSecret, { ...options, httpOnly: true });
+          res.cookie(browserSessionCookies.csrf, csrfSecret, { ...options, httpOnly: false });
+          reissued = true;
+        }
+      } catch (error) {
+        await transaction.query('ROLLBACK').catch(() => {});
+        throw error;
+      } finally {
+        if (transaction !== req.db) transaction.release();
+      }
+    } else {
+      await req.db.query('DELETE FROM user_sessions WHERE user_id = $1', [userId]);
     }
 
-    console.error('Password change error:', error);
-    res.status(500).json({
-      success: false,
-      error: 'Failed to change password',
-      // SECURITY: error.message not exposed to clients
+    await recordSecurityEvent(req.db, EVENTS.PASSWORD_CHANGED, {
+      userId, req, metadata: { method: 'authenticated_password_change', authKind: resolved.auth?.kind || 'unknown', sessionReissued: reissued },
     });
+
+    // `signedOut` tells the client which outcome it got, so it never has to infer
+    // one from a later 401 on an unrelated request.
+    return res.json({
+      success: true,
+      signedOut: !reissued,
+      message: reissued
+        ? 'Password changed. Other devices have been signed out.'
+        : 'Password changed successfully. Please sign in again.',
+    });
+  } catch (error) {
+    if (error.name === 'JsonWebTokenError' || error.name === 'TokenExpiredError') return res.status(401).json({ success: false, error: 'Invalid or expired token' });
+    console.error('Password change error:', error);
+    return res.status(500).json({ success: false, error: 'Failed to change password' });
+  }
+});
+
+// POST /api/auth/admin-reset-password - Admin-only recovery for accounts whose email
+// cannot receive mail. This is deliberately separate from the user's current-password
+// change: admin recovery proves admin auth, revokes every session, burns every reset
+// token, and records who initiated it.
+router.post('/admin-reset-password', authMiddleware, requireAdmin, async (req, res) => {
+  try {
+    const { userId, new_password } = req.body || {};
+    if (!userId || typeof userId !== 'string' || !new_password || typeof new_password !== 'string') {
+      return res.status(400).json({ success: false, error: 'userId and new_password are required' });
+    }
+    if (new_password.length < 6) {
+      return res.status(400).json({ success: false, error: 'New password must be at least 6 characters long' });
+    }
+    const hash = await hashPassword(new_password);
+    const client = await req.db.connect();
+    let sessionsRevoked = 0;
+    let resetsBurned = 0;
+    try {
+      await client.query('BEGIN');
+      const target = await client.query('SELECT id, email FROM users WHERE id=$1 FOR UPDATE', [userId]);
+      if (!target.rows.length) {
+        await client.query('ROLLBACK');
+        return res.status(404).json({ success: false, error: 'User not found' });
+      }
+      await client.query('UPDATE users SET password_hash=$1, updated_at=NOW() WHERE id=$2', [hash, userId]);
+      const revoked = await client.query('DELETE FROM user_sessions WHERE user_id=$1', [userId]);
+      const burned = await client.query('UPDATE password_resets SET used_at=NOW() WHERE user_id=$1 AND used_at IS NULL', [userId]);
+      sessionsRevoked = revoked.rowCount || 0;
+      resetsBurned = burned.rowCount || 0;
+      await client.query('COMMIT');
+    } catch (error) {
+      await client.query('ROLLBACK').catch(() => {});
+      throw error;
+    } finally { client.release(); }
+    await recordSecurityEvent(req.db, EVENTS.PASSWORD_RESET_ADMIN, {
+      userId, req, metadata: { initiatedBy: req.user.id, method: 'admin_initiated', sessionsRevoked, resetsBurned },
+    });
+    return res.json({ success: true, sessionsRevoked, resetsBurned, message: 'Password reset. All sessions and outstanding reset links were revoked.' });
+  } catch (error) {
+    console.error('[auth] admin password reset failed:', error.message);
+    return res.status(500).json({ success: false, error: 'Admin password reset failed' });
   }
 });
 
