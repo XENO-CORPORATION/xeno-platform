@@ -105,6 +105,8 @@ test('signed out still honours grace', () => {
 test('it identifies itself explicitly', () => {
   assert.ok(src.includes("'X-Xeno-Client': `${opts.product}/${opts.version}`"),
     'the client no longer identifies itself — the platform can only fall back to the User-Agent');
+  assert.ok(src.includes("'X-Xeno-Surface'"),
+    'the client must stamp X-Xeno-Surface for per-product inference and entitlement attribution');
 });
 
 test('it reads canUse, and reports the SOURCE', () => {

@@ -51,6 +51,8 @@ export interface XenoAccountConfig {
   getToken: () => string | null | undefined | Promise<string | null | undefined>;
   /** Optional fetch impl (Node < 18 / custom). Defaults to global fetch. */
   fetchImpl?: typeof fetch;
+  /** Product surface identifier (e.g. 'xeno-pixel', 'xeno-motion'). Stamped on X-Xeno-Surface header. */
+  surface?: string;
 }
 
 const FREE: Entitlements = {
@@ -67,7 +69,10 @@ export function createXenoAccount(cfg: XenoAccountConfig) {
 
   async function headers(): Promise<Record<string, string>> {
     const t = await cfg.getToken();
-    return t ? { Authorization: `Bearer ${t}` } : {};
+    const h: Record<string, string> = {};
+    if (t) h.Authorization = `Bearer ${t}`;
+    if (cfg.surface) h['X-Xeno-Surface'] = cfg.surface;
+    return h;
   }
 
   async function get<T>(path: string): Promise<T | null> {

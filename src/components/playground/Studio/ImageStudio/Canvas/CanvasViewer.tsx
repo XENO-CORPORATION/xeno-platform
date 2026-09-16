@@ -2624,10 +2624,15 @@ const CanvasViewer: React.FC<CanvasViewerProps> = ({
     setIsFileDropdownOpen(false);
   };
 
-  const handleCloseFile = () => {
+  const handleCloseFile = async () => {
     console.log('❌ Close File clicked');
     if (hasUnsavedChanges) {
-      const confirmed = window.confirm('You have unsaved changes. Close anyway?');
+      const confirmed = await confirmAction({
+        title: 'Unsaved changes',
+        detail: 'You have unsaved changes. Close anyway?',
+        confirmLabel: 'Close anyway',
+        destructive: true,
+      });
       if (!confirmed) return;
     }
     onClose();
@@ -2640,7 +2645,7 @@ const CanvasViewer: React.FC<CanvasViewerProps> = ({
     try {
       const canvas = canvasRef.current;
       if (!canvas) {
-        alert('No canvas available to save');
+        notify.error('No canvas available to save');
         return;
       }
 
@@ -2687,7 +2692,7 @@ const CanvasViewer: React.FC<CanvasViewerProps> = ({
       setIsFileDropdownOpen(false);
     } catch (error) {
       console.error('❌ Error saving project:', error);
-      alert('Failed to save project file');
+      notify.error('Failed to save project file');
     }
   };
 
@@ -2707,7 +2712,7 @@ const CanvasViewer: React.FC<CanvasViewerProps> = ({
 
         // Validate project file
         if (projectData.type !== 'xenostudio-image-project') {
-          alert('Invalid project file format');
+          notify.error('Invalid project file format');
           return;
         }
 
@@ -2739,7 +2744,7 @@ const CanvasViewer: React.FC<CanvasViewerProps> = ({
         setIsFileDropdownOpen(false);
       } catch (error) {
         console.error('❌ Error loading project:', error);
-        alert('Failed to load project file. Make sure it\'s a valid .xenproject file.');
+        notify.error("Failed to load project file. Make sure it's a valid .xenproject file.");
       }
     };
 

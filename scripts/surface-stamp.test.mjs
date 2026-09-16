@@ -54,3 +54,31 @@ test('an unnamed caller still degrades to the legacy bucket, never to a crash', 
   assert.equal(requestSurface({}), LEGACY_SURFACE);
   assert.equal(requestSurface({ headers: { 'x-xeno-surface': 'not a surface!' } }), LEGACY_SURFACE);
 });
+
+test('shared xeno-account stamps X-Xeno-Surface when surface is specified', () => {
+  const accountSrc = readFileSync('shared/xeno-account.ts', 'utf8');
+  assert.match(accountSrc, /surface\?: string;/,
+    'XenoAccountConfig must accept an optional surface identifier');
+  assert.match(accountSrc, /h\['X-Xeno-Surface'\] = cfg\.surface;/,
+    'createXenoAccount must stamp X-Xeno-Surface when configured');
+
+  // Verify valid surfaces resolve cleanly
+  const testSurface = 'xeno-pixel';
+  const resolved = requestSurface({ headers: { 'x-xeno-surface': testSurface } });
+  assert.equal(resolved, testSurface);
+  assert.notEqual(resolved, LEGACY_SURFACE);
+});
+
+test('desktop xenoLicence client stamps X-Xeno-Surface derived from product', () => {
+  const licenceSrc = readFileSync('clients/licence/xenoLicence.ts', 'utf8');
+  assert.match(licenceSrc, /'X-Xeno-Surface': opts\.product\.startsWith\('xeno-'\) \? opts\.product : `xeno-\$\{opts\.product\}`/,
+    'checkLicence must stamp X-Xeno-Surface derived from product slug');
+
+  // Verify resolution of derived product slugs
+  for (const prod of ['pixel', 'sound', 'motion', 'canvas', 'workflow', 'hub']) {
+    const derived = prod.startsWith('xeno-') ? prod : `xeno-${prod}`;
+    const resolved = requestSurface({ headers: { 'x-xeno-surface': derived } });
+    assert.equal(resolved, derived);
+    assert.notEqual(resolved, LEGACY_SURFACE);
+  }
+});
