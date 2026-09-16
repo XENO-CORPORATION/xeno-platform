@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { Button } from '@xenosystem/elements-react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { 
   Bot, 
@@ -146,22 +147,24 @@ export const SharedChatView: React.FC = () => {
         </div>
 
         <div className="flex items-center gap-2">
-          <button
+          <Button
+            size="sm"
+            variant="secondary"
             onClick={handleCopyShareLink}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white/[0.05] hover:bg-white/[0.08] border border-white/[0.08] text-xs text-white/80 transition-colors"
             title="Copy share link"
           >
-            {copiedLink ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5 text-white/40" />}
+            {copiedLink ? <Check className="w-3.5 h-3.5 text-emerald-400 mr-1" /> : <Copy className="w-3.5 h-3.5 text-white/40 mr-1" />}
             <span>{copiedLink ? 'Copied' : 'Share'}</span>
-          </button>
+          </Button>
 
-          <button
+          <Button
+            size="sm"
+            variant="primary"
             onClick={handleForkChat}
-            className="inline-flex items-center gap-1.5 px-4 py-1.5 rounded-full bg-white text-black font-medium text-xs hover:bg-white/90 shadow-sm transition-transform active:scale-95"
           >
-            <Sparkles className="w-3.5 h-3.5 text-black/70" />
+            <Sparkles className="w-3.5 h-3.5 mr-1" />
             <span>Open in XENO</span>
-          </button>
+          </Button>
         </div>
       </header>
 
@@ -273,13 +276,14 @@ export const SharedChatView: React.FC = () => {
             <p className="text-xs text-white/50 mb-6">
               Create apps, generate assets, and converse with high-reasoning models in an all-in-one workspace.
             </p>
-            <button
+            <Button
+              size="lg"
+              variant="primary"
               onClick={handleForkChat}
-              className="inline-flex items-center gap-2 px-6 py-3 rounded-full bg-white text-black font-medium text-sm hover:bg-white/90 shadow-lg transition-transform active:scale-95"
             >
-              <MessageSquare className="w-4 h-4" />
+              <MessageSquare className="w-4 h-4 mr-2" />
               <span>Start your own conversation</span>
-            </button>
+            </Button>
           </div>
         </div>
       </main>
