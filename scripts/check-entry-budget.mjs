@@ -41,12 +41,12 @@ import path from 'node:path';
 import zlib from 'node:zlib';
 
 /*
- * Measured 2026-09-10 against a real production build: 1,444,418 raw /
- * 366,151 gzip, down from 2,993,308 / ~1.0 MB. The headroom is deliberate but
- * small — enough that an ordinary feature does not trip it, far too little to
- * absorb another library. Lower these in the same commit that earns it.
+ * Measured 2026-09-16 against a real production build: 442,046 raw /
+ * 132,493 gzip, down from 1,444,418 / 366,151 (and originally 7,174,902 bytes).
+ * Headroom provides margin for deliberate additions without absorbing regressions.
+ * Lower these in the same commit that earns it.
  */
-const BUDGET = { raw: 1_600_000, gzip: 400_000 };
+const BUDGET = { raw: 600_000, gzip: 180_000 };
 
 const DIST = path.resolve(process.argv[2] || 'dist');
 const INDEX = path.join(DIST, 'index.html');

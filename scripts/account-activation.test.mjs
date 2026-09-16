@@ -247,5 +247,5 @@ test('🔴 something in the CLIENT handles account_not_activated', () => {
 test('the waiting page exists and is routed', () => {
   const app = readFileSync(new URL('../src/App.tsx', import.meta.url), 'utf8');
   assert.match(app, /path="\/auth\/activate"/, 'no route renders the waiting page');
-  assert.match(app, /import ActivateAccount/, 'the page is not imported');
+  assert.match(app, /(?:import\s+ActivateAccount\s+from|ActivateAccount\s*=\s*lazyRoute\()/, 'the page is not imported');
 });

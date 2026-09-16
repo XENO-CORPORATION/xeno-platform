@@ -70,7 +70,10 @@ test('real lazy route delays loading, preserves surrounding state and recovers f
 
 test('workspace and creative routes are not eager imports; fallback has no local visual controls', () => {
   const app = readFileSync(new URL('../src/App.tsx', import.meta.url), 'utf8');
-  for (const name of ['OverviewPage', 'MultiChatContainer', 'OSHomeInterface', 'OSAuthWithContainers']) {
+  for (const name of [
+    'OverviewPage', 'MultiChatContainer', 'OSHomeInterface', 'OSAuthWithContainers',
+    'ProductPage', 'Privacy', 'Pricing', 'Onboarding', 'OSAuthInterface', 'OSContainerWizard', 'AuthContent'
+  ]) {
     assert.match(app, new RegExp(`const ${name} = lazyRoute\\(`));
     assert.doesNotMatch(app, new RegExp(`import ${name} from`));
   }
