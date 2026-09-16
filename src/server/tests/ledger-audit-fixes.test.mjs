@@ -32,6 +32,7 @@ import {
   enforceInHouseDailyLimit, bumpInhouseDailyUsage, nextUtcMidnight,
 } from '../middleware/inHouseDailyLimit.js';
 import videoRoutes from '../routes/videoRoutes.js';
+import { installUsageCreditFixture, optInUsageCredits } from './usage-credit-fixture.mjs';
 
 const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL });
 let pass = 0, fail = 0;
@@ -39,11 +40,13 @@ const ok = (c, m) => { if (c) { pass++; console.log(`  ✓ ${m}`); } else { fail
 const C = (n) => n * MICRO_PER_CREDIT;
 
 const BASE = `
-CREATE TABLE IF NOT EXISTS users (id uuid PRIMARY KEY DEFAULT gen_random_uuid(), credits bigint DEFAULT 0);
+CREATE TABLE IF NOT EXISTS users (id uuid PRIMARY KEY DEFAULT gen_random_uuid(), username text DEFAULT 'test', email text DEFAULT 'test@test.com', display_name text DEFAULT 'Tester', role text DEFAULT 'user', is_active boolean DEFAULT true, status text DEFAULT 'active', credits bigint DEFAULT 0);
+CREATE TABLE IF NOT EXISTS agent_identities (user_id uuid PRIMARY KEY, owner_user_id uuid, agent_role varchar(16) DEFAULT 'other', agent_origin text, status varchar(16) DEFAULT 'active');
 CREATE TABLE IF NOT EXISTS credit_accounts (id uuid PRIMARY KEY DEFAULT gen_random_uuid(), user_id uuid UNIQUE, owner_kind varchar(16) DEFAULT 'user', balance bigint DEFAULT 0, lifetime_earned bigint DEFAULT 0, lifetime_spent bigint DEFAULT 0, is_frozen boolean DEFAULT false, created_at timestamptz DEFAULT now(), updated_at timestamptz DEFAULT now());
 CREATE TABLE IF NOT EXISTS credit_transactions (id uuid PRIMARY KEY DEFAULT gen_random_uuid(), user_id uuid, account_id uuid, type varchar(32), amount bigint, balance_after bigint, reference_type varchar(64), reference_id varchar(128), description text, metadata jsonb, prev_hash text, entry_hash text, created_at timestamptz DEFAULT now());
 CREATE TABLE IF NOT EXISTS api_usage_logs (id uuid PRIMARY KEY DEFAULT gen_random_uuid(), user_id uuid, surface varchar(64), operation varchar(128), model varchar(128), provider varchar(64), actual_cost_micro bigint, estimated_cost_micro bigint, input_tokens int DEFAULT 0, output_tokens int DEFAULT 0, status varchar(16), request_id varchar(128), endpoint text, method varchar(8), created_at timestamptz DEFAULT now());
 CREATE TABLE IF NOT EXISTS workspaces (id uuid PRIMARY KEY, status varchar(16) DEFAULT 'active', metadata jsonb DEFAULT '{}'::jsonb);
+CREATE TABLE IF NOT EXISTS xeno_account_plans (user_id text PRIMARY KEY, plan varchar(50) DEFAULT 'free', status varchar(20) DEFAULT 'active', current_period_end timestamptz);
 -- New audit tables (mirrors migrations/20260719000000-ledger-audit-tables.sql)
 CREATE TABLE IF NOT EXISTS inhouse_daily_usage (user_id uuid NOT NULL, day date NOT NULL, count int NOT NULL DEFAULT 0, PRIMARY KEY (user_id, day));
 CREATE TABLE IF NOT EXISTS ledger_compensation_failures (id uuid PRIMARY KEY DEFAULT gen_random_uuid(), user_id uuid, amount_micro bigint NOT NULL, txn_ref varchar(128), reason text, context jsonb, resolved boolean NOT NULL DEFAULT false, created_at timestamptz NOT NULL DEFAULT now());
@@ -53,13 +56,18 @@ CREATE TABLE IF NOT EXISTS video_render_jobs (id uuid PRIMARY KEY, project_id uu
 `;
 
 const balance = async (uid) => (await getBalanceV2(pool, uid)).availableMicro;
-const newUser = async () => (await pool.query('INSERT INTO users (credits) VALUES (0) RETURNING id')).rows[0].id;
+const newUser = async () => {
+  const uid = (await pool.query('INSERT INTO users (credits) VALUES (0) RETURNING id')).rows[0].id;
+  await optInUsageCredits(pool, uid);
+  return uid;
+};
 const grant = (uid, credits) => addGrant(pool, uid, { amountMicro: C(credits), kind: 'paid', sourceRef: `seed:${uid}` });
 const lifetimeEarned = async (uid) => Number((await pool.query('SELECT lifetime_earned FROM credit_accounts WHERE user_id=$1', [uid])).rows[0].lifetime_earned);
 
 async function main() {
   await pool.query(BASE);
   await migrateAccountV2(pool);
+  await installUsageCreditFixture(pool);
   console.log('✓ migration applied');
 
   // ── Fix 7: plan resolution — internal + ultra alias ────────────────────────
@@ -92,6 +100,7 @@ async function main() {
 
   {
     const u = await newUser();
+    await pool.query("INSERT INTO xeno_account_plans (user_id, plan, status) VALUES ($1, 'internal', 'active')", [u]);
     await grant(u, 100);
     actingUser = u;
     // 1000×1000 × 2s × 5fps / 1e6 = 10 credits

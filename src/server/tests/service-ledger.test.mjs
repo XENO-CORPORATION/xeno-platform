@@ -16,6 +16,7 @@ import pg from 'pg';
 import { migrateAccountV2 } from '../database/migrate-account-v2.js';
 import { getBalanceV2, MICRO_PER_CREDIT } from '../utils/creditLedgerV2.js';
 import serviceLedgerRoutes from '../routes/serviceLedgerRoutes.js';
+import { installUsageCreditFixture, optInUsageCredits } from './usage-credit-fixture.mjs';
 
 const TOKEN = 'test-service-token-abc123';
 process.env.LEDGER_SERVICE_TOKEN = TOKEN;
@@ -27,7 +28,10 @@ const C = (n) => n * MICRO_PER_CREDIT;
 
 // Base ledger tables migrateAccountV2 augments (created here for a fresh throwaway DB).
 const BASE = `
-CREATE TABLE IF NOT EXISTS users (id uuid PRIMARY KEY DEFAULT gen_random_uuid(), credits bigint DEFAULT 0);
+CREATE TABLE IF NOT EXISTS users (id uuid PRIMARY KEY DEFAULT gen_random_uuid(), username text DEFAULT 'test', email text DEFAULT 'test@test.com', display_name text DEFAULT 'Tester', role text DEFAULT 'user', is_active boolean DEFAULT true, status text DEFAULT 'active', credits bigint DEFAULT 0);
+CREATE TABLE IF NOT EXISTS agent_identities (user_id uuid PRIMARY KEY, owner_user_id uuid, agent_role varchar(16) DEFAULT 'other', agent_origin text, status varchar(16) DEFAULT 'active');
+CREATE TABLE IF NOT EXISTS workspaces (id uuid PRIMARY KEY, status varchar(16) DEFAULT 'active', metadata jsonb DEFAULT '{}'::jsonb);
+CREATE TABLE IF NOT EXISTS xeno_account_plans (user_id text PRIMARY KEY, plan varchar(50) DEFAULT 'free', status varchar(20) DEFAULT 'active', current_period_end timestamptz);
 CREATE TABLE IF NOT EXISTS credit_accounts (id uuid PRIMARY KEY DEFAULT gen_random_uuid(), user_id uuid UNIQUE, balance bigint DEFAULT 0, lifetime_earned bigint DEFAULT 0, lifetime_spent bigint DEFAULT 0, is_frozen boolean DEFAULT false, created_at timestamptz DEFAULT now(), updated_at timestamptz DEFAULT now());
 CREATE TABLE IF NOT EXISTS credit_transactions (id uuid PRIMARY KEY DEFAULT gen_random_uuid(), user_id uuid, account_id uuid, type varchar(32), amount bigint, balance_after bigint, reference_type varchar(64), reference_id varchar(128), description text, metadata jsonb, prev_hash text, entry_hash text, created_at timestamptz DEFAULT now());
 CREATE TABLE IF NOT EXISTS api_usage_logs (id uuid PRIMARY KEY DEFAULT gen_random_uuid(), user_id uuid, surface varchar(64), operation varchar(128), model varchar(128), provider varchar(64), actual_cost_micro bigint, estimated_cost_micro bigint, input_tokens int DEFAULT 0, output_tokens int DEFAULT 0, status varchar(16), request_id varchar(128), endpoint text, method varchar(8), created_at timestamptz DEFAULT now());
@@ -53,6 +57,7 @@ const available = async (uid) => (await getBalanceV2(pool, uid)).availableMicro;
 async function main() {
   await pool.query(BASE);
   await migrateAccountV2(pool);
+  await installUsageCreditFixture(pool);
 
   // Minimal app: fake req.db middleware (the pool) → router. NO authMiddleware.
   const app = express();
@@ -62,8 +67,10 @@ async function main() {
   await new Promise((r) => server.listen(0, '127.0.0.1', r));
   baseUrl = `http://127.0.0.1:${server.address().port}`;
 
-  // Seed a user with 100 credits.
+  // Seed a user with 100 credits and internal plan (no auto-allowance issued).
   const userId = (await pool.query('INSERT INTO users (credits) VALUES (100) RETURNING id')).rows[0].id;
+  await optInUsageCredits(pool, userId);
+  await pool.query("INSERT INTO xeno_account_plans (user_id, plan, status) VALUES ($1, 'internal', 'active')", [userId]);
 
   // ── 1. Auth gate: no token / wrong token → 401 (never open) ─────────────────
   const noTok = await req('POST', '/api/v2/ledger/service/holds', { body: { userId, holdId: 'h-x', amountMicro: C(1), operation: 'op', surface: 'agents' } });

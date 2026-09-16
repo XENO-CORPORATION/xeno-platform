@@ -38,7 +38,7 @@ jobs:
     runs-on: ubuntu-latest
     services:
       postgres:
-        image: postgres:15-alpine
+        image: pgvector/pgvector:0.8.6-pg15-bookworm
         env:
           POSTGRES_PASSWORD: test
           POSTGRES_DB: postgres
@@ -71,7 +71,7 @@ jobs:
         working-directory: src/server
         run: |
           set -euo pipefail
-          SUITES="ledger-v2 ledger-chain ledger-billing ledger-correctness billing-money-in media-metering wallet-service"
+          SUITES="ledger-v2 ledger-chain ledger-billing ledger-correctness billing-money-in media-metering wallet-service service-ledger ledger-audit-fixes credit-mirror-drift"
           fail=0
           for t in $SUITES; do
             db="xeno_payment_${t//-/_}"
