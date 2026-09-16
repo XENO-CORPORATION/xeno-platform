@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { Button, TextInput } from '@xenosystem/elements-react';
 
 type RemoteRun = {
   runId: string;
@@ -148,13 +149,14 @@ export default function RemoteRuns() {
             <h1 className="text-2xl font-semibold tracking-normal">Remote Runs</h1>
             <p className="mt-1 text-sm text-white/60">{status}</p>
           </div>
-          <button
-            className="h-10 rounded border border-white/15 px-4 text-sm text-white hover:bg-white/10"
+          <Button
+            variant="secondary"
+            size="md"
             onClick={() => void refresh()}
             type="button"
           >
             Refresh
-          </button>
+          </Button>
         </header>
 
         {error && (
@@ -191,15 +193,15 @@ export default function RemoteRuns() {
           </aside>
 
           <section className="flex min-h-[520px] flex-col border border-white/10">
-            <div className="flex flex-wrap gap-2 border-b border-white/10 p-3">
-              <input
-                className="h-10 w-full bg-white/5 px-3 text-sm text-white outline-none ring-1 ring-white/10 focus:ring-white/30 sm:w-56"
+            <div className="flex flex-wrap items-center gap-2 border-b border-white/10 p-3">
+              <TextInput
+                className="w-full sm:w-56"
                 onChange={(event) => setWorkspace(event.target.value)}
                 placeholder="Workspace"
                 value={workspace}
               />
-              <input
-                className="h-10 min-w-0 flex-1 bg-white/5 px-3 text-sm text-white outline-none ring-1 ring-white/10 focus:ring-white/30"
+              <TextInput
+                className="min-w-0 flex-1"
                 onChange={(event) => setPrompt(event.target.value)}
                 onKeyDown={(event) => {
                   if (event.key === 'Enter' && !event.shiftKey) void startRun();
@@ -207,22 +209,24 @@ export default function RemoteRuns() {
                 placeholder="Prompt"
                 value={prompt}
               />
-              <button
-                className="h-10 rounded bg-white px-4 text-sm font-medium text-black disabled:opacity-40"
+              <Button
+                variant="primary"
+                size="md"
                 disabled={busy || !prompt.trim()}
                 onClick={() => void startRun()}
                 type="button"
               >
                 Start
-              </button>
-              <button
-                className="h-10 rounded border border-white/15 px-4 text-sm text-white disabled:opacity-40"
+              </Button>
+              <Button
+                variant="secondary"
+                size="md"
                 disabled={busy || !selectedRunId}
                 onClick={() => void stopRun()}
                 type="button"
               >
                 Stop
-              </button>
+              </Button>
             </div>
 
             <div className="min-h-0 flex-1 overflow-auto p-3 font-mono text-xs">
