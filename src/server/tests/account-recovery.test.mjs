@@ -84,8 +84,10 @@ async function main() {
   const id1 = await uid('u1@t.example'), id2 = await uid('u2@t.example');
   // The bug this proves: a CONSTANT sourceRef:'signup' collided on uq_credit_txn_ref for
   // user2, so pre-fix user2 got ZERO signup credits. Both must now have their own grant.
-  ok((await grantCount(id1, `signup:${id1}`)) === 1, 'user1 has a signup grant (signup:<id1>)');
-  ok((await grantCount(id2, `signup:${id2}`)) === 1, 'user2 ALSO has a signup grant (idempotency-collision fixed)');
+  // 2026-09-17 (F11): the sign-up grant is retired — the free tier is the weekly
+  // allowance, issued on first metered use to a verified mailbox. Nothing at sign-up.
+  ok((await grantCount(id1, `signup:${id1}`)) === 0, 'user1 gets NO sign-up grant');
+  ok((await grantCount(id2, `signup:${id2}`)) === 0, 'user2 gets NO sign-up grant either');
 
   // ---- B2c: register issues an email-verification token ----
   ok((await pool.query('SELECT count(*)::int n FROM email_verifications WHERE user_id=$1', [id1])).rows[0].n === 1, 'register issued an email_verifications token');

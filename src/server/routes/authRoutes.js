@@ -12,7 +12,7 @@ import crypto from 'crypto';
 import fetch from 'node-fetch';
 import Redis from 'ioredis';
 import { siteOrigin, siteUrl, mailDomain } from '../config/hosts.js';
-import { addGrant, addGrantTx, MICRO_PER_CREDIT } from '../utils/creditLedgerV2.js';
+import { MICRO_PER_CREDIT } from '../utils/creditLedgerV2.js';
 import { deductCredits } from '../utils/creditTransactions.js';
 import { sendEmail, sendWelcomeEmail } from '../services/emailService.js';
 import { recordSecurityEvent, recordSecurityEventTransactional, EVENTS } from '../services/securityEvents.js';
@@ -42,7 +42,13 @@ import {
 } from '../middleware/registrationGate.js';
 
 // Free-tier starter credits granted on signup so new users can try premium generation.
-const FREE_SIGNUP_CREDITS = Number(process.env.FREE_SIGNUP_CREDITS || 50);
+// The free tier is ONE mechanism: the weekly allowance (utils/quotaEngine.js,
+// PRICING STANDARD §8b D4/D6 — one ledger, one expiry rule). Until 2026-09-17 three
+// stacked on top of each other: 50 credits at sign-up (no expiry), 1,000 on the
+// post-onboarding "welcome" claim (€10 of retail credit for an email address), and
+// the 50/week allowance — a fresh account held 1,100 credits in its first session.
+// The sign-up and welcome grants are retired; the allowance is issued on first
+// metered use, to a VERIFIED mailbox.
 
 const router = express.Router();
 
@@ -706,19 +712,6 @@ router.post('/register', requireRegistrationOpen, async (req, res) => {
     });
     sendWelcomeEmail(req.db, user, { activationCode });
 
-    // Grant Free-tier starter credits (kind:'free' → drawn down before paid credits)
-    // so a new user can actually try premium generation. Non-fatal on failure.
-    if (FREE_SIGNUP_CREDITS > 0) {
-      try {
-        // Per-user idempotency key. A constant 'signup' ref collided on uq_credit_txn_ref
-        // for EVERY user after the first (the grant threw and was silently swallowed here),
-        // so only the very first account ever registered actually received signup credits.
-        await addGrant(req.db, user.id, { amountMicro: FREE_SIGNUP_CREDITS * MICRO_PER_CREDIT, kind: 'free', sourceRef: `signup:${user.id}` });
-        user.credits = FREE_SIGNUP_CREDITS;
-      } catch (grantErr) {
-        console.warn('[register] signup credit grant failed:', grantErr.message);
-      }
-    }
 
     // Session-backed token (sid claim + user_sessions row; plaintext JWT never stored).
     const token = await issueLoginCredential(req.db, user, req, res);
@@ -1975,7 +1968,7 @@ router.post('/claim-bonus', async (req, res) => {
     // converge on one grant and the same authoritative ledger balance.
     if (user.bonus_credits_claimed) {
       const credits = await creditsView(req.db, user.id);
-      return res.json({ success: true, already_claimed: true, credits: credits.balance, welcome_amount: 1000 });
+      return res.json({ success: true, already_claimed: true, credits: credits.balance });
     }
 
     const onboarding = await req.db.query(
@@ -1987,52 +1980,26 @@ router.post('/claim-bonus', async (req, res) => {
       return res.status(409).json({ success: false, error: 'Complete onboarding before receiving welcome credits' });
     }
 
-    // Award welcome credits into the CANONICAL v2 ledger (credit_accounts) via
-    // addGrantTx, which also mirrors users.credits (mirrorLegacy). Previously this
-    // only SET users.credits, leaving the v2 ledger the chat meter / api-proxy /
-    // Hub actually read at zero → false 402 "Insufficient credits" despite a shown
-    // balance. Claim atomically first (WHERE bonus_credits_claimed = false) so
-    // concurrent calls can't double-grant; roll the claim back if the grant throws.
-    const WELCOME_BONUS_CREDITS = 1000;
-    const client = await req.db.connect();
-    let clientReleased = false;
-    try {
-      await client.query('BEGIN');
-      const claim = await client.query(
-        'UPDATE users SET bonus_credits_claimed = true WHERE id = $1 AND bonus_credits_claimed = false RETURNING id',
-        [user.id],
-      );
-      if (claim.rows.length === 0) {
-        await client.query('ROLLBACK');
-        client.release();
-        clientReleased = true;
-        const credits = await creditsView(req.db, user.id);
-        return res.json({ success: true, already_claimed: true, credits: credits.balance, welcome_amount: 1000 });
-      }
-      await addGrantTx(client, user.id, {
-        amountMicro: WELCOME_BONUS_CREDITS * MICRO_PER_CREDIT,
-        kind: 'free',
-        sourceRef: `welcome-bonus:${user.id}`,
-      });
-      await client.query('COMMIT');
-    } catch (grantErr) {
-      await client.query('ROLLBACK').catch(() => {});
-      throw grantErr;
-    } finally {
-      // The early idempotent return releases explicitly before reading through
-      // the pool; all other paths release here.
-      if (!clientReleased) client.release();
-    }
+    // The welcome is a HANDSHAKE, not a grant: it issues this week's allowance (the
+    // free tier's one mechanism — see FREE_SIGNUP_CREDITS above) and marks the claim.
+    // ensureQuota refuses an unverified mailbox (EMAIL_UNVERIFIED → 403 below).
+    const { ensureQuota } = await import('../services/quotaService.js');
+    const { getEffectivePlan } = await import('../services/effectivePlan.js');
+    const { plan } = await getEffectivePlan(req.db, user.id);
+    const quota = await ensureQuota(req.db, user.id, plan);
+    await req.db.query('UPDATE users SET bonus_credits_claimed = true WHERE id = $1 AND bonus_credits_claimed = false', [user.id]);
     const credits = await creditsView(req.db, user.id);
 
     res.json({
       success: true,
-      message: 'Welcome credits claimed successfully!',
+      message: 'Your weekly allowance is ready.',
       credits: credits.balance,
-      welcome_amount: 1000
+      allowance: { credits: quota.creditsTotal ?? null, resetsAt: quota.resetsAt ?? null, plan },
+      welcome_amount: quota.creditsTotal ?? null,
     });
 
   } catch (error) {
+    if (error.code === 'EMAIL_UNVERIFIED') return res.status(403).json({ success: false, error: 'email_unverified', message: error.message });
     if (error.name === 'JsonWebTokenError') {
       return res.status(401).json({
         success: false,
@@ -2839,15 +2806,6 @@ router.post('/register-with-handle', requireRegistrationOpen, async (req, res) =
     // No recovery address means no welcome, which is correct: there is nowhere to send it.
     if (recovery) sendWelcomeEmail(req.db, { ...user, email: recovery });
 
-    // Free-tier starter credits (same as /register; non-fatal).
-    if (FREE_SIGNUP_CREDITS > 0) {
-      try {
-        await addGrant(req.db, user.id, { amountMicro: FREE_SIGNUP_CREDITS * MICRO_PER_CREDIT, kind: 'free', sourceRef: `signup:${user.id}` });
-        user.credits = FREE_SIGNUP_CREDITS;
-      } catch (grantErr) {
-        console.warn('[register-with-handle] signup credit grant failed:', grantErr.message);
-      }
-    }
 
     // Session-backed token (sid claim + user_sessions row; plaintext JWT never stored).
     const token = await issueLoginCredential(req.db, user, req, res);

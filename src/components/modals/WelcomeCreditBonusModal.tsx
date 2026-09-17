@@ -42,7 +42,7 @@ const WelcomeCreditBonusModal: React.FC = () => {
     const result = await authService.claimBonusCredits();
     if (!result.success) {
       setCreditState('unavailable');
-      setError(result.error || 'Your welcome credits could not be confirmed. You can retry without losing your place.');
+      setError(result.error || 'Your weekly allowance could not be confirmed. You can retry without losing your place.');
       return;
     }
     setCredits(result.credits ?? null);
@@ -56,7 +56,7 @@ const WelcomeCreditBonusModal: React.FC = () => {
     startedRef.current = true;
 
     if (isPreview) {
-      setCredits(user?.credits ?? 1000);
+      setCredits(user?.credits ?? 50);
       setCreditState('ready');
       return;
     }
@@ -145,10 +145,10 @@ const WelcomeCreditBonusModal: React.FC = () => {
         <div className="xeno-welcome-access-shell">
           <div className="xeno-welcome-access-copy">
             <span className="xeno-welcome-eyebrow">Included with your account</span>
-            <h2>{ready ? 'Your welcome credits are ready' : 'Preparing your welcome credits'}</h2>
+            <h2>{ready ? 'Your weekly allowance is ready' : 'Preparing your weekly allowance'}</h2>
             <p>{ready
               ? 'The confirmed balance below comes from your account ledger and is available to metered XENO cloud capabilities.'
-              : 'We automatically add the one-time welcome grant after onboarding. No card or checkout is required.'}</p>
+              : 'Every week your account receives a fresh allowance for XENO cloud capabilities. No card or checkout is required — only a confirmed email address.'}</p>
           </div>
 
           <div className={`xeno-welcome-balance ${ready ? 'is-claimed' : ''}`} aria-live="polite">
@@ -157,14 +157,14 @@ const WelcomeCreditBonusModal: React.FC = () => {
               <span>Account balance</span>
               {ready && <span className="xeno-welcome-claimed"><Check size={12} /> Confirmed</span>}
             </div>
-            <strong>{ready ? (credits ?? 1000).toLocaleString() : '—'}</strong>
+            <strong>{ready ? (credits ?? 50).toLocaleString() : '—'}</strong>
             <small>{creditState === 'granting' || creditState === 'checking' ? 'confirming with your account ledger…' : 'usage credits'}</small>
           </div>
 
           {error && <p className="xeno-welcome-error" role="alert">{error}</p>}
 
           <dl className="xeno-welcome-facts">
-            <div><dt>Account</dt><dd>No card is required for the welcome grant</dd></div>
+            <div><dt>Account</dt><dd>No card is required for the weekly allowance</dd></div>
             <div><dt>Balance</dt><dd>Read from the canonical account ledger</dd></div>
             <div><dt>Control</dt><dd>You choose when paid usage or a plan begins</dd></div>
           </dl>

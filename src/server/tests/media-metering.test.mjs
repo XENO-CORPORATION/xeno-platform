@@ -76,6 +76,18 @@ async function main() {
     run: async () => ({ choices: [{ message: { content: 'OK' } }], usage: { prompt_tokens: 21, completion_tokens: 3, total_tokens: 24 } }),
   });
   const rowc = (await pool.query('SELECT model, input_tokens, output_tokens, dimensions FROM api_usage_logs WHERE user_id=$1 ORDER BY created_at DESC LIMIT 1', [uc])).rows[0];
+  // F14: a provider count the caller could not have produced is capped to what they sent.
+  const uh = await newUser();
+  await grant(uh, 1000);
+  await meterPremiumChat(pool, uh, {
+    model: 'grok-4.6', provider: 'xai', requestId: 'rq-harness', estInputTokens: 11, maxTokens: 5, surface: 'dogfood',
+    callerInputTokens: 11,
+    run: async () => ({ choices: [{ message: { content: 'OK' } }], usage: { prompt_tokens: 642, completion_tokens: 3, total_tokens: 645 } }),
+  });
+  const rowh = (await pool.query('SELECT input_tokens, dimensions FROM api_usage_logs WHERE user_id=$1 ORDER BY created_at DESC LIMIT 1', [uh])).rows[0];
+  ok(rowh && Number(rowh.input_tokens) < 60 && Number(rowh.dimensions?.absorbed_input_tokens) === 642 - Number(rowh.input_tokens),
+    `chat: 642 reported for an 11-token request bills ${rowh?.input_tokens} and records the absorbed ${rowh?.dimensions?.absorbed_input_tokens}`);
+
   ok(rc.creditsCharged >= 0 && rowc && rowc.model === 'grok-4.6' && Number(rowc.input_tokens) === 21 && Number(rowc.output_tokens) === 3 && rowc.dimensions?.usage_source === 'provider',
     `chat: the settled usage row carries model + measured tokens + usage_source (${JSON.stringify(rowc)})`);
 
