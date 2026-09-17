@@ -152,7 +152,14 @@ export function createServiceLedgerRouter({
       const caller = callerInputTokens == null ? null : nonNegInt(callerInputTokens);
       const inTok = billableInputTokens(reported, caller, typeof provider === 'string' ? provider : 'default');
       const absorbed = Math.max(0, reported - inTok);
-      if (measured === false) return { actualCostMicro: Number.MAX_SAFE_INTEGER, priced: { model, measured: false, inputTokens: inTok, outputTokens: outTok, absorbedInputTokens: absorbed } };
+      // 🔴 UNMEASURED = charge the RESERVED worst case, said explicitly. This used to be
+      // expressed as Number.MAX_SAFE_INTEGER and relied on the settle clamping to the
+      // hold; when the clamp was replaced by charge-actual (PR #263) an unmeasured
+      // settle charged min(MAX, balance) — the operator's ENTIRE balance, 995,781,419
+      // credits, on one 524-cut stream (2026-09-17 18:51Z). The sentinel is gone: the
+      // ledger is told to charge the held amount, and it also refuses any priced
+      // actual above OVERRUN_CEILING × held as a defect rather than usage.
+      if (measured === false) return { actualCostMicro: 0, chargeHeld: true, priced: { model, measured: false, inputTokens: inTok, outputTokens: outTok, absorbedInputTokens: absorbed } };
       return {
         actualCostMicro: pricing.getChatCostMicro(model, { inputTokens: inTok, outputTokens: outTok }),
         priced: { model, measured: true, inputTokens: inTok, outputTokens: outTok, absorbedInputTokens: absorbed },
@@ -255,6 +262,7 @@ export function createServiceLedgerRouter({
       // routeMismatchBasis on the settle body). Unknown values are dropped, never
       // rejected — a label is not a reason to lose a charge.
       const settled = await ledger.settleHoldV2(req.db, subject.userId, req.params.holdId, amount.actualCostMicro, {
+        chargeHeld: amount.chargeHeld === true,
         model: amount.priced?.model ?? null,
         inputTokens: amount.priced?.inputTokens ?? 0,
         outputTokens: amount.priced?.outputTokens ?? 0,
