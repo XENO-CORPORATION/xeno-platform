@@ -315,3 +315,55 @@ test('the identity names the product, not the underlying model', () => {
     'which is the whole reason the transcript was wrong.',
   );
 });
+
+/*
+ * 2026-09-17, Chat on grok-4.6-high-fast: challenged with "you are grok not xeno", the model
+ * denied it, and on "what are you talking about?" ran TEN web searches (188 s, twelve metered
+ * calls) to learn what XENO is — because the identity named it and described nothing. The
+ * identity must now carry a product description, forbid searching for itself, and disclose the
+ * underlying model truthfully. Each assertion below was verified to FAIL when its line is removed.
+ */
+test('the identity describes the product, forbids self-search, and discloses the model honestly', () => {
+  const code = stripComments(CONFIG);
+  const identity = /export const XENO_IDENTITY = \[[\s\S]*?\]\.join/.exec(code)?.[0] ?? '';
+  assert.ok(identity, 'XENO_IDENTITY must be an array joined into one statement');
+  assert.match(
+    identity, /AI-native software company building the agent-native software stack/,
+    'the identity must carry the LOCKED brand one-liner — a model that knows nothing about the product searches for it',
+  );
+  for (const product of ['Hub', 'Pixel', 'Motion', 'Canvas', 'Sound', 'Workflow', 'Anima']) {
+    assert.match(identity, new RegExp('(^|[^A-Za-z])' + product + '([^A-Za-z]|$)'), `the product list must name ${product}`);
+  }
+  assert.match(
+    identity, /NEVER search the web to find out who or what you are/,
+    'self-search must be forbidden in so many words — "verify rather than recall" otherwise sends the model to Google for its own name',
+  );
+  assert.match(
+    identity, /never[^.]*search to answer a greeting, small talk/i,
+    'a greeting must not trigger a metered search',
+  );
+  assert.match(
+    identity, /which model or vendor is behind you, tell them plainly and truthfully/,
+    'the underlying model is shown in the picker; denying it is a lie the user can see',
+  );
+  assert.doesNotMatch(
+    identity, /never (reveal|disclose|mention) (the|which) model/i,
+    'the identity must not instruct the model to hide what it runs on',
+  );
+});
+
+test('Chat search is a quick lookup: a small cap, and the prompt says so', () => {
+  const loop = readFileSync(join(ROOT, 'src', 'server', 'utils', 'chatToolLoop.js'), 'utf8');
+  const chat = /chat:\s*Object\.freeze\(\{\s*maxSearches:\s*(\d+)/.exec(stripComments(loop));
+  assert.ok(chat, 'TOOL_BUDGETS.chat must declare maxSearches');
+  assert.ok(
+    Number(chat[1]) <= 3,
+    `Chat maxSearches is ${chat[1]}; it must be ≤ 3 — every search is a metered upstream call and at 10 one message cost twelve of them`,
+  );
+  const research = /research:\s*Object\.freeze\(\{\s*maxSearches:\s*(\d+)/.exec(stripComments(loop));
+  assert.ok(research && Number(research[1]) > Number(chat[1]), 'Research keeps the deep budget');
+  assert.match(
+    stripComments(CONFIG), /one good query is the norm/,
+    'the Chat capability statement must tell the model the budget is small, or it learns it by hitting the wall',
+  );
+});
