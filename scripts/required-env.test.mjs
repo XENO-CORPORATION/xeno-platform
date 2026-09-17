@@ -142,5 +142,7 @@ test('/metrics always emits the count, including zero, and names each missing ke
 
 test('the alert rule exists and reads the metric the backend emits', () => {
   const rules = read('../observability/slo-rules.yml');
-  assert.match(rules, /alert: XenoExpectedConfigMissing\n\s+expr: max\(xeno_config_expected_missing_count\) > 0/);
+  // `\r?` — a fresh checkout on Windows (core.autocrlf=true) carries CRLF in the working tree while
+  // the index holds LF; it is the same rule either way, and this gate is about the rule.
+  assert.match(rules, /alert: XenoExpectedConfigMissing\r?\n\s+expr: max\(xeno_config_expected_missing_count\) > 0/);
 });

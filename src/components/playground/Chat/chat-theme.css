@@ -276,3 +276,38 @@
     animation: none;
   }
 }
+
+/* ── The transcript's tokens, from the chat's ───────────────────────────────────────────
+   `TranscriptTurn` (`@xenosystem/agent-conversation`, D10) paints from `--xa-*` tokens declared on
+   `.xa-transcript` — its own dark ground, so a panel reads the same in every host. In THIS chat it
+   sits inside a themed thread (dark / dim / light), so the tokens are re-derived from the chat's
+   own palette here: one ink, the six greys as steps between text and canvas, the plates from the
+   chat's surfaces. The transcript stays token-driven; only the values move. Light is the one flip
+   the stylesheet promises — the ink and the greys — not a second set of rules. */
+.chat-themed .chat-turn-head.xa-transcript {
+  --xa-ground: var(--chat-canvas);
+  --xa-plate: var(--chat-surface);
+  --xa-box: var(--chat-surface);
+  --xa-code: var(--chat-canvas);
+  --xa-well: var(--chat-surface);
+  --xa-menu: var(--chat-elevated);
+  --xa-ink-text: var(--chat-text);
+  --xa-send: var(--chat-accent);
+  --xa-send-hover: var(--chat-accent);
+  --xa-t1: var(--chat-text);
+  --xa-t2: color-mix(in srgb, var(--chat-text) 88%, var(--chat-canvas));
+  --xa-t3: color-mix(in srgb, var(--chat-text) 68%, var(--chat-canvas));
+  --xa-t4: var(--chat-muted);
+  --xa-t5: color-mix(in srgb, var(--chat-muted) 82%, var(--chat-canvas));
+  --xa-t6: color-mix(in srgb, var(--chat-muted) 66%, var(--chat-canvas));
+  --xa-label: color-mix(in srgb, var(--chat-text) 32%, transparent);
+  /* the head sits in the thread's own gutter, flush with the reply below it */
+  width: 100%;
+  padding: 0;
+}
+.chat-theme-light .chat-turn-head.xa-transcript {
+  color-scheme: light;
+  --xa-ink: 10, 10, 10;
+}
+/* the head has no reply of its own, so its bottom edge is the reply's top edge: 4px, not a plate gap */
+.chat-turn-head.xa-transcript:not(:empty) { margin-bottom: 4px; }

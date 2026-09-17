@@ -12,6 +12,8 @@ import '@xenosystem/elements-react/xeno-elements.css';
 // because every chat surface is its own route: while these lived in ChatWithLLM's JSX they existed
 // only while that one component was mounted, and the sibling routes had no tokens to use.
 import './components/playground/Chat/chat-theme.css';
+// The canonical transcript's stylesheet (D10) — the chat mounts its turn head (chat-theme.css bridges the tokens).
+import '@xenosystem/agent-conversation/styles.css';
 import './index.css';
 import { SiteGateProvider } from './contexts/SiteGateContext.tsx';
 import { SiteGateWrapper } from './components/auth/SiteGate.tsx';

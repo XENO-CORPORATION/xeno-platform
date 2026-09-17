@@ -15,6 +15,8 @@ export interface UserSettings {
     alignment?: 'center' | 'left' | 'right';
     showTokenCount?: boolean;
     fontSize?: 'small' | 'medium' | 'large';
+    /** How a turn's steps show: drawn as they happen, or folded with the current one on the clock line. */
+    stepsMode?: 'expanded' | 'collapsed';
   };
   appearance?: {
     theme?: 'system' | 'custom' | 'dark' | 'dim' | 'light';
