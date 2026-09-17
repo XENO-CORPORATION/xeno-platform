@@ -6,6 +6,7 @@
  */
 
 import express from 'express';
+import { routingDimensions } from '../utils/usageDimensions.js';
 import { resolveInferenceRoute, markCredentialInvalid, byokEnabled } from '../services/providerCredentials.js';
 import { attachManagedGrant, recordGrantUsage } from '../services/inferenceGrants.js';
 import { requireGrantToken, requireTls, sendGrantError } from './inferenceGrantAuth.js';
@@ -63,6 +64,7 @@ router.post('/usage', async (req, res) => {
       model: b.model, provider: b.provider, operation: b.operation,
       inputTokens: Number.isInteger(b.inputTokens) ? b.inputTokens : undefined,
       outputTokens: Number.isInteger(b.outputTokens) ? b.outputTokens : undefined,
+      dimensions: routingDimensions(b),
     });
     return res.json(result);
   } catch (e) { sendGrantError(res, e); }

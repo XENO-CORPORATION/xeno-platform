@@ -28,6 +28,34 @@ import {
   setCredentialModels,
 } from '../services/providerCredentials.js';
 import { attachManagedGrant } from '../services/inferenceGrants.js';
+import { recordSecurityEventTransactional, EVENTS } from '../services/securityEvents.js';
+import { credentialProbeLimiter } from '../middleware/rateLimiter.js';
+
+/**
+ * Run a credential-lifecycle op and its audit row in ONE transaction.
+ *
+ * Vault refuses to serve without an audit device; we are not that strict, but a
+ * secret op whose audit can silently fail is an op that cannot be investigated.
+ * The service functions take any `db` with `.query`, so they run unchanged on
+ * the client. If the audit insert fails the op rolls back — a credential change
+ * we cannot attribute to an actor does not happen.
+ */
+async function audited(req, type, metadataOf, op) {
+  const client = await req.db.connect();
+  try {
+    await client.query('BEGIN');
+    const result = await op(client);
+    await recordSecurityEventTransactional(client, type, { userId: req.user.id, req, metadata: metadataOf(result) });
+    await client.query('COMMIT');
+    return result;
+  } catch (e) {
+    await client.query('ROLLBACK').catch(() => {});
+    throw e;
+  } finally {
+    client.release();
+  }
+}
+
 
 const router = express.Router();
 
@@ -71,13 +99,16 @@ router.get('/credentials', async (req, res) => {
  * rejects is REFUSED with 422 rather than stored as `invalid` — storing a key we
  * already know is dead just moves the confusion later.
  */
-router.post('/credentials', async (req, res) => {
+// credentialProbeLimiter FIRST: a refused request must never reach the provider probe.
+router.post('/credentials', credentialProbeLimiter, async (req, res) => {
   if (!byokEnabled()) {
     return res.status(503).json({ error: { code: 'byok_disabled', message: 'bring-your-own-key is not enabled on this server' } });
   }
   try {
     const { provider, label, secret, baseUrl } = req.body || {};
-    const created = await createCredential(req.db, req.user.id, { provider, label, secret, baseUrl });
+    const created = await audited(req, EVENTS.BYOK_CREDENTIAL_CREATED,
+      (c) => ({ credentialId: c.id, provider: c.provider, fingerprint: c.key_fingerprint, hasBaseUrl: Boolean(baseUrl) }),
+      (client) => createCredential(client, req.user.id, { provider, label, secret, baseUrl }));
     res.status(201).json({ credential: created });
   } catch (e) { sendError(res, e); }
 });
@@ -99,13 +130,19 @@ router.put('/credentials/:id/models', async (req, res) => {
   try {
     const models = req.body && Object.prototype.hasOwnProperty.call(req.body, 'models') ? req.body.models : undefined;
     if (models === undefined) return res.status(400).json({ error: { code: 'models_invalid', message: 'body.models required (array or null)' } });
-    res.json({ credential: await setCredentialModels(req.db, req.user.id, req.params.id, models) });
+    const credential = await audited(req, EVENTS.BYOK_CREDENTIAL_MODELS_SET,
+      (c) => ({ credentialId: c.id, provider: c.provider, models: c.models }),
+      (client) => setCredentialModels(client, req.user.id, req.params.id, models));
+    res.json({ credential });
   } catch (e) { sendError(res, e); }
 });
 
 router.post('/credentials/:id/revoke', async (req, res) => {
   try {
-    res.json({ credential: await revokeCredential(req.db, req.user.id, req.params.id) });
+    const credential = await audited(req, EVENTS.BYOK_CREDENTIAL_REVOKED,
+      (c) => ({ credentialId: c.id, provider: c.provider, fingerprint: c.key_fingerprint }),
+      (client) => revokeCredential(client, req.user.id, req.params.id));
+    res.json({ credential });
   } catch (e) { sendError(res, e); }
 });
 
@@ -118,7 +155,10 @@ router.post('/credentials/:id/revoke', async (req, res) => {
  */
 router.delete('/credentials/:id', async (req, res) => {
   try {
-    res.json(await deleteCredential(req.db, req.user.id, req.params.id));
+    const result = await audited(req, EVENTS.BYOK_CREDENTIAL_DELETED,
+      (r) => ({ credentialId: req.params.id, provider: r.provider, fingerprint: r.fingerprint }),
+      (client) => deleteCredential(client, req.user.id, req.params.id));
+    res.json({ deleted: result.deleted });
   } catch (e) {
     if (e && e.code === 'credential_in_use') {
       return res.status(409).json({ error: { code: e.code, message: e.message }, surfaces: e.surfaces });
@@ -154,7 +194,9 @@ router.get('/routes', async (req, res) => {
 router.put('/routes/:surface', async (req, res) => {
   try {
     const { path, mode, credentialId } = req.body || {};
-    const saved = await setRoute(req.db, req.user.id, req.params.surface, { path, mode, credentialId });
+    const saved = await audited(req, EVENTS.BYOK_ROUTE_SET,
+      (r) => ({ surface: r.surface, path: r.path, mode: r.mode, credentialId: r.credential_id || null }),
+      (client) => setRoute(client, req.user.id, req.params.surface, { path, mode, credentialId }));
     res.json({ route: saved });
   } catch (e) { sendError(res, e); }
 });
@@ -162,7 +204,10 @@ router.put('/routes/:surface', async (req, res) => {
 /** DELETE an override so the product INHERITS the account default again (D2). */
 router.delete('/routes/:surface', async (req, res) => {
   try {
-    res.json(await clearRoute(req.db, req.user.id, req.params.surface));
+    const result = await audited(req, EVENTS.BYOK_ROUTE_CLEARED,
+      () => ({ surface: req.params.surface }),
+      (client) => clearRoute(client, req.user.id, req.params.surface));
+    res.json(result);
   } catch (e) { sendError(res, e); }
 });
 

@@ -50,6 +50,15 @@ export const EVENTS = Object.freeze({
   TOKEN_REVOKED: 'token_revoked',
   TOKEN_REUSE_DETECTED: 'token_reuse_detected', // RFC 9700 family revocation fired
   OIDC_CLIENT_REGISTERED: 'oidc_client_registered',
+  // BYOK credential lifecycle (INFERENCE ROUTING spec; Vault's rule: no secret
+  // op without an audit record). Metadata carries ids, provider and the key
+  // FINGERPRINT — never the key, never last4, never a base_url with auth in it.
+  BYOK_CREDENTIAL_CREATED: 'byok_credential_created',
+  BYOK_CREDENTIAL_REVOKED: 'byok_credential_revoked',
+  BYOK_CREDENTIAL_DELETED: 'byok_credential_deleted',
+  BYOK_CREDENTIAL_MODELS_SET: 'byok_credential_models_set',
+  BYOK_ROUTE_SET: 'byok_route_set',
+  BYOK_ROUTE_CLEARED: 'byok_route_cleared',
 });
 
 const KNOWN = new Set(Object.values(EVENTS));

@@ -217,7 +217,7 @@ export async function revokeCredential(db, userId, credentialId) {
     `UPDATE user_provider_credentials
         SET status = 'revoked', updated_at = NOW()
       WHERE id = $1 AND user_id = $2
-      RETURNING id, status`,
+      RETURNING id, status, provider, key_fingerprint`,
     [credentialId, userId]
   );
   if (!rows[0]) throw fail('credential_not_found', 'no such credential', 404);
@@ -239,12 +239,14 @@ export async function deleteCredential(db, userId, credentialId) {
     e.surfaces = used.map((r) => r.surface);
     throw e;
   }
-  const { rowCount } = await db.query(
-    `DELETE FROM user_provider_credentials WHERE id = $1 AND user_id = $2`,
+  const { rows } = await db.query(
+    `DELETE FROM user_provider_credentials WHERE id = $1 AND user_id = $2
+     RETURNING provider, key_fingerprint`,
     [credentialId, userId]
   );
-  if (rowCount === 0) throw fail('credential_not_found', 'no such credential', 404);
-  return { deleted: true };
+  if (!rows[0]) throw fail('credential_not_found', 'no such credential', 404);
+  // provider + fingerprint ride along for the audit row; the wire shape stays { deleted }.
+  return { deleted: true, provider: rows[0].provider, fingerprint: rows[0].key_fingerprint };
 }
 
 /**
