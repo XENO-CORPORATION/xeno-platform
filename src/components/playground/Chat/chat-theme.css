@@ -241,3 +241,38 @@
     transition: none;
   }
 }
+
+/* ── Skeleton — the shape of what is coming, never a plausible stand-in ──────────────────
+   While the model catalogue, the account settings and the conversation load, the chat used to
+   render a REAL-LOOKING model name ("GPT-5.6 Terra", the hard-coded fallback) in the picker,
+   so for the first few hundred milliseconds of every load the UI asserted a model nobody had
+   chosen — and the same fallback could be sent to if the user was quick (2026-09-17).
+   A skeleton is visibly a placeholder: it has the size and position of the content and none
+   of its meaning. ChatGPT, Claude and Linear all shimmer an empty pill here; none paints a
+   default value. Monochrome by construction — a surface lightness sweep, no hue. */
+.chat-skeleton {
+  position: relative;
+  display: inline-block;
+  overflow: hidden;
+  border-radius: 4px;
+  background: var(--chat-control);
+  color: transparent !important;
+  user-select: none;
+  pointer-events: none;
+}
+.chat-skeleton::after {
+  content: '';
+  position: absolute;
+  inset: 0 auto 0 -40%;
+  width: 40%;
+  background: color-mix(in srgb, var(--chat-text) 12%, transparent);
+  animation: chat-skeleton-sweep 1.25s ease-in-out infinite;
+}
+@keyframes chat-skeleton-sweep {
+  to { transform: translateX(350%); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .chat-skeleton::after {
+    animation: none;
+  }
+}

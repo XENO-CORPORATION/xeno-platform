@@ -7516,6 +7516,9 @@ interface QueueState {
     const canSend = composerText.trim() || attachedFiles.length > 0;
     if (!canSend || isLoading || isUploadingAttachments) return;
     if (isContextLimitReached) return;
+    // Until the catalogue answers, `selectedModel` is the hard-coded fallback, not a choice.
+    // A message sent now would go to a model the user never picked and the picker never showed.
+    if (isModelsLoading) return;
 
     // Prepare the new user message
     const userTextToSend = (inputOverride ?? inputValue).trim();
@@ -12995,8 +12998,8 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                         data-composer-send-button
                         onClick={handleVoiceSend}
                         className={`flex items-center justify-center transition-[background-color,color,transform,opacity] duration-200 active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--chat-accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--chat-canvas)] ${inputValue.trim() || attachedFiles.length > 0 ? 'bg-[var(--chat-accent)] text-[var(--chat-on-accent)] hover:opacity-90 motion-safe:animate-send-button-enter' : 'cursor-not-allowed border border-[var(--chat-border)] bg-[var(--chat-control)] text-[var(--chat-muted)]'} ${composerActionButtonSizeClass}`}
-                        aria-label="Send message"
-                        disabled={!(inputValue.trim() || attachedFiles.length > 0) || isContextLimitReached}
+                        aria-label={isModelsLoading ? 'Send message (waiting for models)' : 'Send message'}
+                        disabled={!(inputValue.trim() || attachedFiles.length > 0) || isContextLimitReached || isModelsLoading}
                       >
                         {/* The send arrow was hand-drawn here — stroke 2, round caps — while every other
                             glyph in the composer came from the set at 1.75 with butt caps. It never
@@ -15435,8 +15438,9 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                   )}
                   aria-expanded={isComposerModelSelectorOpen}
                   aria-controls={modelSelectorControlId}
-                  aria-label={`Open model selector. Current model: ${selectedModel.name}`}
-                  title={`Current model: ${selectedModel.name}`}
+                  aria-label={isModelsLoading ? 'Model selector, loading models' : `Open model selector. Current model: ${selectedModel.name}`}
+                  title={isModelsLoading ? 'Loading models' : `Current model: ${selectedModel.name}`}
+                  aria-busy={isModelsLoading || undefined}
                   onClick={() => {
                     requestComposerModelSelector();
                     setIsChatMoreMenuOpen(false);
@@ -15448,9 +15452,13 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                   <span data-chat-model-provider className="hidden flex-shrink-0 text-[10px] font-semibold uppercase tracking-[0.08em] text-[var(--chat-muted)] lg:inline">
                     {selectedModelProviderName}
                   </span>
-                  <span className="min-w-0 truncate font-medium text-[var(--chat-text)]">
-                    {selectedModel.name}
-                  </span>
+                  {isModelsLoading ? (
+                    <span className="chat-skeleton h-3 w-[5.5rem]" data-chat-model-skeleton aria-hidden="true">Loading</span>
+                  ) : (
+                    <span className="min-w-0 truncate font-medium text-[var(--chat-text)]">
+                      {selectedModel.name}
+                    </span>
+                  )}
                   <ChevronDown
                     size={12}
                     className={`flex-shrink-0 transition-transform duration-150 ${isComposerModelSelectorOpen ? 'rotate-180' : ''}`}

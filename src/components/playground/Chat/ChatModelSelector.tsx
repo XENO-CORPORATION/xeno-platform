@@ -295,9 +295,15 @@ const ChatModelSelector: React.FC<ChatModelSelectorProps> = ({
               className="chat-inline-model-rail flex min-w-max items-center gap-1.5 px-0.5"
             >
               {inlineProviderGroups.length === 0 ? (
-                <span className="whitespace-nowrap px-1 text-xs text-[var(--chat-muted)]">
-                  {isLoading ? 'Loading models...' : 'No models available.'}
-                </span>
+                isLoading ? (
+                  <span className="flex items-center gap-1.5 px-1" data-chat-model-skeleton aria-busy="true" aria-label="Loading models">
+                    {[6, 4.5, 5].map((w, i) => (
+                      <span key={i} className="chat-skeleton h-6 rounded-[8px]" style={{ width: `${w}rem` }} aria-hidden="true">Loading</span>
+                    ))}
+                  </span>
+                ) : (
+                  <span className="whitespace-nowrap px-1 text-xs text-[var(--chat-muted)]">No models available.</span>
+                )
               ) : activeInlineProviderGroup ? (
                 <>
                 <IconButton
@@ -406,7 +412,8 @@ const ChatModelSelector: React.FC<ChatModelSelectorProps> = ({
         data-gooey-tab
         aria-expanded={isOpen}
         aria-haspopup="dialog"
-        aria-label={`Select model. Current model: ${selectedModel.name}`}
+        aria-label={isLoading ? 'Model selector, loading models' : `Select model. Current model: ${selectedModel.name}`}
+        aria-busy={isLoading || undefined}
         onClick={() => {
           if (isOpen) {
             closeInlineTray();
@@ -436,7 +443,14 @@ const ChatModelSelector: React.FC<ChatModelSelectorProps> = ({
               <Brain size={14} className="flex-shrink-0 text-[var(--chat-muted)]" />
             )
           )}
-          <span className="truncate">{selectedModel.name}</span>
+          {/* While the catalogue loads, `selectedModel` is still the hard-coded fallback — a
+              real-looking name nobody chose. A skeleton has the label's size and none of its
+              meaning, so nothing is asserted until something is known. */}
+          {isLoading ? (
+            <span className="chat-skeleton h-3 w-[5.5rem]" data-chat-model-skeleton aria-hidden="true">Loading</span>
+          ) : (
+            <span className="truncate">{selectedModel.name}</span>
+          )}
           <ChevronDown
             size={13}
             className={`flex-shrink-0 text-[var(--chat-muted)] transition-transform duration-150 ${isOpen ? 'rotate-180' : ''}`}
@@ -460,9 +474,18 @@ const ChatModelSelector: React.FC<ChatModelSelectorProps> = ({
           </div>
           <div className="overflow-y-auto overscroll-contain p-2">
             {groupedModels.length === 0 ? (
-              <div className="px-4 py-8 text-center text-sm text-[var(--chat-muted)]">
-                {isLoading ? 'Loading models...' : 'No models available.'}
-              </div>
+              isLoading ? (
+                <div className="flex flex-col gap-2 px-2 py-2" data-chat-model-skeleton aria-busy="true" aria-label="Loading models">
+                  {[62, 48, 71, 55, 66].map((w, i) => (
+                    <div key={i} className="flex items-center gap-2 px-2 py-2">
+                      <span className="chat-skeleton h-3.5 w-3.5 rounded-full" aria-hidden="true">·</span>
+                      <span className="chat-skeleton h-3" style={{ width: `${w}%` }} aria-hidden="true">Loading</span>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="px-4 py-8 text-center text-sm text-[var(--chat-muted)]">No models available.</div>
+              )
             ) : (
               groupedModels.map((group, groupIndex) => {
                 const modelOffset = groupedModels
