@@ -15,6 +15,7 @@ import { byokEnabled, resolveInferenceRoute } from '../services/providerCredenti
 import { mintGrant } from '../services/inferenceGrants.js';
 import { requestSurface } from '../utils/requestSurface.js';
 import { recordInferenceUsage } from '../utils/recordInferenceUsage.js';
+import { callerInputTokens } from '../utils/billableInput.js';
 import { upstreamFetch } from '../services/upstream.js';
 import { streamToolLoop, addUsage, TOOL_BUDGETS } from '../utils/chatToolLoop.js';
 import { ToolCallAccumulator } from '../utils/streamingToolCalls.js';
@@ -301,6 +302,7 @@ router.post('/chat', requireEntitlement('canUse'), async (req, res) => {
     const metered = await meterPremiumChat(req.db, userId, {
       model, provider: 'xeno', requestId: reqIdSeed,
       estInputTokens, maxTokens: max_tokens, surface,
+      callerInputTokens: callerInputTokens(messages),
       run: () => callXenoApi(model, messages, temperature, max_tokens, toolExtra, {
         'X-Xeno-Surface': surface,
       }),
@@ -315,6 +317,7 @@ router.post('/chat', requireEntitlement('canUse'), async (req, res) => {
     });
   } catch (error) {
     if (error.code === 'QUOTA_EXCEEDED') return res.status(402).json({ error: 'QUOTA_EXCEEDED', message: error.message, resetsAt: error.resetsAt });
+    if (error.code === 'EMAIL_UNVERIFIED') return res.status(403).json({ error: 'email_unverified', message: error.message });
     if (error.http === 402) {
       const bal = await getBalanceV2(req.db, userId).catch(() => null);
       return res.status(402).json({
@@ -568,9 +571,11 @@ router.post('/chat/stream', requireEntitlement('canUse'), async (req, res) => {
     meter = await meterPremiumChatStream(req.db, userId, {
       model, provider: 'xeno', requestId: `${reqIdSeed}:0`,
       estInputTokens, maxTokens: max_tokens, surface: requestSurface(req),
+      callerInputTokens: callerInputTokens(finalMessages),
     });
   } catch (error) {
     if (error.code === 'QUOTA_EXCEEDED') return res.status(402).json({ error: 'QUOTA_EXCEEDED', message: error.message, resetsAt: error.resetsAt });
+    if (error.code === 'EMAIL_UNVERIFIED') return res.status(403).json({ error: 'email_unverified', message: error.message });
     if (error.http === 402) {
       const bal = await getBalanceV2(req.db, userId).catch(() => null);
       return res.status(402).json({
@@ -648,6 +653,9 @@ router.post('/chat/stream', requireEntitlement('canUse'), async (req, res) => {
     const next = await meterPremiumChatStream(req.db, userId, {
       model, provider: 'xeno', requestId: `${reqIdSeed}:${iteration}`,
       estInputTokens, maxTokens: max_tokens, surface: requestSurface(req),
+      // A later tool iteration carries the tool results the caller asked for; its input is
+      // theirs, so it is billed as reported (F14 caps only what could not have come from them).
+      callerInputTokens: null,
     });
     meters.push(next);
     return next;

@@ -146,6 +146,22 @@ export async function issueAllowanceTx(client, userId, plan, { now = new Date() 
   const credits = allowanceCreditsFor(plan);
   if (credits == null) return { issued: false, reason: 'unmetered' };
 
+  // 🔴 The FREE allowance is real inference we pay for, handed to anyone who can
+  // type an address. Dogfooding 2026-09-17 (F11): an account whose activation mail
+  // BOUNCED held credits and could spend them. OpenAI phone-verifies before free
+  // credits; Anthropic gives none without it. We ask for the one thing we already
+  // require for recovery — a confirmed mailbox. Paid plans are not gated: a card
+  // is a stronger proof than a mailbox. Fail closed: no row = not verified.
+  if (canonicalPlan(plan) === 'free') {
+    const v = await client.query('SELECT email_verified FROM users WHERE id = $1', [userId]);
+    if (!v.rows[0]?.email_verified) {
+      const e = new Error('Verify your email address to use your free allowance.');
+      e.code = 'EMAIL_UNVERIFIED';
+      e.http = 403;
+      throw e;
+    }
+  }
+
   const { index, endsAt } = windowFor(now);
   const sourceRef = allowanceSourceRef(userId, plan, index);
 

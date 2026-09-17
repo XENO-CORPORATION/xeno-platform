@@ -29,7 +29,7 @@ const C = (n) => n * MICRO_PER_CREDIT;
 
 // Base ledger tables migrateAccountV2 augments (created here for a fresh throwaway DB).
 const BASE = `
-CREATE TABLE IF NOT EXISTS users (id uuid PRIMARY KEY DEFAULT gen_random_uuid(), username text DEFAULT 'test', email text DEFAULT 'test@test.com', display_name text DEFAULT 'Tester', role text DEFAULT 'user', is_active boolean DEFAULT true, status text DEFAULT 'active', credits bigint DEFAULT 0);
+CREATE TABLE IF NOT EXISTS users (id uuid PRIMARY KEY DEFAULT gen_random_uuid(), username text DEFAULT 'test', email text DEFAULT 'test@test.com', display_name text DEFAULT 'Tester', role text DEFAULT 'user', is_active boolean DEFAULT true, status text DEFAULT 'active', credits bigint DEFAULT 0, email_verified boolean DEFAULT false);
 CREATE TABLE IF NOT EXISTS agent_identities (user_id uuid PRIMARY KEY, owner_user_id uuid, agent_role varchar(16) DEFAULT 'other', agent_origin text, status varchar(16) DEFAULT 'active');
 CREATE TABLE IF NOT EXISTS workspaces (id uuid PRIMARY KEY, status varchar(16) DEFAULT 'active', metadata jsonb DEFAULT '{}'::jsonb);
 CREATE TABLE IF NOT EXISTS xeno_account_plans (user_id text PRIMARY KEY, plan varchar(50) DEFAULT 'free', status varchar(20) DEFAULT 'active', current_period_end timestamptz);
@@ -167,6 +167,32 @@ async function main() {
   const s7 = await req('POST', '/api/v2/ledger/service/holds/hold-poor/settle', { token: TOKEN, body: { userId: poor, actualCostMicro: C(9) } });
   ok(h7.status === 200 && s7.status === 200 && s7.json?.settledMicro === C(2), `used 9 with 2 in the account → charged 2, never negative (settled ${s7.json?.settledMicro / MICRO_PER_CREDIT})`);
   ok((await available(poor)) === 0, 'the poor account sits at exactly zero');
+
+  // F14 on the gateway path: usage.callerInputTokens caps the billed input.
+  const h8 = await req('POST', '/api/v2/ledger/service/holds', { token: TOKEN, body: { userId, holdId: 'hold-harness', operation: 'chat.completion', surface: 'xeno_api', amountMicro: C(1) } });
+  const s8 = await req('POST', '/api/v2/ledger/service/holds/hold-harness/settle', {
+    token: TOKEN, body: { userId, usage: { model: 'gpt-4o-mini', inputTokens: 642, outputTokens: 3, measured: true, callerInputTokens: 11, provider: 'xai' } },
+  });
+  const row8 = (await pool.query(`SELECT input_tokens, dimensions FROM api_usage_logs WHERE user_id=$1 AND request_id='hold-harness'`, [userId])).rows[0];
+  ok(h8.status === 200 && s8.status === 200 && s8.json?.pricing?.inputTokens < 60 && Number(row8?.input_tokens) === s8.json?.pricing?.inputTokens && Number(row8?.dimensions?.absorbed_input_tokens) > 580,
+    `gateway settle: 642 reported, caller sent 11 → billed ${s8.json?.pricing?.inputTokens}, absorbed ${row8?.dimensions?.absorbed_input_tokens}`);
+  const h9 = await req('POST', '/api/v2/ledger/service/holds', { token: TOKEN, body: { userId, holdId: 'hold-noclaim', operation: 'chat.completion', surface: 'xeno_api', amountMicro: C(1) } });
+  const s9 = await req('POST', '/api/v2/ledger/service/holds/hold-noclaim/settle', {
+    token: TOKEN, body: { userId, usage: { model: 'gpt-4o-mini', inputTokens: 642, outputTokens: 3, measured: true } },
+  });
+  ok(h9.status === 200 && s9.status === 200 && s9.json?.pricing?.inputTokens === 642, 'no callerInputTokens → billed as reported (unknown fails toward the customer paying)');
+
+  // ── F11: the FREE allowance is issued only to a VERIFIED mailbox ──
+  const unverified = (await pool.query("INSERT INTO users (credits, email_verified) VALUES (0, false) RETURNING id")).rows[0].id;
+  await pool.query("INSERT INTO xeno_account_plans (user_id, plan, status) VALUES ($1, 'free', 'active')", [unverified]);
+  await optInUsageCredits(pool, unverified);
+  const hu = await req('POST', '/api/v2/ledger/service/holds', { token: TOKEN, body: { userId: unverified, holdId: 'hold-unverified', operation: 'chat.completion', surface: 'xeno_api', amountMicro: C(1) } });
+  ok(hu.status === 403 && hu.json?.error?.code === 'EMAIL_UNVERIFIED', `an unverified free account gets no allowance and a clear 403 (${hu.status} ${hu.json?.error?.code})`);
+  ok((await pool.query('SELECT count(*)::int n FROM credit_grants WHERE user_id=$1', [unverified])).rows[0].n === 0, '…and no lot was issued');
+  await pool.query('UPDATE users SET email_verified = true WHERE id = $1', [unverified]);
+  const hv = await req('POST', '/api/v2/ledger/service/holds', { token: TOKEN, body: { userId: unverified, holdId: 'hold-verified', operation: 'chat.completion', surface: 'xeno_api', amountMicro: C(1) } });
+  ok(hv.status === 200 && hv.json?.state === 'held', 'once verified, the same call issues the weekly allowance and admits the hold');
+  ok((await pool.query("SELECT count(*)::int n FROM credit_grants WHERE user_id=$1 AND kind='allowance'", [unverified])).rows[0].n === 1, 'exactly one allowance lot — the free tier is one mechanism');
 
   console.log(`\n${fail === 0 ? '✅' : '❌'} service-ledger: ${pass} passed, ${fail} failed`);
   // Await the close, and drop keep-alive sockets first. An unawaited

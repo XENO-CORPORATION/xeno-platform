@@ -31,6 +31,7 @@
  */
 import express from 'express';
 import { routingDimensions } from '../utils/usageDimensions.js';
+import { billableInputTokens } from '../utils/billableInput.js';
 import crypto from 'node:crypto';
 import * as defaultLedger from '../utils/creditLedgerV2.js';
 import * as defaultPricing from '../utils/creditCosts.js';
@@ -45,6 +46,7 @@ function sendErr(res, err) {
     INSUFFICIENT_CREDITS: 402,
     QUOTA_EXCEEDED: 402,
     ACCOUNT_FROZEN: 403,
+    EMAIL_UNVERIFIED: 403,
     NOT_FOUND: 404,
     CONFLICT: 409,
     SPEND_CAP_EXCEEDED: 429,
@@ -139,15 +141,21 @@ export function createServiceLedgerRouter({
   function settleAmount(b) {
     if (b.usage && typeof b.usage === 'object') {
       if (b.actualCostMicro !== undefined) return { error: 'send either usage or actualCostMicro, not both' };
-      const { model, inputTokens, outputTokens, measured } = b.usage;
+      const { model, inputTokens, outputTokens, measured, callerInputTokens, provider } = b.usage;
       if (!model || typeof model !== 'string') return { error: 'usage.model required' };
-      const inTok = nonNegInt(inputTokens ?? 0);
+      const reported = nonNegInt(inputTokens ?? 0);
       const outTok = nonNegInt(outputTokens ?? 0);
-      if (inTok === null || outTok === null) return { error: 'usage.inputTokens and usage.outputTokens must be non-negative integers' };
-      if (measured === false) return { actualCostMicro: Number.MAX_SAFE_INTEGER, priced: { model, measured: false, inputTokens: inTok, outputTokens: outTok } };
+      if (reported === null || outTok === null) return { error: 'usage.inputTokens and usage.outputTokens must be non-negative integers' };
+      // F14: bill the tokens the CALLER sent. The gateway reports the provider's count and,
+      // when it can, the caller's own (`usage.callerInputTokens`); a route's harness prompt
+      // is our cost. Absent = unknown = billed as reported.
+      const caller = callerInputTokens == null ? null : nonNegInt(callerInputTokens);
+      const inTok = billableInputTokens(reported, caller, typeof provider === 'string' ? provider : 'default');
+      const absorbed = Math.max(0, reported - inTok);
+      if (measured === false) return { actualCostMicro: Number.MAX_SAFE_INTEGER, priced: { model, measured: false, inputTokens: inTok, outputTokens: outTok, absorbedInputTokens: absorbed } };
       return {
         actualCostMicro: pricing.getChatCostMicro(model, { inputTokens: inTok, outputTokens: outTok }),
-        priced: { model, measured: true, inputTokens: inTok, outputTokens: outTok },
+        priced: { model, measured: true, inputTokens: inTok, outputTokens: outTok, absorbedInputTokens: absorbed },
       };
     }
     const legacy = nonNegInt(b.actualCostMicro ?? 0);
@@ -253,6 +261,7 @@ export function createServiceLedgerRouter({
         dimensions: {
           ...routingDimensions(b),
           ...(amount.priced ? { usage_source: amount.priced.measured ? 'provider' : 'estimated' } : {}),
+          ...(amount.priced?.absorbedInputTokens ? { absorbed_input_tokens: amount.priced.absorbedInputTokens } : {}),
           ...(subject.isAgent ? { agent_user_id: subject.actorUserId } : {}),
         },
       });

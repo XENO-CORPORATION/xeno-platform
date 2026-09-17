@@ -17,6 +17,7 @@ import {
   holdV2, settleHoldV2, voidHoldV2, deterministicTxnId, MICRO_PER_CREDIT,
 } from './creditLedgerV2.js';
 import { getChatCostMicro, estimateChatCostMicro } from './creditCosts.js';
+import { billableInputTokens } from './billableInput.js';
 import { prepareAccountQuota } from '../services/usageCreditsService.js';
 
 /**
@@ -85,6 +86,8 @@ export async function meterPremiumChat(db, userId, opts) {
   const {
     model, provider, requestId,
     estInputTokens = 0, maxTokens = 1024, run,
+    // The caller's OWN input count (utils/billableInput.js). Null = unknown = bill as reported.
+    callerInputTokens = null,
     surface = 'ai_chat',
     reopenVoidedHold = false,
   } = opts;
@@ -125,7 +128,10 @@ export async function meterPremiumChat(db, userId, opts) {
   // bounded by the balance; any unused reservation is released). Best-effort: a settle failure must not fail the user's completion,
   // but it does leave the hold to expire (900s) rather than charging.
   const usage = result?.usage || {};
-  const inputTokens = usage.prompt_tokens ?? estInputTokens;
+  // F14: the customer pays for what THEY sent — a route's harness prompt is our cost.
+  const reportedInput = usage.prompt_tokens ?? estInputTokens;
+  const inputTokens = billableInputTokens(reportedInput, callerInputTokens, provider);
+  const absorbedInputTokens = Math.max(0, reportedInput - inputTokens);
   const hasOutputUsage = usage.completion_tokens != null || usage.total_tokens != null;
   const outputTokens = usage.completion_tokens
     ?? (usage.total_tokens != null ? Math.max(0, usage.total_tokens - (usage.prompt_tokens || 0)) : 0);
@@ -145,7 +151,7 @@ export async function meterPremiumChat(db, userId, opts) {
     // the same defect, fixed in PR #256).
     const settled = await settleHoldV2(db, userId, holdId, actualMicro, {
       model, provider, inputTokens, outputTokens,
-      dimensions: { usage_source: hasOutputUsage ? 'provider' : 'estimated', route_path: 'premium' },
+      dimensions: { usage_source: hasOutputUsage ? 'provider' : 'estimated', route_path: 'premium', ...(absorbedInputTokens ? { absorbed_input_tokens: absorbedInputTokens } : {}) },
     });
     costMicro = settled?.settledMicro ?? costMicro;
   } catch (e) {
@@ -315,6 +321,7 @@ export async function meterPremiumChatStream(db, userId, opts) {
   const {
     model, provider, requestId,
     estInputTokens = 0, maxTokens = 1024,
+    callerInputTokens = null,
     surface = 'ai_chat',
   } = opts;
 
@@ -351,7 +358,9 @@ export async function meterPremiumChatStream(db, userId, opts) {
   async function settle({ inputTokens, outputTokens = 0, hasOutputUsage = true } = {}) {
     if (done) return { alreadySettled: true, costMicro: 0, creditsCharged: 0 };
     done = true;
-    const inTok = inputTokens ?? estInputTokens;
+    const reportedInput = inputTokens ?? estInputTokens;
+    const inTok = billableInputTokens(reportedInput, callerInputTokens, provider);
+    const absorbedInputTokens = Math.max(0, reportedInput - inTok);
     const actualMicro = hasOutputUsage
       ? getChatCostMicro(model, { inputTokens: inTok, outputTokens: outputTokens || 0 })
       : estimateMicro;
@@ -359,7 +368,7 @@ export async function meterPremiumChatStream(db, userId, opts) {
     try {
       const settled = await withRetry(() => settleHoldV2(db, userId, holdId, actualMicro, {
         model, provider, inputTokens: inTok, outputTokens: outputTokens || 0,
-        dimensions: { usage_source: hasOutputUsage ? 'provider' : 'estimated', route_path: 'premium' },
+        dimensions: { usage_source: hasOutputUsage ? 'provider' : 'estimated', route_path: 'premium', ...(absorbedInputTokens ? { absorbed_input_tokens: absorbedInputTokens } : {}) },
       }));
       costMicro = settled?.settledMicro ?? costMicro;
     } catch (e) {

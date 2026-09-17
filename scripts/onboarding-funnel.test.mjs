@@ -225,7 +225,11 @@ test('welcome state is server-owned, idempotent, and preserves established users
   assert.match(oauth, /welcomeAcknowledged: Boolean\(row\?\.welcome_acknowledged_at\)/);
   assert.match(oauth, /router\.post\('\/onboarding\/welcome\/acknowledge'/);
   assert.match(oauth, /already_claimed: true/);
-  assert.match(oauth, /addGrantTx\(client, user\.id/);
+  // 2026-09-17 (F11): the welcome is an allowance HANDSHAKE, not a 1,000-credit grant —
+  // the free tier is one mechanism (PRICING STANDARD §8b), issued to a verified mailbox.
+  assert.match(oauth, /const quota = await ensureQuota\(req\.db, user\.id, plan\)/);
+  assert.doesNotMatch(oauth, /WELCOME_BONUS_CREDITS|welcome-bonus:|welcome_amount: 1000/);
+  assert.doesNotMatch(oauth, /sourceRef: `signup:\$\{user\.id\}`/, 'no sign-up grant either');
   assert.match(welcomeMigration, /ADD COLUMN IF NOT EXISTS welcome_acknowledged_at/);
   assert.match(welcomeMigration, /WHERE welcome_acknowledged_at IS NULL/);
 });
