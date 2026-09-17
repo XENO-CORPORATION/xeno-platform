@@ -131,6 +131,7 @@ import { staticCacheMiddleware, apiCacheMiddleware, securityHeadersMiddleware } 
 import { authLimiter as perEndpointAuthLimiter, llmLimiter, imageGenLimiter, uploadLimiter, clientIp } from './middleware/rateLimiter.js';
 import { rateLimitKey } from './utils/clientIp.js';
 import { sweepExpiredHolds, MICRO_PER_CREDIT } from './utils/creditLedgerV2.js';
+import { syncGatewayCatalogue } from './services/gatewayCatalogueSync.js';
 import { seedMarketplace } from './database/seeds/marketplace-seed.js';
 import { seedForum } from './database/seeds/forum-seed.js';
 import { initBackgroundJobs } from './services/backgroundJobs.js';
@@ -3907,6 +3908,22 @@ startDownloadCleanup();
     backgroundLeader.whenLeader(() => {
       const t = setInterval(sweepIntents, 30 * 60 * 1000);
       t.unref(); sweepIntents();
+      return () => clearInterval(t);
+    });
+
+    // Gateway catalogue sync: gateway_model_aliases.provider follows the gateway's
+    // own catalogue (services/gatewayCatalogueSync.js) so provider-aware BYOK
+    // routing can refuse a mismatch itself instead of attempting it. On start and
+    // every 30 min; leader-only, like the sweeps. Unconfigured = says so once.
+    const syncCatalogue = () => syncGatewayCatalogue(pool)
+      .then((r) => {
+        if (r.skipped) { if (!syncCatalogue.saidSkip) { console.log(`[CatalogueSync] disabled: ${r.skipped}`); syncCatalogue.saidSkip = true; } return; }
+        console.log(`[CatalogueSync] ${r.total} models: +${r.inserted} inserted, ${r.updated} provider updated, ${r.unchanged} unchanged`);
+      })
+      .catch((e) => console.error('[CatalogueSync] error (table left as it was):', e.message));
+    backgroundLeader.whenLeader(() => {
+      const t = setInterval(syncCatalogue, 30 * 60 * 1000);
+      t.unref(); syncCatalogue();
       return () => clearInterval(t);
     });
 
