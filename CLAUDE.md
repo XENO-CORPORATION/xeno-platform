@@ -302,7 +302,7 @@ Authority: `../xeno-elements/DESIGN_SYSTEM.md` (LOCKED) and
 ## 🏗️ The platform hierarchy & naming — build under the lock (LOCKED 2026-09-17)
 
 Two ladders, five rungs, meeting at the App — `../XENO FULL-STACK HIERARCHY.md` (master),
-`../XENO FRONT-END HIERARCHY.md` (Elements → Components → Panels → Templates → Apps),
+`../XENO FRONT-END HIERARCHY.md` (Elements → Components → Blocks → Templates → Apps — rung 3 is BLOCKS; a panel is the slot a block sits in),
 `../XENO BACK-END HIERARCHY.md` (Primitives → Capabilities → Nodes → Blueprints → Apps).
 One naming rule on every rung — `../XENO PACKAGE NAMING - STANDARD.md`:
 `@xenosystem/<rung>/<family>` → one named export per unit. Gate: `node ../scripts/check-package-naming.mjs`.
@@ -313,6 +313,6 @@ One naming rule on every rung — `../XENO PACKAGE NAMING - STANDARD.md`:
 §BUILD UNDER THE LOCK FROM DAY ONE). Concretely:
 - depend DOWN only — never on a rung above, never on `xeno-apps`;
 - never re-implement a lower rung here — extract DOWN to its repo and mount it;
-- never publish a per-unit package on a ladder rung (`@xenosystem/panel-<x>`, `component-<x>`, `node-<x>`) — a unit is a named export in a family subpath;
+- never publish a per-unit package on a ladder rung (`@xenosystem/block-<x>`/`panel-<x>`, `component-<x>`, `node-<x>`) — a unit is a named export in a family subpath;
 - never commit a `file:` dependency to a `.tgz` in a Temp directory or an absolute path — publish, wait for npm's read replica, depend on the range;
 - seen before used — it renders or runs standalone in `xeno-apps` before this repo relies on it.
