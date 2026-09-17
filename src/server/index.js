@@ -123,6 +123,7 @@ import { assembleProjectContext } from './services/chatProjectContext.js';
 // Round 8: Infrastructure imports
 import healthRoutes from './routes/healthRoutes.js';
 import webhookRoutes from './routes/webhookRoutes.js';
+import emailWebhookRoutes from './routes/emailWebhookRoutes.js';
 import analyticsRoutes from './routes/analyticsRoutes.js';
 import docsRoutes from './routes/docsRoutes.js';
 import jobRoutes from './routes/jobRoutes.js';
@@ -453,6 +454,8 @@ console.log('🌐 Browser routes integrated: /api/browser/* (mounted early for r
 // body survives for signature verification (billingService.constructEvent).
 app.use('/api/billing/webhook', express.raw({ type: 'application/json' }), (req, res, next) => { req.db = pool; next(); }, stripeWebhook);
 console.log('💳 Billing webhook integrated: /api/billing/webhook (raw body, pre-json)');
+// Mail delivery events (Resend, Svix-signed) — same raw-body, pre-json contract.
+app.use('/api/email/webhooks', express.raw({ type: '*/*', limit: '1mb' }), (req, res, next) => { req.db = pool; next(); }, emailWebhookRoutes);
 
 // ULTRA HIGH LIMITS for base64 image data processing
 app.use(express.json({ 

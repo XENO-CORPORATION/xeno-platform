@@ -60,7 +60,7 @@ const CORE_DB_SUITES = [
   'auth-token-confusion', 'api-key-auth', 'browser-bff-session',
   'inference-routing-live', 'dpop-token-exchange', 'readonly-preview-lifecycle',
   'leader-election', 'fresh-db-boot', 'password-change-atomicity',
-  'byok-lifecycle-audit', 'gateway-catalogue-sync',
+  'byok-lifecycle-audit', 'gateway-catalogue-sync', 'email-delivery-events',
 ];
 const CORE_NODB_SUITES = ['ai-tools-passthrough', 'entitlement-gate', 'upstream'];
 const MONEY_SUITES = [

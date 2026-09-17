@@ -805,11 +805,13 @@ export async function sendEmail(db, template, toEmail, data, userId = null) {
 
   try {
     // Production: send via Resend API
+    let providerId = null;
     if (process.env.RESEND_API_KEY) {
       // Guarded: a wedged mail API used to hold a worker indefinitely. NOT
       // idempotent — a retry here sends the customer a second email, and the
       // caller already implements its own bounded resend loop.
-      const resendResponse = await upstreamFetch('https://api.resend.com/emails', {
+      // RESEND_API_BASE_URL exists so a test can stand in for Resend on loopback; production never sets it.
+      const resendResponse = await upstreamFetch(`${(process.env.RESEND_API_BASE_URL || 'https://api.resend.com').replace(/\/+$/, '')}/emails`, {
         target: 'resend', timeoutMs: 20000, idempotent: false, maxConcurrent: 6,
         method: 'POST',
         headers: {
@@ -830,6 +832,7 @@ export async function sendEmail(db, template, toEmail, data, userId = null) {
       }
 
       const resendData = await resendResponse.json();
+      providerId = typeof resendData?.id === 'string' ? resendData.id : null;
       console.log(`[Email] Sent via Resend to ${toEmail}: ${subject} (id: ${resendData.id})`);
     } else if (process.env.SENDGRID_API_KEY) {
       // Fallback: SendGrid
@@ -871,11 +874,13 @@ export async function sendEmail(db, template, toEmail, data, userId = null) {
       return { success: false, skipped: true, reason: 'no_provider', emailId };
     }
 
-    // Mark as sent
+    // Mark as sent — 'sent' means the PROVIDER ACCEPTED it; delivery/bounce arrive
+    // later on routes/emailWebhookRoutes.js, keyed by provider_id, which is why it
+    // is stored here (F2: it was logged to stdout and never kept).
     if (db) {
       await db.query(
-        'UPDATE email_logs SET status = $1, sent_at = NOW() WHERE id = $2',
-        ['sent', emailId]
+        'UPDATE email_logs SET status = $1, sent_at = NOW(), provider_id = COALESCE($3, provider_id) WHERE id = $2',
+        ['sent', emailId, providerId]
       );
     }
 
