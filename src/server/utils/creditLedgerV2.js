@@ -700,25 +700,42 @@ export async function settleHoldV2(pool, userId, holdId, actualCostMicro, usage 
       await client.query('COMMIT');
       finalRow = hold;
     } else {
-      const requested = BigInt(Math.min(Math.max(0, Math.round(actualCostMicro)), Number(hold.amount_micro)));
+      // 🔴 THE HOLD IS AN ADMISSION RESERVATION, NOT A PRICE CAP. Until 2026-09-17 the
+      // charge was clamped to the held amount, on the design assumption that the hold
+      // was a true worst case (max_tokens as output). It is not: a reasoning model
+      // spends reasoning tokens max_tokens does not bound, and the gateway's own
+      // system prompt adds ~640 input tokens the caller never sent. Dogfooding measured
+      // a call priced at 1.14 credits settling for 0.05 — the hold — a 96% under-bill on
+      // every reasoning call. Charge what was actually used, bounded only by what the
+      // account holds (below).
+      const requested = BigInt(Math.max(0, Math.round(actualCostMicro)));
+      const held = BigInt(hold.amount_micro);
       const acct = await ensureAccount(client, userId);
       await syncGrants(client, acct, userId);
       // Never drive the balance negative: a refund/dispute clawback can reduce the posted
-      // balance below this hold's reservation while the operation was in flight. Charge only
-      // what's still available (the rest was already returned to the customer).
+      // balance below this hold's reservation while the operation was in flight, and an
+      // overrun past the hold may exceed what is left. Charge only what's still there.
       const posted = BigInt(acct.balance);
       const avail = posted < 0n ? 0n : posted;
       const actual = requested < avail ? requested : avail;
+      const overrun = actual > held ? actual - held : 0n;
       if (actual > 0n) {
+        const reservedPart = actual - overrun;
         const funding = await readHoldFunding(client, hold.id);
         if (funding.length) {
-          await consumeFunding(client, funding, actual);
+          await consumeFunding(client, funding, reservedPart);
         }
         else {
           // Pre-migration holds were already admitted under the old policy. Finish
           // them without retroactively applying the new default-off consent.
-          const leftover = await drawdownGrants(client, userId, actual);
-          reportLotDrift('settleHoldV2', { userId, accountId: acct.id, requestedMicro: actual, leftoverMicro: leftover });
+          const leftover = await drawdownGrants(client, userId, reservedPart);
+          reportLotDrift('settleHoldV2', { userId, accountId: acct.id, requestedMicro: reservedPart, leftoverMicro: leftover });
+        }
+        if (overrun > 0n) {
+          // The part past the reservation was never allocated to lots; draw it now, in
+          // the same priority order a fresh charge would use.
+          const leftover = await drawdownGrants(client, userId, overrun);
+          reportLotDrift('settleHoldV2:overrun', { userId, accountId: acct.id, requestedMicro: overrun, leftoverMicro: leftover });
         }
       }
       const newBalance = posted - actual;
@@ -730,7 +747,7 @@ export async function settleHoldV2(pool, userId, holdId, actualCostMicro, usage 
         userId, accountId: acct.id, type: 'debit', amount: (-actual).toString(), balanceAfter: newBalance.toString(),
         refType: 'xeno.hold', refId: holdId,
         description: `${hold.surface}:${hold.operation}`,
-        metadata: JSON.stringify({ surface: hold.surface, operation: hold.operation, holdId, model: usage.model ?? null, ...(usage.dimensions || {}) }),
+        metadata: JSON.stringify({ surface: hold.surface, operation: hold.operation, holdId, model: usage.model ?? null, heldMicro: held.toString(), pricedMicro: requested.toString(), overrunMicro: overrun.toString(), ...(usage.dimensions || {}) }),
       });
       await insertUsageLog(client, userId, {
         surface: hold.surface, operation: hold.operation, transactionId: holdId,

@@ -6,10 +6,12 @@
  * the money journal stays single-writer (see credit-metering map + Arch §4.7).
  *
  * Why hold→settle and not check-then-charge: an LLM's real cost is only known
- * AFTER the response (token counts), and settleHoldV2 CLAMPS the charge to the
- * held amount — so we must reserve the worst case up front (max_tokens as output)
- * or we under-charge, and the reservation also prevents oversell across concurrent
- * requests during the provider call.
+ * AFTER the response (token counts). The hold reserves the worst case we can
+ * estimate up front (max_tokens as output) so concurrent requests cannot oversell
+ * the balance during the provider call. ⚠️ It is NOT a price cap: since 2026-09-17
+ * settleHoldV2 charges the ACTUAL priced usage, bounded only by the balance —
+ * reasoning tokens and the gateway's prompt overhead routinely exceed the estimate,
+ * and clamping to it under-billed reasoning calls by 20×+.
  */
 import {
   holdV2, settleHoldV2, voidHoldV2, deterministicTxnId, MICRO_PER_CREDIT,
@@ -119,8 +121,8 @@ export async function meterPremiumChat(db, userId, opts) {
     throw e;
   }
 
-  // Phase 2 — settle the ACTUAL token cost (clamped to the hold; the remainder is
-  // released). Best-effort: a settle failure must not fail the user's completion,
+  // Phase 2 — settle the ACTUAL token cost (the ledger charges what was used,
+  // bounded by the balance; any unused reservation is released). Best-effort: a settle failure must not fail the user's completion,
   // but it does leave the hold to expire (900s) rather than charging.
   const usage = result?.usage || {};
   const inputTokens = usage.prompt_tokens ?? estInputTokens;
@@ -134,7 +136,8 @@ export async function meterPremiumChat(db, userId, opts) {
     ? getChatCostMicro(model, { inputTokens, outputTokens })
     : estimateMicro;
 
-  let costMicro = Math.min(actualMicro, estimateMicro);
+  // Provisional only — settleHoldV2 reports what it actually charged.
+  let costMicro = actualMicro;
   try {
     // The usage row for this held call must carry what was measured — model,
     // tokens, the source of the count — not just the amount. Dogfooding 2026-09-17
@@ -341,7 +344,7 @@ export async function meterPremiumChatStream(db, userId, opts) {
   let done = false; // single-shot guard: settle XOR void, exactly once
 
   /**
-   * Phase 2 — settle the ACTUAL cost (clamped to the hold). `hasOutputUsage=false`
+   * Phase 2 — settle the ACTUAL cost (charged as used, bounded by the balance). `hasOutputUsage=false`
    * means the provider never reported output tokens → charge the reserved worst case
    * rather than billing a real completion as zero output (same rule as meterPremiumChat).
    */
@@ -352,7 +355,7 @@ export async function meterPremiumChatStream(db, userId, opts) {
     const actualMicro = hasOutputUsage
       ? getChatCostMicro(model, { inputTokens: inTok, outputTokens: outputTokens || 0 })
       : estimateMicro;
-    let costMicro = Math.min(actualMicro, estimateMicro);
+    let costMicro = actualMicro;
     try {
       const settled = await withRetry(() => settleHoldV2(db, userId, holdId, actualMicro, {
         model, provider, inputTokens: inTok, outputTokens: outputTokens || 0,
