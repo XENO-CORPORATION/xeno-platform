@@ -81,6 +81,30 @@ export const passwordResetLimiter = rateLimit({
 });
 
 // --------------------------------------------------------------------------
+// 1b. Provider-credential probe limiter — per user
+// --------------------------------------------------------------------------
+// POST /api/v2/inference/credentials verifies the submitted key against the
+// LIVE provider before storing it (spec D9), and a `compatible` credential lets
+// the caller name the endpoint. Unlimited, that is an outbound-request
+// amplifier keyed on a signed-in account: a script can make us hammer a
+// third party, or enumerate a stolen key list one probe at a time. Only the
+// global /api/ limiter covered it. Ten stores per quarter hour is generous for
+// a human managing keys and hopeless for enumeration. Keyed on the user
+// (the route is behind oidcAuth), never the spoofable body.
+export const credentialProbeLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+  validate: { ip: false },
+  message: {
+    error: { code: 'rate_limited', message: 'Too many key verifications. Please try again in 15 minutes.' },
+    retryAfter: 900,
+  },
+  keyGenerator: (req) => (req.user?.id ? `cred-probe:user:${req.user.id}` : `cred-probe:ip:${normalizeIp(req)}`),
+});
+
+// --------------------------------------------------------------------------
 // 2. LLM / AI generation rate limiter — per-user (by JWT userId)
 // --------------------------------------------------------------------------
 export const llmLimiter = rateLimit({

@@ -30,6 +30,7 @@
  * no req.user) — service auth lives entirely in this file.
  */
 import express from 'express';
+import { routingDimensions } from '../utils/usageDimensions.js';
 import crypto from 'node:crypto';
 import * as defaultLedger from '../utils/creditLedgerV2.js';
 import * as defaultPricing from '../utils/creditCosts.js';
@@ -241,7 +242,20 @@ export function createServiceLedgerRouter({
       // settling under the agent's own id would look for a hold that is not there and
       // strand the reservation until it expired. Resolve identically on every leg.
       const subject = await billingSubjectFor(req.db, b.userId);
-      const settled = await ledger.settleHoldV2(req.db, subject.userId, req.params.holdId, amount.actualCostMicro);
+      // The usage row for a held call carries what the settle measured (model,
+      // tokens) and WHY it was routed here (gateway f6087f3 sends routeReason /
+      // routeMismatchBasis on the settle body). Unknown values are dropped, never
+      // rejected — a label is not a reason to lose a charge.
+      const settled = await ledger.settleHoldV2(req.db, subject.userId, req.params.holdId, amount.actualCostMicro, {
+        model: amount.priced?.model ?? null,
+        inputTokens: amount.priced?.inputTokens ?? 0,
+        outputTokens: amount.priced?.outputTokens ?? 0,
+        dimensions: {
+          ...routingDimensions(b),
+          ...(amount.priced ? { usage_source: amount.priced.measured ? 'provider' : 'estimated' } : {}),
+          ...(subject.isAgent ? { agent_user_id: subject.actorUserId } : {}),
+        },
+      });
       res.json({ ...settled, pricing: amount.priced, billedUserId: subject.userId });
     } catch (err) {
       sendErr(res, err);
@@ -294,6 +308,7 @@ export function createServiceLedgerRouter({
         inputTokens: inTok,
         outputTokens: outTok,
         dimensions: {
+          ...routingDimensions(b),
           usage_source: measured === false ? 'estimated' : 'provider',
           ...(subject.isAgent ? { agent_user_id: subject.actorUserId } : {}),
         },

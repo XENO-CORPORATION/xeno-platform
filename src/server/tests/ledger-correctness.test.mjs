@@ -1,4 +1,5 @@
 import { installUsageCreditFixture, optInUsageCredits } from './usage-credit-fixture.mjs';
+import { tablesDDL } from './fixtures/schema.mjs';
 /**
  * Ledger correctness test (Blocker #8): DEF-4 backfill lot drift, DEF-5 reversing
  * refund, and the phantom-hold sweeper (INFRA-7.3).
@@ -29,7 +30,6 @@ const BASE = `
 CREATE TABLE IF NOT EXISTS users (id uuid PRIMARY KEY DEFAULT gen_random_uuid(), credits bigint DEFAULT 0);
 CREATE TABLE IF NOT EXISTS credit_accounts (id uuid PRIMARY KEY DEFAULT gen_random_uuid(), user_id uuid UNIQUE, balance bigint DEFAULT 0, lifetime_earned bigint DEFAULT 0, lifetime_spent bigint DEFAULT 0, is_frozen boolean DEFAULT false, created_at timestamptz DEFAULT now(), updated_at timestamptz DEFAULT now());
 CREATE TABLE IF NOT EXISTS credit_transactions (id uuid PRIMARY KEY DEFAULT gen_random_uuid(), user_id uuid, account_id uuid, type varchar(32), amount bigint, balance_after bigint, reference_type varchar(64), reference_id varchar(128), description text, metadata jsonb, prev_hash text, entry_hash text, created_at timestamptz DEFAULT now());
-CREATE TABLE IF NOT EXISTS api_usage_logs (id uuid PRIMARY KEY DEFAULT gen_random_uuid(), user_id uuid, surface varchar(64), operation varchar(128), model varchar(128), provider varchar(64), actual_cost_micro bigint, estimated_cost_micro bigint, input_tokens int DEFAULT 0, output_tokens int DEFAULT 0, status varchar(16), request_id varchar(128), endpoint text, method varchar(8), created_at timestamptz DEFAULT now());
 `;
 
 const balance = async (uid) => Number((await pool.query('SELECT balance FROM credit_accounts WHERE user_id=$1', [uid])).rows[0].balance);
@@ -45,6 +45,8 @@ const legacyUser = async (credits = 0) => {
 
 async function main() {
   await pool.query(BASE);
+  // api_usage_logs from the MIGRATIONS (fixtures/schema.mjs): its shape is production's, incl. `dimensions`.
+  await pool.query(tablesDDL('api_usage_logs'));
   await migrateAccountV2(pool);
   await installUsageCreditFixture(pool);
 

@@ -11,6 +11,7 @@
  * settle debits actual + releases remainder, void releases, replay idempotency.
  */
 import http from 'node:http';
+import { tablesDDL } from './fixtures/schema.mjs';
 import express from 'express';
 import pg from 'pg';
 import { migrateAccountV2 } from '../database/migrate-account-v2.js';
@@ -34,7 +35,6 @@ CREATE TABLE IF NOT EXISTS workspaces (id uuid PRIMARY KEY, status varchar(16) D
 CREATE TABLE IF NOT EXISTS xeno_account_plans (user_id text PRIMARY KEY, plan varchar(50) DEFAULT 'free', status varchar(20) DEFAULT 'active', current_period_end timestamptz);
 CREATE TABLE IF NOT EXISTS credit_accounts (id uuid PRIMARY KEY DEFAULT gen_random_uuid(), user_id uuid UNIQUE, balance bigint DEFAULT 0, lifetime_earned bigint DEFAULT 0, lifetime_spent bigint DEFAULT 0, is_frozen boolean DEFAULT false, created_at timestamptz DEFAULT now(), updated_at timestamptz DEFAULT now());
 CREATE TABLE IF NOT EXISTS credit_transactions (id uuid PRIMARY KEY DEFAULT gen_random_uuid(), user_id uuid, account_id uuid, type varchar(32), amount bigint, balance_after bigint, reference_type varchar(64), reference_id varchar(128), description text, metadata jsonb, prev_hash text, entry_hash text, created_at timestamptz DEFAULT now());
-CREATE TABLE IF NOT EXISTS api_usage_logs (id uuid PRIMARY KEY DEFAULT gen_random_uuid(), user_id uuid, surface varchar(64), operation varchar(128), model varchar(128), provider varchar(64), actual_cost_micro bigint, estimated_cost_micro bigint, input_tokens int DEFAULT 0, output_tokens int DEFAULT 0, status varchar(16), request_id varchar(128), endpoint text, method varchar(8), created_at timestamptz DEFAULT now());
 `;
 
 let server, baseUrl;
@@ -56,6 +56,8 @@ const available = async (uid) => (await getBalanceV2(pool, uid)).availableMicro;
 
 async function main() {
   await pool.query(BASE);
+  // api_usage_logs from the MIGRATIONS (fixtures/schema.mjs): its shape is production's, incl. `dimensions`.
+  await pool.query(tablesDDL('api_usage_logs'));
   await migrateAccountV2(pool);
   await installUsageCreditFixture(pool);
 
@@ -109,6 +111,38 @@ async function main() {
   const voided = await req('POST', '/api/v2/ledger/service/holds/hold-svc-2/void', { token: TOKEN, body: { userId } });
   ok(voided.status === 200 && voided.json?.state === 'voided', 'void → voided');
   ok((await available(userId)) === C(96), 'void released 20 → available 96 (no charge)');
+
+  // ── The usage row for a HELD call carries what the settle measured and WHY it
+  //    was routed here (gateway f6087f3 sends routeReason/routeMismatchBasis).
+  //    Before 2026-09-17 every settled row had model NULL and 0 tokens.
+  const h3 = await req('POST', '/api/v2/ledger/service/holds', { token: TOKEN, body: { userId, holdId: 'hold-svc-dims', operation: 'chat.completion', surface: 'xeno-web', amountMicro: C(10) } });
+  ok(h3.status === 200, 'hold for the dimensions case');
+  const s3 = await req('POST', '/api/v2/ledger/service/holds/hold-svc-dims/settle', {
+    token: TOKEN,
+    body: { userId, usage: { model: 'gpt-4o-mini', inputTokens: 120, outputTokens: 30, measured: true },
+      routeReason: 'provider-mismatch', routeMismatchBasis: 'catalogue-mismatch', unknownField: 'ignored' },
+  });
+  ok(s3.status === 200 && s3.json?.state === 'settled', `settle with usage + route dimensions → ${s3.status}`);
+  const row3 = (await pool.query(`SELECT model, input_tokens, output_tokens, dimensions FROM api_usage_logs WHERE user_id=$1 AND request_id='hold-svc-dims'`, [userId])).rows[0];
+  ok(row3 && row3.model === 'gpt-4o-mini' && Number(row3.input_tokens) === 120 && Number(row3.output_tokens) === 30,
+    'settled usage row carries the measured model + tokens (was NULL / 0 for every held call)');
+  ok(row3 && row3.dimensions?.route_reason === 'provider-mismatch' && row3.dimensions?.route_mismatch_basis === 'catalogue-mismatch' && row3.dimensions?.usage_source === 'provider',
+    'settled usage row carries route_reason + route_mismatch_basis + usage_source');
+  const h4 = await req('POST', '/api/v2/ledger/service/holds', { token: TOKEN, body: { userId, holdId: 'hold-svc-dims-bad', operation: 'chat.completion', surface: 'xeno-web', amountMicro: C(10) } });
+  const s4 = await req('POST', '/api/v2/ledger/service/holds/hold-svc-dims-bad/settle', {
+    token: TOKEN, body: { userId, actualCostMicro: C(1), routeReason: 'not-a-real-reason', routeMismatchBasis: 42 },
+  });
+  ok(h4.status === 200 && s4.status === 200 && s4.json?.state === 'settled', 'an unknown route label never rejects a settle (the charge lands)');
+  const row4 = (await pool.query(`SELECT dimensions FROM api_usage_logs WHERE user_id=$1 AND request_id='hold-svc-dims-bad'`, [userId])).rows[0];
+  ok(row4 && row4.dimensions === null, 'an unknown route label is DROPPED, not stored');
+  const u5 = await req('POST', '/api/v2/ledger/service/usage', {
+    token: TOKEN,
+    body: { userId, transactionId: 'usage-dims-1', surface: 'xeno-web', operation: 'chat.completion',
+      usage: { model: 'gpt-4o-mini', inputTokens: 10, outputTokens: 5, measured: true }, routeReason: 'account-default' },
+  });
+  const row5 = (await pool.query(`SELECT dimensions FROM api_usage_logs WHERE user_id=$1 AND request_id='usage-dims-1'`, [userId])).rows[0];
+  ok(u5.status === 200 && row5?.dimensions?.route_reason === 'account-default' && row5?.dimensions?.usage_source === 'provider',
+    'one-shot /usage carries route_reason beside usage_source');
 
   console.log(`\n${fail === 0 ? '✅' : '❌'} service-ledger: ${pass} passed, ${fail} failed`);
   // Await the close, and drop keep-alive sockets first. An unawaited

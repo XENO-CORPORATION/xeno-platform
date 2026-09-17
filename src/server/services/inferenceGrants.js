@@ -178,6 +178,8 @@ export async function recordGrantUsage(db, presented, usage = {}) {
     outputTokens: outTok,
     requestId,
     endpoint: '/v1/chat/completions',
+    // A grant row is BYOK by construction; the reason says which level chose it.
+    dimensions: { route_path: 'byok', ...(usage.dimensions || {}) },
   });
   await db.query(
     'UPDATE user_provider_credentials SET last_used_at = NOW() WHERE id = $1',

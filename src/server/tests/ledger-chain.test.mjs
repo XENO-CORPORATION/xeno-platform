@@ -1,4 +1,5 @@
 import { installUsageCreditFixture, optInUsageCredits } from './usage-credit-fixture.mjs';
+import { tablesDDL } from './fixtures/schema.mjs';
 /**
  * Self-contained integration test for the ledger hash chain (Arch §5).
  * Creates the minimal live-shaped base tables, then exercises debit + hold/settle
@@ -23,15 +24,12 @@ CREATE TABLE IF NOT EXISTS credit_transactions (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(), user_id uuid, account_id uuid, type varchar(32),
   amount bigint, balance_after bigint, reference_type varchar(64), reference_id varchar(128),
   description text, metadata jsonb, prev_hash text, entry_hash text, created_at timestamptz DEFAULT now());
-CREATE TABLE IF NOT EXISTS api_usage_logs (
-  id uuid PRIMARY KEY DEFAULT gen_random_uuid(), user_id uuid, surface varchar(64), operation varchar(128),
-  model varchar(128), provider varchar(64), actual_cost_micro bigint, estimated_cost_micro bigint,
-  input_tokens int DEFAULT 0, output_tokens int DEFAULT 0, status varchar(16), request_id varchar(128),
-  endpoint text, method varchar(8), created_at timestamptz DEFAULT now());
 `;
 
 async function main() {
   await pool.query(BASE);
+  // api_usage_logs from the MIGRATIONS (fixtures/schema.mjs): its shape is production's, incl. `dimensions`.
+  await pool.query(tablesDDL('api_usage_logs'));
   await migrateAccountV2(pool);
   await installUsageCreditFixture(pool);
   const u = await pool.query('INSERT INTO users (credits) VALUES (100) RETURNING id');

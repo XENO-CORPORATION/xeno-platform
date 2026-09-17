@@ -18,6 +18,7 @@
  *    consistent during the strangler-fig transition.
  */
 import crypto from 'node:crypto';
+import { dimensionsJson } from './usageDimensions.js';
 import { allocateFunding, saveHoldFunding, consumeFunding, readHoldFunding } from './usageCreditFunding.js';
 
 export const MICRO_PER_CREDIT = 1_000_000;
@@ -428,6 +429,13 @@ export async function verifyChainV2(pool, userId) {
  * Unified usage aggregation (Arch §4.5/§7 "where/what" view). groupBy is a
  * dimension (surface/operation/model/provider) — no platform conditionals.
  */
+// 🔴 `api_usage_logs.created_at` is `timestamp WITHOUT time zone` (baseline), filled by
+// now() under the DB session's zone — UTC in production. A JS Date bound straight
+// against it is read as a wall clock in the CALLER's zone with the offset discarded,
+// so a +02:00 client asked for "the last hour" got a window two hours in the future
+// and an empty summary. Correct in production only because both processes run UTC.
+// Cast the bound to timestamptz first, then to the UTC wall clock the column holds.
+// Found 2026-09-17 when the ledger fixtures took the column's real type.
 export async function usageSummary(pool, userId, { from, to, groupBy = 'surface' }) {
   const col = { surface: 'surface', operation: 'operation', model: 'model', provider: 'provider' }[groupBy] || 'surface';
   const r = await pool.query(
@@ -436,7 +444,9 @@ export async function usageSummary(pool, userId, { from, to, groupBy = 'surface'
             COALESCE(SUM(input_tokens),0)::bigint  AS input_tokens,
             COALESCE(SUM(output_tokens),0)::bigint AS output_tokens
        FROM api_usage_logs
-      WHERE user_id=$1 AND created_at >= $2 AND created_at < $3
+      WHERE user_id=$1
+        AND created_at >= ($2::timestamptz AT TIME ZONE 'UTC')
+        AND created_at <  ($3::timestamptz AT TIME ZONE 'UTC')
       GROUP BY ${col} ORDER BY cost_micro DESC`,
     [userId, from, to],
   );
@@ -671,7 +681,14 @@ export async function holdV2(pool, userId, req) {
 }
 
 /** Settle a hold for the actual cost (phase 2). Posting < held restores the rest. */
-export async function settleHoldV2(pool, userId, holdId, actualCostMicro) {
+/**
+ * @param {object} [usage] what the settle measured — { model, provider, inputTokens,
+ *   outputTokens, dimensions }. Before 2026-09-17 the settle's usage row carried
+ *   surface + operation only: model NULL, 0 tokens, for every held call. The
+ *   caller had the numbers (it priced the settle from them) and they were dropped
+ *   one line before the write. Optional, because legacy callers settle by amount.
+ */
+export async function settleHoldV2(pool, userId, holdId, actualCostMicro, usage = {}) {
   const client = await pool.connect();
   let finalRow;
   try {
@@ -713,9 +730,14 @@ export async function settleHoldV2(pool, userId, holdId, actualCostMicro) {
         userId, accountId: acct.id, type: 'debit', amount: (-actual).toString(), balanceAfter: newBalance.toString(),
         refType: 'xeno.hold', refId: holdId,
         description: `${hold.surface}:${hold.operation}`,
-        metadata: JSON.stringify({ surface: hold.surface, operation: hold.operation, holdId }),
+        metadata: JSON.stringify({ surface: hold.surface, operation: hold.operation, holdId, model: usage.model ?? null, ...(usage.dimensions || {}) }),
       });
-      await insertUsageLog(client, userId, { surface: hold.surface, operation: hold.operation, transactionId: holdId }, actual);
+      await insertUsageLog(client, userId, {
+        surface: hold.surface, operation: hold.operation, transactionId: holdId,
+        model: usage.model ?? null, provider: usage.provider ?? null,
+        inputTokens: usage.inputTokens ?? 0, outputTokens: usage.outputTokens ?? 0,
+        dimensions: usage.dimensions,
+      }, actual);
       await mirrorLegacy(client, userId, newBalance);
       await client.query('COMMIT');
       const updated = await client.query('SELECT * FROM credit_holds WHERE id=$1', [hold.id]);
@@ -770,15 +792,17 @@ export async function sweepExpiredHolds(pool, { batchLimit = 1000 } = {}) {
 async function insertUsageLog(client, userId, event, costMicro) {
   // api_usage_logs requires NOT NULL: user_id, endpoint, method, status.
   // The v2 ledger route is the "endpoint" that incurred the cost; method = POST.
+  // `dimensions` is the closed routing/attribution vocabulary (utils/usageDimensions.js);
+  // the ledger entry's metadata carries the same facts, this is the queryable copy.
   await client.query(
     `INSERT INTO api_usage_logs
        (user_id, surface, operation, model, provider, actual_cost_micro, estimated_cost_micro,
-        input_tokens, output_tokens, status, request_id, endpoint, method, created_at)
-     VALUES ($1,$2,$3,$4,$5,$6,$6,$7,$8,'ok',$9,$10,'POST', now())`,
+        input_tokens, output_tokens, status, request_id, endpoint, method, dimensions, created_at)
+     VALUES ($1,$2,$3,$4,$5,$6,$6,$7,$8,'ok',$9,$10,'POST',$11::jsonb, now())`,
     [
       userId, event.surface, event.operation, event.model ?? null, event.provider ?? null,
       costMicro.toString(), event.inputTokens ?? 0, event.outputTokens ?? 0, event.transactionId,
-      `/api/v2/ledger/usage:${event.operation}`,
+      `/api/v2/ledger/usage:${event.operation}`, dimensionsJson(event.dimensions),
     ],
   );
 }
