@@ -199,7 +199,7 @@ export async function createCredential(db, userId, { provider, label, secret, ba
 export async function listCredentials(db, userId) {
   const { rows } = await db.query(
     `SELECT c.id, c.provider, c.label, c.key_fingerprint, c.key_last4, c.base_url,
-            c.status, c.verified_at, c.last_used_at, c.created_at,
+            c.status, c.verified_at, c.last_used_at, c.created_at, c.models,
             COUNT(r.surface)::int AS routed_surfaces
        FROM user_provider_credentials c
        LEFT JOIN inference_routes r ON r.credential_id = c.id
@@ -343,12 +343,93 @@ export async function listRoutes(db, userId) {
  * Returns a decision, or throws a typed refusal. 🔴 It NEVER downgrades a byok
  * decision into a premium one — see rule 2 at the top of this file.
  */
-export async function resolveInferenceRoute(db, userId, { surface, requestedPath = null }) {
+/**
+ * Providers whose endpoint serves ARBITRARY model ids. For these the
+ * credential's own allow-list is the whole rule — the platform catalogue cannot
+ * know what a self-hosted or aggregator endpoint serves.
+ */
+export const PASSTHROUGH_PROVIDERS = new Set(['compatible', 'openrouter', 'azure-openai']);
+
+const MODEL_ID_RE = /^[A-Za-z0-9][A-Za-z0-9._:/@-]{0,127}$/;
+
+/** Validate + normalise an allow-list. Throws a typed 400 on bad input. */
+export function normalizeModelList(models) {
+  if (models == null) return null;
+  if (!Array.isArray(models)) throw fail('models_invalid', 'models must be an array of model ids', 400);
+  const out = [];
+  for (const m of models) {
+    const id = String(m ?? '').trim();
+    if (!id) continue;
+    if (!MODEL_ID_RE.test(id)) throw fail('models_invalid', `not a model id: ${id.slice(0, 40)}`, 400);
+    if (!out.includes(id)) out.push(id);
+    if (out.length > 64) throw fail('models_invalid', 'at most 64 models per credential', 400);
+  }
+  return out;
+}
+
+export async function setCredentialModels(db, userId, credentialId, models) {
+  const list = normalizeModelList(models);
+  const { rows } = await db.query(
+    `UPDATE user_provider_credentials SET models = $3, updated_at = NOW()
+      WHERE id = $2 AND user_id = $1
+      RETURNING id, provider, label, models`,
+    [userId, credentialId, list],
+  );
+  if (!rows[0]) throw fail('credential_not_found', 'no such credential', 404);
+  return rows[0];
+}
+
+/**
+ * Can THIS credential serve THIS model? The decision that was missing.
+ *
+ * 2026-09-17: an account-wide byok default to a DeepSeek key sent claude-sonnet-5
+ * to DeepSeek. Routing knew the surface and the path, and nothing about whether
+ * the key on the other end could answer. Now:
+ *
+ *   pass-through provider   -> the credential's allow-list IS the rule.
+ *                              No list, or not listed -> does not serve.
+ *   first-party provider    -> the catalogue says who serves the model. Same
+ *                              provider -> serves; a DIFFERENT provider -> does
+ *                              not; UNKNOWN to the catalogue -> serves (the user
+ *                              chose this key; the provider will refuse a model
+ *                              it does not have, visibly and unbilled, which is
+ *                              strictly better than quietly spending credits).
+ *                              An allow-list, when present, narrows further.
+ *
+ * Returns { serves, basis } so the decision can say WHY, never just what.
+ */
+export function credentialServesModel(cred, model, catalogRow) {
+  const id = typeof model === 'string' ? model.trim() : '';
+  if (!id) return { serves: true, basis: 'no-model-requested' };
+  const list = Array.isArray(cred?.models) ? cred.models : null;
+  if (PASSTHROUGH_PROVIDERS.has(cred?.provider)) {
+    if (!list || list.length === 0) return { serves: false, basis: 'no-allow-list' };
+    return list.includes(id) ? { serves: true, basis: 'allow-list' } : { serves: false, basis: 'not-in-allow-list' };
+  }
+  if (list && list.length > 0 && !list.includes(id)) return { serves: false, basis: 'not-in-allow-list' };
+  const owner = catalogRow?.provider && catalogRow.provider !== 'unknown' ? catalogRow.provider : null;
+  if (!owner) return { serves: true, basis: 'catalogue-unknown' };
+  return owner === cred?.provider
+    ? { serves: true, basis: 'catalogue-match' }
+    : { serves: false, basis: 'catalogue-mismatch' };
+}
+
+async function catalogRowFor(db, model) {
+  const id = typeof model === 'string' ? model.trim() : '';
+  if (!id) return null;
+  const { rows } = await db.query(
+    'SELECT public_id, provider FROM gateway_model_aliases WHERE public_id = $1 AND enabled LIMIT 1',
+    [id],
+  );
+  return rows[0] || null;
+}
+
+export async function resolveInferenceRoute(db, userId, { surface, requestedPath = null, model = null }) {
   const key = surface && String(surface).trim() ? String(surface).trim() : DEFAULT_SURFACE;
 
   const { rows } = await db.query(
     `SELECT r.surface, r.path, r.mode, r.credential_id,
-            c.provider, c.base_url, c.status AS credential_status, c.key_fingerprint
+            c.provider, c.base_url, c.status AS credential_status, c.key_fingerprint, c.models
        FROM inference_routes r
        LEFT JOIN user_provider_credentials c ON c.id = r.credential_id
       WHERE r.user_id = $1 AND r.surface = ANY($2::text[])`,
@@ -357,19 +438,41 @@ export async function resolveInferenceRoute(db, userId, { surface, requestedPath
 
   const override = rows.find((r) => r.surface === key && key !== DEFAULT_SURFACE);
   const accountDefault = rows.find((r) => r.surface === DEFAULT_SURFACE);
-  const chosen = override || accountDefault || null;
+
+  /* Walk the levels. A byok level whose credential cannot serve the requested
+   * model DOES NOT APPLY — resolution continues to the next level, and the
+   * decision says so. That is not D5's fallback: this request was never a BYOK
+   * request for that provider. It is a route naming a key that cannot answer,
+   * and pretending otherwise sends the wrong model to the wrong provider
+   * (measured: claude-sonnet-5 → DeepSeek → 400). The reason rides on the
+   * decision so the caller can surface it; silence is the failure mode. */
+  const catalog = await catalogRowFor(db, model);
+  const mismatches = [];
+  let chosen = null;
+  let reason = 'platform-default';
+  for (const [level, row] of [['product-override', override], ['account-default', accountDefault]]) {
+    if (!row) continue;
+    if (row.path === 'byok' && row.mode !== 'local' && row.credential_id) {
+      const fit = credentialServesModel(row, model, catalog);
+      if (!fit.serves) {
+        mismatches.push({ level, surface: row.surface, credentialId: row.credential_id, provider: row.provider, basis: fit.basis });
+        continue;
+      }
+    }
+    chosen = row; reason = level; break;
+  }
+  if (!chosen && mismatches.length) reason = 'provider-mismatch';
 
   let path = requestedPath || chosen?.path || 'premium';
-  let reason = requestedPath ? 'request-override'
-    : override ? 'product-override'
-    : accountDefault ? 'account-default'
-    : 'platform-default';
+  if (requestedPath) reason = 'request-override';
+  const mismatch = mismatches.length ? { model: model || null, skipped: mismatches } : undefined;
 
   if (path !== 'byok') {
     return {
       path, mode: 'managed', reason,
       metered: path === 'premium',
       credential: null,
+      ...(mismatch ? { mismatch } : {}),
     };
   }
 
@@ -384,7 +487,13 @@ export async function resolveInferenceRoute(db, userId, { surface, requestedPath
     return { path: 'byok', mode: 'local', reason, metered: false, credential: null };
   }
 
-  if (!chosen?.credential_id) throw fail('byok_credential_missing', 'no key is configured for this product', 409);
+  if (!chosen?.credential_id) {
+    if (mismatches.length) {
+      const m = mismatches[0];
+      throw fail('byok_provider_mismatch', `the key routed for this product (${m.provider}) cannot serve ${model}`, 409);
+    }
+    throw fail('byok_credential_missing', 'no key is configured for this product', 409);
+  }
   if (chosen.credential_status === 'revoked') throw fail('byok_credential_revoked', 'the key for this product was revoked', 409);
   if (chosen.credential_status !== 'active') throw fail('byok_credential_invalid', 'the key for this product was rejected by the provider', 409);
 
@@ -399,6 +508,9 @@ export async function resolveInferenceRoute(db, userId, { surface, requestedPath
       fingerprint: chosen.key_fingerprint,
       baseUrl: chosen.base_url || PROVIDERS[chosen.provider]?.defaultBase || null,
     },
+    // A level that was skipped on the way here is part of the decision too —
+    // "your Pixel override was ignored for this model" must be sayable.
+    ...(mismatch ? { mismatch } : {}),
   };
 }
 

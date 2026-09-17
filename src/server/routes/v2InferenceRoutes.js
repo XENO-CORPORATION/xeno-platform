@@ -25,6 +25,7 @@ import {
   SUPPORTED_PROVIDERS, DEFAULT_SURFACE, byokEnabled,
   createCredential, listCredentials, revokeCredential, deleteCredential,
   setRoute, clearRoute, listRoutes, listProducts, resolveInferenceRoute,
+  setCredentialModels,
 } from '../services/providerCredentials.js';
 import { attachManagedGrant } from '../services/inferenceGrants.js';
 
@@ -78,6 +79,27 @@ router.post('/credentials', async (req, res) => {
     const { provider, label, secret, baseUrl } = req.body || {};
     const created = await createCredential(req.db, req.user.id, { provider, label, secret, baseUrl });
     res.status(201).json({ credential: created });
+  } catch (e) { sendError(res, e); }
+});
+
+/**
+ * PUT /credentials/:id/models — the model ids this credential may serve.
+ *
+ * A key answers for ONE provider. For pass-through providers (compatible,
+ * openrouter, azure-openai) the endpoint serves arbitrary ids and the platform
+ * cannot know which, so this list is the whole rule: unset serves nothing. For
+ * first-party providers it narrows what the catalogue already allows. Measured
+ * 2026-09-17: without it, an account default to a DeepSeek key sent
+ * claude-sonnet-5 to DeepSeek.
+ *
+ * Body: { models: string[] | null }   200 { credential: { id, provider, label, models } }
+ * 400 models_invalid · 404 credential_not_found
+ */
+router.put('/credentials/:id/models', async (req, res) => {
+  try {
+    const models = req.body && Object.prototype.hasOwnProperty.call(req.body, 'models') ? req.body.models : undefined;
+    if (models === undefined) return res.status(400).json({ error: { code: 'models_invalid', message: 'body.models required (array or null)' } });
+    res.json({ credential: await setCredentialModels(req.db, req.user.id, req.params.id, models) });
   } catch (e) { sendError(res, e); }
 });
 
@@ -158,7 +180,7 @@ router.delete('/routes/:surface', async (req, res) => {
 router.post('/resolve', async (req, res) => {
   try {
     const { surface, requestedPath, model } = req.body || {};
-    const decision = await resolveInferenceRoute(req.db, req.user.id, { surface, requestedPath });
+    const decision = await resolveInferenceRoute(req.db, req.user.id, { surface, requestedPath, model });
     res.json(await attachManagedGrant(req.db, req.user.id, decision, { surface, model }));
   } catch (e) { sendError(res, e); }
 });

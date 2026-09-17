@@ -216,7 +216,7 @@ router.post('/chat', requireEntitlement('canUse'), async (req, res) => {
     decision = { path: requestedPath || 'premium', mode: 'managed', reason: 'flag-off', credential: null };
   } else {
     try {
-      decision = await resolveInferenceRoute(req.db, userId, { surface, requestedPath });
+      decision = await resolveInferenceRoute(req.db, userId, { surface, requestedPath, model });
     } catch (error) {
       const code = error && error.code;
       if (code === 'byok_disabled') {
@@ -434,7 +434,7 @@ router.post('/chat/stream', requireEntitlement('canUse'), async (req, res) => {
     streamDecision = { path: requestedPath || 'premium' };
   } else {
     try {
-      streamDecision = await resolveInferenceRoute(req.db, userId, { surface, requestedPath });
+      streamDecision = await resolveInferenceRoute(req.db, userId, { surface, requestedPath, model });
     } catch (error) {
       const code = error && error.code;
       if (code === 'byok_disabled') {

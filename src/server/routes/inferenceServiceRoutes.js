@@ -23,6 +23,7 @@ router.post('/resolve', async (req, res) => {
     const decision = await resolveInferenceRoute(req.db, b.userId, {
       surface: b.surface,
       requestedPath: b.requestedPath || null,
+      model: typeof b.model === 'string' ? b.model : null,
     });
     const attached = await attachManagedGrant(req.db, b.userId, decision, {
       surface: b.surface,
