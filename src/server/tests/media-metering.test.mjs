@@ -14,7 +14,7 @@ import { tablesDDL } from './fixtures/schema.mjs';
  */
 import pg from 'pg';
 import { migrateAccountV2 } from '../database/migrate-account-v2.js';
-import { meterMediaGeneration } from '../utils/inferenceMeter.js';
+import { meterMediaGeneration, meterPremiumChat } from '../utils/inferenceMeter.js';
 import {
   addGrant, getBalanceV2, verifyChainV2, MICRO_PER_CREDIT,
 } from '../utils/creditLedgerV2.js';
@@ -62,6 +62,22 @@ async function main() {
   ok(await balance(u1) === C(950), 'cost×n: 5 images @ 10cr charged 50 (not a flat 10)');
   ok(r1.creditsCharged === 50, 'cost×n: creditsCharged reports 50');
   ok(r1.actualCount === 5, 'cost×n: actualCount = 5');
+  // The usage row carries WHAT was metered, not just the amount (dogfooding
+  // 2026-09-17: every in-process settle wrote model NULL / 0 tokens / no dimensions).
+  const row1 = (await pool.query('SELECT model, provider, dimensions FROM api_usage_logs WHERE user_id=$1 ORDER BY created_at DESC LIMIT 1', [u1])).rows[0];
+  ok(row1 && row1.model && row1.provider && row1.dimensions?.usage_source === 'unit' && Number(row1.dimensions?.units) === 5 && row1.dimensions?.route_path === 'premium',
+    `cost×n: the usage row names the model, provider and unit count (${JSON.stringify(row1)})`);
+
+  // And the CHAT meter — the path every /api/ai/chat call takes — carries tokens.
+  const uc = await newUser();
+  await grant(uc, 1000);
+  const rc = await meterPremiumChat(pool, uc, {
+    model: 'grok-4.6', provider: 'xeno', requestId: 'rq-chat', estInputTokens: 20, maxTokens: 50, surface: 'dogfood',
+    run: async () => ({ choices: [{ message: { content: 'OK' } }], usage: { prompt_tokens: 21, completion_tokens: 3, total_tokens: 24 } }),
+  });
+  const rowc = (await pool.query('SELECT model, input_tokens, output_tokens, dimensions FROM api_usage_logs WHERE user_id=$1 ORDER BY created_at DESC LIMIT 1', [uc])).rows[0];
+  ok(rc.creditsCharged >= 0 && rowc && rowc.model === 'grok-4.6' && Number(rowc.input_tokens) === 21 && Number(rowc.output_tokens) === 3 && rowc.dimensions?.usage_source === 'provider',
+    `chat: the settled usage row carries model + measured tokens + usage_source (${JSON.stringify(rowc)})`);
 
   // ── 2. Under-delivery: provider returns fewer than requested → charge actual ─
   const u2 = await newUser();
