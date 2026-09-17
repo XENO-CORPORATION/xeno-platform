@@ -106,6 +106,7 @@ import forumRoutes from './routes/forumRoutes.js';
 import { requireActivated } from './services/accountActivation.js';
 import agentRoutes from './routes/agentRoutes.js';
 import { authMiddleware, optionalAuthMiddleware } from './middleware/auth.js';
+import { suspensionGate } from './middleware/suspensionGate.js';
 import { initCleanupService } from './services/cleanupService.js';
 import { startDownloadCleanup } from './services/downloadService.js';
 import { startConversionWorker } from './services/conversionWorker.js';
@@ -322,6 +323,9 @@ app.use('/api/', databaseMiddleware, requireSupportedClient);
 // This injects a two-minute, process-local bearer for the existing unified
 // auth middleware and enforces double-submit CSRF on unsafe cookie requests.
 app.use('/api/', browserSessionMiddleware(pool));
+// A suspended account is refused on EVERY /api route that sees a credential —
+// once, here — not only where a route remembered to check (middleware/suspensionGate.js).
+app.use('/api/', suspensionGate(pool));
 app.use('/api/client-policy', databaseMiddleware, clientPolicyRoutes);
 
 // The auth surface, limiter by limiter (middleware/rateLimiter.js §1a). These
