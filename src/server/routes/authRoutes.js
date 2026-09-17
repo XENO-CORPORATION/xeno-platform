@@ -2691,8 +2691,23 @@ router.get('/activation-status', async (req, res) => {
     if (!token) return res.status(401).json({ success: false, error: 'Authentication required' });
     const decoded = jwt.verify(token, JWT_SECRET, { algorithms: ['HS256'] });
     const activated = await isAccountActivated(req.db, decoded.userId);
+    // What the provider said about the LATEST verification mail. `bounced` /
+    // `complained` / `failed` mean "check your inbox" would be a lie (F3).
+    const d = await req.db.query(
+      `SELECT status, error, to_email FROM email_logs
+        WHERE user_id = $1 AND template IN ('email_verification', 'activation')
+        ORDER BY created_at DESC LIMIT 1`,
+      [decoded.userId],
+    ).catch(() => ({ rows: [] }));
+    const last = d.rows[0] || null;
+    const delivery = last ? {
+      status: last.status,
+      undeliverable: ['bounced', 'complained', 'failed'].includes(last.status),
+      reason: ['bounced', 'failed'].includes(last.status) ? (last.error || null) : null,
+      to: last.to_email,
+    } : null;
     res.set('Cache-Control', 'no-store');
-    return res.json({ success: true, activated });
+    return res.json({ success: true, activated, delivery });
   } catch (e) {
     if (e?.name === 'JsonWebTokenError' || e?.name === 'TokenExpiredError') {
       return res.status(401).json({ success: false, error: 'Authentication required' });

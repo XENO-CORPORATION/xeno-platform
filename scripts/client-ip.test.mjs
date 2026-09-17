@@ -98,3 +98,11 @@ test('the limiters USE it — clientIp is no longer a keyGenerator', () => {
     'rateLimiter.normalizeIp feeds five limiters; it was named for IPv6 '
     + 'compatibility and provided none.');
 });
+
+test('the request logger records the CLIENT address, not the Docker bridge (F8, 2026-09-17)', async () => {
+  const { readFileSync } = await import('node:fs');
+  const src = readFileSync(new URL('../src/server/middleware/requestLogger.js', import.meta.url), 'utf8');
+  assert.match(src, /import \{ clientIp \} from '\.\.\/utils\/clientIp\.js'/);
+  assert.match(src, /ip: clientIp\(req\),/);
+  assert.doesNotMatch(src, /ip: req\.ip \|\| req\.connection/, 'req.ip behind Cloudflare→nginx→backend is the bridge gateway for every request');
+});

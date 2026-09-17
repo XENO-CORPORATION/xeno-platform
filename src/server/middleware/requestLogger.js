@@ -10,6 +10,7 @@
 
 import { v4 as uuidv4 } from 'uuid';
 import { recordRequest } from '../services/metrics.js';
+import { clientIp } from '../utils/clientIp.js';
 
 // --------------------------------------------------------------------------
 // Logger utility — lightweight structured logger (Pino-like JSON output)
@@ -98,7 +99,9 @@ export function requestLoggerMiddleware(req, res, next) {
     requestId,
     method: req.method,
     path: req.path,
-    ip: req.ip || req.connection?.remoteAddress,
+    // The CLIENT's address, not the Docker bridge (dogfooding 2026-09-17, F8: every
+    // request_error row read 172.20.0.1 — abuse could not be attributed to anyone).
+    ip: clientIp(req),
     userAgent: req.headers['user-agent']?.substring(0, 120),
   });
 

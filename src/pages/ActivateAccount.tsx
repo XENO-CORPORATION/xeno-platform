@@ -54,6 +54,8 @@ const ActivateAccount = () => {
   const [cooldown, setCooldown] = useState(0);
   const [resending, setResending] = useState(false);
   const [resendMessage, setResendMessage] = useState('');
+  /** From the provider, via /activation-status: the last code mail bounced / was refused. */
+  const [undeliverable, setUndeliverable] = useState<{ to: string; reason: string | null } | null>(null);
   const [focused, setFocused] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -78,6 +80,7 @@ const ActivateAccount = () => {
         const r = await fetch('/api/auth/activation-status', { headers: { Authorization: `Bearer ${token}` } });
         const d = await r.json();
         if (live && d?.activated) { setPhase('done'); return; }
+        if (live) setUndeliverable(d?.delivery?.undeliverable ? { to: d.delivery.to, reason: d.delivery.reason } : null);
       } catch { /* a dropped poll is not worth showing anyone */ }
       if (live) window.setTimeout(tick, POLL_MS);
     };
@@ -295,6 +298,14 @@ const ActivateAccount = () => {
               </div>
 
               {resendMessage && <p className="mt-4 text-sm text-white/50">{resendMessage}</p>}
+
+              {undeliverable && (
+                <p className="mt-4 text-sm text-red-300/90" role="alert">
+                  We couldn&apos;t deliver to <span className="font-mono">{undeliverable.to}</span>
+                  {undeliverable.reason ? ` — ${undeliverable.reason}` : ''}. Sending again won&apos;t help;
+                  sign in with a different address or contact support.
+                </p>
+              )}
 
               {/*
                 Names a TIMEFRAME and names SPAM. Without both, someone whose
