@@ -94,7 +94,10 @@ export function assertSafeEndpointUrl(raw) {
     url = new URL(String(raw));
   } catch {
     const e = new Error('endpoint is not a valid URL');
+    // A refused endpoint is the CALLER's mistake — 400 with the code, never a 500
+    // that reads as "the platform broke" (dogfooding 2026-09-17, F16).
     e.code = 'endpoint_invalid';
+    e.http = 400;
     throw e;
   }
 
@@ -104,6 +107,7 @@ export function assertSafeEndpointUrl(raw) {
   if (url.protocol !== 'https:') {
     const e = new Error('endpoint must use https');
     e.code = 'endpoint_not_https';
+    e.http = 400;
     throw e;
   }
 
@@ -111,6 +115,7 @@ export function assertSafeEndpointUrl(raw) {
   if (url.username || url.password) {
     const e = new Error('endpoint must not embed credentials');
     e.code = 'endpoint_has_credentials';
+    e.http = 400;
     throw e;
   }
 
@@ -119,6 +124,7 @@ export function assertSafeEndpointUrl(raw) {
   if ((net.isIP(literal) && isForbiddenAddress(literal))) {
     const e = new Error('endpoint resolves to a non-public address');
     e.code = 'endpoint_forbidden_address';
+    e.http = 400;
     throw e;
   }
 
