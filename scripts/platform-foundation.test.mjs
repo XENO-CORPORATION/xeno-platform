@@ -265,9 +265,14 @@ test('usage totals come from the canonical double-entry ledger', () => {
 });
 test('sign-in does not expose sign-up-only controls to assistive technology', () => {
   assert.match(auth, /activeTab === 'signup' \? <div/);
-  assert.match(authContent, /activeTab === 'signup' \? <div/);
   assert.doesNotMatch(auth, /activeTab === 'signup' \? 'max-h-24/);
-  assert.doesNotMatch(authContent, /activeTab === 'signup' \? 'max-h-24/);
+  // AuthContent (the routed page) mounts the family since 2026-09-17: the name field's a11y
+  // exclusion is CredentialForm's (aria-hidden + tabIndex -1 unless mode === 'signup'), tested in
+  // xeno-components. This page must hand it the mode and must not grow a local name input again —
+  // the previous assertion pinned the old mechanism (`activeTab === 'signup' ? <div`), not the outcome.
+  assert.match(authContent, /<CredentialForm[\s\S]*?mode=\{activeTab\}/);
+  assert.doesNotMatch(authContent, /<input[^>]*value=\{name\}/);
+  assert.doesNotMatch(authContent, /type=\{showPassword \? 'text' : 'password'\}/);
 });
 test('implemented routes do not impersonate unavailable products or fabricate labs', () => {
   assert.doesNotMatch(routes, /Coming Soon|TikTok Channel Manager|Lab Editor|mockLabs|Lab card placeholder/);
