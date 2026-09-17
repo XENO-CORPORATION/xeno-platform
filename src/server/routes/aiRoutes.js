@@ -8,7 +8,7 @@ import { resolveRoute, normalizePath, catalogPaths } from '../utils/modelPaths.j
 import { meterPremiumChat, meterPremiumChatStream } from '../utils/inferenceMeter.js';
 import { estimateChatCostMicro, estimateMessageTokens } from '../utils/creditCosts.js';
 import { getBalanceV2, MICRO_PER_CREDIT } from '../utils/creditLedgerV2.js';
-import { xenoChatCompletion, xenoChatCompletionStream, xenoApiConfigured } from '../utils/xenoChat.js';
+import { xenoChatCompletion, xenoChatCompletionStream, xenoApiConfigured, classifyUpstreamError } from '../utils/xenoChat.js';
 import { enforceInHouseDailyLimit, limitExceededBody } from '../middleware/inHouseDailyLimit.js';
 import requireEntitlement from '../middleware/requireEntitlement.js';
 import { byokEnabled, resolveInferenceRoute } from '../services/providerCredentials.js';
@@ -326,6 +326,10 @@ router.post('/chat', requireEntitlement('canUse'), async (req, res) => {
     if (error.http === 403) return res.status(403).json({ error: 'Account frozen' });
     if (error.http === 503) return res.status(503).json({ error: 'Premium inference unavailable', message: 'The inference service is not configured.' });
     console.error(`[AI Chat] Error (path=${inferencePath}, model=${model}):`, error.message);
+    // The caller's own mistake (unknown model, bad request) keeps its status and the
+    // provider's sentence; only a genuinely unexplained failure is a 500.
+    const upstream = classifyUpstreamError(error);
+    if (upstream) return res.status(upstream.status).json({ ...upstream.body, model });
     return res.status(500).json({ error: 'AI generation failed', model });
   }
 });
@@ -969,7 +973,10 @@ router.post('/chat/stream', requireEntitlement('canUse'), async (req, res) => {
       message: error?.message,
     });
     if (!clientGone) {
-      await send({ type: 'error', error: 'inference_error', message: 'The inference stream failed.' });
+      const upstream = classifyUpstreamError(error);
+      await send(upstream
+        ? { type: 'error', error: upstream.body.error, message: upstream.body.message, status: upstream.status }
+        : { type: 'error', error: 'inference_error', message: 'The inference stream failed.' });
       endStream();
     }
     return;

@@ -27,6 +27,45 @@ export function xenoApiConfigured() {
  * Returns the raw OpenAI-shaped JSON ({ choices:[{message:{content}}], usage, model }).
  * Throws Error with .http=503 if the key is unset, or a provider Error on non-2xx.
  */
+/**
+ * Turn a failed gateway call into what the CUSTOMER should see.
+ *
+ * Found by dogfooding 2026-09-17: a request for a model that does not exist came
+ * back from the gateway as a clean `404 model_not_found` with a sentence, and the
+ * platform answered `500 "AI generation failed"` — telling the user the platform
+ * broke when they had mistyped a model id. A caller cannot fix what it is not told.
+ *
+ * The rule (OpenAI / Anthropic do the same): the caller's OWN mistake keeps its
+ * status and the provider's sentence — 400 / 404 / 413 / 422 / 429. Our platform
+ * credential being refused (401 / 403) is OUR fault and is reported as 503 with no
+ * provider detail; a provider 5xx is a 502. Anything else stays a 500. Never the
+ * raw body: it can carry provider internals, and a message is enough.
+ */
+export function classifyUpstreamError(error) {
+  const status = Number(error?.status);
+  if (!Number.isInteger(status)) return null;
+  let upstream = null;
+  const m = typeof error?.message === 'string' ? error.message.match(/^XENO API error: \d+ - ([\s\S]*)$/) : null;
+  if (m) { try { upstream = JSON.parse(m[1]); } catch { upstream = null; } }
+  const detail = upstream?.error && typeof upstream.error === 'object' ? upstream.error : null;
+  const message = typeof detail?.message === 'string' && detail.message.length <= 400 ? detail.message : null;
+  const code = typeof detail?.code === 'string' && /^[a-z0-9_]{1,64}$/.test(detail.code) ? detail.code : null;
+
+  if ([400, 404, 413, 422].includes(status)) {
+    return { status, body: { error: code || 'invalid_request', message: message || 'The inference request was rejected.' } };
+  }
+  if (status === 429) {
+    return { status: 429, body: { error: 'rate_limited', message: message || 'The inference service is rate-limiting requests. Try again shortly.' } };
+  }
+  if (status === 401 || status === 403) {
+    return { status: 503, body: { error: 'inference_unavailable', message: 'The inference service refused the platform credential. This is on us, not you.' } };
+  }
+  if (status >= 500) {
+    return { status: 502, body: { error: 'upstream_error', message: 'The inference provider returned an error. Try again.' } };
+  }
+  return null;
+}
+
 export async function xenoChatCompletion({ model, messages, temperature, max_tokens, stream = false, extra = {}, headers = {} }) {
   if (!XENO_API_KEY) { const e = new Error('XENO_API_KEY not configured'); e.http = 503; throw e; }
   const response = await fetch(`${XENO_API_BASE}/chat/completions`, {
