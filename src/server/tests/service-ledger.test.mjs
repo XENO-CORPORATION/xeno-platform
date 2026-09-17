@@ -15,7 +15,7 @@ import { tablesDDL } from './fixtures/schema.mjs';
 import express from 'express';
 import pg from 'pg';
 import { migrateAccountV2 } from '../database/migrate-account-v2.js';
-import { getBalanceV2, MICRO_PER_CREDIT } from '../utils/creditLedgerV2.js';
+import { getBalanceV2, MICRO_PER_CREDIT, addGrant } from '../utils/creditLedgerV2.js';
 import serviceLedgerRoutes from '../routes/serviceLedgerRoutes.js';
 import { installUsageCreditFixture, optInUsageCredits } from './usage-credit-fixture.mjs';
 
@@ -143,6 +143,30 @@ async function main() {
   const row5 = (await pool.query(`SELECT dimensions FROM api_usage_logs WHERE user_id=$1 AND request_id='usage-dims-1'`, [userId])).rows[0];
   ok(u5.status === 200 && row5?.dimensions?.route_reason === 'account-default' && row5?.dimensions?.usage_source === 'provider',
     'one-shot /usage carries route_reason beside usage_source');
+
+  // ── The hold is an admission reservation, NOT a price cap (2026-09-17). A
+  //    reasoning model's actual usage routinely exceeds the worst case the caller's
+  //    max_tokens implies; the charge follows the usage, bounded by the balance.
+  const bal0 = await available(userId);
+  const h6 = await req('POST', '/api/v2/ledger/service/holds', { token: TOKEN, body: { userId, holdId: 'hold-overrun', operation: 'chat.completion', surface: 'xeno_api', amountMicro: C(1) } });
+  const s6 = await req('POST', '/api/v2/ledger/service/holds/hold-overrun/settle', { token: TOKEN, body: { userId, actualCostMicro: C(5) } });
+  ok(h6.status === 200 && s6.status === 200 && s6.json?.settledMicro === C(5), `a settle PAST the hold charges the actual usage (held 1, used 5 → settled ${s6.json?.settledMicro / MICRO_PER_CREDIT})`);
+  ok((await available(userId)) === bal0 - C(5), 'the balance moved by the actual usage, not the reservation');
+  const lots = await pool.query('SELECT COALESCE(SUM(remaining_micro),0)::bigint AS s FROM credit_grants WHERE user_id=$1', [userId]);
+  const acct = await pool.query('SELECT balance FROM credit_accounts WHERE user_id=$1', [userId]);
+  ok(Number(lots.rows[0].s) === Number(acct.rows[0].balance), 'the overrun was drawn from the lots — Σ(lots) still equals the balance');
+  const txn = (await pool.query(`SELECT metadata FROM credit_transactions WHERE user_id=$1 AND reference_id='hold-overrun'`, [userId])).rows[0];
+  ok(txn && txn.metadata.heldMicro === String(C(1)) && txn.metadata.overrunMicro === String(C(4)), 'the journal records held vs overrun');
+
+  // Balance cannot go negative: a settle past what the account holds charges what is left.
+  const poor = (await pool.query("INSERT INTO users (credits) VALUES (0) RETURNING id")).rows[0].id;
+  await pool.query("INSERT INTO xeno_account_plans (user_id, plan, status) VALUES ($1, 'internal', 'active')", [poor]);
+  await optInUsageCredits(pool, poor);
+  await addGrant(pool, poor, { amountMicro: C(2), kind: 'paid', sourceRef: 'test:poor' });
+  const h7 = await req('POST', '/api/v2/ledger/service/holds', { token: TOKEN, body: { userId: poor, holdId: 'hold-poor', operation: 'chat.completion', surface: 'xeno_api', amountMicro: C(1) } });
+  const s7 = await req('POST', '/api/v2/ledger/service/holds/hold-poor/settle', { token: TOKEN, body: { userId: poor, actualCostMicro: C(9) } });
+  ok(h7.status === 200 && s7.status === 200 && s7.json?.settledMicro === C(2), `used 9 with 2 in the account → charged 2, never negative (settled ${s7.json?.settledMicro / MICRO_PER_CREDIT})`);
+  ok((await available(poor)) === 0, 'the poor account sits at exactly zero');
 
   console.log(`\n${fail === 0 ? '✅' : '❌'} service-ledger: ${pass} passed, ${fail} failed`);
   // Await the close, and drop keep-alive sockets first. An unawaited
