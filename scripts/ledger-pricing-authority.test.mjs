@@ -32,7 +32,7 @@ function fakeLedger() {
     calls,
     async getBalanceV2(_db, userId) { calls.push(['balance', userId]); return { postedMicro: 5_000_000, availableMicro: 4_000_000, is_frozen: false }; },
     async holdV2(_db, userId, req) { calls.push(['hold', userId, req]); return { holdId: req.holdId, state: 'held', amountMicro: req.amountMicro }; },
-    async settleHoldV2(_db, userId, holdId, actual) { calls.push(['settle', userId, holdId, actual]); return { holdId, state: 'settled', settledMicro: Math.min(actual, 2_000_000) }; },
+    async settleHoldV2(_db, userId, holdId, actual, usage) { calls.push(['settle', userId, holdId, actual, usage]); return { holdId, state: 'settled', settledMicro: Math.min(actual, 2_000_000) }; },
     async voidHoldV2(_db, userId, holdId) { calls.push(['void', userId, holdId]); return { holdId, state: 'voided' }; },
     async recordUsageV2(_db, userId, event) { calls.push(['usage', userId, event]); return { accepted: true, duplicate: false, costMicro: event.costMicro, transactionId: event.transactionId }; },
   };
@@ -136,9 +136,15 @@ test('an unmeasured settle charges the reservation, never a cheaper estimate', (
     userId: 'u1', usage: { model: 'claude-opus-5', inputTokens: 16, outputTokens: 2, measured: false },
   });
   assert.equal(r.status, 200);
-  const actual = ledger.calls.find((c) => c[0] === 'settle')[3];
-  assert.ok(actual > pricing.getChatCostMicro('claude-opus-5', { inputTokens: 16, outputTokens: 2 }), 'must not settle at the estimate');
-  assert.equal(actual, Number.MAX_SAFE_INTEGER, 'settleHoldV2 clamps this to the held amount');
+  // 🔴 2026-09-17: this gate used to pin a MAX_SAFE_INTEGER sentinel "that the
+  // ledger clamps to the hold". PR #263 removed the clamp; the sentinel then
+  // settled a real account to 0. An unmeasured settle is now a FLAG, never a
+  // number — the route sends actualCostMicro 0 + chargeHeld:true and the ledger
+  // charges exactly the reservation (PR #272). No integer may stand in for it.
+  const settle = ledger.calls.find((c) => c[0] === 'settle');
+  assert.equal(settle[3], 0, 'no amount travels with an unmeasured settle');
+  assert.equal(settle[4]?.chargeHeld, true, 'the ledger is told to charge the reservation');
+  assert.ok(!Object.is(settle[3], Number.MAX_SAFE_INTEGER), 'the sentinel that drained a balance must never come back');
   assert.equal(r.json.pricing.measured, false);
 }));
 

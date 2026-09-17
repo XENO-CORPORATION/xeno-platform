@@ -158,3 +158,15 @@ test('the streaming route still exists and is still metered', () => {
     'the streaming route must place credit holds — an unmetered inference path is free money',
   );
 });
+
+test('the stream sends SSE keepalive comments from header flush until the end (524 at 18:49Z, 2026-09-17)', () => {
+  const src = readFileSync(new URL('../src/server/routes/aiRoutes.js', import.meta.url), 'utf8');
+  assert.match(src, /const SSE_KEEPALIVE_MS = 15_000;/, '15 s — inside Cloudflare\'s 100 s origin timeout with margin');
+  const flush = src.indexOf('res.flushHeaders();');
+  const ka = src.indexOf('const keepalive = setInterval(');
+  const endStream = src.indexOf('const endStream = () => {');
+  assert.ok(flush > 0 && ka > flush && ka < endStream, 'the keepalive starts right after the headers are flushed');
+  assert.ok(src.includes(": keepalive ${Date.now()}") && src.includes("res.write(`: keepalive"), "a comment frame — invisible to every SSE parser");
+  assert.match(src.slice(endStream, endStream + 200), /clearInterval\(keepalive\)/, 'endStream stops it');
+  assert.match(src, /res\.on\('close', \(\) => clearInterval\(keepalive\)\)/, 'and so does a vanished client');
+});

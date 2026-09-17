@@ -26,6 +26,9 @@ import { searchInfoFromAnnotations } from '../utils/searchInfo.js';
 import { openProjectContextTurn, closeProjectContextTurn } from '../utils/projectContextTurn.js';
 import { assembleProjectContext } from '../services/chatProjectContext.js';
 
+/** SSE keepalive interval — well inside Cloudflare's 100 s origin timeout and any proxy idle timeout. */
+const SSE_KEEPALIVE_MS = 15_000;
+
 const router = express.Router();
 
 /**
@@ -619,11 +622,25 @@ router.post('/chat/stream', requireEntitlement('canUse'), async (req, res) => {
       req.once('close', done);
     });
   };
+  // 🔴 KEEPALIVE. A reasoning model can sit for minutes before its first token, and
+  // nothing else on the wire moves in that time — Cloudflare's origin timeout is
+  // 100 s, so the browser saw `524` while the backend kept relaying to nobody
+  // (2026-09-17 18:49Z, grok-4.6-high-fast, 2m23s to first byte). SSE comment
+  // frames are invisible to every client parser and keep every intermediary
+  // (Cloudflare, nginx, browsers) satisfied that the response is alive. Started the
+  // moment headers are flushed; stopped on every exit path through endStream.
+  const keepalive = setInterval(() => {
+    if (res.writableEnded || res.destroyed) { clearInterval(keepalive); return; }
+    res.write(`: keepalive ${Date.now()}\n\n`);
+  }, SSE_KEEPALIVE_MS);
+  if (typeof keepalive.unref === 'function') keepalive.unref();
   const endStream = () => {
+    clearInterval(keepalive);
     if (res.writableEnded) return;
     res.write('data: [DONE]\n\n');
     res.end();
   };
+  res.on('close', () => clearInterval(keepalive));
 
   let outputChars = 0;   // for a best-effort output-token estimate if usage never arrives
   let usageObj = null;   // upstream usage chunk (include_usage)
