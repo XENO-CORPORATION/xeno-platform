@@ -8,7 +8,7 @@ import { resolveRoute, normalizePath, catalogPaths } from '../utils/modelPaths.j
 import { meterPremiumChat, meterPremiumChatStream } from '../utils/inferenceMeter.js';
 import { estimateChatCostMicro, estimateMessageTokens } from '../utils/creditCosts.js';
 import { getBalanceV2, MICRO_PER_CREDIT } from '../utils/creditLedgerV2.js';
-import { xenoChatCompletion, xenoChatCompletionStream, xenoApiConfigured, classifyUpstreamError } from '../utils/xenoChat.js';
+import { xenoChatCompletion, xenoChatCompletionStream, xenoApiConfigured, classifyUpstreamError, xenoModelCatalog, prettyModelName, PROVIDER_LABELS } from '../utils/xenoChat.js';
 import { enforceInHouseDailyLimit, limitExceededBody } from '../middleware/inHouseDailyLimit.js';
 import requireEntitlement from '../middleware/requireEntitlement.js';
 import { byokEnabled, resolveInferenceRoute } from '../services/providerCredentials.js';
@@ -1104,24 +1104,50 @@ router.post('/chat/estimate', async (req, res) => {
 });
 
 /**
- * GET /api/ai/models — static fallback list (the live catalog is GET /api/models).
- * Kept for back-compat; tagged with inference paths for the 3-path UI.
+ * GET /api/ai/models — the flat, back-compat model list, from the LIVE catalogue.
+ *
+ * Dogfooding 2026-09-17: this answered a hardcoded 2024 list — gpt-4o-mini,
+ * claude-3-opus, gemini-1.5-pro, llama-3.1-70b… — and every one of them 404s at
+ * the gateway. An integrator picking a model from the platform's own list could
+ * not make a single call. The gateway is the one catalogue source (like
+ * /api/models); when it cannot be reached, the platform's synced copy
+ * (gateway_model_aliases, kept current by services/gatewayCatalogueSync.js) answers
+ * instead — a catalogue that may be minutes stale is honest, a list that was never
+ * true is not. Text models only; reasoning-effort variants collapsed, as /api/models.
  */
-router.get('/models', (req, res) => {
-  const raw = [
-    { id: 'gpt-4o', name: 'GPT-4o', provider: 'OpenAI', description: 'Most capable OpenAI model', icon: '🟢' },
-    { id: 'gpt-4o-mini', name: 'GPT-4o Mini', provider: 'OpenAI', description: 'Fast and affordable', icon: '🟢' },
-    { id: 'claude-3-5-sonnet', name: 'Claude 3.5 Sonnet', provider: 'Anthropic', description: 'Best for analysis and coding', icon: '🟠' },
-    { id: 'claude-3-opus', name: 'Claude 3 Opus', provider: 'Anthropic', description: 'Most powerful Claude', icon: '🟠' },
-    { id: 'gemini-1.5-pro', name: 'Gemini 1.5 Pro', provider: 'Google', description: 'Long context, multimodal', icon: '🔵' },
-    { id: 'gemini-1.5-flash', name: 'Gemini 1.5 Flash', provider: 'Google', description: 'Fast and efficient', icon: '🔵' },
-    { id: 'llama-3.1-70b', name: 'Llama 3.1 70B', provider: 'Meta', description: 'Open source, powerful', icon: '🟣' },
-    { id: 'deepseek-v3', name: 'DeepSeek V3', provider: 'DeepSeek', description: 'Advanced reasoning', icon: '🔴' },
-    { id: 'deepseek-r1', name: 'DeepSeek R1', provider: 'DeepSeek', description: 'Reasoning model', icon: '🔴' },
-    { id: 'mistral-large', name: 'Mistral Large', provider: 'Mistral', description: 'European excellence', icon: '⚪' },
-  ];
-  const models = raw.map((m) => ({ ...m, ...catalogPaths(m.id) }));
-  res.json({ success: true, models });
+const EFFORT_SUFFIX = /-(high|low|medium|none|xhigh|max)$/;
+const flatModel = (id, provider, extra = {}) => ({
+  id,
+  name: extra.name || prettyModelName(id),
+  provider: PROVIDER_LABELS[provider] || provider,
+  description: extra.description || '',
+  ...catalogPaths(id),
+});
+router.get('/models', async (req, res) => {
+  res.setHeader('Cache-Control', 'private, no-cache, must-revalidate');
+  try {
+    const live = await xenoModelCatalog();
+    const models = live
+      .filter((m) => String(m.type || 'text').toLowerCase() === 'text' && !EFFORT_SUFFIX.test(String(m.id)))
+      .map((m) => flatModel(String(m.id), String(m.owned_by || 'xeno').toLowerCase(), { name: m.name, description: m.description }));
+    if (models.length > 0) return res.json({ success: true, source: 'gateway', models });
+  } catch (error) {
+    console.warn('[ai/models] live catalogue unavailable, serving the synced copy:', error.message);
+  }
+  try {
+    const { rows } = await req.db.query(
+      `SELECT public_id, provider FROM gateway_model_aliases
+        WHERE enabled AND NOT is_alias AND provider <> 'unknown'
+        ORDER BY provider, public_id`,
+    );
+    const models = rows
+      .filter((r) => !EFFORT_SUFFIX.test(r.public_id))
+      .map((r) => flatModel(r.public_id, r.provider));
+    return res.json({ success: true, source: 'catalogue', models });
+  } catch (error) {
+    console.error('[ai/models] catalogue unavailable:', error.message);
+    return res.status(503).json({ success: false, error: 'catalogue_unavailable', message: 'The model catalogue is not reachable right now.' });
+  }
 });
 
 /**
