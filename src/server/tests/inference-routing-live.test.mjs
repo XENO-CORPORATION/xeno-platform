@@ -37,7 +37,7 @@ import {
   setRoute, clearRoute, listRoutes, resolveInferenceRoute, useCredential,
   markCredentialInvalid, fingerprint, byokEnabled,
 } from '../services/providerCredentials.js';
-import { exchangeGrant, attachManagedGrant } from '../services/inferenceGrants.js';
+import { exchangeGrant, attachManagedGrant, recordGrantUsage } from '../services/inferenceGrants.js';
 import { encrypt } from '../utils/secretBox.js';
 
 if (!process.env.DATABASE_URL) throw new Error('DATABASE_URL is required');
@@ -163,6 +163,43 @@ async function main() {
     await exchangeGrant(pool, grant, async () => true);
   } catch (e) { replay = e.code || e.message; }
   ok(replay !== null, `§6: replaying a spent grant is REFUSED (${replay}) — single-use`);
+
+  // ── D4: not billed must never mean invisible ──────────────────────────────
+  // The gateway path had no way to record a BYOK call: /service/usage prices
+  // at premium server-side, so it would have CHARGED. Measured on the first real
+  // call 2026-09-17: correct money, zero usage rows. This is the endpoint that
+  // closes it — bound to the SPENT grant, once, cost 0 by construction.
+  const usageBefore = await pool.query('SELECT count(*)::int AS n FROM api_usage_logs WHERE user_id=$1', [userId]);
+  const rec = await recordGrantUsage(pool, grant, { model: 'gpt-5.5', provider: 'openai', inputTokens: 38, outputTokens: 16 });
+  ok(rec.recorded === true && rec.userId === userId && rec.surface === 'xeno-motion',
+    "D4: usage is recorded against the SPENT grant, attributed to the grant's user and surface");
+  const row = await pool.query(
+    'SELECT surface, model, provider, actual_cost_micro, input_tokens, output_tokens, status, request_id FROM api_usage_logs WHERE user_id=$1 ORDER BY created_at DESC LIMIT 1',
+    [userId],
+  );
+  ok(row.rows.length === 1 && Number(row.rows[0].actual_cost_micro) === 0, 'D4: the usage row costs ZERO');
+  // bigint columns come back from pg as strings — compare by value, not identity.
+  ok(row.rows[0].surface === 'xeno-motion' && Number(row.rows[0].input_tokens) === 38 && Number(row.rows[0].output_tokens) === 16,
+    'D4: the row carries the real surface and the provider-reported token counts');
+  ok(row.rows[0].request_id === `grant:${rec.grantId}`, 'D4: the row is traceable to its grant');
+
+  const again = await recordGrantUsage(pool, grant, { model: 'gpt-5.5', inputTokens: 38, outputTokens: 16 });
+  const usageAfter = await pool.query('SELECT count(*)::int AS n FROM api_usage_logs WHERE user_id=$1', [userId]);
+  ok(again.duplicate === true && usageAfter.rows[0].n === usageBefore.rows[0].n + 1,
+    'D4: a retry for the same grant is a no-op, never a double');
+
+  // A grant that was minted but NEVER exchanged must not be able to record
+  // usage — the exchange is the proof the call happened on the user's key.
+  const unspent = await attachManagedGrant(pool, userId, inherited, { surface: 'xeno-motion', model: 'gpt-5.5' });
+  let unspentErr = null;
+  try { await recordGrantUsage(pool, unspent.credential.grant, { inputTokens: 1 }); } catch (e) { unspentErr = e.code; }
+  ok(unspentErr === 'grant_unspent', `D4: an unexchanged grant cannot record usage (${unspentErr})`);
+  let unknownErr = null;
+  try { await recordGrantUsage(pool, 'xgrant_0000000000000000000000000000000000000000000000000000000000000000', {}); } catch (e) { unknownErr = e.code; }
+  ok(unknownErr === 'grant_unknown', `D4: an unknown grant cannot record usage (${unknownErr})`);
+  // No credit movement happened for any of this.
+  const txns = await pool.query('SELECT count(*)::int AS n FROM credit_transactions WHERE user_id=$1', [userId]);
+  ok(txns.rows[0].n === 0, 'D4: recording BYOK usage moved no credits');
 
   // ── D10: deleting a credential a route points at is REFUSED, not cascaded ─
   // Cascading would silently re-point that product at premium and start spending

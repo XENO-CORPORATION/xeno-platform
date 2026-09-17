@@ -119,7 +119,74 @@ export async function attachManagedGrant(db, userId, decision, { surface, model 
   };
 }
 
+/**
+ * Record the usage of a BYOK call, bound to the grant that carried it.
+ *
+ * Spec D4: BYOK never meters money but ALWAYS records usage. The platform's own
+ * chat route already does this (aiRoutes -> recordInferenceUsage). The gateway
+ * path — API key -> gateway -> grant exchange -> user's provider — had nothing
+ * to call: /service/usage prices every call at premium server-side, so posting a
+ * BYOK completion there would have CHARGED the user, and there was no unbilled
+ * alternative. Measured 2026-09-17 on the first real BYOK call through the
+ * platform vault: resolve 200, exchange 200, key used, zero credit movement —
+ * and zero api_usage_logs rows. Correct money, invisible usage.
+ *
+ * Binding to the grant is what makes this safe to expose to a service token:
+ * the row is only written for a grant that was minted for this user, for this
+ * surface, and has been SPENT — i.e. the exchange actually happened. A caller
+ * holding the token cannot record free usage for an arbitrary user or model,
+ * and cannot record a second row for the same call: one grant, one row.
+ *
+ * The cost is 0 by construction (recordInferenceUsage refuses any other value).
+ * `provider` and `model` come from the caller because the caller is the one
+ * that saw the provider's response; `surface` and `user_id` come from the grant
+ * because the caller is not trusted to say who this was for.
+ */
+export async function recordGrantUsage(db, presented, usage = {}) {
+  if (!presented || typeof presented !== 'string' || !presented.startsWith(GRANT_PREFIX)) {
+    throw fail('grant_unknown', 'grant is not usable', 409);
+  }
+  const hash = hashGrant(presented);
+  const { rows } = await db.query(
+    `SELECT id, user_id, surface, model, credential_id, spent_at
+       FROM inference_grants WHERE grant_hash = $1`,
+    [hash],
+  );
+  const g = rows[0];
+  if (!g) throw fail('grant_unknown', 'no such grant', 409);
+  if (!g.spent_at) throw fail('grant_unspent', 'usage can only be recorded for an exchanged grant', 409);
+
+  const inTok = Number.isInteger(usage.inputTokens) && usage.inputTokens >= 0 ? usage.inputTokens : 0;
+  const outTok = Number.isInteger(usage.outputTokens) && usage.outputTokens >= 0 ? usage.outputTokens : 0;
+  const requestId = `grant:${g.id}`;
+
+  // One grant, one row. The request_id carries the grant id so a retry from
+  // the gateway (network blip after we committed) is a no-op, not a double.
+  const { rows: existing } = await db.query(
+    'SELECT id FROM api_usage_logs WHERE user_id = $1 AND request_id = $2 LIMIT 1',
+    [g.user_id, requestId],
+  );
+  if (existing[0]) return { recorded: false, duplicate: true, grantId: g.id };
+
+  const { recordInferenceUsage } = await import('../utils/recordInferenceUsage.js');
+  await recordInferenceUsage(db, g.user_id, {
+    surface: g.surface,
+    operation: usage.operation || 'chat.completion',
+    model: typeof usage.model === 'string' && usage.model ? usage.model : (g.model || null),
+    provider: typeof usage.provider === 'string' ? usage.provider : null,
+    inputTokens: inTok,
+    outputTokens: outTok,
+    requestId,
+    endpoint: '/v1/chat/completions',
+  });
+  await db.query(
+    'UPDATE user_provider_credentials SET last_used_at = NOW() WHERE id = $1',
+    [g.credential_id],
+  ).catch(() => {});
+  return { recorded: true, duplicate: false, grantId: g.id, userId: g.user_id, surface: g.surface };
+}
+
 export default {
   GRANT_TTL_SECONDS, GRANT_PREFIX, hashGrant,
-  mintGrant, spendGrant, exchangeGrant, attachManagedGrant,
+  mintGrant, spendGrant, exchangeGrant, attachManagedGrant, recordGrantUsage,
 };
