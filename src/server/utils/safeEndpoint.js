@@ -88,6 +88,13 @@ export function isForbiddenAddress(ip) {
  *
  * Throws with a `code` the caller can turn into a typed 4xx.
  */
+/** Our own public hostnames and every subdomain of them. */
+export const XENO_HOST_SUFFIXES = Object.freeze(['xenostudio.ai', 'xenosystem.ai']);
+export function isXenoHost(hostname) {
+  const h = String(hostname || '').toLowerCase().replace(/\.$/, '');
+  return XENO_HOST_SUFFIXES.some((d) => h === d || h.endsWith(`.${d}`));
+}
+
 export function assertSafeEndpointUrl(raw) {
   let url;
   try {
@@ -115,6 +122,18 @@ export function assertSafeEndpointUrl(raw) {
   if (url.username || url.password) {
     const e = new Error('endpoint must not embed credentials');
     e.code = 'endpoint_has_credentials';
+    e.http = 400;
+    throw e;
+  }
+
+  // 🔴 Never XENO itself. Dogfooding 2026-09-17: a `compatible` credential whose
+  // endpoint was api.xenostudio.ai made the gateway call ITSELF with the same key —
+  // resolver → byok → gateway → resolver → … — 100 requests in one second until the
+  // per-key limiter ended it. The gateway now refuses this at egress and carries a
+  // hop header; refusing it here means it is refused at SAVE time, not first use.
+  if (isXenoHost(url.hostname)) {
+    const e = new Error("the endpoint points at XENO itself; set it to the provider's own endpoint");
+    e.code = 'endpoint_is_xeno';
     e.http = 400;
     throw e;
   }
