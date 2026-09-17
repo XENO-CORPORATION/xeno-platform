@@ -93,11 +93,19 @@ test('🔴 an upstream failure is LOGGED with its reason', () => {
 });
 
 test('the client is never sent the provider’s own error text', () => {
-  const at = STREAM.indexOf("await send({ type: 'error'");
-  assert.ok(at > 0);
-  const sendCall = STREAM.slice(at, STREAM.indexOf('}', at) + 1);
+  // Refined 2026-09-17 (dogfooding): the RAW upstream message still never reaches
+  // the browser. What may reach it is the CLASSIFIED form from
+  // classifyUpstreamError — a bounded sentence for the caller's own 4xx mistake
+  // (an unknown model id is 404 with "does not exist", not "the stream failed"),
+  // nothing at all for our credential being refused or a provider 5xx. The gate
+  // therefore forbids `error.message` in the send and requires the classifier.
+  const at = STREAM.indexOf('const upstream = classifyUpstreamError(error);', STREAM.indexOf("console.error('[chat/stream] upstream failed'"));
+  assert.ok(at > 0, 'the stream classifies the upstream error before sending anything');
+  const sendCall = STREAM.slice(at, STREAM.indexOf('endStream();', at));
+  assert.match(sendCall, /await send\(upstream/);
   assert.doesNotMatch(
     sendCall, /error\?\.message|error\.message/,
-    'forwarding the provider message leaks upstream detail to the browser',
+    'forwarding the raw provider message leaks upstream detail to the browser',
   );
+  assert.match(sendCall, /message: 'The inference stream failed\.'/, 'the generic message remains the fallback');
 });
