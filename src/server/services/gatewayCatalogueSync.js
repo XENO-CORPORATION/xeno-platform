@@ -72,8 +72,20 @@ export async function applyCatalogue(db, rows) {
       else if (r.rows[0].inserted) inserted += 1;
       else updated += 1;
     }
+    // Hand-curated aliases point at an internal id the catalogue DOES know
+    // (`seedance-2` -> `seedance-2.0`, `google-veo3_1` -> `veo_31_fast`). The
+    // catalogue never mentions the alias, so its provider stayed 'unknown' — 8 of
+    // them on production after the first sync. An alias serves whatever its
+    // target serves; inherit, only where the target has a real answer.
+    const inherited = await client.query(
+      `UPDATE gateway_model_aliases a
+          SET provider = t.provider, updated_at = now()
+         FROM gateway_model_aliases t
+        WHERE a.is_alias AND a.internal_id = t.public_id
+          AND t.provider <> 'unknown' AND a.provider IS DISTINCT FROM t.provider`,
+    );
     await client.query('COMMIT');
-    return { inserted, updated, unchanged, total: rows.length };
+    return { inserted, updated, unchanged, inherited: inherited.rowCount, total: rows.length };
   } catch (e) {
     await client.query('ROLLBACK').catch(() => {});
     throw e;
