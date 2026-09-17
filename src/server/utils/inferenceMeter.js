@@ -136,7 +136,14 @@ export async function meterPremiumChat(db, userId, opts) {
 
   let costMicro = Math.min(actualMicro, estimateMicro);
   try {
-    const settled = await settleHoldV2(db, userId, holdId, actualMicro);
+    // The usage row for this held call must carry what was measured — model,
+    // tokens, the source of the count — not just the amount. Dogfooding 2026-09-17
+    // found every in-process settle wrote model NULL / 0 tokens (the gateway path had
+    // the same defect, fixed in PR #256).
+    const settled = await settleHoldV2(db, userId, holdId, actualMicro, {
+      model, provider, inputTokens, outputTokens,
+      dimensions: { usage_source: hasOutputUsage ? 'provider' : 'estimated', route_path: 'premium' },
+    });
     costMicro = settled?.settledMicro ?? costMicro;
   } catch (e) {
     // leave hold to expire; do not fail the response — but NEVER silently: an
@@ -254,7 +261,9 @@ export async function meterMediaGeneration(db, userId, opts) {
     // Retry the settle across a transient ledger/DB blip so a single failure does not strand
     // the hold. settleHoldV2 is idempotent (no-ops once the hold is not 'held'), so the retry
     // can never double-charge.
-    const settled = await withRetry(() => settleHoldV2(db, userId, holdId, actualMicro));
+    const settled = await withRetry(() => settleHoldV2(db, userId, holdId, actualMicro, {
+      model, provider, dimensions: { usage_source: 'unit', units: actualCount, route_path: 'premium' },
+    }));
     costMicro = settled?.settledMicro ?? costMicro;
   } catch (e) {
     // all retries failed — leave the hold to expire rather than fail a completed generation
@@ -345,7 +354,10 @@ export async function meterPremiumChatStream(db, userId, opts) {
       : estimateMicro;
     let costMicro = Math.min(actualMicro, estimateMicro);
     try {
-      const settled = await withRetry(() => settleHoldV2(db, userId, holdId, actualMicro));
+      const settled = await withRetry(() => settleHoldV2(db, userId, holdId, actualMicro, {
+        model, provider, inputTokens: inTok, outputTokens: outputTokens || 0,
+        dimensions: { usage_source: hasOutputUsage ? 'provider' : 'estimated', route_path: 'premium' },
+      }));
       costMicro = settled?.settledMicro ?? costMicro;
     } catch (e) {
       // All retries failed — leave the hold to expire (short 120s stream expiry)
