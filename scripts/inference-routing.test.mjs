@@ -344,3 +344,13 @@ test('supported providers are declared, not improvised', () => {
     ['anthropic', 'azure-openai', 'compatible', 'google', 'openai', 'openrouter']
   );
 });
+
+test("a refused endpoint is the caller's 400, never a 500 (F16, 2026-09-17)", () => {
+  for (const [url, code] of [['http://127.0.0.1:8080/v1', 'endpoint_not_https'], ['not a url', 'endpoint_invalid'], ['https://user:pw@example.com/v1', 'endpoint_has_credentials'], ['https://169.254.169.254/x', 'endpoint_forbidden_address']]) {
+    let err = null;
+    try { assertSafeEndpointUrl(url); } catch (e) { err = e; }
+    assert.ok(err, `${url} is refused`);
+    assert.equal(err.code, code);
+    assert.equal(err.http, 400, `${code} carries http 400 so the route does not answer "inference routing failed"`);
+  }
+});
