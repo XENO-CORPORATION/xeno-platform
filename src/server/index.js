@@ -128,7 +128,10 @@ import docsRoutes from './routes/docsRoutes.js';
 import jobRoutes from './routes/jobRoutes.js';
 import { requestLoggerMiddleware, logger } from './middleware/requestLogger.js';
 import { staticCacheMiddleware, apiCacheMiddleware, securityHeadersMiddleware } from './middleware/cdnOptimization.js';
-import { authLimiter as perEndpointAuthLimiter, llmLimiter, imageGenLimiter, uploadLimiter, clientIp } from './middleware/rateLimiter.js';
+import {
+  llmLimiter, imageGenLimiter, uploadLimiter, clientIp,
+  loginFailureLimiter, loginAddressCeiling, registerLimiter, recoveryMailLimiter, tokenRedeemLimiter,
+} from './middleware/rateLimiter.js';
 import { rateLimitKey } from './utils/clientIp.js';
 import { sweepExpiredHolds, MICRO_PER_CREDIT } from './utils/creditLedgerV2.js';
 import { syncGatewayCatalogue } from './services/gatewayCatalogueSync.js';
@@ -320,25 +323,17 @@ app.use('/api/', databaseMiddleware, requireSupportedClient);
 app.use('/api/', browserSessionMiddleware(pool));
 app.use('/api/client-policy', databaseMiddleware, clientPolicyRoutes);
 
-// Strict rate limiter for auth endpoints: 10 requests per 15 minutes per IP
-const authLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 10,
-  standardHeaders: true,
-  legacyHeaders: false,
-  validate: { ip: false },
-  keyGenerator: rateLimitKey, // per-client (else one collapsed bucket = platform-wide login lockout)
-  message: { success: false, error: 'Too many authentication attempts, please try again later.' },
-});
-app.use('/api/auth/login', authLimiter);
-app.use('/api/auth/register', authLimiter);
-app.use('/api/auth/register-with-handle', authLimiter);
-// Account-recovery + verification endpoints send email and mutate credentials —
-// same strict, client-IP-keyed limiter as login/register (never the collapsed proxy hop).
-app.use('/api/auth/forgot-password', authLimiter);
-app.use('/api/auth/reset-password', authLimiter);
-app.use('/api/auth/verify-email', authLimiter);
-app.use('/api/auth/resend-verification', authLimiter);
+// The auth surface, limiter by limiter (middleware/rateLimiter.js §1a). These
+// used to share ONE bucket of 10 requests / 15 min per IP that counted successes,
+// which locked a whole NAT out of every auth endpoint after ten sign-ins — found
+// by dogfooding 2026-09-17. Failures count; a correct password never does.
+app.use('/api/auth/login', loginAddressCeiling, loginFailureLimiter);
+app.use('/api/auth/register', registerLimiter);
+app.use('/api/auth/register-with-handle', registerLimiter);
+app.use('/api/auth/forgot-password', recoveryMailLimiter);
+app.use('/api/auth/resend-verification', recoveryMailLimiter);
+app.use('/api/auth/reset-password', tokenRedeemLimiter);
+app.use('/api/auth/verify-email', tokenRedeemLimiter);
 
 // Stricter rate limiter for AI generation endpoints: 30 requests per minute
 const generationLimiter = rateLimit({
