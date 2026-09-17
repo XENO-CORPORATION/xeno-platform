@@ -114,6 +114,45 @@ const DEFAULT_MODEL: Model = {
   outputModalities: ['text']
 };
 
+/**
+ * Which model the chat opens with, and why a refresh must not reset it.
+ *
+ * ## The defect (reported 2026-09-17)
+ *
+ * Every page load re-selected `gpt-5.6-terra` — the model catalogue arrived and the code picked a
+ * hard-coded favourite — so a conversation held on Grok came back on GPT after a refresh, and a
+ * user who had chosen a model for the day chose it again after every reload. The conversation's
+ * `model_id` had been stored on the server since the first version of the schema and was read by
+ * NOTHING on the client; `UserSettings.models.defaultModel` was typed and written by nothing.
+ *
+ * ## The rule, ranked (ChatGPT and Claude both behave this way)
+ *
+ *   conversation > user's explicit pick this session > account setting > this browser > fallback
+ *
+ * A conversation keeps the model it was last used with (the server row, updated on every switch);
+ * a new chat opens with the model the user picked last (the account setting, so it follows them
+ * across devices; the browser copy is only a fast path before the settings request returns).
+ * The model list and the conversation load in either order, so a preference is stashed with its
+ * rank and applied when both halves are present — a lower-ranked source arriving later never
+ * overrides a higher-ranked one that already applied.
+ */
+const LAST_MODEL_STORAGE_KEY = 'xeno_chat_last_model';
+type ModelPreferenceSource = 'fallback' | 'local' | 'settings' | 'user' | 'conversation';
+interface ModelPreference { id: string; source: ModelPreferenceSource }
+const MODEL_PREFERENCE_RANK: Record<ModelPreferenceSource, number> = {
+  fallback: 0, local: 1, settings: 2, user: 3, conversation: 4,
+};
+const readLastModelId = (): string | null => {
+  try { return localStorage.getItem(LAST_MODEL_STORAGE_KEY); } catch { return null; }
+};
+const writeLastModelId = (id: string): void => {
+  try { localStorage.setItem(LAST_MODEL_STORAGE_KEY, id); } catch { /* storage optional */ }
+};
+const initialModelPreference = (): ModelPreference => {
+  const local = readLastModelId();
+  return local ? { id: local, source: 'local' } : { id: DEFAULT_MODEL.id, source: 'fallback' };
+};
+
 // =============================================================================
 // MODEL CAPABILITY DETECTION HELPERS
 // =============================================================================
@@ -2757,6 +2796,26 @@ const ChatWithLLM: React.FC<ChatWithLLMProps> = ({
   const [isSearchToggled, setIsSearchToggled] = useState(false);
   const [selectedModel, setSelectedModel] = useState<Model>(DEFAULT_MODEL);
   const [groupedModels, setGroupedModels] = useState<GroupedModels[]>([]);
+  /* The catalogue, readable from callbacks that must not re-subscribe on every change. */
+  const groupedModelsRef = useRef<GroupedModels[]>([]);
+  /* The best model preference seen so far and where it came from — see LAST_MODEL_STORAGE_KEY. */
+  const [initialPreference] = useState<ModelPreference>(initialModelPreference);
+  const modelPreferenceRef = useRef<ModelPreference>(initialPreference);
+  /**
+   * Record a model preference from `source` and apply it if the catalogue can resolve it.
+   * Returns whether it took effect now. A preference outranked by one already recorded is
+   * ignored — the account default must never undo the conversation's own model.
+   */
+  const preferModel = useCallback((id: string | null | undefined, source: ModelPreferenceSource): boolean => {
+    if (!id) return false;
+    const current = modelPreferenceRef.current;
+    if (MODEL_PREFERENCE_RANK[source] < MODEL_PREFERENCE_RANK[current.source] && current.id !== id) return false;
+    modelPreferenceRef.current = { id, source };
+    const resolved = findModelById(groupedModelsRef.current, id);
+    if (!resolved) return false;
+    setSelectedModel(resolved);
+    return true;
+  }, []);
   const [isModelsLoading, setIsModelsLoading] = useState(true);
   const [modelSelectorOpenRequestKey, setModelSelectorOpenRequestKey] = useState<number | null>(null);
   const [isComposerModelSelectorOpen, setIsComposerModelSelectorOpen] = useState(false);
@@ -5269,11 +5328,19 @@ interface QueueState {
         setIsModelsLoading(true);
         console.log('🔄 Loading models from API...');
         const models = await getGroupedModels();
+        groupedModelsRef.current = models;
         setGroupedModels(models);
 
-        // Default to gpt-5.6-terra, else gpt-5.5, else the first available.
+        /*
+         * The remembered model first — the conversation's, the user's pick, the account
+         * setting or this browser's last one, whichever ranks highest so far. The hard-coded
+         * favourite is only the FALLBACK for a first visit or a remembered model that no
+         * longer exists in the catalogue. (Until 2026-09-17 the favourite won every load.)
+         */
         const flat = models.flatMap(g => g.models);
-        const preferred = flat.find(m => m.id === 'gpt-5.6-terra')
+        const remembered = findModelById(models, modelPreferenceRef.current.id);
+        const preferred = remembered
+          || flat.find(m => m.id === 'gpt-5.6-terra')
           || flat.find(m => /gpt-5\.6-terra/.test(m.id))
           || flat.find(m => m.id === 'gpt-5.5')
           || flat[0];
@@ -5679,6 +5746,9 @@ interface QueueState {
             try { localStorage.setItem('xeno_chat_font_size', settings.chat.fontSize); } catch { /* storage optional */ }
           }
         }
+        // The account's default model follows the user across devices; it applies unless the
+        // conversation or an explicit pick this session already outranks it.
+        if (settings.models?.defaultModel) preferModel(settings.models.defaultModel, 'settings');
         console.log("User settings loaded from database.");
       } catch (error) {
         console.error("Error loading user settings:", error);
@@ -7856,6 +7926,9 @@ interface QueueState {
           // Convert database message format to local format
           const localMessages: ChatMessage[] = fullConversation.messages.map(dbMessageToLocal);
           setMessages(localMessages);
+          // A conversation reopens on the model it was last used with (server row, kept
+          // current by handleModelSelect). Highest rank: nothing loaded later overrides it.
+          preferModel(fullConversation.model_id, 'conversation');
 
           // Update cache in conversation history
           setConversationHistory(prevHistory => {
@@ -8601,6 +8674,24 @@ Keep the summary under 500 words. Preserve essential context needed to continue 
     const previousModel = selectedModel;
     setSelectedModel(model);
     setShowThinkingId(null); // Reset expanded thoughts on model change
+
+    /*
+     * Remember the pick in all three places it is read back from: this browser (fast path on
+     * the next load), the account (follows the user across devices, and is what a NEW chat
+     * opens with), and the conversation row (what THIS chat reopens with). The conversation is
+     * the highest-ranked source, so the pick is recorded at 'conversation' rank when one is
+     * open and 'user' rank otherwise — either way the account setting can no longer undo it.
+     */
+    writeLastModelId(model.id);
+    const dbConversationId = activeConversationId && activeConversationId !== CHAT_DEMO_CONVERSATION_ID
+      ? activeConversationId : null;
+    modelPreferenceRef.current = { id: model.id, source: dbConversationId ? 'conversation' : 'user' };
+    void saveSettingsToDb('models.defaultModel', model.id);
+    if (dbConversationId && isDbAuthenticated) {
+      chatService.updateConversation(dbConversationId, { model_id: model.id }).catch((error) => {
+        console.error('Error saving the conversation model:', error);
+      });
+    }
 
     // --- Refactored Logic to sync toggle state based on capability ---
     syncTogglesForModel(model); // Use the helper function
