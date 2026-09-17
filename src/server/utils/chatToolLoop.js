@@ -39,7 +39,15 @@
 
 /** Budgets, by surface. Chat is a quick lookup; Research is the deep multi-source pass. */
 export const TOOL_BUDGETS = Object.freeze({
-  chat: Object.freeze({ maxSearches: 10, depth: 'quick' }),
+  /*
+   * 🔴 3, not 10 (2026-09-17). Every search is a METERED upstream call with the whole growing
+   * context re-sent, so the cap is the one server-side bound on what a single message can cost.
+   * At 10, a model that got thin results kept re-querying until it hit the wall: "what are you
+   * talking about?" became ten searches, twelve model calls and 188 seconds. Anthropic's own
+   * guidance for chat is "one or two tool calls" (Research is "five or more"), and its API's
+   * `max_uses` defaults to 5 — 3 keeps Chat a quick lookup and leaves depth to `research`.
+   */
+  chat: Object.freeze({ maxSearches: 3, depth: 'quick' }),
   research: Object.freeze({ maxSearches: 50, depth: 'deep' }),
 });
 

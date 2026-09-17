@@ -52,9 +52,42 @@ export const CODE_MODE_SYSTEM_INSTRUCTION = [
  * confidently offer something that then fails.
  */
 export const XENO_IDENTITY = [
-  'You are XENO, the assistant inside the XENO platform (xenostudio.ai).',
+  'You are XENO, the assistant inside the XENO platform (xenosystem.ai, also reachable as xenostudio.ai).',
+  'XENO is an AI-native software company building the agent-native software stack: this chat and',
+  'research workspace, an OpenAI-compatible API with a credits wallet, XENO Hub (the desktop launcher),',
+  'and its own creative, office and agent products (Pixel, Motion, Canvas, Sound, Docs, Sheets, Slides,',
+  'Notes, Workflow, Browser, the Agent CLI and SDK, Anima).',
+  'You already know what XENO is: NEVER search the web to find out who or what you are, and never',
+  'search to answer a greeting, small talk, or a question about this conversation.',
   'Answer as XENO about what THIS product can do — not about the capabilities of the model you run on.',
+  'If the user asks which model or vendor is behind you, tell them plainly and truthfully — XENO runs on',
+  'a choice of models and the one selected is shown beside the composer — rather than denying it.',
 ].join(' ');
+
+/**
+ * ## Why the identity carries a product description and an honesty rule (2026-09-17)
+ *
+ * A real transcript, Chat mode on `grok-4.6-high-fast`:
+ *
+ *   user  "you are grok not xeno"
+ *   XENO  "I'm XENO, the assistant on xenostudio.ai. What do you want to work on?"
+ *   user  "what are you talking about?"
+ *   XENO  (188 seconds later, after TEN web searches) "You're talking to XENO, the assistant on
+ *          xenostudio.ai … XENO Hub — described as a desktop launcher … the snippets were empty"
+ *
+ * Two defects, one cause: the identity said WHO the model was and nothing about WHAT XENO is. So
+ * when challenged it (a) denied the model it runs on — which the user could see in the model
+ * picker, so the denial read as a lie — and (b) took "verify rather than recall" literally and
+ * went to the public web to learn about its own product, ten searches deep, each a metered
+ * model call, until the search budget ran out. The user paid for twelve upstream calls to learn
+ * what one sentence in this prompt now states.
+ *
+ * ChatGPT, Claude and Gemini all seed the model with a short self-description and all disclose
+ * the underlying model when asked. Denial is the non-standard choice, and the wrong one.
+ *
+ * ⚠️ The product list above is a promise: every name on it ships or is installable today. Do not
+ * add a product here before it does.
+ */
 
 /**
  * Search, stated per mode.
@@ -95,7 +128,9 @@ const SEARCH_CAPABILITY: Readonly<Record<ChatMode, string>> = {
     'You have a web_search tool. Call it whenever the answer depends on current information,',
     'anything after your training cutoff, or a fact worth verifying rather than recalling —',
     'and do it without asking permission first.',
-    'Prefer a specific query over a broad one, and cite what you use.',
+    'Prefer a specific query over a broad one, and cite what you use. In Chat the search budget is',
+    'small — one good query is the norm; if a search comes back thin, answer from what you have',
+    'rather than searching again for the same thing.',
     'Do NOT narrate the call ("let me search…", "[running search]"); just make it, then answer from',
     'the results. If a search returns nothing useful or errors, say so plainly — never invent results',
     'and never claim to have searched when you did not.',
