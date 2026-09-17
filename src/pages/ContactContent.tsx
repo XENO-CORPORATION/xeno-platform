@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Button } from '@xenosystem/elements-react';
+import { Button, TextInput } from '@xenosystem/elements-react';
 import { ArrowLeft, Mail, User, MessageSquare, Send, CheckCircle } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import AuthMark from '../components/auth/AuthMark';
@@ -20,6 +20,7 @@ const ContactContent = () => {
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
+    if (isSubmitting) return;
     setIsSubmitting(true);
 
     // Simulate submission
@@ -104,22 +105,22 @@ const ContactContent = () => {
                   }`}
                   style={{ transitionDelay: '0.25s' }}
                 >
-                  <label className="block text-sm font-medium text-white/60 mb-2">
+                  <label htmlFor="contact-name" className="block text-sm font-medium text-white/60 mb-2">
                     Name
                   </label>
-                  <div className="relative group">
-                    <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
-                      <User size={18} className="text-white/30 transition-colors duration-300 group-focus-within:text-white/50" />
-                    </div>
-                    <input
-                      type="text"
-                      value={name}
-                      onChange={(e) => setName(e.target.value)}
-                      required
-                      className="w-full pl-11 pr-4 py-3.5 bg-white/[0.04] border border-white/[0.08] rounded-[6px] text-white placeholder-white/30 focus:outline-none focus:border-white/20 focus:bg-white/[0.06] transition-all duration-300 hover:border-white/15"
-                      placeholder="Your name"
-                    />
-                  </div>
+                  <TextInput
+                    id="contact-name"
+                    name="name"
+                    type="text"
+                    size="lg"
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                    required
+                    disabled={isSubmitting}
+                    className="w-full"
+                    placeholder="Your name"
+                    autoComplete="name"
+                  />
                 </div>
 
                 {/* Email Field */}
@@ -129,22 +130,22 @@ const ContactContent = () => {
                   }`}
                   style={{ transitionDelay: '0.3s' }}
                 >
-                  <label className="block text-sm font-medium text-white/60 mb-2">
+                  <label htmlFor="contact-email" className="block text-sm font-medium text-white/60 mb-2">
                     Email
                   </label>
-                  <div className="relative group">
-                    <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
-                      <Mail size={18} className="text-white/30 transition-colors duration-300 group-focus-within:text-white/50" />
-                    </div>
-                    <input
-                      type="email"
-                      value={email}
-                      onChange={(e) => setEmail(e.target.value)}
-                      required
-                      className="w-full pl-11 pr-4 py-3.5 bg-white/[0.04] border border-white/[0.08] rounded-[6px] text-white placeholder-white/30 focus:outline-none focus:border-white/20 focus:bg-white/[0.06] transition-all duration-300 hover:border-white/15"
-                      placeholder="you@example.com"
-                    />
-                  </div>
+                  <TextInput
+                    id="contact-email"
+                    name="email"
+                    type="email"
+                    size="lg"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    required
+                    disabled={isSubmitting}
+                    className="w-full"
+                    placeholder="you@example.com"
+                    autoComplete="email"
+                  />
                 </div>
 
                 {/* Message Field */}
@@ -154,7 +155,7 @@ const ContactContent = () => {
                   }`}
                   style={{ transitionDelay: '0.35s' }}
                 >
-                  <label className="block text-sm font-medium text-white/60 mb-2">
+                  <label htmlFor="contact-message" className="block text-sm font-medium text-white/60 mb-2">
                     Message
                   </label>
                   <div className="relative group">
@@ -162,9 +163,12 @@ const ContactContent = () => {
                       <MessageSquare size={18} className="text-white/30 transition-colors duration-300 group-focus-within:text-white/50" />
                     </div>
                     <textarea
+                      id="contact-message"
+                      name="message"
                       value={message}
                       onChange={(e) => setMessage(e.target.value)}
                       required
+                      disabled={isSubmitting}
                       rows={4}
                       className="w-full pl-11 pr-4 py-3.5 bg-white/[0.04] border border-white/[0.08] rounded-[6px] text-white placeholder-white/30 focus:outline-none focus:border-white/20 focus:bg-white/[0.06] transition-all duration-300 hover:border-white/15 resize-none"
                       placeholder="How can we help?"
@@ -178,6 +182,7 @@ const ContactContent = () => {
                   variant="primary"
                   size="lg"
                   disabled={isSubmitting}
+                  busy={isSubmitting}
                   className="w-full mt-6"
                 >
                   {isSubmitting ? 'Sending…' : 'Send Message'}

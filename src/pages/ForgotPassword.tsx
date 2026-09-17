@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Button } from '@xenosystem/elements-react';
+import { Button, TextInput } from '@xenosystem/elements-react';
 import { ArrowLeft, ArrowRight, Mail, MailCheck } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import AuthMark from '../components/auth/AuthMark';
@@ -23,6 +23,7 @@ const ForgotPassword = () => {
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
+    if (isSubmitting) return;
     setEmailError('');
 
     if (!validateEmail(email)) {
@@ -127,23 +128,21 @@ const ForgotPassword = () => {
 
               <form onSubmit={handleSubmit} className="space-y-4">
                 <div>
-                  <label className="block text-sm font-medium text-white/60 mb-2">Email</label>
-                  <div className="relative group">
-                    <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
-                      <Mail size={18} className="text-white/30 transition-colors duration-300 group-focus-within:text-white/50" />
-                    </div>
-                    <input
-                      type="email"
-                      value={email}
-                      onChange={(e) => setEmail(e.target.value)}
-                      required
-                      autoFocus
-                      className={`w-full pl-11 pr-4 py-3.5 bg-white/[0.04] border ${
-                        emailError ? 'border-red-500/50 focus:border-red-500/70' : 'border-white/[0.08] focus:border-white/20'
-                      } rounded-[6px] text-white placeholder-white/30 focus:outline-none focus:bg-white/[0.06] transition-all duration-300 hover:border-white/15`}
-                      placeholder="you@example.com"
-                    />
-                  </div>
+                  <label htmlFor="forgot-email" className="block text-sm font-medium text-white/60 mb-2">Email</label>
+                  <TextInput
+                    id="forgot-email"
+                    name="email"
+                    type="email"
+                    size="lg"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    required
+                    autoFocus
+                    disabled={isSubmitting}
+                    className={`w-full ${emailError ? 'border-red-500/50' : ''}`}
+                    placeholder="you@example.com"
+                    autoComplete="email"
+                  />
                   <div className={`overflow-hidden transition-all duration-300 ease-out ${emailError ? 'max-h-8 opacity-100 mt-2' : 'max-h-0 opacity-0'}`}>
                     <p className="text-sm text-red-400">{emailError}</p>
                   </div>
@@ -154,6 +153,7 @@ const ForgotPassword = () => {
                   variant="primary"
                   size="lg"
                   disabled={isSubmitting}
+                  busy={isSubmitting}
                   className="w-full mt-2"
                 >
                   {isSubmitting ? 'Sending…' : 'Send reset link'}

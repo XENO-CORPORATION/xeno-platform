@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Button } from '@xenosystem/elements-react';
+import { Button, TextInput } from '@xenosystem/elements-react';
 import { ArrowLeft, ArrowRight, KeyRound, Eye, EyeOff, CheckCircle2, AlertCircle } from 'lucide-react';
 import { Link, useSearchParams } from 'react-router-dom';
 import AuthMark from '../components/auth/AuthMark';
@@ -23,6 +23,7 @@ const ResetPassword = () => {
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
+    if (isSubmitting) return;
     setError('');
 
     if (password.length < 6) {
@@ -141,24 +142,27 @@ const ResetPassword = () => {
               <form onSubmit={handleSubmit} className="space-y-4">
                 {/* New password */}
                 <div>
-                  <label className="block text-sm font-medium text-white/60 mb-2">New password</label>
-                  <div className="relative group">
-                    <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
-                      <KeyRound size={18} className="text-white/30 transition-colors duration-300 group-focus-within:text-white/50" />
-                    </div>
-                    <input
+                  <label htmlFor="reset-new-password" className="block text-sm font-medium text-white/60 mb-2">New password</label>
+                  <div className="relative">
+                    <TextInput
+                      id="reset-new-password"
+                      name="new_password"
                       type={showPassword ? 'text' : 'password'}
+                      size="lg"
                       value={password}
                       onChange={(e) => setPassword(e.target.value)}
                       required
                       autoFocus
-                      className="w-full pl-11 pr-12 py-3.5 bg-white/[0.04] border border-white/[0.08] rounded-[6px] text-white placeholder-white/30 focus:outline-none focus:border-white/20 focus:bg-white/[0.06] transition-all duration-300 hover:border-white/15"
+                      disabled={isSubmitting}
+                      className="w-full pr-12"
                       placeholder="At least 6 characters"
+                      autoComplete="new-password"
                     />
                     <button
                       type="button"
+                      aria-label={showPassword ? 'Hide password' : 'Show password'}
                       onClick={() => setShowPassword(!showPassword)}
-                      className="absolute inset-y-0 right-0 pr-4 flex items-center"
+                      className="absolute inset-y-0 right-0 pr-4 flex items-center z-10"
                     >
                       <div className="transition-all duration-300 hover:scale-110">
                         {showPassword ? (
@@ -173,20 +177,20 @@ const ResetPassword = () => {
 
                 {/* Confirm password */}
                 <div>
-                  <label className="block text-sm font-medium text-white/60 mb-2">Confirm password</label>
-                  <div className="relative group">
-                    <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
-                      <KeyRound size={18} className="text-white/30 transition-colors duration-300 group-focus-within:text-white/50" />
-                    </div>
-                    <input
+                  <label htmlFor="reset-confirm-password" className="block text-sm font-medium text-white/60 mb-2">Confirm password</label>
+                  <div className="relative">
+                    <TextInput
+                      id="reset-confirm-password"
+                      name="confirm_password"
                       type={showPassword ? 'text' : 'password'}
+                      size="lg"
                       value={confirm}
                       onChange={(e) => setConfirm(e.target.value)}
                       required
-                      className={`w-full pl-11 pr-4 py-3.5 bg-white/[0.04] border ${
-                        error ? 'border-red-500/50 focus:border-red-500/70' : 'border-white/[0.08] focus:border-white/20'
-                      } rounded-[6px] text-white placeholder-white/30 focus:outline-none focus:bg-white/[0.06] transition-all duration-300 hover:border-white/15`}
+                      disabled={isSubmitting}
+                      className={`w-full ${error ? 'border-red-500/50' : ''}`}
                       placeholder="Re-enter your password"
+                      autoComplete="new-password"
                     />
                   </div>
                   <div className={`overflow-hidden transition-all duration-300 ease-out ${error ? 'max-h-8 opacity-100 mt-2' : 'max-h-0 opacity-0'}`}>
@@ -199,6 +203,7 @@ const ResetPassword = () => {
                   variant="primary"
                   size="lg"
                   disabled={isSubmitting}
+                  busy={isSubmitting}
                   className="w-full mt-2"
                 >
                   {isSubmitting ? 'Resetting…' : 'Reset password'}

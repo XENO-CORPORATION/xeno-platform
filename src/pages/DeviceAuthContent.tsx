@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Button } from '@xenosystem/elements-react';
+import { Button, TextInput } from '@xenosystem/elements-react';
 import { Link, useLocation, useParams } from 'react-router-dom';
 import AuthMark from '../components/auth/AuthMark';
 import { ArrowLeft, KeyRound } from 'lucide-react';
@@ -50,6 +50,7 @@ const DeviceAuthContent: React.FC<{ protocol?: 'oidc' | 'legacy' }> = ({ protoco
 
   const verify = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (status === 'verifying') return;
     const userCode = code.replace(/[^A-Z0-9]/gi, '');
     if (userCode.length !== 8) { setStatus('Enter the full 8-character code.'); return; }
     if (!authed) { setStatus('Your session expired — please reload.'); return; }
@@ -122,18 +123,20 @@ const DeviceAuthContent: React.FC<{ protocol?: 'oidc' | 'legacy' }> = ({ protoco
             </div>
           ) : (
             <form onSubmit={verify}>
-              <label className="mb-2 block text-sm text-white/50">One-time code</label>
-              <div className="relative">
-                <KeyRound size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-white/30" />
-                <input
-                  value={code}
-                  onChange={(e) => onCodeChange(e.target.value)}
-                  placeholder="XXXX-XXXX"
-                  autoFocus
-                  inputMode="text"
-                  className="w-full rounded-[6px] border border-white/[0.08] bg-white/[0.02] py-3 pl-10 pr-3 text-center font-mono text-lg tracking-[0.3em] text-white placeholder:tracking-normal placeholder:text-white/20 focus:border-white/30 focus:outline-none"
-                />
-              </div>
+              <label htmlFor="device-code" className="mb-2 block text-sm text-white/50">One-time code</label>
+              <TextInput
+                id="device-code"
+                name="code"
+                size="lg"
+                value={code}
+                onChange={(e) => onCodeChange(e.target.value)}
+                placeholder="XXXX-XXXX"
+                autoFocus
+                inputMode="text"
+                disabled={status === 'verifying'}
+                className="w-full text-center font-mono text-lg tracking-[0.3em]"
+                autoComplete="one-time-code"
+              />
               {status !== 'idle' && status !== 'verifying' && (
                 <p className="mt-2 text-sm text-red-400">{status}</p>
               )}
@@ -156,6 +159,7 @@ const DeviceAuthContent: React.FC<{ protocol?: 'oidc' | 'legacy' }> = ({ protoco
                 variant="primary"
                 size="lg"
                 disabled={status === 'verifying'}
+                busy={status === 'verifying'}
                 className="mt-5 w-full"
               >
                 {status === 'verifying' ? 'Checking…' : authorization ? `Approve ${authorization.client_name}` : 'Continue'}

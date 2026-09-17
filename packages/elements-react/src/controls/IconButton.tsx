@@ -64,7 +64,7 @@ export const IconButton = forwardRef<HTMLButtonElement, IconButtonProps>(functio
   },
   ref,
 ): ReactElement {
-  const availability: Availability = disabled ? 'disabled' : busy ? 'busy' : 'enabled'
+  const availability: Availability = busy ? 'busy' : disabled ? 'disabled' : 'enabled'
   return (
     <button
       ref={ref}
@@ -73,7 +73,7 @@ export const IconButton = forwardRef<HTMLButtonElement, IconButtonProps>(functio
       data-variant={variant}
       data-availability={availability}
       data-enter={enter ? '' : undefined}
-      disabled={disabled}
+      disabled={disabled || busy}
       aria-busy={busy || undefined}
       {...sizeAttr(size)}
       {...rest}

@@ -41,6 +41,7 @@ export const EVENTS = Object.freeze({
   // Account state
   ACCOUNT_SUSPENDED_BLOCKED: 'account_suspended_blocked', // usable-check refused a sign-in
   PASSWORD_RESET_REQUESTED: 'password_reset_requested',
+  PASSWORD_RESET: 'password_reset',
   PASSWORD_RESET_ADMIN: 'password_reset_admin',
   PASSWORD_CHANGED: 'password_changed',
   // OIDC / token lifecycle
@@ -92,6 +93,35 @@ export async function recordSecurityEvent(db, type, { userId = null, req = null,
     // Loud, and swallowed. See the contract above.
     console.error(`[security-events] failed to record '${eventType}': ${String(e?.message || e)}`);
   }
+}
+
+/**
+ * Transactional security event write for credential-changing operations.
+ * Throws on DB failure so the enclosing transaction rolls back.
+ */
+export async function recordSecurityEventTransactional(client, type, { userId = null, req = null, metadata = {} } = {}) {
+  if (!client) throw new Error('database client required for transactional security event');
+  const hasTable = await client.query("SELECT to_regclass('public.security_events') IS NOT NULL AS exists").catch(() => ({ rows: [{ exists: false }] }));
+  if (!hasTable.rows?.[0]?.exists) return;
+
+  let eventType = type;
+  let meta = metadata;
+  if (!KNOWN.has(type)) {
+    console.error(`[security-events] unknown event type '${type}' — recording as unknown_event`);
+    eventType = 'unknown_event';
+    meta = { ...metadata, attemptedType: type };
+  }
+  await client.query(
+    `INSERT INTO security_events (user_id, event_type, metadata, ip_address, user_agent, created_at)
+     VALUES ($1, $2, $3, $4, $5, NOW())`,
+    [
+      userId,
+      eventType,
+      JSON.stringify(meta || {}),
+      req ? clientIp(req) : null,
+      req ? req.get('User-Agent') : null,
+    ],
+  );
 }
 
 /**
