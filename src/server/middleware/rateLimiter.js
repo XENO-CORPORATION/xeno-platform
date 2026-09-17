@@ -81,6 +81,92 @@ export const passwordResetLimiter = rateLimit({
 });
 
 // --------------------------------------------------------------------------
+// 1a. The auth surface, limiter by limiter — FAILURES count, successes never do
+// --------------------------------------------------------------------------
+// Found by dogfooding 2026-09-17 (journey 1): index.js put login, register,
+// forgot-password, reset-password, verify-email and resend-verification behind
+// ONE bucket of 10 requests / 15 min keyed on the client IP, counting successes.
+// A single new customer spends 3 of those on sign-up → verify → sign-in, and an
+// office, a family, or any carrier-grade-NAT mobile network shares the IP — so
+// the tenth successful login in a quarter hour locked everyone behind that
+// address out of every auth endpoint at once, and a normal dogfood run hit it
+// in eight calls.
+//
+// What the leaders converge on (OWASP ASVS 2.2.1 / Auth0 / Cloudflare): throttle
+// FAILED attempts, key them on the account being attacked as well as the
+// address, and never let a successful login count against anyone. Credential
+// stuffing across many accounts from one address is a separate, looser ceiling.
+// Endpoints that SEND MAIL are limited on what they cost us (mail), keyed on the
+// address + the target, and count every request.
+const authKey = (prefix) => (req) => {
+  const email = typeof req.body?.email === 'string' ? req.body.email.trim().toLowerCase() : '';
+  return `${prefix}:${normalizeIp(req)}:${email}`;
+};
+const authMessage = (what, minutes) => ({
+  success: false,
+  error: `Too many ${what}. Please try again in ${minutes} minutes.`,
+  retryAfter: minutes * 60,
+});
+
+/** Login: 10 FAILURES per address+account per 15 min. A correct password never counts. */
+export const loginFailureLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 10,
+  skipSuccessfulRequests: true,
+  standardHeaders: true,
+  legacyHeaders: false,
+  validate: { ip: false },
+  message: authMessage('sign-in attempts', 15),
+  keyGenerator: authKey('login'),
+});
+
+/** Login: 100 FAILURES per address per 15 min, whatever the account — the stuffing ceiling. */
+export const loginAddressCeiling = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 100,
+  skipSuccessfulRequests: true,
+  standardHeaders: true,
+  legacyHeaders: false,
+  validate: { ip: false },
+  message: authMessage('sign-in attempts from this network', 15),
+  keyGenerator: (req) => `login-addr:${normalizeIp(req)}`,
+});
+
+/** Registration: 10 per address per hour, every attempt — accounts are what abuse wants. */
+export const registerLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000,
+  max: 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+  validate: { ip: false },
+  message: authMessage('sign-up attempts', 60),
+  keyGenerator: (req) => `register:${normalizeIp(req)}`,
+});
+
+/** Mail-sending recovery (forgot-password, resend-verification): 5 per address+target per hour, every request. */
+export const recoveryMailLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000,
+  max: 5,
+  standardHeaders: true,
+  legacyHeaders: false,
+  validate: { ip: false },
+  message: authMessage('recovery emails', 60),
+  keyGenerator: authKey('recovery'),
+});
+
+/** Token redemption (reset-password, verify-email): 20 FAILURES per address per 15 min — a guessed token is a failure, a redeemed one is not. */
+export const tokenRedeemLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 20,
+  skipSuccessfulRequests: true,
+  standardHeaders: true,
+  legacyHeaders: false,
+  validate: { ip: false },
+  message: authMessage('attempts', 15),
+  keyGenerator: (req) => `redeem:${normalizeIp(req)}`,
+});
+
+// --------------------------------------------------------------------------
 // 1b. Provider-credential probe limiter — per user
 // --------------------------------------------------------------------------
 // POST /api/v2/inference/credentials verifies the submitted key against the
