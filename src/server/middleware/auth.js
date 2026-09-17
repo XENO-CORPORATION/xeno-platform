@@ -71,13 +71,14 @@ async function resolveApiKeyUser(req, rawKey) {
        FROM api_keys ak
        JOIN users u ON u.id = ak.user_id
       WHERE ak.key_prefix = $1 AND ak.key_hash = $2 AND ak.is_active = true
-        AND u.is_active = true
       LIMIT 1`,
     [keyPrefix, keyHash],
   );
   if (rows.length === 0) return null;
   const row = rows[0];
   if (row.expires_at && new Date(row.expires_at) < new Date()) return null;
+  // The key's own user suspended → a distinct refusal (see resolveAuthedUser).
+  if (row.is_active === false) return { suspended: true };
 
   // Best-effort usage bump — never block auth on this write, never let it throw.
   req.db
@@ -126,6 +127,7 @@ export async function resolveAuthedUser(req) {
   // JWT-shaped tokens fall through to the byte-for-byte-unchanged JWT logic below.
   if (!JWT_SHAPE.test(token)) {
     const user = await resolveApiKeyUser(req, token);
+    if (user?.suspended) return { status: 401, error: 'This account has been suspended', code: 'account_suspended' };
     if (user) return { user };
     return { status: 401, error: 'Invalid authentication token' };
   }
@@ -216,10 +218,14 @@ export async function resolveAuthedUser(req) {
 
   const result = await req.db.query(
     `SELECT id, username, email, display_name, avatar_url, created_at, email_verified, is_active
-       FROM users WHERE id = $1 AND is_active = true`,
+       FROM users WHERE id = $1`,
     [userId],
   );
   if (result.rows.length === 0) return { status: 401, error: 'Invalid or expired token' };
+  // A suspended account is refused with a DISTINCT code, so the suspension gate
+  // (middleware/suspensionGate.js) can enforce it ahead of routes that resolve
+  // the token by hand — "invalid token" would let those routes carry on.
+  if (result.rows[0].is_active === false) return { status: 401, error: 'This account has been suspended', code: 'account_suspended' };
   return { user: result.rows[0], auth: authContext };
 }
 
