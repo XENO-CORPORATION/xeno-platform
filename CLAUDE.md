@@ -298,3 +298,21 @@ Authority: `../xeno-elements/DESIGN_SYSTEM.md` (LOCKED) and
 - `PRODUCT-PAGES-SPEC.md` — URLs, `releases.json` schema, download redirects, prerender.
 - `RELEASE-TO-WEBSITE.md` — legacy release note (superseded by `release-guide/`).
 - `XENO AUTH - SPEC.md` — **xeno-platform OWNS the account ORIGIN** (OIDC provider `/api/oauth2/*`: `src/server/routes/oauth2Routes.js` + `utils/oidcProvider.js`). The §13 provider prerequisites (loopback port-flex, `id_token` nonce, discovery ES256, scope down-scoping, admin register-client, RFC 8693 token-exchange, step-up, revocation denylist) are HARD-BLOCKERS every other product waits on — ship + verify them here BEFORE any product migrates to the unified auth.
+
+## 🏗️ The platform hierarchy & naming — build under the lock (LOCKED 2026-09-17)
+
+Two ladders, five rungs, meeting at the App — `../XENO FULL-STACK HIERARCHY.md` (master),
+`../XENO FRONT-END HIERARCHY.md` (Elements → Components → Panels → Templates → Apps),
+`../XENO BACK-END HIERARCHY.md` (Primitives → Capabilities → Nodes → Blueprints → Apps).
+One naming rule on every rung — `../XENO PACKAGE NAMING - STANDARD.md`:
+`@xenosystem/<rung>/<family>` → one named export per unit. Gate: `node ../scripts/check-package-naming.mjs`.
+
+**This repo is:** **BACK rung 1 — a Primitive.** A platform service or runtime the back ladder is built on (inference, processing, device actions, the OIDC origin and ledger, hosted runs, the registry). It exposes capabilities (rung 2) through ONE code path; nothing on the front ladder imports it, and proprietary consumers reach AGPL primitives out of process (root CLAUDE.md §5b).
+
+🔴 **Never create a temporary name, package, path or layer "for now"** (root `CLAUDE.md`
+§BUILD UNDER THE LOCK FROM DAY ONE). Concretely:
+- depend DOWN only — never on a rung above, never on `xeno-apps`;
+- never re-implement a lower rung here — extract DOWN to its repo and mount it;
+- never publish a per-unit package on a ladder rung (`@xenosystem/panel-<x>`, `component-<x>`, `node-<x>`) — a unit is a named export in a family subpath;
+- never commit a `file:` dependency to a `.tgz` in a Temp directory or an absolute path — publish, wait for npm's read replica, depend on the range;
+- seen before used — it renders or runs standalone in `xeno-apps` before this repo relies on it.
