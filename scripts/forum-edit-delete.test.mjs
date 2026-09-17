@@ -202,10 +202,16 @@ test('erasure actually reaches forum content', () => {
 test('forum erasure runs INSIDE the erasure transaction', () => {
   // A failure here must roll back the identity tombstone too, rather than
   // reporting a half-erased subject as erased.
+  // Since 2026-09-17 the body lives in eraseSubjectTx(client, …), which eraseSubject
+  // runs between its BEGIN and COMMIT on the one client — so the check is structural:
+  // the forum step is inside the Tx function, and the Tx call precedes COMMIT.
+  const tx = ERASE.indexOf('export async function eraseSubjectTx(client, userId');
   const i = ERASE.indexOf('eraseForumContent(client, userId)');
+  const call = ERASE.indexOf('await eraseSubjectTx(client, userId');
   const commit = ERASE.indexOf("client.query('COMMIT')");
-  assert.ok(i > 0 && commit > i,
-    'eraseForumContent must be called before COMMIT, on the same client.');
+  assert.ok(tx > 0 && i > tx, 'eraseForumContent runs inside eraseSubjectTx, on the transaction client');
+  assert.ok(call > 0 && commit > call, 'eraseSubjectTx runs before COMMIT, on the same client');
+  assert.ok(ERASE.slice(call, commit).includes('await eraseSubjectTx') && !ERASE.slice(call, commit).includes('ROLLBACK'), 'nothing commits early');
 });
 
 test('erasure is SCOPED to the subject', () => {

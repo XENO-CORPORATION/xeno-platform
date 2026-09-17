@@ -33,7 +33,7 @@ async function main() {
   // Order matters: forum_threads has an FK to forum_spaces, and forum_posts to
   // forum_threads. Naming them in dependency order is the price of not running
   // all 42 tables — and it is visible, which is the point.
-  await pool.query(tablesDDL('user_sessions', 'forum_spaces', 'forum_threads', 'forum_posts'));
+  await pool.query(tablesDDL('user_sessions', 'forum_spaces', 'forum_threads', 'forum_posts', 'api_keys', 'email_logs', 'email_verifications', 'security_events', 'agent_identities'));
   await migrateAccountV2(pool);
   // This suite builds its own schema rather than running the full migration set,
   // so the usage-credit consent tables are not here. Spending now consults them,
@@ -74,6 +74,17 @@ async function main() {
   await pool.query(`INSERT INTO inference_grants (user_id, credential_id, spent_at) VALUES ($1,$2,now())`, [userId, cred]);
   await pool.query(`UPDATE api_usage_logs SET ip_address='203.0.113.9', user_agent='JaneBrowser/1.0', request_params='{"prompt":"my address is 1 Main St"}' WHERE user_id=$1`, [userId]);
 
+  // ── What a real account leaves behind (F23, 2026-09-17): a developer key, mail
+  //    rows with the address, a verification token, security rows with ip/UA, and
+  //    an AGENT — a subject of its own, with a key, whose handle embeds the owner.
+  await pool.query(`INSERT INTO api_keys (user_id, name, key_prefix, key_hash, is_active) VALUES ($1, 'dev', 'xeno-prefix-0001', 'hash1', true)`, [userId]);
+  await pool.query(`INSERT INTO email_logs (user_id, to_email, template, status) VALUES ($1, 'jane@real.example', 'email_verification', 'sent')`, [userId]);
+  await pool.query(`INSERT INTO email_verifications (user_id, email, token_hash, expires_at) VALUES ($1, 'jane@real.example', 'tok', now() + interval '1 day')`, [userId]);
+  await pool.query(`INSERT INTO security_events (user_id, event_type, ip_address, user_agent) VALUES ($1, 'login_success', '203.0.113.7', 'JaneBrowser/1.0')`, [userId]);
+  const agentId = (await pool.query("INSERT INTO users (email, username, display_name, credits) VALUES ('bot.jane@agents.invalid','bot.jane','bot.jane',0) RETURNING id")).rows[0].id;
+  await pool.query(`INSERT INTO agent_identities (user_id, owner_user_id, agent_role, agent_origin, status) VALUES ($1, $2, 'other', 'manual', 'active')`, [agentId, userId]);
+  await pool.query(`INSERT INTO api_keys (user_id, name, key_prefix, key_hash, is_active) VALUES ($1, 'agent', 'xk_prefix-000002', 'hash2', true)`, [agentId]);
+
   const before = await verifyChainV2(pool, userId);
   ok(before.ok && before.entries === 1, 'ledger chain intact before erasure');
 
@@ -91,6 +102,16 @@ async function main() {
     'erase: the usage FACTS (cost, tokens) are kept — segregation, like the ledger');
 
   ok(r.erased && r.linksRemoved === 1, 'erase: PII links removed');
+  ok(r.keysRevoked === 1 && (await pool.query('SELECT bool_and(NOT is_active) AS dead FROM api_keys WHERE user_id=$1', [userId])).rows[0].dead === true, 'erase: the developer key is revoked');
+  ok((await pool.query("SELECT to_email FROM email_logs WHERE user_id=$1", [userId])).rows.every((x) => /@erased\.invalid$/.test(x.to_email)), 'erase: e-mail log rows keep the delivery fact and lose the address');
+  ok((await pool.query('SELECT count(*)::int n FROM email_verifications WHERE user_id=$1', [userId])).rows[0].n === 0, 'erase: verification tokens gone');
+  const sec = (await pool.query('SELECT ip_address, user_agent, event_type FROM security_events WHERE user_id=$1', [userId])).rows[0];
+  ok(sec && sec.ip_address === null && sec.user_agent === null && sec.event_type === 'login_success', 'erase: security events keep the type and lose ip / user-agent');
+  ok(r.agentsErased === 1, 'erase: the owned agent was erased as a subject of its own');
+  const agentRow = (await pool.query('SELECT username, is_active FROM users WHERE id=$1', [agentId])).rows[0];
+  ok(agentRow && agentRow.username.startsWith('erased_') && agentRow.is_active === false, "erase: the agent's handle (which embedded the owner's name) is tombstoned and it is inactive");
+  ok((await pool.query('SELECT count(*)::int n FROM agent_identities WHERE owner_user_id=$1', [userId])).rows[0].n === 0, 'erase: the ownership relation is gone');
+  ok((await pool.query('SELECT bool_and(NOT is_active) AS dead FROM api_keys WHERE user_id=$1', [agentId])).rows[0].dead === true, "erase: the agent's key is revoked — nothing unowned stays alive");
 
   const usr = (await pool.query('SELECT email, display_name, username, is_active FROM users WHERE id=$1', [userId])).rows[0];
   ok(usr.email.includes('@erased.invalid') && usr.display_name === 'Erased User' && usr.username.startsWith('erased_') && usr.is_active === false, 'user PII tombstoned to non-identifying sentinels, deactivated');

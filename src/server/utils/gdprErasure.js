@@ -15,6 +15,26 @@ export async function eraseSubject(pool, userId) {
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
+    const result = await eraseSubjectTx(client, userId, { agentsErased: 0 });
+    await client.query('COMMIT');
+    return result;
+  } catch (e) {
+    await client.query('ROLLBACK').catch(() => {});
+    throw e;
+  } finally {
+    client.release();
+  }
+}
+
+/**
+ * The erasure itself, on a client the caller owns. Recursive: a human's AGENTS
+ * are subjects of their own (their handle embeds the owner's username, they hold
+ * keys, they may have posted) and are erased with the owner — an agent cannot
+ * outlive its owner, and an orphaned active agent with a working key is exactly
+ * what the hard DELETE used to leave behind (dogfooding 2026-09-17, F23).
+ */
+export async function eraseSubjectTx(client, userId, acc) {
+  {
     // 1. Tombstone PII on the canonical user (keep the row + id for FK/ledger
     //    integrity). display_name/username are NOT NULL on live, so tombstone to
     //    a non-identifying, id-derived sentinel rather than NULL.
@@ -70,16 +90,26 @@ export async function eraseSubject(pool, userId) {
     //    failure must roll back the identity tombstone rather than report a
     //    half-erased subject as erased.
     const forum = await eraseForumContent(client, userId);
-    await client.query('COMMIT');
+    // 6. Keys, mail and security rows. A developer/agent key is REVOKED (the row
+    //    is an audit fact; is_active=false makes it dead by derivation). E-mail
+    //    log rows keep template/status (delivery facts) and lose the address;
+    //    verification tokens go; security events keep the type and lose ip/UA.
+    const keys = await client.query('UPDATE api_keys SET is_active = false WHERE user_id = $1 AND is_active = true', [userId]);
+    await client.query(`UPDATE email_logs SET to_email = 'erased+' || $1 || '@erased.invalid' WHERE user_id = $1 AND to_email NOT LIKE 'erased+%'`, [userId]);
+    await client.query('DELETE FROM email_verifications WHERE user_id = $1', [userId]);
+    await client.query('UPDATE security_events SET ip_address = NULL, user_agent = NULL WHERE user_id = $1 AND (ip_address IS NOT NULL OR user_agent IS NOT NULL)', [userId]);
+    // 7. Owned agents: each is a subject; erase it, then drop the relation.
+    const owned = await client.query('SELECT user_id FROM agent_identities WHERE owner_user_id = $1', [userId]);
+    for (const a of owned.rows) {
+      await eraseSubjectTx(client, a.user_id, acc);
+      await client.query('DELETE FROM agent_identities WHERE user_id = $1', [a.user_id]);
+      acc.agentsErased += 1;
+    }
     return {
       erased: true, userId, linksRemoved: links.rowCount, ledgerPreserved: true,
       providerCredentialsRemoved: credentials.rowCount, routesRemoved: routes.rowCount, usageRowsScrubbed: usage.rowCount,
+      keysRevoked: keys.rowCount, agentsErased: acc.agentsErased,
       ...forum,
     };
-  } catch (e) {
-    await client.query('ROLLBACK').catch(() => {});
-    throw e;
-  } finally {
-    client.release();
   }
 }
