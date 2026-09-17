@@ -35,7 +35,7 @@ import { runAllMigrations } from '../services/migrationRunner.js';
 import {
   listCredentials, revokeCredential, deleteCredential,
   setRoute, clearRoute, listRoutes, resolveInferenceRoute, useCredential,
-  markCredentialInvalid, fingerprint, byokEnabled,
+  markCredentialInvalid, fingerprint, byokEnabled, setCredentialModels, credentialServesModel,
 } from '../services/providerCredentials.js';
 import { exchangeGrant, attachManagedGrant, recordGrantUsage } from '../services/inferenceGrants.js';
 import { encrypt } from '../utils/secretBox.js';
@@ -163,6 +163,92 @@ async function main() {
     await exchangeGrant(pool, grant, async () => true);
   } catch (e) { replay = e.code || e.message; }
   ok(replay !== null, `§6: replaying a spent grant is REFUSED (${replay}) — single-use`);
+
+  // ── PROVIDER-AWARE ROUTING: a key answers for ONE provider ───────────────
+  // The production failure, reproduced: an account default routed to a
+  // pass-through (DeepSeek-style) credential, then a Claude model is requested.
+  // Before this, the resolver said byok, the grant was exchanged, and the
+  // gateway sent claude-sonnet-5 to DeepSeek → 400 provider_error. Every model
+  // the key could NOT serve was broken.
+  const dsUser = (await pool.query(
+    `INSERT INTO users (email, username, display_name, password_hash, email_verified, is_active)
+     VALUES ('byok-provider@xeno.test','byok_provider','BYOK Provider','x', true, true) RETURNING id`,
+  )).rows[0].id;
+  const ds = (await pool.query(
+    `INSERT INTO user_provider_credentials
+       (user_id, provider, label, secret_encrypted, key_fingerprint, key_last4, base_url, status, verified_at)
+     VALUES ($1,'compatible','deepseek',$2,$3,'345a','https://api.deepseek.com/v1','active',NOW()) RETURNING id`,
+    [dsUser, encrypt(FAKE_KEY), fingerprint(FAKE_KEY + 'ds')],
+  )).rows[0];
+  await setRoute(pool, dsUser, '*', { path: 'byok', mode: 'managed', credentialId: ds.id });
+  // A catalogue row saying who serves claude-sonnet-5, as production's does.
+  await pool.query(
+    `INSERT INTO gateway_model_aliases (public_id, internal_id, provider, enabled)
+     VALUES ('claude-sonnet-5','claude-sonnet-5','anthropic',true) ON CONFLICT (public_id) DO NOTHING`,
+  );
+
+  // No allow-list on a pass-through credential → it serves NOTHING. Fail closed.
+  const noList = await resolveInferenceRoute(pool, dsUser, { surface: 'xeno-web', model: 'deepseek-reasoner' });
+  ok(noList.path === 'premium' && noList.reason === 'provider-mismatch' && noList.mismatch?.skipped?.[0]?.basis === 'no-allow-list',
+    `pass-through credential with no allow-list serves nothing → premium, reason ${noList.reason} (${noList.mismatch?.skipped?.[0]?.basis})`);
+
+  await setCredentialModels(pool, dsUser, ds.id, ['deepseek-chat', 'deepseek-reasoner']);
+  const onList = await resolveInferenceRoute(pool, dsUser, { surface: 'xeno-web', model: 'deepseek-reasoner' });
+  ok(onList.path === 'byok' && onList.reason === 'account-default' && !onList.mismatch,
+    'a listed model routes to the key');
+
+  // THE production case. Claude on a DeepSeek key must NOT route to DeepSeek.
+  const claude = await resolveInferenceRoute(pool, dsUser, { surface: 'xeno-web', model: 'claude-sonnet-5' });
+  ok(claude.path === 'premium' && claude.metered === true,
+    'a model the key cannot serve does not route to that key — it continues to premium');
+  ok(claude.reason === 'provider-mismatch',
+    `…and the decision SAYS so (reason ${claude.reason}) — explicit, never silent`);
+  ok(claude.mismatch && claude.mismatch.model === 'claude-sonnet-5' && claude.mismatch.skipped[0].credentialId === ds.id,
+    'the decision names the model and the credential that was skipped');
+
+  // An EXPLICIT byok request for an unservable model is refused with a typed
+  // error — never quietly served on some other key, never quietly premium.
+  let explicit = null;
+  try { await resolveInferenceRoute(pool, dsUser, { surface: 'xeno-web', model: 'claude-sonnet-5', requestedPath: 'byok' }); } catch (e) { explicit = e.code; }
+  ok(explicit === 'byok_provider_mismatch', `an explicit byok request for an unservable model is refused (${explicit})`);
+
+  // Levels are walked: a product override that cannot serve falls to an account
+  // default that can, and the decision records the skip.
+  const oai = (await pool.query(
+    `INSERT INTO user_provider_credentials
+       (user_id, provider, label, secret_encrypted, key_fingerprint, key_last4, status, verified_at)
+     VALUES ($1,'openai','oai',$2,$3,'aaaa','active',NOW()) RETURNING id`,
+    [dsUser, encrypt(FAKE_KEY), fingerprint(FAKE_KEY + 'oai')],
+  )).rows[0];
+  await setRoute(pool, dsUser, 'xeno-pixel', { path: 'byok', mode: 'managed', credentialId: oai.id });
+  // The catalogue knows DeepSeek serves deepseek-chat, so the OpenAI override is a
+  // KNOWN mismatch (not merely unknown) and must be skipped.
+  await pool.query(
+    `INSERT INTO gateway_model_aliases (public_id, internal_id, provider, enabled)
+     VALUES ('deepseek-chat','deepseek-chat','deepseek',true) ON CONFLICT (public_id) DO NOTHING`,
+  );
+  const walked = await resolveInferenceRoute(pool, dsUser, { surface: 'xeno-pixel', model: 'deepseek-chat' });
+  ok(walked.path === 'byok' && walked.credential?.id === ds.id && walked.reason === 'account-default',
+    'an unservable product override is skipped and the account default that CAN serve is used');
+  ok(walked.mismatch?.skipped?.[0]?.level === 'product-override',
+    'the skipped level is recorded on the decision');
+
+  // First-party: the catalogue decides; unknown-to-catalogue is allowed (the
+  // provider refuses visibly; that beats quietly spending credits).
+  ok(credentialServesModel({ provider: 'openai' }, 'claude-sonnet-5', { provider: 'anthropic' }).serves === false, 'first-party: catalogue mismatch does not serve');
+  ok(credentialServesModel({ provider: 'anthropic' }, 'claude-sonnet-5', { provider: 'anthropic' }).serves === true, 'first-party: catalogue match serves');
+  ok(credentialServesModel({ provider: 'openai' }, 'gpt-5.5', null).basis === 'catalogue-unknown' && credentialServesModel({ provider: 'openai' }, 'gpt-5.5', null).serves === true,
+    'first-party: a model the catalogue does not know is attempted on the key, not silently billed');
+  ok(credentialServesModel({ provider: 'openai', models: ['gpt-5.5'] }, 'gpt-5.5-mini', null).serves === false,
+    'first-party: an allow-list narrows further');
+  // No model on the request → the route applies as before (nothing to check).
+  const noModel = await resolveInferenceRoute(pool, dsUser, { surface: 'xeno-web' });
+  ok(noModel.path === 'byok', 'a request that names no model is routed as before');
+
+  // Allow-list input is validated; a typo cannot widen trust.
+  let bad = null;
+  try { await setCredentialModels(pool, dsUser, ds.id, ['deepseek-chat', 'not a model id!']); } catch (e) { bad = e.code; }
+  ok(bad === 'models_invalid', `a malformed allow-list is refused (${bad})`);
 
   // ── D4: not billed must never mean invisible ──────────────────────────────
   // The gateway path had no way to record a BYOK call: /service/usage prices
