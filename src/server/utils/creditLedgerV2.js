@@ -688,6 +688,9 @@ export async function holdV2(pool, userId, req) {
  *   caller had the numbers (it priced the settle from them) and they were dropped
  *   one line before the write. Optional, because legacy callers settle by amount.
  */
+/** The most a settle may exceed its reservation before it is treated as a defect (×held). */
+export const OVERRUN_CEILING = 200n;
+
 export async function settleHoldV2(pool, userId, holdId, actualCostMicro, usage = {}) {
   const client = await pool.connect();
   let finalRow;
@@ -708,8 +711,19 @@ export async function settleHoldV2(pool, userId, holdId, actualCostMicro, usage 
       // a call priced at 1.14 credits settling for 0.05 — the hold — a 96% under-bill on
       // every reasoning call. Charge what was actually used, bounded only by what the
       // account holds (below).
-      const requested = BigInt(Math.max(0, Math.round(actualCostMicro)));
       const held = BigInt(hold.amount_micro);
+      // An UNMEASURED settle charges the reserved worst case — the hold — never more.
+      // (The old sentinel for this, MAX_SAFE_INTEGER, drained a whole account once the
+      // clamp below it was removed; the intent is now a flag, not a magic number.)
+      let requested = usage.chargeHeld ? held : BigInt(Math.max(0, Math.round(actualCostMicro)));
+      // 🔴 A priced actual far beyond the reservation is a DEFECT, not usage. A harness
+      // prompt or reasoning can legitimately exceed the estimate by tens of times; nothing
+      // legitimate exceeds it by hundreds. Charge the hold, record it, and shout.
+      if (requested > held * OVERRUN_CEILING) {
+        console.error(`[ledger] SETTLE OVERRUN CEILING: hold ${holdId} held=${held} priced=${requested} (> ${OVERRUN_CEILING}×) — charging the hold; the caller's usage is wrong`);
+        usage = { ...usage, dimensions: { ...(usage.dimensions || {}), settle_ceiling_hit: true } };
+        requested = held;
+      }
       const acct = await ensureAccount(client, userId);
       await syncGrants(client, acct, userId);
       // Never drive the balance negative: a refund/dispute clawback can reduce the posted

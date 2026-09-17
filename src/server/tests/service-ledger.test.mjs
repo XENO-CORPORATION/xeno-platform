@@ -168,6 +168,28 @@ async function main() {
   ok(h7.status === 200 && s7.status === 200 && s7.json?.settledMicro === C(2), `used 9 with 2 in the account → charged 2, never negative (settled ${s7.json?.settledMicro / MICRO_PER_CREDIT})`);
   ok((await available(poor)) === 0, 'the poor account sits at exactly zero');
 
+  // ── 2026-09-17 18:51Z: an UNMEASURED settle drained the operator's whole balance ──
+  //    (measured:false used to mean MAX_SAFE_INTEGER, relying on the clamp #263 removed).
+  const rich = (await pool.query("INSERT INTO users (credits) VALUES (0) RETURNING id")).rows[0].id;
+  await pool.query("INSERT INTO xeno_account_plans (user_id, plan, status) VALUES ($1, 'internal', 'active')", [rich]);
+  await optInUsageCredits(pool, rich);
+  await addGrant(pool, rich, { amountMicro: C(1_000_000), kind: 'paid', sourceRef: 'test:rich' });
+  const hu1 = await req('POST', '/api/v2/ledger/service/holds', { token: TOKEN, body: { userId: rich, holdId: 'hold-unmeasured', operation: 'chat.completion.stream', surface: 'xeno_api', amountMicro: C(13) } });
+  const su1 = await req('POST', '/api/v2/ledger/service/holds/hold-unmeasured/settle', {
+    token: TOKEN, body: { userId: rich, usage: { model: 'grok-4.6-high-fast', inputTokens: 0, outputTokens: 0, measured: false } },
+  });
+  ok(hu1.status === 200 && su1.status === 200 && su1.json?.settledMicro === C(13), `an UNMEASURED settle charges exactly the hold (held 13 → settled ${su1.json?.settledMicro / MICRO_PER_CREDIT})`);
+  ok((await available(rich)) === C(1_000_000 - 13), 'the balance moved by the reservation, not to zero');
+  // A priced actual hundreds of times the hold is a defect, not usage.
+  const hu2 = await req('POST', '/api/v2/ledger/service/holds', { token: TOKEN, body: { userId: rich, holdId: 'hold-absurd', operation: 'chat.completion', surface: 'xeno_api', amountMicro: C(1) } });
+  const su2 = await req('POST', '/api/v2/ledger/service/holds/hold-absurd/settle', { token: TOKEN, body: { userId: rich, actualCostMicro: C(500) } });
+  const rowAbs = (await pool.query(`SELECT dimensions FROM api_usage_logs WHERE user_id=$1 AND request_id='hold-absurd'`, [rich])).rows[0];
+  ok(hu2.status === 200 && su2.status === 200 && su2.json?.settledMicro === C(1) && rowAbs?.dimensions?.settle_ceiling_hit === true,
+    `a settle > 200× the hold charges the hold and flags it (settled ${su2.json?.settledMicro / MICRO_PER_CREDIT}, flagged ${rowAbs?.dimensions?.settle_ceiling_hit})`);
+  const hu3 = await req('POST', '/api/v2/ledger/service/holds', { token: TOKEN, body: { userId: rich, holdId: 'hold-harness-40x', operation: 'chat.completion', surface: 'xeno_api', amountMicro: C(1) } });
+  const su3 = await req('POST', '/api/v2/ledger/service/holds/hold-harness-40x/settle', { token: TOKEN, body: { userId: rich, actualCostMicro: C(40) } });
+  ok(hu3.status === 200 && su3.status === 200 && su3.json?.settledMicro === C(40), 'a 40× overrun (a real harness prompt) is still charged as used');
+
   // F14 on the gateway path: usage.callerInputTokens caps the billed input.
   const h8 = await req('POST', '/api/v2/ledger/service/holds', { token: TOKEN, body: { userId, holdId: 'hold-harness', operation: 'chat.completion', surface: 'xeno_api', amountMicro: C(1) } });
   const s8 = await req('POST', '/api/v2/ledger/service/holds/hold-harness/settle', {
