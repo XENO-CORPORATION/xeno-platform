@@ -44,6 +44,11 @@ import {
   getChatProfile,
 } from './chatSkillsLibrary';
 import { buildChatSystemPrompt, CHAT_MODE_PLACEHOLDERS, modeUsesXenoSearch, type ChatMode } from './chatModeConfig';
+import ChatTurnHead from './ChatTurnHead';
+import {
+  applyTurnEvent, closeTurnRecord, DEFAULT_STEPS_MODE, isStepsMode, newTurnRecord, normalizeStoredTurn, turnHasRail,
+  type ChatTurnRecord, type StepsMode,
+} from './chatTurnTranscript';
 import { readGenerateResponse, readStreamedTurn, endpointForTask, streamRequestBody, CHAT_STREAM_ENDPOINT } from './chatStream';
 import { reasoningCapabilityForModel } from '@/server/lib/chatModelCapabilities.js';
 import CodeBlockWithHeader from './CodeBlockWithHeader';
@@ -391,6 +396,8 @@ interface ChatMessage {
     projectSources?: ProjectSourceReference[];
     projectContextId?: string;
     isPersistenceError?: boolean;
+    /** What the assistant did before it answered — the transcript's rail (chatTurnTranscript.ts). */
+    turn?: ChatTurnRecord;
 }
 
 const messageLibraryAttachments = (message: ChatMessage): DBChatAttachment[] => {
@@ -506,6 +513,7 @@ const dbMessageToLocal = (msg: DBChatMessage, index: number): ChatMessage => {
     } : undefined,
     projectSources: Array.isArray(msg.project_sources) ? msg.project_sources : undefined,
     searchInfo: persistedSearch,
+    turn: isAi ? normalizeStoredTurn((msg as { turn?: unknown }).turn) : undefined,
   };
 };
 
@@ -2841,6 +2849,16 @@ const ChatWithLLM: React.FC<ChatWithLLMProps> = ({
   const [isSettingsModalShown, setIsSettingsModalShown] = useState(false);
   const [isConversationSelectorOpen, setIsConversationSelectorOpen] = useState(false);
   const [isWideChatEnabled, setIsWideChatEnabled] = useState(false);
+  /* How a turn's steps are shown — `expanded` draws the rail as the turn works, `collapsed` keeps it
+     folded and carries the current step on the clock line (D10). Account setting, browser copy first. */
+  const [stepsMode, setStepsMode] = useState<StepsMode>(() => {
+    try {
+      const stored = localStorage.getItem('xeno_chat_steps_mode');
+      return isStepsMode(stored) ? stored : DEFAULT_STEPS_MODE;
+    } catch {
+      return DEFAULT_STEPS_MODE;
+    }
+  });
   const [chatAlignment, setChatAlignment] = useState<'center' | 'left' | 'right'>('center');
   const [chatFontSize, setChatFontSize] = useState<'small' | 'medium' | 'large'>(() => {
     if (typeof window !== 'undefined') {
@@ -5745,6 +5763,10 @@ interface QueueState {
             setChatFontSize(settings.chat.fontSize);
             try { localStorage.setItem('xeno_chat_font_size', settings.chat.fontSize); } catch { /* storage optional */ }
           }
+          if (isStepsMode(settings.chat.stepsMode)) {
+            setStepsMode(settings.chat.stepsMode);
+            try { localStorage.setItem('xeno_chat_steps_mode', settings.chat.stepsMode); } catch { /* storage optional */ }
+          }
         }
         // The account's default model follows the user across devices; it applies unless the
         // conversation or an explicit pick this session already outranks it.
@@ -5800,6 +5822,20 @@ interface QueueState {
     try { localStorage.setItem('xeno_chat_font_size', chatFontSize); } catch { /* storage optional */ }
     debouncedSaveSetting('chat.fontSize', chatFontSize);
   }, [chatFontSize, debouncedSaveSetting]);
+
+  useEffect(() => {
+    try { localStorage.setItem('xeno_chat_steps_mode', stepsMode); } catch { /* storage optional */ }
+    debouncedSaveSetting('chat.stepsMode', stepsMode);
+  }, [stepsMode, debouncedSaveSetting]);
+
+  /* The transcript measures how long a thought took; keep it on the record so a reopened turn still says so. */
+  const rememberThinkingTime = useCallback((messageId: string, ms: number) => {
+    setMessages(prev => prev.map(msg =>
+      msg.id === messageId && msg.turn && msg.turn.thinkingMs === undefined
+        ? { ...msg, turn: { ...msg.turn, thinkingMs: ms } }
+        : msg
+    ));
+  }, []);
   // --- END User Settings ---
 
   // --- NEW: Load/Save Recent Files from Database ---
@@ -6376,6 +6412,7 @@ interface QueueState {
                 has_thinking: !!msg.thinkingContent,
                 attachments: messageLibraryAttachments(msg),
                 context_record_id: msg.projectContextId,
+                turn: msg.turn,
               })),
             );
             return register(dbConversation.id);
@@ -6793,26 +6830,40 @@ interface QueueState {
          */
         let streamedText = '';
         /*
+         * The turn record: every search the loop reports lands on it as it happens, and the
+         * placeholder message carries it so the transcript head draws the rail live. It is
+         * closed and attached to the final message below (chatTurnTranscript.ts).
+         */
+        let turnRecord = newTurnRecord(thinkingStartTimeRef.current || Date.now());
+        let streamedThinking = '';
+        /*
          * One handler, two transports. Both readers return the SAME object shape, so the ~400
          * downstream lines below are keyed off one payload and never fork.
          */
         const readTurn = isStreamedTurn ? readStreamedTurn : readGenerateResponse;
         const data = await readTurn(response, (event) => {
-            if (event.type === 'search_start' && event.query) {
+            if (event.type === 'search_start' || event.type === 'search_result' || event.type === 'search_error') {
                 /*
-                 * Show the live query on the existing thinking placeholder.
-                 *
-                 * ⚠️ It writes `text`, which the placeholder ALREADY renders (it holds the
-                 * literal "Thinking" / "Searching"), rather than adding a field. A new field
-                 * would need a matching render change, and the placeholder is shared by several
-                 * flows — the smaller change is the one that cannot break the others.
+                 * A search is a STEP on the turn's rail. The record grows here and the message
+                 * carries it, so the transcript head (ChatTurnHead) draws "Searching the web ·
+                 * <query>" the moment the loop starts one, and its result count when it lands.
+                 * Until 2026-09-17 this wrote "Searching: <query>" into the placeholder's text
+                 * and forgot it; nothing of the turn survived the answer.
                  */
-                const query = String(event.query);
-                const label = query.length > 60 ? `${query.slice(0, 57)}…` : query;
+                turnRecord = applyTurnEvent(turnRecord, event as Parameters<typeof applyTurnEvent>[1]);
+                const record = turnRecord;
                 setMessages(prev => prev.map(msg =>
-                    msg.id === localPlaceholderId && msg.isThinkingPlaceholder
-                        ? { ...msg, text: `Searching: ${label}` }
-                        : msg
+                    msg.id === localPlaceholderId ? { ...msg, turn: record } : msg
+                ));
+                return;
+            }
+
+            if (event.type === 'reasoning' && event.text) {
+                // The thought, as it is being had — the head shows "Thinking…" with its last line.
+                streamedThinking += event.text;
+                const thinking = streamedThinking;
+                setMessages(prev => prev.map(msg =>
+                    msg.id === localPlaceholderId ? { ...msg, thinkingContent: thinking } : msg
                 ));
                 return;
             }
@@ -7048,6 +7099,7 @@ interface QueueState {
                 sender: 'ai',
             text: rawTextForState,
             timestamp: Date.now(),
+            turn: closeTurnRecord(turnRecord),
             parsedAnswer: finalAnswer,
             parsedThinking: thinking,
             hasThinking: localHasThinking,
@@ -7153,6 +7205,7 @@ interface QueueState {
                           has_thinking: !!updatedMessage.thinkingContent,
                           context_record_id: updatedMessage.projectContextId,
                           web_context_receipt_id: updatedMessage.searchInfo?.webContextReceiptId,
+                          turn: updatedMessage.turn,
                       });
                       if (!persistedAssistantMessage) throw new Error('The assistant turn was not persisted.');
                     } catch (error) {
@@ -14924,6 +14977,8 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                   onWideChatChange={setIsWideChatEnabled}
                   chatFontSize={chatFontSize}
                   onChatFontSizeChange={setChatFontSize}
+                  stepsMode={stepsMode}
+                  onStepsModeChange={setStepsMode}
                   isMobile={isMobile}
                   maxInterfacesReached={maxInterfacesReached}
                   isMultiInterface={!!isMultiInterface}
@@ -16495,9 +16550,19 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                                         <span className="text-[var(--chat-muted)]">Okay, let me figure out{ellipsisText}</span>
                                     </div>
                                 ) : (
-                                    <ThinkingAnimation
-                                        duration={liveTimerValue || 0}
-                                        isLive={true}
+                                    /* The turn, opening: the canonical clock line ("Working for 4s"),
+                                       then each search on the rail as the loop reports it. Replaces the
+                                       chat's own thinking animation (2026-09-17, D10). */
+                                    <ChatTurnHead
+                                        messageId={message.id}
+                                        thinking={message.thinkingContent}
+                                        streaming
+                                        replyStarted={false}
+                                        timestamp={message.turn?.startedAt}
+                                        model={selectedModel.id}
+                                        turn={message.turn}
+                                        stepsMode={stepsMode}
+                                        onThinkingTime={rememberThinkingTime}
                                     />
                                 )}
                             </div>
@@ -16832,8 +16897,25 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                                         </div>
                                       ) : (
                                       <>
-                                      {/* 1. Thoughts — compact toggle + gradually expanding content */}
-                                      {message.hasThinking && (
+                                      {/* 1. The turn's head — clock line, thought, rail — from the canonical
+                                          transcript (D10, consumed not copied). The chat's own thinking box
+                                          below it remains only for a legacy turn with no record and no
+                                          thought text, where it explains the absence. */}
+                                      {(turnHasRail(message.turn, message.thinkingContent) || message.isStreaming) ? (
+                                          <div className="w-full pl-[1.125rem]">
+                                              <ChatTurnHead
+                                                  messageId={message.id}
+                                                  thinking={message.thinkingContent}
+                                                  streaming={Boolean(message.isStreaming)}
+                                                  replyStarted={Boolean(message.parsedAnswer)}
+                                                  timestamp={message.timestamp}
+                                                  model={message.modelIdUsed || message.modelId}
+                                                  turn={message.turn}
+                                                  stepsMode={stepsMode}
+                                                  onThinkingTime={rememberThinkingTime}
+                                              />
+                                          </div>
+                                      ) : message.hasThinking && (
                                           <div className="w-full pl-[1.125rem]">
                                               {/* Stays hand-written: a line of text with 2px of
                                                   vertical padding and no box at all, whose leading
@@ -16915,8 +16997,11 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                                       )}
  
                                       {/* 2. Grounding Info Box - Xeno Search Sources */}
-                                      {/* Show Xeno Search Loading Animation or Results - Only when Xeno Search was actually used */}
-                                      {((message.isLoading && message.searchInfo && isXenoSearchEnabled) ||
+                                      {/* Show Xeno Search Loading Animation or Results - Only when Xeno Search was actually used.
+                                          A turn whose rail already lists what each search read shows them there (the
+                                          transcript's sources line); this box then stays for the pre-turn Research path. */}
+                                      {!(message.turn?.steps.some((step) => step.sources && step.sources.length > 0)) &&
+                                       ((message.isLoading && message.searchInfo && isXenoSearchEnabled) ||
                                         (!message.isLoading && message.searchInfo &&
                                          ((message.searchInfo.queries?.length ?? 0) > 0 || (message.searchInfo.sources?.length ?? 0) > 0))) ? (
                                           message.isLoading ? (

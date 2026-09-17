@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { STEPS_MODES, type StepsMode } from './chatTurnTranscript';
 import { DownloadDecl, PlusDecl, Settings, XDecl } from '@/lib/icons';
 import {
   getChatPersonaId,
@@ -24,6 +25,9 @@ export type ChatSettingsModalProps = {
   onWideChatChange: (value: boolean) => void;
   chatFontSize: ChatFontSize;
   onChatFontSizeChange: (value: ChatFontSize) => void;
+  /** D10's two step modes: the rail drawn as the turn works, or folded with the current step on the clock line. */
+  stepsMode: StepsMode;
+  onStepsModeChange: (value: StepsMode) => void;
   isMobile: boolean;
   maxInterfacesReached: boolean;
   isMultiInterface: boolean;
@@ -57,6 +61,8 @@ const ChatSettingsModal: React.FC<ChatSettingsModalProps> = ({
   onWideChatChange,
   chatFontSize,
   onChatFontSizeChange,
+  stepsMode,
+  onStepsModeChange,
   isMobile,
   maxInterfacesReached,
   isMultiInterface,
@@ -377,6 +383,33 @@ const ChatSettingsModal: React.FC<ChatSettingsModalProps> = ({
                   </button>
                 ))}
               </div>
+            </div>
+
+            <div>
+              <span className="mb-2 block text-[11px] font-bold uppercase tracking-wide text-[var(--chat-muted)]">
+                Steps
+              </span>
+              <div className="flex gap-1.5" role="radiogroup" aria-label="How a turn's steps are shown">
+                {/* Stays hand-written — same surface, same reason as the pairs above. */}
+                {STEPS_MODES.map((value) => (
+                  <button
+                    key={value}
+                    type="button"
+                    role="radio"
+                    aria-checked={stepsMode === value}
+                    data-steps-mode-option={value}
+                    onClick={() => onStepsModeChange(value)}
+                    className={prefBtn(stepsMode === value)}
+                  >
+                    {value === 'expanded' ? 'Expanded' : 'Collapsed'}
+                  </button>
+                ))}
+              </div>
+              <p className="mt-1.5 text-[11px] leading-4 text-[var(--chat-muted)]">
+                {stepsMode === 'expanded'
+                  ? 'Every search and thought is drawn on the rail as the turn works, and stays open when it ends.'
+                  : 'The rail stays folded; the clock line carries the current step, and "Worked for" opens the trail.'}
+              </p>
             </div>
 
             {!isMobile && (

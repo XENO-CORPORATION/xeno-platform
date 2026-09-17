@@ -37,6 +37,8 @@ export interface ChatMessage {
   completion_tokens?: number;
   total_tokens?: number;
   context_record_id?: string;
+  /** The turn's presentational record (chatTurnTranscript.ts); validated server-side. */
+  turn?: unknown;
   project_sources?: ProjectSourceReference[];
   created_at?: string;
   message_index?: number;
@@ -294,6 +296,7 @@ export const chatService = {
       completion_tokens?: number;
       total_tokens?: number;
       context_record_id?: string;
+      turn?: unknown;
     }
   ): Promise<ChatMessage | null> {
     if (!isPersistedConversationId(conversationId)) {

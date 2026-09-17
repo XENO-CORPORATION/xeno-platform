@@ -19,6 +19,7 @@ import { calculateNextScheduleOccurrence, calculateScheduleOccurrences } from '.
 import { CHAT_PROJECT_CONTRACTS } from '../config/chatProjectContracts.js';
 import { requireActivated } from '../services/accountActivation.js';
 import { chatWebContextService, ChatWebContextError } from '../services/chatWebContext.js';
+import { normalizeTurnRecord } from '../utils/chatTurnRecord.js';
 
 /** Local `convo-<timestamp>` ids are UI-only. Sending one to Postgres is a 500. */
 function rejectIfNotPersistedConversationId(res, conversationId) {
@@ -388,9 +389,13 @@ router.post('/init', async (req, res) => {
         completion_tokens INTEGER,
         total_tokens INTEGER,
         created_at TIMESTAMP DEFAULT NOW(),
-        message_index INTEGER NOT NULL
+        message_index INTEGER NOT NULL,
+        turn JSONB
       )
     `);
+    // Existing databases receive the column through the migration of the same name; a fresh one
+    // gets it here so the two paths agree (2026-09-17, chat-message-turn).
+    await req.db.query('ALTER TABLE chat_messages ADD COLUMN IF NOT EXISTS turn JSONB');
 
     // Create personas table
     await req.db.query(`
@@ -787,8 +792,16 @@ router.post('/conversations/:id/messages', async (req, res) => {
       prompt_tokens,
       completion_tokens,
       total_tokens,
-      context_record_id
+      context_record_id,
+      turn,
     } = req.body;
+
+    // The turn record is client-written and presentational; it is validated and bounded, and an
+    // invalid one is refused rather than trimmed into something that looks stored.
+    const turnRecord = normalizeTurnRecord(turn);
+    if (!turnRecord.ok) {
+      return res.status(400).json({ success: false, error: turnRecord.error, code: 'invalid_turn' });
+    }
 
     if (search_context !== undefined && search_context !== null) {
       return res.status(400).json({
@@ -881,13 +894,14 @@ router.post('/conversations/:id/messages', async (req, res) => {
         `INSERT INTO chat_messages (
           conversation_id, user_id, created_by_user_id, role, content, model_id,
           thinking, has_thinking, attachments, search_context,
-          prompt_tokens, completion_tokens, total_tokens, message_index
-        ) VALUES ($1,$2,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
+          prompt_tokens, completion_tokens, total_tokens, message_index, turn
+        ) VALUES ($1,$2,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)
         RETURNING *`,
         [conversationId, userId, role, content, model_id, thinking, has_thinking,
           attachments ? JSON.stringify(attachments) : null,
           webContextReceipt ? JSON.stringify(webContextReceipt.search_context) : null,
-          prompt_tokens, completion_tokens, total_tokens, messageIndex],
+          prompt_tokens, completion_tokens, total_tokens, messageIndex,
+          turnRecord.turn ? JSON.stringify(turnRecord.turn) : null],
       )).rows[0];
       if (generationContext) {
         await tx.query(
@@ -958,6 +972,15 @@ router.post('/conversations/:id/messages/batch', async (req, res) => {
 
     await requireResourceRelation(req.db, userPrincipal(userId), 'conversation', conversationId, 'reviewer');
 
+    const turnRecords = [];
+    for (const message of messages) {
+      const turnRecord = normalizeTurnRecord(message?.turn);
+      if (!turnRecord.ok) {
+        return res.status(400).json({ success: false, error: turnRecord.error, code: 'invalid_turn' });
+      }
+      turnRecords.push(turnRecord.turn);
+    }
+
     try {
       for (const message of messages) {
         await assertAuthorizedLibraryAttachments(req.db, userPrincipal(userId), message.attachments);
@@ -980,20 +1003,21 @@ router.post('/conversations/:id/messages/batch', async (req, res) => {
 
     // Insert all messages
     const insertedMessages = [];
-    for (const msg of messages) {
+    for (const [position, msg] of messages.entries()) {
       const result = await req.db.query(
         `INSERT INTO chat_messages (
           conversation_id, user_id, created_by_user_id, role, content, model_id,
           thinking, has_thinking, attachments, search_context,
-          prompt_tokens, completion_tokens, total_tokens, message_index
-        ) VALUES ($1, $2, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+          prompt_tokens, completion_tokens, total_tokens, message_index, turn
+        ) VALUES ($1, $2, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
         RETURNING *`,
         [
           conversationId, userId, msg.role, msg.content, msg.model_id,
           msg.thinking, msg.has_thinking || false,
           msg.attachments ? JSON.stringify(msg.attachments) : null,
           null,
-          msg.prompt_tokens, msg.completion_tokens, msg.total_tokens, messageIndex++
+          msg.prompt_tokens, msg.completion_tokens, msg.total_tokens, messageIndex++,
+          turnRecords[position] ? JSON.stringify(turnRecords[position]) : null,
         ]
       );
       insertedMessages.push(result.rows[0]);
