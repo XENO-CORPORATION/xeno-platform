@@ -63,12 +63,20 @@ test('no CASCADE to users survives anywhere in the evidence migration', () => {
     'something in the evidence migration still cascades from users');
 });
 
-test('the deletion path is still the self-service one this guards against', () => {
-  /* If account deletion ever stops being a hard DELETE — a soft-delete, say —
-   * this whole design should be revisited rather than left in place unread.
-   * That is worth being told about, so assert the premise. */
-  assert.ok(/DELETE FROM users WHERE id = \$1/.test(auth),
-    'account deletion is no longer a hard DELETE — re-derive whether SET NULL is still the right shape');
+test('the deletion path is the self-service one, and it is ERASURE (re-derived 2026-09-17)', () => {
+  /* The premise this file was written against — a hard `DELETE FROM users` —
+   * stopped being true on 2026-09-17 (dogfood F23): self-service deletion now runs
+   * eraseSubject, which TOMBSTONES the user row. Re-derived: that is STRONGER for
+   * the evidence. The consent row's user_id keeps pointing at the tombstone, so
+   * SET NULL never even fires, and the record-time handle still identifies the
+   * subject. SET NULL stays as the schema's own guard (§1) — a policy enforced in
+   * one place is not enforced — and erasure must never touch the evidence table. */
+  const del = auth.slice(auth.indexOf("router.delete('/account'"), auth.indexOf('router.', auth.indexOf("router.delete('/account'") + 20));
+  assert.match(del, /eraseSubject\(req\.db, decoded\.userId\)/, 'self-service deletion runs the audited erasure');
+  assert.doesNotMatch(del, /query\(\s*['`"]DELETE FROM users/, 'and is no longer a hard delete');
+  const erase = readFileSync(new URL('../src/server/utils/gdprErasure.js', import.meta.url), 'utf8');
+  assert.doesNotMatch(erase, /checkout_consents/, 'erasure never touches the consent evidence');
+  assert.doesNotMatch(erase, /DELETE FROM users/, 'erasure tombstones; it never deletes the subject row');
 });
 
 /* ── 2 · A surviving row must still identify its subject ─────────────────── */

@@ -1904,15 +1904,21 @@ router.delete('/account', async (req, res) => {
       });
     }
 
-    // Delete user sessions first
-    await req.db.query('DELETE FROM user_sessions WHERE user_id = $1', [decoded.userId]);
-
-    // Delete user (this will cascade to related tables if set up)
-    await req.db.query('DELETE FROM users WHERE id = $1', [decoded.userId]);
+    // 🔴 ONE erasure procedure, not a hard DELETE. Dogfooding 2026-09-17 (F23):
+    // this route ran `DELETE FROM users`, which is neither erasure nor safe —
+    // the ledger and usage rows kept a dangling subject id (financial facts must
+    // survive, but tied to a TOMBSTONE), the subject's agents lost their identity
+    // rows by cascade while their user rows and keys stayed alive and unowned,
+    // e-mail and security rows kept the address and IPs, and the vault was left
+    // to a cascade. eraseSubject is the audited path the OIDC route already
+    // used; both doors now open onto the same room.
+    const { eraseSubject } = await import('../utils/gdprErasure.js');
+    const result = await eraseSubject(req.db, decoded.userId);
 
     res.json({
       success: true,
-      message: 'Account deleted successfully'
+      message: 'Account deleted successfully',
+      erased: result,
     });
 
   } catch (error) {

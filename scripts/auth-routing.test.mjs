@@ -167,3 +167,12 @@ test('user-facing source no longer sends people directly to the legacy auth URL'
     assert.doesNotMatch(read(path), /(?:href|to)="\/auth"/, `${path} still points at legacy /auth`);
   }
 });
+
+test('account deletion is ERASURE, never a hard DELETE FROM users (F23, 2026-09-17)', async () => {
+  const { readFileSync } = await import('node:fs');
+  const src = readFileSync(new URL('../src/server/routes/authRoutes.js', import.meta.url), 'utf8');
+  const start = src.indexOf("router.delete('/account'");
+  const block = src.slice(start, src.indexOf('router.', start + 20));
+  assert.match(block, /eraseSubject\(req\.db, decoded\.userId\)/, 'the legacy deletion route runs the audited erasure');
+  assert.doesNotMatch(block, /query\(\s*['`"]DELETE FROM users/, 'a hard delete orphans the ledger, leaves agents alive and unowned, and keeps the address in mail rows');
+});
