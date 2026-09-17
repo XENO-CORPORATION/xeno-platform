@@ -354,3 +354,15 @@ test("a refused endpoint is the caller's 400, never a 500 (F16, 2026-09-17)", ()
     assert.equal(err.http, 400, `${code} carries http 400 so the route does not answer "inference routing failed"`);
   }
 });
+
+test('an endpoint that is XENO itself is refused at save time (the recursion storm of 2026-09-17)', async () => {
+  const { isXenoHost } = await import('../src/server/utils/safeEndpoint.js');
+  for (const url of ['https://api.xenostudio.ai/v1', 'https://direct-api.xenostudio.ai:8443/v1', 'https://XENOSTUDIO.AI/v1', 'https://post.xenosystem.ai/api', 'https://xenosystem.ai./v1']) {
+    let err = null;
+    try { assertSafeEndpointUrl(url); } catch (e) { err = e; }
+    assert.ok(err && err.code === 'endpoint_is_xeno' && err.http === 400, `${url} → endpoint_is_xeno 400 (got ${err?.code})`);
+  }
+  assert.ok(assertSafeEndpointUrl('https://api.openai.com/v1'), 'a real provider is still fine');
+  assert.ok(assertSafeEndpointUrl('https://notxenostudio.ai/v1'), 'a suffix match is not a substring match');
+  assert.equal(isXenoHost('xenostudio.ai.evil.example'), false, 'our name as a subdomain of someone else is not us');
+});
