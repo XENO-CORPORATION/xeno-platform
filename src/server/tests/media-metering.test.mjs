@@ -76,6 +76,19 @@ async function main() {
     run: async () => ({ choices: [{ message: { content: 'OK' } }], usage: { prompt_tokens: 21, completion_tokens: 3, total_tokens: 24 } }),
   });
   const rowc = (await pool.query('SELECT model, input_tokens, output_tokens, dimensions FROM api_usage_logs WHERE user_id=$1 ORDER BY created_at DESC LIMIT 1', [uc])).rows[0];
+  // F20: an AGENT's call bills its owner and names the agent on the usage row.
+  const owner = await newUser();
+  await grant(owner, 1000);
+  const agent = (await pool.query("INSERT INTO users (credits, username, display_name, is_active, status) VALUES (0, 'bot', 'bot', true, 'active') RETURNING id")).rows[0].id;
+  await pool.query("INSERT INTO agent_identities (user_id, owner_user_id, agent_role, agent_origin, status) VALUES ($1, $2, 'other', 'manual', 'active')", [agent, owner]);
+  await meterPremiumChat(pool, agent, {
+    model: 'grok-4.6', provider: 'xai', requestId: 'rq-agent', estInputTokens: 11, maxTokens: 5, surface: 'dogfood', callerInputTokens: 11,
+    run: async () => ({ choices: [{ message: { content: 'OK' } }], usage: { prompt_tokens: 12, completion_tokens: 3, total_tokens: 15 } }),
+  });
+  const rowa = (await pool.query("SELECT user_id, dimensions FROM api_usage_logs WHERE surface='dogfood' AND request_id LIKE '%' ORDER BY created_at DESC LIMIT 1")).rows[0];
+  ok(rowa && rowa.user_id === owner && rowa.dimensions?.agent_user_id === agent,
+    `agent call: billed to the OWNER (${rowa?.user_id === owner}) and the agent is named on the row (${rowa?.dimensions?.agent_user_id === agent})`);
+
   // F14: a provider count the caller could not have produced is capped to what they sent.
   const uh = await newUser();
   await grant(uh, 1000);

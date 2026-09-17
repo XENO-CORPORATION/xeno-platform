@@ -82,7 +82,12 @@ function meteringError(code, original) {
  * @throws  err with err.http (402/403/500) on metering failure; provider errors bubble up after the hold is voided.
  */
 export async function meterPremiumChat(db, userId, opts) {
-  userId = (await prepareAccountQuota(db, userId)).userId;
+  // An agent spends its OWNER's wallet (one human, one wallet, one quota) and is
+  // named on the row so the owner can see WHICH agent spent it — the service-ledger
+  // path already did; the in-process path did not (dogfooding 2026-09-17, F20).
+  const subject = await prepareAccountQuota(db, userId);
+  userId = subject.userId;
+  const agentDims = subject.isAgent ? { agent_user_id: subject.actorUserId } : {};
   const {
     model, provider, requestId,
     estInputTokens = 0, maxTokens = 1024, run,
@@ -151,7 +156,7 @@ export async function meterPremiumChat(db, userId, opts) {
     // the same defect, fixed in PR #256).
     const settled = await settleHoldV2(db, userId, holdId, actualMicro, {
       model, provider, inputTokens, outputTokens,
-      dimensions: { usage_source: hasOutputUsage ? 'provider' : 'estimated', route_path: 'premium', ...(absorbedInputTokens ? { absorbed_input_tokens: absorbedInputTokens } : {}) },
+      dimensions: { usage_source: hasOutputUsage ? 'provider' : 'estimated', route_path: 'premium', ...agentDims, ...(absorbedInputTokens ? { absorbed_input_tokens: absorbedInputTokens } : {}) },
     });
     costMicro = settled?.settledMicro ?? costMicro;
   } catch (e) {
@@ -202,7 +207,12 @@ export async function meterPremiumChat(db, userId, opts) {
  *          up AFTER the hold is voided (so the route reports them without a charge).
  */
 export async function meterMediaGeneration(db, userId, opts) {
-  userId = (await prepareAccountQuota(db, userId)).userId;
+  // An agent spends its OWNER's wallet (one human, one wallet, one quota) and is
+  // named on the row so the owner can see WHICH agent spent it — the service-ledger
+  // path already did; the in-process path did not (dogfooding 2026-09-17, F20).
+  const subject = await prepareAccountQuota(db, userId);
+  userId = subject.userId;
+  const agentDims = subject.isAgent ? { agent_user_id: subject.actorUserId } : {};
   const {
     surface, operation, model, provider,
     requestId, unitCostMicro, count = 1, run,
@@ -271,7 +281,7 @@ export async function meterMediaGeneration(db, userId, opts) {
     // the hold. settleHoldV2 is idempotent (no-ops once the hold is not 'held'), so the retry
     // can never double-charge.
     const settled = await withRetry(() => settleHoldV2(db, userId, holdId, actualMicro, {
-      model, provider, dimensions: { usage_source: 'unit', units: actualCount, route_path: 'premium' },
+      model, provider, dimensions: { usage_source: 'unit', units: actualCount, route_path: 'premium', ...agentDims },
     }));
     costMicro = settled?.settledMicro ?? costMicro;
   } catch (e) {
@@ -317,7 +327,12 @@ export async function meterMediaGeneration(db, userId, opts) {
  * @throws  err with err.http (402/403/500) if the Phase-1 hold fails (BEFORE any stream).
  */
 export async function meterPremiumChatStream(db, userId, opts) {
-  userId = (await prepareAccountQuota(db, userId)).userId;
+  // An agent spends its OWNER's wallet (one human, one wallet, one quota) and is
+  // named on the row so the owner can see WHICH agent spent it — the service-ledger
+  // path already did; the in-process path did not (dogfooding 2026-09-17, F20).
+  const subject = await prepareAccountQuota(db, userId);
+  userId = subject.userId;
+  const agentDims = subject.isAgent ? { agent_user_id: subject.actorUserId } : {};
   const {
     model, provider, requestId,
     estInputTokens = 0, maxTokens = 1024,
@@ -368,7 +383,7 @@ export async function meterPremiumChatStream(db, userId, opts) {
     try {
       const settled = await withRetry(() => settleHoldV2(db, userId, holdId, actualMicro, {
         model, provider, inputTokens: inTok, outputTokens: outputTokens || 0,
-        dimensions: { usage_source: hasOutputUsage ? 'provider' : 'estimated', route_path: 'premium', ...(absorbedInputTokens ? { absorbed_input_tokens: absorbedInputTokens } : {}) },
+        dimensions: { usage_source: hasOutputUsage ? 'provider' : 'estimated', route_path: 'premium', ...agentDims, ...(absorbedInputTokens ? { absorbed_input_tokens: absorbedInputTokens } : {}) },
       }));
       costMicro = settled?.settledMicro ?? costMicro;
     } catch (e) {
