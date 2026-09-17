@@ -36,7 +36,8 @@ async function main() {
   try {
     // Seeded state: a hand-curated alias and a prefix-guess 'unknown' row.
     await pool.query(`INSERT INTO gateway_model_aliases (public_id, internal_id, provider, is_alias) VALUES
-      ('claude-opus-4.6', 'claude-opus-4-6', 'anthropic', true), ('muse-spark-1', 'muse-spark-1', 'unknown', false)
+      ('claude-opus-4.6', 'claude-opus-4-6', 'anthropic', true), ('muse-spark-1', 'muse-spark-1', 'unknown', false),
+      ('seedance-2', 'seedance-2.0', 'unknown', true), ('orphan-alias', 'nobody-serves-this', 'unknown', true)
       ON CONFLICT (public_id) DO UPDATE SET provider = EXCLUDED.provider`);
     await pool.query(`UPDATE gateway_model_aliases SET enabled = false WHERE public_id = 'claude-opus-4.6'`);
 
@@ -51,12 +52,14 @@ async function main() {
       { id: 'claude-opus-4-6', provider: 'anthropic', type: 'chat', routable: false },
       { id: 'muse-spark-1', provider: 'xeno', type: 'chat', routable: true },
       { id: 'claude-opus-4.6', provider: 'anthropic', type: 'chat', routable: true },
+      { id: 'seedance-2.0', provider: 'byteplus', type: 'video', routable: true },
       { id: 'bad id with spaces', provider: 'openai' }, { id: 'x', provider: 'Not A Provider!' }, null,
     ] };
     const r = await syncGatewayCatalogue(pool, { INFERENCE_CATALOGUE_URL: url, INFERENCE_GRANT_TOKEN: TOKEN });
     ok(seenAuth === `Bearer ${TOKEN}`, 'the sync authenticates with the shared grant token');
     // claude-opus-4-6 is seeded by the registry migration, so only gpt-5.5 is new.
-    ok(r.total === 4 && r.inserted === 1, `4 usable rows of 7 (${r.total}); 1 inserted (${r.inserted})`);
+    // claude-opus-4-6 and seedance-2.0 are seeded by the registry migration; only gpt-5.5 is new.
+    ok(r.total === 5 && r.inserted === 1, `5 usable rows of 8 (${r.total}); 1 inserted (${r.inserted})`);
     const gpt = await row('gpt-5.5');
     ok(gpt && gpt.provider === 'openai' && gpt.internal_id === 'gpt-5.5' && gpt.is_alias === false && gpt.enabled === true, 'a new id lands as an enabled identity alias with its provider');
     const opus = await row('claude-opus-4-6');
@@ -68,6 +71,11 @@ async function main() {
       'a hand-curated alias keeps its internal_id and its enabled=false — the sync never touches either');
     const after = (await pool.query('SELECT count(*)::int n FROM gateway_model_aliases')).rows[0].n;
     ok(after === before + 1, 'rows the catalogue does not mention are left alone');
+    const sd = await row('seedance-2');
+    // The migration seeds further seedance aliases, so inherited is >= 1, not exactly 1.
+    ok(sd && sd.provider === 'byteplus' && r.inherited >= 1, `an alias the catalogue never names inherits its TARGET's provider (${r.inherited} inherited)`);
+    const orphan = await row('orphan-alias');
+    ok(orphan && orphan.provider === 'unknown', "an alias whose target the catalogue does not know stays 'unknown' — never guessed");
 
     // ── the matcher on what just landed ──
     const anth = { provider: 'anthropic', models: null };
@@ -78,7 +86,7 @@ async function main() {
 
     // ── idempotent ──
     const r2 = await syncGatewayCatalogue(pool, { INFERENCE_CATALOGUE_URL: url, INFERENCE_GRANT_TOKEN: TOKEN });
-    ok(r2.inserted === 0 && r2.updated === 0 && r2.unchanged === 4, 'a second identical sync changes nothing');
+    ok(r2.inserted === 0 && r2.updated === 0 && r2.inherited === 0 && r2.unchanged === 5, 'a second identical sync changes nothing');
 
     // ── malformed / unauthorised: nothing written ──
     body = { models: 'nope' };

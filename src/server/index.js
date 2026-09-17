@@ -3918,7 +3918,7 @@ startDownloadCleanup();
     const syncCatalogue = () => syncGatewayCatalogue(pool)
       .then((r) => {
         if (r.skipped) { if (!syncCatalogue.saidSkip) { console.log(`[CatalogueSync] disabled: ${r.skipped}`); syncCatalogue.saidSkip = true; } return; }
-        console.log(`[CatalogueSync] ${r.total} models: +${r.inserted} inserted, ${r.updated} provider updated, ${r.unchanged} unchanged`);
+        console.log(`[CatalogueSync] ${r.total} models: +${r.inserted} inserted, ${r.updated} provider updated, ${r.inherited} alias(es) inherited, ${r.unchanged} unchanged`);
       })
       .catch((e) => console.error('[CatalogueSync] error (table left as it was):', e.message));
     backgroundLeader.whenLeader(() => {
