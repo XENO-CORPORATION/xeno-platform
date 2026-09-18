@@ -6877,11 +6877,20 @@ interface QueueState {
                  * answer being written, not a spinner. `isDotPlaceholder` clears too, or the
                  * dots render on top of real text.
                  */
+                /*
+                 * 🔴 `parsedAnswer` too, not only `text`. The bubble prints `parsedAnswer`; the
+                 * streaming change (352f6cc) wrote deltas into `text` alone, so for four days the
+                 * answer was invisible while it streamed and appeared whole at the end — which,
+                 * with the turn head above it, read as the clock "disappearing and glitching when
+                 * the answer appears" (2026-09-18). The final result still overwrites both with
+                 * the parsed answer.
+                 */
                 setMessages(prev => prev.map(msg =>
                     msg.id === localPlaceholderId
                         ? {
                             ...msg,
                             text: streamedText,
+                            parsedAnswer: streamedText,
                             isThinkingPlaceholder: false,
                             isDotPlaceholder: false,
                             isStreaming: true,
@@ -7090,7 +7099,13 @@ interface QueueState {
         // }
 
         updatedMessage = { // Assign to the variable declared earlier
-                id: `ai-${Date.now()}`,
+                /*
+                 * The placeholder's OWN id, kept. A fresh `ai-…` id here made React unmount the
+                 * placeholder's element and mount a new one for the answer, so the turn head —
+                 * mid-fold — was destroyed and rebuilt: its rise animation replayed and the clock
+                 * jumped. The turn is one element from "Working for" to "Worked for".
+                 */
+                id: localPlaceholderId,
                 sender: 'ai',
             text: rawTextForState,
             timestamp: Date.now(),
@@ -7152,11 +7167,13 @@ interface QueueState {
             TYPEWRITER_ENABLED && !streamedText && !updatedMessage.imageData && !updatedMessage.isError && !!updatedMessage.parsedAnswer;
         const fullAnswerForReveal = updatedMessage.parsedAnswer || '';
         setMessages(prevMessages => {
-            const base = prevMessages.filter(msg => msg.id !== localPlaceholderId);
             const display = applyTypewriter
                 ? { ...updatedMessage, parsedAnswer: '', isStreaming: true }
                 : updatedMessage;
-            return [...base, display];
+            // replace IN PLACE — same id, same position — so nothing remounts
+            return prevMessages.some(msg => msg.id === localPlaceholderId)
+                ? prevMessages.map(msg => (msg.id === localPlaceholderId ? display : msg))
+                : [...prevMessages, display];
         });
         if (applyTypewriter) startTypewriter(updatedMessage.id, fullAnswerForReveal);
 
@@ -16544,34 +16561,19 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                     // kept helpers above if we bring them back later.
                     const dateSeparatorElement = null;
 
-                    if (message.isThinkingPlaceholder) {
-                        // Animated thinking placeholder with live timer
-                        const isRefinementPlaceholder = message.id === aiRefinementPlaceholderId;
+                    if (message.isThinkingPlaceholder && message.id === aiRefinementPlaceholderId) {
+                        // The prompt-refinement placeholder keeps its own line; the ordinary thinking
+                        // placeholder is rendered by the assistant block below, as the opening of the
+                        // SAME element the answer will fill — a separate element here remounted the
+                        // turn head on the first delta (2026-09-18).
                         return (
                             <div key={message.id} className="flex justify-start w-full pl-[1.125rem]">
-                                {isRefinementPlaceholder ? (
-                                    <div className="flex items-center gap-2 bg-[var(--chat-surface)] border border-[var(--chat-border)] rounded-lg px-3 py-1.5 text-sm">
-                                        <span className="flex h-2 w-2 relative mr-1">
-                                            <span className="relative inline-flex rounded-full h-2 w-2 bg-[var(--chat-muted)] animate-pulse"></span>
-                                        </span>
-                                        <span className="text-[var(--chat-muted)]">Okay, let me figure out{ellipsisText}</span>
-                                    </div>
-                                ) : (
-                                    /* The turn, opening: the canonical clock line ("Working for 4s"),
-                                       then each search on the rail as the loop reports it. Replaces the
-                                       chat's own thinking animation (2026-09-17, D10). */
-                                    <ChatTurnHead
-                                        messageId={message.id}
-                                        thinking={message.thinkingContent}
-                                        streaming
-                                        replyStarted={false}
-                                        timestamp={message.turn?.startedAt ?? message.timestamp}
-                                        model={selectedModel.id}
-                                        turn={message.turn}
-                                        stepsMode={stepsMode}
-                                        onThinkingTime={rememberThinkingTime}
-                                    />
-                                )}
+                                <div className="flex items-center gap-2 bg-[var(--chat-surface)] border border-[var(--chat-border)] rounded-lg px-3 py-1.5 text-sm">
+                                    <span className="flex h-2 w-2 relative mr-1">
+                                        <span className="relative inline-flex rounded-full h-2 w-2 bg-[var(--chat-muted)] animate-pulse"></span>
+                                    </span>
+                                    <span className="text-[var(--chat-muted)]">Okay, let me figure out{ellipsisText}</span>
+                                </div>
                             </div>
                         );
                     } else if (message.isDotPlaceholder) {
@@ -16908,15 +16910,15 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                                           transcript (D10, consumed not copied). The chat's own thinking box
                                           below it remains only for a legacy turn with no record and no
                                           thought text, where it explains the absence. */}
-                                      {(message.turn || turnHasRail(message.turn, message.thinkingContent) || message.isStreaming) ? (
+                                      {(message.turn || turnHasRail(message.turn, message.thinkingContent) || message.isStreaming || message.isThinkingPlaceholder) ? (
                                           <div className="w-full pl-[1.125rem]">
                                               <ChatTurnHead
                                                   messageId={message.id}
                                                   thinking={message.thinkingContent}
-                                                  streaming={Boolean(message.isStreaming)}
+                                                  streaming={Boolean(message.isStreaming || message.isThinkingPlaceholder)}
                                                   replyStarted={Boolean(message.parsedAnswer)}
-                                                  timestamp={message.timestamp}
-                                                  model={message.modelIdUsed || message.modelId}
+                                                  timestamp={message.turn?.startedAt ?? message.timestamp}
+                                                  model={message.modelIdUsed || message.modelId || selectedModel.id}
                                                   turn={message.turn}
                                                   stepsMode={stepsMode}
                                                   onThinkingTime={rememberThinkingTime}
