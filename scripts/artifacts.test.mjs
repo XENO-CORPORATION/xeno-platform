@@ -85,7 +85,8 @@ test('the raw-file CSP is the CLI viewer policy plus sandbox — one policy, two
   }
   // The raw route sends that header — not a different literal.
   const rawRoute = source.slice(source.indexOf("router.get('/:id/v/:token/r/:revision/"));
-  assert.match(rawRoute, /'content-security-policy': ARTIFACT_PAGE_CSP/);
+  assert.match(rawRoute, /'content-security-policy': `\$\{ARTIFACT_PAGE_CSP\}; frame-ancestors \$\{frameAncestor\(req\)\}`/, 'the CLI policy plus frame-ancestors for the shell origin');
+  assert.match(rawRoute, /res\.removeHeader\('x-frame-options'\)/, 'helmet XFO DENY blocked the frame in Chrome (2026-09-18)');
   assert.match(rawRoute, /'x-content-type-options': 'nosniff'/);
 });
 
