@@ -121,6 +121,7 @@ try {
   check('search events grow the turn record on the placeholder', /turnRecord = applyTurnEvent\(turnRecord, event/.test(chat) && /msg\.id === localPlaceholderId \? \{ \.\.\.msg, turn: record \}/.test(chat));
   check('the final message carries the closed record and it is persisted', /turn: closeTurnRecord\(turnRecord\)/.test(chat) && /turn: updatedMessage\.turn,/.test(chat) && /turn: msg\.turn,/.test(chat));
   check('a stored message reads its turn back', /turn: isAi \? normalizeStoredTurn\(/.test(chat));
+  check('a reasoning model that returned no trace shows NO thought box — the phantom "[Thinking process not provided…]" is gone', !/Thinking process not provided or markers not found/.test(chat) && !/localHasThinking = true;/.test(chat) && /\) : null\}/.test(chat));
   check('the steps mode is an account setting with a browser copy, and the modal exposes it', /debouncedSaveSetting\('chat\.stepsMode', stepsMode\)/.test(chat) && /isStepsMode\(settings\.chat\.stepsMode\)/.test(chat) && /onStepsModeChange=\{setStepsMode\}/.test(chat));
   const modal = readFileSync(new URL('../src/components/playground/Chat/ChatSettingsModal.tsx', import.meta.url), 'utf8');
   check('the Preferences pane offers both modes', /data-steps-mode-option=\{value\}/.test(modal) && /STEPS_MODES\.map/.test(modal));
