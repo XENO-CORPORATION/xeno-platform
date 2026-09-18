@@ -132,6 +132,13 @@ jobs:
           test "$count" -ge 1 || { echo "dist/assets has no index bundle"; exit 1; }
           echo "dist/ contains $count index bundle(s)"
 
+      # A focused text field paints NO ring — measured in a real browser against the
+      # EMITTED stylesheets, inside the platform shell. Four source-level fixes for the
+      # chat's edit field each read as correct and left the stroke on screen, because
+      # the rule that painted it lived in a different stylesheet (2026-09-18).
+      - name: Assert .focus-self fields render ringless in the built CSS
+        run: npm run test:focus-self-rendered
+
   # ── The Forum's end-to-end proofs ───────────────────────────────────────────
   #
   # Separate job because it needs a database, and because it must be possible to
