@@ -34,7 +34,20 @@ const menu = (theme) => `
     </div>
   </div>
 </div>`;
-const html = `<!doctype html><html class="dark"><head><meta charset="utf-8"><style>${css}</style></head><body style="margin:0">${menu('dark')}${menu('light')}</body></html>`;
+// the composer's control row as ChatWithLLM/ChatEmptyState render it, reveal CLOSED: the "+", the
+// collapsed Upload slot, the (empty) token counter, then the effort chip
+const row = `
+<div id="row" class="chat-themed chat-theme-dark" style="width:600px;padding:16px">
+  <div class="chat-input-controls flex items-center justify-between gap-2 mt-1">
+    <div class="flex items-center gap-1 md:gap-2 relative">
+      <button id="plus" class="chat-icon-turn" style="width:28px;height:28px" aria-expanded="false">+</button>
+      <span class="inline-flex overflow-hidden transition-[width,opacity,margin] duration-300 w-0 opacity-0 -mr-1 md:-mr-2"><button style="width:32px;height:28px">U</button></span>
+      <div data-token-context-counter class="flex shrink-0 items-center whitespace-nowrap empty:hidden"></div>
+      <div data-effort-control class="relative flex items-center"><button id="chip" class="flex h-7 items-center gap-1.5 rounded-[10px] border px-2.5 text-xs">Effort Auto</button></div>
+    </div>
+  </div>
+</div>`;
+const html = `<!doctype html><html class="dark"><head><meta charset="utf-8"><style>${css}</style></head><body style="margin:0">${menu('dark')}${menu('light')}${row}</body></html>`;
 const file = join(tmpdir(), `xeno-effort-menu-${process.pid}.html`);
 writeFileSync(file, html);
 
@@ -43,7 +56,7 @@ const check = (name, ok, detail = '') => { results.push(ok); console.log(`${ok ?
 const browser = await puppeteer.launch({ headless: true });
 try {
   const page = await browser.newPage();
-  await page.setViewport({ width: 700, height: 500 });
+  await page.setViewport({ width: 900, height: 500 }); // ≥ md, so the row uses gap-2
   await page.goto(pathToFileURL(file).href);
   await new Promise((r) => setTimeout(r, 600)); // past the `.xa-line` rise animation
   const read = (theme) => page.evaluate((theme) => {
@@ -71,6 +84,8 @@ try {
     check(`${theme}: filled cells are brighter than empty ones, and the current is the accent fill`, alpha(r.on.bg) > alpha(r.off.bg) && alpha(r.cur.bg) === 1, `${r.on.bg} vs ${r.off.bg} vs ${r.cur.bg}`);
     check(`${theme}: Faster/Smarter ends are painted (no transparent text)`, alpha(r.ends.color) > 0 && parseFloat(r.ends.opacity) > 0, r.ends.color);
   }
+  const gap = await page.evaluate(() => { const p = document.getElementById('plus').getBoundingClientRect(); const c = document.getElementById('chip').getBoundingClientRect(); return c.left - p.right; });
+  check('the effort chip sits ONE row gap (8px) after "+" — the collapsed Upload slot and the empty counter cost nothing', Math.round(gap) === 8, `${gap}px`);
   const dark = await read('dark'); const light = await read('light');
   check('light flips the ink: the current cell is dark on light, light on dark', lum(light.cur.bg) < lum(dark.cur.bg), `${dark.cur.bg} vs ${light.cur.bg}`);
 } finally {

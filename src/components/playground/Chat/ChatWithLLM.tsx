@@ -13036,7 +13036,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                           Upload | mic, Send). It only speaks up when it has something to offer:
                           the Compress action, or a near/over-limit warning. */}
                       {!isMobile && (
-                        <div data-token-context-counter className="flex shrink-0 items-center whitespace-nowrap">
+                        <div data-token-context-counter className="flex shrink-0 items-center whitespace-nowrap empty:hidden">
                           {(() => {
                             const totalUsedTokens = activeConversationTokenCount + currentInputAndSystemTokens;
                             const maxTokens = selectedModel?.maxTokens || 200000;

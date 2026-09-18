@@ -95,8 +95,11 @@ export const ComposerRevealControls: React.FC = () => {
       />
 
       <span
-        className={`inline-flex overflow-hidden transition-[width,opacity] duration-300 ease-[cubic-bezier(0.34,1.4,0.5,1)] ${
-          reveal.isOpen ? 'w-8 opacity-100' : 'w-0 opacity-0'
+        /* Closed, the slot is 0 wide but still a flex item — so it would still cost the row's gap on
+           both sides, leaving a hole between "+" and the next control. The negative margin gives
+           its trailing gap back while closed; open, it is a real 32px item with a normal gap. */
+        className={`inline-flex overflow-hidden transition-[width,opacity,margin] duration-300 ease-[cubic-bezier(0.34,1.4,0.5,1)] ${
+          reveal.isOpen ? 'w-8 opacity-100' : 'w-0 opacity-0 -mr-1 md:-mr-2'
         }`}
       >
         <IconButton
