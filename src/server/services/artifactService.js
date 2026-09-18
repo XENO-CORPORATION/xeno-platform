@@ -77,6 +77,15 @@ export function extractTitle(html) {
 export function prepareRevision(body) {
   const html = typeof body?.html === 'string' ? body.html : '';
   if (!html.trim()) throw new ArtifactError(400, 'A page needs HTML content.', 'missing_html');
+  // A replacement character means the source was not valid UTF-8 when it was read. Publishing it
+  // ships a page with a visible defect; refuse with the position, the way Claude Code's publish does.
+  const bad = html.indexOf('\uFFFD');
+  if (bad !== -1) {
+    const before = html.slice(0, bad);
+    const line = before.split('\n').length;
+    const col = bad - before.lastIndexOf('\n');
+    throw new ArtifactError(400, `The page contains the replacement character U+FFFD at line ${line}, column ${col}; the source file is not valid UTF-8 text.`, 'invalid_utf8');
+  }
   const htmlBytes = Buffer.from(html, 'utf8');
   const files = new Map();
   const inputFiles = Array.isArray(body.files) ? body.files : [];
@@ -183,17 +192,39 @@ export async function reviseArtifact(db, { artifactId, ownerUserId, body }) {
   return getArtifactForOwner(db, artifactId, ownerUserId);
 }
 
-export async function setVisibility(db, { artifactId, ownerUserId, visibility }) {
-  if (visibility !== 'private' && visibility !== 'link') throw new ArtifactError(400, 'visibility must be "private" or "link".', 'invalid_visibility');
+/**
+ * Audience + version pinning.
+ *   private   — the owner only
+ *   link      — anyone holding the share token (a NEW token each time it is enabled; off = every old link dead)
+ *   workspace — active members of one of the owner's billing workspaces, signed in, no token
+ * `sharedRevision` pins what viewers see (null/undefined = always the latest). The owner always sees the latest.
+ */
+export async function setVisibility(db, { artifactId, ownerUserId, visibility, workspaceId, sharedRevision }) {
+  if (!['private', 'link', 'workspace'].includes(visibility)) throw new ArtifactError(400, 'visibility must be "private", "link" or "workspace".', 'invalid_visibility');
   const current = await getArtifactForOwner(db, artifactId, ownerUserId);
   if (!current) throw new ArtifactError(404, 'Artifact not found.', 'not_found');
+  let pinned = null;
+  if (sharedRevision !== undefined && sharedRevision !== null) {
+    pinned = Number.parseInt(String(sharedRevision), 10);
+    if (!Number.isInteger(pinned) || pinned < 1 || pinned > current.currentRevision) throw new ArtifactError(400, `sharedRevision must be between 1 and ${current.currentRevision}.`, 'invalid_revision');
+  }
   if (visibility === 'private') {
-    await db.query(`UPDATE artifacts SET visibility='private', share_token_hash=NULL, updated_at=NOW() WHERE id=$1`, [artifactId]);
+    await db.query(`UPDATE artifacts SET visibility='private', share_token_hash=NULL, workspace_id=NULL, shared_revision=$2, updated_at=NOW() WHERE id=$1`, [artifactId, pinned]);
+    return { ...(await getArtifactForOwner(db, artifactId, ownerUserId)), shareToken: null };
+  }
+  if (visibility === 'workspace') {
+    if (typeof workspaceId !== 'string' || !/^[0-9a-f-]{36}$/i.test(workspaceId)) throw new ArtifactError(400, 'workspaceId is required for workspace sharing.', 'invalid_workspace');
+    const member = (await db.query(
+      `SELECT 1 FROM billing_workspace_members WHERE workspace_id=$1 AND user_id=$2 AND member_status='active' LIMIT 1`,
+      [workspaceId, ownerUserId],
+    )).rows[0];
+    if (!member) throw new ArtifactError(403, 'You are not an active member of that workspace.', 'not_a_member');
+    await db.query(`UPDATE artifacts SET visibility='workspace', workspace_id=$2, share_token_hash=NULL, shared_revision=$3, updated_at=NOW() WHERE id=$1`, [artifactId, workspaceId, pinned]);
     return { ...(await getArtifactForOwner(db, artifactId, ownerUserId)), shareToken: null };
   }
   // A new token every time link sharing is (re)enabled: turning it off revokes every old link.
   const shareToken = mintId('s_', 32);
-  await db.query(`UPDATE artifacts SET visibility='link', share_token_hash=$2, updated_at=NOW() WHERE id=$1`, [artifactId, sha256(shareToken)]);
+  await db.query(`UPDATE artifacts SET visibility='link', share_token_hash=$2, workspace_id=NULL, shared_revision=$3, updated_at=NOW() WHERE id=$1`, [artifactId, sha256(shareToken), pinned]);
   return { ...(await getArtifactForOwner(db, artifactId, ownerUserId)), shareToken };
 }
 
@@ -203,16 +234,51 @@ export async function deleteArtifact(db, { artifactId, ownerUserId }) {
   return { deleted: true };
 }
 
-export async function addComment(db, { artifactId, userId, body, selector, access }) {
+/** Comments an artifact may take per hour before the queue refuses — the same 60 Claude Code caps its watch at. */
+export const ARTIFACT_COMMENT_HOURLY_CAP = 60;
+
+/**
+ * A person's comment. `parentId` makes it a reply in a thread; `toAgent` (default true) puts it on
+ * the publishing session's queue — a note between reviewers stays on the page and is never delivered.
+ */
+export async function addComment(db, { artifactId, userId, body, selector, parentId, toAgent = true, access }) {
   const artifact = await resolveReadable(db, { artifactId, userId, shareToken: access?.shareToken });
   if (!artifact) throw new ArtifactError(404, 'Artifact not found.', 'not_found');
   const text = String(body ?? '').trim();
   if (!text) throw new ArtifactError(400, 'A comment needs text.', 'missing_body');
+  let parent = null;
+  if (parentId !== undefined && parentId !== null) {
+    parent = (await db.query(`SELECT id FROM artifact_comments WHERE id=$1 AND artifact_id=$2 AND parent_id IS NULL`, [String(parentId), artifactId])).rows[0]?.id ?? null;
+    if (!parent) throw new ArtifactError(400, 'parentId must be a top-level comment on this artifact.', 'invalid_parent');
+  }
+  const recent = (await db.query(`SELECT count(*)::int AS n FROM artifact_comments WHERE artifact_id=$1 AND created_at > NOW() - interval '1 hour'`, [artifactId])).rows[0].n;
+  if (recent >= ARTIFACT_COMMENT_HOURLY_CAP) throw new ArtifactError(429, `This page has taken ${ARTIFACT_COMMENT_HOURLY_CAP} comments in the last hour; try again later.`, 'comment_rate_limited');
   const id = mintId('c_');
   const row = (await db.query(
-    `INSERT INTO artifact_comments (id, artifact_id, revision, user_id, body, selector) VALUES ($1, $2, $3, $4, $5, $6)
-     RETURNING id, artifact_id, revision, user_id, body, selector, created_at, delivered_at`,
-    [id, artifactId, artifact.currentRevision, userId, text.slice(0, 20000), typeof selector === 'string' && selector.trim() ? selector.trim().slice(0, 500) : null],
+    `INSERT INTO artifact_comments (id, artifact_id, revision, user_id, body, selector, parent_id, author_kind, to_agent) VALUES ($1, $2, $3, $4, $5, $6, $7, 'user', $8)
+     RETURNING id, artifact_id, revision, user_id, body, selector, parent_id, author_kind, to_agent, created_at, delivered_at`,
+    [id, artifactId, artifact.access === 'owner' ? artifact.currentRevision : artifact.viewRevision, userId, text.slice(0, 20000), typeof selector === 'string' && selector.trim() ? selector.trim().slice(0, 500) : null, parent, toAgent !== false],
+  )).rows[0];
+  return commentView(row);
+}
+
+/**
+ * The publishing session's reply, posted by the OWNER (the session acts as them) into a thread.
+ * Never queued for delivery — it is the agent talking, not to it.
+ */
+export async function addAgentReply(db, { artifactId, ownerUserId, parentId, body }) {
+  const artifact = await getArtifactForOwner(db, artifactId, ownerUserId);
+  if (!artifact) throw new ArtifactError(404, 'Artifact not found.', 'not_found');
+  const text = String(body ?? '').trim();
+  if (!text) throw new ArtifactError(400, 'A reply needs text.', 'missing_body');
+  const parent = (await db.query(`SELECT id, revision FROM artifact_comments WHERE id=$1 AND artifact_id=$2`, [String(parentId ?? ''), artifactId])).rows[0];
+  if (!parent) throw new ArtifactError(400, 'parentId must be a comment on this artifact.', 'invalid_parent');
+  const rootId = (await db.query(`SELECT COALESCE(parent_id, id) AS root FROM artifact_comments WHERE id=$1`, [parent.id])).rows[0].root;
+  const id = mintId('c_');
+  const row = (await db.query(
+    `INSERT INTO artifact_comments (id, artifact_id, revision, user_id, body, parent_id, author_kind, to_agent, delivered_at) VALUES ($1, $2, $3, $4, $5, $6, 'agent', FALSE, NOW())
+     RETURNING id, artifact_id, revision, user_id, body, selector, parent_id, author_kind, to_agent, created_at, delivered_at`,
+    [id, artifactId, artifact.currentRevision, ownerUserId, text.slice(0, 20000), rootId],
   )).rows[0];
   return commentView(row);
 }
@@ -229,6 +295,41 @@ export async function markCommentsDelivered(db, { artifactId, ownerUserId, comme
   return { delivered: result.rowCount };
 }
 
+/**
+ * Retention: artifacts past `expires_at` are soft-deleted in bounded batches. Policy is set per
+ * artifact at publish time from ARTIFACTS_RETENTION_DAYS_PRIVATE / _SHARED (unset = keep forever),
+ * and re-derived when sharing changes. Never throws — hygiene must not take a request down.
+ */
+export function retentionDaysFor(visibility, env = process.env) {
+  const raw = env[visibility === 'private' ? 'ARTIFACTS_RETENTION_DAYS_PRIVATE' : 'ARTIFACTS_RETENTION_DAYS_SHARED'];
+  if (raw == null || raw === '') return null;
+  const n = Number(raw);
+  // A malformed value keeps "never" rather than becoming 0 — a retention system must not fail towards deleting everything.
+  if (!Number.isFinite(n) || n < 1) return null;
+  return Math.floor(n);
+}
+
+export async function applyRetentionPolicy(db, artifactId, env = process.env) {
+  const row = (await db.query(`SELECT visibility FROM artifacts WHERE id=$1 AND deleted_at IS NULL`, [artifactId])).rows[0];
+  if (!row) return;
+  const days = retentionDaysFor(row.visibility, env);
+  await db.query(`UPDATE artifacts SET expires_at = CASE WHEN $2::int IS NULL THEN NULL ELSE NOW() + ($2::int || ' days')::interval END WHERE id=$1`, [artifactId, days]);
+}
+
+export async function sweepExpiredArtifacts(db, { limit = 200 } = {}) {
+  try {
+    const result = await db.query(
+      `UPDATE artifacts SET deleted_at=NOW(), visibility='private', share_token_hash=NULL, workspace_id=NULL
+        WHERE id IN (SELECT id FROM artifacts WHERE deleted_at IS NULL AND expires_at IS NOT NULL AND expires_at < NOW() LIMIT $1)`,
+      [limit],
+    );
+    return { expired: result.rowCount };
+  } catch (error) {
+    console.error('[artifacts] retention sweep failed:', error?.message ?? error);
+    return { expired: 0, error: String(error?.message ?? error) };
+  }
+}
+
 // ───────────────────────────── reads ─────────────────────────────
 
 function artifactView(row) {
@@ -241,6 +342,9 @@ function artifactView(row) {
     icon: row.icon ?? undefined,
     currentRevision: row.current_revision,
     visibility: row.visibility,
+    workspaceId: row.workspace_id ?? undefined,
+    sharedRevision: row.shared_revision ?? undefined,
+    expiresAt: row.expires_at ?? undefined,
     sourceArtifactId: row.source_artifact_id ?? undefined,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
@@ -248,7 +352,11 @@ function artifactView(row) {
 }
 
 function commentView(row) {
-  return { id: row.id, artifactId: row.artifact_id, revision: row.revision, userId: row.user_id, body: row.body, selector: row.selector ?? undefined, createdAt: row.created_at, deliveredAt: row.delivered_at ?? undefined, ...(row.display_name ? { author: row.display_name } : {}) };
+  return {
+    id: row.id, artifactId: row.artifact_id, revision: row.revision, userId: row.user_id, body: row.body, selector: row.selector ?? undefined,
+    parentId: row.parent_id ?? undefined, authorKind: row.author_kind ?? 'user', toAgent: row.to_agent !== false,
+    createdAt: row.created_at, deliveredAt: row.delivered_at ?? undefined, ...(row.display_name ? { author: row.display_name } : {}),
+  };
 }
 
 export async function getArtifactForOwner(db, artifactId, ownerUserId) {
@@ -269,11 +377,21 @@ export async function listArtifactsForOwner(db, ownerUserId, { limit = 50 } = {}
 export async function resolveReadable(db, { artifactId, userId, shareToken }) {
   const row = (await db.query(`SELECT * FROM artifacts WHERE id=$1 AND deleted_at IS NULL`, [artifactId])).rows[0];
   if (!row) return null;
-  if (userId && row.owner_user_id === userId) return { ...artifactView(row), access: 'owner' };
+  const view = artifactView(row);
+  // What a viewer sees: the pinned revision if the owner pinned one, else the latest. The owner always sees the latest.
+  const viewRevision = row.shared_revision ?? row.current_revision;
+  if (userId && row.owner_user_id === userId) return { ...view, access: 'owner', viewRevision: row.current_revision };
   if (row.visibility === 'link' && typeof shareToken === 'string' && shareToken && row.share_token_hash) {
     const presented = Buffer.from(sha256(shareToken));
     const expected = Buffer.from(row.share_token_hash);
-    if (presented.length === expected.length && crypto.timingSafeEqual(presented, expected)) return { ...artifactView(row), access: 'link' };
+    if (presented.length === expected.length && crypto.timingSafeEqual(presented, expected)) return { ...view, access: 'link', viewRevision };
+  }
+  if (row.visibility === 'workspace' && userId && row.workspace_id) {
+    const member = (await db.query(
+      `SELECT 1 FROM billing_workspace_members WHERE workspace_id=$1 AND user_id=$2 AND member_status='active' LIMIT 1`,
+      [row.workspace_id, userId],
+    )).rows[0];
+    if (member) return { ...view, access: 'workspace', viewRevision };
   }
   return null;
 }
@@ -303,7 +421,7 @@ export async function readFile(db, { artifactId, revision, path }) {
 export async function listComments(db, { artifactId, undeliveredOnly = false }) {
   const rows = (await db.query(
     `SELECT c.*, u.display_name FROM artifact_comments c LEFT JOIN users u ON u.id = c.user_id
-      WHERE c.artifact_id=$1 ${undeliveredOnly ? 'AND c.delivered_at IS NULL' : ''} ORDER BY c.created_at ASC LIMIT 500`,
+      WHERE c.artifact_id=$1 ${undeliveredOnly ? 'AND c.delivered_at IS NULL AND c.to_agent AND c.author_kind = \'user\'' : ''} ORDER BY c.created_at ASC LIMIT 500`,
     [artifactId],
   )).rows;
   return rows.map(commentView);

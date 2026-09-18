@@ -5,11 +5,16 @@
  * Mounted behind databaseMiddleware + authMiddleware: every route here is
  * about one account's artifacts. Reads that must work for a stranger holding a
  * share link go through /a/… (artifactViewerRoutes.js), never this router.
+ *
+ * Governance: publish / share / delete are recorded as security events (the
+ * platform's audit log); ARTIFACTS_ENABLED=false answers 503 on every write.
  */
 import express from 'express';
 import {
   ArtifactError,
+  addAgentReply,
   addComment,
+  applyRetentionPolicy,
   createArtifact,
   deleteArtifact,
   getArtifactForOwner,
@@ -23,8 +28,14 @@ import {
   setVisibility,
 } from '../services/artifactService.js';
 import { mintViewToken } from '../services/artifactViewToken.js';
+import { recordSecurityEvent } from '../services/securityEvents.js';
 
 const router = express.Router();
+
+export function artifactsEnabled(env = process.env) {
+  const raw = (env.ARTIFACTS_ENABLED ?? 'true').trim().toLowerCase();
+  return !(raw === 'false' || raw === '0' || raw === 'off');
+}
 
 const originOf = (req) => (process.env.PUBLIC_ORIGIN?.replace(/\/$/, '') || `${req.protocol}://${req.get('host')}`);
 
@@ -42,21 +53,31 @@ const wrap = (handler) => async (req, res) => {
   }
 };
 
+/** The admin kill-switch: reads keep working (people can still open what exists); writes stop. */
+const requireEnabled = (req, res, next) => {
+  if (artifactsEnabled()) return next();
+  res.status(503).json({ error: 'Artifacts are turned off for this platform.', code: 'artifacts_disabled' });
+};
+
 const withUrl = (req, artifact) => ({ ...artifact, url: publicUrlFor(artifact.id, originOf(req)) });
+
+const audit = (req, type, artifactId, metadata = {}) => recordSecurityEvent(req.db, type, { userId: req.user.id, req, metadata: { artifactId, ...metadata } }).catch(() => undefined);
 
 router.get('/', wrap(async (req, res) => {
   const limit = Number.parseInt(String(req.query.limit ?? '50'), 10) || 50;
   const artifacts = await listArtifactsForOwner(req.db, req.user.id, { limit });
-  res.json({ artifacts: artifacts.map((a) => withUrl(req, a)) });
+  res.json({ artifacts: artifacts.map((a) => withUrl(req, a)), enabled: artifactsEnabled() });
 }));
 
-router.post('/', wrap(async (req, res) => {
+router.post('/', requireEnabled, wrap(async (req, res) => {
   const artifact = await createArtifact(req.db, {
     ownerUserId: req.user.id,
     body: req.body ?? {},
     sourceArtifactId: typeof req.body?.sourceArtifactId === 'string' ? req.body.sourceArtifactId.slice(0, 120) : undefined,
   });
-  res.status(201).json({ artifact: withUrl(req, artifact) });
+  await applyRetentionPolicy(req.db, artifact.id);
+  await audit(req, 'artifact_published', artifact.id, { revision: 1, title: artifact.title });
+  res.status(201).json({ artifact: withUrl(req, await getArtifactForOwner(req.db, artifact.id, req.user.id)) });
 }));
 
 router.get('/:id', wrap(async (req, res) => {
@@ -65,21 +86,36 @@ router.get('/:id', wrap(async (req, res) => {
   res.json({ artifact: withUrl(req, artifact), revisions: await listRevisions(req.db, artifact.id) });
 }));
 
-router.post('/:id/revisions', wrap(async (req, res) => {
+router.post('/:id/revisions', requireEnabled, wrap(async (req, res) => {
   const artifact = await reviseArtifact(req.db, { artifactId: req.params.id, ownerUserId: req.user.id, body: req.body ?? {} });
+  if (!artifact.unchanged) await audit(req, 'artifact_published', artifact.id, { revision: artifact.currentRevision, title: artifact.title });
   res.status(artifact.unchanged ? 200 : 201).json({ artifact: withUrl(req, artifact) });
 }));
 
 router.delete('/:id', wrap(async (req, res) => {
-  res.json(await deleteArtifact(req.db, { artifactId: req.params.id, ownerUserId: req.user.id }));
+  const result = await deleteArtifact(req.db, { artifactId: req.params.id, ownerUserId: req.user.id });
+  await audit(req, 'artifact_deleted', req.params.id);
+  res.json(result);
 }));
 
-/** Link sharing: { visibility: 'link' } mints a share token (shown ONCE); 'private' revokes every link. */
-router.post('/:id/share', wrap(async (req, res) => {
-  const result = await setVisibility(req.db, { artifactId: req.params.id, ownerUserId: req.user.id, visibility: req.body?.visibility ?? 'link' });
+/**
+ * Audience: { visibility: 'link' } mints a share token (shown ONCE); 'workspace' + workspaceId
+ * opens it to that workspace's active members; 'private' revokes everything. `sharedRevision`
+ * pins the revision viewers see (null = latest).
+ */
+router.post('/:id/share', requireEnabled, wrap(async (req, res) => {
+  const result = await setVisibility(req.db, {
+    artifactId: req.params.id,
+    ownerUserId: req.user.id,
+    visibility: req.body?.visibility ?? 'link',
+    workspaceId: req.body?.workspaceId,
+    sharedRevision: req.body?.sharedRevision,
+  });
+  await applyRetentionPolicy(req.db, req.params.id);
   const { shareToken, ...artifact } = result;
+  await audit(req, 'artifact_shared', artifact.id, { visibility: artifact.visibility, ...(artifact.workspaceId ? { workspaceId: artifact.workspaceId } : {}), ...(artifact.sharedRevision ? { sharedRevision: artifact.sharedRevision } : {}) });
   res.json({
-    artifact: withUrl(req, artifact),
+    artifact: withUrl(req, await getArtifactForOwner(req.db, artifact.id, req.user.id)),
     ...(shareToken ? { shareToken, shareUrl: `${publicUrlFor(artifact.id, originOf(req))}?s=${shareToken}` } : {}),
   });
 }));
@@ -88,8 +124,8 @@ router.post('/:id/share', wrap(async (req, res) => {
 router.post('/:id/view-token', wrap(async (req, res) => {
   const artifact = await resolveReadable(req.db, { artifactId: req.params.id, userId: req.user.id, shareToken: req.body?.shareToken });
   if (!artifact) throw new ArtifactError(404, 'Artifact not found.', 'not_found');
-  const token = mintViewToken({ artifactId: artifact.id, revision: artifact.currentRevision });
-  res.json({ viewToken: token, revision: artifact.currentRevision, expiresInSeconds: 3600 });
+  const token = mintViewToken({ artifactId: artifact.id, revision: artifact.viewRevision });
+  res.json({ viewToken: token, revision: artifact.viewRevision, expiresInSeconds: 3600 });
 }));
 
 router.get('/:id/comments', wrap(async (req, res) => {
@@ -100,14 +136,22 @@ router.get('/:id/comments', wrap(async (req, res) => {
   res.json({ comments: await listComments(req.db, { artifactId: artifact.id, undeliveredOnly }) });
 }));
 
-router.post('/:id/comments', wrap(async (req, res) => {
+router.post('/:id/comments', requireEnabled, wrap(async (req, res) => {
   const comment = await addComment(req.db, {
     artifactId: req.params.id,
     userId: req.user.id,
     body: req.body?.body,
     selector: req.body?.selector,
+    parentId: req.body?.parentId,
+    toAgent: req.body?.toAgent !== false,
     access: { shareToken: typeof req.body?.shareToken === 'string' ? req.body.shareToken : undefined },
   });
+  res.status(201).json({ comment });
+}));
+
+/** The publishing session replies into a thread, attributed to the owner. */
+router.post('/:id/comments/:commentId/reply', requireEnabled, wrap(async (req, res) => {
+  const comment = await addAgentReply(req.db, { artifactId: req.params.id, ownerUserId: req.user.id, parentId: req.params.commentId, body: req.body?.body });
   res.status(201).json({ comment });
 }));
 

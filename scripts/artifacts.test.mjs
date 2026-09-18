@@ -30,13 +30,40 @@ test('both artifact routers are mounted in the real app, behind the right middle
   assert.ok(index.indexOf('app.use(express.json(') < index.indexOf("app.use('/api/artifacts'"), 'express.json must precede the artifacts mount');
 });
 
-test('nginx proxies /a/<id> (and only the artifact id shape) to the backend', () => {
+test('nginx proxies /a/<id> (and only the artifact id shape) to the backend, and the regex is QUOTED', () => {
   const conf = read('nginx', 'default.conf').replace(/#[^\n]*/g, '');
-  const block = /location ~ \^\/a\/a_\[A-Za-z0-9\]\{22\}\(\/\.\*\)\?\$ \{([\s\S]*?)\n\s*\}/.exec(conf);
-  assert.ok(block, 'a location for /a/a_<22> exists');
+  const block = /location ~ "\^\/a\/a_\[A-Za-z0-9\]\{22\}\(\/\.\*\)\?\$" \{([\s\S]*?)\n\s*\}/.exec(conf);
+  assert.ok(block, 'a location for /a/a_<22> exists, with the {22} regex in quotes');
   assert.match(block[1], /proxy_pass http:\/\/\$backend_upstream;/);
   assert.match(block[1], /proxy_set_header Host \$host;/);
   assert.match(block[1], /proxy_set_header X-Forwarded-Proto \$scheme;/);
+  // An UNQUOTED `{n}` inside `location ~` is parsed by nginx as a block opener and the whole config
+  // fails to load — `nginx -t` said exactly that on the first version of this block. Refuse the shape.
+  for (const line of conf.split('\n')) {
+    if (/^\s*location\s+~\*?\s+[^"'\s]*\{\d/.test(line)) assert.fail(`unquoted brace quantifier in a location regex: ${line.trim()}`);
+  }
+});
+
+test('the user-content host serves ONLY raw revision files, and the backend refuses raw on any other host', () => {
+  const conf = read('nginx', 'default.conf').replace(/#[^\n]*/g, '');
+  const server = /server \{\s*listen 80;\s*server_name usercontent\.xenostudio\.ai;([\s\S]*?)\n\}/.exec(conf);
+  assert.ok(server, 'a server block for usercontent.xenostudio.ai exists');
+  assert.match(server[1], /set \$backend_upstream backend:8080;/, 'the variable is per-server and must be set here too');
+  assert.match(server[1], /location ~ "\^\/a\/a_\[A-Za-z0-9\]\{22\}\/v\/\[\^\/\]\+\/r\/\[0-9\]\+\/\.\+\$" \{/, 'only the raw path shape is proxied');
+  assert.match(server[1], /location \/ \{\s*return 404;/, 'everything else on that host is 404');
+  const viewer = uncommented(read('src', 'server', 'routes', 'artifactViewerRoutes.js'));
+  assert.match(viewer, /if \(host && req\.get\('host'\) !== host\) return res\.status\(404\)/, 'raw files refuse the app host when a content host is configured');
+  assert.match(viewer, /if \(host && req\.get\('host'\) === host\) return page\(res, 404/, 'the shell refuses the content host');
+  assert.match(viewer, /'cross-origin-resource-policy': 'cross-origin'/, 'an opaque-origin frame must be able to load its own files');
+  const compose = read('docker-compose.yml');
+  for (const name of ['ARTIFACTS_R2_BUCKET', 'R2_ACCOUNT_ID', 'R2_ACCESS_KEY_ID', 'R2_SECRET_ACCESS_KEY', 'ARTIFACTS_DIR', 'ARTIFACTS_CONTENT_ORIGIN', 'ARTIFACTS_ENABLED', 'ARTIFACTS_RETENTION_DAYS_PRIVATE', 'ARTIFACTS_RETENTION_DAYS_SHARED', 'PUBLIC_ORIGIN']) {
+    assert.ok(compose.includes(`- ${name}=\${${name}:-`), `compose names ${name} (a value in .env alone reaches no container)`);
+  }
+  assert.match(compose, /- \.\/data\/artifacts:\/app\/data\/artifacts/, 'the filesystem backend is a bind mount, so pages survive a redeploy');
+  const index = uncommented(read('src', 'server', 'index.js'));
+  assert.match(index, /sweepExpiredArtifacts\(pool\)/, 'retention is wired into the sweep, not just exported');
+  const events = uncommented(read('src', 'server', 'services', 'securityEvents.js'));
+  for (const t of ['artifact_published', 'artifact_shared', 'artifact_deleted']) assert.ok(events.includes(`'${t}'`), `${t} is a KNOWN security event (unknown types are recorded as unknown_event)`);
 });
 
 test('the raw-file CSP is the CLI viewer policy plus sandbox — one policy, two homes', () => {
