@@ -17359,7 +17359,8 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
             turns={scrubberTurns}
             scrollerRef={chatAreaRef}
             className="chat-thread-scrubber"
-            style={{ top: 72, bottom: composerDockHeight + 8, right: (contextWorkspaceInsetPx || 0) + 4 }}
+            /* centred in the thread that is VISIBLE: below the 64px top bar, above the measured dock */
+            style={{ top: `calc(50% + ${Math.round((64 - composerDockHeight) / 2)}px)`, right: (contextWorkspaceInsetPx || 0) + 4 }}
           />
         )}
 

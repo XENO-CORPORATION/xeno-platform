@@ -176,7 +176,7 @@ try {
   check('the chat mounts the canonical ThreadScrubber on its own scroller, fed from STATE (messages), with placeholders left out', /<ThreadScrubber\s+turns=\{scrubberTurns\}\s+scrollerRef=\{chatAreaRef\}/.test(chat) && /useMemo<ScrubberTurn\[\]>\(\(\) => messages/.test(chat) && /!m\.isThinkingPlaceholder && !m\.isDotPlaceholder && !m\.isError/.test(chat));
   check('every message element carries data-turn so the map can find it', /data-turn=\{message\.id\}/.test(chat));
   check('a turn that searched is MARKED on the rail', /marked: !!\(m\.turn\?\.steps\?\.length\)/.test(chat));
-  check('the rail stops above the composer dock, whose height is measured, not assumed', /ref=\{composerDockRef\}/.test(chat) && /new ResizeObserver\(measure\);\s*observer\.observe\(dock\)/.test(chat) && /bottom: composerDockHeight \+ 8/.test(chat));
+  check('the rail is centred in the visible thread — between the top bar and the composer dock, whose height is measured, not assumed', /ref=\{composerDockRef\}/.test(chat) && /new ResizeObserver\(measure\);\s*observer\.observe\(dock\)/.test(chat) && /calc\(50% \+ \$\{Math\.round\(\(64 - composerDockHeight\) \/ 2\)\}px\)/.test(chat));
   check('the rail carries the transcript tokens inside the chat theme, light included', /\.chat-themed \.chat-thread-scrubber \{/.test(css) && /\.chat-theme-light \.chat-thread-scrubber \{ --xa-ink: 10, 10, 10; \}/.test(css));
   check('the favicon proxy is MOUNTED, not just written', /app\.use\('\/api\/favicon', faviconRoutes\);/.test(server) && /import faviconRoutes from '\.\/routes\/faviconRoutes\.js';/.test(server));
   const main = readFileSync(new URL('../src/main.tsx', import.meta.url), 'utf8');
