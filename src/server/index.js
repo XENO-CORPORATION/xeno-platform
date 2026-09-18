@@ -81,6 +81,7 @@ import { sweepExpiredIntents } from './services/downloadFunnel.js';
 import { sweepRetention, RETENTION_SWEEP_INTERVAL_MS } from './services/dataRetention.js';
 import { requireSupportedClient } from './middleware/requireSupportedClient.js';
 import clientPolicyRoutes from './routes/clientPolicyRoutes.js';
+import faviconRoutes from './routes/faviconRoutes.js';
 import xenoRoutes from './routes/xenoRoutes.js';
 import marketplaceRoutes from './routes/marketplaceRoutes.js';
 import billingRoutes, { stripeWebhook } from './routes/billingRoutes.js';
@@ -327,6 +328,8 @@ app.use('/api/', browserSessionMiddleware(pool));
 // once, here — not only where a route remembered to check (middleware/suspensionGate.js).
 app.use('/api/', suspensionGate(pool));
 app.use('/api/client-policy', databaseMiddleware, clientPolicyRoutes);
+// A cited site's favicon, through us (never the site from the user's browser). Public, cached; routes/faviconRoutes.js.
+app.use('/api/favicon', faviconRoutes);
 
 // The auth surface, limiter by limiter (middleware/rateLimiter.js §1a). These
 // used to share ONE bucket of 10 requests / 15 min per IP that counted successes,

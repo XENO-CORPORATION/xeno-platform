@@ -12,7 +12,7 @@
  */
 import React, { useMemo } from 'react';
 import { TranscriptTurn, type TranscriptActions } from '@xenosystem/agent-conversation/components/agent/transcript/Transcript';
-import { toTranscriptMessage, type ChatTurnRecord, type StepsMode } from './chatTurnTranscript';
+import { toTranscriptMessage, type ChatTurnRecord, type StepsMode, chatFaviconUrl } from './chatTurnTranscript';
 
 /** This surface has no asks (no tool needs a grant in Chat), so every ask action is a refusal. */
 const NO_ASKS: TranscriptActions['ask'] = {
@@ -75,6 +75,7 @@ export const ChatTurnHead: React.FC<ChatTurnHeadProps> = ({
         renderMarkdown={() => null}
         model={model}
         clock="always"
+        faviconUrl={chatFaviconUrl}
       />
     </div>
   );

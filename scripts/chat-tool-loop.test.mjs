@@ -349,3 +349,48 @@ test('an unknown surface is capped, even driven by a model that never stops', as
     `${TOOL_BUDGETS.chat.maxSearches} — the budget fell back to something without a cap`,
   );
 });
+
+/*
+ * ── citations: the numbering contract ──────────────────────────────────────────────────────
+ *
+ * `[n]` in the reply refers to the n-th DISTINCT source of the turn: one id per URL, first
+ * appearance wins, from 1, across every search. The client derives the same numbers from the
+ * turn's steps (`numberSources` in @xenosystem/agent-conversation); this pins the server half.
+ * The streamed loop's events are pinned in chat-tool-stream.test.mjs.
+ */
+test('🔴 sources are numbered turn-wide — one id per URL, first appearance wins, across searches', async () => {
+  const toolPayloads = [];
+  let call = 0;
+  const found = [
+    [{ title: 'one', url: 'https://one.test/', snippet: '' }, { title: 'two', url: 'https://two.test/', snippet: '' }],
+    [{ title: 'two again', url: 'https://two.test/', snippet: '' }, { title: 'three', url: 'https://three.test/', snippet: '' }],
+  ];
+  const result = await runToolLoop({
+    messages: [{ role: 'user', content: 'q' }],
+    surface: 'research',
+    turnId: 'cite',
+    callModel: async ({ messages }) => {
+      call += 1;
+      for (const m of messages) if (m.role === 'tool' && !toolPayloads.includes(m.content)) toolPayloads.push(m.content);
+      if (call <= 2) return searchCall(`q${call}`, `call_${call}`);
+      return answer('done [1][3]');
+    },
+    runSearch: async () => ({ sources: found[call - 1] }),
+  });
+  const ids = toolPayloads.map((raw) => JSON.parse(raw).sources.map((s) => `${s.id}:${s.title}`));
+  assert.deepEqual(ids, [['1:one', '2:two'], ['2:two again', '3:three']], 'the model sees the same id for the same URL in every search');
+  assert.deepEqual(result.sources.map((s) => `${s.id}:${s.url}`), ['1:https://one.test/', '2:https://two.test/', '3:https://three.test/'], 'the turn-level list is distinct and in order');
+});
+
+test('the tool tells the model HOW to cite, and the mode prompts agree', async () => {
+  const { readFileSync } = await import('node:fs');
+  assert.match(WEB_SEARCH_TOOL.function.description, /`\[id\]` immediately after each sentence/);
+  assert.match(WEB_SEARCH_TOOL.function.description, /never write footnotes/i);
+  const config = readFileSync(new URL('../src/components/playground/Chat/chatModeConfig.ts', import.meta.url), 'utf8');
+  for (const mode of ['chat', 'research']) {
+    const start = config.indexOf(`  ${mode}: [`);
+    const block = config.slice(start, config.indexOf('].join', start));
+    assert.match(block, /every result has an `id`/, `${mode} must explain the ids`);
+    assert.match(block, /never a source list/, `${mode} must forbid the footnote list`);
+  }
+});

@@ -25,6 +25,8 @@ import type {
   ChatMessage as TranscriptMessage,
   ToolCallInfo,
 } from '@xenosystem/agent-conversation/stores/agentChatStore';
+import { numberSources } from '@xenosystem/agent-conversation/components/agent/transcript/turnModel';
+import type { CitedSource } from '@xenosystem/agent-conversation/components/agent/transcript/citations';
 
 export type StepsMode = 'expanded' | 'collapsed';
 export const STEPS_MODES: ReadonlyArray<StepsMode> = ['expanded', 'collapsed'];
@@ -233,4 +235,29 @@ export function toTranscriptMessage(input: ChatTurnInput): TranscriptMessage {
     segments,
     runtimeKind: 'llm',
   };
+}
+
+/**
+ * Favicons come through OUR proxy (`/api/favicon`, routes/faviconRoutes.js) — never the cited site
+ * from the user's browser: that is an IP leak per render and hotlink-blocking hosts refuse it.
+ */
+export const chatFaviconUrl = (domain: string): string => `/api/favicon?domain=${encodeURIComponent(domain)}`;
+
+/**
+ * The sources a reply's `[n]` markers refer to — the turn's record, numbered by the ONE rule both
+ * sides implement (`numberSources`: one id per URL, first appearance across every search step,
+ * from 1; the server's tool loop numbers what it hands the model the same way).
+ */
+export function turnCitedSources(record: ChatTurnRecord | undefined): CitedSource[] {
+  if (!record) return [];
+  const flat = record.steps.flatMap((step) => (step.sources ?? []).map((source) => ({
+    title: source.title || domainOf(source.url),
+    url: source.url,
+    domain: domainOf(source.url),
+  })));
+  return numberSources(flat);
+}
+
+function domainOf(url: string): string {
+  try { return new URL(url).hostname.replace(/^www\./, ''); } catch { return url; }
 }
