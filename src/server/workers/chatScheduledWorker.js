@@ -266,21 +266,36 @@ export async function publishMessages(pool, { run, task, conversationId, assista
         : Number((await tx.query(
           'SELECT COALESCE(MAX(message_index), -1) + 1 AS next_index FROM chat_messages WHERE conversation_id = $1', [conversationId],
         )).rows[0].next_index);
-    await tx.query(
+    // The pair hangs off the branch the person is on (the active leaf, else the newest message)
+    // and becomes the new leaf — a run's messages must land ON the thread, not beside it as a
+    // second root (chat-message-branches, 2026-09-18).
+    const leafRow = (await tx.query('SELECT active_leaf_id FROM chat_conversations WHERE id = $1', [conversationId])).rows[0];
+    const parentId = leafRow?.active_leaf_id
+      ?? (await tx.query('SELECT id FROM chat_messages WHERE conversation_id = $1 ORDER BY message_index DESC, created_at DESC LIMIT 1', [conversationId])).rows[0]?.id
+      ?? null;
+    const userInsert = await tx.query(
       `INSERT INTO chat_messages(
-         conversation_id,user_id,created_by_user_id,role,content,model_id,message_index,scheduled_run_id
-       ) VALUES($1,$2,$2,'user',$3,$4,$5,$6)
-       ON CONFLICT(scheduled_run_id,role) WHERE scheduled_run_id IS NOT NULL AND role IN ('user','assistant') DO NOTHING`,
-      [conversationId, task.run_as_user_id, task.prompt, task.model_id, nextIndex, run.id],
-    );
-    const assistantInsert = await tx.query(
-      `INSERT INTO chat_messages(
-         conversation_id,user_id,created_by_user_id,role,content,model_id,message_index,scheduled_run_id
-       ) VALUES($1,$2,$2,'assistant',$3,$4,$5,$6)
+         conversation_id,user_id,created_by_user_id,role,content,model_id,message_index,scheduled_run_id,parent_id
+       ) VALUES($1,$2,$2,'user',$3,$4,$5,$6,$7)
        ON CONFLICT(scheduled_run_id,role) WHERE scheduled_run_id IS NOT NULL AND role IN ('user','assistant') DO NOTHING
        RETURNING id`,
-      [conversationId, task.run_as_user_id, assistantText, task.model_id, nextIndex + 1, run.id],
+      [conversationId, task.run_as_user_id, task.prompt, task.model_id, nextIndex, run.id, parentId],
     );
+    const userMessageId = userInsert.rows[0]?.id || (await tx.query(
+      "SELECT id FROM chat_messages WHERE scheduled_run_id=$1 AND role='user'", [run.id],
+    )).rows[0]?.id || null;
+    const assistantInsert = await tx.query(
+      `INSERT INTO chat_messages(
+         conversation_id,user_id,created_by_user_id,role,content,model_id,message_index,scheduled_run_id,parent_id
+       ) VALUES($1,$2,$2,'assistant',$3,$4,$5,$6,$7)
+       ON CONFLICT(scheduled_run_id,role) WHERE scheduled_run_id IS NOT NULL AND role IN ('user','assistant') DO NOTHING
+       RETURNING id`,
+      [conversationId, task.run_as_user_id, assistantText, task.model_id, nextIndex + 1, run.id, userMessageId],
+    );
+    const newLeafId = assistantInsert.rows[0]?.id || (await tx.query(
+      "SELECT id FROM chat_messages WHERE scheduled_run_id=$1 AND role='assistant'", [run.id],
+    )).rows[0]?.id || userMessageId;
+    if (newLeafId) await tx.query('UPDATE chat_conversations SET active_leaf_id = $2 WHERE id = $1', [conversationId, newLeafId]);
     if (task.project_id && contextManifest) {
       const assistantId = assistantInsert.rows[0]?.id || (await tx.query(
         "SELECT id FROM chat_messages WHERE scheduled_run_id=$1 AND role='assistant'",
