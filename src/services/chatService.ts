@@ -42,6 +42,8 @@ export interface ChatMessage {
   project_sources?: ProjectSourceReference[];
   created_at?: string;
   message_index?: number;
+  /** The message this one follows — the tree edge. `null` = the conversation's first. */
+  parent_id?: string | null;
   // Legacy fields for compatibility
   sender?: 'user' | 'ai';
   text?: string;
@@ -86,7 +88,12 @@ export interface Conversation {
   is_archived?: boolean;
   message_count?: number;
   project_id?: string | null;
+  /** The ACTIVE branch, root → leaf, in reading order. */
   messages?: ChatMessage[];
+  /** Every message of every branch (with `parent_id`), for the ‹ i/n › controls. */
+  branches?: ChatMessage[];
+  /** The message the person is looking at; the branch shown is its path to the root. */
+  active_leaf_id?: string | null;
   // Legacy fields for compatibility
   timestamp?: number;
   systemPrompt?: string;
@@ -297,6 +304,12 @@ export const chatService = {
       total_tokens?: number;
       context_record_id?: string;
       turn?: unknown;
+      /**
+       * Where the message hangs. Omitted: after the conversation's active leaf (a normal send).
+       * A message id: a SIBLING branch — an edit passes the edited message's own parent, a
+       * regenerate passes the user message it answers. `null`: a new first message.
+       */
+      parent_id?: string | null;
     }
   ): Promise<ChatMessage | null> {
     if (!isPersistedConversationId(conversationId)) {
@@ -320,10 +333,31 @@ export const chatService = {
     }
   },
 
+  /**
+   * Switch branch: the sibling flipped to with ‹ › (or any message) becomes the branch shown —
+   * the server lands on the newest reply chain beneath it and remembers, so a reload agrees.
+   */
+  async setActiveLeaf(conversationId: string, messageId: string): Promise<{ active_leaf_id: string; messages: string[] } | null> {
+    if (!isPersistedConversationId(conversationId)) return null;
+    try {
+      const response = await fetch(`${API_BASE}/conversations/${conversationId}/active-leaf`, {
+        method: 'PUT',
+        headers: getAuthHeaders(),
+        body: JSON.stringify({ message_id: messageId }),
+      });
+      const result = await handleResponse<{ active_leaf_id: string; messages: string[] }>(response);
+      return result?.active_leaf_id ? { active_leaf_id: result.active_leaf_id, messages: result.messages || [] } : null;
+    } catch (error) {
+      console.error('Failed to switch branch:', error);
+      return null;
+    }
+  },
+
   // Add multiple messages at once
   async addMessagesBatch(
     conversationId: string,
-    messages: ChatMessage[]
+    messages: ChatMessage[],
+    options: { parent_id?: string | null } = {},
   ): Promise<ChatMessage[]> {
     if (!isPersistedConversationId(conversationId)) {
       return [];
@@ -334,7 +368,7 @@ export const chatService = {
         {
           method: 'POST',
           headers: getAuthHeaders(),
-          body: JSON.stringify({ messages }),
+          body: JSON.stringify({ messages, ...(options.parent_id !== undefined ? { parent_id: options.parent_id } : {}) }),
         }
       );
 

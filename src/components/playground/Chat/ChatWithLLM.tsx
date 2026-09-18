@@ -51,6 +51,7 @@ import {
 } from './chatTurnTranscript';
 import { CitationChip, parseCitationHref, remarkCitations } from '@xenosystem/agent-conversation/components/agent/transcript/citations';
 import { ThreadScrubber, firstLineOf, type ScrubberTurn } from '@xenosystem/agent-conversation/components/agent/transcript/ThreadScrubber';
+import { activePath as branchActivePath, branchInfo } from './chatBranches';
 import { readGenerateResponse, readStreamedTurn, endpointForTask, streamRequestBody, CHAT_STREAM_ENDPOINT } from './chatStream';
 import { reasoningCapabilityForModel, reasoningTraceForModel } from '@/server/lib/chatModelCapabilities.js';
 import CodeBlockWithHeader from './CodeBlockWithHeader';
@@ -398,6 +399,10 @@ interface ChatMessage {
     projectSources?: ProjectSourceReference[];
     projectContextId?: string;
     isPersistenceError?: boolean;
+    /** The row's id in the database, once persisted — the tree edge needs it. Local `id` stays the UI key. */
+    dbId?: string;
+    /** The database id of the message this one follows; `null` = the conversation's first. */
+    parentDbId?: string | null;
     /** What the assistant did before it answered — the transcript's rail (chatTurnTranscript.ts). */
     turn?: ChatTurnRecord;
 }
@@ -489,6 +494,8 @@ const dbMessageToLocal = (msg: DBChatMessage, index: number): ChatMessage => {
   const persistedSearch = normalizePersistedSearchInfo(msg.search_context);
   return {
     id: msg.id || `msg-${index}`,
+    dbId: msg.id,
+    parentDbId: msg.parent_id ?? null,
     sender: isAi ? 'ai' : 'user',
     text: msg.content,
     parsedAnswer: isAi ? msg.content : undefined,
@@ -2957,6 +2964,30 @@ const ChatWithLLM: React.FC<ChatWithLLMProps> = ({
   const feedbackPopupRef = useRef<HTMLDivElement>(null);
   const dislikePopupRef = useRef<HTMLDivElement>(null);
   const chatAreaRef = useRef<HTMLDivElement>(null); // chatAreaRef is used in the hover useEffect
+  /*
+   * The message TREE (chatBranches.ts). `messages` is the branch on screen; `branchRows` is every
+   * row of every branch the server handed down, and grows as sends persist, so the ‹ i/n › controls
+   * know their siblings. `dbIdByLocalId` remembers a persisted row's id for a local message the
+   * in-flight send closed over before the id came back.
+   */
+  type BranchRowDb = DBChatMessage & { id: string };
+  const asBranchRows = (rows: DBChatMessage[] | undefined): BranchRowDb[] => (rows ?? []).filter((row): row is BranchRowDb => typeof row.id === 'string');
+  const [branchRows, setBranchRows] = useState<BranchRowDb[]>([]);
+  const branchRowsRef = useRef<BranchRowDb[]>([]);
+  useEffect(() => { branchRowsRef.current = branchRows; }, [branchRows]);
+  const dbIdByLocalIdRef = useRef<Map<string, string>>(new Map());
+  const dbIdOf = useCallback((message: ChatMessage | undefined): string | undefined => {
+    if (!message) return undefined;
+    return message.dbId ?? dbIdByLocalIdRef.current.get(message.id);
+  }, []);
+  const rememberPersisted = useCallback((localId: string, row: DBChatMessage) => {
+    if (!row?.id) return;
+    dbIdByLocalIdRef.current.set(localId, row.id);
+    setBranchRows((previous) => (previous.some((existing) => existing.id === row.id) ? previous : [...previous, row as BranchRowDb]));
+    setMessages((previous) => previous.map((message) => (
+      message.id === localId ? { ...message, dbId: row.id, parentDbId: row.parent_id ?? null } : message
+    )));
+  }, []);
   // The thread scrubber (the conversation map on the right edge) spans the visible thread: below
   // the top bar, above the composer dock — whose height is measured, since it grows with its rows.
   const composerDockRef = useRef<HTMLDivElement>(null);
@@ -6440,7 +6471,7 @@ interface QueueState {
           });
           if (dbConversation) {
             // For AI messages, save parsedAnswer (what is displayed) rather than the raw text.
-            await chatService.addMessagesBatch(
+            const persistedRows = await chatService.addMessagesBatch(
               dbConversation.id,
               conversationMessages.map((msg) => ({
                 role: msg.sender === 'ai' ? ('assistant' as const) : ('user' as const),
@@ -6453,6 +6484,8 @@ interface QueueState {
                 turn: msg.turn,
               })),
             );
+            // the batch came back in order: pair each row with the local message it stored
+            persistedRows.forEach((row, index) => { const local = conversationMessages[index]; if (local && row?.id) rememberPersisted(local.id, row); });
             return register(dbConversation.id);
           }
           throw new Error('Conversation creation returned no durable record.');
@@ -7261,6 +7294,10 @@ interface QueueState {
                     // Add the AI response message to the database
                     // Save parsedAnswer (the displayed content) as content, not raw text
                     try {
+                      // under the message it ANSWERED — a regenerate then lands as a sibling of the
+                      // old reply, never under it
+                      const answered = [...currentHistory].reverse().find((message) => message.id !== localPlaceholderId && message.sender === 'user');
+                      const answeredDbId = dbIdOf(answered);
                       const persistedAssistantMessage = await chatService.addMessage(conversationId, {
                           role: 'assistant',
                           content: updatedMessage.projectContextId
@@ -7272,8 +7309,10 @@ interface QueueState {
                           context_record_id: updatedMessage.projectContextId,
                           web_context_receipt_id: updatedMessage.searchInfo?.webContextReceiptId,
                           turn: updatedMessage.turn,
+                          ...(answeredDbId ? { parent_id: answeredDbId } : {}),
                       });
                       if (!persistedAssistantMessage) throw new Error('The assistant turn was not persisted.');
+                      rememberPersisted(updatedMessage.id, persistedAssistantMessage);
                     } catch (error) {
                         console.error("Error adding message to database:", error);
                         setProjectFileNotice('The answer is visible but not saved. Retry before leaving this chat.');
@@ -7707,12 +7746,19 @@ interface QueueState {
       await createConversationForMessages(currentMessageHistory);
     } else if (isDbAuthenticated) {
       try {
+        // it follows the message before it on screen (the branch shown), not blindly the server's
+        // leaf — after a branch switch or an edit the two can differ, and this is what makes an
+        // edited version's chain its own
+        const previousShown = currentMessageHistory[currentMessageHistory.findIndex((message) => message.id === newUserMessage.id) - 1];
+        const previousDbId = dbIdOf(previousShown);
         const persistedUserMessage = await chatService.addMessage(activeConversationIdRef.current, {
           role: 'user',
           content: newUserMessage.text,
           attachments: messageLibraryAttachments(newUserMessage),
+          ...(previousShown ? { parent_id: previousDbId ?? null } : {}),
         });
         if (!persistedUserMessage) throw new Error('The user turn was not persisted.');
+        rememberPersisted(newUserMessage.id, persistedUserMessage);
       } catch (error) {
         console.error("Error adding user message to database:", error);
         setProjectFileNotice('This message is not saved. Web research was not started.');
@@ -8048,6 +8094,8 @@ interface QueueState {
           // Convert database message format to local format
           const localMessages: ChatMessage[] = fullConversation.messages.map(dbMessageToLocal);
           setMessages(localMessages);
+          setBranchRows(asBranchRows(fullConversation.branches ?? fullConversation.messages));
+          dbIdByLocalIdRef.current = new Map();
           // A conversation reopens on the model it was last used with (server row, kept
           // current by handleModelSelect). Highest rank: nothing loaded later overrides it.
           preferModel(fullConversation.model_id, 'conversation');
@@ -8892,6 +8940,8 @@ Keep the summary under 500 words. Preserve essential context needed to continue 
       dismissChatOverlays();
       setHistoryNavView('chats');
       setMessages([]); // Clear current messages
+      setBranchRows([]);
+      dbIdByLocalIdRef.current = new Map();
       setActiveConversationId(null); // Set active ID to null (indicates new chat)
       if (typeof window !== 'undefined' && window.location.pathname !== '/overview/chat/llm' && window.location.pathname !== '/c') {
         window.history.pushState(null, '', '/overview/chat/llm');
@@ -10424,24 +10474,87 @@ Keep the summary under 500 words. Preserve essential context needed to continue 
           return;
       }
       
-      const updatedMessage: ChatMessage = { 
-          ...messages[editedIndex], 
-          text: editText
+      /*
+       * An edit is a NEW VERSION beside the old one — a sibling branch with its own reply chain —
+       * never an overwrite (chatBranches.ts). It used to change the bubble on screen and append the
+       * new reply to the flat list; the edited text was never saved and the old reply never
+       * retired, so a reload showed the original with two answers under it (production,
+       * 2026-09-18). The new version is persisted FIRST, under the edited message's own parent, so
+       * the reply that follows hangs off it.
+       */
+      const edited = messages[editedIndex];
+      const newVersion: ChatMessage = {
+          ...edited,
+          id: `user-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+          text: editText,
+          timestamp: Date.now(),
+          dbId: undefined,
+          parentDbId: edited.parentDbId ?? dbIdOf(messages[editedIndex - 1]) ?? null,
+          isPersistenceError: false,
       };
-      
-      const truncatedHistory = [...messages.slice(0, editedIndex), updatedMessage];
-      
-      setMessages(truncatedHistory); // Update state immediately
-      
-      setEditingMessageId(null); // Clear edit state
+      const truncatedHistory = [...messages.slice(0, editedIndex), newVersion];
+      setMessages(truncatedHistory);
+      setEditingMessageId(null);
       setEditText('');
-      
+
+      const conversationId = activeConversationIdRef.current;
+      if (conversationId && isDbAuthenticated) {
+          try {
+              const persisted = await chatService.addMessage(conversationId, {
+                  role: 'user',
+                  content: newVersion.text,
+                  attachments: messageLibraryAttachments(newVersion),
+                  parent_id: newVersion.parentDbId ?? null,
+              });
+              if (!persisted) throw new Error('The edited message was not persisted.');
+              rememberPersisted(newVersion.id, persisted);
+          } catch (error) {
+              console.error('Error persisting the edited message:', error);
+              setProjectFileNotice('This edit is not saved. Retry before leaving this chat.');
+              setMessages((previous) => previous.map((message) => (message.id === newVersion.id ? { ...message, isPersistenceError: true } : message)));
+          }
+      }
+
       await fetchAiResponse(truncatedHistory, systemPrompt, selectedModel, undefined, undefined, undefined); // Explicitly pass undefined for task, xenoContext, and xenoSearchInfo
   };
 
   const handleCancelEdit = () => {
       setEditingMessageId(null);
       setEditText('');
+  };
+
+  /**
+   * ‹ › on a bubble: show the sibling version and its newest reply chain. The server records the
+   * leaf, so a reload lands on the same branch; the path is derived from the rows already here.
+   */
+  const switchBranch = useCallback(async (siblingDbId: string) => {
+      const conversationId = activeConversationIdRef.current;
+      if (!conversationId || isLoading) return;
+      const result = await chatService.setActiveLeaf(conversationId, siblingDbId);
+      if (!result) return;
+      const rows = branchRowsRef.current;
+      const path = branchActivePath(rows, result.active_leaf_id);
+      if (!path.length) return;
+      setMessages(path.map(dbMessageToLocal));
+      setEditingMessageId(null);
+      setEditText('');
+  }, [isLoading]);
+
+  /** The ‹ i/n › control for a bubble, or nothing when the message has one version. */
+  const renderBranchControl = (message: ChatMessage) => {
+      const info = branchInfo(branchRows, dbIdOf(message));
+      if (info.total < 2) return null;
+      const go = (delta: -1 | 1) => {
+          const next = info.siblings[(info.current - 1 + delta + info.total) % info.total];
+          if (next?.id) void switchBranch(next.id);
+      };
+      return (
+          <span className="chat-branch-nav inline-flex items-center gap-0.5 text-[11px] tabular-nums text-[var(--chat-muted)]" data-branch-nav={`${info.current}/${info.total}`}>
+              <button type="button" className="focus-self rounded px-1 hover:text-[var(--chat-text)] disabled:opacity-40" onClick={() => go(-1)} aria-label="Previous version" disabled={isLoading}>‹</button>
+              <span aria-live="polite">{info.current}/{info.total}</span>
+              <button type="button" className="focus-self rounded px-1 hover:text-[var(--chat-text)] disabled:opacity-40" onClick={() => go(1)} aria-label="Next version" disabled={isLoading}>›</button>
+          </span>
+      );
   };
   
   // --- Event Delegation Handlers (Updated for hidden markers) ---
@@ -16868,6 +16981,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                                                  ) : undefined}
                                                  actions={
                                                    <>
+                                               {renderBranchControl(message)}
                                                <IconButton
                                                    icon={RefreshDecl}
                                                    size="sm"
@@ -17287,6 +17401,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                                                   boxes around 14px glyphs, so most of the air is already
                                                   inside them and adding 8 more reads as a toolbar. */}
                                               <div className="flex items-center gap-0.5">
+                                                  {renderBranchControl(message)}
                                                   {/* `xeno-icon-hover` on every one of these: it is the library's generic "this element hosts
                                                       the glyph inside it" hook, and a glyph's motion is triggered by its HOST rather than by
                                                       itself. Without it the icons sat still — the animations were all there, with nothing to
