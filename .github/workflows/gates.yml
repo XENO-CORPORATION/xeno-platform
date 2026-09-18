@@ -142,6 +142,8 @@ jobs:
       # the chat only through two CSS scopes; a grep cannot see whether the built CSS applies them.
       - name: Assert the effort menu renders from the chat tokens in the built CSS
         run: npm run test:effort-menu-rendered
+      - name: Assert the phone drawer renders off-canvas with a full-viewport scrim
+        run: npm run test:mobile-drawer-rendered
 
   # ── The Forum's end-to-end proofs ───────────────────────────────────────────
   #

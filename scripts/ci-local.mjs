@@ -238,6 +238,9 @@ async function main() {
         const effort = run('npm', ['run', 'test:effort-menu-rendered'], { quiet: true });
         record('build: the effort menu renders from the chat tokens (real browser, built CSS)', effort.code === 0);
         ok = ok && effort.code === 0;
+        const drawer = run('npm', ['run', 'test:mobile-drawer-rendered'], { quiet: true });
+        record('build: the phone drawer renders off-canvas with a full-viewport scrim (real browser, built CSS)', drawer.code === 0);
+        ok = ok && drawer.code === 0;
       }
     }
 
