@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { readFileSync } from 'node:fs';
-import { reasoningCapabilityForModel, reasoningEffortForModel } from '../src/server/lib/chatModelCapabilities.js';
+import { reasoningCapabilityForModel, reasoningEffortForModel, reasoningTraceForModel } from '../src/server/lib/chatModelCapabilities.js';
 
 const TOGGLEABLE = [
   'grok-4.6',
@@ -53,4 +53,22 @@ test('the shared contract is present in the frontend Docker build context', () =
   const deployScript = readFileSync(new URL('./deploy-platform.mjs', import.meta.url), 'utf8');
   assert.match(dockerignore, /!src\/server\/lib\/chatModelCapabilities\.js/);
   assert.match(deployScript, /frontend:\s*\[[\s\S]*?'\.dockerignore'/);
+});
+
+/*
+ * Measured on the live gateway 2026-09-18 (it neither adds, renames nor strips reasoning fields):
+ * grok-4.6 streams `delta.reasoning_content`; grok-4.6-high-fast streams content only — xAI's
+ * fast tier keeps the trace by design. A model that reasons but shows no thought must SAY so, or
+ * the absence reads as the chat losing it. Unmeasured fixed tiers stay `visible` on purpose: a
+ * wrong "internal" label would hide a thought that would have shown.
+ */
+test('the trace classification: visible where the provider returns one, internal where it keeps it, none where the model does not reason', () => {
+  assert.equal(reasoningTraceForModel('grok-4.6'), 'visible');
+  assert.equal(reasoningTraceForModel('grok-4.6-high-fast'), 'internal');
+  assert.equal(reasoningTraceForModel('x-ai/grok-4.5-high-fast'), 'internal');
+  assert.equal(reasoningTraceForModel('claude-sonnet-4-6-thinking'), 'visible', 'unmeasured fixed tiers are not labelled internal');
+  assert.equal(reasoningTraceForModel('gpt-4.1'), 'none');
+  const chat = readFileSync(new URL('../src/components/playground/Chat/ChatWithLLM.tsx', import.meta.url), 'utf8');
+  assert.match(chat, /reasoningTraceForModel\(selectedModel\.id\) === 'internal' && \(/, 'the composer says "reasons internally" for such a model');
+  assert.match(chat, /data-reasoning-trace="internal"/);
 });
