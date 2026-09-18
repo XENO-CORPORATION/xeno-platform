@@ -113,6 +113,10 @@ try {
   const expandedSettled = await render({ messageId: 'p4', streaming: false, replyStarted: true, stepsMode: 'expanded', turn: done, timestamp: done.startedAt });
   check('expanded: the settled rail stays open and lists the search', /Searched the web/.test(expandedSettled.textContent) && /3 results/.test(expandedSettled.textContent));
 
+  const bare = closeTurnRecord(newTurnRecord(Date.now() - 3000), Date.now() - 100);
+  const plain = await render({ messageId: 'p5', streaming: false, replyStarted: true, stepsMode: 'collapsed', turn: bare, timestamp: bare.startedAt });
+  check('a plain reply — no steps, no thought — still rests under "Worked for …" (the chat asks for the clock on every turn)', /Worked for \d+s/.test(plain.textContent) && plain.querySelector('.xa-bare') !== null);
+
   await act(async () => { root.unmount(); });
 
   // ── reachability: the chat mounts the head where its own thinking box and spinner were ──
@@ -121,6 +125,9 @@ try {
   check('search events grow the turn record on the placeholder', /turnRecord = applyTurnEvent\(turnRecord, event/.test(chat) && /msg\.id === localPlaceholderId \? \{ \.\.\.msg, turn: record \}/.test(chat));
   check('the final message carries the closed record and it is persisted', /turn: closeTurnRecord\(turnRecord\)/.test(chat) && /turn: updatedMessage\.turn,/.test(chat) && /turn: msg\.turn,/.test(chat));
   check('a stored message reads its turn back', /turn: isAi \? normalizeStoredTurn\(/.test(chat));
+  const head = readFileSync(new URL('../src/components/playground/Chat/ChatTurnHead.tsx', import.meta.url), 'utf8');
+  check('the chat asks for the clock on EVERY turn (clock="always") — a plain reply rests under "Worked for …"', /clock="always"/.test(head) && /\(message\.turn \|\| turnHasRail\(/.test(chat));
+  check('the placeholder carries the start of the turn, so the opening clock counts from the request rather than from each render', /timestamp: thinkingStartTimeRef\.current, \/\/ the turn's clock starts here/.test(chat) && /timestamp=\{message\.turn\?\.startedAt \?\? message\.timestamp\}/.test(chat));
   check('a reasoning model that returned no trace shows NO thought box — the phantom "[Thinking process not provided…]" is gone', !/Thinking process not provided or markers not found/.test(chat) && !/localHasThinking = true;/.test(chat) && /\) : null\}/.test(chat));
   check('the steps mode is an account setting with a browser copy, and the modal exposes it', /debouncedSaveSetting\('chat\.stepsMode', stepsMode\)/.test(chat) && /isStepsMode\(settings\.chat\.stepsMode\)/.test(chat) && /onStepsModeChange=\{setStepsMode\}/.test(chat));
   const modal = readFileSync(new URL('../src/components/playground/Chat/ChatSettingsModal.tsx', import.meta.url), 'utf8');
