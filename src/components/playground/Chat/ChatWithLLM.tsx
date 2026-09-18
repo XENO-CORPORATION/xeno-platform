@@ -16631,26 +16631,20 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                                      <div
                                          className="chat-message-editor flex w-full flex-col gap-2 rounded-xl border border-[var(--chat-border)] bg-[var(--chat-surface)] p-2 text-[var(--chat-text)]"
                                      >
-                                         <div className="rounded-lg border border-[var(--chat-border)] bg-[var(--chat-canvas)]/40 px-2.5 py-2 transition-colors focus-within:border-[var(--chat-composer-focus-border)]">
-                                         {/* Stays hand-written — bare inside a box it does not
-                                             own. The `--chat-canvas`/40 plate carries the hairline
-                                             and the radius, and on focus its border steps ONE shade
-                                             (`--chat-composer-focus-border`, the composer's own
-                                             rule) — never an accent border, never a ring. The field
-                                             is `focus-self`: it opts out of the global
-                                             `:focus-visible` outline, which `outline-none` alone
-                                             cannot do (same specificity, index.css loads last) and
-                                             which drew a second bright rectangle inside the plate
-                                             (2026-09-18). A text input takes no focus ring —
-                                             DESIGN_SYSTEM. */}
+                                         {/* The field sits bare in the card, as the composer's does — no inner
+                                             plate. The plate that stood here (a bordered box inside the bordered
+                                             card) is the "square border on the input container" the person kept
+                                             seeing after every ring and outline had gone (2026-09-18): the card
+                                             is the container, and a container inside a container is one edge too
+                                             many. `focus-self` keeps the global outline off the field; the card's
+                                             own hairline is the edge. */}
                                          <textarea
                                              ref={editInputRef}
                                              value={editText}
                                              onChange={(e) => setEditText(e.target.value)}
-                                             className="focus-self min-h-[2.75rem] w-full resize-y border-none bg-transparent text-[15px] leading-6 text-[var(--chat-text)] outline-none focus:outline-none focus:ring-0"
-                                               rows={1}
-                                           />
-                                         </div>
+                                             className="focus-self min-h-[2.75rem] w-full resize-y border-none bg-transparent px-2.5 py-2 text-[15px] leading-6 text-[var(--chat-text)] outline-none focus:outline-none focus:ring-0"
+                                             rows={1}
+                                         />
                                          <div className="flex items-start gap-1.5 text-xs leading-4 text-[var(--chat-muted)]">
                                            <Info size={13} className="mt-0.5 flex-shrink-0 text-[var(--chat-muted)]" aria-hidden="true" />
                                            <p>
