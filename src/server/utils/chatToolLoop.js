@@ -65,7 +65,10 @@ export const WEB_SEARCH_TOOL = Object.freeze({
     description:
       'Search the web and read the results. Use this whenever the answer depends on current '
       + 'information, anything after your training cutoff, or facts you should verify rather '
-      + 'than recall. Prefer a specific query over a broad one.',
+      + 'than recall. Prefer a specific query over a broad one. Every source in the results has an '
+      + '`id`: cite it as `[id]` immediately after each sentence it supports — `[2]`, or `[1][3]` '
+      + 'for several. Never list sources at the end of the answer and never write footnotes; the '
+      + 'interface renders each `[id]` as the source itself.',
     parameters: {
       type: 'object',
       properties: {
@@ -212,8 +215,7 @@ export async function runToolLoop({ messages, surface, turnId, callModel, runSea
 
       try {
         const result = await runSearch({ query: args.query, depth: budget.depth });
-        const found = Array.isArray(result?.sources) ? result.sources : [];
-        sources.push(...found);
+        const found = admitSources(sources, Array.isArray(result?.sources) ? result.sources : []);
         working.push(toolResultMessage(id, searchResultPayload(args.query, found)));
       } catch (error) {
         /*
@@ -349,7 +351,29 @@ export const toolResultMessage = (toolCallId, payload) => ({
  */
 export const searchResultPayload = (query, sources) => ({
   query,
-  sources: sources.map((s) => ({ title: s.title, url: s.url, snippet: s.snippet ?? s.text ?? '' })),
+  sources: sources.map((s) => ({ id: s.id, title: s.title, url: s.url, snippet: s.snippet ?? s.text ?? '' })),
+});
+
+/**
+ * The numbering contract — the citation `[n]` refers to the n-th DISTINCT source of the turn.
+ *
+ * One id per URL, first appearance wins, from 1, across every search of the turn. A source that
+ * comes back from a second search keeps the id it already had, so `[3]` means the same page in
+ * every iteration and the model can cite a source found earlier. The client derives the same
+ * numbers from the turn's steps (`numberSources` in @xenosystem/agent-conversation) — this is
+ * the ONE rule both sides implement, and `chat-tool-loop.test.mjs` pins it here.
+ *
+ * @internal Shared by both loops in this file.
+ * @param {Array} turnSources the turn's distinct sources so far (mutated — new ones are appended)
+ * @param {Array} found       what one search returned
+ * @returns {Array} `found`, each entry carrying its turn-wide `id`
+ */
+export const admitSources = (turnSources, found) => found.map((source) => {
+  const known = turnSources.find((s) => s.url === source.url);
+  if (known) return { ...source, id: known.id };
+  const numbered = { ...source, id: turnSources.length + 1 };
+  turnSources.push(numbered);
+  return numbered;
 });
 
 /**
@@ -456,15 +480,14 @@ export async function* streamToolLoop({ messages, surface, turnId, streamModel, 
 
       try {
         const result = await runSearch({ query: args.query, depth: budget.depth });
-        const found = Array.isArray(result?.sources) ? result.sources : [];
-        sources.push(...found);
+        const found = admitSources(sources, Array.isArray(result?.sources) ? result.sources : []);
         working.push(toolResultMessage(id, searchResultPayload(args.query, found)));
         yield {
           type: 'search_result',
           iteration: iterations,
           query: args.query,
           count: found.length,
-          sources: found.map((s) => ({ title: s.title, url: s.url })),
+          sources: found.map((s) => ({ id: s.id, title: s.title, url: s.url })),
         };
       } catch (error) {
         // A failure is a RESULT on both channels: a tool message so the model can speak to

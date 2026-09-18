@@ -144,7 +144,35 @@ try {
   const modal = readFileSync(new URL('../src/components/playground/Chat/ChatSettingsModal.tsx', import.meta.url), 'utf8');
   check('the Preferences pane offers both modes', /data-steps-mode-option=\{value\}/.test(modal) && /STEPS_MODES\.map/.test(modal));
   const css = readFileSync(new URL('../src/components/playground/Chat/chat-theme.css', import.meta.url), 'utf8');
-  check('the transcript tokens are re-derived from the chat theme, light included', /\.chat-themed \.chat-turn-head\.xa-transcript \{/.test(css) && /\.chat-theme-light \.chat-turn-head\.xa-transcript/.test(css));
+  check('the transcript tokens are re-derived from the chat theme, light included — for the head AND the chip in the prose', /\.chat-themed :is\(\.chat-turn-head\.xa-transcript, \.xa-cite\) \{/.test(css) && /\.chat-theme-light \.chat-turn-head\.xa-transcript/.test(css) && /\.chat-theme-light \.xa-cite \{ --xa-ink: 10, 10, 10; \}/.test(css) && !/--xa-label: [^}]*width: 100%/.test(css));
+
+  // ── citations: the claim carries its evidence (2026-09-18) ───────────────────────────
+  // The numbering contract is ONE rule on both sides: the server's admitSources numbers what it
+  // hands the model; the chat's turnCitedSources numbers the record it kept. Prove they agree by
+  // feeding the SERVER's events through the CLIENT's record and comparing ids.
+  {
+    const { admitSources } = await import('../src/server/utils/chatToolLoop.js');
+    const { turnCitedSources } = turnModule;
+    const turnSources = [];
+    const search1 = admitSources(turnSources, [{ title: 'One', url: 'https://one.test/a' }, { title: 'Two', url: 'https://two.test/b' }]);
+    const search2 = admitSources(turnSources, [{ title: 'Two again', url: 'https://two.test/b' }, { title: 'Three', url: 'https://three.test/c' }]);
+    let record = newTurnRecord(1000);
+    record = applyTurnEvent(record, { type: 'search_start', query: 'q1' }, 1100);
+    record = applyTurnEvent(record, { type: 'search_result', query: 'q1', count: 2, sources: search1.map(({ id, title, url }) => ({ id, title, url })) }, 1200);
+    record = applyTurnEvent(record, { type: 'search_start', query: 'q2' }, 1300);
+    record = applyTurnEvent(record, { type: 'search_result', query: 'q2', count: 2, sources: search2.map(({ id, title, url }) => ({ id, title, url })) }, 1400);
+    const client = turnCitedSources(closeTurnRecord(record, 1500)).map((s) => `${s.id}:${s.url}`);
+    const server = turnSources.map((s) => `${s.id}:${s.url}`);
+    check('🔴 the client numbers the turn\'s sources exactly as the server numbered them for the model', JSON.stringify(client) === JSON.stringify(server), `${client} vs ${server}`);
+    check('a source cited from a second search keeps the id it had — [2] means the same page in every step', client[1] === '2:https://two.test/b' && client.length === 3);
+    check('a stored record (JSON round trip) numbers the same', JSON.stringify(turnCitedSources(normalizeStoredTurn(JSON.parse(JSON.stringify(closeTurnRecord(record, 1500))))).map((s) => `${s.id}:${s.url}`)) === JSON.stringify(server));
+    check('the chat\'s favicon resolver is OUR proxy, never the site', turnModule.chatFaviconUrl('en.wikipedia.org') === '/api/favicon?domain=en.wikipedia.org');
+  }
+  check('the answer\'s markdown runs remarkCitations and renders a cited [n] as the canonical CitationChip with the turn\'s numbered sources', /remarkPlugins=\{\[remarkGfm, remarkCitations\]\}/.test(chat) && /const citedIds = parseCitationHref\(href\);/.test(chat) && /<CitationChip ids=\{citedIds\} sources=\{turnCitedSources\(message\.turn\)\} faviconUrl=\{chatFaviconUrl\}>/.test(chat));
+  check('every other link in an answer opens in a new tab, never navigates the chat away', /return <a href=\{href\} target="_blank" rel="noopener noreferrer">\{children\}<\/a>;/.test(chat));
+  check('the turn head paints real favicons through the proxy', /faviconUrl=\{chatFaviconUrl\}/.test(head));
+  const server = readFileSync(new URL('../src/server/index.js', import.meta.url), 'utf8');
+  check('the favicon proxy is MOUNTED, not just written', /app\.use\('\/api\/favicon', faviconRoutes\);/.test(server) && /import faviconRoutes from '\.\/routes\/faviconRoutes\.js';/.test(server));
   const main = readFileSync(new URL('../src/main.tsx', import.meta.url), 'utf8');
   check('the canonical stylesheet is loaded once, at the entry', /@xenosystem\/agent-conversation\/styles\.css/.test(main));
 } finally {

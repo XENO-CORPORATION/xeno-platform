@@ -284,7 +284,26 @@
    own palette here: one ink, the six greys as steps between text and canvas, the plates from the
    chat's surfaces. The transcript stays token-driven; only the values move. Light is the one flip
    the stylesheet promises — the ink and the greys — not a second set of rules. */
-.chat-themed .chat-turn-head.xa-transcript {
+/* The citation chip renders INSIDE the reply's prose — outside `.xa-transcript` — so it carries the
+   transcript's base tokens itself (the same values transcript.css puts on `.xa-transcript`), and
+   then the chat's re-derivation below, through the shared selector. */
+.chat-themed .xa-cite {
+  --xa-ink: 255, 255, 255;
+  --xa-line: rgba(var(--xa-ink), 0.08);
+  --xa-line-soft: rgba(var(--xa-ink), 0.07);
+  --xa-line-tip: rgba(var(--xa-ink), 0.10);
+  --xa-wash: rgba(var(--xa-ink), 0.03);
+  --xa-wash-hover: rgba(var(--xa-ink), 0.05);
+}
+.chat-theme-light .xa-cite { --xa-ink: 10, 10, 10; }
+/* the prose's link rules must not restyle the chip — it is a control, not a link in running text */
+.chat-themed .prose .xa-cite-chip, .chat-themed .prose .xa-citecard-row { text-decoration: none; font-weight: 500; }
+.chat-themed .prose .xa-cite-chip { color: var(--xa-t4); }
+.chat-themed .prose .xa-cite-chip:hover, .chat-themed .prose .xa-cite.xa-open .xa-cite-chip { color: var(--xa-t2); }
+.chat-themed .prose .xa-citecard-row { color: inherit; }
+.chat-themed .prose .xa-citecard-title { color: var(--xa-t1); }
+.chat-themed .prose img.xa-fav { margin: 0; display: inline-flex; }
+.chat-themed :is(.chat-turn-head.xa-transcript, .xa-cite) {
   --xa-ground: var(--chat-canvas);
   --xa-plate: var(--chat-surface);
   --xa-box: var(--chat-surface);
@@ -301,10 +320,9 @@
   --xa-t5: color-mix(in srgb, var(--chat-muted) 82%, var(--chat-canvas));
   --xa-t6: color-mix(in srgb, var(--chat-muted) 66%, var(--chat-canvas));
   --xa-label: color-mix(in srgb, var(--chat-text) 32%, transparent);
-  /* the head sits in the thread's own gutter, flush with the reply below it */
-  width: 100%;
-  padding: 0;
 }
+/* the head sits in the thread's own gutter, flush with the reply below it */
+.chat-themed .chat-turn-head.xa-transcript { width: 100%; padding: 0; }
 .chat-theme-light .chat-turn-head.xa-transcript {
   color-scheme: light;
   --xa-ink: 10, 10, 10;

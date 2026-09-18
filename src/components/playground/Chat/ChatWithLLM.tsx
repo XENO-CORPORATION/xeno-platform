@@ -46,9 +46,10 @@ import {
 import { buildChatSystemPrompt, CHAT_MODE_PLACEHOLDERS, modeUsesXenoSearch, type ChatMode } from './chatModeConfig';
 import ChatTurnHead from './ChatTurnHead';
 import {
-  applyTurnEvent, closeTurnRecord, DEFAULT_STEPS_MODE, isStepsMode, newTurnRecord, normalizeStoredTurn, turnHasRail,
+  applyTurnEvent, chatFaviconUrl, closeTurnRecord, DEFAULT_STEPS_MODE, isStepsMode, newTurnRecord, normalizeStoredTurn, turnCitedSources, turnHasRail,
   type ChatTurnRecord, type StepsMode,
 } from './chatTurnTranscript';
+import { CitationChip, parseCitationHref, remarkCitations } from '@xenosystem/agent-conversation/components/agent/transcript/citations';
 import { readGenerateResponse, readStreamedTurn, endpointForTask, streamRequestBody, CHAT_STREAM_ENDPOINT } from './chatStream';
 import { reasoningCapabilityForModel, reasoningTraceForModel } from '@/server/lib/chatModelCapabilities.js';
 import CodeBlockWithHeader from './CodeBlockWithHeader';
@@ -17133,10 +17134,18 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                                                      theme CSS uses [class*="bg-…"] and would paint the whole answer. */
                                                   <div className="prose prose-sm max-w-none prose-strong:font-bold prose-code:px-2 prose-code:py-0.5 prose-code:rounded prose-code:font-mono prose-code:text-[15px] prose-code:font-normal prose-code:font-medium prose-code:before:content-none prose-code:after:content-none prose-pre:rounded-lg prose-pre:border prose-pre:border-[var(--chat-border)] prose-pre:p-4 prose-pre:font-mono prose-pre:text-[15px] prose-pre:overflow-x-auto">
                                                    <ReactMarkdown
-  remarkPlugins={[remarkGfm]}
+  remarkPlugins={[remarkGfm, remarkCitations]}
   rehypePlugins={[rehypeRaw]}
   components={{
     pre: ({children}: any) => <>{children}</>,
+    /* a `[n]` the model cited becomes the chip after the claim, the cited sources on hover — the
+       canonical CitationChip from @xenosystem/agent-conversation (2026-09-18); every other link is
+       an ordinary external anchor */
+    a: ({ href, children }: any) => {
+      const citedIds = parseCitationHref(href);
+      if (citedIds) return <CitationChip ids={citedIds} sources={turnCitedSources(message.turn)} faviconUrl={chatFaviconUrl}>{children}</CitationChip>;
+      return <a href={href} target="_blank" rel="noopener noreferrer">{children}</a>;
+    },
                                                         code({node, inline, className, children, ...props}: any) {
       const match = /language-(\w+)/.exec(className || "");
       if (!inline) {

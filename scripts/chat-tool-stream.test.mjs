@@ -386,3 +386,26 @@ test('Research streams the deep depth', async () => {
   }));
   assert.equal(depth, 'deep', 'Research must select the deeper search budget');
 });
+
+test('🔴 search_result events carry the turn-wide source ids the model was given', async () => {
+  let calls = 0;
+  const found = [
+    [{ title: 'one', url: 'https://one.test/' }, { title: 'two', url: 'https://two.test/' }],
+    [{ title: 'two again', url: 'https://two.test/' }, { title: 'three', url: 'https://three.test/' }],
+  ];
+  const events = await drain(streamToolLoop({
+    messages: [{ role: 'user', content: 'q' }],
+    surface: 'research',
+    turnId: 'cite',
+    streamModel: () => {
+      calls += 1;
+      if (calls <= 2) return searchCallStream(`q${calls}`, { id: `c${calls}` });
+      return answerStream('done [1][3]');
+    },
+    runSearch: async () => ({ sources: found[calls - 1] }),
+  }));
+  const results = events.filter((e) => e.type === 'search_result').map((e) => e.sources.map((s) => s.id));
+  assert.deepEqual(results, [[1, 2], [2, 3]], 'one id per URL, first appearance wins, across searches');
+  const complete = events.find((e) => e.type === 'complete');
+  assert.deepEqual(complete.sources.map((s) => s.id), [1, 2, 3]);
+});
