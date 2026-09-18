@@ -409,3 +409,65 @@ test('🔴 search_result events carry the turn-wide source ids the model was giv
   const complete = events.find((e) => e.type === 'complete');
   assert.deepEqual(complete.sources.map((s) => s.id), [1, 2, 3]);
 });
+
+test('🔴 reasoning streamed between the searches reaches the client — a searching turn thinks visibly', async () => {
+  // measured on production 2026-09-18: grok-4.6 (which exposes its trace) showed a thought on a plain
+  // turn and NOTHING on a turn that searched, because this loop forwarded delta/tool_calls/usage only
+  let calls = 0;
+  const events = await drain(streamToolLoop({
+    messages: [{ role: 'user', content: 'really?' }],
+    surface: 'chat',
+    turnId: 'think',
+    streamModel: () => {
+      calls += 1;
+      if (calls === 1) return streamOf([
+        { type: 'reasoning', text: 'The user doubts the sources; ' },
+        { type: 'reasoning', text: 'I should re-check them live.' },
+        { type: 'delta', text: 'I\u2019ll check those claims against live sources.' },
+        { type: 'tool_calls', toolCalls: [{ id: 'c1', function: { name: 'web_search', arguments: '{"query":"gaming september 2026"}' } }] },
+      ]);
+      return streamOf([
+        { type: 'reasoning', text: 'Same coverage; answer plainly.' },
+        { type: 'delta', text: 'Yes. A live search turns up the same coverage.' },
+      ]);
+    },
+    runSearch: async () => sources(),
+  }));
+  const thought = events.filter((e) => e.type === 'reasoning').map((e) => e.text).join('');
+  assert.equal(thought, 'The user doubts the sources; I should re-check them live.Same coverage; answer plainly.', 'every reasoning delta, from both iterations, is forwarded');
+  const searchStart = events.findIndex((e) => e.type === 'search_start');
+  const firstThought = events.findIndex((e) => e.type === 'reasoning');
+  assert.ok(firstThought < searchStart, 'the thought before the search arrives before the search does');
+});
+
+test('narration before a search and the answer after it are two paragraphs, not one run-on sentence', async () => {
+  let calls = 0;
+  const events = await drain(streamToolLoop({
+    messages: [{ role: 'user', content: 'really?' }],
+    surface: 'chat',
+    turnId: 'para',
+    streamModel: () => {
+      calls += 1;
+      if (calls === 1) return streamOf([
+        { type: 'delta', text: 'I\u2019ll check those claims against live sources.' },
+        { type: 'tool_calls', toolCalls: [{ id: 'c1', function: { name: 'web_search', arguments: '{"query":"q"}' } }] },
+      ]);
+      return answerStream('Yes. A live search turns up the same coverage.');
+    },
+    runSearch: async () => sources(),
+  }));
+  const text = events.filter((e) => e.type === 'delta').map((e) => e.text).join('');
+  assert.equal(text, 'I\u2019ll check those claims against live sources.\n\nYes. A live search turns up the same coverage.');
+});
+
+test('a turn that did NOT narrate gets no stray break before its answer', async () => {
+  let calls = 0;
+  const events = await drain(streamToolLoop({
+    messages: [{ role: 'user', content: 'q' }],
+    surface: 'chat',
+    turnId: 'nobreak',
+    streamModel: () => { calls += 1; return calls === 1 ? searchCallStream('q') : answerStream('Answer.'); },
+    runSearch: async () => sources(),
+  }));
+  assert.equal(events.filter((e) => e.type === 'delta').map((e) => e.text).join(''), 'Answer.');
+});
