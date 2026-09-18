@@ -4748,15 +4748,30 @@ const ChatWithLLM: React.FC<ChatWithLLMProps> = ({
     }
     // Any conversation the reused composer starts from here should link to this project.
     pendingChatProjectIdRef.current = projectId;
-    // Remember which conversation was active on entry so we only auto-leave the workspace
-    // once a *different* (new) conversation becomes active.
-    projectEntryConversationIdRef.current = activeConversationId;
+    /*
+     * 🔴 The project page's composer starts a NEW chat in this project — so the conversation that
+     * was open before is left behind here. `createConversationForMessages` refuses to create while
+     * a conversation is active, so without this a message typed on the project page was silently
+     * appended to whatever chat the person came from, and nothing appeared under the project
+     * (measured on production 2026-09-18). Claude and ChatGPT Projects behave the same way: the
+     * project page is a place to start, not a continuation of the last thread.
+     */
+    // (the composer's draft is left alone — the route effect re-runs this when history finishes
+    // loading, and a person may already be typing)
+    if (activeConversationIdRef.current) {
+      activeConversationIdRef.current = null;
+      setActiveConversationId(null);
+      setMessages([]);
+    }
+    // Nothing is active on entry, so the first conversation the composer creates is the one that
+    // auto-leaves the workspace for the thread.
+    projectEntryConversationIdRef.current = null;
     try {
       localStorage.setItem(ACTIVE_PROJECT_ID_STORAGE_KEY, projectId);
     } catch {
       /* ignore storage failures */
     }
-  }, [activeConversationId]);
+  }, []);
 
   const closeProject = useCallback(() => {
     setActiveProjectId(null);

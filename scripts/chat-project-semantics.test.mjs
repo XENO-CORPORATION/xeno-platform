@@ -263,3 +263,26 @@ test('provider tool calls are inert output and never expose arguments as assista
   assert.doesNotMatch(output, /delete_workspace|do-not-leak|"id"/);
   assert.equal(sideEffectCount, 0);
 });
+
+/*
+ * ── the project page's composer starts a chat IN the project ───────────────────────────────
+ *
+ * `createConversationForMessages` refuses to create while a conversation is active — correct for
+ * the thread view, and the reason a message typed on a project page was silently appended to
+ * whatever chat the person came from, with nothing appearing under the project (production,
+ * 2026-09-18). Opening a project must therefore clear the active conversation, so the first
+ * send creates a new one carrying `pendingChatProjectIdRef`.
+ */
+test('🔴 opening a project clears the active conversation so the composer starts a NEW chat in the project', async () => {
+  const { readFileSync } = await import('node:fs');
+  const chat = readFileSync(new URL('../src/components/playground/Chat/ChatWithLLM.tsx', import.meta.url), 'utf8');
+  const start = chat.indexOf('const openProject = useCallback(');
+  const body = chat.slice(start, chat.indexOf('const closeProject = useCallback(', start));
+  assert.ok(body.includes('pendingChatProjectIdRef.current = projectId;'), 'the project id is pending for the next conversation');
+  assert.match(body, /if \(activeConversationIdRef\.current\) \{\s*activeConversationIdRef\.current = null;\s*setActiveConversationId\(null\);\s*setMessages\(\[\]\);/, 'an active conversation is left behind on entry');
+  assert.ok(body.includes('projectEntryConversationIdRef.current = null;'), 'so the first created conversation is the one that opens the thread');
+  assert.ok(!body.includes("setInputValue('')"), 'the draft the person may already be typing is not wiped by a re-run');
+  // and the creator still refuses while one is active — the guard this fix works WITH, not around
+  assert.match(chat, /if \(activeConversationIdRef\.current \|\| isCreatingConversationRef\.current\) return null;/);
+  assert.match(chat, /project_id: projectId,/, 'the new conversation is created with the project link');
+});
