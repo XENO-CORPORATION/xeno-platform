@@ -296,6 +296,17 @@
   --xa-wash-hover: rgba(var(--xa-ink), 0.05);
 }
 .chat-theme-light .xa-cite { --xa-ink: 10, 10, 10; }
+/* the thread scrubber renders beside the scroller, outside `.xa-transcript` — same bridge as the chip */
+.chat-themed .chat-thread-scrubber {
+  --xa-ink: 255, 255, 255;
+  --xa-line: rgba(var(--xa-ink), 0.08);
+  --xa-line-soft: rgba(var(--xa-ink), 0.07);
+  --xa-line-tip: rgba(var(--xa-ink), 0.10);
+  --xa-wash: rgba(var(--xa-ink), 0.03);
+  --xa-wash-hover: rgba(var(--xa-ink), 0.05);
+  --xa-ease: cubic-bezier(0.2, 0.7, 0.2, 1);
+}
+.chat-theme-light .chat-thread-scrubber { --xa-ink: 10, 10, 10; }
 /* the prose's link rules must not restyle the chip — it is a control, not a link in running text */
 .chat-themed .prose .xa-cite-chip, .chat-themed .prose .xa-citecard-row { text-decoration: none; font-weight: 500; }
 .chat-themed .prose .xa-cite-chip { color: var(--xa-t4); }
@@ -303,7 +314,7 @@
 .chat-themed .prose .xa-citecard-row { color: inherit; }
 .chat-themed .prose .xa-citecard-title { color: var(--xa-t1); }
 .chat-themed .prose img.xa-fav { margin: 0; display: inline-flex; }
-.chat-themed :is(.chat-turn-head.xa-transcript, .xa-cite) {
+.chat-themed :is(.chat-turn-head.xa-transcript, .xa-cite, .chat-thread-scrubber) {
   --xa-ground: var(--chat-canvas);
   --xa-plate: var(--chat-surface);
   --xa-box: var(--chat-surface);

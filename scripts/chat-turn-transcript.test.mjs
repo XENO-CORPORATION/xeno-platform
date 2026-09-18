@@ -144,7 +144,7 @@ try {
   const modal = readFileSync(new URL('../src/components/playground/Chat/ChatSettingsModal.tsx', import.meta.url), 'utf8');
   check('the Preferences pane offers both modes', /data-steps-mode-option=\{value\}/.test(modal) && /STEPS_MODES\.map/.test(modal));
   const css = readFileSync(new URL('../src/components/playground/Chat/chat-theme.css', import.meta.url), 'utf8');
-  check('the transcript tokens are re-derived from the chat theme, light included — for the head AND the chip in the prose', /\.chat-themed :is\(\.chat-turn-head\.xa-transcript, \.xa-cite\) \{/.test(css) && /\.chat-theme-light \.chat-turn-head\.xa-transcript/.test(css) && /\.chat-theme-light \.xa-cite \{ --xa-ink: 10, 10, 10; \}/.test(css) && !/--xa-label: [^}]*width: 100%/.test(css));
+  check('the transcript tokens are re-derived from the chat theme, light included — for the head AND the chip in the prose', /\.chat-themed :is\(\.chat-turn-head\.xa-transcript, \.xa-cite, \.chat-thread-scrubber\) \{/.test(css) && /\.chat-theme-light \.chat-turn-head\.xa-transcript/.test(css) && /\.chat-theme-light \.xa-cite \{ --xa-ink: 10, 10, 10; \}/.test(css) && !/--xa-label: [^}]*width: 100%/.test(css));
 
   // ── citations: the claim carries its evidence (2026-09-18) ───────────────────────────
   // The numbering contract is ONE rule on both sides: the server's admitSources numbers what it
@@ -172,6 +172,12 @@ try {
   check('every other link in an answer opens in a new tab, never navigates the chat away', /return <a href=\{href\} target="_blank" rel="noopener noreferrer">\{children\}<\/a>;/.test(chat));
   check('the turn head paints real favicons through the proxy', /faviconUrl=\{chatFaviconUrl\}/.test(head));
   const server = readFileSync(new URL('../src/server/index.js', import.meta.url), 'utf8');
+  // ── the thread scrubber: the conversation map (2026-09-18 /isg) ───────────────────────
+  check('the chat mounts the canonical ThreadScrubber on its own scroller, fed from STATE (messages), with placeholders left out', /<ThreadScrubber\s+turns=\{scrubberTurns\}\s+scrollerRef=\{chatAreaRef\}/.test(chat) && /useMemo<ScrubberTurn\[\]>\(\(\) => messages/.test(chat) && /!m\.isThinkingPlaceholder && !m\.isDotPlaceholder && !m\.isError/.test(chat));
+  check('every message element carries data-turn so the map can find it', /data-turn=\{message\.id\}/.test(chat));
+  check('a turn that searched is MARKED on the rail', /marked: !!\(m\.turn\?\.steps\?\.length\)/.test(chat));
+  check('the rail stops above the composer dock, whose height is measured, not assumed', /ref=\{composerDockRef\}/.test(chat) && /new ResizeObserver\(measure\);\s*observer\.observe\(dock\)/.test(chat) && /bottom: composerDockHeight \+ 8/.test(chat));
+  check('the rail carries the transcript tokens inside the chat theme, light included', /\.chat-themed \.chat-thread-scrubber \{/.test(css) && /\.chat-theme-light \.chat-thread-scrubber \{ --xa-ink: 10, 10, 10; \}/.test(css));
   check('the favicon proxy is MOUNTED, not just written', /app\.use\('\/api\/favicon', faviconRoutes\);/.test(server) && /import faviconRoutes from '\.\/routes\/faviconRoutes\.js';/.test(server));
   const main = readFileSync(new URL('../src/main.tsx', import.meta.url), 'utf8');
   check('the canonical stylesheet is loaded once, at the entry', /@xenosystem\/agent-conversation\/styles\.css/.test(main));
