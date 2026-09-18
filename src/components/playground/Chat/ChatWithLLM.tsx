@@ -50,6 +50,7 @@ import {
   type ChatTurnRecord, type StepsMode,
 } from './chatTurnTranscript';
 import { CitationChip, parseCitationHref, remarkCitations } from '@xenosystem/agent-conversation/components/agent/transcript/citations';
+import { ThreadScrubber, firstLineOf, type ScrubberTurn } from '@xenosystem/agent-conversation/components/agent/transcript/ThreadScrubber';
 import { readGenerateResponse, readStreamedTurn, endpointForTask, streamRequestBody, CHAT_STREAM_ENDPOINT } from './chatStream';
 import { reasoningCapabilityForModel, reasoningTraceForModel } from '@/server/lib/chatModelCapabilities.js';
 import CodeBlockWithHeader from './CodeBlockWithHeader';
@@ -2956,6 +2957,27 @@ const ChatWithLLM: React.FC<ChatWithLLMProps> = ({
   const feedbackPopupRef = useRef<HTMLDivElement>(null);
   const dislikePopupRef = useRef<HTMLDivElement>(null);
   const chatAreaRef = useRef<HTMLDivElement>(null); // chatAreaRef is used in the hover useEffect
+  // The thread scrubber (the conversation map on the right edge) spans the visible thread: below
+  // the top bar, above the composer dock — whose height is measured, since it grows with its rows.
+  const composerDockRef = useRef<HTMLDivElement>(null);
+  const [composerDockHeight, setComposerDockHeight] = useState(0);
+  useEffect(() => {
+    const dock = composerDockRef.current;
+    if (!dock) return;
+    const measure = () => setComposerDockHeight(dock.offsetHeight);
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(dock);
+    return () => observer.disconnect();
+  }, []);
+  const scrubberTurns = useMemo<ScrubberTurn[]>(() => messages
+    .filter((m) => !m.isThinkingPlaceholder && !m.isDotPlaceholder && !m.isError)
+    .map((m) => {
+      const isUser = m.sender === 'user';
+      const modelId = m.modelIdUsed || m.modelId;
+      const modelName = modelId ? (findModelById(groupedModels, modelId)?.name || modelId) : 'XENO';
+      return { id: m.id, role: isUser ? 'user' : 'assistant', label: isUser ? 'You' : modelName, firstLine: firstLineOf(isUser ? (m.text || '') : (m.parsedAnswer || m.text || '')), marked: !!(m.turn?.steps?.length) } as ScrubberTurn;
+    }), [messages, groupedModels]);
 
   // --- STATE ---
   // ... (other state variables) ...
@@ -16623,6 +16645,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                         <React.Fragment key={message.id}>
                           {dateSeparatorElement}
                           <div
+                            data-turn={message.id}
                             className={`flex w-full ${isUser ? 'justify-end' : 'justify-start'} ${firstMessageTopMargin} ${
                               messageMatchesSearch ? 'bg-[var(--chat-accent-soft)] border-l-2 border-[var(--chat-accent)] -ml-0.5 pl-0.5' : ''
                             }`}
@@ -17328,10 +17351,21 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                )}
               </div>
               </div>
+        {/* The conversation map: a tick rail on the thread's right edge (canonical ThreadScrubber,
+            @xenosystem/agent-conversation 0.1.43). Spans the visible thread — below the top bar,
+            above the composer dock — and only once the thread is taller than two viewports. */}
+        {messages.length > 0 && (
+          <ThreadScrubber
+            turns={scrubberTurns}
+            scrollerRef={chatAreaRef}
+            className="chat-thread-scrubber"
+            style={{ top: 72, bottom: composerDockHeight + 8, right: (contextWorkspaceInsetPx || 0) + 4 }}
+          />
+        )}
 
         {/* Bottom Input Section — when history is open (desktop), shift right so
             the composer + update cards clear the sidebar (same size, not moved up). */}
-        <div className={`${isMultiInterface ? 'max-w-full px-2' : (messages.length === 0 ? 'max-w-[56rem]' : (isWideChatEnabled ? 'max-w-[72rem]' : 'max-w-[52rem]'))} w-full px-2 md:px-4 absolute left-0 right-0 z-10 main-content-transition ${
+        <div ref={composerDockRef} className={`${isMultiInterface ? 'max-w-full px-2' : (messages.length === 0 ? 'max-w-[56rem]' : (isWideChatEnabled ? 'max-w-[72rem]' : 'max-w-[52rem]'))} w-full px-2 md:px-4 absolute left-0 right-0 z-10 main-content-transition ${
           messages.length === 0
             ? `top-1/2 max-h-[calc(100dvh-5rem)] -translate-y-1/2 py-4 pb-2 md:pb-4 hide-scrollbar ${isMobile || isMultiInterface ? 'overflow-y-auto' : 'overflow-visible'}`
             : 'bottom-0 overflow-visible pb-2 md:pb-3'
