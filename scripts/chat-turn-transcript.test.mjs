@@ -121,7 +121,16 @@ try {
 
   // ── reachability: the chat mounts the head where its own thinking box and spinner were ──
   const chat = readFileSync(new URL('../src/components/playground/Chat/ChatWithLLM.tsx', import.meta.url), 'utf8');
-  check('the thinking placeholder renders ChatTurnHead (streaming) — not ThinkingAnimation', (chat.match(/<ChatTurnHead/g) || []).length >= 2 && !/<ThinkingAnimation\s+duration=\{liveTimerValue/.test(chat));
+  check('the thinking placeholder renders ChatTurnHead (streaming) — not ThinkingAnimation', (chat.match(/<ChatTurnHead/g) || []).length >= 1 && !/<ThinkingAnimation\s+duration=\{liveTimerValue/.test(chat));
+  /*
+   * 2026-09-18: "it disappears and glitches when the answer appears". Three causes, each pinned:
+   * the placeholder was its own element (remount on the first delta); the final message took a
+   * fresh id (remount when the answer landed, mid-fold); and deltas went to `text` while the
+   * bubble printed `parsedAnswer`, so the answer was invisible until it arrived whole.
+   */
+  check('ONE element from "Working for" to "Worked for": the thinking placeholder is rendered by the assistant block, not by an early return', /message\.isThinkingPlaceholder && message\.id === aiRefinementPlaceholderId\) \{/.test(chat) && !/if \(message\.isThinkingPlaceholder\) \{/.test(chat) && /message\.isStreaming \|\| message\.isThinkingPlaceholder\)/.test(chat));
+  check('the final message keeps the placeholder id and replaces it in place — no remount when the answer lands', /id: localPlaceholderId,/.test(chat) && !/id: `ai-\$\{Date\.now\(\)\}`/.test(chat) && /prevMessages\.map\(msg => \(msg\.id === localPlaceholderId \? display : msg\)\)/.test(chat));
+  check('streamed deltas are SHOWN as they arrive — the delta handler writes parsedAnswer, which is what the bubble prints', /parsedAnswer: streamedText,/.test(chat));
   check('search events grow the turn record on the placeholder', /turnRecord = applyTurnEvent\(turnRecord, event/.test(chat) && /msg\.id === localPlaceholderId \? \{ \.\.\.msg, turn: record \}/.test(chat));
   check('the final message carries the closed record and it is persisted', /turn: closeTurnRecord\(turnRecord\)/.test(chat) && /turn: updatedMessage\.turn,/.test(chat) && /turn: msg\.turn,/.test(chat));
   check('a stored message reads its turn back', /turn: isAi \? normalizeStoredTurn\(/.test(chat));
