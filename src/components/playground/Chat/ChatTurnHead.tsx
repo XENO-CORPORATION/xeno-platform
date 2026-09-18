@@ -62,7 +62,11 @@ export const ChatTurnHead: React.FC<ChatTurnHeadProps> = ({
   }), [messageId, onThinkingTime]);
 
   return (
-    <div className="xa-transcript chat-turn-head" data-chat-turn-head={messageId} data-steps-mode={stepsMode}>
+    /* `xa-collapsed` is what the stylesheet keys the collapsed behaviour on — the live line's
+       ticker ("Working for 3s │ Thinking · …") and the folded rail. The agent panel sets it on
+       its `.xa-transcript`; without it here the chat drew the "collapsed" mode as an OPEN rail
+       with the thought as a row underneath and no ticker (2026-09-18). */
+    <div className={`xa-transcript chat-turn-head${stepsMode === 'collapsed' ? ' xa-collapsed' : ''}`} data-chat-turn-head={messageId} data-steps-mode={stepsMode}>
       {/* `clock="always"`: every turn is working from the moment the request goes out, so the
           chat shows the clock on every turn — "Working for 4s" over the streaming reply, then a
           bare "Worked for 4s" resting above it — with the rail underneath only when there are

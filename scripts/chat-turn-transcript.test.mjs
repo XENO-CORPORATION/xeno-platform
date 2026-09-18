@@ -171,6 +171,7 @@ try {
   check('the answer\'s markdown runs remarkCitations and renders a cited [n] as the canonical CitationChip with the turn\'s numbered sources', /remarkPlugins=\{\[remarkGfm, remarkCitations\]\}/.test(chat) && /const citedIds = parseCitationHref\(href\);/.test(chat) && /<CitationChip ids=\{citedIds\} sources=\{turnCitedSources\(message\.turn\)\} faviconUrl=\{chatFaviconUrl\}>/.test(chat));
   check('every other link in an answer opens in a new tab, never navigates the chat away', /return <a href=\{href\} target="_blank" rel="noopener noreferrer">\{children\}<\/a>;/.test(chat));
   check('the turn head paints real favicons through the proxy', /faviconUrl=\{chatFaviconUrl\}/.test(head));
+  check('collapsed mode carries the `xa-collapsed` class the stylesheet keys on — the ticker on the line and the folded rail, not a thought row underneath (2026-09-18)', /className=\{`xa-transcript chat-turn-head\$\{stepsMode === 'collapsed' \? ' xa-collapsed' : ''\}`\}/.test(head));
   const server = readFileSync(new URL('../src/server/index.js', import.meta.url), 'utf8');
   // ── the thread scrubber: the conversation map (2026-09-18 /isg) ───────────────────────
   check('the chat mounts the canonical ThreadScrubber on its own scroller, fed from STATE (messages), with placeholders left out', /<ThreadScrubber\s+turns=\{scrubberTurns\}\s+scrollerRef=\{chatAreaRef\}/.test(chat) && /useMemo<ScrubberTurn\[\]>\(\(\) => messages/.test(chat) && /!m\.isThinkingPlaceholder && !m\.isDotPlaceholder && !m\.isError/.test(chat));
