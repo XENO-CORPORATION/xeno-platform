@@ -1,4 +1,5 @@
 import express from 'express';
+import { activePath, deepestLeafUnder, indexById } from '../utils/chatBranches.js';
 import { chatWorkspaceScope } from '../middleware/chatWorkspaceScope.js';
 import crypto from 'crypto';
 import fs from 'fs';
@@ -396,6 +397,10 @@ router.post('/init', async (req, res) => {
     // Existing databases receive the column through the migration of the same name; a fresh one
     // gets it here so the two paths agree (2026-09-17, chat-message-turn).
     await req.db.query('ALTER TABLE chat_messages ADD COLUMN IF NOT EXISTS turn JSONB');
+    // Branches (2026-09-18, chat-message-branches): the tree edge and the leaf the person is on.
+    await req.db.query('ALTER TABLE chat_messages ADD COLUMN IF NOT EXISTS parent_id UUID REFERENCES chat_messages(id) ON DELETE CASCADE');
+    await req.db.query('CREATE INDEX IF NOT EXISTS idx_chat_messages_parent ON chat_messages(parent_id)');
+    await req.db.query('ALTER TABLE chat_conversations ADD COLUMN IF NOT EXISTS active_leaf_id UUID');
 
     // Create personas table
     await req.db.query(`
@@ -558,11 +563,22 @@ router.get('/conversations/:id', async (req, res) => {
       [id]
     );
 
+    /*
+     * The whole tree goes down — every branch is the person's — plus which leaf is active. A
+     * client that knows nothing about branches still gets a coherent thread: `messages` is the
+     * ACTIVE PATH in reading order, and the rest ride in `branches` (every message, with
+     * `parent_id`) for the ‹ i/n › controls. The leaf never dangles (chatBranches.js).
+     */
+    const allRows = messagesResult.rows;
+    const path = activePath(allRows, convResult.rows[0].active_leaf_id);
+    const leafId = path.length ? path[path.length - 1].id : null;
     res.json({
       success: true,
       conversation: {
         ...convResult.rows[0],
-        messages: messagesResult.rows
+        active_leaf_id: leafId,
+        messages: path,
+        branches: allRows,
       }
     });
   } catch (error) {
@@ -771,6 +787,54 @@ router.delete('/conversations/:id', async (req, res) => {
 // ============================================
 
 // POST /api/chat/conversations/:id/messages - Add message to conversation
+/**
+ * Which message a new one follows. `undefined` -> the conversation's active leaf (a normal send);
+ * `null` -> none (a new first message, a sibling of the root); a UUID -> that message, which must
+ * belong to this conversation. Returns `{ parentId }` or `{ error }`.
+ */
+async function resolveParentForInsert(db, conversationId, requested) {
+  if (requested === undefined) {
+    const leaf = (await db.query('SELECT active_leaf_id FROM chat_conversations WHERE id = $1', [conversationId])).rows[0]?.active_leaf_id;
+    if (leaf) {
+      const known = await db.query('SELECT id FROM chat_messages WHERE id = $1 AND conversation_id = $2', [leaf, conversationId]);
+      if (known.rows.length) return { parentId: leaf };
+    }
+    // no leaf recorded (pre-migration row, or an empty conversation): follow the newest message
+    const newest = (await db.query('SELECT id FROM chat_messages WHERE conversation_id = $1 ORDER BY message_index DESC, created_at DESC LIMIT 1', [conversationId])).rows[0];
+    return { parentId: newest?.id ?? null };
+  }
+  if (requested === null) return { parentId: null };
+  const parent = await db.query('SELECT id FROM chat_messages WHERE id = $1 AND conversation_id = $2', [requested, conversationId]);
+  if (!parent.rows.length) return { error: 'parent_id is not a message of this conversation' };
+  return { parentId: requested };
+}
+
+/**
+ * Switch branch: make `message_id` (or the newest leaf beneath it) the conversation's active
+ * leaf. The client sends the sibling it flipped to with the branch control and lands on that
+ * version's latest reply chain; a reload then shows the same branch.
+ */
+router.put('/conversations/:id/active-leaf', async (req, res) => {
+  try {
+    const userId = req.user?.id;
+    if (!userId) return res.status(401).json({ success: false, error: 'Unauthorized' });
+    const { id: conversationId } = req.params;
+    if (rejectIfNotPersistedConversationId(res, conversationId)) return;
+    const { message_id } = req.body || {};
+    if (!UUID_RE.test(String(message_id))) return res.status(400).json({ success: false, error: 'message_id must be a UUID', code: 'invalid_leaf' });
+    await requireResourceRelation(req.db, userPrincipal(userId), 'conversation', conversationId, 'reviewer');
+    const rows = (await req.db.query('SELECT id, parent_id, role, message_index, created_at FROM chat_messages WHERE conversation_id = $1', [conversationId])).rows;
+    if (!indexById(rows).has(message_id)) return res.status(404).json({ success: false, error: 'Message not found in this conversation', code: 'leaf_not_found' });
+    const leafId = deepestLeafUnder(rows, message_id);
+    await req.db.query('UPDATE chat_conversations SET active_leaf_id = $2, updated_at = NOW() WHERE id = $1', [conversationId, leafId]);
+    res.json({ success: true, active_leaf_id: leafId, messages: activePath(rows, leafId).map((row) => row.id) });
+  } catch (error) {
+    if (sendChatAuthorityError(res, error)) return;
+    console.error('Failed to switch branch:', error);
+    res.status(500).json({ success: false, error: 'Internal server error' });
+  }
+});
+
 router.post('/conversations/:id/messages', async (req, res) => {
   try {
     const userId = req.user?.id;
@@ -794,7 +858,15 @@ router.post('/conversations/:id/messages', async (req, res) => {
       total_tokens,
       context_record_id,
       turn,
+      parent_id,
     } = req.body;
+
+    // Where this message hangs. Absent, it follows the conversation's active leaf (the normal
+    // send). Given, it is a SIBLING branch: an edit passes the edited message's own parent, a
+    // regenerate passes the user message the reply answers. `null` means "a new first message".
+    if (parent_id !== undefined && parent_id !== null && !UUID_RE.test(String(parent_id))) {
+      return res.status(400).json({ success: false, error: 'parent_id must be a UUID or null', code: 'invalid_parent' });
+    }
 
     // The turn record is client-written and presentational; it is validated and bounded, and an
     // invalid one is refused rather than trimmed into something that looks stored.
@@ -890,19 +962,25 @@ router.post('/conversations/:id/messages', async (req, res) => {
          FROM chat_messages WHERE conversation_id = $1`,
         [conversationId],
       )).rows[0].next_index);
+      const resolvedParent = await resolveParentForInsert(tx, conversationId, parent_id);
+      if (resolvedParent.error) {
+        throw Object.assign(new Error(resolvedParent.error), { code: 'invalid_parent', status: 400 });
+      }
       const inserted = (await tx.query(
         `INSERT INTO chat_messages (
           conversation_id, user_id, created_by_user_id, role, content, model_id,
           thinking, has_thinking, attachments, search_context,
-          prompt_tokens, completion_tokens, total_tokens, message_index, turn
-        ) VALUES ($1,$2,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)
+          prompt_tokens, completion_tokens, total_tokens, message_index, turn, parent_id
+        ) VALUES ($1,$2,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)
         RETURNING *`,
         [conversationId, userId, role, content, model_id, thinking, has_thinking,
           attachments ? JSON.stringify(attachments) : null,
           webContextReceipt ? JSON.stringify(webContextReceipt.search_context) : null,
           prompt_tokens, completion_tokens, total_tokens, messageIndex,
-          turnRecord.turn ? JSON.stringify(turnRecord.turn) : null],
+          turnRecord.turn ? JSON.stringify(turnRecord.turn) : null, resolvedParent.parentId],
       )).rows[0];
+      // the new message is what the person is looking at
+      await tx.query('UPDATE chat_conversations SET active_leaf_id = $2 WHERE id = $1', [conversationId, inserted.id]);
       if (generationContext) {
         await tx.query(
           `INSERT INTO chat_message_context_manifests(message_id,project_id,context_manifest)
@@ -938,7 +1016,7 @@ router.post('/conversations/:id/messages', async (req, res) => {
     });
   } catch (error) {
     if (sendChatAuthorityError(res, error)) return;
-    if (error.code === 'invalid_context_record' || error.code === 'invalid_web_context_receipt') {
+    if (error.code === 'invalid_context_record' || error.code === 'invalid_web_context_receipt' || error.code === 'invalid_parent') {
       return res.status(error.status || 409).json({ success: false, error: error.message, code: error.code });
     }
     console.error('Failed to add message:', error);
@@ -1001,6 +1079,16 @@ router.post('/conversations/:id/messages/batch', async (req, res) => {
     );
     let messageIndex = indexResult.rows[0].next_index;
 
+    // A batch is one chain: the first hangs off the given parent (or the active leaf), each next
+    // off the one before, and the last becomes the leaf.
+    const batchParent = req.body.parent_id;
+    if (batchParent !== undefined && batchParent !== null && !UUID_RE.test(String(batchParent))) {
+      return res.status(400).json({ success: false, error: 'parent_id must be a UUID or null', code: 'invalid_parent' });
+    }
+    const resolvedParent = await resolveParentForInsert(req.db, conversationId, batchParent);
+    if (resolvedParent.error) return res.status(400).json({ success: false, error: resolvedParent.error, code: 'invalid_parent' });
+    let parentId = resolvedParent.parentId;
+
     // Insert all messages
     const insertedMessages = [];
     for (const [position, msg] of messages.entries()) {
@@ -1008,8 +1096,8 @@ router.post('/conversations/:id/messages/batch', async (req, res) => {
         `INSERT INTO chat_messages (
           conversation_id, user_id, created_by_user_id, role, content, model_id,
           thinking, has_thinking, attachments, search_context,
-          prompt_tokens, completion_tokens, total_tokens, message_index, turn
-        ) VALUES ($1, $2, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+          prompt_tokens, completion_tokens, total_tokens, message_index, turn, parent_id
+        ) VALUES ($1, $2, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
         RETURNING *`,
         [
           conversationId, userId, msg.role, msg.content, msg.model_id,
@@ -1018,9 +1106,14 @@ router.post('/conversations/:id/messages/batch', async (req, res) => {
           null,
           msg.prompt_tokens, msg.completion_tokens, msg.total_tokens, messageIndex++,
           turnRecords[position] ? JSON.stringify(turnRecords[position]) : null,
+          parentId,
         ]
       );
       insertedMessages.push(result.rows[0]);
+      parentId = result.rows[0].id;
+    }
+    if (insertedMessages.length) {
+      await req.db.query('UPDATE chat_conversations SET active_leaf_id = $2 WHERE id = $1', [conversationId, parentId]);
     }
 
     // Update conversation timestamps
@@ -1129,7 +1222,7 @@ router.delete('/messages/:id', async (req, res) => {
       'reviewer',
     );
     const result = await req.db.query(
-      `DELETE FROM chat_messages WHERE id = $1 RETURNING id`,
+      `DELETE FROM chat_messages WHERE id = $1 RETURNING id, parent_id, conversation_id`,
       [messageId]
     );
 
@@ -1137,6 +1230,21 @@ router.delete('/messages/:id', async (req, res) => {
       return res.status(404).json({ success: false, error: 'Message not found' });
     }
 
+    // Its subtree went with it (parent_id cascades). If the active leaf was in there, land on the
+    // deleted message's parent — the last thing still on that branch — else on the newest message.
+    {
+      const gone = result.rows[0];
+      const leafRow = (await req.db.query('SELECT active_leaf_id FROM chat_conversations WHERE id = $1', [gone.conversation_id])).rows[0];
+      const leafStillThere = leafRow?.active_leaf_id
+        ? (await req.db.query('SELECT 1 FROM chat_messages WHERE id = $1', [leafRow.active_leaf_id])).rows.length > 0
+        : false;
+      if (!leafStillThere) {
+        const fallback = gone.parent_id
+          ?? (await req.db.query('SELECT id FROM chat_messages WHERE conversation_id = $1 ORDER BY message_index DESC, created_at DESC LIMIT 1', [gone.conversation_id])).rows[0]?.id
+          ?? null;
+        await req.db.query('UPDATE chat_conversations SET active_leaf_id = $2 WHERE id = $1', [gone.conversation_id, fallback]);
+      }
+    }
     res.json({ success: true, id: result.rows[0].id });
   } catch (error) {
     if (sendChatAuthorityError(res, error)) return;
@@ -1403,12 +1511,14 @@ router.get('/share/:token', async (req, res) => {
     }
 
     // Get conversation messages
+    // the branch the owner is on is what is shared — an edited-away version is not part of the thread
     const messagesResult = await req.db.query(
-      `SELECT id, role, content, model_id, created_at, message_index
+      `SELECT id, role, content, model_id, created_at, message_index, parent_id
        FROM chat_messages WHERE conversation_id = $1 ORDER BY message_index ASC`,
       [share.conversation_id]
     );
-    const publicMessages = serializePublicConversationMessages(messagesResult.rows);
+    const sharedLeaf = (await req.db.query('SELECT active_leaf_id FROM chat_conversations WHERE id = $1', [share.conversation_id])).rows[0]?.active_leaf_id;
+    const publicMessages = serializePublicConversationMessages(activePath(messagesResult.rows, sharedLeaf));
 
     res.json({
       success: true,
@@ -1479,12 +1589,14 @@ router.post('/share/:token/accept', async (req, res) => {
       });
     }
 
+    // the branch the owner is on is what is shared — an edited-away version is not part of the thread
     const messagesResult = await req.db.query(
-      `SELECT id, role, content, model_id, created_at, message_index
+      `SELECT id, role, content, model_id, created_at, message_index, parent_id
        FROM chat_messages WHERE conversation_id = $1 ORDER BY message_index ASC`,
       [share.conversation_id]
     );
-    const publicMessages = serializePublicConversationMessages(messagesResult.rows);
+    const sharedLeaf = (await req.db.query('SELECT active_leaf_id FROM chat_conversations WHERE id = $1', [share.conversation_id])).rows[0]?.active_leaf_id;
+    const publicMessages = serializePublicConversationMessages(activePath(messagesResult.rows, sharedLeaf));
     const newConversation = await withTransaction(req.db, async (tx) => {
       const newConvResult = await tx.query(
         `INSERT INTO chat_conversations (
