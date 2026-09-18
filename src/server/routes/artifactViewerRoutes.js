@@ -105,7 +105,7 @@ function shellHtml({ artifact, frameSrc, access, comments, shareToken, signedIn,
     : `<p class="hint">Sign in to send a comment to the agent that published this page.</p><p><a class="btn" href="/login?next=${encodeURIComponent(`/a/${artifact.id}${shareToken ? `?s=${shareToken}` : ''}`)}">Sign in</a></p>`;
   return `<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>${escapeHtml(artifact.title)}</title>
+<title>${escapeHtml(artifact.title)}</title><link rel="icon" type="image/svg+xml" href="/favicon-v2.svg">
 <style>
 :root{color-scheme:dark;--bg:#060606;--plate:#101010;--plate2:#151515;--line:rgba(255,255,255,.06);--line2:rgba(255,255,255,.14);--ink:#ece7df;--ink2:#948d83;--ink3:#69635b}
 html,body{height:100%;margin:0}body{display:grid;grid-template-rows:auto 1fr;background:var(--bg);color:var(--ink);font:14px/1.5 Inter,system-ui,sans-serif}
