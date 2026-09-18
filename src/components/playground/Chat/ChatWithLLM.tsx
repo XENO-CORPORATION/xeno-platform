@@ -13206,16 +13206,18 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
           /* The user turn is the library's MessageBubble, and these are the two things this chat wants
              said differently.
 
-             The width is a knob the component publishes rather than a prop, because the answer here is
-             a breakpoint: 75 percent of a desktop column reads well, and 75 percent of a phone is a
-             ribbon. The media queries further down move the same variable.
+             The width is a knob the component publishes rather than a prop. It was a breakpoint —
+             88 / 96 / 98 percent — and the person asked why their own message stops short of the
+             column while the answer runs its full width (2026-09-18). One column, two widths, read
+             as a defect. Both turns now span the interface; a short message is still a plate that
+             fits its text, because the component's inner block shrinks to its content.
 
              The timestamp fades with the buttons. The component keeps it steady on the grounds that a
              meta row which never empties never shifts the layout — true, and this chat still prefers a
              transcript with no clock under every line until you go looking. Its row holds its height
              either way, so nothing moves. */
           .chat-message-bubble {
-            --xeno-message-max: 88%;
+            --xeno-message-max: 100%;
           }
           .chat-message-bubble .xeno-message-time {
             opacity: 0;
@@ -14050,10 +14052,10 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
               display: none !important;
             }
             .chat-message-bubble {
-              --xeno-message-max: 96%;
+              --xeno-message-max: 100%;
             }
             .chat-message-editor {
-              max-width: 96% !important;
+              max-width: 100% !important;
             }
             .chat-input-container {
               padding: 0.75rem !important;
@@ -14090,10 +14092,10 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
               margin-left: 0 !important;
             }
             .chat-message-bubble {
-              --xeno-message-max: 98%;
+              --xeno-message-max: 100%;
             }
             .chat-message-editor {
-              max-width: 98% !important;
+              max-width: 100% !important;
             }
             .chat-top-bar {
               padding-top: 0.375rem !important;
@@ -16627,7 +16629,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                            {isUser ? (
                                editingMessageId === message.id ? (
                                      <div
-                                         className="chat-message-editor flex w-full max-w-[98%] flex-col gap-2 rounded-xl border border-[var(--chat-border)] bg-[var(--chat-surface)] p-2 text-[var(--chat-text)] md:max-w-[88%]"
+                                         className="chat-message-editor flex w-full flex-col gap-2 rounded-xl border border-[var(--chat-border)] bg-[var(--chat-surface)] p-2 text-[var(--chat-text)]"
                                      >
                                          <div className="rounded-lg border border-[var(--chat-accent)]/70 bg-[var(--chat-canvas)]/40 px-2.5 py-2 transition-colors focus-within:border-[var(--chat-accent)] focus-within:ring-1 focus-within:ring-[var(--chat-accent)]/25">
                                          {/* Stays hand-written — bare inside a box it does not
