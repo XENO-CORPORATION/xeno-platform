@@ -35,7 +35,13 @@
 [data-overview-shell] :where(input, select, textarea, button) { font-family: inherit; }
 [data-overview-shell] :where(input, select, textarea) { color-scheme: inherit; }
 [data-overview-shell] :where(input, select, textarea)::placeholder { color: var(--xeno-theme-text-soft); }
-[data-overview-shell] :where(button, a[href], input, select, textarea):focus-visible {
+/* `:not(.focus-self)` — a field that paints its own focus state opts out of this ring with
+   `.focus-self` (index.css). This rule and `.focus-self:focus-visible` are BOTH (0,2,0), so
+   source order used to decide, and this file loads later: inside the shell every `.focus-self`
+   textarea drew this 2px white outline anyway. That was the stroke around the chat's edit field
+   that survived four fixes (2026-09-18) — none of which were visible in a render outside the
+   shell. Now the two rules cannot meet. */
+[data-overview-shell] :where(button, a[href], input, select, textarea):not(.focus-self):focus-visible {
   outline: 2px solid var(--xeno-theme-focus-ring);
   outline-offset: 2px;
 }

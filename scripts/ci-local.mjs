@@ -230,6 +230,12 @@ async function main() {
       const built = code === 0 && bundles >= 1;
       record('build: frontend compiles and emits a bundle', built, `${bundles} index bundle(s)`);
       ok = ok && built;
+      if (built) {
+        // gates.yml runs this after the bundle assertion: it reads the EMITTED stylesheets
+        const ring = run('npm', ['run', 'test:focus-self-rendered'], { quiet: true });
+        record('build: .focus-self fields render ringless (real browser, built CSS)', ring.code === 0);
+        ok = ok && ring.code === 0;
+      }
     }
 
     if (want('core') || want('money')) {
