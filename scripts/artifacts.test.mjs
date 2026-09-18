@@ -99,8 +99,10 @@ test('view tokens are scoped to one artifact + revision and signed with the plat
 });
 
 test('the artifacts suite is in the core DB list on both sides of the drift gate', () => {
-  assert.match(read('scripts', 'ci-local.mjs'), /'artifacts',\n\];/);
-  assert.match(read('.github', 'workflows', 'core-tests.yml'), /suspension-gate artifacts"/);
+  // Order-independent on purpose: other PRs append their own suites, and the drift gate already
+  // proves the two lists agree with each other.
+  assert.match(read('scripts', 'ci-local.mjs'), /const CORE_DB_SUITES = \[[^\]]*'artifacts'[^\]]*\];/);
+  assert.match(read('.github', 'workflows', 'core-tests.yml'), /SUITES="[^"]*\bartifacts\b[^"]*"/);
 });
 
 test('storage refuses keys outside the artifacts namespace and never overwrites a revision key by design', () => {
