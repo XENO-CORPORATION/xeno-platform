@@ -79,6 +79,7 @@ import productDownloadRoutes, { grantRouter as downloadGrantRouter, updateGrantR
 import { router as downloadFunnelRouter } from './routes/downloadFunnelRoutes.js';
 import { sweepExpiredIntents } from './services/downloadFunnel.js';
 import { sweepRetention, RETENTION_SWEEP_INTERVAL_MS } from './services/dataRetention.js';
+import { sweepExpiredArtifacts } from './services/artifactService.js';
 import { requireSupportedClient } from './middleware/requireSupportedClient.js';
 import clientPolicyRoutes from './routes/clientPolicyRoutes.js';
 import faviconRoutes from './routes/faviconRoutes.js';
@@ -106,6 +107,8 @@ import learnRoutes from './routes/learnRoutes.js';
 import forumRoutes from './routes/forumRoutes.js';
 import { requireActivated } from './services/accountActivation.js';
 import agentRoutes from './routes/agentRoutes.js';
+import artifactRoutes from './routes/artifactRoutes.js';
+import { createArtifactViewerRouter } from './routes/artifactViewerRoutes.js';
 import { authMiddleware, optionalAuthMiddleware } from './middleware/auth.js';
 import { suspensionGate } from './middleware/suspensionGate.js';
 import { initCleanupService } from './services/cleanupService.js';
@@ -746,6 +749,14 @@ app.use('/api/forum', databaseMiddleware, forumRoutes);
 // Comms (XENO FORUM - SPEC.md D8). Under /api/v2/* per the identity plan's
 // rule that new surfaces sit beside the frozen legacy /api/auth/*.
 app.use('/api/v2/agents', databaseMiddleware, agentRoutes);
+// XENO Artifacts — the hosted home for pages an agent publishes from XENO Agent
+// CLI (`Artifact` tool, `/artifacts promote --cloud`). The API is owner-only and
+// sits behind authMiddleware; the VIEWER at /a/<id> takes the browser session
+// cookie (or a share link) so a pasted URL opens in a browser with no bearer.
+// Raw revision files are served under the artifact CSP + `sandbox`, the same
+// policy the CLI's loopback viewer enforces (routes/artifactViewerRoutes.js).
+app.use('/api/artifacts', databaseMiddleware, authMiddleware, artifactRoutes);
+app.use('/a', databaseMiddleware, browserSessionMiddleware(pool), createArtifactViewerRouter());
 console.log('⬇️ Download routes integrated: /api/download/*');
 
 // Round 8: Infrastructure routes
@@ -3966,6 +3977,9 @@ startDownloadCleanup();
         const parts = Object.entries(counts).map(([t, n]) => `${t}:${n}`);
         if (parts.length) console.log(`[Retention] pruned ${parts.join(' ')}`);
       })
+      // Artifacts expire per ARTIFACTS_RETENTION_DAYS_* (services/artifactService.js) — soft-deleted, bounded batches.
+      .then(() => sweepExpiredArtifacts(pool))
+      .then((r) => { if (r?.expired) console.log(`[Retention] artifacts expired:${r.expired}`); })
       .catch((e) => console.error('[Retention] error:', e.message));
     backgroundLeader.whenLeader(() => {
       const t = setInterval(sweepRet, RETENTION_SWEEP_INTERVAL_MS);
