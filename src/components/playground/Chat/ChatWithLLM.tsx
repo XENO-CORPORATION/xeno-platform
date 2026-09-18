@@ -16631,19 +16631,23 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                                      <div
                                          className="chat-message-editor flex w-full flex-col gap-2 rounded-xl border border-[var(--chat-border)] bg-[var(--chat-surface)] p-2 text-[var(--chat-text)]"
                                      >
-                                         <div className="rounded-lg border border-[var(--chat-accent)]/70 bg-[var(--chat-canvas)]/40 px-2.5 py-2 transition-colors focus-within:border-[var(--chat-accent)] focus-within:ring-1 focus-within:ring-[var(--chat-accent)]/25">
+                                         <div className="rounded-lg border border-[var(--chat-border)] bg-[var(--chat-canvas)]/40 px-2.5 py-2 transition-colors focus-within:border-[var(--chat-composer-focus-border)]">
                                          {/* Stays hand-written — bare inside a box it does not
-                                             own. The `--chat-canvas`/40 plate around it carries the
-                                             border, the radius and a `focus-within` ring that
-                                             brightens to accent, which is why the field itself is
-                                             `bg-transparent` with no outline. Giving it
-                                             `.xeno-textarea` would draw a second bordered card
-                                             inside the one already lighting up. */}
+                                             own. The `--chat-canvas`/40 plate carries the hairline
+                                             and the radius, and on focus its border steps ONE shade
+                                             (`--chat-composer-focus-border`, the composer's own
+                                             rule) — never an accent border, never a ring. The field
+                                             is `focus-self`: it opts out of the global
+                                             `:focus-visible` outline, which `outline-none` alone
+                                             cannot do (same specificity, index.css loads last) and
+                                             which drew a second bright rectangle inside the plate
+                                             (2026-09-18). A text input takes no focus ring —
+                                             DESIGN_SYSTEM. */}
                                          <textarea
                                              ref={editInputRef}
                                              value={editText}
                                              onChange={(e) => setEditText(e.target.value)}
-                                             className="min-h-[2.75rem] w-full resize-y bg-transparent text-[15px] leading-6 text-[var(--chat-text)] outline-none"
+                                             className="focus-self min-h-[2.75rem] w-full resize-y bg-transparent text-[15px] leading-6 text-[var(--chat-text)] outline-none focus:outline-none focus:ring-0"
                                                rows={1}
                                            />
                                          </div>
@@ -16873,7 +16877,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                                           <textarea
                                             value={editingAiContent}
                                             onChange={(e) => setEditingAiContent(e.target.value)}
-                                            className="w-full min-h-[300px] max-h-[600px] p-4 bg-[var(--chat-surface)] border border-[var(--chat-border)] rounded-xl text-[var(--chat-text)] text-sm resize-y focus:outline-none focus:border-[var(--chat-muted)] leading-relaxed"
+                                            className="focus-self w-full min-h-[300px] max-h-[600px] p-4 bg-[var(--chat-surface)] border border-[var(--chat-border)] rounded-xl text-[var(--chat-text)] text-sm resize-y outline-none focus:outline-none focus:ring-0 focus:border-[var(--chat-composer-focus-border)] leading-relaxed"
                                             placeholder="Edit AI response..."
                                             autoFocus
                                             spellCheck={false}
