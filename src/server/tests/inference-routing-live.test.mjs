@@ -35,7 +35,7 @@ import { runAllMigrations } from '../services/migrationRunner.js';
 import {
   listCredentials, revokeCredential, deleteCredential,
   setRoute, clearRoute, listRoutes, resolveInferenceRoute, useCredential,
-  markCredentialInvalid, fingerprint, byokEnabled, setCredentialModels, credentialServesModel,
+  markCredentialInvalid, fingerprint, byokEnabled, setCredentialModels, credentialServesModel, annotateCatalogueRoutes,
 } from '../services/providerCredentials.js';
 import { exchangeGrant, attachManagedGrant, recordGrantUsage } from '../services/inferenceGrants.js';
 import { encrypt } from '../utils/secretBox.js';
@@ -205,6 +205,17 @@ async function main() {
     `…and the decision SAYS so (reason ${claude.reason}) — explicit, never silent`);
   ok(claude.mismatch && claude.mismatch.model === 'claude-sonnet-5' && claude.mismatch.skipped[0].credentialId === ds.id,
     'the decision names the model and the credential that was skipped');
+
+  // THE PICKER agrees with the request (2026-09-18: the key answered `deepseek-chat` over
+  // the API and the web chat never listed it). The catalogue annotation is derived from
+  // the same walk, against the same rows, so what is offered is what will be served.
+  const pick = await annotateCatalogueRoutes(pool, dsUser, { surface: 'xeno-web', modelIds: ['claude-sonnet-5'] });
+  ok(pick.extra.map((e) => e.id).sort().join(',') === 'deepseek-chat,deepseek-reasoner',
+    'the picker ADDS the models the key serves that the gateway does not carry');
+  ok(pick.routes.get('deepseek-chat')?.path === 'byok' && pick.routes.get('deepseek-chat')?.credential?.id === ds.id,
+    'and stamps them as answered on that key');
+  ok(pick.routes.get('claude-sonnet-5')?.path === 'premium' && pick.routes.get('claude-sonnet-5')?.reason === claude.reason,
+    'a gateway model the key cannot serve is stamped premium with the SAME reason the request got');
 
   // An EXPLICIT byok request for an unservable model is refused with a typed
   // error — never quietly served on some other key, never quietly premium.

@@ -23,6 +23,8 @@ const FIXED_REASONING_MODELS = new Set([
   'gpt-5.4-thinking',
   'gpt-5.5-thinking',
   'claude-sonnet-4-6-thinking',
+  // DeepSeek's reasoning model always reasons and returns `reasoning_content` (BYOK route)
+  'deepseek-reasoner',
 ]);
 
 /*

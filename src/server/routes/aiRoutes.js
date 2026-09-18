@@ -11,7 +11,8 @@ import { getBalanceV2, MICRO_PER_CREDIT } from '../utils/creditLedgerV2.js';
 import { xenoChatCompletion, xenoChatCompletionStream, xenoApiConfigured, classifyUpstreamError, xenoModelCatalog, prettyModelName, PROVIDER_LABELS } from '../utils/xenoChat.js';
 import { enforceInHouseDailyLimit, limitExceededBody } from '../middleware/inHouseDailyLimit.js';
 import requireEntitlement from '../middleware/requireEntitlement.js';
-import { byokEnabled, resolveInferenceRoute } from '../services/providerCredentials.js';
+import { byokEnabled, resolveInferenceRoute, annotateCatalogueRoutes } from '../services/providerCredentials.js';
+import { vendorLabelForCredential } from '../utils/modelCatalogueMerge.js';
 import { mintGrant } from '../services/inferenceGrants.js';
 import { requestSurface } from '../utils/requestSurface.js';
 import { recordInferenceUsage } from '../utils/recordInferenceUsage.js';
@@ -1158,6 +1159,34 @@ const flatModel = (id, provider, extra = {}) => ({
   description: extra.description || '',
   ...catalogPaths(id),
 });
+/**
+ * The account's own keys, folded in: every model gains `route` (what a request would
+ * do) and the models a key reaches that the gateway does not carry are appended,
+ * labelled by vendor. Same walk as a request (`annotateCatalogueRoutes`); no provider
+ * is called. Any failure degrades to the gateway list — a catalogue is never a 500.
+ */
+async function withAccountRoutes(req, models) {
+  const userId = req.user?.id;
+  if (!userId || !req.db) return models;
+  try {
+    const { routes, extra } = await annotateCatalogueRoutes(req.db, userId, { surface: requestSurface(req), modelIds: models.map((m) => m.id) });
+    const asRoute = (id) => {
+      const r = routes.get(id);
+      if (!r || r.path !== 'byok') return { path: 'premium' };
+      return r.mode === 'local' ? { path: 'byok', mode: 'local' } : { path: 'byok', mode: 'managed', key: { label: r.credential.label, provider: r.credential.provider, status: r.credential.status } };
+    };
+    const out = models.map((m) => ({ ...m, route: asRoute(m.id) }));
+    for (const { id, credential } of extra) {
+      if (out.some((m) => m.id === id)) continue;
+      out.push({ ...flatModel(id, credential.provider, { name: prettyModelName(id) }), provider: vendorLabelForCredential(credential), route: asRoute(id) });
+    }
+    return out;
+  } catch (error) {
+    console.warn('[ai/models] account routes unavailable, serving the gateway list:', error.message);
+    return models;
+  }
+}
+
 router.get('/models', async (req, res) => {
   res.setHeader('Cache-Control', 'private, no-cache, must-revalidate');
   try {
@@ -1165,7 +1194,7 @@ router.get('/models', async (req, res) => {
     const models = live
       .filter((m) => String(m.type || 'text').toLowerCase() === 'text' && !EFFORT_SUFFIX.test(String(m.id)))
       .map((m) => flatModel(String(m.id), String(m.owned_by || 'xeno').toLowerCase(), { name: m.name, description: m.description }));
-    if (models.length > 0) return res.json({ success: true, source: 'gateway', models });
+    if (models.length > 0) return res.json({ success: true, source: 'gateway', models: await withAccountRoutes(req, models) });
   } catch (error) {
     console.warn('[ai/models] live catalogue unavailable, serving the synced copy:', error.message);
   }
@@ -1178,7 +1207,7 @@ router.get('/models', async (req, res) => {
     const models = rows
       .filter((r) => !EFFORT_SUFFIX.test(r.public_id))
       .map((r) => flatModel(r.public_id, r.provider));
-    return res.json({ success: true, source: 'catalogue', models });
+    return res.json({ success: true, source: 'catalogue', models: await withAccountRoutes(req, models) });
   } catch (error) {
     console.error('[ai/models] catalogue unavailable:', error.message);
     return res.status(503).json({ success: false, error: 'catalogue_unavailable', message: 'The model catalogue is not reachable right now.' });

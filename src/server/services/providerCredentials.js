@@ -426,36 +426,44 @@ async function catalogRowFor(db, model) {
   return rows[0] || null;
 }
 
-export async function resolveInferenceRoute(db, userId, { surface, requestedPath = null, model = null }) {
+/** The route rows that apply to a surface: its own override (if any) and the account default. */
+async function routeRowsFor(db, userId, surface) {
   const key = surface && String(surface).trim() ? String(surface).trim() : DEFAULT_SURFACE;
-
   const { rows } = await db.query(
     `SELECT r.surface, r.path, r.mode, r.credential_id,
-            c.provider, c.base_url, c.status AS credential_status, c.key_fingerprint, c.models
+            c.provider, c.base_url, c.status AS credential_status, c.key_fingerprint, c.models, c.label
        FROM inference_routes r
        LEFT JOIN user_provider_credentials c ON c.id = r.credential_id
       WHERE r.user_id = $1 AND r.surface = ANY($2::text[])`,
     [userId, [key, DEFAULT_SURFACE]]
   );
+  return {
+    override: rows.find((r) => r.surface === key && key !== DEFAULT_SURFACE) || null,
+    accountDefault: rows.find((r) => r.surface === DEFAULT_SURFACE) || null,
+  };
+}
 
-  const override = rows.find((r) => r.surface === key && key !== DEFAULT_SURFACE);
-  const accountDefault = rows.find((r) => r.surface === DEFAULT_SURFACE);
-
-  /* Walk the levels. A byok level whose credential cannot serve the requested
-   * model DOES NOT APPLY — resolution continues to the next level, and the
-   * decision says so. That is not D5's fallback: this request was never a BYOK
-   * request for that provider. It is a route naming a key that cannot answer,
-   * and pretending otherwise sends the wrong model to the wrong provider
-   * (measured: claude-sonnet-5 → DeepSeek → 400). The reason rides on the
-   * decision so the caller can surface it; silence is the failure mode. */
-  const catalog = await catalogRowFor(db, model);
+/**
+ * Walk the levels for ONE model. A byok level whose credential cannot serve the
+ * requested model DOES NOT APPLY — resolution continues to the next level, and the
+ * decision says so. That is not D5's fallback: this request was never a BYOK
+ * request for that provider. It is a route naming a key that cannot answer, and
+ * pretending otherwise sends the wrong model to the wrong provider (measured:
+ * claude-sonnet-5 → DeepSeek → 400). The reason rides on the decision so the
+ * caller can surface it; silence is the failure mode.
+ *
+ * ONE walk, two callers: `resolveInferenceRoute` (a request) and
+ * `annotateCatalogueRoutes` (the picker). The picker must show exactly what a
+ * request will get — a second copy of this rule is how the two would disagree.
+ */
+export function chooseRouteLevel({ override, accountDefault }, model, catalogRow) {
   const mismatches = [];
   let chosen = null;
   let reason = 'platform-default';
   for (const [level, row] of [['product-override', override], ['account-default', accountDefault]]) {
     if (!row) continue;
     if (row.path === 'byok' && row.mode !== 'local' && row.credential_id) {
-      const fit = credentialServesModel(row, model, catalog);
+      const fit = credentialServesModel(row, model, catalogRow);
       if (!fit.serves) {
         mismatches.push({ level, surface: row.surface, credentialId: row.credential_id, provider: row.provider, basis: fit.basis });
         continue;
@@ -464,6 +472,14 @@ export async function resolveInferenceRoute(db, userId, { surface, requestedPath
     chosen = row; reason = level; break;
   }
   if (!chosen && mismatches.length) reason = 'provider-mismatch';
+  return { chosen, reason, mismatches };
+}
+
+export async function resolveInferenceRoute(db, userId, { surface, requestedPath = null, model = null }) {
+  const levels = await routeRowsFor(db, userId, surface);
+  const catalog = await catalogRowFor(db, model);
+  const { chosen, reason: walkedReason, mismatches } = chooseRouteLevel(levels, model, catalog);
+  let reason = walkedReason;
 
   let path = requestedPath || chosen?.path || 'premium';
   if (requestedPath) reason = 'request-override';
@@ -517,6 +533,73 @@ export async function resolveInferenceRoute(db, userId, { surface, requestedPath
 }
 
 /**
+ * What the PICKER should show — every model the gateway serves plus every model the
+ * account's own keys make reachable, each stamped with the route a request for it
+ * would actually take.
+ *
+ * 2026-09-18: a DeepSeek key was stored and routed account-wide, `deepseek-chat`
+ * answered on it over the API — and the web chat never listed it, because the picker
+ * came from the gateway catalogue alone and DeepSeek is not a gateway provider. A
+ * BYOK route is a ROUTING rule; nothing made it a CATALOGUE entry. Open WebUI,
+ * LibreChat and OpenRouter's BYOK all list a connected provider's models beside the
+ * platform's; so do we now, derived from the same walk a request uses:
+ *
+ *   pass-through key (compatible / openrouter / azure) -> its allow-list IS its model
+ *     list (routing serves nothing else, so nothing else is honest to show);
+ *   first-party key (openai / anthropic / google)      -> the gateway's models of that
+ *     provider now route to the key and are stamped so.
+ *
+ * No provider is called: what a key CAN reach is not what the router WILL serve,
+ * and the picker is a promise about the latter. Returns
+ *   { routes: Map<modelId, {path, mode?, reason, credential?}>, extra: [{ id, credential }] }
+ * where `extra` are allow-listed models the gateway does not carry.
+ */
+export async function annotateCatalogueRoutes(db, userId, { surface, modelIds }) {
+  const ids = Array.from(new Set((modelIds || []).map((m) => String(m || '').trim()).filter(Boolean)));
+  const routes = new Map();
+  const extra = [];
+  if (!byokEnabled()) return { routes, extra };
+
+  const levels = await routeRowsFor(db, userId, surface);
+  if (!levels.override && !levels.accountDefault) return { routes, extra };
+  const routedKeys = [levels.override, levels.accountDefault]
+    .filter((r) => r && r.path === 'byok' && r.mode !== 'local' && r.credential_id && r.credential_status === 'active');
+
+  // allow-listed models the gateway does not carry are candidates too
+  const candidates = new Set(ids);
+  for (const r of routedKeys) for (const m of Array.isArray(r.models) ? r.models : []) candidates.add(m);
+  const all = Array.from(candidates);
+
+  const catalog = new Map();
+  if (all.length) {
+    const { rows } = await db.query(
+      'SELECT public_id, provider FROM gateway_model_aliases WHERE enabled AND public_id = ANY($1::text[])',
+      [all],
+    );
+    for (const row of rows) catalog.set(row.public_id, row);
+  }
+
+  const describe = (row) => ({
+    id: row.credential_id,
+    provider: row.provider,
+    label: row.label || row.provider,
+    baseUrl: row.base_url || null,
+    status: row.credential_status,
+  });
+  const known = new Set(ids);
+  for (const id of all) {
+    const { chosen, reason } = chooseRouteLevel(levels, id, catalog.get(id) || null);
+    let entry;
+    if (chosen?.path === 'byok' && chosen.mode === 'local') entry = { path: 'byok', mode: 'local', reason };
+    else if (chosen?.path === 'byok' && chosen.credential_id) entry = { path: 'byok', mode: 'managed', reason, credential: describe(chosen) };
+    else entry = { path: 'premium', reason };
+    routes.set(id, entry);
+    if (!known.has(id) && entry.path === 'byok' && entry.credential) extra.push({ id, credential: entry.credential });
+  }
+  return { routes, extra };
+}
+
+/**
  * Decrypt for one outbound call. The ONLY function here that yields plaintext,
  * and it never returns it — the caller receives the result of `use(secret)`.
  *
@@ -558,6 +641,6 @@ export async function markCredentialInvalid(db, credentialId) {
 
 export default {
   DEFAULT_SURFACE, SUPPORTED_PROVIDERS, byokEnabled, fingerprint,
-  verifyCredential, createCredential, listCredentials, revokeCredential, deleteCredential,
+  verifyCredential, createCredential, listCredentials, revokeCredential, deleteCredential, annotateCatalogueRoutes, chooseRouteLevel,
   setRoute, clearRoute, listRoutes, listProducts, resolveInferenceRoute, useCredential, markCredentialInvalid,
 };

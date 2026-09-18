@@ -2,8 +2,27 @@ import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from 're
 import { createPortal } from 'react-dom';
 import { IconButton, Spinner } from '@xenosystem/elements-react';
 import { Brain, BrainCircuit, Check, ChevronDown, ChevronLeft, ChevronRight, ArrowRightDecl, Search, X } from '@/lib/icons';
-import type { GroupedModels, Model } from '@/services/modelService';
+import { isOwnKeyRoute, type GroupedModels, type Model } from '@/services/modelService';
 import { chainDurationMs, MODEL_CHAIN } from './composerGooey';
+
+/**
+ * "your key" — the model is answered on the account's own provider key, not credits.
+ * Stamped by the server from the routing walk a request uses, so the tag is a promise
+ * about what will happen, never a guess about what the key could reach.
+ */
+const OwnKeyTag: React.FC<{ model: Model }> = ({ model }) => {
+  const key = model.route && model.route.path === 'byok' && model.route.mode === 'managed' ? model.route.key : null;
+  const title = key ? `Answered on your ${key.label || key.provider || ''} key — no credits`.replace(/\s+/g, ' ') : 'Answered by this product with your own key — no credits';
+  return (
+    <span
+      data-own-key-route
+      title={title}
+      className="inline-flex flex-shrink-0 items-center rounded-[6px] border border-[var(--chat-border)] px-1 py-px text-[9px] font-medium uppercase tracking-[0.06em] leading-[14px] text-[var(--chat-muted)]"
+    >
+      your key
+    </span>
+  );
+};
 
 interface ChatModelSelectorProps {
   groupedModels: GroupedModels[];
@@ -341,6 +360,7 @@ const ChatModelSelector: React.FC<ChatModelSelectorProps> = ({
                     >
                       <span className="flex items-center gap-1.5">
                         <span className="max-w-[11rem] truncate">{model.name}</span>
+                        {isOwnKeyRoute(model) && <OwnKeyTag model={model} />}
                         {isSelected && <Check size={12} className="text-[var(--chat-text)]" />}
                       </span>
                     </button>
@@ -525,7 +545,10 @@ const ChatModelSelector: React.FC<ChatModelSelectorProps> = ({
                                 : 'border-[var(--chat-border)] bg-[var(--chat-control)] text-[var(--chat-muted)]'
                             }`}
                           >
-                            <span className="min-w-0 truncate">{model.name}</span>
+                            <span className="flex min-w-0 items-center gap-1.5">
+                              <span className="min-w-0 truncate">{model.name}</span>
+                              {isOwnKeyRoute(model) && <OwnKeyTag model={model} />}
+                            </span>
                             <span className="flex flex-shrink-0 items-center gap-1.5 text-[10px] tabular-nums text-[var(--chat-muted)]">
                               {formatTokenCount(model.maxTokens)}
                               {isSelected && <Check size={12} className="text-[var(--chat-accent)]" />}
@@ -677,6 +700,7 @@ const ChatModelSelector: React.FC<ChatModelSelectorProps> = ({
                               <div className="min-w-0">
                                 <div className="flex items-center gap-2">
                                   <span className="font-medium text-sm text-white truncate">{model.name}</span>
+                                  {isOwnKeyRoute(model) && <OwnKeyTag model={model} />}
                                   {isSelected && (
                                     <span className="inline-flex items-center rounded-full bg-white/20 px-2 py-0.5 text-[10px] font-semibold text-white">
                                       Active
