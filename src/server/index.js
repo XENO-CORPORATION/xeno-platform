@@ -125,6 +125,7 @@ import { reasoningCapabilityForModel, reasoningEffortForModel } from './lib/chat
 import { annotateCatalogueRoutes } from './services/providerCredentials.js';
 import { requestSurface } from './utils/requestSurface.js';
 import { mergeCatalogueWithRoutes } from './utils/modelCatalogueMerge.js';
+import { buildEffortFamilies, effortOptionsFor } from './utils/reasoningEffortFamilies.js';
 import { registerManagedLibraryFile } from './services/libraryAssets.js';
 import { assembleProjectContext } from './services/chatProjectContext.js';
 
@@ -896,6 +897,9 @@ app.get('/api/models', databaseMiddleware, authMiddleware, async (req, res) => {
     // variants (-high/-low/-medium/-none/-xhigh/-max) — the same model at a
     // different effort (handled by the reasoning toggle), not distinct models.
     const EFFORT_SUFFIX = /-(high|low|medium|none|xhigh|max)$/;
+    // The variants are collapsed from the LIST and kept as each base model's `efforts` —
+    // the effort control offers exactly the levels the gateway proves exist for that model.
+    const effortFamilies = buildEffortFamilies(allModels.filter((m) => String(m.type || 'text').toLowerCase() === 'text').map((m) => String(m.id)));
     const textModels = allModels.filter(m =>
       String(m.type || 'text').toLowerCase() === 'text' && !EFFORT_SUFFIX.test(String(m.id))
     );
@@ -917,9 +921,11 @@ app.get('/api/models', databaseMiddleware, authMiddleware, async (req, res) => {
 
         const supportsReasoning = reasoningCapabilityForModel(id);
         const supportsVision = /gemini|gpt-5|gpt-4o|claude|pixtral|vision|llama-4|grok-4/.test(id);
+        const efforts = effortOptionsFor(String(model.id), effortFamilies, supportsReasoning);
 
         return {
           id: model.id,
+          ...(efforts.length ? { efforts } : {}),
           name: model.name || prettyModelName(model.id),
           maxTokens: model.context_length || model.max_tokens || 128000,
           created: model.created,
@@ -1913,7 +1919,10 @@ app.post('/api/chat/generate', databaseMiddleware, authMiddleware, async (req, r
 
         // Add reasoning parameter for reasoning-capable models when reasoning is enabled
         if (effectiveReasoningState) {
-            const reasoningEffort = reasoningEffortForModel(selectedModelId, true);
+            const requestedEffort = ['low', 'medium', 'high'].includes(req.body?.reasoningEffort) ? req.body.reasoningEffort : null;
+            const reasoningEffort = requestedEffort && reasoningCapabilityForModel(selectedModelId) === 'toggleable'
+              ? requestedEffort
+              : reasoningEffortForModel(selectedModelId, true);
             if (reasoningEffort) {
                 // XENO API's preferred OpenAI-compatible field. Fixed-effort aliases
                 // deliberately omit it because the model ID already selects effort.

@@ -235,6 +235,9 @@ async function main() {
         const ring = run('npm', ['run', 'test:focus-self-rendered'], { quiet: true });
         record('build: .focus-self fields render ringless (real browser, built CSS)', ring.code === 0);
         ok = ok && ring.code === 0;
+        const effort = run('npm', ['run', 'test:effort-menu-rendered'], { quiet: true });
+        record('build: the effort menu renders from the chat tokens (real browser, built CSS)', effort.code === 0);
+        ok = ok && effort.code === 0;
       }
     }
 

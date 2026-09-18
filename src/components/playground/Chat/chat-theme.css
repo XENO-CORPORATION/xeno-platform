@@ -307,6 +307,17 @@
   --xa-ease: cubic-bezier(0.2, 0.7, 0.2, 1);
 }
 .chat-theme-light .chat-thread-scrubber { --xa-ink: 10, 10, 10; }
+.chat-themed .chat-effort {
+  --xa-ink: 255, 255, 255;
+  --xa-line: rgba(var(--xa-ink), 0.08);
+  --xa-line-soft: rgba(var(--xa-ink), 0.07);
+  --xa-line-menu: rgba(var(--xa-ink), 0.09);
+  --xa-wash: rgba(var(--xa-ink), 0.03);
+  --xa-ease: cubic-bezier(0.2, 0.7, 0.2, 1);
+}
+.chat-theme-light .chat-effort { --xa-ink: 10, 10, 10; }
+/* the effort menu is the composer's own popover (the panel's is bound to its dock): no dock padding, no container query */
+.chat-themed .chat-effort.xa-dock { padding: 0; container-type: normal; }
 /* the prose's link rules must not restyle the chip — it is a control, not a link in running text */
 .chat-themed .prose .xa-cite-chip, .chat-themed .prose .xa-citecard-row { text-decoration: none; font-weight: 500; }
 .chat-themed .prose .xa-cite-chip { color: var(--xa-t4); }
@@ -314,7 +325,7 @@
 .chat-themed .prose .xa-citecard-row { color: inherit; }
 .chat-themed .prose .xa-citecard-title { color: var(--xa-t1); }
 .chat-themed .prose img.xa-fav { margin: 0; display: inline-flex; }
-.chat-themed :is(.chat-turn-head.xa-transcript, .xa-cite, .chat-thread-scrubber) {
+.chat-themed :is(.chat-turn-head.xa-transcript, .xa-cite, .chat-thread-scrubber, .chat-effort) {
   --xa-ground: var(--chat-canvas);
   --xa-plate: var(--chat-surface);
   --xa-box: var(--chat-surface);

@@ -404,7 +404,7 @@ router.post('/chat', requireEntitlement('canUse'), async (req, res) => {
  */
 router.post('/chat/stream', requireEntitlement('canUse'), async (req, res) => {
   const {
-    model, messages, reasoning, conversationId, systemPrompt, projectId,
+    model, messages, reasoning, reasoningEffort: requestedEffort, conversationId, systemPrompt, projectId,
     /*
      * 🔴 NO DEFAULT TEMPERATURE. Sending one broke every Claude Opus 5 turn in production:
      *
@@ -770,7 +770,8 @@ router.post('/chat/stream', requireEntitlement('canUse'), async (req, res) => {
       extra: {
         // OpenRouter-style reasoning hint (the live catalog is OpenRouter-fronted);
         // the gateway streams thinking back as delta.reasoning when supported.
-        ...(reasoning ? { reasoning: { effort: 'medium' } } : {}),
+        // the level the person chose on the effort control; the bare toggle's default stays 'medium'
+        ...(reasoning ? { reasoning: { effort: ['low', 'medium', 'high'].includes(requestedEffort) ? requestedEffort : 'medium' } } : {}),
         ...(tools?.length ? { tools, tool_choice: 'auto' } : {}),
       },
     });
