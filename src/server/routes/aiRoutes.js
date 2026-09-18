@@ -845,6 +845,10 @@ router.post('/chat/stream', requireEntitlement('canUse'), async (req, res) => {
    * deltas means a dropped frame cannot truncate the saved message.
    */
   let assembledText = '';
+  // the thought as streamed — it rides the result frame too, so a client that reads only the
+  // result (or reloads) keeps it; `reasoningProcessed` is the CLIENT's toggle and says nothing
+  // about whether the model thought out loud
+  let assembledReasoning = '';
   let assembledAnnotations = null;
 
   try {
@@ -858,6 +862,7 @@ router.post('/chat/stream', requireEntitlement('canUse'), async (req, res) => {
           assembledText += event.text;
           await send({ type: 'delta', text: event.text });
         } else if (event.type === 'reasoning') {
+          assembledReasoning += event.text;
           await send({ type: 'reasoning', text: event.text });
         } else if (event.type === 'usage') {
           usageObj = event.usage;
@@ -918,6 +923,7 @@ router.post('/chat/stream', requireEntitlement('canUse'), async (req, res) => {
             await send({ type: 'delta', text: event.text });
             break;
           case 'reasoning':
+            assembledReasoning += event.text;
             await send({ type: 'reasoning', text: event.text });
             break;
           case 'search_start':
@@ -1091,6 +1097,10 @@ router.post('/chat/stream', requireEntitlement('canUse'), async (req, res) => {
   await send({
     type: 'result',
     ...shaped,
+    // 🔴 The streamed thought, kept on the result. Without it a reasoning model's thought showed
+    // while the turn ran and VANISHED when the answer landed: the client rebuilds its message
+    // from this frame, and the shaper only knows the client's reasoning toggle (2026-09-18).
+    ...(assembledReasoning.trim() && !shaped.thinking ? { thinking: assembledReasoning.trim(), hasThinking: true } : {}),
     ...(annotationSearchInfo ? { searchInfo: annotationSearchInfo } : {}),
     // The tool loop's own sources, which are a different thing from provider annotations:
     // these are pages XENO fetched, not pages the model cited.
