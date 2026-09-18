@@ -7075,17 +7075,10 @@ interface QueueState {
         // --- Force thinking display for specific models when reasoning was active ---
         // For certain models, we want the "Thoughts" UI section to appear even if parseResponse 
         // didn't find explicit markers, allowing the UI to show appropriate fallback messages
-        if (reasoningStateForThisCall && // If reasoning was active for this API call
-            !localHasThinking &&         // AND parseResponse found no "Thinking Process:" marker
-            shouldForceThinkingDisplay(data.modelIdUsed || actualModelIdForApi) // AND it's a reasoning-capable model
-        ) {
-            // For these models, conceptually, thinking did occur (a reasoning model was used).
-            // Override localHasThinking to true so the UI "Thoughts" section renders
-            // and can display its specific fallback message.
-            localHasThinking = true;
-            console.log(`[fetchAiResponse] Forcing thinking display for model ${data.modelIdUsed || actualModelIdForApi} - reasoning was active but no markers found`);
-            // `thinking` (and thus `thinkingContent`) will remain null, triggering the fallback in the UI.
-        }
+        // A reasoning model whose provider returned no trace has no thought to SHOW. This used to
+        // force `hasThinking` so a placeholder box could explain the absence; the transcript
+        // renders a thought only when there is one (2026-09-18).
+        void shouldForceThinkingDisplay;
 
         // --- Construct final AI message object ---
         // console.log("[TokenCountDebug] Text for answerTokenCount (finalAnswer):", finalAnswer);
@@ -16915,87 +16908,15 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                                                   onThinkingTime={rememberThinkingTime}
                                               />
                                           </div>
-                                      ) : message.hasThinking && (
-                                          <div className="w-full pl-[1.125rem]">
-                                              {/* Stays hand-written: a line of text with 2px of
-                                                  vertical padding and no box at all, whose leading
-                                                  mark is `.xeno-model-cube` — an animated cube this
-                                                  chat draws itself, not a glyph. `leadingIcon` takes a
-                                                  declaration, and a `Button` would put a 32px control
-                                                  around a label that sits inline with the message
-                                                  above it. */}
-                                              <button
-                                                  type="button"
-                                                  onClick={() => setShowThinkingId(showThinkingId === message.id ? null : message.id)}
-                                                  className="inline-flex items-center gap-2 py-0.5 text-[13px] transition-colors"
-                                              >
-                                                  <span className="xeno-model-cube" aria-hidden="true" />
-                                                  <span className="font-semibold text-[var(--chat-text)]">
-                                                      {(message.modelIdUsed?.split('/').pop() || 'Model')}
-                                                      {message.thinkingDuration !== undefined && message.thinkingDuration >= 0 && (
-                                                          <span className="ml-1.5 font-medium text-[var(--chat-muted)]">· {message.thinkingDuration}s</span>
-                                                      )}
-                                                  </span>
-                                                  <ChevronDown size={14} className={`text-[var(--chat-muted)] transition-transform duration-200 ${showThinkingId === message.id ? 'rotate-180' : ''}`} />
-                                              </button>
-                                              <div className={`chat-collapsible ${showThinkingId === message.id ? 'chat-collapsible-open' : ''}`}>
-                                                <div className="chat-collapsible-inner">
-                                                  <div className="chat-collapsible-content mt-1.5 border-l-2 border-[var(--chat-border)] pl-3 text-sm prose prose-sm prose-invert max-w-none text-[var(--chat-muted)] prose-p:my-2 prose-li:my-0.5 prose-ol:pl-5 prose-ul:pl-5 prose-headings:text-[var(--chat-text)] prose-headings:font-medium leading-relaxed">
-                                                {message.thinkingContent ? (
-                                                              <ReactMarkdown 
-                                                                  remarkPlugins={[remarkGfm]}
-                                                                  rehypePlugins={[rehypeRaw]}
-                                                          components={{ 
-                                                              pre: ({children}: any) => <>{children}</>, 
-                                                          code({node, inline, className, children, ...props}: any) {
-                                                                  const match = /language-(\w+)/.exec(className || ""); 
-                                                                  if (!inline) { 
-                                                                      const codeString = String(children).replace(/\n$/, ""); 
-                                                                      if (match || codeString.includes("\n")) { 
-                                                                      const blockIndex = node?.position?.start?.line ?? (node?.index ?? Date.now());
-                                                                      const codeBlockId = `${message.id}-thinking-code-${blockIndex}`;
-                                                                      return <CodeBlockWithHeader
-                                                                                language={match ? match[1] : "plaintext"} theme={resolvedChatTheme === 'light' ? 'light' : 'dark'}
-                                                                                code={codeString}
-                                                                                runtimes={pistonRuntimes}
-                                                                                runtimesLoading={pistonRuntimesLoading}
-                                                                                codeBlockId={codeBlockId}
-                                                                                executionState={codeBlockExecutionStates[codeBlockId]}
-                                                                                onRunCode={handleCodeBlockRun}
-                                                                                onCloseOutput={handleCodeBlockCloseOutput}
-                                                                                onEditCode={handleEditCodeBlock}
-                                                                                isEditing={editingCodeBlockId === codeBlockId}
-                                                                                editingCode={editingCodeBlockId === codeBlockId ? editingCodeContent : ''}
-                                                                                onEditCodeChange={setEditingCodeContent}
-                                                                                onSaveCodeEdit={handleSaveCodeEdit}
-                                                                                onCancelCodeEdit={handleCancelCodeEdit}
-                                                                             />;
-                                                                      } else { 
-                                                                          return <code className="bg-[var(--chat-surface)] rounded px-2 py-1 font-mono text-[15px] text-[var(--chat-text)] align-middle max-w-full">{codeString}</code>; 
-                                                                      } 
-                                                                  } 
-                                                                  return <code className={className} {...props}>{children}</code>; 
-                                                              }, 
-                                                          }} 
-                                                      > 
-                                                          {message.thinkingContent || ''} 
-                                                              </ReactMarkdown>
-                                                  ) : (
-                                                      <p className="text-[var(--chat-muted)] italic text-sm">
-                                                          {message.modelIdUsed?.includes('google/gemini-2.5-pro') 
-                                                              ? "Gemini 2.5 Pro provided a direct answer. Its detailed thought process wasn't explicitly formatted in this instance."
-                                                              : message.modelIdUsed?.includes('x-ai/grok')
-                                                                  ? "Grok provided a direct answer. Its detailed thought process wasn't explicitly formatted in this instance."
-                                                                  : "[Thinking process not provided or markers not found in API response]"
-                                                          }
-                                                      </p>
-                                                  )}
-                                                  </div>
-                                                </div>
-                                              </div>
-                                      </div>
-                                      )}
- 
+                                      ) : null}
+                                      {/* A turn with no thought text and no steps shows NOTHING above its
+                                          reply (D10: "a message with no steps has no clock line — the reply
+                                          simply arrives"). The box that stood here rendered "[Thinking process
+                                          not provided or markers not found in API response]" for every
+                                          reasoning model whose provider returns no trace — grok-4.6-high-fast
+                                          reasons at a fixed effort and xAI does not return its reasoning
+                                          content — which reads as a defect on every plain answer (2026-09-18). */}
+
                                       {/* 2. Grounding Info Box - Xeno Search Sources */}
                                       {/* Show Xeno Search Loading Animation or Results - Only when Xeno Search was actually used.
                                           A turn whose rail already lists what each search read shows them there (the
