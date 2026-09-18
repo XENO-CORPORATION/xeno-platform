@@ -296,6 +296,27 @@ services:
       - SUBJECT_HASH_SECRET_PREVIOUS=${SUBJECT_HASH_SECRET_PREVIOUS:-}
       # Per-account cap on download-grant minting (default 60/hour).
       - GRANT_HOURLY_CAP=${GRANT_HOURLY_CAP:-}
+      # ── XENO Artifacts (routes/artifactRoutes.js, /a/<id>) ───────────
+      # Storage: ARTIFACTS_R2_BUCKET + the three R2 creds selects R2 (private
+      # bucket `xeno-artifacts`, created 2026-09-18); unset, pages land in
+      # ARTIFACTS_DIR — a bind mount below, so they survive a redeploy. The
+      # boot line prints which backend is active. `scripts/migrate-artifacts-
+      # storage.mjs` moves fs → R2 losslessly when the credential lands.
+      - ARTIFACTS_R2_BUCKET=${ARTIFACTS_R2_BUCKET:-}
+      - R2_ACCOUNT_ID=${R2_ACCOUNT_ID:-}
+      - R2_ACCESS_KEY_ID=${R2_ACCESS_KEY_ID:-}
+      - R2_SECRET_ACCESS_KEY=${R2_SECRET_ACCESS_KEY:-}
+      - ARTIFACTS_DIR=${ARTIFACTS_DIR:-/app/data/artifacts}
+      # Raw revision files are served ONLY on this host (never carries the
+      # app's __Host- cookies): https://usercontent.xenostudio.ai. Unset =
+      # same origin, CSP sandbox alone.
+      - ARTIFACTS_CONTENT_ORIGIN=${ARTIFACTS_CONTENT_ORIGIN:-}
+      - PUBLIC_ORIGIN=${PUBLIC_ORIGIN:-}
+      # Kill-switch (false/0/off = writes answer 503; existing pages still open).
+      - ARTIFACTS_ENABLED=${ARTIFACTS_ENABLED:-}
+      # Retention in days, unset = keep. Separate for private and shared pages.
+      - ARTIFACTS_RETENTION_DAYS_PRIVATE=${ARTIFACTS_RETENTION_DAYS_PRIVATE:-}
+      - ARTIFACTS_RETENTION_DAYS_SHARED=${ARTIFACTS_RETENTION_DAYS_SHARED:-}
     extra_hosts:
       - "host.docker.internal:host-gateway"
     volumes:
@@ -304,6 +325,8 @@ services:
       - ./src/server/sam2-uploads:/app/sam2-uploads
       - ./src/server/storage:/app/storage
       - ./conversions:/app/conversions
+      # XENO Artifacts, filesystem backend (see ARTIFACTS_* above).
+      - ./data/artifacts:/app/data/artifacts
       # Backups, READ-ONLY. Mounted solely so /api/health can report how old the
       # newest dump is — see the backup check in src/server/index.js. The nightly
       # backup failed silently for 15 days because nothing off-box could observe

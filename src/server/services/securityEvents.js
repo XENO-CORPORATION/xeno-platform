@@ -59,6 +59,11 @@ export const EVENTS = Object.freeze({
   BYOK_CREDENTIAL_MODELS_SET: 'byok_credential_models_set',
   BYOK_ROUTE_SET: 'byok_route_set',
   BYOK_ROUTE_CLEARED: 'byok_route_cleared',
+  // XENO Artifacts — publish / share / delete, the same family Claude Code audits as
+  // claude_artifact_* (code.claude.com/docs/en/artifacts, "Review the audit log").
+  ARTIFACT_PUBLISHED: 'artifact_published',
+  ARTIFACT_SHARED: 'artifact_shared',
+  ARTIFACT_DELETED: 'artifact_deleted',
 });
 
 const KNOWN = new Set(Object.values(EVENTS));

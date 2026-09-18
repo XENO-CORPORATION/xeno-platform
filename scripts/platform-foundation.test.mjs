@@ -153,7 +153,8 @@ test('shared interaction states use role-specific theme tokens across the platfo
   assert.match(themeStyles, /\.xeno-project-list > button:hover[\s\S]*?var\(--xeno-theme-row-hover\)/);
   assert.match(themeStyles, /\.xeno-integration-card:hover[\s\S]*?var\(--xeno-theme-row-hover\)/);
   assert.match(themeStyles, /\.xeno-range-picker button\.is-active[\s\S]*?var\(--xeno-theme-inverse\)/);
-  assert.match(themeStyles, /button, a\[href\], input, select, textarea\):focus-visible[\s\S]*?var\(--xeno-theme-focus-ring\)/);
+  // b0d6093 added `:not(.focus-self)` between the group and `:focus-visible` (the shell ring must not beat .focus-self).
+  assert.match(themeStyles, /button, a\[href\], input, select, textarea\)(?::not\(\.focus-self\))?:focus-visible[\s\S]*?var\(--xeno-theme-focus-ring\)/);
   assert.match(workbenchStyles, /\.xeno-drawer-layout-menu > button:hover \{ background: var\(--xeno-theme-control-hover\); color: var\(--xeno-theme-text\); \}/);
   assert.match(platformStyles, /\.xeno-start-card:hover \{[^}]*background: var\(--xeno-theme-row-hover\);[^}]*background-color: var\(--xeno-theme-row-hover\);/);
   assert.match(platformStyles, /\.xeno-sidebar-scroll[^}]*scrollbar-color: var\(--xeno-theme-border-strong\) transparent/);
