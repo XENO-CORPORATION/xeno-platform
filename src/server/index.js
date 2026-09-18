@@ -122,6 +122,9 @@ import { render as renderMetrics } from './services/metrics.js';
 import { enforceEnv } from './config/requiredEnv.js';
 import { breakerSnapshot } from './services/upstream.js';
 import { reasoningCapabilityForModel, reasoningEffortForModel } from './lib/chatModelCapabilities.js';
+import { annotateCatalogueRoutes } from './services/providerCredentials.js';
+import { requestSurface } from './utils/requestSurface.js';
+import { mergeCatalogueWithRoutes } from './utils/modelCatalogueMerge.js';
 import { registerManagedLibraryFile } from './services/libraryAssets.js';
 import { assembleProjectContext } from './services/chatProjectContext.js';
 
@@ -852,14 +855,32 @@ const COMPANY_PREFIXES = {
   'xAI': 'x-ai/',
 };
 
+/**
+ * The picker lists what a REQUEST would get: the gateway's catalogue plus every model
+ * the account's own keys make reachable, each stamped with its route. Derived from the
+ * same level walk a request uses (`annotateCatalogueRoutes`), never from a provider
+ * call. A failure here degrades to the gateway list — a picker is never a 500.
+ */
+async function withAccountRoutes(req, gatewayResult) {
+  const userId = req.user?.id;
+  if (!userId || !req.db) return gatewayResult;
+  try {
+    const ids = Object.values(gatewayResult.companies || {}).flat().map((m) => m.id);
+    const annotated = await annotateCatalogueRoutes(req.db, userId, { surface: requestSurface(req), modelIds: ids });
+    return mergeCatalogueWithRoutes(gatewayResult, annotated, { reasoningCapabilityForModel, prettyModelName });
+  } catch (error) {
+    console.warn('[models] account routes unavailable, serving the gateway list:', error.message);
+    return gatewayResult;
+  }
+}
+
 app.get('/api/models', databaseMiddleware, authMiddleware, async (req, res) => {
   try {
     const now = Date.now();
 
     // Return cached data if still valid
     if (modelsCache && (now - modelsCacheTimestamp) < MODELS_CACHE_DURATION) {
-      console.log('📦 Returning cached models data');
-      return res.json(modelsCache);
+      return res.json(await withAccountRoutes(req, modelsCache));
     }
 
     console.log('🔄 Fetching fresh models from the XENO API...');
@@ -924,13 +945,15 @@ app.get('/api/models', databaseMiddleware, authMiddleware, async (req, res) => {
       companies: groupedModels
     };
 
-    // Cache the result
+    // Cache the GATEWAY result only. What the account's own keys add is per user and
+    // is merged on the way out — a shared cache of a per-user list would show one
+    // person's providers to the next.
     modelsCache = result;
     modelsCacheTimestamp = now;
 
     console.log(`✅ Models cached: ${Object.keys(groupedModels).length} companies`);
 
-    res.json(result);
+    res.json(await withAccountRoutes(req, result));
 
   } catch (error) {
     console.error('❌ Error fetching models:', error);

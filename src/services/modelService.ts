@@ -19,7 +19,22 @@ export interface Model {
   provider?: string;
   contextWindow?: number;
   temperature?: number;
+  /**
+   * What a request for this model would actually do on THIS account — stamped by the
+   * server from the same routing walk a request uses. `byok` + `key` = answered on the
+   * account's own key, no credits.
+   */
+  route?: ModelRoute;
 }
+
+export type ModelRoute =
+  | { path: 'premium' }
+  | { path: 'byok'; mode: 'local' }
+  | { path: 'byok'; mode: 'managed'; key: { label?: string; provider?: string; status?: string } };
+
+/** True when the model is answered on the account's own key rather than credits. */
+export const isOwnKeyRoute = (model: Pick<Model, 'route'> | null | undefined): boolean =>
+  model?.route?.path === 'byok';
 
 export interface ModelsResponse {
   success: boolean;
@@ -33,8 +48,11 @@ export interface GroupedModels {
   models: Model[];
 }
 
-const CACHE_KEY = 'xeno_models_cache_v3';
-const CACHE_DURATION = 30 * 60 * 1000; // 30 minutes
+const CACHE_KEY = 'xeno_models_cache_v4';
+// Short: the list is per ACCOUNT now (own-key routes fold in), and a key stored or routed
+// on the API platform must show up here without a sign-out. The gateway part is cached
+// server-side for 30 minutes, so a short client cache costs no gateway call.
+const CACHE_DURATION = 2 * 60 * 1000; // 2 minutes
 
 interface CachedData {
   timestamp: number;
@@ -66,8 +84,10 @@ export const fetchModels = async (): Promise<ModelsResponse> => {
   // /api/models is auth-gated — send the platform bearer token (same key the
   // rest of the app uses). Without it the endpoint 401s and the picker is empty.
   const token = getAccessToken();
+  // The surface names the product, so per-product route overrides fold into the list the
+  // same way they apply to a request from this product.
   const response = await fetch('/api/models', {
-    headers: token ? { Authorization: `Bearer ${token}` } : {},
+    headers: { 'x-xeno-surface': 'xeno-web', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
   });
   if (!response.ok) {
     throw new Error(`Failed to fetch models: ${response.status} ${response.statusText}`);
@@ -116,6 +136,7 @@ export const findModelById = async (modelId: string): Promise<Model | null> => {
 
 export const clearModelsCache = (): void => {
   localStorage.removeItem(CACHE_KEY);
+  localStorage.removeItem('xeno_models_cache_v3');
   localStorage.removeItem('xeno_free_models_cache');
 };
 
