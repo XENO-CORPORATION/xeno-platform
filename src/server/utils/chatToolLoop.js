@@ -410,6 +410,8 @@ export async function* streamToolLoop({ messages, surface, turnId, streamModel, 
   let iterations = 0;
   let cappedOut = false;
   let lastUsage = null;
+  // text the model wrote on an earlier iteration, before a tool call — the answer that follows needs a break from it
+  let narrated = false;
 
   const maxIterations = budget.maxSearches + 1;
 
@@ -430,9 +432,23 @@ export async function* streamToolLoop({ messages, surface, turnId, streamModel, 
          * tool call. Models narrate before searching ("Let me check the current figures")
          * and that text is part of the answer — holding it back until the turn resolves
          * is what made the buffered version feel like a hang.
+         *
+         * A narration that ended before the search ("I'll check those claims.") and the
+         * answer that follows it are two paragraphs the model wrote as two turns; joined
+         * raw they read as one run-on sentence ("…live sources.Yes. A live search…" — seen
+         * on production 2026-09-18). One break between them, once.
          */
+        if (narrated && !text) yield { type: 'delta', text: '\n\n' };
         text += event.text;
         yield { type: 'delta', text: event.text };
+      } else if (event.type === 'reasoning') {
+        /*
+         * 🔴 The thought, forwarded like the answer. A reasoning model (grok-4.6 exposes its
+         * trace) thinks before it decides to search and again before it answers; dropping
+         * these here meant every turn that searched showed no thinking at all, while a plain
+         * turn on the same model did (measured on production 2026-09-18, grok-4.6, "really?").
+         */
+        yield { type: 'reasoning', text: event.text };
       } else if (event.type === 'tool_calls') {
         toolCalls = event.toolCalls;
       } else if (event.type === 'usage') {
@@ -451,6 +467,7 @@ export async function* streamToolLoop({ messages, surface, turnId, streamModel, 
     }
 
     working.push(assistantToolCallMessage(text, toolCalls));
+    if (text.trim()) narrated = true;
 
     for (const call of toolCalls) {
       const name = call?.function?.name;
