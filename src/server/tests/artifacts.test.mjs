@@ -105,7 +105,8 @@ async function main() {
     assert.doesNotMatch(shellHtml, /xeno_session=/, 'the shell never echoes a session');
     const raw = await fetch(`${base}${frameSrc}`);
     assert.equal(raw.status, 200);
-    assert.equal(raw.headers.get('content-security-policy'), ARTIFACT_PAGE_CSP);
+    assert.equal(raw.headers.get('content-security-policy'), `${ARTIFACT_PAGE_CSP}; frame-ancestors 'self'`, 'the CLI policy + sandbox, framed only by the shell origin');
+    assert.equal(raw.headers.get('x-frame-options'), null, 'helmet XFO DENY must not reach a raw page — Chrome blocks the frame with it');
     assert.match(ARTIFACT_PAGE_CSP, /sandbox allow-scripts/, 'raw responses run as an opaque origin');
     assert.match(ARTIFACT_PAGE_CSP, /connect-src 'none'/);
     assert.equal(raw.headers.get('x-content-type-options'), 'nosniff');

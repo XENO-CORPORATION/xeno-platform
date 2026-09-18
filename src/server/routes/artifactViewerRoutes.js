@@ -57,6 +57,13 @@ export function contentOrigin(env = process.env) {
   return raw && /^https?:\/\/[^/]+$/.test(raw) ? raw : undefined;
 }
 
+/** The origin allowed to frame a raw page: PUBLIC_ORIGIN (the shell's home), else this request's own origin. */
+export function frameAncestor(req, env = process.env) {
+  const configured = env.PUBLIC_ORIGIN?.trim().replace(/\/+$/, '');
+  if (configured && /^https?:\/\/[^/]+$/.test(configured)) return configured;
+  return "'self'";
+}
+
 function contentHostOf(env = process.env) {
   const origin = contentOrigin(env);
   return origin ? new URL(origin).host : undefined;
@@ -191,10 +198,15 @@ export function createArtifactViewerRouter() {
       const filePath = (Array.isArray(req.params.filePath) ? req.params.filePath : [req.params.filePath ?? '']).map((s) => decodeURIComponent(s)).join('/');
       const file = await readFile(req.db, { artifactId: id, revision, path: filePath });
       if (!file) return res.status(404).set(RAW_HEADERS_TEXT).send('Not found.');
+      // helmet sets X-Frame-Options: DENY on every response; a raw page is framed by the shell on
+      // the APP origin, so that header must go — Chrome blocked the frame with it ("usercontent
+      // … is blocked", measured 2026-09-18 in a real browser). frame-ancestors names the one origin
+      // that may embed the page: the shell's. Everything else in the policy is the CLI viewer's.
+      res.removeHeader('x-frame-options');
       res.status(200).set({
         'content-type': file.contentType,
         'content-length': String(file.bytes.length),
-        'content-security-policy': ARTIFACT_PAGE_CSP,
+        'content-security-policy': `${ARTIFACT_PAGE_CSP}; frame-ancestors ${frameAncestor(req)}`,
         // The frame is an OPAQUE origin (CSP sandbox), so its own subresource loads are cross-origin
         // to this host; a `same-origin` CORP would block the page's own stylesheet. The token is the
         // authority here, not the resource policy.
