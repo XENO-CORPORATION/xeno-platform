@@ -183,6 +183,7 @@ WRITABLE_MOUNTS=(
   storage/videos
   storage/thumbnails
   storage/assets
+  data/artifacts
 )
 for mount_path in "${WRITABLE_MOUNTS[@]}"; do
   install -d -m 2770 -o 1001 -g 1001 "$mount_path"
