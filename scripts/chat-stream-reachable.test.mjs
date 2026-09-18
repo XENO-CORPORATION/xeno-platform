@@ -170,3 +170,14 @@ test('the stream sends SSE keepalive comments from header flush until the end (5
   assert.match(src.slice(endStream, endStream + 200), /clearInterval\(keepalive\)/, 'endStream stops it');
   assert.match(src, /res\.on\('close', \(\) => clearInterval\(keepalive\)\)/, 'and so does a vanished client');
 });
+
+test('🔴 the streamed thought rides the result frame — it must not vanish when the answer lands (2026-09-18)', () => {
+  const src = readFileSync(new URL('../src/server/routes/aiRoutes.js', import.meta.url), 'utf8');
+  assert.match(src, /let assembledReasoning = '';/, 'the thought is assembled as it streams');
+  assert.equal((src.match(/assembledReasoning \+= event\.text;/g) || []).length, 2, 'in BOTH branches — the plain relay and the tool loop');
+  const result = src.indexOf("type: 'result',");
+  assert.match(src.slice(result, result + 900), /assembledReasoning\.trim\(\) && !shaped\.thinking \? \{ thinking: assembledReasoning\.trim\(\), hasThinking: true \}/, 'and it is on the result frame when the shaper did not already carry one');
+  const chat = readFileSync(new URL('../src/components/playground/Chat/ChatWithLLM.tsx', import.meta.url), 'utf8');
+  assert.match(chat, /const streamedOrCarried = streamedThinking\.trim\(\) \|\| \(typeof data\.thinking === 'string' \? data\.thinking\.trim\(\) : ''\);/, 'the client keeps what streamed (or what the frame carries) over the reasoning toggle\'s verdict');
+  assert.match(chat, /thinking: updatedMessage\.thinkingContent,\s*has_thinking: !!updatedMessage\.thinkingContent,/, 'and persists it, so a reload shows the Thought row');
+});

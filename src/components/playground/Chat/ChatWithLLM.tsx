@@ -7065,6 +7065,22 @@ interface QueueState {
             }
         }
 
+        /*
+         * 🔴 The thought must not vanish when the answer lands. The branches above derive `thinking`
+         * from the request's reasoning TOGGLE (`data.reasoningProcessed`), not from whether the model
+         * thought out loud — and a model that streams its trace (grok-4.6) does so regardless of the
+         * toggle. The placeholder showed the thought as it was written; the final message is rebuilt
+         * from `data` and dropped it (2026-09-18). What streamed, or what the result frame carries,
+         * wins over the toggle's verdict.
+         */
+        if (!thinking) {
+            const streamedOrCarried = streamedThinking.trim() || (typeof data.thinking === 'string' ? data.thinking.trim() : '');
+            if (streamedOrCarried) {
+                thinking = streamedOrCarried;
+                localHasThinking = true;
+            }
+        }
+
         // --- Highlighting logic ---
         let finalAnswer = answer;
         let markerMap = new Map<number, number[]>();
