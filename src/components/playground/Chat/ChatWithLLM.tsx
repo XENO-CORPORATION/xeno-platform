@@ -50,7 +50,7 @@ import {
   type ChatTurnRecord, type StepsMode,
 } from './chatTurnTranscript';
 import { readGenerateResponse, readStreamedTurn, endpointForTask, streamRequestBody, CHAT_STREAM_ENDPOINT } from './chatStream';
-import { reasoningCapabilityForModel } from '@/server/lib/chatModelCapabilities.js';
+import { reasoningCapabilityForModel, reasoningTraceForModel } from '@/server/lib/chatModelCapabilities.js';
 import CodeBlockWithHeader from './CodeBlockWithHeader';
 import ThinkingAnimation, { ThinkingAnimationInline } from './ThinkingAnimation';
 import ThinkingStatus from './ThinkingStatus';
@@ -12882,6 +12882,18 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                             );
                           })()}
                         </div>
+                      )}
+                      {/* A fixed-effort tier whose provider keeps the trace: say so, or the absence of a
+                          thought reads as the chat losing it (measured 2026-09-18: grok-4.6 streams its
+                          reasoning, grok-4.6-high-fast does not — by xAI's design). */}
+                      {reasoningTraceForModel(selectedModel.id) === 'internal' && (
+                        <span
+                          data-reasoning-trace="internal"
+                          className="text-[11px] text-[var(--chat-muted)]"
+                          title="This tier reasons at a fixed effort; the provider does not return its thought, so none is shown."
+                        >
+                          reasons internally
+                        </span>
                       )}
                       {/* Reasoning toggle */}
                       {modelHasReasoningCapability(selectedModel.id, selectedModel) === 'toggleable' && (

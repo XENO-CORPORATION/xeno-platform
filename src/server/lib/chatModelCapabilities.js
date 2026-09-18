@@ -25,6 +25,21 @@ const FIXED_REASONING_MODELS = new Set([
   'claude-sonnet-4-6-thinking',
 ]);
 
+/*
+ * Models that REASON but whose provider returns no trace — measured on the live gateway
+ * 2026-09-18 (the gateway neither adds, renames nor strips reasoning fields; what the upstream
+ * emits is what arrives): `grok-4.6` streams 16 `delta.reasoning_content` frames before its
+ * answer; `grok-4.6-high-fast` streams content only. xAI's fast tier is "reason internally,
+ * answer fast" by design, so the chat must say "reasons internally" rather than promise a
+ * thought it will never receive. The rest of the fixed set is unmeasured and is NOT listed here:
+ * an absent entry means "expect a trace", and a wrong "internal" label hides a thought that
+ * would have shown.
+ */
+const INTERNAL_TRACE_MODELS = new Set([
+  'grok-4.6-high-fast',
+  'grok-4.5-high-fast',
+]);
+
 function bareModelId(id = '') {
   const normalized = String(id).trim().toLowerCase();
   return normalized.includes('/') ? normalized.slice(normalized.lastIndexOf('/') + 1) : normalized;
@@ -41,6 +56,16 @@ export function reasoningCapabilityForModel(id = '') {
   return 'disabled';
 }
 
+/**
+ * Whether a thought can be SHOWN for a model: `visible` (the provider returns a trace),
+ * `internal` (it reasons, the provider keeps the trace), `none` (it does not reason).
+ */
+export function reasoningTraceForModel(id = '') {
+  const capability = reasoningCapabilityForModel(id);
+  if (capability === 'disabled') return 'none';
+  return INTERNAL_TRACE_MODELS.has(bareModelId(id)) ? 'internal' : 'visible';
+}
+
 /** Preferred XENO API request value, or null for disabled/fixed aliases. */
 export function reasoningEffortForModel(id = '', enabled = false) {
   return enabled && reasoningCapabilityForModel(id) === 'toggleable' ? 'high' : null;
@@ -49,4 +74,5 @@ export function reasoningEffortForModel(id = '', enabled = false) {
 export const reasoningModelContract = Object.freeze({
   toggleable: Object.freeze([...TOGGLEABLE_REASONING_MODELS]),
   fixed: Object.freeze([...FIXED_REASONING_MODELS]),
+  internalTrace: Object.freeze([...INTERNAL_TRACE_MODELS]),
 });
