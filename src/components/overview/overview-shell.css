@@ -324,14 +324,32 @@
 }
 
 @media (max-width: 760px) {
-  [data-overview-shell] .xeno-overview-sidebar { width: 52px; flex-basis: 52px; }
-  [data-overview-shell] .xeno-sidebar-panel { position: absolute; left: 52px; top: 0; transform: translateX(-105%); box-shadow: 12px 0 32px var(--xeno-theme-shadow); opacity: 0; pointer-events: none; }
-  [data-overview-shell] .xeno-overview-sidebar.is-mobile-open .xeno-sidebar-panel { transform: translateX(0); opacity: 1; pointer-events: auto; }
-  [data-overview-shell] .xeno-overview-sidebar.is-collapsed .xeno-sidebar-panel { transform: translateX(-105%); }
+  /* The sidebar is an OFF-CANVAS DRAWER on a phone (2026-09-19): fully out of the viewport so the
+     surface has the whole screen, in from the left over a scrim on a hold-tap or an edge swipe,
+     out again on Back / Escape / the scrim. The slot it occupies in the shell takes no width. */
+  [data-overview-shell] > [data-taskbar-slot] { width: 0; flex: 0 0 0; margin-right: 0 !important; transform: none !important; }
+  [data-overview-shell] .xeno-overview-sidebar {
+    position: fixed; inset: 0 auto 0 0; z-index: 90;
+    width: min(300px, 88vw); flex-basis: auto; height: 100dvh;
+    transform: translateX(-100%);
+    box-shadow: none;
+    /* in: the standard decelerate; out: a shorter accelerate — the motion every mobile drawer
+       uses, so it reads as a sheet and not as a slide show (a linear ease reads mechanical) */
+    transition: transform 240ms cubic-bezier(0.3, 0, 0, 1), box-shadow 240ms;
+    padding-top: env(safe-area-inset-top, 0px); padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+  [data-overview-shell] .xeno-overview-sidebar.is-mobile-open { transform: translateX(0); box-shadow: 16px 0 40px var(--xeno-theme-shadow); transition: transform 320ms cubic-bezier(0.05, 0.7, 0.1, 1), box-shadow 320ms; }
+  /* on a phone the drawer always shows both columns — the rail and the panel — never the collapsed rail alone */
+  [data-overview-shell] .xeno-overview-sidebar.is-collapsed { width: min(300px, 88vw); }
+  [data-overview-shell] .xeno-overview-sidebar.is-collapsed .xeno-sidebar-panel { pointer-events: auto; transform: none; opacity: 1; }
+  [data-overview-shell] .xeno-sidebar-panel { flex: 1 1 auto; min-width: 0; }
   [data-overview-shell] .xeno-mobile-menu-button { display: grid; }
+  [data-overview-shell] .xeno-collapse-button { display: none; }
   [data-overview-shell] .xeno-expand-tab { display: none !important; }
   [data-overview-shell] .xeno-overview-sidebar .xeno-rail-brand { opacity: 1; pointer-events: auto; }
-  [data-overview-shell] .xeno-mobile-scrim { position: fixed; z-index: 1; display: block; inset: 0 0 0 52px; border: 0; background: var(--xeno-theme-overlay); backdrop-filter: blur(1px); }
+  /* on <body>, under the taskbar slot's stacking context (z 60) and over everything else */
+  .xeno-mobile-scrim { position: fixed; z-index: 59; display: block; inset: 0; border: 0; background: var(--xeno-theme-overlay); backdrop-filter: blur(1px); animation: xeno-scrim-in 240ms ease-out both; }
+  @keyframes xeno-scrim-in { from { opacity: 0; } to { opacity: 1; } }
   [data-overview-shell] .xeno-dashboard-header { padding: 0 10px 0 14px; }
   [data-overview-shell] .xeno-dashboard-command { width: 34px; padding: 0; justify-content: center; }
   [data-overview-shell] .xeno-dashboard-command span,
@@ -346,6 +364,7 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
+  [data-overview-shell] .xeno-mobile-scrim,
   [data-overview-shell] .xeno-overview-sidebar,
   [data-overview-shell] .xeno-sidebar-panel,
   [data-overview-shell] .xeno-start-card,

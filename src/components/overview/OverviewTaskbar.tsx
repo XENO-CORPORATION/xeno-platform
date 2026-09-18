@@ -1,4 +1,6 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useMobileDrawer } from './useMobileDrawer';
+import { createPortal } from 'react-dom';
 import { useLocation, useNavigate } from 'react-router-dom';
 import {
   Bell, BookOpen, Boxes, BriefcaseBusiness, Check, ChevronDown, ChevronRight,
@@ -68,6 +70,19 @@ const OverviewTaskbar: React.FC<OverviewTaskbarProps> = ({ onCollapseChange, onO
   const [accountMenuOpen, setAccountMenuOpen] = useState(false);
   const workspaceMenuRef = useRef<HTMLDivElement>(null);
   const accountMenuRef = useRef<HTMLDivElement>(null);
+  const drawerRef = useRef<HTMLElement>(null);
+  const openDrawer = useCallback(() => setIsMobileOpen(true), []);
+  const closeDrawer = useCallback(() => setIsMobileOpen(false), []);
+  // On a phone the sidebar is an off-canvas drawer: hold-tap or edge-swipe opens it, Back /
+  // Escape / the scrim close it, the page behind is inert while it is open (useMobileDrawer.ts).
+  useMobileDrawer({ open: isMobileOpen, onOpen: openDrawer, onClose: closeDrawer, drawerRef });
+  // The chat's top-left XENO mark asks the shell to toggle the taskbar; on a phone that means
+  // the drawer — the one visible way in, beside the hold-tap and the edge swipe.
+  useEffect(() => {
+    const onToggle = () => { if (window.matchMedia?.('(max-width: 760px)').matches) setIsMobileOpen((open) => !open); };
+    window.addEventListener('toggle_overview_taskbar', onToggle);
+    return () => window.removeEventListener('toggle_overview_taskbar', onToggle);
+  }, []);
 
   const accountName = user?.display_name || user?.username || 'XENO user';
   const workspaceName = activeWorkspace?.name || (isWorkspaceLoading ? 'Loading…' : 'Personal');
@@ -146,7 +161,8 @@ const OverviewTaskbar: React.FC<OverviewTaskbarProps> = ({ onCollapseChange, onO
   };
 
   return (
-    <aside className={`xeno-overview-sidebar${isCollapsed ? ' is-collapsed' : ''}${isMobileOpen ? ' is-mobile-open' : ''}`}
+    <aside ref={drawerRef} className={`xeno-overview-sidebar${isCollapsed ? ' is-collapsed' : ''}${isMobileOpen ? ' is-mobile-open' : ''}`}
+      data-mobile-drawer={isMobileOpen ? 'open' : 'closed'}
       aria-label="XENO workspace navigation">
       <nav className="xeno-sidebar-rail" aria-label="Primary navigation">
         <button type="button" className="xeno-rail-brand" onClick={() => (isCollapsed ? toggleCollapsed() : go('/overview'))}
@@ -248,7 +264,12 @@ const OverviewTaskbar: React.FC<OverviewTaskbarProps> = ({ onCollapseChange, onO
         </div>
       </div>
 
-      {isMobileOpen ? <button type="button" className="xeno-mobile-scrim" onClick={() => setIsMobileOpen(false)} aria-label="Close navigation" /> : null}
+      {/* The scrim lives on <body>, NOT in this aside: the drawer is transformed, and a transformed
+          element is the containing block for its fixed descendants — inside, `inset: 0` covered
+          the drawer and nothing else (caught by mobile-drawer-rendered, 2026-09-19). */}
+      {isMobileOpen && typeof document !== 'undefined'
+        ? createPortal(<button type="button" className="xeno-mobile-scrim" data-overview-scrim onClick={() => setIsMobileOpen(false)} aria-label="Close navigation" />, document.body)
+        : null}
     </aside>
   );
 };

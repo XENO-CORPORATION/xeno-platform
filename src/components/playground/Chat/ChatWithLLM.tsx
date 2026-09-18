@@ -19967,16 +19967,23 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
           }
 
           if (isMobile) {
+            // On a phone the history is a full-viewport sheet (2026-09-19): the top-left button
+            // gives the whole screen to the conversation list, and it leaves the same way it came —
+            // a slide from the left edge, not a floating card in a 12px inset.
             return createPortal(
               <div
                 ref={historySidebarRef}
-                className={`chat-themed xeno-icon-hosts chat-theme-${resolvedChatTheme} chat-history-sidebar fixed z-[50] border rounded-lg overflow-hidden transition-all duration-300 ease-in-out ${!isHistoryOpen ? 'chat-history-sidebar-closed' : ''}`}
+                data-chat-history-sheet={isHistoryOpen ? 'open' : 'closed'}
+                className={`chat-themed xeno-icon-hosts chat-theme-${resolvedChatTheme} chat-history-sidebar fixed z-[50] overflow-hidden transition-transform duration-300 ease-[cubic-bezier(0.05,0.7,0.1,1)] motion-reduce:transition-none ${!isHistoryOpen ? 'chat-history-sidebar-closed' : ''}`}
                 data-chat-theme-preference={chatTheme}
                 style={{
-                  top: '12px',
-                  bottom: '12px',
-                  width: HISTORY_SIDEBAR_WIDTH_PX,
-                  left: isHistoryOpen ? '12px' : '-100%',
+                  top: 0,
+                  bottom: 0,
+                  left: 0,
+                  width: '100vw',
+                  paddingTop: 'env(safe-area-inset-top, 0px)',
+                  paddingBottom: 'env(safe-area-inset-bottom, 0px)',
+                  transform: isHistoryOpen ? 'translateX(0)' : 'translateX(-100%)',
                   pointerEvents: isHistoryOpen ? 'auto' : 'none',
                   ...historySurfaceStyle,
                 }}

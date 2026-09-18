@@ -270,7 +270,7 @@ const OverviewContent: React.FC = () => {
     >
       <LayoutContext.Provider value={{ isSidebarCollapsed }}>
         {/* Left Taskbar - Original taskbar with OS button and AI interfaces */}
-        <div style={{ transition: 'transform 0.35s cubic-bezier(0.25, 0.1, 0.25, 1), margin 0.35s cubic-bezier(0.25, 0.1, 0.25, 1)', transform: isTaskbarHidden ? 'translateX(-100%)' : 'translateX(0)', marginRight: isTaskbarHidden ? (isSidebarCollapsed ? '-52px' : '-300px') : '0', zIndex: 60, position: 'relative' }}>
+        <div data-taskbar-slot style={{ transition: 'transform 0.35s cubic-bezier(0.25, 0.1, 0.25, 1), margin 0.35s cubic-bezier(0.25, 0.1, 0.25, 1)', transform: isTaskbarHidden ? 'translateX(-100%)' : 'translateX(0)', marginRight: isTaskbarHidden ? (isSidebarCollapsed ? '-52px' : '-300px') : '0', zIndex: 60, position: 'relative' }}>
         <OverviewTaskbar
           labs={labs}
           onCreateLab={handleCreateLab}
