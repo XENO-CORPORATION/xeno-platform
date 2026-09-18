@@ -6537,6 +6537,7 @@ interface QueueState {
             id: localPlaceholderId,
             sender: 'ai',
             text: placeholderText, 
+            timestamp: thinkingStartTimeRef.current, // the turn's clock starts here
             isThinkingPlaceholder: true,
             isDotPlaceholder: false, 
         };
@@ -6546,6 +6547,7 @@ interface QueueState {
             id: localPlaceholderId,
             sender: 'ai',
             text: '',
+            timestamp: Date.now(),
             isThinkingPlaceholder: false,
             isDotPlaceholder: true, 
         };
@@ -6834,7 +6836,7 @@ interface QueueState {
          * placeholder message carries it so the transcript head draws the rail live. It is
          * closed and attached to the final message below (chatTurnTranscript.ts).
          */
-        let turnRecord = newTurnRecord(thinkingStartTimeRef.current || Date.now());
+        let turnRecord = newTurnRecord(placeholderMessageToAdd?.timestamp || thinkingStartTimeRef.current || Date.now());
         let streamedThinking = '';
         /*
          * One handler, two transports. Both readers return the SAME object shape, so the ~400
@@ -16563,7 +16565,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                                         thinking={message.thinkingContent}
                                         streaming
                                         replyStarted={false}
-                                        timestamp={message.turn?.startedAt}
+                                        timestamp={message.turn?.startedAt ?? message.timestamp}
                                         model={selectedModel.id}
                                         turn={message.turn}
                                         stepsMode={stepsMode}
@@ -16906,7 +16908,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                                           transcript (D10, consumed not copied). The chat's own thinking box
                                           below it remains only for a legacy turn with no record and no
                                           thought text, where it explains the absence. */}
-                                      {(turnHasRail(message.turn, message.thinkingContent) || message.isStreaming) ? (
+                                      {(message.turn || turnHasRail(message.turn, message.thinkingContent) || message.isStreaming) ? (
                                           <div className="w-full pl-[1.125rem]">
                                               <ChatTurnHead
                                                   messageId={message.id}

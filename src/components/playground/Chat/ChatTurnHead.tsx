@@ -63,12 +63,18 @@ export const ChatTurnHead: React.FC<ChatTurnHeadProps> = ({
 
   return (
     <div className="xa-transcript chat-turn-head" data-chat-turn-head={messageId} data-steps-mode={stepsMode}>
+      {/* `clock="always"`: every turn is working from the moment the request goes out, so the
+          chat shows the clock on every turn — "Working for 4s" over the streaming reply, then a
+          bare "Worked for 4s" resting above it — with the rail underneath only when there are
+          steps. D10's `auto` (no steps → no clock line) stays the agent panel's default; on a chat
+          where most turns have no steps it read as the clock being lost (2026-09-18). */}
       <TranscriptTurn
         msg={msg}
         stepsMode={stepsMode}
         actions={actions}
         renderMarkdown={() => null}
         model={model}
+        clock="always"
       />
     </div>
   );
