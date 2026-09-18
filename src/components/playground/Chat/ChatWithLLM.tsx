@@ -16647,7 +16647,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                                              ref={editInputRef}
                                              value={editText}
                                              onChange={(e) => setEditText(e.target.value)}
-                                             className="focus-self min-h-[2.75rem] w-full resize-y bg-transparent text-[15px] leading-6 text-[var(--chat-text)] outline-none focus:outline-none focus:ring-0"
+                                             className="focus-self min-h-[2.75rem] w-full resize-y border-none bg-transparent text-[15px] leading-6 text-[var(--chat-text)] outline-none focus:outline-none focus:ring-0"
                                                rows={1}
                                            />
                                          </div>
