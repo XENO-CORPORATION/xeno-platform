@@ -138,6 +138,10 @@ jobs:
       # the rule that painted it lived in a different stylesheet (2026-09-18).
       - name: Assert .focus-self fields render ringless in the built CSS
         run: npm run test:focus-self-rendered
+      # The effort menu's cells come from @xenosystem/agent-conversation's composer.css and reach
+      # the chat only through two CSS scopes; a grep cannot see whether the built CSS applies them.
+      - name: Assert the effort menu renders from the chat tokens in the built CSS
+        run: npm run test:effort-menu-rendered
 
   # ── The Forum's end-to-end proofs ───────────────────────────────────────────
   #

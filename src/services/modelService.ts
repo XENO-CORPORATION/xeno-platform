@@ -25,6 +25,18 @@ export interface Model {
    * account's own key, no credits.
    */
   route?: ModelRoute;
+  /**
+   * The efforts this model reasons at, as the gateway models them: suffixed ids
+   * (`claude-sonnet-5-high`, via `id`) or a request parameter for the toggleable set
+   * (via `param`); `auto` = the bare id. Absent = nothing to choose.
+   */
+  efforts?: ModelEffortOption[];
+}
+
+export interface ModelEffortOption {
+  effort: 'auto' | 'none' | 'low' | 'medium' | 'high' | 'xhigh' | 'max';
+  modelId: string;
+  via: 'id' | 'param';
 }
 
 export type ModelRoute =

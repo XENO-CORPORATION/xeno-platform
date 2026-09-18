@@ -144,7 +144,7 @@ try {
   const modal = readFileSync(new URL('../src/components/playground/Chat/ChatSettingsModal.tsx', import.meta.url), 'utf8');
   check('the Preferences pane offers both modes', /data-steps-mode-option=\{value\}/.test(modal) && /STEPS_MODES\.map/.test(modal));
   const css = readFileSync(new URL('../src/components/playground/Chat/chat-theme.css', import.meta.url), 'utf8');
-  check('the transcript tokens are re-derived from the chat theme, light included — for the head AND the chip in the prose', /\.chat-themed :is\(\.chat-turn-head\.xa-transcript, \.xa-cite, \.chat-thread-scrubber\) \{/.test(css) && /\.chat-theme-light \.chat-turn-head\.xa-transcript/.test(css) && /\.chat-theme-light \.xa-cite \{ --xa-ink: 10, 10, 10; \}/.test(css) && !/--xa-label: [^}]*width: 100%/.test(css));
+  check('the transcript tokens are re-derived from the chat theme, light included — for the head, the chip in the prose, the scrubber and the effort menu', /\.chat-themed :is\(\.chat-turn-head\.xa-transcript, \.xa-cite, \.chat-thread-scrubber, \.chat-effort\) \{/.test(css) && /\.chat-theme-light \.chat-effort \{ --xa-ink: 10, 10, 10; \}/.test(css) && /\.chat-theme-light \.chat-turn-head\.xa-transcript/.test(css) && /\.chat-theme-light \.xa-cite \{ --xa-ink: 10, 10, 10; \}/.test(css) && !/--xa-label: [^}]*width: 100%/.test(css));
 
   // ── citations: the claim carries its evidence (2026-09-18) ───────────────────────────
   // The numbering contract is ONE rule on both sides: the server's admitSources numbers what it

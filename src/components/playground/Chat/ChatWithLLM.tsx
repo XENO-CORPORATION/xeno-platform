@@ -22,6 +22,8 @@ import {
 } from '../../../platform/platformTheme';
 import ChatEmptyState, { ComposerRevealControls, type ChatEmptyStateTool } from './ChatEmptyState';
 import ChatModelSelector from './ChatModelSelector';
+import ChatEffortControl from './ChatEffortControl';
+import { effortOptionFor, readEffortPreferences, requestShapeFor, writeEffortPreference } from './chatReasoningEffort';
 import ChatShareModal from './ChatShareModal';
 import { isOutlineDebugOn, OUTLINE_DEBUG_CSS } from './outlineDebug';
   import ChatLibraryPage from './ChatLibraryPage';
@@ -2809,9 +2811,18 @@ const ChatWithLLM: React.FC<ChatWithLLMProps> = ({
     touchStartRef.current = null;
   }, [isMobile, isHistoryOpen, openHistorySidebar]);
 
-  const [isReasonToggled, setIsReasonToggled] = useState(true);
   const [isSearchToggled, setIsSearchToggled] = useState(false);
   const [selectedModel, setSelectedModel] = useState<Model>(DEFAULT_MODEL);
+  /* The effort per base model, remembered locally; the option in force is derived from the
+     selected model's own `efforts`, so a model with no levels has none to be wrong about. */
+  const [effortPrefs, setEffortPrefs] = useState<Record<string, string>>(() => readEffortPreferences());
+  const selectedEffort = effortOptionFor(selectedModel, effortPrefs);
+  const selectedEffortRef = useRef(selectedEffort);
+  selectedEffortRef.current = selectedEffort;
+  const chooseEffort = useCallback((option: { effort: string }) => {
+      setEffortPrefs((prev) => ({ ...prev, [selectedModel.id]: option.effort }));
+      writeEffortPreference(selectedModel.id, option.effort);
+  }, [selectedModel.id]);
   const [groupedModels, setGroupedModels] = useState<GroupedModels[]>([]);
   /* The catalogue, readable from callbacks that must not re-subscribe on every change. */
   const groupedModelsRef = useRef<GroupedModels[]>([]);
@@ -6553,14 +6564,15 @@ interface QueueState {
     const modelId = currentModel.id;
     const reasoningCapability = modelHasReasoningCapability(modelId);
 
+    const effortShape = requestShapeFor(baseModelId, effortOptionFor(currentModel, effortPrefs));
     const effectiveReasoningState =
         reasoningCapability === 'alwaysOn' ? true :
-        reasoningCapability === 'disabled' ? false :
-        isReasonToggled;
+        reasoningCapability === 'disabled' && !(currentModel.efforts && currentModel.efforts.length) ? false :
+        effortShape.reasons;
 
     // --- Determine actual model ID to use for the API ---
     // Only specific models use the :thinking suffix; others use API parameters for reasoning
-    let actualModelIdForApi = baseModelId;
+    let actualModelIdForApi = taskArg !== 'image' ? effortShape.modelId : baseModelId;
     if (taskArg !== 'image' && isGpt4oAndSearchActive) {
         actualModelIdForApi = "openai/gpt-4o-search-preview";
     } else if (taskArg !== 'image' && effectiveReasoningState && modelsWithThinkingSuffix[baseModelId]) {
@@ -6770,6 +6782,7 @@ interface QueueState {
         systemPrompt: finalSystemPrompt || undefined,
         selectedModelId: actualModelIdForApi,
         effectiveReasoningState: effectiveReasoningState,
+        reasoningEffort: taskArg !== 'image' ? effortShape.reasoningEffort : undefined,
         conversationId: isPersistedConversationId(generationConversationId) ? generationConversationId : undefined,
         projectId: generationProjectId,
         useSearchTool: undefined as (boolean | undefined),
@@ -9035,11 +9048,9 @@ Keep the summary under 500 words. Preserve essential context needed to continue 
   // --- NEW Helper Function to Sync Toggles ---
   // (Extracted from handleModelSelect to be reusable)
   // Uses dynamic modelHasReasoningCapability helper instead of hardcoded lists
-  const syncTogglesForModel = (model: Model) => {
-     const capability = modelHasReasoningCapability(model.id);
-     if (capability === 'alwaysOn') setIsReasonToggled(true);
-     else if (capability === 'disabled') setIsReasonToggled(false);
-     // toggleable: keep current state (user preference persists across model switches)
+  const syncTogglesForModel = (_model: Model) => {
+     // The effort is per model and derived from its own `efforts` (see chatReasoningEffort.ts);
+     // there is no global toggle left to sync.
   };
   // --- END NEW Helper --- 
 
@@ -12664,7 +12675,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                 isInlineTray={isInlineTray}
                 isMinimal
                 isLoading={isModelsLoading}
-                isReasoningActive={modelHasReasoningCapability(selectedModel.id, selectedModel) !== 'disabled' && isReasonToggled}
+                isReasoningActive={modelHasReasoningCapability(selectedModel.id, selectedModel) === 'alwaysOn' || requestShapeFor(selectedModel.id, selectedEffort).reasons}
                 openRequestKey={modelSelectorOpenRequestKey}
                 onOpenRequestHandled={acknowledgeComposerModelSelectorRequest}
                 onOpenChange={onOpenChange}
@@ -13081,21 +13092,9 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                           reasons internally
                         </span>
                       )}
-                      {/* Reasoning toggle */}
-                      {modelHasReasoningCapability(selectedModel.id, selectedModel) === 'toggleable' && (
-                        <IconButton
-                          icon={BrainDecl}
-                          variant="quiet"
-                          size="sm"
-                          iconSize={14}
-                          onMouseDown={(e) => {
-                            e.preventDefault();
-                            e.stopPropagation();
-                            setIsReasonToggled(prev => !prev);
-                          }}
-                          aria-label={isReasonToggled ? 'Turn off extended reasoning' : 'Turn on extended reasoning'}
-                        />
-                      )}
+                      {/* The effort control — the levels this model actually offers (Model.efforts),
+                          the agent panel's cells; nothing when there is nothing to choose. */}
+                      <ChatEffortControl model={selectedModel} value={selectedEffort} onChange={chooseEffort} disabled={isLoading} />
               </div>
                   <div className="flex items-center gap-2 md:gap-3">
                   {(isLoading || messages.some((m) => m.isStreaming)) ? (
