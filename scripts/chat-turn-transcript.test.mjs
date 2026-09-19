@@ -110,6 +110,11 @@ try {
   const startingEl = await render({ messageId: 'p0', streaming: true, replyStarted: false, stepsMode: 'collapsed', timestamp: Date.now() - 2500 });
   check('a turn that has only just gone out — no record yet — already reads "Working for 2s"', /Working for \d+s/.test(startingEl.textContent) && startingEl.querySelector('.xa-turn.xa-live') !== null, startingEl.textContent);
   check('and a plain turn says nothing the client made up: no "Thinking", no "Writing the answer", no rotating cube', !/Thinking|Writing the answer|Reading your question|thinking-cube/.test(startingEl.textContent) && startingEl.querySelector('.thinking-cube') === null);
+  check('a plain Working for has no ticker words, so the divider has nothing to separate', startingEl.querySelector('.xa-t') === null);
+  {
+    const css = readFileSync(new URL('../node_modules/@xenosystem/agent-conversation/src/transcript.css', import.meta.url), 'utf8');
+    check('the live divider only shows when the ticker has words — a dangling │ is the 0.1.53 defect', /:has\(\.xa-t\) \.xa-vr \{ display: block; \}/.test(css) && !/\.xa-collapsed \.xa-turn\.xa-live:not\(\.xa-open\):not\(\.xa-done\) \.xa-line \.xa-vr \{ display: block; \}/.test(css));
+  }
 
   const expectingEl = await render({ messageId: 'pe', streaming: true, replyStarted: false, expectingThought: true, stepsMode: 'collapsed', timestamp: Date.now() - 2500 });
   check('a reasoning turn waiting on its first token still reads Working for, AND Thinking on the clock line', /Working for \d+s/.test(expectingEl.textContent) && /Thinking/.test(expectingEl.textContent) && !/Writing the answer/.test(expectingEl.textContent), expectingEl.textContent);
