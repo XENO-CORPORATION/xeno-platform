@@ -24,6 +24,17 @@ export function splitEffort(id) {
   return m ? { baseId: m[1], effort: m[2] } : null;
 }
 
+/** The family a picker id belongs to. `-tiered` is the dynamic/auto SKU of the same flash line. */
+export function familyLookupId(id) {
+  return String(id || '').replace(/-tiered$/i, '');
+}
+
+function autoModelIdFor(baseId, set) {
+  if (set.has(baseId)) return baseId;
+  const tiered = `${baseId}-tiered`;
+  return set.has(tiered) ? tiered : null;
+}
+
 export function effortRank(effort) {
   if (effort === 'auto') return -1;
   return EFFORT_LEVELS.indexOf(effort);
@@ -37,8 +48,9 @@ export function effortLabel(effort) {
 
 /**
  * Families from a list of ids: baseId → options, one per suffixed variant, `auto` first when
- * the bare id exists. A base with a single variant and no bare id is not a family (the same
- * rule core applies — one odd suffix is a model name, not a level).
+ * the bare id OR its `-tiered` SKU exists. Gemini 3.8 Flash ships as `…-tiered` (dynamic
+ * budget) plus `…-low/medium/high` — those are one family, not a nameless leftover.
+ * A base with a single variant and no auto SKU is not a family (one odd suffix is a name).
  */
 export function buildEffortFamilies(ids) {
   const set = new Set(ids.map(String));
@@ -52,9 +64,10 @@ export function buildEffortFamilies(ids) {
   }
   const families = new Map();
   for (const [baseId, options] of variants) {
-    if (options.length < 2 && !set.has(baseId)) continue;
+    const autoId = autoModelIdFor(baseId, set);
+    if (options.length < 2 && !autoId) continue;
     const sorted = [...options].sort((a, b) => effortRank(a.effort) - effortRank(b.effort));
-    if (set.has(baseId)) sorted.unshift({ effort: 'auto', modelId: baseId, via: 'id' });
+    if (autoId) sorted.unshift({ effort: 'auto', modelId: autoId, via: 'id' });
     families.set(baseId, sorted);
   }
   return families;
@@ -70,8 +83,11 @@ export function buildEffortFamilies(ids) {
  */
 export function effortOptionsFor(baseId, families, capability) {
   if (capability === 'alwaysOn') return [];
-  const fromIds = families.get(baseId) || [];
+  const fromIds = families.get(baseId) || families.get(familyLookupId(baseId)) || [];
   const byEffort = new Map(fromIds.map((o) => [o.effort, o]));
+  if (byEffort.has('auto')) {
+    byEffort.set('auto', { ...byEffort.get('auto'), modelId: baseId });
+  }
   if (capability === 'toggleable') {
     if (!byEffort.has('auto')) byEffort.set('auto', { effort: 'auto', modelId: baseId, via: 'id' });
     for (const level of PARAM_LEVELS) if (!byEffort.has(level)) byEffort.set(level, { effort: level, modelId: baseId, via: 'param' });
@@ -80,4 +96,4 @@ export function effortOptionsFor(baseId, families, capability) {
   return options.length >= 2 ? options : [];
 }
 
-export default { EFFORT_LEVELS, splitEffort, effortRank, effortLabel, buildEffortFamilies, effortOptionsFor };
+export default { EFFORT_LEVELS, splitEffort, familyLookupId, effortRank, effortLabel, buildEffortFamilies, effortOptionsFor };
