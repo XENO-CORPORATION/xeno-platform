@@ -45,6 +45,7 @@ before(async () => {
         export { default as DeviceAuthContent } from './src/pages/DeviceAuthContent.tsx';
         export { default as ForgotPassword } from './src/pages/ForgotPassword.tsx';
         export { default as ResetPassword } from './src/pages/ResetPassword.tsx';
+        export { default as VerifyEmail } from './src/pages/VerifyEmail.tsx';
       `,
       resolveDir: process.cwd(),
     },
@@ -209,15 +210,12 @@ test('DeviceAuthContent: adopts TextInput, auto-formats codes, submits via Enter
       )
     );
 
-    const codeLabel = container.querySelector('label[for="device-code"]');
-    const codeInput = container.querySelector('#device-code');
-    assert.ok(codeLabel, 'Code label with htmlFor="device-code" must exist');
-    assert.ok(codeInput, 'TextInput with id="device-code" must exist');
+    const form = container.querySelector('form[data-xc="device-code-form"]');
+    const codeInput = container.querySelector('[data-field="code"]');
+    assert.ok(form, 'Device page must mount @xenosystem/components/auth DeviceCodeForm');
+    assert.ok(codeInput, 'Family code field (data-field="code") must exist');
     assert.equal(codeInput.getAttribute('autocomplete'), 'one-time-code');
     assert.equal(codeInput.value, 'ABCD-1234', 'initial code query param should be auto-formatted to ABCD-1234');
-
-    const form = container.querySelector('form');
-    const submitBtn = container.querySelector('button[type="submit"]');
 
     // Submit form
     await act(async () => {
@@ -225,6 +223,32 @@ test('DeviceAuthContent: adopts TextInput, auto-formats codes, submits via Enter
     });
 
     assert.equal(fetchCalled, true, 'Submitting valid 8-char code must call device verification endpoint');
+    unmount();
+  } finally {
+    globalThis.fetch = origFetch;
+  }
+});
+
+test('VerifyEmail: mounts VerifyEmailNotice and reports a missing token as failed', async () => {
+  const { VerifyEmail } = Pages;
+  const origFetch = globalThis.fetch;
+  let verifyCalled = false;
+  globalThis.fetch = async () => {
+    verifyCalled = true;
+    return { ok: false, json: async () => ({}) };
+  };
+  try {
+    const { container, unmount } = render(
+      React.createElement(Router.MemoryRouter, { initialEntries: ['/verify-email'] },
+        React.createElement(VerifyEmail, null)
+      )
+    );
+    await act(async () => { await new Promise((r) => setTimeout(r, 0)); });
+    const notice = container.querySelector('[data-xc="verify-email-notice"]');
+    assert.ok(notice, 'Verify page must mount @xenosystem/components/auth VerifyEmailNotice');
+    assert.equal(notice.getAttribute('data-status'), 'failed');
+    assert.ok(container.textContent.includes('This verification link is missing or malformed.'));
+    assert.equal(verifyCalled, false, 'A missing token must not POST /api/auth/verify-email');
     unmount();
   } finally {
     globalThis.fetch = origFetch;

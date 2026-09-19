@@ -1,8 +1,8 @@
 import React, { useEffect, useState } from 'react';
-import { Button, TextInput } from '@xenosystem/elements-react';
 import { Link, useLocation, useParams } from 'react-router-dom';
+import { DeviceCodeForm, formatUserCode, userCodeOf, type DeviceCodeStatus } from '@xenosystem/components/auth';
 import AuthMark from '../components/auth/AuthMark';
-import { ArrowLeft, KeyRound } from 'lucide-react';
+import { ArrowLeft } from 'lucide-react';
 import { getAuthApp } from '../lib/authApps';
 import { authPath } from '../lib/authRouting.js';
 import { useAuth } from '../contexts/AuthContext';
@@ -10,13 +10,18 @@ import { useAuth } from '../contexts/AuthContext';
 /* ──────────────────────────────────────────────────────────────────────
  * /activate is the RFC 8628 verification URI. /auth/:app/device remains a
  * compatibility surface for the pre-OIDC CLI device-code implementation.
+ *
+ * The code field, typing rule, connected state and phishing note are
+ * `@xenosystem/components/auth` DeviceCodeForm. This page owns the session
+ * redirect, the inspect/approve (or legacy verify) calls, and the consent
+ * copy for the registered client.
  * ────────────────────────────────────────────────────────────────────── */
 const DeviceAuthContent: React.FC<{ protocol?: 'oidc' | 'legacy' }> = ({ protocol = 'oidc' }) => {
   const { app: appSlug } = useParams();
   const location = useLocation();
   const legacyAuthApp = getAuthApp(appSlug) ?? getAuthApp('cli')!;
   const initialCode = new URLSearchParams(location.search).get('code') || '';
-  const [code, setCode] = useState(() => formatCode(initialCode));
+  const [code, setCode] = useState(() => formatUserCode(initialCode));
   const [status, setStatus] = useState<'idle' | 'verifying' | 'connected' | string>('idle');
   const [authorization, setAuthorization] = useState<{
     client_id: string;
@@ -41,18 +46,15 @@ const DeviceAuthContent: React.FC<{ protocol?: 'oidc' | 'legacy' }> = ({ protoco
     }
   }, [authed, authLoading, appSlug, location.pathname, location.search, protocol]);
 
-  // Auto-format to XXXX-XXXX as the user types.
   const onCodeChange = (v: string) => {
-    setCode(formatCode(v));
+    setCode(v);
     setAuthorization(null);
     if (status !== 'idle') setStatus('idle');
   };
 
-  const verify = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const verify = async () => {
     if (status === 'verifying') return;
-    const userCode = code.replace(/[^A-Z0-9]/gi, '');
-    if (userCode.length !== 8) { setStatus('Enter the full 8-character code.'); return; }
+    if (!userCodeOf(code)) { setStatus('Enter the full 8-character code.'); return; }
     if (!authed) { setStatus('Your session expired — please reload.'); return; }
     setStatus('verifying');
     try {
@@ -90,6 +92,11 @@ const DeviceAuthContent: React.FC<{ protocol?: 'oidc' | 'legacy' }> = ({ protoco
   const displayName = authorization?.client_name
     || (protocol === 'legacy' ? legacyAuthApp.displayName : 'your XENO device');
 
+  const formStatus: DeviceCodeStatus =
+    status === 'idle' || status === 'verifying' || status === 'connected'
+      ? status
+      : { error: status };
+
   return (
     <>
       <header className={`flex items-center justify-between gap-4 px-4 py-3 sm:px-5 sm:py-4 transition-all duration-500 ease-out ${isVisible ? 'opacity-100 translate-y-0' : 'opacity-0 -translate-y-4'}`} style={{ transitionDelay: '0.1s' }}>
@@ -101,72 +108,30 @@ const DeviceAuthContent: React.FC<{ protocol?: 'oidc' | 'legacy' }> = ({ protoco
 
       <div className="flex-1 min-h-0 flex flex-col justify-center px-6 pb-6 lg:px-12 xl:px-20 pt-6">
         <div className={`w-full max-w-[400px] mx-auto transition-all duration-700 ease-out ${isVisible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-8'}`} style={{ transitionDelay: '0.15s' }}>
-          <div className="mb-6 flex items-center gap-3 rounded-[6px] border border-white/[0.08] bg-white/[0.03] p-3">
-            {/* Monochrome: DESIGN_SYSTEM.md §2 is white-alpha only and colour is
-              semantic-only. The registry's per-app accent is retired hue
-              (#a760ff and friends) and must not paint product chrome. */}
-            <span className="grid h-9 w-9 shrink-0 place-items-center rounded-[4px] border border-white/[0.12] bg-white/[0.06] text-sm font-bold text-white/85">
-              {displayName.replace(/^XENO\s+/, '').charAt(0).toUpperCase() || 'X'}
-            </span>
-            <div className="min-w-0">
-              <div className="text-sm font-semibold leading-tight">Connect {displayName}</div>
-              <div className="truncate text-xs text-white/40">
-                {authorization ? 'Confirm the registered client and requested access.' : 'Enter the code shown on your device.'}
-              </div>
-            </div>
-          </div>
-
-          {status === 'connected' ? (
-            <div className="rounded-[6px] border border-emerald-400/30 bg-emerald-400/[0.08] px-4 py-5 text-center">
-              <div className="text-base font-semibold text-emerald-300">✓ Connected</div>
-              <p className="mt-1 text-sm text-white/50">Return to your terminal — you're signed in.</p>
-            </div>
-          ) : (
-            <form onSubmit={verify}>
-              <label htmlFor="device-code" className="mb-2 block text-sm text-white/50">One-time code</label>
-              <TextInput
-                id="device-code"
-                name="code"
-                size="lg"
-                value={code}
-                onChange={(e) => onCodeChange(e.target.value)}
-                placeholder="XXXX-XXXX"
-                autoFocus
-                inputMode="text"
-                disabled={status === 'verifying'}
-                className="w-full text-center font-mono text-lg tracking-[0.3em]"
-                autoComplete="one-time-code"
-              />
-              {status !== 'idle' && status !== 'verifying' && (
-                <p className="mt-2 text-sm text-red-400">{status}</p>
-              )}
-              {authorization && (
-                <div className="mt-4 rounded-[6px] border border-white/[0.1] bg-white/[0.03] p-4">
-                  <p className="text-sm text-white/75">
-                    Approve only if you started <span className="font-semibold text-white">{authorization.client_name}</span> on your device.
-                  </p>
-                  <div className="mt-3 flex flex-wrap gap-1.5">
-                    {authorization.scope.map((scope) => (
-                      <span key={scope} className="rounded-[4px] border border-white/[0.1] px-2 py-1 text-xs text-white/45">
-                        {scope}
-                      </span>
-                    ))}
-                  </div>
+          <DeviceCodeForm
+            app={{ name: displayName }}
+            code={code}
+            onChange={onCodeChange}
+            onSubmit={() => { void verify(); }}
+            status={formStatus}
+            labels={{
+              hint: authorization ? 'Confirm the registered client and requested access.' : 'Enter the code shown on your device.',
+              submit: authorization ? `Approve ${authorization.client_name}` : 'Continue',
+              busy: 'Checking…',
+            }}
+            after={authorization && status !== 'connected' ? (
+              <div>
+                <p>
+                  Approve only if you started <span>{authorization.client_name}</span> on your device.
+                </p>
+                <div>
+                  {authorization.scope.map((scope) => (
+                    <span key={scope}>{scope}</span>
+                  ))}
                 </div>
-              )}
-              <Button
-                type="submit"
-                variant="primary"
-                size="lg"
-                disabled={status === 'verifying'}
-                busy={status === 'verifying'}
-                className="mt-5 w-full"
-              >
-                {status === 'verifying' ? 'Checking…' : authorization ? `Approve ${authorization.client_name}` : 'Continue'}
-              </Button>
-              <p className="mt-4 text-center text-xs text-white/30">Device codes are a common phishing target. Never share yours or approve a request you did not start.</p>
-            </form>
-          )}
+              </div>
+            ) : undefined}
+          />
         </div>
       </div>
     </>
@@ -174,8 +139,3 @@ const DeviceAuthContent: React.FC<{ protocol?: 'oidc' | 'legacy' }> = ({ protoco
 };
 
 export default DeviceAuthContent;
-
-function formatCode(value: string): string {
-  const clean = value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 8);
-  return clean.length > 4 ? `${clean.slice(0, 4)}-${clean.slice(4)}` : clean;
-}
