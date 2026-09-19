@@ -193,7 +193,11 @@ test('Library image history is a semantic right-side rail', () => {
 });
 
 test('Overview sidebar owns the full viewport and keeps the permanent rail at 52px', () => {
-  assert.match(overviewTaskbar, /<aside className=\{`xeno-overview-sidebar/);
+  /* Attributes may precede `className` on this element — the drawer added `ref` and
+     `data-mobile-drawer` (2026-09-19). Pin that the SIDEBAR element carries the class, not the
+     order of its attributes: this assertion broke the moment a sibling attribute was added, which
+     says nothing about whether the sidebar is the sidebar. */
+  assert.match(overviewTaskbar, /<aside\b[^>]*className=\{`xeno-overview-sidebar/);
   assert.match(overviewShellStyles, /\.xeno-overview-sidebar\s*\{[\s\S]*?height:\s*100dvh/);
   assert.match(overviewShellStyles, /\.xeno-sidebar-rail\s*\{[\s\S]*?width:\s*52px;[\s\S]*?box-sizing:\s*border-box;[\s\S]*?border-right:/);
   assert.doesNotMatch(overviewTaskbar, /backdrop-blur-md border-r border-white\/10/);
