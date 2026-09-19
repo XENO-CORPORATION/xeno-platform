@@ -144,6 +144,10 @@ jobs:
         run: npm run test:effort-menu-rendered
       - name: Assert the phone drawer renders off-canvas with a full-viewport scrim
         run: npm run test:mobile-drawer-rendered
+      # The clock line's divider is shown by a rule in another package and hidden only on
+      # specificity; only a browser proves which one wins.
+      - name: Assert the clock line's divider waits for the step it separates
+        run: npm run test:transcript-divider-rendered
 
   # ── The Forum's end-to-end proofs ───────────────────────────────────────────
   #

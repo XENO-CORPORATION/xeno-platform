@@ -241,6 +241,9 @@ async function main() {
         const drawer = run('npm', ['run', 'test:mobile-drawer-rendered'], { quiet: true });
         record('build: the phone drawer renders off-canvas with a full-viewport scrim (real browser, built CSS)', drawer.code === 0);
         ok = ok && drawer.code === 0;
+        const divider = run('npm', ['run', 'test:transcript-divider-rendered'], { quiet: true });
+        record('build: the clock line\'s divider waits for the step it separates (real browser, built CSS)', divider.code === 0);
+        ok = ok && divider.code === 0;
       }
     }
 

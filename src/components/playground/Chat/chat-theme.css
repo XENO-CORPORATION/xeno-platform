@@ -351,3 +351,25 @@
 }
 /* the head has no reply of its own, so its bottom edge is the reply's top edge: 4px, not a plate gap */
 .chat-turn-head.xa-transcript:not(:empty) { margin-bottom: 4px; }
+
+/*
+ * The clock line's divider belongs to the CURRENT STEP, not to the turn being live (2026-09-19).
+ *
+ * The library shows it whenever a collapsed turn is live —
+ * `.xa-collapsed .xa-turn.xa-live:not(.xa-open):not(.xa-done) .xa-line .xa-vr { display: block }`
+ * — and shows the ticker under the identical condition, so a turn with no steps yet (a plain
+ * model: grok-4.6, gpt-5.5) drew `▪ Working for 2s │` with nothing on the right of the rule
+ * forever. A separator that separates nothing is a dangling line, and the turn never fills it.
+ *
+ * The library already treats the two as a pair: while an ask is pending it hides `.xa-vr` AND
+ * `.xa-cur` together (transcript.css:310-311). This makes the divider follow the pair's real
+ * driver — whether the ticker has WORDS. The empty ticker keeps its flex space, so the first step
+ * still slides in from behind the glyph without a reflow; only the rule waits for it.
+ *
+ * Specificity: both rules are 0,13,0, beating the library's 0,10,0 pair, and they are mutually
+ * exclusive on `:has()`. Scoped to this surface because the chat is what consumes the transcript;
+ * the same rule belongs in the package, where the agent panel draws the same line (recorded in
+ * orchestrator/briefs/2026-09-19-transcript-divider-follows-its-content.md).
+ */
+.chat-themed .chat-turn-head.xa-transcript .xa-turn.xa-live:not(.xa-asking) .xa-line:not(:has(.xa-tx:not(:empty))) .xa-vr { display: none; }
+.chat-themed .chat-turn-head.xa-transcript .xa-turn.xa-live:not(.xa-asking) .xa-line:has(.xa-tx:not(:empty)) .xa-vr { display: block; }
