@@ -168,6 +168,12 @@ export interface ChatTurnInput {
   streaming?: boolean;
   /** The reply has started to arrive — the thought, if any, is over. */
   replyStarted?: boolean;
+  /**
+   * The turn is waiting on a reasoning model and no thought text has arrived yet.
+   * The clock still says Thinking (not a bare "Working for 2s") — the client is not
+   * inventing a thought, it is naming the wait the placeholder already is.
+   */
+  expectingThought?: boolean;
   /** When this message was created, used when the record carries no start. */
   timestamp?: number;
   model?: string;
@@ -220,6 +226,7 @@ export function toTranscriptMessage(input: ChatTurnInput): TranscriptMessage {
     toolCallId: toolCall.id,
   }));
   const thinking = input.thinking?.trim() ? input.thinking : undefined;
+  const isThinking = live && !input.replyStarted && Boolean(thinking || input.expectingThought);
   return {
     id: input.id,
     role: 'assistant',
@@ -228,7 +235,7 @@ export function toTranscriptMessage(input: ChatTurnInput): TranscriptMessage {
     ...(input.model ? { model: input.model } : {}),
     ...(thinking ? { thinking } : {}),
     isStreaming: live,
-    isThinking: live && !input.replyStarted && Boolean(thinking),
+    isThinking,
     ...(turn?.endedAt !== undefined ? { endedAt: turn.endedAt } : {}),
     ...(turn?.thinkingMs !== undefined ? { thinkingMs: turn.thinkingMs } : {}),
     toolCalls,

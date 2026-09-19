@@ -74,6 +74,10 @@ try {
     check('the turn keeps its start and end so a reopened turn still says how long it took', msg.timestamp === 1000 && msg.endedAt === 2500 && msg.thinking === 'weighing it');
     const live = toTranscriptMessage({ id: 'm2', streaming: true, replyStarted: false, thinking: 'hmm', turn: applyTurnEvent(newTurnRecord(1000), { type: 'search_start', query: 'live q' }, 1100) });
     check('a live search is a running tool call and the thought is live until the reply starts', live.toolCalls[0].status === 'running' && live.isThinking === true && live.isStreaming === true);
+    const waiting = toTranscriptMessage({ id: 'm3', streaming: true, replyStarted: false, expectingThought: true, timestamp: 1000 });
+    check('a reasoning turn waiting on its first thought token is already thinking — so the clock can say Thinking', waiting.isThinking === true && waiting.thinking === undefined);
+    const plain = toTranscriptMessage({ id: 'm4', streaming: true, replyStarted: false, timestamp: 1000 });
+    check('a plain turn is not thinking just because it is live — that would invent a thought', plain.isThinking === false);
   }
 
   // ── the real component, mounted ───────────────────────────────────────────────────────
@@ -105,7 +109,10 @@ try {
    */
   const startingEl = await render({ messageId: 'p0', streaming: true, replyStarted: false, stepsMode: 'collapsed', timestamp: Date.now() - 2500 });
   check('a turn that has only just gone out — no record yet — already reads "Working for 2s"', /Working for \d+s/.test(startingEl.textContent) && startingEl.querySelector('.xa-turn.xa-live') !== null, startingEl.textContent);
-  check('and it says nothing the client made up: no "Thinking", no "Writing the answer", no rotating cube', !/Thinking|Writing the answer|Reading your question|thinking-cube/.test(startingEl.textContent) && startingEl.querySelector('.thinking-cube') === null);
+  check('and a plain turn says nothing the client made up: no "Thinking", no "Writing the answer", no rotating cube', !/Thinking|Writing the answer|Reading your question|thinking-cube/.test(startingEl.textContent) && startingEl.querySelector('.thinking-cube') === null);
+
+  const expectingEl = await render({ messageId: 'pe', streaming: true, replyStarted: false, expectingThought: true, stepsMode: 'collapsed', timestamp: Date.now() - 2500 });
+  check('a reasoning turn waiting on its first token still reads Working for, AND Thinking on the clock line', /Working for \d+s/.test(expectingEl.textContent) && /Thinking/.test(expectingEl.textContent) && !/Writing the answer/.test(expectingEl.textContent), expectingEl.textContent);
 
   const liveRecord = applyTurnEvent(newTurnRecord(Date.now() - 4000), { type: 'search_start', query: 'xeno hub launcher' }, Date.now() - 1000);
   const openingEl = await render({ messageId: 'p1', streaming: true, replyStarted: false, stepsMode: 'expanded', turn: newTurnRecord(Date.now() - 3000) });
