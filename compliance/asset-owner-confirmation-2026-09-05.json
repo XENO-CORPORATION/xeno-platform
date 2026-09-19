@@ -8,18 +8,21 @@
   "assets": [
     {
       "path": "icons/menu-icon.svg",
-      "sha256": "b9f659ddca9a9d4e02b135e8168cd858f66e20bbfc12f5e69860f032f21fa18c",
-      "category": "identity-or-icon"
+      "sha256": "dc0fe86ad8f91217867d52115b2633489388bf2d1585ea324bc32a187585684d",
+      "category": "identity-or-icon",
+      "repositoryHistory": "git commit 3153fcde23ec3630223a9cc2a848df22eec6a413"
     },
     {
       "path": "icons/more-icon.svg",
-      "sha256": "4d141bbfdafdf1e7496bbb31728b1e97d43d0a0f3eeb223aa492fb9f1397e9dd",
-      "category": "identity-or-icon"
+      "sha256": "be64f205a8af8245df5af142ae5e12f687eb8ae498ee1826b039347324f778a6",
+      "category": "identity-or-icon",
+      "repositoryHistory": "git commit 3153fcde23ec3630223a9cc2a848df22eec6a413"
     },
     {
       "path": "icons/search-icon.svg",
-      "sha256": "d890fd508453f65a8d97ec0f384f9985e66b8927e202039fcddee9749da58530",
-      "category": "identity-or-icon"
+      "sha256": "8ee2ef67fce0dee91f0c626f004cb0aab6950d96b6b8e8f0efc9f91ba8630af1",
+      "category": "identity-or-icon",
+      "repositoryHistory": "git commit 3153fcde23ec3630223a9cc2a848df22eec6a413"
     },
     {
       "path": "public/canvas-workspace-demo.jpg",
@@ -28,18 +31,21 @@
     },
     {
       "path": "public/favicon-v2.svg",
-      "sha256": "4da493e8e97e3764032d8b196587043303d71dc8869015821c3d34d0e4b0a526",
-      "category": "identity-or-icon"
+      "sha256": "363dbc708c0729cfa387f9c1e59e62a669c16dfe33b318791a1a1b1afe0ad243",
+      "category": "identity-or-icon",
+      "repositoryHistory": "git commit f11937624171c40942164b0b643f695cd38d6868"
     },
     {
       "path": "public/favicon.svg",
-      "sha256": "4da493e8e97e3764032d8b196587043303d71dc8869015821c3d34d0e4b0a526",
-      "category": "identity-or-icon"
+      "sha256": "363dbc708c0729cfa387f9c1e59e62a669c16dfe33b318791a1a1b1afe0ad243",
+      "category": "identity-or-icon",
+      "repositoryHistory": "git commit f11937624171c40942164b0b643f695cd38d6868"
     },
     {
       "path": "public/flux-logo.svg",
-      "sha256": "6f2f0a00949a2111e163a51c1fef11d9478cc957b4e2cd4a507bafec1d96928d",
-      "category": "identity-or-icon"
+      "sha256": "c9fb7e70a27cae1e018d3278eeba0eb5eb1c12b8fb719bf6a62613ae266c681c",
+      "category": "identity-or-icon",
+      "repositoryHistory": "git commit d9ef645c3d23f5624fd55081f2d432ae790d94cc"
     },
     {
       "path": "public/hero-assets/hero-abstract.webp",
@@ -103,8 +109,9 @@
     },
     {
       "path": "public/logo.svg",
-      "sha256": "fcf634df6d6961fcb5f6c20ddddabc06b8f9188bc97b31bdf26133c8c9704960",
-      "category": "identity-or-icon"
+      "sha256": "6d726d2bebcc22ebb3c8a909da7b45604c2de212320c0487c5584469dc4d4abe",
+      "category": "identity-or-icon",
+      "repositoryHistory": "git commit f11937624171c40942164b0b643f695cd38d6868"
     },
     {
       "path": "public/share/earth-map.jpg",
@@ -113,13 +120,21 @@
     },
     {
       "path": "public/xeno-logo-original.png",
-      "sha256": "fcf634df6d6961fcb5f6c20ddddabc06b8f9188bc97b31bdf26133c8c9704960",
-      "category": "identity-or-icon"
+      "sha256": "6d726d2bebcc22ebb3c8a909da7b45604c2de212320c0487c5584469dc4d4abe",
+      "category": "identity-or-icon",
+      "repositoryHistory": "git commit ddcd2b13ca9f73b412401d56809e2bfe7fd71f69"
     },
     {
       "path": "public/xeno-logo.svg",
-      "sha256": "fcf634df6d6961fcb5f6c20ddddabc06b8f9188bc97b31bdf26133c8c9704960",
-      "category": "identity-or-icon"
+      "sha256": "6d726d2bebcc22ebb3c8a909da7b45604c2de212320c0487c5584469dc4d4abe",
+      "category": "identity-or-icon",
+      "repositoryHistory": "git commit ddcd2b13ca9f73b412401d56809e2bfe7fd71f69"
     }
-  ]
+  ],
+  "correction": {
+    "what": "Nine sha256 values were computed over a CRLF working copy of the file rather than the bytes the repository stores. Git stores these files with LF, so the recorded hash described no file in the repository, and the verdict of every gate that compared them depended on the machine's `core.autocrlf` setting: the gate failed on a Linux/LF checkout and would have passed on a Windows/CRLF one. Measured 2026-09-19: all nine recorded values equal sha256(the file at its committing commit, LF -> CRLF) and every file on disk is byte-identical to its committing blob.",
+    "correction": "Every sha256 below was re-derived from the committed bytes with `git cat-file -p <commit>:<path>` at the commit named in repositoryHistory, which is the same content the 2026-09-05 statement covers: each file's last commit predates that statement (2026-01-18 .. 2026-08-16) and no file has changed since. The owner's verbatim statement, its scope, the date and the list of paths are untouched; only the binding values were corrected.",
+    "invariant": "A recorded hash is sha256 of the bytes at the committing commit, never of a working copy. scripts/asset-provenance-coverage.test.mjs and scripts/generated-asset-evidence.test.mjs hash the committed blob for exactly this reason.",
+    "date": "2026-09-19"
+  }
 }
