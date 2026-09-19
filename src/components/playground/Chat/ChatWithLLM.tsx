@@ -57,8 +57,6 @@ import { activePath as branchActivePath, branchInfo } from './chatBranches';
 import { readGenerateResponse, readStreamedTurn, endpointForTask, streamRequestBody, CHAT_STREAM_ENDPOINT } from './chatStream';
 import { reasoningCapabilityForModel, reasoningTraceForModel } from '@/server/lib/chatModelCapabilities.js';
 import CodeBlockWithHeader from './CodeBlockWithHeader';
-import ThinkingAnimation, { ThinkingAnimationInline } from './ThinkingAnimation';
-import ThinkingStatus from './ThinkingStatus';
 import { chatComplete } from '@/services/aiService';
 import { getGroupedModels, GroupedModels, Model } from '@/services/modelService';
 import { chatService, isPersistedConversationId } from '@/services/chatService';
@@ -12642,13 +12640,13 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
       data-chat-scroll-in-row
       onClick={scrollToBottom}
       className={`group inline-flex h-7 items-center justify-center rounded-lg border border-[var(--chat-border)] bg-[var(--chat-surface)] text-[var(--chat-muted)] transition-colors duration-150 hover:bg-[var(--chat-hover)] hover:text-[var(--chat-text)] focus:outline-none ${(isLoading || messages.some((m) => m.isStreaming)) ? 'w-[82px]' : 'w-7'}`}
-      aria-label={(isLoading || messages.some((m) => m.isStreaming)) ? 'Generating — scroll to latest' : 'Scroll to bottom'}
+      aria-label={(isLoading || messages.some((m) => m.isStreaming)) ? 'Working — scroll to latest' : 'Scroll to bottom'}
     >
       {(isLoading || messages.some((m) => m.isStreaming)) ? (
         <>
           <span className="group-hover:hidden"><span className="xeno-gen-dots" aria-hidden="true"><i /><i /><i /></span></span>
           <span className="hidden whitespace-nowrap text-[11px] font-medium group-hover:inline">
-            {messages.some((m) => m.isDotPlaceholder) ? 'Thinking…' : 'Generating…'}
+            Working…
           </span>
         </>
       ) : (
@@ -16730,10 +16728,14 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                     const dateSeparatorElement = null;
 
                     if (message.isThinkingPlaceholder && message.id === aiRefinementPlaceholderId) {
-                        // The prompt-refinement placeholder keeps its own line; the ordinary thinking
-                        // placeholder is rendered by the assistant block below, as the opening of the
-                        // SAME element the answer will fill — a separate element here remounted the
-                        // turn head on the first delta (2026-09-18).
+                        // The prompt-refinement placeholder keeps its own line; EVERY other in-flight
+                        // turn — the thinking placeholder and the dot placeholder alike — is opened by
+                        // the assistant block below, as the SAME element the answer will fill. Two
+                        // reasons, one shape: a separate element here remounted the turn head on the
+                        // first delta (2026-09-18), and it was where the dot placeholder drew the
+                        // legacy scripted phase box — "Thinking · Writing the answer" with a rotating
+                        // square, invented client-side — instead of the canonical clock line that every
+                        // other turn shows (2026-09-19).
                         return (
                             <div key={message.id} className="flex justify-start w-full pl-[1.125rem]">
                                 <div className="flex items-center gap-2 bg-[var(--chat-surface)] border border-[var(--chat-border)] rounded-lg px-3 py-1.5 text-sm">
@@ -16742,15 +16744,6 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                                     </span>
                                     <span className="text-[var(--chat-muted)]">Okay, let me figure out{ellipsisText}</span>
                                 </div>
-                            </div>
-                        );
-                    } else if (message.isDotPlaceholder) {
-                        return (
-                            <div key={message.id} className="flex justify-start w-full pl-[1.125rem] py-2">
-                                <ThinkingStatus
-                                    mode={emptyStateMode}
-                                    searching={isXenoSearchEnabled}
-                                />
                             </div>
                         );
                     } else if (message.isCancelled) {
@@ -17081,12 +17074,12 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                                           transcript (D10, consumed not copied). The chat's own thinking box
                                           below it remains only for a legacy turn with no record and no
                                           thought text, where it explains the absence. */}
-                                      {(message.turn || turnHasRail(message.turn, message.thinkingContent) || message.isStreaming || message.isThinkingPlaceholder) ? (
+                                      {(message.turn || turnHasRail(message.turn, message.thinkingContent) || message.isStreaming || message.isThinkingPlaceholder || message.isDotPlaceholder) ? (
                                           <div className="w-full pl-[1.125rem]">
                                               <ChatTurnHead
                                                   messageId={message.id}
                                                   thinking={message.thinkingContent}
-                                                  streaming={Boolean(message.isStreaming || message.isThinkingPlaceholder)}
+                                                  streaming={Boolean(message.isStreaming || message.isThinkingPlaceholder || message.isDotPlaceholder)}
                                                   replyStarted={Boolean(message.parsedAnswer)}
                                                   timestamp={message.turn?.startedAt ?? message.timestamp}
                                                   model={message.modelIdUsed || message.modelId || selectedModel.id}
@@ -17265,26 +17258,13 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
 
                                       {/* 3. AI Answer Text */}
                                       <div className={`w-full pl-[1.125rem] ${message.searchInfo && (message.searchInfo.queries?.length > 0 || message.searchInfo.sources?.length > 0) ? 'mt-3' : ''}`}>
-                                          {/* Show pulsating dot when AI is generating response - but NOT for search-only messages */}
-                                          {!message.isError &&
-                                           !message.parsedAnswer &&
-                                           !message.isLoading &&
-                                           !message.isGeneratingImage &&
-                                           !message.imageData &&
-                                           !message.generatedImageAsset &&
-                                           message.sender === 'ai' &&
-                                           !message.isThinkingPlaceholder &&
-                                           !message.isDotPlaceholder &&
-                                           !(message.searchInfo && message.searchInfo.sources && message.searchInfo.sources.length > 0 && !message.text) && (
-                                              <div className="flex items-center gap-2 py-2">
-                                                  <div className="flex items-center space-x-1 ai-response-dots">
-                                                      <div className="w-2 h-2 rounded-full bg-[var(--chat-muted)] dot"></div>
-                                                      <div className="w-2 h-2 rounded-full bg-[var(--chat-muted)] dot"></div>
-                                                      <div className="w-2 h-2 rounded-full bg-[var(--chat-muted)] dot"></div>
-                                                  </div>
-                                                  <span className="text-[var(--chat-muted)] text-sm">Generating response...</span>
-                                              </div>
-                                          )}
+                                          {/* No spinner here (2026-09-19). This block drew three
+                                              hard-coded `rounded-full` dots under a running-verb line —
+                                              a second status vocabulary beside the transcript's clock line,
+                                              and one that could only ever render on a turn that was NOT
+                                              loading, so the words were untrue whenever it appeared. The
+                                              clock line above it is the live state, for every in-flight
+                                              turn; the composer pill carries it while the surface scrolls. */}
 
                                           {message.isError && message.text && (
                                               <div className={`prose prose-sm prose-invert max-w-none text-[var(--chat-danger)] prose-strong:text-[var(--chat-danger)] prose-p:my-1.5 prose-li:my-0.5 prose-ol:pl-5 prose-ul:pl-5`}>
@@ -17547,20 +17527,20 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
             <div data-chat-scroll-to-bottom className="pointer-events-none relative z-20 mb-2 flex justify-center">
               {/* Stays hand-written: it MORPHS. Idle it is a 28px square holding a bouncing
                   chevron; while the model works it stretches to 82px and holds three animated dots
-                  that swap for the word "Generating…" under the pointer. Two contents, two widths and
+                  that swap for the word "Working…" under the pointer. Two contents, two widths and
                   two bespoke animations — `.xeno-gen-dots` and `.xeno-chevron-bounce` — where a
                   `Button` is one box with one label. */}
               <button
                 type="button"
                 onClick={scrollToBottom}
                 className={`group pointer-events-auto inline-flex items-center justify-center rounded-lg border border-[var(--chat-border)] bg-[var(--chat-surface)] text-[var(--chat-muted)] shadow-md transition-colors duration-150 hover:bg-[var(--chat-hover)] hover:text-[var(--chat-text)] focus:outline-none ${(isLoading || messages.some((m) => m.isStreaming)) ? 'h-7 w-[82px]' : 'h-7 w-7'}`}
-                aria-label={(isLoading || messages.some((m) => m.isStreaming)) ? 'Generating — scroll to latest' : 'Scroll to bottom'}
+                aria-label={(isLoading || messages.some((m) => m.isStreaming)) ? 'Working — scroll to latest' : 'Scroll to bottom'}
               >
                 {(isLoading || messages.some((m) => m.isStreaming)) ? (
                   <>
                     <span className="group-hover:hidden"><span className="xeno-gen-dots" aria-hidden="true"><i /><i /><i /></span></span>
                     <span className="hidden whitespace-nowrap text-[11px] font-medium group-hover:inline">
-                      {messages.some((m) => m.isDotPlaceholder) ? 'Thinking…' : 'Generating…'}
+                      Working…
                     </span>
                   </>
                 ) : (
