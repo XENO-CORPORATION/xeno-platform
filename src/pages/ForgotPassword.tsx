@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { Button, TextInput } from '@xenosystem/elements-react';
-import { ArrowLeft, ArrowRight, Mail, MailCheck } from 'lucide-react';
+import { ArrowLeft } from 'lucide-react';
 import { Link } from 'react-router-dom';
+import { PasswordResetForm } from '@xenosystem/components/auth';
 import AuthMark from '../components/auth/AuthMark';
 
 const ForgotPassword = () => {
@@ -21,8 +21,7 @@ const ForgotPassword = () => {
     return re.test(value);
   };
 
-  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
-    e.preventDefault();
+  const submit = async () => {
     if (isSubmitting) return;
     setEmailError('');
 
@@ -55,15 +54,12 @@ const ForgotPassword = () => {
 
   return (
     <>
-      {/* Header */}
       <header
         className={`flex items-center justify-between gap-4 px-4 py-3 sm:px-5 sm:py-4 transition-all duration-500 ease-out ${
           isVisible ? 'opacity-100 translate-y-0' : 'opacity-0 -translate-y-4'
         }`}
         style={{ transitionDelay: '0.1s' }}
       >
-
-
         <Link
           to="/login"
           className="flex items-center gap-1.5 text-sm text-white/40 hover:text-white/70 transition-all duration-300 hover:gap-2"
@@ -81,93 +77,24 @@ const ForgotPassword = () => {
           }`}
           style={{ transitionDelay: '0.15s' }}
         >
-          {submitted ? (
-            /* Generic confirmation — identical whether or not the account exists */
-            <div className="animate-fadeSlideUp">
-              <div className="mb-6 flex h-14 w-14 items-center justify-center rounded-[6px] bg-white/[0.06] border border-white/[0.08]">
-                <MailCheck size={26} className="text-white/80" />
-              </div>
-              <h2 className="text-3xl font-bold tracking-tight mb-2 text-center">Check your email</h2>
-              <p className="text-white/40 leading-relaxed">
-                If an account exists for <span className="text-white/70">{email}</span>, we&rsquo;ve sent a
-                password reset link. Follow it to choose a new password.
-              </p>
-              <p className="text-sm text-white/30 mt-4 leading-relaxed">
-                Didn&rsquo;t get it? Check your spam folder, or{' '}
-                <button
-                  type="button"
-                  onClick={() => setSubmitted(false)}
-                  className="text-white/50 hover:text-white transition-colors underline underline-offset-2"
-                >
-                  try another email
-                </button>
-                .
-              </p>
-
-              <Link
-                to="/login"
-                className="group mt-8 w-full py-4 bg-white text-black text-sm font-semibold rounded-[6px] flex items-center justify-center gap-0 transition-all duration-300 ease-out hover:bg-white/90 hover:shadow-lg hover:shadow-white/10 active:scale-[0.98] overflow-hidden"
-              >
-                <span className="transition-transform duration-300 group-hover:-translate-x-1">Back to sign in</span>
-                <ArrowRight
-                  size={16}
-                  strokeWidth={2.5}
-                  className="opacity-0 -ml-4 group-hover:opacity-100 group-hover:ml-2 transition-all duration-300 ease-out"
-                />
-              </Link>
-            </div>
-          ) : (
-            <>
-              {/* Heading */}
-              <div className="mb-8">
-                <h2 className="text-3xl font-bold tracking-tight mb-2 text-center">Forgot password?</h2>
-                <p className="text-white/40">
-                  Enter the email associated with your account and we&rsquo;ll send you a link to reset your password.
-                </p>
-              </div>
-
-              <form onSubmit={handleSubmit} className="space-y-4">
-                <div>
-                  <label htmlFor="forgot-email" className="block text-sm font-medium text-white/60 mb-2">Email</label>
-                  <TextInput
-                    id="forgot-email"
-                    name="email"
-                    type="email"
-                    size="lg"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    required
-                    autoFocus
-                    disabled={isSubmitting}
-                    className={`w-full ${emailError ? 'border-red-500/50' : ''}`}
-                    placeholder="you@example.com"
-                    autoComplete="email"
-                  />
-                  <div className={`overflow-hidden transition-all duration-300 ease-out ${emailError ? 'max-h-8 opacity-100 mt-2' : 'max-h-0 opacity-0'}`}>
-                    <p className="text-sm text-red-400">{emailError}</p>
-                  </div>
-                </div>
-
-                <Button
-                  type="submit"
-                  variant="primary"
-                  size="lg"
-                  disabled={isSubmitting}
-                  busy={isSubmitting}
-                  className="w-full mt-2"
-                >
-                  {isSubmitting ? 'Sending…' : 'Send reset link'}
-                </Button>
-              </form>
-
-              <p className="text-center text-sm text-white/30 mt-8">
-                Remembered it?{' '}
-                <Link to="/login" className="text-white/50 hover:text-white transition-colors underline underline-offset-2">
-                  Sign in
-                </Link>
-              </p>
-            </>
-          )}
+          <PasswordResetForm
+            mode="request"
+            values={{ email, password: '', confirm: '' }}
+            onChange={(v) => setEmail(v.email)}
+            onSubmit={() => { void submit(); }}
+            phase={submitted ? 'sent' : isSubmitting ? 'submitting' : 'idle'}
+            errors={{ email: emailError || undefined }}
+            onRetry={() => { setSubmitted(false); setEmailError(''); }}
+            after={
+              submitted ? (
+                <Link to="/login">Back to sign in</Link>
+              ) : (
+                <>
+                  Remembered it? <Link to="/login">Sign in</Link>
+                </>
+              )
+            }
+          />
         </div>
       </div>
     </>

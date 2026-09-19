@@ -58,6 +58,7 @@ before(async () => {
       '@xenosystem/elements-react': path.resolve('packages/elements-react/src/index.ts'),
       '@xenosystem/elements': path.resolve('packages/elements/src'),
       '@xenosystem/generate': path.resolve('packages/generate/src/index.ts'),
+      '@xenosystem/components/auth': path.resolve('../../../xeno-components/packages/components/src/auth/index.ts'),
     },
     plugins: [
       {
@@ -246,13 +247,13 @@ test('ForgotPassword: adopts TextInput, validates email, prevents duplicate subm
       React.createElement(Router.MemoryRouter, null, React.createElement(ForgotPassword, null))
     );
 
-    const emailLabel = container.querySelector('label[for="forgot-email"]');
-    const emailInput = container.querySelector('#forgot-email');
-    assert.ok(emailLabel, 'Forgot email label with htmlFor="forgot-email" must exist');
-    assert.ok(emailInput, 'TextInput with id="forgot-email" must exist');
-
-    const form = container.querySelector('form');
-    const submitBtn = container.querySelector('button[type="submit"]');
+    const form = container.querySelector('form[data-xc="password-reset-form"]');
+    const emailInput = container.querySelector('[data-field="email"]');
+    assert.ok(form, 'Forgot password must mount @xenosystem/components/auth PasswordResetForm');
+    assert.equal(form.getAttribute('data-mode'), 'request');
+    assert.equal(form.getAttribute('data-phase'), 'idle');
+    assert.ok(emailInput, 'Family email field (data-field="email") must exist');
+    const submitBtn = container.querySelector('button[data-intent="submit"]');
 
     // Invalid email triggers validation error and does not submit
     act(() => {
@@ -310,15 +311,14 @@ test('ResetPassword: adopts TextInput, toggles password visibility with aria lab
       )
     );
 
-    const newPassLabel = container.querySelector('label[for="reset-new-password"]');
-    const newPassInput = container.querySelector('#reset-new-password');
-    const confirmPassLabel = container.querySelector('label[for="reset-confirm-password"]');
-    const confirmPassInput = container.querySelector('#reset-confirm-password');
+    const form = container.querySelector('form[data-xc="password-reset-form"]');
+    const newPassInput = container.querySelector('[data-field="password"]');
+    const confirmPassInput = container.querySelector('[data-field="confirm"]');
 
-    assert.ok(newPassLabel, 'Label for reset-new-password must exist');
-    assert.ok(newPassInput, 'TextInput for reset-new-password must exist');
-    assert.ok(confirmPassLabel, 'Label for reset-confirm-password must exist');
-    assert.ok(confirmPassInput, 'TextInput for reset-confirm-password must exist');
+    assert.ok(form, 'Reset password must mount @xenosystem/components/auth PasswordResetForm');
+    assert.equal(form.getAttribute('data-mode'), 'reset');
+    assert.ok(newPassInput, 'Family password field (data-field="password") must exist');
+    assert.ok(confirmPassInput, 'Family confirm field (data-field="confirm") must exist');
 
     // Initial type is password
     assert.equal(newPassInput.getAttribute('type'), 'password');
@@ -333,8 +333,6 @@ test('ResetPassword: adopts TextInput, toggles password visibility with aria lab
     });
     assert.equal(newPassInput.getAttribute('type'), 'text', 'Clicking toggle must reveal password');
     assert.equal(toggleBtn.getAttribute('aria-label'), 'Hide password');
-
-    const form = container.querySelector('form');
 
     // Password mismatch validation
     act(() => {
