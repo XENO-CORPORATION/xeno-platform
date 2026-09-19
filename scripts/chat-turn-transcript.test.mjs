@@ -123,6 +123,7 @@ try {
   const settled = await render({ messageId: 'p3', streaming: false, replyStarted: true, stepsMode: 'collapsed', thinking: 'first decide what XENO Hub is', turn: done, timestamp: done.startedAt, model: 'grok-4.6-high-fast' });
   const text = settled.textContent;
   check('a settled turn folds to the receipt ("Worked for …")', /Worked for/.test(text));
+  check('ONE settled step rides the clock line where the live ticker had it — not "1 step" (0.1.50)', settled.querySelector('.xa-line.xa-docked') !== null && /Searched the web/.test(text) && !/\b1 step\b/.test(text));
   check('the settled search reads as a record with its result count', /Searched the web/.test(settled.innerHTML) || /3 results/.test(settled.innerHTML));
   check('no reply, no action row — those stay the chat\'s own', !settled.querySelector('.xa-rfoot'));
 
