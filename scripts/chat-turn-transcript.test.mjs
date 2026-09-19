@@ -13,13 +13,19 @@ import { createRoot } from 'react-dom/client';
 import testUtils from 'react-dom/test-utils';
 import { JSDOM } from 'jsdom';
 import { createServer } from 'vite';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
 const { act } = testUtils;
 const motionStubPath = fileURLToPath(new URL('./framer-motion-test-stub.mjs', import.meta.url));
 
 const results = [];
+/**
+ * Source with comments removed. A gate about what the code DOES must not be satisfied — or broken —
+ * by prose: the comment recording that a legacy renderer was deleted names it, and a gate that reads
+ * prose would fail on the note explaining the fix.
+ */
+const code = (src) => src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/[^\n]*$/gm, '');
 const check = (name, ok, detail = '') => {
   results.push({ name, ok });
   console.log(`${ok ? '✔' : '✖'} ${name}${detail && !ok ? ` — ${detail}` : ''}`);
@@ -91,6 +97,16 @@ try {
     return document.getElementById('root');
   };
 
+  /*
+   * The state the legacy box drew, and the state it drew it in most often (2026-09-19): a turn that
+   * has only just gone out, which has NO record yet — the record lands when the server announces the
+   * turn. The claim is that the canonical head describes that state too, and that it says "Working",
+   * never a client-scripted phase list.
+   */
+  const startingEl = await render({ messageId: 'p0', streaming: true, replyStarted: false, stepsMode: 'collapsed', timestamp: Date.now() - 2500 });
+  check('a turn that has only just gone out — no record yet — already reads "Working for 2s"', /Working for \d+s/.test(startingEl.textContent) && startingEl.querySelector('.xa-turn.xa-live') !== null, startingEl.textContent);
+  check('and it says nothing the client made up: no "Thinking", no "Writing the answer", no rotating cube', !/Thinking|Writing the answer|Reading your question|thinking-cube/.test(startingEl.textContent) && startingEl.querySelector('.thinking-cube') === null);
+
   const liveRecord = applyTurnEvent(newTurnRecord(Date.now() - 4000), { type: 'search_start', query: 'xeno hub launcher' }, Date.now() - 1000);
   const openingEl = await render({ messageId: 'p1', streaming: true, replyStarted: false, stepsMode: 'expanded', turn: newTurnRecord(Date.now() - 3000) });
   check('an opening turn shows the canonical clock line ("Working for …") — the chat\'s own spinner is gone', /Working for/.test(openingEl.textContent) && openingEl.querySelector('.xa-transcript'));
@@ -123,12 +139,25 @@ try {
   const chat = readFileSync(new URL('../src/components/playground/Chat/ChatWithLLM.tsx', import.meta.url), 'utf8');
   check('the thinking placeholder renders ChatTurnHead (streaming) — not ThinkingAnimation', (chat.match(/<ChatTurnHead/g) || []).length >= 1 && !/<ThinkingAnimation\s+duration=\{liveTimerValue/.test(chat));
   /*
+   * 2026-09-19: the turn that had just gone out drew a DIFFERENT thing from the turn that was
+   * running — a client-scripted phase box ("Thinking · Writing the answer", rotating square) and,
+   * in the answer area, three dots reading "Generating response...". Both were second vocabularies
+   * beside the canonical clock line. The dot placeholder is not its own element any more, so the
+   * head that opens a turn is the SAME node the answer fills, and the legacy renderers are gone
+   * rather than left unreachable — the shape this workspace keeps rediscovering.
+   */
+  check('the dot placeholder is not an early return any more — every in-flight turn opens the SAME assistant block', !/\} else if \(message\.isDotPlaceholder\) \{/.test(chat));
+  check('the head covers the dot placeholder: the clock line is what a just-sent turn shows, in both places it is asked for', /message\.isThinkingPlaceholder \|\| message\.isDotPlaceholder\) \? \(/.test(chat) && /streaming=\{Boolean\(message\.isStreaming \|\| message\.isThinkingPlaceholder \|\| message\.isDotPlaceholder\)\}/.test(chat));
+  check('the legacy thinking renderers are DELETED, not left unreachable — the client-scripted phase list and the second spinner', !/ThinkingStatus|ThinkingAnimation|thinking-cube|Writing the answer|Reading your question/.test(code(chat)) && !existsSync(new URL('../src/components/playground/Chat/ThinkingStatus.tsx', import.meta.url)) && !existsSync(new URL('../src/components/playground/Chat/ThinkingAnimation.tsx', import.meta.url)));
+  check('and the answer area renders no second spinner — the row of hard-coded dots under a running verb is gone', !/ai-response-dots"/.test(code(chat)) && !/Generating response/.test(code(chat)));
+  check('ONE word for a running turn — the scroll pill says "Working…" like the clock line (two pills + the note that explains them)', !/'Thinking…'|'Generating…'/.test(chat) && (chat.match(/Working…/g) || []).length === 3);
+  /*
    * 2026-09-18: "it disappears and glitches when the answer appears". Three causes, each pinned:
    * the placeholder was its own element (remount on the first delta); the final message took a
    * fresh id (remount when the answer landed, mid-fold); and deltas went to `text` while the
    * bubble printed `parsedAnswer`, so the answer was invisible until it arrived whole.
    */
-  check('ONE element from "Working for" to "Worked for": the thinking placeholder is rendered by the assistant block, not by an early return', /message\.isThinkingPlaceholder && message\.id === aiRefinementPlaceholderId\) \{/.test(chat) && !/if \(message\.isThinkingPlaceholder\) \{/.test(chat) && /message\.isStreaming \|\| message\.isThinkingPlaceholder\)/.test(chat));
+  check('ONE element from "Working for" to "Worked for": the thinking placeholder is rendered by the assistant block, not by an early return', /message\.isThinkingPlaceholder && message\.id === aiRefinementPlaceholderId\) \{/.test(chat) && !/if \(message\.isThinkingPlaceholder\) \{/.test(chat) && /message\.isStreaming \|\| message\.isThinkingPlaceholder \|\| message\.isDotPlaceholder\)/.test(chat));
   check('the final message keeps the placeholder id and replaces it in place — no remount when the answer lands', /id: localPlaceholderId,/.test(chat) && !/id: `ai-\$\{Date\.now\(\)\}`/.test(chat) && /prevMessages\.map\(msg => \(msg\.id === localPlaceholderId \? display : msg\)\)/.test(chat));
   check('the edit plate keeps its hairline and paints NOTHING on focus — no ring, no accent, no focus-within brightening (2026-09-18)', !chat.includes('border-[var(--chat-accent)]/70') && !chat.includes('focus-within:ring-1 focus-within:ring-[var(--chat-accent)]') && chat.includes('<div className="rounded-lg border border-[var(--chat-border)] bg-[var(--chat-canvas)]/40 px-2.5 py-2">') && !/bg-\[var\(--chat-canvas\)\]\/40 px-2\.5 py-2 [^"]*focus-within/.test(chat) && (chat.match(/className="focus-self[^"]*resize-y border-none/g) || []).length === 1);
   check('the user turn spans the column like the answer does — no 88 / 96 / 98 percent cap (2026-09-18)', (chat.match(/--xeno-message-max: 100%;/g) || []).length === 3 && !/--xeno-message-max: (88|96|98)%/.test(chat) && !/chat-message-editor flex w-full max-w-/.test(chat));
