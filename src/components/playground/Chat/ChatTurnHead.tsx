@@ -39,6 +39,7 @@ export interface ChatTurnHeadProps {
   thinking?: string;
   streaming?: boolean;
   replyStarted?: boolean;
+  expectingThought?: boolean;
   timestamp?: number;
   model?: string;
   turn?: ChatTurnRecord;
@@ -48,11 +49,11 @@ export interface ChatTurnHeadProps {
 }
 
 export const ChatTurnHead: React.FC<ChatTurnHeadProps> = ({
-  messageId, thinking, streaming, replyStarted, timestamp, model, turn, stepsMode, onThinkingTime,
+  messageId, thinking, streaming, replyStarted, expectingThought, timestamp, model, turn, stepsMode, onThinkingTime,
 }) => {
   const msg = useMemo(
-    () => toTranscriptMessage({ id: messageId, thinking, streaming, replyStarted, timestamp, model, turn }),
-    [messageId, thinking, streaming, replyStarted, timestamp, model, turn],
+    () => toTranscriptMessage({ id: messageId, thinking, streaming, replyStarted, expectingThought, timestamp, model, turn }),
+    [messageId, thinking, streaming, replyStarted, expectingThought, timestamp, model, turn],
   );
   const actions = useMemo<TranscriptActions>(() => ({
     ask: NO_ASKS,

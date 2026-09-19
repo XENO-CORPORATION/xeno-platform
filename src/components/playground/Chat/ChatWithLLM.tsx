@@ -17111,6 +17111,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                                                   thinking={message.thinkingContent}
                                                   streaming={Boolean(message.isStreaming || message.isThinkingPlaceholder || message.isDotPlaceholder)}
                                                   replyStarted={Boolean(message.parsedAnswer)}
+                                                  expectingThought={Boolean(message.isThinkingPlaceholder) && !message.thinkingContent}
                                                   timestamp={message.turn?.startedAt ?? message.timestamp}
                                                   model={message.modelIdUsed || message.modelId || selectedModel.id}
                                                   turn={message.turn}
