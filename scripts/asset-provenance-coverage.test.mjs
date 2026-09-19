@@ -25,6 +25,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
+import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -32,6 +33,31 @@ import { fileURLToPath } from 'node:url';
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const read = (p) => JSON.parse(fs.readFileSync(path.join(ROOT, p), 'utf8'));
 const sha256 = (bytes) => createHash('sha256').update(bytes).digest('hex');
+
+/**
+ * The asset's bytes AS COMMITTED — the blob at HEAD — with the working copy only for a file HEAD
+ * does not have yet.
+ *
+ * 🔴 Hashing the working copy makes the verdict depend on the MACHINE, not the repository. Git
+ * stores these files with LF; a checkout with `core.autocrlf=true` writes CRLF, so the same asset
+ * hashes two different ways. That is how nine recorded hashes in
+ * `compliance/asset-owner-confirmation-2026-09-05.json` came to describe no file in the repository
+ * at all (found 2026-09-19): this gate was red on every LF checkout and would have been green on a
+ * Windows one, so it had never been trusted on either.
+ */
+function committedBytes(file) {
+  const cached = blobCache.get(file);
+  if (cached) return cached;
+  let bytes;
+  try {
+    bytes = execFileSync('git', ['cat-file', '-p', `HEAD:${file}`], { cwd: ROOT, maxBuffer: 64 * 1024 * 1024 });
+  } catch {
+    bytes = fs.readFileSync(path.join(ROOT, file)); // not committed yet — the working copy IS the artifact
+  }
+  blobCache.set(file, bytes);
+  return bytes;
+}
+const blobCache = new Map();
 
 const pending = read('compliance/asset-provenance-pending.json');
 const owner = read('compliance/asset-owner-confirmation-2026-09-05.json');
@@ -67,7 +93,7 @@ function classify() {
   for (const asset of pending.assets) {
     for (const file of expand(asset.path)) {
       if (seen.has(file)) continue;
-      const hash = sha256(fs.readFileSync(path.join(ROOT, file)));
+      const hash = sha256(committedBytes(file));
       seen.set(file, ownerHashes.has(hash) ? 'owner' : registeredHashes.has(hash) ? 'registry' : 'unrecorded');
     }
   }
@@ -116,7 +142,7 @@ test('the AI-generated entries carry a generator, a rights basis and its evidenc
   const generated = [...files].filter(([, v]) => v === 'registry').map(([file]) => file);
   assert.ok(generated.length, 'no generated assets found — the fixture for this has moved');
   for (const file of generated) {
-    const entry = registeredHashes.get(sha256(fs.readFileSync(path.join(ROOT, file))));
+    const entry = registeredHashes.get(sha256(committedBytes(file)));
     assert.ok(entry.generator, `${file}: no generator recorded`);
     assert.ok(entry.rights, `${file}: no rights basis recorded`);
     assert.ok(entry.rightsEvidence, `${file}: the rights basis points at no evidence`);
