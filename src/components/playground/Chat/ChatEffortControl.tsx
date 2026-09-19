@@ -1,13 +1,8 @@
 /**
- * The effort control in the web chat's composer — the agent panel's `EffortCells` (LOCKED
- * prototype: the chosen cell opens to hold the word, glides, fuses at the top level) mounted
- * on a chip beside the model selector, in place of the old brain toggle.
- *
- * The toggle was an on/off that meant "send effort=medium" (2026-09-19). The gateway models
- * effort as levels — suffixed ids (`claude-sonnet-5-high`) or a request parameter for the
- * toggleable set — and the server now lists them per model (`Model.efforts`). This control
- * offers exactly those. It renders nothing for a model with no levels: a fixed-reasoning model
- * says "reasons" elsewhere; a non-reasoning model has nothing to choose.
+ * The effort control in the web chat's composer — the agent panel's `EffortCells` mounted
+ * on a chip beside the Brain toggle. Brain is on/off (auto vs a real level). This control
+ * offers the levels the gateway proves exist for the model (`Model.efforts`), minus `auto`
+ * which the Brain already is. It renders nothing when there is no level to pick.
  *
  * D7d: the cells COME from `@xenosystem/agent-conversation`, they are not re-drawn here. The
  * popover is the chat's own (the panel's `XaMenu` is bound to its dock), styled by the same
@@ -27,7 +22,7 @@ export const ChatEffortControl: React.FC<{
 }> = ({ model, value, onChange, disabled }) => {
   const [open, setOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
-  const options = model.efforts || [];
+  const options = (model.efforts || []).filter((o) => o.effort !== 'auto' && o.effort !== 'none');
 
   useEffect(() => {
     if (!open) return;
@@ -40,7 +35,7 @@ export const ChatEffortControl: React.FC<{
     return () => { document.removeEventListener('pointerdown', away, true); document.removeEventListener('keydown', key); };
   }, [open]);
 
-  if (options.length < 2) return null;
+  if (options.length < 1) return null;
   const current = options.find((o) => o.effort === value.effort) || options[0];
 
   return (

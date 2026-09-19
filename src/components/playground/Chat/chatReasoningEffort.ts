@@ -47,6 +47,31 @@ export function effortOptionFor(model: Pick<Model, 'id' | 'efforts'>, prefs: Rec
   return options.find((o) => o.effort === wanted) || options.find((o) => o.effort === 'auto') || options[0];
 }
 
+const AUTO_OR_NONE = new Set(['auto', 'none']);
+
+function defaultOnEffort(options: ModelEffortOption[]): ModelEffortOption | undefined {
+  return options.find((o) => o.effort === 'medium')
+    || options.find((o) => o.effort === 'high')
+    || options.find((o) => !AUTO_OR_NONE.has(o.effort));
+}
+
+/**
+ * Brain off → the family's auto SKU (`…-tiered` / bare id). Brain on → a real level;
+ * if the remembered choice is still auto, pick the model's default (medium, else high).
+ */
+export function effortOptionForTurn(
+  model: Pick<Model, 'id' | 'efforts'>,
+  prefs: Record<string, string>,
+  reasoningOn: boolean,
+): ModelEffortOption {
+  const options = model.efforts || [];
+  const auto = options.find((o) => o.effort === 'auto') || { ...AUTO_EFFORT, modelId: model.id };
+  if (!reasoningOn) return auto;
+  const chosen = effortOptionFor(model, prefs);
+  if (!AUTO_OR_NONE.has(chosen.effort)) return chosen;
+  return defaultOnEffort(options) || chosen;
+}
+
 /** What goes on the request for this option. */
 export function requestShapeFor(baseId: string, option: ModelEffortOption): { modelId: string; reasoningEffort?: 'low' | 'medium' | 'high'; reasons: boolean } {
   const reasons = option.effort !== 'auto' && option.effort !== 'none';

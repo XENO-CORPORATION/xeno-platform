@@ -922,11 +922,14 @@ app.get('/api/models', databaseMiddleware, authMiddleware, async (req, res) => {
         const supportsReasoning = reasoningCapabilityForModel(id);
         const supportsVision = /gemini|gpt-5|gpt-4o|claude|pixtral|vision|llama-4|grok-4/.test(id);
         const efforts = effortOptionsFor(String(model.id), effortFamilies, supportsReasoning);
+        const pickerName = efforts.length
+          ? prettyModelName(String(model.id).replace(/-tiered$/i, ''))
+          : (model.name || prettyModelName(model.id));
 
         return {
           id: model.id,
           ...(efforts.length ? { efforts } : {}),
-          name: model.name || prettyModelName(model.id),
+          name: pickerName,
           maxTokens: model.context_length || model.max_tokens || 128000,
           created: model.created,
           description: model.description || '',

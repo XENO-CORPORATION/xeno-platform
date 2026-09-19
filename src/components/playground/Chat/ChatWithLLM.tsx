@@ -23,7 +23,7 @@ import {
 import ChatEmptyState, { ComposerRevealControls, type ChatEmptyStateTool } from './ChatEmptyState';
 import ChatModelSelector from './ChatModelSelector';
 import ChatEffortControl from './ChatEffortControl';
-import { effortOptionFor, readEffortPreferences, requestShapeFor, writeEffortPreference } from './chatReasoningEffort';
+import { effortOptionForTurn, readEffortPreferences, requestShapeFor, writeEffortPreference } from './chatReasoningEffort';
 import ChatShareModal from './ChatShareModal';
 import { isOutlineDebugOn, OUTLINE_DEBUG_CSS } from './outlineDebug';
   import ChatLibraryPage from './ChatLibraryPage';
@@ -2811,16 +2811,29 @@ const ChatWithLLM: React.FC<ChatWithLLMProps> = ({
 
   const [isSearchToggled, setIsSearchToggled] = useState(false);
   const [selectedModel, setSelectedModel] = useState<Model>(DEFAULT_MODEL);
+  /* Brain on/off — auto SKU vs a real level. The level itself is per base model. */
+  const [isReasonToggled, setIsReasonToggled] = useState(true);
   /* The effort per base model, remembered locally; the option in force is derived from the
      selected model's own `efforts`, so a model with no levels has none to be wrong about. */
   const [effortPrefs, setEffortPrefs] = useState<Record<string, string>>(() => readEffortPreferences());
-  const selectedEffort = effortOptionFor(selectedModel, effortPrefs);
+  const selectedEffort = effortOptionForTurn(selectedModel, effortPrefs, isReasonToggled);
   const selectedEffortRef = useRef(selectedEffort);
   selectedEffortRef.current = selectedEffort;
   const chooseEffort = useCallback((option: { effort: string }) => {
       setEffortPrefs((prev) => ({ ...prev, [selectedModel.id]: option.effort }));
       writeEffortPreference(selectedModel.id, option.effort);
   }, [selectedModel.id]);
+  const modelHasEffortLevels = (selectedModel.efforts || []).some((o) => o.effort !== 'auto' && o.effort !== 'none');
+  const toggleReasoning = useCallback(() => {
+    setIsReasonToggled((prev) => {
+      const next = !prev;
+      if (next) {
+        const on = effortOptionForTurn(selectedModel, effortPrefs, true);
+        if (on.effort !== 'auto' && on.effort !== 'none') chooseEffort(on);
+      }
+      return next;
+    });
+  }, [chooseEffort, effortPrefs, selectedModel]);
   const [groupedModels, setGroupedModels] = useState<GroupedModels[]>([]);
   /* The catalogue, readable from callbacks that must not re-subscribe on every change. */
   const groupedModelsRef = useRef<GroupedModels[]>([]);
@@ -6562,7 +6575,7 @@ interface QueueState {
     const modelId = currentModel.id;
     const reasoningCapability = modelHasReasoningCapability(modelId);
 
-    const effortShape = requestShapeFor(baseModelId, effortOptionFor(currentModel, effortPrefs));
+    const effortShape = requestShapeFor(baseModelId, selectedEffortRef.current);
     const effectiveReasoningState =
         reasoningCapability === 'alwaysOn' ? true :
         reasoningCapability === 'disabled' && !(currentModel.efforts && currentModel.efforts.length) ? false :
@@ -13090,9 +13103,26 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                           reasons internally
                         </span>
                       )}
-                      {/* The effort control — the levels this model actually offers (Model.efforts),
-                          the agent panel's cells; nothing when there is nothing to choose. */}
-                      <ChatEffortControl model={selectedModel} value={selectedEffort} onChange={chooseEffort} disabled={isLoading} />
+                      {/* Brain is on/off. The effort chip is the level when thinking is on —
+                          proxy SKUs (`gemini-3.8-flash-high`) or a request parameter. */}
+                      {modelHasEffortLevels && (
+                        <button
+                          type="button"
+                          data-reason-toggle
+                          onMouseDown={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            toggleReasoning();
+                          }}
+                          title={isReasonToggled ? 'Thinking on' : 'Thinking off'}
+                          className={`flex items-center justify-center border border-[var(--chat-border)] rounded-lg p-2 cursor-pointer select-none hover:bg-[var(--chat-hover)] ${isReasonToggled ? 'text-[var(--chat-text)]' : 'text-[var(--chat-muted)] opacity-50'}`}
+                        >
+                          <Brain size={16} />
+                        </button>
+                      )}
+                      {isReasonToggled && (
+                        <ChatEffortControl model={selectedModel} value={selectedEffort} onChange={chooseEffort} disabled={isLoading} />
+                      )}
               </div>
                   <div className="flex items-center gap-2 md:gap-3">
                   {(isLoading || messages.some((m) => m.isStreaming)) ? (
