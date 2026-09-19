@@ -74,8 +74,20 @@ test('Research errors stay visible instead of deleting their placeholder first',
   assert.match(chat, /No public sources were found for this query\. No model answer was generated\./);
 });
 
-test('single-line language-fenced code remains executable in both answer renderers', () => {
+test('single-line language-fenced code remains executable in every answer renderer', () => {
+  /* Every markdown `code()` branch in this file must use the executable form. This asserted a
+   COUNT of 2 named after "both answer renderers", and the second one was never an answer
+   renderer: it was the collapsible THOUGHT box (`message.hasThinking`), deleted on 2026-09-18 when
+   a reasoning model with no trace stopped getting a box explaining the absence. So the count went
+   to 1 and this suite has been red on main since — over a renderer that is correctly gone.
+   Pin the INVARIANT instead: one executable-fence branch per markdown code branch, however many
+   renderers exist. Measured 2026-09-19: 1 and 1, with 0 of the broken single-check form. */
   const executableFenceBranches = chat.match(/if \(match \|\| codeString\.includes\("\\n"\)\)/g) || [];
-  assert.equal(executableFenceBranches.length, 2);
+  const markdownCodeBranches = chat.match(/if \(!inline\) \{/g) || [];
+  assert.ok(markdownCodeBranches.length >= 1,
+    'no markdown code branch found — this assertion has drifted from the file and proves nothing');
+  assert.equal(executableFenceBranches.length, markdownCodeBranches.length,
+    `every markdown code branch must keep one-line fenced code executable: ${executableFenceBranches.length} `
+    + `executable branch(es) for ${markdownCodeBranches.length} code branch(es)`);
   assert.doesNotMatch(chat, /if \(codeString\.includes\("\\n"\)\)/);
 });
