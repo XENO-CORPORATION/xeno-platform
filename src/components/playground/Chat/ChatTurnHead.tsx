@@ -40,6 +40,8 @@ export interface ChatTurnHeadProps {
   streaming?: boolean;
   replyStarted?: boolean;
   expectingThought?: boolean;
+  /** A reasoning wait happened — keep Thought on the clock after the stream ends. */
+  hadThought?: boolean;
   timestamp?: number;
   model?: string;
   turn?: ChatTurnRecord;
@@ -49,11 +51,11 @@ export interface ChatTurnHeadProps {
 }
 
 export const ChatTurnHead: React.FC<ChatTurnHeadProps> = ({
-  messageId, thinking, streaming, replyStarted, expectingThought, timestamp, model, turn, stepsMode, onThinkingTime,
+  messageId, thinking, streaming, replyStarted, expectingThought, hadThought, timestamp, model, turn, stepsMode, onThinkingTime,
 }) => {
   const msg = useMemo(
-    () => toTranscriptMessage({ id: messageId, thinking, streaming, replyStarted, expectingThought, timestamp, model, turn }),
-    [messageId, thinking, streaming, replyStarted, expectingThought, timestamp, model, turn],
+    () => toTranscriptMessage({ id: messageId, thinking, streaming, replyStarted, expectingThought, hadThought, timestamp, model, turn }),
+    [messageId, thinking, streaming, replyStarted, expectingThought, hadThought, timestamp, model, turn],
   );
   const actions = useMemo<TranscriptActions>(() => ({
     ask: NO_ASKS,

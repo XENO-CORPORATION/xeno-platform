@@ -6633,7 +6633,8 @@ interface QueueState {
             text: placeholderText, 
             timestamp: thinkingStartTimeRef.current, // the turn's clock starts here
             isThinkingPlaceholder: true,
-            isDotPlaceholder: false, 
+            isDotPlaceholder: false,
+            hasThinking: shouldTriggerThinkingPlaceholder,
         };
         setThinkingPlaceholderId(localPlaceholderId); 
     } else {
@@ -7223,7 +7224,6 @@ interface QueueState {
             turn: closeTurnRecord(turnRecord),
             parsedAnswer: finalAnswer,
             parsedThinking: thinking,
-            hasThinking: localHasThinking,
                 thinkingDuration: shouldTriggerThinkingPlaceholder ? duration : undefined,
             modelIdUsed: data.modelIdUsed || actualModelIdForApi,
             searchInfo: finalSearchInfoToUse, // Use the determined search info
@@ -7231,6 +7231,7 @@ interface QueueState {
             uniqueSourcesUsed: sourcesUsed,
             projectSources: Array.isArray(data.projectSources) ? data.projectSources : undefined,
             projectContextId: typeof data.projectContextId === 'string' ? data.projectContextId : undefined,
+            hasThinking: Boolean(localHasThinking || thinking || shouldTriggerThinkingPlaceholder),
             thinkingContent: thinking ?? undefined,
             imageData: data.imageData || undefined, // Handle potential image data from API
             isGeneratingImage: taskArg === 'image' ? false : undefined, // Set generating flag based on task
@@ -17112,6 +17113,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                                                   streaming={Boolean(message.isStreaming || message.isThinkingPlaceholder || message.isDotPlaceholder)}
                                                   replyStarted={Boolean(message.parsedAnswer)}
                                                   expectingThought={Boolean(message.isThinkingPlaceholder) && !message.thinkingContent}
+                                                  hadThought={Boolean(message.thinkingContent || message.hasThinking || message.turn?.thinkingMs || message.thinkingDuration)}
                                                   timestamp={message.turn?.startedAt ?? message.timestamp}
                                                   model={message.modelIdUsed || message.modelId || selectedModel.id}
                                                   turn={message.turn}

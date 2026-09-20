@@ -75,9 +75,11 @@ try {
     const live = toTranscriptMessage({ id: 'm2', streaming: true, replyStarted: false, thinking: 'hmm', turn: applyTurnEvent(newTurnRecord(1000), { type: 'search_start', query: 'live q' }, 1100) });
     check('a live search is a running tool call and the thought is live until the reply starts', live.toolCalls[0].status === 'running' && live.isThinking === true && live.isStreaming === true);
     const waiting = toTranscriptMessage({ id: 'm3', streaming: true, replyStarted: false, expectingThought: true, timestamp: 1000 });
-    check('a reasoning turn waiting on its first thought token is already thinking — so the clock can say Thinking', waiting.isThinking === true && waiting.thinking === undefined);
+    check('a reasoning turn waiting on its first thought token is already thinking — so the clock can say Thinking', waiting.isThinking === true && waiting.thinking === '');
     const plain = toTranscriptMessage({ id: 'm4', streaming: true, replyStarted: false, timestamp: 1000 });
     check('a plain turn is not thinking just because it is live — that would invent a thought', plain.isThinking === false);
+    const kept = toTranscriptMessage({ id: 'm5', streaming: false, replyStarted: true, hadThought: true, timestamp: 1000 });
+    check('a settled reasoning wait still carries an empty thought so the clock can say Thought', kept.thinking === '' && kept.isThinking === false);
   }
 
   // ── the real component, mounted ───────────────────────────────────────────────────────
@@ -139,7 +141,7 @@ try {
 
   const thoughtOnly = closeTurnRecord(newTurnRecord(Date.now() - 4000), Date.now());
   const thoughtEl = await render({ messageId: 'pt', streaming: false, replyStarted: true, stepsMode: 'collapsed', thinking: 'Safety and policy constraints exist.', turn: thoughtOnly, timestamp: thoughtOnly.startedAt });
-  check('a thought-only turn docks Thought on the clock line — the reasoning is the rail, not a second header (0.1.51)', thoughtEl.querySelector('.xa-line.xa-docked') !== null && /Thought/.test(thoughtEl.querySelector('.xa-cur')?.textContent || '') && thoughtEl.querySelector('.xa-row.xa-think.xa-docked') !== null && /Safety and policy constraints exist/.test(thoughtEl.textContent));
+  check('a thought-only turn docks Thought on the clock line — the trace hangs under that word, not a second header (0.1.54)', thoughtEl.querySelector('.xa-line.xa-docked.xa-thought') !== null && /Thought/.test(thoughtEl.querySelector('.xa-cur')?.textContent || '') && thoughtEl.querySelector('.xa-row.xa-think') === null && thoughtEl.querySelector('[data-hang]') !== null && /Safety and policy constraints exist/.test(thoughtEl.textContent));
   check('the settled search reads as a record with its result count', /Searched the web/.test(settled.innerHTML) || /3 results/.test(settled.innerHTML));
   check('no reply, no action row — those stay the chat\'s own', !settled.querySelector('.xa-rfoot'));
 
