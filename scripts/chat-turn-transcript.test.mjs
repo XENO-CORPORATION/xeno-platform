@@ -138,12 +138,14 @@ try {
   const text = settled.textContent;
   check('a settled turn folds to the receipt ("Worked for …")', /Worked for/.test(text));
   check('ONE settled step rides the clock line where the live ticker had it — not "1 step" (0.1.50)', settled.querySelector('.xa-line.xa-docked') !== null && /Searched the web/.test(text) && !/\b1 step\b/.test(text));
+  check('the settled search reads as a record with its result count', /Searched the web/.test(settled.innerHTML) || /3 results/.test(settled.innerHTML));
+  check('no reply, no action row — those stay the chat\'s own', !settled.querySelector('.xa-rfoot'));
 
   const thoughtOnly = closeTurnRecord(newTurnRecord(Date.now() - 4000), Date.now());
   const thoughtEl = await render({ messageId: 'pt', streaming: false, replyStarted: true, stepsMode: 'collapsed', thinking: 'Safety and policy constraints exist.', turn: thoughtOnly, timestamp: thoughtOnly.startedAt });
   check('a thought-only turn docks Thought on the clock line — the trace hangs under that word, not a second header (0.1.54)', thoughtEl.querySelector('.xa-line.xa-docked.xa-thought') !== null && /Thought/.test(thoughtEl.querySelector('.xa-cur')?.textContent || '') && thoughtEl.querySelector('.xa-row.xa-think') === null && thoughtEl.querySelector('[data-hang]') !== null && /Safety and policy constraints exist/.test(thoughtEl.textContent));
-  check('the settled search reads as a record with its result count', /Searched the web/.test(settled.innerHTML) || /3 results/.test(settled.innerHTML));
-  check('no reply, no action row — those stay the chat\'s own', !settled.querySelector('.xa-rfoot'));
+  await act(async () => { await new Promise((resolve) => setTimeout(resolve, 350)); });
+  check('settled Thought has no brain and hugs the bar — Worked for 2s | Thought (0.1.56)', thoughtEl.querySelector('.xa-cur.xa-bare') !== null && thoughtEl.querySelector('.xa-cur .xa-slot') === null);
 
   const expandedSettled = await render({ messageId: 'p4', streaming: false, replyStarted: true, stepsMode: 'expanded', turn: done, timestamp: done.startedAt });
   check('expanded: the settled rail stays open and lists the search', /Searched the web/.test(expandedSettled.textContent) && /3 results/.test(expandedSettled.textContent));
