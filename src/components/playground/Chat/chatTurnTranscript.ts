@@ -174,6 +174,12 @@ export interface ChatTurnInput {
    * inventing a thought, it is naming the wait the placeholder already is.
    */
   expectingThought?: boolean;
+  /**
+   * A reasoning wait happened on this turn (placeholder, stored hasThinking, measured
+   * duration). After the stream ends, expectingThought is false; this keeps the think
+   * step so the receipt still says Thought instead of a bare Worked for.
+   */
+  hadThought?: boolean;
   /** When this message was created, used when the record carries no start. */
   timestamp?: number;
   model?: string;
@@ -227,13 +233,14 @@ export function toTranscriptMessage(input: ChatTurnInput): TranscriptMessage {
   }));
   const thinking = input.thinking?.trim() ? input.thinking : undefined;
   const isThinking = live && !input.replyStarted && Boolean(thinking || input.expectingThought);
+  const keepThought = Boolean(thinking || isThinking || input.hadThought || (typeof turn?.thinkingMs === 'number'));
   return {
     id: input.id,
     role: 'assistant',
     content: '',
     timestamp: turn?.startedAt ?? input.timestamp ?? Date.now(),
     ...(input.model ? { model: input.model } : {}),
-    ...(thinking ? { thinking } : {}),
+    ...(keepThought ? { thinking: thinking ?? '' } : {}),
     isStreaming: live,
     isThinking,
     ...(turn?.endedAt !== undefined ? { endedAt: turn.endedAt } : {}),
