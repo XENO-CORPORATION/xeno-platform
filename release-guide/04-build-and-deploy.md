@@ -74,9 +74,34 @@ The consequence for deploying: **you do not copy `dist/` to the box.** You ship 
 
 ---
 
-## 3. The manual on-box deploy pipeline
+## 3. The on-box deploy pipeline
 
-> **Current reality:** org GitHub Actions billing is down, so this content deploy is **manual**. When CI is restored this becomes a workflow; until then, run it by hand from your workstation.
+> 🔴 **USE `scripts/deploy-platform.mjs`. Do not hand-type the `git archive | ssh` command below.**
+>
+> ```bash
+> node scripts/deploy-platform.mjs frontend            # dry-run — prints the plan, changes nothing
+> node scripts/deploy-platform.mjs frontend --execute  # the real deploy
+> ```
+>
+> The script exists *because* the manual command is easy to get wrong, and §3.3 documents the
+> pre-script procedure. It ships the full input set for the service (for `frontend`: `src`,
+> `packages`, `public`, `scripts`, `nginx`, `index.html`, the Dockerfile, every tsconfig/vite/
+> tailwind config, **and** `package.json` + `package-lock.json` — 18 paths), refuses to run if any
+> of them are dirty, verifies the commit is contained in `origin/main`, snapshots the box's
+> `docker-compose.yml` before replacing it, builds before swapping, tags `:rollback`, gates on
+> `/health`, and rolls back automatically on failure.
+>
+> ⚠️ **Shipping a subset does not work and fails in a way that looks like it worked.** On
+> 2026-09-20 a session followed §3.3 literally and shipped only `package.json` +
+> `package-lock.json`. The build exited 0 — and produced an image with the chat UI **entirely
+> absent**, because the box's `src/` was 282 commits behind and the frontend is compiled from
+> `src/`, not from the dependency alone. It was caught only by inspecting the image before the
+> swap. The full path set is not a convenience; it is the reason the build is reproducible.
+>
+> **Current reality:** org GitHub Actions billing is down, so this deploy runs from a workstation
+> rather than CI. When CI is restored this becomes a workflow that calls the same script.
+
+### 3.0 — The manual procedure (superseded; kept for understanding what the script does)
 
 Fixed infrastructure values (do not substitute — these are the real ones):
 
