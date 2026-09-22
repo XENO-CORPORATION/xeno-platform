@@ -11,12 +11,10 @@ import assert from 'node:assert/strict';
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import pg from 'pg';
+import { requireProofDatabase, workforceProofUnavailable } from './lib/workforce-proof-database.mjs';
 
-test('handoffs and decision records on owned isolated PostgreSQL', async (t) => {
-  const connectionString = process.env.WORKFORCE_TEST_DATABASE_URL;
-  assert.ok(connectionString, 'WORKFORCE_TEST_DATABASE_URL required; no skipped SQL proof');
-  assert.equal(new URL(connectionString).pathname, '/workforceproof',
-    'refusing to run against any database but the disposable proof fixture');
+test('handoffs and decision records on owned isolated PostgreSQL', { skip: workforceProofUnavailable() }, async (t) => {
+  const connectionString = requireProofDatabase(process.env.WORKFORCE_TEST_DATABASE_URL);
 
   const schema = `workforce_handoff_${randomBytes(10).toString('hex')}`;
   const pool = new pg.Pool({ connectionString, options: `-c search_path=${schema}`, max: 8 });

@@ -244,6 +244,32 @@ const BACKEND_EVIDENCE = {
       return { migrations: migrations.length };
     } finally { await pool.end(); }
   });
+  // The workforce migration suites own their own database because they CREATE and DROP schemas,
+  // which has no business happening inside the platform database under qualification. They were
+  // registered here on 2026-09-22 after being found reachable from NOTHING: four suites, 41
+  // assertions, named by no npm script and no workflow -- including the chain gate that had just
+  // caught main carrying three migrations whose foundation was never committed. They cannot join
+  // the npm chain, which has no database and where they would fail on every developer machine.
+  const workforceDb = `xeno_qual_${randomBytes(16).toString('hex')}`;
+  await createDatabase(workforceDb);
+  await step('workforce-migrations', async () => {
+    const files = [
+      'scripts/workforce-migration-chain.test.mjs',
+      'scripts/workforce-team-membership-migration.test.mjs',
+      'scripts/workforce-division-migration.test.mjs',
+      'scripts/workforce-handoff-migration.test.mjs',
+    ];
+    const output = await command(process.execPath, ['--test', '--test-reporter=tap', '--test-concurrency=1',
+      '--test-force-exit', ...files.map(file => path.join(root, file))], {
+      // These suites read WORKFORCE_TEST_DATABASE_URL, not DATABASE_URL, and refuse any database
+      // that is not demonstrably disposable -- so it is passed explicitly past childEnvironment's
+      // allowlist rather than inherited.
+      env: { ...childEnvironment(process.env, scratch, urlFor(workforceDb)),
+             WORKFORCE_TEST_DATABASE_URL: urlFor(workforceDb) },
+      cwd: scratch, timeout: 10 * 60_000, log: 'workforce-migrations' });
+    return parseTapSummary(output, 0);
+  });
+
   for (const [name, files] of [
     ['workspace-project-database', ['scripts/chat-workspace-scope.database.test.mjs', 'scripts/workspace-teams.test.mjs', 'scripts/chat-project-database-integration.test.mjs']],
     ['semantic-index-scale', ['scripts/chat-project-semantic-scale-qualification.test.mjs']],
