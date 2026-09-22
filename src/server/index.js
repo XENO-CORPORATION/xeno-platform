@@ -53,6 +53,7 @@ import userDataRoutes from './routes/userDataRoutes.js';
 import browserRoutes from './routes/browserRoutes.js';
 import aiRoutes from './routes/aiRoutes.js';
 import { workspaceRoutes, workspaceInviteRoutes } from './routes/workspaceRoutes.js';
+import workforceRoutes from './routes/workforceRoutes.js';
 import { resolveBillingAccountId } from './services/walletService.js';
 import { xenoModelCatalog, PROVIDER_LABELS, prettyModelName, xenoChatCompletion, normalizeXenoModelId, XENO_API_BASE, XENO_API_KEY, xenoApiConfigured } from './utils/xenoChat.js';
 import { meterPremiumChat, meterMediaGeneration } from './utils/inferenceMeter.js';
@@ -580,6 +581,9 @@ console.log('💳 Billing routes integrated: /api/billing/* (checkout, portal, c
 // Account + dashboard read-aggregation surface (account UI / home dashboard).
 // Pure reads over users + v2 ledger + plan + ReBAC workspaces. Auth per-route.
 app.use('/api/account', databaseMiddleware, accountRoutes);
+// Workforce definitions are not agent principal/key provisioning. Auth and
+// fine-grained workforce scopes are enforced per route by the canonical router.
+app.use('/api/workforce', databaseMiddleware, workforceRoutes);
 app.use('/api/dashboard', databaseMiddleware, dashboardRoutes);
 console.log('👤 Account + dashboard routes integrated: /api/account/* + /api/dashboard/*');
 

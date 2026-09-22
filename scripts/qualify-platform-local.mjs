@@ -258,6 +258,14 @@ const BACKEND_EVIDENCE = {
       'scripts/workforce-team-membership-migration.test.mjs',
       'scripts/workforce-division-migration.test.mjs',
       'scripts/workforce-handoff-migration.test.mjs',
+      // The service layer's database-backed suites. The four that need NO database
+      // (scope, scope-policy, authority, routes) are in the npm chain instead, where
+      // they run on every machine rather than only where PostgreSQL exists.
+      'scripts/workforce-resource-migration.test.mjs',
+      'scripts/workforce-workspace-assignment-migration.test.mjs',
+      'scripts/workforce-catalog.test.mjs',
+      'scripts/workforce-resources.test.mjs',
+      'scripts/workforce-api-key.test.mjs',
     ];
     const output = await command(process.execPath, ['--test', '--test-reporter=tap', '--test-concurrency=1',
       '--test-force-exit', ...files.map(file => path.join(root, file))], {
