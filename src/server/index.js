@@ -151,6 +151,7 @@ import { seedForum } from './database/seeds/forum-seed.js';
 import { initBackgroundJobs } from './services/backgroundJobs.js';
 import { startNotificationEmailSweep } from './services/forumNotifyEmail.js';
 import { startWebhookPushSweep } from './services/forumWebhookPush.js';
+import { startWorkspaceInviteDeliveryWorker } from './services/workspaceInviteDelivery.js';
 
 // ── Internal-service JSON POST helper (replaces the axios dependency) ──────────
 // Uses the module's existing `fetch` + an AbortController timeout. Returns
@@ -4017,6 +4018,11 @@ backgroundLeader.whenLeader(() => startNotificationEmailSweep(pool));
 // Loop D push half. The delivery engine it feeds had ZERO producers before this
 // line existed — see forumWebhookPush.js.
 backgroundLeader.whenLeader(() => startWebhookPushSweep(pool));
+// Invitation mail is CLAIMED durably before it is dispatched, so a crash between the
+// commit and the send cannot lose an invitation — which the previous inline send could.
+// Leader-elected because two replicas draining one queue would double-send: the claim
+// makes a lost ACK safe, not a second dispatcher.
+backgroundLeader.whenLeader(() => startWorkspaceInviteDeliveryWorker(pool));
 // Development can embed these loops for convenience. Production runs them in
 // the explicit chat-workers service so an API restart cannot silently own or
 // erase correctness-critical worker health.

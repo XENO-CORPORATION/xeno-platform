@@ -22,7 +22,11 @@ import { ensureWorkspaceWallet, walletBalance, transferToWorkspace, setWorkspace
 import { workspaceSeatInfo } from '../utils/workspaceContext.js';
 import { createWorkspaceSeatCheckout } from '../services/billingService.js';
 import { withTransaction } from '../services/chatProjectAuthority.js';
-import { lockWorkspaceAuthority } from '../services/workspaceOperationReceipts.js';
+import { authorityTransaction, lockWorkspaceAuthority } from '../services/workspaceOperationReceipts.js';
+import { decideWorkspaceInvite } from '../services/workspaceLifecycle.js';
+import { mutateWorkspaceMembership } from '../services/workspaceMembershipOperations.js';
+import { workspaceMembershipOperationRoutes } from './workspaceMembershipOperationRoutes.js';
+import { accountWorkspaceOperationRoutes } from './accountWorkspaceOperationRoutes.js';
 import workspaceTeamRoutes from './workspaceTeamRoutes.js';
 import { workspaceKeyRoutes } from './workspaceKeyRoutes.js';
 import { requireWorkspaceAuthority } from '../middleware/workspaceScopes.js';
@@ -204,10 +208,31 @@ const INVITE_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 // ════════════════════════════════════════════════════════════════════════════
 // /api/workspaces
 // ════════════════════════════════════════════════════════════════════════════
+// Legacy (non-identified) requests keep their existing URLs, bodies and response shapes,
+// and now run the SAME transaction and business rules as an identified operation. They stay
+// non-replayable -- no operation id -- which is exactly what distinguishes them.
+async function legacyMembership(req, res, action, input) {
+  let result;
+  try {
+    ({ result } = await mutateWorkspaceMembership(req.db, req.params.id, req.user.id, null, null, action, input, { legacy: true }));
+  } catch (failure) {
+    // The service refuses with a TYPED error carrying the status it means -- 402 for a seat
+    // limit, 403 for insufficient authority, 404 for a member or invitation that is not
+    // there, 409 for an invitation that already exists. `wrap` turns any rejection into a
+    // 500, so without this every refusal these routes used to express would arrive as
+    // "Internal error" -- the client cannot tell a full workspace from a broken server.
+    // An error with no status IS unexpected and keeps the 500 deliberately.
+    if (!failure.status) throw failure;
+    return res.status(failure.status).json({ success: false, error: failure.code });
+  }
+  res.json({ success: true, ...(action === 'invite.create' ? { invite: shapeInvite(result.invite) } : {}) });
+}
+
 const router = express.Router();
 router.use(requireWorkspaceAuthority);
 router.use('/:id/teams', workspaceTeamRoutes);
 router.use('/:id/api-keys', workspaceKeyRoutes);
+router.use('/:id', workspaceMembershipOperationRoutes);
 
 // GET /api/workspaces/:id — the workspace itself. Present on the preservation branch and
 // never on main, so a workspace-scoped credential could reach /members but not the row it
@@ -326,92 +351,16 @@ router.get('/:id/members', wrapId(async (req, res) => {
 }));
 
 // PATCH /api/workspaces/:id/members/:memberId { member_role }
-router.patch('/:id/members/:memberId', wrapId(async (req, res) => {
-  const { id: wsId, memberId } = req.params;
-  const changed = await withTransaction(req.db, async (tx) => {
-    const ws = (await tx.query('SELECT * FROM workspaces WHERE id = $1 FOR UPDATE', [wsId])).rows[0];
-    if (!ws) { res.status(404).json({ success: false, error: 'Workspace not found' }); return false; }
-    if (!(await can(tx, wsId, req.user.id, 'admin'))) {
-      res.status(403).json({ success: false, error: 'Admin required' }); return false;
-    }
-    const newRel = toRelation(req.body?.member_role);
-    if (memberId === ws.owner_user_id) {
-      res.status(400).json({ success: false, error: 'Use owner-transfer to change the owner' }); return false;
-    }
-    if (String(req.body?.member_role).toLowerCase() === 'owner') {
-      res.status(400).json({ success: false, error: 'Use owner-transfer to assign ownership' }); return false;
-    }
-    const roles = await memberRoles(tx, wsId);
-    if (!roles.has(memberId)) { res.status(404).json({ success: false, error: 'Not a member' }); return false; }
-    const deletes = (await listObjectTuples(tx, WS(wsId)))
-      .filter((t) => t.subject === USER(memberId))
-      .map((t) => ({ object: WS(wsId), relation: t.relation, subject: USER(memberId) }));
-    await writeTuples(tx, { deletes, writes: [{ object: WS(wsId), relation: newRel, subject: USER(memberId) }] });
-    await auditStrict(tx, wsId, req.user.id, 'member.role_change', memberId, { from: roles.get(memberId), to: newRel });
-    return true;
-  });
-  if (!changed) return;
-  res.json({ success: true });
-}));
+router.patch('/:id/members/:memberId', wrapId((req, res) => legacyMembership(req, res, 'member.role',
+  { memberId: req.params.memberId, role: toDisplayRole(toRelation(req.body?.member_role)) })));
 
 // DELETE /api/workspaces/:id/members/:memberId  (admin removes; or self-leave)
-router.delete('/:id/members/:memberId', wrapId(async (req, res) => {
-  const { id: wsId, memberId } = req.params;
-  const removed = await withTransaction(req.db, async (tx) => {
-    const ws = (await tx.query('SELECT * FROM workspaces WHERE id = $1 FOR UPDATE', [wsId])).rows[0];
-    if (!ws) { res.status(404).json({ success: false, error: 'Workspace not found' }); return false; }
-    const isSelf = memberId === req.user.id;
-    if (!isSelf && !(await can(tx, wsId, req.user.id, 'admin'))) {
-      res.status(403).json({ success: false, error: 'Admin required' }); return false;
-    }
-    if (memberId === ws.owner_user_id) {
-      res.status(400).json({ success: false, error: 'Owner cannot be removed; transfer ownership first' }); return false;
-    }
-    const deletes = (await listObjectTuples(tx, WS(wsId)))
-      .filter((t) => t.subject === USER(memberId))
-      .map((t) => ({ object: WS(wsId), relation: t.relation, subject: USER(memberId) }));
-    if (!deletes.length) { res.status(404).json({ success: false, error: 'Not a member' }); return false; }
-    await writeTuples(tx, { deletes });
-    await auditStrict(tx, wsId, req.user.id, isSelf ? 'member.leave' : 'member.remove', memberId, {});
-    return true;
-  });
-  if (!removed) return;
-  res.json({ success: true });
-}));
+router.delete('/:id/members/:memberId', wrapId((req, res) => legacyMembership(req, res, 'member.remove',
+  { memberId: req.params.memberId })));
 
 // POST /api/workspaces/:id/owner-transfer { new_owner_user_id }
-router.post('/:id/owner-transfer', wrapId(async (req, res) => {
-  const wsId = req.params.id;
-  const newOwner = req.body?.new_owner_user_id;
-  if (!newOwner || !UUID_RE.test(String(newOwner))) {
-    return res.status(400).json({ success: false, error: 'new_owner_user_id is required' });
-  }
-  const transferred = await withTransaction(req.db, async (tx) => {
-    const ws = (await tx.query('SELECT * FROM workspaces WHERE id = $1 FOR UPDATE', [wsId])).rows[0];
-    if (!ws) { res.status(404).json({ success: false, error: 'Workspace not found' }); return false; }
-    if (ws.owner_user_id !== req.user.id) {
-      res.status(403).json({ success: false, error: 'Only the current owner can transfer ownership' }); return false;
-    }
-    const roles = await memberRoles(tx, wsId);
-    if (!roles.has(newOwner)) { res.status(400).json({ success: false, error: 'New owner must already be a member' }); return false; }
-    const tuples = await listObjectTuples(tx, WS(wsId));
-    const deletes = tuples
-      .filter((t) => t.subject === USER(req.user.id) || t.subject === USER(newOwner))
-      .map((t) => ({ object: WS(wsId), relation: t.relation, subject: t.subject }));
-    await writeTuples(tx, {
-      deletes,
-      writes: [
-        { object: WS(wsId), relation: 'owner', subject: USER(newOwner) },
-        { object: WS(wsId), relation: 'admin', subject: USER(req.user.id) },
-      ],
-    });
-    await tx.query('UPDATE workspaces SET owner_user_id = $1, updated_at = now() WHERE id = $2', [newOwner, wsId]);
-    await auditStrict(tx, wsId, req.user.id, 'owner.transfer', newOwner, { from: req.user.id });
-    return true;
-  });
-  if (!transferred) return;
-  res.json({ success: true });
-}));
+router.post('/:id/owner-transfer', wrapId((req, res) => legacyMembership(req, res, 'owner.transfer',
+  { newOwnerId: req.body?.new_owner_user_id })));
 
 // GET /api/workspaces/:id/invites
 router.get('/:id/invites', wrapId(async (req, res) => {
@@ -432,103 +381,16 @@ router.get('/:id/invites', wrapId(async (req, res) => {
 }));
 
 // POST /api/workspaces/:id/invites { email, role }
-router.post('/:id/invites', wrapId(async (req, res) => {
-  const wsId = req.params.id;
-  const email = String(req.body?.email || '').trim().toLowerCase();
-  if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-    return res.status(400).json({ success: false, error: 'A valid email is required' });
-  }
-  const role = toRelation(req.body?.role);
-  if (!INVITABLE_RELATIONS.has(role)) {
-    return res.status(403).json({ success: false, error: 'Invites cannot grant the owner role. Use owner-transfer instead.' });
-  }
-  const token = crypto.randomBytes(24).toString('hex');
-  const expiresAt = new Date(Date.now() + INVITE_TTL_MS).toISOString();
-  const created = await withTransaction(req.db, async (tx) => {
-    const ws = (await tx.query('SELECT * FROM workspaces WHERE id = $1 FOR UPDATE', [wsId])).rows[0];
-    if (!ws) { res.status(404).json({ success: false, error: 'Workspace not found' }); return null; }
-    if (!(await can(tx, wsId, req.user.id, 'admin'))) {
-      res.status(403).json({ success: false, error: 'Admin required' }); return null;
-    }
-    const roles = await memberRoles(tx, wsId);
-    const existingUser = (await tx.query(
-      'SELECT id, display_name FROM users WHERE lower(email) = $1 LIMIT 1', [email],
-    )).rows[0];
-    if (existingUser && roles.has(existingUser.id)) {
-      res.status(409).json({ success: false, error: 'This user is already a member' }); return null;
-    }
-    // The workspace row lock serializes seat reservations across concurrent invites.
-    const seatInfo = await workspaceSeatInfo(tx, wsId, roles.size);
-    if (seatInfo.used >= seatInfo.limit) {
-      res.status(402).json({
-        success: false,
-        error: `Seat limit reached (${seatInfo.limit} seats on the ${seatInfo.plan} plan). Upgrade the workspace to invite more members.`,
-        seat_limit: seatInfo.limit, seats_used: seatInfo.used,
-      });
-      return null;
-    }
-    try {
-      const invite = (await tx.query(
-        `INSERT INTO workspace_invites (workspace_id, invited_by_user_id, invited_user_id, invited_email, role, token, expires_at)
-         VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING *`,
-        [wsId, req.user.id, existingUser?.id || null, email, role, token, expiresAt],
-      )).rows[0];
-      await auditStrict(tx, wsId, req.user.id, 'invite.create', email, { role });
-      return { ws, invite };
-    } catch (e) {
-      if (e.code === '23505') { res.status(409).json({ success: false, error: 'An invite is already pending for this email' }); return null; }
-      throw e;
-    }
-  });
-  if (!created) return;
-  await sendInviteEmail(req.db, created.ws, created.invite, req.user);
-  const invite = created.invite;
-  const ws = created.ws;
-  res.json({ success: true, invite: shapeInvite({ ...invite, workspace_name: ws.name, invited_by_name: req.user.display_name }) });
-}));
+router.post('/:id/invites', wrapId((req, res) => legacyMembership(req, res, 'invite.create',
+  { email: String(req.body?.email || '').trim().toLowerCase(), role: toDisplayRole(toRelation(req.body?.role)) })));
 
 // DELETE /api/workspaces/:id/invites/:inviteId  (revoke)
-router.delete('/:id/invites/:inviteId', wrapId(async (req, res) => {
-  const { id: wsId, inviteId } = req.params;
-  const revoked = await withTransaction(req.db, async (tx) => {
-    await tx.query('SELECT id FROM workspaces WHERE id = $1 FOR UPDATE', [wsId]);
-    if (!(await can(tx, wsId, req.user.id, 'admin'))) {
-      res.status(403).json({ success: false, error: 'Admin required' }); return false;
-    }
-    const r = await tx.query(
-      "UPDATE workspace_invites SET status = 'revoked' WHERE id = $1 AND workspace_id = $2 AND status = 'pending' RETURNING id",
-      [inviteId, wsId],
-    );
-    if (!r.rows.length) { res.status(404).json({ success: false, error: 'Pending invite not found' }); return false; }
-    await auditStrict(tx, wsId, req.user.id, 'invite.revoke', inviteId, {});
-    return true;
-  });
-  if (!revoked) return;
-  res.json({ success: true });
-}));
+router.delete('/:id/invites/:inviteId', wrapId((req, res) => legacyMembership(req, res, 'invite.revoke',
+  { inviteId: req.params.inviteId })));
 
 // POST /api/workspaces/:id/invites/:inviteId/resend
-router.post('/:id/invites/:inviteId/resend', wrapId(async (req, res) => {
-  const { id: wsId, inviteId } = req.params;
-  const expiresAt = new Date(Date.now() + INVITE_TTL_MS).toISOString();
-  const resend = await withTransaction(req.db, async (tx) => {
-    const ws = (await tx.query('SELECT * FROM workspaces WHERE id = $1 FOR UPDATE', [wsId])).rows[0];
-    if (!ws) { res.status(404).json({ success: false, error: 'Workspace not found' }); return null; }
-    if (!(await can(tx, wsId, req.user.id, 'admin'))) {
-      res.status(403).json({ success: false, error: 'Admin required' }); return null;
-    }
-    const inv = (await tx.query(
-      "SELECT * FROM workspace_invites WHERE id = $1 AND workspace_id = $2 AND status = 'pending' FOR UPDATE", [inviteId, wsId],
-    )).rows[0];
-    if (!inv) { res.status(404).json({ success: false, error: 'Pending invite not found' }); return null; }
-    await tx.query('UPDATE workspace_invites SET expires_at = $1 WHERE id = $2', [expiresAt, inv.id]);
-    await auditStrict(tx, wsId, req.user.id, 'invite.resend', inv.id, {});
-    return { ws, inv };
-  });
-  if (!resend) return;
-  await sendInviteEmail(req.db, resend.ws, { ...resend.inv, expires_at: expiresAt }, req.user);
-  res.json({ success: true });
-}));
+router.post('/:id/invites/:inviteId/resend', wrapId((req, res) => legacyMembership(req, res, 'invite.resend',
+  { inviteId: req.params.inviteId })));
 
 // GET /api/workspaces/:id/billing — the workspace's OWN wallet (Phase 4).
 router.get('/:id/billing', wrapId(async (req, res) => {
@@ -671,10 +533,7 @@ router.get('/:id/audit', wrapId(async (req, res) => {
 // ════════════════════════════════════════════════════════════════════════════
 const inviteRouter = express.Router();
 inviteRouter.use(requireWorkspaceAuthority);
-
-const inviteIsForMe = (inv, user) =>
-  (inv.invited_user_id && inv.invited_user_id === user.id) ||
-  (inv.invited_email && String(inv.invited_email).toLowerCase() === String(user.email || '').toLowerCase());
+inviteRouter.use('/operations', accountWorkspaceOperationRoutes);
 
 // GET /api/workspace-invites — my pending invites.
 inviteRouter.get('/', wrap(async (req, res) => {
@@ -683,74 +542,56 @@ inviteRouter.get('/', wrap(async (req, res) => {
        FROM workspace_invites i
        JOIN workspaces w ON w.id = i.workspace_id
        LEFT JOIN users u ON u.id = i.invited_by_user_id
-      WHERE i.status = 'pending' AND (i.invited_user_id = $1 OR lower(i.invited_email) = lower($2))
+      -- A PINNED invitation has exactly one recipient. Only an unpinned invitation is
+      -- addressed by email, so the pin takes PRECEDENCE rather than adding an alternative
+      -- -- an OR here shows somebody else's invitation to whoever shares the address.
+      WHERE i.status = 'pending'
+        AND (CASE WHEN i.invited_user_id IS NOT NULL
+                  THEN i.invited_user_id = $1
+                  ELSE lower(i.invited_email) = lower($2) END)
       ORDER BY i.created_at DESC`,
     [req.user.id, req.user.email || ''],
   )).rows;
   res.json({ success: true, invites: rows.map(shapeInvite) });
 }));
 
-// POST /api/workspace-invites/:inviteId/accept
-inviteRouter.post('/:inviteId/accept', wrap(async (req, res) => {
-  const accepted = await withTransaction(req.db, async (tx) => {
-    const inv = (await tx.query(
-      "SELECT * FROM workspace_invites WHERE id = $1 AND status = 'pending' FOR UPDATE", [req.params.inviteId],
-    )).rows[0];
-    if (!inv) { res.status(404).json({ success: false, error: 'Invite not found' }); return false; }
-    if (!inviteIsForMe(inv, req.user)) { res.status(403).json({ success: false, error: 'This invite is not for you' }); return false; }
-    // Serialize accept/revoke/invite operations for seat and ownership correctness.
-    // The advisory gate comes FIRST and is the one billing also takes: a row lock only
-    // serializes writers of THIS row, and `setWorkspacePlan` writes the same row from a
-    // different path. Seats are capacity and membership spends it, so an acceptance that
-    // read the old limit and a seat reduction must not both commit.
-    await lockWorkspaceAuthority(tx, String(inv.workspace_id));
-    await tx.query('SELECT id FROM workspaces WHERE id = $1 FOR UPDATE', [inv.workspace_id]);
-    if (inv.expires_at && new Date(inv.expires_at) < new Date()) {
-      await tx.query("UPDATE workspace_invites SET status = 'expired' WHERE id = $1", [inv.id]);
-      await auditStrict(tx, inv.workspace_id, req.user.id, 'invite.expire', inv.id, {});
-      return { expired: true };
+// POST /api/workspace-invites/:inviteId/{accept,decline}
+//
+// Shims over the canonical invite-decision service -- the same code path the receipted
+// `/operations` surface uses. They carried their own inline copy until now, and the copy
+// had drifted in two ways that mattered:
+//
+//   * the recipient test ORed the two clauses, so an invitation PINNED to a user
+//     (`invited_user_id`) was still acceptable by anyone whose address matched
+//     `invited_email`. The service tests the pin FIRST and reads the address only when
+//     there is no pin, so a pinned invitation has exactly one legitimate recipient.
+//   * `decline` took the invitation row lock but never the workspace authority gate, so
+//     it could interleave with a seat change. Every membership writer takes the same
+//     gate, in the same order, or the ordering is not an ordering.
+//
+// No operation ID means no promise of replay: the commit completes before the ACK and a
+// lost ACK is re-driven by asking again. Clients needing replay use `/operations`.
+for (const action of ['accept', 'decline']) {
+  inviteRouter.post(`/:inviteId/${action}`, wrap(async (req, res) => {
+    let result;
+    try {
+      result = await authorityTransaction(req.db, db =>
+        decideWorkspaceInvite(db, req.user.id, req.params.inviteId, action));
+    } catch (failure) {
+      // The service refuses with a TYPED error carrying the status it means -- 402 for a
+      // seat limit, 404 for an invitation that is not this account's, 403 for an archived
+      // workspace. Letting those reach the generic handler turns every refusal into a 500,
+      // which is indistinguishable from the server being broken. An error without a status
+      // IS unexpected and keeps that treatment deliberately.
+      if (!failure.status) throw failure;
+      return res.status(failure.status).json({ success: false, error: failure.code });
     }
-    // The pending invite reserved a seat; re-check because the paid limit can change.
-    const acceptRoles = await memberRoles(tx, inv.workspace_id);
-    const acceptSeats = await workspaceSeatInfo(tx, inv.workspace_id, acceptRoles.size);
-    if (acceptRoles.size >= acceptSeats.limit && !acceptRoles.has(req.user.id)) {
-      res.status(402).json({ success: false, error: `This workspace has reached its seat limit (${acceptSeats.limit}).` });
-      return false;
-    }
-    const acceptRelation = toRelation(inv.role);
-    if (!INVITABLE_RELATIONS.has(acceptRelation)) {
-      res.status(403).json({ success: false, error: 'This invite grants a role that cannot be accepted. Ownership moves only via owner-transfer.' });
-      return false;
-    }
-    await writeTuples(tx, { writes: [{ object: WS(inv.workspace_id), relation: acceptRelation, subject: USER(req.user.id) }] });
-    await tx.query(
-      "UPDATE workspace_invites SET status = 'accepted', accepted_at = now(), invited_user_id = $1 WHERE id = $2",
-      [req.user.id, inv.id],
-    );
-    await auditStrict(tx, inv.workspace_id, req.user.id, 'invite.accept', req.user.id, { role: inv.role });
-    return true;
-  });
-  if (accepted?.expired) return res.status(410).json({ success: false, error: 'This invite has expired' });
-  if (!accepted) return;
-  res.json({ success: true });
-}));
-
-// POST /api/workspace-invites/:inviteId/decline
-inviteRouter.post('/:inviteId/decline', wrap(async (req, res) => {
-  const declined = await withTransaction(req.db, async (tx) => {
-    const inv = (await tx.query(
-      "SELECT * FROM workspace_invites WHERE id = $1 AND status = 'pending' FOR UPDATE", [req.params.inviteId],
-    )).rows[0];
-    if (!inv) { res.status(404).json({ success: false, error: 'Invite not found' }); return false; }
-    if (!inviteIsForMe(inv, req.user)) { res.status(403).json({ success: false, error: 'This invite is not for you' }); return false; }
-    await tx.query('SELECT id FROM workspaces WHERE id = $1 FOR UPDATE', [inv.workspace_id]);
-    await tx.query("UPDATE workspace_invites SET status = 'declined' WHERE id = $1", [inv.id]);
-    await auditStrict(tx, inv.workspace_id, req.user.id, 'invite.decline', inv.id, {});
-    return true;
-  });
-  if (!declined) return;
-  res.json({ success: true });
-}));
+    // A rejection is a COMMITTED terminal outcome (expiry writes its transition), not a
+    // failure to act -- so it answers 410 rather than rolling the transaction back.
+    if (result.rejection) return res.status(410).json({ success: false, error: result.rejection });
+    res.json({ success: true });
+  }));
+}
 
 export { router as workspaceRoutes, inviteRouter as workspaceInviteRoutes };
 export default router;
