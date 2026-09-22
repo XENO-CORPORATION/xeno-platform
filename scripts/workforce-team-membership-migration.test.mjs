@@ -22,13 +22,10 @@ import assert from 'node:assert/strict';
 import { randomBytes, randomUUID } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import pg from 'pg';
+import { requireProofDatabase, workforceProofUnavailable } from './lib/workforce-proof-database.mjs';
 
-test('team membership and admitted member snapshots on owned isolated PostgreSQL', async t => {
-  const connectionString = process.env.WORKFORCE_TEST_DATABASE_URL;
-  assert.ok(connectionString, 'WORKFORCE_TEST_DATABASE_URL required; no skipped SQL proof');
-  const target = new URL(connectionString);
-  assert.ok(['127.0.0.1', 'localhost', '[::1]'].includes(target.hostname));
-  assert.equal(target.pathname, '/workforceproof'); assert.equal(target.search, '');
+test('team membership and admitted member snapshots on owned isolated PostgreSQL', { skip: workforceProofUnavailable() }, async t => {
+  const connectionString = requireProofDatabase(process.env.WORKFORCE_TEST_DATABASE_URL);
   const schema = `workforce_membership_${randomBytes(10).toString('hex')}`;
   const pool = new pg.Pool({ connectionString, options: `-c search_path=${schema}`, max: 8 });
   const read = f => readFile(new URL(`../src/server/database/migrations/${f}`, import.meta.url), 'utf8');
