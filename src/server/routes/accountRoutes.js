@@ -70,8 +70,14 @@ router.get('/notifications', authMiddleware, async (req, res) => {
       `SELECT i.id, i.role, i.created_at, w.name AS workspace_name
          FROM workspace_invites i
          JOIN workspaces w ON w.id = i.workspace_id
+        -- A PINNED invitation has exactly one recipient (see workspaceLifecycle's
+        -- inviteForAccount). Only an unpinned invitation is addressed by email, so the pin
+        -- takes PRECEDENCE -- an OR notifies whoever shares the address about somebody
+        -- else's invitation, and the accept route would then honour it.
         WHERE i.status = 'pending'
-          AND (i.invited_user_id = $1 OR lower(i.invited_email) = lower($2))
+          AND (CASE WHEN i.invited_user_id IS NOT NULL
+                    THEN i.invited_user_id = $1
+                    ELSE lower(i.invited_email) = lower($2) END)
         ORDER BY i.created_at DESC LIMIT 50`,
       [uid, me.email || ''],
     )).rows;
