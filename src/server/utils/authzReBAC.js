@@ -13,6 +13,46 @@
  */
 const ROLE_RANK = { viewer: 1, client: 1, reviewer: 2, editor: 3, admin: 4, owner: 5 };
 
+/**
+ * PARENT INHERITANCE IS DECLARED PER OBJECT TYPE — it is not a property of the graph.
+ *
+ * The rewrite below used to follow a `parent` tuple for ANY object type. That is right for a
+ * CONTAINMENT parent (a conversation inside a workspace: holding `editor` on the workspace should
+ * mean `editor` on its conversations) and wrong for a STRUCTURAL parent — a division inside a
+ * division, where a grant on `dev` must NOT silently become the same grant on every child.
+ * XENO-WORKFORCE-01 §21 names this exactly: "current any-parent behavior cannot represent all
+ * intersections. Add action-specific predicates and tests, not more parent edges."
+ *
+ * So the object type declares what its `parent` edge MEANS, and an UNDECLARED TYPE DOES NOT
+ * INHERIT. That default matters more than the list: a new object type added later gets the safe
+ * behaviour without anyone remembering to opt out, and opting IN is a visible line in this file.
+ *
+ * 🔴 EVERY TYPE THAT WRITES A `parent` TUPLE TODAY IS LISTED, so this is behaviour-preserving for
+ * every live grant. Derived by grepping every `relation: 'parent'` write site before changing it:
+ *   chatRoutes.js            conversation → project | workspace
+ *   chatProjectAuthority.js  project → workspace, library_asset → project
+ *   libraryAssets.js         library_asset | artifact → project | workspace
+ *   workspaceContext.js      <caller-supplied type> → workspace   ← see WORKSPACE_SCOPED below
+ *   chatScheduledWorker.js   conversation → project
+ * Adding a type here grants inheritance deliberately; omitting one refuses it deliberately.
+ */
+const PARENT_INHERITS = new Set(['conversation', 'project', 'library_asset', 'artifact']);
+
+/**
+ * `workspaceContext.js` writes `<objectType>:<id>#parent@workspace:<id>` with a caller-supplied
+ * type, so the set above cannot be complete by inspection alone. A parent that IS a workspace is
+ * containment by construction — the workspace is the tenant — so it keeps inheriting whatever the
+ * child type is. A parent of any OTHER type must be declared. This is what keeps the change
+ * behaviour-preserving without pretending the write sites are enumerable.
+ */
+const CONTAINMENT_PARENT_TYPES = new Set(['workspace']);
+
+/** Does `childType` inherit a relation through a `parent` tuple pointing at `parentType`? */
+export function inheritsFromParent(childType, parentType) {
+  if (CONTAINMENT_PARENT_TYPES.has(parentType)) return true;
+  return PARENT_INHERITS.has(childType);
+}
+
 function parseRef(s) {
   const i = String(s).indexOf(':');
   return i === -1 ? { type: s, id: '' } : { type: s.slice(0, i), id: s.slice(i + 1) };
@@ -67,6 +107,10 @@ async function heldRelations(db, object, subject) {
  * relation on that parent — so a workspace member/editor/owner automatically has the
  * matching relation on the workspace's conversations, projects, runs, etc. `_depth`
  * bounds the recursion (cycle/anti-DoS guard).
+ *
+ * ⚠️ That last step is DECLARED, not automatic — see `inheritsFromParent`. Inheriting through
+ * ANY `parent` tuple cannot express a structural hierarchy (a division inside a division), and
+ * an undeclared object type deliberately does not inherit.
  */
 export async function check(db, { object, relation, subject }, _depth = 0) {
   if (!object || !relation || !subject) return { allowed: false };
@@ -89,6 +133,11 @@ export async function check(db, { object, relation, subject }, _depth = 0) {
       [o.type, o.id],
     );
     for (const p of parents.rows) {
+      // ACTION-SPECIFIC, not any-parent: the child type must declare that its `parent` edge
+      // carries authority (or the parent must be a containment tenant). A structural parent — a
+      // division above a division — is skipped here, so a grant on the parent is NOT silently a
+      // grant on the child. XENO-WORKFORCE-01 §21.
+      if (!inheritsFromParent(o.type, p.subject_type)) continue;
       const parentRef = `${p.subject_type}:${p.subject_id}`;
       const r = await check(db, { object: parentRef, relation, subject }, _depth + 1);
       if (r.allowed) return { allowed: true, via: `parent(${parentRef})→${r.via}` };

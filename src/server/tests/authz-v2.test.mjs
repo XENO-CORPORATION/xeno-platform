@@ -47,6 +47,38 @@ async function main() {
   await writeTuples(pool, { deletes: [{ object: W, relation: 'editor', subject: 'user:bob' }] });
   ok(!(await check(pool, { object: W, relation: 'editor', subject: 'user:bob' })).allowed, 'revoked editor loses access');
 
+  // PARENT INHERITANCE IS DECLARED, NOT AUTOMATIC
+  // The rewrite followed a `parent` tuple for ANY object type, so a grant on a parent became the
+  // same grant on every child. That is right for CONTAINMENT (a conversation in a workspace) and
+  // wrong for STRUCTURE (a division in a division). XENO-WORKFORCE-01 §21 prescribes the repair:
+  // "add action-specific predicates and tests, not more parent edges."
+  //
+  // ⚠️ The first four assertions pin the EXISTING behaviour and must stay green - this change is
+  // behaviour-preserving for every object type that writes a parent tuple today. Only the last
+  // two are new capability, and they FAIL on the old any-parent code.
+  await writeTuples(pool, { writes: [
+    { object: 'project:p1',        relation: 'parent', subject: W },
+    { object: 'conversation:c1',   relation: 'parent', subject: 'project:p1' },
+    { object: 'division:dev',      relation: 'parent', subject: W },
+    { object: 'division:platform', relation: 'parent', subject: 'division:dev' },
+    { object: 'division:dev',      relation: 'editor', subject: 'user:erin' },
+  ]});
+
+  ok((await check(pool, { object: 'project:p1', relation: 'editor', subject: 'user:alice' })).allowed,
+     'workspace owner => editor on a contained project (containment inheritance preserved)');
+  ok((await check(pool, { object: 'conversation:c1', relation: 'viewer', subject: 'user:carol' })).allowed,
+     'workspace viewer => viewer on a conversation two containment hops down');
+  ok((await check(pool, { object: 'conversation:c1', relation: 'editor', subject: 'user:dave' })).allowed === false,
+     'a non-member still inherits nothing');
+  ok((await check(pool, { object: 'division:dev', relation: 'owner', subject: 'user:alice' })).allowed,
+     'a division still inherits from its WORKSPACE (the tenant is containment)');
+
+  // New behaviour. On the old any-parent code BOTH of these were ALLOWED.
+  ok((await check(pool, { object: 'division:platform', relation: 'editor', subject: 'user:erin' })).allowed === false,
+     'editor on a PARENT DIVISION does NOT become editor on its child division (action-specific)');
+  ok((await check(pool, { object: 'division:platform', relation: 'owner', subject: 'user:alice' })).allowed === false,
+     'a workspace owner does NOT reach a NESTED division through its parent division');
+
   // ── HTTP surface: /api/v2/authz write-gate + objects read-gate ─────────────
   let asUser = 'alice';
   const app = express();
