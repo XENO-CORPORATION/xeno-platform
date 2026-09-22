@@ -20,6 +20,7 @@
  */
 import Stripe from 'stripe';
 import { requireCheckoutConsent, consumeConsent } from './checkoutConsent.js';
+import { authorityTransaction, lockWorkspaceAuthority } from './workspaceOperationReceipts.js';
 import { readCheckoutStatus } from './checkoutStatus.js';
 import { siteOrigin } from '../config/hosts.js';
 import { addGrantTx, clawbackTx, getBalanceV2, MICRO_PER_CREDIT } from '../utils/creditLedgerV2.js';
@@ -824,16 +825,38 @@ export async function createWorkspaceSeatCheckout(pool, user, {
   return { url: session.url, id: session.id };
 }
 
-/** Persist a workspace's team plan + seat limit into workspaces.metadata.billing (merge). */
-async function setWorkspacePlan(pool, workspaceId, { plan, status, subId = null, seats = null, periodEnd = null }) {
+/** Persist a workspace's team plan + seat limit into workspaces.metadata.billing (merge).
+ *
+ * Takes the SHARED workspace authority gate, so a seat-limit write and an invitation
+ * acceptance cannot interleave. Seats are a capacity decision and membership spends that
+ * capacity; without one ordered gate, a seat reduction and an acceptance that reads the old
+ * limit can both commit, and the workspace ends up over its paid seat count with no error.
+ *
+ * Accepts EITHER a pool or an in-transaction client, because both callers exist and their
+ * needs differ:
+ *   - `reconcileSubscription` already holds a transaction and a `SELECT … FOR UPDATE` on the
+ *     workspace row; it passes that client, and the advisory lock joins the same transaction.
+ *   - anything holding only a pool needs a transaction of its own, because
+ *     `pg_advisory_xact_lock` is transaction-scoped: taken on a bare pool it is released the
+ *     instant the statement ends, which looks like locking and is not.
+ */
+export async function setWorkspacePlan(db, workspaceId, { plan, status, subId = null, seats = null, periodEnd = null }) {
   const patch = { plan, status };
   if (subId) patch.stripe_subscription_id = subId;
   if (seats != null) patch.seat_limit = Number(seats);
   if (periodEnd) patch.current_period_end = periodEnd;
-  await pool.query(
-    "UPDATE workspaces SET metadata = jsonb_set(COALESCE(metadata,'{}'::jsonb), '{billing}', COALESCE(metadata->'billing','{}'::jsonb) || $1::jsonb, true), updated_at = now() WHERE id = $2",
-    [JSON.stringify(patch), String(workspaceId)],
-  );
+  const write = async client => {
+    await lockWorkspaceAuthority(client, String(workspaceId));
+    await client.query(
+      "UPDATE workspaces SET metadata = jsonb_set(COALESCE(metadata,'{}'::jsonb), '{billing}', COALESCE(metadata->'billing','{}'::jsonb) || $1::jsonb, true), updated_at = now() WHERE id = $2",
+      [JSON.stringify(patch), String(workspaceId)],
+    );
+  };
+  // MEASURED, not assumed: a pg `PoolClient` inherits `connect` from `Client`, so testing
+  // for `connect` identifies a checked-out client AS a pool and then calls `pool.connect()`
+  // on it — "Client has already been connected. You cannot reuse a client." `release` is the
+  // property only a checked-out client has, and a Pool does not.
+  return typeof db.release === 'function' ? write(db) : authorityTransaction(db, write);
 }
 
 /** Stripe billing portal (manage/cancel subscription, update card). */

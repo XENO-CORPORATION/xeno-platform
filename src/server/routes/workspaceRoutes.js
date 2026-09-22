@@ -22,6 +22,7 @@ import { ensureWorkspaceWallet, walletBalance, transferToWorkspace, setWorkspace
 import { workspaceSeatInfo } from '../utils/workspaceContext.js';
 import { createWorkspaceSeatCheckout } from '../services/billingService.js';
 import { withTransaction } from '../services/chatProjectAuthority.js';
+import { lockWorkspaceAuthority } from '../services/workspaceOperationReceipts.js';
 import workspaceTeamRoutes from './workspaceTeamRoutes.js';
 import { workspaceKeyRoutes } from './workspaceKeyRoutes.js';
 import { requireWorkspaceAuthority } from '../middleware/workspaceScopes.js';
@@ -698,6 +699,11 @@ inviteRouter.post('/:inviteId/accept', wrap(async (req, res) => {
     if (!inv) { res.status(404).json({ success: false, error: 'Invite not found' }); return false; }
     if (!inviteIsForMe(inv, req.user)) { res.status(403).json({ success: false, error: 'This invite is not for you' }); return false; }
     // Serialize accept/revoke/invite operations for seat and ownership correctness.
+    // The advisory gate comes FIRST and is the one billing also takes: a row lock only
+    // serializes writers of THIS row, and `setWorkspacePlan` writes the same row from a
+    // different path. Seats are capacity and membership spends it, so an acceptance that
+    // read the old limit and a seat reduction must not both commit.
+    await lockWorkspaceAuthority(tx, String(inv.workspace_id));
     await tx.query('SELECT id FROM workspaces WHERE id = $1 FOR UPDATE', [inv.workspace_id]);
     if (inv.expires_at && new Date(inv.expires_at) < new Date()) {
       await tx.query("UPDATE workspace_invites SET status = 'expired' WHERE id = $1", [inv.id]);
