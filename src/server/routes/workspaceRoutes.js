@@ -23,6 +23,8 @@ import { workspaceSeatInfo } from '../utils/workspaceContext.js';
 import { createWorkspaceSeatCheckout } from '../services/billingService.js';
 import { withTransaction } from '../services/chatProjectAuthority.js';
 import workspaceTeamRoutes from './workspaceTeamRoutes.js';
+import { workspaceKeyRoutes } from './workspaceKeyRoutes.js';
+import { requireWorkspaceAuthority } from '../middleware/workspaceScopes.js';
 
 // ── ref helpers ──────────────────────────────────────────────────────────────
 const WS = (id) => `workspace:${id}`;
@@ -202,7 +204,18 @@ const INVITE_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 // /api/workspaces
 // ════════════════════════════════════════════════════════════════════════════
 const router = express.Router();
+router.use(requireWorkspaceAuthority);
 router.use('/:id/teams', workspaceTeamRoutes);
+router.use('/:id/api-keys', workspaceKeyRoutes);
+
+// GET /api/workspaces/:id — the workspace itself. Present on the preservation branch and
+// never on main, so a workspace-scoped credential could reach /members but not the row it
+// belongs to. Uses only helpers main already declares.
+router.get('/:id', wrapId(async (req, res) => {
+  const workspace = await getWorkspace(req.db, req.params.id);
+  if (!workspace || !(await can(req.db, req.params.id, req.user.id, 'viewer'))) return res.status(403).json({ success: false, error: 'Not a member of this workspace' });
+  res.json({ success: true, workspace: await shapeWorkspace(req.db, workspace, req.user.id) });
+}));
 
 // PATCH /api/workspaces/:id — owner/admin workspace identity update. The
 // response is the post-write server record and the audit event preserves both
@@ -656,6 +669,7 @@ router.get('/:id/audit', wrapId(async (req, res) => {
 // /api/workspace-invites  (the invitee's side)
 // ════════════════════════════════════════════════════════════════════════════
 const inviteRouter = express.Router();
+inviteRouter.use(requireWorkspaceAuthority);
 
 const inviteIsForMe = (inv, user) =>
   (inv.invited_user_id && inv.invited_user_id === user.id) ||

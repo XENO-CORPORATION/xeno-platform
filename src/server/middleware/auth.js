@@ -6,6 +6,7 @@
 import jwt from 'jsonwebtoken';
 import crypto from 'crypto';
 import { readApiKeyWorkforceScopes } from '../services/apiKeyWorkforceAuthority.js';
+import { workspaceKeyFromHeaders, resolveWorkspaceApiKey } from '../services/workspaceApiKeys.js';
 import { previewPrincipal } from './previewSession.js';
 import {
   getKeyByKid, isAccessToken, isOidcSessionActive, ACCESS_TOKEN_AUDIENCE, ACCESS_TOKEN_TYP,
@@ -128,6 +129,12 @@ async function resolveApiKeyUser(req, rawKey) {
 export async function resolveAuthedUser(req) {
   const preview = previewPrincipal(req);
   if (preview) return { user: preview.user, auth: { kind: 'preview', sid: preview.sid } };
+  // A `xeno-ws-v1_` credential is workspace-scoped: it authenticates to ITS workspace's
+  // routes and to nothing global. Resolved before the bearer path because it travels in
+  // its own header and must never be mistaken for an account token.
+  const workspaceCredential = workspaceKeyFromHeaders(req.headers);
+  if (workspaceCredential?.error) return { status: 401, error: workspaceCredential.error };
+  if (workspaceCredential) return resolveWorkspaceApiKey(req, workspaceCredential.key);
   const token = req.headers.authorization?.replace(/^(?:Bearer|DPoP)\s+/i, '');
   if (!token) return { status: 401, error: 'Authentication token required' };
 
