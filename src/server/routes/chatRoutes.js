@@ -21,6 +21,14 @@ import { CHAT_PROJECT_CONTRACTS } from '../config/chatProjectContracts.js';
 import { requireActivated } from '../services/accountActivation.js';
 import { chatWebContextService, ChatWebContextError } from '../services/chatWebContext.js';
 import { normalizeTurnRecord } from '../utils/chatTurnRecord.js';
+import { requireDpopIfBound } from '../middleware/dpopResource.js';
+import liveConversationCollaborationRoutes from './liveConversationCollaborationRoutes.js';
+import {
+  assertLiveCollaborationAuthority,
+  createLiveShare,
+  acceptLiveShare,
+  sendLiveCollaborationError,
+} from '../services/liveConversationCollaboration.js';
 
 /** Local `convo-<timestamp>` ids are UI-only. Sending one to Postgres is a 500. */
 function rejectIfNotPersistedConversationId(res, conversationId) {
@@ -1412,7 +1420,7 @@ router.post('/personas/:id/use', async (req, res) => {
 // ============================================
 
 // POST /api/chat/conversations/:id/share - Create a share link for a conversation
-router.post('/conversations/:id/share', async (req, res) => {
+router.post('/conversations/:id/share', requireDpopIfBound, async (req, res) => {
   try {
     const userId = req.user?.id;
     if (!userId) {
@@ -1421,13 +1429,28 @@ router.post('/conversations/:id/share', async (req, res) => {
 
     const { id: conversationId } = req.params;
     if (rejectIfNotPersistedConversationId(res, conversationId)) return;
-    const { expires_in_days = 7, visibility = 'public' } = req.body;
+    // `mode` selects the capability: 'snapshot' (the historical default -- a copy taken at
+    // accept time) or 'live' (standing access to the ORIGINAL conversation). `role` applies
+    // to live shares only and is validated by the collaboration service, not here.
+    const { expires_in_days = 7, visibility = 'public', mode = 'snapshot', role } = req.body;
     if (!['public', 'workspace'].includes(visibility)) {
       return res.status(400).json({ success: false, error: 'visibility must be public or workspace', code: 'invalid_share_visibility' });
     }
     const expiryDays = Number(expires_in_days);
     if (!Number.isInteger(expiryDays) || expiryDays < 1 || expiryDays > 30) {
       return res.status(400).json({ success: false, error: 'expires_in_days must be between 1 and 30', code: 'invalid_share_expiry' });
+    }
+
+    if (mode === 'live') {
+      try {
+        assertLiveCollaborationAuthority(req);
+        return res.json({ success: true, share: await createLiveShare(req.db, {
+          conversationId, ownerId: userId, role, visibility, expiresInDays: expiryDays,
+        }) });
+      } catch (error) {
+        if (sendLiveCollaborationError(res, error)) return;
+        throw error;
+      }
     }
 
     await requireResourceRelation(req.db, userPrincipal(userId), 'conversation', conversationId, 'admin');
@@ -1455,10 +1478,10 @@ router.post('/conversations/:id/share', async (req, res) => {
     // Create share record
     const result = await req.db.query(
       `INSERT INTO chat_shared_conversations (
-         conversation_id, owner_id, share_token, token_digest, visibility, workspace_id, expires_at
-       ) VALUES ($1, $2, $3, $4, $5, $6, $7)
+         conversation_id, owner_id, share_token, token_digest, visibility, workspace_id, expires_at, mode, participant_role
+       ) VALUES ($1, $2, NULL, $3, $4, $5, $6, 'snapshot', NULL)
        RETURNING *`,
-      [conversationId, userId, shareToken, tokenDigest, visibility, visibility === 'workspace' ? convCheck.rows[0].workspace_id : null, expiresAt]
+      [conversationId, userId, tokenDigest, visibility, visibility === 'workspace' ? convCheck.rows[0].workspace_id : null, expiresAt]
     );
 
     const shareUrl = `${req.protocol}://${req.get('host')}/overview/chat/shared/${shareToken}`;
@@ -1501,7 +1524,15 @@ router.get('/share/:token', async (req, res) => {
 
     const share = shareResult.rows[0];
     if (share.visibility === 'workspace') {
-      if (!req.user?.id) return res.status(401).json({ success: false, error: 'Authentication required for workspace share' });
+      if (!req.user?.id) {
+        // A LIVE workspace share hides its own existence from an anonymous caller. Answering
+        // 401 confirms the token is valid and the share is real -- for a capability token that
+        // confirmation is itself the leak, since the only way to hold the token is to have been
+        // given it. Snapshot keeps 401: those links predate this and a signed-out member needs
+        // to be told to sign in rather than shown a dead end.
+        if (share.mode === 'live') return res.status(404).json({ success: false, error: 'Share link not found or expired' });
+        return res.status(401).json({ success: false, error: 'Authentication required for workspace share' });
+      }
       const access = await check(req.db, {
         object: `workspace:${share.workspace_id}`,
         relation: 'viewer',
@@ -1518,7 +1549,18 @@ router.get('/share/:token', async (req, res) => {
       [share.conversation_id]
     );
     const sharedLeaf = (await req.db.query('SELECT active_leaf_id FROM chat_conversations WHERE id = $1', [share.conversation_id])).rows[0]?.active_leaf_id;
-    const publicMessages = serializePublicConversationMessages(activePath(messagesResult.rows, sharedLeaf));
+    // A LIVE share hands a bounded public capability to an unauthenticated caller, so its
+    // response is bounded too: the newest 100 messages of the shared branch, each capped at
+    // 2048 characters. Snapshot keeps its legacy unbounded projection -- existing links must
+    // not start returning less than they did. Live catch-up continues past this window
+    // through the durable event cursor once the share is accepted.
+    //
+    // The cap is applied AFTER sanitizing, never before: truncating first could cut a private
+    // capability in half and leave the surviving fragment in the response.
+    const sharedBranch = serializePublicConversationMessages(activePath(messagesResult.rows, sharedLeaf));
+    const publicMessages = share.mode === 'live'
+      ? sharedBranch.slice(-100).map((message) => ({ ...message, content: String(message.content ?? '').slice(0, 2048) }))
+      : sharedBranch;
 
     res.json({
       success: true,
@@ -1530,6 +1572,8 @@ router.get('/share/:token', async (req, res) => {
         created_at: share.conversation_created_at,
         owner_name: share.owner_name || share.owner_email,
         expires_at: share.expires_at,
+        mode: share.mode,
+        participant_role: share.participant_role,
         messages: publicMessages
       }
     });
@@ -1540,7 +1584,7 @@ router.get('/share/:token', async (req, res) => {
 });
 
 // POST /api/chat/share/:token/accept - Accept a shared conversation and copy to user's account
-router.post('/share/:token/accept', async (req, res) => {
+router.post('/share/:token/accept', requireDpopIfBound, async (req, res) => {
   try {
     const userId = req.user?.id;
     if (!userId) {
@@ -1571,6 +1615,16 @@ router.post('/share/:token/accept', async (req, res) => {
         subject: `user:${userId}`,
       });
       if (!access.allowed) return res.status(404).json({ success: false, error: 'Share link not found or expired' });
+    }
+
+    if (share.mode === 'live') {
+      try {
+        assertLiveCollaborationAuthority(req);
+        return res.json({ success: true, ...(await acceptLiveShare(req.db, { token, userId })) });
+      } catch (error) {
+        if (sendLiveCollaborationError(res, error)) return;
+        throw error;
+      }
     }
 
     // Check if user already accepted this share
@@ -2920,5 +2974,11 @@ router.delete('/memories/:id', async (req, res) => {
     res.status(500).json({ success: false, error: 'Internal server error' });
   }
 });
+
+// Live collaboration shares this router's `/conversations/...` space and its auth
+// middleware. Mounted LAST so it cannot shadow a route already served here:
+// express matches in registration order, and a subsystem that silently captured
+// an existing path would be a regression no test of its own would catch.
+router.use(liveConversationCollaborationRoutes);
 
 export default router;
