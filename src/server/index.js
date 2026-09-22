@@ -52,6 +52,7 @@ import userDataRoutes from './routes/userDataRoutes.js';
 import browserRoutes from './routes/browserRoutes.js';
 import aiRoutes from './routes/aiRoutes.js';
 import { workspaceRoutes, workspaceInviteRoutes } from './routes/workspaceRoutes.js';
+import workforceRoutes from './routes/workforceRoutes.js';
 import { resolveBillingAccountId } from './services/walletService.js';
 import { xenoModelCatalog, PROVIDER_LABELS, prettyModelName, xenoChatCompletion, normalizeXenoModelId, XENO_API_BASE, XENO_API_KEY, xenoApiConfigured } from './utils/xenoChat.js';
 import { meterPremiumChat, meterMediaGeneration } from './utils/inferenceMeter.js';
@@ -120,6 +121,7 @@ import { seedForum } from './database/seeds/forum-seed.js';
 import { initBackgroundJobs } from './services/backgroundJobs.js';
 import { startNotificationEmailSweep } from './services/forumNotifyEmail.js';
 import { startWebhookPushSweep } from './services/forumWebhookPush.js';
+import { startWebhookDeliveryWorker } from './services/webhookDelivery.js';
 
 // ── Internal-service JSON POST helper (replaces the axios dependency) ──────────
 // Uses the module's existing `fetch` + an AbortController timeout. Returns
@@ -561,6 +563,9 @@ console.log('💳 Billing routes integrated: /api/billing/* (checkout, portal, c
 // Account + dashboard read-aggregation surface (account UI / home dashboard).
 // Pure reads over users + v2 ledger + plan + ReBAC workspaces. Auth per-route.
 app.use('/api/account', databaseMiddleware, accountRoutes);
+// Workforce definitions are not agent principal/key provisioning. Auth and
+// fine-grained workforce scopes are enforced per route by the canonical router.
+app.use('/api/workforce', databaseMiddleware, workforceRoutes);
 app.use('/api/dashboard', databaseMiddleware, dashboardRoutes);
 console.log('👤 Account + dashboard routes integrated: /api/account/* + /api/dashboard/*');
 
@@ -3981,7 +3986,11 @@ app.use((err, req, res, next) => {
 // =============================================================================
 // GRACEFUL SHUTDOWN
 // =============================================================================
+let webhookDeliveryWorker;
+let webhookDeliveryStopping = false;
 function gracefulShutdown(signal) {
+  webhookDeliveryStopping = true;
+  const deliveryStopped = webhookDeliveryWorker?.close();
   console.log(`\n${signal} received. Starting graceful shutdown...`);
 
   // Stop accepting new connections
@@ -3990,6 +3999,7 @@ function gracefulShutdown(signal) {
 
     // Close database pool
     try {
+      await deliveryStopped;
       await pool.end();
       console.log('Database pool closed.');
     } catch (err) {
@@ -4050,6 +4060,7 @@ async function runStartupMigrations() {
 
 runStartupMigrations()
   .then(() => {
+    if (!webhookDeliveryStopping) webhookDeliveryWorker = startWebhookDeliveryWorker(pool);
     app.locals.migrationsReady = true;
     console.log('✅ Database migrations complete — readiness gate open');
     // Phantom-hold sweeper: void expired credit_holds every 15 min so stranded holds do

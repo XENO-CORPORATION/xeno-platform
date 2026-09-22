@@ -44,6 +44,7 @@ export const FIRST_PARTY_CLIENTS = [
   { id: 'xeno-rt', name: 'XENO RT', loopback: true },
   // CLI (device grant + loopback PKCE)
   { id: 'xeno-agent-cli', name: 'XENO Agent CLI', loopback: true },
+  { id: 'xeno-agent-interface', name: 'XENO Agent', loopback: true },
   { id: 'xeno-anima', name: 'XENO Anima', loopback: true },
   // Web (exact-match redirect; the SPA handles OIDC in-browser)
   // DUAL-HOME: siteUrlVariants() returns the callback on the canonical site

@@ -217,10 +217,11 @@ async function main() {
   ok((await get(tokens.access_token, '/api/optional')).json.user?.id === userId, 'optionalAuth: access token still attaches the user');
 
   console.log(`\n${fail === 0 ? '✅' : '❌'} auth-token-confusion: ${pass} passed, ${fail} failed`);
-  server.close();
-  rp.close();
+  server.closeAllConnections();
+  rp.closeAllConnections();
+  await Promise.all([new Promise(resolve => server.close(resolve)), new Promise(resolve => rp.close(resolve))]);
   await pool.end();
-  process.exit(fail === 0 ? 0 : 1);
+  process.exitCode = fail === 0 ? 0 : 1;
 }
 
 main().catch((e) => { console.error('FATAL', e); process.exit(1); });

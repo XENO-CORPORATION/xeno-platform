@@ -684,7 +684,7 @@ const templates = {
  * @param {object} data - Template data
  * @param {string} [userId] - User ID for logging
  */
-export async function sendEmail(db, template, toEmail, data, userId = null) {
+export async function sendEmail(db, template, toEmail, data, userId = null, options = {}) {
   const templateFn = templates[template];
   if (!templateFn) {
     throw new Error(`Unknown email template: ${template}`);
@@ -718,6 +718,7 @@ export async function sendEmail(db, template, toEmail, data, userId = null) {
     if (process.env.RESEND_API_KEY) {
       const resendResponse = await fetch('https://api.resend.com/emails', {
         method: 'POST',
+        signal: options.signal,
         headers: {
           'Authorization': `Bearer ${process.env.RESEND_API_KEY}`,
           'Content-Type': 'application/json',
@@ -731,16 +732,17 @@ export async function sendEmail(db, template, toEmail, data, userId = null) {
       });
 
       if (!resendResponse.ok) {
-        const errBody = await resendResponse.text();
-        throw new Error(`Resend API error ${resendResponse.status}: ${errBody}`);
+        await resendResponse.body?.cancel();
+        throw new Error(`Resend API HTTP ${resendResponse.status}`);
       }
 
-      const resendData = await resendResponse.json();
-      console.log(`[Email] Sent via Resend to ${toEmail}: ${subject} (id: ${resendData.id})`);
+      await resendResponse.body?.cancel();
+      console.log(`[Email] Accepted by Resend: ${template}`);
     } else if (process.env.SENDGRID_API_KEY) {
       // Fallback: SendGrid
       const sgResponse = await fetch('https://api.sendgrid.com/v3/mail/send', {
         method: 'POST',
+        signal: options.signal,
         headers: {
           'Authorization': `Bearer ${process.env.SENDGRID_API_KEY}`,
           'Content-Type': 'application/json',
@@ -754,8 +756,8 @@ export async function sendEmail(db, template, toEmail, data, userId = null) {
       });
 
       if (!sgResponse.ok) {
-        const errBody = await sgResponse.text();
-        throw new Error(`SendGrid API error ${sgResponse.status}: ${errBody}`);
+        await sgResponse.body?.cancel();
+        throw new Error(`SendGrid API HTTP ${sgResponse.status}`);
       }
 
       console.log(`[Email] Sent via SendGrid to ${toEmail}: ${subject}`);

@@ -91,7 +91,7 @@ export async function workspaceSeatInfo(db, workspaceId, activeMembers) {
     }
   }
   const pending = Number((await db.query(
-    "SELECT count(*)::int c FROM workspace_invites WHERE workspace_id = $1 AND status = 'pending'", [workspaceId],
+    "SELECT count(*)::int c FROM workspace_invites WHERE workspace_id = $1 AND status = 'pending' AND (expires_at IS NULL OR expires_at > now())", [workspaceId],
   )).rows[0].c);
   return { limit, used: (activeMembers ?? 0) + pending, plan, seat_limit: limit };
 }

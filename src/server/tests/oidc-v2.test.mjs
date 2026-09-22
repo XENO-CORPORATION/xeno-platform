@@ -22,7 +22,7 @@ async function main() {
   // live); stub it here so the OIDC-only test can run the additive migration.
   await pool.query(`CREATE TABLE IF NOT EXISTS credit_transactions (id uuid PRIMARY KEY DEFAULT gen_random_uuid(), user_id uuid, reference_type varchar(64), reference_id varchar(128))`);
   // mintTokens records the surface link (Arch §2.1) → needs external_identity_links.
-  await pool.query(`CREATE TABLE IF NOT EXISTS external_identity_links (id uuid PRIMARY KEY DEFAULT gen_random_uuid(), source_system varchar(64) NOT NULL, external_user_id text, external_email text, platform_user_id uuid NOT NULL, metadata jsonb, created_at timestamptz DEFAULT now(), updated_at timestamptz DEFAULT now())`);
+  await pool.query(`CREATE TABLE IF NOT EXISTS external_identity_links (id uuid PRIMARY KEY DEFAULT gen_random_uuid(), source_system varchar(64) NOT NULL, external_user_id text, external_email text, platform_user_id uuid NOT NULL, metadata jsonb, created_at timestamptz DEFAULT now(), updated_at timestamptz DEFAULT now(), UNIQUE (source_system, platform_user_id))`);
   await migrateAccountV2(pool);
   // Minimal users table for the test.
   await pool.query(`CREATE TABLE IF NOT EXISTS users (id uuid PRIMARY KEY DEFAULT gen_random_uuid(), email text, username text, display_name text, avatar_url text, email_verified boolean DEFAULT true, is_active boolean DEFAULT true)`);
@@ -212,6 +212,6 @@ async function main() {
 
   console.log(`\n${fail === 0 ? '✅' : '❌'} oidc-v2: ${pass} passed, ${fail} failed`);
   await pool.end();
-  process.exit(fail === 0 ? 0 : 1);
+  process.exitCode = fail === 0 ? 0 : 1;
 }
 main().catch((e) => { console.error('FATAL', e); process.exit(1); });

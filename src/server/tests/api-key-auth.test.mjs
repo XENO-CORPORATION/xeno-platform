@@ -135,8 +135,9 @@ async function main() {
   ok(r9.status === 401, 'missing token → 401');
 
   console.log(`\n${fail === 0 ? '✅' : '❌'} api-key-auth: ${pass} passed, ${fail} failed`);
-  server.close();
+  server.closeAllConnections();
+  await new Promise(resolve => server.close(resolve));
   await pool.end();
-  process.exit(fail === 0 ? 0 : 1);
+  process.exitCode = fail === 0 ? 0 : 1;
 }
 main().catch((e) => { console.error('FATAL', e); process.exit(1); });

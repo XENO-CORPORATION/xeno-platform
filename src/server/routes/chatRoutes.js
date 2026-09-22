@@ -18,6 +18,14 @@ import { calculateNextScheduleOccurrence, calculateScheduleOccurrences } from '.
 import { CHAT_PROJECT_CONTRACTS } from '../config/chatProjectContracts.js';
 import { requireActivated } from '../services/accountActivation.js';
 import { chatWebContextService, ChatWebContextError } from '../services/chatWebContext.js';
+import { requireDpopIfBound } from '../middleware/dpopResource.js';
+import liveConversationCollaborationRoutes from './liveConversationCollaborationRoutes.js';
+import {
+  acceptLiveShare,
+  assertLiveCollaborationAuthority,
+  createLiveShare,
+  sendLiveCollaborationError,
+} from '../services/liveConversationCollaboration.js';
 
 /** Local `convo-<timestamp>` ids are UI-only. Sending one to Postgres is a 500. */
 function rejectIfNotPersistedConversationId(res, conversationId) {
@@ -415,7 +423,10 @@ router.post('/init', async (req, res) => {
         id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
         conversation_id UUID NOT NULL REFERENCES chat_conversations(id) ON DELETE CASCADE,
         owner_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-        share_token VARCHAR(64) UNIQUE NOT NULL,
+        share_token VARCHAR(64) UNIQUE,
+        token_digest TEXT UNIQUE NOT NULL,
+        mode TEXT NOT NULL DEFAULT 'snapshot',
+        participant_role TEXT,
         expires_at TIMESTAMP NOT NULL,
         created_at TIMESTAMP DEFAULT NOW(),
         revoked_at TIMESTAMP,
@@ -1271,7 +1282,7 @@ router.post('/personas/:id/use', async (req, res) => {
 // ============================================
 
 // POST /api/chat/conversations/:id/share - Create a share link for a conversation
-router.post('/conversations/:id/share', async (req, res) => {
+router.post('/conversations/:id/share', requireDpopIfBound, async (req, res) => {
   try {
     const userId = req.user?.id;
     if (!userId) {
@@ -1280,13 +1291,34 @@ router.post('/conversations/:id/share', async (req, res) => {
 
     const { id: conversationId } = req.params;
     if (rejectIfNotPersistedConversationId(res, conversationId)) return;
-    const { expires_in_days = 7, visibility = 'public' } = req.body;
+    const { expires_in_days = 7, visibility = 'public', mode: requestedMode = 'snapshot', role = 'viewer' } = req.body;
+    const mode = requestedMode === 'legacy' ? 'snapshot' : requestedMode;
+    if (!['snapshot', 'live'].includes(mode)) {
+      return res.status(400).json({ success: false, error: 'mode must be snapshot or live', code: 'invalid_share_mode' });
+    }
     if (!['public', 'workspace'].includes(visibility)) {
       return res.status(400).json({ success: false, error: 'visibility must be public or workspace', code: 'invalid_share_visibility' });
     }
     const expiryDays = Number(expires_in_days);
     if (!Number.isInteger(expiryDays) || expiryDays < 1 || expiryDays > 30) {
       return res.status(400).json({ success: false, error: 'expires_in_days must be between 1 and 30', code: 'invalid_share_expiry' });
+    }
+
+    if (mode === 'live') {
+      try {
+        assertLiveCollaborationAuthority(req);
+        const share = await createLiveShare(req.db, {
+          conversationId,
+          ownerId: userId,
+          role,
+          visibility,
+          expiresInDays: expiryDays,
+        });
+        return res.json({ success: true, share });
+      } catch (error) {
+        if (sendLiveCollaborationError(res, error)) return;
+        throw error;
+      }
     }
 
     await requireResourceRelation(req.db, userPrincipal(userId), 'conversation', conversationId, 'admin');
@@ -1314,10 +1346,10 @@ router.post('/conversations/:id/share', async (req, res) => {
     // Create share record
     const result = await req.db.query(
       `INSERT INTO chat_shared_conversations (
-         conversation_id, owner_id, share_token, token_digest, visibility, workspace_id, expires_at
-       ) VALUES ($1, $2, $3, $4, $5, $6, $7)
+         conversation_id, owner_id, share_token, token_digest, visibility, workspace_id, expires_at, mode, participant_role
+       ) VALUES ($1, $2, NULL, $3, $4, $5, $6, 'snapshot', NULL)
        RETURNING *`,
-      [conversationId, userId, shareToken, tokenDigest, visibility, visibility === 'workspace' ? convCheck.rows[0].workspace_id : null, expiresAt]
+      [conversationId, userId, tokenDigest, visibility, visibility === 'workspace' ? convCheck.rows[0].workspace_id : null, expiresAt]
     );
 
     const shareUrl = `${req.protocol}://${req.get('host')}/overview/chat/shared/${shareToken}`;
@@ -1326,6 +1358,9 @@ router.post('/conversations/:id/share', async (req, res) => {
       success: true,
       share: {
         ...result.rows[0],
+        share_token: undefined,
+        token_digest: undefined,
+        mode: 'snapshot',
         share_url: shareUrl,
         conversation_title: convCheck.rows[0].title
       }
@@ -1341,6 +1376,9 @@ router.post('/conversations/:id/share', async (req, res) => {
 router.get('/share/:token', async (req, res) => {
   try {
     const { token } = req.params;
+    if (!/^[a-f0-9]{64}$/.test(token)) {
+      return res.status(404).json({ success: false, error: 'Share link not found or expired' });
+    }
 
     // Get share record
     const shareResult = await req.db.query(
@@ -1360,7 +1398,10 @@ router.get('/share/:token', async (req, res) => {
 
     const share = shareResult.rows[0];
     if (share.visibility === 'workspace') {
-      if (!req.user?.id) return res.status(401).json({ success: false, error: 'Authentication required for workspace share' });
+      if (!req.user?.id) {
+        if (share.mode === 'live') return res.status(404).json({ success: false, error: 'Share link not found or expired' });
+        return res.status(401).json({ success: false, error: 'Authentication required for workspace share' });
+      }
       const access = await check(req.db, {
         object: `workspace:${share.workspace_id}`,
         relation: 'viewer',
@@ -1370,11 +1411,24 @@ router.get('/share/:token', async (req, res) => {
     }
 
     // Get conversation messages
-    const messagesResult = await req.db.query(
-      `SELECT id, role, content, model_id, created_at, message_index
-       FROM chat_messages WHERE conversation_id = $1 ORDER BY message_index ASC`,
-      [share.conversation_id]
-    );
+    // A public live capability must have a bounded response even when the
+    // original conversation is old or unusually large. Snapshot mode retains
+    // its legacy copy projection; live catch-up continues through the durable
+    // event cursor after authenticated acceptance.
+    const messagesResult = share.mode === 'live'
+      ? await req.db.query(
+        `SELECT * FROM (
+           SELECT id,role,LEFT(content,2048) content,model_id,created_at,message_index
+           FROM chat_messages WHERE conversation_id=$1 AND role IN ('user','assistant')
+           ORDER BY message_index DESC LIMIT 100
+         ) bounded ORDER BY message_index ASC`,
+        [share.conversation_id],
+      )
+      : await req.db.query(
+        `SELECT id, role, content, model_id, created_at, message_index
+         FROM chat_messages WHERE conversation_id = $1 ORDER BY message_index ASC`,
+        [share.conversation_id],
+      );
     const publicMessages = serializePublicConversationMessages(messagesResult.rows);
 
     res.json({
@@ -1387,6 +1441,8 @@ router.get('/share/:token', async (req, res) => {
         created_at: share.conversation_created_at,
         owner_name: share.owner_name || share.owner_email,
         expires_at: share.expires_at,
+        mode: share.mode || 'snapshot',
+        participant_role: share.mode === 'live' ? share.participant_role : null,
         messages: publicMessages
       }
     });
@@ -1397,7 +1453,7 @@ router.get('/share/:token', async (req, res) => {
 });
 
 // POST /api/chat/share/:token/accept - Accept a shared conversation and copy to user's account
-router.post('/share/:token/accept', async (req, res) => {
+router.post('/share/:token/accept', requireDpopIfBound, async (req, res) => {
   try {
     const userId = req.user?.id;
     if (!userId) {
@@ -1405,6 +1461,9 @@ router.post('/share/:token/accept', async (req, res) => {
     }
 
     const { token } = req.params;
+    if (!/^[a-f0-9]{64}$/.test(token)) {
+      return res.status(404).json({ success: false, error: 'Share link not found or expired' });
+    }
 
     // Get share record
     const shareResult = await req.db.query(
@@ -1428,6 +1487,16 @@ router.post('/share/:token/accept', async (req, res) => {
         subject: `user:${userId}`,
       });
       if (!access.allowed) return res.status(404).json({ success: false, error: 'Share link not found or expired' });
+    }
+
+    if (share.mode === 'live') {
+      try {
+        assertLiveCollaborationAuthority(req);
+        return res.json({ success: true, ...(await acceptLiveShare(req.db, { token, userId })) });
+      } catch (error) {
+        if (sendLiveCollaborationError(res, error)) return;
+        throw error;
+      }
     }
 
     // Check if user already accepted this share
@@ -1509,7 +1578,7 @@ router.delete('/conversations/:id/share', async (req, res) => {
     // Revoke all active shares for this conversation
     await req.db.query(
       `UPDATE chat_shared_conversations SET revoked_at = NOW()
-       WHERE conversation_id = $1 AND revoked_at IS NULL`,
+       WHERE conversation_id = $1 AND mode = 'snapshot' AND revoked_at IS NULL`,
       [conversationId]
     );
 
@@ -1534,7 +1603,8 @@ router.get('/conversations/:id/shares', async (req, res) => {
     await requireResourceRelation(req.db, userPrincipal(userId), 'conversation', conversationId, 'admin');
 
     const result = await req.db.query(
-      `SELECT id, conversation_id, visibility, workspace_id, expires_at, revoked_at, accept_count, created_at
+      `SELECT id, conversation_id, visibility, workspace_id, expires_at, revoked_at, accept_count, created_at,
+              mode, participant_role
        FROM chat_shared_conversations
        WHERE conversation_id = $1
        ORDER BY created_at DESC`,
@@ -2760,5 +2830,10 @@ router.delete('/memories/:id', async (req, res) => {
     res.status(500).json({ success: false, error: 'Internal server error' });
   }
 });
+
+// Live collaboration uses dedicated relations outside the ordinary conversation
+// role hierarchy. Mount last so its proof/scope middleware cannot affect legacy
+// chat and snapshot-share endpoints.
+router.use(liveConversationCollaborationRoutes);
 
 export default router;

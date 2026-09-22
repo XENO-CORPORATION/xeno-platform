@@ -9,11 +9,10 @@
  *
  * ── 🔴 THE DELIVERY ENGINE HAD NO PRODUCERS ─────────────────────────────────
  *
- * `dispatchWebhookEvent` in `routes/webhookRoutes.js` is a complete delivery
- * system: HMAC-SHA256 signing, an SSRF guard on registration, delivery rows,
- * exponential-backoff retry to 5 attempts. A repo-wide search for callers
- * returns NOTHING. The release plan lists it as "built (billing uses it)";
- * billing does not use it, and nor does anything else.
+ * Originally the delivery engine had no producers. This sweep supplied the
+ * first. The 2026-09-04 repair moves attempts to a leased PostgreSQL worker:
+ * queue admission is now transactional with this sweep's cursor, retries survive
+ * process loss, and public HTTPS egress is checked at each socket connection.
  *
  * That is the eleventh instance of this codebase's signature defect — after
  * xeno-workflow's 76 unregistered node types, xeno-tools' never-called
@@ -133,23 +132,14 @@ export async function pushPendingDigests(db, { limit = 25 } = {}) {
           continue; // rule 2 — and the cursor stays put, so the window accumulates
         }
 
-        // ⚠️ THE POOL, NOT `client`, AND THIS IS NOT A STYLE CHOICE.
-        //
-        // `dispatchWebhookEvent` inserts the delivery row and then fires the
-        // actual HTTP request FIRE-AND-FORGET — `deliverWebhook(...).catch()`.
-        // That continuation records the response code minutes later, long after
-        // this transaction has committed and the client has been returned to the
-        // pool. Handing it `client` means those writes land on a connection that
-        // belongs to somebody else's query by then.
-        //
-        // It is also correct on its own terms: a delivery attempt is a fact that
-        // happened, and it must not disappear because the sweep's bookkeeping
-        // rolled back.
+        // Queue admission and digest cursor now commit together. The dedicated
+        // worker only sees committed rows and never retains this transaction client.
         const matched = await dispatchWebhookEvent(
-          db,
+          client,
           DIGEST_EVENT,
           { digest, deliveredAt: new Date().toISOString() },
           sub.user_id,
+          { eventId: `forum.digest:${sub.user_id}:${sub.last_push_at ? new Date(sub.last_push_at).toISOString() : 'initial'}` },
         );
 
         if (!matched) {

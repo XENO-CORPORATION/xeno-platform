@@ -13,6 +13,7 @@ import express from 'express';
 import { authMiddleware } from '../middleware/auth.js';
 import { issuer } from '../config/hosts.js';
 import { verifyDpopProof } from '../utils/dpop.js';
+import { requireRecentOidcAuth } from '../middleware/recentOidcAuth.js';
 import {
   jwks,
   discovery,
@@ -39,20 +40,6 @@ const router = express.Router();
 function sendOauthError(res, err) {
   const status = err.statusCode || 400;
   res.status(status).json({ error: err.oauthError || 'invalid_request', error_description: err.message });
-}
-
-function requireRecentOidcAuth({ scope, clients }) {
-  return (req, res, next) => {
-    const authTime = Number(req.auth?.authTime);
-    const now = Math.floor(Date.now() / 1000);
-    const scopes = new Set(String(req.auth?.scope || '').split(/\s+/).filter(Boolean));
-    if (req.auth?.kind !== 'oidc' || !clients.includes(req.auth?.clientId) || !scopes.has(scope)
-        || !Number.isFinite(authTime) || authTime > now + 60 || now - authTime > 5 * 60) {
-      res.set('WWW-Authenticate', 'DPoP error="insufficient_user_authentication", max_age="300"');
-      return res.status(401).json({ error: 'insufficient_user_authentication', max_age: 300 });
-    }
-    return next();
-  };
 }
 
 async function requireDpopIfBound(req, res, next) {

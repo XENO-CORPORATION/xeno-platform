@@ -13,8 +13,8 @@
 
 import { Router } from 'express';
 import crypto from 'crypto';
-import fetch from 'node-fetch';
-import { assertPublicHttpUrl } from '../utils/urlGuard.js';
+import { assertSafeEndpointUrl } from '../utils/safeEndpoint.js';
+import { controlWebhookDelivery, enqueueWebhookEvent } from '../services/webhookDelivery.js';
 
 const router = Router();
 
@@ -25,6 +25,7 @@ const VALID_EVENTS = [
   'credits_low',
   'user_signup',
   'generation_complete',
+  'forum.digest',
 ];
 
 // --------------------------------------------------------------------------
@@ -35,7 +36,7 @@ const VALID_EVENTS = [
 router.get('/', async (req, res) => {
   try {
     const { rows } = await req.db.query(
-      'SELECT id, url, events, is_active, created_at, updated_at FROM webhooks WHERE user_id = $1 ORDER BY created_at DESC',
+      'SELECT id, url, events, is_active, created_at, updated_at FROM webhooks WHERE user_id = $1 AND notification_workspace_id IS NULL AND deleted_at IS NULL ORDER BY created_at DESC',
       [req.user.id]
     );
     res.json({ success: true, webhooks: rows });
@@ -54,18 +55,17 @@ router.post('/', async (req, res) => {
       return res.status(400).json({ success: false, error: 'URL is required' });
     }
 
-    // Validate URL: http/https + public host only (SSRF guard — deliveries are
-    // server-side POSTs, so internal/private targets must be rejected)
+    // Early structural guard; delivery revalidates every address at socket connect.
     try {
       const parsed = new URL(url);
-      if (!['http:', 'https:'].includes(parsed.protocol)) {
-        return res.status(400).json({ success: false, error: 'URL must use HTTP or HTTPS' });
+      if (parsed.protocol !== 'https:') {
+        return res.status(400).json({ success: false, error: 'URL must use HTTPS' });
       }
-      await assertPublicHttpUrl(url);
+      assertSafeEndpointUrl(url);
     } catch (e) {
       return res.status(400).json({
         success: false,
-        error: e.code === 'ERR_URL_FORBIDDEN' ? 'Webhook URL must point to a public host' : 'Invalid URL format',
+        error: 'Webhook URL must be a credential-free public HTTPS endpoint',
       });
     }
 
@@ -115,18 +115,17 @@ router.put('/:id', async (req, res) => {
     let idx = 1;
 
     if (url !== undefined) {
-      // Same validation as create: http/https + public host only (the update path
-      // previously only checked parseability — an SSRF bypass).
+      // Same structural policy as create, with connect-time enforcement in the worker.
       try {
         const parsed = new URL(url);
-        if (!['http:', 'https:'].includes(parsed.protocol)) {
-          return res.status(400).json({ success: false, error: 'URL must use HTTP or HTTPS' });
+        if (parsed.protocol !== 'https:') {
+          return res.status(400).json({ success: false, error: 'URL must use HTTPS' });
         }
-        await assertPublicHttpUrl(url);
+        assertSafeEndpointUrl(url);
       } catch (e) {
         return res.status(400).json({
           success: false,
-          error: e.code === 'ERR_URL_FORBIDDEN' ? 'Webhook URL must point to a public host' : 'Invalid URL',
+          error: 'Webhook URL must be a credential-free public HTTPS endpoint',
         });
       }
       updates.push(`url = $${idx++}`);
@@ -152,7 +151,7 @@ router.put('/:id', async (req, res) => {
     values.push(id, req.user.id);
 
     const { rows } = await req.db.query(
-      `UPDATE webhooks SET ${updates.join(', ')} WHERE id = $${idx++} AND user_id = $${idx}
+      `UPDATE webhooks SET ${updates.join(', ')} WHERE id = $${idx++} AND user_id = $${idx} AND notification_workspace_id IS NULL AND deleted_at IS NULL
        RETURNING id, url, events, is_active, updated_at`,
       values
     );
@@ -172,7 +171,8 @@ router.put('/:id', async (req, res) => {
 router.delete('/:id', async (req, res) => {
   try {
     const { rowCount } = await req.db.query(
-      'DELETE FROM webhooks WHERE id = $1 AND user_id = $2',
+      `UPDATE webhooks SET is_active=false,deleted_at=clock_timestamp(),updated_at=clock_timestamp()
+       WHERE id=$1 AND user_id=$2 AND notification_workspace_id IS NULL AND deleted_at IS NULL`,
       [req.params.id, req.user.id]
     );
 
@@ -195,10 +195,11 @@ router.get('/:id/deliveries', async (req, res) => {
 
     const { rows } = await req.db.query(
       `SELECT wd.id, wd.event, wd.status_code, wd.attempt, wd.max_attempts,
-              wd.delivered_at, wd.failed_at, wd.created_at
+              wd.delivered_at, wd.failed_at, wd.created_at, wd.state, wd.event_id,
+              wd.next_retry_at, wd.cancelled_at, wd.error_code
        FROM webhook_deliveries wd
        JOIN webhooks w ON wd.webhook_id = w.id
-       WHERE w.id = $1 AND w.user_id = $2
+       WHERE w.id = $1 AND w.user_id = $2 AND w.notification_workspace_id IS NULL AND w.deleted_at IS NULL
        ORDER BY wd.created_at DESC
        LIMIT $3 OFFSET $4`,
       [req.params.id, req.user.id, limit, offset]
@@ -220,113 +221,23 @@ router.get('/:id/deliveries', async (req, res) => {
  * @param {object} db - Database pool
  * @param {string} event - Event type (e.g. 'new_version')
  * @param {object} payload - Event payload
- * @param {string} [userId] - Optional: target specific user's webhooks
+ * @param {string} [userId] - Required owner, except public new_version announcements
  */
-export async function dispatchWebhookEvent(db, event, payload, userId = null) {
-  try {
-    let query = 'SELECT id, url, secret FROM webhooks WHERE is_active = true AND $1 = ANY(events)';
-    const params = [event];
-
-    if (userId) {
-      query += ' AND user_id = $2';
-      params.push(userId);
-    }
-
-    const { rows: webhooks } = await db.query(query, params);
-
-    for (const webhook of webhooks) {
-      // Create delivery record
-      const { rows } = await db.query(
-        `INSERT INTO webhook_deliveries (webhook_id, event, payload)
-         VALUES ($1, $2, $3) RETURNING id`,
-        [webhook.id, event, JSON.stringify(payload)]
-      );
-
-      // Fire and forget — actual delivery
-      deliverWebhook(db, rows[0].id, webhook, event, payload).catch(err => {
-        console.error(`[Webhooks] Delivery error for ${rows[0].id}:`, err.message);
-      });
-    }
-
-    return webhooks.length;
-  } catch (error) {
-    console.error('[Webhooks] Dispatch error:', error.message);
-    return 0;
-  }
+export async function dispatchWebhookEvent(db, event, payload, userId = null, options = {}) {
+  return enqueueWebhookEvent(db, event, payload, userId, options);
 }
 
 /**
- * Deliver a single webhook with retry logic
+ * Delivery controls use the same authenticated owner boundary as history.
  */
-async function deliverWebhook(db, deliveryId, webhook, event, payload, attempt = 1) {
-  const body = JSON.stringify({
-    event,
-    payload,
-    timestamp: new Date().toISOString(),
-    deliveryId,
-  });
-
-  // Create HMAC signature
-  const signature = webhook.secret
-    ? crypto.createHmac('sha256', webhook.secret).update(body).digest('hex')
-    : null;
-
+router.post('/:id/deliveries/:deliveryId/:operation', async (req, res) => {
   try {
-    const response = await fetch(webhook.url, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'User-Agent': 'XENO-Webhooks/1.0',
-        'X-Webhook-Event': event,
-        'X-Webhook-Delivery': deliveryId,
-        ...(signature && { 'X-Webhook-Signature': `sha256=${signature}` }),
-      },
-      body,
-      signal: AbortSignal.timeout(10000), // 10s timeout
-    });
-
-    const responseBody = await response.text().catch(() => '');
-
-    if (response.ok) {
-      await db.query(
-        `UPDATE webhook_deliveries
-         SET status_code = $1, response_body = $2, delivered_at = NOW(), attempt = $3
-         WHERE id = $4`,
-        [response.status, responseBody.substring(0, 1000), attempt, deliveryId]
-      );
-    } else {
-      throw new Error(`HTTP ${response.status}: ${responseBody.substring(0, 200)}`);
-    }
+    const delivery = await controlWebhookDelivery(req.db, req.user.id, req.params.id, req.params.deliveryId, req.params.operation);
+    if (!delivery) return res.status(409).json({ success: false, error: 'Delivery is unavailable or cannot transition' });
+    res.json({ success: true, delivery, ...(req.params.operation === 'cancel' ? { notice: 'Future attempts cancelled; an already accepted request cannot be recalled.' } : {}) });
   } catch (error) {
-    const MAX_ATTEMPTS = 5;
-
-    if (attempt < MAX_ATTEMPTS) {
-      // Exponential backoff: 30s, 2min, 8min, 32min
-      const delayMs = Math.pow(4, attempt) * 7500;
-      const nextRetry = new Date(Date.now() + delayMs);
-
-      await db.query(
-        `UPDATE webhook_deliveries
-         SET status_code = $1, response_body = $2, attempt = $3, next_retry_at = $4
-         WHERE id = $5`,
-        [0, error.message.substring(0, 1000), attempt, nextRetry.toISOString(), deliveryId]
-      );
-
-      // Schedule retry
-      setTimeout(() => {
-        deliverWebhook(db, deliveryId, webhook, event, payload, attempt + 1)
-          .catch(err => console.error(`[Webhooks] Retry ${attempt + 1} failed:`, err.message));
-      }, delayMs);
-    } else {
-      // Max attempts reached — mark as failed
-      await db.query(
-        `UPDATE webhook_deliveries
-         SET status_code = 0, response_body = $1, attempt = $2, failed_at = NOW()
-         WHERE id = $3`,
-        [error.message.substring(0, 1000), attempt, deliveryId]
-      );
-    }
+    res.status(error instanceof TypeError ? 400 : 500).json({ success: false, error: 'Delivery control failed' });
   }
-}
+});
 
 export default router;

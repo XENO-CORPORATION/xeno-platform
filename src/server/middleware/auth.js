@@ -5,6 +5,8 @@
 
 import jwt from 'jsonwebtoken';
 import crypto from 'crypto';
+import { workspaceKeyFromHeaders, resolveWorkspaceApiKey } from '../services/workspaceApiKeys.js';
+import { readApiKeyWorkforceScopes } from '../services/apiKeyWorkforceAuthority.js';
 import {
   getKeyByKid, isAccessToken, isOidcSessionActive, ACCESS_TOKEN_AUDIENCE, ACCESS_TOKEN_TYP,
 } from '../utils/oidcProvider.js';
@@ -58,7 +60,7 @@ function hashApiKey(rawKey) {
  * returns. Best-effort `last_used_at`/`usage_count` bump. Returns null on any
  * miss (unknown / inactive / expired key, or inactive user) so the caller emits
  * the identical 401 as the JWT path.
- * @returns {Promise<object | null>} the user row, or null.
+ * @returns {Promise<object | null>} user plus canonical key context, or null.
  */
 async function resolveApiKeyUser(req, rawKey) {
   const keyPrefix = rawKey.slice(0, 16);
@@ -77,6 +79,7 @@ async function resolveApiKeyUser(req, rawKey) {
   if (rows.length === 0) return null;
   const row = rows[0];
   if (row.expires_at && new Date(row.expires_at) < new Date()) return null;
+  const scopes = await readApiKeyWorkforceScopes(req.db, row.key_id);
 
   // Best-effort usage bump — never block auth on this write, never let it throw.
   req.db
@@ -86,7 +89,7 @@ async function resolveApiKeyUser(req, rawKey) {
     )
     .catch(() => {});
 
-  return {
+  return { user: {
     id: row.id,
     username: row.username,
     email: row.email,
@@ -95,7 +98,7 @@ async function resolveApiKeyUser(req, rawKey) {
     created_at: row.created_at,
     email_verified: row.email_verified,
     is_active: row.is_active,
-  };
+  }, auth: { kind: 'api-key', keyId: row.key_id, scopes } };
 }
 
 /**
@@ -116,14 +119,17 @@ async function resolveApiKeyUser(req, rawKey) {
  * @returns {{ user: object } | { status: number, error: string }}
  */
 export async function resolveAuthedUser(req) {
+  const workspaceCredential = workspaceKeyFromHeaders(req.headers);
+  if (workspaceCredential?.error) return { status: 401, error: workspaceCredential.error };
+  if (workspaceCredential) return resolveWorkspaceApiKey(req, workspaceCredential.key);
   const token = req.headers.authorization?.replace(/^(?:Bearer|DPoP)\s+/i, '');
   if (!token) return { status: 401, error: 'Authentication token required' };
 
   // ADDITIVE branch: a token that is NOT JWT-shaped can only be an API key.
   // JWT-shaped tokens fall through to the byte-for-byte-unchanged JWT logic below.
   if (!JWT_SHAPE.test(token)) {
-    const user = await resolveApiKeyUser(req, token);
-    if (user) return { user };
+    const resolved = await resolveApiKeyUser(req, token);
+    if (resolved) return resolved;
     return { status: 401, error: 'Invalid authentication token' };
   }
 

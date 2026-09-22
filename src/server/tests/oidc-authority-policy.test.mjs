@@ -30,11 +30,18 @@ test('every released interactive surface in the retained inventory has a checked
     'xeno-hub', 'xeno-pixel', 'xeno-motion', 'xeno-sound', 'xeno-canvas',
     'xeno-browser', 'xeno-docs', 'xeno-sheets', 'xeno-slides', 'xeno-notes',
     'xeno-architect', 'xeno-3d', 'xeno-engine', 'xeno-workflow', 'xeno-comms',
-    'xeno-shell', 'xeno-agent-cli', 'xeno-anima', 'xeno-web', 'xeno-post',
+    'xeno-shell', 'xeno-agent-cli', 'xeno-agent-interface', 'xeno-anima', 'xeno-web', 'xeno-post',
   ];
   for (const clientId of released) assert.ok(CLIENT_AUTHORITY[clientId], `missing authority for ${clientId}`);
   const seeded = new Set(FIRST_PARTY_CLIENTS.map((client) => client.id));
   for (const clientId of released) assert.ok(seeded.has(clientId), `missing registration migration for ${clientId}`);
+});
+
+test('XENO Agent Interface has its own sender-bound collaboration client ceiling', () => {
+  const scopes = new Set(CLIENT_AUTHORITY['xeno-agent-interface']);
+  for (const required of ['openid', 'team:read', 'team:manage', 'collaboration:use', 'agent-identity:use']) assert.equal(scopes.has(required), true);
+  for (const forbidden of ['billing:manage', 'marketplace:payout', 'account:logout']) assert.equal(scopes.has(forbidden), false);
+  assert.equal(FIRST_PARTY_CLIENTS.find(({ id }) => id === 'xeno-agent-interface')?.loopback, true);
 });
 
 test('XENO Post is registered against its reachable API callback', () => {

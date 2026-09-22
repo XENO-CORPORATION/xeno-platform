@@ -22,6 +22,7 @@ import Stripe from 'stripe';
 import { consentReady, findUsableConsent, consumeConsent } from './checkoutConsent.js';
 import { siteOrigin } from '../config/hosts.js';
 import { addGrantTx, clawbackTx, getBalanceV2, MICRO_PER_CREDIT } from '../utils/creditLedgerV2.js';
+import { authorityTransaction, lockWorkspaceAuthority } from './workspaceOperationReceipts.js';
 
 const SECRET = process.env.STRIPE_SECRET_KEY || '';
 const PUBLISHABLE = process.env.STRIPE_PUBLISHABLE_KEY || '';
@@ -725,15 +726,18 @@ export async function createWorkspaceSeatCheckout(pool, user, {
 }
 
 /** Persist a workspace's team plan + seat limit into workspaces.metadata.billing (merge). */
-async function setWorkspacePlan(pool, workspaceId, { plan, status, subId = null, seats = null, periodEnd = null }) {
+export async function setWorkspacePlan(pool, workspaceId, { plan, status, subId = null, seats = null, periodEnd = null }) {
   const patch = { plan, status };
   if (subId) patch.stripe_subscription_id = subId;
   if (seats != null) patch.seat_limit = Number(seats);
   if (periodEnd) patch.current_period_end = periodEnd;
-  await pool.query(
-    "UPDATE workspaces SET metadata = jsonb_set(COALESCE(metadata,'{}'::jsonb), '{billing}', COALESCE(metadata->'billing','{}'::jsonb) || $1::jsonb, true), updated_at = now() WHERE id = $2",
-    [JSON.stringify(patch), String(workspaceId)],
-  );
+  await authorityTransaction(pool,async db=>{
+    await lockWorkspaceAuthority(db,String(workspaceId));
+    // The row lock is deliberately after the shared advisory gate, matching
+    // every invitation/membership path. Stripe remains the plan authority.
+    await db.query('SELECT id FROM workspaces WHERE id=$1 FOR UPDATE',[String(workspaceId)]);
+    await db.query("UPDATE workspaces SET metadata = jsonb_set(COALESCE(metadata,'{}'::jsonb), '{billing}', COALESCE(metadata->'billing','{}'::jsonb) || $1::jsonb, true), updated_at = now() WHERE id = $2",[JSON.stringify(patch),String(workspaceId)]);
+  });
 }
 
 /** Stripe billing portal (manage/cancel subscription, update card). */
