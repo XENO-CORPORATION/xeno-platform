@@ -8,16 +8,21 @@ export const OIDC_SCOPES = Object.freeze([
   'inference:run', 'ledger:read', 'ledger:spend',
   'projects:read', 'projects:write', 'sync:use',
   'agent-identity:use', 'team:read', 'team:manage', 'collaboration:use',
+  'workforce:read', 'workforce:manage',
   'billing:read', 'billing:manage', 'marketplace:payout', 'account:logout',
   'broker:enroll', 'broker:exchange',
 ]);
 
 const IDENTITY = ['openid', 'profile', 'email'];
 const PRODUCT = [...IDENTITY, 'ledger', 'inference:run', 'ledger:read', 'ledger:spend', 'projects:read', 'projects:write', 'sync:use'];
-const HUB = [...PRODUCT, 'agent-identity:use', 'team:read', 'team:manage', 'collaboration:use', 'billing:read', 'billing:manage', 'account:logout', 'broker:enroll', 'broker:exchange'];
+// A ceiling permits consent to be REQUESTED; it never expands an existing token.
+// Workforce configuration authorizes neither billing, principal minting nor execution --
+// those stay on their own scopes, so a workforce grant cannot become a spend grant.
+const WORKFORCE = ['workforce:read', 'workforce:manage'];
+const HUB = [...PRODUCT, ...WORKFORCE, 'agent-identity:use', 'team:read', 'team:manage', 'collaboration:use', 'billing:read', 'billing:manage', 'account:logout', 'broker:enroll', 'broker:exchange'];
 const WEB = [...HUB, 'marketplace:payout'];
 const COLLAB_PRODUCT = [...PRODUCT, 'team:read', 'collaboration:use'];
-const AGENT_PRODUCT = [...PRODUCT, 'agent-identity:use'];
+const AGENT_PRODUCT = [...PRODUCT, ...WORKFORCE, 'agent-identity:use'];
 
 export const CLIENT_AUTHORITY = Object.freeze({
   'xeno-hub': HUB,

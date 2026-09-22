@@ -5,6 +5,7 @@
 
 import jwt from 'jsonwebtoken';
 import crypto from 'crypto';
+import { readApiKeyWorkforceScopes } from '../services/apiKeyWorkforceAuthority.js';
 import { previewPrincipal } from './previewSession.js';
 import {
   getKeyByKid, isAccessToken, isOidcSessionActive, ACCESS_TOKEN_AUDIENCE, ACCESS_TOKEN_TYP,
@@ -88,15 +89,22 @@ async function resolveApiKeyUser(req, rawKey) {
     )
     .catch(() => {});
 
+  // ADDITIVE: the key's own identity travels with the user, so a caller can tell
+  // WHICH credential authenticated and what it is allowed to do. Without this,
+  // `req.auth` is null on the API-key path and every scope check refuses — which
+  // is precisely how the workforce routes 403'd on a valid key.
   return {
-    id: row.id,
-    username: row.username,
-    email: row.email,
-    display_name: row.display_name,
-    avatar_url: row.avatar_url,
-    created_at: row.created_at,
-    email_verified: row.email_verified,
-    is_active: row.is_active,
+    user: {
+      id: row.id,
+      username: row.username,
+      email: row.email,
+      display_name: row.display_name,
+      avatar_url: row.avatar_url,
+      created_at: row.created_at,
+      email_verified: row.email_verified,
+      is_active: row.is_active,
+    },
+    auth: { kind: 'api-key', keyId: row.key_id, scopes: await readApiKeyWorkforceScopes(req.db, row.key_id) },
   };
 }
 
@@ -126,9 +134,11 @@ export async function resolveAuthedUser(req) {
   // ADDITIVE branch: a token that is NOT JWT-shaped can only be an API key.
   // JWT-shaped tokens fall through to the byte-for-byte-unchanged JWT logic below.
   if (!JWT_SHAPE.test(token)) {
-    const user = await resolveApiKeyUser(req, token);
-    if (user?.suspended) return { status: 401, error: 'This account has been suspended', code: 'account_suspended' };
-    if (user) return { user };
+    const resolved = await resolveApiKeyUser(req, token);
+    // Suspension is unchanged and still checked FIRST: the resolver returns the
+    // bare { suspended: true } sentinel for that case and never an auth context.
+    if (resolved?.suspended) return { status: 401, error: 'This account has been suspended', code: 'account_suspended' };
+    if (resolved) return resolved;
     return { status: 401, error: 'Invalid authentication token' };
   }
 
