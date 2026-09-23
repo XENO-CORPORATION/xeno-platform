@@ -11,10 +11,10 @@
  * Recorded here rather than in a commit message, because a reason nobody can find is a reason
  * nobody has. Each is checked against the schema, not assumed.
  *
- *   DIV-05  "a team owned by one division MAY be assigned to another." There is no
- *           division-assignment record at all -- `workforce_workspace_assignments` targets a
- *           WORKSPACE, and DIV-05 needs a separately accepted, separately revocable assignment
- *           to a DIVISION that moves neither ownership nor the funding scope.
+ *   DIV-05  NOW CITED -- by scripts/workforce-division-assignment-migration.test.mjs, against
+ *           20260923130000-workforce-assignment-division-target.sql (2026-09-23). The assignment
+ *           record gained a division target; the suite proves each division assignment is its own
+ *           record, separately accepted and revoked, and that neither edge here moves.
  *   DIV-07  "a division's budget is a scope on the existing ledger" and "the division a run
  *           SPENDS against is read from the team's FUNDING SCOPE, never its owning division."
  *           The funding EDGE is proven above and is a precondition, not the requirement: nothing
