@@ -298,6 +298,65 @@ test('handoffs and decision records on owned isolated PostgreSQL', { skip: workf
          VALUES($1,$1,'task',$2)`, [worker, randomUUID()]);
     });
 
+    // NFR-02 has two halves and they fail in opposite directions.
+    //   "no silent truncation of retained history" -- proven by the immutability and no-TRUNCATE
+    //     triggers, and by the populated-rollback refusal in the case below.
+    //   "zero acknowledged-record loss across FORCED PROCESS TERMINATION" -- proven by nothing,
+    //     because every existing case closes its connection politely. A graceful close is the one
+    //     shutdown that says nothing about durability.
+    // So this kills the socket outright, mid-session, with no client-side cleanup, and asserts
+    // both directions: what was ACKNOWLEDGED survives, and what was never acknowledged does NOT
+    // come back. The second half matters as much as the first -- a store that resurrected an
+    // uncommitted write would also be losing the guarantee, just in the flattering direction.
+    await t.test('an acknowledged decision survives a killed connection; an unacknowledged one does not (NFR-02)', async () => {
+      const kill = async prepare => {
+        const client = new pg.Client({ connectionString, options: `-c search_path=${schema}` });
+        client.on('error', () => {});           // the destroy below surfaces here; it is expected
+        await client.connect();
+        const op = await prepare(client);
+        // Not `client.end()`. That flushes and says goodbye, which is exactly the shutdown this
+        // case is NOT about. Destroying the stream is the closest thing to `kill -9` reachable
+        // from a test: the server sees the connection vanish with no termination message.
+        client.connection.stream.destroy();
+        await new Promise(resolve => setTimeout(resolve, 50));
+        return op;
+      };
+      const present = async op => Number((await pool.query(
+        'SELECT count(*) c FROM workforce_operations WHERE operation_id=$1', [op])).rows[0].c);
+
+      // ACKNOWLEDGED: the INSERT committed and the server said so before the socket died.
+      const kept = await kill(async client => {
+        const op = randomUUID();
+        await client.query(
+          `INSERT INTO workforce_operations(actor_user_id,client_id,operation_id,request_hash,kind,
+             subject_type,subject_id,deciding_principal_id,responsible_account_id,authority)
+           VALUES($1,'killed',$2,$3,'member.admit','membership',$4,$1,$1,'team:manager')`,
+          [humanManager, op, sha(op), randomUUID()]);
+        return op;
+      });
+      assert.equal(await present(kept), 1,
+        'a committed decision is still there after the connection was destroyed, not closed');
+
+      // UNACKNOWLEDGED: the same INSERT, inside a transaction that never reached COMMIT.
+      const lost = await kill(async client => {
+        const op = randomUUID();
+        await client.query('BEGIN');
+        await client.query(
+          `INSERT INTO workforce_operations(actor_user_id,client_id,operation_id,request_hash,kind,
+             subject_type,subject_id,deciding_principal_id,responsible_account_id,authority)
+           VALUES($1,'killed',$2,$3,'member.admit','membership',$4,$1,$1,'team:manager')`,
+          [humanManager, op, sha(op), randomUUID()]);
+        return op;                               // no COMMIT -- the client dies holding it open
+      });
+      assert.equal(await present(lost), 0,
+        'an uncommitted write is rolled back by the server when the connection dies, never resurrected');
+
+      // ...and the surviving row is still subject to the retention rules, so "it came back" and
+      // "it can now be quietly removed" are not two ways of passing this case.
+      await deny(`DELETE FROM workforce_operations WHERE operation_id=$1`, [kept]);
+      await deny('TRUNCATE workforce_operations');
+    });
+
     await t.test('populated rollback is refused; empty rollback is clean and re-appliable', async () => {
       await assert.rejects(pool.query(down), e => e.code === '23514');
       // The operations table refuses DELETE by design, so prove the refusal, then drop the
