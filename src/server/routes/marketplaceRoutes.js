@@ -249,6 +249,18 @@ router.post('/listings/:id/rent', authMiddleware, makeAcquireHandler(['rental'],
  * xeno-rt / the creator's hosted agent is a separate integration; this endpoint
  * owns the metering + access check. Requires an active entitlement OR pay_per_use
  * pricing the buyer pays into per call.
+ *
+ * 🔴 THIS ROUTE REPORTS WORK IT DOES NOT DO. Both success branches answer `brokered: true` and no
+ * branch dispatches anything -- the comment above assigns the call to "the agent gateway", and no
+ * gateway, product or test in the workspace calls this endpoint (searched each repo's origin default
+ * branch, 2026-09-23). On the pay_per_use branch it DEBITS the buyer and accrues creator earnings for
+ * an execution that never happens. XENO-WORKFORCE-01 MKT-06 forbids precisely this: "Authorization or
+ * a debit alone cannot report brokered:true or completion. No debit for an execution that was never
+ * admitted." MKT-05/06 are therefore not cited anywhere.
+ *
+ * LATENT: production has 0 third-party listings and 0 marketplace transactions, so nobody has been
+ * charged. The fix is the one MKT-06 names -- create or adopt a durable hosted run (xeno-agents-api
+ * already implements one) and report its real state -- not a change to this response's wording.
  */
 router.post('/invoke/:listingId', authMiddleware, async (req, res) => {
   try {
