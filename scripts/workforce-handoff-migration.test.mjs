@@ -27,6 +27,15 @@
  *   LIFE-08  objectives as the top of the work tree -- no table.
  *   LIFE-09  capacity is DERIVED, never declared -- nothing derives it.
  *
+ *   HAND-06  "no silent history transfer: a handoff shows the target audience and the included
+ *            historical content." The one §8.2c requirement this suite does NOT prove, despite the
+ *            HAND-01..HAND-06 range in the header. workforce_handoffs carries a work reference and
+ *            an optional artifact_ref, and no column names an audience or the history a handoff
+ *            discloses -- so there is nothing to show and nothing to consent to. What IS true, and
+ *            is the half of HAND-06 that matters most, is that a handoff cannot carry a transcript:
+ *            it has no content column at all, so the sender's private history cannot ride along.
+ *            That is an absence, not a disclosure flow, and HAND-06 asks for the flow.
+ *
  *   NFR-03   "at most one effective contribution, reservation, settlement and result delivery per
  *            logical operation under duplicate requests/restarts." The durable-operation identity
  *            (actor_user_id, client_id, operation_id) genuinely delivers at-most-once and is
