@@ -8,6 +8,21 @@ import { tablesDDL } from './fixtures/schema.mjs';
  * (pooled vs personal, member vs non-member).
  *
  * Run: DATABASE_URL=postgresql://postgres:pw@host:5432/db node tests/wallet-service.test.mjs
+ *
+ * ⚠️ XENO-WORKFORCE-01 FUND-06 IS NOT CITED HERE -- AND THE LAST ASSERTIONS PIN BEHAVIOUR IT FORBIDS.
+ * FUND-06: "Each run has one selected payer ... No silent fallback to a personal wallet if the
+ * selected pool cannot fund the work." resolveBillingAccountId returns the PERSONAL wallet whenever
+ * the workspace is missing, archived, not pooled, or the caller is not a member, and reports nothing
+ * about which of those happened; its only caller (index.js, the chat completion route) additionally
+ * falls back to personal on ANY error, logging a warning. The assertions "pooled workspace but
+ * non-member -> personal wallet" and friends below encode that fallback as correct. Under FUND-06 a
+ * caller who SELECTED a pool it cannot use must be refused, not quietly billed personally.
+ *
+ * LATENT, NOT LIVE -- measured 2026-09-23: WORKSPACE_BILLING_ENABLED is unset in the production
+ * backend container and no workspace has billing_mode='pooled', so every spend bills personally by
+ * design and no pool is ever silently bypassed. The defect becomes live the day that flag is set.
+ * Repairing it means a typed refusal from the resolver, a caller that returns it to the client, and
+ * changing the assertions below -- do it BEFORE enabling pooled billing, not after.
  */
 import pg from 'pg';
 import crypto from 'crypto';
