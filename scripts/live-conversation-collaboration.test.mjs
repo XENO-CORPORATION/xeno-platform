@@ -1,3 +1,19 @@
+/* ⚠️ XENO-WORKFORCE-01 MKT-01 AND MKT-02 ARE NOT CITED BY THIS SUITE, although it proves part of each.
+ *
+ *   MKT-01  "neither a public listing nor a SHARE LINK grants tools or workspace files." The share-link
+ *           half is proven below: accepting a share at any role leaves every conversation relation
+ *           (viewer..owner) denied, the ordinary chat routes answer 404, and the owner stays the sole
+ *           execution writer -- owner sync mirrors display events and never stores tool arguments.
+ *           But MKT-01 is chiefly about AGENT LISTINGS: ownership, visibility, invoke permission,
+ *           definition-edit permission and export/license rights as separate grants. None of those
+ *           distinctions exists for a workforce agent today, so a citation would claim five of six.
+ *   MKT-02  "viewer, participant and CONTROLLER are distinct ... controller changes respect the existing
+ *           execution lease and approvals." The roles built are viewer, commenter and contributor, and
+ *           none can execute. There is no controller and no execution lease to hand over, so the part
+ *           of MKT-02 that is hard -- transferring control of a live run -- has not been written.
+ *           Public entry being admission rather than an anonymous credential IS proven (an
+ *           unauthenticated accept answers 401).
+ */
 import assert from 'node:assert/strict';
 import crypto from 'node:crypto';
 import { createRequire } from 'node:module';
