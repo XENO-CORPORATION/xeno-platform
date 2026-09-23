@@ -27,8 +27,12 @@ const ROLE_RANK = { viewer: 1, client: 1, reviewer: 2, editor: 3, admin: 4, owne
  * INHERIT. That default matters more than the list: a new object type added later gets the safe
  * behaviour without anyone remembering to opt out, and opting IN is a visible line in this file.
  *
- * 🔴 EVERY TYPE THAT WRITES A `parent` TUPLE TODAY IS LISTED, so this is behaviour-preserving for
- * every live grant. Derived by grepping every `relation: 'parent'` write site before changing it:
+ * ⚠️ THIS LIST WAS ONCE CLAIMED COMPLETE AND WAS NOT. It was derived by grepping `relation:
+ * 'parent'` write sites under `src/server` only, which silently excluded `schedule` and `skill` --
+ * both write their tuple from the suite that defines the behaviour, and both lost inheritance
+ * the moment any-parent following was removed. `scripts/parent-inheritance.test.mjs` now derives
+ * the write sites mechanically and fails on an undeclared type, so the claim is checked rather
+ * than asserted. The write sites, for reading:
  *   chatRoutes.js            conversation → project | workspace
  *   chatProjectAuthority.js  project → workspace, library_asset → project
  *   libraryAssets.js         library_asset | artifact → project | workspace
@@ -36,7 +40,19 @@ const ROLE_RANK = { viewer: 1, client: 1, reviewer: 2, editor: 3, admin: 4, owne
  *   chatScheduledWorker.js   conversation → project
  * Adding a type here grants inheritance deliberately; omitting one refuses it deliberately.
  */
-const PARENT_INHERITS = new Set(['conversation', 'project', 'library_asset', 'artifact']);
+const PARENT_INHERITS = new Set(['conversation', 'project', 'library_asset', 'artifact',
+  // 🔴 ADDED after both were found REVOKED by the narrowing above. The enumeration it was
+  // derived from missed them because it grepped only `src/server`, and these two types write
+  // their `parent` tuple from the suites that define the behaviour:
+  //   schedule:<id>#parent@project:<id>      a schedule belongs to its project
+  //   skill:<id>#parent@conversation:<id>    a skill belongs to its conversation
+  // Both are CONTAINMENT — the child has no existence outside the parent — so authority on the
+  // parent is authority on the child, which is exactly what the rewrite is for.
+  //
+  // The symptom was two failures that looked unrelated: `GET /scheduled/:id/runs` answering 404
+  // to the project's own owner, and "skill remains reachable through project inheritance" going
+  // false. One omission, two faces. See endpoint `parent-inheritance` gate below.
+  'schedule', 'skill']);
 
 /**
  * `workspaceContext.js` writes `<objectType>:<id>#parent@workspace:<id>` with a caller-supplied
