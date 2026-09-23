@@ -343,6 +343,55 @@ test('team membership and admitted member snapshots on owned isolated PostgreSQL
       await pool.query(REVOKE, [proposal.id]);
     });
 
+    // ROLE-05's operative claim: "function never widens platform or workspace authority ...
+    // promotion to `manager` grants nothing the principal's owner does not already hold."
+    //
+    // 🔴 THE ONLY WAY A SCHEMA CAN PROVE A GRANT DID NOT HAPPEN IS TO SHOW NOTHING WAS WRITTEN.
+    // So this promotes a worker to manager -- the single most authority-flavoured change the
+    // model allows, since ROLE-02 gives `manager` real powers -- and asserts the row count of
+    // EVERY table in the schema is unchanged. A grant is a row somewhere. If a future change
+    // wires the team function into `relationship_tuples`, or into any grant, lease or capability
+    // table that does not exist yet, a row appears and this fails without anyone having to
+    // remember to extend it: the table list is enumerated from the catalog, not hard-coded.
+    //
+    // ⚠️ The team's `team_membership_revision` DOES advance, and that is asserted rather than
+    // excluded, because it is the distinction the requirement turns on: bookkeeping about the
+    // membership having changed is not a grant of authority. Measured before it was written --
+    // the probe reported zero row-count deltas and that counter moving by one.
+    await t.test('promotion to manager writes no row anywhere, so it grants nothing (ROLE-05)', async () => {
+      const subject = randomUUID(), t2 = randomUUID();
+      await pool.query(
+        "INSERT INTO workforce_resources(id,kind,owner_user_id,name) VALUES($1,'team',$3,'Promote'),($2,'agent',$3,'Subject')",
+        [t2, subject, owner]);
+      const m = (await addMember(subject, t2, 'worker')).rows[0];
+
+      const census = async () => {
+        const tables = (await pool.query(
+          `SELECT tablename FROM pg_tables WHERE schemaname=$1 ORDER BY tablename`, [schema])).rows;
+        const counts = {};
+        for (const { tablename } of tables)
+          counts[tablename] = Number((await pool.query(`SELECT count(*) c FROM "${tablename}"`)).rows[0].c);
+        return counts;
+      };
+      const before = await census();
+      assert.ok(Object.keys(before).length >= 8,
+        'the census must actually see the schema -- an empty table list would pass vacuously');
+      const teamRevBefore = await teamRevision(t2);
+
+      await pool.query(`UPDATE workforce_team_memberships SET role='manager',revision=revision+1,
+        updated_at=clock_timestamp() WHERE id=$1`, [m.id]);
+      assert.equal((await pool.query('SELECT role FROM workforce_team_memberships WHERE id=$1',
+        [m.id])).rows[0].role, 'manager', 'the promotion really happened');
+
+      assert.deepEqual(await census(), before,
+        'a promotion wrote a row somewhere. A team function says what a member is FOR, never what ' +
+        'it may DO -- any new row is an authority grant the intersection never authorised.');
+
+      // The one thing that DOES move, asserted rather than ignored: bookkeeping is not a grant.
+      assert.equal(await teamRevision(t2), teamRevBefore + 1,
+        'the team records that its membership changed -- which is a revision, not a right');
+    });
+
     await t.test('a temporary table cannot shadow the descriptor and forge team admission', async () => {
       const client = await pool.connect();
       try {
