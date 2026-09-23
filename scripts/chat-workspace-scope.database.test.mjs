@@ -22,6 +22,12 @@
  * ACTIVE workspace, which defaults to the personal one. So a Studio owner who invites a colleague
  * from that page hands them every chat they ever started on the web.
  *
+ * LATENT, NOT LIVE -- production measured 2026-09-23 (aggregate counts, no content read): 17 active
+ * personal workspaces, NONE with a member other than its owner and NO pending invite to one; 26
+ * conversations parented to a personal workspace, 0 readable by anyone but their owner. The path
+ * exists and nobody has walked it yet. Re-measure before relying on that:
+ *   personal workspaces whose relationship_tuples name a user other than owner_user_id.
+ *
  * NOT repaired here: the fix is the spec's own prescription (§12, "resolve personal workspace
  * wrappers through one adapter"), and it spans conversation creation, the scoped list query, the
  * pooled-billing tag the header also drives, and a migration of existing conversations already
