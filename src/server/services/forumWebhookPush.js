@@ -9,11 +9,13 @@
  *
  * ── 🔴 THE DELIVERY ENGINE HAD NO PRODUCERS ─────────────────────────────────
  *
- * `dispatchWebhookEvent` in `routes/webhookRoutes.js` is a complete delivery
- * system: HMAC-SHA256 signing, an SSRF guard on registration, delivery rows,
- * exponential-backoff retry to 5 attempts. A repo-wide search for callers
- * returns NOTHING. The release plan lists it as "built (billing uses it)";
- * billing does not use it, and nor does anything else.
+ * `dispatchWebhookEvent` in `routes/webhookRoutes.js` had NO CALLERS AT ALL when this was
+ * written: a whole delivery system nothing ever invoked. The release plan listed it as
+ * "built (billing uses it)"; billing did not use it, and nor did anything else.
+ *
+ * This sweep is that producer, and it is still the only one. What changed since: dispatch
+ * no longer sends — it admits a durable row, and services/webhookDelivery.js delivers it
+ * under a fenced lease. Signing, retry and backoff moved there with the sender.
  *
  * That is the eleventh instance of this codebase's signature defect — after
  * xeno-workflow's 76 unregistered node types, xeno-tools' never-called
@@ -133,23 +135,29 @@ export async function pushPendingDigests(db, { limit = 25 } = {}) {
           continue; // rule 2 — and the cursor stays put, so the window accumulates
         }
 
-        // ⚠️ THE POOL, NOT `client`, AND THIS IS NOT A STYLE CHOICE.
+        // ⚠️ `client`, NOT THE POOL — AND THIS REVERSED WHEN DELIVERY BECAME DURABLE.
         //
-        // `dispatchWebhookEvent` inserts the delivery row and then fires the
-        // actual HTTP request FIRE-AND-FORGET — `deliverWebhook(...).catch()`.
-        // That continuation records the response code minutes later, long after
-        // this transaction has committed and the client has been returned to the
-        // pool. Handing it `client` means those writes land on a connection that
-        // belongs to somebody else's query by then.
+        // Queue admission and the digest cursor now commit TOGETHER. The worker only ever
+        // sees committed rows and never touches this transaction's client, so a sweep that
+        // rolls back leaves neither a moved cursor nor a delivery — which is the honest
+        // pairing. Admitting on the pool instead would let a row survive a rolled-back
+        // sweep and re-admit on the next pass.
         //
-        // It is also correct on its own terms: a delivery attempt is a fact that
-        // happened, and it must not disappear because the sweep's bookkeeping
-        // rolled back.
+        // HISTORICAL, kept because it explains the old shape: dispatch used to POST from
+        // here fire-and-forget, and its continuation wrote the response code minutes later
+        // — long after this transaction had committed and `client` had gone back to the
+        // pool, so those writes would have landed on somebody else's connection. The pool
+        // was mandatory then and is wrong now; that sender no longer exists.
+        //
+        // The event id is DERIVED, not random: a sweep that retries after a lost commit
+        // re-admits the same identity, and the unique (webhook_id, event_id) index turns
+        // the duplicate into an idempotent no-op instead of a second digest.
         const matched = await dispatchWebhookEvent(
-          db,
+          client,
           DIGEST_EVENT,
           { digest, deliveredAt: new Date().toISOString() },
           sub.user_id,
+          { eventId: `forum.digest:${sub.user_id}:${sub.last_push_at ? new Date(sub.last_push_at).toISOString() : 'initial'}` },
         );
 
         if (!matched) {

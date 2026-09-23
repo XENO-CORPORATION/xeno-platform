@@ -65,6 +65,7 @@ export function isForbiddenAddress(ip) {
     if (a === 192 && b === 0) return true;             // IETF protocol assignments
     if (a === 100 && b >= 64 && b <= 127) return true; // CGNAT
     if (a === 198 && (b === 18 || b === 19)) return true; // benchmarking
+    if ((a === 198 && b === 51) || (a === 203 && b === 0)) return true; // documentation
     if (a >= 224) return true;                         // multicast + reserved
     return false;
   }
@@ -76,6 +77,23 @@ export function isForbiddenAddress(ip) {
     if (/^f[cd]/.test(head)) return true;              // fc00::/7 unique-local
     if (/^fe[89ab]/.test(head)) return true;           // fe80::/10 link-local
     if (/^ff/.test(head)) return true;                 // multicast
+    // The unwrap at the top of this function matches only the DOTTED form. `::ffff:7f00:1`
+    // is that same loopback in hex and `::ffff:a9fe:a9fe` is the cloud metadata address;
+    // neither matches it, and both were ALLOWED before this. Decode the mapping and
+    // re-check as IPv4.
+    //
+    // This and the global-unicast floor below are each sufficient alone, and both are kept:
+    // a later relaxation of either must not silently reopen the mapping. Removing just one
+    // proves nothing, so the suite pins the OUTCOME -- see endpoint-address-rules.test.mjs.
+    const halves = v.split('::');
+    const left = halves[0].split(':').filter(Boolean);
+    const right = (halves[1] || '').split(':').filter(Boolean);
+    const words = (halves.length === 2 ? [...left, ...Array(8 - left.length - right.length).fill('0'), ...right] : left).map(word => parseInt(word, 16));
+    if (words.slice(0, 5).every(word => word === 0) && words[5] === 0xffff) {
+      return isForbiddenAddress(`${words[6] >> 8}.${words[6] & 255}.${words[7] >> 8}.${words[7] & 255}`);
+    }
+    if (words[0] < 0x2000 || words[0] > 0x3fff) return true; // global unicast only
+    if (words[0] === 0x2002 || (words[0] === 0x2001 && (words[1] === 0 || words[1] === 0xdb8))) return true; // 6to4, Teredo, doc
     return false;
   }
 
@@ -161,7 +179,7 @@ function guardedLookup(hostname, options, callback) {
     if (err) return callback(err);
     const list = Array.isArray(addresses) ? addresses : [addresses];
     const safe = list.filter((a) => !isForbiddenAddress(a.address));
-    if (safe.length === 0) {
+    if (safe.length !== list.length || safe.length === 0) {
       const e = new Error(`refusing to connect to ${hostname}: resolves to a non-public address`);
       e.code = 'endpoint_forbidden_address';
       return callback(e);
@@ -185,29 +203,58 @@ function guardedLookup(hostname, options, callback) {
  * request. A stack trace carrying the request object is a leak.
  */
 export function safeGet(rawUrl, { headers = {}, timeoutMs = DEFAULT_TIMEOUT_MS, maxBytes = DEFAULT_MAX_BYTES } = {}) {
+  return safeRequest(rawUrl, { headers, timeoutMs, maxBytes });
+}
+
+/**
+ * The guarded transport. Generalized from `safeGet` so a webhook can POST through the same
+ * address checks rather than reaching for bare `fetch` -- the durable delivery worker sends
+ * to URLs the user supplied, which is exactly the case these guards exist for.
+ *
+ * Over the previous GET-only version it also: settles ONCE (a late `error` after `end`
+ * could otherwise reject an already-resolved request), enforces the deadline across the
+ * WHOLE request rather than only socket inactivity, disables connection reuse so every
+ * attempt re-resolves through `guardedLookup`, and preserves `Retry-After` -- the one
+ * scheduling field the retry policy needs. No other response header crosses this boundary.
+ */
+export function safeRequest(rawUrl, { method = 'GET', headers = {}, body, timeoutMs = DEFAULT_TIMEOUT_MS, maxBytes = DEFAULT_MAX_BYTES, signal } = {}) {
   const url = assertSafeEndpointUrl(rawUrl);
+  if (!['GET', 'POST', 'HEAD'].includes(method)) throw new TypeError('Unsupported endpoint method');
+  if (!Number.isInteger(timeoutMs) || timeoutMs < 1 || timeoutMs > 30_000 || !Number.isInteger(maxBytes) || maxBytes < 0 || maxBytes > 1024 * 1024) throw new TypeError('Invalid endpoint budget');
+  if (body !== undefined && (typeof body !== 'string' && !Buffer.isBuffer(body))) throw new TypeError('Invalid endpoint body');
+  if (body !== undefined && Buffer.byteLength(body) > 256 * 1024) throw new TypeError('Endpoint request exceeds size cap');
 
   return new Promise((resolve, reject) => {
+    let settled = false;
+    let deadline;
+    const finish = (error, result) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(deadline);
+      signal?.removeEventListener('abort', abort);
+      if (error) reject(error); else resolve(result);
+    };
+    const abort = () => { const error = new Error('endpoint request aborted'); error.code = 'endpoint_aborted'; req.destroy(); finish(error); };
     const req = https.request(
       {
         protocol: url.protocol,
-        hostname: url.hostname,
+        hostname: url.hostname.replace(/^\[|\]$/g, ''),
         port: url.port || 443,
         path: `${url.pathname}${url.search}`,
-        method: 'GET',
+        method,
         headers: { Accept: 'application/json', ...headers },
         lookup: guardedLookup,
+        agent: false,
         timeout: timeoutMs,
       },
       (res) => {
         // Refuse redirects rather than following and re-checking. A 302 into the
-        // metadata service is the textbook bypass and nothing legitimate needs
-        // one to answer a models listing.
+        // metadata service is the textbook bypass and nothing legitimate needs one.
         if (res.statusCode >= 300 && res.statusCode < 400) {
-          res.resume();
+          res.destroy();
           const e = new Error('endpoint issued a redirect, which is refused');
           e.code = 'endpoint_redirect_refused';
-          return reject(e);
+          return finish(e);
         }
 
         let size = 0;
@@ -218,23 +265,32 @@ export function safeGet(rawUrl, { headers = {}, timeoutMs = DEFAULT_TIMEOUT_MS, 
             res.destroy();
             const e = new Error('endpoint response exceeded the size cap');
             e.code = 'endpoint_response_too_large';
-            return reject(e);
+            return finish(e);
           }
           chunks.push(c);
         });
-        res.on('end', () => resolve({ status: res.statusCode, body: Buffer.concat(chunks).toString('utf8') }));
-        res.on('error', (err) => reject(scrub(err)));
+        res.on('end', () => {
+          const retryAfter = res.headers['retry-after'];
+          finish(null, { status: res.statusCode, body: Buffer.concat(chunks).toString('utf8'),
+            ...(typeof retryAfter === 'string' ? { retryAfter } : {}) });
+        });
+        res.on('error', (err) => finish(scrub(err)));
+        res.on('aborted', () => finish(scrub({ code: 'endpoint_response_aborted' })));
       }
     );
 
-    req.on('timeout', () => {
+    const timeout = () => {
       req.destroy();
       const e = new Error('endpoint timed out');
       e.code = 'endpoint_timeout';
-      reject(e);
-    });
-    req.on('error', (err) => reject(scrub(err)));
-    req.end();
+      finish(e);
+    };
+    req.on('timeout', timeout);
+    deadline = setTimeout(timeout, timeoutMs); // whole request, not only socket inactivity
+    req.on('error', (err) => finish(scrub(err)));
+    signal?.addEventListener('abort', abort, { once: true });
+    if (signal?.aborted) return abort();
+    req.end(body);
   });
 }
 

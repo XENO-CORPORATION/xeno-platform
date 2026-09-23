@@ -29,6 +29,7 @@ import { workspaceMembershipOperationRoutes } from './workspaceMembershipOperati
 import { accountWorkspaceOperationRoutes } from './accountWorkspaceOperationRoutes.js';
 import workspaceTeamRoutes from './workspaceTeamRoutes.js';
 import { workspaceKeyRoutes } from './workspaceKeyRoutes.js';
+import workspaceNotificationRoutes from './workspaceNotificationRoutes.js';
 import { requireWorkspaceAuthority } from '../middleware/workspaceScopes.js';
 
 // ── ref helpers ──────────────────────────────────────────────────────────────
@@ -232,6 +233,7 @@ const router = express.Router();
 router.use(requireWorkspaceAuthority);
 router.use('/:id/teams', workspaceTeamRoutes);
 router.use('/:id/api-keys', workspaceKeyRoutes);
+router.use('/:id/notifications', workspaceNotificationRoutes);
 router.use('/:id', workspaceMembershipOperationRoutes);
 
 // GET /api/workspaces/:id — the workspace itself. Present on the preservation branch and

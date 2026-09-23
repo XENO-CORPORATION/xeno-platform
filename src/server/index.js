@@ -152,6 +152,7 @@ import { initBackgroundJobs } from './services/backgroundJobs.js';
 import { startNotificationEmailSweep } from './services/forumNotifyEmail.js';
 import { startWebhookPushSweep } from './services/forumWebhookPush.js';
 import { startWorkspaceInviteDeliveryWorker } from './services/workspaceInviteDelivery.js';
+import { startWebhookDeliveryWorker } from './services/webhookDelivery.js';
 
 // ── Internal-service JSON POST helper (replaces the axios dependency) ──────────
 // Uses the module's existing `fetch` + an AbortController timeout. Returns
@@ -3847,7 +3848,13 @@ app.use((err, req, res, next) => {
 // =============================================================================
 // GRACEFUL SHUTDOWN
 // =============================================================================
+let webhookDeliveryWorker;
+let webhookDeliveryStopping = false;
 function gracefulShutdown(signal) {
+  // Set FIRST: a signal can arrive while startup migrations are still running, and without
+  // it the worker would start after the shutdown had already passed that line.
+  webhookDeliveryStopping = true;
+  const deliveryStopped = webhookDeliveryWorker?.close();
   console.log(`\n${signal} received. Starting graceful shutdown...`);
 
   // Hand leadership over BEFORE draining: a standby should pick the background
@@ -3860,7 +3867,8 @@ function gracefulShutdown(signal) {
 
     // Close database pool
     try {
-      await pool.end();
+      await deliveryStopped;
+    await pool.end();
       console.log('Database pool closed.');
     } catch (err) {
       console.error('Error closing database pool:', err.message);
@@ -3928,6 +3936,9 @@ try {
   process.exit(1);
 }
 
+// Nothing below this boundary can serve requests, perform scheduled work or
+// announce readiness while migrations are pending, deferred or rejected.
+if (!webhookDeliveryStopping) webhookDeliveryWorker = startWebhookDeliveryWorker(pool);
 // Nothing below this boundary can serve requests, perform scheduled work or
 // announce readiness while migrations are pending, deferred or rejected.
 app.locals.migrationsReady = true;
