@@ -21,6 +21,17 @@ import { generateSignedUrl } from '../middleware/cdnOptimization.js';
 
 // Platform fee, configurable via env. Default 25% (SPEC §12 open Q1: propose
 // 20–30%; 0 for official first-party since there is no external creator).
+//
+// ⚠️ THE 25% DEFAULT CONTRADICTS TWO LOCKED DECISIONS, and "open Q1" above is no longer open for
+// agents. XENO-WORKFORCE-01 D07 (locked): "15% commission on net creator-service charge for new
+// paid agent listings, excluding separate compute/tax"; FUND-19 fixes the arithmetic as
+// floor(net_service_micro * 15 / 100) on the CUMULATIVE amount per billing item, so splitting
+// events cannot change the total. `XENO PRICING - STANDARD & LEDGER.md` (locked) says 15–20% for
+// marketplace purchases generally. 25% is outside both, and the Math.round-per-transaction below
+// is not partition-independent. Measured 2026-09-23: MARKETPLACE_PLATFORM_FEE_PCT is unset in
+// production and there are 0 third-party listings and 0 marketplace transactions, so nothing has
+// been charged at the wrong rate. Not changed here because the rate for NON-agent kinds is a
+// commercial choice inside the ledger's range -- decide it, then implement D07/FUND-19 together.
 const DEFAULT_PLATFORM_FEE_PCT = Number(process.env.MARKETPLACE_PLATFORM_FEE_PCT ?? 25);
 const SIGNED_URL_TTL_SECONDS = 6 * 60 * 60; // 6h, matches the model-catalog precedent
 
