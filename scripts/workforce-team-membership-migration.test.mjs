@@ -18,12 +18,20 @@
  * requirement with a named fix, not an accepted behaviour.
  */
 /* ⚠️ NOT CITED HERE, AND WHY.
- *   ROLE-05  "function never widens platform or workspace authority; the effective right is the
- *            INTERSECTION of all three axes plus assignment, entitlement and budget (RUN-02)."
- *            The schema keeps the three axes separate -- proven above, where a platform role name
- *            is refused in the team-function column -- and that is a PRECONDITION for ROLE-05,
- *            not ROLE-05. The claim is about what an authorizer COMPUTES, and nothing in this
- *            estate reads a team function to decide anything yet. */
+ *   LIFE-05  shares ROLE-05's second sentence but adds that changing a team function is "a
+ *            membership revision WITH A RECORDED ACTOR AND REASON". The membership row carries
+ *            `created_by_user_id` and a revision: it records who CREATED the membership, never
+ *            who changed its role or why. `workforce_operations` carries `member.promote` with a
+ *            decider, an authority and a rationale -- but nothing REQUIRES one to be written when
+ *            a role changes, so it is a log somebody may or may not keep. Citing LIFE-05 would
+ *            claim an enforcement that does not exist.
+ *   RUN-02   the intersection ROLE-05 defers to. No authorizer computes it; there is no run model.
+ *
+ * ✅ ROLE-05 ITSELF IS NOW CITED, above, by the promotion census. An earlier version of this note
+ * refused it on the grounds that "the claim is about what an authorizer COMPUTES" -- which was
+ * true and was the wrong conclusion. A schema cannot show what an authorizer computes, but it CAN
+ * show that a promotion wrote no row anywhere, and "grants nothing" is exactly that. Kept as a
+ * correction rather than deleted, because the reasoning that nearly lost it generalises. */
 
 import test from 'node:test';
 import assert from 'node:assert/strict';

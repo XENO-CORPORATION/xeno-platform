@@ -15,8 +15,11 @@
  *            Kept rather than deleted: a reader arriving at this list needs to know it moved.
  *   LIFE-02  removal is REVOCATION plus SETTLEMENT, and the two are separate. There is no
  *            settlement anywhere -- it is FUND-domain and unbuilt.
- *   LIFE-03  removal never deletes history. OWN-06 governs it and the membership suite proves it;
- *            this suite proves only that an OPERATION cannot be deleted.
+ *   LIFE-03  ✅ NOW CITED, in this suite -- see the departed-principal case. It was refused here
+ *            on the grounds that "OWN-06 governs it and the membership suite proves it", which
+ *            missed LIFE-03's own normative sentence: a departed worker's RECEIPTS survive and
+ *            attribution is not retroactively rewritten. That is a property of the operations
+ *            table and of nothing else. Kept as a correction, not deleted.
  *   LIFE-04  evaluation is EVIDENCE-DERIVED, never a rating column. `evidence` being a real array
  *            is a precondition, proven above. Nothing derives an evaluation from it.
  *   LIFE-05  promotion changes a FUNCTION, never authority directly. `member.promote` is a
