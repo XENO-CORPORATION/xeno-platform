@@ -90,7 +90,11 @@ test('divisions on owned isolated PostgreSQL', { skip: workforceProofUnavailable
         [company.id, otherWs]);
     });
 
-    await t.test('divisions NEST, and a nested one cannot cross workspaces or cycle (D15)', async () => {
+    // DIV-01's structural half: the record carries an optional parent FROM THE START, because
+    // retrofitting a parent edge onto live grants is a security migration rather than an addition.
+    // Its remaining clauses -- a division owns teams, has a head, carries a budget scope -- are
+    // proven by the three cases below, not by this one.
+    await t.test('divisions NEST, and a nested one cannot cross workspaces or cycle (DIV-01, D15)', async () => {
       const dev = (await mkDivision(companyWs, 'dev')).rows[0];
       const platform = (await mkDivision(companyWs, 'platform', { parent: dev.id })).rows[0];
       assert.equal(platform.parent_division_id, dev.id,
@@ -111,7 +115,12 @@ test('divisions on owned isolated PostgreSQL', { skip: workforceProofUnavailable
         [dev.id, platform.id]);
     });
 
-    await t.test('OWNING and FUNDING are two independent edges, defaulted not fused (D17)', async () => {
+    // DIV-04 is asserted at the end of this case: at most ONE owning division per resource, said
+    // by a primary key rather than by a trigger, so a second owner is unrepresentable. Its
+    // containment half -- inside the resource's OWN workspace -- is the DIV-02 case below.
+    // ⚠️ DIV-04's transfer clause (permanent until an explicit AUDITED transfer, OWN-05) has no
+    // case here; an owner can be re-pointed by a plain UPDATE and nothing records who did it.
+    await t.test('OWNING and FUNDING are two independent edges, defaulted not fused (DIV-04, D17)', async () => {
       const dev = (await pool.query(`SELECT id FROM workforce_divisions WHERE workspace_id=$1 AND key='dev'`,
         [companyWs])).rows[0];
       const office = (await mkDivision(companyWs, 'office')).rows[0];
@@ -222,6 +231,44 @@ test('divisions on owned isolated PostgreSQL', { skip: workforceProofUnavailable
       await deny(`UPDATE workforce_divisions SET name='x' WHERE id=$1`, [d.id]);
       await deny(`UPDATE workforce_division_ownership SET revision=revision+3 WHERE resource_id=$1`, [teamA]);
       await deny(`UPDATE workforce_division_funding SET revision=revision+3 WHERE resource_id=$1`, [teamA]);
+    });
+
+    // 🔴 DIV-10 IS THE ONE DIVISION RULE THAT ROTS SILENTLY, so it gets a gate rather than prose.
+    // Every other requirement here fails loudly when broken -- a cycle is refused, a second owner
+    // is refused. "Reuse the existing model" fails by ADDITION: somebody needing a division budget
+    // adds `division_wallets`, it works, every test stays green, and the ecosystem now has a second
+    // wallet whose balance can disagree with the ledger. That is the `organizations` mistake
+    // (xeno-company SPEC §4.1) and the *"UI label mistaken for pool enforcement"* failure in one.
+    await t.test('divisions add NO second wallet, roster, permission engine or audit stream (DIV-10)', async () => {
+      const introduced = (await pool.query(
+        `SELECT table_name FROM information_schema.tables
+          WHERE table_schema=$1 AND table_name LIKE 'workforce_division%' ORDER BY table_name`,
+        [schema])).rows.map((r) => r.table_name);
+      // The division migration is allowed exactly three records: the division itself and its two
+      // independent edges (D17). Anything else is a parallel mechanism wearing a division prefix.
+      assert.deepEqual(introduced,
+        ['workforce_division_funding', 'workforce_division_ownership', 'workforce_divisions'],
+        'a fourth division table is a second mechanism -- extend an existing record instead');
+
+      // Said again by MEANING rather than by name, because the rule is about the concept and a
+      // table called `workforce_division_budgets` would pass the list above if it were added to it.
+      const forbidden = (await pool.query(
+        `SELECT table_name FROM information_schema.tables
+          WHERE table_schema=$1
+            AND table_name ~ '(wallet|balance|budget|roster|member|permission|role|grant|audit|event)'
+            AND table_name LIKE '%division%'`, [schema])).rows.map((r) => r.table_name);
+      assert.deepEqual(forbidden, [],
+        'budget reuses the ledger allocation, authority reuses ReBAC, membership reuses the team record');
+
+      // And the edges REUSE the canonical resource rather than describing their own: a row here
+      // cannot name a resource the workforce model does not already own, which is what makes the
+      // owning-division edge an attribute of the existing record instead of a second roster.
+      await deny(
+        `INSERT INTO workforce_division_ownership(resource_id,resource_kind,division_id,created_by_user_id)
+         VALUES($1,'team',$2,$3)`,
+        ['00000000-0000-4000-8000-0000000000dd',
+         (await pool.query(`SELECT id FROM workforce_divisions WHERE workspace_id=$1 AND key='dev'`,
+           [companyWs])).rows[0].id, creator], '23503');
     });
 
     await t.test('populated rollback is refused; empty rollback is clean and re-appliable', async () => {
