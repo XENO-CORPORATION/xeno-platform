@@ -10,6 +10,33 @@ import { tablesDDL } from './fixtures/schema.mjs';
  *            lifetime_spent (not lifetime_earned), adds a neutral paid lot (not promo),
  *            appends a type='refund' journal row, and is idempotent per original txn.
  *   - sweeper: sweepExpiredHolds voids expired 'held' rows, leaves non-expired ones.
+ *   - an expired FUNDED hold keeps its lots reserved until its state changes.
+ *
+ * ⚠️ XENO-WORKFORCE-01 FUND-09 IS NOT CITED HERE, and the reason is a measured defect, not an
+ * unbuilt feature. FUND-09: "Do not release a reservation merely because a lease/HTTP request
+ * expired. Running or uncertain provider work remains committed until its settlement/cancellation
+ * is proved." Half of that holds today and is pinned below: a FUNDED hold whose expires_at has
+ * passed still withholds its lots (usageCreditFunding.allocateFunding counts a reservation while
+ * state='held', whatever its expiry), so a second spend is refused. The other half does not hold.
+ * Measured against PostgreSQL on 2026-09-23, with a 100-credit hold for a run that is still going:
+ *
+ *   1. TTL lapses       -> spending is refused (correct), but getBalanceV2 reports 100 AVAILABLE,
+ *                          because activeHoldsMicro filters expires_at and allocateFunding does not
+ *   2. sweeper runs     -> the hold is voided on time alone; the 100 credits are spent elsewhere
+ *   3. the run settles  -> settleHoldV2 sees a non-held state and no-ops: state voided, settled 0,
+ *                          reported as success. The run was free and its reservation spent twice.
+ *
+ * Who reaches it: the service hold route defaults to 3600 s, xeno-agents-api sends no expiry, and
+ * no wall-clock bound on its runs was found -- so a hosted run that outlives its hour and a sweep
+ * ends this way. (xeno-api-proxy derives its TTL from the execution deadline plus a margin, so its
+ * holds are bounded.) The existing sweeper assertion below uses an UNFUNDED raw-inserted hold,
+ * whose release at expiry is consistent with allocateFunding's legacy branch; it is not itself
+ * the contradiction.
+ *
+ * NOT repaired in this change: FUND-09's own answer is "a qualified run-backed extension", i.e.
+ * the running service keeps its hold alive, which is a new verb on the service ledger consumed by
+ * xeno-agents-api and xeno-api-proxy -- a billing interface change across three services, and so
+ * a decision rather than a repair. This note is the record; there is deliberately no second copy.
  *
  * Run: DATABASE_URL=postgresql://t:t@127.0.0.1:5432/t node tests/ledger-correctness.test.mjs
  */
@@ -17,7 +44,7 @@ import pg from 'pg';
 import { migrateAccountV2 } from '../database/migrate-account-v2.js';
 import {
   addGrant, reverseUsage, recordUsageV2, getBalanceV2, verifyChainV2,
-  sweepExpiredHolds, MICRO_PER_CREDIT,
+  sweepExpiredHolds, holdV2, MICRO_PER_CREDIT,
 } from '../utils/creditLedgerV2.js';
 import { refundCredits } from '../utils/creditTransactions.js';
 
@@ -97,6 +124,27 @@ async function main() {
   const st = async (hid) => (await pool.query('SELECT state FROM credit_holds WHERE user_id=$1 AND hold_id=$2', [u3, hid])).rows[0].state;
   ok(await st('h-expired') === 'voided', 'sweeper: expired hold → state voided');
   ok(await st('h-live') === 'held', 'sweeper: non-expired hold left untouched (still held)');
+
+  // ── An expired FUNDED hold still withholds its lots until something changes its state ──
+  // The half of FUND-09 that holds today (see the header). Expiry is backdated rather than slept
+  // for, so the proof is about the rule and not about the clock.
+  // Each assertion gets its own account: sharing one lets an earlier accepted spend drain the
+  // balance and make the next refusal pass for the wrong reason (measured while mutation-checking).
+  const expiredFundedHold = async (tag) => {
+    const uid = await legacyUser(0);
+    await addGrant(pool, uid, { amountMicro: C(100), kind: 'paid', sourceRef: `grant-${tag}` });
+    await holdV2(pool, uid, { holdId: 'run-long', surface: 'agents', operation: 'run', amountMicro: C(100) });
+    await pool.query("UPDATE credit_holds SET expires_at = now() - interval '1 second' WHERE user_id=$1 AND hold_id='run-long'", [uid]);
+    return uid;
+  };
+  const refusal = async (fn) => { try { await fn(); return 'accepted'; } catch (e) { return e.code; } };
+  const u4 = await expiredFundedHold('4');
+  ok(await refusal(() => recordUsageV2(pool, u4, { transactionId: 'other-spend', surface: 's', operation: 'o', costMicro: C(100) })) === 'INSUFFICIENT_CREDITS',
+    'expired funded hold: a spend against its lots is still refused');
+  ok(await balance(u4) === C(100) && await lots(u4) === C(100), 'expired funded hold: the refused spend charged nothing');
+  const u5 = await expiredFundedHold('5');
+  ok(await refusal(() => holdV2(pool, u5, { holdId: 'second-run', surface: 'agents', operation: 'run', amountMicro: C(1) })) === 'INSUFFICIENT_CREDITS',
+    'expired funded hold: a second reservation against its lots is still refused');
 
   // ── Chain integrity across grant + spend + refund ───────────────────────────
   ok((await verifyChainV2(pool, u2)).ok, 'chain: verifyChainV2 ok across grant+spend+refund');
