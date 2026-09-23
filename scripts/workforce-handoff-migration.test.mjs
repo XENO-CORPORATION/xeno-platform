@@ -30,8 +30,15 @@
  *   NFR-03   "at most one effective contribution, reservation, settlement and result delivery per
  *            logical operation under duplicate requests/restarts." The durable-operation identity
  *            (actor_user_id, client_id, operation_id) genuinely delivers at-most-once and is
- *            proven above -- but NFR-03's four nouns are all FUND-domain concepts with no tables,
- *            so citing it would claim the funding half on the strength of the plumbing half. */
+ *            proven above. CORRECTED 2026-09-23: this note used to say NFR-03's four nouns are
+ *            "FUND-domain concepts with no tables". Two of them are not. RESERVATION and
+ *            SETTLEMENT are the existing ledger's credit_holds, keyed UNIQUE (user_id, hold_id),
+ *            and replay of both is proven elsewhere -- a replayed holdId does not double-reserve
+ *            (service-ledger.test.mjs) and a replayed settle is a no-op on a non-held hold
+ *            (usage-credit-postgres-proof.mjs). The real gap is narrower: CONTRIBUTION does not
+ *            exist anywhere in src/server (0 hits outside forum and collaboration vocabulary),
+ *            and RESULT DELIVERY has no workforce record. A citation would still claim half of
+ *            the requirement that has never been written. */
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
