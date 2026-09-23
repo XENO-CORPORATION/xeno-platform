@@ -109,7 +109,7 @@ test('team membership and admitted member snapshots on owned isolated PostgreSQL
         VALUES($1,$2,'agent',9)`, [team, loneAgent]);
     });
 
-    await t.test('role is the ROLE-02 team function -- exactly three, and no default', async () => {
+    await t.test('role is the ROLE-02 team function -- exactly three, and no default (ROLE-01)', async () => {
       // Without these, the CHECK could be deleted and every other assertion here would still pass:
       // the suite only ever writes valid values. A constraint nothing tries to violate is a
       // constraint nobody is verifying.
@@ -137,6 +137,41 @@ test('team membership and admitted member snapshots on owned isolated PostgreSQL
       await deny(
         `INSERT INTO workforce_team_memberships(team_id,member_resource_id,member_resource_kind,created_by_user_id)
          VALUES($1,$2,'agent',$3)`, [team, loneAgent, creator], '23502');
+    });
+
+    // 🔴 ROLE-03 HOLDS ONLY BY THE SHAPE OF AN INDEX, AND NOTHING SAID SO UNTIL NOW.
+    // `workforce_team_active_resource` is UNIQUE on (team_id, member_resource_id) -- per TEAM.
+    // Drop `team_id` from it, which reads like tightening a uniqueness rule, and a principal
+    // becomes admissible to exactly one team ecosystem-wide: §7.4's *"an agent can also belong to
+    // multiple teams with contextual roles"* silently becomes false, and every existing case here
+    // still passes, because they all operate on one team. A constraint whose CORRECTNESS nothing
+    // exercises is a constraint nobody is verifying -- the same reasoning as the case above.
+    await t.test('the same principal is a manager in one team and an observer in another (ROLE-03)', async () => {
+      const teamA = randomUUID(), teamB = randomUUID(), dualAgent = randomUUID();
+      await pool.query(
+        "INSERT INTO workforce_resources(id,kind,owner_user_id,name) VALUES($1,'team',$4,'Alpha'),($2,'team',$4,'Beta'),($3,'agent',$4,'Dual')",
+        [teamA, teamB, dualAgent, owner]);
+
+      const asManager = (await addMember(dualAgent, teamA, 'manager')).rows[0];
+      const asObserver = (await addMember(dualAgent, teamB, 'observer')).rows[0];
+
+      // Both live AT ONCE. Revoking one to add the other would prove the opposite of ROLE-03.
+      const live = (await pool.query(
+        `SELECT team_id, role FROM workforce_team_memberships
+          WHERE member_resource_id=$1 AND state='active' ORDER BY role`, [dualAgent])).rows;
+      assert.deepEqual(live, [{ team_id: teamA, role: 'manager' }, { team_id: teamB, role: 'observer' }],
+        'two live memberships, two different functions, neither merged into a principal-level role');
+
+      // The functions are independent: demoting the manager leaves the observer untouched. If a
+      // function were a property OF THE PRINCIPAL, one write here would move both.
+      await pool.query(`UPDATE workforce_team_memberships SET role='worker',revision=revision+1,
+        updated_at=clock_timestamp() WHERE id=$1`, [asManager.id]);
+      assert.equal((await pool.query('SELECT role FROM workforce_team_memberships WHERE id=$1',
+        [asObserver.id])).rows[0].role, 'observer', 'the other membership is unmoved');
+
+      // ...and one live membership per member IS still enforced -- per team. Said here so that
+      // this case cannot be read as licence to drop the uniqueness index it depends on.
+      await assert.rejects(addMember(dualAgent, teamA, 'observer'), error => error.code === '23505');
     });
 
     await t.test('one live membership per member, and endpoints must be exactly one kind', async () => {
