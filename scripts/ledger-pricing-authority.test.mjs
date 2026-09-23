@@ -16,6 +16,39 @@
  *   - one-shot usage ignores the price table                       -> "a one-shot usage is priced by the platform"
  *   - a public route publishes the per-token table                 -> "no server route publishes the per-token table"
  *   - gpt-6 falls back to default tier                             -> "flagship ids resolve to the flagship tier"
+ *
+ * ⚠️ THE ACCT FAMILY OF XENO-WORKFORCE-01 IS NOT CITED HERE, AND THE REASON IS NARROWER THAN THE
+ * ONE THIS ESTATE HAD WRITTEN DOWN. The workforce coverage tenet used to say ACCT and FUND "create
+ * no tables", citing a pin that enumerates `workforce_`-prefixed tables. That pin is blind to
+ * these families: they are specified against the EXISTING ledger -- credit_accounts (with its
+ * owner_kind scope), credit_holds, credit_hold_funding, credit_transactions, credit_grants -- all
+ * of which exist, and much of which is proven by this suite and the proof:* scripts. Corrected in
+ * the tenet on 2026-09-23.
+ *
+ * What is actually missing is the ACCT VOCABULARY, not the ledger under it:
+ *
+ *   ACCT-08  its pricing clause is proven BELOW -- the platform prices from model and tokens, a
+ *            caller naming a price is refused, and a usage without a usage object is refused
+ *            ("the caller cannot send money"). But the same requirement demands account history
+ *            showing "incoming/outgoing gifts, contributions, reservations, usage and returns".
+ *            Reservations and usage exist. Gifts, contributions and returns do not: `gift` appears
+ *            ZERO times in src/server. A citation would claim three ledger operations that have
+ *            never been written.
+ *   ACCT-02  the three operations it exists to distinguish -- gift, contribute, budget allocation
+ *            -- are the same gap. Only the third has any implementation (holds/grants).
+ *   ACCT-03/04/05/06  are entirely about gift mechanics: recipient confirmation, atomic
+ *            debit-and-credit with a receipt, non-cancellability with a separately authorized
+ *            return, opt-out. None exists.
+ *   ACCT-01  "the central Platform/account ledger is authoritative ... the XENO private API must
+ *            not keep an independent spendable balance." The platform half is proven here. The
+ *            other half is a claim about a DIFFERENT REPOSITORY (xeno-api-proxy), which this suite
+ *            cannot observe -- and which reads its balance from this ledger rather than holding
+ *            one, checked 2026-09-23 but not assertable from inside xeno-platform.
+ *   ACCT-07  "agent-originated gifts/contributions require explicit bounded spend approval." The
+ *            agent-subject half IS proven below (an agent's balance is its OWNER's; all four legs
+ *            resolve one subject) and spend_caps exist -- but again, no gift or contribution.
+ *
+ * So ACCT closes by BUILDING gift/contribute/return on this ledger, not by building a ledger.
  */
 
 import test from 'node:test';
