@@ -1,3 +1,32 @@
+/* 🔴 ASN-06 IS A GENUINE SPEC-vs-IMPLEMENTATION CONFLICT AND IS DELIBERATELY NOT CITED.
+ * The requirement reads: "Permissions use explicit modes such as `none`, `explicit`,
+ * `inherit_parent`. Empty collections do not encode all three. The legacy empty=inherited policy
+ * is migrated with its effective parent bound, never changed implicitly."
+ *
+ * The second sentence IS proven, in the policy-grammar case below: `[]`, `{}` and null are all
+ * invalid, and an empty capability list under an EXPLICIT mode is a real decision that grants
+ * nobody. The first sentence is not. `workforce_assignment_policy_valid` asserts `inherit_parent`
+ * INVALID -- only `none` and `explicit` exist -- and the case below pins that refusal, so the
+ * implementation actively contradicts a mode the requirement names. There is also no legacy
+ * migration binding an effective parent, because there is nothing to inherit from.
+ *
+ * ⚠️ This is NOT a test gap to paper over, and it is NOT a doc bug to tidy away: per the standing
+ * rule, a capability claim is a REQUIREMENT, so the gap closes UPWARD or it gets an owner and an
+ * exit condition. Citing ASN-06 would hide a decision somebody has to make.
+ *
+ * ⚠️ ALSO NOT CITED, for the ordinary reason that nothing is built:
+ *   ASN-02  "a team may target several projects; several teams may target one project" -- there
+ *           is no project-participation record. The workspace half (explicit records, never
+ *           inferred from path prefixes) is proven; the project half has no table.
+ *   ASN-07  directory bindings carrying host/environment identity and a canonical root. Measured:
+ *           zero occurrences of canonical_root / host_identity anywhere under src/.
+ *   ASN-08  reconciling Interface directory projections with `chat_projects` by explicit id
+ *           mapping. No mapping table exists.
+ *   ASN-09  a discriminated personal-project OR workspace-project participation target. The
+ *           composite-FK case below proves the SCHEMA AFFORDANCE a participation record would
+ *           bind to -- deliberately, using a fixture table -- which is a precondition and not the
+ *           requirement. */
+
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { randomBytes, randomUUID } from 'node:crypto';

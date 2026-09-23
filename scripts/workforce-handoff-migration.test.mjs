@@ -6,6 +6,27 @@
  * Run: WORKFORCE_TEST_DATABASE_URL=postgresql://t:t@127.0.0.1:5432/workforceproof \
  *      node --test scripts/workforce-handoff-migration.test.mjs
  */
+/* ⚠️ NOT CITED FROM THIS SUITE, AND WHY. These are the acts §8.2d names; this migration LOGS
+ * decisions about them, which is not the same as performing them.
+ *   LIFE-01  joining is an ADMISSION, not a creation. `member.admit` is a recordable decision
+ *            here; admission itself lives in the membership model.
+ *   LIFE-02  removal is REVOCATION plus SETTLEMENT, and the two are separate. There is no
+ *            settlement anywhere -- it is FUND-domain and unbuilt.
+ *   LIFE-03  removal never deletes history. OWN-06 governs it and the membership suite proves it;
+ *            this suite proves only that an OPERATION cannot be deleted.
+ *   LIFE-04  evaluation is EVIDENCE-DERIVED, never a rating column. `evidence` being a real array
+ *            is a precondition, proven above. Nothing derives an evaluation from it.
+ *   LIFE-05  promotion changes a FUNCTION, never authority directly. `member.promote` is a
+ *            loggable kind; the act belongs to the membership model.
+ *   LIFE-08  objectives as the top of the work tree -- no table.
+ *   LIFE-09  capacity is DERIVED, never declared -- nothing derives it.
+ *
+ *   NFR-03   "at most one effective contribution, reservation, settlement and result delivery per
+ *            logical operation under duplicate requests/restarts." The durable-operation identity
+ *            (actor_user_id, client_id, operation_id) genuinely delivers at-most-once and is
+ *            proven above -- but NFR-03's four nouns are all FUND-domain concepts with no tables,
+ *            so citing it would claim the funding half on the strength of the plumbing half. */
+
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createHash, randomBytes, randomUUID } from 'node:crypto';

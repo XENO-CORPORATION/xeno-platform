@@ -7,6 +7,24 @@
  * Run: WORKFORCE_TEST_DATABASE_URL=postgresql://t:t@127.0.0.1:5432/workforceproof \
  *      node --test scripts/workforce-division-migration.test.mjs
  */
+/* ⚠️ THE DIVISION REQUIREMENTS THIS SUITE DELIBERATELY DOES NOT CITE, AND WHY.
+ * Recorded here rather than in a commit message, because a reason nobody can find is a reason
+ * nobody has. Each is checked against the schema, not assumed.
+ *
+ *   DIV-05  "a team owned by one division MAY be assigned to another." There is no
+ *           division-assignment record at all -- `workforce_workspace_assignments` targets a
+ *           WORKSPACE, and DIV-05 needs a separately accepted, separately revocable assignment
+ *           to a DIVISION that moves neither ownership nor the funding scope.
+ *   DIV-07  "a division's budget is a scope on the existing ledger" and "the division a run
+ *           SPENDS against is read from the team's FUNDING SCOPE, never its owning division."
+ *           The funding EDGE is proven above and is a precondition, not the requirement: nothing
+ *           reads it at spend time, because there is no spend path. Citing DIV-07 would claim the
+ *           half that decides who actually pays.
+ *   DIV-08  "a division scope is a VISIBILITY and an EXECUTION boundary, ENFORCED AT ADMISSION."
+ *           Nothing enforces it; RUN-02's intersection does not exist. This is precisely the
+ *           *"UI label mistaken for pool enforcement"* failure §21 names, so a citation here
+ *           would be the exact mistake the requirement warns about. */
+
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { randomBytes, randomUUID } from 'node:crypto';
