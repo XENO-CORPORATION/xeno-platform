@@ -1,3 +1,24 @@
+/* ⚠️ VIEW-01 AND VIEW-02 ARE DELIBERATELY NOT CITED BY THIS SUITE, AND IT IS CLOSER THAN IT LOOKS.
+ * This is the one list API in the workforce estate, so it is where the VIEW family would be cited
+ * if anything were. Checked against `src/server/services/workforceCatalog.js`, not assumed:
+ *
+ *   VIEW-01  "global lists are authorized aggregates, never a tenant or permission bypass. Filter
+ *            metadata by owner, access type, assignment, status and search; paginate server-side."
+ *            MOST of it is proven below: the list is authorization-gated per owner and refuses
+ *            creators, parent edges and unrelated members; it filters by owner, kind and status;
+ *            pagination is server-side keyset, bound to actor/client/owner/kind/status. But the
+ *            accepted input is exactly {owner, expectedActorAccountId, limit, kind, status,
+ *            cursor}. There is NO assignment filter and NO search, and VIEW-01 names both. A
+ *            citation would claim the two filters a user would reach for first.
+ *   VIEW-02  "workspace lists show ASSIGNED resources only". This lists OWNED resources -- it
+ *            never consults `workforce_workspace_assignments` at all -- so a resource assigned
+ *            INTO a workspace does not appear in that workspace's list. The metadata-only
+ *            response IS proven below, which is VIEW-02's non-leakage half; its defining half is
+ *            unbuilt.
+ *
+ * Both close by EXTENDING this endpoint (an `assignment` filter, a `search` term, an
+ * assigned-into-workspace listing), never by a second list API. */
+
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { randomUUID, randomBytes, generateKeyPairSync } from 'node:crypto';
