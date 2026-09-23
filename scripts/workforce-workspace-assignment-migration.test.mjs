@@ -15,9 +15,15 @@
  * exit condition. Citing ASN-06 would hide a decision somebody has to make.
  *
  * ⚠️ ALSO NOT CITED, for the ordinary reason that nothing is built:
- *   ASN-02  "a team may target several projects; several teams may target one project" -- there
- *           is no project-participation record. The workspace half (explicit records, never
- *           inferred from path prefixes) is proven; the project half has no table.
+ *   ASN-02  "a team may target several projects; several teams may target one project". The
+ *           workspace half (explicit records, never inferred from path prefixes) is proven.
+ *           CORRECTED 2026-09-23: this note said "the project half has no table". It has one --
+ *           `workspace_team_projects` (20260904140000-workspace-operational-teams.sql), an explicit
+ *           many-to-many team<->chat_projects record, composite-keyed to one workspace. But it binds
+ *           `workspace_teams`, a SECOND team model that predates `workforce_resources` kind='team'
+ *           by eighteen days and is linked to it by nothing. Citing ASN-02 against it would decide
+ *           which of the two is the spec's "team", and that is an owner decision, not a test
+ *           outcome. Recorded as spec evidence row E16.
  *   ASN-07  directory bindings carrying host/environment identity and a canonical root. Measured:
  *           zero occurrences of canonical_root / host_identity anywhere under src/.
  *   ASN-08  reconciling Interface directory projections with `chat_projects` by explicit id
