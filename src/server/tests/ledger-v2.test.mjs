@@ -70,6 +70,17 @@ async function main() {
   });
   ok(r2.duplicate === true && r2.balance.availableMicro === 95 * MICRO_PER_CREDIT, 'replay is duplicate no-op (still 95)');
 
+  // 3b. A replay reports what was CHARGED, not what the retry asked for. A retry that arrives with a
+  //     different amount under the same transactionId is a no-op on the ledger, and its receipt has to
+  //     agree with the ledger -- the first version of this path echoed the retry's amount, so a caller
+  //     was told it had been charged 30 while 5 had been.
+  const r3 = await recordUsageV2(pool, userId, {
+    transactionId: 'txn-aaaa-0001', surface: 'xeno_post', operation: 'ai.caption', costMicro: 30 * MICRO_PER_CREDIT,
+  });
+  ok(r3.duplicate === true && r3.costMicro === 5 * MICRO_PER_CREDIT,
+    `replay with a different amount reports the original charge (5), not the retry's (30): got ${r3.costMicro / MICRO_PER_CREDIT}`);
+  ok(r3.balance.availableMicro === 95 * MICRO_PER_CREDIT, 'and charged nothing more (still 95)');
+
   // 4. audit + usage rows written with surface.
   const txns = await pool.query("SELECT count(*)::int n FROM credit_transactions WHERE user_id=$1", [userId]);
   const logs = await pool.query("SELECT count(*)::int n, max(surface) s FROM api_usage_logs WHERE user_id=$1", [userId]);
