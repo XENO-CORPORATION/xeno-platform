@@ -6,6 +6,15 @@ import { tablesDDL } from './fixtures/schema.mjs';
  *
  * Verifies the billing-critical invariants: debit + idempotency, two-phase
  * holds with partial-settle restore, oversell prevention, and the legacy mirror.
+ *
+ * ⚠️ XENO-WORKFORCE-01 FUND-04 IS NOT CITED HERE. FUND-04: "Create contribution with stable caller
+ * idempotency key, canonical payload hash and business-operation ID. Repeated same request returns
+ * the same result; CHANGED PAYLOAD CONFLICTS." The idempotency half holds for the ledger's own
+ * operations and is proven below (a replay is a no-op that reports the original charge -- case 3b).
+ * The conflict half does not: nothing stores a payload hash, so a replay under the same key with a
+ * different amount is silently a no-op rather than a refusal. Measured 2026-09-23 for both verbs:
+ * recordUsageV2 (5 then 30 credits) and holdV2 (10 then 40) each accept the second call and keep the
+ * first amount. And FUND-04 is about a CONTRIBUTION, which does not exist in src/server at all.
  */
 import pg from 'pg';
 import { migrateAccountV2 } from '../database/migrate-account-v2.js';
