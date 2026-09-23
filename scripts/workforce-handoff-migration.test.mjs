@@ -82,6 +82,58 @@ test('handoffs and decision records on owned isolated PostgreSQL', { skip: workf
       assert.equal(projected.committed_at.toISOString(), op.committed_at.toISOString());
     });
 
+    // LIFE-06 enumerates six elements: who decided, WHAT was decided, under which AUTHORITY, on
+    // what EVIDENCE, when, and what it SUPERSEDED. "Who" is the case below (LIFE-07) and "when" is
+    // asserted by the D19 projection above; the three in the middle had nothing.
+    // 🔴 `authority` is the one that decides whether this table is the DELIBERATIVE layer the
+    // requirement asks for or just a second operational log. §15 already records state changes and
+    // authorization reasons. What a decision record adds is the reasoning a successor agent needs,
+    // and a blank authority makes the row indistinguishable from the log it was meant to improve
+    // on -- so emptiness is refused, not merely discouraged.
+    await t.test('a decision records its authority, its evidence and what it superseded (LIFE-06)', async () => {
+      const first = (await record({ authority: 'team:manager', evidence: [{ kind: 'review', ref: 'r-1' }],
+                                    rationale: 'sustained delivery over two cycles' })).rows[0];
+      assert.equal(first.authority, 'team:manager');
+      assert.deepEqual(first.evidence, [{ kind: 'review', ref: 'r-1' }],
+        'evidence survives the round trip as structured data, not as prose about evidence');
+
+      // Superseding is a LINK, so a later reader can follow why a decision was replaced rather
+      // than finding two unrelated rows and guessing which one is current.
+      const second = (await record({ kind: 'member.promote', supersedes: first.operation_id })).rows[0];
+      assert.equal(second.supersedes_operation_id, first.operation_id);
+
+      // Authority is NOT NULL **and** non-blank. NOT NULL alone is satisfied by a space.
+      await assert.rejects(record({ authority: '   ' }), e => e.code === '23514',
+        'whitespace is not an authority -- the CHECK trims before measuring');
+      await deny(
+        `INSERT INTO workforce_operations(actor_user_id,client_id,operation_id,request_hash,kind,
+           subject_type,subject_id,deciding_principal_id,responsible_account_id)
+         VALUES($1,'c',$2,$3,'member.admit','membership',$4,$1,$1)`,
+        [humanManager, randomUUID(), sha('a'), randomUUID()], '23502');
+
+      // Evidence is an ARRAY. A bare object would read as "one piece of evidence" and quietly
+      // break every consumer that iterates, which is worse than refusing it.
+      await deny(
+        `INSERT INTO workforce_operations(actor_user_id,client_id,operation_id,request_hash,kind,
+           subject_type,subject_id,deciding_principal_id,responsible_account_id,authority,evidence)
+         VALUES($1,'c',$2,$3,'member.admit','membership',$4,$1,$1,'x','{"kind":"review"}'::jsonb)`,
+        [humanManager, randomUUID(), sha('b'), randomUUID()]);
+
+      // ...and it COVERS the acts LIFE-06 names, rather than just the handoff ones this migration
+      // was written for. Each is accepted by a real insert; the suite would otherwise never write
+      // one and the enumeration could be narrowed with nothing failing.
+      for (const [kind, subjectType] of [['member.admit', 'membership'], ['member.remove', 'membership'],
+        ['member.promote', 'membership'], ['division.assign', 'division'], ['budget.set', 'budget']]) {
+        const row = (await record({ kind, subjectType })).rows[0];
+        assert.equal(row.kind, kind, `${kind} is a recordable decision`);
+      }
+      await deny(
+        `INSERT INTO workforce_operations(actor_user_id,client_id,operation_id,request_hash,kind,
+           subject_type,subject_id,deciding_principal_id,responsible_account_id,authority)
+         VALUES($1,'c',$2,$3,'member.vibe','membership',$4,$1,$1,'x')`,
+        [humanManager, randomUUID(), sha('c'), randomUUID()]);
+    });
+
     await t.test('a decision names BOTH the deciding principal and the responsible account (LIFE-07)', async () => {
       // "An agent decided" is not an accountability answer. An agent manager records under its own
       // principal while its owner remains answerable.
