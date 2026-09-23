@@ -8,7 +8,12 @@ import pg from 'pg';
 import { migrateAccountV2 } from '../database/migrate-account-v2.js';
 import { recordUsageV2, addGrant, setSpendCap, usageSummary, getBalanceV2, MICRO_PER_CREDIT } from '../utils/creditLedgerV2.js';
 
-const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL });
+// The session runs UTC because production's does (measured 2026-09-23: `SHOW TimeZone` -> UTC on
+// xenostudio-postgres). usageSummary's window relies on it -- see the note above that function in
+// creditLedgerV2.js -- and on a machine whose Postgres defaults to a local zone this suite failed
+// "usage groupBy surface = 5 credits (undefined)" while production was correct. PGTZ does not reach a
+// node-postgres connection; the startup option does.
+const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL, options: '-c TimeZone=UTC' });
 let pass = 0, fail = 0;
 const ok = (c, m) => { if (c) { pass++; console.log(`  ✓ ${m}`); } else { fail++; console.log(`  ✗ ${m}`); } };
 const C = (n) => n * MICRO_PER_CREDIT;
