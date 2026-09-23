@@ -186,6 +186,53 @@ test('every workforce migration applies in order from an empty database', { skip
       assert.equal(membership.rowCount, 1, 'the membership table must exist for its silence to mean anything');
     });
 
+    // A resource's OWNER cannot move without its REVISION moving too.
+    //
+    // 🔴 IT COULD, measured before `20260923120000-workforce-owner-change-advances-revision`
+    // existed: a plain UPDATE of `owner_user_id` succeeded and left `revision` at 1. Every
+    // snapshot check in this chain compares revisions -- assignment acceptance refuses when
+    // `resource.revision <> NEW.resource_revision` -- so an owner moved without a bump produces a
+    // materially different resource that every version-based consumer believes is unchanged.
+    // Tested HERE because the guard is a trigger on a table created many migrations earlier, and
+    // this is the only suite in which the whole chain, and therefore the trigger, exists.
+    //
+    // ⚠️ DELIBERATELY NOT CITED AS OWN-05, and this is the one place an honest reading and a
+    // flattering one diverge. OWN-05's "never silently migrates" is about SECRETS and ACTIVE RUNS,
+    // not the ownership row; its transfer obligations (source authorization, destination
+    // acceptance, dependency/licence review, an auditable operation) are unbuilt. The first draft
+    // of this change froze the owner columns and titled itself OWN-05 -- which would have claimed
+    // the requirement while making transfer impossible and the acceptance check's owner
+    // comparison permanently dead code. This is the smaller, true thing.
+    await t.test('a resource owner cannot change without its revision advancing', async () => {
+      const [humanA, humanB] = ['00000000-0000-4000-8000-00000000a001', '00000000-0000-4000-8000-00000000a002'];
+      const co = '00000000-0000-4000-8000-00000000c001';
+      const personal = '00000000-0000-4000-8000-00000000e001';
+      await pool.query('INSERT INTO users VALUES ($1), ($2)', [humanA, humanB]);
+      await pool.query(`INSERT INTO workspaces(id,owner_user_id,name,slug) VALUES ($1,$2,'co','co')`, [co, humanA]);
+      await pool.query(`INSERT INTO workforce_resources(id,kind,owner_user_id,name) VALUES ($1,'agent',$2,'p')`, [personal, humanA]);
+      const revisionOf = async () => Number((await pool.query(
+        'SELECT revision FROM workforce_resources WHERE id=$1', [personal])).rows[0].revision);
+
+      const silent = (sql, values) => assert.rejects(pool.query(sql, values),
+        e => e.code === '23514' && /without advancing revision/.test(e.message));
+      // To another person, no bump.
+      await silent('UPDATE workforce_resources SET owner_user_id=$2 WHERE id=$1', [personal, humanB]);
+      // Personal -> company in ONE statement that keeps the XOR satisfied -- the tidiest form of
+      // the defect, and the one a "move this to my company" feature writes first.
+      await silent('UPDATE workforce_resources SET owner_user_id=NULL, owner_workspace_id=$2 WHERE id=$1', [personal, co]);
+      assert.equal(await revisionOf(), 1, 'nothing moved and nothing was recorded');
+
+      // The visible form is allowed -- transfer is meant to exist (OWN-01: "permanent until an
+      // explicit, audited transfer"), so this must not be an immutability rule in disguise.
+      await pool.query('UPDATE workforce_resources SET owner_user_id=NULL, owner_workspace_id=$2, revision=revision+1 WHERE id=$1',
+        [personal, co]);
+      assert.equal(await revisionOf(), 2);
+
+      // And an edit that does not touch the owner is untouched by the rule.
+      await pool.query(`UPDATE workforce_resources SET name='renamed' WHERE id=$1`, [personal]);
+      assert.equal(await revisionOf(), 2, 'a rename is not an ownership change and carries no obligation here');
+    });
+
   } finally {
     if (createdSchema) await pool.query(`DROP SCHEMA "${schema}" CASCADE`);
     await pool.end();
