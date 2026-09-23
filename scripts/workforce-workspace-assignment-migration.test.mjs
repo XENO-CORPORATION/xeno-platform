@@ -38,13 +38,19 @@ test('workspace assignment schema on owned isolated PostgreSQL', { skip: workfor
     await pool.query("INSERT INTO workforce_resources(id,kind,owner_user_id,name) VALUES($1,'agent',$2,'Agent'),($3,'team',$2,'Team')", [agent, sourceOwner, team]);
     await pool.query("INSERT INTO workforce_resources(id,kind,owner_workspace_id,name) VALUES($1,'agent',$2,'Company agent')", [companyAgent, sourceWorkspace]);
 
-    await t.test('empty rollback/reapply is additive and creates no automatic same-owner assignment or ReBAC edges', async () => {
+    // ASN-03: a direct agent assignment must not manufacture a General team. This is the half
+    // that proves nothing is created implicitly -- no same-owner assignment, no ReBAC edge.
+    await t.test('empty rollback/reapply is additive and creates no automatic same-owner assignment or ReBAC edges (ASN-03)', async () => {
       await pool.query(up); await pool.query(down); await pool.query(up);
       assert.equal((await pool.query('SELECT count(*) FROM workforce_resources')).rows[0].count, '3');
       assert.equal((await pool.query('SELECT count(*) FROM workforce_workspace_assignments')).rows[0].count, '0');
       assert.equal((await pool.query('SELECT count(*) FROM relationship_tuples')).rows[0].count, '0');
     });
-    await t.test('direct agent follows explicit proposal/dual approval/acceptance with independent creator', async () => {
+    // ASN-03 (a direct agent assignment is first-class, not routed through a team) and ASN-04
+    // (a cross-owner assignment needs the source owner's approval AND the target's acceptance,
+    // and BOTH are recorded): the proposal carries neither, acceptance carries both, and
+    // neither may later be nulled -- see the immutability case below.
+    await t.test('direct agent follows explicit proposal/dual approval/acceptance with independent creator (ASN-03, ASN-04)', async () => {
       const proposal = await propose();
       assert.equal(proposal.state, 'proposed'); assert.equal(proposal.revision, '1');
       assert.equal(proposal.created_by_user_id, creator); assert.equal(proposal.source_owner_user_id, sourceOwner);
@@ -73,7 +79,11 @@ test('workspace assignment schema on owned isolated PostgreSQL', { skip: workfor
       for (const mode of ['none', 'explicit']) assert.equal((await pool.query('SELECT workforce_assignment_policy_valid($1::jsonb) AS valid', [{ schemaVersion: 1, mode, capabilities: [] }])).rows[0].valid, true);
       assert.equal((await pool.query('SELECT workforce_assignment_policy_valid($1::jsonb) AS valid', [{ ...policy, capabilities: ['3d.generate'] }])).rows[0].valid, true);
     });
-    await t.test('one live assignment per pair survives concurrent proposals; revoked history permits a distinct new proposal', async () => {
+    // ASN-01: an agent may hold MULTIPLE workspace assignments. The uniqueness is per
+    // (resource, workspace) PAIR, not per resource -- this agent is already assigned to
+    // targetWorkspace above and takes foreignWorkspace here -- and assignment never moves
+    // ownership, which stays on source_owner_* and survives independently.
+    await t.test('one live assignment per pair survives concurrent proposals; revoked history permits a distinct new proposal (ASN-01)', async () => {
       const results = await Promise.allSettled([propose({ workspace: foreignWorkspace }), propose({ workspace: foreignWorkspace })]);
       assert.equal(results.filter(value => value.status === 'fulfilled').length, 1);
       assert.equal(results.find(value => value.status === 'rejected').reason.code, '23505');
