@@ -8,8 +8,11 @@
  */
 /* ⚠️ NOT CITED FROM THIS SUITE, AND WHY. These are the acts §8.2d names; this migration LOGS
  * decisions about them, which is not the same as performing them.
- *   LIFE-01  joining is an ADMISSION, not a creation. `member.admit` is a recordable decision
- *            here; admission itself lives in the membership model.
+ *   LIFE-01  ✅ NOW CITED, but not here -- in `workforce-migration-chain.test.mjs`, which is the
+ *            only place the whole schema exists at once, because its operative claim ("no new
+ *            consent shape") is about a mechanism being ABSENT everywhere. `member.admit` is a
+ *            recordable decision in this suite; admission itself lives in the membership model.
+ *            Kept rather than deleted: a reader arriving at this list needs to know it moved.
  *   LIFE-02  removal is REVOCATION plus SETTLEMENT, and the two are separate. There is no
  *            settlement anywhere -- it is FUND-domain and unbuilt.
  *   LIFE-03  removal never deletes history. OWN-06 governs it and the membership suite proves it;
