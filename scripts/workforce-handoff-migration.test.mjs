@@ -381,6 +381,55 @@ test('handoffs and decision records on owned isolated PostgreSQL', { skip: workf
       await deny('TRUNCATE workforce_operations');
     });
 
+    // LIFE-03's normative sentence is the last one: "a departed worker's contribution record and
+    // receipts SURVIVE; attribution is NOT RETROACTIVELY REWRITTEN." (Its middle sentence cites
+    // what OWN-06 governs -- archive blocking admissions, retained history staying readable --
+    // and those are proven and cited in the membership suite.)
+    //
+    // 🔴 THIS RESTS ON AN ABSENCE, WHICH IS WHY IT NEEDS A TEST. `workforce_operations` declares
+    // NO foreign key to `users` at all, deliberately: an operation must outlive the row it acted
+    // on, or the audit trail disappears exactly when the thing is removed -- which is the case an
+    // audit exists for. Nothing asserted that. Somebody tidying up referential integrity adds
+    // `REFERENCES users(id) ON DELETE CASCADE` to `deciding_principal_id`, it reads as a
+    // correctness fix in review, and a user deletion silently erases the decisions they made.
+    // `ON DELETE SET NULL` is the same defect wearing better clothes -- it is literally
+    // "attribution retroactively rewritten", and it is what the OTHER workforce tables correctly
+    // use for CREATOR fields, so the pattern is right there to copy onto the wrong column.
+    await t.test('a departed principal keeps its decisions, and they still name it (LIFE-03)', async () => {
+      const departing = randomUUID();
+      await pool.query('INSERT INTO users VALUES($1)', [departing]);
+      const decided = (await record({ decider: departing, responsible: departing,
+                                      authority: 'team:manager', rationale: 'approved the hire' })).rows[0];
+
+      // The worker departs. Not archived, not revoked -- the account row is gone.
+      await pool.query('DELETE FROM users WHERE id=$1', [departing]);
+      assert.equal((await pool.query('SELECT count(*) c FROM users WHERE id=$1', [departing])).rows[0].c, '0');
+
+      const after = (await pool.query(
+        'SELECT * FROM workforce_operations WHERE operation_id=$1', [decided.operation_id])).rows;
+      assert.equal(after.length, 1, 'the decision survives the departure');
+      assert.equal(after[0].deciding_principal_id, departing,
+        'and it STILL NAMES the departed principal -- a nulled attribution is a rewritten one');
+      assert.equal(after[0].responsible_account_id, departing);
+      assert.equal(after[0].authority, 'team:manager');
+      assert.equal(after[0].rationale, 'approved the hire');
+      assert.equal(after[0].committed_at.toISOString(), decided.committed_at.toISOString(),
+        'nothing about the record was touched by the deletion');
+
+      // Said structurally as well, so the behaviour cannot regress through a cascade that simply
+      // has no rows to act on in some future fixture ordering.
+      const { rows: fks } = await pool.query(`
+        SELECT c.conname FROM pg_constraint c
+        JOIN pg_class child ON child.oid = c.conrelid
+        JOIN pg_class parent ON parent.oid = c.confrelid
+        JOIN pg_namespace n ON n.oid = child.relnamespace
+        WHERE c.contype='f' AND n.nspname=$1 AND child.relname='workforce_operations'
+          AND parent.relname='users'`, [schema]);
+      assert.deepEqual(fks, [],
+        'workforce_operations must declare NO foreign key to users. An audit row that can be ' +
+        'cascaded away, or nulled, by deleting the account it names is not an audit row.');
+    });
+
     await t.test('populated rollback is refused; empty rollback is clean and re-appliable', async () => {
       await assert.rejects(pool.query(down), e => e.code === '23514');
       // The operations table refuses DELETE by design, so prove the refusal, then drop the
