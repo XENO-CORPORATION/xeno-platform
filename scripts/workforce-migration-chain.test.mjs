@@ -99,6 +99,48 @@ test('every workforce migration applies in order from an empty database', { skip
         assert.ok(present.has(required), `${required} missing after the full chain`);
       }
     });
+    // 🔴 THE WHOLE WORKFORCE SCHEMA, PINNED — because a claim about what does NOT exist is the
+    // easiest kind to be quietly wrong about, and this estate currently rests on one.
+    //
+    // XENO-WORKFORCE-01 carries 145 numbered requirements. Most are uncited by any test, and the
+    // honest reason is NOT that somebody forgot to write tests: eight whole families — VIEW, SES,
+    // RUN, MKT, FUND, ACCT, PUB, FORGE — create no tables between them, so there is nothing to
+    // assert against and writing tests for them would be fabricating proof.
+    //
+    // That reasoning is load-bearing, and until now it was an assumption re-derived by hand every
+    // time somebody asked. This turns it into a checked fact. The day a `workforce_funding_*` or
+    // `workforce_listing_*` table lands, this fails — and the fix is NOT to widen the list. It is
+    // that the requirements the new table implements have stopped being unbuildable and now need
+    // real citations, which is exactly the moment that decision should be forced into the open.
+    await t.test('the workforce schema is exactly these tables, and a new one invalidates the coverage premise', async () => {
+      const { rows } = await pool.query(
+        `SELECT tablename FROM pg_tables WHERE schemaname=$1 ORDER BY tablename`, [schema]);
+      const workforce = rows.map(r => r.tablename).filter(t => t.startsWith('workforce_'));
+
+      assert.deepEqual(workforce, [
+        'workforce_agent_versions',
+        'workforce_assignment_member_sets',
+        'workforce_assignment_members',
+        'workforce_division_funding',
+        'workforce_division_ownership',
+        'workforce_divisions',
+        'workforce_handoffs',
+        'workforce_operations',
+        'workforce_resource_operations',
+        'workforce_resources',
+        'workforce_team_memberships',
+        'workforce_workspace_assignments',
+      ], 'the workforce schema changed. If a table was ADDED, the requirements it implements are ' +
+         'no longer unimplementable and must be cited by real tests before this list is widened; ' +
+         'if one was REMOVED, the citations that rest on it are now claiming something absent.');
+
+      // The two api_key_* tables are workforce-scoped but deliberately NOT prefixed, because they
+      // extend an existing platform table rather than standing alone. Asserted separately so the
+      // list above stays a statement about the workforce schema and not about a naming accident.
+      const apiKeyScoped = rows.map(r => r.tablename).filter(t => t.startsWith('api_key_workforce'));
+      assert.deepEqual(apiKeyScoped, ['api_key_workforce_capabilities', 'api_key_workforce_operations']);
+    });
+
   } finally {
     if (createdSchema) await pool.query(`DROP SCHEMA "${schema}" CASCADE`);
     await pool.end();
