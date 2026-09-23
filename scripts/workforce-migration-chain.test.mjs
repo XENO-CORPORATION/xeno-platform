@@ -141,6 +141,51 @@ test('every workforce migration applies in order from an empty database', { skip
       assert.deepEqual(apiKeyScoped, ['api_key_workforce_capabilities', 'api_key_workforce_operations']);
     });
 
+    // LIFE-01's operative claim is the last sentence: "NO NEW CONSENT SHAPE -- this reuses
+    // admission rather than inventing employment." Its other clauses are proven and cited
+    // elsewhere (two-sided acceptance ASN-04, the admitted member set ASN-05, an explicit team
+    // function ROLE-02, an owning division DIV-04). This is the one nothing could assert from
+    // inside a single suite, because it is a claim about the ABSENCE of a mechanism anywhere in
+    // the schema -- and the schema only exists in one place once the whole chain has run.
+    //
+    // 🔴 THE TELL IS THAT `workforce_team_memberships` HAS NO CONSENT COLUMN AT ALL. Joining a
+    // team carries no acceptance of its own; a principal is put to work through machinery that
+    // already existed. An `employment_accepted_by` appearing here would be the requirement's
+    // exact failure -- inventing employment -- and it would look perfectly reasonable in review.
+    await t.test('putting a principal to work invents no consent shape beyond the existing three (LIFE-01)', async () => {
+      const { rows } = await pool.query(`
+        SELECT c.table_name || '.' || c.column_name AS ref
+        FROM information_schema.columns c
+        JOIN information_schema.tables t
+          ON t.table_schema = c.table_schema AND t.table_name = c.table_name
+        WHERE c.table_schema = $1 AND t.table_type = 'BASE TABLE'
+          AND c.column_name ~ '(approv|accept|admit|consent|signed|agree|employ)'
+        ORDER BY ref`, [schema]);
+
+      // Deliberately NOT matching on 'sign': it hits as-SIGN-ment_id and reports four columns that
+      // have nothing to do with consent. Found by running the query before writing the assertion,
+      // which is the only reason this list is the real one.
+      assert.deepEqual(rows.map(r => r.ref), [
+        'workforce_assignment_member_sets.admitted_at',
+        'workforce_assignment_member_sets.admitted_by_user_id',
+        'workforce_handoffs.accepted_at',
+        'workforce_workspace_assignments.accepted_at',
+        'workforce_workspace_assignments.source_approved_at',
+        'workforce_workspace_assignments.source_approved_by_user_id',
+        'workforce_workspace_assignments.target_accepted_by_user_id',
+      ], 'a new consent-bearing column means a fourth consent shape. LIFE-01 forbids that: a ' +
+         'principal joins through the EXISTING two-sided assignment acceptance, the admitted ' +
+         'member set, and -- for work already in flight -- handoff acceptance. If this list grew, ' +
+         'employment was invented rather than reused.');
+
+      // Said the other way round, because the assertion above would also pass if somebody deleted
+      // the membership table outright: the table exists, and it holds no consent of its own.
+      const membership = await pool.query(
+        `SELECT 1 FROM information_schema.tables WHERE table_schema=$1 AND table_name=$2`,
+        [schema, 'workforce_team_memberships']);
+      assert.equal(membership.rowCount, 1, 'the membership table must exist for its silence to mean anything');
+    });
+
   } finally {
     if (createdSchema) await pool.query(`DROP SCHEMA "${schema}" CASCADE`);
     await pool.end();
