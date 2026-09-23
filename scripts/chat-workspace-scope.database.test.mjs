@@ -1,3 +1,32 @@
+/* ⚠️ XENO-WORKFORCE-01 SES-01 IS NOT CITED, AND THE REASON IS A MEASURED PRIVACY DEFECT.
+ *
+ * SES-01: "Global New Chat defaults to personal conversation ownership with no organizational
+ * assignment. Backing personal account scope is not presented as a forced user-created workspace."
+ *
+ * The SERVER default holds: POST /api/chat/conversations with no workspace context writes
+ * owner_user_id = the caller, workspace_id NULL and a `conversation#owner@user` tuple.
+ *
+ * The web client never reaches that default. chatService.ts and ChatWithLLM.tsx attach
+ * `x-xeno-workspace` from localStorage on every request, and WorkspaceContext.tsx sets that key to
+ * the caller's PERSONAL workspace by default. So a web New Chat is created with workspace_id = the
+ * personal workspace, owner_user_id NULL and a `conversation#parent@workspace` tuple -- ownership
+ * by containment, not by the person. Measured against PostgreSQL through the real chat router,
+ * 2026-09-23:
+ *
+ *   - a user is admitted to someone's personal workspace as `viewer` (what an accepted invite writes)
+ *   - GET that person's web-created chat -> 200, message content visible
+ *   - GET the same person's API-created chat -> 404
+ *
+ * A personal workspace CAN take members: invites carry no workspace_type check, and the seat limit
+ * resolves from the owner's plan -- `studio` includes 25 seats. The Team page invites into the
+ * ACTIVE workspace, which defaults to the personal one. So a Studio owner who invites a colleague
+ * from that page hands them every chat they ever started on the web.
+ *
+ * NOT repaired here: the fix is the spec's own prescription (§12, "resolve personal workspace
+ * wrappers through one adapter"), and it spans conversation creation, the scoped list query, the
+ * pooled-billing tag the header also drives, and a migration of existing conversations already
+ * parented to personal workspaces -- an ownership-model change with a production data migration.
+ */
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import crypto from 'node:crypto';
