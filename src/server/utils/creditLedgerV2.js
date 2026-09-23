@@ -533,13 +533,17 @@ export async function recordUsageV2(pool, userId, event) {
     await client.query('BEGIN');
 
     // Idempotency: replayed event → no-op.
+    // 🔴 A replay reports what the ORIGINAL debit charged, read from its journal entry -- never
+    // the replaying request's costMicro. The earlier version echoed the request, so a retry that
+    // arrived with a different amount under the same transactionId was told it had been charged
+    // that amount while the ledger held the first one: a receipt that disagreed with the journal.
     const dupe = await client.query(
-      'SELECT 1 FROM credit_transactions WHERE user_id = $1 AND reference_type = $2 AND reference_id = $3',
+      'SELECT amount FROM credit_transactions WHERE user_id = $1 AND reference_type = $2 AND reference_id = $3',
       [userId, REF_TYPE, event.transactionId],
     );
     if (dupe.rows.length > 0) {
       await client.query('COMMIT');
-      outcome = { duplicate: true };
+      outcome = { duplicate: true, chargedMicro: -BigInt(dupe.rows[0].amount) };
     } else {
       const acct = await ensureAccount(client, userId);
       if (acct.is_frozen) {
@@ -588,7 +592,7 @@ export async function recordUsageV2(pool, userId, event) {
     // Pool re-entrancy guard: getBalanceV2 checks out its OWN connection, so it
     // must run only after client.release() (above) — never while a client is held.
     const bal = await getBalanceV2(pool, userId);
-    return { accepted: true, duplicate: true, costMicro: Number(costMicro), transactionId: event.transactionId, balance: bal };
+    return { accepted: true, duplicate: true, costMicro: Number(outcome.chargedMicro), transactionId: event.transactionId, balance: bal };
   }
   return {
     accepted: true,
