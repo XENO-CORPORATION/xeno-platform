@@ -172,7 +172,12 @@ test('handoffs and decision records on owned isolated PostgreSQL', { skip: workf
       assert.equal(ok.payer_account_id, humanManager);
     });
 
-    await t.test('endpoints and crossed scopes are immutable (HAND-04)', async () => {
+    // DIV-09 is cited here because this case proves its load-bearing half: a cross-division
+    // handoff is ACCEPTED (not refused as an error case) and the crossing is RECORDED as the two
+    // division ids rather than a boolean. Its three remaining clauses are proven by neighbouring
+    // cases in this same suite -- moves work never authority (HAND-02), bills the executing side
+    // (HAND-05), offered until accepted (HAND-03) -- and are cited there.
+    await t.test('endpoints and crossed scopes are immutable (HAND-04, DIV-09)', async () => {
       const creative = (await pool.query(
         `INSERT INTO workforce_divisions(workspace_id,key,name,created_by_user_id)
          VALUES($1,'creative','creative',$2) RETURNING *`, [companyWs, creator])).rows[0];
@@ -190,6 +195,49 @@ test('handoffs and decision records on owned isolated PostgreSQL', { skip: workf
         [h.id, creative.id]);
       await deny(`UPDATE workforce_handoffs SET work_ref_id=$2, revision=revision+1 WHERE id=$1`,
         [h.id, randomUUID()]);
+    });
+
+    // HAND-01 is the requirement that says a handoff is a RECORD, not a message -- and the whole
+    // force of that distinction is that the record cannot be incomplete. A message can omit its
+    // subject and still be sent; a row that permits NULL where the requirement enumerates a field
+    // is a message with a table around it. So this asserts the enumerated elements are STRUCTURAL:
+    // who handed off, to whom, and about what are each refused when absent, and the work reference
+    // is a typed pair rather than free text.
+    await t.test('a handoff cannot exist without its who, to-whom and about-what (HAND-01)', async () => {
+      const work = randomUUID();
+      for (const [column, sql] of [
+        ['source_principal_id',
+         `INSERT INTO workforce_handoffs(target_principal_id,work_ref_type,work_ref_id) VALUES($1,'task',$2)`],
+        ['target_principal_id',
+         `INSERT INTO workforce_handoffs(source_principal_id,work_ref_type,work_ref_id) VALUES($1,'task',$2)`],
+        ['work_ref_type',
+         `INSERT INTO workforce_handoffs(source_principal_id,target_principal_id,work_ref_id) VALUES($1,$2,$2)`],
+      ]) {
+        await deny(sql, column === 'work_ref_type' ? [worker, humanManager] : [worker, work], '23502',
+          `${column} is NOT NULL, so an incomplete handoff is unrepresentable`);
+      }
+      // work_ref_id has no default either -- listed separately because the three-argument shape above
+      // cannot express it without also omitting a second column, which would prove nothing about
+      // WHICH omission was refused.
+      await deny(
+        `INSERT INTO workforce_handoffs(source_principal_id,target_principal_id,work_ref_type)
+         VALUES($1,$2,'task')`, [worker, humanManager], '23502');
+
+      // The work reference is a TYPED pair. `task|project|run` are the three things §8.2c hands off;
+      // a fourth would be invented rather than derived, exactly as with ROLE-02's three functions.
+      await deny(
+        `INSERT INTO workforce_handoffs(source_principal_id,target_principal_id,work_ref_type,work_ref_id)
+         VALUES($1,$2,'message',$3)`, [worker, humanManager, work]);
+
+      // And the elements that make it durable rather than transient: a fresh handoff is `offered`
+      // with a revision, carries its own identity, and records the scopes it crossed -- read back
+      // from the row rather than assumed from the insert.
+      const h = (await offer({ work })).rows[0];
+      assert.equal(h.state, 'offered', 'a handoff begins un-accepted -- HAND-03');
+      assert.equal(Number(h.revision), 1);
+      assert.equal(h.work_ref_id, work);
+      assert.equal(h.source_workspace_id, companyWs);
+      assert.ok(h.id && h.created_at, 'it is a row with an identity, not an event that was emitted');
     });
 
     await t.test('a principal cannot hand work to itself', async () => {
