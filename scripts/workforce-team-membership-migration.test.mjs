@@ -17,6 +17,14 @@
  * unmissable, not to make the migration unrunnable. Each one is a failing
  * requirement with a named fix, not an accepted behaviour.
  */
+/* ⚠️ NOT CITED HERE, AND WHY.
+ *   ROLE-05  "function never widens platform or workspace authority; the effective right is the
+ *            INTERSECTION of all three axes plus assignment, entitlement and budget (RUN-02)."
+ *            The schema keeps the three axes separate -- proven above, where a platform role name
+ *            is refused in the team-function column -- and that is a PRECONDITION for ROLE-05,
+ *            not ROLE-05. The claim is about what an authorizer COMPUTES, and nothing in this
+ *            estate reads a team function to decide anything yet. */
+
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { randomBytes, randomUUID } from 'node:crypto';
