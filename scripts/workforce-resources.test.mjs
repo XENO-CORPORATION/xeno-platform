@@ -67,7 +67,10 @@ test('transactional workforce creation and receipts on isolated PostgreSQL', { s
       assert.equal(await count('workforce_resources'), 0);
     });
 
-    await t.test('personal creation persists resource/version/receipt together without principal creation', async () => {
+    // OWN-02: agent identity, its versioned definition and a runtime PRINCIPAL are three
+      // different things. Creating the first two creates no account -- a configuration file is
+      // not credential-bearing -- and `kind: 'principal'` is refused outright below.
+      await t.test('personal creation persists resource/version/receipt together without principal creation (OWN-02)', async () => {
       const before = await counts();
       const input = request();
       const result = await createWorkforceResource(pool, context(), input);
@@ -158,7 +161,10 @@ test('transactional workforce creation and receipts on isolated PostgreSQL', { s
       assert.equal(result.version.createdByUserId, agent);
     });
 
-    await t.test('strict bounded input rejects arbitrary config, plaintext secret fields and invalid pins', async () => {
+    // OWN-03: configuration carries secret REFERENCES, never secret values. The fixture uses
+      // `secretReferences: [{ name, ref }]`; an inline `env: { TOKEN: 'secret-value' }` is
+      // refused here, at the boundary, rather than being stored and hoped about.
+      await t.test('strict bounded input rejects arbitrary config, plaintext secret fields and invalid pins (OWN-03)', async () => {
       const before = await counts();
       const invalid = [
         { ...request(), env: { TOKEN: 'secret-value' } },

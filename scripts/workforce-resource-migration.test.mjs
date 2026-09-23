@@ -41,7 +41,9 @@ test('workforce resource persistence against isolated PostgreSQL', { skip: workf
       assert.equal((await pool.query('SELECT id FROM workspaces')).rows[0].id, workspace);
     });
 
-    await t.test('personal and company ownership share canonical resource IDs independently of creator', async () => {
+    // OWN-01: one explicit canonical owner scope, with creator attribution kept separate --
+    // personal maps to the account, company to the workspace, and neither is the creator.
+    await t.test('personal and company ownership share canonical resource IDs independently of creator (OWN-01)', async () => {
       await pool.query(`INSERT INTO workforce_resources(id,kind,owner_user_id,created_by_user_id,name)
         VALUES ($1,'agent',$2,$3,'Personal'), ($4,'team',$2,$3,'Reusable team')`, [agent, owner, creator, team]);
       await pool.query(`INSERT INTO workforce_resources(id,kind,owner_workspace_id,created_by_user_id,name)
@@ -54,7 +56,9 @@ test('workforce resource persistence against isolated PostgreSQL', { skip: workf
       assert.equal(row.revision, '1');
     });
 
-    await t.test('owner XOR and canonical foreign keys reject unknown or contradictory owners', async () => {
+    // OWN-01: 'ONE explicit owner scope' is enforced as a XOR, so a resource owned by both a
+    // user and a workspace -- or by neither -- is unrepresentable rather than merely unusual.
+    await t.test('owner XOR and canonical foreign keys reject unknown or contradictory owners (OWN-01)', async () => {
       await denied("INSERT INTO workforce_resources(kind,name) VALUES ('agent','Missing')", [], '23514');
       await denied("INSERT INTO workforce_resources(kind,name,owner_user_id,owner_workspace_id) VALUES ('agent','Both',$1,$2)", [owner, workspace], '23514');
       await denied("INSERT INTO workforce_resources(kind,name,owner_user_id) VALUES ('agent','Unknown',$1)", [randomUUID()], '23503');
@@ -98,7 +102,11 @@ test('workforce resource persistence against isolated PostgreSQL', { skip: workf
       assert.equal((await pool.query('SELECT count(*) FROM workforce_agent_versions WHERE resource_id=$1 AND version=2', [agent])).rows[0].count, '1');
     });
 
-    await t.test('immutable versions reject mutation, deletion, and creator-erasure bypass', async () => {
+    // OWN-03: a definition update must not mutate an ACTIVE RUN. There is no run table to
+    // assert against yet, so what is proven is the mechanism the guarantee rests on: a
+    // published version row can never be altered or removed, so anything pinned to it keeps
+    // exactly the bytes it pinned. An update necessarily becomes a NEW version.
+    await t.test('immutable versions reject mutation, deletion, and creator-erasure bypass (OWN-03)', async () => {
       await denied("UPDATE workforce_agent_versions SET content='{}' WHERE resource_id=$1", [agent], '23514');
       await denied('UPDATE workforce_agent_versions SET created_by_user_id=NULL WHERE resource_id=$1', [agent], '23514');
       await denied("UPDATE workforce_agent_versions SET created_by_user_id=NULL,content='{}' WHERE resource_id=$1", [agent], '23514');

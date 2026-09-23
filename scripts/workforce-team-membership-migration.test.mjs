@@ -95,7 +95,9 @@ test('team membership and admitted member snapshots on owned isolated PostgreSQL
       assert.equal(await teamRevision(team), 1);
     });
 
-    await t.test('membership creation advances the team revision and stamps join and change together', async () => {
+    // OWN-04: a membership carries its ROLE and moves the team's REVISION -- the two things the
+    // requirement names -- so a reader can tell which generation of the team they are seeing.
+    await t.test('membership creation advances the team revision and stamps join and change together (OWN-04)', async () => {
       const before = await teamRevision(team);
       const membership = (await addMember()).rows[0];
       assert.equal(membership.state, 'active'); assert.equal(membership.revision, '1');
@@ -277,7 +279,10 @@ test('team membership and admitted member snapshots on owned isolated PostgreSQL
       } finally { client.release(); }
     });
 
-    await t.test('an archived team admits nobody new, but its existing members can still be revoked', async () => {
+    // OWN-04: archive, member removal and deletion are SEPARATE operations with separate
+    // read-back, not one cascade. An archived team still permits revocation of a sitting
+    // member, which is only expressible if the two verbs are actually distinct.
+    await t.test('an archived team admits nobody new, but its existing members can still be revoked (OWN-04)', async () => {
       const { rows: [existing] } = await addMember(loneAgent, backfilledTeam);
       await pool.query("UPDATE workforce_resources SET status='archived',revision=revision+1 WHERE id=$1", [backfilledTeam]);
       /* OWN-06: archive blocks new admissions. Previously no guard read
