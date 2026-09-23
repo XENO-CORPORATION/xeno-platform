@@ -233,7 +233,7 @@ test('team membership and admitted member snapshots on owned isolated PostgreSQL
       await pool.query(REVOKE, [proposal.id]);
     });
 
-    await t.test('a later member set is captured, admitted by the target, and only then effective', async () => {
+    await t.test('a later member set is captured, admitted by the target, and only then effective (ASN-05)', async () => {
       /* D02: "later members require target admission". Previously UNIQUE(assignment_id)
        * made snapshot_revision a dead column, so a later member could only be added by
        * revoking and re-proposing -- a NEW grant needing fresh source approval, which
@@ -276,6 +276,62 @@ test('team membership and admitted member snapshots on owned isolated PostgreSQL
       // An admitted set is immutable again, and admission cannot be replayed.
       await deny(`UPDATE workforce_assignment_member_sets SET member_count=99 WHERE assignment_id=$1 AND snapshot_revision=2`, [proposal.id]);
       await deny(ADMIT.replace(' RETURNING *', ''), [proposal.id, 2, creator]);
+      await pool.query(REVOKE, [proposal.id]);
+    });
+
+    // 🔴 ASN-05's LAST CLAUSE -- "removals revoke eligibility PROMPTLY" -- is held entirely by the
+    // tail of `workforce_assignment_active_member_candidates` and by nothing else:
+    //   membership.state='active' AND membership.revision=admitted.membership_revision
+    //                              AND membership.role=admitted.role
+    // Remove that tail, which reads like simplifying a join onto the membership row, and a revoked
+    // member keeps exercising the assignment until somebody remembers to rewrite the admitted set.
+    // The requirement's own words for that are "no unchecked future-member access expansion".
+    // It is DERIVED, not propagated -- which is why it is worth pinning at all. Write-time
+    // propagation is how this estate already shipped a suspension that held on password login and
+    // not on OAuth.
+    //
+    // ⚠️ THE THREE PREDICATES ARE MUTUALLY REDUNDANT, AND THIS CASE CANNOT ISOLATE ANY ONE OF THEM.
+    // Measured, not assumed: deleting `state='active'`, or the revision pin, or the role pin, each
+    // leaves this case GREEN, because every membership mutation advances the revision by exactly
+    // one (pinned two cases above), so a revocation trips the state pin AND the revision pin, and a
+    // promotion trips the role pin AND the revision pin. Only removing all three fails it. That is
+    // recorded here rather than left for the next person to rediscover: a single-line mutation
+    // against overlapping defences proves nothing, and a gate is only as good as the change it can
+    // actually catch.
+    await t.test('revoking a member ends its eligibility at once, and so does changing its role (ASN-05)', async () => {
+      const ws = randomUUID();
+      await pool.query('INSERT INTO workspaces(id,owner_user_id,name,slug) VALUES($1,$2,$3,$3)',
+        [ws, owner, `revoke-${ws.slice(0, 8)}`]);
+      const held = (await pool.query(
+        `SELECT * FROM workforce_team_memberships WHERE team_id=$1 AND state='active' ORDER BY created_at`,
+        [team])).rows;
+      const proposal = await propose({ workspace: ws });
+      await describe(proposal.id, team, held.length, await teamRevision(team), 1, ws);
+      for (const m of held)
+        await pool.query(`INSERT INTO workforce_assignment_members(assignment_id,snapshot_revision,team_id,
+          membership_id,membership_revision,role) VALUES($1,1,$2,$3,$4,$5)`,
+          [proposal.id, team, m.id, m.revision, m.role]);
+      await pool.query(ACCEPT, [proposal.id, approver]);
+
+      const live = async () => Number((await pool.query(
+        'SELECT count(*) c FROM workforce_assignment_active_member_candidates WHERE assignment_id=$1',
+        [proposal.id])).rows[0].c);
+      assert.equal(await live(), held.length, 'the admitted set is effective to begin with');
+
+      // Revoke one. No admission step, no rewrite of the admitted set -- eligibility ends here.
+      await pool.query(`UPDATE workforce_team_memberships SET state='revoked',revision=revision+1,
+        revoked_at=clock_timestamp(),updated_at=clock_timestamp() WHERE id=$1`, [held[0].id]);
+      assert.equal(await live(), held.length - 1,
+        'a revoked member is no longer a candidate the moment it is revoked');
+
+      // And a surviving member whose ROLE changes drops out too: the target admitted this member
+      // AT THIS ROLE, so a promotion is a new grant to be admitted, not a detail of an old one.
+      if (held.length > 1) {
+        await pool.query(`UPDATE workforce_team_memberships SET role='manager',revision=revision+1,
+          updated_at=clock_timestamp() WHERE id=$1`, [held[1].id]);
+        assert.equal(await live(), held.length - 2,
+          'an admitted grant is for a member at a revision AND a role, never for the member alone');
+      }
       await pool.query(REVOKE, [proposal.id]);
     });
 
