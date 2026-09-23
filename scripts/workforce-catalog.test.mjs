@@ -17,7 +17,16 @@
  *            unbuilt.
  *
  * Both close by EXTENDING this endpoint (an `assignment` filter, a `search` term, an
- * assigned-into-workspace listing), never by a second list API. */
+ * assigned-into-workspace listing), never by a second list API.
+ *
+ *   NFR-07   "API cursors, caches, subscriptions, deep links and exports are scope-bound and
+ *            revision-aware. Unauthorized IDs do not reveal existence through error-detail
+ *            differences." The LAST sentence is proven below, on the real HTTP router, for this
+ *            endpoint -- a real-but-unreadable owner and an unused UUID return byte-identical
+ *            responses. The cursor half is proven too (scope-bound, see the cursor case). But
+ *            caches, subscriptions, deep links and exports do not exist in the workforce estate,
+ *            and one endpoint is not "API". A citation would claim four surfaces that are unbuilt
+ *            on the strength of one that is. */
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -174,6 +183,52 @@ test('owned workforce catalog: real isolated PostgreSQL, authorization, keyset a
       assert.equal((await post(token('workforce:manage'))).status, 403); assert.equal((await post(token('workforce:read', 'xeno-pixel'))).status, 403);
       assert.equal((await post(token(), input(personal, { expectedActorAccountId: other }))).status, 403);
       assert.equal((await post(token(), input(personal, { actorUserId: other }))).status, 400);
+
+      // NFR-07: "unauthorized IDs do not reveal existence through error-detail differences."
+      // 🔴 THIS IS THE ONE CLASS OF LEAK A PASSING AUTHORIZATION SUITE CANNOT CATCH. Every case
+      // above asserts that a denial IS a denial. None asserts that two denials are the SAME
+      // denial -- and an oracle is built from the difference, not from the refusal. A `not_found`
+      // for an unknown workspace beside a `denied` for a real one the caller may not see is a
+      // working existence oracle in which every individual response is correct.
+      // Compared on the WHOLE wire response, not a hand-picked field: status, body and header
+      // order together, because a leak that hides in a field nobody thought to compare is
+      // precisely the leak this requirement is about.
+      // 🔴 CANONICALISE RECURSIVELY, and never with JSON.stringify's array argument. The first
+      // version of this case wrote `JSON.stringify(body, Object.keys(body).sort())` to get stable
+      // key order -- but that array is a PROPERTY ALLOWLIST applied at EVERY DEPTH, so nested keys
+      // were silently dropped and `details: { reason: ... }` rendered as `details: {}` on both
+      // sides. A mutation that put a distinct reason on the wire still passed. The gate was
+      // comparing two hollowed-out bodies, which is the exact vacuity it exists to prevent.
+      const canonical = value => Array.isArray(value) ? value.map(canonical)
+        : value && typeof value === 'object'
+          ? Object.fromEntries(Object.keys(value).sort().map(k => [k, canonical(value[k])]))
+          : value;
+      const wire = async owner => {
+        const r = await post(token(), input(owner));
+        return { status: r.status, body: JSON.stringify(canonical(r.body)) };
+      };
+      // ⚠️ NOT `foreign`: despite its name, the fixture grants `human` ADMIN on it (see the grant
+      // block above), so it is authorized and correctly answers 200. The first draft of this case
+      // used it and "found a leak" that was the fixture. A workspace the caller has NO relation
+      // to is created here instead, so the comparison is between two genuinely unreadable owners.
+      const stranger = randomUUID();
+      await pool.query("INSERT INTO workspaces(id,owner_user_id,name,slug) VALUES($1,$2,'Stranger','stranger')",
+        [stranger, other]);
+      const realButUnauthorized = await wire({ type: 'workspace', id: stranger });
+      const doesNotExist = await wire({ type: 'workspace', id: randomUUID() });
+      assert.deepEqual(realButUnauthorized, doesNotExist,
+        'a workspace that exists but is not readable must be indistinguishable from one that does '
+        + 'not exist; any difference is an existence oracle for the whole workspace table');
+
+      // Same for a personal owner: a real stranger's account vs an account id that is nobody's.
+      assert.deepEqual(await wire({ type: 'user', id: other }), await wire({ type: 'user', id: randomUUID() }),
+        'a real foreign account must not be distinguishable from an unused UUID');
+
+      // ...and the control that stops this passing vacuously: an AUTHORIZED read is different.
+      // Without it, a router that answered 403 to everything -- including the owner -- would
+      // satisfy both assertions above.
+      assert.notDeepEqual(await wire(personal), realButUnauthorized,
+        'the authorized read must differ, or these comparisons prove only that nothing works');
     });
   } finally {
     if (server) { server.closeAllConnections(); await new Promise(resolve => server.close(resolve)); }
