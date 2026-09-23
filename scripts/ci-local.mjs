@@ -24,6 +24,12 @@
  *   .github/workflows/core-tests.yml   → DB core suites, no-DB core suites
  *   .github/workflows/money-tests.yml  → the seven money suites, one DB each
  *
+ * ⚠️ The `proofs` stage has no workflow counterpart, because until it existed
+ * NOTHING ran those suites -- not this runner and not CI. It is the one stage
+ * here that checks MORE than Actions did, and it is listed as such rather than
+ * quietly closing the gap: gates.yml needs a matching job before the two are
+ * honestly identical again.
+ *
  * `--check-drift` asserts exactly that and is run as part of the chain, so if
  * someone adds a suite to a workflow and not here, THIS fails and says so.
  *
@@ -42,7 +48,7 @@
  *
  * Usage:
  *   node scripts/ci-local.mjs                 # everything
- *   node scripts/ci-local.mjs --only=gates    # gates | core | money | build
+ *   node scripts/ci-local.mjs --only=gates    # gates | core | money | build | proofs
  *   node scripts/ci-local.mjs --check-drift   # only verify this matches the workflows
  *   node scripts/ci-local.mjs --keep-db       # leave the container up for debugging
  */
@@ -68,6 +74,82 @@ const MONEY_SUITES = [
   'billing-money-in', 'media-metering', 'wallet-service',
   'service-ledger', 'ledger-audit-fixes', 'credit-mirror-drift',
 ];
+
+/* ── DATABASE PROOFS (scripts/*.test.mjs) ────────────────────────────────────
+ * 19 suites in the `npm test` chain gate themselves on a fixture URL and SKIP
+ * without it. Nothing supplied one -- not this runner, not gates.yml -- so they
+ * had never executed in any automated run: the workforce schema, workspace keys,
+ * membership operations, live collaboration, webhook delivery and notifications
+ * all reported green by reporting nothing.
+ *
+ * A skipped SQL proof is indistinguishable from a passing one, which is the
+ * failure this repository has a name for. They get their own stage rather than
+ * a database bolted onto `npm test`, for the reason gates.yml already gives for
+ * keeping forum-proofs separate: two stages that each mean one thing tell you
+ * more than one stage mixing source checks with a live-system check.
+ *
+ * The list is DERIVED from the suites themselves, never hand-kept -- a new DB
+ * suite is covered the day it is written, without anyone remembering. Each
+ * database name is the one the suite ASSERTS; they are not interchangeable (the
+ * workforce suites refuse any database but `workforceproof`, so a wrong name
+ * here fails loudly instead of running against something else). */
+/* `migrated: true` means the suite expects the REAL schema -- it inserts into `users` and
+ * `workspaces` directly instead of building its own tables. The rest create an owned
+ * schema per run and must be handed an EMPTY database: migrating those would leave the
+ * public schema populated underneath them, which is the "passes because a previous suite
+ * left rows behind" failure this runner exists to avoid. */
+const DB_PROOF_FIXTURES = {
+  WORKFORCE_TEST_DATABASE_URL: { database: 'workforceproof', migrated: false },
+  WORKSPACE_KEY_TEST_DATABASE_URL: { database: 'workspacekeyproof', migrated: false },
+  NOTIFICATION_TEST_DATABASE_URL: { database: 'notificationproof', migrated: false },
+  WORKSPACE_AUTH_TEST_DATABASE_URL: { database: 'workspaceproof', migrated: false },
+  TEST_DATABASE_URL: { database: 'chatproof', migrated: true },
+};
+
+/* The canonical fresh-database sequence, taken from src/server/tests/fresh-db-boot.test.mjs
+ * rather than reinvented: versioned SQL first, then the account/ledger v2 migration. */
+function migrateDatabase(url) {
+  const script = [
+    "import pg from 'pg';",
+    "import { runAllMigrations } from './src/server/services/migrationRunner.js';",
+    "import * as accountV2 from './src/server/database/migrate-account-v2.js';",
+    "const pool = new pg.Pool({ connectionString: process.env.MIGRATE_URL });",
+    "await runAllMigrations(pool);",
+    "await (accountV2.migrateAccountV2 || accountV2.default)(pool);",
+    "await pool.end();",
+  ].join('\n');
+  return run('node', ['--input-type=module', '-e', script], { env: { MIGRATE_URL: url }, quiet: true });
+}
+
+/* Suites that need a LIVE SERVICE as well as a database. They are not database proofs and
+ * do not belong in this stage: gates.yml already states the reason for keeping that class
+ * out -- "a check that needs production to be up is a check that goes red for reasons that
+ * have nothing to do with the commit, and a red that means nothing gets ignored."
+ *
+ * Named individually with what each one waits on, never matched by a pattern: a pattern
+ * would quietly swallow the next real DB suite that happened to match it. */
+const EXTERNAL_SERVICE_SUITES = {
+  'chat-project-semantic-integration.test.mjs': 'XENO_EMBEDDING_BASE_URL (a live embeddings service)',
+  'chat-project-semantic-scale-qualification.test.mjs': 'XENO_EMBEDDING_BASE_URL (a live embeddings service)',
+};
+
+function deriveDbProofSuites() {
+  const found = [];
+  for (const file of readdirSync(join(ROOT, 'scripts')).filter((n) => n.endsWith('.test.mjs'))) {
+    const body = readFileSync(join(ROOT, 'scripts', file), 'utf8');
+    // The FIRST fixture variable a suite reads is the one it runs against.
+    const m = body.match(/process\.env\.([A-Z_]*TEST_DATABASE_URL)/);
+    if (!m || !DB_PROOF_FIXTURES[m[1]]) continue;
+    if (EXTERNAL_SERVICE_SUITES[file]) {
+      // Said out loud rather than silently skipped -- the whole point of this stage is that
+      // a suite nobody ran cannot look like a suite that passed.
+      log(`${c.dim}  not a database proof, excluded: ${file} needs ${EXTERNAL_SERVICE_SUITES[file]}${c.off}`);
+      continue;
+    }
+    found.push({ file, variable: m[1] });
+  }
+  return found.sort((a, b) => a.file.localeCompare(b.file));
+}
 
 // Mirrors core-tests.yml `env:`. See the ENVIRONMENT note above before trimming.
 const CI_ENV = {
@@ -155,11 +237,28 @@ function checkDrift() {
 }
 
 // ── Postgres ────────────────────────────────────────────────────────────────
+/* An EXTERNAL Postgres may be supplied as a base URL (no database path):
+ *
+ *   CI_LOCAL_PG_URL=postgresql://user:pass@127.0.0.1:5432 node scripts/ci-local.mjs
+ *
+ * Docker is the default and stays the default -- a disposable container is the
+ * only way to guarantee a suite is not passing on rows a previous run left
+ * behind. But requiring it makes the runner unusable on a machine that already
+ * has a Postgres and no Docker daemon, and "the gates cannot run here" is how a
+ * gate stops being run at all. In CI this is the hook for a service container,
+ * so the workflow and this file execute the SAME code rather than two
+ * descriptions of it.
+ *
+ * Databases are still dropped and recreated per suite either way. */
+const EXTERNAL_PG = (process.env.CI_LOCAL_PG_URL || '').replace(/\/+$/, '');
+
 function dockerOk() {
+  if (EXTERNAL_PG) return true;
   try { execFileSync('docker', ['version'], { stdio: 'ignore' }); return true; } catch { return false; }
 }
 
 function startPg() {
+  if (EXTERNAL_PG) return; // not ours to start
   spawnSync('docker', ['rm', '-f', PG.container], { stdio: 'ignore' });
   const up = spawnSync('docker', [
     'run', '-d', '--name', PG.container,
@@ -176,10 +275,19 @@ function startPg() {
   throw new Error('postgres did not become ready');
 }
 
-const stopPg = () => spawnSync('docker', ['rm', '-f', PG.container], { stdio: 'ignore' });
+const stopPg = () => { if (!EXTERNAL_PG) spawnSync('docker', ['rm', '-f', PG.container], { stdio: 'ignore' }); };
 
 function freshDb(name) {
-  for (const sql of [`DROP DATABASE IF EXISTS ${name}`, `CREATE DATABASE ${name}`]) {
+  const statements = [`DROP DATABASE IF EXISTS ${name}`, `CREATE DATABASE ${name}`];
+  if (EXTERNAL_PG) {
+    const admin = new URL(`${EXTERNAL_PG}/postgres`);
+    for (const sql of statements) {
+      spawnSync('psql', [admin.href, '-v', 'ON_ERROR_STOP=1', '-q', '-c', sql],
+        { stdio: 'ignore', env: { ...process.env, PGPASSWORD: decodeURIComponent(admin.password || '') } });
+    }
+    return `${EXTERNAL_PG}/${name}`;
+  }
+  for (const sql of statements) {
     spawnSync('docker', ['exec', PG.container, 'psql', '-U', 'postgres', '-d', 'postgres', '-c', sql], { stdio: 'ignore' });
   }
   return `postgresql://postgres:${PG.password}@127.0.0.1:${PG.port}/${name}`;
@@ -196,6 +304,65 @@ function runDbSuites(label, suites, dbPrefix) {
       log(out.split('\n').slice(-25).join('\n'));
     }
     record(`${label}: ${t}`, code === 0);
+  }
+  return allOk;
+}
+
+/* Run the derived database proofs and assert each one ACTUALLY RAN.
+ *
+ * The exit code alone is not enough and never was: a suite that skips exits 0.
+ * So every suite must report at least one passing test and ZERO skipped ones --
+ * the only reading under which "green" means the SQL was exercised. */
+function runDbProofs(baseUrl) {
+  const suites = deriveDbProofSuites();
+  if (!suites.length) {
+    // Deriving nothing means the scan broke, not that there is nothing to prove.
+    record('proofs: database suites were found to run', false, 'derivation returned no suites');
+    return false;
+  }
+  const created = new Set();
+  let allOk = true;
+  for (const { file, variable } of suites) {
+    const { database, migrated } = DB_PROOF_FIXTURES[variable];
+    if (!created.has(database)) {
+      const url = freshDb(database);
+      if (migrated) {
+        const m = migrateDatabase(url);
+        if (m.code !== 0) {
+          // Without this the suites fail as `relation "users" does not exist`, which reads
+          // as a broken test rather than a database that was never prepared.
+          record(`proofs: migrate ${database}`, false, 'migrations failed; suites needing it cannot run');
+          log(m.out.split(/\r?\n/).slice(-15).join('\n'));
+          return false;
+        }
+      }
+      created.add(database);
+    }
+    const { code, out } = run('node', ['--test', '--test-force-exit', join('scripts', file)],
+      { env: { [variable]: baseUrl + '/' + database }, quiet: true });
+    const count = (label) => {
+      for (const line of out.split(/\r?\n/)) {
+        // node --test prints `<info> pass 11`; TAP-style output prints `# pass 11`.
+        // Strip whatever symbol leads the line rather than matching it: the reporter's
+        // glyph is not a contract, and the counts are.
+        const text = line.replace(/^[^A-Za-z]+/, '').trim();
+        if (!text.startsWith(label)) continue;
+        const rest = text.slice(label.length).trim();
+        if (/^[0-9]+$/.test(rest)) return Number(rest);
+      }
+      return null;
+    };
+    const passed = count('pass');
+    const skipped = count('skipped');
+    const ran = code === 0 && passed !== null && passed > 0 && (skipped === null || skipped === 0);
+    if (!ran) {
+      allOk = false;
+      log(c.red + '--- ' + file + ' ---' + c.off);
+      log(out.split(/\r?\n/).slice(-25).join('\n'));
+    }
+    record('proofs: ' + file, ran, passed === null
+      ? 'reported no test counts'
+      : passed + ' passed' + (skipped ? ', ' + skipped + ' SKIPPED' : ''));
   }
   return allOk;
 }
@@ -247,7 +414,7 @@ async function main() {
       }
     }
 
-    if (want('core') || want('money')) {
+    if (want('core') || want('money') || want('proofs')) {
       if (!dockerOk()) {
         record('postgres (docker)', false, 'docker is not available — DB suites cannot run');
         ok = false;
@@ -268,6 +435,10 @@ async function main() {
         // money-tests.yml requires `xeno_payment_*` database names — a guard in
         // the suites themselves, so the prefix is load-bearing, not cosmetic.
         if (want('money')) ok = runDbSuites('money', MONEY_SUITES, 'xeno_payment_') && ok;
+
+        // The `scripts/` database proofs. Same container, their own fixtures --
+        // each suite asserts the database it is given, so the names are fixed.
+        if (want('proofs')) ok = runDbProofs(EXTERNAL_PG || `postgresql://postgres:${PG.password}@127.0.0.1:${PG.port}`) && ok;
       }
     }
   } finally {
