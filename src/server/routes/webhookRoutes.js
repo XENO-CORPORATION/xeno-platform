@@ -7,14 +7,15 @@
  * - credits_low      — Credits below threshold
  * - user_signup      — New user registered (admin only)
  *
- * Webhook delivery includes HMAC signature verification
- * and exponential backoff retry (up to 5 attempts).
+ * This module owns REGISTRATION and ADMISSION only. Signing, retry, backoff and the
+ * request itself belong to the durable worker in services/webhookDelivery.js -- see
+ * `dispatchWebhookEvent` below for why the in-process sender was removed.
  */
 
 import { Router } from 'express';
 import crypto from 'crypto';
-import fetch from 'node-fetch';
 import { assertPublicHttpUrl } from '../utils/urlGuard.js';
+import { enqueueWebhookEvent, controlWebhookDelivery } from '../services/webhookDelivery.js';
 
 const router = Router();
 
@@ -195,10 +196,11 @@ router.get('/:id/deliveries', async (req, res) => {
 
     const { rows } = await req.db.query(
       `SELECT wd.id, wd.event, wd.status_code, wd.attempt, wd.max_attempts,
-              wd.delivered_at, wd.failed_at, wd.created_at
+              wd.delivered_at, wd.failed_at, wd.created_at, wd.state, wd.event_id,
+              wd.next_retry_at, wd.cancelled_at, wd.error_code
        FROM webhook_deliveries wd
        JOIN webhooks w ON wd.webhook_id = w.id
-       WHERE w.id = $1 AND w.user_id = $2
+       WHERE w.id = $1 AND w.user_id = $2 AND w.notification_workspace_id IS NULL AND w.deleted_at IS NULL
        ORDER BY wd.created_at DESC
        LIMIT $3 OFFSET $4`,
       [req.params.id, req.user.id, limit, offset]
@@ -222,33 +224,49 @@ router.get('/:id/deliveries', async (req, res) => {
  * @param {object} payload - Event payload
  * @param {string} [userId] - Optional: target specific user's webhooks
  */
-export async function dispatchWebhookEvent(db, event, payload, userId = null) {
+/**
+ * Dispatch an event to all matching webhooks.
+ *
+ * ADMISSION ONLY. This records the intent durably and returns; the delivery itself is made
+ * by the leased worker in services/webhookDelivery.js. Nothing is sent from this call.
+ *
+ * WHY THIS REPLACED AN IN-PROCESS SENDER
+ * --------------------------------------
+ * The previous implementation POSTed from here, fire-and-forget, and scheduled its retries
+ * with `setTimeout` -- backing off to 32 minutes. Those timers lived in process memory, so a
+ * restart, a deploy or a crash dropped every pending retry PERMANENTLY. `next_retry_at` was
+ * written on each failure and read by nothing: there was no sweeper, so a dropped retry was
+ * never resumed and the row simply stayed behind forever.
+ *
+ * It also had no lease, so two replicas would both send; it stored up to 1 KB of the
+ * endpoint's response body in the database; and it read the response unbounded.
+ *
+ * The worker fixes each of those: PostgreSQL owns the work, a claim takes a fenced lease,
+ * authority is re-read after claiming and before the network, `response_body` is never
+ * retained, and the transport caps the response.
+ *
+ * ⚠️ These two designs CANNOT run at once -- both would send, and every event would be
+ * delivered twice. Old application instances must be stopped before this migration runs;
+ * they do not honour leases and would claim nothing while still sending everything.
+ *
+ * @param {object} db - Database pool
+ * @param {string} event - Event type (e.g. 'new_version')
+ * @param {object} payload - Event payload
+ * @param {string} [userId] - Optional: target a specific user's webhooks
+ * @param {object} [options] - `{ eventId }` to make admission idempotent for a producer
+ *   that may retry. `db` may be a pooled CLIENT, so the delivery row can commit inside the
+ *   producer's own transaction -- admission is now a plain INSERT with no continuation.
+ * @returns {Promise<number>} destinations the event was admitted for
+ */
+export async function dispatchWebhookEvent(db, event, payload, userId = null, options = {}) {
+  // Deliberately NOT `return await`. `enqueueWebhookEvent` is async, so a refusal arrives as
+  // a REJECTION and passes straight through this try -- which is what a transactional
+  // producer needs. The forum sweep admits inside its own transaction; swallowing a refusal
+  // would return 0, the sweep would read that as "no destinations matched", advance its
+  // cursor, and the digest would be dropped in silence. Propagating rolls the sweep back so
+  // the window is retried intact. The catch below covers a synchronous throw only.
   try {
-    let query = 'SELECT id, url, secret FROM webhooks WHERE is_active = true AND $1 = ANY(events)';
-    const params = [event];
-
-    if (userId) {
-      query += ' AND user_id = $2';
-      params.push(userId);
-    }
-
-    const { rows: webhooks } = await db.query(query, params);
-
-    for (const webhook of webhooks) {
-      // Create delivery record
-      const { rows } = await db.query(
-        `INSERT INTO webhook_deliveries (webhook_id, event, payload)
-         VALUES ($1, $2, $3) RETURNING id`,
-        [webhook.id, event, JSON.stringify(payload)]
-      );
-
-      // Fire and forget — actual delivery
-      deliverWebhook(db, rows[0].id, webhook, event, payload).catch(err => {
-        console.error(`[Webhooks] Delivery error for ${rows[0].id}:`, err.message);
-      });
-    }
-
-    return webhooks.length;
+    return enqueueWebhookEvent(db, event, payload, userId, options);
   } catch (error) {
     console.error('[Webhooks] Dispatch error:', error.message);
     return 0;
@@ -256,77 +274,21 @@ export async function dispatchWebhookEvent(db, event, payload, userId = null) {
 }
 
 /**
- * Deliver a single webhook with retry logic
+ * Delivery controls, on the same authenticated owner boundary as history.
+ *
+ * `cancel` stops FUTURE attempts. It cannot unsend one already accepted by the receiver,
+ * and the response says so rather than implying a recall happened -- the worker may be
+ * mid-request under a lease at the moment this lands, and the fence makes its settle a
+ * no-op, not a retraction.
  */
-async function deliverWebhook(db, deliveryId, webhook, event, payload, attempt = 1) {
-  const body = JSON.stringify({
-    event,
-    payload,
-    timestamp: new Date().toISOString(),
-    deliveryId,
-  });
-
-  // Create HMAC signature
-  const signature = webhook.secret
-    ? crypto.createHmac('sha256', webhook.secret).update(body).digest('hex')
-    : null;
-
+router.post('/:id/deliveries/:deliveryId/:operation', async (req, res) => {
   try {
-    const response = await fetch(webhook.url, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'User-Agent': 'XENO-Webhooks/1.0',
-        'X-Webhook-Event': event,
-        'X-Webhook-Delivery': deliveryId,
-        ...(signature && { 'X-Webhook-Signature': `sha256=${signature}` }),
-      },
-      body,
-      signal: AbortSignal.timeout(10000), // 10s timeout
-    });
-
-    const responseBody = await response.text().catch(() => '');
-
-    if (response.ok) {
-      await db.query(
-        `UPDATE webhook_deliveries
-         SET status_code = $1, response_body = $2, delivered_at = NOW(), attempt = $3
-         WHERE id = $4`,
-        [response.status, responseBody.substring(0, 1000), attempt, deliveryId]
-      );
-    } else {
-      throw new Error(`HTTP ${response.status}: ${responseBody.substring(0, 200)}`);
-    }
+    const delivery = await controlWebhookDelivery(req.db, req.user.id, req.params.id, req.params.deliveryId, req.params.operation);
+    if (!delivery) return res.status(409).json({ success: false, error: 'Delivery is unavailable or cannot transition' });
+    res.json({ success: true, delivery, ...(req.params.operation === 'cancel' ? { notice: 'Future attempts cancelled; an already accepted request cannot be recalled.' } : {}) });
   } catch (error) {
-    const MAX_ATTEMPTS = 5;
-
-    if (attempt < MAX_ATTEMPTS) {
-      // Exponential backoff: 30s, 2min, 8min, 32min
-      const delayMs = Math.pow(4, attempt) * 7500;
-      const nextRetry = new Date(Date.now() + delayMs);
-
-      await db.query(
-        `UPDATE webhook_deliveries
-         SET status_code = $1, response_body = $2, attempt = $3, next_retry_at = $4
-         WHERE id = $5`,
-        [0, error.message.substring(0, 1000), attempt, nextRetry.toISOString(), deliveryId]
-      );
-
-      // Schedule retry
-      setTimeout(() => {
-        deliverWebhook(db, deliveryId, webhook, event, payload, attempt + 1)
-          .catch(err => console.error(`[Webhooks] Retry ${attempt + 1} failed:`, err.message));
-      }, delayMs);
-    } else {
-      // Max attempts reached — mark as failed
-      await db.query(
-        `UPDATE webhook_deliveries
-         SET status_code = 0, response_body = $1, attempt = $2, failed_at = NOW()
-         WHERE id = $3`,
-        [error.message.substring(0, 1000), attempt, deliveryId]
-      );
-    }
+    res.status(error instanceof TypeError ? 400 : 500).json({ success: false, error: 'Delivery control failed' });
   }
-}
+});
 
 export default router;
