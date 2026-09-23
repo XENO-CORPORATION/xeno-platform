@@ -23,6 +23,16 @@ import { tablesDDL } from './fixtures/schema.mjs';
  * design and no pool is ever silently bypassed. The defect becomes live the day that flag is set.
  * Repairing it means a typed refusal from the resolver, a caller that returns it to the client, and
  * changing the assertions below -- do it BEFORE enabling pooled billing, not after.
+ *
+ * 🔴 AND A POOL CANNOT SPEND AT ALL YET -- a second, independent blocker found while measuring the
+ * first (2026-09-23, real PostgreSQL). A member transferred 30 credits into a pooled workspace (the
+ * transfer succeeds, workspace balance 30), the resolver named the WORKSPACE as payer, and a 5-credit
+ * hold against it was refused QUOTA_EXCEEDED "Turn on usage credits". Paid lots are spendable only
+ * with a usage_credit_preferences row, and that table's user_id REFERENCES users(id) -- so a workspace
+ * id can never hold one (insert refused 23503; the same foreign key is on production). Every pooled
+ * spend therefore fails. Enabling WORKSPACE_BILLING_ENABLED today would not bill pools; it would
+ * refuse every member's premium chat in a pooled workspace. The consent model (FUND-02 / D07-adjacent:
+ * whose consent does a pooled paid lot need?) must be settled before the flag can mean anything.
  */
 import pg from 'pg';
 import crypto from 'crypto';
