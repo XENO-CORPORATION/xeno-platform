@@ -28,7 +28,8 @@ import { generateSignedUrl } from '../middleware/cdnOptimization.js';
 // floor(net_service_micro * 15 / 100) on the CUMULATIVE amount per billing item, so splitting
 // events cannot change the total. `XENO PRICING - STANDARD & LEDGER.md` (locked) says 15–20% for
 // marketplace purchases generally. 25% is outside both, and the Math.round-per-transaction below
-// is not partition-independent. Measured 2026-09-23: MARKETPLACE_PLATFORM_FEE_PCT is unset in
+// is not partition-independent. Measured 2026-09-23 on both backend replicas (backend-2/-3, via
+// printenv): MARKETPLACE_PLATFORM_FEE_PCT is unset in
 // production and there are 0 third-party listings and 0 marketplace transactions, so nothing has
 // been charged at the wrong rate. Not changed here because the rate for NON-agent kinds is a
 // commercial choice inside the ledger's range -- decide it, then implement D07/FUND-19 together.

@@ -18,8 +18,11 @@ import { tablesDDL } from './fixtures/schema.mjs';
  * non-member -> personal wallet" and friends below encode that fallback as correct. Under FUND-06 a
  * caller who SELECTED a pool it cannot use must be refused, not quietly billed personally.
  *
- * LATENT, NOT LIVE -- measured 2026-09-23: WORKSPACE_BILLING_ENABLED is unset in the production
- * backend container and no workspace has billing_mode='pooled', so every spend bills personally by
+ * LATENT, NOT LIVE -- measured 2026-09-23: WORKSPACE_BILLING_ENABLED is unset in BOTH production
+ * backend replicas (xeno-platform-backend-2/-3; read with `docker exec <c> printenv`, which lists 125
+ * variables, so an absent name is really absent) and no workspace has billing_mode='pooled'. The first
+ * measurement queried a container name that does not exist and reported "unset" from the error --
+ * corrected here. So every spend bills personally by
  * design and no pool is ever silently bypassed. The defect becomes live the day that flag is set.
  * Repairing it means a typed refusal from the resolver, a caller that returns it to the client, and
  * changing the assertions below -- do it BEFORE enabling pooled billing, not after.
