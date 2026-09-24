@@ -13,6 +13,7 @@ import express from 'express';
 import { authMiddleware } from '../middleware/auth.js';
 import { issuer } from '../config/hosts.js';
 import { verifyDpopProof } from '../utils/dpop.js';
+import { requireSupportedTokenClient } from '../middleware/requireSupportedClient.js';
 import {
   jwks,
   discovery,
@@ -261,8 +262,11 @@ router.post('/authorize', authMiddleware, async (req, res) => {
   } catch (e) { sendOauthError(res, e); }
 });
 
-// POST /oauth2/token — public; grant_type dispatch.
-router.post('/token', async (req, res) => {
+// POST /oauth2/token — public; grant_type dispatch. A product client below its
+// version floor is refused first (middleware/requireSupportedClient.js,
+// requireSupportedTokenClient) — the only lever that reaches builds which send no
+// identity of their own.
+router.post('/token', requireSupportedTokenClient, async (req, res) => {
   const b = req.body || {};
   try {
     if (b.grant_type === 'urn:ietf:params:oauth:grant-type:token-exchange') {

@@ -88,6 +88,50 @@ export function identifyClient(req) {
   return null;
 }
 
+/**
+ * The product an OIDC client id belongs to — `xeno-canvas` → `canvas` — or null.
+ *
+ * 🔴 This is how the floor reaches builds that send NO identity at all. Measured
+ * 2026-09-25: every shipped Canvas calls the API from Electron's main process with
+ * Node's global `fetch`, whose User-Agent is the bare word `node`, and sends no
+ * `X-Xeno-Client` — so `identifyClient` sees nothing, and 90 days of production
+ * `api_usage_logs` contain zero Canvas user-agents. What every such build DOES
+ * carry is its sign-in client: it cannot get a token without presenting
+ * `client_id=xeno-canvas`. Only names in NAME_MAP count, so an unknown or
+ * third-party client can never be mistaken for a product.
+ */
+export function productForOidcClient(clientId) {
+  const k = String(clientId || '').toLowerCase().trim();
+  return NAME_MAP.has(k) ? NAME_MAP.get(k) : null;
+}
+
+/**
+ * The floor, applied at the TOKEN endpoint to a product's own client.
+ *
+ * A request that names a product's client and does not identify its build with
+ * `X-Xeno-Client` predates enforcement, so it is treated as version `0` — older
+ * than any floor. Where the product has no live floor this is a no-op, exactly as
+ * `evaluateClient` is, so adding it changes nothing until an operator sets one.
+ *
+ * Why only the explicit header, not the User-Agent: a build that already sends a
+ * versioned User-Agent but not the header is exactly the population the header
+ * rollout exists to move, and we have measured none in production. Honouring the
+ * UA here would reopen the door for a spoofable string while closing it for
+ * nothing real.
+ *
+ * Returns the same shape as `evaluateClient`, with `identity.source` set to
+ * `'oidc-client'` when the build did not identify itself.
+ */
+export function evaluateTokenClient({ clientId, headers }, policies, now = new Date()) {
+  const product = productForOidcClient(clientId);
+  if (!product) return { ok: true, identity: null };
+  const declared = identifyClient({ headers: { 'x-xeno-client': headers?.['x-xeno-client'] } });
+  const identity = declared && declared.product === product
+    ? declared
+    : { product, version: '0', source: 'oidc-client' };
+  return evaluateClient(identity, policies, now);
+}
+
 /** Numeric-dotted comparison; a prerelease sorts below its release. */
 export function compareVersions(a, b) {
   const parse = (v) => {
