@@ -1,10 +1,10 @@
 /**
  * XENO-WORKFORCE-01 ASN-07 and ASN-08 -- a project's directory is a binding on a named host.
  *
- *   ASN-07  "Directory resource bindings include host/environment identity and canonical root.
+ *   ASN-07 reads: "Directory resource bindings include host/environment identity and canonical root.
  *            Identical path strings on different machines are not the same resource. Host
  *            realpath/symlink and platform permission enforcement remain authoritative."
- *   ASN-08  "Keep existing project identities and personal/workspace ownership semantics. Reconcile
+ *   ASN-08 reads: "Keep existing project identities and personal/workspace ownership semantics. Reconcile
  *            Interface directory projections and Platform `chat_projects` through explicit ID
  *            mappings/bindings, not name/path equality. ... Research projects may have no
  *            directory; Agent execution still requires an authorized execution root."
