@@ -19,29 +19,41 @@ import crypto from 'crypto';
 import { deductCredits, refundCredits, logUsage } from '../utils/creditTransactions.js';
 import { generateSignedUrl } from '../middleware/cdnOptimization.js';
 
-// Platform fee, configurable via env. Default 25% (SPEC §12 open Q1: propose
-// 20–30%; 0 for official first-party since there is no external creator).
+// Platform commission. 🔒 XENO-WORKFORCE-01 D07 (locked): "15% commission on net creator-service
+// charge for new paid agent listings, excluding separate compute/tax", and FUND-19 fixes the arithmetic:
+// floor(net * 15 / 100), charged on the net amount and never rounded up in XENO's favour. The pricing
+// ledger (`XENO PRICING - STANDARD & LEDGER.md`, locked) puts marketplace purchases generally at 15-20%;
+// the non-agent rate is set at 15% too so there is ONE rate and one piece of arithmetic, at the low end
+// of that range. This replaced a 25% default (SPEC §12's then-open Q1) that contradicted both locks and
+// rounded per transaction; measured before the change, production had 0 third-party listings and 0
+// marketplace transactions, so no one was charged at the old rate.
 //
-// ⚠️ THE 25% DEFAULT CONTRADICTS TWO LOCKED DECISIONS, and "open Q1" above is no longer open for
-// agents. XENO-WORKFORCE-01 D07 (locked): "15% commission on net creator-service charge for new
-// paid agent listings, excluding separate compute/tax"; FUND-19 fixes the arithmetic as
-// floor(net_service_micro * 15 / 100) on the CUMULATIVE amount per billing item, so splitting
-// events cannot change the total. `XENO PRICING - STANDARD & LEDGER.md` (locked) says 15–20% for
-// marketplace purchases generally. 25% is outside both, and the Math.round-per-transaction below
-// is not partition-independent. Measured 2026-09-23 on both backend replicas (backend-2/-3, via
-// printenv): MARKETPLACE_PLATFORM_FEE_PCT is unset in
-// production and there are 0 third-party listings and 0 marketplace transactions, so nothing has
-// been charged at the wrong rate. Not changed here because the rate for NON-agent kinds is a
-// commercial choice inside the ledger's range -- decide it, then implement D07/FUND-19 together.
-const DEFAULT_PLATFORM_FEE_PCT = Number(process.env.MARKETPLACE_PLATFORM_FEE_PCT ?? 25);
+// The env override is retained ONLY within the locked range: a value outside 15-20 is refused at load,
+// because a misconfigured fee must stop the process rather than bill users at a rate nobody approved.
+export const PLATFORM_COMMISSION_PCT = (() => {
+  const raw = process.env.MARKETPLACE_PLATFORM_FEE_PCT;
+  if (raw === undefined || raw === '') return 15;
+  const pct = Number(raw);
+  if (!Number.isInteger(pct) || pct < 15 || pct > 20) {
+    throw new Error(`MARKETPLACE_PLATFORM_FEE_PCT=${raw} is outside the locked 15-20% range`);
+  }
+  return pct;
+})();
+
+/**
+ * Split a gross credit amount into the platform commission and the creator's net, exactly.
+ * First-party / official listings take nothing: there is no external creator to pay.
+ * @returns {{ feePct: number, platformFee: number, creatorNet: number }}
+ */
+export function commissionFor(listing, gross) {
+  const amount = Number(gross) || 0;
+  const feePct = (listing.is_first_party || listing.trust_tier === 'official' || !listing.developer_id)
+    ? 0 : PLATFORM_COMMISSION_PCT;
+  const platformFee = Math.floor((amount * feePct) / 100);
+  return { feePct, platformFee, creatorNet: amount - platformFee };
+}
 const SIGNED_URL_TTL_SECONDS = 6 * 60 * 60; // 6h, matches the model-catalog precedent
 
-function platformFeePct(listing) {
-  // First-party / official listings take 0% (no external creator to pay).
-  if (listing.is_first_party || listing.trust_tier === 'official' || !listing.developer_id) return 0;
-  const pct = DEFAULT_PLATFORM_FEE_PCT;
-  return Number.isFinite(pct) && pct >= 0 && pct <= 100 ? pct : 25;
-}
 
 // --------------------------------------------------------------------------
 // Serialization
@@ -320,9 +332,7 @@ export async function acquireListing(db, { user, listing, pricing, txnType }) {
   }
 
   const cost = Number(pricing.price_credits) || 0;
-  const feePct = platformFeePct(listing);
-  const platformFee = Math.round((cost * feePct) / 100);
-  const creatorNet = cost - platformFee;
+  const { feePct, platformFee, creatorNet } = commissionFor(listing, cost);
   const expiresAt = computeExpiry(pricing.model, pricing.period);
 
   // Ledger-authoritative debit BEFORE the purchase txn (keeps users.credits a pure
@@ -425,9 +435,7 @@ export async function meterInvocation(db, { user, listing, pricing, units = 1, m
     return { ok: false, status: 402, error: 'Insufficient credits', currentCredits: debit.currentCredits };
   }
 
-  const feePct = platformFeePct(listing);
-  const platformFee = Math.round((cost * feePct) / 100);
-  const creatorNet = cost - platformFee;
+  const { feePct, platformFee, creatorNet } = commissionFor(listing, cost);
 
   const { rows: txnRows } = await db.query(
     `INSERT INTO marketplace_transactions
@@ -503,7 +511,7 @@ export async function requestPayout(db, { developerId, amountCredits }) {
   return { ok: true, payout: rows[0], note: 'not_implemented' };
 }
 
-export { refundCredits, DEFAULT_PLATFORM_FEE_PCT };
+export { refundCredits };
 
 export default {
   serializeListingSummary,
