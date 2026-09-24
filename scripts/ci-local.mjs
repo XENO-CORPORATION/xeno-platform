@@ -48,12 +48,13 @@
  *
  * Usage:
  *   node scripts/ci-local.mjs                 # everything
- *   node scripts/ci-local.mjs --only=gates    # gates | core | money | build | proofs
+ *   node scripts/ci-local.mjs --only=gates    # gates | core | money | build | proofs | cross
  *   node scripts/ci-local.mjs --check-drift   # only verify this matches the workflows
  *   node scripts/ci-local.mjs --keep-db       # leave the container up for debugging
  */
 import { execFileSync, spawnSync } from 'node:child_process';
-import { existsSync, readFileSync, readdirSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync, mkdtempSync, symlinkSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { dirname, join, resolve } from 'node:path';
 
@@ -219,7 +220,7 @@ function checkDrift() {
   // A suite file that exists but no list names is the "built, tested,
   // unreachable" shape applied to the gates themselves — that is how
   // browser-bff-session sat in neither workflow, and erasure stayed red unseen.
-  const known = new Set([...CORE_DB_SUITES, ...CORE_NODB_SUITES, ...MONEY_SUITES]);
+  const known = new Set([...CORE_DB_SUITES, ...CORE_NODB_SUITES, ...MONEY_SUITES, ...CROSS_SERVICE_SUITES]);
   const pkg = readFileSync(join(ROOT, 'package.json'), 'utf8');
   const stranded = readdirSync(join(SERVER, 'tests'))
     .filter((f) => f.endsWith('.test.mjs'))
@@ -306,6 +307,57 @@ function runDbSuites(label, suites, dbPrefix) {
       log(out.split('\n').slice(-25).join('\n'));
     }
     record(`${label}: ${t}`, code === 0);
+  }
+  return allOk;
+}
+
+/* CROSS-SERVICE proofs: suites that drive a SIBLING SERVICE for real, not a stand-in.
+ *
+ * marketplace-broker proves XENO-WORKFORCE-01 MKT-06 by booting the real xeno-agents-api against this
+ * platform's real auth and ledger. So it needs a BUILT agents-api. This builds the sibling checkout's
+ * origin default branch into a throwaway directory -- never its working tree, which may hold another
+ * session's work -- and reuses the sibling's installed node_modules read-only.
+ *
+ * A skip counts as a failure: the suite skips without AGENTS_API_DIST, and a stage that goes green on a
+ * skip is the appearance of coverage. Missing sibling or install => the stage FAILS and says why. */
+const CROSS_SERVICE_SUITES = ['marketplace-broker'];
+
+function buildAgentsApi() {
+  const sibling = resolve(ROOT, '..', 'xeno-agents-api');
+  if (!existsSync(join(sibling, '.git'))) return { error: `no sibling checkout at ${sibling}` };
+  if (!existsSync(join(sibling, 'node_modules', 'fastify'))) {
+    return { error: `${sibling} has no installed node_modules (run npm ci there)` };
+  }
+  const dir = mkdtempSync(join(tmpdir(), 'ci-agents-api-'));
+  const ref = spawnSync('git', ['-C', sibling, 'rev-parse', '--verify', 'origin/HEAD'], { encoding: 'utf8' }).status === 0
+    ? 'origin/HEAD' : 'origin/main';
+  const archive = spawnSync('sh', ['-c', `git -C "${sibling}" archive ${ref} | tar -x -C "${dir}"`], { encoding: 'utf8' });
+  if (archive.status !== 0) return { error: `git archive failed: ${archive.stderr}` };
+  symlinkSync(join(sibling, 'node_modules'), join(dir, 'node_modules'));
+  const tsc = spawnSync(process.execPath, [join(sibling, 'node_modules', 'typescript', 'bin', 'tsc'), '-p', 'tsconfig.build.json'],
+    { cwd: dir, encoding: 'utf8' });
+  if (tsc.status !== 0) return { error: `agents-api build failed:\n${(tsc.stdout + tsc.stderr).slice(-2000)}` };
+  spawnSync(process.execPath, ['scripts/copy-assets.mjs'], { cwd: dir, encoding: 'utf8' });
+  return { dist: join(dir, 'dist'), ref };
+}
+
+function runCrossServiceSuites() {
+  const built = buildAgentsApi();
+  if (built.error) {
+    record('cross-service: build xeno-agents-api', false, built.error);
+    return false;
+  }
+  record('cross-service: build xeno-agents-api', true, built.ref);
+  let allOk = true;
+  for (const t of CROSS_SERVICE_SUITES) {
+    const url = freshDb(`xeno_payment_${t.replace(/-/g, '_')}`);
+    const { code, out } = run('node', [join('tests', `${t}.test.mjs`)],
+      { cwd: SERVER, env: { DATABASE_URL: url, AGENTS_API_DIST: built.dist }, quiet: true });
+    const pass = Number((out.match(/^ℹ pass (\d+)/m) || [])[1] || 0);
+    const skipped = Number((out.match(/^ℹ skipped (\d+)/m) || [])[1] || 0);
+    const ranOk = code === 0 && pass >= 1 && skipped === 0;
+    if (!ranOk) { allOk = false; log(`${c.red}--- ${t} ---${c.off}`); log(out.split('\n').slice(-25).join('\n')); }
+    record(`cross-service: ${t}`, ranOk, ranOk ? '' : `exit ${code}, pass ${pass}, skipped ${skipped}`);
   }
   return allOk;
 }
@@ -416,7 +468,7 @@ async function main() {
       }
     }
 
-    if (want('core') || want('money') || want('proofs')) {
+    if (want('core') || want('money') || want('proofs') || want('cross')) {
       if (!dockerOk()) {
         record('postgres (docker)', false, 'docker is not available — DB suites cannot run');
         ok = false;
@@ -441,6 +493,9 @@ async function main() {
         // The `scripts/` database proofs. Same container, their own fixtures --
         // each suite asserts the database it is given, so the names are fixed.
         if (want('proofs')) ok = runDbProofs(EXTERNAL_PG || `postgresql://postgres:${PG.password}@127.0.0.1:${PG.port}`) && ok;
+
+        // Cross-service proofs drive a real sibling service; see CROSS_SERVICE_SUITES.
+        if (want('cross')) ok = runCrossServiceSuites() && ok;
       }
     }
   } finally {

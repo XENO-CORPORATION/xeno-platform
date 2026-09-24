@@ -1,17 +1,19 @@
 /**
  * Marketplace money boundaries, against real PostgreSQL through the REAL marketplace router.
  *
- *   1. POST /api/marketplace/invoke never debits, never reports success, for an execution that never
- *      runs. Until 2026-09-24 it answered `brokered: true` with no dispatch and, on the pay_per_use
- *      branch, debited the buyer and accrued creator earnings -- what XENO-WORKFORCE-01 MKT-06
- *      forbids ("no debit for an execution that was never admitted"). It now answers 501
- *      `broker_unavailable`, dispatched: false, charged: 0, after the same access checks.
+ *   1. POST /api/marketplace/invoke never debits. Until 2026-09-24 it answered `brokered: true` with no
+ *      dispatch and, on the pay_per_use branch, debited the buyer and accrued creator earnings -- what
+ *      XENO-WORKFORCE-01 MKT-06 forbids ("no debit for an execution that was never admitted"). It then
+ *      refused with 501 rather than lie, and since the broker landed it creates a real hosted run in
+ *      xeno-agents-api; the money is that run's ledger hold, settled by agents-api at real usage, and
+ *      this route still debits nothing of its own. Here AGENTS_API_BASE_URL is deliberately unset, so
+ *      the route reports `broker_unavailable` -- which is the honest answer when no broker is reachable,
+ *      and keeps this suite free of a second service. The brokered path is marketplace-broker.test.mjs.
  *   2. The platform commission is the locked D07 15%, as floor(gross * 15 / 100), and 0 for
  *      first-party / official listings. It used to default to 25% and round up per transaction.
  *
- * Not cited as MKT-06 or FUND-15/19: MKT-06 is satisfied only once a hosted run is actually created
- * and its real state returned -- refusing is the correct interim, not the requirement -- and FUND-15
- * and FUND-19 also cover contributions, gifts and cumulative per-item billing, which do not exist.
+ * Not cited as MKT-06 (that is marketplace-broker.test.mjs, which drives the real hosted run) nor as
+ * FUND-15/19, which also cover contributions, gifts and cumulative per-item billing that do not exist.
  *
  * Measured against UNMODIFIED origin/main before the repair, on a freshly migrated database: the old
  * route debited the buyer 15 credits (units 3 x 5) through the ledger, then died inserting into
@@ -22,7 +24,6 @@
  *
  * Mutation-checked (each fails the named case; restored passes):
  *   - the route meters again (svc.meterInvocation)       -> "invoke debits nothing and records nothing"
- *   - the route answers success                           -> "invoke refuses and says nothing ran"
  *   - commission back to 25                               -> "commission is 15% of gross, floored"
  *   - Math.round instead of Math.floor                    -> "commission is 15% of gross, floored"
  *   - first-party listings charged                        -> "first-party and official listings pay no commission"
@@ -91,7 +92,7 @@ async function main() {
   await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
   const invoke = async (id) => {
     const r = await fetch(`http://127.0.0.1:${server.address().port}/api/marketplace/invoke/${id}`, {
-      method: 'POST', headers: { 'content-type': 'application/json', authorization: `Bearer ${token}` }, body: JSON.stringify({ units: 3 }),
+      method: 'POST', headers: { 'content-type': 'application/json', authorization: `Bearer ${token}` }, body: JSON.stringify({ prompt: "run the mind" }),
     });
     return { status: r.status, body: await r.json().catch(() => ({})) };
   };
@@ -100,10 +101,9 @@ async function main() {
     const before = (await getBalanceV2(pool, buyer)).availableMicro;
     const txBefore = Number((await pool.query('SELECT count(*) FROM marketplace_transactions')).rows[0].count);
     const r = await invoke(listing);
-    ok(r.status === 501 && r.body.success === false && r.body.error === 'broker_unavailable'
-      && r.body.dispatched === false && r.body.charged === 0 && !('brokered' in r.body),
-    `invoke refuses and says nothing ran (got ${r.status} ${JSON.stringify(r.body).slice(0, 120)})`);
-    ok(r.body.access === 'pay_per_use', 'invoke still reports which access path applied');
+    ok(r.status === 503 && r.body.error === 'broker_unavailable' && r.body.dispatched === false
+      && r.body.charged === 0 && !('brokered' in r.body),
+    `with no broker configured, invoke says so and nothing ran (got ${r.status} ${JSON.stringify(r.body).slice(0, 120)})`);
     const after = (await getBalanceV2(pool, buyer)).availableMicro;
     const txAfter = Number((await pool.query('SELECT count(*) FROM marketplace_transactions')).rows[0].count);
     const earnings = Number((await pool.query('SELECT count(*) FROM marketplace_creator_earnings WHERE developer_id=$1', [dev])).rows[0].count);
