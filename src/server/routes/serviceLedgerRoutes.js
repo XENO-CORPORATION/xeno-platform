@@ -49,6 +49,8 @@ function sendErr(res, err) {
     EMAIL_UNVERIFIED: 403,
     NOT_FOUND: 404,
     CONFLICT: 409,
+    HOLD_NOT_ACTIVE: 409,
+    HOLD_EXPIRED: 409,
     SPEND_CAP_EXCEEDED: 429,
   };
   // A Postgres unique-violation on the holdId (concurrent replay racing past the
@@ -275,6 +277,22 @@ export function createServiceLedgerRouter({
       });
       res.json({ ...settled, pricing: amount.priced, billedUserId: subject.userId });
     } catch (err) {
+      sendErr(res, err);
+    }
+  });
+
+  // POST /api/v2/ledger/service/holds/:holdId/extend — keep a RUNNING reservation committed (FUND-09).
+  // The holder calls this while its work is alive, so the sweeper never releases a hold under a live run.
+  // Body { userId, extendBySeconds } (1-3600). Refuses a settled/voided hold (409) and an already-expired
+  // one (409): an expired hold may have been swept and its credits re-spent, so it cannot be revived.
+  router.post('/holds/:holdId/extend', async (req, res) => {
+    const b = req.body || {};
+    if (!b.userId) return badRequest(res, 'userId required');
+    try {
+      const subject = await billingSubjectFor(req.db, b.userId);
+      res.json(await ledger.extendHoldV2(req.db, subject.userId, req.params.holdId, b.extendBySeconds));
+    } catch (err) {
+      if (err.code === 'BAD_REQUEST') return badRequest(res, err.message);
       sendErr(res, err);
     }
   });

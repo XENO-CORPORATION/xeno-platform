@@ -789,6 +789,49 @@ export async function settleHoldV2(pool, userId, holdId, actualCostMicro, usage 
   return holdView(finalRow, await getBalanceV2(pool, userId));
 }
 
+/**
+ * Keep a RUNNING reservation committed: move a held hold's expiry forward. XENO-WORKFORCE-01 FUND-09:
+ * "Do not release a reservation merely because a lease/HTTP request expired. Running or uncertain
+ * provider work remains committed until its settlement/cancellation is proved ... Existing generic
+ * expiring holds require a qualified run-backed extension." This is that extension.
+ *
+ * Why it is needed, measured 2026-09-23: a run that outlives its hold's TTL has its reservation
+ * voided by sweepExpiredHolds on time alone; the credits are then spendable elsewhere, and the run's
+ * eventual settle no-ops on the voided hold and reports success -- the run is free and its credits
+ * are spent twice. The holder calls this while the work is alive, so the hold never lapses under it.
+ *
+ * Deliberately narrow:
+ *   - it only ever moves expires_at FORWARD, never back, and never past MAX_HOLD_EXTENSION_SECONDS
+ *     from now -- an extension is a heartbeat, not a way to make a hold permanent;
+ *   - it never changes the amount, the funding lots, the payer or the state;
+ *   - it refuses a hold that is no longer 'held' (settled, voided) with HOLD_NOT_ACTIVE, and one whose
+ *     expiry has ALREADY passed with HOLD_EXPIRED. An expired hold may have been swept, and its credits
+ *     re-spent; reviving it would re-reserve value that is no longer there. The holder must stop, or
+ *     settle what it consumed -- settle still charges actual usage against the account.
+ * Idempotent in effect: extending twice to the same horizon leaves one expiry.
+ */
+export const MAX_HOLD_EXTENSION_SECONDS = 3600;
+export async function extendHoldV2(pool, userId, holdId, extendBySeconds) {
+  const seconds = Math.floor(Number(extendBySeconds));
+  if (!Number.isFinite(seconds) || seconds < 1 || seconds > MAX_HOLD_EXTENSION_SECONDS) {
+    const e = new Error(`extendBySeconds must be an integer from 1 to ${MAX_HOLD_EXTENSION_SECONDS}`);
+    e.code = 'BAD_REQUEST'; throw e;
+  }
+  const r = await pool.query(
+    `UPDATE credit_holds
+        SET expires_at = GREATEST(expires_at, now() + ($3 || ' seconds')::interval), updated_at = now()
+      WHERE user_id = $1 AND hold_id = $2 AND state = 'held' AND expires_at > now()
+      RETURNING *`,
+    [userId, holdId, String(seconds)],
+  );
+  if (r.rows[0]) return { ...holdView(r.rows[0], await getBalanceV2(pool, userId)), expiresAt: r.rows[0].expires_at };
+  const row = (await pool.query('SELECT state, expires_at FROM credit_holds WHERE user_id=$1 AND hold_id=$2', [userId, holdId])).rows[0];
+  if (!row) { const e = new Error('hold not found'); e.code = 'NOT_FOUND'; throw e; }
+  const e = new Error(row.state !== 'held' ? `hold is ${row.state}` : 'hold has already expired');
+  e.code = row.state !== 'held' ? 'HOLD_NOT_ACTIVE' : 'HOLD_EXPIRED';
+  throw e;
+}
+
 /** Release a hold without charging. Idempotent. */
 export async function voidHoldV2(pool, userId, holdId) {
   // No transaction needed (single idempotent UPDATE + read) — run directly on the
