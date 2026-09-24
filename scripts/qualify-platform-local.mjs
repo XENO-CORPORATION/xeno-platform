@@ -264,6 +264,7 @@ const BACKEND_EVIDENCE = {
       'scripts/workforce-ownership-transfer.test.mjs',
       'scripts/workforce-project-participation.test.mjs',
       'scripts/workforce-function-change.test.mjs',
+      'scripts/workforce-handoff-disclosure.test.mjs',
       'scripts/workforce-handoff-migration.test.mjs',
       // The service layer's database-backed suites. The four that need NO database
       // (scope, scope-policy, authority, routes) are in the npm chain instead, where
