@@ -244,23 +244,25 @@ router.post('/listings/:id/subscribe', authMiddleware, makeAcquireHandler(['subs
 router.post('/listings/:id/rent', authMiddleware, makeAcquireHandler(['rental'], 'rent'));
 
 /**
- * POST /invoke/:listingId — platform-brokered metered hosted-agent call (§4b).
- * Charges per-use credits and records usage. The actual brokered agent call to
- * xeno-rt / the creator's hosted agent is a separate integration; this endpoint
- * owns the metering + access check. Requires an active entitlement OR pay_per_use
- * pricing the buyer pays into per call.
+ * POST /invoke/:listingId -- platform-brokered hosted-agent call (SPEC §4b; rental execution is brokered
+ * onto xeno-agents-api hosted runs, §14).
  *
- * 🔴 THIS ROUTE REPORTS WORK IT DOES NOT DO. Both success branches answer `brokered: true` and no
- * branch dispatches anything -- the comment above assigns the call to "the agent gateway", and no
- * gateway, product or test in the workspace calls this endpoint (searched each repo's origin default
- * branch, 2026-09-23). On the pay_per_use branch it DEBITS the buyer and accrues creator earnings for
- * an execution that never happens. XENO-WORKFORCE-01 MKT-06 forbids precisely this: "Authorization or
- * a debit alone cannot report brokered:true or completion. No debit for an execution that was never
- * admitted." MKT-05/06 are therefore not cited anywhere.
+ * 🔒 XENO-WORKFORCE-01 MKT-06: "Broker invocation must create/adopt a durable hosted run, expose actual
+ * queued/running/completed/failed/interrupted state and return artifacts/results. Authorization or a
+ * debit alone cannot report brokered:true or completion. No debit for an execution that was never
+ * admitted."
  *
- * LATENT: production has 0 third-party listings and 0 marketplace transactions, so nobody has been
- * charged. The fix is the one MKT-06 names -- create or adopt a durable hosted run (xeno-agents-api
- * already implements one) and report its real state -- not a change to this response's wording.
+ * Until 2026-09-24 this route did exactly what MKT-06 forbids: both success branches reported the
+ * call as brokered while nothing was dispatched, and the pay_per_use branch DEBITED the buyer and
+ * accrued creator earnings for an execution that never happened. No caller in any repository used it,
+ * and production had 0 third-party listings, so nobody was charged -- recorded before the repair.
+ *
+ * It now does the only honest thing available while no hosted run can be created from here: it checks
+ * access exactly as before (listing, kind, entitlement or pay-per-use pricing) so the caller learns
+ * whether they COULD invoke, then answers 501 `broker_unavailable` with `dispatched: false`, and
+ * never debits. A caller cannot mistake this for success, and no money moves for work that did not run.
+ * The remaining work is the broker itself -- create or adopt an xeno-agents-api run on the buyer's
+ * behalf and return its real state -- which lands behind this same route.
  */
 router.post('/invoke/:listingId', authMiddleware, async (req, res) => {
   try {
@@ -272,42 +274,22 @@ router.post('/invoke/:listingId', authMiddleware, async (req, res) => {
       return badRequest(res, 'Only mind/swarm listings are invocable');
     }
 
-    const units = Number.isFinite(Number(req.body?.units)) && Number(req.body.units) > 0
-      ? Math.floor(Number(req.body.units)) : 1;
-
-    // Rental/subscription entitlement → unmetered (or capped) within window.
     const entitlement = await svc.getActiveEntitlement(req.db, req.user.id, listing.id);
-    if (entitlement && (entitlement.kind === 'rental' || entitlement.kind === 'subscribed')) {
-      return res.json({
-        success: true, metered: false, brokered: true,
-        message: 'Invocation authorized under active rental/subscription window',
-        // NOTE: the brokered call to the creator's hosted agent / xeno-rt is
-        // performed by the agent gateway; this endpoint authorizes + accounts.
-      });
-    }
-
-    // Otherwise require pay_per_use pricing and meter the call.
-    const pricing = await svc.getPricing(req.db, listing.id, 'pay_per_use');
-    if (!pricing) {
+    const entitled = Boolean(entitlement && (entitlement.kind === 'rental' || entitlement.kind === 'subscribed'));
+    const pricing = entitled ? null : await svc.getPricing(req.db, listing.id, 'pay_per_use');
+    if (!entitled && !pricing) {
       return res.status(402).json({ success: false, error: 'No active entitlement and no pay-per-use pricing' });
     }
 
-    const result = await svc.meterInvocation(req.db, {
-      user: req.user, listing, pricing, units,
-      meta: { ref: isString(req.body?.ref) ? req.body.ref.slice(0, 200) : null },
-    });
-    if (!result.ok) {
-      return res.status(result.status).json({
-        success: false, error: result.error,
-        ...(result.currentCredits != null ? { currentCredits: result.currentCredits } : {}),
-      });
-    }
-
-    res.json({
-      success: true, metered: true, brokered: true, units,
-      charged: result.transaction.gross,
-      newBalance: result.newBalance,
-      transactionId: result.transaction.id,
+    // Access is established. Nothing is dispatched and nothing is charged: there is no hosted run to
+    // create or adopt yet, and MKT-06 forbids reporting or billing one that does not exist.
+    return res.status(501).json({
+      success: false,
+      error: 'broker_unavailable',
+      message: 'Hosted invocation is not available yet. Nothing was run and nothing was charged.',
+      dispatched: false,
+      charged: 0,
+      access: entitled ? entitlement.kind : 'pay_per_use',
     });
   } catch (error) {
     console.error('[Marketplace] invoke error:', error.message);
