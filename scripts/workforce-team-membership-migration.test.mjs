@@ -18,13 +18,15 @@
  * requirement with a named fix, not an accepted behaviour.
  */
 /* ⚠️ NOT CITED HERE, AND WHY.
- *   LIFE-05  shares ROLE-05's second sentence but adds that changing a team function is "a
- *            membership revision WITH A RECORDED ACTOR AND REASON". The membership row carries
- *            `created_by_user_id` and a revision: it records who CREATED the membership, never
- *            who changed its role or why. `workforce_operations` carries `member.promote` with a
- *            decider, an authority and a rationale -- but nothing REQUIRES one to be written when
- *            a role changes, so it is a log somebody may or may not keep. Citing LIFE-05 would
- *            claim an enforcement that does not exist.
+ *   LIFE-05  ✅ NOW CITED, in workforce-function-change.test.mjs, against
+ *            20260924190000-workforce-function-change-is-decided.sql. The gap this note recorded
+ *            was real: the row said who CREATED the membership, never who changed its role or why,
+ *            and nothing required a `member.promote` record to exist. A role change now carries a
+ *            composite reference to the decision it was taken under, and the database refuses the
+ *            change without one -- a decision about another membership, of another kind, or already
+ *            used for an earlier change is refused too. Cited THERE rather than here because the
+ *            decision record is created by the handoff migration, which this suite does not load.
+ *            Kept as a correction rather than deleted, like the ROLE-05 note below.
  *   RUN-02   the intersection ROLE-05 defers to. No authorizer computes it; there is no run model.
  *
  * ✅ ROLE-05 ITSELF IS NOW CITED, above, by the promotion census. An earlier version of this note

@@ -22,8 +22,10 @@
  *            table and of nothing else. Kept as a correction, not deleted.
  *   LIFE-04  evaluation is EVIDENCE-DERIVED, never a rating column. `evidence` being a real array
  *            is a precondition, proven above. Nothing derives an evaluation from it.
- *   LIFE-05  promotion changes a FUNCTION, never authority directly. `member.promote` is a
- *            loggable kind; the act belongs to the membership model.
+ *   LIFE-05  ✅ NOW CITED, in workforce-function-change.test.mjs. `member.promote` was only a
+ *            loggable kind when this note was written; a team-role or division-head change now
+ *            REQUIRES one, referenced from the row it changed (20260924190000). This suite still
+ *            proves only that the record itself is immutable and carries both principals.
  *   LIFE-08  objectives as the top of the work tree -- no table.
  *   LIFE-09  capacity is DERIVED, never declared -- nothing derives it.
  *
