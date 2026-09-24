@@ -105,7 +105,16 @@ test('workforce ownership transfer: two-sided, reviewed, audited, never silent (
     for (const id of [alice, bob, carol, editor, creator, agent]) await pool.query('INSERT INTO users(id,username) VALUES($1::uuid,$1::text)', [id]);
     const chain = (await readdir(MIGRATIONS)).filter((f) => f.endsWith('.sql')
       && (/workforce/.test(f) || f === '20260711120000-workspaces.sql' || f === '20260811130000-agent-identities.sql')).sort();
-    for (const f of chain) await pool.query((await readFile(new URL(f, MIGRATIONS), 'utf8')).split('-- DOWN')[0]);
+    // chat_projects precedes the workforce chain in production, and from 20260924180000 (ASN-09) the
+    // chain references it -- so it is created after workspaces and before the first workforce file.
+    for (const f of chain) {
+      if (f.includes('workforce') && !(await pool.query("SELECT to_regclass('chat_projects') AS t")).rows[0].t) {
+        await pool.query(`CREATE TABLE chat_projects(id UUID PRIMARY KEY DEFAULT gen_random_uuid(), user_id UUID,
+          owner_user_id UUID REFERENCES users(id), workspace_id UUID REFERENCES workspaces(id), name TEXT NOT NULL DEFAULT 'p',
+          is_archived BOOLEAN NOT NULL DEFAULT false, CHECK ((owner_user_id IS NULL) <> (workspace_id IS NULL)))`);
+      }
+      await pool.query((await readFile(new URL(f, MIGRATIONS), 'utf8')).split('-- DOWN')[0]);
+    }
     await pool.query("INSERT INTO agent_identities(user_id,owner_user_id,agent_role) VALUES($1,$2,'personal')", [agent, alice]);
     await pool.query(`INSERT INTO workspaces(id,owner_user_id,name,slug) VALUES($1,$2,'Studio','studio'),($3,$4,'Acme','acme')`,
       [studio, alice, acme, bob]);

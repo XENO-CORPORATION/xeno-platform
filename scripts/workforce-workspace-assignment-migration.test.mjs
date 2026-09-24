@@ -20,14 +20,13 @@
  *           by eighteen days and is linked to it by nothing. Citing ASN-02 against it would decide
  *           which of the two is the spec's "team", and that is an owner decision, not a test
  *           outcome. Recorded as spec evidence row E16.
- *   ASN-07  directory bindings carrying host/environment identity and a canonical root. Measured:
- *           zero occurrences of canonical_root / host_identity anywhere under src/.
- *   ASN-08  reconciling Interface directory projections with `chat_projects` by explicit id
- *           mapping. No mapping table exists.
- *   ASN-09  a discriminated personal-project OR workspace-project participation target. The
- *           composite-FK case below proves the SCHEMA AFFORDANCE a participation record would
- *           bind to -- deliberately, using a fixture table -- which is a precondition and not the
- *           requirement. */
+ *   ASN-07 and ASN-08 are NOW CITED in project-directory-bindings.test.mjs (PR #398): a project's
+ *           directory is a binding on an authenticated installation with a canonical root, and the
+ *           Interface reconciles by (installation, root) rather than by name or path string.
+ *   ASN-09 is NOW CITED in workforce-project-participation.test.mjs: the discriminated
+ *           personal-project OR workspace-project participation record exists
+ *           (20260924180000-workforce-project-participation.sql). The composite-FK case below still
+ *           proves the affordance it binds to, and stays as the precondition it always was. */
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
