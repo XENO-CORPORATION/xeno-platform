@@ -32,6 +32,7 @@ import crypto from 'crypto';
 import jwt from 'jsonwebtoken';
 import { getSigningKey, ACCESS_TOKEN_AUDIENCE, ACCESS_TOKEN_TYP } from '../utils/oidcProvider.js';
 import { issuer } from '../config/hosts.js';
+import { buildRentalContext, recordExchange } from './marketplaceRentalPartitions.js';
 
 export const BROKER_ACTOR = 'xeno-marketplace';
 const DELEGATED_TTL_SEC = 5 * 60;
@@ -122,9 +123,12 @@ async function applyRun(db, invocationId, run) {
  * (nothing held, nothing charged), or `uncertain` when the outcome is unknown -- the next call with the
  * same invocation adopts whatever run was created.
  */
-export async function dispatchInvocation(db, { invocation, user, listing, version, prompt, fetchImpl = fetch, env = process.env }) {
+export async function dispatchInvocation(db, { invocation, user, listing, version, prompt, binding = null, fetchImpl = fetch, env = process.env }) {
   const base = agentsApiBaseUrl(env);
   if (!base) throw new BrokerUnavailableError('AGENTS_API_BASE_URL is not configured');
+  // MKT-07: a rental run's context is assembled HERE, from the version's reviewed serving material and
+  // this binding's own partition -- never the artifact, the manifest, or any other partition.
+  const runPrompt = binding ? await buildRentalContext(db, { binding, prompt }) : prompt;
   const { token, sid } = await mintDelegatedAccessToken(db, user.id, { invocationId: invocation.id });
   try {
     let res;
@@ -138,7 +142,7 @@ export async function dispatchInvocation(db, { invocation, user, listing, versio
           'idempotency-key': `mkt-invocation:${invocation.id}`,
         },
         body: JSON.stringify({
-          prompt,
+          prompt: runPrompt,
           title: `${listing.title}`.slice(0, 200),
           agent: {
             name: listing.slug,
@@ -171,6 +175,23 @@ export async function dispatchInvocation(db, { invocation, user, listing, versio
   }
 }
 
+/** Read the run's final output from its events and record it into the binding's partition. */
+async function recordRentalOutcome(db, { invocation, base, token, fetchImpl }) {
+  let summary = '';
+  try {
+    const res = await fetchImpl(`${base}/runs/${encodeURIComponent(invocation.run_id)}/events?tail=50`, {
+      headers: { authorization: `Bearer ${token}`, accept: 'application/json' },
+    });
+    const body = await res.json().catch(() => null);
+    const events = Array.isArray(body?.events) ? body.events : [];
+    const done = [...events].reverse().find((e) => e?.type === 'turn.completed' && typeof e.outputPreview === 'string');
+    summary = done?.outputPreview || '';
+  } catch { /* unreachable events leave the exchange unrecorded; the run itself is unaffected */ }
+  const binding = (await db.query('SELECT * FROM marketplace_rental_bindings WHERE id = $1', [invocation.binding_id])).rows[0];
+  if (summary && binding) await recordExchange(db, { invocation, binding, summary });
+  await db.query('UPDATE marketplace_invocations SET partition_recorded_at = now() WHERE id = $1', [invocation.id]);
+}
+
 async function markUncertain(db, invocationId, reason) {
   const r = await db.query(
     `UPDATE marketplace_invocations SET state = 'uncertain', run_status_reason = $2, updated_at = now()
@@ -182,9 +203,9 @@ async function markUncertain(db, invocationId, reason) {
 
 /** Re-read the run's real state from agents-api. An uncertain dispatch is reconciled by re-dispatching
  * with the same idempotency key, which adopts the run if it was created and creates it if it was not. */
-export async function refreshInvocation(db, { invocation, user, listing, version, fetchImpl = fetch, env = process.env }) {
+export async function refreshInvocation(db, { invocation, user, listing, version, binding = null, fetchImpl = fetch, env = process.env }) {
   if (invocation.state === 'uncertain' || invocation.state === 'pending') {
-    return dispatchInvocation(db, { invocation, user, listing, version, prompt: invocation.prompt, fetchImpl, env });
+    return dispatchInvocation(db, { invocation, user, listing, version, prompt: invocation.prompt, binding, fetchImpl, env });
   }
   if (!invocation.run_id || invocation.state === 'finished' || invocation.state === 'refused') return invocation;
   const base = agentsApiBaseUrl(env);
@@ -200,7 +221,13 @@ export async function refreshInvocation(db, { invocation, user, listing, version
       return invocation;   // the run exists; an unreachable reader changes nothing about it
     }
     const body = await res.json().catch(() => null);
-    return res.ok && body?.run?.runId ? applyRun(db, invocation.id, body.run) : invocation;
+    if (!(res.ok && body?.run?.runId)) return invocation;
+    const after = await applyRun(db, invocation.id, body.run);
+    // MKT-08: a finished rental run's outcome is learned into ITS partition, once.
+    if (after.state === 'finished' && after.binding_id && !after.partition_recorded_at) {
+      await recordRentalOutcome(db, { invocation: after, base, token, fetchImpl });
+    }
+    return after;
   } finally {
     await revokeDelegatedSession(db, sid);
   }

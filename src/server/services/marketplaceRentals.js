@@ -15,6 +15,7 @@
  *     deleted: invocations keep their binding_id, so work run under a rental stays attributable.
  */
 import { isWorkspaceMember } from '../utils/workspaceContext.js';
+import { attachPartition } from './marketplaceRentalPartitions.js';
 
 export class RentalError extends Error {
   constructor(code, message, status) { super(message); this.name = 'RentalError'; this.code = code; this.status = status; }
@@ -75,7 +76,7 @@ export async function bindRental(pool, { user, listing, workspaceId = null }) {
         WHERE entitlement_id = $1 AND state = 'active' AND target_workspace_id IS NOT DISTINCT FROM $2`,
       [entitlement.id, workspaceId],
     );
-    if (existing.rows[0]) { await client.query('COMMIT'); return existing.rows[0]; }
+    if (existing.rows[0]) { await client.query('COMMIT'); return attachPartition(pool, existing.rows[0]); }
     if (workspaceId != null) {
       const live = Number((await client.query(
         `SELECT count(*) FROM marketplace_rental_bindings
@@ -93,8 +94,11 @@ export async function bindRental(pool, { user, listing, workspaceId = null }) {
        VALUES ($1, $2, $3, $4, $5) RETURNING *`,
       [entitlement.id, listing.id, user.id, workspaceId, version.id],
     );
+    // MKT-07: the binding's memory partition is (entitlement, target) -- attached in the same
+    // transaction, so a binding never exists without the partition that isolates it.
+    const bound = await attachPartition(client, r.rows[0]);
     await client.query('COMMIT');
-    return r.rows[0];
+    return bound;
   } catch (e) {
     await client.query('ROLLBACK').catch(() => {});
     throw e;
@@ -117,6 +121,7 @@ export async function bindingForDispatch(db, { user, listing, bindingId }) {
   if (!binding) throw new RentalError('binding_not_found', 'Rental binding not found', 404);
   if (binding.state !== 'active') throw new RentalError('binding_revoked', 'This rental binding was revoked', 403);
   await liveRentalEntitlement(db, user.id, listing.id);
+  if (!binding.partition_id) return attachPartition(db, binding);
   if (binding.target_workspace_id && !(await isWorkspaceMember(db, binding.target_workspace_id, user.id))) {
     throw new RentalError('not_a_member', 'You no longer belong to the workspace this rental is bound to', 403);
   }
@@ -187,6 +192,7 @@ export function publicBinding(b) {
     title: b.title,
     target: b.target_workspace_id ? { kind: 'workspace', workspaceId: b.target_workspace_id } : { kind: 'personal' },
     servingVersionId: b.serving_version_id,
+    partitionId: b.partition_id ?? null,
     state: b.state,
     revokedAt: b.revoked_at,
     revokedReason: b.revoked_reason,

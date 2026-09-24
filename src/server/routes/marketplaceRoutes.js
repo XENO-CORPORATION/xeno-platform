@@ -25,6 +25,7 @@ import authMiddleware, { optionalAuthMiddleware } from '../middleware/auth.js';
 import * as svc from '../services/marketplaceService.js';
 import * as broker from '../services/marketplaceBroker.js';
 import * as rentals from '../services/marketplaceRentals.js';
+import * as partitions from '../services/marketplaceRentalPartitions.js';
 import {
   VALID_KINDS, VALID_PRICING_MODELS,
   verifyEd25519, runAutomatedChecks, resolvePublishTrustTier,
@@ -324,7 +325,7 @@ router.post('/invoke/:listingId', authMiddleware, async (req, res) => {
     const version = binding
       ? await svc.getVersionById(req.db, binding.serving_version_id)
       : (await svc.getVersionsForListing(req.db, listing.id))?.[0] || null;
-    const after = await broker.refreshInvocation(req.db, { invocation, user: req.user, listing, version });
+    const after = await broker.refreshInvocation(req.db, { invocation, user: req.user, listing, version, binding });
     return sendInvocation(res, after);
   } catch (error) {
     if (error instanceof broker.BrokerUnavailableError) {
@@ -370,6 +371,35 @@ router.post('/rental-bindings/:id/revoke', authMiddleware, async (req, res) => {
   }
 });
 
+// ── rental partitions: the renter's own memory (MKT-07/08/09) ────────────────────────────────
+function partitionHandler(fn) {
+  return async (req, res) => {
+    try { return await fn(req, res); } catch (e) {
+      if (e instanceof partitions.PartitionError) return res.status(e.status).json({ success: false, error: e.code, message: e.message });
+      console.error('[Marketplace] partition error:', e.message);
+      return res.status(500).json({ success: false, error: 'Rental partition request failed' });
+    }
+  };
+}
+router.get('/rental-partitions', authMiddleware, partitionHandler(async (req, res) =>
+  res.json({ success: true, partitions: await partitions.listPartitions(req.db, req.user.id) })));
+/** GET /rental-partitions/:id/export -- the renter's content in this partition. Recorded. */
+router.get('/rental-partitions/:id/export', authMiddleware, partitionHandler(async (req, res) =>
+  res.json({ success: true, export: await partitions.exportPartition(req.db, { user: req.user, partitionId: req.params.id }) })));
+/** DELETE /rental-partitions/:id/content -- deletes the renter's content; items under retention are reported. */
+router.delete('/rental-partitions/:id/content', authMiddleware, partitionHandler(async (req, res) =>
+  res.json({ success: true, ...(await partitions.deletePartitionContent(req.db, { user: req.user, partitionId: req.params.id })) })));
+/** POST /rental-partitions/:id/disclosures { itemIds, reason } -- the renter's explicit improvement-sharing. */
+router.post('/rental-partitions/:id/disclosures', authMiddleware, partitionHandler(async (req, res) => {
+  const d = await partitions.authorizeDisclosure(req.db, {
+    user: req.user, partitionId: req.params.id, itemIds: req.body?.itemIds, reason: req.body?.reason,
+  });
+  return res.json({ success: true, disclosure: { id: d.id, items: d.snapshot.length, authorizedAt: d.authorized_at } });
+}));
+/** GET /developer/listings/:id/rental-disclosures -- what renters CHOSE to share with the seller. Audited. */
+router.get('/developer/listings/:id/rental-disclosures', authMiddleware, partitionHandler(async (req, res) =>
+  res.json({ success: true, disclosures: await partitions.sellerDisclosures(req.db, { sellerUserId: req.user.id, listingId: req.params.id }) })));
+
 /** GET /rental-bindings -- the caller's bindings, active and revoked. */
 router.get('/rental-bindings', authMiddleware, async (req, res) => {
   try {
@@ -386,7 +416,10 @@ router.get('/invocations/:id', authMiddleware, async (req, res) => {
     const invocation = await broker.getInvocation(req.db, req.user.id, req.params.id);
     if (!invocation) return res.status(404).json({ success: false, error: 'Invocation not found' });
     const listing = await svc.getListingById(req.db, invocation.listing_id);
-    const after = await broker.refreshInvocation(req.db, { invocation, user: req.user, listing, version: null });
+    const binding = invocation.binding_id
+      ? (await req.db.query('SELECT * FROM marketplace_rental_bindings WHERE id = $1', [invocation.binding_id])).rows[0]
+      : null;
+    const after = await broker.refreshInvocation(req.db, { invocation, user: req.user, listing, version: null, binding });
     return sendInvocation(res, after);
   } catch (error) {
     if (error instanceof broker.BrokerUnavailableError) {
