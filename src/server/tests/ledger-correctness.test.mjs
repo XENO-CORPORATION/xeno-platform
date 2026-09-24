@@ -33,10 +33,11 @@ import { tablesDDL } from './fixtures/schema.mjs';
  * whose release at expiry is consistent with allocateFunding's legacy branch; it is not itself
  * the contradiction.
  *
- * NOT repaired in this change: FUND-09's own answer is "a qualified run-backed extension", i.e.
- * the running service keeps its hold alive, which is a new verb on the service ledger consumed by
- * xeno-agents-api and xeno-api-proxy -- a billing interface change across three services, and so
- * a decision rather than a repair. This note is the record; there is deliberately no second copy.
+ * REPAIRED 2026-09-24 -- FUND-09's "qualified run-backed extension" now exists and every holder uses
+ * it: POST /holds/:holdId/extend (xeno-platform #389), agents-api (#7), the platform meters (#390) and
+ * the gateway (api-proxy #13, #14). The case below still proves the underlying fact -- an UNRENEWED
+ * hold is released at expiry -- which is exactly why each holder must renew; hold-extension.test.mjs
+ * is where FUND-09 is cited, with the full list of holders.
  *
  * Run: DATABASE_URL=postgresql://t:t@127.0.0.1:5432/t node tests/ledger-correctness.test.mjs
  */
