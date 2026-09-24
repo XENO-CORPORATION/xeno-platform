@@ -31,6 +31,14 @@ const PLATFORM_PRELUDE = `
     id UUID PRIMARY KEY, owner_user_id UUID REFERENCES users(id),
     name TEXT NOT NULL, slug TEXT NOT NULL);
   CREATE TABLE api_keys(id UUID PRIMARY KEY, user_id UUID REFERENCES users(id));
+  -- chat_projects as the chat migrations (20260825120000, 20260829120000) leave it, both of which
+  -- precede the whole workforce chain in production. Modelled because ASN-09's project
+  -- participation references it: from 20260924180000 on, the workforce chain has a real
+  -- dependency outside itself, and a prelude that omits it would test a schema nobody runs.
+  CREATE TABLE chat_projects(id UUID PRIMARY KEY DEFAULT gen_random_uuid(), user_id UUID,
+    owner_user_id UUID REFERENCES users(id), workspace_id UUID REFERENCES workspaces(id),
+    name TEXT NOT NULL DEFAULT 'p', is_archived BOOLEAN NOT NULL DEFAULT false,
+    CHECK ((owner_user_id IS NULL) <> (workspace_id IS NULL)));
 `;
 
 test('every workforce migration applies in order from an empty database', { skip: workforceProofUnavailable() }, async (t) => {
@@ -82,9 +90,13 @@ test('every workforce migration applies in order from an empty database', { skip
         JOIN pg_namespace n ON n.oid = t.relnamespace
         WHERE c.contype = 'f' AND n.nspname = $1`, [schema]);
       assert.ok(rows.length > 0, 'the workforce chain declares no foreign keys at all -- implausible');
+      // `chat_projects` joined 2026-09-24 (ASN-09): project participation targets an EXISTING project,
+      // because ASN-08 forbids a second project product. It is named here individually, and added to
+      // the prelude above, rather than matched by a looser pattern -- a new external dependency of the
+      // workforce chain is exactly the thing this gate exists to make somebody write down.
       for (const { parent } of rows) {
         const bare = parent.replace(/^.*\./, '');
-        assert.ok(/^(workforce_|users$|workspaces$|api_keys$)/.test(bare),
+        assert.ok(/^(workforce_|users$|workspaces$|api_keys$|chat_projects$)/.test(bare),
           `workforce schema references ${bare}, which is neither workforce-owned nor in the prelude`);
       }
     });
@@ -129,6 +141,9 @@ test('every workforce migration applies in order from an empty database', { skip
         // OWN-05, 2026-09-24 -- widened only because the requirement it implements is now cited by
         // a real test (workforce-ownership-transfer.test.mjs), exactly as the message below asks.
         'workforce_ownership_transfers',
+        // ASN-09, 2026-09-24 -- the discriminated project-participation record, cited by
+        // workforce-project-participation.test.mjs.
+        'workforce_project_participations',
         'workforce_resource_operations',
         'workforce_resources',
         'workforce_team_memberships',
@@ -180,6 +195,13 @@ test('every workforce migration applies in order from an empty database', { skip
         // assignment never moves ownership (ASN-01) and a handoff "moves work, never authority".
         'workforce_ownership_transfers.accepted_at',
         'workforce_ownership_transfers.accepted_by_user_id',
+        // ASN-09's personal-project CONSENT -- "personal-project participation binds directly to its
+        // canonical personal owner/project and consent". Required by the spec, and like the transfer
+        // acceptance above it is not a way of JOINING: the spec's own words are "External offers
+        // create narrow engagements ... not corporate memberships", and the participation suite
+        // asserts that creating one writes no workspace, tuple, team membership or assignment.
+        'workforce_project_participations.consented_at',
+        'workforce_project_participations.consented_by_user_id',
         'workforce_workspace_assignments.accepted_at',
         'workforce_workspace_assignments.source_approved_at',
         'workforce_workspace_assignments.source_approved_by_user_id',
