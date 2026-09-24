@@ -117,11 +117,20 @@ async function main() {
     ok((await invoke(unpriced)).status === 402, 'a listing with no entitlement and no pay-per-use price is still refused 402');
     ok((await invoke(crypto.randomUUID())).status === 404, 'an unknown listing is still 404');
   } finally {
-    server.close();
+    // Drop fetch's keep-alive sockets and wait for the close, rather than leaving it in flight.
+    server.closeAllConnections?.();
+    await new Promise((resolve) => server.close(resolve));
   }
 
   console.log(`\n${fail === 0 ? '✅' : '❌'} marketplace-invoke-and-commission: ${pass} passed, ${fail} failed`);
   await pool.end();
-  process.exit(fail === 0 ? 0 : 1);
+  /* Let the process END rather than calling process.exit() here. An immediate exit tore
+   * libuv down while handles were still closing, and on Windows that aborted the process
+   * AFTER all seven tests had passed (`Assertion failed: !(handle->flags &
+   * UV_HANDLE_CLOSING), src\win\async.c`) — exit 127, a green suite reported red, on
+   * main as well as on branches. The unref'd timer is only a backstop: it cannot keep the
+   * process alive, and fires only if some handle would otherwise hang it. */
+  process.exitCode = fail === 0 ? 0 : 1;
+  setTimeout(() => process.exit(process.exitCode), 5000).unref();
 }
 main().catch((e) => { console.error('FATAL', e); process.exit(1); });
