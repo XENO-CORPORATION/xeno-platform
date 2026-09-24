@@ -110,27 +110,62 @@ function requireWorkforceScope(scope) {
 const defaultCreate = async (...args) => (await import('../services/workforceResources.js')).createWorkforceResource(...args);
 const defaultRead = async (...args) => (await import('../services/workforceResources.js')).readWorkforceResourceOperation(...args);
 const defaultList = async (...args) => (await import('../services/workforceCatalog.js')).listOwnedWorkforceResources(...args);
+const capabilities = value => Array.isArray(value) && value.length <= 64
+  && value.every(c => typeof c === 'string' && /^[a-zA-Z0-9][a-zA-Z0-9._:/@+-]{0,127}$/.test(c));
+const revisionString = value => typeof value === 'string' && /^[1-9][0-9]{0,18}$/.test(value);
+/** VIEW-02: each scoped view carries ONLY its own scope's facts. An assigned row carries this
+ * workspace's assignment, a project row this project's participation -- and neither carries an
+ * `owner`, because the source owner of a resource assigned in is not this scope's to disclose. */
+function scopedFacts(view, item) {
+  if (view === 'owned') return {};
+  if (view === 'assigned') {
+    const a = item.assignment;
+    if (!a || uuid(a.id) !== a.id || !(a.divisionId === null || uuid(a.divisionId) === a.divisionId) || !revisionString(a.revision)
+      || typeof a.acceptedAt !== 'string' || !Number.isFinite(Date.parse(a.acceptedAt))
+      || !['none', 'explicit'].includes(a.effectiveMode) || !capabilities(a.effectiveCapabilities)) throw new Error('Invalid assignment facts');
+    return { assignment: fields(a, ['id', 'divisionId', 'revision', 'acceptedAt', 'effectiveMode', 'effectiveCapabilities']) };
+  }
+  const p = item.participation;
+  if (!p || uuid(p.id) !== p.id || !['workspace', 'personal'].includes(p.targetKind) || typeof p.responsibility !== 'string'
+    || !p.responsibility.trim() || Buffer.byteLength(p.responsibility, 'utf8') > 200 || !revisionString(p.revision)
+    || !capabilities(p.effectiveCapabilities)) throw new Error('Invalid participation facts');
+  return { participation: fields(p, ['id', 'targetKind', 'responsibility', 'revision', 'effectiveCapabilities']) };
+}
 function catalogObservation(value, request) {
   try {
     if (!value || typeof value !== 'object' || value.success === false) return null;
     const owner = normalizeOwnerScope(value.owner), requested = normalizeOwnerScope(request.owner);
-    if (value.schemaVersion !== 1 || value.scope !== 'owned' || owner.type !== requested.type || owner.id !== requested.id
+    const view = request.view ?? 'owned';
+    if (value.schemaVersion !== 1 || value.scope !== view || !['owned', 'assigned', 'project'].includes(view)
+      || owner.type !== requested.type || owner.id !== requested.id
+      || (view === 'project' ? value.projectId !== uuid(request.projectId) : Object.hasOwn(value, 'projectId'))
       || !Array.isArray(value.items) || value.items.length > (request.limit ?? 50)
       || !(value.nextCursor === null || (typeof value.nextCursor === 'string' && /^[a-zA-Z0-9_-]{1,2048}$/.test(value.nextCursor)))) return null;
     const items = value.items.map(item => {
-      const scope = normalizeOwnerScope(item.owner);
-      if (uuid(item.id) !== item.id || scope.type !== owner.type || scope.id !== owner.id || !['agent', 'team'].includes(item.kind)
+      if (view === 'owned') {
+        const scope = normalizeOwnerScope(item.owner);
+        if (scope.type !== owner.type || scope.id !== owner.id) throw new Error('Invalid catalog owner');
+      } else if (Object.hasOwn(item, 'owner') || Object.hasOwn(item, 'createdByUserId')) {
+        throw new Error('A scoped view never discloses the source owner or its creator attribution');
+      }
+      if (uuid(item.id) !== item.id || !['agent', 'team'].includes(item.kind)
         || item.status !== (request.status ?? 'active') || (request.kind !== undefined && item.kind !== request.kind)
         || typeof item.name !== 'string' || !item.name.trim() || Buffer.byteLength(item.name, 'utf8') > 200
         || typeof item.description !== 'string' || Buffer.byteLength(item.description, 'utf8') > 4096
-        || !(item.createdByUserId === null || uuid(item.createdByUserId) === item.createdByUserId)
+        || (view === 'owned' && !(item.createdByUserId === null || uuid(item.createdByUserId) === item.createdByUserId))
         || typeof item.revision !== 'string' || !/^[1-9][0-9]{0,18}$/.test(item.revision)
         || typeof item.createdAt !== 'string' || typeof item.updatedAt !== 'string'
         || !Number.isFinite(Date.parse(item.createdAt)) || !Number.isFinite(Date.parse(item.updatedAt))) throw new Error('Invalid catalog metadata');
-      return fields(item, ['id', 'kind', 'owner', 'createdByUserId', 'name', 'description', 'status', 'revision', 'createdAt', 'updatedAt']);
+      return { ...fields(item, ['id', 'kind', ...(view === 'owned' ? ['owner', 'createdByUserId'] : []), 'name', 'description',
+        'status', 'revision', 'createdAt', 'updatedAt']), ...scopedFacts(view, item) };
     });
-    if (new Set(items.map(item => item.id)).size !== items.length) return null;
-    return { schemaVersion: 1, scope: 'owned', owner, items, nextCursor: value.nextCursor };
+    // Owned rows are one per resource. A scoped row is one per assignment or participation, so its
+    // uniqueness is that record's id -- a resource assigned in, revoked and assigned again appears
+    // once per live assignment, and only one of those can be live at a time.
+    const keys = items.map(item => view === 'owned' ? item.id : (item.assignment ?? item.participation).id);
+    if (new Set(keys).size !== items.length) return null;
+    return { schemaVersion: 1, scope: view, owner, ...(view === 'project' ? { projectId: value.projectId } : {}),
+      items, nextCursor: value.nextCursor };
   } catch { return null; }
 }
 
