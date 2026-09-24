@@ -36,7 +36,10 @@ function ledgerFixture(kinds, cost) {
     if (sql.startsWith('SELECT * FROM credit_holds')) return { rows: [{ ...hold }] };
     if (sql.startsWith("UPDATE credit_holds SET state='settled'")) { hold.state = 'settled'; hold.settled_micro = params[0]; return { rows: [] }; }
     if (sql.startsWith('UPDATE credit_accounts SET balance')) { balance = BigInt(params[0]); return { rows: [] }; }
-    if (sql.startsWith('SELECT 1 FROM credit_transactions') || sql.startsWith('SELECT entry_hash') || sql.startsWith('SELECT window_sec')) return { rows: [] };
+    // The replay probe reads the ORIGINAL debit's amount since a333e7a (a replay reports what was
+    // charged). This stub matched the old `SELECT 1` text, so every drawdown case threw -- matching
+    // on the table rather than the column list keeps the stub about the ledger, not about wording.
+    if (/^SELECT (1|amount) FROM credit_transactions/.test(sql) || sql.startsWith('SELECT entry_hash') || sql.startsWith('SELECT window_sec')) return { rows: [] };
     if (sql.startsWith('INSERT INTO credit_transactions') || sql.startsWith('INSERT INTO api_usage_logs') || sql.startsWith('UPDATE users SET credits')) return { rows: [] };
     throw new Error(`Unexpected query: ${sql}`);
   };

@@ -331,11 +331,45 @@ test('full-page issue states use the shared split recovery composition', () => {
   assert.match(platformStyles, /grid-template-columns:minmax\(0,\.96fr\)/);
 });
 test('workspace lifecycle mutations are transaction-bound, serialized, and audited', () => {
+  /* ⚠️ Membership moved OUT of the routes on 2026-09-22 (bb0f969, "one authority for
+   * membership"). The old assertions here counted `withTransaction(req.db` and `FOR UPDATE`
+   * in workspaceRoutes.js and looked for inline owner.transfer / invite.accept audits --
+   * shapes that no longer exist because the routes stopped doing that work themselves.
+   * They failed for two days against code that was strictly more correct. A count of
+   * lock statements in one file was never the property; the property is that every
+   * membership mutation runs in ONE transaction that takes the workspace gate, then the
+   * row, and audits inside it. That is what is measured now, where it lives. */
   assert.match(workspaceRoutes, /import \{ withTransaction \}/);
   assert.match(workspaceRoutes, /async function auditStrict/);
-  assert.ok((workspaceRoutes.match(/withTransaction\(req\.db/g) || []).length >= 8);
-  assert.ok((workspaceRoutes.match(/FOR UPDATE/g) || []).length >= 7);
-  assert.match(workspaceRoutes, /await auditStrict\(tx, wsId, req\.user\.id, 'owner\.transfer'/);
-  assert.match(workspaceRoutes, /await auditStrict\(tx, inv\.workspace_id, req\.user\.id, 'invite\.accept'/);
+  // Creation and rename are still route-local: each is a transaction with a strict audit.
+  for (const action of ['workspace.create', 'workspace.update']) {
+    assert.match(workspaceRoutes, new RegExp(`await auditStrict\\(tx, [^,]+, [^,]+, '${action.replace('.', '\\.')}'`),
+      `${action} is no longer audited inside its transaction`);
+  }
+  assert.ok((workspaceRoutes.match(/withTransaction\(req\.db/g) || []).length >= 2,
+    'workspace creation and rename no longer run in a transaction');
+
+  // Every membership route delegates to the ONE membership authority; none writes a tuple,
+  // an invite or an owner itself.
+  for (const action of ['member.role', 'member.remove', 'owner.transfer', 'invite.create', 'invite.revoke', 'invite.resend']) {
+    assert.match(workspaceRoutes, new RegExp(`legacyMembership\\(req, res, '${action.replace('.', '\\.')}'`),
+      `the ${action} route no longer goes through the membership authority`);
+  }
+  assert.doesNotMatch(workspaceRoutes, /(INSERT INTO|UPDATE|DELETE FROM) workspace_invites|DELETE FROM relationship_tuples/,
+    'a route writes membership directly, around the authority that serializes it');
+
+  const membership = read('src', 'server', 'services', 'workspaceMembershipOperations.js');
+  const legacy = membership.slice(membership.indexOf('if(options.legacy===true) return authorityTransaction('));
+  assert.ok(legacy.length > 0 && legacy.indexOf('lockWorkspaceAuthority(db,workspaceId)') > -1
+    && legacy.indexOf('lockWorkspaceAuthority(db,workspaceId)') < legacy.indexOf('authorizeMutation(db)'),
+    'legacy membership mutations no longer take the workspace gate before authorizing');
+  assert.match(membership, /INSERT INTO workspace_audit\(workspace_id,actor_user_id,action,target,metadata\)/,
+    'membership mutations are no longer audited in their transaction');
+
+  const lifecycle = read('src', 'server', 'services', 'workspaceLifecycle.js');
+  assert.match(workspaceRoutes, /authorityTransaction\(req\.db,\s*db\s*=>\s*decideWorkspaceInvite\(db,/,
+    'invitation acceptance no longer runs in the authority transaction');
+  assert.match(lifecycle, /await audit\(db,workspace\.id,actor,`invite\.\$\{action\}`/,
+    'invitation acceptance is no longer audited');
   assert.doesNotMatch(workspaceRoutes, /persisted best-effort/);
 });

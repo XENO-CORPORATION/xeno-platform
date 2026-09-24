@@ -17,7 +17,17 @@ const AGENT_REQUESTED_SCOPES = [
 test('the Agent is a first-party public loopback client', () => {
   const client = agent();
   assert.deepEqual(client, { id: 'xeno-agent-interface', name: 'XENO Agent', loopback: true });
-  assert.deepEqual(scopesForClient(client.id), scopesForClient('xeno-shell'));
+  // The Agent's authority is the shared agent-surface authority (xeno-shell's) plus EXACTLY
+  // one deliberate addition: `collaboration:use`, granted by 18eac82 (2026-09-22, "live
+  // conversation collaboration") because the Agent joins live conversations and Shell does
+  // not. This asserted plain equality with xeno-shell and went red on that commit: correct
+  // code, stale test. Asserting the difference keeps the property this was guarding -- no
+  // authority the agent surfaces do not already hold, apart from that one named scope.
+  const shell = new Set(scopesForClient('xeno-shell'));
+  const own = scopesForClient(client.id);
+  assert.ok([...shell].every((scope) => own.includes(scope)), 'the Agent lost authority the agent surfaces hold');
+  assert.deepEqual(own.filter((scope) => !shell.has(scope)), ['collaboration:use'],
+    'the Agent holds authority beyond the agent surfaces other than the one deliberate addition');
   assert.equal(client.secret, undefined, 'the migration must not invent a client secret');
   assert.equal(CLIENT_AUTHORITY[client.id].includes('openid'), true);
   assert.doesNotThrow(assertAuthorityPolicy);
@@ -50,12 +60,24 @@ test('arbitrary loopback ports are accepted only for /callback', async () => {
 test('Agent scopes are downscoped by the existing authority policy, not widened', () => {
   const allowed = new Set(scopesForClient(agent().id));
   const granted = AGENT_REQUESTED_SCOPES.filter((scope) => allowed.has(scope));
-  assert.deepEqual(granted, ['openid', 'profile', 'email']);
-  // team/workforce scopes are not in the checked-in authority policy yet;
-  // silently granting them here would weaken validation and invent authority.
-  assert.ok(!OIDC_SCOPES.includes('offline_access'));
-  assert.ok(!OIDC_SCOPES.includes('workforce:read'));
-  assert.ok(!OIDC_SCOPES.includes('workforce:manage'));
+  // What the Agent requests versus what its checked-in row allows. Two of these were added
+  // deliberately and are now granted: `workforce:read`/`workforce:manage` (3cbd89a,
+  // 2026-09-22 -- the workforce service layer, which gives every agent surface the
+  // workforce authority) and `collaboration:use` (18eac82). This test used to assert those
+  // scopes did not EXIST, which was the state before either commit and went red on the
+  // first: correct policy, stale test.
+  assert.deepEqual(granted, ['openid', 'profile', 'email', 'collaboration:use', 'workforce:read', 'workforce:manage']);
+  // The property this guards is unchanged: a request is DOWNSCOPED, never honoured beyond
+  // the row. The Agent asks for team administration and refresh -- neither is in its row,
+  // so neither is granted, however it asks.
+  for (const scope of ['team:read', 'team:manage', 'offline_access']) {
+    assert.ok(!allowed.has(scope), `the Agent is granted ${scope}, which its authority row does not carry`);
+  }
+  assert.ok(!OIDC_SCOPES.includes('offline_access'), 'offline_access is not a scope this provider issues');
+  // A workforce grant cannot become a spend or payout grant: those stay on their own scopes.
+  for (const scope of ['billing:manage', 'marketplace:payout', 'broker:exchange']) {
+    assert.ok(!allowed.has(scope), `the Agent holds ${scope}`);
+  }
 });
 
 test('unknown clients remain rejected and PKCE remains mandatory', async () => {

@@ -102,6 +102,16 @@ export function topLevelCount(src) {
   }
   segments.push(current);
 
+  // 🔴 A SPREAD MAKES THE COUNT UNKNOWABLE, so the call is skipped, not guessed.
+  // `[...identity, requestHash]` is two SOURCE elements and any number of
+  // parameters: `identity` is a five-tuple here, a three-tuple there. Counting
+  // it as one produced the checker's THIRD round of false positives -- seven
+  // statements "referencing $5..$8 with only 4 params" that bind exactly eight,
+  // across four files -- and left the gate red on main for two days, which is
+  // how a gate learns to be ignored. `null` joins these calls to the skipped
+  // count, the same place an interpolated SQL literal goes.
+  if (segments.some((s) => s.trim().startsWith('...'))) return null;
+
   // 🔴 COUNT ELEMENTS, NOT SEPARATORS. The first version returned
   // `commas + 1`, which is wrong for the trailing comma this codebase uses
   // everywhere — and it produced NINE false positives on its first run, every

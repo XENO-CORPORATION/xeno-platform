@@ -89,6 +89,21 @@ test('it stays QUIET on a correct query written the way this repo writes them', 
   for (let n = 1; n <= count; n += 1) assert.ok(used.has(n), `$${n} should be used`);
 });
 
+test('🔴 a spread in the params is SKIPPED, not counted as one element', () => {
+  // workspaceOperationReceipts binds `[...identity, requestHash, receipt, incarnation]`
+  // where identity is a five-tuple: eight parameters for $1..$8, from four
+  // source elements. Counted as four, that correct statement read as broken.
+  assert.equal(topLevelCount('...identity, requestHash, JSON.stringify(receipt), incarnation'), null);
+  assert.equal(topLevelCount('JSON.stringify(rejected), ...identity'), null);
+  assert.equal(topLevelCount(`
+  ...ids, // the caller's identity
+  scope,
+`), null);
+  // A spread NESTED inside an element is still one element -- only a top-level
+  // spread changes how many parameters the array binds.
+  assert.equal(topLevelCount('a, f(...rest), { ...o }, [...xs]'), 4);
+});
+
 test('an interpolated SQL literal is SKIPPED, not guessed at', () => {
   // getDigest builds its filters with `${tagFilter(2)}`, so placeholders exist
   // that this scanner cannot see. Guessing there is how a gate earns its

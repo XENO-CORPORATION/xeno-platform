@@ -59,7 +59,12 @@ before(async () => {
       '@xenosystem/elements-react': path.resolve('packages/elements-react/src/index.ts'),
       '@xenosystem/elements': path.resolve('packages/elements/src'),
       '@xenosystem/generate': path.resolve('packages/generate/src/index.ts'),
-      '@xenosystem/components/auth': path.resolve('../../../xeno-components/packages/components/src/auth/index.ts'),
+      // `@xenosystem/components/auth` is deliberately NOT aliased. It used to point at
+      // `../../../xeno-components/...` -- three levels ABOVE this repository, a path that exists on
+      // no machine (a sibling checkout would be `../xeno-components`), so the bundle failed on every
+      // run and all five pages reported as broken. The pages ship against the PUBLISHED package the
+      // app declares (`@xenosystem/components` in package.json), so that is what they are tested
+      // against: resolved from node_modules, exactly as the production build resolves it.
     },
     plugins: [
       {
