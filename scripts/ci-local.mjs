@@ -73,7 +73,7 @@ const MONEY_SUITES = [
   'ledger-v2', 'ledger-chain', 'ledger-billing', 'ledger-correctness',
   'billing-money-in', 'media-metering', 'wallet-service',
   'service-ledger', 'ledger-audit-fixes', 'credit-mirror-drift',
-  'marketplace-invoke-and-commission',
+  'marketplace-invoke-and-commission', 'hold-extension',
 ];
 
 /* ── DATABASE PROOFS (scripts/*.test.mjs) ────────────────────────────────────
