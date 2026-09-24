@@ -273,6 +273,7 @@ const BACKEND_EVIDENCE = {
       'scripts/workforce-workspace-assignment-migration.test.mjs',
       'scripts/workforce-catalog.test.mjs',
       'scripts/workforce-catalog-scoped-views.test.mjs',
+      'scripts/workforce-catalog-global-view.test.mjs',
       'scripts/workforce-resources.test.mjs',
       'scripts/workforce-api-key.test.mjs',
     ];

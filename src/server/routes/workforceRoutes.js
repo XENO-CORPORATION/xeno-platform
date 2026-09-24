@@ -131,11 +131,39 @@ function scopedFacts(view, item) {
     || !capabilities(p.effectiveCapabilities)) throw new Error('Invalid participation facts');
   return { participation: fields(p, ['id', 'targetKind', 'responsibility', 'revision', 'effectiveCapabilities']) };
 }
+/** VIEW-01: a global row states HOW the caller reaches it. Owner and creator appear only with owner
+ * access -- a row reached solely through an assignment names neither, exactly as the assigned view. */
+function globalFacts(item, request) {
+  const access = item.access;
+  if (!Array.isArray(access) || !access.length || new Set(access).size !== access.length
+    || access.some(a => !['personal', 'workspace', 'assigned'].includes(a))) throw new Error('Invalid access');
+  if (request.access !== undefined && !access.includes(request.access)) throw new Error('Access filter not honoured');
+  const into = item.assignedInto;
+  if (!Array.isArray(into) || into.some(id => uuid(id) !== id) || new Set(into).size !== into.length
+    || (into.length > 0) !== access.includes('assigned')) throw new Error('Invalid assignment facts');
+  if (request.assignedTo !== undefined && !into.includes(uuid(request.assignedTo))) throw new Error('Assignment filter not honoured');
+  const owned = access.includes('personal') || access.includes('workspace');
+  if (owned !== (Object.hasOwn(item, 'owner') && Object.hasOwn(item, 'createdByUserId'))) {
+    throw new Error('Owner facts appear exactly when the caller reads the owner scope');
+  }
+  if (!owned) return { access, assignedInto: into };
+  const owner = normalizeOwnerScope(item.owner);
+  if ((owner.type === 'user') !== access.includes('personal') || (owner.type === 'workspace') !== access.includes('workspace')) {
+    throw new Error('Owner scope does not match access');
+  }
+  if (request.owner !== undefined) {
+    const wanted = normalizeOwnerScope(request.owner);
+    if (wanted.type !== owner.type || wanted.id !== owner.id) throw new Error('Owner filter not honoured');
+  }
+  if (!(item.createdByUserId === null || uuid(item.createdByUserId) === item.createdByUserId)) throw new Error('Invalid creator');
+  return { access, owner, createdByUserId: item.createdByUserId, assignedInto: into };
+}
 function catalogObservation(value, request) {
   try {
     if (!value || typeof value !== 'object' || value.success === false) return null;
-    const owner = normalizeOwnerScope(value.owner), requested = normalizeOwnerScope(request.owner);
     const view = request.view ?? 'owned';
+    if (view === 'global') return globalObservation(value, request);
+    const owner = normalizeOwnerScope(value.owner), requested = normalizeOwnerScope(request.owner);
     if (value.schemaVersion !== 1 || value.scope !== view || !['owned', 'assigned', 'project'].includes(view)
       || owner.type !== requested.type || owner.id !== requested.id
       || (view === 'project' ? value.projectId !== uuid(request.projectId) : Object.hasOwn(value, 'projectId'))
@@ -167,6 +195,31 @@ function catalogObservation(value, request) {
     return { schemaVersion: 1, scope: view, owner, ...(view === 'project' ? { projectId: value.projectId } : {}),
       items, nextCursor: value.nextCursor };
   } catch { return null; }
+}
+
+const itemMetadataValid = (item, request) => uuid(item.id) === item.id && ['agent', 'team'].includes(item.kind)
+  && item.status === (request.status ?? 'active') && (request.kind === undefined || item.kind === request.kind)
+  && typeof item.name === 'string' && item.name.trim() && Buffer.byteLength(item.name, 'utf8') <= 200
+  && typeof item.description === 'string' && Buffer.byteLength(item.description, 'utf8') <= 4096
+  && typeof item.revision === 'string' && /^[1-9][0-9]{0,18}$/.test(item.revision)
+  && typeof item.createdAt === 'string' && typeof item.updatedAt === 'string'
+  && Number.isFinite(Date.parse(item.createdAt)) && Number.isFinite(Date.parse(item.updatedAt));
+function globalObservation(value, request) {
+  if (value.schemaVersion !== 1 || value.scope !== 'global' || Object.hasOwn(value, 'owner') || Object.hasOwn(value, 'projectId')
+    || !Array.isArray(value.items) || value.items.length > (request.limit ?? 50)
+    || !(value.nextCursor === null || (typeof value.nextCursor === 'string' && /^[a-zA-Z0-9_-]{1,2048}$/.test(value.nextCursor)))) return null;
+  const search = typeof request.search === 'string' ? request.search.trim().toLowerCase() : null;
+  const items = value.items.map(item => {
+    if (!itemMetadataValid(item, request)) throw new Error('Invalid catalog metadata');
+    if (search && !item.name.toLowerCase().includes(search) && !item.description.toLowerCase().includes(search)) {
+      throw new Error('Search filter not honoured');
+    }
+    return { ...fields(item, ['id', 'kind', 'name', 'description', 'status', 'revision', 'createdAt', 'updatedAt']),
+      ...globalFacts(item, request) };
+  });
+  // One global row per RESOURCE -- a resource reached two ways is still one row.
+  if (new Set(items.map(item => item.id)).size !== items.length) return null;
+  return { schemaVersion: 1, scope: 'global', items, nextCursor: value.nextCursor };
 }
 
 /** Mount with databaseMiddleware; each endpoint authenticates itself. Services

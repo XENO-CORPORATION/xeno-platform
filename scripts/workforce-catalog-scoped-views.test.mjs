@@ -194,7 +194,9 @@ test('workspace and project views of the one catalog show assigned and participa
       await reject(list({ type: 'user', id: viewer }, { view: 'assigned' }), 'bad_input', 'only a workspace has an assigned view');
       await reject(list(scope(target), { view: 'project' }), 'bad_input', 'a project view names its project');
       await reject(list(scope(target), { projectId: project }), 'bad_input', 'only a project view takes a project');
-      await reject(list(scope(target), { view: 'global' }), 'bad_input', 'there is no global view here');
+      // `global` is a view since VIEW-01; it takes no owner SCOPE of its own and is proven in
+      // workforce-catalog-global-view.test.mjs. An unknown view name is still refused.
+      await reject(list(scope(target), { view: 'everything' }), 'bad_input', 'an unknown view is refused');
 
       const extra = await resource('third assigned');
       await assign(extra, target);
