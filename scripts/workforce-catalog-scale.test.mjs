@@ -27,16 +27,28 @@
  * machine runs it, which is what "a documented local qualification environment" permits; the line
  * says which.
  *
- * 🔴 THE CITATION IS ONLY AS WIDE AS THE LIST ROUTES THAT EXIST, so that is gated too. VIEW-01/02
- * specify a global aggregate list and an assigned-resources list; neither exists yet. The first
+ * 🔴 THE CITATION IS ONLY AS WIDE AS THE LIST ROUTES THAT EXIST, so that is gated too. The first
  * test below enumerates every workforce route whose path is a list and fails if any is not in
  * QUALIFIED -- so a new list route cannot inherit this citation without being qualified here. It
  * reads source and needs no database, so it runs even where the timing test is skipped.
+ *
+ * AND ONLY AS WIDE AS THE VIEWS THE ROUTE SERVES. VIEW-02 added `view: 'assigned'` to the same
+ * route (2026-09-24), which reads through the assignment table and the ASN-06 effective-policy view
+ * rather than the owner index -- a different query that deserves its own measurement. So 1 in 4
+ * accepted assignments is accepted, the timing mix samples the assigned view too, and its plan is
+ * asserted to read the target-catalog index. QUALIFIED_VIEWS is checked against the service's own
+ * VIEWS list, so a new view cannot ride on this measurement either. `project` is excluded from
+ * the timing only because this dataset seeds no projects; it is a single indexed project lookup.
  *
  * Measured 2026-09-23 (WSL2, Ryzen 9 9950X, PostgreSQL 16.15): p50 10.4 ms, p95 14.9 ms, max 63.6 ms,
  * index scan on workforce_resources_workspace_catalog. Mutation-checked: dropping that index fails the
  * plan check; adding an unmeasured `/assignments/list` route fails the enumeration; a 600 ms stall in
  * the catalog query fails the p95 budget. Restored, 6/6.
+ *
+ * 2026-09-24 (VIEW-02): p50 17.1 ms, p95 24.2 ms at the envelope with 25,000 accepted assignments and
+ * half the samples on the assigned view, which reads workforce_workspace_assignments_target_catalog.
+ * Mutation-checked: declaring an unmeasured `global` view fails the view enumeration; dropping the
+ * assignment indexes fails the assigned-plan check.
  */
 
 import test from 'node:test';
@@ -61,6 +73,17 @@ const SAMPLES = 200, PAGE = 50, P95_BUDGET_MS = 500;
 
 /** Every workforce list route this suite qualifies. A new one must be added here WITH a measurement. */
 const QUALIFIED = ['/resources/list'];
+/** Every view of that route this suite measures, and the one it deliberately does not time. */
+const QUALIFIED_VIEWS = ['owned', 'assigned'], UNTIMED_VIEWS = { project: 'no projects in the NFR-04 envelope' };
+
+test('every view the catalog serves is one this suite measures or names (NFR-04)', () => {
+  const text = readFileSync(new URL('../src/server/services/workforceCatalog.js', import.meta.url), 'utf8');
+  const declared = /const VIEWS = \[([^\]]*)\]/.exec(text);
+  assert.ok(declared, 'the catalog no longer declares its VIEWS list; this gate cannot see new views');
+  const views = [...declared[1].matchAll(/'([a-z]+)'/g)].map(m => m[1]);
+  assert.deepEqual(views.filter(v => !QUALIFIED_VIEWS.includes(v) && !Object.hasOwn(UNTIMED_VIEWS, v)), [],
+    'the catalog serves a view this suite neither measures nor names; qualify it before it shares the NFR-04 citation');
+});
 
 test('every workforce list route is one this suite qualifies (NFR-04)', () => {
   const routes = [];
@@ -91,8 +114,11 @@ test('workforce list API p95 at the NFR-04 envelope (NFR-04)', { skip: workforce
       CREATE TABLE oidc_signing_keys(kid TEXT PRIMARY KEY,alg TEXT,private_pem TEXT);
       CREATE TABLE oauth_dpop_replays(jkt TEXT,jti TEXT,htm TEXT,htu TEXT,expires_at TIMESTAMPTZ,UNIQUE(jkt,jti));`);
     for (const id of [human, other]) await pool.query('INSERT INTO users(id,username) VALUES($1,$2)', [id, id]);
+    // The assigned view reads the ASN-06 effective-policy view, so the chain up to it is needed.
     for (const filename of ['20260711120000-workspaces.sql', '20260811130000-agent-identities.sql',
-      '20260905120000-workforce-resources.sql', '20260905122000-workforce-workspace-assignments.sql']) {
+      '20260905120000-workforce-resources.sql', '20260905122000-workforce-workspace-assignments.sql',
+      '20260922120000-workforce-divisions.sql', '20260923130000-workforce-assignment-division-target.sql',
+      '20260924150000-workforce-assignment-inherit-parent.sql']) {
       await pool.query((await readFile(new URL(`../src/server/database/migrations/${filename}`, import.meta.url), 'utf8')).split('-- DOWN')[0]);
     }
 
@@ -117,16 +143,23 @@ test('workforce list API p95 at the NFR-04 envelope (NFR-04)', { skip: workforce
         JOIN (SELECT id, row_number() OVER (ORDER BY id) AS ord FROM workspaces) t
           ON ((t.ord - o.ord + $3) % $3) BETWEEN 1 AND $2
        WHERE r.kind = 'agent'`, [other, ASSIGNMENTS_PER_AGENT, WORKSPACES]);
+    // One in four proposals is ACCEPTED, so the assigned view has real rows to page through: 25,000
+    // live assignments, ~250 per workspace. Acceptance goes through the real guard, one statement.
+    await pool.query(`UPDATE workforce_workspace_assignments SET state='accepted', revision=revision+1,
+        source_approved_by_user_id=$1, source_approved_at=clock_timestamp(), target_accepted_by_user_id=$1,
+        accepted_at=clock_timestamp(), updated_at=clock_timestamp()
+      WHERE id IN (SELECT id FROM workforce_workspace_assignments ORDER BY id LIMIT $2)`, [other, ASSIGNMENTS_PER_AGENT * 10_000 / 4]);
     await pool.query('ANALYZE workforce_resources; ANALYZE workforce_workspace_assignments; ANALYZE relationship_tuples; ANALYZE workspaces');
 
     const counts = (await pool.query(`SELECT
         (SELECT count(*) FROM workforce_resources WHERE kind='agent')::int AS agents,
         (SELECT count(*) FROM workforce_resources WHERE kind='team')::int AS teams,
         (SELECT count(*) FROM workspaces)::int AS workspaces,
-        (SELECT count(*) FROM workforce_workspace_assignments)::int AS assignments`)).rows[0];
+        (SELECT count(*) FROM workforce_workspace_assignments)::int AS assignments,
+        (SELECT count(*) FROM workforce_workspace_assignments WHERE state='accepted')::int AS accepted`)).rows[0];
 
     await t.test('the dataset is the envelope the requirement names, not an approximation of it', () => {
-      assert.deepEqual(counts, { agents: 10_000, teams: 1_000, workspaces: 100, assignments: 100_000 });
+      assert.deepEqual(counts, { agents: 10_000, teams: 1_000, workspaces: 100, assignments: 100_000, accepted: 25_000 });
     });
 
     // ── Real HTTP boundary ───────────────────────────────────────────────────────────────────
@@ -170,11 +203,14 @@ test('workforce list API p95 at the NFR-04 envelope (NFR-04)', { skip: workforce
     await t.test(`${SAMPLES} requests across every workspace: p95 <= ${P95_BUDGET_MS} ms`, async () => {
       for (let i = 0; i < SAMPLES; i++) {
         const ws = workspaceIds[i % WORKSPACES];
-        let body = request(ws, i % 5 === 4 ? { kind: 'team' } : {});
+        // Every other sample is the ASSIGNED view (VIEW-02). Kind-filtered pages stay on the owned
+        // view, because assignments in this dataset are agent-only and a team filter would be empty.
+        const view = i % 2 === 1 ? { view: 'assigned' } : {};
+        let body = request(ws, i % 5 === 4 && !view.view ? { kind: 'team' } : view);
         if (i % 3 === 2) {
-          const first = await post(request(ws));
+          const first = await post(request(ws, view));
           assert.equal(first.status, 200);
-          body = request(ws, { cursor: first.body.nextCursor });
+          body = request(ws, { ...view, cursor: first.body.nextCursor });
         }
         const r = await post(body);
         assert.equal(r.status, 200, `request ${i} failed: ${JSON.stringify(r.body)}`);
@@ -201,7 +237,24 @@ test('workforce list API p95 at the NFR-04 envelope (NFR-04)', { skip: workforce
           'the list query sequentially scans workforce_resources at the envelope');
         assert.ok(scans.some(n => n['Index Name'] === 'workforce_resources_workspace_catalog'),
           `expected workforce_resources_workspace_catalog, plan used: ${scans.map(n => n['Index Name'] || n['Node Type']).join(', ')}`);
+        // The assigned view reads the ASSIGNMENT table by target workspace. At this envelope a scan
+        // of 100,000 assignments is the failure to catch, so its plan is asserted too.
+        const assignedPlan = (await db.query(`EXPLAIN (ANALYZE, BUFFERS, FORMAT JSON)
+          SELECT a.id FROM workforce_workspace_assignments a
+            JOIN workforce_resources r ON r.id=a.resource_id
+            JOIN workforce_assignment_effective_policy ep ON ep.assignment_id=a.id
+           WHERE a.workspace_id=$1 AND a.state='accepted' AND a.valid_from<=now() AND (a.valid_until IS NULL OR a.valid_until>now())
+             AND r.status='active' ORDER BY a.created_at DESC,a.id DESC LIMIT $2`, [workspaceIds[50], PAGE + 1])).rows[0]['QUERY PLAN'][0];
+        const assignedNodes = [];
+        const walk = node => { assignedNodes.push(node); (node.Plans || []).forEach(walk); };
+        walk(assignedPlan.Plan);
+        const assignmentScans = assignedNodes.filter(n => n['Relation Name'] === 'workforce_workspace_assignments' && n['Alias'] === 'a');
+        assert.ok(assignmentScans.length > 0, 'the assigned plan never read the assignment table as `a`; this EXPLAIN is not the assigned view');
+        assert.deepEqual(assignmentScans.filter(n => n['Node Type'] === 'Seq Scan').map(n => n['Node Type']), [],
+          'the assigned view sequentially scans workforce_workspace_assignments at the envelope');
         console.log('NFR-04 evidence:', JSON.stringify({
+          assignedPlan: assignmentScans.map(n => ({ node: n['Node Type'], index: n['Index Name'] ?? null })),
+          assignedExecutionMs: assignedPlan['Execution Time'],
           route: 'POST /api/workforce/resources/list', dataset: counts, samples: samples.length, pageSize: PAGE,
           p50Ms: Number(percentile(samples, 50).toFixed(2)), p95Ms: Number(percentile(samples, 95).toFixed(2)),
           maxMs: Number(samples.at(-1).toFixed(2)), budgetMs: P95_BUDGET_MS,

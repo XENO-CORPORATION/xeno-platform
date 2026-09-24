@@ -10,11 +10,13 @@
  *            accepted input is exactly {owner, expectedActorAccountId, limit, kind, status,
  *            cursor}. There is NO assignment filter and NO search, and VIEW-01 names both. A
  *            citation would claim the two filters a user would reach for first.
- *   VIEW-02  "workspace lists show ASSIGNED resources only". This lists OWNED resources -- it
- *            never consults `workforce_workspace_assignments` at all -- so a resource assigned
- *            INTO a workspace does not appear in that workspace's list. The metadata-only
- *            response IS proven below, which is VIEW-02's non-leakage half; its defining half is
- *            unbuilt.
+ *   VIEW-02  ✅ NOW CITED, in workforce-catalog-scoped-views.test.mjs. This note recorded that the
+ *            catalog listed only OWNED resources and never consulted an assignment, so a resource
+ *            assigned INTO a workspace did not appear there. The endpoint gained `view: 'assigned'`
+ *            (accepted, current assignments into the workspace) and `view: 'project'` (ASN-09
+ *            participations in one project), each carrying only its own scope's facts -- no source
+ *            owner, creator, definition or other assignments. It was extended exactly as the line
+ *            below prescribes, not given a second list API. The owned view is unchanged.
  *
  * Both close by EXTENDING this endpoint (an `assignment` filter, a `search` term, an
  * assigned-into-workspace listing), never by a second list API.
