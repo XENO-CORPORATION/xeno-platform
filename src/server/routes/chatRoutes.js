@@ -23,6 +23,7 @@ import { chatWebContextService, ChatWebContextError } from '../services/chatWebC
 import { normalizeTurnRecord } from '../utils/chatTurnRecord.js';
 import { requireDpopIfBound } from '../middleware/dpopResource.js';
 import liveConversationCollaborationRoutes from './liveConversationCollaborationRoutes.js';
+import projectDirectoryBindingRoutes from './projectDirectoryBindingRoutes.js';
 import {
   assertLiveCollaborationAuthority,
   createLiveShare,
@@ -2979,6 +2980,13 @@ router.delete('/memories/:id', async (req, res) => {
 // middleware. Mounted LAST so it cannot shadow a route already served here:
 // express matches in registration order, and a subsystem that silently captured
 // an existing path would be a regression no test of its own would catch.
+// ASN-07/ASN-08: a project's directory is a binding on a named, authenticated installation.
+// 🔴 Mounted BEFORE live collaboration, not after it. That router guards itself with a router-level
+// `router.use` that runs for EVERY request that reaches it -- so anything mounted after it inherits a
+// `collaboration:use` requirement it has nothing to do with. Measured: the first draft mounted this
+// last and every binding request answered 403 insufficient_scope. None of these paths exists above,
+// so mounting here shadows nothing.
+router.use(projectDirectoryBindingRoutes);
 router.use(liveConversationCollaborationRoutes);
 
 export default router;
