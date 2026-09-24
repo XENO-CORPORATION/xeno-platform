@@ -110,16 +110,24 @@ test('no src/server/tests suite is ORPHANED — reachable from no runner at all'
    * list, so "money and auth are covered" was true of the files and false of
    * every runner.
    *
-   * Three runners exist and a suite need only be named by one:
+   * Four runners exist and a suite need only be named by one:
    *   - the npm test chain (no database available),
    *   - scripts/qualify-platform-local.mjs --backend-only (a real Postgres),
-   *   - a GitHub workflow.
-   * The qualifier's list is read as TEXT, never imported: importing that file
-   * starts Docker containers, so running it is the side effect. */
+   *   - a GitHub workflow,
+   *   - scripts/ci-local.mjs's CROSS_SERVICE_SUITES -- proofs that drive a real
+   *     SIBLING service (marketplace-broker boots a built xeno-agents-api). A
+   *     workflow cannot run them, having no sibling checkout, so ci-local is their
+   *     only runner, and it counts a skip as a failure.
+   * Both lists are read as TEXT, never imported: importing either file starts
+   * Docker containers, so running it is the side effect. */
   const qualifier = fs.readFileSync(path.join(ROOT, 'scripts/qualify-platform-local.mjs'), 'utf8');
   const declared = qualifier.match(/const BACKEND_SUITES = \[([\s\S]*?)\];/);
   assert.ok(declared, 'BACKEND_SUITES is no longer declared where this gate reads it');
   const named = new Set([...declared[1].matchAll(/'([^']+)'/g)].map((m) => m[1]));
+  const ciLocal = fs.readFileSync(path.join(ROOT, 'scripts/ci-local.mjs'), 'utf8');
+  const crossService = ciLocal.match(/const CROSS_SERVICE_SUITES = \[([\s\S]*?)\];/);
+  assert.ok(crossService, 'CROSS_SERVICE_SUITES is no longer declared where this gate reads it');
+  for (const m of crossService[1].matchAll(/'([^']+)'/g)) named.add(m[1]);
 
   const workflowDir = path.join(ROOT, '.github/workflows');
   const workflows = fs.existsSync(workflowDir)

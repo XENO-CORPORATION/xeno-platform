@@ -29,6 +29,7 @@ const billing = read('src/server/services/billingService.js');
 const gate = read('src/server/utils/entitlementGate.js');
 const funnel = read('src/server/services/downloadFunnel.js');
 const wsRoutes = read('src/server/routes/workspaceRoutes.js');
+const membership = read('src/server/services/workspaceMembershipOperations.js');
 
 /**
  * A pool stub. `personal` is the xeno_account_plans row; `workspaces` are the
@@ -159,17 +160,34 @@ test('BILLING and DUNNING stay personal', () => {
 /* ── 5 · Seats gate JOINING, not USING ───────────────────────────────────── */
 
 test('the seat cap is enforced at invite time, and NOT again at entitlement time', () => {
-  /* Derived from the code, not chosen: workspaceRoutes refuses an invite with 403
-   * once used >= limit, so membership is already seat-bounded at the only moment
-   * it can be bounded fairly.
+  /* Derived from the code, not chosen: the membership service refuses an invite
+   * with 402 `seat_limit` once used >= limit, so membership is already
+   * seat-bounded at the only moment it can be bounded fairly.
+   *
+   * ⚠️ The cap MOVED on 2026-09-22 (bb0f969, "one authority for membership"):
+   * workspaceRoutes used to check it inline, and now every invite route calls
+   * mutateWorkspaceMembership, which checks it inside the membership transaction.
+   * This gate kept reading the route file and failed for two days against code
+   * that was strictly MORE correct -- so it asserts the cap where it lives AND
+   * that the invite routes still go through it, because either half alone can
+   * pass while invites are unbounded.
    *
    * Re-checking here would revoke an ARBITRARY member's access — there is no
    * ordering over members, so WHICH person loses access could change between two
    * requests. A licence that flickers is worse than one occasionally
    * over-granted, and the remedy for an over-seated workspace is a billing
    * conversation, not locking someone out mid-task. */
-  assert.ok(/seatInfo\.used >= seatInfo\.limit/.test(wsRoutes),
+  // The create branch runs from its `if` to the INSERT that creates the invite. Anchored on
+  // both ends inside the branch: an end found by searching the whole file for 'invite.resend'
+  // lands on the field table at the top, before the start, and yields an empty slice.
+  const createStart = membership.indexOf("if (action === 'invite.create') {");
+  const createBranch = membership.slice(createStart, membership.indexOf('INSERT INTO workspace_invites', createStart));
+  assert.ok(createStart >= 0 && createBranch.length > 200, 'the invite.create branch was not found — this gate would read an empty slice');
+  assert.ok(/seats\.used\s*>=\s*seats\.limit\)\s*throw error\(402,\s*'seat_limit'\)/.test(createBranch),
     'the invite path no longer enforces the seat cap — membership is now unbounded');
+  assert.ok(/router\.post\('\/:id\/invites',\s*wrapId\(\(req, res\) => legacyMembership\(req, res, 'invite\.create'/.test(wsRoutes)
+    && /mutateWorkspaceMembership\(/.test(wsRoutes.slice(wsRoutes.indexOf('async function legacyMembership'))),
+    'the invite route no longer goes through the membership service — the seat cap it enforces is bypassed');
   assert.ok(!/seat_limit|seatInfo/.test(svc),
     'effectivePlan re-checks the seat cap — an arbitrary member would lose access when someone else joins');
 });
