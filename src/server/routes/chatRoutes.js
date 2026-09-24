@@ -1,6 +1,7 @@
 import express from 'express';
 import { activePath, deepestLeafUnder, indexById } from '../utils/chatBranches.js';
 import { chatWorkspaceScope } from '../middleware/chatWorkspaceScope.js';
+import { resolveResourceScope } from '../services/personalScope.js';
 import crypto from 'crypto';
 import fs from 'fs';
 import { workspaceFromReq, isWorkspaceMember, UUID_RE } from '../utils/workspaceContext.js';
@@ -504,10 +505,20 @@ router.get('/conversations', async (req, res) => {
 
     const params = [interface_id];
 
-    if (req.chatWorkspaceId) {
+    // SES-01: the caller's OWN personal wrapper is their personal scope, so it lists their
+    // personally owned chats (plus any still parented to the wrapper from before the adapter).
+    // Another person's personal wrapper lists nothing: it is not a place a caller's chats live.
+    const listScope = await resolveResourceScope(req.db, { userId, workspaceId: req.chatWorkspaceId });
+    if (listScope.kind === 'refused') return res.json({ success: true, conversations: [], total: 0 });
+    if (listScope.kind === 'workspace') {
       params.push(req.chatWorkspaceId);
       query += ` AND (c.workspace_id = $2::uuid OR EXISTS (
         SELECT 1 FROM chat_projects p WHERE p.id=c.project_id AND p.workspace_id=$2::uuid
+      ))`;
+    } else if (req.chatWorkspaceId) {
+      params.push(userId, req.chatWorkspaceId);
+      query += ` AND (c.owner_user_id = $2::uuid OR c.workspace_id = $3::uuid OR EXISTS (
+        SELECT 1 FROM chat_projects p WHERE p.id=c.project_id AND (p.owner_user_id=$2::uuid OR p.workspace_id=$3::uuid)
       ))`;
     }
 
@@ -610,8 +621,14 @@ router.post('/conversations', async (req, res) => {
     const { title = 'New Chat', model_id, system_prompt, persona_id, interface_id = 'playground', project_id } = req.body;
 
     if (project_id) await requireResourceRelation(req.db, userPrincipal(userId), 'project', project_id, 'reviewer');
+    // SES-01: a New Chat under the caller's own personal wrapper is PERSONALLY owned -- the wrapper
+    // backs their account scope, it is not a container other members of it could read through.
     const wsCtx = req.chatWorkspaceId;
-    const wsId = (wsCtx && await isWorkspaceMember(req.db, wsCtx, userId)) ? wsCtx : null;
+    const scope = await resolveResourceScope(req.db, { userId, workspaceId: wsCtx });
+    if (scope.kind === 'refused') {
+      return res.status(404).json({ success: false, error: 'Workspace not found', code: 'workspace_not_found' });
+    }
+    const wsId = (scope.kind === 'workspace' && await isWorkspaceMember(req.db, wsCtx, userId)) ? wsCtx : null;
     const conversation = await withTransaction(req.db, async (tx) => {
       const project = project_id
         ? (await tx.query('SELECT workspace_id FROM chat_projects WHERE id = $1', [project_id])).rows[0]
@@ -2555,6 +2572,10 @@ router.get('/projects', async (req, res) => {
     if (requestedWorkspaceId && !UUID_RE.test(String(requestedWorkspaceId))) {
       return res.status(400).json({ success: false, error: 'Invalid workspace id' });
     }
+    // SES-01: the caller's own personal wrapper lists their personal projects too.
+    const listScope = await resolveResourceScope(req.db, { userId, workspaceId: requestedWorkspaceId });
+    if (listScope.kind === 'refused') return res.json({ success: true, projects: [], limit, offset });
+    const personalOwner = listScope.kind === 'personal' && requestedWorkspaceId ? userId : null;
 
     const { rows: candidates } = await req.db.query(
       `SELECT p.*, 
@@ -2562,9 +2583,9 @@ router.get('/projects', async (req, res) => {
               (SELECT COUNT(*) FROM chat_conversations WHERE project_id = p.id) AS chat_count
        FROM chat_projects p
        WHERE ($1::boolean OR p.is_archived = FALSE)
-         AND ($2::uuid IS NULL OR p.workspace_id = $2::uuid)
+         AND ($2::uuid IS NULL OR p.workspace_id = $2::uuid OR p.owner_user_id = $3::uuid)
        ORDER BY p.updated_at DESC`,
-      [includeArchived, requestedWorkspaceId]
+      [includeArchived, requestedWorkspaceId, personalOwner]
     );
     const authorized = [];
     for (const project of candidates) {
@@ -2624,9 +2645,13 @@ router.post('/projects', async (req, res) => {
     const { name, description, custom_instructions, settings } = req.body;
     if (!name) return res.status(400).json({ success: false, error: 'Project name is required' });
 
+    const scope = await resolveResourceScope(req.db, { userId, workspaceId: req.chatWorkspaceId });
+    if (scope.kind === 'refused') {
+      return res.status(404).json({ success: false, error: 'Workspace not found', code: 'workspace_not_found' });
+    }
     const project = await createAuthorizedProject(req.db, {
       principal: userPrincipal(userId),
-      workspaceId: req.chatWorkspaceId,
+      workspaceId: scope.kind === 'workspace' ? req.chatWorkspaceId : null,
       name,
       description,
       customInstructions: custom_instructions,

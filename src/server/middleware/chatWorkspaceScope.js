@@ -1,4 +1,5 @@
 import { UUID_RE, isWorkspaceMember } from '../utils/workspaceContext.js';
+import { resolveResourceScope } from '../services/personalScope.js';
 
 /** An explicit workspace is a boundary, never a hint that may fall back to personal scope. */
 export function requestedChatWorkspace(req) {
@@ -35,15 +36,21 @@ export async function chatWorkspaceScope(req, res, next) {
     for (const id of new Set([conversationPath, req.body?.conversation_id, req.query?.conversation_id].filter(Boolean))) {
       references.push(['conversation', id]);
     }
+    // SES-01: under the caller's OWN personal wrapper, their personally owned chats and projects
+    // are in scope -- that is where the adapter now puts them.
+    const scope = await resolveResourceScope(req.db, { userId: req.user.id, workspaceId });
+    const personalOwner = scope.kind === 'personal' ? req.user.id : null;
     for (const [kind, id] of references) {
       if (typeof id !== 'string' || !UUID_RE.test(id)) {
         return res.status(400).json({ success: false, error: `Invalid ${kind} id`, code: 'invalid_reference_id' });
       }
       const result = kind === 'project'
-        ? await req.db.query('SELECT id FROM chat_projects WHERE id=$1 AND workspace_id=$2', [id, workspaceId])
+        ? await req.db.query('SELECT id FROM chat_projects WHERE id=$1 AND (workspace_id=$2 OR owner_user_id=$3::uuid)',
+          [id, workspaceId, personalOwner])
         : await req.db.query(`SELECT c.id FROM chat_conversations c
             LEFT JOIN chat_projects p ON p.id=c.project_id
-            WHERE c.id=$1 AND COALESCE(p.workspace_id,c.workspace_id)=$2 AND c.deleted_at IS NULL`, [id, workspaceId]);
+            WHERE c.id=$1 AND (COALESCE(p.workspace_id,c.workspace_id)=$2
+              OR COALESCE(p.owner_user_id,c.owner_user_id)=$3::uuid) AND c.deleted_at IS NULL`, [id, workspaceId, personalOwner]);
       if (!result.rows.length) {
         return res.status(404).json({ success: false, error: 'Resource not found in active workspace', code: 'resource_not_found' });
       }
