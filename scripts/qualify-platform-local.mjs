@@ -257,6 +257,10 @@ const BACKEND_EVIDENCE = {
       'scripts/workforce-migration-chain.test.mjs',
       'scripts/workforce-team-membership-migration.test.mjs',
       'scripts/workforce-division-migration.test.mjs',
+      // Both were in `test:workforce-migrations` and missing here, so the qualifier -- the runner
+      // that gives each suite its own disposable database -- never ran them.
+      'scripts/workforce-division-assignment-migration.test.mjs',
+      'scripts/workforce-assignment-inherit-parent.test.mjs',
       'scripts/workforce-handoff-migration.test.mjs',
       // The service layer's database-backed suites. The four that need NO database
       // (scope, scope-policy, authority, routes) are in the npm chain instead, where

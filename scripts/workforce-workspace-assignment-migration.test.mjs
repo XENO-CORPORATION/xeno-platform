@@ -1,18 +1,14 @@
-/* 🔴 ASN-06 IS A GENUINE SPEC-vs-IMPLEMENTATION CONFLICT AND IS DELIBERATELY NOT CITED.
- * The requirement reads: "Permissions use explicit modes such as `none`, `explicit`,
- * `inherit_parent`. Empty collections do not encode all three. The legacy empty=inherited policy
- * is migrated with its effective parent bound, never changed implicitly."
+/* ✅ ASN-06 IS BUILT AND CITED ELSEWHERE -- scripts/workforce-assignment-inherit-parent.test.mjs,
+ * against 20260924150000-workforce-assignment-inherit-parent.sql. This suite applies only the
+ * FOUNDATION migration, whose grammar knew two modes, so its policy-grammar case below still pins
+ * that foundation truthfully: under it `inherit_parent` is refused. The later migration replaces
+ * the grammar with three declared modes and a BOUND parent, and is where the requirement is proven.
  *
- * The second sentence IS proven, in the policy-grammar case below: `[]`, `{}` and null are all
- * invalid, and an empty capability list under an EXPLICIT mode is a real decision that grants
- * nobody. The first sentence is not. `workforce_assignment_policy_valid` asserts `inherit_parent`
- * INVALID -- only `none` and `explicit` exist -- and the case below pins that refusal, so the
- * implementation actively contradicts a mode the requirement names. There is also no legacy
- * migration binding an effective parent, because there is nothing to inherit from.
- *
- * ⚠️ This is NOT a test gap to paper over, and it is NOT a doc bug to tidy away: per the standing
- * rule, a capability claim is a REQUIREMENT, so the gap closes UPWARD or it gets an owner and an
- * exit condition. Citing ASN-06 would hide a decision somebody has to make.
+ * ⚠️ Recorded because it was the reason this note used to exist: the foundation refused
+ * `inherit_parent`, which made ASN-06's first sentence false in code while its second ("empty
+ * collections do not encode all three") was already true. The gap was closed upward -- the mode
+ * was built, with its parent bound and a dead parent granting nothing -- not by editing the
+ * requirement to match the two modes that happened to exist.
  *
  * ⚠️ ALSO NOT CITED, for the ordinary reason that nothing is built:
  *   ASN-02  "a team may target several projects; several teams may target one project". The
