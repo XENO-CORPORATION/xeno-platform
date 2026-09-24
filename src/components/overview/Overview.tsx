@@ -24,6 +24,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { useWorkspace } from '../../contexts/WorkspaceContext';
 import { listProjects, type Project } from '../../services/accountService';
 import { chatService } from '../../services/chatService';
+import { scopeLabel } from '../../lib/workspaceLabel';
 
 interface OverviewProps {
   onAddCredits?: () => void;
@@ -247,7 +248,7 @@ const Overview: React.FC<OverviewProps> = ({ onAddCredits, onOpenCommandPalette 
   return (
     <main className="xeno-overview-dashboard">
       <header className="xeno-dashboard-header">
-        <div className="xeno-breadcrumb"><span>Home</span><ChevronRight size={13} /><strong>{activeWorkspace?.name || 'Overview'}</strong></div>
+        <div className="xeno-breadcrumb"><span>Home</span><ChevronRight size={13} /><strong>{scopeLabel(activeWorkspace) || 'Overview'}</strong></div>
         <div className="xeno-dashboard-actions">
           <button type="button" className="xeno-dashboard-command" aria-label="Search or enter a command" title="Search or enter a command" onClick={onOpenCommandPalette}><Command size={14} aria-hidden="true" /><span>Search or enter a command</span><kbd>⌘ K</kbd></button>
           <div className="xeno-credit-pill"><Coins size={14} />{formatCredits(remainingCredits)}</div>

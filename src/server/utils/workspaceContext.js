@@ -55,6 +55,9 @@ export async function tagResourceWorkspace(db, req, { objectType, objectId, tabl
   const workspaceId = workspaceFromReq(req);
   const userId = req.user?.id;
   if (!workspaceId || !userId || !objectId) return null;
+  // SES-01: a personal wrapper is never a parent. The resource stays the person's own.
+  const { resolveResourceScope } = await import('../services/personalScope.js');
+  if ((await resolveResourceScope(db, { userId, workspaceId })).kind !== 'workspace') return null;
   if (!(await isWorkspaceMember(db, workspaceId, userId))) return null;
   if (table) {
     try { await db.query(`UPDATE ${table} SET workspace_id = $1 WHERE id = $2`, [workspaceId, objectId]); }

@@ -11,6 +11,7 @@ import {
 import type { LucideIcon } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { useWorkspace } from '../../contexts/WorkspaceContext';
+import { scopeDetail, scopeLabel } from '../../lib/workspaceLabel';
 import './overview-shell.css';
 
 interface OverviewTaskbarProps {
@@ -85,7 +86,7 @@ const OverviewTaskbar: React.FC<OverviewTaskbarProps> = ({ onCollapseChange, onO
   }, []);
 
   const accountName = user?.display_name || user?.username || 'XENO user';
-  const workspaceName = activeWorkspace?.name || (isWorkspaceLoading ? 'Loading…' : 'Personal');
+  const workspaceName = scopeLabel(activeWorkspace) || (isWorkspaceLoading ? 'Loading…' : 'Personal');
   const unreadCount = 0;
   const railItems = useMemo(() => [
     { label: 'Home', path: '/overview', icon: Home },
@@ -207,7 +208,7 @@ const OverviewTaskbar: React.FC<OverviewTaskbarProps> = ({ onCollapseChange, onO
                     className={`xeno-workspace-menu-row${workspace.id === activeWorkspace?.id ? ' is-selected' : ''}`}
                     onClick={async () => { try { await switchWorkspace(workspace.id); setWorkspaceMenuOpen(false); } catch { /* context exposes the confirmed failure */ } }}>
                     <span className="xeno-workspace-mark" aria-hidden="true" />
-                    <span><strong>{workspace.name}</strong><small>{workspace.workspace_type === 'team' ? `${workspace.member_count ?? 0} members` : 'Personal workspace'}</small></span>
+                    <span><strong>{scopeLabel(workspace)}</strong><small>{scopeDetail(workspace)}</small></span>
                     {workspace.id === activeWorkspace?.id ? <Check size={15} /> : null}
                   </button>
                 )) : <p className="xeno-menu-empty">No workspaces available</p>}

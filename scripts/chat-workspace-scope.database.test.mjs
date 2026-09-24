@@ -1,4 +1,10 @@
-/* ⚠️ XENO-WORKFORCE-01 SES-01 IS NOT CITED, AND THE REASON IS A MEASURED PRIVACY DEFECT.
+/* ✅ XENO-WORKFORCE-01 SES-01 is NOW CITED, in personal-scope-adapter.database.test.mjs (2026-09-24).
+ * The defect below was repaired exactly as the last paragraph prescribes: services/personalScope.js
+ * is the one adapter, every creation path that turns an active context into a scope calls it, and
+ * migration 20260924210000 returns rows already parented to a personal wrapper to their owner. The
+ * reproduction below now reads 404. The record is kept as it was measured, because it is the reason.
+ *
+ * ⚠️ (as recorded 2026-09-23) XENO-WORKFORCE-01 SES-01 IS NOT CITED, AND THE REASON IS A MEASURED PRIVACY DEFECT.
  *
  * SES-01: "Global New Chat defaults to personal conversation ownership with no organizational
  * assignment. Backing personal account scope is not presented as a forced user-created workspace."

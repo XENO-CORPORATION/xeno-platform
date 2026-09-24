@@ -4,6 +4,7 @@ import path from 'path';
 import { CHAT_PROJECT_CONTRACTS } from '../config/chatProjectContracts.js';
 import { check, writeTuples } from '../utils/authzReBAC.js';
 import { withTransaction } from './chatProjectAuthority.js';
+import { resolveResourceScope } from './personalScope.js';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const SIGNATURE_VERSION = 'v1';
@@ -201,6 +202,11 @@ export async function registerManagedLibraryFile(db, {
   if (Number(fileSize) !== bytes.length) throw new Error('Stored Library file size changed before registration');
 
   return withTransaction(db, async (tx) => {
+    // SES-01: an asset created under the caller's own personal wrapper is the caller's own, never
+    // parented to the wrapper, where every member of it would inherit a relation on it.
+    const scope = await resolveResourceScope(tx, { userId, workspaceId });
+    if (scope.kind === 'refused') throw new Error('Workspace editor access is required to register an asset');
+    if (scope.kind === 'personal') workspaceId = null;
     if (workspaceId) {
       const workspaceAccess = await check(tx, {
         object: `workspace:${workspaceId}`,
