@@ -14,7 +14,7 @@
  * and clamping to it under-billed reasoning calls by 20×+.
  */
 import {
-  holdV2, settleHoldV2, voidHoldV2, deterministicTxnId, MICRO_PER_CREDIT,
+  holdV2, settleHoldV2, voidHoldV2, extendHoldV2, deterministicTxnId, MICRO_PER_CREDIT,
 } from './creditLedgerV2.js';
 import { getChatCostMicro, estimateChatCostMicro } from './creditCosts.js';
 import { billableInputTokens } from './billableInput.js';
@@ -47,13 +47,72 @@ async function withRetry(fn, { attempts = 3, baseMs = 50 } = {}) {
  * and (b) logged with the grep-able `[meter-failure]` tag + full money context.
  * Semantics stay NON-FATAL: the user's completion is never failed by metering.
  */
-export const meterFailureCounters = { settle: 0, void: 0 };
+export const meterFailureCounters = { settle: 0, void: 0, extend: 0 };
 function reportMeterFailure(kind, err, ctx) {
   meterFailureCounters[kind] = (meterFailureCounters[kind] || 0) + 1;
   console.error(
     `[meter-failure] ${kind} failed (count=${meterFailureCounters[kind]}):`,
     { ...ctx, error: String(err?.message || err) },
   );
+}
+
+/**
+ * XENO-WORKFORCE-01 FUND-09: "Do not release a reservation merely because a lease/HTTP request expired.
+ * Running or uncertain provider work remains committed until its settlement/cancellation is proved."
+ *
+ * Every hold below is placed with a short TTL (900 s, 120 s for a stream) so a settle that never
+ * arrives frees the balance quickly. But a provider call is not bounded by that TTL: a long reasoning
+ * stream or a slow video generation outlives it, the sweeper voids the reservation on time alone, the
+ * balance is spendable elsewhere, and the eventual settle charges what is left -- possibly nothing.
+ * So while the provider call is IN FLIGHT the holder renews its own hold, and stops the moment the call
+ * resolves; the short TTL then still bounds a holder that crashed mid-call.
+ *
+ * Renewal is every `HOLD_HEARTBEAT_MS` for `HOLD_HEARTBEAT_EXTEND_SECONDS` -- a third of the shortest
+ * TTL, extended by the longest -- so two missed beats in a row still leave the hold alive. A refusal
+ * (the hold is already gone) is recorded, not thrown: the provider call is not ours to abort from here,
+ * and the settle that follows reports what it could charge.
+ */
+export const HOLD_HEARTBEAT_MS = 40_000;
+export const HOLD_HEARTBEAT_EXTEND_SECONDS = 900;
+// A holder that never settles must not pin a reservation forever: no in-process provider call
+// outlives the server's own request bounds, so past this the heartbeat stops and says so, and the
+// hold's own TTL takes over again.
+export const HOLD_HEARTBEAT_MAX_MS = 2 * 60 * 60 * 1000;
+export const holdHeartbeatStats = { beats: 0, refused: 0, capped: 0 };
+const envMs = (name, fallback) => {
+  const n = Number(process.env[name]);
+  return Number.isFinite(n) && n > 0 ? n : fallback;
+};
+export function startHoldHeartbeat(db, userId, holdId, {
+  everyMs = envMs('METER_HOLD_HEARTBEAT_MS', HOLD_HEARTBEAT_MS),
+  extendSeconds = HOLD_HEARTBEAT_EXTEND_SECONDS,
+  maxMs = envMs('METER_HOLD_HEARTBEAT_MAX_MS', HOLD_HEARTBEAT_MAX_MS),
+} = {}) {
+  let stopped = false;
+  const startedAt = Date.now();
+  const stop = () => { stopped = true; clearInterval(timer); };
+  const beat = () => {
+    if (stopped) return;
+    if (Date.now() - startedAt > maxMs) {
+      holdHeartbeatStats.capped += 1;
+      stop();
+      reportMeterFailure('extend', new Error('heartbeat lifetime cap reached; the holder never settled'), { userId, holdId });
+      return;
+    }
+    holdHeartbeatStats.beats += 1;
+    extendHoldV2(db, userId, holdId, extendSeconds).catch((e) => {
+      // A beat already in flight when the call settled lands on a settled hold: expected, not a failure.
+      if (stopped) return;
+      if (e?.code === 'HOLD_EXPIRED' || e?.code === 'HOLD_NOT_ACTIVE' || e?.code === 'NOT_FOUND') {
+        holdHeartbeatStats.refused += 1;
+        stop();                  // nothing left to keep alive
+      }
+      reportMeterFailure('extend', e, { userId, holdId });
+    });
+  };
+  const timer = setInterval(beat, everyMs);
+  timer.unref?.();
+  return stop;
 }
 
 /** Map a ledger error code to an HTTP-shaped error the route can return directly. */
@@ -120,6 +179,7 @@ export async function meterPremiumChat(db, userId, opts) {
 
   // Run the provider. Any failure → void the hold (full refund) and bubble up.
   let result;
+  const stopHeartbeat = startHoldHeartbeat(db, userId, holdId);
   try {
     result = await run();
   } catch (e) {
@@ -127,6 +187,8 @@ export async function meterPremiumChat(db, userId, opts) {
       userId, holdId, surface, operation: 'chat.completion', heldMicro: estimateMicro,
     }));
     throw e;
+  } finally {
+    stopHeartbeat();
   }
 
   // Phase 2 — settle the ACTUAL token cost (the ledger charges what was used,
@@ -258,6 +320,7 @@ export async function meterMediaGeneration(db, userId, opts) {
   // Run the provider (this closure also applies any watermark, so a watermark
   // failure is treated as a generation failure). Any throw → void the hold and bubble.
   let result;
+  const stopHeartbeat = startHoldHeartbeat(db, userId, holdId);
   try {
     result = await run();
   } catch (e) {
@@ -265,6 +328,8 @@ export async function meterMediaGeneration(db, userId, opts) {
       userId, holdId, surface, operation, heldMicro: totalMicro,
     }));
     throw e;
+  } finally {
+    stopHeartbeat();
   }
 
   // Phase 2 — settle for the number of outputs ACTUALLY returned (clamped to the reserved
@@ -364,6 +429,8 @@ export async function meterPremiumChatStream(db, userId, opts) {
   }
 
   let done = false; // single-shot guard: settle XOR void, exactly once
+  // The stream is driven by the route; keep its hold alive until settle() or voidHold() ends it.
+  const stopHeartbeat = startHoldHeartbeat(db, userId, holdId);
 
   /**
    * Phase 2 — settle the ACTUAL cost (charged as used, bounded by the balance). `hasOutputUsage=false`
@@ -373,6 +440,7 @@ export async function meterPremiumChatStream(db, userId, opts) {
   async function settle({ inputTokens, outputTokens = 0, hasOutputUsage = true } = {}) {
     if (done) return { alreadySettled: true, costMicro: 0, creditsCharged: 0 };
     done = true;
+    stopHeartbeat();
     const reportedInput = inputTokens ?? estInputTokens;
     const inTok = billableInputTokens(reportedInput, callerInputTokens, provider);
     const absorbedInputTokens = Math.max(0, reportedInput - inTok);
@@ -409,6 +477,7 @@ export async function meterPremiumChatStream(db, userId, opts) {
   async function voidHold() {
     if (done) return;
     done = true;
+    stopHeartbeat();
     await withRetry(() => voidHoldV2(db, userId, holdId)).catch((e) => reportMeterFailure('void', e, {
       userId, holdId, surface: 'ai_chat', operation: 'chat.completion.stream', heldMicro: estimateMicro,
     }));
