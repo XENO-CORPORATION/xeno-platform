@@ -23,6 +23,7 @@ import express from 'express';
 import crypto from 'crypto';
 import authMiddleware, { optionalAuthMiddleware } from '../middleware/auth.js';
 import * as svc from '../services/marketplaceService.js';
+import * as broker from '../services/marketplaceBroker.js';
 import {
   VALID_KINDS, VALID_PRICING_MODELS,
   verifyEd25519, runAutomatedChecks, resolvePublishTrustTier,
@@ -250,19 +251,20 @@ router.post('/listings/:id/rent', authMiddleware, makeAcquireHandler(['rental'],
  * 🔒 XENO-WORKFORCE-01 MKT-06: "Broker invocation must create/adopt a durable hosted run, expose actual
  * queued/running/completed/failed/interrupted state and return artifacts/results. Authorization or a
  * debit alone cannot report brokered:true or completion. No debit for an execution that was never
- * admitted."
+ * admitted; uncertain dispatch is reconciled before retry."
  *
- * Until 2026-09-24 this route did exactly what MKT-06 forbids: both success branches reported the
- * call as brokered while nothing was dispatched, and the pay_per_use branch DEBITED the buyer and
- * accrued creator earnings for an execution that never happened. No caller in any repository used it,
- * and production had 0 third-party listings, so nobody was charged -- recorded before the repair.
+ * History: until 2026-09-24 this route reported the call as brokered while dispatching nothing, and its
+ * pay_per_use branch debited the buyer for an execution that never happened (#388 made it refuse). It now
+ * does the real thing, through services/marketplaceBroker.js:
+ *   - access is checked exactly as before (listing, kind, entitlement or pay-per-use pricing);
+ *   - a durable invocation is written, then xeno-agents-api is asked to create the run AS THE BUYER with a
+ *     deterministic idempotency key, so a retry after a lost response adopts the run that exists;
+ *   - NOTHING is debited here. agents-api places the hold when it admits the run and settles it from real
+ *     usage; a run it refuses costs nothing;
+ *   - the response is the run's real state. 202 while it runs, 200 once it is terminal, 402/4xx when
+ *     agents-api refused it, 503 when dispatch is uncertain (retry the SAME invocation to reconcile).
  *
- * It now does the only honest thing available while no hosted run can be created from here: it checks
- * access exactly as before (listing, kind, entitlement or pay-per-use pricing) so the caller learns
- * whether they COULD invoke, then answers 501 `broker_unavailable` with `dispatched: false`, and
- * never debits. A caller cannot mistake this for success, and no money moves for work that did not run.
- * The remaining work is the broker itself -- create or adopt an xeno-agents-api run on the buyer's
- * behalf and return its real state -- which lands behind this same route.
+ * Body: { prompt (required), maxCredits? , invocationId? } -- pass invocationId to retry/reconcile one.
  */
 router.post('/invoke/:listingId', authMiddleware, async (req, res) => {
   try {
@@ -281,21 +283,72 @@ router.post('/invoke/:listingId', authMiddleware, async (req, res) => {
       return res.status(402).json({ success: false, error: 'No active entitlement and no pay-per-use pricing' });
     }
 
-    // Access is established. Nothing is dispatched and nothing is charged: there is no hosted run to
-    // create or adopt yet, and MKT-06 forbids reporting or billing one that does not exist.
-    return res.status(501).json({
-      success: false,
-      error: 'broker_unavailable',
-      message: 'Hosted invocation is not available yet. Nothing was run and nothing was charged.',
-      dispatched: false,
-      charged: 0,
-      access: entitled ? entitlement.kind : 'pay_per_use',
+    const b = req.body || {};
+    let invocation;
+    if (b.invocationId !== undefined) {
+      invocation = await broker.getInvocation(req.db, req.user.id, String(b.invocationId));
+      if (!invocation || invocation.listing_id !== listing.id) {
+        return res.status(404).json({ success: false, error: 'Invocation not found' });
+      }
+    } else {
+      if (!isNonEmptyString(b.prompt) || b.prompt.length > 100000) {
+        return badRequest(res, 'prompt is required (1-100000 characters)');
+      }
+      const maxCredits = b.maxCredits === undefined ? undefined : Number(b.maxCredits);
+      if (maxCredits !== undefined && !(Number.isFinite(maxCredits) && maxCredits > 0)) {
+        return badRequest(res, 'maxCredits must be a positive number');
+      }
+      invocation = await broker.createInvocation(req.db, {
+        user: req.user, listing, access: entitled ? entitlement.kind : 'pay_per_use', prompt: b.prompt, maxCredits,
+      });
+    }
+
+    const versions = await svc.getVersionsForListing(req.db, listing.id);
+    const after = await broker.refreshInvocation(req.db, {
+      invocation, user: req.user, listing, version: versions?.[0] || null,
     });
+    return sendInvocation(res, after);
   } catch (error) {
+    if (error instanceof broker.BrokerUnavailableError) {
+      // Not configured: nothing was dispatched and nothing was charged.
+      return res.status(503).json({ success: false, error: 'broker_unavailable', dispatched: false, charged: 0 });
+    }
     console.error('[Marketplace] invoke error:', error.message);
     res.status(500).json({ success: false, error: 'Failed to invoke' });
   }
 });
+
+/** GET /invocations/:id -- the invocation and its run's CURRENT state, re-read from xeno-agents-api. */
+router.get('/invocations/:id', authMiddleware, async (req, res) => {
+  try {
+    const invocation = await broker.getInvocation(req.db, req.user.id, req.params.id);
+    if (!invocation) return res.status(404).json({ success: false, error: 'Invocation not found' });
+    const listing = await svc.getListingById(req.db, invocation.listing_id);
+    const after = await broker.refreshInvocation(req.db, { invocation, user: req.user, listing, version: null });
+    return sendInvocation(res, after);
+  } catch (error) {
+    if (error instanceof broker.BrokerUnavailableError) {
+      return res.status(503).json({ success: false, error: 'broker_unavailable' });
+    }
+    console.error('[Marketplace] invocation read error:', error.message);
+    res.status(500).json({ success: false, error: 'Failed to read invocation' });
+  }
+});
+
+function sendInvocation(res, row) {
+  const invocation = broker.publicInvocation(row);
+  if (row.state === 'refused') {
+    const status = /insufficient|credit|budget|quota/i.test(row.run_status_reason || '') ? 402 : 409;
+    return res.status(status).json({ success: false, error: 'not_admitted', invocation, charged: 0 });
+  }
+  if (row.state === 'uncertain') {
+    return res.status(503).json({
+      success: false, error: 'dispatch_uncertain', invocation,
+      message: 'The run may or may not have started. Retry with this invocationId to reconcile; it will not start a second run.',
+    });
+  }
+  return res.status(row.state === 'finished' ? 200 : 202).json({ success: true, invocation });
+}
 
 // ==========================================================================
 // DOWNLOAD (auth, entitlement-gated)
