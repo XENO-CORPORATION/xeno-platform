@@ -16,6 +16,7 @@ import express from 'express';
 import authMiddleware from '../middleware/auth.js';
 import * as billing from '../services/billingService.js';
 import { getEffectiveEntitlements } from '../services/effectivePlan.js';
+import { productAccessFor } from '../services/productAccess.js';
 import { recordConsent, CONSENT_TEXT, CONSENT_HASH } from '../services/checkoutConsent.js';
 import { rateLimitKey } from '../utils/clientIp.js';
 import { creditsView, subscriptionView } from '../utils/accountViews.js';
@@ -60,10 +61,19 @@ router.get('/checkout/:sessionId/status', authMiddleware, requireEnabled, async 
   }
 });
 
-/** The user's plan + feature entitlements — the gate every product reads. */
+/**
+ * The user's plan + feature entitlements — the gate every product reads.
+ *
+ * A product that names itself in `X-Xeno-Client` also gets `product`: whether THIS
+ * account may open THIS product (services/productAccess.js). That is the answer the
+ * product's door renders; `entitlements.canUse` keeps its own, wider meaning.
+ */
 router.get('/entitlements', authMiddleware, async (req, res) => {
   try {
-    res.json({ success: true, ...(await getEffectiveEntitlements(req.db, req.user.id)) });
+    const effective = await getEffectiveEntitlements(req.db, req.user.id);
+    const product = await productAccessFor(req, effective.entitlements);
+    res.set('Cache-Control', 'no-store');
+    res.json({ success: true, ...effective, ...(product ? { product } : {}) });
   } catch (err) {
     console.error('[billing] entitlements error:', err.message);
     res.status(500).json({ success: false, error: 'Failed to load entitlements' });

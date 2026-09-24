@@ -42,7 +42,11 @@ import {
 } from '../src/server/utils/turnProgress.js';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
-const SERVER = readFileSync(join(ROOT, 'src', 'server', 'index.js'), 'utf8');
+/* Line endings normalised: the index is stored LF (`i/lf`) but a Windows checkout with
+ * core.autocrlf writes it CRLF, and the assertions below match source text spanning a
+ * newline. Without this the suite failed on every Windows machine while passing on Linux
+ * — a gate whose verdict depended on the checkout, not the code. */
+const SERVER = readFileSync(join(ROOT, 'src', 'server', 'index.js'), 'utf8').replace(/\r\n/g, '\n');
 const stripComments = (s) => s.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
 
 /** A response that records everything written, and refuses what a real one would refuse. */
