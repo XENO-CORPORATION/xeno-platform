@@ -25,6 +25,7 @@ import ChatModelSelector from './ChatModelSelector';
 import ChatEffortControl from './ChatEffortControl';
 import { effortOptionForTurn, readEffortPreferences, requestShapeFor, writeEffortPreference } from './chatReasoningEffort';
 import ChatShareModal from './ChatShareModal';
+import ChatMoveModal from './ChatMoveModal';
 import { isOutlineDebugOn, OUTLINE_DEBUG_CSS } from './outlineDebug';
   import ChatLibraryPage from './ChatLibraryPage';
 import ChatScheduledPage from './ChatScheduledPage';
@@ -3478,6 +3479,8 @@ const ChatWithLLM: React.FC<ChatWithLLMProps> = ({
   const [newChatProjectDescription, setNewChatProjectDescription] = useState('');
   /** If set, the next created project receives this conversation. */
   const [pendingProjectAssignConversationId, setPendingProjectAssignConversationId] = useState<string | null>(null);
+  // SES-05: the move a persisted chat is waiting on -- held until the consented move dialog answers.
+  const [pendingMove, setPendingMove] = useState<{ conversationId: string; title: string; projectId: string; projectName: string } | null>(null);
 
   useEffect(() => {
     if (chatService.isAuthenticated()) return;
@@ -8580,17 +8583,22 @@ interface QueueState {
     }
   };
 
+  // SES-05: a persisted chat moves only through the consented move dialog, which shows who will be
+  // able to read it and how much history goes with it before anything changes.
   const handleAssignConversationToProject = async (conversationId: string, projectId: string | null) => {
     if (isDbAuthenticated && isPersistedConversationId(conversationId)) {
-      try {
-        const updated = await chatService.updateConversation(conversationId, { project_id: projectId });
-        if (!updated) throw new Error('Conversation project was not saved.');
-      } catch (error) {
-        console.error('[ChatWithLLM] Failed to assign conversation to project:', error);
-        setProjectFileNotice('The chat could not be moved to that project.');
+      if (!projectId) {
+        setProjectFileNotice('A chat that belongs to a project stays in it. Start a new chat for private work.');
         return;
       }
+      const conversation = conversationHistory.find((convo) => convo.id === conversationId);
+      const project = chatProjects.find((candidate) => candidate.id === projectId);
+      setPendingMove({ conversationId, title: conversation?.title || 'This chat', projectId, projectName: project?.name || 'this project' });
+      return;
     }
+    applyConversationMove(conversationId, projectId);
+  };
+  const applyConversationMove = (conversationId: string, projectId: string | null) => {
     patchConversation(conversationId, { projectId });
     if (projectId) {
       const now = Date.now();
@@ -17616,6 +17624,19 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
         {feedbackPopupPresence.rendered && createPortal(renderFeedbackPopup(), document.body)}
         {dislikePopupPresence.rendered && createPortal(renderDislikeFeedbackPopup(), document.body)}
         {isDeleteModalMounted && createPortal(renderDeleteConfirmationModal(), document.body)}
+        {pendingMove && createPortal(
+          <div className={`chat-themed chat-theme-${resolvedChatTheme}`} style={chatThemePreviewStyle}>
+            <ChatMoveModal
+              conversationId={pendingMove.conversationId}
+              conversationTitle={pendingMove.title}
+              projectId={pendingMove.projectId}
+              projectName={pendingMove.projectName}
+              onMoved={() => { applyConversationMove(pendingMove.conversationId, pendingMove.projectId); setPendingMove(null); }}
+              onClose={() => setPendingMove(null)}
+            />
+          </div>,
+          document.body,
+        )}
         {isCreateProjectModalMounted && createPortal(renderCreateProjectModal(), document.body)}
         {isProjectSettingsMounted &&
           projectSettings &&
