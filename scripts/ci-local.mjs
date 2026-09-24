@@ -74,6 +74,7 @@ const MONEY_SUITES = [
   'billing-money-in', 'media-metering', 'wallet-service',
   'service-ledger', 'ledger-audit-fixes', 'credit-mirror-drift',
   'marketplace-invoke-and-commission', 'hold-extension', 'meter-hold-heartbeat',
+  'run-backed-hold',
 ];
 
 /* ── DATABASE PROOFS (scripts/*.test.mjs) ────────────────────────────────────
