@@ -90,6 +90,8 @@ function publicInvocation(row) {
     id: row.id,
     listingId: row.listing_id,
     access: row.access,
+    bindingId: row.binding_id ?? null,
+    servingVersionId: row.serving_version_id ?? null,
     state: row.state,
     runId: row.run_id,
     runStatus: row.run_status,
@@ -204,11 +206,14 @@ export async function refreshInvocation(db, { invocation, user, listing, version
   }
 }
 
-export async function createInvocation(db, { user, listing, access, prompt, maxCredits }) {
+export async function createInvocation(db, { user, listing, access, prompt, maxCredits, binding = null }) {
+  // A rental invocation carries the binding it runs under and the serving version it pins (MKT-05),
+  // so the work stays attributable after the rental ends; the table refuses a rental row without both.
   const r = await db.query(
-    `INSERT INTO marketplace_invocations (user_id, listing_id, access, prompt, max_credits, state)
-     VALUES ($1, $2, $3, $4, $5, 'pending') RETURNING *`,
-    [user.id, listing.id, access, prompt, maxCredits ?? null],
+    `INSERT INTO marketplace_invocations
+       (user_id, listing_id, access, prompt, max_credits, state, binding_id, serving_version_id)
+     VALUES ($1, $2, $3, $4, $5, 'pending', $6, $7) RETURNING *`,
+    [user.id, listing.id, access, prompt, maxCredits ?? null, binding?.id ?? null, binding?.serving_version_id ?? null],
   );
   return r.rows[0];
 }

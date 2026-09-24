@@ -24,6 +24,7 @@ import crypto from 'crypto';
 import authMiddleware, { optionalAuthMiddleware } from '../middleware/auth.js';
 import * as svc from '../services/marketplaceService.js';
 import * as broker from '../services/marketplaceBroker.js';
+import * as rentals from '../services/marketplaceRentals.js';
 import {
   VALID_KINDS, VALID_PRICING_MODELS,
   verifyEd25519, runAutomatedChecks, resolvePublishTrustTier,
@@ -276,17 +277,32 @@ router.post('/invoke/:listingId', authMiddleware, async (req, res) => {
       return badRequest(res, 'Only mind/swarm listings are invocable');
     }
 
+    const b = req.body || {};
     const entitlement = await svc.getActiveEntitlement(req.db, req.user.id, listing.id);
-    const entitled = Boolean(entitlement && (entitlement.kind === 'rental' || entitlement.kind === 'subscribed'));
+    // XENO-WORKFORCE-01 MKT-05: a RENTAL runs only through a live binding to a serving version. The
+    // binding is re-checked here, on every dispatch, so an expired or revoked rental -- or a revoked
+    // binding -- refuses new work. A retry of an existing invocation is re-checked the same way.
+    const retry = b.invocationId !== undefined
+      ? await broker.getInvocation(req.db, req.user.id, String(b.invocationId)) : null;
+    const rentalBindingId = retry?.binding_id ?? b.bindingId;
+    let binding = null;
+    if (rentalBindingId || entitlement?.kind === 'rental' || retry?.access === 'rental') {
+      try {
+        binding = await rentals.bindingForDispatch(req.db, { user: req.user, listing, bindingId: rentalBindingId });
+      } catch (e) {
+        if (e instanceof rentals.RentalError) return res.status(e.status).json({ success: false, error: e.code, message: e.message });
+        throw e;
+      }
+    }
+    const entitled = Boolean(binding) || entitlement?.kind === 'subscribed';
     const pricing = entitled ? null : await svc.getPricing(req.db, listing.id, 'pay_per_use');
     if (!entitled && !pricing) {
       return res.status(402).json({ success: false, error: 'No active entitlement and no pay-per-use pricing' });
     }
 
-    const b = req.body || {};
     let invocation;
     if (b.invocationId !== undefined) {
-      invocation = await broker.getInvocation(req.db, req.user.id, String(b.invocationId));
+      invocation = retry;
       if (!invocation || invocation.listing_id !== listing.id) {
         return res.status(404).json({ success: false, error: 'Invocation not found' });
       }
@@ -299,14 +315,16 @@ router.post('/invoke/:listingId', authMiddleware, async (req, res) => {
         return badRequest(res, 'maxCredits must be a positive number');
       }
       invocation = await broker.createInvocation(req.db, {
-        user: req.user, listing, access: entitled ? entitlement.kind : 'pay_per_use', prompt: b.prompt, maxCredits,
+        user: req.user, listing, access: binding ? 'rental' : (entitled ? entitlement.kind : 'pay_per_use'),
+        prompt: b.prompt, maxCredits, binding,
       });
     }
 
-    const versions = await svc.getVersionsForListing(req.db, listing.id);
-    const after = await broker.refreshInvocation(req.db, {
-      invocation, user: req.user, listing, version: versions?.[0] || null,
-    });
+    // A rental runs its PINNED serving version; anything else runs the listing's newest version.
+    const version = binding
+      ? await svc.getVersionById(req.db, binding.serving_version_id)
+      : (await svc.getVersionsForListing(req.db, listing.id))?.[0] || null;
+    const after = await broker.refreshInvocation(req.db, { invocation, user: req.user, listing, version });
     return sendInvocation(res, after);
   } catch (error) {
     if (error instanceof broker.BrokerUnavailableError) {
@@ -315,6 +333,50 @@ router.post('/invoke/:listingId', authMiddleware, async (req, res) => {
     }
     console.error('[Marketplace] invoke error:', error.message);
     res.status(500).json({ success: false, error: 'Failed to invoke' });
+  }
+});
+
+/**
+ * POST /listings/:id/rental/bind  { workspaceId? }
+ * Bind the caller's rental to themselves or to ONE workspace they belong to, as the listing's rental
+ * licence allows, pinned to the listing's hosted serving version (MKT-05). Idempotent per target.
+ */
+router.post('/listings/:id/rental/bind', authMiddleware, async (req, res) => {
+  try {
+    const listing = await svc.getListingById(req.db, req.params.id);
+    if (!listing || listing.status !== 'published') return res.status(404).json({ success: false, error: 'Listing not found or not published' });
+    const workspaceId = req.body?.workspaceId ?? null;
+    if (workspaceId !== null && !(typeof workspaceId === 'string' && /^[0-9a-f-]{36}$/i.test(workspaceId))) {
+      return badRequest(res, 'workspaceId must be a workspace id or omitted');
+    }
+    const binding = await rentals.bindRental(req.db, { user: req.user, listing, workspaceId });
+    return res.json({ success: true, binding: rentals.publicBinding(binding) });
+  } catch (e) {
+    if (e instanceof rentals.RentalError) return res.status(e.status).json({ success: false, error: e.code, message: e.message });
+    console.error('[Marketplace] rental bind error:', e.message);
+    return res.status(500).json({ success: false, error: 'Failed to bind rental' });
+  }
+});
+
+/** POST /rental-bindings/:id/revoke { reason? } -- the renter ends one binding. Its work stays recorded. */
+router.post('/rental-bindings/:id/revoke', authMiddleware, async (req, res) => {
+  try {
+    const binding = await rentals.revokeBinding(req.db, { user: req.user, bindingId: req.params.id, reason: req.body?.reason });
+    return res.json({ success: true, binding: rentals.publicBinding(binding) });
+  } catch (e) {
+    if (e instanceof rentals.RentalError) return res.status(e.status).json({ success: false, error: e.code, message: e.message });
+    console.error('[Marketplace] rental revoke error:', e.message);
+    return res.status(500).json({ success: false, error: 'Failed to revoke binding' });
+  }
+});
+
+/** GET /rental-bindings -- the caller's bindings, active and revoked. */
+router.get('/rental-bindings', authMiddleware, async (req, res) => {
+  try {
+    return res.json({ success: true, bindings: await rentals.listBindings(req.db, req.user.id) });
+  } catch (e) {
+    console.error('[Marketplace] rental list error:', e.message);
+    return res.status(500).json({ success: false, error: 'Failed to list bindings' });
   }
 });
 
@@ -369,6 +431,13 @@ router.get('/download/:listingVersionId', authMiddleware, async (req, res) => {
       const entitlement = await svc.getActiveEntitlement(req.db, req.user.id, version.listing_id);
       if (!entitlement) {
         return res.status(403).json({ success: false, error: 'You do not have access to this download' });
+      }
+      // MKT-05: a rental is hosted use of a serving version, "not a downloadable private agent".
+      if (!rentals.rentalMayDownload(entitlement)) {
+        return res.status(403).json({
+          success: false, error: 'rental_not_downloadable',
+          message: 'A rental runs on the platform; it does not include the private artifact.',
+        });
       }
     }
 
