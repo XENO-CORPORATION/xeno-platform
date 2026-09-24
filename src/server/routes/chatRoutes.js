@@ -2,6 +2,7 @@ import express from 'express';
 import { activePath, deepestLeafUnder, indexById } from '../utils/chatBranches.js';
 import { chatWorkspaceScope } from '../middleware/chatWorkspaceScope.js';
 import { resolveResourceScope } from '../services/personalScope.js';
+import { ConversationMoveError, moveConversation, previewConversationMove } from '../services/conversationMove.js';
 import crypto from 'crypto';
 import fs from 'fs';
 import { workspaceFromReq, isWorkspaceMember, UUID_RE } from '../utils/workspaceContext.js';
@@ -677,12 +678,15 @@ router.put('/conversations/:id', async (req, res) => {
 
     const { id } = req.params;
     if (rejectIfNotPersistedConversationId(res, id)) return;
-    const { title, model_id, system_prompt, persona_id, is_archived, project_id } = req.body;
+    const { title, model_id, system_prompt, persona_id, is_archived } = req.body;
+    // SES-05: moving a conversation is a separate, consented action -- POST /conversations/:id/move.
+    // Accepting `project_id` here would re-parent the whole history in the same call that renames it.
+    if (Object.hasOwn(req.body || {}, 'project_id')) {
+      return res.status(400).json({ success: false, code: 'move_is_a_separate_action',
+        error: 'Move a conversation with POST /conversations/:id/move/preview and /move.' });
+    }
 
     await requireResourceRelation(req.db, userPrincipal(userId), 'conversation', id, 'editor');
-    if (project_id !== undefined && project_id !== null) {
-      await requireResourceRelation(req.db, userPrincipal(userId), 'project', project_id, 'editor');
-    }
 
     // Build dynamic update query
     const updates = [];
@@ -709,15 +713,6 @@ router.put('/conversations/:id', async (req, res) => {
       updates.push(`is_archived = $${paramCount++}`);
       values.push(is_archived);
     }
-    if (project_id !== undefined) {
-      updates.push(`project_id = $${paramCount++}`);
-      values.push(project_id || null);
-      if (project_id) {
-        updates.push('owner_user_id = NULL');
-        updates.push('workspace_id = NULL');
-      }
-    }
-
     updates.push(`updated_at = NOW()`);
 
     const result = await withTransaction(req.db, async (tx) => {
@@ -726,11 +721,6 @@ router.put('/conversations/:id', async (req, res) => {
         [id],
       );
       if (current.rows.length === 0) return current;
-      if (project_id === null && current.rows[0].project_id) {
-        const detachError = new Error('A project conversation cannot be detached into unscoped access.');
-        detachError.code = 'project_detach_forbidden';
-        throw detachError;
-      }
       values.push(id);
       const updated = await tx.query(
         `UPDATE chat_conversations
@@ -739,18 +729,6 @@ router.put('/conversations/:id', async (req, res) => {
          RETURNING *`,
         values,
       );
-      if (project_id !== undefined && project_id !== current.rows[0].project_id) {
-        await tx.query(
-          `DELETE FROM relationship_tuples
-           WHERE object_type = 'conversation' AND object_id = $1 AND relation IN ('owner', 'parent')`,
-          [id],
-        );
-        await writeTuples(tx, { writes: [{
-          object: `conversation:${id}`,
-          relation: project_id ? 'parent' : 'owner',
-          subject: project_id ? `project:${project_id}` : `user:${userId}`,
-        }] });
-      }
       return updated;
     });
 
@@ -764,10 +742,50 @@ router.put('/conversations/:id', async (req, res) => {
     });
   } catch (error) {
     if (sendChatAuthorityError(res, error)) return;
-    if (error.code === 'project_detach_forbidden') {
-      return res.status(409).json({ success: false, error: error.message, code: error.code });
-    }
     console.error('Failed to update conversation:', error);
+    res.status(500).json({ success: false, error: 'Internal server error' });
+  }
+});
+
+// XENO-WORKFORCE-01 SES-05 -- moving a conversation into a project is its own two-step action.
+// The preview names who will be able to read it and how much history goes with it; the move is
+// accepted only against that exact preview (its consent revision) and only once nothing is running.
+function sendMoveError(res, error) {
+  if (!(error instanceof ConversationMoveError)) return false;
+  res.status(error.status).json({ success: false, error: error.message, code: error.code });
+  return true;
+}
+router.post('/conversations/:id/move/preview', async (req, res) => {
+  try {
+    const userId = req.user?.id;
+    if (!userId) return res.status(401).json({ success: false, error: 'Unauthorized' });
+    if (rejectIfNotPersistedConversationId(res, req.params.id)) return;
+    const projectId = req.body?.project_id;
+    if (typeof projectId !== 'string' || !UUID_RE.test(projectId)) {
+      return res.status(400).json({ success: false, error: 'project_id is required', code: 'invalid_move_target' });
+    }
+    res.json({ success: true, move: await previewConversationMove(req.db, { userId, conversationId: req.params.id, projectId }) });
+  } catch (error) {
+    if (sendMoveError(res, error) || sendChatAuthorityError(res, error)) return;
+    console.error('Failed to preview conversation move:', error);
+    res.status(500).json({ success: false, error: 'Internal server error' });
+  }
+});
+router.post('/conversations/:id/move', async (req, res) => {
+  try {
+    const userId = req.user?.id;
+    if (!userId) return res.status(401).json({ success: false, error: 'Unauthorized' });
+    if (rejectIfNotPersistedConversationId(res, req.params.id)) return;
+    const projectId = req.body?.project_id;
+    if (typeof projectId !== 'string' || !UUID_RE.test(projectId)) {
+      return res.status(400).json({ success: false, error: 'project_id is required', code: 'invalid_move_target' });
+    }
+    const result = await moveConversation(req.db, { userId, conversationId: req.params.id, projectId,
+      consentRevision: req.body?.consent_revision });
+    res.json({ success: true, conversation: result.conversation });
+  } catch (error) {
+    if (sendMoveError(res, error) || sendChatAuthorityError(res, error)) return;
+    console.error('Failed to move conversation:', error);
     res.status(500).json({ success: false, error: 'Internal server error' });
   }
 });

@@ -33,6 +33,8 @@ const SKILLS_PAGE = codeOnly(readFileSync(chat('ChatSkillsWorkspace.tsx'), 'utf8
 const CUSTOMIZE = codeOnly(readFileSync(chat('chatCustomize.ts'), 'utf8'));
 const SETTINGS_PAGE = codeOnly(readFileSync(chat('ChatGlobalSettingsPage.tsx'), 'utf8'));
 const WITH_LLM = codeOnly(readFileSync(chat('ChatWithLLM.tsx'), 'utf8'));
+const MOVE_MODAL = codeOnly(readFileSync(chat('ChatMoveModal.tsx'), 'utf8'));
+const CHAT_SERVICE = codeOnly(readFileSync(join(ROOT, 'src', 'services', 'chatService.ts'), 'utf8'));
 const ROUTES = codeOnly(
   readFileSync(join(ROOT, 'src', 'server', 'routes', 'chatRoutes.js'), 'utf8'),
 );
@@ -180,12 +182,21 @@ test('project chat membership persists on create, move, list, and direct load', 
   const create = extractFrom(WITH_LLM, 'const createConversationForMessages = async');
   assert.match(create, /project_id:\s*projectId/, 'new project chats omit project_id.');
 
+  // SES-05 (2026-09-24): a persisted chat no longer moves through the general update. The menu opens
+  // the consented move dialog, and the DIALOG is what persists the move, against the preview's consent
+  // revision. Each link is asserted inside the function that must hold it, so a severed caller fails.
   const assign = extractFrom(WITH_LLM, 'const handleAssignConversationToProject = async');
-  assert.match(
-    assign,
-    /chatService\.updateConversation\(conversationId, \{ project_id: projectId \}\)/,
-    'moving an existing chat between projects is still local-only.',
-  );
+  assert.match(assign, /setPendingMove\(\{/, 'moving a persisted chat does not open the move dialog.');
+  assert.doesNotMatch(assign, /updateConversation\([^)]*project_id/, 'a move still bypasses the consented dialog.');
+  assert.match(WITH_LLM, /pendingMove && createPortal\(\s*<div[^>]*>\s*<ChatMoveModal/, 'the move dialog is never mounted.');
+  const commit = extractFrom(MOVE_MODAL, 'const commitMove = async');
+  assert.match(commit, /chatService\.moveConversation\(conversationId, projectId, preview\.consentRevision\)/,
+    'the move dialog does not persist the move against its preview\'s consent.');
+  const load = extractFrom(MOVE_MODAL, 'const load = async');
+  assert.match(load, /chatService\.previewConversationMove\(conversationId, projectId\)/, 'the move dialog shows no preview.');
+  const move = extractFrom(CHAT_SERVICE, 'async moveConversation(');
+  assert.match(move, /\/move`/, 'moveConversation does not call the move route.');
+  assert.match(move, /consent_revision: consentRevision/, 'moveConversation drops the consent revision.');
 
   assert.match(
     WITH_LLM,
@@ -222,11 +233,14 @@ test('project chat membership persists on create, move, list, and direct load', 
     'the generation payload does not carry the project id resolved from the conversation row.',
   );
 
-  assert.match(
-    ROUTES,
-    /updates\.push\(`project_id =/,
-    'the conversation update route cannot persist project_id.',
-  );
+  // The property this line guarded -- a move is actually persisted -- now lives in its own route, and
+  // is asserted there: the move route calls moveConversation, which writes project_id and the parent
+  // tuple. The general update must NOT persist it any more (SES-05), so that half is asserted too.
+  const moveRoute = extractFrom(ROUTES, "router.post('/conversations/:id/move', async");
+  assert.match(moveRoute, /await moveConversation\(req\.db,/, 'the move route does not persist the move.');
+  assert.doesNotMatch(ROUTES, /updates\.push\(`project_id =/, 'the general conversation update still moves a chat.');
+  const MOVE_SERVICE = codeOnly(readFileSync(join(ROOT, 'src', 'server', 'services', 'conversationMove.js'), 'utf8'));
+  assert.match(MOVE_SERVICE, /UPDATE chat_conversations SET project_id=\$2/, 'moveConversation does not write project_id.');
   assert.match(
     ROUTES,
     /c\.is_archived, c\.project_id/,

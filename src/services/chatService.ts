@@ -154,6 +154,32 @@ const handleResponse = async <T>(response: Response): Promise<T> => {
   return data as T;
 };
 
+/** XENO-WORKFORCE-01 SES-05: what moving a chat into a project would disclose, and to whom. */
+export interface ConversationMovePreview {
+  conversationId: string;
+  destination: { type: 'project'; id: string };
+  audience: { userId: string; displayName: string | null; isYou: boolean }[];
+  includedHistory: { messages: number; firstAt: string | null; lastAt: string | null; scope: 'entire-conversation' };
+  consentRevision: string;
+}
+
+/** A move failure keeps the server's code: the dialog must tell `consent_stale` from anything else.
+ * Text first, like handleResponse, so a Cloudflare HTML page is a named failure, not a SyntaxError. */
+const moveRequest = async <T>(path: string, body: Record<string, unknown>): Promise<T> => {
+  const response = await fetch(`${API_BASE}${path}`, { method: 'POST', headers: getAuthHeaders(), body: JSON.stringify(body) });
+  const raw = await response.text();
+  let data: { success?: boolean; error?: string; code?: string } & Record<string, unknown>;
+  try {
+    data = raw ? JSON.parse(raw) : {};
+  } catch {
+    throw new Error(`Move request failed with status ${response.status}. Non-JSON response.`);
+  }
+  if (!response.ok || !data.success) {
+    throw Object.assign(new Error(data.error || `Request failed with status ${response.status}`), { code: data.code });
+  }
+  return data as T;
+};
+
 // ============================================
 // CONVERSATION API
 // ============================================
@@ -237,6 +263,18 @@ export const chatService = {
   },
 
   // Update conversation
+  async previewConversationMove(conversationId: string, projectId: string): Promise<ConversationMovePreview> {
+    return (await moveRequest<{ move: ConversationMovePreview }>(`/conversations/${conversationId}/move/preview`,
+      { project_id: projectId })).move;
+  },
+
+  /** Moves only against the consent revision the preview returned; a stale one is refused (409). */
+  async moveConversation(conversationId: string, projectId: string, consentRevision: string): Promise<Conversation> {
+    return (await moveRequest<{ conversation: Conversation }>(`/conversations/${conversationId}/move`,
+      { project_id: projectId, consent_revision: consentRevision })).conversation;
+  },
+
+  // A move is NOT an update: `project_id` is refused here and goes through the two calls above.
   async updateConversation(
     id: string,
     data: {
@@ -245,7 +283,6 @@ export const chatService = {
       system_prompt?: string;
       persona_id?: string | null;
       is_archived?: boolean;
-      project_id?: string | null;
     }
   ): Promise<Conversation | null> {
     if (!isPersistedConversationId(id)) {
