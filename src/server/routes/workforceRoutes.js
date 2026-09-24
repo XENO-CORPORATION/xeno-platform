@@ -6,6 +6,7 @@ import { normalizeOwnerScope } from '../services/workforceScope.js';
 import { WorkforceResourceError } from '../services/workforceResources.js';
 import { apiKeyWorkforceNamespace, validApiKeyWorkforceScopes } from '../services/apiKeyWorkforceAuthority.js';
 import apiKeyWorkforceCapabilityRoutes from './apiKeyWorkforceCapabilityRoutes.js';
+import workforceOwnershipTransferRoutes from './workforceOwnershipTransferRoutes.js';
 
 const MAX_BODY_BYTES = 256 * 1024;
 const ERRORS = Object.freeze({
@@ -140,6 +141,8 @@ function catalogObservation(value, request) {
 export function createWorkforceRouter({ createWorkforceResource = defaultCreate, readWorkforceResourceOperation = defaultRead, listOwnedWorkforceResources = defaultList } = {}) {
   const router = express.Router();
   router.use('/api-key-capabilities', apiKeyWorkforceCapabilityRoutes);
+  // OWN-05: two-sided, reviewed, audited ownership transfer. Its own stricter auth bar -- see the router.
+  router.use('/ownership-transfers', workforceOwnershipTransferRoutes);
   const parse = express.json({ limit: MAX_BODY_BYTES, strict: true });
   const handle = (service, readOnly = false, project = responseObservation) => async (req, res) => {
     try {

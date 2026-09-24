@@ -126,6 +126,9 @@ test('every workforce migration applies in order from an empty database', { skip
         'workforce_divisions',
         'workforce_handoffs',
         'workforce_operations',
+        // OWN-05, 2026-09-24 -- widened only because the requirement it implements is now cited by
+        // a real test (workforce-ownership-transfer.test.mjs), exactly as the message below asks.
+        'workforce_ownership_transfers',
         'workforce_resource_operations',
         'workforce_resources',
         'workforce_team_memberships',
@@ -169,14 +172,23 @@ test('every workforce migration applies in order from an empty database', { skip
         'workforce_assignment_member_sets.admitted_at',
         'workforce_assignment_member_sets.admitted_by_user_id',
         'workforce_handoffs.accepted_at',
+        // OWN-05's DESTINATION ACCEPTANCE of an ownership move -- added 2026-09-24 with
+        // 20260924160000-workforce-ownership-transfer.sql, and recorded here on purpose rather than
+        // filtered out. It is a consent shape the spec REQUIRES ("ownership transfer requires ...
+        // destination acceptance") and it is not a way of JOINING: it admits no principal to work,
+        // grants no membership and touches no roster. It could not reuse the three below -- an
+        // assignment never moves ownership (ASN-01) and a handoff "moves work, never authority".
+        'workforce_ownership_transfers.accepted_at',
+        'workforce_ownership_transfers.accepted_by_user_id',
         'workforce_workspace_assignments.accepted_at',
         'workforce_workspace_assignments.source_approved_at',
         'workforce_workspace_assignments.source_approved_by_user_id',
         'workforce_workspace_assignments.target_accepted_by_user_id',
-      ], 'a new consent-bearing column means a fourth consent shape. LIFE-01 forbids that: a ' +
-         'principal joins through the EXISTING two-sided assignment acceptance, the admitted ' +
+      ], 'a new consent-bearing column means a new consent shape. LIFE-01 forbids one for JOINING: ' +
+         'a principal joins through the EXISTING two-sided assignment acceptance, the admitted ' +
          'member set, and -- for work already in flight -- handoff acceptance. If this list grew, ' +
-         'employment was invented rather than reused.');
+         'either employment was invented rather than reused, or a new act that is not joining needs ' +
+         'its consent recorded here with the requirement that demands it -- as OWN-05 transfer is.');
 
       // Said the other way round, because the assertion above would also pass if somebody deleted
       // the membership table outright: the table exists, and it holds no consent of its own.
@@ -196,13 +208,14 @@ test('every workforce migration applies in order from an empty database', { skip
     // Tested HERE because the guard is a trigger on a table created many migrations earlier, and
     // this is the only suite in which the whole chain, and therefore the trigger, exists.
     //
-    // ⚠️ DELIBERATELY NOT CITED AS OWN-05, and this is the one place an honest reading and a
-    // flattering one diverge. OWN-05's "never silently migrates" is about SECRETS and ACTIVE RUNS,
-    // not the ownership row; its transfer obligations (source authorization, destination
-    // acceptance, dependency/licence review, an auditable operation) are unbuilt. The first draft
-    // of this change froze the owner columns and titled itself OWN-05 -- which would have claimed
-    // the requirement while making transfer impossible and the acceptance check's owner
-    // comparison permanently dead code. This is the smaller, true thing.
+    // ⚠️ NOT CITED AS OWN-05 HERE -- OWN-05 is proven in workforce-ownership-transfer.test.mjs,
+    // against 20260924160000-workforce-ownership-transfer.sql, which builds the obligations this
+    // note used to list as unbuilt: source authorization, destination acceptance, a review checked
+    // against the declared secrets and licences, and a decision record the move commits under.
+    // This case stays the smaller, true thing it always was -- a revision bump on ANY owner change,
+    // including the transfer's own -- and the reason it was never titled OWN-05 still holds: the
+    // first draft froze the owner columns, which would have claimed the requirement while making
+    // the transfer impossible.
     await t.test('a resource owner cannot change without its revision advancing', async () => {
       const [humanA, humanB] = ['00000000-0000-4000-8000-00000000a001', '00000000-0000-4000-8000-00000000a002'];
       const co = '00000000-0000-4000-8000-00000000c001';
