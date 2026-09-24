@@ -1,8 +1,15 @@
-/* ⚠️ VIEW-01 AND VIEW-02 ARE DELIBERATELY NOT CITED BY THIS SUITE, AND IT IS CLOSER THAN IT LOOKS.
+/* ✅ VIEW-01 AND VIEW-02 ARE BOTH NOW CITED, each in its own suite -- see each entry. This note is kept
+ * as the record of what was missing, which is what those suites were built to close.
+ *
+ * (as recorded) VIEW-01 AND VIEW-02 WERE DELIBERATELY NOT CITED BY THIS SUITE.
  * This is the one list API in the workforce estate, so it is where the VIEW family would be cited
  * if anything were. Checked against `src/server/services/workforceCatalog.js`, not assumed:
  *
- *   VIEW-01  "global lists are authorized aggregates, never a tenant or permission bypass. Filter
+ *   VIEW-01  ✅ NOW CITED, in workforce-catalog-global-view.test.mjs (2026-09-24): `view: 'global'`
+ *            is the aggregate, computed by the SAME read rule as every per-scope view, and it carries
+ *            the two filters recorded below as missing -- `assignedTo` and `search` -- plus `access`
+ *            and `owner`, with a keyset cursor bound to all of them. As recorded:
+ *            "global lists are authorized aggregates, never a tenant or permission bypass. Filter
  *            metadata by owner, access type, assignment, status and search; paginate server-side."
  *            MOST of it is proven below: the list is authorization-gated per owner and refuses
  *            creators, parent edges and unrelated members; it filters by owner, kind and status;

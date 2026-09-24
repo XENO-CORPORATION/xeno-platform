@@ -40,11 +40,21 @@
  * VIEWS list, so a new view cannot ride on this measurement either. `project` is excluded from
  * the timing only because this dataset seeds no projects; it is a single indexed project lookup.
  *
+ * AND THE GLOBAL VIEW (VIEW-01, 2026-09-24) IS THE HEAVIEST QUERY THE ROUTE SERVES: the caller here
+ * reads all 100 workspaces, so an unfiltered global page ranges over all 11,000 resources and all
+ * 25,000 accepted assignments. A quarter of the samples are global (an eighth searched), and their
+ * p95 is asserted SEPARATELY, because a mix can hide one slow view inside several fast ones.
+ *
  * Measured 2026-09-23 (WSL2, Ryzen 9 9950X, PostgreSQL 16.15): p50 10.4 ms, p95 14.9 ms, max 63.6 ms,
  * index scan on workforce_resources_workspace_catalog. Mutation-checked: dropping that index fails the
  * plan check; adding an unmeasured `/assignments/list` route fails the enumeration; a 600 ms stall in
  * the catalog query fails the p95 budget. Restored, 6/6.
  *
+ * 2026-09-24 (VIEW-01): global view p50 141 ms, p95 171 ms over 50 samples, the caller reading all
+ * 100 workspaces (the worst case). EXPLAIN puts the query itself at ~27 ms; the rest is the per-scope
+ * authority check, deliberately one `scopeReadable` per workspace so the aggregate cannot drift
+ * from the per-scope rule. Mutation-checked: dropping `global` from QUALIFIED_VIEWS fails the view
+ * enumeration, and a 600 ms stall in the global authority fails the p95 budget (768 ms mixed).
  * 2026-09-24 (VIEW-02): p50 17.1 ms, p95 24.2 ms at the envelope with 25,000 accepted assignments and
  * half the samples on the assigned view, which reads workforce_workspace_assignments_target_catalog.
  * Mutation-checked: declaring an unmeasured `global` view fails the view enumeration; dropping the
@@ -74,7 +84,7 @@ const SAMPLES = 200, PAGE = 50, P95_BUDGET_MS = 500;
 /** Every workforce list route this suite qualifies. A new one must be added here WITH a measurement. */
 const QUALIFIED = ['/resources/list'];
 /** Every view of that route this suite measures, and the one it deliberately does not time. */
-const QUALIFIED_VIEWS = ['owned', 'assigned'], UNTIMED_VIEWS = { project: 'no projects in the NFR-04 envelope' };
+const QUALIFIED_VIEWS = ['owned', 'assigned', 'global'], UNTIMED_VIEWS = { project: 'no projects in the NFR-04 envelope' };
 
 test('every view the catalog serves is one this suite measures or names (NFR-04)', () => {
   const text = readFileSync(new URL('../src/server/services/workforceCatalog.js', import.meta.url), 'utf8');
@@ -182,6 +192,7 @@ test('workforce list API p95 at the NFR-04 envelope (NFR-04)', { skip: workforce
     };
     const workspaceIds = (await pool.query('SELECT id FROM workspaces ORDER BY id')).rows.map(r => r.id);
     const request = (workspace, rest = {}) => ({ owner: { type: 'workspace', id: workspace }, expectedActorAccountId: human, limit: PAGE, ...rest });
+    const globalRequest = (rest = {}) => ({ view: 'global', expectedActorAccountId: human, limit: PAGE, ...rest });
 
     await t.test('a page is correct before it is timed', async () => {
       // A fast wrong answer is not a qualified list. Walk one workspace completely by cursor and
@@ -199,26 +210,36 @@ test('workforce list API p95 at the NFR-04 envelope (NFR-04)', { skip: workforce
     // Warm the connection pool and the JIT so the samples measure the route, not first-touch cost.
     for (let i = 0; i < 20; i++) await post(request(workspaceIds[i % WORKSPACES]));
 
-    const samples = [];
+    const samples = [], globalSamples = [];
     await t.test(`${SAMPLES} requests across every workspace: p95 <= ${P95_BUDGET_MS} ms`, async () => {
       for (let i = 0; i < SAMPLES; i++) {
         const ws = workspaceIds[i % WORKSPACES];
         // Every other sample is the ASSIGNED view (VIEW-02). Kind-filtered pages stay on the owned
         // view, because assignments in this dataset are agent-only and a team filter would be empty.
-        const view = i % 2 === 1 ? { view: 'assigned' } : {};
-        let body = request(ws, i % 5 === 4 && !view.view ? { kind: 'team' } : view);
+        // A quarter of the samples are GLOBAL (VIEW-01), half of those searched; the rest alternate
+        // owned and assigned (VIEW-02).
+        const which = i % 4 === 3 ? 'global' : i % 2 === 1 ? 'assigned' : 'owned';
+        const make = (rest = {}) => which === 'global'
+          ? globalRequest(i % 8 === 7 ? { search: 'Resource 5', ...rest } : rest)
+          : request(ws, which === 'assigned' ? { view: 'assigned', ...rest } : rest);
+        let body = which === 'owned' && i % 5 === 4 ? request(ws, { kind: 'team' }) : make();
         if (i % 3 === 2) {
-          const first = await post(request(ws, view));
+          const first = await post(make());
           assert.equal(first.status, 200);
-          body = request(ws, { ...view, cursor: first.body.nextCursor });
+          body = make({ cursor: first.body.nextCursor });
         }
         const r = await post(body);
         assert.equal(r.status, 200, `request ${i} failed: ${JSON.stringify(r.body)}`);
         assert.ok(r.body.items.length > 0, `request ${i} returned an empty page`);
         samples.push(r.ms);
+        if (which === 'global') globalSamples.push(r.ms);
       }
       samples.sort((a, b) => a - b);
+      globalSamples.sort((a, b) => a - b);
       assert.ok(percentile(samples, 95) <= P95_BUDGET_MS, `p95 ${percentile(samples, 95).toFixed(1)} ms exceeds ${P95_BUDGET_MS} ms`);
+      assert.ok(globalSamples.length >= 40, 'the global view was sampled');
+      assert.ok(percentile(globalSamples, 95) <= P95_BUDGET_MS,
+        `global view p95 ${percentile(globalSamples, 95).toFixed(1)} ms exceeds ${P95_BUDGET_MS} ms`);
     });
 
     await t.test('the plan reads the owner catalog index, never a sequential scan of resources', async () => {
@@ -253,6 +274,8 @@ test('workforce list API p95 at the NFR-04 envelope (NFR-04)', { skip: workforce
         assert.deepEqual(assignmentScans.filter(n => n['Node Type'] === 'Seq Scan').map(n => n['Node Type']), [],
           'the assigned view sequentially scans workforce_workspace_assignments at the envelope');
         console.log('NFR-04 evidence:', JSON.stringify({
+          globalSamples: globalSamples.length, globalP50Ms: Number(percentile(globalSamples, 50).toFixed(2)),
+          globalP95Ms: Number(percentile(globalSamples, 95).toFixed(2)),
           assignedPlan: assignmentScans.map(n => ({ node: n['Node Type'], index: n['Index Name'] ?? null })),
           assignedExecutionMs: assignedPlan['Execution Time'],
           route: 'POST /api/workforce/resources/list', dataset: counts, samples: samples.length, pageSize: PAGE,
