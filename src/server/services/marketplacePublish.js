@@ -22,6 +22,54 @@ export const VALID_KINDS = new Set([
   'app-native', 'app-sandboxed', 'panel', 'plugin', 'mcp', 'model', 'mind', 'swarm',
 ]);
 
+// The agent kinds (SPEC §2): `mind` is one Anima, `swarm` a coordinated package. `swarm` is the LEGACY
+// name for what the .xanima format calls a swarm-kind container; it stays a listing kind so every
+// existing swarm listing keeps working (XENO-WORKFORCE-01 MKT-03).
+export const AGENT_KINDS = new Set(['mind', 'swarm']);
+
+/** The .xanima manifest `kind` each agent listing kind must carry. */
+const XANIMA_KIND_FOR_LISTING = Object.freeze({ mind: 'anima', swarm: 'swarm' });
+
+function agentManifestProblems(kind, m) {
+  if (!m || typeof m !== 'object' || Array.isArray(m) || m.format !== 'xanima'
+    || !Number.isInteger(m.schemaVersion) || m.schemaVersion < 1) return ['manifest_not_xanima'];
+  const problems = [];
+  if (m.kind !== XANIMA_KIND_FOR_LISTING[kind]) problems.push('manifest_kind_mismatch');
+  const minds = Array.isArray(m.minds) ? m.minds : [];
+  if (minds.some((entry) => !entry || typeof entry !== 'object' || Array.isArray(entry))) return [...problems, 'manifest_not_xanima'];
+  if (minds.length === 0) problems.push('package_lists_no_minds');
+  else if (kind === 'mind' && minds.length !== 1) problems.push('mind_carries_one_mind');
+  if (kind === 'swarm' && (!m.wiring || typeof m.wiring !== 'object' || Array.isArray(m.wiring))) problems.push('swarm_requires_wiring');
+  // The Soul is the agent's EARNED, private self and never transfers with a sold or rented Mind
+  // (SPEC D3; .xanima carries a reference by default and `embedded: true` only on explicit export).
+  if (minds.some((entry) => entry.soul?.embedded === true)) problems.push('private_soul_embedded');
+  return problems;
+}
+
+/**
+ * XENO-WORKFORCE-01 MKT-03 -- what an AGENT version must be before it can be published: licensed, and,
+ * when it ships an artifact, a signed canonical `.xanima` whose declared manifest matches the listing.
+ * Returns the reasons it cannot be published ([] when it can, and always [] for a non-agent kind).
+ *
+ * The database holds the same rules as its own invariant (20260925100000); this is the early answer a
+ * seller gets at upload instead of at approval. Signature VALIDITY is checked by the route with
+ * verifyEd25519 -- here only its presence, because a pure function has no key to check it against.
+ *
+ * A version with no artifact is a hosted-only serving version (MKT-05): it still needs its licence.
+ */
+export function agentVersionProblems(kind, v) {
+  if (!AGENT_KINDS.has(kind)) return [];
+  const problems = [];
+  if (typeof v.license !== 'string' || !v.license.trim()) problems.push('license_required');
+  const locations = [v.artifactR2Key, v.artifactUrl ? String(v.artifactUrl).split('?')[0] : null].filter(Boolean);
+  if (locations.length) {
+    if (!locations.every((location) => String(location).toLowerCase().endsWith('.xanima'))) problems.push('artifact_not_canonical');
+    if (!(typeof v.sha256 === 'string' && /^[0-9a-f]{64}$/i.test(v.sha256) && v.sig && v.pubkey)) problems.push('artifact_unsigned');
+    problems.push(...agentManifestProblems(kind, v.manifest));
+  }
+  return problems;
+}
+
 export const VALID_TRUST_TIERS = new Set(['community', 'verified', 'official']);
 export const VALID_PRICING_MODELS = new Set(['free', 'one_time', 'subscription', 'pay_per_use', 'rental']);
 
@@ -142,6 +190,17 @@ export function runAutomatedChecks({ kind, trustTier, license }, versionRow) {
     checks.noNativeForCommunity = { pass: true, detail: 'no native code on community tier' };
   }
 
+  // 6. MKT-03 -- an agent version is a licensed, signed, canonical .xanima (see agentVersionProblems).
+  if (AGENT_KINDS.has(kind)) {
+    const problems = agentVersionProblems(kind, {
+      license: versionRow?.license, artifactR2Key: versionRow?.artifact_r2_key, artifactUrl: versionRow?.artifact_url,
+      sha256: versionRow?.artifact_sha256, sig: versionRow?.ed25519_sig, pubkey: versionRow?.ed25519_pubkey, manifest,
+    });
+    checks.agentPackage = problems.length
+      ? { pass: false, detail: problems.join(', ') }
+      : { pass: true, detail: 'licensed agent version; any artifact is a signed canonical .xanima' };
+  }
+
   const passed = Object.values(checks).every((c) => c.pass);
   return { passed, checks };
 }
@@ -158,6 +217,8 @@ export function resolvePublishTrustTier(developerTier) {
 
 export default {
   COMMUNITY_FORBIDDEN_KINDS,
+  AGENT_KINDS,
+  agentVersionProblems,
   VALID_KINDS,
   VALID_TRUST_TIERS,
   VALID_PRICING_MODELS,

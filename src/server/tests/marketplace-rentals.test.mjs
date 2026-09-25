@@ -111,9 +111,15 @@ test('a rental runs a serving version where its licence allows, and stops when i
   const mkListing = async (slug, license) => (await pool.query(
     `INSERT INTO marketplace_listings(slug,kind,developer_id,title,status,rental_license) VALUES($1,'mind',$2,$1,'published',$3::jsonb) RETURNING id`,
     [`${marker}-${slug}`, dev, JSON.stringify({ schemaVersion: 1, ...license })])).rows[0].id;
+  // A published agent version is licensed and, when it ships an artifact, a signed canonical .xanima
+  // (MKT-03, 20260925100000). The signature material is shape-only here: this suite is about rentals.
   const mkVersion = async (listing, version, { servable, gated }) => (await pool.query(
-    `INSERT INTO marketplace_listing_versions(listing_id,version,artifact_r2_key,servable,published_at)
-     VALUES($1,$2,$3,$4,now()) RETURNING id`, [listing, version, gated ? `private/${listing}/${version}.xanima` : null, servable])).rows[0].id;
+    `INSERT INTO marketplace_listing_versions(listing_id,version,artifact_r2_key,servable,published_at,license,
+       artifact_sha256,ed25519_sig,ed25519_pubkey,manifest)
+     VALUES($1,$2,$3,$4,now(),'Proprietary',$5,$6,$6,$7::jsonb) RETURNING id`,
+    [listing, version, gated ? `private/${listing}/${version}.xanima` : null, servable,
+     gated ? 'a'.repeat(64) : null, gated ? 'c2ln' : null,
+     JSON.stringify(gated ? { format: 'xanima', schemaVersion: 1, kind: 'anima', minds: [{ id: 'm', path: 'minds/m/mind.xeno' }], entries: [] } : {})])).rows[0].id;
   const rentable = await mkListing('mind', { personal: true, workspace: true, maxWorkspaces: 1 });
   await pool.query(`INSERT INTO marketplace_listing_pricing(listing_id,model,price_credits,period) VALUES($1,'rental',10,'week')`, [rentable]);
   const privateArtifact = await mkVersion(rentable, '1.0.0', { servable: false, gated: true });

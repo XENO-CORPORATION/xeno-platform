@@ -28,7 +28,7 @@ import * as rentals from '../services/marketplaceRentals.js';
 import * as partitions from '../services/marketplaceRentalPartitions.js';
 import {
   VALID_KINDS, VALID_PRICING_MODELS,
-  verifyEd25519, runAutomatedChecks, resolvePublishTrustTier,
+  verifyEd25519, runAutomatedChecks, resolvePublishTrustTier, agentVersionProblems,
 } from '../services/marketplacePublish.js';
 
 const router = express.Router();
@@ -140,7 +140,9 @@ router.get('/listings/:slug', optionalAuthMiddleware, async (req, res) => {
       success: true,
       listing: svc.serializeListingSummary({ ...listing, pricing }),
       description: listing.description,
-      versions: versions.map((v) => svc.serializeVersion(v, { entitled, gated: isGatedVersion(v) })),
+      // MKT-03: only a reviewed (published) agent version is offered; an unreviewed one is the seller's draft.
+      versions: versions.filter((v) => !v.agent_package || v.published_at)
+        .map((v) => svc.serializeVersion(v, { entitled, gated: isGatedVersion(v) })),
       reviews: reviews.map((r) => ({
         id: r.id, rating: r.rating, title: r.title, text: r.text, author: r.author, createdAt: r.created_at,
       })),
@@ -458,6 +460,11 @@ router.get('/download/:listingVersionId', authMiddleware, async (req, res) => {
   try {
     const version = await svc.getVersionById(req.db, req.params.listingVersionId);
     if (!version) return res.status(404).json({ success: false, error: 'Version not found' });
+    // MKT-03: an agent reaches buyers only through review. An unreviewed agent version is not distributed,
+    // and answers exactly as a version that does not exist, so its existence is not disclosed either.
+    if (version.agent_package && !version.published_at) {
+      return res.status(404).json({ success: false, error: 'Version not found' });
+    }
 
     const gated = isGatedVersion(version);
     if (gated) {
@@ -699,6 +706,16 @@ router.post('/listings/:id/versions', authMiddleware, async (req, res) => {
       if (!ver.valid) return badRequest(res, `Ed25519 signature verification failed: ${ver.error || 'invalid'}`);
     }
 
+    // MKT-03: an agent version is licensed and, when it ships an artifact, a signed canonical .xanima whose
+    // manifest matches the listing. Refused here so a seller hears it at upload, not at review; the
+    // database holds the same rule for the moment the version is actually published.
+    const agentProblems = agentVersionProblems(listing.kind, {
+      license: listing.license, artifactR2Key, artifactUrl, sha256, sig: sigB64, pubkey: pubKeyB64, manifest,
+    });
+    if (agentProblems.length) {
+      return res.status(400).json({ success: false, error: 'agent_version_not_publishable', problems: agentProblems });
+    }
+
     const { rows: clash } = await req.db.query(
       `SELECT 1 FROM marketplace_listing_versions WHERE listing_id = $1 AND version = $2`,
       [listing.id, version],
@@ -708,11 +725,14 @@ router.post('/listings/:id/versions', authMiddleware, async (req, res) => {
     const { rows } = await req.db.query(
       `INSERT INTO marketplace_listing_versions
          (listing_id, version, artifact_r2_key, artifact_url, artifact_sha256, artifact_size_bytes,
-          ed25519_sig, ed25519_pubkey, release_notes, declared_capabilities, manifest, has_native_binary)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10::jsonb,$11::jsonb,$12)
+          ed25519_sig, ed25519_pubkey, release_notes, declared_capabilities, manifest, has_native_binary, license)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10::jsonb,$11::jsonb,$12,$13)
        RETURNING *`,
+      // The version carries the licence it is published under -- a snapshot of the listing's licence at
+      // this moment. A later edit to the listing's label cannot change what this version was sold under.
       [listing.id, version, artifactR2Key, artifactUrl, sha256, sizeBytes,
-       sigB64, pubKeyB64, releaseNotes, JSON.stringify(declaredCaps), JSON.stringify(manifest), hasNativeBinary],
+       sigB64, pubKeyB64, releaseNotes, JSON.stringify(declaredCaps), JSON.stringify(manifest), hasNativeBinary,
+       listing.license || null],
     );
 
     res.status(201).json({ success: true, version: svc.serializeVersion(rows[0], { entitled: true, gated: false }) });
@@ -742,9 +762,11 @@ router.post('/listings/:id/submit', authMiddleware, async (req, res) => {
     if (!versionRow) return res.status(404).json({ success: false, error: 'Version not found on this listing' });
 
     // Automated checks (SPEC §6) — D1 enforced server-side inside runAutomatedChecks.
+    // An agent version is checked against the licence IT carries (snapshotted at creation, MKT-03), not the
+    // listing's current label; other kinds keep the listing licence they always used.
     const { passed, checks } = runAutomatedChecks(
-      { kind: listing.kind, trustTier: listing.trust_tier, license: listing.license },
-      versionRow,
+      { kind: listing.kind, trustTier: listing.trust_tier, license: versionRow.agent_package ? versionRow.license : listing.license },
+      { ...versionRow, license: versionRow.agent_package ? versionRow.license : listing.license },
     );
 
     const state = passed ? 'in_review' : 'checks_failed';
@@ -876,7 +898,11 @@ router.post('/submissions/:id/approve', authMiddleware, requireAdmin, async (req
     );
     // Publish the listing + mark the version published + set current_version.
     const { rows: verRows } = await client.query(
-      `UPDATE marketplace_listing_versions SET published_at = NOW() WHERE id = $1 RETURNING version`,
+      // A published agent version's publication is part of what it IS (MKT-03), so approving it again keeps
+      // the original moment rather than rewriting it; other kinds keep their existing behaviour.
+      `UPDATE marketplace_listing_versions
+          SET published_at = CASE WHEN agent_package THEN COALESCE(published_at, NOW()) ELSE NOW() END
+        WHERE id = $1 RETURNING version`,
       [submission.listing_version_id],
     );
     await client.query(
@@ -890,6 +916,12 @@ router.post('/submissions/:id/approve', authMiddleware, requireAdmin, async (req
     res.json({ success: true, listingId: submission.listing_id, publishedVersion: verRows[0]?.version });
   } catch (error) {
     await client.query('ROLLBACK');
+    // MKT-03: the database refuses to publish an agent version that is unlicensed, unsigned, not a canonical
+    // .xanima of the listing's kind, or carrying a private Soul -- including when a reviewer approves it.
+    // That is the rule working, not a fault, so it is answered as a refusal rather than a 500.
+    if (error.code === '23514' && /agent (version|artifact|manifest|package)/.test(error.message || '')) {
+      return res.status(422).json({ success: false, error: 'agent_version_not_publishable', reason: error.message });
+    }
     console.error('[Marketplace] approve error:', error.message);
     res.status(500).json({ success: false, error: 'Failed to approve submission' });
   } finally {
