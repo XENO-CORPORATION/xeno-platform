@@ -42,6 +42,7 @@ export const DOCUMENTED_SLUGS: readonly string[] = [
   'architect',
   'form',
   'engine',
+  'browser',
 ];
 
 /** Does this product have a docs section at /docs/<slug>? */

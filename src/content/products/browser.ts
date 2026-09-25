@@ -23,11 +23,11 @@ const browser: ProductContent = {
     headline: 'The browser where your agent has hands, not just eyes.',
     sub: 'XENO Browser is real Chromium for you — and the first browser an AI agent can fully drive from a terminal. It browses, reads, clicks and types like any web agent, and — uniquely — uploads and downloads files by path, with no OS file dialog in the way.',
     media: { type: 'mockup', src: 'browser-hero', alt: 'XENO Browser — an AI agent attaches a file to a web composer by path while a scoped-consent prompt asks to approve the host-path upload' },
-    badges: ['Real Chromium', 'Agentic file I/O', 'Multi-account profiles', '.xbrowser Spaces', 'Private by default'],
-    note: 'Public beta — download the Windows build now (unsigned preview; macOS & Linux coming soon). No CAPTCHA-solving, ever.',
+    badges: ['Real Chromium', 'Agentic file I/O', 'Workspaces', 'Split view & tab groups', 'Multi-account profiles', 'Private by default'],
+    note: 'Version 0.5.0 for Windows — sign in with your XENO account to use it. Unsigned preview build; macOS & Linux not released yet. No CAPTCHA-solving, ever.',
   },
   trust: [
-    'Part of the XENO platform — one sign-in',
+    'Part of the XENO platform — opens with your XENO account',
     'Real Chromium via Electron — sites behave exactly as in Chrome',
     'Inherits the xeno-use safety model — bounded mounts, scoped consent',
   ],
@@ -62,6 +62,19 @@ const browser: ProductContent = {
         'Main-process CDP — never detaches mid-run',
         'Reaches pages an extension can’t (privileged / policy-gated)',
         'Implements xeno-use’s use-driver-web contract as a native driver',
+      ],
+    },
+    {
+      eyebrow: 'An everyday browser',
+      icon: 'Layers',
+      accent: 'radial-gradient(ellipse at 72% 26%, rgba(200,200,220,0.14), transparent 60%), linear-gradient(165deg,#131316,#070707 74%)',
+      title: 'Everything you expect from a browser, and a little more',
+      desc: 'Separate workspaces for work and home in one window, named and coloured tab groups, two tabs side by side in split view, vertical tabs, and tabs that sleep in the background without losing their place. A side panel for your reading list, history and bookmarks; translation in place; a real print preview; docked developer tools; private windows.',
+      bullets: [
+        'Workspaces — switch without reloading, restored after a restart',
+        'Tab groups, split view, vertical tabs and compact mode',
+        'Sleeping tabs free memory but never lose unsent text',
+        'Translate bar, print preview, view source, docked DevTools',
       ],
     },
     {
@@ -140,6 +153,7 @@ const browser: ProductContent = {
       { feature: 'Built-in multi-account profiles (proxy + fingerprint per account)', xeno: 'Native', them: false },
       { feature: 'Saved Spaces with agent context (.xbrowser)', xeno: true, them: 'Some' },
       { feature: 'Mature extension & add-on ecosystem', xeno: 'Growing', them: true },
+      { feature: 'Workspaces, tab groups and split view', xeno: true, them: 'Some' },
       { feature: 'Availability', xeno: 'Beta (Windows)', them: 'Shipping' },
     ],
   },
@@ -147,6 +161,8 @@ const browser: ProductContent = {
     { label: 'Engine', value: 'Electron + WebContentsView (Chromium)' },
     { label: 'Platforms', value: 'Windows (x64) · macOS & Linux planned' },
     { label: 'Project format', value: '.xbrowser (saved Spaces)' },
+    { label: 'Version', value: '0.5.0' },
+    { label: 'Account', value: 'XENO sign-in required' },
     { label: 'Status', value: 'Public beta' },
   ],
   faq: [
@@ -156,11 +172,12 @@ const browser: ProductContent = {
     { q: 'What is a Space / the .xbrowser format?', a: 'A Space is a saved browsing context — its tabs, pins, profile, and the agent’s task plus allowed mount points (an Arc-Spaces analog). It serializes to a portable .xbrowser file with autosave and crash recovery. Secrets like cookies and tokens live in the profile store, never in a shareable Space file.' },
     { q: 'Does it replace the XENO browser extension?', a: 'No — they complement each other. xeno-extension puts the agent inside your existing Chromium browser (Chrome, Edge or Brave — it is a Manifest V3 extension built on chrome.sidePanel and chrome.debugger, neither of which Firefox supports); XENO Browser is the agent inside our own browser, with the full control an extension can’t get. Both implement xeno-use’s use-driver-web contract.' },
     { q: 'Can I run multiple accounts with different fingerprints?', a: 'Yes. The built-in Profile Manager gives each account an isolated identity — its own cookies/storage, proxy, and fingerprint — plus groups, a reusable proxy library with connectivity/IP-geo checks, per-profile extensions, and an action log. Fingerprints are coherent by design for legitimate multi-account isolation; we don’t market “undetectable”, and there’s no CAPTCHA bypass. Simultaneous windows-per-profile is on the roadmap.' },
-    { q: 'When can I use it?', a: 'Now — it’s in public beta. Download the Windows build (an unsigned preview; macOS & Linux are coming). It ships the file-I/O differentiator working end-to-end from xeno-agent-cli.' },
+    { q: 'When can I use it?', a: 'Now — version 0.5.0 for Windows is in public beta. Sign in on xenostudio.ai and download it. The installer is not code-signed yet, so Windows SmartScreen asks you to confirm (More info → Run anyway). macOS and Linux have not been released.' },
+    { q: 'Do I need a XENO account?', a: 'Yes. Since 0.5.0 the browser opens behind a sign-in screen: you sign in with your XENO account in your own web browser (XENO Browser never sees your password), and nothing of the browser runs until the platform confirms your account may use it. A network outage never locks you out — the last confirmed answer holds for 14 days.' },
   ],
   seo: {
     title: 'XENO Browser — the agent-native web browser',
-    description: 'Real Chromium for you, and the first browser an AI agent can fully drive from a terminal — uploading and downloading files by path with no OS dialog. Saved Spaces (.xbrowser), scoped consent, private by default. In public beta — download for Windows.',
+    description: 'Real Chromium for you, and the first browser an AI agent can fully drive from a terminal — uploading and downloading files by path with no OS dialog. Saved Spaces (.xbrowser), scoped consent, private by default. Version 0.5.0 for Windows, in public beta — sign in with your XENO account.',
   },
 };
 
