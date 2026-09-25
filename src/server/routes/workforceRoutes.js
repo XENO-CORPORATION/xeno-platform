@@ -112,6 +112,36 @@ const defaultRead = async (...args) => (await import('../services/workforceResou
 const defaultList = async (...args) => (await import('../services/workforceCatalog.js')).listOwnedWorkforceResources(...args);
 const defaultAdmit = async (...args) => (await import('../services/workforceRunAdmission.js')).admitRun(...args);
 const defaultReadAdmission = async (...args) => (await import('../services/workforceRunAdmission.js')).readRunAdmission(...args);
+// RUN-03: the lease is signed with the platform's OWN active OIDC key -- the one published at
+// /api/oauth2/jwks -- so any runtime can verify it offline against the public JWKS, and no key
+// ever comes from a request.
+const defaultAuthorizeStep = async (db, context, body) => {
+  const [{ authorizeRunStep }, { getSigningKey }] = await Promise.all([
+    import('../services/workforceRunAuthority.js'), import('../utils/oidcProvider.js')]);
+  const key = await getSigningKey(db);
+  return authorizeRunStep(db, context, body, { signingKey: { kid: key.kid, privatePem: key.privatePem } });
+};
+const defaultRevokeRun = async (db, context, body) => (await import('../services/workforceRunAuthority.js')).revokeRun(db, context, body.admissionId);
+const defaultReadAuthority = async (db, context, body) => (await import('../services/workforceRunAuthority.js')).readRunAuthority(db, context, body.admissionId);
+
+/** RUN-03: a step authorization is a signed lease plus its public record, and nothing else. */
+const LEASE_FIELDS = ['schemaVersion', 'leaseId', 'admissionId', 'sequence', 'operation', 'capability', 'effectiveCapabilities', 'issuedAt', 'expiresAt', 'kid'];
+function leaseObservation(value) {
+  try {
+    const l = value?.lease;
+    if (!l || l.schemaVersion !== 1 || uuid(l.leaseId) !== l.leaseId || uuid(l.admissionId) !== l.admissionId
+      || typeof l.sequence !== 'string' || !/^[1-9][0-9]{0,18}$/.test(l.sequence) || !capabilities(l.effectiveCapabilities)
+      || typeof value.token !== 'string' || !/^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/.test(value.token)
+      || !(Date.parse(l.expiresAt) > Date.parse(l.issuedAt)) || Date.parse(l.expiresAt) - Date.parse(l.issuedAt) > 60_000) return null;
+    return { lease: fields(l, LEASE_FIELDS), token: value.token };
+  } catch { return null; }
+}
+function authorityObservation(value) {
+  try {
+    if (!value || value.schemaVersion !== 1 || uuid(value.admissionId) !== value.admissionId || typeof value.revoked !== 'boolean') return null;
+    return fields(value, ['schemaVersion', 'admissionId', 'revoked', 'reason', 'revokedAt', 'latestLeaseSequence', 'replayed']);
+  } catch { return null; }
+}
 
 /** RUN-01: an admission is reported only in the shape the service decided it. The router projects
  * the documented fields and refuses anything that is not a whole admission -- a truthy object is
@@ -248,7 +278,8 @@ function globalObservation(value, request) {
  * Domain input normalization, canonical principal/ReBAC checks and transactions
  * belong to the real service, not the renderer or this routing adapter. */
 export function createWorkforceRouter({ createWorkforceResource = defaultCreate, readWorkforceResourceOperation = defaultRead, listOwnedWorkforceResources = defaultList,
-  admitRun = defaultAdmit, readRunAdmission = defaultReadAdmission } = {}) {
+  admitRun = defaultAdmit, readRunAdmission = defaultReadAdmission, authorizeRunStep = defaultAuthorizeStep,
+  revokeRun = defaultRevokeRun, readRunAuthority = defaultReadAuthority } = {}) {
   const router = express.Router();
   router.use('/api-key-capabilities', apiKeyWorkforceCapabilityRoutes);
   // OWN-05: two-sided, reviewed, audited ownership transfer. Its own stricter auth bar -- see the router.
@@ -282,6 +313,7 @@ export function createWorkforceRouter({ createWorkforceResource = defaultCreate,
         if (Number.isSafeInteger(error.details.currentVersion)) extra.currentVersion = error.details.currentVersion;
         if (typeof error.details.availableMicro === 'string' && /^[0-9]{1,20}$/.test(error.details.availableMicro)) extra.availableMicro = error.details.availableMicro;
         if (typeof error.details.field === 'string' && /^[a-zA-Z.]{1,64}$/.test(error.details.field)) extra.field = error.details.field;
+        if (typeof error.details.revocation === 'string' && /^[a-z_]{1,32}$/.test(error.details.revocation)) extra.revocation = error.details.revocation;
         return fail(res, error.code, { schemaVersion: 1, reason: error.details.reason, ...extra });
       }
       return fail(res, Object.hasOwn(ERRORS, error?.code) ? error.code : 'internal');
@@ -300,7 +332,21 @@ export function createWorkforceRouter({ createWorkforceResource = defaultCreate,
       if (Object.keys(body).some(key => key !== 'admissionId')) throw Object.assign(new Error('unknown field'), { code: 'bad_input' });
       return readRunAdmission(db, context, body.admissionId);
     }, true, admissionObservation));
-  for (const path of ['/resources', '/resources/list', '/resource-operations/read', '/run-admissions', '/run-admissions/read']) {
+  // RUN-03: before each privileged call and each new provider dispatch the runtime asks again, and the
+  // answer -- a signed lease of at most 60 s, or a typed refusal -- is re-derived from live rows. A
+  // manage act because a lease authorizes spending. Stopping a run is too; reading its state is a read.
+  const onlyAdmission = (service) => (db, context, body) => {
+    if (Object.keys(body).some(key => key !== 'admissionId')) throw Object.assign(new Error('unknown field'), { code: 'bad_input' });
+    return service(db, context, body);
+  };
+  router.post('/run-admissions/authorize-step', authMiddleware, requireDpopIfBound, requireWorkforceScope('workforce:manage'), parse,
+    handle(authorizeRunStep, false, leaseObservation));
+  router.post('/run-admissions/revoke', authMiddleware, requireDpopIfBound, requireWorkforceScope('workforce:manage'), parse,
+    handle(onlyAdmission(revokeRun), false, authorityObservation));
+  router.post('/run-admissions/authority', authMiddleware, requireDpopIfBound, requireWorkforceScope('workforce:read'), parse,
+    handle(onlyAdmission(readRunAuthority), true, authorityObservation));
+  for (const path of ['/resources', '/resources/list', '/resource-operations/read', '/run-admissions', '/run-admissions/read',
+    '/run-admissions/authorize-step', '/run-admissions/revoke', '/run-admissions/authority']) {
     router.all(path, (_req, res) => res.set('Allow', 'POST').status(405).json({ success: false, code: 'bad_input', error: 'Method not allowed.' }));
   }
   router.use((error, _req, res, _next) => {
