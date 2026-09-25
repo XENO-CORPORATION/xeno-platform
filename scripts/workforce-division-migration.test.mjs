@@ -21,9 +21,12 @@
  *           reads it at spend time, because there is no spend path. Citing DIV-07 would claim the
  *           half that decides who actually pays.
  *   DIV-08  "a division scope is a VISIBILITY and an EXECUTION boundary, ENFORCED AT ADMISSION."
- *           Nothing enforces it; RUN-02's intersection does not exist. This is precisely the
- *           *"UI label mistaken for pool enforcement"* failure §21 names, so a citation here
- *           would be the exact mistake the requirement warns about. */
+ *           Still not cited. RUN-02's intersection now exists (workforce-run-admission.test.mjs,
+ *           2026-09-25) and a division-targeted assignment is admitted under its OWN grant, never
+ *           unioned with its parent scope -- that is the EXECUTION half's precondition. What is
+ *           missing is the boundary itself: admission does not ask whether the ACTOR sits inside
+ *           the division, and nothing filters VISIBILITY by it. Citing DIV-08 now would still be
+ *           the *"UI label mistaken for pool enforcement"* failure §21 names. */
 
 import test from 'node:test';
 import assert from 'node:assert/strict';

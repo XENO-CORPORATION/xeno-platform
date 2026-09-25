@@ -110,6 +110,27 @@ function requireWorkforceScope(scope) {
 const defaultCreate = async (...args) => (await import('../services/workforceResources.js')).createWorkforceResource(...args);
 const defaultRead = async (...args) => (await import('../services/workforceResources.js')).readWorkforceResourceOperation(...args);
 const defaultList = async (...args) => (await import('../services/workforceCatalog.js')).listOwnedWorkforceResources(...args);
+const defaultAdmit = async (...args) => (await import('../services/workforceRunAdmission.js')).admitRun(...args);
+const defaultReadAdmission = async (...args) => (await import('../services/workforceRunAdmission.js')).readRunAdmission(...args);
+
+/** RUN-01: an admission is reported only in the shape the service decided it. The router projects
+ * the documented fields and refuses anything that is not a whole admission -- a truthy object is
+ * not a run the platform agreed to. */
+const ADMISSION_FIELDS = ['schemaVersion', 'admissionId', 'operationId', 'agent', 'target', 'team', 'conversationId', 'root',
+  'entitlementId', 'payer', 'budget', 'capabilities', 'memoryNamespace', 'admittedAt'];
+function admissionObservation(value) {
+  try {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+    const a = value.admission ?? value;
+    if (!a || a.schemaVersion !== 1 || uuid(a.admissionId) !== a.admissionId || !a.agent || !a.target || !a.payer || !a.budget
+      || !a.capabilities || !Array.isArray(a.capabilities.effective) || !capabilities(a.capabilities.effective)
+      || typeof a.admittedAt !== 'string' || !Number.isFinite(Date.parse(a.admittedAt))) return null;
+    const admission = fields(a, ADMISSION_FIELDS);
+    return Object.hasOwn(value, 'admission')
+      ? { admission, replayed: value.replayed === true }
+      : { admission };
+  } catch { return null; }
+}
 const capabilities = value => Array.isArray(value) && value.length <= 64
   && value.every(c => typeof c === 'string' && /^[a-zA-Z0-9][a-zA-Z0-9._:/@+-]{0,127}$/.test(c));
 const revisionString = value => typeof value === 'string' && /^[1-9][0-9]{0,18}$/.test(value);
@@ -226,7 +247,8 @@ function globalObservation(value, request) {
  * are injectable for HTTP boundary qualification only, never from request data.
  * Domain input normalization, canonical principal/ReBAC checks and transactions
  * belong to the real service, not the renderer or this routing adapter. */
-export function createWorkforceRouter({ createWorkforceResource = defaultCreate, readWorkforceResourceOperation = defaultRead, listOwnedWorkforceResources = defaultList } = {}) {
+export function createWorkforceRouter({ createWorkforceResource = defaultCreate, readWorkforceResourceOperation = defaultRead, listOwnedWorkforceResources = defaultList,
+  admitRun = defaultAdmit, readRunAdmission = defaultReadAdmission } = {}) {
   const router = express.Router();
   router.use('/api-key-capabilities', apiKeyWorkforceCapabilityRoutes);
   // OWN-05: two-sided, reviewed, audited ownership transfer. Its own stricter auth bar -- see the router.
@@ -251,13 +273,34 @@ export function createWorkforceRouter({ createWorkforceResource = defaultCreate,
           return fail(res, 'unavailable', { schemaVersion: 1, reason: 'operation_state_uncertain', ...identity });
         } catch { return fail(res, 'internal'); }
       }
+      // A run-admission refusal carries its typed reason, because the reason IS the answer a client
+      // acts on (re-pin a stale version, ask for budget approval, re-admit a member). Only the
+      // closed schemaVersion + reason (+ the one documented number) cross; nothing else of `details`.
+      if (error?.name === 'RunAdmissionError' && Object.hasOwn(ERRORS, error.code)
+        && typeof error.details?.reason === 'string' && /^[a-z_]{1,64}$/.test(error.details.reason)) {
+        const extra = {};
+        if (Number.isSafeInteger(error.details.currentVersion)) extra.currentVersion = error.details.currentVersion;
+        if (typeof error.details.availableMicro === 'string' && /^[0-9]{1,20}$/.test(error.details.availableMicro)) extra.availableMicro = error.details.availableMicro;
+        if (typeof error.details.field === 'string' && /^[a-zA-Z.]{1,64}$/.test(error.details.field)) extra.field = error.details.field;
+        return fail(res, error.code, { schemaVersion: 1, reason: error.details.reason, ...extra });
+      }
       return fail(res, Object.hasOwn(ERRORS, error?.code) ? error.code : 'internal');
     }
   };
   router.post('/resources', authMiddleware, requireDpopIfBound, requireWorkforceScope('workforce:manage'), parse, handle(createWorkforceResource));
   router.post('/resources/list', authMiddleware, requireDpopIfBound, requireWorkforceScope('workforce:read'), parse, handle(listOwnedWorkforceResources, true, catalogObservation));
   router.post('/resource-operations/read', authMiddleware, requireDpopIfBound, requireWorkforceScope('workforce:read'), parse, handle(readWorkforceResourceOperation, true));
-  for (const path of ['/resources', '/resources/list', '/resource-operations/read']) {
+  // RUN-01/RUN-02: admit one run. The service resolves every fact from authoritative rows and computes
+  // the intersection; this adapter only authenticates (workforce:manage -- admitting a run commits a
+  // payer's budget) and bounds the body. Reading an admission back is a workforce:read.
+  router.post('/run-admissions', authMiddleware, requireDpopIfBound, requireWorkforceScope('workforce:manage'), parse,
+    handle(admitRun, false, admissionObservation));
+  router.post('/run-admissions/read', authMiddleware, requireDpopIfBound, requireWorkforceScope('workforce:read'), parse,
+    handle((db, context, body) => {
+      if (Object.keys(body).some(key => key !== 'admissionId')) throw Object.assign(new Error('unknown field'), { code: 'bad_input' });
+      return readRunAdmission(db, context, body.admissionId);
+    }, true, admissionObservation));
+  for (const path of ['/resources', '/resources/list', '/resource-operations/read', '/run-admissions', '/run-admissions/read']) {
     router.all(path, (_req, res) => res.set('Allow', 'POST').status(405).json({ success: false, code: 'bad_input', error: 'Method not allowed.' }));
   }
   router.use((error, _req, res, _next) => {

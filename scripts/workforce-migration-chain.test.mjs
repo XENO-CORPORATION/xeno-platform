@@ -149,6 +149,9 @@ test('every workforce migration applies in order from an empty database', { skip
         'workforce_project_participations',
         'workforce_resource_operations',
         'workforce_resources',
+        // RUN-01/RUN-02, 2026-09-25 -- one run's admission, resolved from authoritative state as the
+        // intersection of every right it runs under; cited by workforce-run-admission.test.mjs.
+        'workforce_run_admissions',
         'workforce_team_memberships',
         'workforce_workspace_assignments',
       ], 'the workforce schema changed. If a table was ADDED, the requirements it implements are ' +
@@ -205,6 +208,12 @@ test('every workforce migration applies in order from an empty database', { skip
         // asserts that creating one writes no workspace, tuple, team membership or assignment.
         'workforce_project_participations.consented_at',
         'workforce_project_participations.consented_by_user_id',
+        // RUN-01's ADMISSION -- added 2026-09-25 with 20260925130000-workforce-run-admissions.sql. Not a
+        // consent at all, and not a way of JOINING: it is the platform's DECISION that one run may start,
+        // taken from rights that were already consented elsewhere (the assignment's two-sided acceptance,
+        // the admitted member set, the participation's consent). It writes no membership, tuple or roster,
+        // names no *_by_user_id of its own, and is immutable -- so it records WHEN, never a new WHO agreed.
+        'workforce_run_admissions.admitted_at',
         'workforce_workspace_assignments.accepted_at',
         'workforce_workspace_assignments.source_approved_at',
         'workforce_workspace_assignments.source_approved_by_user_id',
