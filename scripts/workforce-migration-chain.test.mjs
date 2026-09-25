@@ -152,6 +152,10 @@ test('every workforce migration applies in order from an empty database', { skip
         // RUN-01/RUN-02, 2026-09-25 -- one run's admission, resolved from authoritative state as the
         // intersection of every right it runs under; cited by workforce-run-admission.test.mjs.
         'workforce_run_admissions',
+        // RUN-03/NFR-06/NFR-10, 2026-09-25 -- every run-authority lease ever issued (at most 60 s, monotonic
+        // per admission) and the durable revocation that fences them; cited by workforce-run-authority.test.mjs.
+        'workforce_run_leases',
+        'workforce_run_revocations',
         'workforce_team_memberships',
         'workforce_workspace_assignments',
       ], 'the workforce schema changed. If a table was ADDED, the requirements it implements are ' +

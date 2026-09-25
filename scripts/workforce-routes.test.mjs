@@ -86,7 +86,15 @@ test('real HTTP/authMiddleware/JWT/DPoP boundary with query-aware auth DB and in
     return method === 'admit' ? admittedFixture() : admittedFixture().admission;
   };
   app.use(basePath, createWorkforceRouter({ createWorkforceResource: invoke('create'), readWorkforceResourceOperation: invoke('read'),
-    admitRun: admit('admit'), readRunAdmission: admit('readAdmission') }));
+    admitRun: admit('admit'), readRunAdmission: admit('readAdmission'),
+    authorizeRunStep: async (pool, context, value) => { calls.push({ method: 'authorizeStep', context, body: value }); if (admitFailure) throw admitFailure;
+      return admitResult ?? { token: 'aaa.bbb.ccc', lease: { schemaVersion: 1, leaseId: operationId, admissionId: operationId, sequence: '1',
+        operation: 'provider_dispatch', capability: null, effectiveCapabilities: ['files.read'], issuedAt: '2026-09-25T12:00:00.000Z',
+        expiresAt: '2026-09-25T12:01:00.000Z', kid: 'k', secretSigningMaterial: 'hidden' } }; },
+    revokeRun: async (pool, context, value) => { calls.push({ method: 'revoke', context, body: value });
+      return { schemaVersion: 1, admissionId: operationId, revoked: true, reason: 'stopped_by_actor', revokedAt: '2026-09-25T12:00:00.000Z', replayed: false }; },
+    readRunAuthority: async (pool, context, value) => { calls.push({ method: 'authority', context, body: value });
+      return { schemaVersion: 1, admissionId: operationId, revoked: false, reason: null, latestLeaseSequence: '1' }; } }));
   const server = app.listen(0, '127.0.0.1');
   await new Promise(resolve => server.once('listening', resolve));
   const origin = `http://127.0.0.1:${server.address().port}`;
@@ -285,6 +293,37 @@ test('real HTTP/authMiddleware/JWT/DPoP boundary with query-aware auth DB and in
         assert.equal((await request({ path: '/run-admissions', body: admission })).status, 500, 'a partial admission is not a success');
       }
       admitResult = undefined;
+    });
+    await t.test('RUN-03: each step is authorized over HTTP by the admitted actor, as a bounded signed lease', async () => {
+      const stepBody = { admissionId: operationId, operation: 'provider_dispatch' };
+      const result = await request({ path: '/run-admissions/authorize-step', body: stepBody });
+      assert.equal(result.status, 200, 'the step-authorization route is reachable');
+      assert.equal(result.body.token, 'aaa.bbb.ccc');
+      assert.ok(!JSON.stringify(result.body).includes('hidden'), 'only the documented lease fields cross');
+      assert.deepEqual(calls.at(-1).context, { actorUserId: human, clientId: 'xeno-agent-interface' }, 'the actor comes from authentication');
+      assert.equal((await request({ path: '/run-admissions/authorize-step', body: stepBody, token: mint({ scope: 'workforce:read' }) })).status, 403,
+        'a lease authorizes spending, so it needs workforce:manage');
+      for (const lease of [{ expiresAt: '2026-09-25T12:05:00.000Z' }, { sequence: '0' }]) {
+        admitResult = { token: 'aaa.bbb.ccc', lease: { schemaVersion: 1, leaseId: operationId, admissionId: operationId, sequence: '1',
+          operation: 'provider_dispatch', capability: null, effectiveCapabilities: [], issuedAt: '2026-09-25T12:00:00.000Z', expiresAt: '2026-09-25T12:01:00.000Z', kid: 'k', ...lease } };
+        assert.equal((await request({ path: '/run-admissions/authorize-step', body: stepBody })).status, 500, 'a lease longer than 60 s is never reported');
+      }
+      admitResult = undefined;
+      const { RunAdmissionError } = await import('../src/server/services/workforceRunAdmission.js');
+      admitFailure = new RunAdmissionError('denied', 'admission_revoked', { revocation: 'authority_lost', sql: 'SECRET' });
+      const refused = await request({ path: '/run-admissions/authorize-step', body: stepBody });
+      assert.equal(refused.status, 403);
+      assert.deepEqual(refused.body.details, { schemaVersion: 1, reason: 'admission_revoked', revocation: 'authority_lost' }, 'a revoked run says so, and why');
+      admitFailure = undefined;
+      const stopped = await request({ path: '/run-admissions/revoke', body: { admissionId: operationId } });
+      assert.equal(stopped.status, 200);
+      assert.equal(stopped.body.reason, 'stopped_by_actor');
+      assert.equal((await request({ path: '/run-admissions/revoke', body: { admissionId: operationId }, token: mint({ scope: 'workforce:read' }) })).status, 403);
+      const state = await request({ path: '/run-admissions/authority', body: { admissionId: operationId }, token: mint({ scope: 'workforce:read' }) });
+      assert.equal(state.status, 200);
+      assert.equal(state.body.revoked, false);
+      assert.equal((await request({ path: '/run-admissions/authority', body: { admissionId: operationId, extra: 1 } })).status, 400);
+      assert.equal((await request({ method: 'GET', path: '/run-admissions/authorize-step' })).status, 405);
     });
   } finally {
     server.closeAllConnections();
