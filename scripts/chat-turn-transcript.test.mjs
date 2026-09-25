@@ -78,8 +78,14 @@ try {
     check('a reasoning turn waiting on its first thought token is already thinking — so the clock can say Thinking', waiting.isThinking === true && waiting.thinking === '');
     const plain = toTranscriptMessage({ id: 'm4', streaming: true, replyStarted: false, timestamp: 1000 });
     check('a plain turn is not thinking just because it is live — that would invent a thought', plain.isThinking === false);
-    const kept = toTranscriptMessage({ id: 'm5', streaming: false, replyStarted: true, hadThought: true, timestamp: 1000 });
-    check('a settled reasoning wait still carries an empty thought so the clock can say Thought', kept.thinking === '' && kept.isThinking === false);
+    // A settled turn says Thought only when thought TEXT arrived. The duration the chat records
+    // is send-to-first-token — WAITING — so a Claude "hello" that never thought read
+    // `Thought for 6s` (2026-09-25). Inverted from the 0.1.55 pin, which asserted the opposite.
+    const waitedOnly = toTranscriptMessage({ id: 'm5', streaming: false, replyStarted: true, hadThought: true, timestamp: 1000, turn: { ...closeTurnRecord(newTurnRecord(1000), 7000), thinkingMs: 6000 } });
+    check('a settled turn with no thought text carries NO thought — its wait is not a thought', waitedOnly.thinking === undefined && waitedOnly.isThinking === false);
+    const thought = toTranscriptMessage({ id: 'm5b', streaming: false, replyStarted: true, hadThought: true, thinking: 'The classic trap is 10 cents.', timestamp: 1000 });
+    check('a settled turn WITH thought text keeps it', thought.thinking === 'The classic trap is 10 cents.');
+    check('while the reply has not started, a reasoning wait still says Thinking', waiting.isThinking === true && waiting.thinking === '');
   }
 
   // ── the real component, mounted ───────────────────────────────────────────────────────
