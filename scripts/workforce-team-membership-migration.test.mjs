@@ -27,7 +27,13 @@
  *            used for an earlier change is refused too. Cited THERE rather than here because the
  *            decision record is created by the handoff migration, which this suite does not load.
  *            Kept as a correction rather than deleted, like the ROLE-05 note below.
- *   RUN-02   the intersection ROLE-05 defers to. No authorizer computes it; there is no run model.
+ *   RUN-02   ✅ NOW CITED (2026-09-25), in workforce-run-admission.test.mjs, against
+ *            20260925130000-workforce-run-admissions.sql and services/workforceRunAdmission.js. This
+ *            said "no authorizer computes it; there is no run model" -- true then. A run is now admitted
+ *            as the intersection of actor authority, the pinned definition, the target grant, the
+ *            runtime ceiling, the entitlement and a funded budget, and a team run needs the actor's own
+ *            admitted membership with a manager or worker function -- the ROLE-05 deferral closed.
+ *            Kept as a correction rather than deleted, like the notes around it.
  *
  * ✅ ROLE-05 ITSELF IS NOW CITED, above, by the promotion census. An earlier version of this note
  * refused it on the grounds that "the claim is about what an authorizer COMPUTES" -- which was

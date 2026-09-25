@@ -69,7 +69,24 @@ test('real HTTP/authMiddleware/JWT/DPoP boundary with query-aware auth DB and in
   };
   const app = express();
   app.use((req, _res, next) => { req.db = db; next(); });
-  app.use(basePath, createWorkforceRouter({ createWorkforceResource: invoke('create'), readWorkforceResourceOperation: invoke('read') }));
+  // RUN-01/RUN-02 over HTTP: the admission service is injected exactly like the resource services.
+  let admitFailure;
+  let admitResult;
+  const admittedFixture = () => ({ replayed: false, admission: { schemaVersion: 1, admissionId: operationId, operationId,
+    agent: { resourceId: operationId, version: 1, contentHash: 'a'.repeat(64) },
+    target: { kind: 'personal', ownerUserId: human, workspaceId: null, projectId: null, assignmentId: null, assignmentRevision: null, participationId: null, participationRevision: null },
+    team: null, conversationId: null, root: null, entitlementId: null, payer: { kind: 'user', userId: human }, budget: { ceilingMicro: '1000' },
+    capabilities: { requested: ['files.read'], effective: ['files.read'], terms: { definition: ['files.read'], target: ['files.read'], runtime: null, entitlement: null } },
+    memoryNamespace: `user:${human}:agent:${operationId}`, admittedAt: '2026-09-25T12:00:00.000Z' } });
+  const admit = method => async (pool, context, value) => {
+    assert.equal(pool, db);
+    calls.push({ method, context, body: value });
+    if (admitFailure) throw admitFailure;
+    if (admitResult !== undefined) return admitResult;
+    return method === 'admit' ? admittedFixture() : admittedFixture().admission;
+  };
+  app.use(basePath, createWorkforceRouter({ createWorkforceResource: invoke('create'), readWorkforceResourceOperation: invoke('read'),
+    admitRun: admit('admit'), readRunAdmission: admit('readAdmission') }));
   const server = app.listen(0, '127.0.0.1');
   await new Promise(resolve => server.once('listening', resolve));
   const origin = `http://127.0.0.1:${server.address().port}`;
@@ -227,6 +244,47 @@ test('real HTTP/authMiddleware/JWT/DPoP boundary with query-aware auth DB and in
       });
       assert.equal((await request()).body.details, undefined);
       serviceFailure = undefined;
+    });
+    await t.test('RUN-01/RUN-02: a run is admitted over HTTP by the authenticated actor, never one the body names', async () => {
+      const admission = { operationId, agent: { resourceId: operationId, version: 1, contentHash: 'a'.repeat(64) },
+        target: { kind: 'personal', ownerUserId: human }, capabilities: ['files.read'], budget: { ceilingMicro: '1000' } };
+      const result = await request({ path: '/run-admissions', body: admission });
+      assert.equal(result.status, 200, 'the admission route is reachable');
+      assert.equal(result.body.admission.admissionId, operationId);
+      assert.deepEqual(calls.at(-1).context, { actorUserId: human, clientId: 'xeno-agent-interface' }, 'the actor comes from authentication');
+      assert.equal(calls.at(-1).method, 'admit');
+      const before = calls.length;
+      for (const key of ['actorUserId', 'clientId', 'userId', 'principal', 'auth']) {
+        assert.equal((await request({ path: '/run-admissions', body: { ...admission, [key]: human } })).status, 400, 'a body cannot name the actor');
+      }
+      // Admitting a run commits a payer's budget, so it is a manage act; reading one back is a read.
+      assert.equal((await request({ path: '/run-admissions', body: admission, token: mint({ scope: 'workforce:read' }) })).status, 403,
+        'admitting a run needs workforce:manage');
+      assert.equal(calls.length, before);
+      const read = await request({ path: '/run-admissions/read', body: { admissionId: operationId }, token: mint({ scope: 'workforce:read' }) });
+      assert.equal(read.status, 200);
+      assert.equal(calls.at(-1).method, 'readAdmission');
+      assert.equal((await request({ path: '/run-admissions/read', body: { admissionId: operationId, extra: 1 } })).status, 400);
+      assert.equal((await request({ method: 'GET', path: '/run-admissions' })).status, 405);
+    });
+    await t.test('RUN-02: a refusal crosses the wire as its typed reason, and nothing else of the service error', async () => {
+      const admission = { operationId, agent: { resourceId: operationId, version: 1, contentHash: 'a'.repeat(64) },
+        target: { kind: 'personal', ownerUserId: human }, capabilities: ['files.read'], budget: { ceilingMicro: '1000' } };
+      const { RunAdmissionError } = await import('../src/server/services/workforceRunAdmission.js');
+      for (const [code, reason, extra, status] of [['conflict', 'agent_version_stale', { currentVersion: 2 }, 409],
+        ['needs_approval', 'budget_exceeds_available', { availableMicro: '500' }, 403], ['denied', 'observer_cannot_dispatch', {}, 403]]) {
+        admitFailure = new RunAdmissionError(code, reason, { ...extra, sql: 'SECRET private' });
+        const result = await request({ path: '/run-admissions', body: admission });
+        assert.equal(result.status, status);
+        assert.deepEqual(result.body.details, { schemaVersion: 1, reason, ...extra }, 'the refusal reason reaches the client');
+        assert.ok(!JSON.stringify(result.body).includes('SECRET'), 'nothing else of the service error crosses');
+      }
+      admitFailure = undefined;
+      for (const result of [{}, { admission: { schemaVersion: 1 } }, { admission: { ...admittedFixture().admission, admissionId: 'x' } }]) {
+        admitResult = result;
+        assert.equal((await request({ path: '/run-admissions', body: admission })).status, 500, 'a partial admission is not a success');
+      }
+      admitResult = undefined;
     });
   } finally {
     server.closeAllConnections();
