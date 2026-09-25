@@ -30,6 +30,7 @@ import {
   VALID_KINDS, VALID_PRICING_MODELS,
   verifyEd25519, runAutomatedChecks, resolvePublishTrustTier, agentVersionProblems,
 } from '../services/marketplacePublish.js';
+import * as teamPackages from '../services/marketplaceTeamPackages.js';
 
 const router = express.Router();
 
@@ -141,7 +142,8 @@ router.get('/listings/:slug', optionalAuthMiddleware, async (req, res) => {
       listing: svc.serializeListingSummary({ ...listing, pricing }),
       description: listing.description,
       // MKT-03: only a reviewed (published) agent version is offered; an unreviewed one is the seller's draft.
-      versions: versions.filter((v) => !v.agent_package || v.published_at)
+      // MKT-04: so is a team package -- the seller's export report is theirs until they submit it.
+      versions: versions.filter((v) => !(v.agent_package || v.team_package) || v.published_at)
         .map((v) => svc.serializeVersion(v, { entitled, gated: isGatedVersion(v) })),
       reviews: reviews.map((r) => ({
         id: r.id, rating: r.rating, title: r.title, text: r.text, author: r.author, createdAt: r.created_at,
@@ -383,6 +385,40 @@ function partitionHandler(fn) {
     }
   };
 }
+/**
+ * POST /listings/:id/import-team  { versionId, owner: {type,id}, acceptLicense, teamName? }
+ * MKT-04: create, from a published team version the caller is entitled to, a NEW team owned by the caller
+ * or a workspace they administer. `acceptLicense` must be the version's licence exactly: the instance is
+ * licensed under what was accepted, not under whatever the listing's label says later.
+ */
+router.post('/listings/:id/import-team', authMiddleware, async (req, res) => {
+  try {
+    const body = req.body || {};
+    const versionId = body.versionId;
+    const version = typeof versionId === 'string' && /^[0-9a-f-]{36}$/i.test(versionId) ? await svc.getVersionById(req.db, versionId) : null;
+    if (!version || version.listing_id !== req.params.id) return res.status(404).json({ success: false, error: 'Version not found' });
+    const result = await teamPackages.importTeamPackage(req.db, { actorUserId: req.user.id, listingVersionId: versionId,
+      owner: body.owner, acceptLicense: body.acceptLicense, teamName: Object.hasOwn(body, 'teamName') ? body.teamName : null });
+    return res.status(result.replayed ? 200 : 201).json({ success: true, import: result });
+  } catch (e) {
+    if (e instanceof teamPackages.TeamPackageError) return res.status(e.status).json({ success: false, error: e.code, details: e.details });
+    if (e?.name === 'WorkforceScopeError') return res.status(400).json({ success: false, error: 'bad_input', details: e.details });
+    console.error('[Marketplace] team import error:', e.message);
+    return res.status(500).json({ success: false, error: 'Failed to import team' });
+  }
+});
+
+/** GET /team-imports/:teamId -- where an imported team came from, to whoever may manage its owner. */
+router.get('/team-imports/:teamId', authMiddleware, async (req, res) => {
+  try {
+    return res.json({ success: true, import: await teamPackages.readTeamImport(req.db, { actorUserId: req.user.id, teamId: req.params.teamId }) });
+  } catch (e) {
+    if (e instanceof teamPackages.TeamPackageError) return res.status(e.status).json({ success: false, error: e.code });
+    console.error('[Marketplace] team import read error:', e.message);
+    return res.status(500).json({ success: false, error: 'Failed to read team import' });
+  }
+});
+
 router.get('/rental-partitions', authMiddleware, partitionHandler(async (req, res) =>
   res.json({ success: true, partitions: await partitions.listPartitions(req.db, req.user.id) })));
 /** GET /rental-partitions/:id/export -- the renter's content in this partition. Recorded. */
@@ -462,7 +498,7 @@ router.get('/download/:listingVersionId', authMiddleware, async (req, res) => {
     if (!version) return res.status(404).json({ success: false, error: 'Version not found' });
     // MKT-03: an agent reaches buyers only through review. An unreviewed agent version is not distributed,
     // and answers exactly as a version that does not exist, so its existence is not disclosed either.
-    if (version.agent_package && !version.published_at) {
+    if ((version.agent_package || version.team_package) && !version.published_at) {
       return res.status(404).json({ success: false, error: 'Version not found' });
     }
 
@@ -687,6 +723,25 @@ router.post('/listings/:id/versions', authMiddleware, async (req, res) => {
 
     const { version } = req.body || {};
     if (!isNonEmptyString(version) || version.length > 40) return badRequest(res, 'version is required (e.g. 1.0.0)');
+
+    // MKT-04 / D22: a team version's package is BUILT by the platform from one canonical team the seller
+    // manages -- never supplied. A caller-sent package, artifact or manifest is refused, so nothing but the
+    // allowlisted configuration can reach a listing whatever the caller puts in the body.
+    if (listing.kind === 'team') {
+      const supplied = ['teamPackage', 'team_package', 'manifest', 'artifactR2Key', 'artifactUrl', 'sha256', 'ed25519Sig', 'ed25519PubKey']
+        .filter((key) => Object.hasOwn(req.body, key));
+      if (supplied.length) {
+        return res.status(400).json({ success: false, error: 'team_package_is_built_by_the_platform', fields: supplied });
+      }
+      try {
+        const built = await teamPackages.exportTeamPackage(req.db, { actorUserId: req.user.id, teamId: req.body.teamId,
+          listingId: listing.id, version, releaseNotes: isString(req.body?.releaseNotes) ? req.body.releaseNotes : null });
+        return res.status(201).json({ success: true, ...built });
+      } catch (e) {
+        if (e instanceof teamPackages.TeamPackageError) return res.status(e.status).json({ success: false, error: e.code, details: e.details });
+        throw e;
+      }
+    }
 
     const artifactR2Key = isString(req.body?.artifactR2Key) ? req.body.artifactR2Key.slice(0, 1000) : null;
     const artifactUrl = isString(req.body?.artifactUrl) ? req.body.artifactUrl.slice(0, 1000) : null;
@@ -919,6 +974,9 @@ router.post('/submissions/:id/approve', authMiddleware, requireAdmin, async (req
     // MKT-03: the database refuses to publish an agent version that is unlicensed, unsigned, not a canonical
     // .xanima of the listing's kind, or carrying a private Soul -- including when a reviewer approves it.
     // That is the rule working, not a fault, so it is answered as a refusal rather than a 500.
+    if (error.code === '23514' && /team package/.test(error.message || '')) {
+      return res.status(422).json({ success: false, error: 'team_package_not_publishable', reason: error.message });
+    }
     if (error.code === '23514' && /agent (version|artifact|manifest|package)/.test(error.message || '')) {
       return res.status(422).json({ success: false, error: 'agent_version_not_publishable', reason: error.message });
     }
