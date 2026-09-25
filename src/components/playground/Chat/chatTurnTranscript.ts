@@ -176,8 +176,15 @@ export interface ChatTurnInput {
   expectingThought?: boolean;
   /**
    * A reasoning wait happened on this turn (placeholder, stored hasThinking, measured
-   * duration). After the stream ends, expectingThought is false; this keeps the think
-   * step so the receipt still says Thought instead of a bare Worked for.
+   * duration). Kept for callers; it no longer makes a settled turn say Thought on its own.
+   *
+   * 🔴 It used to, and that label was a claim the turn could not back. The "duration" behind it
+   * is the chat's own timer — send until the first answer token — which measures WAITING, not
+   * thinking. A Claude "hello" at medium effort does not think at all (measured 2026-09-25: 134
+   * output tokens for a 400-character reply, i.e. the answer alone) and still read
+   * `Thought for 6s`; every Gemini turn, which reports a duration and never any text, read the
+   * same. A settled turn says Thought only when thought TEXT arrived; otherwise the receipt is
+   * the honest `Worked for 6s`. The live wait still says Thinking — see `expectingThought`.
    */
   hadThought?: boolean;
   /** When this message was created, used when the record carries no start. */
@@ -233,7 +240,9 @@ export function toTranscriptMessage(input: ChatTurnInput): TranscriptMessage {
   }));
   const thinking = input.thinking?.trim() ? input.thinking : undefined;
   const isThinking = live && !input.replyStarted && Boolean(thinking || input.expectingThought);
-  const keepThought = Boolean(thinking || isThinking || input.hadThought || (typeof turn?.thinkingMs === 'number'));
+  // a thought is kept when there are words to show, or while one may still be arriving — never
+  // for a settled turn whose only evidence of "thinking" is how long the answer took to start
+  const keepThought = Boolean(thinking || isThinking);
   return {
     id: input.id,
     role: 'assistant',
