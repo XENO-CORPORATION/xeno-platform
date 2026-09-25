@@ -66,6 +66,10 @@ const luminance = (rgb) => {
 const browser = await puppeteer.launch({ headless: true });
 try {
   const tab = await browser.newPage();
+  // The sweep is suppressed under "reduce motion" (the library's own rule), and headless Chromium
+  // inherits that from the OS — so the host decided this gate. Ask for motion; the reduced case
+  // is the library's to test.
+  await tab.emulateMediaFeatures([{ name: 'prefers-reduced-motion', value: 'no-preference' }]);
   await tab.setViewport({ width: 900, height: 500 });
   await tab.goto(pathToFileURL(file).href);
   await new Promise((r) => setTimeout(r, 400));

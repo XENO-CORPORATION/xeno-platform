@@ -40,6 +40,10 @@ const check = (name, ok, detail = '') => { results.push(ok); console.log(`${ok ?
 const browser = await puppeteer.launch({ headless: true });
 try {
   const page = await browser.newPage();
+  // Headless Chromium inherits the OS "reduce motion" setting — on a machine with Windows animations
+  // off, every transition resolves to ~0s and this gate measured the host, not the stylesheet
+  // (2026-09-26: `ease 1e-05s`). Motion is what this checks, so ask for it explicitly.
+  await page.emulateMediaFeatures([{ name: 'prefers-reduced-motion', value: 'no-preference' }]);
   await page.setViewport({ width: 390, height: 800, isMobile: true, hasTouch: true });
   const read = () => page.evaluate(() => {
     const r = (sel) => { const n = document.querySelector(sel); if (!n) return null; const b = n.getBoundingClientRect(); const s = getComputedStyle(n); return { left: b.left, right: b.right, top: b.top, bottom: b.bottom, width: b.width, position: s.position, timing: s.transitionTimingFunction, duration: s.transitionDuration }; };
