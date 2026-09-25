@@ -98,7 +98,7 @@ const MultiChatContainer = lazyRoute(() => import('./components/playground/Chat/
 
 
 // Lazy load StudioVideoCanvas for standalone canvas page
-const StudioVideoCanvas = React.lazy(() =>
+const StudioVideoCanvas = lazyRoute(() =>
   import('./components/playground/Studio/VideoStudio')
     .then(module => ({ default: module.StudioVideoCanvas }))
 );
@@ -331,9 +331,7 @@ function App() {
             {/* Standalone Video Studio Canvas - Full page interface */}
             <Route path="/studio/video/canvas/:projectId?" element={
               <ProtectedRoute>
-                <React.Suspense fallback={<div className="w-full h-screen flex items-center justify-center bg-black text-white">Loading Canvas...</div>}>
-                  <StudioVideoCanvas />
-                </React.Suspense>
+                <StudioVideoCanvas />
               </ProtectedRoute>
             } />
 

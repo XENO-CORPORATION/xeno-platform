@@ -465,6 +465,9 @@ async function main() {
         const divider = run('npm', ['run', 'test:transcript-divider-rendered'], { quiet: true });
         record('build: the clock line\'s divider waits for the step it separates (real browser, built CSS)', divider.code === 0);
         ok = ok && divider.code === 0;
+        const loading = run('npm', ['run', 'test:route-loading-rendered'], { quiet: true });
+        record('build: the route loader is a bar in the page theme, not a dark card (real browser, built CSS)', loading.code === 0);
+        ok = ok && loading.code === 0;
       }
     }
 
