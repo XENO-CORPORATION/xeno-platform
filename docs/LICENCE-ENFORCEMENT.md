@@ -45,9 +45,18 @@ is the cost of the named interim, and it is the reason the EXIT below matters mo
 today the cost is one port; at seventeen adopters it is seventeen, and the ones nobody ports are
 the ones running the version with the bug.
 
-**EXIT:** publish `@xenosystem/licence` and replace the copies. Until then, `motion`'s
-`scripts/licence-check.mjs` is the pattern worth copying alongside the client — it pins the
-copy's digest, so a local edit is visible and a stale copy is at least identifiable.
+**EXIT — TAKEN 2026-09-25: `@xenosystem/licence` is the package** (`clients/licence/`, ESM + CJS,
+behaviour-tested over a real socket, 11 mutants killed). New adopters depend on it; `motion`'s
+copy should be replaced by it rather than re-synced. Beyond the copy it fixes two things:
+
+- 🔴 **The copied client defaulted to `api.xenostudio.ai`, which is the inference GATEWAY.** It
+  does not serve `/api/billing/entitlements` (it answers with its own `401 {"error":"Unauthorized"}`)
+  or `/api/client-policy` (HTML 404). A product that did not override `apiBase` read an
+  explicit-looking refusal from a server that never looked at the account — i.e. every signed-in
+  user fail-CLOSED to `unlicensed`. The package defaults to the platform, `https://xenostudio.ai`.
+- It reads the per-product verdict (`product.allowed`, AUTH GATE DELTA §9.4) instead of the global
+  `canUse`, and asks `/api/client-policy` when signed out so a too-old build is told to update
+  before it is offered a sign-in the server will refuse.
 
 🔴 **The third layer is the one that answers "what about builds already out
 there?"** An installer shipped before any of this existed has no check compiled
@@ -64,12 +73,12 @@ User-Agent by default, and production logs carry `XenoCode/0.2.0`,
 
 ### 1 · Check entitlement in the MAIN process
 
-Copy `clients/licence/xenoLicence.ts` and call `startLicence()` at boot.
+Depend on `@xenosystem/licence` and call `startLicence()` at boot.
 
 ```ts
-import { startLicence } from './licence/xenoLicence';
+import { startLicence, xenoClientHeaders } from '@xenosystem/licence';
 
-startLicence({
+const licence = startLicence({
   product: 'hub',                    // must match the platform slug
   version: app.getVersion(),
   getToken:  () => account.getAccessToken(),
@@ -77,7 +86,13 @@ startLicence({
   writeCache: (l) => store.set('licence', l),
   onChange:  (l) => mainWindow?.webContents.send('licence:changed', l),
 });
+// licence.refresh() after sign-in / sign-out; licence.stop() on quit.
 ```
+
+🔴 **Put `xenoClientHeaders(product, version)` on your OIDC token requests too.** The server
+refuses a product's own sign-in client below its floor unless the header says the build is
+supported (AUTH GATE DELTA §9.3). `clients/licence/xenoLicence.ts` is kept only as the record of
+what products copied before the package existed.
 
 🔴 **Main process, never the renderer.** A renderer check is a suggestion —
 DevTools is one keystroke away, and anything the renderer decides can be

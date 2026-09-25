@@ -1,0 +1,36 @@
+{
+  "name": "@xenosystem/licence",
+  "version": "0.1.0",
+  "description": "The main-process entitlement check every XENO desktop app runs: signed in, allowed for THIS product, not below the version floor. Fail open on a network error, closed on a refusal, 14-day grace. XENO AUTH - AUTH GATE DELTA §9.",
+  "license": "UNLICENSED",
+  "author": "XENO Corporation <emilian@bnkrsys.com>",
+  "type": "module",
+  "sideEffects": false,
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "build": "node build.mjs",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "node --test test/*.test.mjs",
+    "prepublishOnly": "npm run typecheck && npm run build && npm test"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}
