@@ -2097,3 +2097,25 @@ div:has([data-composer-reveal][data-reveal-open="true"]) > [data-chat-scroll-to-
     animation: none;
   }
 }
+
+/* ── Route loading (components/platform/lazyRoute.tsx) ────────────────────────────────
+   A thin indeterminate bar across the top of the content area, in the theme the page is in.
+   It takes no height of its own beyond the bar, has no card, and paints no background —
+   `.chat-themed` otherwise lays the page colour under it, which read as a block in the page. */
+.route-loading.chat-themed {
+  background: transparent;
+  width: 100%;
+  min-height: 2px;
+}
+.route-loading .xeno-progressbar { gap: 0; }
+.route-loading .xeno-progressbar-track {
+  height: 2px;
+  border-radius: 0;
+  background: transparent;
+}
+.route-loading .xeno-progressbar-fill { opacity: 0.7; }
+.route-loading[data-shown] { animation: route-loading-in 160ms ease-out both; }
+@keyframes route-loading-in { from { opacity: 0; } to { opacity: 1; } }
+@media (prefers-reduced-motion: reduce) {
+  .route-loading[data-shown] { animation: none; }
+}

@@ -21,7 +21,7 @@ const VideoUpscaleInterface = lazyRoute(() => import('../components/playground/E
 const MultiChatContainer = lazyRoute(() => import('../components/playground/Chat/MultiChatContainer'));
 const ChatWithVoice = lazyRoute(() => import('../components/playground/Chat/ChatWithVoice'));
 const SearchChatInterface = lazyRoute(() => import('../components/playground/Chat/SearchChatInterface'));
-const ThreeDGenerationInterface = React.lazy(() => import('../components/playground/Generation/ThreeDGenerationInterface'));
+const ThreeDGenerationInterface = lazyRoute(() => import('../components/playground/Generation/ThreeDGenerationInterface'));
 const AudioGenerationInterface = lazyRoute(() => import('../components/playground/Generation/AudioGenerationInterface'));
 const VideoGenerationInterface = lazyRoute(() => import('../components/playground/Generation/VideoGenerationInterface'));
 const VideoGenerationInterface2 = lazyRoute(() => import('../components/playground/Generation/VideoGenerationInterface2'));
@@ -36,7 +36,7 @@ const ShoppingSearchInterface = lazyRoute(() => import('../components/playground
 // Import new Studio interfaces
 const ImageStudioInterface = lazyRoute(() => import('../components/playground/Studio/ImageStudio'));
 // Lazy load VideoStudio interface (the chat interface, not the canvas)
-const VideoStudioInterface = React.lazy(() =>
+const VideoStudioInterface = lazyRoute(() =>
   import('../components/playground/Studio/VideoStudioInterface')
 );
 const AudioStudioInterface = lazyRoute(() => import('../components/playground/Studio/AudioStudioInterface'));
@@ -300,7 +300,7 @@ const OverviewContent: React.FC = () => {
             <Route path="/overview/generation/image2" element={<ImageGenerationInterface2 />} />
             <Route path="generation/image2-copy" element={<ImageGenerationInterface2Copy />} />
             <Route path="/overview/generation/image2-copy" element={<ImageGenerationInterface2Copy />} />
-            <Route path="generation/3d" element={<React.Suspense fallback={<div>Loading 3D Studio...</div>}><ThreeDGenerationInterface /></React.Suspense>} />
+            <Route path="generation/3d" element={<ThreeDGenerationInterface />} />
             <Route path="generation/video" element={<VideoGenerationInterface />} />
             <Route path="generation/video2" element={<VideoGenerationInterface2 />} />
             <Route path="generation/audio" element={<AudioGenerationInterface />} />
@@ -343,7 +343,7 @@ const OverviewContent: React.FC = () => {
             <Route path="search/shopping" element={<ShoppingSearchInterface />} />
             <Route path="studio/image" element={<ImageStudioInterface />} />
             <Route path="studio/image/:projectId" element={<ImageStudioInterface />} />
-            <Route path="studio/video" element={<React.Suspense fallback={<div>Loading Video Studio...</div>}><VideoStudioInterface /></React.Suspense>} />
+            <Route path="studio/video" element={<VideoStudioInterface />} />
             <Route path="studio/audio" element={<AudioStudioInterface />} />
             <Route path="studio/inpainting" element={<ImageInpaintingStudio />} />
             {/* Office routes */}

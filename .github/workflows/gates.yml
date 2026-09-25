@@ -148,6 +148,9 @@ jobs:
       # specificity; only a browser proves which one wins.
       - name: Assert the clock line's divider waits for the step it separates
         run: npm run test:transcript-divider-rendered
+      # The route loader's theme and shape are decided by three stylesheets on specificity.
+      - name: Assert the route loader is a bar in the page's theme, not a dark card
+        run: npm run test:route-loading-rendered
 
   # ── The Forum's end-to-end proofs ───────────────────────────────────────────
   #

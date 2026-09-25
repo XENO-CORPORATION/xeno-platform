@@ -130,27 +130,21 @@ export const buildPlatformThemeStyle = (position: number): CSSProperties => {
   } as CSSProperties;
 };
 
-export const usePlatformTheme = () => {
+/**
+ * The platform theme as the page is ALREADY showing it — last-known local preference, the system
+ * scheme, and every change announced after — with no request of its own.
+ *
+ * Use this for a surface that mounts often and briefly (the route loader appears on every route
+ * change); `usePlatformTheme` below adds the one server confirmation a long-lived surface wants.
+ * Both return the same shape and follow the same announcements, so the two can never disagree.
+ */
+export const useResolvedPlatformTheme = () => {
   const [preference, setPreference] = useState<PlatformThemePreference>(readStoredTheme);
   const [brightness, setBrightness] = useState<number>(readStoredBrightness);
   const [systemTheme, setSystemTheme] = useState<Extract<ResolvedPlatformTheme, 'light' | 'dark'>>(readSystemTheme);
 
   useEffect(() => {
-    let active = true;
-    userDataService.getSettings()
-      .then((settings) => {
-        const confirmedPreference = normalizePlatformTheme(settings.appearance?.theme);
-        if (!active || !confirmedPreference) return;
-        const confirmedBrightness = normalizePlatformThemeBrightness(settings.appearance?.themeBrightness);
-        announcePlatformTheme(confirmedPreference, confirmedBrightness);
-      })
-      .catch(() => {
-        // Last-known local rendering remains available; Settings reports server errors explicitly.
-      });
-    return () => { active = false; };
-  }, []);
-
-  useEffect(() => {
+    if (typeof window === 'undefined' || !window.matchMedia) return;
     const media = window.matchMedia('(prefers-color-scheme: dark)');
     const onSystemTheme = (event: MediaQueryListEvent) => setSystemTheme(event.matches ? 'dark' : 'light');
     const onPreference = (event: Event) => {
@@ -187,4 +181,28 @@ export const usePlatformTheme = () => {
   const themeStyle = useMemo(() => buildPlatformThemeStyle(resolvedPosition), [resolvedPosition]);
 
   return { preference, brightness, resolvedTheme, resolvedPosition, themeStyle } as const;
+};
+
+/** The platform theme plus one confirmation from the account's saved settings, announced to every
+ * surface when it lands. Behaviour is unchanged from before `useResolvedPlatformTheme` was split
+ * out of it. */
+export const usePlatformTheme = () => {
+  const theme = useResolvedPlatformTheme();
+
+  useEffect(() => {
+    let active = true;
+    userDataService.getSettings()
+      .then((settings) => {
+        const confirmedPreference = normalizePlatformTheme(settings.appearance?.theme);
+        if (!active || !confirmedPreference) return;
+        const confirmedBrightness = normalizePlatformThemeBrightness(settings.appearance?.themeBrightness);
+        announcePlatformTheme(confirmedPreference, confirmedBrightness);
+      })
+      .catch(() => {
+        // Last-known local rendering remains available; Settings reports server errors explicitly.
+      });
+    return () => { active = false; };
+  }, []);
+
+  return theme;
 };

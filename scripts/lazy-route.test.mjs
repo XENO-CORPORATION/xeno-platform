@@ -35,7 +35,7 @@ test('real lazy route delays loading, preserves surrounding state and recovers f
       '@xenosystem/generate': path.resolve('packages/generate/src/index.ts'),
     },
   });
-  const { lazyRoute } = await import('./harness/.lazy-route.generated.mjs');
+  const { lazyRoute, ROUTE_LOADING_DELAY_MS } = await import('./harness/.lazy-route.generated.mjs');
   let rejectFirst, calls = 0;
   const first = new Promise((_, reject) => { rejectFirst = reject; });
   const Route = lazyRoute(() => {
@@ -49,8 +49,21 @@ test('real lazy route delays loading, preserves surrounding state and recovers f
   assert.equal(calls, 1);
   const input = document.querySelector('input');
   input.value = 'still editing';
-  assert.ok(document.querySelector('[role="status"][aria-busy="true"]'));
-  assert.equal(document.querySelector('[role="progressbar"]').hasAttribute('aria-valuenow'), false);
+  const status = document.querySelector('[role="status"][aria-busy="true"]');
+  assert.ok(status, 'a loading route announces itself');
+  assert.match(status.textContent, /Loading page/, 'and says what is loading — to assistive technology');
+  // it takes the page's theme — a bare `.xeno` is the library's DARK default, which is how the old
+  // card rendered dark on a light page (2026-09-25)
+  assert.ok(status.classList.contains('xeno') && ['light', 'dark'].includes(status.getAttribute('data-theme')),
+    `the loader carries the resolved platform theme (data-theme=${status.getAttribute('data-theme')})`);
+  assert.equal(status.querySelector('.xeno-card'), null, 'no card: a loading route is a bar, not a block in the page');
+  // nothing visible for a fast load — the bar appears only once the delay has passed
+  assert.equal(document.querySelector('[role="progressbar"]'), null, 'no bar before the delay, so a fast chunk never flashes');
+  await act(async () => { await new Promise(r => setTimeout(r, ROUTE_LOADING_DELAY_MS + 40)); });
+  const bar = document.querySelector('[role="progressbar"]');
+  assert.ok(bar, 'the bar appears once the route has taken longer than the delay');
+  assert.equal(bar.hasAttribute('aria-valuenow'), false, 'indeterminate: it claims no position');
+  assert.equal(document.querySelector('.xeno-progressbar-header'), null, 'no visible "Loading page —" caption');
   t.mock.method(console, 'error', () => {}); // Expected React error-boundary diagnostic.
   await act(async () => { rejectFirst(new Error('fixture chunk unavailable')); });
   assert.ok(document.querySelector('[role="alert"]'));
