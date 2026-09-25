@@ -121,10 +121,14 @@ test('rental memory is partitioned, renter-owned and disclosed only by the rente
   await pool.query(`INSERT INTO marketplace_listing_pricing(listing_id,model,price_credits,period) VALUES($1,'rental',10,'week')`, [listing]);
   const version = (await pool.query(
     `INSERT INTO marketplace_listing_versions
-       (listing_id, version, artifact_r2_key, manifest, servable, published_at, serving_material, serving_material_reviewed_at, serving_material_reviewed_by)
-     VALUES ($1, '1.0.0', $2, $3::jsonb, true, now(), $4, now(), $5) RETURNING id`,
-    [listing, `private/${SELLER_PRIVATE}.xanima`, JSON.stringify({ privateMemory: SELLER_PRIVATE }),
-     `You are a careful reviewer. ${SELLER_SERVING}`, seller])).rows[0].id;
+       (listing_id, version, artifact_r2_key, manifest, servable, published_at, serving_material, serving_material_reviewed_at, serving_material_reviewed_by,
+        license, artifact_sha256, ed25519_sig, ed25519_pubkey)
+     VALUES ($1, '1.0.0', $2, $3::jsonb, true, now(), $4, now(), $5, 'Proprietary', $6, 'c2ln', 'c2ln') RETURNING id`,
+    // The manifest is a valid published .xanima (MKT-03) that still carries the seller-private sentinel,
+    // so "context load never reads the manifest" is tested against a manifest a real publish would hold.
+    [listing, `private/${SELLER_PRIVATE}.xanima`,
+     JSON.stringify({ format: 'xanima', schemaVersion: 1, kind: 'anima', minds: [{ id: 'm', path: 'minds/m/mind.xeno' }], entries: [], privateMemory: SELLER_PRIVATE }),
+     `You are a careful reviewer. ${SELLER_SERVING}`, seller, 'a'.repeat(64)])).rows[0].id;
   assert.equal((await renterCall('POST', `/listings/${listing}/rent`, {})).status, 200);
 
   const bindA = (await renterCall('POST', `/listings/${listing}/rental/bind`, { workspaceId: wsA })).body.binding;

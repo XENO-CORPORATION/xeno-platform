@@ -124,6 +124,8 @@ export function serializeVersion(v, { entitled = false, gated = false } = {}) {
     sha256: v.artifact_sha256,
     sizeBytes: v.artifact_size_bytes != null ? Number(v.artifact_size_bytes) : null,
     signed: Boolean(v.ed25519_sig && v.ed25519_pubkey),
+    // MKT-03: the licence this version was published under (null for versions predating the snapshot).
+    license: v.license ?? null,
     downloadUrl,
     publishedAt: v.published_at,
   };
