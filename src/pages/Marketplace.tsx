@@ -38,7 +38,7 @@ interface Listing {
 }
 
 /* ──────────────────────────────────────────────────────────────────────
- * Filter groups (the catalog has 8 kinds; we group them for the UI)
+ * Filter groups (the catalog has 9 kinds; we group them for the UI)
  * ────────────────────────────────────────────────────────────────────── */
 const GROUPS = [
   { id: 'all', label: 'All', icon: Store, kinds: [] as string[] },
@@ -46,11 +46,11 @@ const GROUPS = [
   { id: 'panels', label: 'Panels', icon: PanelsTopLeft, kinds: ['panel'] },
   { id: 'plugins', label: 'Plugins & MCP', icon: Puzzle, kinds: ['plugin', 'mcp'] },
   { id: 'models', label: 'Models', icon: Cpu, kinds: ['model'] },
-  { id: 'agents', label: 'Minds & Swarms', icon: Bot, kinds: ['mind', 'swarm'] },
+  { id: 'agents', label: 'Minds, Swarms & Teams', icon: Bot, kinds: ['mind', 'swarm', 'team'] },
 ];
 const kindToGroup: Record<string, string> = {
   'app-native': 'apps', 'app-sandboxed': 'apps', panel: 'panels', plugin: 'plugins',
-  mcp: 'plugins', model: 'models', mind: 'agents', swarm: 'agents',
+  mcp: 'plugins', model: 'models', mind: 'agents', swarm: 'agents', team: 'agents',
 };
 const KIND_META: Record<string, { label: string; icon: React.ComponentType<{ className?: string }> }> = {
   'app-native': { label: 'App', icon: Boxes },
@@ -61,6 +61,7 @@ const KIND_META: Record<string, { label: string; icon: React.ComponentType<{ cla
   model: { label: 'Model', icon: Cpu },
   mind: { label: 'Mind', icon: Bot },
   swarm: { label: 'Swarm', icon: Network },
+  team: { label: 'Team', icon: Network },
 };
 
 /* Featured first-party listings — shown when the live catalog API is unreachable

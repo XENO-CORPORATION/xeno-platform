@@ -126,6 +126,15 @@ export function serializeVersion(v, { entitled = false, gated = false } = {}) {
     signed: Boolean(v.ed25519_sig && v.ed25519_pubkey),
     // MKT-03: the licence this version was published under (null for versions predating the snapshot).
     license: v.license ?? null,
+    // MKT-04: what a team version contains, before anyone buys it -- who is in it, what each one does,
+    // under what licence, and which secrets the buyer will have to provide. The definitions are the product
+    // and arrive only by import.
+    ...(v.team_package ? { team: {
+      packageHash: v.team_package_hash,
+      name: v.team_package.team?.name ?? null,
+      members: (v.team_package.members ?? []).map((m) => ({ name: m.name, role: m.role, license: m.license ?? v.license ?? null,
+        secretNames: m.definition?.secretNames ?? [] })),
+    } } : {}),
     downloadUrl,
     publishedAt: v.published_at,
   };

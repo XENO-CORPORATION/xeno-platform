@@ -20,6 +20,8 @@ export const COMMUNITY_FORBIDDEN_KINDS = new Set(['app-native']);
 // All recognized kinds (SPEC §2). Mirrors the DB CHECK constraint.
 export const VALID_KINDS = new Set([
   'app-native', 'app-sandboxed', 'panel', 'plugin', 'mcp', 'model', 'mind', 'swarm',
+  // XENO-WORKFORCE-01 MKT-04 / D22: an exported workforce team. Not `swarm`, which is a .xanima of Minds.
+  'team',
 ]);
 
 // The agent kinds (SPEC §2): `mind` is one Anima, `swarm` a coordinated package. `swarm` is the LEGACY
@@ -199,6 +201,14 @@ export function runAutomatedChecks({ kind, trustTier, license }, versionRow) {
     checks.agentPackage = problems.length
       ? { pass: false, detail: problems.join(', ') }
       : { pass: true, detail: 'licensed agent version; any artifact is a signed canonical .xanima' };
+  }
+
+  // 7. MKT-04 -- a team version carries a package the platform built, with its hash. Its CONTENTS are the
+  //    database's to check at publication (marketplace_team_package_valid); here only that one exists.
+  if (kind === 'team') {
+    checks.teamPackage = versionRow?.team_package && versionRow?.team_package_hash
+      ? { pass: true, detail: `team package of ${versionRow.team_package.members?.length ?? 0} agent(s)` }
+      : { pass: false, detail: 'a team version carries a team package built from a canonical team' };
   }
 
   const passed = Object.values(checks).every((c) => c.pass);
