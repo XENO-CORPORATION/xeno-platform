@@ -137,6 +137,9 @@ test('every workforce migration applies in order from an empty database', { skip
         'workforce_division_ownership',
         'workforce_divisions',
         'workforce_handoffs',
+        // D21, 2026-09-25 -- the id mapping kept when `workspace_teams` was absorbed into the canonical
+        // team model, cited by workforce-team-project-responsibility.test.mjs (the absorption case).
+        'workforce_legacy_team_migration',
         'workforce_operations',
         // OWN-05, 2026-09-24 -- widened only because the requirement it implements is now cited by
         // a real test (workforce-ownership-transfer.test.mjs), exactly as the message below asks.

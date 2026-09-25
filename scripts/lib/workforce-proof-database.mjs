@@ -60,7 +60,7 @@ export function requireProofDatabase(connectionString) {
  * npm chain: every developer machine and every CI job without PostgreSQL went red on a suite that
  * simply had nothing to run against. The repo's own reachability gate prescribes the alternative —
  * "an env guard INSIDE itself, where its skip is visible in the run output, not absent from it" —
- * and `workspace-teams.test.mjs` already does exactly this with `{ skip: !TEST_DATABASE_URL }`.
+ * and `workforce-team-project-responsibility.test.mjs` does exactly this with `{ skip: !TEST_DATABASE_URL }`.
  *
  * A skip is honest; a PASS would not be. Nothing here ever reports success without a database.
  */

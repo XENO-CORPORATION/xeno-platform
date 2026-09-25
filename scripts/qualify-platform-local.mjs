@@ -289,7 +289,7 @@ const BACKEND_EVIDENCE = {
   });
 
   for (const [name, files] of [
-    ['workspace-project-database', ['scripts/chat-workspace-scope.database.test.mjs', 'scripts/workspace-teams.test.mjs', 'scripts/chat-project-database-integration.test.mjs']],
+    ['workspace-project-database', ['scripts/chat-workspace-scope.database.test.mjs', 'scripts/workforce-team-project-responsibility.test.mjs', 'scripts/chat-project-database-integration.test.mjs']],
     ['semantic-index-scale', ['scripts/chat-project-semantic-scale-qualification.test.mjs']],
   ]) {
     await step(name, async () => {

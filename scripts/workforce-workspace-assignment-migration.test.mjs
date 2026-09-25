@@ -11,7 +11,11 @@
  * requirement to match the two modes that happened to exist.
  *
  * ⚠️ ALSO NOT CITED, for the ordinary reason that nothing is built:
- *   ASN-02  "a team may target several projects; several teams may target one project". The
+ *   ASN-02  ✅ NOW CITED (D21, 2026-09-25), in workforce-team-project-responsibility.test.mjs. The owner
+ *           decided `workforce_resources` kind='team' is the canonical team; `workspace_teams` was
+ *           absorbed into it and its team->project link became a project responsibility on an
+ *           accepted assignment. The note below is kept as the record of why it was refused until then.
+ *           "a team may target several projects; several teams may target one project". The
  *           workspace half (explicit records, never inferred from path prefixes) is proven.
  *           CORRECTED 2026-09-23: this note said "the project half has no table". It has one --
  *           `workspace_team_projects` (20260904140000-workspace-operational-teams.sql), an explicit

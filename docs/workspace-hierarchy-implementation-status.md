@@ -16,6 +16,8 @@ Platform workspaces live in `workspaces`; memberships and roles use `relationshi
 
 ### Operational teams continuation
 
+> **Superseded 2026-09-25 by XENO-WORKFORCE-01 D21.** The three tables below were a second team model, linked to `workforce_resources` kind='team' by nothing (spec evidence E16). The owner decided the workforce team is canonical: `20260925110000-workforce-team-project-responsibility.sql` absorbs every `workspace_teams` row into it (a workspace-owned team, its agents as `worker` memberships, an accepted self-assignment with a `none` policy, and one project participation per project), records each old id in `workforce_legacy_team_migration`, and drops the legacy tables. `/api/workspaces/:id/teams` and `/overview/teams` keep their contract. Proof: `scripts/workforce-team-project-responsibility.test.mjs`. The entries below are kept as the record of what was built on 2026-09-04.
+
 - Added canonical `workspace_teams`, many-to-many project assignments and single-team-per-workspace canonical agent assignments. Composite foreign keys prevent cross-workspace project bindings.
 - Authenticated CRUD checks workspace context and admin authority. Mutations lock the workspace, reject stale versions and commit assignments with mandatory audit records in one transaction. Archiving removes bindings, not projects, agents or files.
 - `/overview/teams` is distinct from workspace membership at `/overview/team`. Navigation, settings and command search expose Teams. Project details read their assigned teams from the same API. Drafts and asynchronous completions are isolated on workspace switches.
