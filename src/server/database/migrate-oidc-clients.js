@@ -47,6 +47,12 @@ export const FIRST_PARTY_CLIENTS = [
   { id: 'xeno-anima', name: 'XENO Anima', loopback: true },
   // Standalone Agent (loopback PKCE; no client secret)
   { id: 'xeno-agent-interface', name: 'XENO Agent', loopback: true },
+  // XENO Spawn — a local web UI served by its own loopback Node server. The SERVER
+  // receives the callback at /auth/callback on whatever free port it bound (default
+  // 7340), so it registers that PATH instead of /callback; clientAllowsRedirect
+  // accepts any port on the loopback literals (RFC 8252 §7.3). A loopback client
+  // may declare its own loopback paths; assertLoopbackRedirects refuses anything else.
+  { id: 'xeno-spawn', name: 'XENO Spawn', loopback: true, redirects: ['http://127.0.0.1/auth/callback', 'http://[::1]/auth/callback'] },
   // Web (exact-match redirect; the SPA handles OIDC in-browser)
   // DUAL-HOME: siteUrlVariants() returns the callback on the canonical site
   // origin AND on every host in XENO_ALIAS_SITE_ORIGINS. Accepting both is the
@@ -66,11 +72,33 @@ const SQL = `
 ALTER TABLE oauth_clients ADD COLUMN IF NOT EXISTS loopback boolean NOT NULL DEFAULT false;
 `;
 
+/** The redirect set a client is seeded with. A loopback client defaults to the
+ *  canonical /callback pair and may declare its own loopback PATHS instead. */
+export function redirectsForClient(c) {
+  if (!c.loopback) return c.redirects || [];
+  const redirects = c.redirects || LOOPBACK_CB;
+  assertLoopbackRedirects(c.id, redirects);
+  return redirects;
+}
+
+/** A loopback client's registered redirects must be port-less http URIs on the
+ *  127.0.0.1 / [::1] literals — never `localhost` (RFC 8252 §8.3) or another host. */
+export function assertLoopbackRedirects(clientId, redirects) {
+  if (!Array.isArray(redirects) || redirects.length === 0) throw new Error(`loopback client ${clientId} has no redirects`);
+  for (const u of redirects) {
+    const url = new URL(u);
+    const host = url.hostname.replace(/^\[|\]$/g, '');
+    if (url.protocol !== 'http:' || (host !== '127.0.0.1' && host !== '::1') || url.port || url.search || url.hash) {
+      throw new Error(`loopback client ${clientId} registers a non-loopback redirect ${u}`);
+    }
+  }
+}
+
 export async function migrateOidcClients(pool) {
   assertAuthorityPolicy();
   await pool.query(SQL);
   for (const c of FIRST_PARTY_CLIENTS) {
-    const redirects = c.loopback ? LOOPBACK_CB : c.redirects || [];
+    const redirects = redirectsForClient(c);
     const scopes = scopesForClient(c.id);
     if (!scopes) throw new Error(`missing checked-in authority policy for ${c.id}`);
     await pool.query(
