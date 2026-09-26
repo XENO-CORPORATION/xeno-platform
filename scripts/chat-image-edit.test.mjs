@@ -193,11 +193,21 @@ test('the model is told when an image was an edit, and only then', () => {
 
 test('the shape is stated in the PROMPT the image model reads — the gateway ignores aspect_ratio for these models', async () => {
   const { shapedPrompt } = await import('../src/server/utils/chatImageTool.js');
-  assert.match(shapedPrompt('A lighthouse', '9:16'), /^Tall portrait image, 9:16 aspect ratio\. A lighthouse$/);
-  assert.match(shapedPrompt('A road', '16:9'), /^Wide landscape image, 16:9/);
-  assert.match(shapedPrompt('An icon', 'nonsense'), /^Square image, 1:1/, 'an unknown shape is square, never missing');
+  assert.match(shapedPrompt('A lighthouse', '9:16'), /^Tall portrait image, 9:16 aspect ratio, 941x1672 pixels\. A lighthouse$/);
+  assert.match(shapedPrompt('A road', '16:9'), /^Wide landscape image, 16:9 aspect ratio, 1672x941 pixels\./);
+  assert.match(shapedPrompt('An icon', 'nonsense'), /^Square image, 1:1 aspect ratio, 1254x1254 pixels\./, 'an unknown shape is square, never missing');
   const sent = {};
   await executor({ sent, previewedFrom: {} })({ prompt: 'A lighthouse', aspectRatio: '9:16', quality: 'high', index: 0 });
-  assert.match(sent.payload.prompt, /^Tall portrait image, 9:16 aspect ratio\. A lighthouse$/, 'the executor sends the shaped prompt');
+  assert.match(sent.payload.prompt, /^Tall portrait image, 9:16 aspect ratio, 941x1672 pixels\. A lighthouse$/, 'the executor sends the shaped prompt');
   assert.equal(sent.payload.aspect_ratio, '9:16', 'and still sends the parameter, for the day it is honoured');
+});
+
+test('the size stated for each ratio IS that ratio — a size the model does not draw is a size it ignores', async () => {
+  const { CHAT_IMAGE_SIZES, CHAT_IMAGE_ASPECTS } = await import('../src/server/utils/chatImageTool.js');
+  assert.deepEqual(Object.keys(CHAT_IMAGE_SIZES).sort(), [...CHAT_IMAGE_ASPECTS].sort(), 'every offered ratio has a size');
+  for (const [ratio, [w, h]] of Object.entries(CHAT_IMAGE_SIZES)) {
+    const [rw, rh] = ratio.split(':').map(Number);
+    // the model's native sizes are rounded to its grid, so "is the ratio" means within 1%
+    assert.ok(Math.abs(w / h - rw / rh) / (rw / rh) < 0.01, `${ratio} is stated as ${w}x${h}`);
+  }
 });

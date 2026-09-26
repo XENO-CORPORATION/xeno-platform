@@ -285,12 +285,14 @@ export async function getAuthorizedLibraryFile(db, principal, assetId, relation 
   const { rows } = await db.query(
     `SELECT f.id, f.original_name, f.filename, f.mime_type, f.file_size, f.storage_path,
             f.owner_user_id, f.workspace_id, f.content_sha256,
+            f.metadata->>'source' AS metadata_source,
             latest.state AS ingestion_state,
+            latest.error_code AS ingestion_error_code,
             COALESCE(latest.state IN ('ready','unsupported'), FALSE) AS ingestion_safe,
             COALESCE(latest.state = 'ready', FALSE) AS ingestion_ready
      FROM user_files f
      LEFT JOIN LATERAL (
-       SELECT state FROM library_asset_ingestions WHERE asset_id = f.id ORDER BY created_at DESC LIMIT 1
+       SELECT state, error_code FROM library_asset_ingestions WHERE asset_id = f.id ORDER BY created_at DESC LIMIT 1
      ) latest ON TRUE
      WHERE f.id = $1 AND f.deleted_at IS NULL AND f.storage_type = 'platform-upload'
     `,
@@ -336,7 +338,37 @@ export async function assertOwnedLibraryAttachments(db, userId, attachments) {
   }
 }
 
-export async function assertAuthorizedLibraryAttachments(db, principal, attachments) {
+/** The upload sources a CLIENT may declare. `chat-generation` is not one: only the server writes it. */
+export const CLIENT_UPLOAD_SOURCES = Object.freeze(['upload', 'library', 'project', 'chat-attachment']);
+
+const PENDING_SCAN_STATES = new Set(['quarantined', 'scanning', 'extracting']);
+
+/**
+ * An image the chat's generate_image tool made for THIS person, still inside its malware scan.
+ *
+ * 🔴 Why this exists (2026-09-26): an image lands in the chat ~20 s before its scan finishes, and the
+ * assistant message that shows it is saved the moment the turn ends — so the save was refused
+ * (`library_asset_not_found`, 404) and the chat said "Not saved" for a turn the person had watched
+ * complete and been charged for. Measured live: save refused at 12:09:00.878, scan clean 12:09:18.
+ *
+ * What is relaxed is narrow: a message may REFERENCE the asset id before the scan ends. The bytes are
+ * not: the content route and the signed-link route still refuse anything not `ingestion_safe` (423 /
+ * no link), so nothing unscanned is ever served — to the owner, or to anyone the chat is shared with.
+ * All of these must hold:
+ *   - the server wrote it: `chat-generation` is refused as a client upload source (CLIENT_UPLOAD_SOURCES);
+ *   - it is the caller's own, not a workspace file they can merely see;
+ *   - the scan has not finished — and never a file the scanner flagged as malware;
+ *   - the turn being saved names it as one of its images (the route passes those ids).
+ */
+export function isOwnPendingChatImage(file, principal) {
+  return Boolean(file)
+    && file.metadata_source === 'chat-generation'
+    && Boolean(principal?.id) && file.owner_user_id === principal.id
+    && PENDING_SCAN_STATES.has(file.ingestion_state)
+    && file.ingestion_error_code !== 'malware_detected';
+}
+
+export async function assertAuthorizedLibraryAttachments(db, principal, attachments, { pendingImageIds = null } = {}) {
   if (attachments == null) return;
   if (!Array.isArray(attachments)) throw Object.assign(new Error('Message attachments must be an array'), { code: 'invalid_attachments' });
   const ids = [...new Set(attachments.map((attachment) => attachment?.asset_id).filter(Boolean))];
@@ -345,9 +377,9 @@ export async function assertAuthorizedLibraryAttachments(db, principal, attachme
   }
   for (const id of ids) {
     const file = await getAuthorizedLibraryFile(db, principal, id);
-    if (!file || !file.ingestion_safe) {
-      throw Object.assign(new Error('One or more Library assets are unavailable'), { code: 'library_asset_not_found' });
-    }
+    if (file && file.ingestion_safe) continue;
+    if (pendingImageIds?.has(id) && isOwnPendingChatImage(file, principal)) continue;
+    throw Object.assign(new Error('One or more Library assets are unavailable'), { code: 'library_asset_not_found' });
   }
 }
 

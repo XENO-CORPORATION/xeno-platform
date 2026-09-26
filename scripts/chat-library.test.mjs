@@ -80,7 +80,11 @@ test('Library blob reads require ownership and a server-managed upload record', 
 
 test('uploads and conversational image generation both persist Library rows', () => {
   assert.match(server, /app\.post\('\/api\/upload'[\s\S]*?registerManagedLibraryFile/);
-  assert.match(server, /source: req\.body\?\.source \|\| 'upload'/);
+  // 2026-09-26: the source a CLIENT declares is from a closed list. `chat-generation` marks a file the
+  // server's own image tool made — a message may reference one during its scan — so no upload may claim it.
+  assert.match(server, /source: CLIENT_UPLOAD_SOURCES\.includes\(req\.body\?\.source\) \? req\.body\.source : 'upload'/);
+  assert.match(libraryAssets, /CLIENT_UPLOAD_SOURCES = Object\.freeze\(\['upload', 'library', 'project', 'chat-attachment'\]\)/);
+  assert.doesNotMatch(libraryAssets.match(/CLIENT_UPLOAD_SOURCES = [^\n]*/)[0], /chat-generation/);
   assert.match(server, /source: 'chat-generation'/);
   assert.match(server, /libraryContentUrl/);
   assert.match(chat, /libraryService\.upload\(file, 'chat-attachment'\)/);
@@ -150,8 +154,45 @@ test('message asset references are ReBAC-authorized before SQL persistence', () 
   assert.match(routes, /assertAuthorizedLibraryAttachments/);
   assert.match(routes, /await assertAuthorizedLibraryAttachments[\s\S]*?INSERT INTO chat_messages/);
   assert.match(libraryAssets, /for \(const id of ids\)[\s\S]*?getAuthorizedLibraryFile/);
-  assert.match(libraryAssets, /!file \|\| !file\.ingestion_safe/);
+  // A reference is accepted when the file is scanned — or when it is the turn's OWN generated image
+  // still in its scan (isOwnPendingChatImage). Anything else is refused.
+  assert.match(libraryAssets, /if \(file && file\.ingestion_safe\) continue;\s*if \(pendingImageIds\?\.has\(id\) && isOwnPendingChatImage\(file, principal\)\) continue;\s*throw/);
+  assert.match(routes, /pendingImageIds: role === 'assistant' \? turnImageAssetIds\(turnRecord\.turn\) : null/);
+  assert.match(routes, /pendingImageIds: message\?\.role === 'assistant' \? turnImageAssetIds\(turnRecords\[position\]\) : null/);
   assert.match(service, /asset_id\?: string/);
+});
+
+test('a turn may reference its own image during the scan; the BYTES stay behind the scan', async () => {
+  const { assertAuthorizedLibraryAttachments, isOwnPendingChatImage } = await import('../src/server/services/libraryAssets.js');
+  const me = { type: 'user', id: '20000000-0000-4000-8000-000000000002' };
+  const asset = '10000000-0000-4000-8000-000000000001';
+  const row = (over = {}) => ({
+    id: asset, owner_user_id: me.id, metadata_source: 'chat-generation',
+    ingestion_state: 'quarantined', ingestion_error_code: null, ingestion_safe: false, ...over,
+  });
+  // a db that allows the ReBAC check and returns one file row
+  const dbWith = (file) => ({
+    query: async (sql) => (/relationship_tuples/.test(sql) ? { rows: [{ relation: 'owner' }] } : { rows: file ? [file] : [] }),
+  });
+  const attach = [{ type: 'image', asset_id: asset }];
+  const turnIds = new Set([asset]);
+
+  await assertAuthorizedLibraryAttachments(dbWith(row()), me, attach, { pendingImageIds: turnIds });
+  await assertAuthorizedLibraryAttachments(dbWith(row({ ingestion_state: 'scanning' })), me, attach, { pendingImageIds: turnIds });
+  const refused = (file, opts) => assert.rejects(assertAuthorizedLibraryAttachments(dbWith(file), me, attach, opts), { code: 'library_asset_not_found' });
+  await refused(row(), undefined);                                                    // not named by the turn
+  await refused(row(), { pendingImageIds: new Set() });                               // the turn names other images
+  await refused(row({ metadata_source: 'chat-attachment' }), { pendingImageIds: turnIds }); // an upload, not the server's image
+  await refused(row({ owner_user_id: '30000000-0000-4000-8000-000000000003' }), { pendingImageIds: turnIds }); // someone else's
+  await refused(row({ ingestion_state: 'failed' }), { pendingImageIds: turnIds });    // the scan ENDED without passing
+  await refused(row({ ingestion_error_code: 'malware_detected' }), { pendingImageIds: turnIds }); // flagged, back in quarantine
+  await refused(null, { pendingImageIds: turnIds });                                  // no such file
+  await assertAuthorizedLibraryAttachments(dbWith(row({ ingestion_safe: true, ingestion_state: 'ready' })), me, attach); // scanned: as before
+
+  assert.equal(isOwnPendingChatImage(row(), { id: me.id }), true);
+  // the bytes: both the content route and the signed link still refuse anything not scanned
+  assert.match(libraryRoutes, /file\.ingestion_safe === false\)[\s\S]{0,40}status\(423\)/);
+  assert.match(libraryAssets, /createAuthorizedLibraryContentPath[\s\S]{0,400}if \(!file \|\| !file\.ingestion_safe\) return null;/);
 });
 
 test('shared image component exports draggable signed URLs and chat persists references, not duplicate bytes', () => {

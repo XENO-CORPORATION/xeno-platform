@@ -128,7 +128,7 @@ import { annotateCatalogueRoutes } from './services/providerCredentials.js';
 import { requestSurface } from './utils/requestSurface.js';
 import { mergeCatalogueWithRoutes } from './utils/modelCatalogueMerge.js';
 import { buildEffortFamilies, effortOptionsFor } from './utils/reasoningEffortFamilies.js';
-import { registerManagedLibraryFile } from './services/libraryAssets.js';
+import { CLIENT_UPLOAD_SOURCES, registerManagedLibraryFile } from './services/libraryAssets.js';
 import { assembleProjectContext } from './services/chatProjectContext.js';
 
 // Round 8: Infrastructure imports
@@ -1050,7 +1050,9 @@ app.post('/api/upload', databaseMiddleware, authMiddleware, upload.single('image
       mimeType: req.file.mimetype,
       fileSize: req.file.size,
       storagePath: filePath,
-      metadata: { source: req.body?.source || 'upload' },
+      // a CLIENT-declared source, from a closed list: `chat-generation` marks a file the server's own
+      // image tool made, which a message may reference during its scan — no upload may claim it
+      metadata: { source: CLIENT_UPLOAD_SOURCES.includes(req.body?.source) ? req.body.source : 'upload' },
     });
     const libraryId = stored.id;
 

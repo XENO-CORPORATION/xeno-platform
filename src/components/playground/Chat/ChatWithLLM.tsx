@@ -50,7 +50,7 @@ import { buildChatSystemPrompt, CHAT_MODE_PLACEHOLDERS, modeUsesXenoSearch, type
 import ChatTurnHead from './ChatTurnHead';
 import { ChatGeneratedImages, imageAssetFor, type ChatTurnImageView } from './ChatGeneratedImage';
 import {
-  applyTurnEvent, chatFaviconUrl, closeTurnRecord, DEFAULT_STEPS_MODE, isStepsMode, newTurnRecord, normalizeStoredTurn, turnCitedSources, turnHasRail, turnImages,
+  applyTurnEvent, chatFaviconUrl, closeTurnRecord, DEFAULT_STEPS_MODE, isStepsMode, newTurnRecord, normalizeStoredTurn, turnCitedSources, turnHasRail, turnImageModels, turnImages,
   type ChatTurnRecord, type StepsMode,
 } from './chatTurnTranscript';
 import { CitationChip, parseCitationHref, remarkCitations } from '@xenosystem/agent-conversation/components/agent/transcript/citations';
@@ -316,6 +316,45 @@ const estimateTokens = (text: string): number => {
   return quickEstimateTokens(text);
 };
 
+const formatTokenCount = (count: number): string => count.toLocaleString('en-US');
+const modelLabel = (modelId: string): string => modelId.split('/').pop() || modelId;
+
+/**
+ * The ⓘ row under an answer: WHICH models made it and what they used.
+ *
+ * The text model first, with the turn's real token counts in → out when the server billed them (a
+ * tool turn's calls summed); the local estimate only when a turn has no usage. Then every image model
+ * the turn used — `gpt-image-2.5-sunburst · 1 image · 555 tokens` — because an image is made by a
+ * different model from the words around it, and a row naming only the chat model hid that it ran.
+ */
+function MessageModelInfo({ timestamp, textModel, tokenUsage, estimatedTokens, imageModels }: {
+  timestamp?: number;
+  textModel: string;
+  tokenUsage?: { input: number; output: number; total: number };
+  estimatedTokens?: number;
+  imageModels: Array<{ model: string; images: number; tokens?: number }>;
+}) {
+  return (
+    // A step down from the action bar's own size and set off from it: this is a footnote about the
+    // message, not another control in the row, and at text-xs butted against the ⓘ it read as one.
+    <div className="ml-2 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-[11px] text-[var(--chat-muted)]" data-message-model-info="true">
+      {timestamp && <span>{formatMessageTime(timestamp)}</span>}
+      <span data-model-kind="text" title={tokenUsage ? `${formatTokenCount(tokenUsage.input)} in · ${formatTokenCount(tokenUsage.output)} out` : undefined}>
+        {modelLabel(textModel)}
+        {tokenUsage
+          ? <> · {formatTokenCount(tokenUsage.total)} tokens</>
+          : estimatedTokens !== undefined ? <> · ~{formatTokenCount(estimatedTokens)} tokens</> : null}
+      </span>
+      {imageModels.map((entry) => (
+        <span key={entry.model} data-model-kind="image">
+          {modelLabel(entry.model)} · {entry.images} {entry.images === 1 ? 'image' : 'images'}
+          {entry.tokens !== undefined ? <> · {formatTokenCount(entry.tokens)} tokens</> : null}
+        </span>
+      ))}
+    </div>
+  );
+}
+
 // Interface for attached file state
 interface AttachedFile {
   id: string;
@@ -395,6 +434,12 @@ interface ChatMessage {
     isCancelled?: boolean; // New field to indicate if the AI response was cancelled
     isXenoSearchCancelled?: boolean; // New field to indicate if cancelled due to Xeno Search failure
     answerTokenCount?: number; // NEW: Token count for the AI's answer
+    /**
+     * The text model's REAL tokens for the turn, as the server billed them (all upstream calls of a
+     * tool turn summed). Stored with the message, so the info row shows the same numbers after a
+     * reload; `answerTokenCount` is only the local estimate, kept for turns that have no usage.
+     */
+    tokenUsage?: { input: number; output: number; total: number };
     isLoading?: boolean; // NEW: Flag for search loading state
     isXenoDeepSearchContainer?: boolean; // New flag to identify deep search containers
     isStreaming?: boolean; // True while the answer is being revealed (typewriter); actions hidden until done
@@ -532,6 +577,9 @@ const dbMessageToLocal = (msg: DBChatMessage, index: number): ChatMessage => {
     parsedAnswer: isAi ? msg.content : undefined,
     modelId: msg.model_id,
     modelIdUsed: msg.model_id,
+    ...(isAi && Number.isInteger(msg.total_tokens) && (msg.total_tokens as number) > 0 ? {
+      tokenUsage: { input: msg.prompt_tokens ?? 0, output: msg.completion_tokens ?? 0, total: msg.total_tokens as number },
+    } : {}),
     thinkingContent: msg.thinking,
     hasThinking: msg.has_thinking,
     timestamp: msg.created_at ? new Date(msg.created_at).getTime() : undefined,
@@ -6511,6 +6559,11 @@ interface QueueState {
                 has_thinking: !!msg.thinkingContent,
                 attachments: messageLibraryAttachments(msg),
                 context_record_id: msg.projectContextId,
+                ...(msg.tokenUsage ? {
+                  prompt_tokens: msg.tokenUsage.input,
+                  completion_tokens: msg.tokenUsage.output,
+                  total_tokens: msg.tokenUsage.total,
+                } : {}),
                 turn: msg.turn,
               })),
             );
@@ -7259,6 +7312,13 @@ interface QueueState {
             imageData: data.imageData || undefined, // Handle potential image data from API
             isGeneratingImage: taskArg === 'image' ? false : undefined, // Set generating flag based on task
             answerTokenCount: estimateTokens(finalAnswer || ''), // NEW: Store token count
+            ...(Number.isInteger(data.usage?.total_tokens) && data.usage.total_tokens > 0 ? {
+              tokenUsage: {
+                input: data.usage.prompt_tokens || 0,
+                output: data.usage.completion_tokens || 0,
+                total: data.usage.total_tokens,
+              },
+            } : {}),
             isXenoDeepSearchContainer: false, // New flag to identify deep search containers
             isLoading: false, // FIX: Explicitly set loading to false when response is complete
         };
@@ -7356,6 +7416,11 @@ interface QueueState {
                           has_thinking: !!updatedMessage.thinkingContent,
                           context_record_id: updatedMessage.projectContextId,
                           web_context_receipt_id: updatedMessage.searchInfo?.webContextReceiptId,
+                          ...(updatedMessage.tokenUsage ? {
+                            prompt_tokens: updatedMessage.tokenUsage.input,
+                            completion_tokens: updatedMessage.tokenUsage.output,
+                            total_tokens: updatedMessage.tokenUsage.total,
+                          } : {}),
                           turn: updatedMessage.turn,
                           // every image the turn made: the attachment is what ties the library file
                           // to this conversation, so a reload and a share can show it
@@ -16998,15 +17063,13 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                                                   // off from it: this is a footnote about the message,
                                                   // not another control in the row, and at text-xs
                                                   // butted against the ⓘ it read as one.
-                                                  <div className="ml-2 flex items-center gap-3 text-[11px] text-[var(--chat-muted)]">
-                                                      {message.timestamp && (
-                                                          <span className="text-[var(--chat-muted)]">{formatMessageTime(message.timestamp)}</span>
-                                                      )}
-                                                      <span>{message.modelIdUsed.split('/').pop()}</span>
-                                                      {message.answerTokenCount !== undefined && (
-                                                          <span>{message.answerTokenCount} tokens</span>
-                                                      )}
-                                                  </div>
+                                                  <MessageModelInfo
+                                                      timestamp={message.timestamp}
+                                                      textModel={message.modelIdUsed}
+                                                      tokenUsage={message.tokenUsage}
+                                                      estimatedTokens={message.answerTokenCount}
+                                                      imageModels={turnImageModels(message.turn)}
+                                                  />
                                               )}
                                           </div>
                                       )}

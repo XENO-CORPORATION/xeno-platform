@@ -67,7 +67,7 @@ try {
   };
 
   const { ChatGeneratedImages, aspectValue, frameMaxWidth } = await vite.ssrLoadModule('/src/components/playground/Chat/ChatGeneratedImage.tsx');
-  const { applyTurnEvent, newTurnRecord, turnImages, closeTurnRecord } = await vite.ssrLoadModule('/src/components/playground/Chat/chatTurnTranscript.ts');
+  const { applyTurnEvent, newTurnRecord, turnImages, closeTurnRecord, turnImageModels, normalizeStoredTurn } = await vite.ssrLoadModule('/src/components/playground/Chat/chatTurnTranscript.ts');
 
   const root = createRoot(document.getElementById('root'));
   const render = async (props) => {
@@ -137,6 +137,24 @@ try {
   el = await render({ images: [], live: false });
   check('a turn that made no image renders nothing at all', el.querySelector('.chat-genimages') === null);
 
+  // ── which models made the turn: the image model and its tokens ride the step ───────────────
+  const ASSET_A = '11111111-2222-4333-8444-555555555555';
+  const ASSET_B = '11111111-2222-4333-8444-666666666666';
+  let modelled = applyTurnEvent(newTurnRecord(1000), { type: 'image_start', index: 0, prompt: 'a', aspectRatio: '1:1' }, 1100);
+  modelled = applyTurnEvent(modelled, { type: 'image_result', index: 0, image: { id: ASSET_A, model: 'gpt-image-2.5-sunburst', usage: { input: 40, output: 515, total: 555 } } }, 2000);
+  modelled = applyTurnEvent(modelled, { type: 'image_start', index: 1, prompt: 'b', aspectRatio: '9:16' }, 2100);
+  modelled = applyTurnEvent(modelled, { type: 'image_result', index: 1, image: { id: ASSET_B, model: 'gpt-image-2.5-sunburst', usage: { input: 40, output: 301, total: 341 } } }, 3000);
+  modelled = applyTurnEvent(modelled, { type: 'image_start', index: 2, prompt: 'c', aspectRatio: '1:1' }, 3100);
+  modelled = applyTurnEvent(modelled, { type: 'image_error', index: 2, code: 'image_declined', message: 'declined' }, 3200);
+  check('an image step records the model that drew it and that call\'s tokens', turnImages(modelled)[0].model === 'gpt-image-2.5-sunburst' && turnImages(modelled)[0].usage?.total === 555);
+  const summary = turnImageModels(modelled);
+  check('the info summary lists each image model once, counts its images and sums their tokens — a failed image is not counted',
+    summary.length === 1 && summary[0].model === 'gpt-image-2.5-sunburst' && summary[0].images === 2 && summary[0].tokens === 896, JSON.stringify(summary));
+  const reloaded = normalizeStoredTurn(JSON.parse(JSON.stringify(closeTurnRecord(modelled, 4000))));
+  check('the model and tokens survive a save and reload', turnImageModels(reloaded)[0]?.tokens === 896);
+  const hostile = applyTurnEvent(newTurnRecord(1000), { type: 'image_result', index: 0, image: { id: ASSET_A, model: '<img onerror=x>', usage: { input: -1, output: 2, total: 1 } } }, 2000);
+  check('a malformed model or usage is dropped, never stored', turnImages(hostile)[0].model === undefined && turnImages(hostile)[0].usage === undefined);
+
   // ── the chat really mounts it, from the turn record, and the old detector is gone ────────────
   // the working tree is CRLF on Windows and LF in git; read the source in one shape either way
   const chat = code(readFileSync('src/components/playground/Chat/ChatWithLLM.tsx', 'utf8').replace(/\r\n/g, '\n'));
@@ -147,6 +165,11 @@ try {
   check('the streamed save stores the turn\'s images as attachments, so a reload has them', /turnImages\(updatedMessage\.turn\)\.some\(\(step\) => step\.assetId\)[\s\S]{0,120}attachments: messageLibraryAttachments\(updatedMessage\)/.test(chat));
   check('the keyword image detector is gone — an image request is a chat turn the model decides', !/extractedDirectPrompt|isPotentialImageRefinement|const generateImage =/.test(chat));
   check('the preview is session-only: nothing sends imagePreviews to the server', !/imagePreviews[^\n]{0,80}chatService\.addMessage|addMessage\([^)]*imagePreviews/.test(chat));
+  check('the info row names the text model AND every image model of the turn', /<MessageModelInfo[\s\S]{0,400}textModel=\{message\.modelIdUsed\}[\s\S]{0,400}imageModels=\{turnImageModels\(message\.turn\)\}/.test(chat));
+  check('the info row shows the REAL billed tokens, and the estimate only as a fallback marked "~"', /tokenUsage\s*\?\s*<> · \{formatTokenCount\(tokenUsage\.total\)\} tokens<\/>\s*: estimatedTokens !== undefined \? <> · ~\{formatTokenCount\(estimatedTokens\)\} tokens<\/>/.test(chat));
+  // read UNSTRIPPED: `code()` treats the `'image/*'` string in dbMessageToLocal as a comment opener
+  const chatRaw = readFileSync('src/components/playground/Chat/ChatWithLLM.tsx', 'utf8').replace(/\r\n/g, '\n');
+  check('the real tokens are saved with the message and read back on reload', /prompt_tokens: updatedMessage\.tokenUsage\.input,[\s\S]{0,160}total_tokens: updatedMessage\.tokenUsage\.total/.test(chatRaw) && /tokenUsage: \{ input: msg\.prompt_tokens \?\? 0, output: msg\.completion_tokens \?\? 0, total: msg\.total_tokens as number \}/.test(chatRaw));
   const css = readFileSync('src/components/playground/Chat/chatGeneratedImage.css', 'utf8');
   check('every colour of the frame is a chat token (it renders in light, dim and dark)', !/#[0-9a-f]{3,8}\b/i.test(css.replace(/\.chat-genimage-action[^{]*\{[^}]*\}/g, '').replace(/\/\*[\s\S]*?\*\//g, '')) && /var\(--chat-border\)/.test(css));
   check('reduced motion is honoured', /prefers-reduced-motion: reduce/.test(css));
