@@ -1,0 +1,60 @@
+/*
+ * A collapsed user message: a few lines, a fade, a "Show more".
+ *
+ * The wrapper sits INSIDE `.xeno-message-body`, so it inherits the bubble's `white-space: pre-wrap`
+ * and `overflow-wrap` — the person's own line breaks are kept. Collapse is a `max-height` clamp, not
+ * truncation: the full text stays in the DOM (Copy and Edit read it), only its DISPLAY is bounded.
+ * Every colour is a chat token, so it reads in the light, dim and dark themes; the fade blends to
+ * `--chat-surface`, which is exactly the user bubble's own fill (`--xeno-surface: var(--chat-surface)`).
+ */
+.chat-usermsg {
+  display: block;
+  min-width: 0;
+}
+
+/* ~9 lines at the body's line-height. A message taller than this clamps; anything shorter is shown
+   whole and never gets a toggle. `min-height:0` lets the box actually shrink to the clamp inside a
+   flex bubble. */
+.chat-usermsg-text[data-clamped] {
+  display: block;
+  max-height: 13.5em;
+  overflow: hidden;
+  min-height: 0;
+  /* The fade is part of the clamp, so the last visible line reads as "continues" rather than a hard
+     cut. mask-image needs no extra element and tints nothing — it only reveals less toward the edge. */
+  -webkit-mask-image: linear-gradient(to bottom, #000 70%, transparent 100%);
+  mask-image: linear-gradient(to bottom, #000 70%, transparent 100%);
+}
+
+.chat-usermsg-toggle {
+  display: inline-flex;
+  align-items: center;
+  margin-top: 6px;
+  padding: 2px 0;
+  border: 0;
+  background: none;
+  cursor: pointer;
+  font: inherit;
+  font-size: 12px;
+  line-height: 1.2;
+  color: var(--chat-muted);
+  transition: color 120ms ease;
+}
+
+.chat-usermsg-toggle:hover,
+.chat-usermsg-toggle:focus-visible {
+  color: var(--chat-text);
+}
+
+/* The toggle is a real control: it keeps the platform's focus ring rather than the bare browser one. */
+.chat-usermsg-toggle:focus-visible {
+  outline: 2px solid var(--chat-accent);
+  outline-offset: 2px;
+  border-radius: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .chat-usermsg-toggle {
+    transition: none;
+  }
+}

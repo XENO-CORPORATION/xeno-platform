@@ -154,6 +154,9 @@ jobs:
       # A chat image's frame must BE the image's shape before it exists, and read in every palette.
       - name: Assert a generated image's frame is its shape, in the page's theme
         run: npm run test:chat-generated-image-rendered
+      # A long pasted user message must clamp to a few lines with a fade + Show more, in every palette.
+      - name: Assert a long user message collapses, in the page's theme
+        run: npm run test:chat-user-message-rendered
 
   # ── The Forum's end-to-end proofs ───────────────────────────────────────────
   #

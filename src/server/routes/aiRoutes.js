@@ -8,7 +8,7 @@ import { resolveRoute, normalizePath, catalogPaths } from '../utils/modelPaths.j
 import { meterPremiumChat, meterPremiumChatStream, meterMediaGeneration } from '../utils/inferenceMeter.js';
 import { estimateChatCostMicro, estimateMessageTokens } from '../utils/creditCosts.js';
 import { getBalanceV2, MICRO_PER_CREDIT } from '../utils/creditLedgerV2.js';
-import { xenoChatCompletion, xenoChatCompletionStream, xenoApiConfigured, classifyUpstreamError, xenoModelCatalog, prettyModelName, PROVIDER_LABELS, xenoImageGeneration } from '../utils/xenoChat.js';
+import { xenoChatCompletion, xenoChatCompletionStream, xenoApiConfigured, classifyUpstreamError, isContentDeclined, xenoModelCatalog, prettyModelName, PROVIDER_LABELS, xenoImageGeneration } from '../utils/xenoChat.js';
 import { enforceInHouseDailyLimit, limitExceededBody } from '../middleware/inHouseDailyLimit.js';
 import requireEntitlement from '../middleware/requireEntitlement.js';
 import { byokEnabled, resolveInferenceRoute, annotateCatalogueRoutes } from '../services/providerCredentials.js';
@@ -860,6 +860,9 @@ router.post('/chat/stream', requireEntitlement('canUse'), async (req, res) => {
 
         if (chunk.usage) yield { type: 'usage', usage: chunk.usage };
 
+        const finish = chunk.choices?.[0]?.finish_reason;
+        if (typeof finish === 'string' && finish) lastFinishReason = finish;
+
         const delta = chunk.choices?.[0]?.delta || {};
         if (Array.isArray(delta.tool_calls)) calls.push(delta.tool_calls);
         if (typeof delta.content === 'string' && delta.content.length) {
@@ -897,6 +900,14 @@ router.post('/chat/stream', requireEntitlement('canUse'), async (req, res) => {
    * deltas means a dropped frame cannot truncate the saved message.
    */
   let assembledText = '';
+  /*
+   * The finish_reason the LAST upstream call ended on, captured across whichever path ran
+   * (plain relay or a tool-loop iteration — both call streamOneCall). It exists for ONE case:
+   * a provider that refuses to answer ends the stream with `finish_reason: "content_filter"`
+   * and NO content, which otherwise settles as an empty, successful turn and reaches the client
+   * as "Invalid response format from server". Measured live 2026-09-26 on claude-opus-5-5-medium.
+   */
+  let lastFinishReason = null;
   // the thought as streamed — it rides the result frame too, so a client that reads only the
   // result (or reloads) keeps it; `reasoningProcessed` is the CLIENT's toggle and says nothing
   // about whether the model thought out loud
@@ -1210,6 +1221,26 @@ router.post('/chat/stream', requireEntitlement('canUse'), async (req, res) => {
         message: error?.message,
       });
     });
+  }
+
+  /*
+   * 🔴 The model DECLINED and produced nothing. The provider ends such a stream with
+   * `finish_reason: "content_filter"` (some resellers: "refusal") and an empty body, which
+   * had shaped into a blank successful result and surfaced as "Invalid response format from
+   * server" — an error about our JSON, for a refusal that is about the message. Tell the truth
+   * and stop, so the client shows a clear message and offers a retry, and let billing resolve
+   * first (0 output tokens ⇒ resolveAllMeters already voided the hold, so nothing was charged).
+   * A turn with ANY text or an image is a real answer and never takes this branch.
+   */
+  if (isContentDeclined(lastFinishReason, { hasText: Boolean(assembledText.trim()), hasImage: imagesMade.length > 0 })) {
+    await send({
+      type: 'error',
+      error: 'content_declined',
+      message: 'The model declined to answer this message. Try rephrasing it, or switch to another model.',
+    });
+    await send({ type: 'done' });
+    endStream();
+    return;
   }
 
   const shaped = shapeChatResponse({

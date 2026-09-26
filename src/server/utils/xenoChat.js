@@ -41,6 +41,24 @@ export function xenoApiConfigured() {
  * provider detail; a provider 5xx is a 502. Anything else stays a 500. Never the
  * raw body: it can carry provider internals, and a message is enough.
  */
+/**
+ * The finish reasons a provider uses when it REFUSES to answer rather than failing. The stream
+ * closes normally with an empty body, so this is the only signal that a blank turn is a decline
+ * and not a bug. `content_filter` is the OpenAI-shaped value; some resellers send `refusal`.
+ */
+export const DECLINED_FINISH_REASONS = new Set(['content_filter', 'refusal']);
+
+/**
+ * Did the model DECLINE — end a call on a refusal finish reason having produced nothing? A turn
+ * with any answer text or any generated image is a real answer and is never a decline, even if a
+ * later fragment carried a filter flag. Pure so it can be tested against the exact cases that
+ * reach it, rather than asserting a regex over the route (mechanism, not outcome).
+ */
+export function isContentDeclined(finishReason, { hasText, hasImage } = {}) {
+  if (hasText || hasImage) return false;
+  return DECLINED_FINISH_REASONS.has(finishReason);
+}
+
 export function classifyUpstreamError(error) {
   const status = Number(error?.status);
   if (!Number.isInteger(status)) return null;
