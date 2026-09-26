@@ -249,6 +249,10 @@ services:
       # Svix signing secret of the Resend webhook that posts delivery events to
       # /api/email/webhooks/resend (routes/emailWebhookRoutes.js). Unset = 503, never unsigned.
       - RESEND_WEBHOOK_SECRET=${RESEND_WEBHOOK_SECRET:-}
+      # XENO Shell shared sessions: Cloudflare Realtime TURN (a named stand-in for our own coturn,
+      # services/shellSessions.js). Unset = STUN only: shells behind a blocking NAT cannot meet.
+      - CF_TURN_KEY_ID=${CF_TURN_KEY_ID:-}
+      - CF_TURN_KEY_API_TOKEN=${CF_TURN_KEY_API_TOKEN:-}
       # ── Billing / Stripe ─────────────────────────────────────────────
       # 🔴 DECLARED HERE ON PURPOSE, all via ${VAR:-} so an unset one is empty
       # rather than a compose error. On 2026-08-24 this file was overwritten from
