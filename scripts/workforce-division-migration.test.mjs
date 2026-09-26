@@ -21,12 +21,17 @@
  *           reads it at spend time, because there is no spend path. Citing DIV-07 would claim the
  *           half that decides who actually pays.
  *   DIV-08  "a division scope is a VISIBILITY and an EXECUTION boundary, ENFORCED AT ADMISSION."
- *           Still not cited. RUN-02's intersection now exists (workforce-run-admission.test.mjs,
- *           2026-09-25) and a division-targeted assignment is admitted under its OWN grant, never
- *           unioned with its parent scope -- that is the EXECUTION half's precondition. What is
- *           missing is the boundary itself: admission does not ask whether the ACTOR sits inside
- *           the division, and nothing filters VISIBILITY by it. Citing DIV-08 now would still be
- *           the *"UI label mistaken for pool enforcement"* failure §21 names. */
+ *           NOW CITED (2026-09-27), and not here: this suite proves the division RECORD, and the
+ *           boundary lives in the services that decide. EXECUTION: admission refuses an actor
+ *           outside the division (workforce-run-admission.test.mjs, "DIV-08: a division is an
+ *           execution boundary"), and live authority stops a run whose actor leaves it or whose
+ *           division closes (workforce-run-authority.test.mjs). VISIBILITY: the catalog lists a
+ *           division's work only to those who can see the division, in every view
+ *           (workforce-catalog-scoped-views.test.mjs). One rule for both -- a relation held on the
+ *           division ITSELF, never through a parent division, with workspace administrators seeing
+ *           and acting in all of them -- on the existing ReBAC tuples, so DIV-10's "no division
+ *           permission engine or roster" holds. What the refusal named was the missing boundary;
+ *           that is what was built. */
 
 import test from 'node:test';
 import assert from 'node:assert/strict';

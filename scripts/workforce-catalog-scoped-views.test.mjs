@@ -36,6 +36,14 @@
  *   - the project view skips the scope check             -> "another scope's project answers like a missing one"
  *   - the scope hash ignores the view                    -> "a cursor is bound to its view"
  *   - the route validator admits a source owner          -> "the route refuses a reply that names the source owner"
+ *
+ * DIV-08, the VISIBILITY half -- "a principal acting in `creative` sees creative surfaces" -- mutation-
+ * checked 2026-09-27, each fails the named assertion:
+ *   - the assigned view ignores divisions                -> "a division-scoped assignment is hidden outside the division"
+ *   - division visibility follows a parent division      -> "seeing a parent division does not reveal its child"
+ *   - workspace admins are not exempt                    -> "a workspace administrator sees every division"
+ *   - the project view ignores divisions                 -> "project work inside a division is hidden outside it"
+ *   - the global view counts a hidden division as a reach -> "the global view never reaches through a hidden division"
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -214,6 +222,52 @@ test('workspace and project views of the one catalog show assigned and participa
       assert.ok(!ids(await list(scope(target), { view: 'assigned' })).includes(live));
       const [row] = (await list(scope(target), { view: 'project', projectId: project })).items;
       assert.deepEqual(row.participation.effectiveCapabilities, [], 'a participation follows its assignment');
+    });
+
+    await t.test('DIV-08: a division is a visibility boundary -- its work is listed only to those who can see it (DIV-08)', async () => {
+      const [insider, outsiderOfDiv, admin, parentOnly] = Array.from({ length: 4 }, () => randomUUID());
+      for (const id of [insider, outsiderOfDiv, admin, parentOnly]) await pool.query('INSERT INTO users(id,username) VALUES($1::uuid,$1::text)', [id]);
+      const tuple = (type, id, relation, u) => pool.query(`INSERT INTO relationship_tuples(object_type,object_id,relation,subject_type,subject_id)
+        VALUES($1,$2,$3,'user',$4)`, [type, id, relation, u]);
+      for (const u of [insider, outsiderOfDiv, parentOnly]) await tuple('workspace', target, 'viewer', u);
+      await tuple('workspace', target, 'admin', admin);
+      const mk = async (key, parent = null) => (await pool.query(`INSERT INTO workforce_divisions(workspace_id,parent_division_id,key,name,created_by_user_id)
+        VALUES($1,$2,$3,$3,$4) RETURNING id`, [target, parent, key, sourceAdmin])).rows[0].id;
+      const creative = await mk('creative'), dev = await mk('dev'), platform = await mk('platform', dev);
+      await tuple('division', creative, 'viewer', insider);
+      await tuple('division', dev, 'viewer', parentOnly);
+      const divisionAssign = async (name, divisionId) => {
+        const id = await resource(name);
+        const row = (await pool.query(`INSERT INTO workforce_workspace_assignments(resource_id,resource_kind,workspace_id,source_owner_workspace_id,
+          resource_revision,created_by_user_id,policy,target_division_id) VALUES($1,'agent',$2,$3,1,$4,$5,$6) RETURNING *`,
+        [id, target, source, sourceAdmin, policy(['files.read']), divisionId])).rows[0];
+        return { id, assignment: await accept(row) };
+      };
+      const inCreative = await divisionAssign('creative only', creative);
+      const inPlatform = await divisionAssign('platform only', platform);
+      const workspaceLevel = await divisionAssign('workspace level', null);
+      const seen = async (actor) => ids(await list(scope(target), { view: 'assigned', limit: 100 }, ctx(actor)));
+
+      assert.ok((await seen(insider)).includes(inCreative.id), 'a division member sees its division\'s work');
+      assert.ok(!(await seen(outsiderOfDiv)).includes(inCreative.id), 'a division-scoped assignment is hidden outside the division');
+      assert.ok((await seen(outsiderOfDiv)).includes(workspaceLevel.id), 'work that names no division is listed as before');
+      assert.ok(!(await seen(parentOnly)).includes(inPlatform.id), 'seeing a parent division does not reveal its child');
+      const adminSees = await seen(admin);
+      assert.ok(adminSees.includes(inCreative.id) && adminSees.includes(inPlatform.id), 'a workspace administrator sees every division');
+
+      // A project's view: work built on a division assignment is inside that division.
+      const proj = (await pool.query('INSERT INTO chat_projects(workspace_id) VALUES($1) RETURNING id', [target])).rows[0].id;
+      await pool.query(`INSERT INTO workforce_project_participations(resource_id,resource_kind,project_id,target_kind,workspace_id,assignment_id,
+         responsibility,policy,created_by_user_id) VALUES($1,'agent',$2,'workspace',$3,$4,'reviewer',$5,$6)`,
+      [inCreative.id, proj, target, inCreative.assignment.id, policy(['files.read']), sourceAdmin]);
+      const projectIds = async (actor) => ids(await list(scope(target), { view: 'project', projectId: proj }, ctx(actor)));
+      assert.deepEqual(await projectIds(insider), [inCreative.id]);
+      assert.deepEqual(await projectIds(outsiderOfDiv), [], 'project work inside a division is hidden outside it');
+
+      // The global aggregate: an assignment into a readable workspace is a reach only through a visible division.
+      const globalIds = async (actor) => ids(await listOwnedWorkforceResources(pool, ctx(actor), { view: 'global', expectedActorAccountId: actor, limit: 100 }));
+      assert.ok((await globalIds(insider)).includes(inCreative.id));
+      assert.ok(!(await globalIds(outsiderOfDiv)).includes(inCreative.id), 'the global view never reaches through a hidden division');
     });
 
     await t.test('over real HTTP: the router serves the views and refuses a reply that leaks', async () => {

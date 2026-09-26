@@ -30,6 +30,15 @@
  *   - the resolver skips the observer check                    -> "a team pin needs the actor's admitted membership"
  *   - the resolver accepts a target granting another resource  -> "a pin is only of the resource the target grants"
  *   - the read writes an admission                             -> "a pin read admits nothing"
+ *
+ * Mutation-checked 2026-09-27, DIV-08 (actsInDivision + the division term), each fails the named assertion:
+ *   - the division term is skipped                    -> "a workspace editor outside the division cannot run its work"
+ *   - a workspace EDITOR counts as in every division  -> "a workspace editor outside the division cannot run its work"
+ *   - the division check follows parent tuples        -> "editor on a parent division does not reach its child"
+ *   - a division viewer may execute                   -> "a division viewer does not execute in it"
+ *   - workspace admins are not exempt                 -> "a workspace administrator acts in every division of its own workspace"
+ *   - a project run skips the division term           -> "a project inside a division is inside its boundary"
+ *   - an archived division still admits               -> "an archived division admits no new run"
  * The three resolver mutants ALSO fail admission's own assertion ("owning a resource is not authority in
  * a workspace", "an observer may not dispatch", "an assignment admits only the resource it assigns"):
  * admission and the read call one resolveRunnable, so neither can be weakened without the other.
@@ -95,6 +104,10 @@ test('a run is admitted from authoritative state, as the intersection of every r
       source_approved_at=clock_timestamp(), target_accepted_by_user_id=$2, accepted_at=clock_timestamp(), updated_at=clock_timestamp() WHERE id=$1`, [a, approver ?? owner]);
     return a;
   };
+
+  // DIV-08: a principal acts INSIDE a division by holding a relation on the division itself.
+  const inDivision = (divisionId, u, relation = 'editor', subjectType = 'user') => pool.query(`INSERT INTO relationship_tuples(object_type,object_id,relation,subject_type,subject_id)
+    VALUES('division',$1,$2,$3,$4)`, [divisionId, relation, subjectType, u]);
 
   // A division-targeted assignment (DIV-05): same edge, one more column.
   const assignTo = async (resourceId, workspaceId, divisionId, policy) => {
@@ -207,14 +220,17 @@ test('a run is admitted from authoritative state, as the intersection of every r
     const ws = await workspace(owner, 'div', [['editor', editor]]);
     const division = (await pool.query(`INSERT INTO workforce_divisions(workspace_id,key,name,created_by_user_id) VALUES($1,'office','Office',$2) RETURNING id`,
       [ws, owner])).rows[0].id;
+    await inDivision(division, editor);
     const wide = await assign(lent.id, 'agent', ws, { type: 'workspace', id: lender }, explicit(['files.read', 'files.write', 'shell.run']));
     const narrow = await assignTo(lent.id, ws, division, explicit(['files.read']));
     const r = await admitRun(pool, ctx(editor), base(lent, { kind: 'workspace', assignmentId: narrow }));
     assert.deepEqual(r.admission.capabilities.effective, ['files.read'], 'a division grant is not unioned with its parent scope');
     assert.ok(wide);
     // An explicitly INHERITING grant takes exactly its bound parent's set -- and nothing once that parent dies.
-    const inherits = await assignTo(lent.id, ws, (await pool.query(`INSERT INTO workforce_divisions(workspace_id,key,name,created_by_user_id)
-      VALUES($1,'studio','Studio',$2) RETURNING id`, [ws, owner])).rows[0].id,
+    const studioDivision = (await pool.query(`INSERT INTO workforce_divisions(workspace_id,key,name,created_by_user_id)
+      VALUES($1,'studio','Studio',$2) RETURNING id`, [ws, owner])).rows[0].id;
+    await inDivision(studioDivision, editor);
+    const inherits = await assignTo(lent.id, ws, studioDivision,
       { schemaVersion: 1, mode: 'inherit_parent', capabilities: [], parent: { assignmentId: wide,
         revision: Number((await pool.query('SELECT revision FROM workforce_workspace_assignments WHERE id=$1', [wide])).rows[0].revision) } });
     const inherited = await admitRun(pool, ctx(editor), base(lent, { kind: 'workspace', assignmentId: inherits }));
@@ -222,6 +238,60 @@ test('a run is admitted from authoritative state, as the intersection of every r
     await pool.query(`UPDATE workforce_workspace_assignments SET state='revoked', revision=revision+1, revoked_at=clock_timestamp(), updated_at=clock_timestamp() WHERE id=$1`, [wide]);
     const orphaned = await admitRun(pool, ctx(editor), base(lent, { kind: 'workspace', assignmentId: inherits }));
     assert.deepEqual(orphaned.admission.capabilities.effective, [], 'an inherited grant whose parent is revoked grants nothing');
+  });
+
+  await t.test('DIV-08: a division is an execution boundary, enforced at admission (DIV-08)', async () => {
+    // "A division scope is a VISIBILITY and an EXECUTION boundary, enforced at admission. A principal
+    //  acting in `creative` ... may act on creative-scoped projects; RUN-02's intersection gains
+    //  division as a term." The workspace editor below may act for the WORKSPACE; that alone must not
+    //  reach work scoped to a division it is not in.
+    const member = await user('div-member'), stranger = await user('div-stranger');
+    await fund(member, 5_000_000n); await fund(stranger, 5_000_000n);
+    const ws = await workspace(owner, 'div08', [['editor', member], ['editor', stranger], ['admin', editor]]);
+    const mk = async (key, parent = null) => (await pool.query(`INSERT INTO workforce_divisions(workspace_id,parent_division_id,key,name,created_by_user_id)
+      VALUES($1,$2,$3,$3,$4) RETURNING id`, [ws, parent, key, owner])).rows[0].id;
+    const creative = await mk('creative'), dev = await mk('dev');
+    const platform = await mk('platform', dev);
+    await inDivision(creative, member);
+    const intoCreative = await assignTo(lent.id, ws, creative, explicit(['files.read']));
+    const run = (actor, assignmentId) => admitRun(pool, ctx(actor), base(lent, { kind: 'workspace', assignmentId }, { capabilities: ['files.read'] }));
+    // An ALLOW is asserted as an outcome, so a refusal fails under the message that names the property.
+    const admits = async (promise, message) => assert.equal(await promise.then(() => 'admitted', (e) => e.details?.reason ?? e.message), 'admitted', message);
+
+    const admitted = await run(member, intoCreative);
+    assert.deepEqual(admitted.admission.capabilities.effective, ['files.read'], 'a division member runs division-scoped work');
+    await rejects(run(stranger, intoCreative), 'denied', 'actor_outside_division', 'a workspace editor outside the division cannot run its work');
+    await admits(run(editor, intoCreative), 'a workspace administrator acts in every division of its own workspace');
+    await rejects(run(viewer, intoCreative), 'denied', 'actor_cannot_act_for_target', 'the workspace boundary is still checked first');
+
+    // D15: a grant on a PARENT division is not a grant on its child.
+    await inDivision(dev, stranger);
+    const intoPlatform = await assignTo(lent.id, ws, platform, explicit(['files.read']));
+    await rejects(run(stranger, intoPlatform), 'denied', 'actor_outside_division', 'editor on a parent division does not reach its child');
+    await inDivision(platform, stranger);
+    await admits(run(stranger, intoPlatform), 'editor on the child division itself does');
+
+    // A viewer of the division may see it, not run in it; an agent gets exactly its grant.
+    const watcher = await user('div-watcher');
+    await fund(watcher, 5_000_000n);
+    await pool.query(`INSERT INTO relationship_tuples(object_type,object_id,relation,subject_type,subject_id) VALUES('workspace',$1,'editor','user',$2)`, [ws, watcher]);
+    await inDivision(creative, watcher, 'viewer');
+    await rejects(run(watcher, intoCreative), 'denied', 'actor_outside_division', 'a division viewer does not execute in it');
+
+    // The boundary covers project work built on a division assignment, and the pin read agrees.
+    const project = (await pool.query('INSERT INTO chat_projects(workspace_id,name) VALUES($1,$2) RETURNING id', [ws, `${marker}-div08p`])).rows[0].id;
+    const pp = (await pool.query(`INSERT INTO workforce_project_participations(resource_id,resource_kind,project_id,target_kind,workspace_id,assignment_id,responsibility,policy)
+      VALUES($1,'agent',$2,'workspace',$3,$4,'reviewer',$5) RETURNING id`, [lent.id, project, ws, intoCreative, explicit(['files.read'])])).rows[0].id;
+    const projectTarget = { kind: 'project', projectId: project, participationId: pp };
+    await rejects(admitRun(pool, ctx(stranger), base(lent, projectTarget, { capabilities: ['files.read'] })), 'denied', 'actor_outside_division',
+      'a project inside a division is inside its boundary');
+    await admits(admitRun(pool, ctx(member), base(lent, projectTarget, { capabilities: ['files.read'] })), 'a division member runs its project work');
+    await rejects(readRunnablePin(pool, ctx(stranger), { agent: { resourceId: lent.id }, target: { kind: 'workspace', assignmentId: intoCreative } }),
+      'denied', 'actor_outside_division', 'the pin read refuses where admission refuses');
+
+    // An archived division admits no new run, even to its own members.
+    await pool.query(`UPDATE workforce_divisions SET lifecycle='archived', archived_at=clock_timestamp(), revision=revision+1, updated_at=clock_timestamp() WHERE id=$1`, [creative]);
+    await rejects(run(member, intoCreative), 'denied', 'division_not_live', 'an archived division admits no new run');
   });
 
   await t.test('RUN-02: budget approval is explicit and funded', async () => {

@@ -32,6 +32,9 @@
  *   entitlement          when the agent came from the marketplace (its version names one), an ACTIVE,
  *                        unexpired entitlement of the payer to that listing, and the capabilities the
  *                        listing version declares.
+ *   division (DIV-08)    when the target is division-scoped, the actor acts INSIDE that division --
+ *                        `editor` on the division itself, or an administrator of its workspace. A
+ *                        grant on a parent division or on the workspace alone does not reach it.
  *   budget approval      an explicit ceiling in integer micro-credits, positive, no larger than the
  *                        payer's available balance now. The payer is the actor's own account: a
  *                        workspace pool cannot fund a run until FUND-06 builds one, and there is no
@@ -147,6 +150,29 @@ async function actsForWorkspace(db, actor, workspaceId) {
   return verdict.allowed && ['direct', 'role-hierarchy'].includes(verdict.via);
 }
 
+/** DIV-08: may this principal act INSIDE this division? A division is an execution boundary, decided
+ * by the existing ReBAC service (DIV-10: no division-specific permission engine or roster):
+ *   - a human who administers the WORKSPACE acts in every division of it -- the workspace remains the
+ *     single tenant (DIV-02), and a tenant's administrators are not locked out of their own org chart;
+ *   - anyone else needs `editor` on the division ITSELF, held directly (or by role hierarchy for a
+ *     human). Reaching it through a `parent` tuple does not count: `division` is deliberately absent
+ *     from authzReBAC's PARENT_INHERITS, so a grant on `dev` never becomes a grant on `platform`
+ *     (D15), and a workspace editor who inherits through the division's parent-workspace tuple is
+ *     exactly the "UI label mistaken for pool enforcement" §21 forbids;
+ *   - an agent gets exactly the relation it was granted, never a hierarchy, as everywhere else. */
+export async function actsInDivision(db, who, workspaceId, divisionId) {
+  if (who.principal.kind === 'human') {
+    const admin = await check(db, { object: `workspace:${workspaceId}`, relation: 'admin', subject: who.subject });
+    if (admin.allowed && ['direct', 'role-hierarchy'].includes(admin.via)) return true;
+  }
+  const [subjectType, subjectId] = who.subject.split(':');
+  // Hold the granting rows through the decision, so a grant removed concurrently is honoured.
+  await db.query(`SELECT relation FROM relationship_tuples WHERE object_type='division' AND object_id=$1
+    AND subject_type=$2 AND subject_id=$3 FOR SHARE`, [divisionId, subjectType, subjectId]);
+  const verdict = await check(db, { object: `division:${divisionId}`, relation: 'editor', subject: who.subject });
+  return verdict.allowed && ['direct', ...(who.principal.kind === 'human' ? ['role-hierarchy'] : [])].includes(verdict.via);
+}
+
 async function incarnation(db, actorUserId) {
   const row = (await db.query(`SELECT extract(epoch FROM u.created_at)::text AS actor_created_at
     FROM users u WHERE u.id=$1`, [actorUserId])).rows[0];
@@ -252,6 +278,17 @@ async function resolveRunnable(db, actor, request, scope, beforeResource = async
       if (!(await actsForWorkspace(db, who, targetWorkspace))) fail('denied', 'actor_cannot_act_for_target');
     } else if (who.principal.kind === 'human' ? who.principal.id !== targetOwner : who.principal.owner?.id !== targetOwner) {
       fail('denied', 'actor_cannot_act_for_target');
+    }
+
+    // ── DIV-08: the division the run executes in, when the target is division-scoped ────────────
+    // A division-targeted assignment (DIV-05) puts the run INSIDE that division, directly or through
+    // a project participation built on it. Being able to act for the workspace is not enough.
+    // OWN-06: an archived division admits no new run, though its history stays readable.
+    const divisionId = assignment?.target_division_id ?? null;
+    if (divisionId) {
+      const division = (await db.query('SELECT workspace_id, lifecycle FROM workforce_divisions WHERE id=$1 FOR SHARE', [divisionId])).rows[0];
+      if (!division || division.lifecycle !== 'active') fail('denied', 'division_not_live');
+      if (!(await actsInDivision(db, who, division.workspace_id, divisionId))) fail('denied', 'actor_outside_division');
     }
 
     // ── the team, and the actor's own admitted membership in it (ROLE-02: observers do not dispatch) ──

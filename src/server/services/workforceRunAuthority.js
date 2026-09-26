@@ -48,7 +48,7 @@ import { resolvePrincipal } from './agentIdentity.js';
 import { check } from '../utils/authzReBAC.js';
 import { authorityTransaction, lockWorkspaceAuthority } from './workspaceOperationReceipts.js';
 import { lockApiKeyWorkforceAuthority } from './apiKeyWorkforceAuthority.js';
-import { RunAdmissionError } from './workforceRunAdmission.js';
+import { RunAdmissionError, actsInDivision } from './workforceRunAdmission.js';
 
 /** NFR-06: "maximum 60 seconds". The database CHECK holds the same bound independently. */
 export const RUN_LEASE_MAX_SECONDS = 60;
@@ -72,6 +72,8 @@ const TERMINAL = new Map([
   ['actor_cannot_act_for_target', 'authority_lost'], ['actor_not_an_admitted_member', 'authority_lost'],
   ['observer_cannot_dispatch', 'authority_lost'], ['agent_not_an_admitted_member', 'authority_lost'],
   ['entitlement_not_live', 'authority_lost'], ['root_binding_not_live', 'authority_lost'],
+  // DIV-08: leaving the division, or the division being archived, stops the run.
+  ['actor_outside_division', 'authority_lost'], ['division_not_live', 'authority_lost'],
 ]);
 
 async function livePrincipal(db, userId) {
@@ -133,6 +135,18 @@ async function liveTerms(db, row) {
   }
 
   if (row.target_workspace_id && !(await actsForWorkspace(db, who, row.target_workspace_id))) fail('denied', 'actor_cannot_act_for_target');
+  // DIV-08: the division the run executes in, read from the assignment it was admitted under -- the
+  // assignment's division target is immutable, so this is the same division, re-checked LIVE. A
+  // workspace-project run records that assignment too (admission writes it), so one read covers both.
+  if (row.assignment_id) {
+    const d = (await db.query(`SELECT a.target_division_id AS id, d.workspace_id, d.lifecycle FROM workforce_workspace_assignments a
+       LEFT JOIN workforce_divisions d ON d.id = a.target_division_id WHERE a.id=$1`, [row.assignment_id])).rows[0];
+    if (d?.id) {
+      await db.query('SELECT id FROM workforce_divisions WHERE id=$1 FOR SHARE', [d.id]);
+      if (d.lifecycle !== 'active') fail('denied', 'division_not_live');
+      if (!(await actsInDivision(db, who, d.workspace_id, d.id))) fail('denied', 'actor_outside_division');
+    }
+  }
   if (row.target_kind === 'project' && !row.target_workspace_id) {
     const self = who.principal.kind === 'human' ? who.principal.id : who.principal.owner?.id;
     if (self !== row.target_owner_user_id) fail('denied', 'actor_cannot_act_for_target');
