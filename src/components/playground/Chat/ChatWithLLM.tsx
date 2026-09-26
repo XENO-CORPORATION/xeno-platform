@@ -49,6 +49,7 @@ import {
 import { buildChatSystemPrompt, CHAT_MODE_PLACEHOLDERS, modeUsesXenoSearch, type ChatMode } from './chatModeConfig';
 import ChatTurnHead from './ChatTurnHead';
 import { ChatGeneratedImages, imageAssetFor, type ChatTurnImageView } from './ChatGeneratedImage';
+import { ChatUserMessage } from './ChatUserMessage';
 import {
   applyTurnEvent, chatFaviconUrl, closeTurnRecord, DEFAULT_STEPS_MODE, isStepsMode, newTurnRecord, normalizeStoredTurn, turnCitedSources, turnHasRail, turnImageModels, turnImages,
   type ChatTurnRecord, type StepsMode,
@@ -16577,7 +16578,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                                                    </>
                                                  }
                                                >
-                                                 {message.text || undefined}
+                                                 {message.text ? <ChatUserMessage text={message.text} /> : undefined}
                                                </MessageBubble>
                                              );
                                            })()

@@ -480,6 +480,9 @@ async function main() {
         const genimage = run('npm', ['run', 'test:chat-generated-image-rendered'], { quiet: true });
         record('build: a generated image\'s frame is its shape, in the page theme (real browser, built CSS)', genimage.code === 0);
         ok = ok && genimage.code === 0;
+        const usermsg = run('npm', ['run', 'test:chat-user-message-rendered'], { quiet: true });
+        record('build: a long user message collapses in the page theme (real browser, built CSS)', usermsg.code === 0);
+        ok = ok && usermsg.code === 0;
       }
     }
 
