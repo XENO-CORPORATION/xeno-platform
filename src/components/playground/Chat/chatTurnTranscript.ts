@@ -67,8 +67,14 @@ export interface ChatTurnImageStep {
   assetId?: string;
   width?: number;
   height?: number;
+  /** The image model that drew it (`gpt-image-2.5-sunburst`) — the message's info row lists it. */
+  model?: string;
+  /** That image call's own tokens, as the gateway reported them. Absent when it did not. */
+  usage?: ChatTurnImageUsage;
   error?: string;
 }
+
+export interface ChatTurnImageUsage { input: number; output: number; total: number }
 
 export type ChatTurnStep = ChatTurnSearchStep | ChatTurnImageStep;
 
@@ -92,10 +98,19 @@ export type TurnStreamEvent =
   | { type: 'search_result'; query?: string; count?: number; sources?: Array<{ url?: string; title?: string }> }
   | { type: 'search_error'; query?: string; code?: string; message?: string }
   | { type: 'image_start'; index?: number; prompt?: string; aspectRatio?: string }
-  | { type: 'image_result'; index?: number; image?: { id?: string; aspectRatio?: string; width?: number; height?: number } }
+  | { type: 'image_result'; index?: number; image?: { id?: string; aspectRatio?: string; width?: number; height?: number; model?: string; usage?: Partial<ChatTurnImageUsage> } }
   | { type: 'image_error'; index?: number; code?: string; message?: string };
 
 export const TURN_IMAGE_ASPECTS: ReadonlyArray<string> = ['1:1', '16:9', '9:16', '4:3', '3:4', '3:2', '2:3'];
+/** Mirrors `utils/chatTurnRecord.js`: what the server accepts is what the client records. */
+const MODEL_ID = /^[A-Za-z0-9][A-Za-z0-9._:/-]{0,127}$/;
+const isTokenCount = (value: unknown): value is number => Number.isInteger(value) && (value as number) >= 0 && (value as number) <= 10_000_000;
+const asImageUsage = (raw: unknown): ChatTurnImageUsage | undefined => {
+  if (!raw || typeof raw !== 'object') return undefined;
+  const { input, output, total } = raw as Partial<ChatTurnImageUsage>;
+  return isTokenCount(input) && isTokenCount(output) && isTokenCount(total) ? { input, output, total } : undefined;
+};
+const asModelId = (raw: unknown): string | undefined => (typeof raw === 'string' && MODEL_ID.test(raw) ? raw : undefined);
 const isSearchStep = (step: ChatTurnStep): step is ChatTurnSearchStep => step.kind === 'search';
 export const isImageStep = (step: ChatTurnStep): step is ChatTurnImageStep => step.kind === 'image';
 
@@ -172,17 +187,37 @@ function applyImageEvent(
   let closed: ChatTurnImageStep;
   if (event.type === 'image_result') {
     const image = event.image ?? {};
+    const model = asModelId(image.model);
+    const usage = asImageUsage(image.usage);
     closed = {
       ...base,
       endedAt: now,
       ...(typeof image.id === 'string' ? { assetId: image.id } : {}),
       ...(Number.isInteger(image.width) && Number.isInteger(image.height) ? { width: image.width as number, height: image.height as number } : {}),
+      ...(model ? { model } : {}),
+      ...(usage ? { usage } : {}),
     };
   } else {
     closed = { ...base, endedAt: now, error: (typeof event.message === 'string' && event.message.trim()) || 'That image could not be generated.' };
   }
   const steps = existing ? record.steps.map((step) => (step.id === id ? closed : step)) : [...record.steps, closed];
   return { ...record, steps };
+}
+
+/**
+ * The image models a turn used, for the message's info row: each model once, with how many images it
+ * drew and their tokens summed. Failed images drew nothing and are not counted.
+ */
+export function turnImageModels(record: ChatTurnRecord | undefined): Array<{ model: string; images: number; tokens?: number }> {
+  const byModel = new Map<string, { model: string; images: number; tokens?: number }>();
+  for (const step of turnImages(record)) {
+    if (!step.assetId || !step.model) continue;
+    const entry = byModel.get(step.model) ?? { model: step.model, images: 0 };
+    entry.images += 1;
+    if (step.usage) entry.tokens = (entry.tokens ?? 0) + step.usage.total;
+    byModel.set(step.model, entry);
+  }
+  return [...byModel.values()];
 }
 
 /** Close the record: every still-open step is marked ended, and the turn is stamped. */
@@ -212,6 +247,8 @@ export function normalizeStoredTurn(value: unknown): ChatTurnRecord | undefined 
         ...(typeof image.endedAt === 'number' ? { endedAt: image.endedAt } : {}),
         ...(typeof image.assetId === 'string' ? { assetId: image.assetId } : {}),
         ...(typeof image.width === 'number' && typeof image.height === 'number' ? { width: image.width, height: image.height } : {}),
+        ...(asModelId(image.model) ? { model: image.model } : {}),
+        ...(asImageUsage(image.usage) ? { usage: asImageUsage(image.usage) } : {}),
         ...(typeof image.error === 'string' ? { error: image.error } : {}),
       }];
     }

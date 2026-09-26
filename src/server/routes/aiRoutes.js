@@ -1058,6 +1058,8 @@ router.post('/chat/stream', requireEntitlement('canUse'), async (req, res) => {
               aspectRatio: event.image.aspectRatio,
               model: event.image.model,
               ...(event.image.width ? { width: event.image.width, height: event.image.height } : {}),
+              // the image call's own tokens — the info row lists them beside the text model's
+              ...(event.image.usage ? { usage: event.image.usage } : {}),
             };
             // The saved record never carries bytes: `images` on the result frame is what the message
             // stores. The preview rides THIS frame only, to the person who asked, for the minutes the

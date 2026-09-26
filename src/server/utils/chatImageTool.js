@@ -158,16 +158,33 @@ export function parseImageArguments(raw) {
  * "Tall portrait image, 9:16" 941x1672, "Square image" 1254x1254. So the shape is stated here, in
  * front of the model's brief, and the parameters are still sent for the day the gateway honours them.
  * Without this the placeholder the chat drew at 9:16 would be filled by a 3:2 picture.
+ *
+ * The size is stated too, and it is the size the model ACTUALLY draws at that ratio — measured the
+ * same day, ratio + size for all seven, every one exact (1254x1254, 1672x941, 941x1672, 1448x1086,
+ * 1086x1448, 1536x1024, 1024x1536). A size it does not draw is a size it ignores: asking for
+ * 1792x1024 alongside "16:9" was the only combination that came back off-shape (1659x948).
  */
-const SHAPE_PHRASES = Object.freeze({
-  '1:1': 'Square image, 1:1 aspect ratio.',
-  '16:9': 'Wide landscape image, 16:9 aspect ratio.',
-  '9:16': 'Tall portrait image, 9:16 aspect ratio.',
-  '4:3': 'Landscape image, 4:3 aspect ratio.',
-  '3:4': 'Portrait image, 3:4 aspect ratio.',
-  '3:2': 'Landscape image, 3:2 aspect ratio.',
-  '2:3': 'Portrait image, 2:3 aspect ratio.',
+export const CHAT_IMAGE_SIZES = Object.freeze({
+  '1:1': [1254, 1254],
+  '16:9': [1672, 941],
+  '9:16': [941, 1672],
+  '4:3': [1448, 1086],
+  '3:4': [1086, 1448],
+  '3:2': [1536, 1024],
+  '2:3': [1024, 1536],
 });
+const SHAPE_WORDS = Object.freeze({
+  '1:1': 'Square image, 1:1 aspect ratio',
+  '16:9': 'Wide landscape image, 16:9 aspect ratio',
+  '9:16': 'Tall portrait image, 9:16 aspect ratio',
+  '4:3': 'Landscape image, 4:3 aspect ratio',
+  '3:4': 'Portrait image, 3:4 aspect ratio',
+  '3:2': 'Landscape image, 3:2 aspect ratio',
+  '2:3': 'Portrait image, 2:3 aspect ratio',
+});
+const SHAPE_PHRASES = Object.freeze(Object.fromEntries(Object.entries(SHAPE_WORDS).map(
+  ([ratio, words]) => [ratio, `${words}, ${CHAT_IMAGE_SIZES[ratio][0]}x${CHAT_IMAGE_SIZES[ratio][1]} pixels.`],
+)));
 
 export const shapedPrompt = (prompt, aspectRatio) =>
   `${SHAPE_PHRASES[aspectRatio] || SHAPE_PHRASES[CHAT_IMAGE_DEFAULT_ASPECT]} ${prompt}`;
@@ -261,6 +278,21 @@ export const imageBudgetExhaustedPayload = (images) => ({
 });
 
 /** Base64 out of a gateway image item: `{ b64_json }`, `{ url: 'data:…' }`. Hosted URLs are not fetched. */
+/**
+ * The image call's own token usage, as the gateway reports it — `{ input_tokens, output_tokens,
+ * total_tokens }` (measured 2026-09-26: a 1:1 low-quality image was 24 in / 515 out). Absent or
+ * malformed usage is `null`: shown as nothing, never as a guessed number.
+ */
+export function imageUsageFrom(response) {
+  const usage = response?.usage;
+  if (!usage || typeof usage !== 'object') return null;
+  const count = (value) => (Number.isInteger(value) && value >= 0 ? value : null);
+  const input = count(usage.input_tokens);
+  const output = count(usage.output_tokens);
+  if (input === null && output === null) return null;
+  return { input: input ?? 0, output: output ?? 0, total: count(usage.total_tokens) ?? (input ?? 0) + (output ?? 0) };
+}
+
 export function base64FromImageItem(item) {
   if (!item || typeof item !== 'object') return null;
   if (typeof item.b64_json === 'string' && item.b64_json) return item.b64_json;
@@ -321,6 +353,7 @@ export function createChatImageExecutor({ db, userId, turnId, meter, generate, r
     const edited = Boolean(useReference && reference?.dataUrl);
     let stored = null;
     let delivered = null;
+    let usage = null;
     const metered = await meter(db, userId, {
       surface: 'chat',
       operation: 'image-generation',
@@ -343,6 +376,7 @@ export function createChatImageExecutor({ db, userId, turnId, meter, generate, r
           response_format: 'b64_json',
           ...(edited ? { reference_images: [reference.dataUrl] } : {}),
         });
+        usage = imageUsageFrom(response);
         const b64 = base64FromImageItem(response?.data?.[0]);
         if (!b64) throw Object.assign(new Error('The image service returned no image.'), { code: 'image_empty' });
         let buffer = Buffer.from(b64, 'base64');
@@ -369,6 +403,7 @@ export function createChatImageExecutor({ db, userId, turnId, meter, generate, r
       quality,
       model,
       edited,
+      ...(usage ? { usage } : {}),
       ...(previewUrl ? { previewUrl } : {}),
       creditsCharged: metered.creditsCharged,
     };

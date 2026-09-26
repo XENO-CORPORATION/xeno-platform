@@ -47,6 +47,8 @@ export interface ChatGeneratedImage {
   model?: string;
   width?: number;
   height?: number;
+  /** The image call's own tokens, as the gateway reported them — shown in the message's info row. */
+  usage?: { input: number; output: number; total: number };
   /**
    * A WebP of the same bytes, on the live `image_result` frame ONLY — never on the stored message.
    * The library copy is quarantined until its malware scan passes, and this is what the person who

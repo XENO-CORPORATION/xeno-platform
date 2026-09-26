@@ -32,6 +32,7 @@ import {
   storeChatImage,
   imageDimensions,
   base64FromImageItem,
+  imageUsageFrom,
 } from '../src/server/utils/chatImageTool.js';
 import { normalizeTurnRecord, TURN_SCHEMA } from '../src/server/utils/chatTurnRecord.js';
 
@@ -194,6 +195,24 @@ test('billing: hold for one image, generate with the model\'s shape, store, then
   assert.equal(image.creditsCharged, CHAT_IMAGE_CREDITS);
 });
 
+test('the image call\'s own tokens reach the result — as the gateway reported them, never guessed', async () => {
+  const run = (usage) => createChatImageExecutor({
+    db: {}, userId: 'u1', turnId: 'turnU',
+    meter: fakeMeter([]),
+    generate: async () => ({ data: [{ b64_json: PNG_2x1.toString('base64') }], ...(usage === undefined ? {} : { usage }) }),
+    resolveEntitlements: async () => ({ watermark: false }),
+    watermark: async (b) => b,
+    store: async () => ({ id: 'asset1', contentUrl: '/api/library/assets/asset1/content' }),
+    microPerCredit: 1_000_000,
+  })({ prompt: 'a fox', aspectRatio: '1:1', quality: 'low', index: 0 });
+  // the shape measured on the live gateway 2026-09-26
+  const reported = await run({ input_tokens: 40, input_tokens_details: { text_tokens: 40 }, output_tokens: 515, total_tokens: 555 });
+  assert.deepEqual(reported.usage, { input: 40, output: 515, total: 555 });
+  assert.equal((await run(undefined)).usage, undefined, 'no usage from the gateway is no usage, not a zero');
+  assert.equal(imageUsageFrom({ usage: { input_tokens: -1, output_tokens: 'x' } }), null, 'malformed usage is dropped');
+  assert.deepEqual(imageUsageFrom({ usage: { input_tokens: 3, output_tokens: 4 } }), { input: 3, output: 4, total: 7 }, 'a missing total is the sum');
+});
+
 test('billing: a failed generation voids the hold — nothing is charged', async () => {
   const log = [];
   const run = createChatImageExecutor({
@@ -291,4 +310,16 @@ test('the saved turn accepts an image step — and nothing it could not store ho
   assert.equal(normalizeTurnRecord({ ...base, steps: [{ id: 'i', kind: 'image', prompt: 'x', aspectRatio: '21:9', startedAt: 2 }] }).ok, false, 'an unsupported ratio');
   assert.equal(normalizeTurnRecord({ ...base, steps: [{ id: 'i', kind: 'image', prompt: 'x', aspectRatio: '1:1', startedAt: 2, assetId: 'https://evil.example/x.png' }] }).ok, false, 'an asset id is an id, never a URL');
   assert.equal(normalizeTurnRecord({ ...base, steps: [{ id: 'i', kind: 'image', prompt: 'x', aspectRatio: '1:1', startedAt: 2, contentUrl: 'javascript:alert(1)' }] }).turn.steps[0].contentUrl, undefined, 'unknown fields are dropped');
+});
+
+test('an image step records which model drew it and its tokens — and only well-formed ones', () => {
+  const base = { schema: TURN_SCHEMA, startedAt: 1, steps: [] };
+  const step = { id: 'image-1', kind: 'image', prompt: 'a fox', aspectRatio: '1:1', startedAt: 2, endedAt: 3 };
+  const ok = normalizeTurnRecord({ ...base, steps: [{ ...step, model: 'gpt-image-2.5-sunburst', usage: { input: 40, output: 515, total: 555, extra: 1 } }] });
+  assert.equal(ok.ok, true);
+  assert.equal(ok.turn.steps[0].model, 'gpt-image-2.5-sunburst');
+  assert.deepEqual(ok.turn.steps[0].usage, { input: 40, output: 515, total: 555 }, 'only the three counts are kept');
+  assert.equal(normalizeTurnRecord({ ...base, steps: [{ ...step, model: '<script>' }] }).ok, false, 'a model is a model id');
+  assert.equal(normalizeTurnRecord({ ...base, steps: [{ ...step, usage: { input: 1, output: -2, total: 3 } }] }).ok, false, 'token counts are non-negative integers');
+  assert.equal(normalizeTurnRecord({ ...base, steps: [{ ...step, usage: 'lots' }] }).ok, false);
 });

@@ -23,6 +23,9 @@ const shortString = (value, max) => typeof value === 'string' && value.length <=
 const IMAGE_ASPECTS = new Set(['1:1', '16:9', '9:16', '4:3', '3:4', '3:2', '2:3']);
 /** An image step points at a library asset by id; nothing else may ride in the record. */
 const LIBRARY_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+/** A model id as the catalogue writes them: `gpt-image-2.5-sunburst`, `openai/gpt-5.6-terra`. */
+const MODEL_ID = /^[A-Za-z0-9][A-Za-z0-9._:/-]{0,127}$/;
+const tokenCount = (value) => Number.isInteger(value) && value >= 0 && value <= 10_000_000;
 
 /**
  * An `image` step: the chat's generate_image tool drew something (2026-09-26). It records the
@@ -45,6 +48,15 @@ function normalizeImageStep(raw) {
       return { ok: false, error: `image step.${key} must be a positive integer` };
     }
   }
+  if (raw.model !== undefined && (typeof raw.model !== 'string' || !MODEL_ID.test(raw.model))) {
+    return { ok: false, error: 'image step.model must be a model id' };
+  }
+  if (raw.usage !== undefined) {
+    const usage = raw.usage;
+    if (!usage || typeof usage !== 'object' || Array.isArray(usage) || !['input', 'output', 'total'].every((key) => tokenCount(usage[key]))) {
+      return { ok: false, error: 'image step.usage must be { input, output, total } token counts' };
+    }
+  }
   return {
     ok: true,
     step: {
@@ -56,9 +68,16 @@ function normalizeImageStep(raw) {
       ...(raw.endedAt !== undefined ? { endedAt: raw.endedAt } : {}),
       ...(raw.assetId !== undefined ? { assetId: raw.assetId } : {}),
       ...(raw.width !== undefined ? { width: raw.width, height: raw.height } : {}),
+      ...(raw.model !== undefined ? { model: raw.model } : {}),
+      ...(raw.usage !== undefined ? { usage: { input: raw.usage.input, output: raw.usage.output, total: raw.usage.total } } : {}),
       ...(raw.error !== undefined ? { error: raw.error } : {}),
     },
   };
+}
+
+/** The library asset ids a normalized turn's image steps name — the images this turn made. */
+export function turnImageAssetIds(turn) {
+  return new Set((turn?.steps || []).filter((step) => step.kind === 'image' && step.assetId).map((step) => step.assetId));
 }
 
 /**

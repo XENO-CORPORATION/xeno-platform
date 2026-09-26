@@ -22,7 +22,7 @@ import { calculateNextScheduleOccurrence, calculateScheduleOccurrences } from '.
 import { CHAT_PROJECT_CONTRACTS } from '../config/chatProjectContracts.js';
 import { requireActivated } from '../services/accountActivation.js';
 import { chatWebContextService, ChatWebContextError } from '../services/chatWebContext.js';
-import { normalizeTurnRecord } from '../utils/chatTurnRecord.js';
+import { normalizeTurnRecord, turnImageAssetIds } from '../utils/chatTurnRecord.js';
 import { requireDpopIfBound } from '../middleware/dpopResource.js';
 import liveConversationCollaborationRoutes from './liveConversationCollaborationRoutes.js';
 import projectDirectoryBindingRoutes from './projectDirectoryBindingRoutes.js';
@@ -946,7 +946,11 @@ router.post('/conversations/:id/messages', async (req, res) => {
     await requireResourceRelation(req.db, userPrincipal(userId), 'conversation', conversationId, 'reviewer');
 
     try {
-      await assertAuthorizedLibraryAttachments(req.db, userPrincipal(userId), attachments);
+      // An assistant turn's own generated images may still be in their malware scan when it is
+      // saved; the turn names them, and the check accepts exactly those (libraryAssets.js).
+      await assertAuthorizedLibraryAttachments(req.db, userPrincipal(userId), attachments, {
+        pendingImageIds: role === 'assistant' ? turnImageAssetIds(turnRecord.turn) : null,
+      });
     } catch (attachmentError) {
       const invalid = attachmentError.code === 'invalid_attachments' || attachmentError.code === 'invalid_library_asset_id';
       return res.status(invalid ? 400 : 404).json({
@@ -1104,8 +1108,10 @@ router.post('/conversations/:id/messages/batch', async (req, res) => {
     }
 
     try {
-      for (const message of messages) {
-        await assertAuthorizedLibraryAttachments(req.db, userPrincipal(userId), message.attachments);
+      for (const [position, message] of messages.entries()) {
+        await assertAuthorizedLibraryAttachments(req.db, userPrincipal(userId), message.attachments, {
+          pendingImageIds: message?.role === 'assistant' ? turnImageAssetIds(turnRecords[position]) : null,
+        });
       }
     } catch (attachmentError) {
       const invalid = attachmentError.code === 'invalid_attachments' || attachmentError.code === 'invalid_library_asset_id';
