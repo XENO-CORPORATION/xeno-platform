@@ -16,6 +16,7 @@
  *   - one-shot usage ignores the price table                       -> "a one-shot usage is priced by the platform"
  *   - a public route publishes the per-token table                 -> "no server route publishes the per-token table"
  *   - gpt-6 falls back to default tier                             -> "flagship ids resolve to the flagship tier"
+ *   - the embedding override rows removed                          -> "embeddings are priced at the ledger's rate"
  *
  * ⚠️ THE ACCT FAMILY OF XENO-WORKFORCE-01 IS NOT CITED HERE, AND THE REASON IS NARROWER THAN THE
  * ONE THIS ESTATE HAD WRITTEN DOWN. The workforce coverage tenet used to say ACCT and FUND "create
@@ -257,6 +258,20 @@ test('flagship ids resolve to the flagship tier', () => {
   assert.equal(pricing.chatTier('gpt-6-mini'), 'frontier-mid', 'mini stays mid even on a flagship generation');
   assert.equal(pricing.chatTier('claude-sonnet-5'), 'frontier-mid');
   assert.equal(pricing.chatTier('deepseek-v4'), 'open');
+});
+
+// 🔴 Embeddings are input-only and priced from the ledger (§6 "Platform capabilities"), never by the
+// tier heuristic: 'xeno-embed-gemini-2' matches no tier and fell to 'default' — 300 µcr/tok, 15x
+// provider cost — and 'xeno-embed-qwen3-8b' matched 'open' at 60x. One million tokens must cost
+// exactly the ledger's credits, and an embedding must never be charged for output it cannot have.
+test('embeddings are priced at the ledger\'s rate, input-only', () => {
+  const credits = (model) => pricing.getChatCostMicro(model, { inputTokens: 1_000_000, outputTokens: 0 }) / 1_000_000;
+  assert.equal(credits('xeno-embed-qwen3-8b'), 3, 'Qwen3-Embedding-8B: 3 credits per million input tokens');
+  assert.equal(credits('xeno-embed-gemini-2'), 60, 'Gemini Embedding 2: 60 credits per million input tokens');
+  for (const m of ['xeno-embed-qwen3-8b', 'xeno-embed-gemini-2']) {
+    assert.equal(pricing.chatRatesFor(m).tier, 'override', `${m} is priced by an explicit row, not a guessed tier`);
+    assert.equal(pricing.chatRatesFor(m).outputMicroPerToken, 0, `${m} charges nothing for output`);
+  }
 });
 
 // ── §8b: the hold path issues the weekly allowance and installs the burst caps ───

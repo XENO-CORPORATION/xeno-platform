@@ -61,6 +61,16 @@ const CHAT_TIERS = {
 // Explicit per-model overrides (OpenRouter-style ids) win over tier heuristics.
 const CHAT_MODEL_OVERRIDES = {
   // e.g. 'openai/gpt-5.4-pro': { input: 1000, output: 4000 },
+
+  // EMBEDDINGS — POST /v1/embeddings on the gateway (xeno-api-proxy 9593cb4). Input-only: an
+  // embedding has no output tokens. 3x provider cost at 1 credit = EUR 0.01, per
+  // `XENO PRICING - STANDARD & LEDGER.md` §6 "Platform capabilities": Qwen3-Embedding-8B at
+  // $0.010/1M -> 3 cr/1M, Gemini Embedding 2 at $0.20/1M -> 60 cr/1M. Values are µcr PER TOKEN,
+  // so 3 cr/1M = 3 µcr/tok. Without these rows the tier heuristic billed 'xeno-embed-gemini-2' at
+  // the 'default' rate (300 µcr/tok, 15x cost — "gemini" matches no tier) and 'xeno-embed-qwen3-8b'
+  // at 'open' (60, 60x cost), measured 2026-09-26 against scripts/ledger-pricing-authority.test.mjs.
+  'xeno-embed-qwen3-8b': { input: 3, output: 0 },
+  'xeno-embed-gemini-2': { input: 60, output: 0 },
 };
 
 /**
