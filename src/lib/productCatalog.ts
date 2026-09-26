@@ -261,7 +261,7 @@ export const PRODUCTS: Product[] = [
   // x86_64 AppImage alongside the Windows installer, both built from the same
   // commit and both verified through the live auto-update chain. Leaving this
   // as 'Windows' would hide a platform the feed actually serves.
-  { slug: 'shell', name: 'XENO Shell', tagline: 'A desktop shell with a real terminal and folder-level permissions.', category: 'Develop', status: 'beta', delivery: 'desktop', operatingSystem: 'Windows, Linux', repo: 'xeno-shell' },
+  { slug: 'shell', name: 'XENO Shell', tagline: 'A desktop you can share, with a real terminal and folder-level permissions.', category: 'Develop', status: 'beta', delivery: 'desktop', operatingSystem: 'Windows', repo: 'xeno-shell' },
   // Anima SHIPS. All 8 packages are live on npm at 0.0.2 (verified against the
   // registry 2026-07-27), so 'coming-soon'/'soon' was telling visitors a product
   // they can install does not exist. It also suppressed an upgrade signal that
