@@ -48,6 +48,10 @@ export const CLIENT_AUTHORITY = Object.freeze({
   'xeno-agent-interface': [...AGENT_PRODUCT, 'collaboration:use'],
   'xeno-rt': ['openid', 'profile', 'inference:run', 'ledger:read', 'ledger:spend'],
   'xeno-agent-cli': AGENT_PRODUCT,
+  // XENO Spawn: identity, read the credits balance, and run inference through the XENO
+  // gateway on the user's behalf (which spends credits). Nothing more: no projects/sync,
+  // no workforce, no billing, team or broker authority. Widen by a reviewed change only.
+  'xeno-spawn': [...IDENTITY, 'inference:run', 'ledger:read', 'ledger:spend'],
   'xeno-web': WEB,
   'xeno-post': [...COLLAB_PRODUCT, 'team:manage', 'billing:read'],
   'xeno-api-portal': [...IDENTITY, 'inference:run', 'ledger:read', 'ledger:spend', 'billing:read', 'billing:manage'],
