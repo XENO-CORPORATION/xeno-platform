@@ -197,7 +197,11 @@ tables are immutable and retained, and `workforce-migration-chain.test.mjs` pins
 table fails that gate on purpose: the requirement it implements must be cited by a real test first.
 
 ⚠️ **Not built:**
-- No runtime calls `authorize-step` yet. That is SDK/Interface work: the SDK has no pre-dispatch hook.
+- ~~No runtime calls `authorize-step` yet; the SDK has no pre-dispatch hook.~~ ✅ **The SDK half
+  landed 2026-09-26** (xeno-agent-sdk #54, #55): the loop asks a `runAuthority` before every dispatch
+  and tool call, and `@xenosystem/agent-sdk/workforce` `createWorkforceRunAuthority` is the one client
+  that calls `authorize-step`. 🔴 **No host passes one yet** — the Interface pins an older SDK and has
+  no admission flow — so runs are still not revocation-enforced end to end.
 - DIV-08: admission does not yet check that the actor sits inside the division.
 - The payer is always the actor's own account. No workspace or project pool exists (FUND-06), and there is no silent fallback.
 
