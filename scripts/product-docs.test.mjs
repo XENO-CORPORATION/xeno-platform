@@ -13,7 +13,7 @@ const required = {
   sdk: { version: '0.9.24', pages: ['introduction', 'agent-loop', 'sessions', 'goal-loop-handoff', 'governed-automation', 'package-exports', 'versioning-stability'] },
   acp: { version: '0.2.14', pages: ['introduction', 'architecture', 'coordination-extension', 'session-lifecycle', 'agent-endpoint', 'troubleshooting'] },
   hub: { version: '0.11.18', pages: ['introduction', 'agent', 'agent-runtime-updates', 'updates', 'troubleshooting'] },
-  browser: { version: '0.5.0', pages: ['introduction', 'installation', 'signing-in', 'tabs-and-workspaces', 'agent-api', 'troubleshooting'] },
+  browser: { version: '0.5.1', pages: ['introduction', 'installation', 'signing-in', 'tabs-and-workspaces', 'agent-api', 'troubleshooting'] },
 };
 
 function parseModule(fileName) {
