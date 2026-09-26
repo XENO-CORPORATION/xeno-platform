@@ -72,6 +72,7 @@ test('real HTTP/authMiddleware/JWT/DPoP boundary with query-aware auth DB and in
   // RUN-01/RUN-02 over HTTP: the admission service is injected exactly like the resource services.
   let admitFailure;
   let admitResult;
+  let pinResult;
   const admittedFixture = () => ({ replayed: false, admission: { schemaVersion: 1, admissionId: operationId, operationId,
     agent: { resourceId: operationId, version: 1, contentHash: 'a'.repeat(64) },
     target: { kind: 'personal', ownerUserId: human, workspaceId: null, projectId: null, assignmentId: null, assignmentRevision: null, participationId: null, participationRevision: null },
@@ -87,6 +88,9 @@ test('real HTTP/authMiddleware/JWT/DPoP boundary with query-aware auth DB and in
   };
   app.use(basePath, createWorkforceRouter({ createWorkforceResource: invoke('create'), readWorkforceResourceOperation: invoke('read'),
     admitRun: admit('admit'), readRunAdmission: admit('readAdmission'),
+    readRunnablePin: async (pool, context, value) => { calls.push({ method: 'pin', context, body: value }); if (admitFailure) throw admitFailure;
+      return pinResult ?? { schemaVersion: 1, agent: { resourceId: value.agent.resourceId, version: 3, contentHash: 'b'.repeat(64) },
+        target: value.target, team: null, terms: { definition: ['files.read'], target: ['files.read'] }, internalRow: 'hidden' }; },
     authorizeRunStep: async (pool, context, value) => { calls.push({ method: 'authorizeStep', context, body: value }); if (admitFailure) throw admitFailure;
       return admitResult ?? { token: 'aaa.bbb.ccc', lease: { schemaVersion: 1, leaseId: operationId, admissionId: operationId, sequence: '1',
         operation: 'provider_dispatch', capability: null, effectiveCapabilities: ['files.read'], issuedAt: '2026-09-25T12:00:00.000Z',
@@ -293,6 +297,38 @@ test('real HTTP/authMiddleware/JWT/DPoP boundary with query-aware auth DB and in
         assert.equal((await request({ path: '/run-admissions', body: admission })).status, 500, 'a partial admission is not a success');
       }
       admitResult = undefined;
+    });
+    // Mutation-checked 2026-09-26, 4 mutants, each fails the named assertion; restored passes:
+    //   the route demands workforce:manage              -> "reading a pin is a read"
+    //   the validator accepts another resource / target -> "a pin for something not asked about is never reported"
+    //   the route projects the whole service reply      -> "only the documented pin fields cross"
+    await t.test('RUN-01: the pin an admission must name is read over HTTP as a read, and only for what was asked', async () => {
+      const ask = { agent: { resourceId: operationId }, target: { kind: 'personal', ownerUserId: human } };
+      const read = await request({ path: '/run-admissions/pin', body: ask, token: mint({ scope: 'workforce:read' }) });
+      assert.equal(read.status, 200, 'reading a pin is a read');
+      assert.deepEqual(read.body.agent, { resourceId: operationId, version: 3, contentHash: 'b'.repeat(64) });
+      assert.ok(!JSON.stringify(read.body).includes('hidden'), 'only the documented pin fields cross');
+      assert.deepEqual(calls.at(-1).context, { actorUserId: human, clientId: 'xeno-agent-interface' }, 'the actor comes from authentication');
+      const before = calls.length;
+      for (const key of ['actorUserId', 'clientId', 'userId', 'principal', 'auth']) {
+        assert.equal((await request({ path: '/run-admissions/pin', body: { ...ask, [key]: human } })).status, 400, 'a body cannot name the actor');
+      }
+      assert.equal(calls.length, before);
+      // A reply about another agent, another target, or with a malformed pin is not an answer to this question.
+      for (const bad of [{ agent: { resourceId: human, version: 3, contentHash: 'b'.repeat(64) } }, { agent: { resourceId: operationId, version: 0, contentHash: 'b'.repeat(64) } },
+        { agent: { resourceId: operationId, version: 3, contentHash: 'B'.repeat(64) } }, { target: { kind: 'personal', ownerUserId: operationId } }]) {
+        pinResult = { schemaVersion: 1, agent: { resourceId: operationId, version: 3, contentHash: 'b'.repeat(64) }, target: ask.target, team: null,
+          terms: { definition: [], target: [] }, ...bad };
+        assert.equal((await request({ path: '/run-admissions/pin', body: ask })).status, 500, 'a pin for something not asked about is never reported');
+      }
+      pinResult = undefined;
+      const { RunAdmissionError } = await import('../src/server/services/workforceRunAdmission.js');
+      admitFailure = new RunAdmissionError('denied', 'actor_cannot_act_for_target', { sql: 'SECRET' });
+      const refused = await request({ path: '/run-admissions/pin', body: ask });
+      assert.equal(refused.status, 403);
+      assert.deepEqual(refused.body.details, { schemaVersion: 1, reason: 'actor_cannot_act_for_target' }, 'the refusal reason reaches the client, nothing else');
+      admitFailure = undefined;
+      assert.equal((await request({ method: 'GET', path: '/run-admissions/pin' })).status, 405);
     });
     await t.test('RUN-03: each step is authorized over HTTP by the admitted actor, as a bounded signed lease', async () => {
       const stepBody = { admissionId: operationId, operation: 'provider_dispatch' };
