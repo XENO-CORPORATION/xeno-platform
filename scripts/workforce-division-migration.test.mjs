@@ -20,8 +20,8 @@
  *           The funding EDGE is proven above and is a precondition, not the requirement: nothing
  *           reads it at spend time, because there is no spend path. Citing DIV-07 would claim the
  *           half that decides who actually pays.
- *   DIV-08  "a division scope is a VISIBILITY and an EXECUTION boundary, ENFORCED AT ADMISSION."
- *           NOW CITED (2026-09-27), and not here: this suite proves the division RECORD, and the
+ *   DIV-08  NOW CITED (2026-09-27) -- "a division scope is a VISIBILITY and an EXECUTION boundary,
+ *           ENFORCED AT ADMISSION." Not cited here: this suite proves the division RECORD, and the
  *           boundary lives in the services that decide. EXECUTION: admission refuses an actor
  *           outside the division (workforce-run-admission.test.mjs, "DIV-08: a division is an
  *           execution boundary"), and live authority stops a run whose actor leaves it or whose
