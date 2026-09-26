@@ -6,7 +6,7 @@ import path from 'path';
 import { generateSignedUrl } from '../middleware/cdnOptimization.js';
 import { resolveRoute, normalizePath, catalogPaths } from '../utils/modelPaths.js';
 import { meterPremiumChat, meterPremiumChatStream, meterMediaGeneration } from '../utils/inferenceMeter.js';
-import { estimateChatCostMicro, estimateMessageTokens } from '../utils/creditCosts.js';
+import { estimateChatCostMicro, estimateMessageTokens, getCreditCost } from '../utils/creditCosts.js';
 import { getBalanceV2, MICRO_PER_CREDIT } from '../utils/creditLedgerV2.js';
 import { xenoChatCompletion, xenoChatCompletionStream, xenoApiConfigured, classifyUpstreamError, isContentDeclined, xenoModelCatalog, prettyModelName, PROVIDER_LABELS, xenoImageGeneration } from '../utils/xenoChat.js';
 import { enforceInHouseDailyLimit, limitExceededBody } from '../middleware/inHouseDailyLimit.js';
@@ -19,6 +19,8 @@ import { recordInferenceUsage } from '../utils/recordInferenceUsage.js';
 import { callerInputTokens } from '../utils/billableInput.js';
 import { upstreamFetch } from '../services/upstream.js';
 import { streamToolLoop, addUsage, TOOL_BUDGETS, WEB_SEARCH_TOOL } from '../utils/chatToolLoop.js';
+import { RUN_CODE_TOOL } from '../utils/chatCodeTool.js';
+import { runInSandbox, codeExecutionAvailable, runCodeMetered } from '../services/sandboxSession.js';
 import {
   GENERATE_IMAGE_TOOL, createChatImageExecutor, storeChatImage, latestConversationImage, makeImagePreview,
 } from '../utils/chatImageTool.js';
@@ -605,10 +607,15 @@ router.post('/chat/stream', requireEntitlement('canUse'), async (req, res) => {
    * capability statement tells the model they exist (chatModeConfig.ts).
    */
   const surfaceHasTools = Object.hasOwn(TOOL_BUDGETS, chatSurface);
+  // run_code is offered only on a SAVED conversation (its sandbox is keyed by conversation_id) and
+  // only when the execution engine is actually reachable — never advertise a capability the deploy
+  // lacks (CHAT-CODE-EXECUTION-SPEC.md §5). The probe is cached, so this costs nothing on the hot path.
+  const codeAvailable = surfaceHasTools && Boolean(conversationId) && (await codeExecutionAvailable());
   const offeredTools = surfaceHasTools
     ? [
       ...(webSearchAvailable() ? [WEB_SEARCH_TOOL] : []),
       ...(xenoApiConfigured() ? [GENERATE_IMAGE_TOOL] : []),
+      ...(codeAvailable ? [RUN_CODE_TOOL] : []),
     ]
     : [];
   const toolSurface = offeredTools.length ? chatSurface : null;
@@ -999,6 +1006,28 @@ router.post('/chat/stream', requireEntitlement('canUse'), async (req, res) => {
         runImage,
         imageReference,
         streamModel,
+        runCode: codeAvailable
+          ? async ({ language, code, index }) => {
+              // Execution is metered on the ledger when a rate is set (free by default until the owner
+              // prices it — creditCosts.js CODE_EXECUTION_COST). The Library surfacing happens INSIDE
+              // the metered run, so a run that is charged is a run whose files were captured.
+              const doRun = () => runInSandbox({
+                db: req.db, conversationId, ownerUserId: userId, language, code,
+                library: { register: registerManagedLibraryFile, uploadsDir: CHAT_IMAGE_UPLOADS_DIR },
+              });
+              const { result, creditsCharged } = await runCodeMetered({
+                meter: meterMediaGeneration,
+                db: req.db,
+                userId,
+                unitCredits: getCreditCost('code'),
+                microPerCredit: MICRO_PER_CREDIT,
+                requestId: `${reqIdSeed}:code:${index}`,
+                surface: chatSurface,
+                doRun,
+              });
+              return { ...result, creditsCharged };
+            }
+          : undefined,
         runSearch: ({ query, depth }) => chatWebContextService.searchAndFetch({
           actorId: userId,
           conversationId: conversationId || null,
@@ -1100,6 +1129,34 @@ router.post('/chat/stream', requireEntitlement('canUse'), async (req, res) => {
                   : 'That image could not be generated.',
             });
             break;
+          case 'code_start':
+            sawSearch = true;
+            // BEFORE the wait, like search/image: the UI shows a running code block rather than a pause.
+            await send({ type: 'code_start', index: event.index, language: event.language });
+            break;
+          case 'code_result': {
+            // Clip for the WIRE (the model already got its own clipped copy): a run may print up to
+            // xenorun's 1 MB cap, and the bubble does not need all of it.
+            const clip = (s, n) => (typeof s === 'string' && s.length > n ? `${s.slice(0, n)}\n…[truncated]` : s || '');
+            await send({
+              type: 'code_result',
+              index: event.index,
+              status: event.result.status,
+              exitCode: event.result.exitCode,
+              stdout: clip(event.result.stdout, 16000),
+              stderr: clip(event.result.stderr, 8000),
+              files: event.result.savedFiles,
+              ...(event.result.libraryAssets && event.result.libraryAssets.length ? { libraryAssets: event.result.libraryAssets } : {}),
+              ...(event.result.creditsCharged ? { creditsCharged: event.result.creditsCharged } : {}),
+              ...(event.result.outputFilesTruncated ? { filesTruncated: true } : {}),
+            });
+            break;
+          }
+          case 'code_error':
+            // Reported, never silent, never fatal: the model got the failure as a tool result.
+            console.warn('[chat/stream] code execution failed', { requestId: reqIdSeed, index: event.index });
+            await send({ type: 'code_error', index: event.index, message: 'That code could not be executed.' });
+            break;
           case 'usage':
             usageObj = addUsage(usageObj, event.usage);
             break;
@@ -1111,6 +1168,7 @@ router.post('/chat/stream', requireEntitlement('canUse'), async (req, res) => {
               type: 'tool_use',
               searches: event.searches,
               images: event.images,
+              codeRuns: event.codeRuns,
               iterations: event.iterations,
               cappedOut: event.cappedOut,
             });

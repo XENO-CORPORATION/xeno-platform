@@ -22,6 +22,13 @@ const IMAGE_COSTS = {
 const EDIT_COST = 10;
 const VIDEO_COST = 100;
 const AUDIO_COST = 40;
+// Code execution runs on OUR servers (xenorun), so per the pricing doctrine it is a paid cloud
+// capability, not a free Layer-1 app feature. The RATE is an owner decision (see
+// `XENO PRICING - STANDARD & LEDGER.md` §6 "Platform capabilities"): DEFAULT 0 = free in beta, so
+// no user is charged until the owner sets the number. The metering plumbing is wired and exercised
+// (services/sandboxSession.js runCodeMetered) — flipping this to a positive value turns billing on
+// with no code change. Credits per completed execution (a run that ran, whatever its exit code).
+const CODE_EXECUTION_COST = 0;
 
 export function getCreditCost(type, model) {
   switch (type) {
@@ -34,6 +41,8 @@ export function getCreditCost(type, model) {
       return VIDEO_COST;
     case 'audio':
       return AUDIO_COST;
+    case 'code':
+      return CODE_EXECUTION_COST;
     default:
       return 10;
   }

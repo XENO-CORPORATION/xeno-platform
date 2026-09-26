@@ -24,10 +24,16 @@ import { fileURLToPath } from 'url';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 const KEY_PATTERN = /^artifacts\/[A-Za-z0-9_-]+\/r\d+\/[A-Za-z0-9._\-/]+$/;
+// Per-chat sandbox files (CHAT-CODE-EXECUTION-SPEC.md) share this store's R2/fs backend and its
+// hand-rolled SigV4 client rather than a second copy. Confined to one namespace under one UUID dir;
+// `..` and empty segments are still refused below, so a sandbox can address neither another sandbox
+// nor the artifacts namespace. Named `chat-sandboxes` because `workspace` is the tenancy scope here.
+const SANDBOX_KEY_PATTERN = /^chat-sandboxes\/[0-9a-fA-F-]{36}\/[A-Za-z0-9._\- /]+$/;
 
 function assertKey(key) {
-  if (typeof key !== 'string' || !KEY_PATTERN.test(key) || key.includes('..') || key.includes('//')) {
-    throw new Error(`Refusing storage key outside the artifacts namespace: ${key}`);
+  const inNamespace = typeof key === 'string' && (KEY_PATTERN.test(key) || SANDBOX_KEY_PATTERN.test(key));
+  if (!inNamespace || key.includes('..') || key.includes('//')) {
+    throw new Error(`Refusing storage key outside the allowed namespaces: ${key}`);
   }
 }
 

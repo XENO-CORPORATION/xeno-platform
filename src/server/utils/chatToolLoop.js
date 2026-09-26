@@ -43,6 +43,12 @@ import {
   imageResultPayload,
   imageBudgetExhaustedPayload,
 } from './chatImageTool.js';
+import {
+  CHAT_CODE_BUDGET,
+  parseCodeArguments,
+  codeResultPayload,
+  codeBudgetExhaustedPayload,
+} from './chatCodeTool.js';
 
 /** Budgets, by surface. Chat is a quick lookup; Research is the deep multi-source pass. */
 export const TOOL_BUDGETS = Object.freeze({
@@ -418,12 +424,14 @@ export const budgetExhaustedPayload = (searches) => ({
  * @yields { type:'delta'|'search_start'|'search_result'|'search_error'|'image_start'|'image_result'|
  *           'image_error'|'usage'|'complete', … }
  */
-export async function* streamToolLoop({ messages, surface, turnId, streamModel, runSearch, tools: offered, runImage, imageReference = null }) {
+export async function* streamToolLoop({ messages, surface, turnId, streamModel, runSearch, tools: offered, runImage, runCode, imageReference = null }) {
   const budget = budgetFor(surface);
   const tools = Array.isArray(offered) ? offered : toolsForSurface(surface);
   const canSearch = tools.some((tool) => tool?.function?.name === 'web_search');
   const canDraw = typeof runImage === 'function' && tools.some((tool) => tool?.function?.name === 'generate_image');
+  const canRun = typeof runCode === 'function' && tools.some((tool) => tool?.function?.name === 'run_code');
   let images = 0;
+  let codeRuns = 0;
 
   const working = [...messages];
   const sources = [];
@@ -483,7 +491,7 @@ export async function* streamToolLoop({ messages, surface, turnId, streamModel, 
     iterations += 1;
 
     if (toolCalls.length === 0) {
-      yield { type: 'complete', iterations, searches, images, sources, cappedOut, usage: lastUsage };
+      yield { type: 'complete', iterations, searches, images, codeRuns, sources, cappedOut, usage: lastUsage };
       return;
     }
 
@@ -521,6 +529,35 @@ export async function* streamToolLoop({ messages, surface, turnId, streamModel, 
           const message = error?.message || 'unknown error';
           working.push(toolResultMessage(id, { error: `image generation failed: ${message}` }));
           yield { type: 'image_error', index, code: error?.code || 'image_failed', http: error?.http, message };
+        }
+        continue;
+      }
+
+      if (name === 'run_code' && canRun) {
+        if (codeRuns >= CHAT_CODE_BUDGET) {
+          working.push(toolResultMessage(id, codeBudgetExhaustedPayload(codeRuns)));
+          continue;
+        }
+        const args = parseCodeArguments(call?.function?.arguments);
+        if (!args.ok) {
+          working.push(toolResultMessage(id, { error: args.error }));
+          continue;
+        }
+        const index = codeRuns;
+        codeRuns += 1;
+        // The run goes out BEFORE the wait, like a search/image: the UI shows the code is running
+        // rather than a silent pause.
+        yield { type: 'code_start', index, language: args.language, code: args.code };
+        try {
+          const result = await runCode({ language: args.language, code: args.code, index });
+          working.push(toolResultMessage(id, codeResultPayload(result)));
+          yield { type: 'code_result', index, result };
+        } catch (error) {
+          // A failed execution is a RESULT on both channels (like a failed search): a tool message
+          // so the model can speak to it, and an event so the user sees the attempt.
+          const message = error?.message || 'unknown error';
+          working.push(toolResultMessage(id, { error: `code execution failed: ${message}` }));
+          yield { type: 'code_error', index, message };
         }
         continue;
       }
@@ -587,7 +624,7 @@ export async function* streamToolLoop({ messages, surface, turnId, streamModel, 
       yield { type: 'usage', usage: event.usage };
     }
   }
-  yield { type: 'complete', iterations: iterations + 1, searches, images, sources, cappedOut, usage: lastUsage };
+  yield { type: 'complete', iterations: iterations + 1, searches, images, codeRuns, sources, cappedOut, usage: lastUsage };
 }
 
 /**
