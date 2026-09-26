@@ -32,7 +32,12 @@ export async function codeExecutionAvailable(fetchImpl = globalThis.fetch, now =
     const r = await fetchImpl(`${XENORUN_URL}/api/v1/health`, { method: 'GET' });
     if (r.ok) {
       const body = await r.json().catch(() => ({}));
-      ok = body?.docker === true || body?.status === 'healthy';
+      const healthy = body?.docker === true || body?.status === 'healthy';
+      // Require the file-I/O capability, not just health: an OLDER engine is "healthy" but silently
+      // ignores files/collectOutput, so offering run_code against it would run code that loses its
+      // files. run_code is offered only once the DEPLOYED engine advertises workspace-files.
+      const hasFileIO = Array.isArray(body?.features) && body.features.includes('workspace-files');
+      ok = healthy && hasFileIO;
     }
   } catch {
     ok = false;
