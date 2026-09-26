@@ -51,7 +51,7 @@ const shell: ProductContent = {
     sub: 'XENO Shell is a desktop of its own on top of Windows: windows, dock, files and genuine PTY terminals on your real PC. Invite someone on another PC with a code and they join with their own cursor — seeing only the windows, folders and terminals you choose.',
     media: { type: 'mockup', src: 'shell-hero', alt: 'XENO Shell — the per-display desktop running a Fabric ssh terminal and a mount-scoped Files window, with the shell-chrome consent sheet asking to grant a folder' },
     badges: ['Windows', 'Public beta', 'Unsigned build', 'Shared sessions', 'XENO account'],
-    note: 'Beta channel · v0.1.0-beta.4 · UNSIGNED — on Windows SmartScreen will show “Windows protected your PC”; choose More info → Run anyway. Needs a XENO account to open. Comms, Agents, Tasks and Hub inside the shell are still sample content — see “What it is today”.',
+    note: 'Beta channel · v0.1.0-beta.5 · UNSIGNED — on Windows SmartScreen will show “Windows protected your PC”; choose More info → Run anyway. Needs a XENO account to open. Comms, Agents, Tasks and Hub inside the shell are still sample content — see “What it is today”.',
   },
   trust: [
     'Two-PC sessions proven end to end: the host verifies each guest’s XENO account, and a forged identity is refused',
@@ -75,7 +75,7 @@ const shell: ProductContent = {
         'Real today: the desktop on your real disk, PTY terminals, Mounts, shared sessions with folders and terminals',
         'Not yet: Comms, Agents, Tasks and Hub inside the shell show sample content',
         'Guests see shared windows as frames, not their live contents; files over 8 MB are refused',
-        'v0.1.0-beta.4 is Windows-only; Linux is on the older beta.2; macOS is not built yet',
+        'v0.1.0-beta.5 is Windows-only; Linux is on the older beta.2; macOS is not built yet',
       ],
     },
     {
@@ -187,7 +187,7 @@ const shell: ProductContent = {
   },
   specs: [
     { label: 'Platform', value: 'Windows 10/11 x64 (per-user install) · Linux x64 on the older beta.2' },
-    { label: 'Channel', value: 'Beta · v0.1.0-beta.4 · unsigned' },
+    { label: 'Channel', value: 'Beta · v0.1.0-beta.5 · unsigned' },
     { label: 'Account', value: 'XENO account required to open' },
     { label: 'Terminal', value: 'node-pty (ConPTY) · ssh:// + local://' },
     { label: 'Status', value: 'Public beta — desktop, terminals, files and shared sessions' },
@@ -205,7 +205,7 @@ const shell: ProductContent = {
     { q: 'What happens if I revoke access while something is using it?', a: 'It dies immediately. Open handles fail with a typed XENO-FS[PermissionRevoked] error rather than silently reading stale data, and the revocation is written to the audit ring in Settings → Privacy alongside every allow and deny.' },
     { q: 'How do updates work, and can I go back?', a: 'Installed shells check the beta feed on startup and every 30 minutes, and roll out in stages by a deterministic machine bucket. A no-downgrade guard stops you sliding backwards accidentally; the only thing that overrides it is a deliberate rollback marker we publish if a build turns out bad. If the update server is unreachable, Shell retries quietly and boots as normal.' },
     { q: 'Is any data sent anywhere?', a: 'Crash minidumps and renderer errors spool to ~/.xeno/shell/crash/ on your own machine, scrubbed of paths, URIs, mount tokens and other identifiers — version and display topology only. Upload is off by default and doubly gated: it needs both your opt-in and a configured endpoint, and no endpoint ships in this build.' },
-    { q: 'macOS and Linux?', a: 'v0.1.0-beta.4 is Windows-only; its Linux build has not been published yet, so Linux users are on v0.1.0-beta.2 — an x86_64 AppImage built from the same commit as the Windows installer, with the same packaged end-to-end evidence: the full mounts acceptance flow, junction and .. escapes rejected, live revocation, and a verified self-update. macOS is not built yet. The codebase is cross-platform and the terminal uses forkpty on POSIX, so it is a packaging and evidence gap rather than a porting one.' },
+    { q: 'macOS and Linux?', a: 'v0.1.0-beta.5 is Windows-only; its Linux build has not been published yet, so Linux users are on v0.1.0-beta.2 — an x86_64 AppImage built from the same commit as the Windows installer, with the same packaged end-to-end evidence: the full mounts acceptance flow, junction and .. escapes rejected, live revocation, and a verified self-update. macOS is not built yet. The codebase is cross-platform and the terminal uses forkpty on POSIX, so it is a packaging and evidence gap rather than a porting one.' },
   ],
   seo: {
     title: 'XENO Shell — a desktop you can share, with a real terminal and folder-level permissions',

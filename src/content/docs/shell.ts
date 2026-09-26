@@ -1,17 +1,17 @@
 import type { ProductDocs } from './_types';
 
-/* XENO Shell documentation — reconciled against xeno-shell v0.1.0-beta.4 (tag v0.1.0-beta.4,
- * 1655d54). Every claim traces to that tag: apps/desktop/src/main/door.ts + authGate.ts (the
+/* XENO Shell documentation — reconciled against xeno-shell v0.1.0-beta.5 (tag v0.1.0-beta.5,
+ * 4effc31). Every claim traces to that tag: apps/desktop/src/main/door.ts + authGate.ts (the
  * sign-in door), account.ts (Sign in with XENO), remoteSession.ts + sessionServer.ts (sessions
  * between two PCs), sessionFiles.ts (shared folders), sessionTerminals.ts (shared terminals),
  * sessionLog.ts (the activity log) and authLog.ts (diagnostics).
- * Windows only for 0.1.0-beta.4: the Linux AppImage in the feed is the older beta.2, so no other
+ * Windows only for 0.1.0-beta.5: the Linux AppImage in the feed is the older beta.2, so no other
  * platform is named for this version. */
 const shell: ProductDocs = {
   slug: 'shell',
   productName: 'XENO Shell',
   tagline: 'A desktop environment you can share: another person joins your PC with their own cursor, on files and terminals you choose.',
-  version: '0.1.0-beta.4',
+  version: '0.1.0-beta.5',
   updated: '2026-09-26',
   seo: {
     title: 'XENO Shell documentation',
@@ -31,7 +31,7 @@ const shell: ProductDocs = {
           slug: 'installation',
           title: 'Installation',
           description: 'Download and install XENO Shell on Windows.',
-          body: "## Installation\n\nXENO Shell 0.1.0-beta.4 is available for **Windows (x64)**.\n\n1. Sign in on [xenostudio.ai](/product/shell) and choose **Download for Windows**. Downloading needs a signed-in account with an active plan.\n2. Run `XENO Shell Setup 0.1.0-beta.4.exe`. It installs for your user only; no administrator rights are needed.\n3. The installer is **not code-signed yet**, so Windows SmartScreen shows *Windows protected your PC*. Choose **More info → Run anyway**. The app says so too: an **Unsigned build** badge sits on the sign-in screen and in the shell.\n4. Open XENO Shell and [sign in](/docs/shell/signing-in).\n\n## Updates\n\nXENO Shell checks for updates on the beta channel and downloads them in the background. A copy on an earlier beta updates to 0.1.0-beta.4 by itself.\n\n## Where your data lives\n\nSettings, your sign-in and the diagnostics log live in `%APPDATA%\\@xeno-corporation\\xeno-shell-desktop\\`. Desktop layout and window positions are in `%USERPROFILE%\\.xeno\\shell\\state.json`.",
+          body: "## Installation\n\nXENO Shell 0.1.0-beta.5 is available for **Windows (x64)**.\n\n1. Sign in on [xenostudio.ai](/product/shell) and choose **Download for Windows**. Downloading needs a signed-in account with an active plan.\n2. Run `XENO Shell Setup 0.1.0-beta.5.exe`. It installs for your user only; no administrator rights are needed.\n3. The installer is **not code-signed yet**, so Windows SmartScreen shows *Windows protected your PC*. Choose **More info → Run anyway**. The app says so too: an **Unsigned build** badge sits on the sign-in screen and in the shell.\n4. Open XENO Shell and [sign in](/docs/shell/signing-in).\n\n## Updates\n\nXENO Shell checks for updates on the beta channel and downloads them in the background. A copy on an earlier beta updates to 0.1.0-beta.5 by itself.\n\n## Where your data lives\n\nSettings, your sign-in and the diagnostics log live in `%APPDATA%\\@xeno-corporation\\xeno-shell-desktop\\`. Desktop layout and window positions are in `%USERPROFILE%\\.xeno\\shell\\state.json`.",
         },
         {
           slug: 'signing-in',
@@ -48,7 +48,7 @@ const shell: ProductDocs = {
           slug: 'sharing',
           title: 'Sharing your shell',
           description: 'Let someone on another PC join your shell with their own cursor.',
-          body: "## Sharing your shell\n\nBoth people need XENO Shell and a XENO account. The person sharing is the **host**; the person joining is the **guest**.\n\n### Host\n\n1. Open the share panel and choose **Start sharing**.\n2. A code appears, such as `ABCD-2345`. Give it to the guest.\n3. When the guest asks to join, their XENO account name appears with a **XENO** tag, which means the platform confirmed who they are. Choose **Let in** or **No**.\n\n### Guest\n\n1. Open the share panel and choose **Join someone instead**.\n2. Enter the code and choose **Join**.\n3. Wait for the host to let you in.\n\n## What the guest can do\n\n- Each person has **their own cursor**, labelled with their name.\n- New windows stay **private** until the host shares them.\n- The host can **lock** a window, hand it to the guest, take it back, or remove the guest from the session at any time.\n\n## How the connection works\n\nThe two PCs connect **directly** to each other. When a network blocks a direct connection, the connection goes through a XENO relay instead. The platform only introduces the two PCs; it never sees what you do in the session. The guest's PC checks the host's encryption key against the one XENO vouched for, and refuses to connect if they differ.",
+          body: "## Sharing your shell\n\nBoth people need XENO Shell and a XENO account. The person sharing is the **host**; the person joining is the **guest**.\n\n### Host\n\n1. Choose **Share** in the top bar, next to your account (or press Ctrl+K and choose *Share this shell…*), then choose **Start sharing**.\n2. A code appears, such as `ABCD-2345`. Give it to the guest.\n3. When the guest asks to join, their XENO account name appears with a **XENO** tag, which means the platform confirmed who they are. Choose **Let in** or **No**.\n\n### Guest\n\n1. Choose **Share** in the top bar, then choose **Join someone instead**.\n2. Enter the code and choose **Join**.\n3. Wait for the host to let you in.\n\n## What the guest can do\n\n- Each person has **their own cursor**, labelled with their name.\n- New windows stay **private** until the host shares them.\n- The host can **lock** a window, hand it to the guest, take it back, or remove the guest from the session at any time.\n\n## How the connection works\n\nThe two PCs connect **directly** to each other. When a network blocks a direct connection, the connection goes through a XENO relay instead. The platform only introduces the two PCs; it never sees what you do in the session. The guest's PC checks the host's encryption key against the one XENO vouched for, and refuses to connect if they differ.",
         },
         {
           slug: 'shared-folders-and-terminals',
