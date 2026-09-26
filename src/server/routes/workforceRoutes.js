@@ -113,6 +113,7 @@ const defaultList = async (...args) => (await import('../services/workforceCatal
 const defaultAdmit = async (...args) => (await import('../services/workforceRunAdmission.js')).admitRun(...args);
 const defaultReadAdmission = async (...args) => (await import('../services/workforceRunAdmission.js')).readRunAdmission(...args);
 const defaultReadPin = async (...args) => (await import('../services/workforceRunAdmission.js')).readRunnablePin(...args);
+const defaultReadCapacity = async (...args) => (await import('../services/workforceCapacity.js')).readWorkforceCapacity(...args);
 // RUN-03: the lease is signed with the platform's OWN active OIDC key -- the one published at
 // /api/oauth2/jwks -- so any runtime can verify it offline against the public JWKS, and no key
 // ever comes from a request.
@@ -160,6 +161,28 @@ function admissionObservation(value) {
     return Object.hasOwn(value, 'admission')
       ? { admission, replayed: value.replayed === true }
       : { admission };
+  } catch { return null; }
+}
+/** LIFE-09: capacity is reported for the scope ASKED about, as numbers derived at the read, never a
+ * stored figure. A reply for another scope, or carrying a field outside this shape, is not reported. */
+const intString = value => typeof value === 'string' && /^(0|[1-9][0-9]{0,30})$/.test(value);
+const count = value => Number.isSafeInteger(value) && value >= 0;
+function capacityObservation(value, request) {
+  try {
+    const owner = normalizeOwnerScope(value?.owner), asked = normalizeOwnerScope(request.owner);
+    if (value.schemaVersion !== 1 || owner.type !== asked.type || owner.id !== asked.id
+      || typeof value.derivedAt !== 'string' || !Number.isFinite(Date.parse(value.derivedAt))
+      || !count(value.activeAdmissions) || !count(value.inFlightRuns) || !count(value.activeAgents)
+      || value.inFlightRuns > value.activeAdmissions || value.activeAgents > value.activeAdmissions
+      || !intString(value.committedCeilingMicro) || !Array.isArray(value.funding) || value.funding.length > 1000) return null;
+    const funding = value.funding.map(f => {
+      if (!f || uuid(f.payerUserId) !== f.payerUserId || typeof f.canFund !== 'boolean'
+        || (Object.hasOwn(f, 'availableMicro') && !intString(f.availableMicro))) throw new Error('Invalid funding row');
+      return { payerUserId: f.payerUserId, canFund: f.canFund, ...(Object.hasOwn(f, 'availableMicro') ? { availableMicro: f.availableMicro } : {}) };
+    });
+    if (new Set(funding.map(f => f.payerUserId)).size !== funding.length) return null;
+    return { schemaVersion: 1, owner, derivedAt: value.derivedAt, activeAdmissions: value.activeAdmissions,
+      inFlightRuns: value.inFlightRuns, activeAgents: value.activeAgents, committedCeilingMicro: value.committedCeilingMicro, funding };
   } catch { return null; }
 }
 /** RUN-01's precondition: the pin reported is for the agent and the target ASKED about, in its whole
@@ -296,7 +319,8 @@ function globalObservation(value, request) {
  * Domain input normalization, canonical principal/ReBAC checks and transactions
  * belong to the real service, not the renderer or this routing adapter. */
 export function createWorkforceRouter({ createWorkforceResource = defaultCreate, readWorkforceResourceOperation = defaultRead, listOwnedWorkforceResources = defaultList,
-  admitRun = defaultAdmit, readRunAdmission = defaultReadAdmission, readRunnablePin = defaultReadPin, authorizeRunStep = defaultAuthorizeStep,
+  admitRun = defaultAdmit, readRunAdmission = defaultReadAdmission, readRunnablePin = defaultReadPin, readWorkforceCapacity = defaultReadCapacity,
+  authorizeRunStep = defaultAuthorizeStep,
   revokeRun = defaultRevokeRun, readRunAuthority = defaultReadAuthority } = {}) {
   const router = express.Router();
   router.use('/api-key-capabilities', apiKeyWorkforceCapabilityRoutes);
@@ -350,6 +374,9 @@ export function createWorkforceRouter({ createWorkforceResource = defaultCreate,
       if (Object.keys(body).some(key => key !== 'admissionId')) throw Object.assign(new Error('unknown field'), { code: 'bad_input' });
       return readRunAdmission(db, context, body.admissionId);
     }, true, admissionObservation));
+  // LIFE-09: what a scope is running and can still fund, derived at the read. A read, like the catalog.
+  router.post('/capacity', authMiddleware, requireDpopIfBound, requireWorkforceScope('workforce:read'), parse,
+    handle(readWorkforceCapacity, true, capacityObservation));
   // RUN-01's precondition: the current pin of an agent as runnable at one target, by this actor -- what an
   // admission must name. A read, resolved under admission's own rule; it commits nothing.
   router.post('/run-admissions/pin', authMiddleware, requireDpopIfBound, requireWorkforceScope('workforce:read'), parse,
@@ -367,7 +394,7 @@ export function createWorkforceRouter({ createWorkforceResource = defaultCreate,
     handle(onlyAdmission(revokeRun), false, authorityObservation));
   router.post('/run-admissions/authority', authMiddleware, requireDpopIfBound, requireWorkforceScope('workforce:read'), parse,
     handle(onlyAdmission(readRunAuthority), true, authorityObservation));
-  for (const path of ['/resources', '/resources/list', '/resource-operations/read', '/run-admissions', '/run-admissions/read', '/run-admissions/pin',
+  for (const path of ['/resources', '/resources/list', '/resource-operations/read', '/run-admissions', '/run-admissions/read', '/run-admissions/pin', '/capacity',
     '/run-admissions/authorize-step', '/run-admissions/revoke', '/run-admissions/authority']) {
     router.all(path, (_req, res) => res.set('Allow', 'POST').status(405).json({ success: false, code: 'bad_input', error: 'Method not allowed.' }));
   }

@@ -85,7 +85,7 @@ function request(value) {
  * granting tuple rows through its metadata query/transaction commit. Personal
  * delegation writers should also use the owner row FOR UPDATE; tuple row locks
  * independently serialize deletion of an existing grant with this read. */
-async function authorizeRead(db, actorId, owner) {
+export async function authorizeRead(db, actorId, owner) {
   if (owner.type === 'workspace') {
     const statuses = await lockWorkspaces(db, [owner.id]);
     if (statuses.get(owner.id) !== 'active') fail();

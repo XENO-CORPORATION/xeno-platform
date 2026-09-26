@@ -27,7 +27,10 @@
  *            REQUIRES one, referenced from the row it changed (20260924190000). This suite still
  *            proves only that the record itself is immutable and carries both principals.
  *   LIFE-08  objectives as the top of the work tree -- no table.
- *   LIFE-09  capacity is DERIVED, never declared -- nothing derives it.
+ *   LIFE-09  NOW CITED (2026-09-27), in workforce-capacity.test.mjs, against the views in
+ *            20260927100000-workforce-derived-capacity.sql and services/workforceCapacity.js. Capacity
+ *            is read from live admissions, revocations, leases and holds, and there is no column or
+ *            table anywhere in the schema to declare it in.
  *
  *   HAND-06  ✅ NOW CITED, in workforce-handoff-disclosure.test.mjs, against
  *            20260924200000-workforce-handoff-disclosure.sql. The gap this note recorded was real:
