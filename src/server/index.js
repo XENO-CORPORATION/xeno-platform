@@ -92,6 +92,7 @@ import dashboardRoutes from './routes/dashboardRoutes.js';
 import v2LedgerRoutes from './routes/v2LedgerRoutes.js';
 import serviceLedgerRoutes from './routes/serviceLedgerRoutes.js';
 import oauth2Routes from './routes/oauth2Routes.js';
+import shellSessionRoutes from './routes/shellSessionRoutes.js';
 import v2MeRoutes from './routes/v2MeRoutes.js';
 import v2AuthzRoutes from './routes/v2AuthzRoutes.js';
 import v2InferenceRoutes from './routes/v2InferenceRoutes.js';
@@ -637,6 +638,8 @@ if (process.env.OIDC_ENABLED === 'true') {
   app.use('/api/v2/inference', databaseMiddleware, oidcAuth, v2InferenceRoutes);
   // XENO handle registry (handle = login = identity = @xenostudio.ai address)
   app.use('/api/v2/handles', databaseMiddleware, oidcAuth, handleRoutes);
+  // XENO Shell shared sessions: discovery + signalling only; content is peer-to-peer, E2E encrypted.
+  app.use('/api/v2/shell/sessions', databaseMiddleware, oidcAuth, shellSessionRoutes);
   app.get('/api/oauth2/.well-known/openid-configuration', (req, res) => res.json(oidcDiscovery()));
   console.log('🔐 OIDC provider integrated: /api/oauth2/* + /api/v2/me + /api/v2/authz (OIDC_ENABLED)');
 }
