@@ -122,3 +122,12 @@ Until the loop exists, the capability statement says plainly that **no tool can 
 Chat/Code/Agents, that Research's search runs *before* the turn, and that the model must never
 narrate searching or claim a search failed. That is honest about today and stops the fabrication;
 it is not the end state.
+
+## Beyond search — code execution is a separate, larger subsystem
+
+A `run_code` tool belongs on this same loop and reuses everything above — the per-iteration
+`requestId`, the server-side budget, the visible count. But the thing it binds to (a persistent
+per-chat workspace and an on-demand sandbox) is a subsystem in its own right, with an infra
+concern this plan does not own: a persistent per-chat workspace over `xenorun` (the owned
+code-execution engine — NOT `xeno-use`, which is device/computer use). It is specified in
+**`CHAT-CODE-EXECUTION-SPEC.md`**. Add the `run_code` tool here only once that ships.
