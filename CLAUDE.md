@@ -172,6 +172,37 @@ always rolled back — `proof:forum-push`, `proof:forum-report`, `proof:forum-th
 🔴 **Run the proof before believing a Forum feature works.** Eleven features here have been
 built, unit-tested and unreachable.
 
+## 🧭 Workforce runs are ADMITTED, then RE-ASKED — the authority lives HERE (2026-09-25/26)
+
+XENO-WORKFORCE-01's run authority is a **platform primitive**, like agent identity above: every
+runtime (SDK, Interface, CLI, hosted agents) asks this repo, and none of them may decide on its own.
+Full record, reasoning and evidence: `../docs/specs/xeno-workforce-implementation-status.md`
+→ *"Four families closed on the platform — 2026-09-25/26"*.
+
+| Piece | Where | Rule |
+|---|---|---|
+| **One team model** (D21, #413) | `workforce_resources` kind `team` | `workspace_teams` was absorbed and dropped. Never add a team table or a team flag again. |
+| **Team packages** (MKT-04/D22, #415) | `services/marketplaceTeamPackages.js` | Listing kind `team`, built by the platform from one canonical team. Humans and non-redistributable agents never leave. |
+| **Admission** (RUN-01/02, #416) | `services/workforceRunAdmission.js`, `POST /api/workforce/run-admissions` | Every term read from its own row, never from the request. Effective = request ∩ definition ∩ target ∩ runtime ∩ entitlement, and the DB CHECK holds it too. |
+| **Live authority** (RUN-03/NFR-06/10, #420) | `services/workforceRunAuthority.js`, `…/run-admissions/authorize-step`, `/revoke`, `/authority` | Re-derived from LIVE rows before each privileged call and provider dispatch. It only narrows. A step returns an ES256 lease, ≤60 s, signed with the key at `/api/oauth2/jwks`. |
+
+**Why:** the workforce schema existed and nothing used it to decide anything at run time. A UI's
+request is not proof. A pin fixes the DEFINITION, not the AUTHORITY. And without a bounded lease a
+disconnected worker spends forever. Every later family — child runs, loops, nested budgets, pooled
+funding, division boundaries — needs this record and this check first.
+
+🔴 **Do not widen these by editing the service alone.** Each intersection term is enforced twice: in
+the service, and by a CHECK or trigger on `workforce_run_admissions` / `workforce_run_leases`. The
+tables are immutable and retained, and `workforce-migration-chain.test.mjs` pins the schema. A new
+table fails that gate on purpose: the requirement it implements must be cited by a real test first.
+
+⚠️ **Not built:**
+- No runtime calls `authorize-step` yet. That is SDK/Interface work: the SDK has no pre-dispatch hook.
+- DIV-08: admission does not yet check that the actor sits inside the division.
+- The payer is always the actor's own account. No workspace or project pool exists (FUND-06), and there is no silent fallback.
+
+Do not describe runs as revocation-enforced end to end until a runtime calls `authorize-step`.
+
 ## Working in `../xeno-elements-foundations` from this repo
 
 The chat's design-system adoption edits both repos in one session. The element library has its own
