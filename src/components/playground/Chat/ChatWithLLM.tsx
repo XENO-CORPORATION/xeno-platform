@@ -50,6 +50,7 @@ import { buildChatSystemPrompt, CHAT_MODE_PLACEHOLDERS, modeUsesXenoSearch, type
 import ChatTurnHead from './ChatTurnHead';
 import { ChatGeneratedImages, imageAssetFor, type ChatTurnImageView } from './ChatGeneratedImage';
 import { ChatUserMessage } from './ChatUserMessage';
+import { pasteBecomesFile, makePastedTextFile } from './chatPaste';
 import {
   applyTurnEvent, chatFaviconUrl, closeTurnRecord, DEFAULT_STEPS_MODE, isStepsMode, newTurnRecord, normalizeStoredTurn, turnCitedSources, turnHasRail, turnImageModels, turnImages,
   type ChatTurnRecord, type StepsMode,
@@ -9720,65 +9721,78 @@ Keep the summary under 500 words. Preserve essential context needed to continue 
   };
   
   // Handle file selection from the hidden input
-  const handleFileSelected = async (event: React.ChangeEvent<HTMLInputElement>) => {
-    const files = event.target.files;
-    if (files && files.length > 0) {
-        // Selection is the moment the browser has the real bytes. Persist them now;
-        // the old recent-file callback only wrote metadata and was never invoked,
-        // which made attachments disappear from every other device.
-        setIsUploadingAttachments(true);
-        let newFiles: AttachedFile[] = [];
-        try {
-          newFiles = await Promise.all(Array.from(files).map(async (file) => {
-            const asset = await libraryService.upload(file, 'chat-attachment');
-            return {
-              id: asset.assetId,
-              name: asset.name,
-              type: asset.mimeType || file.type || 'application/octet-stream',
-              fileObject: file,
-              assetId: asset.assetId,
-              contentUrl: asset.contentUrl,
-              size: asset.size || file.size,
-            };
-          }));
-        } catch (error) {
-          console.error('Failed to save chat attachment to Library:', error);
-          return;
-        } finally {
-          setIsUploadingAttachments(false);
-        }
-        
-        // Add files to recent files list
-        const now = Date.now();
-        const newRecentFiles = newFiles.map((file) => ({
-          id: file.id,
-          name: file.name,
-          type: file.type,
-          size: file.size || 0,
-          lastUsed: now,
-          assetId: file.assetId,
-          contentUrl: file.contentUrl,
-          preview: file.fileObject && file.type.startsWith('image/') ? URL.createObjectURL(file.fileObject) : undefined
-        }));
+  /**
+   * Upload real File objects to the Library and attach them to the composer. Extracted from the
+   * file-picker handler so a big PASTE (below) reaches the SAME path: upload -> chip -> sent to the
+   * model as file content (the send loop reads a text/* file's bytes) -> saved with the message ->
+   * openable in the right-side Context Panel and in the Library. One place, so the two entry points
+   * cannot drift.
+   */
+  const attachFileObjects = async (fileObjs: File[]) => {
+    if (!fileObjs.length) return;
+    // The moment we hold the real bytes. Persist now; a metadata-only record disappears off-device.
+    setIsUploadingAttachments(true);
+    let newFiles: AttachedFile[] = [];
+    try {
+      newFiles = await Promise.all(fileObjs.map(async (file) => {
+        const asset = await libraryService.upload(file, 'chat-attachment');
+        return {
+          id: asset.assetId,
+          name: asset.name,
+          type: asset.mimeType || file.type || 'application/octet-stream',
+          fileObject: file,
+          assetId: asset.assetId,
+          contentUrl: asset.contentUrl,
+          size: asset.size || file.size,
+        };
+      }));
+    } catch (error) {
+      console.error('Failed to save chat attachment to Library:', error);
+      return;
+    } finally {
+      setIsUploadingAttachments(false);
+    }
 
-        setRecentFiles(prev => {
-          // Remove any existing files with the same name and add new ones
-          const filtered = prev.filter(existingFile => 
-            !newRecentFiles.some(newFile => newFile.name === existingFile.name)
-          );
-          // Add new files at the beginning and limit to 20 most recent
-          return [...newRecentFiles, ...filtered].slice(0, 20);
-        });
-        
-        setAttachedFiles(prev => [...prev, ...newFiles]);
-        setIsAttachMenuOpen(false); // Close menus
-        setIsRecentFilesOpen(false);
-    }
-    if(event.target) {
-        event.target.value = '';
-    }
+    const now = Date.now();
+    const newRecentFiles = newFiles.map((file) => ({
+      id: file.id,
+      name: file.name,
+      type: file.type,
+      size: file.size || 0,
+      lastUsed: now,
+      assetId: file.assetId,
+      contentUrl: file.contentUrl,
+      preview: file.fileObject && file.type.startsWith('image/') ? URL.createObjectURL(file.fileObject) : undefined,
+    }));
+    setRecentFiles(prev => {
+      const filtered = prev.filter(existingFile => !newRecentFiles.some(newFile => newFile.name === existingFile.name));
+      return [...newRecentFiles, ...filtered].slice(0, 20);
+    });
+    setAttachedFiles(prev => [...prev, ...newFiles]);
+    setIsAttachMenuOpen(false);
+    setIsRecentFilesOpen(false);
   };
 
+  const handleFileSelected = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const files = event.target.files;
+    if (files && files.length > 0) await attachFileObjects(Array.from(files));
+    if (event.target) event.target.value = '';
+  };
+
+  /**
+   * A large paste becomes a `Pasted text.txt` attachment instead of a wall of inline text — the
+   * ChatGPT behaviour. Above the chatPaste threshold (2000, an owner decision 2026-09-26) the paste
+   * is diverted into a real Library file and attached; below it, it pastes inline as before. A paste
+   * that carries actual files/images is left to the browser's own handling. The full text is never
+   * cut: it lives in the file, which the model reads and the Context Panel / Library show whole.
+   */
+  const handleComposerPaste = (event: React.ClipboardEvent<HTMLTextAreaElement>) => {
+    const pasted = event.clipboardData.getData('text/plain');
+    const hasFiles = Boolean(event.clipboardData.files && event.clipboardData.files.length > 0);
+    if (!pasteBecomesFile({ text: pasted, hasFiles })) return;
+    event.preventDefault();
+    void attachFileObjects([makePastedTextFile(pasted)]);
+  };
   // Handle removing an attached file
   const handleRemoveAttachedFile = (fileIdToRemove: string) => {
       setAttachedFiles(prev => prev.filter(file => file.id !== fileIdToRemove));
@@ -12418,6 +12432,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                 placeholder={CHAT_MODE_PLACEHOLDERS[emptyStateMode]}
                 value={inputValue}
                 onChange={(e) => setInputValue(e.target.value)}
+                onPaste={handleComposerPaste}
                 onKeyDown={(e) => {
                   // Enter without Shift sends the message
                   if (e.key === 'Enter' && !e.shiftKey) {
