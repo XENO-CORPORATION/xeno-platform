@@ -84,6 +84,18 @@ function capabilities(value, field) {
 }
 const within = (set, allowed) => set.filter((c) => allowed.includes(c));
 
+/** A run's target: exactly the fields its kind needs, and nothing that another kind would read. */
+function parseTarget(value) {
+  const target = record(value, ['kind', 'ownerUserId', 'assignmentId', 'projectId', 'participationId'], 'target');
+  if (!['personal', 'workspace', 'project'].includes(target.kind)) fail('bad_input', 'invalid_target_kind');
+  const shape = { personal: ['kind', 'ownerUserId'], workspace: ['kind', 'assignmentId'], project: ['kind', 'projectId', 'participationId'] }[target.kind];
+  for (const key of Object.keys(target)) if (!shape.includes(key)) fail('bad_input', 'target_field_conflict', { field: `target.${key}` });
+  for (const key of shape.slice(1)) if (!Object.hasOwn(target, key)) fail('bad_input', 'target_field_missing', { field: `target.${key}` });
+  return target.kind === 'personal' ? { kind: 'personal', ownerUserId: uuid(target.ownerUserId, 'target_owner') }
+    : target.kind === 'workspace' ? { kind: 'workspace', assignmentId: uuid(target.assignmentId, 'assignment') }
+      : { kind: 'project', projectId: uuid(target.projectId, 'project'), participationId: uuid(target.participationId, 'participation') };
+}
+
 function parse(context, value) {
   const ctx = record(context, ['actorUserId', 'clientId', 'apiKeyId'], 'context');
   if (typeof ctx.clientId !== 'string' || !/^[a-zA-Z0-9._-]{1,128}$/.test(ctx.clientId)) fail('bad_input', 'invalid_client');
@@ -92,12 +104,7 @@ function parse(context, value) {
   const agent = record(input.agent, ['resourceId', 'version', 'contentHash'], 'agent');
   if (!Number.isSafeInteger(agent.version) || agent.version < 1) fail('bad_input', 'invalid_agent_version');
   if (typeof agent.contentHash !== 'string' || !/^[0-9a-f]{64}$/.test(agent.contentHash)) fail('bad_input', 'invalid_agent_content_hash');
-  const target = record(input.target, ['kind', 'ownerUserId', 'assignmentId', 'projectId', 'participationId'], 'target');
-  if (!['personal', 'workspace', 'project'].includes(target.kind)) fail('bad_input', 'invalid_target_kind');
-  // The target shape is explicit: exactly the fields its kind needs, and nothing that another kind would read.
-  const shape = { personal: ['kind', 'ownerUserId'], workspace: ['kind', 'assignmentId'], project: ['kind', 'projectId', 'participationId'] }[target.kind];
-  for (const key of Object.keys(target)) if (!shape.includes(key)) fail('bad_input', 'target_field_conflict', { field: `target.${key}` });
-  for (const key of shape.slice(1)) if (!Object.hasOwn(target, key)) fail('bad_input', 'target_field_missing', { field: `target.${key}` });
+  const target = parseTarget(input.target);
   const team = input.team === undefined || input.team === null ? null : record(input.team, ['teamId'], 'team');
   const root = input.root === undefined || input.root === null ? null : record(input.root, ['bindingId', 'installationId'], 'root');
   if (root && (typeof root.installationId !== 'string' || !/^[A-Za-z0-9_-]{43}$/.test(root.installationId))) fail('bad_input', 'invalid_root_installation');
@@ -110,9 +117,7 @@ function parse(context, value) {
       operationId: uuid(input.operationId, 'operation'),
       expectedActorAccountId: optionalUuid(input.expectedActorAccountId, 'expected_actor'),
       agent: { resourceId: uuid(agent.resourceId, 'agent_resource'), version: agent.version, contentHash: agent.contentHash },
-      target: target.kind === 'personal' ? { kind: 'personal', ownerUserId: uuid(target.ownerUserId, 'target_owner') }
-        : target.kind === 'workspace' ? { kind: 'workspace', assignmentId: uuid(target.assignmentId, 'assignment') }
-          : { kind: 'project', projectId: uuid(target.projectId, 'project'), participationId: uuid(target.participationId, 'participation') },
+      target,
       team: team ? { teamId: uuid(team.teamId, 'team') } : null,
       conversationId: optionalUuid(input.conversationId, 'conversation'),
       root: root ? { bindingId: uuid(root.bindingId, 'root_binding'), installationId: root.installationId } : null,
@@ -169,16 +174,16 @@ function publicAdmission(row) {
   };
 }
 
-export async function admitRun(pool, authenticatedContext, value) {
-  const { actor, request } = parse(authenticatedContext, value);
-  // A comparison condition, never authentication: it closes an account switch between intent and dispatch.
-  if (request.expectedActorAccountId && request.expectedActorAccountId !== actor.actorUserId) fail('conflict', 'actor_context_conflict');
-  const requestHash = operationHash({ agent: request.agent, target: request.target, team: request.team, conversationId: request.conversationId,
-    root: request.root, capabilities: request.capabilities, runtimeCapabilities: request.runtimeCapabilities, budget: request.budget });
-
-  return authorityTransaction(pool, async (db) => {
+/** The facts both admission and the pin read resolve, IN ONE PLACE, in the house lock order: the
+ * target and its workspace gate, the acting principal, the agent and its CURRENT definition, the
+ * target's grant, that the target grants THIS resource, and that the actor may act for the target.
+ * Admission and `readRunnablePin` both call it, so the read can never say an agent is runnable where
+ * admitting it would refuse -- or the reverse. It resolves nothing about the team, conversation,
+ * root, entitlement or budget: those belong to one admission, not to what may run where. */
+async function resolveRunnable(db, actor, request, scope, beforeResource = async () => {}) {
     // ── the target, and the workspace authority gate that serializes it (the house lock order) ──
     let assignment = null, participation = null, project = null, targetWorkspace = null, targetOwner = null;
+
     if (request.target.kind === 'workspace') {
       assignment = (await db.query('SELECT * FROM workforce_workspace_assignments WHERE id=$1', [request.target.assignmentId])).rows[0];
       if (!assignment) fail('not_found', 'target_not_found');
@@ -197,27 +202,19 @@ export async function admitRun(pool, authenticatedContext, value) {
 
     await db.query(`SELECT id FROM users WHERE id=$1 OR id IN (SELECT owner_user_id FROM agent_identities WHERE user_id=$1) ORDER BY id FOR SHARE`, [actor.actorUserId]);
     const who = await actorPrincipal(db, actor.actorUserId);
-    await lockApiKeyWorkforceAuthority(db, actor, 'workforce:manage');
+    await lockApiKeyWorkforceAuthority(db, actor, scope);
 
-    // ── idempotency ─────────────────────────────────────────────────────────────────────────────
-    await db.query('SELECT pg_advisory_xact_lock(hashtextextended($1,0))', [`run-admission:${actor.actorUserId}:${actor.clientId}:${request.operationId}`]);
-    const inc = await incarnation(db, actor.actorUserId);
-    const prior = (await db.query('SELECT * FROM workforce_run_admissions WHERE actor_user_id=$1 AND client_id=$2 AND operation_id=$3',
-      [actor.actorUserId, actor.clientId, request.operationId])).rows[0];
-    if (prior) {
-      if (prior.request_hash !== requestHash) fail('conflict', 'operation_payload_conflict');
-      if (prior.incarnation_hash !== inc) fail('conflict', 'operation_incarnation_conflict');
-      return { replayed: true, admission: publicAdmission(prior) };
-    }
+    // Admission replays a prior decision here, before any rights are re-read.
+    const early = await beforeResource(who);
+    if (early) return { early };
 
     // ── resource-use rights: the agent and the definition actually pinned ──────────────────────
     const agent = (await db.query(`SELECT * FROM workforce_resources WHERE id=$1 AND kind='agent' FOR SHARE`, [request.agent.resourceId])).rows[0];
     if (!agent || agent.status !== 'active') fail('not_found', 'agent_not_found');
     const version = (await db.query(`SELECT * FROM workforce_agent_versions WHERE resource_id=$1 ORDER BY version DESC LIMIT 1`, [agent.id])).rows[0];
-    // The pin is to the CURRENT definition. A stale pin is a conflict, not a quiet run of something else.
-    if (!version || version.version !== request.agent.version || version.content_hash !== request.agent.contentHash) {
-      fail('conflict', 'agent_version_stale', { currentVersion: version?.version ?? null });
-    }
+    // An active agent always has a definition; one without is not runnable, and says so rather than
+    // letting a caller pin to nothing.
+    if (!version) fail('not_found', 'agent_not_found');
     const definitionTerm = capabilities(Array.isArray(version.content?.requestedCapabilities) ? version.content.requestedCapabilities : [], 'definition_capabilities');
 
     // ── the target grant, from the views that already resolve liveness and inheritance ─────────
@@ -273,6 +270,41 @@ export async function admitRun(pool, authenticatedContext, value) {
       team = { id: request.team.teamId, membershipId: member.membership_id, membershipRevision: member.membership_revision,
         memberSetRevision: member.snapshot_revision, function: member.role };
     }
+
+    return { who, agent, version, definitionTerm, targetTerm, assignment, participation, project, targetWorkspace, targetOwner, team };
+}
+
+export async function admitRun(pool, authenticatedContext, value) {
+  const { actor, request } = parse(authenticatedContext, value);
+  // A comparison condition, never authentication: it closes an account switch between intent and dispatch.
+  if (request.expectedActorAccountId && request.expectedActorAccountId !== actor.actorUserId) fail('conflict', 'actor_context_conflict');
+  const requestHash = operationHash({ agent: request.agent, target: request.target, team: request.team, conversationId: request.conversationId,
+    root: request.root, capabilities: request.capabilities, runtimeCapabilities: request.runtimeCapabilities, budget: request.budget });
+
+  return authorityTransaction(pool, async (db) => {
+    // The actor incarnation is read inside the idempotency hook and recorded on the new admission.
+    let inc;
+    const resolved = await resolveRunnable(db, actor, request, 'workforce:manage', async () => {
+      // ── idempotency ─────────────────────────────────────────────────────────────────────────────
+      await db.query('SELECT pg_advisory_xact_lock(hashtextextended($1,0))', [`run-admission:${actor.actorUserId}:${actor.clientId}:${request.operationId}`]);
+      inc = await incarnation(db, actor.actorUserId);
+      const prior = (await db.query('SELECT * FROM workforce_run_admissions WHERE actor_user_id=$1 AND client_id=$2 AND operation_id=$3',
+        [actor.actorUserId, actor.clientId, request.operationId])).rows[0];
+      if (prior) {
+        if (prior.request_hash !== requestHash) fail('conflict', 'operation_payload_conflict');
+        if (prior.incarnation_hash !== inc) fail('conflict', 'operation_incarnation_conflict');
+        return { replayed: true, admission: publicAdmission(prior) };
+      }
+
+      return null;
+    });
+    if (resolved.early) return resolved.early;
+    const { who, agent, version, definitionTerm, targetTerm, assignment, participation, targetWorkspace, targetOwner, team } = resolved;
+    // The pin is to the CURRENT definition. A stale pin is a conflict, not a quiet run of something else.
+    if (version.version !== request.agent.version || version.content_hash !== request.agent.contentHash) {
+      fail('conflict', 'agent_version_stale', { currentVersion: version.version });
+    }
+
 
     // ── the conversation, if the run belongs to one: it must be in the target's scope ──────────
     if (request.conversationId) {
@@ -340,6 +372,53 @@ export async function admitRun(pool, authenticatedContext, value) {
       request.conversationId, root?.bindingId ?? null, root?.revision ?? null, root?.installationId ?? null, entitlementId,
       payerUserId, request.budget.ceilingMicro, JSON.stringify(request.capabilities), JSON.stringify(effective), JSON.stringify(rights), memoryNamespace])).rows[0];
     return { replayed: false, admission: publicAdmission(row) };
+  });
+}
+
+/** RUN-01's precondition, read before admitting: the CURRENT version pin of an agent as runnable at one
+ * target, by this actor -- the `{ resourceId, version, contentHash }` an admission must name.
+ *
+ * Admission takes the pin as a PRECONDITION and refuses a stale one (`agent_version_stale`), the way an
+ * HTTP `If-Match` refuses a stale ETag or a Kubernetes update a stale `resourceVersion`: the host
+ * commits to the definition it saw, and a definition that changed in between is a conflict rather than
+ * a quiet run of something else. Before this read nothing returned a pin, so no host could admit.
+ *
+ * It answers under ADMISSION'S OWN RULE, by calling the same `resolveRunnable`: the target and its
+ * liveness, the agent and its current definition, that the target grants this resource, that the actor
+ * may act for the target, and -- for a team run -- the actor's and the agent's admitted membership. So
+ * it never reports an agent runnable where admitting it would refuse on one of those terms, and it
+ * discloses exactly what admission would: an admission already returns the pin and the definition's
+ * capability term to its actor. A workspace VIEWER, who may see an assigned resource in the catalog but
+ * may not dispatch it, is refused here exactly as by admission.
+ *
+ * NOT resolved, and so still able to refuse at admission: the conversation, the root binding, the
+ * entitlement of a bought agent and the budget. Those belong to one admission, not to whether this agent
+ * may run here. It writes nothing.
+ *
+ * This is deliberately NOT section 11.1's `agent.resource.get`: that is a catalog read of one resource
+ * under the catalog's visibility rule (VIEW-02), and it remains unbuilt. A pin is authorized by the RUN rule. */
+export async function readRunnablePin(pool, authenticatedContext, value) {
+  const ctx = record(authenticatedContext, ['actorUserId', 'clientId', 'apiKeyId'], 'context');
+  if (typeof ctx.clientId !== 'string' || !/^[a-zA-Z0-9._-]{1,128}$/.test(ctx.clientId)) fail('bad_input', 'invalid_client');
+  const actor = { actorUserId: uuid(ctx.actorUserId, 'actor'), clientId: ctx.clientId,
+    ...(Object.hasOwn(ctx, 'apiKeyId') ? { apiKeyId: uuid(ctx.apiKeyId, 'api_key') } : {}) };
+  const input = record(value, ['expectedActorAccountId', 'agent', 'target', 'team'], 'request');
+  const agent = record(input.agent, ['resourceId'], 'agent');
+  const request = {
+    agent: { resourceId: uuid(agent.resourceId, 'agent_resource') },
+    target: parseTarget(input.target),
+    team: input.team === undefined || input.team === null ? null : { teamId: uuid(record(input.team, ['teamId'], 'team').teamId, 'team') },
+  };
+  const expected = optionalUuid(input.expectedActorAccountId, 'expected_actor');
+  if (expected && expected !== actor.actorUserId) fail('conflict', 'actor_context_conflict');
+  return authorityTransaction(pool, async (db) => {
+    const r = await resolveRunnable(db, actor, request, 'workforce:read');
+    return { schemaVersion: 1,
+      agent: { resourceId: r.agent.id, version: r.version.version, contentHash: r.version.content_hash },
+      target: request.target, team: request.team,
+      // What admission would record as the definition and target terms; the runtime ceiling and an
+      // entitlement can only narrow this further.
+      terms: { definition: r.definitionTerm, target: r.targetTerm } };
   });
 }
 

@@ -112,6 +112,7 @@ const defaultRead = async (...args) => (await import('../services/workforceResou
 const defaultList = async (...args) => (await import('../services/workforceCatalog.js')).listOwnedWorkforceResources(...args);
 const defaultAdmit = async (...args) => (await import('../services/workforceRunAdmission.js')).admitRun(...args);
 const defaultReadAdmission = async (...args) => (await import('../services/workforceRunAdmission.js')).readRunAdmission(...args);
+const defaultReadPin = async (...args) => (await import('../services/workforceRunAdmission.js')).readRunnablePin(...args);
 // RUN-03: the lease is signed with the platform's OWN active OIDC key -- the one published at
 // /api/oauth2/jwks -- so any runtime can verify it offline against the public JWKS, and no key
 // ever comes from a request.
@@ -159,6 +160,23 @@ function admissionObservation(value) {
     return Object.hasOwn(value, 'admission')
       ? { admission, replayed: value.replayed === true }
       : { admission };
+  } catch { return null; }
+}
+/** RUN-01's precondition: the pin reported is for the agent and the target ASKED about, in its whole
+ * shape -- a reply about another resource or another target is not an answer to this question. */
+function pinObservation(value, request) {
+  try {
+    if (!value || value.schemaVersion !== 1 || !value.agent || !value.target || !value.terms) return null;
+    const a = value.agent;
+    if (uuid(a.resourceId) !== a.resourceId || a.resourceId !== uuid(request.agent?.resourceId)
+      || !Number.isSafeInteger(a.version) || a.version < 1 || typeof a.contentHash !== 'string' || !/^[0-9a-f]{64}$/.test(a.contentHash)) return null;
+    if (JSON.stringify(value.target) !== JSON.stringify(request.target && Object.fromEntries(Object.entries(request.target)
+      .map(([k, v]) => [k, k === 'kind' ? v : uuid(v)])))) return null;
+    const team = request.team ? { teamId: uuid(request.team.teamId) } : null;
+    if (JSON.stringify(value.team ?? null) !== JSON.stringify(team)) return null;
+    if (!capabilities(value.terms.definition) || !capabilities(value.terms.target)) return null;
+    return { schemaVersion: 1, agent: { resourceId: a.resourceId, version: a.version, contentHash: a.contentHash },
+      target: value.target, team, terms: { definition: value.terms.definition, target: value.terms.target } };
   } catch { return null; }
 }
 const capabilities = value => Array.isArray(value) && value.length <= 64
@@ -278,7 +296,7 @@ function globalObservation(value, request) {
  * Domain input normalization, canonical principal/ReBAC checks and transactions
  * belong to the real service, not the renderer or this routing adapter. */
 export function createWorkforceRouter({ createWorkforceResource = defaultCreate, readWorkforceResourceOperation = defaultRead, listOwnedWorkforceResources = defaultList,
-  admitRun = defaultAdmit, readRunAdmission = defaultReadAdmission, authorizeRunStep = defaultAuthorizeStep,
+  admitRun = defaultAdmit, readRunAdmission = defaultReadAdmission, readRunnablePin = defaultReadPin, authorizeRunStep = defaultAuthorizeStep,
   revokeRun = defaultRevokeRun, readRunAuthority = defaultReadAuthority } = {}) {
   const router = express.Router();
   router.use('/api-key-capabilities', apiKeyWorkforceCapabilityRoutes);
@@ -332,6 +350,10 @@ export function createWorkforceRouter({ createWorkforceResource = defaultCreate,
       if (Object.keys(body).some(key => key !== 'admissionId')) throw Object.assign(new Error('unknown field'), { code: 'bad_input' });
       return readRunAdmission(db, context, body.admissionId);
     }, true, admissionObservation));
+  // RUN-01's precondition: the current pin of an agent as runnable at one target, by this actor -- what an
+  // admission must name. A read, resolved under admission's own rule; it commits nothing.
+  router.post('/run-admissions/pin', authMiddleware, requireDpopIfBound, requireWorkforceScope('workforce:read'), parse,
+    handle(readRunnablePin, true, pinObservation));
   // RUN-03: before each privileged call and each new provider dispatch the runtime asks again, and the
   // answer -- a signed lease of at most 60 s, or a typed refusal -- is re-derived from live rows. A
   // manage act because a lease authorizes spending. Stopping a run is too; reading its state is a read.
@@ -345,7 +367,7 @@ export function createWorkforceRouter({ createWorkforceResource = defaultCreate,
     handle(onlyAdmission(revokeRun), false, authorityObservation));
   router.post('/run-admissions/authority', authMiddleware, requireDpopIfBound, requireWorkforceScope('workforce:read'), parse,
     handle(onlyAdmission(readRunAuthority), true, authorityObservation));
-  for (const path of ['/resources', '/resources/list', '/resource-operations/read', '/run-admissions', '/run-admissions/read',
+  for (const path of ['/resources', '/resources/list', '/resource-operations/read', '/run-admissions', '/run-admissions/read', '/run-admissions/pin',
     '/run-admissions/authorize-step', '/run-admissions/revoke', '/run-admissions/authority']) {
     router.all(path, (_req, res) => res.set('Allow', 'POST').status(405).json({ success: false, code: 'bad_input', error: 'Method not allowed.' }));
   }

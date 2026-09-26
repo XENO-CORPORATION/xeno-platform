@@ -184,6 +184,7 @@ Full record, reasoning and evidence: `../docs/specs/xeno-workforce-implementatio
 | **One team model** (D21, #413) | `workforce_resources` kind `team` | `workspace_teams` was absorbed and dropped. Never add a team table or a team flag again. |
 | **Team packages** (MKT-04/D22, #415) | `services/marketplaceTeamPackages.js` | Listing kind `team`, built by the platform from one canonical team. Humans and non-redistributable agents never leave. |
 | **Admission** (RUN-01/02, #416) | `services/workforceRunAdmission.js`, `POST /api/workforce/run-admissions` | Every term read from its own row, never from the request. Effective = request ∩ definition ∩ target ∩ runtime ∩ entitlement, and the DB CHECK holds it too. |
+| **Pin** (RUN-01's precondition) | `readRunnablePin`, `POST /api/workforce/run-admissions/pin` (`workforce:read`) | The CURRENT `{ resourceId, version, contentHash }` of an agent as runnable at one target, by this actor — what an admission must name. Resolved by the SAME `resolveRunnable` admission calls, so it refuses exactly where admission refuses. Writes nothing. Not resolved: conversation, root, entitlement, budget. It is NOT §11.1's `agent.resource.get`, which is still unbuilt. |
 | **Live authority** (RUN-03/NFR-06/10, #420) | `services/workforceRunAuthority.js`, `…/run-admissions/authorize-step`, `/revoke`, `/authority` | Re-derived from LIVE rows before each privileged call and provider dispatch. It only narrows. A step returns an ES256 lease, ≤60 s, signed with the key at `/api/oauth2/jwks`. |
 
 **Why:** the workforce schema existed and nothing used it to decide anything at run time. A UI's
@@ -200,12 +201,15 @@ table fails that gate on purpose: the requirement it implements must be cited by
 - ~~No runtime calls `authorize-step` yet; the SDK has no pre-dispatch hook.~~ ✅ **The SDK half
   landed 2026-09-26** (xeno-agent-sdk #54, #55): the loop asks a `runAuthority` before every dispatch
   and tool call, and `@xenosystem/agent-sdk/workforce` `createWorkforceRunAuthority` is the one client
-  that calls `authorize-step`. 🔴 **No host passes one yet** — the Interface pins an older SDK and has
-  no admission flow — so runs are still not revocation-enforced end to end.
+  that calls `authorize-step`. ✅ **The host half landed too** (xeno-agent-interface #73): a turn that
+  names an admission runs under a `runAuthority`, on the SDK lane only. SDK #59/#60 add
+  `createWorkforceRunAdmissionClient` (admit / revoke / authority), and `/run-admissions/pin` gives a
+  host the pin it must name. 🔴 **Nothing admits a run yet**: no host calls `POST /run-admissions` from a
+  user action, so no real run is revocation-enforced end to end.
 - DIV-08: admission does not yet check that the actor sits inside the division.
 - The payer is always the actor's own account. No workspace or project pool exists (FUND-06), and there is no silent fallback.
 
-Do not describe runs as revocation-enforced end to end until a runtime calls `authorize-step`.
+Do not describe runs as revocation-enforced end to end until a host admits a run from a real user action and runs it under that admission.
 
 ## Working in `../xeno-elements-foundations` from this repo
 

@@ -24,6 +24,16 @@
  *   - an agent outside the member set may run        -> "the agent must be in the admitted member set"
  *   - the database drops its target containment      -> "the database refuses an admission wider than its terms"
  *
+ * Mutation-checked 2026-09-26, the pin read (readRunnablePin), 5 mutants, each fails the named assertion:
+ *   - the read reports the FIRST version, not the current one  -> "the pin is the current definition"
+ *   - the resolver skips the actor-for-target check            -> "a pin is refused where admission would refuse"
+ *   - the resolver skips the observer check                    -> "a team pin needs the actor's admitted membership"
+ *   - the resolver accepts a target granting another resource  -> "a pin is only of the resource the target grants"
+ *   - the read writes an admission                             -> "a pin read admits nothing"
+ * The three resolver mutants ALSO fail admission's own assertion ("owning a resource is not authority in
+ * a workspace", "an observer may not dispatch", "an assignment admits only the resource it assigns"):
+ * admission and the read call one resolveRunnable, so neither can be weakened without the other.
+ *
  * 🔴 THE INTERSECTION IS HELD TWICE, AND EACH HOLD IS PROVEN ON ITS OWN. Removing only the service's
  * target, runtime or entitlement term does NOT reach the named assertion: the database CHECK refuses
  * the wider row first (every admitting case fails on workforce_run_admission_intersection). That is
@@ -43,7 +53,7 @@ test('a run is admitted from authoritative state, as the intersection of every r
   const pool = new pg.Pool({ connectionString: url, max: 6 });
   t.after(() => pool.end());
   assert.ok((await pool.query("SELECT to_regclass('workforce_run_admissions') AS t")).rows[0].t, 'this suite runs on the migrated schema');
-  const { admitRun, readRunAdmission } = await import('../src/server/services/workforceRunAdmission.js');
+  const { admitRun, readRunAdmission, readRunnablePin } = await import('../src/server/services/workforceRunAdmission.js');
 
   const marker = `run-${randomUUID().slice(0, 8)}`;
   const hash = (s) => createHash('sha256').update(s).digest('hex');
@@ -263,6 +273,71 @@ test('a run is admitted from authoritative state, as the intersection of every r
     const outsider = await agentResource({ type: 'workspace', id: studio }, 'Outsider', ['files.read']);
     await rejects(admitRun(pool, ctx(editor), base(outsider, { kind: 'workspace', assignmentId: teamIn }, { team: { teamId: team } })),
       'denied', 'agent_not_an_admitted_member', 'the agent must be in the admitted member set');
+  });
+
+  await t.test('RUN-01: the pin an admission must name is read under admission\'s own rule, and admits', async () => {
+    // Before this read no host could admit: nothing returned an agent's current { version, contentHash },
+    // and admission refuses a stale pin. The read returns the CURRENT pin -- and it is one admission accepts.
+    // Its own agent: this case moves the definition, and the shared fixture's pins must not go stale.
+    const ws = await workspace(owner, 'pin', [['editor', editor], ['viewer', viewer]]);
+    const pinned = await agentResource({ type: 'workspace', id: lender }, 'Pinned', ['files.read', 'files.write', 'shell.run']);
+    const into = await assign(pinned.id, 'agent', ws, { type: 'workspace', id: lender }, explicit(['files.read']));
+    const pinFor = (actor, target, extra = {}) => readRunnablePin(pool, ctx(actor), { agent: { resourceId: pinned.id }, target, ...extra });
+    const pin = await pinFor(editor, { kind: 'workspace', assignmentId: into });
+    const current = (await pool.query('SELECT version, content_hash FROM workforce_agent_versions WHERE resource_id=$1 ORDER BY version DESC LIMIT 1', [pinned.id])).rows[0];
+    assert.deepEqual(pin.agent, { resourceId: pinned.id, version: current.version, contentHash: current.content_hash }, 'the pin is the current definition');
+    assert.deepEqual(pin.terms, { definition: ['files.read', 'files.write', 'shell.run'], target: ['files.read'] },
+      'the read states the definition and target terms admission would record');
+    const admitted = await admitRun(pool, ctx(editor), { operationId: randomUUID(), agent: pin.agent, target: { kind: 'workspace', assignmentId: into },
+      capabilities: ['files.read'], budget });
+    assert.deepEqual(admitted.admission.agent, pin.agent, 'the pin the read returns is one admission accepts');
+
+    // A newer definition moves the pin, and the old one is then refused by admission -- the read is how a host re-pins.
+    await pool.query(`INSERT INTO workforce_agent_versions(resource_id,version,content,content_hash) VALUES($1,$2,$3,$4)`,
+      [pinned.id, current.version + 1, { instructions: 'newer', skills: [], requestedCapabilities: ['files.read'], secretReferences: [] }, hash(`${pinned.id}:${current.version + 1}`)]);
+    const moved = await pinFor(editor, { kind: 'workspace', assignmentId: into });
+    assert.equal(moved.agent.version, current.version + 1, 'the pin is the current definition');
+    await rejects(admitRun(pool, ctx(editor), { operationId: randomUUID(), agent: pin.agent, target: { kind: 'workspace', assignmentId: into },
+      capabilities: ['files.read'], budget }), 'conflict', 'agent_version_stale', 'the superseded pin is now stale');
+
+    // It refuses exactly where admission refuses, with the same reason -- no oracle beyond admission's own.
+    for (const [actor, target, code, reason, message] of [
+      [viewer, { kind: 'workspace', assignmentId: into }, 'denied', 'actor_cannot_act_for_target', 'a pin is refused where admission would refuse'],
+      [outsider, { kind: 'workspace', assignmentId: into }, 'denied', 'actor_cannot_act_for_target', 'a pin is refused where admission would refuse'],
+      [editor, { kind: 'workspace', assignmentId: randomUUID() }, 'not_found', 'target_not_found', 'an unknown target has no pin'],
+      [owner, { kind: 'personal', ownerUserId: owner }, 'denied', 'resource_not_the_owners', 'a pin is only of the resource the target grants'],
+    ]) {
+      await rejects(pinFor(actor, target), code, reason, message);
+      await rejects(admitRun(pool, ctx(actor), { operationId: randomUUID(), agent: moved.agent, target, capabilities: ['files.read'], budget }),
+        code, reason, `admission agrees: ${message}`);
+    }
+    const otherIn = await assign(mine.id, 'agent', ws, { type: 'user', id: owner }, explicit(['files.read']));
+    await rejects(pinFor(editor, { kind: 'workspace', assignmentId: otherIn }), 'denied', 'target_does_not_grant_this_resource',
+      'a pin is only of the resource the target grants');
+
+    // A team run: the actor's own admitted membership, and the agent's, exactly as admission.
+    const team = (await pool.query(`INSERT INTO workforce_resources(kind,owner_workspace_id,name) VALUES('team',$1,'PinCrew') RETURNING id`, [ws])).rows[0].id;
+    const crew = await agentResource({ type: 'workspace', id: ws }, 'PinCrewAgent', ['files.read']);
+    await pool.query(`INSERT INTO workforce_team_memberships(team_id,member_resource_id,member_resource_kind,role) VALUES($1,$2,'agent','worker')`, [team, crew.id]);
+    await pool.query(`INSERT INTO workforce_team_memberships(team_id,member_principal_id,role) VALUES($1,$2,'worker')`, [team, editor]);
+    await pool.query(`INSERT INTO workforce_team_memberships(team_id,member_principal_id,role) VALUES($1,$2,'observer')`, [team, owner]);
+    const teamIn = await assign(team, 'team', ws, { type: 'workspace', id: ws }, explicit(['files.read']));
+    const teamPin = await readRunnablePin(pool, ctx(editor), { agent: { resourceId: crew.id }, target: { kind: 'workspace', assignmentId: teamIn }, team: { teamId: team } });
+    assert.deepEqual(teamPin.agent, { resourceId: crew.id, version: crew.version, contentHash: crew.contentHash }, 'a team member reads its agent\'s pin');
+    await rejects(readRunnablePin(pool, ctx(owner), { agent: { resourceId: crew.id }, target: { kind: 'workspace', assignmentId: teamIn }, team: { teamId: team } }),
+      'denied', 'observer_cannot_dispatch', 'a team pin needs the actor\'s admitted membership');
+    await rejects(readRunnablePin(pool, ctx(editor), { agent: { resourceId: crew.id }, target: { kind: 'workspace', assignmentId: teamIn } }),
+      'denied', 'target_does_not_grant_this_resource', 'a team assignment grants the team, not a member run outside it');
+
+    // Reading a pin writes nothing and does not take the manage scope; a malformed question is refused.
+    const before = (await pool.query('SELECT count(*)::int AS n FROM workforce_run_admissions')).rows[0].n;
+    await pinFor(editor, { kind: 'workspace', assignmentId: into });
+    assert.equal((await pool.query('SELECT count(*)::int AS n FROM workforce_run_admissions')).rows[0].n, before, 'a pin read admits nothing');
+    await rejects(pinFor(editor, { kind: 'workspace', assignmentId: into, ownerUserId: editor }), 'bad_input', 'target_field_conflict', 'a pin target names only what its kind needs');
+    await assert.rejects(readRunnablePin(pool, ctx(editor), { agent: { resourceId: pinned.id, version: 1 }, target: { kind: 'workspace', assignmentId: into } }),
+      (e) => e.code === 'bad_input', 'the read takes no pin of its own to trust');
+    await rejects(readRunnablePin(pool, ctx(editor), { agent: { resourceId: pinned.id }, target: { kind: 'workspace', assignmentId: into }, expectedActorAccountId: owner }),
+      'conflict', 'actor_context_conflict', 'the expected-actor precondition holds for the read too');
   });
 
   await t.test('RUN-01: a project run records its participation and root binding', async () => {
