@@ -14,6 +14,7 @@ const required = {
   acp: { version: '0.2.14', pages: ['introduction', 'architecture', 'coordination-extension', 'session-lifecycle', 'agent-endpoint', 'troubleshooting'] },
   hub: { version: '0.11.18', pages: ['introduction', 'agent', 'agent-runtime-updates', 'updates', 'troubleshooting'] },
   browser: { version: '0.5.8', pages: ['introduction', 'installation', 'signing-in', 'tabs-and-workspaces', 'agent-api', 'troubleshooting'] },
+  shell: { version: '0.1.0-beta.4', pages: ['introduction', 'installation', 'signing-in', 'sharing', 'shared-folders-and-terminals', 'troubleshooting'] },
 };
 
 function parseModule(fileName) {
