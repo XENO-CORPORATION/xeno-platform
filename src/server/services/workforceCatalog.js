@@ -136,6 +136,31 @@ async function scopeReadable(db, principal, owner) {
   return verdict.allowed && ['direct', ...(principal.kind === 'human' ? ['role-hierarchy'] : [])].includes(verdict.via);
 }
 
+/** DIV-08, the VISIBILITY half: "a principal acting in `creative` sees creative surfaces". Which of this
+ * workspace's divisions may this principal SEE? The same rule admission uses to EXECUTE, one relation
+ * down: an administrator of the workspace sees every division (the workspace is the tenant, DIV-02);
+ * anyone else sees a division it holds a relation on DIRECTLY -- never through a parent division
+ * (D15), because `division` is not a containment type in authzReBAC. Seeing needs `viewer`; running
+ * needs `editor` (workforceRunAdmission.actsInDivision). Rows that name no division are outside this
+ * rule entirely: a workspace-level assignment is visible exactly as it was.
+ * Returns null for "every division", or the ids the principal may see. */
+async function visibleDivisions(db, principal, workspaceId) {
+  const subjectType = principal.kind === 'agent' ? 'agent' : 'user';
+  if (principal.kind === 'human') {
+    const admin = await check(db, { object: `workspace:${workspaceId}`, relation: 'admin', subject: `user:${principal.id}` });
+    if (admin.allowed && ['direct', 'role-hierarchy'].includes(admin.via)) return null;
+  }
+  const { rows } = await db.query(`SELECT d.id FROM workforce_divisions d
+      JOIN relationship_tuples t ON t.object_type='division' AND t.object_id=d.id::text AND t.subject_type=$2 AND t.subject_id=$3
+     WHERE d.workspace_id=$1 ORDER BY d.id FOR SHARE OF t`, [workspaceId, subjectType, principal.id]);
+  const seen = [];
+  for (const { id } of rows) {
+    const v = await check(db, { object: `division:${id}`, relation: 'viewer', subject: `${subjectType}:${principal.id}` });
+    if (v.allowed && ['direct', ...(principal.kind === 'human' ? ['role-hierarchy'] : [])].includes(v.via)) seen.push(id);
+  }
+  return [...new Set(seen)];
+}
+
 /** VIEW-01: every scope the caller may read, each decided by `scopeReadable` -- the same rule the
  * per-scope views use, so the aggregate is exactly their union and never a way around them.
  * Candidates are the workspaces the caller holds any tuple on; each is then checked under its lock,
@@ -202,11 +227,20 @@ export async function listOwnedWorkforceResources(pool, authenticatedContext, va
       // reaches it. Assignments are read only into workspaces the caller can read, so a resource's other
       // assignments -- their targets and their count -- never reach this row.
       const pattern = input.search === null ? null : `%${input.search.replace(/[\\%_]/g, c => `\\${c}`)}%`;
+      // DIV-08: per readable workspace, the divisions the caller may see (null = all of them).
+      const hidden = [];
+      for (const ws of readable.workspaces) {
+        const seen = await visibleDivisions(db, principal, ws);
+        if (seen === null) continue;
+        const all = (await db.query('SELECT id FROM workforce_divisions WHERE workspace_id=$1', [ws])).rows.map((r) => r.id);
+        hidden.push(...all.filter((id) => !seen.includes(id)));
+      }
       ({ rows } = await db.query(`WITH assigned AS (
           SELECT a.resource_id, array_agg(DISTINCT a.workspace_id ORDER BY a.workspace_id)::text[] AS into_ws
             FROM workforce_workspace_assignments a
            WHERE a.workspace_id = ANY($2::uuid[]) AND a.state='accepted' AND a.valid_from<=now()
              AND (a.valid_until IS NULL OR a.valid_until>now())
+             AND (a.target_division_id IS NULL OR NOT (a.target_division_id = ANY($13::uuid[])))
            GROUP BY a.resource_id)
         SELECT r.id,r.kind,r.owner_user_id,r.owner_workspace_id,r.created_by_user_id,r.name,r.description,r.status,r.revision,
           r.created_at,r.updated_at,r.created_at::text AS cursor_created_at,
@@ -225,7 +259,7 @@ export async function listOwnedWorkforceResources(pool, authenticatedContext, va
         ORDER BY r.created_at DESC,r.id DESC LIMIT $12 FOR SHARE OF r`,
       [readable.users, readable.workspaces, input.kind, input.status, ...after,
         input.owner?.type === 'user' ? input.owner.id : null, input.owner?.type === 'workspace' ? input.owner.id : null,
-        input.access, input.assignedTo, pattern, input.limit + 1]));
+        input.access, input.assignedTo, pattern, input.limit + 1, hidden]));
     } else if (input.view === 'owned') {
       ({ rows } = await db.query(`SELECT id,kind,created_by_user_id,name,description,status,revision,
         created_at,updated_at,created_at::text AS cursor_created_at FROM workforce_resources
@@ -235,6 +269,7 @@ export async function listOwnedWorkforceResources(pool, authenticatedContext, va
         ORDER BY created_at DESC,id DESC LIMIT $6 FOR SHARE`,
       [input.owner.id, input.kind, input.status, ...after, input.limit + 1]));
     } else if (input.view === 'assigned') {
+      const divisions = await visibleDivisions(db, principal, input.owner.id);
       // Keyed by the ASSIGNMENT's own (created_at,id), so the keyset stays total when one resource
       // is assigned into this workspace more than once over time. Only an assignment that grants
       // something NOW is listed -- a proposal, a revocation or an expiry is not "assigned".
@@ -247,24 +282,30 @@ export async function listOwnedWorkforceResources(pool, authenticatedContext, va
         WHERE a.workspace_id=$1 AND a.state='accepted' AND a.valid_from<=now() AND (a.valid_until IS NULL OR a.valid_until>now())
           AND ($2::text IS NULL OR r.kind=$2) AND r.status=$3
           AND ($4::timestamptz IS NULL OR (a.created_at,a.id)<($4::timestamptz,$5::uuid))
+          -- DIV-08: a division-scoped assignment is listed only to those who can see that division.
+          AND (a.target_division_id IS NULL OR $7::uuid[] IS NULL OR a.target_division_id = ANY($7::uuid[]))
         ORDER BY a.created_at DESC,a.id DESC LIMIT $6 FOR SHARE OF a`,
-      [input.owner.id, input.kind, input.status, ...after, input.limit + 1]));
+      [input.owner.id, input.kind, input.status, ...after, input.limit + 1, divisions]));
     } else {
       // The project must belong to the owner scope that was authorized above; asking about another
       // scope's project reads as the same denial as asking about one that does not exist.
       const project = (await db.query(`SELECT id FROM chat_projects WHERE id=$1 AND ${input.owner.type === 'user'
         ? 'owner_user_id' : 'workspace_id'}=$2 FOR SHARE`, [input.projectId, input.owner.id])).rows[0];
       if (!project) fail();
+      const divisions = input.owner.type === 'workspace' ? await visibleDivisions(db, principal, input.owner.id) : null;
       ({ rows } = await db.query(`SELECT r.id,r.kind,r.created_by_user_id,r.name,r.description,r.status,r.revision,
           r.created_at,r.updated_at,pp.id AS participation_id,pp.target_kind,pp.responsibility,pp.revision AS participation_revision,
           ep.effective_capabilities,pp.created_at::text AS cursor_created_at, pp.id AS cursor_id
         FROM workforce_project_participations pp
         JOIN workforce_resources r ON r.id=pp.resource_id
         JOIN workforce_participation_effective_policy ep ON ep.participation_id=pp.id
+        LEFT JOIN workforce_workspace_assignments ga ON ga.id=pp.assignment_id
         WHERE pp.project_id=$1 AND pp.state='active' AND ($2::text IS NULL OR r.kind=$2) AND r.status=$3
           AND ($4::timestamptz IS NULL OR (pp.created_at,pp.id)<($4::timestamptz,$5::uuid))
+          -- DIV-08: work built on a division-scoped assignment is inside that division's boundary.
+          AND (ga.target_division_id IS NULL OR $7::uuid[] IS NULL OR ga.target_division_id = ANY($7::uuid[]))
         ORDER BY pp.created_at DESC,pp.id DESC LIMIT $6 FOR SHARE OF pp`,
-      [input.projectId, input.kind, input.status, ...after, input.limit + 1]));
+      [input.projectId, input.kind, input.status, ...after, input.limit + 1, divisions]));
     }
     const page = rows.slice(0, input.limit), last = page.at(-1);
     const items = page.map(row => {

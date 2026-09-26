@@ -42,6 +42,10 @@
  * mutant failed on an uncaught throw rather than on the pin assertion. A mutant that is only caught
  * incidentally does not prove the assertion it is listed against.
  */
+/* Mutation-checked 2026-09-27, DIV-08 under live authority, each fails the named assertion:
+ *   - the live division term is skipped                  -> "an actor removed from the division stops"
+ *   - the division is read only for a workspace target   -> "a project run inside an archived division stops"
+ *   - leaving the division is not a terminal loss        -> "leaving the division revokes the run durably" */
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { randomUUID, createHash, generateKeyPairSync, createPublicKey } from 'node:crypto';
@@ -104,6 +108,9 @@ test('an admitted run re-asks before each step, and live revocation overrides it
     return a;
   };
 
+  const inDivision = (divisionId, u, relation = 'editor') => pool.query(`INSERT INTO relationship_tuples(object_type,object_id,relation,subject_type,subject_id)
+    VALUES('division',$1,$2,'user',$3)`, [divisionId, relation, u]);
+
   // A division-targeted assignment (DIV-05): same edge, one more column.
   const assignTo = async (resourceId, workspaceId, divisionId, policy) => {
     const rev = (await pool.query('SELECT revision FROM workforce_resources WHERE id=$1', [resourceId])).rows[0].revision;
@@ -165,6 +172,8 @@ test('an admitted run re-asks before each step, and live revocation overrides it
     const ws = await workspace(owner, 'inherit', [['editor', editor]]);
     const division = (await pool.query(`INSERT INTO workforce_divisions(workspace_id,key,name,created_by_user_id) VALUES($1,'office','Office',$2) RETURNING id`,
       [ws, owner])).rows[0].id;
+    // DIV-08: division-scoped work is run by someone INSIDE the division.
+    await inDivision(division, editor);
     const parent = await assign(lent.id, 'agent', ws, { type: 'workspace', id: lender }, explicit(['files.read', 'files.write']));
     const revision = Number((await pool.query('SELECT revision FROM workforce_workspace_assignments WHERE id=$1', [parent])).rows[0].revision);
     const child = await assignTo(lent.id, ws, division, { schemaVersion: 1, mode: 'inherit_parent', capabilities: [], parent: { assignmentId: parent, revision } });
@@ -225,6 +234,31 @@ test('an admitted run re-asks before each step, and live revocation overrides it
     await step(editor, tid, 'provider_dispatch');
     await pool.query(`UPDATE workforce_team_memberships SET state='revoked', revision=revision+1, revoked_at=clock_timestamp(), updated_at=clock_timestamp() WHERE id=$1`, [mem]);
     await rejects(step(editor, tid, 'provider_dispatch'), 'denied', 'actor_not_an_admitted_member', 'a member removed mid-run stops dispatching');
+  });
+
+  await t.test('DIV-08: leaving the division, or the division closing, stops a run already under way (DIV-08)', async () => {
+    // The boundary is enforced at admission AND re-derived before every step, like every other term:
+    // a boundary checked only at the start is one a long run walks straight past.
+    const ws = await workspace(owner, 'div08live', [['editor', editor]]);
+    const creative = (await pool.query(`INSERT INTO workforce_divisions(workspace_id,key,name,created_by_user_id) VALUES($1,'creative','Creative',$2) RETURNING id`,
+      [ws, owner])).rows[0].id;
+    await inDivision(creative, editor);
+    const into = await assignTo(lent.id, ws, creative, explicit(['files.read']));
+    const id = await admit(editor, lent, { kind: 'workspace', assignmentId: into }, { capabilities: ['files.read'] });
+    await step(editor, id, 'provider_dispatch');
+    await pool.query(`DELETE FROM relationship_tuples WHERE object_type='division' AND object_id=$1 AND subject_id=$2`, [creative, editor]);
+    await rejects(step(editor, id, 'provider_dispatch'), 'denied', 'actor_outside_division', 'an actor removed from the division stops');
+    assert.equal((await readRunAuthority(pool, ctx(editor), id)).revoked, true, 'leaving the division revokes the run durably');
+
+    // A project run built on the division assignment is fenced the same way.
+    await inDivision(creative, editor);
+    const project = (await pool.query('INSERT INTO chat_projects(workspace_id,name) VALUES($1,$2) RETURNING id', [ws, `${marker}-div08live`])).rows[0].id;
+    const pp = (await pool.query(`INSERT INTO workforce_project_participations(resource_id,resource_kind,project_id,target_kind,workspace_id,assignment_id,responsibility,policy)
+      VALUES($1,'agent',$2,'workspace',$3,$4,'reviewer',$5) RETURNING id`, [lent.id, project, ws, into, explicit(['files.read'])])).rows[0].id;
+    const pid = await admit(editor, lent, { kind: 'project', projectId: project, participationId: pp }, { capabilities: ['files.read'] });
+    await step(editor, pid, 'provider_dispatch');
+    await pool.query(`UPDATE workforce_divisions SET lifecycle='archived', archived_at=clock_timestamp(), revision=revision+1, updated_at=clock_timestamp() WHERE id=$1`, [creative]);
+    await rejects(step(editor, pid, 'provider_dispatch'), 'denied', 'division_not_live', 'a project run inside an archived division stops');
   });
 
   await t.test('RUN-03: an expired entitlement stops a bought agent mid-run', async () => {
