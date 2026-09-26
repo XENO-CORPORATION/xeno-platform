@@ -43,6 +43,7 @@ const NAME_MAP = new Map([
   ['xeno-notes', 'notes'], ['xenonotes', 'notes'],
   ['xeno-agent', 'agent'], ['xenoagent', 'agent'],
   ['xenocode', 'agent-cli'], ['xeno-agent-cli', 'agent-cli'],
+  ['xeno-spawn', 'spawn'], ['xenospawn', 'spawn'],
   ['xenoharbor', 'harbor'],
 ]);
 

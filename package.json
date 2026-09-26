@@ -32,7 +32,7 @@
     "test:required-env": "node --test scripts/required-env.test.mjs",
     "test:password-atomicity": "node src/server/tests/password-change-atomicity.test.mjs",
     "test:auth-forms": "node --test scripts/auth-forms-real-dom.test.mjs",
-    "test:oidc-agent-client": "node --test scripts/oidc-agent-client.test.mjs",
+    "test:oidc-agent-client": "node --test scripts/oidc-agent-client.test.mjs scripts/oidc-spawn-client.test.mjs",
     "test:chat-generate-gate": "node --test scripts/chat-generate-project-gate.test.mjs",
     "test:credit-mirror": "node --test scripts/credit-mirror-ceiling.test.mjs",
     "test:ledger-pricing": "node --test scripts/ledger-pricing-authority.test.mjs",
