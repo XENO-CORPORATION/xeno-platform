@@ -50,7 +50,7 @@ the correct architecture buys us over a naive "one sandbox per chat."
 | Manual "Run" button | ✅ works | `handleCodeBlockRun` → `/api/piston/execute`. The **model cannot invoke it** |
 | Statefulness | ❌ **none** | each exec gets a fresh 256 MB `/workspace` tmpfs, discarded on exit (`xenorun/src/engine/executor.ts`); no files carried in or out |
 | Chat tool loop | ✅ works | `streamToolLoop`; offers `WEB_SEARCH_TOOL` + `GENERATE_IMAGE_TOOL` (`aiRoutes.js:610`). **No code tool** |
-| Per-chat workspace | ❌ none | `chat_conversations` has no workspace; no `chat_workspaces` table; no per-chat file store |
+| Per-chat workspace | ❌ none | `chat_conversations` has no workspace; no `chat_sandboxes` table; no per-chat file store |
 
 So xenorun gives us **isolated one-shot execution** (live). The two gaps for parity are: (a) it takes
 no input files and returns no output files — it is snippet-in, stdout-out; and (b) the model can't call
@@ -99,7 +99,8 @@ clear right answer:
 
 ## 6. Architecture — the seam and the data model
 
-- **`chat_workspaces`** (Postgres): `chat_id → workspace_id`, an R2 prefix, size + file count, last
+- **`chat_sandboxes`** (Postgres — NOT `chat_workspaces`: `workspace` is the tenancy scope in chat,
+  `chat_conversations.workspace_id`, so the code filesystem is the *sandbox*): `conversation_id → sandbox`, a storage prefix, size + file count, last
   activity, quota. One per conversation, created lazily on first `run_code`. Additive migration.
 - **Workspace bytes in R2** under the workspace prefix, written through the **one gated choke point**
   (`scripts/lib/r2-upload.mjs` / the runtime equivalent — ABSOLUTE RULE §2b), never a second uploader.
@@ -123,7 +124,7 @@ clear right answer:
 0. **This proposal + approval.** (No infra decision — the substrate is xenorun, already deployed.)
 1. **`xenorun` gains file-in/file-out** (general primitive extension, in the xenorun repo). Verify its
    `--network none` posture while there.
-2. **`chat_workspaces` model** + R2 prefix (platform, additive migration).
+2. **`chat_sandboxes` model** + storage prefix (platform, additive migration). ✅ DONE — migration `20260926200000-chat-sandboxes.sql` + `services/chatSandbox.js`, proven by `npm run smoke:chat-sandbox` (real Postgres + fs store) and `npm run test:chat-sandbox-keys`.
 3. **`SandboxSession`** wrapper → restore workspace, exec via xenorun, collect outputs.
 4. **`RUN_CODE_TOOL`** on the existing loop (metering reused from the tool-calling plan).
 5. **Output files → workspace R2 → Library ingestion.**
