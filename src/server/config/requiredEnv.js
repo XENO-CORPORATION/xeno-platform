@@ -71,6 +71,8 @@ export const REQUIRED_ENV = {
       { key: 'XENO_EXTENSION_ORIGINS', why: 'the browser extension is refused by CORS' },
       { key: 'SUBJECT_HASH_SECRET', why: 'digests fall back to JWT_SECRET, so rotating it orphans every consent record' },
       { key: 'XENO_API_KEY', why: 'chat requests to the inference gateway are unauthenticated' },
+      { key: 'CF_TURN_KEY_ID', why: 'XENO Shell sessions fall back to STUN only, so shells behind a blocking NAT cannot meet' },
+      { key: 'CF_TURN_KEY_API_TOKEN', why: 'XENO Shell sessions fall back to STUN only, so shells behind a blocking NAT cannot meet' },
     ],
   },
   'chat-workers': {
