@@ -477,6 +477,9 @@ async function main() {
         const loading = run('npm', ['run', 'test:route-loading-rendered'], { quiet: true });
         record('build: the route loader is a bar in the page theme, not a dark card (real browser, built CSS)', loading.code === 0);
         ok = ok && loading.code === 0;
+        const genimage = run('npm', ['run', 'test:chat-generated-image-rendered'], { quiet: true });
+        record('build: a generated image\'s frame is its shape, in the page theme (real browser, built CSS)', genimage.code === 0);
+        ok = ok && genimage.code === 0;
       }
     }
 

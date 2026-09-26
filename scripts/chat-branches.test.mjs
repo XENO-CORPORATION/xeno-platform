@@ -71,7 +71,7 @@ test('client: an EDIT persists as a sibling under the edited message\'s parent, 
 
 test('client: an assistant reply persists under the user message it answers (a regenerate = a sibling reply)', async () => {
   const chat = await src('../src/components/playground/Chat/ChatWithLLM.tsx');
-  assert.match(chat, /const answeredDbId = dbIdOf\(answered\);[\s\S]{0,900}\.\.\.\(answeredDbId \? \{ parent_id: answeredDbId \} : \{\}\),/, 'the assistant persist names its parent');
+  assert.match(chat, /const answeredDbId = dbIdOf\(answered\);[\s\S]{0,1600}\.\.\.\(answeredDbId \? \{ parent_id: answeredDbId \} : \{\}\),/, 'the assistant persist names its parent');
 });
 
 test('client: the ‹ i/n › control is on BOTH bubbles and a switch goes through the server, then re-derives the path', async () => {

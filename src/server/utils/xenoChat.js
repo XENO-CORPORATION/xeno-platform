@@ -120,6 +120,47 @@ export async function xenoChatCompletionStream({ model, messages, temperature, m
 }
 
 /**
+ * One image from the gateway's `/v1/images/generations`, for the chat's `generate_image` tool.
+ *
+ * A direct call rather than the `xeno-ai` SDK the older routes use: the SDK aborts every request
+ * at 60 s, and the GPT image models routinely take 20-60 s and can take longer, so the SDK would
+ * void a generation the gateway was about to deliver — and the gateway would still bill it. The
+ * deadline here is the gateway's own (its image timeout is 900 s), shortened to what a chat turn
+ * can sensibly wait, and the caller's signal cancels it when the client leaves.
+ */
+export const CHAT_IMAGE_TIMEOUT_MS = 240_000;
+
+export async function xenoImageGeneration(payload, { signal, timeoutMs = CHAT_IMAGE_TIMEOUT_MS } = {}) {
+  if (!XENO_API_KEY) { const e = new Error('XENO_API_KEY not configured'); e.http = 503; throw e; }
+  const deadline = AbortSignal.timeout(timeoutMs);
+  const combined = signal ? AbortSignal.any([signal, deadline]) : deadline;
+  let response;
+  try {
+    response = await fetch(`${XENO_API_BASE}/images/generations`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${XENO_API_KEY}` },
+      body: JSON.stringify(payload),
+      signal: combined,
+    });
+  } catch (error) {
+    if (deadline.aborted) { const e = new Error('The image took too long to generate.'); e.code = 'image_timeout'; throw e; }
+    throw error;
+  }
+  if (!response.ok) {
+    const text = await response.text().catch(() => '');
+    // The provider's body stays server-side: it can carry vendor detail the user is not shown.
+    const e = new Error(response.status === 400 && /moderation|safety|content_policy/i.test(text)
+      ? 'The image was declined by the content filter.'
+      : 'The image service returned an error.');
+    e.status = response.status;
+    e.code = response.status === 400 && /moderation|safety|content_policy/i.test(text) ? 'image_declined' : 'image_upstream';
+    e.detail = text.slice(0, 500);
+    throw e;
+  }
+  return response.json();
+}
+
+/**
  * Fetch the XENO API model catalog and group it into the platform's UI shape
  * ({ success, companies: { CompanyName: Model[] } }). Groups by `owned_by`.
  */

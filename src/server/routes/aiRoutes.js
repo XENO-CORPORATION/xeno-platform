@@ -5,10 +5,10 @@ import { randomUUID } from 'crypto';
 import path from 'path';
 import { generateSignedUrl } from '../middleware/cdnOptimization.js';
 import { resolveRoute, normalizePath, catalogPaths } from '../utils/modelPaths.js';
-import { meterPremiumChat, meterPremiumChatStream } from '../utils/inferenceMeter.js';
+import { meterPremiumChat, meterPremiumChatStream, meterMediaGeneration } from '../utils/inferenceMeter.js';
 import { estimateChatCostMicro, estimateMessageTokens } from '../utils/creditCosts.js';
 import { getBalanceV2, MICRO_PER_CREDIT } from '../utils/creditLedgerV2.js';
-import { xenoChatCompletion, xenoChatCompletionStream, xenoApiConfigured, classifyUpstreamError, xenoModelCatalog, prettyModelName, PROVIDER_LABELS } from '../utils/xenoChat.js';
+import { xenoChatCompletion, xenoChatCompletionStream, xenoApiConfigured, classifyUpstreamError, xenoModelCatalog, prettyModelName, PROVIDER_LABELS, xenoImageGeneration } from '../utils/xenoChat.js';
 import { enforceInHouseDailyLimit, limitExceededBody } from '../middleware/inHouseDailyLimit.js';
 import requireEntitlement from '../middleware/requireEntitlement.js';
 import { byokEnabled, resolveInferenceRoute, annotateCatalogueRoutes } from '../services/providerCredentials.js';
@@ -18,10 +18,17 @@ import { requestSurface } from '../utils/requestSurface.js';
 import { recordInferenceUsage } from '../utils/recordInferenceUsage.js';
 import { callerInputTokens } from '../utils/billableInput.js';
 import { upstreamFetch } from '../services/upstream.js';
-import { streamToolLoop, addUsage, TOOL_BUDGETS } from '../utils/chatToolLoop.js';
+import { streamToolLoop, addUsage, TOOL_BUDGETS, WEB_SEARCH_TOOL } from '../utils/chatToolLoop.js';
+import {
+  GENERATE_IMAGE_TOOL, createChatImageExecutor, storeChatImage, latestConversationImage, makeImagePreview,
+} from '../utils/chatImageTool.js';
+import { registerManagedLibraryFile } from '../services/libraryAssets.js';
+import { resolveEntitlements } from '../utils/entitlementGate.js';
+import { watermarkBuffer } from '../utils/watermark.js';
 import { ToolCallAccumulator } from '../utils/streamingToolCalls.js';
 import { chatWebContextService, webSearchAvailable } from '../services/chatWebContext.js';
 import { toProviderMessages, looksLikePartsShape } from '../utils/chatMessageParts.js';
+import { attachReferencedImage } from '../utils/imageReferral.js';
 import { shapeChatResponse } from '../utils/chatResponseShape.js';
 import { searchInfoFromAnnotations } from '../utils/searchInfo.js';
 import { openProjectContextTurn, closeProjectContextTurn } from '../utils/projectContextTurn.js';
@@ -29,6 +36,7 @@ import { assembleProjectContext } from '../services/chatProjectContext.js';
 
 /** SSE keepalive interval — well inside Cloudflare's 100 s origin timeout and any proxy idle timeout. */
 const SSE_KEEPALIVE_MS = 15_000;
+
 
 const router = express.Router();
 
@@ -73,6 +81,12 @@ const projectSources = (sources) => {
 };
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
+/*
+ * Where chat-generated images are written: the server's own `uploads` directory, the one `/api/chat/generate`
+ * writes to (`path.join(__dirname, 'uploads')` in index.js) — `/app/uploads` in the container. Resolved from
+ * this file, not the working directory, so both routes land in the same folder whatever the process's cwd.
+ */
+const CHAT_IMAGE_UPLOADS_DIR = path.resolve(__dirname, '../uploads');
 const LOCAL_MODEL_CATALOG_PATH = path.resolve(__dirname, '../data/localModelCatalog.json');
 
 // ── All inference routes through the XENO API (api.xenostudio.ai) ─────────────
@@ -393,6 +407,13 @@ router.post('/chat', requireEntitlement('canUse'), async (req, res) => {
  *   projectContextTurn   project grounding AND its audit record
  *   autoImageFallback    a picture instead of a blank reply when asked to draw
  *
+ * ⚠️ Corrected 2026-09-26: two of those six were never called from this route — `imageReferral`
+ * and `autoImageFallback` were listed here and imported nowhere in this file. `imageReferral` is
+ * now wired (see `attachReferencedImage` below). `autoImageFallback` is SUPERSEDED here rather than
+ * wired: the model now draws deliberately through the `generate_image` tool (utils/chatImageTool.js)
+ * — a real prompt it wrote, a picture it knows about — instead of the server guessing from an empty
+ * reply that a picture was wanted. It stays on `/api/chat/generate`, which has no tool.
+ *
  * They are EXTRACTED, not copied: two implementations of any of them would disagree
  * invisibly, since both still return an answer.
  *
@@ -421,6 +442,8 @@ router.post('/chat/stream', requireEntitlement('canUse'), async (req, res) => {
      * parameter refuses every value of it.
      */
     path: reqPath, requestId, temperature, max_tokens = 4096,
+    // the client's word that the chosen model reads images — gates re-attaching a referenced one
+    supportsVision,
   } = req.body || {};
 
   // ── Pre-stream validation → normal HTTP errors (we have not switched to SSE yet).
@@ -543,6 +566,20 @@ router.post('/chat/stream', requireEntitlement('canUse'), async (req, res) => {
    * already send OpenAI-shaped messages are untouched: `looksLikePartsShape` only converts
    * when at least one message actually carries `parts`.
    */
+  /*
+   * "Make that one bigger", "what's in it?" — the picture a follow-up refers to goes back in front of
+   * the model, on the current user turn where it will actually look (an assistant's image is history
+   * and conversion drops it).
+   *
+   * 🔴 This header listed `imageReferral` among the modules this route runs from 2026-09-14, and the
+   * route never called it: every follow-up about an image was answered by a model that could not see
+   * it. It matters twice now the chat makes images itself. Gated on the client's `supportsVision`,
+   * because an image part sent to a text-only model is a failed request, not context. Runs on the
+   * RAW `parts[]` messages — after the project-context hash above, which records what the user sent.
+   */
+  if (supportsVision === true && looksLikePartsShape(messages)) {
+    attachReferencedImage(messages);
+  }
   const finalMessages = looksLikePartsShape(messages)
     ? toProviderMessages(messages, { systemPrompt: effectiveSystemPrompt })
     : (effectiveSystemPrompt
@@ -561,9 +598,20 @@ router.post('/chat/stream', requireEntitlement('canUse'), async (req, res) => {
    */
   const requestedSurface = typeof req.body?.chatSurface === 'string' ? req.body.chatSurface.trim() : '';
   const chatSurface = requestedSurface || 'chat';
-  const toolSurface = Object.hasOwn(TOOL_BUDGETS, chatSurface) && webSearchAvailable()
-    ? chatSurface
-    : null;
+  /*
+   * The tools this turn offers — each available on its own. `generate_image` does not depend on the
+   * search service, so a search outage no longer takes image generation down with it; both are
+   * offered only on a surface with a tool budget (chat, research), which is also exactly where the
+   * capability statement tells the model they exist (chatModeConfig.ts).
+   */
+  const surfaceHasTools = Object.hasOwn(TOOL_BUDGETS, chatSurface);
+  const offeredTools = surfaceHasTools
+    ? [
+      ...(webSearchAvailable() ? [WEB_SEARCH_TOOL] : []),
+      ...(xenoApiConfigured() ? [GENERATE_IMAGE_TOOL] : []),
+    ]
+    : [];
+  const toolSurface = offeredTools.length ? chatSurface : null;
 
   // ── Phase 1 — hold worst-case BEFORE opening the stream, so an over-budget wallet
   // gets a clean 402 (not a half-open SSE). 403 = frozen; anything else = 500.
@@ -839,6 +887,8 @@ router.post('/chat/stream', requireEntitlement('canUse'), async (req, res) => {
    */
   const sourcesSeen = [];
   let sawSearch = false;
+  /** Images this turn produced, in order — kept on the result frame so the saved message has them. */
+  const imagesMade = [];
   /*
    * The full answer, accumulated for the terminal `result` frame.
    *
@@ -900,10 +950,43 @@ router.post('/chat/stream', requireEntitlement('canUse'), async (req, res) => {
         }
       };
 
+      /*
+       * The image an edit starts from, read from the client's `parts[]` messages — conversion for
+       * the provider drops an assistant's images, and the gateway needs the bytes, not a mention.
+       * Resolved once per turn, by the server, so the model can ask for "the latest image" and
+       * never name one.
+       */
+      const imageReference = offeredTools.includes(GENERATE_IMAGE_TOOL) ? latestConversationImage(messages) : null;
+      const runImage = createChatImageExecutor({
+        db: req.db,
+        userId,
+        turnId: reqIdSeed,
+        reference: imageReference,
+        makePreview: makeImagePreview,
+        meter: meterMediaGeneration,
+        generate: (payload) => xenoImageGeneration(payload, { signal: upstreamAbort.signal }),
+        resolveEntitlements,
+        watermark: watermarkBuffer,
+        store: ({ buffer, prompt, model: imageModel, aspectRatio }) => storeChatImage({
+          db: req.db,
+          userId,
+          uploadsDir: CHAT_IMAGE_UPLOADS_DIR,
+          register: registerManagedLibraryFile,
+          buffer,
+          prompt,
+          model: imageModel,
+          aspectRatio,
+        }),
+        microPerCredit: MICRO_PER_CREDIT,
+      });
+
       for await (const event of streamToolLoop({
         messages: finalMessages,
         surface: toolSurface,
         turnId: reqIdSeed,
+        tools: offeredTools,
+        runImage,
+        imageReference,
         streamModel,
         runSearch: ({ query, depth }) => chatWebContextService.searchAndFetch({
           actorId: userId,
@@ -961,6 +1044,49 @@ router.post('/chat/stream', requireEntitlement('canUse'), async (req, res) => {
               message: 'That search could not be completed.',
             });
             break;
+          case 'image_start':
+            sawSearch = true;
+            // The shape BEFORE the wait: the chat draws a placeholder in this aspect ratio, so the
+            // image lands in a frame already the right size.
+            await send({ type: 'image_start', index: event.index, prompt: event.prompt, aspectRatio: event.aspectRatio, ...(event.edit ? { edit: true } : {}) });
+            break;
+          case 'image_result': {
+            const image = {
+              id: event.image.id,
+              contentUrl: event.image.contentUrl,
+              prompt: event.image.prompt,
+              aspectRatio: event.image.aspectRatio,
+              model: event.image.model,
+              ...(event.image.width ? { width: event.image.width, height: event.image.height } : {}),
+            };
+            // The saved record never carries bytes: `images` on the result frame is what the message
+            // stores. The preview rides THIS frame only, to the person who asked, for the minutes the
+            // library copy spends in its malware-scan quarantine (libraryAssets.js → 423 until clean).
+            imagesMade.push(image);
+            await send({
+              type: 'image_result',
+              index: event.index,
+              image: { ...image, ...(event.image.previewUrl ? { previewUrl: event.image.previewUrl } : {}) },
+              creditsCharged: event.image.creditsCharged,
+            });
+            break;
+          }
+          case 'image_error':
+            // Logged with its code, never its prompt (user content), and never the provider's text.
+            console.warn('[chat/stream] image failed', {
+              requestId: reqIdSeed, index: event.index, code: event.code, http: event.http,
+            });
+            await send({
+              type: 'image_error',
+              index: event.index,
+              code: event.http === 402 ? 'insufficient_credits' : event.code,
+              message: event.http === 402
+                ? 'Not enough credits to generate this image.'
+                : event.code === 'image_declined'
+                  ? 'That image was declined by the content filter.'
+                  : 'That image could not be generated.',
+            });
+            break;
           case 'usage':
             usageObj = addUsage(usageObj, event.usage);
             break;
@@ -971,6 +1097,7 @@ router.post('/chat/stream', requireEntitlement('canUse'), async (req, res) => {
             await send({
               type: 'tool_use',
               searches: event.searches,
+              images: event.images,
               iterations: event.iterations,
               cappedOut: event.cappedOut,
             });
@@ -1107,6 +1234,9 @@ router.post('/chat/stream', requireEntitlement('canUse'), async (req, res) => {
     // The tool loop's own sources, which are a different thing from provider annotations:
     // these are pages XENO fetched, not pages the model cited.
     ...(sourcesSeen.length ? { toolSources: projectSources(sourcesSeen) } : {}),
+    // Every image the turn made, as stored library assets — the client attaches them to the saved
+    // message so they survive a reload (the bytes live in the library, never in the message).
+    ...(imagesMade.length ? { images: imagesMade } : {}),
     // Project grounding: the record id lets a client link an answer back to the exact
     // sources that were in context when it was produced.
     ...(projectContextRecordId ? { projectContextId: projectContextRecordId } : {}),

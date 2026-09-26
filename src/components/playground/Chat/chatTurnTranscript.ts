@@ -52,12 +52,32 @@ export interface ChatTurnSearchStep {
   error?: string;
 }
 
+/**
+ * An image the turn's generate_image tool drew (2026-09-26). The prompt is the MODEL's, the shape is
+ * what the placeholder was sized to, and `assetId` is the library file — the only way the image is
+ * found again after a reload. Validated server-side by `utils/chatTurnRecord.js`.
+ */
+export interface ChatTurnImageStep {
+  id: string;
+  kind: 'image';
+  prompt: string;
+  aspectRatio: string;
+  startedAt: number;
+  endedAt?: number;
+  assetId?: string;
+  width?: number;
+  height?: number;
+  error?: string;
+}
+
+export type ChatTurnStep = ChatTurnSearchStep | ChatTurnImageStep;
+
 export interface ChatTurnRecord {
   schema: typeof TURN_SCHEMA;
   startedAt: number;
   endedAt?: number;
   thinkingMs?: number;
-  steps: ChatTurnSearchStep[];
+  steps: ChatTurnStep[];
 }
 
 export const newTurnRecord = (startedAt = Date.now()): ChatTurnRecord => ({
@@ -70,7 +90,14 @@ export const newTurnRecord = (startedAt = Date.now()): ChatTurnRecord => ({
 export type TurnStreamEvent =
   | { type: 'search_start'; query?: string; iteration?: number }
   | { type: 'search_result'; query?: string; count?: number; sources?: Array<{ url?: string; title?: string }> }
-  | { type: 'search_error'; query?: string; code?: string; message?: string };
+  | { type: 'search_error'; query?: string; code?: string; message?: string }
+  | { type: 'image_start'; index?: number; prompt?: string; aspectRatio?: string }
+  | { type: 'image_result'; index?: number; image?: { id?: string; aspectRatio?: string; width?: number; height?: number } }
+  | { type: 'image_error'; index?: number; code?: string; message?: string };
+
+export const TURN_IMAGE_ASPECTS: ReadonlyArray<string> = ['1:1', '16:9', '9:16', '4:3', '3:4', '3:2', '2:3'];
+const isSearchStep = (step: ChatTurnStep): step is ChatTurnSearchStep => step.kind === 'search';
+export const isImageStep = (step: ChatTurnStep): step is ChatTurnImageStep => step.kind === 'image';
 
 const asSources = (raw: unknown): ChatTurnSource[] => {
   if (!Array.isArray(raw)) return [];
@@ -94,6 +121,9 @@ const asSources = (raw: unknown): ChatTurnSource[] => {
  * of its own so nothing the server reported is dropped.
  */
 export function applyTurnEvent(record: ChatTurnRecord, event: TurnStreamEvent, now = Date.now()): ChatTurnRecord {
+  if (event.type === 'image_start' || event.type === 'image_result' || event.type === 'image_error') {
+    return applyImageEvent(record, event, now);
+  }
   const query = typeof event.query === 'string' ? event.query.trim().slice(0, 512) : '';
   if (event.type === 'search_start') {
     const id = `search-${record.steps.length + 1}`;
@@ -101,7 +131,7 @@ export function applyTurnEvent(record: ChatTurnRecord, event: TurnStreamEvent, n
   }
   const openIndex = [...record.steps.keys()].reverse().find((index) => {
     const step = record.steps[index];
-    return step.endedAt === undefined && (!query || step.query === query);
+    return isSearchStep(step) && step.endedAt === undefined && (!query || step.query === query);
   });
   const closed: Partial<ChatTurnSearchStep> = event.type === 'search_result'
     ? {
@@ -114,7 +144,44 @@ export function applyTurnEvent(record: ChatTurnRecord, event: TurnStreamEvent, n
     const id = `search-${record.steps.length + 1}`;
     return { ...record, steps: [...record.steps, { id, kind: 'search', query, startedAt: now, ...closed } as ChatTurnSearchStep] };
   }
-  const steps = record.steps.map((step, index) => (index === openIndex ? { ...step, ...closed } : step));
+  const steps = record.steps.map((step, index) => (index === openIndex ? { ...step, ...closed } as ChatTurnStep : step));
+  return { ...record, steps };
+}
+
+/**
+ * Fold an image event into the record. The step is keyed by the server's per-turn image index, so a
+ * result always closes the image it belongs to, however the events interleave with searches.
+ */
+function applyImageEvent(
+  record: ChatTurnRecord,
+  event: Extract<TurnStreamEvent, { type: 'image_start' | 'image_result' | 'image_error' }>,
+  now: number,
+): ChatTurnRecord {
+  const index = Number.isInteger(event.index) ? (event.index as number) : 0;
+  const id = `image-${index + 1}`;
+  if (event.type === 'image_start') {
+    if (record.steps.some((step) => step.id === id)) return record;
+    const aspectRatio = TURN_IMAGE_ASPECTS.includes(event.aspectRatio ?? '') ? (event.aspectRatio as string) : '1:1';
+    const prompt = typeof event.prompt === 'string' ? event.prompt.slice(0, 4000) : '';
+    return { ...record, steps: [...record.steps, { id, kind: 'image', prompt, aspectRatio, startedAt: now }] };
+  }
+  const existing = record.steps.find((step) => step.id === id);
+  const base: ChatTurnImageStep = existing && isImageStep(existing)
+    ? existing
+    : { id, kind: 'image', prompt: '', aspectRatio: '1:1', startedAt: now };
+  let closed: ChatTurnImageStep;
+  if (event.type === 'image_result') {
+    const image = event.image ?? {};
+    closed = {
+      ...base,
+      endedAt: now,
+      ...(typeof image.id === 'string' ? { assetId: image.id } : {}),
+      ...(Number.isInteger(image.width) && Number.isInteger(image.height) ? { width: image.width as number, height: image.height as number } : {}),
+    };
+  } else {
+    closed = { ...base, endedAt: now, error: (typeof event.message === 'string' && event.message.trim()) || 'That image could not be generated.' };
+  }
+  const steps = existing ? record.steps.map((step) => (step.id === id ? closed : step)) : [...record.steps, closed];
   return { ...record, steps };
 }
 
@@ -132,7 +199,22 @@ export function normalizeStoredTurn(value: unknown): ChatTurnRecord | undefined 
   if (!value || typeof value !== 'object' || Array.isArray(value)) return undefined;
   const record = value as Partial<ChatTurnRecord>;
   if (record.schema !== TURN_SCHEMA || typeof record.startedAt !== 'number' || !Array.isArray(record.steps)) return undefined;
-  const steps = record.steps.flatMap((raw): ChatTurnSearchStep[] => {
+  const steps = record.steps.flatMap((raw): ChatTurnStep[] => {
+    if (raw && typeof raw === 'object' && (raw as ChatTurnImageStep).kind === 'image') {
+      const image = raw as ChatTurnImageStep;
+      if (typeof image.id !== 'string' || typeof image.prompt !== 'string' || typeof image.startedAt !== 'number') return [];
+      return [{
+        id: image.id,
+        kind: 'image',
+        prompt: image.prompt,
+        aspectRatio: TURN_IMAGE_ASPECTS.includes(image.aspectRatio) ? image.aspectRatio : '1:1',
+        startedAt: image.startedAt,
+        ...(typeof image.endedAt === 'number' ? { endedAt: image.endedAt } : {}),
+        ...(typeof image.assetId === 'string' ? { assetId: image.assetId } : {}),
+        ...(typeof image.width === 'number' && typeof image.height === 'number' ? { width: image.width, height: image.height } : {}),
+        ...(typeof image.error === 'string' ? { error: image.error } : {}),
+      }];
+    }
     if (!raw || typeof raw !== 'object' || (raw as ChatTurnSearchStep).kind !== 'search') return [];
     const step = raw as ChatTurnSearchStep;
     if (typeof step.id !== 'string' || typeof step.query !== 'string' || typeof step.startedAt !== 'number') return [];
@@ -155,6 +237,10 @@ export function normalizeStoredTurn(value: unknown): ChatTurnRecord | undefined 
     steps,
   };
 }
+
+/** The images a turn made, in order, as library assets — what the reply draws under the head. */
+export const turnImages = (turn: ChatTurnRecord | undefined): ChatTurnImageStep[] =>
+  (turn?.steps ?? []).filter(isImageStep);
 
 /** Whether a message has anything for the transcript head to show. */
 export const turnHasRail = (turn: ChatTurnRecord | undefined, thinking: string | undefined): boolean =>
@@ -206,7 +292,31 @@ const searchResultText = (step: ChatTurnSearchStep): string => {
   return '';
 };
 
-const toToolCall = (step: ChatTurnSearchStep, turnLive: boolean): ToolCallInfo => {
+/**
+ * An image step as the transcript's own `image_generate` tool call — a name the canonical step model
+ * already renders ("Generating image", then "Generated image"), so the chat adds no row of its own.
+ * The image itself is drawn by the chat under the transcript head, in the reply; the row carries the
+ * fact and, on failure, why.
+ */
+const imageToolCall = (step: ChatTurnImageStep, turnLive: boolean): ToolCallInfo => {
+  const done = step.endedAt !== undefined || !turnLive;
+  const endedAt = step.endedAt ?? (done ? step.startedAt : undefined);
+  return {
+    id: step.id,
+    toolName: 'image_generate',
+    params: { prompt: step.prompt, aspect_ratio: step.aspectRatio },
+    status: done ? 'done' : 'running',
+    success: done ? !step.error : undefined,
+    ...(done ? { outcome: step.error ? ('failed' as const) : ('succeeded' as const) } : {}),
+    result: done ? (step.error || '') : undefined,
+    startedAt: step.startedAt,
+    ...(endedAt !== undefined ? { endedAt, durationMs: Math.max(0, endedAt - step.startedAt) } : {}),
+    category: 'other',
+  };
+};
+
+const toToolCall = (step: ChatTurnStep, turnLive: boolean): ToolCallInfo => {
+  if (isImageStep(step)) return imageToolCall(step, turnLive);
   const done = step.endedAt !== undefined || !turnLive;
   const endedAt = step.endedAt ?? (done ? step.startedAt : undefined);
   return {
@@ -273,7 +383,7 @@ export const chatFaviconUrl = (domain: string): string => `/api/favicon?domain=$
  */
 export function turnCitedSources(record: ChatTurnRecord | undefined): CitedSource[] {
   if (!record) return [];
-  const flat = record.steps.flatMap((step) => (step.sources ?? []).map((source) => ({
+  const flat = record.steps.flatMap((step) => (isSearchStep(step) ? step.sources ?? [] : []).map((source) => ({
     title: source.title || domainOf(source.url),
     url: source.url,
     domain: domainOf(source.url),

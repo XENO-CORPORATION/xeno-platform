@@ -48,8 +48,9 @@ import {
 } from './chatSkillsLibrary';
 import { buildChatSystemPrompt, CHAT_MODE_PLACEHOLDERS, modeUsesXenoSearch, type ChatMode } from './chatModeConfig';
 import ChatTurnHead from './ChatTurnHead';
+import { ChatGeneratedImages, imageAssetFor, type ChatTurnImageView } from './ChatGeneratedImage';
 import {
-  applyTurnEvent, chatFaviconUrl, closeTurnRecord, DEFAULT_STEPS_MODE, isStepsMode, newTurnRecord, normalizeStoredTurn, turnCitedSources, turnHasRail,
+  applyTurnEvent, chatFaviconUrl, closeTurnRecord, DEFAULT_STEPS_MODE, isStepsMode, newTurnRecord, normalizeStoredTurn, turnCitedSources, turnHasRail, turnImages,
   type ChatTurnRecord, type StepsMode,
 } from './chatTurnTranscript';
 import { CitationChip, parseCitationHref, remarkCitations } from '@xenosystem/agent-conversation/components/agent/transcript/citations';
@@ -406,6 +407,11 @@ interface ChatMessage {
     parentDbId?: string | null;
     /** What the assistant did before it answered — the transcript's rail (chatTurnTranscript.ts). */
     turn?: ChatTurnRecord;
+    /**
+     * Previews of this turn's generated images, keyed by image step id, from the live `image_result`
+     * frames. Session-only: never persisted (the library holds the image; the turn record names it).
+     */
+    imagePreviews?: Record<string, string>;
 }
 
 const messageLibraryAttachments = (message: ChatMessage): DBChatAttachment[] => {
@@ -442,6 +448,26 @@ const messageLibraryAttachments = (message: ChatMessage): DBChatAttachment[] => 
       content_url: message.generatedImageAsset.contentUrl,
       size_bytes: message.generatedImageAsset.size,
     });
+  }
+  /*
+   * The images the turn's generate_image tool made. Stored as attachments as well as on the turn
+   * record: an attachment is what grants the conversation (and a share of it) access to the library
+   * file and what the Library page lists under the chat, while the record says where each one sits
+   * in the turn and what shape it is.
+   */
+  if (message.sender === 'ai') {
+    for (const step of turnImages(message.turn)) {
+      const asset = imageAssetFor(step);
+      if (!asset || persisted.some((entry) => entry.asset_id === asset.assetId)) continue;
+      persisted.push({
+        type: 'image',
+        name: asset.name,
+        content: '',
+        mimeType: asset.mimeType,
+        asset_id: asset.assetId,
+        content_url: asset.contentUrl,
+      });
+    }
   }
   return persisted;
 };
@@ -491,7 +517,11 @@ const dbMessageToLocal = (msg: DBChatMessage, index: number): ChatMessage => {
     size: attachment.size_bytes,
   }));
   const file = attachments.find((attachment) => attachment.type !== 'image' && attachment.asset_id);
-  const generated = isAi ? images[0] : undefined;
+  const storedTurn = isAi ? normalizeStoredTurn((msg as { turn?: unknown }).turn) : undefined;
+  // a turn whose images are on its record draws them from there, all of them, in their shapes; the
+  // single-image slot is for the older image path, which saved one attachment and no record
+  const drawnByTurn = new Set(turnImages(storedTurn).map((step) => step.assetId).filter(Boolean));
+  const generated = isAi ? images.find((image) => !drawnByTurn.has(image.assetId)) : undefined;
   const persistedSearch = normalizePersistedSearchInfo(msg.search_context);
   return {
     id: msg.id || `msg-${index}`,
@@ -523,7 +553,7 @@ const dbMessageToLocal = (msg: DBChatMessage, index: number): ChatMessage => {
     } : undefined,
     projectSources: Array.isArray(msg.project_sources) ? msg.project_sources : undefined,
     searchInfo: persistedSearch,
-    turn: isAi ? normalizeStoredTurn((msg as { turn?: unknown }).turn) : undefined,
+    turn: storedTurn,
   };
 };
 
@@ -2975,7 +3005,6 @@ const ChatWithLLM: React.FC<ChatWithLLMProps> = ({
   const tokenCountDebounceRef = useRef<NodeJS.Timeout | null>(null);
 
   // --- NEW: State for the ID of the AI refinement placeholder message ---
-  const [aiRefinementPlaceholderId, setAiRefinementPlaceholderId] = useState<string | null>(null);
   // --- END NEW ---
 
   // Refs used in hover effects - DECLARE EARLIER
@@ -4884,15 +4913,7 @@ const ChatWithLLM: React.FC<ChatWithLLMProps> = ({
   // --- NEW: Hover state for System Prompt button ---
   const [isSystemPromptButtonHovered, setIsSystemPromptButtonHovered] = useState(false);
 
-  // --- NEW: State for image generation ---
-  const [isGeneratingImage, setIsGeneratingImage] = useState(false);
-  const [generatedImageData, setGeneratedImageData] = useState<string | null>(null);
-  const [imageGenerationMessageId, setImageGenerationMessageId] = useState<string | null>(null);
-  // --- END IMAGE GENERATION STATE ---
 
-  // --- NEW: State for LLM-based Image Prompt Refinement ---
-  const [isWaitingForRefinedPromptForMessageId, setIsWaitingForRefinedPromptForMessageId] = useState<string | null>(null);
-  // --- END NEW ---
 
   // --- NEW: State for Full-screen Image Viewer ---
   const [isFullScreenImageOpen, setIsFullScreenImageOpen] = useState(false);
@@ -4907,6 +4928,15 @@ const ChatWithLLM: React.FC<ChatWithLLMProps> = ({
     const output: LibraryViewerItem[] = [];
     if (message.generatedImageAsset) {
       output.push({ id: `${message.id}:generated`, name: message.generatedImageAsset.name, asset: message.generatedImageAsset, context: 'Chat' });
+    } else if (message.imageData && !turnImages(message.turn).length) {
+      const inline = message.imageData.startsWith('data:image/') ? message.imageData : `data:image/png;base64,${message.imageData}`;
+      output.push({ id: `${message.id}:generated`, name: 'XENO image', sourceUrl: inline, context: 'Chat' });
+    }
+    for (const step of turnImages(message.turn)) {
+      const asset = imageAssetFor(step);
+      const preview = message.imagePreviews?.[step.id];
+      if (!asset && !preview) continue;
+      output.push({ id: `${message.id}:${step.id}`, name: asset?.name || 'XENO image', asset, sourceUrl: preview, context: 'Chat' });
     }
     const images = message.userImageAttachments?.length
       ? message.userImageAttachments
@@ -5102,7 +5132,6 @@ const ChatWithLLM: React.FC<ChatWithLLMProps> = ({
     !isMultiInterface && isContextPanelOpen ? contextPanelWidth : 0;
 
   // --- NEW: State for the animated ellipsis text ---
-  const [ellipsisText, setEllipsisText] = useState('.');
   // --- END NEW ---
 
   // --- State for Xeno Search Results Display ---
@@ -6186,30 +6215,6 @@ interface QueueState {
   }, []); // Run only once on mount to set up observers/listeners
   // --- END NEW ---
 
-  // --- NEW: Effect to animate ellipsisText for the refinement placeholder ---
-  useEffect(() => {
-    let animationInterval: NodeJS.Timeout | null = null;
-    if (messages.some(msg => msg.id === aiRefinementPlaceholderId && msg.isThinkingPlaceholder)) {
-      animationInterval = setInterval(() => {
-        setEllipsisText(prev => {
-          if (prev === '...') return '.';
-          if (prev === '..') return '...';
-          if (prev === '.') return '..';
-          return '.';
-        });
-      }, 500); // Adjust speed as needed
-    } else {
-      if (animationInterval) {
-        clearInterval(animationInterval);
-      }
-      setEllipsisText('.'); // Reset when not active
-    }
-    return () => {
-      if (animationInterval) {
-        clearInterval(animationInterval);
-      }
-    };
-  }, [messages, aiRefinementPlaceholderId]); // Re-run if messages or the ID changes
   // --- END NEW ---
 
   // --- NEW: useEffect to fetch Piston Runtimes ONCE on ChatWithLLM mount ---
@@ -6658,6 +6663,10 @@ interface QueueState {
     setMessages(prev => [...prev, placeholderMessageToAdd!]);
     }
 
+    // the newest turn that made images — the only one whose pictures travel with this message
+    const latestImageTurnId = [...currentHistory].reverse()
+        .find((msg) => msg.sender === 'ai' && turnImages(msg.turn).some((step) => step.assetId || msg.imagePreviews?.[step.id]))?.id;
+
     // --- Construct API messages with new structure ---
     const apiMessagesPromises = currentHistory
         .filter(msg => !msg.isThinkingPlaceholder) 
@@ -6745,6 +6754,34 @@ interface QueueState {
                 }
             }
 
+            /*
+             * The images the turn's generate_image tool made, as the assistant's image parts. The
+             * server does not show an assistant's image to the model (conversion drops it) — it reads
+             * the newest one as the starting point when the model asks to edit "the latest image",
+             * and re-attaches it to a follow-up that refers to it. Only the most recent turn's images
+             * are fetched: an edit starts from the newest picture, and fetching every image of a long
+             * conversation on every message would be a cost for nothing.
+             */
+            if (msg.sender === 'ai' && msg.id === latestImageTurnId) {
+                for (const step of turnImages(msg.turn)) {
+                    const asset = imageAssetFor(step);
+                    const preview = msg.imagePreviews?.[step.id];
+                    try {
+                        let data = preview?.startsWith('data:') ? preview.split(',')[1] : '';
+                        let mediaType = preview?.startsWith('data:image/webp') ? 'image/webp' : 'image/png';
+                        if (!data && asset) {
+                            const blob = await libraryService.fetchAssetBlob(asset);
+                            data = (await fileToBase64(new globalThis.File([blob], asset.name, { type: blob.type || asset.mimeType }))).split(',')[1];
+                            mediaType = blob.type || asset.mimeType;
+                        }
+                        if (data) messagePayload.parts.push({ type: 'image', media_type: mediaType, data });
+                    } catch (error) {
+                        // still in its scan, or gone: the model gets the words, and an edit starts fresh
+                        console.warn('[API Prep] generated image unavailable for the model:', error);
+                    }
+                }
+            }
+
             // NEW: Add AI-generated image if present in an AI message
             if (msg.sender === 'ai' && (msg.imageData || msg.generatedImageAsset)) {
                 // console.log(`[API Prep] Adding AI-generated image to payload for AI message ID ${msg.id}`);
@@ -6811,6 +6848,12 @@ interface QueueState {
          * server-side against a known list.
          */
         chatSurface: emptyStateMode,
+        /*
+         * Whether the chosen model can SEE an image. The server re-attaches the picture a follow-up
+         * refers to ("make that one bigger", "what's in it?") only for a model that can read it — an
+         * image part sent to a text-only model is an error, not context.
+         */
+        supportsVision: modelSupportsVision(currentModel),
         task: taskArg // Ensure taskArg is used here
     };
 
@@ -6937,6 +6980,8 @@ interface QueueState {
          */
         let turnRecord = newTurnRecord(placeholderMessageToAdd?.timestamp || thinkingStartTimeRef.current || Date.now());
         let streamedThinking = '';
+        /** Previews from the live image frames, by image step id — shown while the library copy is scanned. */
+        const imagePreviews: Record<string, string> = {};
         /*
          * One handler, two transports. Both readers return the SAME object shape, so the ~400
          * downstream lines below are keyed off one payload and never fork.
@@ -6955,6 +7000,27 @@ interface QueueState {
                 const record = turnRecord;
                 setMessages(prev => prev.map(msg =>
                     msg.id === localPlaceholderId ? { ...msg, turn: record } : msg
+                ));
+                return;
+            }
+
+            if (event.type === 'image_start' || event.type === 'image_result' || event.type === 'image_error') {
+                /*
+                 * An image is a step of the turn too: `image_start` draws its frame at the announced
+                 * shape (the placeholder is the right size before the picture exists), `image_result`
+                 * fills it — from the preview the frame carried, since the stored copy is still in its
+                 * scan — and `image_error` keeps the frame and says why.
+                 */
+                turnRecord = applyTurnEvent(turnRecord, event as Parameters<typeof applyTurnEvent>[1]);
+                if (event.type === 'image_result' && event.image?.previewUrl?.startsWith('data:image/')) {
+                    imagePreviews[`image-${(event.index ?? 0) + 1}`] = event.image.previewUrl;
+                }
+                // the image is billed when it lands, so the balance the header shows moves now
+                if (event.type === 'image_result') window.dispatchEvent(new CustomEvent('xeno:credits-updated'));
+                const record = turnRecord;
+                const previews = { ...imagePreviews };
+                setMessages(prev => prev.map(msg =>
+                    msg.id === localPlaceholderId ? { ...msg, turn: record, imagePreviews: previews, isDotPlaceholder: false } : msg
                 ));
                 return;
             }
@@ -7030,53 +7096,6 @@ interface QueueState {
             thinkingStartTimeRef.current = null; 
         }
 
-        // --- NEW: Handle Refined Prompt Response (early return) ---
-        if (isWaitingForRefinedPromptForMessageId) {
-            const refinedPromptMessageId = isWaitingForRefinedPromptForMessageId;
-            setIsWaitingForRefinedPromptForMessageId(null); // Reset state first
-
-            let refinedPromptText = '';
-            // Extract the refined prompt text (assuming it's in data.text or data.answer)
-            if (reasoningStateForThisCall && data.answer !== undefined) {
-                refinedPromptText = data.answer || '';
-            } else if (data.text) {
-                refinedPromptText = data.text;
-            } else {
-                console.error("LLM failed to return a refined prompt. Response data:", data);
-                setMessages(prevMessages =>
-                    prevMessages.map(msg =>
-                        msg.id === refinedPromptMessageId
-                        ? { ...msg, text: "Error: Could not get a description for the image.", isError: true, isThinkingPlaceholder: false, isGeneratingImage: false }
-                        : msg
-                    )
-                );
-                return; // Exit early
-            }
-
-            refinedPromptText = cleanText(refinedPromptText.trim()) || "A generic artistic image";
-            console.log(`Received refined prompt from LLM (truncated): "${refinedPromptText.substring(0, 50)}${refinedPromptText.length > 50 ? '... [refined prompt truncated for logging]' : ''}"`);
-
-            // Update the placeholder message
-            setMessages(prevMessages =>
-                prevMessages.map(msg =>
-                    msg.id === refinedPromptMessageId
-                    ? {
-                        ...msg,
-                        text: `Generating image with prompt: "${refinedPromptText}"`,
-                        isThinkingPlaceholder: false,
-                        isGeneratingImage: true,
-                        imageData: undefined,
-                        isError: false
-                      }
-                    : msg
-                )
-            );
-
-            // Call the actual image generation service
-            await generateImage(refinedPromptText, refinedPromptMessageId, selectedModel.id);
-            return; // IMPORTANT: Exit after handling refined prompt
-        }
-        // --- END NEW: Handle Refined Prompt Response ---
 
         // --- Process regular AI response ---
         let thinking: string | null = null;
@@ -7225,6 +7244,7 @@ interface QueueState {
             text: rawTextForState,
             timestamp: Date.now(),
             turn: closeTurnRecord(turnRecord),
+            ...(Object.keys(imagePreviews).length ? { imagePreviews: { ...imagePreviews } } : {}),
             parsedAnswer: finalAnswer,
             parsedThinking: thinking,
                 thinkingDuration: shouldTriggerThinkingPlaceholder ? duration : undefined,
@@ -7337,6 +7357,11 @@ interface QueueState {
                           context_record_id: updatedMessage.projectContextId,
                           web_context_receipt_id: updatedMessage.searchInfo?.webContextReceiptId,
                           turn: updatedMessage.turn,
+                          // every image the turn made: the attachment is what ties the library file
+                          // to this conversation, so a reload and a share can show it
+                          ...(turnImages(updatedMessage.turn).some((step) => step.assetId)
+                            ? { attachments: messageLibraryAttachments(updatedMessage) }
+                            : {}),
                           ...(answeredDbId ? { parent_id: answeredDbId } : {}),
                       });
                       if (!persistedAssistantMessage) throw new Error('The assistant turn was not persisted.');
@@ -7532,171 +7557,6 @@ interface QueueState {
     }
   }, [isLoading, queue.messages.length]);
 
-  // Function to generate image using the main chat API endpoint
-  const generateImage = async (prompt: string, messageId: string, imageModelId: string) => {
-    console.log(`[ChatWithLLM] generateImage calling /api/chat/generate for message ${messageId} using model ${imageModelId} with prompt: \"${prompt}\"`);
-
-    setMessages(prevMessages =>
-      prevMessages.map(msg =>
-        msg.id === messageId
-          ? {
-              ...msg,
-              isGeneratingImage: true,
-              isThinkingPlaceholder: false,
-              text: `Initializing image generation for: \"${prompt}\"`, // Initial placeholder text
-              parsedAnswer: undefined,
-              imageData: undefined,
-              isError: false,
-              isCancelled: false // Ensure isCancelled is initially false
-            }
-          : msg
-      )
-    );
-
-    const controllerForThisRequest = abortController; // Capture the controller instance
-
-    try {
-      const imagePromptMessage: ChatMessage = {
-        id: `user-prompt-for-${messageId}`,
-        sender: 'user',
-        text: prompt,
-      };
-
-      const imageModel = findModelById(groupedModels, imageModelId) || {
-        id: 'gpt-image-2',
-        name: 'GPT Image 2',
-        provider: 'OpenAI',
-        maxTokens: 4096,
-      } as any;
-
-      const aiImageResponse = await fetchAiResponse(
-        [imagePromptMessage],
-        null,
-        imageModel,
-        'image',
-        undefined,
-        undefined
-      ) as { imageData: string; modelIdUsed: string; libraryItemId?: string; libraryContentUrl?: string } | undefined;
-
-      // Check for abort *after* fetchAiResponse has completed or aborted
-      if (controllerForThisRequest?.signal.aborted) {
-        console.log(`[ChatWithLLM] Image generation for message ${messageId} was aborted by user.`);
-        setMessages(prevMessages =>
-          prevMessages.map(msg =>
-            msg.id === messageId
-              ? {
-                  ...msg,
-                  isGeneratingImage: false,
-                  isError: false,
-                  text: "Image generation aborted.", // Consistent with other cancelled text
-                  imageData: undefined,
-                  isCancelled: true,       // Set the flag
-                  isThinkingPlaceholder: false, // Ensure placeholders are cleared
-                  parsedAnswer: "Image generation aborted."
-                }
-              : msg
-          )
-        );
-        return; // Exit after handling abort
-      }
-
-      if (aiImageResponse?.imageData) {
-           const generatedImageAsset = aiImageResponse.libraryItemId ? {
-             assetId: aiImageResponse.libraryItemId,
-             name: `XENO image ${new Date().toISOString().replace(/[:.]/g, '-')}.png`,
-             mimeType: 'image/png',
-             contentUrl: aiImageResponse.libraryContentUrl || `/api/library/assets/${aiImageResponse.libraryItemId}/content`,
-           } satisfies LibraryAssetRef : undefined;
-           const completedText = `Image generated for prompt: "${prompt}"`;
-           // console.log(`[ChatWithLLM] Image data received via fetchAiResponse for message ${messageId}`);
-             setMessages(prevMessages =>
-                prevMessages.map(msg =>
-                msg.id === messageId
-                    ? {
-                        ...msg,
-                        imageData: aiImageResponse.imageData,
-                        isGeneratingImage: false,
-                        text: msg.text?.includes('Initializing') || msg.text?.includes('Generating image') ? `Image generated for prompt: \"${prompt}\"` : msg.text,
-                        parsedAnswer: msg.text?.includes('Initializing') || msg.text?.includes('Generating image') ? `Image generated for prompt: \"${prompt}\"` : msg.parsedAnswer,
-                        modelIdUsed: aiImageResponse.modelIdUsed || imageModelId,
-                        generatedImageAsset,
-                        isCancelled: false
-                    }
-                    : msg
-                )
-            );
-           const persistedImageMessage: ChatMessage = {
-             id: messageId,
-             sender: 'ai',
-             text: completedText,
-             parsedAnswer: completedText,
-             timestamp: Date.now(),
-             modelIdUsed: aiImageResponse.modelIdUsed || imageModelId,
-             imageData: aiImageResponse.imageData,
-             generatedImageAsset,
-           };
-           const conversationId = activeConversationIdRef.current ?? activeConversationId;
-           if (conversationId) {
-             setConversationHistory((history) => history.map((conversation) => conversation.id === conversationId
-               ? {
-                   ...conversation,
-                   messages: conversation.messages.some((entry) => entry.id === messageId)
-                     ? conversation.messages.map((entry) => entry.id === messageId ? persistedImageMessage : entry)
-                     : [...conversation.messages, persistedImageMessage],
-                 }
-               : conversation));
-             if (isDbAuthenticated) {
-               void chatService.addMessage(conversationId, {
-                 role: 'assistant',
-                 content: completedText,
-                 model_id: persistedImageMessage.modelIdUsed,
-                 attachments: messageLibraryAttachments(persistedImageMessage),
-               }).catch((error) => console.error('Error saving generated Library image message:', error));
-             }
-           }
-      } else { // Covers undefined aiImageResponse (not aborted) or if it returned text/error
-            const errorTextFromResponse = (aiImageResponse as any)?.text; // Attempt to get text if it was an error object from fetchAiResponse
-            const errorMsg = errorTextFromResponse || 'Error generating image: Unexpected response or format.';
-            console.error(`[ChatWithLLM] Image generation failed or returned unexpected for message ${messageId}: ${errorMsg}`);
-            setMessages(prevMessages =>
-                prevMessages.map(msg =>
-                msg.id === messageId && !msg.isError 
-                    ? { 
-                        ...msg, 
-                        isError: true, 
-                        isGeneratingImage: false, 
-                        text: errorMsg,
-                        parsedAnswer: errorMsg,
-                        isCancelled: false 
-                      } 
-                    : msg
-                )
-            );
-      }
-
-    } catch (error) {
-      console.error(`Error in generateImage flow for message ${messageId}:`, error);
-      setMessages(prevMessages =>
-        prevMessages.map(msg =>
-          msg.id === messageId && !msg.isError
-            ? {
-                ...msg,
-                isError: true,
-                isGeneratingImage: false,
-                text: `Error generating image: ${error instanceof Error ? error.message : 'Unknown error'}`,
-                parsedAnswer: `Error generating image: ${error instanceof Error ? error.message : 'Unknown error'}`,
-                isCancelled: false
-              }
-            : msg
-        )
-      );
-    } finally {
-       // isLoading state is handled by fetchAiResponse's finally block for the overall request
-       // However, ensure isGeneratingImage specific to this messageId is false if not already handled
-       setMessages(prev => prev.map(m => m.id === messageId && m.isGeneratingImage ? {...m, isGeneratingImage: false} : m));
-    }
-  };
-
   const handleGenerate = async (inputOverride?: string) => {
     const composerText = inputOverride ?? inputValue;
     const canSend = composerText.trim() || attachedFiles.length > 0;
@@ -7802,165 +7662,20 @@ interface QueueState {
       return;
     }
 
-    // --- Image Generation Intent Detection (Revised Logic with DEBUG logs) ---
-    const userTextForProcessing = userTextToSend.toLowerCase().trim();
-    // console.log('[INTENT DEBUG] Starting intent detection for:', userTextForProcessing);
-
-    // --- NEW: Add checks to PREVENT image generation for long/code-like inputs ---
-    const MAX_LENGTH_FOR_IMAGE_INTENT = 300; // Max characters for a typical image prompt
-    const MIN_CODE_INDICATORS_FOR_NO_IMAGE = 8; // Min number of code-like tokens to flag as code
-    const CODE_INDICATOR_REGEX = /(import|export|function|class|const|let|var|return|=>|\{|\}|\[|\]|\(|\)|;|:|componentDidMount|useEffect|useState|render|<[a-zA-Z_][\w.:-]*(\s|\/>|>|<\/[a-zA-Z_][\w.:-]*>))/gi;
-
-    let isLikelyCodeOrLongText = false;
-
-    if (userTextToSend.length > MAX_LENGTH_FOR_IMAGE_INTENT) {
-        isLikelyCodeOrLongText = true;
-        // console.log('[INTENT DEBUG] Input too long for image intent:', userTextToSend.length, 'chars');
-    } else {
-        const codeIndicators = (userTextToSend.match(CODE_INDICATOR_REGEX) || []).length;
-        if (codeIndicators >= MIN_CODE_INDICATORS_FOR_NO_IMAGE) {
-            isLikelyCodeOrLongText = true;
-            // console.log('[INTENT DEBUG] Input has too many code indicators for image intent:', codeIndicators);
-        }
-    }
-    // --- END NEW CHECKS ---
-
-    const baseImageVerbs = ["generate", "create", "make", "draw", "paint", "sketch"];
-    const imageNounVariations = ["image", "an image", "a image", "picture", "a picture", "an picture", "photo", "a photo", "an photo", "drawing", "a drawing", "an drawing", "illustration", "an illustration", "a illustration", "art", "an art", "a art", "pic", "a pic", "an pic", "painting", "a painting", "an painting", "sketch", "a sketch", "an sketch"];
-    const prepositionsForSubject = ["of", "about", "with", "depicting", "showing", "featuring", "for"];
-    const contextualSubjectKeywords = ["this", "that", "it", "them", "those", "the previous one", "the current topic", "the former", "the latter", "previous", "above"];
-
-    let extractedDirectPrompt: string | null = null;
-    let isPotentialImageRefinement: boolean = false;
-
-    // Direct visual / image generation intent check (e.g. "Create a cozy rainy-night café in a watercolor style", "draw a cat", "generate an image of a sunset")
-    if (!extractedDirectPrompt && !isLikelyCodeOrLongText) {
-        const isImageAction = /^(create|generate|draw|paint|sketch|render|make|illustrate|design)\b/i.test(userTextForProcessing);
-        const hasVisualTerm = /\b(image|photo|picture|drawing|illustration|art|portrait|painting|sketch|graphic|wallpaper|watercolor|cafe|cyberpunk|anime|scenery|landscape|scene|avatar|logo|render|3d)\b/i.test(userTextForProcessing);
-        const hasStylePhrase = /\b(style|in\s+(a\s+)?(watercolor|oil|digital|pixel|anime|cyberpunk|3d|photorealistic|cinematic|vintage|retro|realistic))\b/i.test(userTextForProcessing);
-        const isDirectImageOf = /^(image|picture|photo|drawing|illustration|painting|sketch)\s+(of|with|for)\b/i.test(userTextForProcessing);
-
-        if ((isImageAction && (hasVisualTerm || hasStylePhrase)) || isDirectImageOf) {
-            extractedDirectPrompt = userTextToSend;
-        }
-    }
-
-    // Stage 1: Try to find a direct command with a clear subject.
-    if (!extractedDirectPrompt) {
-        verbLoop: for (const verb of baseImageVerbs) {
-            for (const noun of imageNounVariations) {
-                for (const prep of prepositionsForSubject) {
-                    const commandPatternStart = `${verb} ${noun} ${prep} `;
-                    if (userTextForProcessing.startsWith(commandPatternStart)) {
-                        const potentialSubject = userTextToSend.substring(commandPatternStart.length).trim();
-                        if (potentialSubject) {
-                            if (contextualSubjectKeywords.includes(potentialSubject.toLowerCase())) {
-                                isPotentialImageRefinement = true;
-                                break verbLoop;
-                            } else {
-                                extractedDirectPrompt = potentialSubject;
-                                break verbLoop;
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    // Stage 2: If not a clear direct command from Stage 1, check for commands needing refinement.
-    if (!extractedDirectPrompt && !isPotentialImageRefinement) {
-        verbLoop2: for (const verb of baseImageVerbs) {
-            for (const noun of imageNounVariations) {
-                const commandPatternNoPrep = `${verb} ${noun} `;
-                if (userTextForProcessing.startsWith(commandPatternNoPrep)) {
-                    const potentialSubjectNoPrep = userTextToSend.substring(commandPatternNoPrep.length).trim();
-                    if (potentialSubjectNoPrep) {
-                        isPotentialImageRefinement = true;
-                        break verbLoop2;
-                    }
-                }
-                if (userTextForProcessing === `${verb} ${noun}`) {
-                    isPotentialImageRefinement = true;
-                    break verbLoop2;
-                }
-            }
-        }
-    }
-
-    // Stage 3: Broader check for inclusion of image-related verbs/nouns if nothing specific caught yet.
-    if (!isLikelyCodeOrLongText && !extractedDirectPrompt && !isPotentialImageRefinement) {
-        const baseNounsForRegex = ["image", "picture", "photo", "drawing", "illustration", "art", "pic", "painting", "sketch"];
-        const containsVerbCheck = baseImageVerbs.some(verb => new RegExp(`\\b${verb}\\b`, 'i').test(userTextForProcessing));
-        const containsNounCheck = baseNounsForRegex.some(noun => new RegExp(`\\b${noun}\\b`, 'i').test(userTextForProcessing));
-        const containsContextualWordCheck = contextualSubjectKeywords.some(csWord => new RegExp(`\\b${csWord.replace(/\s+/g, '\\s+')}\\b`, 'i').test(userTextForProcessing));
-
-        if (containsVerbCheck && containsNounCheck) {
-            isPotentialImageRefinement = true;
-        } else if ((userTextForProcessing === "draw" || userTextForProcessing === "paint" || userTextForProcessing === "sketch") && !filesToSend.length) {
-            isPotentialImageRefinement = true;
-        } else if (containsVerbCheck && containsContextualWordCheck && !containsNounCheck) {
-            isPotentialImageRefinement = true;
-        }
-    }
-    // --- End Image Generation Intent Detection ---
-
-    // console.log('[INTENT DEBUG] Final check: isPotentialImageRefinement =', isPotentialImageRefinement, 'extractedDirectPrompt =', extractedDirectPrompt);
-    // console.log('[INTENT DEBUG] isLikelyCodeOrLongText =', isLikelyCodeOrLongText);
-
-    if (extractedDirectPrompt) {
-        // console.log('[INTENT DEBUG] Path Taken: Direct Image Command (Path 1)');
-        // ... rest of Path 1 logic
-        const aiImageMessage: ChatMessage = {
-            id: `ai-image-${Date.now()}`,
-            sender: 'ai',
-            text: `Generating image with prompt: "${extractedDirectPrompt}"`,
-            isGeneratingImage: true
-        };
-        // Add the placeholder for the image being generated to the message history
-        currentMessageHistory = [...currentMessageHistory, aiImageMessage];
-        setMessages(currentMessageHistory);
-        // Call generateImage with the extracted prompt and the ID of the placeholder message
-        await generateImage(extractedDirectPrompt, aiImageMessage.id, selectedModel.id);
-
-    } else if (isPotentialImageRefinement && !isLikelyCodeOrLongText) { // MODIFIED: Add !isLikelyCodeOrLongText guard
-        // console.log('[INTENT DEBUG] Path Taken: Potential Image Refinement (Path 2)');
-        // ... rest of Path 2 logic
-        const newAiRefinementPlaceholderId = `ai-refine-${Date.now()}`;
-        setAiRefinementPlaceholderId(newAiRefinementPlaceholderId); // Use state setter
-
-        const aiRefinementPlaceholder: ChatMessage = {
-            id: newAiRefinementPlaceholderId, // Use the new ID
-            sender: 'ai',
-            text: 'Okay, let me figure out a good description for the image...', // Base text, ellipsis will be dynamic
-            isThinkingPlaceholder: true, // This identifies it for the animation effect
-        };
-        // Add the refinement placeholder to message history
-        currentMessageHistory = [...currentMessageHistory, aiRefinementPlaceholder];
-        setMessages(currentMessageHistory);
-
-        // Construct history for the LLM to refine the prompt (history before the placeholder)
-        const historyForRefinement = currentMessageHistory.slice(0, -1);
-
-        // console.log("Requesting prompt refinement from LLM with history:", historyForRefinement);
-        const refinementResponse = await fetchAiResponse(historyForRefinement, systemPrompt, selectedModel, "refine_image_prompt", undefined, undefined);
-
-        if (refinementResponse && 'refinedPromptText' in refinementResponse && refinementResponse.refinedPromptText) {
-            const refinedPrompt = refinementResponse.refinedPromptText;
-            // console.log('[ChatWithLLM HandleGenerate] Path 2: Got refined prompt:', refinedPrompt);
-            // Call generateImage with the refined prompt, using the placeholder's ID
-            await generateImage(refinedPrompt, newAiRefinementPlaceholderId, selectedModel.id);
-        } else {
-            console.error('[ChatWithLLM HandleGenerate] Path 2: Failed to get refined prompt or invalid response.', refinementResponse);
-            setMessages(prev => prev.map(msg =>
-                msg.id === newAiRefinementPlaceholderId
-                ? { ...msg, text: "Sorry, I couldn't figure out what image to generate. Please try being more specific.", isThinkingPlaceholder: false, isError: true, isGeneratingImage: false }
-                : msg
-            ));
-        }
-    } else {
-        // console.log('[INTENT DEBUG] Path Taken: Regular Chat Message (Path 3)');
-        // ... rest of Path 3 logic (or if it was flagged as code/long text and didn't match Path 1)
+    /*
+     * 🔴 An image request is a CHAT TURN (2026-09-26). This block used to run ~150 lines of regular
+     * expressions over the user's words BEFORE any model saw them and, on a match, sent those raw
+     * words to an image model — or asked a model to "refine" them first when the regexes judged the
+     * wording vague. So the prompt was never really written by a model, the chat model never knew an
+     * image existed, and "draw" inside a code question or "image" in a paragraph about Docker could
+     * trigger a paid generation.
+     *
+     * The chat model now decides, through its `generate_image` tool (server:
+     * utils/chatImageTool.js): it writes the full image prompt, picks the shape, and the picture
+     * arrives as a step of the answer — the way ChatGPT's in-chat image generation works. The block
+     * below is the only path a message takes.
+     */
+    {
         // First clear any previous Xeno Search results
         setXenoSearchResults(null);
 
@@ -10757,239 +10472,6 @@ Keep the summary under 500 words. Preserve essential context needed to continue 
     };
   }, [hoveredElementRef.current, startHideTimer, sourcePreviewRef]);
 
-  // Dot-Matrix Canvas Image Generation Placeholder
-  const DotMatrixImagePlaceholder: React.FC<{ prompt?: string }> = ({ prompt }) => {
-    const canvasRef = useRef<HTMLCanvasElement>(null);
-
-    useEffect(() => {
-      const canvas = canvasRef.current;
-      if (!canvas) return;
-      const ctx = canvas.getContext('2d');
-      if (!ctx) return;
-
-      let animId: number;
-      let cells: { x: number; y: number; phase: number; speed: number; base: number }[] = [];
-      let w = 0, h = 0;
-      const mouse = { x: -9999, y: -9999 };
-
-      const CFG = {
-        pitch: 18,
-        cellSize: 5.5,
-        cornerRadius: 1.5,
-        cellColor: '#8a8a9e',
-        glowRadius: 160,
-        sweepSpeed: 0.35,
-        sweepWidth: 0.45,
-        axis: 'x' as const,
-        dir: 1
-      };
-
-      const handleMouseMove = (e: PointerEvent) => {
-        const rect = canvas.getBoundingClientRect();
-        mouse.x = e.clientX - rect.left;
-        mouse.y = e.clientY - rect.top;
-      };
-      const handleMouseLeave = () => {
-        mouse.x = -9999;
-        mouse.y = -9999;
-      };
-
-      canvas.addEventListener('pointermove', handleMouseMove);
-      canvas.addEventListener('pointerleave', handleMouseLeave);
-
-      const build = () => {
-        if (!canvas || !ctx) return;
-        const dpr = Math.min(window.devicePixelRatio || 1, 2);
-        w = canvas.clientWidth;
-        h = canvas.clientHeight;
-        if (!w || !h) return;
-        canvas.width = Math.round(w * dpr);
-        canvas.height = Math.round(h * dpr);
-        ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-
-        cells = [];
-        const p = CFG.pitch;
-        for (let y = p / 2; y < h; y += p) {
-          for (let x = p / 2; x < w; x += p) {
-            cells.push({
-              x: Math.round(x),
-              y: Math.round(y),
-              phase: Math.random() * Math.PI * 2,
-              speed: 0.4 + Math.random() * 1.6,
-              base: Math.random()
-            });
-          }
-        }
-      };
-
-      const ro = new ResizeObserver(build);
-      ro.observe(canvas);
-      build();
-
-      const t0 = performance.now();
-      const frame = () => {
-        if (!ctx || !w || !h) {
-          animId = requestAnimationFrame(frame);
-          return;
-        }
-        const t = (performance.now() - t0) / 1000;
-        const cycle = 1 + CFG.sweepWidth;
-        const prog = (t * CFG.sweepSpeed) % cycle;
-        const head = CFG.dir === 1 ? prog - CFG.sweepWidth : 1 - prog;
-
-        ctx.clearRect(0, 0, w, h);
-        ctx.fillStyle = CFG.cellColor;
-
-        const s = CFG.cellSize;
-        const r = CFG.cornerRadius;
-        const radius = CFG.glowRadius;
-
-        for (let i = 0; i < cells.length; i++) {
-          const cell = cells[i];
-          const u = cell.x / w;
-          const rel = (u - head) / CFG.sweepWidth;
-          const sweep = rel > 0 && rel < 1 ? Math.sin(rel * Math.PI) : 0;
-          let a = 0.08 + 0.22 * cell.base + 0.25 * (0.5 + 0.5 * Math.sin(t * cell.speed + cell.phase)) + 0.65 * sweep * (0.4 + 0.6 * cell.base);
-
-          const dx = cell.x - mouse.x;
-          const dy = cell.y - mouse.y;
-          const dist = Math.sqrt(dx * dx + dy * dy);
-          if (dist < radius) {
-            a += (1 - dist / radius) * 0.75;
-          }
-
-          ctx.globalAlpha = Math.min(Math.max(a, 0.05), 1);
-          ctx.beginPath();
-          if (typeof (ctx as any).roundRect === 'function') {
-            (ctx as any).roundRect(cell.x - (s / 2), cell.y - (s / 2), s, s, r);
-          } else {
-            ctx.rect(cell.x - (s / 2), cell.y - (s / 2), s, s);
-          }
-          ctx.fill();
-        }
-
-        ctx.globalAlpha = 1;
-        animId = requestAnimationFrame(frame);
-      };
-
-      frame();
-
-      return () => {
-        cancelAnimationFrame(animId);
-        ro.disconnect();
-        canvas.removeEventListener('pointermove', handleMouseMove);
-        canvas.removeEventListener('pointerleave', handleMouseLeave);
-      };
-    }, []);
-
-    return (
-      <div className="relative w-full aspect-square flex flex-col justify-between overflow-hidden bg-[#0a0a0d]">
-        {/* Header with generation status badge */}
-        <div className="p-3.5 z-10 flex items-center justify-between pointer-events-none">
-          <div className="flex items-center gap-2 px-3 py-1 bg-black/60 backdrop-blur-md rounded-full border border-white/10 text-xs text-gray-200">
-            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-            <span className="font-medium tracking-wide">Generating image with GPT Image 2</span>
-          </div>
-        </div>
-
-        {/* Dot Matrix Canvas */}
-        <canvas ref={canvasRef} className="absolute inset-0 w-full h-full block cursor-crosshair" />
-
-        {/* Bottom hint badge */}
-        <div className="p-3.5 z-10 pointer-events-none">
-          <div className="px-3 py-1.5 bg-black/60 backdrop-blur-md rounded-lg border border-white/10 text-[11px] text-gray-300 truncate shadow-lg">
-            {prompt || 'Rendering visual scene — hang tight...'}
-          </div>
-        </div>
-      </div>
-    );
-  };
-
-  // Image Generation Component
-  const ImageContainer: React.FC<{ message: ChatMessage }> = ({ message }) => {
-    if (!message.isGeneratingImage && !message.imageData && !message.generatedImageAsset) {
-      return null;
-    }
-
-    // Helper function to get the proper image URL
-    const getImageUrl = () => {
-      if (!message.imageData) return '';
-      
-      // Check if imageData is already a complete data URI
-      if (message.imageData.startsWith('data:')) {
-        // Handle malformed nested data URIs
-        if (message.imageData.includes('data:image/svg+xml;base64,data:image/png;base64,')) {
-          console.warn('⚠️ Detected malformed nested data URI, extracting PNG data...');
-          const pngMatch = message.imageData.match(/data:image\/png;base64,([A-Za-z0-9+/=]+)/);
-          if (pngMatch && pngMatch[1]) {
-            const pngBase64 = pngMatch[1].split('data:')[0];
-            return `data:image/png;base64,${pngBase64}`;
-          }
-        }
-        return message.imageData;
-      }
-      return `data:image/png;base64,${message.imageData}`;
-    };
-
-    const handleImageClick = () => {
-      if (message.generatedImageAsset) {
-        setLibraryViewerSelection({ items: conversationLibraryViewerItems, activeId: `${message.id}:generated` });
-        return;
-      }
-      if (message.imageData) {
-        const imageUrl = getImageUrl();
-        setFullScreenImageUrl(imageUrl);
-        setIsFullScreenImageOpen(true);
-        setViewerShowsDownloadButton(true);
-      }
-    };
-
-    const promptText = (message.text || '').replace(/^Generating image with prompt:\s*"?/, '').replace(/"?$/, '');
-
-    return (
-      <div className="w-full max-w-[440px] aspect-square rounded-2xl overflow-hidden bg-[#111114] border border-[#222228] shadow-2xl my-3 transition-all duration-300">
-        {message.isGeneratingImage && !message.imageData ? (
-          <DotMatrixImagePlaceholder prompt={promptText} />
-        ) : (message.imageData || message.generatedImageAsset) ? (
-          <div className="relative group w-full h-full overflow-hidden">
-            <LibraryAssetImage
-              asset={message.generatedImageAsset}
-              sourceUrl={message.imageData ? getImageUrl() : undefined}
-              alt="AI generated image"
-              className="w-full h-full object-cover cursor-pointer transition-transform duration-300 group-hover:scale-[1.02]"
-              onClick={handleImageClick}
-            />
-            {/* Hover overlay with action buttons */}
-            <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-black/30 opacity-0 group-hover:opacity-100 transition-opacity duration-200 flex flex-col justify-between p-3.5 pointer-events-none">
-              <div className="flex justify-end">
-                <span className="px-2.5 py-0.5 bg-black/70 backdrop-blur-md rounded-full text-[11px] font-medium text-emerald-400 border border-emerald-500/30">
-                  GPT Image 2
-                </span>
-              </div>
-              <div className="flex items-center justify-between pointer-events-auto">
-                <button
-                  onClick={handleImageClick}
-                  className="flex items-center gap-1.5 px-3 py-1.5 bg-white/10 hover:bg-white/20 backdrop-blur-md border border-white/20 rounded-lg text-xs text-white font-medium transition-colors"
-                >
-                  <Search size={13} />
-                  <span>View Full</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={(event) => { event.stopPropagation(); handleImageClick(); }}
-                  className="flex items-center gap-1.5 px-3 py-1.5 bg-white/10 hover:bg-white/20 backdrop-blur-md border border-white/20 rounded-lg text-xs text-white font-medium transition-colors"
-                >
-                  <Download size={13} />
-                  <span>Open Library</span>
-                </button>
-              </div>
-            </div>
-          </div>
-        ) : null}
-      </div>
-    );
-  };
-  
   // --- Define handlers and preview component INSIDE ChatWithLLM ---
   const handleIndicatorMouseEnter = (
     event: React.MouseEvent<HTMLSpanElement>,
@@ -16766,26 +16248,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                     // kept helpers above if we bring them back later.
                     const dateSeparatorElement = null;
 
-                    if (message.isThinkingPlaceholder && message.id === aiRefinementPlaceholderId) {
-                        // The prompt-refinement placeholder keeps its own line; EVERY other in-flight
-                        // turn — the thinking placeholder and the dot placeholder alike — is opened by
-                        // the assistant block below, as the SAME element the answer will fill. Two
-                        // reasons, one shape: a separate element here remounted the turn head on the
-                        // first delta (2026-09-18), and it was where the dot placeholder drew the
-                        // legacy scripted phase box — "Thinking · Writing the answer" with a rotating
-                        // square, invented client-side — instead of the canonical clock line that every
-                        // other turn shows (2026-09-19).
-                        return (
-                            <div key={message.id} className="flex justify-start w-full pl-[1.125rem]">
-                                <div className="flex items-center gap-2 bg-[var(--chat-surface)] border border-[var(--chat-border)] rounded-lg px-3 py-1.5 text-sm">
-                                    <span className="flex h-2 w-2 relative mr-1">
-                                        <span className="relative inline-flex rounded-full h-2 w-2 bg-[var(--chat-muted)] animate-pulse"></span>
-                                    </span>
-                                    <span className="text-[var(--chat-muted)]">Okay, let me figure out{ellipsisText}</span>
-                                </div>
-                            </div>
-                        );
-                    } else if (message.isCancelled) {
+                    if (message.isCancelled) {
                         return (
                             <div key={message.id} className="group relative flex justify-start w-full">
                                 <div className="flex items-center"> {/* Flex row for both elements */}
@@ -17142,7 +16605,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                                       {/* Show Xeno Search Loading Animation or Results - Only when Xeno Search was actually used.
                                           A turn whose rail already lists what each search read shows them there (the
                                           transcript's sources line); this box then stays for the pre-turn Research path. */}
-                                      {!(message.turn?.steps.some((step) => step.sources && step.sources.length > 0)) &&
+                                      {!(message.turn?.steps.some((step) => step.kind === 'search' && (step.sources?.length ?? 0) > 0)) &&
                                        ((message.isLoading && message.searchInfo && isXenoSearchEnabled) ||
                                         (!message.isLoading && message.searchInfo &&
                                          ((message.searchInfo.queries?.length ?? 0) > 0 || (message.searchInfo.sources?.length ?? 0) > 0))) ? (
@@ -17313,9 +16776,50 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                                               </div>
                                           )}
 
-                                          {(message.isGeneratingImage || message.imageData || message.generatedImageAsset) && (
-                                              <ImageContainer message={message} />
-                                          )}
+                                          {(() => {
+                                              /*
+                                               * ONE renderer for every generated image. A turn from the
+                                               * generate_image tool carries its images on the turn record;
+                                               * an older conversation saved by the retired keyword path
+                                               * carries ONE library attachment (or, older still, inline
+                                               * base64) and no record — it is drawn in the same frame, as
+                                               * a square, which is the only shape that path ever made.
+                                               */
+                                              const images: ChatTurnImageView[] = turnImages(message.turn).map((step) => ({
+                                                  step,
+                                                  previewUrl: message.imagePreviews?.[step.id],
+                                                  asset: imageAssetFor(step),
+                                              }));
+                                              if (!images.length && (message.generatedImageAsset || message.imageData)) {
+                                                  const inline = message.imageData
+                                                      ? (message.imageData.startsWith('data:image/') ? message.imageData : `data:image/png;base64,${message.imageData}`)
+                                                      : undefined;
+                                                  images.push({
+                                                      step: {
+                                                          id: 'generated',
+                                                          kind: 'image',
+                                                          prompt: '',
+                                                          aspectRatio: '1:1',
+                                                          startedAt: message.timestamp ?? 0,
+                                                          endedAt: message.timestamp ?? 0,
+                                                          ...(message.generatedImageAsset ? { assetId: message.generatedImageAsset.assetId } : {}),
+                                                      },
+                                                      previewUrl: inline,
+                                                      asset: message.generatedImageAsset,
+                                                  });
+                                              }
+                                              if (!images.length) return null;
+                                              return (
+                                                  <ChatGeneratedImages
+                                                      images={images}
+                                                      live={Boolean(message.isStreaming || message.isThinkingPlaceholder || message.isDotPlaceholder)}
+                                                      onOpen={(image) => setLibraryViewerSelection({
+                                                          items: conversationLibraryViewerItems,
+                                                          activeId: `${message.id}:${image.step.id}`,
+                                                      })}
+                                                  />
+                                              );
+                                          })()}
 
                                           {!message.isError && (message.parsedAnswer || message.isStreaming) && (
                                                   /* Do not put prose-pre:bg-* / child bg utilities on this wrapper:

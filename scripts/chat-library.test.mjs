@@ -85,7 +85,11 @@ test('uploads and conversational image generation both persist Library rows', ()
   assert.match(server, /libraryContentUrl/);
   assert.match(chat, /libraryService\.upload\(file, 'chat-attachment'\)/);
   assert.match(chat, /generatedImageAsset/);
-  assert.match(chat, /attachments: messageLibraryAttachments\(persistedImageMessage\)/);
+  // 2026-09-26: chat images come from the generate_image tool and are saved WITH the streamed turn —
+  // the retired keyword path's separate `persistedImageMessage` save is gone. Every image of the turn
+  // is an attachment, which is what ties the library file to the conversation.
+  assert.match(chat, /turnImages\(updatedMessage\.turn\)\.some\(\(step\) => step\.assetId\)[\s\S]{0,160}attachments: messageLibraryAttachments\(updatedMessage\)/);
+  assert.match(chat, /for \(const step of turnImages\(message\.turn\)\)[\s\S]{0,400}asset_id: asset\.assetId/);
 });
 
 test('Library UI owns canonical URL tabs and real list/grid controls', () => {
