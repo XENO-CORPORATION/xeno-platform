@@ -73,6 +73,7 @@ test('real HTTP/authMiddleware/JWT/DPoP boundary with query-aware auth DB and in
   let admitFailure;
   let admitResult;
   let pinResult;
+  let capacityResult;
   const admittedFixture = () => ({ replayed: false, admission: { schemaVersion: 1, admissionId: operationId, operationId,
     agent: { resourceId: operationId, version: 1, contentHash: 'a'.repeat(64) },
     target: { kind: 'personal', ownerUserId: human, workspaceId: null, projectId: null, assignmentId: null, assignmentRevision: null, participationId: null, participationRevision: null },
@@ -88,6 +89,9 @@ test('real HTTP/authMiddleware/JWT/DPoP boundary with query-aware auth DB and in
   };
   app.use(basePath, createWorkforceRouter({ createWorkforceResource: invoke('create'), readWorkforceResourceOperation: invoke('read'),
     admitRun: admit('admit'), readRunAdmission: admit('readAdmission'),
+    readWorkforceCapacity: async (pool, context, value) => { calls.push({ method: 'capacity', context, body: value });
+      return capacityResult ?? { schemaVersion: 1, owner: value.owner, derivedAt: '2026-09-27T12:00:00.000Z', activeAdmissions: 2, inFlightRuns: 1,
+        activeAgents: 2, committedCeilingMicro: '3500000', funding: [{ payerUserId: human, canFund: true, availableMicro: '7000000', internal: 'hidden' }] }; },
     readRunnablePin: async (pool, context, value) => { calls.push({ method: 'pin', context, body: value }); if (admitFailure) throw admitFailure;
       return pinResult ?? { schemaVersion: 1, agent: { resourceId: value.agent.resourceId, version: 3, contentHash: 'b'.repeat(64) },
         target: value.target, team: null, terms: { definition: ['files.read'], target: ['files.read'] }, internalRow: 'hidden' }; },
@@ -329,6 +333,23 @@ test('real HTTP/authMiddleware/JWT/DPoP boundary with query-aware auth DB and in
       assert.deepEqual(refused.body.details, { schemaVersion: 1, reason: 'actor_cannot_act_for_target' }, 'the refusal reason reaches the client, nothing else');
       admitFailure = undefined;
       assert.equal((await request({ method: 'GET', path: '/run-admissions/pin' })).status, 405);
+    });
+    // Mutation-checked 2026-09-27: the route demands workforce:manage -> "reading capacity is a read";
+    // the validator accepts another scope -> "capacity for another scope is never reported".
+    await t.test('LIFE-09: capacity is read over HTTP as a read, only for the scope asked about', async () => {
+      const ask = { owner: { type: 'user', id: human }, expectedActorAccountId: human };
+      const read = await request({ path: '/capacity', body: ask, token: mint({ scope: 'workforce:read' }) });
+      assert.equal(read.status, 200, 'reading capacity is a read');
+      assert.equal(read.body.committedCeilingMicro, '3500000');
+      assert.ok(!JSON.stringify(read.body).includes('hidden'), 'only the documented capacity fields cross');
+      assert.deepEqual(calls.at(-1).context, { actorUserId: human, clientId: 'xeno-agent-interface' }, 'the actor comes from authentication');
+      for (const bad of [{ owner: { type: 'user', id: operationId } }, { inFlightRuns: 5 }, { committedCeilingMicro: '-1' }]) {
+        capacityResult = { schemaVersion: 1, owner: ask.owner, derivedAt: '2026-09-27T12:00:00.000Z', activeAdmissions: 2, inFlightRuns: 1,
+          activeAgents: 2, committedCeilingMicro: '0', funding: [], ...bad };
+        assert.equal((await request({ path: '/capacity', body: ask })).status, 500, 'capacity for another scope is never reported');
+      }
+      capacityResult = undefined;
+      assert.equal((await request({ method: 'GET', path: '/capacity' })).status, 405);
     });
     await t.test('RUN-03: each step is authorized over HTTP by the admitted actor, as a bounded signed lease', async () => {
       const stepBody = { admissionId: operationId, operation: 'provider_dispatch' };
