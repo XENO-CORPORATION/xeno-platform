@@ -3,10 +3,14 @@
  * Mounted behind oidcAuth: every caller is a signed-in XENO account. See services/shellSessions.js.
  */
 import express from 'express';
+import { requireDpopIfBound } from '../middleware/dpopResource.js';
 import { ShellSessionDirectory, ShellSessionError, iceServers, mintSessionPass } from '../services/shellSessions.js';
 
 export function createShellSessionRouter({ directory = new ShellSessionDirectory() } = {}) {
   const router = express.Router();
+  // A sender-constrained (DPoP) token must prove possession on every call here: a session pass
+  // is admission to someone's machine, so a stolen bearer token must not be enough to mint one.
+  router.use(requireDpopIfBound);
   const nameOf = (u) => u?.display_name || u?.username || u?.email || 'XENO user';
 
   const handle = (op) => async (req, res) => {
