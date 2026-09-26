@@ -122,14 +122,25 @@ clear right answer:
 ## 8. Build order (causality, not preference)
 
 0. **This proposal + approval.** (No infra decision — the substrate is xenorun, already deployed.)
-1. **`xenorun` gains file-in/file-out** (general primitive extension, in the xenorun repo). Verify its
-   `--network none` posture while there.
+1. **`xenorun` gains file-in/file-out** (general primitive extension, in the xenorun repo). ✅ DONE — shipped to `xenorun` main (`2057437`), `--network none` verified, `npm run smoke:workspace` 7/7 real Docker.
 2. **`chat_sandboxes` model** + storage prefix (platform, additive migration). ✅ DONE — migration `20260926200000-chat-sandboxes.sql` + `services/chatSandbox.js`, proven by `npm run smoke:chat-sandbox` (real Postgres + fs store) and `npm run test:chat-sandbox-keys`.
-3. **`SandboxSession`** wrapper → restore workspace, exec via xenorun, collect outputs.
-4. **`RUN_CODE_TOOL`** on the existing loop (metering reused from the tool-calling plan).
-5. **Output files → workspace R2 → Library ingestion.**
-6. **Execution metering** on the ledger + workspace quotas.
+3. **`SandboxSession`** wrapper → restore workspace, exec via xenorun, collect outputs. ✅ DONE — `services/sandboxSession.js`; capstone `npm run smoke:chat-code-execution` 5/5 (real xenorun + real Postgres, persistence + isolation across turns).
+4. **`RUN_CODE_TOOL`** on the existing loop. ✅ DONE — `utils/chatCodeTool.js` + `streamToolLoop` dispatch + aiRoutes offer/executor/SSE; `npm run test:chat-code-loop` 4/4.
+5. **Output files → workspace R2 → Library ingestion.** ✅ DONE — `surfaceRunFilesToLibrary` registers run outputs as managed Library assets (best-effort, personal-scoped); `npm run test:chat-sandbox-library` 3/3.
+6. **Execution metering** on the ledger + workspace quotas. ✅ PLUMBING DONE — `runCodeMetered` wraps a run in `meterMediaGeneration` (operation `code_execution`, charge per completed run); `npm run test:chat-code-metering` 4/4. 🔴 The RATE is the owner's decision: `creditCosts.js CODE_EXECUTION_COST` defaults to **0 (free in beta)** so nobody is charged until it is set, and a `XENO PRICING - STANDARD & LEDGER.md` §6 row must record it (orchestrator). Quotas: done in step 2.
 
 Each increment is a separate commit with its own outcome-pinned, mutation-checked gate, per the repo's
 testing discipline. Steps 2–6 are platform-only and need no new infrastructure; step 1 is a small,
 general, additive change to an already-deployed MIT engine.
+
+## 9. What remains before it is LIVE for users
+
+All six steps are built and gated on `feat/chat-code-execution`. Two things stand between here and a
+real user running code from chat:
+
+1. **Merge + coordinated deploy.** The branch merges to `main`; the **deployed** `xenorun` is rebuilt
+   from its `main` (which now serves file I/O) so `/api/v1/execute` accepts `files`/`collectOutput`;
+   the platform deploys. The tool gates itself on a live reachability probe, so until the rebuilt
+   xenorun is up it simply is not offered — no broken half-state.
+2. **The execution rate** (§8 step 6) — an owner pricing decision + a `XENO PRICING` §6 row. Free
+   until then; the plumbing needs no change when it is set.
