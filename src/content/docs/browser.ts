@@ -1,6 +1,6 @@
 import type { ProductDocs } from './_types';
 
-/* XENO Browser documentation — reconciled against xeno-browser v0.5.5 (tag v0.5.5, 6439938).
+/* XENO Browser documentation — reconciled against xeno-browser v0.5.6 (tag v0.5.6, 919934e).
  * Every claim here traces to the code in that tag: src/main/auth/ (the sign-in door),
  * src/main/licence/ (the licence check), src/main/TabManager.ts (tabs, groups, split,
  * workspaces, sleep), src/main/AgentControlPlane.ts + capabilityHost.ts (the agent surface),
@@ -10,7 +10,7 @@ const browser: ProductDocs = {
   slug: 'browser',
   productName: 'XENO Browser',
   tagline: 'The agent-native web browser — real Chromium, with an agent that can attach and download files by path.',
-  version: '0.5.5',
+  version: '0.5.6',
   updated: '2026-09-26',
   seo: {
     title: 'XENO Browser documentation',
@@ -53,7 +53,7 @@ const browser: ProductDocs = {
           slug: 'reading-translate-print',
           title: 'Reading, translating and printing',
           description: 'The side panel, page translation, print preview, view source and developer tools.',
-          body: "## Reading, translating and printing\n\n## Side panel\n\nThe side panel holds your **reading list**, **history** and **bookmarks**. Open the reading list with **Ctrl+Shift+L**, and save the current page to it from the command bar.\n\n## Translate\n\nWhen a page is in another language, a bar offers to translate it into yours, in place. You can choose to always or never translate a language. Translation uses the XENO model through your account; manage languages in **Settings → Languages**.\n\n## Print preview\n\n**Ctrl+P** opens a preview of the real document with destination, pages, layout, paper size, margins, scale and headers/footers. Save as PDF, or print.\n\n## View source\n\n**Ctrl+U** opens the page's source in a new tab as a numbered listing.\n\n## Developer tools\n\n**F12** docks developer tools under the page. They follow the active tab when you switch tabs.",
+          body: "## Reading, translating and printing\n\n## Side panel\n\nThe side panel holds your **reading list**, **history** and **bookmarks**. Open the reading list with **Ctrl+Shift+L**, and save the current page to it from the command bar.\n\n## Translate\n\nWhen a page is in another language, a bar offers to translate it into yours, in place. You can choose to always or never translate a language. Translation uses the XENO model through your account; manage languages in **Settings → Languages**.\n\n## Print preview\n\n**Ctrl+P** opens a preview of the real document with destination, pages, layout, paper size, margins, scale and headers/footers. Save as PDF, or print.\n\n## View source\n\n**Ctrl+U** opens the page's source in a new tab as a numbered listing.\n\n## Developer tools\n\n**F12** docks developer tools under the page. They follow the active tab when you switch tabs.\n\n## Selecting text\n\nHighlight any text on a page and a small bar appears with **Copy**, **Search** (opens a web search for the selection) and **Ask agent** (opens the agent sidebar with the text ready). Click anywhere else to dismiss it. In a text box, right-click instead for the editing menu.",
         },
         {
           slug: 'keyboard-shortcuts',
