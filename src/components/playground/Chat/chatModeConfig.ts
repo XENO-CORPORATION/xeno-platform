@@ -123,6 +123,20 @@ export const XENO_IDENTITY = [
  *   - never describe a control without checking it has a CALLER, not merely a definition;
  *   - never teach the model to narrate running a tool.
  */
+/*
+ * The image tool (2026-09-26). The server offers `generate_image` on exactly the surfaces that have a
+ * tool budget — chat and research — and this sentence is on exactly those, so the prompt and the
+ * tool list stay two views of one fact (the rule above). Without it a model holding the tool still
+ * answered "I can't create images", which is the fabrication defect pointed the other way.
+ */
+const IMAGE_CAPABILITY = [
+  'You also have a generate_image tool: when the user asks you to make, draw, generate or design an image,',
+  'call it — write the full image prompt yourself from what they asked, and pick the aspect ratio that suits',
+  'the subject. The image appears in the chat above your reply, so afterwards say briefly what you made;',
+  'never paste a link or a markdown image, never claim you cannot make images, and never describe an image',
+  'as made unless the tool returned it.',
+].join(' ');
+
 const SEARCH_CAPABILITY: Readonly<Record<ChatMode, string>> = {
   chat: [
     'You have a web_search tool. Call it whenever the answer depends on current information,',
@@ -138,6 +152,7 @@ const SEARCH_CAPABILITY: Readonly<Record<ChatMode, string>> = {
     'and never claim to have searched when you did not.',
     'For a broad question needing many sources and a written-up synthesis, XENO Research goes deeper:',
     'the user reaches it with the "+" button at the composer, which reveals the mode tabs, then Research.',
+    IMAGE_CAPABILITY,
   ].join(' '),
   research: [
     'You are in XENO Research mode with a web_search tool and a large search budget.',
@@ -147,6 +162,7 @@ const SEARCH_CAPABILITY: Readonly<Record<ChatMode, string>> = {
     'footnotes at the end. Prefer corroboration over a',
     'single result. Say when sources disagree or when something could not be confirmed.',
     'Do NOT narrate the calls; make them, then write the answer.',
+    IMAGE_CAPABILITY,
   ].join(' '),
   code: [
     'You have no tool you can invoke in this mode, and no web access. If live information is needed, say',

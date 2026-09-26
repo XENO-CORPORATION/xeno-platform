@@ -38,14 +38,36 @@
  *    xeno-use's exec stream, one layer up.
  */
 
+/** An image the chat's generate_image tool made — a library asset, never inline bytes. */
+export interface ChatGeneratedImage {
+  id: string;
+  contentUrl: string;
+  prompt: string;
+  aspectRatio: string;
+  model?: string;
+  width?: number;
+  height?: number;
+  /**
+   * A WebP of the same bytes, on the live `image_result` frame ONLY — never on the stored message.
+   * The library copy is quarantined until its malware scan passes, and this is what the person who
+   * asked sees in the meantime.
+   */
+  previewUrl?: string;
+}
+
 export type ChatStreamEvent =
   | { type: 'delta'; text: string }
   | { type: 'reasoning'; text: string }
   | { type: 'search_start'; query: string; iteration: number }
   | { type: 'search_result'; query: string; count: number; sources: Array<{ url: string; title: string }> }
   | { type: 'search_error'; query: string; code: string; message: string }
+  // generate_image (2026-09-26): the shape first, so the placeholder is the right size; then the
+  // stored library asset, or a failure the turn reports rather than a placeholder that vanishes.
+  | { type: 'image_start'; index: number; prompt: string; aspectRatio: string; edit?: boolean }
+  | { type: 'image_result'; index: number; image: ChatGeneratedImage; creditsCharged?: number }
+  | { type: 'image_error'; index: number; code: string; message: string }
   | { type: 'sources'; sources: Array<{ url: string; title: string }> }
-  | { type: 'tool_use'; searches: number; iterations: number; cappedOut: boolean }
+  | { type: 'tool_use'; searches: number; images?: number; iterations: number; cappedOut: boolean }
   | { type: 'usage'; input: number; output: number; total: number; creditsSettled: number; upstreamCalls?: number }
   | { type: 'error'; error: string; message: string }
   | { type: 'done' };
@@ -236,6 +258,7 @@ export const streamRequestBody = (payload: Record<string, any>): Record<string, 
   conversationId: payload.conversationId,
   projectId: payload.projectId,
   chatSurface: payload.chatSurface,
+  supportsVision: payload.supportsVision === true,
   temperature: payload.temperature,
   max_tokens: payload.max_tokens,
 });
@@ -377,6 +400,9 @@ export async function readStreamedTurn(
       case 'search_start':
       case 'search_result':
       case 'search_error':
+      case 'image_start':
+      case 'image_result':
+      case 'image_error':
         onProgress?.(event);
         break;
       case 'error':

@@ -37,6 +37,13 @@
  * visible: with a large budget the user waits. Recorded rather than hidden.
  */
 
+import {
+  CHAT_IMAGE_BUDGET,
+  parseImageArguments,
+  imageResultPayload,
+  imageBudgetExhaustedPayload,
+} from './chatImageTool.js';
+
 /** Budgets, by surface. Chat is a quick lookup; Research is the deep multi-source pass. */
 export const TOOL_BUDGETS = Object.freeze({
   /*
@@ -398,11 +405,25 @@ export const budgetExhaustedPayload = (searches) => ({
  *                                    { type:'delta', text } | { type:'tool_calls', toolCalls } |
  *                                    { type:'usage', usage }>
  * @param {function} o.runSearch    ({ query, depth }) => { sources: [...] }
- * @yields { type:'delta'|'search_start'|'search_result'|'search_error'|'usage'|'complete', … }
+ * @param {object[]} [o.tools]      the declarations to offer; defaults to the surface's (web_search).
+ *                                  The caller decides — search can be down while images are not.
+ * @param {function} [o.runImage]   ({ prompt, aspectRatio, quality, index }) => stored image. Only
+ *                                  consulted when `generate_image` is among `tools`: a declaration
+ *                                  without an executor is the fabrication defect this file exists to
+ *                                  prevent, so the two must arrive together.
+ * @param {{aspectRatio: string}|null} [o.imageReference]  the image an edit would start from (resolved
+ *                                  by the caller from the conversation). An edit keeps its shape, so
+ *                                  that is the shape announced; without one, `use_latest_image` is a
+ *                                  fresh image in the ratio the model chose.
+ * @yields { type:'delta'|'search_start'|'search_result'|'search_error'|'image_start'|'image_result'|
+ *           'image_error'|'usage'|'complete', … }
  */
-export async function* streamToolLoop({ messages, surface, turnId, streamModel, runSearch }) {
+export async function* streamToolLoop({ messages, surface, turnId, streamModel, runSearch, tools: offered, runImage, imageReference = null }) {
   const budget = budgetFor(surface);
-  const tools = toolsForSurface(surface);
+  const tools = Array.isArray(offered) ? offered : toolsForSurface(surface);
+  const canSearch = tools.some((tool) => tool?.function?.name === 'web_search');
+  const canDraw = typeof runImage === 'function' && tools.some((tool) => tool?.function?.name === 'generate_image');
+  let images = 0;
 
   const working = [...messages];
   const sources = [];
@@ -462,7 +483,7 @@ export async function* streamToolLoop({ messages, surface, turnId, streamModel, 
     iterations += 1;
 
     if (toolCalls.length === 0) {
-      yield { type: 'complete', iterations, searches, sources, cappedOut, usage: lastUsage };
+      yield { type: 'complete', iterations, searches, images, sources, cappedOut, usage: lastUsage };
       return;
     }
 
@@ -473,7 +494,38 @@ export async function* streamToolLoop({ messages, surface, turnId, streamModel, 
       const name = call?.function?.name;
       const id = call?.id;
 
-      if (name !== 'web_search') {
+      if (name === 'generate_image' && canDraw) {
+        if (images >= CHAT_IMAGE_BUDGET) {
+          working.push(toolResultMessage(id, imageBudgetExhaustedPayload(images)));
+          continue;
+        }
+        const args = parseImageArguments(call?.function?.arguments);
+        if (!args.ok) {
+          working.push(toolResultMessage(id, { error: args.error }));
+          continue;
+        }
+        const index = images;
+        images += 1;
+        const useReference = Boolean(args.useLatestImage && imageReference?.aspectRatio);
+        const aspectRatio = useReference ? imageReference.aspectRatio : args.aspectRatio;
+        // The shape goes out BEFORE the wait: the chat sizes its placeholder to the image that is
+        // coming, so nothing reflows when it lands (an image takes 20-60 s).
+        yield { type: 'image_start', index, prompt: args.prompt, aspectRatio, quality: args.quality, edit: useReference };
+        try {
+          const image = await runImage({ prompt: args.prompt, aspectRatio, quality: args.quality, index, useReference });
+          working.push(toolResultMessage(id, imageResultPayload({ prompt: args.prompt, aspectRatio, model: image?.model, edited: Boolean(image?.edited) })));
+          yield { type: 'image_result', index, image };
+        } catch (error) {
+          // A failed image is a RESULT on both channels, like a failed search: the model can say
+          // so truthfully, and the user sees the attempt rather than a placeholder that vanishes.
+          const message = error?.message || 'unknown error';
+          working.push(toolResultMessage(id, { error: `image generation failed: ${message}` }));
+          yield { type: 'image_error', index, code: error?.code || 'image_failed', http: error?.http, message };
+        }
+        continue;
+      }
+
+      if (name !== 'web_search' || !canSearch) {
         working.push(toolResultMessage(id, { error: `unknown tool: ${name}` }));
         continue;
       }
@@ -535,7 +587,7 @@ export async function* streamToolLoop({ messages, surface, turnId, streamModel, 
       yield { type: 'usage', usage: event.usage };
     }
   }
-  yield { type: 'complete', iterations: iterations + 1, searches, sources, cappedOut, usage: lastUsage };
+  yield { type: 'complete', iterations: iterations + 1, searches, images, sources, cappedOut, usage: lastUsage };
 }
 
 /**

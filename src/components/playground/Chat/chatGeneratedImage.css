@@ -1,0 +1,164 @@
+/*
+ * Images a chat turn generated (ChatGeneratedImage.tsx). Every colour is a chat token, so the frame
+ * sits in the light, dim and dark palettes alike; the picture is the only thing here that is not the
+ * page. Gate: scripts/chat-generated-image-rendered.test.mjs (real browser, built CSS).
+ */
+.chat-genimages {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin: 10px 0 14px;
+}
+
+.chat-genimage {
+  position: relative;
+  width: 100%;
+  margin: 0;
+}
+
+/* The frame IS the image's shape before the image exists — nothing below it moves when it lands. */
+.chat-genimage-frame {
+  position: relative;
+  width: 100%;
+  overflow: hidden;
+  border-radius: 16px;
+  border: 1px solid var(--chat-border);
+  background: color-mix(in srgb, var(--chat-text) 4%, var(--chat-canvas));
+}
+
+.chat-genimage-img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  animation: chat-genimage-in 320ms ease-out both;
+}
+.chat-genimage-img--hidden {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  animation: none;
+}
+
+@keyframes chat-genimage-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+/* ── generating: a dot field with a slow glint across it, and one quiet caption ──────────────── */
+.chat-genimage-shimmer {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: flex-end;
+  background-image: radial-gradient(color-mix(in srgb, var(--chat-text) 16%, transparent) 1px, transparent 1.6px);
+  background-size: 14px 14px;
+  background-position: 7px 7px;
+}
+.chat-genimage-glint {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    100deg,
+    transparent 20%,
+    color-mix(in srgb, var(--chat-text) 9%, transparent) 50%,
+    transparent 80%
+  );
+  background-size: 250% 100%;
+  animation: chat-genimage-glint 2.2s ease-in-out infinite;
+}
+@keyframes chat-genimage-glint {
+  from { background-position: 120% 0; }
+  to { background-position: -20% 0; }
+}
+.chat-genimage-caption {
+  position: relative;
+  margin: 12px 14px;
+  font-size: 12.5px;
+  line-height: 1.2;
+  color: var(--chat-muted);
+}
+
+/* ── failed / still in its scan: the frame stays, and says why ──────────────────────────────── */
+.chat-genimage-failed {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 4px;
+  padding: 16px 18px;
+  text-align: left;
+}
+.chat-genimage-failed-title {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--chat-text);
+}
+.chat-genimage-failed-reason {
+  font-size: 12.5px;
+  line-height: 1.45;
+  color: var(--chat-muted);
+}
+
+/* ── ready: the whole picture opens the viewer; one download control on hover or focus ─────── */
+.chat-genimage-open {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  cursor: zoom-in;
+  background: transparent;
+  border: 0;
+  padding: 0;
+}
+.chat-genimage-open:focus-visible {
+  outline: 2px solid var(--chat-accent);
+  outline-offset: -2px;
+  border-radius: 16px;
+}
+.chat-genimage-actions {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  z-index: 2;
+  display: flex;
+  gap: 6px;
+  opacity: 0;
+  transition: opacity 150ms ease;
+}
+.chat-genimage-frame:hover .chat-genimage-actions,
+.chat-genimage-actions:focus-within {
+  opacity: 1;
+}
+.chat-genimage-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 9px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  /* over a picture of any colour, so the control carries its own backing rather than the page's */
+  background: rgba(10, 10, 10, 0.62);
+  color: #fafafa;
+  backdrop-filter: blur(8px);
+  cursor: pointer;
+}
+.chat-genimage-action:hover {
+  background: rgba(10, 10, 10, 0.78);
+}
+.chat-genimage-action:focus-visible {
+  outline: 2px solid #fafafa;
+  outline-offset: 1px;
+}
+
+/* Touch has no hover: the control is always there. */
+@media (hover: none) {
+  .chat-genimage-actions { opacity: 1; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .chat-genimage-img { animation: none; }
+  .chat-genimage-glint { animation: none; background-position: 50% 0; }
+  .chat-genimage-actions { transition: none; }
+}
