@@ -53,7 +53,7 @@
  *   node scripts/ci-local.mjs --keep-db       # leave the container up for debugging
  */
 import { execFileSync, spawnSync } from 'node:child_process';
-import { existsSync, readFileSync, readdirSync, mkdtempSync, symlinkSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync, mkdtempSync, symlinkSync, writeFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { dirname, join, resolve } from 'node:path';
@@ -121,7 +121,16 @@ function migrateDatabase(url) {
     "await (accountV2.migrateAccountV2 || accountV2.default)(pool);",
     "await pool.end();",
   ].join('\n');
-  return run('node', ['--input-type=module', '-e', script], { env: { MIGRATE_URL: url }, quiet: true });
+  // Through a FILE, never `node -e`: run() spawns with `shell: true` on Windows, and cmd.exe ends
+  // an argument at the first newline, so a multi-line -e script arrives as `import` and fails with
+  // "Unexpected end of input" — every migrated proof then reports "cannot run" on Windows only.
+  const file = join(ROOT, `.ci-local-migrate-${process.pid}.mjs`);
+  writeFileSync(file, script);
+  try {
+    return run('node', [file], { env: { MIGRATE_URL: url }, quiet: true });
+  } finally {
+    rmSync(file, { force: true });
+  }
 }
 
 /* Suites that need a LIVE SERVICE as well as a database. They are not database proofs and

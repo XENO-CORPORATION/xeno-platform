@@ -1,6 +1,6 @@
 import type { ProductDocs } from './_types';
 
-/* XENO Browser documentation — reconciled against xeno-browser v0.5.0 (tag v0.5.0, fe7cd44).
+/* XENO Browser documentation — reconciled against xeno-browser v0.5.1 (tag v0.5.1, b9b60e5).
  * Every claim here traces to the code in that tag: src/main/auth/ (the sign-in door),
  * src/main/licence/ (the licence check), src/main/TabManager.ts (tabs, groups, split,
  * workspaces, sleep), src/main/AgentControlPlane.ts + capabilityHost.ts (the agent surface),
@@ -10,8 +10,8 @@ const browser: ProductDocs = {
   slug: 'browser',
   productName: 'XENO Browser',
   tagline: 'The agent-native web browser — real Chromium, with an agent that can attach and download files by path.',
-  version: '0.5.0',
-  updated: '2026-09-25',
+  version: '0.5.1',
+  updated: '2026-09-26',
   seo: {
     title: 'XENO Browser documentation',
     description: 'Install XENO Browser, sign in, and use workspaces, tab groups, split view, translate, print preview and developer tools — and drive the browser from an agent over its local API.',
@@ -30,7 +30,7 @@ const browser: ProductDocs = {
           slug: 'installation',
           title: 'Installation',
           description: 'Download and install the Windows build.',
-          body: "## Installation\n\nXENO Browser is available for **Windows (x64)**. Other platforms have not been released.\n\n1. Sign in on [xenostudio.ai](/product/browser) and choose **Download for Windows**. Downloading needs a signed-in account with an active plan.\n2. Run `XENO Browser Setup <version>.exe`.\n3. The installer is **not code-signed yet**, so Windows SmartScreen shows *Windows protected your PC*. Choose **More info → Run anyway**. The app says so too: an **Unsigned** badge sits in its title bar and on the sign-in screen.\n4. Finish the installer, then open XENO Browser and [sign in](/docs/browser/signing-in).\n\n## Updates\n\nThe browser checks for updates on its own and offers each new version as it is released. You do not need to download new versions by hand.\n\n## Where your data lives\n\nProfiles, history, bookmarks, the reading list, settings and your saved session live in `%APPDATA%\\XENO Browser\\`. The sign-in trace (see [Troubleshooting](/docs/browser/troubleshooting)) is `auth.log` in the same folder.",
+          body: "## Installation\n\nXENO Browser is available for **Windows (x64)**. Other platforms have not been released.\n\n1. Sign in on [xenostudio.ai](/product/browser) and choose **Download for Windows**. Downloading needs a signed-in account with an active plan.\n2. Run `XENO Browser Setup <version>.exe`.\n3. The installer is **not code-signed yet**, so Windows SmartScreen shows *Windows protected your PC*. Choose **More info → Run anyway**. The app says so too: an **Unsigned** badge sits in its title bar and on the sign-in screen.\n4. Finish the installer, then open XENO Browser and [sign in](/docs/browser/signing-in).\n\n## Updates\n\nFrom **0.5.1** the browser checks for updates on its own and offers each new version as it is released.\n\n**If you installed 0.5.0 or earlier, install 0.5.1 by hand once.** Those versions could not update themselves. Download it from the [product page](/product/browser) and run it over your current copy — your profiles, tabs and settings are kept.\n\n## Where your data lives\n\nProfiles, history, bookmarks, the reading list, settings and your saved session live in `%APPDATA%\\xeno-browser\\`. The sign-in trace (see [Troubleshooting](/docs/browser/troubleshooting)) is `auth.log` in the same folder.",
         },
         {
           slug: 'signing-in',
@@ -81,7 +81,7 @@ const browser: ProductDocs = {
           slug: 'troubleshooting',
           title: 'Troubleshooting',
           description: 'Sign-in problems, SmartScreen, and where to look when something goes wrong.',
-          body: "## Troubleshooting\n\n## Windows warns when I install\n\nThe installer is not code-signed yet, so SmartScreen shows *Windows protected your PC*. Choose **More info → Run anyway**. This is expected for this release.\n\n## I signed in, and it still asks me to sign in\n\n- Make sure you finished signing in in your web browser, then return to XENO Browser.\n- If the sign-in page was closed early, choose **Cancel** on the sign-in screen and start again.\n- `auth.log` in `%APPDATA%\\XENO Browser\\` records each step (sign-in started and finished, the verdict from XENO, every change of the screen's state). It never contains your password or tokens. Include it when you ask for help.\n\n## It says my browser needs a plan\n\nYour account is signed in but does not include XENO Browser. Choose a plan on xenostudio.ai, then choose **Check again**.\n\n## It says to update\n\nThis version is below the oldest one still supported. Download the latest version from the [product page](/product/browser).\n\n## It says my plan couldn't be confirmed\n\nThe browser could not reach XENO for 14 days. Connect to the internet and choose **Check again**. Your plan is not affected.\n\n## Starting over\n\nTo reset the browser completely, close it and rename `%APPDATA%\\XENO Browser\\`. The browser starts fresh the next time, and your old data stays in the renamed folder.",
+          body: "## Troubleshooting\n\n## I see two windows, or it asks me to sign in again\n\nThose were bugs in 0.5.0, fixed in **0.5.1**. Install 0.5.1 from the [product page](/product/browser) over your current copy (0.5.0 cannot update itself).\n\n## Windows warns when I install\n\nThe installer is not code-signed yet, so SmartScreen shows *Windows protected your PC*. Choose **More info → Run anyway**. This is expected for this release.\n\n## I signed in, and it still asks me to sign in\n\n- Make sure you finished signing in in your web browser, then return to XENO Browser.\n- If the sign-in page was closed early, choose **Cancel** on the sign-in screen and start again.\n- `auth.log` in `%APPDATA%\\xeno-browser\\` records each step (sign-in started and finished, the verdict from XENO, every change of the screen's state). It never contains your password or tokens. Include it when you ask for help.\n\n## It says my browser needs a plan\n\nYour account is signed in but does not include XENO Browser. Choose a plan on xenostudio.ai, then choose **Check again**.\n\n## It says to update\n\nThis version is below the oldest one still supported. Download the latest version from the [product page](/product/browser).\n\n## It says my plan couldn't be confirmed\n\nThe browser could not reach XENO for 14 days. Connect to the internet and choose **Check again**. Your plan is not affected.\n\n## Starting over\n\nTo reset the browser completely, close it and rename `%APPDATA%\\xeno-browser\\`. The browser starts fresh the next time, and your old data stays in the renamed folder.",
         },
       ],
     },

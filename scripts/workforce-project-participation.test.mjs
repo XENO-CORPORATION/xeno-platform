@@ -94,7 +94,11 @@ test('project participation has a discriminated personal-or-workspace target (AS
     for (const id of [owner, guestOwner, approver, stranger]) await pool.query('INSERT INTO users VALUES($1)', [id]);
     const chain = (await readdir(MIGRATIONS)).filter((f) => f.endsWith('.sql')
       && (/workforce/.test(f) || f === '20260711120000-workspaces.sql')).sort()
-      .filter((f) => f !== '20260924180000-workforce-project-participation.sql');
+      // Only what came BEFORE this migration: later workforce migrations (handoff disclosure, team
+      // project responsibility, run admissions) reference chat_projects, which this proof creates
+      // below, so applying them first failed the whole proof with `relation "chat_projects" does
+      // not exist` from the moment they landed.
+      .filter((f) => f < '20260924180000-workforce-project-participation.sql');
     for (const f of chain) await pool.query((await readFile(new URL(f, MIGRATIONS), 'utf8')).split('-- DOWN')[0]);
     // chat_projects as the chat migrations leave it: exactly one of a personal owner or a workspace.
     await pool.query(`CREATE TABLE chat_projects(id UUID PRIMARY KEY DEFAULT gen_random_uuid(), user_id UUID,
