@@ -50,129 +50,221 @@ function newJoinCode() {
 const normCode = (c) => String(c || '').toUpperCase().replace(/[^A-Z0-9]/g, '').replace(/^(.{4})(.{4})$/, '$1-$2');
 const FINGERPRINT_RE = /^sha-256 (?:[0-9A-F]{2}:){31}[0-9A-F]{2}$/;
 
-/**
- * Sessions live in memory: they are ephemeral by definition (SESSIONS Q3: guest seats do not
- * persist) and this service is a meeting point, not a record. A backend restart ends discovery
- * for live sessions; the peers' own connection is unaffected because it never ran through here.
+/*
+ * WHERE SESSIONS LIVE. The backend runs as several replicas behind one upstream, so a host and a
+ * guest are routinely served by different processes; a session held in one process's memory is
+ * invisible to the others and the join fails at random. Sessions therefore live in a SHARED store
+ * — Redis in production (`RedisSessionStore`), the one the platform already runs — and in memory
+ * only for tests and single-process development (`MemorySessionStore`).
+ *
+ * Sessions stay ephemeral by design (SESSIONS Q3: guest seats do not persist): every key carries a
+ * TTL, and the peers' own connection never runs through here, so losing the store ends discovery,
+ * not a live session.
+ *
+ * The store contract is deliberately small, and the two operations that MUST be atomic are atomic
+ * in both implementations: redeeming a code (two guests racing the same code — exactly one wins)
+ * and draining a signalling queue (a message is delivered once, never twice, never lost).
  */
-export class ShellSessionDirectory {
+
+/** In-process store. Tests and single-process development only. */
+export class MemorySessionStore {
   constructor({ now = Date.now } = {}) {
     this.now = now;
-    this.sessions = new Map();   // sessionId -> session
-    this.byCode = new Map();     // code -> sessionId
+    this.kv = new Map();     // key -> { value, exp }
+    this.lists = new Map();  // key -> { items, exp }
+    this.hashes = new Map(); // key -> { map, exp }
+  }
+  _live(m, key) { const e = m.get(key); if (e && e.exp <= this.now()) { m.delete(key); return undefined; } return e; }
+  async get(key) { return this._live(this.kv, key)?.value ?? null; }
+  async set(key, value, ttlMs) { this.kv.set(key, { value, exp: this.now() + ttlMs }); }
+  async setNx(key, value, ttlMs) { if (this._live(this.kv, key)) return false; await this.set(key, value, ttlMs); return true; }
+  // No await between the read and the delete: that gap is exactly where two redeems would race.
+  async take(key) { const v = this._live(this.kv, key)?.value ?? null; this.kv.delete(key); return v; }
+  async del(...keys) { for (const k of keys) { this.kv.delete(k); this.lists.delete(k); this.hashes.delete(k); } }
+  async hset(key, field, value, ttlMs) {
+    const e = this._live(this.hashes, key) || { map: new Map(), exp: 0 };
+    e.map.set(field, value); e.exp = this.now() + ttlMs; this.hashes.set(key, e);
+  }
+  async hget(key, field) { return this._live(this.hashes, key)?.map.get(field) ?? null; }
+  async hdel(key, field) { this._live(this.hashes, key)?.map.delete(field); }
+  async hgetall(key) { return Object.fromEntries(this._live(this.hashes, key)?.map ?? []); }
+  async push(key, value, cap, ttlMs) {
+    const e = this._live(this.lists, key) || { items: [], exp: 0 };
+    e.items.push(value); if (e.items.length > cap) e.items.splice(0, e.items.length - cap);
+    e.exp = this.now() + ttlMs; this.lists.set(key, e);
+  }
+  async drain(key) { const e = this._live(this.lists, key); this.lists.delete(key); return e ? e.items : []; }
+  async hit(key, windowMs) {
+    const e = this._live(this.kv, key);
+    if (!e) { await this.set(key, 1, windowMs); return 1; }
+    e.value += 1; return e.value;
+  }
+}
+
+/** Shared store on Redis (ioredis client). What production uses. */
+export class RedisSessionStore {
+  constructor(redis) { this.r = redis; }
+  async get(key) { const v = await this.r.get(key); return v === null ? null : JSON.parse(v); }
+  async set(key, value, ttlMs) { await this.r.set(key, JSON.stringify(value), 'PX', Math.max(1, Math.ceil(ttlMs))); }
+  async setNx(key, value, ttlMs) { return (await this.r.set(key, JSON.stringify(value), 'PX', Math.max(1, Math.ceil(ttlMs)), 'NX')) === 'OK'; }
+  // GETDEL is atomic: two guests redeeming the same code cannot both get the session.
+  async take(key) { const v = await this.r.getdel(key); return v === null ? null : JSON.parse(v); }
+  async del(...keys) { if (keys.length) await this.r.del(...keys); }
+  async hset(key, field, value, ttlMs) { await this.r.multi().hset(key, field, JSON.stringify(value)).pexpire(key, Math.ceil(ttlMs)).exec(); }
+  async hget(key, field) { const v = await this.r.hget(key, field); return v === null ? null : JSON.parse(v); }
+  async hdel(key, field) { await this.r.hdel(key, field); }
+  async hgetall(key) { const h = await this.r.hgetall(key); return Object.fromEntries(Object.entries(h).map(([k, v]) => [k, JSON.parse(v)])); }
+  async push(key, value, cap, ttlMs) {
+    await this.r.multi().rpush(key, JSON.stringify(value)).ltrim(key, -cap, -1).pexpire(key, Math.ceil(ttlMs)).exec();
+  }
+  // Read-and-clear in one transaction: a message pushed between the read and the delete would
+  // otherwise be lost.
+  async drain(key) {
+    const res = await this.r.multi().lrange(key, 0, -1).del(key).exec();
+    const [err, items] = res[0];
+    if (err) throw err;
+    return items.map((x) => JSON.parse(x));
+  }
+  async hit(key, windowMs) {
+    const res = await this.r.multi().incr(key).pexpire(key, windowMs, 'NX').exec();
+    return res[0][1];
+  }
+}
+
+const K = {
+  session: (id) => `shell:s:${id}`,
+  code: (code) => `shell:code:${code}`,
+  peers: (id) => `shell:p:${id}`,
+  queue: (id, peer) => `shell:q:${id}:${peer}`,
+  attempts: (user) => `shell:rl:${user}`,
+};
+
+export class ShellSessionDirectory {
+  constructor({ store, now = Date.now } = {}) {
+    this.now = now;
+    this.store = store || new MemorySessionStore({ now });
   }
 
-  sweep() {
-    const t = this.now();
-    for (const [id, s] of this.sessions) {
-      if (s.expiresAt <= t) this.end(id);
-      else if (s.code && s.codeExpiresAt <= t) { this.byCode.delete(s.code); s.code = null; }
-    }
+  async load(sessionId) {
+    const s = await this.store.get(K.session(sessionId));
+    if (!s || s.expiresAt <= this.now()) fail(404, 'no_session', 'That session has ended.');
+    return s;
   }
+  ttl(s) { return Math.max(1, s.expiresAt - this.now()); }
 
-  create({ userId, displayName, fingerprint }) {
-    this.sweep();
+  async create({ userId, displayName, fingerprint }) {
     if (!FINGERPRINT_RE.test(String(fingerprint || ''))) fail(400, 'bad_fingerprint', 'A DTLS certificate fingerprint (sha-256) is required.');
     const id = crypto.randomUUID();
+    const name = String(displayName || 'Host').slice(0, 60);
     const session = {
-      id, hostUserId: userId, hostName: String(displayName || 'Host').slice(0, 60), fingerprint,
+      id, hostUserId: userId, hostName: name, fingerprint,
       createdAt: this.now(), expiresAt: this.now() + SESSION_TTL_MS,
       code: null, codeExpiresAt: 0,
-      // peerId -> { userId, name, queue: [] } ; the host is peer 'host'
-      peers: new Map([['host', { userId, name: String(displayName || 'Host').slice(0, 60), queue: [] }]]),
     };
-    this.sessions.set(id, session);
-    this.rotateCode(id, userId);
-    return this.hostView(session);
+    await this.store.set(K.session(id), session, SESSION_TTL_MS);
+    await this.store.hset(K.peers(id), 'host', { userId, name }, SESSION_TTL_MS);
+    return this.rotateCode(id, userId);
   }
 
   hostView(s) {
     return { session_id: s.id, join_code: s.code, code_expires_at: new Date(s.codeExpiresAt).toISOString(), expires_at: new Date(s.expiresAt).toISOString() };
   }
 
-  requireHost(sessionId, userId) {
-    const s = this.sessions.get(sessionId);
-    if (!s || s.expiresAt <= this.now()) fail(404, 'no_session', 'That session has ended.');
+  async requireHost(sessionId, userId) {
+    const s = await this.load(sessionId);
     if (s.hostUserId !== userId) fail(403, 'not_host', 'Only the host can do that.');
     return s;
   }
 
-  rotateCode(sessionId, userId) {
-    const s = this.requireHost(sessionId, userId);
-    if (s.code) this.byCode.delete(s.code);
+  async rotateCode(sessionId, userId) {
+    const s = await this.requireHost(sessionId, userId);
+    if (s.code) await this.store.del(K.code(s.code));
     let code;
-    do { code = newJoinCode(); } while (this.byCode.has(code));
+    // SET NX: a code already pointing at another live session is never overwritten.
+    do { code = newJoinCode(); } while (!(await this.store.setNx(K.code(code), s.id, CODE_TTL_MS)));
     s.code = code; s.codeExpiresAt = this.now() + CODE_TTL_MS;
-    this.byCode.set(code, s.id);
+    await this.store.set(K.session(s.id), s, this.ttl(s));
     return this.hostView(s);
   }
 
+  /** The session record, for minting the host's pass. */
+  async get(sessionId) { return this.load(sessionId); }
+
   /**
-   * A signed-in guest redeems a code. The code is consumed (single use) and a peer slot is made.
-   * This does NOT admit anyone into the host's shell: the host still sees the verified name and
-   * approves, over the encrypted peer connection.
+   * A signed-in guest redeems a code. The code is consumed (single use, atomically) and a peer
+   * slot is made. This does NOT admit anyone into the host's shell: the host still sees the
+   * verified name and approves, over the encrypted peer connection.
    */
-  redeem({ code, userId, displayName }) {
-    this.sweep();
-    const id = this.byCode.get(normCode(code));
-    const s = id && this.sessions.get(id);
-    if (!s || s.codeExpiresAt <= this.now()) fail(404, 'bad_code', 'That code is not valid or has expired.');
+  async redeem({ code, userId, displayName }) {
+    const key = K.code(normCode(code));
+    const id = await this.store.get(key);
+    const s = id ? await this.store.get(K.session(id)) : null;
+    if (!s || s.expiresAt <= this.now() || s.codeExpiresAt <= this.now()) fail(404, 'bad_code', 'That code is not valid or has expired.');
+    // Checked BEFORE the code is consumed, so a host testing their own code does not burn it.
     if (s.hostUserId === userId) fail(409, 'own_session', 'This is your own session.');
-    this.byCode.delete(s.code); s.code = null;
+    if ((await this.store.take(key)) !== s.id) fail(404, 'bad_code', 'That code is not valid or has expired.');
+    s.code = null;
+    await this.store.set(K.session(s.id), s, this.ttl(s));
     const peerId = crypto.randomBytes(9).toString('base64url');
-    s.peers.set(peerId, { userId, name: String(displayName || 'Guest').slice(0, 60), queue: [] });
+    await this.store.hset(K.peers(s.id), peerId, { userId, name: String(displayName || 'Guest').slice(0, 60) }, this.ttl(s));
     return { session: s, peerId };
   }
 
   /** Relay one signalling message (SDP / ICE / control) from one peer to another. */
-  signal({ sessionId, fromPeerId, fromUserId, toPeerId, message }) {
-    const s = this.sessions.get(sessionId);
-    if (!s || s.expiresAt <= this.now()) fail(404, 'no_session', 'That session has ended.');
-    const from = s.peers.get(fromPeerId);
+  async signal({ sessionId, fromPeerId, fromUserId, toPeerId, message }) {
+    const s = await this.load(sessionId);
+    const from = await this.store.hget(K.peers(sessionId), fromPeerId);
     if (!from || from.userId !== fromUserId) fail(403, 'not_peer', 'Not a participant in this session.');
-    const to = s.peers.get(toPeerId);
+    const to = await this.store.hget(K.peers(sessionId), toPeerId);
     if (!to) fail(404, 'no_peer', 'That participant is not in this session.');
     // Guests may only talk to the host; the host may talk to anyone. Guests never learn each
     // other's addresses through us — every guest's connection is to the host alone.
     if (fromPeerId !== 'host' && toPeerId !== 'host') fail(403, 'guest_to_guest', 'Guests signal only the host.');
     const body = JSON.stringify(message ?? null);
     if (body.length > MAX_SIGNAL_BYTES) fail(413, 'too_large', 'Signalling message too large.');
-    to.queue.push({ from: fromPeerId, message: JSON.parse(body), at: this.now() });
-    if (to.queue.length > MAX_QUEUE) to.queue.splice(0, to.queue.length - MAX_QUEUE);
+    await this.store.push(K.queue(sessionId, toPeerId), { from: fromPeerId, message: JSON.parse(body), at: this.now() }, MAX_QUEUE, this.ttl(s));
     return { ok: true };
   }
 
   /** Drain queued signalling messages for a peer. */
-  receive({ sessionId, peerId, userId }) {
-    const s = this.sessions.get(sessionId);
-    if (!s || s.expiresAt <= this.now()) fail(404, 'no_session', 'That session has ended.');
-    const p = s.peers.get(peerId);
+  async receive({ sessionId, peerId, userId }) {
+    await this.load(sessionId);
+    const p = await this.store.hget(K.peers(sessionId), peerId);
     if (!p || p.userId !== userId) fail(403, 'not_peer', 'Not a participant in this session.');
     const t = this.now();
-    const out = p.queue.filter((m) => t - m.at < SIGNAL_TTL_MS);
-    p.queue = [];
-    const peers = peerId === 'host'
-      ? [...s.peers.entries()].filter(([id]) => id !== 'host').map(([id, x]) => ({ peer_id: id, user_id: x.userId, name: x.name }))
-      : undefined;
+    const out = (await this.store.drain(K.queue(sessionId, peerId))).filter((m) => t - m.at < SIGNAL_TTL_MS);
+    let peers;
+    if (peerId === 'host') {
+      const all = await this.store.hgetall(K.peers(sessionId));
+      peers = Object.entries(all).filter(([id]) => id !== 'host').map(([id, x]) => ({ peer_id: id, user_id: x.userId, name: x.name }));
+    }
     return { messages: out.map((m) => ({ from: m.from, message: m.message })), ...(peers ? { peers } : {}) };
   }
 
-  leave({ sessionId, peerId, userId }) {
-    const s = this.sessions.get(sessionId);
+  async leave({ sessionId, peerId, userId }) {
+    const s = await this.store.get(K.session(sessionId));
     if (!s) return;
-    const p = s.peers.get(peerId);
+    const p = await this.store.hget(K.peers(sessionId), peerId);
     if (!p || p.userId !== userId) return;
     if (peerId === 'host') return this.end(sessionId);
-    s.peers.delete(peerId);
-    s.peers.get('host')?.queue.push({ from: peerId, message: { type: 'left' }, at: this.now() });
+    await this.store.hdel(K.peers(sessionId), peerId);
+    await this.store.del(K.queue(sessionId, peerId));
+    await this.store.push(K.queue(sessionId, 'host'), { from: peerId, message: { type: 'left' }, at: this.now() }, MAX_QUEUE, this.ttl(s));
   }
 
-  end(sessionId) {
-    const s = this.sessions.get(sessionId);
+  async end(sessionId) {
+    const s = await this.store.get(K.session(sessionId));
     if (!s) return;
-    if (s.code) this.byCode.delete(s.code);
-    this.sessions.delete(sessionId);
+    const peers = Object.keys(await this.store.hgetall(K.peers(sessionId)));
+    await this.store.del(
+      K.session(sessionId), K.peers(sessionId),
+      ...(s.code ? [K.code(s.code)] : []),
+      ...peers.map((p) => K.queue(sessionId, p)),
+    );
   }
+
+  /** Count one code-redemption attempt for a user in a 60 s window, across every replica. */
+  async attempt(userId) { return this.store.hit(K.attempts(userId), 60_000); }
 }
 
 /** Sign the session pass for a redeemed guest (and for the host, so both sides are symmetric). */
