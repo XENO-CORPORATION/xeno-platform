@@ -128,5 +128,6 @@ it is not the end state.
 A `run_code` tool belongs on this same loop and reuses everything above — the per-iteration
 `requestId`, the server-side budget, the visible count. But the thing it binds to (a persistent
 per-chat workspace and an on-demand sandbox) is a subsystem in its own right, with an infra
-decision this plan does not own. It is specified in **`CHAT-CODE-EXECUTION-SPEC.md`** (proposal,
-blocked on a substrate decision + approval). Add the `run_code` tool here only once that ships.
+concern this plan does not own: a persistent per-chat workspace over `xenorun` (the owned
+code-execution engine — NOT `xeno-use`, which is device/computer use). It is specified in
+**`CHAT-CODE-EXECUTION-SPEC.md`**. Add the `run_code` tool here only once that ships.
