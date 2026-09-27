@@ -53,6 +53,9 @@ export const FIRST_PARTY_CLIENTS = [
   // accepts any port on the loopback literals (RFC 8252 §7.3). A loopback client
   // may declare its own loopback paths; assertLoopbackRedirects refuses anything else.
   { id: 'xeno-spawn', name: 'XENO Spawn', loopback: true, redirects: ['http://127.0.0.1/auth/callback', 'http://[::1]/auth/callback'] },
+  // XENO Workshop run LOCALLY by an operator: its own loopback Node server receives the
+  // callback at /auth/callback on whatever port it bound (default 5251) — xeno-spawn's shape.
+  { id: 'xeno-workshop-local', name: 'XENO Workshop (local)', loopback: true, redirects: ['http://127.0.0.1/auth/callback', 'http://[::1]/auth/callback'] },
   // Web (exact-match redirect; the SPA handles OIDC in-browser)
   // DUAL-HOME: siteUrlVariants() returns the callback on the canonical site
   // origin AND on every host in XENO_ALIAS_SITE_ORIGINS. Accepting both is the
@@ -61,6 +64,10 @@ export const FIRST_PARTY_CLIENTS = [
   // working the moment this migration re-runs.
   { id: 'xeno-web', name: 'XENO Web', loopback: false, redirects: siteUrlVariants('/auth/callback') },
   { id: 'xeno-post', name: 'XENO Post', loopback: false, redirects: ['https://post.xenosystem.ai/api/v1/platform/xeno/callback', 'https://post.xenostudio.ai/api/v1/platform/xeno/callback'] },
+  // XENO Workshop HOSTED — a backend-for-frontend: the workshop server does the code exchange
+  // and holds the tokens; the browser only ever has an httpOnly session cookie. A separate
+  // client_id from the local one so each deployment can be revoked on its own.
+  { id: 'xeno-workshop', name: 'XENO Workshop', loopback: false, redirects: ['https://workshop.xenosystem.ai/auth/callback'] },
   // XENO Mail — web relying party; mail-core (backend) handles the code exchange.
   { id: 'xeno-mail', name: 'XENO Mail', loopback: false, redirects: ['https://mail-api.xenostudio.ai/api/auth/xeno/callback'] },
   // Mobile (registered ahead of build; app-scheme redirect)
