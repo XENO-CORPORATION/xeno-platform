@@ -719,11 +719,11 @@ router.post('/listings/:id/versions', authMiddleware, async (req, res) => {
     const dev = await getDeveloperForUser(req.db, req.user.id);
     if (!dev) return res.status(403).json({ success: false, error: 'Register a developer profile first' });
 
+    // NFR-07: a listing you do not own answers exactly as one that does not exist. A 403 here told a
+    // stranger that an id names a real listing while an unknown one 404'd -- an existence oracle over the
+    // whole marketplace_listings table, from an id that is guessable and, for a draft, unpublished.
     const listing = await svc.getListingById(req.db, req.params.id);
-    if (!listing) return res.status(404).json({ success: false, error: 'Listing not found' });
-    if (listing.developer_id !== dev.id) {
-      return res.status(403).json({ success: false, error: 'You do not own this listing' });
-    }
+    if (!listing || listing.developer_id !== dev.id) return res.status(404).json({ success: false, error: 'Listing not found' });
 
     const { version } = req.body || {};
     if (!isNonEmptyString(version) || version.length > 40) return badRequest(res, 'version is required (e.g. 1.0.0)');
@@ -807,11 +807,9 @@ router.post('/listings/:id/submit', authMiddleware, async (req, res) => {
     const dev = await getDeveloperForUser(req.db, req.user.id);
     if (!dev) return res.status(403).json({ success: false, error: 'Register a developer profile first' });
 
+    // NFR-07: same rule as /versions -- someone else's listing is not found, not forbidden.
     const listing = await svc.getListingById(req.db, req.params.id);
-    if (!listing) return res.status(404).json({ success: false, error: 'Listing not found' });
-    if (listing.developer_id !== dev.id) {
-      return res.status(403).json({ success: false, error: 'You do not own this listing' });
-    }
+    if (!listing || listing.developer_id !== dev.id) return res.status(404).json({ success: false, error: 'Listing not found' });
 
     // Submit the latest version unless a specific one is named.
     const versions = await svc.getVersionsForListing(req.db, listing.id);

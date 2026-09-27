@@ -603,6 +603,41 @@ test('live conversation collaboration is durable, sender-bound, race-safe and ex
       assert.equal((await entry(actor, users.contributor, conversationId, { kind: 'comment', content: 'over rate' })).status, 429);
     });
 
+    // NFR-07 -- the SUBSCRIPTION and DEEP-LINK halves, here because both need this suite's sender-bound session.
+    // The other surfaces (cursors, caches, exports, id parity) are proven in scripts/workforce-scope-binding.test.mjs.
+    // Mutation-checked 2026-09-28: the feed ignores revocation -> "a revoked participant's feed ends like a missing
+    // one"; a revoked link still previews -> "a revoked share link is not found".
+    await t.test('NFR-07: a feed subscription and a share deep link each end with their authority, indistinguishably', async () => {
+      const canonical = (value) => Array.isArray(value) ? value.map(canonical)
+        : value && typeof value === 'object' ? Object.fromEntries(Object.keys(value).sort().map((k) => [k, canonical(value[k])])) : value;
+      const wire = async (response) => ({ status: response.status, body: JSON.stringify(canonical(await response.json().catch(() => ({})))) });
+
+      // The subscription: a participant reads the feed from a cursor; revoked, its NEXT read from that same cursor
+      // answers exactly as a conversation that does not exist -- the cursor carries no authority of its own.
+      const conversationId = await makeConversation('nfr07 feed');
+      const share = await createShare(conversationId, 'contributor');
+      const { actor } = await accept(share, users.racer);
+      const feedPath = (id, after) => `/api/chat/conversations/${id}/collaboration/events?after=${after}&limit=200`;
+      const feed = await json(await request(actor, 'GET', feedPath(conversationId, 0), null), 200);
+      assert.ok(Number.isSafeInteger(feed.cursor), 'a participant subscribes from a cursor');
+      assert.equal((await request(ownerToken, 'DELETE', `/api/chat/conversations/${conversationId}/collaborators/${users.racer}`, null)).status, 200);
+      const revoked = await wire(await request(actor, 'GET', feedPath(conversationId, feed.cursor), null));
+      const absent = await wire(await request(actor, 'GET', feedPath(crypto.randomUUID(), feed.cursor), null));
+      assert.deepEqual(revoked, absent, "a revoked participant's feed ends like a missing one");
+      assert.equal(revoked.status, 404);
+
+      // The deep link: a revoked link answers byte for byte like one that never existed, beside a link that works.
+      const works = await createShare(conversationId, 'viewer');
+      const dead = await createShare(conversationId, 'viewer');
+      assert.equal((await request(ownerToken, 'DELETE', `/api/chat/conversations/${conversationId}/shares/${dead.id}/live`, null)).status, 200);
+      const live = await wire(await request(null, 'GET', `/api/chat/share/${works.token}`, null));
+      const gone = await wire(await request(null, 'GET', `/api/chat/share/${dead.token}`, null));
+      const never = await wire(await request(null, 'GET', `/api/chat/share/${'f'.repeat(64)}`, null));
+      assert.deepEqual(gone, never, 'a revoked share link is not found');
+      assert.equal(live.status, 200, 'and a link that works opens, so the comparison is not vacuous');
+      assert.notDeepEqual(live, gone);
+    });
+
     await t.test('snapshot mode remains explicitly copy-on-accept compatible', async () => {
       const conversationId = await makeConversation('snapshot');
       const share = await createShare(conversationId, 'viewer', 'snapshot');

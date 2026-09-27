@@ -179,9 +179,10 @@ export function exportTeamPackage(pool, { actorUserId, teamId, listingId, versio
 
     const listingRow = (await db.query(`SELECT l.*, d.user_id AS developer_user_id FROM marketplace_listings l
       LEFT JOIN marketplace_developers d ON d.id = l.developer_id WHERE l.id=$1 FOR UPDATE OF l`, [listing])).rows[0];
-    if (!listingRow) fail('not_found', 'listing_not_found');
+    // NFR-07: a listing you do not own answers exactly as one that does not exist -- 'not_your_listing' beside
+    // 'listing_not_found' confirmed to anyone that an id names a real listing. Its KIND is told only to its owner.
+    if (!listingRow || listingRow.developer_user_id !== actor) fail('not_found', 'listing_not_found');
     if (listingRow.kind !== 'team') fail('bad_input', 'listing_is_not_a_team_listing');
-    if (listingRow.developer_user_id !== actor) fail('denied', 'not_your_listing');
 
     const { package: pkg, excludedMemberships, excluded } = buildPackage(teamRow, await loadMembers(db, team), { versionLicence: listingRow.license, owner });
     const hash = operationHash(pkg);
