@@ -35,7 +35,11 @@
  *            responses. The cursor half is proven too (scope-bound, see the cursor case). But
  *            caches, subscriptions, deep links and exports do not exist in the workforce estate,
  *            and one endpoint is not "API". A citation would claim four surfaces that are unbuilt
- *            on the strength of one that is. */
+ *            on the strength of one that is.
+ *            2026-09-27: the run surfaces joined it -- admission and the pin read now answer a target
+ *            the caller cannot see exactly like a missing one (workforce-run-admission.test.mjs, the
+ *            NFR-07 case). Still not cited, for the same reason: caches, subscriptions, deep links and
+ *            exports remain unbuilt. */
 
 import test from 'node:test';
 import assert from 'node:assert/strict';

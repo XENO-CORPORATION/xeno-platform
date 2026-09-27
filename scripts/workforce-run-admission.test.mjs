@@ -43,6 +43,12 @@
  * a workspace", "an observer may not dispatch", "an assignment admits only the resource it assigns"):
  * admission and the read call one resolveRunnable, so neither can be weakened without the other.
  *
+ * CHANGED 2026-09-27 (NFR-07): an actor who cannot SEE the target workspace -- the lender's owner, an
+ * outsider -- is now refused `target_not_found`, exactly like an id that does not exist, where it used
+ * to be told `actor_cannot_act_for_target`. That was an existence oracle: the two answers differed for a
+ * real and an unknown assignment. A viewer of the workspace still gets the precise reason. The two
+ * assertions that expected the old answer were updated with it; their messages are unchanged.
+ *
  * 🔴 THE INTERSECTION IS HELD TWICE, AND EACH HOLD IS PROVEN ON ITS OWN. Removing only the service's
  * target, runtime or entitlement term does NOT reach the named assertion: the database CHECK refuses
  * the wider row first (every admitting case fails on workforce_run_admission_intersection). That is
@@ -185,7 +191,7 @@ test('a run is admitted from authoritative state, as the intersection of every r
   await t.test('RUN-02: owning a resource is not authority in a workspace', async () => {
     // The lender's owner owns the resource, but is not a member of the studio it was lent to.
     await rejects(admitRun(pool, ctx(outsider), base(lent, { kind: 'workspace', assignmentId: lentIn })),
-      'denied', 'actor_cannot_act_for_target', 'owning a resource is not authority in a workspace');
+      'not_found', 'target_not_found', 'owning a resource is not authority in a workspace');
     await rejects(admitRun(pool, ctx(viewer), base(lent, { kind: 'workspace', assignmentId: lentIn })),
       'denied', 'actor_cannot_act_for_target', 'a workspace viewer cannot dispatch');
     // And a personal target runs only the target owner's own resource.
@@ -195,6 +201,41 @@ test('a run is admitted from authoritative state, as the intersection of every r
     assert.deepEqual(personal.admission.capabilities.effective, ['files.read', 'files.write', 'shell.run']);
     await rejects(admitRun(pool, ctx(editor), base(mine, { kind: 'personal', ownerUserId: owner })),
       'denied', 'actor_cannot_act_for_target', 'nobody runs another person\'s personal agent for them');
+  });
+
+  // NFR-07, the last sentence, for the two run endpoints. Mutation-checked 2026-09-27, each fails the named
+  // assertion: the visibility check is removed -> "an unreadable target answers exactly like a missing one";
+  // it is checked AFTER the target's own liveness -> "a revoked target does not tell a stranger it was
+  // revoked"; seeing is treated as acting -> "a viewer still learns why it may not run".
+  // NOT a citation of NFR-07: its last sentence holds here, but caches, subscriptions, deep links and exports
+  // do not exist, so the requirement is refused at workforce-catalog.test.mjs. The id stays out of the title.
+  await t.test('a run target the caller cannot see answers exactly like one that does not exist', async () => {
+    const hidden = await workspace(owner, 'nfr07', [['editor', editor], ['viewer', viewer]]);
+    const live = await assign(lent.id, 'agent', hidden, { type: 'workspace', id: lender }, explicit(['files.read']));
+    // A second resource, because one resource has at most one live assignment into a workspace.
+    const other = await agentResource({ type: 'workspace', id: lender }, 'Hidden', ['files.read']);
+    const gone = await assign(other.id, 'agent', hidden, { type: 'workspace', id: lender }, explicit(['files.read']));
+    await pool.query(`UPDATE workforce_workspace_assignments SET state='revoked', revision=revision+1, revoked_at=clock_timestamp(), updated_at=clock_timestamp() WHERE id=$1`, [gone]);
+    const stranger = await user('nfr07-stranger');
+    await fund(stranger, 5_000_000n);
+    // The whole refusal a caller can observe: code, and every detail -- an oracle is built from the
+    // difference, so the comparison is of everything, not of one hand-picked field.
+    const refusal = (p) => p.then(() => 'admitted', (e) => JSON.stringify({ code: e.code, status: e.status, details: e.details }));
+    const pinOf = (actor, assignmentId) => refusal(readRunnablePin(pool, ctx(actor), { agent: { resourceId: assignmentId === gone ? other.id : lent.id },
+      target: { kind: 'workspace', assignmentId } }));
+    const admitOf = (actor, assignmentId, agent = assignmentId === gone ? other : lent) =>
+      refusal(admitRun(pool, ctx(actor), base(agent, { kind: 'workspace', assignmentId }, { capabilities: ['files.read'] })));
+    const missing = randomUUID();
+    for (const [ask, name] of [[pinOf, 'the pin read'], [admitOf, 'admission']]) {
+      const unknown = await ask(stranger, missing);
+      assert.notEqual(unknown, 'admitted');
+      assert.equal(await ask(stranger, live), unknown, `${name}: an unreadable target answers exactly like a missing one`);
+      assert.equal(await ask(stranger, gone), unknown, `${name}: a revoked target does not tell a stranger it was revoked`);
+    }
+    // Someone who can SEE the workspace already sees the assignment in the catalog, so the precise reason
+    // is theirs to have -- and it is not the missing-target answer.
+    assert.equal(JSON.parse(await admitOf(viewer, live)).details.reason, 'actor_cannot_act_for_target', 'a viewer still learns why it may not run');
+    assert.equal(JSON.parse(await admitOf(editor, gone)).details.reason, 'assignment_not_live', 'a member is told the assignment was revoked');
   });
 
   await t.test('RUN-02: a revoked assignment admits nothing', async () => {
@@ -262,6 +303,10 @@ test('a run is admitted from authoritative state, as the intersection of every r
     assert.deepEqual(admitted.admission.capabilities.effective, ['files.read'], 'a division member runs division-scoped work');
     await rejects(run(stranger, intoCreative), 'denied', 'actor_outside_division', 'a workspace editor outside the division cannot run its work');
     await admits(run(editor, intoCreative), 'a workspace administrator acts in every division of its own workspace');
+    // A principal who cannot even SEE this workspace is refused like an unknown target (NFR-07); one who can
+    // see it but not act for it is refused at the workspace term, before any division term.
+    await rejects(run(viewer, intoCreative), 'not_found', 'target_not_found', 'the workspace boundary is still checked first');
+    await pool.query(`INSERT INTO relationship_tuples(object_type,object_id,relation,subject_type,subject_id) VALUES('workspace',$1,'viewer','user',$2)`, [ws, viewer]);
     await rejects(run(viewer, intoCreative), 'denied', 'actor_cannot_act_for_target', 'the workspace boundary is still checked first');
 
     // D15: a grant on a PARENT division is not a grant on its child.
@@ -373,7 +418,7 @@ test('a run is admitted from authoritative state, as the intersection of every r
     // It refuses exactly where admission refuses, with the same reason -- no oracle beyond admission's own.
     for (const [actor, target, code, reason, message] of [
       [viewer, { kind: 'workspace', assignmentId: into }, 'denied', 'actor_cannot_act_for_target', 'a pin is refused where admission would refuse'],
-      [outsider, { kind: 'workspace', assignmentId: into }, 'denied', 'actor_cannot_act_for_target', 'a pin is refused where admission would refuse'],
+      [outsider, { kind: 'workspace', assignmentId: into }, 'not_found', 'target_not_found', 'a pin is refused where admission would refuse'],
       [editor, { kind: 'workspace', assignmentId: randomUUID() }, 'not_found', 'target_not_found', 'an unknown target has no pin'],
       [owner, { kind: 'personal', ownerUserId: owner }, 'denied', 'resource_not_the_owners', 'a pin is only of the resource the target grants'],
     ]) {
