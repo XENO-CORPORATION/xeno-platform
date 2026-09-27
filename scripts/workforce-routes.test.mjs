@@ -76,6 +76,11 @@ test('real HTTP/authMiddleware/JWT/DPoP boundary with query-aware auth DB and in
   let capacityResult;
   let evaluationResult;
   let deliveryResult;
+  let removalResult, removalFailure;
+  const removalFixture = (membershipId) => ({ schemaVersion: 1, membershipId, teamId: operationId,
+    decision: { actorUserId: human, clientId: 'xeno-agent-interface', operationId },
+    removedAt: '2026-09-27T12:00:00.000Z', archivedAt: null, settled: false,
+    runs: [{ admissionId: operationId, fenced: true, leaseLive: false, accounted: false, settled: false, owes: 'report_or_delivery', sql: 'hidden' }] });
   const admittedFixture = () => ({ replayed: false, admission: { schemaVersion: 1, admissionId: operationId, operationId,
     agent: { resourceId: operationId, version: 1, contentHash: 'a'.repeat(64) },
     target: { kind: 'personal', ownerUserId: human, workspaceId: null, projectId: null, assignmentId: null, assignmentRevision: null, participationId: null, participationRevision: null },
@@ -100,6 +105,12 @@ test('real HTTP/authMiddleware/JWT/DPoP boundary with query-aware auth DB and in
     deliverRunResult: async (pool, context, value) => { calls.push({ method: 'deliver', context, body: value });
       return deliveryResult ?? { replayed: false, delivery: { childAdmissionId: value.childAdmissionId, parentAdmissionId: value.parentAdmissionId,
         outcome: 'interrupted', interruptedReason: 'stopped', deliveredAt: '2026-09-27T12:00:00.000Z' } }; },
+    removeTeamMember: async (pool, context, value) => { calls.push({ method: 'remove', context, body: value }); if (removalFailure) throw removalFailure;
+      return { replayed: false, removal: removalResult ?? removalFixture(value.membershipId) }; },
+    readMemberRemoval: async (pool, context, value) => { calls.push({ method: 'readRemoval', context, body: value }); if (removalFailure) throw removalFailure;
+      return removalResult ?? removalFixture(value.membershipId); },
+    archiveMemberRemoval: async (pool, context, value) => { calls.push({ method: 'archive', context, body: value }); if (removalFailure) throw removalFailure;
+      return { replayed: false, removal: removalResult ?? removalFixture(value.membershipId) }; },
     readRunOutcome: async (pool, context, value) => { calls.push({ method: 'outcome', context, body: value });
       return { schemaVersion: 1, admissionId: value.admissionId, parentAdmissionId: null, taskRef: 'goal-1:task-7', conversationId: null, state: 'running',
         result: null, interruption: null, delivery: null, children: [] }; },
@@ -410,6 +421,46 @@ test('real HTTP/authMiddleware/JWT/DPoP boundary with query-aware auth DB and in
       assert.deepEqual([read.status, read.body.taskRef], [200, 'goal-1:task-7'], 'reading an outcome is a read');
       assert.deepEqual(calls.at(-1).context, { actorUserId: human, clientId: 'xeno-agent-interface' }, 'the actor comes from authentication');
       for (const path of ['/run-admissions/result', '/run-admissions/deliver', '/run-admissions/outcome']) {
+        assert.equal((await request({ method: 'GET', path })).status, 405);
+      }
+    });
+    // Mutation-checked 2026-09-27: removal demands only workforce:read -> "removing a member is a manage act";
+    // the projection accepts another membership -> "a removal of another membership is never reported"; the
+    // unsettled list passes the service's detail through -> "only what is still owed crosses the wire"; the
+    // projection trusts the service's settled flag -> "a removal cannot claim to be settled while a run still owes something".
+    await t.test('LIFE-02: a member is removed and archived as manage acts, and what it still owes is read as a read', async () => {
+      const { MemberRemovalError } = await import('../src/server/services/workforceMemberRemoval.js');
+      const membershipId = crypto.randomUUID();
+      const ask = { operationId: crypto.randomUUID(), membershipId, rationale: 'left the project' };
+      const removed = await request({ path: '/member-removals', body: ask });
+      assert.equal(removed.status, 200);
+      assert.deepEqual([removed.body.removal.membershipId, removed.body.removal.runs[0].owes], [membershipId, 'report_or_delivery']);
+      assert.ok(!JSON.stringify(removed.body).includes('hidden'), 'only the documented removal fields cross');
+      assert.deepEqual(calls.at(-1).context, { actorUserId: human, clientId: 'xeno-agent-interface' }, 'the actor comes from authentication');
+      assert.equal((await request({ path: '/member-removals', body: ask, token: mint({ scope: 'workforce:read' }) })).status, 403,
+        'removing a member is a manage act');
+      assert.equal((await request({ path: '/member-removals/archive', body: { membershipId }, token: mint({ scope: 'workforce:read' }) })).status, 403,
+        'archiving a removal is a manage act');
+      const read = await request({ path: '/member-removals/read', body: { membershipId }, token: mint({ scope: 'workforce:read' }) });
+      assert.deepEqual([read.status, read.body.settled], [200, false], 'reading a removal is a read');
+      removalResult = removalFixture(crypto.randomUUID());
+      assert.equal((await request({ path: '/member-removals/read', body: { membershipId }, token: mint({ scope: 'workforce:read' }) })).status, 500,
+        'a removal of another membership is never reported');
+      removalResult = { ...removalFixture(membershipId), settled: true };
+      assert.equal((await request({ path: '/member-removals/read', body: { membershipId }, token: mint({ scope: 'workforce:read' }) })).status, 500,
+        'a removal cannot claim to be settled while a run still owes something');
+      removalResult = undefined;
+      removalFailure = new MemberRemovalError('conflict', 'removal_not_settled',
+        { unsettled: [{ admissionId: operationId, owes: 'lease_expiry', sql: 'SECRET private' }] });
+      const refused = await request({ path: '/member-removals/archive', body: { membershipId } });
+      assert.equal(refused.status, 409);
+      assert.deepEqual(refused.body.details, { schemaVersion: 1, reason: 'removal_not_settled', unsettled: [{ admissionId: operationId, owes: 'lease_expiry' }] },
+        'only what is still owed crosses the wire');
+      removalFailure = new MemberRemovalError('not_found', 'membership_not_found', { team: 'SECRET' });
+      const hidden = await request({ path: '/member-removals', body: ask });
+      assert.deepEqual([hidden.status, hidden.body.details], [404, { schemaVersion: 1, reason: 'membership_not_found' }]);
+      removalFailure = undefined;
+      for (const path of ['/member-removals', '/member-removals/read', '/member-removals/archive']) {
         assert.equal((await request({ method: 'GET', path })).status, 405);
       }
     });
