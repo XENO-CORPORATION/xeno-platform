@@ -160,6 +160,16 @@ async function actsForWorkspace(db, actor, workspaceId) {
   return verdict.allowed && ['direct', 'role-hierarchy'].includes(verdict.via);
 }
 
+/** May this principal SEE the workspace -- `viewer` or above, directly (or by role hierarchy for a human),
+ * exactly the catalog's scope rule. Seeing is not acting: acting is `actsForWorkspace`, one relation up. */
+async function readsWorkspace(db, who, workspaceId) {
+  const [subjectType, subjectId] = who.subject.split(':');
+  await db.query(`SELECT relation FROM relationship_tuples WHERE object_type='workspace' AND object_id=$1
+    AND subject_type=$2 AND subject_id=$3 FOR SHARE`, [workspaceId, subjectType, subjectId]);
+  const verdict = await check(db, { object: `workspace:${workspaceId}`, relation: 'viewer', subject: who.subject });
+  return verdict.allowed && ['direct', ...(who.principal.kind === 'human' ? ['role-hierarchy'] : [])].includes(verdict.via);
+}
+
 /** DIV-08: may this principal act INSIDE this division? A division is an execution boundary, decided
  * by the existing ReBAC service (DIV-10: no division-specific permission engine or roster):
  *   - a human who administers the WORKSPACE acts in every division of it -- the workspace remains the
@@ -244,6 +254,20 @@ async function resolveRunnable(db, actor, request, scope, beforeResource = async
     // Admission replays a prior decision here, before any rights are re-read.
     const early = await beforeResource(who);
     if (early) return { early };
+
+    // ── NFR-07: a target the actor may not SEE answers like one that does not exist ────────────
+    // "Unauthorized IDs do not reveal existence through error-detail differences." Every refusal below
+    // this line names a fact about the target -- that it is revoked, archived, grants another resource,
+    // lies in a division. Said to someone who cannot see the target, each is an existence oracle: an
+    // unknown id answered `target_not_found` and a real one `actor_cannot_act_for_target`. So the
+    // visibility question is asked FIRST, under the catalog's own rule (VIEW-01/02 -- a viewer of the
+    // workspace, or the personal owner), and failing it is `target_not_found`, byte for byte. A reader of
+    // the scope still gets the precise reason: they can already see the assignment in the catalog.
+    // A personal target is the actor's own scope or it is not theirs to name; either way it is not a
+    // hidden row, so it keeps its own refusal.
+    if (targetWorkspace && !(await readsWorkspace(db, who, targetWorkspace))) fail('not_found', 'target_not_found');
+    if (!targetWorkspace && request.target.kind === 'project'
+      && (who.principal.kind === 'human' ? who.principal.id : who.principal.owner?.id) !== targetOwner) fail('not_found', 'target_not_found');
 
     // ── resource-use rights: the agent and the definition actually pinned ──────────────────────
     const agent = (await db.query(`SELECT * FROM workforce_resources WHERE id=$1 AND kind='agent' FOR SHARE`, [request.agent.resourceId])).rows[0];
