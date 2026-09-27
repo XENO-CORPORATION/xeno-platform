@@ -31,6 +31,10 @@ function sendErr(res, err) {
   const map = {
     INSUFFICIENT_CREDITS: 402, QUOTA_EXCEEDED: 402, BAD_REQUEST: 400, FORBIDDEN: 403,
     ACCOUNT_FROZEN: 403,
+    // quotaEngine refuses a free allowance to an unconfirmed mailbox (F11). That is the account's
+    // state, not a platform failure: aiRoutes and authRoutes already answer it 403, and here it
+    // was a 500 — found by XENO Spawn's first real sign-in, on a fresh account.
+    EMAIL_UNVERIFIED: 403,
     NOT_FOUND: 404,
     CONFLICT: 409,
     SPEND_CAP_EXCEEDED: 429,
