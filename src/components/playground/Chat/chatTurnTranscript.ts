@@ -76,7 +76,35 @@ export interface ChatTurnImageStep {
 
 export interface ChatTurnImageUsage { input: number; output: number; total: number }
 
-export type ChatTurnStep = ChatTurnSearchStep | ChatTurnImageStep;
+export interface ChatTurnCodeFile { path: string; assetId?: string }
+
+/**
+ * A `code` step: the turn's run_code tool executed code in the conversation's sandbox (2026-09-27).
+ * The sandbox persists between turns, so this is the visible record of one run — its language and
+ * source, what it printed, its exit, and any files it produced (each a library asset, so it opens
+ * again after a reload). Validated server-side by `utils/chatTurnRecord.js`.
+ */
+export interface ChatTurnCodeStep {
+  id: string;
+  kind: 'code';
+  language: string;
+  code: string;
+  startedAt: number;
+  endedAt?: number;
+  status?: 'running' | 'success' | 'error' | 'timeout' | 'killed';
+  exitCode?: number | null;
+  stdout?: string;
+  stderr?: string;
+  files?: ChatTurnCodeFile[];
+  error?: string;
+}
+
+/** Caps mirror `utils/chatTurnRecord.js` CODE_LIMITS: what the server accepts is what the client records. */
+const CODE_LIMITS = { code: 8000, stdout: 4000, stderr: 2000, files: 32 } as const;
+const CODE_LANGUAGES: ReadonlyArray<string> = ['python', 'javascript', 'typescript', 'go', 'rust', 'c', 'cpp', 'java', 'ruby', 'php', 'bash'];
+const CODE_STATUSES: ReadonlyArray<ChatTurnCodeStep['status']> = ['running', 'success', 'error', 'timeout', 'killed'];
+
+export type ChatTurnStep = ChatTurnSearchStep | ChatTurnImageStep | ChatTurnCodeStep;
 
 export interface ChatTurnRecord {
   schema: typeof TURN_SCHEMA;
@@ -99,7 +127,10 @@ export type TurnStreamEvent =
   | { type: 'search_error'; query?: string; code?: string; message?: string }
   | { type: 'image_start'; index?: number; prompt?: string; aspectRatio?: string }
   | { type: 'image_result'; index?: number; image?: { id?: string; aspectRatio?: string; width?: number; height?: number; model?: string; usage?: Partial<ChatTurnImageUsage> } }
-  | { type: 'image_error'; index?: number; code?: string; message?: string };
+  | { type: 'image_error'; index?: number; code?: string; message?: string }
+  | { type: 'code_start'; index?: number; language?: string; code?: string }
+  | { type: 'code_result'; index?: number; status?: string; exitCode?: number | null; stdout?: string; stderr?: string; files?: Array<{ path?: string }>; libraryAssets?: Array<{ path?: string; assetId?: string }> }
+  | { type: 'code_error'; index?: number; message?: string };
 
 export const TURN_IMAGE_ASPECTS: ReadonlyArray<string> = ['1:1', '16:9', '9:16', '4:3', '3:4', '3:2', '2:3'];
 /** Mirrors `utils/chatTurnRecord.js`: what the server accepts is what the client records. */
@@ -113,6 +144,7 @@ const asImageUsage = (raw: unknown): ChatTurnImageUsage | undefined => {
 const asModelId = (raw: unknown): string | undefined => (typeof raw === 'string' && MODEL_ID.test(raw) ? raw : undefined);
 const isSearchStep = (step: ChatTurnStep): step is ChatTurnSearchStep => step.kind === 'search';
 export const isImageStep = (step: ChatTurnStep): step is ChatTurnImageStep => step.kind === 'image';
+export const isCodeStep = (step: ChatTurnStep): step is ChatTurnCodeStep => step.kind === 'code';
 
 const asSources = (raw: unknown): ChatTurnSource[] => {
   if (!Array.isArray(raw)) return [];
@@ -138,6 +170,9 @@ const asSources = (raw: unknown): ChatTurnSource[] => {
 export function applyTurnEvent(record: ChatTurnRecord, event: TurnStreamEvent, now = Date.now()): ChatTurnRecord {
   if (event.type === 'image_start' || event.type === 'image_result' || event.type === 'image_error') {
     return applyImageEvent(record, event, now);
+  }
+  if (event.type === 'code_start' || event.type === 'code_result' || event.type === 'code_error') {
+    return applyCodeEvent(record, event, now);
   }
   const query = typeof event.query === 'string' ? event.query.trim().slice(0, 512) : '';
   if (event.type === 'search_start') {
@@ -205,6 +240,54 @@ function applyImageEvent(
 }
 
 /**
+ * Fold a code event into the record, keyed by the run's per-turn index (like images), so a result
+ * always closes the run it belongs to however events interleave. Clips to CODE_LIMITS so what the
+ * client records is what the server will accept.
+ */
+function applyCodeEvent(
+  record: ChatTurnRecord,
+  event: Extract<TurnStreamEvent, { type: 'code_start' | 'code_result' | 'code_error' }>,
+  now: number,
+): ChatTurnRecord {
+  const index = Number.isInteger(event.index) ? (event.index as number) : 0;
+  const id = `code-${index + 1}`;
+  const clip = (s: unknown, n: number): string | undefined => (typeof s === 'string' ? s.slice(0, n) : undefined);
+  if (event.type === 'code_start') {
+    if (record.steps.some((step) => step.id === id)) return record;
+    const language = CODE_LANGUAGES.includes(event.language ?? '') ? (event.language as string) : 'python';
+    const code = clip(event.code, CODE_LIMITS.code) ?? '';
+    return { ...record, steps: [...record.steps, { id, kind: 'code', language, code, startedAt: now, status: 'running' }] };
+  }
+  const existing = record.steps.find((step) => step.id === id);
+  const base: ChatTurnCodeStep = existing && isCodeStep(existing)
+    ? existing
+    : { id, kind: 'code', language: 'python', code: '', startedAt: now, status: 'running' };
+  let closed: ChatTurnCodeStep;
+  if (event.type === 'code_result') {
+    const status = CODE_STATUSES.includes(event.status as ChatTurnCodeStep['status']) ? (event.status as ChatTurnCodeStep['status']) : 'success';
+    const assetByPath = new Map<string, string>();
+    for (const a of event.libraryAssets ?? []) if (a?.path && a?.assetId) assetByPath.set(a.path, a.assetId);
+    const files: ChatTurnCodeFile[] = (event.files ?? [])
+      .filter((f): f is { path: string } => typeof f?.path === 'string')
+      .slice(0, CODE_LIMITS.files)
+      .map((f) => ({ path: f.path, ...(assetByPath.has(f.path) ? { assetId: assetByPath.get(f.path) } : {}) }));
+    closed = {
+      ...base,
+      endedAt: now,
+      status,
+      ...(event.exitCode === null || Number.isInteger(event.exitCode) ? { exitCode: event.exitCode as number | null } : {}),
+      ...(clip(event.stdout, CODE_LIMITS.stdout) !== undefined ? { stdout: clip(event.stdout, CODE_LIMITS.stdout) } : {}),
+      ...(clip(event.stderr, CODE_LIMITS.stderr) !== undefined ? { stderr: clip(event.stderr, CODE_LIMITS.stderr) } : {}),
+      ...(files.length ? { files } : {}),
+    };
+  } else {
+    closed = { ...base, endedAt: now, status: 'error', error: (typeof event.message === 'string' && event.message.trim()) || 'That code could not be executed.' };
+  }
+  const steps = existing ? record.steps.map((step) => (step.id === id ? closed : step)) : [...record.steps, closed];
+  return { ...record, steps };
+}
+
+/**
  * The image models a turn used, for the message's info row: each model once, with how many images it
  * drew and their tokens summed. Failed images drew nothing and are not counted.
  */
@@ -252,6 +335,30 @@ export function normalizeStoredTurn(value: unknown): ChatTurnRecord | undefined 
         ...(typeof image.error === 'string' ? { error: image.error } : {}),
       }];
     }
+    if (raw && typeof raw === 'object' && (raw as ChatTurnCodeStep).kind === 'code') {
+      const c = raw as ChatTurnCodeStep;
+      if (typeof c.id !== 'string' || !CODE_LANGUAGES.includes(c.language) || typeof c.code !== 'string' || typeof c.startedAt !== 'number') return [];
+      const files = Array.isArray(c.files)
+        ? c.files
+            .filter((f): f is ChatTurnCodeFile => Boolean(f) && typeof f.path === 'string')
+            .slice(0, CODE_LIMITS.files)
+            .map((f) => ({ path: f.path, ...(typeof f.assetId === 'string' ? { assetId: f.assetId } : {}) }))
+        : [];
+      return [{
+        id: c.id,
+        kind: 'code',
+        language: c.language,
+        code: c.code.slice(0, CODE_LIMITS.code),
+        startedAt: c.startedAt,
+        ...(typeof c.endedAt === 'number' ? { endedAt: c.endedAt } : {}),
+        ...(CODE_STATUSES.includes(c.status) ? { status: c.status } : {}),
+        ...(c.exitCode === null || typeof c.exitCode === 'number' ? { exitCode: c.exitCode } : {}),
+        ...(typeof c.stdout === 'string' ? { stdout: c.stdout.slice(0, CODE_LIMITS.stdout) } : {}),
+        ...(typeof c.stderr === 'string' ? { stderr: c.stderr.slice(0, CODE_LIMITS.stderr) } : {}),
+        ...(files.length ? { files } : {}),
+        ...(typeof c.error === 'string' ? { error: c.error } : {}),
+      }];
+    }
     if (!raw || typeof raw !== 'object' || (raw as ChatTurnSearchStep).kind !== 'search') return [];
     const step = raw as ChatTurnSearchStep;
     if (typeof step.id !== 'string' || typeof step.query !== 'string' || typeof step.startedAt !== 'number') return [];
@@ -278,6 +385,10 @@ export function normalizeStoredTurn(value: unknown): ChatTurnRecord | undefined 
 /** The images a turn made, in order, as library assets — what the reply draws under the head. */
 export const turnImages = (turn: ChatTurnRecord | undefined): ChatTurnImageStep[] =>
   (turn?.steps ?? []).filter(isImageStep);
+
+/** The code runs a turn made, in order — what the reply draws as code-execution blocks under the head. */
+export const turnCodeSteps = (turn: ChatTurnRecord | undefined): ChatTurnCodeStep[] =>
+  (turn?.steps ?? []).filter(isCodeStep);
 
 /** Whether a message has anything for the transcript head to show. */
 export const turnHasRail = (turn: ChatTurnRecord | undefined, thinking: string | undefined): boolean =>
@@ -352,8 +463,40 @@ const imageToolCall = (step: ChatTurnImageStep, turnLive: boolean): ToolCallInfo
   };
 };
 
+/** A code step's one-line rail result: its exit and how many files it produced, or the error. */
+const codeResultText = (step: ChatTurnCodeStep): string => {
+  if (step.error) return step.error;
+  const exit = typeof step.exitCode === 'number' ? `Exit ${step.exitCode}` : (step.status ?? 'done');
+  const files = step.files?.length ? ` · ${step.files.length} file${step.files.length === 1 ? '' : 's'}` : '';
+  return `${exit}${files}`;
+};
+
+/**
+ * A code step as the transcript's own `run_code` tool call — the canonical step model renders the row
+ * ("Running code", then "Ran code"); the block itself (source, output, files) is drawn by the chat
+ * under the transcript head. The row carries the language, the exit and, on failure, why.
+ */
+const codeToolCall = (step: ChatTurnCodeStep, turnLive: boolean): ToolCallInfo => {
+  const done = step.endedAt !== undefined || !turnLive;
+  const endedAt = step.endedAt ?? (done ? step.startedAt : undefined);
+  const failed = Boolean(step.error) || (step.status !== undefined && step.status !== 'success' && step.status !== 'running');
+  return {
+    id: step.id,
+    toolName: 'run_code',
+    params: { language: step.language },
+    status: done ? 'done' : 'running',
+    success: done ? !failed : undefined,
+    ...(done ? { outcome: failed ? ('failed' as const) : ('succeeded' as const) } : {}),
+    result: done ? codeResultText(step) : undefined,
+    startedAt: step.startedAt,
+    ...(endedAt !== undefined ? { endedAt, durationMs: Math.max(0, endedAt - step.startedAt) } : {}),
+    category: 'other',
+  };
+};
+
 const toToolCall = (step: ChatTurnStep, turnLive: boolean): ToolCallInfo => {
   if (isImageStep(step)) return imageToolCall(step, turnLive);
+  if (isCodeStep(step)) return codeToolCall(step, turnLive);
   const done = step.endedAt !== undefined || !turnLive;
   const endedAt = step.endedAt ?? (done ? step.startedAt : undefined);
   return {

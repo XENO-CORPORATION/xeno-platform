@@ -5,7 +5,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { readFileSync } from 'node:fs';
-import { normalizeTurnRecord, TURN_LIMITS, TURN_SCHEMA } from '../src/server/utils/chatTurnRecord.js';
+import { normalizeTurnRecord, turnCodeAssetIds, TURN_LIMITS, TURN_SCHEMA } from '../src/server/utils/chatTurnRecord.js';
 
 const good = () => ({
   schema: TURN_SCHEMA,
@@ -54,4 +54,33 @@ test('both insert routes validate the record before the row, and store it in the
   assert.match(routes, /ADD COLUMN IF NOT EXISTS turn JSONB/, 'a fresh database has the column too');
   const migration = readFileSync(new URL('../src/server/database/migrations/20260917120000-chat-message-turn.sql', import.meta.url), 'utf8');
   assert.match(migration, /ALTER TABLE chat_messages ADD COLUMN IF NOT EXISTS turn JSONB/);
+});
+
+const goodCode = () => ({
+  id: 'code-1', kind: 'code', language: 'python', code: 'print(1)', startedAt: 1100, endedAt: 2000,
+  status: 'success', exitCode: 0, stdout: 'ok', stderr: '',
+  files: [{ path: 'out.csv', assetId: '11111111-2222-3333-4444-555555555555' }],
+});
+
+test('a code step is validated, bounded and read back — a run the person watched, never the bytes', () => {
+  const r = normalizeTurnRecord({ ...good(), steps: [goodCode()] });
+  assert.equal(r.ok, true);
+  assert.equal(r.turn.steps[0].kind, 'code');
+  assert.equal(r.turn.steps[0].language, 'python');
+  assert.equal(r.turn.steps[0].exitCode, 0);
+  assert.equal(r.turn.steps[0].files[0].assetId, '11111111-2222-3333-4444-555555555555');
+  // the produced files are library asset ids the retention sweep can find
+  assert.deepEqual([...turnCodeAssetIds(r.turn)], ['11111111-2222-3333-4444-555555555555']);
+  // a killed run with a null exit is legal
+  assert.equal(normalizeTurnRecord({ ...good(), steps: [{ ...goodCode(), status: 'killed', exitCode: null }] }).ok, true);
+});
+
+test('a bad code step is refused, not trimmed — language, size, exit range, status and asset id are all checked', () => {
+  assert.equal(normalizeTurnRecord({ ...good(), steps: [{ ...goodCode(), language: 'brainfuck' }] }).ok, false, 'unknown language');
+  assert.equal(normalizeTurnRecord({ ...good(), steps: [{ ...goodCode(), code: 'x'.repeat(8001) }] }).ok, false, 'code over cap');
+  assert.equal(normalizeTurnRecord({ ...good(), steps: [{ ...goodCode(), exitCode: 99999 }] }).ok, false, 'exit out of range');
+  assert.equal(normalizeTurnRecord({ ...good(), steps: [{ ...goodCode(), status: 'exploded' }] }).ok, false, 'unknown status');
+  assert.equal(normalizeTurnRecord({ ...good(), steps: [{ ...goodCode(), files: [{ path: 'x', assetId: 'not-a-uuid' }] }] }).ok, false, 'file asset must be a library id');
+  const wideFiles = { ...goodCode(), files: Array.from({ length: 33 }, (_, i) => ({ path: `f${i}` })) };
+  assert.equal(normalizeTurnRecord({ ...good(), steps: [wideFiles] }).ok, false, 'files list is capped');
 });

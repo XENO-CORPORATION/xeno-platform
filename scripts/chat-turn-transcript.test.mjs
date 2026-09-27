@@ -42,7 +42,7 @@ const vite = await createServer({
 let dom;
 try {
   const turnModule = await vite.ssrLoadModule('/src/components/playground/Chat/chatTurnTranscript.ts');
-  const { applyTurnEvent, closeTurnRecord, newTurnRecord, normalizeStoredTurn, toTranscriptMessage, turnHasRail } = turnModule;
+  const { applyTurnEvent, closeTurnRecord, newTurnRecord, normalizeStoredTurn, toTranscriptMessage, turnHasRail, turnCodeSteps } = turnModule;
 
   // ── the record, pure ──────────────────────────────────────────────────────────────────
   {
@@ -62,6 +62,23 @@ try {
     check('a stored record reads back whole', roundTrip && roundTrip.steps.length === 3 && roundTrip.steps[0].sources[0].url === 'https://xenostudio.ai/product/hub');
     check('a stored value that is not a v1 record is absent, never a crash', normalizeStoredTurn({ schema: 'other' }) === undefined && normalizeStoredTurn('x') === undefined);
     check('a turn with no steps and no thought has no rail', !turnHasRail(newTurnRecord(), '') && turnHasRail(record, '') && turnHasRail(undefined, 'a thought'));
+  }
+
+  // ── the record, code runs ───────────────────────────────────────────────────────────────
+  {
+    let record = newTurnRecord(1000);
+    record = applyTurnEvent(record, { type: 'code_start', index: 0, language: 'python', code: 'print(2+2)' }, 1200);
+    check('a code_start opens a running code step with its source and language', record.steps.length === 1 && record.steps[0].kind === 'code' && record.steps[0].language === 'python' && record.steps[0].code === 'print(2+2)' && record.steps[0].status === 'running' && record.steps[0].endedAt === undefined);
+    record = applyTurnEvent(record, { type: 'code_result', index: 0, status: 'success', exitCode: 0, stdout: '4\n', stderr: '', files: [{ path: 'out.csv' }], libraryAssets: [{ path: 'out.csv', assetId: '11111111-2222-3333-4444-555555555555' }] }, 2400);
+    check('a code_result closes the run with exit, stdout and its produced file bound to a library asset', record.steps[0].endedAt === 2400 && record.steps[0].status === 'success' && record.steps[0].exitCode === 0 && record.steps[0].stdout === '4\n' && record.steps[0].files.length === 1 && record.steps[0].files[0].assetId === '11111111-2222-3333-4444-555555555555');
+    record = applyTurnEvent(record, { type: 'code_start', index: 1, language: 'bash', code: 'exit 1' }, 2500);
+    record = applyTurnEvent(record, { type: 'code_error', index: 1, message: 'That code could not be executed.' }, 2600);
+    check('a code_error closes its own run (keyed by index) with the error, not the first one', record.steps.length === 2 && record.steps[1].status === 'error' && record.steps[1].error && record.steps[0].status === 'success');
+    check('turnCodeSteps returns the runs in order', turnCodeSteps(record).length === 2 && turnCodeSteps(record)[0].language === 'python' && turnCodeSteps(record)[1].language === 'bash');
+    const back = normalizeStoredTurn(JSON.parse(JSON.stringify(closeTurnRecord(record, 3000))));
+    check('a stored turn reads its code runs back whole, asset id intact', back && turnCodeSteps(back).length === 2 && turnCodeSteps(back)[0].files[0].assetId === '11111111-2222-3333-4444-555555555555');
+    const unknownFirst = applyTurnEvent(newTurnRecord(1000), { type: 'code_result', index: 0, status: 'success', exitCode: 0, stdout: 'ok' }, 1500);
+    check('a code_result with no matching start still lands as a settled run — nothing reported is dropped', unknownFirst.steps.length === 1 && unknownFirst.steps[0].kind === 'code' && unknownFirst.steps[0].endedAt === 1500);
   }
 
   // ── the adapter: the chat's turn in the transcript's own terms ───────────────────────
@@ -86,6 +103,12 @@ try {
     const thought = toTranscriptMessage({ id: 'm5b', streaming: false, replyStarted: true, hadThought: true, thinking: 'The classic trap is 10 cents.', timestamp: 1000 });
     check('a settled turn WITH thought text keeps it', thought.thinking === 'The classic trap is 10 cents.');
     check('while the reply has not started, a reasoning wait still says Thinking', waiting.isThinking === true && waiting.thinking === '');
+
+    const codeRecord = closeTurnRecord(applyTurnEvent(applyTurnEvent(newTurnRecord(1000), { type: 'code_start', index: 0, language: 'python', code: 'print(1)' }, 1100), { type: 'code_result', index: 0, status: 'success', exitCode: 0, stdout: '1' }, 1900), 2500);
+    const codeMsg = toTranscriptMessage({ id: 'mcode', streaming: false, replyStarted: true, timestamp: 1000, turn: codeRecord });
+    check('a code run is a run_code tool call, succeeded, in a segment', codeMsg.toolCalls.length === 1 && codeMsg.toolCalls[0].toolName === 'run_code' && codeMsg.toolCalls[0].status === 'done' && codeMsg.toolCalls[0].outcome === 'succeeded' && codeMsg.segments[0].toolCallId === codeMsg.toolCalls[0].id);
+    const liveCode = toTranscriptMessage({ id: 'mcode2', streaming: true, replyStarted: false, turn: applyTurnEvent(newTurnRecord(1000), { type: 'code_start', index: 0, language: 'go', code: 'x' }, 1100) });
+    check('a running code step is a running run_code tool call', liveCode.toolCalls[0].toolName === 'run_code' && liveCode.toolCalls[0].status === 'running');
   }
 
   // ── the real component, mounted ───────────────────────────────────────────────────────

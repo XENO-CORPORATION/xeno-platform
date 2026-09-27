@@ -49,10 +49,11 @@ import {
 import { buildChatSystemPrompt, CHAT_MODE_PLACEHOLDERS, modeUsesXenoSearch, type ChatMode } from './chatModeConfig';
 import ChatTurnHead from './ChatTurnHead';
 import { ChatGeneratedImages, imageAssetFor, type ChatTurnImageView } from './ChatGeneratedImage';
+import { ChatCodeExecution } from './ChatCodeExecution';
 import { ChatUserMessage } from './ChatUserMessage';
 import { pasteBecomesFile, makePastedTextFile } from './chatPaste';
 import {
-  applyTurnEvent, chatFaviconUrl, closeTurnRecord, DEFAULT_STEPS_MODE, isStepsMode, newTurnRecord, normalizeStoredTurn, turnCitedSources, turnHasRail, turnImageModels, turnImages,
+  applyTurnEvent, chatFaviconUrl, closeTurnRecord, DEFAULT_STEPS_MODE, isStepsMode, newTurnRecord, normalizeStoredTurn, turnCitedSources, turnHasRail, turnImageModels, turnImages, turnCodeSteps,
   type ChatTurnRecord, type StepsMode,
 } from './chatTurnTranscript';
 import { CitationChip, parseCitationHref, remarkCitations } from '@xenosystem/agent-conversation/components/agent/transcript/citations';
@@ -7076,6 +7077,23 @@ interface QueueState {
                 const previews = { ...imagePreviews };
                 setMessages(prev => prev.map(msg =>
                     msg.id === localPlaceholderId ? { ...msg, turn: record, imagePreviews: previews, isDotPlaceholder: false } : msg
+                ));
+                return;
+            }
+
+            if (event.type === 'code_start' || event.type === 'code_result' || event.type === 'code_error') {
+                /*
+                 * A run is a step of the turn too (2026-09-27): `code_start` opens the block with the
+                 * source and a running state, `code_result` closes it with the exit, output and any
+                 * produced files (each already a Library asset), and `code_error` keeps the block and
+                 * says why. The block is drawn by ChatCodeExecution under the transcript head.
+                 */
+                turnRecord = applyTurnEvent(turnRecord, event as Parameters<typeof applyTurnEvent>[1]);
+                // a priced run bills when it lands, so the header balance moves now (free by default)
+                if (event.type === 'code_result') window.dispatchEvent(new CustomEvent('xeno:credits-updated'));
+                const record = turnRecord;
+                setMessages(prev => prev.map(msg =>
+                    msg.id === localPlaceholderId ? { ...msg, turn: record, isDotPlaceholder: false } : msg
                 ));
                 return;
             }
@@ -16901,6 +16919,14 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                                                   />
                                               );
                                           })()}
+
+                                          {/* run_code blocks (2026-09-27): the source, output and produced
+                                              files of each run the turn made, in order — drawn under the head
+                                              like generated images, live and on reload from the turn record. */}
+                                          <ChatCodeExecution
+                                              steps={turnCodeSteps(message.turn)}
+                                              live={Boolean(message.isStreaming || message.isThinkingPlaceholder || message.isDotPlaceholder)}
+                                          />
 
                                           {!message.isError && (message.parsedAnswer || message.isStreaming) && (
                                                   /* Do not put prose-pre:bg-* / child bg utilities on this wrapper:

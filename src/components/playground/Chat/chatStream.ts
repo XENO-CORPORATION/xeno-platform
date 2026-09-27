@@ -68,6 +68,11 @@ export type ChatStreamEvent =
   | { type: 'image_start'; index: number; prompt: string; aspectRatio: string; edit?: boolean }
   | { type: 'image_result'; index: number; image: ChatGeneratedImage; creditsCharged?: number }
   | { type: 'image_error'; index: number; code: string; message: string }
+  // run_code (2026-09-27): the source and language first (the block shows the code before the wait),
+  // then the completed run — its exit, output and produced files — or a failure the turn reports.
+  | { type: 'code_start'; index: number; language: string; code: string }
+  | { type: 'code_result'; index: number; status: string; exitCode: number | null; stdout: string; stderr: string; files?: Array<{ path: string; size?: number }>; libraryAssets?: Array<{ path: string; assetId: string }>; creditsCharged?: number; filesTruncated?: boolean }
+  | { type: 'code_error'; index: number; message: string }
   | { type: 'sources'; sources: Array<{ url: string; title: string }> }
   | { type: 'tool_use'; searches: number; images?: number; iterations: number; cappedOut: boolean }
   | { type: 'usage'; input: number; output: number; total: number; creditsSettled: number; upstreamCalls?: number }
