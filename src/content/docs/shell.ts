@@ -1,17 +1,18 @@
 import type { ProductDocs } from './_types';
 
-/* XENO Shell documentation — reconciled against xeno-shell v0.1.0-beta.5 (tag v0.1.0-beta.5,
- * 4effc31). Every claim traces to that tag: apps/desktop/src/main/door.ts + authGate.ts (the
+/* XENO Shell documentation — reconciled against xeno-shell v0.1.0-beta.6 (tag v0.1.0-beta.6,
+ * 941d10b). Every claim traces to that tag: apps/desktop/src/main/door.ts + authGate.ts (the
  * sign-in door), account.ts (Sign in with XENO), remoteSession.ts + sessionServer.ts (sessions
  * between two PCs), sessionFiles.ts (shared folders), sessionTerminals.ts (shared terminals),
- * sessionLog.ts (the activity log) and authLog.ts (diagnostics).
- * Windows only for 0.1.0-beta.5: the Linux AppImage in the feed is the older beta.2, so no other
+ * sessionLog.ts (the activity log), authLog.ts (diagnostics) and hostWindows.ts +
+ * design/host-apps.js (bringing apps in).
+ * Windows only for 0.1.0-beta.6: the Linux AppImage in the feed is the older beta.2, so no other
  * platform is named for this version. */
 const shell: ProductDocs = {
   slug: 'shell',
   productName: 'XENO Shell',
   tagline: 'A desktop environment you can share: another person joins your PC with their own cursor, on files and terminals you choose.',
-  version: '0.1.0-beta.5',
+  version: '0.1.0-beta.6',
   updated: '2026-09-26',
   seo: {
     title: 'XENO Shell documentation',
@@ -31,7 +32,7 @@ const shell: ProductDocs = {
           slug: 'installation',
           title: 'Installation',
           description: 'Download and install XENO Shell on Windows.',
-          body: "## Installation\n\nXENO Shell 0.1.0-beta.5 is available for **Windows (x64)**.\n\n1. Sign in on [xenostudio.ai](/product/shell) and choose **Download for Windows**. Downloading needs a signed-in account with an active plan.\n2. Run `XENO Shell Setup 0.1.0-beta.5.exe`. It installs for your user only; no administrator rights are needed.\n3. The installer is **not code-signed yet**, so Windows SmartScreen shows *Windows protected your PC*. Choose **More info → Run anyway**. The app says so too: an **Unsigned build** badge sits on the sign-in screen and in the shell.\n4. Open XENO Shell and [sign in](/docs/shell/signing-in).\n\n## Updates\n\nXENO Shell checks for updates on the beta channel and downloads them in the background. A copy on an earlier beta updates to 0.1.0-beta.5 by itself.\n\n## Where your data lives\n\nSettings, your sign-in and the diagnostics log live in `%APPDATA%\\@xeno-corporation\\xeno-shell-desktop\\`. Desktop layout and window positions are in `%USERPROFILE%\\.xeno\\shell\\state.json`.",
+          body: "## Installation\n\nXENO Shell 0.1.0-beta.6 is available for **Windows (x64)**.\n\n1. Sign in on [xenostudio.ai](/product/shell) and choose **Download for Windows**. Downloading needs a signed-in account with an active plan.\n2. Run `XENO Shell Setup 0.1.0-beta.6.exe`. It installs for your user only; no administrator rights are needed.\n3. The installer is **not code-signed yet**, so Windows SmartScreen shows *Windows protected your PC*. Choose **More info → Run anyway**. The app says so too: an **Unsigned build** badge sits on the sign-in screen and in the shell.\n4. Open XENO Shell and [sign in](/docs/shell/signing-in).\n\n## Updates\n\nXENO Shell checks for updates on the beta channel and downloads them in the background. A copy on an earlier beta updates to 0.1.0-beta.6 by itself.\n\n## Where your data lives\n\nSettings, your sign-in and the diagnostics log live in `%APPDATA%\\@xeno-corporation\\xeno-shell-desktop\\`. Desktop layout and window positions are in `%USERPROFILE%\\.xeno\\shell\\state.json`.",
         },
         {
           slug: 'signing-in',
@@ -44,6 +45,12 @@ const shell: ProductDocs = {
     {
       title: 'Working together',
       pages: [
+        {
+          slug: 'bringing-apps-in',
+          title: 'Bringing your apps in',
+          description: 'Make the apps you already have open on Windows into XENO Shell windows.',
+          body: "## Bringing your apps into XENO Shell\n\nXENO Shell can take the apps you already have open on Windows and make each one a window inside the shell: in the dock, on your workspaces, snappable. The app keeps running as itself.\n\n### Bringing apps in\n\n1. When XENO Shell starts it asks **Bring your open apps into XENO Shell?** and lists the apps you have open. You can also open this list any time: press **Ctrl+K** and choose *Bring apps into XENO Shell…*.\n2. Tick the apps you want. Nothing is ticked for you.\n3. Choose **Bring in**.\n\nEach app you picked opens as a XENO Shell window showing the app live. Click it and you are using the app itself.\n\n### Giving an app back\n\n- **Close** its XENO Shell window. The app goes back to Windows exactly where it was, and keeps running.\n- To give every app back at once, press **Ctrl+K** and choose *Give all apps back to Windows*.\n- If you quit the app itself, its XENO Shell window closes too.\n\n### What to expect\n\n- **An app running as administrator** is listed but greyed out. Windows does not let another program move it.\n- **Minimising XENO Shell** minimises the apps you brought in, so they do not float over your other windows.\n- **If XENO Shell stops unexpectedly**, the next time it starts it puts every app back where it was.\n- To stop the question at start-up, tick **Don’t ask when XENO Shell starts**.\n\nBringing apps in works on Windows only.",
+        },
         {
           slug: 'sharing',
           title: 'Sharing your shell',

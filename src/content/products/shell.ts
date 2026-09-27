@@ -25,7 +25,9 @@ import type { ProductContent } from './_types';
  *  · The build is UNSIGNED and on the BETA channel. Say so, and say what
  *    SmartScreen does, everywhere a user could be surprised.
  *
- * UPDATED 2026-09-26 for v0.1.0-beta.4 (tag v0.1.0-beta.4, 1655d54): the design delivery is
+ * UPDATED 2026-09-27 for v0.1.0-beta.6 (tag v0.1.0-beta.6, 941d10b): adds bringing open Windows
+ * apps in (apps/desktop/src/main/hostWindows.ts + design/host-apps.js).
+ * Earlier, for v0.1.0-beta.4 (tag v0.1.0-beta.4, 1655d54): the design delivery is
  * the desktop, shared sessions between two PCs (XENO-account identity, WebRTC, host-chosen
  * folders and terminals, activity log) and the sign-in door are real and verified. Comms,
  * Agents, Tasks and Hub inside the shell are STILL sample content — keep saying so. beta.4
@@ -51,7 +53,7 @@ const shell: ProductContent = {
     sub: 'XENO Shell is a desktop of its own on top of Windows: windows, dock, files and genuine PTY terminals on your real PC. Invite someone on another PC with a code and they join with their own cursor — seeing only the windows, folders and terminals you choose.',
     media: { type: 'mockup', src: 'shell-hero', alt: 'XENO Shell — the per-display desktop running a Fabric ssh terminal and a mount-scoped Files window, with the shell-chrome consent sheet asking to grant a folder' },
     badges: ['Windows', 'Public beta', 'Unsigned build', 'Shared sessions', 'XENO account'],
-    note: 'Beta channel · v0.1.0-beta.5 · UNSIGNED — on Windows SmartScreen will show “Windows protected your PC”; choose More info → Run anyway. Needs a XENO account to open. Comms, Agents, Tasks and Hub inside the shell are still sample content — see “What it is today”.',
+    note: 'Beta channel · v0.1.0-beta.6 · UNSIGNED — on Windows SmartScreen will show “Windows protected your PC”; choose More info → Run anyway. Needs a XENO account to open. Comms, Agents, Tasks and Hub inside the shell are still sample content — see “What it is today”.',
   },
   trust: [
     'Two-PC sessions proven end to end: the host verifies each guest’s XENO account, and a forged identity is refused',
@@ -75,7 +77,7 @@ const shell: ProductContent = {
         'Real today: the desktop on your real disk, PTY terminals, Mounts, shared sessions with folders and terminals',
         'Not yet: Comms, Agents, Tasks and Hub inside the shell show sample content',
         'Guests see shared windows as frames, not their live contents; files over 8 MB are refused',
-        'v0.1.0-beta.5 is Windows-only; Linux is on the older beta.2; macOS is not built yet',
+        'v0.1.0-beta.6 is Windows-only; Linux is on the older beta.2; macOS is not built yet',
       ],
     },
     {
@@ -89,6 +91,19 @@ const shell: ProductContent = {
         'Windows stay private until you share them; lock, hand over or take back any window',
         'Share a folder view-only or editable — the guest works on your disk, inside it, nowhere else',
         'Share a terminal; the guest types only after you give them the keyboard, and you can take it back',
+      ],
+    },
+    {
+      eyebrow: 'Your apps, inside',
+      icon: 'Layers',
+      accent: 'radial-gradient(ellipse at 72% 26%, rgba(200,200,210,0.14), transparent 60%), linear-gradient(165deg,#15161a,#070707 74%)',
+      title: 'Bring the apps you already have open',
+      desc: 'When XENO Shell starts it offers to bring in the apps you already have open on Windows. Each one you pick becomes a XENO Shell window — in the dock, on your workspaces, snappable — showing the real app live, and when you click it you are using the app itself. It keeps running as itself: close its window here and it goes back to Windows exactly where it was.',
+      bullets: [
+        'Nothing is brought in unless you tick it',
+        'Close its window here and the app goes back to Windows where it was; quit the app and its window closes',
+        'If XENO Shell stops unexpectedly, its next start puts every app back',
+        'An app running as administrator is listed with the reason it cannot be moved — Windows only',
       ],
     },
     {
@@ -187,7 +202,7 @@ const shell: ProductContent = {
   },
   specs: [
     { label: 'Platform', value: 'Windows 10/11 x64 (per-user install) · Linux x64 on the older beta.2' },
-    { label: 'Channel', value: 'Beta · v0.1.0-beta.5 · unsigned' },
+    { label: 'Channel', value: 'Beta · v0.1.0-beta.6 · unsigned' },
     { label: 'Account', value: 'XENO account required to open' },
     { label: 'Terminal', value: 'node-pty (ConPTY) · ssh:// + local://' },
     { label: 'Status', value: 'Public beta — desktop, terminals, files and shared sessions' },
@@ -199,17 +214,17 @@ const shell: ProductContent = {
     { q: 'Why does it need a XENO account?', a: 'XENO Shell opens only for a signed-in account the platform allows, like every XENO app. The same account is what proves to the host who is asking to join a shared session. If you are offline it keeps working for 14 days after it last confirmed your plan.' },
     { q: 'Do XENO apps run inside it yet?', a: 'Not yet. Comms, Agents, Tasks and Hub appear in the shell with sample content; they are not connected to your account in this build. The desktop, terminals, files and shared sessions are real. We would rather you know that before you download it than after.' },
     { q: 'It is unsigned — what will Windows do?', a: 'SmartScreen will show “Windows protected your PC” when you run the installer. Choose More info → Run anyway to continue, or wait for the signed build if that is not acceptable for your machine. The app itself also carries a visible Unsigned build badge, on the sign-in screen and in the shell, and that flag can only read “signed” when a real signing environment produced the build.' },
-    { q: 'How do updates work on Linux?', a: 'Linux is on v0.1.0-beta.2 for now; v0.1.0-beta.4 shipped for Windows first. Keep the AppImage as an AppImage and it updates itself in place, exactly like the Windows build. If you extract it, or repackage it, self-update stops working — that is a limitation of the AppImage format, not a bug — and Shell will say so rather than pretend: the updater reports that updates are unavailable for this launch mode instead of retrying forever against something that cannot succeed. Download a new AppImage when you want to move forward.' },
+    { q: 'How do updates work on Linux?', a: 'Linux is on v0.1.0-beta.2 for now; v0.1.0-beta.6 shipped for Windows first. Keep the AppImage as an AppImage and it updates itself in place, exactly like the Windows build. If you extract it, or repackage it, self-update stops working — that is a limitation of the AppImage format, not a bug — and Shell will say so rather than pretend: the updater reports that updates are unavailable for this launch mode instead of retrying forever against something that cannot succeed. Download a new AppImage when you want to move forward.' },
     { q: 'Is this kiosk mode? Can I get out?', a: 'It is not kiosk. Full-OS mode is a borderless-fullscreen window per display, which is why F11 reliably toggles it and your keyboard shortcuts are not swallowed. Kiosk was rejected precisely because of its key-handling behaviour.' },
     { q: 'What is a Mount, and what is xmount://?', a: 'A Mount is a host folder you have granted to Shell. Apps do not get that path — they get an opaque xmount:// handle, and they additionally need their own per-app grant on that mount, consented in shell chrome. Paths are canonicalised twice before use, so “..”, junctions and alternate data streams are rejected rather than followed.' },
     { q: 'What happens if I revoke access while something is using it?', a: 'It dies immediately. Open handles fail with a typed XENO-FS[PermissionRevoked] error rather than silently reading stale data, and the revocation is written to the audit ring in Settings → Privacy alongside every allow and deny.' },
     { q: 'How do updates work, and can I go back?', a: 'Installed shells check the beta feed on startup and every 30 minutes, and roll out in stages by a deterministic machine bucket. A no-downgrade guard stops you sliding backwards accidentally; the only thing that overrides it is a deliberate rollback marker we publish if a build turns out bad. If the update server is unreachable, Shell retries quietly and boots as normal.' },
     { q: 'Is any data sent anywhere?', a: 'Crash minidumps and renderer errors spool to ~/.xeno/shell/crash/ on your own machine, scrubbed of paths, URIs, mount tokens and other identifiers — version and display topology only. Upload is off by default and doubly gated: it needs both your opt-in and a configured endpoint, and no endpoint ships in this build.' },
-    { q: 'macOS and Linux?', a: 'v0.1.0-beta.5 is Windows-only; its Linux build has not been published yet, so Linux users are on v0.1.0-beta.2 — an x86_64 AppImage built from the same commit as the Windows installer, with the same packaged end-to-end evidence: the full mounts acceptance flow, junction and .. escapes rejected, live revocation, and a verified self-update. macOS is not built yet. The codebase is cross-platform and the terminal uses forkpty on POSIX, so it is a packaging and evidence gap rather than a porting one.' },
+    { q: 'macOS and Linux?', a: 'v0.1.0-beta.6 is Windows-only; its Linux build has not been published yet, so Linux users are on v0.1.0-beta.2 — an x86_64 AppImage built from the same commit as the Windows installer, with the same packaged end-to-end evidence: the full mounts acceptance flow, junction and .. escapes rejected, live revocation, and a verified self-update. macOS is not built yet. The codebase is cross-platform and the terminal uses forkpty on POSIX, so it is a packaging and evidence gap rather than a porting one.' },
   ],
   seo: {
     title: 'XENO Shell — a desktop you can share, with a real terminal and folder-level permissions',
-    description: 'XENO Shell is a desktop on top of Windows with real PTY terminals and a permission-brokered file manager — and shared sessions: someone on another PC joins with their own cursor and a verified XENO account, on the folders and terminals you choose. Public beta, v0.1.0-beta.4, unsigned. XENO apps inside it are still sample content.',
+    description: 'XENO Shell is a desktop on top of Windows with real PTY terminals and a permission-brokered file manager — and shared sessions: someone on another PC joins with their own cursor and a verified XENO account, on the folders and terminals you choose. Bring the apps you already have open inside it. Public beta, v0.1.0-beta.6, unsigned. XENO apps inside it are still sample content.',
   },
 };
 
