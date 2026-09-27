@@ -367,6 +367,10 @@ interface AttachedFile {
   assetId?: string;
   contentUrl?: string;
   size?: number;
+  // The malware scan gate: false while the freshly-uploaded asset is still being scanned, true once
+  // it has cleared. Send is blocked until every attachment is ready, so a file only enters a
+  // conversation after it is scanned and valid. undefined = nothing to wait on (no assetId).
+  ready?: boolean;
 }
 
 type MessageImageAttachment = {
@@ -7661,7 +7665,9 @@ interface QueueState {
   const handleGenerate = async (inputOverride?: string) => {
     const composerText = inputOverride ?? inputValue;
     const canSend = composerText.trim() || attachedFiles.length > 0;
-    if (!canSend || isLoading || isUploadingAttachments) return;
+    // An attachment still in its malware scan is not sendable yet — a file enters a conversation only
+    // once it is scanned and valid (AttachedFile.ready), so a sent message never shows "still scanning".
+    if (!canSend || isLoading || isUploadingAttachments || attachedFiles.some(f => f.ready === false)) return;
     if (isContextLimitReached) return;
     // Until the catalogue answers, `selectedModel` is the hard-coded fallback, not a choice.
     // A message sent now would go to a model the user never picked and the picker never showed.
@@ -9764,6 +9770,20 @@ Keep the summary under 500 words. Preserve essential context needed to continue 
    * openable in the right-side Context Panel and in the Library. One place, so the two entry points
    * cannot drift.
    */
+  /**
+   * Poll an asset's malware-scan status until it clears. Resolves true when scanned, or false if a
+   * generous window (~40s) elapses first — the caller releases the file either way so a stuck scan
+   * never permanently traps the composer (an unsafe asset is still refused at view/read time).
+   */
+  const waitForAssetReady = async (assetId: string): Promise<boolean> => {
+    const delays = [400, 700, 1000, 1500, 2000, 2500, 3000, 3500, 4000, 5000, 6000, 8000];
+    for (const delay of delays) {
+      if (await libraryService.assetReady(assetId)) return true;
+      await new Promise((resolve) => setTimeout(resolve, delay));
+    }
+    return libraryService.assetReady(assetId);
+  };
+
   const attachFileObjects = async (fileObjs: File[]) => {
     if (!fileObjs.length) return;
     // The moment we hold the real bytes. Persist now; a metadata-only record disappears off-device.
@@ -9780,6 +9800,7 @@ Keep the summary under 500 words. Preserve essential context needed to continue 
           assetId: asset.assetId,
           contentUrl: asset.contentUrl,
           size: asset.size || file.size,
+          ready: false, // becomes true once the malware scan clears (polled below); gates send
         };
       }));
     } catch (error) {
@@ -9807,6 +9828,18 @@ Keep the summary under 500 words. Preserve essential context needed to continue 
     setAttachedFiles(prev => [...prev, ...newFiles]);
     setIsAttachMenuOpen(false);
     setIsRecentFilesOpen(false);
+
+    // Scan-before-send: wait for each fresh upload's malware scan to clear, THEN mark it ready.
+    // Send is blocked while any attachment is not ready, so a file enters a conversation only after it
+    // is scanned and valid — no "still scanning" state ever appears on a sent message. The blob
+    // preview shows meanwhile (LibraryAssetImage prefers it). A genuinely stuck scan is not allowed to
+    // trap the composer forever: after a generous window the file is released anyway (the content
+    // endpoint still refuses an unsafe asset, so nothing unsafe can actually be viewed or read).
+    const markReady = (id: string) => setAttachedFiles(prev => prev.map(x => (x.id === id ? { ...x, ready: true } : x)));
+    for (const f of newFiles) {
+      if (!f.assetId) { markReady(f.id); continue; }
+      void waitForAssetReady(f.assetId).then(() => markReady(f.id));
+    }
   };
 
   const handleFileSelected = async (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -12459,6 +12492,16 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                                             }
                                         }}
                                     />
+                                    {file.ready === false && (
+                                        <span
+                                            className="pointer-events-none absolute inset-0 flex items-center justify-center rounded-lg bg-[color-mix(in_srgb,var(--chat-canvas)_55%,transparent)]"
+                                            role="status"
+                                            aria-label="Scanning attachment before it can be sent"
+                                            title="Scanning…"
+                                        >
+                                            <span className="h-4 w-4 animate-spin rounded-full border-2 border-[var(--chat-text)] border-t-transparent" aria-hidden="true" />
+                                        </span>
+                                    )}
                                     {/* Stays hand-written: 18 x 18, and the control scale starts at
                                         xs = 24. This is a badge notched into the chip's corner with a
                                         -6px overhang; six pixels wider is six more pixels of the chip
@@ -12489,9 +12532,15 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                                             }
                                         }}
                                     >
-                                        <FileText size={14} className={file.fileObject ? "text-[var(--chat-muted)] group-hover:text-[var(--chat-text)]" : "text-[var(--chat-muted)]"} />
+                                        {file.ready === false ? (
+                                            <span className="h-3.5 w-3.5 flex-shrink-0 animate-spin rounded-full border-2 border-[var(--chat-muted)] border-t-transparent" role="status" aria-label="Scanning" title="Scanning…" />
+                                        ) : (
+                                            <FileText size={14} className={file.fileObject ? "text-[var(--chat-muted)] group-hover:text-[var(--chat-text)]" : "text-[var(--chat-muted)]"} />
+                                        )}
                                         <span className="truncate max-w-[140px]" title={file.name}>{file.name}</span>
-                                        {!file.fileObject && (
+                                        {file.ready === false ? (
+                                            <span className="text-[11px] text-[var(--chat-muted)] ml-0.5">scanning…</span>
+                                        ) : !file.fileObject && (
                                             <span className="text-[11px] text-[var(--chat-muted)] ml-0.5">(recent)</span>
                                         )}
                                     </div>
@@ -12935,9 +12984,9 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                         type="button"
                         data-composer-send-button
                         onClick={handleVoiceSend}
-                        className={`flex items-center justify-center transition-[background-color,color,transform,opacity] duration-200 active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--chat-accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--chat-canvas)] ${inputValue.trim() || attachedFiles.length > 0 ? 'bg-[var(--chat-accent)] text-[var(--chat-on-accent)] hover:opacity-90 motion-safe:animate-send-button-enter' : 'cursor-not-allowed border border-[var(--chat-border)] bg-[var(--chat-control)] text-[var(--chat-muted)]'} ${composerActionButtonSizeClass}`}
-                        aria-label={isModelsLoading ? 'Send message (waiting for models)' : 'Send message'}
-                        disabled={!(inputValue.trim() || attachedFiles.length > 0) || isContextLimitReached || isModelsLoading}
+                        className={`flex items-center justify-center transition-[background-color,color,transform,opacity] duration-200 active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--chat-accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--chat-canvas)] ${(inputValue.trim() || attachedFiles.length > 0) && !isUploadingAttachments && !attachedFiles.some(f => f.ready === false) ? 'bg-[var(--chat-accent)] text-[var(--chat-on-accent)] hover:opacity-90 motion-safe:animate-send-button-enter' : 'cursor-not-allowed border border-[var(--chat-border)] bg-[var(--chat-control)] text-[var(--chat-muted)]'} ${composerActionButtonSizeClass}`}
+                        aria-label={isModelsLoading ? 'Send message (waiting for models)' : (isUploadingAttachments || attachedFiles.some(f => f.ready === false)) ? 'Send message (scanning attachment…)' : 'Send message'}
+                        disabled={!(inputValue.trim() || attachedFiles.length > 0) || isContextLimitReached || isModelsLoading || isUploadingAttachments || attachedFiles.some(f => f.ready === false)}
                       >
                         {/* The send arrow was hand-drawn here — stroke 2, round caps — while every other
                             glyph in the composer came from the set at 1.75 with butt caps. It never
@@ -18903,6 +18952,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
             items={libraryViewerSelection.items}
             activeId={libraryViewerSelection.activeId}
             leftInset={(isTaskbarHidden ? 0 : TASKBAR_WIDTH_PX) + historyWorkspaceInsetPx}
+            themeClassName={`chat-themed xeno-icon-hosts chat-theme-${resolvedChatTheme}`}
             onClose={() => setLibraryViewerSelection(null)}
           />,
           document.body,
