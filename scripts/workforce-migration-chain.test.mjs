@@ -130,6 +130,9 @@ test('every workforce migration applies in order from an empty database', { skip
       const workforce = rows.map(r => r.tablename).filter(t => t.startsWith('workforce_'));
 
       assert.deepEqual(workforce, [
+        // MKT-01/OWN-03, 2026-09-27 -- the receipt of one agent-definition revision (the definition-edit right);
+        // cited by workforce-agent-revision.test.mjs and workforce-marketplace-rights.test.mjs.
+        'workforce_agent_revisions',
         'workforce_agent_versions',
         'workforce_assignment_member_sets',
         'workforce_assignment_members',

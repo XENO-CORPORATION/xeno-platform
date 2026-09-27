@@ -135,7 +135,11 @@ router.get('/listings/:slug', optionalAuthMiddleware, async (req, res) => {
     if (req.user) {
       entitlement = await svc.getActiveEntitlement(req.db, req.user.id, listing.id);
     }
-    const entitled = Boolean(entitlement);
+    // MKT-01: invoke and export are DIFFERENT rights. An entitlement may carry the right to run a listing without
+    // the right to take it away -- a rental never does (MKT-05) -- so the download URL on this page is decided by
+    // the same rule /download applies, not by "is there an entitlement". Before this, a renter refused by /download
+    // with rental_not_downloadable read a working URL for the same private artifact off this page.
+    const entitled = Boolean(entitlement) && rentals.rentalMayDownload(entitlement);
 
     res.json({
       success: true,
