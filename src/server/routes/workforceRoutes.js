@@ -118,6 +118,7 @@ const defaultReadCapacity = async (...args) => (await import('../services/workfo
 const defaultReadEvaluation = async (...args) => (await import('../services/workforceEvaluation.js')).readWorkforceEvaluation(...args);
 const runResults = (name) => async (...args) => (await import('../services/workforceRunResults.js'))[name](...args);
 const memberRemoval = (name) => async (...args) => (await import('../services/workforceMemberRemoval.js'))[name](...args);
+const agentRevision = (name) => async (...args) => (await import('../services/workforceAgentRevision.js'))[name](...args);
 // RUN-03: the lease is signed with the platform's OWN active OIDC key -- the one published at
 // /api/oauth2/jwks -- so any runtime can verify it offline against the public JWKS, and no key
 // ever comes from a request.
@@ -202,6 +203,34 @@ function createAndAssignObservation(value, request, readOnly) {
         sourceApprovedByUserId: a.sourceApprovedByUserId, targetAcceptedByUserId: a.targetAcceptedByUserId, awaiting: a.awaiting };
     });
     return { ...base, owner, assignments };
+  } catch { return null; }
+}
+/** MKT-01/OWN-03: a revision reply is the receipt, and the version it wrote only to someone who may still revise it.
+ * The receipt names the agent and operation asked about, and a version one greater than the one it revised. */
+const REVISION_VERSION_FIELDS = ['resourceId', 'version', 'schemaVersion', 'content', 'contentHash', 'provenance', 'license', 'createdByUserId', 'createdAt'];
+function revisionObservation(value, request, readOnly) {
+  try {
+    if (!value || value.schemaVersion !== 1 || typeof value.replayed !== 'boolean') return null;
+    const access = value.access;
+    if (!access || typeof access.allowed !== 'boolean') return null;
+    if (value.state === 'not-observed') {
+      if (!readOnly || value.revision !== null || value.version !== null || value.replayed !== false || access.allowed) return null;
+      return { schemaVersion: 1, state: 'not-observed', replayed: false, revision: null, version: null, access: { allowed: false, reason: 'no_access' } };
+    }
+    const r = value.revision;
+    if (value.state !== 'committed' || !r || uuid(r.operationId) !== uuid(request.operationId)
+      || (request.resourceId !== undefined && uuid(r.resourceId) !== uuid(request.resourceId))
+      || !Number.isSafeInteger(r.previousVersion) || r.previousVersion < 1 || r.version !== r.previousVersion + 1
+      || (request.baseVersion !== undefined && r.previousVersion !== request.baseVersion)
+      || typeof r.committedAt !== 'string' || !Number.isFinite(Date.parse(r.committedAt))) return null;
+    const revision = { operationId: r.operationId, resourceId: r.resourceId, previousVersion: r.previousVersion, version: r.version, committedAt: r.committedAt };
+    if (!access.allowed) {
+      if (value.version !== null || access.reason !== 'no_access') return null;
+      return { schemaVersion: 1, state: 'committed', replayed: value.replayed, revision, version: null, access: { allowed: false, reason: 'no_access' } };
+    }
+    const v = value.version;
+    if (!v || uuid(v.resourceId) !== uuid(r.resourceId) || v.version !== r.version || !/^[0-9a-f]{64}$/.test(v.contentHash)) return null;
+    return { schemaVersion: 1, state: 'committed', replayed: value.replayed, revision, version: fields(v, REVISION_VERSION_FIELDS), access: { allowed: true } };
   } catch { return null; }
 }
 function capacityObservation(value, request) {
@@ -475,6 +504,7 @@ export function createWorkforceRouter({ createWorkforceResource = defaultCreate,
   readWorkforceEvaluation = defaultReadEvaluation,
   reportRunResult = runResults('reportRunResult'), deliverRunResult = runResults('deliverRunResult'), readRunOutcome = runResults('readRunOutcome'),
   removeTeamMember = memberRemoval('removeTeamMember'), readMemberRemoval = memberRemoval('readMemberRemoval'), archiveMemberRemoval = memberRemoval('archiveMemberRemoval'),
+  reviseAgentDefinition = agentRevision('reviseAgentDefinition'), readAgentRevision = agentRevision('readAgentRevision'),
   authorizeRunStep = defaultAuthorizeStep,
   revokeRun = defaultRevokeRun, readRunAuthority = defaultReadAuthority } = {}) {
   const router = express.Router();
@@ -526,6 +556,16 @@ export function createWorkforceRouter({ createWorkforceResource = defaultCreate,
             });
           }
         } catch { return fail(res, 'internal'); }
+        return fail(res, error.code, { schemaVersion: 1, reason: error.details.reason, ...extra });
+      }
+      // MKT-01/OWN-03: a revision refusal carries its reason, and a stale base the current version to re-read.
+      if (error?.name === 'AgentRevisionError' && Object.hasOwn(ERRORS, error.code)
+        && typeof error.details?.reason === 'string' && /^[a-z_]{1,64}$/.test(error.details.reason)) {
+        if (error.code === 'unavailable' && error.details.reason === 'operation_state_uncertain') {
+          try { return fail(res, 'unavailable', { schemaVersion: 1, reason: 'operation_state_uncertain', operationId: uuid(req.body.operationId) }); }
+          catch { return fail(res, 'internal'); }
+        }
+        const extra = Number.isSafeInteger(error.details.currentVersion) ? { currentVersion: error.details.currentVersion } : {};
         return fail(res, error.code, { schemaVersion: 1, reason: error.details.reason, ...extra });
       }
       return fail(res, Object.hasOwn(ERRORS, error?.code) ? error.code : 'internal');
@@ -587,7 +627,13 @@ export function createWorkforceRouter({ createWorkforceResource = defaultCreate,
     handle(readMemberRemoval, true, removalReadObservation));
   router.post('/member-removals/archive', authMiddleware, requireDpopIfBound, requireWorkforceScope('workforce:manage'), parse,
     handle(archiveMemberRemoval, false, removalObservation));
-  for (const path of ['/resources', '/resources/create-and-assign', '/resources/list', '/resource-operations/read', '/run-admissions', '/run-admissions/read', '/run-admissions/pin', '/capacity', '/evaluation',
+  // MKT-01/OWN-03: revising a definition is a manage act -- the right to change what an agent IS -- and reconciling
+  // one by its operation id is a read.
+  router.post('/resources/revise-definition', authMiddleware, requireDpopIfBound, requireWorkforceScope('workforce:manage'), parse,
+    handle(reviseAgentDefinition, false, revisionObservation));
+  router.post('/resources/revise-definition/read', authMiddleware, requireDpopIfBound, requireWorkforceScope('workforce:read'), parse,
+    handle(readAgentRevision, true, revisionObservation));
+  for (const path of ['/resources', '/resources/create-and-assign', '/resources/revise-definition', '/resources/revise-definition/read', '/resources/list', '/resource-operations/read', '/run-admissions', '/run-admissions/read', '/run-admissions/pin', '/capacity', '/evaluation',
     '/run-admissions/authorize-step', '/run-admissions/revoke', '/run-admissions/authority',
     '/run-admissions/result', '/run-admissions/deliver', '/run-admissions/outcome',
     '/member-removals', '/member-removals/read', '/member-removals/archive']) {

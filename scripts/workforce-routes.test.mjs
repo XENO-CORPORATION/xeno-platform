@@ -76,6 +76,13 @@ test('real HTTP/authMiddleware/JWT/DPoP boundary with query-aware auth DB and in
   let capacityResult;
   let evaluationResult;
   let deliveryResult;
+  let revisionResult;
+  const revisedAgent = '88888888-8888-4888-8888-888888888888';
+  const revisionFixture = (opId) => ({ schemaVersion: 1, state: 'committed', replayed: false,
+    revision: { operationId: opId, resourceId: revisedAgent, previousVersion: 1, version: 2, committedAt: '2026-09-27T12:00:00.000Z' },
+    version: { resourceId: revisedAgent, version: 2, schemaVersion: 1, content: { instructions: 'v2' }, contentHash: 'c'.repeat(64),
+      provenance: {}, license: {}, createdByUserId: human, createdAt: '2026-09-27T12:00:00.000Z', internalRow: 'hidden' },
+    access: { allowed: true } });
   let createAndAssignResult;
   const assignedWorkspace = '66666666-6666-4666-8666-666666666666';
   const createAndAssignFixture = () => ({ ...committed(), owner, assignments: [{ assignmentId: '77777777-7777-4777-8777-777777777777',
@@ -100,6 +107,10 @@ test('real HTTP/authMiddleware/JWT/DPoP boundary with query-aware auth DB and in
     return method === 'admit' ? admittedFixture() : admittedFixture().admission;
   };
   app.use(basePath, createWorkforceRouter({ createWorkforceResource: invoke('create'), readWorkforceResourceOperation: invoke('read'),
+    reviseAgentDefinition: async (pool, context, value) => { calls.push({ method: 'revise', context, body: value });
+      return revisionResult ?? revisionFixture(value.operationId); },
+    readAgentRevision: async (pool, context, value) => { calls.push({ method: 'readRevision', context, body: value });
+      return revisionResult ?? revisionFixture(value.operationId); },
     createAndAssignWorkforceResource: async (pool, context, value) => { calls.push({ method: 'createAndAssign', context, body: value });
       return createAndAssignResult ?? createAndAssignFixture(); },
     admitRun: admit('admit'), readRunAdmission: admit('readAdmission'),
@@ -501,6 +512,30 @@ test('real HTTP/authMiddleware/JWT/DPoP boundary with query-aware auth DB and in
       assert.equal(plain.status, 200);
       assert.deepEqual([Object.hasOwn(plain.body, 'assignments'), Object.hasOwn(plain.body, 'owner')], [false, false],
         'the plain create reply keeps the shape shipped clients parse strictly');
+    });
+    // Mutation-checked 2026-09-27: the revision route demands only workforce:read -> "revising a definition is a
+    // manage act"; the projection accepts a receipt for another agent -> "a revision for another agent is never
+    // reported"; it passes the service's extra fields -> "only the documented version fields cross".
+    await t.test('MKT-01: revising a definition is a manage act over HTTP, reporting the version it wrote', async () => {
+      const body = { operationId: crypto.randomUUID(), resourceId: revisedAgent, baseVersion: 1,
+        definition: { schemaVersion: 1, instructions: 'v2', skills: [], requestedCapabilities: [] } };
+      revisionResult = undefined;
+      const made = await request({ path: '/resources/revise-definition', body });
+      assert.equal(made.status, 200);
+      assert.deepEqual([made.body.revision.previousVersion, made.body.revision.version, made.body.version.version], [1, 2, 2]);
+      assert.ok(!JSON.stringify(made.body).includes('hidden'), 'only the documented version fields cross');
+      assert.deepEqual(calls.at(-1).context, { actorUserId: human, clientId: 'xeno-agent-interface' }, 'the actor comes from authentication');
+      assert.equal((await request({ path: '/resources/revise-definition', body, token: mint({ scope: 'workforce:read' }) })).status, 403,
+        'revising a definition is a manage act');
+      // A consistent reply about ANOTHER agent -- receipt and version agree with each other, just not with the request.
+      const other = revisionFixture(body.operationId);
+      revisionResult = { ...other, revision: { ...other.revision, resourceId: human }, version: { ...other.version, resourceId: human } };
+      assert.equal((await request({ path: '/resources/revise-definition', body })).status, 500, 'a revision for another agent is never reported');
+      revisionResult = undefined;
+      // Reconciling a revision is a read, by operation id alone.
+      const read = await request({ path: '/resources/revise-definition/read', body: { operationId: body.operationId }, token: mint({ scope: 'workforce:read' }) });
+      assert.deepEqual([read.status, read.body.revision.version], [200, 2]);
+      assert.equal((await request({ method: 'GET', path: '/resources/revise-definition' })).status, 405);
     });
     await t.test('LIFE-04: an evaluation is read over HTTP as a read, for the subject and window asked about', async () => {
       const ask = { owner: { type: 'workspace', id: operationId }, subject: { kind: 'agent', resourceId: operationId },
