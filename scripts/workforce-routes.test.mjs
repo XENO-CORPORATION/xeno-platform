@@ -75,6 +75,7 @@ test('real HTTP/authMiddleware/JWT/DPoP boundary with query-aware auth DB and in
   let pinResult;
   let capacityResult;
   let evaluationResult;
+  let deliveryResult;
   const admittedFixture = () => ({ replayed: false, admission: { schemaVersion: 1, admissionId: operationId, operationId,
     agent: { resourceId: operationId, version: 1, contentHash: 'a'.repeat(64) },
     target: { kind: 'personal', ownerUserId: human, workspaceId: null, projectId: null, assignmentId: null, assignmentRevision: null, participationId: null, participationRevision: null },
@@ -93,6 +94,15 @@ test('real HTTP/authMiddleware/JWT/DPoP boundary with query-aware auth DB and in
     readWorkforceCapacity: async (pool, context, value) => { calls.push({ method: 'capacity', context, body: value });
       return capacityResult ?? { schemaVersion: 1, owner: value.owner, derivedAt: '2026-09-27T12:00:00.000Z', activeAdmissions: 2, inFlightRuns: 1,
         activeAgents: 2, committedCeilingMicro: '3500000', funding: [{ payerUserId: human, canFund: true, availableMicro: '7000000', internal: 'hidden' }] }; },
+    reportRunResult: async (pool, context, value) => { calls.push({ method: 'report', context, body: value });
+      return { replayed: false, result: { outcome: 'completed', interruptedReason: null, summary: 's', artifacts: [{ name: 'diff', ref: 'artifact:1', content: 'hidden' }],
+        reportedAt: '2026-09-27T12:00:00.000Z', reportHash: 'hidden' } }; },
+    deliverRunResult: async (pool, context, value) => { calls.push({ method: 'deliver', context, body: value });
+      return deliveryResult ?? { replayed: false, delivery: { childAdmissionId: value.childAdmissionId, parentAdmissionId: value.parentAdmissionId,
+        outcome: 'interrupted', interruptedReason: 'stopped', deliveredAt: '2026-09-27T12:00:00.000Z' } }; },
+    readRunOutcome: async (pool, context, value) => { calls.push({ method: 'outcome', context, body: value });
+      return { schemaVersion: 1, admissionId: value.admissionId, parentAdmissionId: null, taskRef: 'goal-1:task-7', conversationId: null, state: 'running',
+        result: null, interruption: null, delivery: null, children: [] }; },
     readWorkforceEvaluation: async (pool, context, value) => { calls.push({ method: 'evaluation', context, body: value });
       return evaluationResult ?? { schemaVersion: 1, owner: value.owner, subject: value.subject, window: value.window,
         derivedAt: '2026-09-27T12:00:00.000Z', settledBefore: '2026-09-27T11:55:00.000Z', closed: true,
@@ -380,6 +390,29 @@ test('real HTTP/authMiddleware/JWT/DPoP boundary with query-aware auth DB and in
     // Mutation-checked 2026-09-27: the route demands workforce:manage -> "reading an evaluation is a read";
     // the projection passes unknown fields -> "no score crosses the wire"; it accepts another window ->
     // "an evaluation of another window is never reported".
+    // Mutation-checked 2026-09-27: the delivery projection accepts another parent -> "a delivery to another
+    // parent is never reported"; the report projection passes unknown fields -> "only the documented result fields cross".
+    await t.test('RUN-04: a result is reported and delivered over HTTP as manage acts, and the outcome read as a read', async () => {
+      const parentId = crypto.randomUUID();
+      const reported = await request({ path: '/run-admissions/result', body: { admissionId: operationId, outcome: 'completed' } });
+      assert.equal(reported.status, 200);
+      assert.ok(!JSON.stringify(reported.body).includes('hidden'), 'only the documented result fields cross');
+      assert.equal((await request({ path: '/run-admissions/result', body: { admissionId: operationId, outcome: 'completed' },
+        token: mint({ scope: 'workforce:read' }) })).status, 403, 'reporting a result is a manage act');
+      const delivered = await request({ path: '/run-admissions/deliver', body: { childAdmissionId: operationId, parentAdmissionId: parentId } });
+      assert.deepEqual([delivered.status, delivered.body.delivery.parentAdmissionId], [200, parentId]);
+      deliveryResult = { replayed: false, delivery: { childAdmissionId: operationId, parentAdmissionId: crypto.randomUUID(), outcome: 'completed',
+        interruptedReason: null, deliveredAt: '2026-09-27T12:00:00.000Z' } };
+      assert.equal((await request({ path: '/run-admissions/deliver', body: { childAdmissionId: operationId, parentAdmissionId: parentId } })).status, 500,
+        'a delivery to another parent is never reported');
+      deliveryResult = undefined;
+      const read = await request({ path: '/run-admissions/outcome', body: { admissionId: operationId }, token: mint({ scope: 'workforce:read' }) });
+      assert.deepEqual([read.status, read.body.taskRef], [200, 'goal-1:task-7'], 'reading an outcome is a read');
+      assert.deepEqual(calls.at(-1).context, { actorUserId: human, clientId: 'xeno-agent-interface' }, 'the actor comes from authentication');
+      for (const path of ['/run-admissions/result', '/run-admissions/deliver', '/run-admissions/outcome']) {
+        assert.equal((await request({ method: 'GET', path })).status, 405);
+      }
+    });
     await t.test('LIFE-04: an evaluation is read over HTTP as a read, for the subject and window asked about', async () => {
       const ask = { owner: { type: 'workspace', id: operationId }, subject: { kind: 'agent', resourceId: operationId },
         window: { since: '2026-09-01T00:00:00.000Z', until: '2026-09-02T00:00:00.000Z' }, expectedActorAccountId: human };

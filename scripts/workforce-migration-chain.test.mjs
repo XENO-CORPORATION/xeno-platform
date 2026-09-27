@@ -155,6 +155,10 @@ test('every workforce migration applies in order from an empty database', { skip
         // RUN-03/NFR-06/NFR-10, 2026-09-25 -- every run-authority lease ever issued (at most 60 s, monotonic
         // per admission) and the durable revocation that fences them; cited by workforce-run-authority.test.mjs.
         'workforce_run_leases',
+        // RUN-04, 2026-09-27 -- a run's reported result and the receipt of its delivery to its parent;
+        // cited by workforce-run-results.test.mjs.
+        'workforce_run_result_deliveries',
+        'workforce_run_results',
         'workforce_run_revocations',
         'workforce_team_memberships',
         'workforce_workspace_assignments',

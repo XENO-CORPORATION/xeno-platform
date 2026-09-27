@@ -111,7 +111,7 @@ function parse(context, value) {
   const ctx = record(context, ['actorUserId', 'clientId', 'apiKeyId'], 'context');
   if (typeof ctx.clientId !== 'string' || !/^[a-zA-Z0-9._-]{1,128}$/.test(ctx.clientId)) fail('bad_input', 'invalid_client');
   const input = record(value, ['operationId', 'expectedActorAccountId', 'agent', 'target', 'team', 'conversationId', 'root',
-    'capabilities', 'runtimeCapabilities', 'budget', 'parent'], 'request');
+    'capabilities', 'runtimeCapabilities', 'budget', 'parent', 'taskRef'], 'request');
   const agent = record(input.agent, ['resourceId', 'version', 'contentHash'], 'agent');
   if (!Number.isSafeInteger(agent.version) || agent.version < 1) fail('bad_input', 'invalid_agent_version');
   if (typeof agent.contentHash !== 'string' || !/^[0-9a-f]{64}$/.test(agent.contentHash)) fail('bad_input', 'invalid_agent_content_hash');
@@ -137,6 +137,9 @@ function parse(context, value) {
       budget: { ceilingMicro: budget.ceilingMicro },
       parent: input.parent === undefined || input.parent === null ? null
         : { admissionId: uuid(record(input.parent, ['admissionId'], 'parent').admissionId, 'parent_admission') },
+      // RUN-04: the coordination task this run is for -- an opaque reference, recorded, never interpreted.
+      taskRef: input.taskRef === undefined || input.taskRef === null ? null
+        : (typeof input.taskRef === 'string' && /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/.test(input.taskRef) ? input.taskRef : fail('bad_input', 'invalid_task_ref')),
     },
   };
 }
@@ -215,6 +218,7 @@ function publicAdmission(row) {
     payer: { kind: row.payer_kind, userId: row.payer_user_id },
     budget: { ceilingMicro: String(row.budget_ceiling_micro) },
     parent: row.parent_admission_id ? { admissionId: row.parent_admission_id, depth: row.nesting_depth } : null,
+    taskRef: row.task_ref ?? null,
     capabilities: { requested: row.requested_capabilities, effective: row.effective_capabilities, terms: row.rights },
     memoryNamespace: row.memory_namespace,
     admittedAt: row.admitted_at.toISOString(),
@@ -352,7 +356,7 @@ export async function admitRun(pool, authenticatedContext, value) {
   if (request.expectedActorAccountId && request.expectedActorAccountId !== actor.actorUserId) fail('conflict', 'actor_context_conflict');
   const requestHash = operationHash({ agent: request.agent, target: request.target, team: request.team, conversationId: request.conversationId,
     root: request.root, capabilities: request.capabilities, runtimeCapabilities: request.runtimeCapabilities, budget: request.budget,
-    ...(request.parent ? { parent: request.parent } : {}) });
+    ...(request.parent ? { parent: request.parent } : {}), ...(request.taskRef ? { taskRef: request.taskRef } : {}) });
 
   return authorityTransaction(pool, async (db) => {
     // The actor incarnation is read inside the idempotency hook and recorded on the new admission.
@@ -442,6 +446,10 @@ export async function admitRun(pool, authenticatedContext, value) {
           : request.target.kind === 'workspace' ? parent.assignment_id === request.target.assignmentId
             : parent.participation_id === request.target.participationId);
       if (!sameTarget || parent.payer_user_id !== payerUserId) fail('conflict', 'child_outside_parent_target');
+      // RUN-04: a child inherits a subset of its parent's context -- its root among it, or none.
+      if (root && (root.bindingId !== parent.root_binding_id || root.installationId !== parent.host_installation_id)) {
+        fail('conflict', 'child_outside_parent_root');
+      }
       if (parent.nesting_depth >= 8) fail('denied', 'nesting_too_deep');
       // A child may do nothing its parent may not: its effective set is narrowed by the parent's too.
       effective = within(effective, parent.effective_capabilities);
@@ -461,8 +469,8 @@ export async function admitRun(pool, authenticatedContext, value) {
         team_id,team_kind,team_membership_id,team_membership_revision,member_set_revision,team_function,
         conversation_id,root_binding_id,root_binding_revision,host_installation_id,entitlement_id,
         payer_kind,payer_user_id,budget_ceiling_micro,requested_capabilities,effective_capabilities,rights,memory_namespace,
-        parent_admission_id,nesting_depth)
-      VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,'user',$28,$29,$30,$31,$32,$33,$34,$35)
+        parent_admission_id,nesting_depth,task_ref)
+      VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,'user',$28,$29,$30,$31,$32,$33,$34,$35,$36)
       RETURNING *`,
     [actor.actorUserId, actor.clientId, request.operationId, requestHash, inc,
       agent.id, version.version, version.content_hash, request.target.kind,
@@ -471,7 +479,7 @@ export async function admitRun(pool, authenticatedContext, value) {
       team?.id ?? null, team ? 'team' : null, team?.membershipId ?? null, team?.membershipRevision ?? null, team?.memberSetRevision ?? null, team?.function ?? null,
       request.conversationId, root?.bindingId ?? null, root?.revision ?? null, root?.installationId ?? null, entitlementId,
       payerUserId, request.budget.ceilingMicro, JSON.stringify(request.capabilities), JSON.stringify(effective), JSON.stringify(rights), memoryNamespace,
-      parent?.id ?? null, parent ? parent.nesting_depth + 1 : 0])).rows[0];
+      parent?.id ?? null, parent ? parent.nesting_depth + 1 : 0, request.taskRef])).rows[0];
     return { replayed: false, admission: publicAdmission(row) };
   });
 }

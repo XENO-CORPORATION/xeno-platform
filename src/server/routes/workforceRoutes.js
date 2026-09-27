@@ -115,6 +115,7 @@ const defaultReadAdmission = async (...args) => (await import('../services/workf
 const defaultReadPin = async (...args) => (await import('../services/workforceRunAdmission.js')).readRunnablePin(...args);
 const defaultReadCapacity = async (...args) => (await import('../services/workforceCapacity.js')).readWorkforceCapacity(...args);
 const defaultReadEvaluation = async (...args) => (await import('../services/workforceEvaluation.js')).readWorkforceEvaluation(...args);
+const runResults = (name) => async (...args) => (await import('../services/workforceRunResults.js'))[name](...args);
 // RUN-03: the lease is signed with the platform's OWN active OIDC key -- the one published at
 // /api/oauth2/jwks -- so any runtime can verify it offline against the public JWKS, and no key
 // ever comes from a request.
@@ -197,6 +198,56 @@ const COUNT_KEYS = { stopped: ['stopped_by_actor', 'stopped_by_target', 'authori
 const counts = (value, keys) => value && typeof value === 'object' && !Array.isArray(value)
   && Object.keys(value).length === keys.length && keys.every(k => count(value[k]));
 const ids = value => Array.isArray(value) && value.length <= 500 && value.every(v => uuid(v) === v);
+/** RUN-04: a run's result, the receipt of its delivery, and its outcome -- each for the run ASKED about. A
+ * delivery for another child, or to another parent than the one asked for, is not reported. */
+const OUTCOMES = ['completed', 'failed', 'interrupted'];
+const INTERRUPTIONS = ['budget_exhausted', 'stopped', 'authority_lost', 'uncertain', 'blocked'];
+function resultShape(r) {
+  if (!r || !OUTCOMES.includes(r.outcome) || !(r.interruptedReason === null || INTERRUPTIONS.includes(r.interruptedReason))
+    || (r.outcome === 'interrupted') !== (r.interruptedReason !== null) || typeof r.summary !== 'string' || !Array.isArray(r.artifacts)
+    || !Number.isFinite(Date.parse(r.reportedAt))) throw new Error('Invalid result');
+  const artifacts = r.artifacts.map(a => {
+    if (!a || typeof a.name !== 'string' || typeof a.ref !== 'string' || (a.sha256 !== undefined && !/^[0-9a-f]{64}$/.test(a.sha256))) throw new Error('Invalid artifact');
+    return { name: a.name, ref: a.ref, ...(a.sha256 ? { sha256: a.sha256 } : {}) };
+  });
+  return { outcome: r.outcome, interruptedReason: r.interruptedReason, summary: r.summary, artifacts, reportedAt: r.reportedAt };
+}
+function deliveryShape(d) {
+  if (!d || uuid(d.childAdmissionId) !== d.childAdmissionId || uuid(d.parentAdmissionId) !== d.parentAdmissionId || !OUTCOMES.includes(d.outcome)
+    || !(d.interruptedReason === null || INTERRUPTIONS.includes(d.interruptedReason)) || !Number.isFinite(Date.parse(d.deliveredAt))) throw new Error('Invalid delivery');
+  return { childAdmissionId: d.childAdmissionId, parentAdmissionId: d.parentAdmissionId, outcome: d.outcome,
+    interruptedReason: d.interruptedReason, deliveredAt: d.deliveredAt };
+}
+function reportObservation(value) {
+  try { return { replayed: value?.replayed === true, result: resultShape(value.result) }; } catch { return null; }
+}
+function deliveryObservation(value, request) {
+  try {
+    const delivery = deliveryShape(value?.delivery);
+    if (delivery.childAdmissionId !== uuid(request.childAdmissionId) || delivery.parentAdmissionId !== uuid(request.parentAdmissionId)) return null;
+    return { replayed: value.replayed === true, delivery };
+  } catch { return null; }
+}
+function outcomeObservation(value, request) {
+  try {
+    if (!value || value.schemaVersion !== 1 || value.admissionId !== uuid(request.admissionId)) return null;
+    if (!['running', ...OUTCOMES].includes(value.state)) return null;
+    for (const id of [value.parentAdmissionId, value.conversationId]) if (id !== null && uuid(id) !== id) return null;
+    if (value.taskRef !== null && (typeof value.taskRef !== 'string' || !/^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/.test(value.taskRef))) return null;
+    const interruption = value.interruption === null ? null : (() => {
+      const i = value.interruption;
+      if (!i || !INTERRUPTIONS.includes(i.reason) || i.derivedFrom !== 'fence' || uuid(i.fencedByAdmissionId) !== i.fencedByAdmissionId) throw new Error('Invalid interruption');
+      return { reason: i.reason, derivedFrom: 'fence', fencedByAdmissionId: i.fencedByAdmissionId };
+    })();
+    if (!Array.isArray(value.children) || value.children.length > 1000) return null;
+    return { schemaVersion: 1, admissionId: value.admissionId, parentAdmissionId: value.parentAdmissionId, taskRef: value.taskRef,
+      conversationId: value.conversationId, state: value.state,
+      result: value.result === null ? null : resultShape(value.result), interruption,
+      delivery: value.delivery === null ? null : deliveryShape(value.delivery),
+      children: value.children.map(c => { if (uuid(c.admissionId) !== c.admissionId || typeof c.delivered !== 'boolean') throw new Error('Invalid child');
+        return { admissionId: c.admissionId, delivered: c.delivered }; }) };
+  } catch { return null; }
+}
 function evaluationObservation(value, request) {
   try {
     const owner = normalizeOwnerScope(value?.owner), asked = normalizeOwnerScope(request.owner);
@@ -363,6 +414,7 @@ function globalObservation(value, request) {
 export function createWorkforceRouter({ createWorkforceResource = defaultCreate, readWorkforceResourceOperation = defaultRead, listOwnedWorkforceResources = defaultList,
   admitRun = defaultAdmit, readRunAdmission = defaultReadAdmission, readRunnablePin = defaultReadPin, readWorkforceCapacity = defaultReadCapacity,
   readWorkforceEvaluation = defaultReadEvaluation,
+  reportRunResult = runResults('reportRunResult'), deliverRunResult = runResults('deliverRunResult'), readRunOutcome = runResults('readRunOutcome'),
   authorizeRunStep = defaultAuthorizeStep,
   revokeRun = defaultRevokeRun, readRunAuthority = defaultReadAuthority } = {}) {
   const router = express.Router();
@@ -440,8 +492,17 @@ export function createWorkforceRouter({ createWorkforceResource = defaultCreate,
     handle(onlyAdmission(revokeRun), false, authorityObservation));
   router.post('/run-admissions/authority', authMiddleware, requireDpopIfBound, requireWorkforceScope('workforce:read'), parse,
     handle(onlyAdmission(readRunAuthority), true, authorityObservation));
+  // RUN-04: a run's result is reported and delivered to its parent -- both manage acts, because a delivered
+  // outcome is what the parent then acts on; reading a run's outcome is a read.
+  router.post('/run-admissions/result', authMiddleware, requireDpopIfBound, requireWorkforceScope('workforce:manage'), parse,
+    handle(reportRunResult, false, reportObservation));
+  router.post('/run-admissions/deliver', authMiddleware, requireDpopIfBound, requireWorkforceScope('workforce:manage'), parse,
+    handle(deliverRunResult, false, deliveryObservation));
+  router.post('/run-admissions/outcome', authMiddleware, requireDpopIfBound, requireWorkforceScope('workforce:read'), parse,
+    handle(readRunOutcome, true, outcomeObservation));
   for (const path of ['/resources', '/resources/list', '/resource-operations/read', '/run-admissions', '/run-admissions/read', '/run-admissions/pin', '/capacity', '/evaluation',
-    '/run-admissions/authorize-step', '/run-admissions/revoke', '/run-admissions/authority']) {
+    '/run-admissions/authorize-step', '/run-admissions/revoke', '/run-admissions/authority',
+    '/run-admissions/result', '/run-admissions/deliver', '/run-admissions/outcome']) {
     router.all(path, (_req, res) => res.set('Allow', 'POST').status(405).json({ success: false, code: 'bad_input', error: 'Method not allowed.' }));
   }
   router.use((error, _req, res, _next) => {
