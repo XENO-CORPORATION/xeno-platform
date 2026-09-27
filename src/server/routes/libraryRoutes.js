@@ -139,6 +139,21 @@ router.post('/assets/:id/link', async (req, res) => {
   }
 });
 
+// Readiness of an asset's malware scan, so the composer can wait for it BEFORE a file is sent into a
+// conversation (rather than showing "still scanning" after the fact). `ingestion_safe === false` is the
+// quarantine window; null/true means the scan has cleared and the asset can be served and referenced.
+router.get('/assets/:id/status', async (req, res) => {
+  try {
+    if (!isLibraryUuid(req.params.id)) return res.status(400).json({ success: false, error: 'Invalid asset id' });
+    const file = await getAuthorizedLibraryFile(req.db, { type: 'user', id: req.user.id }, req.params.id);
+    if (!file) return res.status(404).json({ success: false, error: 'Library asset not found' });
+    res.json({ success: true, ready: file.ingestion_safe !== false });
+  } catch (error) {
+    console.error('Failed to read Library asset status:', error);
+    res.status(500).json({ success: false, error: 'Could not read Library asset status' });
+  }
+});
+
 router.post('/assets/:id/ingestions/retry', async (req, res) => {
   try {
     if (!isLibraryUuid(req.params.id)) return res.status(400).json({ success: false, error: 'Invalid asset id' });

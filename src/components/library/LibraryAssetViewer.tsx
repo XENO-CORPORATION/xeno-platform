@@ -16,6 +16,10 @@ export type LibraryAssetViewerProps = {
   activeId: string;
   onClose: () => void;
   leftInset?: number;
+  /** The chat theme scope class (e.g. `chat-themed chat-theme-dark`). This viewer portals to
+   *  document.body, OUTSIDE the chat theme, so the --chat-* tokens only resolve when it carries
+   *  the scope itself — without it the whole viewer falls back to its dark literals. */
+  themeClassName?: string;
 };
 
 const MAX_VISIBLE_THUMBNAILS = 9;
@@ -41,7 +45,7 @@ export const getVisibleLibraryViewerItems = (items: LibraryViewerItem[], activeI
   return previewable.slice(start, start + MAX_VISIBLE_THUMBNAILS);
 };
 
-export const LibraryAssetViewer: React.FC<LibraryAssetViewerProps> = ({ items, activeId, onClose, leftInset = 0 }) => {
+export const LibraryAssetViewer: React.FC<LibraryAssetViewerProps> = ({ items, activeId, onClose, leftInset = 0, themeClassName = '' }) => {
   const initialIndex = Math.max(items.findIndex((item) => item.id === activeId), 0);
   const [index, setIndex] = useState(initialIndex);
   const [resolvedUrl, setResolvedUrl] = useState('');
@@ -128,25 +132,25 @@ export const LibraryAssetViewer: React.FC<LibraryAssetViewerProps> = ({ items, a
 
   return (
     <div
-      className="fixed inset-y-0 right-0 z-[11000] isolate flex flex-col overflow-hidden bg-[#050505] text-white"
+      className={`${themeClassName} fixed inset-y-0 right-0 z-[11000] isolate flex flex-col overflow-hidden bg-[var(--chat-canvas)] text-[var(--chat-text)]`}
       style={{ left: Math.max(0, leftInset) }}
       role="dialog"
       aria-label={`Library preview: ${item.name}`}
       data-library-asset-viewer="true"
       data-library-viewer-left={Math.max(0, leftInset)}
     >
-      <header className="grid h-[50px] shrink-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-4 border-b border-white/10 bg-[#080808] px-3">
-        <div className="flex min-w-0 items-center gap-2 overflow-hidden text-[12px] text-white/65">
-          <button type="button" onClick={onClose} className="rounded-lg p-2 hover:bg-white/10" aria-label="Close preview"><X size={16} /></button>
-          <span className="shrink-0 text-[13px] font-semibold tracking-tight text-white">XENO</span>
-          <span className="shrink-0 text-white/30">/</span>
-          <span className="shrink-0 text-white/75">Library</span><span className="shrink-0 text-white/30">/</span>
-          {item.context && <><span className="max-w-52 truncate">{item.context}</span><span className="shrink-0 text-white/30">/</span></>}
-          <span className="truncate font-medium text-white">{item.name}</span>
+      <header className="grid h-[50px] shrink-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-4 border-b border-[var(--chat-border)] bg-[var(--chat-surface)] px-3">
+        <div className="flex min-w-0 items-center gap-2 overflow-hidden text-[12px] text-[var(--chat-muted)]">
+          <button type="button" onClick={onClose} className="rounded-lg p-2 hover:bg-[var(--chat-hover)]" aria-label="Close preview"><X size={16} /></button>
+          <span className="shrink-0 text-[13px] font-semibold tracking-tight text-[var(--chat-text)]">XENO</span>
+          <span className="shrink-0 text-[var(--chat-muted)]">/</span>
+          <span className="shrink-0 text-[var(--chat-text)]">Library</span><span className="shrink-0 text-[var(--chat-muted)]">/</span>
+          {item.context && <><span className="max-w-52 truncate">{item.context}</span><span className="shrink-0 text-[var(--chat-muted)]">/</span></>}
+          <span className="truncate font-medium text-[var(--chat-text)]">{item.name}</span>
         </div>
         <div className="flex shrink-0 items-center gap-1">
-          <button type="button" disabled={!canExport} onClick={() => void copyLink()} className="rounded-lg p-2 hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-30 disabled:hover:bg-transparent" aria-label="Copy share link"><Copy size={16} /></button>
-          <button type="button" disabled={!canExport} onClick={() => void download()} className="rounded-lg p-2 hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-30 disabled:hover:bg-transparent" aria-label="Download"><Download size={16} /></button>
+          <button type="button" disabled={!canExport} onClick={() => void copyLink()} className="rounded-lg p-2 hover:bg-[var(--chat-hover)] disabled:cursor-not-allowed disabled:opacity-30 disabled:hover:bg-transparent" aria-label="Copy share link"><Copy size={16} /></button>
+          <button type="button" disabled={!canExport} onClick={() => void download()} className="rounded-lg p-2 hover:bg-[var(--chat-hover)] disabled:cursor-not-allowed disabled:opacity-30 disabled:hover:bg-transparent" aria-label="Download"><Download size={16} /></button>
         </div>
       </header>
       <div className="flex min-h-0 flex-1">
@@ -159,18 +163,18 @@ export const LibraryAssetViewer: React.FC<LibraryAssetViewerProps> = ({ items, a
               onResolvedUrl={setResolvedUrl}
               onStateChange={handleImageStateChange}
               alt={item.name}
-              className="flex max-h-full max-w-full cursor-grab select-none flex-col items-center justify-center object-contain text-white/45 active:cursor-grabbing"
-              loadingFallback={<span className="text-[12px] text-white/45">Loading preview…</span>}
+              className="flex max-h-full max-w-full cursor-grab select-none flex-col items-center justify-center object-contain text-[var(--chat-muted)] active:cursor-grabbing"
+              loadingFallback={<span className="text-[12px] text-[var(--chat-muted)]">Loading preview…</span>}
               fallback={(
                 <span className="flex max-w-sm flex-col items-center gap-3 text-center">
-                  <span className="flex h-12 w-12 items-center justify-center rounded-2xl border border-white/10 bg-white/[0.04]"><FileImage size={22} aria-hidden="true" /></span>
-                  <span className="text-[14px] font-medium text-white/80">Preview not ready yet</span>
-                  <span className="text-[12px] leading-relaxed text-white/45">A newly created image is scanned before it can be shown — try again in a moment. If it was removed, it won't return.</span>
+                  <span className="flex h-12 w-12 items-center justify-center rounded-2xl border border-[var(--chat-border)] bg-[var(--chat-surface-muted)]"><FileImage size={22} aria-hidden="true" /></span>
+                  <span className="text-[14px] font-medium text-[var(--chat-text)]">Preview not ready yet</span>
+                  <span className="text-[12px] leading-relaxed text-[var(--chat-muted)]">A newly created image is scanned before it can be shown — try again in a moment. If it was removed, it won't return.</span>
                 </span>
               )}
             />
           ) : imageState === 'resolving' ? (
-            <span className="text-[12px] text-white/45">Loading preview…</span>
+            <span className="text-[12px] text-[var(--chat-muted)]">Loading preview…</span>
           ) : imageState === 'ready' && resolvedUrl ? (
             mimeType.startsWith('video/') ? (
               <video src={resolvedUrl} controls className="max-h-full max-w-full" aria-label={item.name} />
@@ -181,26 +185,26 @@ export const LibraryAssetViewer: React.FC<LibraryAssetViewerProps> = ({ items, a
                 src={resolvedUrl}
                 title={item.name}
                 sandbox={mimeType === 'text/html' ? '' : undefined}
-                className="h-full w-full rounded-lg border border-white/10 bg-white"
+                className="h-full w-full rounded-lg border border-[var(--chat-border)] bg-white"
               />
             )
           ) : (
             <span className="flex max-w-sm flex-col items-center gap-3 text-center">
-              <span className="flex h-12 w-12 items-center justify-center rounded-2xl border border-white/10 bg-white/[0.04]"><File size={22} aria-hidden="true" /></span>
-              <span className="text-[14px] font-medium text-white/80">Preview not ready yet</span>
-              <span className="text-[12px] leading-relaxed text-white/45">A newly added file is scanned before it can be shown — try again in a moment. If it was removed, it won't return.</span>
+              <span className="flex h-12 w-12 items-center justify-center rounded-2xl border border-[var(--chat-border)] bg-[var(--chat-surface-muted)]"><File size={22} aria-hidden="true" /></span>
+              <span className="text-[14px] font-medium text-[var(--chat-text)]">Preview not ready yet</span>
+              <span className="text-[12px] leading-relaxed text-[var(--chat-muted)]">A newly added file is scanned before it can be shown — try again in a moment. If it was removed, it won't return.</span>
             </span>
           )}
         </main>
         {visibleImageItems.length > 1 && (
           <aside
-            className="flex w-[76px] shrink-0 flex-col items-center gap-2 overflow-y-auto border-l border-white/10 py-3"
+            className="flex w-[76px] shrink-0 flex-col items-center gap-2 overflow-y-auto border-l border-[var(--chat-border)] py-3"
             aria-label="Image history"
             data-library-preview-rail="right"
           >
             {visibleImageItems.map(({ item: entry, index: entryIndex }) => (
-              <button key={entry.id} type="button" onClick={() => setIndex(entryIndex)} className={`h-14 w-14 overflow-hidden rounded-lg border bg-white/[0.03] ${entryIndex === index ? 'border-white/80' : 'border-white/15 opacity-70 hover:opacity-100'}`} aria-label={`Preview ${entry.name}`}>
-                <LibraryAssetImage asset={entry.asset} sourceUrl={entry.sourceUrl} alt={entry.name} className="flex h-full w-full items-center justify-center object-cover text-white/35" draggable={false} />
+              <button key={entry.id} type="button" onClick={() => setIndex(entryIndex)} className={`h-14 w-14 overflow-hidden rounded-lg border bg-[var(--chat-surface-muted)] ${entryIndex === index ? 'border-[var(--chat-accent)]' : 'border-[var(--chat-border)] opacity-70 hover:opacity-100'}`} aria-label={`Preview ${entry.name}`}>
+                <LibraryAssetImage asset={entry.asset} sourceUrl={entry.sourceUrl} alt={entry.name} className="flex h-full w-full items-center justify-center object-cover text-[var(--chat-muted)]" draggable={false} />
               </button>
             ))}
           </aside>

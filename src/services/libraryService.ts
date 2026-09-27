@@ -78,6 +78,22 @@ export const libraryService = {
     return (await readJson<{ url: string }>(response)).url;
   },
 
+  /**
+   * Whether an asset's malware scan has cleared — true once it can be served and referenced. Used to
+   * wait for a fresh upload to finish scanning BEFORE it is sent into a conversation. Fails closed:
+   * any error reads as not-ready so a caller polling this never treats an unknown state as safe.
+   */
+  async assetReady(assetId: string): Promise<boolean> {
+    try {
+      const response = await fetch(`/api/library/assets/${encodeURIComponent(assetId)}/status`, { headers: authHeaders() });
+      if (!response.ok) return false;
+      const body = await response.json().catch(() => ({}));
+      return body?.ready === true;
+    } catch {
+      return false;
+    }
+  },
+
   async fetchAssetBlob(asset: Pick<LibraryAssetRef, 'assetId' | 'contentUrl'>): Promise<Blob> {
     const response = await fetch(asset.contentUrl || `/api/library/assets/${asset.assetId}/content`, { headers: authHeaders() });
     if (!response.ok) throw new Error(`Library asset unavailable (${response.status})`);
