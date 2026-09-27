@@ -38,6 +38,15 @@
  * revoked, and the database refuses to issue another lease under it. A transient refusal (the payer
  * cannot fund this step right now) does not revoke -- a top-up must be able to resume the run.
  *
+ * ── NESTED RUNS (RUN-10) ────────────────────────────────────────────────────────────────────────
+ * A child run is fenced by a revocation of ITSELF OR ANY ANCESTOR, read through the one database
+ * function that defines it (workforce_run_admission_fence), never by writing a revocation into every
+ * descendant -- a cascade written at stop time is a step something can skip. And each step of a child is
+ * authorized against every ancestor's LIVE authority as well as its own: the child keeps its own agent
+ * pin, but its reach is the intersection of what is still live at every level. An ancestor that has
+ * lost a term is revoked durably, exactly as it would be on its own next step, and that one write fences
+ * every run beneath it.
+ *
  * ── WHAT IT DELIBERATELY DOES NOT DO ───────────────────────────────────────────────────────────
  * It never releases or voids a hold. FUND-09 forbids releasing a reservation because authority or a
  * lease lapsed, and NFR-06 keeps dispatched noncancellable work visible until it settles. Revoking
@@ -225,14 +234,26 @@ export async function authorizeRunStep(pool, authenticatedContext, value, { sign
     // Serialize the admission's lease sequence; the database guard holds the same rule independently.
     await db.query('SELECT pg_advisory_xact_lock(hashtextextended($1,0))', [`run-authority:${admissionId}`]);
 
-    const revoked = (await db.query('SELECT reason FROM workforce_run_revocations WHERE admission_id=$1', [admissionId])).rows[0];
-    if (revoked) fail('denied', 'admission_revoked', { revocation: revoked.reason });
+    const fence = await fenceOf(db, admissionId);
+    if (fence) fail('denied', 'admission_revoked', { revocation: fence.reason, ...(fence.admissionId !== admissionId ? { inherited: true } : {}) });
 
-    let live;
-    try { ({ live } = await liveTerms(db, row)); }
-    catch (error) {
-      if (error instanceof RunAdmissionError && TERMINAL.has(error.details.reason)) terminal = { error, reason: TERMINAL.get(error.details.reason) };
-      throw error;
+    // The run and every ancestor, nearest first. Each is re-derived LIVE; the step may use only what
+    // survives at every level. A terminal loss is recorded against the level that lost it.
+    const chain = [row];
+    while (chain.at(-1).parent_admission_id) {
+      chain.push((await db.query('SELECT * FROM workforce_run_admissions WHERE id=$1', [chain.at(-1).parent_admission_id])).rows[0]);
+    }
+    let live = null;
+    for (const level of chain) {
+      let levelLive;
+      try { ({ live: levelLive } = await liveTerms(db, level)); }
+      catch (error) {
+        if (error instanceof RunAdmissionError && TERMINAL.has(error.details.reason)) {
+          terminal = { error, reason: TERMINAL.get(error.details.reason), admissionId: level.id };
+        }
+        throw error;
+      }
+      live = live === null ? levelLive : live.filter((c) => levelLive.includes(c));
     }
     if (operation === 'privileged_call' && !live.includes(capability)) {
       fail('denied', 'capability_not_live', { capability });
@@ -265,7 +286,7 @@ export async function authorizeRunStep(pool, authenticatedContext, value, { sign
     if (terminal) {
       // A platform finding names nobody: the actor who happened to ask did not decide it.
       await pool.query(`INSERT INTO workforce_run_revocations(admission_id,reason) VALUES($1,$2)
-        ON CONFLICT (admission_id) DO NOTHING`, [admissionId, terminal.reason]);
+        ON CONFLICT (admission_id) DO NOTHING`, [terminal.admissionId ?? admissionId, terminal.reason]);
     }
     throw error;
   });
@@ -300,10 +321,19 @@ export async function readRunAuthority(pool, authenticatedContext, admissionIdVa
   const admissionId = uuid(admissionIdValue, 'admission');
   const row = (await pool.query('SELECT actor_user_id FROM workforce_run_admissions WHERE id=$1', [admissionId])).rows[0];
   if (!row || row.actor_user_id !== actorUserId) fail('not_found', 'admission_not_found');
-  const revoked = (await pool.query('SELECT reason, revoked_at FROM workforce_run_revocations WHERE admission_id=$1', [admissionId])).rows[0];
+  const revoked = await fenceOf(pool, admissionId);
   const latest = (await pool.query('SELECT max(sequence)::text AS s FROM workforce_run_leases WHERE admission_id=$1', [admissionId])).rows[0].s;
   return { schemaVersion: 1, admissionId, revoked: Boolean(revoked), reason: revoked?.reason ?? null,
+    // RUN-10: a run stopped because an ANCESTOR was stopped names that ancestor -- the actor admitted both.
+    fencedByAdmissionId: revoked && revoked.admissionId !== admissionId ? revoked.admissionId : null,
     latestLeaseSequence: latest ?? null };
+}
+
+/** RUN-10: the revocation that fences this admission -- its own, or the nearest ancestor's -- or null. */
+async function fenceOf(db, admissionId) {
+  const r = (await db.query(`SELECT r.admission_id, r.reason, r.revoked_at FROM workforce_run_revocations r
+     WHERE r.admission_id = workforce_run_admission_fence($1)`, [admissionId])).rows[0];
+  return r ? { admissionId: r.admission_id, reason: r.reason, revokedAt: r.revoked_at } : null;
 }
 
 function publicLease(row) {

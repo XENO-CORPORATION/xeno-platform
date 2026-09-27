@@ -351,6 +351,23 @@ test('real HTTP/authMiddleware/JWT/DPoP boundary with query-aware auth DB and in
       capacityResult = undefined;
       assert.equal((await request({ method: 'GET', path: '/capacity' })).status, 405);
     });
+    // Mutation-checked 2026-09-27: the projection drops `parent` -> "a child admission crosses with its parent";
+    // the projection accepts a malformed parent -> "a malformed parent reference is not a success".
+    await t.test('RUN-10: a child is admitted over HTTP under its parent, and reports it', async () => {
+      const parentId = crypto.randomUUID();
+      const child = { operationId, agent: { resourceId: operationId, version: 1, contentHash: 'a'.repeat(64) },
+        target: { kind: 'personal', ownerUserId: human }, capabilities: ['files.read'], budget: { ceilingMicro: '1000' }, parent: { admissionId: parentId } };
+      admitResult = { replayed: false, admission: { ...admittedFixture().admission, parent: { admissionId: parentId, depth: 1 } } };
+      const result = await request({ path: '/run-admissions', body: child });
+      assert.equal(result.status, 200);
+      assert.deepEqual(calls.at(-1).body.parent, { admissionId: parentId }, 'the parent reaches the service as asked');
+      assert.deepEqual(result.body.admission.parent, { admissionId: parentId, depth: 1 }, 'a child admission crosses with its parent');
+      for (const parent of [{ admissionId: 'x', depth: 1 }, { admissionId: parentId, depth: 0 }, { admissionId: parentId, depth: 1, budget: 'hidden' }]) {
+        admitResult = { replayed: false, admission: { ...admittedFixture().admission, parent } };
+        assert.equal((await request({ path: '/run-admissions', body: child })).status, 500, 'a malformed parent reference is not a success');
+      }
+      admitResult = undefined;
+    });
     await t.test('RUN-03: each step is authorized over HTTP by the admitted actor, as a bounded signed lease', async () => {
       const stepBody = { admissionId: operationId, operation: 'provider_dispatch' };
       const result = await request({ path: '/run-admissions/authorize-step', body: stepBody });

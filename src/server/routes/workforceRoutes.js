@@ -141,7 +141,8 @@ function leaseObservation(value) {
 function authorityObservation(value) {
   try {
     if (!value || value.schemaVersion !== 1 || uuid(value.admissionId) !== value.admissionId || typeof value.revoked !== 'boolean') return null;
-    return fields(value, ['schemaVersion', 'admissionId', 'revoked', 'reason', 'revokedAt', 'latestLeaseSequence', 'replayed']);
+    if (value.fencedByAdmissionId !== undefined && value.fencedByAdmissionId !== null && uuid(value.fencedByAdmissionId) !== value.fencedByAdmissionId) return null;
+    return fields(value, ['schemaVersion', 'admissionId', 'revoked', 'reason', 'revokedAt', 'latestLeaseSequence', 'replayed', 'fencedByAdmissionId']);
   } catch { return null; }
 }
 
@@ -149,7 +150,7 @@ function authorityObservation(value) {
  * the documented fields and refuses anything that is not a whole admission -- a truthy object is
  * not a run the platform agreed to. */
 const ADMISSION_FIELDS = ['schemaVersion', 'admissionId', 'operationId', 'agent', 'target', 'team', 'conversationId', 'root',
-  'entitlementId', 'payer', 'budget', 'capabilities', 'memoryNamespace', 'admittedAt'];
+  'entitlementId', 'payer', 'budget', 'parent', 'capabilities', 'memoryNamespace', 'admittedAt'];
 function admissionObservation(value) {
   try {
     if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
@@ -157,6 +158,9 @@ function admissionObservation(value) {
     if (!a || a.schemaVersion !== 1 || uuid(a.admissionId) !== a.admissionId || !a.agent || !a.target || !a.payer || !a.budget
       || !a.capabilities || !Array.isArray(a.capabilities.effective) || !capabilities(a.capabilities.effective)
       || typeof a.admittedAt !== 'string' || !Number.isFinite(Date.parse(a.admittedAt))) return null;
+    // RUN-10: a child names the admission it was carved from, one level below it, and nothing else.
+    if (a.parent !== undefined && a.parent !== null && (uuid(a.parent.admissionId) !== a.parent.admissionId
+      || !Number.isSafeInteger(a.parent.depth) || a.parent.depth < 1 || a.parent.depth > 8 || Object.keys(a.parent).length !== 2)) return null;
     const admission = fields(a, ADMISSION_FIELDS);
     return Object.hasOwn(value, 'admission')
       ? { admission, replayed: value.replayed === true }
