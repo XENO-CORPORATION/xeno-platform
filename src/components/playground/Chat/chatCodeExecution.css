@@ -1,0 +1,207 @@
+/*
+ * The in-chat code-execution block (ChatCodeExecution.tsx). Monochrome, plate construction, every
+ * colour from a --chat-* token so it renders in the light, dim and dark palettes. Emphasis comes
+ * from surface lightness and border, never hue — the one exception is stderr/error, which uses the
+ * shared danger token because a failure the person must notice is exactly what a danger colour is for.
+ */
+
+.chat-codes {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin: 6px 0 4px;
+}
+
+.chat-code {
+  border: 1px solid var(--chat-border);
+  border-radius: 12px;
+  background: var(--chat-surface);
+  overflow: hidden;
+  max-width: 720px;
+}
+
+.chat-code-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 7px 10px 7px 8px;
+  background: var(--chat-surface-muted);
+  border-bottom: 1px solid var(--chat-border);
+}
+
+.chat-code-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: transparent;
+  border: 0;
+  padding: 2px 4px;
+  margin: 0;
+  cursor: pointer;
+  color: var(--chat-text);
+  font: inherit;
+  border-radius: 6px;
+}
+.chat-code-toggle:hover { background: var(--chat-hover); }
+
+.chat-code-lang-icon { color: var(--chat-muted); flex: none; }
+.chat-code-lang {
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+}
+
+.chat-code-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--chat-muted);
+  padding-right: 4px;
+  white-space: nowrap;
+}
+.chat-code-status[data-code-state='success'] { color: var(--chat-text); }
+.chat-code-status[data-code-state='error'] { color: var(--chat-danger); }
+
+.chat-code-spin {
+  animation: chat-code-spin 0.8s linear infinite;
+  color: var(--chat-muted);
+}
+@keyframes chat-code-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) {
+  .chat-code-spin { animation: none; }
+}
+
+.chat-code-body {
+  display: flex;
+  flex-direction: column;
+}
+
+/* --- source --- */
+.chat-code-source {
+  position: relative;
+}
+.chat-code-copy {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  z-index: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border: 1px solid var(--chat-border);
+  border-radius: 6px;
+  background: var(--chat-surface);
+  color: var(--chat-muted);
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.12s ease, color 0.12s ease;
+}
+.chat-code-source:hover .chat-code-copy,
+.chat-code-copy:focus-visible { opacity: 1; }
+.chat-code-copy:hover { color: var(--chat-text); }
+
+.chat-code-pre {
+  margin: 0;
+  padding: 12px 14px;
+  max-height: 320px;
+  overflow: auto;
+  background: var(--chat-canvas);
+  color: var(--chat-text);
+  font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+  font-size: 12.5px;
+  line-height: 1.55;
+  white-space: pre;
+  tab-size: 4;
+}
+.chat-code-pre code { font: inherit; background: none; padding: 0; }
+
+/* --- output --- */
+.chat-code-output {
+  border-top: 1px solid var(--chat-border);
+  display: flex;
+  flex-direction: column;
+}
+.chat-code-stdout,
+.chat-code-stderr {
+  margin: 0;
+  padding: 10px 14px;
+  max-height: 260px;
+  overflow: auto;
+  font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+  font-size: 12px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.chat-code-stdout { color: var(--chat-surface-text); background: var(--chat-surface); }
+.chat-code-stderr {
+  color: var(--chat-danger);
+  background: color-mix(in srgb, var(--chat-danger) 8%, var(--chat-surface));
+  border-top: 1px solid var(--chat-border);
+}
+.chat-code-stdout code,
+.chat-code-stderr code { font: inherit; background: none; padding: 0; }
+
+.chat-code-error {
+  padding: 10px 14px;
+  font-size: 12.5px;
+  color: var(--chat-danger);
+  background: color-mix(in srgb, var(--chat-danger) 8%, var(--chat-surface));
+  border-top: 1px solid var(--chat-border);
+}
+
+/* --- produced files --- */
+.chat-code-files {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 10px 12px;
+  border-top: 1px solid var(--chat-border);
+  background: var(--chat-surface-muted);
+}
+.chat-code-file {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 6px 4px 8px;
+  border: 1px solid var(--chat-border);
+  border-radius: 8px;
+  background: var(--chat-surface);
+  max-width: 260px;
+}
+.chat-code-file-icon { color: var(--chat-muted); flex: none; }
+.chat-code-file-name {
+  border: 0;
+  background: transparent;
+  padding: 0;
+  margin: 0;
+  font: inherit;
+  font-size: 12.5px;
+  color: var(--chat-text);
+  cursor: pointer;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 190px;
+}
+.chat-code-file[data-openable='true'] .chat-code-file-name:hover { text-decoration: underline; }
+.chat-code-file-name--static { cursor: default; color: var(--chat-muted); }
+.chat-code-file-download {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--chat-muted);
+  cursor: pointer;
+  flex: none;
+}
+.chat-code-file-download:hover { background: var(--chat-hover); color: var(--chat-text); }

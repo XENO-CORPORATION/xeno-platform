@@ -1132,7 +1132,14 @@ router.post('/chat/stream', requireEntitlement('canUse'), async (req, res) => {
           case 'code_start':
             sawSearch = true;
             // BEFORE the wait, like search/image: the UI shows a running code block rather than a pause.
-            await send({ type: 'code_start', index: event.index, language: event.language });
+            // The SOURCE rides along (clipped to the record's cap) so the block shows what ran, the way
+            // Claude/ChatGPT do — the model already wrote it, so there is nothing to compute here.
+            await send({
+              type: 'code_start',
+              index: event.index,
+              language: event.language,
+              code: typeof event.code === 'string' ? event.code.slice(0, 8000) : '',
+            });
             break;
           case 'code_result': {
             // Clip for the WIRE (the model already got its own clipped copy): a run may print up to

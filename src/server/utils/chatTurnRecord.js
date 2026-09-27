@@ -80,6 +80,67 @@ export function turnImageAssetIds(turn) {
   return new Set((turn?.steps || []).filter((step) => step.kind === 'image' && step.assetId).map((step) => step.assetId));
 }
 
+// A `code` step: the chat's run_code tool executed code in the conversation's sandbox (2026-09-27).
+// Presentational, like every step here — the authoritative run stays server-side; this is what the
+// person watched. Mirrors chatCodeTool.js RUN_CODE_LANGUAGES; kept inline so the validator is
+// self-contained. stdout/stderr/code are capped tighter than the wire (the record is not a log).
+const CODE_LANGUAGES = new Set(['python', 'javascript', 'typescript', 'go', 'rust', 'c', 'cpp', 'java', 'ruby', 'php', 'bash']);
+const CODE_STATUSES = new Set(['running', 'success', 'error', 'timeout', 'killed']);
+const CODE_LIMITS = Object.freeze({ code: 8000, stdout: 4000, stderr: 2000, files: 32, path: 512 });
+
+function normalizeCodeStep(raw) {
+  if (!CODE_LANGUAGES.has(raw.language)) return { ok: false, error: 'code step.language must be a supported language' };
+  if (!shortString(raw.code, CODE_LIMITS.code)) return { ok: false, error: `code step.code must be a string of at most ${CODE_LIMITS.code} characters` };
+  if (!isFiniteNumber(raw.startedAt) || raw.startedAt <= 0) return { ok: false, error: 'step.startedAt must be a timestamp' };
+  if (raw.endedAt !== undefined && (!isFiniteNumber(raw.endedAt) || raw.endedAt < raw.startedAt)) {
+    return { ok: false, error: 'step.endedAt must be a timestamp at or after its startedAt' };
+  }
+  if (raw.status !== undefined && !CODE_STATUSES.has(raw.status)) return { ok: false, error: 'code step.status must be a known status' };
+  if (raw.exitCode !== undefined && raw.exitCode !== null && (!Number.isInteger(raw.exitCode) || raw.exitCode < -256 || raw.exitCode > 256)) {
+    return { ok: false, error: 'code step.exitCode must be an integer or null' };
+  }
+  if (raw.stdout !== undefined && !shortString(raw.stdout, CODE_LIMITS.stdout)) return { ok: false, error: 'code step.stdout too long' };
+  if (raw.stderr !== undefined && !shortString(raw.stderr, CODE_LIMITS.stderr)) return { ok: false, error: 'code step.stderr too long' };
+  if (raw.error !== undefined && !shortString(raw.error, TURN_LIMITS.text)) return { ok: false, error: 'step.error must be a short string' };
+  const files = [];
+  if (raw.files !== undefined) {
+    if (!Array.isArray(raw.files) || raw.files.length > CODE_LIMITS.files) return { ok: false, error: `code step.files may hold at most ${CODE_LIMITS.files} files` };
+    for (const file of raw.files) {
+      if (!file || typeof file !== 'object' || Array.isArray(file)) return { ok: false, error: 'each file must be an object' };
+      if (!shortString(file.path, CODE_LIMITS.path) || !file.path) return { ok: false, error: 'file.path must be a short string' };
+      if (file.assetId !== undefined && (typeof file.assetId !== 'string' || !LIBRARY_ID.test(file.assetId))) return { ok: false, error: 'file.assetId must be a library asset id' };
+      files.push({ path: file.path, ...(file.assetId !== undefined ? { assetId: file.assetId } : {}) });
+    }
+  }
+  return {
+    ok: true,
+    step: {
+      id: raw.id,
+      kind: 'code',
+      language: raw.language,
+      code: raw.code,
+      startedAt: raw.startedAt,
+      ...(raw.endedAt !== undefined ? { endedAt: raw.endedAt } : {}),
+      ...(raw.status !== undefined ? { status: raw.status } : {}),
+      ...(raw.exitCode !== undefined ? { exitCode: raw.exitCode } : {}),
+      ...(raw.stdout !== undefined ? { stdout: raw.stdout } : {}),
+      ...(raw.stderr !== undefined ? { stderr: raw.stderr } : {}),
+      ...(files.length ? { files } : {}),
+      ...(raw.error !== undefined ? { error: raw.error } : {}),
+    },
+  };
+}
+
+/** The library asset ids a normalized turn's code steps name — files its runs produced. */
+export function turnCodeAssetIds(turn) {
+  const ids = new Set();
+  for (const step of turn?.steps || []) {
+    if (step.kind !== 'code' || !Array.isArray(step.files)) continue;
+    for (const file of step.files) if (file.assetId) ids.add(file.assetId);
+  }
+  return ids;
+}
+
 /**
  * @returns {{ ok: true, turn: object } | { ok: false, error: string }}
  */
@@ -107,6 +168,12 @@ export function normalizeTurnRecord(value) {
       const image = normalizeImageStep(raw);
       if (!image.ok) return image;
       steps.push(image.step);
+      continue;
+    }
+    if (raw.kind === 'code') {
+      const code = normalizeCodeStep(raw);
+      if (!code.ok) return code;
+      steps.push(code.step);
       continue;
     }
     if (raw.kind !== 'search') return { ok: false, error: `unknown step kind: ${String(raw.kind).slice(0, 32)}` };
