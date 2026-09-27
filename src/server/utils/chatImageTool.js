@@ -96,12 +96,17 @@ export const GENERATE_IMAGE_TOOL = Object.freeze({
       + 'short request into a vivid one, but keep every detail the user asked for. Choose '
       + '`aspect_ratio` for the subject (16:9 for landscapes and wide scenes, 9:16 for phone '
       + 'wallpapers and tall subjects, 1:1 for icons, avatars and logos) unless the user named one. '
-      + 'When the user wants to change, restyle or continue an image already in the conversation — '
-      + 'one you made, or one they attached ("make it blue", "same but at night", "turn this photo '
-      + 'into a watercolour") — set `use_latest_image` to true and write `prompt` as the change '
-      + 'plus what must stay the same; the new image keeps that image\'s shape. For a new, unrelated '
-      + 'image leave it false. After the image is made, reply briefly — one or two sentences about '
-      + 'what you made; do not repeat the prompt.',
+      + 'When the user wants to change, restyle, continue, REDESIGN, improve, or base a new image on '
+      + 'an image already in the conversation — one you made, or one they attached ("make it blue", '
+      + '"same but at night", "turn this photo into a watercolour", "redesign this character", "use '
+      + 'this as the reference") — set `use_latest_image` to true and write `prompt` as the change '
+      + 'plus what must stay the same. A reference makes the new image keep the REFERENCE\'S shape, so '
+      + 'when the user gives you an image to work from and preserving its subject or identity matters, '
+      + 'set `use_latest_image` to true EVEN IF that means keeping the reference\'s aspect ratio — do '
+      + 'NOT quietly start from scratch and lose their design; if a different layout is essential, use '
+      + 'the reference anyway and tell the user the result matched the reference\'s shape. Only leave '
+      + 'it false for a genuinely new, unrelated image. After the image is made, reply briefly — one '
+      + 'or two sentences about what you made; do not repeat the prompt.',
     parameters: {
       type: 'object',
       properties: {
@@ -121,7 +126,7 @@ export const GENERATE_IMAGE_TOOL = Object.freeze({
         },
         use_latest_image: {
           type: 'boolean',
-          description: 'True to edit or build on the most recent image in the conversation (the user\'s attachment in this message if any, otherwise the last image shown). Defaults to false.',
+          description: 'True to edit, redesign or build on the most recent image in the conversation (the user\'s attachment in THIS message if any, otherwise the last image shown). Set true whenever the user gives you an image to work from and its subject or identity should carry over — including a redesign or concept iteration, not only small edits. The result keeps that image\'s shape. Defaults to false.',
         },
       },
       required: ['prompt'],
