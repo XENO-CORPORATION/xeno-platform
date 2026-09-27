@@ -13,8 +13,12 @@
  *            consent shape") is about a mechanism being ABSENT everywhere. `member.admit` is a
  *            recordable decision in this suite; admission itself lives in the membership model.
  *            Kept rather than deleted: a reader arriving at this list needs to know it moved.
- *   LIFE-02  removal is REVOCATION plus SETTLEMENT, and the two are separate. There is no
- *            settlement anywhere -- it is FUND-domain and unbuilt.
+ *   LIFE-02  NOW CITED (2026-09-27), in workforce-member-removal.test.mjs, against
+ *            20260927130000-workforce-member-removal.sql. The reason recorded here -- "there is no
+ *            settlement anywhere, it is FUND-domain and unbuilt" -- stopped being true when RUN-10 made
+ *            a run a funded envelope and RUN-04 gave it a result and a delivery: settling a removed
+ *            member's work is those, derived. A removal is a `member.remove` decision recorded in this
+ *            table; revoking a seat fences its runs at once, whoever revokes it; archival waits for them.
  *   LIFE-03  ✅ NOW CITED, in this suite -- see the departed-principal case. It was refused here
  *            on the grounds that "OWN-06 governs it and the membership suite proves it", which
  *            missed LIFE-03's own normative sentence: a departed worker's RECEIPTS survive and

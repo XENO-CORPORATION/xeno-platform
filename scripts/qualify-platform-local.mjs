@@ -289,7 +289,7 @@ const BACKEND_EVIDENCE = {
   });
 
   for (const [name, files] of [
-    ['workspace-project-database', ['scripts/chat-workspace-scope.database.test.mjs', 'scripts/workforce-team-project-responsibility.test.mjs', 'scripts/workforce-run-admission.test.mjs', 'scripts/workforce-run-authority.test.mjs', 'scripts/workforce-capacity.test.mjs', 'scripts/workforce-nested-run-envelopes.test.mjs', 'scripts/workforce-evaluation.test.mjs', 'scripts/workforce-run-results.test.mjs', 'scripts/workforce-security-matrix.test.mjs', 'scripts/chat-project-database-integration.test.mjs']],
+    ['workspace-project-database', ['scripts/chat-workspace-scope.database.test.mjs', 'scripts/workforce-team-project-responsibility.test.mjs', 'scripts/workforce-run-admission.test.mjs', 'scripts/workforce-run-authority.test.mjs', 'scripts/workforce-capacity.test.mjs', 'scripts/workforce-nested-run-envelopes.test.mjs', 'scripts/workforce-evaluation.test.mjs', 'scripts/workforce-run-results.test.mjs', 'scripts/workforce-member-removal.test.mjs', 'scripts/workforce-security-matrix.test.mjs', 'scripts/chat-project-database-integration.test.mjs']],
     ['semantic-index-scale', ['scripts/chat-project-semantic-scale-qualification.test.mjs']],
   ]) {
     await step(name, async () => {

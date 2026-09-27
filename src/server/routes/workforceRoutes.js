@@ -116,6 +116,7 @@ const defaultReadPin = async (...args) => (await import('../services/workforceRu
 const defaultReadCapacity = async (...args) => (await import('../services/workforceCapacity.js')).readWorkforceCapacity(...args);
 const defaultReadEvaluation = async (...args) => (await import('../services/workforceEvaluation.js')).readWorkforceEvaluation(...args);
 const runResults = (name) => async (...args) => (await import('../services/workforceRunResults.js'))[name](...args);
+const memberRemoval = (name) => async (...args) => (await import('../services/workforceMemberRemoval.js'))[name](...args);
 // RUN-03: the lease is signed with the platform's OWN active OIDC key -- the one published at
 // /api/oauth2/jwks -- so any runtime can verify it offline against the public JWKS, and no key
 // ever comes from a request.
@@ -247,6 +248,33 @@ function outcomeObservation(value, request) {
       children: value.children.map(c => { if (uuid(c.admissionId) !== c.admissionId || typeof c.delivered !== 'boolean') throw new Error('Invalid child');
         return { admissionId: c.admissionId, delivered: c.delivered }; }) };
   } catch { return null; }
+}
+/** LIFE-02: a removal is reported for the membership ASKED about -- its decision, when it took effect, and for
+ * each run it fenced whether that run is settled and, if not, what it still owes. A removal of another
+ * membership, or a run row carrying anything outside this shape, is not reported. */
+const OWES = ['fence', 'lease_expiry', 'report_or_delivery'];
+function removalShape(r, request) {
+  if (!r || r.schemaVersion !== 1 || r.membershipId !== uuid(request.membershipId) || uuid(r.teamId) !== r.teamId) throw new Error('Invalid removal');
+  const d = r.decision;
+  if (!d || uuid(d.actorUserId) !== d.actorUserId || typeof d.clientId !== 'string' || !/^[a-zA-Z0-9._-]{1,128}$/.test(d.clientId)
+    || uuid(d.operationId) !== d.operationId) throw new Error('Invalid decision');
+  if (!Number.isFinite(Date.parse(r.removedAt)) || !(r.archivedAt === null || Number.isFinite(Date.parse(r.archivedAt)))) throw new Error('Invalid time');
+  if (!Array.isArray(r.runs) || r.runs.length > 1000 || typeof r.settled !== 'boolean') throw new Error('Invalid runs');
+  const runs = r.runs.map(x => {
+    if (!x || uuid(x.admissionId) !== x.admissionId || ![x.fenced, x.leaseLive, x.accounted, x.settled].every(b => typeof b === 'boolean')
+      || !(x.owes === null ? x.settled : OWES.includes(x.owes) && !x.settled)) throw new Error('Invalid run');
+    return { admissionId: x.admissionId, fenced: x.fenced, leaseLive: x.leaseLive, accounted: x.accounted, settled: x.settled, owes: x.owes };
+  });
+  if (r.settled !== runs.every(x => x.settled)) throw new Error('Inconsistent settlement');
+  return { schemaVersion: 1, membershipId: r.membershipId, teamId: r.teamId,
+    decision: { actorUserId: d.actorUserId, clientId: d.clientId, operationId: d.operationId },
+    removedAt: r.removedAt, archivedAt: r.archivedAt, runs, settled: r.settled };
+}
+function removalObservation(value, request) {
+  try { return { replayed: value?.replayed === true, removal: removalShape(value.removal, request) }; } catch { return null; }
+}
+function removalReadObservation(value, request) {
+  try { return removalShape(value, request); } catch { return null; }
 }
 function evaluationObservation(value, request) {
   try {
@@ -415,6 +443,7 @@ export function createWorkforceRouter({ createWorkforceResource = defaultCreate,
   admitRun = defaultAdmit, readRunAdmission = defaultReadAdmission, readRunnablePin = defaultReadPin, readWorkforceCapacity = defaultReadCapacity,
   readWorkforceEvaluation = defaultReadEvaluation,
   reportRunResult = runResults('reportRunResult'), deliverRunResult = runResults('deliverRunResult'), readRunOutcome = runResults('readRunOutcome'),
+  removeTeamMember = memberRemoval('removeTeamMember'), readMemberRemoval = memberRemoval('readMemberRemoval'), archiveMemberRemoval = memberRemoval('archiveMemberRemoval'),
   authorizeRunStep = defaultAuthorizeStep,
   revokeRun = defaultRevokeRun, readRunAuthority = defaultReadAuthority } = {}) {
   const router = express.Router();
@@ -451,6 +480,21 @@ export function createWorkforceRouter({ createWorkforceResource = defaultCreate,
         if (typeof error.details.availableMicro === 'string' && /^[0-9]{1,20}$/.test(error.details.availableMicro)) extra.availableMicro = error.details.availableMicro;
         if (typeof error.details.field === 'string' && /^[a-zA-Z.]{1,64}$/.test(error.details.field)) extra.field = error.details.field;
         if (typeof error.details.revocation === 'string' && /^[a-z_]{1,32}$/.test(error.details.revocation)) extra.revocation = error.details.revocation;
+        return fail(res, error.code, { schemaVersion: 1, reason: error.details.reason, ...extra });
+      }
+      // LIFE-02: a removal refusal carries its reason, and an unsettled one says what is still owed -- the
+      // ids of the runs and the one thing each owes, and nothing else of the service's detail.
+      if (error?.name === 'MemberRemovalError' && Object.hasOwn(ERRORS, error.code)
+        && typeof error.details?.reason === 'string' && /^[a-z_]{1,64}$/.test(error.details.reason)) {
+        const extra = {};
+        try {
+          if (Array.isArray(error.details.unsettled) && error.details.unsettled.length <= 1000) {
+            extra.unsettled = error.details.unsettled.map(u => {
+              if (uuid(u?.admissionId) !== u.admissionId || !OWES.includes(u.owes)) throw new Error('Invalid unsettled run');
+              return { admissionId: u.admissionId, owes: u.owes };
+            });
+          }
+        } catch { return fail(res, 'internal'); }
         return fail(res, error.code, { schemaVersion: 1, reason: error.details.reason, ...extra });
       }
       return fail(res, Object.hasOwn(ERRORS, error?.code) ? error.code : 'internal');
@@ -500,9 +544,18 @@ export function createWorkforceRouter({ createWorkforceResource = defaultCreate,
     handle(deliverRunResult, false, deliveryObservation));
   router.post('/run-admissions/outcome', authMiddleware, requireDpopIfBound, requireWorkforceScope('workforce:read'), parse,
     handle(readRunOutcome, true, outcomeObservation));
+  // LIFE-02: removing a team member is a decided manage act that revokes at once; archiving it waits for the
+  // work it fenced to settle; reading what it still owes is a read.
+  router.post('/member-removals', authMiddleware, requireDpopIfBound, requireWorkforceScope('workforce:manage'), parse,
+    handle(removeTeamMember, false, removalObservation));
+  router.post('/member-removals/read', authMiddleware, requireDpopIfBound, requireWorkforceScope('workforce:read'), parse,
+    handle(readMemberRemoval, true, removalReadObservation));
+  router.post('/member-removals/archive', authMiddleware, requireDpopIfBound, requireWorkforceScope('workforce:manage'), parse,
+    handle(archiveMemberRemoval, false, removalObservation));
   for (const path of ['/resources', '/resources/list', '/resource-operations/read', '/run-admissions', '/run-admissions/read', '/run-admissions/pin', '/capacity', '/evaluation',
     '/run-admissions/authorize-step', '/run-admissions/revoke', '/run-admissions/authority',
-    '/run-admissions/result', '/run-admissions/deliver', '/run-admissions/outcome']) {
+    '/run-admissions/result', '/run-admissions/deliver', '/run-admissions/outcome',
+    '/member-removals', '/member-removals/read', '/member-removals/archive']) {
     router.all(path, (_req, res) => res.set('Allow', 'POST').status(405).json({ success: false, code: 'bad_input', error: 'Method not allowed.' }));
   }
   router.use((error, _req, res, _next) => {

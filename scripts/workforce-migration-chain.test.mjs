@@ -140,6 +140,9 @@ test('every workforce migration applies in order from an empty database', { skip
         // D21, 2026-09-25 -- the id mapping kept when `workspace_teams` was absorbed into the canonical
         // team model, cited by workforce-team-project-responsibility.test.mjs (the absorption case).
         'workforce_legacy_team_migration',
+        // LIFE-02, 2026-09-27 -- a membership removal: revocation now, settlement separately, archival only
+        // once settled; cited by workforce-member-removal.test.mjs.
+        'workforce_membership_removals',
         'workforce_operations',
         // OWN-05, 2026-09-24 -- widened only because the requirement it implements is now cited by
         // a real test (workforce-ownership-transfer.test.mjs), exactly as the message below asks.

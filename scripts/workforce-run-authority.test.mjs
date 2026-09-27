@@ -23,7 +23,7 @@
  *   - a pin is treated as the current definition                     -> "a pin preserves reproducibility: the run keeps its admitted definition"
  *   - an archived agent keeps running                                -> "an archived agent runs nothing further"
  *   - the actor's target authority is not re-checked                 -> "an actor removed from the target stops"
- *   - the team membership is not re-checked                          -> "a member removed mid-run stops dispatching"
+ *   - the team membership is not re-checked                          -> "a member no longer admitted mid-run stops dispatching"
  *   - the entitlement is not re-checked                              -> "an expired entitlement stops the run mid-flight"
  *   - a funding refusal revokes the run                              -> "a funding refusal does not revoke: a top-up resumes the run"
  *   - a terminal loss is not recorded durably                        -> "losing a term of the admission revokes the run durably"
@@ -231,9 +231,27 @@ test('an admitted run re-asks before each step, and live revocation overrides it
     const mem = (await pool.query(`INSERT INTO workforce_team_memberships(team_id,member_principal_id,role) VALUES($1,$2,'worker') RETURNING id`, [team, editor])).rows[0].id;
     const teamIn = await assign(team, 'team', studio, { type: 'workspace', id: studio }, explicit(['files.read']));
     const tid = await admit(editor, crewAgent, { kind: 'workspace', assignmentId: teamIn }, { team: { teamId: team } });
+    const later = await admit(editor, crewAgent, { kind: 'workspace', assignmentId: teamIn }, { team: { teamId: team } });
     await step(editor, tid, 'provider_dispatch');
+    // A function change leaves the seat in place, but the target admitted this member AS A WORKER: the next
+    // step re-derives membership live and refuses. The change is legal only with its decision (LIFE-05).
+    const demotion = randomUUID();
+    await pool.query(`INSERT INTO workforce_operations(actor_user_id,client_id,operation_id,request_hash,kind,subject_type,subject_id,
+      deciding_principal_id,responsible_account_id,authority) VALUES($1,'xeno-agent-interface',$2,$3,'member.promote','membership',$4,$1,$1,'test')`,
+    [owner, demotion, hash(demotion), mem]);
+    await pool.query(`UPDATE workforce_team_memberships SET role='observer', revision=revision+1, updated_at=clock_timestamp(),
+      role_decision_actor_user_id=$2, role_decision_client_id='xeno-agent-interface', role_decision_operation_id=$3 WHERE id=$1`, [mem, owner, demotion]);
+    // Fencing is for a seat that is GONE. A seat whose function changed still exists; its runs stop when they
+    // next ask, and not before.
+    const untouched = await Promise.all([tid, later].map((id) => readRunAuthority(pool, ctx(editor), id)));
+    assert.deepEqual(untouched.map((a) => a.revoked), [false, false], 'a demotion alone fences nothing it has not re-checked');
+    await rejects(step(editor, tid, 'provider_dispatch'), 'denied', 'actor_not_an_admitted_member', 'a member no longer admitted mid-run stops dispatching');
+    // Revoking the seat is stronger than that: every run under it is fenced AT ONCE (LIFE-02,
+    // 20260927130000), so a run that has not asked since is already revoked when it next does.
     await pool.query(`UPDATE workforce_team_memberships SET state='revoked', revision=revision+1, revoked_at=clock_timestamp(), updated_at=clock_timestamp() WHERE id=$1`, [mem]);
-    await rejects(step(editor, tid, 'provider_dispatch'), 'denied', 'actor_not_an_admitted_member', 'a member removed mid-run stops dispatching');
+    const fenced = await readRunAuthority(pool, ctx(editor), later);
+    assert.deepEqual([fenced.revoked, fenced.reason], [true, 'authority_lost'], 'a removed seat fences its runs before they ask again');
+    await rejects(step(editor, later, 'provider_dispatch'), 'denied', 'admission_revoked', 'a removed seat fences its runs before they ask again');
   });
 
   await t.test('DIV-08: leaving the division, or the division closing, stops a run already under way (DIV-08)', async () => {
