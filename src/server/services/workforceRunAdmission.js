@@ -39,7 +39,15 @@
  *                        payer's available balance now. The payer is the actor's own account: a
  *                        workspace pool cannot fund a run until FUND-06 builds one, and there is no
  *                        silent fallback in either direction.
- * Each term is recorded; the database refuses an admission whose effective set is not inside every one.
+ *   parent (RUN-10)      optional: the admission this run is spawned inside. A child is a SUB-RESERVATION
+ *                        of its parent, never a copy: same actor, client, payer and target; capabilities
+ *                        inside the parent's; a ceiling carved out of what the parent has left after
+ *                        every child already carved from it. The parent must still be live -- a run whose
+ *                        parent or any ancestor was stopped spawns nothing. The child keeps its OWN agent
+ *                        pin: which definition runs is a pin, how far it may go is the parent's live
+ *                        ceiling, and those are different facts.
+ * Each term is recorded; the database refuses an admission whose effective set is not inside every one --
+ * and, for a child, one that is not inside its parent (20260927110000-workforce-nested-run-envelopes.sql).
  *
  * ── "NO UNION VIA GENERIC PARENT TRAVERSAL" ────────────────────────────────────────────────────
  * Authority for the TARGET is checked against the target, and authority for the RESOURCE comes from
@@ -103,7 +111,7 @@ function parse(context, value) {
   const ctx = record(context, ['actorUserId', 'clientId', 'apiKeyId'], 'context');
   if (typeof ctx.clientId !== 'string' || !/^[a-zA-Z0-9._-]{1,128}$/.test(ctx.clientId)) fail('bad_input', 'invalid_client');
   const input = record(value, ['operationId', 'expectedActorAccountId', 'agent', 'target', 'team', 'conversationId', 'root',
-    'capabilities', 'runtimeCapabilities', 'budget'], 'request');
+    'capabilities', 'runtimeCapabilities', 'budget', 'parent'], 'request');
   const agent = record(input.agent, ['resourceId', 'version', 'contentHash'], 'agent');
   if (!Number.isSafeInteger(agent.version) || agent.version < 1) fail('bad_input', 'invalid_agent_version');
   if (typeof agent.contentHash !== 'string' || !/^[0-9a-f]{64}$/.test(agent.contentHash)) fail('bad_input', 'invalid_agent_content_hash');
@@ -127,6 +135,8 @@ function parse(context, value) {
       capabilities: capabilities(input.capabilities, 'capabilities'),
       runtimeCapabilities: input.runtimeCapabilities === undefined || input.runtimeCapabilities === null ? null : capabilities(input.runtimeCapabilities, 'runtime_capabilities'),
       budget: { ceilingMicro: budget.ceilingMicro },
+      parent: input.parent === undefined || input.parent === null ? null
+        : { admissionId: uuid(record(input.parent, ['admissionId'], 'parent').admissionId, 'parent_admission') },
     },
   };
 }
@@ -194,6 +204,7 @@ function publicAdmission(row) {
     entitlementId: row.entitlement_id,
     payer: { kind: row.payer_kind, userId: row.payer_user_id },
     budget: { ceilingMicro: String(row.budget_ceiling_micro) },
+    parent: row.parent_admission_id ? { admissionId: row.parent_admission_id, depth: row.nesting_depth } : null,
     capabilities: { requested: row.requested_capabilities, effective: row.effective_capabilities, terms: row.rights },
     memoryNamespace: row.memory_namespace,
     admittedAt: row.admitted_at.toISOString(),
@@ -316,7 +327,8 @@ export async function admitRun(pool, authenticatedContext, value) {
   // A comparison condition, never authentication: it closes an account switch between intent and dispatch.
   if (request.expectedActorAccountId && request.expectedActorAccountId !== actor.actorUserId) fail('conflict', 'actor_context_conflict');
   const requestHash = operationHash({ agent: request.agent, target: request.target, team: request.team, conversationId: request.conversationId,
-    root: request.root, capabilities: request.capabilities, runtimeCapabilities: request.runtimeCapabilities, budget: request.budget });
+    root: request.root, capabilities: request.capabilities, runtimeCapabilities: request.runtimeCapabilities, budget: request.budget,
+    ...(request.parent ? { parent: request.parent } : {}) });
 
   return authorityTransaction(pool, async (db) => {
     // The actor incarnation is read inside the idempotency hook and recorded on the new admission.
@@ -391,6 +403,32 @@ export async function admitRun(pool, authenticatedContext, value) {
     if (entitlementTerm) effective = within(effective, entitlementTerm);
     const rights = { definition: definitionTerm, target: targetTerm, runtime: request.runtimeCapabilities, entitlement: entitlementTerm };
 
+    // ── RUN-10: a child is a sub-reservation of a live parent, never a copied ceiling ──────────
+    let parent = null;
+    if (request.parent) {
+      // Locked FOR NO KEY UPDATE: every child of one parent is decided in turn, so the remaining envelope read
+      // here is the one the insert commits against. The database guard holds the same rule on its own.
+      parent = (await db.query('SELECT * FROM workforce_run_admissions WHERE id=$1 FOR NO KEY UPDATE', [request.parent.admissionId])).rows[0];
+      // A parent the actor did not admit is indistinguishable from one that does not exist.
+      if (!parent || parent.actor_user_id !== actor.actorUserId || parent.client_id !== actor.clientId) fail('not_found', 'parent_admission_not_found');
+      const fence = (await db.query('SELECT workforce_run_admission_fence($1) AS f', [parent.id])).rows[0].f;
+      if (fence) fail('denied', 'parent_admission_revoked');
+      const sameTarget = parent.target_kind === request.target.kind
+        && (request.target.kind === 'personal' ? parent.target_owner_user_id === targetOwner
+          : request.target.kind === 'workspace' ? parent.assignment_id === request.target.assignmentId
+            : parent.participation_id === request.target.participationId);
+      if (!sameTarget || parent.payer_user_id !== payerUserId) fail('conflict', 'child_outside_parent_target');
+      if (parent.nesting_depth >= 8) fail('denied', 'nesting_too_deep');
+      // A child may do nothing its parent may not: its effective set is narrowed by the parent's too.
+      effective = within(effective, parent.effective_capabilities);
+      const carved = BigInt((await db.query('SELECT coalesce(sum(budget_ceiling_micro),0)::text AS c FROM workforce_run_admissions WHERE parent_admission_id=$1',
+        [parent.id])).rows[0].c);
+      const remaining = BigInt(parent.budget_ceiling_micro) - carved;
+      if (BigInt(request.budget.ceilingMicro) > remaining) {
+        fail('needs_approval', 'budget_exceeds_parent_envelope', { remainingMicro: (remaining < 0n ? 0n : remaining).toString() });
+      }
+    }
+
     const memoryNamespace = request.target.kind === 'project' ? `project:${request.target.projectId}:agent:${agent.id}`
       : targetWorkspace ? `workspace:${targetWorkspace}:agent:${agent.id}` : `user:${targetOwner}:agent:${agent.id}`;
     const row = (await db.query(`INSERT INTO workforce_run_admissions(actor_user_id,client_id,operation_id,request_hash,incarnation_hash,
@@ -398,8 +436,9 @@ export async function admitRun(pool, authenticatedContext, value) {
         assignment_id,assignment_revision,participation_id,participation_revision,
         team_id,team_kind,team_membership_id,team_membership_revision,member_set_revision,team_function,
         conversation_id,root_binding_id,root_binding_revision,host_installation_id,entitlement_id,
-        payer_kind,payer_user_id,budget_ceiling_micro,requested_capabilities,effective_capabilities,rights,memory_namespace)
-      VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,'user',$28,$29,$30,$31,$32,$33)
+        payer_kind,payer_user_id,budget_ceiling_micro,requested_capabilities,effective_capabilities,rights,memory_namespace,
+        parent_admission_id,nesting_depth)
+      VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,'user',$28,$29,$30,$31,$32,$33,$34,$35)
       RETURNING *`,
     [actor.actorUserId, actor.clientId, request.operationId, requestHash, inc,
       agent.id, version.version, version.content_hash, request.target.kind,
@@ -407,7 +446,8 @@ export async function admitRun(pool, authenticatedContext, value) {
       assignment?.id ?? null, assignment ? assignment.revision : null, participation?.id ?? null, participation ? participation.revision : null,
       team?.id ?? null, team ? 'team' : null, team?.membershipId ?? null, team?.membershipRevision ?? null, team?.memberSetRevision ?? null, team?.function ?? null,
       request.conversationId, root?.bindingId ?? null, root?.revision ?? null, root?.installationId ?? null, entitlementId,
-      payerUserId, request.budget.ceilingMicro, JSON.stringify(request.capabilities), JSON.stringify(effective), JSON.stringify(rights), memoryNamespace])).rows[0];
+      payerUserId, request.budget.ceilingMicro, JSON.stringify(request.capabilities), JSON.stringify(effective), JSON.stringify(rights), memoryNamespace,
+      parent?.id ?? null, parent ? parent.nesting_depth + 1 : 0])).rows[0];
     return { replayed: false, admission: publicAdmission(row) };
   });
 }

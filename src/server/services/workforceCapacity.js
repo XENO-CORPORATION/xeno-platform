@@ -22,9 +22,13 @@
  * A payer's balance is disclosed ONLY to that payer or to a workspace administrator of the scope: a
  * viewer learns that runs are funded, not how much another person holds.
  *
- * NOT CLAIMED: RUN-10's nested sub-reservations and FUND-06's pooled envelope do not exist, so there is
- * no "remaining envelope" to report beyond each run's own approved ceiling and each payer's headroom.
- * Those are reported separately rather than summed into a pool no ledger holds.
+ * RUN-10 (2026-09-27, 20260927110000-workforce-nested-run-envelopes.sql): a nested run is carved out of
+ * its parent's envelope, so its ceiling is already inside its root's. `committedCeilingMicro` therefore
+ * sums ROOT admissions only -- each approved envelope once -- while `activeAdmissions` counts every run,
+ * and a run fenced by a stopped ancestor is not active. Both come from the views, not from here.
+ *
+ * NOT CLAIMED: FUND-06's pooled envelope does not exist, so there is no pool to report beyond each payer's
+ * headroom. Those are reported per payer rather than summed into a pool no ledger holds.
  */
 import { normalizeOwnerScope } from './workforceScope.js';
 import { check } from '../utils/authzReBAC.js';
