@@ -150,6 +150,9 @@ test('every workforce migration applies in order from an empty database', { skip
         // ASN-09, 2026-09-24 -- the discriminated project-participation record, cited by
         // workforce-project-participation.test.mjs.
         'workforce_project_participations',
+        // VIEW-03, 2026-09-27 -- the assignments one create-plus-assign command made, bound to its creation
+        // receipt; cited by workforce-create-and-assign.test.mjs.
+        'workforce_resource_operation_assignments',
         'workforce_resource_operations',
         'workforce_resources',
         // RUN-01/RUN-02, 2026-09-25 -- one run's admission, resolved from authoritative state as the

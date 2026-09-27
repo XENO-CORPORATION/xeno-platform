@@ -76,6 +76,11 @@ test('real HTTP/authMiddleware/JWT/DPoP boundary with query-aware auth DB and in
   let capacityResult;
   let evaluationResult;
   let deliveryResult;
+  let createAndAssignResult;
+  const assignedWorkspace = '66666666-6666-4666-8666-666666666666';
+  const createAndAssignFixture = () => ({ ...committed(), owner, assignments: [{ assignmentId: '77777777-7777-4777-8777-777777777777',
+    workspaceId: assignedWorkspace, state: 'proposed', policy: { schemaVersion: 1, mode: 'none', capabilities: [] },
+    sourceApprovedByUserId: human, targetAcceptedByUserId: null, awaiting: 'target_acceptance', internalRow: 'hidden' }] });
   let removalResult, removalFailure;
   const removalFixture = (membershipId) => ({ schemaVersion: 1, membershipId, teamId: operationId,
     decision: { actorUserId: human, clientId: 'xeno-agent-interface', operationId },
@@ -95,6 +100,8 @@ test('real HTTP/authMiddleware/JWT/DPoP boundary with query-aware auth DB and in
     return method === 'admit' ? admittedFixture() : admittedFixture().admission;
   };
   app.use(basePath, createWorkforceRouter({ createWorkforceResource: invoke('create'), readWorkforceResourceOperation: invoke('read'),
+    createAndAssignWorkforceResource: async (pool, context, value) => { calls.push({ method: 'createAndAssign', context, body: value });
+      return createAndAssignResult ?? createAndAssignFixture(); },
     admitRun: admit('admit'), readRunAdmission: admit('readAdmission'),
     readWorkforceCapacity: async (pool, context, value) => { calls.push({ method: 'capacity', context, body: value });
       return capacityResult ?? { schemaVersion: 1, owner: value.owner, derivedAt: '2026-09-27T12:00:00.000Z', activeAdmissions: 2, inFlightRuns: 1,
@@ -463,6 +470,37 @@ test('real HTTP/authMiddleware/JWT/DPoP boundary with query-aware auth DB and in
       for (const path of ['/member-removals', '/member-removals/read', '/member-removals/archive']) {
         assert.equal((await request({ method: 'GET', path })).status, 405);
       }
+    });
+    // Mutation-checked 2026-09-27: the route demands only workforce:read -> "creating and assigning is a manage act";
+    // the projection accepts an assignment to a workspace nobody asked for -> "an assignment nobody asked for is never
+    // reported"; it accepts a proposed assignment claiming a target approver -> "a proposed assignment names no target
+    // approver"; it passes the service's extra fields -> "only the documented assignment fields cross".
+    await t.test('VIEW-03: create-plus-assign is one manage act over HTTP, reporting the owner and each assignment asked for', async () => {
+      const body = { ...createBody, operationId: crypto.randomUUID(),
+        assignments: [{ workspaceId: assignedWorkspace, policy: { schemaVersion: 1, mode: 'none', capabilities: [] } }] };
+      // The fixture's receipt is for the shared operationId; answer for the one asked.
+      const reply = () => { const f = createAndAssignFixture(); f.operation = { ...f.operation, operationId: body.operationId }; return f; };
+      createAndAssignResult = reply();
+      const made = await request({ path: '/resources/create-and-assign', body });
+      assert.equal(made.status, 200);
+      assert.deepEqual([made.body.owner, made.body.assignments[0].state, made.body.assignments[0].awaiting], [owner, 'proposed', 'target_acceptance']);
+      assert.ok(!JSON.stringify(made.body).includes('hidden'), 'only the documented assignment fields cross');
+      assert.deepEqual(calls.at(-1).context, { actorUserId: human, clientId: 'xeno-agent-interface' }, 'the actor comes from authentication');
+      assert.equal((await request({ path: '/resources/create-and-assign', body, token: mint({ scope: 'workforce:read' }) })).status, 403,
+        'creating and assigning is a manage act');
+      createAndAssignResult = { ...reply(), assignments: [{ ...reply().assignments[0], workspaceId: human }] };
+      assert.equal((await request({ path: '/resources/create-and-assign', body })).status, 500, 'an assignment nobody asked for is never reported');
+      createAndAssignResult = { ...reply(), assignments: [{ ...reply().assignments[0], targetAcceptedByUserId: human }] };
+      assert.equal((await request({ path: '/resources/create-and-assign', body })).status, 500, 'a proposed assignment names no target approver');
+      createAndAssignResult = { ...reply(), owner: { type: 'workspace', id: assignedWorkspace } };
+      assert.equal((await request({ path: '/resources/create-and-assign', body })).status, 500, 'a reply owned by someone else is never reported');
+      createAndAssignResult = undefined;
+      assert.equal((await request({ method: 'GET', path: '/resources/create-and-assign' })).status, 405);
+      // The shipped /resources reply is untouched: no owner or assignments key appears on it.
+      const plain = await request({ path: '/resources' });
+      assert.equal(plain.status, 200);
+      assert.deepEqual([Object.hasOwn(plain.body, 'assignments'), Object.hasOwn(plain.body, 'owner')], [false, false],
+        'the plain create reply keeps the shape shipped clients parse strictly');
     });
     await t.test('LIFE-04: an evaluation is read over HTTP as a read, for the subject and window asked about', async () => {
       const ask = { owner: { type: 'workspace', id: operationId }, subject: { kind: 'agent', resourceId: operationId },

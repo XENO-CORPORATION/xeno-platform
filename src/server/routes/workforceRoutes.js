@@ -108,6 +108,7 @@ function requireWorkforceScope(scope) {
 }
 
 const defaultCreate = async (...args) => (await import('../services/workforceResources.js')).createWorkforceResource(...args);
+const defaultCreateAndAssign = async (...args) => (await import('../services/workforceResources.js')).createAndAssignWorkforceResource(...args);
 const defaultRead = async (...args) => (await import('../services/workforceResources.js')).readWorkforceResourceOperation(...args);
 const defaultList = async (...args) => (await import('../services/workforceCatalog.js')).listOwnedWorkforceResources(...args);
 const defaultAdmit = async (...args) => (await import('../services/workforceRunAdmission.js')).admitRun(...args);
@@ -174,6 +175,35 @@ function admissionObservation(value) {
  * stored figure. A reply for another scope, or carrying a field outside this shape, is not reported. */
 const intString = value => typeof value === 'string' && /^(0|[1-9][0-9]{0,30})$/.test(value);
 const count = value => Number.isSafeInteger(value) && value >= 0;
+/** VIEW-03: a create-plus-assign result is the creation's own observation (the exact projection POST /resources
+ * sends, so a client parses one shape) plus the owner it was created for and the assignments it made -- each
+ * for a workspace the request ASKED for, in the order asked, with its state and the side still owed. An
+ * assignment to a workspace nobody asked for, a missing one, or an owner that is not the requested owner is
+ * not reported. */
+const ASSIGNMENT_STATES = ['proposed', 'accepted'];
+function createAndAssignObservation(value, request, readOnly) {
+  try {
+    const base = responseObservation(value, request, readOnly);
+    if (!base || base.state !== 'committed') return null;
+    const owner = normalizeOwnerScope(value.owner), asked = normalizeOwnerScope(request.owner);
+    if (owner.type !== asked.type || owner.id !== asked.id) return null;
+    const wanted = Array.isArray(request.assignments) ? request.assignments.map((a) => uuid(a.workspaceId)) : [];
+    if (!Array.isArray(value.assignments) || value.assignments.length !== wanted.length) return null;
+    const assignments = value.assignments.map((a, i) => {
+      if (!a || uuid(a.assignmentId) !== a.assignmentId || uuid(a.workspaceId) !== wanted[i] || !ASSIGNMENT_STATES.includes(a.state)) throw new Error('Invalid assignment');
+      if (uuid(a.sourceApprovedByUserId) !== a.sourceApprovedByUserId) throw new Error('Unapproved source');
+      const accepted = a.state === 'accepted';
+      if (accepted ? uuid(a.targetAcceptedByUserId) !== a.targetAcceptedByUserId || a.awaiting !== null
+        : a.targetAcceptedByUserId !== null || a.awaiting !== 'target_acceptance') throw new Error('Inconsistent assignment state');
+      const policy = a.policy;
+      if (!policy || policy.schemaVersion !== 1 || !['none', 'explicit'].includes(policy.mode) || !Array.isArray(policy.capabilities)) throw new Error('Invalid policy');
+      return { assignmentId: a.assignmentId, workspaceId: a.workspaceId, state: a.state,
+        policy: { schemaVersion: 1, mode: policy.mode, capabilities: policy.capabilities.map(String) },
+        sourceApprovedByUserId: a.sourceApprovedByUserId, targetAcceptedByUserId: a.targetAcceptedByUserId, awaiting: a.awaiting };
+    });
+    return { ...base, owner, assignments };
+  } catch { return null; }
+}
 function capacityObservation(value, request) {
   try {
     const owner = normalizeOwnerScope(value?.owner), asked = normalizeOwnerScope(request.owner);
@@ -440,6 +470,7 @@ function globalObservation(value, request) {
  * Domain input normalization, canonical principal/ReBAC checks and transactions
  * belong to the real service, not the renderer or this routing adapter. */
 export function createWorkforceRouter({ createWorkforceResource = defaultCreate, readWorkforceResourceOperation = defaultRead, listOwnedWorkforceResources = defaultList,
+  createAndAssignWorkforceResource = defaultCreateAndAssign,
   admitRun = defaultAdmit, readRunAdmission = defaultReadAdmission, readRunnablePin = defaultReadPin, readWorkforceCapacity = defaultReadCapacity,
   readWorkforceEvaluation = defaultReadEvaluation,
   reportRunResult = runResults('reportRunResult'), deliverRunResult = runResults('deliverRunResult'), readRunOutcome = runResults('readRunOutcome'),
@@ -501,6 +532,10 @@ export function createWorkforceRouter({ createWorkforceResource = defaultCreate,
     }
   };
   router.post('/resources', authMiddleware, requireDpopIfBound, requireWorkforceScope('workforce:manage'), parse, handle(createWorkforceResource));
+  // VIEW-03: create a resource and assign it in ONE durable command. A SIBLING of /resources rather than an
+  // extra field on it: shipped clients parse that response strictly, and an added key would fail every one.
+  router.post('/resources/create-and-assign', authMiddleware, requireDpopIfBound, requireWorkforceScope('workforce:manage'), parse,
+    handle(createAndAssignWorkforceResource, false, createAndAssignObservation));
   router.post('/resources/list', authMiddleware, requireDpopIfBound, requireWorkforceScope('workforce:read'), parse, handle(listOwnedWorkforceResources, true, catalogObservation));
   router.post('/resource-operations/read', authMiddleware, requireDpopIfBound, requireWorkforceScope('workforce:read'), parse, handle(readWorkforceResourceOperation, true));
   // RUN-01/RUN-02: admit one run. The service resolves every fact from authoritative rows and computes
@@ -552,7 +587,7 @@ export function createWorkforceRouter({ createWorkforceResource = defaultCreate,
     handle(readMemberRemoval, true, removalReadObservation));
   router.post('/member-removals/archive', authMiddleware, requireDpopIfBound, requireWorkforceScope('workforce:manage'), parse,
     handle(archiveMemberRemoval, false, removalObservation));
-  for (const path of ['/resources', '/resources/list', '/resource-operations/read', '/run-admissions', '/run-admissions/read', '/run-admissions/pin', '/capacity', '/evaluation',
+  for (const path of ['/resources', '/resources/create-and-assign', '/resources/list', '/resource-operations/read', '/run-admissions', '/run-admissions/read', '/run-admissions/pin', '/capacity', '/evaluation',
     '/run-admissions/authorize-step', '/run-admissions/revoke', '/run-admissions/authority',
     '/run-admissions/result', '/run-admissions/deliver', '/run-admissions/outcome',
     '/member-removals', '/member-removals/read', '/member-removals/archive']) {

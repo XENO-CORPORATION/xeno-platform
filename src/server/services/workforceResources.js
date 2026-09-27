@@ -4,6 +4,7 @@ import { authorizeOwnerManagement } from './workforceAuthority.js';
 import { resolvePrincipal } from './agentIdentity.js';
 import { authorityTransaction, lockWorkspaceAuthority, operationHash } from './workspaceOperationReceipts.js';
 import { lockApiKeyWorkforceAuthority } from './apiKeyWorkforceAuthority.js';
+import { check } from '../utils/authzReBAC.js';
 
 export class WorkforceResourceError extends Error {
   constructor(code, reason, extra = {}) {
@@ -91,8 +92,22 @@ function context(value) {
   return { actorUserId: uuid(input.actorUserId), clientId: input.clientId,
     ...(Object.hasOwn(input, 'apiKeyId') ? { apiKeyId: uuid(input.apiKeyId) } : {}) };
 }
-function request(value, create) {
-  const input = record(value, create ? ['operationId', 'owner', 'kind', 'name', 'description', 'definition', 'expectedActorAccountId'] : ['operationId', 'owner', 'expectedActorAccountId']);
+/** VIEW-03: the workspaces a creation assigns into, each with the policy it grants there. Validated for
+ * shape here; the policy's own grammar is the database's (workforce_assignment_policy_valid). */
+const MAX_ASSIGNMENTS = 32;
+function assignments(value) {
+  return list(value, MAX_ASSIGNMENTS, (item) => {
+    const a = record(item, ['workspaceId', 'policy']);
+    const policy = record(a.policy, ['schemaVersion', 'mode', 'capabilities']);
+    if (policy.schemaVersion !== 1 || !['none', 'explicit'].includes(policy.mode)) fail('bad_input', 'invalid_assignment_policy');
+    const capabilities = list(policy.capabilities, 64, identifier, (c) => c);
+    if (policy.mode === 'none' && capabilities.length) fail('bad_input', 'invalid_assignment_policy');
+    return { workspaceId: uuid(a.workspaceId), policy: { schemaVersion: 1, mode: policy.mode, capabilities } };
+  }, (a) => a.workspaceId);
+}
+function request(value, create, { withAssignments = false } = {}) {
+  const input = record(value, create ? ['operationId', 'owner', 'kind', 'name', 'description', 'definition', 'expectedActorAccountId',
+    ...(withAssignments ? ['assignments'] : [])] : ['operationId', 'owner', 'expectedActorAccountId']);
   const result = { operationId: uuid(input.operationId), owner: normalizeOwnerScope(input.owner),
     ...(Object.hasOwn(input, 'expectedActorAccountId') ? { expectedActorAccountId: uuid(input.expectedActorAccountId) } : {}) };
   if (!create) return result;
@@ -100,7 +115,8 @@ function request(value, create) {
   if (input.kind === 'team' && Object.hasOwn(input, 'definition')) fail('bad_input', 'team_definition_forbidden');
   return { ...result, kind: input.kind, name: text(input.name, 200).trim(),
     description: text(Object.hasOwn(input, 'description') ? input.description : '', 4096, { empty: true }),
-    definition: input.kind === 'agent' ? definition(input.definition) : null };
+    definition: input.kind === 'agent' ? definition(input.definition) : null,
+    ...(withAssignments ? { assignments: Object.hasOwn(input, 'assignments') ? assignments(input.assignments) : [] } : {}) };
 }
 
 /** Receipt identity is deliberately narrower than management authority. A
@@ -165,13 +181,82 @@ async function observed(db, actor, input, receipt, replayed) {
   return result;
 }
 
+/** Whether the actor ADMINISTERS a workspace -- the target side of ASN-04. Humans through the role
+ * hierarchy; an agent only through a direct grant, never an inherited one. */
+async function administers(db, principal, workspaceId) {
+  const subject = `${principal.kind === 'agent' ? 'agent' : 'user'}:${principal.id}`;
+  const verdict = await check(db, { object: `workspace:${workspaceId}`, relation: 'admin', subject });
+  return verdict.allowed && ['direct', ...(principal.kind === 'human' ? ['role-hierarchy'] : [])].includes(verdict.via);
+}
+
+/** VIEW-03: write the command's assignments against the receipt that was just written. Runs inside the
+ * creation's transaction; any refusal here rolls the whole command back. */
+async function assign(db, actor, input, principal, receipt) {
+  const source = input.owner;
+  for (const [position, target] of input.assignments.entries()) {
+    // The house lock order: the workspace authority gate, then the workspace row.
+    await lockWorkspaceAuthority(db, target.workspaceId);
+    const workspace = (await db.query('SELECT status FROM workspaces WHERE id=$1 FOR SHARE', [target.workspaceId])).rows[0];
+    if (!workspace || workspace.status !== 'active') fail('denied', 'assignment_target_unavailable');
+    const accepts = await administers(db, principal, target.workspaceId);
+    const team = input.kind === 'team';
+    // The policy's grammar is the database's (workforce_assignment_policy_valid); a policy it refuses is the caller's
+    // error, typed as one, and -- thrown inside this transaction -- rolls back everything the command wrote before it.
+    const row = (await db.query(`INSERT INTO workforce_workspace_assignments(resource_id,resource_kind,workspace_id,source_owner_user_id,
+        source_owner_workspace_id,resource_revision,created_by_user_id,policy,member_set_revision)
+      VALUES($1,$2,$3,$4,$5,1,$6,$7,$8) RETURNING *`,
+    [receipt.resource_id, input.kind, target.workspaceId, source.type === 'user' ? source.id : null, source.type === 'workspace' ? source.id : null,
+      actor.actorUserId, target.policy, team ? 1 : null]).catch((e) => {
+      if (e.code === '23514' && e.constraint === 'workforce_workspace_assignments_policy_check') fail('bad_input', 'invalid_assignment_policy');
+      throw e;
+    })).rows[0];
+    if (team) {
+      // ASN-05: the approved member set, captured BEFORE source approval. A new team has no members yet, so
+      // this is the explicit EMPTY set -- a set of zero, not an absent one.
+      const members = (await db.query(`SELECT id, revision, role FROM workforce_team_memberships WHERE team_id=$1 AND state='active' ORDER BY id`,
+        [receipt.resource_id])).rows;
+      const revision = (await db.query('SELECT team_membership_revision FROM workforce_resources WHERE id=$1', [receipt.resource_id])).rows[0].team_membership_revision;
+      await db.query(`INSERT INTO workforce_assignment_member_sets(assignment_id,snapshot_revision,team_id,workspace_id,team_membership_revision,member_count,created_by_user_id)
+        VALUES($1,1,$2,$3,$4,$5,$6)`, [row.id, receipt.resource_id, target.workspaceId, revision, members.length, actor.actorUserId]);
+      for (const m of members) await db.query(`INSERT INTO workforce_assignment_members(assignment_id,snapshot_revision,team_id,membership_id,membership_revision,role)
+        VALUES($1,1,$2,$3,$4,$5)`, [row.id, receipt.resource_id, m.id, m.revision, m.role]);
+    }
+    // ASN-04: the source side, always -- the creator passed the owner's management check to create this.
+    // The target side only when the creator administers the target; otherwise it stays proposed.
+    const accept = accepts ? ", state='accepted', target_accepted_by_user_id=$2, accepted_at=clock_timestamp()" : '';
+    await db.query(`UPDATE workforce_workspace_assignments SET revision=revision+1, source_approved_by_user_id=$2,
+        source_approved_at=clock_timestamp(), updated_at=clock_timestamp()${accept} WHERE id=$1`, [row.id, actor.actorUserId]);
+    await db.query(`INSERT INTO workforce_resource_operation_assignments(actor_user_id,client_id,operation_id,position,assignment_id,workspace_id)
+      VALUES($1,$2,$3,$4,$5,$6)`, [...identity(actor, input), position, row.id, target.workspaceId]);
+    await db.query(`INSERT INTO workspace_audit(workspace_id,actor_user_id,action,target,metadata) VALUES($1,$2,'workforce_resource_assigned',$3,$4)`,
+      [target.workspaceId, actor.actorUserId, `workforce_assignment:${row.id}`,
+        { schemaVersion: 1, operationId: input.operationId, resourceId: receipt.resource_id, assignmentId: row.id, state: accepts ? 'accepted' : 'proposed' }]);
+  }
+}
+
+/** VIEW-03: a create-plus-assign result names its owner and every assignment it made, each with its state and,
+ * when it is only proposed, the side still owed. A plain create is returned exactly as before. */
+async function withAssignments(db, actor, input, result) {
+  if (!input.assignments) return result;
+  const rows = (await db.query(`SELECT o.position, a.id, a.workspace_id, a.state, a.policy, a.source_approved_by_user_id, a.target_accepted_by_user_id
+      FROM workforce_resource_operation_assignments o JOIN workforce_workspace_assignments a ON a.id = o.assignment_id
+     WHERE o.actor_user_id=$1 AND o.client_id=$2 AND o.operation_id=$3 ORDER BY o.position`, identity(actor, input))).rows;
+  return { ...result, owner: result.operation.owner, assignments: rows.map((r) => ({
+    assignmentId: r.id, workspaceId: r.workspace_id, state: r.state, policy: r.policy,
+    sourceApprovedByUserId: r.source_approved_by_user_id, targetAcceptedByUserId: r.target_accepted_by_user_id,
+    awaiting: r.state === 'proposed' ? 'target_acceptance' : null })) };
+}
+
 async function transact(pool, actor, input, create) {
   // This is a precondition, never authentication. It closes account-switch races
   // between a prepared client intent and token acquisition for actual dispatch.
   if (input.expectedActorAccountId && input.expectedActorAccountId !== actor.actorUserId) fail('conflict', 'actor_context_conflict');
   const requestHash = create ? operationHash({ owner: input.owner, kind: input.kind, name: input.name,
     description: input.description, definition: input.definition,
-    ...(input.expectedActorAccountId ? { expectedActorAccountId: input.expectedActorAccountId } : {}) }) : null;
+    ...(input.expectedActorAccountId ? { expectedActorAccountId: input.expectedActorAccountId } : {}),
+    // VIEW-03: only a create-plus-assign hashes its assignment set. A plain create hashes exactly what it
+    // always did, so every receipt written before this change still matches its own retry.
+    ...(input.assignments ? { assignments: input.assignments } : {}) }) : null;
   let awaitingCommit = false;
   try {
     return await authorityTransaction(pool, async db => {
@@ -183,7 +268,7 @@ async function transact(pool, actor, input, create) {
         if (prior.owner_type !== input.owner.type || prior.owner_id !== input.owner.id) fail('conflict', 'operation_scope_conflict');
         if (prior.incarnation_hash !== await incarnation(db, actor, input.owner, principal)) fail('conflict', 'operation_incarnation_conflict');
         if (create && prior.request_hash !== requestHash) fail('conflict', 'operation_payload_conflict');
-        return observed(db, actor, input, prior, true);
+        return withAssignments(db, actor, input, await observed(db, actor, input, prior, true));
       }
       if (!create) return { state: 'not-observed', operation: null, resource: null, version: null, replayed: false };
       await authorizeOwnerManagement(db, actor.actorUserId, input.owner, { action: 'create_resource', forMutation: true });
@@ -205,7 +290,8 @@ async function transact(pool, actor, input, create) {
       const receipt = (await db.query(`INSERT INTO workforce_resource_operations(actor_user_id,client_id,operation_id,owner_type,owner_id,
         request_hash,incarnation_hash,resource_id,resource_revision,agent_version) VALUES($1,$2,$3,$4,$5,$6,$7,$8,1,$9) RETURNING *`,
       [...identity(actor, input), input.owner.type, input.owner.id, requestHash, incarnationHash, resourceId, input.definition ? 1 : null])).rows[0];
-      const result = await observed(db, actor, input, receipt, false);
+      if (input.assignments) await assign(db, actor, input, principal, receipt);
+      const result = await withAssignments(db, actor, input, await observed(db, actor, input, receipt, false));
       awaitingCommit = true;
       return result;
     });
@@ -222,6 +308,29 @@ async function transact(pool, actor, input, create) {
  * This creates no principal, assignment, membership, session or execution. */
 export function createWorkforceResource(pool, authenticatedContext, value) {
   return transact(pool, context(authenticatedContext), request(value, true), true);
+}
+/**
+ * VIEW-03: create a resource AND assign it, as one durable command. The same receipt, the same idempotency
+ * and the same authority as createWorkforceResource -- this is that command with an assignment set, not a
+ * second one. Each assignment is a real workforce_workspace_assignments row under ASN-04's two checks:
+ *
+ *   source   approved by the creator, who has just passed the owner-management check the create requires --
+ *            the owner's sharing permission, recorded.
+ *   target   accepted only when the creator ADMINISTERS the target workspace, recorded. Otherwise the
+ *            assignment is created PROPOSED with the target side empty, and it grants nothing until that
+ *            workspace's administrator accepts it. "A signed-in user belonging to both sides may satisfy
+ *            both checks, but both checks are recorded" -- never one check standing in for two.
+ *
+ * A team assigned this way carries an EXPLICIT approved member set (ASN-05) -- the team's active members at
+ * creation, which for a new team is the empty set -- captured before source approval, as the teams page does.
+ *
+ * Everything commits together or not at all: a refused assignment rolls the resource, its version, its
+ * receipt and every earlier assignment back with it. A retry of the same operation returns the same resource
+ * and the same assignments and writes nothing; a retry asking for different ones conflicts.
+ */
+// Async, so a malformed request REJECTS like every other refusal instead of throwing before a promise exists.
+export async function createAndAssignWorkforceResource(pool, authenticatedContext, value) {
+  return transact(pool, context(authenticatedContext), request(value, true, { withAssignments: true }), true);
 }
 export function readWorkforceResourceOperation(pool, authenticatedContext, value) {
   return transact(pool, context(authenticatedContext), request(value, false), false);
