@@ -40,3 +40,27 @@ test('HTTP account toggle saves ON and OFF with audit evidence and returns fresh
   assert.deepEqual(db.events,[['u',true],['u',false]]);
  } finally {server.closeAllConnections();await new Promise(r=>server.close(r));}
 });
+
+test('an unverified mailbox reads as 403 email_unverified on /balance, never a 500', async () => {
+  const unverified = { ...human, email_verified: false };
+  const query = async (sql, p = []) => {
+    if (sql.includes('LEFT JOIN agent_identities')) return { rows: [unverified] };
+    if (sql.includes('SELECT plan, status, current_period_end')) return { rows: [] };
+    if (sql.includes('SELECT email_verified FROM users')) return { rows: [{ email_verified: false }] };
+    if (sql.includes('relationship_tuples')) return { rows: [] };
+    if (['BEGIN', 'COMMIT', 'ROLLBACK'].includes(sql)) return { rows: [] };
+    if (sql.startsWith('SELECT') || sql.startsWith('INSERT') || sql.startsWith('UPDATE') || sql.startsWith('CREATE')) return { rows: [] };
+    throw Error('Unexpected SQL: ' + sql);
+  };
+  const db = { query, previewReadOnly: true, connect: async () => ({ query, release() {} }) };
+  const app = express();
+  app.use((req, _res, next) => { req.db = db; req.user = { id: 'u' }; next(); });
+  app.use('/api/v2/ledger', router);
+  const server = app.listen(0);
+  try {
+    const res = await fetch(`http://127.0.0.1:${server.address().port}/api/v2/ledger/balance`);
+    const body = await res.json();
+    assert.equal(res.status, 403);
+    assert.equal(body.error.code, 'EMAIL_UNVERIFIED');
+  } finally { server.close(); }
+});
