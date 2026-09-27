@@ -207,8 +207,8 @@ test('a run is admitted from authoritative state, as the intersection of every r
   // assertion: the visibility check is removed -> "an unreadable target answers exactly like a missing one";
   // it is checked AFTER the target's own liveness -> "a revoked target does not tell a stranger it was
   // revoked"; seeing is treated as acting -> "a viewer still learns why it may not run".
-  // NOT a citation of NFR-07: its last sentence holds here, but caches, subscriptions, deep links and exports
-  // do not exist, so the requirement is refused at workforce-catalog.test.mjs. The id stays out of the title.
+  // Part of NFR-07's parity half, for the two run endpoints. NFR-07 itself is cited by
+  // scripts/workforce-scope-binding.test.mjs, which covers every surface it names; the id stays out of this title.
   await t.test('a run target the caller cannot see answers exactly like one that does not exist', async () => {
     const hidden = await workspace(owner, 'nfr07', [['editor', editor], ['viewer', viewer]]);
     const live = await assign(lent.id, 'agent', hidden, { type: 'workspace', id: lender }, explicit(['files.read']));

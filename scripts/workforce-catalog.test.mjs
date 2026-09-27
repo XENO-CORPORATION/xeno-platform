@@ -28,18 +28,13 @@
  * Both close by EXTENDING this endpoint (an `assignment` filter, a `search` term, an
  * assigned-into-workspace listing), never by a second list API.
  *
- *   NFR-07   "API cursors, caches, subscriptions, deep links and exports are scope-bound and
- *            revision-aware. Unauthorized IDs do not reveal existence through error-detail
- *            differences." The LAST sentence is proven below, on the real HTTP router, for this
- *            endpoint -- a real-but-unreadable owner and an unused UUID return byte-identical
- *            responses. The cursor half is proven too (scope-bound, see the cursor case). But
- *            caches, subscriptions, deep links and exports do not exist in the workforce estate,
- *            and one endpoint is not "API". A citation would claim four surfaces that are unbuilt
- *            on the strength of one that is.
- *            2026-09-27: the run surfaces joined it -- admission and the pin read now answer a target
- *            the caller cannot see exactly like a missing one (workforce-run-admission.test.mjs, the
- *            NFR-07 case). Still not cited, for the same reason: caches, subscriptions, deep links and
- *            exports remain unbuilt. */
+ *   NFR-07   NOW CITED (2026-09-28) by scripts/workforce-scope-binding.test.mjs, with the subscription and
+ *            deep-link halves in scripts/live-conversation-collaboration.test.mjs. The note that stood here
+ *            said caches, subscriptions, deep links and exports "do not exist"; measured, all four did --
+ *            the live-event feed IS a cursor subscription, a live share link IS a capability deep link, the
+ *            rental partition export IS an export -- and the cache half was a real DEFECT: the /api no-store
+ *            default was mounted after every router, so every reply went out with no Cache-Control at all.
+ *            This suite still proves the catalog's own half (the id-parity and cursor cases below). */
 
 import test from 'node:test';
 import assert from 'node:assert/strict';

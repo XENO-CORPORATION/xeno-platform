@@ -338,6 +338,11 @@ app.use('/api/', browserSessionMiddleware(pool));
 // A suspended account is refused on EVERY /api route that sees a credential —
 // once, here — not only where a route remembered to check (middleware/suspensionGate.js).
 app.use('/api/', suspensionGate(pool));
+// NFR-07: the no-store default for /api responses, set BEFORE any router runs. It sat at the END of
+// this file for as long as it has existed, so it applied only to requests no route answered -- every
+// reply had already been sent without a Cache-Control header at all, leaving the decision to the
+// browser or any intermediary. A route that WANTS a cache policy sets its own and this leaves it alone.
+app.use('/api/', apiCacheMiddleware);
 app.use('/api/client-policy', databaseMiddleware, clientPolicyRoutes);
 // A cited site's favicon, through us (never the site from the user's browser). Public, cached; routes/faviconRoutes.js.
 app.use('/api/favicon', faviconRoutes);
@@ -789,9 +794,6 @@ console.log('[Infra] Job queue routes: /api/jobs/*');
 // API documentation (Swagger UI + OpenAPI spec)
 app.use('/api/docs', docsRoutes);
 console.log('[Infra] API docs: /api/docs');
-
-// API cache headers for all /api/ responses
-app.use('/api/', apiCacheMiddleware);
 
 console.log('✅ Custom routes integrated successfully');
 

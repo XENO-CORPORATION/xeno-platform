@@ -119,6 +119,10 @@ export function publicTransfer(row) {
  */
 export async function transferReviewSubject(pool, { actorUserId, transferId }) {
   return authorityTransaction(pool, async (db) => {
+    // NFR-07: the actor's KIND is checked before any id is resolved, so an agent naming a transfer --
+    // real or invented -- gets one answer. Resolving first made an unknown id 404 while a real one 403'd,
+    // which is an existence oracle for the whole table from a token that could never be authorized anyway.
+    await humanActor(db, actorUserId);
     const transfer = await loadTransfer(db, uuid(transferId, 'transfer'));
     const from = scopeOf(transfer.from_owner_user_id, transfer.from_owner_workspace_id);
     await lockScopes(db, from);
@@ -178,6 +182,8 @@ export async function proposeOwnershipTransfer(pool, { actorUserId, resourceId, 
 async function step(pool, { actorUserId, transferId, expectedRevision }, apply) {
   const tid = uuid(transferId, 'transfer');
   return authorityTransaction(pool, async (db) => {
+    // NFR-07: kind before existence -- see transferReviewSubject.
+    await humanActor(db, actorUserId);
     const peek = (await db.query('SELECT * FROM workforce_ownership_transfers WHERE id=$1', [tid])).rows[0];
     if (!peek) fail('not_found', 'transfer_not_found');
     const from = scopeOf(peek.from_owner_user_id, peek.from_owner_workspace_id);
