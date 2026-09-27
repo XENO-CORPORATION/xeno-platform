@@ -164,8 +164,8 @@ export const LibraryAssetViewer: React.FC<LibraryAssetViewerProps> = ({ items, a
               fallback={(
                 <span className="flex max-w-sm flex-col items-center gap-3 text-center">
                   <span className="flex h-12 w-12 items-center justify-center rounded-2xl border border-white/10 bg-white/[0.04]"><FileImage size={22} aria-hidden="true" /></span>
-                  <span className="text-[14px] font-medium text-white/80">Preview unavailable</span>
-                  <span className="text-[12px] leading-relaxed text-white/45">This Library image is unavailable or no longer authorized.</span>
+                  <span className="text-[14px] font-medium text-white/80">Preview not ready yet</span>
+                  <span className="text-[12px] leading-relaxed text-white/45">A newly created image is scanned before it can be shown — try again in a moment. If it was removed, it won't return.</span>
                 </span>
               )}
             />
@@ -187,8 +187,8 @@ export const LibraryAssetViewer: React.FC<LibraryAssetViewerProps> = ({ items, a
           ) : (
             <span className="flex max-w-sm flex-col items-center gap-3 text-center">
               <span className="flex h-12 w-12 items-center justify-center rounded-2xl border border-white/10 bg-white/[0.04]"><File size={22} aria-hidden="true" /></span>
-              <span className="text-[14px] font-medium text-white/80">Preview unavailable</span>
-              <span className="text-[12px] leading-relaxed text-white/45">This Library file is unavailable or no longer authorized.</span>
+              <span className="text-[14px] font-medium text-white/80">Preview not ready yet</span>
+              <span className="text-[12px] leading-relaxed text-white/45">A newly added file is scanned before it can be shown — try again in a moment. If it was removed, it won't return.</span>
             </span>
           )}
         </main>

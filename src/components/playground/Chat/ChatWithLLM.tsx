@@ -432,7 +432,9 @@ interface ChatMessage {
     userImageAttachment?: MessageImageAttachment; // Updated for serialization (first image; kept for older history)
     /** All image attachments for a user turn — rendered above the text bubble by aspect ratio. */
     userImageAttachments?: MessageImageAttachment[];
-    userFileAttachment?: { file?: File; name: string; type: string; content?: string; encoding?: 'text' | 'base64'; assetId?: string; contentUrl?: string; size?: number }; // Updated for serialization
+    userFileAttachment?: { file?: File; name: string; type: string; content?: string; encoding?: 'text' | 'base64'; assetId?: string; contentUrl?: string; size?: number }; // first non-image file; kept for older history
+    /** All non-image file attachments for a user turn. `userFileAttachment` stays the first, for older history. */
+    userFileAttachments?: Array<{ file?: File; name: string; type: string; content?: string; encoding?: 'text' | 'base64'; assetId?: string; contentUrl?: string; size?: number }>;
     generatedImageAsset?: LibraryAssetRef;
     isCancelled?: boolean; // New field to indicate if the AI response was cancelled
     isXenoSearchCancelled?: boolean; // New field to indicate if cancelled due to Xeno Search failure
@@ -475,15 +477,19 @@ const messageLibraryAttachments = (message: ChatMessage): DBChatAttachment[] => 
     content_url: image.contentUrl,
     size_bytes: image.size,
   }));
-  if (message.userFileAttachment?.assetId) {
+  const files = message.userFileAttachments?.length
+    ? message.userFileAttachments
+    : message.userFileAttachment ? [message.userFileAttachment] : [];
+  for (const file of files) {
+    if (!file.assetId) continue;
     persisted.push({
       type: 'document',
-      name: message.userFileAttachment.name,
+      name: file.name,
       content: '',
-      mimeType: message.userFileAttachment.type,
-      asset_id: message.userFileAttachment.assetId,
-      content_url: message.userFileAttachment.contentUrl,
-      size_bytes: message.userFileAttachment.size,
+      mimeType: file.type,
+      asset_id: file.assetId,
+      content_url: file.contentUrl,
+      size_bytes: file.size,
     });
   }
   if (message.generatedImageAsset?.assetId) {
@@ -564,7 +570,14 @@ const dbMessageToLocal = (msg: DBChatMessage, index: number): ChatMessage => {
     contentUrl: attachment.content_url || `/api/library/assets/${attachment.asset_id}/content`,
     size: attachment.size_bytes,
   }));
-  const file = attachments.find((attachment) => attachment.type !== 'image' && attachment.asset_id);
+  const files = attachments.filter((attachment) => attachment.type !== 'image' && attachment.asset_id).map((attachment) => ({
+    name: attachment.name,
+    type: attachment.mimeType || 'application/octet-stream',
+    assetId: attachment.asset_id,
+    contentUrl: attachment.content_url || `/api/library/assets/${attachment.asset_id}/content`,
+    size: attachment.size_bytes,
+  }));
+  const file = files[0];
   const storedTurn = isAi ? normalizeStoredTurn((msg as { turn?: unknown }).turn) : undefined;
   // a turn whose images are on its record draws them from there, all of them, in their shapes; the
   // single-image slot is for the older image path, which saved one attachment and no record
@@ -588,13 +601,8 @@ const dbMessageToLocal = (msg: DBChatMessage, index: number): ChatMessage => {
     timestamp: msg.created_at ? new Date(msg.created_at).getTime() : undefined,
     userImageAttachment: !isAi ? images[0] : undefined,
     userImageAttachments: !isAi && images.length ? images : undefined,
-    userFileAttachment: !isAi && file ? {
-      name: file.name,
-      type: file.mimeType || 'application/octet-stream',
-      assetId: file.asset_id,
-      contentUrl: file.content_url || `/api/library/assets/${file.asset_id}/content`,
-      size: file.size_bytes,
-    } : undefined,
+    userFileAttachment: !isAi ? file : undefined,
+    userFileAttachments: !isAi && files.length ? files : undefined,
     generatedImageAsset: generated ? {
       assetId: generated.assetId!,
       name: generated.name,
@@ -2988,6 +2996,10 @@ const ChatWithLLM: React.FC<ChatWithLLMProps> = ({
   const [isRecentFilesOpen, setIsRecentFilesOpen] = useState(false);
   const [attachedFiles, setAttachedFiles] = useState<AttachedFile[]>([]);
   const [isUploadingAttachments, setIsUploadingAttachments] = useState(false);
+  // Drag-and-drop onto the composer: a depth counter, not a boolean, because dragenter/dragleave
+  // fire for every child element the pointer crosses, so a single flag flickers off over the textarea.
+  const dragDepthRef = useRef(0);
+  const [isDraggingFiles, setIsDraggingFiles] = useState(false);
   const [recentFiles, setRecentFiles] = useState<Array<{
     id: string;
     name: string;
@@ -5254,7 +5266,7 @@ const ChatWithLLM: React.FC<ChatWithLLMProps> = ({
             type: img.type,
             hasData: Boolean(img.base64Data),
           }));
-          const files = m.userFileAttachment ? [{ name: m.userFileAttachment.name, type: m.userFileAttachment.type }] : [];
+          const files = (m.userFileAttachments?.length ? m.userFileAttachments : (m.userFileAttachment ? [m.userFileAttachment] : [])).map(f => ({ name: f.name, type: f.type }));
           const sources = (m.searchInfo?.sources || (m as any).sources || []).map((s: any) => ({
             title: s.title || s.uri || s.url || 'Source',
             url: s.uri || s.url || '',
@@ -6767,14 +6779,18 @@ interface QueueState {
                 }
             }
             
-            // Add user file attachment if present (separate condition to allow both image and file)
-            if (msg.sender === 'user' && msg.userFileAttachment && (msg.userFileAttachment.file || msg.userFileAttachment.assetId)) {
-                let file = msg.userFileAttachment.file;
-                if (!file && msg.userFileAttachment.assetId && msg.userFileAttachment.contentUrl) {
-                  const blob = await libraryService.fetchAssetBlob({ assetId: msg.userFileAttachment.assetId, contentUrl: msg.userFileAttachment.contentUrl });
-                  file = new globalThis.File([blob], msg.userFileAttachment.name, { type: msg.userFileAttachment.type });
+            // Every non-image file the user attached rides the turn — not just the first.
+            const userFiles = msg.userFileAttachments?.length
+              ? msg.userFileAttachments
+              : msg.userFileAttachment ? [msg.userFileAttachment] : [];
+            for (const attachment of msg.sender === 'user' ? userFiles : []) {
+                if (!(attachment.file || attachment.assetId)) continue;
+                let file = attachment.file;
+                if (!file && attachment.assetId && attachment.contentUrl) {
+                  const blob = await libraryService.fetchAssetBlob({ assetId: attachment.assetId, contentUrl: attachment.contentUrl });
+                  file = new globalThis.File([blob], attachment.name, { type: attachment.type });
                 }
-                if (!file) throw new Error(`Library file unavailable: ${msg.userFileAttachment.name}`);
+                if (!file) throw new Error(`Library file unavailable: ${attachment.name}`);
                 const isCommonTextType = file.type.startsWith('text/') ||
                                      [ '.md', '.json', '.csv', '.xml', '.html', '.css', '.js', '.ts', '.jsx', '.tsx', '.py', '.java', '.c', '.cpp', '.cs', '.php', '.rb', '.go', '.swift', '.kt', '.rs', '.toml', '.yaml', '.yml'].some(ext => file.name.toLowerCase().endsWith(ext));
 
@@ -7673,20 +7689,21 @@ interface QueueState {
       imageAttachmentsPayload.length > 0 ? imageAttachmentsPayload : undefined;
     const userImageAttachmentPayload = userImageAttachmentsPayload?.[0];
 
-    let userFileAttachmentPayload: ChatMessage['userFileAttachment'] = undefined;
-    // Allow file attachment regardless of whether there's also an image
-      const firstNonImageFile = filesToSend.find(f => !f.type.startsWith('image/'));
-      if (firstNonImageFile) {
-        userFileAttachmentPayload = {
-          file: firstNonImageFile.fileObject,
-          name: firstNonImageFile.name,
-          type: firstNonImageFile.type,
-          assetId: firstNonImageFile.assetId,
-          contentUrl: firstNonImageFile.contentUrl,
-          size: firstNonImageFile.size,
-        };
-      console.log('Attaching non-image file to user message:', firstNonImageFile.name);
-    }
+    // ALL non-image files ride the turn (not just the first). `userFileAttachment` keeps the first
+    // for older readers/history; the array is what the model, the store and the bubble actually use.
+    const fileAttachmentsPayload = filesToSend
+      .filter(f => !f.type.startsWith('image/'))
+      .map(f => ({
+        file: f.fileObject,
+        name: f.name,
+        type: f.type,
+        assetId: f.assetId,
+        contentUrl: f.contentUrl,
+        size: f.size,
+      }));
+    const userFileAttachmentsPayload =
+      fileAttachmentsPayload.length > 0 ? fileAttachmentsPayload : undefined;
+    const userFileAttachmentPayload = userFileAttachmentsPayload?.[0];
 
     const newUserMessage: ChatMessage = {
         id: messageId,
@@ -7696,6 +7713,7 @@ interface QueueState {
         userImageAttachment: userImageAttachmentPayload,
         userImageAttachments: userImageAttachmentsPayload,
         userFileAttachment: userFileAttachmentPayload,
+        userFileAttachments: userFileAttachmentsPayload,
     };
     // --- End user message preparation ---
 
@@ -9811,6 +9829,38 @@ Keep the summary under 500 words. Preserve essential context needed to continue 
     event.preventDefault();
     void attachFileObjects([makePastedTextFile(pasted)]);
   };
+
+  /**
+   * Drag-and-drop files onto the composer. Paste deliberately leaves file drops to the browser
+   * (chatPaste.ts), so drop is the intended entry point for dropping a file — it funnels into the
+   * SAME `attachFileObjects` the picker and paste-to-file use, so a dropped file uploads, chips and
+   * sends exactly like a picked one, and multiple dropped files all attach.
+   */
+  const dragHasFiles = (event: React.DragEvent) => Array.from(event.dataTransfer?.types || []).includes('Files');
+  const handleComposerDragEnter = (event: React.DragEvent) => {
+    if (!dragHasFiles(event)) return;
+    event.preventDefault();
+    dragDepthRef.current += 1;
+    setIsDraggingFiles(true);
+  };
+  const handleComposerDragOver = (event: React.DragEvent) => {
+    if (!dragHasFiles(event)) return;
+    event.preventDefault(); // required, or the browser opens the file instead of letting us drop it
+    event.dataTransfer.dropEffect = 'copy';
+  };
+  const handleComposerDragLeave = (event: React.DragEvent) => {
+    if (!dragHasFiles(event)) return;
+    dragDepthRef.current -= 1;
+    if (dragDepthRef.current <= 0) { dragDepthRef.current = 0; setIsDraggingFiles(false); }
+  };
+  const handleComposerDrop = (event: React.DragEvent) => {
+    if (!dragHasFiles(event)) return;
+    event.preventDefault();
+    dragDepthRef.current = 0;
+    setIsDraggingFiles(false);
+    const files = Array.from(event.dataTransfer.files || []);
+    if (files.length) void attachFileObjects(files);
+  };
   // Handle removing an attached file
   const handleRemoveAttachedFile = (fileIdToRemove: string) => {
       setAttachedFiles(prev => prev.filter(file => file.id !== fileIdToRemove));
@@ -11617,6 +11667,17 @@ Keep the summary under 500 words. Preserve essential context needed to continue 
             delete message.userFileAttachment;
         }
 
+        // The multi-file array carries live File objects too (not JSON-serializable). Every attached
+        // file was uploaded to the library, so each element has an assetId+contentUrl to reload from;
+        // keep only the serializable fields (drop the File, mirroring the singular path above).
+        if (Array.isArray(message.userFileAttachments)) {
+            const serializedFiles = message.userFileAttachments
+                .filter((f: NonNullable<ChatMessage['userFileAttachments']>[number]) => f.assetId && f.contentUrl)
+                .map((f: NonNullable<ChatMessage['userFileAttachments']>[number]) => ({ name: f.name, type: f.type, assetId: f.assetId, contentUrl: f.contentUrl, size: f.size }));
+            if (serializedFiles.length) message.userFileAttachments = serializedFiles;
+            else delete message.userFileAttachments;
+        }
+
         // <<< ADDED: Remove AI-generated image data before saving to localStorage >>>
         if (message.imageData) {
           // console.log(`[LocalStoragePrep] Removing imageData for message ID ${message.id} to save space.`);
@@ -11951,8 +12012,11 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
     }[] = [];
 
     for (const message of messages) {
-      if (message.userFileAttachment?.name) {
-        const attachment = message.userFileAttachment;
+      const messageFileAttachments = message.userFileAttachments?.length
+        ? message.userFileAttachments
+        : message.userFileAttachment ? [message.userFileAttachment] : [];
+      messageFileAttachments.forEach((attachment, fileIndex) => {
+        if (!attachment?.name) return;
         const raw = attachment.content?.trim() ?? '';
         let content = raw;
         if (!content) {
@@ -11961,12 +12025,12 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
           content = raw || 'Binary file — text preview not available.';
         }
         items.push({
-          key: `${message.id}-file`,
+          key: `${message.id}-file-${fileIndex}`,
           name: attachment.name,
           kind: 'file',
           content,
         });
-      }
+      });
       const images =
         message.userImageAttachments && message.userImageAttachments.length > 0
           ? message.userImageAttachments
@@ -12350,12 +12414,25 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
           {/* Input Box Area — inner bordered field inside the composer shell (empty + conversation). */}
           <div
             data-empty-composer-input="true"
+            data-dragging-files={isDraggingFiles ? 'true' : undefined}
+            onDragEnter={handleComposerDragEnter}
+            onDragOver={handleComposerDragOver}
+            onDragLeave={handleComposerDragLeave}
+            onDrop={handleComposerDrop}
             /* One stroke only: the shell carries it now (it is the box the gooey skin is
                moulded onto), so this inner field must not draw a second border. */
             className={`chat-input-container relative rounded-2xl border border-transparent bg-transparent shadow-none ${
               messages.length === 0 ? 'p-3' : 'p-2'
             }`}
           >
+            {isDraggingFiles && (
+              <div
+                className="pointer-events-none absolute inset-0 z-20 flex items-center justify-center rounded-2xl border-2 border-dashed border-[var(--chat-accent)] bg-[color-mix(in_srgb,var(--chat-accent)_10%,transparent)]"
+                aria-hidden="true"
+              >
+                <span className="text-[13px] font-medium text-[var(--chat-text)]">Drop files to attach</span>
+              </div>
+            )}
             {isContextLimitReached && (
               <div className="mb-3 p-2.5 border border-[var(--chat-danger)]/70 bg-[var(--chat-danger)]/15 rounded-lg text-[var(--chat-danger)] text-xs shadow-md">
                 {contextLimitWarning}
@@ -16482,10 +16559,10 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
 
                                              const hasAttachments =
                                                imageAttachments.length > 0 ||
-                                               Boolean(
-                                                 message.userFileAttachment &&
-                                                   (message.userFileAttachment.file || message.userFileAttachment.content || message.userFileAttachment.assetId),
-                                               );
+                                               (message.userFileAttachments?.length
+                                                 ? message.userFileAttachments
+                                                 : message.userFileAttachment ? [message.userFileAttachment] : [])
+                                                 .some((f) => f.file || f.content || f.assetId);
 
                                              return (
                                                <MessageBubble
@@ -16534,41 +16611,40 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                                              </div>
                                            )}
 
-                                           {message.userFileAttachment && (message.userFileAttachment.file || message.userFileAttachment.content || message.userFileAttachment.assetId) && (
-                                            /* A BUTTON, not a `<div onClick>`. It opens the file in
-                                                the context panel, so a keyboard has to reach it —
-                                                and did not. `text-left` because a button centres its
-                                                content and this row is a filename that truncates.
-                                                Stays hand-written otherwise: it is a content row on
-                                                a message, where `ListRow` is the eventual answer and
-                                                would also decide how the message list is traversed. */
+                                           {/* Every non-image file the user attached, not just the first. A BUTTON,
+                                               not a `<div onClick>`, so a keyboard reaches it; `text-left` because a
+                                               button centres its content and this row is a truncating filename. */}
+                                           {(message.userFileAttachments?.length
+                                              ? message.userFileAttachments
+                                              : message.userFileAttachment ? [message.userFileAttachment] : [])
+                                             .filter((f) => f.file || f.content || f.assetId)
+                                             .map((fileAttachment, fileIndex) => (
                                             <button
+                                                     key={`${message.id}-file-${fileIndex}-${fileAttachment.name}`}
                                                      type="button"
                                                      className="ml-auto mr-0 flex max-w-[250px] cursor-pointer items-center gap-2.5 rounded-lg border border-[var(--chat-border)] bg-[var(--chat-surface)] p-2 text-left transition-colors hover:bg-[var(--chat-hover)]"
                                               onClick={() => {
-                                                if (message.userFileAttachment) {
-                                                  if (message.userFileAttachment.file) {
+                                                  if (fileAttachment.file) {
                                                     const fileToShow: AttachedFile = {
-                                                      id: `user-attached-${message.userFileAttachment.name}-${message.id}`,
-                                                      name: message.userFileAttachment.name,
-                                                      type: message.userFileAttachment.type,
-                                                      fileObject: message.userFileAttachment.file
+                                                      id: `user-attached-${fileAttachment.name}-${message.id}`,
+                                                      name: fileAttachment.name,
+                                                      type: fileAttachment.type,
+                                                      fileObject: fileAttachment.file
                                                     };
                                                     handleShowFileInContextPanel(fileToShow);
-                                                  } else if (message.userFileAttachment.assetId) {
-                                                    void libraryService.createSignedLink(message.userFileAttachment.assetId).then((url) => window.open(url, '_blank', 'noopener'));
+                                                  } else if (fileAttachment.assetId) {
+                                                    void libraryService.createSignedLink(fileAttachment.assetId).then((url) => window.open(url, '_blank', 'noopener'));
                                                   } else {
-                                                    handleShowFileInContextPanel(message.userFileAttachment as any);
+                                                    handleShowFileInContextPanel(fileAttachment as any);
                                                   }
-                                                }
                                               }}
                                             >
                                                      <FileText size={17} className="flex-shrink-0 text-[var(--chat-muted)]" />
-                                                     <span className="truncate text-sm text-[var(--chat-text)]" title={message.userFileAttachment.name}>
-                                                {message.userFileAttachment.name}
+                                                     <span className="truncate text-sm text-[var(--chat-text)]" title={fileAttachment.name}>
+                                                {fileAttachment.name}
                                               </span>
                                             </button>
-                                           )}
+                                           ))}
 
                                                    </>
                                                  ) : undefined}

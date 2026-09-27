@@ -24,17 +24,26 @@ export const LibraryAssetImage: React.FC<LibraryAssetImageProps> = ({
   ...imageProps
 }) => {
   const directUrl = sourceUrl || asset?.contentUrl || '';
-  const [url, setUrl] = useState(asset?.assetId ? '' : directUrl);
+  // A blob:/data: sourceUrl is bytes we already hold locally — always showable, and immune to the
+  // quarantine window a freshly-uploaded library asset sits in (its signed link 404s until the
+  // malware scan passes). Prefer it over a signed link when we have it; only resolve the asset's
+  // signed link when there is NO local source (e.g. a reload, where the blob is gone). This is what
+  // makes a just-attached chat image show its preview instead of a blank icon while it is scanned.
+  const localUrl = /^(?:blob:|data:)/i.test(sourceUrl || '') ? (sourceUrl as string) : '';
+  const useAssetLink = Boolean(asset?.assetId) && !localUrl;
+  const [url, setUrl] = useState(useAssetLink ? '' : directUrl);
   const [state, setState] = useState<LibraryAssetImageState>(
-    asset?.assetId ? 'resolving' : directUrl ? 'ready' : 'unavailable',
+    useAssetLink ? 'resolving' : directUrl ? 'ready' : 'unavailable',
   );
 
   useEffect(() => {
     let cancelled = false;
+    const nextLocalUrl = /^(?:blob:|data:)/i.test(sourceUrl || '') ? (sourceUrl as string) : '';
     const nextDirectUrl = sourceUrl || asset?.contentUrl || '';
-    setUrl(asset?.assetId ? '' : nextDirectUrl);
+    const nextUseAssetLink = Boolean(asset?.assetId) && !nextLocalUrl;
+    setUrl(nextUseAssetLink ? '' : nextDirectUrl);
 
-    if (!asset?.assetId) {
+    if (!nextUseAssetLink) {
       const nextState = nextDirectUrl ? 'ready' : 'unavailable';
       setState(nextState);
       onStateChange?.(nextState);
@@ -42,9 +51,11 @@ export const LibraryAssetImage: React.FC<LibraryAssetImageProps> = ({
       return undefined;
     }
 
+    const assetId = asset?.assetId;
+    if (!assetId) return undefined; // unreachable given nextUseAssetLink, but narrows for the compiler
     setState('resolving');
     onStateChange?.('resolving');
-    void libraryService.createSignedLink(asset.assetId)
+    void libraryService.createSignedLink(assetId)
       .then((signedUrl) => {
         if (cancelled) return;
         setUrl(signedUrl);
@@ -54,6 +65,16 @@ export const LibraryAssetImage: React.FC<LibraryAssetImageProps> = ({
       })
       .catch(() => {
         if (cancelled) return;
+        // The signed link can be refused while the asset is still in its scan. If we hold a local
+        // source (blob/data) fall back to it rather than showing a blank; otherwise report
+        // unavailable so any external retry (e.g. ChatGeneratedImage's backoff) can take over.
+        if (nextLocalUrl) {
+          setUrl(nextLocalUrl);
+          setState('ready');
+          onStateChange?.('ready');
+          onResolvedUrl?.(nextLocalUrl);
+          return;
+        }
         setUrl('');
         setState('unavailable');
         onStateChange?.('unavailable');
