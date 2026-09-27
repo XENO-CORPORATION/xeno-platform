@@ -74,6 +74,7 @@ test('real HTTP/authMiddleware/JWT/DPoP boundary with query-aware auth DB and in
   let admitResult;
   let pinResult;
   let capacityResult;
+  let evaluationResult;
   const admittedFixture = () => ({ replayed: false, admission: { schemaVersion: 1, admissionId: operationId, operationId,
     agent: { resourceId: operationId, version: 1, contentHash: 'a'.repeat(64) },
     target: { kind: 'personal', ownerUserId: human, workspaceId: null, projectId: null, assignmentId: null, assignmentRevision: null, participationId: null, participationRevision: null },
@@ -92,6 +93,14 @@ test('real HTTP/authMiddleware/JWT/DPoP boundary with query-aware auth DB and in
     readWorkforceCapacity: async (pool, context, value) => { calls.push({ method: 'capacity', context, body: value });
       return capacityResult ?? { schemaVersion: 1, owner: value.owner, derivedAt: '2026-09-27T12:00:00.000Z', activeAdmissions: 2, inFlightRuns: 1,
         activeAgents: 2, committedCeilingMicro: '3500000', funding: [{ payerUserId: human, canFund: true, availableMicro: '7000000', internal: 'hidden' }] }; },
+    readWorkforceEvaluation: async (pool, context, value) => { calls.push({ method: 'evaluation', context, body: value });
+      return evaluationResult ?? { schemaVersion: 1, owner: value.owner, subject: value.subject, window: value.window,
+        derivedAt: '2026-09-27T12:00:00.000Z', settledBefore: '2026-09-27T11:55:00.000Z', closed: true,
+        runs: { admitted: 3, children: 1, activeAtEnd: 2, stopped: { stopped_by_actor: 1, stopped_by_target: 0, authority_lost: 0 } },
+        steps: { privilegedCalls: 1, providerDispatches: 2 }, handoffs: null,
+        decisions: { byRelation: { about: { 'division.assign': 1 } }, withEvidence: 0 },
+        records: { admissions: [operationId], handoffs: [], decisions: [], truncated: false },
+        notRecorded: ['contributions', 'reviewerDecisions', 'settlements'], score: 97 }; },
     readRunnablePin: async (pool, context, value) => { calls.push({ method: 'pin', context, body: value }); if (admitFailure) throw admitFailure;
       return pinResult ?? { schemaVersion: 1, agent: { resourceId: value.agent.resourceId, version: 3, contentHash: 'b'.repeat(64) },
         target: value.target, team: null, terms: { definition: ['files.read'], target: ['files.read'] }, internalRow: 'hidden' }; },
@@ -367,6 +376,31 @@ test('real HTTP/authMiddleware/JWT/DPoP boundary with query-aware auth DB and in
         assert.equal((await request({ path: '/run-admissions', body: child })).status, 500, 'a malformed parent reference is not a success');
       }
       admitResult = undefined;
+    });
+    // Mutation-checked 2026-09-27: the route demands workforce:manage -> "reading an evaluation is a read";
+    // the projection passes unknown fields -> "no score crosses the wire"; it accepts another window ->
+    // "an evaluation of another window is never reported".
+    await t.test('LIFE-04: an evaluation is read over HTTP as a read, for the subject and window asked about', async () => {
+      const ask = { owner: { type: 'workspace', id: operationId }, subject: { kind: 'agent', resourceId: operationId },
+        window: { since: '2026-09-01T00:00:00.000Z', until: '2026-09-02T00:00:00.000Z' }, expectedActorAccountId: human };
+      const read = await request({ path: '/evaluation', body: ask, token: mint({ scope: 'workforce:read' }) });
+      assert.equal(read.status, 200, 'reading an evaluation is a read');
+      assert.deepEqual(read.body.runs.stopped, { stopped_by_actor: 1, stopped_by_target: 0, authority_lost: 0 });
+      assert.equal(Object.hasOwn(read.body, 'score'), false, 'no score crosses the wire');
+      assert.deepEqual(calls.at(-1).context, { actorUserId: human, clientId: 'xeno-agent-interface' }, 'the actor comes from authentication');
+      const base = () => ({ schemaVersion: 1, owner: ask.owner, subject: ask.subject, window: ask.window, derivedAt: '2026-09-27T12:00:00.000Z',
+        settledBefore: '2026-09-27T11:55:00.000Z', closed: true, runs: { admitted: 0, children: 0, activeAtEnd: 0, stopped: { stopped_by_actor: 0, stopped_by_target: 0, authority_lost: 0 } },
+        steps: { privilegedCalls: 0, providerDispatches: 0 }, handoffs: null, decisions: { byRelation: {}, withEvidence: 0 },
+        records: { admissions: [], handoffs: [], decisions: [], truncated: false }, notRecorded: [] });
+      for (const bad of [{ window: { since: '2026-08-01T00:00:00.000Z', until: '2026-09-02T00:00:00.000Z' } },
+        { subject: { kind: 'agent', resourceId: human } }, { runs: { admitted: -1, children: 0, activeAtEnd: 0, stopped: {} } }]) {
+        evaluationResult = { ...base(), ...bad };
+        assert.equal((await request({ path: '/evaluation', body: ask })).status, 500, 'an evaluation of another window is never reported');
+      }
+      evaluationResult = undefined;
+      assert.equal((await request({ path: '/evaluation', body: ask, token: mint({ scope: 'workforce:manage' }) })).status, 403,
+        'an evaluation needs workforce:read');
+      assert.equal((await request({ method: 'GET', path: '/evaluation' })).status, 405);
     });
     await t.test('RUN-03: each step is authorized over HTTP by the admitted actor, as a bounded signed lease', async () => {
       const stepBody = { admissionId: operationId, operation: 'provider_dispatch' };

@@ -114,6 +114,7 @@ const defaultAdmit = async (...args) => (await import('../services/workforceRunA
 const defaultReadAdmission = async (...args) => (await import('../services/workforceRunAdmission.js')).readRunAdmission(...args);
 const defaultReadPin = async (...args) => (await import('../services/workforceRunAdmission.js')).readRunnablePin(...args);
 const defaultReadCapacity = async (...args) => (await import('../services/workforceCapacity.js')).readWorkforceCapacity(...args);
+const defaultReadEvaluation = async (...args) => (await import('../services/workforceEvaluation.js')).readWorkforceEvaluation(...args);
 // RUN-03: the lease is signed with the platform's OWN active OIDC key -- the one published at
 // /api/oauth2/jwks -- so any runtime can verify it offline against the public JWKS, and no key
 // ever comes from a request.
@@ -187,6 +188,43 @@ function capacityObservation(value, request) {
     if (new Set(funding.map(f => f.payerUserId)).size !== funding.length) return null;
     return { schemaVersion: 1, owner, derivedAt: value.derivedAt, activeAdmissions: value.activeAdmissions,
       inFlightRuns: value.inFlightRuns, activeAgents: value.activeAgents, committedCeilingMicro: value.committedCeilingMicro, funding };
+  } catch { return null; }
+}
+/** LIFE-04: an evaluation is reported for the scope, subject and window ASKED about, as counts and the ids of
+ * the records behind them. A reply about another subject or window, or carrying a field outside this shape --
+ * a score above all -- is not reported. */
+const COUNT_KEYS = { stopped: ['stopped_by_actor', 'stopped_by_target', 'authority_lost'], handoff: ['offered', 'accepted', 'declined', 'expired'] };
+const counts = (value, keys) => value && typeof value === 'object' && !Array.isArray(value)
+  && Object.keys(value).length === keys.length && keys.every(k => count(value[k]));
+const ids = value => Array.isArray(value) && value.length <= 500 && value.every(v => uuid(v) === v);
+function evaluationObservation(value, request) {
+  try {
+    const owner = normalizeOwnerScope(value?.owner), asked = normalizeOwnerScope(request.owner);
+    if (value.schemaVersion !== 1 || owner.type !== asked.type || owner.id !== asked.id) return null;
+    if (JSON.stringify(value.subject) !== JSON.stringify(request.subject)) return null;
+    if (Date.parse(value.window?.since) !== Date.parse(request.window?.since) || Date.parse(value.window?.until) !== Date.parse(request.window?.until)) return null;
+    for (const t of [value.derivedAt, value.settledBefore]) if (typeof t !== 'string' || !Number.isFinite(Date.parse(t))) return null;
+    const r = value.runs, st = value.steps, d = value.decisions, rec = value.records;
+    if (typeof value.closed !== 'boolean' || !r || !count(r.admitted) || !count(r.children) || !count(r.activeAtEnd) || !counts(r.stopped, COUNT_KEYS.stopped)
+      || !st || !count(st.privilegedCalls) || !count(st.providerDispatches)) return null;
+    if (value.handoffs !== null && !(value.handoffs && counts(value.handoffs.sent, COUNT_KEYS.handoff) && counts(value.handoffs.received, COUNT_KEYS.handoff))) return null;
+    if (!d || !count(d.withEvidence) || !d.byRelation || typeof d.byRelation !== 'object') return null;
+    const byRelation = {};
+    for (const [relation, kinds] of Object.entries(d.byRelation)) {
+      if (!['made', 'answeredFor', 'about'].includes(relation) || !kinds || typeof kinds !== 'object') return null;
+      byRelation[relation] = {};
+      for (const [kind, n] of Object.entries(kinds)) { if (!/^[a-z]+\.[a-z]+$/.test(kind) || !count(n)) return null; byRelation[relation][kind] = n; }
+    }
+    if (!rec || !ids(rec.admissions) || !ids(rec.handoffs) || !ids(rec.decisions) || typeof rec.truncated !== 'boolean') return null;
+    if (!Array.isArray(value.notRecorded) || !value.notRecorded.every(s => typeof s === 'string' && /^[a-zA-Z]{1,40}$/.test(s))) return null;
+    return { schemaVersion: 1, owner, subject: value.subject, window: { since: value.window.since, until: value.window.until },
+      derivedAt: value.derivedAt, settledBefore: value.settledBefore, closed: value.closed,
+      runs: { admitted: r.admitted, children: r.children, activeAtEnd: r.activeAtEnd, stopped: fields(r.stopped, COUNT_KEYS.stopped) },
+      steps: { privilegedCalls: st.privilegedCalls, providerDispatches: st.providerDispatches },
+      handoffs: value.handoffs === null ? null : { sent: fields(value.handoffs.sent, COUNT_KEYS.handoff), received: fields(value.handoffs.received, COUNT_KEYS.handoff) },
+      decisions: { byRelation, withEvidence: d.withEvidence },
+      records: { admissions: rec.admissions, handoffs: rec.handoffs, decisions: rec.decisions, truncated: rec.truncated },
+      notRecorded: value.notRecorded };
   } catch { return null; }
 }
 /** RUN-01's precondition: the pin reported is for the agent and the target ASKED about, in its whole
@@ -324,6 +362,7 @@ function globalObservation(value, request) {
  * belong to the real service, not the renderer or this routing adapter. */
 export function createWorkforceRouter({ createWorkforceResource = defaultCreate, readWorkforceResourceOperation = defaultRead, listOwnedWorkforceResources = defaultList,
   admitRun = defaultAdmit, readRunAdmission = defaultReadAdmission, readRunnablePin = defaultReadPin, readWorkforceCapacity = defaultReadCapacity,
+  readWorkforceEvaluation = defaultReadEvaluation,
   authorizeRunStep = defaultAuthorizeStep,
   revokeRun = defaultRevokeRun, readRunAuthority = defaultReadAuthority } = {}) {
   const router = express.Router();
@@ -381,6 +420,9 @@ export function createWorkforceRouter({ createWorkforceResource = defaultCreate,
   // LIFE-09: what a scope is running and can still fund, derived at the read. A read, like the catalog.
   router.post('/capacity', authMiddleware, requireDpopIfBound, requireWorkforceScope('workforce:read'), parse,
     handle(readWorkforceCapacity, true, capacityObservation));
+  // LIFE-04: an evaluation of one subject for a stated window, derived at the read. A read, like capacity.
+  router.post('/evaluation', authMiddleware, requireDpopIfBound, requireWorkforceScope('workforce:read'), parse,
+    handle(readWorkforceEvaluation, true, evaluationObservation));
   // RUN-01's precondition: the current pin of an agent as runnable at one target, by this actor -- what an
   // admission must name. A read, resolved under admission's own rule; it commits nothing.
   router.post('/run-admissions/pin', authMiddleware, requireDpopIfBound, requireWorkforceScope('workforce:read'), parse,
@@ -398,7 +440,7 @@ export function createWorkforceRouter({ createWorkforceResource = defaultCreate,
     handle(onlyAdmission(revokeRun), false, authorityObservation));
   router.post('/run-admissions/authority', authMiddleware, requireDpopIfBound, requireWorkforceScope('workforce:read'), parse,
     handle(onlyAdmission(readRunAuthority), true, authorityObservation));
-  for (const path of ['/resources', '/resources/list', '/resource-operations/read', '/run-admissions', '/run-admissions/read', '/run-admissions/pin', '/capacity',
+  for (const path of ['/resources', '/resources/list', '/resource-operations/read', '/run-admissions', '/run-admissions/read', '/run-admissions/pin', '/capacity', '/evaluation',
     '/run-admissions/authorize-step', '/run-admissions/revoke', '/run-admissions/authority']) {
     router.all(path, (_req, res) => res.set('Allow', 'POST').status(405).json({ success: false, code: 'bad_input', error: 'Method not allowed.' }));
   }

@@ -20,8 +20,11 @@
  *            missed LIFE-03's own normative sentence: a departed worker's RECEIPTS survive and
  *            attribution is not retroactively rewritten. That is a property of the operations
  *            table and of nothing else. Kept as a correction, not deleted.
- *   LIFE-04  evaluation is EVIDENCE-DERIVED, never a rating column. `evidence` being a real array
- *            is a precondition, proven above. Nothing derives an evaluation from it.
+ *   LIFE-04  NOW CITED (2026-09-27), in workforce-evaluation.test.mjs, against
+ *            services/workforceEvaluation.js: an evaluation is a projection over admissions, leases,
+ *            revocations, handoffs and these decision records for a stated window, reproducible for it,
+ *            with no rating column anywhere. `evidence` being a real array is what lets it count the
+ *            decisions that carried evidence.
  *   LIFE-05  ✅ NOW CITED, in workforce-function-change.test.mjs. `member.promote` was only a
  *            loggable kind when this note was written; a team-role or division-head change now
  *            REQUIRES one, referenced from the row it changed (20260924190000). This suite still
