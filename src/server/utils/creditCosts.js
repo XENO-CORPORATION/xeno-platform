@@ -3,6 +3,8 @@
  * Used by xenoRoutes to determine how many credits to deduct per request.
  */
 
+import { createHash } from 'node:crypto';
+
 const IMAGE_COSTS = {
   'fast': 5,
   'classic': 5,
@@ -114,6 +116,39 @@ export function chatRatesFor(modelId) {
 }
 
 
+// A tariff snapshot is internal ledger data, never a caller-selected price or a
+// public per-token table. Persist the whole snapshot with the reservation so a
+// later deploy cannot reprice work already admitted. The hash binds the model,
+// resolved rates, units and arithmetic, not a hand-maintained version label.
+const canonicalTariff = value => ({ schemaVersion: value.schemaVersion, operation: value.operation,
+  model: value.model, unit: value.unit, arithmetic: value.arithmetic,
+  inputMicroPerToken: value.inputMicroPerToken, outputMicroPerToken: value.outputMicroPerToken });
+const tariffVersion = value => 'chat-sha256:' + createHash('sha256').update(JSON.stringify(canonicalTariff(value))).digest('hex');
+const pricingError = () => Object.assign(new Error('Invalid pinned chat tariff or usage'), { code: 'INVALID_PINNED_PRICING' });
+const exactCount = value => {
+  if (typeof value === 'number' && Number.isSafeInteger(value) && value >= 0) return BigInt(value);
+  if (typeof value === 'string' && /^(0|[1-9][0-9]{0,17})$/.test(value)) return BigInt(value);
+  throw pricingError();
+};
+export function pinChatTariff(model) {
+  if (typeof model !== 'string' || !model || model !== model.trim() || Buffer.byteLength(model) > 100 || /[\u0000-\u001f]/.test(model)) throw pricingError();
+  const rates=chatRates(model);
+  const body={schemaVersion:1,operation:'chat.completion',model,unit:'microcredit',arithmetic:'integer-per-token-v1',
+    inputMicroPerToken:String(rates.input),outputMicroPerToken:String(rates.output)};
+  return Object.freeze({...body,version:tariffVersion(body)});
+}
+export function pricePinnedChatUsage(snapshot, {inputTokens,outputTokens}={}) {
+  if (!snapshot || Array.isArray(snapshot) || Object.keys(snapshot).length !== 8
+    || snapshot.schemaVersion !== 1 || snapshot.operation !== 'chat.completion' || snapshot.unit !== 'microcredit'
+    || snapshot.arithmetic !== 'integer-per-token-v1' || typeof snapshot.model !== 'string'
+    || !snapshot.model || Buffer.byteLength(snapshot.model) > 100
+    || typeof snapshot.inputMicroPerToken !== 'string' || typeof snapshot.outputMicroPerToken !== 'string'
+    || snapshot.version !== tariffVersion(snapshot)) throw pricingError();
+  const cost=exactCount(snapshot.inputMicroPerToken)*exactCount(inputTokens)
+    +exactCount(snapshot.outputMicroPerToken)*exactCount(outputTokens);
+  if(cost>9223372036854775807n)throw pricingError();
+  return cost.toString();
+}
 
 /** Actual premium-chat cost in µcr from real token usage (used at settle time). */
 export function getChatCostMicro(modelId, { inputTokens = 0, outputTokens = 0 } = {}) {
@@ -122,15 +157,16 @@ export function getChatCostMicro(modelId, { inputTokens = 0, outputTokens = 0 } 
 }
 
 /**
- * WORST-CASE premium-chat cost in µcr, used to place the pre-call hold. settleHoldV2
- * clamps the actual charge to the held amount, so the hold MUST be >= real cost or
- * we under-charge — hence we assume the full max_tokens are billed as output.
+ * Estimated premium-chat reservation in µcr. This is NOT a hard upper bound:
+ * input is estimated and provider reasoning may exceed max_tokens. Ordinary
+ * settlement can charge beyond it. Restricted pooled dispatch must instead use
+ * an enforceable provider bound and its pinned tariff; never promote this estimate
+ * to a maximum liability merely by naming it a worst case.
  */
 export function estimateChatCostMicro(modelId, { inputTokens = 0, maxOutputTokens = 1024 } = {}) {
   const r = chatRates(modelId);
-  // Pad the input estimate 25% — chars/4 is not a strict upper bound (code/CJK are
-  // token-denser) and the hold must stay >= actual so settle never clamps to an
-  // undercharge. Output is already worst-case (max_tokens).
+  // Pad the input estimate 25%; chars/4 is not a strict upper bound (code/CJK
+  // are token-denser). This padding does not make an unbounded provider bounded.
   const est = r.input * Math.ceil((inputTokens || 0) * 1.25) + r.output * (maxOutputTokens || 1024);
   // Floor the hold at a small non-zero amount so a 402 fires for empty wallets.
   return Math.max(Math.round(est), Math.round(0.05 * MICRO)); // >= 0.05 credit
