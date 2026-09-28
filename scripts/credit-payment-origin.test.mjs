@@ -29,12 +29,15 @@ test('payment origins bind settled monetary evidence to the exact lot atomically
   const {readFile}=await import('node:fs/promises');
   const fundingSql=await readFile(new URL('../src/server/database/migrations/20260928120000-workforce-funding-foundation.sql',import.meta.url),'utf8');
   const [fundingUp,fundingDown]=fundingSql.split(/^--\s*DOWN\b/im);
+  const budgetSql=await readFile(new URL('../src/server/database/migrations/20260928130000-workforce-funding-budgets.sql',import.meta.url),'utf8');
+  const [budgetUp,budgetDown]=budgetSql.split(/^--\s*DOWN\b/im);
   await t.test('funding schema rolls back only while empty',async()=>{
     const db=await pool.connect();
     try {
-      await db.query('BEGIN');await db.query(fundingDown);
+      // Roll back dependants first, exactly as the migration runner does.
+      await db.query('BEGIN');await db.query(budgetDown);await db.query(fundingDown);
       assert.equal((await db.query("SELECT to_regclass('workforce_funding_campaigns') AS t")).rows[0].t,null,'empty funding rollback removes its schema');
-      await db.query(fundingUp);await db.query('COMMIT');
+      await db.query(fundingUp);await db.query(budgetUp);await db.query('COMMIT');
     } finally {await db.query('ROLLBACK');db.release();}
   });
   const marker = randomUUID().replaceAll('-', '');

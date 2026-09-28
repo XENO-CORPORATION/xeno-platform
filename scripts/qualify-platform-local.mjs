@@ -228,7 +228,7 @@ const BACKEND_EVIDENCE = {
     await createDatabase(originDb);
     await step('payment-lot-origins', async () => {
       const output = await command(process.execPath, ['--test', '--test-reporter=tap', '--test-force-exit', '--test-concurrency=1',
-        path.join(root, 'scripts/credit-payment-origin.test.mjs'), path.join(root, 'scripts/credit-restricted-account.test.mjs'), path.join(root, 'scripts/credit-journal-order.test.mjs')],
+        path.join(root, 'scripts/credit-payment-origin.test.mjs'), path.join(root, 'scripts/credit-restricted-account.test.mjs'), path.join(root, 'scripts/credit-journal-order.test.mjs'), path.join(root, 'scripts/workforce-funding-budgets.test.mjs')],
       { env: childEnvironment(process.env, scratch, urlFor(originDb)), cwd: scratch, timeout: 180_000, log: 'payment-origins' });
       return parseTapSummary(output, 0);
     });
@@ -316,7 +316,7 @@ const BACKEND_EVIDENCE = {
   await createDatabase(originDb);
   await step('payment-lot-origins', async () => {
     const output = await command(process.execPath, ['--test', '--test-reporter=tap', '--test-force-exit', '--test-concurrency=1',
-      path.join(root, 'scripts/credit-payment-origin.test.mjs'), path.join(root, 'scripts/credit-restricted-account.test.mjs'), path.join(root, 'scripts/credit-journal-order.test.mjs')],
+      path.join(root, 'scripts/credit-payment-origin.test.mjs'), path.join(root, 'scripts/credit-restricted-account.test.mjs'), path.join(root, 'scripts/credit-journal-order.test.mjs'), path.join(root, 'scripts/workforce-funding-budgets.test.mjs')],
     { env: childEnvironment(process.env, scratch, urlFor(originDb)), cwd: scratch, timeout: 180_000, log: 'payment-origins' });
     return parseTapSummary(output, 0);
   });

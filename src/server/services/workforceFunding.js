@@ -41,13 +41,13 @@ async function human(db, actor, { lock = true } = {}) {
   if (!p?.usable || p.kind!=='human') fail('denied','usable_human_required');
   return p;
 }
-async function projectAuthority(db, actor, id, relation='admin') {
+async function projectAuthority(db, actor, id, relation='admin', { allowArchived=false }={}) {
   const peek=(await db.query('SELECT workspace_id FROM chat_projects WHERE id=$1',[id])).rows[0];
   if (!peek) fail('not_found','project_not_found');
   if (peek.workspace_id) await lockWorkspaceAuthority(db,peek.workspace_id);
   await human(db,actor);
   const p=(await db.query('SELECT * FROM chat_projects WHERE id=$1 FOR SHARE',[id])).rows[0];
-  if (!p || p.is_archived || p.workspace_id!==peek.workspace_id) fail('not_found','project_not_found');
+  if (!p || (p.is_archived && !allowArchived) || p.workspace_id!==peek.workspace_id) fail('not_found','project_not_found');
   if (p.workspace_id) {
     const workspace=(await db.query('SELECT status FROM workspaces WHERE id=$1 FOR SHARE',[p.workspace_id])).rows[0];
     if(workspace?.status!=='active') fail('not_found','project_not_found');
@@ -225,5 +225,98 @@ export async function readFundingContribution(pool,ctx,value) {
       JOIN workforce_contribution_lots l ON l.origin_grant_id=q.grant_id WHERE l.contribution_id=$1 ORDER BY q.event_id`,[c.id])).rows;
     return {...contributionOf(c,true),availability:quarantines.length?'quarantined':c.state==='returned'?'returned':'restricted',
       reconciliationRequired:quarantines.length>0,quarantines:quarantines.map(q=>({reason:q.reason,state:q.state}))};
+  });
+}
+
+// Budget authority is separate from campaign management: an editor plans, a different
+// project owner approves, and a named human/agent spends only through subsequent admission.
+async function budgetPool(db,actor,poolId,relation,{requireOpen=true}={}) {
+  const p=(await db.query(`SELECT p.*,c.project_id FROM workforce_funding_pools p
+    JOIN workforce_funding_campaigns c ON c.id=p.campaign_id WHERE p.id=$1`,[poolId])).rows[0];
+  if(!p)fail('not_found','funding_pool_not_found');
+  await projectAuthority(db,actor,p.project_id,relation,{allowArchived:!requireOpen});
+  const campaign=(await db.query('SELECT * FROM workforce_funding_campaigns WHERE id=$1 FOR SHARE',[p.campaign_id])).rows[0];
+  if(!campaign||(requireOpen&&!['draft','open','paused'].includes(campaign.status)))fail('conflict','campaign_not_budgetable');
+  const milestone=(await db.query('SELECT * FROM workforce_funding_milestones WHERE id=$1 AND campaign_id=$2 FOR SHARE',[p.milestone_id,p.campaign_id])).rows[0];
+  if(!milestone)fail('not_found','milestone_not_found');
+  await db.query('SELECT pg_advisory_xact_lock(hashtextextended($1,0))',[`funding-budget:${poolId}`]);
+  const termsHash=operationHash({campaignId:campaign.id,projectId:campaign.project_id,terms:termsOf(campaign),milestone:milestoneOf(milestone)});
+  return {pool:p,campaign,milestone,termsHash};
+}
+function budgetOf(r,replayed=false) {
+  return {id:r.id,poolId:r.pool_id,proposedByUserId:r.proposed_by_user_id,spenderUserId:r.spender_user_id,
+    operationId:r.operation_id,maximumMicro:String(r.maximum_micro),perRunMicro:String(r.per_run_micro),
+    purpose:r.purpose,priceVersion:r.price_version,termsHash:r.terms_hash,state:r.state,revision:String(r.revision),
+    decidedByUserId:r.decided_by_user_id,decisionOperationId:r.decision_operation_id,replayed};
+}
+export async function proposeFundingBudget(pool,ctx,value) {
+  const a=context(ctx),v=shape(value,['operationId','poolId','spenderUserId','maximumMicro','perRunMicro','purpose','priceVersion','termsHash']);
+  const input={operationId:uuid(v.operationId),poolId:uuid(v.poolId),spenderUserId:uuid(v.spenderUserId),
+    maximumMicro:amount(v.maximumMicro),perRunMicro:amount(v.perRunMicro),purpose:text(v.purpose,2000),
+    priceVersion:text(v.priceVersion,128),termsHash:text(v.termsHash,64)};
+  if(!/^[a-f0-9]{64}$/.test(input.termsHash)||BigInt(input.perRunMicro)>BigInt(input.maximumMicro))fail('bad_input','invalid_budget');
+  return authorityTransaction(pool,async db=>{
+    const p=await budgetPool(db,a.actorUserId,input.poolId,'editor');
+    const prior=(await db.query('SELECT * FROM workforce_funding_budgets WHERE proposed_by_user_id=$1 AND client_id=$2 AND operation_id=$3',
+      [a.actorUserId,a.clientId,input.operationId])).rows[0];
+    const hash=operationHash(input);
+    if(prior){if(prior.request_hash!==hash)fail('conflict','operation_payload_conflict');return budgetOf(prior,true);}
+    if(p.termsHash!==input.termsHash)fail('conflict','funding_terms_changed');
+    if(BigInt(input.maximumMicro)>BigInt(p.milestone.budget_max_micro))fail('denied','budget_exceeds_contributor_limit');
+    const spender=await resolvePrincipal(db,input.spenderUserId);
+    if(!spender?.usable||!['human','agent'].includes(spender.kind))fail('denied','spender_unavailable');
+    const r=(await db.query(`INSERT INTO workforce_funding_budgets
+      (pool_id,proposed_by_user_id,spender_user_id,client_id,operation_id,request_hash,terms_hash,maximum_micro,per_run_micro,purpose,price_version)
+      VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING *`,[input.poolId,a.actorUserId,input.spenderUserId,a.clientId,
+      input.operationId,hash,p.termsHash,input.maximumMicro,input.perRunMicro,input.purpose,input.priceVersion])).rows[0];
+    return budgetOf(r);
+  });
+}
+export async function decideFundingBudget(pool,ctx,value) {
+  const a=context(ctx),v=shape(value,['budgetId','operationId','decision','expectedRevision']);
+  const id=uuid(v.budgetId),op=uuid(v.operationId);
+  if(!['approved','rejected'].includes(v.decision)||typeof v.expectedRevision!=='string'||!/^\d+$/.test(v.expectedRevision))fail('bad_input','invalid_budget_decision');
+  return authorityTransaction(pool,async db=>{
+    const peek=(await db.query('SELECT pool_id FROM workforce_funding_budgets WHERE id=$1',[id])).rows[0];
+    if(!peek)fail('not_found','budget_not_found');
+    const p=await budgetPool(db,a.actorUserId,peek.pool_id,'owner');
+    const b=(await db.query('SELECT * FROM workforce_funding_budgets WHERE id=$1 FOR UPDATE',[id])).rows[0];
+    const spender=await resolvePrincipal(db,b.spender_user_id);
+    if(b.proposed_by_user_id===a.actorUserId||b.spender_user_id===a.actorUserId||spender?.owner?.id===a.actorUserId) {
+      fail('denied','independent_budget_approval_required');
+    }
+    if(b.decision_operation_id===op&&b.decided_by_user_id===a.actorUserId&&b.state===v.decision)return budgetOf(b,true);
+    if(b.state!=='proposed'||String(b.revision)!==v.expectedRevision)fail('conflict','budget_revision_changed');
+    if(p.termsHash!==b.terms_hash)fail('conflict','funding_terms_changed');
+    if(!spender?.usable)fail('denied','spender_unavailable');
+    if(v.decision==='approved'&&(await db.query("SELECT 1 FROM workforce_funding_budgets WHERE pool_id=$1 AND state='approved'",[b.pool_id])).rowCount) {
+      fail('conflict','pool_already_has_active_budget');
+    }
+    const r=(await db.query(`UPDATE workforce_funding_budgets SET state=$2,revision=revision+1,
+      decided_by_user_id=$3,decision_operation_id=$4,decided_at=now() WHERE id=$1 RETURNING *`,[id,v.decision,a.actorUserId,op])).rows[0];
+    return budgetOf(r);
+  });
+}
+export async function revokeFundingBudget(pool,ctx,value) {
+  const a=context(ctx),v=shape(value,['budgetId','expectedRevision']),id=uuid(v.budgetId);
+  if(typeof v.expectedRevision!=='string'||!/^\d+$/.test(v.expectedRevision))fail('bad_input','invalid_budget_revision');
+  return authorityTransaction(pool,async db=>{
+    const peek=(await db.query('SELECT pool_id FROM workforce_funding_budgets WHERE id=$1',[id])).rows[0];
+    if(!peek)fail('not_found','budget_not_found');
+    await budgetPool(db,a.actorUserId,peek.pool_id,'owner',{requireOpen:false});
+    const b=(await db.query('SELECT * FROM workforce_funding_budgets WHERE id=$1 FOR UPDATE',[id])).rows[0];
+    if(b.state==='revoked')return budgetOf(b,true);
+    if(b.state!=='approved'||String(b.revision)!==v.expectedRevision)fail('conflict','budget_revision_changed');
+    return budgetOf((await db.query(`UPDATE workforce_funding_budgets SET state='revoked',revision=revision+1,
+      revoked_by_user_id=$2,revoked_at=now() WHERE id=$1 RETURNING *`,[id,a.actorUserId])).rows[0]);
+  });
+}
+export async function readFundingBudget(pool,ctx,value) {
+  const a=context(ctx),v=shape(value,['budgetId']),id=uuid(v.budgetId);
+  return authorityTransaction(pool,async db=>{
+    const peek=(await db.query('SELECT pool_id FROM workforce_funding_budgets WHERE id=$1',[id])).rows[0];
+    if(!peek)fail('not_found','budget_not_found');
+    await budgetPool(db,a.actorUserId,peek.pool_id,'viewer',{requireOpen:false});
+    return budgetOf((await db.query('SELECT * FROM workforce_funding_budgets WHERE id=$1',[id])).rows[0]);
   });
 }
