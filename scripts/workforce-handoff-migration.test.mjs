@@ -57,10 +57,11 @@
  *            SETTLEMENT are the existing ledger's credit_holds, keyed UNIQUE (user_id, hold_id),
  *            and replay of both is proven elsewhere -- a replayed holdId does not double-reserve
  *            (service-ledger.test.mjs) and a replayed settle is a no-op on a non-held hold
- *            (usage-credit-postgres-proof.mjs). The real gap is narrower: CONTRIBUTION does not
- *            exist anywhere in src/server (0 hits outside forum and collaboration vocabulary),
- *            and RESULT DELIVERY has no workforce record. A citation would still claim half of
- *            the requirement that has never been written. */
+ *            (usage-credit-postgres-proof.mjs). Updated 2026-09-28: contributions now have an
+ *            atomic ledger path and a fresh-process retry proof (credit-payment-origin.test.mjs,
+ *            FUND-04); RUN-04 also records result delivery. This suite still does not cite NFR-03:
+ *            qualification of restart/replay across all four operations belongs in their composed
+ *            integration proof, not in this handoff migration test. */
 
 import test from 'node:test';
 import assert from 'node:assert/strict';

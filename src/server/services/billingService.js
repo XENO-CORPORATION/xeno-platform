@@ -23,7 +23,7 @@ import { requireCheckoutConsent, consumeConsent } from './checkoutConsent.js';
 import { authorityTransaction, lockWorkspaceAuthority } from './workspaceOperationReceipts.js';
 import { readCheckoutStatus } from './checkoutStatus.js';
 import { siteOrigin } from '../config/hosts.js';
-import { addGrantTx, clawbackTx, getBalanceV2, MICRO_PER_CREDIT } from '../utils/creditLedgerV2.js';
+import { addGrantTx, clawbackTx, quarantineContributedOriginTx, getBalanceV2, MICRO_PER_CREDIT } from '../utils/creditLedgerV2.js';
 import { priceIssues } from '../utils/priceAgreement.js';
 import { assertSalesOpen, salesOpen } from '../middleware/salesGate.js';
 import { billingAccountConfig, billingBindingError, verifyBillingAccount, canonicalBillingEvent, requireBillingDatabaseBinding } from '../utils/billingAccountBinding.js';
@@ -1043,6 +1043,13 @@ async function clawbackForCharge(pool, event, { paymentIntent, targetRefundMicro
     if (!row) { await client.query('COMMIT'); return { handled: true, reason: 'no charge mapping' }; }
     const target = Math.min(Number(targetRefundMicro), Number(row.credits_micro));
     const delta = target - Number(row.refunded_micro);
+    if (delta > 0 && await quarantineContributedOriginTx(client, {
+      paymentIntent,eventId:event.id,reason:freeze?'dispute':'refund',liabilityMicro:String(delta),
+    })) {
+      await client.query('UPDATE billing_charges SET refunded_micro=$1 WHERE payment_intent=$2',[String(target),paymentIntent]);
+      await client.query('COMMIT');
+      return {handled:true,reconciliationRequired:true};
+    }
     if (delta > 0) {
       const r = await clawbackTx(client, String(row.user_id), delta, {
         refType: 'stripe.refund', refId: event.id, description: `refund ${event.type}`,
@@ -1243,8 +1250,17 @@ export async function handleEvent(pool, event, { provider = stripe } = {}) {
       if (pi) {
         // Resolve the owner first, then freeze via a parameterized uuid predicate
         // (a text subquery would be `uuid = text`, which Postgres rejects at plan time).
-        const owner = (await pool.query('SELECT user_id FROM billing_charges WHERE payment_intent=$1', [pi])).rows[0];
-        if (owner) await pool.query('UPDATE credit_accounts SET is_frozen=true, updated_at=now() WHERE user_id=$1', [String(owner.user_id)]);
+        const client = await pool.connect();
+        try {
+          await client.query('BEGIN');
+          const owner = (await client.query('SELECT user_id,credits_micro FROM billing_charges WHERE payment_intent=$1 FOR UPDATE', [pi])).rows[0];
+          const contributed = owner && await quarantineContributedOriginTx(client, {
+            paymentIntent:pi,eventId:event.id,reason:'dispute',liabilityMicro:'0',
+          });
+          if (owner && !contributed) await client.query('UPDATE credit_accounts SET is_frozen=true, updated_at=now() WHERE user_id=$1', [String(owner.user_id)]);
+          await client.query('COMMIT');
+        } catch(error) { await client.query('ROLLBACK').catch(()=>{}); throw error; }
+        finally { client.release(); }
       }
       return { handled: true };
     }

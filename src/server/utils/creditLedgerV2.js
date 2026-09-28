@@ -19,7 +19,7 @@
  */
 import crypto from 'node:crypto';
 import { dimensionsJson } from './usageDimensions.js';
-import { allocateFunding, saveHoldFunding, consumeFunding, readHoldFunding } from './usageCreditFunding.js';
+import { allocateFunding, allocateContributionFunding, quarantinedGrantIds, saveHoldFunding, consumeFunding, readHoldFunding } from './usageCreditFunding.js';
 
 export const MICRO_PER_CREDIT = 1_000_000;
 const REF_TYPE = 'xeno.usage';
@@ -113,6 +113,7 @@ async function grantsAvailable(client, userId) {
  */
 async function drawdownGrants(client, userId, costMicro) {
   let need = costMicro;
+  const quarantined = new Set(await quarantinedGrantIds(client, userId));
   const lots = await client.query(
     `SELECT id, remaining_micro, kind FROM credit_grants
       WHERE user_id=$1 AND remaining_micro>0 AND (expires_at IS NULL OR expires_at>now())
@@ -125,9 +126,15 @@ async function drawdownGrants(client, userId, costMicro) {
   // Grant kind is descriptive; priority, expiry and FIFO determine consumption.
   for (const lot of lots.rows) {
     if (need <= 0n) break;
+    if (quarantined.has(lot.id)) continue;
     const take = BigInt(lot.remaining_micro) < need ? BigInt(lot.remaining_micro) : need;
     await client.query('UPDATE credit_grants SET remaining_micro = remaining_micro - $1 WHERE id = $2', [take.toString(), lot.id]);
     need -= take;
+  }
+  // A quarantined balance is not an available funding source. In particular the
+  // legacy overrun path must roll back rather than debit it while reporting drift.
+  if (need > 0n && quarantined.size) {
+    throw Object.assign(new Error('Available non-quarantined lots do not cover this debit'), { code: 'FUNDING_CONFLICT' });
   }
   return need; // 0 if fully covered
 }
@@ -179,6 +186,136 @@ export async function addGrantTx(client, userId, { amountMicro, kind = 'paid', p
   });
   await mirrorLegacy(client, userId, newBalance);
   return { accountId: acct.id, amountMicro: Number(amt), newBalanceMicro: newBalance, isFrozen: Boolean(acct.is_frozen) };
+}
+
+/** Called while the payment's billing_charges row is locked. Once value has moved
+ * into a contribution, generic clawback must not substitute unrelated wallet lots.
+ * Quarantine keeps the origin unspendable and records the unreconciled liability;
+ * it never cancels an existing provider commitment or claims a loss was funded. */
+export async function quarantineContributedOriginTx(client, { paymentIntent, eventId, reason, liabilityMicro }) {
+  const present=(await client.query("SELECT to_regclass('workforce_funding_origin_quarantine') AS relation")).rows[0]?.relation;
+  if(!present) return false; // installations/tests before the additive funding migration
+  const origin=(await client.query(`SELECT o.grant_id FROM credit_grant_payment_origins o
+    WHERE o.payment_intent=$1 AND EXISTS (SELECT 1 FROM workforce_contribution_lots l WHERE l.origin_grant_id=o.grant_id)`,[paymentIntent])).rows[0];
+  if(!origin) return false;
+  // Serialize quarantine with every ordinary debit and pool transfer. The payment
+  // row is already locked by the caller; take affected accounts in the same order
+  // as contribution allocation before changing eligibility.
+  await client.query(`SELECT a.id FROM credit_accounts a WHERE a.id IN (
+    SELECT g.account_id FROM credit_grants g WHERE g.id=$1
+    UNION SELECT p.account_id FROM workforce_contribution_lots l
+      JOIN workforce_funding_contributions c ON c.id=l.contribution_id
+      JOIN workforce_funding_pools p ON p.campaign_id=c.campaign_id AND p.milestone_id=c.milestone_id
+      WHERE l.origin_grant_id=$1
+    ) ORDER BY a.user_id FOR UPDATE OF a`,[origin.grant_id]);
+  await client.query(`INSERT INTO workforce_funding_origin_quarantine(event_id,payment_intent,grant_id,reason,liability_micro)
+    VALUES($1,$2,$3,$4,$5) ON CONFLICT(event_id) DO NOTHING`,[eventId,paymentIntent,origin.grant_id,reason,String(liabilityMicro)]);
+  return true;
+}
+
+/** Move a pending, consent-bound contribution into its restricted ledger account.
+ * The caller owns BEGIN/COMMIT and must insert the pending contribution on that same
+ * client. No generic account-kind bypass is exposed: endpoints, amount and provenance
+ * are derived from the durable contribution and pool rows, not caller-supplied balances.
+ * The service commits the confirmation and this movement together or rolls both back. */
+export async function fundContributionTx(client, contributionId) {
+  const c = (await client.query(`SELECT c.*,p.id AS pool_id,p.account_id AS pool_account_id
+    FROM workforce_funding_contributions c JOIN workforce_funding_pools p
+      ON p.campaign_id=c.campaign_id AND p.milestone_id=c.milestone_id
+    WHERE c.id=$1 FOR UPDATE OF c`, [contributionId])).rows[0];
+  if (!c || c.state !== 'pending') throw Object.assign(new Error('Pending contribution required'), { code: 'CONTRIBUTION_NOT_PENDING' });
+  if ((await client.query('SELECT 1 FROM workforce_contribution_lots WHERE contribution_id=$1', [c.id])).rowCount) {
+    throw Object.assign(new Error('Contribution already funded'), { code: 'CONTRIBUTION_ALREADY_FUNDED' });
+  }
+  const selected = await allocateContributionFunding(client, c.contributor_user_id, String(c.amount_micro), { destinationOwnerId: c.pool_id });
+  const dest = (await client.query('SELECT id,balance FROM credit_accounts WHERE user_id=$1', [c.pool_id])).rows[0];
+  if (dest.id !== c.pool_account_id) throw Object.assign(new Error('Pool account mismatch'), { code: 'CONTRIBUTION_DESTINATION_UNAVAILABLE' });
+  for (const lot of selected.allocations) {
+    const moved = (await client.query(`WITH source AS (
+      UPDATE credit_grants SET remaining_micro=remaining_micro-$2
+      WHERE id=$1 AND user_id=$3 AND account_id=$4 AND remaining_micro >= $2
+      RETURNING priority,expires_at
+    ) INSERT INTO credit_grants(user_id,account_id,amount_micro,remaining_micro,kind,priority,source_ref,expires_at)
+      SELECT $5,$6,$2,$2,'contribution',priority,$7,expires_at FROM source RETURNING id`,
+    [lot.grantId,lot.amountMicro,c.contributor_user_id,selected.accountId,c.pool_id,dest.id,`contribution:${c.id}:${lot.grantId}`])).rows[0];
+    if (!moved) throw Object.assign(new Error('Contribution lot moved concurrently'), { code: 'FUNDING_CONFLICT' });
+    await client.query(`INSERT INTO workforce_contribution_lots
+      (contribution_id,origin_grant_id,pool_grant_id,amount_micro,origin_kind,origin_expires_at)
+      SELECT $1,$2,$3,$4,'paid',expires_at FROM credit_grants WHERE id=$2`, [c.id,lot.grantId,moved.id,lot.amountMicro]);
+  }
+  const source = (await client.query('UPDATE credit_accounts SET balance=balance-$1,updated_at=now() WHERE id=$2 RETURNING balance',
+    [c.amount_micro,selected.accountId])).rows[0];
+  const destination = (await client.query('UPDATE credit_accounts SET balance=balance+$1,updated_at=now() WHERE id=$2 RETURNING balance',
+    [c.amount_micro,dest.id])).rows[0];
+  const metadata = JSON.stringify({ contributionId:c.id,projectPoolId:c.pool_id,milestoneId:c.milestone_id,termsVersion:c.terms_version });
+  await insertLedgerEntry(client, { userId:c.contributor_user_id,accountId:selected.accountId,type:'transfer',
+    amount:String(-BigInt(c.amount_micro)),balanceAfter:String(source.balance),refType:'xeno.contribution',refId:c.id,
+    description:'project contribution out',metadata });
+  await insertLedgerEntry(client, { userId:c.pool_id,accountId:dest.id,type:'transfer',amount:String(c.amount_micro),
+    balanceAfter:String(destination.balance),refType:'xeno.contribution',refId:c.id,description:'project contribution in',metadata });
+  await mirrorLegacy(client, c.contributor_user_id, BigInt(source.balance));
+  return { poolId:c.pool_id,amountMicro:String(c.amount_micro),lotCount:selected.allocations.length };
+}
+
+/** Return only the contribution's unspent, unreserved lots to their original grant rows.
+ * No replacement 'paid' grant is minted: original expiry/priority/origin survive byte-for-byte.
+ * Unknown commitments block return; the clock alone cannot prove provider settlement. */
+export async function returnContributionTx(client, contributionId, actorUserId) {
+  const c=(await client.query(`SELECT c.*,p.id AS pool_id,p.account_id AS pool_account_id
+    FROM workforce_funding_contributions c JOIN workforce_funding_pools p
+      ON p.campaign_id=c.campaign_id AND p.milestone_id=c.milestone_id
+    WHERE c.id=$1 AND c.contributor_user_id=$2 FOR UPDATE OF c`,[contributionId,actorUserId])).rows[0];
+  if(!c) throw Object.assign(new Error('Contribution not found'),{code:'CONTRIBUTION_NOT_FOUND'});
+  const prior=(await client.query('SELECT * FROM workforce_funding_returns WHERE contribution_id=$1',[c.id])).rows[0];
+  if(prior) return {amountMicro:String(prior.amount_micro),expiredMicro:String(prior.expired_micro),replayed:true};
+  if(c.state!=='confirmed') throw Object.assign(new Error('Contribution cannot be returned'),{code:'CONTRIBUTION_NOT_RETURNABLE'});
+  const charges=(await client.query(`SELECT b.payment_intent,b.refunded_micro FROM billing_charges b
+    JOIN credit_grant_payment_origins o ON o.payment_intent=b.payment_intent
+    JOIN workforce_contribution_lots l ON l.origin_grant_id=o.grant_id
+    WHERE l.contribution_id=$1 ORDER BY b.payment_intent FOR UPDATE OF b`,[c.id])).rows;
+  const quarantined=(await client.query(`SELECT 1 FROM workforce_funding_origin_quarantine q
+    JOIN workforce_contribution_lots l ON l.origin_grant_id=q.grant_id WHERE l.contribution_id=$1`,[c.id])).rowCount;
+  if(quarantined || !charges.length || charges.some(b=>BigInt(b.refunded_micro)>0n)) throw Object.assign(new Error('Contribution origin requires reconciliation'),{code:'CONTRIBUTION_ORIGIN_QUARANTINED'});
+  const accounts=(await client.query('SELECT id,user_id,balance,is_frozen,owner_kind FROM credit_accounts WHERE user_id=ANY($1::uuid[]) ORDER BY user_id FOR UPDATE',
+    [[c.pool_id,c.contributor_user_id].sort()])).rows;
+  const source=accounts.find(a=>a.user_id===c.pool_id),destination=accounts.find(a=>a.user_id===c.contributor_user_id);
+  if(!source || !destination || source.owner_kind!=='project_pool' || destination.owner_kind!=='user'
+    || source.is_frozen || destination.is_frozen) throw Object.assign(new Error('Return account unavailable'),{code:'CONTRIBUTION_ACCOUNT_UNAVAILABLE'});
+  if((await client.query("SELECT 1 FROM credit_holds WHERE user_id=$1 AND state='held'",[c.pool_id])).rowCount) {
+    throw Object.assign(new Error('Pool commitments must settle before return'),{code:'CONTRIBUTION_RESERVED'});
+  }
+  const lots=(await client.query(`SELECT l.*,g.remaining_micro,(g.expires_at<=now()) AS expired
+    FROM workforce_contribution_lots l JOIN credit_grants g ON g.id=l.pool_grant_id
+    WHERE l.contribution_id=$1 ORDER BY g.id FOR UPDATE OF g`,[c.id])).rows;
+  let total=0n,expired=0n;
+  for(const lot of lots){const n=BigInt(lot.remaining_micro);total+=n;if(lot.expired)expired+=n;}
+  if(total>BigInt(c.amount_micro)||BigInt(source.balance)<total) throw Object.assign(new Error('Contribution accounting mismatch'),{code:'FUNDING_CONFLICT'});
+  await client.query('INSERT INTO workforce_funding_returns(contribution_id,returned_by_user_id,amount_micro,expired_micro) VALUES($1,$2,$3,$4)',
+    [c.id,actorUserId,String(total),String(expired)]);
+  for(const lot of lots){
+    if(BigInt(lot.remaining_micro)===0n)continue;
+    const restored=await client.query(`UPDATE credit_grants SET remaining_micro=remaining_micro+$1
+      WHERE id=$2 AND user_id=$3 AND remaining_micro+$1<=amount_micro RETURNING id`,[lot.remaining_micro,lot.origin_grant_id,c.contributor_user_id]);
+    if(restored.rowCount!==1) throw Object.assign(new Error('Original contribution lot unavailable'),{code:'FUNDING_CONFLICT'});
+    await client.query('UPDATE credit_grants SET remaining_micro=0 WHERE id=$1',[lot.pool_grant_id]);
+    await client.query('INSERT INTO workforce_funding_return_lots(contribution_id,pool_grant_id,origin_grant_id,amount_micro) VALUES($1,$2,$3,$4)',
+      [c.id,lot.pool_grant_id,lot.origin_grant_id,lot.remaining_micro]);
+  }
+  // Expired value is retained as lineage, never revived into the spendable balance.
+  // Otherwise syncGrants could backfill an expired-only wallet into a fresh paid lot.
+  const spendable=total-expired;
+  const sourceAfter=BigInt(source.balance)-total,destAfter=BigInt(destination.balance)+spendable;
+  await client.query('UPDATE credit_accounts SET balance=$1,updated_at=now() WHERE id=$2',[String(sourceAfter),source.id]);
+  await client.query('UPDATE credit_accounts SET balance=$1,updated_at=now() WHERE id=$2',[String(destAfter),destination.id]);
+  const metadata=JSON.stringify({contributionId:c.id,reversesReferenceType:'xeno.contribution',expiredMicro:String(expired)});
+  await insertLedgerEntry(client,{userId:c.pool_id,accountId:source.id,type:'transfer',amount:String(-total),balanceAfter:String(sourceAfter),
+    refType:'xeno.contribution.return',refId:c.id,description:'project contribution return out',metadata});
+  await insertLedgerEntry(client,{userId:c.contributor_user_id,accountId:destination.id,type:'transfer',amount:String(spendable),balanceAfter:String(destAfter),
+    refType:'xeno.contribution.return',refId:c.id,description:'project contribution return in',metadata});
+  await mirrorLegacy(client,c.contributor_user_id,destAfter);
+  await client.query("UPDATE workforce_funding_contributions SET state='return_pending',updated_at=now() WHERE id=$1",[c.id]);
+  await client.query("UPDATE workforce_funding_contributions SET state='returned',updated_at=now() WHERE id=$1",[c.id]);
+  return {amountMicro:String(total),expiredMicro:String(expired),replayed:false};
 }
 
 /** Add a grant (credit top-up / promo / free allotment). Opens its own transaction. */

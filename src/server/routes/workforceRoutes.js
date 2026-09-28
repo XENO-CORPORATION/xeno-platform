@@ -7,6 +7,7 @@ import { WorkforceResourceError } from '../services/workforceResources.js';
 import { apiKeyWorkforceNamespace, validApiKeyWorkforceScopes } from '../services/apiKeyWorkforceAuthority.js';
 import apiKeyWorkforceCapabilityRoutes from './apiKeyWorkforceCapabilityRoutes.js';
 import workforceOwnershipTransferRoutes from './workforceOwnershipTransferRoutes.js';
+import workforceFundingRoutes from './workforceFundingRoutes.js';
 
 const MAX_BODY_BYTES = 256 * 1024;
 const ERRORS = Object.freeze({
@@ -511,6 +512,7 @@ export function createWorkforceRouter({ createWorkforceResource = defaultCreate,
   router.use('/api-key-capabilities', apiKeyWorkforceCapabilityRoutes);
   // OWN-05: two-sided, reviewed, audited ownership transfer. Its own stricter auth bar -- see the router.
   router.use('/ownership-transfers', workforceOwnershipTransferRoutes);
+  router.use('/funding', workforceFundingRoutes);
   const parse = express.json({ limit: MAX_BODY_BYTES, strict: true });
   const handle = (service, readOnly = false, project = responseObservation) => async (req, res) => {
     try {

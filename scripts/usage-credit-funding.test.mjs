@@ -7,6 +7,7 @@ function fixture({ enabled, lots = [], legacy = '0' } = {}) {
   const taken = [];
   return { stored, taken, async query(sql, p=[]) {
     if (sql.startsWith('SELECT enabled')) return { rows: enabled === undefined ? [] : [{enabled}] };
+    if (sql.startsWith('SELECT to_regclass')) return { rows: [{ relation: null }] };
     if (sql.startsWith('SELECT g.id')) {
       assert.match(sql,/h.state='held'/);
       assert.match(sql,/g.expires_at>now\(\)/);

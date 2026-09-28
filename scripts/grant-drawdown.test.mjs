@@ -14,6 +14,7 @@ function ledgerFixture(kinds, cost) {
     if (/^(BEGIN|COMMIT|ROLLBACK)$/.test(sql)) return { rows: [] };
     if (sql.startsWith('SELECT enabled')) return { rows: [{enabled:true}] };
     if (sql.startsWith("SELECT to_jsonb(a)->>'owner_kind'")) return { rows: [{ owner_kind: 'user' }] };
+    if (sql.startsWith('SELECT to_regclass')) return { rows: [{ relation: null }] };
     if (sql.startsWith('SELECT grant_id')) return { rows: [] };
     if (sql.includes('AS reserved')) return { rows: [{reserved:'0'}] };
     if (sql.startsWith('SELECT g.id')) return { rows: lots.map(row=>({...row,available:row.remaining_micro})) };

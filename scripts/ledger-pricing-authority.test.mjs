@@ -32,11 +32,12 @@
  *            caller naming a price is refused, and a usage without a usage object is refused
  *            ("the caller cannot send money"). But the same requirement demands account history
  *            showing "incoming/outgoing gifts, contributions, reservations, usage and returns".
- *            Reservations and usage exist. Gifts, contributions and returns do not: `gift` appears
- *            ZERO times in src/server. A citation would claim three ledger operations that have
- *            never been written.
+ *            Reservations, usage, project contributions and origin-preserving contribution returns
+ *            now exist. Gifts and the unified account-history UI remain unimplemented; a citation
+ *            here would still claim more than this pricing test proves.
  *   ACCT-02  the three operations it exists to distinguish -- gift, contribute, budget allocation
- *            -- are the same gap. Only the third has any implementation (holds/grants).
+ *            -- still need a composed UI/API proof. Contributions now use workforceFunding;
+ *            holds/grants back budget allocation, while gifting remains to be built.
  *   ACCT-03/04/05/06  are entirely about gift mechanics: recipient confirmation, atomic
  *            debit-and-credit with a receipt, non-cancellability with a separately authorized
  *            return, opt-out. None exists.
@@ -47,7 +48,9 @@
  *            one, checked 2026-09-23 but not assertable from inside xeno-platform.
  *   ACCT-07  "agent-originated gifts/contributions require explicit bounded spend approval." The
  *            agent-subject half IS proven below (an agent's balance is its OWNER's; all four legs
- *            resolve one subject) and spend_caps exist -- but again, no gift or contribution.
+ *            resolve one subject) and spend_caps exist. Human contributions now work, but an
+ *            agent-originated contribution needs the bounded-approval path; refusing agents is
+ *            not evidence that this required capability has been implemented.
  *
  * So ACCT closes by BUILDING gift/contribute/return on this ledger, not by building a ledger.
  */
