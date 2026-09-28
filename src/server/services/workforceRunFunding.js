@@ -101,6 +101,16 @@ export async function reserveRunFunding(db,funding,admission,parent) {
     FROM workforce_run_funding f JOIN credit_holds h ON h.id=f.hold_row_id
     WHERE f.pool_id=$1 AND f.admission_id=f.root_admission_id`,[p.id])).rows[0].total;
   if(BigInt(committed)+amount>BigInt(b.maximum_micro)||BigInt(committed)+amount>BigInt(p.budget_max_micro))refuse('funding_pool_limit');
+  if(b.window_seconds!=null) {
+    // All unresolved roots count regardless of age/expiry. Settled debit time,
+    // not admission time, determines which posted spend is inside the window.
+    const windowed=(await db.query(`SELECT
+      (SELECT COALESCE(sum(amount_micro-settled_micro),0) FROM credit_holds WHERE user_id=$1 AND state='held')
+      +(SELECT COALESCE(sum(-amount),0) FROM credit_transactions WHERE user_id=$1 AND type='debit'
+        AND created_at>(clock_timestamp() AT TIME ZONE 'UTC')-make_interval(secs=>$2)) AS total`,
+      [p.account_owner_id,b.window_seconds])).rows[0].total;
+    if(BigInt(windowed)+amount>BigInt(b.window_limit_micro))refuse('funding_window_limit');
+  }
   const lots=(await db.query(`SELECT g.id,g.remaining_micro,
     g.remaining_micro-COALESCE((SELECT sum(f.reserved_micro) FROM credit_hold_funding f JOIN credit_holds h ON h.id=f.hold_row_id
       WHERE f.grant_id=g.id AND h.state='held'),0) AS available
