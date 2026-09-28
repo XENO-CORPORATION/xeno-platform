@@ -230,6 +230,45 @@ export async function readFundingContribution(pool,ctx,value) {
   });
 }
 
+// Private contributor accounting is independent of project membership. A contribution
+// buys no project access; this report exposes only that contributor's financial facts.
+export async function readContributorFunding(pool,ctx,value) {
+  const a=context(ctx),v=shape(value,['contributionId']),id=uuid(v.contributionId);
+  return authorityTransaction(pool,async db=>{
+    await db.query('SET TRANSACTION ISOLATION LEVEL REPEATABLE READ');
+    await human(db,a.actorUserId);
+    const c=(await db.query('SELECT * FROM workforce_funding_contributions WHERE id=$1 AND contributor_user_id=$2',[id,a.actorUserId])).rows[0];
+    if(!c)fail('not_found','contribution_not_found');
+    const lots=(await db.query(`SELECT l.amount_micro,g.remaining_micro,g.expires_at<=now() AS expired,
+      EXISTS(SELECT 1 FROM workforce_funding_origin_quarantine q WHERE q.grant_id=l.origin_grant_id) AS quarantined,
+      COALESCE((SELECT sum(f.reserved_micro) FROM credit_hold_funding f JOIN credit_holds h ON h.id=f.hold_row_id
+        WHERE f.grant_id=g.id AND h.state='held'),0)::text AS committed_micro,
+      COALESCE((SELECT r.amount_micro FROM workforce_funding_return_lots r WHERE r.contribution_id=l.contribution_id AND r.pool_grant_id=l.pool_grant_id),0)::text AS returned_micro
+      FROM workforce_contribution_lots l JOIN credit_grants g ON g.id=l.pool_grant_id WHERE l.contribution_id=$1`,[id])).rows;
+    let confirmed=0n,consumed=0n,returned=0n,committed=0n,available=0n,expired=0n,quarantined=0n;
+    for(const lot of lots) {
+      const original=BigInt(lot.amount_micro),remaining=BigInt(lot.remaining_micro),back=BigInt(lot.returned_micro),held=BigInt(lot.committed_micro);
+      if(remaining<0n||back<0n||held<0n||held>remaining||remaining+back>original)fail('unavailable','contribution_accounting_inconsistent');
+      confirmed+=original;consumed+=original-remaining-back;returned+=back;committed+=held;
+      const free=remaining-held;
+      // Categories are disjoint. Disputed residual value stays quarantined even
+      // when its expiry elapsed; held liability stays committed regardless of either.
+      if(lot.quarantined)quarantined+=free;
+      else if(lot.expired)expired+=free;
+      else available+=free;
+    }
+    if(confirmed!==BigInt(c.amount_micro)||confirmed!==consumed+returned+committed+available+expired+quarantined)fail('unavailable','contribution_accounting_inconsistent');
+    const returnRow=(await db.query('SELECT expired_micro FROM workforce_funding_returns WHERE contribution_id=$1',[id])).rows[0];
+    const disputed=(await db.query(`SELECT EXISTS(SELECT 1 FROM workforce_contribution_lots l
+      JOIN workforce_funding_origin_quarantine q ON q.grant_id=l.origin_grant_id WHERE l.contribution_id=$1) AS yes`,[id])).rows[0].yes;
+    return {contributionId:c.id,campaignId:c.campaign_id,milestoneId:c.milestone_id,state:c.state,termsVersion:c.terms_version,
+      amounts:{confirmedMicro:String(confirmed),committedMicro:String(committed),consumedMicro:String(consumed),returnedMicro:String(returned),
+        availableMicro:String(available),expiredMicro:String(expired),quarantinedMicro:String(quarantined)},
+      expiredReturnedMicro:String(returnRow?.expired_micro??0),reconciliationRequired:disputed,
+      asOf:(await db.query('SELECT transaction_timestamp() AS t')).rows[0].t.toISOString()};
+  });
+}
+
 // Budget authority is separate from campaign management: an editor plans, a different
 // project owner approves, and a named human/agent spends only through subsequent admission.
 async function budgetPool(db,actor,poolId,relation,{requireOpen=true}={}) {
