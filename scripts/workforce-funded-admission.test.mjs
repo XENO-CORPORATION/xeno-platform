@@ -51,7 +51,12 @@ test('pool admission reserves exact eligible lots atomically and never falls bac
  await handleEvent(pool,fixture.event('evt_'+marker,'checkout.session.completed',s),{provider:fixture.provider});
  await pool.query('INSERT INTO usage_credit_preferences(user_id,enabled) VALUES($1,true) ON CONFLICT(user_id) DO UPDATE SET enabled=true',[contributor]);
  const contribute=amountMicro=>funding.contributeFunding(pool,ctx(contributor),{operationId:randomUUID(),campaignId:campaign.id,milestoneId:milestone.id,amountMicro,consentHash:offer.consentHash,confirmed:true});
- await contribute('1000000');
+ const initialContribution=await contribute('1000000');
+ const accounting=id=>funding.readContributorFunding(pool,ctx(contributor),{contributionId:id});
+ assert.deepEqual((await accounting(initialContribution.id)).amounts,{confirmedMicro:'1000000',committedMicro:'0',consumedMicro:'0',returnedMicro:'0',availableMicro:'1000000',expiredMicro:'0',quarantinedMicro:'0'},
+   'contributor accounting starts from actual confirmed lots');
+ await assert.rejects(funding.readContributorFunding(pool,ctx(owner),{contributionId:initialContribution.id}),e=>e.details?.reason==='contribution_not_found',
+   'project ownership cannot read another contributor private accounting');
  await reject(admitRun(pool,ctx(owner),request('1000000')),'milestone_threshold_unmet','underfunded milestone cannot admit despite approved budget');
  assert.equal((await pool.query('SELECT count(*)::int n FROM workforce_run_admissions')).rows[0].n,0,'failed funding rolls admission back');
  // Drive the real router with sender-bound tokens; a passing service is not an HTTP proof.
@@ -70,18 +75,28 @@ test('pool admission reserves exact eligible lots atomically and never falls bac
  const app=express();app.use((req,_res,next)=>{req.db=pool;next();});app.use('/api/workforce',router);
  const server=app.listen(0,'127.0.0.1');await new Promise(r=>server.once('listening',r));
  t.after(async()=>{server.closeAllConnections();await new Promise(r=>server.close(r));});
- const call=async(body,scope='openid workforce:read workforce:manage ledger:spend',path='/api/workforce/run-admissions')=>{
-   const token=jwt.sign({sub:owner,sid,auth_epoch:0,auth_time:now,client_id:'xeno-agent-interface',scope,typ:'at+jwt',cnf:{jkt}},
+ const donorSid=randomUUID();
+ await pool.query('INSERT INTO oauth_user_auth_epochs(user_id,epoch) VALUES($1,0) ON CONFLICT DO NOTHING',[contributor]);
+ await pool.query(`INSERT INTO oauth_session_state(sid,user_id,auth_epoch,auth_time,dpop_jkt,expires_at)
+ VALUES($1,$2,0,to_timestamp($3),$4,now()+interval '1 hour')`,[donorSid,contributor,now,jkt]);
+ const call=async(body,scope='openid workforce:read workforce:manage ledger:spend',path='/api/workforce/run-admissions',actor=owner)=>{
+   const token=jwt.sign({sub:actor,sid:actor===contributor?donorSid:sid,auth_epoch:0,auth_time:now,client_id:'xeno-agent-interface',scope,typ:'at+jwt',cnf:{jkt}},
     signer.privatePem,{algorithm:signer.alg,keyid:signer.kid,audience:'xeno-api',expiresIn:'5m',header:{typ:'at+jwt'}});
    const dpop=jwt.sign({jti:randomUUID(),htm:'POST',htu:issuer()+path,ath:accessTokenHash(token),iat:now},proofKey.privateKey,{algorithm:'ES256',header:{typ:'dpop+jwt',jwk}});
    const r=await fetch(`http://127.0.0.1:${server.address().port}${path}`,{method:'POST',headers:{authorization:`DPoP ${token}`,dpop,'content-type':'application/json'},body:JSON.stringify(body)});
    return {status:r.status,body:await r.json().catch(()=>null)};
  };
+ const reportPath='/api/workforce/funding/contributions/accounting';
+ const financial=await call({contributionId:initialContribution.id},'openid workforce:manage',reportPath,contributor);
+ assert.equal(financial.status,200,'contributor accounting is reachable without spending permission');
+ assert.equal(financial.body.result.amounts.availableMicro,'1000000','HTTP reports persisted contribution value');
+ assert.equal((await call({contributionId:initialContribution.id},undefined,reportPath)).status,404,'HTTP project owner cannot read someone else financial report');
+ assert.equal((await call({contributionId:randomUUID()},undefined,reportPath)).status,404,'missing and foreign reports are indistinguishable');
  const denied=await call(request('1000000'));
  assert.deepEqual([denied.status,denied.body?.details?.reason],[403,'milestone_threshold_unmet'],'HTTP reports an actionable pool funding refusal');
  const unscoped=await call(request('1000000'),'openid workforce:read workforce:manage');
  assert.deepEqual([unscoped.status,unscoped.body?.details?.reason],[403,undefined],'workforce-only token never reaches pool reservation');
- await contribute('3000000');
+ const laterContribution=await contribute('3000000');
  await pool.query(`CREATE FUNCTION fail_funding_fixture() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'fixture reservation failed'; END $$;
  CREATE TRIGGER fail_funding_fixture BEFORE INSERT ON workforce_run_funding FOR EACH ROW EXECUTE FUNCTION fail_funding_fixture()`);
  try {
@@ -117,6 +132,8 @@ test('pool admission reserves exact eligible lots atomically and never falls bac
  assert.equal(expiredCapacity.funding.find(f=>f.payerUserId===p.id)?.availableMicro,'0',
    'capacity never releases an expired pool commitment');
  assert.equal(expiredCapacity.committedCeilingMicro,'4000000','pool commitment counts each root hold once');
+ const heldReports=await Promise.all([initialContribution.id,laterContribution.id].map(accounting));
+ assert.equal(heldReports.reduce((n,r)=>n+BigInt(r.amounts.committedMicro),0n),4000000n,'contributor reports retain exact expired-hold commitments');
  const httpCapacity=await call({owner:{type:'user',id:owner},expectedActorAccountId:owner},undefined,'/api/workforce/capacity');
  assert.deepEqual([httpCapacity.status,httpCapacity.body?.committedCeilingMicro,httpCapacity.body?.funding?.find(f=>f.payerUserId===p.id)?.availableMicro],
    [200,'4000000','0'],'HTTP capacity projects real pool commitments without expired-hold headroom');
@@ -193,6 +210,9 @@ test('pool admission reserves exact eligible lots atomically and never falls bac
    'below-ceiling usage charges only authoritative measured cost');
  const returnedSmall=await funding.returnFundingContribution(pool,ctx(contributor),{contributionId:contribution2.id});
  assert.equal(returnedSmall.amountMicro,'996000','unused reserved value returns to its original contributor after terminal settlement');
+ const returnedReport=await accounting(contribution2.id);
+ assert.deepEqual(returnedReport.amounts,{confirmedMicro:'1000000',committedMicro:'0',consumedMicro:'4000',returnedMicro:'996000',availableMicro:'0',expiredMicro:'0',quarantinedMicro:'0'},
+   'accounting distinguishes measured consumption from returned value without double counting');
  assert.equal((await verifyChainV2(pool,p2)).ok,true,'usage then return preserve the same canonical journal');
  const dispute=fixture.event('evt_dispute_'+marker,'charge.dispute.funds_withdrawn',{payment_intent:s.payment_intent,amount:500});
  await handleEvent(pool,dispute,{provider:fixture.provider});
@@ -217,6 +237,11 @@ test('pool admission reserves exact eligible lots atomically and never falls bac
  assert.equal(finalCapacity.committedCeilingMicro,'0','terminal settlement clears only the settled financial commitment');
  assert.equal(finalCapacity.funding.find(f=>f.payerUserId===p.id)?.availableMicro,'0',
    'settling a hold cannot make quarantined residual value available');
+ const finalReports=await Promise.all([initialContribution.id,laterContribution.id].map(accounting));
+ assert.equal(finalReports.reduce((n,r)=>n+BigInt(r.amounts.quarantinedMicro),0n),2000000n,'accounting preserves quarantined residual value as a separate category');
+ assert.equal(finalReports.reduce((n,r)=>n+BigInt(r.amounts.consumedMicro),0n),2000000n,'accounting reports only actual charged consumption, not platform liability');
+ assert.ok(finalReports.every(r=>r.reconciliationRequired),'contributors see their payment-origin dispute without private provider data');
+ assert.ok(finalReports.every(r=>!JSON.stringify(r).includes('providerRequestId')&&!JSON.stringify(r).includes('price_snapshot')),'contributor projections exclude provider receipts and internal prices');
  await t.test('approved rolling caps count posted spend plus every unresolved root',async()=>{
    const donor=await user(),tag=randomUUID().replaceAll('-','');
    const checkout={...s,id:'cs_'+tag,payment_intent:'pi_'+tag,client_reference_id:donor,metadata:{xenoUserId:donor,credits:'5',kind:'credits'}};

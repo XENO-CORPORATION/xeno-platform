@@ -399,7 +399,13 @@ test('payment origins bind settled monetary evidence to the exact lot atomically
       await new Promise(r=>setTimeout(r,100));
     }
     assert.equal((await pool.query('SELECT expires_at<=clock_timestamp() AS expired FROM credit_grants WHERE id=$1',[shortLot])).rows[0].expired,true);
+    const expiredReport=await svc.readContributorFunding(pool,ctx(shortOwner),{contributionId:shortContribution.id});
+    assert.deepEqual([expiredReport.amounts.expiredMicro,expiredReport.amounts.availableMicro],['5000000','0'],
+      'expired contribution is reported separately from available value');
     const expiredReturn=await svc.returnFundingContribution(pool,ctx(shortOwner),{contributionId:shortContribution.id});
+    const returnedReport=await svc.readContributorFunding(pool,ctx(shortOwner),{contributionId:shortContribution.id});
+    assert.deepEqual([returnedReport.amounts.returnedMicro,returnedReport.expiredReturnedMicro,returnedReport.amounts.availableMicro],['5000000','5000000','0'],
+      'returned expiry stays explicit and never appears as available credit');
     assert.deepEqual([expiredReturn.amountMicro,expiredReturn.expiredMicro,await cash(shortOwner)],['5000000','5000000','0'],
       'expired return remains expired rather than reviving spendable balance');
     await addGrant(pool,shortOwner,{amountMicro:1,kind:'promo',sourceRef:`after-expiry-${marker}`});

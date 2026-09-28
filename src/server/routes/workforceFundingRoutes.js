@@ -61,6 +61,7 @@ router.post('/budgets/read',handle(funding.readFundingBudget));
 router.post('/budgets/revoke',spend,recent,handle(funding.revokeFundingBudget));
 router.post('/contributions',spend,recent,handle(funding.contributeFunding));
 router.post('/contributions/read',handle(funding.readFundingContribution));
+router.post('/contributions/accounting',handle(funding.readContributorFunding));
 router.post('/contributions/return',spend,recent,handle(funding.returnFundingContribution));
 router.use((error,_req,res,_next)=>res.status(error?.type==='entity.too.large'||error?.type==='entity.parse.failed'?400:503)
   .json({success:false,code:'bad_input',error:'Invalid funding request.'}));
