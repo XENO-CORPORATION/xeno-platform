@@ -24,13 +24,27 @@ import { allocateFunding, saveHoldFunding, consumeFunding, readHoldFunding } fro
 export const MICRO_PER_CREDIT = 1_000_000;
 const REF_TYPE = 'xeno.usage';
 
+/** Ordinary ledger operations may address only ordinary wallets. A pool UUID is not a spend grant.
+ * Reading the row as JSON preserves compatibility with legacy schemas predating owner_kind.
+ * There is deliberately no caller-supplied flag that bypasses this boundary. */
+async function requireOrdinaryWallet(client, userId) {
+  const { rows } = await client.query("SELECT to_jsonb(a)->>'owner_kind' AS owner_kind FROM credit_accounts a WHERE user_id=$1", [userId]);
+  const kind = rows[0]?.owner_kind;
+  if (kind != null && !['user', 'workspace'].includes(kind)) {
+    throw Object.assign(new Error('Restricted ledger account requires its allocation authority'), { code: 'RESTRICTED_ACCOUNT' });
+  }
+}
+
 /** Ensure the user has a credit_accounts wallet; backfill from legacy on first touch. */
 async function ensureAccount(client, userId) {
   const found = await client.query(
     'SELECT id, balance, is_frozen FROM credit_accounts WHERE user_id = $1 FOR UPDATE',
     [userId],
   );
-  if (found.rows.length > 0) return found.rows[0];
+  if (found.rows.length > 0) {
+    await requireOrdinaryWallet(client, userId);
+    return found.rows[0];
+  }
 
   // Backfill the new wallet from the legacy whole-credit balance (× 1e6).
   const legacy = await client.query('SELECT credits FROM users WHERE id = $1', [userId]);
@@ -43,6 +57,7 @@ async function ensureAccount(client, userId) {
      RETURNING id, balance, is_frozen`,
     [userId, seedMicro.toString()],
   );
+  await requireOrdinaryWallet(client, userId);
   return created.rows[0];
 }
 
@@ -291,12 +306,14 @@ export async function reverseUsage(pool, userId, micro, opts = {}) {
 
 /** Freeze / unfreeze an account (dispute response — stops further spend). */
 export async function setFrozen(pool, userId, frozen) {
+  await requireOrdinaryWallet(pool, userId);
   await pool.query('UPDATE credit_accounts SET is_frozen=$1, updated_at=now() WHERE user_id=$2', [Boolean(frozen), userId]);
 }
 
 // ── Spend caps (Arch §4.6) ──────────────────────────────────────────────────
 
 export async function setSpendCap(pool, userId, { windowSec, limitMicro }) {
+  await requireOrdinaryWallet(pool, userId);
   await pool.query(
     `INSERT INTO spend_caps (user_id, window_sec, limit_micro) VALUES ($1,$2,$3)
      ON CONFLICT (user_id, window_sec) DO UPDATE SET limit_micro=EXCLUDED.limit_micro`,
@@ -531,6 +548,7 @@ export async function recordUsageV2(pool, userId, event) {
   let outcome; // { duplicate:true } | { duplicate:false, newBalance, held }
   try {
     await client.query('BEGIN');
+    await requireOrdinaryWallet(client, userId);
 
     // Idempotency: replayed event → no-op.
     // 🔴 A replay reports what the ORIGINAL debit charged, read from its journal entry -- never
@@ -610,6 +628,7 @@ export async function holdV2(pool, userId, req) {
   let outcome; // { existingRow } | { row, balance, held, isFrozen }
   try {
     await client.query('BEGIN');
+    await requireOrdinaryWallet(client, userId);
     const existing = await client.query('SELECT * FROM credit_holds WHERE user_id = $1 AND hold_id = $2 FOR UPDATE', [userId, req.holdId]);
     if (existing.rows.length > 0 && req.reopenVoided === true && existing.rows[0].state === 'voided') {
       const acct = await ensureAccount(client, userId);
@@ -700,6 +719,7 @@ export async function settleHoldV2(pool, userId, holdId, actualCostMicro, usage 
   let finalRow;
   try {
     await client.query('BEGIN');
+    await requireOrdinaryWallet(client, userId);
     const h = await client.query("SELECT * FROM credit_holds WHERE user_id=$1 AND hold_id=$2 FOR UPDATE", [userId, holdId]);
     if (h.rows.length === 0) { await client.query('ROLLBACK'); const e = new Error('hold not found'); e.code='NOT_FOUND'; throw e; }
     const hold = h.rows[0];
@@ -812,6 +832,7 @@ export async function settleHoldV2(pool, userId, holdId, actualCostMicro, usage 
  */
 export const MAX_HOLD_EXTENSION_SECONDS = 3600;
 export async function extendHoldV2(pool, userId, holdId, extendBySeconds) {
+  await requireOrdinaryWallet(pool, userId);
   const seconds = Math.floor(Number(extendBySeconds));
   if (!Number.isFinite(seconds) || seconds < 1 || seconds > MAX_HOLD_EXTENSION_SECONDS) {
     const e = new Error(`extendBySeconds must be an integer from 1 to ${MAX_HOLD_EXTENSION_SECONDS}`);
@@ -834,6 +855,7 @@ export async function extendHoldV2(pool, userId, holdId, extendBySeconds) {
 
 /** Release a hold without charging. Idempotent. */
 export async function voidHoldV2(pool, userId, holdId) {
+  await requireOrdinaryWallet(pool, userId);
   // No transaction needed (single idempotent UPDATE + read) — run directly on the
   // pool so we never hold a client while getBalanceV2 checks out a second one
   // (pool re-entrancy guard).
@@ -858,6 +880,8 @@ export async function sweepExpiredHolds(pool, { batchLimit = 1000 } = {}) {
        WHERE id IN (
          SELECT id FROM credit_holds
            WHERE state='held' AND expires_at <= now()
+             AND NOT EXISTS (SELECT 1 FROM credit_accounts a WHERE a.user_id=credit_holds.user_id
+               AND COALESCE(to_jsonb(a)->>'owner_kind','user') NOT IN ('user','workspace'))
            ORDER BY expires_at ASC
            LIMIT $1
            FOR UPDATE SKIP LOCKED
