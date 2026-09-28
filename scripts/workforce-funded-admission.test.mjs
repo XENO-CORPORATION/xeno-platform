@@ -111,6 +111,15 @@ test('pool admission reserves exact eligible lots atomically and never falls bac
  await pool.query("UPDATE credit_holds SET expires_at=now()-interval '1 hour' WHERE user_id=$1",[p.id]);
  await sweepExpiredHolds(pool);
  assert.equal((await pool.query("SELECT count(*)::int n FROM credit_holds WHERE user_id=$1 AND state='held'",[p.id])).rows[0].n,2,'expired pool holds remain committed until settlement proof');
+ const {readWorkforceCapacity}=await import('../src/server/services/workforceCapacity.js');
+ const capacity=()=>readWorkforceCapacity(pool,ctx(owner),{owner:{type:'user',id:owner},expectedActorAccountId:owner});
+ const expiredCapacity=await capacity();
+ assert.equal(expiredCapacity.funding.find(f=>f.payerUserId===p.id)?.availableMicro,'0',
+   'capacity never releases an expired pool commitment');
+ assert.equal(expiredCapacity.committedCeilingMicro,'4000000','pool commitment counts each root hold once');
+ const httpCapacity=await call({owner:{type:'user',id:owner},expectedActorAccountId:owner},undefined,'/api/workforce/capacity');
+ assert.deepEqual([httpCapacity.status,httpCapacity.body?.committedCeilingMicro,httpCapacity.body?.funding?.find(f=>f.payerUserId===p.id)?.availableMicro],
+   [200,'4000000','0'],'HTTP capacity projects real pool commitments without expired-hold headroom');
  const {authorizeRunStep}=await import('../src/server/services/workforceRunAuthority.js');
  const key=generateKeyPairSync('ec',{namedCurve:'P-256'});
  const signingKey={kid:'isolated-test',privatePem:key.privateKey.export({format:'pem',type:'pkcs8'})};
@@ -163,6 +172,7 @@ test('pool admission reserves exact eligible lots atomically and never falls bac
    'settlement reaches canonical usage analytics');
  const {verifyChainV2}=await import('../src/server/utils/creditLedgerV2.js');
  assert.equal((await verifyChainV2(pool,p.id)).ok,true,'pool settlement preserves the canonical hash chain');
+ assert.equal((await capacity()).committedCeilingMicro,'2000000','settlement stops counting a released pool reservation as committed');
  // A separate milestone proves ordinary below-ceiling settlement and return,
  // not only the exceptional overrun/quarantine branches above.
  const c2=await funding.createFundingCampaign(pool,ctx(owner),{operationId:randomUUID(),projectId:project.id,beneficiary:'Small delivery',cancellationTerms:'Cancel.',refundTerms:'Original expiry.',deliverableLicense:'MIT'});
@@ -191,6 +201,11 @@ test('pool admission reserves exact eligible lots atomically and never falls bac
    'quarantine cannot release uncertain commitments');
  await funding.revokeFundingBudget(pool,ctx(approver),{budgetId:proposal.id,expectedRevision:'2'});
  await reject(step('privileged_call'),'funding_budget_unavailable','revocation blocks the next funded run step without releasing liability');
+ const {revokeRun}=await import('../src/server/services/workforceRunAuthority.js');
+ await revokeRun(pool,ctx(owner),first.admission.admissionId);
+ const revokedCapacity=await capacity();
+ assert.equal(revokedCapacity.committedCeilingMicro,'2000000','revocation preserves financially unresolved pool commitments');
+ assert.equal(revokedCapacity.funding.find(f=>f.payerUserId===p.id)?.availableMicro,'0','quarantined pool value never appears as available capacity');
  await reject(admitRun(pool,ctx(owner),request('1')),'funding_budget_unavailable','revoked budget cannot admit another run');
  const quarantineReceipt={...receipt,admissionId:first.admission.admissionId,eventId:'quarantined_'+marker,providerRequestId:'quarantined_provider_'+marker,inputTokens:100,outputTokens:100};
  const quarantineSettle=await settle(quarantineReceipt);
@@ -198,4 +213,8 @@ test('pool admission reserves exact eligible lots atomically and never falls bac
    'authoritative completion after revocation records quarantined loss without taking unrelated value');
  assert.equal((await pool.query("SELECT count(*)::int n FROM credit_holds WHERE user_id=$1 AND state='held'",[p.id])).rows[0].n,0,
    'only terminal receipts release the remaining uncertain commitments');
+ const finalCapacity=await capacity();
+ assert.equal(finalCapacity.committedCeilingMicro,'0','terminal settlement clears only the settled financial commitment');
+ assert.equal(finalCapacity.funding.find(f=>f.payerUserId===p.id)?.availableMicro,'0',
+   'settling a hold cannot make quarantined residual value available');
 });
