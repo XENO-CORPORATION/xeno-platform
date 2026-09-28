@@ -20,7 +20,9 @@ test('a budget is a bounded proposal until an independent current project owner 
   const [up,down]=migration.split('-- DOWN');
   const priceMigration=await readFile(new URL('../src/server/database/migrations/20260928140000-workforce-budget-price-pin.sql',import.meta.url),'utf8');
   const [priceUp,priceDown]=priceMigration.split('-- DOWN');
-  await pool.query(priceDown);await pool.query(down);await pool.query(up);await pool.query(priceUp);
+  const runMigration=await readFile(new URL('../src/server/database/migrations/20260928150000-workforce-funded-admissions.sql',import.meta.url),'utf8');
+  const [runUp,runDown]=runMigration.split('-- DOWN');
+  await pool.query(runDown);await pool.query(priceDown);await pool.query(down);await pool.query(up);await pool.query(priceUp);await pool.query(runUp);
   assert.equal((await pool.query("SELECT to_regclass('workforce_funding_budgets') name")).rows[0].name,'workforce_funding_budgets',
     'empty budget migration rolls back and reapplies');
   const makeUser=async()=>{const s=randomUUID();return (await pool.query(`INSERT INTO users(username,email,password_hash,display_name)

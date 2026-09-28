@@ -7,6 +7,7 @@ import { requireRecentOidcAuth } from '../middleware/recentOidcAuth.js';
 import { scopesForClient } from '../config/oidcAuthorityPolicy.js';
 import { API_KEY_WORKFORCE_GRANT_CLIENTS } from '../services/apiKeyWorkforceCapabilities.js';
 import * as funding from '../services/workforceFunding.js';
+import { releaseUndispatchedFunding } from '../services/workforceRunFunding.js';
 
 const router=express.Router();
 router.use((_req,res,next)=>{res.set('Cache-Control','no-store');res.vary('Authorization');next();});
@@ -46,6 +47,10 @@ router.post('/milestones',recent,handle(funding.createFundingMilestone));
 router.post('/campaigns/open',recent,handle(funding.openFundingCampaign));
 router.post('/campaigns/status',recent,handle(funding.setFundingCampaignStatus));
 router.post('/offers/read',handle(funding.readFundingOffer));
+router.post('/runs/release-undispatched',spend,recent,handle(async(db,ctx,value)=>{
+  try{return await releaseUndispatchedFunding(db,ctx,value);}
+  catch(error){if(error.code==='needs_approval')throw new funding.FundingError('conflict',error.details.reason);throw error;}
+}));
 router.post('/budgets/price',handle(funding.readFundingPrice));
 router.post('/budgets',recent,handle(funding.proposeFundingBudget));
 router.post('/budgets/decide',spend,recent,handle(funding.decideFundingBudget));

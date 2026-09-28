@@ -58,6 +58,7 @@ import { check } from '../utils/authzReBAC.js';
 import { authorityTransaction, lockWorkspaceAuthority } from './workspaceOperationReceipts.js';
 import { lockApiKeyWorkforceAuthority } from './apiKeyWorkforceAuthority.js';
 import { RunAdmissionError, actsInDivision } from './workforceRunAdmission.js';
+import { resolveRunFunding } from './workforceRunFunding.js';
 
 /** NFR-06: "maximum 60 seconds". The database CHECK holds the same bound independently. */
 export const RUN_LEASE_MAX_SECONDS = 60;
@@ -186,6 +187,20 @@ async function liveTerms(db, row) {
     entitlementTerm = row.rights.entitlement;
   }
 
+  if(row.payer_kind==='project_pool') {
+    try {
+      await resolveRunFunding(db,{actorUserId:row.actor_user_id},{target:{kind:'project',projectId:row.project_id},
+        budget:{fundingBudgetId:row.funding_budget_id,ceilingMicro:String(row.budget_ceiling_micro)}});
+    } catch(error) { fail(error.code==='needs_approval'?'needs_approval':'denied',error.details?.reason??'funding_approval_not_live'); }
+    await db.query('SELECT id FROM credit_accounts WHERE user_id=$1 FOR SHARE',[row.payer_user_id]);
+    const reservation=(await db.query(`SELECT h.state,h.id FROM workforce_run_funding f
+      JOIN credit_holds h ON h.id=f.hold_row_id WHERE f.admission_id=$1 FOR SHARE OF h`,[row.id])).rows[0];
+    if(reservation?.state!=='held')fail('needs_approval','pool_reservation_not_live');
+    const blocked=(await db.query(`SELECT 1 FROM credit_hold_funding f JOIN workforce_contribution_lots l ON l.pool_grant_id=f.grant_id
+      JOIN workforce_funding_origin_quarantine q ON q.grant_id=l.origin_grant_id WHERE f.hold_row_id=$1 LIMIT 1`,[reservation.id])).rowCount;
+    if(blocked)fail('needs_approval','pool_origin_quarantined');
+  }
+
   // Budget: the payer must still be able to fund work at all. A frozen account stops the run; an
   // account with nothing left is refused for THIS step without revoking -- a top-up resumes it.
   const acct = (await db.query('SELECT balance, is_frozen FROM credit_accounts WHERE user_id=$1 FOR SHARE', [row.payer_user_id])).rows[0];
@@ -265,6 +280,9 @@ export async function authorizeRunStep(pool, authenticatedContext, value, { sign
       throw terminal.error;
     }
 
+    // A generic lease cannot attest that a provider enforces a monetary upper bound.
+    // Pool dispatch must use the bounded metering path, not this compatibility lease.
+    if(operation==='provider_dispatch'&&row.payer_kind==='project_pool')fail('needs_approval','bounded_provider_dispatch_required');
     const sequence = BigInt((await db.query('SELECT coalesce(max(sequence),0)::text AS s FROM workforce_run_leases WHERE admission_id=$1',
       [admissionId])).rows[0].s) + 1n;
     const iat = Math.floor(now() / 1000);
