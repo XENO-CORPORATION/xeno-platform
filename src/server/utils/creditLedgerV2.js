@@ -19,6 +19,7 @@
  */
 import crypto from 'node:crypto';
 import { dimensionsJson } from './usageDimensions.js';
+import { pricePinnedChatUsage } from './creditCosts.js';
 import { allocateFunding, allocateContributionFunding, quarantinedGrantIds, saveHoldFunding, consumeFunding, readHoldFunding } from './usageCreditFunding.js';
 
 export const MICRO_PER_CREDIT = 1_000_000;
@@ -1060,6 +1061,74 @@ function holdView(row, balance) {
     settledMicro: Number(row.settled_micro ?? 0),
     balance,
   };
+}
+
+/** Final pooled-run settlement. Only a service-authenticated, aggregate terminal
+ * receipt may call this; a user/run result or timeout is never usage evidence.
+ * Payer, tariff and hold come from the retained admission. No generic bypass. */
+export async function settleProjectRunV2(pool, receipt) {
+  const bad=code=>Object.assign(new Error(code),{code});
+  const keys=['admissionId','eventId','providerRequestId','provider','model','inputTokens','outputTokens','measured','allWorkTerminal'];
+  if(!receipt||Array.isArray(receipt)||Object.keys(receipt).some(k=>!keys.includes(k))
+    ||!(/^[a-f0-9]{8}-[a-f0-9]{4}-[1-8][a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/i.test(receipt.admissionId??''))
+    ||!(/^[A-Za-z0-9][A-Za-z0-9._:-]{7,127}$/.test(receipt.eventId??''))
+    ||receipt.measured!==true||receipt.allWorkTerminal!==true)throw bad('BAD_REQUEST');
+  for(const [key,max] of [['providerRequestId',200],['provider',50],['model',100]]) {
+    const v=receipt[key];if(typeof v!=='string'||!v.trim()||v!==v.trim()||Buffer.byteLength(v)>max||v.includes('\0'))throw bad('BAD_REQUEST');
+  }
+  const count=v=>{if(typeof v==='number'&&Number.isSafeInteger(v)&&v>=0)return String(v);
+    if(typeof v==='string'&&/^(0|[1-9][0-9]{0,17})$/.test(v))return v;throw bad('BAD_REQUEST');};
+  const inputTokens=count(receipt.inputTokens),outputTokens=count(receipt.outputTokens);
+  const input={admissionId:receipt.admissionId.toLowerCase(),eventId:receipt.eventId,providerRequestId:receipt.providerRequestId,
+    provider:receipt.provider,model:receipt.model,inputTokens,outputTokens,measured:true,allWorkTerminal:true};
+  const hash=crypto.createHash('sha256').update(JSON.stringify(input)).digest('hex');
+  const view=(r,replayed)=>({admissionId:r.root_admission_id,eventId:r.event_id,state:r.state,
+    pricedMicro:String(r.priced_micro),chargedMicro:String(r.charged_micro),liabilityMicro:String(r.liability_micro),priceVersion:r.price_version,replayed});
+  const db=await pool.connect();
+  try {
+    await db.query('BEGIN');
+    await db.query("SET LOCAL lock_timeout='2s'");
+    const a=(await db.query(`SELECT a.*,f.pool_id,f.hold_row_id,b.price_snapshot,b.price_version
+      FROM workforce_run_admissions a JOIN workforce_run_funding f ON f.admission_id=a.id
+      JOIN workforce_funding_budgets b ON b.id=f.budget_id WHERE a.id=$1 AND a.parent_admission_id IS NULL`,[input.admissionId])).rows[0];
+    if(!a||a.payer_kind!=='project_pool')throw bad('NOT_FOUND');
+    // Same sequence as release/lease. Revoked authority does not invalidate a
+    // real receipt for already-performed work; it only stops new work.
+    await db.query('SELECT pg_advisory_xact_lock(hashtextextended($1,0))',[`run-authority:${a.id}`]);
+    await db.query('SELECT pg_advisory_xact_lock(hashtextextended($1,0))',[`funding-budget:${a.pool_id}`]);
+    const prior=(await db.query('SELECT * FROM workforce_funding_settlements WHERE root_admission_id=$1 OR event_id=$2',[a.id,input.eventId])).rows[0];
+    if(prior){if(prior.request_hash!==hash)throw bad('CONFLICT');await db.query('COMMIT');return view(prior,true);}
+    if(a.price_snapshot?.model!==input.model)throw bad('CONFLICT');
+    const priced=BigInt(pricePinnedChatUsage(a.price_snapshot,{inputTokens,outputTokens}));
+    const account=(await db.query('SELECT * FROM credit_accounts WHERE user_id=$1 FOR UPDATE',[a.payer_user_id])).rows[0];
+    if(!account||account.owner_kind!=='project_pool')throw bad('RESTRICTED_ACCOUNT');
+    const h=(await db.query('SELECT * FROM credit_holds WHERE id=$1 FOR UPDATE',[a.hold_row_id])).rows[0];
+    if(!h||h.account_id!==account.id||h.state!=='held')throw bad('HOLD_NOT_ACTIVE');
+    const funding=await readHoldFunding(db,h.id),reserved=BigInt(h.amount_micro);
+    if(funding.reduce((n,x)=>n+BigInt(x.amountMicro),0n)!==reserved)throw bad('FUNDING_CONFLICT');
+    const quarantined=new Set(await quarantinedGrantIds(db,a.payer_user_id));
+    const available=funding.filter(f=>!quarantined.has(f.grantId));
+    let canCharge=available.reduce((n,x)=>n+BigInt(x.amountMicro),0n);
+    if(account.is_frozen)canCharge=0n;
+    const balance=BigInt(account.balance);if(canCharge>balance)canCharge=balance>0n?balance:0n;
+    const charged=priced<canCharge?priced:canCharge,liability=priced-charged;
+    // Never allocate fresh lots to cover an overrun, even if the pool has money.
+    if(charged>0n)await consumeFunding(db,available,charged);
+    const next=balance-charged;
+    await db.query('UPDATE credit_accounts SET balance=$1,lifetime_spent=lifetime_spent+$2,updated_at=clock_timestamp() WHERE id=$3',
+      [String(next),String(charged),account.id]);
+    await db.query("UPDATE credit_holds SET state='settled',settled_micro=$1,updated_at=clock_timestamp() WHERE id=$2",[String(charged),h.id]);
+    await insertLedgerEntry(db,{userId:a.payer_user_id,accountId:account.id,type:'debit',amount:String(-charged),balanceAfter:String(next),
+      refType:'xeno.hold',refId:h.hold_id,description:'workforce:run',metadata:JSON.stringify({admissionId:a.id,eventId:input.eventId,
+        providerRequestId:input.providerRequestId,priceVersion:a.price_version,pricedMicro:String(priced),liabilityMicro:String(liability)})});
+    await insertUsageLog(db,a.payer_user_id,{surface:'workforce',operation:'run',transactionId:a.id,model:input.model,provider:input.provider,
+      inputTokens,outputTokens,dimensions:{usage_source:'provider'}},charged);
+    const result=(await db.query(`INSERT INTO workforce_funding_settlements(root_admission_id,event_id,provider_request_id,request_hash,
+      provider,model,price_version,input_tokens,output_tokens,priced_micro,charged_micro,liability_micro,state,all_work_terminal)
+      VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,true) RETURNING *`,[a.id,input.eventId,input.providerRequestId,hash,
+      input.provider,input.model,a.price_version,inputTokens,outputTokens,String(priced),String(charged),String(liability),liability>0n?'reconciliation_required':'settled'])).rows[0];
+    await db.query('COMMIT');return view(result,false);
+  }catch(error){await db.query('ROLLBACK');throw error;}finally{db.release();}
 }
 
 /** Stable deterministic id helper for callers without one (rarely needed). */

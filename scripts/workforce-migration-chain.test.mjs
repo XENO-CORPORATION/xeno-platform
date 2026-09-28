@@ -150,6 +150,7 @@ test('every workforce migration applies in order from an empty database', { skip
         'workforce_funding_pools',
         'workforce_funding_return_lots',
         'workforce_funding_returns',
+        'workforce_funding_settlements',
         'workforce_handoffs',
         // D21, 2026-09-25 -- the id mapping kept when `workspace_teams` was absorbed into the canonical
         // team model, cited by workforce-team-project-responsibility.test.mjs (the absorption case).
