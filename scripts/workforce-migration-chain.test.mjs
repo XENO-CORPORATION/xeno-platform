@@ -140,6 +140,9 @@ test('every workforce migration applies in order from an empty database', { skip
         'workforce_divisions',
         // Contribution conservation, source-lot eligibility, HTTP consent and retry
         // recovery are exercised against the full ledger in credit-payment-origin.
+        // Independent budget decisions are proven separately; execution admission
+        // must still consume them before the complete FUND-13 contract is cited.
+        'workforce_funding_budgets',
         'workforce_funding_campaigns',
         'workforce_funding_contributions',
         'workforce_funding_milestones',
