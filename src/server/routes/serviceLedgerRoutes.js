@@ -110,6 +110,17 @@ export function createServiceLedgerRouter({
 } = {}) {
   const router = express.Router();
   router.use(makeRequireServiceToken(getServiceToken));
+  // This is a final aggregate provider receipt, not a user-authored run outcome.
+  // Payer and tariff are resolved from admission; callers cannot select money.
+  router.post('/project-runs/settle',async(req,res)=>{
+    res.set('Cache-Control','no-store');
+    try { res.json(await ledger.settleProjectRunV2(req.db,req.body)); }
+    catch(error) {
+      if(error.code==='BAD_REQUEST'||error.code==='INVALID_PINNED_PRICING')return badRequest(res,'Measured terminal usage receipt required.');
+      if(error.code==='FUNDING_CONFLICT')return res.status(409).json({error:{code:error.code}});
+      sendErr(res,error);
+    }
+  });
 
   /**
    * Worst-case reservation for a request. `pricing` is priced HERE; `amountMicro` is the

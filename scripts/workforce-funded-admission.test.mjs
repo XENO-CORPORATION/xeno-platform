@@ -1,5 +1,5 @@
-// Real admission + canonical reservation proof. Dispatch and settlement follow;
-// no complete funding requirement is cited by an admission-only test.
+// Real admission, canonical reservation and service-receipt settlement proof.
+// Provider-bound dispatch remains unimplemented; no complete funding requirement is cited.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {randomUUID,createHash,generateKeyPairSync} from 'node:crypto';
@@ -127,6 +127,63 @@ test('pool admission reserves exact eligible lots atomically and never falls bac
  const released=await call({admissionId:untouched},undefined,releasePath);
  assert.deepEqual([released.status,released.body?.result?.state],[200,'released'],'HTTP releases a provably never-leased reservation');
  assert.equal((await call({admissionId:untouched},undefined,releasePath)).body.result.replayed,true,'undispatched release is idempotent');
+ const {createServiceLedgerRouter}=await import('../src/server/routes/serviceLedgerRoutes.js');
+ const serviceApp=express();serviceApp.use(express.json());serviceApp.use((req,_res,next)=>{req.db=pool;next();});
+ serviceApp.use('/api/v2/ledger/service',createServiceLedgerRouter({getServiceToken:()=> 'isolated-service-secret'}));
+ const service=serviceApp.listen(0,'127.0.0.1');await new Promise(r=>service.once('listening',r));
+ t.after(async()=>{service.closeAllConnections();await new Promise(r=>service.close(r));});
+ const settle=async(body,token='isolated-service-secret')=>{
+   const r=await fetch(`http://127.0.0.1:${service.address().port}/api/v2/ledger/service/project-runs/settle`,{method:'POST',
+     headers:{authorization:`Bearer ${token}`,'content-type':'application/json'},body:JSON.stringify(body)});
+   return {status:r.status,body:await r.json()};
+ };
+ const next=(await admitRun(pool,ctx(owner),request())).admission;
+ const receipt={admissionId:next.admissionId,eventId:'usage_'+marker,providerRequestId:'provider_'+marker,provider:'isolated-provider',
+   model:price.model,inputTokens:1000,outputTokens:1000,measured:true,allWorkTerminal:true};
+ const beforeSettle=(await pool.query('SELECT balance FROM credit_accounts WHERE user_id=$1',[p.id])).rows[0].balance;
+ assert.equal((await settle(receipt,'wrong')).status,401,'only authenticated backend services may submit usage receipts');
+ assert.equal((await settle({...receipt,measured:false})).status,400,'unmeasured pooled usage never consumes a guessed amount');
+ assert.equal((await settle({...receipt,allWorkTerminal:false})).status,400,'partial work cannot release the aggregate reservation');
+ assert.equal((await settle({...receipt,actualCostMicro:1})).status,400,'service callers submit usage rather than monetary charges');
+ await pool.query(`CREATE FUNCTION fail_settle_fixture() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'fixture receipt failed'; END $$;
+ CREATE TRIGGER fail_settle_fixture BEFORE INSERT ON workforce_funding_settlements FOR EACH ROW EXECUTE FUNCTION fail_settle_fixture()`);
+ try {
+   assert.equal((await settle(receipt)).status,500,'failed terminal receipt refuses settlement');
+   assert.equal((await pool.query('SELECT balance FROM credit_accounts WHERE user_id=$1',[p.id])).rows[0].balance,beforeSettle,'receipt failure rolls back posted charge');
+   assert.equal((await pool.query('SELECT state FROM credit_holds WHERE hold_id=$1',[next.admissionId])).rows[0].state,'held','receipt failure keeps the reservation committed');
+ }finally{await pool.query('DROP TRIGGER fail_settle_fixture ON workforce_funding_settlements; DROP FUNCTION fail_settle_fixture()');}
+ const posted=await settle(receipt);
+ assert.deepEqual([posted.status,posted.body.pricedMicro,posted.body.chargedMicro,posted.body.liabilityMicro,posted.body.state],
+   [200,'4000000','2000000','2000000','reconciliation_required'],'overrun is platform liability, never an extra contributor debit');
+ assert.equal((await settle(receipt)).body.replayed,true,'duplicate final usage cannot charge twice');
+ assert.equal((await settle({...receipt,outputTokens:999})).status,409,'changed receipt replay conflicts');
+ assert.equal((await pool.query("SELECT count(*)::int n FROM credit_transactions WHERE user_id=$1 AND reference_type='xeno.hold' AND reference_id=$2",[p.id,next.admissionId])).rows[0].n,1,
+   'settlement appends exactly one canonical journal entry');
+ assert.equal((await pool.query('SELECT count(*)::int n FROM api_usage_logs WHERE user_id=$1 AND request_id=$2',[p.id,next.admissionId])).rows[0].n,1,
+   'settlement reaches canonical usage analytics');
+ const {verifyChainV2}=await import('../src/server/utils/creditLedgerV2.js');
+ assert.equal((await verifyChainV2(pool,p.id)).ok,true,'pool settlement preserves the canonical hash chain');
+ // A separate milestone proves ordinary below-ceiling settlement and return,
+ // not only the exceptional overrun/quarantine branches above.
+ const c2=await funding.createFundingCampaign(pool,ctx(owner),{operationId:randomUUID(),projectId:project.id,beneficiary:'Small delivery',cancellationTerms:'Cancel.',refundTerms:'Original expiry.',deliverableLicense:'MIT'});
+ const m2=await funding.createFundingMilestone(pool,ctx(owner),{campaignId:c2.id,key:'small',title:'Small',criteria:['Tests'],thresholdMicro:'100000',budgetMaxMicro:'1000000'});
+ await funding.openFundingCampaign(pool,ctx(owner),{campaignId:c2.id});
+ const o2=await funding.readFundingOffer(pool,ctx(contributor),{campaignId:c2.id,milestoneId:m2.id});
+ const p2=(await pool.query('SELECT id FROM workforce_funding_pools WHERE milestone_id=$1',[m2.id])).rows[0].id;
+ const price2=await funding.readFundingPrice(pool,ctx(planner),{poolId:p2,model:price.model});
+ const b2=await funding.proposeFundingBudget(pool,ctx(planner),{operationId:randomUUID(),poolId:p2,spenderUserId:owner,maximumMicro:'1000000',perRunMicro:'500000',purpose:'Small delivery',termsHash:o2.consentHash,...price2});
+ await funding.decideFundingBudget(pool,ctx(approver),{budgetId:b2.id,operationId:randomUUID(),decision:'approved',expectedRevision:'1'});
+ const contribution2=await funding.contributeFunding(pool,ctx(contributor),{operationId:randomUUID(),campaignId:c2.id,milestoneId:m2.id,amountMicro:'1000000',consentHash:o2.consentHash,confirmed:true});
+ const small=(await admitRun(pool,ctx(owner),request('500000',{budget:{ceilingMicro:'500000',fundingBudgetId:b2.id}}))).admission;
+ assert.equal((await settle({...receipt,admissionId:small.admissionId,eventId:'duplicate_provider_'+marker})).status,409,
+   'one provider receipt cannot settle two different reservations');
+ const smallReceipt={...receipt,admissionId:small.admissionId,eventId:'small_'+marker,providerRequestId:'small_provider_'+marker,inputTokens:1,outputTokens:1};
+ const settledSmall=await settle(smallReceipt);
+ assert.deepEqual([settledSmall.status,settledSmall.body.chargedMicro,settledSmall.body.liabilityMicro,settledSmall.body.state],[200,'4000','0','settled'],
+   'below-ceiling usage charges only authoritative measured cost');
+ const returnedSmall=await funding.returnFundingContribution(pool,ctx(contributor),{contributionId:contribution2.id});
+ assert.equal(returnedSmall.amountMicro,'996000','unused reserved value returns to its original contributor after terminal settlement');
+ assert.equal((await verifyChainV2(pool,p2)).ok,true,'usage then return preserve the same canonical journal');
  const dispute=fixture.event('evt_dispute_'+marker,'charge.dispute.funds_withdrawn',{payment_intent:s.payment_intent,amount:500});
  await handleEvent(pool,dispute,{provider:fixture.provider});
  await reject(step('privileged_call'),'pool_origin_quarantined','quarantined reserved origin blocks new funded steps');
@@ -135,4 +192,10 @@ test('pool admission reserves exact eligible lots atomically and never falls bac
  await funding.revokeFundingBudget(pool,ctx(approver),{budgetId:proposal.id,expectedRevision:'2'});
  await reject(step('privileged_call'),'funding_budget_unavailable','revocation blocks the next funded run step without releasing liability');
  await reject(admitRun(pool,ctx(owner),request('1')),'funding_budget_unavailable','revoked budget cannot admit another run');
+ const quarantineReceipt={...receipt,admissionId:first.admission.admissionId,eventId:'quarantined_'+marker,providerRequestId:'quarantined_provider_'+marker,inputTokens:100,outputTokens:100};
+ const quarantineSettle=await settle(quarantineReceipt);
+ assert.deepEqual([quarantineSettle.status,quarantineSettle.body.chargedMicro,quarantineSettle.body.liabilityMicro],[200,'0','400000'],
+   'authoritative completion after revocation records quarantined loss without taking unrelated value');
+ assert.equal((await pool.query("SELECT count(*)::int n FROM credit_holds WHERE user_id=$1 AND state='held'",[p.id])).rows[0].n,0,
+   'only terminal receipts release the remaining uncertain commitments');
 });
