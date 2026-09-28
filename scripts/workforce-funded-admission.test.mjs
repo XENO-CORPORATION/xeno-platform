@@ -75,12 +75,16 @@ test('pool admission reserves exact eligible lots atomically and never falls bac
  const app=express();app.use((req,_res,next)=>{req.db=pool;next();});app.use('/api/workforce',router);
  const server=app.listen(0,'127.0.0.1');await new Promise(r=>server.once('listening',r));
  t.after(async()=>{server.closeAllConnections();await new Promise(r=>server.close(r));});
+ const approverSid=randomUUID();
+ await pool.query('INSERT INTO oauth_user_auth_epochs(user_id,epoch) VALUES($1,0) ON CONFLICT DO NOTHING',[approver]);
+ await pool.query(`INSERT INTO oauth_session_state(sid,user_id,auth_epoch,auth_time,dpop_jkt,expires_at)
+ VALUES($1,$2,0,to_timestamp($3),$4,now()+interval '1 hour')`,[approverSid,approver,now,jkt]);
  const donorSid=randomUUID();
  await pool.query('INSERT INTO oauth_user_auth_epochs(user_id,epoch) VALUES($1,0) ON CONFLICT DO NOTHING',[contributor]);
  await pool.query(`INSERT INTO oauth_session_state(sid,user_id,auth_epoch,auth_time,dpop_jkt,expires_at)
  VALUES($1,$2,0,to_timestamp($3),$4,now()+interval '1 hour')`,[donorSid,contributor,now,jkt]);
  const call=async(body,scope='openid workforce:read workforce:manage ledger:spend',path='/api/workforce/run-admissions',actor=owner)=>{
-   const token=jwt.sign({sub:actor,sid:actor===contributor?donorSid:sid,auth_epoch:0,auth_time:now,client_id:'xeno-agent-interface',scope,typ:'at+jwt',cnf:{jkt}},
+   const token=jwt.sign({sub:actor,sid:actor===contributor?donorSid:actor===approver?approverSid:sid,auth_epoch:0,auth_time:now,client_id:'xeno-agent-interface',scope,typ:'at+jwt',cnf:{jkt}},
     signer.privatePem,{algorithm:signer.alg,keyid:signer.kid,audience:'xeno-api',expiresIn:'5m',header:{typ:'at+jwt'}});
    const dpop=jwt.sign({jti:randomUUID(),htm:'POST',htu:issuer()+path,ath:accessTokenHash(token),iat:now},proofKey.privateKey,{algorithm:'ES256',header:{typ:'dpop+jwt',jwk}});
    const r=await fetch(`http://127.0.0.1:${server.address().port}${path}`,{method:'POST',headers:{authorization:`DPoP ${token}`,dpop,'content-type':'application/json'},body:JSON.stringify(body)});
@@ -214,6 +218,30 @@ test('pool admission reserves exact eligible lots atomically and never falls bac
  assert.deepEqual(returnedReport.amounts,{confirmedMicro:'1000000',committedMicro:'0',consumedMicro:'4000',returnedMicro:'996000',availableMicro:'0',expiredMicro:'0',quarantinedMicro:'0'},
    'accounting distinguishes measured consumption from returned value without double counting');
  assert.equal((await verifyChainV2(pool,p2)).ok,true,'usage then return preserve the same canonical journal');
+ const {reportRunResult}=await import('../src/server/services/workforceRunResults.js');
+ const acceptance={operationId:randomUUID(),milestoneId:m2.id,expectedRevision:'1',admissionIds:[small.admissionId],criteriaConfirmed:[true],
+   contributorStatement:'The small delivery passed the published review criterion.',rationale:'Reviewed the immutable completion record.'};
+ const acceptPath='/api/workforce/funding/milestones/accept';
+ assert.equal((await call(acceptance,undefined,acceptPath,approver)).status,409,'a milestone requires completed evidence, not an admission alone');
+ await reportRunResult(pool,ctx(owner),{admissionId:small.admissionId,outcome:'completed',summary:'PRIVATE PROMPT CONTENT',artifacts:[{name:'private-output',ref:'artifact:private-result'}]});
+ assert.equal((await call({...acceptance,criteriaConfirmed:[]},undefined,acceptPath,approver)).status,400,'every published acceptance criterion needs explicit confirmation');
+ assert.equal((await call({...acceptance,criteriaConfirmed:['true']},undefined,acceptPath,approver)).status,400,'criteria confirmation is boolean data, not text');
+ await reportRunResult(pool,ctx(owner),{admissionId:first.admission.admissionId,outcome:'completed',summary:'Other milestone completed',artifacts:[]});
+ assert.equal((await call({...acceptance,admissionIds:[first.admission.admissionId]},undefined,acceptPath,approver)).status,409,'evidence from another milestone cannot satisfy this one');
+ assert.equal((await call(acceptance,undefined,acceptPath,owner)).status,403,'the run producer cannot accept their own delivery');
+ const accepted=await call(acceptance,undefined,acceptPath,approver);
+ assert.deepEqual([accepted.status,accepted.body?.result?.status],[200,'accepted'],'independent milestone acceptance is reachable over HTTP');
+ assert.equal((await call(acceptance,undefined,acceptPath,approver)).body.result.replayed,true,'acceptance replay creates one durable decision');
+ assert.equal((await call({...acceptance,contributorStatement:'Changed text'},undefined,acceptPath,approver)).status,409,'changed acceptance replay conflicts');
+ const evidenceReport=(await call({contributionId:contribution2.id},undefined,reportPath,contributor)).body.result;
+ assert.deepEqual([evidenceReport.milestoneEvidence.statement,evidenceReport.milestoneEvidence.criteriaCount,evidenceReport.milestoneEvidence.evidenceCount],
+   [acceptance.contributorStatement,1,1],'contributor sees the approved statement bound to real evidence');
+ assert.ok(!JSON.stringify(evidenceReport).includes('PRIVATE PROMPT')&&!JSON.stringify(evidenceReport).includes('artifact:private-result'),
+   'milestone evidence never copies private run content into contributor reports');
+ const decision=(await pool.query("SELECT * FROM workforce_operations WHERE kind='milestone.accept' AND subject_id=$1",[m2.id])).rows[0];
+ assert.deepEqual([decision.deciding_principal_id,decision.responsible_account_id,decision.evidence[0].admissionId],[approver,approver,small.admissionId],
+   'milestone acceptance uses the canonical accountable decision ledger');
+ await assert.rejects(pool.query('DELETE FROM workforce_milestone_acceptances WHERE milestone_id=$1',[m2.id]),{code:'23514'},'milestone approvals are retained');
  const dispute=fixture.event('evt_dispute_'+marker,'charge.dispute.funds_withdrawn',{payment_intent:s.payment_intent,amount:500});
  await handleEvent(pool,dispute,{provider:fixture.provider});
  await reject(step('privileged_call'),'pool_origin_quarantined','quarantined reserved origin blocks new funded steps');

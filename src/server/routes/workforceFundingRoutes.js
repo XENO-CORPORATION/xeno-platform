@@ -44,6 +44,7 @@ const handle=service=>async(req,res)=>{
 };
 router.post('/campaigns',recent,handle(funding.createFundingCampaign));
 router.post('/milestones',recent,handle(funding.createFundingMilestone));
+router.post('/milestones/accept',recent,handle(funding.acceptFundingMilestone));
 router.post('/campaigns/open',recent,handle(funding.openFundingCampaign));
 router.post('/campaigns/status',recent,handle(funding.setFundingCampaignStatus));
 router.post('/offers/read',handle(funding.readFundingOffer));

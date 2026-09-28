@@ -26,7 +26,9 @@ test('a budget is a bounded proposal until an independent current project owner 
   const [settlementUp,settlementDown]=settlementMigration.split('-- DOWN');
   const windowMigration=await readFile(new URL('../src/server/database/migrations/20260928170000-workforce-budget-windows.sql',import.meta.url),'utf8');
   const [windowUp,windowDown]=windowMigration.split('-- DOWN');
-  await pool.query(windowDown);await pool.query(settlementDown);await pool.query(runDown);await pool.query(priceDown);await pool.query(down);await pool.query(up);await pool.query(priceUp);await pool.query(runUp);await pool.query(settlementUp);await pool.query(windowUp);
+  const evidenceMigration=await readFile(new URL('../src/server/database/migrations/20260928190000-workforce-milestone-evidence.sql',import.meta.url),'utf8');
+  const [evidenceUp,evidenceDown]=evidenceMigration.split('-- DOWN');
+  await pool.query(evidenceDown);await pool.query(windowDown);await pool.query(settlementDown);await pool.query(runDown);await pool.query(priceDown);await pool.query(down);await pool.query(up);await pool.query(priceUp);await pool.query(runUp);await pool.query(settlementUp);await pool.query(windowUp);await pool.query(evidenceUp);
   assert.equal((await pool.query("SELECT to_regclass('workforce_funding_budgets') name")).rows[0].name,'workforce_funding_budgets',
     'empty budget migration rolls back and reapplies');
   const makeUser=async()=>{const s=randomUUID();return (await pool.query(`INSERT INTO users(username,email,password_hash,display_name)

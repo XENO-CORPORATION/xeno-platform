@@ -158,6 +158,8 @@ test('every workforce migration applies in order from an empty database', { skip
         // LIFE-02, 2026-09-27 -- a membership removal: revocation now, settlement separately, archival only
         // once settled; cited by workforce-member-removal.test.mjs.
         'workforce_membership_removals',
+        'workforce_milestone_acceptances',
+        'workforce_milestone_evidence',
         'workforce_operations',
         // OWN-05, 2026-09-24 -- widened only because the requirement it implements is now cited by
         // a real test (workforce-ownership-transfer.test.mjs), exactly as the message below asks.
@@ -227,6 +229,9 @@ test('every workforce migration applies in order from an empty database', { skip
         // a deliverable condition, not employment consent or a membership grant.
         'workforce_funding_milestones.acceptance_criteria',
         'workforce_handoffs.accepted_at',
+        // Deliverable acceptance binds completed run evidence and published criteria;
+        // it grants no membership, assignment or permission to join a team.
+        'workforce_milestone_acceptances.accepted_at',
         // OWN-05's DESTINATION ACCEPTANCE of an ownership move -- added 2026-09-24 with
         // 20260924160000-workforce-ownership-transfer.sql, and recorded here on purpose rather than
         // filtered out. It is a consent shape the spec REQUIRES ("ownership transfer requires ...

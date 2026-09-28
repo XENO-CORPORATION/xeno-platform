@@ -145,6 +145,46 @@ export async function openFundingCampaign(pool,ctx,value) {
     return {id,status:'open'};
   });
 }
+export async function acceptFundingMilestone(pool,ctx,value) {
+  const a=context(ctx),v=shape(value,['operationId','milestoneId','expectedRevision','admissionIds','criteriaConfirmed','contributorStatement','rationale']);
+  const input={operationId:uuid(v.operationId),milestoneId:uuid(v.milestoneId),expectedRevision:text(v.expectedRevision,20),
+    contributorStatement:text(v.contributorStatement,4000),rationale:text(v.rationale,4000)};
+  if(!/^[1-9][0-9]*$/.test(input.expectedRevision)||!Array.isArray(v.admissionIds)||!v.admissionIds.length||v.admissionIds.length>32
+    ||!Array.isArray(v.criteriaConfirmed)||v.criteriaConfirmed.length>32||!v.criteriaConfirmed.every(x=>x===true))fail('bad_input','invalid_milestone_evidence');
+  input.admissionIds=[...new Set(v.admissionIds.map(uuid))].sort();input.criteriaConfirmed=v.criteriaConfirmed;
+  return authorityTransaction(pool,async db=>{
+    const peek=(await db.query('SELECT campaign_id FROM workforce_funding_milestones WHERE id=$1',[input.milestoneId])).rows[0];
+    if(!peek)fail('not_found','milestone_not_found');
+    const c=await campaignAuthority(db,a.actorUserId,peek.campaign_id);
+    await db.query('SELECT pg_advisory_xact_lock(hashtextextended($1,0))',[`milestone-accept:${a.actorUserId}:${a.clientId}:${input.operationId}`]);
+    const hash=operationHash(input);
+    const previous=(await db.query('SELECT * FROM workforce_operations WHERE actor_user_id=$1 AND client_id=$2 AND operation_id=$3',[a.actorUserId,a.clientId,input.operationId])).rows[0];
+    if(previous){if(previous.kind!=='milestone.accept'||previous.request_hash!==hash)fail('conflict','operation_payload_conflict');return {milestoneId:input.milestoneId,status:'accepted',replayed:true};}
+    const m=(await db.query('SELECT * FROM workforce_funding_milestones WHERE id=$1 FOR UPDATE',[input.milestoneId])).rows[0];
+    if(!['open','funded','active'].includes(m.status)||String(m.revision)!==input.expectedRevision)fail('conflict','milestone_revision_changed');
+    if(input.criteriaConfirmed.length!==m.acceptance_criteria.items.length)fail('bad_input','every_acceptance_criterion_required');
+    const evidence=[];
+    for(const id of input.admissionIds) {
+      const row=(await db.query(`SELECT a.actor_user_id,a.project_id,r.outcome,r.report_hash FROM workforce_run_admissions a
+        JOIN workforce_run_results r ON r.admission_id=a.id JOIN workforce_run_funding f ON f.admission_id=a.id
+        JOIN workforce_funding_pools p ON p.id=f.pool_id WHERE a.id=$1 AND p.milestone_id=$2`,[id,m.id])).rows[0];
+      if(!row||row.project_id!==c.project_id||row.outcome!=='completed')fail('conflict','completed_milestone_evidence_required');
+      const producer=await resolvePrincipal(db,row.actor_user_id);
+      if(row.actor_user_id===a.actorUserId||producer?.owner?.id===a.actorUserId)fail('denied','independent_milestone_review_required');
+      evidence.push({admissionId:id,reportHash:row.report_hash});
+    }
+    const project=(await db.query('SELECT workspace_id FROM chat_projects WHERE id=$1',[c.project_id])).rows[0];
+    await db.query(`INSERT INTO workforce_operations(actor_user_id,client_id,operation_id,request_hash,kind,subject_type,subject_id,
+      deciding_principal_id,responsible_account_id,authority,rationale,evidence,workspace_id)
+      VALUES($1,$2,$3,$4,'milestone.accept','milestone',$5,$1,$1,$6,$7,$8,$9)`,
+      [a.actorUserId,a.clientId,input.operationId,hash,m.id,`project:${c.project_id}#admin`,input.rationale,JSON.stringify(evidence),project.workspace_id]);
+    await db.query(`INSERT INTO workforce_milestone_acceptances(milestone_id,actor_user_id,client_id,operation_id,terms_version,contributor_statement,criteria_count)
+      VALUES($1,$2,$3,$4,$5,$6,$7)`,[m.id,a.actorUserId,a.clientId,input.operationId,m.terms_version,input.contributorStatement,input.criteriaConfirmed.length]);
+    for(const item of evidence)await db.query('INSERT INTO workforce_milestone_evidence(milestone_id,admission_id,report_hash) VALUES($1,$2,$3)',[m.id,item.admissionId,item.reportHash]);
+    await db.query("UPDATE workforce_funding_milestones SET status='accepted',revision=revision+1,updated_at=clock_timestamp() WHERE id=$1",[m.id]);
+    return {milestoneId:m.id,status:'accepted',replayed:false};
+  });
+}
 // The contribution preview contains terms and totals only, never project content,
 // membership, prompts, credentials or a source-lot list. Authentication is required.
 export async function readFundingOffer(pool,ctx,value) {
@@ -261,7 +301,12 @@ export async function readContributorFunding(pool,ctx,value) {
     const returnRow=(await db.query('SELECT expired_micro FROM workforce_funding_returns WHERE contribution_id=$1',[id])).rows[0];
     const disputed=(await db.query(`SELECT EXISTS(SELECT 1 FROM workforce_contribution_lots l
       JOIN workforce_funding_origin_quarantine q ON q.grant_id=l.origin_grant_id WHERE l.contribution_id=$1) AS yes`,[id])).rows[0].yes;
+    const accepted=(await db.query(`SELECT a.contributor_statement,a.criteria_count,a.terms_version,a.accepted_at,
+      (SELECT count(*)::int FROM workforce_milestone_evidence e WHERE e.milestone_id=a.milestone_id) AS evidence_count
+      FROM workforce_milestone_acceptances a WHERE a.milestone_id=$1`,[c.milestone_id])).rows[0];
     return {contributionId:c.id,campaignId:c.campaign_id,milestoneId:c.milestone_id,state:c.state,termsVersion:c.terms_version,
+      milestoneEvidence:accepted?{status:'accepted',statement:accepted.contributor_statement,criteriaCount:accepted.criteria_count,
+        termsVersion:accepted.terms_version,evidenceCount:accepted.evidence_count,acceptedAt:accepted.accepted_at.toISOString()}:null,
       amounts:{confirmedMicro:String(confirmed),committedMicro:String(committed),consumedMicro:String(consumed),returnedMicro:String(returned),
         availableMicro:String(available),expiredMicro:String(expired),quarantinedMicro:String(quarantined)},
       expiredReturnedMicro:String(returnRow?.expired_micro??0),reconciliationRequired:disputed,
