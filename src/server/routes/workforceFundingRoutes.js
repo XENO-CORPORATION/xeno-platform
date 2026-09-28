@@ -18,6 +18,13 @@ router.use(authMiddleware,requireDpopIfBound,(req,res,next)=>{
   next();
 },express.json({limit:'64kb',strict:true}));
 const recent=requireRecentOidcAuth({scope:'workforce:manage',clients:API_KEY_WORKFORCE_GRANT_CLIENTS});
+// Configuration authority is never spending authority, even for a recent DPoP session.
+const spend=(req,res,next)=>{
+  if(!String(req.auth.scope).split(/\s+/).includes('ledger:spend')||!scopesForClient(req.auth.clientId)?.includes('ledger:spend')) {
+    return res.status(403).json({success:false,code:'denied',error:'Ledger spending scope required.'});
+  }
+  next();
+};
 const handle=service=>async(req,res)=>{
   try {
     if(!req.body||Array.isArray(req.body)||typeof req.body!=='object'||Buffer.byteLength(JSON.stringify(req.body))>65536) {
@@ -39,9 +46,9 @@ router.post('/milestones',recent,handle(funding.createFundingMilestone));
 router.post('/campaigns/open',recent,handle(funding.openFundingCampaign));
 router.post('/campaigns/status',recent,handle(funding.setFundingCampaignStatus));
 router.post('/offers/read',handle(funding.readFundingOffer));
-router.post('/contributions',recent,handle(funding.contributeFunding));
+router.post('/contributions',spend,recent,handle(funding.contributeFunding));
 router.post('/contributions/read',handle(funding.readFundingContribution));
-router.post('/contributions/return',recent,handle(funding.returnFundingContribution));
+router.post('/contributions/return',spend,recent,handle(funding.returnFundingContribution));
 router.use((error,_req,res,_next)=>res.status(error?.type==='entity.too.large'||error?.type==='entity.parse.failed'?400:503)
   .json({success:false,code:'bad_input',error:'Invalid funding request.'}));
 export default router;
