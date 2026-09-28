@@ -407,7 +407,7 @@ test('payment origins bind settled monetary evidence to the exact lot atomically
     await pool.query('INSERT INTO oauth_user_auth_epochs(user_id,epoch) VALUES($1,0) ON CONFLICT DO NOTHING',[alice]);
     await pool.query(`INSERT INTO oauth_session_state(sid,user_id,auth_epoch,auth_time,dpop_jkt,expires_at)
       VALUES($1,$2,0,to_timestamp($3),$4,now()+interval '1 hour')`,[sid,alice,now,jkt]);
-    const mint=({bound=true,scope='openid workforce:read workforce:manage',authTime=now}={})=>jwt.sign({sub:alice,sid,auth_epoch:0,
+    const mint=({bound=true,scope='openid workforce:read workforce:manage ledger:spend',authTime=now}={})=>jwt.sign({sub:alice,sid,auth_epoch:0,
       auth_time:authTime,client_id:'xeno-agent-interface',scope,typ:'at+jwt',...(bound?{cnf:{jkt}}:{})},signer.privatePem,
       {algorithm:signer.alg,keyid:signer.kid,audience:'xeno-api',expiresIn:'5m',header:{typ:'at+jwt'}});
     const app=express();app.use((req,_res,next)=>{req.db=pool;next();});app.use('/api/workforce',router);
@@ -443,8 +443,13 @@ test('payment origins bind settled monetary evidence to the exact lot atomically
     assert.equal((await call('/contributions',request,{credential:mint({authTime:now-3600})})).status,401,
       'contribution requires recent authentication at the money-moving endpoint');
     assert.equal((await call('/contributions',{...request,confirmed:false})).status,400,'HTTP funding requires explicit consent');
+    const configurationOnly=mint({scope:'openid workforce:read workforce:manage'});
+    assert.equal((await call('/contributions',request,{credential:configurationOnly})).status,403,
+      'workforce configuration scope cannot transfer credits');
     const funded=await call('/contributions',request);
     assert.deepEqual([funded.status,funded.body.result?.state],[200,'confirmed'],'HTTP contribution reaches the real ledger');
+    assert.equal((await call('/contributions/return',{contributionId:funded.body.result.id},{credential:configurationOnly})).status,403,
+      'workforce configuration scope cannot return credits');
     const returned=await call('/contributions/return',{contributionId:funded.body.result.id});
     assert.deepEqual([returned.status,returned.body.result?.state,returned.body.result?.amountMicro],[200,'returned','1000'],
       'HTTP return reaches the original contributor and exact amount');
