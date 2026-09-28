@@ -224,6 +224,14 @@ const BACKEND_EVIDENCE = {
         { env: childEnvironment(process.env, scratch, urlFor(paymentDb)), cwd: scratch, timeout: 180_000, log: 'payment' });
       return parseMoneySummary(output, 0);
     });
+    const originDb = `xeno_qual_${randomBytes(16).toString('hex')}`;
+    await createDatabase(originDb);
+    await step('payment-lot-origins', async () => {
+      const output = await command(process.execPath, ['--test', '--test-reporter=tap', '--test-force-exit',
+        path.join(root, 'scripts/credit-payment-origin.test.mjs')],
+      { env: childEnvironment(process.env, scratch, urlFor(originDb)), cwd: scratch, timeout: 180_000, log: 'payment-origins' });
+      return parseTapSummary(output, 0);
+    });
     await step('payment-backup-restore', () => restoreCheck(paymentDb, 'payment'));
   } else {
   const platformDb = `xeno_qual_${runId}`, paymentDb = `xeno_payment_${runId}`;
@@ -303,6 +311,14 @@ const BACKEND_EVIDENCE = {
     const output = await command(process.execPath, [path.join(root, 'src/server/tests/billing-money-in.test.mjs')],
       { env: childEnvironment(process.env, scratch, urlFor(paymentDb)), cwd: scratch, timeout: 180_000, log: 'payment' });
     return parseMoneySummary(output, 0);
+  });
+  const originDb = `xeno_qual_${randomBytes(16).toString('hex')}`;
+  await createDatabase(originDb);
+  await step('payment-lot-origins', async () => {
+    const output = await command(process.execPath, ['--test', '--test-reporter=tap', '--test-force-exit',
+      path.join(root, 'scripts/credit-payment-origin.test.mjs')],
+    { env: childEnvironment(process.env, scratch, urlFor(originDb)), cwd: scratch, timeout: 180_000, log: 'payment-origins' });
+    return parseTapSummary(output, 0);
   });
   await step('payment-backup-restore', () => restoreCheck(paymentDb, 'payment'));
   await step('platform-backup-restore', () => restoreCheck(platformDb, 'platform'));

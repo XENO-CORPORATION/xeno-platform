@@ -1003,6 +1003,20 @@ async function grantCreditsForEvent(pool, event, userId, credits, session) {
       // idempotency was introduced. All claims and ledger writes commit together.
       if (firstCheckout && firstPayment) {
         await addGrantTx(client, String(userId), { amountMicro, kind: 'paid', sourceRef: `stripe:checkout:${session.id}` });
+        // Eligibility is evidence from the account-bound, provider-retrieved event, never kind='paid'.
+        // Zero-price promotions and older events lacking monetary evidence still fulfill normally,
+        // but cannot acquire transferable origin by their label or a source_ref someone copied.
+        if (session.payment_status === 'paid' && pi && Number.isSafeInteger(session.amount_total)
+          && session.amount_total > 0 && typeof session.currency === 'string' && /^[a-z]{3}$/.test(session.currency)) {
+          const config = billingAccountConfig(ACCOUNT_ENV);
+          const origin = await client.query(`INSERT INTO credit_grant_payment_origins
+              (grant_id,provider_account,provider_mode,payment_intent,checkout_session,event_id,paid_minor,currency,amount_micro)
+            SELECT id,$3,$4,$5,$6,$7,$8,$9,$10 FROM credit_grants
+             WHERE user_id=$1 AND source_ref=$2 AND amount_micro=$10 AND kind='paid' RETURNING grant_id`,
+          [String(userId), `stripe:checkout:${session.id}`, config.accountId, config.mode, pi,
+            session.id, event.id, String(session.amount_total), session.currency, String(amountMicro)]);
+          if (origin.rowCount !== 1) throw new Error('Paid credit origin must bind exactly one granted lot');
+        }
         console.log(`💳 [billing] granted ${credits} credits to user ${userId} (top-up ${event.id})`);
       }
     }
