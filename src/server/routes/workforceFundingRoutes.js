@@ -46,6 +46,7 @@ router.post('/milestones',recent,handle(funding.createFundingMilestone));
 router.post('/campaigns/open',recent,handle(funding.openFundingCampaign));
 router.post('/campaigns/status',recent,handle(funding.setFundingCampaignStatus));
 router.post('/offers/read',handle(funding.readFundingOffer));
+router.post('/budgets/price',handle(funding.readFundingPrice));
 router.post('/budgets',recent,handle(funding.proposeFundingBudget));
 router.post('/budgets/decide',spend,recent,handle(funding.decideFundingBudget));
 router.post('/budgets/read',handle(funding.readFundingBudget));

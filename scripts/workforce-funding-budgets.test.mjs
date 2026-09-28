@@ -18,7 +18,9 @@ test('a budget is a bounded proposal until an independent current project owner 
   const {readFile}=await import('node:fs/promises');
   const migration=await readFile(new URL('../src/server/database/migrations/20260928130000-workforce-funding-budgets.sql',import.meta.url),'utf8');
   const [up,down]=migration.split('-- DOWN');
-  await pool.query(down);await pool.query(up);
+  const priceMigration=await readFile(new URL('../src/server/database/migrations/20260928140000-workforce-budget-price-pin.sql',import.meta.url),'utf8');
+  const [priceUp,priceDown]=priceMigration.split('-- DOWN');
+  await pool.query(priceDown);await pool.query(down);await pool.query(up);await pool.query(priceUp);
   assert.equal((await pool.query("SELECT to_regclass('workforce_funding_budgets') name")).rows[0].name,'workforce_funding_budgets',
     'empty budget migration rolls back and reapplies');
   const makeUser=async()=>{const s=randomUUID();return (await pool.query(`INSERT INTO users(username,email,password_hash,display_name)
@@ -35,8 +37,9 @@ test('a budget is a bounded proposal until an independent current project owner 
   await funding.openFundingCampaign(pool,ctx(owner),{campaignId:campaign.id});
   const offer=await funding.readFundingOffer(pool,ctx(planner),{campaignId:campaign.id,milestoneId:milestone.id});
   const p=(await pool.query('SELECT * FROM workforce_funding_pools WHERE milestone_id=$1',[milestone.id])).rows[0];
+  const price=await funding.readFundingPrice(pool,ctx(planner),{poolId:p.id,model:'claude-opus-5'});
   const draft=(patch={})=>({operationId:randomUUID(),poolId:p.id,spenderUserId:spender,maximumMicro:'5000',perRunMicro:'1000',
-    purpose:'Implement the accepted milestone',priceVersion:'tariff-fixture-v1',termsHash:offer.consentHash,...patch});
+    purpose:'Implement the accepted milestone',...price,termsHash:offer.consentHash,...patch});
   const reject=(fn,reason,message)=>assert.rejects(fn,e=>e.details?.reason===reason,message);
   let proposed;
   await t.test('planning and approval are separate, and both are bounded by contributor terms',async()=>{
@@ -46,7 +49,15 @@ test('a budget is a bounded proposal until an independent current project owner 
       'budget_exceeds_contributor_limit','a planner cannot raise the contributor-authorized ceiling');
     await reject(funding.proposeFundingBudget(pool,ctx(planner),draft({termsHash:'f'.repeat(64)})),
       'funding_terms_changed','a proposal binds the contributor-visible terms');
+    await reject(funding.proposeFundingBudget(pool,ctx(planner),draft({priceVersion:'tariff-fixture-v1'})),
+      'funding_price_changed','an arbitrary price label cannot authorize spending');
     const request=draft();proposed=await funding.proposeFundingBudget(pool,ctx(planner),request);
+    const persisted=(await pool.query('SELECT price_snapshot FROM workforce_funding_budgets WHERE id=$1',[proposed.id])).rows[0].price_snapshot;
+    assert.equal(persisted.version,price.priceVersion,'the budget retains the exact approved tariff');
+    assert.ok(!JSON.stringify(proposed).includes('MicroPerToken'),'public budget readback never publishes token rates');
+    await assert.rejects(pool.query('UPDATE workforce_funding_budgets SET price_snapshot=NULL WHERE id=$1',[proposed.id]),{code:'23514'},
+      'the tariff cannot be removed from an existing proposal');
+    await assert.rejects(pool.query(priceDown),{code:'23514'},'rollback cannot erase retained price consent');
     assert.deepEqual([proposed.state,proposed.maximumMicro,proposed.perRunMicro],['proposed','5000','1000'],'planning creates no spending approval');
     assert.equal((await funding.proposeFundingBudget(pool,ctx(planner),request)).id,proposed.id,'proposal retry retains identity');
     await reject(funding.proposeFundingBudget(pool,ctx(planner),{...request,perRunMicro:'999'}),'operation_payload_conflict','changed proposal replay conflicts');
@@ -85,6 +96,23 @@ test('a budget is a bounded proposal until an independent current project owner 
       decided_by_user_id=proposed_by_user_id,decision_operation_id=$2,decided_at=now() WHERE id=$1`,[second.id,randomUUID()]),
       {code:'23514'},'database refuses self-approved budgets independently');
   });
+  await t.test('legacy unpriced proposals stay retained but cannot gain spending approval',async()=>{
+    const c=await funding.createFundingCampaign(pool,ctx(owner),{operationId:randomUUID(),projectId:project.id,
+      beneficiary:'Legacy price',cancellationTerms:'Cancel.',refundTerms:'Original expiry.',deliverableLicense:'MIT'});
+    const m=await funding.createFundingMilestone(pool,ctx(owner),{campaignId:c.id,key:'legacy',title:'Legacy',criteria:['Review'],thresholdMicro:'1000',budgetMaxMicro:'10000'});
+    await funding.openFundingCampaign(pool,ctx(owner),{campaignId:c.id});
+    const offer=await funding.readFundingOffer(pool,ctx(owner),{campaignId:c.id,milestoneId:m.id});
+    const isolated=(await pool.query('SELECT id FROM workforce_funding_pools WHERE milestone_id=$1',[m.id])).rows[0].id;
+    const source=await funding.proposeFundingBudget(pool,ctx(planner),draft({poolId:isolated,termsHash:offer.consentHash}));
+    const legacy=(await pool.query(`INSERT INTO workforce_funding_budgets
+      (pool_id,proposed_by_user_id,spender_user_id,client_id,operation_id,request_hash,terms_hash,maximum_micro,per_run_micro,purpose,price_version)
+      SELECT pool_id,proposed_by_user_id,spender_user_id,client_id,$2,request_hash,terms_hash,maximum_micro,per_run_micro,purpose,'legacy-label'
+      FROM workforce_funding_budgets WHERE id=$1 RETURNING id`,[source.id,randomUUID()])).rows[0];
+    await reject(funding.decideFundingBudget(pool,ctx(owner),{budgetId:legacy.id,operationId:randomUUID(),decision:'approved',expectedRevision:'1'}),
+      'funding_price_unpinned','legacy price labels cannot authorize new spend');
+    const refused=await funding.decideFundingBudget(pool,ctx(owner),{budgetId:legacy.id,operationId:randomUUID(),decision:'rejected',expectedRevision:'1'});
+    assert.equal(refused.state,'rejected','unpriced legacy proposals can still be resolved without inventing a tariff');
+  });
   await t.test('an approver cannot grant to themselves through an owned agent',async()=>{
     const bot=await makeUser();
     await pool.query("INSERT INTO agent_identities(user_id,owner_user_id,agent_role,agent_origin) VALUES($1,$2,'other','budget-test')",[bot,owner]);
@@ -117,7 +145,8 @@ test('a budget is a bounded proposal until an independent current project owner 
         VALUES($1,$2,0,to_timestamp($3),$4,now()+interval '1 hour')`,[sid,actor,now,jkt]);
     }
     const app=express();app.use((req,_res,next)=>{req.db=pool;next();});app.use('/api/workforce',router);
-    const server=app.listen(0,'127.0.0.1');await new Promise(r=>server.once('listening',r));t.after(()=>server.close());
+    const server=app.listen(0,'127.0.0.1');await new Promise(r=>server.once('listening',r));
+    t.after(async()=>{server.closeAllConnections();await new Promise(r=>server.close(r));});
     const call=async(path,body,{actor=owner,scope='openid workforce:read workforce:manage ledger:spend',authTime=now,proof=true}={})=>{
       const token=jwt.sign({sub:actor,sid:sessions.get(actor),auth_epoch:0,auth_time:authTime,client_id:'xeno-agent-interface',scope,typ:'at+jwt',cnf:{jkt}},
         signer.privatePem,{algorithm:signer.alg,keyid:signer.kid,audience:'xeno-api',expiresIn:'5m',header:{typ:'at+jwt'}});
@@ -125,9 +154,15 @@ test('a budget is a bounded proposal until an independent current project owner 
       if(proof)headers.dpop=jwt.sign({jti:randomUUID(),htm:'POST',htu:issuer()+full,ath:accessTokenHash(token),iat:now},
         key.privateKey,{algorithm:'ES256',header:{typ:'dpop+jwt',jwk}});
       const r=await fetch(`http://127.0.0.1:${server.address().port}${full}`,{method:'POST',headers,body:JSON.stringify(body)});
-      return {status:r.status,body:await r.json(),cache:r.headers.get('cache-control')};
+      return {status:r.status,body:await r.json().catch(()=>null),cache:r.headers.get('cache-control')};
     };
     const request=draft(),config={scope:'openid workforce:read workforce:manage'};
+    const quote=await call('/budgets/price',{poolId:p.id,model:price.model},{actor:planner});
+    assert.deepEqual([quote.status,quote.body?.result],[200,price],'HTTP price preview exposes an identity without internal rates');
+    assert.equal((await call('/budgets/price',{poolId:p.id,model:price.model},{actor:other})).status,404,
+      'price preview does not disclose an unreadable pool');
+    assert.equal((await call('/budgets',{...request,priceVersion:'old-price'},{actor:planner})).status,409,
+      'HTTP refuses stale tariff consent');
     const made=await call('/budgets',request,{actor:planner,...config});
     assert.equal(made.status,200,`HTTP budget proposal is mounted: ${JSON.stringify(made.body)}`);
     assert.equal(made.body.result.state,'proposed','HTTP planning grants no spending authority');

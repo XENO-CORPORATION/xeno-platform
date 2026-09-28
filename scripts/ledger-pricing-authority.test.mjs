@@ -61,6 +61,30 @@ import express from 'express';
 import { createServiceLedgerRouter } from '../src/server/routes/serviceLedgerRoutes.js';
 import * as pricing from '../src/server/utils/creditCosts.js';
 
+test('pinned tariffs bind the model and resolved rates, with exact integer settlement', async()=>{
+  const {createHash}=await import('node:crypto');
+  const pinned=pricing.pinChatTariff('claude-opus-5');
+  assert.equal(pinned.version,pricing.pinChatTariff('claude-opus-5').version,'identical prices have a stable tariff identity');
+  assert.notEqual(pinned.version,pricing.pinChatTariff('gpt-6-astra').version,'the tariff binds the billed model, not only its tier');
+  assert.equal(pricing.pricePinnedChatUsage(pinned,{inputTokens:16,outputTokens:17}),'67200','pinned settlement uses the accepted rates');
+  assert.equal(pricing.pricePinnedChatUsage(pinned,{inputTokens:'9007199254740993',outputTokens:'0'}),'7205759403792794400',
+    'microcredit arithmetic never rounds through a JavaScript number');
+  assert.throws(()=>pricing.pricePinnedChatUsage({...pinned,inputMicroPerToken:'1'},{inputTokens:16,outputTokens:17}),
+    {code:'INVALID_PINNED_PRICING'},'changing rates without changing the tariff identity is refused');
+  // An earlier internally persisted tariff stays priced by its own bytes after the live table changes.
+  const historical={schemaVersion:1,operation:'chat.completion',model:'claude-opus-5',unit:'microcredit',arithmetic:'integer-per-token-v1',
+    inputMicroPerToken:'100',outputMicroPerToken:'200'};
+  const version='chat-sha256:'+createHash('sha256').update(JSON.stringify(historical)).digest('hex');
+  assert.equal(pricing.pricePinnedChatUsage({...historical,version},{inputTokens:16,outputTokens:17}),'5000',
+    'settlement never substitutes the current tariff for a retained tariff');
+  for(const inputTokens of [-1,0.5,NaN,Infinity,'01','-1',undefined,9007199254740992]) {
+    assert.throws(()=>pricing.pricePinnedChatUsage(pinned,{inputTokens,outputTokens:0}),{code:'INVALID_PINNED_PRICING'},
+      'invalid or unmeasured token counts cannot become a zero-cost receipt');
+  }
+  assert.throws(()=>pricing.pricePinnedChatUsage(pinned,{inputTokens:'999999999999999999',outputTokens:0}),{code:'INVALID_PINNED_PRICING'},
+    'database overflow is refused before posting');
+});
+
 const TOKEN = 'test-service-token';
 
 function fakeLedger() {
