@@ -51,6 +51,9 @@ router.post('/runs/release-undispatched',spend,recent,handle(async(db,ctx,value)
   try{return await releaseUndispatchedFunding(db,ctx,value);}
   catch(error){if(error.code==='needs_approval')throw new funding.FundingError('conflict',error.details.reason);throw error;}
 }));
+router.post('/scope-caps',recent,handle(funding.proposeScopeSpendCap));
+router.post('/scope-caps/decide',spend,recent,handle(funding.decideScopeSpendCap));
+router.post('/scope-caps/read',handle(funding.readScopeSpendCaps));
 router.post('/budgets/price',handle(funding.readFundingPrice));
 router.post('/budgets',recent,handle(funding.proposeFundingBudget));
 router.post('/budgets/decide',spend,recent,handle(funding.decideFundingBudget));

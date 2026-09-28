@@ -182,6 +182,7 @@ test('every workforce migration applies in order from an empty database', { skip
         'workforce_run_result_deliveries',
         'workforce_run_results',
         'workforce_run_revocations',
+        'workforce_scope_spend_caps',
         'workforce_team_memberships',
         'workforce_workspace_assignments',
       ], 'the workforce schema changed. If a table was ADDED, the requirements it implements are ' +
