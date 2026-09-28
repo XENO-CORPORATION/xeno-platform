@@ -177,7 +177,7 @@
     "test:artifacts": "node --test scripts/artifacts.test.mjs",
     "test:signup-flow": "node --test scripts/signup-flow-contract.test.mjs",
     "test:support-page": "node --test scripts/support-page.test.mjs",
-    "test:payment-ops": "node --test scripts/payment-operations.test.mjs scripts/billing-checkout-price.test.mjs scripts/billing-account-binding.test.mjs scripts/billing-reconciliation.test.mjs scripts/stripe-live-setup.test.mjs",
+    "test:payment-ops": "node --test scripts/credit-payment-origin.test.mjs scripts/payment-operations.test.mjs scripts/billing-checkout-price.test.mjs scripts/billing-account-binding.test.mjs scripts/billing-reconciliation.test.mjs scripts/stripe-live-setup.test.mjs",
     "test:retention": "node --test scripts/retention-and-bounds.test.mjs",
     "test:evidence-erasure": "node --test scripts/evidence-survives-erasure.test.mjs",
     "test:no-mangled-escapes": "node --test scripts/no-mangled-escapes.test.mjs",

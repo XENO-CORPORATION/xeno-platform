@@ -194,6 +194,47 @@ CREATE INDEX IF NOT EXISTS idx_grants_drawdown
 CREATE UNIQUE INDEX IF NOT EXISTS uq_grants_allowance_window
   ON credit_grants (user_id, source_ref) WHERE kind = 'allowance' AND source_ref IS NOT NULL;
 
+-- Payment origin is evidence, not the grant's kind or a caller-supplied source_ref.
+-- Deliberately no historical backfill: old paid labels cannot prove settled value.
+-- Kept beside credit_grants because that table is created after versioned migrations.
+CREATE TABLE IF NOT EXISTS credit_grant_payment_origins (
+  grant_id uuid PRIMARY KEY REFERENCES credit_grants(id) ON DELETE RESTRICT,
+  provider_account text NOT NULL,
+  provider_mode text NOT NULL CHECK (provider_mode IN ('test','live')),
+  payment_intent text NOT NULL,
+  checkout_session text NOT NULL,
+  event_id text NOT NULL,
+  paid_minor bigint NOT NULL CHECK (paid_minor > 0),
+  currency text NOT NULL CHECK (currency ~ '^[a-z]{3}$'),
+  amount_micro bigint NOT NULL CHECK (amount_micro > 0),
+  recorded_at timestamptz NOT NULL DEFAULT now(),
+  UNIQUE(provider_account, provider_mode, payment_intent),
+  UNIQUE(provider_account, provider_mode, checkout_session)
+);
+CREATE OR REPLACE FUNCTION credit_grant_payment_origin_guard() RETURNS trigger AS $origin$
+DECLARE g credit_grants%ROWTYPE;
+BEGIN
+  IF TG_OP <> 'INSERT' THEN
+    RAISE EXCEPTION 'payment origins are immutable; disputes are separate records' USING ERRCODE='23514';
+  END IF;
+  SELECT * INTO g FROM credit_grants WHERE id=NEW.grant_id;
+  IF NOT FOUND OR g.kind <> 'paid' OR g.amount_micro <> NEW.amount_micro
+     OR g.source_ref IS DISTINCT FROM 'stripe:checkout:' || NEW.checkout_session THEN
+    RAISE EXCEPTION 'payment origin must describe the exact purchased lot' USING ERRCODE='23514';
+  END IF;
+  RETURN NEW;
+END;
+$origin$ LANGUAGE plpgsql;
+DROP TRIGGER IF EXISTS credit_grant_payment_origins_guard ON credit_grant_payment_origins;
+CREATE TRIGGER credit_grant_payment_origins_guard BEFORE INSERT OR UPDATE OR DELETE ON credit_grant_payment_origins
+  FOR EACH ROW EXECUTE FUNCTION credit_grant_payment_origin_guard();
+DROP TRIGGER IF EXISTS credit_grant_payment_origins_no_truncate ON credit_grant_payment_origins;
+CREATE TRIGGER credit_grant_payment_origins_no_truncate BEFORE TRUNCATE ON credit_grant_payment_origins
+  FOR EACH STATEMENT EXECUTE FUNCTION credit_grant_payment_origin_guard();
+DO $origin_path$ BEGIN
+  EXECUTE format('ALTER FUNCTION %I.credit_grant_payment_origin_guard() SET search_path = %I, pg_temp', current_schema(), current_schema());
+END $origin_path$;
+
 -- Spend caps as a settlement INVARIANT (Arch §4.6): a debit that would exceed the
 -- window cap is rejected, not just alerted.
 CREATE TABLE IF NOT EXISTS spend_caps (
