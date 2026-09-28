@@ -180,6 +180,60 @@ test('payment origins bind settled monetary evidence to the exact lot atomically
     { code: 'INSUFFICIENT_CONTRIBUTABLE_CREDITS' }, 'an unresolved legacy hold stays committed past its expiry');
     assert.deepEqual(await rows(), verified, 'allocation inspection writes no origin evidence');
   });
+  await t.test('only payment-backed lots transfer, preserving original expiry and milestone restrictions (FUND-02)', async () => {
+    const svc=await import('../src/server/services/workforceFunding.js');
+    const {createAuthorizedProject,userPrincipal}=await import('../src/server/services/chatProjectAuthority.js');
+    const manager=await user('elig-manager'),ctx=actorUserId=>({actorUserId,clientId:'xeno-agent-interface'});
+    const project=await createAuthorizedProject(pool,{principal:userPrincipal(manager),name:'Eligibility proof'});
+    const campaign=await svc.createFundingCampaign(pool,ctx(manager),{operationId:randomUUID(),projectId:project.id,
+      beneficiary:'Accepted delivery',cancellationTerms:'Cancel unused work.',refundTerms:'Original expiry applies.',deliverableLicense:'MIT'});
+    const milestone=await svc.createFundingMilestone(pool,ctx(manager),{campaignId:campaign.id,key:'eligible',title:'Eligible',criteria:['Review'],thresholdMicro:'1',budgetMaxMicro:'5000000'});
+    await svc.openFundingCampaign(pool,ctx(manager),{campaignId:campaign.id});
+    const offer=await svc.readFundingOffer(pool,ctx(manager),{campaignId:campaign.id,milestoneId:milestone.id});
+    const p=(await pool.query('SELECT * FROM workforce_funding_pools WHERE milestone_id=$1',[milestone.id])).rows[0];
+    const request=()=>({operationId:randomUUID(),campaignId:campaign.id,milestoneId:milestone.id,amountMicro:'100',consentHash:offer.consentHash,confirmed:true});
+    for(const kind of ['allowance','promo','paid']) {
+      const u=await user('no-'+kind);
+      await addGrant(pool,u,{amountMicro:1000,kind,sourceRef:'unverified-'+marker+'-'+kind});
+      await pool.query('INSERT INTO usage_credit_preferences(user_id,enabled) VALUES($1,true)',[u]);
+      const before=(await pool.query('SELECT balance FROM credit_accounts WHERE user_id=$1',[u])).rows[0].balance;
+      await assert.rejects(svc.contributeFunding(pool,ctx(u),request()),{code:'INSUFFICIENT_CONTRIBUTABLE_CREDITS'},
+        'allowance, promotional and unverified paid value cannot become contributed paid credit');
+      assert.equal((await pool.query('SELECT balance FROM credit_accounts WHERE user_id=$1',[u])).rows[0].balance,before,'ineligible transfer leaves source money intact');
+      assert.equal((await pool.query('SELECT count(*)::int n FROM workforce_funding_contributions WHERE contributor_user_id=$1',[u])).rows[0].n,0,'ineligible transfer leaves no confirmed receipt');
+    }
+    // Provider subscriptions are not ledger payment lots; even a funded numeric
+    // balance with no provenance is refused rather than relabelled by backfill.
+    const quotaOnly=await user('external-quota');
+    await pool.query("INSERT INTO credit_accounts(user_id,balance,owner_kind) VALUES($1,1000,'user')",[quotaOnly]);
+    await pool.query('INSERT INTO usage_credit_preferences(user_id,enabled) VALUES($1,true)',[quotaOnly]);
+    await assert.rejects(svc.contributeFunding(pool,ctx(quotaOnly),request()),{code:'INSUFFICIENT_CONTRIBUTABLE_CREDITS'},'a balance or external quota is not paid-lot evidence');
+    const eligible=await user('eligible-paid');
+    const paid=session('eligible',{client_reference_id:eligible,metadata:{xenoUserId:eligible,credits:'5',kind:'credits'}});
+    await run(event('eligible',paid));
+    await pool.query('INSERT INTO usage_credit_preferences(user_id,enabled) VALUES($1,true)',[eligible]);
+    await pool.query("UPDATE credit_grants SET expires_at=date_trunc('day',now())+interval '30 days 0.654321 seconds' WHERE user_id=$1",[eligible]);
+    const made=await svc.contributeFunding(pool,ctx(eligible),request());
+    const links=(await pool.query(`SELECT l.origin_kind,s.expires_at::text AS original_expiry,g.expires_at::text AS pool_expiry,
+      g.kind,g.amount_micro,c.milestone_id,c.terms_version,o.checkout_session
+      FROM workforce_contribution_lots l JOIN credit_grants s ON s.id=l.origin_grant_id
+      JOIN credit_grants g ON g.id=l.pool_grant_id JOIN workforce_funding_contributions c ON c.id=l.contribution_id
+      JOIN credit_grant_payment_origins o ON o.grant_id=l.origin_grant_id WHERE c.id=$1`,[made.id])).rows;
+    assert.equal(links.length,1,'one eligible origin moves into one restricted lot');
+    assert.deepEqual([links[0].origin_kind,links[0].kind,links[0].amount_micro,links[0].milestone_id,links[0].terms_version,links[0].checkout_session],
+      ['paid','contribution','100',milestone.id,offer.terms.version,paid.id],'transfer retains paid origin and the accepted milestone terms');
+    assert.equal(links[0].original_expiry,links[0].pool_expiry,'transfer preserves microsecond expiry rather than granting a fresh lifetime');
+    assert.equal((await pool.query('SELECT balance FROM credit_accounts WHERE id=$1',[p.account_id])).rows[0].balance,'100','only eligible value reaches the restricted account');
+    const db=await pool.connect();
+    try {
+      await db.query('BEGIN');
+      await db.query(`UPDATE credit_grants SET expires_at=NULL WHERE id IN
+        (SELECT pool_grant_id FROM workforce_contribution_lots WHERE contribution_id=$1)`,[made.id]);
+      await db.query('UPDATE workforce_funding_contributions SET updated_at=now() WHERE id=$1',[made.id]);
+      await assert.rejects(db.query('SET CONSTRAINTS ALL IMMEDIATE'),{code:'23514'},
+        'database rejects changed expiry even when a transfer writer gets it wrong');
+    }finally{await db.query('ROLLBACK');db.release();}
+  });
   await t.test('contributions conserve lots and ledger value under replay, concurrency and rollback (FUND-04)', async () => {
     const svc = await import('../src/server/services/workforceFunding.js');
     const { createAuthorizedProject, userPrincipal } = await import('../src/server/services/chatProjectAuthority.js');
