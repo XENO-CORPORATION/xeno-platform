@@ -410,9 +410,15 @@ async function insertLedgerEntry(client, e) {
   const prevHash = prev.rows[0]?.entry_hash || GENESIS;
   const entryHash = chainHash(prevHash, e);
   await client.query(
+    // now() is the transaction START, not its serialization order. A transaction
+    // that began first can acquire the account lock last; repeated writes in one
+    // transaction also share now(). Keep the existing journal order strictly advancing
+    // under that account lock, including a backwards wall-clock adjustment.
     `INSERT INTO credit_transactions
-       (user_id, account_id, type, amount, balance_after, reference_type, reference_id, description, metadata, prev_hash, entry_hash)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9::jsonb,$10,$11)`,
+       (user_id, account_id, type, amount, balance_after, reference_type, reference_id, description, metadata, prev_hash, entry_hash, created_at)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9::jsonb,$10,$11,
+       GREATEST(clock_timestamp() AT TIME ZONE 'UTC',
+         (SELECT max(created_at)+interval '1 microsecond' FROM credit_transactions WHERE account_id=$2)))`,
     [e.userId, e.accountId, e.type, e.amount, e.balanceAfter, e.refType, e.refId, e.description, e.metadata, prevHash, entryHash],
   );
   return entryHash;
