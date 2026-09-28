@@ -1,0 +1,138 @@
+// Real admission + canonical reservation proof. Dispatch and settlement follow;
+// no complete funding requirement is cited by an admission-only test.
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {randomUUID,createHash,generateKeyPairSync} from 'node:crypto';
+import pg from 'pg';
+import {requireProofDatabase} from './lib/workforce-proof-database.mjs';
+import {installBillingProviderFixture} from './fixtures/billing-provider-fixture.mjs';
+const url=process.env.TEST_DATABASE_URL;if(url)requireProofDatabase(url);
+process.env.STRIPE_SECRET_KEY='sk_test_localfixture';process.env.STRIPE_PUBLISHABLE_KEY='pk_test_localfixture';
+process.env.STRIPE_EXPECTED_ACCOUNT_ID='acct_fixture';process.env.STRIPE_EXPECTED_MODE='test';
+const fixture=installBillingProviderFixture();
+const {handleEvent}=await import('../src/server/services/billingService.js');
+const funding=await import('../src/server/services/workforceFunding.js');
+const {admitRun}=await import('../src/server/services/workforceRunAdmission.js');
+const {runAllMigrations}=await import('../src/server/services/migrationRunner.js');
+const {migrateAccountV2}=await import('../src/server/database/migrate-account-v2.js');
+const {createAuthorizedProject,userPrincipal}=await import('../src/server/services/chatProjectAuthority.js');
+
+test('pool admission reserves exact eligible lots atomically and never falls back to personal funds',{skip:!url},async t=>{
+ const pool=new pg.Pool({connectionString:url,max:10});t.after(()=>pool.end());
+ await runAllMigrations(pool);await migrateAccountV2(pool);
+ const user=async()=>{const x=randomUUID();return(await pool.query("INSERT INTO users(username,email,display_name,password_hash) VALUES($1,$2,$1,'test') RETURNING id",[x,x+'@example.test'])).rows[0].id;};
+ const owner=await user(),planner=await user(),approver=await user(),contributor=await user();
+ const ctx=actorUserId=>({actorUserId,clientId:'xeno-agent-interface'});
+ const project=await createAuthorizedProject(pool,{principal:userPrincipal(owner),name:'Funded admission'});
+ await pool.query(`INSERT INTO relationship_tuples(object_type,object_id,relation,subject_type,subject_id)
+ VALUES('project',$1,'owner','user',$2),('project',$1,'editor','user',$3)`,[project.id,approver,planner]);
+ const resource=randomUUID(),hash=createHash('sha256').update(resource).digest('hex');
+ await pool.query("INSERT INTO workforce_resources(id,kind,owner_user_id,name) VALUES($1,'agent',$2,'Runner')",[resource,owner]);
+ await pool.query(`INSERT INTO workforce_agent_versions(resource_id,version,content,content_hash,provenance)
+ VALUES($1,1,$2,$3,'{}')`,[resource,{instructions:'test',requestedCapabilities:['files.read']},hash]);
+ const part=(await pool.query(`INSERT INTO workforce_project_participations(resource_id,resource_kind,project_id,target_kind,personal_owner_user_id,consented_by_user_id,consented_at,responsibility,policy)
+ VALUES($1,'agent',$2,'personal',$3,$3,now(),'worker',$4) RETURNING id`,[resource,project.id,owner,{schemaVersion:1,mode:'explicit',capabilities:['files.read']}])).rows[0].id;
+ const campaign=await funding.createFundingCampaign(pool,ctx(owner),{operationId:randomUUID(),projectId:project.id,beneficiary:'Delivery',cancellationTerms:'Cancel unused work.',refundTerms:'Return with original expiry.',deliverableLicense:'MIT'});
+ const milestone=await funding.createFundingMilestone(pool,ctx(owner),{campaignId:campaign.id,key:'first',title:'First',criteria:['Tests'],thresholdMicro:'2000000',budgetMaxMicro:'4000000'});
+ await funding.openFundingCampaign(pool,ctx(owner),{campaignId:campaign.id});
+ const offer=await funding.readFundingOffer(pool,ctx(owner),{campaignId:campaign.id,milestoneId:milestone.id});
+ const p=(await pool.query('SELECT * FROM workforce_funding_pools WHERE milestone_id=$1',[milestone.id])).rows[0];
+ const price=await funding.readFundingPrice(pool,ctx(planner),{poolId:p.id,model:'claude-opus-5'});
+ const proposal=await funding.proposeFundingBudget(pool,ctx(planner),{operationId:randomUUID(),poolId:p.id,spenderUserId:owner,maximumMicro:'4000000',perRunMicro:'2000000',purpose:'First milestone',termsHash:offer.consentHash,...price});
+ await funding.decideFundingBudget(pool,ctx(approver),{budgetId:proposal.id,operationId:randomUUID(),decision:'approved',expectedRevision:'1'});
+ const request=(amount='2000000',extra={})=>({operationId:randomUUID(),agent:{resourceId:resource,version:1,contentHash:hash},target:{kind:'project',projectId:project.id,participationId:part},capabilities:['files.read'],budget:{ceilingMicro:amount,fundingBudgetId:proposal.id},...extra});
+ const reject=(promise,reason,message)=>assert.rejects(promise,e=>e.details?.reason===reason,message);
+ if(!(await pool.query("SELECT to_regclass('billing_charges') AS relation")).rows[0].relation) {
+  await reject(admitRun(pool,ctx(owner),request('1000000')),'pool_insufficient_eligible_funds','a new installation refuses absent paid evidence without an SQL failure');
+ }
+ const marker=randomUUID().replaceAll('-','');
+ const s={id:'cs_'+marker,mode:'payment',payment_status:'paid',payment_intent:'pi_'+marker,client_reference_id:contributor,customer:'cus_'+marker,
+ amount_total:500,currency:'eur',metadata:{xenoUserId:contributor,credits:'5',kind:'credits'}};
+ await handleEvent(pool,fixture.event('evt_'+marker,'checkout.session.completed',s),{provider:fixture.provider});
+ await pool.query('INSERT INTO usage_credit_preferences(user_id,enabled) VALUES($1,true) ON CONFLICT(user_id) DO UPDATE SET enabled=true',[contributor]);
+ const contribute=amountMicro=>funding.contributeFunding(pool,ctx(contributor),{operationId:randomUUID(),campaignId:campaign.id,milestoneId:milestone.id,amountMicro,consentHash:offer.consentHash,confirmed:true});
+ await contribute('1000000');
+ await reject(admitRun(pool,ctx(owner),request('1000000')),'milestone_threshold_unmet','underfunded milestone cannot admit despite approved budget');
+ assert.equal((await pool.query('SELECT count(*)::int n FROM workforce_run_admissions')).rows[0].n,0,'failed funding rolls admission back');
+ // Drive the real router with sender-bound tokens; a passing service is not an HTTP proof.
+ const express=(await import('express')).default;
+ const {createRequire}=await import('node:module');
+ const jwt=createRequire(new URL('../src/server/package.json',import.meta.url))('jsonwebtoken');
+ const {jwkThumbprint,accessTokenHash}=await import('../src/server/utils/dpop.js');
+ const {issuer}=await import('../src/server/config/hosts.js');
+ const {getSigningKey}=await import('../src/server/utils/oidcProvider.js');
+ const {default:router}=await import('../src/server/routes/workforceRoutes.js');
+ const signer=await getSigningKey(pool),proofKey=generateKeyPairSync('ec',{namedCurve:'P-256'}),sid=randomUUID(),now=Math.floor(Date.now()/1000);
+ const jwk=proofKey.publicKey.export({format:'jwk'}),jkt=jwkThumbprint(jwk);
+ await pool.query('INSERT INTO oauth_user_auth_epochs(user_id,epoch) VALUES($1,0) ON CONFLICT DO NOTHING',[owner]);
+ await pool.query(`INSERT INTO oauth_session_state(sid,user_id,auth_epoch,auth_time,dpop_jkt,expires_at)
+ VALUES($1,$2,0,to_timestamp($3),$4,now()+interval '1 hour')`,[sid,owner,now,jkt]);
+ const app=express();app.use((req,_res,next)=>{req.db=pool;next();});app.use('/api/workforce',router);
+ const server=app.listen(0,'127.0.0.1');await new Promise(r=>server.once('listening',r));
+ t.after(async()=>{server.closeAllConnections();await new Promise(r=>server.close(r));});
+ const call=async(body,scope='openid workforce:read workforce:manage ledger:spend',path='/api/workforce/run-admissions')=>{
+   const token=jwt.sign({sub:owner,sid,auth_epoch:0,auth_time:now,client_id:'xeno-agent-interface',scope,typ:'at+jwt',cnf:{jkt}},
+    signer.privatePem,{algorithm:signer.alg,keyid:signer.kid,audience:'xeno-api',expiresIn:'5m',header:{typ:'at+jwt'}});
+   const dpop=jwt.sign({jti:randomUUID(),htm:'POST',htu:issuer()+path,ath:accessTokenHash(token),iat:now},proofKey.privateKey,{algorithm:'ES256',header:{typ:'dpop+jwt',jwk}});
+   const r=await fetch(`http://127.0.0.1:${server.address().port}${path}`,{method:'POST',headers:{authorization:`DPoP ${token}`,dpop,'content-type':'application/json'},body:JSON.stringify(body)});
+   return {status:r.status,body:await r.json().catch(()=>null)};
+ };
+ const denied=await call(request('1000000'));
+ assert.deepEqual([denied.status,denied.body?.details?.reason],[403,'milestone_threshold_unmet'],'HTTP reports an actionable pool funding refusal');
+ const unscoped=await call(request('1000000'),'openid workforce:read workforce:manage');
+ assert.deepEqual([unscoped.status,unscoped.body?.details?.reason],[403,undefined],'workforce-only token never reaches pool reservation');
+ await contribute('3000000');
+ await pool.query(`CREATE FUNCTION fail_funding_fixture() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'fixture reservation failed'; END $$;
+ CREATE TRIGGER fail_funding_fixture BEFORE INSERT ON workforce_run_funding FOR EACH ROW EXECUTE FUNCTION fail_funding_fixture()`);
+ try {
+   await assert.rejects(admitRun(pool,ctx(owner),request()),/fixture reservation failed/,'a late reservation failure aborts admission');
+   assert.equal((await pool.query('SELECT count(*)::int n FROM workforce_run_admissions')).rows[0].n,0,'admission and reservation are one transaction');
+   assert.equal((await pool.query('SELECT count(*)::int n FROM credit_holds WHERE user_id=$1',[p.id])).rows[0].n,0,'late failure leaves no orphan hold');
+ } finally {await pool.query('DROP TRIGGER fail_funding_fixture ON workforce_run_funding; DROP FUNCTION fail_funding_fixture()');}
+ const personalBefore=(await pool.query('SELECT * FROM credit_accounts WHERE user_id=$1',[owner])).rows;
+ const req=request(),httpFirst=await call(req);
+ assert.equal(httpFirst.status,200,`HTTP pool admission creates a real reservation: ${JSON.stringify(httpFirst.body)}`);
+ const first=httpFirst.body;
+ assert.deepEqual(first.admission.payer,{kind:'project_pool',userId:p.id},'selected payer is the actual pool');
+ const records=(await pool.query('SELECT * FROM workforce_run_funding')).rows;
+ assert.equal(records.length,1,'admission creates one durable funding link');
+ const hold=(await pool.query('SELECT * FROM credit_holds WHERE id=$1',[records[0].hold_row_id])).rows[0];
+ assert.equal(hold.amount_micro,'2000000','canonical hold reserves the exact admitted ceiling');
+ assert.equal((await pool.query('SELECT sum(reserved_micro)::text n FROM credit_hold_funding WHERE hold_row_id=$1',[hold.id])).rows[0].n,'2000000','reservation is allocated to real contribution lots');
+ const replay=await admitRun(pool,ctx(owner),req);assert.equal(replay.admission.admissionId,first.admission.admissionId,'same admission retry reuses its hold');
+ const child=await admitRun(pool,ctx(owner),request('500000',{parent:{admissionId:first.admission.admissionId}}));
+ assert.equal((await pool.query('SELECT hold_row_id FROM workforce_run_funding WHERE admission_id=$1',[child.admission.admissionId])).rows[0].hold_row_id,hold.id,'child carves its parent hold rather than reserving again');
+ assert.equal((await pool.query('SELECT count(*)::int n FROM credit_holds WHERE user_id=$1',[p.id])).rows[0].n,1,'child is not counted twice against the pool');
+ const races=await Promise.allSettled([admitRun(pool,ctx(owner),request()),admitRun(pool,ctx(owner),request())]);
+ assert.equal(races.filter(x=>x.status==='fulfilled').length,1,'two roots cannot reserve the same remaining pool value');
+ assert.equal(races.find(x=>x.status==='rejected').reason.details.reason,'funding_pool_limit');
+ assert.deepEqual((await pool.query('SELECT * FROM credit_accounts WHERE user_id=$1',[owner])).rows,personalBefore,'pool admission never creates or debits a personal fallback wallet');
+ const {sweepExpiredHolds}=await import('../src/server/utils/creditLedgerV2.js');
+ await pool.query("UPDATE credit_holds SET expires_at=now()-interval '1 hour' WHERE user_id=$1",[p.id]);
+ await sweepExpiredHolds(pool);
+ assert.equal((await pool.query("SELECT count(*)::int n FROM credit_holds WHERE user_id=$1 AND state='held'",[p.id])).rows[0].n,2,'expired pool holds remain committed until settlement proof');
+ const {authorizeRunStep}=await import('../src/server/services/workforceRunAuthority.js');
+ const key=generateKeyPairSync('ec',{namedCurve:'P-256'});
+ const signingKey={kid:'isolated-test',privatePem:key.privateKey.export({format:'pem',type:'pkcs8'})};
+ const step=operation=>authorizeRunStep(pool,ctx(owner),{admissionId:first.admission.admissionId,operation,...(operation==='privileged_call'?{capability:'files.read'}:{})},{signingKey});
+ assert.ok((await step('privileged_call')).token,'live approval permits an otherwise authorized non-provider step');
+ await reject(step('provider_dispatch'),'bounded_provider_dispatch_required','generic lease cannot authorize unbounded pooled provider dispatch');
+ const releasePath='/api/workforce/funding/runs/release-undispatched';
+ const noRelease=await call({admissionId:first.admission.admissionId},undefined,releasePath);
+ assert.deepEqual([noRelease.status,noRelease.body?.details?.reason],[409,'provider_liability_unresolved'],
+  'any execution lease prevents a claimed undispatched release');
+ const untouched=races.find(x=>x.status==='fulfilled').value.admission.admissionId;
+ assert.equal((await call({admissionId:untouched},'openid workforce:read workforce:manage',releasePath)).status,403,
+  'release of a funded reservation requires spending scope');
+ const released=await call({admissionId:untouched},undefined,releasePath);
+ assert.deepEqual([released.status,released.body?.result?.state],[200,'released'],'HTTP releases a provably never-leased reservation');
+ assert.equal((await call({admissionId:untouched},undefined,releasePath)).body.result.replayed,true,'undispatched release is idempotent');
+ const dispute=fixture.event('evt_dispute_'+marker,'charge.dispute.funds_withdrawn',{payment_intent:s.payment_intent,amount:500});
+ await handleEvent(pool,dispute,{provider:fixture.provider});
+ await reject(step('privileged_call'),'pool_origin_quarantined','quarantined reserved origin blocks new funded steps');
+ assert.equal((await pool.query("SELECT count(*)::int n FROM credit_holds WHERE user_id=$1 AND state='held'",[p.id])).rows[0].n,1,
+   'quarantine cannot release uncertain commitments');
+ await funding.revokeFundingBudget(pool,ctx(approver),{budgetId:proposal.id,expectedRevision:'2'});
+ await reject(step('privileged_call'),'funding_budget_unavailable','revocation blocks the next funded run step without releasing liability');
+ await reject(admitRun(pool,ctx(owner),request('1')),'funding_budget_unavailable','revoked budget cannot admit another run');
+});

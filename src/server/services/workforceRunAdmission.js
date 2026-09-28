@@ -36,9 +36,11 @@
  *                        `editor` on the division itself, or an administrator of its workspace. A
  *                        grant on a parent division or on the workspace alone does not reach it.
  *   budget approval      an explicit ceiling in integer micro-credits, positive, no larger than the
- *                        payer's available balance now. The payer is the actor's own account: a
- *                        workspace pool cannot fund a run until FUND-06 builds one, and there is no
- *                        silent fallback in either direction.
+ *                        payer's available balance now. An explicit fundingBudgetId selects a
+ *                        project pool instead: approved named spender, milestone threshold and
+ *                        real lot-allocated canonical hold commit with admission. There is no
+ *                        personal fallback. Provider dispatch additionally requires an enforceable
+ *                        bound; the generic authority lease refuses it for pools.
  *   parent (RUN-10)      optional: the admission this run is spawned inside. A child is a SUB-RESERVATION
  *                        of its parent, never a copy: same actor, client, payer and target; capabilities
  *                        inside the parent's; a ceiling carved out of what the parent has left after
@@ -63,6 +65,7 @@ import { resolvePrincipal } from './agentIdentity.js';
 import { check } from '../utils/authzReBAC.js';
 import { authorityTransaction, lockWorkspaceAuthority, operationHash } from './workspaceOperationReceipts.js';
 import { lockApiKeyWorkforceAuthority } from './apiKeyWorkforceAuthority.js';
+import { resolveRunFunding, reserveRunFunding } from './workforceRunFunding.js';
 
 export class RunAdmissionError extends Error {
   constructor(code, reason, extra = {}) {
@@ -120,7 +123,9 @@ function parse(context, value) {
   const root = input.root === undefined || input.root === null ? null : record(input.root, ['bindingId', 'installationId'], 'root');
   if (root && (typeof root.installationId !== 'string' || !/^[A-Za-z0-9_-]{43}$/.test(root.installationId))) fail('bad_input', 'invalid_root_installation');
   if (root && target.kind !== 'project') fail('bad_input', 'root_requires_a_project');
-  const budget = record(input.budget, ['ceilingMicro'], 'budget');
+  const budget = record(input.budget, ['ceilingMicro', 'fundingBudgetId'], 'budget');
+  const fundingBudgetId=optionalUuid(budget.fundingBudgetId,'funding_budget');
+  if(fundingBudgetId&&target.kind!=='project')fail('bad_input','pool_requires_project');
   if (typeof budget.ceilingMicro !== 'string' || !/^[1-9][0-9]{0,17}$/.test(budget.ceilingMicro)) fail('bad_input', 'invalid_budget_ceiling');
   return {
     actor: { actorUserId: uuid(ctx.actorUserId, 'actor'), clientId: ctx.clientId, ...(Object.hasOwn(ctx, 'apiKeyId') ? { apiKeyId: uuid(ctx.apiKeyId, 'api_key') } : {}) },
@@ -134,7 +139,7 @@ function parse(context, value) {
       root: root ? { bindingId: uuid(root.bindingId, 'root_binding'), installationId: root.installationId } : null,
       capabilities: capabilities(input.capabilities, 'capabilities'),
       runtimeCapabilities: input.runtimeCapabilities === undefined || input.runtimeCapabilities === null ? null : capabilities(input.runtimeCapabilities, 'runtime_capabilities'),
-      budget: { ceilingMicro: budget.ceilingMicro },
+      budget: { ceilingMicro: budget.ceilingMicro, ...(fundingBudgetId?{fundingBudgetId}:{}) },
       parent: input.parent === undefined || input.parent === null ? null
         : { admissionId: uuid(record(input.parent, ['admissionId'], 'parent').admissionId, 'parent_admission') },
       // RUN-04: the coordination task this run is for -- an opaque reference, recorded, never interpreted.
@@ -216,7 +221,7 @@ function publicAdmission(row) {
     root: row.root_binding_id ? { bindingId: row.root_binding_id, revision: String(row.root_binding_revision), installationId: row.host_installation_id } : null,
     entitlementId: row.entitlement_id,
     payer: { kind: row.payer_kind, userId: row.payer_user_id },
-    budget: { ceilingMicro: String(row.budget_ceiling_micro) },
+    budget: { ceilingMicro: String(row.budget_ceiling_micro), ...(row.funding_budget_id?{fundingBudgetId:row.funding_budget_id}:{}) },
     parent: row.parent_admission_id ? { admissionId: row.parent_admission_id, depth: row.nesting_depth } : null,
     taskRef: row.task_ref ?? null,
     capabilities: { requested: row.requested_capabilities, effective: row.effective_capabilities, terms: row.rights },
@@ -416,13 +421,21 @@ export async function admitRun(pool, authenticatedContext, value) {
     }
 
     // ── budget approval: explicit, positive, and funded by the payer now ───────────────────────
-    const payerUserId = who.principal.kind === 'agent' ? who.principal.owner.id : who.principal.id;
+    let funding=null;
+    if(request.budget.fundingBudgetId) {
+      try { funding=await resolveRunFunding(db,actor,request); }
+      catch(error){if(error.code==='needs_approval')fail('needs_approval',error.details.reason);throw error;}
+    }
+    const payerUserId = funding?funding.pool.account_owner_id:who.principal.kind === 'agent' ? who.principal.owner.id : who.principal.id;
+    if(!funding) {
     const acct = (await db.query('SELECT balance, is_frozen FROM credit_accounts WHERE user_id=$1 FOR SHARE', [payerUserId])).rows[0];
     const held = BigInt((await db.query(`SELECT coalesce(sum(amount_micro - settled_micro),0)::text AS h FROM credit_holds
       WHERE user_id=$1 AND state='held' AND expires_at > now()`, [payerUserId])).rows[0].h);
     const available = acct ? BigInt(acct.balance) - held : 0n;
     if (!acct || acct.is_frozen) fail('needs_approval', 'payer_cannot_fund');
     if (BigInt(request.budget.ceilingMicro) > available) fail('needs_approval', 'budget_exceeds_available', { availableMicro: (available < 0n ? 0n : available).toString() });
+
+    }
 
     // ── the intersection ───────────────────────────────────────────────────────────────────────
     let effective = within(request.capabilities, definitionTerm);
@@ -469,8 +482,8 @@ export async function admitRun(pool, authenticatedContext, value) {
         team_id,team_kind,team_membership_id,team_membership_revision,member_set_revision,team_function,
         conversation_id,root_binding_id,root_binding_revision,host_installation_id,entitlement_id,
         payer_kind,payer_user_id,budget_ceiling_micro,requested_capabilities,effective_capabilities,rights,memory_namespace,
-        parent_admission_id,nesting_depth,task_ref)
-      VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,'user',$28,$29,$30,$31,$32,$33,$34,$35,$36)
+        parent_admission_id,nesting_depth,task_ref,funding_budget_id)
+      VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$37,$28,$29,$30,$31,$32,$33,$34,$35,$36,$38)
       RETURNING *`,
     [actor.actorUserId, actor.clientId, request.operationId, requestHash, inc,
       agent.id, version.version, version.content_hash, request.target.kind,
@@ -479,7 +492,12 @@ export async function admitRun(pool, authenticatedContext, value) {
       team?.id ?? null, team ? 'team' : null, team?.membershipId ?? null, team?.membershipRevision ?? null, team?.memberSetRevision ?? null, team?.function ?? null,
       request.conversationId, root?.bindingId ?? null, root?.revision ?? null, root?.installationId ?? null, entitlementId,
       payerUserId, request.budget.ceilingMicro, JSON.stringify(request.capabilities), JSON.stringify(effective), JSON.stringify(rights), memoryNamespace,
-      parent?.id ?? null, parent ? parent.nesting_depth + 1 : 0, request.taskRef])).rows[0];
+      parent?.id ?? null, parent ? parent.nesting_depth + 1 : 0, request.taskRef,
+      funding?'project_pool':'user',funding?.budget.id??null])).rows[0];
+    if(funding) {
+      try { await reserveRunFunding(db,funding,row,parent); }
+      catch(error){if(error.code==='needs_approval')fail('needs_approval',error.details.reason);throw error;}
+    }
     return { replayed: false, admission: publicAdmission(row) };
   });
 }

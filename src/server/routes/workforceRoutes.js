@@ -108,6 +108,17 @@ function requireWorkforceScope(scope) {
   };
 }
 
+// Selecting restricted funds requires spending authority in addition to workforce
+// configuration. Legacy credentials and workforce-only API keys do not gain it.
+function requirePoolSpend(req,res,next) {
+  if(!req.body?.budget?.fundingBudgetId)return next();
+  const auth=req.auth;
+  if(auth?.kind!=='oidc'||!auth.sid||!auth.dpopJkt
+    ||!String(auth.scope).split(/\s+/).includes('ledger:spend')
+    ||!scopesForClient(auth.clientId)?.includes('ledger:spend'))return fail(res,'denied');
+  return next();
+}
+
 const defaultCreate = async (...args) => (await import('../services/workforceResources.js')).createWorkforceResource(...args);
 const defaultCreateAndAssign = async (...args) => (await import('../services/workforceResources.js')).createAndAssignWorkforceResource(...args);
 const defaultRead = async (...args) => (await import('../services/workforceResources.js')).readWorkforceResourceOperation(...args);
@@ -583,7 +594,7 @@ export function createWorkforceRouter({ createWorkforceResource = defaultCreate,
   // RUN-01/RUN-02: admit one run. The service resolves every fact from authoritative rows and computes
   // the intersection; this adapter only authenticates (workforce:manage -- admitting a run commits a
   // payer's budget) and bounds the body. Reading an admission back is a workforce:read.
-  router.post('/run-admissions', authMiddleware, requireDpopIfBound, requireWorkforceScope('workforce:manage'), parse,
+  router.post('/run-admissions', authMiddleware, requireDpopIfBound, requireWorkforceScope('workforce:manage'), parse, requirePoolSpend,
     handle(admitRun, false, admissionObservation));
   router.post('/run-admissions/read', authMiddleware, requireDpopIfBound, requireWorkforceScope('workforce:read'), parse,
     handle((db, context, body) => {
