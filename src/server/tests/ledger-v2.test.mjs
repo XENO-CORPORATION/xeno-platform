@@ -14,7 +14,10 @@ import { tablesDDL } from './fixtures/schema.mjs';
  * The conflict half does not: nothing stores a payload hash, so a replay under the same key with a
  * different amount is silently a no-op rather than a refusal. Measured 2026-09-23 for both verbs:
  * recordUsageV2 (5 then 30 credits) and holdV2 (10 then 40) each accept the second call and keep the
- * first amount. And FUND-04 is about a CONTRIBUTION, which does not exist in src/server at all.
+ * first amount. FUND-04 is NOW CITED (2026-09-28) by credit-payment-origin.test.mjs: the new
+ * contribution command records a canonical payload hash, rejects changed retries, moves both
+ * account balances and lot lineage atomically, and survives a lost acknowledgement/process restart.
+ * That contribution guarantee does not change the older usage/hold replay semantics tested here.
  */
 import pg from 'pg';
 import { migrateAccountV2 } from '../database/migrate-account-v2.js';

@@ -38,9 +38,10 @@
  * `closed` says whether the whole window lies before it. A window that is not closed may still move.
  *
  * ── WHAT IT CANNOT SEE, SAID IN THE ANSWER ──────────────────────────────────────────────────────────────
- * Contributions (PUB/FUND), reviewer decisions (RUN-06) and settlements linked to a run do not exist, so
- * `notRecorded` names them in every answer. An evaluation that silently omitted them would read as
- * complete; one that estimated them would be the masquerade FUND-12 forbids.
+ * This evaluation does not yet project contributions, reviewer decisions or linked settlements,
+ * so `notRecorded` names those omissions. Financial contributions now exist in workforceFunding;
+ * integrating their appropriate sanitized projection remains work, not evidence of absence.
+ * An evaluation that silently omitted these categories would read as complete.
  *
  * ── WHO MAY READ ONE ────────────────────────────────────────────────────────────────────────────────────
  * A performance view is about a person or an agent someone answers for, so it is narrower than the

@@ -31,6 +31,8 @@ const PLATFORM_PRELUDE = `
     id UUID PRIMARY KEY, owner_user_id UUID REFERENCES users(id),
     name TEXT NOT NULL, slug TEXT NOT NULL);
   CREATE TABLE api_keys(id UUID PRIMARY KEY, user_id UUID REFERENCES users(id));
+  -- Funding references the EXISTING canonical account, never a second balance.
+  CREATE TABLE credit_accounts(id UUID PRIMARY KEY, user_id UUID UNIQUE, owner_kind VARCHAR(16));
   -- chat_projects as the chat migrations (20260825120000, 20260829120000) leave it, both of which
   -- precede the whole workforce chain in production. Modelled because ASN-09's project
   -- participation references it: from 20260924180000 on, the workforce chain has a real
@@ -96,7 +98,7 @@ test('every workforce migration applies in order from an empty database', { skip
       // workforce chain is exactly the thing this gate exists to make somebody write down.
       for (const { parent } of rows) {
         const bare = parent.replace(/^.*\./, '');
-        assert.ok(/^(workforce_|users$|workspaces$|api_keys$|chat_projects$)/.test(bare),
+        assert.ok(/^(workforce_|users$|workspaces$|api_keys$|chat_projects$|credit_accounts$)/.test(bare),
           `workforce schema references ${bare}, which is neither workforce-owned nor in the prelude`);
       }
     });
@@ -114,16 +116,12 @@ test('every workforce migration applies in order from an empty database', { skip
     // 🔴 THE WHOLE WORKFORCE SCHEMA, PINNED — because a claim about what does NOT exist is the
     // easiest kind to be quietly wrong about, and this estate currently rests on one.
     //
-    // XENO-WORKFORCE-01 carries 145 numbered requirements. Most are uncited by any test, and the
-    // honest reason is NOT that somebody forgot to write tests: eight whole families — VIEW, SES,
-    // RUN, MKT, FUND, ACCT, PUB, FORGE — create no tables between them, so there is nothing to
-    // assert against and writing tests for them would be fabricating proof.
-    //
-    // That reasoning is load-bearing, and until now it was an assumption re-derived by hand every
-    // time somebody asked. This turns it into a checked fact. The day a `workforce_funding_*` or
-    // `workforce_listing_*` table lands, this fails — and the fix is NOT to widen the list. It is
-    // that the requirements the new table implements have stopped being unbuildable and now need
-    // real citations, which is exactly the moment that decision should be forced into the open.
+    // This list originally tracked missing families. RUN, VIEW, marketplace and funding
+    // records now exist; claiming they create no tables would itself be a stale observation.
+    // A new table still demands behavioural proof before this inventory changes. The
+    // full-schema ledger tests exercise contributions, origin/expiry preservation, returns,
+    // lost acknowledgements and exact conservation; this suite proves migration composition,
+    // not those financial outcomes.
     await t.test('the workforce schema is exactly these tables, and a new one invalidates the coverage premise', async () => {
       const { rows } = await pool.query(
         `SELECT tablename FROM pg_tables WHERE schemaname=$1 ORDER BY tablename`, [schema]);
@@ -136,9 +134,19 @@ test('every workforce migration applies in order from an empty database', { skip
         'workforce_agent_versions',
         'workforce_assignment_member_sets',
         'workforce_assignment_members',
+        'workforce_contribution_lots',
         'workforce_division_funding',
         'workforce_division_ownership',
         'workforce_divisions',
+        // Contribution conservation, source-lot eligibility, HTTP consent and retry
+        // recovery are exercised against the full ledger in credit-payment-origin.
+        'workforce_funding_campaigns',
+        'workforce_funding_contributions',
+        'workforce_funding_milestones',
+        'workforce_funding_origin_quarantine',
+        'workforce_funding_pools',
+        'workforce_funding_return_lots',
+        'workforce_funding_returns',
         'workforce_handoffs',
         // D21, 2026-09-25 -- the id mapping kept when `workspace_teams` was absorbed into the canonical
         // team model, cited by workforce-team-project-responsibility.test.mjs (the absorption case).
@@ -209,6 +217,9 @@ test('every workforce migration applies in order from an empty database', { skip
       assert.deepEqual(rows.map(r => r.ref), [
         'workforce_assignment_member_sets.admitted_at',
         'workforce_assignment_member_sets.admitted_by_user_id',
+        // FUND-14 requires milestone acceptance criteria before contributions. This is
+        // a deliverable condition, not employment consent or a membership grant.
+        'workforce_funding_milestones.acceptance_criteria',
         'workforce_handoffs.accepted_at',
         // OWN-05's DESTINATION ACCEPTANCE of an ownership move -- added 2026-09-24 with
         // 20260924160000-workforce-ownership-transfer.sql, and recorded here on purpose rather than
