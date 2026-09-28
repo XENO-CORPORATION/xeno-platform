@@ -24,11 +24,13 @@
  *
  * RUN-10 (2026-09-27, 20260927110000-workforce-nested-run-envelopes.sql): a nested run is carved out of
  * its parent's envelope, so its ceiling is already inside its root's. `committedCeilingMicro` therefore
- * sums ROOT admissions only -- each approved envelope once -- while `activeAdmissions` counts every run,
- * and a run fenced by a stopped ancestor is not active. Both come from the views, not from here.
- *
- * NOT CLAIMED: FUND-06's pooled envelope does not exist, so there is no pool to report beyond each payer's
- * headroom. Those are reported per payer rather than summed into a pool no ledger holds.
+ * counts each root envelope once, while `activeAdmissions` counts every active run.
+ * Ordinary unfunded admissions retain that compatibility projection. Pool commitments
+ * instead follow their actual canonical root holds: revocation and expiry are NOT
+ * settlement. Held pool payers stay visible even after authority stops, and settled
+ * or proved-undispatched holds stop counting. Pool headroom excludes expired and
+ * quarantined contribution lots. These are financial headroom figures, not a claim
+ * that every provider is eligible for bounded pool dispatch.
  */
 import { normalizeOwnerScope } from './workforceScope.js';
 import { check } from '../utils/authzReBAC.js';
@@ -80,16 +82,44 @@ async function readableScope(db, actorUserId, owner) {
 export async function readWorkforceCapacity(pool, authenticatedContext, value) {
   const { actor, owner } = input(authenticatedContext, value);
   return authorityTransaction(pool, async (db) => {
+    // Every figure in this response describes one database snapshot, including
+    // concurrent hold -> settle transitions across the canonical tables.
+    await db.query('SET TRANSACTION ISOLATION LEVEL REPEATABLE READ');
     const { principal, admin } = await readableScope(db, actor.actorUserId, owner);
     await lockApiKeyWorkforceAuthority(db, actor, 'workforce:read');
     const row = (await db.query('SELECT * FROM workforce_scope_capacity WHERE scope_type=$1 AND scope_id=$2', [owner.type, owner.id])).rows[0];
-    const payers = row?.active_payers ?? [];
+    // Pool liability survives revocation and clock expiry; admission activity is
+    // not a financial release. Keep unresolved payers visible after work stops.
+    const roots=(await db.query(`SELECT a.payer_user_id,h.state,h.amount_micro,h.settled_micro
+      FROM workforce_run_admissions a JOIN workforce_run_funding f ON f.admission_id=a.id
+      JOIN credit_holds h ON h.id=f.hold_row_id
+      WHERE a.parent_admission_id IS NULL AND
+        (($1='workspace' AND a.target_workspace_id=$2) OR
+         ($1='user' AND a.target_workspace_id IS NULL AND a.target_owner_user_id=$2))`,[owner.type,owner.id])).rows;
+    const ordinary=(await db.query(`SELECT COALESCE(sum(budget_ceiling_micro),0)::text AS total
+      FROM workforce_run_admissions a WHERE a.payer_kind='user' AND a.parent_admission_id IS NULL
+        AND workforce_run_admission_fence(a.id) IS NULL
+        AND (($1='workspace' AND a.target_workspace_id=$2) OR
+          ($1='user' AND a.target_workspace_id IS NULL AND a.target_owner_user_id=$2))`,[owner.type,owner.id])).rows[0].total;
+    const committed=BigInt(ordinary)+roots.filter(r=>r.state==='held').reduce((n,r)=>n+BigInt(r.amount_micro)-BigInt(r.settled_micro),0n);
+    const payers = [...new Set([...(row?.active_payers??[]),...roots.filter(r=>r.state==='held').map(r=>r.payer_user_id)])];
     const funding = [];
     for (const payer of [...payers].sort()) {
-      const acct = (await db.query('SELECT balance, is_frozen FROM credit_accounts WHERE user_id=$1', [payer])).rows[0];
+      const acct = (await db.query('SELECT balance, is_frozen,owner_kind FROM credit_accounts WHERE user_id=$1', [payer])).rows[0];
+      const isPool=acct?.owner_kind==='project_pool';
       const held = BigInt((await db.query(`SELECT coalesce(sum(amount_micro - settled_micro),0)::text AS h FROM credit_holds
-        WHERE user_id=$1 AND state='held' AND expires_at > now()`, [payer])).rows[0].h);
-      const available = acct ? BigInt(acct.balance) - held : 0n;
+        WHERE user_id=$1 AND state='held' AND ($2::boolean OR expires_at > now())`, [payer,isPool])).rows[0].h);
+      let available = acct ? BigInt(acct.balance) - held : 0n;
+      if(isPool) {
+        const eligible=(await db.query(`SELECT COALESCE(sum(GREATEST(0,g.remaining_micro-COALESCE((SELECT sum(f.reserved_micro)
+          FROM credit_hold_funding f JOIN credit_holds h ON h.id=f.hold_row_id WHERE f.grant_id=g.id AND h.state='held'),0))),0)::text AS total
+          FROM credit_grants g JOIN workforce_contribution_lots l ON l.pool_grant_id=g.id
+          JOIN workforce_funding_contributions c ON c.id=l.contribution_id
+          WHERE g.user_id=$1 AND g.kind='contribution' AND c.state='confirmed' AND g.remaining_micro>0
+            AND (g.expires_at IS NULL OR g.expires_at>now())
+            AND NOT EXISTS(SELECT 1 FROM workforce_funding_origin_quarantine q WHERE q.grant_id=l.origin_grant_id)`,[payer])).rows[0].total;
+        if(available>BigInt(eligible))available=BigInt(eligible);
+      }
       const canFund = Boolean(acct) && !acct.is_frozen && available > 0n;
       // A payer's own balance is theirs; a workspace administrator may see it for runs in their scope.
       const mayDisclose = admin || payer === (principal.kind === 'human' ? principal.id : principal.owner.id);
@@ -101,7 +131,7 @@ export async function readWorkforceCapacity(pool, authenticatedContext, value) {
       activeAdmissions: Number(row?.active_admissions ?? 0),
       inFlightRuns: Number(row?.in_flight_runs ?? 0),
       activeAgents: Number(row?.active_agents ?? 0),
-      committedCeilingMicro: String(row?.committed_ceiling_micro ?? '0'),
+      committedCeilingMicro: String(committed),
       funding,
     };
   });
