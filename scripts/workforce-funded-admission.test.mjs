@@ -217,4 +217,45 @@ test('pool admission reserves exact eligible lots atomically and never falls bac
  assert.equal(finalCapacity.committedCeilingMicro,'0','terminal settlement clears only the settled financial commitment');
  assert.equal(finalCapacity.funding.find(f=>f.payerUserId===p.id)?.availableMicro,'0',
    'settling a hold cannot make quarantined residual value available');
+ await t.test('approved rolling caps count posted spend plus every unresolved root',async()=>{
+   const donor=await user(),tag=randomUUID().replaceAll('-','');
+   const checkout={...s,id:'cs_'+tag,payment_intent:'pi_'+tag,client_reference_id:donor,metadata:{xenoUserId:donor,credits:'5',kind:'credits'}};
+   await handleEvent(pool,fixture.event('evt_'+tag,'checkout.session.completed',checkout),{provider:fixture.provider});
+   await pool.query('INSERT INTO usage_credit_preferences(user_id,enabled) VALUES($1,true)',[donor]);
+   const c=await funding.createFundingCampaign(pool,ctx(owner),{operationId:randomUUID(),projectId:project.id,beneficiary:'Windowed work',cancellationTerms:'Cancel.',refundTerms:'Original expiry.',deliverableLicense:'MIT'});
+   const m=await funding.createFundingMilestone(pool,ctx(owner),{campaignId:c.id,key:'window',title:'Window',criteria:['Review'],thresholdMicro:'1',budgetMaxMicro:'5000000'});
+   await funding.openFundingCampaign(pool,ctx(owner),{campaignId:c.id});
+   const o=await funding.readFundingOffer(pool,ctx(donor),{campaignId:c.id,milestoneId:m.id});
+   const dest=(await pool.query('SELECT id FROM workforce_funding_pools WHERE milestone_id=$1',[m.id])).rows[0].id;
+   const rate=await funding.readFundingPrice(pool,ctx(planner),{poolId:dest,model:price.model});
+   // Authenticated owner can plan too, but still needs a different approver.
+   const proposal={operationId:randomUUID(),poolId:dest,spenderUserId:owner,maximumMicro:'5000000',perRunMicro:'1500000',purpose:'Rolling cap',termsHash:o.consentHash,...rate,window:{seconds:3600,limitMicro:'2000000'}};
+   const proposed=await call(proposal,undefined,'/api/workforce/funding/budgets');
+   assert.equal(proposed.status,200,'HTTP accepts an explicit bounded window proposal');
+   const b=proposed.body.result;
+   assert.equal((await call({...proposal,window:{seconds:3600,limitMicro:'2500000'}},undefined,'/api/workforce/funding/budgets')).status,409,
+     'a changed period limit cannot replay the original budget operation');
+   for(const window of [{seconds:0,limitMicro:'2000000'},{seconds:3600,limitMicro:'1000000'},{seconds:3600,limitMicro:'6000000'},{seconds:1.5,limitMicro:'2000000'}]) {
+     assert.equal((await call({...proposal,operationId:randomUUID(),window},undefined,'/api/workforce/funding/budgets')).status,400,
+       'HTTP rejects invalid or inconsistent budget windows');
+   }
+   assert.deepEqual(b.window,{seconds:3600,limitMicro:'2000000'},'proposal and readback retain the exact window policy');
+   await funding.decideFundingBudget(pool,ctx(approver),{budgetId:b.id,operationId:randomUUID(),decision:'approved',expectedRevision:'1'});
+   await assert.rejects(pool.query('UPDATE workforce_funding_budgets SET window_limit_micro=3000000 WHERE id=$1',[b.id]),{code:'23514'},'approved period cap cannot be widened in place');
+   const {readFile}=await import('node:fs/promises');
+   const windowMigration=await readFile(new URL('../src/server/database/migrations/20260928170000-workforce-budget-windows.sql',import.meta.url),'utf8');
+   await assert.rejects(pool.query(windowMigration.split('-- DOWN')[1]),{code:'23514'},'rollback refuses to erase an approved period limit');
+   await funding.contributeFunding(pool,ctx(donor),{operationId:randomUUID(),campaignId:c.id,milestoneId:m.id,amountMicro:'4000000',consentHash:o.consentHash,confirmed:true});
+   const ask=amount=>request(amount,{budget:{ceilingMicro:amount,fundingBudgetId:b.id}});
+   const concurrent=await Promise.allSettled([admitRun(pool,ctx(owner),ask('1500000')),admitRun(pool,ctx(owner),ask('1500000'))]);
+   assert.equal(concurrent.filter(x=>x.status==='fulfilled').length,1,'concurrent reservations cannot oversell a rolling cap');
+   assert.equal(concurrent.find(x=>x.status==='rejected').reason.details.reason,'funding_window_limit');
+   const admitted=concurrent.find(x=>x.status==='fulfilled').value.admission.admissionId;
+   await pool.query("UPDATE credit_holds SET expires_at=now()-interval '2 hours',created_at=now()-interval '2 hours' WHERE hold_id=$1",[admitted]);
+   await reject(admitRun(pool,ctx(owner),ask('600000')),'funding_window_limit','old unresolved work counts even outside the rolling window');
+   const finalReceipt={...receipt,admissionId:admitted,eventId:'window_'+tag,providerRequestId:'window_provider_'+tag,inputTokens:100,outputTokens:100};
+   assert.equal((await settle(finalReceipt)).body.chargedMicro,'400000','settlement replaces commitment with exact posted spend');
+   await admitRun(pool,ctx(owner),ask('1500000'));
+   await reject(admitRun(pool,ctx(owner),ask('100001')),'funding_window_limit','recent posted spend and active holds share one cap');
+ });
 });

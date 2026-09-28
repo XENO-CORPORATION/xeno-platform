@@ -248,7 +248,8 @@ function budgetOf(r,replayed=false) {
   return {id:r.id,poolId:r.pool_id,proposedByUserId:r.proposed_by_user_id,spenderUserId:r.spender_user_id,
     operationId:r.operation_id,maximumMicro:String(r.maximum_micro),perRunMicro:String(r.per_run_micro),
     purpose:r.purpose,priceVersion:r.price_version,model:r.price_snapshot?.model??null,termsHash:r.terms_hash,state:r.state,revision:String(r.revision),
-    decidedByUserId:r.decided_by_user_id,decisionOperationId:r.decision_operation_id,replayed};
+    decidedByUserId:r.decided_by_user_id,decisionOperationId:r.decision_operation_id,
+    ...(r.window_seconds!=null?{window:{seconds:r.window_seconds,limitMicro:String(r.window_limit_micro)}}:{}),replayed};
 }
 export async function readFundingPrice(pool,ctx,value) {
   const a=context(ctx),v=shape(value,['poolId','model']),poolId=uuid(v.poolId),model=text(v.model,100);
@@ -259,11 +260,18 @@ export async function readFundingPrice(pool,ctx,value) {
   });
 }
 export async function proposeFundingBudget(pool,ctx,value) {
-  const a=context(ctx),v=shape(value,['operationId','poolId','spenderUserId','maximumMicro','perRunMicro','purpose','priceVersion','termsHash','model']);
+  const a=context(ctx),v=shape(value,['operationId','poolId','spenderUserId','maximumMicro','perRunMicro','purpose','priceVersion','termsHash','model','window']);
   const input={operationId:uuid(v.operationId),poolId:uuid(v.poolId),spenderUserId:uuid(v.spenderUserId),
     maximumMicro:amount(v.maximumMicro),perRunMicro:amount(v.perRunMicro),purpose:text(v.purpose,2000),
     priceVersion:text(v.priceVersion,128),termsHash:text(v.termsHash,64),model:text(v.model,100)};
   if(!/^[a-f0-9]{64}$/.test(input.termsHash)||BigInt(input.perRunMicro)>BigInt(input.maximumMicro))fail('bad_input','invalid_budget');
+  if(v.window!==undefined) {
+    const w=shape(v.window,['seconds','limitMicro']);
+    if(!Number.isSafeInteger(w.seconds)||w.seconds<1||w.seconds>31536000)fail('bad_input','invalid_budget_window');
+    const limit=amount(w.limitMicro);
+    if(BigInt(limit)>BigInt(input.maximumMicro)||BigInt(input.perRunMicro)>BigInt(limit))fail('bad_input','invalid_budget_window');
+    input.window={seconds:w.seconds,limitMicro:limit};
+  }
   return authorityTransaction(pool,async db=>{
     const p=await budgetPool(db,a.actorUserId,input.poolId,'editor');
     const prior=(await db.query('SELECT * FROM workforce_funding_budgets WHERE proposed_by_user_id=$1 AND client_id=$2 AND operation_id=$3',
@@ -278,9 +286,9 @@ export async function proposeFundingBudget(pool,ctx,value) {
     const spender=await resolvePrincipal(db,input.spenderUserId);
     if(!spender?.usable||!['human','agent'].includes(spender.kind))fail('denied','spender_unavailable');
     const r=(await db.query(`INSERT INTO workforce_funding_budgets
-      (pool_id,proposed_by_user_id,spender_user_id,client_id,operation_id,request_hash,terms_hash,maximum_micro,per_run_micro,purpose,price_version,price_snapshot)
-      VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) RETURNING *`,[input.poolId,a.actorUserId,input.spenderUserId,a.clientId,
-      input.operationId,hash,p.termsHash,input.maximumMicro,input.perRunMicro,input.purpose,input.priceVersion,JSON.stringify(tariff)])).rows[0];
+      (pool_id,proposed_by_user_id,spender_user_id,client_id,operation_id,request_hash,terms_hash,maximum_micro,per_run_micro,purpose,price_version,price_snapshot,window_seconds,window_limit_micro)
+      VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14) RETURNING *`,[input.poolId,a.actorUserId,input.spenderUserId,a.clientId,
+      input.operationId,hash,p.termsHash,input.maximumMicro,input.perRunMicro,input.purpose,input.priceVersion,JSON.stringify(tariff),input.window?.seconds??null,input.window?.limitMicro??null])).rows[0];
     return budgetOf(r);
   });
 }
