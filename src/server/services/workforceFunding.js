@@ -6,6 +6,7 @@ import { check } from '../utils/authzReBAC.js';
 import { authorityTransaction, lockWorkspaceAuthority, operationHash } from './workspaceOperationReceipts.js';
 import { fundContributionTx, returnContributionTx } from '../utils/creditLedgerV2.js';
 import { pinChatTariff } from '../utils/creditCosts.js';
+import { lockFundingScopes } from './workforceScopeSpendCaps.js';
 
 export class FundingError extends Error {
   constructor(code, reason) {
@@ -332,6 +333,72 @@ export async function revokeFundingBudget(pool,ctx,value) {
       revoked_by_user_id=$2,revoked_at=now() WHERE id=$1 RETURNING *`,[id,a.actorUserId])).rows[0]);
   });
 }
+function capScope(value) {
+  shape(value,['kind','id']);
+  if(!['project','workspace'].includes(value.kind))fail('bad_input','invalid_cap_scope');
+  return {kind:value.kind,id:uuid(value.id)};
+}
+async function scopeCapAuthority(db,actor,scope,relation) {
+  if(scope.kind==='project') {
+    const p=await projectAuthority(db,actor,scope.id,relation);
+    await lockFundingScopes(db,p.id,p.workspace_id);
+  } else {
+    await lockWorkspaceAuthority(db,scope.id);await human(db,actor);
+    const w=(await db.query('SELECT status FROM workspaces WHERE id=$1 FOR SHARE',[scope.id])).rows[0];
+    await db.query(`SELECT object_id FROM relationship_tuples WHERE object_type='workspace' AND object_id=$1
+      ORDER BY relation,subject_type,subject_id FOR SHARE`,[scope.id]);
+    if(w?.status!=='active'||!(await check(db,{object:`workspace:${scope.id}`,relation,subject:`user:${actor}`})).allowed)fail('not_found','scope_not_found');
+    await lockFundingScopes(db,null,scope.id);
+  }
+}
+const capOf=(r,replayed=false)=>({id:r.id,scope:{kind:r.scope_kind,id:r.scope_id},operationId:r.operation_id,
+  windowSeconds:r.window_seconds,limitMicro:String(r.limit_micro),state:r.state,proposedByUserId:r.proposed_by_user_id,
+  decidedByUserId:r.decided_by_user_id,supersededBy:r.superseded_by,replayed});
+export async function proposeScopeSpendCap(pool,ctx,value) {
+  const a=context(ctx),v=shape(value,['operationId','scope','windowSeconds','limitMicro']),scope=capScope(v.scope);
+  if(!Number.isSafeInteger(v.windowSeconds)||v.windowSeconds<1||v.windowSeconds>31536000
+    ||typeof v.limitMicro!=='string'||!/^(0|[1-9][0-9]{0,17})$/.test(v.limitMicro))fail('bad_input','invalid_scope_cap');
+  const input={operationId:uuid(v.operationId),scope,windowSeconds:v.windowSeconds,limitMicro:v.limitMicro};
+  return authorityTransaction(pool,async db=>{
+    await scopeCapAuthority(db,a.actorUserId,scope,'editor');
+    const hash=operationHash(input);
+    const prior=(await db.query('SELECT * FROM workforce_scope_spend_caps WHERE proposed_by_user_id=$1 AND client_id=$2 AND operation_id=$3',
+      [a.actorUserId,a.clientId,input.operationId])).rows[0];
+    if(prior){if(prior.request_hash!==hash)fail('conflict','operation_payload_conflict');return capOf(prior,true);}
+    return capOf((await db.query(`INSERT INTO workforce_scope_spend_caps(scope_kind,scope_id,project_id,workspace_id,proposed_by_user_id,
+      client_id,operation_id,request_hash,window_seconds,limit_micro) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING *`,
+      [scope.kind,scope.id,scope.kind==='project'?scope.id:null,scope.kind==='workspace'?scope.id:null,a.actorUserId,a.clientId,input.operationId,hash,input.windowSeconds,input.limitMicro])).rows[0]);
+  });
+}
+export async function decideScopeSpendCap(pool,ctx,value) {
+  const a=context(ctx),v=shape(value,['capId','operationId','decision','expectedActiveId']),id=uuid(v.capId),op=uuid(v.operationId);
+  if(!['approved','rejected'].includes(v.decision))fail('bad_input','invalid_cap_decision');
+  const expected=v.expectedActiveId==null?null:uuid(v.expectedActiveId);
+  return authorityTransaction(pool,async db=>{
+    const peek=(await db.query('SELECT scope_kind,scope_id FROM workforce_scope_spend_caps WHERE id=$1',[id])).rows[0];
+    if(!peek)fail('not_found','scope_cap_not_found');
+    await scopeCapAuthority(db,a.actorUserId,{kind:peek.scope_kind,id:peek.scope_id},'owner');
+    const c=(await db.query('SELECT * FROM workforce_scope_spend_caps WHERE id=$1 FOR UPDATE',[id])).rows[0];
+    if(c.proposed_by_user_id===a.actorUserId)fail('denied','independent_budget_approval_required');
+    if(c.decision_operation_id===op&&c.decided_by_user_id===a.actorUserId&&c.state===v.decision)return capOf(c,true);
+    if(c.state!=='proposed')fail('conflict','scope_cap_already_decided');
+    if(v.decision==='approved') {
+      const active=(await db.query("SELECT id FROM workforce_scope_spend_caps WHERE scope_kind=$1 AND scope_id=$2 AND window_seconds=$3 AND state='approved' FOR UPDATE",[c.scope_kind,c.scope_id,c.window_seconds])).rows[0];
+      if((active?.id??null)!==expected)fail('conflict','scope_cap_changed');
+      if(active)await db.query("UPDATE workforce_scope_spend_caps SET state='superseded',superseded_by=$2 WHERE id=$1",[active.id,c.id]);
+    }
+    return capOf((await db.query('UPDATE workforce_scope_spend_caps SET state=$2,decided_by_user_id=$3,decision_operation_id=$4,decided_at=clock_timestamp() WHERE id=$1 RETURNING *',
+      [c.id,v.decision,a.actorUserId,op])).rows[0]);
+  });
+}
+export async function readScopeSpendCaps(pool,ctx,value) {
+  const a=context(ctx),v=shape(value,['scope']),scope=capScope(v.scope);
+  return authorityTransaction(pool,async db=>{
+    await scopeCapAuthority(db,a.actorUserId,scope,'viewer');
+    return {scope,caps:(await db.query('SELECT * FROM workforce_scope_spend_caps WHERE scope_kind=$1 AND scope_id=$2 ORDER BY created_at,id',[scope.kind,scope.id])).rows.map(r=>capOf(r))};
+  });
+}
+
 export async function readFundingBudget(pool,ctx,value) {
   const a=context(ctx),v=shape(value,['budgetId']),id=uuid(v.budgetId);
   return authorityTransaction(pool,async db=>{

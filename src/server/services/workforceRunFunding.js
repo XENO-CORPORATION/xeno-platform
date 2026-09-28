@@ -5,6 +5,7 @@ import { check } from '../utils/authzReBAC.js';
 import { operationHash, authorityTransaction, lockWorkspaceAuthority } from './workspaceOperationReceipts.js';
 import { pricePinnedChatUsage } from '../utils/creditCosts.js';
 import { saveHoldFunding } from '../utils/usageCreditFunding.js';
+import { lockFundingScopes, assertScopeFundingCaps } from './workforceScopeSpendCaps.js';
 
 const refuse=reason=>{throw Object.assign(new Error(reason),{code:'needs_approval',details:{schemaVersion:1,reason}});};
 
@@ -48,6 +49,9 @@ export async function resolveRunFunding(db,actor,request) {
     JOIN workforce_funding_campaigns c ON c.id=p.campaign_id
     JOIN workforce_funding_milestones m ON m.id=p.milestone_id WHERE p.id=$1`,[peek.pool_id])).rows[0];
   if(!p||p.project_id!==request.target.projectId)refuse('funding_budget_unavailable');
+  const project=(await db.query('SELECT workspace_id FROM chat_projects WHERE id=$1 FOR SHARE',[p.project_id])).rows[0];
+  p.workspace_id=project?.workspace_id??null;
+  await lockFundingScopes(db,p.project_id,p.workspace_id);
   const campaign=(await db.query('SELECT * FROM workforce_funding_campaigns WHERE id=$1 FOR SHARE',[p.campaign_id])).rows[0];
   const milestone=(await db.query('SELECT * FROM workforce_funding_milestones WHERE id=$1 FOR SHARE',[p.milestone_id])).rows[0];
   if(campaign.status!=='open'||!['open','funded','active'].includes(milestone.status))refuse('funding_not_executable');
@@ -86,6 +90,7 @@ export async function reserveRunFunding(db,funding,admission,parent) {
       VALUES($1,$2,$3,$4,$5,$6)`,[admission.id,f.root_admission_id,b.id,p.id,f.hold_row_id,String(amount)]);
     return;
   }
+  await assertScopeFundingCaps(db,p.project_id,p.workspace_id,amount);
   // A fresh installation has no verified payment evidence yet, not a SQL fault.
   const evidence=(await db.query("SELECT to_regclass('billing_charges') charges,to_regclass('billing_account_binding') binding")).rows[0];
   if(!evidence.charges||!evidence.binding)refuse('pool_insufficient_eligible_funds');
