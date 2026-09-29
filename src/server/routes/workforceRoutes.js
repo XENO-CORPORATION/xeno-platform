@@ -248,6 +248,30 @@ function revisionObservation(value, request, readOnly) {
     return { schemaVersion: 1, state: 'committed', replayed: value.replayed, revision, version: fields(v, REVISION_VERSION_FIELDS), access: { allowed: true } };
   } catch { return null; }
 }
+/** MKT-01/OWN-03: reading a definition's exact pinned content is the same right a revision holds, exercised as
+ * a read. The version reported is checked against the resourceId, version and contentHash exactly ASKED
+ * about -- a reply naming any other resource, version or hash is not an answer to this question, so a caller
+ * can never be handed content under an id/version/hash it did not itself pin (a swapped-identity reply is
+ * refused here even if the service ever answered one). */
+function definitionReadObservation(value, request) {
+  try {
+    if (!value || value.schemaVersion !== 1) return null;
+    const access = value.access;
+    if (!access || access.allowed !== true) return null;
+    const v = value.version;
+    if (!v || uuid(v.resourceId) !== uuid(request.resourceId) || v.version !== request.version || v.contentHash !== request.contentHash
+      || !Number.isSafeInteger(v.version) || v.version < 1 || v.schemaVersion !== 1 || !/^[0-9a-f]{64}$/.test(v.contentHash)
+      || !v.content || typeof v.content !== 'object' || Array.isArray(v.content) || typeof v.content.instructions !== 'string'
+      || !Array.isArray(v.content.skills) || !Array.isArray(v.content.requestedCapabilities) || !Array.isArray(v.content.secretReferences)
+      || !v.provenance || typeof v.provenance !== 'object' || Array.isArray(v.provenance)
+      || !v.license || typeof v.license !== 'object' || Array.isArray(v.license)
+      || (v.createdByUserId !== null && uuid(v.createdByUserId) !== v.createdByUserId)
+      || typeof v.createdAt !== 'string' || !Number.isFinite(Date.parse(v.createdAt))) return null;
+    const projected = { schemaVersion: 1, version: fields(v, REVISION_VERSION_FIELDS), access: { allowed: true } };
+    if (Buffer.byteLength(JSON.stringify(projected), 'utf8') > MAX_BODY_BYTES) return null;
+    return projected;
+  } catch { return null; }
+}
 function capacityObservation(value, request) {
   try {
     const owner = normalizeOwnerScope(value?.owner), asked = normalizeOwnerScope(request.owner);
@@ -520,6 +544,7 @@ export function createWorkforceRouter({ createWorkforceResource = defaultCreate,
   reportRunResult = runResults('reportRunResult'), deliverRunResult = runResults('deliverRunResult'), readRunOutcome = runResults('readRunOutcome'),
   removeTeamMember = memberRemoval('removeTeamMember'), readMemberRemoval = memberRemoval('readMemberRemoval'), archiveMemberRemoval = memberRemoval('archiveMemberRemoval'),
   reviseAgentDefinition = agentRevision('reviseAgentDefinition'), readAgentRevision = agentRevision('readAgentRevision'),
+  readAgentDefinition = agentRevision('readAgentDefinition'),
   authorizeRunStep = defaultAuthorizeStep,
   revokeRun = defaultRevokeRun, readRunAuthority = defaultReadAuthority } = {}) {
   const router = express.Router();
@@ -658,7 +683,12 @@ export function createWorkforceRouter({ createWorkforceResource = defaultCreate,
     handle(reviseAgentDefinition, false, revisionObservation));
   router.post('/resources/revise-definition/read', authMiddleware, requireDpopIfBound, requireWorkforceScope('workforce:read'), parse,
     handle(readAgentRevision, true, revisionObservation));
-  for (const path of ['/resources', '/resources/create-and-assign', '/resources/revise-definition', '/resources/revise-definition/read', '/resources/list', '/resource-operations/read', '/run-admissions', '/run-admissions/read', '/run-admissions/pin', '/capacity', '/evaluation',
+  // MKT-01: reading a definition's exact pinned content -- resourceId, version and the hash it is believed to
+  // hold -- is a read of the same definition-edit right, additive beside the receipt-by-operation-id read
+  // above: no write, no receipt, workforce:read (not manage).
+  router.post('/resources/definition/read', authMiddleware, requireDpopIfBound, requireWorkforceScope('workforce:read'), parse,
+    handle(readAgentDefinition, true, definitionReadObservation));
+  for (const path of ['/resources', '/resources/create-and-assign', '/resources/revise-definition', '/resources/revise-definition/read', '/resources/definition/read', '/resources/list', '/resource-operations/read', '/run-admissions', '/run-admissions/read', '/run-admissions/pin', '/capacity', '/evaluation',
     '/run-admissions/authorize-step', '/run-admissions/revoke', '/run-admissions/authority',
     '/run-admissions/result', '/run-admissions/deliver', '/run-admissions/outcome',
     '/member-removals', '/member-removals/read', '/member-removals/archive']) {

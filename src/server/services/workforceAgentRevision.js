@@ -241,3 +241,57 @@ export async function readAgentRevision(pool, authenticatedContext, value) {
     return observed(db, receipt, true, { withContent: allowed });
   });
 }
+
+function parseDefinitionRead(value) {
+  const input = record(value, ['resourceId', 'version', 'contentHash', 'expectedActorAccountId'], 'request');
+  if (!Number.isSafeInteger(input.version) || input.version < 1) fail('bad_input', 'invalid_version');
+  if (typeof input.contentHash !== 'string' || !hashPattern.test(input.contentHash)) fail('bad_input', 'invalid_content_hash');
+  return { resourceId: uuid(input.resourceId, 'resource'), version: input.version, contentHash: input.contentHash,
+    expectedActorAccountId: uuid(input.expectedActorAccountId, 'expected_actor_account') };
+}
+
+/**
+ * Read the exact pinned content of one version of an agent's definition -- never a write, never a receipt.
+ *
+ * THE BAR is the same right reviseAgentDefinition holds -- mayRevise: the person themselves for a personal
+ * agent, a CURRENT editor (or above) of the owning workspace for a company agent, a human only. Holding any
+ * OTHER right over the agent -- seeing it in a listing, an invoke grant, renting it, a shared conversation,
+ * having it assigned into your workspace -- confers nothing here, and is told the agent does not exist, the
+ * same answer lockAgent already gives an id that names nothing. Definition-edit authority is derived fresh
+ * under the same locks reviseAgentDefinition takes (an owner change, a suspension or a revoked editor relation
+ * are all seen), never assumed from a caller's earlier read.
+ *
+ * THE PIN is exact on three axes, not just the resourceId a listing right would already leak: `version` (a
+ * caller reading a specific historical version after a later one exists, e.g. v1 after v2 was written, gets
+ * exactly v1), and `contentHash` (a version NUMBER is not a content identity -- the hash is -- so a caller
+ * whose belief about what a real version holds is wrong is refused rather than silently handed whatever that
+ * version actually holds). `expectedActorAccountId` is REQUIRED and is not an authority claim -- it is a
+ * confused-deputy guard: the read is answered only for the account the caller states it is reading as, so a
+ * request built for one account cannot be silently satisfied by a different authenticated session.
+ */
+export async function readAgentDefinition(pool, authenticatedContext, value) {
+  const actor = actorOf(authenticatedContext);
+  const input = parseDefinitionRead(value);
+  // The account pin, checked before any database access: this call answers only for the account it claims to
+  // be reading as. A session authenticated as a different account than the caller believes it holds is refused
+  // here -- there is no path where a caller is handed content it did not ask its own account to be handed.
+  if (actor.actorUserId !== input.expectedActorAccountId) fail('denied', 'expected_actor_account_mismatch');
+  return authorityTransaction(pool, async (db) => {
+    // The same house order reviseAgentDefinition takes: workspace gate, workspace row, principal rows and the
+    // resource (lockAgent), then the key. A read locks exactly as a write does, because the authority answer
+    // must be the CURRENT one -- an owner transfer or a suspension mid-flight must not be missed.
+    const { agent, owner } = await lockAgent(db, actor, input.resourceId);
+    await lockApiKeyWorkforceAuthority(db, actor, 'workforce:read');
+    const principal = await resolvePrincipal(db, actor.actorUserId);
+    const allowed = await mayRevise(db, principal, owner);
+    // No other right is an oracle for this one: unauthorized and nonexistent answer identically (not_found,
+    // above, from lockAgent itself for an id that names nothing at all).
+    if (!allowed) fail('not_found', 'agent_not_found');
+    const row = (await db.query('SELECT * FROM workforce_agent_versions WHERE resource_id=$1 AND version=$2', [agent.id, input.version])).rows[0];
+    if (!row) fail('not_found', 'agent_version_not_found');
+    if (row.content_hash !== input.contentHash) {
+      fail('conflict', 'content_hash_mismatch', { resourceId: agent.id, version: input.version, contentHash: row.content_hash });
+    }
+    return { schemaVersion: 1, version: versionOf(row), access: { allowed: true } };
+  });
+}

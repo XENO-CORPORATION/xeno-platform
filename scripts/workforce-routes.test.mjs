@@ -4,6 +4,7 @@ import crypto from 'node:crypto';
 import { createRequire } from 'node:module';
 import express from 'express';
 import { issuer } from '../src/server/config/hosts.js';
+import { apiCacheMiddleware } from '../src/server/middleware/cdnOptimization.js';
 import { accessTokenHash, jwkThumbprint } from '../src/server/utils/dpop.js';
 import { WorkforceResourceError } from '../src/server/services/workforceResources.js';
 const jwt = createRequire(new URL('../src/server/package.json', import.meta.url))('jsonwebtoken');
@@ -68,6 +69,7 @@ test('real HTTP/authMiddleware/JWT/DPoP boundary with query-aware auth DB and in
       : { state: 'not-observed', operation: null, resource: null, version: null, replayed: false };
   };
   const app = express();
+  app.use('/api/', apiCacheMiddleware);
   app.use((req, _res, next) => { req.db = db; next(); });
   // RUN-01/RUN-02 over HTTP: the admission service is injected exactly like the resource services.
   let admitFailure;
@@ -82,6 +84,11 @@ test('real HTTP/authMiddleware/JWT/DPoP boundary with query-aware auth DB and in
     revision: { operationId: opId, resourceId: revisedAgent, previousVersion: 1, version: 2, committedAt: '2026-09-27T12:00:00.000Z' },
     version: { resourceId: revisedAgent, version: 2, schemaVersion: 1, content: { instructions: 'v2' }, contentHash: 'c'.repeat(64),
       provenance: {}, license: {}, createdByUserId: human, createdAt: '2026-09-27T12:00:00.000Z', internalRow: 'hidden' },
+    access: { allowed: true } });
+  let definitionReadResult, definitionReadFailure;
+  const definitionReadFixture = (request) => ({ schemaVersion: 1,
+    version: { resourceId: request.resourceId, version: request.version, schemaVersion: 1, content: { instructions: 'pinned', skills: [], requestedCapabilities: [], secretReferences: [] },
+      contentHash: request.contentHash, provenance: {}, license: {}, createdByUserId: human, createdAt: '2026-09-27T12:00:00.000Z', internalRow: 'hidden' },
     access: { allowed: true } });
   let createAndAssignResult;
   const assignedWorkspace = '66666666-6666-4666-8666-666666666666';
@@ -111,6 +118,9 @@ test('real HTTP/authMiddleware/JWT/DPoP boundary with query-aware auth DB and in
       return revisionResult ?? revisionFixture(value.operationId); },
     readAgentRevision: async (pool, context, value) => { calls.push({ method: 'readRevision', context, body: value });
       return revisionResult ?? revisionFixture(value.operationId); },
+    readAgentDefinition: async (pool, context, value) => { calls.push({ method: 'readDefinition', context, body: value });
+      if (definitionReadFailure) throw definitionReadFailure;
+      return definitionReadResult ?? definitionReadFixture(value); },
     createAndAssignWorkforceResource: async (pool, context, value) => { calls.push({ method: 'createAndAssign', context, body: value });
       return createAndAssignResult ?? createAndAssignFixture(); },
     admitRun: admit('admit'), readRunAdmission: admit('readAdmission'),
@@ -565,6 +575,66 @@ test('real HTTP/authMiddleware/JWT/DPoP boundary with query-aware auth DB and in
       const read = await request({ path: '/resources/revise-definition/read', body: { operationId: body.operationId }, token: mint({ scope: 'workforce:read' }) });
       assert.deepEqual([read.status, read.body.revision.version], [200, 2]);
       assert.equal((await request({ method: 'GET', path: '/resources/revise-definition' })).status, 405);
+    });
+    // Mutation-checked pattern (see the revise-definition block above): the route demands only workforce:read ->
+    // "reading a definition is a read, never a manage act"; the projection accepts a reply naming another
+    // resource, version or hash than the one asked about -> "a reply for another pin is never reported".
+    await t.test('MKT-01: a definition is read over HTTP under the exact pin asked for, and never as a manage act', async () => {
+      const ask = { resourceId: revisedAgent, version: 2, contentHash: 'c'.repeat(64), expectedActorAccountId: human };
+      definitionReadResult = undefined;
+      const read = await request({ path: '/resources/definition/read', body: ask, token: mint({ scope: 'workforce:read' }) });
+      assert.equal(read.status, 200);
+      assert.deepEqual([read.body.version.resourceId, read.body.version.version, read.body.version.contentHash], [revisedAgent, 2, 'c'.repeat(64)]);
+      assert.match(read.headers.get('cache-control'), /no-store/, 'private definitions are never cacheable');
+      assert.ok(!JSON.stringify(read.body).includes('hidden'), 'only the documented version fields cross');
+      assert.deepEqual(calls.at(-1).context, { actorUserId: human, clientId: 'xeno-agent-interface' }, 'the actor comes from authentication');
+      assert.equal(calls.at(-1).method, 'readDefinition');
+      const boundRead = mint({ scope: 'workforce:read', bound: true });
+      const beforeProof = calls.length;
+      assert.equal((await request({ path: '/resources/definition/read', body: ask, token: boundRead, scheme: 'DPoP' })).status, 401,
+        'a bound definition reader cannot omit its proof');
+      assert.equal(calls.length, beforeProof, 'missing proof never reaches definition authority');
+      const signedRead = proof(boundRead, '/resources/definition/read');
+      assert.equal((await request({ path: '/resources/definition/read', body: ask, token: boundRead, scheme: 'DPoP', proof: signedRead })).status, 200);
+      assert.equal((await request({ path: '/resources/definition/read', body: ask, token: boundRead, scheme: 'DPoP', proof: signedRead })).status, 401,
+        'a definition-read DPoP proof cannot be replayed');
+      // A read, never a manage act: workforce:manage alone is not enough, and a body cannot name the actor.
+      assert.equal((await request({ path: '/resources/definition/read', body: ask, token: mint({ scope: 'workforce:manage' }) })).status, 403,
+        'reading a definition needs workforce:read, not workforce:manage');
+      const before = calls.length;
+      for (const key of ['actorUserId', 'clientId', 'userId', 'principal', 'auth']) {
+        assert.equal((await request({ path: '/resources/definition/read', body: { ...ask, [key]: human }, token: mint({ scope: 'workforce:read' }) })).status, 400,
+          'a body cannot name the actor');
+      }
+      assert.equal(calls.length, before, 'a rejected forged body never reaches the service');
+      // A reply naming a DIFFERENT resource, version or hash than the one asked about is not an answer to
+      // this question -- swapping any one of the three id/version/hash fields is caught, never reported.
+      for (const bad of [{ resourceId: human }, { version: 3 }, { contentHash: 'd'.repeat(64) }]) {
+        definitionReadResult = { ...definitionReadFixture(ask), version: { ...definitionReadFixture(ask).version, ...bad } };
+        assert.equal((await request({ path: '/resources/definition/read', body: ask, token: mint({ scope: 'workforce:read' }) })).status, 500,
+          'a reply for another pin is never reported');
+      }
+      for (const bad of [{ schemaVersion: 2 }, { content: null }, { content: { instructions: 'missing references' } },
+        { provenance: [] }, { license: null }, { createdByUserId: 'invalid' }, { createdAt: 'invalid' },
+        { content: { instructions: 'x'.repeat(262145), skills: [], requestedCapabilities: [], secretReferences: [] } }]) {
+        definitionReadResult = { ...definitionReadFixture(ask), version: { ...definitionReadFixture(ask).version, ...bad } };
+        assert.equal((await request({ path: '/resources/definition/read', body: ask, token: mint({ scope: 'workforce:read' }) })).status, 500,
+          'an incomplete or oversized definition is never reported as usable');
+      }
+      definitionReadResult = undefined;
+      // A refusal from the service crosses as its typed reason, exactly like every other AgentRevisionError --
+      // the SAME catch block the revise-definition routes already use, unmodified.
+      const { AgentRevisionError } = await import('../src/server/services/workforceAgentRevision.js');
+      definitionReadFailure = new AgentRevisionError('denied', 'expected_actor_account_mismatch', { sql: 'SECRET private' });
+      const refused = await request({ path: '/resources/definition/read', body: ask, token: mint({ scope: 'workforce:read' }) });
+      assert.equal(refused.status, 403);
+      assert.deepEqual(refused.body.details, { schemaVersion: 1, reason: 'expected_actor_account_mismatch' }, 'the refusal reason reaches the client, nothing else');
+      assert.ok(!JSON.stringify(refused.body).includes('SECRET'), 'nothing else of the service error crosses');
+      definitionReadFailure = new AgentRevisionError('not_found', 'agent_not_found');
+      assert.equal((await request({ path: '/resources/definition/read', body: ask, token: mint({ scope: 'workforce:read' }) })).status, 404,
+        'an unauthorized read is reported not_found, hiding whether the id names anything');
+      definitionReadFailure = undefined;
+      assert.equal((await request({ method: 'GET', path: '/resources/definition/read' })).status, 405);
     });
     await t.test('LIFE-04: an evaluation is read over HTTP as a read, for the subject and window asked about', async () => {
       const ask = { owner: { type: 'workspace', id: operationId }, subject: { kind: 'agent', resourceId: operationId },
