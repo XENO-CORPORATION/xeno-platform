@@ -98,7 +98,7 @@ test('real HTTP/authMiddleware/JWT/DPoP boundary with query-aware auth DB and in
     target: { kind: 'personal', ownerUserId: human, workspaceId: null, projectId: null, assignmentId: null, assignmentRevision: null, participationId: null, participationRevision: null },
     team: null, conversationId: null, root: null, entitlementId: null, payer: { kind: 'user', userId: human }, budget: { ceilingMicro: '1000' },
     capabilities: { requested: ['files.read'], effective: ['files.read'], terms: { definition: ['files.read'], target: ['files.read'], runtime: null, entitlement: null } },
-    memoryNamespace: `user:${human}:agent:${operationId}`, admittedAt: '2026-09-25T12:00:00.000Z' } });
+    taskRef:'goal-1:task-7', memoryNamespace: `user:${human}:agent:${operationId}`, admittedAt: '2026-09-25T12:00:00.000Z' } });
   const admit = method => async (pool, context, value, options) => {
     assert.equal(pool, db);
     calls.push({ method, context, body: value, options });
@@ -319,6 +319,7 @@ test('real HTTP/authMiddleware/JWT/DPoP boundary with query-aware auth DB and in
       const result = await request({ path: '/run-admissions', body: admission });
       assert.equal(result.status, 200, 'the admission route is reachable');
       assert.equal(result.body.admission.admissionId, operationId);
+      assert.equal(result.body.admission.taskRef,'goal-1:task-7','admission HTTP preserves the recorded task binding');
       assert.deepEqual(calls.at(-1).context, { actorUserId: human, clientId: 'xeno-agent-interface' }, 'the actor comes from authentication');
       assert.equal(calls.at(-1).method, 'admit');
       const before = calls.length;
@@ -331,6 +332,7 @@ test('real HTTP/authMiddleware/JWT/DPoP boundary with query-aware auth DB and in
       assert.equal(calls.length, before);
       const read = await request({ path: '/run-admissions/read', body: { admissionId: operationId }, token: mint({ scope: 'workforce:read' }) });
       assert.equal(read.status, 200);
+      assert.equal(read.body.admission.taskRef,'goal-1:task-7','admission readback preserves the task binding');
       assert.equal(calls.at(-1).method, 'readAdmission');
       const boundRead = await request({ path: '/run-admissions/read', body: { admissionId: operationId, expectedActorAccountId: human }, token: mint({ scope: 'workforce:read' }) });
       assert.equal(boundRead.status,200,'prepared admission readback accepts the expected actor field');
@@ -342,8 +344,12 @@ test('real HTTP/authMiddleware/JWT/DPoP boundary with query-aware auth DB and in
       const body={operationId,expectedActorAccountId:human};
       const query=()=>request({path:'/run-admissions/operations/read',body,token:mint({scope:'workforce:read'})});
       admitResult=undefined;
-      assert.equal((await query()).status,200,'operation recovery is mounted under read authority');
+      const recovered=await query();
+      assert.equal(recovered.status,200,'operation recovery is mounted under read authority');
+      assert.equal(recovered.body.admission.taskRef,'goal-1:task-7','operation recovery preserves the task binding');
       assert.deepEqual(calls.at(-1).body,body,'operation recovery retains the expected actor precondition');
+      admitResult={schemaVersion:1,state:'committed',operationId,admission:{...admittedFixture().admission,taskRef:{secret:'private'}}};
+      assert.equal((await query()).status,500,'invalid task metadata is refused instead of disclosed');
       admitResult={schemaVersion:1,state:'not-observed',operationId,admission:null};
       assert.deepEqual((await query()).body,{...admitResult,success:true},'no receipt is reported honestly as not-observed');
       admitResult={schemaVersion:1,state:'committed',operationId,admission:{...admittedFixture().admission,operationId:crypto.randomUUID()}};
