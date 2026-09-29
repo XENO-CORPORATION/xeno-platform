@@ -114,6 +114,10 @@ test('real HTTP/authMiddleware/JWT/DPoP boundary with query-aware auth DB and in
     createAndAssignWorkforceResource: async (pool, context, value) => { calls.push({ method: 'createAndAssign', context, body: value });
       return createAndAssignResult ?? createAndAssignFixture(); },
     admitRun: admit('admit'), readRunAdmission: admit('readAdmission'),
+    readRunAdmissionOperation:async(pool,context,value)=>{
+      calls.push({method:'readAdmissionOperation',context,body:value});
+      return admitResult??{schemaVersion:1,state:'committed',operationId:value.operationId,admission:admittedFixture().admission};
+    },
     readWorkforceCapacity: async (pool, context, value) => { calls.push({ method: 'capacity', context, body: value });
       return capacityResult ?? { schemaVersion: 1, owner: value.owner, derivedAt: '2026-09-27T12:00:00.000Z', activeAdmissions: 2, inFlightRuns: 1,
         activeAgents: 2, committedCeilingMicro: '3500000', funding: [{ payerUserId: human, canFund: true, availableMicro: '7000000', internal: 'hidden' }] }; },
@@ -333,6 +337,22 @@ test('real HTTP/authMiddleware/JWT/DPoP boundary with query-aware auth DB and in
       assert.deepEqual(calls.at(-1).options,{expectedActorAccountId:human},'HTTP passes the expected actor to the receipt authority');
       assert.equal((await request({ path: '/run-admissions/read', body: { admissionId: operationId, extra: 1 } })).status, 400);
       assert.equal((await request({ method: 'GET', path: '/run-admissions' })).status, 405);
+    });
+    await t.test('admission recovery is a read and refuses a receipt for another operation',async()=>{
+      const body={operationId,expectedActorAccountId:human};
+      const query=()=>request({path:'/run-admissions/operations/read',body,token:mint({scope:'workforce:read'})});
+      admitResult=undefined;
+      assert.equal((await query()).status,200,'operation recovery is mounted under read authority');
+      assert.deepEqual(calls.at(-1).body,body,'operation recovery retains the expected actor precondition');
+      admitResult={schemaVersion:1,state:'not-observed',operationId,admission:null};
+      assert.deepEqual((await query()).body,{...admitResult,success:true},'no receipt is reported honestly as not-observed');
+      admitResult={schemaVersion:1,state:'committed',operationId,admission:{...admittedFixture().admission,operationId:crypto.randomUUID()}};
+      assert.equal((await query()).status,500,'a receipt for another operation cannot be reported as recovered');
+      const mixed='abcdefab-abcd-4abc-8abc-abcdefabcdef';
+      admitResult={schemaVersion:1,state:'not-observed',operationId:mixed,admission:null};
+      assert.equal((await request({path:'/run-admissions/operations/read',body:{operationId:mixed.toUpperCase(),expectedActorAccountId:human},token:mint({scope:'workforce:read'})})).status,200,
+        'recovery compares canonical UUIDs rather than their original casing');
+      admitResult=undefined;
     });
     await t.test('RUN-02: a refusal crosses the wire as its typed reason, and nothing else of the service error', async () => {
       const admission = { operationId, agent: { resourceId: operationId, version: 1, contentHash: 'a'.repeat(64) },
