@@ -48,8 +48,18 @@ test('capacity is derived from live admissions, leases and holds, and never stor
   const explicit = (caps) => ({ schemaVersion: 1, mode: 'explicit', capabilities: caps });
   const user = async (s) => (await pool.query(`INSERT INTO users(username,email,password_hash,display_name,email_verified)
     VALUES($1,$2,'test-only',$1,TRUE) RETURNING id`, [`${marker}-${s}`, `${marker}-${s}@example.test`])).rows[0].id;
-  const fund = (u, micro) => pool.query(`INSERT INTO credit_accounts(user_id,balance) VALUES($1,$2)
-    ON CONFLICT (user_id) DO UPDATE SET balance=EXCLUDED.balance`, [u, micro]);
+  // Idempotent: a repeat fund(u, newMicro) REPLACES this fixture's grant/balance, it never
+  // accumulates a second lot. See workforce-run-admission.test.mjs's fund() for why a real
+  // credit_grants lot (not just credit_accounts.balance) is required for admission to admit.
+  const fund = async (u, micro) => {
+    await pool.query(`INSERT INTO credit_accounts(user_id,balance) VALUES($1,$2)
+      ON CONFLICT (user_id) DO UPDATE SET balance=EXCLUDED.balance`, [u, micro]);
+    await pool.query(`INSERT INTO usage_credit_preferences(user_id,enabled) VALUES($1,true)
+      ON CONFLICT (user_id) DO UPDATE SET enabled=true`, [u]);
+    await pool.query(`INSERT INTO credit_grants(id,user_id,amount_micro,remaining_micro,kind,source_ref)
+      VALUES(md5('test-fund:'||$1::text)::uuid,$1::uuid,$2,$2,'paid','test-fund')
+      ON CONFLICT (id) DO UPDATE SET amount_micro=EXCLUDED.amount_micro, remaining_micro=EXCLUDED.remaining_micro`, [u, micro]);
+  };
   const tuple = (type, id, rel, u) => pool.query(`INSERT INTO relationship_tuples(object_type,object_id,relation,subject_type,subject_id)
     VALUES($1,$2,$3,'user',$4)`, [type, id, rel, u]);
   const ctx = (actorUserId) => ({ actorUserId, clientId: 'xeno-agent-interface' });

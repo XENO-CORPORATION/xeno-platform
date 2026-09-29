@@ -67,6 +67,16 @@ test('an evaluation is a projection over evidence for a stated window, never a s
   const owner = await user('owner'), worker = await user('worker'), member = await user('member'), stranger = await user('stranger');
   const lenderOwner = await user('lender');
   await pool.query('INSERT INTO credit_accounts(user_id,balance) VALUES($1,50000000),($2,50000000)', [owner, worker]);
+  // Admission's budget term reads eligible credit_grants lots (utils/usageCreditFunding.js
+  // allocateFunding), not the cached credit_accounts.balance alone -- fund a real paid lot +
+  // overflow-on per payer, idempotently (deterministic grant id, replace not accumulate).
+  for (const u of [owner, worker]) {
+    await pool.query(`INSERT INTO usage_credit_preferences(user_id,enabled) VALUES($1,true)
+      ON CONFLICT (user_id) DO UPDATE SET enabled=true`, [u]);
+    await pool.query(`INSERT INTO credit_grants(id,user_id,amount_micro,remaining_micro,kind,source_ref)
+      VALUES(md5('test-fund:'||$1::text)::uuid,$1::uuid,50000000,50000000,'paid','test-fund')
+      ON CONFLICT (id) DO UPDATE SET amount_micro=EXCLUDED.amount_micro, remaining_micro=EXCLUDED.remaining_micro`, [u]);
+  }
   const ws = (await pool.query('INSERT INTO workspaces(owner_user_id,name,slug) VALUES($1,$2,$2) RETURNING id', [owner, `${marker}-ws`])).rows[0].id;
   const elsewhere = (await pool.query('INSERT INTO workspaces(owner_user_id,name,slug) VALUES($1,$2,$2) RETURNING id', [owner, `${marker}-else`])).rows[0].id;
   const lender = (await pool.query('INSERT INTO workspaces(owner_user_id,name,slug) VALUES($1,$2,$2) RETURNING id', [lenderOwner, `${marker}-lender`])).rows[0].id;
