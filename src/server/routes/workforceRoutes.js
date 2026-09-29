@@ -168,7 +168,7 @@ function authorityObservation(value) {
  * the documented fields and refuses anything that is not a whole admission -- a truthy object is
  * not a run the platform agreed to. */
 const ADMISSION_FIELDS = ['schemaVersion', 'admissionId', 'operationId', 'agent', 'target', 'team', 'conversationId', 'root',
-  'entitlementId', 'payer', 'budget', 'parent', 'capabilities', 'memoryNamespace', 'admittedAt'];
+  'entitlementId', 'payer', 'budget', 'parent', 'taskRef', 'capabilities', 'memoryNamespace', 'admittedAt'];
 function admissionObservation(value) {
   try {
     if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
@@ -179,6 +179,8 @@ function admissionObservation(value) {
     // RUN-10: a child names the admission it was carved from, one level below it, and nothing else.
     if (a.parent !== undefined && a.parent !== null && (uuid(a.parent.admissionId) !== a.parent.admissionId
       || !Number.isSafeInteger(a.parent.depth) || a.parent.depth < 1 || a.parent.depth > 8 || Object.keys(a.parent).length !== 2)) return null;
+    if (a.taskRef !== undefined && a.taskRef !== null
+      && (typeof a.taskRef !== 'string' || !/^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/.test(a.taskRef))) return null;
     const admission = fields(a, ADMISSION_FIELDS);
     return Object.hasOwn(value, 'admission')
       ? { admission, replayed: value.replayed === true }
