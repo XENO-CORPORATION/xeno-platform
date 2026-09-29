@@ -123,7 +123,7 @@ const defaultCreate = async (...args) => (await import('../services/workforceRes
 const defaultCreateAndAssign = async (...args) => (await import('../services/workforceResources.js')).createAndAssignWorkforceResource(...args);
 const defaultRead = async (...args) => (await import('../services/workforceResources.js')).readWorkforceResourceOperation(...args);
 const defaultList = async (...args) => (await import('../services/workforceCatalog.js')).listOwnedWorkforceResources(...args);
-const defaultAdmit = async (...args) => (await import('../services/workforceRunAdmission.js')).admitRun(...args);
+const defaultAdmit = async (...args) => (await import('../services/workforceRunAdmission.js')).admitAccountRun(...args);
 const defaultReadAdmission = async (...args) => (await import('../services/workforceRunAdmission.js')).readRunAdmission(...args);
 const defaultReadAdmissionOperation = async (...args) => (await import('../services/workforceRunAdmission.js')).readRunAdmissionOperation(...args);
 const defaultReadPin = async (...args) => (await import('../services/workforceRunAdmission.js')).readRunnablePin(...args);

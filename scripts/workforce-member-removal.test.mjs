@@ -62,6 +62,16 @@ test('a removal revokes at once and settles separately (LIFE-02)', { skip: !url,
 
   const owner = await user('owner'), manager = await user('manager'), worker = await user('worker'), stranger = await user('stranger');
   await pool.query('INSERT INTO credit_accounts(user_id,balance) VALUES($1,90000000),($2,90000000),($3,90000000)', [owner, manager, worker]);
+  // Admission's budget term reads eligible credit_grants lots (utils/usageCreditFunding.js
+  // allocateFunding), not the cached credit_accounts.balance alone -- fund a real paid lot +
+  // overflow-on per payer, idempotently (deterministic grant id, replace not accumulate).
+  for (const u of [owner, manager, worker]) {
+    await pool.query(`INSERT INTO usage_credit_preferences(user_id,enabled) VALUES($1,true)
+      ON CONFLICT (user_id) DO UPDATE SET enabled=true`, [u]);
+    await pool.query(`INSERT INTO credit_grants(id,user_id,amount_micro,remaining_micro,kind,source_ref)
+      VALUES(md5('test-fund:'||$1::text)::uuid,$1::uuid,90000000,90000000,'paid','test-fund')
+      ON CONFLICT (id) DO UPDATE SET amount_micro=EXCLUDED.amount_micro, remaining_micro=EXCLUDED.remaining_micro`, [u]);
+  }
   const ws = (await pool.query('INSERT INTO workspaces(owner_user_id,name,slug) VALUES($1,$2,$2) RETURNING id', [owner, `${marker}-ws`])).rows[0].id;
   await tuple(ws, 'owner', owner); await tuple(ws, 'editor', manager); await tuple(ws, 'editor', worker);
 
