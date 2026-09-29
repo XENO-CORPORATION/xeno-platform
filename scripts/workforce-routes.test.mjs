@@ -99,9 +99,9 @@ test('real HTTP/authMiddleware/JWT/DPoP boundary with query-aware auth DB and in
     team: null, conversationId: null, root: null, entitlementId: null, payer: { kind: 'user', userId: human }, budget: { ceilingMicro: '1000' },
     capabilities: { requested: ['files.read'], effective: ['files.read'], terms: { definition: ['files.read'], target: ['files.read'], runtime: null, entitlement: null } },
     memoryNamespace: `user:${human}:agent:${operationId}`, admittedAt: '2026-09-25T12:00:00.000Z' } });
-  const admit = method => async (pool, context, value) => {
+  const admit = method => async (pool, context, value, options) => {
     assert.equal(pool, db);
-    calls.push({ method, context, body: value });
+    calls.push({ method, context, body: value, options });
     if (admitFailure) throw admitFailure;
     if (admitResult !== undefined) return admitResult;
     return method === 'admit' ? admittedFixture() : admittedFixture().admission;
@@ -328,6 +328,9 @@ test('real HTTP/authMiddleware/JWT/DPoP boundary with query-aware auth DB and in
       const read = await request({ path: '/run-admissions/read', body: { admissionId: operationId }, token: mint({ scope: 'workforce:read' }) });
       assert.equal(read.status, 200);
       assert.equal(calls.at(-1).method, 'readAdmission');
+      const boundRead = await request({ path: '/run-admissions/read', body: { admissionId: operationId, expectedActorAccountId: human }, token: mint({ scope: 'workforce:read' }) });
+      assert.equal(boundRead.status,200,'prepared admission readback accepts the expected actor field');
+      assert.deepEqual(calls.at(-1).options,{expectedActorAccountId:human},'HTTP passes the expected actor to the receipt authority');
       assert.equal((await request({ path: '/run-admissions/read', body: { admissionId: operationId, extra: 1 } })).status, 400);
       assert.equal((await request({ method: 'GET', path: '/run-admissions' })).status, 405);
     });

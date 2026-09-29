@@ -550,8 +550,11 @@ export async function readRunnablePin(pool, authenticatedContext, value) {
 }
 
 /** Read one admission back, to its actor or to whoever may act for its target now. */
-export async function readRunAdmission(pool, authenticatedContext, admissionId) {
+export async function readRunAdmission(pool, authenticatedContext, admissionId, options = {}) {
   const actorUserId = uuid(authenticatedContext?.actorUserId, 'actor');
+  const input = record(options, ['expectedActorAccountId'], 'read_options');
+  const expected = optionalUuid(input.expectedActorAccountId, 'expected_actor');
+  if (expected && expected !== actorUserId) fail('conflict', 'actor_context_conflict');
   const id = uuid(admissionId, 'admission');
   return authorityTransaction(pool, async (db) => {
     const row = (await db.query('SELECT * FROM workforce_run_admissions WHERE id=$1', [id])).rows[0];
