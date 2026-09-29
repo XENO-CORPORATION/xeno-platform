@@ -43,7 +43,7 @@ test('an agent definition is revised by its editors only, as one durable command
   t.after(() => pool.end());
   assert.ok((await pool.query("SELECT to_regclass('workforce_agent_revisions') AS v")).rows[0].v, 'this suite runs on the migrated schema');
   const { createWorkforceResource } = await import('../src/server/services/workforceResources.js');
-  const { reviseAgentDefinition, readAgentRevision } = await import('../src/server/services/workforceAgentRevision.js');
+  const { reviseAgentDefinition, readAgentRevision, readAgentDefinition } = await import('../src/server/services/workforceAgentRevision.js');
   const { proposeOwnershipTransfer } = await import('../src/server/services/workforceOwnershipTransfer.js');
   const { admitRun } = await import('../src/server/services/workforceRunAdmission.js');
   const { authorizeRunStep } = await import('../src/server/services/workforceRunAuthority.js');
@@ -185,5 +185,73 @@ test('an agent definition is revised by its editors only, as one durable command
     // A NEW run is pinned to the new definition, and the old pin is refused -- the revision is a new version, not an edit.
     await rejects(admitRun(pool, ctx(erin), { operationId: randomUUID(), agent: pinned, target: { kind: 'personal', ownerUserId: erin },
       capabilities: ['files.read'], budget: { ceilingMicro: '1000000' } }), 'conflict', 'agent_version_stale', 'a new run is admitted on the current version');
+  });
+
+  await t.test('MKT-01: a definition is READ by its editors only, exactly the pin asked for, and writes nothing', async () => {
+    const readCtx = (actorUserId) => ({ actorUserId, clientId: 'xeno-agent-interface' });
+    const read = (actor, resourceId, version, contentHash, expectedActorAccountId) =>
+      readAgentDefinition(pool, readCtx(actor), { resourceId, version, contentHash, expectedActorAccountId: expectedActorAccountId ?? actor });
+    const hashOf = async (id, version) => (await pool.query('SELECT content_hash FROM workforce_agent_versions WHERE resource_id=$1 AND version=$2', [id, version])).rows[0].content_hash;
+
+    // An agent whose OWNER holds the right (alice, who owns and can revise the studio's agents) still may not
+    // itself read a definition -- the same "human only" bar mayRevise holds, with no carve-out for a read.
+    const bot2 = await user('bot2');
+    await pool.query("INSERT INTO agent_identities(user_id,owner_user_id,agent_role,agent_origin) VALUES($1,$2,'other','mkt01-read-fixture')", [bot2, alice]);
+    await tuple(studio, 'editor', bot2, 'agent');
+    await tuple(studio, 'editor', bot2);
+
+    const dev = await create(alice, { type: 'workspace', id: studio }, definition('read v1: analyse'));
+    await revise(erin, dev, 1, definition('read v2: analyse and summarise', ['files.read', 'files.write']));
+    const hash1 = await hashOf(dev, 1), hash2 = await hashOf(dev, 2);
+    const own = await create(alice, { type: 'user', id: alice }, definition('personal pinned instruction'));
+    const ownHash = await hashOf(own, 1);
+    const before = await snapshot();
+    assert.equal((await read(alice, own, 1, ownHash)).version.content.instructions, 'personal pinned instruction', 'personal definition is readable by its current human owner');
+    await rejects(read(erin, own, 1, ownHash), 'not_found', 'agent_not_found', 'workspace editing rights do not expose personal definitions');
+    await rejects(readAgentDefinition(pool, readCtx(alice), { resourceId: own, version: 1, contentHash: ownHash }), 'bad_input', 'invalid_expected_actor_account', 'an account precondition is mandatory');
+
+    // The owner (alice) and the editor who wrote v2 (erin) may each read either version, exactly as pinned.
+    const asOwner = await read(alice, dev, 1, hash1);
+    assert.deepEqual([asOwner.version.version, asOwner.version.content.instructions], [1, 'read v1: analyse'], 'the owner reads a historical version exactly');
+    const asEditor = await read(erin, dev, 2, hash2);
+    assert.deepEqual([asEditor.version.version, asEditor.version.content.instructions], [2, 'read v2: analyse and summarise'], 'an editor reads the current version');
+    assert.deepEqual(await snapshot(), before, 'a read writes nothing, for the owner or the editor');
+
+    // No OTHER right is an oracle for this one: a viewer, a stranger and an agent (even one whose owner could
+    // read) all answer not_found, the same answer an id that names nothing gives.
+    await rejects(read(vic, dev, 2, hash2), 'not_found', 'agent_not_found', 'a viewer of the workspace may not read its agents\' definitions');
+    await rejects(read(stranger, dev, 2, hash2), 'not_found', 'agent_not_found', 'a stranger may not read a definition');
+    await rejects(read(bot2, dev, 2, hash2), 'not_found', 'agent_not_found', 'an agent may not read a definition, even one whose owner could');
+    await rejects(read(stranger, randomUUID(), 1, 'a'.repeat(64)), 'not_found', 'agent_not_found', 'an id that names nothing answers the same');
+    assert.deepEqual(await snapshot(), before, 'every refused read writes nothing');
+
+    // Historical: v1 stays exactly readable after v2 exists.
+    const historical = await read(alice, dev, 1, hash1);
+    assert.equal(historical.version.contentHash, hash1, 'a historical version is exact after a later one is written');
+
+    // The exact pin: a real version under a hash it does not hold, or a version never written, is refused --
+    // never silently handed whatever that version (or the current one) actually holds.
+    await rejects(read(alice, dev, 1, hash2), 'conflict', 'content_hash_mismatch', 'a version under the wrong hash is refused');
+    await rejects(read(alice, dev, 99, hash2), 'not_found', 'agent_version_not_found', 'a version that was never written is refused');
+
+    // The account pin: a read for a different account than the one authenticated is refused before the
+    // resource is even looked up -- it is not an oracle for whether the resource exists either.
+    await rejects(read(alice, dev, 1, hash1, erin), 'denied', 'expected_actor_account_mismatch', 'a mismatched expected account is refused');
+    await rejects(read(stranger, randomUUID(), 1, 'a'.repeat(64), alice), 'denied', 'expected_actor_account_mismatch', 'the account pin is checked before the resource is');
+    assert.deepEqual(await snapshot(), before, 'every refused read, of any kind, writes nothing');
+
+    // Suspended editor: erin's own account suspended -- mayRevise requires a usable principal, so the read
+    // answers not_found exactly as an unauthorized one does, never a distinct "suspended" leak.
+    await pool.query(`UPDATE users SET is_active=FALSE, status='suspended' WHERE id=$1`, [erin]);
+    await rejects(read(erin, dev, 2, hash2), 'not_found', 'agent_not_found', 'a suspended editor cannot read a definition');
+    await pool.query(`UPDATE users SET is_active=TRUE, status='active' WHERE id=$1`, [erin]);
+    assert.ok((await read(erin, dev, 2, hash2)).access.allowed, 'reinstating the account restores the read');
+
+    // Revoked editor: the editor relation itself removed -- authority is derived fresh under the read's own
+    // lock, never cached from an earlier grant.
+    await pool.query(`DELETE FROM relationship_tuples WHERE object_type='workspace' AND object_id=$1 AND relation='editor' AND subject_type='user' AND subject_id=$2`, [studio, erin]);
+    await rejects(read(erin, dev, 2, hash2), 'not_found', 'agent_not_found', 'a revoked editor cannot read a definition');
+    await tuple(studio, 'editor', erin);
+    assert.deepEqual(await snapshot(), before, 'suspending, revoking and restoring an editor writes nothing to the definition tables');
   });
 });
