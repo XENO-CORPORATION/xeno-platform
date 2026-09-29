@@ -155,6 +155,15 @@ test('a run is admitted from authoritative state, as the intersection of every r
     // Read-back is the actor's, and anyone who may act for the target; nobody else learns it exists.
     assert.equal((await readRunAdmission(pool, ctx(owner), a.admissionId)).admissionId, a.admissionId);
     await rejects(readRunAdmission(pool, ctx(outsider), a.admissionId), 'not_found', 'admission_not_found', 'an admission is not disclosed outside its target');
+    // Both accounts may legitimately read this workspace. Permission alone does
+    // not fence a prepared recovery request that switched authenticated accounts.
+    await rejects(readRunAdmission(pool,ctx(owner),a.admissionId,{expectedActorAccountId:editor}),
+      'conflict','actor_context_conflict','prepared recovery refuses account switches even when both accounts have access');
+    assert.equal((await readRunAdmission(pool,ctx(editor),a.admissionId,{expectedActorAccountId:editor})).admissionId,a.admissionId,
+      'matching prepared actor reads the original admission');
+    const noDatabase={connect:async()=>{assert.fail('actor mismatch must be refused before reading any admission');}};
+    await rejects(readRunAdmission(noDatabase,ctx(owner),a.admissionId,{expectedActorAccountId:editor}),
+      'conflict','actor_context_conflict','identity precondition precedes receipt lookup');
   });
 
   await t.test('RUN-01: requested fields are not proof', async () => {

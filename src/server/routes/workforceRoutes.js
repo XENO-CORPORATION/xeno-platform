@@ -598,8 +598,8 @@ export function createWorkforceRouter({ createWorkforceResource = defaultCreate,
     handle(admitRun, false, admissionObservation));
   router.post('/run-admissions/read', authMiddleware, requireDpopIfBound, requireWorkforceScope('workforce:read'), parse,
     handle((db, context, body) => {
-      if (Object.keys(body).some(key => key !== 'admissionId')) throw Object.assign(new Error('unknown field'), { code: 'bad_input' });
-      return readRunAdmission(db, context, body.admissionId);
+      if (Object.keys(body).some(key => !['admissionId','expectedActorAccountId'].includes(key))) throw Object.assign(new Error('unknown field'), { code: 'bad_input' });
+      return readRunAdmission(db, context, body.admissionId, { expectedActorAccountId: body.expectedActorAccountId });
     }, true, admissionObservation));
   // LIFE-09: what a scope is running and can still fund, derived at the read. A read, like the catalog.
   router.post('/capacity', authMiddleware, requireDpopIfBound, requireWorkforceScope('workforce:read'), parse,
