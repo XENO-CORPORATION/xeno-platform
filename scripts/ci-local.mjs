@@ -71,7 +71,7 @@ const CORE_DB_SUITES = [
 ];
 const CORE_NODB_SUITES = ['ai-tools-passthrough', 'entitlement-gate', 'upstream'];
 const MONEY_SUITES = [
-  'ledger-v2', 'ledger-chain', 'ledger-billing', 'ledger-correctness',
+  'ledger-v2', 'ledger-chain', 'ledger-billing', 'ledger-correctness', 'ledger-hold-tx-parity',
   'billing-money-in', 'media-metering', 'wallet-service',
   'service-ledger', 'ledger-audit-fixes', 'credit-mirror-drift',
   'marketplace-invoke-and-commission', 'hold-extension', 'meter-hold-heartbeat',
