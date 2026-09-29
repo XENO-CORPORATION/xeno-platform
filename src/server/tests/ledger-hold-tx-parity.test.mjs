@@ -6,8 +6,8 @@ import { tablesDDL } from './fixtures/schema.mjs';
  * `holdV2Tx(client, userId, req)` is the canonical holdV2 TRANSACTION BODY, factored out
  * so a caller that already owns a transaction can compose a hold into it atomically
  * instead of opening a second, independent one. `holdV2(pool, userId, req)` is unchanged
- * in its PUBLIC behavior: it still opens its own connection+transaction, now delegating
- * the body to holdV2Tx, then commits/rolls back, releases, and (only afterward, on its
+ * in its PUBLIC behavior: it still opens its own connection+transaction, sharing the
+ * same private body with holdV2Tx, then commits/rolls back, releases, and (only afterward, on its
  * own connection) reads the post-release balance exactly as before.
  *
  * This file proves:
@@ -213,6 +213,22 @@ async function main() {
     // max:1 makes a balance read before releasing the transaction client fail.
     const publicReplay = await holdV2(pool, u, { holdId: 'idem-1', amountMicro: C(999), surface: 's', operation: 'o' });
     ok(publicReplay.amountMicro === C(10), 'public replay preserves original amount and reads balance after releasing its client');
+  }
+
+  // The public API captured amount before waiting for a connection before extraction.
+  {
+    const u = await newUser();
+    await grant(u, 100);
+    let releaseConnect;
+    const ready = new Promise((resolve) => { releaseConnect = resolve; });
+    const delayedPool = { connect: async () => { await ready; return pool.connect(); } };
+    const request = { holdId: 'amount-snapshot', amountMicro: C(10), surface: 's', operation: 'o' };
+    const pending = holdV2(delayedPool, u, request);
+    request.amountMicro = C(20);
+    releaseConnect();
+    const result = await pending;
+    ok(result.amountMicro === C(10), 'public hold preserves its amount snapshot across asynchronous connection acquisition');
+    ok((await getBalanceV2(pool, u)).availableMicro === C(90), 'stored reservation matches the original amount snapshot');
   }
 
   console.log(`\nledger-hold-tx-parity: ${pass} passed`);

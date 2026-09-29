@@ -787,6 +787,12 @@ export async function recordUsageV2(pool, userId, event) {
  */
 export async function holdV2Tx(client, userId, req) {
   const amountMicro = BigInt(Math.max(1, Math.round(req.amountMicro)));
+  return holdV2Body(client, userId, req, amountMicro);
+}
+
+// Both entry points normalize once, before their first await. The pool-owning
+// wrapper must retain that snapshot while waiting for a connection.
+async function holdV2Body(client, userId, req, amountMicro) {
   await requireOrdinaryWallet(client, userId);
   const existing = await client.query('SELECT * FROM credit_holds WHERE user_id = $1 AND hold_id = $2 FOR UPDATE', [userId, req.holdId]);
   if (existing.rows.length > 0 && req.reopenVoided === true && existing.rows[0].state === 'voided') {
@@ -847,7 +853,7 @@ export async function holdV2Tx(client, userId, req) {
 }
 
 /** Reserve credits (phase 1). Idempotent on holdId. Throws INSUFFICIENT_CREDITS.
- * Opens its OWN transaction and delegates the body to holdV2Tx (see above); this
+ * Opens its OWN transaction and shares the body with holdV2Tx (see above); this
  * wrapper is the only place that owns BEGIN/COMMIT/ROLLBACK/connect/getBalanceV2
  * for that transaction. */
 export async function holdV2(pool, userId, req) {
@@ -856,7 +862,7 @@ export async function holdV2(pool, userId, req) {
   let outcome; // { existingRow } | { row, balance, held, isFrozen, amountMicro }
   try {
     await client.query('BEGIN');
-    outcome = await holdV2Tx(client, userId, req);
+    outcome = await holdV2Body(client, userId, req, amountMicro);
     await client.query('COMMIT');
   } catch (err) {
     await client.query('ROLLBACK').catch(() => {});
