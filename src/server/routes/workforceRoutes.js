@@ -125,6 +125,7 @@ const defaultRead = async (...args) => (await import('../services/workforceResou
 const defaultList = async (...args) => (await import('../services/workforceCatalog.js')).listOwnedWorkforceResources(...args);
 const defaultAdmit = async (...args) => (await import('../services/workforceRunAdmission.js')).admitRun(...args);
 const defaultReadAdmission = async (...args) => (await import('../services/workforceRunAdmission.js')).readRunAdmission(...args);
+const defaultReadAdmissionOperation = async (...args) => (await import('../services/workforceRunAdmission.js')).readRunAdmissionOperation(...args);
 const defaultReadPin = async (...args) => (await import('../services/workforceRunAdmission.js')).readRunnablePin(...args);
 const defaultReadCapacity = async (...args) => (await import('../services/workforceCapacity.js')).readWorkforceCapacity(...args);
 const defaultReadEvaluation = async (...args) => (await import('../services/workforceEvaluation.js')).readWorkforceEvaluation(...args);
@@ -512,7 +513,7 @@ function globalObservation(value, request) {
  * belong to the real service, not the renderer or this routing adapter. */
 export function createWorkforceRouter({ createWorkforceResource = defaultCreate, readWorkforceResourceOperation = defaultRead, listOwnedWorkforceResources = defaultList,
   createAndAssignWorkforceResource = defaultCreateAndAssign,
-  admitRun = defaultAdmit, readRunAdmission = defaultReadAdmission, readRunnablePin = defaultReadPin, readWorkforceCapacity = defaultReadCapacity,
+  admitRun = defaultAdmit, readRunAdmission = defaultReadAdmission, readRunAdmissionOperation = defaultReadAdmissionOperation, readRunnablePin = defaultReadPin, readWorkforceCapacity = defaultReadCapacity,
   readWorkforceEvaluation = defaultReadEvaluation,
   reportRunResult = runResults('reportRunResult'), deliverRunResult = runResults('deliverRunResult'), readRunOutcome = runResults('readRunOutcome'),
   removeTeamMember = memberRemoval('removeTeamMember'), readMemberRemoval = memberRemoval('readMemberRemoval'), archiveMemberRemoval = memberRemoval('archiveMemberRemoval'),
@@ -601,6 +602,15 @@ export function createWorkforceRouter({ createWorkforceResource = defaultCreate,
       if (Object.keys(body).some(key => !['admissionId','expectedActorAccountId'].includes(key))) throw Object.assign(new Error('unknown field'), { code: 'bad_input' });
       return readRunAdmission(db, context, body.admissionId, { expectedActorAccountId: body.expectedActorAccountId });
     }, true, admissionObservation));
+  router.post('/run-admissions/operations/read', authMiddleware, requireDpopIfBound, requireWorkforceScope('workforce:read'), parse,
+    handle(readRunAdmissionOperation,true,(value,request)=>{
+      const operationId=uuid(request.operationId);
+      if(!value||value.schemaVersion!==1||value.operationId!==operationId)return null;
+      if(value.state==='not-observed'&&value.admission===null)return {schemaVersion:1,state:value.state,operationId:value.operationId,admission:null};
+      if(value.state!=='committed'||value.admission?.operationId!==operationId)return null;
+      const projected=admissionObservation(value.admission);
+      return projected?{schemaVersion:1,state:'committed',operationId:value.operationId,admission:projected.admission}:null;
+    }));
   // LIFE-09: what a scope is running and can still fund, derived at the read. A read, like the catalog.
   router.post('/capacity', authMiddleware, requireDpopIfBound, requireWorkforceScope('workforce:read'), parse,
     handle(readWorkforceCapacity, true, capacityObservation));

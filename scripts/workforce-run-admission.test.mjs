@@ -495,6 +495,44 @@ test('a run is admitted from authoritative state, as the intersection of every r
     await rejects(admitRun(pool, ctx(editor), { ...req, capabilities: ['files.read'] }), 'conflict', 'operation_payload_conflict', 'a changed request under the same operation conflicts');
   });
 
+  await t.test('a lost commit response recovers by actor-bound operation without admitting again',async()=>{
+    const {readRunAdmissionOperation}=await import('../src/server/services/workforceRunAdmission.js');
+    const req=base(lent,{kind:'workspace',assignmentId:lentIn});
+    const question={operationId:req.operationId,expectedActorAccountId:editor};
+    assert.deepEqual(await readRunAdmissionOperation(pool,ctx(editor),question),
+      {schemaVersion:1,state:'not-observed',operationId:req.operationId,admission:null},'unknown operation is not guessed successful');
+    let dropped=false;
+    const lost={connect:async()=>{const db=await pool.connect();return {release:()=>db.release(),query:async(sql,...args)=>{
+      const result=await db.query(sql,...args);if(sql==='COMMIT'&&!dropped){dropped=true;throw Error('lost acknowledgement');}return result;
+    }};}};
+    await assert.rejects(admitRun(lost,ctx(editor),req),/lost acknowledgement/);
+    const count=async()=>(await pool.query('SELECT count(*)::int n FROM workforce_run_admissions')).rows[0].n;
+    const before=await count();
+    const recovered=await readRunAdmissionOperation(pool,ctx(editor),question);
+    assert.equal(recovered.state,'committed','lost acknowledgement resolves the original committed admission');
+    assert.equal(recovered.admission.operationId,req.operationId);
+    assert.equal(await count(),before,'operation readback never creates an admission');
+    assert.equal((await readRunAdmissionOperation(pool,ctx(editor,'other-client'),question)).state,'not-observed','receipt namespace is client-bound');
+    assert.equal((await readRunAdmissionOperation(pool,ctx(owner),{...question,expectedActorAccountId:owner})).state,'not-observed','workspace owner cannot recover another actors operation');
+    await rejects(readRunAdmissionOperation(pool,ctx(owner),question),'conflict','actor_context_conflict','operation recovery refuses changed account identity');
+    const {revokeRun,authorizeRunStep}=await import('../src/server/services/workforceRunAuthority.js');
+    await revokeRun(pool,ctx(editor),recovered.admission.admissionId);
+    assert.equal((await readRunAdmissionOperation(pool,ctx(editor),question)).state,'committed','historical receipt survives revocation without renewing permission');
+    const originalCreated=(await pool.query('SELECT created_at::text value FROM users WHERE id=$1',[editor])).rows[0].value;
+    try {
+      await pool.query("UPDATE users SET created_at=created_at+interval '1 second' WHERE id=$1",[editor]);
+      await rejects(readRunAdmissionOperation(pool,ctx(editor),question),'conflict','operation_incarnation_conflict','recreated account identity cannot inherit an old operation receipt');
+    } finally {await pool.query('UPDATE users SET created_at=$2 WHERE id=$1',[editor,originalCreated]);}
+    try {
+      await pool.query('UPDATE users SET is_active=false WHERE id=$1',[editor]);
+      await rejects(readRunAdmissionOperation(pool,ctx(editor),question),'denied','actor_unavailable','suspended accounts cannot recover private admissions');
+    } finally {await pool.query('UPDATE users SET is_active=true WHERE id=$1',[editor]);}
+    const {generateKeyPairSync}=await import('node:crypto');const keys=generateKeyPairSync('ec',{namedCurve:'P-256'});
+    await rejects(authorizeRunStep(pool,ctx(editor),{admissionId:recovered.admission.admissionId,operation:'provider_dispatch'},
+      {signingKey:{kid:'recovery-test',privatePem:keys.privateKey.export({format:'pem',type:'pkcs8'})}}),
+      'denied','admission_revoked','recovering a receipt cannot revive revoked execution');
+  });
+
   await t.test('the database refuses an admission wider than its terms, and retains every admission', async () => {
     const row = (await pool.query('SELECT * FROM workforce_run_admissions ORDER BY admitted_at LIMIT 1')).rows[0];
     const widened = { ...row, id: randomUUID(), operation_id: randomUUID(), effective_capabilities: JSON.stringify(['files.read', 'shell.run']) };

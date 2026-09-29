@@ -549,6 +549,29 @@ export async function readRunnablePin(pool, authenticatedContext, value) {
   });
 }
 
+/** Recover a committed attempt when its response (and admission id) was lost.
+ * This receipt is historical evidence, not renewed run authority. Its owner is
+ * the exact authenticated actor/client incarnation, never the current UI scope. */
+export async function readRunAdmissionOperation(pool, authenticatedContext, value) {
+  const ctx=record(authenticatedContext,['actorUserId','clientId','apiKeyId'],'context');
+  if(typeof ctx.clientId!=='string'||!/^[a-zA-Z0-9._-]{1,128}$/.test(ctx.clientId))fail('bad_input','invalid_client');
+  const actor={actorUserId:uuid(ctx.actorUserId,'actor'),clientId:ctx.clientId,
+    ...(Object.hasOwn(ctx,'apiKeyId')?{apiKeyId:uuid(ctx.apiKeyId,'api_key')}:{})};
+  const input=record(value,['operationId','expectedActorAccountId'],'request');
+  const expected=uuid(input.expectedActorAccountId,'expected_actor'),operationId=uuid(input.operationId,'operation');
+  if(expected!==actor.actorUserId)fail('conflict','actor_context_conflict');
+  return authorityTransaction(pool,async db=>{
+    await db.query(`SELECT id FROM users WHERE id=$1 OR id IN (SELECT owner_user_id FROM agent_identities WHERE user_id=$1) ORDER BY id FOR SHARE`,[actor.actorUserId]);
+    await actorPrincipal(db,actor.actorUserId);
+    await lockApiKeyWorkforceAuthority(db,actor,'workforce:read');
+    const row=(await db.query('SELECT * FROM workforce_run_admissions WHERE actor_user_id=$1 AND client_id=$2 AND operation_id=$3',
+      [actor.actorUserId,actor.clientId,operationId])).rows[0];
+    if(!row)return {schemaVersion:1,state:'not-observed',operationId,admission:null};
+    if(row.incarnation_hash!==await incarnation(db,actor.actorUserId))fail('conflict','operation_incarnation_conflict');
+    return {schemaVersion:1,state:'committed',operationId,admission:publicAdmission(row)};
+  });
+}
+
 /** Read one admission back, to its actor or to whoever may act for its target now. */
 export async function readRunAdmission(pool, authenticatedContext, admissionId, options = {}) {
   const actorUserId = uuid(authenticatedContext?.actorUserId, 'actor');
