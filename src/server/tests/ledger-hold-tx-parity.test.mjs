@@ -24,16 +24,17 @@ import { tablesDDL } from './fixtures/schema.mjs';
  *  6. Idempotent replay (existingRow) still works through holdV2Tx directly.
  *
  * Deliberately NOT covered here (pre-existing behavior, out of scope for this refactor):
- * rounding of req.amountMicro, reopenVoided semantics beyond the happy/refusal paths
- * already pinned in scripts/spend-cap-enforcement.test.mjs, and settle/void (untouched).
+ * rounding edge cases and settle/void internals (untouched). Reopen transaction rollback
+ * is covered here; existing spend-cap tests also cover reopen refusal.
  *
- * Run: DATABASE_URL=postgresql://t:t@127.0.0.1:55455/t node src/server/tests/ledger-hold-tx-parity.test.mjs
+ * Run through the local money stage, or supply a fresh local database named
+ * xeno_payment_ledger_hold_tx_parity in DATABASE_URL and run this file directly.
  */
 import assert from 'node:assert/strict';
 import pg from 'pg';
 import { migrateAccountV2 } from '../database/migrate-account-v2.js';
 import {
-  addGrant, getBalanceV2, setFrozen, setSpendCap, holdV2, holdV2Tx, MICRO_PER_CREDIT,
+  addGrant, getBalanceV2, setFrozen, setSpendCap, holdV2, holdV2Tx, voidHoldV2, MICRO_PER_CREDIT,
 } from '../utils/creditLedgerV2.js';
 
 const connectionString = process.env.TEST_DATABASE_URL || process.env.DATABASE_URL;
@@ -213,6 +214,24 @@ async function main() {
     // max:1 makes a balance read before releasing the transaction client fail.
     const publicReplay = await holdV2(pool, u, { holdId: 'idem-1', amountMicro: C(999), surface: 's', operation: 'o' });
     ok(publicReplay.amountMicro === C(10), 'public replay preserves original amount and reads balance after releasing its client');
+  }
+
+  // Reopening also participates in the caller transaction, including rollback.
+  {
+    const u = await newUser(); await grant(u, 100);
+    const req = { holdId: 'reopen-tx', amountMicro: C(10), surface: 's', operation: 'o' };
+    await holdV2(pool, u, req); await voidHoldV2(pool, u, req.holdId);
+    const { client } = await trackedClient();
+    await client.query('BEGIN');
+    const reopened = await holdV2Tx(client, u, { ...req, amountMicro: C(20), reopenVoided: true });
+    ok(reopened.row.state === 'held', 'caller transaction can reopen a voided hold');
+    await client.query('ROLLBACK'); client.release();
+    const row = (await pool.query('SELECT * FROM credit_holds WHERE user_id=$1 AND hold_id=$2', [u, req.holdId])).rows[0];
+    ok(row.state === 'voided' && Number(row.amount_micro) === C(10), 'reopen rollback restores original voided row and amount');
+    ok((await getBalanceV2(pool, u)).availableMicro === C(100), 'reopen rollback leaves the whole balance available');
+    const committed = await holdV2(pool, u, { ...req, amountMicro: C(20), reopenVoided: true });
+    ok(committed.state === 'held' && committed.amountMicro === C(20), 'public reopen still commits the requested amount');
+    ok((await getBalanceV2(pool, u)).availableMicro === C(80), 'committed reopen reserves exactly once');
   }
 
   // The public API captured amount before waiting for a connection before extraction.
