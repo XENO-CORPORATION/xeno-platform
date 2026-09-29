@@ -254,4 +254,53 @@ test('an agent definition is revised by its editors only, as one durable command
     await tuple(studio, 'editor', erin);
     assert.deepEqual(await snapshot(), before, 'suspending, revoking and restoring an editor writes nothing to the definition tables');
   });
+
+  await t.test('the mounted HTTP reader loads the exact PostgreSQL definition under real account and proof checks', async () => {
+    const express = (await import('express')).default;
+    const { createRequire } = await import('node:module');
+    const jwt = createRequire(new URL('../src/server/package.json', import.meta.url))('jsonwebtoken');
+    const { jwkThumbprint, accessTokenHash } = await import('../src/server/utils/dpop.js');
+    const { issuer } = await import('../src/server/config/hosts.js');
+    const { getSigningKey } = await import('../src/server/utils/oidcProvider.js');
+    const { apiCacheMiddleware } = await import('../src/server/middleware/cdnOptimization.js');
+    process.env.JWT_SECRET = randomUUID() + randomUUID();
+    const { default: router } = await import('../src/server/routes/workforceRoutes.js');
+    const signer = await getSigningKey(pool), key = generateKeyPairSync('ec', { namedCurve: 'P-256' });
+    const jwk = key.publicKey.export({ format: 'jwk' }), jkt = jwkThumbprint(jwk), now = Math.floor(Date.now() / 1000), sessions = new Map();
+    for (const actor of [alice, stranger]) {
+      const sid = randomUUID(); sessions.set(actor, sid);
+      await pool.query('INSERT INTO oauth_user_auth_epochs(user_id,epoch) VALUES($1,0) ON CONFLICT DO NOTHING', [actor]);
+      await pool.query(`INSERT INTO oauth_session_state(sid,user_id,auth_epoch,auth_time,dpop_jkt,expires_at)
+        VALUES($1,$2,0,to_timestamp($3),$4,now()+interval '1 hour')`, [sid, actor, now, jkt]);
+    }
+    const app = express(); app.use('/api/', apiCacheMiddleware);
+    app.use((req, _res, next) => { req.db = pool; next(); }); app.use('/api/workforce', router);
+    const server = app.listen(0, '127.0.0.1'); await new Promise(resolve => server.once('listening', resolve));
+    try {
+      const id = await create(alice, { type: 'user', id: alice }, definition('the exact authored HTTP instruction'));
+      const version = (await pool.query('SELECT content_hash FROM workforce_agent_versions WHERE resource_id=$1 AND version=1', [id])).rows[0];
+      const ask = { resourceId: id, version: 1, contentHash: version.content_hash, expectedActorAccountId: alice };
+      const call = async (body, actor = alice, includeProof = true, scope = 'workforce:read') => {
+        const token = jwt.sign({ sub: actor, sid: sessions.get(actor), auth_epoch: 0, auth_time: now,
+          client_id: 'xeno-agent-interface', scope, typ: 'at+jwt', cnf: { jkt } }, signer.privatePem,
+          { algorithm: signer.alg, keyid: signer.kid, audience: 'xeno-api', expiresIn: '5m', header: { typ: 'at+jwt' } });
+        const path = '/api/workforce/resources/definition/read', headers = { 'content-type': 'application/json', authorization: `DPoP ${token}` };
+        if (includeProof) headers.dpop = jwt.sign({ jti: randomUUID(), htm: 'POST', htu: issuer() + path, ath: accessTokenHash(token), iat: now },
+          key.privateKey, { algorithm: 'ES256', header: { typ: 'dpop+jwt', jwk } });
+        const result = await fetch(`http://127.0.0.1:${server.address().port}${path}`, { method: 'POST', headers, body: JSON.stringify(body) });
+        return { status: result.status, body: await result.json(), cache: result.headers.get('cache-control') };
+      };
+      const before = await snapshot(), read = await call(ask);
+      assert.equal(read.status, 200, 'real mounted reader reaches the database service');
+      assert.equal(read.body.version.content.instructions, 'the exact authored HTTP instruction', 'HTTP returns the actual stored instructions');
+      assert.equal(read.body.version.contentHash, ask.contentHash);
+      assert.match(read.cache, /no-store/, 'real definition response forbids caching');
+      assert.equal((await call({ ...ask, expectedActorAccountId: stranger }, stranger)).status, 404, 'real HTTP stranger cannot read the personal definition');
+      assert.equal((await call({ ...ask, expectedActorAccountId: stranger })).status, 403, 'real HTTP account precondition is enforced by the service');
+      assert.equal((await call({ ...ask, contentHash: 'f'.repeat(64) })).status, 409, 'real HTTP stale hash is refused by the service');
+      assert.equal((await call(ask, alice, false)).status, 401, 'real HTTP missing proof is refused');
+      assert.equal((await call(ask, alice, true, 'workforce:manage')).status, 403, 'real HTTP scope cannot substitute manage for read');
+      assert.deepEqual(await snapshot(), before, 'composed HTTP reads never mutate definition state');
+    } finally { server.closeAllConnections(); await new Promise(resolve => server.close(resolve)); }
+  });
 });
