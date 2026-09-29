@@ -765,75 +765,99 @@ export async function recordUsageV2(pool, userId, event) {
   };
 }
 
-/** Reserve credits (phase 1). Idempotent on holdId. Throws INSUFFICIENT_CREDITS. */
+/**
+ * The canonical holdV2 TRANSACTION BODY, factored out so a caller that already owns a
+ * transaction (BEGIN…COMMIT around other writes of its own) can compose a hold into it
+ * atomically instead of opening a second, independent transaction.
+ *
+ * Deliberately excludes what only the OWNER of a transaction may do: no BEGIN, no COMMIT,
+ * no ROLLBACK, no `pool.connect()` (it takes an already-checked-out `client`), and no
+ * `getBalanceV2` (that needs its own connection and must run only after the owning
+ * transaction has committed and the client has been released — see holdV2 below). On any
+ * failure this THROWS with the same `err.code` the inline version threw; it never issues
+ * ROLLBACK itself, so an aborted attempt leaves the decision — and the actual rollback —
+ * to whichever caller owns BEGIN/COMMIT for this client.
+ *
+ * Returns the same normalized outcome holdV2 has always built internally:
+ *   { existingRow }                              — an idempotent replay (no write happened)
+ *   { row, balance, held, isFrozen, amountMicro } — a fresh hold or a reopened voided one
+ * `row` is the raw `credit_holds` row (RETURNING *); `balance`/`held` are the PRE-hold
+ * figures the caller needs to build a view without a second read (see holdV2's own use of
+ * `outcome.held + amountMicro` below) — they are not re-read after the write.
+ */
+export async function holdV2Tx(client, userId, req) {
+  const amountMicro = BigInt(Math.max(1, Math.round(req.amountMicro)));
+  await requireOrdinaryWallet(client, userId);
+  const existing = await client.query('SELECT * FROM credit_holds WHERE user_id = $1 AND hold_id = $2 FOR UPDATE', [userId, req.holdId]);
+  if (existing.rows.length > 0 && req.reopenVoided === true && existing.rows[0].state === 'voided') {
+    const acct = await ensureAccount(client, userId);
+    const balance = BigInt(acct.balance);
+    const held = await activeHoldsMicro(client, userId);
+    if (acct.is_frozen || balance - held < amountMicro) {
+      const err = new Error('insufficient credits');
+      err.code = acct.is_frozen ? 'ACCOUNT_FROZEN' : 'INSUFFICIENT_CREDITS';
+      throw err;
+    }
+    await assertWithinCaps(client, userId, amountMicro);
+    await syncGrants(client, acct, userId);
+    const funding = await allocateFunding(client, userId, amountMicro);
+    const expiresAt = new Date(Date.now() + (req.expiresInSeconds ?? 900) * 1000);
+    const reopened = await client.query(
+      `UPDATE credit_holds
+       SET state='held', amount_micro=$2, settled_micro=0, expires_at=$3, updated_at=now()
+       WHERE id=$1 AND state='voided'
+       RETURNING *`,
+      [existing.rows[0].id, amountMicro.toString(), expiresAt.toISOString()],
+    );
+    if (!reopened.rows[0]) throw Object.assign(new Error('voided hold could not be reopened'), { code: 'HOLD_REOPEN_CONFLICT' });
+    await saveHoldFunding(client, reopened.rows[0].id, funding);
+    return { row: reopened.rows[0], balance, held, isFrozen: Boolean(acct.is_frozen), amountMicro };
+  }
+  if (existing.rows.length > 0) {
+    return { existingRow: existing.rows[0] };
+  }
+  const acct = await ensureAccount(client, userId);
+  const balance = BigInt(acct.balance);
+  const held = await activeHoldsMicro(client, userId);
+  if (acct.is_frozen || balance - held < amountMicro) {
+    const err = new Error('insufficient credits');
+    err.code = acct.is_frozen ? 'ACCOUNT_FROZEN' : 'INSUFFICIENT_CREDITS';
+    throw err;
+  }
+  // Spend-cap invariant (§4.6), enforced at HOLD time — the only point where
+  // refusing means anything. Refusing at settle would be theatre: the compute has
+  // already run and the provider has already billed us, so the choice there is
+  // "charge the customer" or "eat the cost", never "don't spend". Gate the
+  // reservation and every settle that follows is in-budget by construction.
+  //
+  // This ran nowhere before: recordUsageV2 checked caps, holdV2 and settleHoldV2
+  // did not — so the hold path, which is how hosted agent runs bill, ignored caps
+  // entirely even when one was set.
+  await assertWithinCaps(client, userId, amountMicro);
+  await syncGrants(client, acct, userId);
+  const funding = await allocateFunding(client, userId, amountMicro);
+  const expiresAt = new Date(Date.now() + (req.expiresInSeconds ?? 900) * 1000);
+  const row = await client.query(
+    `INSERT INTO credit_holds (user_id, account_id, hold_id, surface, operation, amount_micro, expires_at)
+     VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING *`,
+    [userId, acct.id, req.holdId, req.surface, req.operation, amountMicro.toString(), expiresAt.toISOString()],
+  );
+  await saveHoldFunding(client, row.rows[0].id, funding);
+  return { row: row.rows[0], balance, held, isFrozen: Boolean(acct.is_frozen), amountMicro };
+}
+
+/** Reserve credits (phase 1). Idempotent on holdId. Throws INSUFFICIENT_CREDITS.
+ * Opens its OWN transaction and delegates the body to holdV2Tx (see above); this
+ * wrapper is the only place that owns BEGIN/COMMIT/ROLLBACK/connect/getBalanceV2
+ * for that transaction. */
 export async function holdV2(pool, userId, req) {
   const amountMicro = BigInt(Math.max(1, Math.round(req.amountMicro)));
   const client = await pool.connect();
-  let outcome; // { existingRow } | { row, balance, held, isFrozen }
+  let outcome; // { existingRow } | { row, balance, held, isFrozen, amountMicro }
   try {
     await client.query('BEGIN');
-    await requireOrdinaryWallet(client, userId);
-    const existing = await client.query('SELECT * FROM credit_holds WHERE user_id = $1 AND hold_id = $2 FOR UPDATE', [userId, req.holdId]);
-    if (existing.rows.length > 0 && req.reopenVoided === true && existing.rows[0].state === 'voided') {
-      const acct = await ensureAccount(client, userId);
-      const balance = BigInt(acct.balance);
-      const held = await activeHoldsMicro(client, userId);
-      if (acct.is_frozen || balance - held < amountMicro) {
-        await client.query('ROLLBACK');
-        const err = new Error('insufficient credits');
-        err.code = acct.is_frozen ? 'ACCOUNT_FROZEN' : 'INSUFFICIENT_CREDITS';
-        throw err;
-      }
-      await assertWithinCaps(client, userId, amountMicro);
-      await syncGrants(client, acct, userId);
-      const funding = await allocateFunding(client, userId, amountMicro);
-      const expiresAt = new Date(Date.now() + (req.expiresInSeconds ?? 900) * 1000);
-      const reopened = await client.query(
-        `UPDATE credit_holds
-         SET state='held', amount_micro=$2, settled_micro=0, expires_at=$3, updated_at=now()
-         WHERE id=$1 AND state='voided'
-         RETURNING *`,
-        [existing.rows[0].id, amountMicro.toString(), expiresAt.toISOString()],
-      );
-      if (!reopened.rows[0]) throw Object.assign(new Error('voided hold could not be reopened'), { code: 'HOLD_REOPEN_CONFLICT' });
-      await saveHoldFunding(client, reopened.rows[0].id, funding);
-      await client.query('COMMIT');
-      outcome = { row: reopened.rows[0], balance, held, isFrozen: Boolean(acct.is_frozen) };
-    } else if (existing.rows.length > 0) {
-      await client.query('COMMIT');
-      outcome = { existingRow: existing.rows[0] };
-    } else {
-      const acct = await ensureAccount(client, userId);
-      const balance = BigInt(acct.balance);
-      const held = await activeHoldsMicro(client, userId);
-      if (acct.is_frozen || balance - held < amountMicro) {
-        await client.query('ROLLBACK');
-        const err = new Error('insufficient credits');
-        err.code = acct.is_frozen ? 'ACCOUNT_FROZEN' : 'INSUFFICIENT_CREDITS';
-        throw err;
-      }
-      // Spend-cap invariant (§4.6), enforced at HOLD time — the only point where
-      // refusing means anything. Refusing at settle would be theatre: the compute has
-      // already run and the provider has already billed us, so the choice there is
-      // "charge the customer" or "eat the cost", never "don't spend". Gate the
-      // reservation and every settle that follows is in-budget by construction.
-      //
-      // This ran nowhere before: recordUsageV2 checked caps, holdV2 and settleHoldV2
-      // did not — so the hold path, which is how hosted agent runs bill, ignored caps
-      // entirely even when one was set.
-      await assertWithinCaps(client, userId, amountMicro);
-      await syncGrants(client, acct, userId);
-      const funding = await allocateFunding(client, userId, amountMicro);
-      const expiresAt = new Date(Date.now() + (req.expiresInSeconds ?? 900) * 1000);
-      const row = await client.query(
-        `INSERT INTO credit_holds (user_id, account_id, hold_id, surface, operation, amount_micro, expires_at)
-         VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING *`,
-        [userId, acct.id, req.holdId, req.surface, req.operation, amountMicro.toString(), expiresAt.toISOString()],
-      );
-      await saveHoldFunding(client, row.rows[0].id, funding);
-      await client.query('COMMIT');
-      outcome = { row: row.rows[0], balance, held, isFrozen: Boolean(acct.is_frozen) };
-    }
+    outcome = await holdV2Tx(client, userId, req);
+    await client.query('COMMIT');
   } catch (err) {
     await client.query('ROLLBACK').catch(() => {});
     throw err;
