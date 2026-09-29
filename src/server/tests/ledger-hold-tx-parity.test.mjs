@@ -111,16 +111,23 @@ async function main() {
       'both paths reserve identically: available 90 for both users after a 10-credit hold');
   }
 
+  // A fixture business record models another write owned by the caller, not a new ledger.
+  await pool.query('CREATE TABLE hold_caller_fixture (id text PRIMARY KEY)');
   // ── 3: caller ROLLBACK after a successful holdV2Tx leaves no hold / no funding ──
   {
     const u = await newUser();
     await grant(u, 100);
     const { client } = await trackedClient();
     await client.query('BEGIN');
+    await client.query("INSERT INTO hold_caller_fixture VALUES ('rollback-1')");
     const outcome = await holdV2Tx(client, u, { holdId: 'rollback-1', amountMicro: C(20), surface: 's', operation: 'o' });
     const rowId = outcome.row.id;
-    await client.query('ROLLBACK'); // simulates some OTHER step in the caller's composed transaction failing
+    await assert.rejects(client.query("INSERT INTO hold_caller_fixture VALUES ('rollback-1')"),
+      { code: '23505' }, 'a real later statement fails inside the caller transaction');
+    await client.query('ROLLBACK');
     client.release();
+    ok((await pool.query("SELECT count(*)::int n FROM hold_caller_fixture WHERE id='rollback-1'")).rows[0].n === 0,
+      'caller ROLLBACK: business record and hold roll back together');
     ok(await holdCount(u, 'rollback-1') === 0, 'caller ROLLBACK: no credit_holds row survives');
     ok(await fundingCountFor(rowId) === 0, 'caller ROLLBACK: no credit_hold_funding rows survive (id captured before rollback)');
     ok((await getBalanceV2(pool, u)).availableMicro === C(100), 'caller ROLLBACK: full balance untouched (the hold never happened)');
@@ -132,10 +139,13 @@ async function main() {
     await grant(u, 100);
     const { client } = await trackedClient();
     await client.query('BEGIN');
+    await client.query("INSERT INTO hold_caller_fixture VALUES ('commit-1')");
     const outcome = await holdV2Tx(client, u, { holdId: 'commit-1', amountMicro: C(30), surface: 's', operation: 'o' });
     const rowId = outcome.row.id;
     await client.query('COMMIT');
     client.release();
+    ok((await pool.query("SELECT count(*)::int n FROM hold_caller_fixture WHERE id='commit-1'")).rows[0].n === 1,
+      'caller COMMIT: business record and hold commit together');
     ok(await holdCount(u, 'commit-1') === 1, 'caller COMMIT: exactly one credit_holds row retained');
     ok((await fundingCountFor(rowId)) >= 1, 'caller COMMIT: funding rows retained');
     ok((await getBalanceV2(pool, u)).availableMicro === C(70), 'caller COMMIT: reservation persists (available 70)');
