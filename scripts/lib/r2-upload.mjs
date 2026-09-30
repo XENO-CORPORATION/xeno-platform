@@ -38,7 +38,7 @@ import { statSync, existsSync, writeFileSync, mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, basename } from 'node:path';
 import { loadPatterns, scanArtifact, formatScanResult, walkFiles } from './secret-scan.mjs';
-import { describeArtifact } from './feed-integrity.mjs';
+import { describeArtifact, sha256Hex } from './feed-integrity.mjs';
 
 /** PRIVATE. Never export this. See the header. */
 function runRclone(args, { dryRun, label }) {
@@ -179,27 +179,24 @@ export class R2Publisher {
     if (!/\/v[^/]+\//.test(`/${key}`) && !/^models\//.test(key)) return;
     const probe = statRemote(`${this.remote}/${key}`);
     if (probe.status === 'unknown') {
-      if (!this.warnedImmutability) {
-        this.warnedImmutability = true;
-        console.warn(
-          `  ⚠ immutability check UNAVAILABLE (${probe.reason}).\n` +
-          '    Could not ask R2 whether these keys already exist, so an existing immutable\n' +
-          '    installer would be silently overwritten. Fix the rclone remote before a real publish.',
-        );
+      if (this.dryRun) {
+        console.warn(`  [dry-run] remote identity unverified for ${key}; a real publish will refuse`);
+        return;
       }
-      return;
+      throw new GateError(`IMMUTABILITY GATE — cannot prove ${key} absent (${probe.reason}); refusing write`);
     }
     if (probe.status === 'absent') return;
-    const remote = probe.entry;
     const localSize = statSync(localPath).size;
-    if (remote.Size === localSize) return; // same bytes, benign re-run
-    throw new GateError(
-      `IMMUTABILITY GATE — ${key} already exists on R2 with a different size ` +
-      `(remote ${remote.Size} vs local ${localSize}). Installers are immutable: overwriting one ` +
-      `silently changes what every existing download link serves, and no checksum anybody published ` +
-      `still matches. Cut a NEW version instead, or pass --allow-overwrite if you are certain.`,
-      { key, remoteSize: remote.Size, localSize },
-    );
+    if (probe.entry.Size === localSize) {
+      // Preserve preflight callers: identical content is permitted, but the
+      // caller receives 'exists' and must SKIP, never overwrite, that object.
+      const output = execFileSync('rclone', ['hashsum', 'SHA256', `${this.remote}/${key}`, '--download'],
+        { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], timeout: 60 * 60 * 1000 });
+      const remoteHash = output.trim().split(/\s+/)[0];
+      if (/^[a-f0-9]{64}$/i.test(remoteHash) && remoteHash.toLowerCase() === sha256Hex(localPath)) return 'exists';
+    }
+    throw new GateError(`IMMUTABILITY GATE — ${key} already exists with unverified or different content; publish a new identity`,
+      { key, remoteSize: probe.entry.Size, localSize, exists: true });
   }
 
   /**
@@ -208,8 +205,11 @@ export class R2Publisher {
    */
   async putArtifact(localPath, key, { requireStructural = true, label } = {}) {
     await this.gate(localPath, { requireStructural });
-    this.assertNotClobbering(localPath, key);
-    runRclone(['copyto', localPath, `${this.remote}/${key}`, '--no-traverse'], { dryRun: this.dryRun, label });
+    if (this.assertNotClobbering(localPath, key) === 'exists') {
+      this.uploads.push({ key, path: localPath, kind: 'artifact', skipped: true, verified: true });
+      return describeArtifact(localPath);
+    }
+    runRclone(['copyto', localPath, `${this.remote}/${key}`, '--no-traverse', '--immutable'], { dryRun: this.dryRun, label });
     this.uploads.push({ key, path: localPath, kind: 'artifact' });
     return describeArtifact(localPath);
   }
@@ -248,8 +248,11 @@ export class R2Publisher {
     if (probe.status === 'unknown') {
       // Same discipline as the immutability gate: a BROKEN probe must not read as "nothing
       // to back up". Warn explicitly so a failed backup is never mistaken for a skipped one.
-      console.warn(`  ⚠ snapshot: could not probe ${key} (${probe.reason}). Overwriting WITHOUT a backup.`);
-      return null;
+      if (this.dryRun) {
+        console.warn(`  [dry-run] snapshot unverified for ${key}; a real write will refuse`);
+        return null;
+      }
+      throw new GateError(`Cannot snapshot ${key}: remote probe failed (${probe.reason}); refusing pointer write`);
     }
     const stamp = new Date().toISOString().replace(/[:.]/g, '-');
     const dot = key.lastIndexOf('.');
@@ -264,9 +267,7 @@ export class R2Publisher {
       console.log(`  snapshot: ${key} → ${dest}`);
       return dest;
     } catch (err) {
-      // Deliberately non-fatal. Losing history is bad; being unable to ship a fix is worse.
-      console.warn(`  ⚠ snapshot of ${key} FAILED (${err?.message ?? err}). The overwrite is NOT undoable — continuing.`);
-      return null;
+      throw new GateError(`Snapshot of ${key} failed; refusing irreversible overwrite: ${err?.message ?? err}`);
     }
   }
 

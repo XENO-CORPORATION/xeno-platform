@@ -1,4 +1,5 @@
 import express from 'express';
+import { acceptsBundles, serializeLocalModelCatalogModel } from '../utils/localModelCatalog.js';
 import { readFileSync } from 'fs';
 import { fileURLToPath } from 'url';
 import { randomUUID } from 'crypto';
@@ -118,36 +119,6 @@ function readLocalModelCatalog() {
   return JSON.parse(raw);
 }
 
-function serializeLocalModelCatalogModel(model) {
-  const installSpec = model.installSpec
-    ? {
-        ...model.installSpec,
-        downloadUrl: model.installSpec.artifactKey
-          ? generateSignedUrl(model.installSpec.artifactKey, 6 * 60 * 60)
-          : null,
-      }
-    : null;
-
-  return {
-    id: model.id,
-    name: model.name,
-    provider: model.provider,
-    category: model.category,
-    description: model.description,
-    size: model.size,
-    sizeBytes: model.sizeBytes ?? null,
-    parameters: model.parameters ?? null,
-    tags: Array.isArray(model.tags) ? model.tags : [],
-    license: model.license ?? null,
-    runtime: model.runtime ?? null,
-    installable: Boolean(model.installable && installSpec?.downloadUrl),
-    installSpec,
-    unavailableReason: model.unavailableReason ?? null,
-    // These run on the user's own machine via Hub + xeno-rt → the in-house path.
-    path: 'inhouse',
-    paths: ['inhouse'],
-  };
-}
 
 /** In-house path: proxy to a self-hosted xeno-rt OpenAI-compatible server. */
 async function callInhouse(baseUrl, model, messages, temperature, max_tokens, extra = {}) {
@@ -1449,8 +1420,9 @@ router.get('/models', async (req, res) => {
  */
 router.get('/local-model-catalog', (req, res) => {
   const catalog = readLocalModelCatalog();
+  const bundles = acceptsBundles(req.get('X-Xrt-Catalog-Capabilities'));
   const models = Array.isArray(catalog.models)
-    ? catalog.models.map(serializeLocalModelCatalogModel)
+    ? catalog.models.map(model => serializeLocalModelCatalogModel(model, { bundles, signUrl: generateSignedUrl }))
     : [];
 
   res.setHeader('Cache-Control', 'private, no-cache, must-revalidate');

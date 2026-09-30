@@ -25,7 +25,7 @@
  *                           → REBUILD. Never hand-edit a checksum to make a gate pass.
  */
 import { createHash } from 'node:crypto';
-import { statSync, readFileSync } from 'node:fs';
+import { statSync, readFileSync, openSync, readSync, closeSync } from 'node:fs';
 import { basename } from 'node:path';
 
 /**
@@ -119,12 +119,25 @@ export function rewriteLatestYml(text, version) {
 }
 
 /** electron-builder writes sha512 as BASE64 of the raw digest, not hex. */
+function fileDigest(file, algorithm, encoding) {
+  const handle = openSync(file, 'r');
+  const hash = createHash(algorithm);
+  const buffer = Buffer.allocUnsafe(1024 * 1024);
+  try {
+    let bytes;
+    while ((bytes = readSync(handle, buffer, 0, buffer.length, null)) > 0) {
+      hash.update(buffer.subarray(0, bytes));
+    }
+    return hash.digest(encoding);
+  } finally { closeSync(handle); }
+}
+
 export function sha512Base64(file) {
-  return createHash('sha512').update(readFileSync(file)).digest('base64');
+  return fileDigest(file, 'sha512', 'base64');
 }
 
 export function sha256Hex(file) {
-  return createHash('sha256').update(readFileSync(file)).digest('hex');
+  return fileDigest(file, 'sha256', 'hex');
 }
 
 /**
