@@ -100,6 +100,9 @@ test('workspace and project views of the one catalog show assigned and participa
       CREATE TABLE oidc_signing_keys(kid TEXT PRIMARY KEY,alg TEXT,private_pem TEXT);
       CREATE TABLE oauth_dpop_replays(jkt TEXT,jti TEXT,htm TEXT,htu TEXT,expires_at TIMESTAMPTZ,UNIQUE(jkt,jti));`);
     for (const id of [viewer, sourceAdmin, stranger, creator]) await pool.query('INSERT INTO users(id,username) VALUES($1::uuid,$1::text)', [id]);
+    // Canonical ledger identity is an external prerequisite of the funding migrations,
+    // not a workforce-owned wallet. Match the migration-chain fixture's prelude.
+    await pool.query('CREATE TABLE credit_accounts(id UUID PRIMARY KEY, user_id UUID UNIQUE, owner_kind VARCHAR(16))');
     const chain = (await readdir(MIGRATIONS)).filter((f) => f.endsWith('.sql')
       && (/workforce/.test(f) || ['20260711120000-workspaces.sql', '20260811130000-agent-identities.sql'].includes(f))).sort();
     await pool.query((await readFile(new URL('20260711120000-workspaces.sql', MIGRATIONS), 'utf8')).split('-- DOWN')[0]);

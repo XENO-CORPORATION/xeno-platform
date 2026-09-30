@@ -77,6 +77,9 @@ test('a change of team function or division head is decided, with its actor and 
       CREATE TABLE chat_projects(id UUID PRIMARY KEY DEFAULT gen_random_uuid(), user_id UUID, owner_user_id UUID REFERENCES users(id),
         workspace_id UUID, name TEXT NOT NULL DEFAULT 'p', is_archived BOOLEAN NOT NULL DEFAULT false)`);
     for (const id of [owner, lead, erasable]) await pool.query('INSERT INTO users VALUES($1)', [id]);
+    // Canonical ledger identity is an external prerequisite of the funding migrations,
+    // not a workforce-owned wallet. Match the migration-chain fixture's prelude.
+    await pool.query('CREATE TABLE credit_accounts(id UUID PRIMARY KEY, user_id UUID UNIQUE, owner_kind VARCHAR(16))');
     const chain = (await readdir(MIGRATIONS)).filter((f) => f.endsWith('.sql')
       && (/workforce/.test(f) || f === '20260711120000-workspaces.sql')).sort()
       .filter((f) => f !== '20260924190000-workforce-function-change-is-decided.sql');
