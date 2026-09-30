@@ -170,6 +170,13 @@ test('pool admission reserves exact eligible lots atomically and never falls bac
    return {status:r.status,body:await r.json()};
  };
  const next=(await admitRun(pool,ctx(owner),request())).admission;
+ // A pool run that never drew settles through its aggregate provider receipt below: finishing the run
+ // (its result recorded) must NOT release the hold that receipt needs.
+ await pool.query("INSERT INTO workforce_run_results(admission_id,outcome,summary,artifacts,report_hash,reported_by_user_id) VALUES($1,'completed','','[]',$2,$3)",
+   [next.admissionId,createHash('sha256').update('pool-result').digest('hex'),owner]);
+ {const {closeFinishedRunTx}=await import('../src/server/utils/creditLedgerV2.js');const c=await pool.connect();
+  try{await c.query('BEGIN');assert.equal(await closeFinishedRunTx(c,next.admissionId),null,'a finished pool run without draws keeps its hold for the aggregate receipt');await c.query('COMMIT');}
+  finally{c.release();}}
  const receipt={admissionId:next.admissionId,eventId:'usage_'+marker,providerRequestId:'provider_'+marker,provider:'isolated-provider',
    model:price.model,inputTokens:1000,outputTokens:1000,measured:true,allWorkTerminal:true};
  const beforeSettle=(await pool.query('SELECT balance FROM credit_accounts WHERE user_id=$1',[p.id])).rows[0].balance;

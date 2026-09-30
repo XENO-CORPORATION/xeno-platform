@@ -59,6 +59,7 @@ import { authorityTransaction, lockWorkspaceAuthority } from './workspaceOperati
 import { lockApiKeyWorkforceAuthority } from './apiKeyWorkforceAuthority.js';
 import { RunAdmissionError, actsInDivision } from './workforceRunAdmission.js';
 import { resolveRunFunding } from './workforceRunFunding.js';
+import { closeFinishedRunTx } from '../utils/creditLedgerV2.js';
 
 /** NFR-06: "maximum 60 seconds". The database CHECK holds the same bound independently. */
 export const RUN_LEASE_MAX_SECONDS = 60;
@@ -329,6 +330,9 @@ export async function revokeRun(pool, authenticatedContext, admissionIdValue) {
     await db.query('SELECT pg_advisory_xact_lock(hashtextextended($1,0))', [`run-authority:${admissionId}`]);
     await db.query(`INSERT INTO workforce_run_revocations(admission_id,revoked_by_user_id,reason) VALUES($1,$2,$3)
       ON CONFLICT (admission_id) DO NOTHING`, [admissionId, actorUserId, reason]);
+    // A stop fences the tree. If nothing is still in flight, the run is over: release its reservation
+    // with the stop, in this transaction. An open draw keeps it committed until that work resolves.
+    await closeFinishedRunTx(db, admissionId);
     const r = (await db.query('SELECT * FROM workforce_run_revocations WHERE admission_id=$1', [admissionId])).rows[0];
     return { schemaVersion: 1, admissionId, revoked: true, reason: r.reason, revokedAt: r.revoked_at.toISOString(), replayed: r.reason !== reason };
   });
