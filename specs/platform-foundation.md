@@ -253,7 +253,12 @@ the remainder and wallet conservation matches the charge. An invalid gateway key
 provider; a separate revoked admission stops before a new draw/provider call. Terminal closure is
 mutation-checked independently of revocation so one closing path cannot mask the other.
 
-A fourth request exercises sender-constrained OIDC: a synthetic issuer-signed token bound to a real
+A fourth request is a real default-factory SDK delegation. The branch-admission hook admits a child
+under the parent's envelope and supplies its distinct authority. Its provider call creates a draw
+on the parent's existing hold, not another wallet reservation. Reporting only the parent leaves
+that hold open; the child's terminal result closes the tree and releases the remainder.
+
+A fifth request exercises sender-constrained OIDC: a synthetic issuer-signed token bound to a real
 local session and a per-request P-256 DPoP proof travels through the real workforce authorization
 router and actual gateway verifier. Its own admission has one measured settled draw. Wrong-method
 proof, replayed proof and revoked session refuse before provider work. Public HTTPS identities are
