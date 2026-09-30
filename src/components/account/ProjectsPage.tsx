@@ -3,7 +3,7 @@ import { Archive, CalendarDays, FolderKanban, LayoutGrid, List, MessageSquare, P
 import { useNavigate, useParams } from 'react-router-dom';
 import { useWorkspace } from '../../contexts/WorkspaceContext';
 import { scopeLabel } from '../../lib/workspaceLabel';
-import { archiveProject, createProject, listProjects, updateProject, type Project } from '../../services/accountService';
+import { archiveProject, createProject, getProject, listProjects, updateProject, type Project } from '../../services/accountService';
 import ResourceState from '../platform/ResourceState';
 import ProjectTeamAssignments from './ProjectTeamAssignments';
 import ProjectPublication from './ProjectPublication';
@@ -29,6 +29,9 @@ const ProjectsPage: React.FC = () => {
   const loadGeneration = useRef(0);
   const [loadedWorkspaceId, setLoadedWorkspaceId] = useState<string>();
   const [projects, setProjects] = useState<Project[]>([]);
+  const [detail, setDetail] = useState<{ project: Project; workspaceId: string; generation: number } | null>(null);
+  const [detailError, setDetailError] = useState('');
+  const [detailReload, setDetailReload] = useState(0);
   const [state, setState] = useState<'loading' | 'ready' | 'error'>('loading');
   const [error, setError] = useState('');
   const [query, setQuery] = useState('');
@@ -75,7 +78,24 @@ const ProjectsPage: React.FC = () => {
     return loadedWorkspaceId === activeWorkspace?.id
       ? projects.filter((project) => !needle || `${project.name} ${project.description || ''}`.toLowerCase().includes(needle)) : [];
   }, [projects, query, loadedWorkspaceId, activeWorkspace?.id]);
-  const selected = loadedWorkspaceId === activeWorkspace?.id ? projects.find((project) => project.id === projectId) || null : null;
+  useEffect(() => {
+    setDetail(null); setDetailError('');
+    if (!projectId || !activeWorkspace?.id) return;
+    const workspaceId = activeWorkspace.id, generation = actionContext.current.generation;
+    const abort = new AbortController(); let current = true;
+    const timer = window.setTimeout(() => { abort.abort(); if (current) setDetailError('Project request timed out. Retry to check access.'); }, 15000);
+    void getProject(projectId, abort.signal).then(result => {
+      if (!current || generation !== actionContext.current.generation) return;
+      if (result.project.id !== projectId) throw new Error('The server returned a different project.');
+      if (result.project.workspace_id && result.project.workspace_id !== workspaceId) throw new Error('This project belongs to another workspace. Select its workspace to open this link.');
+      if (!result.project.workspace_id && activeWorkspace.workspace_type !== 'personal') throw new Error('Select your personal workspace to open this project.');
+      setDetail({ project: { ...result.project, capabilities: result.capabilities }, workspaceId, generation });
+    }).catch(cause => { if (current && !abort.signal.aborted && generation === actionContext.current.generation) setDetailError(cause instanceof Error ? cause.message : 'Project unavailable.'); })
+      .finally(() => window.clearTimeout(timer));
+    return () => { current = false; window.clearTimeout(timer); abort.abort(); };
+  }, [projectId, activeWorkspace?.id, activeWorkspace?.workspace_type, detailReload]);
+  const selected = detail && detail.project.id === projectId && detail.workspaceId === activeWorkspace?.id
+    && detail.generation === actionContext.current.generation ? detail.project : null;
 
   const submitCreate = async (event: React.FormEvent) => {
     event.preventDefault();
@@ -115,6 +135,7 @@ const ProjectsPage: React.FC = () => {
         if (!stillCurrent()) return;
         if (result.project.id !== action.project.id || result.project.name !== next) throw new Error('The server did not confirm the requested project name.');
         setProjects(current => current.map(item => item.id === action.project.id ? result.project : item));
+        setDetail(current => current?.project.id === action.project.id ? { ...current, project: { ...result.project, capabilities: current.project.capabilities } } : current);
       } else {
         if (confirmedArchive.current !== action.project.id) {
           await archiveProject(action.project.id);
@@ -137,6 +158,9 @@ const ProjectsPage: React.FC = () => {
   return <main className="xeno-platform-page xeno-projects-page">
     <header className="xeno-platform-page-header"><div><span className="xeno-page-eyebrow">{scopeLabel(activeWorkspace)}</span><h1>Projects</h1><p>Workspace projects for conversations, files, instructions, schedules, and agent work.</p></div><div className="xeno-header-actions"><button type="button" className="xeno-page-button" onClick={() => navigate('/public-projects')}>Public projects</button><button type="button" className="xeno-page-button" onClick={() => void load()}><RefreshCw size={15} />Refresh</button><button type="button" className="xeno-page-button is-primary" onClick={() => setCreating(true)}><Plus size={15} />New project</button></div></header>
     {error ? <div className="xeno-inline-error" role="alert">{error}</div> : null}
+    {projectId && !selected ? <ResourceState kind={detailError ? 'unavailable' : 'loading'} title={detailError ? 'Project unavailable' : 'Loading project details'} detail={detailError || undefined}
+      actionLabel="Retry project" onRetry={detailError ? () => setDetailReload(value => value + 1) : undefined}
+      secondaryActionLabel="Back to projects" onSecondaryAction={() => navigate('/overview/projects')} /> : null}
     <div className="xeno-project-toolbar"><label><Search size={15} /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search projects" /></label><div role="group" aria-label="Project view"><button type="button" className={view === 'list' ? 'is-active' : ''} onClick={() => selectView('list')}><List size={15} />List</button><button type="button" className={view === 'board' ? 'is-active' : ''} onClick={() => selectView('board')}><LayoutGrid size={15} />Board</button><button type="button" className={view === 'calendar' ? 'is-active' : ''} onClick={() => selectView('calendar')}><CalendarDays size={15} />Calendar</button></div></div>
     {state === 'loading' ? <ResourceState kind="loading" title="Loading persisted projects" /> : state === 'error' ? <ResourceState kind="error" title="We couldn't load projects" detail={error} actionLabel="Try again" onRetry={() => void load()} /> : filtered.length === 0 ? <ResourceState kind="empty" layout="page" previewLabel="Workspace / Projects" title={query ? 'No matching projects' : 'No projects yet'} detail={query ? 'Change the search or clear it to see all projects.' : 'Create a persisted project to keep conversations, files, instructions, schedules, and agent work together.'} actionLabel={query ? 'Clear search' : 'Create project'} onRetry={() => query ? setQuery('') : setCreating(true)} /> : view === 'list' ? <section className="xeno-data-card xeno-project-list"><header><span>Name</span><span>Contents</span><span>Status</span><span>Updated</span></header>{filtered.map((project) => <button type="button" key={project.id} onClick={() => navigate(`/overview/projects/${project.id}`)}><span><i><FolderKanban size={16} /></i><b>{project.name}</b><small>{project.description || 'No description'}</small></span><span>{Number(project.chat_count || 0)} chats · {Number(project.file_count || 0)} files</span><span>{projectState(project)}</span><time>{dateLabel(project.updated_at)}</time></button>)}</section> : view === 'board' ? <section className="xeno-project-board"><div><header><span>Active</span><b>{filtered.filter((item) => !item.is_archived).length}</b></header>{filtered.filter((item) => !item.is_archived).map((project) => <button type="button" key={project.id} onClick={() => navigate(`/overview/projects/${project.id}`)}><FolderKanban size={16} /><strong>{project.name}</strong><p>{project.description || 'No description'}</p><small>{Number(project.chat_count || 0)} chats · updated {dateLabel(project.updated_at)}</small></button>)}</div></section> : <section className="xeno-data-card xeno-project-calendar">{filtered.map((project) => <button type="button" key={project.id} onClick={() => navigate(`/overview/projects/${project.id}`)}><time>{new Date(project.updated_at).toLocaleDateString(undefined, { month: 'short', day: '2-digit' })}</time><span><strong>{project.name}</strong><small>Last persisted update · {Number(project.chat_count || 0)} chats</small></span></button>)}</section>}
     {creating ? <div className="xeno-drawer-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) setCreating(false); }}><aside className="xeno-detail-drawer" role="dialog" aria-modal="true" aria-label="Create project"><header><span className="xeno-integration-logo"><FolderKanban size={20} /></span><span><small>{activeWorkspace.name}</small><h2>New project</h2></span><button type="button" onClick={() => setCreating(false)} aria-label="Close"><X size={18} /></button></header><form className="xeno-project-form" onSubmit={submitCreate}><label>Project name<input autoFocus required maxLength={255} value={name} onChange={(event) => setName(event.target.value)} /></label><label>Description<textarea rows={5} value={description} onChange={(event) => setDescription(event.target.value)} /></label><p>This creates a server-backed project in the active workspace. It is immediately available to people and agents with access.</p><button type="submit" className="xeno-page-button is-primary" disabled={busy === 'create'}>{busy === 'create' ? 'Creating…' : 'Create project'}</button></form></aside></div> : null}
