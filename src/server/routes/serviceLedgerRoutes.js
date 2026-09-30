@@ -117,10 +117,39 @@ export function createServiceLedgerRouter({
     try { res.json(await ledger.settleProjectRunV2(req.db,req.body)); }
     catch(error) {
       if(error.code==='BAD_REQUEST'||error.code==='INVALID_PINNED_PRICING')return badRequest(res,'Measured terminal usage receipt required.');
-      if(error.code==='FUNDING_CONFLICT')return res.status(409).json({error:{code:error.code}});
+      if(error.code==='FUNDING_CONFLICT'||error.code==='DRAWS_PRESENT')return res.status(409).json({error:{code:error.code}});
       sendErr(res,error);
     }
   });
+
+  /**
+   * RUN DRAWS -- XENO-WORKFORCE-01 §8.7. The gateway opens one draw per provider dispatch on the run's
+   * one reservation, presenting the runtime's lease and the actor it authenticated; the platform decides
+   * payer, tariff and bound. Settlement is measured usage, never a caller-chosen amount.
+   */
+  const DRAW_STATUS = {
+    RUN_BUDGET_EXHAUSTED: 402, LEASE_REQUIRED: 403, LEASE_INVALID: 403, LEASE_WRONG_OPERATION: 403, LEASE_EXPIRED: 403,
+    LEASE_CONSUMED: 409, RUN_REVOKED: 403, RUN_RESERVATION_MISSING: 404, RUN_RESERVATION_LAPSED: 409,
+    MODEL_NOT_APPROVED: 422, MODEL_NOT_PRICED: 422, DRAWS_UNRESOLVED: 409, NOT_ROOT: 409, DRAW_NOT_OPEN: 409,
+    FUNDING_CONFLICT: 409, INVALID_PINNED_PRICING: 422,
+  };
+  const drawRoute = (act) => async (req, res) => {
+    res.set('Cache-Control', 'no-store');
+    const body = { ...(req.body || {}), admissionId: req.params.admissionId, ...(req.params.drawId ? { drawId: req.params.drawId } : {}) };
+    try { res.json(await ledger[act](req.db, body)); }
+    catch (error) {
+      if (error.code === 'BAD_REQUEST') return badRequest(res, 'Malformed run draw request.');
+      const status = DRAW_STATUS[error.code];
+      if (status) return res.status(status).json({ error: { code: error.code,
+        ...(error.remainingMicro ? { remainingMicro: error.remainingMicro, requiredMicro: error.requiredMicro } : {}) } });
+      sendErr(res, error);
+    }
+  };
+  router.post('/runs/:admissionId/draws', drawRoute('openRunDrawV2'));
+  router.post('/runs/:admissionId/draws/:drawId/settle', drawRoute('settleRunDrawV2'));
+  router.post('/runs/:admissionId/draws/:drawId/void', drawRoute('voidRunDrawV2'));
+  router.post('/runs/:admissionId/draws/:drawId/extend', drawRoute('extendRunDrawV2'));
+  router.post('/runs/:admissionId/close', drawRoute('closeRunReservationV2'));
 
   /**
    * Worst-case reservation for a request. `pricing` is priced HERE; `amountMicro` is the

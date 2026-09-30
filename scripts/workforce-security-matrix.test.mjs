@@ -95,6 +95,16 @@ test('NFR-01: no cross-owner or cross-workspace disclosure, and no unexpected gr
   const owner = await user('owner'), editor = await user('editor'), viewer = await user('viewer');
   const rivalOwner = await user('rival'), stranger = await user('stranger'), lenderOwner = await user('lender');
   await pool.query('INSERT INTO credit_accounts(user_id,balance) VALUES($1,90000000),($2,90000000),($3,90000000)', [owner, editor, rivalOwner]);
+  // Admission's budget term reads eligible credit_grants lots (utils/usageCreditFunding.js
+  // allocateFunding), not the cached credit_accounts.balance alone -- fund a real paid lot +
+  // overflow-on per payer, idempotently (deterministic grant id, replace not accumulate).
+  for (const u of [owner, editor, rivalOwner]) {
+    await pool.query(`INSERT INTO usage_credit_preferences(user_id,enabled) VALUES($1,true)
+      ON CONFLICT (user_id) DO UPDATE SET enabled=true`, [u]);
+    await pool.query(`INSERT INTO credit_grants(id,user_id,amount_micro,remaining_micro,kind,source_ref)
+      VALUES(md5('test-fund:'||$1::text)::uuid,$1::uuid,90000000,90000000,'paid','test-fund')
+      ON CONFLICT (id) DO UPDATE SET amount_micro=EXCLUDED.amount_micro, remaining_micro=EXCLUDED.remaining_micro`, [u]);
+  }
   const studio = await workspace(owner, 'studio'), rival = await workspace(rivalOwner, 'rival'), lender = await workspace(lenderOwner, 'lender');
   await tuple('workspace', studio, 'editor', 'user', editor);
   await tuple('workspace', studio, 'viewer', 'user', viewer);

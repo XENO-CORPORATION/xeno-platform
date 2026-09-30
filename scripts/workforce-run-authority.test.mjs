@@ -73,8 +73,18 @@ test('an admitted run re-asks before each step, and live revocation overrides it
   const explicit = (caps) => ({ schemaVersion: 1, mode: 'explicit', capabilities: caps });
   const user = async (s) => (await pool.query(`INSERT INTO users(username,email,password_hash,display_name,email_verified)
     VALUES($1,$2,'test-only',$1,TRUE) RETURNING id`, [`${marker}-${s}`, `${marker}-${s}@example.test`])).rows[0].id;
-  const fund = (u, micro) => pool.query(`INSERT INTO credit_accounts(user_id,balance) VALUES($1,$2)
-    ON CONFLICT (user_id) DO UPDATE SET balance=EXCLUDED.balance`, [u, micro]);
+  // Idempotent: a repeat fund(u, newMicro) REPLACES this fixture's grant/balance, it never
+  // accumulates a second lot. See workforce-run-admission.test.mjs's fund() for why a real
+  // credit_grants lot (not just credit_accounts.balance) is required for admission to admit.
+  const fund = async (u, micro) => {
+    await pool.query(`INSERT INTO credit_accounts(user_id,balance) VALUES($1,$2)
+      ON CONFLICT (user_id) DO UPDATE SET balance=EXCLUDED.balance`, [u, micro]);
+    await pool.query(`INSERT INTO usage_credit_preferences(user_id,enabled) VALUES($1,true)
+      ON CONFLICT (user_id) DO UPDATE SET enabled=true`, [u]);
+    await pool.query(`INSERT INTO credit_grants(id,user_id,amount_micro,remaining_micro,kind,source_ref)
+      VALUES(md5('test-fund:'||$1::text)::uuid,$1::uuid,$2,$2,'paid','test-fund')
+      ON CONFLICT (id) DO UPDATE SET amount_micro=EXCLUDED.amount_micro, remaining_micro=EXCLUDED.remaining_micro`, [u, micro]);
+  };
   const workspace = async (owner, s, extra = []) => {
     const id = (await pool.query('INSERT INTO workspaces(owner_user_id,name,slug) VALUES($1,$2,$2) RETURNING id', [owner, `${marker}-${s}`])).rows[0].id;
     await pool.query(`INSERT INTO relationship_tuples(object_type,object_id,relation,subject_type,subject_id) VALUES('workspace',$1,'owner','user',$2)`, [id, owner]);
@@ -122,7 +132,7 @@ test('an admitted run re-asks before each step, and live revocation overrides it
   };
 
   const owner = await user('owner'), editor = await user('editor'), viewer = await user('viewer'), outsider = await user('outsider');
-  await fund(owner, 5_000_000n); await fund(editor, 5_000_000n); await fund(outsider, 5_000_000n);
+  await fund(owner, 100_000_000n); await fund(editor, 100_000_000n); await fund(outsider, 100_000_000n);
   const studio = await workspace(owner, 'studio', [['editor', editor], ['viewer', viewer]]);
   const lender = await workspace(outsider, 'lender');
   const ctx = (actorUserId, clientId = 'xeno-agent-interface') => ({ actorUserId, clientId });
@@ -217,7 +227,7 @@ test('an admitted run re-asks before each step, and live revocation overrides it
   });
 
   await t.test('RUN-03: the actor losing the target, or the team membership, stops the run', async () => {
-    await fund(viewer, 5_000_000n);
+    await fund(viewer, 100_000_000n);
     const ws = await workspace(owner, 'member', [['editor', viewer]]);
     const a = await assign(lent.id, 'agent', ws, { type: 'workspace', id: lender }, explicit(['files.read']));
     const id = await admit(viewer, lent, { kind: 'workspace', assignmentId: a });

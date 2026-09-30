@@ -95,11 +95,16 @@ test('client: Brain off is auto; Brain on picks a real level (medium, else high)
   );
 });
 
-test('reachability: Brain stays, the effort control sits beside it, the level rides the request end to end', () => {
+test('reachability: thinking on/off folds into the effort control beside the model, the level rides the request end to end', () => {
   const chat = src('../src/components/playground/Chat/ChatWithLLM.tsx');
-  assert.match(chat, /setIsReasonToggled/, 'the on/off Brain toggle remains');
-  assert.match(chat, /data-reason-toggle/, 'Brain is a real control, not a leftover import');
-  assert.match(chat, /<ChatEffortControl model=\{selectedModel\} value=\{selectedEffort\} onChange=\{chooseEffort\}/, 'the effort control sits beside Brain');
+  assert.match(chat, /setIsReasonToggled/, 'thinking on/off is still real state');
+  // The approved hybrid design: model | effort as ONE group, Off as the effort's first level —
+  // never a separate Brain button beside a chip.
+  assert.match(chat, /<ChatEffortControl model=\{selectedModel\} value=\{selectedEffort\} onChange=\{chooseEffort\} thinking=\{\{ on: isReasonToggled, onToggle: toggleReasoning \}\}/, 'the effort control carries thinking on/off');
+  assert.doesNotMatch(chat, /data-reason-toggle/, 'no separate Brain toggle survives beside the effort pill; the pill carries it');
+  const at = chat.indexOf('data-composer-model-group');
+  assert.notEqual(at, -1, 'the model | effort group exists');
+  assert.match(chat.slice(at, at + 2500), /<ChatModelSelector[\s\S]*isRowTrigger[\s\S]*<ChatEffortControl/, 'model then effort, in one group');
   assert.match(chat, /const effortShape = requestShapeFor\(baseModelId, selectedEffortRef\.current\);/, 'the send path derives id + parameter from the chosen option');
   assert.match(chat, /let actualModelIdForApi = taskArg !== 'image' \? effortShape\.modelId : baseModelId;/, 'a suffixed id is what gets sent');
   assert.match(chat, /reasoningEffort: taskArg !== 'image' \? effortShape\.reasoningEffort : undefined,/, 'the parameter rides the payload');
@@ -115,7 +120,10 @@ test('reachability: Brain stays, the effort control sits beside it, the level ri
   const control = src('../src/components/playground/Chat/ChatEffortControl.tsx');
   assert.match(control, /from '@xenosystem\/agent-conversation\/components\/agent\/composer\/EffortCells'/, 'the cells COME from the conversation package (D7d), not a copy');
   assert.match(control, /if \(options\.length < 1\) return null;/, 'nothing to choose → nothing rendered');
-  assert.match(control, /o\.effort !== 'auto'/, 'Auto is the Brain, not a second chip');
+  assert.match(control, /o\.effort !== 'auto'/, 'Auto is thinking-off, not a second level');
+  assert.match(control, /data-reason-toggle=\{thinking \? \(isOff \? 'off' : 'on'\) : undefined\}/, 'the pill reports thinking on/off');
+  assert.match(control, /if \(id === THINKING_OFF_ID\) \{\s*if \(thinking\?\.on\) thinking\.onToggle\(\);/, 'Off turns thinking off');
+  assert.match(control, /if \(thinking && !thinking\.on\) thinking\.onToggle\(\);\s*onChange\(next\);/, 'a level turns thinking on at that level');
   const css = src('../src/components/playground/Chat/chat-theme.css');
   assert.match(css, /\.chat-effort\.xa-dock \{ padding: 0; container-type: normal; \}/);
 });

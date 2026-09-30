@@ -76,8 +76,22 @@ test('a run is admitted from authoritative state, as the intersection of every r
   const explicit = (caps) => ({ schemaVersion: 1, mode: 'explicit', capabilities: caps });
   const user = async (s) => (await pool.query(`INSERT INTO users(username,email,password_hash,display_name,email_verified)
     VALUES($1,$2,'test-only',$1,TRUE) RETURNING id`, [`${marker}-${s}`, `${marker}-${s}@example.test`])).rows[0].id;
-  const fund = (u, micro) => pool.query(`INSERT INTO credit_accounts(user_id,balance) VALUES($1,$2)
-    ON CONFLICT (user_id) DO UPDATE SET balance=EXCLUDED.balance`, [u, micro]);
+  // Funds an eligible PAID lot, not just the cached credit_accounts.balance total: admission's
+  // budget term now reads eligibility from usageCreditFunding.allocateFunding (the canonical
+  // allocator, shared with creditLedgerV2's hold/spend paths), which draws from credit_grants
+  // under the account's overflow preference -- a balance with no grant behind it funds nothing.
+  // Idempotent: a repeat fund(u, newMicro) REPLACES this fixture's grant/balance, it never
+  // accumulates a second lot -- the grant id is deterministic (derived from u), so a second
+  // call upserts the same row rather than adding a sibling one an allocator would then sum.
+  const fund = async (u, micro) => {
+    await pool.query(`INSERT INTO credit_accounts(user_id,balance) VALUES($1,$2)
+      ON CONFLICT (user_id) DO UPDATE SET balance=EXCLUDED.balance`, [u, micro]);
+    await pool.query(`INSERT INTO usage_credit_preferences(user_id,enabled) VALUES($1,true)
+      ON CONFLICT (user_id) DO UPDATE SET enabled=true`, [u]);
+    await pool.query(`INSERT INTO credit_grants(id,user_id,amount_micro,remaining_micro,kind,source_ref)
+      VALUES(md5('test-fund:'||$1::text)::uuid,$1::uuid,$2,$2,'paid','test-fund')
+      ON CONFLICT (id) DO UPDATE SET amount_micro=EXCLUDED.amount_micro, remaining_micro=EXCLUDED.remaining_micro`, [u, micro]);
+  };
   const workspace = async (owner, s, extra = []) => {
     const id = (await pool.query('INSERT INTO workspaces(owner_user_id,name,slug) VALUES($1,$2,$2) RETURNING id', [owner, `${marker}-${s}`])).rows[0].id;
     await pool.query(`INSERT INTO relationship_tuples(object_type,object_id,relation,subject_type,subject_id) VALUES('workspace',$1,'owner','user',$2)`, [id, owner]);
@@ -126,7 +140,7 @@ test('a run is admitted from authoritative state, as the intersection of every r
   };
 
   const owner = await user('owner'), editor = await user('editor'), viewer = await user('viewer'), outsider = await user('outsider');
-  await fund(owner, 5_000_000n); await fund(editor, 5_000_000n); await fund(outsider, 5_000_000n);
+  await fund(owner, 100_000_000n); await fund(editor, 100_000_000n); await fund(outsider, 100_000_000n);
   const studio = await workspace(owner, 'studio', [['editor', editor], ['viewer', viewer]]);
   const lender = await workspace(outsider, 'lender');
   const ctx = (actorUserId, clientId = 'xeno-agent-interface') => ({ actorUserId, clientId });
@@ -226,7 +240,7 @@ test('a run is admitted from authoritative state, as the intersection of every r
     const gone = await assign(other.id, 'agent', hidden, { type: 'workspace', id: lender }, explicit(['files.read']));
     await pool.query(`UPDATE workforce_workspace_assignments SET state='revoked', revision=revision+1, revoked_at=clock_timestamp(), updated_at=clock_timestamp() WHERE id=$1`, [gone]);
     const stranger = await user('nfr07-stranger');
-    await fund(stranger, 5_000_000n);
+    await fund(stranger, 100_000_000n);
     // The whole refusal a caller can observe: code, and every detail -- an oracle is built from the
     // difference, so the comparison is of everything, not of one hand-picked field.
     const refusal = (p) => p.then(() => 'admitted', (e) => JSON.stringify({ code: e.code, status: e.status, details: e.details }));
@@ -296,7 +310,7 @@ test('a run is admitted from authoritative state, as the intersection of every r
     //  division as a term." The workspace editor below may act for the WORKSPACE; that alone must not
     //  reach work scoped to a division it is not in.
     const member = await user('div-member'), stranger = await user('div-stranger');
-    await fund(member, 5_000_000n); await fund(stranger, 5_000_000n);
+    await fund(member, 100_000_000n); await fund(stranger, 100_000_000n);
     const ws = await workspace(owner, 'div08', [['editor', member], ['editor', stranger], ['admin', editor]]);
     const mk = async (key, parent = null) => (await pool.query(`INSERT INTO workforce_divisions(workspace_id,parent_division_id,key,name,created_by_user_id)
       VALUES($1,$2,$3,$3,$4) RETURNING id`, [ws, parent, key, owner])).rows[0].id;
@@ -327,7 +341,7 @@ test('a run is admitted from authoritative state, as the intersection of every r
 
     // A viewer of the division may see it, not run in it; an agent gets exactly its grant.
     const watcher = await user('div-watcher');
-    await fund(watcher, 5_000_000n);
+    await fund(watcher, 100_000_000n);
     await pool.query(`INSERT INTO relationship_tuples(object_type,object_id,relation,subject_type,subject_id) VALUES('workspace',$1,'editor','user',$2)`, [ws, watcher]);
     await inDivision(creative, watcher, 'viewer');
     await rejects(run(watcher, intoCreative), 'denied', 'actor_outside_division', 'a division viewer does not execute in it');
@@ -352,8 +366,12 @@ test('a run is admitted from authoritative state, as the intersection of every r
     const r = admitRun(pool, ctx(owner), base({ id: mine.id, version: 2, contentHash: hash(`${mine.id}:2`) }, { kind: 'personal', ownerUserId: owner },
       { budget: { ceilingMicro: '999999999' } }));
     await rejects(r, 'needs_approval', 'budget_exceeds_available', 'budget approval is explicit and funded');
+    // Leave exactly half a credit free, whatever earlier admissions in this suite already reserved (every
+    // admitted personal run now holds its ceiling): a 1-credit run must then be refused.
+    const free = BigInt((await pool.query(`SELECT a.balance - COALESCE((SELECT sum(amount_micro-settled_micro) FROM credit_holds
+      WHERE user_id=$1 AND state='held' AND expires_at>now()),0) AS f FROM credit_accounts a WHERE a.user_id=$1`, [owner])).rows[0].f);
     await pool.query(`INSERT INTO credit_holds(user_id,hold_id,surface,operation,amount_micro,settled_micro,state,expires_at)
-      VALUES($1,$2,'test','test',4500000,0,'held',now()+interval '1 hour')`, [owner, randomUUID()]);
+      VALUES($1,$2,'test','test',$3,0,'held',now()+interval '1 hour')`, [owner, randomUUID(), (free - 500000n).toString()]);
     await rejects(admitRun(pool, ctx(owner), base({ id: mine.id, version: 2, contentHash: hash(`${mine.id}:2`) }, { kind: 'personal', ownerUserId: owner })),
       'needs_approval', 'budget_exceeds_available', 'budget approval is explicit and funded');
     await assert.rejects(admitRun(pool, ctx(owner), base({ id: mine.id, version: 2, contentHash: hash(`${mine.id}:2`) }, { kind: 'personal', ownerUserId: owner },

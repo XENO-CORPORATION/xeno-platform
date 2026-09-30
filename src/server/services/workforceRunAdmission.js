@@ -39,8 +39,11 @@
  *                        payer's available balance now. An explicit fundingBudgetId selects a
  *                        project pool instead: approved named spender, milestone threshold and
  *                        real lot-allocated canonical hold commit with admission. There is no
- *                        personal fallback. Provider dispatch additionally requires an enforceable
- *                        bound; the generic authority lease refuses it for pools.
+ *                        personal fallback. A PERSONAL root reserves its ceiling the same way: one
+ *                        canonical hold (creditLedgerV2 holdV2Tx), committed with the admission. Every
+ *                        provider dispatch then opens a DRAW on that one hold (creditLedgerV2
+ *                        openRunDrawV2) -- the enforceable per-dispatch bound -- and settles it from
+ *                        measured usage. There is no second hold per call and no parallel wallet.
  *   parent (RUN-10)      optional: the admission this run is spawned inside. A child is a SUB-RESERVATION
  *                        of its parent, never a copy: same actor, client, payer and target; capabilities
  *                        inside the parent's; a ceiling carved out of what the parent has left after
@@ -66,6 +69,9 @@ import { check } from '../utils/authzReBAC.js';
 import { authorityTransaction, lockWorkspaceAuthority, operationHash } from './workspaceOperationReceipts.js';
 import { lockApiKeyWorkforceAuthority } from './apiKeyWorkforceAuthority.js';
 import { resolveRunFunding, reserveRunFunding } from './workforceRunFunding.js';
+import { allocateFunding } from '../utils/usageCreditFunding.js';
+import { holdV2Tx, RUN_HOLD_TTL_SECONDS, OPEN_DRAW_ON_HOLD } from '../utils/creditLedgerV2.js';
+import { prepareAccountQuota } from './usageCreditsService.js';
 
 export class RunAdmissionError extends Error {
   constructor(code, reason, extra = {}) {
@@ -427,14 +433,41 @@ export async function admitRun(pool, authenticatedContext, value) {
       catch(error){if(error.code==='needs_approval')fail('needs_approval',error.details.reason);throw error;}
     }
     const payerUserId = funding?funding.pool.account_owner_id:who.principal.kind === 'agent' ? who.principal.owner.id : who.principal.id;
-    if(!funding) {
-    const acct = (await db.query('SELECT balance, is_frozen FROM credit_accounts WHERE user_id=$1 FOR SHARE', [payerUserId])).rows[0];
-    const held = BigInt((await db.query(`SELECT coalesce(sum(amount_micro - settled_micro),0)::text AS h FROM credit_holds
-      WHERE user_id=$1 AND state='held' AND expires_at > now()`, [payerUserId])).rows[0].h);
-    const available = acct ? BigInt(acct.balance) - held : 0n;
-    if (!acct || acct.is_frozen) fail('needs_approval', 'payer_cannot_fund');
-    if (BigInt(request.budget.ceilingMicro) > available) fail('needs_approval', 'budget_exceeds_available', { availableMicro: (available < 0n ? 0n : available).toString() });
-
+    // A personal CHILD reserves no new money: it is carved out of its parent's envelope (checked below)
+    // and draws on its root's one hold. Checking the payer's free balance for it would count the
+    // parent's own reservation against it and refuse a child the parent can fund.
+    if(!funding && !request.parent) {
+      // Same lock (FOR UPDATE, not FOR SHARE) and the same order as the canonical spend path --
+      // creditLedgerV2's ensureAccount/holdV2 and usageCreditsService's updateUsageCredits all take
+      // the account row before touching usage_credit_preferences or credit_grants, so overflow
+      // preference and lot state cannot change under a concurrent toggle or hold. `allocateFunding`
+      // itself documents this: "Account lock must be held by the caller."
+      const acct = (await db.query('SELECT balance, is_frozen FROM credit_accounts WHERE user_id=$1 FOR UPDATE', [payerUserId])).rows[0];
+      if (!acct || acct.is_frozen) fail('needs_approval', 'payer_cannot_fund');
+      // Conservation bound, same as holdV2's own pre-allocator check: credit_accounts.balance is
+      // documented as "the cached total" of unexpired credit_grants -- a cache, so it can drift
+      // (write-path bug, partial migration) out from under the lots table. This one raw comparison
+      // is what catches that: a grant that claims eligible funds the cache does not back is refused
+      // HERE, before allocateFunding ever sees it. It is not a second eligibility computation --
+      // it never chooses which lot to draw from and its result is not reused as "available" below.
+      const held = BigInt((await db.query(`SELECT coalesce(sum(amount_micro - settled_micro),0)::text AS h FROM credit_holds h
+        WHERE user_id=$1 AND state='held' AND (expires_at > now() OR ${OPEN_DRAW_ON_HOLD})`, [payerUserId])).rows[0].h);
+      if (BigInt(acct.balance) - held < BigInt(request.budget.ceilingMicro)) fail('needs_approval', 'budget_exceeds_available');
+      // Eligibility is the canonical allocator's own rule -- overflow preference, quarantine, and
+      // outstanding lot- and legacy-hold reservations, ALL read once, here, rather than re-derived
+      // from credit_accounts.balance minus a second independent sum of credit_holds (which double
+      // counts exactly what allocateFunding already withholds from its eligible lots). Its plan is
+      // discarded: this is a precondition read, never a reservation -- admission does not hold funds
+      // for the personal path (see the module header; dispatch-time metering is separate, unbuilt,
+      // and the production Interface stays gated closed until it lands).
+      try {
+        await allocateFunding(db, payerUserId, request.budget.ceilingMicro);
+      } catch (error) {
+        if (error.code === 'QUOTA_EXCEEDED' || error.code === 'INSUFFICIENT_CREDITS') {
+          fail('needs_approval', 'budget_exceeds_available', { usageCreditsEnabled: error.usageCreditsEnabled, resetsAt: error.resetsAt });
+        }
+        throw error;
+      }
     }
 
     // ── the intersection ───────────────────────────────────────────────────────────────────────
@@ -497,9 +530,86 @@ export async function admitRun(pool, authenticatedContext, value) {
     if(funding) {
       try { await reserveRunFunding(db,funding,row,parent); }
       catch(error){if(error.code==='needs_approval')fail('needs_approval',error.details.reason);throw error;}
+    } else if (parent) {
+      // A sub-reservation names its ROOT's one hold. A parent without one cannot fund anything.
+      const link = (await db.query('SELECT root_admission_id, hold_row_id FROM workforce_run_holds WHERE admission_id=$1', [parent.id])).rows[0];
+      if (!link) fail('needs_approval', 'parent_funding_unavailable');
+      const h = (await db.query('SELECT state FROM credit_holds WHERE id=$1 FOR SHARE', [link.hold_row_id])).rows[0];
+      if (h?.state !== 'held') fail('needs_approval', 'parent_funding_unavailable');
+      await db.query('INSERT INTO workforce_run_holds(admission_id,root_admission_id,hold_row_id) VALUES($1,$2,$3)',
+        [row.id, link.root_admission_id, link.hold_row_id]);
+    } else {
+      // The personal root reserves its whole ceiling now, on the canonical ledger, in this transaction:
+      // an admitted run cannot be starved mid-task by the payer's other spend. Same checks as any hold --
+      // ordinary wallet, free balance, spend caps, the overflow-consent allocator.
+      let held;
+      try {
+        held = await holdV2Tx(db, payerUserId, { holdId: row.id, amountMicro: Number(request.budget.ceilingMicro),
+          surface: 'workforce', operation: 'run', expiresInSeconds: RUN_HOLD_TTL_SECONDS });
+      } catch (error) {
+        if (['INSUFFICIENT_CREDITS', 'QUOTA_EXCEEDED', 'ACCOUNT_FROZEN', 'SPEND_CAP_EXCEEDED'].includes(error.code)) {
+          fail('needs_approval', error.code === 'SPEND_CAP_EXCEEDED' ? 'spend_cap_exceeded' : 'budget_exceeds_available',
+            { usageCreditsEnabled: error.usageCreditsEnabled, resetsAt: error.resetsAt });
+        }
+        throw error;
+      }
+      // A fresh admission row has a fresh id, so an existing hold under it is not a replay: refuse it.
+      if (held.existingRow) fail('conflict', 'run_reservation_conflict');
+      await db.query('INSERT INTO workforce_run_holds(admission_id,root_admission_id,hold_row_id) VALUES($1,$1,$2)', [row.id, held.row.id]);
     }
     return { replayed: false, admission: publicAdmission(row) };
   });
+}
+
+/** admitRun's own budget term can only ever find an allowance lot that already exists: ensureQuota
+ * (the weekly lazy issuance -- see usageCreditsService.prepareAccountQuota) opens its OWN pool
+ * connection and cannot run nested inside admitRun's transaction without risking a real deadlock --
+ * its account lock races admitRun's, and its mirrorLegacy UPDATE on `users` would block behind the
+ * FOR SHARE resolveRunnable already holds on that same row from a DIFFERENT connection, while THIS
+ * connection is the one awaiting it. This is the fix: a SEQUENCE of separate, non-nested steps,
+ * never a nested one.
+ *
+ *   1. parse (same validity as admitRun, including the expected-actor conflict), then a READ-ONLY
+ *      check for a prior admission on this (actor, client, operation). A replay is forwarded to
+ *      admitRun UNCHANGED -- its own idempotency hook is the one place a replay is decided, with the
+ *      same hash/incarnation conflict it always has, even for a since-revoked resource. No quota
+ *      step runs for a replay: nothing new is being issued for it, only re-reported.
+ *   2. a POOL-funded request (fundingBudgetId set) draws no personal quota; forwarded unchanged too.
+ *   3. otherwise, a PREFLIGHT authorityTransaction resolves the run exactly as admission would
+ *      (resolveRunnable + the same stale-pin check admitRun makes) and commits. This is what makes
+ *      "no issuance for unauthorized target" true: an unauthorized/invalid target throws here, the
+ *      preflight transaction rolls back, and prepareAccountQuota is never called. The payer is
+ *      captured the same way admitRun derives it -- the owner for an agent, the principal itself for
+ *      a human -- never a client-selected field.
+ *   4. AFTER that connection has released, prepareAccountQuota(pool, actor.actorUserId) runs on its
+ *      OWN connection/transaction. Its resolved billing subject must equal the payer step 3
+ *      captured; a mismatch refuses rather than issuing an allowance to whoever billingSubjectFor
+ *      resolved instead of the actor's real payer.
+ *   5. admitRun itself, UNCHANGED, resolves and checks everything again inside its own transaction.
+ *      Nothing from steps 3-4 is reused as authority -- they exist only so that, for a first-use
+ *      payer, the lot admitRun's allocator looks for is already there. */
+export async function admitAccountRun(pool, authenticatedContext, value) {
+  const { actor, request } = parse(authenticatedContext, value);
+  if (request.expectedActorAccountId && request.expectedActorAccountId !== actor.actorUserId) fail('conflict', 'actor_context_conflict');
+  const prior = await pool.query('SELECT 1 FROM workforce_run_admissions WHERE actor_user_id=$1 AND client_id=$2 AND operation_id=$3',
+    [actor.actorUserId, actor.clientId, request.operationId]);
+  if (!prior.rowCount && !request.budget.fundingBudgetId) {
+    const payer = await authorityTransaction(pool, async (db) => {
+      const r = await resolveRunnable(db, actor, request, 'workforce:manage');
+      if (r.version.version !== request.agent.version || r.version.content_hash !== request.agent.contentHash) {
+        fail('conflict', 'agent_version_stale', { currentVersion: r.version.version });
+      }
+      return r.who.principal.kind === 'agent' ? r.who.principal.owner.id : r.who.principal.id;
+    });
+    let subject;
+    try { subject = await prepareAccountQuota(pool, actor.actorUserId); }
+    catch (error) {
+      if (error.code === 'EMAIL_UNVERIFIED') fail('denied', 'email_verification_required');
+      throw error;
+    }
+    if (subject.userId !== payer) fail('denied', 'payer_subject_mismatch');
+  }
+  return admitRun(pool, authenticatedContext, value);
 }
 
 /** RUN-01's precondition, read before admitting: the CURRENT version pin of an agent as runnable at one

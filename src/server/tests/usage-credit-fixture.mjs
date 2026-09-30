@@ -4,6 +4,9 @@ import { readFileSync } from 'node:fs';
 
 export async function installUsageCreditFixture(pool) {
   await pool.query(readFileSync(new URL('../database/migrations/20260915140000-usage-credit-consent.sql', import.meta.url),'utf8').split('-- DOWN')[0]);
+  // The ledger's hold liveness reads run draws (an open draw keeps its reservation committed), so a
+  // ledger-only schema carries the draw table too -- the real migration, which is ledger-only by design.
+  await pool.query(readFileSync(new URL('../database/migrations/20260930100000-credit-hold-draws.sql', import.meta.url),'utf8').split('-- DOWN')[0]);
 }
 export async function optInUsageCredits(pool,userId) {
   await pool.query('INSERT INTO usage_credit_preferences (user_id,enabled) VALUES ($1,true) ON CONFLICT (user_id) DO UPDATE SET enabled=true',[userId]);

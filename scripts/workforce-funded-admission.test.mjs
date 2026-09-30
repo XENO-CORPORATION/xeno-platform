@@ -9,6 +9,7 @@ import {installBillingProviderFixture} from './fixtures/billing-provider-fixture
 const url=process.env.TEST_DATABASE_URL;if(url)requireProofDatabase(url);
 process.env.STRIPE_SECRET_KEY='sk_test_localfixture';process.env.STRIPE_PUBLISHABLE_KEY='pk_test_localfixture';
 process.env.STRIPE_EXPECTED_ACCOUNT_ID='acct_fixture';process.env.STRIPE_EXPECTED_MODE='test';
+process.env.JWT_SECRET ||= 'publication-milestone-local-fixture';
 const fixture=installBillingProviderFixture();
 const {handleEvent}=await import('../src/server/services/billingService.js');
 const funding=await import('../src/server/services/workforceFunding.js');
@@ -146,7 +147,9 @@ test('pool admission reserves exact eligible lots atomically and never falls bac
  const signingKey={kid:'isolated-test',privatePem:key.privateKey.export({format:'pem',type:'pkcs8'})};
  const step=operation=>authorizeRunStep(pool,ctx(owner),{admissionId:first.admission.admissionId,operation,...(operation==='privileged_call'?{capability:'files.read'}:{})},{signingKey});
  assert.ok((await step('privileged_call')).token,'live approval permits an otherwise authorized non-provider step');
- await reject(step('provider_dispatch'),'bounded_provider_dispatch_required','generic lease cannot authorize unbounded pooled provider dispatch');
+ // A dispatch lease attests authority only; the pool's money moves solely through a run draw that
+ // consumes it (proved in workforce-run-draws.test.mjs), so the lease itself spends nothing.
+ assert.ok((await step('provider_dispatch')).token,'a live pool run receives a dispatch lease; its bound is the draw');
  const releasePath='/api/workforce/funding/runs/release-undispatched';
  const noRelease=await call({admissionId:first.admission.admissionId},undefined,releasePath);
  assert.deepEqual([noRelease.status,noRelease.body?.details?.reason],[409,'provider_liability_unresolved'],
@@ -168,6 +171,13 @@ test('pool admission reserves exact eligible lots atomically and never falls bac
    return {status:r.status,body:await r.json()};
  };
  const next=(await admitRun(pool,ctx(owner),request())).admission;
+ // A pool run that never drew settles through its aggregate provider receipt below: finishing the run
+ // (its result recorded) must NOT release the hold that receipt needs.
+ await pool.query("INSERT INTO workforce_run_results(admission_id,outcome,summary,artifacts,report_hash,reported_by_user_id) VALUES($1,'completed','','[]',$2,$3)",
+   [next.admissionId,createHash('sha256').update('pool-result').digest('hex'),owner]);
+ {const {closeFinishedRunTx}=await import('../src/server/utils/creditLedgerV2.js');const c=await pool.connect();
+  try{await c.query('BEGIN');assert.equal(await closeFinishedRunTx(c,next.admissionId),null,'a finished pool run without draws keeps its hold for the aggregate receipt');await c.query('COMMIT');}
+  finally{c.release();}}
  const receipt={admissionId:next.admissionId,eventId:'usage_'+marker,providerRequestId:'provider_'+marker,provider:'isolated-provider',
    model:price.model,inputTokens:1000,outputTokens:1000,measured:true,allWorkTerminal:true};
  const beforeSettle=(await pool.query('SELECT balance FROM credit_accounts WHERE user_id=$1',[p.id])).rows[0].balance;
@@ -242,6 +252,9 @@ test('pool admission reserves exact eligible lots atomically and never falls bac
  assert.deepEqual([decision.deciding_principal_id,decision.responsible_account_id,decision.evidence[0].admissionId],[approver,approver,small.admissionId],
    'milestone acceptance uses the canonical accountable decision ledger');
  await assert.rejects(pool.query('DELETE FROM workforce_milestone_acceptances WHERE milestone_id=$1',[m2.id]),{code:'23514'},'milestone approvals are retained');
+ const {proveAcceptedPublication}=await import('./lib/project-publication-milestones.mjs');
+ await proveAcceptedPublication({pool,app,server,call,projectId:project.id,owner,approver,contributor,
+   milestone:m2,unacceptedMilestoneId:milestone.id,admissionId:small.admissionId,contributorStatement:acceptance.contributorStatement});
  const dispute=fixture.event('evt_dispute_'+marker,'charge.dispute.funds_withdrawn',{payment_intent:s.payment_intent,amount:500});
  await handleEvent(pool,dispute,{provider:fixture.provider});
  await reject(step('privileged_call'),'pool_origin_quarantined','quarantined reserved origin blocks new funded steps');

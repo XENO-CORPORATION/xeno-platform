@@ -103,6 +103,9 @@ test('workforce ownership transfer: two-sided, reviewed, audited, never silent (
       CREATE TABLE oauth_user_auth_epochs(user_id UUID PRIMARY KEY, epoch INTEGER);
       CREATE TABLE oauth_dpop_replays(jkt TEXT, jti TEXT, htm TEXT, htu TEXT, expires_at TIMESTAMPTZ, UNIQUE(jkt, jti))`);
     for (const id of [alice, bob, carol, editor, creator, agent]) await pool.query('INSERT INTO users(id,username) VALUES($1::uuid,$1::text)', [id]);
+    // Canonical ledger identity is an external prerequisite of the funding migrations,
+    // not a workforce-owned wallet. Match the migration-chain fixture's prelude.
+    await pool.query('CREATE TABLE credit_accounts(id UUID PRIMARY KEY, user_id UUID UNIQUE, owner_kind VARCHAR(16))');
     const chain = (await readdir(MIGRATIONS)).filter((f) => f.endsWith('.sql')
       && (/workforce/.test(f) || f === '20260711120000-workspaces.sql' || f === '20260811130000-agent-identities.sql')).sort();
     // chat_projects precedes the workforce chain in production, and from 20260924180000 (ASN-09) the

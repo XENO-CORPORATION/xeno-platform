@@ -56,7 +56,8 @@ try {
     assert.match(chat, /if \(!pasteBecomesFile\(\{ text: pasted, hasFiles \}\)\) return;/);
     assert.match(chat, /void attachFileObjects\(\[makePastedTextFile\(pasted\)\]\)/);
     // attachFileObjects is the SAME path the file picker uses (no second upload implementation)
-    assert.match(chat, /const handleFileSelected = async[\s\S]{0,160}await attachFileObjects\(Array\.from\(files\)\)/);
+    // (the picker can target a queued prompt — `queuedId` — and it is still the one upload path)
+    assert.match(chat, /const handleFileSelected = async[\s\S]{0,260}await attachFileObjects\(Array\.from\(files\)(, queuedId)?\)/);
     assert.match(chat, /libraryService\.upload\(file, 'chat-attachment'\)/);
   });
 } finally {

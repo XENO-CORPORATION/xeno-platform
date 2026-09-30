@@ -288,9 +288,11 @@ test('there is ONE alias map, not a copy of it in the quota engine', async () =>
   // the same account — which is the bug above, in the form it would come back.
   const { readFileSync } = await import('node:fs');
   const { PLAN_ALIASES } = await import('../src/server/services/billingService.js');
+  const plans = await import('../src/server/services/accountPlan.js');
+  assert.equal(PLAN_ALIASES, plans.PLAN_ALIASES, 'billing and quota must share the exact alias map');
   const engine = readFileSync(new URL('../src/server/utils/quotaEngine.js', import.meta.url), 'utf8');
-  assert.match(engine, /import \{ canonicalPlan \} from '\.\.\/services\/billingService\.js'/,
-    'the engine must resolve through billingService, the one place aliases are decided');
+  assert.match(engine, /import \{ canonicalPlan \} from '\.\.\/services\/accountPlan\.js'/,
+    'the engine must resolve through accountPlan, the one place aliases are decided');
   // Check for a hardcoded MAPPING, not for the word. The defect is a second copy of the
   // map; naming 'ultra' in a comment that explains the bug is not. An earlier version of
   // this gate failed on its own documentation — a gate asserting against prose.
@@ -298,7 +300,7 @@ test('there is ONE alias map, not a copy of it in the quota engine', async () =>
   for (const alias of Object.keys(PLAN_ALIASES)) {
     // Quoted or bare, an alias appearing in CODE here is a second copy of the map.
     assert.ok(!new RegExp(`['"\`]?${alias}['"\`]?\\s*:`).test(code),
-      `'${alias}' is mapped inside quotaEngine — aliases are billingService's to decide`);
+      `'${alias}' is mapped inside quotaEngine — aliases are accountPlan's to decide`);
     assert.ok(!new RegExp(`['"\`]${alias}['"\`]`).test(code),
       `'${alias}' is named in quotaEngine code — the engine must not know any plan's old name`);
   }

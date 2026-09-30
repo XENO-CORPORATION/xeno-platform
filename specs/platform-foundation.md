@@ -144,6 +144,157 @@ The server remains authoritative. Workspace-scoped lists clear when scope change
 8. Focused platform-foundation tests prove command uniqueness, truthful data boundaries, route reachability, and agent-readiness declarations.
 9. Production qualification additionally requires a revision-tied real server and test database, seeded multi-role accounts, durable reload proof, and 401/403/404/409/500 plus cross-workspace race cases. Source tests, typecheck, and bundle build do not substitute for that gate.
 
+## Public project publication candidate — 2026-09-30
+
+This additive slice extends `chat_projects`; it does not create a second project model.
+Management is mounted in `ProjectsPage` and uses `accountService`. Public routes are
+`/public-projects` and `/public-projects/:projectId`, separate from the private `/projects`
+redirect. The API is `/api/public-projects`: anonymous projection reads; authenticated
+`state`, `preview`, `operations`, and `operations/read` POSTs.
+
+Only explicitly authored title/purpose/licence/terms/contribution-guide/roadmap/update text
+and the previewed publisher identity are disclosed. Saving a draft never changes the published
+snapshot. Public/unlisted visibility grants no membership, private-project viewing, file access,
+execution or spending. Unlisted pages are link-readable but absent from discovery. Exact preview
+hash and revision precede publish; stable actor/client/operation receipts fence retries. Archive
+or ownership change makes a publication private; undoing that context change cannot resurrect it.
+
+Local evidence: `project-publication-contract.test.mjs` and `project-publication.test.mjs`,
+registered in `test:platform-foundation` and discovered by `ci:local`'s database-proof stage.
+The database suite calls the real React/browser journey (no optional browser flag): save/reload,
+preview, publish with a deliberately lost post-commit acknowledgement, reload/reconcile,
+public direct entry/refresh/Back/Forward, revoke, and visitor refusal. Real PostgreSQL + mounted
+HTTP checks cover legacy/browser-cookie-CSRF/OIDC-DPoP authentication, scope refusal, disclosure
+allowlisting, revision races, immutable receipts, receipt-write rollback, guarded migration
+rollback/reapply, owner A-B-A revocation, workspace publication and pagination. Operation-keyed
+browser recovery preserves multiple tabs' pending identities; malformed recovery fails closed.
+Six deliberate mutations fail for preview bypass, unlisted discovery, revoked read, accidental
+private access, pre-receipt commit, and omitted management authorization. Focused component/parent
+types (176 files, zero diagnostics), SQL-placeholder and migration-version gates pass.
+
+**Accepted-milestone announcements:** the project admin may select up to eight accepted milestones
+through authenticated `/milestones`, then author separate public labels/summaries. Selection reads
+canonical milestone acceptance and immutable evidence; preview and publish both verify the same
+project and acceptance hash. The retained version privately binds those sources. Public JSON/HTML
+contains only the authored label, summary and accepted status: no milestone/run IDs, hashes,
+reviewer/producer identity, reports, contributor statement, artifacts or financial data. Acceptance
+alone never publishes anything. Source text is not copied into the editor. Draft removal does not
+change the live snapshot; a confirmed new projection removes it; make-private withdraws access.
+
+`workforce-funded-admission.test.mjs` invokes `lib/project-publication-milestones.mjs` after its
+real funded run is independently accepted through HTTP, not synthetic acceptance rows. The helper
+then drives the actual React/account transport/server/PostgreSQL publication journey, including lost
+acknowledgement recovery, reload, Back/Forward, withdrawal and stale account replies. Foreign,
+unaccepted, changed-hash and post-preview withdrawn sources refuse; revoked admins cannot publish
+or list selections. Unique private sentinels stay out of public JSON and rendered HTML. Six mutants
+are checked for source-project binding, acceptance hash, private-source leakage, exact preview,
+live acceptance status and account-generation fencing. On the declared Express **5.2.1**, 29 targeted
+tests pass across this journey and adjacent publication/dialog/detail/SQL suites; focused types
+cover 92 files with zero diagnostics. The first scratch harness used Express 4; it was corrected
+and the composed tests rerun, not treated as proof of the declared runtime.
+
+**Boundary:** isolated local candidate, not deployed or production-qualified. Browser auth context
+is a fixture; server authentication/authorization and persistence are real local implementations.
+Full product build and full gates were not run. Accepted artifacts, broader selected task evidence,
+funding totals, participation offers, contribution review/integration, and forge/resource drivers
+remain unbuilt here. This is partial XENO-WORKFORCE-01 publication work, not a full PUB-02 claim;
+no requirement citation has been added for this slice yet. No production data was accessed.
+
+## Gateway / ledger composition qualification — 2026-09-30
+
+`npm run qualify:workforce-gateway` is an explicit cross-repo local gate. Supply:
+- `TEST_DATABASE_URL`: a fresh migrated PostgreSQL database on localhost/127.0.0.1,
+  named `xeno_qual_<32 hex>`; the command refuses other hosts/names and missing inputs.
+- `GATEWAY_BILLING_REPO`: a local xeno-api-proxy Git repository containing the tested commit.
+- `GATEWAY_BILLING_COMMIT`: its full 40-character commit ID.
+- `GATEWAY_BILLING_SOURCE`: an isolated checkout/export of that commit with its dependencies
+  installed. The billing client, caller-token counter, billing session and dispatch-tracker
+  modules must match committed bytes exactly.
+
+First measured pair: Platform `788bfc3`, gateway `dbd3f86`. The real gateway billing module and
+HTTP ledger client call the real Platform service-token router and PostgreSQL: a root reserves
+the whole wallet; a draw still opens when ordinary available balance is zero; invalid leases,
+missing output bounds and wrong service credentials refuse before draw creation; a consumed
+lease cannot fund another request; a fresh lease can; a provably undispatched request voids its
+draw; measured usage changes the canonical balance; terminal result closes the resolved root
+and returns only the remaining reservation. No second wallet hold is created. A loopback provider
+fixture independently reads PostgreSQL and refuses a request without an open draw or matching
+output bound. Its actual HTTP response supplies the usage settled by the gateway; the real
+AsyncLocalStorage dispatch tracker marks provider traffic but not the ledger's quote request.
+The provider is a fixture, not a commercial model or the full gateway inference route.
+
+**Not proven here:** SDK request-context forwarding, full gateway authentication/router startup,
+commercial provider execution, streaming/cancellation uncertainty, reconciliation of later measured usage,
+or production behavior. Authenticated actor metadata and provider usage are explicit fixtures;
+service authentication, authority leases, billing transport and ledger effects are real local
+implementations. The Interface execution gate must remain closed until the full composed path
+is qualified. This command changes only its disposable database; no production access/deploy.
+
+### Full SDK / gateway-process candidate proof
+
+`npm run qualify:workforce-sdk` starts the actual gateway `server.js` in a child process,
+not a hand-built equivalent route. Supply `TEST_DATABASE_URL` (fresh migrated local disposable),
+`WORKFORCE_GATEWAY_SOURCE` + `WORKFORCE_GATEWAY_COMMIT`, and `WORKFORCE_SDK_SOURCE` +
+`WORKFORCE_SDK_COMMIT`. Build the SDK main/workforce entries from that clean source first.
+The proof checks candidate identities/source and emits both executed SDK bundle hashes. Gateway
+`.env` is refused; its environment is synthetic and allowlisted. A preloaded socket/fetch guard
+permits only explicit loopback fixture ports, including background discovery. No commercial
+provider or production resource is used.
+
+Measured candidate pair: SDK PR100 `2584dd0` (based on `603994d`, version unchanged at0.10.30),
+gateway PR16 `4c83b154` (the reconciled branch, not deployed). Actual gateway API-key authentication
+reads the local canonical DB; SDK authority uses the real workforce JWT router/JWKS; the gateway
+calls the real service-token ledger and a loopback provider fixture. Two buffered requests and one
+streamed request exchange three fresh leases and create three measured settled draws on one hold.
+The provider waits for the SDK's text callback before finishing, proving actual incremental delivery,
+and the SDK consumes the gateway's terminal usage frame. SSE `[DONE]` is not a settlement receipt:
+the proof separately waits, bounded, for durable draw settlement. Terminal result reporting releases
+the remainder and wallet conservation matches the charge. An invalid gateway key reaches no
+provider; a separate revoked admission stops before a new draw/provider call. Terminal closure is
+mutation-checked independently of revocation so one closing path cannot mask the other.
+
+A fourth request is a real default-factory SDK delegation. The branch-admission hook admits a child
+under the parent's envelope and supplies its distinct authority. Its provider call creates a draw
+on the parent's existing hold, not another wallet reservation. Reporting only the parent leaves
+that hold open; the child's terminal result closes the tree and releases the remainder.
+
+A fifth request exercises sender-constrained OIDC: a synthetic issuer-signed token bound to a real
+local session and a per-request P-256 DPoP proof travels through the real workforce authorization
+router and actual gateway verifier. Its own admission has one measured settled draw. Wrong-method
+proof, replayed proof and revoked session refuse before provider work. Public HTTPS identities are
+mapped explicitly to loopback transport in this fixture; no issuer discovery or production TLS is
+claimed. This proves the SDK/account callback seam, not the installed Interface account worker.
+
+A sixth actual provider response omits usage. SDK model-work accounting stays `unknown`; the draw
+is explicitly `unmeasured` with null token counts, charged at its authorized reservation bound;
+usage analytics labels the source `reservation`, and the wallet still conserves. Re-measured against
+merged gateway `f033cfd` (same source tree as the earlier PR16 candidate). This is not proof the
+provider terminated or that later measurements are reconciled: the existing settle endpoint refuses
+changed payloads after settlement, and append-only downward correction remains open.
+
+This is **candidate qualification**, not SDK release/Interface adoption, complete account sign-in,
+commercial-provider output, cancellation uncertainty reconciliation, or the full workforce mission.
+The SDK owner controls PR100 merge/release sequencing. The Interface execution gate remains closed.
+
+## Workforce account-plan dependency repair — 2026-09-30
+
+Canonical quota adoption exposed two payment-client import paths: quota aliases and effective
+plan reads both imported `billingService`. `accountPlan.js` now owns the existing aliases,
+entitlements and personal-plan reader; billing re-exports the identical bindings. Both use
+one unchanged initializer in `billingSchema.js`, including its shared pending promise and
+failure retry. No plan, allowance, entitlement, ledger or subscription behavior is replaced.
+The workforce deployment-boundary allowlist is unchanged.
+
+Local proof: 114 targeted plan/quota/entitlement/pricing/preview/reachability checks pass,
+including the fresh PostgreSQL plan/bootstrap proof; the real local billing-money-in suite
+passes 60 assertions, and the migrated workforce run-draw suite passes 14 tests. Five deliberate
+mutations are caught: either import path returning to billing, poisoned bootstrap retry,
+read-only preview writing schema, and billing exporting a copied alias map. Extracted policy
+and schema bodies were compared against their committed originals. The database proof is
+registered in `test:effective-plan` and discovered by the local database-proof stage.
+Full product gates and production behavior were not tested; nothing was deployed. This repair
+does not qualify SDK dispatch-lease forwarding or remove the Interface execution gate.
+
 ## Explicit non-goals
 
 - No product-specific CRM, tasks, contracts, workflow canvas, document editor, or model-selection implementation.

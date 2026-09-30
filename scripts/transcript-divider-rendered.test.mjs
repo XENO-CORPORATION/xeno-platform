@@ -94,7 +94,10 @@ try {
 
   const empty = await read('live-empty');
   check('a live turn with NO step yet: the divider is not drawn', empty.display === 'none' && empty.width === 0, `display=${empty.display} width=${empty.width}px`);
-  check('  and the ticker really is empty — that is why (the gate would pass vacuously otherwise)', empty.txEmpty === true && empty.curDisplay === 'flex', `txEmpty=${empty.txEmpty} ticker=${empty.curDisplay}`);
+  // The fixture's ticker really is empty — that is why the divider is hidden (otherwise the gate
+  // would pass vacuously). Its DISPLAY is no longer asserted: since agent-conversation 0.1.77 the
+  // library hides an empty ticker itself (`.xa-line:has(.xa-t) .xa-cur`), so `none` is correct.
+  check('  and the ticker really is empty — that is why (the gate would pass vacuously otherwise)', empty.txEmpty === true, `txEmpty=${empty.txEmpty} ticker=${empty.curDisplay}`);
 
   const step = await read('live-step');
   check('a live turn WITH a step: the divider is drawn, separating the words from the clock', step.display === 'block' && step.width > 0, `display=${step.display} width=${step.width}px`);
