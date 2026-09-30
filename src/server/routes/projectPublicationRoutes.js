@@ -48,6 +48,7 @@ const body = [express.json({ limit: '48kb', strict: true }), (req, res, next) =>
 }];
 for (const [path, service, scope] of [
   ['/state', publication.readProjectPublication, 'projects:read'],
+  ['/milestones', publication.readPublicationMilestones, 'projects:read'],
   ['/preview', publication.previewProjectPublication, 'projects:read'],
   ['/operations/read', publication.readProjectPublicationOperation, 'projects:read'],
   ['/operations', publication.mutateProjectPublication, 'projects:write'],

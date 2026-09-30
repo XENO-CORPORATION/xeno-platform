@@ -38,9 +38,25 @@ function text(value, max, required = false) {
   if (required && !result) fail('required_text');
   return result;
 }
+export function normalizeAcceptedSummaries(value, { sources = false } = {}) {
+  if (!Array.isArray(value) || value.length > 8) fail('invalid_milestone_summaries');
+  const seen = new Set();
+  return value.map(item => {
+    const v = publicationRecord(item, sources ? ['milestoneId', 'acceptanceHash', 'label', 'summary'] : ['label', 'summary', 'status']);
+    const result = { label: text(v.label, 160, true), summary: text(v.summary, 512, true) };
+    if (!sources) {
+      if (v.status !== 'accepted') fail('invalid_acceptance_status');
+      return { ...result, status: 'accepted' };
+    }
+    const milestoneId = publicationId(v.milestoneId);
+    if (seen.has(milestoneId) || typeof v.acceptanceHash !== 'string' || !/^[a-f0-9]{64}$/.test(v.acceptanceHash)) fail('invalid_milestone_summaries');
+    seen.add(milestoneId);
+    return { milestoneId, acceptanceHash: v.acceptanceHash, ...result };
+  });
+}
 /** Plain text rendered as text, never HTML. Licence/terms are explicit, never defaulted. */
 export function normalizePublicationContent(value) {
-  const v = publicationRecord(value, ['schemaVersion', 'title', 'purpose', 'license', 'termsVersion', 'contributionGuide', 'roadmap', 'updates']);
+  const v = publicationRecord(value, ['schemaVersion', 'title', 'purpose', 'license', 'termsVersion', 'contributionGuide', 'roadmap', 'updates', 'acceptedMilestones']);
   if (v.schemaVersion !== 1) fail('unsupported_schema');
   return {
     schemaVersion: 1,
@@ -51,5 +67,6 @@ export function normalizePublicationContent(value) {
     contributionGuide: text(v.contributionGuide, 8000, true),
     roadmap: text(v.roadmap, 8000),
     updates: text(v.updates, 8000),
+    ...(v.acceptedMilestones === undefined ? {} : { acceptedMilestones: normalizeAcceptedSummaries(v.acceptedMilestones, { sources: true }) }),
   };
 }

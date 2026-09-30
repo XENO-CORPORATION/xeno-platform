@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
 
 /** Real components + real account transport. Only the signed-in React context is a fixture. */
-export async function provePublicationBrowser({ app, baseUrl, projectId, accountId, token }) {
+export async function provePublicationBrowser({ app, baseUrl, projectId, accountId, token, milestone = null, forbidden = [] }) {
   const root = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
   const bundle = await build({ write: false, bundle: true, platform: 'browser', format: 'iife',
     define: { 'process.env.NODE_ENV': '"production"' },
@@ -48,11 +48,22 @@ export async function provePublicationBrowser({ app, baseUrl, projectId, account
       const setter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value').set;
       [...document.querySelectorAll('textarea')].forEach((input, i) => { setter.call(input, fields[i]); input.dispatchEvent(new Event('input', { bubbles: true })); });
     }, fields);
+    if (milestone) {
+      await click('Load accepted milestones'); await click(`Select ${milestone.title}`);
+      await page.evaluate(() => {
+        const setter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value').set;
+        const inputs = [...document.querySelectorAll('textarea')].slice(7);
+        for (const [i, value] of ['Reviewed delivery', 'The selected delivery has been accepted.'].entries()) {
+          setter.call(inputs[i], value); inputs[i].dispatchEvent(new Event('input', { bubbles: true }));
+        }
+      });
+    }
     await click('Save private draft'); await has('Draft revision: 1');
     await page.reload(); await page.waitForSelector('textarea');
     assert.equal(await page.$eval('textarea', node => node.value), fields[0], 'saved draft survives refresh');
     await click('Preview saved draft'); await has('Exact disclosure preview');
     assert.equal(await page.$eval('.legal-prose h2', node => node.textContent), fields[0]);
+    if (milestone) assert((await page.$eval('.legal-prose', node => node.innerText)).includes('The selected delivery has been accepted.'), 'accepted summary renders in exact preview');
     // The server commits but its acknowledgement is lost at the transport boundary.
     await page.evaluate(() => {
       const fetch = window.fetch.bind(window); let drop = true;
@@ -89,6 +100,11 @@ export async function provePublicationBrowser({ app, baseUrl, projectId, account
     assert.equal(new URL(page.url()).pathname, '/public-projects/' + projectId);
     await page.reload(); await has(fields[1]);
     assert(!(await page.content()).includes('PRIVATE-INSTRUCTIONS'));
+    if (milestone) {
+      assert((await page.$eval('body', node => node.innerText)).includes('The selected delivery has been accepted.'), 'accepted summary survives public direct entry and reload');
+      const html = await page.content();
+      for (const secret of forbidden) assert(!html.includes(secret), `public HTML excludes ${secret}`);
+    }
     await page.goBack(); await has('Current visibility: unlisted');
     await page.goForward(); await has(fields[1]);
     await page.goto(baseUrl + '/fixture/manage'); await has('Current visibility: unlisted');
@@ -120,6 +136,31 @@ export async function provePublicationBrowser({ app, baseUrl, projectId, account
     await page.evaluate(() => window.releaseFixturePreview());
     await page.waitForFunction(() => [...document.querySelectorAll('button')].some(b => b.textContent === 'Preview saved draft' && !b.disabled));
     assert.equal(await page.$('.legal-prose h2'), null, 'late preview from prior account generation is discarded');
+    if (milestone) {
+      await page.reload(); await has('Current visibility: private');
+      await page.evaluate(() => {
+        const fetch = window.fetch.bind(window);
+        window.fetch = async (...args) => {
+          const response = await fetch(...args);
+          if (String(args[0]).endsWith('/milestones')) {
+            const text = await response.text(); window.fixtureMilestonesWaiting = true;
+            await new Promise(resolve => { window.releaseFixtureMilestones = resolve; });
+            return new Response(text, { status: response.status, headers: response.headers });
+          }
+          return response;
+        };
+      });
+      await click('Load accepted milestones');
+      await page.waitForFunction(() => window.fixtureMilestonesWaiting === true);
+      await page.evaluate(() => window.fixtureAccount('dddddddd-dddd-4ddd-8ddd-dddddddddddd'));
+      await has('actor_changed');
+      await page.evaluate(accountId => window.fixtureAccount(accountId), accountId);
+      await has('Current visibility: private');
+      await page.evaluate(() => window.releaseFixtureMilestones());
+      await page.waitForFunction(() => [...document.querySelectorAll('button')].some(b => b.textContent === 'Load accepted milestones' && !b.disabled));
+      assert.equal(await page.evaluate(title => [...document.querySelectorAll('button')].some(b => b.textContent === `Select ${title}`), milestone.title), false,
+        'late milestone list from prior account generation is discarded');
+    }
     const recoveryKey = `xeno-project-publication:${accountId}:${projectId}:corrupt-fixture`;
     await page.evaluate(key => localStorage.setItem(key, '{invalid-json'), recoveryKey);
     await page.goto(baseUrl + '/fixture/manage'); await has('Publication changes are blocked');

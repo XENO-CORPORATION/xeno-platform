@@ -172,9 +172,30 @@ Six deliberate mutations fail for preview bypass, unlisted discovery, revoked re
 private access, pre-receipt commit, and omitted management authorization. Focused component/parent
 types (176 files, zero diagnostics), SQL-placeholder and migration-version gates pass.
 
+**Accepted-milestone announcements:** the project admin may select up to eight accepted milestones
+through authenticated `/milestones`, then author separate public labels/summaries. Selection reads
+canonical milestone acceptance and immutable evidence; preview and publish both verify the same
+project and acceptance hash. The retained version privately binds those sources. Public JSON/HTML
+contains only the authored label, summary and accepted status: no milestone/run IDs, hashes,
+reviewer/producer identity, reports, contributor statement, artifacts or financial data. Acceptance
+alone never publishes anything. Source text is not copied into the editor. Draft removal does not
+change the live snapshot; a confirmed new projection removes it; make-private withdraws access.
+
+`workforce-funded-admission.test.mjs` invokes `lib/project-publication-milestones.mjs` after its
+real funded run is independently accepted through HTTP, not synthetic acceptance rows. The helper
+then drives the actual React/account transport/server/PostgreSQL publication journey, including lost
+acknowledgement recovery, reload, Back/Forward, withdrawal and stale account replies. Foreign,
+unaccepted, changed-hash and post-preview withdrawn sources refuse; revoked admins cannot publish
+or list selections. Unique private sentinels stay out of public JSON and rendered HTML. Six mutants
+are checked for source-project binding, acceptance hash, private-source leakage, exact preview,
+live acceptance status and account-generation fencing. On the declared Express **5.2.1**, 29 targeted
+tests pass across this journey and adjacent publication/dialog/detail/SQL suites; focused types
+cover 92 files with zero diagnostics. The first scratch harness used Express 4; it was corrected
+and the composed tests rerun, not treated as proof of the declared runtime.
+
 **Boundary:** isolated local candidate, not deployed or production-qualified. Browser auth context
 is a fixture; server authentication/authorization and persistence are real local implementations.
-Full product build and full gates were not run. Accepted artifacts, selected task evidence,
+Full product build and full gates were not run. Accepted artifacts, broader selected task evidence,
 funding totals, participation offers, contribution review/integration, and forge/resource drivers
 remain unbuilt here. This is partial XENO-WORKFORCE-01 publication work, not a full PUB-02 claim;
 no requirement citation has been added for this slice yet. No production data was accessed.
