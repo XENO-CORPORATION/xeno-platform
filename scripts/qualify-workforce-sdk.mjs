@@ -67,7 +67,8 @@ test('SDK physical dispatches traverse gateway auth, run draws, provider and can
   app.use('/api/v2/ledger/service', createServiceLedgerRouter({ getServiceToken: () => serviceToken }));
   const serve = async app => { const s = app.listen(0, '127.0.0.1'); await new Promise(r => s.once('listening', r)); t.after(async () => { s.closeAllConnections(); await new Promise(r => s.close(r)); }); return s; };
   const platformServer = await serve(app), platformUrl = `http://127.0.0.1:${platformServer.address().port}`;
-  let providerCalls = 0;
+  let providerCalls = 0, streamedCalls = 0, observeStream;
+  const streamObserved = new Promise(resolve => { observeStream = resolve; });
   const provider = express(); provider.use(express.json());
   provider.get('/v1/models', (_req, res) => res.json({ data: [{ id: 'gpt-5.5', owned_by: 'openai', object: 'model' }] }));
   provider.post('/v1/chat/completions', async (req, res) => {
@@ -75,6 +76,16 @@ test('SDK physical dispatches traverse gateway auth, run draws, provider and can
     assert.equal(draws.length, 1, 'provider has one admitted open draw before execution');
     assert.equal(req.body.max_tokens, 100, 'provider receives enforceable output bound');
     providerCalls++;
+    if (req.body.stream === true) {
+      streamedCalls++;
+      res.type('text/event-stream');
+      res.write(`data: ${JSON.stringify({ choices: [{ delta: { content: `reply-${providerCalls}` }, finish_reason: null }] })}\n\n`);
+      await Promise.race([streamObserved, new Promise((_, reject) => { const timer = setTimeout(() => reject(Error('SDK did not receive streaming content before provider completion')), 5000); timer.unref(); })]);
+      res.write(`data: ${JSON.stringify({ choices: [{ delta: {}, finish_reason: 'stop' }] })}\n\n`);
+      res.write(`data: ${JSON.stringify({ choices: [], usage: { prompt_tokens: 10, completion_tokens: 5 } })}\n\n`);
+      res.end('data: [DONE]\n\n');
+      return;
+    }
     res.json({ model: 'gpt-5.5', choices: [{ message: { role: 'assistant', content: `reply-${providerCalls}` }, finish_reason: 'stop' }], usage: { prompt_tokens: 10, completion_tokens: 5 } });
   });
   const providerServer = await serve(provider), providerUrl = `http://127.0.0.1:${providerServer.address().port}`;
@@ -125,12 +136,27 @@ test('SDK physical dispatches traverse gateway auth, run draws, provider and can
     toolRegistry: new ToolRegistry(), permissionEngine: new PermissionEngine({ mode: 'bypassPermissions' }), runAuthority: authority });
   try { assert.match(await agent.run('one'), /reply-1/); assert.match(await agent.run('two'), /reply-2/); }
   catch (error) { assert.fail(`Composed turn failed: ${error.message}; gateway=${logs.replaceAll(apiKey, '[fixture-key]')}`); }
-  assert.equal(exchanges, 2, 'N physical SDK calls exchange N fresh leases');
-  assert.equal(providerCalls, 2, 'both calls reach the real gateway provider route');
-  const draws = (await pool.query('SELECT * FROM credit_hold_draws WHERE admission_id=$1 ORDER BY created_at', [admissionId])).rows;
-  assert.equal(draws.length, 2, 'N calls create N draws on one admission');
-  assert.equal(new Set(draws.map(d => d.lease_hash)).size, 2, 'ledger consumes distinct leases');
-  assert(draws.every(d => d.state === 'settled' && d.outcome === 'measured' && String(d.input_tokens) === '10' && String(d.output_tokens) === '5'), 'both provider responses settle measured usage');
+  const streamedText = [];
+  const streamingAgent = new AgentLoop({ apiKey, baseURL: gatewayUrl, model: 'gpt-5.5', maxTokens: 100, maxIterations: 2, systemPrompt: 'Reply briefly.',
+    streamAgentResponses: true, onText: text => { streamedText.push(text); observeStream(); },
+    toolRegistry: new ToolRegistry(), permissionEngine: new PermissionEngine({ mode: 'bypassPermissions' }), runAuthority: authority });
+  assert.match(await streamingAgent.run('stream three'), /reply-3/);
+  assert.equal(streamedText.join(''), 'reply-3', 'SDK receives real stream content before provider completion');
+  assert.equal(streamedCalls, 1, 'one request traverses the actual gateway streaming relay');
+  assert.deepEqual({ input: streamingAgent.tokenUsage.input, output: streamingAgent.tokenUsage.output }, { input: 10, output: 5 }, 'SDK consumes the gateway terminal usage frame');
+  assert.equal(exchanges, 3, 'N physical SDK calls exchange N fresh leases');
+  assert.equal(providerCalls, 3, 'buffered and streamed calls reach the real gateway provider route');
+  // SSE completion is transport completion, not the ledger's settlement acknowledgement.
+  // Observe durable draw state with a bounded wait; never equate [DONE] with charged.
+  let draws;
+  for (let attempt = 0; attempt < 100; attempt++) {
+    draws = (await pool.query('SELECT * FROM credit_hold_draws WHERE admission_id=$1 ORDER BY created_at', [admissionId])).rows;
+    if (draws.length === 3 && draws.every(draw => draw.state === 'settled')) break;
+    await new Promise(resolve => setTimeout(resolve, 20));
+  }
+  assert.equal(draws.length, 3, 'N calls create N draws on one admission');
+  assert.equal(new Set(draws.map(d => d.lease_hash)).size, 3, 'ledger consumes distinct leases');
+  assert(draws.every(d => d.state === 'settled' && d.outcome === 'measured' && String(d.input_tokens) === '10' && String(d.output_tokens) === '5'), `all provider responses settle measured usage: ${JSON.stringify(draws.map(d => ({ state: d.state, outcome: d.outcome, input: d.input_tokens, output: d.output_tokens })))}`);
   assert.equal((await pool.query('SELECT count(*)::int n FROM credit_holds WHERE user_id=$1', [owner])).rows[0].n, 1, 'gateway creates no second wallet hold');
   await reportRunResult(pool, context, { admissionId, outcome: 'completed', summary: 'Local proof completed', artifacts: [] });
   assert.equal((await pool.query('SELECT state FROM credit_holds WHERE hold_id=$1', [admissionId])).rows[0].state, 'settled', 'terminal run releases the remaining reservation');
@@ -147,7 +173,7 @@ test('SDK physical dispatches traverse gateway auth, run draws, provider and can
   await revokeRun(pool, context, revokedId);
   agent.configureModelExecution({ runAuthority: revokedAuthority });
   await assert.rejects(agent.run('must not dispatch after revoke'), error => (error.reason ?? error.cause?.reason) === 'admission_revoked', 'real platform revocation stops the next SDK request');
-  assert.equal(providerCalls, 2, 'revoked authority reaches no provider');
+  assert.equal(providerCalls, 3, 'revoked authority reaches no provider');
   assert.equal((await pool.query('SELECT count(*)::int n FROM credit_hold_draws WHERE admission_id=$1', [revokedId])).rows[0].n, 0, 'revocation creates no new draw');
   assert(!logs.includes('WORKFORCE_FIXTURE_EGRESS_REFUSED'), 'gateway made no unexpected outbound call');
   const bundles = Object.fromEntries(['dist/index.js', 'dist/workforce/index.js'].map(file => [file, createHash('sha256').update(readFileSync(join(sdk, file))).digest('hex')]));
