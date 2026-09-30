@@ -85,7 +85,11 @@ test('admission\'s budget term is the canonical eligible-lot check, not a raw ba
     await account(owner, 2_000_000n); await overflow(owner, false); await grant(owner, 2_000_000n, 'allowance');
     const admission = (await admitPersonal(owner, agent, '1000000')).admission;
     assert.ok(admission.admissionId, 'an allowance lot funds admission even with overflow off');
-    assert.equal(await holdCount(owner), 0, 'a successful personal-target admission reserves no funds (approval, not a hold)');
+    // §8.7: a personal root now RESERVES its ceiling -- exactly one canonical hold, nothing else.
+    assert.equal(await holdCount(owner), 1, 'a successful personal-target admission reserves exactly one hold');
+    const [h] = (await pool.query('SELECT hold_id, surface, operation, amount_micro FROM credit_holds WHERE user_id=$1', [owner])).rows;
+    assert.deepEqual([h.hold_id, h.surface, h.operation, String(h.amount_micro)], [admission.admissionId, 'workforce', 'run', '1000000'],
+      'the reservation is the admitted ceiling, named by the admission');
   });
 
   await t.test('overflow ON, a paid lot is eligible', async () => {

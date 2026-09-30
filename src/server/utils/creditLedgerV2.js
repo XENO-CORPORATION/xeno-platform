@@ -19,7 +19,7 @@
  */
 import crypto from 'node:crypto';
 import { dimensionsJson } from './usageDimensions.js';
-import { pricePinnedChatUsage } from './creditCosts.js';
+import { pricePinnedChatUsage, pinChatTariff } from './creditCosts.js';
 import { allocateFunding, allocateContributionFunding, quarantinedGrantIds, saveHoldFunding, consumeFunding, readHoldFunding } from './usageCreditFunding.js';
 
 export const MICRO_PER_CREDIT = 1_000_000;
@@ -62,14 +62,21 @@ async function ensureAccount(client, userId) {
   return created.rows[0];
 }
 
+/** SQL predicate, for a `credit_holds h` row: a run draw on it is still open. The ONE definition of
+ * "time alone may not free this hold", shared by every liveness read and by the expiry sweep. */
+export const OPEN_DRAW_ON_HOLD = "EXISTS (SELECT 1 FROM credit_hold_draws d WHERE d.hold_row_id=h.id AND d.state='open')";
+
 /** Sum of active holds (micro) for a user. */
 async function activeHoldsMicro(client, userId) {
   // Only NON-EXPIRED holds reserve balance. A hold that outlives its expires_at (e.g. a
   // settle that failed all retries and was "left to expire") must stop locking credits —
   // there is no sweeper voiding rows, so the available-balance math self-heals at expiry.
+  //
+  // A run reservation with an OPEN draw is the exception: the provider is working against it, so it
+  // stays committed whatever its clock says (FUND-09). Time alone never frees in-flight dispatch.
   const r = await client.query(
     `SELECT COALESCE(SUM(amount_micro - settled_micro), 0)::bigint AS held
-       FROM credit_holds WHERE user_id = $1 AND state = 'held' AND expires_at > now()`,
+       FROM credit_holds h WHERE user_id = $1 AND state = 'held' AND (expires_at > now() OR ${OPEN_DRAW_ON_HOLD})`,
     [userId],
   );
   return BigInt(r.rows[0].held);
@@ -894,6 +901,7 @@ export async function settleHoldV2(pool, userId, holdId, actualCostMicro, usage 
   try {
     await client.query('BEGIN');
     await requireOrdinaryWallet(client, userId);
+    await refuseRunHold(client, userId, holdId);
     const h = await client.query("SELECT * FROM credit_holds WHERE user_id=$1 AND hold_id=$2 FOR UPDATE", [userId, holdId]);
     if (h.rows.length === 0) { await client.query('ROLLBACK'); const e = new Error('hold not found'); e.code='NOT_FOUND'; throw e; }
     const hold = h.rows[0];
@@ -1007,6 +1015,7 @@ export async function settleHoldV2(pool, userId, holdId, actualCostMicro, usage 
 export const MAX_HOLD_EXTENSION_SECONDS = 3600;
 export async function extendHoldV2(pool, userId, holdId, extendBySeconds) {
   await requireOrdinaryWallet(pool, userId);
+  await refuseRunHold(pool, userId, holdId);
   const seconds = Math.floor(Number(extendBySeconds));
   if (!Number.isFinite(seconds) || seconds < 1 || seconds > MAX_HOLD_EXTENSION_SECONDS) {
     const e = new Error(`extendBySeconds must be an integer from 1 to ${MAX_HOLD_EXTENSION_SECONDS}`);
@@ -1030,6 +1039,7 @@ export async function extendHoldV2(pool, userId, holdId, extendBySeconds) {
 /** Release a hold without charging. Idempotent. */
 export async function voidHoldV2(pool, userId, holdId) {
   await requireOrdinaryWallet(pool, userId);
+  await refuseRunHold(pool, userId, holdId);
   // No transaction needed (single idempotent UPDATE + read) — run directly on the
   // pool so we never hold a client while getBalanceV2 checks out a second one
   // (pool re-entrancy guard).
@@ -1052,10 +1062,12 @@ export async function sweepExpiredHolds(pool, { batchLimit = 1000 } = {}) {
   const res = await pool.query(
     `UPDATE credit_holds SET state='voided', updated_at=now()
        WHERE id IN (
-         SELECT id FROM credit_holds
+         SELECT id FROM credit_holds h
            WHERE state='held' AND expires_at <= now()
-             AND NOT EXISTS (SELECT 1 FROM credit_accounts a WHERE a.user_id=credit_holds.user_id
+             AND NOT EXISTS (SELECT 1 FROM credit_accounts a WHERE a.user_id=h.user_id
                AND COALESCE(to_jsonb(a)->>'owner_kind','user') NOT IN ('user','workspace'))
+             -- An open draw is provider work in flight: expiry never releases it (FUND-09).
+             AND NOT ${OPEN_DRAW_ON_HOLD}
            ORDER BY expires_at ASC
            LIMIT $1
            FOR UPDATE SKIP LOCKED
@@ -1134,6 +1146,9 @@ export async function settleProjectRunV2(pool, receipt) {
     if(!account||account.owner_kind!=='project_pool')throw bad('RESTRICTED_ACCOUNT');
     const h=(await db.query('SELECT * FROM credit_holds WHERE id=$1 FOR UPDATE',[a.hold_row_id])).rows[0];
     if(!h||h.account_id!==account.id||h.state!=='held')throw bad('HOLD_NOT_ACTIVE');
+    // One settlement mode per reservation: a run that dispatched through draws settled each one from
+    // its own measured receipt, so a second, aggregate receipt would charge that work twice.
+    if((await db.query('SELECT 1 FROM credit_hold_draws WHERE hold_row_id=$1 LIMIT 1',[h.id])).rowCount)throw bad('DRAWS_PRESENT');
     const funding=await readHoldFunding(db,h.id),reserved=BigInt(h.amount_micro);
     if(funding.reduce((n,x)=>n+BigInt(x.amountMicro),0n)!==reserved)throw bad('FUNDING_CONFLICT');
     const quarantined=new Set(await quarantinedGrantIds(db,a.payer_user_id));
@@ -1159,6 +1174,352 @@ export async function settleProjectRunV2(pool, receipt) {
       input.provider,input.model,a.price_version,inputTokens,outputTokens,String(priced),String(charged),String(liability),liability>0n?'reconciliation_required':'settled'])).rows[0];
     await db.query('COMMIT');return view(result,false);
   }catch(error){await db.query('ROLLBACK');throw error;}finally{db.release();}
+}
+
+// ── Run draws: one run reservation, one slice per provider dispatch ─────────────────────────────
+//
+// XENO-WORKFORCE-01 §8.7. A run's ROOT admission holds its ceiling once (a pool root via
+// workforce_run_funding, a personal root via workforce_run_holds); every provider dispatch in the run
+// tree opens a DRAW on that one hold -- never a second hold against the account -- and settles it from
+// the gateway's measured usage. This is the shape real-time charging converges on: RFC 8506 session
+// credit-control (reserve, granted/used units per update, termination clears the rest) and card
+// manual capture (multicapture up to the authorized amount).
+//
+// What each act guarantees:
+//   open   -- a live provider_dispatch LEASE for this admission (RUN-03: one lease, one dispatch), no
+//             fence on the admission or any ancestor, the tariff PINNED now (FUND-07), and every
+//             envelope from the dispatching admission up to the root still covering the draw's bound.
+//   settle -- measured usage only, priced with the draw's pinned tariff, charged within the tightest
+//             remaining envelope and the reserved lots; the rest is recorded platform LIABILITY, never
+//             a charge past an approved ceiling and never fresh lots.
+//   void   -- only with proof the provider never received the request. A timeout is not that proof:
+//             the draw stays open and keeps its slice committed (FUND-09).
+//   close  -- the root releases its remainder only when no draw anywhere in the tree is open.
+export const RUN_DRAW_TTL_SECONDS = 900;
+export const RUN_HOLD_TTL_SECONDS = 3600;
+export const RUN_DRAW_MAX_INPUT_TOKENS = 10_000_000;
+export const RUN_DRAW_MAX_OUTPUT_TOKENS = 1_000_000;
+const RUN_UUID = /^[a-f0-9]{8}-[a-f0-9]{4}-[1-8][a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/i;
+const RUN_DRAW_ID = /^[A-Za-z0-9][A-Za-z0-9._:-]{7,127}$/;
+const drawError = (code, extra = {}) => Object.assign(new Error(code), { code, ...extra });
+const sha256hex = (v) => crypto.createHash('sha256').update(v).digest('hex');
+
+function drawText(v, max) {
+  if (typeof v !== 'string' || !v.trim() || v !== v.trim() || Buffer.byteLength(v) > max || /[\u0000-\u001f]/.test(v)) throw drawError('BAD_REQUEST');
+  return v;
+}
+function drawCount(v, { min = 0, max }) {
+  const n = typeof v === 'string' && /^(0|[1-9][0-9]{0,17})$/.test(v) ? Number(v) : v;
+  if (!Number.isSafeInteger(n) || n < min || n > max) throw drawError('BAD_REQUEST');
+  return n;
+}
+function drawShape(value, keys) {
+  if (!value || typeof value !== 'object' || Array.isArray(value) || Object.keys(value).some((k) => !keys.includes(k))) throw drawError('BAD_REQUEST');
+  if (typeof value.admissionId !== 'string' || !RUN_UUID.test(value.admissionId)) throw drawError('BAD_REQUEST');
+  if ('drawId' in value && (typeof value.drawId !== 'string' || !RUN_DRAW_ID.test(value.drawId))) throw drawError('BAD_REQUEST');
+  if ('actorUserId' in value && (typeof value.actorUserId !== 'string' || !RUN_UUID.test(value.actorUserId))) throw drawError('BAD_REQUEST');
+  return { ...value, admissionId: value.admissionId.toLowerCase(), ...(value.actorUserId ? { actorUserId: value.actorUserId.toLowerCase() } : {}) };
+}
+
+/** The reservation an admission spends from: its root's one hold. Null when it has none. */
+async function runReservationOf(db, admission) {
+  const table = admission.payer_kind === 'project_pool' ? 'workforce_run_funding' : 'workforce_run_holds';
+  const r = (await db.query(`SELECT root_admission_id, hold_row_id FROM ${table} WHERE admission_id=$1`, [admission.id])).rows[0];
+  return r ? { rootId: r.root_admission_id, holdRowId: r.hold_row_id, pool: admission.payer_kind === 'project_pool' } : null;
+}
+
+/** Used within an admission's subtree on one hold: open draws at their reservation, settled draws at
+ * what they charged (liability is the platform's, not the payer's). `excludeDrawRowId` leaves one out. */
+async function subtreeDrawnMicro(db, holdRowId, admissionId, excludeDrawRowId = null) {
+  const r = await db.query(`WITH RECURSIVE sub(id) AS (
+      SELECT $2::uuid UNION ALL SELECT a.id FROM workforce_run_admissions a JOIN sub ON a.parent_admission_id=sub.id)
+    SELECT COALESCE(sum(CASE WHEN d.state='open' THEN d.reserved_micro WHEN d.state='settled' THEN d.charged_micro ELSE 0 END),0)::text AS used
+      FROM credit_hold_draws d WHERE d.hold_row_id=$1 AND d.admission_id IN (SELECT id FROM sub)
+       AND ($3::uuid IS NULL OR d.id<>$3)`, [holdRowId, admissionId, excludeDrawRowId]);
+  return BigInt(r.rows[0].used);
+}
+
+/** The tightest remaining envelope, from the dispatching admission up to the root. Each level's
+ * ceiling is counted once, over its own subtree -- a child is a carve-out of its parent, not a second
+ * budget on top of it -- and the root is additionally bounded by the hold itself. */
+async function runHeadroomMicro(db, hold, admission, excludeDrawRowId = null) {
+  let headroom = BigInt(hold.amount_micro) - BigInt(hold.settled_micro)
+    - BigInt((await db.query(`SELECT COALESCE(sum(reserved_micro),0)::text AS r FROM credit_hold_draws
+        WHERE hold_row_id=$1 AND state='open' AND ($2::uuid IS NULL OR id<>$2)`, [hold.id, excludeDrawRowId])).rows[0].r);
+  for (let level = admission; level; ) {
+    const left = BigInt(level.budget_ceiling_micro) - await subtreeDrawnMicro(db, hold.id, level.id, excludeDrawRowId);
+    if (left < headroom) headroom = left;
+    level = level.parent_admission_id
+      ? (await db.query('SELECT * FROM workforce_run_admissions WHERE id=$1', [level.parent_admission_id])).rows[0]
+      : null;
+  }
+  return headroom < 0n ? 0n : headroom;
+}
+
+/** Lock a run's reservation in the one order every run-money act uses: run authority, then the
+ * payer's account, then the hold. Returns the admission, its reservation, the account and the hold. */
+async function lockRunReservation(db, admissionId, { lockAccount }) {
+  const admission = (await db.query('SELECT * FROM workforce_run_admissions WHERE id=$1', [admissionId])).rows[0];
+  if (!admission) throw drawError('NOT_FOUND');
+  const reservation = await runReservationOf(db, admission);
+  if (!reservation) throw drawError('RUN_RESERVATION_MISSING');
+  await db.query('SELECT pg_advisory_xact_lock(hashtextextended($1,0))', [`run-authority:${reservation.rootId}`]);
+  const peek = (await db.query('SELECT user_id FROM credit_holds WHERE id=$1', [reservation.holdRowId])).rows[0];
+  if (!peek) throw drawError('RUN_RESERVATION_MISSING');
+  const account = lockAccount
+    ? (await db.query('SELECT * FROM credit_accounts WHERE user_id=$1 FOR UPDATE', [peek.user_id])).rows[0]
+    : (await db.query("SELECT id, user_id, to_jsonb(a)->>'owner_kind' AS owner_kind FROM credit_accounts a WHERE user_id=$1", [peek.user_id])).rows[0];
+  const hold = (await db.query('SELECT * FROM credit_holds WHERE id=$1 FOR UPDATE', [reservation.holdRowId])).rows[0];
+  if (!account || !hold || hold.account_id !== account.id || hold.user_id !== admission.payer_user_id) throw drawError('FUNDING_CONFLICT');
+  return { admission, reservation, account, hold };
+}
+
+async function holdHasOpenDraw(db, holdRowId) {
+  return (await db.query("SELECT 1 FROM credit_hold_draws WHERE hold_row_id=$1 AND state='open' LIMIT 1", [holdRowId])).rowCount > 0;
+}
+
+function drawView(row, replayed) {
+  return {
+    drawId: row.draw_id, admissionId: row.admission_id, state: row.state, outcome: row.outcome,
+    model: row.model, priceVersion: row.price_version, reservedMicro: String(row.reserved_micro),
+    pricedMicro: String(row.priced_micro), chargedMicro: String(row.charged_micro), liabilityMicro: String(row.liability_micro),
+    expiresAt: row.expires_at, replayed,
+  };
+}
+
+/**
+ * Authorize ONE provider dispatch against a run's reservation. Service-authenticated: the gateway
+ * sends the actor it authenticated and the lease the runtime presented; the platform decides.
+ * Idempotent on (hold, drawId) -- a replay with identical terms returns the same draw, even after
+ * the lease has expired; different terms are a CONFLICT.
+ */
+export async function openRunDrawV2(pool, value) {
+  const v = drawShape(value, ['admissionId', 'actorUserId', 'drawId', 'lease', 'model', 'inputBound', 'outputBound']);
+  if (!v.actorUserId || !v.drawId) throw drawError('BAD_REQUEST');
+  const model = drawText(v.model, 100);
+  const inputBound = drawCount(v.inputBound, { max: RUN_DRAW_MAX_INPUT_TOKENS });
+  const outputBound = drawCount(v.outputBound, { min: 1, max: RUN_DRAW_MAX_OUTPUT_TOKENS });
+  if (typeof v.lease !== 'string' || v.lease.length < 16 || v.lease.length > 4096) throw drawError('LEASE_REQUIRED');
+  const leaseHash = sha256hex(v.lease);
+  const requestHash = sha256hex(JSON.stringify({ admissionId: v.admissionId, drawId: v.drawId, leaseHash, model, inputBound, outputBound }));
+  const db = await pool.connect();
+  try {
+    await db.query('BEGIN');
+    await db.query("SET LOCAL lock_timeout='2s'");
+    const { admission, account, hold } = await lockRunReservation(db, v.admissionId, { lockAccount: false });
+    // Only the admitted actor may spend the run. Anyone else learns nothing about it.
+    if (admission.actor_user_id !== v.actorUserId) throw drawError('NOT_FOUND');
+    const prior = (await db.query('SELECT * FROM credit_hold_draws WHERE hold_row_id=$1 AND draw_id=$2', [hold.id, v.drawId])).rows[0];
+    if (prior) {
+      if (prior.request_hash !== requestHash) throw drawError('CONFLICT');
+      await db.query('COMMIT');
+      return drawView(prior, true);
+    }
+    // Authority is live NOW, at this admission and every ancestor.
+    if ((await db.query('SELECT workforce_run_admission_fence($1) AS f', [admission.id])).rows[0].f) throw drawError('RUN_REVOKED');
+    const lease = (await db.query(`SELECT operation, expires_at > clock_timestamp() AS live
+      FROM workforce_run_leases WHERE admission_id=$1 AND token_hash=$2`, [admission.id, leaseHash])).rows[0];
+    if (!lease) throw drawError('LEASE_INVALID');
+    if (lease.operation !== 'provider_dispatch') throw drawError('LEASE_WRONG_OPERATION');
+    if (!lease.live) throw drawError('LEASE_EXPIRED');
+    if ((await db.query('SELECT 1 FROM credit_hold_draws WHERE lease_hash=$1', [leaseHash])).rowCount) throw drawError('LEASE_CONSUMED');
+    // The reservation must still be committed. A personal hold lapses by time unless a draw keeps it;
+    // a pool hold is committed while held (pool accounting has never read its expiry).
+    const live = hold.state === 'held'
+      && (account.owner_kind === 'project_pool' || new Date(hold.expires_at) > new Date() || await holdHasOpenDraw(db, hold.id));
+    if (!live) throw drawError('RUN_RESERVATION_LAPSED');
+    // FUND-07: the price is fixed when the dispatch is authorized. A pool run is priced from the
+    // tariff its budget approved and may use no other model; a personal run pins today's tariff here.
+    let tariff;
+    if (admission.payer_kind === 'project_pool') {
+      tariff = (await db.query('SELECT price_snapshot FROM workforce_funding_budgets WHERE id=$1', [admission.funding_budget_id])).rows[0]?.price_snapshot;
+      if (!tariff || tariff.model !== model) throw drawError('MODEL_NOT_APPROVED');
+    } else {
+      try { tariff = pinChatTariff(model); } catch { throw drawError('MODEL_NOT_PRICED'); }
+    }
+    let reserved = BigInt(pricePinnedChatUsage(tariff, { inputTokens: String(inputBound), outputTokens: String(outputBound) }));
+    if (reserved < 1n) reserved = 1n;
+    const headroom = await runHeadroomMicro(db, hold, admission);
+    if (reserved > headroom) throw drawError('RUN_BUDGET_EXHAUSTED', { remainingMicro: headroom.toString(), requiredMicro: reserved.toString() });
+    const row = (await db.query(`INSERT INTO credit_hold_draws(hold_row_id,admission_id,draw_id,request_hash,lease_hash,model,tariff,
+        price_version,input_bound,output_bound,reserved_micro,expires_at)
+      VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,clock_timestamp()+make_interval(secs=>$12)) RETURNING *`,
+    [hold.id, admission.id, v.drawId, requestHash, leaseHash, model, JSON.stringify(tariff), tariff.version,
+      String(inputBound), String(outputBound), reserved.toString(), RUN_DRAW_TTL_SECONDS])).rows[0];
+    // The run is alive: its reservation must not lapse under the dispatch it just authorized.
+    await db.query(`UPDATE credit_holds SET expires_at=GREATEST(expires_at, clock_timestamp()+make_interval(secs=>$2)), updated_at=clock_timestamp()
+      WHERE id=$1`, [hold.id, RUN_HOLD_TTL_SECONDS]);
+    await db.query('COMMIT');
+    return drawView(row, false);
+  } catch (error) { await db.query('ROLLBACK').catch(() => {}); throw error; }
+  finally { db.release(); }
+}
+
+/**
+ * Settle one draw from the gateway's MEASURED usage. The charge is the priced usage, bounded by the
+ * tightest remaining envelope, the reserved non-quarantined lots and the posted balance; whatever
+ * those cannot cover is recorded liability on the draw. Idempotent on the measured payload.
+ */
+export async function settleRunDrawV2(pool, value) {
+  const v = drawShape(value, ['admissionId', 'drawId', 'providerRequestId', 'provider', 'model', 'inputTokens', 'outputTokens', 'measured']);
+  if (!v.drawId || typeof v.measured !== 'boolean') throw drawError('BAD_REQUEST');
+  // Unmeasured = the request WAS sent and no usage came back (a cut stream, a lost response). The
+  // dispatch is charged at the bound it was authorized for -- never more -- and says so. It is never
+  // accepted with token counts: a count the caller computed is not a measurement.
+  const measured = v.measured;
+  if (!measured && (v.inputTokens !== undefined || v.outputTokens !== undefined)) throw drawError('BAD_REQUEST');
+  const providerRequestId = drawText(v.providerRequestId, 200), provider = drawText(v.provider, 50), model = drawText(v.model, 100);
+  const inputTokens = measured ? drawCount(v.inputTokens, { max: 1e15 }) : null;
+  const outputTokens = measured ? drawCount(v.outputTokens, { max: 1e15 }) : null;
+  const db = await pool.connect();
+  try {
+    await db.query('BEGIN');
+    await db.query("SET LOCAL lock_timeout='2s'");
+    const { admission, account, hold } = await lockRunReservation(db, v.admissionId, { lockAccount: true });
+    const draw = (await db.query('SELECT * FROM credit_hold_draws WHERE hold_row_id=$1 AND draw_id=$2 FOR UPDATE', [hold.id, v.drawId])).rows[0];
+    if (!draw || draw.admission_id !== admission.id) throw drawError('NOT_FOUND');
+    if (draw.state === 'settled') {
+      const same = draw.provider === provider && draw.provider_request_id === providerRequestId
+        && draw.outcome === (measured ? 'measured' : 'unmeasured')
+        && String(draw.input_tokens) === String(inputTokens) && String(draw.output_tokens) === String(outputTokens);
+      if (!same) throw drawError('CONFLICT');
+      await db.query('COMMIT');
+      return drawView(draw, true);
+    }
+    if (draw.state !== 'open') throw drawError('CONFLICT');
+    if (draw.model !== model) throw drawError('CONFLICT');
+    const priced = measured
+      ? BigInt(pricePinnedChatUsage(draw.tariff, { inputTokens: String(inputTokens), outputTokens: String(outputTokens) }))
+      : BigInt(draw.reserved_micro);
+    // A hold that stopped being 'held' under an open draw was released by a dispute freeze
+    // (billingService voids every hold of a frozen account). The provider work still happened: it is
+    // recorded, and it is the platform's liability -- never a charge against released funds.
+    const holdLive = hold.state === 'held';
+    let charged = holdLive ? priced : 0n;
+    const headroom = await runHeadroomMicro(db, hold, admission, draw.id);
+    if (headroom < charged) charged = headroom;
+    // Only lots this hold reserved, never quarantined, never fresh (an overrun is not new consent).
+    const quarantined = new Set(await quarantinedGrantIds(db, hold.user_id));
+    const funding = (await readHoldFunding(db, hold.id)).filter((f) => !quarantined.has(f.grantId));
+    const lots = funding.reduce((n, f) => n + BigInt(f.amountMicro), 0n);
+    if (lots < charged) charged = lots;
+    const balance = BigInt(account.balance);
+    if (account.is_frozen) charged = 0n;
+    if (balance < charged) charged = balance > 0n ? balance : 0n;
+    const liability = priced - charged;
+    let remaining = charged;
+    for (const f of funding) {
+      if (remaining === 0n) break;
+      const take = BigInt(f.amountMicro) < remaining ? BigInt(f.amountMicro) : remaining;
+      const g = await db.query('UPDATE credit_grants SET remaining_micro=remaining_micro-$1 WHERE id=$2 AND remaining_micro >= $1 RETURNING id', [take.toString(), f.grantId]);
+      if (g.rows.length !== 1) throw drawError('FUNDING_CONFLICT');
+      // The slice leaves the reservation as it is spent, so the next draw is funded from what is left
+      // (reserved_micro > 0 is a CHECK, so a fully spent lot's reservation row goes away).
+      const shrunk = await db.query(`UPDATE credit_hold_funding SET reserved_micro=reserved_micro-$1
+        WHERE hold_row_id=$2 AND grant_id=$3 AND reserved_micro>$1`, [take.toString(), hold.id, f.grantId]);
+      if (shrunk.rowCount !== 1) {
+        const spent = await db.query('DELETE FROM credit_hold_funding WHERE hold_row_id=$1 AND grant_id=$2 AND reserved_micro=$3',
+          [hold.id, f.grantId, take.toString()]);
+        if (spent.rowCount !== 1) throw drawError('FUNDING_CONFLICT');
+      }
+      remaining -= take;
+    }
+    const next = balance - charged;
+    await db.query('UPDATE credit_accounts SET balance=$1,lifetime_spent=lifetime_spent+$2,updated_at=clock_timestamp() WHERE id=$3',
+      [next.toString(), charged.toString(), account.id]);
+    if (holdLive) await db.query('UPDATE credit_holds SET settled_micro=settled_micro+$1,updated_at=clock_timestamp() WHERE id=$2', [charged.toString(), hold.id]);
+    await insertLedgerEntry(db, {
+      userId: hold.user_id, accountId: account.id, type: 'debit', amount: (-charged).toString(), balanceAfter: next.toString(),
+      refType: 'xeno.draw', refId: draw.id, description: 'workforce:run.dispatch',
+      metadata: JSON.stringify({ admissionId: admission.id, holdId: hold.hold_id, drawId: draw.draw_id, providerRequestId, provider, model,
+        priceVersion: draw.price_version, reservedMicro: String(draw.reserved_micro), pricedMicro: priced.toString(), liabilityMicro: liability.toString() }),
+    });
+    await insertUsageLog(db, hold.user_id, { surface: 'workforce', operation: 'run.dispatch', transactionId: draw.id, model, provider,
+      inputTokens: inputTokens ?? 0, outputTokens: outputTokens ?? 0,
+      dimensions: { usage_source: measured ? 'provider' : 'reservation' } }, charged);
+    if (!['project_pool'].includes(account.owner_kind ?? 'user')) await mirrorLegacy(db, hold.user_id, next);
+    const row = (await db.query(`UPDATE credit_hold_draws SET state='settled',outcome=$9,provider=$2,provider_request_id=$3,
+        input_tokens=$4,output_tokens=$5,priced_micro=$6,charged_micro=$7,liability_micro=$8,resolved_at=clock_timestamp()
+      WHERE id=$1 RETURNING *`, [draw.id, provider, providerRequestId, inputTokens === null ? null : String(inputTokens),
+      outputTokens === null ? null : String(outputTokens), priced.toString(), charged.toString(), liability.toString(),
+      measured ? 'measured' : 'unmeasured'])).rows[0];
+    if (liability > 0n) console.error(`[ledger] RUN DRAW LIABILITY: admission=${admission.id} draw=${draw.draw_id} priced=${priced} charged=${charged}`);
+    await db.query('COMMIT');
+    return drawView(row, false);
+  } catch (error) { await db.query('ROLLBACK').catch(() => {}); throw error; }
+  finally { db.release(); }
+}
+
+/** Release a draw whose request provably never reached a provider. No proof, no release. */
+export async function voidRunDrawV2(pool, value) {
+  const v = drawShape(value, ['admissionId', 'drawId', 'notDispatched']);
+  if (!v.drawId || v.notDispatched !== true) throw drawError('BAD_REQUEST');
+  const db = await pool.connect();
+  try {
+    await db.query('BEGIN');
+    await db.query("SET LOCAL lock_timeout='2s'");
+    const { admission, hold } = await lockRunReservation(db, v.admissionId, { lockAccount: false });
+    const draw = (await db.query('SELECT * FROM credit_hold_draws WHERE hold_row_id=$1 AND draw_id=$2 FOR UPDATE', [hold.id, v.drawId])).rows[0];
+    if (!draw || draw.admission_id !== admission.id) throw drawError('NOT_FOUND');
+    if (draw.state === 'voided') { await db.query('COMMIT'); return drawView(draw, true); }
+    if (draw.state !== 'open') throw drawError('CONFLICT');
+    const row = (await db.query(`UPDATE credit_hold_draws SET state='voided',outcome='not_dispatched',resolved_at=clock_timestamp()
+      WHERE id=$1 RETURNING *`, [draw.id])).rows[0];
+    await db.query('COMMIT');
+    return drawView(row, false);
+  } catch (error) { await db.query('ROLLBACK').catch(() => {}); throw error; }
+  finally { db.release(); }
+}
+
+/** Keep an in-flight draw -- and so its run's reservation -- committed while the provider works. */
+export async function extendRunDrawV2(pool, value) {
+  const v = drawShape(value, ['admissionId', 'drawId', 'extendBySeconds']);
+  if (!v.drawId) throw drawError('BAD_REQUEST');
+  const seconds = drawCount(v.extendBySeconds, { min: 1, max: MAX_HOLD_EXTENSION_SECONDS });
+  const db = await pool.connect();
+  try {
+    await db.query('BEGIN');
+    await db.query("SET LOCAL lock_timeout='2s'");
+    const { admission, hold } = await lockRunReservation(db, v.admissionId, { lockAccount: false });
+    const row = (await db.query(`UPDATE credit_hold_draws SET expires_at=GREATEST(expires_at, clock_timestamp()+make_interval(secs=>$3))
+      WHERE hold_row_id=$1 AND draw_id=$2 AND admission_id=$4 AND state='open' RETURNING *`, [hold.id, v.drawId, seconds, admission.id])).rows[0];
+    if (!row) throw drawError('DRAW_NOT_OPEN');
+    await db.query(`UPDATE credit_holds SET expires_at=GREATEST(expires_at, clock_timestamp()+make_interval(secs=>$2)), updated_at=clock_timestamp()
+      WHERE id=$1`, [hold.id, seconds]);
+    await db.query('COMMIT');
+    return drawView(row, false);
+  } catch (error) { await db.query('ROLLBACK').catch(() => {}); throw error; }
+  finally { db.release(); }
+}
+
+/**
+ * End a run's reservation: release what it did not spend. Only the ROOT closes, and only once no
+ * draw anywhere in its tree is open -- an unresolved dispatch keeps its slice committed (FUND-09).
+ * The hold ends 'settled' for what the draws charged, or 'voided' if nothing was charged.
+ */
+export async function closeRunReservationV2(pool, value) {
+  const v = drawShape(value, ['admissionId']);
+  const db = await pool.connect();
+  try {
+    await db.query('BEGIN');
+    await db.query("SET LOCAL lock_timeout='2s'");
+    const { admission, reservation, hold } = await lockRunReservation(db, v.admissionId, { lockAccount: false });
+    if (reservation.rootId !== admission.id) throw drawError('NOT_ROOT');
+    if (hold.state !== 'held') { await db.query('COMMIT'); return { admissionId: admission.id, state: hold.state, settledMicro: String(hold.settled_micro), replayed: true }; }
+    if (await holdHasOpenDraw(db, hold.id)) throw drawError('DRAWS_UNRESOLVED');
+    const state = BigInt(hold.settled_micro) > 0n ? 'settled' : 'voided';
+    await db.query('UPDATE credit_holds SET state=$2,updated_at=clock_timestamp() WHERE id=$1', [hold.id, state]);
+    await db.query('COMMIT');
+    return { admissionId: admission.id, state, settledMicro: String(hold.settled_micro), replayed: false };
+  } catch (error) { await db.query('ROLLBACK').catch(() => {}); throw error; }
+  finally { db.release(); }
+}
+
+/** A run's reservation is managed ONLY by the run-draw acts above. The generic hold verbs must not
+ * settle, void or extend it: voiding a run hold would release money an in-flight dispatch holds. */
+async function refuseRunHold(db, userId, holdId) {
+  const r = await db.query("SELECT 1 FROM credit_holds WHERE user_id=$1 AND hold_id=$2 AND surface='workforce' AND operation='run'", [userId, holdId]);
+  if (r.rowCount) throw drawError('RUN_HOLD_MANAGED');
 }
 
 /** Stable deterministic id helper for callers without one (rarely needed). */

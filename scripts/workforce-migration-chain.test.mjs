@@ -176,6 +176,9 @@ test('every workforce migration applies in order from an empty database', { skip
         // intersection of every right it runs under; cited by workforce-run-admission.test.mjs.
         'workforce_run_admissions',
         'workforce_run_funding',
+        // §8.7, 2026-09-30 -- a PERSONAL run's link to its root's one reservation (pool runs keep
+        // workforce_run_funding); spent through credit_hold_draws. Cited by workforce-run-draws.test.mjs.
+        'workforce_run_holds',
         // RUN-03/NFR-06/NFR-10, 2026-09-25 -- every run-authority lease ever issued (at most 60 s, monotonic
         // per admission) and the durable revocation that fences them; cited by workforce-run-authority.test.mjs.
         'workforce_run_leases',
