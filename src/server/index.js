@@ -853,10 +853,14 @@ app.get('/health', (req, res) => {
 });
 
 // OpenRouter Models API - Fetch available models grouped by company
-// Cache for models (refresh every 30 minutes)
+// Cache for models. The gateway's list is already filtered to ROUTABLE models from its
+// availability sweep, so this cache is how long a model that has stopped answering stays
+// offered here. It was 30 minutes (2026-09-30: `deepseek-v4-flash-vision-exp` answered 503 to
+// every request while the picker kept offering it, newest-first, as the default). The gateway
+// call is one cheap request; a minute bounds the lag to the sweep's own cadence.
 let modelsCache = null;
 let modelsCacheTimestamp = 0;
-const MODELS_CACHE_DURATION = 30 * 60 * 1000; // 30 minutes
+const MODELS_CACHE_DURATION = 60 * 1000;
 
 // Companies to include and their prefixes
 const COMPANY_PREFIXES = {
@@ -955,6 +959,13 @@ app.get('/api/models', databaseMiddleware, authMiddleware, async (req, res) => {
           supportsFileUpload: supportsVision,
           paths: ['premium', 'byok'],
           defaultPath: 'premium',
+          // The gateway's own verdict, carried through rather than dropped, so a client can
+          // tell "reachable now" from "no verdict" and never default to the second.
+          ...(model.availability !== undefined ? {
+            available: model.available === true,
+            availability: String(model.availability),
+            availabilityCheckedAt: model.availability_checked_at || null,
+          } : {}),
         };
       });
       if (latestModels.length > 0) groupedModels[companyName] = latestModels;
