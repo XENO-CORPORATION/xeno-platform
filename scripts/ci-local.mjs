@@ -55,6 +55,7 @@
 import { execFileSync, spawnSync } from 'node:child_process';
 import { existsSync, readFileSync, readdirSync, mkdtempSync, symlinkSync, writeFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
+import { randomBytes } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { dirname, join, resolve } from 'node:path';
 
@@ -106,14 +107,18 @@ const DB_PROOF_FIXTURES = {
   WORKSPACE_KEY_TEST_DATABASE_URL: { database: 'workspacekeyproof', migrated: false },
   NOTIFICATION_TEST_DATABASE_URL: { database: 'notificationproof', migrated: false },
   WORKSPACE_AUTH_TEST_DATABASE_URL: { database: 'workspaceproof', migrated: false },
-  TEST_DATABASE_URL: { database: 'chatproof', migrated: true },
+  // No fixed name: each suite gets its own `xeno_qual_<hex>` copy of the migrated template (below).
+  TEST_DATABASE_URL: { database: null, migrated: true },
 };
-/* A suite that reads TEST_DATABASE_URL (it needs the REAL schema) AND passes it through the
- * workforce guard (`requireProofDatabase`) needs both at once: migrated, and a name the guard
- * accepts. `chatproof` is not one, so twelve credit/workforce proofs refused to start here while
- * reading as failures ("0 passed"). They get their own migrated database under the guard's
- * qualifier shape instead of the guard being loosened. */
-const GUARDED_MIGRATED_FIXTURE = { database: 'xeno_qual_c10ca1' + '0'.repeat(26), migrated: true };
+/* A MIGRATED suite gets a database of its OWN, copied from one migrated template
+ * (`CREATE DATABASE … TEMPLATE`, the Rails/Django test-database pattern): migrations run once, and
+ * no suite can pass or fail because of rows another suite left behind. Sharing one migrated
+ * database did exactly that -- funding-budgets' teardown was refused by another suite's retained
+ * decisions, and run-results collided on another suite's fixed host installation id, both reading
+ * as broken tests. The copy is named `xeno_qual_<32 hex>`, the qualifier shape: the workforce guard
+ * (`requireProofDatabase`) accepts nothing else, and `project-publication` accepts it too. */
+const MIGRATED_TEMPLATE = 'ciproof_migrated_template';
+const qualifierName = () => 'xeno_qual_' + randomBytes(16).toString('hex');
 
 /* The canonical fresh-database sequence, taken from src/server/tests/fresh-db-boot.test.mjs
  * rather than reinvented: versioned SQL first, then the account/ledger v2 migration. */
@@ -164,8 +169,7 @@ function deriveDbProofSuites() {
       log(`${c.dim}  not a database proof, excluded: ${file} needs ${EXTERNAL_SERVICE_SUITES[file]}${c.off}`);
       continue;
     }
-    const guarded = m[1] === 'TEST_DATABASE_URL' && /requireProofDatabase\(/.test(body);
-    found.push({ file, variable: m[1], fixture: guarded ? GUARDED_MIGRATED_FIXTURE : DB_PROOF_FIXTURES[m[1]] });
+    found.push({ file, variable: m[1], fixture: DB_PROOF_FIXTURES[m[1]] });
   }
   return found.sort((a, b) => a.file.localeCompare(b.file));
 }
@@ -296,8 +300,10 @@ function startPg() {
 
 const stopPg = () => { if (!EXTERNAL_PG) spawnSync('docker', ['rm', '-f', PG.container], { stdio: 'ignore' }); };
 
-function freshDb(name) {
-  const statements = [`DROP DATABASE IF EXISTS ${name}`, `CREATE DATABASE ${name}`];
+/* `template` copies a prepared database instead of creating an empty one (it must have no open
+ * connections, which is why migrateDatabase ends its pool before returning). */
+function freshDb(name, template = null) {
+  const statements = [`DROP DATABASE IF EXISTS ${name}`, `CREATE DATABASE ${name}${template ? ` TEMPLATE ${template}` : ''}`];
   if (EXTERNAL_PG) {
     const admin = new URL(`${EXTERNAL_PG}/postgres`);
     for (const sql of statements) {
@@ -392,20 +398,24 @@ function runDbProofs(baseUrl) {
   }
   const created = new Set();
   let allOk = true;
+  if (suites.some(({ fixture }) => fixture.migrated)) {
+    // Migrate ONCE, into the template every migrated suite is copied from.
+    const m = migrateDatabase(freshDb(MIGRATED_TEMPLATE));
+    if (m.code !== 0) {
+      // Without this the suites fail as `relation "users" does not exist`, which reads
+      // as a broken test rather than a database that was never prepared.
+      record('proofs: migrate the template database', false, 'migrations failed; suites needing it cannot run');
+      log(m.out.split(/\r?\n/).slice(-15).join('\n'));
+      return false;
+    }
+  }
   for (const { file, variable, fixture } of suites) {
-    const { database, migrated } = fixture;
-    if (!created.has(database)) {
-      const url = freshDb(database);
-      if (migrated) {
-        const m = migrateDatabase(url);
-        if (m.code !== 0) {
-          // Without this the suites fail as `relation "users" does not exist`, which reads
-          // as a broken test rather than a database that was never prepared.
-          record(`proofs: migrate ${database}`, false, 'migrations failed; suites needing it cannot run');
-          log(m.out.split(/\r?\n/).slice(-15).join('\n'));
-          return false;
-        }
-      }
+    let database = fixture.database;
+    if (fixture.migrated) {
+      database = qualifierName();
+      freshDb(database, MIGRATED_TEMPLATE);
+    } else if (!created.has(database)) {
+      freshDb(database);
       created.add(database);
     }
     const { code, out } = run('node', ['--test', '--test-force-exit', join('scripts', file)],
