@@ -265,6 +265,13 @@ proof, replayed proof and revoked session refuse before provider work. Public HT
 mapped explicitly to loopback transport in this fixture; no issuer discovery or production TLS is
 claimed. This proves the SDK/account callback seam, not the installed Interface account worker.
 
+A sixth actual provider response omits usage. SDK model-work accounting stays `unknown`; the draw
+is explicitly `unmeasured` with null token counts, charged at its authorized reservation bound;
+usage analytics labels the source `reservation`, and the wallet still conserves. Re-measured against
+merged gateway `f033cfd` (same source tree as the earlier PR16 candidate). This is not proof the
+provider terminated or that later measurements are reconciled: the existing settle endpoint refuses
+changed payloads after settlement, and append-only downward correction remains open.
+
 This is **candidate qualification**, not SDK release/Interface adoption, complete account sign-in,
 commercial-provider output, cancellation uncertainty reconciliation, or the full workforce mission.
 The SDK owner controls PR100 merge/release sequencing. The Interface execution gate remains closed.

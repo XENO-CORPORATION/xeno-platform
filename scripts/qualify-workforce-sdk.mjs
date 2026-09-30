@@ -69,7 +69,7 @@ test('SDK physical dispatches traverse gateway auth, run draws, provider and can
   app.use('/api/v2/ledger/service', createServiceLedgerRouter({ getServiceToken: () => serviceToken }));
   const serve = async app => { const s = app.listen(0, '127.0.0.1'); await new Promise(r => s.once('listening', r)); t.after(async () => { s.closeAllConnections(); await new Promise(r => s.close(r)); }); return s; };
   const platformServer = await serve(app), platformUrl = `http://127.0.0.1:${platformServer.address().port}`;
-  let providerAdmissionId = admissionId;
+  let providerAdmissionId = admissionId, omitProviderUsage = false;
   let providerCalls = 0, streamedCalls = 0, observeStream;
   const streamObserved = new Promise(resolve => { observeStream = resolve; });
   const provider = express(); provider.use(express.json());
@@ -89,7 +89,7 @@ test('SDK physical dispatches traverse gateway auth, run draws, provider and can
       res.end('data: [DONE]\n\n');
       return;
     }
-    res.json({ model: 'gpt-5.5', choices: [{ message: { role: 'assistant', content: `reply-${providerCalls}` }, finish_reason: 'stop' }], usage: { prompt_tokens: 10, completion_tokens: 5 } });
+    res.json({ model: 'gpt-5.5', choices: [{ message: { role: 'assistant', content: `reply-${providerCalls}` }, finish_reason: 'stop' }], ...(omitProviderUsage ? {} : { usage: { prompt_tokens: 10, completion_tokens: 5 } }) });
   });
   const providerServer = await serve(provider), providerUrl = `http://127.0.0.1:${providerServer.address().port}`;
   const portServer = await serve(express()), gatewayPort = portServer.address().port;
@@ -254,8 +254,32 @@ test('SDK physical dispatches traverse gateway auth, run draws, provider and can
   assert.equal(providerCalls, 5, 'DPoP replay and session revoke reach no provider');
   assert.equal((await pool.query('SELECT count(*)::int n FROM credit_hold_draws WHERE admission_id=$1', [providerAdmissionId])).rows[0].n, 1, 'bound session makes one draw only');
   await reportRunResult(pool, boundContext, { admissionId: providerAdmissionId, outcome: 'completed', summary: 'Sender-bound fixture done', artifacts: [] });
+  const uncertainBefore = BigInt((await getBalanceV2(pool, owner)).availableMicro);
+  const uncertain = await admitRun(pool, context, { operationId: randomUUID(), expectedActorAccountId: owner,
+    agent: { resourceId: made.resource.id, version: made.version.version, contentHash: made.version.contentHash },
+    target: { kind: 'personal', ownerUserId: owner }, capabilities: [], runtimeCapabilities: [], budget: { ceilingMicro: '10000000' } });
+  providerAdmissionId = uncertain.admission.admissionId; omitProviderUsage = true;
+  const uncertainAuthority = createWorkforceRunAuthority({ issuer: 'https://platform.test', admissionId: providerAdmissionId,
+    authorizeRequest: async () => ({ authorization: `Bearer ${accountToken}` }), capabilityForTool: () => null,
+    sequenceStore: { read: id => sequences.get(id) ?? null, write: (id, seq) => { sequences.set(id, seq); } },
+    fetchImpl: (target, options) => fetch(String(target).replace('https://platform.test', platformUrl), options) });
+  const uncertainAccounting = [];
+  const uncertainAgent = new AgentLoop({ apiKey, baseURL: gatewayUrl, model: 'gpt-5.5', maxTokens: 100, maxIterations: 2,
+    modelWorkAccounting: { admit() {}, settle: result => { uncertainAccounting.push(result); } },
+    systemPrompt: 'Reply briefly.', runAuthority: uncertainAuthority, toolRegistry: new ToolRegistry(), permissionEngine: new PermissionEngine({ mode: 'bypassPermissions' }) });
+  assert.match(await uncertainAgent.run('provider omits usage'), /reply-6/);
+  assert.deepEqual(uncertainAccounting.map(result => result.status), ['unknown'], 'SDK never promotes missing provider counts to measured zero');
+  const uncertainDraw = (await pool.query('SELECT * FROM credit_hold_draws WHERE admission_id=$1', [providerAdmissionId])).rows[0];
+  assert.deepEqual([uncertainDraw.state, uncertainDraw.outcome, uncertainDraw.input_tokens, uncertainDraw.output_tokens],
+    ['settled', 'unmeasured', null, null], 'missing provider counts remain explicitly unmeasured');
+  assert.equal(uncertainDraw.charged_micro, uncertainDraw.reserved_micro, 'unmeasured charge is the authorized dispatch bound');
+  assert(BigInt(uncertainDraw.charged_micro) <= 10000000n, 'uncertain charge never exceeds admitted ceiling');
+  const usage = (await pool.query('SELECT dimensions FROM api_usage_logs WHERE request_id=$1', [uncertainDraw.id])).rows[0];
+  assert.equal(usage.dimensions.usage_source, 'reservation', 'analytics distinguishes reserved charge from provider measurement');
+  await reportRunResult(pool, context, { admissionId: providerAdmissionId, outcome: 'completed', summary: 'Reply received without counts', artifacts: [] });
+  assert.equal(BigInt((await getBalanceV2(pool, owner)).availableMicro), uncertainBefore - BigInt(uncertainDraw.charged_micro), 'unmeasured settlement conserves canonical wallet value');
   assert(!logs.includes('WORKFORCE_FIXTURE_EGRESS_REFUSED'), 'gateway made no unexpected outbound call');
   const bundles = Object.fromEntries(['dist/index.js', 'dist/workforce/index.js'].map(file => [file, createHash('sha256').update(readFileSync(join(sdk, file))).digest('hex')]));
   console.log('Qualification evidence:', JSON.stringify({ sdkRevision, bundles, gatewayRevision: revision, providerCalls,
-    rootDraws: draws.length, delegatedDraws: childDraw.length, senderBoundDraws: boundDraw.length }));
+    rootDraws: draws.length, delegatedDraws: childDraw.length, senderBoundDraws: boundDraw.length, unmeasuredDraws: 1 }));
 });
