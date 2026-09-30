@@ -55,6 +55,7 @@
 import { execFileSync, spawnSync } from 'node:child_process';
 import { existsSync, readFileSync, readdirSync, mkdtempSync, symlinkSync, writeFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
+import { randomBytes } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { dirname, join, resolve } from 'node:path';
 
@@ -106,14 +107,18 @@ const DB_PROOF_FIXTURES = {
   WORKSPACE_KEY_TEST_DATABASE_URL: { database: 'workspacekeyproof', migrated: false },
   NOTIFICATION_TEST_DATABASE_URL: { database: 'notificationproof', migrated: false },
   WORKSPACE_AUTH_TEST_DATABASE_URL: { database: 'workspaceproof', migrated: false },
-  TEST_DATABASE_URL: { database: 'chatproof', migrated: true },
+  // No fixed name: each suite gets its own `xeno_qual_<hex>` copy of the migrated template (below).
+  TEST_DATABASE_URL: { database: null, migrated: true },
 };
-/* A suite that reads TEST_DATABASE_URL (it needs the REAL schema) AND passes it through the
- * workforce guard (`requireProofDatabase`) needs both at once: migrated, and a name the guard
- * accepts. `chatproof` is not one, so twelve credit/workforce proofs refused to start here while
- * reading as failures ("0 passed"). They get their own migrated database under the guard's
- * qualifier shape instead of the guard being loosened. */
-const GUARDED_MIGRATED_FIXTURE = { database: 'xeno_qual_c10ca1' + '0'.repeat(26), migrated: true };
+/* A MIGRATED suite gets a database of its OWN, copied from one migrated template
+ * (`CREATE DATABASE … TEMPLATE`, the Rails/Django test-database pattern): migrations run once, and
+ * no suite can pass or fail because of rows another suite left behind. Sharing one migrated
+ * database did exactly that -- funding-budgets' teardown was refused by another suite's retained
+ * decisions, and run-results collided on another suite's fixed host installation id, both reading
+ * as broken tests. The copy is named `xeno_qual_<32 hex>`, the qualifier shape: the workforce guard
+ * (`requireProofDatabase`) accepts nothing else, and `project-publication` accepts it too. */
+const MIGRATED_TEMPLATE = 'ciproof_migrated_template';
+const qualifierName = () => 'xeno_qual_' + randomBytes(16).toString('hex');
 
 /* The canonical fresh-database sequence, taken from src/server/tests/fresh-db-boot.test.mjs
  * rather than reinvented: versioned SQL first, then the account/ledger v2 migration. */
@@ -164,8 +169,7 @@ function deriveDbProofSuites() {
       log(`${c.dim}  not a database proof, excluded: ${file} needs ${EXTERNAL_SERVICE_SUITES[file]}${c.off}`);
       continue;
     }
-    const guarded = m[1] === 'TEST_DATABASE_URL' && /requireProofDatabase\(/.test(body);
-    found.push({ file, variable: m[1], fixture: guarded ? GUARDED_MIGRATED_FIXTURE : DB_PROOF_FIXTURES[m[1]] });
+    found.push({ file, variable: m[1], fixture: DB_PROOF_FIXTURES[m[1]] });
   }
   return found.sort((a, b) => a.file.localeCompare(b.file));
 }
@@ -286,7 +290,10 @@ function startPg() {
   ], { stdio: 'pipe', encoding: 'utf8' });
   if (up.status !== 0) throw new Error(`could not start postgres: ${up.stderr}`);
   for (let i = 0; i < 60; i += 1) {
-    const r = spawnSync('docker', ['exec', PG.container, 'pg_isready', '-U', 'postgres'], { stdio: 'ignore' });
+    // Over TCP, not the socket: the image's entrypoint first boots a temporary server that listens
+    // ONLY on the Unix socket, runs init, then restarts. A socket probe reports that temporary
+    // server ready, and the first CREATE DATABASE can land in the restart window.
+    const r = spawnSync('docker', ['exec', PG.container, 'pg_isready', '-h', '127.0.0.1', '-U', 'postgres'], { stdio: 'ignore' });
     if (r.status === 0) return;
     spawnSync(process.platform === 'win32' ? 'timeout' : 'sleep',
       process.platform === 'win32' ? ['/t', '1', '/nobreak'] : ['1'], { stdio: 'ignore' });
@@ -296,18 +303,26 @@ function startPg() {
 
 const stopPg = () => { if (!EXTERNAL_PG) spawnSync('docker', ['rm', '-f', PG.container], { stdio: 'ignore' }); };
 
-function freshDb(name) {
-  const statements = [`DROP DATABASE IF EXISTS ${name}`, `CREATE DATABASE ${name}`];
+/* `template` copies a prepared database instead of creating an empty one (it must have no open
+ * connections, which is why migrateDatabase ends its pool before returning). */
+function freshDb(name, template = null) {
+  const statements = [`DROP DATABASE IF EXISTS ${name}`, `CREATE DATABASE ${name}${template ? ` TEMPLATE ${template}` : ''}`];
+  // A failed CREATE used to be discarded here and surfaced later as a suite that could not connect
+  // -- a broken database reading as a broken test. Refuse at the statement that failed instead.
+  const check = (r, sql) => {
+    if (r.status !== 0) throw new Error(`could not prepare database ${name} (${sql}): ${String(r.stderr || '').trim()}`);
+  };
   if (EXTERNAL_PG) {
     const admin = new URL(`${EXTERNAL_PG}/postgres`);
     for (const sql of statements) {
-      spawnSync('psql', [admin.href, '-v', 'ON_ERROR_STOP=1', '-q', '-c', sql],
-        { stdio: 'ignore', env: { ...process.env, PGPASSWORD: decodeURIComponent(admin.password || '') } });
+      check(spawnSync('psql', [admin.href, '-v', 'ON_ERROR_STOP=1', '-q', '-c', sql],
+        { stdio: ['ignore', 'ignore', 'pipe'], encoding: 'utf8', env: { ...process.env, PGPASSWORD: decodeURIComponent(admin.password || '') } }), sql);
     }
     return `${EXTERNAL_PG}/${name}`;
   }
   for (const sql of statements) {
-    spawnSync('docker', ['exec', PG.container, 'psql', '-U', 'postgres', '-d', 'postgres', '-c', sql], { stdio: 'ignore' });
+    check(spawnSync('docker', ['exec', PG.container, 'psql', '-v', 'ON_ERROR_STOP=1', '-U', 'postgres', '-d', 'postgres', '-c', sql],
+      { stdio: ['ignore', 'ignore', 'pipe'], encoding: 'utf8' }), sql);
   }
   return `postgresql://postgres:${PG.password}@127.0.0.1:${PG.port}/${name}`;
 }
@@ -392,20 +407,24 @@ function runDbProofs(baseUrl) {
   }
   const created = new Set();
   let allOk = true;
+  if (suites.some(({ fixture }) => fixture.migrated)) {
+    // Migrate ONCE, into the template every migrated suite is copied from.
+    const m = migrateDatabase(freshDb(MIGRATED_TEMPLATE));
+    if (m.code !== 0) {
+      // Without this the suites fail as `relation "users" does not exist`, which reads
+      // as a broken test rather than a database that was never prepared.
+      record('proofs: migrate the template database', false, 'migrations failed; suites needing it cannot run');
+      log(m.out.split(/\r?\n/).slice(-15).join('\n'));
+      return false;
+    }
+  }
   for (const { file, variable, fixture } of suites) {
-    const { database, migrated } = fixture;
-    if (!created.has(database)) {
-      const url = freshDb(database);
-      if (migrated) {
-        const m = migrateDatabase(url);
-        if (m.code !== 0) {
-          // Without this the suites fail as `relation "users" does not exist`, which reads
-          // as a broken test rather than a database that was never prepared.
-          record(`proofs: migrate ${database}`, false, 'migrations failed; suites needing it cannot run');
-          log(m.out.split(/\r?\n/).slice(-15).join('\n'));
-          return false;
-        }
-      }
+    let database = fixture.database;
+    if (fixture.migrated) {
+      database = qualifierName();
+      freshDb(database, MIGRATED_TEMPLATE);
+    } else if (!created.has(database)) {
+      freshDb(database);
       created.add(database);
     }
     const { code, out } = run('node', ['--test', '--test-force-exit', join('scripts', file)],
