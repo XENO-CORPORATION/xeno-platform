@@ -18,6 +18,7 @@
     "test:surface-stamp": "node --test scripts/surface-stamp.test.mjs",
     "ci:local": "node scripts/ci-local.mjs",
     "ci:local:drift": "node scripts/ci-local.mjs --check-drift",
+    "qualify:workforce-gateway": "node --test scripts/qualify-workforce-gateway.mjs",
     "test:licence-client": "node --test scripts/licence-client.test.mjs",
     "test:licence-package": "node clients/licence/build.mjs && node --test clients/licence/test/licence.test.mjs",
     "test:client-version": "node --test scripts/client-version.test.mjs",

@@ -179,6 +179,31 @@ funding totals, participation offers, contribution review/integration, and forge
 remain unbuilt here. This is partial XENO-WORKFORCE-01 publication work, not a full PUB-02 claim;
 no requirement citation has been added for this slice yet. No production data was accessed.
 
+## Gateway / ledger composition qualification — 2026-09-30
+
+`npm run qualify:workforce-gateway` is an explicit cross-repo local gate. Supply:
+- `TEST_DATABASE_URL`: a fresh migrated PostgreSQL database on localhost/127.0.0.1,
+  named `xeno_qual_<32 hex>`; the command refuses other hosts/names and missing inputs.
+- `GATEWAY_BILLING_REPO`: a local xeno-api-proxy Git repository containing the tested commit.
+- `GATEWAY_BILLING_COMMIT`: its full 40-character commit ID.
+- `GATEWAY_BILLING_SOURCE`: an isolated checkout/export of that commit with its dependencies
+  installed. The three executed gateway billing modules must match committed bytes exactly.
+
+First measured pair: Platform `788bfc3`, gateway `dbd3f86`. The real gateway billing module and
+HTTP ledger client call the real Platform service-token router and PostgreSQL: a root reserves
+the whole wallet; a draw still opens when ordinary available balance is zero; invalid leases,
+missing output bounds and wrong service credentials refuse before draw creation; a consumed
+lease cannot fund another request; a fresh lease can; a provably undispatched request voids its
+draw; measured usage changes the canonical balance; terminal result closes the resolved root
+and returns only the remaining reservation. No second wallet hold is created.
+
+**Not proven here:** SDK request-context forwarding, full gateway authentication/router startup,
+provider execution, streaming/cancellation uncertainty, reconciliation of later measured usage,
+or production behavior. Authenticated actor metadata and provider usage are explicit fixtures;
+service authentication, authority leases, billing transport and ledger effects are real local
+implementations. The Interface execution gate must remain closed until the full composed path
+is qualified. This command changes only its disposable database; no production access/deploy.
+
 ## Explicit non-goals
 
 - No product-specific CRM, tasks, contracts, workflow canvas, document editor, or model-selection implementation.
