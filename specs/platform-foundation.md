@@ -241,11 +241,14 @@ The proof checks candidate identities/source and emits both executed SDK bundle 
 permits only explicit loopback fixture ports, including background discovery. No commercial
 provider or production resource is used.
 
-Measured candidate pair: SDK PR100 `22cf5db` (based on `603994d`, version unchanged at0.10.30),
+Measured candidate pair: SDK PR100 `2584dd0` (based on `603994d`, version unchanged at0.10.30),
 gateway PR16 `4c83b154` (the reconciled branch, not deployed). Actual gateway API-key authentication
 reads the local canonical DB; SDK authority uses the real workforce JWT router/JWKS; the gateway
-calls the real service-token ledger and a loopback provider fixture. Two SDK requests exchange two
-fresh leases and create two measured settled draws on one hold. Terminal result reporting releases
+calls the real service-token ledger and a loopback provider fixture. Two buffered requests and one
+streamed request exchange three fresh leases and create three measured settled draws on one hold.
+The provider waits for the SDK's text callback before finishing, proving actual incremental delivery,
+and the SDK consumes the gateway's terminal usage frame. SSE `[DONE]` is not a settlement receipt:
+the proof separately waits, bounded, for durable draw settlement. Terminal result reporting releases
 the remainder and wallet conservation matches the charge. An invalid gateway key reaches no
 provider; a separate revoked admission stops before a new draw/provider call. Terminal closure is
 mutation-checked independently of revocation so one closing path cannot mask the other.
