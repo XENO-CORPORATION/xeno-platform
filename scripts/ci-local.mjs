@@ -290,7 +290,10 @@ function startPg() {
   ], { stdio: 'pipe', encoding: 'utf8' });
   if (up.status !== 0) throw new Error(`could not start postgres: ${up.stderr}`);
   for (let i = 0; i < 60; i += 1) {
-    const r = spawnSync('docker', ['exec', PG.container, 'pg_isready', '-U', 'postgres'], { stdio: 'ignore' });
+    // Over TCP, not the socket: the image's entrypoint first boots a temporary server that listens
+    // ONLY on the Unix socket, runs init, then restarts. A socket probe reports that temporary
+    // server ready, and the first CREATE DATABASE can land in the restart window.
+    const r = spawnSync('docker', ['exec', PG.container, 'pg_isready', '-h', '127.0.0.1', '-U', 'postgres'], { stdio: 'ignore' });
     if (r.status === 0) return;
     spawnSync(process.platform === 'win32' ? 'timeout' : 'sleep',
       process.platform === 'win32' ? ['/t', '1', '/nobreak'] : ['1'], { stdio: 'ignore' });
@@ -304,16 +307,22 @@ const stopPg = () => { if (!EXTERNAL_PG) spawnSync('docker', ['rm', '-f', PG.con
  * connections, which is why migrateDatabase ends its pool before returning). */
 function freshDb(name, template = null) {
   const statements = [`DROP DATABASE IF EXISTS ${name}`, `CREATE DATABASE ${name}${template ? ` TEMPLATE ${template}` : ''}`];
+  // A failed CREATE used to be discarded here and surfaced later as a suite that could not connect
+  // -- a broken database reading as a broken test. Refuse at the statement that failed instead.
+  const check = (r, sql) => {
+    if (r.status !== 0) throw new Error(`could not prepare database ${name} (${sql}): ${String(r.stderr || '').trim()}`);
+  };
   if (EXTERNAL_PG) {
     const admin = new URL(`${EXTERNAL_PG}/postgres`);
     for (const sql of statements) {
-      spawnSync('psql', [admin.href, '-v', 'ON_ERROR_STOP=1', '-q', '-c', sql],
-        { stdio: 'ignore', env: { ...process.env, PGPASSWORD: decodeURIComponent(admin.password || '') } });
+      check(spawnSync('psql', [admin.href, '-v', 'ON_ERROR_STOP=1', '-q', '-c', sql],
+        { stdio: ['ignore', 'ignore', 'pipe'], encoding: 'utf8', env: { ...process.env, PGPASSWORD: decodeURIComponent(admin.password || '') } }), sql);
     }
     return `${EXTERNAL_PG}/${name}`;
   }
   for (const sql of statements) {
-    spawnSync('docker', ['exec', PG.container, 'psql', '-U', 'postgres', '-d', 'postgres', '-c', sql], { stdio: 'ignore' });
+    check(spawnSync('docker', ['exec', PG.container, 'psql', '-v', 'ON_ERROR_STOP=1', '-U', 'postgres', '-d', 'postgres', '-c', sql],
+      { stdio: ['ignore', 'ignore', 'pipe'], encoding: 'utf8' }), sql);
   }
   return `postgresql://postgres:${PG.password}@127.0.0.1:${PG.port}/${name}`;
 }
