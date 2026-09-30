@@ -28,6 +28,7 @@ test('a run spends through one reservation, one draw per provider dispatch (XENO
   assert.ok((await pool.query("SELECT to_regclass('credit_hold_draws') AS t")).rows[0].t, 'this suite runs on the migrated schema');
   const { admitRun } = await import('../src/server/services/workforceRunAdmission.js');
   const { authorizeRunStep, revokeRun } = await import('../src/server/services/workforceRunAuthority.js');
+  const { reportRunResult } = await import('../src/server/services/workforceRunResults.js');
   const ledger = await import('../src/server/utils/creditLedgerV2.js');
   const { pinChatTariff, pricePinnedChatUsage } = await import('../src/server/utils/creditCosts.js');
   const { createServiceLedgerRouter } = await import('../src/server/routes/serviceLedgerRoutes.js');
@@ -258,6 +259,43 @@ test('a run spends through one reservation, one draw per provider dispatch (XENO
       model: MODEL, inputTokens: 50, outputTokens: 50, measured: true });
     assert.deepEqual([BigInt(s.chargedMicro), BigInt(s.liabilityMicro)], [0n, price(50, 50)], 'the work is recorded and owed by the platform');
     assert.equal(await posted(owner), beforePosted, 'released funds are never charged');
+  });
+
+  await t.test('the event that ends a run releases its reservation in the same transaction, never before', async () => {
+    const holdState = async (r) => (await pool.query('SELECT state, settled_micro FROM credit_holds WHERE user_id=$1 AND hold_id=$2', [owner, r])).rows[0];
+    const report = (r, outcome = 'completed') => reportRunResult(pool, ctx(owner), { admissionId: r, outcome });
+    // A run that did nothing: its report is the last event, and releases everything.
+    const idle = await admit(owner, agent, price(100, 100) * 3n);
+    const beforeIdle = await available(owner);
+    await report(idle);
+    assert.equal((await holdState(idle)).state, 'voided', 'a finished run that spent nothing releases its whole reservation');
+    assert.equal(await available(owner) - beforeIdle, price(100, 100) * 3n);
+    // "completed" is not proof of provider outcome: an open draw keeps the reservation until it resolves.
+    const busy = await admit(owner, agent, price(100, 100) * 3n);
+    const d = await open(owner, busy);
+    await report(busy);
+    assert.equal((await holdState(busy)).state, 'held', 'a report alone never releases in-flight provider work');
+    await ledger.settleRunDrawV2(pool, { admissionId: busy, drawId: d.drawId, providerRequestId: `last-${marker}`, provider: 'anthropic',
+      model: MODEL, inputTokens: 20, outputTokens: 20, measured: true });
+    assert.deepEqual([(await holdState(busy)).state, BigInt((await holdState(busy)).settled_micro)], ['settled', price(20, 20)],
+      'the last draw resolving ends the finished run, in the settle\'s own transaction');
+    // A child still running keeps the whole tree committed; its own result is what releases it.
+    const root = await admit(owner, agent, price(100, 100) * 4n);
+    const child = await admit(owner, agent, price(100, 100), root);
+    await report(root);
+    assert.equal((await holdState(root)).state, 'held', 'an unfinished child keeps its root\'s reservation committed');
+    await report(child, 'failed');
+    assert.equal((await holdState(root)).state, 'voided', 'the last run in the tree finishing releases the reservation');
+    // A stop fences the tree: nothing in flight -> released with the stop; a draw in flight -> held until it resolves.
+    const stopped = await admit(owner, agent, price(100, 100) * 2n);
+    await revokeRun(pool, ctx(owner), stopped);
+    assert.equal((await holdState(stopped)).state, 'voided', 'a stopped run with nothing in flight releases at once');
+    const stoppedBusy = await admit(owner, agent, price(100, 100) * 2n);
+    const inflight = await open(owner, stoppedBusy);
+    await revokeRun(pool, ctx(owner), stoppedBusy);
+    assert.equal((await holdState(stoppedBusy)).state, 'held', 'a stop never releases work already dispatched');
+    await ledger.voidRunDrawV2(pool, { admissionId: stoppedBusy, drawId: inflight.drawId, notDispatched: true });
+    assert.equal((await holdState(stoppedBusy)).state, 'voided', 'the in-flight draw resolving completes the stop');
   });
 
   await t.test('the service routes authenticate and map each refusal', async () => {

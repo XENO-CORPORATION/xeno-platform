@@ -1444,6 +1444,8 @@ export async function settleRunDrawV2(pool, value) {
       outputTokens === null ? null : String(outputTokens), priced.toString(), charged.toString(), liability.toString(),
       measured ? 'measured' : 'unmeasured'])).rows[0];
     if (liability > 0n) console.error(`[ledger] RUN DRAW LIABILITY: admission=${admission.id} draw=${draw.draw_id} priced=${priced} charged=${charged}`);
+    // The last dispatch of a finished run resolving is what ends it: release in this transaction.
+    await closeFinishedRunTx(db, admission.id);
     await db.query('COMMIT');
     return drawView(row, false);
   } catch (error) { await db.query('ROLLBACK').catch(() => {}); throw error; }
@@ -1465,6 +1467,7 @@ export async function voidRunDrawV2(pool, value) {
     if (draw.state !== 'open') throw drawError('CONFLICT');
     const row = (await db.query(`UPDATE credit_hold_draws SET state='voided',outcome='not_dispatched',resolved_at=clock_timestamp()
       WHERE id=$1 RETURNING *`, [draw.id])).rows[0];
+    await closeFinishedRunTx(db, admission.id);
     await db.query('COMMIT');
     return drawView(row, false);
   } catch (error) { await db.query('ROLLBACK').catch(() => {}); throw error; }
@@ -1513,6 +1516,44 @@ export async function closeRunReservationV2(pool, value) {
     return { admissionId: admission.id, state, settledMicro: String(hold.settled_micro), replayed: false };
   } catch (error) { await db.query('ROLLBACK').catch(() => {}); throw error; }
   finally { db.release(); }
+}
+
+/**
+ * Release a run's reservation IF THE RUN IS OVER, inside the CALLER'S transaction -- so the event that
+ * ends the run (a result report, the last draw resolving, a stop) and the release commit together or
+ * not at all. Whichever of those events comes last closes; none of them is a best-effort afterthought.
+ *
+ * "Over" is proved, never reported: every run in the root's tree has a recorded result or is fenced,
+ * AND no draw on the reservation is open. A runtime saying "completed" proves nothing about provider
+ * work -- only a settled or provably-voided draw does (FUND-09). A child still running keeps the whole
+ * reservation committed.
+ *
+ * A pool run that never drew is left alone: it settles through its aggregate provider receipt
+ * (settleProjectRunV2), which needs the hold still held.
+ *
+ * Takes the same locks in the same order as every run-money act (run authority, then the hold).
+ * Idempotent. Returns the hold's new state, or null when the run is not over or has no reservation.
+ */
+export async function closeFinishedRunTx(db, admissionId) {
+  const admission = (await db.query('SELECT * FROM workforce_run_admissions WHERE id=$1', [admissionId])).rows[0];
+  if (!admission) return null;
+  const reservation = await runReservationOf(db, admission);
+  if (!reservation) return null;
+  await db.query('SELECT pg_advisory_xact_lock(hashtextextended($1,0))', [`run-authority:${reservation.rootId}`]);
+  const hold = (await db.query('SELECT * FROM credit_holds WHERE id=$1 FOR UPDATE', [reservation.holdRowId])).rows[0];
+  if (!hold || hold.state !== 'held') return null;
+  const drew = (await db.query('SELECT 1 FROM credit_hold_draws WHERE hold_row_id=$1 LIMIT 1', [hold.id])).rowCount > 0;
+  if (reservation.pool && !drew) return null;
+  if (await holdHasOpenDraw(db, hold.id)) return null;
+  const live = Number((await db.query(`WITH RECURSIVE tree(id) AS (
+      SELECT $1::uuid UNION ALL SELECT a.id FROM workforce_run_admissions a JOIN tree ON a.parent_admission_id=tree.id)
+    SELECT count(*)::int AS n FROM tree t
+     WHERE NOT EXISTS (SELECT 1 FROM workforce_run_results r WHERE r.admission_id=t.id)
+       AND workforce_run_admission_fence(t.id) IS NULL`, [reservation.rootId])).rows[0].n);
+  if (live > 0) return null;
+  const state = BigInt(hold.settled_micro) > 0n ? 'settled' : 'voided';
+  await db.query('UPDATE credit_holds SET state=$2,updated_at=clock_timestamp() WHERE id=$1', [hold.id, state]);
+  return state;
 }
 
 /** A run's reservation is managed ONLY by the run-draw acts above. The generic hold verbs must not
