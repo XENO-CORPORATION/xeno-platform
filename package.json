@@ -23,7 +23,7 @@
     "test:licence-package": "node clients/licence/build.mjs && node --test clients/licence/test/licence.test.mjs",
     "test:client-version": "node --test scripts/client-version.test.mjs",
     "test:product-access": "node --test scripts/product-access.test.mjs",
-    "test:effective-plan": "node --test scripts/effective-plan.test.mjs",
+    "test:effective-plan": "node --test scripts/effective-plan.test.mjs scripts/account-plan.test.mjs",
     "test:entitlements": "node --test scripts/entitlement-enforcement.test.mjs",
     "test:email-log-status": "node --test scripts/email-log-status.test.mjs",
     "test:email": "node --test scripts/welcome-email.test.mjs scripts/email-chrome.test.mjs",
