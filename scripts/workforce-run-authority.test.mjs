@@ -132,7 +132,7 @@ test('an admitted run re-asks before each step, and live revocation overrides it
   };
 
   const owner = await user('owner'), editor = await user('editor'), viewer = await user('viewer'), outsider = await user('outsider');
-  await fund(owner, 5_000_000n); await fund(editor, 5_000_000n); await fund(outsider, 5_000_000n);
+  await fund(owner, 100_000_000n); await fund(editor, 100_000_000n); await fund(outsider, 100_000_000n);
   const studio = await workspace(owner, 'studio', [['editor', editor], ['viewer', viewer]]);
   const lender = await workspace(outsider, 'lender');
   const ctx = (actorUserId, clientId = 'xeno-agent-interface') => ({ actorUserId, clientId });
@@ -227,7 +227,7 @@ test('an admitted run re-asks before each step, and live revocation overrides it
   });
 
   await t.test('RUN-03: the actor losing the target, or the team membership, stops the run', async () => {
-    await fund(viewer, 5_000_000n);
+    await fund(viewer, 100_000_000n);
     const ws = await workspace(owner, 'member', [['editor', viewer]]);
     const a = await assign(lent.id, 'agent', ws, { type: 'workspace', id: lender }, explicit(['files.read']));
     const id = await admit(viewer, lent, { kind: 'workspace', assignmentId: a });

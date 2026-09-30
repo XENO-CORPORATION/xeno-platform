@@ -146,7 +146,9 @@ test('pool admission reserves exact eligible lots atomically and never falls bac
  const signingKey={kid:'isolated-test',privatePem:key.privateKey.export({format:'pem',type:'pkcs8'})};
  const step=operation=>authorizeRunStep(pool,ctx(owner),{admissionId:first.admission.admissionId,operation,...(operation==='privileged_call'?{capability:'files.read'}:{})},{signingKey});
  assert.ok((await step('privileged_call')).token,'live approval permits an otherwise authorized non-provider step');
- await reject(step('provider_dispatch'),'bounded_provider_dispatch_required','generic lease cannot authorize unbounded pooled provider dispatch');
+ // A dispatch lease attests authority only; the pool's money moves solely through a run draw that
+ // consumes it (proved in workforce-run-draws.test.mjs), so the lease itself spends nothing.
+ assert.ok((await step('provider_dispatch')).token,'a live pool run receives a dispatch lease; its bound is the draw');
  const releasePath='/api/workforce/funding/runs/release-undispatched';
  const noRelease=await call({admissionId:first.admission.admissionId},undefined,releasePath);
  assert.deepEqual([noRelease.status,noRelease.body?.details?.reason],[409,'provider_liability_unresolved'],
