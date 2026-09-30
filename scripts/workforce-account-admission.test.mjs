@@ -77,5 +77,13 @@ test('account-backed HTTP admission prepares the canonical allowance only after 
   assert.equal((await grants(bot)).length, 0, 'an agent receives no separate weekly quota');
   assert.equal((await grants(owner)).length, 1, 'agent and human share the same allowance window');
   assert.equal((await pool.query('SELECT count(*)::int AS n FROM spend_caps')).rows[0].n, beforeCaps, 'admission never invents a spend-cap setting');
-  assert.equal((await pool.query('SELECT count(*)::int AS n FROM credit_holds WHERE user_id=$1', [owner])).rows[0].n, 0, 'eligibility is not a fabricated spend reservation');
+  // §8.7: every admitted personal ROOT reserves its ceiling as one canonical workforce/run hold named by the
+  // admission -- and nothing else: no hold without an admission, none for a refused request, none twice.
+  const holds = (await pool.query(`SELECT h.hold_id, h.surface, h.operation, h.amount_micro, a.budget_ceiling_micro, a.parent_admission_id
+    FROM credit_holds h LEFT JOIN workforce_run_admissions a ON a.id::text=h.hold_id WHERE h.user_id=$1`, [owner])).rows;
+  const roots = (await pool.query(`SELECT count(*)::int AS n FROM workforce_run_admissions WHERE payer_user_id=$1 AND payer_kind='user'
+    AND parent_admission_id IS NULL`, [owner])).rows[0].n;
+  assert.equal(holds.length, roots, 'one reservation per admitted root, and none for anything refused');
+  assert.ok(holds.every((h) => h.surface === 'workforce' && h.operation === 'run' && h.parent_admission_id === null
+    && String(h.amount_micro) === String(h.budget_ceiling_micro)), 'each reservation is exactly its admission\'s ceiling, never a fabricated amount');
 });

@@ -39,8 +39,11 @@
  *                        payer's available balance now. An explicit fundingBudgetId selects a
  *                        project pool instead: approved named spender, milestone threshold and
  *                        real lot-allocated canonical hold commit with admission. There is no
- *                        personal fallback. Provider dispatch additionally requires an enforceable
- *                        bound; the generic authority lease refuses it for pools.
+ *                        personal fallback. A PERSONAL root reserves its ceiling the same way: one
+ *                        canonical hold (creditLedgerV2 holdV2Tx), committed with the admission. Every
+ *                        provider dispatch then opens a DRAW on that one hold (creditLedgerV2
+ *                        openRunDrawV2) -- the enforceable per-dispatch bound -- and settles it from
+ *                        measured usage. There is no second hold per call and no parallel wallet.
  *   parent (RUN-10)      optional: the admission this run is spawned inside. A child is a SUB-RESERVATION
  *                        of its parent, never a copy: same actor, client, payer and target; capabilities
  *                        inside the parent's; a ceiling carved out of what the parent has left after
@@ -67,6 +70,7 @@ import { authorityTransaction, lockWorkspaceAuthority, operationHash } from './w
 import { lockApiKeyWorkforceAuthority } from './apiKeyWorkforceAuthority.js';
 import { resolveRunFunding, reserveRunFunding } from './workforceRunFunding.js';
 import { allocateFunding } from '../utils/usageCreditFunding.js';
+import { holdV2Tx, RUN_HOLD_TTL_SECONDS, OPEN_DRAW_ON_HOLD } from '../utils/creditLedgerV2.js';
 import { prepareAccountQuota } from './usageCreditsService.js';
 
 export class RunAdmissionError extends Error {
@@ -429,7 +433,10 @@ export async function admitRun(pool, authenticatedContext, value) {
       catch(error){if(error.code==='needs_approval')fail('needs_approval',error.details.reason);throw error;}
     }
     const payerUserId = funding?funding.pool.account_owner_id:who.principal.kind === 'agent' ? who.principal.owner.id : who.principal.id;
-    if(!funding) {
+    // A personal CHILD reserves no new money: it is carved out of its parent's envelope (checked below)
+    // and draws on its root's one hold. Checking the payer's free balance for it would count the
+    // parent's own reservation against it and refuse a child the parent can fund.
+    if(!funding && !request.parent) {
       // Same lock (FOR UPDATE, not FOR SHARE) and the same order as the canonical spend path --
       // creditLedgerV2's ensureAccount/holdV2 and usageCreditsService's updateUsageCredits all take
       // the account row before touching usage_credit_preferences or credit_grants, so overflow
@@ -443,8 +450,8 @@ export async function admitRun(pool, authenticatedContext, value) {
       // is what catches that: a grant that claims eligible funds the cache does not back is refused
       // HERE, before allocateFunding ever sees it. It is not a second eligibility computation --
       // it never chooses which lot to draw from and its result is not reused as "available" below.
-      const held = BigInt((await db.query(`SELECT coalesce(sum(amount_micro - settled_micro),0)::text AS h FROM credit_holds
-        WHERE user_id=$1 AND state='held' AND expires_at > now()`, [payerUserId])).rows[0].h);
+      const held = BigInt((await db.query(`SELECT coalesce(sum(amount_micro - settled_micro),0)::text AS h FROM credit_holds h
+        WHERE user_id=$1 AND state='held' AND (expires_at > now() OR ${OPEN_DRAW_ON_HOLD})`, [payerUserId])).rows[0].h);
       if (BigInt(acct.balance) - held < BigInt(request.budget.ceilingMicro)) fail('needs_approval', 'budget_exceeds_available');
       // Eligibility is the canonical allocator's own rule -- overflow preference, quarantine, and
       // outstanding lot- and legacy-hold reservations, ALL read once, here, rather than re-derived
@@ -523,6 +530,32 @@ export async function admitRun(pool, authenticatedContext, value) {
     if(funding) {
       try { await reserveRunFunding(db,funding,row,parent); }
       catch(error){if(error.code==='needs_approval')fail('needs_approval',error.details.reason);throw error;}
+    } else if (parent) {
+      // A sub-reservation names its ROOT's one hold. A parent without one cannot fund anything.
+      const link = (await db.query('SELECT root_admission_id, hold_row_id FROM workforce_run_holds WHERE admission_id=$1', [parent.id])).rows[0];
+      if (!link) fail('needs_approval', 'parent_funding_unavailable');
+      const h = (await db.query('SELECT state FROM credit_holds WHERE id=$1 FOR SHARE', [link.hold_row_id])).rows[0];
+      if (h?.state !== 'held') fail('needs_approval', 'parent_funding_unavailable');
+      await db.query('INSERT INTO workforce_run_holds(admission_id,root_admission_id,hold_row_id) VALUES($1,$2,$3)',
+        [row.id, link.root_admission_id, link.hold_row_id]);
+    } else {
+      // The personal root reserves its whole ceiling now, on the canonical ledger, in this transaction:
+      // an admitted run cannot be starved mid-task by the payer's other spend. Same checks as any hold --
+      // ordinary wallet, free balance, spend caps, the overflow-consent allocator.
+      let held;
+      try {
+        held = await holdV2Tx(db, payerUserId, { holdId: row.id, amountMicro: Number(request.budget.ceilingMicro),
+          surface: 'workforce', operation: 'run', expiresInSeconds: RUN_HOLD_TTL_SECONDS });
+      } catch (error) {
+        if (['INSUFFICIENT_CREDITS', 'QUOTA_EXCEEDED', 'ACCOUNT_FROZEN', 'SPEND_CAP_EXCEEDED'].includes(error.code)) {
+          fail('needs_approval', error.code === 'SPEND_CAP_EXCEEDED' ? 'spend_cap_exceeded' : 'budget_exceeds_available',
+            { usageCreditsEnabled: error.usageCreditsEnabled, resetsAt: error.resetsAt });
+        }
+        throw error;
+      }
+      // A fresh admission row has a fresh id, so an existing hold under it is not a replay: refuse it.
+      if (held.existingRow) fail('conflict', 'run_reservation_conflict');
+      await db.query('INSERT INTO workforce_run_holds(admission_id,root_admission_id,hold_row_id) VALUES($1,$1,$2)', [row.id, held.row.id]);
     }
     return { replayed: false, admission: publicAdmission(row) };
   });

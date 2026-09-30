@@ -131,13 +131,14 @@ test('capacity is derived from live admissions, leases and holds, and never stor
   });
 
   await t.test('headroom is the payer\'s balance less its live holds, as admission computes it', async () => {
-    assert.equal((await read()).funding[0].availableMicro, '7000000');
+    // 7 funded, less the 1 the editor's admitted run RESERVED: an admitted personal run holds its ceiling.
+    assert.equal((await read()).funding[0].availableMicro, '6000000', 'an admitted run\'s ceiling is reserved, not free');
     await pool.query(`INSERT INTO credit_holds(user_id,hold_id,surface,operation,amount_micro,settled_micro,state,expires_at)
       VALUES($1,$2,'test','test',2500000,500000,'held',now()+interval '1 hour')`, [editor, randomUUID()]);
-    assert.equal((await read()).funding[0].availableMicro, '5000000', 'headroom is the balance less live holds');
+    assert.equal((await read()).funding[0].availableMicro, '4000000', 'headroom is the balance less live holds');
     await pool.query(`INSERT INTO credit_holds(user_id,hold_id,surface,operation,amount_micro,state,expires_at)
       VALUES($1,$2,'test','test',9000000,'held',now()-interval '1 minute')`, [editor, randomUUID()]);
-    assert.equal((await read()).funding[0].availableMicro, '5000000', 'an expired hold holds nothing');
+    assert.equal((await read()).funding[0].availableMicro, '4000000', 'an expired hold holds nothing');
     await pool.query('UPDATE credit_accounts SET is_frozen=true WHERE user_id=$1', [editor]);
     assert.equal((await read()).funding[0].canFund, false, 'a frozen payer cannot fund');
     await pool.query('UPDATE credit_accounts SET is_frozen=false WHERE user_id=$1', [editor]);
@@ -145,11 +146,11 @@ test('capacity is derived from live admissions, leases and holds, and never stor
 
   await t.test('who may read it, and what each reader learns', async () => {
     const asEditor = (await read(editor)).funding[0];
-    assert.equal(asEditor.availableMicro, '5000000', 'a payer sees its own headroom');
+    assert.equal(asEditor.availableMicro, '4000000', 'a payer sees its own headroom');
     const asViewer = (await read(viewer)).funding[0];
     assert.equal(asViewer.canFund, true);
     assert.ok(!Object.hasOwn(asViewer, 'availableMicro'), 'a viewer learns that a run is funded, not how much');
-    assert.equal((await read(owner)).funding[0].availableMicro, '5000000', 'a workspace administrator sees what funds its runs');
+    assert.equal((await read(owner)).funding[0].availableMicro, '4000000', 'a workspace administrator sees what funds its runs');
     const refusal = (p) => p.then(() => 'allowed', (e) => JSON.stringify({ code: e.code, details: e.details }));
     const unreadable = await refusal(read(stranger));
     const missing = await refusal(readWorkforceCapacity(pool, ctx(stranger), { owner: { type: 'workspace', id: randomUUID() }, expectedActorAccountId: stranger }));

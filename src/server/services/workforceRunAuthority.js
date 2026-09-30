@@ -280,9 +280,10 @@ export async function authorizeRunStep(pool, authenticatedContext, value, { sign
       throw terminal.error;
     }
 
-    // A generic lease cannot attest that a provider enforces a monetary upper bound.
-    // Pool dispatch must use the bounded metering path, not this compatibility lease.
-    if(operation==='provider_dispatch'&&row.payer_kind==='project_pool')fail('needs_approval','bounded_provider_dispatch_required');
+    // A lease attests AUTHORITY, never money. The monetary bound on a provider dispatch is the run DRAW
+    // (creditLedgerV2 openRunDrawV2): it consumes this lease -- one lease, one dispatch -- and is the only
+    // path that spends a run's reservation, pool or personal. A pool lease therefore spends nothing by
+    // itself, so the earlier refusal ("bounded_provider_dispatch_required") no longer guards anything.
     const sequence = BigInt((await db.query('SELECT coalesce(max(sequence),0)::text AS s FROM workforce_run_leases WHERE admission_id=$1',
       [admissionId])).rows[0].s) + 1n;
     const iat = Math.floor(now() / 1000);
