@@ -12,6 +12,19 @@ test('publication accepts only explicitly authored bounded disclosure fields', (
   assert.throws(() => normalizePublicationContent({ ...content(), purpose: 'x'.repeat(8001) }), /invalid_text/);
   assert.throws(() => normalizePublicationContent({ ...content(), title: 'bad\0text' }), /invalid_text/);
 });
+test('selected milestone disclosure is bounded and never accepts private evidence fields', () => {
+  const item = { milestoneId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', acceptanceHash: 'a'.repeat(64), label: 'Delivery', summary: 'Reviewed result' };
+  const normalize = items => normalizePublicationContent({ ...content(), acceptedMilestones: items });
+  assert.deepEqual(normalize([item]).acceptedMilestones, [item]);
+  assert.equal(normalizePublicationContent(content()).acceptedMilestones, undefined, 'old snapshots stay compatible');
+  assert.throws(() => normalize([item, item]), /invalid_milestone_summaries/);
+  assert.throws(() => normalize(Array(9).fill(item)), /invalid_milestone_summaries/);
+  assert.throws(() => normalize([{ ...item, summary: 'x'.repeat(513) }]), /invalid_text/);
+  assert.throws(() => normalize([{ ...item, label: '' }]), /required_text/);
+  for (const key of ['report', 'contributorStatement', 'producer', 'artifactToken', 'fundingTotals', 'status']) {
+    assert.throws(() => normalize([{ ...item, [key]: 'private' }]), /unknown_field/);
+  }
+});
 test('publication validation never invokes a supplied getter or inherited field', () => {
   let called = false;
   const value = content(); Object.defineProperty(value, 'title', { enumerable: true, get() { called = true; return 'secret'; } });

@@ -2,7 +2,7 @@ import { resolvePrincipal } from './agentIdentity.js';
 import { check } from '../utils/authzReBAC.js';
 import { authorityTransaction, lockWorkspaceAuthority, operationHash } from './workspaceOperationReceipts.js';
 import { normalizePublicationContent, publicationRecord, publicationId, publicationRevision,
-  publicationVisibility, publicProjectPath } from '../config/projectPublicationContract.js';
+  publicationVisibility, publicProjectPath, normalizeAcceptedSummaries } from '../config/projectPublicationContract.js';
 
 export class ProjectPublicationError extends Error {
   constructor(code, status = 409) { super(code); this.code = code; this.status = status; }
@@ -53,14 +53,36 @@ function stateView(state) {
   return { projectId: state.project_id, revision: String(state.revision), draft: state.draft && normalizePublicationContent(state.draft),
     visibility: state.visibility, publishedRevision: state.published_revision === null ? null : String(state.published_revision), url: publicProjectPath(state.project_id) };
 }
-function previewOf(project, principal, state, visibility) {
+// Acceptance is immutable evidence, not permission to publish the underlying work.
+// Only the project admin sees these source identifiers; public projections never do.
+const acceptedFrom = `FROM workforce_funding_milestones m
+  JOIN workforce_funding_campaigns c ON c.id=m.campaign_id
+  JOIN workforce_milestone_acceptances a ON a.milestone_id=m.id
+  JOIN workforce_operations o ON o.actor_user_id=a.actor_user_id AND o.client_id=a.client_id AND o.operation_id=a.operation_id
+  WHERE c.project_id=$1 AND m.status='accepted'
+    AND EXISTS(SELECT 1 FROM workforce_milestone_evidence e WHERE e.milestone_id=m.id)`;
+const acceptedSelect = `SELECT m.id,m.title,a.terms_version,o.request_hash,
+  (SELECT jsonb_agg(jsonb_build_object('admissionId',e.admission_id,'reportHash',e.report_hash) ORDER BY e.admission_id)
+    FROM workforce_milestone_evidence e WHERE e.milestone_id=m.id) AS evidence`;
+const acceptanceHash = row => operationHash({ milestoneId: row.id, termsVersion: row.terms_version,
+  decision: row.request_hash, evidence: row.evidence });
+async function previewOf(db, project, principal, state, visibility) {
   if (!state.draft || visibility === 'private') fail('draft_and_audience_required', 400);
-  const projection = { projectId: project.id, ...normalizePublicationContent(state.draft),
+  const { acceptedMilestones, ...content } = normalizePublicationContent(state.draft);
+  const bindings = [], summaries = [];
+  for (const selected of acceptedMilestones || []) {
+    const row = (await db.query(`${acceptedSelect} ${acceptedFrom} AND m.id=$2 FOR SHARE OF m,c`, [project.id, selected.milestoneId])).rows[0];
+    if (!row || acceptanceHash(row) !== selected.acceptanceHash) fail('accepted_milestone_unavailable');
+    bindings.push({ milestoneId: row.id, acceptanceHash: selected.acceptanceHash });
+    summaries.push({ label: selected.label, summary: selected.summary, status: 'accepted' });
+  }
+  const projection = { projectId: project.id, ...content,
+    ...(acceptedMilestones === undefined ? {} : { acceptedMilestones: summaries }),
     maintainer: { id: principal.id, handle: principal.handle, displayName: principal.displayName },
     url: publicProjectPath(project.id) };
   const previewHash = operationHash({ projection, revision: String(state.revision), projectVersion: project.version,
-    owner: project.owner_user_id, workspace: project.workspace_id, visibility });
-  return { projection, previewHash, revision: String(state.revision), visibility };
+    owner: project.owner_user_id, workspace: project.workspace_id, visibility, bindings });
+  return { projection, previewHash, revision: String(state.revision), visibility, bindings };
 }
 function readInput(value, keys = []) {
   const v = publicationRecord(value, ['projectId', 'expectedActorAccountId', ...keys]);
@@ -79,7 +101,20 @@ export async function previewProjectPublication(pool, context, value) {
   return authorityTransaction(pool, async db => {
     const authority = await lockProject(db, actor, v.projectId);
     if (!authority.allowed) fail('project_not_found', 404);
-    return previewOf(authority.project, authority.principal, await stateOf(db, v.projectId), visibility);
+    const { bindings, ...preview } = await previewOf(db, authority.project, authority.principal, await stateOf(db, v.projectId), visibility);
+    return preview;
+  });
+}
+export async function readPublicationMilestones(pool, context, value) {
+  const v = readInput(value, ['after']), actor = actorOf(context, v.expectedActorAccountId);
+  const after = v.after == null ? null : publicationId(v.after);
+  return authorityTransaction(pool, async db => {
+    const authority = await lockProject(db, actor, v.projectId);
+    if (!authority.allowed) fail('project_not_found', 404);
+    const rows = (await db.query(`${acceptedSelect} ${acceptedFrom}
+      AND ($2::uuid IS NULL OR m.id>$2::uuid) ORDER BY m.id LIMIT 21`, [v.projectId, after])).rows;
+    return { milestones: rows.slice(0, 20).map(row => ({ milestoneId: row.id, title: row.title, acceptanceHash: acceptanceHash(row) })),
+      nextCursor: rows.length > 20 ? rows[19].id : null };
   });
 }
 export async function readProjectPublicationOperation(pool, context, value) {
@@ -124,10 +159,10 @@ export async function mutateProjectPublication(pool, context, value) {
     if (v.action === 'draft') {
       await db.query('UPDATE project_publications SET draft=$2,revision=$3,updated_at=now() WHERE project_id=$1', [v.projectId, JSON.stringify(input.content), revision]);
     } else if (v.action === 'publish') {
-      const preview = previewOf(authority.project, authority.principal, current, input.visibility);
+      const preview = await previewOf(db, authority.project, authority.principal, current, input.visibility);
       if (preview.previewHash !== input.previewHash) fail('preview_changed');
       await db.query(`INSERT INTO project_publication_versions(project_id,revision,projection,preview_hash,actor_user_id)
-        VALUES($1,$2,$3,$4,$5)`, [v.projectId, revision, JSON.stringify(preview.projection), preview.previewHash, actor.id]);
+        VALUES($1,$2,$3,$4,$5)`, [v.projectId, revision, JSON.stringify({ ...preview.projection, _acceptedSources: preview.bindings }), preview.previewHash, actor.id]);
       await db.query('UPDATE project_publications SET revision=$2,published_revision=$2,visibility=$3,updated_at=now() WHERE project_id=$1', [v.projectId, revision, input.visibility]);
     } else {
       await db.query("UPDATE project_publications SET revision=$2,visibility='private',updated_at=now() WHERE project_id=$1", [v.projectId, revision]);
@@ -154,6 +189,7 @@ function publicView(row) {
   const value = row.projection;
   const content = normalizePublicationContent(Object.fromEntries(['schemaVersion', 'title', 'purpose', 'license', 'termsVersion', 'contributionGuide', 'roadmap', 'updates'].map(k => [k, value[k]])));
   return { projectId: row.project_id, revision: String(row.published_revision), visibility: row.visibility, ...content,
+    ...(value.acceptedMilestones === undefined ? {} : { acceptedMilestones: normalizeAcceptedSummaries(value.acceptedMilestones) }),
     maintainer: { id: publicationId(value.maintainer.id), handle: String(value.maintainer.handle), displayName: String(value.maintainer.displayName) }, url: publicProjectPath(row.project_id) };
 }
 export async function readPublicProject(db, id) {

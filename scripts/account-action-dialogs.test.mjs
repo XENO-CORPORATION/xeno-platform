@@ -39,7 +39,7 @@ before(async () => {
           WorkspaceContext: 'export const useWorkspace = () => globalThis.__accountFixture.workspace;',
           AuthContext: 'export const useAuth = () => ({logout: globalThis.__accountFixture.logout});',
           accountService: 'export class AccountApiError extends Error {}\n' + ['listProjects', 'getProject', 'createProject', 'updateProject', 'archiveProject', 'getAccountSessions', 'revokeAccountSession',
-            'readProjectPublication', 'previewProjectPublication', 'mutateProjectPublication', 'readProjectPublicationOperation']
+            'readProjectPublication', 'previewProjectPublication', 'mutateProjectPublication', 'readProjectPublicationOperation', 'readPublicationMilestones']
             .map(method => `export const ${method} = (...args) => globalThis.__accountFixture.api.${method}(...args);`).join('\n'),
           userDataService: 'export const userDataService = {getSettings: async () => ({}), updateSetting: async () => ({})};',
           authService: 'export const authService = {};',

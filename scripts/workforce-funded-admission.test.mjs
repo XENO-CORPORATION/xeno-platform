@@ -9,6 +9,7 @@ import {installBillingProviderFixture} from './fixtures/billing-provider-fixture
 const url=process.env.TEST_DATABASE_URL;if(url)requireProofDatabase(url);
 process.env.STRIPE_SECRET_KEY='sk_test_localfixture';process.env.STRIPE_PUBLISHABLE_KEY='pk_test_localfixture';
 process.env.STRIPE_EXPECTED_ACCOUNT_ID='acct_fixture';process.env.STRIPE_EXPECTED_MODE='test';
+process.env.JWT_SECRET ||= 'publication-milestone-local-fixture';
 const fixture=installBillingProviderFixture();
 const {handleEvent}=await import('../src/server/services/billingService.js');
 const funding=await import('../src/server/services/workforceFunding.js');
@@ -251,6 +252,9 @@ test('pool admission reserves exact eligible lots atomically and never falls bac
  assert.deepEqual([decision.deciding_principal_id,decision.responsible_account_id,decision.evidence[0].admissionId],[approver,approver,small.admissionId],
    'milestone acceptance uses the canonical accountable decision ledger');
  await assert.rejects(pool.query('DELETE FROM workforce_milestone_acceptances WHERE milestone_id=$1',[m2.id]),{code:'23514'},'milestone approvals are retained');
+ const {proveAcceptedPublication}=await import('./lib/project-publication-milestones.mjs');
+ await proveAcceptedPublication({pool,app,server,call,projectId:project.id,owner,approver,contributor,
+   milestone:m2,unacceptedMilestoneId:milestone.id,admissionId:small.admissionId,contributorStatement:acceptance.contributorStatement});
  const dispute=fixture.event('evt_dispute_'+marker,'charge.dispute.funds_withdrawn',{payment_intent:s.payment_intent,amount:500});
  await handleEvent(pool,dispute,{provider:fixture.provider});
  await reject(step('privileged_call'),'pool_origin_quarantined','quarantined reserved origin blocks new funded steps');
