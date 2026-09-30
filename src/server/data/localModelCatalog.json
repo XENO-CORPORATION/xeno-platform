@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
-  "catalogVersion": "2026-03-25-qwen35-lineup",
-  "updatedAt": "2026-03-25T17:58:36.550Z",
+  "catalogVersion": "2026-09-30-audio-rc1",
+  "updatedAt": "2026-09-30T00:00:00.000Z",
   "models": [
     {
       "id": "qwen3.5-0.8b-q4-k-m",
@@ -228,6 +228,64 @@
       "installable": false,
       "runtime": "xeno-rt-embedding",
       "unavailableReason": "Local embedding runtimes are not managed here yet."
+    },
+    {
+      "id": "whisper-small-timestamped",
+      "name": "Timestamped Whisper Small",
+      "provider": "OpenAI / ONNX Community",
+      "category": "audio",
+      "description": "Word timings and verification for the Chatterbox speech pipeline. Install separately before using the default word check. Requires xeno-rt 0.4.0 candidate or later and ONNX Runtime 1.23+. Windows x86-64 qualified; CPU fallback is slow.",
+      "size": "1.53 GB",
+      "sizeBytes": 1528441158,
+      "tags": [
+        "audio",
+        "local",
+        "experimental",
+        "word-timings"
+      ],
+      "license": "Apache-2.0",
+      "runtime": "xeno-rt-audio",
+      "installable": true,
+      "bundleSpec": {
+        "kind": "bundle-v1",
+        "bundleId": "whisper-small-timestamped",
+        "digest": "7c1a63b7dfc213c98485271bd84602cdda05a011d9b017c49538a0f7772fd5c9",
+        "minimumRuntime": "0.4.0",
+        "manifestKey": "models/bundles/whisper-small-timestamped/7c1a63b7dfc213c98485271bd84602cdda05a011d9b017c49538a0f7772fd5c9/xrt.bundle.json",
+        "sizeBytes": 1528441158,
+        "platforms": [
+          "windows-x86_64"
+        ]
+      }
+    },
+    {
+      "id": "chatterbox-multilingual-v3",
+      "name": "Chatterbox Multilingual v3",
+      "provider": "Resemble AI / KitsuMate",
+      "category": "audio",
+      "description": "Reference-voice speech generation. The default verified-speech pipeline depends on Timestamped Whisper Small: install that bundle separately. word_check:false does not require Whisper. Requires xeno-rt 0.4.0 candidate or later and ONNX Runtime 1.23+. Windows x86-64 qualified; CPU fallback is slow.",
+      "size": "3.28 GB",
+      "sizeBytes": 3280806073,
+      "tags": [
+        "audio",
+        "local",
+        "experimental",
+        "speech"
+      ],
+      "license": "MIT",
+      "runtime": "xeno-rt-audio",
+      "installable": true,
+      "bundleSpec": {
+        "kind": "bundle-v1",
+        "bundleId": "chatterbox-multilingual-v3",
+        "digest": "94b19c67ad9e1f3bf6551099603f39d020376e11d48dceeaa32c1d3b5f6a06f1",
+        "minimumRuntime": "0.4.0",
+        "manifestKey": "models/bundles/chatterbox-multilingual-v3/94b19c67ad9e1f3bf6551099603f39d020376e11d48dceeaa32c1d3b5f6a06f1/xrt.bundle.json",
+        "sizeBytes": 3280806073,
+        "platforms": [
+          "windows-x86_64"
+        ]
+      }
     }
   ]
 }
