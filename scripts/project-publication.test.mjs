@@ -195,6 +195,41 @@ test('project publication is explicit, receipted and revocable without publishin
   const managerPreview = await previewProjectPublication(pool, context(stranger), { ...managerBase, visibility: 'public' });
   await writeTuples(pool, { deletes: [{ object: `project:${project.id}`, relation: 'admin', subject: `user:${stranger}` }] });
   await assert.rejects(mutateProjectPublication(pool, context(stranger), { ...publish, ...managerBase, operationId: randomUUID(), expectedRevision: managerPreview.revision, visibility: 'public', previewHash: managerPreview.previewHash }), { code: 'project_not_found' }, 'revoked administrator cannot publish from an old preview');
+  // Pause an authorized publish after its grant-row locks, then attempt an
+  // independent revocation. The database, not a timer in application code, must
+  // serialize them. Once the publish ends, revocation wins every later request.
+  await writeTuples(pool, { writes: [{ object: `project:${project.id}`, relation: 'admin', subject: `user:${stranger}` }] });
+  const racePreview = await previewProjectPublication(pool, context(stranger), { ...managerBase, visibility: 'public' });
+  let atWrite, releaseWrite;
+  const arrived = new Promise(resolve => { atWrite = resolve; });
+  const proceed = new Promise(resolve => { releaseWrite = resolve; });
+  const pausedPool = { connect: async () => {
+    const client = await pool.connect();
+    return { query: async (sql, params) => {
+      if (String(sql).includes('INSERT INTO project_publication_versions')) { atWrite(); await proceed; }
+      return client.query(sql, params);
+    }, release: () => client.release() };
+  } };
+  const racingPublish = mutateProjectPublication(pausedPool, context(stranger), { ...publish, ...managerBase,
+    operationId: randomUUID(), expectedRevision: racePreview.revision, visibility: 'public', previewHash: racePreview.previewHash });
+  const revoker = await pool.connect();
+  try {
+    await Promise.race([arrived, racingPublish.then(() => { throw new Error('Publish did not reach the barrier'); })]);
+    await revoker.query('BEGIN');
+    await revoker.query("SET LOCAL lock_timeout='150ms'");
+    await assert.rejects(revoker.query(`DELETE FROM relationship_tuples WHERE object_type='project' AND object_id=$1
+      AND subject_type='user' AND subject_id=$2 AND relation='admin'`, [project.id, stranger]),
+      { code: '55P03' }, 'grant revocation waits for already-authorized publication transaction');
+  } finally {
+    await revoker.query('ROLLBACK'); revoker.release(); releaseWrite();
+    await racingPublish;
+  }
+  await writeTuples(pool, { deletes: [{ object: `project:${project.id}`, relation: 'admin', subject: `user:${stranger}` }] });
+  await assert.rejects(previewProjectPublication(pool, context(stranger), { ...managerBase, visibility: 'public' }),
+    { code: 'project_not_found' }, 'committed grant revocation blocks subsequent publication');
+  // Clear this test's deliberately published page before the empty discovery UI proof.
+  const afterRace = await readProjectPublication(pool, context(owner), base);
+  await mutateProjectPublication(pool, context(owner), { ...revoke, operationId: randomUUID(), expectedRevision: afterRace.revision });
   {
     const browserProject = await createAuthorizedProject(pool, { principal: { type: 'user', id: owner }, name: 'PRIVATE-NAME', customInstructions: 'PRIVATE-INSTRUCTIONS' });
     const { provePublicationBrowser } = await import('./lib/project-publication-browser.mjs');
