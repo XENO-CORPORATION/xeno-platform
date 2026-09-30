@@ -361,10 +361,13 @@
  * model: grok-4.6, gpt-5.5) drew `▪ Working for 2s │` with nothing on the right of the rule
  * forever. A separator that separates nothing is a dangling line, and the turn never fills it.
  *
- * The library already treats the two as a pair: while an ask is pending it hides `.xa-vr` AND
- * `.xa-cur` together (transcript.css:310-311). This makes the divider follow the pair's real
- * driver — whether the ticker has WORDS. The empty ticker keeps its flex space, so the first step
- * still slides in from behind the glyph without a reflow; only the rule waits for it.
+ * This makes the divider follow the pair's real driver — whether the ticker has WORDS.
+ *
+ * ⚠️ Re-measured 2026-09-30 against agent-conversation 0.1.77, which moved under this rule twice:
+ * it now hides an EMPTY ticker itself (`.xa-cur` shows only when `.xa-line:has(.xa-t)`), and while
+ * an ask is pending it hides `.xa-cur` but no longer `.xa-vr` — so every pending ask drew a lone
+ * `│` with nothing beside it, the exact dangling line this block exists to remove. The third rule
+ * restores the pair: while asking, the ticker is hidden, so its divider is too.
  *
  * Specificity: both rules are 0,13,0, beating the library's 0,10,0 pair, and they are mutually
  * exclusive on `:has()`. Scoped to this surface because the chat is what consumes the transcript;
@@ -373,3 +376,4 @@
  */
 .chat-themed .chat-turn-head.xa-transcript .xa-turn.xa-live:not(.xa-asking) .xa-line:not(:has(.xa-tx:not(:empty))) .xa-vr { display: none; }
 .chat-themed .chat-turn-head.xa-transcript .xa-turn.xa-live:not(.xa-asking) .xa-line:has(.xa-tx:not(:empty)) .xa-vr { display: block; }
+.chat-themed .chat-turn-head.xa-transcript .xa-turn.xa-live.xa-asking:not(.xa-open):not(.xa-done) .xa-line .xa-vr { display: none; }
