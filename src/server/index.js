@@ -54,6 +54,7 @@ import browserRoutes from './routes/browserRoutes.js';
 import aiRoutes from './routes/aiRoutes.js';
 import { workspaceRoutes, workspaceInviteRoutes } from './routes/workspaceRoutes.js';
 import workforceRoutes from './routes/workforceRoutes.js';
+import projectPublicationRoutes from './routes/projectPublicationRoutes.js';
 import { resolveBillingAccountId } from './services/walletService.js';
 import { xenoModelCatalog, PROVIDER_LABELS, prettyModelName, xenoChatCompletion, normalizeXenoModelId, XENO_API_BASE, XENO_API_KEY, xenoApiConfigured } from './utils/xenoChat.js';
 import { meterPremiumChat, meterMediaGeneration } from './utils/inferenceMeter.js';
@@ -592,6 +593,8 @@ app.use('/api/account', databaseMiddleware, accountRoutes);
 // Workforce definitions are not agent principal/key provisioning. Auth and
 // fine-grained workforce scopes are enforced per route by the canonical router.
 app.use('/api/workforce', databaseMiddleware, workforceRoutes);
+// Only explicitly published projections are public; management authenticates in the router.
+app.use('/api/public-projects', databaseMiddleware, projectPublicationRoutes);
 app.use('/api/dashboard', databaseMiddleware, dashboardRoutes);
 console.log('👤 Account + dashboard routes integrated: /api/account/* + /api/dashboard/*');
 

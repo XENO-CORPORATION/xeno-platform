@@ -395,4 +395,38 @@ export const updateWorkspace = (workspaceId: string, updates: { name?: string; s
 
 export const archiveProject = (projectId: string) =>
   apiFetch<{ success: true }>(`/chat/projects/${projectId}`, { method: 'DELETE' });
+export interface ProjectPublicationContent {
+  schemaVersion: 1; title: string; purpose: string; license: string; termsVersion: string;
+  contributionGuide: string; roadmap: string; updates: string;
+}
+export interface PublicProject extends ProjectPublicationContent {
+  projectId: string; revision?: string; visibility?: 'public' | 'unlisted'; url: string;
+  maintainer: { id: string; handle: string; displayName: string };
+}
+export interface ProjectPublicationState {
+  projectId: string; revision: string; draft: ProjectPublicationContent | null;
+  visibility: 'private' | 'public' | 'unlisted'; publishedRevision: string | null; url: string;
+}
+export interface ProjectPublicationPreview {
+  projection: PublicProject; previewHash: string; revision: string; visibility: 'public' | 'unlisted';
+}
+export interface ProjectPublicationOperation {
+  schemaVersion: 1; operationId: string; projectId: string; action: 'draft' | 'publish' | 'revoke';
+  revision: string; visibility: ProjectPublicationState['visibility'];
+}
+export interface ProjectPublicationRequest {
+  operationId: string; projectId: string; expectedActorAccountId: string; expectedRevision: string;
+  action: ProjectPublicationOperation['action']; content?: ProjectPublicationContent;
+  visibility?: 'public' | 'unlisted'; previewHash?: string;
+}
+const publicationPost = <T>(path: string, input: unknown) =>
+  apiFetch<{ success: true; result: T }>(`/public-projects${path}`, { method: 'POST', body: JSON.stringify(input), cache: 'no-store', signal: AbortSignal.timeout(15000) }).then(response => response.result);
+export const readProjectPublication = (projectId: string, expectedActorAccountId: string) =>
+  publicationPost<ProjectPublicationState>('/state', { projectId, expectedActorAccountId });
+export const previewProjectPublication = (projectId: string, expectedActorAccountId: string, visibility: 'public' | 'unlisted') =>
+  publicationPost<ProjectPublicationPreview>('/preview', { projectId, expectedActorAccountId, visibility });
+export const mutateProjectPublication = (input: ProjectPublicationRequest) =>
+  publicationPost<{ state: 'committed'; operation: ProjectPublicationOperation; replayed: boolean }>('/operations', input);
+export const readProjectPublicationOperation = (input: Pick<ProjectPublicationRequest, 'projectId' | 'expectedActorAccountId' | 'operationId'>) =>
+  publicationPost<{ state: 'committed' | 'not-observed'; operation: ProjectPublicationOperation | null }>('/operations/read', input);
 import { getAccessToken } from '../lib/authSession';
