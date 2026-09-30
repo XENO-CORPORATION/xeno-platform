@@ -230,6 +230,30 @@ service authentication, authority leases, billing transport and ledger effects a
 implementations. The Interface execution gate must remain closed until the full composed path
 is qualified. This command changes only its disposable database; no production access/deploy.
 
+### Full SDK / gateway-process candidate proof
+
+`npm run qualify:workforce-sdk` starts the actual gateway `server.js` in a child process,
+not a hand-built equivalent route. Supply `TEST_DATABASE_URL` (fresh migrated local disposable),
+`WORKFORCE_GATEWAY_SOURCE` + `WORKFORCE_GATEWAY_COMMIT`, and `WORKFORCE_SDK_SOURCE` +
+`WORKFORCE_SDK_COMMIT`. Build the SDK main/workforce entries from that clean source first.
+The proof checks candidate identities/source and emits both executed SDK bundle hashes. Gateway
+`.env` is refused; its environment is synthetic and allowlisted. A preloaded socket/fetch guard
+permits only explicit loopback fixture ports, including background discovery. No commercial
+provider or production resource is used.
+
+Measured candidate pair: SDK PR100 `22cf5db` (based on `603994d`, version unchanged at0.10.30),
+gateway PR16 `4c83b154` (the reconciled branch, not deployed). Actual gateway API-key authentication
+reads the local canonical DB; SDK authority uses the real workforce JWT router/JWKS; the gateway
+calls the real service-token ledger and a loopback provider fixture. Two SDK requests exchange two
+fresh leases and create two measured settled draws on one hold. Terminal result reporting releases
+the remainder and wallet conservation matches the charge. An invalid gateway key reaches no
+provider; a separate revoked admission stops before a new draw/provider call. Terminal closure is
+mutation-checked independently of revocation so one closing path cannot mask the other.
+
+This is **candidate qualification**, not SDK release/Interface adoption, DPoP consumer qualification,
+commercial-provider output, cancellation uncertainty reconciliation, or the full workforce mission.
+The SDK owner controls PR100 merge/release sequencing. The Interface execution gate remains closed.
+
 ## Workforce account-plan dependency repair — 2026-09-30
 
 Canonical quota adoption exposed two payment-client import paths: quota aliases and effective
