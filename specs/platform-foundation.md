@@ -144,6 +144,41 @@ The server remains authoritative. Workspace-scoped lists clear when scope change
 8. Focused platform-foundation tests prove command uniqueness, truthful data boundaries, route reachability, and agent-readiness declarations.
 9. Production qualification additionally requires a revision-tied real server and test database, seeded multi-role accounts, durable reload proof, and 401/403/404/409/500 plus cross-workspace race cases. Source tests, typecheck, and bundle build do not substitute for that gate.
 
+## Public project publication candidate — 2026-09-30
+
+This additive slice extends `chat_projects`; it does not create a second project model.
+Management is mounted in `ProjectsPage` and uses `accountService`. Public routes are
+`/public-projects` and `/public-projects/:projectId`, separate from the private `/projects`
+redirect. The API is `/api/public-projects`: anonymous projection reads; authenticated
+`state`, `preview`, `operations`, and `operations/read` POSTs.
+
+Only explicitly authored title/purpose/licence/terms/contribution-guide/roadmap/update text
+and the previewed publisher identity are disclosed. Saving a draft never changes the published
+snapshot. Public/unlisted visibility grants no membership, private-project viewing, file access,
+execution or spending. Unlisted pages are link-readable but absent from discovery. Exact preview
+hash and revision precede publish; stable actor/client/operation receipts fence retries. Archive
+or ownership change makes a publication private; undoing that context change cannot resurrect it.
+
+Local evidence: `project-publication-contract.test.mjs` and `project-publication.test.mjs`,
+registered in `test:platform-foundation` and discovered by `ci:local`'s database-proof stage.
+The database suite calls the real React/browser journey (no optional browser flag): save/reload,
+preview, publish with a deliberately lost post-commit acknowledgement, reload/reconcile,
+public direct entry/refresh/Back/Forward, revoke, and visitor refusal. Real PostgreSQL + mounted
+HTTP checks cover legacy/browser-cookie-CSRF/OIDC-DPoP authentication, scope refusal, disclosure
+allowlisting, revision races, immutable receipts, receipt-write rollback, guarded migration
+rollback/reapply, owner A-B-A revocation, workspace publication and pagination. Operation-keyed
+browser recovery preserves multiple tabs' pending identities; malformed recovery fails closed.
+Six deliberate mutations fail for preview bypass, unlisted discovery, revoked read, accidental
+private access, pre-receipt commit, and omitted management authorization. Focused component/parent
+types (176 files, zero diagnostics), SQL-placeholder and migration-version gates pass.
+
+**Boundary:** isolated local candidate, not deployed or production-qualified. Browser auth context
+is a fixture; server authentication/authorization and persistence are real local implementations.
+Full product build and full gates were not run. Accepted artifacts, selected task evidence,
+funding totals, participation offers, contribution review/integration, and forge/resource drivers
+remain unbuilt here. This is partial XENO-WORKFORCE-01 publication work, not a full PUB-02 claim;
+no requirement citation has been added for this slice yet. No production data was accessed.
+
 ## Explicit non-goals
 
 - No product-specific CRM, tasks, contracts, workflow canvas, document editor, or model-selection implementation.

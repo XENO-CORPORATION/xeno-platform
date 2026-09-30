@@ -7,6 +7,7 @@ import Home3 from "./pages/Home3";
 import { lazyRoute } from './components/platform/lazyRoute';
 
 const ProductPage = lazyRoute(() => import('./pages/ProductPage'));
+const PublicProjects = lazyRoute(() => import('./pages/PublicProjects'));
 const ProductReleases = lazyRoute(() => import('./pages/ProductReleases'));
 const ProductReleaseDetail = lazyRoute(() => import('./pages/ProductReleaseDetail'));
 const ProductDownload = lazyRoute(() => import('./pages/ProductDownload'));
@@ -338,6 +339,8 @@ function App() {
             {/* Direct Conversation and Sub-surface Routes */}
             <Route path="/c/:conversationId" element={<ConversationRouteRedirect />} />
             <Route path="/c" element={<ConversationRouteRedirect />} />
+            <Route path="/public-projects" element={<PublicProjects />} />
+            <Route path="/public-projects/:projectId" element={<PublicProjects />} />
             <Route path="/projects/:projectId" element={<ProjectRouteRedirect />} />
             <Route path="/projects" element={<ProjectRouteRedirect />} />
             <Route path="/scheduled" element={<Navigate to="/overview/chat/scheduled" replace />} />
