@@ -209,6 +209,25 @@ service authentication, authority leases, billing transport and ledger effects a
 implementations. The Interface execution gate must remain closed until the full composed path
 is qualified. This command changes only its disposable database; no production access/deploy.
 
+## Workforce account-plan dependency repair — 2026-09-30
+
+Canonical quota adoption exposed two payment-client import paths: quota aliases and effective
+plan reads both imported `billingService`. `accountPlan.js` now owns the existing aliases,
+entitlements and personal-plan reader; billing re-exports the identical bindings. Both use
+one unchanged initializer in `billingSchema.js`, including its shared pending promise and
+failure retry. No plan, allowance, entitlement, ledger or subscription behavior is replaced.
+The workforce deployment-boundary allowlist is unchanged.
+
+Local proof: 114 targeted plan/quota/entitlement/pricing/preview/reachability checks pass,
+including the fresh PostgreSQL plan/bootstrap proof; the real local billing-money-in suite
+passes 60 assertions, and the migrated workforce run-draw suite passes 14 tests. Five deliberate
+mutations are caught: either import path returning to billing, poisoned bootstrap retry,
+read-only preview writing schema, and billing exporting a copied alias map. Extracted policy
+and schema bodies were compared against their committed originals. The database proof is
+registered in `test:effective-plan` and discovered by the local database-proof stage.
+Full product gates and production behavior were not tested; nothing was deployed. This repair
+does not qualify SDK dispatch-lease forwarding or remove the Interface execution gate.
+
 ## Explicit non-goals
 
 - No product-specific CRM, tasks, contracts, workflow canvas, document editor, or model-selection implementation.

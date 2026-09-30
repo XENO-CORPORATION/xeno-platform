@@ -28,7 +28,7 @@
  */
 
 import { addGrantTx, MICRO_PER_CREDIT } from './creditLedgerV2.js';
-import { canonicalPlan } from '../services/billingService.js';
+import { canonicalPlan } from '../services/accountPlan.js';
 
 /** Plan → credits granted per 7-day window. `null` = no metered allowance (unlimited). */
 export const WEEKLY_ALLOWANCE_CREDITS = {
@@ -50,7 +50,7 @@ export const WEEKLY_ALLOWANCE_CREDITS = {
  * smallest allowance we offer, and `internal` stays unmetered because it is WRITTEN as null.
  */
 export function allowanceCreditsFor(plan) {
-  // Resolve legacy/aliased names FIRST, from billingService's one map. The allowance table
+  // Resolve legacy/aliased names FIRST, from accountPlan's one map. The allowance table
   // is keyed on canonical plans, and `xeno_account_plans.plan` stores the raw value.
   const resolved = canonicalPlan(plan);
   if (Object.prototype.hasOwnProperty.call(WEEKLY_ALLOWANCE_CREDITS, resolved)) {

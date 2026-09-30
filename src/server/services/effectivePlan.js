@@ -44,14 +44,14 @@
  * Every serious per-seat product works this way: you cannot add beyond your
  * seats, and everyone who is a member is licensed.
  */
-import { entitlementsFor, getPlan } from './billingService.js';
+import { entitlementsFor, getPlan } from './accountPlan.js';
 
 const ACTIVE = new Set(['active', 'trialing', 'past_due']);
 
 /**
  * Plan strength. Used ONLY to pick which name to report when someone holds more
  * than one — it is not an entitlement decision, which stays with the table in
- * billingService.
+ * accountPlan.
  *
  * `internal` outranks everything because it is the staff plan; a staff member who
  * also sits in a Team workspace should not be reported as a Team subscriber.
