@@ -113,6 +113,23 @@ test('merge: the cached gateway object is NOT mutated, every model gains `route`
   assert.equal(reasoningCapabilityForModel('deepseek-reasoner'), 'alwaysOn', 'the reasoning model is a reasoning model');
 });
 
+test('a model that stopped answering leaves the picker within a minute, and its verdict reaches the client', () => {
+  // 2026-09-30: the 30-minute cache kept `deepseek-v4-flash-vision-exp` offered (as the
+  // newest-first default) while it answered 503 to every request. The gateway's list is already
+  // filtered to routable models, so this cache IS the availability lag.
+  const index = src('../src/server/index.js');
+  const expr = index.match(/const MODELS_CACHE_DURATION = ([^;]+);/)[1];
+  assert.match(expr, /^[\d_ *]+$/, 'a plain arithmetic literal');
+  const ms = expr.split('*').reduce((n, part) => n * Number(part.trim().replace(/_/g, '')), 1);
+  assert.ok(ms > 0 && ms <= 60_000, `the catalogue cache bounds the availability lag to a minute (was ${ms} ms)`);
+  const handler = index.slice(index.indexOf("app.get('/api/models'"), index.indexOf("app.get('/api/test-db'"));
+  assert.match(handler, /available: model\.available === true,/, 'the gateway verdict is carried, strictly');
+  assert.match(handler, /availability: String\(model\.availability\),/);
+  const merged = mergeCatalogueWithRoutes({ companies: { DeepSeek: [{ id: 'm', available: true, availability: 'available' }] } },
+    { routes: new Map(), extra: [] }, { reasoningCapabilityForModel, prettyModelName: (x) => x });
+  assert.equal(merged.companies.DeepSeek[0].availability, 'available', 'the per-account merge keeps the verdict');
+});
+
 test('vendor label: host first, then the key\'s label', () => {
   assert.equal(vendorLabelForCredential({ baseUrl: 'https://api.deepseek.com/v1', label: 'deepseek-api' }), 'DeepSeek');
   assert.equal(vendorLabelForCredential({ baseUrl: 'https://api.mistral.ai/v1' }), 'Mistral');
