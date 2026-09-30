@@ -216,7 +216,10 @@ test('Library viewer is a shell-isolated portal with bounded, honest preview sta
   assert.match(viewer, /data-library-asset-viewer="true"/);
   assert.match(viewer, /style=\{\{ left: Math\.max\(0, leftInset\) \}\}/);
   assert.match(viewer, /MAX_VISIBLE_THUMBNAILS = 9/);
-  assert.match(viewer, /Preview unavailable/);
+  // An honest not-yet-available state that says why (a new image is scanned before it is shown),
+  // never a silent blank. Re-worded 2026-09-27 (9f884a8) from "Preview unavailable".
+  assert.match(viewer, /Preview not ready yet/);
+  assert.match(viewer, /scanned before it can be shown/);
   assert.match(viewer, /disabled=\{!canExport\}/);
   assert.match(image, /data-library-image-state=\{state\}/);
   assert.match(image, /state !== 'ready' \|\| !url/);
@@ -233,8 +236,10 @@ test('Library image history is a semantic right-side rail', () => {
   assert.ok(viewer.indexOf('<main className=') < viewer.indexOf('<aside'));
   assert.match(viewer, /aria-label="Image history"/);
   assert.match(viewer, /data-library-preview-rail="right"/);
-  assert.match(viewer, /overflow-y-auto border-l border-white\/10/);
-  assert.doesNotMatch(viewer, /overflow-y-auto border-r border-white\/10/);
+  // A RIGHT-side rail is bordered on its left, whatever the theme colour: the viewer carries the chat
+  // theme tokens since 9f884a8, so the rule is the side, not the literal colour.
+  assert.match(viewer, /overflow-y-auto border-l border-\[var\(--chat-border\)\]/);
+  assert.doesNotMatch(viewer, /overflow-y-auto border-r\b/);
 });
 
 test('Overview sidebar owns the full viewport and keeps the permanent rail at 52px', () => {
