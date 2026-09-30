@@ -26,6 +26,7 @@
 import { createHash } from 'node:crypto';
 import { authorityTransaction } from './workspaceOperationReceipts.js';
 import { lockApiKeyWorkforceAuthority } from './apiKeyWorkforceAuthority.js';
+import { closeFinishedRunTx } from '../utils/creditLedgerV2.js';
 
 export class RunResultError extends Error {
   constructor(code, reason, extra = {}) {
@@ -119,6 +120,10 @@ export async function reportRunResult(pool, authenticatedContext, value) {
     const row = (await db.query(`INSERT INTO workforce_run_results(admission_id,outcome,interrupted_reason,summary,artifacts,report_hash,reported_by_user_id)
       VALUES($1,$2,$3,$4,$5,$6,$7) RETURNING *`, [report.admissionId, report.outcome, report.interruptedReason, report.summary,
       JSON.stringify(report.artifacts), reportHash, actor.actorUserId])).rows[0];
+    // The result is recorded; if it was the last thing the run was waiting on, the run's reservation
+    // is released IN THIS TRANSACTION -- receipt and release commit together. The report itself proves
+    // nothing about provider work: release waits for every draw to resolve and every run to finish.
+    await closeFinishedRunTx(db, report.admissionId);
     return { replayed: false, result: publicResult(row) };
   });
 }
