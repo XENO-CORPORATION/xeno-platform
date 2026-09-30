@@ -10,7 +10,11 @@ export async function provePublicationBrowser({ app, baseUrl, projectId, account
   const bundle = await build({ write: false, bundle: true, platform: 'browser', format: 'iife',
     define: { 'process.env.NODE_ENV': '"production"' },
     plugins: [{ name: 'fixture-auth-context', setup(builder) {
-      builder.onLoad({ filter: /[\\/]contexts[\\/]AuthContext\.tsx$/ }, () => ({ contents: `export const useAuth=()=>({user:{id:${JSON.stringify(accountId)}},isAuthenticated:true,isLoading:false});`, loader: 'tsx' }));
+      builder.onLoad({ filter: /[\\/]contexts[\\/]AuthContext\.tsx$/ }, () => ({ contents: `
+        import {useSyncExternalStore} from 'react';
+        let id=${JSON.stringify(accountId)}; const listeners=new Set();
+        window.fixtureAccount=value=>{id=value;listeners.forEach(fn=>fn());};
+        export const useAuth=()=>({user:{id:useSyncExternalStore(fn=>{listeners.add(fn);return()=>listeners.delete(fn)},()=>id)},isAuthenticated:true,isLoading:false});`, loader: 'tsx' }));
     } }],
     stdin: { resolveDir: root, loader: 'tsx', contents: `
       import React from 'react'; import {createRoot} from 'react-dom/client';
@@ -91,6 +95,31 @@ export async function provePublicationBrowser({ app, baseUrl, projectId, account
     await click('Make private'); await click('Confirm make private'); await has('Current visibility: private');
     await page.goto(baseUrl + '/public-projects/' + projectId); await has('private or withdrawn');
     await page.goto(baseUrl + '/public-projects'); await has('No public projects');
+    // A preview may finish after account A -> B -> A. The response belongs to
+    // the old generation even though the current account ID matches again.
+    await page.goto(baseUrl + '/fixture/manage'); await has('Current visibility: private');
+    await page.evaluate(() => {
+      const fetch = window.fetch.bind(window);
+      window.fetch = async (...args) => {
+        const response = await fetch(...args);
+        if (String(args[0]).endsWith('/preview')) {
+          const text = await response.text();
+          window.fixturePreviewWaiting = true;
+          await new Promise(resolve => { window.releaseFixturePreview = resolve; });
+          return new Response(text, { status: response.status, headers: response.headers });
+        }
+        return response;
+      };
+    });
+    await click('Preview saved draft');
+    await page.waitForFunction(() => window.fixturePreviewWaiting === true);
+    await page.evaluate(() => window.fixtureAccount('dddddddd-dddd-4ddd-8ddd-dddddddddddd'));
+    await has('actor_changed');
+    await page.evaluate(accountId => window.fixtureAccount(accountId), accountId);
+    await has('Current visibility: private');
+    await page.evaluate(() => window.releaseFixturePreview());
+    await page.waitForFunction(() => [...document.querySelectorAll('button')].some(b => b.textContent === 'Preview saved draft' && !b.disabled));
+    assert.equal(await page.$('.legal-prose h2'), null, 'late preview from prior account generation is discarded');
     const recoveryKey = `xeno-project-publication:${accountId}:${projectId}:corrupt-fixture`;
     await page.evaluate(key => localStorage.setItem(key, '{invalid-json'), recoveryKey);
     await page.goto(baseUrl + '/fixture/manage'); await has('Publication changes are blocked');
