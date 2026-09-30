@@ -41,7 +41,7 @@ test('SDK physical dispatches traverse gateway auth, run draws, provider and can
     assert.equal(readFileSync(join(gateway, file), 'utf8').replaceAll('\r\n', '\n'), committed.toString('utf8').replaceAll('\r\n', '\n'), `gateway candidate source ${file}`);
   }
   process.env.XENO_AGENT_HOME = mkdtempSync(join(tmpdir(), 'workforce-sdk-proof-'));
-  const { AgentLoop, PermissionEngine, ToolRegistry } = await import(pathToFileURL(join(sdk, 'dist/index.js')).href);
+  const { AgentLoop, PermissionEngine, ToolRegistry, runDelegatedXenoTurn } = await import(pathToFileURL(join(sdk, 'dist/index.js')).href);
   const { createWorkforceRunAuthority } = await import(pathToFileURL(join(sdk, 'dist/workforce/index.js')).href);
   const name = randomUUID();
   const owner = (await pool.query("INSERT INTO users(username,email,password_hash,display_name,email_verified) VALUES($1,$2,'fixture',$1,true) RETURNING id", [name, `${name}@example.test`])).rows[0].id;
@@ -161,9 +161,36 @@ test('SDK physical dispatches traverse gateway auth, run draws, provider and can
   assert.equal(new Set(draws.map(d => d.lease_hash)).size, 3, 'ledger consumes distinct leases');
   assert(draws.every(d => d.state === 'settled' && d.outcome === 'measured' && String(d.input_tokens) === '10' && String(d.output_tokens) === '5'), `all provider responses settle measured usage: ${JSON.stringify(draws.map(d => ({ state: d.state, outcome: d.outcome, input: d.input_tokens, output: d.output_tokens })))}`);
   assert.equal((await pool.query('SELECT count(*)::int n FROM credit_holds WHERE user_id=$1', [owner])).rows[0].n, 1, 'gateway creates no second wallet hold');
+  const beforeChild = (await getBalanceV2(pool, owner)).availableMicro;
+  let childAdmissionId, childSettlement;
+  await runDelegatedXenoTurn({ cwd: process.env.XENO_AGENT_HOME, apiKey, baseURL: gatewayUrl, model: 'gpt-5.5',
+    userPrompt: 'Review the fixture', maxIterations: 2, maxTotalTokens: 4000, maxOutputTokens: 100, timeoutMs: 15000,
+    parentSystemPrompt: 'Fixture', parentExecutionMode: 'agent', branchPolicy: { roles: ['researcher'] },
+    runAuthority: authority, createToolRegistry: () => new ToolRegistry(),
+    acquireBranchAdmission: async () => {
+      const childRun = await admitRun(pool, context, { operationId: randomUUID(), expectedActorAccountId: owner,
+        agent: { resourceId: made.resource.id, version: made.version.version, contentHash: made.version.contentHash },
+        target: { kind: 'personal', ownerUserId: owner }, capabilities: [], runtimeCapabilities: [], budget: { ceilingMicro: '10000000' },
+        parent: { admissionId } });
+      childAdmissionId = childRun.admission.admissionId;
+      providerAdmissionId = childAdmissionId;
+      assert.equal((await getBalanceV2(pool, owner)).availableMicro, beforeChild, 'child admission creates no second wallet reservation');
+      return { runAuthority: createWorkforceRunAuthority({ issuer: 'https://platform.test', admissionId: childAdmissionId,
+        authorizeRequest: async () => ({ authorization: `Bearer ${accountToken}` }), capabilityForTool: () => null,
+        sequenceStore: { read: id => sequences.get(id) ?? null, write: (id, seq) => { sequences.set(id, seq); } },
+        fetchImpl: (target, options) => fetch(String(target).replace('https://platform.test', platformUrl), options) }),
+        settle: result => { childSettlement = result; } };
+    } });
+  assert.equal(childSettlement.status, 'completed', 'default branch factory completes a truly admitted child');
+  const childDraw = (await pool.query('SELECT * FROM credit_hold_draws WHERE admission_id=$1', [childAdmissionId])).rows;
+  assert.equal(childDraw.length, 1, 'delegated physical request uses its own admission draw');
+  assert.equal(childDraw[0].hold_row_id, draws[0].hold_row_id, 'child draw consumes the same root hold');
+  assert.equal(childDraw[0].state, 'settled', 'delegated provider usage settles');
   await reportRunResult(pool, context, { admissionId, outcome: 'completed', summary: 'Local proof completed', artifacts: [] });
+  assert.equal((await pool.query('SELECT state FROM credit_holds WHERE hold_id=$1', [admissionId])).rows[0].state, 'held', 'parent result cannot release an unreported child');
+  await reportRunResult(pool, context, { admissionId: childAdmissionId, outcome: 'completed', summary: 'Child fixture complete', artifacts: [] });
   assert.equal((await pool.query('SELECT state FROM credit_holds WHERE hold_id=$1', [admissionId])).rows[0].state, 'settled', 'terminal run releases the remaining reservation');
-  const charged = draws.reduce((sum, d) => sum + BigInt(d.charged_micro), 0n);
+  const charged = [...draws, ...childDraw].reduce((sum, d) => sum + BigInt(d.charged_micro), 0n);
   assert.equal(BigInt((await getBalanceV2(pool, owner)).availableMicro), BigInt(ceiling) - charged, 'wallet conservation matches measured draw charges');
   const revoked = await admitRun(pool, context, { operationId: randomUUID(), expectedActorAccountId: owner,
     agent: { resourceId: made.resource.id, version: made.version.version, contentHash: made.version.contentHash },
@@ -176,7 +203,7 @@ test('SDK physical dispatches traverse gateway auth, run draws, provider and can
   await revokeRun(pool, context, revokedId);
   agent.configureModelExecution({ runAuthority: revokedAuthority });
   await assert.rejects(agent.run('must not dispatch after revoke'), error => (error.reason ?? error.cause?.reason) === 'admission_revoked', 'real platform revocation stops the next SDK request');
-  assert.equal(providerCalls, 3, 'revoked authority reaches no provider');
+  assert.equal(providerCalls, 4, 'revoked authority reaches no provider');
   assert.equal((await pool.query('SELECT count(*)::int n FROM credit_hold_draws WHERE admission_id=$1', [revokedId])).rows[0].n, 0, 'revocation creates no new draw');
   // Exercise the Interface-style sender-bound account path independently of API keys.
   const dpopKey = generateKeyPairSync('ec', { namedCurve: 'P-256' });
@@ -204,7 +231,7 @@ test('SDK physical dispatches traverse gateway auth, run draws, provider and can
     fetchImpl: (target, options) => fetch(String(target).replace(issuer(), platformUrl), options) });
   const boundAgent = new AgentLoop({ baseURL: gatewayUrl, model: 'gpt-5.5', maxTokens: 100, maxIterations: 2, systemPrompt: 'Reply briefly.',
     authorizeRequest: authorize, runAuthority: boundAuthority, toolRegistry: new ToolRegistry(), permissionEngine: new PermissionEngine({ mode: 'bypassPermissions' }) });
-  try { assert.match(await boundAgent.run('sender bound'), /reply-4/); }
+  try { assert.match(await boundAgent.run('sender bound'), /reply-5/); }
   catch (error) { assert.fail(`DPoP composed turn failed: ${error.message}; gateway=${logs.replaceAll(apiKey, '[fixture-key]')}`); }
   const proofUrl = gatewayUrl + '/v1/chat/completions';
   const proofHeaders = await authorize({ method: 'POST', url: proofUrl });
@@ -224,10 +251,11 @@ test('SDK physical dispatches traverse gateway auth, run draws, provider and can
   const revokedRequest = await fetch(proofUrl, { method: 'POST', headers: { ...await authorize({ method: 'POST', url: proofUrl }), 'content-type': 'application/json' }, body });
   assert.equal(revokedRequest.status, 401, 'real gateway refuses the revoked OIDC session'); await revokedRequest.arrayBuffer();
   await assert.rejects(boundAgent.run('revoked account'), error => (error.reason ?? error.cause?.reason) === 'authority_unavailable', 'revoked account session blocks next authority exchange');
-  assert.equal(providerCalls, 4, 'DPoP replay and session revoke reach no provider');
+  assert.equal(providerCalls, 5, 'DPoP replay and session revoke reach no provider');
   assert.equal((await pool.query('SELECT count(*)::int n FROM credit_hold_draws WHERE admission_id=$1', [providerAdmissionId])).rows[0].n, 1, 'bound session makes one draw only');
   await reportRunResult(pool, boundContext, { admissionId: providerAdmissionId, outcome: 'completed', summary: 'Sender-bound fixture done', artifacts: [] });
   assert(!logs.includes('WORKFORCE_FIXTURE_EGRESS_REFUSED'), 'gateway made no unexpected outbound call');
   const bundles = Object.fromEntries(['dist/index.js', 'dist/workforce/index.js'].map(file => [file, createHash('sha256').update(readFileSync(join(sdk, file))).digest('hex')]));
-  console.log('Qualification evidence:', JSON.stringify({ sdkRevision, bundles, gatewayRevision: revision, providerCalls, draws: draws.length }));
+  console.log('Qualification evidence:', JSON.stringify({ sdkRevision, bundles, gatewayRevision: revision, providerCalls,
+    rootDraws: draws.length, delegatedDraws: childDraw.length, senderBoundDraws: boundDraw.length }));
 });
