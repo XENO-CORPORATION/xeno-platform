@@ -108,6 +108,12 @@ const DB_PROOF_FIXTURES = {
   WORKSPACE_AUTH_TEST_DATABASE_URL: { database: 'workspaceproof', migrated: false },
   TEST_DATABASE_URL: { database: 'chatproof', migrated: true },
 };
+/* A suite that reads TEST_DATABASE_URL (it needs the REAL schema) AND passes it through the
+ * workforce guard (`requireProofDatabase`) needs both at once: migrated, and a name the guard
+ * accepts. `chatproof` is not one, so twelve credit/workforce proofs refused to start here while
+ * reading as failures ("0 passed"). They get their own migrated database under the guard's
+ * qualifier shape instead of the guard being loosened. */
+const GUARDED_MIGRATED_FIXTURE = { database: 'xeno_qual_c10ca1' + '0'.repeat(26), migrated: true };
 
 /* The canonical fresh-database sequence, taken from src/server/tests/fresh-db-boot.test.mjs
  * rather than reinvented: versioned SQL first, then the account/ledger v2 migration. */
@@ -158,7 +164,8 @@ function deriveDbProofSuites() {
       log(`${c.dim}  not a database proof, excluded: ${file} needs ${EXTERNAL_SERVICE_SUITES[file]}${c.off}`);
       continue;
     }
-    found.push({ file, variable: m[1] });
+    const guarded = m[1] === 'TEST_DATABASE_URL' && /requireProofDatabase\(/.test(body);
+    found.push({ file, variable: m[1], fixture: guarded ? GUARDED_MIGRATED_FIXTURE : DB_PROOF_FIXTURES[m[1]] });
   }
   return found.sort((a, b) => a.file.localeCompare(b.file));
 }
@@ -385,8 +392,8 @@ function runDbProofs(baseUrl) {
   }
   const created = new Set();
   let allOk = true;
-  for (const { file, variable } of suites) {
-    const { database, migrated } = DB_PROOF_FIXTURES[variable];
+  for (const { file, variable, fixture } of suites) {
+    const { database, migrated } = fixture;
     if (!created.has(database)) {
       const url = freshDb(database);
       if (migrated) {

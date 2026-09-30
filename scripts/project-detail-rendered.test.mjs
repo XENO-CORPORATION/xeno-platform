@@ -39,7 +39,8 @@ test('fresh project detail resolves by ID even when absent from the list page', 
   app.get('/api/workspaces/:id/teams', (_req, res) => res.json({ success: true, teams: [] }));
   app.post('/api/public-projects/state', (_req, res) => res.status(403).json({ success: false, error: 'Publication is unavailable in this fixture' }));
   app.get('/fixture.js', (_req, res) => res.type('js').send(bundle.outputFiles[0].text));
-  app.get('/overview/projects/:id?', (_req, res) => res.type('html').send('<!doctype html><div id="root"></div><script src="/fixture.js"></script>'));
+  // Express 5 (path-to-regexp v8): an optional segment is `{/:id}` — `:id?` is a syntax error.
+  app.get('/overview/projects{/:id}', (_req, res) => res.type('html').send('<!doctype html><div id="root"></div><script src="/fixture.js"></script>'));
   const server = app.listen(0, '127.0.0.1'); await new Promise(r => server.once('listening', r));
   t.after(async () => { server.closeAllConnections(); await new Promise(r => server.close(r)); });
   const browser = await puppeteer.launch({ headless: true }); t.after(() => browser.close());

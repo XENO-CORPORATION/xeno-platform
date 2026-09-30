@@ -22,11 +22,11 @@ assert.notEqual(controlsEnd, -1, 'Composer send controls should exist');
 
 const controlsRow = source.slice(controlsStart, controlsEnd);
 const counterIndex = controlsRow.indexOf('data-token-context-counter');
-const reasoningIndex = controlsRow.indexOf('{/* Reasoning toggle */}');
+const reasoningIndex = controlsRow.indexOf('data-composer-model-group');
 const voiceIndex = controlsRow.indexOf('data-voice-primary');
 
 assert.notEqual(counterIndex, -1, 'Desktop token counter should have a stable test hook');
-assert.notEqual(reasoningIndex, -1, 'Reasoning toggle should remain in the controls row');
+assert.notEqual(reasoningIndex, -1, 'The model | effort group should be in the controls row');
 assert(counterIndex < reasoningIndex, 'Token counter should be in the left composer controls');
 assert.match(controlsRow, /!isMobile/, 'Mobile should keep using its separate header counter');
 assert.match(controlsRow, /compactConversation\(selectedModel\)/, 'Compress behavior should remain available');
@@ -42,8 +42,14 @@ assert.match(controlsRow, /compactConversation\(selectedModel\)/, 'Compress beha
  * where it went. The counter's place is now stated against the voice control, which is the right-hand
  * group's first member and did not move.
  */
-assert.equal(controlsRow.indexOf('<ChatModelSelector'), -1, 'Model selector no longer lives in the controls row');
-assert.match(source, /modelSelector=\{\(\{ isInlineTray, onOpenChange \}\) => \(\s*<ChatModelSelector/, 'Model selector should be handed to ChatEmptyState, which draws it above the box');
+/*
+ * Restated again (2026-09-30, the hybrid composer): the model selector came BACK into this row as
+ * text beside the effort pill, and ChatEmptyState no longer draws one above the box. (The
+ * "Reasoning toggle" marker this file used to anchor on was gone before that — the file was red
+ * and is not in npm test; it is anchored on the model | effort group now.)
+ */
+assert.match(controlsRow, /data-composer-model-group[\s\S]*<ChatModelSelector[\s\S]*isRowTrigger/, 'Model selector sits in the row as the model | effort group');
+assert.doesNotMatch(source, /modelSelector=\{\(\{ isInlineTray, onOpenChange \}\) =>/, 'ChatEmptyState is no longer handed a second selector');
 assert.notEqual(voiceIndex, -1, 'Voice control should remain in the controls row');
 assert(counterIndex < voiceIndex, 'Token counter should sit left of the composer action group');
 
