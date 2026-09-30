@@ -187,7 +187,8 @@ no requirement citation has been added for this slice yet. No production data wa
 - `GATEWAY_BILLING_REPO`: a local xeno-api-proxy Git repository containing the tested commit.
 - `GATEWAY_BILLING_COMMIT`: its full 40-character commit ID.
 - `GATEWAY_BILLING_SOURCE`: an isolated checkout/export of that commit with its dependencies
-  installed. The three executed gateway billing modules must match committed bytes exactly.
+  installed. The billing client, caller-token counter, billing session and dispatch-tracker
+  modules must match committed bytes exactly.
 
 First measured pair: Platform `788bfc3`, gateway `dbd3f86`. The real gateway billing module and
 HTTP ledger client call the real Platform service-token router and PostgreSQL: a root reserves
@@ -195,10 +196,14 @@ the whole wallet; a draw still opens when ordinary available balance is zero; in
 missing output bounds and wrong service credentials refuse before draw creation; a consumed
 lease cannot fund another request; a fresh lease can; a provably undispatched request voids its
 draw; measured usage changes the canonical balance; terminal result closes the resolved root
-and returns only the remaining reservation. No second wallet hold is created.
+and returns only the remaining reservation. No second wallet hold is created. A loopback provider
+fixture independently reads PostgreSQL and refuses a request without an open draw or matching
+output bound. Its actual HTTP response supplies the usage settled by the gateway; the real
+AsyncLocalStorage dispatch tracker marks provider traffic but not the ledger's quote request.
+The provider is a fixture, not a commercial model or the full gateway inference route.
 
 **Not proven here:** SDK request-context forwarding, full gateway authentication/router startup,
-provider execution, streaming/cancellation uncertainty, reconciliation of later measured usage,
+commercial provider execution, streaming/cancellation uncertainty, reconciliation of later measured usage,
 or production behavior. Authenticated actor metadata and provider usage are explicit fixtures;
 service authentication, authority leases, billing transport and ledger effects are real local
 implementations. The Interface execution gate must remain closed until the full composed path
