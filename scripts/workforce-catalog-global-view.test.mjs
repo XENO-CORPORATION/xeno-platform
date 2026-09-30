@@ -106,6 +106,9 @@ test('the global catalog is an authorized aggregate with every named filter (VIE
     await pool.query((await readFile(new URL('20260711120000-workspaces.sql', MIGRATIONS), 'utf8')).split('-- DOWN')[0]);
     await pool.query(`CREATE TABLE chat_projects(id UUID PRIMARY KEY DEFAULT gen_random_uuid(), user_id UUID, owner_user_id UUID REFERENCES users(id),
       workspace_id UUID REFERENCES workspaces(id), name TEXT NOT NULL DEFAULT 'p', is_archived BOOLEAN NOT NULL DEFAULT false)`);
+    // Canonical ledger identity is an external prerequisite of the funding migrations,
+    // not a workforce-owned wallet. Match the migration-chain fixture's prelude.
+    await pool.query('CREATE TABLE credit_accounts(id UUID PRIMARY KEY, user_id UUID UNIQUE, owner_kind VARCHAR(16))');
     const chain = (await readdir(MIGRATIONS)).filter((f) => f.endsWith('.sql')
       && (/workforce/.test(f) || f === '20260811130000-agent-identities.sql')).sort();
     for (const f of chain) await pool.query((await readFile(new URL(f, MIGRATIONS), 'utf8')).split('-- DOWN')[0]);

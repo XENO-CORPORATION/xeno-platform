@@ -96,6 +96,9 @@ test('a handoff shows its audience and included history, and discloses nothing e
         user_id UUID, role VARCHAR(20) NOT NULL, content TEXT NOT NULL, message_index INTEGER NOT NULL,
         created_at TIMESTAMP DEFAULT now())`);
     for (const id of [owner, sender, target, bystander, colleague, outsider]) await pool.query('INSERT INTO users VALUES($1)', [id]);
+    // Canonical ledger identity is an external prerequisite of the funding migrations,
+    // not a workforce-owned wallet. Match the migration-chain fixture's prelude.
+    await pool.query('CREATE TABLE credit_accounts(id UUID PRIMARY KEY, user_id UUID UNIQUE, owner_kind VARCHAR(16))');
     const chain = (await readdir(MIGRATIONS)).filter((f) => f.endsWith('.sql')
       && (/workforce/.test(f) || f === '20260711120000-workspaces.sql')).sort().filter((f) => f !== THIS);
     for (const f of chain) await pool.query((await readFile(new URL(f, MIGRATIONS), 'utf8')).split('-- DOWN')[0]);
