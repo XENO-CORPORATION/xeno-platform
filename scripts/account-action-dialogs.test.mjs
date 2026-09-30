@@ -38,7 +38,8 @@ before(async () => {
         const sources = {
           WorkspaceContext: 'export const useWorkspace = () => globalThis.__accountFixture.workspace;',
           AuthContext: 'export const useAuth = () => ({logout: globalThis.__accountFixture.logout});',
-          accountService: ['listProjects', 'createProject', 'updateProject', 'archiveProject', 'getAccountSessions', 'revokeAccountSession']
+          accountService: 'export class AccountApiError extends Error {}\n' + ['listProjects', 'getProject', 'createProject', 'updateProject', 'archiveProject', 'getAccountSessions', 'revokeAccountSession',
+            'readProjectPublication', 'previewProjectPublication', 'mutateProjectPublication', 'readProjectPublicationOperation']
             .map(method => `export const ${method} = (...args) => globalThis.__accountFixture.api.${method}(...args);`).join('\n'),
           userDataService: 'export const userDataService = {getSettings: async () => ({}), updateSetting: async () => ({})};',
           authService: 'export const authService = {};',
@@ -62,7 +63,7 @@ after(() => {
   delete globalThis.__accountFixture;
 });
 
-const project = (id = 'p1', name = 'Original') => ({ id, name, settings: {}, updated_at: '2026-09-08T00:00:00Z' });
+const project = (id = 'p1', name = 'Original') => ({ id, name, workspace_id: 'w1', settings: {}, updated_at: '2026-09-08T00:00:00Z' });
 const session = current => ({ id: 's1', current, browser: 'Fixture browser', created_at: '2026-09-08T00:00:00Z', expires_at: '2026-09-15T00:00:00Z' });
 function fixture(current = false) {
   const state = {
@@ -72,6 +73,15 @@ function fixture(current = false) {
   state.logout = () => { state.loggedOut++; };
   state.api = {
     listProjects: async id => { state.calls.push(['list', id]); return { projects: state.projects }; },
+    getProject: async id => {
+      const found = state.projects.find(item => item.id === id);
+      if (!found) throw new Error('Project not found');
+      return { project: { ...found, workspace_id: state.workspace.activeWorkspace.id }, capabilities: { admin: true } };
+    },
+    readProjectPublication: async () => { throw new Error('Publication not part of this dialog fixture'); },
+    previewProjectPublication: async () => { throw new Error('Unexpected publication preview'); },
+    mutateProjectPublication: async () => { throw new Error('Unexpected publication mutation'); },
+    readProjectPublicationOperation: async () => { throw new Error('Unexpected publication recovery'); },
     createProject: async () => { throw new Error('Unexpected create'); },
     updateProject: async (id, patch) => { state.calls.push(['update', id, patch]); return { project: { ...project(id), ...patch } }; },
     archiveProject: async id => { state.calls.push(['archive', id]); state.projects = []; return { success: true }; },

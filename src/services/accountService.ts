@@ -376,6 +376,10 @@ export const listProjects = (workspaceId?: string) =>
     `/chat/projects${workspaceId ? `?workspace_id=${workspaceId}` : ''}`
   );
 
+export const getProject = (projectId: string, signal?: AbortSignal) =>
+  apiFetch<{ success: true; project: Project; capabilities: Record<string, boolean> }>(
+    `/chat/projects/${encodeURIComponent(projectId)}`, { signal, cache: 'no-store' });
+
 export const createProject = (name: string, workspaceId: string, description?: string) =>
   apiFetch<{ success: true; project: Project }>('/chat/projects', {
     method: 'POST',
