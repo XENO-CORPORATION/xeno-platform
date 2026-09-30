@@ -253,7 +253,14 @@ the remainder and wallet conservation matches the charge. An invalid gateway key
 provider; a separate revoked admission stops before a new draw/provider call. Terminal closure is
 mutation-checked independently of revocation so one closing path cannot mask the other.
 
-This is **candidate qualification**, not SDK release/Interface adoption, DPoP consumer qualification,
+A fourth request exercises sender-constrained OIDC: a synthetic issuer-signed token bound to a real
+local session and a per-request P-256 DPoP proof travels through the real workforce authorization
+router and actual gateway verifier. Its own admission has one measured settled draw. Wrong-method
+proof, replayed proof and revoked session refuse before provider work. Public HTTPS identities are
+mapped explicitly to loopback transport in this fixture; no issuer discovery or production TLS is
+claimed. This proves the SDK/account callback seam, not the installed Interface account worker.
+
+This is **candidate qualification**, not SDK release/Interface adoption, complete account sign-in,
 commercial-provider output, cancellation uncertainty reconciliation, or the full workforce mission.
 The SDK owner controls PR100 merge/release sequencing. The Interface execution gate remains closed.
 
