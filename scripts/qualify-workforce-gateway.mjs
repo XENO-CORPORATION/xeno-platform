@@ -27,7 +27,7 @@ test('committed gateway billing composes with canonical run admission, draw sett
   const revision = process.env.GATEWAY_BILLING_COMMIT;
   assert(/^[a-f0-9]{40}$/.test(revision || ''), 'Exact gateway commit required');
   const hashes = {};
-  for (const file of ['src/chat-billing.js', 'src/platform-ledger.js', 'src/caller-tokens.js']) {
+  for (const file of ['src/chat-billing.js', 'src/platform-ledger.js', 'src/caller-tokens.js', 'src/dispatch-tracker.js']) {
     const committed = execFileSync('git', ['-C', process.env.GATEWAY_BILLING_REPO, 'cat-file', 'blob', `${revision}:${file}`]);
     const staged = readFileSync(resolve(process.env.GATEWAY_BILLING_SOURCE, file));
     assert.deepEqual(staged, committed, `gateway module differs from declared commit: ${file}`);
@@ -37,6 +37,7 @@ test('committed gateway billing composes with canonical run admission, draw sett
   const fromGateway = path => import(pathToFileURL(resolve(process.env.GATEWAY_BILLING_SOURCE, path)).href);
   const { createPlatformLedger } = await fromGateway('src/platform-ledger.js');
   const { openChatBilling } = await fromGateway('src/chat-billing.js');
+  const { installDispatchTracking, runTrackingDispatch } = await fromGateway('src/dispatch-tracker.js');
   const pool = new pg.Pool({ connectionString: url, max: 8 }); t.after(() => pool.end());
   const name = randomUUID();
   const owner = (await pool.query(`INSERT INTO users(username,email,password_hash,display_name,email_verified)
@@ -85,8 +86,27 @@ test('committed gateway billing composes with canonical run admission, draw sett
   assert.equal(reused.session,null);assert.equal(reused.res.body.error.code,'lease_consumed','each physical dispatch requires a fresh lease');
   const second=await open(await lease());assert(second.session);
   await second.session.finish();assert.equal((await state(second.id)).state,'voided','proven undispatched request releases its slice only');
-  first.session.dispatch.dispatched=true;
-  const receipt=await first.session.record({model:'claude-opus-5',inputTokens:10,outputTokens:5,measured:true});
+  let providerRequests=0;
+  const providerApp=express(); providerApp.use(express.json());
+  providerApp.post('/v1/chat/completions', async(req,res)=>{
+    providerRequests++;
+    const reserved=await state(first.id);
+    if(reserved?.state!=='open')return res.status(409).json({error:'provider reached without an open draw'});
+    if(req.body.max_tokens!==100)return res.status(400).json({error:'output bound changed'});
+    res.json({model:'claude-opus-5',choices:[{message:{role:'assistant',content:'Fixture reply'}}],usage:{prompt_tokens:10,completion_tokens:5}});
+  });
+  const providerServer=providerApp.listen(0,'127.0.0.1');await new Promise(r=>providerServer.once('listening',r));
+  t.after(async()=>{providerServer.closeAllConnections();await new Promise(r=>providerServer.close(r))});
+  const untrack=installDispatchTracking({ignoreOrigins:[`http://127.0.0.1:${server.address().port}`]});t.after(untrack);
+  await runTrackingDispatch(first.session.dispatch,()=>fetch(`http://127.0.0.1:${server.address().port}/api/v2/ledger/service/quote?model=claude-opus-5&estInputTokens=10&maxOutputTokens=100`,
+    {headers:{authorization:`Bearer ${token}`},signal:AbortSignal.timeout(5000)}).then(r=>r.json()));
+  assert.equal(first.session.dispatch.dispatched,false,'ledger HTTP is not provider dispatch');
+  const response=await runTrackingDispatch(first.session.dispatch,()=>fetch(`http://127.0.0.1:${providerServer.address().port}/v1/chat/completions`,
+    {method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({model:'claude-opus-5',max_tokens:100,messages:[{role:'user',content:'Hello'}]}),signal:AbortSignal.timeout(5000)}));
+  assert.equal(response.status,200,'provider observes an already-open draw and unchanged output bound');
+  const completion=await response.json();
+  assert.equal(providerRequests,1);assert.equal(first.session.dispatch.dispatched,true,'real provider HTTP is tracked');
+  const receipt=await first.session.record({model:completion.model,inputTokens:completion.usage.prompt_tokens,outputTokens:completion.usage.completion_tokens,measured:true});
   assert(!receipt.failed,'real HTTP settlement must succeed');
   await first.session.finish();
   const settled=await state(first.id);assert.equal(settled.state,'settled');assert(BigInt(settled.charged_micro)>0n);
