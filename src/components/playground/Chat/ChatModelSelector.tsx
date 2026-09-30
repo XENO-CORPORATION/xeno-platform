@@ -29,6 +29,12 @@ interface ChatModelSelectorProps {
   isCompact?: boolean;
   isInlineTray?: boolean;
   isMinimal?: boolean;
+  /**
+   * The composer control-row trigger (the approved hybrid design): the model's name as plain text in
+   * the row's model | effort group — no chip, no border — opening its menu UPWARD, because the row sits
+   * at the bottom of the screen in a conversation.
+   */
+  isRowTrigger?: boolean;
   isLoading: boolean;
   isReasoningActive: boolean;
   openRequestKey?: number | null;
@@ -57,6 +63,7 @@ const ChatModelSelector: React.FC<ChatModelSelectorProps> = ({
   isCompact = false,
   isInlineTray = false,
   isMinimal = false,
+  isRowTrigger = false,
   isLoading,
   isReasoningActive,
   openRequestKey = null,
@@ -445,16 +452,18 @@ const ChatModelSelector: React.FC<ChatModelSelectorProps> = ({
           updateOpen(true);
         }}
         className={`chat-model-trigger flex items-center justify-center gap-1.5 border text-xs font-medium text-[var(--chat-text)] transition-[background-color,border-color,color,transform] duration-150 hover:border-[var(--chat-muted)] hover:bg-[var(--chat-hover)] hover:text-[var(--chat-text)] active:scale-[0.98] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--chat-muted)] ${
-          isMinimal
-            ? 'h-8 rounded-[10px] border-[var(--chat-border)] bg-[var(--chat-overlay)] px-3'
-            : 'h-9 rounded-[10px] border-[var(--chat-border)] bg-transparent px-2.5'
+          isRowTrigger
+            ? 'chat-model-row-trigger h-[26px] rounded-md border-transparent bg-transparent px-[7px] text-[11.5px] hover:border-transparent'
+            : isMinimal
+              ? 'h-8 rounded-[10px] border-[var(--chat-border)] bg-[var(--chat-overlay)] px-3'
+              : 'h-9 rounded-[10px] border-[var(--chat-border)] bg-transparent px-2.5'
         } ${
-          isCompact ? 'min-w-[7.5rem] max-w-[9rem]' : 'min-w-[8.5rem] max-w-[11rem]'
+          isRowTrigger ? 'max-w-[15rem]' : isCompact ? 'min-w-[7.5rem] max-w-[9rem]' : 'min-w-[8.5rem] max-w-[11rem]'
         }`}
       >
         {/* One wrapper so the gooey reveal can fade the whole label as a unit. */}
         <span className="flex min-w-0 items-center gap-1.5">
-          {!isMinimal && (
+          {!isMinimal && !isRowTrigger && (
             isLoading ? (
               <Spinner size={14} className="flex-shrink-0" />
             ) : isReasoningActive ? (
@@ -484,7 +493,7 @@ const ChatModelSelector: React.FC<ChatModelSelectorProps> = ({
           role="dialog"
           aria-label="Choose a model"
           className={`absolute right-0 z-30 flex max-h-[min(28rem,60vh)] w-[min(34rem,calc(100vw-2rem))] flex-col overflow-hidden rounded-xl border border-[var(--chat-border)] bg-[var(--chat-elevated)] shadow-[0_18px_50px_color-mix(in_srgb,var(--chat-text)_18%,transparent)] transition-[opacity,transform,visibility] duration-200 ease-out ${
-            isMinimal ? 'top-full mt-2 origin-top-right' : 'bottom-full mb-2 origin-bottom-right'
+            isMinimal && !isRowTrigger ? 'top-full mt-2 origin-top-right' : 'bottom-full mb-2 origin-bottom-right'
           } ${
             isOpen ? 'visible translate-x-0 opacity-100' : 'invisible translate-x-3 opacity-0'
           }`}

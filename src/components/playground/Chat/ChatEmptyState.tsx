@@ -33,6 +33,15 @@ export type ChatEmptyStateTool = 'recent-files';
 
 interface ChatEmptyStateProps {
   children: React.ReactNode;
+  /**
+   * The composer's control row. The composer changes SHAPE by state (the approved hybrid design):
+   * on the empty state it is one box with the controls inside it; in a conversation the box becomes
+   * a raised plate and the controls break out into a row UNDERNEATH it. Same controls, one element,
+   * two homes — never two copies.
+   */
+  controls?: React.ReactNode;
+  /** Floats above the composer in a conversation (the prompt queue). Never shown on the empty state. */
+  aboveComposer?: React.ReactNode;
   isActive: boolean;
   isCompact?: boolean;
   /** Hide the hover tool rail entirely (e.g. the project workspace composer). */
@@ -153,6 +162,8 @@ const AGENT_ACTION_CLOSE_DURATION_MS = chainDurationMs(AGENT_HUB_MOCK_ACTIONS.le
 
 const ChatEmptyState: React.FC<ChatEmptyStateProps> = ({
   children,
+  controls,
+  aboveComposer,
   isActive,
   isCompact = false,
   hideToolRail = false,
@@ -967,6 +978,8 @@ const ChatEmptyState: React.FC<ChatEmptyStateProps> = ({
       {/* The inner field owns the padding now — the column would double it up. */}
       <div data-composer-column className="relative z-10 ml-auto flex w-full min-w-0 flex-col">
         <div className="w-full">{children}</div>
+        {/* Empty state: the controls live INSIDE the one box. */}
+        {isActive && controls && <div data-composer-controls="inside" className="w-full px-3 pb-2.5">{controls}</div>}
       </div>
     </div>
   );
@@ -1066,6 +1079,8 @@ const ChatEmptyState: React.FC<ChatEmptyStateProps> = ({
         </div>
 
         {composerShell}
+        {/* Conversation: the box is the raised plate and the controls break out BELOW it. */}
+        {!isActive && controls && <div data-composer-controls="below" className="relative z-10 w-full px-1 pt-2">{controls}</div>}
       </div>
     </ChatComposerRevealContext.Provider>
   );
@@ -1078,6 +1093,9 @@ const ChatEmptyState: React.FC<ChatEmptyStateProps> = ({
         data-conversation-composer-frame
         className="relative flex w-full flex-col overflow-visible [container-type:inline-size] [container-name:chat-composer]"
       >
+        {/* The queue floats above the composer as its own card. When the reveal row (mode tabs) is up
+            it occupies the band just above the box, so the card steps up out of its way. */}
+        {aboveComposer && <div data-chat-queue-slot className="relative z-10 mb-2.5 transition-[margin] duration-200">{aboveComposer}</div>}
         {composerReveal}
       </div>
     );

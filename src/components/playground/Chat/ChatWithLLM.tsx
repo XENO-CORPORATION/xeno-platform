@@ -52,6 +52,8 @@ import { ChatGeneratedImages, imageAssetFor, type ChatTurnImageView } from './Ch
 import { ChatCodeExecution } from './ChatCodeExecution';
 import { ChatUserMessage } from './ChatUserMessage';
 import { pasteBecomesFile, makePastedTextFile } from './chatPaste';
+import { ChatQueue } from './ChatQueue';
+import { enqueue, removeQueued, moveQueued, updateQueued, markQueuedFileReady, nextSendable, type QueueState } from './chatQueueState';
 import {
   applyTurnEvent, chatFaviconUrl, closeTurnRecord, DEFAULT_STEPS_MODE, isStepsMode, newTurnRecord, normalizeStoredTurn, turnCitedSources, turnHasRail, turnImageModels, turnImages, turnCodeSteps,
   type ChatTurnRecord, type StepsMode,
@@ -3063,8 +3065,12 @@ const ChatWithLLM: React.FC<ChatWithLLMProps> = ({
   const [liveTimerValue, setLiveTimerValue] = useState<number | null>(null);
   const [abortController, setAbortController] = useState<AbortController | null>(null); // Added state for AbortController
 
-  // Queue system state
-  const [queue, setQueue] = useState<QueueState>({ messages: [], isExpanded: false });
+  // Queue system state (chatQueue.ts). HELD while a prompt is being edited or the list rearranged:
+  // a held queue never sends its next prompt.
+  const [queue, setQueue] = useState<QueueState<AttachedFile>>(() => ({ messages: [], isExpanded: true }));
+  const [isQueueHeld, setIsQueueHeld] = useState(false);
+  /* Where the next upload lands: the composer (null), or a queued prompt being edited. */
+  const attachTargetRef = useRef<string | null>(null);
 
   // Real token count state (updated via API)
   const [realTokenCount, setRealTokenCount] = useState<number>(0); // Total including input
@@ -5490,19 +5496,6 @@ const ChatWithLLM: React.FC<ChatWithLLMProps> = ({
   }, []); // Depends only on constants and window properties
   // --- END: MOVED HELPER FUNCTIONS ---
 
-  // Queue system interfaces
-interface QueuedMessage {
-  id: string;
-  text: string;
-  attachedFiles: AttachedFile[];
-  timestamp: number;
-}
-
-interface QueueState {
-  messages: QueuedMessage[];
-  isExpanded: boolean;
-}
-
   useEffect(() => {
     const textarea = textareaRef.current;
     if (textarea) {
@@ -7604,70 +7597,67 @@ interface QueueState {
     }
   };
 
-  // Queue system functions
+  // Queue system functions (state transitions live in chatQueue.ts)
   const addToQueue = () => {
     if (!inputValue.trim() && attachedFiles.length === 0) return;
-    
-    const queuedMessage: QueuedMessage = {
-      id: `queue-${Date.now()}-${Math.random()}`,
+    setQueue(prev => enqueue(prev, {
+      id: `queue-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
       text: inputValue,
       attachedFiles: [...attachedFiles],
-      timestamp: Date.now()
-    };
-    
-    setQueue(prev => ({
-      ...prev,
-      messages: [...prev.messages, queuedMessage]
+      timestamp: Date.now(),
     }));
-    
     // Clear input after adding to queue
     setInputValue('');
     setAttachedFiles([]);
   };
 
-  const removeFromQueue = (messageId: string) => {
-    setQueue(prev => ({
-      ...prev,
-      messages: prev.messages.filter(msg => msg.id !== messageId)
-    }));
+  const removeFromQueue = (messageId: string) => setQueue(prev => removeQueued(prev, messageId));
+  const toggleQueueExpansion = () => setQueue(prev => ({ ...prev, isExpanded: !prev.isExpanded }));
+  const moveInQueue = (from: number, to: number) => setQueue(prev => moveQueued(prev, from, to));
+  const saveQueuedText = (id: string, text: string) => setQueue(prev => updateQueued(prev, id, { text }));
+  const removeQueuedFile = (id: string, fileId: string) => setQueue(prev => {
+    const item = prev.messages.find(m => m.id === id);
+    return item ? updateQueued(prev, id, { attachedFiles: item.attachedFiles.filter(f => f.id !== fileId) }) : prev;
+  });
+  const attachToQueued = (id: string) => {
+    attachTargetRef.current = id;
+    fileInputRef.current?.click();
   };
 
-  const toggleQueueExpansion = () => {
-    setQueue(prev => ({
-      ...prev,
-      isExpanded: !prev.isExpanded
-    }));
-  };
-
-  const processQueue = async () => {
-    if (queue.messages.length === 0 || isLoading) return;
-    
-    const nextMessage = queue.messages[0];
-    
-    // Set the input values from the queued message
-    setInputValue(nextMessage.text);
-    setAttachedFiles(nextMessage.attachedFiles);
-    
-    // Remove from queue
-    removeFromQueue(nextMessage.id);
-    
-    // Trigger generation
-    await handleGenerate();
-  };
-
-  // Effect to process queue when generation finishes
+  /*
+   * Send the next queued prompt once the chat is free. 🔴 It used to set the COMPOSER's state and then
+   * call handleGenerate(), which reads that state from the render it was created in — one step behind.
+   * Each run therefore sent the PREVIOUS prompt's text, and the last queued prompt was removed and
+   * never sent (reproduced 2026-09-30: three prompts queued, two replies). Now the prompt's own text
+   * and files go to handleGenerate directly, and nothing is removed until it can actually be sent:
+   * a held queue, an attachment still scanning, or a send the chat would refuse all WAIT.
+   */
+  // STATE, not a ref: when a queued send finishes, clearing this must re-run the effect below, or the
+  // next prompt would wait for some unrelated render to notice it.
+  const [isQueueSending, setIsQueueSending] = useState(false);
   useEffect(() => {
-    if (!isLoading && queue.messages.length > 0) {
-      processQueue();
-    }
-  }, [isLoading, queue.messages.length]);
+    if (isLoading || isQueueSending) return;
+    const next = nextSendable(queue, { held: isQueueHeld });
+    if (!('item' in next)) return;
+    if (isUploadingAttachments || isContextLimitReached || isModelsLoading) return;
+    const item = next.item;
+    setIsQueueSending(true);
+    setQueue(prev => removeQueued(prev, item.id));
+    void Promise.resolve(handleGenerate(item.text, item.attachedFiles)).finally(() => setIsQueueSending(false));
+  }, [isLoading, isQueueSending, queue, isQueueHeld, isUploadingAttachments, isContextLimitReached, isModelsLoading]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const handleGenerate = async (inputOverride?: string) => {
+  /**
+   * Send a turn. With no arguments it sends the COMPOSER (and clears it). `inputOverride` replaces the
+   * text only (the voice path); `filesOverride` makes it a send that is not the composer's at all — a
+   * queued prompt — so the composer the user may be typing in is left untouched.
+   */
+  const handleGenerate = async (inputOverride?: string, filesOverride?: AttachedFile[]) => {
     const composerText = inputOverride ?? inputValue;
-    const canSend = composerText.trim() || attachedFiles.length > 0;
+    const turnFiles = filesOverride ?? attachedFiles;
+    const canSend = composerText.trim() || turnFiles.length > 0;
     // An attachment still in its malware scan is not sendable yet — a file enters a conversation only
     // once it is scanned and valid (AttachedFile.ready), so a sent message never shows "still scanning".
-    if (!canSend || isLoading || isUploadingAttachments || attachedFiles.some(f => f.ready === false)) return;
+    if (!canSend || isLoading || isUploadingAttachments || turnFiles.some(f => f.ready === false)) return;
     if (isContextLimitReached) return;
     // Until the catalogue answers, `selectedModel` is the hard-coded fallback, not a choice.
     // A message sent now would go to a model the user never picked and the picker never showed.
@@ -7675,7 +7665,7 @@ interface QueueState {
 
     // Prepare the new user message
     const userTextToSend = (inputOverride ?? inputValue).trim();
-    const filesToSend = [...attachedFiles]; // Capture files before clearing
+    const filesToSend = [...turnFiles]; // Capture files before clearing
 
     // console.log('handleGenerate called with text:', userTextToSend); // Original log, can be kept or removed
     const messageId = `user-${Date.now()}`;
@@ -7723,8 +7713,11 @@ interface QueueState {
     };
     // --- End user message preparation ---
 
-    setInputValue('');
-    setAttachedFiles([]);
+    // A queued prompt is not the composer's: whatever the user is typing meanwhile stays.
+    if (filesOverride === undefined) {
+      setInputValue('');
+      setAttachedFiles([]);
+    }
 
     let currentMessageHistory: ChatMessage[] = [...messages, newUserMessage];
     setMessages(currentMessageHistory);
@@ -9784,7 +9777,9 @@ Keep the summary under 500 words. Preserve essential context needed to continue 
     return libraryService.assetReady(assetId);
   };
 
-  const attachFileObjects = async (fileObjs: File[]) => {
+  /** `queuedId`: attach to that queued prompt instead of the composer — the same upload, the same
+   * scan-before-send rule, only a different place for the finished file to land. */
+  const attachFileObjects = async (fileObjs: File[], queuedId: string | null = null) => {
     if (!fileObjs.length) return;
     // The moment we hold the real bytes. Persist now; a metadata-only record disappears off-device.
     setIsUploadingAttachments(true);
@@ -9825,6 +9820,17 @@ Keep the summary under 500 words. Preserve essential context needed to continue 
       const filtered = prev.filter(existingFile => !newRecentFiles.some(newFile => newFile.name === existingFile.name));
       return [...newRecentFiles, ...filtered].slice(0, 20);
     });
+    if (queuedId) {
+      setQueue(prev => {
+        const item = prev.messages.find(m => m.id === queuedId);
+        return item ? updateQueued(prev, queuedId, { attachedFiles: [...item.attachedFiles, ...newFiles] }) : prev;
+      });
+      for (const f of newFiles) {
+        if (!f.assetId) { setQueue(prev => markQueuedFileReady(prev, f.id)); continue; }
+        void waitForAssetReady(f.assetId).then(() => setQueue(prev => markQueuedFileReady(prev, f.id)));
+      }
+      return;
+    }
     setAttachedFiles(prev => [...prev, ...newFiles]);
     setIsAttachMenuOpen(false);
     setIsRecentFilesOpen(false);
@@ -9844,9 +9850,19 @@ Keep the summary under 500 words. Preserve essential context needed to continue 
 
   const handleFileSelected = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const files = event.target.files;
-    if (files && files.length > 0) await attachFileObjects(Array.from(files));
+    const queuedId = attachTargetRef.current;
+    attachTargetRef.current = null;
+    if (files && files.length > 0) await attachFileObjects(Array.from(files), queuedId);
     if (event.target) event.target.value = '';
   };
+  // A picker opened for a queued prompt and then cancelled must not send the NEXT upload there.
+  useEffect(() => {
+    const input = fileInputRef.current;
+    if (!input) return undefined;
+    const reset = () => { attachTargetRef.current = null; };
+    input.addEventListener('cancel', reset);
+    return () => input.removeEventListener('cancel', reset);
+  }, []);
 
   /**
    * A large paste becomes a `Pasted text.txt` attachment instead of a wall of inline text — the
@@ -12358,30 +12374,433 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
           <div className="relative z-10">
           <ChatEmptyState
             scrollAffordance={composerScrollAffordance}
+            /* The prompt queue floats above the composer while a chat runs (ChatQueue.tsx). */
+            aboveComposer={queue.messages.length > 0 && messages.length > 0 ? (
+              <ChatQueue
+                queue={queue}
+                waiting={(isLoading || messages.some((m) => m.isStreaming)) ? 'reply' : queue.messages[0]?.attachedFiles.some((f) => f.ready === false) ? 'scanning' : 'ready'}
+                onToggle={toggleQueueExpansion}
+                onRemove={removeFromQueue}
+                onMove={moveInQueue}
+                onSaveText={saveQueuedText}
+                onRemoveFile={removeQueuedFile}
+                onAttach={attachToQueued}
+                onHoldChange={setIsQueueHeld}
+              />
+            ) : undefined}
+            /* The control row: inside the box on the empty state, underneath it in a conversation. */
+            controls={(
+                <div className={`chat-input-controls flex items-center justify-between gap-2 ${messages.length === 0 ? 'mt-1.5 md:mt-2' : 'mt-1'}`}>
+                  <div className="flex items-center gap-1 md:gap-2 relative">
+                      {/* "+" reveals the mode tabs above the box; Upload rides out with it. */}
+                      <ComposerRevealControls />
+                      {/* Attach / Recent live on the hover tool rail (empty + conversation). */}
+                      <div className="relative hidden">
+                          <IconButton
+                            icon={PaperclipDecl}
+                            variant="quiet"
+                            size="sm"
+                            iconSize={16}
+                            ref={attachButtonRef}
+                            onClick={toggleAttachMenu}
+                            aria-label="Attach file"
+                            disabled={!modelSupportsVision(selectedModel)}
+                          />
+                          {/* Attach Menu */}
+                          <div 
+                              {...(() => { const { ref: _g, className: _c, ...handlers } = attachMenuGoo.hostProps; return handlers; })()}
+                              {...attachMenuKbd.menuProps}
+                              className={`
+                                  ${attachMenuGoo.hostProps.className} chat-goo
+                                  absolute bottom-full left-0 z-30 mb-2 origin-bottom-left
+                                  w-64 rounded-lg border border-[var(--chat-border)] bg-[var(--chat-elevated)] shadow-xl
+                                  transition-[opacity,transform] duration-200 ease-out
+                                  ${isAttachMenuOpen 
+                                      ? 'opacity-100 scale-100 visible' 
+                                      : 'opacity-0 scale-95 invisible' 
+                                  }
+                              `}
+                           >
+                               {/* First child, so the pill paints behind the rows rather than over them. */}
+                               {attachMenuGoo.pill}
+                               <div className="space-y-1 p-2">
+                                   <MenuItem leadingIcon={FolderUpDecl} onSelect={handleUploadFile}>
+                                       Upload a file
+                                   </MenuItem>
+                                   <div className="mx-1 my-1 border-t border-[var(--chat-border)]"></div>
+                                   {/* `submenu` AND `aria-expanded`, and both are true: the row promises a
+                                       panel and that panel is currently showing. The second is what keeps
+                                       this menu alive — `useMenu` dismisses on any chosen row except one
+                                       reporting `aria-expanded`, and the Recent panel is only visible
+                                       while `isAttachMenuOpen`, so closing here would destroy the thing
+                                       the click just asked for. */}
+                                   <MenuItem
+                                       leadingIcon={FileClockDecl}
+                                       submenu
+                                       aria-expanded={isRecentFilesOpen}
+                                       onSelect={handleShowRecent}
+                                   >
+                                       Recent
+                                   </MenuItem>
+                               </div>
+                             </div>
+                            {/* Recent Files Panel */}
+                             <div 
+                                ref={recentFilesPanelRef}
+                                className={`
+                                    hide-scrollbar
+                                    absolute bottom-full left-full z-30 mb-2 ml-2 origin-bottom-left
+                                    max-h-[320px] w-72 overflow-y-auto rounded-2xl border border-[var(--chat-border)] bg-[var(--chat-elevated)] shadow-xl
+                                    transition-all duration-200 ease-out
+                                    ${isRecentFilesOpen && isAttachMenuOpen 
+                                        ? 'opacity-100 scale-100 visible' 
+                                        : 'opacity-0 scale-95 invisible' 
+                                    }
+                                `}
+                                style={{ left: 'calc(16rem + 0.5rem)' }} // Adjust positioning if needed
+                              >
+                                     <div className="p-2">
+                                         {/* Header */}
+                                         <div className="mb-2 flex items-center justify-between px-1.5 pt-0.5">
+                                           <span className="select-none text-[10.5px] font-semibold uppercase tracking-[0.12em] text-[var(--chat-muted)]">Recent</span>
+                                           <IconButton
+                                             icon={XDecl}
+                                             variant="ghost"
+                                             size="xs"
+                                             iconSize={13}
+                                             onClick={() => setIsRecentFilesOpen(false)}
+                                             aria-label="Close recent files"
+                                           />
+                                         </div>
+                                         <div className="mx-1.5 mb-2 h-px bg-[var(--chat-border)]" />
+                                         {/* Recent Files Search */}
+                                         {/* §7's canonical field: the `relative` wrapper, the
+                                             absolutely-placed magnifier and the `pl-7` that dodged it
+                                             all go, and the glyph becomes `leadingIcon`. Four lines
+                                             become one, and the box that was three elements deep is one
+                                             element.
+                                             `iconSize={14}` holds the magnifier where it was — `sm`
+                                             draws 16, which is why `TextInput` grew that door in this
+                                             same pass. The fill was already `--chat-canvas`, which is
+                                             what `.xeno-input` paints, and the focus border was already
+                                             `--chat-muted`, which is what it focuses to. The radius
+                                             moves 8 to 6, onto the scale. */}
+                                         {recentFiles.length > 3 && (
+                                           <div className="mb-2">
+                                             <TextInput
+                                               size="sm"
+                                               iconSize={14}
+                                               leadingIcon={SearchDecl}
+                                               className="w-full"
+                                               type="text"
+                                               placeholder="Search files..."
+                                               value={recentFilesSearchQuery}
+                                               onChange={(e) => setRecentFilesSearchQuery(e.target.value)}
+                                               aria-label="Search recent files"
+                                             />
+                                           </div>
+                                         )}
+                                         {recentFiles.length === 0 ? (
+                                           <div className="px-3 py-6 text-center text-sm text-[var(--chat-muted)]">
+                                             <FileClock size={24} className="mx-auto mb-2 text-[var(--chat-muted)]" />
+                                             <p>No recent files</p>
+                                             <p className="mt-1 text-xs">Files you attach will appear here</p>
+                                           </div>
+                                         ) : (
+                                           recentFiles
+                                             .filter(file =>
+                                               !recentFilesSearchQuery.trim() ||
+                                               file.name.toLowerCase().includes(recentFilesSearchQuery.toLowerCase())
+                                             )
+                                             .map((file: typeof recentFiles[0]) => (
+                                             <div key={file.id} className="group flex cursor-pointer items-center justify-between gap-2 rounded-lg px-2 py-2 text-sm text-[var(--chat-text)] transition-colors hover:bg-[var(--chat-hover)]">
+                                               <div 
+                                                 className="flex items-center gap-2 overflow-hidden flex-1" 
+                                                 onClick={() => handleReattachRecentFile(file)}
+                                               >
+                                                 <span className="flex w-7 flex-shrink-0 items-center justify-center">
+                                                   {file.type.startsWith('image/') && file.preview ? (
+                                                     <img src={file.preview} alt="" className="h-7 w-7 rounded-md object-cover" />
+                                                   ) : (
+                                                     <FileText size={17} className="text-[var(--chat-muted)]" />
+                                                   )}
+                                                 </span>
+                                                 <div className="flex flex-col overflow-hidden">
+                                                    <span className="truncate" title={file.name}>{file.name}</span>
+                                                   <span className="mt-0.5 font-mono text-[11px] text-[var(--chat-muted)]">
+                                                     {(file.size / 1024).toFixed(1)} KB · {new Date(file.lastUsed).toLocaleDateString()}
+                                                   </span>
+                                                 </div>
+                                               </div>
+                                               <IconButton
+                                                 icon={XDecl}
+                                                 variant="ghost"
+                                                 size="xs"
+                                                 iconSize={14}
+                                                 onClick={(e) => {
+                                                   e.stopPropagation();
+                                                   handleRemoveRecentFile(file.id);
+                                                 }}
+                                                 aria-label="Remove"
+                                               />
+                                             </div>
+                                           ))
+                                         )}
+                              </div>
+                            </div>
+                          </div>
+                          {/* Context usage. The permanent "n / m tokens" readout is gone from the
+                              composer — the control row is meant to read as the designed one ("+",
+                              Upload | mic, Send). It only speaks up when it has something to offer:
+                              the Compress action, or a near/over-limit warning. */}
+                          {!isMobile && (
+                            <div data-token-context-counter className="flex shrink-0 items-center whitespace-nowrap empty:hidden">
+                              {(() => {
+                                const totalUsedTokens = activeConversationTokenCount + currentInputAndSystemTokens;
+                                const maxTokens = selectedModel?.maxTokens || 200000;
+                                // Use conversation-only tokens for compress threshold (not input)
+                                const conversationUsagePercent = conversationTokenCount / maxTokens;
+                                const totalUsagePercent = totalUsedTokens / maxTokens;
+                                const canCompress = conversationUsagePercent > 0.9 && messages.length > 0;
+                                const isNearLimit = totalUsagePercent > 0.9;
+                                const isOverLimit = totalUsagePercent > 1;
+
+                                if (!canCompress && !isNearLimit) return null;
+
+                                if (canCompress) {
+                                  // Show compress button only when CONVERSATION history is near limit
+                                  /* Stays hand-written: it has no box. No padding, no height, no fill
+                                     and no border — a line of tabular numbers that swaps itself for the
+                                     word "Compress" under the pointer. A `Button` is a box with a height
+                                     and side padding, and giving this one either would move the
+                                     composer's status row. It reads as text because it is text that
+                                     happens to be clickable. */
+                                  return (
+                                    <button
+                                      onClick={() => compactConversation(selectedModel)}
+                                      disabled={isLoading}
+                                      className="group text-xs text-[var(--chat-muted)] transition-all hover:text-[var(--chat-text)] disabled:cursor-not-allowed disabled:opacity-50 tabular-nums"
+                                    >
+                                      <span className="group-hover:hidden">
+                                        {totalUsedTokens.toLocaleString()} / {maxTokens.toLocaleString()} tokens
+                                      </span>
+                                      <span className="hidden font-medium group-hover:inline">
+                                        Compress
+                                      </span>
+                                    </button>
+                                  );
+                                }
+                                return (
+                                  <span className={`text-xs tabular-nums ${isOverLimit ? 'text-[var(--chat-danger)]' : isNearLimit ? 'text-[var(--chat-text)]' : 'text-[var(--chat-muted)]'}`}>
+                                    {totalUsedTokens.toLocaleString()} / {maxTokens.toLocaleString()} tokens
+                                  </span>
+                                );
+                              })()}
+                            </div>
+                          )}
+                          {/* A fixed-effort tier whose provider keeps the trace: say so, or the absence of a
+                              thought reads as the chat losing it (measured 2026-09-18: grok-4.6 streams its
+                              reasoning, grok-4.6-high-fast does not — by xAI's design). */}
+                          {reasoningTraceForModel(selectedModel.id) === 'internal' && (
+                            <span
+                              data-reasoning-trace="internal"
+                              className="text-[11px] text-[var(--chat-muted)]"
+                              title="This tier reasons at a fixed effort; the provider does not return its thought, so none is shown."
+                            >
+                              reasons internally
+                            </span>
+                          )}
+                  </div>
+                      <div className="flex items-center gap-2 md:gap-3">
+                      {/* model | effort — one group, the model's name as text and the effort as a pill
+                          (the approved hybrid design). Thinking on/off is the effort's `Off` level:
+                          one control, never a separate Brain button beside a chip. */}
+                      <div data-composer-model-group className="flex h-[26px] min-w-0 items-center">
+                        <ChatModelSelector
+                          groupedModels={groupedModels}
+                          isCompact={isMobile || isMultiInterface}
+                          isRowTrigger
+                          isLoading={isModelsLoading}
+                          isReasoningActive={modelHasReasoningCapability(selectedModel.id, selectedModel) === 'alwaysOn' || requestShapeFor(selectedModel.id, selectedEffort).reasons}
+                          openRequestKey={modelSelectorOpenRequestKey}
+                          onOpenRequestHandled={acknowledgeComposerModelSelectorRequest}
+                          onOpenChange={setIsComposerModelSelectorOpen}
+                          onSelect={handleModelSelect}
+                          selectedModel={selectedModel}
+                          triggerId={modelSelectorControlId}
+                        />
+                        {modelHasEffortLevels && (
+                          <>
+                            <span className="mx-px h-[11px] w-px flex-none bg-[var(--chat-border)]" aria-hidden="true" />
+                            <ChatEffortControl model={selectedModel} value={selectedEffort} onChange={chooseEffort} thinking={{ on: isReasonToggled, onToggle: toggleReasoning }} disabled={isLoading} />
+                          </>
+                        )}
+                      </div>
+                      {(isLoading || messages.some((m) => m.isStreaming)) ? (
+                        // While generating OR typing out the answer: Queue (if typing) else Stop.
+                        (inputValue.trim() || attachedFiles.length > 0) ? (
+                          <IconButton
+                            icon={PlusDecl}
+                            variant="ghost"
+                            size="sm"
+                            iconSize={16}
+                            onClick={addToQueue}
+                            title="Queue it — sends automatically after this reply"
+                            aria-label="Add this message to the queue"
+                          />
+                        ) : (
+                          /* Stays hand-written, and the reason is a pair rather than this button.
+                             The three composer actions — Stop, Mic, Send — are guaranteed the same box
+                             by one shared `composerActionButtonSizeClass`, and a test counts its uses to
+                             keep that guarantee. Send cannot convert at all: index.css repaints it with
+                             `!important` in both states, so a variant would have nothing to decide.
+                             Converting the two that could would leave the pair the same size by two
+                             different mechanisms, which is the drift the shared class exists to stop.
+                             The class itself is already the scale — `h-7 w-7 rounded-lg` is `sm` at the
+                             control radius — so this converts the day Send can. */
+                          <button
+                            onClick={handleStopGeneration}
+                            title="Stop generating"
+                            aria-label="Stop generating"
+                            className={`${composerActionButtonSizeClass} flex items-center justify-center bg-[var(--chat-surface)] text-[var(--chat-text)] transition-all hover:bg-[var(--chat-control)] active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--chat-muted)]`}
+                          >
+                            {/* The last lucide import left in the chat's chrome, and it was not being used
+                                as an icon: `fill="currentColor" strokeWidth={0}` is a call site asking for a
+                                RECTANGLE. XENO has a `stop`, and its declaration already settled what stop
+                                looks like in this grammar — a rounded square outline, deliberately not the
+                                filled block a media player would use.
+
+                                So this is a visible change: the button goes from a solid square to an
+                                outlined one. It is the set's own answer to the question, and it brings the
+                                control a hover motion it never had. */}
+                            <Stop size={14} />
+                          </button>
+                        )
+                      ) : (
+                        <>
+                          <div
+                            ref={voiceControlRef}
+                            className="voice-control relative flex items-center"
+                            data-voice-menu-open={isVoiceModeMenuOpen ? 'true' : 'false'}
+                          >
+                            {/* Two losses from one conversion, and the second is not cosmetic.
+                                `data-voice-mode-trigger` went because the grep for it only read `src/`;
+                                `scripts/test-chat-voice-controls.mjs` reads this file as TEXT and looks
+                                for the attribute by name.
+                                `absolute right-full mr-1` went because the whole className was replaced
+                                rather than filtered — and those are LAYOUT. Without them the chevron
+                                joined the flow and pushed Send along the row, which is the one thing the
+                                test that noticed is named after. `flex h-7 w-7` did not come back: that
+                                is `sm`, and it is the component's to say. */}
+                            <IconButton
+                              icon={ChevronDownDecl}
+                              variant="ghost"
+                              size="sm"
+                              iconSize={15}
+                              className="absolute right-full mr-1"
+                              data-voice-mode-trigger
+                              onClick={() => (isVoiceModeMenuOpen ? closeVoiceMenu() : openVoiceMenu())}
+                              aria-label="Voice input options"
+                              aria-expanded={isVoiceModeMenuOpen}
+                              aria-haspopup="dialog"
+                            />
+                            {/* Stays hand-written — Stop's neighbour, same shared size class and the
+                                same pair that cannot be split. */}
+                            <button
+                              type="button"
+                              data-voice-primary
+                              onClick={voiceInputMode === 'tap' ? handleToggleVoiceInput : undefined}
+                              onPointerDown={handleVoicePointerDown}
+                              onPointerUp={handleVoicePointerUp}
+                              onPointerCancel={handleVoicePointerUp}
+                              onKeyDown={handleVoiceKeyDown}
+                              onKeyUp={handleVoiceKeyUp}
+                              className={`${composerActionButtonSizeClass} flex items-center justify-center transition-all relative ${isVoiceInputActive ? 'bg-[var(--chat-control)]/70' : 'bg-[var(--chat-surface)] hover:bg-[var(--chat-control)]'}`}
+                              aria-label={isVoiceInputActive ? 'Stop voice input' : voiceInputMode === 'hold' ? 'Hold to record voice input' : 'Start voice input'}
+                            >
+                              {isVoiceInputActive && (
+                                <span className="absolute inset-0 flex items-center justify-center">
+                                  <span className="animate-ping h-3.5 w-3.5 rounded-full bg-[var(--chat-danger)] opacity-75"></span>
+                                </span>
+                              )}
+                              <Mic size={16} className={`relative ${isVoiceInputActive ? 'text-[var(--chat-danger)]' : 'text-[var(--chat-muted)]'}`} />
+                            </button>
+                            {(isVoiceModeMenuOpen || isVoiceMenuClosing) && (
+                              <div
+                                data-voice-mode-popover
+                                role="dialog"
+                                aria-label="Voice input options"
+                                className={`absolute -right-10 bottom-full z-40 mb-1.5 w-40 rounded-lg border border-[var(--chat-border)] bg-[var(--chat-elevated)] px-2 py-1.5 shadow-lg shadow-black/20 ${isVoiceModeMenuOpen ? 'voice-menu-in' : 'voice-menu-out'}`}
+                              >
+                                <div className="flex items-center justify-between gap-2">
+                                  <div className="flex min-w-0 items-center gap-1.5">
+                                    <Hand size={13} className="shrink-0 text-[var(--chat-muted)]" aria-hidden="true" />
+                                    <span className="truncate text-[11px] font-medium text-[var(--chat-text)]">Hold to record</span>
+                                  </div>
+                                  {/* Stays hand-written: a 28 x 16 track with a thumb that grows as it
+                                      travels, where `<Switch>` is 36 x 20 with a 14px knob. Smaller than
+                                      the component in both directions, and its exact class strings are
+                                      pinned by scripts/test-chat-voice-controls.mjs down to the thumb's
+                                      travel in pixels. */}
+                                  <button
+                                    type="button"
+                                    data-voice-hold-switch
+                                    role="switch"
+                                    aria-checked={voiceInputMode === 'hold'}
+                                    onClick={() => {
+                                      stopVoiceInput();
+                                      setVoiceInputMode((mode) => mode === 'hold' ? 'tap' : 'hold');
+                                    }}
+                                    className={`relative inline-flex h-4 w-7 shrink-0 items-center rounded-md border p-[2px] transition-[background-color,border-color] duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] motion-reduce:transition-none focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--chat-text)]/40 ${
+                                      voiceInputMode === 'hold'
+                                        ? 'border-[var(--chat-text)] bg-[var(--chat-text)]'
+                                        : 'border-[var(--chat-border)] bg-[var(--chat-canvas)]'
+                                    }`}
+                                  >
+                                    <span
+                                      className={`pointer-events-none absolute left-[2px] top-1/2 block rounded-[3px] transition-[transform,background-color,width,height] duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] motion-reduce:transition-none ${
+                                        voiceInputMode === 'hold'
+                                          ? 'h-3 w-3 translate-x-[10px] -translate-y-1/2 bg-[var(--chat-elevated)]'
+                                          : 'h-2.5 w-2.5 translate-x-0 -translate-y-1/2 bg-[var(--chat-text)]'
+                                      }`}
+                                    />
+                                  </button>
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                          {/* Stays hand-written, and it is the one holding the other two here. The
+                              normalisation block paints it with `!important` in both states — accent
+                              fill and inverted ink when it can send, a muted control fill when it
+                              cannot — so every colour a variant would choose is overruled before it
+                              renders. Its enabled state is also the inverted emphasis the variant set
+                              does not carry (§9). */}
+                          <button
+                            type="button"
+                            data-composer-send-button
+                            onClick={handleVoiceSend}
+                            className={`flex items-center justify-center transition-[background-color,color,transform,opacity] duration-200 active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--chat-accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--chat-canvas)] ${(inputValue.trim() || attachedFiles.length > 0) && !isUploadingAttachments && !attachedFiles.some(f => f.ready === false) ? 'bg-[var(--chat-accent)] text-[var(--chat-on-accent)] hover:opacity-90 motion-safe:animate-send-button-enter' : 'cursor-not-allowed border border-[var(--chat-border)] bg-[var(--chat-control)] text-[var(--chat-muted)]'} ${composerActionButtonSizeClass}`}
+                            aria-label={isModelsLoading ? 'Send message (waiting for models)' : (isUploadingAttachments || attachedFiles.some(f => f.ready === false)) ? 'Send message (scanning attachment…)' : 'Send message'}
+                            disabled={!(inputValue.trim() || attachedFiles.length > 0) || isContextLimitReached || isModelsLoading || isUploadingAttachments || attachedFiles.some(f => f.ready === false)}
+                          >
+                            {/* The send arrow was hand-drawn here — stroke 2, round caps — while every other
+                                glyph in the composer came from the set at 1.75 with butt caps. It never
+                                animated because there was nothing to animate: no `data-glyph`, no parts, no
+                                rule to match. It looked like a hover that had been forgotten rather than an
+                                icon that had never been one. */}
+                            <ArrowUp size={16} />
+                          </button>
+                        </>
+                      )}
+                    </div>
+                    </div>
+            )}
             isActive={options?.forceCompact ? false : messages.length === 0}
             isCompact={isMultiInterface}
             isTemporaryChat={isTemporaryChat}
             hideToolRail={options?.forceCompact}
             activeMode={emptyStateMode}
             canAnalyzeDocument={modelSupportsFileUpload(selectedModel)}
-            modelSelectorOpenRequestKey={modelSelectorOpenRequestKey}
-            modelSelector={({ isInlineTray, onOpenChange }) => (
-              <ChatModelSelector
-                groupedModels={groupedModels}
-                isCompact={isMobile || isMultiInterface}
-                isInlineTray={isInlineTray}
-                isMinimal
-                isLoading={isModelsLoading}
-                isReasoningActive={modelHasReasoningCapability(selectedModel.id, selectedModel) === 'alwaysOn' || requestShapeFor(selectedModel.id, selectedEffort).reasons}
-                openRequestKey={modelSelectorOpenRequestKey}
-                onOpenRequestHandled={acknowledgeComposerModelSelectorRequest}
-                onOpenChange={onOpenChange}
-                onSelect={handleModelSelect}
-                selectedModel={selectedModel}
-                triggerId={modelSelectorControlId}
-              />
-            )}
-            onModelSelectorOpenChange={setIsComposerModelSelectorOpen}
             onAgentActionSelect={handleEmptyStateAgentAction}
             onModeChange={handleEmptyStateModeChange}
             onUploadFile={handleUploadFile}
@@ -12392,57 +12811,6 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                 : undefined
             }
           >
-          {/* Queue Container */}
-          {queue.messages.length > 0 && (
-            <div className="mb-3 bg-[var(--chat-surface)] border border-[var(--chat-border)] rounded-lg shadow-md">
-              <div className="w-full flex items-center justify-between p-3 text-left text-[var(--chat-text)] rounded-lg">
-                <div className="flex items-center gap-2">
-                  <span className="text-sm font-medium">{queue.messages.length} in queue</span>
-                </div>
-                <IconButton
-                  icon={ChevronDownDecl}
-                  variant="ghost"
-                  size="xs"
-                  iconSize={16}
-                  onClick={toggleQueueExpansion}
-                  aria-label={queue.isExpanded ? 'Collapse queued messages' : 'Expand queued messages'}
-                />
-              </div>
-              
-              {queue.isExpanded && (
-                <div className="px-3 pb-3 space-y-2">
-                  {queue.messages.map((queuedMessage, index) => (
-                    <div 
-                      key={queuedMessage.id}
-                      className="flex items-center justify-between p-2 bg-[var(--chat-surface)]/80 rounded-md border border-[var(--chat-border)]/50"
-                    >
-                      <div className="flex items-center gap-2 flex-1 min-w-0">
-                        <div className="w-4 h-4 rounded-full border-2 border-[var(--chat-border)] flex-shrink-0"></div>
-                        <div className="flex-1 min-w-0">
-                          <div className="text-sm text-[var(--chat-text)] truncate">
-                            {queuedMessage.text || `Task ${index + 1}`}
-                          </div>
-                          {queuedMessage.attachedFiles.length > 0 && (
-                            <div className="text-xs text-[var(--chat-muted)] mt-1">
-                              {queuedMessage.attachedFiles.length} file(s) attached
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                      <IconButton
-                        icon={XDecl}
-                        variant="ghost"
-                        size="xs"
-                        iconSize={14}
-                        onClick={() => removeFromQueue(queuedMessage.id)}
-                        aria-label="Remove from queue"
-                      />
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          )}
 
           {/* Input Box Area — inner bordered field inside the composer shell (empty + conversation). */}
           <div
@@ -12598,407 +12966,6 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
               />
             </div>
             
-            {/* Controls Row */}
-            <div className={`chat-input-controls flex items-center justify-between gap-2 ${messages.length === 0 ? 'mt-1.5 md:mt-2' : 'mt-1'}`}>
-              <div className="flex items-center gap-1 md:gap-2 relative">
-                  {/* "+" reveals the mode tabs / model chip above the box; Upload rides out with it. */}
-                  <ComposerRevealControls />
-                  {/* Attach / Recent live on the hover tool rail (empty + conversation). */}
-                  <div className="relative hidden">
-                      <IconButton
-                        icon={PaperclipDecl}
-                        variant="quiet"
-                        size="sm"
-                        iconSize={16}
-                        ref={attachButtonRef}
-                        onClick={toggleAttachMenu}
-                        aria-label="Attach file"
-                        disabled={!modelSupportsVision(selectedModel)}
-                      />
-                      {/* Attach Menu */}
-                      <div 
-                          {...(() => { const { ref: _g, className: _c, ...handlers } = attachMenuGoo.hostProps; return handlers; })()}
-                          {...attachMenuKbd.menuProps}
-                          className={`
-                              ${attachMenuGoo.hostProps.className} chat-goo
-                              absolute bottom-full left-0 z-30 mb-2 origin-bottom-left
-                              w-64 rounded-lg border border-[var(--chat-border)] bg-[var(--chat-elevated)] shadow-xl
-                              transition-[opacity,transform] duration-200 ease-out
-                              ${isAttachMenuOpen 
-                                  ? 'opacity-100 scale-100 visible' 
-                                  : 'opacity-0 scale-95 invisible' 
-                              }
-                          `}
-                       >
-                           {/* First child, so the pill paints behind the rows rather than over them. */}
-                           {attachMenuGoo.pill}
-                           <div className="space-y-1 p-2">
-                               <MenuItem leadingIcon={FolderUpDecl} onSelect={handleUploadFile}>
-                                   Upload a file
-                               </MenuItem>
-                               <div className="mx-1 my-1 border-t border-[var(--chat-border)]"></div>
-                               {/* `submenu` AND `aria-expanded`, and both are true: the row promises a
-                                   panel and that panel is currently showing. The second is what keeps
-                                   this menu alive — `useMenu` dismisses on any chosen row except one
-                                   reporting `aria-expanded`, and the Recent panel is only visible
-                                   while `isAttachMenuOpen`, so closing here would destroy the thing
-                                   the click just asked for. */}
-                               <MenuItem
-                                   leadingIcon={FileClockDecl}
-                                   submenu
-                                   aria-expanded={isRecentFilesOpen}
-                                   onSelect={handleShowRecent}
-                               >
-                                   Recent
-                               </MenuItem>
-                           </div>
-                         </div>
-                        {/* Recent Files Panel */}
-                         <div 
-                            ref={recentFilesPanelRef}
-                            className={`
-                                hide-scrollbar
-                                absolute bottom-full left-full z-30 mb-2 ml-2 origin-bottom-left
-                                max-h-[320px] w-72 overflow-y-auto rounded-2xl border border-[var(--chat-border)] bg-[var(--chat-elevated)] shadow-xl
-                                transition-all duration-200 ease-out
-                                ${isRecentFilesOpen && isAttachMenuOpen 
-                                    ? 'opacity-100 scale-100 visible' 
-                                    : 'opacity-0 scale-95 invisible' 
-                                }
-                            `}
-                            style={{ left: 'calc(16rem + 0.5rem)' }} // Adjust positioning if needed
-                          >
-                                 <div className="p-2">
-                                     {/* Header */}
-                                     <div className="mb-2 flex items-center justify-between px-1.5 pt-0.5">
-                                       <span className="select-none text-[10.5px] font-semibold uppercase tracking-[0.12em] text-[var(--chat-muted)]">Recent</span>
-                                       <IconButton
-                                         icon={XDecl}
-                                         variant="ghost"
-                                         size="xs"
-                                         iconSize={13}
-                                         onClick={() => setIsRecentFilesOpen(false)}
-                                         aria-label="Close recent files"
-                                       />
-                                     </div>
-                                     <div className="mx-1.5 mb-2 h-px bg-[var(--chat-border)]" />
-                                     {/* Recent Files Search */}
-                                     {/* §7's canonical field: the `relative` wrapper, the
-                                         absolutely-placed magnifier and the `pl-7` that dodged it
-                                         all go, and the glyph becomes `leadingIcon`. Four lines
-                                         become one, and the box that was three elements deep is one
-                                         element.
-                                         `iconSize={14}` holds the magnifier where it was — `sm`
-                                         draws 16, which is why `TextInput` grew that door in this
-                                         same pass. The fill was already `--chat-canvas`, which is
-                                         what `.xeno-input` paints, and the focus border was already
-                                         `--chat-muted`, which is what it focuses to. The radius
-                                         moves 8 to 6, onto the scale. */}
-                                     {recentFiles.length > 3 && (
-                                       <div className="mb-2">
-                                         <TextInput
-                                           size="sm"
-                                           iconSize={14}
-                                           leadingIcon={SearchDecl}
-                                           className="w-full"
-                                           type="text"
-                                           placeholder="Search files..."
-                                           value={recentFilesSearchQuery}
-                                           onChange={(e) => setRecentFilesSearchQuery(e.target.value)}
-                                           aria-label="Search recent files"
-                                         />
-                                       </div>
-                                     )}
-                                     {recentFiles.length === 0 ? (
-                                       <div className="px-3 py-6 text-center text-sm text-[var(--chat-muted)]">
-                                         <FileClock size={24} className="mx-auto mb-2 text-[var(--chat-muted)]" />
-                                         <p>No recent files</p>
-                                         <p className="mt-1 text-xs">Files you attach will appear here</p>
-                                       </div>
-                                     ) : (
-                                       recentFiles
-                                         .filter(file =>
-                                           !recentFilesSearchQuery.trim() ||
-                                           file.name.toLowerCase().includes(recentFilesSearchQuery.toLowerCase())
-                                         )
-                                         .map((file: typeof recentFiles[0]) => (
-                                         <div key={file.id} className="group flex cursor-pointer items-center justify-between gap-2 rounded-lg px-2 py-2 text-sm text-[var(--chat-text)] transition-colors hover:bg-[var(--chat-hover)]">
-                                           <div 
-                                             className="flex items-center gap-2 overflow-hidden flex-1" 
-                                             onClick={() => handleReattachRecentFile(file)}
-                                           >
-                                             <span className="flex w-7 flex-shrink-0 items-center justify-center">
-                                               {file.type.startsWith('image/') && file.preview ? (
-                                                 <img src={file.preview} alt="" className="h-7 w-7 rounded-md object-cover" />
-                                               ) : (
-                                                 <FileText size={17} className="text-[var(--chat-muted)]" />
-                                               )}
-                                             </span>
-                                             <div className="flex flex-col overflow-hidden">
-                                                <span className="truncate" title={file.name}>{file.name}</span>
-                                               <span className="mt-0.5 font-mono text-[11px] text-[var(--chat-muted)]">
-                                                 {(file.size / 1024).toFixed(1)} KB · {new Date(file.lastUsed).toLocaleDateString()}
-                                               </span>
-                                             </div>
-                                           </div>
-                                           <IconButton
-                                             icon={XDecl}
-                                             variant="ghost"
-                                             size="xs"
-                                             iconSize={14}
-                                             onClick={(e) => {
-                                               e.stopPropagation();
-                                               handleRemoveRecentFile(file.id);
-                                             }}
-                                             aria-label="Remove"
-                                           />
-                                         </div>
-                                       ))
-                                     )}
-                          </div>
-                        </div>
-                      </div>
-                      {/* Context usage. The permanent "n / m tokens" readout is gone from the
-                          composer — the control row is meant to read as the designed one ("+",
-                          Upload | mic, Send). It only speaks up when it has something to offer:
-                          the Compress action, or a near/over-limit warning. */}
-                      {!isMobile && (
-                        <div data-token-context-counter className="flex shrink-0 items-center whitespace-nowrap empty:hidden">
-                          {(() => {
-                            const totalUsedTokens = activeConversationTokenCount + currentInputAndSystemTokens;
-                            const maxTokens = selectedModel?.maxTokens || 200000;
-                            // Use conversation-only tokens for compress threshold (not input)
-                            const conversationUsagePercent = conversationTokenCount / maxTokens;
-                            const totalUsagePercent = totalUsedTokens / maxTokens;
-                            const canCompress = conversationUsagePercent > 0.9 && messages.length > 0;
-                            const isNearLimit = totalUsagePercent > 0.9;
-                            const isOverLimit = totalUsagePercent > 1;
-
-                            if (!canCompress && !isNearLimit) return null;
-
-                            if (canCompress) {
-                              // Show compress button only when CONVERSATION history is near limit
-                              /* Stays hand-written: it has no box. No padding, no height, no fill
-                                 and no border — a line of tabular numbers that swaps itself for the
-                                 word "Compress" under the pointer. A `Button` is a box with a height
-                                 and side padding, and giving this one either would move the
-                                 composer's status row. It reads as text because it is text that
-                                 happens to be clickable. */
-                              return (
-                                <button
-                                  onClick={() => compactConversation(selectedModel)}
-                                  disabled={isLoading}
-                                  className="group text-xs text-[var(--chat-muted)] transition-all hover:text-[var(--chat-text)] disabled:cursor-not-allowed disabled:opacity-50 tabular-nums"
-                                >
-                                  <span className="group-hover:hidden">
-                                    {totalUsedTokens.toLocaleString()} / {maxTokens.toLocaleString()} tokens
-                                  </span>
-                                  <span className="hidden font-medium group-hover:inline">
-                                    Compress
-                                  </span>
-                                </button>
-                              );
-                            }
-                            return (
-                              <span className={`text-xs tabular-nums ${isOverLimit ? 'text-[var(--chat-danger)]' : isNearLimit ? 'text-[var(--chat-text)]' : 'text-[var(--chat-muted)]'}`}>
-                                {totalUsedTokens.toLocaleString()} / {maxTokens.toLocaleString()} tokens
-                              </span>
-                            );
-                          })()}
-                        </div>
-                      )}
-                      {/* A fixed-effort tier whose provider keeps the trace: say so, or the absence of a
-                          thought reads as the chat losing it (measured 2026-09-18: grok-4.6 streams its
-                          reasoning, grok-4.6-high-fast does not — by xAI's design). */}
-                      {reasoningTraceForModel(selectedModel.id) === 'internal' && (
-                        <span
-                          data-reasoning-trace="internal"
-                          className="text-[11px] text-[var(--chat-muted)]"
-                          title="This tier reasons at a fixed effort; the provider does not return its thought, so none is shown."
-                        >
-                          reasons internally
-                        </span>
-                      )}
-                      {/* Brain is on/off. The effort chip is the level when thinking is on —
-                          proxy SKUs (`gemini-3.8-flash-high`) or a request parameter. */}
-                      {modelHasEffortLevels && (
-                        <button
-                          type="button"
-                          data-reason-toggle
-                          onMouseDown={(e) => {
-                            e.preventDefault();
-                            e.stopPropagation();
-                            toggleReasoning();
-                          }}
-                          title={isReasonToggled ? 'Thinking on' : 'Thinking off'}
-                          className={`flex items-center justify-center border border-[var(--chat-border)] rounded-lg p-2 cursor-pointer select-none hover:bg-[var(--chat-hover)] ${isReasonToggled ? 'text-[var(--chat-text)]' : 'text-[var(--chat-muted)] opacity-50'}`}
-                        >
-                          <Brain size={16} />
-                        </button>
-                      )}
-                      {isReasonToggled && (
-                        <ChatEffortControl model={selectedModel} value={selectedEffort} onChange={chooseEffort} disabled={isLoading} />
-                      )}
-              </div>
-                  <div className="flex items-center gap-2 md:gap-3">
-                  {(isLoading || messages.some((m) => m.isStreaming)) ? (
-                    // While generating OR typing out the answer: Queue (if typing) else Stop.
-                    (inputValue.trim() || attachedFiles.length > 0) ? (
-                      <IconButton
-                        icon={PlusDecl}
-                        variant="ghost"
-                        size="sm"
-                        iconSize={16}
-                        onClick={addToQueue}
-                        title="Add this message to the queue"
-                        aria-label="Add this message to the queue"
-                      />
-                    ) : (
-                      /* Stays hand-written, and the reason is a pair rather than this button.
-                         The three composer actions — Stop, Mic, Send — are guaranteed the same box
-                         by one shared `composerActionButtonSizeClass`, and a test counts its uses to
-                         keep that guarantee. Send cannot convert at all: index.css repaints it with
-                         `!important` in both states, so a variant would have nothing to decide.
-                         Converting the two that could would leave the pair the same size by two
-                         different mechanisms, which is the drift the shared class exists to stop.
-                         The class itself is already the scale — `h-7 w-7 rounded-lg` is `sm` at the
-                         control radius — so this converts the day Send can. */
-                      <button
-                        onClick={handleStopGeneration}
-                        title="Stop generating"
-                        aria-label="Stop generating"
-                        className={`${composerActionButtonSizeClass} flex items-center justify-center bg-[var(--chat-surface)] text-[var(--chat-text)] transition-all hover:bg-[var(--chat-control)] active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--chat-muted)]`}
-                      >
-                        {/* The last lucide import left in the chat's chrome, and it was not being used
-                            as an icon: `fill="currentColor" strokeWidth={0}` is a call site asking for a
-                            RECTANGLE. XENO has a `stop`, and its declaration already settled what stop
-                            looks like in this grammar — a rounded square outline, deliberately not the
-                            filled block a media player would use.
-
-                            So this is a visible change: the button goes from a solid square to an
-                            outlined one. It is the set's own answer to the question, and it brings the
-                            control a hover motion it never had. */}
-                        <Stop size={14} />
-                      </button>
-                    )
-                  ) : (
-                    <>
-                      <div
-                        ref={voiceControlRef}
-                        className="voice-control relative flex items-center"
-                        data-voice-menu-open={isVoiceModeMenuOpen ? 'true' : 'false'}
-                      >
-                        {/* Two losses from one conversion, and the second is not cosmetic.
-                            `data-voice-mode-trigger` went because the grep for it only read `src/`;
-                            `scripts/test-chat-voice-controls.mjs` reads this file as TEXT and looks
-                            for the attribute by name.
-                            `absolute right-full mr-1` went because the whole className was replaced
-                            rather than filtered — and those are LAYOUT. Without them the chevron
-                            joined the flow and pushed Send along the row, which is the one thing the
-                            test that noticed is named after. `flex h-7 w-7` did not come back: that
-                            is `sm`, and it is the component's to say. */}
-                        <IconButton
-                          icon={ChevronDownDecl}
-                          variant="ghost"
-                          size="sm"
-                          iconSize={15}
-                          className="absolute right-full mr-1"
-                          data-voice-mode-trigger
-                          onClick={() => (isVoiceModeMenuOpen ? closeVoiceMenu() : openVoiceMenu())}
-                          aria-label="Voice input options"
-                          aria-expanded={isVoiceModeMenuOpen}
-                          aria-haspopup="dialog"
-                        />
-                        {/* Stays hand-written — Stop's neighbour, same shared size class and the
-                            same pair that cannot be split. */}
-                        <button
-                          type="button"
-                          data-voice-primary
-                          onClick={voiceInputMode === 'tap' ? handleToggleVoiceInput : undefined}
-                          onPointerDown={handleVoicePointerDown}
-                          onPointerUp={handleVoicePointerUp}
-                          onPointerCancel={handleVoicePointerUp}
-                          onKeyDown={handleVoiceKeyDown}
-                          onKeyUp={handleVoiceKeyUp}
-                          className={`${composerActionButtonSizeClass} flex items-center justify-center transition-all relative ${isVoiceInputActive ? 'bg-[var(--chat-control)]/70' : 'bg-[var(--chat-surface)] hover:bg-[var(--chat-control)]'}`}
-                          aria-label={isVoiceInputActive ? 'Stop voice input' : voiceInputMode === 'hold' ? 'Hold to record voice input' : 'Start voice input'}
-                        >
-                          {isVoiceInputActive && (
-                            <span className="absolute inset-0 flex items-center justify-center">
-                              <span className="animate-ping h-3.5 w-3.5 rounded-full bg-[var(--chat-danger)] opacity-75"></span>
-                            </span>
-                          )}
-                          <Mic size={16} className={`relative ${isVoiceInputActive ? 'text-[var(--chat-danger)]' : 'text-[var(--chat-muted)]'}`} />
-                        </button>
-                        {(isVoiceModeMenuOpen || isVoiceMenuClosing) && (
-                          <div
-                            data-voice-mode-popover
-                            role="dialog"
-                            aria-label="Voice input options"
-                            className={`absolute -right-10 bottom-full z-40 mb-1.5 w-40 rounded-lg border border-[var(--chat-border)] bg-[var(--chat-elevated)] px-2 py-1.5 shadow-lg shadow-black/20 ${isVoiceModeMenuOpen ? 'voice-menu-in' : 'voice-menu-out'}`}
-                          >
-                            <div className="flex items-center justify-between gap-2">
-                              <div className="flex min-w-0 items-center gap-1.5">
-                                <Hand size={13} className="shrink-0 text-[var(--chat-muted)]" aria-hidden="true" />
-                                <span className="truncate text-[11px] font-medium text-[var(--chat-text)]">Hold to record</span>
-                              </div>
-                              {/* Stays hand-written: a 28 x 16 track with a thumb that grows as it
-                                  travels, where `<Switch>` is 36 x 20 with a 14px knob. Smaller than
-                                  the component in both directions, and its exact class strings are
-                                  pinned by scripts/test-chat-voice-controls.mjs down to the thumb's
-                                  travel in pixels. */}
-                              <button
-                                type="button"
-                                data-voice-hold-switch
-                                role="switch"
-                                aria-checked={voiceInputMode === 'hold'}
-                                onClick={() => {
-                                  stopVoiceInput();
-                                  setVoiceInputMode((mode) => mode === 'hold' ? 'tap' : 'hold');
-                                }}
-                                className={`relative inline-flex h-4 w-7 shrink-0 items-center rounded-md border p-[2px] transition-[background-color,border-color] duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] motion-reduce:transition-none focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--chat-text)]/40 ${
-                                  voiceInputMode === 'hold'
-                                    ? 'border-[var(--chat-text)] bg-[var(--chat-text)]'
-                                    : 'border-[var(--chat-border)] bg-[var(--chat-canvas)]'
-                                }`}
-                              >
-                                <span
-                                  className={`pointer-events-none absolute left-[2px] top-1/2 block rounded-[3px] transition-[transform,background-color,width,height] duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] motion-reduce:transition-none ${
-                                    voiceInputMode === 'hold'
-                                      ? 'h-3 w-3 translate-x-[10px] -translate-y-1/2 bg-[var(--chat-elevated)]'
-                                      : 'h-2.5 w-2.5 translate-x-0 -translate-y-1/2 bg-[var(--chat-text)]'
-                                  }`}
-                                />
-                              </button>
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                      {/* Stays hand-written, and it is the one holding the other two here. The
-                          normalisation block paints it with `!important` in both states — accent
-                          fill and inverted ink when it can send, a muted control fill when it
-                          cannot — so every colour a variant would choose is overruled before it
-                          renders. Its enabled state is also the inverted emphasis the variant set
-                          does not carry (§9). */}
-                      <button
-                        type="button"
-                        data-composer-send-button
-                        onClick={handleVoiceSend}
-                        className={`flex items-center justify-center transition-[background-color,color,transform,opacity] duration-200 active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--chat-accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--chat-canvas)] ${(inputValue.trim() || attachedFiles.length > 0) && !isUploadingAttachments && !attachedFiles.some(f => f.ready === false) ? 'bg-[var(--chat-accent)] text-[var(--chat-on-accent)] hover:opacity-90 motion-safe:animate-send-button-enter' : 'cursor-not-allowed border border-[var(--chat-border)] bg-[var(--chat-control)] text-[var(--chat-muted)]'} ${composerActionButtonSizeClass}`}
-                        aria-label={isModelsLoading ? 'Send message (waiting for models)' : (isUploadingAttachments || attachedFiles.some(f => f.ready === false)) ? 'Send message (scanning attachment…)' : 'Send message'}
-                        disabled={!(inputValue.trim() || attachedFiles.length > 0) || isContextLimitReached || isModelsLoading || isUploadingAttachments || attachedFiles.some(f => f.ready === false)}
-                      >
-                        {/* The send arrow was hand-drawn here — stroke 2, round caps — while every other
-                            glyph in the composer came from the set at 1.75 with butt caps. It never
-                            animated because there was nothing to animate: no `data-glyph`, no parts, no
-                            rule to match. It looked like a hover that had been forgotten rather than an
-                            icon that had never been one. */}
-                        <ArrowUp size={16} />
-                      </button>
-                    </>
-                  )}
-                </div>
-                </div>
           </div>
           </ChatEmptyState>
           </div>
