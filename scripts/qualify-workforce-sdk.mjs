@@ -16,7 +16,7 @@ import { createWorkforceResource } from '../src/server/services/workforceResourc
 import { admitRun } from '../src/server/services/workforceRunAdmission.js';
 import { reportRunResult } from '../src/server/services/workforceRunResults.js';
 import { createServiceLedgerRouter } from '../src/server/routes/serviceLedgerRoutes.js';
-import { addGrant, getBalanceV2 } from '../src/server/utils/creditLedgerV2.js';
+import { addGrant, getBalanceV2, verifyChainV2 } from '../src/server/utils/creditLedgerV2.js';
 import { jwks, getSigningKey } from '../src/server/utils/oidcProvider.js';
 import { issuer } from '../src/server/config/hosts.js';
 import { jwkThumbprint, accessTokenHash } from '../src/server/utils/dpop.js';
@@ -66,7 +66,11 @@ test('SDK physical dispatches traverse gateway auth, run draws, provider and can
   const app = express(); app.use(express.json()); app.use((req, _res, next) => { req.db = pool; next(); });
   app.get('/api/oauth2/jwks', async (_req, res) => res.json(await jwks(pool)));
   app.use('/api/workforce', workforceRouter);
-  app.use('/api/v2/ledger/service', createServiceLedgerRouter({ getServiceToken: () => serviceToken }));
+  // The correction route is closed unless a receipt verifier is injected. This fixture verifier is the
+  // ONLY seam: it returns a receipt it was primed with, never counts copied from the request body.
+  const lateReceipts = new Map();
+  app.use('/api/v2/ledger/service', createServiceLedgerRouter({ getServiceToken: () => serviceToken,
+    verifyCorrectionReceipt: async ({ evidence }) => lateReceipts.get(evidence?.receiptId) ?? null }));
   const serve = async app => { const s = app.listen(0, '127.0.0.1'); await new Promise(r => s.once('listening', r)); t.after(async () => { s.closeAllConnections(); await new Promise(r => s.close(r)); }); return s; };
   const platformServer = await serve(app), platformUrl = `http://127.0.0.1:${platformServer.address().port}`;
   let providerAdmissionId = admissionId, omitProviderUsage = false;
@@ -289,6 +293,25 @@ test('SDK physical dispatches traverse gateway auth, run draws, provider and can
     assert.equal(draw.consumed_micro, draw.charged_micro, 'real dispatch lots sum to its settled charge');
     assert.equal(draw.lot_count, draw.allocation_count, 'real dispatch has every recorded lot');
   }
+  // Late provider measurement for the real unmeasured gateway draw, through the real HTTP route.
+  const tariff = uncertainDraw.tariff;
+  const measuredMicro = BigInt(tariff.inputMicroPerToken) * 10n + BigInt(tariff.outputMicroPerToken) * 5n;
+  lateReceipts.set('late-1', { verified: true, correctionSourceId: `late-${uncertainDraw.id}`, providerReceiptId: `upstream-${uncertainDraw.id}`,
+    provider: uncertainDraw.provider, providerRequestId: uncertainDraw.provider_request_id, model: uncertainDraw.model,
+    actorService: 'qualifier-receipt-verifier', evidenceHash: createHash('sha256').update(uncertainDraw.id).digest('hex'), inputTokens: 10, outputTokens: 5 });
+  const correct = body => fetch(`${platformUrl}/api/v2/ledger/service/runs/${providerAdmissionId}/draws/${uncertainDraw.draw_id}/corrections`,
+    { method: 'POST', headers: { authorization: `Bearer ${serviceToken}`, 'content-type': 'application/json' }, body: JSON.stringify(body) });
+  assert.equal((await correct({ inputTokens: 1, outputTokens: 1 })).status, 403, 'caller-authored late counts are not a provider receipt');
+  const beforeCorrection = BigInt((await getBalanceV2(pool, owner)).availableMicro);
+  const corrected = await correct({ receiptId: 'late-1' });
+  const correction = await corrected.json();
+  assert.equal(corrected.status, 200, `late provider receipt corrects the real unmeasured draw: ${JSON.stringify(correction)}`);
+  assert.equal(correction.correctionMicro, (BigInt(uncertainDraw.charged_micro) - measuredMicro).toString(), 'correction returns exactly the overcharge at the pinned tariff');
+  assert.equal(BigInt((await getBalanceV2(pool, owner)).availableMicro) - beforeCorrection, BigInt(correction.restoredMicro), 'restored value reaches the payer wallet');
+  assert.equal((await (await correct({ receiptId: 'late-1' })).json()).replayed, true, 'receipt replay is idempotent');
+  assert.equal(JSON.stringify((await pool.query('SELECT * FROM credit_hold_draws WHERE id=$1', [uncertainDraw.id])).rows[0]),
+    JSON.stringify(uncertainDraw), 'settled gateway draw is not rewritten by its correction');
+  assert.equal((await verifyChainV2(pool, owner)).ok, true, 'correction keeps the canonical journal chain valid');
   assert(!logs.includes('WORKFORCE_FIXTURE_EGRESS_REFUSED'), 'gateway made no unexpected outbound call');
   const bundles = Object.fromEntries(['dist/index.js', 'dist/workforce/index.js'].map(file => [file, createHash('sha256').update(readFileSync(join(sdk, file))).digest('hex')]));
   console.log('Qualification evidence:', JSON.stringify({ sdkRevision, bundles, gatewayRevision: revision, providerCalls,

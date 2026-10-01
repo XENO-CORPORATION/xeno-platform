@@ -1575,6 +1575,134 @@ export async function closeFinishedRunTx(db, admissionId) {
   return state;
 }
 
+/** An additive financial projection; gross historical values and execution budgets stay unchanged. */
+export async function readRunDrawCorrectionsV2(pool, value) {
+  const v = drawShape(value, ['admissionId', 'drawId', 'payerUserId']);
+  if (!v.drawId || typeof v.payerUserId !== 'string' || !RUN_UUID.test(v.payerUserId)) throw drawError('BAD_REQUEST');
+  const row = (await pool.query(`SELECT d.charged_micro,
+      COALESCE(sum(c.correction_micro),0)::text AS correction_micro,
+      COALESCE(sum(c.restored_micro),0)::text AS restored_micro,
+      COALESCE(sum(c.liability_micro),0)::text AS liability_micro
+    FROM credit_hold_draws d JOIN credit_draw_consumption_receipts r ON r.draw_row_id=d.id
+    LEFT JOIN credit_draw_corrections c ON c.draw_row_id=d.id
+    WHERE d.admission_id=$1 AND d.draw_id=$2 AND r.payer_user_id=$3
+    GROUP BY d.id`, [v.admissionId, v.drawId, v.payerUserId])).rows[0];
+  if (!row) throw drawError('NOT_FOUND');
+  return { admissionId: v.admissionId, drawId: v.drawId, grossChargedMicro: String(row.charged_micro),
+    correctionMicro: row.correction_micro, netChargedMicro: (BigInt(row.charged_micro)-BigInt(row.correction_micro)).toString(),
+    restoredMicro: row.restored_micro, liabilityMicro: row.liability_micro,
+    walletDebitedMicro: (BigInt(row.charged_micro)-BigInt(row.restored_micro)).toString() };
+}
+
+export const RUN_DRAW_CORRECTION_WINDOW_SECONDS = 72 * 3600;
+
+const correctionView = (row, replayed) => ({ correctionId: row.id, drawRowId: row.draw_row_id,
+  correctionSourceId: row.correction_source_id, originalChargedMicro: String(row.original_charged_micro),
+  correctedPricedMicro: String(row.corrected_priced_micro), correctionMicro: String(row.correction_micro),
+  restoredMicro: String(row.restored_micro), liabilityMicro: String(row.liability_micro), replayed });
+
+/** Internal money primitive: receipt must come from the configured provider verifier, not a request body.
+ * Caller identity is assigned by that verifier; the ordinary service bearer alone is insufficient.
+ * Terminal roots only: correcting financial history never restores execution headroom on a live run. */
+export async function correctRunDrawV2(pool, value, verifiedReceipt) {
+  const v = drawShape(value, ['admissionId', 'drawId']);
+  if (!v.drawId || !verifiedReceipt || verifiedReceipt.verified !== true) throw drawError('PROVIDER_RECEIPT_REQUIRED');
+  const r = verifiedReceipt;
+  const input = { admissionId: v.admissionId, drawId: v.drawId,
+    correctionSourceId: drawText(r.correctionSourceId, 200), providerReceiptId: drawText(r.providerReceiptId, 200),
+    provider: drawText(r.provider, 50), providerRequestId: drawText(r.providerRequestId, 200), model: drawText(r.model, 100),
+    actorService: drawText(r.actorService, 128), evidenceHash: drawText(r.evidenceHash, 64),
+    inputTokens: String(drawCount(r.inputTokens, { max: 1e15 })), outputTokens: String(drawCount(r.outputTokens, { max: 1e15 })) };
+  if (input.correctionSourceId.length < 8 || !/^[a-f0-9]{64}$/.test(input.evidenceHash)) throw drawError('BAD_REQUEST');
+  const hash = sha256hex(JSON.stringify(input));
+  const db = await pool.connect();
+  try {
+    await db.query('BEGIN');
+    await db.query("SET LOCAL lock_timeout='2s'");
+    const { admission, account, hold } = await lockRunReservation(db, v.admissionId, { lockAccount: true });
+    const draw = (await db.query('SELECT *,resolved_at+make_interval(secs=>$3)>clock_timestamp() AS correctable FROM credit_hold_draws WHERE hold_row_id=$1 AND draw_id=$2 FOR UPDATE',
+      [hold.id, v.drawId, RUN_DRAW_CORRECTION_WINDOW_SECONDS])).rows[0];
+    if (!draw || draw.admission_id !== admission.id) throw drawError('NOT_FOUND');
+    const prior = (await db.query('SELECT * FROM credit_draw_corrections WHERE draw_row_id=$1 AND correction_source_id=$2', [draw.id, input.correctionSourceId])).rows[0];
+    if (prior) {
+      if (prior.request_hash !== hash) throw drawError('CONFLICT');
+      await db.query('COMMIT'); return correctionView(prior, true);
+    }
+    if (draw.state !== 'settled' || draw.outcome !== 'unmeasured') throw drawError('DRAW_NOT_CORRECTABLE');
+    if (!draw.correctable) throw drawError('CORRECTION_WINDOW_EXPIRED');
+    if (hold.state === 'held' || await holdHasOpenDraw(db, hold.id)) throw drawError('RUN_NOT_TERMINAL');
+    const root = await runReservationOf(db, admission);
+    const live = (await db.query(`WITH RECURSIVE tree(id) AS (SELECT $1::uuid UNION ALL
+      SELECT a.id FROM workforce_run_admissions a JOIN tree t ON a.parent_admission_id=t.id)
+      SELECT 1 FROM tree t WHERE NOT EXISTS(SELECT 1 FROM workforce_run_results r WHERE r.admission_id=t.id)
+        AND workforce_run_admission_fence(t.id) IS NULL LIMIT 1`, [root.rootId])).rowCount;
+    if (live) throw drawError('RUN_NOT_TERMINAL');
+    if (draw.provider !== input.provider || draw.provider_request_id !== input.providerRequestId || draw.model !== input.model) throw drawError('RECEIPT_IDENTITY_MISMATCH');
+    const provenance = (await db.query('SELECT * FROM credit_draw_consumption_receipts WHERE draw_row_id=$1', [draw.id])).rows[0];
+    if (!provenance || provenance.account_id !== account.id || provenance.payer_user_id !== hold.user_id
+      || String(provenance.charged_micro) !== String(draw.charged_micro)) throw drawError('CONSUMPTION_EVIDENCE_REQUIRED');
+    const corrected = BigInt(pricePinnedChatUsage(draw.tariff, { inputTokens: input.inputTokens, outputTokens: input.outputTokens }));
+    const already = BigInt((await db.query('SELECT coalesce(sum(correction_micro),0)::text AS total FROM credit_draw_corrections WHERE draw_row_id=$1', [draw.id])).rows[0].total);
+    const net = BigInt(draw.charged_micro) - already;
+    if (corrected >= net) throw drawError('CORRECTION_NOT_DOWNWARD');
+    const amount = net - corrected;
+    const consumed = (await db.query(`SELECT l.*,coalesce((SELECT sum(c.amount_micro) FROM credit_draw_correction_lots c
+      WHERE c.draw_row_id=l.draw_row_id AND c.grant_id=l.grant_id),0)::text AS corrected_micro
+      FROM credit_draw_consumption_lots l WHERE l.draw_row_id=$1 ORDER BY consumption_order DESC`, [draw.id])).rows;
+    // Lock grants in the same stable order regardless of the allocation reversal order.
+    await db.query('SELECT id FROM credit_grants WHERE id=ANY($1::uuid[]) ORDER BY id FOR UPDATE', [consumed.map(l => l.grant_id)]);
+    const quarantine = new Set(await quarantinedGrantIds(db, hold.user_id));
+    const hasContributions = (await db.query("SELECT to_regclass('workforce_contribution_lots') AS relation")).rows[0].relation;
+    const allocations = []; let remaining = amount, restored = 0n, liability = 0n;
+    for (const lot of consumed) {
+      if (remaining === 0n) break;
+      const available = BigInt(lot.consumed_micro) - BigInt(lot.corrected_micro);
+      const take = available < remaining ? available : remaining;
+      if (take <= 0n) continue;
+      const current = (await db.query(`SELECT g.*,g.expires_at<=clock_timestamp() AS expired,
+        g.kind=l.grant_kind AND g.priority=l.grant_priority AND g.expires_at IS NOT DISTINCT FROM l.grant_expires_at
+        AND g.source_ref IS NOT DISTINCT FROM l.grant_source_ref AND g.amount_micro=l.grant_amount_micro AS same_origin
+        FROM credit_grants g JOIN credit_draw_consumption_lots l ON l.grant_id=g.id AND l.draw_row_id=$2 WHERE g.id=$1`, [lot.grant_id, draw.id])).rows[0];
+      let reason = !current || current.user_id !== hold.user_id || (current.account_id && current.account_id !== account.id) || !current.same_origin
+        ? 'source_unavailable' : account.is_frozen ? 'frozen' : quarantine.has(lot.grant_id) ? 'quarantined' : current.expired ? 'expired' : 'eligible';
+      if (reason === 'eligible' && lot.grant_kind === 'contribution') {
+        const contribution = hasContributions ? (await db.query(`SELECT c.state,EXISTS(SELECT 1 FROM workforce_funding_returns r WHERE r.contribution_id=c.id) AS returned
+          FROM workforce_contribution_lots l JOIN workforce_funding_contributions c ON c.id=l.contribution_id WHERE l.pool_grant_id=$1`, [lot.grant_id])).rows[0] : null;
+        if (!contribution) reason = 'source_unavailable';
+        else if (contribution.returned || contribution.state === 'returned') reason = 'returned';
+        else if (contribution.state !== 'confirmed') reason = 'quarantined';
+      }
+      if (reason === 'eligible') {
+        const updated = await db.query(`UPDATE credit_grants SET remaining_micro=remaining_micro+$1
+          WHERE id=$2 AND remaining_micro+$1<=amount_micro RETURNING id`, [take.toString(), lot.grant_id]);
+        if (updated.rowCount !== 1) throw drawError('FUNDING_CONFLICT');
+        restored += take;
+      } else liability += take;
+      allocations.push({ grantId: lot.grant_id, amount: take.toString(), reason }); remaining -= take;
+    }
+    if (remaining !== 0n) throw drawError('CONSUMPTION_EVIDENCE_REQUIRED');
+    const correction = (await db.query(`INSERT INTO credit_draw_corrections(draw_row_id,correction_source_id,provider_receipt_id,
+      provider,provider_request_id,model,input_tokens,output_tokens,evidence_hash,request_hash,original_charged_micro,
+      previous_net_micro,corrected_priced_micro,correction_micro,restored_micro,liability_micro,actor_service)
+      VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17) RETURNING *`,
+    [draw.id,input.correctionSourceId,input.providerReceiptId,input.provider,input.providerRequestId,input.model,
+      input.inputTokens,input.outputTokens,input.evidenceHash,hash,String(draw.charged_micro),net.toString(),corrected.toString(),
+      amount.toString(),restored.toString(),liability.toString(),input.actorService])).rows[0];
+    for (const [order, allocation] of allocations.entries()) await db.query(`INSERT INTO credit_draw_correction_lots
+      (correction_id,draw_row_id,grant_id,correction_order,amount_micro,outcome,reason) VALUES($1,$2,$3,$4,$5,$6,$7)`,
+    [correction.id,draw.id,allocation.grantId,order,allocation.amount,allocation.reason === 'eligible' ? 'restored' : 'liability',allocation.reason]);
+    const balance = BigInt(account.balance) + restored;
+    await db.query('UPDATE credit_accounts SET balance=$1,lifetime_spent=GREATEST(0,lifetime_spent-$2),updated_at=clock_timestamp() WHERE id=$3',
+      [balance.toString(),restored.toString(),account.id]);
+    await insertLedgerEntry(db, { userId: hold.user_id, accountId: account.id, type: 'refund', amount: restored.toString(), balanceAfter: balance.toString(),
+      refType: 'xeno.draw.correction', refId: correction.id, description: 'workforce:run.dispatch.correction',
+      metadata: JSON.stringify({ direction: 'reversal', drawRowId: draw.id, correctionMicro: amount.toString(), liabilityMicro: liability.toString(), evidenceHash: input.evidenceHash }) });
+    if (account.owner_kind !== 'project_pool') await mirrorLegacy(db, hold.user_id, balance);
+    await db.query('COMMIT'); return correctionView(correction, false);
+  } catch (error) { await db.query('ROLLBACK').catch(() => {}); throw error; }
+  finally { db.release(); }
+}
+
 /** A run's reservation is managed ONLY by the run-draw acts above. The generic hold verbs must not
  * settle, void or extend it: voiding a run hold would release money an in-flight dispatch holds. */
 async function refuseRunHold(db, userId, holdId) {

@@ -295,8 +295,55 @@ sums for all six buffered/streamed/child/DPoP/unmeasured draws; pooled-funded ad
 Three named mutations (missing receipt allowed, wrong total allowed, evidence update allowed) fail
 with restored controls passing. Existing billing-money-in60, ledger-v217 and ledger-correctness20
 assertions pass; 17 migration-version/SQL/reachability tests pass. No full product gate was run.
-The proof is registered in `test:payment-ops`. The later append-only downward correction still needs
-an explicit source, idempotency key, bounded window and original-lot restoration policy.
+The proof is registered in `test:payment-ops`. The correction it enables is the next section.
+
+### Late-usage downward correction — 2026-10-01
+
+Policy decided by the product owner: a correction comes only from a **trusted provider receipt**,
+within **72 hours** of the original settlement, **downward-only and append-only**. Value whose
+original lot can no longer be safely restored becomes an explicit **liability adjustment**, never a
+fresh spendable grant.
+
+`correctRunDrawV2` (and `POST /api/v2/ledger/service/runs/:admissionId/draws/:drawId/corrections`)
+appends `credit_draw_corrections` + `credit_draw_correction_lots`. It never rewrites the settled
+draw, its debit or its consumption evidence. The money bounds (window, unmeasured-only, exact prior
+net, tariff price, cumulative and per-lot caps, complete allocations, retention, idempotency) are
+enforced in the service AND by PostgreSQL triggers/constraints; terminal-run and lot-eligibility are
+service-only reads under the same account and grant locks. Rules:
+
+- only an `unmeasured` settled draw with retained provenance, inside 72 h, on a **terminal** run
+  (root hold closed, no open draw, every admission in the tree reported or fenced) — a correction
+  never restores execution headroom to a live envelope;
+- the corrected price is the draw's **pinned tariff** × the receipt's tokens (the DB recomputes it),
+  must be below the current net charge, and cumulative corrections can never exceed the original
+  charge; each reversing lot is capped at what that lot originally consumed;
+- idempotent on `(draw, correction_source_id)` — same payload replays, a different payload is a
+  conflict — and one provider receipt can never correct two draws;
+- a lot is restored **in place** (same grant, original expiry/priority/source) only when it is still
+  the payer's, unexpired, unquarantined, the account is unfrozen and — for pooled value — the
+  contribution is confirmed and not returned; everything else is `liability` with its reason;
+- `readRunDrawCorrectionsV2` and the contributor accounting report gross, corrected, net, restored
+  and liability separately, so owed value is never shown as credited value.
+
+🔴 **The HTTP route is closed by default (503).** It needs an injected `verifyCorrectionReceipt`, and
+none is wired: the gateway's `providerRequestId` is its own request id, not an upstream receipt, and a
+service bearer token alone cannot certify token counts a caller wrote. The verifier is bounded (10 s)
+and caller-authored counts are refused (403). **Exit condition:** a provider-specific receipt verifier
+in the gateway (reconciliation against the provider's usage/billing record) and its injection here.
+
+Proof (`scripts/draw-corrections.test.mjs`, fresh PostgreSQL): concurrent same-source replay corrects
+once, payload drift conflicts, successive receipts reduce only the remaining net, settled evidence
+stays byte-identical and a settlement replay cannot undo a correction, hash chain intact, retained
+rows refuse update/delete/truncate/rollback; frozen, expired, returned-contribution and quarantined-
+origin value becomes liability; eligible pooled value returns to the original contribution lot; a
+failed correction write rolls back wallet and lots; >72 h refuses; the DB refuses an invented prior
+net, a price inconsistent with the tariff, an over-cap lot and a header without complete allocations.
+A reported run with a sibling dispatch still in flight, and a root that closed its reservation while a
+child is unreported, are each refused by their own guard. Seven named mutations (window, returned
+contribution, frozen account, hold liveness, tree liveness, per-lot cap, tariff binding) each fail
+their own assertion and the unmutated control passes. Four of them first SURVIVED because a
+neighbouring guard masked them; the tests were split until every guard is independently observed.
+No full product gate was run.
 
 ## Workforce account-plan dependency repair — 2026-09-30
 

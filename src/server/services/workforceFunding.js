@@ -298,6 +298,15 @@ export async function readContributorFunding(pool,ctx,value) {
       else available+=free;
     }
     if(confirmed!==BigInt(c.amount_micro)||confirmed!==consumed+returned+committed+available+expired+quarantined)fail('unavailable','contribution_accounting_inconsistent');
+    // Keep the original conservation categories; a liability correction is owed value,
+    // not a credit that has reached this pool or its contributor's wallet.
+    const correction=(await db.query(`SELECT coalesce(sum(x.amount_micro),0)::text AS total,
+      coalesce(sum(x.amount_micro) FILTER(WHERE x.outcome='restored'),0)::text AS restored,
+      coalesce(sum(x.amount_micro) FILTER(WHERE x.outcome='liability'),0)::text AS liability
+      FROM credit_draw_correction_lots x JOIN workforce_contribution_lots l ON l.pool_grant_id=x.grant_id
+      WHERE l.contribution_id=$1`,[id])).rows[0];
+    const corrected=BigInt(correction.total),restored=BigInt(correction.restored),pendingCorrection=BigInt(correction.liability);
+    if(pendingCorrection>consumed)fail('unavailable','contribution_accounting_inconsistent');
     const returnRow=(await db.query('SELECT expired_micro FROM workforce_funding_returns WHERE contribution_id=$1',[id])).rows[0];
     const disputed=(await db.query(`SELECT EXISTS(SELECT 1 FROM workforce_contribution_lots l
       JOIN workforce_funding_origin_quarantine q ON q.grant_id=l.origin_grant_id WHERE l.contribution_id=$1) AS yes`,[id])).rows[0].yes;
@@ -309,7 +318,9 @@ export async function readContributorFunding(pool,ctx,value) {
         termsVersion:accepted.terms_version,evidenceCount:accepted.evidence_count,acceptedAt:accepted.accepted_at.toISOString()}:null,
       amounts:{confirmedMicro:String(confirmed),committedMicro:String(committed),consumedMicro:String(consumed),returnedMicro:String(returned),
         availableMicro:String(available),expiredMicro:String(expired),quarantinedMicro:String(quarantined)},
-      expiredReturnedMicro:String(returnRow?.expired_micro??0),reconciliationRequired:disputed,
+      corrections:{grossConsumedMicro:String(consumed+restored),correctedMicro:String(corrected),
+        netConsumedMicro:String(consumed-pendingCorrection),restoredMicro:String(restored),liabilityMicro:String(pendingCorrection)},
+      expiredReturnedMicro:String(returnRow?.expired_micro??0),reconciliationRequired:disputed||pendingCorrection>0n,
       asOf:(await db.query('SELECT transaction_timestamp() AS t')).rows[0].t.toISOString()};
   });
 }

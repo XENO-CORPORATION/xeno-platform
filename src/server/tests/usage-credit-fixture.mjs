@@ -8,6 +8,7 @@ export async function installUsageCreditFixture(pool) {
   // ledger-only schema carries the draw table too -- the real migration, which is ledger-only by design.
   await pool.query(readFileSync(new URL('../database/migrations/20260930100000-credit-hold-draws.sql', import.meta.url),'utf8').split('-- DOWN')[0]);
   await pool.query(readFileSync(new URL('../database/migrations/20261001100000-credit-draw-consumption.sql', import.meta.url),'utf8').split('-- DOWN')[0]);
+  await pool.query(readFileSync(new URL('../database/migrations/20261001110000-credit-draw-corrections.sql', import.meta.url),'utf8').split('-- DOWN')[0]);
 }
 export async function optInUsageCredits(pool,userId) {
   await pool.query('INSERT INTO usage_credit_preferences (user_id,enabled) VALUES ($1,true) ON CONFLICT (user_id) DO UPDATE SET enabled=true',[userId]);
