@@ -9777,14 +9777,30 @@ Keep the summary under 500 words. Preserve essential context needed to continue 
    * generous window (~40s) elapses first — the caller releases the file either way so a stuck scan
    * never permanently traps the composer (an unsafe asset is still refused at view/read time).
    */
-  const waitForAssetReady = async (assetId: string): Promise<boolean> => {
-    const delays = [400, 700, 1000, 1500, 2000, 2500, 3000, 3500, 4000, 5000, 6000, 8000];
-    for (const delay of delays) {
-      if (await libraryService.assetReady(assetId)) return true;
-      await new Promise((resolve) => setTimeout(resolve, delay));
+  /*
+   * Wait for an upload's malware scan, for as long as the server says it is still running.
+   *
+   * 🔴 It used to give up after ~38 s and mark the file ready ANYWAY (2026-09-30). The scanner takes
+   * ~17 s per file and works through them one at a time, so six images needed ~2 minutes: the
+   * composer unlocked at 15:49:02 with one of six scanned, the user sent, the server (correctly)
+   * refused to save a message referencing unscanned files, and the message was lost while every
+   * image the user clicked said "still being scanned". A file enters a conversation only once the
+   * server says it is clean. The only early exit is a terminal verdict — `blocked` (malware) — and a
+   * hard ceiling far past any real scan, after which the file stays NOT sendable.
+   */
+  const waitForAssetReady = async (assetId: string): Promise<'ready' | 'blocked' | 'gave-up'> => {
+    const ramp = [400, 700, 1000, 1500, 2000, 2500];
+    const deadline = Date.now() + 20 * 60 * 1000;
+    for (let attempt = 0; Date.now() < deadline; attempt += 1) {
+      const status = await libraryService.assetScanStatus(assetId);
+      if (status !== 'pending') return status;
+      await new Promise((resolve) => setTimeout(resolve, ramp[attempt] ?? 3000));
     }
-    return libraryService.assetReady(assetId);
+    return 'gave-up';
   };
+  const scanVerdictNotice = (name: string, verdict: 'blocked' | 'gave-up') => setProjectFileNotice(verdict === 'blocked'
+    ? `"${name}" was blocked by the security scan and was removed.`
+    : `"${name}" is still being scanned. Remove it, or keep waiting — it can be sent once the scan finishes.`);
 
   /** `queuedId`: attach to that queued prompt instead of the composer — the same upload, the same
    * scan-before-send rule, only a different place for the finished file to land. */
@@ -9836,7 +9852,16 @@ Keep the summary under 500 words. Preserve essential context needed to continue 
       });
       for (const f of newFiles) {
         if (!f.assetId) { setQueue(prev => markQueuedFileReady(prev, f.id)); continue; }
-        void waitForAssetReady(f.assetId).then(() => setQueue(prev => markQueuedFileReady(prev, f.id)));
+        void waitForAssetReady(f.assetId).then((verdict) => {
+          if (verdict === 'ready') { setQueue(prev => markQueuedFileReady(prev, f.id)); return; }
+          scanVerdictNotice(f.name, verdict);
+          if (verdict === 'blocked') {
+            setQueue(prev => {
+              const item = prev.messages.find(m => m.id === queuedId);
+              return item ? updateQueued(prev, queuedId, { attachedFiles: item.attachedFiles.filter(x => x.id !== f.id) }) : prev;
+            });
+          }
+        });
       }
       return;
     }
@@ -9847,13 +9872,16 @@ Keep the summary under 500 words. Preserve essential context needed to continue 
     // Scan-before-send: wait for each fresh upload's malware scan to clear, THEN mark it ready.
     // Send is blocked while any attachment is not ready, so a file enters a conversation only after it
     // is scanned and valid — no "still scanning" state ever appears on a sent message. The blob
-    // preview shows meanwhile (LibraryAssetImage prefers it). A genuinely stuck scan is not allowed to
-    // trap the composer forever: after a generous window the file is released anyway (the content
-    // endpoint still refuses an unsafe asset, so nothing unsafe can actually be viewed or read).
+    // preview shows meanwhile (LibraryAssetImage prefers it). A file is never released unscanned: a
+    // blocked file is removed, and one whose scan never finishes stays unsendable until removed.
     const markReady = (id: string) => setAttachedFiles(prev => prev.map(x => (x.id === id ? { ...x, ready: true } : x)));
     for (const f of newFiles) {
       if (!f.assetId) { markReady(f.id); continue; }
-      void waitForAssetReady(f.assetId).then(() => markReady(f.id));
+      void waitForAssetReady(f.assetId).then((verdict) => {
+        if (verdict === 'ready') { markReady(f.id); return; }
+        scanVerdictNotice(f.name, verdict);
+        if (verdict === 'blocked') setAttachedFiles(prev => prev.filter(x => x.id !== f.id));
+      });
     }
   };
 

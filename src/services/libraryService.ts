@@ -84,13 +84,23 @@ export const libraryService = {
    * any error reads as not-ready so a caller polling this never treats an unknown state as safe.
    */
   async assetReady(assetId: string): Promise<boolean> {
+    return (await this.assetScanStatus(assetId)) === 'ready';
+  },
+
+  /**
+   * The scan's answer as one of three: `ready` (can be sent), `blocked` (the scanner flagged it — it
+   * will never clear) or `pending` (anything else, including a failed request). Fails closed: only an
+   * explicit server `ready` is ready.
+   */
+  async assetScanStatus(assetId: string): Promise<'ready' | 'blocked' | 'pending'> {
     try {
       const response = await fetch(`/api/library/assets/${encodeURIComponent(assetId)}/status`, { headers: authHeaders() });
-      if (!response.ok) return false;
+      if (!response.ok) return 'pending';
       const body = await response.json().catch(() => ({}));
-      return body?.ready === true;
+      if (body?.ready === true) return 'ready';
+      return body?.blocked === true ? 'blocked' : 'pending';
     } catch {
-      return false;
+      return 'pending';
     }
   },
 
