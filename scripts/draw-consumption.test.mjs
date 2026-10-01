@@ -40,7 +40,7 @@ test('resolved draw consumption retains exact lots atomically without changing m
   const first = await open();
   // A migration added after a resolved draw must not fabricate historical evidence.
   await pool.query(down);
-  await pool.query("UPDATE credit_hold_draws SET state='voided',outcome='not_dispatched',resolved_at=now() WHERE id=$1", [first.id]);
+  await pool.query("UPDATE credit_hold_draws SET state='settled',outcome='measured',resolved_at=now(),input_tokens=0,output_tokens=0 WHERE id=$1", [first.id]);
   await pool.query(up);
   assert.equal(await receipt(first.id), undefined, 'historical resolved draw stays explicitly unrecorded');
   await assert.rejects(pool.query(`INSERT INTO credit_draw_consumption_receipts(draw_row_id,hold_row_id,admission_id,account_id,payer_user_id,charged_micro,allocation_count)

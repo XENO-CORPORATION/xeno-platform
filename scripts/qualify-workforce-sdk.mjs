@@ -278,6 +278,17 @@ test('SDK physical dispatches traverse gateway auth, run draws, provider and can
   assert.equal(usage.dimensions.usage_source, 'reservation', 'analytics distinguishes reserved charge from provider measurement');
   await reportRunResult(pool, context, { admissionId: providerAdmissionId, outcome: 'completed', summary: 'Reply received without counts', artifacts: [] });
   assert.equal(BigInt((await getBalanceV2(pool, owner)).availableMicro), uncertainBefore - BigInt(uncertainDraw.charged_micro), 'unmeasured settlement conserves canonical wallet value');
+  const provenance = (await pool.query(`SELECT d.id,d.charged_micro,r.charged_micro AS recorded_micro,r.allocation_count,
+      (SELECT coalesce(sum(l.consumed_micro),0)::text FROM credit_draw_consumption_lots l WHERE l.draw_row_id=d.id) AS consumed_micro,
+      (SELECT count(*)::int FROM credit_draw_consumption_lots l WHERE l.draw_row_id=d.id) AS lot_count
+    FROM credit_hold_draws d LEFT JOIN credit_draw_consumption_receipts r ON r.draw_row_id=d.id
+    WHERE d.state='settled'`)).rows;
+  assert.equal(provenance.length, 6, 'all real gateway draws retain consumption evidence');
+  for (const draw of provenance) {
+    assert.equal(draw.recorded_micro, draw.charged_micro, 'real dispatch receipt matches its settled charge');
+    assert.equal(draw.consumed_micro, draw.charged_micro, 'real dispatch lots sum to its settled charge');
+    assert.equal(draw.lot_count, draw.allocation_count, 'real dispatch has every recorded lot');
+  }
   assert(!logs.includes('WORKFORCE_FIXTURE_EGRESS_REFUSED'), 'gateway made no unexpected outbound call');
   const bundles = Object.fromEntries(['dist/index.js', 'dist/workforce/index.js'].map(file => [file, createHash('sha256').update(readFileSync(join(sdk, file))).digest('hex')]));
   console.log('Qualification evidence:', JSON.stringify({ sdkRevision, bundles, gatewayRevision: revision, providerCalls,

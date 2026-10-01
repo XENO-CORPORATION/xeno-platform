@@ -290,8 +290,12 @@ Fresh local PostgreSQL proof: `scripts/draw-consumption.test.mjs` passes alongsi
 14-case `workforce-run-draws` suite. It covers multi-lot partial consumption, concurrent replay,
 rollback after provenance-write failure, immutable/retained evidence, identity and snapshot
 mismatches, missing/incomplete/zero-charge allocations, expired-lot timestamp preservation and
-canonical hash-chain validity. The proof is registered in `test:payment-ops`; migration-version
-and SQL/reachability gates remain separate. The later append-only downward correction still needs
+canonical hash-chain validity. The actual SDK/gateway qualifier checks matching receipts and lot
+sums for all six buffered/streamed/child/DPoP/unmeasured draws; pooled-funded admission also passes.
+Three named mutations (missing receipt allowed, wrong total allowed, evidence update allowed) fail
+with restored controls passing. Existing billing-money-in60, ledger-v217 and ledger-correctness20
+assertions pass; 17 migration-version/SQL/reachability tests pass. No full product gate was run.
+The proof is registered in `test:payment-ops`. The later append-only downward correction still needs
 an explicit source, idempotency key, bounded window and original-lot restoration policy.
 
 ## Workforce account-plan dependency repair — 2026-09-30
