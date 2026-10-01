@@ -70,6 +70,13 @@ export function cleanAssistantText(fullText) {
   return { answer: cleanTextContent(finalAnswerContent) };
 }
 
+/** What an assistant turn says in place of an image it generated. Exported for tests. */
+export function generatedImageNote(name) {
+  const label = typeof name === 'string' && name.trim() ? ` ("${name.trim().slice(0, 120)}")` : '';
+  return `[You generated an image${label} in this turn with the image tool. It was shown to the ` +
+    'user and saved to their library. The image itself is not included here.]';
+}
+
 /** One `parts[]` message → an OpenAI content array (may be empty). */
 function contentPartsFor(msg, role) {
   const contentParts = [];
@@ -82,8 +89,15 @@ function contentPartsFor(msg, role) {
         if (textForPart && textForPart.trim() !== '') {
           contentParts.push({ type: 'text', text: textForPart });
         }
+      } else if (part?.type === 'image' && role === 'assistant') {
+        // The picture itself never rides an assistant turn: it is something the model
+        // PRODUCED, not an input, and providers reject or mishandle it. But dropping it
+        // SILENTLY erased the fact it happened (2026-09-30): the model saw its own words
+        // "Here's a first Sentinel redesign…" with no image and no tool call behind them,
+        // concluded it had invented the image, and told the user it had made nothing — while
+        // the image sat in their library. So the fact stays, as words.
+        contentParts.push({ type: 'text', text: generatedImageNote(part.name) });
       } else if (part?.type === 'image' && part.media_type && part.data) {
-        // User only: an assistant image is history, not an input.
         if (role === 'user') {
           contentParts.push({
             type: 'image_url',
@@ -140,8 +154,9 @@ export function toProviderMessages(messages, { systemPrompt = null } = {}) {
 
     // A single text part goes as a STRING: providers prefer it for simple turns, and some
     // treat a one-element array differently.
-    if (contentParts.length === 1 && contentParts[0].type === 'text') {
-      apiMessages.push({ role, content: contentParts[0].text });
+    // An assistant turn is text only, so it stays ONE string even with an image note added.
+    if (contentParts.every((p) => p.type === 'text') && (contentParts.length === 1 || role === 'assistant')) {
+      apiMessages.push({ role, content: contentParts.map((p) => p.text).join('\n\n') });
     } else {
       apiMessages.push({ role, content: contentParts });
     }

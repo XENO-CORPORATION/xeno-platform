@@ -37,6 +37,7 @@ import {
   cleanAssistantText,
   cleanTextContent,
   looksLikePartsShape,
+  generatedImageNote,
 } from '../src/server/utils/chatMessageParts.js';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
@@ -99,17 +100,41 @@ test('🔴 a user image becomes an image_url data URI', () => {
      'messages untouched, so the image would have vanished with no error');
 });
 
-test('🔴 an ASSISTANT image is NOT attached', () => {
+test('🔴 an ASSISTANT image is NOT attached — but the fact that it was made is kept', () => {
   const out = toProviderMessages([
     { role: 'model', parts: [
       { type: 'text', text: 'here it is' },
-      { type: 'image', media_type: 'image/png', data: 'AAAA' },
+      { type: 'image', media_type: 'image/png', data: 'AAAA', name: 'XENO image.png' },
     ] },
   ]);
-  assert.equal(out[0].content, 'here it is',
+  assert.equal(typeof out[0].content, 'string', 'an assistant turn stays ONE string');
+  assert.ok(!out[0].content.includes('AAAA'),
     'an image on an assistant turn is history of something the model PRODUCED, not an ' +
     'input; providers reject or mishandle it. The caller re-attaches it to the current ' +
     'user turn when the user refers to it.');
+  assert.equal(out[0].content, `here it is\n\n${generatedImageNote('XENO image.png')}`);
+});
+
+test('🔴 the Sentinel case: asked "what have you done?", the model can see it generated an image', () => {
+  // 2026-09-30, conversation f818a5a7…: the image was made and saved, the model saw only its
+  // own words, concluded it had invented the image, and told the user it had made nothing.
+  const out = toProviderMessages([
+    { role: 'user', parts: [{ type: 'text', text: 'these are some images with the sentinel' }] },
+    { role: 'model', parts: [
+      { type: 'text', text: "Here's a first Sentinel dual-state redesign." },
+      // after a reload, or while its scan runs, the bytes may be absent — the fact must not be
+      { type: 'image', media_type: 'image/png', data: '', name: 'XENO image 2026-09-30T15-49-57-763Z.png' },
+    ] },
+    { role: 'user', parts: [{ type: 'text', text: "so to clarify, I don't get it, what have you done?" }] },
+  ]);
+  assert.match(out[1].content, /You generated an image \("XENO image 2026-09-30T15-49-57-763Z\.png"\)/);
+  assert.match(out[1].content, /shown to the user/);
+});
+
+test('a generated image with no name still leaves a note', () => {
+  const out = toProviderMessages([{ role: 'model', parts: [{ type: 'image', media_type: 'image/png', data: '' }] }]);
+  assert.equal(out.length, 1, 'an image-only assistant turn is no longer dropped from history');
+  assert.equal(out[0].content, generatedImageNote());
 });
 
 test('a PDF rides as an image_url data URI', () => {

@@ -6738,7 +6738,7 @@ const ChatWithLLM: React.FC<ChatWithLLMProps> = ({
         .map(async msg => {
             type ApiMessagePart =
               | { type: 'text'; text: string }
-              | { type: 'image'; media_type: string; data: string } // Base64 data
+              | { type: 'image'; media_type: string; data: string; name?: string } // Base64 data; `name` lets the server say which image an assistant made
               | { type: 'file'; media_type: string; name: string; data_type: 'text' | 'base64'; data: string };
 
             const messagePayload: { role: string; parts: ApiMessagePart[] } = {
@@ -6843,10 +6843,13 @@ const ChatWithLLM: React.FC<ChatWithLLMProps> = ({
                             data = (await fileToBase64(new globalThis.File([blob], asset.name, { type: blob.type || asset.mimeType }))).split(',')[1];
                             mediaType = blob.type || asset.mimeType;
                         }
-                        if (data) messagePayload.parts.push({ type: 'image', media_type: mediaType, data });
+                        // Sent even without bytes: the server turns an assistant image into a note
+                        // that it was made, and a turn must never lose that fact (2026-09-30).
+                        messagePayload.parts.push({ type: 'image', media_type: mediaType, data: data || '', ...(asset?.name ? { name: asset.name } : {}) });
                     } catch (error) {
-                        // still in its scan, or gone: the model gets the words, and an edit starts fresh
+                        // still in its scan, or gone: the model still learns the image was made, and an edit starts fresh
                         console.warn('[API Prep] generated image unavailable for the model:', error);
+                        messagePayload.parts.push({ type: 'image', media_type: 'image/png', data: '', ...(asset?.name ? { name: asset.name } : {}) });
                     }
                 }
             }
@@ -6856,13 +6859,19 @@ const ChatWithLLM: React.FC<ChatWithLLMProps> = ({
                 // console.log(`[API Prep] Adding AI-generated image to payload for AI message ID ${msg.id}`);
                 let generatedData = msg.imageData;
                 if (!generatedData && msg.generatedImageAsset) {
-                  const blob = await libraryService.fetchAssetBlob(msg.generatedImageAsset);
-                  generatedData = (await fileToBase64(new globalThis.File([blob], msg.generatedImageAsset.name, { type: msg.generatedImageAsset.mimeType }))).split(',')[1];
+                  try {
+                    const blob = await libraryService.fetchAssetBlob(msg.generatedImageAsset);
+                    generatedData = (await fileToBase64(new globalThis.File([blob], msg.generatedImageAsset.name, { type: msg.generatedImageAsset.mimeType }))).split(',')[1];
+                  } catch (error) {
+                    // An unreadable old image must not fail the whole send; the note still says it was made.
+                    console.warn('[API Prep] generated image unavailable for the model:', error);
+                  }
                 }
                 messagePayload.parts.push({
                     type: 'image',
                     media_type: 'image/png',
-                    data: generatedData || ''
+                    data: generatedData || '',
+                    ...(msg.generatedImageAsset?.name ? { name: msg.generatedImageAsset.name } : {}),
                 });
             }
 
