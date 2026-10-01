@@ -14,7 +14,8 @@ test('resolved draw consumption retains exact lots atomically without changing m
   const pool = new pg.Pool({ connectionString: requireProofDatabase(url), max: 8 }); t.after(() => pool.end());
   const migration = await readFile(new URL('../src/server/database/migrations/20261001100000-credit-draw-consumption.sql', import.meta.url), 'utf8');
   const [up, down] = migration.split('-- DOWN');
-  await pool.query(down); await pool.query(up);
+  const [correctionUp, correctionDown] = (await readFile(new URL('../src/server/database/migrations/20261001110000-credit-draw-corrections.sql', import.meta.url), 'utf8')).split('-- DOWN');
+  await pool.query(correctionDown); await pool.query(down); await pool.query(up);
   const marker = randomUUID();
   const owner = (await pool.query("INSERT INTO users(username,email,password_hash,display_name) VALUES($1,$2,'fixture',$1) RETURNING id", [marker, `${marker}@example.test`])).rows[0].id;
   await pool.query("INSERT INTO xeno_account_plans(user_id,plan,status) VALUES($1,'internal','active')", [owner]);
@@ -41,7 +42,7 @@ test('resolved draw consumption retains exact lots atomically without changing m
   // A migration added after a resolved draw must not fabricate historical evidence.
   await pool.query(down);
   await pool.query("UPDATE credit_hold_draws SET state='settled',outcome='measured',resolved_at=now(),input_tokens=0,output_tokens=0 WHERE id=$1", [first.id]);
-  await pool.query(up);
+  await pool.query(up); await pool.query(correctionUp);
   assert.equal(await receipt(first.id), undefined, 'historical resolved draw stays explicitly unrecorded');
   await assert.rejects(pool.query(`INSERT INTO credit_draw_consumption_receipts(draw_row_id,hold_row_id,admission_id,account_id,payer_user_id,charged_micro,allocation_count)
     SELECT d.id,d.hold_row_id,d.admission_id,h.account_id,h.user_id,0,0 FROM credit_hold_draws d JOIN credit_holds h ON h.id=d.hold_row_id WHERE d.id=$1`, [first.id]), { code: '23514' }, 'cannot backfill guessed provenance on an old resolved draw');
@@ -71,7 +72,7 @@ test('resolved draw consumption retains exact lots atomically without changing m
   for (const sql of [
     'UPDATE credit_draw_consumption_receipts SET charged_micro=charged_micro', 'DELETE FROM credit_draw_consumption_receipts',
     'UPDATE credit_draw_consumption_lots SET consumed_micro=consumed_micro', 'DELETE FROM credit_draw_consumption_lots',
-    'TRUNCATE credit_draw_consumption_lots', 'TRUNCATE credit_draw_consumption_receipts CASCADE',
+    'TRUNCATE credit_draw_consumption_lots CASCADE', 'TRUNCATE credit_draw_consumption_receipts CASCADE',
   ]) await assert.rejects(pool.query(sql), { code: '23514' }, 'consumption evidence cannot be altered or removed');
   await assert.rejects(pool.query(down), { code: '23514' }, 'rollback refuses retained evidence');
 

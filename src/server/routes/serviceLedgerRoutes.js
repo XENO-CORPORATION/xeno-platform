@@ -107,6 +107,9 @@ export function createServiceLedgerRouter({
   ensureQuota = defaultEnsureQuota,
   getEffectivePlan = defaultGetEffectivePlan,
   billingSubjectFor = defaultBillingSubjectFor,
+  // Deployment must provide a provider-specific receipt verifier. A bearer token
+  // alone cannot certify caller-authored late counts. No default trust identity.
+  verifyCorrectionReceipt = null,
 } = {}) {
   const router = express.Router();
   router.use(makeRequireServiceToken(getServiceToken));
@@ -149,7 +152,32 @@ export function createServiceLedgerRouter({
   router.post('/runs/:admissionId/draws/:drawId/settle', drawRoute('settleRunDrawV2'));
   router.post('/runs/:admissionId/draws/:drawId/void', drawRoute('voidRunDrawV2'));
   router.post('/runs/:admissionId/draws/:drawId/extend', drawRoute('extendRunDrawV2'));
+  router.post('/runs/:admissionId/draws/:drawId/corrections/read', drawRoute('readRunDrawCorrectionsV2'));
   router.post('/runs/:admissionId/close', drawRoute('closeRunReservationV2'));
+  router.post('/runs/:admissionId/draws/:drawId/corrections', async (req, res) => {
+    res.set('Cache-Control', 'no-store');
+    if (typeof verifyCorrectionReceipt !== 'function') return res.status(503).json({ error: { code: 'CORRECTION_VERIFIER_UNAVAILABLE' } });
+    try {
+      const target = { admissionId: req.params.admissionId, drawId: req.params.drawId };
+      const controller = new AbortController();
+      let timer;
+      let receipt;
+      try {
+        receipt = await Promise.race([
+          Promise.resolve().then(() => verifyCorrectionReceipt({ target: Object.freeze(target), evidence: req.body, signal: controller.signal })),
+          new Promise((_, reject) => { timer = setTimeout(() => { controller.abort(); reject(new Error('Correction verifier timed out')); }, 10000); timer.unref?.(); }),
+        ]);
+      } finally { clearTimeout(timer); }
+      if (!receipt || receipt.verified !== true) return res.status(403).json({ error: { code: 'PROVIDER_RECEIPT_REQUIRED' } });
+      res.json(await ledger.correctRunDrawV2(req.db, target, receipt));
+    } catch (error) {
+      const codes = { BAD_REQUEST: 400, PROVIDER_RECEIPT_REQUIRED: 403, NOT_FOUND: 404, CONFLICT: 409,
+        DRAW_NOT_CORRECTABLE: 409, CORRECTION_WINDOW_EXPIRED: 409, RUN_NOT_TERMINAL: 409,
+        RECEIPT_IDENTITY_MISMATCH: 409, CONSUMPTION_EVIDENCE_REQUIRED: 409, CORRECTION_NOT_DOWNWARD: 409,
+        FUNDING_CONFLICT: 409, INVALID_PINNED_PRICING: 422 };
+      res.status(codes[error.code] || 503).json({ error: { code: codes[error.code] ? error.code : 'CORRECTION_UNAVAILABLE' } });
+    }
+  });
 
   /**
    * Worst-case reservation for a request. `pricing` is priced HERE; `amountMicro` is the
