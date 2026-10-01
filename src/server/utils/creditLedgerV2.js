@@ -1407,12 +1407,31 @@ export async function settleRunDrawV2(pool, value) {
     if (account.is_frozen) charged = 0n;
     if (balance < charged) charged = balance > 0n ? balance : 0n;
     const liability = priced - charged;
-    let remaining = charged;
+    let planned = charged, allocationCount = 0;
+    for (const f of funding) {
+      if (planned === 0n) break;
+      planned -= BigInt(f.amountMicro) < planned ? BigInt(f.amountMicro) : planned;
+      allocationCount++;
+    }
+    if (planned !== 0n) throw drawError('FUNDING_CONFLICT');
+    await db.query(`INSERT INTO credit_draw_consumption_receipts
+      (draw_row_id,hold_row_id,admission_id,account_id,payer_user_id,charged_micro,allocation_count)
+      VALUES($1,$2,$3,$4,$5,$6,$7)`, [draw.id, hold.id, admission.id, account.id, hold.user_id, charged.toString(), allocationCount]);
+    let remaining = charged, consumptionOrder = 0;
     for (const f of funding) {
       if (remaining === 0n) break;
       const take = BigInt(f.amountMicro) < remaining ? BigInt(f.amountMicro) : remaining;
       const g = await db.query('UPDATE credit_grants SET remaining_micro=remaining_micro-$1 WHERE id=$2 AND remaining_micro >= $1 RETURNING id', [take.toString(), f.grantId]);
       if (g.rows.length !== 1) throw drawError('FUNDING_CONFLICT');
+      // Copy timestamps in SQL, preserving microseconds and original lot identity.
+      // This survives the reservation-row removal below, in the same transaction.
+      const recorded = await db.query(`INSERT INTO credit_draw_consumption_lots
+        (draw_row_id,grant_id,consumption_order,consumed_micro,grant_kind,grant_priority,grant_expires_at,
+          grant_source_ref,grant_amount_micro,remaining_after_micro)
+        SELECT $1,id,$2,$3,kind,priority,expires_at,source_ref,amount_micro,remaining_micro
+          FROM credit_grants WHERE id=$4 AND user_id=$5 RETURNING grant_id`,
+      [draw.id, consumptionOrder++, take.toString(), f.grantId, hold.user_id]);
+      if (recorded.rowCount !== 1) throw drawError('FUNDING_CONFLICT');
       // The slice leaves the reservation as it is spent, so the next draw is funded from what is left
       // (reserved_micro > 0 is a CHECK, so a fully spent lot's reservation row goes away).
       const shrunk = await db.query(`UPDATE credit_hold_funding SET reserved_micro=reserved_micro-$1
