@@ -276,6 +276,24 @@ This is **candidate qualification**, not SDK release/Interface adoption, complet
 commercial-provider output, cancellation uncertainty reconciliation, or the full workforce mission.
 The SDK owner controls PR100 merge/release sequencing. The Interface execution gate remains closed.
 
+### Draw-consumption provenance prerequisite — 2026-10-01
+
+`settleRunDrawV2` now records exact consumed grant slices in the same transaction as the draw
+settlement. `credit_draw_consumption_receipts` binds the draw to its payer/account/hold and
+charged total; `credit_draw_consumption_lots` retains actual consumed amounts plus original
+kind, priority, expiry, source and post-consumption remainder. Evidence is immutable and survives
+removal of `credit_hold_funding` rows. New settled draws require complete matching evidence;
+legacy resolved draws remain explicitly unrecorded rather than receiving guessed provenance.
+No charge, quota, hold-release, correction or refund policy changed.
+
+Fresh local PostgreSQL proof: `scripts/draw-consumption.test.mjs` passes alongside the existing
+14-case `workforce-run-draws` suite. It covers multi-lot partial consumption, concurrent replay,
+rollback after provenance-write failure, immutable/retained evidence, identity and snapshot
+mismatches, missing/incomplete/zero-charge allocations, expired-lot timestamp preservation and
+canonical hash-chain validity. The proof is registered in `test:payment-ops`; migration-version
+and SQL/reachability gates remain separate. The later append-only downward correction still needs
+an explicit source, idempotency key, bounded window and original-lot restoration policy.
+
 ## Workforce account-plan dependency repair — 2026-09-30
 
 Canonical quota adoption exposed two payment-client import paths: quota aliases and effective
