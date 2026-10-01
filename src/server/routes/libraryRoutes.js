@@ -147,7 +147,15 @@ router.get('/assets/:id/status', async (req, res) => {
     if (!isLibraryUuid(req.params.id)) return res.status(400).json({ success: false, error: 'Invalid asset id' });
     const file = await getAuthorizedLibraryFile(req.db, { type: 'user', id: req.user.id }, req.params.id);
     if (!file) return res.status(404).json({ success: false, error: 'Library asset not found' });
-    res.json({ success: true, ready: file.ingestion_safe !== false });
+    // `blocked` is the one TERMINAL answer the composer needs besides `ready`: a file the scanner
+    // flagged is never going to clear, so waiting for it would trap the composer forever. Every other
+    // not-ready state (queued, scanning, a retry) means "keep waiting" — never "send it anyway".
+    res.json({
+      success: true,
+      ready: file.ingestion_safe !== false,
+      state: file.ingestion_state || 'queued',
+      blocked: file.ingestion_error_code === 'malware_detected',
+    });
   } catch (error) {
     console.error('Failed to read Library asset status:', error);
     res.status(500).json({ success: false, error: 'Could not read Library asset status' });
