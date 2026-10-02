@@ -360,6 +360,26 @@ function MessageModelInfo({ timestamp, textModel, tokenUsage, estimatedTokens, i
   );
 }
 
+/**
+ * ONE display URL per local file, for as long as the page lives.
+ *
+ * A picture the person attached is shown from its local bytes — in the composer chip and then in the
+ * sent message. Minting `URL.createObjectURL(file)` during render gave the <img> a new URL on every
+ * render; the message list re-renders on every streamed token of a reply, so each sent image was
+ * re-resolved (and leaked a URL) dozens of times a second while the model answered. Keyed by the
+ * File itself, so the chip and the message share one URL and the move between them reloads nothing.
+ *
+ * 🔴 NEVER revoke one of these and NEVER hand one to the full-screen viewer — the viewer revokes its
+ * URL when it closes, which would blank every thumbnail showing that file. Give the viewer its own
+ * `URL.createObjectURL(file)` instead.
+ */
+const stableBlobUrls = new WeakMap<Blob, string>();
+const stableBlobUrl = (blob: Blob): string => {
+  let url = stableBlobUrls.get(blob);
+  if (!url) { url = URL.createObjectURL(blob); stableBlobUrls.set(blob, url); }
+  return url;
+};
+
 // Interface for attached file state
 interface AttachedFile {
   id: string;
@@ -2525,6 +2545,80 @@ const getThemeSliderValueText = (position: number): string => {
   const exactTheme = VISUAL_CHAT_THEME_OPTIONS.find((option) => option.position === position);
   return exactTheme ? `${exactTheme.label} theme, ${position}%` : `Custom theme, ${position}%`;
 };
+
+// --- Full-screen Image Viewer ---
+// Declared at MODULE level on purpose. Declared inside ChatWithLLM it was a NEW component type on
+// every render, so React unmounted and rebuilt the whole overlay — image included — on every
+// keystroke and every streamed token while it was open (measured: 34 rebuilds in 33 keystrokes).
+const FullScreenImageViewer: React.FC<{
+  imageUrl: string | null;
+  isOpen: boolean;
+  isShown: boolean;
+  onClose: () => void;
+  showDownloadButton?: boolean;
+}> = ({ imageUrl, isOpen, isShown, onClose, showDownloadButton }) => {
+  if (!imageUrl) return null;
+
+  return (
+    <div
+      className="fixed inset-0 z-[1000] flex items-center justify-center p-4 image-viewer-overlay backdrop-blur-md"
+      style={{
+        backgroundColor: isShown ? 'rgba(0, 0, 0, 0.8)' : 'rgba(0, 0, 0, 0)',
+        transition: `background-color ${SCHEDULE_CREATE_MODAL_MS}ms ${SCHEDULE_DATE_EASE}`,
+      }}
+      onClick={onClose}
+    >
+      <style>{CHAT_MODAL_KEYFRAMES_CSS}</style>
+      <div className="group absolute top-4 right-4 z-[1001] w-16 h-16 flex items-center justify-center">
+        <div className="absolute inset-0 bg-black/20 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity duration-150 ease-in-out -z-10"></div>
+        {/* Stays hand-written, and the reason is what it sits ON. This is an overlay control on
+           a full-screen IMAGE — arbitrary content, any colour — so its ink is `--chat-text` at rest
+           with a plate of its own fading in behind it. `ghost` rests at `--chat-muted`, which is
+           chosen to be quiet against a known surface and is exactly the wrong thing over a
+           photograph. A variant cannot be legible against content it does not know. */}
+        { (showDownloadButton === undefined || showDownloadButton === true) && (
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              const link = document.createElement('a');
+              link.href = imageUrl;
+              link.download = `generated-image-${Date.now()}.png`;
+              document.body.appendChild(link);
+              link.click();
+              document.body.removeChild(link);
+            }}
+            className="relative z-10 p-2 rounded-md text-[var(--chat-text)] hover:bg-[var(--chat-hover)] active:scale-95 transition-all duration-150 ease-in-out"
+            title="Download Image"
+          >
+            <Download size={20} />
+          </button>
+        )}
+        <IconButton
+          icon={XDecl}
+          variant="ghost"
+          size="lg"
+          iconSize={24}
+          className="relative z-10 ml-1 duration-150 ease-in-out"
+          onClick={(e) => { e.stopPropagation(); onClose(); }}
+          title="Close Fullscreen"
+          aria-label="Close fullscreen"
+        />
+      </div>
+      <div
+        className="relative flex h-[90vh] w-[90vw] items-center justify-center"
+        style={chatModalCardMotionStyle('center', isShown, isOpen)}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <img
+          src={imageUrl}
+          alt="Fullscreen image"
+          className="h-full w-full rounded-lg object-contain shadow-2xl"
+        />
+      </div>
+    </div>
+  );
+};
+// --- END Full-screen Image Viewer Component ---
 
 const ChatWithLLM: React.FC<ChatWithLLMProps> = ({
   interfaceId = 'default',
@@ -9824,7 +9918,7 @@ Keep the summary under 500 words. Preserve essential context needed to continue 
       size: file.size,
       // Created ONCE. Building the blob URL during render minted a new URL on every re-render, so
       // the <img> re-decoded each time the upload or scan state changed — the visible "repaint".
-      previewUrl: file.type.startsWith('image/') ? URL.createObjectURL(file) : undefined,
+      previewUrl: file.type.startsWith('image/') ? stableBlobUrl(file) : undefined,
       uploading: true,
       ready: false,
     }));
@@ -11297,76 +11391,6 @@ Keep the summary under 500 words. Preserve essential context needed to continue 
   };
   // --- END NEW HANDLER FUNCTIONS ---
 
-  // --- NEW: Full-screen Image Viewer Component ---
-  const FullScreenImageViewer: React.FC<{
-    imageUrl: string | null;
-    isOpen: boolean;
-    isShown: boolean;
-    onClose: () => void;
-    showDownloadButton?: boolean;
-  }> = ({ imageUrl, isOpen, isShown, onClose, showDownloadButton }) => {
-    if (!imageUrl) return null;
-
-    return (
-      <div
-        className="fixed inset-0 z-[1000] flex items-center justify-center p-4 image-viewer-overlay backdrop-blur-md"
-        style={{
-          backgroundColor: isShown ? 'rgba(0, 0, 0, 0.8)' : 'rgba(0, 0, 0, 0)',
-          transition: `background-color ${SCHEDULE_CREATE_MODAL_MS}ms ${SCHEDULE_DATE_EASE}`,
-        }}
-        onClick={onClose}
-      >
-        <style>{CHAT_MODAL_KEYFRAMES_CSS}</style>
-        <div className="group absolute top-4 right-4 z-[1001] w-16 h-16 flex items-center justify-center">
-          <div className="absolute inset-0 bg-black/20 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity duration-150 ease-in-out -z-10"></div>
-          /* Stays hand-written, and the reason is what it sits ON. This is an overlay control on
-             a full-screen IMAGE — arbitrary content, any colour — so its ink is `--chat-text` at rest
-             with a plate of its own fading in behind it. `ghost` rests at `--chat-muted`, which is
-             chosen to be quiet against a known surface and is exactly the wrong thing over a
-             photograph. A variant cannot be legible against content it does not know. */
-          { (showDownloadButton === undefined || showDownloadButton === true) && (
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                const link = document.createElement('a');
-                link.href = imageUrl;
-                link.download = `generated-image-${Date.now()}.png`;
-                document.body.appendChild(link);
-                link.click();
-                document.body.removeChild(link);
-              }}
-              className="relative z-10 p-2 rounded-md text-[var(--chat-text)] hover:bg-[var(--chat-hover)] active:scale-95 transition-all duration-150 ease-in-out"
-              title="Download Image"
-            >
-              <Download size={20} />
-            </button>
-          )}
-          <IconButton
-            icon={XDecl}
-            variant="ghost"
-            size="lg"
-            iconSize={24}
-            className="relative z-10 ml-1 duration-150 ease-in-out"
-            onClick={(e) => { e.stopPropagation(); onClose(); }}
-            title="Close Fullscreen"
-            aria-label="Close fullscreen"
-          />
-        </div>
-        <div
-          className="relative flex h-[90vh] w-[90vw] items-center justify-center"
-          style={chatModalCardMotionStyle('center', isShown, isOpen)}
-          onClick={(e) => e.stopPropagation()}
-        >
-          <img
-            src={imageUrl}
-            alt="Fullscreen image"
-            className="h-full w-full rounded-lg object-contain shadow-2xl"
-          />
-        </div>
-      </div>
-    );
-  };
-  // --- END Full-screen Image Viewer Component ---
 
   // Function to show file in context panel
   const handleShowFileInContextPanel = (fileData: AttachedFile | { name: string, type: string, content: string, encoding: 'base64' | 'text' }) => {
@@ -12906,8 +12930,9 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                                         alt={file.name}
                                         className="w-11 h-11 rounded-lg object-cover flex-shrink-0 border border-[var(--chat-border)] group-hover:border-[var(--chat-muted)] transition-all duration-200 ease-out cursor-pointer group-hover:scale-[1.02]"
                                         onClick={() => {
-                                            if (file.previewUrl) {
-                                                setFullScreenImageUrl(file.previewUrl);
+                                            if (file.fileObject) {
+                                                // Its own URL: the viewer revokes what it is given when it closes.
+                                                setFullScreenImageUrl(URL.createObjectURL(file.fileObject));
                                                 setIsFullScreenImageOpen(true);
                                                 setViewerShowsDownloadButton(false);
                                             }
@@ -16650,7 +16675,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                                                        const src = img.base64Data
                                                          ? `data:${img.type};base64,${img.base64Data}`
                                                          : img.file
-                                                           ? URL.createObjectURL(img.file)
+                                                           ? stableBlobUrl(img.file)
                                                            : img.contentUrl || '';
                                                        if (!src) return null;
                                                        /* Stays hand-written: a 148 x 200 image card.
