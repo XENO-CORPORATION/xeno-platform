@@ -58,7 +58,10 @@ try {
     // attachFileObjects is the SAME path the file picker uses (no second upload implementation)
     // (the picker can target a queued prompt — `queuedId` — and it is still the one upload path)
     assert.match(chat, /const handleFileSelected = async[\s\S]{0,260}await attachFileObjects\(Array\.from\(files\)(, queuedId)?\)/);
-    assert.match(chat, /libraryService\.upload\(file, 'chat-attachment'\)/);
+    // ...and the upload inside it saves to the Library as a `chat-attachment` (2026-10-02: each placed
+    // file uploads itself, so the call reads the placeholder's own File).
+    assert.match(chat.slice(chat.indexOf('const attachFileObjects = async'), chat.indexOf('const handleFileSelected = async')),
+      /libraryService\.upload\(f\.fileObject as File, 'chat-attachment'\)/);
   });
 } finally {
   await vite.close();

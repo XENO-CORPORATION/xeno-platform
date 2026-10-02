@@ -87,7 +87,10 @@ test('uploads and conversational image generation both persist Library rows', ()
   assert.doesNotMatch(libraryAssets.match(/CLIENT_UPLOAD_SOURCES = [^\n]*/)[0], /chat-generation/);
   assert.match(server, /source: 'chat-generation'/);
   assert.match(server, /libraryContentUrl/);
-  assert.match(chat, /libraryService\.upload\(file, 'chat-attachment'\)/);
+  // Every chat attachment is saved to the Library as a `chat-attachment`, inside the ONE upload path.
+  // 2026-10-02: each placed file uploads itself, so the call reads the placeholder's own File.
+  assert.match(chat.slice(chat.indexOf('const attachFileObjects = async'), chat.indexOf('const handleFileSelected = async')),
+    /libraryService\.upload\(f\.fileObject as File, 'chat-attachment'\)/);
   assert.match(chat, /generatedImageAsset/);
   // 2026-09-26: chat images come from the generate_image tool and are saved WITH the streamed turn —
   // the retired keyword path's separate `persistedImageMessage` save is gone. Every image of the turn

@@ -104,7 +104,26 @@ const CODE_LIMITS = { code: 8000, stdout: 4000, stderr: 2000, files: 32 } as con
 const CODE_LANGUAGES: ReadonlyArray<string> = ['python', 'javascript', 'typescript', 'go', 'rust', 'c', 'cpp', 'java', 'ruby', 'php', 'bash'];
 const CODE_STATUSES: ReadonlyArray<ChatTurnCodeStep['status']> = ['running', 'success', 'error', 'timeout', 'killed'];
 
-export type ChatTurnStep = ChatTurnSearchStep | ChatTurnImageStep | ChatTurnCodeStep;
+/**
+ * A `question` step: the model asked the person with ask_user (2026-10-02). The turn ENDED here; the
+ * answer is the person's next message, so it is never written into this record (a saved turn is not
+ * edited after the fact). Validated server-side by `utils/chatTurnRecord.js`.
+ */
+export interface ChatTurnQuestionStep {
+  id: string;
+  kind: 'question';
+  question: string;
+  options: string[];
+  multiple: boolean;
+  startedAt: number;
+  endedAt?: number;
+  toolCallId?: string;
+}
+
+/** Caps mirror `utils/chatTurnRecord.js` QUESTION_LIMITS. */
+export const QUESTION_LIMITS = { question: 300, option: 300, minOptions: 2, maxOptions: 6, toolCallId: 128 } as const;
+
+export type ChatTurnStep = ChatTurnSearchStep | ChatTurnImageStep | ChatTurnCodeStep | ChatTurnQuestionStep;
 
 export interface ChatTurnRecord {
   schema: typeof TURN_SCHEMA;
@@ -130,7 +149,8 @@ export type TurnStreamEvent =
   | { type: 'image_error'; index?: number; code?: string; message?: string }
   | { type: 'code_start'; index?: number; language?: string; code?: string }
   | { type: 'code_result'; index?: number; status?: string; exitCode?: number | null; stdout?: string; stderr?: string; files?: Array<{ path?: string }>; libraryAssets?: Array<{ path?: string; assetId?: string }> }
-  | { type: 'code_error'; index?: number; message?: string };
+  | { type: 'code_error'; index?: number; message?: string }
+  | { type: 'ask_user'; toolCallId?: string | null; question?: string; options?: unknown[]; multiple?: boolean };
 
 export const TURN_IMAGE_ASPECTS: ReadonlyArray<string> = ['1:1', '16:9', '9:16', '4:3', '3:4', '3:2', '2:3'];
 /** Mirrors `utils/chatTurnRecord.js`: what the server accepts is what the client records. */
@@ -145,6 +165,7 @@ const asModelId = (raw: unknown): string | undefined => (typeof raw === 'string'
 const isSearchStep = (step: ChatTurnStep): step is ChatTurnSearchStep => step.kind === 'search';
 export const isImageStep = (step: ChatTurnStep): step is ChatTurnImageStep => step.kind === 'image';
 export const isCodeStep = (step: ChatTurnStep): step is ChatTurnCodeStep => step.kind === 'code';
+export const isQuestionStep = (step: ChatTurnStep): step is ChatTurnQuestionStep => step.kind === 'question';
 
 const asSources = (raw: unknown): ChatTurnSource[] => {
   if (!Array.isArray(raw)) return [];
@@ -173,6 +194,11 @@ export function applyTurnEvent(record: ChatTurnRecord, event: TurnStreamEvent, n
   }
   if (event.type === 'code_start' || event.type === 'code_result' || event.type === 'code_error') {
     return applyCodeEvent(record, event, now);
+  }
+  if (event.type === 'ask_user') {
+    const step = asQuestionStep({ ...event, id: 'question-1', startedAt: now });
+    if (!step || record.steps.some(isQuestionStep)) return record;
+    return { ...record, steps: [...record.steps, step] };
   }
   const query = typeof event.query === 'string' ? event.query.trim().slice(0, 512) : '';
   if (event.type === 'search_start') {
@@ -303,6 +329,34 @@ export function turnImageModels(record: ChatTurnRecord | undefined): Array<{ mod
   return [...byModel.values()];
 }
 
+/**
+ * A question step from untrusted input (a stream event or a stored record), or null when it is not a
+ * usable question. One validator for both paths, so what renders live is exactly what restores.
+ */
+function asQuestionStep(raw: any): ChatTurnQuestionStep | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const question = typeof raw.question === 'string' ? raw.question.trim().slice(0, QUESTION_LIMITS.question) : '';
+  const options = Array.isArray(raw.options)
+    ? raw.options.filter((o: unknown): o is string => typeof o === 'string' && o.trim() !== '').map((o: string) => o.trim().slice(0, QUESTION_LIMITS.option))
+    : [];
+  if (!question || options.length < QUESTION_LIMITS.minOptions || options.length > QUESTION_LIMITS.maxOptions) return null;
+  if (typeof raw.id !== 'string' || typeof raw.startedAt !== 'number') return null;
+  return {
+    id: raw.id,
+    kind: 'question',
+    question,
+    options,
+    multiple: raw.multiple === true,
+    startedAt: raw.startedAt,
+    ...(typeof raw.endedAt === 'number' ? { endedAt: raw.endedAt } : {}),
+    ...(typeof raw.toolCallId === 'string' && raw.toolCallId.length <= QUESTION_LIMITS.toolCallId ? { toolCallId: raw.toolCallId } : {}),
+  };
+}
+
+/** The question a turn ended on, if it asked one. */
+export const turnQuestion = (turn: ChatTurnRecord | undefined): ChatTurnQuestionStep | undefined =>
+  (turn?.steps ?? []).find(isQuestionStep);
+
 /** Close the record: every still-open step is marked ended, and the turn is stamped. */
 export function closeTurnRecord(record: ChatTurnRecord, endedAt = Date.now()): ChatTurnRecord {
   return {
@@ -358,6 +412,10 @@ export function normalizeStoredTurn(value: unknown): ChatTurnRecord | undefined 
         ...(files.length ? { files } : {}),
         ...(typeof c.error === 'string' ? { error: c.error } : {}),
       }];
+    }
+    if (raw && typeof raw === 'object' && (raw as ChatTurnQuestionStep).kind === 'question') {
+      const question = asQuestionStep(raw);
+      return question ? [question] : [];
     }
     if (!raw || typeof raw !== 'object' || (raw as ChatTurnSearchStep).kind !== 'search') return [];
     const step = raw as ChatTurnSearchStep;
@@ -494,9 +552,29 @@ const codeToolCall = (step: ChatTurnCodeStep, turnLive: boolean): ToolCallInfo =
   };
 };
 
+/**
+ * A question step as the transcript's own `ask_user` call — the canonical step model already draws it
+ * ("Asked <question>"). Done the moment it is recorded: the turn ENDED on it, nothing is running.
+ */
+const questionToolCall = (step: ChatTurnQuestionStep): ToolCallInfo => ({
+  id: step.id,
+  toolName: 'ask_user',
+  params: { question: step.question },
+  status: 'done',
+  success: true,
+  outcome: 'succeeded',
+  result: '',
+  startedAt: step.startedAt,
+  endedAt: step.endedAt ?? step.startedAt,
+  durationMs: Math.max(0, (step.endedAt ?? step.startedAt) - step.startedAt),
+  category: 'other',
+});
+
 const toToolCall = (step: ChatTurnStep, turnLive: boolean): ToolCallInfo => {
   if (isImageStep(step)) return imageToolCall(step, turnLive);
   if (isCodeStep(step)) return codeToolCall(step, turnLive);
+  // 🔴 Before this, anything that was not an image or code step fell through to web_search below.
+  if (isQuestionStep(step)) return questionToolCall(step);
   const done = step.endedAt !== undefined || !turnLive;
   const endedAt = step.endedAt ?? (done ? step.startedAt : undefined);
   return {

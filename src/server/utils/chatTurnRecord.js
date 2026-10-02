@@ -141,6 +141,42 @@ export function turnCodeAssetIds(turn) {
   return ids;
 }
 
+// A `question` step: the model asked the person with ask_user (2026-10-02). The record holds the question
+// and its options exactly as shown; the ANSWER is the person's next message, so it is never written here
+// and a saved turn is never edited after the fact. Limits mirror chatAskUserTool.js ASK_USER_LIMITS.
+const QUESTION_LIMITS = Object.freeze({ question: 300, option: 300, minOptions: 2, maxOptions: 6, toolCallId: 128 });
+
+function normalizeQuestionStep(raw) {
+  if (!shortString(raw.question, QUESTION_LIMITS.question) || !raw.question.trim()) {
+    return { ok: false, error: `question step.question must be a non-empty string of at most ${QUESTION_LIMITS.question} characters` };
+  }
+  if (!Array.isArray(raw.options) || raw.options.length < QUESTION_LIMITS.minOptions || raw.options.length > QUESTION_LIMITS.maxOptions) {
+    return { ok: false, error: `question step.options must hold ${QUESTION_LIMITS.minOptions} to ${QUESTION_LIMITS.maxOptions} options` };
+  }
+  for (const option of raw.options) {
+    if (!shortString(option, QUESTION_LIMITS.option) || !option.trim()) return { ok: false, error: 'each question option must be a short non-empty string' };
+  }
+  if (raw.multiple !== undefined && typeof raw.multiple !== 'boolean') return { ok: false, error: 'question step.multiple must be a boolean' };
+  if (raw.toolCallId !== undefined && !shortString(raw.toolCallId, QUESTION_LIMITS.toolCallId)) return { ok: false, error: 'question step.toolCallId must be a short string' };
+  if (!isFiniteNumber(raw.startedAt) || raw.startedAt <= 0) return { ok: false, error: 'step.startedAt must be a timestamp' };
+  if (raw.endedAt !== undefined && (!isFiniteNumber(raw.endedAt) || raw.endedAt < raw.startedAt)) {
+    return { ok: false, error: 'step.endedAt must be a timestamp at or after its startedAt' };
+  }
+  return {
+    ok: true,
+    step: {
+      id: raw.id,
+      kind: 'question',
+      question: raw.question,
+      options: [...raw.options],
+      multiple: raw.multiple === true,
+      startedAt: raw.startedAt,
+      ...(raw.endedAt !== undefined ? { endedAt: raw.endedAt } : {}),
+      ...(raw.toolCallId !== undefined ? { toolCallId: raw.toolCallId } : {}),
+    },
+  };
+}
+
 /**
  * @returns {{ ok: true, turn: object } | { ok: false, error: string }}
  */
@@ -174,6 +210,12 @@ export function normalizeTurnRecord(value) {
       const code = normalizeCodeStep(raw);
       if (!code.ok) return code;
       steps.push(code.step);
+      continue;
+    }
+    if (raw.kind === 'question') {
+      const question = normalizeQuestionStep(raw);
+      if (!question.ok) return question;
+      steps.push(question.step);
       continue;
     }
     if (raw.kind !== 'search') return { ok: false, error: `unknown step kind: ${String(raw.kind).slice(0, 32)}` };

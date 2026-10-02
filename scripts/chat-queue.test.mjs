@@ -81,7 +81,9 @@ try {
     const at = chat.indexOf('const [isQueueSending, setIsQueueSending] = useState(false);');
     assert.notEqual(at, -1, 'the guard is state, so a finished send re-runs the effect');
     const effect = chat.slice(at, chat.indexOf('}, [isLoading, isQueueSending, queue, isQueueHeld', at));
-    assert.match(effect, /const next = nextSendable\(queue, \{ held: isQueueHeld \}\);\s*if \(!\('item' in next\)\) return;/, 'nextSendable decides before anything is removed');
+    // 2026-10-02: an open ask_user question holds the queue too — the model asked something, so a
+    // queued prompt must not jump in front of the answer.
+    assert.match(effect, /const next = nextSendable\(queue, \{ held: isQueueHeld \|\| Boolean\(waitingQuestion\) \}\);\s*if \(!\('item' in next\)\) return;/, 'nextSendable decides before anything is removed, and a waiting question holds the queue');
     assert.match(effect, /handleGenerate\(item\.text, item\.attachedFiles\)/, 'the prompt\'s own text and files go to handleGenerate');
     assert.doesNotMatch(effect, /setInput\(/, 'the composer is not used as a mailbox for the queued prompt');
     assert.ok(effect.indexOf('removeQueued') > effect.indexOf("'item' in next"), 'removal comes after the send decision');
@@ -89,7 +91,12 @@ try {
   });
 
   test('reachability: the card is mounted above the composer and wired to the queue', () => {
-    assert.match(chat, /aboveComposer=\{queue\.messages\.length > 0 && messages\.length > 0 \? \(\s*<ChatQueue/);
+    // The slot holds the ask_user panel ABOVE the queue when both exist (2026-10-02); the queue itself
+    // still mounts whenever it has prompts.
+    const slot = chat.slice(chat.indexOf('aboveComposer={'), chat.indexOf(') : undefined}', chat.indexOf('aboveComposer={')));
+    assert.match(slot, /^aboveComposer=\{\(waitingQuestion \|\| queue\.messages\.length > 0\) && messages\.length > 0 \? \(/);
+    assert.match(slot, /\{queue\.messages\.length > 0 && \(\s*<ChatQueue/);
+    assert.ok(slot.indexOf('<ChatQuestionPanel') !== -1 && slot.indexOf('<ChatQuestionPanel') < slot.indexOf('<ChatQueue'), 'the question panel sits above the queue');
     for (const handler of ['onToggle={toggleQueueExpansion}', 'onRemove={removeFromQueue}', 'onMove={moveInQueue}', 'onSaveText={saveQueuedText}', 'onRemoveFile={removeQueuedFile}', 'onAttach={attachToQueued}', 'onHoldChange={setIsQueueHeld}']) {
       assert.ok(chat.includes(handler), `ChatQueue gets ${handler}`);
     }

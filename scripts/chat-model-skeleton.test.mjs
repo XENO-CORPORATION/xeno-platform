@@ -48,7 +48,9 @@ test('nothing can be sent to the fallback model while the catalogue loads', () =
   const generate = CHAT.slice(CHAT.indexOf('const handleGenerate = async ('), CHAT.indexOf('const handleGenerate = async (') + 1200);
   assert.match(generate, /if \(isModelsLoading\) return;/, 'handleGenerate is the one choke point — Enter, the button and voice all pass through it');
   const send = CHAT.slice(CHAT.indexOf('data-composer-send-button'), CHAT.indexOf('data-composer-send-button') + 1600);
-  assert.match(send, /disabled=\{[^}]*\|\| isModelsLoading\}/, 'the affordance matches the guard');
+  // A clause of the button's `disabled`, wherever it sits in the list: the scan-before-send check now
+  // follows it (2026-09-30), and the rule is that the button refuses what handleGenerate refuses.
+  assert.match(send, /disabled=\{[^}]*\|\| isModelsLoading(?: \|\||\})/, 'the affordance matches the guard');
 });
 
 test('the skeleton is a real primitive: chat tokens, a shimmer, and stillness under reduced motion', () => {
