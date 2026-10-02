@@ -5394,7 +5394,18 @@ const ChatWithLLM: React.FC<ChatWithLLMProps> = ({
       };
 
       let readableLog = `# XENO Chat Session Transcript\n\n`;
-      readableLog += `- **Exported At:** ${telemetry.exportTimestamp}\n`;
+      // Message times below are the exporter's local time; name the zone so the transcript can be lined
+      // up with server logs (UTC) by someone in another timezone.
+      const exportZone = Intl.DateTimeFormat().resolvedOptions().timeZone || 'local';
+      const offsetMin = -new Date().getTimezoneOffset();
+      const exportOffset = `UTC${offsetMin >= 0 ? '+' : '-'}${String(Math.floor(Math.abs(offsetMin) / 60)).padStart(2, '0')}:${String(Math.abs(offsetMin) % 60).padStart(2, '0')}`;
+      const fullTime = (t: unknown) => {
+        const d = new Date(t as string | number | Date);
+        if (Number.isNaN(d.getTime())) return 'unknown time';
+        return d.toLocaleString(undefined, { weekday: 'short', year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false });
+      };
+      readableLog += `- **Exported At:** ${fullTime(telemetry.exportTimestamp)} (${exportZone}, ${exportOffset})\n`;
+      readableLog += `- **Message times:** ${exportZone} (${exportOffset})\n`;
       readableLog += `- **Conversation:** ${activeTitle} (\`${telemetry.session.conversationId}\`)\n`;
       readableLog += `- **Model:** ${selectedModel?.name || selectedModel?.id || 'Default'} (\`${selectedModel?.id || 'n/a'}\`)\n`;
       readableLog += `- **Mode:** \`${emptyStateMode}\` | **Theme:** \`${chatTheme}\` | **Viewport:** ${telemetry.client.viewport.width}x${telemetry.client.viewport.height} (DPR: ${telemetry.client.viewport.devicePixelRatio})\n`;
@@ -5406,12 +5417,28 @@ const ChatWithLLM: React.FC<ChatWithLLMProps> = ({
         readableLog += `_(No messages in active session)_\n\n`;
       } else {
         messages.forEach((m, i) => {
-          const roleLabel = String(m.sender || (m as any).role || 'message').toUpperCase();
-          const timeLabel = m.timestamp ? new Date(m.timestamp).toLocaleTimeString() : 'now';
+          const rawRole = String(m.sender || (m as any).role || 'message').toLowerCase();
+          const roleLabel = rawRole === 'user' ? 'USER' : rawRole === 'ai' || rawRole === 'assistant' ? 'AI' : rawRole.toUpperCase();
+          const timeLabel = m.timestamp ? fullTime(m.timestamp) : 'not sent yet';
+          // One line of facts per message — which model answered, how long it worked, what was attached, and
+          // whether it is saved yet: the first questions anyone reading a transcript to debug asks.
+          const meta: string[] = [];
+          if (m.timestamp) meta.push(new Date(m.timestamp).toISOString());
+          if (m.modelIdUsed) meta.push(`model ${m.modelIdUsed}`);
+          if (m.thinkingDuration) meta.push(`worked ${m.thinkingDuration}s`);
+          const fileCount = m.userFileAttachments?.length || (m.userFileAttachment ? 1 : 0);
+          if (fileCount) meta.push(`${fileCount} file${fileCount === 1 ? '' : 's'}`);
+          const imageCount = ((m as any).images?.length || 0) + ((m as any).userImages?.length || 0);
+          if (imageCount) meta.push(`${imageCount} image${imageCount === 1 ? '' : 's'}`);
+          const sourceCount = (m.searchInfo?.sources || (m as any).sources || []).length;
+          if (sourceCount) meta.push(`${sourceCount} source${sourceCount === 1 ? '' : 's'}`);
+          if (m.isError) meta.push('ERROR');
+          if (!m.id || /^(user|placeholder|msg)-/.test(String(m.id))) meta.push('not saved yet');
           const contentText = m.parsedAnswer || m.text || (m as any).content || '';
           const thinkingText = m.parsedThinking || m.thinkingContent || (m as any).reasoning || null;
 
           readableLog += `### [${i + 1}] ${roleLabel} — ${timeLabel}\n\n`;
+          if (meta.length) readableLog += `_${meta.join(' · ')}_\n\n`;
           if (thinkingText) {
             readableLog += `> **Thinking / Reasoning Trace:**\n> ${String(thinkingText).replace(/\\n/g, '\n> ')}\n\n`;
           }
