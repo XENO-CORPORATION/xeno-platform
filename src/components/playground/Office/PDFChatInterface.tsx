@@ -7,10 +7,8 @@ import {
   Undo2, Redo2, History
 } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
+import { normalizeChatMath, remarkChatMath, rehypeChatKatex } from '@/lib/chatMath';
 import remarkGfm from 'remark-gfm';
-import remarkMath from 'remark-math';
-import rehypeKatex from 'rehype-katex';
-import 'katex/dist/katex.min.css';
 import * as pdfjsLib from 'pdfjs-dist';
 import pdfWorkerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
 import { countMessageTokens, estimateTokens as quickEstimateTokens } from '@/services/tokenizerService';
@@ -1519,8 +1517,8 @@ Keep the summary under 500 words. Do NOT include any LaTeX code in the summary -
                             <div className={`w-full rounded-2xl p-3 ${message.isError ? 'bg-red-500/10 border border-red-500/30' : 'bg-transparent'}`}>
                               <div className="prose prose-sm prose-invert max-w-none text-gray-200">
                                 <ReactMarkdown
-                                  remarkPlugins={[remarkGfm, remarkMath]}
-                                  rehypePlugins={[rehypeKatex]}
+                                  remarkPlugins={[remarkGfm, remarkChatMath]}
+                                  rehypePlugins={[rehypeChatKatex]}
                                   components={{
                                     code({ node, inline, className, children, ...props }: any) {
                                       return inline ? (
@@ -1533,7 +1531,7 @@ Keep the summary under 500 words. Do NOT include any LaTeX code in the summary -
                                     }
                                   }}
                                 >
-                                  {stripLatexFromChat(message.text)}
+                                  {normalizeChatMath(stripLatexFromChat(message.text))}
                                 </ReactMarkdown>
                               </div>
                               {/* Show indicator that document was generated */}

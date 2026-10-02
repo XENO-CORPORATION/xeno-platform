@@ -3,6 +3,7 @@ import { Button, IconButton } from '@xenosystem/elements-react';
 import { usePlatformTheme } from '../../../platform/platformTheme';
 import { Mic, MicOff, Loader, StopCircle, Play, AlertTriangle, Check, MessageSquare, MessageSquareDecl, ArrowRightDecl, CheckDecl, CopyDecl, PauseDecl, PlayDecl, Trash2Decl } from '@/lib/icons';
 import ReactMarkdown from 'react-markdown';
+import { normalizeChatMath, remarkChatMath, rehypeChatKatex } from '@/lib/chatMath';
 import remarkGfm from 'remark-gfm';
 import rehypeRaw from 'rehype-raw';
 
@@ -1483,10 +1484,10 @@ const ChatWithVoice: React.FC = () => {
                             {msg.textContent && (
                               <div className="prose prose-sm prose-invert max-w-none text-[var(--chat-text)] prose-strong:text-[var(--chat-text)] prose-p:my-1.5 prose-li:my-0.5 prose-ol:pl-5 prose-ul:pl-5"> 
                                 <ReactMarkdown
-                                  remarkPlugins={[remarkGfm]}
-                                  rehypePlugins={[rehypeRaw]}
+                                  remarkPlugins={[remarkGfm, remarkChatMath]}
+                                  rehypePlugins={[rehypeRaw, rehypeChatKatex]}
                                 >
-                                  {msg.textContent}
+                                  {normalizeChatMath(msg.textContent)}
                                 </ReactMarkdown>
                               </div>
                             )}

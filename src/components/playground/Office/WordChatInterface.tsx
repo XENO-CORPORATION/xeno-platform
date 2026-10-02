@@ -8,10 +8,8 @@ import {
 } from 'lucide-react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import ReactMarkdown from 'react-markdown';
+import { normalizeChatMath, remarkChatMath, rehypeChatKatex } from '@/lib/chatMath';
 import remarkGfm from 'remark-gfm';
-import remarkMath from 'remark-math';
-import rehypeKatex from 'rehype-katex';
-import 'katex/dist/katex.min.css';
 import TipTapEditor, { TipTapEditorRef, EditorToolbar, Editor } from './TipTapEditor';
 import PaginatedTipTapEditor, { PaginatedTipTapEditorRef } from './PaginatedTipTapEditor';
 import { countMessageTokens, estimateTokens as quickEstimateTokens } from '@/services/tokenizerService';
@@ -1993,10 +1991,10 @@ ${currentHtml}
                           <div className={`w-full rounded-2xl p-3 ${message.isError ? 'bg-red-500/10 border border-red-500/30' : 'bg-transparent'}`}>
                             <div className="prose prose-sm prose-invert max-w-none text-gray-200">
                               <ReactMarkdown
-                                remarkPlugins={[remarkGfm, remarkMath]}
-                                rehypePlugins={[rehypeKatex]}
+                                remarkPlugins={[remarkGfm, remarkChatMath]}
+                                rehypePlugins={[rehypeChatKatex]}
                               >
-                                {stripBlocksFromChat(message.text)}
+                                {normalizeChatMath(stripBlocksFromChat(message.text))}
                               </ReactMarkdown>
                             </div>
                             {(message.documentContent || message.styleCommands) && (

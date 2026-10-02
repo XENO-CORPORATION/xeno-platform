@@ -301,7 +301,11 @@ const CodeBlockWithHeader: React.FC<CodeBlockWithHeaderProps> = memo(({
                 lineNumberStyle={lineNumberStyle}
                 wrapLines={false}
                 wrapLongLines={false}
-                codeTagProps={{ style: { fontFamily: 'inherit', whiteSpace: 'inherit', lineHeight: 'inherit' } }}
+                // `padding: 0` is load-bearing. The reply wrapper pads INLINE code (`prose-code:px-2`),
+                // and that rule matches this <code> too; horizontal padding on an inline element only
+                // shows where it starts, so it pushed line 1 — and only line 1 — 8px right of every
+                // other line (2026-10-02). An inline style wins over any wrapper's class.
+                codeTagProps={{ style: { fontFamily: 'inherit', whiteSpace: 'inherit', lineHeight: 'inherit', padding: 0 } }}
               >
                 {code}
               </SyntaxHighlighter>

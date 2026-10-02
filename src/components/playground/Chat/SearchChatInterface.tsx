@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { Button, IconButton, MenuItem, SegmentedControl, Spinner, useGooPill, useMenu } from '@xenosystem/elements-react';
 import ReactMarkdown from 'react-markdown';
+import { normalizeChatMath, remarkChatMath, rehypeChatKatex } from '@/lib/chatMath';
 import { Send, Globe, ChevronDown, Eye, Check, Zap, Link2, Sparkles, ExternalLink, Bot, Navigation, ScanEye, Layers, FileOutput, Search as SearchIcon, Clock, PaperclipDecl, XDecl, Trash2Decl, SendDecl, StopCircleDecl, EditDecl, LightbulbDecl, GlobeDecl, BotDecl, BrainDecl } from '@/lib/icons';
 import { getGroupedModels, GroupedModels, Model, FALLBACK_MODELS } from '@/services/modelService';
 import { chatService, Conversation as DbConversation, ChatMessage as DbChatMessage } from '@/services/chatService';
@@ -1620,6 +1621,8 @@ Based on these search results, provide a helpful, accurate, and concise answer t
                         <div className="max-w-[75%]">
                           <div className="bg-[var(--chat-surface)] text-[var(--chat-text)] rounded-2xl rounded-bl-none p-3 prose prose-sm prose-invert max-w-none prose-p:my-2 prose-li:my-0.5 prose-ol:pl-5 prose-ul:pl-5 prose-headings:text-[var(--chat-text)] prose-headings:font-medium prose-strong:text-[var(--chat-text)] prose-strong:font-semibold leading-relaxed">
                             <ReactMarkdown
+                              remarkPlugins={[remarkChatMath]}
+                              rehypePlugins={[rehypeChatKatex]}
                               components={{
                                 p: ({ children }) => <p className="text-sm my-2">{children}</p>,
                                 strong: ({ children }) => <strong className="font-semibold text-[var(--chat-text)]">{children}</strong>,
@@ -1635,7 +1638,7 @@ Based on these search results, provide a helpful, accurate, and concise answer t
                                 blockquote: ({ children }) => <blockquote className="border-l-2 border-[var(--chat-border)] pl-3 my-2 text-[var(--chat-muted)] italic">{children}</blockquote>,
                               }}
                             >
-                              {message.content}
+                              {normalizeChatMath(message.content)}
                             </ReactMarkdown>
                             {message.pageContext && (
                               <p className="text-xs mt-2 text-[var(--chat-muted)] flex items-center gap-1">
