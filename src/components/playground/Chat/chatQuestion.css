@@ -1,0 +1,108 @@
+/* The ask_user question panel — a card above the composer, in the queue's slot (ChatQuestionPanel.tsx).
+   Ported from the approved preview (orchestrator/previews/chat-question-panel.html), on the chat theme
+   tokens so it follows light, dim and dark. Same card as the queue (chatQueue.css) on purpose. */
+
+.chat-q {
+  display: flex;
+  flex-direction: column;
+  background: var(--chat-surface);
+  border: 1px solid var(--chat-border);
+  border-radius: 10px;
+  box-shadow: 0 1px 2px rgb(0 0 0 / 0.3), 0 12px 32px rgb(0 0 0 / 0.35);
+  overflow: hidden;
+  outline: none;
+  animation: chat-q-rise 0.34s cubic-bezier(0.2, 0.7, 0.2, 1) both;
+}
+/* The panel takes focus only so its keys work. It is a container, not a control: it never draws a focus
+   border (a border that appears on open and vanishes on the first click reads as a glitch). */
+.chat-q:focus,
+.chat-q:focus-visible { outline: none; border-color: var(--chat-border); }
+@keyframes chat-q-rise { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+
+/* The marker: a filled square, never animated. White while the question waits, grey once answered. */
+.chat-q-sq { flex: none; width: 10px; height: 10px; border-radius: 2.5px; background: var(--chat-text); }
+
+/* Head: the marker and the A–F boxes share one 20px column, so the letters sit straight under it. */
+.chat-q-head { display: flex; align-items: flex-start; gap: 10px; padding: 12px 12px 6px 14px; }
+.chat-q-mark { flex: none; width: 20px; height: 20px; display: flex; align-items: center; justify-content: center; }
+.chat-q-text { flex: 1; min-width: 0; font-size: 14px; font-weight: 500; line-height: 20px; color: var(--chat-text); }
+.chat-q-text small { display: block; font-size: 11.5px; font-weight: 400; line-height: 1.4; color: var(--chat-muted); margin-top: 2px; }
+.chat-q-fold { flex: none; width: 26px; height: 26px; margin: -3px -4px 0 0; border-radius: 6px; color: var(--chat-muted); display: inline-flex; align-items: center; justify-content: center; background: none; border: 0; cursor: pointer; }
+.chat-q-fold:hover { background: var(--chat-hover); color: var(--chat-text); }
+
+.chat-q-list { list-style: none; margin: 0; padding: 2px 6px 4px; display: flex; flex-direction: column; gap: 1px; max-height: min(46vh, 420px); overflow-y: auto; overscroll-behavior: contain; }
+.chat-q-opt {
+  width: 100%; display: flex; align-items: flex-start; gap: 10px; padding: 7px 8px; border-radius: 8px;
+  text-align: left; font-size: 13.5px; line-height: 1.45; color: var(--chat-text);
+  background: none; border: 0; cursor: pointer; transition: background 0.12s;
+}
+.chat-q-opt:hover { background: var(--chat-hover); }
+.chat-q-opt[aria-checked='true'] { background: color-mix(in srgb, var(--chat-text) 4%, transparent); }
+.chat-q-opt[data-active='true'] { background: var(--chat-hover); }
+.chat-q-key {
+  flex: none; width: 20px; height: 20px; border-radius: 6px; border: 1px solid var(--chat-border); background: var(--chat-canvas);
+  color: var(--chat-muted); display: inline-flex; align-items: center; justify-content: center; transition: background 0.12s, color 0.12s;
+}
+.chat-q-opt[data-multi='true'] .chat-q-key { border-radius: 4px; }
+.chat-q-opt[aria-checked='true'] .chat-q-key { background: var(--chat-accent); border-color: var(--chat-accent); color: var(--chat-on-accent); }
+/* Centre the CAPITAL, not the line box: a line box reserves descender room capitals never use, so a
+   flex-centred letter sat ~1px high on a 1x screen. text-box trims the line to cap height. */
+.chat-q-keyc { display: block; font-size: 11px; font-weight: 600; line-height: 1; text-box: trim-both cap alphabetic; }
+.chat-q-opt-text { flex: 1; min-width: 0; }
+
+.chat-q-why { margin: 4px 12px 0; }
+.chat-q-why textarea {
+  display: block; width: 100%; resize: none; min-height: 36px; max-height: 120px; border: 1px solid var(--chat-border);
+  background: var(--chat-canvas); color: var(--chat-text); border-radius: 8px; padding: 8px 10px; font: inherit; font-size: 13px; line-height: 1.45; outline: none;
+}
+.chat-q-why textarea:focus { border-color: var(--chat-text); }
+.chat-q-foot { display: flex; align-items: center; gap: 6px; padding: 8px 10px 10px 12px; }
+.chat-q-addwhy { display: inline-flex; align-items: center; gap: 5px; font-size: 12.5px; color: var(--chat-muted); padding: 5px 6px; margin-left: -6px; border-radius: 6px; background: none; border: 0; cursor: pointer; }
+.chat-q-addwhy:hover { color: var(--chat-text); background: var(--chat-hover); }
+.chat-q-keys { margin-left: auto; margin-right: 4px; font-size: 11.5px; color: var(--chat-muted); white-space: nowrap; }
+.chat-q-keys kbd { font: inherit; font-size: 10.5px; padding: 1px 5px; border: 1px solid var(--chat-border); border-radius: 4px; background: var(--chat-canvas); }
+.chat-q-btn { height: 30px; padding: 0 12px; border-radius: 8px; font-size: 12.5px; font-weight: 500; white-space: nowrap; border: 0; cursor: pointer; transition: background 0.12s, color 0.12s, opacity 0.12s; }
+.chat-q-btn[data-variant='ghost'] { background: none; color: var(--chat-muted); }
+.chat-q-btn[data-variant='ghost']:hover { background: var(--chat-hover); color: var(--chat-text); }
+.chat-q-btn[data-variant='primary'] { background: var(--chat-accent); color: var(--chat-on-accent); }
+.chat-q-btn:disabled { opacity: 0.35; cursor: not-allowed; }
+
+/* Folded (Esc): one line, still waiting. */
+.chat-q-bar { width: 100%; display: flex; align-items: center; gap: 9px; padding: 10px 12px; text-align: left; font-size: 13px; background: none; border: 0; cursor: pointer; color: var(--chat-text); }
+.chat-q-bar:hover { background: color-mix(in srgb, var(--chat-text) 3.5%, transparent); }
+.chat-q-bar .chat-q-sq { margin: 0 5px; }
+.chat-q-bar-q { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--chat-muted); }
+.chat-q-bar b { flex: none; font-weight: 600; }
+.chat-q-bar-open { flex: none; font-size: 12px; color: var(--chat-muted); }
+
+/* The answered record inside the turn: one line, expands on click. */
+.chat-q-rec { margin: 2px 0 12px; border: 1px solid var(--chat-border); border-radius: 9px; background: var(--chat-surface); overflow: hidden; }
+.chat-q-rec-line { width: 100%; display: flex; align-items: center; gap: 8px; padding: 8px 11px; font-size: 12.5px; line-height: 1.4; text-align: left; color: var(--chat-muted); background: none; border: 0; cursor: pointer; }
+.chat-q-rec-line:hover { background: color-mix(in srgb, var(--chat-text) 3.5%, transparent); }
+.chat-q-rec .chat-q-sq { background: var(--chat-muted); }
+.chat-q-rec[data-pending='true'] .chat-q-sq { background: var(--chat-text); }
+.chat-q-rec-q { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.chat-q-rec-a { flex: none; max-width: 46%; color: var(--chat-text); font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.chat-q-rec-chev { flex: none; display: flex; transition: transform 0.15s; }
+.chat-q-rec[data-open='true'] .chat-q-rec-chev { transform: rotate(180deg); }
+.chat-q-rec-body { border-top: 1px solid var(--chat-border); padding: 6px 6px 8px; }
+.chat-q-rec-qq { padding: 6px 6px 4px; font-size: 13px; font-weight: 500; color: var(--chat-text); }
+.chat-q-rec-body ol { list-style: none; margin: 0; padding: 0; }
+.chat-q-rec-body li { display: flex; gap: 9px; align-items: flex-start; padding: 5px 6px; border-radius: 7px; font-size: 12.5px; line-height: 1.45; color: var(--chat-muted); }
+.chat-q-rec-body li[data-picked='true'] { background: color-mix(in srgb, var(--chat-text) 4%, transparent); color: var(--chat-text); }
+.chat-q-rec-body li .chat-q-key { width: 18px; height: 18px; border-radius: 5px; }
+.chat-q-rec-body li[data-picked='true'] .chat-q-key { background: var(--chat-accent); border-color: var(--chat-accent); color: var(--chat-on-accent); }
+.chat-q-rec-why { margin: 6px 6px 0; font-size: 12.5px; line-height: 1.5; color: var(--chat-text); }
+.chat-q-rec-why span { color: var(--chat-muted); }
+
+@media (max-width: 520px) {
+  .chat-q-keys { display: none; }
+  .chat-q-list { max-height: 26vh; }
+  .chat-q-opt { font-size: 13px; line-height: 1.4; padding: 6px; }
+  .chat-q-head { padding: 10px 10px 4px 12px; }
+  .chat-q-text { font-size: 13.5px; }
+  .chat-q-foot { padding: 6px 8px 8px 10px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .chat-q { animation: none; }
+}

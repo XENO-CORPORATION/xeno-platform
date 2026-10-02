@@ -21,6 +21,7 @@ import { callerInputTokens } from '../utils/billableInput.js';
 import { upstreamFetch } from '../services/upstream.js';
 import { streamToolLoop, addUsage, TOOL_BUDGETS, WEB_SEARCH_TOOL } from '../utils/chatToolLoop.js';
 import { RUN_CODE_TOOL } from '../utils/chatCodeTool.js';
+import { ASK_USER_TOOL } from '../utils/chatAskUserTool.js';
 import { runInSandbox, codeExecutionAvailable, runCodeMetered } from '../services/sandboxSession.js';
 import {
   GENERATE_IMAGE_TOOL, createChatImageExecutor, storeChatImage, latestConversationImage, makeImagePreview,
@@ -582,11 +583,16 @@ router.post('/chat/stream', requireEntitlement('canUse'), async (req, res) => {
   // only when the execution engine is actually reachable — never advertise a capability the deploy
   // lacks (CHAT-CODE-EXECUTION-SPEC.md §5). The probe is cached, so this costs nothing on the hot path.
   const codeAvailable = surfaceHasTools && Boolean(conversationId) && (await codeExecutionAvailable());
+  // ask_user is offered only to a client that SAYS it can show the question panel. An API caller or an
+  // older bundle that cannot render it would get a turn that ends on a question nobody can see.
+  const clientCapabilities = Array.isArray(req.body?.clientCapabilities) ? req.body.clientCapabilities : [];
+  const askAvailable = surfaceHasTools && clientCapabilities.includes('ask_user');
   const offeredTools = surfaceHasTools
     ? [
       ...(webSearchAvailable() ? [WEB_SEARCH_TOOL] : []),
       ...(xenoApiConfigured() ? [GENERATE_IMAGE_TOOL] : []),
       ...(codeAvailable ? [RUN_CODE_TOOL] : []),
+      ...(askAvailable ? [ASK_USER_TOOL] : []),
     ]
     : [];
   const toolSurface = offeredTools.length ? chatSurface : null;
@@ -868,6 +874,8 @@ router.post('/chat/stream', requireEntitlement('canUse'), async (req, res) => {
    */
   const sourcesSeen = [];
   let sawSearch = false;
+  // The question this turn ended on, if the model called ask_user (chatAskUserTool.js).
+  let askedQuestion = null;
   /** Images this turn produced, in order — kept on the result frame so the saved message has them. */
   const imagesMade = [];
   /*
@@ -1135,6 +1143,12 @@ router.post('/chat/stream', requireEntitlement('canUse'), async (req, res) => {
             console.warn('[chat/stream] code execution failed', { requestId: reqIdSeed, index: event.index });
             await send({ type: 'code_error', index: event.index, message: 'That code could not be executed.' });
             break;
+          case 'ask_user':
+            // The turn ends here; the panel needs the question before the result frame lands, so the
+            // composer can show it the moment the stream closes.
+            askedQuestion = { toolCallId: event.toolCallId, question: event.question, options: event.options, multiple: event.multiple };
+            await send({ type: 'ask_user', ...askedQuestion });
+            break;
           case 'usage':
             usageObj = addUsage(usageObj, event.usage);
             break;
@@ -1306,6 +1320,8 @@ router.post('/chat/stream', requireEntitlement('canUse'), async (req, res) => {
     // Every image the turn made, as stored library assets — the client attaches them to the saved
     // message so they survive a reload (the bytes live in the library, never in the message).
     ...(imagesMade.length ? { images: imagesMade } : {}),
+    // The pending question, so a client that missed the live frame still has it on the record.
+    ...(askedQuestion ? { question: askedQuestion } : {}),
     // Project grounding: the record id lets a client link an answer back to the exact
     // sources that were in context when it was produced.
     ...(projectContextRecordId ? { projectContextId: projectContextRecordId } : {}),

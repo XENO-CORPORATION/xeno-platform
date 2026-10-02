@@ -49,6 +49,7 @@ import {
   codeResultPayload,
   codeBudgetExhaustedPayload,
 } from './chatCodeTool.js';
+import { parseAskUserArguments, askUserAlreadyPendingPayload } from './chatAskUserTool.js';
 
 /** Budgets, by surface. Chat is a quick lookup; Research is the deep multi-source pass. */
 export const TOOL_BUDGETS = Object.freeze({
@@ -422,7 +423,7 @@ export const budgetExhaustedPayload = (searches) => ({
  *                                  that is the shape announced; without one, `use_latest_image` is a
  *                                  fresh image in the ratio the model chose.
  * @yields { type:'delta'|'search_start'|'search_result'|'search_error'|'image_start'|'image_result'|
- *           'image_error'|'usage'|'complete', … }
+ *           'image_error'|'code_start'|'code_result'|'code_error'|'ask_user'|'usage'|'complete', … }
  */
 export async function* streamToolLoop({ messages, surface, turnId, streamModel, runSearch, tools: offered, runImage, runCode, imageReference = null }) {
   const budget = budgetFor(surface);
@@ -430,6 +431,8 @@ export async function* streamToolLoop({ messages, surface, turnId, streamModel, 
   const canSearch = tools.some((tool) => tool?.function?.name === 'web_search');
   const canDraw = typeof runImage === 'function' && tools.some((tool) => tool?.function?.name === 'generate_image');
   const canRun = typeof runCode === 'function' && tools.some((tool) => tool?.function?.name === 'run_code');
+  // ask_user needs no executor: the person IS the executor, and the answer arrives as the next turn.
+  const canAsk = tools.some((tool) => tool?.function?.name === 'ask_user');
   let images = 0;
   let codeRuns = 0;
 
@@ -498,9 +501,20 @@ export async function* streamToolLoop({ messages, surface, turnId, streamModel, 
     working.push(assistantToolCallMessage(text, toolCalls));
     if (text.trim()) narrated = true;
 
+    let question = null;
     for (const call of toolCalls) {
       const name = call?.function?.name;
       const id = call?.id;
+
+      if (name === 'ask_user' && canAsk) {
+        // One question per turn. A second one is answered with an error the model can read — it is
+        // never queued, because the turn is about to end at the first.
+        if (question) { working.push(toolResultMessage(id, askUserAlreadyPendingPayload())); continue; }
+        const args = parseAskUserArguments(call?.function?.arguments);
+        if (!args.ok) { working.push(toolResultMessage(id, { error: args.error })); continue; }
+        question = { toolCallId: typeof id === 'string' ? id : null, question: args.question, options: args.options, multiple: args.multiple };
+        continue;
+      }
 
       if (name === 'generate_image' && canDraw) {
         if (images >= CHAT_IMAGE_BUDGET) {
@@ -609,6 +623,17 @@ export async function* streamToolLoop({ messages, surface, turnId, streamModel, 
           message,
         };
       }
+    }
+
+    if (question) {
+      /*
+       * The turn ENDS at the question (chatAskUserTool.js): the model is not re-called, because the
+       * only thing it can usefully do next is read the answer, and that is the person's next message.
+       * Every other tool in this batch has already run and been shown.
+       */
+      yield { type: 'ask_user', ...question };
+      yield { type: 'complete', iterations, searches, images, codeRuns, sources, cappedOut, usage: lastUsage, question };
+      return;
     }
   }
 

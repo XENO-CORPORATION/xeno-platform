@@ -53,9 +53,11 @@ import { ChatCodeExecution } from './ChatCodeExecution';
 import { ChatUserMessage } from './ChatUserMessage';
 import { pasteBecomesFile, makePastedTextFile } from './chatPaste';
 import { ChatQueue } from './ChatQueue';
+import { ChatQuestionPanel, ChatQuestionRecord } from './ChatQuestionPanel';
+import { formatAnswer, pendingQuestion, questionHistoryNote, questionOutcome } from './chatQuestion';
 import { enqueue, removeQueued, moveQueued, updateQueued, patchQueuedFile, nextSendable, type QueueState } from './chatQueueState';
 import {
-  applyTurnEvent, chatFaviconUrl, closeTurnRecord, DEFAULT_STEPS_MODE, isStepsMode, newTurnRecord, normalizeStoredTurn, turnCitedSources, turnHasRail, turnImageModels, turnImages, turnCodeSteps,
+  applyTurnEvent, chatFaviconUrl, closeTurnRecord, DEFAULT_STEPS_MODE, isStepsMode, newTurnRecord, normalizeStoredTurn, turnCitedSources, turnHasRail, turnImageModels, turnImages, turnCodeSteps, turnQuestion,
   type ChatTurnRecord, type StepsMode,
 } from './chatTurnTranscript';
 import { CitationChip, parseCitationHref, remarkCitations } from '@xenosystem/agent-conversation/components/agent/transcript/citations';
@@ -6837,7 +6839,16 @@ const ChatWithLLM: React.FC<ChatWithLLMProps> = ({
                 parts: []
             };
 
-            const textContent = msg.sender === 'user' ? msg.text : (msg.parsedAnswer || msg.text);
+            /*
+             * A reply that ended on a question carries it as text (ask_user, 2026-10-02): history sends a
+             * reply's prose only, never its tool calls, so without this the model would not know what it
+             * had asked when the answer arrives — and a question-only turn would send no text at all.
+             */
+            const askedQuestion = msg.sender === 'ai' ? turnQuestion(msg.turn) : undefined;
+            const replyText = msg.parsedAnswer || msg.text;
+            const textContent = msg.sender === 'user'
+              ? msg.text
+              : askedQuestion ? [replyText, questionHistoryNote(askedQuestion)].filter((part) => part && part.trim()).join('\n\n') : replyText;
             if (textContent && textContent.trim() !== '') {
                 messagePayload.parts.push({ type: 'text', text: textContent });
             }
@@ -7194,6 +7205,17 @@ const ChatWithLLM: React.FC<ChatWithLLMProps> = ({
                 return;
             }
 
+            if (event.type === 'ask_user') {
+                // The turn ends on a question (ask_user): it becomes a step, and the composer shows the
+                // panel as soon as the turn lands (pendingQuestion reads the finished message).
+                turnRecord = applyTurnEvent(turnRecord, event as Parameters<typeof applyTurnEvent>[1]);
+                const record = turnRecord;
+                setMessages(prev => prev.map(msg =>
+                    msg.id === localPlaceholderId ? { ...msg, turn: record, isDotPlaceholder: false } : msg
+                ));
+                return;
+            }
+
             if (event.type === 'code_start' || event.type === 'code_result' || event.type === 'code_error') {
                 /*
                  * A run is a step of the turn too (2026-09-27): `code_start` opens the block with the
@@ -7417,6 +7439,10 @@ const ChatWithLLM: React.FC<ChatWithLLMProps> = ({
         // if (thinking) {
             // console.log("[TokenCountDebug] Parsed thinking content:", thinking);
         // }
+
+        if (data?.question && !turnQuestion(turnRecord)) {
+            turnRecord = applyTurnEvent(turnRecord, { type: 'ask_user', ...data.question });
+        }
 
         updatedMessage = { // Assign to the variable declared earlier
                 /*
@@ -7735,16 +7761,31 @@ const ChatWithLLM: React.FC<ChatWithLLMProps> = ({
   // STATE, not a ref: when a queued send finishes, clearing this must re-run the effect below, or the
   // next prompt would wait for some unrelated render to notice it.
   const [isQueueSending, setIsQueueSending] = useState(false);
+  /*
+   * The question the conversation is waiting on (ask_user, 2026-10-02): the last message is a finished
+   * reply that ended on one. Derived, never stored — the next message answers it, and once one exists
+   * it is no longer pending, so a reload, a regenerate or a deleted answer all stay consistent.
+   */
+  const waitingQuestion = useMemo(() => (isLoading ? null : pendingQuestion(messages)), [messages, isLoading]);
+  const answerQuestion = (picked: number[], reason: string) => {
+    if (!waitingQuestion) return;
+    // An empty file list makes this a send that is not the composer's: whatever the person was typing stays.
+    void handleGenerate(formatAnswer(waitingQuestion.step, picked, reason), []);
+  };
+  const skipQuestion = () => {
+    if (!waitingQuestion) return;
+    void handleGenerate('I\u2019d rather skip this question.', []);
+  };
   useEffect(() => {
     if (isLoading || isQueueSending) return;
-    const next = nextSendable(queue, { held: isQueueHeld });
+    const next = nextSendable(queue, { held: isQueueHeld || Boolean(waitingQuestion) });
     if (!('item' in next)) return;
     if (isUploadingAttachments || isContextLimitReached || isModelsLoading) return;
     const item = next.item;
     setIsQueueSending(true);
     setQueue(prev => removeQueued(prev, item.id));
     void Promise.resolve(handleGenerate(item.text, item.attachedFiles)).finally(() => setIsQueueSending(false));
-  }, [isLoading, isQueueSending, queue, isQueueHeld, isUploadingAttachments, isContextLimitReached, isModelsLoading]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [isLoading, isQueueSending, queue, isQueueHeld, waitingQuestion, isUploadingAttachments, isContextLimitReached, isModelsLoading]); // eslint-disable-line react-hooks/exhaustive-deps
 
   /**
    * Send a turn. With no arguments it sends the COMPOSER (and clears it). `inputOverride` replaces the
@@ -11174,6 +11215,15 @@ Keep the summary under 500 words. Preserve essential context needed to continue 
     });
   };
 
+  // A question appears AFTER the turn lands, and the panel grows the dock — the scroll above can run
+  // before either happens. Bring the reply (the scenario the question is about) into view once both have.
+  const waitingQuestionId = waitingQuestion?.messageId;
+  useEffect(() => {
+    if (!waitingQuestionId) return;
+    const frame = requestAnimationFrame(() => scrollToBottom());
+    return () => cancelAnimationFrame(frame);
+  }, [waitingQuestionId, composerDockHeight]); // eslint-disable-line react-hooks/exhaustive-deps
+
   // Auto-scroll to bottom when messages change or during loading
   useEffect(() => {
     // Small delay to ensure DOM has updated
@@ -12445,7 +12495,12 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
           <ChatEmptyState
             scrollAffordance={composerScrollAffordance}
             /* The prompt queue floats above the composer while a chat runs (ChatQueue.tsx). */
-            aboveComposer={queue.messages.length > 0 && messages.length > 0 ? (
+            aboveComposer={(waitingQuestion || queue.messages.length > 0) && messages.length > 0 ? (
+              <>
+              {waitingQuestion && (
+                <ChatQuestionPanel step={waitingQuestion.step} onAnswer={answerQuestion} onSkip={skipQuestion} busy={isLoading} />
+              )}
+              {queue.messages.length > 0 && (
               <ChatQueue
                 queue={queue}
                 waiting={(isLoading || messages.some((m) => m.isStreaming)) ? 'reply' : queue.messages[0]?.attachedFiles.some((f) => f.ready === false) ? 'scanning' : 'ready'}
@@ -12457,6 +12512,8 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                 onAttach={attachToQueued}
                 onHoldChange={setIsQueueHeld}
               />
+              )}
+              </>
             ) : undefined}
             /* The control row: inside the box on the empty state, underneath it in a conversation. */
             controls={(
@@ -13012,7 +13069,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                   Tier-2 container built ON this component rather than an instance of it. */}
               <textarea
                 ref={textareaRef}
-                placeholder={CHAT_MODE_PLACEHOLDERS[emptyStateMode]}
+                placeholder={waitingQuestion ? 'Or type your own answer\u2026' : CHAT_MODE_PLACEHOLDERS[emptyStateMode]}
                 value={inputValue}
                 onChange={(e) => setInputValue(e.target.value)}
                 onPaste={handleComposerPaste}
@@ -16457,6 +16514,13 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
             // Match both panel clearances so messages and composer share one centre line.
             paddingLeft: historyWorkspaceInsetPx || undefined,
             paddingRight: contextWorkspaceInsetPx || undefined,
+            /*
+             * The composer dock floats over the thread, so the thread's last line must clear it. The fixed
+             * pb-56/pb-60 covered a bare composer, not one carrying a question panel or an expanded queue:
+             * the scenario a question was ABOUT slid under the panel (2026-10-02). The dock is measured
+             * already (composerDockHeight), so the floor follows it; the classes stay as the first-paint value.
+             */
+            paddingBottom: composerDockHeight ? Math.max(240, composerDockHeight + 32) : undefined,
           }}
         >
                         {/* `clip`, not `hidden`: it contains the same overflow, but `hidden`
@@ -17145,6 +17209,13 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                                                {/* Streaming caret removed to match the XENO model (no vertical caret). */}
                                                   </div>
                                           )}
+                                          {(() => {
+                                              // ask_user: the question this turn ended on, one line, once ANSWERED (the message after it).
+                                              // While it waits, the panel above the composer is the question — showing both would say it twice.
+                                              const asked = !message.isStreaming ? turnQuestion(message.turn) : undefined;
+                                              const outcome = asked ? questionOutcome(messages, message.id, asked) : null;
+                                              return asked && outcome ? <ChatQuestionRecord step={asked} outcome={outcome} /> : null;
+                                          })()}
                                           {message.isPersistenceError && (
                                             <div role="status" className="mt-2 rounded-lg border border-[var(--chat-danger)]/40 bg-[var(--chat-danger)]/10 px-3 py-2 text-xs text-[var(--chat-danger)]">
                                               Not saved. Keep this chat open and retry before leaving.

@@ -137,6 +137,18 @@ const IMAGE_CAPABILITY = [
   'as made unless the tool returned it.',
 ].join(' ');
 
+/*
+ * The question tool (2026-10-02). The server offers `ask_user` on the same surfaces, to a client that
+ * declares it can show the question panel — which this chat always does — so, by the rule above, the
+ * sentence is on the same surfaces. Without it a model holding the tool kept writing "A) … B) …" as prose.
+ */
+const ASK_CAPABILITY = [
+  'You also have an ask_user tool. When you want the user to choose — a quiz answer, a decision between',
+  'approaches, which of several things they meant — call it instead of writing lettered options as text:',
+  'put any context (a scenario, a snippet) in your message first, pass only the short question and the',
+  'options, then stop and wait; their answer arrives as their next message. Ask one question at a time.',
+].join(' ');
+
 const SEARCH_CAPABILITY: Readonly<Record<ChatMode, string>> = {
   chat: [
     'You have a web_search tool. Call it whenever the answer depends on current information,',
@@ -153,6 +165,7 @@ const SEARCH_CAPABILITY: Readonly<Record<ChatMode, string>> = {
     'For a broad question needing many sources and a written-up synthesis, XENO Research goes deeper:',
     'the user reaches it with the "+" button at the composer, which reveals the mode tabs, then Research.',
     IMAGE_CAPABILITY,
+    ASK_CAPABILITY,
   ].join(' '),
   research: [
     'You are in XENO Research mode with a web_search tool and a large search budget.',
@@ -163,6 +176,7 @@ const SEARCH_CAPABILITY: Readonly<Record<ChatMode, string>> = {
     'single result. Say when sources disagree or when something could not be confirmed.',
     'Do NOT narrate the calls; make them, then write the answer.',
     IMAGE_CAPABILITY,
+    ASK_CAPABILITY,
   ].join(' '),
   code: [
     'You have no tool you can invoke in this mode, and no web access. If live information is needed, say',

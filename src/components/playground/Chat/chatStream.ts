@@ -73,6 +73,9 @@ export type ChatStreamEvent =
   | { type: 'code_start'; index: number; language: string; code: string }
   | { type: 'code_result'; index: number; status: string; exitCode: number | null; stdout: string; stderr: string; files?: Array<{ path: string; size?: number }>; libraryAssets?: Array<{ path: string; assetId: string }>; creditsCharged?: number; filesTruncated?: boolean }
   | { type: 'code_error'; index: number; message: string }
+  // ask_user (2026-10-02): the turn ENDS on a question; the composer shows it as a panel and the
+  // person's answer is their next message (chatAskUserTool.js on the server).
+  | { type: 'ask_user'; toolCallId: string | null; question: string; options: string[]; multiple: boolean }
   | { type: 'sources'; sources: Array<{ url: string; title: string }> }
   | { type: 'tool_use'; searches: number; images?: number; iterations: number; cappedOut: boolean }
   | { type: 'usage'; input: number; output: number; total: number; creditsSettled: number; upstreamCalls?: number }
@@ -268,6 +271,9 @@ export const streamRequestBody = (payload: Record<string, any>): Record<string, 
   supportsVision: payload.supportsVision === true,
   temperature: payload.temperature,
   max_tokens: payload.max_tokens,
+  // What this client can render. The server offers ask_user ONLY to a client that lists it: a
+  // client that cannot show the panel would get a turn that ends on a question nobody can see.
+  clientCapabilities: ['ask_user'],
 });
 
 /**
@@ -410,6 +416,13 @@ export async function readStreamedTurn(
       case 'image_start':
       case 'image_result':
       case 'image_error':
+      // 🔴 run_code's events were never forwarded (2026-09-27 → 2026-10-02): the server sent them and
+      // the chat had a handler, but this switch dropped them in between, so a run never showed while it
+      // ran and was never saved with the turn — the record is built from exactly these events.
+      case 'code_start':
+      case 'code_result':
+      case 'code_error':
+      case 'ask_user':
         onProgress?.(event);
         break;
       case 'error':
