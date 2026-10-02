@@ -429,6 +429,39 @@ services:
         max-size: "25m"
         max-file: "3"
 
+  # Resident malware scanner for chat/library uploads. clamd keeps the signature database in memory;
+  # the CLI it replaces reloaded it on every file (16.7 s measured on a 5-byte file), so six images
+  # took two minutes to clear. Workers stream bytes to it (INSTREAM on 3310) over clamav-net, the
+  # only network it joins — nothing else can reach it, and it needs egress for freshclam updates.
+  # Version-pinned; the database lives in a volume so a restart does not re-download it.
+  clamav:
+    image: clamav/clamav:1.5.4
+    environment:
+      # Uploads may be up to 100 MB (maxSourceBytes); clamd's 25 MB default would refuse them.
+      - CLAMD_CONF_StreamMaxLength=105M
+    volumes:
+      - clamav_db:/var/lib/clamav
+    networks:
+      - clamav-net
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "clamdcheck.sh"]
+      interval: 30s
+      timeout: 10s
+      # The first start downloads the signature database before clamd listens.
+      start_period: 600s
+      retries: 3
+    deploy:
+      resources:
+        limits:
+          cpus: '2.0'
+          memory: 3G
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "25m"
+        max-file: "3"
+
   # Durable Chat project workers. These are deliberately a separate process
   # from the API so scheduler/ingestion health and restarts are observable.
   chat-workers:
@@ -460,6 +493,11 @@ services:
       - CHAT_INGESTION_ENABLED=${CHAT_INGESTION_ENABLED:-0}
       - CHAT_EXTRACTOR_MODE=filesystem-queue
       - CHAT_EXTRACTOR_QUEUE_DIR=/app/extractor-jobs
+      # Scan with the resident clamd; if it is unreachable the worker falls back to the CLI (slow,
+      # still scanned) — an unavailable daemon is never a pass.
+      - CHAT_ASSET_SCANNER=clamd-instream-v1
+      - CHAT_ASSET_SCANNER_HOST=clamav
+      - CHAT_ASSET_SCANNER_PORT=3310
     volumes:
       - ./src/server/uploads:/app/uploads
       - ./src/server/uploads:/app/src/server/uploads
@@ -472,8 +510,11 @@ services:
         condition: service_started
       chat-extractor:
         condition: service_healthy
+      clamav:
+        condition: service_started
     networks:
       - xenostudio-network
+      - clamav-net
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "node", "-e", "require('http').get('http://127.0.0.1:8081/ready',r=>process.exit(r.statusCode===200?0:1)).on('error',()=>process.exit(1))"]
@@ -791,8 +832,12 @@ volumes:
     driver: local
   chat_extractor_jobs:
     driver: local
+  clamav_db:
+    driver: local
 
 networks:
+  clamav-net:
+    driver: bridge
   xenostudio-network:
     driver: bridge
     ipam:
