@@ -53,7 +53,7 @@ import { ChatCodeExecution } from './ChatCodeExecution';
 import { ChatUserMessage } from './ChatUserMessage';
 import { pasteBecomesFile, makePastedTextFile } from './chatPaste';
 import { ChatQueue } from './ChatQueue';
-import { enqueue, removeQueued, moveQueued, updateQueued, markQueuedFileReady, nextSendable, type QueueState } from './chatQueueState';
+import { enqueue, removeQueued, moveQueued, updateQueued, patchQueuedFile, nextSendable, type QueueState } from './chatQueueState';
 import {
   applyTurnEvent, chatFaviconUrl, closeTurnRecord, DEFAULT_STEPS_MODE, isStepsMode, newTurnRecord, normalizeStoredTurn, turnCitedSources, turnHasRail, turnImageModels, turnImages, turnCodeSteps,
   type ChatTurnRecord, type StepsMode,
@@ -373,6 +373,10 @@ interface AttachedFile {
   // it has cleared. Send is blocked until every attachment is ready, so a file only enters a
   // conversation after it is scanned and valid. undefined = nothing to wait on (no assetId).
   ready?: boolean;
+  // True from the moment a file is dropped until its upload returns; the chip is already on screen.
+  uploading?: boolean;
+  // The local blob URL for an image, made ONCE when the file is attached (never during render).
+  previewUrl?: string;
 }
 
 type MessageImageAttachment = {
@@ -9806,81 +9810,93 @@ Keep the summary under 500 words. Preserve essential context needed to continue 
    * scan-before-send rule, only a different place for the finished file to land. */
   const attachFileObjects = async (fileObjs: File[], queuedId: string | null = null) => {
     if (!fileObjs.length) return;
-    // The moment we hold the real bytes. Persist now; a metadata-only record disappears off-device.
-    setIsUploadingAttachments(true);
-    let newFiles: AttachedFile[] = [];
-    try {
-      newFiles = await Promise.all(fileObjs.map(async (file) => {
-        const asset = await libraryService.upload(file, 'chat-attachment');
-        return {
-          id: asset.assetId,
-          name: asset.name,
-          type: asset.mimeType || file.type || 'application/octet-stream',
-          fileObject: file,
-          assetId: asset.assetId,
-          contentUrl: asset.contentUrl,
-          size: asset.size || file.size,
-          ready: false, // becomes true once the malware scan clears (polled below); gates send
-        };
-      }));
-    } catch (error) {
-      console.error('Failed to save chat attachment to Library:', error);
-      return;
-    } finally {
-      setIsUploadingAttachments(false);
-    }
-
-    const now = Date.now();
-    const newRecentFiles = newFiles.map((file) => ({
-      id: file.id,
+    // 1. Place every file NOW, before a single byte is uploaded — the person sees their file land the
+    //    moment they drop it. An image shows its own pixels from the local bytes; a document shows its
+    //    name. Each placeholder IS the attachment: it keeps this id for its whole life and is updated
+    //    in place as the upload and then the scan finish, so nothing is ever swapped for a second
+    //    element (the old flow added chips only after EVERY upload in the batch had returned).
+    //    `ready: false` from the first frame, so it cannot be sent until the server says it is clean.
+    const placed: AttachedFile[] = fileObjs.map((file) => ({
+      id: `local-${typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(36).slice(2)}`}`,
       name: file.name,
-      type: file.type,
-      size: file.size || 0,
-      lastUsed: now,
-      assetId: file.assetId,
-      contentUrl: file.contentUrl,
-      preview: file.fileObject && file.type.startsWith('image/') ? URL.createObjectURL(file.fileObject) : undefined,
+      type: file.type || 'application/octet-stream',
+      fileObject: file,
+      size: file.size,
+      // Created ONCE. Building the blob URL during render minted a new URL on every re-render, so
+      // the <img> re-decoded each time the upload or scan state changed — the visible "repaint".
+      previewUrl: file.type.startsWith('image/') ? URL.createObjectURL(file) : undefined,
+      uploading: true,
+      ready: false,
     }));
-    setRecentFiles(prev => {
-      const filtered = prev.filter(existingFile => !newRecentFiles.some(newFile => newFile.name === existingFile.name));
-      return [...newRecentFiles, ...filtered].slice(0, 20);
-    });
     if (queuedId) {
       setQueue(prev => {
         const item = prev.messages.find(m => m.id === queuedId);
-        return item ? updateQueued(prev, queuedId, { attachedFiles: [...item.attachedFiles, ...newFiles] }) : prev;
+        return item ? updateQueued(prev, queuedId, { attachedFiles: [...item.attachedFiles, ...placed] }) : prev;
       });
-      for (const f of newFiles) {
-        if (!f.assetId) { setQueue(prev => markQueuedFileReady(prev, f.id)); continue; }
-        void waitForAssetReady(f.assetId).then((verdict) => {
-          if (verdict === 'ready') { setQueue(prev => markQueuedFileReady(prev, f.id)); return; }
-          scanVerdictNotice(f.name, verdict);
-          if (verdict === 'blocked') {
-            setQueue(prev => {
-              const item = prev.messages.find(m => m.id === queuedId);
-              return item ? updateQueued(prev, queuedId, { attachedFiles: item.attachedFiles.filter(x => x.id !== f.id) }) : prev;
-            });
-          }
-        });
-      }
-      return;
+    } else {
+      setAttachedFiles(prev => [...prev, ...placed]);
+      setIsAttachMenuOpen(false);
+      setIsRecentFilesOpen(false);
     }
-    setAttachedFiles(prev => [...prev, ...newFiles]);
-    setIsAttachMenuOpen(false);
-    setIsRecentFilesOpen(false);
 
-    // Scan-before-send: wait for each fresh upload's malware scan to clear, THEN mark it ready.
-    // Send is blocked while any attachment is not ready, so a file enters a conversation only after it
-    // is scanned and valid — no "still scanning" state ever appears on a sent message. The blob
-    // preview shows meanwhile (LibraryAssetImage prefers it). A file is never released unscanned: a
-    // blocked file is removed, and one whose scan never finishes stays unsendable until removed.
-    const markReady = (id: string) => setAttachedFiles(prev => prev.map(x => (x.id === id ? { ...x, ready: true } : x)));
-    for (const f of newFiles) {
-      if (!f.assetId) { markReady(f.id); continue; }
+    // 2. Every later update finds the file BY ID, wherever it now lives. A person can queue the
+    //    prompt (moving its files into the queue) or remove a file while it is still uploading; a
+    //    patch addressed to "the composer" would then land nowhere and the queued copy would wait
+    //    on "scanning" forever.
+    const patch = (id: string, change: Partial<AttachedFile>) => {
+      setAttachedFiles(prev => (prev.some(x => x.id === id) ? prev.map(x => (x.id === id ? { ...x, ...change } : x)) : prev));
+      setQueue(prev => patchQueuedFile(prev, id, change));
+    };
+    const drop = (id: string) => {
+      setAttachedFiles(prev => (prev.some(x => x.id === id) ? prev.filter(x => x.id !== id) : prev));
+      setQueue(prev => patchQueuedFile(prev, id, null));
+    };
+
+    // 3. Upload each file on its own, so a fast one is not held behind a slow one. Each chip updates
+    //    in place the moment ITS upload returns; the batch flag covers the uploads only.
+    setIsUploadingAttachments(true);
+    type Uploaded = { id: string; assetId: string; contentUrl?: string; name: string; type: string; size: number; previewUrl?: string };
+    const results = await Promise.all(placed.map(async (f): Promise<Uploaded | null> => {
+      try {
+        const asset = await libraryService.upload(f.fileObject as File, 'chat-attachment');
+        const done: Uploaded = { id: f.id, assetId: asset.assetId, contentUrl: asset.contentUrl, name: asset.name, type: asset.mimeType || f.type, size: asset.size || f.size || 0, previewUrl: f.previewUrl };
+        patch(f.id, { assetId: done.assetId, contentUrl: done.contentUrl, name: done.name, type: done.type, size: done.size, uploading: false });
+        return done;
+      } catch (error) {
+        console.error('Failed to save chat attachment to Library:', error);
+        drop(f.id);
+        setProjectFileNotice(`"${f.name}" could not be uploaded. Try attaching it again.`);
+        return null;
+      }
+    })).finally(() => setIsUploadingAttachments(false));
+    const uploaded = results.filter((r): r is Uploaded => r !== null);
+
+    // 4. Scan-before-send: a file is never released unscanned. `ready` flips only on the server's
+    //    clean verdict, a blocked file is removed, and one whose scan never finishes stays unsendable
+    //    until the person removes it.
+    for (const f of uploaded) {
       void waitForAssetReady(f.assetId).then((verdict) => {
-        if (verdict === 'ready') { markReady(f.id); return; }
+        if (verdict === 'ready') { patch(f.id, { ready: true }); return; }
         scanVerdictNotice(f.name, verdict);
-        if (verdict === 'blocked') setAttachedFiles(prev => prev.filter(x => x.id !== f.id));
+        if (verdict === 'blocked') drop(f.id);
+      });
+    }
+
+    const now = Date.now();
+    const newRecentFiles = uploaded.map(({ assetId, contentUrl, name, type, size, previewUrl }) => ({
+      id: assetId,
+      name,
+      type,
+      size,
+      lastUsed: now,
+      assetId,
+      contentUrl,
+      preview: previewUrl,
+    }));
+    if (newRecentFiles.length) {
+      setRecentFiles(prev => {
+        const filtered = prev.filter(existingFile => !newRecentFiles.some(newFile => newFile.name === existingFile.name));
+        return [...newRecentFiles, ...filtered].slice(0, 20);
       });
     }
   };
@@ -12883,15 +12899,15 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                             key={file.id}
                             className="flex items-center relative group"
                         >
-                            {file.fileObject && file.type.startsWith('image/') ? (
+                            {file.previewUrl ? (
                                 <div className="relative">
                                     <img
-                                        src={URL.createObjectURL(file.fileObject)}
+                                        src={file.previewUrl}
                                         alt={file.name}
                                         className="w-11 h-11 rounded-lg object-cover flex-shrink-0 border border-[var(--chat-border)] group-hover:border-[var(--chat-muted)] transition-all duration-200 ease-out cursor-pointer group-hover:scale-[1.02]"
                                         onClick={() => {
-                                            if (file.fileObject) {
-                                                setFullScreenImageUrl(URL.createObjectURL(file.fileObject));
+                                            if (file.previewUrl) {
+                                                setFullScreenImageUrl(file.previewUrl);
                                                 setIsFullScreenImageOpen(true);
                                                 setViewerShowsDownloadButton(false);
                                             }
@@ -12901,8 +12917,8 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                                         <span
                                             className="pointer-events-none absolute inset-0 flex items-center justify-center rounded-lg bg-[color-mix(in_srgb,var(--chat-canvas)_55%,transparent)]"
                                             role="status"
-                                            aria-label="Scanning attachment before it can be sent"
-                                            title="Scanning…"
+                                            aria-label={file.uploading ? 'Uploading attachment' : 'Scanning attachment before it can be sent'}
+                                            title={file.uploading ? 'Uploading…' : 'Scanning…'}
                                         >
                                             <span className="h-4 w-4 animate-spin rounded-full border-2 border-[var(--chat-text)] border-t-transparent" aria-hidden="true" />
                                         </span>
@@ -12938,13 +12954,13 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                                         }}
                                     >
                                         {file.ready === false ? (
-                                            <span className="h-3.5 w-3.5 flex-shrink-0 animate-spin rounded-full border-2 border-[var(--chat-muted)] border-t-transparent" role="status" aria-label="Scanning" title="Scanning…" />
+                                            <span className="h-3.5 w-3.5 flex-shrink-0 animate-spin rounded-full border-2 border-[var(--chat-muted)] border-t-transparent" role="status" aria-label={file.uploading ? 'Uploading' : 'Scanning'} title={file.uploading ? 'Uploading…' : 'Scanning…'} />
                                         ) : (
                                             <FileText size={14} className={file.fileObject ? "text-[var(--chat-muted)] group-hover:text-[var(--chat-text)]" : "text-[var(--chat-muted)]"} />
                                         )}
                                         <span className="truncate max-w-[140px]" title={file.name}>{file.name}</span>
                                         {file.ready === false ? (
-                                            <span className="text-[11px] text-[var(--chat-muted)] ml-0.5">scanning…</span>
+                                            <span className="text-[11px] text-[var(--chat-muted)] ml-0.5">{file.uploading ? 'uploading…' : 'scanning…'}</span>
                                         ) : !file.fileObject && (
                                             <span className="text-[11px] text-[var(--chat-muted)] ml-0.5">(recent)</span>
                                         )}
