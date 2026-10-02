@@ -21,7 +21,7 @@
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createServer } from 'vite';
@@ -44,10 +44,26 @@ test('a dropped file is placed before a single byte is uploaded', () => {
 });
 
 test('one preview URL per file, made when it is attached — never during render', () => {
-  assert.match(attach, /previewUrl: file\.type\.startsWith\('image\/'\) \? URL\.createObjectURL\(file\) : undefined,/);
+  assert.match(attach, /previewUrl: file\.type\.startsWith\('image\/'\) \? stableBlobUrl\(file\) : undefined,/);
   const chips = slice(chat, '{attachedFiles.map((file) => (', '{/* Stays hand-written — the file chip');
-  assert.doesNotMatch(chips, /createObjectURL/, 'a URL minted in render re-decodes the image on every state change');
   assert.match(chips, /src=\{file\.previewUrl\}/);
+  const helper = slice(chat, 'const stableBlobUrl = (blob: Blob): string => {', '\n};');
+  assert.match(helper, /stableBlobUrls\.get\(blob\)/, 'the same File always yields the same URL');
+});
+
+test('🔴 a sent image keeps its URL across re-renders (the list re-renders on every streamed token)', () => {
+  const bubble = slice(chat, '{imageAttachments.map((img, imageIndex) => {', '<LibraryAssetImage');
+  assert.match(bubble, /\? stableBlobUrl\(img\.file\)/, 'the same URL the composer chip used — moving into the message reloads nothing');
+  assert.doesNotMatch(bubble, /createObjectURL/, 'a URL minted in render re-resolves every sent image on every token');
+});
+
+test('the full-screen viewer always gets its OWN URL, because it revokes it on close', () => {
+  const chips = slice(chat, '{attachedFiles.map((file) => (', '{/* Stays hand-written — the file chip');
+  assert.match(chips, /setFullScreenImageUrl\(URL\.createObjectURL\(file\.fileObject\)\)/);
+  assert.doesNotMatch(chat, /setFullScreenImageUrl\(file\.previewUrl\)/,
+    'handing the viewer the shared URL blanks the thumbnail the moment the viewer closes');
+  assert.match(chat, /if \(prev\?\.startsWith\('blob:'\)\) URL\.revokeObjectURL\(prev\);\n\s*return null;/,
+    'the viewer does revoke on close — the reason the rule above exists');
 });
 
 test('the chip keeps its id: the upload updates it in place, never replaces it', () => {
@@ -65,6 +81,35 @@ test('updates follow the file into a queued prompt', () => {
 test('a failed upload removes its chip and says so', () => {
   const upload = slice(attach, '// 3. Upload each file', '// 4. Scan-before-send');
   assert.match(upload, /drop\(f\.id\);\n\s*setProjectFileNotice\(`"\$\{f\.name\}" could not be uploaded/);
+});
+
+test('the full-screen viewer is a MODULE-level component, so it is not rebuilt on every render', () => {
+  const viewerAt = chat.indexOf('const FullScreenImageViewer: React.FC<');
+  const chatAt = chat.indexOf('const ChatWithLLM: React.FC<ChatWithLLMProps> = ({');
+  assert.ok(viewerAt > 0 && chatAt > 0, 'both declarations exist');
+  assert.ok(viewerAt < chatAt,
+    'declared inside ChatWithLLM it is a new component type each render: the overlay and its image were rebuilt on every keystroke and streamed token');
+  assert.match(chat.slice(0, viewerAt), /\n\/\/ Declared at MODULE level on purpose\./);
+});
+
+test('no JSX comment renders as text in the chat or library components', () => {
+  // `/* ... */` placed directly between JSX tags is TEXT, not a comment — a developer note was
+  // shown to users inside the full-screen image viewer (2026-10-02). Real JSX comments are `{/* */}`.
+  const dirs = ['src/components/playground/Chat', 'src/components/library'];
+  const offenders = [];
+  for (const dir of dirs) {
+    for (const name of readdirSync(join(ROOT, dir)).filter((n) => n.endsWith('.tsx'))) {
+      const lines = readFileSync(join(ROOT, dir, name), 'utf8').split(/\r?\n/);
+      for (let i = 1; i < lines.length; i += 1) {
+        if (!/^\s+\/\*/.test(lines[i])) continue;
+        let j = i - 1;
+        while (j > 0 && !lines[j].trim()) j -= 1;
+        const prev = lines[j].trim();
+        if (/(>|\/>|\)\}|<\/[A-Za-z.]+>)$/.test(prev) && !/=>\s*$/.test(prev)) offenders.push(`${dir}/${name}:${i + 1}`);
+      }
+    }
+  }
+  assert.deepEqual(offenders, [], 'wrap these in {/* ... */}');
 });
 
 const vite = await createServer({ appType: 'custom', logLevel: 'error', optimizeDeps: { noDiscovery: true }, server: { middlewareMode: true } });
