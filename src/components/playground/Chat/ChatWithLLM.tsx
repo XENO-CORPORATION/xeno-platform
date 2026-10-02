@@ -59,11 +59,13 @@ import {
   type ChatTurnRecord, type StepsMode,
 } from './chatTurnTranscript';
 import { CitationChip, parseCitationHref, remarkCitations } from '@xenosystem/agent-conversation/components/agent/transcript/citations';
+import { normalizeChatMath, remarkChatMath, rehypeChatKatex } from '@/lib/chatMath';
 import { ThreadScrubber, firstLineOf, type ScrubberTurn } from '@xenosystem/agent-conversation/components/agent/transcript/ThreadScrubber';
 import { activePath as branchActivePath, branchInfo } from './chatBranches';
 import { readGenerateResponse, readStreamedTurn, endpointForTask, streamRequestBody, CHAT_STREAM_ENDPOINT } from './chatStream';
 import { reasoningCapabilityForModel, reasoningTraceForModel } from '@/server/lib/chatModelCapabilities.js';
 import CodeBlockWithHeader from './CodeBlockWithHeader';
+import { cleanAnswerText } from './cleanAnswerText';
 import { chatComplete } from '@/services/aiService';
 import { getGroupedModels, GroupedModels, Model } from '@/services/modelService';
 import { chatService, isPersistedConversationId } from '@/services/chatService';
@@ -1019,15 +1021,6 @@ const HistoryConversationTitle: React.FC<{
   );
 };
 
-// --- NEW: Standalone cleanText utility function ---
-const cleanText = (text: string | null): string | null => {
-    if (!text) return null;
-    let cleaned = text.replace(/\n{3,}/g, '\n\n'); // Reduce multiple newlines
-    const trimRegex = /^\s*([*_]{1,2})\s*|\s*([*_]{1,2})\s*$/g;
-    cleaned = cleaned.replace(trimRegex, '').trim(); // Remove markdown markers and final trim
-    return cleaned;
-};
-// --- END NEW --- 
 
 // Helper function to parse combined response text
 const parseResponse = (fullText: string, reasoningExpected: boolean = false): { thinking: string | null; answer: string; hasThinking: boolean } => {
@@ -1049,8 +1042,8 @@ const parseResponse = (fullText: string, reasoningExpected: boolean = false): { 
             .replace(thinkingTagRegex, '')
             .trim();
         return {
-            thinking: cleanText(thinkingContent),
-            answer: cleanText(answer) || '',
+            thinking: cleanAnswerText(thinkingContent),
+            answer: cleanAnswerText(answer) || '',
             hasThinking: true
         };
     }
@@ -1066,7 +1059,7 @@ const parseResponse = (fullText: string, reasoningExpected: boolean = false): { 
         if (thinkingMatchIndex !== -1) {
             // Found "Thinking Process:" - remove it and everything after
             const cleanAnswer = trimmedText.substring(0, thinkingMatchIndex).trim();
-            return { thinking: null, answer: cleanText(cleanAnswer) || '', hasThinking: false };
+            return { thinking: null, answer: cleanAnswerText(cleanAnswer) || '', hasThinking: false };
         }
 
         // Remove "Final Answer:" marker if present
@@ -1076,11 +1069,11 @@ const parseResponse = (fullText: string, reasoningExpected: boolean = false): { 
             const answerStartIndex = answerMatchIndex + (answerMarkerMatch ? answerMarkerMatch[0].length : 0);
             const cleanAnswer = trimmedText.substring(0, answerMatchIndex).trim() + 
                               (answerStartIndex < trimmedText.length ? '\n\n' + trimmedText.substring(answerStartIndex).trim() : '');
-            return { thinking: null, answer: cleanText(cleanAnswer) || '', hasThinking: false };
+            return { thinking: null, answer: cleanAnswerText(cleanAnswer) || '', hasThinking: false };
         }
 
         // No markers found, return the full text as clean answer
-        return { thinking: null, answer: cleanText(trimmedText) || '', hasThinking: false };
+        return { thinking: null, answer: cleanAnswerText(trimmedText) || '', hasThinking: false };
     }
 
     // Original logic for when reasoning is expected
@@ -1173,7 +1166,7 @@ const parseResponse = (fullText: string, reasoningExpected: boolean = false): { 
         // If reasoning was not expected, this is normal - 'answer' is already the full trimmedText.
     }
 
-    return { thinking: cleanText(thinking), answer: cleanText(answer) || '', hasThinking };
+    return { thinking: cleanAnswerText(thinking), answer: cleanAnswerText(answer) || '', hasThinking };
 };
 
 // --- Refactor highlightTextWithSources for Footnote Style ---
@@ -17041,7 +17034,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
 
                                           {message.isError && message.text && (
                                               <div className={`prose prose-sm prose-invert max-w-none text-[var(--chat-danger)] prose-strong:text-[var(--chat-danger)] prose-p:my-1.5 prose-li:my-0.5 prose-ol:pl-5 prose-ul:pl-5`}>
-                                                  <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeRaw]}>{message.text}</ReactMarkdown> 
+                                                  <ReactMarkdown remarkPlugins={[remarkGfm, remarkChatMath]} rehypePlugins={[rehypeRaw, rehypeChatKatex]}>{normalizeChatMath(message.text)}</ReactMarkdown> 
                                               </div>
                                           )}
 
@@ -17103,8 +17096,8 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                                                      theme CSS uses [class*="bg-…"] and would paint the whole answer. */
                                                   <div className="prose prose-sm max-w-none prose-strong:font-bold prose-code:px-2 prose-code:py-0.5 prose-code:rounded prose-code:font-mono prose-code:text-[15px] prose-code:font-normal prose-code:font-medium prose-code:before:content-none prose-code:after:content-none prose-pre:rounded-lg prose-pre:border prose-pre:border-[var(--chat-border)] prose-pre:p-4 prose-pre:font-mono prose-pre:text-[15px] prose-pre:overflow-x-auto">
                                                    <ReactMarkdown
-  remarkPlugins={[remarkGfm, remarkCitations]}
-  rehypePlugins={[rehypeRaw]}
+  remarkPlugins={[remarkGfm, remarkCitations, remarkChatMath]}
+  rehypePlugins={[rehypeRaw, rehypeChatKatex]}
   components={{
     pre: ({children}: any) => <>{children}</>,
     /* a `[n]` the model cited becomes the chip after the claim, the cited sources on hover — the
@@ -17147,7 +17140,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
     },
   }}
 >
-  {message.parsedAnswer}
+  {normalizeChatMath(message.parsedAnswer ?? '')}
 </ReactMarkdown>
                                                {/* Streaming caret removed to match the XENO model (no vertical caret). */}
                                                   </div>

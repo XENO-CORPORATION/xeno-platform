@@ -2119,3 +2119,12 @@ div:has([data-composer-reveal][data-reveal-open="true"]) > [data-chat-scroll-to-
 @media (prefers-reduced-motion: reduce) {
   .route-loading[data-shown] { animation: none; }
 }
+
+/* Math in chat replies (src/lib/chatMath.ts). A long display equation scrolls inside its own
+   line instead of widening the reply column; inline math never wraps mid-formula. */
+.katex-display {
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding: 2px 0;
+}
+.katex { white-space: nowrap; }

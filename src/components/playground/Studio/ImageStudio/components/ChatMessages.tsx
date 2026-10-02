@@ -1,5 +1,6 @@
 import React, { useCallback } from 'react';
 import ReactMarkdown from 'react-markdown';
+import { normalizeChatMath, remarkChatMath, rehypeChatKatex } from '@/lib/chatMath';
 import remarkGfm from 'remark-gfm';
 import rehypeRaw from 'rehype-raw';
 import { 
@@ -258,8 +259,8 @@ export const ChatMessages: React.FC<ChatMessagesProps> = ({
                 </div>
                 <div className="mt-3 pt-3 border-t border-zinc-700/50 w-full text-sm prose prose-sm prose-invert max-w-none text-gray-300 prose-p:my-1.5 prose-li:my-0.5 prose-ol:pl-5 prose-ul:pl-5"> 
                   {message.thinkingContent ? (
-                    <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeRaw]}>
-                      {message.thinkingContent}
+                    <ReactMarkdown remarkPlugins={[remarkGfm, remarkChatMath]} rehypePlugins={[rehypeRaw, rehypeChatKatex]}>
+                      {normalizeChatMath(message.thinkingContent)}
                     </ReactMarkdown>
                   ) : (
                     <p className="text-gray-400 italic text-sm">
@@ -309,15 +310,15 @@ export const ChatMessages: React.FC<ChatMessagesProps> = ({
 
               {message.isError && message.text && (
                 <div className="prose prose-sm prose-invert max-w-none text-red-400 prose-strong:text-red-300 prose-p:my-1.5 prose-li:my-0.5 prose-ol:pl-5 prose-ul:pl-5">
-                  <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeRaw]}>{message.text}</ReactMarkdown> 
+                  <ReactMarkdown remarkPlugins={[remarkGfm, remarkChatMath]} rehypePlugins={[rehypeRaw, rehypeChatKatex]}>{normalizeChatMath(message.text)}</ReactMarkdown> 
                 </div>
               )}
 
               {/* Main AI answer content */}
               {!message.isError && (message.parsedAnswer || message.text) && (
                 <div className="prose prose-sm prose-invert max-w-none text-gray-100 prose-strong:text-gray-50 prose-p:my-1.5 prose-li:my-0.5 prose-ol:pl-5 prose-ul:pl-5">
-                  <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeRaw]}>
-                    {message.parsedAnswer || message.text}
+                  <ReactMarkdown remarkPlugins={[remarkGfm, remarkChatMath]} rehypePlugins={[rehypeRaw, rehypeChatKatex]}>
+                    {normalizeChatMath(message.parsedAnswer || message.text)}
                   </ReactMarkdown>
                 </div>
               )}
