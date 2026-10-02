@@ -73,7 +73,21 @@ const clip = (value, max) => {
  * `{ ok: false, error }`. Never throws — a malformed call becomes a tool result the model can read
  * and correct on its next iteration, the same contract as the other tools.
  */
-export function parseAskUserArguments(raw) {
+/** The question shown when the model supplied none and its message has no question line either. */
+export const ASK_USER_DEFAULT_QUESTION = 'Choose an option';
+
+/**
+ * The question a model wrote in its MESSAGE instead of in the `question` field: the last line ending
+ * in "?", with markdown quote/emphasis markers stripped. Empty when there is none.
+ */
+export function questionFromText(text) {
+  const lines = String(text || '').split(/\r?\n/)
+    .map((line) => line.replace(/^\s*(?:>\s*)+/, '').replace(/[*_`#]/g, '').trim())
+    .filter((line) => line.endsWith('?'));
+  return lines.length ? lines[lines.length - 1] : '';
+}
+
+export function parseAskUserArguments(raw, { fallbackText = '' } = {}) {
   let parsed;
   try {
     parsed = typeof raw === 'string' ? JSON.parse(raw) : raw;
@@ -82,8 +96,15 @@ export function parseAskUserArguments(raw) {
   }
   if (!parsed || typeof parsed !== 'object') return { ok: false, error: 'ask_user arguments must be an object' };
 
-  const question = typeof parsed.question === 'string' ? clip(parsed.question, ASK_USER_LIMITS.question) : '';
-  if (!question) return { ok: false, error: 'ask_user needs a non-empty `question`' };
+  /*
+   * A missing question is NOT a refusal (2026-10-03). Gemini routinely writes the question in its message
+   * and sends only `options` — measured on a replay of a real quiz conversation. Refusing turned that into
+   * an error tool result, and the model then fell back to writing "A) … B) …" as prose: exactly what the
+   * tool exists to prevent. The options are the part only the call can carry; the question is recovered
+   * from the message, or a neutral prompt is shown, since the message above already says what is asked.
+   */
+  const given = typeof parsed.question === 'string' ? clip(parsed.question, ASK_USER_LIMITS.question) : '';
+  const question = given || clip(questionFromText(fallbackText), ASK_USER_LIMITS.question) || ASK_USER_DEFAULT_QUESTION;
 
   if (!Array.isArray(parsed.options)) return { ok: false, error: 'ask_user needs `options` as an array of strings' };
   const options = [];

@@ -24,7 +24,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createServer } from 'vite';
 import { streamToolLoop } from '../src/server/utils/chatToolLoop.js';
-import { ASK_USER_TOOL, parseAskUserArguments } from '../src/server/utils/chatAskUserTool.js';
+import { ASK_USER_TOOL, ASK_USER_DEFAULT_QUESTION, parseAskUserArguments } from '../src/server/utils/chatAskUserTool.js';
 import { RUN_CODE_TOOL } from '../src/server/utils/chatCodeTool.js';
 import { normalizeTurnRecord } from '../src/server/utils/chatTurnRecord.js';
 import { readStreamedTurn } from '../src/components/playground/Chat/chatStream.ts';
@@ -53,7 +53,9 @@ test('the argument parser accepts a real call, strips self-written letters, and 
   const lettered = parseAskUserArguments(JSON.stringify({ question: 'Pick', options: ['A) Use EFS', 'B. Use EBS', '(3) Use S3'] }));
   assert.deepEqual(lettered.options, ['Use EFS', 'Use EBS', 'Use S3'], 'the panel letters them; a model-written prefix would read "A. A) Use EFS"');
   assert.equal(parseAskUserArguments(JSON.stringify({ question: 'Pick', options: ['only one'] })).ok, false, 'fewer than 2 options');
-  assert.equal(parseAskUserArguments(JSON.stringify({ question: '', options: ['a', 'b'] })).ok, false, 'no question');
+  // 2026-10-03: a missing question is recovered, never refused — refusing made Gemini fall back to prose
+  assert.equal(parseAskUserArguments(JSON.stringify({ question: '', options: ['a', 'b'] })).question, ASK_USER_DEFAULT_QUESTION, 'no question anywhere: the neutral prompt');
+  assert.equal(parseAskUserArguments(JSON.stringify({ options: ['a', 'b'] }), { fallbackText: '> A cluster of 50 nodes...\n\n**Which storage fits best?**\n\nThink it through.' }).question, 'Which storage fits best?', 'the last "?" line of the message, markdown stripped');
   assert.equal(parseAskUserArguments(JSON.stringify({ question: 'Pick', options: ['same', 'Same'] })).ok, false, 'duplicates');
   assert.equal(parseAskUserArguments('{not json').ok, false);
   assert.equal(parseAskUserArguments(JSON.stringify({ question: 'Pick', options: ['a', 'b'], multiple: true })).multiple, true);
@@ -84,6 +86,17 @@ test('other tools in the same batch still run before the turn ends', async () =>
   assert.equal(ran, 1);
   const order = events.map((e) => e.type).filter((t) => ['code_result', 'ask_user', 'complete'].includes(t));
   assert.deepEqual(order, ['code_result', 'ask_user', 'complete']);
+});
+
+test('🔴 a call with options but NO question still ends the turn on a panel (Gemini, measured 2026-10-03)', async () => {
+  // The shape Gemini sent on a replay of a real quiz: the question in the message, only `options` in the call.
+  const streamModel = scriptedModel([
+    [{ type: 'delta', text: '> A site runs in one AZ...\n\nWhich solution survives an AZ failure?' }, { type: 'tool_calls', toolCalls: [askCall('q1', { options: Q.options })] }],
+    [{ type: 'delta', text: 'A) prose fallback — SHOULD NEVER BE CALLED' }],
+  ]);
+  const events = await drain(streamToolLoop({ messages: [{ role: 'user', content: 'next one' }], surface: 'chat', turnId: 't', streamModel, runSearch: async () => ({}), tools: [ASK_USER_TOOL] }));
+  assert.equal(streamModel.calls(), 1, 'not bounced back to the model, which would then write the options as text');
+  assert.equal(events.find((e) => e.type === 'ask_user')?.question, 'Which solution survives an AZ failure?');
 });
 
 test('one question per turn — a second is refused, never queued', async () => {
