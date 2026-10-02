@@ -510,7 +510,8 @@ export async function* streamToolLoop({ messages, surface, turnId, streamModel, 
         // One question per turn. A second one is answered with an error the model can read — it is
         // never queued, because the turn is about to end at the first.
         if (question) { working.push(toolResultMessage(id, askUserAlreadyPendingPayload())); continue; }
-        const args = parseAskUserArguments(call?.function?.arguments);
+        // `text` is what the model wrote this iteration — where it puts the question when it omits the field
+        const args = parseAskUserArguments(call?.function?.arguments, { fallbackText: text });
         if (!args.ok) { working.push(toolResultMessage(id, { error: args.error })); continue; }
         question = { toolCallId: typeof id === 'string' ? id : null, question: args.question, options: args.options, multiple: args.multiple };
         continue;
