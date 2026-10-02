@@ -36,7 +36,9 @@ export async function claimLibraryIngestion(pool, workerId) {
   });
 }
 
-export async function processLibraryIngestions(pool, { maxItems = 4 } = {}) {
+// A person who attaches six images waits for all six before they can send, so a sweep drains the
+// queue rather than taking four and sleeping. Bounded so one sweep cannot run forever.
+export async function processLibraryIngestions(pool, { maxItems = 50 } = {}) {
   if (!pool) return [];
   const workerId = `${process.pid}:${crypto.randomUUID()}`;
   const outcomes = [];
@@ -54,7 +56,9 @@ export async function processLibraryIngestions(pool, { maxItems = 4 } = {}) {
   return outcomes;
 }
 
-export function startLibraryIngestionWorker(pool, intervalMs = 15_000, {
+// 2 s between empty sweeps: the cost is one indexed query; the gain is a fresh upload starting its
+// scan within ~2 s instead of up to 15 s after it lands.
+export function startLibraryIngestionWorker(pool, intervalMs = 2_000, {
   processor = processLibraryIngestions,
 } = {}) {
   console.log('Library ingestion worker initialized');

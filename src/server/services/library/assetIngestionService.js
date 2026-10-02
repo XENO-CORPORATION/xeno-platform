@@ -1,4 +1,6 @@
 import { execFile } from 'child_process';
+import fs from 'fs';
+import net from 'net';
 import { promisify } from 'util';
 import { CHAT_PROJECT_CONTRACTS } from '../../config/chatProjectContracts.js';
 import { withTransaction } from '../chatProjectAuthority.js';
@@ -14,10 +16,79 @@ import {
 
 const execFileAsync = promisify(execFile);
 
-export async function scanFile(storagePath, { execFileFn = execFileAsync } = {}) {
-  if (CHAT_PROJECT_CONTRACTS.ingestion.scannerMode !== 'clamav-cli-v1') {
+const SCANNER_MODES = new Set(['clamav-cli-v1', 'clamd-instream-v1']);
+
+/**
+ * Stream a file to clamd with its INSTREAM command and return clamd's verdict line.
+ *
+ * Why a daemon (2026-10-01): `clamscan` reloads the whole signature database on every run — 16.7 s
+ * measured on a 5-byte file — so six images took two minutes to clear. clamd keeps the database
+ * resident and answers in milliseconds. The protocol: `zINSTREAM\0`, then chunks each prefixed by a
+ * 4-byte big-endian length, then a zero-length chunk; clamd replies `stream: OK`, `stream: <name>
+ * FOUND`, or `... ERROR`.
+ */
+export function clamdInstream(storagePath, {
+  host = process.env.CHAT_ASSET_SCANNER_HOST || 'clamav',
+  port = Number(process.env.CHAT_ASSET_SCANNER_PORT || 3310),
+  timeoutMs = 120_000,
+  connect = (options) => net.createConnection(options),
+} = {}) {
+  return new Promise((resolve, reject) => {
+    let settled = false;
+    let reply = '';
+    const done = (fn, value) => { if (settled) return; settled = true; socket.destroy(); fn(value); };
+    const socket = connect({ host, port });
+    socket.setTimeout(timeoutMs, () => done(reject, Object.assign(new Error('clamd timed out'), { code: 'clamd_timeout' })));
+    socket.on('error', (error) => done(reject, Object.assign(new Error('clamd unreachable'), { code: 'clamd_unreachable', cause: error })));
+    socket.on('data', (chunk) => { reply += chunk.toString('utf8'); });
+    socket.on('end', () => done(resolve, reply.replace(/\0+$/, '').trim()));
+    socket.on('close', () => done(resolve, reply.replace(/\0+$/, '').trim()));
+    socket.on('connect', () => {
+      socket.write('zINSTREAM\0');
+      const file = fs.createReadStream(storagePath, { highWaterMark: 64 * 1024 });
+      file.on('error', (error) => done(reject, Object.assign(new Error('scan source unreadable'), { code: 'scanner_failed', cause: error })));
+      file.on('data', (data) => {
+        const header = Buffer.alloc(4);
+        header.writeUInt32BE(data.length, 0);
+        if (!socket.write(Buffer.concat([header, data]))) {
+          file.pause();
+          socket.once('drain', () => file.resume());
+        }
+      });
+      file.on('end', () => socket.write(Buffer.alloc(4)));
+    });
+  });
+}
+
+/** clamd's reply → nothing (clean) or a typed error. Anything not plainly clean is not clean. */
+export function interpretClamdReply(reply) {
+  if (/^stream: OK$/.test(reply)) return;
+  if (/ FOUND$/.test(reply)) throw Object.assign(new Error('Malware detected'), { code: 'malware_detected' });
+  throw Object.assign(new Error(`Mandatory malware scanner failed: ${String(reply).slice(0, 200)}`), { code: 'scanner_failed' });
+}
+
+export async function scanFile(storagePath, { execFileFn = execFileAsync, instream = clamdInstream } = {}) {
+  const mode = CHAT_PROJECT_CONTRACTS.ingestion.scannerMode;
+  if (!SCANNER_MODES.has(mode)) {
     throw Object.assign(new Error('Mandatory malware scanner is unavailable'), { code: 'scanner_unavailable' });
   }
+  if (mode === 'clamd-instream-v1') {
+    let reply;
+    try {
+      reply = await instream(storagePath);
+    } catch (error) {
+      // An unreachable daemon is never a pass: the file is scanned by the CLI instead (slow, but
+      // scanned). A source that cannot be read is a failure either way.
+      if (error.code === 'scanner_failed') throw error;
+      console.warn(`[scanner] clamd ${error.code || 'error'}; scanning with the CLI instead`);
+      return scanWithCli(storagePath, execFileFn);
+    }
+    return interpretClamdReply(reply);
+  }
+  return scanWithCli(storagePath, execFileFn);
+}
+
+async function scanWithCli(storagePath, execFileFn) {
   const executable = process.env.CHAT_ASSET_SCANNER_PATH || 'clamscan';
   try {
     await execFileFn(executable, ['--no-summary', '--infected', storagePath], {

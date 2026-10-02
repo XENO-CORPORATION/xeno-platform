@@ -297,6 +297,19 @@ if [ "$SERVICE" = "chat-workers" ]; then
     exit 1
   fi
   log "matched chat-extractor healthcheck PASSED"
+
+  # The resident malware scanner. Started, never force-recreated: it is a pinned upstream image with
+  # its own signature volume, so restarting it on every worker deploy would only reload ~1 GB of
+  # signatures for nothing. Not a gate either — until clamd answers (the first start downloads the
+  # database), the workers scan with the CLI, which is slow but still a scan.
+  log "ensuring clamav (resident scanner) is running"
+  dc up -d --no-deps --no-build clamav || log "WARN: clamav did not start — workers will scan with the CLI"
+  for _ in $(seq 1 12); do
+    status="$(docker inspect --format '{{.State.Health.Status}}' "$(dc ps -q clamav 2>/dev/null | head -1)" 2>/dev/null || true)"
+    if [ "$status" = "healthy" ]; then log "clamav healthy"; break; fi
+    sleep 5
+  done
+  [ "${status:-}" = "healthy" ] || log "clamav not healthy yet (${status:-unknown}) — continuing; the CLI covers scans until it is"
 fi
 
 # --- 5b. Swap ---------------------------------------------------------------
