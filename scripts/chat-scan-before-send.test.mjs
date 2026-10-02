@@ -12,7 +12,7 @@
  * 45 s with five files unscanned; this code holds it and saves at ~135 s, once all six are clean.
  *
  * Mutation-checked:
- *   - release on timeout again (`.then(() => markReady(...))`)  -> "never released unscanned" fails
+ *   - release on timeout again (`.then(() => patch(f.id, { ready: true }))`) -> "never released unscanned" fails
  *   - drop the server's `blocked` field                          -> "the status route" fails
  *   - stop removing a blocked file                               -> "a blocked file is removed" fails
  */
@@ -55,16 +55,18 @@ test('🔴 a file is never released unscanned: the wait ends only on a verdict',
   const attach = slice(chat, 'const attachFileObjects = async', 'const handleFileSelected = async');
   assert.doesNotMatch(attach, /waitForAssetReady\([^)]*\)\.then\(\(\) =>/,
     'a .then that ignores the verdict marks an unscanned file ready — the 2026-09-30 defect');
-  const composer = slice(attach, 'setAttachedFiles(prev => [...prev, ...newFiles]);', '\n  };');
-  assert.match(composer, /if \(verdict === 'ready'\) \{ markReady\(f\.id\); return; \}/, 'the composer marks ready only on ready');
-  const queued = slice(attach, 'if (queuedId) {', 'setAttachedFiles(prev => [...prev, ...newFiles]);');
-  assert.match(queued, /if \(verdict === 'ready'\) \{ setQueue\(prev => markQueuedFileReady\(prev, f\.id\)\); return; \}/,
-    'a file attached to a queued prompt follows the same rule');
+  assert.match(attach, /uploading: true,\n\s*ready: false,/, 'a placed file is unsendable from its first frame');
+  const scan = slice(attach, '// 4. Scan-before-send', 'const now = Date.now();');
+  assert.match(scan, /if \(verdict === 'ready'\) \{ patch\(f\.id, \{ ready: true \}\); return; \}/,
+    'ready flips only on a ready verdict — in the composer AND in a queued prompt (patch reaches both)');
 });
 
 test('a blocked file is removed, and the person is told why', () => {
   const attach = slice(chat, 'const attachFileObjects = async', 'const handleFileSelected = async');
-  assert.match(attach, /if \(verdict === 'blocked'\) setAttachedFiles\(prev => prev\.filter\(x => x\.id !== f\.id\)\);/);
+  assert.match(attach, /if \(verdict === 'blocked'\) drop\(f\.id\);/);
+  const drop = slice(attach, 'const drop = (id: string) => {', '\n    };');
+  assert.match(drop, /setAttachedFiles\(/, 'removed from the composer');
+  assert.match(drop, /patchQueuedFile\(prev, id, null\)/, 'and from any queued prompt holding it');
   assert.match(chat, /was blocked by the security scan and was removed\./);
   assert.match(chat, /is still being scanned\. Remove it, or keep waiting/);
 });

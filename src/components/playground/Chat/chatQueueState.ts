@@ -82,6 +82,25 @@ export function markQueuedFileReady<F extends QueuedAttachment>(state: QueueStat
 }
 
 /**
+ * Update one attachment by id in whichever queued prompt holds it — `null` removes it. An upload
+ * and its scan finish on their own schedule, and the file may have moved from the composer into a
+ * queued prompt meanwhile; finding it by id (never by "the prompt it started in") is what lets that
+ * move happen without stranding the file at "scanning" forever.
+ */
+export function patchQueuedFile<F extends QueuedAttachment>(state: QueueState<F>, fileId: string, patch: Partial<F> | null): QueueState<F> {
+  let changed = false;
+  const messages = state.messages.map((m) => {
+    if (!m.attachedFiles.some((f) => f.id === fileId)) return m;
+    changed = true;
+    const attachedFiles = patch === null
+      ? m.attachedFiles.filter((f) => f.id !== fileId)
+      : m.attachedFiles.map((f) => (f.id === fileId ? { ...f, ...patch } : f));
+    return { ...m, attachedFiles };
+  });
+  return changed ? { ...state, messages } : state;
+}
+
+/**
  * The prompt the queue would send next, or why it will not send anything yet. A held queue (someone
  * is editing or rearranging it) and a prompt whose attachment is still being scanned both WAIT —
  * nothing is removed until it can actually be sent, so a refusal never costs a prompt.
