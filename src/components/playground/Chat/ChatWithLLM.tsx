@@ -62,7 +62,7 @@ import ChatTurnHead from './ChatTurnHead';
 import { ChatGeneratedImages, imageAssetFor, type ChatTurnImageView } from './ChatGeneratedImage';
 import { ChatCodeExecution } from './ChatCodeExecution';
 import { ChatUserMessage } from './ChatUserMessage';
-import { pasteBecomesFile, makePastedTextFile } from './chatPaste';
+import { pasteBecomesFile, makePastedTextFile, pastedFiles } from './chatPaste';
 import { ChatQueue } from './ChatQueue';
 import { ChatQuestionPanel, ChatQuestionRecord } from './ChatQuestionPanel';
 import { formatAnswer, pendingQuestion, questionHistoryNote, questionOutcome } from './chatQuestion';
@@ -10115,12 +10115,16 @@ Keep the summary under 500 words. Preserve essential context needed to continue 
    * A large paste becomes a `Pasted text.txt` attachment instead of a wall of inline text — the
    * ChatGPT behaviour. Above the chatPaste threshold (2000, an owner decision 2026-09-26) the paste
    * is diverted into a real Library file and attached; below it, it pastes inline as before. A paste
-   * that carries actual files/images is left to the browser's own handling. The full text is never
+   * that carries actual files/images attaches them (pastedFiles) through the shared upload path. The full text is never
    * cut: it lives in the file, which the model reads and the Context Panel / Library show whole.
    */
   const handleComposerPaste = (event: React.ClipboardEvent<HTMLTextAreaElement>) => {
     const pasted = event.clipboardData.getData('text/plain');
-    const hasFiles = Boolean(event.clipboardData.files && event.clipboardData.files.length > 0);
+    // Ctrl+V of a screenshot / copied image / copied files attaches them through the SAME upload
+    // path as the picker and drop — a textarea alone discards them.
+    const files = pastedFiles(event.clipboardData);
+    if (files.length) { event.preventDefault(); void attachFileObjects(files); return; }
+    const hasFiles = false;
     if (!pasteBecomesFile({ text: pasted, hasFiles })) return;
     event.preventDefault();
     void attachFileObjects([makePastedTextFile(pasted)]);
