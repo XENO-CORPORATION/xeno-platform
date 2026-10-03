@@ -579,7 +579,7 @@ const ChatModelSelector: React.FC<ChatModelSelectorProps> = ({
         <div className="fixed inset-0 z-[300] md:hidden flex flex-col justify-end">
           {/* Backdrop */}
           <div
-            className="absolute inset-0 bg-black/80 backdrop-blur-md animate-in fade-in duration-200"
+            className="absolute inset-0 bg-black/80 animate-in fade-in duration-200"
             onClick={() => closeInlineTray()}
           />
 

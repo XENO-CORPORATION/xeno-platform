@@ -43,6 +43,14 @@ interface ChatEmptyStateProps {
   /** Floats above the composer in a conversation (the prompt queue). Never shown on the empty state. */
   aboveComposer?: React.ReactNode;
   isActive: boolean;
+  /**
+   * Where the controls live. `home` = inside the one box; `dock` = underneath a raised plate. Defaults
+   * from `isActive` (the empty state is home, a conversation is dock) but is its own axis: the project
+   * page is a home that has no hero, so the two were conflated before.
+   */
+  placement?: 'home' | 'dock';
+  /** Render the centred "What would you like to explore?" hero. Defaults to `isActive`. */
+  showHero?: boolean;
   isCompact?: boolean;
   /** Hide the hover tool rail entirely (e.g. the project workspace composer). */
   hideToolRail?: boolean;
@@ -165,6 +173,8 @@ const ChatEmptyState: React.FC<ChatEmptyStateProps> = ({
   controls,
   aboveComposer,
   isActive,
+  placement,
+  showHero,
   isCompact = false,
   hideToolRail = false,
   activeMode,
@@ -180,6 +190,9 @@ const ChatEmptyState: React.FC<ChatEmptyStateProps> = ({
   isTemporaryChat = false,
   updates = [],
 }) => {
+  const resolvedPlacement = placement ?? (isActive ? 'home' : 'dock');
+  const controlsInside = resolvedPlacement === 'home';
+  const hero = showHero ?? isActive;
   const railRef = useRef<HTMLElement>(null);
   const handleRef = useRef<HTMLButtonElement>(null);
   const closeTimerRef = useRef<number | null>(null);
@@ -881,7 +894,7 @@ const ChatEmptyState: React.FC<ChatEmptyStateProps> = ({
   const composerShell = (
     <div
       data-chat-composer-shell
-      data-composer-context={isActive ? 'empty' : 'conversation'}
+      data-composer-context={controlsInside ? 'empty' : 'conversation'}
       data-rail-open={showToolRail && isRailOpen ? 'true' : 'false'}
       data-active-tool={showToolRail ? (activeTool ?? '') : ''}
       className={`relative z-10 overflow-visible rounded-2xl border border-[var(--chat-border)] bg-[var(--chat-elevated)] transition-[width,border-color] duration-200 ease-out ${
@@ -979,7 +992,7 @@ const ChatEmptyState: React.FC<ChatEmptyStateProps> = ({
       <div data-composer-column className="relative z-10 ml-auto flex w-full min-w-0 flex-col">
         <div className="w-full">{children}</div>
         {/* Empty state: the controls live INSIDE the one box. */}
-        {isActive && controls && <div data-composer-controls="inside" className="w-full px-3 pb-2.5">{controls}</div>}
+        {controlsInside && controls && <div data-composer-controls="inside" className="w-full px-3 pb-2.5">{controls}</div>}
       </div>
     </div>
   );
@@ -998,6 +1011,7 @@ const ChatEmptyState: React.FC<ChatEmptyStateProps> = ({
       <div
         ref={revealRootRef}
         data-composer-reveal
+        data-composer-placement={resolvedPlacement}
         data-melting={isMelting ? 'true' : 'false'}
         /* Anything sitting just above the composer needs to know the floating row is
            occupying that space — it is out of flow and reserves none of its own. */
@@ -1080,12 +1094,12 @@ const ChatEmptyState: React.FC<ChatEmptyStateProps> = ({
 
         {composerShell}
         {/* Conversation: the box is the raised plate and the controls break out BELOW it. */}
-        {!isActive && controls && <div data-composer-controls="below" className="relative z-10 w-full px-1 pt-2">{controls}</div>}
+        {!controlsInside && controls && <div data-composer-controls="below" className="relative z-10 w-full px-1 pt-2">{controls}</div>}
       </div>
     </ChatComposerRevealContext.Provider>
   );
 
-  if (!isActive) {
+  if (!hero) {
     // Same containment model as the empty-state section: cqw is measured here,
     // not on the expanding shell — otherwise the rail paints over the prompt.
     return (

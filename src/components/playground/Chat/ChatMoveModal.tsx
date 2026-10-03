@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
-import { Button, useDialog } from '@xenosystem/elements-react';
+import { Button } from '@xenosystem/elements-react';
+import ChatModal from './ChatModal';
 import { chatService, type ConversationMovePreview } from '@/services/chatService';
 
 /**
@@ -25,7 +26,6 @@ export default function ChatMoveModal({ conversationId, conversationTitle, proje
   const [preview, setPreview] = useState<ConversationMovePreview | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
-  const { panelProps } = useDialog<HTMLDivElement>({ open: true, onClose, lockScroll: false });
 
   const load = async () => {
     setError(null);
@@ -59,52 +59,49 @@ export default function ChatMoveModal({ conversationId, conversationTitle, proje
 
   const others = preview ? preview.audience.filter((person) => !person.isYou) : [];
   return (
-    <div className="chat-themed fixed inset-0 z-[999] flex items-center justify-center p-4 backdrop-blur-sm"
-      style={{ backgroundColor: 'color-mix(in srgb, var(--chat-text) 28%, transparent)' }} onClick={onClose}>
-      <div {...panelProps} role="dialog" aria-modal="true" aria-labelledby="chat-move-title" data-chat-move-dialog=""
-        className="w-full max-w-md overflow-hidden rounded-lg border"
-        style={{ backgroundColor: 'var(--chat-elevated)', borderColor: 'var(--chat-border)', color: 'var(--chat-text)' }}
-        onClick={(event) => event.stopPropagation()}>
-        <div className="p-4">
-          <h2 id="chat-move-title" className="text-lg font-semibold">Move to {projectName}?</h2>
-          <p className="mt-1 text-sm text-[var(--chat-muted)]">
-            <strong className="text-[var(--chat-text)]">{conversationTitle}</strong> and its entire history become part of this project.
-          </p>
-        </div>
-        <hr className="border-t border-[var(--chat-border)]" />
-        <div className="space-y-3 p-4 text-sm" data-chat-move-disclosure="">
-          {!preview && !error ? <p className="text-[var(--chat-muted)]">Checking who can see this project…</p> : null}
-          {preview ? (
-            <>
-              <p data-chat-move-history="">
-                Included: <strong>{preview.includedHistory.messages} {preview.includedHistory.messages === 1 ? 'message' : 'messages'}</strong>
-                {preview.includedHistory.firstAt ? ` from ${new Date(preview.includedHistory.firstAt).toLocaleDateString()}` : ''}.
-              </p>
-              <div data-chat-move-audience="">
-                <p className="mb-1">
-                  {others.length === 0
-                    ? 'Only you will be able to read it.'
-                    : `${others.length} other ${others.length === 1 ? 'person' : 'people'} will be able to read it:`}
-                </p>
-                {others.length ? (
-                  <ul className="max-h-40 space-y-1 overflow-y-auto rounded-md border border-[var(--chat-border)] p-2">
-                    {others.map((person) => (
-                      <li key={person.userId} className="text-[var(--chat-text)]">{person.displayName || 'A project member'}</li>
-                    ))}
-                  </ul>
-                ) : null}
-              </div>
-            </>
-          ) : null}
-          {error ? <p role="alert" className="text-[var(--chat-text)]">{error}</p> : null}
-        </div>
-        <div className="flex justify-end gap-3 border-t border-[var(--chat-border)] px-4 py-3" style={{ backgroundColor: 'var(--chat-surface)' }}>
+    <ChatModal
+      onClose={onClose}
+      size="md"
+      title={`Move to ${projectName}?`}
+      dialogProps={{ 'data-chat-move-dialog': '' }}
+      footer={(
+        <>
           <Button variant="secondary" size="md" onClick={onClose}>Cancel</Button>
           <Button variant="primary" size="md" onClick={() => void commitMove()} disabled={!preview || pending}>
             {pending ? 'Moving…' : 'Move chat'}
           </Button>
-        </div>
+        </>
+      )}
+    >
+      <div className="space-y-3 text-sm" data-chat-move-disclosure="">
+        <p className="text-[var(--chat-muted)]">
+          <strong className="text-[var(--chat-text)]">{conversationTitle}</strong> and its entire history become part of this project.
+        </p>
+        {!preview && !error ? <p className="text-[var(--chat-muted)]">Checking who can see this project…</p> : null}
+        {preview ? (
+          <>
+            <p data-chat-move-history="">
+              Included: <strong>{preview.includedHistory.messages} {preview.includedHistory.messages === 1 ? 'message' : 'messages'}</strong>
+              {preview.includedHistory.firstAt ? ` from ${new Date(preview.includedHistory.firstAt).toLocaleDateString()}` : ''}.
+            </p>
+            <div data-chat-move-audience="">
+              <p className="mb-1">
+                {others.length === 0
+                  ? 'Only you will be able to read it.'
+                  : `${others.length} other ${others.length === 1 ? 'person' : 'people'} will be able to read it:`}
+              </p>
+              {others.length ? (
+                <ul className="max-h-40 space-y-1 overflow-y-auto rounded-md border border-[var(--chat-border)] p-2">
+                  {others.map((person) => (
+                    <li key={person.userId} className="text-[var(--chat-text)]">{person.displayName || 'A project member'}</li>
+                  ))}
+                </ul>
+              ) : null}
+            </div>
+          </>
+        ) : null}
+        {error ? <p role="alert" className="text-[var(--chat-text)]">{error}</p> : null}
       </div>
-    </div>
+    </ChatModal>
   );
 }

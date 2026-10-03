@@ -135,10 +135,12 @@ const LibraryRouteRedirect: React.FC = () => {
  * mounts, reloads the account-owned project, and restores its backend data.
  */
 const ProjectRouteRedirect: React.FC = () => {
-  const { projectId } = useParams<{ projectId?: string }>();
-  const target = projectId
-    ? `/overview/chat/projects/${encodeURIComponent(projectId)}`
-    : '/overview/chat/projects';
+  const { projectId, conversationId } = useParams<{ projectId?: string; conversationId?: string }>();
+  const target = projectId && conversationId
+    ? `/overview/chat/projects/${encodeURIComponent(projectId)}/c/${encodeURIComponent(conversationId)}`
+    : projectId
+      ? `/overview/chat/projects/${encodeURIComponent(projectId)}`
+      : '/overview/chat/projects';
   return <Navigate to={target} replace />;
 };
 
@@ -341,6 +343,7 @@ function App() {
             <Route path="/c" element={<ConversationRouteRedirect />} />
             <Route path="/public-projects" element={<PublicProjects />} />
             <Route path="/public-projects/:projectId" element={<PublicProjects />} />
+            <Route path="/projects/:projectId/c/:conversationId" element={<ProjectRouteRedirect />} />
             <Route path="/projects/:projectId" element={<ProjectRouteRedirect />} />
             <Route path="/projects" element={<ProjectRouteRedirect />} />
             <Route path="/scheduled" element={<Navigate to="/overview/chat/scheduled" replace />} />

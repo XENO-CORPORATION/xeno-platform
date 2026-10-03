@@ -318,6 +318,7 @@ const OverviewContent: React.FC = () => {
             <Route path="chat/c/:conversationId" element={<MultiChatContainer />} />
             <Route path="chat/projects" element={<MultiChatContainer />} />
             <Route path="chat/projects/:projectId" element={<MultiChatContainer />} />
+            <Route path="chat/projects/:projectId/c/:conversationId" element={<MultiChatContainer />} />
             <Route path="projects" element={<ProjectsPage />} />
             <Route path="projects/:projectId" element={<ProjectsPage />} />
             <Route path="chat/library" element={<MultiChatContainer />} />

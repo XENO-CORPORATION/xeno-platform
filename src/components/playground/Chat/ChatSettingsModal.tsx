@@ -1,13 +1,14 @@
 import React, { useEffect, useState } from 'react';
 import { STEPS_MODES, type StepsMode } from './chatTurnTranscript';
-import { DownloadDecl, PlusDecl, Settings, XDecl } from '@/lib/icons';
+import { DownloadDecl, PlusDecl } from '@/lib/icons';
 import {
   getChatPersonaId,
   listPersonas,
   setChatPersonaId,
   type ChatPersona,
 } from './chatCustomize';
-import { Button, IconButton, useDialog, useTabs } from '@xenosystem/elements-react';
+import { Button, useTabs } from '@xenosystem/elements-react';
+import ChatModal from './ChatModal';
 import ChatSkillsWorkspace from './ChatSkillsWorkspace';
 
 export type ChatFontSize = 'small' | 'medium' | 'large';
@@ -90,11 +91,6 @@ const ChatSettingsModal: React.FC<ChatSettingsModalProps> = ({
     })();
   }, [conversationId]);
 
-  /* Escape was the only part of being a dialog this one did. `useDialog` adds the rest — focus in on
-     open, Tab kept inside, focus back to the opener on close. `lockScroll` is off because the app
-     already keeps the body unscrollable. */
-  const { panelProps } = useDialog<HTMLDivElement>({ open: true, onClose, lockScroll: false });
-
   const handleSelectChatPersona = async (persona: ChatPersona) => {
     const nextId = chatPersonaId === persona.id ? null : persona.id;
     await setChatPersonaId(conversationId, nextId);
@@ -110,20 +106,14 @@ const ChatSettingsModal: React.FC<ChatSettingsModalProps> = ({
     }`;
 
   return (
-    <div
-      {...panelProps}
-      role="dialog"
-      aria-modal="true"
-      aria-label="Chat settings"
-      className={`flex h-[94vh] max-h-[94vh] w-full flex-col overflow-hidden border sm:h-[min(52rem,92vh)] sm:max-h-[92vh] ${RADIUS}`}
-      style={{
-        backgroundColor: 'var(--chat-elevated)',
-        borderColor:
-          'color-mix(in srgb, var(--chat-border) 70%, var(--chat-muted))',
-        color: 'var(--chat-text)',
-        boxShadow: '0 20px 50px -16px rgba(0, 0, 0, 0.75)',
-      }}
-      data-chat-settings-card=""
+    <ChatModal
+      onClose={onClose}
+      size="lg"
+      title="Settings"
+      className="h-[94vh] sm:h-[min(52rem,92vh)]"
+      bodyClassName="flex flex-col overflow-hidden"
+      dialogProps={{ 'data-chat-settings-dialog': '', 'data-chat-settings-card': '' }}
+      footer={<Button variant="secondary" size="md" onClick={onClose}>Done</Button>}
     >
       <style>{`
         .chat-settings-row,
@@ -136,23 +126,8 @@ const ChatSettingsModal: React.FC<ChatSettingsModalProps> = ({
         }
       `}</style>
 
-      <div
-        className="flex flex-shrink-0 items-center gap-2.5 border-b px-4 py-2.5"
-        style={{ borderColor: 'var(--chat-border)' }}
-      >
-        <div className="flex min-w-0 flex-shrink-0 items-center gap-2">
-          <Settings
-            size={16}
-            className="flex-shrink-0 text-[var(--chat-muted)]"
-            aria-hidden="true"
-          />
-          <h2 className="text-[14px] font-semibold tracking-tight text-[var(--chat-text)]">
-            Settings
-          </h2>
-        </div>
-
         <div
-          className="ml-1 flex min-w-0 flex-1 items-center gap-0.5"
+          className="mb-2 flex min-w-0 flex-shrink-0 items-center gap-0.5"
           {...tabs.tablistProps}
           aria-label="Settings sections"
         >
@@ -200,17 +175,7 @@ const ChatSettingsModal: React.FC<ChatSettingsModalProps> = ({
           })}
         </div>
 
-        <IconButton
-          icon={XDecl}
-          variant="ghost"
-          size="md"
-          iconSize={16}
-          onClick={onClose}
-          aria-label="Close chat settings"
-        />
-      </div>
-
-      <div {...tabs.panelProps} className="flex min-h-0 flex-1 flex-col overflow-hidden px-4 py-4">
+      <div {...tabs.panelProps} className="flex min-h-0 flex-1 flex-col overflow-hidden py-2">
         {loading ? (
           <p className="py-8 text-[12.5px] text-[var(--chat-muted)]">
             Loading…
@@ -484,7 +449,7 @@ const ChatSettingsModal: React.FC<ChatSettingsModalProps> = ({
           </div>
         )}
       </div>
-    </div>
+    </ChatModal>
   );
 };
 

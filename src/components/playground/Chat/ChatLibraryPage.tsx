@@ -27,6 +27,7 @@ import {
 } from '@/services/libraryService';
 import LibraryAssetViewer from '@/components/library/LibraryAssetViewer';
 import { createArtifact, type ArtifactKind } from './chatArtifacts';
+import ChatModal from './ChatModal';
 
 type LibraryView = 'list' | 'grid';
 
@@ -573,14 +574,21 @@ const ChatLibraryPage: React.FC<ChatLibraryPageProps> = ({ pageLeft = 0, viewerL
       </div>
 
       {newDocumentOpen && (
-        <div className="absolute inset-0 z-[70] flex items-center justify-center bg-black/55 px-4 backdrop-blur-sm" role="dialog" aria-modal="true" aria-label="New document">
-          <div className="w-full max-w-lg rounded-2xl border p-4 shadow-2xl" style={{ background: 'var(--chat-elevated)', borderColor: 'var(--chat-border)' }}>
-            <div className="flex items-center justify-between"><h2 className="text-[15px] font-medium">New document</h2><button type="button" onClick={() => setNewDocumentOpen(false)} aria-label="Close"><X size={15} /></button></div>
-            <TextInput className="mt-4 w-full" size="lg" value={draftTitle} onChange={(event) => setDraftTitle(event.target.value)} placeholder="Document name" aria-label="Document name" />
-            <textarea className="mt-3 min-h-44 w-full resize-y rounded-xl border bg-[var(--chat-surface)] p-3 text-[12.5px] leading-relaxed outline-none" style={{ borderColor: 'var(--chat-border)' }} value={draftContent} onChange={(event) => setDraftContent(event.target.value)} placeholder="Start writing…" aria-label="Document content" />
-            <div className="mt-4 flex justify-end gap-2"><Button variant="ghost" size="sm" onClick={() => setNewDocumentOpen(false)}>Cancel</Button><Button variant="primary" size="sm" disabled={!draftTitle.trim() || !draftContent.trim() || creating} onClick={() => void createDocument()}>{creating ? 'Creating…' : 'Create'}</Button></div>
-          </div>
-        </div>
+        <ChatModal
+          onClose={() => setNewDocumentOpen(false)}
+          size="lg"
+          title="New document"
+          dialogProps={{ 'data-library-new-document-dialog': '' }}
+          footer={(
+            <>
+              <Button variant="ghost" size="sm" onClick={() => setNewDocumentOpen(false)}>Cancel</Button>
+              <Button variant="primary" size="sm" disabled={!draftTitle.trim() || !draftContent.trim() || creating} onClick={() => void createDocument()}>{creating ? 'Creating…' : 'Create'}</Button>
+            </>
+          )}
+        >
+          <TextInput className="w-full" size="lg" value={draftTitle} onChange={(event) => setDraftTitle(event.target.value)} placeholder="Document name" aria-label="Document name" />
+          <textarea className="mt-3 min-h-44 w-full resize-y rounded-xl border bg-[var(--chat-surface)] p-3 text-[12.5px] leading-relaxed outline-none" style={{ borderColor: 'var(--chat-border)' }} value={draftContent} onChange={(event) => setDraftContent(event.target.value)} placeholder="Start writing…" aria-label="Document content" />
+        </ChatModal>
       )}
 
       {selected?.category === 'images' && createPortal(
@@ -600,24 +608,24 @@ const ChatLibraryPage: React.FC<ChatLibraryPageProps> = ({ pageLeft = 0, viewerL
       )}
 
       {selected && selected.category !== 'images' && (
-        <div className="absolute inset-0 z-[70] flex items-center justify-center bg-black/55 px-4 backdrop-blur-sm" role="dialog" aria-modal="true" aria-label={`${selected.name} preview`} onMouseDown={(event) => { if (event.target === event.currentTarget) setSelected(null); }}>
-          <div className="flex max-h-[82vh] w-full max-w-2xl flex-col overflow-hidden rounded-2xl border shadow-2xl" style={{ background: 'var(--chat-elevated)', borderColor: 'var(--chat-border)' }}>
-            <div className="flex items-start justify-between gap-4 border-b px-4 py-3" style={{ borderColor: 'var(--chat-border)' }}>
-              <div className="min-w-0"><h2 className="truncate text-[14px] font-medium">{selected.name}</h2><p className="mt-1 text-[10.5px] text-[var(--chat-muted)]">{formatModified(selected.updated_at)} · {formatBytes(selected.size_bytes)}</p></div>
-              <button type="button" className="text-[var(--chat-muted)] hover:text-[var(--chat-text)]" onClick={() => setSelected(null)} aria-label="Close preview"><X size={16} /></button>
-            </div>
-            <div className="min-h-0 flex-1 overflow-auto p-4">
-              <pre className="whitespace-pre-wrap break-words rounded-xl border bg-[var(--chat-surface)] p-4 font-mono text-[11.5px] leading-relaxed" style={{ borderColor: 'var(--chat-border)' }}>{selectedBody || 'Preview is not available for this file type.'}</pre>
-            </div>
-            <div className="flex items-center justify-between gap-3 border-t px-4 py-3" style={{ borderColor: 'var(--chat-border)' }}>
+        <ChatModal
+          onClose={() => setSelected(null)}
+          size="lg"
+          title={<span className="block truncate">{selected.name}</span>}
+          dialogProps={{ 'data-library-preview-dialog': '' }}
+          footer={(
+            <div className="flex w-full items-center justify-between gap-3">
               <Button variant="danger" size="sm" onClick={() => void deleteItem(selected)}><Trash size={13} /> Delete</Button>
               <div className="flex items-center gap-2">
                 {selected.conversation_id && <Button variant="secondary" size="sm" onClick={() => { window.location.href = `/c/${selected.conversation_id}`; }}>Open chat</Button>}
                 {(selected.preview_url || selected.source === 'file') && <Button variant="primary" size="sm" onClick={() => void downloadItem(selected)}><Download size={13} /> Download</Button>}
               </div>
             </div>
-          </div>
-        </div>
+          )}
+        >
+          <p className="mb-2 text-[10.5px] text-[var(--chat-muted)]">{formatModified(selected.updated_at)} · {formatBytes(selected.size_bytes)}</p>
+          <pre className="whitespace-pre-wrap break-words rounded-xl border bg-[var(--chat-surface)] p-4 font-mono text-[11.5px] leading-relaxed" style={{ borderColor: 'var(--chat-border)' }}>{selectedBody || 'Preview is not available for this file type.'}</pre>
+        </ChatModal>
       )}
     </div>
   );

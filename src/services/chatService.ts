@@ -1110,6 +1110,33 @@ export const chatService = {
     }
   },
 
+  /** Per-user sidebar pin. Idempotent; appends at the end of the caller's pins. */
+  async pinProject(id: string): Promise<{ pinned: true; pin_position: number }> {
+    const response = await fetch(`${API_BASE}/projects/${encodeURIComponent(id)}/pin`, {
+      method: 'PUT',
+      headers: getAuthHeaders(),
+    });
+    return handleResponse<{ pinned: true; pin_position: number }>(response);
+  },
+
+  async unpinProject(id: string): Promise<{ pinned: false }> {
+    const response = await fetch(`${API_BASE}/projects/${encodeURIComponent(id)}/pin`, {
+      method: 'DELETE',
+      headers: getAuthHeaders(),
+    });
+    return handleResponse<{ pinned: false }>(response);
+  },
+
+  /** `ids` must be exactly the caller's pinned project ids, in the new order. */
+  async reorderPinnedProjects(ids: string[]): Promise<{ order: string[] }> {
+    const response = await fetch(`${API_BASE}/projects/pins/order`, {
+      method: 'PUT',
+      headers: getAuthHeaders(),
+      body: JSON.stringify({ ids }),
+    });
+    return handleResponse<{ order: string[] }>(response);
+  },
+
   async deleteProject(id: string): Promise<boolean> {
     try {
       const response = await fetch(`${API_BASE}/projects/${id}`, {

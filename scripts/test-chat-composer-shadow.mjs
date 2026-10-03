@@ -63,7 +63,11 @@ const assertions = [
     // gooey reveal, the same floating mode row and the same single-stroke box.
     description: 'Conversation composer reuses the shell with the gooey reveal',
     passes:
-      emptyStateSource.includes("data-composer-context={isActive ? 'empty' : 'conversation'}") &&
+      emptyStateSource.includes("data-composer-context={controlsInside ? 'empty' : 'conversation'}") &&
+      emptyStateSource.includes('data-composer-placement={resolvedPlacement}') &&
+      // the project page and the main chat are the SAME composer: both go through renderPrimaryComposer
+      // and say which placement they want, rather than one of them faking `isActive`
+      chatSource.includes("placement={options?.forceCompact || messages.length === 0 ? 'home' : 'dock'}") &&
       emptyStateSource.includes('data-conversation-composer-frame') &&
       emptyStateSource.includes('data-composer-reveal') &&
       emptyStateSource.includes('chat-gooey-skin') &&

@@ -1718,7 +1718,7 @@ Based on these search results, provide a helpful, accurate, and concise answer t
 
         {/* Input Container */}
         <div className="flex-shrink-0 px-4 pb-4">
-          <div className={`mx-auto bg-[var(--chat-surface)] border border-[var(--chat-border)] rounded-2xl overflow-hidden shadow-lg ${
+          <div className={`mx-auto bg-[var(--chat-elevated)] border border-[var(--chat-border)] rounded-xl overflow-hidden shadow-[var(--chat-shell-shadow)] ${
             (showResultsPanel || isBrowserOpen) ? 'max-w-full' : 'max-w-3xl'
           }`}>
             {/* Textarea Row */}
