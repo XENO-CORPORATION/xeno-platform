@@ -34,6 +34,7 @@ import { routingDimensions } from '../utils/usageDimensions.js';
 import { billableInputTokens } from '../utils/billableInput.js';
 import crypto from 'node:crypto';
 import * as defaultLedger from '../utils/creditLedgerV2.js';
+import { proxyReceiptVerifierFromEnv } from '../services/proxyUsageReceipts.js';
 import * as defaultPricing from '../utils/creditCosts.js';
 import { ensureQuota as defaultEnsureQuota } from '../services/quotaService.js';
 import { getEffectivePlan as defaultGetEffectivePlan } from '../services/effectivePlan.js';
@@ -109,7 +110,9 @@ export function createServiceLedgerRouter({
   billingSubjectFor = defaultBillingSubjectFor,
   // Deployment must provide a provider-specific receipt verifier. A bearer token
   // alone cannot certify caller-authored late counts. No default trust identity.
-  verifyCorrectionReceipt = null,
+  // Default: the inner proxy's durable usage receipts, when XENO_USAGE_RECEIPT_URL and its reader key
+  // are both set; otherwise null and the correction route stays closed.
+  verifyCorrectionReceipt = proxyReceiptVerifierFromEnv(),
 } = {}) {
   const router = express.Router();
   router.use(makeRequireServiceToken(getServiceToken));
@@ -159,12 +162,14 @@ export function createServiceLedgerRouter({
     if (typeof verifyCorrectionReceipt !== 'function') return res.status(503).json({ error: { code: 'CORRECTION_VERIFIER_UNAVAILABLE' } });
     try {
       const target = { admissionId: req.params.admissionId, drawId: req.params.drawId };
+      // The verifier binds a receipt to THIS draw's settled identity, read here -- never from the body.
+      const draw = Object.freeze(await ledger.readRunDrawDispatchV2(req.db, target));
       const controller = new AbortController();
       let timer;
       let receipt;
       try {
         receipt = await Promise.race([
-          Promise.resolve().then(() => verifyCorrectionReceipt({ target: Object.freeze(target), evidence: req.body, signal: controller.signal })),
+          Promise.resolve().then(() => verifyCorrectionReceipt({ target: Object.freeze(target), draw, evidence: req.body, signal: controller.signal })),
           new Promise((_, reject) => { timer = setTimeout(() => { controller.abort(); reject(new Error('Correction verifier timed out')); }, 10000); timer.unref?.(); }),
         ]);
       } finally { clearTimeout(timer); }
