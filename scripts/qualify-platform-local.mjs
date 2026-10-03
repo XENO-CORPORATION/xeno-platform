@@ -224,7 +224,7 @@ const BACKEND_EVIDENCE = {
         { env: childEnvironment(process.env, scratch, urlFor(paymentDb)), cwd: scratch, timeout: 180_000, log: 'payment' });
       return parseMoneySummary(output, 0);
     });
-    for (const suite of ['credit-payment-origin','credit-restricted-account','credit-journal-order','workforce-funding-budgets','workforce-funded-admission','workforce-scope-caps']) {
+    for (const suite of ['credit-payment-origin','credit-restricted-account','credit-journal-order','workforce-funding-budgets','workforce-funded-admission','workforce-single-effect','workforce-scope-caps']) {
       const originDb = `xeno_qual_${randomBytes(16).toString('hex')}`;
       await createDatabase(originDb);
       await step(`payment-${suite}`, async () => {
@@ -314,7 +314,7 @@ const BACKEND_EVIDENCE = {
       { env: childEnvironment(process.env, scratch, urlFor(paymentDb)), cwd: scratch, timeout: 180_000, log: 'payment' });
     return parseMoneySummary(output, 0);
   });
-  for (const suite of ['credit-payment-origin','credit-restricted-account','credit-journal-order','workforce-funding-budgets','workforce-funded-admission','workforce-scope-caps']) {
+  for (const suite of ['credit-payment-origin','credit-restricted-account','credit-journal-order','workforce-funding-budgets','workforce-funded-admission','workforce-single-effect','workforce-scope-caps']) {
     const originDb = `xeno_qual_${randomBytes(16).toString('hex')}`;
     await createDatabase(originDb);
     await step(`payment-${suite}`, async () => {
