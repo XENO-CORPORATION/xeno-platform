@@ -188,7 +188,7 @@ test('project chat membership persists on create, move, list, and direct load', 
   const assign = extractFrom(WITH_LLM, 'const handleAssignConversationToProject = async');
   assert.match(assign, /setPendingMove\(\{/, 'moving a persisted chat does not open the move dialog.');
   assert.doesNotMatch(assign, /updateConversation\([^)]*project_id/, 'a move still bypasses the consented dialog.');
-  assert.match(WITH_LLM, /pendingMove && createPortal\(\s*<div[^>]*>\s*<ChatMoveModal/, 'the move dialog is never mounted.');
+  assert.match(WITH_LLM, /pendingMove && \(\s*<ChatMoveModal/, 'the move dialog is never mounted.');
   const commit = extractFrom(MOVE_MODAL, 'const commitMove = async');
   assert.match(commit, /chatService\.moveConversation\(conversationId, projectId, preview\.consentRevision\)/,
     'the move dialog does not persist the move against its preview\'s consent.');

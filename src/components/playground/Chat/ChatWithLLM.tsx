@@ -2,7 +2,7 @@ import React, { useState, useRef, useEffect, useLayoutEffect, useCallback, useMe
 import { confirmAction } from '../../platform/confirmAction';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { createPortal } from 'react-dom'; // Import createPortal
-import { Button, IconButton, ListRow, MenuItem, MessageBubble, Spinner, Tab, Textarea, TextInput, useDialog, useGooPill, useMenu, useTabs } from '@xenosystem/elements-react';
+import { Button, IconButton, ListRow, MenuItem, MessageBubble, Spinner, Tab, Textarea, TextInput, useGooPill, useMenu, useTabs } from '@xenosystem/elements-react';
 // The palettes and the preference that picks one live outside this file now: the CSS at the entry
 // point, the resolution beside it. This component still OWNS the switcher — it is the only thing that
 // writes these keys — but owning a setting never meant being the only place allowed to read it.
@@ -26,6 +26,17 @@ import ChatEffortControl from './ChatEffortControl';
 import { effortOptionForTurn, readEffortPreferences, requestShapeFor, writeEffortPreference } from './chatReasoningEffort';
 import ChatShareModal from './ChatShareModal';
 import ChatMoveModal from './ChatMoveModal';
+import ChatModal from './ChatModal';
+import PinnedProjectsSection from './PinnedProjectsSection';
+import { ChatBreadcrumb, ChatRouteNotice, ProjectChatsSidebarSection } from './ChatProjectNavigation';
+import {
+  buildChatConversationPath,
+  buildProjectPath,
+  buildProjectsPath,
+  conversationUrlCorrection,
+  CHAT_ROOT_PATH,
+  parseChatLocation,
+} from './chatRoutes';
 import { isOutlineDebugOn, OUTLINE_DEBUG_CSS } from './outlineDebug';
   import ChatLibraryPage from './ChatLibraryPage';
 import ChatScheduledPage from './ChatScheduledPage';
@@ -2556,7 +2567,7 @@ const FullScreenImageViewer: React.FC<{
 
   return (
     <div
-      className="fixed inset-0 z-[1000] flex items-center justify-center p-4 image-viewer-overlay backdrop-blur-md"
+      className="fixed inset-0 z-[1000] flex items-center justify-center p-4 image-viewer-overlay"
       style={{
         backgroundColor: isShown ? 'rgba(0, 0, 0, 0.8)' : 'rgba(0, 0, 0, 0)',
         transition: `background-color ${SCHEDULE_CREATE_MODAL_MS}ms ${SCHEDULE_DATE_EASE}`,
@@ -2749,12 +2760,10 @@ const ChatWithLLM: React.FC<ChatWithLLMProps> = ({
   // Persisted so a page refresh keeps the user on the Projects page instead
   // of dropping them back into the new-chat interface.
   const [isProjectsPageOpen, setIsProjectsPageOpen] = useState(() => {
+    // The URL decides, never storage: a stored "projects page open" used to cover a conversation
+    // deep link after a refresh.
     if (typeof window === 'undefined') return false;
-    try {
-      return localStorage.getItem(PROJECTS_PAGE_OPEN_STORAGE_KEY) === 'true';
-    } catch {
-      return false;
-    }
+    return parseChatLocation(window.location.pathname).view === 'projects';
   });
   const [isArtifactsPageOpen, setIsArtifactsPageOpen] = useState(false);
   const [isGlobalSettingsPageOpen, setIsGlobalSettingsPageOpen] = useState(false);
@@ -2765,15 +2774,14 @@ const ChatWithLLM: React.FC<ChatWithLLMProps> = ({
   /** Kept until unmount so exit returns to the same button. */
   const [customizeMotionFrom, setCustomizeMotionFrom] = useState({ x: 0, y: 0 });
   const customizeButtonRef = useRef<HTMLButtonElement>(null);
-  // Which project's workspace is open (null = showing the projects list).
-  // Persisted so a refresh keeps the user inside the same project.
+  // Which project's HOME is open (null = not on a project home). Derived from the URL on entry, so
+  // a refresh lands where the address says; storage (ACTIVE_PROJECT_ID_STORAGE_KEY) is only the
+  // "last project" convenience and never overrides the location. A conversation inside a project
+  // is NOT this state - see `projectContextId`.
   const [activeProjectId, setActiveProjectId] = useState<string | null>(() => {
     if (typeof window === 'undefined') return null;
-    try {
-      return localStorage.getItem(ACTIVE_PROJECT_ID_STORAGE_KEY) || null;
-    } catch {
-      return null;
-    }
+    const entry = parseChatLocation(window.location.pathname);
+    return entry.view === 'project' ? entry.projectId : null;
   });
   const [projectsPageSearch, setProjectsPageSearch] = useState('');
   type ProjectsSort = 'updated' | 'created' | 'name';
@@ -3365,70 +3373,119 @@ const ChatWithLLM: React.FC<ChatWithLLMProps> = ({
     activeConversationIdRef.current = activeConversationId;
   }, [activeConversationId]);
 
-  // URL Route parameter synchronization (e.g. /c/:conversationId, /projects, /scheduled, /library, etc.)
-  useEffect(() => {
-    const path = window.location.pathname;
-    if (path.startsWith('/projects') || path.startsWith('/overview/chat/projects')) {
-      const match = path.match(/\/(?:projects|overview\/chat\/projects)\/([a-zA-Z0-9_-]+)/);
-      if (match && match[1]) {
-        openProject(match[1]);
-      } else {
-        openProjectsPage();
-      }
-    } else if (path.startsWith('/scheduled') || path.startsWith('/overview/chat/scheduled')) {
-      openScheduledPage();
-    } else if (path.startsWith('/library') || path.startsWith('/overview/chat/library') || path.startsWith('/artifacts') || path.startsWith('/overview/chat/artifacts')) {
-      openArtifactsPage();
-    } else if (path.startsWith('/customize') || path.startsWith('/overview/chat/customize')) {
-      openCustomizePage();
-    } else if (path.startsWith('/settings') || path.startsWith('/overview/chat/settings')) {
-      openGlobalSettingsPage();
-    } else if (routeConversationId && routeConversationId !== activeConversationIdRef.current && !isHistoryLoading) {
-      void handleLoadConversation(routeConversationId);
+  // --- Project context: the URL is the source of truth ---------------------------------------
+  // `activeProjectId` is "a project HOME is open". A conversation inside a project is a different
+  // state - the sidebar and breadcrumb need the project while the page is a chat - so the project
+  // CONTEXT is derived: the home that is open, else the project the open conversation belongs to
+  // (from its record, or from the URL while the record is still loading).
+  const [routeProjectHint, setRouteProjectHint] = useState<string | null>(null);
+  // Unauthenticated chats read projects from storage and are loaded from the first render.
+  const [projectsLoaded, setProjectsLoaded] = useState<boolean>(() => !chatService.isAuthenticated());
+  // A conversation opened by URL starts as "loading" so the global new-chat view never flashes
+  // under a deep link; a refused or missing one becomes "unavailable" and says so.
+  const [conversationLoad, setConversationLoad] = useState<{ id: string; status: 'loading' | 'unavailable' } | null>(() => {
+    if (typeof window === 'undefined') return null;
+    const entry = parseChatLocation(window.location.pathname);
+    return entry.conversationId ? { id: entry.conversationId, status: 'loading' } : null;
+  });
+  const activeConversationRecord = activeConversationId
+    ? conversationHistory.find((convo) => convo.id === activeConversationId) ?? null
+    : null;
+  const hasFullPageOverlay =
+    isProjectsPageOpen || isArtifactsPageOpen || isGlobalSettingsPageOpen || isScheduledPageOpen || isCustomizePageOpen || isChatsCatalogOpen;
+  const conversationProjectId = activeConversationId
+    ? activeConversationRecord
+      ? activeConversationRecord.projectId ?? null
+      : routeProjectHint
+    : null;
+  const projectContextId = activeProjectId ?? (hasFullPageOverlay ? null : conversationProjectId);
+  const projectContextIdRef = useRef<string | null>(null);
+  projectContextIdRef.current = projectContextId;
+  // The sidebar swaps its global list for the project's while a project is the context.
+  // "Chats and tasks" asks for the global list while a project chat stays open: remember WHICH
+  // place that was for, so opening any other chat or project returns to the scoped list.
+  const [globalSidebarFor, setGlobalSidebarFor] = useState<string | null>(null);
+  const sidebarPlaceKey = activeProjectId ? `home:${activeProjectId}` : `chat:${activeConversationId ?? ''}`;
+  const isProjectScopedSidebar =
+    Boolean(projectContextId) &&
+    (historyNavView === 'chats' || historyNavView === 'projects') &&
+    globalSidebarFor !== sidebarPlaceKey;
+
+  /**
+   * Make the app show what `pathname` names. One function for the mount/route effect and for
+   * popstate (Back/Forward), idempotent so the two firing for the same navigation is harmless.
+   * It never pushes history: the URL is already right, the state follows it.
+   */
+  const applyChatLocationRef = useRef<(pathname: string) => void>(() => {});
+  applyChatLocationRef.current = (pathname: string) => {
+    const loc = parseChatLocation(pathname);
+    if (loc.view === 'projects') {
+      openProjectsPage();
+      return;
     }
-  }, [routeConversationId, isHistoryLoading]);
+    if (loc.view === 'project' && loc.projectId) {
+      openProject(loc.projectId);
+      return;
+    }
+    const path = pathname;
+    if (path.startsWith('/scheduled') || path.startsWith('/overview/chat/scheduled')) {
+      openScheduledPage();
+      return;
+    }
+    if (path.startsWith('/library') || path.startsWith('/overview/chat/library') || path.startsWith('/artifacts') || path.startsWith('/overview/chat/artifacts')) {
+      openArtifactsPage();
+      return;
+    }
+    if (path.startsWith('/customize') || path.startsWith('/overview/chat/customize')) {
+      openCustomizePage();
+      return;
+    }
+    if (path.startsWith('/settings') || path.startsWith('/overview/chat/settings')) {
+      openGlobalSettingsPage();
+      return;
+    }
+    if ((loc.view === 'conversation' || loc.view === 'project-conversation') && loc.conversationId) {
+      if (isHistoryLoading) return; // the project of a bare /llm/:id link is resolved from the list
+      setRouteProjectHint(loc.projectId);
+      if (loc.conversationId !== activeConversationIdRef.current) {
+        void handleLoadConversation(loc.conversationId, { syncUrl: false, projectIdHint: loc.projectId });
+      } else {
+        // Already the open chat (Back/Forward between its own URLs): only make it visible.
+        setActiveProjectId(null);
+      }
+      return;
+    }
+    if (loc.view === 'chat' && (activeConversationIdRef.current || projectContextIdRef.current)) {
+      handleNewChat({ leaveProject: true });
+    }
+  };
 
-  // Listen to browser Back/Forward popstate buttons
+  // URL Route parameter synchronization (e.g. /overview/chat/projects/:p/c/:id, /projects, /scheduled, /library, etc.)
   useEffect(() => {
-    const handlePopState = () => {
-      const path = window.location.pathname;
-      if (path.startsWith('/projects') || path.startsWith('/overview/chat/projects')) {
-        const match = path.match(/\/(?:projects|overview\/chat\/projects)\/([a-zA-Z0-9_-]+)/);
-        if (match && match[1]) {
-          openProject(match[1]);
-        } else {
-          openProjectsPage();
-        }
-        return;
-      }
-      if (path.startsWith('/scheduled') || path.startsWith('/overview/chat/scheduled')) {
-        openScheduledPage();
-        return;
-      }
-      if (path.startsWith('/library') || path.startsWith('/overview/chat/library') || path.startsWith('/artifacts') || path.startsWith('/overview/chat/artifacts')) {
-        openArtifactsPage();
-        return;
-      }
-      if (path.startsWith('/customize') || path.startsWith('/overview/chat/customize')) {
-        openCustomizePage();
-        return;
-      }
-      if (path.startsWith('/settings') || path.startsWith('/overview/chat/settings')) {
-        openGlobalSettingsPage();
-        return;
-      }
+    applyChatLocationRef.current(window.location.pathname);
+  }, [routeConversationId, isHistoryLoading, location.pathname]);
 
-      const match = path.match(/\/(?:c|overview\/chat\/llm)\/([a-zA-Z0-9_-]+)/);
-      const targetId = match ? match[1] : null;
-      if (targetId && targetId !== activeConversationIdRef.current) {
-        void handleLoadConversation(targetId);
-      } else if (!targetId && activeConversationIdRef.current) {
-        handleNewChat();
-      }
-    };
+  // Listen to browser Back/Forward popstate buttons. The router does not see entries this surface
+  // pushed itself (same pathname before/after), so this listener is what makes Back work.
+  useEffect(() => {
+    const handlePopState = () => applyChatLocationRef.current(window.location.pathname);
     window.addEventListener('popstate', handlePopState);
     return () => window.removeEventListener('popstate', handlePopState);
   }, []);
+
+  // A conversation open at a URL that names the wrong project (a stale link, a deep link with the
+  // wrong project id) or no project is corrected IN PLACE: replace, not push, so Back does not step
+  // through the wrong address. This is also what carries a chat moved into or out of a project
+  // (the Move dialog) and a chat just created from the project composer onto its project URL.
+  useEffect(() => {
+    if (!activeConversationId || !activeConversationRecord || typeof window === 'undefined') return;
+    const correction = conversationUrlCorrection(
+      window.location.pathname,
+      activeConversationId,
+      activeConversationRecord.projectId ?? null,
+    );
+    if (correction) window.history.replaceState(window.history.state, '', correction);
+  }, [activeConversationId, activeConversationRecord?.projectId]);
 
   // --- NEW: State for History Search --- 
   const [historySearchTerm, setHistorySearchTerm] = useState('');
@@ -3502,6 +3559,9 @@ const ChatWithLLM: React.FC<ChatWithLLMProps> = ({
     updatedAt?: number;
     isStarred?: boolean;
     isArchived?: boolean;
+    /** Per-user sidebar pin (server side, chat_project_pins). */
+    isPinned?: boolean;
+    pinPosition?: number | null;
     files?: ProjectFile[];
     instructions?: string;
     scheduledTasks?: ProjectScheduledTask[];
@@ -3539,7 +3599,18 @@ const ChatWithLLM: React.FC<ChatWithLLMProps> = ({
   // Whether the project workspace description is expanded ("Show more").
   const [isProjectDescExpanded, setIsProjectDescExpanded] = useState(false);
   // Right project sidebar (Instructions / Files / Scheduled) — history-style, toggled open/closed.
-  const [isProjectSidebarOpen, setIsProjectSidebarOpen] = useState(true);
+  // Open by default only where there is room beside the page; on a phone it is a drawer the person opens.
+  const [isProjectSidebarOpen, setIsProjectSidebarOpen] = useState(() => typeof window === 'undefined' || window.innerWidth > MOBILE_BREAKPOINT_PX);
+  // Phone drawer: Escape closes the project panel wherever focus is.
+  useEffect(() => {
+    if (!isMobile || !activeProjectId || !isProjectSidebarOpen) return;
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setIsProjectSidebarOpen(false);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [isMobile, activeProjectId, isProjectSidebarOpen]);
+
   // Files rail: show a short grid first; expand to reveal the rest.
   const [isProjectFilesExpanded, setIsProjectFilesExpanded] = useState(false);
   // Hidden input used to upload files into the open project.
@@ -3703,6 +3774,8 @@ const ChatWithLLM: React.FC<ChatWithLLMProps> = ({
             instructions: p.custom_instructions || '',
             isStarred: Boolean(settings.isStarred),
             isArchived: Boolean(p.is_archived),
+            isPinned: Boolean(p.pinned),
+            pinPosition: typeof p.pin_position === 'number' ? p.pin_position : null,
             capabilities: p.capabilities,
             files: serverFiles.map((file) => ({
               id: file.id,
@@ -3737,6 +3810,8 @@ const ChatWithLLM: React.FC<ChatWithLLMProps> = ({
           setChatProjects([]);
           setProjectFileNotice('Projects could not be loaded. Refresh to try again.');
         }
+      } finally {
+        if (isSubscribed) setProjectsLoaded(true);
       }
     })();
 
@@ -3805,6 +3880,55 @@ const ChatWithLLM: React.FC<ChatWithLLMProps> = ({
     setOpenProjectMenuId(null);
   }, [chatProjects]);
 
+  // Per-user project pins: optimistic, server is the owner, failure rolls back and says so.
+  const projectPinSeqRef = useRef(0);
+  const pinnedProjects = useMemo(
+    () =>
+      chatProjects
+        .filter((project) => project.isPinned && !project.isArchived)
+        .sort((a, b) => (a.pinPosition ?? 0) - (b.pinPosition ?? 0)),
+    [chatProjects],
+  );
+
+  const handleToggleProjectPin = useCallback(async (projectId: string) => {
+    const project = chatProjects.find((item) => item.id === projectId);
+    setOpenProjectMenuId(null);
+    if (!project) return;
+    const wasPinned = Boolean(project.isPinned);
+    const previous = { isPinned: project.isPinned, pinPosition: project.pinPosition };
+    const nextPosition = chatProjects.reduce((max, item) => (item.isPinned ? Math.max(max, (item.pinPosition ?? 0) + 1) : max), 0);
+    setChatProjects((prev) => prev.map((item) => item.id === projectId
+      ? { ...item, isPinned: !wasPinned, pinPosition: wasPinned ? null : nextPosition }
+      : item));
+    try {
+      if (wasPinned) await chatService.unpinProject(projectId);
+      else await chatService.pinProject(projectId);
+      setProjectFileNotice(null);
+    } catch (error) {
+      console.error('[ChatWithLLM] Failed to change project pin:', error);
+      setChatProjects((prev) => prev.map((item) => item.id === projectId ? { ...item, ...previous } : item));
+      setProjectFileNotice(wasPinned ? 'The project could not be unpinned. Try again.' : 'The project could not be pinned. Try again.');
+    }
+  }, [chatProjects]);
+
+  const handleReorderPinnedProjects = useCallback(async (orderedIds: string[]) => {
+    const snapshot = new Map(chatProjects.map((item) => [item.id, item.pinPosition ?? null]));
+    const seq = ++projectPinSeqRef.current;
+    setChatProjects((prev) => prev.map((item) => {
+      const index = orderedIds.indexOf(item.id);
+      return index >= 0 ? { ...item, pinPosition: index } : item;
+    }));
+    try {
+      await chatService.reorderPinnedProjects(orderedIds);
+      setProjectFileNotice(null);
+    } catch (error) {
+      console.error('[ChatWithLLM] Failed to reorder pinned projects:', error);
+      if (seq !== projectPinSeqRef.current) return;
+      setChatProjects((prev) => prev.map((item) => snapshot.has(item.id) ? { ...item, pinPosition: snapshot.get(item.id) ?? null } : item));
+      setProjectFileNotice('The pinned order could not be saved. Try again.');
+    }
+  }, [chatProjects]);
+
   const handleToggleProjectArchive = useCallback(async (projectId: string) => {
     const project = chatProjects.find((item) => item.id === projectId);
     if (!project) return;
@@ -3841,6 +3965,13 @@ const ChatWithLLM: React.FC<ChatWithLLMProps> = ({
     }
     setChatProjects((prev) => prev.filter((project) => project.id !== projectId));
     setOpenProjectMenuId(null);
+    // A project deleted while open (its home, or one of its chats) must not leave its address
+    // behind: land on the project list, replacing the dead URL rather than stacking on it.
+    if (typeof window !== 'undefined' && parseChatLocation(window.location.pathname).projectId === projectId) {
+      window.history.replaceState({ view: 'projects' }, '', buildProjectsPath());
+      setIsProjectsPageOpen(true);
+      setHistoryNavView('projects');
+    }
     setActiveProjectId((current) => {
       if (current !== projectId) return current;
       try {
@@ -4757,8 +4888,11 @@ const ChatWithLLM: React.FC<ChatWithLLMProps> = ({
     setIsChatsCatalogFilterOpen(false);
     setProjectsPageSearch('');
     setIsProjectsSortOpen(false);
-    if (typeof window !== 'undefined' && window.location.pathname !== '/projects' && window.location.pathname !== '/overview/chat/projects') {
-      window.history.pushState({ view: 'projects' }, '', '/projects');
+    // Back to the list from a project home leaves that home (it used to stay open on top).
+    setActiveProjectId(null);
+    pendingChatProjectIdRef.current = null;
+    if (typeof window !== 'undefined' && parseChatLocation(window.location.pathname).view !== 'projects') {
+      window.history.pushState({ view: 'projects' }, '', buildProjectsPath());
     }
     try {
       localStorage.setItem(PROJECTS_PAGE_OPEN_STORAGE_KEY, 'true');
@@ -4993,9 +5127,12 @@ const ChatWithLLM: React.FC<ChatWithLLMProps> = ({
     setProjectFileNotice(null);
     setIsProjectDescExpanded(false);
     setIsProjectFilesExpanded(false);
-    setIsProjectSidebarOpen(true);
-    if (typeof window !== 'undefined' && window.location.pathname !== `/projects/${projectId}` && window.location.pathname !== `/overview/chat/projects/${projectId}`) {
-      window.history.pushState({ view: 'project', projectId }, '', `/projects/${projectId}`);
+    setIsProjectSidebarOpen(typeof window === 'undefined' || window.innerWidth > MOBILE_BREAKPOINT_PX);
+    if (typeof window !== 'undefined') {
+      const here = parseChatLocation(window.location.pathname);
+      if (here.view !== 'project' || here.projectId !== projectId) {
+        window.history.pushState({ view: 'project', projectId }, '', buildProjectPath(projectId));
+      }
     }
     // Any conversation the reused composer starts from here should link to this project.
     pendingChatProjectIdRef.current = projectId;
@@ -5014,6 +5151,8 @@ const ChatWithLLM: React.FC<ChatWithLLMProps> = ({
       setActiveConversationId(null);
       setMessages([]);
     }
+    setConversationLoad(null);
+    setRouteProjectHint(null);
     // Nothing is active on entry, so the first conversation the composer creates is the one that
     // auto-leaves the workspace for the thread.
     projectEntryConversationIdRef.current = null;
@@ -5038,7 +5177,7 @@ const ChatWithLLM: React.FC<ChatWithLLMProps> = ({
     setProjectScheduledPreview(null);
     setIsProjectScheduledCreateOpen(false);
     if (typeof window !== 'undefined') {
-      window.history.pushState({ view: 'projects' }, '', '/projects');
+      window.history.pushState({ view: 'projects' }, '', buildProjectsPath());
     }
     try {
       localStorage.removeItem(ACTIVE_PROJECT_ID_STORAGE_KEY);
@@ -5052,8 +5191,11 @@ const ChatWithLLM: React.FC<ChatWithLLMProps> = ({
   useEffect(() => {
     if (!activeProjectId) return;
     if (activeConversationId && activeConversationId !== projectEntryConversationIdRef.current) {
-      dismissChatOverlays();
-      setHistoryNavView('chats');
+      // The first message from the project composer started a chat IN this project: leave the
+      // project HOME for the chat, but keep the project as the context (the conversation record
+      // carries its project id, so the sidebar and breadcrumb stay project-scoped). It used to
+      // dismiss everything and drop the user into the global chats view.
+      setActiveProjectId(null);
     }
   }, [activeConversationId, activeProjectId, dismissChatOverlays]);
 
@@ -5619,7 +5761,7 @@ const ChatWithLLM: React.FC<ChatWithLLMProps> = ({
   useEffect(() => {
     const textarea = textareaRef.current;
     if (textarea) {
-      const maxHeight = messages.length === 0 ? 120 : 120;
+      const maxHeight = 220;
       textarea.style.height = 'auto';
       textarea.style.height = `${Math.min(textarea.scrollHeight, maxHeight)}px`;
     }
@@ -6659,8 +6801,11 @@ const ChatWithLLM: React.FC<ChatWithLLMProps> = ({
       setConversationHistory((prevHistory) => [newConversation, ...prevHistory]);
       setActiveConversationId(id);
       if (typeof window !== 'undefined') {
-        window.history.pushState({ conversationId: id }, '', `/c/${id}`);
+        // A chat started from a project's composer is born INSIDE the project: its address is the
+        // project-scoped one, so the user never leaves the project to see it.
+        window.history.pushState({ conversationId: id, projectId: projectId ?? null }, '', buildChatConversationPath(projectId ?? null, id));
       }
+      setRouteProjectHint(projectId ?? null);
       void bindPendingChatSkills(id);
       void bindPendingChatPersona(id);
       // The pending project link (if any) has now been applied to the new conversation.
@@ -8081,19 +8226,41 @@ const ChatWithLLM: React.FC<ChatWithLLMProps> = ({
   };
 
   // --- Function to Load a Conversation from History or Direct URL ---
-  const handleLoadConversation = async (conversationId: string) => {
+  const handleLoadConversation = async (
+    conversationId: string,
+    options?: { syncUrl?: boolean; projectIdHint?: string | null },
+  ) => {
     if (!conversationId) return;
 
-    // Leave full-page overlays so the loaded chat is visible
+    // A conversation keeps its project: opening it from the sidebar, a search result, the project's
+    // own chat list, a notification or a deep link all land on the SAME address. The project comes
+    // from the conversation's record; a deep link not yet in the list falls back to the URL's hint.
+    const cachedRecord = conversationHistoryRef.current.find((convo) => convo.id === conversationId);
+    const resolvedProjectId = cachedRecord ? cachedRecord.projectId ?? null : options?.projectIdHint ?? null;
+
+    // Leave full-page overlays (including a project HOME) so the loaded chat is visible. The
+    // project stays the context through `projectContextId`; only the home overlay closes.
     dismissChatOverlays();
     setHistoryNavView('chats');
+    // A project chat opened from anywhere must not leave the project composer's "link my next
+    // conversation" intent armed, or the next global new chat would be filed into the project.
+    pendingChatProjectIdRef.current = null;
+    // Read back synchronously: the route effect, popstate and this call can all fire for one
+    // navigation, and a ref that only updates after render would let each load it again.
+    activeConversationIdRef.current = conversationId;
+    setRouteProjectHint(resolvedProjectId);
+    setConversationLoad(cachedRecord?.messages?.length ? null : { id: conversationId, status: 'loading' });
     setActiveConversationId(conversationId);
 
-    // Sync URL in browser address bar (ChatGPT URL standard: /c/:id)
-    if (typeof window !== 'undefined') {
-      const currentPath = window.location.pathname;
-      if (currentPath !== `/c/${conversationId}` && currentPath !== `/overview/chat/llm/${conversationId}`) {
-        window.history.pushState({ conversationId }, '', `/c/${conversationId}`);
+    // Sync the address bar to the canonical URL: /overview/chat/projects/:p/c/:id inside a project,
+    // /overview/chat/llm/:id otherwise. One history entry per hop (nothing is pushed when the
+    // address already names this place, e.g. Back/Forward or a deep link).
+    if (typeof window !== 'undefined' && options?.syncUrl !== false) {
+      const target = buildChatConversationPath(resolvedProjectId, conversationId);
+      const here = parseChatLocation(window.location.pathname);
+      const there = parseChatLocation(target);
+      if (here.view !== there.view || here.projectId !== there.projectId || here.conversationId !== there.conversationId) {
+        window.history.pushState({ conversationId, projectId: resolvedProjectId }, '', target);
       }
     }
 
@@ -8103,7 +8270,10 @@ const ChatWithLLM: React.FC<ChatWithLLMProps> = ({
     if (isDbAuthenticated || !conversationToLoad) {
       try {
         const fullConversation = await chatService.getConversation(conversationId);
+        // Another conversation was opened while this one was loading: drop this answer.
+        if (activeConversationIdRef.current !== conversationId) return;
         if (fullConversation && fullConversation.messages) {
+          setConversationLoad(null);
           // Convert database message format to local format
           const localMessages: ChatMessage[] = fullConversation.messages.map(dbMessageToLocal);
           setMessages(localMessages);
@@ -8119,7 +8289,14 @@ const ChatWithLLM: React.FC<ChatWithLLMProps> = ({
             if (exists) {
               return prevHistory.map(convo =>
                 convo.id === conversationId
-                  ? { ...convo, messages: localMessages, isUnread: false }
+                  ? {
+                      ...convo,
+                      messages: localMessages,
+                      isUnread: false,
+                      // The server is the authority on membership: a stale list row must not keep
+                      // a chat in (or out of) a project after a move made elsewhere.
+                      projectId: fullConversation.project_id !== undefined ? fullConversation.project_id : convo.projectId,
+                    }
                   : convo
               );
             } else {
@@ -8138,17 +8315,28 @@ const ChatWithLLM: React.FC<ChatWithLLMProps> = ({
             }
           });
         } else if (conversationToLoad) {
+          setConversationLoad(null);
           setMessages(conversationToLoad.messages || []);
           patchConversation(conversationId, { isUnread: false });
+        } else {
+          // Not in the list and the server returned nothing: deleted, or no longer shared with
+          // this person. Say so, with a way back, instead of an empty chat that looks new.
+          setConversationLoad({ id: conversationId, status: 'unavailable' });
+          return;
         }
       } catch (error) {
         console.error("Error loading conversation from database:", error);
         if (conversationToLoad) {
+          setConversationLoad(null);
           setMessages(conversationToLoad.messages || []);
           patchConversation(conversationId, { isUnread: false });
+        } else {
+          setConversationLoad({ id: conversationId, status: 'unavailable' });
+          return;
         }
       }
     } else if (conversationToLoad) {
+      setConversationLoad(null);
       setMessages(conversationToLoad.messages || []);
       patchConversation(conversationId, { isUnread: false });
     }
@@ -8952,17 +9140,36 @@ Keep the summary under 500 words. Preserve essential context needed to continue 
   };
 
   // Action for New Chat
-  const handleNewChat = () => {
+  // `options` is untyped on purpose: this is also passed straight to onClick, which hands it an event.
+  const handleNewChat = (options?: unknown) => {
+      // "New chat" from inside a project (its home or one of its chats) STAYS in the project: it is
+      // the project home with its composer, and the conversation it creates is filed there. Leaving
+      // is explicit: `{ leaveProject: true }` (All chats, Back to a non-project address).
+      const leaveProject = (options as { leaveProject?: boolean } | null | undefined)?.leaveProject === true;
+      const stayInProjectId = leaveProject ? null : projectContextIdRef.current;
+      if (stayInProjectId) {
+        activeConversationIdRef.current = null;
+        setActiveConversationId(null);
+        setMessages([]);
+        setBranchRows([]);
+        openProject(stayInProjectId);
+        setInputValue('');
+        return;
+      }
       // Same overlay trap as loading a conversation: a blank chat under Projects/catalog
       // looks like nothing happened.
       dismissChatOverlays();
+      pendingChatProjectIdRef.current = null;
+      setConversationLoad(null);
+      setRouteProjectHint(null);
       setHistoryNavView('chats');
       setMessages([]); // Clear current messages
       setBranchRows([]);
       dbIdByLocalIdRef.current = new Map();
+      activeConversationIdRef.current = null;
       setActiveConversationId(null); // Set active ID to null (indicates new chat)
-      if (typeof window !== 'undefined' && window.location.pathname !== '/overview/chat/llm' && window.location.pathname !== '/c') {
-        window.history.pushState(null, '', '/overview/chat/llm');
+      if (typeof window !== 'undefined' && parseChatLocation(window.location.pathname).view !== 'chat') {
+        window.history.pushState(null, '', CHAT_ROOT_PATH);
       }
       void clearPendingChatSkills();
       void clearPendingChatPersona();
@@ -9063,170 +9270,111 @@ Keep the summary under 500 words. Preserve essential context needed to continue 
   const renderCreateProjectModal = () => {
     const canCreate = newChatProjectName.trim().length > 0;
     return (
-      <div
-        className={`chat-themed xeno-icon-hosts chat-theme-${resolvedChatTheme} fixed top-0 right-0 bottom-0 z-[999] flex items-center justify-center p-4 backdrop-blur-sm`}
-        data-chat-theme-preference={chatTheme}
-        data-create-project-dialog=""
-        style={{
-          left:
-            (isTaskbarHidden ? 0 : TASKBAR_WIDTH_PX) +
-            historyWorkspaceInsetPx,
-          backgroundColor: isCreateProjectModalShown
-            ? 'color-mix(in srgb, var(--chat-text) 28%, transparent)'
-            : 'color-mix(in srgb, var(--chat-text) 0%, transparent)',
-          transition: `background-color ${SCHEDULE_CREATE_MODAL_MS}ms ${SCHEDULE_DATE_EASE}`,
-          ...chatThemePreviewStyle,
-        }}
-        onClick={closeCreateProjectModal}
-      >
-        <style>{CHAT_MODAL_KEYFRAMES_CSS}</style>
-        <div
-          {...createProjectDialog.panelProps}
-          role="dialog"
-          aria-modal="true"
-          aria-labelledby="create-project-dialog-title"
-          className="w-full max-w-[32rem] overflow-hidden rounded-2xl border"
-          style={{
-            backgroundColor: 'var(--chat-elevated)',
-            borderColor: 'var(--chat-border)',
-            color: 'var(--chat-text)',
-            boxShadow: '0 8px 32px rgba(0, 0, 0, 0.45)',
-            // New project CTA sits top-right on the Projects page.
-            ...chatModalCardMotionStyle(
-              'top-right',
-              isCreateProjectModalShown,
-              isCreateProjectModalOpen,
-            ),
-          }}
-          onClick={(event) => event.stopPropagation()}
-        >
-          <div className="flex items-start justify-between gap-3 px-5 pt-5 pb-3">
-            <h2
-              id="create-project-dialog-title"
-              className="text-[1.15rem] font-semibold tracking-tight text-[var(--chat-text)]"
-            >
-              Create a project
-            </h2>
-            <IconButton
-              icon={XDecl}
-              variant="ghost"
+      <ChatModal
+        onClose={closeCreateProjectModal}
+        size="md"
+        title="Create a project"
+        dialogProps={{ 'data-create-project-dialog': '' }}
+        footer={(
+          <>
+            <Button variant="secondary" size="md" onClick={closeCreateProjectModal}>
+              Cancel
+            </Button>
+            <Button
+              variant="primary"
               size="md"
-              iconSize={16}
-              onClick={closeCreateProjectModal}
-              aria-label="Close create project"
+              onClick={submitCreateProjectModal}
+              disabled={!canCreate}
+            >
+              Create project
+            </Button>
+          </>
+        )}
+      >
+        <div className="space-y-4">
+          <div
+            className="rounded-xl px-3.5 py-3"
+            style={{ backgroundColor: 'var(--chat-control)' }}
+          >
+            <p className="text-[13px] font-semibold text-[var(--chat-text)]">
+              How to use projects
+            </p>
+            <p className="mt-1.5 text-[12.5px] leading-relaxed text-[var(--chat-muted)]">
+              Projects help organize your work and leverage knowledge across multiple conversations.
+              Upload docs, code, and files to create themed collections that XENO can reference
+              again and again. Start by creating a memorable title and description to organize
+              your project. You can always edit it later.
+            </p>
+          </div>
+
+          <div className="space-y-1.5">
+            <label
+              htmlFor={`create-project-name-${interfaceId}`}
+              className="block text-[13px] font-medium text-[var(--chat-text)]"
+            >
+              What are you working on?
+            </label>
+            {/* `TextInput lg`, and the field that made the library grow a `fontSize`. The box was
+                already 36px and already `--chat-canvas`, which is what `.xeno-input` paints — but
+                the size scale welds type to height, so asking for the right height would have
+                retyped this 13px field to 14px, a pixel LARGER than the 13px label directly above
+                it. `fontSize={13}` is the same door `iconSize` is, one property over.
+                What leaves with the swap is the interesting part: the inline fill, the inset
+                box-shadow standing in for a border, and TWO JS handlers that hand-painted the focus
+                ring on every focus and blur. `.xeno-input:focus-within` is one CSS rule. The ring
+                moves accent → muted, which is where every other field in this chat already was. */}
+            <TextInput
+              size="lg"
+              fontSize={13}
+              className="w-full"
+              id={`create-project-name-${interfaceId}`}
+              type="text"
+              autoFocus
+              value={newChatProjectName}
+              maxLength={PROJECT_NAME_MAX_CHARS}
+              onChange={(event) =>
+                setNewChatProjectName(event.target.value.slice(0, PROJECT_NAME_MAX_CHARS))
+              }
+              onKeyDown={(event) => {
+                if (event.key === 'Enter' && canCreate) {
+                  event.preventDefault();
+                  void submitCreateProjectModal();
+                }
+              }}
+              placeholder="Name your project"
+            />
+            <p className="text-right text-[11px] tabular-nums text-[var(--chat-muted)]">
+              {newChatProjectName.length}/{PROJECT_NAME_MAX_CHARS}
+            </p>
+          </div>
+
+          <div className="space-y-1.5">
+            <label
+              htmlFor={`create-project-description-${interfaceId}`}
+              className="block text-[13px] font-medium text-[var(--chat-text)]"
+            >
+              What are you trying to achieve?
+            </label>
+            {/* The name field's partner, and it converts on the same door: `.xeno-textarea` had
+                15px written flat into it, so the library grew `fontSize` before this could be
+                taken. Pinned at 13 the type does NOT move — this is a conversion, not the type
+                change §7 reserves its own commit for.
+                Everything else already matched: `px-3 py-2.5` IS the component's `10px 12px`, the
+                fill was `--chat-canvas`, the inset shadow was standing in for its 1px border, and
+                `resize-y` is its `resize: vertical`. The radius moves 8 → 12, onto the card step,
+                and the focus ring accent → muted with the rest of this dialog. */}
+            <Textarea
+              fontSize={13}
+              id={`create-project-description-${interfaceId}`}
+              value={newChatProjectDescription}
+              onChange={(event) => setNewChatProjectDescription(event.target.value)}
+              placeholder="Describe your project, goals, subject, etc..."
+              rows={4}
+              className="w-full min-h-[6.5rem] resize-y text-[var(--chat-text)] placeholder:text-[var(--chat-muted)]"
             />
           </div>
-
-          <div className="space-y-4 px-5 pb-5">
-            <div
-              className="rounded-xl px-3.5 py-3"
-              style={{ backgroundColor: 'var(--chat-control)' }}
-            >
-              <p className="text-[13px] font-semibold text-[var(--chat-text)]">
-                How to use projects
-              </p>
-              <p className="mt-1.5 text-[12.5px] leading-relaxed text-[var(--chat-muted)]">
-                Projects help organize your work and leverage knowledge across multiple conversations.
-                Upload docs, code, and files to create themed collections that XENO can reference
-                again and again. Start by creating a memorable title and description to organize
-                your project. You can always edit it later.
-              </p>
-            </div>
-
-            <div className="space-y-1.5">
-              <label
-                htmlFor={`create-project-name-${interfaceId}`}
-                className="block text-[13px] font-medium text-[var(--chat-text)]"
-              >
-                What are you working on?
-              </label>
-              {/* `TextInput lg`, and the field that made the library grow a `fontSize`. The box was
-                  already 36px and already `--chat-canvas`, which is what `.xeno-input` paints — but
-                  the size scale welds type to height, so asking for the right height would have
-                  retyped this 13px field to 14px, a pixel LARGER than the 13px label directly above
-                  it. `fontSize={13}` is the same door `iconSize` is, one property over.
-                  What leaves with the swap is the interesting part: the inline fill, the inset
-                  box-shadow standing in for a border, and TWO JS handlers that hand-painted the focus
-                  ring on every focus and blur. `.xeno-input:focus-within` is one CSS rule. The ring
-                  moves accent → muted, which is where every other field in this chat already was. */}
-              <TextInput
-                size="lg"
-                fontSize={13}
-                className="w-full"
-                id={`create-project-name-${interfaceId}`}
-                type="text"
-                autoFocus
-                value={newChatProjectName}
-                maxLength={PROJECT_NAME_MAX_CHARS}
-                onChange={(event) =>
-                  setNewChatProjectName(event.target.value.slice(0, PROJECT_NAME_MAX_CHARS))
-                }
-                onKeyDown={(event) => {
-                  if (event.key === 'Enter' && canCreate) {
-                    event.preventDefault();
-                    void submitCreateProjectModal();
-                  }
-                }}
-                placeholder="Name your project"
-              />
-              <p className="text-right text-[11px] tabular-nums text-[var(--chat-muted)]">
-                {newChatProjectName.length}/{PROJECT_NAME_MAX_CHARS}
-              </p>
-            </div>
-
-            <div className="space-y-1.5">
-              <label
-                htmlFor={`create-project-description-${interfaceId}`}
-                className="block text-[13px] font-medium text-[var(--chat-text)]"
-              >
-                What are you trying to achieve?
-              </label>
-              {/* The name field's partner, and it converts on the same door: `.xeno-textarea` had
-                  15px written flat into it, so the library grew `fontSize` before this could be
-                  taken. Pinned at 13 the type does NOT move — this is a conversion, not the type
-                  change §7 reserves its own commit for.
-                  Everything else already matched: `px-3 py-2.5` IS the component's `10px 12px`, the
-                  fill was `--chat-canvas`, the inset shadow was standing in for its 1px border, and
-                  `resize-y` is its `resize: vertical`. The radius moves 8 → 12, onto the card step,
-                  and the focus ring accent → muted with the rest of this dialog. */}
-              <Textarea
-                fontSize={13}
-                id={`create-project-description-${interfaceId}`}
-                value={newChatProjectDescription}
-                onChange={(event) => setNewChatProjectDescription(event.target.value)}
-                placeholder="Describe your project, goals, subject, etc..."
-                rows={4}
-                className="w-full min-h-[6.5rem] resize-y text-[var(--chat-text)] placeholder:text-[var(--chat-muted)]"
-              />
-            </div>
-
-            <div className="flex justify-end gap-2 pt-1">
-              {/* `secondary` — a `--chat-control` fill with text ink is the variant minus its
-                  hairline, which it gains. Every other filled Cancel in this chat took the same
-                  trade. */}
-              <Button variant="secondary" size="md" onClick={closeCreateProjectModal}>
-                Cancel
-              </Button>
-              {/* `primary md`, matching the `secondary md` Cancel beside it. The reason that stood
-                  here was true when it was written and is not any more — it said `primary` could not
-                  be used because the chrome tokens compute on `:root`, and the bridge carries them
-                  now, so the variant paints exactly the `--chat-text` on `--chat-canvas` this was
-                  drawing by hand.
-                  The disabled branch goes with the inline fill: `disabled:opacity-40` and
-                  `disabled:cursor-not-allowed` are the availability axis spelled out, and the
-                  component carries both from `disabled` alone. */}
-              <Button
-                variant="primary"
-                size="md"
-                onClick={submitCreateProjectModal}
-                disabled={!canCreate}
-              >
-                Create project
-              </Button>
-            </div>
-          </div>
         </div>
-      </div>
+      </ChatModal>
     );
   };
 
@@ -9243,60 +9391,56 @@ Keep the summary under 500 words. Preserve essential context needed to continue 
       setProjectSettings({ projectId: project.id, section });
     };
     return (
-      <div
-        className={`chat-themed xeno-icon-hosts chat-theme-${resolvedChatTheme} fixed inset-0 z-[999] flex items-center justify-center p-4 backdrop-blur-sm`}
-        data-chat-theme-preference={chatTheme}
-        data-project-settings-dialog=""
-        style={{
-          backgroundColor: isProjectSettingsShown
-            ? 'color-mix(in srgb, var(--chat-text) 28%, transparent)'
-            : 'color-mix(in srgb, var(--chat-text) 0%, transparent)',
-          transition: `background-color ${SCHEDULE_CREATE_MODAL_MS}ms ${SCHEDULE_DATE_EASE}`,
-          ...chatThemePreviewStyle,
-        }}
-        onClick={closeProjectSettings}
+      <ChatModal
+        onClose={closeProjectSettings}
+        size="lg"
+        title="Project settings"
+        bare
+        bodyClassName="flex flex-col"
+        className="h-[min(640px,calc(100dvh-32px))]"
+        dialogProps={{ 'data-project-settings-dialog': '' }}
+        footer={
+            activeSection === 'danger' || activeSection === 'members' ? (
+                <Button
+                  variant="secondary"
+                  size="lg"
+                  className="w-full sm:min-h-0 sm:w-auto sm:py-2"
+                  onClick={closeProjectSettings}
+                >
+                  Close
+                </Button>
+              ) : (
+                <>
+                  <Button
+                    variant="secondary"
+                    size="lg"
+                    className="w-full sm:min-h-0 sm:w-auto sm:py-2"
+                    onClick={closeProjectSettings}
+                  >
+                    Cancel
+                  </Button>
+                  {/* `primary`, where this was a `ghost` with the fill hand-painted over it through
+                      an inline `style` — and `ButtonProps` omits `style` deliberately. It only worked
+                      because the build strips types without checking them and the object rode in on the
+                      prop spread. A variant that had to be overridden to look right was the wrong
+                      variant; now the two colours come from the same place every other `primary` in
+                      this chat reads. */}
+                  <Button
+                    variant="primary"
+                    size="lg"
+                    className="w-full sm:min-h-0 sm:w-auto sm:py-2"
+                    onClick={saveProjectSettings}
+                  >
+                    Save changes
+                  </Button>
+                </>
+              )
+        }
       >
-        <style>{CHAT_MODAL_KEYFRAMES_CSS}</style>
-        <div
-          {...projectSettingsDialog.panelProps}
-          role="dialog"
-          aria-modal="true"
-          aria-labelledby="project-settings-title"
-          className="flex w-full max-w-[600px] flex-col overflow-hidden rounded-2xl border will-change-transform"
-          style={{
-            // dvh accounts for mobile browser chrome; fall back to vh.
-            height: 'min(640px, calc(100dvh - 0.5rem))',
-            maxHeight: 'calc(100dvh - 0.5rem)',
-            backgroundColor: 'var(--chat-elevated)',
-            borderColor: 'var(--chat-border)',
-            color: 'var(--chat-text)',
-            boxShadow: '0 8px 32px rgba(0, 0, 0, 0.45)',
-            paddingBottom: 'env(safe-area-inset-bottom, 0px)',
-            ...chatModalCardMotionStyle(
-              'top-right',
-              isProjectSettingsShown,
-              isProjectSettingsOpen,
-            ),
-          }}
-          onClick={(event) => event.stopPropagation()}
-        >
-          <div className="flex-shrink-0 px-4 pt-4 pb-3 sm:px-5 sm:pt-5">
+          <div className="flex-shrink-0 px-4 pt-3 pb-2 sm:px-5">
             <div className="flex items-start gap-2 sm:items-center sm:gap-3">
               <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-2 sm:gap-3">
-                  <h2
-                    id="project-settings-title"
-                    className="flex-shrink-0 text-[1.05rem] font-semibold tracking-tight text-[var(--chat-text)] sm:text-[1.15rem]"
-                  >
-                    Project settings
-                  </h2>
-                  <div
-                    className="hidden h-4 w-px flex-shrink-0 sm:block"
-                    style={{
-                      backgroundColor: 'color-mix(in srgb, var(--chat-muted) 45%, transparent)',
-                    }}
-                    aria-hidden="true"
-                  />
                   <nav
                     className="hidden min-w-0 flex-1 flex-wrap items-center gap-1 sm:flex"
                     aria-label="Settings sections"
@@ -9347,13 +9491,6 @@ Keep the summary under 500 words. Preserve essential context needed to continue 
                 </div>
                 <p className="mt-1 truncate text-[12px] text-[var(--chat-muted)]">{project.name}</p>
               </div>
-              <IconButton
-                icon={XDecl}
-                size="lg"
-                iconSize={16}
-                onClick={closeProjectSettings}
-                aria-label="Close project settings"
-              />
             </div>
 
             {/* Mobile: tabs sit under the title so they do not crush into one row. */}
@@ -9566,49 +9703,7 @@ Keep the summary under 500 words. Preserve essential context needed to continue 
               </div>
             )}
           </div>
-
-          <div
-            className="flex flex-shrink-0 flex-col-reverse gap-2 border-t px-4 py-3 sm:flex-row sm:justify-end sm:gap-2 sm:px-5 sm:py-3.5"
-            style={{ borderColor: 'var(--chat-border)' }}
-          >
-            {activeSection === 'danger' || activeSection === 'members' ? (
-              <Button
-                variant="secondary"
-                size="lg"
-                className="w-full sm:min-h-0 sm:w-auto sm:py-2"
-                onClick={closeProjectSettings}
-              >
-                Close
-              </Button>
-            ) : (
-              <>
-                <Button
-                  variant="secondary"
-                  size="lg"
-                  className="w-full sm:min-h-0 sm:w-auto sm:py-2"
-                  onClick={closeProjectSettings}
-                >
-                  Cancel
-                </Button>
-                {/* `primary`, where this was a `ghost` with the fill hand-painted over it through
-                    an inline `style` — and `ButtonProps` omits `style` deliberately. It only worked
-                    because the build strips types without checking them and the object rode in on the
-                    prop spread. A variant that had to be overridden to look right was the wrong
-                    variant; now the two colours come from the same place every other `primary` in
-                    this chat reads. */}
-                <Button
-                  variant="primary"
-                  size="lg"
-                  className="w-full sm:min-h-0 sm:w-auto sm:py-2"
-                  onClick={saveProjectSettings}
-                >
-                  Save changes
-                </Button>
-              </>
-            )}
-          </div>
-        </div>
-      </div>
+      </ChatModal>
     );
   };
 
@@ -9644,87 +9739,31 @@ Keep the summary under 500 words. Preserve essential context needed to continue 
         handleCancelDelete(); // Close modal after action
     };
 
-    // Portaled to document.body — re-apply chat theme tokens like the history sidebar.
     return (
-        <div
-          className={`chat-themed xeno-icon-hosts chat-theme-${resolvedChatTheme} fixed inset-0 z-[999] flex items-center justify-center p-4 backdrop-blur-sm`}
-          data-chat-theme-preference={chatTheme}
-          data-delete-chat-dialog=""
-          style={{
-            backgroundColor: isDeleteModalShown
-              ? 'color-mix(in srgb, var(--chat-text) 28%, transparent)'
-              : 'color-mix(in srgb, var(--chat-text) 0%, transparent)',
-            transition: `background-color ${SCHEDULE_CREATE_MODAL_MS}ms ${SCHEDULE_DATE_EASE}`,
-            ...chatThemePreviewStyle,
-          }}
-          onClick={handleCancelDelete}
-        >
-            <style>{CHAT_MODAL_KEYFRAMES_CSS}</style>
-            <div
-              {...deleteChatDialog.panelProps}
-              role="dialog"
-              aria-modal="true"
-              aria-labelledby="delete-chat-dialog-title"
-              className="w-full max-w-sm overflow-hidden rounded-lg border shadow-xl"
-              style={{
-                backgroundColor: 'var(--chat-elevated)',
-                borderColor: 'var(--chat-border)',
-                color: 'var(--chat-text)',
-                boxShadow: '0 8px 32px color-mix(in srgb, var(--chat-text) 16%, transparent)',
-                ...chatModalCardMotionStyle(
-                  deleteConfirmationModal.origin,
-                  isDeleteModalShown,
-                  deleteConfirmationModal.isOpen,
-                ),
-              }}
-              onClick={(event) => event.stopPropagation()}
-            >
-                <div className="p-4">
-                    <h2 id="delete-chat-dialog-title" className="text-lg font-semibold text-[var(--chat-text)]">
-                      Delete chat?
-                    </h2>
-                </div>
-
-                <hr className="border-t border-[var(--chat-border)]" />
-
-                <div className="p-4">
-                    <p className="text-sm text-[var(--chat-muted)]">
-                        This will delete{' '}
-                        <strong className="font-semibold text-[var(--chat-text)]">
-                          {deleteConfirmationModal.conversationTitle}
-                        </strong>
-                        .
-                    </p>
-                </div>
-
-                <div
-                  className="flex justify-end gap-3 border-t border-[var(--chat-border)] px-4 py-3"
-                  style={{ backgroundColor: 'var(--chat-surface)' }}
-                >
-                    {/* `secondary` word for word: a hairline, a `--chat-control` fill, full ink, and
-                        a `--chat-hover` tint on top when you reach for it. */}
-                    <Button variant="secondary" size="md" onClick={handleCancelDelete}>
-                        Cancel
-                    </Button>
-                    {/* `danger solid md`, matching the `secondary md` Cancel beside it. The
-                        reason recorded here — that the library's `danger` is the quiet reading, right
-                        for a Delete in a row and wrong for the confirm inside the dialog that asks —
-                        is answered rather than removed: the destructive key carries both readings
-                        now, as the neutral one always did with `secondary` and `primary`.
-                        What leaves is the interesting part: an inline fill and TWO mouse handlers
-                        that hand-painted the hover on enter and leave. A `:hover` rule is one line,
-                        and it works for keyboard focus and touch, which the handlers never did. */}
-                    <Button
-                        variant="danger"
-                        emphasis="solid"
-                        size="md"
-                        onClick={handleConfirm}
-                    >
-                        Delete
-                    </Button>
-                </div>
-            </div>
-        </div>
+      <ChatModal
+        onClose={handleCancelDelete}
+        size="sm"
+        title="Delete chat?"
+        dialogProps={{ 'data-delete-chat-dialog': '' }}
+        footer={(
+          <>
+            <Button variant="secondary" size="md" onClick={handleCancelDelete}>
+              Cancel
+            </Button>
+            <Button variant="danger" emphasis="solid" size="md" onClick={handleConfirm}>
+              Delete
+            </Button>
+          </>
+        )}
+      >
+        <p className="text-sm text-[var(--chat-muted)]">
+          This will delete{' '}
+          <strong className="font-semibold text-[var(--chat-text)]">
+            {deleteConfirmationModal.conversationTitle}
+          </strong>
+          .
+        </p>
+      </ChatModal>
     );
   };
   // --- END NEW Modal Component --- 
@@ -12267,59 +12306,8 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
     setIsChatFilesModalOpen(false);
   }, []);
 
-  /**
-   * The seven modal dialogs this file renders, each taking its behaviour from the library.
-   *
-   * They already looked finished — scrim, card, entrance, Escape on most of them — and none of them did
-   * the rest of what a dialog does. Measured on the two that were converted first: focus stayed on
-   * `body` when they opened, Tab walked straight out into the page behind, and closing left focus
-   * nowhere. `useDialog` moves focus in, keeps Tab inside, and hands focus back to whatever opened it.
-   *
-   * One hook per dialog, and they sit HERE rather than beside the state they belong to: each takes a
-   * close function, and those are `const` declarations further up — referencing one before its line runs
-   * is a temporal dead zone, not a hoisted function. So the calls go after the last of them.
-   *
-   * `open` is the `*Open` flag rather than `*Mounted`: mounted stays true through the exit animation, and
-   * focus should go back to the opener when the dialog is dismissed, not when its animation finishes.
-   *
-   * `lockScroll` is off throughout. This app already keeps the body unscrollable, and the hook's
-   * refcount would capture and restore that state for nothing.
-   */
-  const createProjectDialog = useDialog<HTMLDivElement>({
-    open: isCreateProjectModalOpen,
-    onClose: closeCreateProjectModal,
-    lockScroll: false,
-  });
-  const projectSettingsDialog = useDialog<HTMLDivElement>({
-    open: isProjectSettingsOpen,
-    onClose: closeProjectSettings,
-    lockScroll: false,
-  });
-  const deleteChatDialog = useDialog<HTMLDivElement>({
-    open: deleteConfirmationModal.isOpen,
-    onClose: handleCancelDelete,
-    lockScroll: false,
-  });
-  const projectFilePreviewDialog = useDialog<HTMLDivElement>({
-    open: isProjectFilePreviewOpen,
-    onClose: closeProjectFilePreview,
-    lockScroll: false,
-  });
-  const projectScheduledPreviewDialog = useDialog<HTMLDivElement>({
-    open: isProjectScheduledPreviewOpen,
-    onClose: closeProjectScheduledPreview,
-    lockScroll: false,
-  });
-  const projectScheduledCreateDialog = useDialog<HTMLDivElement>({
-    open: isProjectScheduledCreateOpen,
-    onClose: closeProjectScheduledCreate,
-    lockScroll: false,
-  });
-  const chatFilesDialog = useDialog<HTMLDivElement>({
-    open: isChatFilesModalOpen,
-    onClose: closeChatFilesModal,
-    lockScroll: false,
-  });
+  // Every dialog this file renders goes through ChatModal (portal, full-viewport scrim, focus trap,
+  // topmost-only Escape, refcounted scroll lock); there is no per-dialog dialog hook here any more.
 
   const copyChatFilesPreview = useCallback(async () => {
     if (!chatFilesSelected) return;
@@ -12950,6 +12938,11 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                     </div>
             )}
             isActive={options?.forceCompact ? false : messages.length === 0}
+            /* One composer, two homes (chat-input-hybrid.html): the empty chat AND the project page are
+               `home` (controls inside the box); a running conversation is `dock`. The project page has
+               no hero, which is what `isActive` used to mean here as well. */
+            placement={options?.forceCompact || messages.length === 0 ? 'home' : 'dock'}
+            showHero={!options?.forceCompact && messages.length === 0}
             isCompact={isMultiInterface}
             isTemporaryChat={isTemporaryChat}
             hideToolRail={options?.forceCompact}
@@ -13111,13 +13104,13 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                   }
                   // Shift+Enter adds a new line (default behavior)
                 }}
-                rows={messages.length === 0 ? 2 : 2}
+                rows={1}
                 /* `focus-self` opts out of the global `:focus-visible` ring — see the
                    `[data-chat-composer-shell]:focus-within` rule, which moves the indicator onto
                    the shell's own border. The `outline-none`/`focus:ring-0` below cannot do it
                    alone: same specificity as `:focus-visible`, and index.css loads last. */
                 className={`focus-self w-full resize-none border-none bg-transparent px-1 text-[15px] leading-6 text-[var(--chat-text)] outline-none placeholder:text-[var(--chat-muted)] focus:outline-none focus:ring-0 focus:shadow-none ${messages.length === 0 ? 'min-h-[3.25rem] pb-2 pt-0.5' : 'min-h-[3rem] max-h-[7.5rem] pb-1 pt-0.5'}`}
-                style={{ maxHeight: messages.length === 0 ? '120px' : '120px' }}
+                style={{ maxHeight: '220px' }}
               />
             </div>
             
@@ -14860,6 +14853,13 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                                       {project.isStarred ? 'Unstar' : 'Star'}
                                     </MenuItem>
                                     <MenuItem
+                                      onSelect={() => handleToggleProjectPin(project.id)}
+                                      leadingIcon={BookmarkDecl}
+                                      iconState={{ selection: project.isPinned ? 'on' : 'off' }}
+                                    >
+                                      {project.isPinned ? 'Unpin' : 'Pin'}
+                                    </MenuItem>
+                                    <MenuItem
                                       onSelect={() => openProjectSettings(project, 'general')}
                                       leadingIcon={EditDecl}
                                     >
@@ -14985,74 +14985,69 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
           <ChatCustomizePage
             onClose={() => setIsCustomizePageOpen(false)}
             conversationId={activeConversationId}
-            isOpen={isCustomizePageOpen}
-            isShown={isCustomizePageShown}
-            motionFrom={customizeMotionFrom}
           />
         )}
-        {isSettingsModalMounted &&
-          createPortal(
-            <div
-              className={`chat-themed xeno-icon-hosts chat-theme-${resolvedChatTheme} fixed inset-0 z-[999] flex items-center justify-center p-4 backdrop-blur-sm`}
-              data-chat-theme-preference={chatTheme}
-              data-chat-settings-dialog=""
-              style={{
-                backgroundColor: isSettingsModalShown
-                  ? 'color-mix(in srgb, var(--chat-text) 28%, transparent)'
-                  : 'color-mix(in srgb, var(--chat-text) 0%, transparent)',
-                transition: `background-color ${SCHEDULE_CREATE_MODAL_MS}ms ${SCHEDULE_DATE_EASE}`,
-                ...chatThemePreviewStyle,
-              }}
-              onClick={closeChatSettings}
-            >
-              <style>{CHAT_MODAL_KEYFRAMES_CSS}</style>
-              <div
-                className="w-full max-w-[48rem] will-change-transform"
-                style={chatModalCardMotionStyle(
-                  'top-right',
-                  isSettingsModalShown,
-                  isSettingsModalOpen,
-                )}
-                onClick={(event) => event.stopPropagation()}
-              >
-                <ChatSettingsModal
-                  onClose={closeChatSettings}
-                  conversationId={activeConversationId}
-                  onApplyPersona={(persona: ChatPersona | null) => {
-                    if (persona) {
-                      setSelectedPersona(persona.id);
-                      setSystemPrompt(persona.prompt);
-                      setSavedSystemPrompt(persona.prompt);
-                    } else {
-                      setSelectedPersona(null);
-                      setSystemPrompt('');
-                      setSavedSystemPrompt('');
-                    }
-                  }}
-                  chatAlignment={chatAlignment}
-                  onChatAlignmentChange={setChatAlignment}
-                  isWideChatEnabled={isWideChatEnabled}
-                  onWideChatChange={setIsWideChatEnabled}
-                  chatFontSize={chatFontSize}
-                  onChatFontSizeChange={setChatFontSize}
-                  stepsMode={stepsMode}
-                  onStepsModeChange={setStepsMode}
-                  isMobile={isMobile}
-                  maxInterfacesReached={maxInterfacesReached}
-                  isMultiInterface={!!isMultiInterface}
-                  onCreateNewInterface={onCreateNewInterface}
-                  onCloseInterface={
-                    onCloseInterface
-                      ? () => onCloseInterface(interfaceId)
-                      : undefined
-                  }
-                  canExport={messages.length > 0}
-                  onExportMarkdown={handleExportConversation}
-                />
-              </div>
-            </div>,
-            document.body,
-          )}
+        {isSettingsModalMounted && (
+          <ChatSettingsModal
+            onClose={closeChatSettings}
+            conversationId={activeConversationId}
+            onApplyPersona={(persona: ChatPersona | null) => {
+              if (persona) {
+                setSelectedPersona(persona.id);
+                setSystemPrompt(persona.prompt);
+                setSavedSystemPrompt(persona.prompt);
+              } else {
+                setSelectedPersona(null);
+                setSystemPrompt('');
+                setSavedSystemPrompt('');
+              }
+            }}
+            chatAlignment={chatAlignment}
+            onChatAlignmentChange={setChatAlignment}
+            isWideChatEnabled={isWideChatEnabled}
+            onWideChatChange={setIsWideChatEnabled}
+            chatFontSize={chatFontSize}
+            onChatFontSizeChange={setChatFontSize}
+            stepsMode={stepsMode}
+            onStepsModeChange={setStepsMode}
+            isMobile={isMobile}
+            maxInterfacesReached={maxInterfacesReached}
+            isMultiInterface={!!isMultiInterface}
+            onCreateNewInterface={onCreateNewInterface}
+            onCloseInterface={
+              onCloseInterface
+                ? () => onCloseInterface(interfaceId)
+                : undefined
+            }
+            canExport={messages.length > 0}
+            onExportMarkdown={handleExportConversation}
+          />
+        )}
+        {/* Route notices: cover the chat area while a project/chat URL is resolving (no flash of the
+            global view) and explain one that cannot resolve - unknown or deleted project,
+            unavailable chat - always with a way back. */}
+        {activeProjectId && !chatProjects.some((p) => p.id === activeProjectId) && (
+          <ChatRouteNotice
+            kind={projectsLoaded ? 'project-missing' : 'project-loading'}
+            left={historyWorkspaceInsetPx}
+            projectId={activeProjectId}
+            onOpenProjects={openProjectsPage}
+            onAllChats={() => handleNewChat({ leaveProject: true })}
+          />
+        )}
+        {!activeProjectId && !hasFullPageOverlay && conversationLoad && conversationLoad.id === activeConversationId && (
+          <ChatRouteNotice
+            kind={conversationLoad.status === 'loading' ? 'chat-loading' : 'chat-unavailable'}
+            left={historyWorkspaceInsetPx}
+            projectId={conversationProjectId}
+            projectName={chatProjects.find((p) => p.id === conversationProjectId)?.name ?? null}
+            conversationId={conversationLoad.id}
+            onRetry={() => { void handleLoadConversation(conversationLoad.id, { syncUrl: false, projectIdHint: conversationProjectId }); }}
+            onOpenProject={conversationProjectId ? () => openProject(conversationProjectId) : undefined}
+            onOpenProjects={openProjectsPage}
+            onAllChats={() => handleNewChat({ leaveProject: true })}
+          />
+        )}
         {activeProjectId && (() => {
           const project = chatProjects.find((p) => p.id === activeProjectId);
           if (!project) return null;
@@ -15117,6 +15112,17 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                         onClick={() => handleToggleProjectStar(project.id)}
                         aria-label={project.isStarred ? 'Unstar project' : 'Star project'}
                         title={project.isStarred ? 'Unstar' : 'Star'}
+                      />
+                      <IconButton
+                        icon={BookmarkDecl}
+                        iconState={{ selection: project.isPinned ? 'on' : 'off' }}
+                        variant="ghost"
+                        size="md"
+                        iconSize={16}
+                        onClick={() => handleToggleProjectPin(project.id)}
+                        aria-label={project.isPinned ? 'Unpin project' : 'Pin project'}
+                        aria-pressed={Boolean(project.isPinned)}
+                        title={project.isPinned ? 'Unpin from sidebar' : 'Pin to sidebar'}
                       />
                       {/* `ghost md` to the pixel — 32px square, muted ink brightening over a
                           `--chat-hover` fill, glyph 16 which is md's own. The two faces stay ONE
@@ -15204,12 +15210,30 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                 </div>
               </div>
 
-              {/* No outer panel — only open/close + the three section cards on the page canvas. */}
+              {/* Phone width: the panel is a drawer over a scrim that closes it (Esc too). */}
+              {isMobile && isProjectSidebarOpen && (
+                <div
+                  className="absolute inset-0 z-[46] bg-black/50"
+                  data-project-panel-scrim=""
+                  aria-hidden="true"
+                  onClick={() => setIsProjectSidebarOpen(false)}
+                />
+              )}
+              {/* No outer panel on desktop — only open/close + the three section cards on the page canvas. */}
               <aside
                 className="absolute inset-y-0 z-[47] flex w-[260px] flex-col overflow-hidden bg-transparent transition-[right] duration-300 ease-in-out"
                 style={{
                   right: isProjectSidebarOpen ? 0 : -260,
                   pointerEvents: isProjectSidebarOpen ? 'auto' : 'none',
+                  ...(isMobile
+                    ? { backgroundColor: 'var(--chat-canvas)', borderLeft: '1px solid var(--chat-border)' }
+                    : null),
+                }}
+                onKeyDown={(event) => {
+                  if (event.key === 'Escape' && isMobile) {
+                    event.stopPropagation();
+                    setIsProjectSidebarOpen(false);
+                  }
                 }}
                 aria-hidden={!isProjectSidebarOpen}
                 aria-label="Project sections"
@@ -15698,6 +15722,16 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
 
           {/* Top Center - Copy Session Transcript & Multi-Interface Selector */}
           <div className="absolute left-1/2 top-1/2 z-20 flex -translate-x-1/2 -translate-y-1/2 items-center gap-2">
+            {/* Projects / <project> / <chat>: every segment but the last is a real link */}
+            {activeConversationId && conversationProjectId && !activeProjectId && !hasFullPageOverlay && (
+              <ChatBreadcrumb
+                projectId={conversationProjectId}
+                projectName={chatProjects.find((p) => p.id === conversationProjectId)?.name ?? (projectsLoaded ? 'Unavailable project' : null)}
+                chatTitle={activeConversationRecord?.title ?? ''}
+                onOpenProjects={openProjectsPage}
+                onOpenProject={() => openProject(conversationProjectId)}
+              />
+            )}
             {/* Conversation Selector (only in multi-interface mode) */}
             {isMultiInterface && (
               <div className="relative">
@@ -17493,1245 +17527,1021 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
         {/* Presence, not the live state — the popover outlives its info by one exit animation. */}
         {feedbackPopupPresence.rendered && createPortal(renderFeedbackPopup(), document.body)}
         {dislikePopupPresence.rendered && createPortal(renderDislikeFeedbackPopup(), document.body)}
-        {isDeleteModalMounted && createPortal(renderDeleteConfirmationModal(), document.body)}
-        {pendingMove && createPortal(
-          <div className={`chat-themed chat-theme-${resolvedChatTheme}`} style={chatThemePreviewStyle}>
-            <ChatMoveModal
-              conversationId={pendingMove.conversationId}
-              conversationTitle={pendingMove.title}
-              projectId={pendingMove.projectId}
-              projectName={pendingMove.projectName}
-              onMoved={() => { applyConversationMove(pendingMove.conversationId, pendingMove.projectId); setPendingMove(null); }}
-              onClose={() => setPendingMove(null)}
-            />
-          </div>,
-          document.body,
+        {isDeleteModalMounted && renderDeleteConfirmationModal()}
+        {pendingMove && (
+          <ChatMoveModal
+            conversationId={pendingMove.conversationId}
+            conversationTitle={pendingMove.title}
+            projectId={pendingMove.projectId}
+            projectName={pendingMove.projectName}
+            onMoved={() => { applyConversationMove(pendingMove.conversationId, pendingMove.projectId); setPendingMove(null); }}
+            onClose={() => setPendingMove(null)}
+          />
         )}
-        {isCreateProjectModalMounted && createPortal(renderCreateProjectModal(), document.body)}
+        {isCreateProjectModalMounted && renderCreateProjectModal()}
         {isProjectSettingsMounted &&
           projectSettings &&
-          createPortal(renderProjectSettingsModal(), document.body)}
-        {isProjectFilePreviewMounted &&
-          projectFilePreview &&
-          createPortal(
-            <div
-              className={`chat-themed xeno-icon-hosts chat-theme-${resolvedChatTheme} fixed inset-0 z-[999] flex items-center justify-center p-4 backdrop-blur-sm`}
-              data-chat-theme-preference={chatTheme}
-              data-project-file-preview=""
-              style={{
-                backgroundColor: isProjectFilePreviewShown
-                  ? 'color-mix(in srgb, var(--chat-text) 28%, transparent)'
-                  : 'color-mix(in srgb, var(--chat-text) 0%, transparent)',
-                transition: `background-color ${SCHEDULE_CREATE_MODAL_MS}ms ${SCHEDULE_DATE_EASE}`,
-                ...chatThemePreviewStyle,
-              }}
-              onClick={closeProjectFilePreview}
-            >
-              <style>{CHAT_MODAL_KEYFRAMES_CSS}</style>
-              <div
-                {...projectFilePreviewDialog.panelProps}
-                role="dialog"
-                aria-modal="true"
-                aria-labelledby="project-file-preview-title"
-                className="flex h-[min(52rem,90vh)] w-full max-w-[64rem] flex-col overflow-hidden rounded-2xl border"
-                style={{
-                  backgroundColor: 'var(--chat-elevated)',
-                  borderColor: 'var(--chat-border)',
-                  color: 'var(--chat-text)',
-                  boxShadow:
-                    '0 8px 32px color-mix(in srgb, var(--chat-text) 16%, transparent)',
-                  ...chatModalCardMotionStyle(
-                    'right',
-                    isProjectFilePreviewShown,
-                    isProjectFilePreviewOpen,
-                  ),
-                }}
-                onClick={(event) => event.stopPropagation()}
-              >
-                <div className="flex flex-shrink-0 items-center gap-2 border-b px-4 py-3"
-                  style={{ borderColor: 'var(--chat-border)' }}
+          renderProjectSettingsModal()}
+        {isProjectFilePreviewMounted && projectFilePreview && (
+          <ChatModal
+            onClose={closeProjectFilePreview}
+            size="wide"
+            title={<span className="block truncate">{projectFilePreview.name}</span>}
+            className="h-[min(52rem,90vh)]"
+            dialogProps={{ 'data-project-file-preview': '' }}
+            footer={(
+              <>
+                <Button
+                  variant="ghost"
+                  size="md"
+                  iconSize={14}
+                  leadingIcon={projectFilePreviewCopied ? CheckDecl : CopyDecl}
+                  data-selection={projectFilePreviewCopied ? 'on' : 'off'}
+                  onClick={() => void copyProjectFilePreview()}
+                  title={projectFilePreviewCopied ? 'Copied' : 'Copy'}
                 >
-                  <FileText
-                    size={14}
-                    className="flex-shrink-0 text-[var(--chat-muted)]"
-                    aria-hidden="true"
-                  />
-                  <h2
-                    id="project-file-preview-title"
-                    className="min-w-0 flex-1 truncate text-[14px] font-semibold tracking-tight text-[var(--chat-text)]"
+                  {projectFilePreviewCopied ? 'Copied' : 'Copy'}
+                </Button>
+                <Button variant="secondary" size="md" onClick={closeProjectFilePreview}>
+                  Close
+                </Button>
+              </>
+            )}
+          >
+            <pre className="whitespace-pre-wrap break-words font-mono text-[13.5px] leading-relaxed text-[var(--chat-text)]">
+              {projectFilePreview.content}
+            </pre>
+          </ChatModal>
+        )}
+        {isProjectScheduledPreviewMounted && projectScheduledPreview && (
+          <ChatModal
+            onClose={closeProjectScheduledPreview}
+            size="md"
+            title="Scheduled task"
+            dialogProps={{ 'data-project-scheduled-preview': '' }}
+          >
+          <div className="flex flex-col gap-4">
+            <div>
+              <p className="text-[11px] font-medium uppercase tracking-wide text-[var(--chat-muted)]">
+                Title
+              </p>
+              <p className="mt-1 text-[14px] font-medium text-[var(--chat-text)]">
+                {projectScheduledPreview.title}
+              </p>
+            </div>
+            <div>
+              <p className="text-[11px] font-medium uppercase tracking-wide text-[var(--chat-muted)]">
+                When
+              </p>
+              <p className="mt-1 text-[13px] text-[var(--chat-text)]">
+                {projectScheduledPreview.cadence}
+              </p>
+            </div>
+            <div>
+              <p className="text-[11px] font-medium uppercase tracking-wide text-[var(--chat-muted)]">
+                Instructions
+              </p>
+              <p className="mt-1 whitespace-pre-wrap text-[12.5px] leading-relaxed text-[var(--chat-text)]">
+                {projectScheduledPreview.prompt || projectScheduledPreview.title}
+              </p>
+            </div>
+            <div>
+              <p className="text-[11px] font-medium uppercase tracking-wide text-[var(--chat-muted)]">
+                Recent runs
+              </p>
+              <div className="mt-1.5 flex max-h-40 flex-col gap-1 overflow-y-auto">
+                {projectScheduledPreview.runs === undefined ? (
+                  <p className="text-[11px] text-[var(--chat-muted)]">Loading run history…</p>
+                ) : projectScheduledPreview.runs.length === 0 ? (
+                  <p className="text-[11px] text-[var(--chat-muted)]">No runs yet.</p>
+                ) : projectScheduledPreview.runs.map((run) => (
+                  <div key={run.id} className="flex items-center justify-between gap-2 rounded-md border px-2 py-1.5" style={{ borderColor: 'var(--chat-border)' }}>
+                    <div className="min-w-0">
+                      <span className="block text-[10.5px] font-medium capitalize text-[var(--chat-text)]">{run.status.replace(/_/g, ' ')}</span>
+                      <span className="block truncate text-[9.5px] text-[var(--chat-muted)]">
+                        {new Date(run.scheduledFor).toLocaleString()} · attempt {run.attemptCount}{run.modelId ? ` · ${run.modelId}` : ''}
+                      </span>
+                      {run.error ? <span className="block truncate text-[9.5px] text-red-400">{run.error}</span> : null}
+                    </div>
+                    {['failed', 'reconciliation_required'].includes(run.status) ? (
+                      <Button variant="secondary" size="sm" onClick={() => void retryProjectScheduledRun(run.id, run.status)}>
+                        Retry
+                      </Button>
+                    ) : null}
+                  </div>
+                ))}
+              </div>
+            </div>
+            <div className="flex items-center justify-between gap-3 rounded-lg border px-3 py-2" style={{ borderColor: 'var(--chat-border)' }}>
+              <div>
+                <span className="block text-[11px] font-medium uppercase tracking-wide text-[var(--chat-muted)]">Status</span>
+                <span className="mt-0.5 block text-[12px] font-medium capitalize text-[var(--chat-text)]">
+                  {projectScheduledPreview.status || 'active'}
+                </span>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={() => void toggleProjectScheduledStatus(projectScheduledPreview)}
+                >
+                  {projectScheduledPreview.status === 'paused' ? 'Resume' : 'Pause'}
+                </Button>
+                <IconButton
+                  icon={TrashDecl}
+                  variant="ghost"
+                  size="sm"
+                  iconSize={14}
+                  onClick={() => void removeProjectScheduledTask(projectScheduledPreview.id)}
+                  aria-label="Delete scheduled task"
+                  title="Delete scheduled task"
+                />
+              </div>
+            </div>
+          </div>
+          </ChatModal>
+        )}
+        {isProjectScheduledCreateMounted && (
+          <ChatModal
+            onClose={closeProjectScheduledCreate}
+            size="md"
+            title="Add scheduled task"
+            bodyClassName="chat-modal-body-visible"
+            dialogProps={{ 'data-project-scheduled-create': '' }}
+            footer={(
+              <>
+              {/* `secondary md` — a `--chat-control` fill with text ink, 32px of box, and it
+                  gains the variant's hairline. The same conversion as the create-project
+                  dialog's Cancel, which is the footer this one copies. */}
+              <Button
+                variant="secondary"
+                size="md"
+                onClick={closeProjectScheduledCreate}
+              >
+                Cancel
+              </Button>
+              {/* Stays hand-written: `--chat-text` fill with `--chat-canvas` ink, the
+                  inverted emphasis. Fifteenth in this chat and the FIFTH Cancel/confirm pair
+                  split by the same missing variant (§9). Its disabled branch is the
+                  availability axis written out, which the component would carry. */}
+              <Button
+                variant="primary"
+                size="md"
+                onClick={submitProjectScheduledCreate}
+                disabled={
+                  !projectScheduledCreateTitle.trim() ||
+                  !projectScheduledCreatePrompt.trim() ||
+                  !projectScheduledCreateTimezone.trim() ||
+                  projectScheduledOccurrences.length === 0 ||
+                  Boolean(projectScheduledPreviewError) ||
+                  isProjectScheduledPreviewLoading ||
+                  isProjectScheduledCreating
+                }
+              >
+                {isProjectScheduledCreating ? 'Adding…' : 'Add'}
+              </Button>
+              </>
+            )}
+          >
+          <div className="flex flex-col gap-3">
+            <label className="block">
+              <span className="mb-1.5 block text-[11px] font-medium uppercase tracking-wide text-[var(--chat-muted)]">
+                Title
+              </span>
+              {/* Stays hand-written, and both halves of the reason are the familiar ones:
+                  `h-10` is 40px where the control scale stops at 36, and the fill is
+                  `--chat-surface` because the dialog is a raised card. Neither is a call
+                  site's to fix. */}
+              <input
+                type="text"
+                value={projectScheduledCreateTitle}
+                onChange={(event) =>
+                  setProjectScheduledCreateTitle(event.target.value)
+                }
+                placeholder="Weekly condition check-in"
+                autoFocus
+                className="h-10 w-full rounded-lg border bg-transparent px-3 text-[13px] text-[var(--chat-text)] outline-none placeholder:text-[var(--chat-muted)]"
+                style={{
+                  borderColor: 'var(--chat-border)',
+                  backgroundColor: 'var(--chat-surface)',
+                }}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter') {
+                    event.preventDefault();
+                    submitProjectScheduledCreate();
+                  }
+                }}
+              />
+            </label>
+            <label className="block">
+              <span className="mb-1.5 block text-[11px] font-medium uppercase tracking-wide text-[var(--chat-muted)]">
+                Instructions
+              </span>
+              <textarea
+                value={projectScheduledCreatePrompt}
+                onChange={(event) => setProjectScheduledCreatePrompt(event.target.value)}
+                placeholder="What should XENO do when this task runs?"
+                rows={3}
+                className="w-full resize-none rounded-lg border bg-transparent px-3 py-2 text-[13px] leading-relaxed text-[var(--chat-text)] outline-none placeholder:text-[var(--chat-muted)]"
+                style={{
+                  borderColor: 'var(--chat-border)',
+                  backgroundColor: 'var(--chat-surface)',
+                }}
+              />
+            </label>
+            <div className="block">
+              <span className="mb-1.5 block text-[11px] font-medium uppercase tracking-wide text-[var(--chat-muted)]">
+                When
+              </span>
+              <div className="relative">
+              {/* Stays hand-written: it is a FIELD, not a button. Full width, label to the
+                  left, chevron to the right, and 40px tall where the control scale stops at 36.
+                  The library has a field-trigger shape in its motion selectors and no component
+                  exported for it, so there is nothing to take. */}
+              <button
+                type="button"
+                onClick={() =>
+                  setIsProjectScheduledWhenOpen((open) => {
+                    if (open) {
+                      resetProjectScheduleDatePanel();
+                      resetProjectScheduleTimePanel();
+                    }
+                    return !open;
+                  })
+                }
+                aria-expanded={isProjectScheduledWhenOpen}
+                className="relative z-20 flex h-10 w-full items-center justify-between gap-2 rounded-lg border px-3 text-left text-[13px] text-[var(--chat-text)] outline-none transition-colors hover:bg-[var(--chat-hover)]"
+                style={{
+                  borderColor: 'var(--chat-border)',
+                  backgroundColor: 'var(--chat-surface)',
+                }}
+              >
+                <span className="min-w-0 truncate">
+                  {formatProjectScheduleLabel(projectScheduledCreateSchedule)}
+                </span>
+                <ChevronDown
+                  size={14}
+                  className={`flex-shrink-0 text-[var(--chat-muted)] transition-transform ${
+                    isProjectScheduledWhenOpen ? 'rotate-180' : ''
+                  }`}
+                  aria-hidden="true"
+                />
+              </button>
+              {isProjectScheduledWhenMounted && (
+                <div
+                  className={`absolute left-0 right-0 top-full z-10 pt-1 ${
+                    isProjectScheduledWhenClipOpen ||
+                    isProjectScheduleDateMounted ||
+                    isProjectScheduleTimeMounted
+                      ? 'overflow-visible'
+                      : 'overflow-hidden'
+                  }`}
+                  style={{
+                    // Fixed height only while sliding; unlock after open so the
+                    // nested calendar/time pickers (absolute) are not clipped.
+                    height:
+                      isProjectScheduledWhenClipOpen ||
+                      isProjectScheduleDateMounted ||
+                      isProjectScheduleTimeMounted
+                        ? 'auto'
+                        : projectScheduledWhenPanelHeight > 0
+                          ? projectScheduledWhenPanelHeight + 4
+                          : 0,
+                    pointerEvents: isProjectScheduledWhenShown
+                      ? 'auto'
+                      : 'none',
+                  }}
+                >
+                <div
+                  ref={projectScheduledWhenContentRef}
+                  className="rounded-lg border p-3 will-change-transform"
+                  style={{
+                    borderColor: 'var(--chat-border)',
+                    backgroundColor: 'var(--chat-surface)',
+                    // Same transform duration open ↔ close (no opacity — it made close feel faster).
+                    transform: isProjectScheduledWhenShown
+                      ? 'translateY(0)'
+                      : 'translateY(calc(-100% - 4px))',
+                    transition: `transform ${SCHEDULE_DATE_PICKER_MS}ms ${SCHEDULE_DATE_EASE}`,
+                  }}
+                >
+                  <div
+                    style={{
+                      opacity: isProjectScheduledWhenTextShown ? 1 : 0,
+                      transform: isProjectScheduledWhenTextShown
+                        ? 'translateY(0)'
+                        : 'translateY(10px)',
+                      // Enter: ease-in. Exit: ease-out — same motion, reversed.
+                      transition: isProjectScheduledWhenTextShown
+                        ? `opacity ${SCHEDULE_DATE_TEXT_MS}ms ease-in, transform ${SCHEDULE_DATE_TEXT_MS}ms ease-in`
+                        : `opacity ${SCHEDULE_DATE_TEXT_MS}ms ease-out, transform ${SCHEDULE_DATE_TEXT_MS}ms ease-out`,
+                    }}
                   >
-                    {projectFilePreview.name}
-                  </h2>
-                  {/* `ghost md` — no fill, no border, muted ink brightening over a `--chat-hover`
-                      tint, and 32px is md. The two faces stay ONE button with the ternary in
-                      `leadingIcon`, which is what lets the check draw itself over the copy mark
-                      instead of replacing it. */}
+                  <div className="flex flex-wrap gap-1">
+                    {SCHEDULE_KIND_OPTIONS.map((option) => {
+                      const active =
+                        projectScheduledCreateSchedule.kind === option.id;
+                      /* The selection pair this chat repeats: `quiet` + `data-selection`,
+                         which fills with `--xeno-control` when chosen and is muted when not.
+                         The border swaps sides doing it — inactive gains the hairline, active
+                         drops it — which is the library's own inversion, and the box does not
+                         move because these already reserved a transparent 1px.
+                         Legible because the panel is `--chat-surface` (#171717) and the fill is
+                         #262626; the elevated-surface collision in §9 does not reach here. */
+                      return (
+                        <Button
+                          key={option.id}
+                          variant="quiet"
+                          size="xs"
+                          data-selection={active ? 'on' : 'off'}
+                          aria-pressed={active}
+                          onClick={() =>
+                            setProjectScheduledCreateSchedule((prev) => ({
+                              ...prev,
+                              kind: option.id,
+                            }))
+                          }
+                        >
+                          {option.label}
+                        </Button>
+                      );
+                    })}
+                  </div>
+
+                  {/* Fixed height so Once/Daily/Weekly/Monthly swaps do not resize the panel */}
+                  <div className="mt-3 h-[4.75rem]">
+                    {projectScheduledCreateSchedule.kind === 'once' && (
+                      <div className="block">
+                        <span className="mb-1.5 block text-[11px] text-[var(--chat-muted)]">
+                          Date
+                        </span>
+                        {/* Anchor: calendar slides out from under the date field.
+                            Raise whole stack above Time while the calendar is open. */}
+                        <div
+                          className={`relative ${
+                            isProjectScheduleDateMounted ? 'z-30' : 'z-10'
+                          }`}
+                        >
+                        <div
+                          className="relative z-20 flex h-9 w-full items-center gap-1 rounded-md border pl-2.5 pr-1"
+                          style={{
+                            borderColor: 'var(--chat-border)',
+                            backgroundColor: 'var(--chat-elevated)',
+                          }}
+                        >
+                          <span className="min-w-0 flex-1 truncate text-[13px] text-[var(--chat-text)]">
+                            {formatScheduleDateDisplay(
+                              projectScheduledCreateSchedule.date,
+                            )}
+                          </span>
+                          <IconButton
+                            icon={CalendarDecl}
+                            variant="ghost"
+                            size="sm"
+                            iconSize={14}
+                            onClick={toggleProjectScheduleDatePicker}
+                            aria-label={
+                              isProjectScheduleDateOpen
+                                ? 'Close calendar'
+                                : 'Open calendar'
+                            }
+                            aria-expanded={isProjectScheduleDateOpen}
+                          />
+                        </div>
+                        {isProjectScheduleDateMounted && (
+                          <div
+                            className="absolute left-0 right-0 top-full z-30 overflow-hidden pt-1"
+                            style={{
+                              height:
+                                projectScheduleDatePanelHeight > 0
+                                  ? projectScheduleDatePanelHeight + 4
+                                  : 0,
+                              pointerEvents: isProjectScheduleDateShown
+                                ? 'auto'
+                                : 'none',
+                            }}
+                            role="dialog"
+                            aria-label="Choose date"
+                          >
+                            <div
+                              ref={projectScheduleDateContentRef}
+                              className="rounded-md border shadow-md will-change-transform"
+                              style={{
+                                borderColor: 'var(--chat-border)',
+                                backgroundColor: 'var(--chat-surface)',
+                                // Slides from under the date field (up = hidden beneath it).
+                                transform: isProjectScheduleDateShown
+                                  ? 'translateY(0)'
+                                  : 'translateY(calc(-100% - 4px))',
+                                transition: `transform ${SCHEDULE_DATE_PICKER_MS}ms ${SCHEDULE_DATE_EASE}`,
+                              }}
+                            >
+                              {/* Panel first; text fades slowly (ease-in) so it does not pop. */}
+                              <div
+                                style={{
+                                  opacity: isProjectScheduleDateTextShown
+                                    ? 1
+                                    : 0,
+                                  transform: isProjectScheduleDateTextShown
+                                    ? 'translateY(0)'
+                                    : 'translateY(10px)',
+                                  transition: `opacity ${SCHEDULE_DATE_TEXT_MS}ms ${SCHEDULE_DATE_TEXT_EASE}, transform ${SCHEDULE_DATE_TEXT_MS}ms ${SCHEDULE_DATE_TEXT_EASE}`,
+                                }}
+                              >
+                            <div className="flex items-center justify-between px-2.5 pb-1 pt-2.5">
+                              <span className="text-[12px] font-semibold text-[var(--chat-text)]">
+                                {projectScheduleCalendarMonth.toLocaleDateString(
+                                  undefined,
+                                  { month: 'long', year: 'numeric' },
+                                )}
+                              </span>
+                              <div className="flex items-center gap-0.5">
+                                <IconButton
+                                  icon={ChevronRightDecl}
+                                  className="chat-icon-flip-x"
+                                  variant="ghost"
+                                  size="sm"
+                                  iconSize={14}
+                                  onClick={() =>
+                                    setProjectScheduleCalendarMonth(
+                                      (month) =>
+                                        new Date(
+                                          month.getFullYear(),
+                                          month.getMonth() - 1,
+                                          1,
+                                        ),
+                                    )
+                                  }
+                                  aria-label="Previous month"
+                                />
+                                <IconButton
+                                  icon={ChevronRightDecl}
+                                  variant="ghost"
+                                  size="sm"
+                                  iconSize={14}
+                                  onClick={() =>
+                                    setProjectScheduleCalendarMonth(
+                                      (month) =>
+                                        new Date(
+                                          month.getFullYear(),
+                                          month.getMonth() + 1,
+                                          1,
+                                        ),
+                                    )
+                                  }
+                                  aria-label="Next month"
+                                />
+                              </div>
+                            </div>
+                            <div className="grid grid-cols-7 gap-0.5 px-2 pb-1">
+                              {SCHEDULE_CAL_WEEKDAYS.map((day) => (
+                                <span
+                                  key={day}
+                                  className="py-1 text-center text-[10px] font-medium text-[var(--chat-muted)]"
+                                >
+                                  {day}
+                                </span>
+                              ))}
+                              {getScheduleMonthGrid(
+                                projectScheduleCalendarMonth,
+                              ).map((cell) => {
+                                const selected =
+                                  cell.ymd ===
+                                  projectScheduledCreateSchedule.date;
+                                /* Stays hand-written: a date GRID, not a row of controls.
+                                   Forty-two 28px cells at 11px with no padding, and the third
+                                   dimension is `opacity` — days outside the month sit at 0.45,
+                                   which is neither a variant nor an availability but a fact
+                                   about the data. A control scale has nothing to say about a
+                                   calendar. */
+                                return (
+                                  <button
+                                    key={cell.ymd}
+                                    type="button"
+                                    onClick={() => {
+                                      setProjectScheduledCreateSchedule(
+                                        (prev) => ({
+                                          ...prev,
+                                          date: cell.ymd,
+                                        }),
+                                      );
+                                      setIsProjectScheduleDateOpen(false);
+                                    }}
+                                    className="h-7 rounded-md text-[11px] font-medium transition-colors"
+                                    style={{
+                                      backgroundColor: selected
+                                        ? 'var(--chat-control)'
+                                        : 'transparent',
+                                      color: selected
+                                        ? 'var(--chat-text)'
+                                        : cell.inMonth
+                                          ? 'var(--chat-text)'
+                                          : 'var(--chat-muted)',
+                                      opacity: cell.inMonth ? 1 : 0.45,
+                                    }}
+                                    aria-pressed={selected}
+                                  >
+                                    {cell.day}
+                                  </button>
+                                );
+                              })}
+                            </div>
+                            <div
+                              className="flex items-center justify-between border-t px-2.5 py-1.5"
+                              style={{ borderColor: 'var(--chat-border)' }}
+                            >
+                              {/* `ghost xs`, both of these: no fill, no border, muted ink
+                                  coming up under the pointer. At ~21px tall with 6px padding
+                                  and 11px type they are under the scale, and xs is the nearest
+                                  step in every dimension — 24 / 8 / 12, which is three pixels,
+                                  two and one. Small enough to be the swap §3.3 asks for rather
+                                  than a resize wearing its clothes. */}
+                              <Button
+                                variant="ghost"
+                                size="xs"
+                                onClick={() => {
+                                  setProjectScheduledCreateSchedule(
+                                    (prev) => ({
+                                      ...prev,
+                                      date: '',
+                                    }),
+                                  );
+                                  setIsProjectScheduleDateOpen(false);
+                                }}
+                              >
+                                Clear
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="xs"
+                                onClick={() => {
+                                  const today = formatScheduleDateYmd(
+                                    new Date(),
+                                  );
+                                  setProjectScheduledCreateSchedule(
+                                    (prev) => ({
+                                      ...prev,
+                                      date: today,
+                                    }),
+                                  );
+                                  setProjectScheduleCalendarMonth(
+                                    monthStartFromYmd(today),
+                                  );
+                                  setIsProjectScheduleDateOpen(false);
+                                }}
+                              >
+                                Today
+                              </Button>
+                            </div>
+                              </div>
+                            </div>
+                          </div>
+                        )}
+                        </div>
+                      </div>
+                    )}
+
+                    {projectScheduledCreateSchedule.kind === 'daily' && (
+                      <p className="pt-6 text-[12px] text-[var(--chat-muted)]">
+                        Runs every day at the time below.
+                      </p>
+                    )}
+
+                    {projectScheduledCreateSchedule.kind === 'weekly' && (
+                      <div>
+                        <span className="mb-1.5 block text-[11px] text-[var(--chat-muted)]">
+                          Day
+                        </span>
+                        <div className="grid grid-cols-7 gap-1">
+                          {SCHEDULE_WEEKDAYS.map((day, index) => {
+                            const active =
+                              projectScheduledCreateSchedule.weekday === index;
+                            /* Stays hand-written, and it is off the scale in ONE dimension
+                               while sitting on it in the other. The box is `h-8`, which is md
+                               exactly; the type is 11px, which is below xs. Taking md would put
+                               14px type into a seven-column grid of ~40px cells, and taking xs
+                               would cut 8px off a row that is already the right height. In a
+                               grid this narrow the type is the dimension that cannot move. */
+                            return (
+                              <button
+                                key={day}
+                                type="button"
+                                onClick={() =>
+                                  setProjectScheduledCreateSchedule((prev) => ({
+                                    ...prev,
+                                    weekday: index,
+                                  }))
+                                }
+                                className="h-8 rounded-md text-[11px] font-medium transition-colors"
+                                style={{
+                                  backgroundColor: active
+                                    ? 'var(--chat-control)'
+                                    : 'transparent',
+                                  color: active
+                                    ? 'var(--chat-text)'
+                                    : 'var(--chat-muted)',
+                                  border: '1px solid var(--chat-border)',
+                                }}
+                                aria-pressed={active}
+                              >
+                                {day.slice(0, 1)}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
+
+                    {projectScheduledCreateSchedule.kind === 'monthly' && (
+                      <p className="pt-6 text-[12px] text-[var(--chat-muted)]">
+                        Runs on the 1st of each month.
+                      </p>
+                    )}
+                  </div>
+
+                  <div
+                    className={`relative mt-3 block ${
+                      isProjectScheduleDateMounted
+                        ? 'z-0'
+                        : isProjectScheduleTimeMounted
+                          ? 'z-30'
+                          : 'z-10'
+                    }`}
+                  >
+                    <span className="mb-1.5 block text-[11px] text-[var(--chat-muted)]">
+                      Time
+                    </span>
+                    <div
+                      className="relative flex h-9 w-full items-center gap-1 rounded-md border pl-2.5 pr-1"
+                      style={{
+                        borderColor: 'var(--chat-border)',
+                        backgroundColor: 'var(--chat-elevated)',
+                      }}
+                    >
+                      <span className="min-w-0 flex-1 truncate text-[13px] text-[var(--chat-text)]">
+                        {formatScheduleTimeDisplay(
+                          projectScheduledCreateSchedule.time,
+                        )}
+                      </span>
+                      <IconButton
+                        icon={ClockDecl}
+                        variant="ghost"
+                        size="sm"
+                        iconSize={14}
+                        onClick={toggleProjectScheduleTimePicker}
+                        aria-label={
+                          isProjectScheduleTimeOpen
+                            ? 'Close time picker'
+                            : 'Open time picker'
+                        }
+                        aria-expanded={isProjectScheduleTimeOpen}
+                      />
+                    </div>
+                    {isProjectScheduleTimeMounted && (
+                      <div
+                        className="absolute left-0 right-0 top-full z-30 overflow-hidden pt-1"
+                        style={{
+                          height:
+                            projectScheduleTimePanelHeight > 0
+                              ? projectScheduleTimePanelHeight + 4
+                              : 0,
+                          pointerEvents: isProjectScheduleTimeShown
+                            ? 'auto'
+                            : 'none',
+                        }}
+                        role="dialog"
+                        aria-label="Choose time"
+                      >
+                        <div
+                          ref={projectScheduleTimeContentRef}
+                          className="rounded-md border shadow-md will-change-transform"
+                          style={{
+                            borderColor: 'var(--chat-border)',
+                            backgroundColor: 'var(--chat-surface)',
+                            transform: isProjectScheduleTimeShown
+                              ? 'translateY(0)'
+                              : 'translateY(calc(-100% - 4px))',
+                            transition: `transform ${SCHEDULE_DATE_PICKER_MS}ms ${SCHEDULE_DATE_EASE}`,
+                          }}
+                        >
+                          <div
+                            style={{
+                              opacity: isProjectScheduleTimeTextShown
+                                ? 1
+                                : 0,
+                              transform: isProjectScheduleTimeTextShown
+                                ? 'translateY(0)'
+                                : 'translateY(10px)',
+                              transition: `opacity ${SCHEDULE_DATE_TEXT_MS}ms ${SCHEDULE_DATE_TEXT_EASE}, transform ${SCHEDULE_DATE_TEXT_MS}ms ${SCHEDULE_DATE_TEXT_EASE}`,
+                            }}
+                          >
+                            {(() => {
+                              const selected = parseScheduleTime(
+                                projectScheduledCreateSchedule.time,
+                              );
+                              return (
+                                <div className="grid grid-cols-3 gap-1 p-2">
+                                  <div>
+                                    <span className="mb-1 block px-1 text-[10px] font-medium uppercase tracking-wide text-[var(--chat-muted)]">
+                                      Hour
+                                    </span>
+                                    <div
+                                      className="max-h-36 overflow-y-auto rounded-md border p-0.5"
+                                      style={{
+                                        borderColor: 'var(--chat-border)',
+                                      }}
+                                    >
+                                      {SCHEDULE_HOURS_12.map((hour) => {
+                                        const active =
+                                          selected.hour12 === hour;
+                                        /* Stays hand-written, with the weekday grid's shape:
+                                           a cell in a scrolling PICKER column, not a button in
+                                           a row. `h-7` is sm and the type is 12 against sm's 13,
+                                           which is close — but the cell is `w-full` inside a
+                                           narrow column with no horizontal padding at all, and
+                                           `.xeno-btn` carries 10px on each side. Twenty pixels
+                                           of padding inside a column sized for two digits is
+                                           the conversion breaking the thing it converts. */
+                                        return (
+                                          <button
+                                            key={hour}
+                                            type="button"
+                                            onClick={() =>
+                                              setProjectScheduleTimePart(
+                                                'hour12',
+                                                hour,
+                                              )
+                                            }
+                                            className="flex h-7 w-full items-center justify-center rounded text-[12px] font-medium transition-colors"
+                                            style={{
+                                              backgroundColor: active
+                                                ? 'var(--chat-control)'
+                                                : 'transparent',
+                                              color: active
+                                                ? 'var(--chat-text)'
+                                                : 'var(--chat-muted)',
+                                            }}
+                                            aria-pressed={active}
+                                          >
+                                            {hour}
+                                          </button>
+                                        );
+                                      })}
+                                    </div>
+                                  </div>
+                                  <div>
+                                    <span className="mb-1 block px-1 text-[10px] font-medium uppercase tracking-wide text-[var(--chat-muted)]">
+                                      Min
+                                    </span>
+                                    <div
+                                      className="max-h-36 overflow-y-auto rounded-md border p-0.5"
+                                      style={{
+                                        borderColor: 'var(--chat-border)',
+                                      }}
+                                    >
+                                      {SCHEDULE_MINUTES.map((minute) => {
+                                        const active =
+                                          selected.minute === minute;
+                                        /* Stays hand-written — the hour column's twin. */
+                                        return (
+                                          <button
+                                            key={minute}
+                                            type="button"
+                                            onClick={() =>
+                                              setProjectScheduleTimePart(
+                                                'minute',
+                                                minute,
+                                              )
+                                            }
+                                            className="flex h-7 w-full items-center justify-center rounded text-[12px] font-medium transition-colors"
+                                            style={{
+                                              backgroundColor: active
+                                                ? 'var(--chat-control)'
+                                                : 'transparent',
+                                              color: active
+                                                ? 'var(--chat-text)'
+                                                : 'var(--chat-muted)',
+                                            }}
+                                            aria-pressed={active}
+                                          >
+                                            {minute}
+                                          </button>
+                                        );
+                                      })}
+                                    </div>
+                                  </div>
+                                  <div>
+                                    <span className="mb-1 block px-1 text-[10px] font-medium uppercase tracking-wide text-[var(--chat-muted)]">
+                                      AM/PM
+                                    </span>
+                                    <div
+                                      className="rounded-md border p-0.5"
+                                      style={{
+                                        borderColor: 'var(--chat-border)',
+                                      }}
+                                    >
+                                      {SCHEDULE_MERIDIEMS.map((meridiem) => {
+                                        const active =
+                                          selected.meridiem === meridiem;
+                                        /* Stays hand-written — the hour column's twin. */
+                                        return (
+                                          <button
+                                            key={meridiem}
+                                            type="button"
+                                            onClick={() =>
+                                              setProjectScheduleTimePart(
+                                                'meridiem',
+                                                meridiem,
+                                              )
+                                            }
+                                            className="flex h-7 w-full items-center justify-center rounded text-[12px] font-medium transition-colors"
+                                            style={{
+                                              backgroundColor: active
+                                                ? 'var(--chat-control)'
+                                                : 'transparent',
+                                              color: active
+                                                ? 'var(--chat-text)'
+                                                : 'var(--chat-muted)',
+                                            }}
+                                            aria-pressed={active}
+                                          >
+                                            {meridiem}
+                                          </button>
+                                        );
+                                      })}
+                                    </div>
+                                  </div>
+                                </div>
+                              );
+                            })()}
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                  </div>
+                </div>
+                </div>
+              )}
+              </div>
+            </div>
+            <label className="block">
+              <span className="mb-1.5 block text-[11px] font-medium uppercase tracking-wide text-[var(--chat-muted)]">
+                Timezone
+              </span>
+              <input
+                type="text"
+                value={projectScheduledCreateTimezone}
+                onChange={(event) => setProjectScheduledCreateTimezone(event.target.value)}
+                placeholder="Europe/Berlin"
+                required
+                aria-describedby="project-schedule-timezone-note"
+                className="h-9 w-full rounded-md border bg-transparent px-3 font-mono text-[12px] text-[var(--chat-text)] outline-none placeholder:text-[var(--chat-muted)]"
+                style={{
+                  borderColor: projectScheduledPreviewError ? 'var(--chat-danger)' : 'var(--chat-border)',
+                  backgroundColor: 'var(--chat-surface)',
+                }}
+              />
+            </label>
+            <div
+              id="project-schedule-timezone-note"
+              className="rounded-lg border px-3 py-2.5"
+              style={{ borderColor: 'var(--chat-border)', backgroundColor: 'var(--chat-surface)' }}
+              aria-live="polite"
+            >
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-[11px] font-medium uppercase tracking-wide text-[var(--chat-muted)]">
+                  Next occurrences
+                </span>
+                <span className="font-mono text-[10.5px] text-[var(--chat-muted)]">
+                  {projectScheduledCreateTimezone || 'Timezone required'}
+                </span>
+              </div>
+              {isProjectScheduledPreviewLoading ? (
+                <p className="mt-2 text-[12px] text-[var(--chat-muted)]">Checking timezone rules…</p>
+              ) : projectScheduledPreviewError ? (
+                <p className="mt-2 text-[12px] text-[var(--chat-danger)]" role="alert">
+                  {projectScheduledPreviewError}
+                </p>
+              ) : (
+                <>
+                  <ol className="mt-2 grid gap-1 text-[11.5px] text-[var(--chat-text)]">
+                    {projectScheduledOccurrences.map((iso, index) => (
+                      <li key={iso} className="flex gap-2">
+                        <span className="w-4 flex-shrink-0 font-mono text-[var(--chat-muted)]">{index + 1}.</span>
+                        <time dateTime={iso}>{formatScheduleOccurrence(iso, projectScheduledCreateTimezone)}</time>
+                      </li>
+                    ))}
+                  </ol>
+                  {projectScheduledOccurrences.length > 0 && (() => {
+                    const offsets = scheduleTimezoneOffsets(projectScheduledOccurrences, projectScheduledCreateTimezone);
+                    return (
+                      <p className="mt-2 border-t pt-2 text-[10.5px] leading-relaxed text-[var(--chat-muted)]" style={{ borderColor: 'var(--chat-border)' }}>
+                        {offsets.length > 1
+                          ? `DST transition is visible in this preview (${offsets.join(' → ')}); the selected local wall-clock time is preserved.`
+                          : `Timezone offset ${offsets[0] || projectScheduledCreateTimezone}; daylight-saving gaps are skipped and overlaps use the first occurrence.`}
+                      </p>
+                    );
+                  })()}
+                </>
+              )}
+            </div>
+          </div>
+          </ChatModal>
+        )}
+        {isSharePreviewMounted && messages.length > 0 && (
+          <ChatShareModal
+            conversationId={activeConversationId ?? 'local-draft'}
+            conversationTitle={
+              conversationHistory.find((convo) => convo.id === activeConversationId)?.title
+            }
+            messages={messages.map((message) => ({
+              id: message.id,
+              sender: message.sender,
+              text: message.parsedAnswer || message.text,
+            }))}
+            onClose={() => setIsSharePreviewOpen(false)}
+          />
+        )}
+        {isChatFilesModalMounted && (
+          <ChatModal
+            onClose={closeChatFilesModal}
+            size="lg"
+            title={<span className="block truncate">{chatFilesSelected ? chatFilesSelected.name : 'Files in chat'}</span>}
+            className="h-[min(40rem,80vh)]"
+            dialogProps={{ 'data-chat-files-preview': '' }}
+            footer={(
+              <>
+                {chatFilesSelected && (
+                  <Button
+                    variant="ghost"
+                    size="md"
+                    iconSize={16}
+                    leadingIcon={ChevronRightDecl}
+                    className="mr-auto [&_svg]:rotate-180"
+                    onClick={() => {
+                      setChatFilesSelectedKey(null);
+                      setChatFilesCopied(false);
+                    }}
+                    title="Back to files list"
+                  >
+                    Back
+                  </Button>
+                )}
+                {chatFilesSelected && (
                   <Button
                     variant="ghost"
                     size="md"
                     iconSize={14}
-                    leadingIcon={projectFilePreviewCopied ? CheckDecl : CopyDecl}
-                    data-selection={projectFilePreviewCopied ? 'on' : 'off'}
-                    onClick={() => void copyProjectFilePreview()}
-                    title={projectFilePreviewCopied ? 'Copied' : 'Copy'}
+                    leadingIcon={chatFilesCopied ? CheckDecl : CopyDecl}
+                    data-selection={chatFilesCopied ? 'on' : 'off'}
+                    onClick={() => void copyChatFilesPreview()}
+                    title={chatFilesCopied ? 'Copied' : 'Copy'}
                   >
-                    {projectFilePreviewCopied ? 'Copied' : 'Copy'}
+                    {chatFilesCopied ? 'Copied' : 'Copy'}
                   </Button>
-                  <IconButton
-                    icon={XDecl}
-                    variant="ghost"
-                    size="md"
-                    iconSize={16}
-                    onClick={closeProjectFilePreview}
-                    aria-label="Close file preview"
+                )}
+                <Button variant="secondary" size="md" onClick={closeChatFilesModal}>
+                  Close
+                </Button>
+              </>
+            )}
+          >
+          {chatFilesSelected ? (
+            <pre className="whitespace-pre-wrap break-words font-mono text-[13.5px] leading-relaxed text-[var(--chat-text)]">
+              {chatFilesSelected.content}
+            </pre>
+          ) : conversationFileItems.length === 0 ? (
+            <p className="py-10 text-center text-[13px] leading-relaxed text-[var(--chat-muted)]">
+              No files attached in this conversation yet.
+            </p>
+          ) : (
+            <ul className="flex flex-col gap-1" role="list">
+              {conversationFileItems.map((item) => (
+                <li key={item.key}>
+                  {/* `ListRow`: a leading glyph, a title that truncates, a trailing mark
+                      and a hover that paints the whole row. The trailing chevron is
+                      DECORATION rather than an action, which is what lets this row take the
+                      component where the recent-file and catalog rows could not — theirs
+                      carry a real button beside the body, and `ListRow` renders its trailing
+                      slot inside its own. */}
+                  <ListRow
+                    leading={item.kind === 'image'
+                      ? <FileImage size={15} aria-hidden="true" />
+                      : <FileText size={15} aria-hidden="true" />}
+                    title={item.name}
+                    trailing={<ChevronRight size={14} aria-hidden="true" />}
+                    onSelect={() => {
+                      setChatFilesSelectedKey(item.key);
+                      setChatFilesCopied(false);
+                    }}
                   />
-                </div>
-                <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4">
-                  <pre className="whitespace-pre-wrap break-words font-mono text-[13.5px] leading-relaxed text-[var(--chat-text)]">
-                    {projectFilePreview.content}
-                  </pre>
-                </div>
-              </div>
-            </div>,
-            document.body,
+                </li>
+              ))}
+            </ul>
           )}
-        {isProjectScheduledPreviewMounted &&
-          projectScheduledPreview &&
-          createPortal(
-            <div
-              className={`chat-themed xeno-icon-hosts chat-theme-${resolvedChatTheme} fixed inset-0 z-[999] flex items-center justify-center p-4 backdrop-blur-sm`}
-              data-chat-theme-preference={chatTheme}
-              data-project-scheduled-preview=""
-              style={{
-                backgroundColor: isProjectScheduledPreviewShown
-                  ? 'color-mix(in srgb, var(--chat-text) 28%, transparent)'
-                  : 'color-mix(in srgb, var(--chat-text) 0%, transparent)',
-                transition: `background-color ${SCHEDULE_CREATE_MODAL_MS}ms ${SCHEDULE_DATE_EASE}`,
-                ...chatThemePreviewStyle,
-              }}
-              onClick={closeProjectScheduledPreview}
-            >
-              <style>{CHAT_MODAL_KEYFRAMES_CSS}</style>
-              <div
-                {...projectScheduledPreviewDialog.panelProps}
-                role="dialog"
-                aria-modal="true"
-                aria-labelledby="project-scheduled-preview-title"
-                className="flex w-full max-w-[28rem] flex-col overflow-hidden rounded-2xl border"
-                style={{
-                  backgroundColor: 'var(--chat-elevated)',
-                  borderColor: 'var(--chat-border)',
-                  color: 'var(--chat-text)',
-                  boxShadow:
-                    '0 8px 32px color-mix(in srgb, var(--chat-text) 16%, transparent)',
-                  ...chatModalCardMotionStyle(
-                    'right',
-                    isProjectScheduledPreviewShown,
-                    isProjectScheduledPreviewOpen,
-                  ),
-                }}
-                onClick={(event) => event.stopPropagation()}
-              >
-                <div
-                  className="flex flex-shrink-0 items-center gap-2 border-b px-4 py-3"
-                  style={{ borderColor: 'var(--chat-border)' }}
-                >
-                  <Clock
-                    size={14}
-                    className="flex-shrink-0 text-[var(--chat-muted)]"
-                    aria-hidden="true"
-                  />
-                  <h2
-                    id="project-scheduled-preview-title"
-                    className="min-w-0 flex-1 truncate text-[14px] font-semibold tracking-tight text-[var(--chat-text)]"
-                  >
-                    Scheduled task
-                  </h2>
-                  <IconButton
-                    icon={XDecl}
-                    variant="ghost"
-                    size="md"
-                    iconSize={16}
-                    onClick={closeProjectScheduledPreview}
-                    aria-label="Close scheduled task"
-                  />
-                </div>
-                <div className="flex flex-col gap-4 px-4 py-4">
-                  <div>
-                    <p className="text-[11px] font-medium uppercase tracking-wide text-[var(--chat-muted)]">
-                      Title
-                    </p>
-                    <p className="mt-1 text-[14px] font-medium text-[var(--chat-text)]">
-                      {projectScheduledPreview.title}
-                    </p>
-                  </div>
-                  <div>
-                    <p className="text-[11px] font-medium uppercase tracking-wide text-[var(--chat-muted)]">
-                      When
-                    </p>
-                    <p className="mt-1 text-[13px] text-[var(--chat-text)]">
-                      {projectScheduledPreview.cadence}
-                    </p>
-                  </div>
-                  <div>
-                    <p className="text-[11px] font-medium uppercase tracking-wide text-[var(--chat-muted)]">
-                      Instructions
-                    </p>
-                    <p className="mt-1 whitespace-pre-wrap text-[12.5px] leading-relaxed text-[var(--chat-text)]">
-                      {projectScheduledPreview.prompt || projectScheduledPreview.title}
-                    </p>
-                  </div>
-                  <div>
-                    <p className="text-[11px] font-medium uppercase tracking-wide text-[var(--chat-muted)]">
-                      Recent runs
-                    </p>
-                    <div className="mt-1.5 flex max-h-40 flex-col gap-1 overflow-y-auto">
-                      {projectScheduledPreview.runs === undefined ? (
-                        <p className="text-[11px] text-[var(--chat-muted)]">Loading run history…</p>
-                      ) : projectScheduledPreview.runs.length === 0 ? (
-                        <p className="text-[11px] text-[var(--chat-muted)]">No runs yet.</p>
-                      ) : projectScheduledPreview.runs.map((run) => (
-                        <div key={run.id} className="flex items-center justify-between gap-2 rounded-md border px-2 py-1.5" style={{ borderColor: 'var(--chat-border)' }}>
-                          <div className="min-w-0">
-                            <span className="block text-[10.5px] font-medium capitalize text-[var(--chat-text)]">{run.status.replace(/_/g, ' ')}</span>
-                            <span className="block truncate text-[9.5px] text-[var(--chat-muted)]">
-                              {new Date(run.scheduledFor).toLocaleString()} · attempt {run.attemptCount}{run.modelId ? ` · ${run.modelId}` : ''}
-                            </span>
-                            {run.error ? <span className="block truncate text-[9.5px] text-red-400">{run.error}</span> : null}
-                          </div>
-                          {['failed', 'reconciliation_required'].includes(run.status) ? (
-                            <Button variant="secondary" size="sm" onClick={() => void retryProjectScheduledRun(run.id, run.status)}>
-                              Retry
-                            </Button>
-                          ) : null}
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                  <div className="flex items-center justify-between gap-3 rounded-lg border px-3 py-2" style={{ borderColor: 'var(--chat-border)' }}>
-                    <div>
-                      <span className="block text-[11px] font-medium uppercase tracking-wide text-[var(--chat-muted)]">Status</span>
-                      <span className="mt-0.5 block text-[12px] font-medium capitalize text-[var(--chat-text)]">
-                        {projectScheduledPreview.status || 'active'}
-                      </span>
-                    </div>
-                    <div className="flex items-center gap-1.5">
-                      <Button
-                        variant="secondary"
-                        size="sm"
-                        onClick={() => void toggleProjectScheduledStatus(projectScheduledPreview)}
-                      >
-                        {projectScheduledPreview.status === 'paused' ? 'Resume' : 'Pause'}
-                      </Button>
-                      <IconButton
-                        icon={TrashDecl}
-                        variant="ghost"
-                        size="sm"
-                        iconSize={14}
-                        onClick={() => void removeProjectScheduledTask(projectScheduledPreview.id)}
-                        aria-label="Delete scheduled task"
-                        title="Delete scheduled task"
-                      />
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>,
-            document.body,
-          )}
-        {isProjectScheduledCreateMounted &&
-          createPortal(
-            <div
-              className={`chat-themed xeno-icon-hosts chat-theme-${resolvedChatTheme} fixed inset-0 z-[999] flex items-center justify-center p-4 backdrop-blur-sm`}
-              data-chat-theme-preference={chatTheme}
-              data-project-scheduled-create=""
-              style={{
-                backgroundColor: isProjectScheduledCreateShown
-                  ? 'color-mix(in srgb, var(--chat-text) 28%, transparent)'
-                  : 'color-mix(in srgb, var(--chat-text) 0%, transparent)',
-                transition: `background-color ${SCHEDULE_CREATE_MODAL_MS}ms ${SCHEDULE_DATE_EASE}`,
-                ...chatThemePreviewStyle,
-              }}
-              onClick={closeProjectScheduledCreate}
-            >
-              <style>{CHAT_MODAL_KEYFRAMES_CSS}</style>
-              <div
-                {...projectScheduledCreateDialog.panelProps}
-                role="dialog"
-                aria-modal="true"
-                aria-labelledby="project-scheduled-create-title"
-                className="flex w-full max-w-[28rem] flex-col overflow-visible rounded-2xl border will-change-transform"
-                style={{
-                  backgroundColor: 'var(--chat-elevated)',
-                  borderColor: 'var(--chat-border)',
-                  color: 'var(--chat-text)',
-                  boxShadow:
-                    '0 8px 32px color-mix(in srgb, var(--chat-text) 16%, transparent)',
-                  ...chatModalCardMotionStyle(
-                    'right',
-                    isProjectScheduledCreateShown,
-                    isProjectScheduledCreateOpen,
-                  ),
-                }}
-                onClick={(event) => event.stopPropagation()}
-              >
-                <div
-                  className="flex flex-shrink-0 items-center gap-2 overflow-hidden rounded-t-2xl border-b px-4 py-3"
-                  style={{ borderColor: 'var(--chat-border)' }}
-                >
-                  <Clock
-                    size={14}
-                    className="flex-shrink-0 text-[var(--chat-muted)]"
-                    aria-hidden="true"
-                  />
-                  <h2
-                    id="project-scheduled-create-title"
-                    className="min-w-0 flex-1 truncate text-[14px] font-semibold tracking-tight text-[var(--chat-text)]"
-                  >
-                    Add scheduled task
-                  </h2>
-                  <IconButton
-                    icon={XDecl}
-                    variant="ghost"
-                    size="md"
-                    iconSize={16}
-                    onClick={closeProjectScheduledCreate}
-                    aria-label="Close add scheduled task"
-                  />
-                </div>
-                <div className="flex flex-col gap-3 px-4 py-4">
-                  <label className="block">
-                    <span className="mb-1.5 block text-[11px] font-medium uppercase tracking-wide text-[var(--chat-muted)]">
-                      Title
-                    </span>
-                    {/* Stays hand-written, and both halves of the reason are the familiar ones:
-                        `h-10` is 40px where the control scale stops at 36, and the fill is
-                        `--chat-surface` because the dialog is a raised card. Neither is a call
-                        site's to fix. */}
-                    <input
-                      type="text"
-                      value={projectScheduledCreateTitle}
-                      onChange={(event) =>
-                        setProjectScheduledCreateTitle(event.target.value)
-                      }
-                      placeholder="Weekly condition check-in"
-                      autoFocus
-                      className="h-10 w-full rounded-lg border bg-transparent px-3 text-[13px] text-[var(--chat-text)] outline-none placeholder:text-[var(--chat-muted)]"
-                      style={{
-                        borderColor: 'var(--chat-border)',
-                        backgroundColor: 'var(--chat-surface)',
-                      }}
-                      onKeyDown={(event) => {
-                        if (event.key === 'Enter') {
-                          event.preventDefault();
-                          submitProjectScheduledCreate();
-                        }
-                      }}
-                    />
-                  </label>
-                  <label className="block">
-                    <span className="mb-1.5 block text-[11px] font-medium uppercase tracking-wide text-[var(--chat-muted)]">
-                      Instructions
-                    </span>
-                    <textarea
-                      value={projectScheduledCreatePrompt}
-                      onChange={(event) => setProjectScheduledCreatePrompt(event.target.value)}
-                      placeholder="What should XENO do when this task runs?"
-                      rows={3}
-                      className="w-full resize-none rounded-lg border bg-transparent px-3 py-2 text-[13px] leading-relaxed text-[var(--chat-text)] outline-none placeholder:text-[var(--chat-muted)]"
-                      style={{
-                        borderColor: 'var(--chat-border)',
-                        backgroundColor: 'var(--chat-surface)',
-                      }}
-                    />
-                  </label>
-                  <div className="block">
-                    <span className="mb-1.5 block text-[11px] font-medium uppercase tracking-wide text-[var(--chat-muted)]">
-                      When
-                    </span>
-                    <div className="relative">
-                    {/* Stays hand-written: it is a FIELD, not a button. Full width, label to the
-                        left, chevron to the right, and 40px tall where the control scale stops at 36.
-                        The library has a field-trigger shape in its motion selectors and no component
-                        exported for it, so there is nothing to take. */}
-                    <button
-                      type="button"
-                      onClick={() =>
-                        setIsProjectScheduledWhenOpen((open) => {
-                          if (open) {
-                            resetProjectScheduleDatePanel();
-                            resetProjectScheduleTimePanel();
-                          }
-                          return !open;
-                        })
-                      }
-                      aria-expanded={isProjectScheduledWhenOpen}
-                      className="relative z-20 flex h-10 w-full items-center justify-between gap-2 rounded-lg border px-3 text-left text-[13px] text-[var(--chat-text)] outline-none transition-colors hover:bg-[var(--chat-hover)]"
-                      style={{
-                        borderColor: 'var(--chat-border)',
-                        backgroundColor: 'var(--chat-surface)',
-                      }}
-                    >
-                      <span className="min-w-0 truncate">
-                        {formatProjectScheduleLabel(projectScheduledCreateSchedule)}
-                      </span>
-                      <ChevronDown
-                        size={14}
-                        className={`flex-shrink-0 text-[var(--chat-muted)] transition-transform ${
-                          isProjectScheduledWhenOpen ? 'rotate-180' : ''
-                        }`}
-                        aria-hidden="true"
-                      />
-                    </button>
-                    {isProjectScheduledWhenMounted && (
-                      <div
-                        className={`absolute left-0 right-0 top-full z-10 pt-1 ${
-                          isProjectScheduledWhenClipOpen ||
-                          isProjectScheduleDateMounted ||
-                          isProjectScheduleTimeMounted
-                            ? 'overflow-visible'
-                            : 'overflow-hidden'
-                        }`}
-                        style={{
-                          // Fixed height only while sliding; unlock after open so the
-                          // nested calendar/time pickers (absolute) are not clipped.
-                          height:
-                            isProjectScheduledWhenClipOpen ||
-                            isProjectScheduleDateMounted ||
-                            isProjectScheduleTimeMounted
-                              ? 'auto'
-                              : projectScheduledWhenPanelHeight > 0
-                                ? projectScheduledWhenPanelHeight + 4
-                                : 0,
-                          pointerEvents: isProjectScheduledWhenShown
-                            ? 'auto'
-                            : 'none',
-                        }}
-                      >
-                      <div
-                        ref={projectScheduledWhenContentRef}
-                        className="rounded-lg border p-3 will-change-transform"
-                        style={{
-                          borderColor: 'var(--chat-border)',
-                          backgroundColor: 'var(--chat-surface)',
-                          // Same transform duration open ↔ close (no opacity — it made close feel faster).
-                          transform: isProjectScheduledWhenShown
-                            ? 'translateY(0)'
-                            : 'translateY(calc(-100% - 4px))',
-                          transition: `transform ${SCHEDULE_DATE_PICKER_MS}ms ${SCHEDULE_DATE_EASE}`,
-                        }}
-                      >
-                        <div
-                          style={{
-                            opacity: isProjectScheduledWhenTextShown ? 1 : 0,
-                            transform: isProjectScheduledWhenTextShown
-                              ? 'translateY(0)'
-                              : 'translateY(10px)',
-                            // Enter: ease-in. Exit: ease-out — same motion, reversed.
-                            transition: isProjectScheduledWhenTextShown
-                              ? `opacity ${SCHEDULE_DATE_TEXT_MS}ms ease-in, transform ${SCHEDULE_DATE_TEXT_MS}ms ease-in`
-                              : `opacity ${SCHEDULE_DATE_TEXT_MS}ms ease-out, transform ${SCHEDULE_DATE_TEXT_MS}ms ease-out`,
-                          }}
-                        >
-                        <div className="flex flex-wrap gap-1">
-                          {SCHEDULE_KIND_OPTIONS.map((option) => {
-                            const active =
-                              projectScheduledCreateSchedule.kind === option.id;
-                            /* The selection pair this chat repeats: `quiet` + `data-selection`,
-                               which fills with `--xeno-control` when chosen and is muted when not.
-                               The border swaps sides doing it — inactive gains the hairline, active
-                               drops it — which is the library's own inversion, and the box does not
-                               move because these already reserved a transparent 1px.
-                               Legible because the panel is `--chat-surface` (#171717) and the fill is
-                               #262626; the elevated-surface collision in §9 does not reach here. */
-                            return (
-                              <Button
-                                key={option.id}
-                                variant="quiet"
-                                size="xs"
-                                data-selection={active ? 'on' : 'off'}
-                                aria-pressed={active}
-                                onClick={() =>
-                                  setProjectScheduledCreateSchedule((prev) => ({
-                                    ...prev,
-                                    kind: option.id,
-                                  }))
-                                }
-                              >
-                                {option.label}
-                              </Button>
-                            );
-                          })}
-                        </div>
-
-                        {/* Fixed height so Once/Daily/Weekly/Monthly swaps do not resize the panel */}
-                        <div className="mt-3 h-[4.75rem]">
-                          {projectScheduledCreateSchedule.kind === 'once' && (
-                            <div className="block">
-                              <span className="mb-1.5 block text-[11px] text-[var(--chat-muted)]">
-                                Date
-                              </span>
-                              {/* Anchor: calendar slides out from under the date field.
-                                  Raise whole stack above Time while the calendar is open. */}
-                              <div
-                                className={`relative ${
-                                  isProjectScheduleDateMounted ? 'z-30' : 'z-10'
-                                }`}
-                              >
-                              <div
-                                className="relative z-20 flex h-9 w-full items-center gap-1 rounded-md border pl-2.5 pr-1"
-                                style={{
-                                  borderColor: 'var(--chat-border)',
-                                  backgroundColor: 'var(--chat-elevated)',
-                                }}
-                              >
-                                <span className="min-w-0 flex-1 truncate text-[13px] text-[var(--chat-text)]">
-                                  {formatScheduleDateDisplay(
-                                    projectScheduledCreateSchedule.date,
-                                  )}
-                                </span>
-                                <IconButton
-                                  icon={CalendarDecl}
-                                  variant="ghost"
-                                  size="sm"
-                                  iconSize={14}
-                                  onClick={toggleProjectScheduleDatePicker}
-                                  aria-label={
-                                    isProjectScheduleDateOpen
-                                      ? 'Close calendar'
-                                      : 'Open calendar'
-                                  }
-                                  aria-expanded={isProjectScheduleDateOpen}
-                                />
-                              </div>
-                              {isProjectScheduleDateMounted && (
-                                <div
-                                  className="absolute left-0 right-0 top-full z-30 overflow-hidden pt-1"
-                                  style={{
-                                    height:
-                                      projectScheduleDatePanelHeight > 0
-                                        ? projectScheduleDatePanelHeight + 4
-                                        : 0,
-                                    pointerEvents: isProjectScheduleDateShown
-                                      ? 'auto'
-                                      : 'none',
-                                  }}
-                                  role="dialog"
-                                  aria-label="Choose date"
-                                >
-                                  <div
-                                    ref={projectScheduleDateContentRef}
-                                    className="rounded-md border shadow-md will-change-transform"
-                                    style={{
-                                      borderColor: 'var(--chat-border)',
-                                      backgroundColor: 'var(--chat-surface)',
-                                      // Slides from under the date field (up = hidden beneath it).
-                                      transform: isProjectScheduleDateShown
-                                        ? 'translateY(0)'
-                                        : 'translateY(calc(-100% - 4px))',
-                                      transition: `transform ${SCHEDULE_DATE_PICKER_MS}ms ${SCHEDULE_DATE_EASE}`,
-                                    }}
-                                  >
-                                    {/* Panel first; text fades slowly (ease-in) so it does not pop. */}
-                                    <div
-                                      style={{
-                                        opacity: isProjectScheduleDateTextShown
-                                          ? 1
-                                          : 0,
-                                        transform: isProjectScheduleDateTextShown
-                                          ? 'translateY(0)'
-                                          : 'translateY(10px)',
-                                        transition: `opacity ${SCHEDULE_DATE_TEXT_MS}ms ${SCHEDULE_DATE_TEXT_EASE}, transform ${SCHEDULE_DATE_TEXT_MS}ms ${SCHEDULE_DATE_TEXT_EASE}`,
-                                      }}
-                                    >
-                                  <div className="flex items-center justify-between px-2.5 pb-1 pt-2.5">
-                                    <span className="text-[12px] font-semibold text-[var(--chat-text)]">
-                                      {projectScheduleCalendarMonth.toLocaleDateString(
-                                        undefined,
-                                        { month: 'long', year: 'numeric' },
-                                      )}
-                                    </span>
-                                    <div className="flex items-center gap-0.5">
-                                      <IconButton
-                                        icon={ChevronRightDecl}
-                                        className="chat-icon-flip-x"
-                                        variant="ghost"
-                                        size="sm"
-                                        iconSize={14}
-                                        onClick={() =>
-                                          setProjectScheduleCalendarMonth(
-                                            (month) =>
-                                              new Date(
-                                                month.getFullYear(),
-                                                month.getMonth() - 1,
-                                                1,
-                                              ),
-                                          )
-                                        }
-                                        aria-label="Previous month"
-                                      />
-                                      <IconButton
-                                        icon={ChevronRightDecl}
-                                        variant="ghost"
-                                        size="sm"
-                                        iconSize={14}
-                                        onClick={() =>
-                                          setProjectScheduleCalendarMonth(
-                                            (month) =>
-                                              new Date(
-                                                month.getFullYear(),
-                                                month.getMonth() + 1,
-                                                1,
-                                              ),
-                                          )
-                                        }
-                                        aria-label="Next month"
-                                      />
-                                    </div>
-                                  </div>
-                                  <div className="grid grid-cols-7 gap-0.5 px-2 pb-1">
-                                    {SCHEDULE_CAL_WEEKDAYS.map((day) => (
-                                      <span
-                                        key={day}
-                                        className="py-1 text-center text-[10px] font-medium text-[var(--chat-muted)]"
-                                      >
-                                        {day}
-                                      </span>
-                                    ))}
-                                    {getScheduleMonthGrid(
-                                      projectScheduleCalendarMonth,
-                                    ).map((cell) => {
-                                      const selected =
-                                        cell.ymd ===
-                                        projectScheduledCreateSchedule.date;
-                                      /* Stays hand-written: a date GRID, not a row of controls.
-                                         Forty-two 28px cells at 11px with no padding, and the third
-                                         dimension is `opacity` — days outside the month sit at 0.45,
-                                         which is neither a variant nor an availability but a fact
-                                         about the data. A control scale has nothing to say about a
-                                         calendar. */
-                                      return (
-                                        <button
-                                          key={cell.ymd}
-                                          type="button"
-                                          onClick={() => {
-                                            setProjectScheduledCreateSchedule(
-                                              (prev) => ({
-                                                ...prev,
-                                                date: cell.ymd,
-                                              }),
-                                            );
-                                            setIsProjectScheduleDateOpen(false);
-                                          }}
-                                          className="h-7 rounded-md text-[11px] font-medium transition-colors"
-                                          style={{
-                                            backgroundColor: selected
-                                              ? 'var(--chat-control)'
-                                              : 'transparent',
-                                            color: selected
-                                              ? 'var(--chat-text)'
-                                              : cell.inMonth
-                                                ? 'var(--chat-text)'
-                                                : 'var(--chat-muted)',
-                                            opacity: cell.inMonth ? 1 : 0.45,
-                                          }}
-                                          aria-pressed={selected}
-                                        >
-                                          {cell.day}
-                                        </button>
-                                      );
-                                    })}
-                                  </div>
-                                  <div
-                                    className="flex items-center justify-between border-t px-2.5 py-1.5"
-                                    style={{ borderColor: 'var(--chat-border)' }}
-                                  >
-                                    {/* `ghost xs`, both of these: no fill, no border, muted ink
-                                        coming up under the pointer. At ~21px tall with 6px padding
-                                        and 11px type they are under the scale, and xs is the nearest
-                                        step in every dimension — 24 / 8 / 12, which is three pixels,
-                                        two and one. Small enough to be the swap §3.3 asks for rather
-                                        than a resize wearing its clothes. */}
-                                    <Button
-                                      variant="ghost"
-                                      size="xs"
-                                      onClick={() => {
-                                        setProjectScheduledCreateSchedule(
-                                          (prev) => ({
-                                            ...prev,
-                                            date: '',
-                                          }),
-                                        );
-                                        setIsProjectScheduleDateOpen(false);
-                                      }}
-                                    >
-                                      Clear
-                                    </Button>
-                                    <Button
-                                      variant="ghost"
-                                      size="xs"
-                                      onClick={() => {
-                                        const today = formatScheduleDateYmd(
-                                          new Date(),
-                                        );
-                                        setProjectScheduledCreateSchedule(
-                                          (prev) => ({
-                                            ...prev,
-                                            date: today,
-                                          }),
-                                        );
-                                        setProjectScheduleCalendarMonth(
-                                          monthStartFromYmd(today),
-                                        );
-                                        setIsProjectScheduleDateOpen(false);
-                                      }}
-                                    >
-                                      Today
-                                    </Button>
-                                  </div>
-                                    </div>
-                                  </div>
-                                </div>
-                              )}
-                              </div>
-                            </div>
-                          )}
-
-                          {projectScheduledCreateSchedule.kind === 'daily' && (
-                            <p className="pt-6 text-[12px] text-[var(--chat-muted)]">
-                              Runs every day at the time below.
-                            </p>
-                          )}
-
-                          {projectScheduledCreateSchedule.kind === 'weekly' && (
-                            <div>
-                              <span className="mb-1.5 block text-[11px] text-[var(--chat-muted)]">
-                                Day
-                              </span>
-                              <div className="grid grid-cols-7 gap-1">
-                                {SCHEDULE_WEEKDAYS.map((day, index) => {
-                                  const active =
-                                    projectScheduledCreateSchedule.weekday === index;
-                                  /* Stays hand-written, and it is off the scale in ONE dimension
-                                     while sitting on it in the other. The box is `h-8`, which is md
-                                     exactly; the type is 11px, which is below xs. Taking md would put
-                                     14px type into a seven-column grid of ~40px cells, and taking xs
-                                     would cut 8px off a row that is already the right height. In a
-                                     grid this narrow the type is the dimension that cannot move. */
-                                  return (
-                                    <button
-                                      key={day}
-                                      type="button"
-                                      onClick={() =>
-                                        setProjectScheduledCreateSchedule((prev) => ({
-                                          ...prev,
-                                          weekday: index,
-                                        }))
-                                      }
-                                      className="h-8 rounded-md text-[11px] font-medium transition-colors"
-                                      style={{
-                                        backgroundColor: active
-                                          ? 'var(--chat-control)'
-                                          : 'transparent',
-                                        color: active
-                                          ? 'var(--chat-text)'
-                                          : 'var(--chat-muted)',
-                                        border: '1px solid var(--chat-border)',
-                                      }}
-                                      aria-pressed={active}
-                                    >
-                                      {day.slice(0, 1)}
-                                    </button>
-                                  );
-                                })}
-                              </div>
-                            </div>
-                          )}
-
-                          {projectScheduledCreateSchedule.kind === 'monthly' && (
-                            <p className="pt-6 text-[12px] text-[var(--chat-muted)]">
-                              Runs on the 1st of each month.
-                            </p>
-                          )}
-                        </div>
-
-                        <div
-                          className={`relative mt-3 block ${
-                            isProjectScheduleDateMounted
-                              ? 'z-0'
-                              : isProjectScheduleTimeMounted
-                                ? 'z-30'
-                                : 'z-10'
-                          }`}
-                        >
-                          <span className="mb-1.5 block text-[11px] text-[var(--chat-muted)]">
-                            Time
-                          </span>
-                          <div
-                            className="relative flex h-9 w-full items-center gap-1 rounded-md border pl-2.5 pr-1"
-                            style={{
-                              borderColor: 'var(--chat-border)',
-                              backgroundColor: 'var(--chat-elevated)',
-                            }}
-                          >
-                            <span className="min-w-0 flex-1 truncate text-[13px] text-[var(--chat-text)]">
-                              {formatScheduleTimeDisplay(
-                                projectScheduledCreateSchedule.time,
-                              )}
-                            </span>
-                            <IconButton
-                              icon={ClockDecl}
-                              variant="ghost"
-                              size="sm"
-                              iconSize={14}
-                              onClick={toggleProjectScheduleTimePicker}
-                              aria-label={
-                                isProjectScheduleTimeOpen
-                                  ? 'Close time picker'
-                                  : 'Open time picker'
-                              }
-                              aria-expanded={isProjectScheduleTimeOpen}
-                            />
-                          </div>
-                          {isProjectScheduleTimeMounted && (
-                            <div
-                              className="absolute left-0 right-0 top-full z-30 overflow-hidden pt-1"
-                              style={{
-                                height:
-                                  projectScheduleTimePanelHeight > 0
-                                    ? projectScheduleTimePanelHeight + 4
-                                    : 0,
-                                pointerEvents: isProjectScheduleTimeShown
-                                  ? 'auto'
-                                  : 'none',
-                              }}
-                              role="dialog"
-                              aria-label="Choose time"
-                            >
-                              <div
-                                ref={projectScheduleTimeContentRef}
-                                className="rounded-md border shadow-md will-change-transform"
-                                style={{
-                                  borderColor: 'var(--chat-border)',
-                                  backgroundColor: 'var(--chat-surface)',
-                                  transform: isProjectScheduleTimeShown
-                                    ? 'translateY(0)'
-                                    : 'translateY(calc(-100% - 4px))',
-                                  transition: `transform ${SCHEDULE_DATE_PICKER_MS}ms ${SCHEDULE_DATE_EASE}`,
-                                }}
-                              >
-                                <div
-                                  style={{
-                                    opacity: isProjectScheduleTimeTextShown
-                                      ? 1
-                                      : 0,
-                                    transform: isProjectScheduleTimeTextShown
-                                      ? 'translateY(0)'
-                                      : 'translateY(10px)',
-                                    transition: `opacity ${SCHEDULE_DATE_TEXT_MS}ms ${SCHEDULE_DATE_TEXT_EASE}, transform ${SCHEDULE_DATE_TEXT_MS}ms ${SCHEDULE_DATE_TEXT_EASE}`,
-                                  }}
-                                >
-                                  {(() => {
-                                    const selected = parseScheduleTime(
-                                      projectScheduledCreateSchedule.time,
-                                    );
-                                    return (
-                                      <div className="grid grid-cols-3 gap-1 p-2">
-                                        <div>
-                                          <span className="mb-1 block px-1 text-[10px] font-medium uppercase tracking-wide text-[var(--chat-muted)]">
-                                            Hour
-                                          </span>
-                                          <div
-                                            className="max-h-36 overflow-y-auto rounded-md border p-0.5"
-                                            style={{
-                                              borderColor: 'var(--chat-border)',
-                                            }}
-                                          >
-                                            {SCHEDULE_HOURS_12.map((hour) => {
-                                              const active =
-                                                selected.hour12 === hour;
-                                              /* Stays hand-written, with the weekday grid's shape:
-                                                 a cell in a scrolling PICKER column, not a button in
-                                                 a row. `h-7` is sm and the type is 12 against sm's 13,
-                                                 which is close — but the cell is `w-full` inside a
-                                                 narrow column with no horizontal padding at all, and
-                                                 `.xeno-btn` carries 10px on each side. Twenty pixels
-                                                 of padding inside a column sized for two digits is
-                                                 the conversion breaking the thing it converts. */
-                                              return (
-                                                <button
-                                                  key={hour}
-                                                  type="button"
-                                                  onClick={() =>
-                                                    setProjectScheduleTimePart(
-                                                      'hour12',
-                                                      hour,
-                                                    )
-                                                  }
-                                                  className="flex h-7 w-full items-center justify-center rounded text-[12px] font-medium transition-colors"
-                                                  style={{
-                                                    backgroundColor: active
-                                                      ? 'var(--chat-control)'
-                                                      : 'transparent',
-                                                    color: active
-                                                      ? 'var(--chat-text)'
-                                                      : 'var(--chat-muted)',
-                                                  }}
-                                                  aria-pressed={active}
-                                                >
-                                                  {hour}
-                                                </button>
-                                              );
-                                            })}
-                                          </div>
-                                        </div>
-                                        <div>
-                                          <span className="mb-1 block px-1 text-[10px] font-medium uppercase tracking-wide text-[var(--chat-muted)]">
-                                            Min
-                                          </span>
-                                          <div
-                                            className="max-h-36 overflow-y-auto rounded-md border p-0.5"
-                                            style={{
-                                              borderColor: 'var(--chat-border)',
-                                            }}
-                                          >
-                                            {SCHEDULE_MINUTES.map((minute) => {
-                                              const active =
-                                                selected.minute === minute;
-                                              /* Stays hand-written — the hour column's twin. */
-                                              return (
-                                                <button
-                                                  key={minute}
-                                                  type="button"
-                                                  onClick={() =>
-                                                    setProjectScheduleTimePart(
-                                                      'minute',
-                                                      minute,
-                                                    )
-                                                  }
-                                                  className="flex h-7 w-full items-center justify-center rounded text-[12px] font-medium transition-colors"
-                                                  style={{
-                                                    backgroundColor: active
-                                                      ? 'var(--chat-control)'
-                                                      : 'transparent',
-                                                    color: active
-                                                      ? 'var(--chat-text)'
-                                                      : 'var(--chat-muted)',
-                                                  }}
-                                                  aria-pressed={active}
-                                                >
-                                                  {minute}
-                                                </button>
-                                              );
-                                            })}
-                                          </div>
-                                        </div>
-                                        <div>
-                                          <span className="mb-1 block px-1 text-[10px] font-medium uppercase tracking-wide text-[var(--chat-muted)]">
-                                            AM/PM
-                                          </span>
-                                          <div
-                                            className="rounded-md border p-0.5"
-                                            style={{
-                                              borderColor: 'var(--chat-border)',
-                                            }}
-                                          >
-                                            {SCHEDULE_MERIDIEMS.map((meridiem) => {
-                                              const active =
-                                                selected.meridiem === meridiem;
-                                              /* Stays hand-written — the hour column's twin. */
-                                              return (
-                                                <button
-                                                  key={meridiem}
-                                                  type="button"
-                                                  onClick={() =>
-                                                    setProjectScheduleTimePart(
-                                                      'meridiem',
-                                                      meridiem,
-                                                    )
-                                                  }
-                                                  className="flex h-7 w-full items-center justify-center rounded text-[12px] font-medium transition-colors"
-                                                  style={{
-                                                    backgroundColor: active
-                                                      ? 'var(--chat-control)'
-                                                      : 'transparent',
-                                                    color: active
-                                                      ? 'var(--chat-text)'
-                                                      : 'var(--chat-muted)',
-                                                  }}
-                                                  aria-pressed={active}
-                                                >
-                                                  {meridiem}
-                                                </button>
-                                              );
-                                            })}
-                                          </div>
-                                        </div>
-                                      </div>
-                                    );
-                                  })()}
-                                </div>
-                              </div>
-                            </div>
-                          )}
-                        </div>
-                        </div>
-                      </div>
-                      </div>
-                    )}
-                    </div>
-                  </div>
-                  <label className="block">
-                    <span className="mb-1.5 block text-[11px] font-medium uppercase tracking-wide text-[var(--chat-muted)]">
-                      Timezone
-                    </span>
-                    <input
-                      type="text"
-                      value={projectScheduledCreateTimezone}
-                      onChange={(event) => setProjectScheduledCreateTimezone(event.target.value)}
-                      placeholder="Europe/Berlin"
-                      required
-                      aria-describedby="project-schedule-timezone-note"
-                      className="h-9 w-full rounded-md border bg-transparent px-3 font-mono text-[12px] text-[var(--chat-text)] outline-none placeholder:text-[var(--chat-muted)]"
-                      style={{
-                        borderColor: projectScheduledPreviewError ? 'var(--chat-danger)' : 'var(--chat-border)',
-                        backgroundColor: 'var(--chat-surface)',
-                      }}
-                    />
-                  </label>
-                  <div
-                    id="project-schedule-timezone-note"
-                    className="rounded-lg border px-3 py-2.5"
-                    style={{ borderColor: 'var(--chat-border)', backgroundColor: 'var(--chat-surface)' }}
-                    aria-live="polite"
-                  >
-                    <div className="flex items-center justify-between gap-2">
-                      <span className="text-[11px] font-medium uppercase tracking-wide text-[var(--chat-muted)]">
-                        Next occurrences
-                      </span>
-                      <span className="font-mono text-[10.5px] text-[var(--chat-muted)]">
-                        {projectScheduledCreateTimezone || 'Timezone required'}
-                      </span>
-                    </div>
-                    {isProjectScheduledPreviewLoading ? (
-                      <p className="mt-2 text-[12px] text-[var(--chat-muted)]">Checking timezone rules…</p>
-                    ) : projectScheduledPreviewError ? (
-                      <p className="mt-2 text-[12px] text-[var(--chat-danger)]" role="alert">
-                        {projectScheduledPreviewError}
-                      </p>
-                    ) : (
-                      <>
-                        <ol className="mt-2 grid gap-1 text-[11.5px] text-[var(--chat-text)]">
-                          {projectScheduledOccurrences.map((iso, index) => (
-                            <li key={iso} className="flex gap-2">
-                              <span className="w-4 flex-shrink-0 font-mono text-[var(--chat-muted)]">{index + 1}.</span>
-                              <time dateTime={iso}>{formatScheduleOccurrence(iso, projectScheduledCreateTimezone)}</time>
-                            </li>
-                          ))}
-                        </ol>
-                        {projectScheduledOccurrences.length > 0 && (() => {
-                          const offsets = scheduleTimezoneOffsets(projectScheduledOccurrences, projectScheduledCreateTimezone);
-                          return (
-                            <p className="mt-2 border-t pt-2 text-[10.5px] leading-relaxed text-[var(--chat-muted)]" style={{ borderColor: 'var(--chat-border)' }}>
-                              {offsets.length > 1
-                                ? `DST transition is visible in this preview (${offsets.join(' → ')}); the selected local wall-clock time is preserved.`
-                                : `Timezone offset ${offsets[0] || projectScheduledCreateTimezone}; daylight-saving gaps are skipped and overlaps use the first occurrence.`}
-                            </p>
-                          );
-                        })()}
-                      </>
-                    )}
-                  </div>
-                  <div className="flex justify-end gap-2 pt-1">
-                    {/* `secondary md` — a `--chat-control` fill with text ink, 32px of box, and it
-                        gains the variant's hairline. The same conversion as the create-project
-                        dialog's Cancel, which is the footer this one copies. */}
-                    <Button
-                      variant="secondary"
-                      size="md"
-                      onClick={closeProjectScheduledCreate}
-                    >
-                      Cancel
-                    </Button>
-                    {/* Stays hand-written: `--chat-text` fill with `--chat-canvas` ink, the
-                        inverted emphasis. Fifteenth in this chat and the FIFTH Cancel/confirm pair
-                        split by the same missing variant (§9). Its disabled branch is the
-                        availability axis written out, which the component would carry. */}
-                    <Button
-                      variant="primary"
-                      size="md"
-                      onClick={submitProjectScheduledCreate}
-                      disabled={
-                        !projectScheduledCreateTitle.trim() ||
-                        !projectScheduledCreatePrompt.trim() ||
-                        !projectScheduledCreateTimezone.trim() ||
-                        projectScheduledOccurrences.length === 0 ||
-                        Boolean(projectScheduledPreviewError) ||
-                        isProjectScheduledPreviewLoading ||
-                        isProjectScheduledCreating
-                      }
-                    >
-                      {isProjectScheduledCreating ? 'Adding…' : 'Add'}
-                    </Button>
-                  </div>
-                </div>
-              </div>
-            </div>,
-            document.body,
-          )}
-        {isSharePreviewMounted &&
-          messages.length > 0 &&
-          createPortal(
-            <ChatShareModal
-              conversationId={activeConversationId ?? 'local-draft'}
-              conversationTitle={
-                conversationHistory.find((convo) => convo.id === activeConversationId)?.title
-              }
-              messages={messages.map((message) => ({
-                id: message.id,
-                sender: message.sender,
-                text: message.parsedAnswer || message.text,
-              }))}
-              themeClassName={`chat-themed xeno-icon-hosts chat-theme-${resolvedChatTheme}`}
-              themeStyle={chatThemePreviewStyle}
-              isOpen={isSharePreviewOpen}
-              isShown={isSharePreviewShown}
-              onClose={() => setIsSharePreviewOpen(false)}
-            />,
-            document.body,
-          )}
-        {isChatFilesModalMounted &&
-          createPortal(
-            <div
-              className={`chat-themed xeno-icon-hosts chat-theme-${resolvedChatTheme} fixed inset-0 z-[999] flex items-center justify-center p-4 backdrop-blur-sm`}
-              data-chat-theme-preference={chatTheme}
-              data-chat-files-preview=""
-              style={{
-                backgroundColor: isChatFilesModalShown
-                  ? 'color-mix(in srgb, var(--chat-text) 28%, transparent)'
-                  : 'color-mix(in srgb, var(--chat-text) 0%, transparent)',
-                transition: `background-color ${SCHEDULE_CREATE_MODAL_MS}ms ${SCHEDULE_DATE_EASE}`,
-                ...chatThemePreviewStyle,
-              }}
-              onClick={closeChatFilesModal}
-            >
-              <style>{CHAT_MODAL_KEYFRAMES_CSS}</style>
-              <div
-                {...chatFilesDialog.panelProps}
-                role="dialog"
-                aria-modal="true"
-                aria-labelledby="chat-files-dialog-title"
-                className="flex h-[min(40rem,80vh)] w-full max-w-[48rem] flex-col overflow-hidden rounded-2xl border"
-                style={{
-                  backgroundColor: 'var(--chat-elevated)',
-                  borderColor: 'var(--chat-border)',
-                  color: 'var(--chat-text)',
-                  boxShadow:
-                    '0 8px 32px color-mix(in srgb, var(--chat-text) 16%, transparent)',
-                  // Same shell as project file preview; origin top-right (⋯ control).
-                  ...chatModalCardMotionStyle(
-                    'top-right',
-                    isChatFilesModalShown,
-                    isChatFilesModalOpen,
-                  ),
-                }}
-                onClick={(event) => event.stopPropagation()}
-              >
-                <div
-                  className="flex flex-shrink-0 items-center gap-2 border-b px-4 py-3"
-                  style={{ borderColor: 'var(--chat-border)' }}
-                >
-                  {chatFilesSelected ? (
-                    <IconButton
-                      icon={ChevronRightDecl}
-                      className="chat-icon-flip-x"
-                      variant="ghost"
-                      size="md"
-                      iconSize={16}
-                      onClick={() => {
-                        setChatFilesSelectedKey(null);
-                        setChatFilesCopied(false);
-                      }}
-                      aria-label="Back to files list"
-                      title="Back"
-                    />
-                  ) : (
-                    <FileText
-                      size={14}
-                      className="flex-shrink-0 text-[var(--chat-muted)]"
-                      aria-hidden="true"
-                    />
-                  )}
-                  <h2
-                    id="chat-files-dialog-title"
-                    className="min-w-0 flex-1 truncate text-[14px] font-semibold tracking-tight text-[var(--chat-text)]"
-                  >
-                    {chatFilesSelected ? chatFilesSelected.name : 'Files in chat'}
-                  </h2>
-                  {/* The file-preview copy button's twin, converted the same way: `ghost md`,
-                      two faces in one button with the ternary in `leadingIcon` so the check draws
-                      rather than appears. */}
-                  {chatFilesSelected && (
-                    <Button
-                      variant="ghost"
-                      size="md"
-                      iconSize={14}
-                      leadingIcon={chatFilesCopied ? CheckDecl : CopyDecl}
-                      data-selection={chatFilesCopied ? 'on' : 'off'}
-                      onClick={() => void copyChatFilesPreview()}
-                      title={chatFilesCopied ? 'Copied' : 'Copy'}
-                    >
-                      {chatFilesCopied ? 'Copied' : 'Copy'}
-                    </Button>
-                  )}
-                  <IconButton
-                    icon={XDecl}
-                    variant="ghost"
-                    size="md"
-                    iconSize={16}
-                    onClick={closeChatFilesModal}
-                    aria-label="Close files in chat"
-                  />
-                </div>
-                <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4">
-                  {chatFilesSelected ? (
-                    <pre className="whitespace-pre-wrap break-words font-mono text-[13.5px] leading-relaxed text-[var(--chat-text)]">
-                      {chatFilesSelected.content}
-                    </pre>
-                  ) : conversationFileItems.length === 0 ? (
-                    <p className="py-10 text-center text-[13px] leading-relaxed text-[var(--chat-muted)]">
-                      No files attached in this conversation yet.
-                    </p>
-                  ) : (
-                    <ul className="flex flex-col gap-1" role="list">
-                      {conversationFileItems.map((item) => (
-                        <li key={item.key}>
-                          {/* `ListRow`: a leading glyph, a title that truncates, a trailing mark
-                              and a hover that paints the whole row. The trailing chevron is
-                              DECORATION rather than an action, which is what lets this row take the
-                              component where the recent-file and catalog rows could not — theirs
-                              carry a real button beside the body, and `ListRow` renders its trailing
-                              slot inside its own. */}
-                          <ListRow
-                            leading={item.kind === 'image'
-                              ? <FileImage size={15} aria-hidden="true" />
-                              : <FileText size={15} aria-hidden="true" />}
-                            title={item.name}
-                            trailing={<ChevronRight size={14} aria-hidden="true" />}
-                            onSelect={() => {
-                              setChatFilesSelectedKey(item.key);
-                              setChatFilesCopied(false);
-                            }}
-                          />
-                        </li>
-                      ))}
-                    </ul>
-                  )}
-                </div>
-              </div>
-            </div>,
-            document.body,
-          )}
+          </ChatModal>
+        )}
         {historyDragGhostTitle != null &&
           createPortal(
             <div
@@ -19527,7 +19337,10 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                           data-goo-row="" className={historyNavItemClass(historyNavView === 'chats' && !isProjectsPageOpen)}
                           onClick={() => {
                             setHistoryNavView('chats');
-                            dismissChatOverlays();
+                            // From a project's page or chat this opens the global list in the sidebar;
+                            // the page itself stays where it is (no teleport, no lost conversation).
+                            if (projectContextId && !activeProjectId) setGlobalSidebarFor(sidebarPlaceKey);
+                            else dismissChatOverlays();
                           }}
                         >
                           <MessagesSquare size={16} className="flex-shrink-0" />
@@ -19601,7 +19414,27 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                           className={`${historyListGoo.hostProps.className} chat-goo chat-goo-list`}
                         >
                         {historyListGoo.pill}
-                        {historyNavView === 'chats' && (
+                        {isProjectScopedSidebar && projectContextId && (
+                          <ProjectChatsSidebarSection
+                            projectId={projectContextId}
+                            projectName={chatProjects.find((p) => p.id === projectContextId)?.name ?? null}
+                            projectsLoaded={projectsLoaded}
+                            chats={conversationHistory
+                              .filter((convo) => convo.projectId === projectContextId && !convo.isArchived)
+                              .sort((a, b) => b.timestamp - a.timestamp)}
+                            activeConversationId={activeConversationId}
+                            isProjectHomeOpen={Boolean(activeProjectId)}
+                            renderRow={(chatId) => {
+                              const row = conversationHistory.find((convo) => convo.id === chatId);
+                              return row ? renderHistoryRow(row, 'recents') : null;
+                            }}
+                            onOpenProject={() => openProject(projectContextId)}
+                            onNewChat={() => handleNewChat()}
+                            onAllProjects={openProjectsPage}
+                            onAllChats={() => { handleNewChat({ leaveProject: true }); }}
+                          />
+                        )}
+                        {!isProjectScopedSidebar && historyNavView === 'chats' && (
                           conversationHistory.filter((c) => !c.isArchived).length === 0 && !searchTermLower ? (
                             <div className="px-2 py-8 text-center">
                               <p className="text-[12px] text-[var(--chat-muted)]">No conversations yet</p>
@@ -19612,6 +19445,13 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                             </div>
                           ) : (
                             <div className="space-y-3">
+                              <PinnedProjectsSection
+                                projects={pinnedProjects.map((project) => ({ id: project.id, name: project.name, count: conversationHistory.filter((c) => c.projectId === project.id).length }))}
+                                activeProjectId={activeProjectId}
+                                onOpen={openProject}
+                                onUnpin={handleToggleProjectPin}
+                                onReorder={handleReorderPinnedProjects}
+                              />
                               {(pinnedConversations.length > 0 ||
                                 (historyDragId != null &&
                                   historyDragFromSectionRef.current === 'recents')) && (
@@ -19748,7 +19588,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                           )
                         )}
 
-                        {historyNavView === 'projects' && (
+                        {!isProjectScopedSidebar && historyNavView === 'projects' && (
                           <div className="space-y-2">
                       {/* Stays hand-written — one of the history sidebar's rows, decided with the
                           seven above it: the library's `Sidebar` is the whole panel, and this one is
@@ -19766,6 +19606,14 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                               emptyPanel('No projects yet', 'Create a project to group related conversations.')
                             ) : (
                               <div className="space-y-0.5">
+                                <PinnedProjectsSection
+                                  showEmptyHint
+                                  projects={pinnedProjects.map((project) => ({ id: project.id, name: project.name, count: conversationHistory.filter((c) => c.projectId === project.id).length }))}
+                                  activeProjectId={activeProjectId}
+                                  onOpen={openProject}
+                                  onUnpin={handleToggleProjectPin}
+                                  onReorder={handleReorderPinnedProjects}
+                                />
                                 {chatProjects.map((project) => {
                                   const count = conversationHistory.filter((c) => c.projectId === project.id).length;
                                   const isActiveProject = activeProjectId === project.id;

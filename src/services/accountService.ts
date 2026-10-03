@@ -141,6 +141,9 @@ export interface Project {
   file_count?: number | string;
   chat_count?: number | string;
   capabilities?: Record<string, boolean>;
+  /** Per-user sidebar pin; absent on responses from older servers. */
+  pinned?: boolean;
+  pin_position?: number | null;
   created_at: string;
   updated_at: string;
 }

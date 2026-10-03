@@ -15,6 +15,8 @@ import './components/playground/Chat/chat-theme.css';
 // The canonical transcript's stylesheet (D10) — the chat mounts its turn head (chat-theme.css bridges the tokens).
 import '@xenosystem/agent-conversation/styles.css';
 import './index.css';
+// After index.css: the composer's one authoritative geometry (approved hybrid design) beats its `!important` rules by order.
+import './components/playground/Chat/chat-composer.css';
 import { SiteGateProvider } from './contexts/SiteGateContext.tsx';
 import { SiteGateWrapper } from './components/auth/SiteGate.tsx';
 import { installActivationInterceptor } from './lib/activationInterceptor';

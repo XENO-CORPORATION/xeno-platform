@@ -1,0 +1,138 @@
+/*
+ * The chat composer, as approved: orchestrator/previews/chat-input-hybrid.html ("Chat States - hybrid").
+ *
+ * ONE stylesheet states the composer's geometry, so the main chat and the project page cannot drift:
+ * both render the same ChatEmptyState, and the only thing that differs is `data-composer-placement`.
+ *
+ *   home  the composer is ONE rounded container; the controls sit INSIDE it (12px radius, 11/12/9 padding).
+ *   dock  the box is a raised plate and the controls row breaks out UNDERNEATH it (12px radius, 12/14).
+ *
+ * It loads AFTER index.css on purpose. The older composer rules (the 18px "composer metrics" block in
+ * index.css, the themed normalisation block in ChatWithLLM, the chip family) are `!important`, so this
+ * file matches their specificity with the `html body` prefix and wins by order. Colours stay on the
+ * --chat-* tokens: the preview's tokens ARE these tokens (chat-theme.css), so the three themes follow.
+ */
+
+/* The preview's --shell-shadow, per theme. */
+.chat-theme-light { --chat-shell-shadow: 0 1px 2px rgba(0, 0, 0, 0.05), 0 10px 30px rgba(0, 0, 0, 0.07); }
+.chat-theme-dim { --chat-shell-shadow: 0 1px 2px rgba(0, 0, 0, 0.3), 0 12px 32px rgba(0, 0, 0, 0.4); }
+.chat-theme-dark { --chat-shell-shadow: 0 1px 2px rgba(0, 0, 0, 0.4), 0 12px 34px rgba(0, 0, 0, 0.55); }
+
+/* ---- the plate -------------------------------------------------------------------------------- */
+html body [data-composer-reveal] [data-chat-composer-shell] {
+  border-radius: 12px !important;
+  background-color: var(--chat-elevated) !important;
+  border-color: var(--chat-border) !important;
+  box-shadow: var(--chat-shell-shadow, none) !important;
+}
+/* The gooey reveal grows a neck out of the box; a drop shadow would paint an edge across it. */
+html body [data-composer-reveal][data-melting="true"] [data-chat-composer-shell] {
+  box-shadow: none !important;
+}
+html body [data-composer-reveal] .chat-gooey-body {
+  border-radius: 12px;
+}
+
+/* ---- the field -------------------------------------------------------------------------------- */
+html body [data-composer-reveal] [data-chat-composer-shell] .chat-input-container {
+  border-radius: 12px !important;
+}
+html body [data-composer-reveal] [data-chat-composer-shell] textarea {
+  display: block;
+  font-size: 14px !important;
+  line-height: 1.5 !important;
+  letter-spacing: -0.006em;
+  padding: 2px 2px 0 !important;
+  min-height: 21px !important;
+  max-height: 220px !important;
+  margin: 0;
+}
+
+/* dock: the box is the raised plate */
+html body [data-composer-reveal][data-composer-placement="dock"] [data-chat-composer-shell] .chat-input-container {
+  padding: 12px 14px !important;
+}
+/* home: the shell is the container, the controls live inside it */
+html body [data-composer-reveal][data-composer-placement="home"] [data-chat-composer-shell] .chat-input-container {
+  padding: 11px 12px 0 !important;
+}
+html body [data-composer-reveal][data-composer-placement="home"] [data-composer-controls="inside"] {
+  padding: 0 12px 9px !important;
+}
+html body [data-composer-reveal][data-composer-placement="home"] [data-composer-controls="inside"] .chat-input-controls {
+  margin-top: 10px !important;
+}
+html body [data-composer-reveal][data-composer-placement="dock"] [data-composer-controls="below"] {
+  padding: 9px 4px 0 !important;
+}
+html body [data-composer-reveal][data-composer-placement="dock"] [data-composer-controls="below"] .chat-input-controls {
+  margin-top: 0 !important;
+}
+
+/* ---- the control row -------------------------------------------------------------------------- */
+html body [data-composer-reveal] .chat-input-controls {
+  gap: 7px;
+}
+/* "+", mic and the other icon buttons: 28px, 7px radius, no stroke, muted until hovered */
+html body [data-composer-reveal] .chat-input-controls .xeno-icon-btn {
+  width: 28px !important;
+  height: 28px !important;
+  border-radius: 7px !important;
+  border-color: transparent !important;
+  background-color: transparent !important;
+  color: var(--chat-muted) !important;
+}
+html body [data-composer-reveal] .chat-input-controls .xeno-icon-btn:hover:not(:disabled) {
+  background-color: var(--chat-hover) !important;
+  color: var(--chat-text) !important;
+}
+html body [data-composer-reveal] .chat-input-controls [data-voice-primary] {
+  width: 28px !important;
+  height: 28px !important;
+  border-radius: 7px !important;
+  border-color: transparent !important;
+  background-color: transparent !important;
+  color: var(--chat-muted) !important;
+}
+html body [data-composer-reveal] .chat-input-controls [data-voice-primary]:hover {
+  background-color: var(--chat-hover) !important;
+  color: var(--chat-text) !important;
+}
+
+/* model | effort: text, not chips */
+html body [data-composer-reveal] [data-composer-model-group] .chat-model-row-trigger {
+  height: 26px !important;
+  min-height: 26px !important;
+  padding: 0 7px !important;
+  border-radius: 6px !important;
+  border-color: transparent !important;
+  background-color: transparent !important;
+  font-size: 11.5px !important;
+  font-weight: 500 !important;
+  line-height: 1 !important;
+  color: var(--chat-text) !important;
+}
+html body [data-composer-reveal] [data-composer-model-group] .chat-model-row-trigger:hover {
+  background-color: var(--chat-hover) !important;
+}
+html body [data-composer-reveal] [data-composer-model-group] .chat-effort-pill {
+  height: 26px !important;
+  padding: 0 5px !important;
+  border-color: transparent !important;
+  background-color: transparent !important;
+}
+
+/* send: 28px, 7px radius, accent when it can send, control fill when it cannot */
+html body [data-composer-reveal] .chat-input-controls [data-composer-send-button] {
+  width: 28px !important;
+  height: 28px !important;
+  border-radius: 7px !important;
+  border-color: transparent !important;
+}
+html body [data-composer-reveal] .chat-input-controls [data-composer-send-button]:disabled:hover {
+  background-color: var(--chat-hover) !important;
+}
+html body [data-composer-reveal] .chat-input-controls [data-composer-send-button] svg {
+  width: 16px;
+  height: 16px;
+}

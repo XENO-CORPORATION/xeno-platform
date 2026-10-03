@@ -20,6 +20,7 @@ import {
 } from '../services/chatProjectAuthority.js';
 import { calculateNextScheduleOccurrence, calculateScheduleOccurrences } from '../services/chatScheduleRecurrence.js';
 import { CHAT_PROJECT_CONTRACTS } from '../config/chatProjectContracts.js';
+import { annotateProjectPins, pinProject, reorderPins, sendChatPinError, unpinProject } from '../services/chatProjectPins.js';
 import { requireActivated } from '../services/accountActivation.js';
 import { chatWebContextService, ChatWebContextError } from '../services/chatWebContext.js';
 import { normalizeTurnRecord, turnImageAssetIds } from '../utils/chatTurnRecord.js';
@@ -2623,11 +2624,56 @@ router.get('/projects', async (req, res) => {
       }
       if (capabilities.viewer) authorized.push({ ...project, capabilities });
     }
-    const rows = authorized.slice(offset, offset + limit);
+    // A pinned project must never fall off the sidebar because 50 newer projects exist: the first
+    // page always carries every pinned project the caller can still see.
+    const page = authorized.slice(offset, offset + limit);
+    const annotated = await annotateProjectPins(req.db, userId, offset === 0 ? authorized : page);
+    const pageIds = new Set(page.map((p) => p.id));
+    const rows = annotated.filter((p) => pageIds.has(p.id) || (offset === 0 && p.pinned));
 
     res.json({ success: true, projects: rows, limit, offset });
   } catch (error) {
     console.error('Failed to list projects:', error);
+    res.status(500).json({ success: false, error: 'Internal server error' });
+  }
+});
+
+// Per-user project pins. (Pinned projects ride along on GET /projects, see annotateProjectPins.)
+router.put('/projects/pins/order', async (req, res) => {
+  try {
+    const userId = req.user?.id;
+    if (!userId) return res.status(401).json({ success: false, error: 'Unauthorized' });
+    const result = await reorderPins(req.db, userId, req.body?.ids);
+    res.json({ success: true, ...result });
+  } catch (error) {
+    if (sendChatAuthorityError(res, error) || sendChatPinError(res, error)) return;
+    console.error('Failed to reorder pinned projects:', error);
+    res.status(500).json({ success: false, error: 'Internal server error' });
+  }
+});
+
+router.put('/projects/:id/pin', async (req, res) => {
+  try {
+    const userId = req.user?.id;
+    if (!userId) return res.status(401).json({ success: false, error: 'Unauthorized' });
+    const result = await pinProject(req.db, userId, req.params.id);
+    res.json({ success: true, project_id: req.params.id, ...result });
+  } catch (error) {
+    if (sendChatAuthorityError(res, error)) return;
+    console.error('Failed to pin project:', error);
+    res.status(500).json({ success: false, error: 'Internal server error' });
+  }
+});
+
+router.delete('/projects/:id/pin', async (req, res) => {
+  try {
+    const userId = req.user?.id;
+    if (!userId) return res.status(401).json({ success: false, error: 'Unauthorized' });
+    const result = await unpinProject(req.db, userId, req.params.id);
+    res.json({ success: true, project_id: req.params.id, ...result });
+  } catch (error) {
+    if (sendChatAuthorityError(res, error)) return;
+    console.error('Failed to unpin project:', error);
     res.status(500).json({ success: false, error: 'Internal server error' });
   }
 });
@@ -2652,7 +2698,8 @@ router.get('/projects/:id', async (req, res) => {
         object: `project:${req.params.id}`, relation, subject: `user:${userId}`,
       })).allowed;
     }
-    res.json({ success: true, project, capabilities });
+    const [annotated] = await annotateProjectPins(req.db, userId, [project]);
+    res.json({ success: true, project: annotated, capabilities });
   } catch (error) {
     if (sendChatAuthorityError(res, error)) return;
     console.error('Failed to get project:', error);
