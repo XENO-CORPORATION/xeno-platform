@@ -147,6 +147,8 @@ import {
 } from './middleware/rateLimiter.js';
 import { rateLimitKey } from './utils/clientIp.js';
 import { sweepExpiredHolds, MICRO_PER_CREDIT } from './utils/creditLedgerV2.js';
+import * as creditLedgerForReconcile from './utils/creditLedgerV2.js';
+import { proxyReceiptVerifierFromEnv, reconcileUnmeasuredDraws } from './services/proxyUsageReceipts.js';
 import { syncGatewayCatalogue } from './services/gatewayCatalogueSync.js';
 import { seedMarketplace } from './database/seeds/marketplace-seed.js';
 import { seedForum } from './database/seeds/forum-seed.js';
@@ -3981,6 +3983,21 @@ startDownloadCleanup();
       t.unref(); sweepHolds();
       return () => clearInterval(t);
     });
+
+    // Late-usage reconciler: an unmeasured run draw (a cut stream) is corrected downward once the
+    // inner proxy's durable receipt of the provider's own usage is available. Off unless the receipt
+    // source is configured (XENO_USAGE_RECEIPT_URL + XENO_USAGE_RECEIPT_READER_KEY).
+    const receiptVerifier = proxyReceiptVerifierFromEnv();
+    if (receiptVerifier) {
+      const reconcileDraws = () => reconcileUnmeasuredDraws(pool, receiptVerifier, { ledger: creditLedgerForReconcile })
+        .then((r) => { if (r.corrected || r.failed) console.log(`[DrawReconciler] corrected=${r.corrected} pending=${r.pending} failed=${r.failed}`); })
+        .catch((e) => console.error('[DrawReconciler] error:', e.message));
+      backgroundLeader.whenLeader(() => {
+        const t = setInterval(reconcileDraws, 5 * 60 * 1000);
+        t.unref(); reconcileDraws();
+        return () => clearInterval(t);
+      });
+    }
 
     // Download-intent sweeper. `expires_at` was in the schema with nothing
     // reading it; expiry is now enforced on read (so the deadline is real at

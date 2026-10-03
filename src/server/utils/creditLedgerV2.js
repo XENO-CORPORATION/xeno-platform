@@ -1594,6 +1594,16 @@ export async function readRunDrawCorrectionsV2(pool, value) {
     walletDebitedMicro: (BigInt(row.charged_micro)-BigInt(row.restored_micro)).toString() };
 }
 
+/** The settled identity of one draw: what a receipt verifier must bind a provider receipt to. No money. */
+export async function readRunDrawDispatchV2(pool, value) {
+  const v = drawShape(value, ['admissionId', 'drawId']);
+  if (!v.drawId) throw drawError('BAD_REQUEST');
+  const row = (await pool.query(`SELECT provider,provider_request_id,model,state,outcome FROM credit_hold_draws
+    WHERE admission_id=$1 AND draw_id=$2`, [v.admissionId, v.drawId])).rows[0];
+  if (!row) throw drawError('NOT_FOUND');
+  return { provider: row.provider, providerRequestId: row.provider_request_id, model: row.model, state: row.state, outcome: row.outcome };
+}
+
 export const RUN_DRAW_CORRECTION_WINDOW_SECONDS = 72 * 3600;
 
 const correctionView = (row, replayed) => ({ correctionId: row.id, drawRowId: row.draw_row_id,
