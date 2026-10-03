@@ -26,7 +26,7 @@ const chat = readFileSync(join(ROOT, 'src', 'components', 'playground', 'Chat', 
 
 const vite = await createServer({ appType: 'custom', logLevel: 'error', optimizeDeps: { noDiscovery: true }, server: { middlewareMode: true } });
 try {
-  const { PASTE_TO_FILE_MIN_CHARS, pasteBecomesFile, makePastedTextFile } = await vite.ssrLoadModule('/src/components/playground/Chat/chatPaste.ts');
+  const { PASTE_TO_FILE_MIN_CHARS, pasteBecomesFile, makePastedTextFile, pastedFiles } = await vite.ssrLoadModule('/src/components/playground/Chat/chatPaste.ts');
 
   test('the threshold is 2000 (the owner decision)', () => {
     assert.equal(PASTE_TO_FILE_MIN_CHARS, 2000);
@@ -49,6 +49,19 @@ try {
     assert.equal(file.name, 'Pasted text.txt');
     assert.equal(file.type, 'text/plain');
     assert.equal(file.size, Buffer.byteLength(text), 'the whole paste is in the file');
+  });
+
+  test('a pasted screenshot/image/file is returned as files (files first, items as fallback), clipboard images renamed', () => {
+    const png = new File(['x'], 'image.png', { type: 'image/png' });
+    const doc = new File(['y'], 'report.pdf', { type: 'application/pdf' });
+    assert.deepEqual(pastedFiles({ files: [png, doc] }).map((f) => f.name), ['Pasted image.png', 'report.pdf']);
+    assert.deepEqual(pastedFiles({ files: [], items: [{ kind: 'string', getAsFile: () => null }, { kind: 'file', getAsFile: () => png }] }).map((f) => f.name), ['Pasted image.png']);
+    assert.deepEqual(pastedFiles({ files: [], items: [] }), []);
+    assert.deepEqual(pastedFiles(null), []);
+  });
+
+  test('the composer attaches pasted files BEFORE the text rule, through the shared upload path', () => {
+    assert.match(chat, /const files = pastedFiles\(event\.clipboardData\);\n\s*if \(files\.length\) \{ event\.preventDefault\(\); void attachFileObjects\(files\); return; \}/);
   });
 
   test('the composer REACHES it: onPaste is wired and routes a diverted paste through the shared upload path', () => {
