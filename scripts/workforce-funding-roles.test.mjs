@@ -6,9 +6,9 @@
 // first; a spend needs the NAMED spender, stays inside the per-run limit and maximum, and its approval is a
 // live permission (an approver who stops being an owner stops the spending).
 // AUTOMATION: an agent budget cannot be approved by the agent's owner, and an independent owner can approve it.
-// NOT EXERCISED: an agent actor itself admitting a run (project participation rules make that fixture
-// impractical here). The spend path is the same code for every principal; only approval independence is
-// agent-specific, and that is what is proven.
+// The agent's own spend path -- admission as an agent principal in a workspace project, within the
+// grant, with the pool paying and the agent's owner untouched -- is proven in
+// workforce-funding-agent-spend.test.mjs, which cites FUND-13 alongside this file.
 // Real admission, canonical reservation and service-receipt settlement proof.
 // Provider-bound dispatch remains unimplemented; no complete funding requirement is cited.
 import test from 'node:test';
