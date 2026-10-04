@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { resolvePrincipal } from './agentIdentity.js';
+import { check } from '../utils/authzReBAC.js';
 
 // PUB-05: contribution records. Every contribution names its type, author,
 // responsible human/account, optional agent/team provenance, target
@@ -64,14 +65,83 @@ async function taskProject(executor, taskId) {
   return rows[0].projectId;
 }
 
+export async function setContributionTerms(poolOrClient, { projectId, actorUserId, requiresCla, claId = null, claVersion = null }) {
+  if (!projectId) throw new Error('projectId is required');
+  if (!actorUserId) throw new Error('actorUserId is required');
+  if (typeof requiresCla !== 'boolean') throw new Error('requiresCla must be boolean');
+  if (requiresCla && (typeof claId !== 'string' || !claId.trim())) {
+    throw new Error('a required contributor agreement names its id');
+  }
+  return withTx(poolOrClient, async (executor) => {
+    const owner = (await executor.query(`SELECT owner_user_id FROM chat_projects WHERE id = $1`, [projectId])).rows[0];
+    if (!owner) throw new Error('Project not found');
+    let admin = owner.owner_user_id && String(owner.owner_user_id) === String(actorUserId);
+    if (!admin) {
+      admin = (await check(executor, {
+        object: `project:${projectId}`, relation: 'admin', subject: `user:${actorUserId}`,
+      })).allowed === true;
+    }
+    if (!admin) throw new Error('contribution_terms_not_authorized');
+    const { rows } = await executor.query(
+      `INSERT INTO project_contribution_terms (project_id, requires_cla, cla_id, cla_version, updated_by_user_id)
+        VALUES ($1, $2, $3, $4, $5)
+        ON CONFLICT (project_id) DO UPDATE
+          SET requires_cla = EXCLUDED.requires_cla, cla_id = EXCLUDED.cla_id,
+              cla_version = EXCLUDED.cla_version, updated_by_user_id = EXCLUDED.updated_by_user_id,
+              updated_at = now()
+        RETURNING *`,
+      [projectId, requiresCla, claId, claVersion, actorUserId],
+    );
+    return rows[0];
+  });
+}
+
+async function readContributionTerms(executor, projectId) {
+  const { rows } = await executor.query(
+    `SELECT requires_cla AS "requiresCla", cla_id AS "claId", cla_version AS "claVersion"
+       FROM project_contribution_terms WHERE project_id = $1`,
+    [projectId],
+  );
+  if (rows.length === 0) return { requiresCla: false, claId: null, claVersion: null };
+  return rows[0];
+}
+
+// The terms version a contribution submits under: the project's published
+// terms where published, else the current draft's, else none yet. The
+// snapshot pins the contribution to the terms both sides saw.
+async function currentTermsVersion(executor, projectId) {
+  const { rows } = await executor.query(
+    `SELECT COALESCE(v.projection->>'termsVersion', (p.draft->>'termsVersion')) AS "termsVersion"
+       FROM project_publications p
+       LEFT JOIN project_publication_versions v
+         ON v.project_id = p.project_id AND v.revision = p.published_revision
+      WHERE p.project_id = $1`,
+    [projectId],
+  );
+  if (rows.length === 0) return null;
+  return rows[0].termsVersion ?? null;
+}
+
 export async function submitContribution(poolOrClient, {
   projectId, taskId = null, type, authorUserId, responsibleUserId,
   provenance = null, revisionHash, evidence = [],
+  origin = null, rightsLicense = null, claId = null,
 }) {
   if (!projectId) throw new Error('projectId is required');
   if (!TYPES.includes(type)) throw new Error('Unknown contribution type');
   if (!authorUserId) throw new Error('authorUserId is required');
   if (!responsibleUserId) throw new Error('responsibleUserId is required');
+  // PUB-04: every contribution declares its origin and rights. No
+  // declaration, no submission — reuse is never assumed.
+  if (typeof origin !== 'string' || !origin.trim() || origin.length > 500) {
+    throw new Error('origin declaration is required');
+  }
+  if (typeof rightsLicense !== 'string' || !rightsLicense.trim() || rightsLicense.length > 500) {
+    throw new Error('rights declaration is required');
+  }
+  if (claId !== null && (typeof claId !== 'string' || !claId.trim() || claId.length > 200)) {
+    throw new Error('invalid contributor agreement reference');
+  }
   const hash = checkedHash(revisionHash);
   const items = checkedEvidence(type, evidence);
   if (provenance !== null && (typeof provenance !== 'object' || Array.isArray(provenance))) {
@@ -89,12 +159,19 @@ export async function submitContribution(poolOrClient, {
     if (!responsible?.usable || responsible.kind !== 'human') {
       throw new Error('responsible_must_be_human');
     }
+    const terms = await readContributionTerms(executor, projectId);
+    if (terms.requiresCla && claId !== terms.claId) {
+      throw new Error('required contributor agreement is missing or mismatched');
+    }
+    const termsVersion = await currentTermsVersion(executor, projectId);
     const id = randomUUID();
     await executor.query(
-      `INSERT INTO contributions (id, project_id, task_id, type, author_user_id, responsible_user_id, provenance, current_revision_no)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, 1)`,
+      `INSERT INTO contributions (id, project_id, task_id, type, author_user_id, responsible_user_id, provenance,
+          current_revision_no, origin, rights_license, cla_id, terms_version)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, 1, $8, $9, $10, $11)`,
       [id, projectId, taskId, type, authorUserId, responsibleUserId,
-        provenance === null ? null : JSON.stringify(provenance)],
+        provenance === null ? null : JSON.stringify(provenance),
+        origin.trim(), rightsLicense.trim(), claId === null ? null : claId.trim(), termsVersion],
     );
     await executor.query(
       `INSERT INTO contribution_revisions (contribution_id, revision_no, revision_hash, evidence, submitted_by_user_id)
@@ -153,6 +230,10 @@ export async function readContribution(poolOrClient, contributionId) {
     provenance: record.provenance,
     currentRevisionNo: Number(record.current_revision_no),
     reviewState: record.review_state,
+    origin: record.origin,
+    rightsLicense: record.rights_license,
+    claId: record.cla_id,
+    termsVersion: record.terms_version,
     revisions,
   };
 }

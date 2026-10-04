@@ -56,7 +56,7 @@ export function normalizeAcceptedSummaries(value, { sources = false } = {}) {
 }
 /** Plain text rendered as text, never HTML. Licence/terms are explicit, never defaulted. */
 export function normalizePublicationContent(value) {
-  const v = publicationRecord(value, ['schemaVersion', 'title', 'purpose', 'license', 'termsVersion', 'contributionGuide', 'roadmap', 'updates', 'acceptedMilestones', 'selectedTasks', 'includeFundingTotals']);
+  const v = publicationRecord(value, ['schemaVersion', 'title', 'purpose', 'license', 'termsVersion', 'contributionGuide', 'roadmap', 'updates', 'acceptedMilestones', 'selectedTasks', 'includeFundingTotals', 'redistribution']);
   if (v.schemaVersion !== 1) fail('unsupported_schema');
   return {
     schemaVersion: 1,
@@ -64,6 +64,11 @@ export function normalizePublicationContent(value) {
     purpose: text(v.purpose, 8000, true),
     license: text(v.license, 2000, true),
     termsVersion: text(v.termsVersion, 120, true),
+    // PUB-04: public visibility is not a license. Redistribution rights
+    // are explicit, and the default is closed: anything without a
+    // redistribution statement publishes as all-rights-reserved, which
+    // no consumer may read as reusable.
+    redistribution: normalizeRedistribution(v.redistribution),
     contributionGuide: text(v.contributionGuide, 8000, true),
     roadmap: text(v.roadmap, 8000),
     updates: text(v.updates, 8000),
@@ -99,6 +104,11 @@ export function normalizeSelectedTaskSummaries(value) {
 export function normalizeFundingTotalsFlag(value) {
   if (value !== true) fail('invalid_funding_totals_flag');
   return true;
+}
+export function normalizeRedistribution(value) {
+  if (value === undefined) return 'all-rights-reserved';
+  if (!['open-source', 'source-available', 'all-rights-reserved'].includes(value)) fail('invalid_redistribution');
+  return value;
 }
 // PUB-02: derived totals only — raised micro-units as a string (BIGINT
 // precision), plus counts. No contributor identities, ever.

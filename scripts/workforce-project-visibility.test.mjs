@@ -46,7 +46,7 @@ test('PUB-01: independent policy fields; unlisted is not authorization; public r
  // The public read is the allowlisted projection and nothing else.
  const pub=await readPublicProject(pool,project);
  assert.deepEqual(Object.keys(pub).sort(),
-  ['contributionGuide','license','maintainer','projectId','purpose','revision','roadmap','schemaVersion','termsVersion','title','updates','url','visibility'].sort(),
+  ['contributionGuide','license','maintainer','projectId','purpose','redistribution','revision','roadmap','schemaVersion','termsVersion','title','updates','url','visibility'].sort(),
   'the public projection carries exactly the allowlisted keys');
  assert.deepEqual(Object.keys(pub.maintainer).sort(),['displayName','handle','id'],'the maintainer block is three fields, no credentials');
  assert.ok(!JSON.stringify(pub).includes('test-hash'),'no credential material reaches the projection');

@@ -223,7 +223,7 @@ const publicFrom = `FROM project_publications p JOIN project_publication_version
     OR (c.workspace_id IS NOT NULL AND w.status='active'))`;
 function publicView(row) {
   const value = row.projection;
-  const content = normalizePublicationContent(Object.fromEntries(['schemaVersion', 'title', 'purpose', 'license', 'termsVersion', 'contributionGuide', 'roadmap', 'updates'].map(k => [k, value[k]])));
+  const content = normalizePublicationContent(Object.fromEntries(['schemaVersion', 'title', 'purpose', 'license', 'termsVersion', 'contributionGuide', 'roadmap', 'updates', 'redistribution'].map(k => [k, value[k]])));
   return { projectId: row.project_id, revision: String(row.published_revision), visibility: row.visibility, ...content,
     ...(value.acceptedMilestones === undefined ? {} : { acceptedMilestones: normalizeAcceptedSummaries(value.acceptedMilestones) }),
     ...(value.selectedTasks === undefined ? {} : { selectedTasks: normalizeSelectedTaskSummaries(value.selectedTasks) }),

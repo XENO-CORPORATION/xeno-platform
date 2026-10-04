@@ -54,7 +54,8 @@ test('PUB-05: typed contribution records with provenance, immutable revisions an
  const made=[];
  for (const [type,hash,proof] of kinds) {
   const record=await submitContribution(pool,{projectId:project,taskId:task,type,authorUserId:dev,
-   responsibleUserId:dev,revisionHash:hash,evidence:proof?[proof]:[]});
+   responsibleUserId:dev,revisionHash:hash,evidence:proof?[proof]:[],
+   origin:'original work by the author',rightsLicense:'MIT'});
   assert.equal(record.type,type,`a ${type} contribution submits`);
   assert.equal(record.revisions[0].revisionHash,hash,'the opaque revision stores verbatim');
   assert.equal(record.reviewState,'pending','records open pending');
@@ -63,28 +64,29 @@ test('PUB-05: typed contribution records with provenance, immutable revisions an
  // Agent authorship with provenance; project-level targeting without a task.
  const agentMade=await submitContribution(pool,{projectId:project,taskId:null,type:'agent-work',
   authorUserId:bot,responsibleUserId:dev,provenance:{agent:'research-bot',team:team},
-  revisionHash:'checkpoint:mind-7:step-4413',evidence:[{trace:'trace-4'}]});
+  revisionHash:'checkpoint:mind-7:step-4413',evidence:[{trace:'trace-4'}],
+  origin:'original work by the author',rightsLicense:'MIT'});
  assert.equal(agentMade.authorUserId,bot,'an agent may author with a human responsible');
  assert.deepEqual(agentMade.provenance,{agent:'research-bot',team},'provenance records the agent and team');
  assert.equal(agentMade.taskId,null,'a contribution may target the project itself');
  // Guards: human responsibility, live authors, honest targets and evidence.
  await assert.rejects(submitContribution(pool,{projectId:project,type:'code',authorUserId:dev,
-   responsibleUserId:bot,revisionHash:'x',evidence:[{a:1}]}),
+   responsibleUserId:bot,revisionHash:'x',evidence:[{a:1}],origin:'o',rightsLicense:'MIT'}),
   e=>/responsible_must_be_human/.test(e.message),'an agent cannot be the responsible party');
  await assert.rejects(submitContribution(pool,{projectId:project,type:'code',authorUserId:dev,
-   responsibleUserId:frozen,revisionHash:'x',evidence:[{a:1}]}),
+   responsibleUserId:frozen,revisionHash:'x',evidence:[{a:1}],origin:'o',rightsLicense:'MIT'}),
   e=>/responsible_must_be_human/.test(e.message),'a suspended account cannot be responsible');
  await assert.rejects(submitContribution(pool,{projectId:project,type:'code',authorUserId:frozen,
-   responsibleUserId:dev,revisionHash:'x',evidence:[{a:1}]}),
+   responsibleUserId:dev,revisionHash:'x',evidence:[{a:1}],origin:'o',rightsLicense:'MIT'}),
   e=>/author_not_usable/.test(e.message),'a suspended account cannot author');
  await assert.rejects(submitContribution(pool,{projectId:project,taskId:foreign,type:'code',authorUserId:dev,
-   responsibleUserId:dev,revisionHash:'x',evidence:[{a:1}]}),
+   responsibleUserId:dev,revisionHash:'x',evidence:[{a:1}],origin:'o',rightsLicense:'MIT'}),
   e=>/not on this project/.test(e.message),'a foreign task refuses');
  await assert.rejects(submitContribution(pool,{projectId:project,type:'carrier-pigeon',authorUserId:dev,
    responsibleUserId:dev,revisionHash:'x',evidence:[]}),
   e=>/Unknown contribution type/.test(e.message),'an unknown type refuses');
  await assert.rejects(submitContribution(pool,{projectId:project,type:'code',authorUserId:dev,
-   responsibleUserId:dev,revisionHash:'x',evidence:[]}),
+   responsibleUserId:dev,revisionHash:'x',evidence:[],origin:'o',rightsLicense:'MIT'}),
   e=>/require evidence/.test(e.message),'code without evidence refuses');
  // Revisions append; history never rewrites.
  const first=made[0];
