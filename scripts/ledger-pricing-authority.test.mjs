@@ -28,19 +28,17 @@
  *
  * What is actually missing is the ACCT VOCABULARY, not the ledger under it:
  *
- *   ACCT-08  its pricing clause is proven BELOW -- the platform prices from model and tokens, a
- *            caller naming a price is refused, and a usage without a usage object is refused
- *            ("the caller cannot send money"). But the same requirement demands account history
- *            showing "incoming/outgoing gifts, contributions, reservations, usage and returns".
- *            Reservations, usage, project contributions and origin-preserving contribution returns
- *            now exist. Gifts and the unified account-history UI remain unimplemented; a citation
- *            here would still claim more than this pricing test proves.
- *   ACCT-02  the three operations it exists to distinguish -- gift, contribute, budget allocation
- *            -- still need a composed UI/API proof. Contributions now use workforceFunding;
- *            holds/grants back budget allocation, while gifting remains to be built.
- *   ACCT-03/04/05/06  are entirely about gift mechanics: recipient confirmation, atomic
- *            debit-and-credit with a receipt, non-cancellability with a separately authorized
- *            return, opt-out. None exists.
+ *   ACCT-08  NOW CITED by scripts/account-history.test.mjs; its pricing clause is proven BELOW
+ *            (a caller naming a price is refused; a usage without a usage object is
+ *            refused -- "the caller cannot send money"), and the unified five-movement history
+ *            with durable statuses is proven there.
+ *   ACCT-02  NOW CITED by scripts/account-operation-distinction.test.mjs: gift vs contribute vs
+ *            budget allocation composed at the typed API, with shape rejection of keys,
+ *            subscriptions and tokens.
+ *   ACCT-03  NOW CITED with ACCT-04 by scripts/account-gift-transfer.test.mjs (recipient
+ *            confirmation, atomic debit-and-credit with receipt and roots); ACCT-05 by
+ *            scripts/account-gift-return.test.mjs (non-cancellable, separately authorized return);
+ *            ACCT-06 by scripts/account-gift-preferences.test.mjs (opt-out, pause, enforcement).
  *   ACCT-01  "the central Platform/account ledger is authoritative ... the XENO private API must
  *            not keep an independent spendable balance." The platform half is proven here. The
  *            other half is a claim about a DIFFERENT REPOSITORY (xeno-api-proxy), which this suite
