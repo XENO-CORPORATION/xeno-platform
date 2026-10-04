@@ -1182,7 +1182,9 @@ export async function settleProjectRunV2(pool, receipt) {
     await db.query('SELECT pg_advisory_xact_lock(hashtextextended($1,0))',[`funding-budget:${a.pool_id}`]);
     const prior=(await db.query('SELECT * FROM workforce_funding_settlements WHERE root_admission_id=$1 OR event_id=$2',[a.id,input.eventId])).rows[0];
     if(prior){if(prior.request_hash!==hash)throw bad('CONFLICT');await db.query('COMMIT');return view(prior,true);}
-    if(a.price_snapshot?.model!==input.model)throw bad('CONFLICT');
+    // Same vocabulary as the draw path: a receipt under any model but the pinned tariff
+    // is refused as not-approved, distinct from a replay-payload conflict.
+    if(a.price_snapshot?.model!==input.model)throw Object.assign(bad('CONFLICT'),{reason:'MODEL_NOT_APPROVED'});
     const priced=BigInt(pricePinnedChatUsage(a.price_snapshot,{inputTokens,outputTokens}));
     const account=(await db.query('SELECT * FROM credit_accounts WHERE user_id=$1 FOR UPDATE',[a.payer_user_id])).rows[0];
     if(!account||account.owner_kind!=='project_pool')throw bad('RESTRICTED_ACCOUNT');
