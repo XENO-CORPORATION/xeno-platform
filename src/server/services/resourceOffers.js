@@ -17,7 +17,10 @@ const uuid = (value, what = 'id') => {
 };
 
 async function withTx(poolOrClient, fn) {
-  if (typeof poolOrClient.connect === 'function') {
+  // NOTE: a pg Client also has .connect, so "has connect" cannot discriminate
+  // a Pool from an already-connected Client. Pool.totalCount does: Clients
+  // never carry it. Nested service calls pass the Client straight through.
+  if (typeof poolOrClient.connect === 'function' && typeof poolOrClient.totalCount === 'number') {
     const client = await poolOrClient.connect();
     try {
       await client.query('BEGIN');
