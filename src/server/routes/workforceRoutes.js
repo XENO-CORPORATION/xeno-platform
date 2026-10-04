@@ -153,14 +153,36 @@ function leaseObservation(value) {
       || typeof l.sequence !== 'string' || !/^[1-9][0-9]{0,18}$/.test(l.sequence) || !capabilities(l.effectiveCapabilities)
       || typeof value.token !== 'string' || !/^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/.test(value.token)
       || !(Date.parse(l.expiresAt) > Date.parse(l.issuedAt)) || Date.parse(l.expiresAt) - Date.parse(l.issuedAt) > 60_000) return null;
-    return { lease: fields(l, LEASE_FIELDS), token: value.token };
+    // RUN-07: what the run can still fund, or null when it has no reservation to read. A malformed budget
+    // is not a smaller budget: the whole observation is refused rather than relayed.
+    const budget = runBudget(value.budget);
+    if (budget === undefined) return null;
+    return { lease: fields(l, LEASE_FIELDS), token: value.token, budget };
   } catch { return null; }
 }
+/** A budget as the service decided it, null when absent, undefined when malformed. */
+function runBudget(b) {
+  if (b === undefined || b === null) return null;
+  if (typeof b !== 'object' || Array.isArray(b) || typeof b.remainingMicro !== 'string' || !/^[0-9]{1,20}$/.test(b.remainingMicro)) return undefined;
+  const at = b.reservationExpiresAt;
+  if (at !== null && at !== undefined && (typeof at !== 'string' || Number.isNaN(Date.parse(at)))) return undefined;
+  return { remainingMicro: b.remainingMicro, reservationExpiresAt: at ?? null };
+}
+const RUN_STATES = new Set(['active', 'exhausted', 'revoked', 'expired', 'finished']);
+const RUN_DURABLE_REASONS = new Set(['budget_exhausted', 'stopped', 'authority_lost']);
 function authorityObservation(value) {
   try {
     if (!value || value.schemaVersion !== 1 || uuid(value.admissionId) !== value.admissionId || typeof value.revoked !== 'boolean') return null;
     if (value.fencedByAdmissionId !== undefined && value.fencedByAdmissionId !== null && uuid(value.fencedByAdmissionId) !== value.fencedByAdmissionId) return null;
-    return fields(value, ['schemaVersion', 'admissionId', 'revoked', 'reason', 'revokedAt', 'latestLeaseSequence', 'replayed', 'fencedByAdmissionId']);
+    // RUN-07: the run's durable state, in the closed vocabularies the service uses. An unknown word is not
+    // relayed as a state: the observation is refused.
+    if (value.state !== undefined && !RUN_STATES.has(value.state)) return null;
+    if (value.durableReason !== undefined && value.durableReason !== null && !RUN_DURABLE_REASONS.has(value.durableReason)) return null;
+    const budget = value.remainingMicro === undefined ? undefined : runBudget({ remainingMicro: value.remainingMicro, reservationExpiresAt: value.reservationExpiresAt });
+    if (budget === undefined && value.remainingMicro !== undefined) return null;
+    const out = fields(value, ['schemaVersion', 'admissionId', 'revoked', 'reason', 'revokedAt', 'latestLeaseSequence', 'replayed', 'fencedByAdmissionId', 'state', 'durableReason']);
+    if (value.remainingMicro !== undefined) { out.remainingMicro = value.remainingMicro; out.reservationExpiresAt = budget.reservationExpiresAt; }
+    return out;
   } catch { return null; }
 }
 

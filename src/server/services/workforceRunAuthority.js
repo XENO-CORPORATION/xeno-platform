@@ -292,7 +292,12 @@ export async function authorizeRunStep(pool, authenticatedContext, value, { sign
     const lease = (await db.query(`INSERT INTO workforce_run_leases(admission_id,sequence,operation,capability,effective_capabilities,
         issued_at,expires_at,signing_kid,token_hash) VALUES($1,$2,$3,$4,$5,to_timestamp($6),to_timestamp($7),$8,$9) RETURNING *`,
     [admissionId, sequence.toString(), operation, capability, JSON.stringify(live), iat, exp, signingKey.kid, tokenHash])).rows[0];
-    return { token, lease: publicLease(lease) };
+    // RUN-07: what the run can still fund, read in the same transaction as the lease, so a runtime can
+    // suspend BEFORE spending rather than learn from a refused draw. Informational: the lease still
+    // attests authority only, and the draw is still checked against the ledger at dispatch.
+    const funding = await readRunFundingStateV2(db, admissionId);
+    return { token, lease: publicLease(lease),
+      budget: funding ? { remainingMicro: funding.remainingMicro, reservationExpiresAt: funding.reservationExpiresAt } : null };
   }).catch(async (error) => {
     // A terminal loss is recorded in its OWN transaction: the refused step rolled back, the revocation
     // must not. Idempotent -- a second loss for the same admission keeps the first reason.

@@ -74,6 +74,7 @@ test('real HTTP/authMiddleware/JWT/DPoP boundary with query-aware auth DB and in
   // RUN-01/RUN-02 over HTTP: the admission service is injected exactly like the resource services.
   let admitFailure;
   let admitResult;
+  let authorityResult;
   let pinResult;
   let capacityResult;
   let evaluationResult;
@@ -164,7 +165,7 @@ test('real HTTP/authMiddleware/JWT/DPoP boundary with query-aware auth DB and in
     revokeRun: async (pool, context, value) => { calls.push({ method: 'revoke', context, body: value });
       return { schemaVersion: 1, admissionId: operationId, revoked: true, reason: 'stopped_by_actor', revokedAt: '2026-09-25T12:00:00.000Z', replayed: false }; },
     readRunAuthority: async (pool, context, value) => { calls.push({ method: 'authority', context, body: value });
-      return { schemaVersion: 1, admissionId: operationId, revoked: false, reason: null, latestLeaseSequence: '1' }; } }));
+      return authorityResult ?? { schemaVersion: 1, admissionId: operationId, revoked: false, reason: null, latestLeaseSequence: '1' }; } }));
   const server = app.listen(0, '127.0.0.1');
   await new Promise(resolve => server.once('listening', resolve));
   const origin = `http://127.0.0.1:${server.address().port}`;
@@ -673,6 +674,19 @@ test('real HTTP/authMiddleware/JWT/DPoP boundary with query-aware auth DB and in
         assert.equal((await request({ path: '/run-admissions/authorize-step', body: stepBody })).status, 500, 'a lease longer than 60 s is never reported');
       }
       admitResult = undefined;
+      // RUN-07: what the run can still fund travels with the lease -- and a malformed budget is never relayed.
+      const leaseOf = (budget) => ({ token: 'aaa.bbb.ccc', lease: { schemaVersion: 1, leaseId: operationId, admissionId: operationId, sequence: '1',
+        operation: 'provider_dispatch', capability: null, effectiveCapabilities: [], issuedAt: '2026-09-25T12:00:00.000Z', expiresAt: '2026-09-25T12:01:00.000Z', kid: 'k' }, ...(budget === undefined ? {} : { budget }) });
+      assert.equal((await request({ path: '/run-admissions/authorize-step', body: stepBody })).body.budget, null, 'a service that says nothing yields no budget, not a made-up one');
+      admitResult = leaseOf({ remainingMicro: '4200', reservationExpiresAt: '2026-09-25T13:00:00.000Z', internal: 'hidden' });
+      assert.deepEqual((await request({ path: '/run-admissions/authorize-step', body: stepBody })).body.budget, { remainingMicro: '4200', reservationExpiresAt: '2026-09-25T13:00:00.000Z' }, 'the remaining budget crosses, and nothing else of it');
+      admitResult = leaseOf(null);
+      assert.equal((await request({ path: '/run-admissions/authorize-step', body: stepBody })).body.budget, null, 'a run with no reservation has no budget to report');
+      for (const bad of [{ remainingMicro: 4200 }, { remainingMicro: '-1' }, { remainingMicro: '1e3' }, { remainingMicro: '5', reservationExpiresAt: 'soon' }, 'cheap']) {
+        admitResult = leaseOf(bad);
+        assert.equal((await request({ path: '/run-admissions/authorize-step', body: stepBody })).status, 500, 'a malformed budget is refused whole: ' + JSON.stringify(bad));
+      }
+      admitResult = undefined;
       const { RunAdmissionError } = await import('../src/server/services/workforceRunAdmission.js');
       admitFailure = new RunAdmissionError('denied', 'admission_revoked', { revocation: 'authority_lost', sql: 'SECRET' });
       const refused = await request({ path: '/run-admissions/authorize-step', body: stepBody });
@@ -695,6 +709,17 @@ test('real HTTP/authMiddleware/JWT/DPoP boundary with query-aware auth DB and in
       const state = await request({ path: '/run-admissions/authority', body: { admissionId: operationId }, token: mint({ scope: 'workforce:read' }) });
       assert.equal(state.status, 200);
       assert.equal(state.body.revoked, false);
+      // RUN-07: the run's durable state crosses in the service's closed vocabulary; an unknown word is refused.
+      const base = { schemaVersion: 1, admissionId: operationId, revoked: false, reason: null, latestLeaseSequence: '1' };
+      authorityResult = { ...base, state: 'exhausted', durableReason: 'budget_exhausted', remainingMicro: '0', reservationExpiresAt: '2026-09-25T13:00:00.000Z', internal: 'hidden' };
+      const exhausted = await request({ path: '/run-admissions/authority', body: { admissionId: operationId }, token: mint({ scope: 'workforce:read' }) });
+      assert.deepEqual([exhausted.body.state, exhausted.body.durableReason, exhausted.body.remainingMicro, exhausted.body.reservationExpiresAt, 'internal' in exhausted.body],
+        ['exhausted', 'budget_exhausted', '0', '2026-09-25T13:00:00.000Z', false], 'the durable state crosses, and nothing else');
+      for (const bad of [{ state: 'running' }, { durableReason: 'because' }, { remainingMicro: 5 }, { remainingMicro: '5', reservationExpiresAt: 'soon' }]) {
+        authorityResult = { ...base, ...bad };
+        assert.equal((await request({ path: '/run-admissions/authority', body: { admissionId: operationId }, token: mint({ scope: 'workforce:read' }) })).status, 500, 'an unknown state word is never relayed: ' + JSON.stringify(bad));
+      }
+      authorityResult = undefined;
       assert.equal((await request({ path: '/run-admissions/authority', body: { admissionId: operationId, extra: 1 } })).status, 400);
       assert.equal((await request({ method: 'GET', path: '/run-admissions/authorize-step' })).status, 405);
     });
