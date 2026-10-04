@@ -124,6 +124,93 @@ export async function allocateContributionFunding(client, userId, amountMicro, {
   return { accountId: account.id, amountMicro, allocations };
 }
 
+/** Select giftable verified value on the caller's transaction. Mirrors the contribution
+ * allocator's lock order (charges, both endpoints sorted, lots) and its verified-origin rule,
+ * with two deliberate differences: the destination is an ordinary user account, and gift lots
+ * from earlier hops are eligible when their recorded stripe root is still verified, unrefunded
+ * and unquarantined. A hand-forged 'gift:%' label with no gift row behind it selects nothing.
+ * Per-gift explicit confirmation replaces the standing usage-credit preference. */
+export async function allocateGiftFunding(client, senderId, amountMicro, { destinationOwnerId } = {}) {
+  if (typeof amountMicro !== 'string' || !/^[1-9][0-9]{0,17}$/.test(amountMicro)) {
+    throw Object.assign(new Error('Gift amount must be exact positive micro-credits'), { code: 'INVALID_GIFT_AMOUNT' });
+  }
+  if (typeof destinationOwnerId !== 'string' || !destinationOwnerId) {
+    throw Object.assign(new Error('Gift destination unavailable'), { code: 'GIFT_DESTINATION_UNAVAILABLE' });
+  }
+  const evidence=(await client.query("SELECT to_regclass('billing_charges') AS charges,to_regclass('billing_account_binding') AS binding")).rows[0];
+  if(!evidence?.charges || !evidence.binding) {
+    throw Object.assign(new Error('No verified payment history is available'),{code:'INSUFFICIENT_GIFTABLE_CREDITS'});
+  }
+  const hasGiftLots=((await client.query("SELECT to_regclass('workforce_gift_lots') AS relation")).rows[0]?.relation) ?? null;
+  // One ordered lock over the sender's own charges AND the stripe roots of their gift lots:
+  // two gifts racing opposite directions take the same order, so no deadlock.
+  const charges = (await client.query(`SELECT c.payment_intent FROM billing_charges c
+    WHERE c.payment_intent IN (
+      SELECT cc.payment_intent FROM billing_charges cc
+      JOIN credit_grant_payment_origins o ON o.payment_intent=cc.payment_intent
+      JOIN credit_grants g ON g.id=o.grant_id
+      JOIN billing_account_binding b ON b.singleton=true AND b.account_id=o.provider_account AND b.mode=o.provider_mode
+      WHERE g.user_id=$1 AND cc.user_id=$1::text
+      ${hasGiftLots ? `UNION SELECT cc.payment_intent FROM credit_grants g
+      JOIN workforce_gift_lots gl ON gl.recipient_grant_id=g.id
+      JOIN credit_grant_payment_origins o ON o.grant_id=gl.root_origin_grant_id
+      JOIN billing_charges cc ON cc.payment_intent=o.payment_intent
+      JOIN billing_account_binding b ON b.singleton=true AND b.account_id=o.provider_account AND b.mode=o.provider_mode
+      WHERE g.user_id=$1 AND g.kind='paid' AND g.source_ref LIKE 'gift:%'` : ``}
+    ) ORDER BY c.payment_intent FOR UPDATE OF c`, [senderId])).rows.map(r => r.payment_intent);
+  const hasQuarantine=(await client.query("SELECT to_regclass('workforce_funding_origin_quarantine') AS relation")).rows[0]?.relation;
+  const quarantined=hasQuarantine ? (await client.query('SELECT DISTINCT grant_id FROM workforce_funding_origin_quarantine')).rows.map(r=>r.grant_id) : [];
+  const owners = [senderId, destinationOwnerId].sort();
+  const accounts = (await client.query('SELECT id,user_id,balance,is_frozen,owner_kind FROM credit_accounts WHERE user_id=ANY($1::uuid[]) ORDER BY user_id FOR UPDATE', [owners])).rows;
+  const account = accounts.find(a => a.user_id === senderId);
+  const destination = accounts.find(a => a.user_id === destinationOwnerId);
+  if (!destination || destination.owner_kind !== 'user' || destination.is_frozen) {
+    throw Object.assign(new Error('Gift destination unavailable'), { code: 'GIFT_DESTINATION_UNAVAILABLE' });
+  }
+  if (!account || account.owner_kind !== 'user' || account.is_frozen) {
+    throw Object.assign(new Error('Gift account unavailable'), { code: 'GIFT_ACCOUNT_UNAVAILABLE' });
+  }
+  const { rows: lots } = await client.query(`SELECT g.id,g.priority,g.expires_at,g.source_ref,
+      gl.root_origin_grant_id AS root_origin_grant_id,
+      g.remaining_micro-COALESCE((SELECT SUM(f.reserved_micro) FROM credit_hold_funding f
+        JOIN credit_holds h ON h.id=f.hold_row_id WHERE f.grant_id=g.id AND h.state='held'),0) AS available
+    FROM credit_grants g
+    LEFT JOIN workforce_gift_lots gl ON gl.recipient_grant_id=g.id
+    LEFT JOIN credit_grant_payment_origins o ON o.grant_id=COALESCE(gl.root_origin_grant_id,g.id)
+    LEFT JOIN billing_charges c ON c.payment_intent=o.payment_intent
+    LEFT JOIN billing_account_binding b ON b.singleton=true AND b.account_id=o.provider_account AND b.mode=o.provider_mode
+    WHERE g.user_id=$1 AND g.account_id=$2 AND g.kind='paid'
+      AND g.remaining_micro>0 AND (g.expires_at IS NULL OR g.expires_at>now())
+      AND c.payment_intent=ANY($3::text[]) AND c.refunded_micro=0 AND b.account_id IS NOT NULL
+      AND NOT (COALESCE(gl.root_origin_grant_id,g.id)=ANY($4::uuid[]))
+      AND ((g.source_ref LIKE 'stripe:checkout:%' AND o.grant_id=g.id AND g.amount_micro=o.amount_micro
+          AND g.source_ref='stripe:checkout:' || o.checkout_session AND c.credits_micro=o.amount_micro)
+        OR (g.source_ref LIKE 'gift:%' AND gl.recipient_grant_id IS NOT NULL))
+    ORDER BY g.priority,g.expires_at ASC NULLS LAST,g.created_at,g.id FOR UPDATE OF g`,
+    [senderId, account.id, charges, quarantined.length ? quarantined : ['00000000-0000-0000-0000-000000000000']]);
+  const legacy = (await client.query(`SELECT COALESCE(SUM(h.amount_micro-h.settled_micro),0) AS reserved
+    FROM credit_holds h WHERE h.user_id=$1 AND h.state='held'
+      AND NOT EXISTS (SELECT 1 FROM credit_hold_funding f WHERE f.hold_row_id=h.id)`, [senderId])).rows[0];
+  let withheld = BigInt(legacy.reserved), need = BigInt(amountMicro);
+  const allocations = [];
+  for (const lot of lots) {
+    if (need === 0n) break;
+    let available = BigInt(lot.available);
+    if (available <= 0n) continue;
+    const reserved = withheld < available ? withheld : available;
+    available -= reserved; withheld -= reserved;
+    if (available <= 0n) continue;
+    const take = available < need ? available : need;
+    allocations.push({ grantId: lot.id, rootOriginGrantId: lot.root_origin_grant_id ?? lot.id,
+      amountMicro: String(take), expiresAt: lot.expires_at, priority: lot.priority });
+    need -= take;
+  }
+  if (need > 0n || BigInt(account.balance) < BigInt(amountMicro)) {
+    throw Object.assign(new Error('Insufficient verified uncommitted giftable value'), { code: 'INSUFFICIENT_GIFTABLE_CREDITS' });
+  }
+  return { accountId: account.id, destinationAccountId: destination.id, amountMicro, allocations };
+}
+
 export async function saveHoldFunding(client, holdRowId, funding) {
   await client.query('DELETE FROM credit_hold_funding WHERE hold_row_id=$1', [holdRowId]);
   for (const [order, f] of funding.entries()) await client.query(
