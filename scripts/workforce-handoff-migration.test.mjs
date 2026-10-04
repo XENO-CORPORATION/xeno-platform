@@ -49,8 +49,9 @@
  *            transcript or its source workspace's history. Cited there rather than here because the
  *            proof needs the chat tables this suite does not build.
  *
- *   NFR-03   "at most one effective contribution, reservation, settlement and result delivery per
- *            logical operation under duplicate requests/restarts." The durable-operation identity
+ *   NFR-03   ✅ NOW CITED, in workforce-single-effect.test.mjs: "at most one effective contribution,
+ *            reservation, settlement and result delivery per logical operation under duplicate
+ *            requests/restarts." The durable-operation identity
  *            (actor_user_id, client_id, operation_id) genuinely delivers at-most-once and is
  *            proven above. CORRECTED 2026-09-23: this note used to say NFR-03's four nouns are
  *            "FUND-domain concepts with no tables". Two of them are not. RESERVATION and
@@ -59,9 +60,10 @@
  *            (service-ledger.test.mjs) and a replayed settle is a no-op on a non-held hold
  *            (usage-credit-postgres-proof.mjs). Updated 2026-09-28: contributions now have an
  *            atomic ledger path and a fresh-process retry proof (credit-payment-origin.test.mjs,
- *            FUND-04); RUN-04 also records result delivery. This suite still does not cite NFR-03:
- *            qualification of restart/replay across all four operations belongs in their composed
- *            integration proof, not in this handoff migration test. */
+ *            FUND-04); RUN-04 also records result delivery. Updated 2026-10-04: the composed
+ *            integration proof this note asked for exists -- workforce-single-effect.test.mjs replays
+ *            a duplicated and restarted request across all four operations and asserts one effect.
+ *            This suite still does not cite NFR-03 itself; the citation lives there. */
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
