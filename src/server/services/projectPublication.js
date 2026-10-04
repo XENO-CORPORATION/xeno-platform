@@ -2,7 +2,8 @@ import { resolvePrincipal } from './agentIdentity.js';
 import { check } from '../utils/authzReBAC.js';
 import { authorityTransaction, lockWorkspaceAuthority, operationHash } from './workspaceOperationReceipts.js';
 import { normalizePublicationContent, publicationRecord, publicationId, publicationRevision,
-  publicationVisibility, publicProjectPath, normalizeAcceptedSummaries } from '../config/projectPublicationContract.js';
+  publicationVisibility, publicProjectPath, normalizeAcceptedSummaries,
+  normalizeSelectedTaskSummaries, normalizeFundingTotals } from '../config/projectPublicationContract.js';
 
 export class ProjectPublicationError extends Error {
   constructor(code, status = 409) { super(code); this.code = code; this.status = status; }
@@ -68,7 +69,7 @@ const acceptanceHash = row => operationHash({ milestoneId: row.id, termsVersion:
   decision: row.request_hash, evidence: row.evidence });
 async function previewOf(db, project, principal, state, visibility) {
   if (!state.draft || visibility === 'private') fail('draft_and_audience_required', 400);
-  const { acceptedMilestones, ...content } = normalizePublicationContent(state.draft);
+  const { acceptedMilestones, selectedTasks, includeFundingTotals, ...content } = normalizePublicationContent(state.draft);
   const bindings = [], summaries = [];
   for (const selected of acceptedMilestones || []) {
     const row = (await db.query(`${acceptedSelect} ${acceptedFrom} AND m.id=$2 FOR SHARE OF m,c`, [project.id, selected.milestoneId])).rows[0];
@@ -76,8 +77,43 @@ async function previewOf(db, project, principal, state, visibility) {
     bindings.push({ milestoneId: row.id, acceptanceHash: selected.acceptanceHash });
     summaries.push({ label: selected.label, summary: selected.summary, status: 'accepted' });
   }
+  // PUB-02: selected tasks resolve against the live work tree. The task
+  // must belong to this project through milestone -> goal; its CURRENT
+  // status snapshots into the projection and binds into the preview hash,
+  // so a status change after preview invalidates the publish.
+  const taskSummaries = [];
+  for (const selected of selectedTasks || []) {
+    const row = (await db.query(
+      `SELECT t.id, t.status FROM project_tasks t
+         JOIN project_milestones m ON m.id = t.milestone_id
+         JOIN project_goals g ON g.id = m.goal_id
+        WHERE t.id = $1 AND g.project_id = $2 FOR SHARE OF t`,
+      [selected.taskId, project.id])).rows[0];
+    if (!row) fail('selected_task_unavailable');
+    bindings.push({ taskId: row.id, status: row.status });
+    taskSummaries.push({ label: selected.label, status: row.status });
+  }
+  // PUB-02: funding totals derive from confirmed contributions across the
+  // project's campaigns at preview time. Pending, returned and disputed
+  // money is not raised money; contributor identities never leave the ledger.
+  let fundingTotals;
+  if (includeFundingTotals) {
+    const totals = (await db.query(
+      `SELECT COALESCE(SUM(c.amount_micro), 0)::text AS raised,
+              COUNT(c.id)::int AS contributions,
+              COUNT(DISTINCT k.id)::int AS campaigns
+         FROM workforce_funding_campaigns k
+         LEFT JOIN workforce_funding_contributions c
+           ON c.campaign_id = k.id AND c.state = 'confirmed'
+        WHERE k.project_id = $1`,
+      [project.id])).rows[0];
+    fundingTotals = { raisedMicro: totals.raised, contributionCount: totals.contributions, campaignCount: totals.campaigns };
+    bindings.push({ fundingTotals });
+  }
   const projection = { projectId: project.id, ...content,
     ...(acceptedMilestones === undefined ? {} : { acceptedMilestones: summaries }),
+    ...(selectedTasks === undefined ? {} : { selectedTasks: taskSummaries }),
+    ...(fundingTotals === undefined ? {} : { fundingTotals }),
     maintainer: { id: principal.id, handle: principal.handle, displayName: principal.displayName },
     url: publicProjectPath(project.id) };
   const previewHash = operationHash({ projection, revision: String(state.revision), projectVersion: project.version,
@@ -190,6 +226,8 @@ function publicView(row) {
   const content = normalizePublicationContent(Object.fromEntries(['schemaVersion', 'title', 'purpose', 'license', 'termsVersion', 'contributionGuide', 'roadmap', 'updates'].map(k => [k, value[k]])));
   return { projectId: row.project_id, revision: String(row.published_revision), visibility: row.visibility, ...content,
     ...(value.acceptedMilestones === undefined ? {} : { acceptedMilestones: normalizeAcceptedSummaries(value.acceptedMilestones) }),
+    ...(value.selectedTasks === undefined ? {} : { selectedTasks: normalizeSelectedTaskSummaries(value.selectedTasks) }),
+    ...(value.fundingTotals === undefined ? {} : { fundingTotals: normalizeFundingTotals(value.fundingTotals) }),
     maintainer: { id: publicationId(value.maintainer.id), handle: String(value.maintainer.handle), displayName: String(value.maintainer.displayName) }, url: publicProjectPath(row.project_id) };
 }
 export async function readPublicProject(db, id) {

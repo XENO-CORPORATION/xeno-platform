@@ -56,7 +56,7 @@ export function normalizeAcceptedSummaries(value, { sources = false } = {}) {
 }
 /** Plain text rendered as text, never HTML. Licence/terms are explicit, never defaulted. */
 export function normalizePublicationContent(value) {
-  const v = publicationRecord(value, ['schemaVersion', 'title', 'purpose', 'license', 'termsVersion', 'contributionGuide', 'roadmap', 'updates', 'acceptedMilestones']);
+  const v = publicationRecord(value, ['schemaVersion', 'title', 'purpose', 'license', 'termsVersion', 'contributionGuide', 'roadmap', 'updates', 'acceptedMilestones', 'selectedTasks', 'includeFundingTotals']);
   if (v.schemaVersion !== 1) fail('unsupported_schema');
   return {
     schemaVersion: 1,
@@ -68,5 +68,45 @@ export function normalizePublicationContent(value) {
     roadmap: text(v.roadmap, 8000),
     updates: text(v.updates, 8000),
     ...(v.acceptedMilestones === undefined ? {} : { acceptedMilestones: normalizeAcceptedSummaries(v.acceptedMilestones, { sources: true }) }),
+    ...(v.selectedTasks === undefined ? {} : { selectedTasks: normalizeSelectedTaskSources(v.selectedTasks) }),
+    ...(v.includeFundingTotals === undefined ? {} : { includeFundingTotals: normalizeFundingTotalsFlag(v.includeFundingTotals) }),
   };
+}
+// PUB-02: the draft selects tasks by id with a display label. Status is
+// NEVER declared here — the preview snapshots live status from the work
+// tree, so a draft cannot publish a false task state.
+export function normalizeSelectedTaskSources(value) {
+  if (!Array.isArray(value) || value.length > 32) fail('invalid_task_selection');
+  const seen = new Set();
+  return value.map(item => {
+    const v = publicationRecord(item, ['taskId', 'label']);
+    const taskId = publicationId(v.taskId);
+    if (seen.has(taskId)) fail('invalid_task_selection');
+    seen.add(taskId);
+    return { taskId, label: text(v.label, 160, true) };
+  });
+}
+// PUB-02: read-side summaries carry the snapshotted label and status only.
+// No task ids, assignees, evidence or internal notes ever reach the public.
+export function normalizeSelectedTaskSummaries(value) {
+  if (!Array.isArray(value) || value.length > 32) fail('invalid_task_summaries');
+  return value.map(item => {
+    const v = publicationRecord(item, ['label', 'status']);
+    if (!['open', 'in-review', 'completed'].includes(v.status)) fail('invalid_task_status');
+    return { label: text(v.label, 160, true), status: v.status };
+  });
+}
+export function normalizeFundingTotalsFlag(value) {
+  if (value !== true) fail('invalid_funding_totals_flag');
+  return true;
+}
+// PUB-02: derived totals only — raised micro-units as a string (BIGINT
+// precision), plus counts. No contributor identities, ever.
+export function normalizeFundingTotals(value) {
+  const v = publicationRecord(value, ['raisedMicro', 'contributionCount', 'campaignCount']);
+  if (typeof v.raisedMicro !== 'string' || !/^(0|[1-9][0-9]{0,18})$/.test(v.raisedMicro)) fail('invalid_funding_totals');
+  for (const k of ['contributionCount', 'campaignCount']) {
+    if (!Number.isInteger(v[k]) || v[k] < 0) fail('invalid_funding_totals');
+  }
+  return { raisedMicro: v.raisedMicro, contributionCount: v.contributionCount, campaignCount: v.campaignCount };
 }
