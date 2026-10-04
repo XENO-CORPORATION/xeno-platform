@@ -130,7 +130,7 @@ export async function allocateContributionFunding(client, userId, amountMicro, {
  * from earlier hops are eligible when their recorded stripe root is still verified, unrefunded
  * and unquarantined. A hand-forged 'gift:%' label with no gift row behind it selects nothing.
  * Per-gift explicit confirmation replaces the standing usage-credit preference. */
-export async function allocateGiftFunding(client, senderId, amountMicro, { destinationOwnerId } = {}) {
+export async function allocateGiftFunding(client, senderId, amountMicro, { destinationOwnerId, ignorePause = false } = {}) {
   if (typeof amountMicro !== 'string' || !/^[1-9][0-9]{0,17}$/.test(amountMicro)) {
     throw Object.assign(new Error('Gift amount must be exact positive micro-credits'), { code: 'INVALID_GIFT_AMOUNT' });
   }
@@ -169,6 +169,15 @@ export async function allocateGiftFunding(client, senderId, amountMicro, { desti
   }
   if (!account || account.owner_kind !== 'user' || account.is_frozen) {
     throw Object.assign(new Error('Gift account unavailable'), { code: 'GIFT_ACCOUNT_UNAVAILABLE' });
+  }
+  if (!ignorePause) {
+    const prefs=(await client.query('SELECT user_id,accepts_unsolicited,gifting_paused FROM workforce_gift_preferences WHERE user_id=ANY($1::uuid[])',
+      [[senderId,destinationOwnerId]])).rows;
+    const prefOf=id=>prefs.find(p=>p.user_id===id) ?? { accepts_unsolicited:true, gifting_paused:false };
+    if (!prefOf(destinationOwnerId).accepts_unsolicited || prefOf(destinationOwnerId).gifting_paused
+      || prefOf(senderId).gifting_paused) {
+      throw Object.assign(new Error('Gift destination unavailable'), { code: 'GIFT_DESTINATION_UNAVAILABLE' });
+    }
   }
   const { rows: lots } = await client.query(`SELECT g.id,g.priority,g.expires_at,g.source_ref,
       gl.root_origin_grant_id AS root_origin_grant_id,

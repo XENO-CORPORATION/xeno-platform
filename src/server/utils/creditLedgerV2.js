@@ -332,8 +332,8 @@ export async function returnContributionTx(client, contributionId, actorUserId) 
  * survive the hop), record origin AND stripe-root references per lot, post both journal
  * entries and mirror both legacy balances. Conservation is structural: every recipient
  * micro is consumed from exactly one sender lot in the same statement. */
-export async function giftTransferTx(client, { giftId, senderId, recipientId, amountMicro }) {
-  const selected = await allocateGiftFunding(client, senderId, String(amountMicro), { destinationOwnerId: recipientId });
+export async function giftTransferTx(client, { giftId, senderId, recipientId, amountMicro, forDisputeReversal = false }) {
+  const selected = await allocateGiftFunding(client, senderId, String(amountMicro), { destinationOwnerId: recipientId, ignorePause: forDisputeReversal });
   for (const lot of selected.allocations) {
     const moved = (await client.query(`WITH source AS (
       UPDATE credit_grants SET remaining_micro=remaining_micro-$2

@@ -96,6 +96,11 @@ test('ACCT-03 + ACCT-04: confirmed gifts move verified value atomically with rec
  const selfHash=operationHash({recipient:alice,amountMicro:'100'});
  await assert.rejects(gifts.giftCredits(pool,ctx(alice),{recipientUserId:alice,amountMicro:'100',operationId:randomUUID(),consentHash:selfHash,confirmed:true}),
   e=>e.details?.reason==='self_gift_refused','the commit refuses self-gifts too');
+ const voidId=randomUUID(),voidHash=operationHash({recipient:voidId,amountMicro:'100'});
+ await assert.rejects(gifts.giftCredits(pool,ctx(alice),{recipientUserId:voidId,amountMicro:'100',operationId:randomUUID(),consentHash:voidHash,confirmed:true}),
+  e=>e.details?.reason==='gift_recipient_unavailable','the commit refuses unknown recipients: no money into the void');
+ assert.equal((await pool.query('SELECT count(*)::int n FROM credit_accounts WHERE user_id=$1',[voidId])).rows[0].n,0,
+  'no ledger row is provisioned for a nonexistent recipient');
 
  // ── Eligibility: paid labels without origin cannot gift; frozen destinations refuse.
  await ledger.addGrant(pool,dave,{amountMicro:1000000,kind:'paid',sourceRef:'backfill'});
