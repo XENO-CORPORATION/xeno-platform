@@ -20,7 +20,7 @@
 import crypto from 'node:crypto';
 import { dimensionsJson } from './usageDimensions.js';
 import { pricePinnedChatUsage, pinChatTariff } from './creditCosts.js';
-import { allocateFunding, allocateContributionFunding, quarantinedGrantIds, saveHoldFunding, consumeFunding, readHoldFunding } from './usageCreditFunding.js';
+import { allocateFunding, allocateContributionFunding, allocateGiftFunding, quarantinedGrantIds, saveHoldFunding, consumeFunding, readHoldFunding } from './usageCreditFunding.js';
 
 export const MICRO_PER_CREDIT = 1_000_000;
 const REF_TYPE = 'xeno.usage';
@@ -324,6 +324,41 @@ export async function returnContributionTx(client, contributionId, actorUserId) 
   await client.query("UPDATE workforce_funding_contributions SET state='return_pending',updated_at=now() WHERE id=$1",[c.id]);
   await client.query("UPDATE workforce_funding_contributions SET state='returned',updated_at=now() WHERE id=$1",[c.id]);
   return {amountMicro:String(total),expiredMicro:String(expired),replayed:false};
+}
+
+/** Move verified value between two ordinary user accounts, atomically. The gift row must
+ * already exist (the service owns identity/consent); this moves the money: consume the
+ * sender's allocated lots, mint recipient lots with the SAME expiry/priority (restrictions
+ * survive the hop), record origin AND stripe-root references per lot, post both journal
+ * entries and mirror both legacy balances. Conservation is structural: every recipient
+ * micro is consumed from exactly one sender lot in the same statement. */
+export async function giftTransferTx(client, { giftId, senderId, recipientId, amountMicro }) {
+  const selected = await allocateGiftFunding(client, senderId, String(amountMicro), { destinationOwnerId: recipientId });
+  for (const lot of selected.allocations) {
+    const moved = (await client.query(`WITH source AS (
+      UPDATE credit_grants SET remaining_micro=remaining_micro-$2
+      WHERE id=$1 AND user_id=$3 AND account_id=$4 AND remaining_micro >= $2
+      RETURNING priority,expires_at
+    ) INSERT INTO credit_grants(user_id,account_id,amount_micro,remaining_micro,kind,priority,source_ref,expires_at)
+      SELECT $5,$6,$2,$2,'paid',priority,$7,expires_at FROM source RETURNING id`,
+    [lot.grantId,lot.amountMicro,senderId,selected.accountId,recipientId,selected.destinationAccountId,`gift:${giftId}:${lot.grantId}`])).rows[0];
+    if (!moved) throw Object.assign(new Error('Gift lot moved concurrently'), { code: 'FUNDING_CONFLICT' });
+    await client.query(`INSERT INTO workforce_gift_lots(gift_id,origin_grant_id,recipient_grant_id,root_origin_grant_id,amount_micro)
+      VALUES($1,$2,$3,$4,$5)`, [giftId,lot.grantId,moved.id,lot.rootOriginGrantId,lot.amountMicro]);
+  }
+  const source = (await client.query('UPDATE credit_accounts SET balance=balance-$1,updated_at=now() WHERE id=$2 RETURNING balance',
+    [amountMicro,selected.accountId])).rows[0];
+  const destination = (await client.query('UPDATE credit_accounts SET balance=balance+$1,updated_at=now() WHERE id=$2 RETURNING balance',
+    [amountMicro,selected.destinationAccountId])).rows[0];
+  const metadata = JSON.stringify({ giftId });
+  await insertLedgerEntry(client, { userId:senderId,accountId:selected.accountId,type:'transfer',
+    amount:String(-BigInt(amountMicro)),balanceAfter:String(source.balance),refType:'xeno.gift',refId:giftId,
+    description:'account gift out',metadata });
+  await insertLedgerEntry(client, { userId:recipientId,accountId:selected.destinationAccountId,type:'transfer',amount:String(amountMicro),
+    balanceAfter:String(destination.balance),refType:'xeno.gift',refId:giftId,description:'account gift in',metadata });
+  await mirrorLegacy(client,senderId,BigInt(source.balance));
+  await mirrorLegacy(client,recipientId,BigInt(destination.balance));
+  return { giftId, amountMicro:String(amountMicro), lotCount:selected.allocations.length };
 }
 
 /** Add a grant (credit top-up / promo / free allotment). Opens its own transaction. */
