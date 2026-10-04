@@ -73,3 +73,28 @@ export async function resolveProviderCwd(poolOrClient, { conversationId, session
     return { path: row.path, scope: row.scope, conversationId: id };
   });
 }
+
+/**
+ * SES-05: settle the provider's active session ownership. Releases the
+ * session-isolated workdir grant so a scope move may proceed. Idempotent:
+ * releasing a conversation with no grant reports released:false rather than
+ * failing, because "no active provider ownership" is already settled.
+ */
+export async function releaseProviderCwd(poolOrClient, { conversationId, actorUserId }) {
+  const id = uuid(conversationId);
+  const actor = uuid(actorUserId);
+  return withClient(poolOrClient, async (client) => {
+    const conv = (await client.query(
+      'SELECT id, owner_user_id FROM chat_conversations WHERE id=$1',
+      [id],
+    )).rows[0];
+    if (!conv) bad('not_found', 'conversation_not_found');
+    if (conv.owner_user_id !== null && conv.owner_user_id !== actor) bad('denied', 'release_not_authorized');
+    const row = (await client.query(
+      'DELETE FROM provider_session_workdirs WHERE conversation_id=$1 RETURNING path',
+      [id],
+    )).rows[0];
+    if (!row) return { released: false, conversationId: id };
+    return { released: true, conversationId: id, path: row.path };
+  });
+}
