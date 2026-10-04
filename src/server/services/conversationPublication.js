@@ -70,7 +70,9 @@ async function participants(executor, conversationId) {
       WHERE conversation_id = $1 AND revoked_at IS NULL`,
     [conversationId],
   )).rows.map((r) => String(r.id));
-  return [...new Set([String(owner), ...authors, ...live])];
+  const voices = [...authors, ...live];
+  if (owner !== null && owner !== undefined) voices.unshift(String(owner));
+  return [...new Set(voices)];
 }
 
 function scopeHashOf(scope) {
@@ -311,7 +313,7 @@ export async function readPublishedLiveEvents(poolOrClient, { conversationId, af
 // of any conversation publication. The token is shown once; only its
 // digest is stored. Expiry kills reads; purge_after sweeps the row.
 export async function publishArtifactLink(poolOrClient, {
-  actorUserId, artifactId, revision, ttlSeconds = 86400, retentionDays = 30,
+  actorUserId, artifactId, revision, ttlSeconds = 86400, retentionDays = 30, projectId = null,
 }) {
   if (!actorUserId) throw new Error('actorUserId is required');
   if (!artifactId) throw new Error('artifactId is required');
@@ -325,6 +327,11 @@ export async function publishArtifactLink(poolOrClient, {
   if (!Number.isInteger(retention) || retention < 1 || retention > 365) {
     throw new Error('retentionDays must be between one and 365 days');
   }
+  // PUB-13: a link may attribute a project so visibility retreat can
+  // reach exactly those links; unattributed links stay publisher-scoped.
+  if (projectId !== null && !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(projectId)) {
+    throw new Error('invalid project attribution');
+  }
   const token = randomUUID().replace(/-/g, '') + randomUUID().replace(/-/g, '');
   const digest = crypto.createHash('sha256').update(token).digest('hex');
   const row = await withTx(poolOrClient, async (executor) => {
@@ -337,13 +344,19 @@ export async function publishArtifactLink(poolOrClient, {
       `SELECT 1 FROM artifact_revisions WHERE artifact_id = $1 AND revision = $2`, [artifactId, rev],
     )).rows[0];
     if (!revRow) throw new Error('Artifact revision not found');
+    if (projectId !== null) {
+      const project = (await executor.query(
+        `SELECT 1 FROM chat_projects WHERE id = $1`, [projectId],
+      )).rows[0];
+      if (!project) throw new Error('Project not found');
+    }
     const { rows } = await executor.query(
       `INSERT INTO artifact_public_links (artifact_id, revision, link_token_digest, state,
-          expires_at, purge_after, published_by_user_id)
-        VALUES ($1, $2, $3, 'published', now() + make_interval(secs => $4), now() + make_interval(days => $5), $6)
+          expires_at, purge_after, published_by_user_id, project_id)
+        VALUES ($1, $2, $3, 'published', now() + make_interval(secs => $4), now() + make_interval(days => $5), $6, $7)
         RETURNING id AS "linkId", artifact_id AS "artifactId", revision, state, expires_at AS "expiresAt",
           purge_after AS "purgeAfter"`,
-      [artifactId, rev, digest, ttl, retention, actorUserId],
+      [artifactId, rev, digest, ttl, retention, actorUserId, projectId],
     );
     return rows[0];
   });
