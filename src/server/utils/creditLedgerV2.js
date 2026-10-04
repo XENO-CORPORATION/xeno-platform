@@ -1274,6 +1274,27 @@ async function lockRunReservation(db, admissionId, { lockAccount }) {
   return { admission, reservation, account, hold };
 }
 
+/**
+ * RUN-07: what a run's reservation can still fund, read WITHOUT locks or writes. A runtime whose
+ * process is gone -- a scheduled or detached run -- reads this to decide whether to continue, wait or
+ * stop. `live` is the same test an open draw applies, so this never reports a reservation as usable
+ * when the ledger would refuse a draw as lapsed; `remainingMicro` is the same envelope headroom a draw
+ * is checked against. Returns null when the run has no reservation to read.
+ */
+export async function readRunFundingStateV2(db, admissionId) {
+  const admission = (await db.query('SELECT * FROM workforce_run_admissions WHERE id=$1', [admissionId])).rows[0];
+  if (!admission) return null;
+  const reservation = await runReservationOf(db, admission);
+  if (!reservation) return null;
+  const hold = (await db.query('SELECT * FROM credit_holds WHERE id=$1', [reservation.holdRowId])).rows[0];
+  if (!hold) return null;
+  const owner = (await db.query("SELECT to_jsonb(a)->>'owner_kind' AS owner_kind FROM credit_accounts a WHERE id=$1", [hold.account_id])).rows[0];
+  const live = hold.state === 'held'
+    && (owner?.owner_kind === 'project_pool' || new Date(hold.expires_at) > new Date() || await holdHasOpenDraw(db, hold.id));
+  return { live, remainingMicro: (await runHeadroomMicro(db, hold, admission)).toString(),
+    reservationExpiresAt: hold.expires_at ? new Date(hold.expires_at).toISOString() : null };
+}
+
 async function holdHasOpenDraw(db, holdRowId) {
   return (await db.query("SELECT 1 FROM credit_hold_draws WHERE hold_row_id=$1 AND state='open' LIMIT 1", [holdRowId])).rowCount > 0;
 }
