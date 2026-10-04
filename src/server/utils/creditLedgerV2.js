@@ -235,7 +235,10 @@ export async function fundContributionTx(client, contributionId) {
   if ((await client.query('SELECT 1 FROM workforce_contribution_lots WHERE contribution_id=$1', [c.id])).rowCount) {
     throw Object.assign(new Error('Contribution already funded'), { code: 'CONTRIBUTION_ALREADY_FUNDED' });
   }
-  const selected = await allocateContributionFunding(client, c.contributor_user_id, String(c.amount_micro), { destinationOwnerId: c.pool_id });
+  // The payer is the row's payer when set (agent-originated: the approval's owner),
+  // else the contributor. Endpoints, amount and provenance stay row-derived.
+  const payer = c.payer_user_id ?? c.contributor_user_id;
+  const selected = await allocateContributionFunding(client, payer, String(c.amount_micro), { destinationOwnerId: c.pool_id });
   const dest = (await client.query('SELECT id,balance FROM credit_accounts WHERE user_id=$1', [c.pool_id])).rows[0];
   if (dest.id !== c.pool_account_id) throw Object.assign(new Error('Pool account mismatch'), { code: 'CONTRIBUTION_DESTINATION_UNAVAILABLE' });
   for (const lot of selected.allocations) {
@@ -245,7 +248,7 @@ export async function fundContributionTx(client, contributionId) {
       RETURNING priority,expires_at
     ) INSERT INTO credit_grants(user_id,account_id,amount_micro,remaining_micro,kind,priority,source_ref,expires_at)
       SELECT $5,$6,$2,$2,'contribution',priority,$7,expires_at FROM source RETURNING id`,
-    [lot.grantId,lot.amountMicro,c.contributor_user_id,selected.accountId,c.pool_id,dest.id,`contribution:${c.id}:${lot.grantId}`])).rows[0];
+    [lot.grantId,lot.amountMicro,payer,selected.accountId,c.pool_id,dest.id,`contribution:${c.id}:${lot.grantId}`])).rows[0];
     if (!moved) throw Object.assign(new Error('Contribution lot moved concurrently'), { code: 'FUNDING_CONFLICT' });
     await client.query(`INSERT INTO workforce_contribution_lots
       (contribution_id,origin_grant_id,pool_grant_id,amount_micro,origin_kind,origin_expires_at)
@@ -256,12 +259,12 @@ export async function fundContributionTx(client, contributionId) {
   const destination = (await client.query('UPDATE credit_accounts SET balance=balance+$1,updated_at=now() WHERE id=$2 RETURNING balance',
     [c.amount_micro,dest.id])).rows[0];
   const metadata = JSON.stringify({ contributionId:c.id,projectPoolId:c.pool_id,milestoneId:c.milestone_id,termsVersion:c.terms_version });
-  await insertLedgerEntry(client, { userId:c.contributor_user_id,accountId:selected.accountId,type:'transfer',
+  await insertLedgerEntry(client, { userId:payer,accountId:selected.accountId,type:'transfer',
     amount:String(-BigInt(c.amount_micro)),balanceAfter:String(source.balance),refType:'xeno.contribution',refId:c.id,
     description:'project contribution out',metadata });
   await insertLedgerEntry(client, { userId:c.pool_id,accountId:dest.id,type:'transfer',amount:String(c.amount_micro),
     balanceAfter:String(destination.balance),refType:'xeno.contribution',refId:c.id,description:'project contribution in',metadata });
-  await mirrorLegacy(client, c.contributor_user_id, BigInt(source.balance));
+  await mirrorLegacy(client, payer, BigInt(source.balance));
   return { poolId:c.pool_id,amountMicro:String(c.amount_micro),lotCount:selected.allocations.length };
 }
 
@@ -272,8 +275,12 @@ export async function returnContributionTx(client, contributionId, actorUserId) 
   const c=(await client.query(`SELECT c.*,p.id AS pool_id,p.account_id AS pool_account_id
     FROM workforce_funding_contributions c JOIN workforce_funding_pools p
       ON p.campaign_id=c.campaign_id AND p.milestone_id=c.milestone_id
-    WHERE c.id=$1 AND c.contributor_user_id=$2 FOR UPDATE OF c`,[contributionId,actorUserId])).rows[0];
+    WHERE c.id=$1 AND (c.contributor_user_id=$2 OR c.payer_user_id=$2) FOR UPDATE OF c`,[contributionId,actorUserId])).rows[0];
   if(!c) throw Object.assign(new Error('Contribution not found'),{code:'CONTRIBUTION_NOT_FOUND'});
+  // Returns restore the PAYER's original grants -- for agent-originated contributions
+  // that is the approval's owner, who is also the only party that may request one
+  // (the service keeps returns human-gated; agents cannot undo their spends).
+  const payer=c.payer_user_id ?? c.contributor_user_id;
   const prior=(await client.query('SELECT * FROM workforce_funding_returns WHERE contribution_id=$1',[c.id])).rows[0];
   if(prior) return {amountMicro:String(prior.amount_micro),expiredMicro:String(prior.expired_micro),replayed:true};
   if(c.state!=='confirmed') throw Object.assign(new Error('Contribution cannot be returned'),{code:'CONTRIBUTION_NOT_RETURNABLE'});
@@ -285,8 +292,8 @@ export async function returnContributionTx(client, contributionId, actorUserId) 
     JOIN workforce_contribution_lots l ON l.origin_grant_id=q.grant_id WHERE l.contribution_id=$1`,[c.id])).rowCount;
   if(quarantined || !charges.length || charges.some(b=>BigInt(b.refunded_micro)>0n)) throw Object.assign(new Error('Contribution origin requires reconciliation'),{code:'CONTRIBUTION_ORIGIN_QUARANTINED'});
   const accounts=(await client.query('SELECT id,user_id,balance,is_frozen,owner_kind FROM credit_accounts WHERE user_id=ANY($1::uuid[]) ORDER BY user_id FOR UPDATE',
-    [[c.pool_id,c.contributor_user_id].sort()])).rows;
-  const source=accounts.find(a=>a.user_id===c.pool_id),destination=accounts.find(a=>a.user_id===c.contributor_user_id);
+    [[c.pool_id,payer].sort()])).rows;
+  const source=accounts.find(a=>a.user_id===c.pool_id),destination=accounts.find(a=>a.user_id===payer);
   if(!source || !destination || source.owner_kind!=='project_pool' || destination.owner_kind!=='user'
     || source.is_frozen || destination.is_frozen) throw Object.assign(new Error('Return account unavailable'),{code:'CONTRIBUTION_ACCOUNT_UNAVAILABLE'});
   if((await client.query("SELECT 1 FROM credit_holds WHERE user_id=$1 AND state='held'",[c.pool_id])).rowCount) {
@@ -303,7 +310,7 @@ export async function returnContributionTx(client, contributionId, actorUserId) 
   for(const lot of lots){
     if(BigInt(lot.remaining_micro)===0n)continue;
     const restored=await client.query(`UPDATE credit_grants SET remaining_micro=remaining_micro+$1
-      WHERE id=$2 AND user_id=$3 AND remaining_micro+$1<=amount_micro RETURNING id`,[lot.remaining_micro,lot.origin_grant_id,c.contributor_user_id]);
+      WHERE id=$2 AND user_id=$3 AND remaining_micro+$1<=amount_micro RETURNING id`,[lot.remaining_micro,lot.origin_grant_id,payer]);
     if(restored.rowCount!==1) throw Object.assign(new Error('Original contribution lot unavailable'),{code:'FUNDING_CONFLICT'});
     await client.query('UPDATE credit_grants SET remaining_micro=0 WHERE id=$1',[lot.pool_grant_id]);
     await client.query('INSERT INTO workforce_funding_return_lots(contribution_id,pool_grant_id,origin_grant_id,amount_micro) VALUES($1,$2,$3,$4)',
@@ -318,9 +325,9 @@ export async function returnContributionTx(client, contributionId, actorUserId) 
   const metadata=JSON.stringify({contributionId:c.id,reversesReferenceType:'xeno.contribution',expiredMicro:String(expired)});
   await insertLedgerEntry(client,{userId:c.pool_id,accountId:source.id,type:'transfer',amount:String(-total),balanceAfter:String(sourceAfter),
     refType:'xeno.contribution.return',refId:c.id,description:'project contribution return out',metadata});
-  await insertLedgerEntry(client,{userId:c.contributor_user_id,accountId:destination.id,type:'transfer',amount:String(spendable),balanceAfter:String(destAfter),
+  await insertLedgerEntry(client,{userId:payer,accountId:destination.id,type:'transfer',amount:String(spendable),balanceAfter:String(destAfter),
     refType:'xeno.contribution.return',refId:c.id,description:'project contribution return in',metadata});
-  await mirrorLegacy(client,c.contributor_user_id,destAfter);
+  await mirrorLegacy(client,payer,destAfter);
   await client.query("UPDATE workforce_funding_contributions SET state='return_pending',updated_at=now() WHERE id=$1",[c.id]);
   await client.query("UPDATE workforce_funding_contributions SET state='returned',updated_at=now() WHERE id=$1",[c.id]);
   return {amountMicro:String(total),expiredMicro:String(expired),replayed:false};

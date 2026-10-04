@@ -5,6 +5,7 @@ import { resolvePrincipal } from './agentIdentity.js';
 import { check } from '../utils/authzReBAC.js';
 import { authorityTransaction, lockWorkspaceAuthority, operationHash } from './workspaceOperationReceipts.js';
 import { fundContributionTx, returnContributionTx } from '../utils/creditLedgerV2.js';
+import { verifySpendApproval } from './agentSpendApprovals.js';
 import { pinChatTariff } from '../utils/creditCosts.js';
 import { lockFundingScopes } from './workforceScopeSpendCaps.js';
 
@@ -37,10 +38,10 @@ const context = v => {
   if (typeof v.clientId !== 'string' || !/^[A-Za-z0-9._-]{1,128}$/.test(v.clientId)) fail('bad_input','invalid_client');
   return { actorUserId:uuid(v.actorUserId),clientId:v.clientId };
 };
-async function human(db, actor, { lock = true } = {}) {
+async function human(db, actor, { lock = true, allowAgent = false } = {}) {
   if (lock) await db.query('SELECT id FROM users WHERE id=$1 FOR SHARE',[actor]);
   const p=await resolvePrincipal(db,actor);
-  if (!p?.usable || p.kind!=='human') fail('denied','usable_human_required');
+  if (!p?.usable || (p.kind!=='human' && !(allowAgent && p.kind==='agent'))) fail('denied','usable_human_required');
   return p;
 }
 async function projectAuthority(db, actor, id, relation='admin', { allowArchived=false }={}) {
@@ -190,7 +191,8 @@ export async function acceptFundingMilestone(pool,ctx,value) {
 export async function readFundingOffer(pool,ctx,value) {
   const a=context(ctx),v=shape(value,['campaignId','milestoneId']);
   return authorityTransaction(pool,async db=>{
-    await human(db,a.actorUserId);
+    // Terms and totals only -- readable by agents. Spending still needs an approval.
+    await human(db,a.actorUserId,{allowAgent:true});
     const c=(await db.query("SELECT * FROM workforce_funding_campaigns WHERE id=$1 AND status='open' FOR SHARE",[uuid(v.campaignId)])).rows[0];
     if(!c) fail('not_found','campaign_not_found');
     await activeCampaignProject(db,c);
@@ -201,16 +203,27 @@ export async function readFundingOffer(pool,ctx,value) {
   });
 }
 export async function contributeFunding(pool,ctx,value) {
-  const a=context(ctx),v=shape(value,['operationId','campaignId','milestoneId','amountMicro','consentHash','confirmed']);
+  const a=context(ctx);
+  const v=shape(value,'spendApprovalId' in Object(value)
+    ? ['operationId','campaignId','milestoneId','amountMicro','consentHash','confirmed','spendApprovalId']
+    : ['operationId','campaignId','milestoneId','amountMicro','consentHash','confirmed']);
   if(v.confirmed!==true || typeof v.consentHash!=='string' || !/^[a-f0-9]{64}$/.test(v.consentHash)) fail('bad_input','explicit_confirmation_required');
-  const input={operationId:uuid(v.operationId),campaignId:uuid(v.campaignId),milestoneId:uuid(v.milestoneId),amountMicro:amount(v.amountMicro),consentHash:v.consentHash};
+  const input={operationId:uuid(v.operationId),campaignId:uuid(v.campaignId),milestoneId:uuid(v.milestoneId),amountMicro:amount(v.amountMicro),consentHash:v.consentHash,
+    spendApprovalId:v.spendApprovalId===undefined?null:uuid(v.spendApprovalId)};
   let committing=false;
   try {
     return await authorityTransaction(pool,async db=>{
       // Match ordinary billing's account -> user lock order. This early identity
       // observation is rechecked under the ledger-held user lock before confirmation.
       await db.query('SELECT pg_advisory_xact_lock(hashtextextended($1,0))',[`contribution-actor:${a.actorUserId}`]);
-      await human(db,a.actorUserId,{lock:false});
+      const me=await human(db,a.actorUserId,{lock:false,allowAgent:true});
+      // Agents contribute only on a live approval; the payer is the approval's owner.
+      // The early verify is advisory (it derives the payer for the row); the commit
+      // consumes after the replay check, like gifts.
+      let payer=a.actorUserId;
+      if(me.kind==='agent') {
+        if(input.spendApprovalId===null) fail('denied','agent_contribution_approval_unavailable');
+      } else if(input.spendApprovalId!==null) fail('bad_input','approval_not_for_humans');
       await db.query('SELECT pg_advisory_xact_lock(hashtextextended($1,0))',[`contribution:${a.actorUserId}:${a.clientId}:${input.operationId}`]);
       const prior=(await db.query('SELECT * FROM workforce_funding_contributions WHERE contributor_user_id=$1 AND client_id=$2 AND operation_id=$3',
         [a.actorUserId,a.clientId,input.operationId])).rows[0];
@@ -223,12 +236,25 @@ export async function contributeFunding(pool,ctx,value) {
       if(!m) fail('not_found','milestone_not_found');
       const terms={campaignId:c.id,projectId:c.project_id,terms:termsOf(c),milestone:milestoneOf(m)};
       if(operationHash(terms)!==input.consentHash) fail('conflict','funding_terms_changed');
+      if(input.spendApprovalId!==null) {
+        payer=(await verifySpendApproval(db,{approvalId:input.spendApprovalId,agentActor:a.actorUserId,operation:'contribute',
+          amountMicro:input.amountMicro,target:{campaignId:c.id,milestoneId:m.id},consume:true})).ownerUserId;
+      }
       const row=(await db.query(`INSERT INTO workforce_funding_contributions
-        (campaign_id,milestone_id,contributor_user_id,client_id,idempotency_key,operation_id,request_hash,amount_micro,terms_version,restriction,state)
-        VALUES($1,$2,$3,$4,$5::text,$5::uuid,$6,$7,$8,$9,'pending') RETURNING *`,
-        [c.id,m.id,a.actorUserId,a.clientId,input.operationId,hash,input.amountMicro,c.terms_version,terms])).rows[0];
+        (campaign_id,milestone_id,contributor_user_id,payer_user_id,approval_id,client_id,idempotency_key,operation_id,request_hash,amount_micro,terms_version,restriction,state)
+        VALUES($1,$2,$3,$4,$5,$6,$7::text,$7::uuid,$8,$9,$10,$11,'pending') RETURNING *`,
+        [c.id,m.id,a.actorUserId,input.spendApprovalId===null?null:payer,input.spendApprovalId,a.clientId,input.operationId,hash,input.amountMicro,c.terms_version,terms])).rows[0];
       await fundContributionTx(db,row.id);
-      await human(db,a.actorUserId);
+      // Recheck identity under the ledger-held lock. For agents this is a principal
+      // re-resolution only -- the approval was already consumed above, so the amount
+      // arithmetic must not run twice.
+      if(me.kind==='agent') {
+        const again=await resolvePrincipal(db,a.actorUserId);
+        const own=await resolvePrincipal(db,payer);
+        if(!again?.usable || again.kind!=='agent' || again.owner.id!==payer || !own?.usable || own.kind!=='human')
+          fail('denied','spend_approval_owner_check_failed');
+        await db.query('SELECT id FROM users WHERE id=$1 FOR SHARE',[a.actorUserId]);
+      } else await human(db,a.actorUserId);
       const result=(await db.query("UPDATE workforce_funding_contributions SET state='confirmed',updated_at=now() WHERE id=$1 RETURNING *",[row.id])).rows[0];
       committing=true;
       return contributionOf(result,false);
@@ -254,6 +280,8 @@ export async function returnFundingContribution(pool,ctx,value) {
 }
 function contributionOf(c,replayed) {
   return {id:c.id,operationId:c.operation_id,campaignId:c.campaign_id,milestoneId:c.milestone_id,
+    contributorUserId:c.contributor_user_id,payerUserId:c.payer_user_id ?? c.contributor_user_id,
+    approvalId:c.approval_id ?? null,
     amountMicro:String(c.amount_micro),termsVersion:c.terms_version,state:c.state,replayed};
 }
 export async function readFundingContribution(pool,ctx,value) {
