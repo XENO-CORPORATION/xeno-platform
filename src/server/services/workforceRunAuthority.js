@@ -59,7 +59,7 @@ import { authorityTransaction, lockWorkspaceAuthority } from './workspaceOperati
 import { lockApiKeyWorkforceAuthority } from './apiKeyWorkforceAuthority.js';
 import { RunAdmissionError, actsInDivision } from './workforceRunAdmission.js';
 import { resolveRunFunding } from './workforceRunFunding.js';
-import { closeFinishedRunTx } from '../utils/creditLedgerV2.js';
+import { closeFinishedRunTx, readRunFundingStateV2 } from '../utils/creditLedgerV2.js';
 
 /** NFR-06: "maximum 60 seconds". The database CHECK holds the same bound independently. */
 export const RUN_LEASE_MAX_SECONDS = 60;
@@ -346,10 +346,31 @@ export async function readRunAuthority(pool, authenticatedContext, admissionIdVa
   if (!row || row.actor_user_id !== actorUserId) fail('not_found', 'admission_not_found');
   const revoked = await fenceOf(pool, admissionId);
   const latest = (await pool.query('SELECT max(sequence)::text AS s FROM workforce_run_leases WHERE admission_id=$1', [admissionId])).rows[0].s;
+  // RUN-07: a runtime whose process is gone must be able to learn WHY a run is not continuing, in the
+  // vocabulary the run's own result uses. State is derived from the live rows, never stored:
+  //   finished  -- the run reported a result, whatever it was; nothing more to continue
+  //   revoked   -- fenced (stopped, or authority lost), this run's own or an ancestor's
+  //   expired   -- its reservation is no longer committed (lapsed or released); it cannot fund a dispatch
+  //   exhausted -- committed, but the remaining envelope is zero
+  //   active    -- may dispatch again, subject to the next live authorization
+  // The fields below are additive: `revoked`, `reason` and the rest keep their meaning.
+  const finished = (await pool.query('SELECT 1 FROM workforce_run_results WHERE admission_id=$1', [admissionId])).rowCount > 0;
+  const funding = await readRunFundingStateV2(pool, admissionId);
+  let state = 'active';
+  if (finished) state = 'finished';
+  else if (revoked) state = 'revoked';
+  else if (funding && !funding.live) state = 'expired';
+  else if (funding && BigInt(funding.remainingMicro) <= 0n) state = 'exhausted';
+  // The same mapping a fenced run's own result uses (fenceOutcome in workforceRunResults): any stop
+  // that is not a lost authority reads as `stopped`.
+  const durableReason = state === 'revoked' ? (revoked.reason === 'authority_lost' ? 'authority_lost' : 'stopped')
+    : (state === 'expired' || state === 'exhausted') ? 'budget_exhausted' : null;
   return { schemaVersion: 1, admissionId, revoked: Boolean(revoked), reason: revoked?.reason ?? null,
     // RUN-10: a run stopped because an ANCESTOR was stopped names that ancestor -- the actor admitted both.
     fencedByAdmissionId: revoked && revoked.admissionId !== admissionId ? revoked.admissionId : null,
-    latestLeaseSequence: latest ?? null };
+    latestLeaseSequence: latest ?? null,
+    state, durableReason,
+    remainingMicro: funding?.remainingMicro ?? null, reservationExpiresAt: funding?.reservationExpiresAt ?? null };
 }
 
 /** RUN-10: the revocation that fences this admission -- its own, or the nearest ancestor's -- or null. */
