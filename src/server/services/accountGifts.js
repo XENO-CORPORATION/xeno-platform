@@ -95,3 +95,91 @@ export async function giftCredits(pool, ctx, value) {
     return giftOf(row,false);
   });
 }
+
+/** Return preview: the original gift, the unreturned remainder, and the consent binding.
+ * Only the gift's recipient may return it; the sender cannot cancel (there is no cancel
+ * path -- gifts are terminal 'completed' -- and returns move only through here). */
+export async function previewGiftReturn(pool, ctx, value) {
+  const a=context(ctx),v=shape(value,['giftId','amountMicro']);
+  const giftId=uuid(v.giftId),micro=amount(v.amountMicro);
+  return authorityTransaction(pool,async db=>{
+    await senderPrincipal(db,a.actorUserId);
+    const g=(await db.query('SELECT * FROM workforce_gifts WHERE id=$1 FOR SHARE',[giftId])).rows[0];
+    if (!g) fail('not_found','gift_not_found');
+    if (g.recipient_user_id!==a.actorUserId) fail('denied','gift_return_recipient_only');
+    const returned=(await db.query('SELECT COALESCE(SUM(amount_micro),0)::text AS total FROM workforce_gift_returns WHERE gift_id=$1',[giftId])).rows[0].total;
+    const remainder=BigInt(g.amount_micro)-BigInt(returned);
+    if (BigInt(micro)>remainder) fail('denied','gift_return_exceeds_remainder');
+    return { giftId:g.id, returnsTo:g.sender_user_id, amountMicro:micro, feeMicro:'0',
+      remainderMicro:String(remainder),
+      consentHash:operationHash({ returnsGift:giftId, recipient:g.sender_user_id, amountMicro:micro }) };
+  });
+}
+
+async function reverseGiftTx(db, a, { giftId, micro, operationId, kind, reason, reversedBy }) {
+  await db.query('SELECT pg_advisory_xact_lock(hashtextextended($1,0))',[`gift-return:${giftId}`]);
+  await db.query('SELECT pg_advisory_xact_lock(hashtextextended($1,0))',[`gift:${a.actorUserId}:${a.clientId}:${operationId}`]);
+  const g=(await db.query('SELECT * FROM workforce_gifts WHERE id=$1 FOR UPDATE',[giftId])).rows[0];
+  if (!g) fail('not_found','gift_not_found');
+  const hash=operationHash({ recipientUserId:g.sender_user_id, amountMicro:micro, operationId, returnsGift:giftId });
+  // Uncertain retries reconcile by identity BEFORE state guards: a committed return must
+  // replay its receipt, not fail the remainder check its own completion caused (ACCT-05).
+  const prior=(await db.query('SELECT * FROM workforce_gifts WHERE sender_user_id=$1 AND client_id=$2 AND operation_id=$3',
+    [a.actorUserId,a.clientId,operationId])).rows[0];
+  if (prior) {
+    if (prior.request_hash!==hash) fail('conflict','operation_payload_conflict');
+    const link=(await db.query('SELECT * FROM workforce_gift_returns WHERE return_gift_id=$1',[prior.id])).rows[0];
+    return { ...giftOf(prior,true), returnsGift:giftId, kind:link.kind };
+  }
+  const returned=(await db.query('SELECT COALESCE(SUM(amount_micro),0)::text AS total FROM workforce_gift_returns WHERE gift_id=$1',[giftId])).rows[0].total;
+  if (BigInt(micro)>BigInt(g.amount_micro)-BigInt(returned)) fail('denied','gift_return_exceeds_remainder');
+  const row=(await db.query(`INSERT INTO workforce_gifts(sender_user_id,recipient_user_id,client_id,operation_id,request_hash,amount_micro)
+    VALUES($1,$2,$3,$4,$5,$6) RETURNING *`,
+    [a.actorUserId,g.sender_user_id,a.clientId,operationId,hash,micro])).rows[0];
+  await giftTransferTx(db,{ giftId:row.id, senderId:a.actorUserId, recipientId:g.sender_user_id, amountMicro:micro });
+  const link=(await db.query(`INSERT INTO workforce_gift_returns(gift_id,return_gift_id,reversed_by_user_id,kind,reason,amount_micro)
+    VALUES($1,$2,$3,$4,$5,$6) RETURNING *`,[giftId,row.id,reversedBy,kind,reason,micro])).rows[0];
+  return { ...giftOf(row,false), returnsGift:giftId, kind:link.kind };
+}
+
+/** Recipient-initiated return: a separately authorized reverse gift over the same rails,
+ * linked to the original and capped at its unreturned remainder. */
+export async function returnGift(pool, ctx, value) {
+  const a=context(ctx),v=shape(value,['giftId','amountMicro','operationId','consentHash','confirmed']);
+  if (v.confirmed!==true || typeof v.consentHash!=='string' || !/^[a-f0-9]{64}$/.test(v.consentHash)) fail('bad_input','explicit_confirmation_required');
+  const input={giftId:uuid(v.giftId),amountMicro:amount(v.amountMicro),operationId:uuid(v.operationId),consentHash:v.consentHash};
+  return authorityTransaction(pool,async db=>{
+    await db.query('SELECT pg_advisory_xact_lock(hashtextextended($1,0))',[`gift-actor:${a.actorUserId}`]);
+    await senderPrincipal(db,a.actorUserId);
+    const g=(await db.query('SELECT sender_user_id,recipient_user_id FROM workforce_gifts WHERE id=$1 FOR SHARE',[input.giftId])).rows[0];
+    if (!g) fail('not_found','gift_not_found');
+    if (g.recipient_user_id!==a.actorUserId) fail('denied','gift_return_recipient_only');
+    if (operationHash({ returnsGift:input.giftId, recipient:g.sender_user_id, amountMicro:input.amountMicro })!==input.consentHash) fail('conflict','gift_terms_changed');
+    return reverseGiftTx(db,a,{ giftId:input.giftId, micro:input.amountMicro, operationId:input.operationId,
+      kind:'recipient_return', reason:'recipient-initiated return', reversedBy:a.actorUserId });
+  });
+}
+
+/** Dispute reversal: an authorized operator appends a justified reversal over the same
+ * rails. Authority is the DB-backed platform admin role; justification is a recorded reason.
+ * The dispute WORKFLOW (filing, evidence, SLA) is out of scope -- this is the append. */
+export async function disputeReverseGift(pool, ctx, value) {
+  const a=context(ctx),v=shape(value,['giftId','amountMicro','reason','operationId']);
+  const input={giftId:uuid(v.giftId),amountMicro:amount(v.amountMicro),operationId:uuid(v.operationId)};
+  if (typeof v.reason!=='string' || !v.reason.trim() || v.reason.includes('\0') || Buffer.byteLength(v.reason)>1000) fail('bad_input','gift_reversal_reason_required');
+  const reason=v.reason.trim();
+  return authorityTransaction(pool,async db=>{
+    await db.query('SELECT pg_advisory_xact_lock(hashtextextended($1,0))',[`gift-actor:${a.actorUserId}`]);
+    await senderPrincipal(db,a.actorUserId);
+    const role=(await db.query('SELECT role FROM users WHERE id=$1 FOR SHARE',[a.actorUserId])).rows[0]?.role;
+    if (role!=='admin') fail('denied','gift_dispute_admin_only');
+    const g=(await db.query('SELECT sender_user_id,recipient_user_id FROM workforce_gifts WHERE id=$1 FOR SHARE',[input.giftId])).rows[0];
+    if (!g) fail('not_found','gift_not_found');
+    // The reversal debits the RECIPIENT's value back to the sender; the operator authorizes
+    // but never pays. Idempotency keys on (recipient, client, operation) like any return,
+    // so a concurrent recipient return and dispute reversal serialize on the remainder.
+    return reverseGiftTx(db,{ actorUserId:g.recipient_user_id, clientId:a.clientId },
+      { giftId:input.giftId, micro:input.amountMicro, operationId:input.operationId,
+        kind:'dispute_reversal', reason, reversedBy:a.actorUserId });
+  });
+}
