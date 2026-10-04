@@ -58,7 +58,7 @@ test('PUB-05: typed contribution records with provenance, immutable revisions an
    origin:'original work by the author',rightsLicense:'MIT'});
   assert.equal(record.type,type,`a ${type} contribution submits`);
   assert.equal(record.revisions[0].revisionHash,hash,'the opaque revision stores verbatim');
-  assert.equal(record.reviewState,'pending','records open pending');
+  assert.equal(record.reviewState,'proposed','records open proposed');
   made.push(record);
  }
  // Agent authorship with provenance; project-level targeting without a task.
