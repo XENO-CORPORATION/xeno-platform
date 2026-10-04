@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { resolvePrincipal } from './agentIdentity.js';
 import { check } from '../utils/authzReBAC.js';
 import { transitionInner } from './contributionLifecycle.js';
+import { supersedePriorJudgments } from './submissionIntegrity.js';
 
 // PUB-05: contribution records. Every contribution names its type, author,
 // responsible human/account, optional agent/team provenance, target
@@ -54,6 +55,27 @@ function checkedHash(revisionHash) {
   return revisionHash;
 }
 
+// PUB-10: a revision may carry a retrievable artifact — a diff or a
+// versioned artifact locator — plus run references, alongside its
+// opaque hash. License and provenance stay on the record itself.
+function checkedArtifact(artifact) {
+  if (artifact === null || artifact === undefined) return null;
+  if (typeof artifact !== 'object' || Array.isArray(artifact)) {
+    throw new Error('artifact must be an object');
+  }
+  const locator = artifact.diffRef ?? artifact.artifactUrn ?? artifact.locator;
+  if (typeof locator !== 'string' || !locator.trim() || locator.length > 1024) {
+    throw new Error('artifact names a diff or versioned artifact locator');
+  }
+  if (artifact.runs !== undefined) {
+    if (!Array.isArray(artifact.runs)
+      || artifact.runs.some((r) => typeof r !== 'string' || !r.trim() || r.length > 512)) {
+      throw new Error('artifact run references must be strings');
+    }
+  }
+  return artifact;
+}
+
 async function taskProject(executor, taskId) {
   const { rows } = await executor.query(
     `SELECT g.project_id AS "projectId" FROM project_tasks t
@@ -97,7 +119,7 @@ export async function setContributionTerms(poolOrClient, { projectId, actorUserI
   });
 }
 
-async function readContributionTerms(executor, projectId) {
+export async function readContributionTerms(executor, projectId) {
   const { rows } = await executor.query(
     `SELECT requires_cla AS "requiresCla", cla_id AS "claId", cla_version AS "claVersion"
        FROM project_contribution_terms WHERE project_id = $1`,
@@ -110,7 +132,7 @@ async function readContributionTerms(executor, projectId) {
 // The terms version a contribution submits under: the project's published
 // terms where published, else the current draft's, else none yet. The
 // snapshot pins the contribution to the terms both sides saw.
-async function currentTermsVersion(executor, projectId) {
+export async function currentTermsVersion(executor, projectId) {
   const { rows } = await executor.query(
     `SELECT COALESCE(v.projection->>'termsVersion', (p.draft->>'termsVersion')) AS "termsVersion"
        FROM project_publications p
@@ -126,7 +148,7 @@ async function currentTermsVersion(executor, projectId) {
 export async function submitContribution(poolOrClient, {
   projectId, taskId = null, type, authorUserId, responsibleUserId,
   provenance = null, revisionHash, evidence = [],
-  origin = null, rightsLicense = null, claId = null,
+  origin = null, rightsLicense = null, claId = null, artifact = null,
 }) {
   if (!projectId) throw new Error('projectId is required');
   if (!TYPES.includes(type)) throw new Error('Unknown contribution type');
@@ -145,6 +167,7 @@ export async function submitContribution(poolOrClient, {
   }
   const hash = checkedHash(revisionHash);
   const items = checkedEvidence(type, evidence);
+  const bundle = checkedArtifact(artifact);
   if (provenance !== null && (typeof provenance !== 'object' || Array.isArray(provenance))) {
     throw new Error('provenance must be an object');
   }
@@ -175,15 +198,15 @@ export async function submitContribution(poolOrClient, {
         origin.trim(), rightsLicense.trim(), claId === null ? null : claId.trim(), termsVersion],
     );
     await executor.query(
-      `INSERT INTO contribution_revisions (contribution_id, revision_no, revision_hash, evidence, submitted_by_user_id)
-        VALUES ($1, 1, $2, $3, $4)`,
-      [id, hash, JSON.stringify(items), authorUserId],
+      `INSERT INTO contribution_revisions (contribution_id, revision_no, revision_hash, evidence, submitted_by_user_id, artifact)
+        VALUES ($1, 1, $2, $3, $4, $5)`,
+      [id, hash, JSON.stringify(items), authorUserId, bundle === null ? null : JSON.stringify(bundle)],
     );
     return readContribution(executor, id);
   });
 }
 
-export async function submitRevision(poolOrClient, { contributionId, actorUserId, revisionHash, evidence = [] }) {
+export async function submitRevision(poolOrClient, { contributionId, actorUserId, revisionHash, evidence = [], artifact = null }) {
   if (!contributionId) throw new Error('contributionId is required');
   if (!actorUserId) throw new Error('actorUserId is required');
   const hash = checkedHash(revisionHash);
@@ -203,16 +226,20 @@ export async function submitRevision(poolOrClient, { contributionId, actorUserId
       throw new Error(`contribution is ${current.review_state} and read-only`);
     }
     const items = checkedEvidence(current.type, evidence);
+    const bundle = checkedArtifact(artifact);
     const next = Number(current.current_revision_no) + 1;
     await executor.query(
-      `INSERT INTO contribution_revisions (contribution_id, revision_no, revision_hash, evidence, submitted_by_user_id)
-        VALUES ($1, $2, $3, $4, $5)`,
-      [contributionId, next, hash, JSON.stringify(items), actorUserId],
+      `INSERT INTO contribution_revisions (contribution_id, revision_no, revision_hash, evidence, submitted_by_user_id, artifact)
+        VALUES ($1, $2, $3, $4, $5, $6)`,
+      [contributionId, next, hash, JSON.stringify(items), actorUserId,
+        bundle === null ? null : JSON.stringify(bundle)],
     );
     await executor.query(
       `UPDATE contributions SET current_revision_no = $2 WHERE id = $1`,
       [contributionId, next],
     );
+    // PUB-10: the new revision supersedes every judgment on an older one.
+    await supersedePriorJudgments(executor, contributionId, next);
     if (['review', 'checks_pending', 'changes_requested'].includes(current.review_state)) {
       await transitionInner(executor, {
         contributionId, actorUserId, toState: 'submitted',
@@ -228,7 +255,7 @@ export async function readContribution(poolOrClient, contributionId) {
   if (rows.length === 0) throw new Error('Contribution not found');
   const record = rows[0];
   const revisions = (await poolOrClient.query(
-    `SELECT revision_no AS "revisionNo", revision_hash AS "revisionHash", evidence,
+    `SELECT revision_no AS "revisionNo", revision_hash AS "revisionHash", evidence, artifact,
             submitted_by_user_id AS "submittedBy", submitted_at AS "submittedAt"
        FROM contribution_revisions WHERE contribution_id = $1 ORDER BY revision_no`,
     [contributionId],
