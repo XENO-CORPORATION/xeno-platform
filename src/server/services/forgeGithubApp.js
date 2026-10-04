@@ -141,6 +141,8 @@ export async function mintInstallationToken(poolOrClient, {
       `SELECT * FROM github_installations WHERE installation_id = $1`, [String(installationId)],
     )).rows[0];
     if (!installation) throw new Error('Installation not found');
+    // FORGE-05: the terminal state reports first.
+    if (installation.uninstalled) throw new Error('installation_uninstalled');
     if (installation.suspended) throw new Error('installation_suspended');
     const grant = checkedPermissions(permissions, installation.permissions, 'token');
     const subject = await resolvePrincipal(executor, forUserId);
@@ -172,14 +174,21 @@ export async function requestExecutionCredentials(poolOrClient, { kind, agentUse
 export async function verifyInstallationToken(poolOrClient, token) {
   if (typeof token !== 'string' || !token) throw new Error('token_unknown');
   const row = (await poolOrClient.query(
-    `SELECT t.*, i.suspended, i.app_id AS "appId" FROM github_app_tokens t
+    `SELECT t.*, i.suspended, i.uninstalled, i.app_id AS "appId" FROM github_app_tokens t
        JOIN github_installations i ON i.installation_id = t.installation_id
       WHERE t.token_digest = $1`,
     [digestOf(token)],
   )).rows[0];
   if (!row) throw new Error('token_unknown');
+  if (row.uninstalled) throw new Error('installation_uninstalled');
   if (row.suspended) throw new Error('installation_suspended');
   if (new Date(row.expires_at) <= new Date()) throw new Error('token_expired');
+  // FORGE-05: a revoked repository poisons every token scoped to it.
+  const revoked = (await poolOrClient.query(
+    `SELECT 1 FROM installation_repo_revocations WHERE installation_id = $1 AND repository = ANY($2)`,
+    [row.installation_id, row.repositories],
+  )).rows[0];
+  if (revoked) throw new Error('token_scope_revoked');
   return row;
 }
 
