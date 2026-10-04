@@ -11,6 +11,7 @@
 import { resolvePrincipal } from './agentIdentity.js';
 import { authorityTransaction, operationHash } from './workspaceOperationReceipts.js';
 import { giftTransferTx } from '../utils/creditLedgerV2.js';
+import { sendEmail } from './emailService.js';
 
 export class GiftError extends Error {
   constructor(code, reason) {
@@ -49,6 +50,27 @@ async function senderPrincipal(db, actor) {
 const giftOf = (row, replayed) => ({ giftId:row.id, state:row.state, amountMicro:String(row.amount_micro),
   senderUserId:row.sender_user_id, recipientUserId:row.recipient_user_id, replayed });
 
+/** Gift preferences, defaulting to accepting/unpaused when no row exists. Callers that
+ * enforce prefs must hold the user's row lock (taken here) so a concurrent preference
+ * change serializes against the gift. */
+async function prefsOf(db, userId) {
+  await db.query('SELECT id FROM users WHERE id=$1 FOR UPDATE',[userId]);
+  const r=(await db.query('SELECT accepts_unsolicited,gifting_paused FROM workforce_gift_preferences WHERE user_id=$1',[userId])).rows[0];
+  return { accepts:r?.accepts_unsolicited ?? true, paused:r?.gifting_paused ?? false };
+}
+
+/** Non-receipt notice to the SENDER, after the money transaction has rolled back: the
+ * content never distinguishes unknown/opted-out/paused/frozen recipients, so the notice
+ * is not an account oracle. Best-effort: mail failure must not rewrite the refusal. */
+async function notifyGiftNotReceived(pool, senderId, { recipientDisplay, amountMicro }) {
+  try {
+    const s=(await pool.query('SELECT email,display_name FROM users WHERE id=$1',[senderId])).rows[0];
+    if (!s?.email) return;
+    await sendEmail(pool,'gift_not_received',s.email,
+      { senderName:s.display_name, recipientDisplay, amountMicro },senderId);
+  } catch (e) { console.log(`[Gifts] non-receipt notice failed for ${senderId}: ${e.message}`); }
+}
+
 /** Safe recipient-confirmation summary: who (display handle only), how much, and the zero
  * fee -- bound by a consent hash the commit must reproduce. Unknown, ineligible and frozen
  * recipients answer identically, so the preview is not an account oracle. */
@@ -56,17 +78,28 @@ export async function previewGift(pool, ctx, value) {
   const a=context(ctx),v=shape(value,['recipientUserId','amountMicro']);
   const recipient=uuid(v.recipientUserId),micro=amount(v.amountMicro);
   if (recipient===a.actorUserId) fail('denied','self_gift_refused');
-  return authorityTransaction(pool,async db=>{
-    await senderPrincipal(db,a.actorUserId);
-    const r=(await db.query(`SELECT u.id,u.display_name,a.owner_kind,a.is_frozen
-      FROM users u LEFT JOIN credit_accounts a ON a.user_id=u.id
-      WHERE u.id=$1 FOR SHARE OF u`,[recipient])).rows[0];
-    const p=r && await resolvePrincipal(db,recipient);
-    if (!r || !p?.usable || p.kind!=='human') fail('not_found','gift_recipient_unavailable');
-    if (r.owner_kind!=null && (r.owner_kind!=='user' || r.is_frozen)) fail('not_found','gift_recipient_unavailable');
-    return { recipient:{ userId:r.id, displayName:r.display_name }, amountMicro:micro, feeMicro:'0',
-      consentHash:operationHash({ recipient:recipient, amountMicro:micro }) };
-  });
+  try {
+    return await authorityTransaction(pool,async db=>{
+      await senderPrincipal(db,a.actorUserId);
+      if ((await prefsOf(db,a.actorUserId)).paused) fail('denied','gift_sending_paused');
+      const r=(await db.query(`SELECT u.id,u.display_name,a.owner_kind,a.is_frozen
+        FROM users u LEFT JOIN credit_accounts a ON a.user_id=u.id
+        WHERE u.id=$1 FOR UPDATE OF u`,[recipient])).rows[0];
+      const p=r && await resolvePrincipal(db,recipient);
+      if (!r || !p?.usable || p.kind!=='human') fail('not_found','gift_recipient_unavailable');
+      if (r.owner_kind!=null && (r.owner_kind!=='user' || r.is_frozen)) fail('refused','gift_recipient_not_accepting');
+      const rp=await prefsOf(db,recipient);
+      if (!rp.accepts || rp.paused) fail('refused','gift_recipient_not_accepting');
+      return { recipient:{ userId:r.id, displayName:r.display_name }, amountMicro:micro, feeMicro:'0',
+        consentHash:operationHash({ recipient:recipient, amountMicro:micro }) };
+    });
+  } catch (e) {
+    if (e.code==='refused' && e.details?.reason==='gift_recipient_not_accepting') {
+      await notifyGiftNotReceived(pool,a.actorUserId,{ recipientDisplay:'the recipient', amountMicro:micro });
+      fail('not_found','gift_recipient_unavailable');
+    }
+    throw e;
+  }
 }
 
 export async function giftCredits(pool, ctx, value) {
@@ -76,14 +109,26 @@ export async function giftCredits(pool, ctx, value) {
     operationId:uuid(v.operationId),consentHash:v.consentHash};
   if (operationHash({ recipient:input.recipientUserId, amountMicro:input.amountMicro })!==input.consentHash) fail('conflict','gift_terms_changed');
   if (input.recipientUserId===a.actorUserId) fail('denied','self_gift_refused');
-  return authorityTransaction(pool,async db=>{
+  try {
+  return await authorityTransaction(pool,async db=>{
     await db.query('SELECT pg_advisory_xact_lock(hashtextextended($1,0))',[`gift-actor:${a.actorUserId}`]);
     await senderPrincipal(db,a.actorUserId);
+    if ((await prefsOf(db,a.actorUserId)).paused) fail('denied','gift_sending_paused');
     await db.query('SELECT pg_advisory_xact_lock(hashtextextended($1,0))',[`gift:${a.actorUserId}:${a.clientId}:${input.operationId}`]);
     const prior=(await db.query('SELECT * FROM workforce_gifts WHERE sender_user_id=$1 AND client_id=$2 AND operation_id=$3',
       [a.actorUserId,a.clientId,input.operationId])).rows[0];
     const hash=operationHash({ recipientUserId:input.recipientUserId, amountMicro:input.amountMicro, operationId:input.operationId });
     if (prior) { if (prior.request_hash!==hash) fail('conflict','operation_payload_conflict'); return giftOf(prior,true); }
+    // The recipient is re-verified at commit: identity must exist (no money into the void),
+    // stay usable, and stay accepting -- preview is advisory and preferences can flip.
+    const r=(await db.query(`SELECT u.id,a.owner_kind,a.is_frozen
+      FROM users u LEFT JOIN credit_accounts a ON a.user_id=u.id
+      WHERE u.id=$1 FOR UPDATE OF u`,[input.recipientUserId])).rows[0];
+    const p=r && await resolvePrincipal(db,input.recipientUserId);
+    if (!r || !p?.usable || p.kind!=='human') fail('not_found','gift_recipient_unavailable');
+    if (r.owner_kind!=null && (r.owner_kind!=='user' || r.is_frozen)) fail('refused','gift_recipient_not_accepting');
+    const rp=await prefsOf(db,input.recipientUserId);
+    if (!rp.accepts || rp.paused) fail('refused','gift_recipient_not_accepting');
     // First receipt provisions the recipient's ledger row at ZERO -- never backfilled from a
     // legacy label (FUND-17). Identity must already exist; only the money row is new.
     await db.query(`INSERT INTO credit_accounts(user_id,owner_kind,balance) VALUES($1,'user',0)
@@ -94,6 +139,13 @@ export async function giftCredits(pool, ctx, value) {
     await giftTransferTx(db,{ giftId:row.id, senderId:a.actorUserId, recipientId:input.recipientUserId, amountMicro:input.amountMicro });
     return giftOf(row,false);
   });
+  } catch (e) {
+    if (e.code==='refused' && e.details?.reason==='gift_recipient_not_accepting') {
+      await notifyGiftNotReceived(pool,a.actorUserId,{ recipientDisplay:'the recipient', amountMicro:input.amountMicro });
+      throw Object.assign(new Error('Gift destination unavailable'),{ code:'GIFT_DESTINATION_UNAVAILABLE' });
+    }
+    throw e;
+  }
 }
 
 /** Return preview: the original gift, the unreturned remainder, and the consent binding.
@@ -136,7 +188,7 @@ async function reverseGiftTx(db, a, { giftId, micro, operationId, kind, reason, 
   const row=(await db.query(`INSERT INTO workforce_gifts(sender_user_id,recipient_user_id,client_id,operation_id,request_hash,amount_micro)
     VALUES($1,$2,$3,$4,$5,$6) RETURNING *`,
     [a.actorUserId,g.sender_user_id,a.clientId,operationId,hash,micro])).rows[0];
-  await giftTransferTx(db,{ giftId:row.id, senderId:a.actorUserId, recipientId:g.sender_user_id, amountMicro:micro });
+  await giftTransferTx(db,{ giftId:row.id, senderId:a.actorUserId, recipientId:g.sender_user_id, amountMicro:micro, forDisputeReversal:kind==='dispute_reversal' });
   const link=(await db.query(`INSERT INTO workforce_gift_returns(gift_id,return_gift_id,reversed_by_user_id,kind,reason,amount_micro)
     VALUES($1,$2,$3,$4,$5,$6) RETURNING *`,[giftId,row.id,reversedBy,kind,reason,micro])).rows[0];
   return { ...giftOf(row,false), returnsGift:giftId, kind:link.kind };
@@ -154,6 +206,8 @@ export async function returnGift(pool, ctx, value) {
     const g=(await db.query('SELECT sender_user_id,recipient_user_id FROM workforce_gifts WHERE id=$1 FOR SHARE',[input.giftId])).rows[0];
     if (!g) fail('not_found','gift_not_found');
     if (g.recipient_user_id!==a.actorUserId) fail('denied','gift_return_recipient_only');
+    if ((await prefsOf(db,a.actorUserId)).paused) fail('denied','gift_return_paused');
+    if ((await prefsOf(db,g.sender_user_id)).paused) fail('denied','gift_return_paused');
     if (operationHash({ returnsGift:input.giftId, recipient:g.sender_user_id, amountMicro:input.amountMicro })!==input.consentHash) fail('conflict','gift_terms_changed');
     return reverseGiftTx(db,a,{ giftId:input.giftId, micro:input.amountMicro, operationId:input.operationId,
       kind:'recipient_return', reason:'recipient-initiated return', reversedBy:a.actorUserId });
@@ -162,7 +216,8 @@ export async function returnGift(pool, ctx, value) {
 
 /** Dispute reversal: an authorized operator appends a justified reversal over the same
  * rails. Authority is the DB-backed platform admin role; justification is a recorded reason.
- * The dispute WORKFLOW (filing, evidence, SLA) is out of scope -- this is the append. */
+ * The dispute WORKFLOW (filing, evidence, SLA) is out of scope -- this is the append.
+ * Reversals bypass gift pause deliberately: pause is the dispute tool, reversal its remedy. */
 export async function disputeReverseGift(pool, ctx, value) {
   const a=context(ctx),v=shape(value,['giftId','amountMicro','reason','operationId']);
   const input={giftId:uuid(v.giftId),amountMicro:amount(v.amountMicro),operationId:uuid(v.operationId)};
@@ -181,5 +236,56 @@ export async function disputeReverseGift(pool, ctx, value) {
     return reverseGiftTx(db,{ actorUserId:g.recipient_user_id, clientId:a.clientId },
       { giftId:input.giftId, micro:input.amountMicro, operationId:input.operationId,
         kind:'dispute_reversal', reason, reversedBy:a.actorUserId });
+  });
+}
+
+/** Gift preferences: anyone sets their own; only an admin sets another account's (the
+ * dispute-pause tool). An admin-set pause sticks: the account cannot clear a pause someone
+ * else imposed. */
+export async function setGiftPreferences(pool, ctx, value) {
+  const a=context(ctx),v=shape(value,['targetUserId','acceptsUnsolicited','giftingPaused']);
+  const target=uuid(v.targetUserId);
+  for (const k of ['acceptsUnsolicited','giftingPaused']) if (typeof v[k]!=='boolean') fail('bad_input','invalid_preference');
+  return authorityTransaction(pool,async db=>{
+    await senderPrincipal(db,a.actorUserId);
+    if (target!==a.actorUserId) {
+      const role=(await db.query('SELECT role FROM users WHERE id=$1 FOR SHARE',[a.actorUserId])).rows[0]?.role;
+      if (role!=='admin') fail('denied','gift_preference_admin_only');
+      if (!(await db.query('SELECT id FROM users WHERE id=$1 FOR SHARE',[target])).rows[0]) fail('not_found','gift_recipient_unavailable');
+    }
+    await db.query('SELECT id FROM users WHERE id=$1 FOR UPDATE',[target]);
+    const role=(await db.query('SELECT role FROM users WHERE id=$1 FOR SHARE',[a.actorUserId])).rows[0]?.role;
+    const existing=(await db.query('SELECT gifting_paused,gifting_paused_by FROM workforce_gift_preferences WHERE user_id=$1 FOR UPDATE',[target])).rows[0];
+    if (existing?.gifting_paused && !v.giftingPaused && existing.gifting_paused_by
+      && existing.gifting_paused_by!==a.actorUserId && role!=='admin') fail('denied','gift_preference_admin_only');
+    const row=(await db.query(`INSERT INTO workforce_gift_preferences(user_id,accepts_unsolicited,gifting_paused,gifting_paused_by,updated_at)
+      VALUES($1,$2,$3,$4,now()) ON CONFLICT(user_id) DO UPDATE SET accepts_unsolicited=$2,gifting_paused=$3,gifting_paused_by=$4,updated_at=now() RETURNING *`,
+      [target,v.acceptsUnsolicited,v.giftingPaused,v.giftingPaused?a.actorUserId:null])).rows[0];
+    return { userId:row.user_id, acceptsUnsolicited:row.accepts_unsolicited, giftingPaused:row.gifting_paused };
+  });
+}
+
+/** Gift events for account history: everything the caller sent or received, newest first,
+ * with direction, counterparty handle, amount, state and return linkage. Callers see only
+ * their own side; asking for another account's history is refused. */
+export async function listGiftHistory(pool, ctx, value) {
+  const a=context(ctx),v=shape(value,['limit']);
+  const limit=Number(v.limit);
+  if (!Number.isInteger(limit) || limit<1 || limit>200) fail('bad_input','invalid_limit');
+  return authorityTransaction(pool,async db=>{
+    await senderPrincipal(db,a.actorUserId);
+    const { rows }=(await db.query(`SELECT g.id,g.sender_user_id,g.recipient_user_id,g.amount_micro,g.state,g.created_at,
+        CASE WHEN g.sender_user_id=$1 THEN 'sent' ELSE 'received' END AS direction,
+        CASE WHEN g.sender_user_id=$1 THEN ru.display_name ELSE su.display_name END AS counterparty,
+        r.kind AS return_kind, r.reason AS return_reason
+      FROM workforce_gifts g
+      JOIN users su ON su.id=g.sender_user_id
+      JOIN users ru ON ru.id=g.recipient_user_id
+      LEFT JOIN workforce_gift_returns r ON r.return_gift_id=g.id
+      WHERE g.sender_user_id=$1 OR g.recipient_user_id=$1
+      ORDER BY g.created_at DESC, g.id DESC LIMIT $2`,[a.actorUserId,limit]));
+    return rows.map(r=>({ giftId:r.id, direction:r.direction, counterparty:r.counterparty,
+      amountMicro:String(r.amount_micro), state:r.state, createdAt:r.created_at.toISOString(),
+      returnKind:r.return_kind, returnReason:r.return_reason }));
   });
 }

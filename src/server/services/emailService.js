@@ -748,6 +748,17 @@ const templates = {
     `, `Respond by ${d.dueBy || 'the Stripe deadline'} or the dispute is lost automatically.`),
   }),
 
+  gift_not_received: ({ senderName, recipientDisplay, amountMicro }) => ({
+    // Deliberately vague about WHY: unknown, opted-out, paused and frozen recipients all
+    // refuse identically, and this notice must not become the oracle the API refuses to be.
+    subject: 'Your XENO gift could not be received',
+    html: wrapInLayout('Gift not received', `
+      ${mailHeading('Your gift could not be received')}
+      ${mailText(`Hi ${escapeHtml(senderName)}, your gift of ${escapeHtml(String(Number(amountMicro) / 1e6))} credits to ${escapeHtml(recipientDisplay)} was not received and nothing left your account.`)}
+      ${mailText('Recipients choose whether to accept unsolicited gifts. If this keeps happening, ask them to check their gift settings — or keep the credits; they never moved.', { muted: true })}
+    `, 'Your gift was not received; nothing left your account.'),
+  }),
+
   forum_mention: ({ displayName, threadTitle, threadUrl, authorName, authorKind, authorOwner, excerpt, unsubscribeUrl: unsubUrl }) => ({
     subject: `${authorName} mentioned you: ${threadTitle}`,
     html: wrapInLayout('You were mentioned', `
