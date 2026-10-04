@@ -251,12 +251,41 @@ defineProvider('mirror',
     reconcile: store.reconcile,
   });
 
+// FORGE-02: non-code resource stores bind through the same neutral
+// surface with read-only reference capabilities.
+defineProvider('store',
+  ['discover', 'readRevision', 'listChecks', 'listReviews', 'reconcile'],
+  {
+    discover: store.discover,
+    readRevision: store.readRevision,
+    listChecks: store.listChecks,
+    listReviews: store.listReviews,
+    reconcile: store.reconcile,
+  });
+
+export function registerForgeProvider(name, capabilities) {
+  if (typeof name !== 'string' || !name.trim() || name.length > 80) {
+    throw new Error('invalid provider name');
+  }
+  if (!Array.isArray(capabilities) || capabilities.length === 0) {
+    throw new Error('capabilities name at least one operation');
+  }
+  if (PROVIDERS.has(name)) throw new Error('provider_exists');
+  const unknown = capabilities.filter((op) => !OPERATIONS.includes(op));
+  if (unknown.length > 0) throw new Error('unknown_operation');
+  const fns = {};
+  for (const op of new Set(capabilities)) fns[op] = store[op];
+  defineProvider(name, [...new Set(capabilities)], fns);
+  return describeCapabilities(name);
+}
+
 export async function discoverRepositories(poolOrClient, provider) {
   return withTx(poolOrClient, (executor) => dispatch(provider, 'discover', executor, { provider }));
 }
 
 export async function bindRepository(poolOrClient, {
   projectId, actorUserId, provider, remoteId, installationRef = null, refs = {}, accessPolicy = {},
+  displayName = null,
 }) {
   if (!projectId) throw new Error('projectId is required');
   if (!actorUserId) throw new Error('actorUserId is required');
@@ -264,13 +293,19 @@ export async function bindRepository(poolOrClient, {
   if (typeof remoteId !== 'string' || !remoteId.trim() || remoteId.length > 512) {
     throw new Error('remoteId names the repository');
   }
+  // FORGE-02: the display label is mutable decoration; the stable
+  // identity stays (provider, remote_id) and nothing else.
+  if (displayName !== null && (typeof displayName !== 'string' || !displayName.trim() || displayName.length > 200)) {
+    throw new Error('invalid display name');
+  }
   return withTx(poolOrClient, async (executor) => {
     if (!(await isProjectAdmin(executor, projectId, actorUserId))) throw new Error('bind_not_authorized');
     try {
       const { rows } = await executor.query(
-        `INSERT INTO forge_bindings (project_id, provider, remote_id, installation_ref, refs, access_policy, created_by_user_id)
-          VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *`,
-        [projectId, provider, remoteId.trim(), installationRef, JSON.stringify(refs), JSON.stringify(accessPolicy), actorUserId],
+        `INSERT INTO forge_bindings (project_id, provider, remote_id, installation_ref, refs, access_policy, created_by_user_id, display_name)
+          VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING *`,
+        [projectId, provider, remoteId.trim(), installationRef, JSON.stringify(refs), JSON.stringify(accessPolicy), actorUserId,
+          displayName === null ? null : displayName.trim()],
       );
       return rows[0];
     } catch (err) {
@@ -417,4 +452,71 @@ export async function recordForgeReview(poolOrClient, { crId, reviewerUserId, de
     );
     return rows[0];
   });
+}
+
+// FORGE-02: a project binds many repositories and stores; every
+// binding carries its full identity tuple.
+export async function listProjectBindings(poolOrClient, projectId) {
+  const { rows } = await poolOrClient.query(
+    `SELECT id, provider, remote_id AS "remoteId", display_name AS "displayName",
+            installation_ref AS "installationRef", refs, access_policy AS "accessPolicy",
+            forked_from_binding_id AS "forkedFrom", created_at AS "createdAt"
+       FROM forge_bindings WHERE project_id = $1 ORDER BY created_at, id`,
+    [projectId],
+  );
+  return rows;
+}
+
+// Rename/transfer reconciliation through stable identity. The lookup
+// matches (provider, remote_id) exactly: a display name or URL that
+// is not the stable remote id resolves nothing and therefore
+// authorizes nothing. The stable anchor never moves; only the
+// decoration and installation do, journaled per move.
+export async function reconcileRepositoryTransfer(poolOrClient, {
+  provider, remoteId, actorUserId, newInstallationRef = null, newDisplayName = null,
+}) {
+  if (!PROVIDERS.has(provider)) throw new Error('unknown_provider');
+  if (typeof remoteId !== 'string' || !remoteId) throw new Error('remoteId names the stable identity');
+  if (newDisplayName !== null
+    && (typeof newDisplayName !== 'string' || !newDisplayName.trim() || newDisplayName.length > 200)) {
+    throw new Error('invalid display name');
+  }
+  return withTx(poolOrClient, async (executor) => {
+    const binding = (await executor.query(
+      `SELECT * FROM forge_bindings WHERE provider = $1 AND remote_id = $2 FOR UPDATE`,
+      [provider, remoteId],
+    )).rows[0];
+    if (!binding) throw new Error('binding_not_found');
+    if (!(await isProjectAdmin(executor, binding.project_id, actorUserId))) {
+      throw new Error('transfer_not_authorized');
+    }
+    const next = {
+      installation: newInstallationRef === null ? binding.installation_ref : newInstallationRef,
+      display: newDisplayName === null ? binding.display_name : newDisplayName.trim(),
+    };
+    await executor.query(
+      `UPDATE forge_bindings SET installation_ref = $2, display_name = $3 WHERE id = $1`,
+      [binding.id, next.installation, next.display],
+    );
+    const { rows } = await executor.query(
+      `INSERT INTO forge_binding_transfers (binding_id, previous_installation_ref, new_installation_ref,
+          previous_display_name, new_display_name, actor_user_id)
+        VALUES ($1, $2, $3, $4, $5, $6) RETURNING *`,
+      [binding.id, binding.installation_ref, next.installation,
+        binding.display_name, next.display, actorUserId],
+    );
+    return { bindingId: binding.id, stableRemoteId: binding.remote_id, transfer: rows[0] };
+  });
+}
+
+export async function readBindingTransfers(poolOrClient, bindingId) {
+  const { rows } = await poolOrClient.query(
+    `SELECT previous_installation_ref AS "previousInstallation",
+            new_installation_ref AS "newInstallation",
+            previous_display_name AS "previousDisplay", new_display_name AS "newDisplay",
+            actor_user_id AS "actor", created_at AS "at"
+       FROM forge_binding_transfers WHERE binding_id = $1 ORDER BY created_at, id`,
+    [bindingId],
+  );
+  return rows;
 }
