@@ -39,11 +39,12 @@
  *            confirmation, atomic debit-and-credit with receipt and roots); ACCT-05 by
  *            scripts/account-gift-return.test.mjs (non-cancellable, separately authorized return);
  *            ACCT-06 by scripts/account-gift-preferences.test.mjs (opt-out, pause, enforcement).
- *   ACCT-01  "the central Platform/account ledger is authoritative ... the XENO private API must
- *            not keep an independent spendable balance." The platform half is proven here. The
- *            other half is a claim about a DIFFERENT REPOSITORY (xeno-api-proxy), which this suite
- *            cannot observe -- and which reads its balance from this ledger rather than holding
- *            one, checked 2026-09-23 but not assertable from inside xeno-platform.
+ *   ACCT-01  NOW CITED by scripts/account-ledger-authority.test.mjs: one composed flow
+ *            settles transfers, allocations, reservations and charges on the canonical ledger
+ *            with system-wide conservation; a closed-world schema pin trips on any second
+ *            spendable balance; the service routes are driven against the real ledger. The
+ *            proxy half is pinned there too (xeno-api-proxy @ 5ac0830 spends via
+ *            platformPool against these same tables; its mirror script is retired).
  *   ACCT-07  NOW CITED by scripts/account-agent-approval.test.mjs: the bounded-approval
  *            path exists (agentSpendApprovals.js) -- one agent, one operation, a maximum, an
  *            expiry, an optional target -- consumed through one shared gate by gifts and
