@@ -127,6 +127,12 @@ export async function acceptResourceOffer(poolOrClient, { actorUserId, offerId, 
     if (offer.status !== 'open') bad('conflict', 'offer_not_open');
     const now = new Date();
     if (now < new Date(offer.valid_from) || now > new Date(offer.valid_until)) bad('conflict', 'offer_window_closed');
+    // RES-05: storage expiry must provide AGREED export/retention behavior, so a
+    // storage offer without agreed terms cannot be accepted in the first place.
+    if (typeof offer.kind === 'string' && offer.kind.startsWith('storage/')
+      && (offer.retention_days === null || offer.export_grace_days === null)) {
+      bad('conflict', 'retention_terms_required');
+    }
     if (offer.allowed_project_id !== null && useProject !== offer.allowed_project_id) bad('denied', 'lease_project_mismatch');
     if (offer.allowed_task_ref !== null && useTask !== offer.allowed_task_ref) bad('denied', 'lease_task_mismatch');
     if (useProject !== null && !(await holdsProject(client, actor, useProject))) bad('denied', 'lease_project_not_held');
