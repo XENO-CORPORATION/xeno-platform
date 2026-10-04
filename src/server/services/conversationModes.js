@@ -188,3 +188,54 @@ export async function transitionToChat(poolOrClient, { conversationId, actorUser
     return { transitionId: row.id, conversationId: convId, fromMode: 'agent', toMode: 'chat', handoff };
   });
 }
+
+/**
+ * SES-06: resume loads PERSISTED identity, mode, project and root binding.
+ * `hints` (cwd, UI selection, claimed mode/owner) is accepted so callers can
+ * pass their incidental context through, and is then IGNORED: every field of
+ * the result comes from the database. Missing roots or revoked grants return
+ * an actionable blocked state; the blocked path performs NO writes, so the
+ * mode cannot drift and no substitute workspace can be chosen.
+ */
+export async function resumeConversation(poolOrClient, { conversationId, actorUserId, hints = {} }) {
+  const convId = uuid(conversationId, 'conversation');
+  const actor = uuid(actorUserId, 'actor');
+  void hints;
+  return withTx(poolOrClient, async (client) => {
+    const conv = (await client.query(
+      'SELECT id, mode, owner_user_id, project_id FROM chat_conversations WHERE id=$1',
+      [convId],
+    )).rows[0];
+    if (!conv) bad('not_found', 'conversation_not_found');
+    if (conv.owner_user_id !== null && conv.owner_user_id !== actor) bad('denied', 'resume_not_authorized');
+    const recorded = (await client.query(
+      `SELECT root_kind, root_project_id FROM conversation_mode_transitions
+       WHERE conversation_id=$1 AND from_mode='chat' AND to_mode='agent' ORDER BY created_at DESC LIMIT 1`,
+      [convId],
+    )).rows[0];
+    const root = recorded
+      ? { kind: recorded.root_kind, ...(recorded.root_project_id ? { projectId: recorded.root_project_id } : {}) }
+      : null;
+    const blocked = (reason, action) => ({
+      blocked: true, reason, action, mode: conv.mode, projectId: conv.project_id, root,
+    });
+    if (conv.mode !== 'agent') {
+      return { blocked: false, identity: { ownerUserId: conv.owner_user_id },
+        mode: conv.mode, projectId: conv.project_id, root };
+    }
+    if (!recorded) return blocked('no_recorded_root', 'transition_with_explicit_root');
+    if (recorded.root_kind === 'project') {
+      const live = (await client.query('SELECT id FROM chat_projects WHERE id=$1 AND is_archived=FALSE', [recorded.root_project_id])).rows[0];
+      if (!live) return blocked('root_missing', 'rebind_to_live_root');
+      if (!(await holdsProject(client, actor, recorded.root_project_id))) {
+        return blocked('grant_revoked', 'request_project_access');
+      }
+    } else {
+      const grant = (await client.query(
+        'SELECT scope FROM provider_session_workdirs WHERE conversation_id=$1', [convId])).rows[0];
+      if (!grant || grant.scope !== 'session-isolated') return blocked('root_missing', 'reprovision_session_root');
+    }
+    return { blocked: false, identity: { ownerUserId: conv.owner_user_id },
+      mode: conv.mode, projectId: conv.project_id, root };
+  });
+}
