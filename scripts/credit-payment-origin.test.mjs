@@ -41,13 +41,17 @@ test('payment origins bind settled monetary evidence to the exact lot atomically
   const [windowUp,windowDown]=windowSql.split(/^--\s*DOWN\b/im);
   const evidenceSql=await readFile(new URL('../src/server/database/migrations/20260928190000-workforce-milestone-evidence.sql',import.meta.url),'utf8');
   const [evidenceUp,evidenceDown]=evidenceSql.split(/^--\s*DOWN\b/im);
+  // Post-foundation ALTERs must be re-applied after the rollback above recreates the
+  // foundation tables bare: the spend-approvals migration is fully re-runnable.
+  const apprSql=await readFile(new URL('../src/server/database/migrations/20261004150000-workforce-spend-approvals.sql',import.meta.url),'utf8');
+  const [apprUp]=apprSql.split(/^--\s*DOWN\b/im);
   await t.test('funding schema rolls back only while empty',async()=>{
     const db=await pool.connect();
     try {
       // Roll back dependants first, exactly as the migration runner does.
       await db.query('BEGIN');await db.query(evidenceDown);await db.query(windowDown);await db.query(settlementDown);await db.query(runDown);await db.query(priceDown);await db.query(budgetDown);await db.query(fundingDown);
       assert.equal((await db.query("SELECT to_regclass('workforce_funding_campaigns') AS t")).rows[0].t,null,'empty funding rollback removes its schema');
-      await db.query(fundingUp);await db.query(budgetUp);await db.query(priceUp);await db.query(runUp);await db.query(settlementUp);await db.query(windowUp);await db.query(evidenceUp);await db.query('COMMIT');
+      await db.query(fundingUp);await db.query(budgetUp);await db.query(priceUp);await db.query(runUp);await db.query(settlementUp);await db.query(windowUp);await db.query(evidenceUp);await db.query(apprUp);await db.query('COMMIT');
     } finally {await db.query('ROLLBACK');db.release();}
   });
   const marker = randomUUID().replaceAll('-', '');

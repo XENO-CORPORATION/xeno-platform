@@ -2,13 +2,16 @@
 // two canonical user accounts. The service owns identity, consent and idempotency; the money
 // moves through the canonical ledger's giftTransferTx in the same transaction.
 //
-// v1 SCOPE, HONESTLY: human senders only (agent-originated gifts need the bounded-approval
-// path ACCT-07 requires, which does not exist -- agents are refused explicitly, not silently);
-// recipients by existing user ID only (no email lookup, no identity auto-creation, no claim
-// links); the recipient's LEDGER row is provisioned at zero on first receipt, never backfilled;
-// recipient lots are spendable and re-giftable but NOT contribution-eligible, because the
-// contribution gate keys on stripe checkout sessions and a gift deliberately breaks that chain.
+// v1 SCOPE, HONESTLY: human senders spend directly; agent senders spend ONLY through a
+// bounded owner approval (ACCT-07, agentSpendApprovals.js) -- the payer is always the
+// approval's owner, derived server-side, never a request field (no payer key exists in
+// any shape here). Recipients by existing user ID only (no email lookup, no identity
+// auto-creation, no claim links); the recipient's LEDGER row is provisioned at zero on
+// first receipt, never backfilled; recipient lots are spendable and re-giftable but NOT
+// contribution-eligible, because the contribution gate keys on stripe checkout sessions
+// and a gift deliberately breaks that chain.
 import { resolvePrincipal } from './agentIdentity.js';
+import { verifySpendApproval } from './agentSpendApprovals.js';
 import { authorityTransaction, operationHash } from './workspaceOperationReceipts.js';
 import { giftTransferTx } from '../utils/creditLedgerV2.js';
 import { sendEmail } from './emailService.js';
@@ -40,15 +43,18 @@ const context = v => {
   if (typeof v.clientId !== 'string' || !/^[A-Za-z0-9._-]{1,128}$/.test(v.clientId)) fail('bad_input','invalid_client');
   return { actorUserId:uuid(v.actorUserId),clientId:v.clientId };
 };
-async function senderPrincipal(db, actor) {
+async function senderPrincipal(db, actor, { allowAgent = false } = {}) {
   await db.query('SELECT id FROM users WHERE id=$1 FOR SHARE',[actor]);
   const p=await resolvePrincipal(db,actor);
-  if (p?.kind==='agent') fail('denied','agent_gift_approval_unavailable');
-  if (!p?.usable || p.kind!=='human') fail('denied','usable_human_required');
+  if (p?.kind==='agent' && !allowAgent) fail('denied','agent_gift_approval_unavailable');
+  if (!p?.usable || (p.kind!=='human' && p.kind!=='agent')) fail('denied','usable_human_required');
   return p;
 }
+// The payer (sender_user_id) is who the money left; the originator is who asked. They
+// coincide for humans; for agent gifts the sender is the approval's owner.
 const giftOf = (row, replayed) => ({ giftId:row.id, state:row.state, amountMicro:String(row.amount_micro),
-  senderUserId:row.sender_user_id, recipientUserId:row.recipient_user_id, replayed });
+  senderUserId:row.sender_user_id, recipientUserId:row.recipient_user_id,
+  originatorUserId:row.originator_user_id, approvalId:row.approval_id, replayed });
 
 /** Gift preferences, defaulting to accepting/unpaused when no row exists. Callers that
  * enforce prefs must hold the user's row lock (taken here) so a concurrent preference
@@ -75,13 +81,25 @@ async function notifyGiftNotReceived(pool, senderId, { recipientDisplay, amountM
  * fee -- bound by a consent hash the commit must reproduce. Unknown, ineligible and frozen
  * recipients answer identically, so the preview is not an account oracle. */
 export async function previewGift(pool, ctx, value) {
-  const a=context(ctx),v=shape(value,['recipientUserId','amountMicro']);
+  const a=context(ctx);
+  const v=shape(value,'spendApprovalId' in Object(value)
+    ? ['recipientUserId','amountMicro','spendApprovalId'] : ['recipientUserId','amountMicro']);
   const recipient=uuid(v.recipientUserId),micro=amount(v.amountMicro);
+  const approvalId=v.spendApprovalId===undefined?undefined:uuid(v.spendApprovalId);
   if (recipient===a.actorUserId) fail('denied','self_gift_refused');
   try {
     return await authorityTransaction(pool,async db=>{
-      await senderPrincipal(db,a.actorUserId);
-      if ((await prefsOf(db,a.actorUserId)).paused) fail('denied','gift_sending_paused');
+      const sender=await senderPrincipal(db,a.actorUserId,{allowAgent:true});
+      // Agents preview against a live approval (advisory; the commit re-verifies and
+      // consumes). Humans must not name one: there is no delegated authority to narrow.
+      let payer=a.actorUserId;
+      if (sender.kind==='agent') {
+        if (approvalId===undefined) fail('denied','agent_gift_approval_unavailable');
+        payer=(await verifySpendApproval(db,{approvalId,agentActor:a.actorUserId,operation:'gift',
+          amountMicro:micro,target:{recipientUserId:recipient},consume:false})).ownerUserId;
+      } else if (approvalId!==undefined) fail('bad_input','approval_not_for_humans');
+      if (recipient===payer) fail('denied','self_gift_refused');
+      if ((await prefsOf(db,payer)).paused) fail('denied','gift_sending_paused');
       const r=(await db.query(`SELECT u.id,u.display_name,a.owner_kind,a.is_frozen
         FROM users u LEFT JOIN credit_accounts a ON a.user_id=u.id
         WHERE u.id=$1 FOR UPDATE OF u`,[recipient])).rows[0];
@@ -103,20 +121,35 @@ export async function previewGift(pool, ctx, value) {
 }
 
 export async function giftCredits(pool, ctx, value) {
-  const a=context(ctx),v=shape(value,['recipientUserId','amountMicro','operationId','consentHash','confirmed']);
+  const a=context(ctx);
+  const v=shape(value,'spendApprovalId' in Object(value)
+    ? ['recipientUserId','amountMicro','operationId','consentHash','confirmed','spendApprovalId']
+    : ['recipientUserId','amountMicro','operationId','consentHash','confirmed']);
   if (v.confirmed!==true || typeof v.consentHash!=='string' || !/^[a-f0-9]{64}$/.test(v.consentHash)) fail('bad_input','explicit_confirmation_required');
   const input={recipientUserId:uuid(v.recipientUserId),amountMicro:amount(v.amountMicro),
-    operationId:uuid(v.operationId),consentHash:v.consentHash};
+    operationId:uuid(v.operationId),consentHash:v.consentHash,
+    spendApprovalId:v.spendApprovalId===undefined?undefined:uuid(v.spendApprovalId)};
   if (operationHash({ recipient:input.recipientUserId, amountMicro:input.amountMicro })!==input.consentHash) fail('conflict','gift_terms_changed');
   if (input.recipientUserId===a.actorUserId) fail('denied','self_gift_refused');
   try {
   return await authorityTransaction(pool,async db=>{
     await db.query('SELECT pg_advisory_xact_lock(hashtextextended($1,0))',[`gift-actor:${a.actorUserId}`]);
-    await senderPrincipal(db,a.actorUserId);
-    if ((await prefsOf(db,a.actorUserId)).paused) fail('denied','gift_sending_paused');
+    const sender=await senderPrincipal(db,a.actorUserId,{allowAgent:true});
+    // The payer is structural, not approved: a human pays for themselves, an agent's
+    // owner pays for it. The approval still gates every micro below; deriving the
+    // payer here lets the replay check run BEFORE any approval state is touched, so
+    // a retried operation replays its receipt even against an exhausted approval.
+    let payer=a.actorUserId,approvalId=null;
+    if (sender.kind==='agent') {
+      if (input.spendApprovalId===undefined) fail('denied','agent_gift_approval_unavailable');
+      approvalId=input.spendApprovalId;
+      payer=sender.owner.id;
+    } else if (input.spendApprovalId!==undefined) fail('bad_input','approval_not_for_humans');
+    if (input.recipientUserId===payer) fail('denied','self_gift_refused');
+    if ((await prefsOf(db,payer)).paused) fail('denied','gift_sending_paused');
     await db.query('SELECT pg_advisory_xact_lock(hashtextextended($1,0))',[`gift:${a.actorUserId}:${a.clientId}:${input.operationId}`]);
-    const prior=(await db.query('SELECT * FROM workforce_gifts WHERE sender_user_id=$1 AND client_id=$2 AND operation_id=$3',
-      [a.actorUserId,a.clientId,input.operationId])).rows[0];
+    const prior=(await db.query('SELECT * FROM workforce_gifts WHERE sender_user_id=$1 AND originator_user_id=$2 AND client_id=$3 AND operation_id=$4',
+      [payer,a.actorUserId,a.clientId,input.operationId])).rows[0];
     const hash=operationHash({ recipientUserId:input.recipientUserId, amountMicro:input.amountMicro, operationId:input.operationId });
     if (prior) { if (prior.request_hash!==hash) fail('conflict','operation_payload_conflict'); return giftOf(prior,true); }
     // The recipient is re-verified at commit: identity must exist (no money into the void),
@@ -133,10 +166,19 @@ export async function giftCredits(pool, ctx, value) {
     // legacy label (FUND-17). Identity must already exist; only the money row is new.
     await db.query(`INSERT INTO credit_accounts(user_id,owner_kind,balance) VALUES($1,'user',0)
       ON CONFLICT(user_id) DO NOTHING`,[input.recipientUserId]);
-    const row=(await db.query(`INSERT INTO workforce_gifts(sender_user_id,recipient_user_id,client_id,operation_id,request_hash,amount_micro)
-      VALUES($1,$2,$3,$4,$5,$6) RETURNING *`,
-      [a.actorUserId,input.recipientUserId,a.clientId,input.operationId,hash,input.amountMicro])).rows[0];
-    await giftTransferTx(db,{ giftId:row.id, senderId:a.actorUserId, recipientId:input.recipientUserId, amountMicro:input.amountMicro });
+    // The approval is consumed AFTER the replay check (a retried operation replays its
+    // receipt without double-consuming) and BEFORE the money moves, under FOR UPDATE.
+    // The consuming owner must still be the derived payer: ownership is re-resolved
+    // live, and drift between the two observations fails closed.
+    if (approvalId!==null) {
+      const funding=(await verifySpendApproval(db,{approvalId,agentActor:a.actorUserId,operation:'gift',
+        amountMicro:input.amountMicro,target:{recipientUserId:input.recipientUserId},consume:true})).ownerUserId;
+      if (funding!==payer) fail('denied','spend_approval_owner_check_failed');
+    }
+    const row=(await db.query(`INSERT INTO workforce_gifts(sender_user_id,recipient_user_id,originator_user_id,approval_id,client_id,operation_id,request_hash,amount_micro)
+      VALUES($1,$2,$3,$4,$5,$6,$7,$8) RETURNING *`,
+      [payer,input.recipientUserId,a.actorUserId,approvalId,a.clientId,input.operationId,hash,input.amountMicro])).rows[0];
+    await giftTransferTx(db,{ giftId:row.id, senderId:payer, recipientId:input.recipientUserId, amountMicro:input.amountMicro });
     return giftOf(row,false);
   });
   } catch (e) {
@@ -176,8 +218,8 @@ async function reverseGiftTx(db, a, { giftId, micro, operationId, kind, reason, 
   const hash=operationHash({ recipientUserId:g.sender_user_id, amountMicro:micro, operationId, returnsGift:giftId });
   // Uncertain retries reconcile by identity BEFORE state guards: a committed return must
   // replay its receipt, not fail the remainder check its own completion caused (ACCT-05).
-  const prior=(await db.query('SELECT * FROM workforce_gifts WHERE sender_user_id=$1 AND client_id=$2 AND operation_id=$3',
-    [a.actorUserId,a.clientId,operationId])).rows[0];
+  const prior=(await db.query('SELECT * FROM workforce_gifts WHERE sender_user_id=$1 AND originator_user_id=$2 AND client_id=$3 AND operation_id=$4',
+    [a.actorUserId,a.actorUserId,a.clientId,operationId])).rows[0];
   if (prior) {
     if (prior.request_hash!==hash) fail('conflict','operation_payload_conflict');
     const link=(await db.query('SELECT * FROM workforce_gift_returns WHERE return_gift_id=$1',[prior.id])).rows[0];
@@ -185,9 +227,9 @@ async function reverseGiftTx(db, a, { giftId, micro, operationId, kind, reason, 
   }
   const returned=(await db.query('SELECT COALESCE(SUM(amount_micro),0)::text AS total FROM workforce_gift_returns WHERE gift_id=$1',[giftId])).rows[0].total;
   if (BigInt(micro)>BigInt(g.amount_micro)-BigInt(returned)) fail('denied','gift_return_exceeds_remainder');
-  const row=(await db.query(`INSERT INTO workforce_gifts(sender_user_id,recipient_user_id,client_id,operation_id,request_hash,amount_micro)
-    VALUES($1,$2,$3,$4,$5,$6) RETURNING *`,
-    [a.actorUserId,g.sender_user_id,a.clientId,operationId,hash,micro])).rows[0];
+  const row=(await db.query(`INSERT INTO workforce_gifts(sender_user_id,recipient_user_id,originator_user_id,client_id,operation_id,request_hash,amount_micro)
+    VALUES($1,$2,$3,$4,$5,$6,$7) RETURNING *`,
+    [a.actorUserId,g.sender_user_id,a.actorUserId,a.clientId,operationId,hash,micro])).rows[0];
   await giftTransferTx(db,{ giftId:row.id, senderId:a.actorUserId, recipientId:g.sender_user_id, amountMicro:micro, forDisputeReversal:kind==='dispute_reversal' });
   const link=(await db.query(`INSERT INTO workforce_gift_returns(gift_id,return_gift_id,reversed_by_user_id,kind,reason,amount_micro)
     VALUES($1,$2,$3,$4,$5,$6) RETURNING *`,[giftId,row.id,reversedBy,kind,reason,micro])).rows[0];

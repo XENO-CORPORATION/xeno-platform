@@ -44,13 +44,14 @@
  *            other half is a claim about a DIFFERENT REPOSITORY (xeno-api-proxy), which this suite
  *            cannot observe -- and which reads its balance from this ledger rather than holding
  *            one, checked 2026-09-23 but not assertable from inside xeno-platform.
- *   ACCT-07  "agent-originated gifts/contributions require explicit bounded spend approval." The
- *            agent-subject half IS proven below (an agent's balance is its OWNER's; all four legs
- *            resolve one subject) and spend_caps exist. Human contributions now work, but an
- *            agent-originated contribution needs the bounded-approval path; refusing agents is
- *            not evidence that this required capability has been implemented.
+ *   ACCT-07  NOW CITED by scripts/account-agent-approval.test.mjs: the bounded-approval
+ *            path exists (agentSpendApprovals.js) -- one agent, one operation, a maximum, an
+ *            expiry, an optional target -- consumed through one shared gate by gifts and
+ *            contributions, with live owner re-resolution and a derived payer. The
+ *            agent-subject half stays proven below (an agent's balance is its OWNER's).
  *
- * So ACCT closes by BUILDING gift/contribute/return on this ledger, not by building a ledger.
+ * So ACCT closed by BUILDING gift/contribute/return/approvals on this ledger, not by
+ * building a ledger. Only ACCT-01's proxy half remains, and it lives in xeno-api-proxy.
  */
 
 import test from 'node:test';
