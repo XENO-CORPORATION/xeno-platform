@@ -59,6 +59,7 @@ import { authorityTransaction, lockWorkspaceAuthority } from './workspaceOperati
 import { lockApiKeyWorkforceAuthority } from './apiKeyWorkforceAuthority.js';
 import { RunAdmissionError, actsInDivision } from './workforceRunAdmission.js';
 import { resolveRunFunding } from './workforceRunFunding.js';
+import { TERMINAL_LOSSES, STEP_REFUSAL_RESUME } from './workforceRunRefusals.js';
 import { closeFinishedRunTx, readRunFundingStateV2 } from '../utils/creditLedgerV2.js';
 
 /** NFR-06: "maximum 60 seconds". The database CHECK holds the same bound independently. */
@@ -77,15 +78,7 @@ const uuid = (value, field) => {
 const b64url = (buf) => Buffer.from(buf).toString('base64url');
 
 /** Terminal losses revoke durably; everything else refuses this step only. */
-const TERMINAL = new Map([
-  ['actor_unavailable', 'authority_lost'], ['agent_not_found', 'authority_lost'], ['agent_version_withdrawn', 'authority_lost'],
-  ['assignment_not_live', 'authority_lost'], ['participation_not_live', 'authority_lost'], ['project_not_live', 'authority_lost'],
-  ['actor_cannot_act_for_target', 'authority_lost'], ['actor_not_an_admitted_member', 'authority_lost'],
-  ['observer_cannot_dispatch', 'authority_lost'], ['agent_not_an_admitted_member', 'authority_lost'],
-  ['entitlement_not_live', 'authority_lost'], ['root_binding_not_live', 'authority_lost'],
-  // DIV-08: leaving the division, or the division being archived, stops the run.
-  ['actor_outside_division', 'authority_lost'], ['division_not_live', 'authority_lost'],
-]);
+const TERMINAL = TERMINAL_LOSSES;
 
 async function livePrincipal(db, userId) {
   const principal = await resolvePrincipal(db, userId);
@@ -308,6 +301,10 @@ export async function authorizeRunStep(pool, authenticatedContext, value, { sign
       await pool.query(`INSERT INTO workforce_run_revocations(admission_id,reason) VALUES($1,$2)
         ON CONFLICT (admission_id) DO NOTHING`, [terminal.admissionId ?? admissionId, terminal.reason]);
     }
+    // RUN-07: say what the refusal means for CONTINUING this run, so a runtime need not hard-code the
+    // reason list. Derived here from the reason alone; a reason the platform has not classified gets none.
+    const resume = error instanceof RunAdmissionError ? STEP_REFUSAL_RESUME.get(error.details?.reason) : null;
+    if (resume) throw new RunAdmissionError(error.code, error.details.reason, { ...error.details, resumable: resume.resumable, resume: resume.resume });
     throw error;
   });
   return result;

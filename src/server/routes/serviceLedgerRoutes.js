@@ -39,6 +39,7 @@ import * as defaultPricing from '../utils/creditCosts.js';
 import { ensureQuota as defaultEnsureQuota } from '../services/quotaService.js';
 import { getEffectivePlan as defaultGetEffectivePlan } from '../services/effectivePlan.js';
 import { billingSubjectFor as defaultBillingSubjectFor } from '../services/agentIdentity.js';
+import { DRAW_REFUSAL_RESUME, resumeFields } from '../services/workforceRunRefusals.js';
 
 // Same error taxonomy as v2LedgerRoutes.sendErr (kept local so the two files
 // share no mutable surface). 23505 (unique-violation on holdId replay) → 409.
@@ -146,7 +147,7 @@ export function createServiceLedgerRouter({
     catch (error) {
       if (error.code === 'BAD_REQUEST') return badRequest(res, 'Malformed run draw request.');
       const status = DRAW_STATUS[error.code];
-      if (status) return res.status(status).json({ error: { code: error.code,
+      if (status) return res.status(status).json({ error: { code: error.code, ...resumeFields(DRAW_REFUSAL_RESUME, error.code),
         ...(error.remainingMicro ? { remainingMicro: error.remainingMicro, requiredMicro: error.requiredMicro } : {}) } });
       sendErr(res, error);
     }

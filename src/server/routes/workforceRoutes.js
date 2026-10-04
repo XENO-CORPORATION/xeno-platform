@@ -582,6 +582,10 @@ export function createWorkforceRouter({ createWorkforceResource = defaultCreate,
         if (typeof error.details.availableMicro === 'string' && /^[0-9]{1,20}$/.test(error.details.availableMicro)) extra.availableMicro = error.details.availableMicro;
         if (typeof error.details.field === 'string' && /^[a-zA-Z.]{1,64}$/.test(error.details.field)) extra.field = error.details.field;
         if (typeof error.details.revocation === 'string' && /^[a-z_]{1,32}$/.test(error.details.revocation)) extra.revocation = error.details.revocation;
+        // RUN-07: set by authorizeRunStep alone, from a closed table -- never from a caller.
+        if (typeof error.details.resumable === 'boolean' && typeof error.details.resume === 'string' && /^[a-z_]{1,32}$/.test(error.details.resume)) {
+          extra.resumable = error.details.resumable; extra.resume = error.details.resume;
+        }
         return fail(res, error.code, { schemaVersion: 1, reason: error.details.reason, ...extra });
       }
       // LIFE-02: a removal refusal carries its reason, and an unsettled one says what is still owed -- the

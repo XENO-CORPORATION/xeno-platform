@@ -678,6 +678,15 @@ test('real HTTP/authMiddleware/JWT/DPoP boundary with query-aware auth DB and in
       const refused = await request({ path: '/run-admissions/authorize-step', body: stepBody });
       assert.equal(refused.status, 403);
       assert.deepEqual(refused.body.details, { schemaVersion: 1, reason: 'admission_revoked', revocation: 'authority_lost' }, 'a revoked run says so, and why');
+      // RUN-07: what the refusal means for continuing crosses when the service set it, as a boolean and a
+      // closed word -- and a malformed pair is dropped rather than relayed.
+      admitFailure = new RunAdmissionError('denied', 'admission_revoked', { revocation: 'authority_lost', resumable: false, resume: 'new_admission' });
+      const resume = await request({ path: '/run-admissions/authorize-step', body: stepBody });
+      assert.deepEqual(resume.body.details, { schemaVersion: 1, reason: 'admission_revoked', revocation: 'authority_lost', resumable: false, resume: 'new_admission' },
+        'a refusal says whether the same run can continue');
+      admitFailure = new RunAdmissionError('denied', 'admission_revoked', { resumable: 'yes', resume: 'drop table;' });
+      assert.deepEqual((await request({ path: '/run-admissions/authorize-step', body: stepBody })).body.details, { schemaVersion: 1, reason: 'admission_revoked' },
+        'a malformed resumability is never relayed');
       admitFailure = undefined;
       const stopped = await request({ path: '/run-admissions/revoke', body: { admissionId: operationId } });
       assert.equal(stopped.status, 200);
