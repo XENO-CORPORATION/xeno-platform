@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { resolvePrincipal } from './agentIdentity.js';
 import { check } from '../utils/authzReBAC.js';
+import { transitionInner } from './contributionLifecycle.js';
 
 // PUB-05: contribution records. Every contribution names its type, author,
 // responsible human/account, optional agent/team provenance, target
@@ -195,6 +196,12 @@ export async function submitRevision(poolOrClient, { contributionId, actorUserId
       && String(actorUserId) !== String(current.responsible_user_id)) {
       throw new Error('revision_not_authorized');
     }
+    // Accepted and terminal contributions are read-only: a rebase after
+    // acceptance is a new contribution, not a rewrite. A rebase during
+    // review returns the record to submitted for re-review.
+    if (['accepted', 'integrated', 'rejected', 'withdrawn'].includes(current.review_state)) {
+      throw new Error(`contribution is ${current.review_state} and read-only`);
+    }
     const items = checkedEvidence(current.type, evidence);
     const next = Number(current.current_revision_no) + 1;
     await executor.query(
@@ -206,6 +213,12 @@ export async function submitRevision(poolOrClient, { contributionId, actorUserId
       `UPDATE contributions SET current_revision_no = $2 WHERE id = $1`,
       [contributionId, next],
     );
+    if (['review', 'checks_pending', 'changes_requested'].includes(current.review_state)) {
+      await transitionInner(executor, {
+        contributionId, actorUserId, toState: 'submitted',
+        rationale: `revision ${next} supersedes ${current.review_state}; re-review required`,
+      });
+    }
     return readContribution(executor, contributionId);
   });
 }
