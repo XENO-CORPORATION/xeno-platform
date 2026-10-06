@@ -1,0 +1,12 @@
+import { createRequire } from 'node:module'; import path from 'node:path'; import { pathToFileURL } from 'node:url';
+const require = createRequire(import.meta.url); const puppeteer = require('puppeteer');
+const b = await puppeteer.launch({ headless: true, args: ['--allow-file-access-from-files'] }); const p = await b.newPage(); const errs = []; p.on('pageerror', (e) => errs.push(e.message));
+const url = pathToFileURL(path.resolve('index.html')).href; const w = (ms) => new Promise((r) => setTimeout(r, ms));
+await p.setViewport({ width: 1440, height: 900 }); await p.goto(url + '#/overview'); await w(700);
+const on = () => p.evaluate(() => document.getElementById('tip').classList.contains('on') ? document.getElementById('tip').textContent : '-');
+await p.hover('#rail [data-go="chat"]'); await w(200); console.log('first hover @200ms:', await on()); await w(400); console.log('first hover @600ms:', await on());
+await p.hover('#rail [data-go="projects"]'); await w(40); console.log('slide to next @40ms:', await on());
+await p.hover('#rail [data-go="library"]'); await w(40); console.log('slide again @40ms:', await on());
+await p.click('#rail [data-go="library"]'); await w(700); console.log('after click on same button:', await on());
+await p.mouse.move(700, 400); await w(800); await p.hover('#rail [data-go="chat"]'); await w(100); console.log('cold again @100ms:', await on());
+console.log('errors', errs); await b.close();

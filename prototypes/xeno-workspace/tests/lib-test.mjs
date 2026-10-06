@@ -1,0 +1,12 @@
+import { createRequire } from 'node:module'; import path from 'node:path'; import { pathToFileURL } from 'node:url';
+const require = createRequire(import.meta.url); const puppeteer = require('puppeteer');
+const b = await puppeteer.launch({ headless: true, args: ['--no-sandbox', '--allow-file-access-from-files'] }); const p = await b.newPage();
+await p.setViewport({ width: 1440, height: 900 }); const errs = []; p.on('pageerror', (e) => errs.push(e.message));
+const w = (ms) => new Promise((r) => setTimeout(r, ms)); const url = pathToFileURL(path.resolve('index.html')).href;
+await p.goto(url); await p.evaluate(() => { try { localStorage.clear(); } catch {} }); await p.goto(url + '#/studio/p/chat'); await w(600);
+await p.click('[data-go-library]'); await w(500);
+console.log('from chat shortcut:', await p.evaluate(() => location.hash), '|', await p.evaluate(() => document.querySelector('.crumbs').innerText.replace(/\s+/g, ' ')), '| marked:', await p.evaluate(() => document.querySelector('#panel > .pv [aria-current="true"]')?.dataset.item));
+await p.screenshot({ path: 'lib.png', clip: { x: 0, y: 0, width: 345, height: 900 } });
+await p.goto(url + '#/office'); await w(400); await p.click('#rail [data-go="library"]'); await w(500); console.log('rail in office:', await p.evaluate(() => location.hash));
+await p.goto(url + '#/overview'); await w(400); await p.click('#rail [data-go="library"]'); await w(500); console.log('rail in overview:', await p.evaluate(() => location.hash));
+console.log('errors', errs); await b.close();

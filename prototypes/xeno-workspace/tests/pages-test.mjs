@@ -1,0 +1,23 @@
+import { createRequire } from 'node:module'; import path from 'node:path'; import { pathToFileURL } from 'node:url';
+const require = createRequire(import.meta.url); const puppeteer = require('puppeteer');
+const b = await puppeteer.launch({ headless: true, args: ['--allow-file-access-from-files'] }); const p = await b.newPage(); const errs = []; p.on('pageerror', (e) => errs.push(e.message)); p.on('console', (m) => { if (m.type() === 'error' && !/ERR_FILE|favicon|fonts/.test(m.text())) errs.push('console: ' + m.text()); });
+const url = pathToFileURL(path.resolve('index.html')).href, wait = (ms) => new Promise((r) => setTimeout(r, ms));
+let fails = 0; const ok = (c, m) => { if (!c) fails++; if (!c || process.env.V) console.log(c ? 'PASS' : 'FAIL', m); }; const ev = (f, ...a) => p.evaluate(f, ...a);
+const routes = process.argv[2] ? [process.argv[2]] : ['studio/g/projects', 'overview/g/workspace/Company', 'overview/g/places', 'overview/g/places/Lobby', 'overview/g/anima/Atlas — research', 'overview/g/anima/Atlas — research/Mind', 'overview/g/anima/Atlas — research/Soul', 'overview/g/anima/Atlas — research/Channels', 'overview/g/anima/Swarms', 'overview/g/anima/Memory', 'overview/g/anima/Skills it learned', 'overview/g/market/Brand checker', 'overview/g/market/Seller console', 'overview/g/market/Rentals', 'overview/g/community/th_0', 'overview/g/community/Moderation', 'overview/g/community/My reports', 'studio/g/projects/Brand refresh/Funding', 'studio/g/projects/Brand refresh', 'studio/g/projects/Brand refresh/Tasks', 'studio/g/projects/Brand refresh/Conversations', 'studio/g/projects/Brand refresh/Team assignments', 'studio/g/projects/Brand refresh/Resources', 'studio/g/projects/Brand refresh/Funding', 'studio/g/projects/Brand refresh/Activity', 'overview/g/projects/Archived projects', 'overview/g/projects/Home reno',
+  'overview/g/library', 'overview/g/library/Images', 'overview/g/library/Trash', 'overview/g/library/Product shot.png',
+  'overview/g/workspace', 'overview/g/workspace/Members', 'overview/g/workspace/Agents', 'overview/g/workspace/Teams', 'overview/g/workspace/Knowledge', 'overview/g/workspace/Automations', 'overview/g/workspace/Activity', 'overview/g/workspace/Settings', 'overview/g/workspace/Studio', 'overview/g/workspace/Switch workspace',
+  'overview/g/anima', 'overview/g/anima/Atlas — research', 'overview/g/community', 'overview/g/community/Questions', 'overview/g/market', 'overview/g/market/Seller console', 'overview/g/market/Purchases', 'overview/g/market/Minds',
+  'dev/z/agents', 'dev/z/automate', 'dev/z/build', 'dev/z/agents/Fix flaky test', 'dev/z/agents/Upgrade electron', 'studio/z/create', 'social/z/publish', 'office/z/mail', 'tools/z/image', 'corpo/z/forms',
+  'studio/p/pixel', 'studio/p/photo', 'dev/p/agent', 'office/p/docs'];
+const sizes = process.env.SIZES ? JSON.parse(process.env.SIZES) : [[1920, 1080], [1440, 900], [1280, 720]];
+for (const [W, H] of sizes) {
+  await p.setViewport({ width: W, height: H }); await p.goto(url); await ev(() => { localStorage.clear(); localStorage.setItem('xw.introSeen', JSON.stringify({ studio: 1, office: 1, social: 1, corpo: 1, dev: 1, tools: 1 })); });
+  for (const r of routes) {
+    await p.goto(url + '#/' + r.split('/').map(encodeURIComponent).join('/')); await p.reload(); await wait(r === routes[0] ? 900 : 650);
+    const g = await ev(() => { const mv = document.querySelector('#main .mview'), pg = mv?.querySelector('.pg'); const over = [...(mv?.querySelectorAll('*') || [])].filter((n) => { const rr = n.getBoundingClientRect(); return rr.width && rr.right > mv.getBoundingClientRect().right + 1 && getComputedStyle(n).position !== 'fixed'; }).map((n) => n.className).slice(0, 3);
+      return { pg: !!pg, h1: pg?.querySelector('h1')?.textContent || document.querySelector('.pg-top .crumbs b')?.textContent, dup: !!pg?.querySelector('.pg-head--col'), foot: !!document.querySelector('.mfoot .sb-fresh'), skel: !!pg?.querySelector('[aria-busy]'), hscroll: mv ? mv.scrollWidth - mv.clientWidth : -1, over, crumbs: document.querySelector('.crumbs')?.textContent }; });
+    ok(g.pg && g.h1 && !g.dup && g.foot && !g.skel && g.hscroll <= 1 && !g.over.length, `${W}x${H} ${r}: "${g.h1}" crumbs="${g.crumbs}" hscroll ${g.hscroll} ${g.over.join(',')}${g.skel ? ' STILL LOADING' : ''}${g.pg ? '' : ' NO PAGE'}`);
+    if (W === 1440) await p.screenshot({ path: `pg-shots/${r.replace(/[\/ ]/g, '_').replace(/[^\w.-]/g, '')}.png` });
+  }
+}
+console.log(fails ? `${fails} FAILED` : `ALL PASS (${routes.length} pages × ${sizes.length} sizes)`, '| errors', errs.slice(0, 8)); await b.close();

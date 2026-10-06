@@ -1,0 +1,15 @@
+import { createRequire } from 'node:module'; import path from 'node:path'; import { pathToFileURL } from 'node:url';
+const require = createRequire(import.meta.url); const puppeteer = require('puppeteer');
+const b = await puppeteer.launch({ headless: true, args: ['--allow-file-access-from-files'] }); const p = await b.newPage(); const errs = []; p.on('pageerror', (e) => errs.push(e.message));
+const url = pathToFileURL(path.resolve('index.html')).href; const w = (ms) => new Promise((r) => setTimeout(r, ms));
+await p.setViewport({ width: 1440, height: 900 }); await p.goto(url); await p.evaluate(() => localStorage.clear()); await p.goto(url + '#/overview'); await w(700);
+const st = () => p.evaluate(() => ({ open: document.getElementById('menu').classList.contains('on'), title: document.querySelector('#menu .nt-head b')?.textContent, unread: document.querySelectorAll('#menu .mi.nt.unread').length, badge: getComputedStyle(document.querySelector('#rail [data-go="bell"] .badge')).display, tip: document.querySelector('#rail [data-go="bell"]').dataset.tip }));
+await p.click('#rail [data-go="bell"]'); await w(300); console.log('bell open:', JSON.stringify(await st()));
+await p.screenshot({ path: 'bell.png', clip: { x: 0, y: 380, width: 420, height: 520 } });
+await p.click('#menu [data-nt-p="agent"]'); await w(500); console.log('click a notification:', await p.evaluate(() => decodeURIComponent(location.hash)), JSON.stringify(await st()));
+await p.click('#rail [data-go="bell"]'); await w(300); await p.click('[data-nt-all]'); await w(300); console.log('mark all read:', JSON.stringify(await st()));
+await p.click('#rail [data-go="bell"]'); await w(300); console.log('bell toggles closed:', JSON.stringify(await st()));
+await p.click('#rail [data-go="help"]'); await w(300); console.log('help open:', JSON.stringify(await st()));
+await p.click('#menu [data-go-community]'); await w(500); console.log('help > community:', await p.evaluate(() => location.hash));
+await p.click('#rail [data-go="help"]'); await w(300); await p.keyboard.press('Escape'); await w(300); console.log('esc closes:', JSON.stringify(await st()));
+console.log('errors', errs); await b.close();
