@@ -1,0 +1,15 @@
+import { createRequire } from 'node:module'; import path from 'node:path'; import { pathToFileURL } from 'node:url';
+const require = createRequire(import.meta.url); const puppeteer = require('puppeteer');
+const b = await puppeteer.launch({ headless: true, args: ['--allow-file-access-from-files'] }); const p = await b.newPage(); const errs = []; p.on('pageerror', (e) => errs.push(e.message));
+const url = pathToFileURL(path.resolve('index.html')).href; const w = (ms) => new Promise((r) => setTimeout(r, ms));
+await p.setViewport({ width: 1440, height: 768 }); await p.goto(url); await p.evaluate(() => localStorage.clear()); await p.goto(url + '#/overview'); await w(700);
+const st = () => p.evaluate(() => [...document.querySelectorAll('#rzone .rcat')].map((c) => { const l = c.querySelector('.rcat-l'); return `${c.dataset.cat}:${getComputedStyle(l).opacity === '1' ? 'LABEL' : 'icon'}${c.dataset.tip ? '+tip' : ''}:h${Math.round(c.getBoundingClientRect().height)}`; }).join(' '));
+const ys = () => p.evaluate(() => [...document.querySelectorAll('#rzone .rcat')].map((c) => Math.round(c.getBoundingClientRect().top)).join(','));
+console.log('closed:', await st(), '| y', await ys());
+await p.click('#rail [data-cat="office"]'); await w(400); console.log('office open:', await st(), '| y', await ys());
+await p.click('#rail [data-zone="office-mail"]'); await w(500); await p.click('#rail [data-cat="office"]'); await w(400);
+console.log('office closed while on its area (current):', await st());
+console.log('overflow at 768 closed?', await p.evaluate(() => { localStorage.setItem('xw.ovOpen', '[]'); return 0; }));
+await p.goto(url + '#/overview'); await w(600); console.log('fit 768:', await p.evaluate(() => { const r = document.getElementById('rmid'); return r.scrollHeight - r.clientHeight; }));
+await p.click('#rail [data-cat="studio"]'); await w(400); await p.screenshot({ path: 'lbl.png', clip: { x: 0, y: 330, width: 120, height: 420 } });
+console.log('errors', errs); await b.close();

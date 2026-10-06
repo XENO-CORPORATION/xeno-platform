@@ -1,0 +1,21 @@
+import { createRequire } from 'node:module'; import path from 'node:path'; import { pathToFileURL } from 'node:url';
+const require = createRequire(import.meta.url); const puppeteer = require('puppeteer');
+const b = await puppeteer.launch({ headless: true, args: ['--no-sandbox', '--allow-file-access-from-files'] }); const p = await b.newPage();
+await p.setViewport({ width: 1440, height: 900 }); const errs = []; p.on('pageerror', (e) => errs.push(e.message));
+const w = (ms) => new Promise((r) => setTimeout(r, ms)); const url = pathToFileURL(path.resolve('index.html')).href;
+await p.goto(url); await p.evaluate(() => { try { localStorage.clear(); localStorage.setItem('xw.introSeen', JSON.stringify({ studio: 1, office: 1, social: 1, corpo: 1, dev: 1, tools: 1 })); } catch {} });
+const st = () => p.evaluate(() => ({ hash: decodeURIComponent(location.hash), h1: document.querySelector('.pg h1')?.textContent, tab: document.querySelector('.pg-tabs [aria-selected="true"]')?.textContent, rows: document.querySelectorAll('.pj-li').length, marked: document.querySelector('#panel > .pv [aria-current="true"]')?.dataset.item }));
+await p.goto(url + '#/studio'); await w(400); await p.click('#rail [data-go="projects"]'); await w(400);
+await p.click('#panel > .pv [data-item="Brand refresh"]'); await w(500); console.log('open:', JSON.stringify(await st()));
+await p.screenshot({ path: 'proj.png', clip: { x: 0, y: 0, width: 1440, height: 720 } });
+await p.click('[data-ptab="Tasks"]'); await w(400); console.log('tasks tab:', JSON.stringify(await st()));
+await p.click('[data-ptab="Team assignments"]'); await w(400); console.log('teams tab:', JSON.stringify(await st()));
+await p.reload(); await w(600); console.log('reload keeps tab:', JSON.stringify(await st()));
+await p.goBack(); await w(400); console.log('back:', (await st()).hash, (await st()).tab);
+await p.goto(url + '#/overview/p/chat'); await w(500);
+await p.click('#panel > .pv [data-project="XENO launch"]'); await w(300);
+const opened = await p.evaluate(() => !!document.querySelector('#panel > .pv [data-open-project="XENO launch"]'));
+if (opened) { await p.click('#panel > .pv [data-open-project="XENO launch"]'); await w(500); }
+console.log('chat project -> project:', opened, JSON.stringify(await st()));
+await p.goto(url + '#/dev/g/workspace'); await w(500); console.log('workspace sections:', await p.evaluate(() => [...document.querySelectorAll('#panel > .pv .sh')].map((x) => x.innerText.trim()).join(' / ')));
+console.log('errors', errs); await b.close();

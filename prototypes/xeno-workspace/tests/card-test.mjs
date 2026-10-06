@@ -1,0 +1,15 @@
+import { createRequire } from 'node:module'; import path from 'node:path'; import { pathToFileURL } from 'node:url';
+const require = createRequire(import.meta.url); const puppeteer = require('puppeteer');
+const b = await puppeteer.launch({ headless: true, args: ['--no-sandbox','--allow-file-access-from-files'] }); const p = await b.newPage();
+await p.setViewport({ width: 1440, height: 900 }); const errs=[]; p.on('pageerror', e=>errs.push(e.message));
+const w = ms=>new Promise(r=>setTimeout(r,ms)); const url = pathToFileURL(path.resolve('index.html')).href;
+await p.goto(url); await p.evaluate(()=>{try{localStorage.clear()}catch{}}); await p.goto(url+'#/studio/p/chat'); await w(800);
+const geo = () => p.evaluate(()=>{const m=document.getElementById('apmenu').getBoundingClientRect(),c=document.getElementById('apcard');const s=c&&c.classList.contains('show');if(!s)return 'card hidden';const r=c.getBoundingClientRect();return 'card right='+Math.round(r.right)+' menu left='+Math.round(m.left)+' gap='+Math.round(m.left-r.right)+' text='+c.querySelector('.ct').textContent});
+await p.click('.live-chat [data-part="model"]'); await w(250);
+await p.hover('#apmenu [data-more-models]'); await p.click('#apmenu [data-more-models]'); await w(250);
+await p.hover('#apmenu [data-model="grok-4.3"]'); await w(250); console.log('expanded, hover grok:', await geo());
+await p.screenshot({path:'card-1.png',clip:{x:600,y:380,width:740,height:500}});
+await p.click('#apmenu [data-more-models]'); await w(250); console.log('after Fewer:', await geo());
+await p.hover('#apmenu [data-model="gpt-5.6-terra"]'); await w(250); console.log('hover terra:', await geo());
+await p.screenshot({path:'card-2.png',clip:{x:600,y:380,width:740,height:500}});
+console.log('errors', errs); await b.close();

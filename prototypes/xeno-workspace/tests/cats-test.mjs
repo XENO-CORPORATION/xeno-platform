@@ -1,0 +1,16 @@
+import { createRequire } from 'node:module'; import path from 'node:path'; import { pathToFileURL } from 'node:url';
+const require = createRequire(import.meta.url); const puppeteer = require('puppeteer');
+const b = await puppeteer.launch({ headless: true, args: ['--no-sandbox', '--allow-file-access-from-files'] }); const p = await b.newPage();
+await p.setViewport({ width: 1440, height: 768 }); const errs = []; p.on('pageerror', (e) => errs.push(e.message));
+const w = (ms) => new Promise((r) => setTimeout(r, ms)); const url = pathToFileURL(path.resolve('index.html')).href;
+await p.goto(url); await p.evaluate(() => { try { localStorage.clear(); } catch {} }); await p.goto(url + '#/overview'); await w(600);
+const st = () => p.evaluate(() => ({ cats: document.querySelectorAll('#rzone .rcat').length, open: document.querySelector('#rzone .rcat[aria-expanded="true"]')?.dataset.cat || '-', kids: document.querySelectorAll('#rzone .rcat-kids .rbtn').length, overflow: (() => { const r = document.getElementById('rmid'); return r.scrollHeight - r.clientHeight; })(), hash: decodeURIComponent(location.hash) }));
+console.log('start:', JSON.stringify(await st()));
+await p.click('#rzone [data-cat="studio"]'); await w(300); console.log('open studio:', JSON.stringify(await st()));
+await p.screenshot({ path: 'cats.png', clip: { x: 0, y: 0, width: 360, height: 768 } });
+await p.click('#rzone [data-zone="studio-generate"]'); await w(500); console.log('studio > generate:', JSON.stringify(await st()), await p.evaluate(() => document.querySelector('.crumbs').innerText.replace(/\s+/g, ' ')));
+await p.click('#rzone [data-cat="corpo"]'); await w(300); console.log('open corpo (6):', JSON.stringify(await st()));
+await p.click('#rzone [data-cat="corpo"]'); await w(300); console.log('close corpo:', JSON.stringify(await st()));
+await p.goto(url + '#/overview/z/dev-automate'); await w(600); console.log('deep link opens its category:', JSON.stringify(await st()));
+await p.goto(url + '#/studio'); await w(600); console.log('inside studio (no cats):', JSON.stringify(await st()));
+console.log('errors', errs); await b.close();
