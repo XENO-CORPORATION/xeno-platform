@@ -1824,7 +1824,7 @@
         (c.recents || []).forEach((g) => { g[1] = g[1].filter((x) => x !== t); });
         if (name) { let pj = c.projects.find((x) => x[0] === name); if (!pj) { pj = [name, null, []]; c.projects.push(pj); } pj[2].unshift(t); S.openProjects.add(name); }
         else (c.recents[0] || (c.recents[0] = ['Today', []]))[1].unshift(t);
-        window.XW.refreshPanel(); toast(name ? `Moved to ${name}` : 'Removed from its project');
+        window.XW.refreshPanel(); if (window.XENO_DRAG?.busy) return; window.XENO_HIST?.record(name ? `Moved “${t}” to ${name}` : `Removed “${t}” from its project`, null);
       };
       return [H.nav(h, () => { go('product', { product: 'chat' }); }),
         [{ label: 'Pinned', icon: 'pin', checked: pinned, run: () => { c.pinned = pinned ? c.pinned.filter((x) => x !== t) : [t, ...(c.pinned || [])]; window.XW.refreshPanel(); toast(pinned ? 'Unpinned' : 'Pinned'); } },
@@ -1923,13 +1923,17 @@
       const get = () => { const L = store.get(key, null) || {}; return { order: [...(L.order || []).filter((i) => ids.includes(i)), ...ids.filter((i) => !(L.order || []).includes(i))], hidden: new Set(L.hidden || []) }; };
       const apply = (L) => { store.set(key, { order: L.order, hidden: [...L.hidden] }); const mv = $('#main .mview'); if (mv) { const top = mv.scrollTop; mv.innerHTML = S.view === 'mode' ? mainMode() : mainDashboard(); mv.scrollTop = top; } };
       // positions as the person SEES them — a section with nothing to show renders nothing and must not count
-      const vis = [...document.querySelectorAll('#main [data-hsec]')].map((x) => x.dataset.hsec), i = vis.indexOf(id), label = HOME_SECS.list.find((x) => x.id === id)?.label || 'section';
-      const move = (d) => () => { const L = get(); const a = L.order.indexOf(id), b = L.order.indexOf(vis[i + d]); [L.order[a], L.order[b]] = [L.order[b], L.order[a]]; apply(L); };
+      const vis = [...document.querySelectorAll('#main [data-hsec]')].filter((x) => x.offsetHeight > 0).map((x) => x.dataset.hsec), i = vis.indexOf(id), label = HOME_SECS.list.find((x) => x.id === id)?.label || 'section';
+      const move = (d) => () => { const L = get(); const a = L.order.indexOf(id), b = L.order.indexOf(vis[i + d]); [L.order[a], L.order[b]] = [L.order[b], L.order[a]]; apply(L); if (!window.XENO_DRAG?.busy) window.XENO_HIST?.record(`Moved “${label}”`, null); };
       return [[{ label: 'Move up', icon: 'up', disabled: i <= 0 ? 'Already at the top' : null, run: move(-1) },
         { label: 'Move down', icon: 'down', disabled: i >= vis.length - 1 ? 'Already at the bottom' : null, run: move(1) },
         { label: `Hide “${label}”`, icon: 'eye', run: () => { const L = get(); L.hidden.add(id); apply(L); undoToast(`Hid “${label}”`, () => { const L2 = get(); L2.hidden.delete(id); apply(L2); }); } }],
       [{ label: 'Customize home…', icon: 'sliders', run: () => document.querySelector('[data-home-custom]')?.click() }]];
     } });
+    // drag (§7x): home sections reorder by dragging or Alt ↑/↓ — through the Move up/down above; a chat drops onto a
+    // project in the sidebar — through its own "Move to project" item
+    window.XENO_DRAG?.sort({ sel: '#main [data-hsec]', label: (n) => HOME_SECS?.list.find((x) => x.id === n.dataset.hsec)?.label || 'section' });
+    window.XENO_DRAG?.move({ sel: '#panel [data-chat]', into: '#panel [data-project]', label: (n) => n.dataset.chat, verb: (t) => t.dataset.project });
 
     // a chat message — the captured live chat and the static thread
     C.register({ id: 'message', sel: '[data-message-id], .chat .um, .chat .am', priority: 2, build: (n) => {

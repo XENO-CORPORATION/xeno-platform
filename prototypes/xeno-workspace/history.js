@@ -42,7 +42,8 @@
   function undoEntry(e) {
     if (!e || e.state !== 'done') return false;
     watch();
-    if (!e.used && (e.gen === gen || !e.before)) { // the area's own undo, then measure what it changed
+    if (!e.fn && !e.before) { toast('That couldn’t be undone'); return false; }
+    if (!e.used && e.fn && (e.gen === gen || !e.before)) { // the area's own undo, then measure what it changed
       const s1 = snap(); try { e.fn(); } catch (err) { console.error(err); toast('That couldn’t be undone'); return false; }
       try { window.XENO_DB?.save?.(); } catch {}
       const s2 = snap(), keys = diff(s1, s2); if (keys.length) { e.after = Object.fromEntries(keys.map((k) => [k, s1[k] ?? null])); e.before = Object.fromEntries(keys.map((k) => [k, s2[k] ?? null])); }
