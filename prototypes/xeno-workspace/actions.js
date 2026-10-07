@@ -211,7 +211,7 @@
 
   // ======================= wave 2: every remaining object does its real thing =======================
   const ctxSeg = () => (X().inOv() ? 'overview' : X().S.mode);
-  const undoToast = (msg, fn) => { const t = document.getElementById('toast'); t.innerHTML = `${esc(msg)} <button class="pg-undo">Undo</button>`; t.classList.add('on'); t.querySelector('.pg-undo').onclick = () => { fn(); t.classList.remove('on'); }; clearTimeout(t._pgT); t._pgT = setTimeout(() => t.classList.remove('on'), 5000); };
+  const undoToast = (msg, fn) => window.XENO_HIST.record(msg, fn);
   const save = () => { window.XENO_DB?.save?.(); };
   const ROLES = [['admin', 'Admin', 'Manages members, billing and settings'], ['member', 'Member', 'Works in the projects they are on'], ['guest', 'Guest', 'Sees only the projects they are added to']];
   const member = (n) => W().members.find((m) => m.name === n);

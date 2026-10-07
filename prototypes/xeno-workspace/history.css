@@ -1,0 +1,31 @@
+/* history.js — the toast stack and the history drawer (XENO MODES - SPEC §7v) */
+#xw-toasts{position:fixed;left:50%;bottom:24px;transform:translateX(-50%);z-index:330;display:flex;flex-direction:column;align-items:center;gap:8px;pointer-events:none}
+.xh-toast{pointer-events:auto;display:flex;align-items:center;gap:10px;padding:5px 5px 5px 14px;border-radius:10px;background:var(--elevated,#1a1a1c);border:1px solid var(--border,rgba(255,255,255,.09));box-shadow:0 14px 40px rgba(0,0,0,.5);font-size:13px;color:var(--text,#f4f4f4);animation:xh-in .22s var(--open,ease-out)}
+.xh-toast button[data-h="undo"],.xh-toast button[data-h="redo"]{height:26px;padding:0 10px;border-radius:7px;background:var(--text,#f4f4f4);color:#0a0a0a;font-weight:500;font-size:12px}
+.xh-toast kbd,#xw-history kbd{font:10.5px Inter,sans-serif;color:var(--dim,#8b8b92)}
+.xh-x{width:26px;height:26px;border-radius:7px;color:var(--dim,#8b8b92);font-size:16px;line-height:1}
+.xh-x:hover{color:var(--text,#f4f4f4);background:rgba(255,255,255,.06)}
+@keyframes xh-in{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+#xw-history{position:fixed;top:56px;right:12px;bottom:12px;width:340px;z-index:320;display:flex;flex-direction:column;gap:10px;padding:14px;border-radius:12px;background:var(--elevated,#1a1a1c);border:1px solid var(--border,rgba(255,255,255,.09));box-shadow:0 20px 60px rgba(0,0,0,.55);transform:translateX(calc(100% + 24px));visibility:hidden;transition:transform .24s var(--open,ease-out),visibility 0s .24s;outline:none}
+#xw-history.on{transform:none;visibility:visible;transition:transform .24s var(--open,ease-out)}
+#xw-history header{display:flex;align-items:center;gap:10px}
+#xw-history header b{flex:1;font-size:14px;font-weight:600}
+.xh-seg{display:flex;padding:2px;border-radius:8px;background:rgba(255,255,255,.05)}
+.xh-seg button{height:24px;padding:0 10px;border-radius:6px;font-size:12px;color:var(--muted,#a1a1a8)}
+.xh-seg button[aria-pressed="true"]{background:rgba(255,255,255,.1);color:var(--text,#f4f4f4)}
+.xh-acts{display:flex;gap:6px}
+.xh-acts button{flex:1;height:30px;display:flex;align-items:center;justify-content:center;gap:8px;border-radius:8px;background:rgba(255,255,255,.06);font-size:12.5px;color:var(--text,#f4f4f4)}
+.xh-acts button:disabled{opacity:.45;cursor:default}
+#xw-history ol{list-style:none;margin:0;padding:0;overflow:auto;display:flex;flex-direction:column}
+#xw-history li{display:flex;align-items:center;gap:10px;padding:9px 4px;border-top:1px solid rgba(255,255,255,.06)}
+#xw-history li:first-child{border-top:0}
+#xw-history li div{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}
+#xw-history li b{font-size:12.5px;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#xw-history li small{font-size:11.5px;color:var(--dim,#8b8b92)}
+#xw-history li.xh-undone b{color:var(--dim,#8b8b92);text-decoration:line-through}
+#xw-history li.xh-theirs b{color:var(--muted,#a1a1a8)}
+#xw-history li button{height:24px;padding:0 9px;border-radius:6px;background:rgba(255,255,255,.06);font-size:11.5px;color:var(--text,#f4f4f4);white-space:nowrap}
+.xh-tag{font-size:11px;color:var(--dim,#8b8b92)}
+.xh-empty{margin:4px 0;font-size:12.5px;line-height:1.5;color:var(--muted,#a1a1a8)}
+#xw-history :focus-visible,.xh-toast :focus-visible{outline:2px solid var(--text,#f4f4f4);outline-offset:2px}
+@media (prefers-reduced-motion:reduce){.xh-toast{animation:none}#xw-history,#xw-history.on{transition:none}}
