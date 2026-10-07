@@ -79,6 +79,7 @@
   // a re-render replaces the rows; put the marks back on the new ones
   new MutationObserver(() => { if (cur && rows(cur.def).some((r) => cur.ids.has(cur.def.id(r)) && !r.hasAttribute('data-xs'))) paint(); })
     .observe(document.documentElement, { childList: true, subtree: true });
+  [['Ctrl Click', 'Add or remove a row'], ['⇧ Click', 'Select a range'], ['X', 'Select the focused row'], ['⇧ ↑ ↓', 'Extend the selection'], ['Ctrl A', 'Select every row'], ['Esc', 'Clear the selection']].forEach(([k, l]) => window.XENO_KEYS?.add('Selecting', k, l));
   window.XENO_SEL = { list, clear, count, ids: () => (cur ? [...cur.ids] : []),
     show(x) { ext = x && x.count > 1 ? x : null; if (ext) cur = null; bar(); } };
 })();
