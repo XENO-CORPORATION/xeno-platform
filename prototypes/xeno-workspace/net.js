@@ -49,7 +49,7 @@
   }
 
   // what each role may do — the client hides and explains; the server is the real gate (refuse mode proves the client copes)
-  const CAN = { owner: ['billing', 'buy', 'sell', 'manage', 'fund', 'moderate', 'approve'], admin: ['buy', 'sell', 'manage', 'fund', 'moderate', 'approve'], member: ['fund', 'request'], guest: [] };
+  const CAN = { owner: ['billing', 'buy', 'sell', 'manage', 'fund', 'moderate', 'approve', 'contribute'], admin: ['buy', 'sell', 'manage', 'fund', 'moderate', 'approve', 'contribute'], member: ['fund', 'request', 'contribute'], guest: [] };
   const can = (what) => CAN[role()].includes(what);
   const who = () => ({ owner: 'an owner', admin: 'an owner or admin', member: 'a member', guest: 'a guest' }[role()]);
 
