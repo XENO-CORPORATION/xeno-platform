@@ -70,7 +70,8 @@
     const h = P(), d = detail(x), R = reviews(x), E = ents()[x.id], mine = x.seller === 'You', avg = R.length ? R.reduce((n, r) => n + r.stars, 0) / R.length : 0;
     const youReviewed = R.find((r) => r.who === 'You');
     const ent = E && E.state !== 'refunded' && E.state !== 'ended' ? entCard(x, E) : '';
-    const buy = mine ? h.btn('Manage in Seller console', 'data-go="market" data-mk="console"', true) : ent ? '' : h.btn(verb(x), `data-xa="getListing" data-arg="${x.id}"`, false, 'plus');
+    const R0 = window.XENO_ROLE, asked = (LS.get('mkRequests', []) || []).includes(x.id);
+    const buy = mine ? h.btn('Manage in Seller console', 'data-go="market" data-mk="console"', true) : ent ? '' : !R0 || R0.can('buy') ? h.btn(verb(x), `data-xa="getListing" data-arg="${x.id}"`, false, 'plus') : R0.can('request') ? (asked ? `<span class="pg-dim">Requested — an admin decides</span>` : h.btn('Ask an admin to get it', `data-mk="request" data-arg="${x.id}"`, false, 'send')) : `<span class="pg-dim">Guests can’t add things to this workspace</span>`;
     const hist = { free: 'Free', one_time: `One payment of ${x.price}. Refundable within ${REFUND_DAYS} days if you haven’t opened it.`, subscription: `${x.price}, renews monthly. Cancel any time — it stays until the end of the month you paid for.`, per_use: `${x.price.replace('Rent · ', '')}, billed per task from your credits, up to the monthly limit you set. Nothing is copied to you: it runs on XENO’s side.` }[model(x)];
     return h.page(h.head({ eyebrow: '<a data-go="market">Marketplace</a> · ' + esc(x.mode === 'agents' ? 'Agents' : 'Apps'), title: x.name, sub: x.blurb })
       + `<div class="mk-hero"><span class="pg-thumb pg-thumb--ic sq mk-big">${ic(x.mode === 'agents' ? (x.kind === 'model' ? 'box' : 'bot') : x.kind === 'blueprint' ? 'layers' : 'grid')}</span>
@@ -124,6 +125,7 @@
 
   // ---------- Seller console ----------
   function consolePage() {
+    if (window.XENO_ROLE && !window.XENO_ROLE.can('sell')) return P().page(P().head({ eyebrow: '<a data-go="market">Marketplace</a> · Seller console', title: 'Seller console', sub: 'Selling for this workspace.' }) + P().box('lock', 'Selling is for owners and admins', 'The company sells as one seller, and its earnings land in the company wallet — so only its owners and admins manage listings and payouts.', '') + P().foot('market', 'GET /api/marketplace/seller'));
     const h = P(), S = seller(), mine = L().filter((x) => x.seller === 'You'), e = earnings(S);
     const kyb = { none: ['Not verified', 'Verify your company to receive payouts. Earnings keep accruing meanwhile.', h.btn('Start verification', 'data-mk="kyb"', false, 'check')], pending: ['Checking', 'We’re checking your company details. This usually takes one to three days.', ''], verified: ['Verified', 'Payouts go to the bank account on file.', ''] }[S.kyb];
     const checks = (x) => (x.checks || ['Manifest is valid', 'Signature matches', 'Declares what it can do', 'No native code (community listings)', 'Runs in the sandbox']).map((c, i) => `<li class="${x.review === 'rejected' && i === 3 ? 'bad' : x.review === 'in review' && i > 2 ? 'wait' : 'ok'}">${ic(x.review === 'rejected' && i === 3 ? 'x' : x.review === 'in review' && i > 2 ? 'clock' : 'check')}${esc(c)}</li>`).join('');
@@ -149,15 +151,24 @@
 
   // ---------- actions ----------
   const go = (x) => X().go('global', { global: 'market', item: x.name });
-  const done = (msg) => { X().render(); if (msg) X().toast(msg); };
+  // optimistic then confirmed (Linear's pattern): the action changes local state, then the server must say yes — a no
+  // restores exactly what was there when the action started
+  const KEYS = ['mkEnts', 'mkReviews', 'mkSeller', 'mkReports'];
+  const OPS = { request: ['market.purchase.request', 'Sending your request'], review: ['market.review', 'Posting your review'], reply: ['market.review.reply', 'Posting your reply'], report: ['market.report', 'Sending the report'], cap: ['market.rental.limit', 'Changing the limit'], cancel: ['market.subscription.cancel', 'Cancelling'], resume: ['market.subscription.resume', 'Resuming'], endRent: ['market.rental.end', 'Ending the rental'], refund: ['market.refund', 'Refunding', true], remove: ['market.entitlement.remove', 'Removing'], deletePart: ['market.rental.partition.delete', 'Deleting your memory'], soul: ['market.listing.soul', 'Signing the Soul review'], kyb: ['market.seller.kyb', 'Submitting your company'], payout: ['market.payout', 'Paying out', true], resubmit: ['market.listing.resubmit', 'Resubmitting'], unlist: ['market.listing.visibility', 'Changing the listing'] };
+  let tx = null;
+  const begin = (act, el) => { tx = { act, el, snap: KEYS.map((k) => [k, localStorage.getItem('xw.' + k)]), market: JSON.stringify(L()) }; };
+  const rollback = (t) => { t.snap.forEach(([k, v]) => { try { v == null ? localStorage.removeItem('xw.' + k) : localStorage.setItem('xw.' + k, v); } catch {} }); window.XENO_PG_MARKET.splice(0, window.XENO_PG_MARKET.length, ...JSON.parse(t.market)); saveDb(); X().render(); };
+  const show = (msg) => { X().render(); if (msg) X().toast(msg); };
+  const done = (msg) => { const t = tx; tx = null; if (!t || !window.XENO_NET) return show(msg); const [op, label, money] = OPS[t.act] || ['market.update', 'Saving']; return window.XENO_NET.run({ op, label, money, el: t.el, apply: () => show(msg) }).then((ok) => { if (!ok) rollback(t); return ok; }); };
   const ACT = {
     open(id) { const x = byId(id); if (x) go(x); },
+    request(id) { const x = byId(id), Rq = LS.get('mkRequests', []) || []; Rq.push(id); LS.set('mkRequests', Rq); done(`Asked your admins for ${x.name} — they get it in their inbox`); },
     console() { X().go('global', { global: 'market', item: 'Seller console' }); },
     async review(id) { const x = byId(id), R = reviews(x), mine = R.find((r) => r.who === 'You');
       const v = await D().form({ title: mine ? 'Edit your review' : `Review ${x.name}`, submit: 'Post review', size: 'sm', fields: [{ id: 's', label: 'Rating', type: 'seg', value: String(mine?.stars || 5), options: [['1', '1'], ['2', '2'], ['3', '3'], ['4', '4'], ['5', '5']] }, { id: 't', label: 'What you think', type: 'textarea', rows: 3, required: true, value: mine?.text || '', max: 600 }] });
       if (!v) return; if (mine) Object.assign(mine, { stars: +v.s, text: v.t, at: now() }); else R.unshift({ id: 'rv' + rid(), who: 'You', stars: +v.s, text: v.t, at: now(), reply: '' }); setReviews(x, R); done('Review posted'); },
     async reply(arg) { const [id, rv] = arg.split('|'), x = byId(id), R = reviews(x), r = R.find((y) => y.id === rv); const v = await D().form({ title: `Reply to ${r.who}`, sub: 'One public reply per review.', submit: 'Reply', size: 'sm', fields: [{ id: 't', label: 'Reply', type: 'textarea', rows: 3, required: true, max: 400 }] }); if (!v) return; r.reply = v.t; setReviews(x, R); done('Reply posted'); },
-    async report(id) { const x = byId(id); const v = await D().form({ title: `Report ${x.name}`, sub: 'Goes to Marketplace moderation. The seller isn’t told who reported it.', submit: 'Send report', size: 'sm', fields: [{ id: 'r', label: 'Why', type: 'choice', cols: 1, required: true, options: [['harm', 'It does something harmful or hidden'], ['ip', 'It copies someone else’s work'], ['broken', 'It doesn’t do what it says'], ['other', 'Something else']] }, { id: 'n', label: 'Details', type: 'textarea', rows: 2 }] }); if (!v) return; const Rp = LS.get('mkReports', []); Rp.push({ id: x.id, why: v.r, at: now() }); LS.set('mkReports', Rp); X().toast('Report sent — you’ll hear back in your inbox'); },
+    async report(id) { const x = byId(id); const v = await D().form({ title: `Report ${x.name}`, sub: 'Goes to Marketplace moderation. The seller isn’t told who reported it.', submit: 'Send report', size: 'sm', fields: [{ id: 'r', label: 'Why', type: 'choice', cols: 1, required: true, options: [['harm', 'It does something harmful or hidden'], ['ip', 'It copies someone else’s work'], ['broken', 'It doesn’t do what it says'], ['other', 'Something else']] }, { id: 'n', label: 'Details', type: 'textarea', rows: 2 }] }); if (!v) return; const Rp = LS.get('mkReports', []); Rp.push({ id: x.id, why: v.r, at: now() }); LS.set('mkReports', Rp); done('Report sent — you’ll hear back in your inbox'); },
     async cap(id) { const E = ents(), e = E[id]; const v = await D().form({ title: 'Monthly limit', sub: `${cr(e.spent)} used this month.`, submit: 'Save', size: 'sm', fields: [{ id: 'c', label: 'Credits', type: 'number', required: true, value: String(e.cap), validate: (n) => (!/^\d+$/.test(n) ? 'A whole number.' : +n < e.spent ? `At least what’s used (${e.spent}).` : null) }] }); if (!v) return; e.cap = +v.c; setEnts(E); done(`Limit is ${cr(e.cap)} a month`); },
     async cancel(id) { const E = ents(), e = E[id], x = byId(id); if (!await D().confirm({ title: `Cancel ${x.name}?`, body: `It stays yours until ${day(e.renews)} — you already paid for this month. It won’t renew after that.`, action: 'Cancel subscription' })) return; e.state = 'cancelled'; setEnts(E); done(`Cancelled — yours until ${day(e.renews)}`); },
     resume(id) { const E = ents(); E[id].state = 'active'; setEnts(E); done('It will renew again'); },
@@ -171,9 +182,9 @@
       if (!v) return; items.forEach((s) => (s.scope = v[s.id])); x.soul.reviewed = true; x.soul.signedAt = now(); saveDb(); done(`${items.filter((s) => s.scope === 'public').length} shared, ${items.filter((s) => s.scope === 'private').length} private — signed`); },
     async kyb() { const v = await D().form({ title: 'Verify your company', sub: 'Needed before payouts. Your earnings keep accruing meanwhile.', submit: 'Submit for checking', fields: [{ id: 'n', label: 'Legal name', required: true }, { id: 'c', label: 'Country', type: 'choice', cols: 2, required: true, options: [['AE', 'United Arab Emirates'], ['RO', 'Romania'], ['US', 'United States'], ['GB', 'United Kingdom']] }, { id: 'r', label: 'Registration number', required: true }] });
       if (!v) return; const S = seller(); S.kyb = 'pending'; LS.set('mkSeller', S); done('Submitted — usually checked within three days');
-      setTimeout(() => { const S2 = seller(); if (S2.kyb === 'pending') { S2.kyb = 'verified'; LS.set('mkSeller', S2); done('Your company is verified — payouts are on'); } }, 2500); },
+      setTimeout(() => { const S2 = seller(); if (S2.kyb === 'pending') { S2.kyb = 'verified'; LS.set('mkSeller', S2); show('Your company is verified — payouts are on'); } }, 2500); },
     async payout() { const S = seller(), e = earnings(S); if (S.kyb !== 'verified' || e.avail <= 0) return; if (!await D().confirm({ title: `Pay out ${eur(e.avail)}?`, body: 'Sent to the bank account on file. Arrives in two to five working days.', action: 'Pay out', danger: false })) return; S.payouts.unshift({ at: now(), amt: e.avail, state: 'pending' }); LS.set('mkSeller', S); done(`${eur(e.avail)} is on its way`); },
-    async resubmit(id) { const x = byId(id); x.review = 'in review'; saveDb(); done('Resubmitted'); setTimeout(() => { x.review = 'live'; x.publishedAt = now(); saveDb(); done(`“${x.name}” is live`); }, 2500); },
+    async resubmit(id) { const x = byId(id); x.review = 'in review'; saveDb(); if (!await done('Resubmitted')) return; setTimeout(() => { const y = byId(id); if (!y || y.review !== 'in review') return; y.review = 'live'; y.publishedAt = now(); saveDb(); show(`“${y.name}” is live`); }, 2500); },
     unlist(id) { const x = byId(id); x.paused = !x.paused; saveDb(); done(x.paused ? 'Unlisted — people who have it keep it' : 'Listed again'); },
   };
   // a new submission moves through the checks: community + native code is refused server-side (D1)
@@ -181,6 +192,6 @@
   // using something ends its no-questions refund window
   window.addEventListener('xw:listing-opened', (e) => { const E = ents(); if (E[e.detail]) { E[e.detail].used = true; setEnts(E); } });
   function entitle(id, cap) { const E = ents(), x = byId(id); E[id] = mkEnt(x, now(), false, cap || 500); if (model(x) === 'per_use') { E[id].spent = 0; E[id].receipts = []; if (x.kind === 'mind') E[id].partition = { memories: 0, at: now() }; } setEnts(E); }
-  document.addEventListener('click', (e) => { const t = e.target.closest('[data-mk]'); if (!t || t.closest('.xd')) return; e.preventDefault(); e.stopPropagation(); ACT[t.dataset.mk]?.(t.dataset.arg); }, true);
+  document.addEventListener('click', (e) => { const t = e.target.closest('[data-mk]'); if (!t || t.closest('.xd')) return; e.preventDefault(); e.stopPropagation(); begin(t.dataset.mk, t); ACT[t.dataset.mk]?.(t.dataset.arg); }, true);
   window.XENO_MARKET = { route, entitle, ents, model };
 })();
