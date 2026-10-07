@@ -96,5 +96,6 @@
       return;
     }
   }, true);
+  window.XENO_KEYS?.add('Moving things', 'Alt ↑ ↓', 'Move the focused section'); window.XENO_KEYS?.add('Moving things', 'Esc', 'Cancel a drag');
   window.XENO_DRAG = Object.assign(API, { sort: (def) => SORTS.push(def), move: (def) => MOVES.push(def), dragging: () => !!(d && d.on) });
 })();

@@ -103,5 +103,6 @@
   });
   document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && open && document.getElementById('xw-history')?.contains(document.activeElement)) toggle(false); });
 
+  window.XENO_KEYS?.add('Undo and history', 'Ctrl Z', 'Undo'); window.XENO_KEYS?.add('Undo and history', 'Ctrl ⇧ Z or Ctrl Y', 'Redo'); window.XENO_KEYS?.add('Undo and history', 'Ctrl ⇧ H', 'Show the history');
   window.XENO_HIST = { record, undo, redo, jump, toggle, toast, list: () => log.map(({ fn, ...e }) => e), canUndo: () => past.length > 0, canRedo: () => future.length > 0 };
 })();

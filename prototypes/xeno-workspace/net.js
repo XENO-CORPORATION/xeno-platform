@@ -105,6 +105,7 @@
   window.XENO_NET_LOG = [];
   // tests (and anything else) can wait for every request to settle instead of guessing a delay
   const idle = async () => { while (inflight > 0) await wait(30); await wait(30); };
+  window.XENO_KEYS?.add('Prototype', 'Ctrl Alt P', 'Prototype controls — network and role');
   window.XENO_NET = { run, begin, end, clear, idle, mode, setMode: (m) => { SS.set('netMode', m); chip(); }, panel };
   window.XENO_ROLE = { role, can, who, gate, set: (r) => { SS.set('viewAs', r); chip(); } };
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', chip); else chip();

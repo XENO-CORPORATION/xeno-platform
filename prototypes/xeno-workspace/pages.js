@@ -553,6 +553,7 @@
     if (d.pgInfo !== undefined) { store.set('pgLibInfo', !store.get('pgLibInfo', false)); return repaint(); }
   });
   // selection updates in place — no redraw, so the grid never jumps and a double-click lands on the same card
+  [['/', 'Search this list'], ['↑ ↓ ← →', 'Move between items'], ['Enter', 'Open'], ['I', 'Show or hide details (Library)'], ['Del', 'Move to Trash (Library)']].forEach(([k, l]) => window.XENO_KEYS?.add('Library and lists', k, l));
   let libBatch = null;   // the Library's several-files menu, handed out by registerPageMenus — one definition, two uses
   function selectFile(id) { const u = ui('library'); u.sel = null; u.sel = id; applyPicks(); }
   // the picked files, in the order they are on screen

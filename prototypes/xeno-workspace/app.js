@@ -1692,13 +1692,18 @@
     sheetOpener = opener || document.activeElement;
     let s = document.getElementById('kbsheet');
     if (!s) { s = document.createElement('div'); s.id = 'kbsheet'; document.body.appendChild(s); s.addEventListener('click', (e) => { if (e.target === s || e.target.closest('[data-kb-close]')) closeShortcuts(); }); s.addEventListener('keydown', (e) => { if (e.key === 'Escape') { e.stopPropagation(); closeShortcuts(); } if (e.key === 'Tab') { e.preventDefault(); s.querySelector('[data-kb-close]').focus(); } }); }
-    const K = [['General', [['Ctrl K', 'Search everything'], ['Ctrl \\', 'Show or hide the sidebar'], ['Alt 0', 'Overview'], ['Alt 1–6', 'Switch mode'], ['Ctrl /', 'Keyboard shortcuts'], ['F1', 'Report a problem'], ['Esc', 'Close the open panel']]],
-      ['Notifications', [['↑ ↓', 'Move between notifications'], ['Enter', 'Open'], ['E', 'Archive'], ['S', 'Snooze'], ['Ctrl Z', 'Undo the last action']]]];
+    // drawn from the registry every module declares its keys into (keys.js, §7y) — never a hand-kept list
+    const K = window.XENO_KEYS.list().map(([h, rows]) => [h, rows.map((r) => [r.keys, r.label])]);
     s.innerHTML = `<div class="kb-shell rp" role="dialog" aria-modal="true" aria-labelledby="kb-title"><header class="pl pl-head"><b id="kb-title">Keyboard shortcuts</b><span class="pp-tools">${iconBtn('data-kb-close', 'x', 'Close  Esc')}</span></header>
-      <div class="kb-cols">${K.map(([h, rows]) => `<section class="pl pl-list"><div class="pl-cap"><span>${h}</span></div>${rows.map(([k, l]) => `<div class="kb-row"><span>${esc(l)}</span><span class="kb-keys">${k.split(' ').map((x) => `<kbd>${esc(x)}</kbd>`).join('')}</span></div>`).join('')}</section>`).join('')}</div></div>`;
+      <div class="kb-cols">${K.map(([h, rows]) => `<section class="pl pl-list"><div class="pl-cap"><span>${h}</span></div>${rows.map(([k, l]) => `<div class="kb-row"><span>${esc(l)}</span><span class="kb-keys">${k.split(' ').map((x) => (x === 'or' ? '<span class="kb-or">or</span>' : `<kbd>${esc(x)}</kbd>`)).join('')}</span></div>`).join('')}</section>`).join('')}</div></div>`;
     s.classList.add('on'); s.querySelector('[data-kb-close]').focus();
   }
   function closeShortcuts() { const s = document.getElementById('kbsheet'); if (!s) return; s.classList.remove('on'); sheetOpener?.focus?.(); sheetOpener = null; }
+  { const K = window.XENO_KEYS; if (K) { [['Ctrl K', 'Search everything'], ['Ctrl \\', 'Show or hide the sidebar'], ['Ctrl / or ?', 'Keyboard shortcuts'], ['F1', 'Report a problem'], ['Esc', 'Close the open panel']].forEach(([k, l]) => K.add('General', k, l));
+    [['Alt 0', 'Overview'], ['Alt 1–6', 'Switch mode']].forEach(([k, l]) => K.add('Moving around', k, l));
+    [['↑ ↓', 'Move between notifications'], ['Enter', 'Open'], ['E', 'Archive'], ['S', 'Snooze']].forEach(([k, l]) => K.add('Notifications', k, l)); } }
+  // ? opens the sheet too (Gmail, GitHub, Linear) — never while typing or with a dialog open
+  document.addEventListener('keydown', (e) => { if (e.key === '?' && !e.ctrlKey && !e.metaKey && !e.altKey && !e.target.closest?.('input,textarea,select,[contenteditable]') && !document.querySelector('.xd')) { e.preventDefault(); const s = document.getElementById('kbsheet'); if (s?.classList.contains('on')) closeShortcuts(); else { hidePops(); openShortcuts(); } } });
   document.addEventListener('keydown', (e) => { if ((e.ctrlKey || e.metaKey) && e.key === '/') { e.preventDefault(); const s = document.getElementById('kbsheet'); if (s?.classList.contains('on')) closeShortcuts(); else { hidePops(); openShortcuts(); } } });
 
   // ---- Usage ----
