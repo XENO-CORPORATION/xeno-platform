@@ -1188,7 +1188,7 @@
     return `#/${base}`;
   }
   function hashToState(h) {
-    const [m, kind, id, ...rest] = String(h || '').replace(/^#\/?/, '').split('/'); const rawItem = rest.join('/'); let item = null; try { item = rawItem ? decodeURIComponent(rawItem) : null; } catch { item = rawItem || null; }
+    const [m, kind, id, ...rest] = String(h || '').split('?')[0].replace(/^#\/?/, '').split('/'); const rawItem = rest.join('/'); let item = null; try { item = rawItem ? decodeURIComponent(rawItem) : null; } catch { item = rawItem || null; }
     const modeOk = MODES.some((x) => x.id === m);
     if (m === 'adaptive') return { view: 'adaptive' };
     if (m === 'overview') { if (kind === 'z' && id && zonesFor('overview').some((z) => z.id === id)) return { view: 'zone', zone: id, zoneOf: 'overview', item };
@@ -1203,9 +1203,14 @@
   }
   let applyingHash = false;
   function syncHash(replace) {
-    const h = stateToHash(); if (location.hash === h) return;
+    const h = stateToHash(); if (location.hash.split('?')[0] === h) return;   // same place: keep its ?sel= (§7bb)
     try { replace ? history.replaceState(null, '', h) : history.pushState(null, '', h); } catch { location.hash = h; }
   }
+  // the selection on a page lives in its URL as ?sel=a,b (§7bb) — replaced, never pushed: selecting adds no Back step
+  window.XENO_URLSEL = {
+    get: () => { const q = location.hash.split('?')[1] || ''; const v = new URLSearchParams(q).get('sel'); return v ? v.split(',').map((x) => decodeURIComponent(x)).filter(Boolean) : []; },
+    set: (ids) => { const base = location.hash.split('?')[0] || '#/'; const next = ids && ids.length ? `${base}?sel=${ids.map(encodeURIComponent).join(',')}` : base; if (next === location.hash) return; try { history.replaceState(history.state, '', next); } catch {} },
+  };
   addEventListener('popstate', () => { const st = hashToState(location.hash); if (!st) return; applyingHash = true; go(st.view, st); applyingHash = false; });
   // ---- (2) return to where you were, per mode ----
   const lastPlace = store.get('last', {});

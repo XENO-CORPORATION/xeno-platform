@@ -134,6 +134,8 @@
   function library(view) {
     const key = 'library', u = ui(key, { view: 'grid' }), V = LIBV[view] || {}, items = window.XENO_PG_LIBRARY.items.filter((f) => !window.XENO_VIS || window.XENO_VIS.file(f));
     const kind = u.seg.kind || 'all';
+    // a link with ?sel= opens with those files selected — once per address, never over a selection made since (§7bb)
+    { const want = (window.XENO_URLSEL?.get() || []).filter((id) => items.some((f) => f.id === id)); if (want.length && libRestored !== location.hash && !u.sel && !u.picked.size) { libRestored = location.hash; u.sel = want[0]; if (want.length > 1) { u.picked = new Set(want); u.anchor = want[0]; } } }
     let rows = items.filter((f) => (V.trash ? !!f.trashedAt : !f.trashedAt) && (!V.kind || V.kind.includes(f.kind)) && (!V.mode || f.source.mode === V.mode) && (!V.chat || f.source.chat) && (!V.starred || f.starred) && (!V.shared || f.sharedBy) && kindOk(f, V.kind ? 'all' : kind) && matchQ(u.q, f.name, pname(f.source.product), f.project || '', f.source.chat || ''));
     rows.sort(u.sort === 'name' ? (a, b) => a.name.localeCompare(b.name) : u.sort === 'size' ? (a, b) => b.bytes - a.bytes : (a, b) => Date.parse(b.updatedAt) - Date.parse(a.updatedAt));
     const live = items.filter((f) => !f.trashedAt), total = live.reduce((n, f) => n + f.bytes, 0), prods = new Set(live.map((f) => f.source.product)).size;
@@ -557,7 +559,7 @@
   });
   // selection updates in place — no redraw, so the grid never jumps and a double-click lands on the same card
   [['/', 'Search this list'], ['↑ ↓ ← →', 'Move between items'], ['Enter', 'Open'], ['I', 'Show or hide details (Library)'], ['Del', 'Move to Trash (Library)']].forEach(([k, l]) => window.XENO_KEYS?.add('Library and lists', k, l));
-  let libBatch = null;   // the Library's several-files menu, handed out by registerPageMenus — one definition, two uses
+  let libBatch = null, libRestored = '';   // the Library's several-files menu, handed out by registerPageMenus — one definition, two uses
   function selectFile(id) { const u = ui('library'); u.sel = null; u.sel = id; applyPicks(); }
   // the picked files, in the order they are on screen
   const picks = () => { const u = ui('library'); const ids = u.picked.size ? [...u.picked] : u.sel ? [u.sel] : []; const order = [...document.querySelectorAll('#main [data-pg-results] [data-pg-file]')].map((n) => n.dataset.pgFile);
@@ -576,7 +578,7 @@
     const split = document.querySelector('#main .pg--lib .pg-split'); if (!split) return;
     split.querySelectorAll('[data-pg-file]').forEach((n) => n.toggleAttribute('aria-selected', isPicked(n.dataset.pgFile)));
     const ids = picks(), si = document.querySelector('#main .mfoot [data-sb-info]');
-    window.XENO_SEL?.show(ids.length > 1 ? { count: ids.length, noun: ['file', 'files'], sections: () => (libBatch ? libBatch(picks().map(libItem)) : []), clear: () => { const u2 = ui('library'); u2.picked = new Set(); selectFile(null); } } : null);
+    window.XENO_URLSEL?.set(ids); window.XENO_SEL?.show(ids.length > 1 ? { count: ids.length, noun: ['file', 'files'], sections: () => (libBatch ? libBatch(picks().map(libItem)) : []), clear: () => { const u2 = ui('library'); u2.picked = new Set(); selectFile(null); } } : null);
     if (si && ids.length > 1) si.textContent = selSummary(ids); else if (si && ids.length === 1) { const f0 = libItem(ids[0]); si.textContent = `1 selected · ${f0.name} · ${bytes(f0.bytes)}`; } else { const pf = framed(), ft = document.querySelector('#main .mfoot'); if (pf && ft) ft.innerHTML = pf.foot; }   // deselecting puts the count back
     if (!store.get('pgLibInfo', false)) return;   // the details pane is opened on purpose (Drive's ⓘ) — selecting never reflows the grid
     split.querySelector('.pg-detail')?.remove();

@@ -20,17 +20,21 @@
     if (cur) rows(cur.def).forEach((r) => { if (cur.ids.has(cur.def.id(r))) { r.setAttribute('data-xs', ''); r.setAttribute('aria-selected', 'true'); } });
     bar();
   }
-  function clear() { if (cur) { cur = null; paint(); } }
-  function toggle(def, r) { const s = state(def), id = def.id(r); s.ids.has(id) ? s.ids.delete(id) : s.ids.add(id); s.anchor = id; if (!s.ids.size) cur = null; paint(); }
-  function range(def, r) { const s = state(def), list = rows(def).map(def.id), a = list.indexOf(s.anchor ?? def.id(r)), b = list.indexOf(def.id(r)); if (a < 0) return toggle(def, r); const [lo, hi] = a < b ? [a, b] : [b, a]; list.slice(lo, hi + 1).forEach((id) => s.ids.add(id)); paint(); }
-  function all(def) { const s = state(def); rows(def).forEach((r) => s.ids.add(def.id(r))); paint(); }
+  // the selection is part of the page's address (§7bb): written when it changes, read back when its rows appear
+  const url = () => window.XENO_URLSEL?.set(cur ? [...cur.ids] : []);
+  function clear() { if (cur) { cur = null; paint(); url(); } }
+  function toggle(def, r) { const s = state(def), id = def.id(r); s.ids.has(id) ? s.ids.delete(id) : s.ids.add(id); s.anchor = id; if (!s.ids.size) cur = null; paint(); url(); }
+  function range(def, r) { const s = state(def), list = rows(def).map(def.id), a = list.indexOf(s.anchor ?? def.id(r)), b = list.indexOf(def.id(r)); if (a < 0) return toggle(def, r); const [lo, hi] = a < b ? [a, b] : [b, a]; list.slice(lo, hi + 1).forEach((id) => s.ids.add(id)); paint(); url(); }
+  function all(def) { const s = state(def); rows(def).forEach((r) => s.ids.add(def.id(r))); paint(); url(); }
   const words = (def, n) => `${n} ${n === 1 ? def.noun[0] : def.noun[1]}`;
   function sections() {
-    if (ext) return ext.sections();
+    if (ext) return [...ext.sections(), [linkItem()]];
     if (!cur) return [];
     const ids = [...cur.ids], done = () => clear();
-    return (cur.def.actions(ids) || []).map((g) => g.filter(Boolean).map((it) => ({ ...it, run: async (...a) => { const r = await it.run?.(...a); if (!it.keep) done(); return r; } }))).filter((g) => g.length);
+    return [...(cur.def.actions(ids) || []).map((g) => g.filter(Boolean).map((it) => ({ ...it, run: async (...a) => { const r = await it.run?.(...a); if (!it.keep) done(); return r; } }))).filter((g) => g.length), [linkItem()]];
   }
+  // the address of exactly this selection — open it and the same rows are selected (Drive, Linear)
+  const linkItem = () => ({ label: 'Copy link to this selection', icon: 'share', keep: true, run: () => window.XCM?.H?.copy(location.href, 'Link to the selection copied') });
   function count() { return ext ? ext.count : cur ? cur.ids.size : 0; }
   // the bar: the count, the common verbs, More (the full list, same as right-click), Clear
   function bar() {
@@ -72,12 +76,16 @@
     else if ((e.ctrlKey || e.metaKey) && k === 'a') { e.preventDefault(); all(def); }
     else if (e.shiftKey && (e.key === 'ArrowDown' || e.key === 'ArrowUp')) {
       const L = rows(def), i = L.indexOf(r), nx = L[i + (e.key === 'ArrowDown' ? 1 : -1)]; if (!nx) return; e.preventDefault();
-      const s = state(def); if (!s.ids.size) { s.ids.add(def.id(r)); s.anchor = def.id(r); } s.ids.add(def.id(nx)); nx.focus(); paint();
+      const s = state(def); if (!s.ids.size) { s.ids.add(def.id(r)); s.anchor = def.id(r); } s.ids.add(def.id(nx)); nx.focus(); paint(); url();
     }
   }, true);
-  window.addEventListener('hashchange', () => { cur = null; paint(); });
+  window.addEventListener('hashchange', () => { cur = null; restored = ''; paint(); });
+  window.addEventListener('popstate', () => { cur = null; restored = ''; paint(); setTimeout(restore, 0); });
   // a re-render replaces the rows; put the marks back on the new ones
-  new MutationObserver(() => { if (cur && rows(cur.def).some((r) => cur.ids.has(cur.def.id(r)) && !r.hasAttribute('data-xs'))) paint(); })
+  // opening a link with ?sel= (or Back/Forward to one) selects those rows once they are on screen — once per address
+  let restored = '';
+  function restore() { const want = window.XENO_URLSEL?.get() || [], here = location.hash.split('?')[0]; if (!want.length || cur || restored === location.hash) return; for (const def of LISTS) { const have = rows(def).map(def.id), hit = want.filter((id) => have.includes(id)); if (hit.length) { restored = location.hash; cur = { def, ids: new Set(hit), anchor: hit[0] }; paint(); rows(def).find((r) => def.id(r) === hit[0])?.scrollIntoView({ block: 'nearest' }); return; } } void here; }
+  new MutationObserver(() => { restore(); if (cur && rows(cur.def).some((r) => cur.ids.has(cur.def.id(r)) && !r.hasAttribute('data-xs'))) paint(); })
     .observe(document.documentElement, { childList: true, subtree: true });
   [['Ctrl Click', 'Add or remove a row'], ['⇧ Click', 'Select a range'], ['X', 'Select the focused row'], ['⇧ ↑ ↓', 'Extend the selection'], ['Ctrl A', 'Select every row'], ['Esc', 'Clear the selection']].forEach(([k, l]) => window.XENO_KEYS?.add('Selecting', k, l));
   window.XENO_SEL = { list, clear, count, ids: () => (cur ? [...cur.ids] : []),
