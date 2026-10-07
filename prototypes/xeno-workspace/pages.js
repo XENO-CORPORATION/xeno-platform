@@ -553,6 +553,7 @@
     if (d.pgInfo !== undefined) { store.set('pgLibInfo', !store.get('pgLibInfo', false)); return repaint(); }
   });
   // selection updates in place — no redraw, so the grid never jumps and a double-click lands on the same card
+  let libBatch = null;   // the Library's several-files menu, handed out by registerPageMenus — one definition, two uses
   function selectFile(id) { const u = ui('library'); u.sel = null; u.sel = id; applyPicks(); }
   // the picked files, in the order they are on screen
   const picks = () => { const u = ui('library'); const ids = u.picked.size ? [...u.picked] : u.sel ? [u.sel] : []; const order = [...document.querySelectorAll('#main [data-pg-results] [data-pg-file]')].map((n) => n.dataset.pgFile);
@@ -571,6 +572,7 @@
     const split = document.querySelector('#main .pg--lib .pg-split'); if (!split) return;
     split.querySelectorAll('[data-pg-file]').forEach((n) => n.toggleAttribute('aria-selected', isPicked(n.dataset.pgFile)));
     const ids = picks(), si = document.querySelector('#main .mfoot [data-sb-info]');
+    window.XENO_SEL?.show(ids.length > 1 ? { count: ids.length, noun: ['file', 'files'], sections: () => (libBatch ? libBatch(picks().map(libItem)) : []), clear: () => { const u2 = ui('library'); u2.picked = new Set(); selectFile(null); } } : null);
     if (si && ids.length > 1) si.textContent = selSummary(ids); else if (si && ids.length === 1) { const f0 = libItem(ids[0]); si.textContent = `1 selected · ${f0.name} · ${bytes(f0.bytes)}`; } else { const pf = framed(), ft = document.querySelector('#main .mfoot'); if (pf && ft) ft.innerHTML = pf.foot; }   // deselecting puts the count back
     if (!store.get('pgLibInfo', false)) return;   // the details pane is opened on purpose (Drive's ⓘ) — selecting never reflows the grid
     split.querySelector('.pg-detail')?.remove();
@@ -617,6 +619,7 @@
   // ---- context menus for page objects (the engine is ctx-menu.js; the shell's objects live in app.js) ----
   (function registerPageMenus() {
     const C = window.XCM; if (!C) return; const H = C.H;
+    libBatch = (fs) => batchMenu(fs);
     const libHash = (name) => `#/${X().inOv() ? 'overview' : S().mode}/g/library/${encodeURIComponent(name)}`;
     const sync = () => window.XENO_PG_SYNC_NAV?.();
     const onLib = () => !!document.querySelector('#main .pg--lib');
@@ -709,6 +712,22 @@
         : d.pgGitem ? `#/${X().inOv() ? 'overview' : S().mode}/g/${S().global}/${encodeURIComponent(d.pgGitem)}` : `#/${X().inOv() ? 'overview' : S().mode}/p/chat`;
       return [H.nav(h, () => n.click()), H.linkItems(h, label)];
     } });
+
+    // select many (§7w): members and forum threads share one model — Ctrl/⇧-click, X, Ctrl A, Esc; the bar and the
+    // right-click menu are drawn from the same verbs
+    const SEL = window.XENO_SEL; if (SEL) {
+      const base = () => `#/${X().inOv() ? 'overview' : S().mode}/g`;
+      SEL.list({ key: 'members', sel: '[data-pg-ws^="Members/"]', id: (r) => r.dataset.pgWs.slice(8), noun: ['member', 'members'],
+        actions: (ids) => [[{ label: `Copy ${ids.length} names`, icon: 'doc', run: () => H.copy(ids.join('\n'), `${ids.length} names copied`) },
+          { label: 'Copy links', icon: 'share', run: () => H.copy(ids.map((n) => H.link(`${base()}/workspace/Members/${encodeURIComponent(n)}`)).join('\n'), `${ids.length} links copied`) }]] });
+      const subs = () => new Set(JSON.parse(localStorage.getItem('xw.forumSubs') || '[]'));
+      const setSubs = (st) => localStorage.setItem('xw.forumSubs', JSON.stringify([...st]));
+      SEL.list({ key: 'threads', sel: '[data-pg-gitem]', id: (r) => r.dataset.pgGitem, noun: ['thread', 'threads'],
+        actions: (ids) => { const st = subs(), all = ids.every((id) => st.has(id)), N = `${ids.length} threads`;
+          return [[all ? { label: `Unfollow ${N}`, icon: 'bell', run: () => { const s2 = subs(); ids.forEach((id) => s2.delete(id)); setSubs(s2); window.XENO_HIST.record(`Unfollowed ${N}`, () => { const s3 = subs(); ids.forEach((id) => s3.add(id)); setSubs(s3); }); } }
+            : { label: `Follow ${N}`, icon: 'bell', run: () => { const was = subs(), s2 = subs(); ids.forEach((id) => s2.add(id)); setSubs(s2); window.XENO_HIST.record(`Following ${N}`, () => setSubs(was)); } },
+            { label: 'Copy links', icon: 'share', run: () => H.copy(ids.map((id) => H.link(`${base()}/community/${encodeURIComponent(id)}`)).join('\n'), `${ids.length} links copied`) }]]; } });
+    }
 
     // an activity entry or a session line: what you do with a line of record is copy it
     C.register({ id: 'record-line', sel: '#main .pg-tl > li, #main .pg-log li', priority: 1, build: (n) => {
