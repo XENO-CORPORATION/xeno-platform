@@ -32,6 +32,8 @@
 
   async function run({ op, label = 'Saving', el = null, money = false, apply = () => {} }) {
     const m = mode(), key = money ? op + ':' + Math.random().toString(36).slice(2, 10) : null;
+    // someone else changed these records after you started? ask before overwriting (the 409, made human)
+    if (window.XENO_LIVE && (await window.XENO_LIVE.resolve(op, label)) === 'review') return false;
     const attempt = async () => {
       window.XENO_NET_LOG?.push({ op, key, at: Date.now() });
       inflight++; bar(); setPending(el, true);
@@ -59,8 +61,11 @@
     c.innerHTML = `<b>Prototype</b>${off ? '' : `<span>${esc(MODES.find((x) => x[0] === mode())[1])} network · viewing as ${esc(ROLES.find((x) => x[0] === role())[1].toLowerCase())}</span>`}`; c.setAttribute('aria-label', `Prototype controls — ${MODES.find((x) => x[0] === mode())[1]} network, viewing as ${ROLES.find((x) => x[0] === role())[1].toLowerCase()}`); c.title = 'Prototype controls (Ctrl+Alt+P)'; }
   async function panel() {
     const v = await D().form({ title: 'Prototype controls', sub: 'Try how the workspace behaves when the server is slow or says no, and how it looks to other roles. Not part of the product.', submit: 'Apply', fields: [
-      { id: 'n', label: 'Network', type: 'choice', cols: 2, value: mode(), options: MODES }, { id: 'r', label: 'View the workspace as', type: 'choice', cols: 2, value: role(), options: ROLES }] });
-    if (!v) return; SS.set('netMode', v.n); SS.set('viewAs', v.r); chip(); X().render(); X().toast(`${MODES.find((x) => x[0] === v.n)[1]} network · viewing as ${ROLES.find((x) => x[0] === v.r)[1].toLowerCase()}`);
+      { id: 'n', label: 'Network', type: 'choice', cols: 2, value: mode(), options: MODES }, { id: 'r', label: 'View the workspace as', type: 'choice', cols: 2, value: role(), options: ROLES },
+      { id: 't', label: 'Teammates', type: 'choice', cols: 2, value: window.XENO_LIVE?.sim() ? 'on' : 'off', options: [['off', 'Off', 'Only you — and your other windows'], ['on', 'Simulated', 'Mira, Nova, Atlas and Juno work alongside you now and then']] },
+      { id: 'a', label: 'Right now', type: 'choice', cols: 2, value: 'none', options: [['none', 'Nothing', ''], ['now', 'A teammate changes this page', 'See a live change, then try editing the same thing']] }] });
+    if (!v) return; SS.set('netMode', v.n); SS.set('viewAs', v.r); window.XENO_LIVE?.setSim(v.t === 'on'); chip(); X().render(); X().toast(`${MODES.find((x) => x[0] === v.n)[1]} network · viewing as ${ROLES.find((x) => x[0] === v.r)[1].toLowerCase()}${v.t === 'on' ? ' · teammates on' : ''}`);
+    if (v.a === 'now') setTimeout(() => window.XENO_LIVE?.act(), 900);
   }
   document.addEventListener('keydown', (e) => { if (e.ctrlKey && e.altKey && e.key.toLowerCase() === 'p' && !document.querySelector('.xd')) { e.preventDefault(); panel(); } });
   // ---------- one transaction per user action, for every area ----------
@@ -72,9 +77,11 @@
   const MONEY = /^(company\.topup|settings\.(plan|buy|gift|credits).*)$/;
   let tx = null;
   const snapshot = () => { const o = {}; try { for (let i = 0; i < localStorage.length; i++) { const k = localStorage.key(i); if (k && k.startsWith('xw.')) o[k] = localStorage.getItem(k); } } catch {} return o; };
-  function restore(snap) {
+  let restoredAt = 0;
+  function restore(snap, since) {
+    restoredAt = since || 0;
     try { const now = []; for (let i = 0; i < localStorage.length; i++) { const k = localStorage.key(i); if (k && k.startsWith('xw.')) now.push(k); } now.forEach((k) => { if (!(k in snap)) localStorage.removeItem(k); }); Object.entries(snap).forEach(([k, v]) => localStorage.setItem(k, v)); } catch {}
-    window.XENO_DB?.reload?.(); window.XENO_WF?.reload?.(); window.XD?.applyPrefs?.(); window.XENO_PG_SYNC_NAV?.(); X().render();
+    window.XENO_DB?.reload?.(); window.XENO_WF?.reload?.(); window.XD?.applyPrefs?.(); window.XENO_LIVE?.reapply?.(restoredAt); window.XENO_PG_SYNC_NAV?.(); X().render();
   }
   function begin(scope, act, el) { tx = { scope, act, el, snap: snapshot(), at: Date.now() }; }
   // an action that ends without saving (cancelled dialog, early refusal) closes its transaction — a later, unrelated save
@@ -85,7 +92,7 @@
     if (!t) { apply(); return true; }
     const op = meta.op || `${t.scope}.${t.act}`;
     const ok = await run({ op, label: meta.label || LABELS[op] || 'Saving', money: meta.money ?? MONEY.test(op), el: t.el, apply });
-    if (!ok) restore(t.snap);
+    if (!ok) restore(t.snap, t.at);
     return ok;
   }
   // ---------- role gates: an action a role can't take is shown unavailable with the reason, and refused on click ----------
