@@ -11,4 +11,4 @@ for (const role of ['member', 'guest']) {
     const g = await p.evaluate(() => { const m = document.querySelector('#main'); if (!m) return null; const live = [...m.querySelectorAll('[data-xa],[data-wf],[data-rs],[data-co],[data-fd],[data-mk],[data-cm],[data-set],[data-pl],[data-an]')].filter((e) => !e.classList.contains('role-off') && e.getAttribute('aria-disabled') !== 'true');
       const act = (e) => Object.entries(e.dataset).find(([k]) => /^(xa|wf|rs|co|fd|mk|cm|set|pl|an)$/.test(k)); return { title: m.querySelector('.crumbs b')?.textContent, acts: [...new Set(live.map((e) => act(e)).filter(Boolean).map(([k, v]) => k + ':' + v))] }; });
     out[role + ' ' + r] = g; } }
-fs.writeFileSync(new URL('./role-walk.json', import.meta.url), JSON.stringify(out, null, 1)); console.log('routes', routes.length, 'errors', errs.slice(0, 3)); await b.close();
+fs.writeFileSync('role-walk.json', JSON.stringify(out, null, 1)); console.log('routes', routes.length, 'errors', errs.slice(0, 3)); await b.close();

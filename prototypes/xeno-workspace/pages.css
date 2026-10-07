@@ -109,7 +109,7 @@
 .pg-card{position:relative;display:flex;flex-direction:column;gap:6px;padding:10px;border-radius:8px;background:#121212;border:1px solid #1f1f1f;text-align:left;cursor:pointer;min-width:0;transition:border-color .15s,background .15s,transform .2s cubic-bezier(.16,1,.3,1)}
 .pg-card:hover{border-color:#333;background:#151515}
 .pg-card:focus-visible{outline:1px solid rgba(255,255,255,.45);outline-offset:1px}
-.pg-card[aria-selected="true"]{border-color:#6a6a6a;background:#181818}
+.pg-card[aria-selected="true"],.pg-card--div[aria-current="true"]{border-color:#6a6a6a;background:#181818}
 .pg-card>b{font-size:13px;font-weight:500;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .pg-card>small,.pg-card-foot{font-size:12px;color:var(--dim);display:flex;align-items:center;gap:6px;min-width:0}
 .pg-card>small img,.pg-card>small .code{width:12px;height:12px;border-radius:2px}
@@ -366,6 +366,9 @@ html[data-panel="open"] .topbar .crumbs{display:flex}   /* the header always sho
 .pg-top-sum{display:flex;align-items:center;gap:14px;font-size:12.5px;color:var(--dim);white-space:nowrap;overflow:hidden;min-width:0;padding-left:4px}
 .pg-top-sum:empty{display:none}
 .pg-top-sum>span{display:inline-flex;align-items:center;gap:5px}
+.pg-top-sum>span:not(.pg-sp):not(.pg-top-next){flex:none}
+/* only the last, longest item gives way — numbers are never cut mid-value */
+.pg-top-sum>.pg-top-next{flex:0 1 auto;min-width:0;display:block;overflow:hidden;text-overflow:ellipsis}
 .pg-top-sum b{color:var(--muted);font-weight:500;font-variant-numeric:tabular-nums}
 .pg-top-sum>span+span::before{content:"";width:3px;height:3px;border-radius:1px;background:#3a3a3a;margin-right:9px}
 .topbar .crumbs b{font-weight:600}
@@ -396,8 +399,8 @@ html[data-panel="closed"] .main,html[data-panel="none"] .main{top:0;right:0;bott
 /* the header morphs with the card: the open-sidebar button grows in and the path glides — no snaps */
 .topbar{transition:padding-left .3s var(--open)}
 html[data-panel="closed"] .topbar,html[data-panel="none"] .topbar{transition:padding-left .24s var(--close)}
-.topbar .opener,html[data-panel="open"] .topbar .opener{display:grid;width:0;min-width:0;margin-right:-10px;opacity:0;overflow:hidden;pointer-events:none;transition:width .3s var(--open),margin .3s var(--open),opacity .18s ease}
-html[data-panel="closed"] .topbar .opener,html[data-panel="none"] .topbar .opener{width:28px;margin-right:0;opacity:1;pointer-events:auto;transition:width .24s var(--close),margin .24s var(--close),opacity .2s ease .06s}
+.topbar .opener,html[data-panel="open"] .topbar .opener{display:grid;width:0;min-width:0;margin-right:-10px;opacity:0;overflow:hidden;pointer-events:none;visibility:hidden;transition:width .3s var(--open),margin .3s var(--open),opacity .18s ease,visibility 0s linear .3s} /* hidden = out of the Tab order, after it has slid away */
+html[data-panel="closed"] .topbar .opener,html[data-panel="none"] .topbar .opener{width:28px;margin-right:0;opacity:1;pointer-events:auto;visibility:visible;transition:width .24s var(--close),margin .24s var(--close),opacity .2s ease .06s,visibility 0s}
 @media (prefers-reduced-motion:reduce){.topbar,.topbar .opener{transition:none!important}}
 /* object facts in the header bar: compact progress, status chip, next milestone, people */
 .pg-top-sum .pg-meta-prog{min-width:0;gap:6px}.pg-top-sum .pg-meter{width:64px;flex:none}.pg-top-sum .pg-meter-n{font-size:11.5px}
@@ -446,7 +449,7 @@ html[data-panel="closed"] .topbar .opener,html[data-panel="none"] .topbar .opene
 .pg-post .pg-link{margin-top:8px;padding:0;height:auto}
 .pg-diag{margin:10px 0 0;padding:8px 10px;border-radius:6px;background:#0e0e0e;border:1px solid #1e1e1e;color:var(--dim);font:11.5px/1.5 ui-monospace,Consolas,monospace;white-space:pre-wrap}
 .pg-reply{margin-top:14px;padding:12px;border-radius:10px;background:#141414;border:1px solid #262626;display:flex;flex-direction:column;gap:10px;transition:border-color .15s}
-.pg-reply:focus-within{border-color:#3a3a3a}
+.pg-reply:focus-within{border-color:#6a6a6a} /* a text field never takes the ring; its container shows focus instead */
 .pg-reply textarea{width:100%;resize:vertical;min-height:72px;background:transparent;border:0;outline:none;color:var(--text);font:13.5px/1.55 Inter,system-ui,sans-serif}
 .pg-reply textarea:focus,.pg-reply textarea:focus-visible{outline:none;box-shadow:none}
 .pg-reply > div{display:flex;align-items:center;justify-content:space-between;gap:12px}

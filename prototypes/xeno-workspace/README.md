@@ -27,6 +27,8 @@ Double-click `index.html`. No server, no install. State is kept in the browser's
 | Anima — Mind, Soul, channels, swarms | rail → Anima | §7p |
 | Places — the workspace as a building | rail → Places | §7q |
 | Search everything | Ctrl K (`>` for commands) | §7r |
+| Failure states and roles | the Prototype chip, bottom right (Ctrl+Alt+P) | §7s |
+| Accessibility | WCAG 2.2 AA, keyboard only | §7t |
 
 **Not real:** live model chat, every server call (sample data only), and payments (test checkout).
 
@@ -35,9 +37,12 @@ Double-click `index.html`. No server, no install. State is kept in the browser's
 Browser tests drive the real page with Puppeteer. From this folder:
 
 ```
-npm i --no-save puppeteer
+npm i --no-save puppeteer axe-core
 node tests/pages-test.mjs        # every page at three sizes
 node tests/inert-sweep.mjs       # no control on any route is a placeholder
+node tests/axe-audit.mjs         # WCAG 2.2 AA on every page — prints nothing when clean
+node tests/kbd-test.mjs          # keyboard only: Tab, focus visible, dialogs trap and return focus
+node tests/role-walk.mjs         # every route as member and guest — writes role-walk.json
 node tests/mk-test.mjs           # one area (see tests/ for the rest)
 ```
 

@@ -46,6 +46,8 @@
 .mk-own{display:flex;align-items:center;gap:12px;padding:12px 14px;border-radius:10px;background:#141414;border:1px solid #1f1f1f}
 .mk-own-m{flex:1;display:flex;flex-direction:column;gap:2px;min-width:0}
 .mk-own-m b{font-size:13.5px;color:var(--text)}
+/* a title link inside a column hugs its text — the .pg a underline must not span the whole row */
+.mk-own-m a{align-self:flex-start;max-width:100%}
 .mk-own-m small{font-size:12px;color:var(--dim)}
 .mk-sub{margin:20px 0 8px;font-size:12px;font-weight:500;color:var(--dim)}
 .mk-sl{display:flex;flex-direction:column;gap:8px;padding:14px 16px;border-radius:10px;background:#141414;border:1px solid #1f1f1f}
