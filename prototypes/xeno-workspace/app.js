@@ -315,7 +315,7 @@
   }
   // Globals = their real top level (MODES §4). Every row is a destination inside that global.
   function panelGlobal(k) {
-    const [title, sub, primary, groups] = window.XENO_GLOBAL_NAV[k];
+    const [title, sub, primary0, groups0] = window.XENO_GLOBAL_NAV[k], [primary, groups] = window.XENO_VIS?.nav ? window.XENO_VIS.nav(k, primary0, groups0) : [primary0, groups0];
     return `<div class="ph"><div class="ttl msw-inline">${title}<span class="msw-bar"></span><span class="msw-count">${esc(sub)}</span></div><button class="ib" data-go="search" aria-label="Search" data-tip="Search" data-kbd="Ctrl K">${ic('search')}</button><button class="ib" data-collapse aria-label="Collapse sidebar" data-tip="Collapse" data-kbd="Ctrl \\">${ic('side')}</button></div>
       <div class="pbody">
         ${primary ? `<button class="act primary" ${{ 'New project': 'data-xa="newProject"', 'Invite people or agents': 'data-xa="invite"', 'New thread': 'data-xa="newThread"', Upload: 'data-xa="upload"', 'Mark all read': 'data-xa="markAllRead"', 'New chat with Anima': 'data-xa="animaChat"', Browse: 'data-go="market"' }[primary] || 'disabled'}>${ic(k === 'market' ? 'market' : k === 'library' ? 'upload' : k === 'workspace' ? 'user' : k === 'inbox' ? 'check' : 'plus')}${esc(primary)}</button>` : ''}

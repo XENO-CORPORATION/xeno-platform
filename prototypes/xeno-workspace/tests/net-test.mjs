@@ -41,7 +41,7 @@ await mode('normal', 'member'); await nav('overview/g/market/Postgres MCP'); ok(
 await click('#main [data-mk="request"]'); await wait(400); ok(/Requested/.test(await ev(() => document.querySelector('#main .mk-buy').textContent)), 'and sees the request is waiting');
 await nav('overview/g/market/Seller console'); ok(/Selling is for owners and admins/.test(await ev(() => document.querySelector('#main').textContent)), 'the seller console explains it is for owners and admins');
 await nav('studio/g/projects/Brand refresh/Funding'); ok(!(await ev(() => !!document.querySelector('#main [data-fd="approve"]'))) && (await ev(() => !!document.querySelector('#main [data-fd="contribute"]'))), 'in funding a member can contribute but not approve');
-await mode('normal', 'guest'); await nav('studio/g/projects/Brand refresh/Funding'); ok(/visible to the project’s members/.test(await ev(() => document.querySelector('#main').textContent)), 'a guest sees that funding is for members');
+await mode('normal', 'guest'); await nav('overview/g/projects/Home reno/Funding'); ok(/visible to the project’s members/.test(await ev(() => document.querySelector('#main').textContent)), 'a guest sees that funding is for members');
 await nav('overview/g/market/Postgres MCP'); ok(/Guests can’t add/.test(await ev(() => document.querySelector('#main .mk-buy').textContent)), 'a guest can browse but not add');
 await mode('normal', 'owner');
 console.log(fails ? `${fails} FAILED` : 'ALL PASS', '| errors', errs.slice(0, 5)); await b.close();

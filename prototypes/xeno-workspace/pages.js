@@ -68,11 +68,11 @@
   // =====================================================================================
   // PROJECTS — index, then one project with its tabs (WORKFORCE §8.5, §11.2)
   // =====================================================================================
-  const PROJ = () => window.XENO_PG_PROJECTS.items;
+  const PROJ = () => window.XENO_PG_PROJECTS.items.filter((p) => !window.XENO_VIS || window.XENO_VIS.project(p));
   const HEALTH = { on_track: 'On track', at_risk: 'At risk', blocked: 'Blocked', done: 'Done' };
   function projectsIndex(arch) {
     const key = 'projects', u = ui(key, { extra: {} }), ctx = X().ctxName();
-    const status = arch ? 'archived' : u.seg.status || 'active';
+    const status = arch ? 'archived' : u.seg.status || (window.XENO_VIS?.guest() ? 'shared' : 'active');
     const modeF = u.seg.mode || 'all';
     const all = PROJ(), counts = { active: all.filter((p) => p.status === 'active').length, shared: all.filter((p) => p.status === 'shared').length, archived: all.filter((p) => p.status === 'archived').length };
     let rows = all.filter((p) => p.status === status && (modeF === 'all' || p.mode === modeF) && matchQ(u.q, p.name, p.goal, p.milestone.title));
@@ -132,7 +132,7 @@
   const thumb = (f) => f.kind === 'image' || f.kind === 'video' || f.kind === 'design' || f.kind === 'audio' || f.kind === 'document' || f.kind === 'sheet' || f.kind === 'deck' || f.kind === 'code' || f.kind === 'post' ? `<span class="pg-thumb">${X().mini(f.source.product === 'image' ? 'image' : f.source.product)}${f.duration ? `<em>${esc(f.duration)}</em>` : ''}</span>` : `<span class="pg-thumb pg-thumb--ic">${ic(KIND[f.kind][1])}</span>`;
   const fileCard = (f, sel) => `<div class="pg-card pg-card--file" tabindex="0" data-pg-file="${esc(f.id)}"${sel ? ' aria-selected="true"' : ''}>${thumb(f)}<b title="${esc(f.name)}">${esc(f.name)}</b><small>${prodIcon(f.source.product, 12)}${esc(pname(f.source.product))} · ${f.trashedAt ? 'deleted ' + ago(f.trashedAt) + ' ago' : ago(f.updatedAt)}</small>${f.starred ? `<span class="pg-star" aria-label="Starred">${ic('star')}</span>` : ''}</div>`;
   function library(view) {
-    const key = 'library', u = ui(key, { view: 'grid' }), V = LIBV[view] || {}, items = window.XENO_PG_LIBRARY.items;
+    const key = 'library', u = ui(key, { view: 'grid' }), V = LIBV[view] || {}, items = window.XENO_PG_LIBRARY.items.filter((f) => !window.XENO_VIS || window.XENO_VIS.file(f));
     const kind = u.seg.kind || 'all';
     let rows = items.filter((f) => (V.trash ? !!f.trashedAt : !f.trashedAt) && (!V.kind || V.kind.includes(f.kind)) && (!V.mode || f.source.mode === V.mode) && (!V.chat || f.source.chat) && (!V.starred || f.starred) && (!V.shared || f.sharedBy) && kindOk(f, V.kind ? 'all' : kind) && matchQ(u.q, f.name, pname(f.source.product), f.project || '', f.source.chat || ''));
     rows.sort(u.sort === 'name' ? (a, b) => a.name.localeCompare(b.name) : u.sort === 'size' ? (a, b) => b.bytes - a.bytes : (a, b) => Date.parse(b.updatedAt) - Date.parse(a.updatedAt));
@@ -405,6 +405,7 @@
     LOADING = false;
     const s = S(), it = s.item;
     if (s.view === 'global') {
+      { const vr = window.XENO_VIS?.route(s.global, it); if (vr) return vr; }
       if (s.global === 'inbox') return null;
       if (s.global === 'projects') { if (!it) return projectsIndex(false); if (it === 'Archived projects') return projectsIndex(true); const [nm, tb] = it.split('/'); return projectPage(nm, tb); }
       if (s.global === 'library') { if (!it || LIBV[it]) return library(it || 'All files'); return itemPage(it); }

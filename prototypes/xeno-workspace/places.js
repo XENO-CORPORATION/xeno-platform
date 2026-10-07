@@ -14,7 +14,7 @@
   const ic = (k) => X().ic(k);
   const LS = { get(k, d) { try { const v = localStorage.getItem('xw.' + k); return v == null ? d : JSON.parse(v); } catch { return d; } }, set(k, v) { try { localStorage.setItem('xw.' + k, JSON.stringify(v)); } catch {} } };
   const SS = { get(k) { try { return sessionStorage.getItem('xw.' + k); } catch { return null; } }, set(k, v) { try { sessionStorage.setItem('xw.' + k, v); } catch {} } };
-  const cur = () => window.XA.currentWorkspace(), isAdmin = () => (!window.XENO_ROLE || window.XENO_ROLE.can('manage')) && cur().id === 'xeno' || cur().id === 'personal' || /owner|admin/i.test(cur().sub || '');
+  const cur = () => window.XA.currentWorkspace(), isAdmin = () => (!window.XENO_ROLE || window.XENO_ROLE.can('manage')) && (cur().id === 'xeno' || cur().id === 'personal' || /owner|admin/i.test(cur().sub || ''));
   let peek = null, listView = false, editing = false;
 
   const runs = () => Object.values(window.XENO_PG_AREAS || {}).flatMap((A) => { const ai = A.cols.indexOf('Agent'), si = A.cols.indexOf('Status'); return ai < 0 ? [] : A.rows.map((r) => ({ name: r[0], agent: r[ai], status: r[si] })); });
@@ -79,7 +79,7 @@
     const floors = it && it !== 'All floors' ? [B.lobby, ...B.floors].filter((f) => f.name === it) : null;
     if (it && it !== 'All floors' && !floors.length) return null;
     const show = floors || [...B.floors.slice().reverse(), B.lobby];
-    const walks = B.handoffs.map((x) => `<li>${ic('right')}<span><b>${esc(x.from)}</b> is walking <b>${esc(x.work)}</b> over to <b>${esc(x.to)}</b></span>${x.to === WF().you() ? h.btn('Take it', `data-pl="accept" data-arg="${x.id}"`, false) : ''}</li>`).join('');
+    const walks = window.XENO_ROLE?.role() === 'guest' ? '' : B.handoffs.map((x) => `<li>${ic('right')}<span><b>${esc(x.from)}</b> is walking <b>${esc(x.work)}</b> over to <b>${esc(x.to)}</b></span>${x.to === WF().you() ? h.btn('Take it', `data-pl="accept" data-arg="${x.id}"`, false) : ''}</li>`).join('');
     const acts = h.btn(listView ? 'Building view' : 'List view', 'data-pl="list"', true, listView ? 'building' : 'grid') + (isAdmin() && !listView ? h.btn(editing ? 'Done arranging' : 'Arrange', 'data-pl="edit"', true, 'edit') : '');
     return h.page(h.head({ eyebrow: 'Places', title: cur().name, sub: B.floors.length ? `${B.floors.length} floor${B.floors.length > 1 ? 's' : ''} and a lobby · ${people().length} people and agents` : 'A lobby, no floors yet — floors appear when the workspace creates divisions', acts })
       + (walks ? `<ul class="pl-walks">${walks}</ul>` : '')
