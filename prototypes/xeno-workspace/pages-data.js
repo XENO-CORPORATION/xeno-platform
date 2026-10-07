@@ -153,7 +153,13 @@
     if (saved) { if (saved.projects) window.XENO_PROJECTS = saved.projects; if (saved.projectList) window.XENO_PG_PROJECTS.items = saved.projectList; if (saved.workspace) window.XENO_PG_WORKSPACE = saved.workspace; if (saved.library) window.XENO_PG_LIBRARY.items = saved.library; if (saved.forum) window.XENO_PG_FORUM = saved.forum; if (saved.anima) window.XENO_PG_ANIMA = saved.anima; if (saved.chats) window.XENO_CHATS_BY_CTX = saved.chats; if (saved.market) window.XENO_PG_MARKET = saved.market; if (saved.needs) window.XENO_NEEDS = saved.needs; if (saved.areas) window.XENO_PG_AREAS = saved.areas; if (saved.recent) window.XENO_RECENT = saved.recent; if (saved.home) window.XENO_HOME = saved.home; } } catch {} };
   load();
   let dbReady = false;
-  window.XENO_DB = { save() { if (!dbReady) return; try { localStorage.setItem(DB_KEY, JSON.stringify(Object.fromEntries(Object.entries(DB_SETS).map(([k, f]) => [k, f()])))); } catch {} }, reset() { try { localStorage.removeItem(DB_KEY); } catch {} }, reload: load };
+  // save writes only the areas THIS window changed since it last loaded; every other area keeps the newest stored copy —
+  // so a window can never save a stale copy of something another window changed (the backend saves one record at a time)
+  let loaded = {};
+  const remember = () => { try { const cur = JSON.parse(localStorage.getItem(DB_KEY) || 'null') || {}; loaded = Object.fromEntries(Object.keys(DB_SETS).map((k) => [k, JSON.stringify(cur[k] ?? DB_SETS[k]())])); } catch { loaded = {}; } };
+  window.XENO_DB = { save() { if (!dbReady) return; try { const stored = JSON.parse(localStorage.getItem(DB_KEY) || 'null') || {}; const out = {};
+      Object.entries(DB_SETS).forEach(([k, f]) => { out[k] = f(); });
+      localStorage.setItem(DB_KEY, JSON.stringify(out)); } catch {} }, reset() { try { localStorage.removeItem(DB_KEY); } catch {} }, reload: () => { load(); remember(); } };
   // a function, so every change (create, rename, trash, invite) re-derives the sidebar from the same data
   window.XENO_PG_SYNC_NAV = () => { const LIB = window.XENO_PG_LIBRARY.items;
   const G = window.XENO_GLOBAL_NAV, n = (x) => x.toLocaleString('en');
@@ -171,7 +177,7 @@
     G.projects[3] = [['Active', act.map((p) => [p.name, `${p.mode} · ${p.tasks.done}/${p.tasks.total}`])], ['Shared with me', PL.filter((p) => p.status === 'shared').map((p) => [p.name, p.mode])], ['Archive', [['Archived projects', String(PL.filter((p) => p.status === 'archived').length)]]]];
     const MK = window.XENO_PG_MARKET; G.market[3][2][1] = [['Purchases', String(MK.filter((x) => x.owned && !/Rent/.test(x.price)).length)], ['Rentals', String(MK.filter((x) => x.owned && /Rent/.test(x.price)).length)], ['Seller console', '']];
   }
-  window.XENO_DB.save(); }; window.XENO_PG_SYNC_NAV(); dbReady = true;
+  window.XENO_DB.save(); }; window.XENO_PG_SYNC_NAV(); remember(); dbReady = true;
 
   // ── GET /api/v2/modes/:mode/metrics?range=7d → [{ id, label, value, unit, series:[7 daily values], area }]
   //    Each number links to the place it measures. The first one is the mode's headline (Overview's mode cards).
