@@ -3,7 +3,7 @@ const require = createRequire(import.meta.url); const puppeteer = require('puppe
 const b = await puppeteer.launch({ headless: true, args: ['--allow-file-access-from-files'] }); const p = await b.newPage(); const errs = []; p.on('pageerror', (e) => errs.push(e.message));
 const url = pathToFileURL(path.resolve('index.html')).href, wait = (ms) => new Promise((r) => setTimeout(r, ms));
 let fails = 0; const ok = (c, msg) => { if (!c) fails++; console.log(c ? 'PASS' : 'FAIL', msg); };
-const ev = (f, ...a) => p.evaluate(f, ...a);
+const ev = (f, ...a) => p.evaluate(f, ...a); const idle = () => p.evaluate(() => window.XENO_NET?.idle?.());
 const shot = async (n) => { const g = await ev(() => { const m = document.getElementById('menu').getBoundingClientRect(); return { y: Math.max(0, m.top - 16), h: m.height + 32 }; }); await p.screenshot({ path: n, clip: { x: 0, y: g.y, width: 520, height: Math.min(g.h, 900 - g.y) } }); };
 const geo = () => ev(() => { const m = document.getElementById('menu'), r = m.getBoundingClientRect(), rail = document.getElementById('rail').getBoundingClientRect(); return { on: m.classList.contains('on'), owner: m.dataset.owner, left: Math.round(r.left - rail.right), bottom: Math.round(innerHeight - r.bottom), top: Math.round(r.top), w: Math.round(r.width), role: m.getAttribute('role') }; });
 await p.setViewport({ width: 1440, height: 900, deviceScaleFactor: 2 }); await p.goto(url); await ev(() => { localStorage.clear(); localStorage.setItem('xw.introSeen', JSON.stringify({ studio: 1, office: 1, social: 1, corpo: 1, dev: 1, tools: 1 })); }); await p.goto(url + '#/studio'); await wait(900);

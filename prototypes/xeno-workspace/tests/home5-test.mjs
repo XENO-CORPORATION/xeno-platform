@@ -2,8 +2,8 @@ import { createRequire } from 'node:module'; import path from 'node:path'; impor
 const require = createRequire(import.meta.url); const puppeteer = require('puppeteer');
 const b = await puppeteer.launch({ headless: true, args: ['--allow-file-access-from-files'] }); const p = await b.newPage(); const errs = []; p.on('pageerror', (e) => errs.push(e.message));
 const url = pathToFileURL(path.resolve('index.html')).href, wait = (ms) => new Promise((r) => setTimeout(r, ms));
-let fails = 0; const ok = (c, m) => { if (!c) fails++; console.log(c ? 'PASS' : 'FAIL', m); }; const ev = (f, ...a) => p.evaluate(f, ...a);
-const nav = async (r) => { await p.goto(url + '#/' + r); await p.reload(); await wait(1000); };
+let fails = 0; const ok = (c, m) => { if (!c) fails++; console.log(c ? 'PASS' : 'FAIL', m); }; const ev = (f, ...a) => p.evaluate(f, ...a); const idle = () => p.evaluate(() => window.XENO_NET?.idle?.());
+const nav = async (r) => { await p.goto(url + '#/' + r); await p.reload(); await wait(1000); await idle(); };
 const into = (sel) => ev((s) => { const n = document.querySelector(s); const mv = document.querySelector('#main .mview'); mv.scrollTop = n.getBoundingClientRect().top - mv.getBoundingClientRect().top + mv.scrollTop - 80; }, sel);
 await p.setViewport({ width: 1440, height: 900 }); await p.goto(url); await ev(() => { localStorage.clear(); localStorage.setItem('xw.introSeen', JSON.stringify({ studio: 1, office: 1, social: 1, corpo: 1, dev: 1, tools: 1 })); });
 // numbers: hover reads a day

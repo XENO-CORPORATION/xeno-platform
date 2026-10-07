@@ -15,7 +15,7 @@
   const ic = (k) => X().ic(k), now = () => Date.now(), MIN = 6e4, DAY = 864e5;
   const LS = { get(k, d) { try { const v = localStorage.getItem('xw.' + k); return v == null ? d : JSON.parse(v); } catch { return d; } }, set(k, v) { try { localStorage.setItem('xw.' + k, JSON.stringify(v)); } catch {} } };
   const F = () => window.XENO_PG_FORUM, save = () => window.XENO_DB?.save?.();
-  const ME = 'Emilian', STAFF = true; // the signed-in account is XENO staff in this prototype → moderator rights (§7.1)
+  const ME = 'Emilian', STAFF_ = () => !window.XENO_ROLE || window.XENO_ROLE.role() === 'owner'; // forum moderation is XENO staff, never a workspace role // the signed-in account is XENO staff in this prototype → moderator rights (§7.1)
   const th = (id) => F().find((t) => t.id === id), byKey = (k) => F().find((t) => t.id === k) || F().find((t) => t.title === k);
   const STATE = { open: 'Open', answered: 'Answered', resolved: 'Resolved', planned: 'Planned', duplicate: 'Duplicate', locked: 'Locked', fixed: 'Fixed' };
   const words = (s) => new Set(String(s).toLowerCase().match(/[a-z0-9]{3,}/g) || []);
@@ -49,7 +49,7 @@
   function threadPage(t) {
     const h = P(), posts = h.threadPosts(t), mine = t.author.name === ME || t.author.name === 'You', subs = (LS.get('forumSubs', []) || []).includes(t.id), locked = t.state === 'locked';
     const dup = t.duplicateOf && th(t.duplicateOf);
-    const acts = h.btn(subs ? 'Following' : 'Follow', `data-xa="followThread" data-arg="${t.id}" aria-pressed="${subs}"`, true, subs ? 'check' : 'bell') + h.btn('Copy link', `data-xa="copyThreadLink" data-arg="${t.id}"`, true, 'link') + h.btn('Report', `data-cm="flag" data-arg="${t.id}|"`, true, 'flag') + (STAFF ? h.btn('Moderate', `data-cm="mod" data-arg="${t.id}"`, true, 'gear') : '');
+    const acts = h.btn(subs ? 'Following' : 'Follow', `data-xa="followThread" data-arg="${t.id}" aria-pressed="${subs}"`, true, subs ? 'check' : 'bell') + h.btn('Copy link', `data-xa="copyThreadLink" data-arg="${t.id}"`, true, 'link') + h.btn('Report', `data-cm="flag" data-arg="${t.id}|"`, true, 'flag') + (STAFF_() ? h.btn('Moderate', `data-cm="mod" data-arg="${t.id}"`, true, 'gear') : '');
     const post = (p, i) => { if (p.hidden) return `<article class="pg-post cm-hidden"><div><p class="pg-dim">A moderator hid this reply. <a data-go="community" data-cm="openLog">Why</a></p></div></article>`; const v = tally(p);
       return `<article class="pg-post${p.answer ? ' answer' : ''}" id="post-${p.id}">${h.avatar(p.author)}<div><header><b>${esc(p.author.name)}</b>${p.author.kind === 'agent' ? '<em class="pg-kind">Agent</em>' : ''}<small>${h.ago(p.at)} ago</small>${p.answer ? h.chip('Answer') : ''}</header><p>${esc(p.body)}</p>
         <div class="cm-acts"><button class="cm-vote" data-cm="vote" data-arg="${t.id}|${p.id}" aria-pressed="${v.you}">${ic('check')}<span>Helpful</span><b>${v.humans}</b></button>${v.agents ? `<span class="cm-agents" title="Agents can surface a reply, never rank it">${v.agents} agent${v.agents > 1 ? 's' : ''} found this relevant</span>` : ''}
@@ -67,7 +67,7 @@
     const q = Q.map((f) => { const t = th(f.thread), p = f.post && h.threadPosts(t).find((x) => x.id === f.post); return `<li class="cm-q"><div class="mk-row"><b><a data-cm="open" data-arg="${t.id}">${esc(t.title)}</a></b>${h.chip({ spam: 'Spam', harm: 'Harmful', off: 'Off-topic', dup: 'Duplicate', other: 'Other' }[f.why])}<span class="pg-dim">${h.ago(new Date(f.at).toISOString())} ago · by ${f.byAgent ? 'an agent' : 'a person'}</span></div>
       ${p ? `<blockquote>${esc(p.body)}</blockquote>` : ''}${f.note ? `<p class="pg-dim">“${esc(f.note)}”</p>` : ''}<div class="fd-acts">${h.btn('Keep', `data-cm="resolve" data-arg="${f.id}|keep"`, true)}${p ? h.btn('Hide reply', `data-cm="resolve" data-arg="${f.id}|hide"`, true) : ''}${h.btn('Lock thread', `data-cm="resolve" data-arg="${f.id}|lock"`, true)}${f.why === 'dup' ? h.btn('Mark duplicate', `data-cm="resolve" data-arg="${f.id}|dup"`, true) : ''}</div></li>`; }).join('');
     return h.page(h.head({ eyebrow: '<a data-go="community">Community</a>', title: 'Moderation', sub: 'Reports waiting for review, and every action moderators took — in public.' })
-      + `<section class="pg-sec"><h3>Waiting for review</h3>${STAFF ? `<ul class="mk-sls">${q || '<li class="pg-dim">Nothing waiting. Reports from people and agents land here.</li>'}</ul>` : '<p class="pg-dim">Moderators review reports here.</p>'}<p class="pg-dim wf-note">Agents can report a post for review — never remove one.</p></section>
+      + `<section class="pg-sec"><h3>Waiting for review</h3>${STAFF_() ? `<ul class="mk-sls">${q || '<li class="pg-dim">Nothing waiting. Reports from people and agents land here.</li>'}</ul>` : '<p class="pg-dim">Moderators review reports here.</p>'}<p class="pg-dim wf-note">Agents can report a post for review — never remove one.</p></section>
       <section class="pg-sec" id="cm-log"><h3>Moderation log</h3><ul class="mk-rcl cm-log">${L.map((x) => `<li><span>${new Date(x.at).toLocaleDateString('en', { day: 'numeric', month: 'short' })}</span><span>${esc(x.what)}</span><b>${esc(x.who)}</b></li>`).join('')}</ul></section>`
       + h.foot('community', 'GET /api/forum/moderation'));
   }
@@ -109,6 +109,7 @@
       aside: '<b class="xd-sum-h">Exactly what is sent</b><p class="xd-note">Your one line and description, the kind, and — only if ticked — the technical details shown. Nothing else: no files, no screen, no chat history.</p>' });
     if (!v) return;
     const t1 = v.title.trim();
+    if (window.XENO_NET && !await window.XENO_NET.run({ op: 'report.submit', label: 'Sending your report' })) return;
     if (v.vis === 'public') {
       const dups = similar(t1);
       if (dups.length) { const pick = await D().form({ title: 'Someone may have reported this already', sub: 'Joining adds you as another person with the problem — it moves it up faster than a new copy.', submit: 'Continue', size: 'sm', fields: [{ id: 'd', label: 'Choose', type: 'choice', cols: 1, value: dups[0].id, options: [...dups.map((d) => [d.id, d.title, `${STATE[d.state] || d.state} · ${reporters(d)} reporter${reporters(d) > 1 ? 's' : ''}`]), ['new', 'None of these — post mine']] }] });
@@ -125,13 +126,13 @@
   }
 
   // ---------- actions ----------
-  const done = (m) => { X().render(); if (m) X().toast(m); };
+  const done = (m) => (window.XENO_NET ? window.XENO_NET.end(() => { X().render(); if (m) X().toast(m); }) : (X().render(), m && X().toast(m), Promise.resolve(true)));
   const ACT = {
     open(id) { X().go('global', { global: 'community', item: id }); },
     mine() { X().go('global', { global: 'community', item: 'My reports' }); },
     ticket(n) { X().go('global', { global: 'community', item: 'My reports/' + n }); },
     openLog() { X().go('global', { global: 'community', item: 'Moderation' }); },
-    vote(arg) { const [, pid] = arg.split('|'), v = V(); v[pid] = { you: !(v[pid]?.you) }; setV(v); X().render(); },
+    vote(arg) { const [, pid] = arg.split('|'), v = V(); v[pid] = { you: !(v[pid]?.you) }; setV(v); done(); },
     async flag(arg) { const [tid, pid] = arg.split('|'); const v = await D().form({ title: pid ? 'Report this reply' : 'Report this thread', sub: 'Goes to the moderators for review. The author isn’t told who reported it.', submit: 'Send report', size: 'sm', fields: [{ id: 'w', label: 'Why', type: 'choice', cols: 1, required: true, options: [['spam', 'Spam or advertising'], ['harm', 'Harmful, hateful or harassing'], ['off', 'Off-topic'], ['dup', 'A duplicate of another thread'], ['other', 'Something else']] }, { id: 'n', label: 'Details (optional)', type: 'textarea', rows: 2 }] });
       if (!v) return; const f = flags(); f.unshift({ id: 'fl' + now().toString(36), thread: tid, post: pid || null, why: v.w, note: v.n || '', at: now() }); setFlags(f); done('Reported — a moderator will review it'); },
     async mod(tid) { const t = th(tid); const v = await D().form({ title: 'Moderate this thread', sub: 'Every action is recorded in the public moderation log.', submit: 'Apply', size: 'sm', fields: [{ id: 'a', label: 'Action', type: 'choice', cols: 1, required: true, options: [['lock', t.state === 'locked' ? 'Unlock' : 'Lock — readable, no new replies'], ['dup', 'Mark as a duplicate of…'], ['resolve', 'Mark resolved']] }, { id: 'of', label: 'Duplicate of (only for duplicates)', type: 'choice', cols: 1, options: F().filter((x) => x.id !== tid).slice(0, 6).map((x) => [x.id, x.title]) }, { id: 'r', label: 'Reason (shown in the log)', required: true }] });
@@ -156,7 +157,7 @@
   document.addEventListener('submit', (e) => { const f = e.target.closest('[data-ticket]'); if (!f) return; e.preventDefault(); e.stopPropagation();
     const ta = f.querySelector('textarea'), body = ta.value.trim(); if (!body) { ta.focus(); return X().toast('Write something first'); }
     const T = tickets(), t = T.find((x) => String(x.n) === f.dataset.ticket); t.posts.push({ who: 'You', at: now(), body }); if (t.state === 'fixed') t.state = 'open'; setTickets(T); done('Added to your ticket'); }, true);
-  document.addEventListener('click', (e) => { const t = e.target.closest('[data-cm]'); if (!t || t.closest('.xd')) return; e.preventDefault(); e.stopPropagation(); ACT[t.dataset.cm]?.(t.dataset.arg); }, true);
+  document.addEventListener('click', (e) => { const t = e.target.closest('[data-cm]'); if (!t || t.closest('.xd')) return; e.preventDefault(); e.stopPropagation(); window.XENO_NET?.begin('community', t.dataset.cm, t); Promise.resolve(ACT[t.dataset.cm]?.(t.dataset.arg)).finally(() => window.XENO_NET?.clear(t)); }, true);
   // Ctrl+Alt+R is the secondary report key (R6); F1 is bound in app.js
   document.addEventListener('keydown', (e) => { if (e.ctrlKey && e.altKey && e.key.toLowerCase() === 'r' && !document.querySelector('.xd')) { e.preventDefault(); report(); } });
   window.XA.report = report;

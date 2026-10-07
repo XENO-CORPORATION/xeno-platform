@@ -2,8 +2,8 @@ import { createRequire } from 'node:module'; import path from 'node:path'; impor
 const require = createRequire(import.meta.url); const puppeteer = require('puppeteer');
 const b = await puppeteer.launch({ headless: true, args: ['--allow-file-access-from-files'] }); const p = await b.newPage(); const errs = []; p.on('pageerror', (e) => errs.push(e.message));
 const url = pathToFileURL(path.resolve('index.html')).href, wait = (ms) => new Promise((r) => setTimeout(r, ms));
-let fails = 0; const ok = (c, m) => { if (!c) fails++; console.log(c ? 'PASS' : 'FAIL', m); }; const ev = (f, ...a) => p.evaluate(f, ...a);
-const nav = async (r) => { await p.goto(url + '#/' + r.split('/').map(encodeURIComponent).join('/')); await p.reload(); await wait(1500); };
+let fails = 0; const ok = (c, m) => { if (!c) fails++; console.log(c ? 'PASS' : 'FAIL', m); }; const ev = (f, ...a) => p.evaluate(f, ...a); const idle = () => p.evaluate(() => window.XENO_NET?.idle?.());
+const nav = async (r) => { await p.goto(url + '#/' + r.split('/').map(encodeURIComponent).join('/')); await p.reload(); await wait(1500); await idle(); };
 const bar = () => ev(() => ({ head: document.querySelector('.pg-top .crumbs')?.textContent, sum: document.querySelector('.pg-top-sum')?.textContent.replace(/\s+/g, ' ').trim(), acts: [...document.querySelectorAll('.pg-top-acts button')].map((x) => x.textContent.trim() || x.getAttribute('aria-label')), fresh: document.querySelector('.mfoot .sb-fresh')?.textContent.trim(), info: document.querySelector('.mfoot .sb-info')?.textContent.trim(), keys: [...document.querySelectorAll('.mfoot .sb-keys span')].map((x) => x.textContent).join(' '), h1s: document.querySelectorAll('.mview h1').length }));
 await p.setViewport({ width: 1440, height: 900 }); await p.evaluateOnNewDocument(() => { window.__xwLatency = 900; });   // a slow network, so loading states are on screen when looked at await p.goto(url); await ev(() => { localStorage.clear(); localStorage.setItem('xw.introSeen', JSON.stringify({ studio: 1, office: 1, social: 1, corpo: 1, dev: 1, tools: 1 })); });
 // one header: title, summary and actions in the bar; no second header in the body

@@ -121,7 +121,7 @@
     home(n) { window.XA.switchWorkspace(res(n).owner); X().go('global', { global: 'workspace', item: 'Agents/' + n }); },
     ask(n) { const r = res(n); decide({ kind: 'assign', subject: n, what: `Asked ${wsName(r.owner)} to assign ${n} to ${cur().name}` }); commit(`Asked ${wsName(r.owner)} — they’ll see it in their inbox`); },
   };
-  document.addEventListener('click', (e) => { const t = e.target.closest('[data-rs]'); if (!t || t.closest('.xd')) return; e.preventDefault(); e.stopPropagation(); if (t.getAttribute('aria-disabled') === 'true') return X().toast('Only the owner workspace’s admins change this'); ACT[t.dataset.rs]?.(t.dataset.arg, t.dataset.kind || 'agent'); }, true);
+  document.addEventListener('click', (e) => { const t = e.target.closest('[data-rs]'); if (!t || t.closest('.xd')) return; e.preventDefault(); e.stopPropagation(); if (t.getAttribute('aria-disabled') === 'true') return X().toast('Only the owner workspace’s admins change this'); window.XENO_NET?.begin('resources', t.dataset.rs, t); Promise.resolve(ACT[t.dataset.rs]?.(t.dataset.arg, t.dataset.kind || 'agent')).finally(() => window.XENO_NET?.clear(t)); }, true);
 
   // team pages gain "Works in" (assignments across workspaces), built from the same records
   function teamAssignments(name) {
@@ -136,5 +136,6 @@
     if (it === 'All my teams') return myAgents('team');
     return null;
   }
+  window.XENO_ROLE?.gate('rs', ['propose', 'accept', 'decline', 'revoke', 'activate', 'version', 'access'], 'manage', 'Owners and admins manage agents and their assignments');
   window.XENO_RES = { route, teamAssignments, store, res };
 })();

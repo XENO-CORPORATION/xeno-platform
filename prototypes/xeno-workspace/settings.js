@@ -26,7 +26,7 @@
   });
   const A = () => { const a = { ...DEF(), ...(LS.get('acct', {}) || {}) }; return a; };
   const save = (a) => { LS.set('acct', a); };
-  const edit = (fn, msg) => { const a = A(); fn(a); save(a); X().render(); if (msg) X().toast(msg); };
+  const edit = (fn, msg) => { const a = A(); fn(a); save(a); return window.XENO_NET ? window.XENO_NET.end(() => { X().render(); if (msg) X().toast(msg); }) : (X().render(), msg && X().toast(msg), Promise.resolve(true)); };
   const undoT = (msg, fn) => { const t = document.getElementById('toast'); t.innerHTML = `${esc(msg)} <button class="pg-undo">Undo</button>`; t.classList.add('on'); t.querySelector('.pg-undo').onclick = () => { fn(); t.classList.remove('on'); }; clearTimeout(t._pgT); t._pgT = setTimeout(() => t.classList.remove('on'), 5000); };
 
   // ---------- confirm it's you (step-up): passkey or an authenticator code, then 10 minutes unlocked ----------
@@ -162,7 +162,7 @@
     async gift() { const a = A(); const v = await D().form({ title: 'Send credits', sub: `You have ${a.balance.toLocaleString()} credits.`, submit: 'Send gift', size: 'sm', fields: [{ id: 'to', label: 'To', required: true, placeholder: '@handle', validate: (x) => { const h = x.trim().replace(/^@/, ''); return !/^[a-z0-9._-]{3,30}$/i.test(h) ? 'Enter their handle.' : h === a.profile.handle ? 'That’s you.' : null; } }, { id: 'n', label: 'Credits', type: 'number', required: true, value: '500', validate: (x) => (!/^\d+$/.test(x) || +x <= 0 ? 'Enter a whole number.' : +x > a.balance ? 'More than you have.' : null) }, { id: 'note', label: 'Message', type: 'textarea', rows: 2, max: 140 }] });
       if (v) edit((x) => { x.balance -= +v.n; x.gifts.unshift({ id: 'g' + rid(), to: v.to.trim().replace(/^@/, ''), amount: +v.n, note: v.note, at: now(), state: 'pending' }); }, `Sent ${(+v.n).toLocaleString()} credits to @${v.to.trim().replace(/^@/, '')} — they have 30 days to accept`); },
     ungift(id) { edit((x) => { const g = x.gifts.find((y) => y.id === id); g.state = 'returned'; x.balance += g.amount; }, 'Gift taken back — the credits are yours again'); },
-    pref(k) { const p = D().prefs(); p[k] = !p[k]; LS.set('prefs', p); D().applyPrefs(); X().render(); },
+    pref(k) { const p = D().prefs(); p[k] = !p[k]; LS.set('prefs', p); D().applyPrefs(); return window.XENO_NET ? window.XENO_NET.end(() => X().render()) : X().render(); },
     prefv(arg) { const [k, v] = arg.split('='); const p = D().prefs(); p[k] = v; LS.set('prefs', p); D().applyPrefs(); X().render(); },
     manageModes: () => { document.querySelector('#logo')?.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true })); setTimeout(() => document.querySelector('[data-manage]')?.click(), 300); },
     shortcuts: () => X().openShortcuts(),
@@ -180,8 +180,8 @@
       const C = LS.get('connections', null) || [{ id: 'c1', name: 'Google Drive', by: 'Emilian', scope: 'Read files you pick', at: now() - 40 * DAY }, { id: 'c2', name: 'GitHub', by: 'Emilian', scope: 'Repositories: xeno-platform', at: now() - 12 * DAY }]; C.unshift({ id: 'c' + rid(), name: v.s, by: A().profile.name, scope: 'Read what you pick', at: now() }); LS.set('connections', C); X().render(); X().toast(`${v.s} connected`); },
     async disconnect(id) { const C = LS.get('connections', null) || []; const c = C.find((x) => x.id === id); if (!c || !await D().confirm({ title: `Disconnect ${esc(c.name)}?`, body: 'Agents and apps in this workspace lose access to it.', action: 'Disconnect' })) return; LS.set('connections', C.filter((x) => x.id !== id)); X().render(); undoT(`${c.name} disconnected`, () => { LS.set('connections', C); X().render(); }); },
   };
-  document.addEventListener('click', (e) => { const t = e.target.closest('[data-set]'); if (!t || !t.closest('.pg--set')) return; e.preventDefault(); if (t.getAttribute('aria-disabled') === 'true') return X().toast(t.title || 'Not available'); ACT[t.dataset.set]?.(t.dataset.arg); });
-  document.addEventListener('change', (e) => { const s = e.target.closest('[data-set-sel]'); if (!s) return; edit((x) => { x.region[s.dataset.setSel] = s.value; }, 'Saved'); });
+  document.addEventListener('click', (e) => { const t = e.target.closest('[data-set]'); if (!t || !t.closest('.pg--set')) return; e.preventDefault(); if (t.getAttribute('aria-disabled') === 'true') return X().toast(t.title || 'Not available'); window.XENO_NET?.begin('settings', t.dataset.set, t); Promise.resolve(ACT[t.dataset.set]?.(t.dataset.arg)).finally(() => window.XENO_NET?.clear(t)); });
+  document.addEventListener('change', (e) => { const s = e.target.closest('[data-set-sel]'); if (!s) return; window.XENO_NET?.begin('settings', 'region', s); edit((x) => { x.region[s.dataset.setSel] = s.value; }, 'Saved'); });
   // the deletion grace period is real: signing in (opening XENO) while it runs offers to keep the account
   setTimeout(() => { const a = A(); if (a.deletion && window.XW) { const t = document.getElementById('toast'); t.innerHTML = `Your account is scheduled for deletion on ${when(a.deletion.at + 30 * DAY)} <button class="pg-undo">Keep my account</button>`; t.classList.add('on'); t.querySelector('.pg-undo').onclick = () => { ACT.undelete(); t.classList.remove('on'); }; } }, 1500);
   // the sidebar for Settings is the same nav, as rows (one source: SECT)
