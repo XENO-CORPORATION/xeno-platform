@@ -3,13 +3,13 @@ const require = createRequire(import.meta.url); const puppeteer = require('puppe
 const b = await puppeteer.launch({ headless: true, args: ['--allow-file-access-from-files'] }); const p = await b.newPage();
 const errs = []; p.on('pageerror', (e) => errs.push(e.message));
 const url = pathToFileURL(path.resolve('index.html')).href, wait = (ms) => new Promise((r) => setTimeout(r, ms));
-let fails = 0; const ok = (c, m) => { if (!c) fails++; console.log(c ? 'PASS' : 'FAIL', m); }; const ev = (f, ...a) => p.evaluate(f, ...a);
+let fails = 0; const ok = (c, m) => { if (!c) fails++; console.log(c ? 'PASS' : 'FAIL', m); }; const ev = (f, ...a) => p.evaluate(f, ...a); const idle = () => p.evaluate(() => window.XENO_NET?.idle?.());
 const F = () => ev(() => JSON.parse(localStorage.getItem('xw.funding'))['Brand refresh']);
-const fd = (a, arg) => ev((x, y) => [...document.querySelectorAll('#main [data-fd]')].find((e) => e.dataset.fd === x && (y == null || e.dataset.arg === y)).click(), a, arg ?? null).then(() => wait(400));
-const submit = async () => { await ev(() => [...document.querySelectorAll('.xd')].pop().querySelector('[data-xd-submit], .xd-foot .xd-btn:not(.ghost)').click()); await wait(450); };
+const fd = (a, arg) => ev((x, y) => [...document.querySelectorAll('#main [data-fd]')].find((e) => e.dataset.fd === x && (y == null || e.dataset.arg === y)).click(), a, arg ?? null).then(() => wait(400)).then(idle);
+const submit = async () => { await ev(() => [...document.querySelectorAll('.xd')].pop().querySelector('[data-xd-submit], .xd-foot .xd-btn:not(.ghost)').click()); await wait(450); await idle(); };
 await p.setViewport({ width: 1440, height: 900 }); await p.goto(url);
 await ev(() => { localStorage.clear(); localStorage.setItem('xw.introSeen', JSON.stringify({ studio: 1, office: 1, social: 1, corpo: 1, dev: 1, tools: 1 })); localStorage.setItem('xw.workspace', '"xeno"'); });
-const open = async () => { await p.goto(url + '#/studio/g/projects/Brand refresh/Funding'); await p.reload(); await wait(900); };
+const open = async () => { await p.goto(url + '#/studio/g/projects/Brand refresh/Funding'); await p.reload(); await wait(900); await idle(); };
 await open();
 let g = await ev(() => ({ sums: [...document.querySelectorAll('#main .fd-sum small')].map((x) => x.textContent), ms: document.querySelectorAll('#main .fd-ms').length }));
 console.log(JSON.stringify(g), await ev(()=>location.hash+' '+document.querySelector('#main').textContent.slice(0,150))); ok(g.sums.join() === 'Confirmed,Committed,Consumed,Returned,Disputed' && g.ms === 3, `contributor view shows the five states and three milestones (FUND-12)`);

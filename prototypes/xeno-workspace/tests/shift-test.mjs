@@ -5,7 +5,7 @@ const require = createRequire(import.meta.url); const puppeteer = require('puppe
 const b = await puppeteer.launch({ headless: true, args: ['--allow-file-access-from-files'] }); const p = await b.newPage(); const errs = []; p.on('pageerror', (e) => errs.push(e.message));
 const url = pathToFileURL(path.resolve('index.html')).href, wait = (ms) => new Promise((r) => setTimeout(r, ms));
 const pickState = async (v) => { await p.evaluate(() => document.querySelector('.mfoot [data-pg-preview]').click()); await new Promise((r) => setTimeout(r, 120)); await p.evaluate((v) => document.querySelector(`.pg-ddm [data-v="${v}"]`).click(), v); };
-let fails = 0; const ok = (c, m) => { if (!c) fails++; console.log(c ? 'PASS' : 'FAIL', m); }; const ev = (f, ...a) => p.evaluate(f, ...a);
+let fails = 0; const ok = (c, m) => { if (!c) fails++; console.log(c ? 'PASS' : 'FAIL', m); }; const ev = (f, ...a) => p.evaluate(f, ...a); const idle = () => p.evaluate(() => window.XENO_NET?.idle?.());
 const seed = () => ev(() => { localStorage.clear(); localStorage.setItem('xw.introSeen', JSON.stringify({ studio: 1, office: 1, social: 1, corpo: 1, dev: 1, tools: 1 })); });
 // boxes of the elements inside a root, keyed by a stable path
 const boxes = (sel) => ev((sel) => { const root = document.querySelector(sel); if (!root) return null; const R = root.getBoundingClientRect(), out = {};

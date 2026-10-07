@@ -16,7 +16,7 @@
   const LS = { get(k, d) { try { const v = localStorage.getItem('xw.' + k); return v == null ? d : JSON.parse(v); } catch { return d; } }, set(k, v) { try { localStorage.setItem('xw.' + k, JSON.stringify(v)); } catch {} } };
   const cur = () => window.XA.currentWorkspace(), cr = (n) => `${Math.round(n).toLocaleString('en')} cr`, day = (t) => new Date(t).toLocaleDateString('en', { day: 'numeric', month: 'short', year: 'numeric' });
   const isCompany = (w) => w.id !== 'personal' && !/Guest/.test(w.sub || '');
-  const isOwner = (w) => w.id === 'xeno' || /owner/i.test(w.sub || '');
+  const isOwner = (w) => (w.id === 'xeno' || /owner/i.test(w.sub || '')) && (!window.XENO_ROLE || window.XENO_ROLE.can('manage'));
   const JUR = [['AE-DXB', 'United Arab Emirates — Dubai (DIFC)', 'DIFC Registrar of Companies'], ['RO', 'Romania', 'ONRC — Trade Register'], ['DE', 'Germany', 'Handelsregister (court)'], ['FR', 'France', 'RCS / SIREN'], ['GR', 'Greece', 'GEMI'], ['GB-NIR', 'United Kingdom — Northern Ireland', 'Companies House'], ['US-DE', 'United States — Delaware', 'Division of Corporations']];
   // §4.2 rule 5: VAT prefixes are their own list, NOT ISO 3166 — Greece is EL, Northern Ireland is XI
   const VAT = { RO: 'RO', DE: 'DE', FR: 'FR', GR: 'EL', 'GB-NIR': 'XI' };
@@ -65,7 +65,7 @@
       </aside></div>` + h.foot('workspace', 'GET /api/v2/companies/:id'));
   }
 
-  const done = (m) => { X().render(); if (m) X().toast(m); };
+  const done = (m) => (window.XENO_NET ? window.XENO_NET.end(() => { X().render(); if (m) X().toast(m); }) : (X().render(), m && X().toast(m), Promise.resolve(true)));
   const ACT = {
     agent(n) { X().go('global', { global: 'workspace', item: 'Agents/' + n }); },
     async edit() { const c = co(); const v = await D().form({ title: 'Company details', submit: 'Save', size: 'sm', fields: [{ id: 'n', label: 'Name', required: true, value: c.name, max: 80 }, { id: 'f', label: 'Legal form', value: c.form, placeholder: 'e.g. FZ-LLC, SRL, GmbH' }] }); if (!v) return; c.name = v.n.trim(); c.form = v.f.trim(); saveCo(c); done('Saved'); },
@@ -86,8 +86,10 @@
       if (!v) return; Wd().members.push({ name: v.m, kind: 'agent', title: v.t.trim(), role: 'member', status: 'active', divisions: [], ownedBy: WF().you(), lastActive: new Date().toISOString() }); WF().decide({ kind: 'admit', subject: v.m, what: `Employed ${v.m} at ${c.name} as ${v.t.trim()}` }); WF().persist(); window.XENO_DB?.save?.(); done(`${v.m} works at ${c.name} now`); },
     async title(n) { const m = Wd().members.find((x) => x.name === n); const v = await D().form({ title: `${n}’s title`, submit: 'Save', size: 'sm', fields: [{ id: 't', label: 'Title', required: true, value: m.title || '' }] }); if (!v) return; m.title = v.t.trim(); WF().decide({ kind: 'role', subject: n, what: `${n}’s title is now ${m.title}` }); WF().persist(); done('Saved'); },
   };
-  document.addEventListener('click', (e) => { const t = e.target.closest('[data-co]'); if (!t || t.closest('.xd')) return; e.preventDefault(); e.stopPropagation(); ACT[t.dataset.co]?.(t.dataset.arg); }, true);
+  document.addEventListener('click', (e) => { const t = e.target.closest('[data-co]'); if (!t || t.closest('.xd')) return; e.preventDefault(); e.stopPropagation(); window.XENO_NET?.begin('company', t.dataset.co, t); Promise.resolve(ACT[t.dataset.co]?.(t.dataset.arg)).finally(() => window.XENO_NET?.clear(t)); }, true);
   // a new company lands on its own setup page instead of a toast
   const orig = window.XA.newCompany; window.XA.newCompany = async (...a) => { const before = window.XA.workspaces().length; await orig(...a); if (window.XA.workspaces().length > before) X().go('global', { global: 'workspace', item: 'Company' }); };
+  window.XENO_ROLE?.gate('co', ['topup'], 'billing', 'Only the owner adds money to the company wallet');
+  window.XENO_ROLE?.gate('co', ['edit', 'addReg', 'addId', 'rmId', 'allocate', 'employ', 'title'], 'manage', 'Owners and admins manage the company');
   window.XENO_COMPANY = { route: (it) => (it === 'Company' ? page() : null), co, balance };
 })();

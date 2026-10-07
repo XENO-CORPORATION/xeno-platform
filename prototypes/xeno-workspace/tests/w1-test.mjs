@@ -3,7 +3,7 @@ const require = createRequire(import.meta.url); const puppeteer = require('puppe
 const b = await puppeteer.launch({ headless: true, args: ['--allow-file-access-from-files'] }); const p = await b.newPage(); await p.emulateMediaFeatures([{ name: 'prefers-reduced-motion', value: 'no-preference' }]);
 const errs = []; p.on('pageerror', (e) => errs.push(e.message + ' @ ' + String(e.stack || '').split(String.fromCharCode(10)).slice(1, 3).join(' | ')));
 const url = pathToFileURL(path.resolve('index.html')).href, wait = (ms) => new Promise((r) => setTimeout(r, ms));
-let fails = 0; const ok = (c, m) => { if (!c) fails++; console.log(c ? 'PASS' : 'FAIL', m); }; const ev = (f, ...a) => p.evaluate(f, ...a);
+let fails = 0; const ok = (c, m) => { if (!c) fails++; console.log(c ? 'PASS' : 'FAIL', m); }; const ev = (f, ...a) => p.evaluate(f, ...a); const idle = () => p.evaluate(() => window.XENO_NET?.idle?.());
 const stubOpen = () => ev(() => { window.__opened = []; window.open = (u) => { window.__opened.push(u); return null; }; });
 const nav = async (r) => { await p.goto(url + '#/' + r); await p.reload(); await wait(1000); await stubOpen(); };
 const click = (sel) => ev((s) => { const n = [...document.querySelectorAll(s)].find((x) => x.offsetParent); n.click(); return !!n; }, sel);

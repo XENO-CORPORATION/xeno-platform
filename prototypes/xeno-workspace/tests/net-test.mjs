@@ -3,13 +3,13 @@ const require = createRequire(import.meta.url); const puppeteer = require('puppe
 const b = await puppeteer.launch({ headless: true, args: ['--allow-file-access-from-files'], protocolTimeout: 60000 }); const p = await b.newPage();
 const errs = []; p.on('pageerror', (e) => errs.push(e.message));
 const url = pathToFileURL(path.resolve('index.html')).href, wait = (ms) => new Promise((r) => setTimeout(r, ms));
-let fails = 0; const ok = (c, m) => { if (!c) fails++; console.log(c ? 'PASS' : 'FAIL', m); }; const ev = (f, ...a) => p.evaluate(f, ...a);
-const nav = async (h) => { await p.goto(url + '#/' + h); await p.reload(); await wait(900); };
-const click = (sel, txt) => ev((s, t) => { const n = [...document.querySelectorAll(s)].find((e) => !t || e.textContent.includes(t)); if (!n) throw new Error('no ' + s + ' ' + t); n.click(); }, sel, txt ?? null).then(() => wait(250));
+let fails = 0; const ok = (c, m) => { if (!c) fails++; console.log(c ? 'PASS' : 'FAIL', m); }; const ev = (f, ...a) => p.evaluate(f, ...a); const idle = () => p.evaluate(() => window.XENO_NET?.idle?.());
+const nav = async (h) => { await p.goto(url + '#/' + h); await p.reload(); await wait(900); await idle(); };
+const click = (sel, txt) => ev((s, t) => { const n = [...document.querySelectorAll(s)].find((e) => !t || e.textContent.includes(t)); if (!n) throw new Error('no ' + s + ' ' + t); n.click(); }, sel, txt ?? null).then(() => wait(250)).then(idle);
 const dlg = () => ev(() => [...document.querySelectorAll('.xd')].pop()?.textContent || '');
 const submit = async (ms = 600) => { await ev(() => [...document.querySelectorAll('.xd')].pop().querySelector('[data-xd-submit], .xd-foot .xd-btn:not(.ghost)').click()); await wait(ms); };
-const cancel = () => ev(() => [...document.querySelectorAll('.xd')].pop().querySelector('[data-xd-cancel], .xd-foot .xd-btn.ghost').click()).then(() => wait(300));
-const mode = (m, r = 'owner') => ev((a, c) => { window.XENO_NET.setMode(a); window.XENO_ROLE.set(c); window.XW.render(); }, m, r).then(() => wait(200));
+const cancel = () => ev(() => [...document.querySelectorAll('.xd')].pop().querySelector('[data-xd-cancel], .xd-foot .xd-btn.ghost').click()).then(() => wait(300)).then(idle);
+const mode = (m, r = 'owner') => ev((a, c) => { window.XENO_NET.setMode(a); window.XENO_ROLE.set(c); window.XW.render(); }, m, r).then(() => wait(200)).then(idle);
 const E = () => ev(() => JSON.parse(localStorage.getItem('xw.mkEnts') || '{}'));
 await p.setViewport({ width: 1440, height: 900 }); await p.goto(url);
 await ev(() => { localStorage.clear(); sessionStorage.clear(); localStorage.setItem('xw.introSeen', JSON.stringify({ studio: 1, office: 1, social: 1, corpo: 1, dev: 1, tools: 1 })); localStorage.setItem('xw.workspace', '"xeno"'); });

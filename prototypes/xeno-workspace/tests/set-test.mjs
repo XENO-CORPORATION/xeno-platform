@@ -3,11 +3,11 @@ const require = createRequire(import.meta.url); const puppeteer = require('puppe
 const b = await puppeteer.launch({ headless: true, args: ['--allow-file-access-from-files'] }); const p = await b.newPage(); await p.emulateMediaFeatures([{ name: 'prefers-reduced-motion', value: 'no-preference' }]);
 const errs = []; p.on('pageerror', (e) => errs.push(e.message + ' @ ' + String(e.stack).split('\n')[1]));
 const url = pathToFileURL(path.resolve('index.html')).href, wait = (ms) => new Promise((r) => setTimeout(r, ms));
-let fails = 0; const ok = (c, m) => { if (!c) fails++; console.log(c ? 'PASS' : 'FAIL', m); }; const ev = (f, ...a) => p.evaluate(f, ...a);
+let fails = 0; const ok = (c, m) => { if (!c) fails++; console.log(c ? 'PASS' : 'FAIL', m); }; const ev = (f, ...a) => p.evaluate(f, ...a); const idle = () => p.evaluate(() => window.XENO_NET?.idle?.());
 const go = async (id) => { await ev((i) => window.XENO_SETTINGS.go(i), id); await wait(450); await ev(() => { window.__opened = []; window.open = (u) => { window.__opened.push(u); }; }); };
-const act = async (a, arg) => { await ev((x, y) => { const n = [...document.querySelectorAll('#main [data-set]')].find((e) => e.dataset.set === x && (y == null || e.dataset.arg === y)); n.click(); }, a, arg ?? null); await wait(350); };
+const act = async (a, arg) => { await ev((x, y) => { const n = [...document.querySelectorAll('#main [data-set]')].find((e) => e.dataset.set === x && (y == null || e.dataset.arg === y)); n.click(); }, a, arg ?? null); await wait(350); await idle(); };
 const dlg = () => ev(() => { const d = [...document.querySelectorAll('.xd')].pop(); return d && { title: d.querySelector('.xd-head b')?.textContent, text: d.textContent }; });
-const submit = async () => { await ev(() => [...document.querySelectorAll('.xd')].pop().querySelector('[data-xd-submit], .xd-foot .xd-btn:not(.ghost)').click()); await wait(450); };
+const submit = async () => { await ev(() => [...document.querySelectorAll('.xd')].pop().querySelector('[data-xd-submit], .xd-foot .xd-btn:not(.ghost)').click()); await wait(450); await idle(); };
 const setF = (id, v) => ev((i, x) => { const n = document.querySelector('#xdf-' + i); n.value = x; n.dispatchEvent(new Event('input', { bubbles: true })); }, id, v);
 const pick = (f, v) => ev((f2, v2) => [...document.querySelectorAll(`.xd [data-f="${f2}"] [data-v]`)].find((x) => x.dataset.v === v2).click(), f, v);
 const acct = () => ev(() => JSON.parse(localStorage.getItem('xw.acct') || '{}'));

@@ -3,10 +3,10 @@ const require = createRequire(import.meta.url); const puppeteer = require('puppe
 const b = await puppeteer.launch({ headless: true, args: ['--allow-file-access-from-files'] }); const p = await b.newPage();
 const errs = []; p.on('pageerror', (e) => errs.push(e.message));
 const url = pathToFileURL(path.resolve('index.html')).href, wait = (ms) => new Promise((r) => setTimeout(r, ms));
-let fails = 0; const ok = (c, m) => { if (!c) fails++; console.log(c ? 'PASS' : 'FAIL', m); }; const ev = (f, ...a) => p.evaluate(f, ...a);
-const nav = async (it) => { await p.goto(url + '#/overview/g/market' + (it ? '/' + it : '')); await p.reload(); await wait(900); };
-const click = (sel, txt) => ev((s, t) => { const n = [...document.querySelectorAll(s)].find((e) => !t || e.textContent.includes(t)); if (!n) throw new Error('no ' + s + ' ' + t); n.click(); }, sel, txt ?? null).then(() => wait(450));
-const submit = async () => { await ev(() => [...document.querySelectorAll('.xd')].pop().querySelector('[data-xd-submit], .xd-foot .xd-btn:not(.ghost)').click()); await wait(500); };
+let fails = 0; const ok = (c, m) => { if (!c) fails++; console.log(c ? 'PASS' : 'FAIL', m); }; const ev = (f, ...a) => p.evaluate(f, ...a); const idle = () => p.evaluate(() => window.XENO_NET?.idle?.());
+const nav = async (it) => { await p.goto(url + '#/overview/g/market' + (it ? '/' + it : '')); await p.reload(); await wait(900); await idle(); };
+const click = (sel, txt) => ev((s, t) => { const n = [...document.querySelectorAll(s)].find((e) => !t || e.textContent.includes(t)); if (!n) throw new Error('no ' + s + ' ' + t); n.click(); }, sel, txt ?? null).then(() => wait(450)).then(idle);
+const submit = async () => { await ev(() => [...document.querySelectorAll('.xd')].pop().querySelector('[data-xd-submit], .xd-foot .xd-btn:not(.ghost)').click()); await wait(500); await idle(); };
 const E = () => ev(() => JSON.parse(localStorage.getItem('xw.mkEnts') || '{}'));
 await p.setViewport({ width: 1440, height: 900 }); await p.goto(url);
 await ev(() => { localStorage.clear(); localStorage.setItem('xw.introSeen', JSON.stringify({ studio: 1, office: 1, social: 1, corpo: 1, dev: 1, tools: 1 })); });

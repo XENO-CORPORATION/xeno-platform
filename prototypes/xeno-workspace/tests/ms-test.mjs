@@ -9,12 +9,12 @@ const b = await puppeteer.launch({ headless: true }); const ctx = b.defaultBrows
 const p = await b.newPage(); await p.emulateMediaFeatures([{ name: 'prefers-reduced-motion', value: 'no-preference' }]);
 const errs = []; p.on('pageerror', (e) => errs.push(e.message));
 const cdp = await p.createCDPSession(); await cdp.send('Browser.setDownloadBehavior', { behavior: 'allow', downloadPath: dl, eventsEnabled: true });
-const wait = (ms) => new Promise((r) => setTimeout(r, ms)); let fails = 0; const ok = (c, m) => { if (!c) fails++; console.log(c ? 'PASS' : 'FAIL', m); }; const ev = (f, ...a) => p.evaluate(f, ...a);
-const nav = async (r) => { await p.goto(url + '#/' + r); await p.reload(); await wait(1100); };
+const wait = (ms) => new Promise((r) => setTimeout(r, ms)); let fails = 0; const ok = (c, m) => { if (!c) fails++; console.log(c ? 'PASS' : 'FAIL', m); }; const ev = (f, ...a) => p.evaluate(f, ...a); const idle = () => p.evaluate(() => window.XENO_NET?.idle?.());
+const nav = async (r) => { await p.goto(url + '#/' + r); await p.reload(); await wait(1100); await idle(); };
 const cardBox = (i) => ev((i) => { const n = [...document.querySelectorAll('#main [data-pg-file]')][i]; n.scrollIntoView({ block: 'center' }); const r = n.getBoundingClientRect(); return { x: r.x + r.width / 2, y: r.y + Math.min(40, r.height / 2), id: n.dataset.pgFile }; }, i);
 const selected = () => ev(() => [...document.querySelectorAll('#main [data-pg-file][aria-selected]')].map((n) => n.dataset.pgFile));
 const menu = () => ev(() => { const m = document.querySelector('.xcm:not(.out):not(.sub)'); return m && { touch: m.classList.contains('touch'), h: m.querySelector('.xcm-i')?.getBoundingClientRect().height, items: [...m.querySelectorAll('.xcm-i')].map((x) => x.querySelector('.xcm-l').textContent.trim()) }; });
-const pick = async (label) => { await ev((l) => [...document.querySelectorAll('.xcm:not(.out) .xcm-i')].find((x) => x.querySelector('.xcm-l').textContent.trim().startsWith(l)).click(), label); await wait(300); };
+const pick = async (label) => { await ev((l) => [...document.querySelectorAll('.xcm:not(.out) .xcm-i')].find((x) => x.querySelector('.xcm-l').textContent.trim().startsWith(l)).click(), label); await wait(300); await idle(); };
 // a download is any file written after the action started — names repeat, so presence alone proves nothing
 const newest = async (_after, ms = 6000) => { const t0 = Date.now() - 50; while (Date.now() - t0 < ms) { const f = fs.readdirSync(dl).filter((x) => !x.endsWith('.crdownload') && fs.statSync(path.join(dl, x)).mtimeMs >= t0); if (f.length) { await wait(200); return f[0]; } await wait(100); } return null; };
 await p.setViewport({ width: 1440, height: 900 }); await p.goto(url); await ev(() => { localStorage.clear(); indexedDB.deleteDatabase('xw.files'); localStorage.setItem('xw.introSeen', JSON.stringify({ studio: 1, office: 1, social: 1, corpo: 1, dev: 1, tools: 1 })); });

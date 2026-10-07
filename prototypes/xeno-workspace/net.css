@@ -12,3 +12,8 @@
 #net-chip b{font-weight:600;color:var(--muted)}
 #net-chip.alert{opacity:1;border-color:#e8e8ec;color:var(--text)}
 #net-chip.alert b{color:#0a0a0a;background:#e8e8ec;border-radius:3px;padding:1px 5px}
+/* role gates (net.js) */
+.role-off{opacity:.45;cursor:not-allowed}
+.pl-closed{background:#111;border-style:dashed}
+.pl-closed header b{display:flex;align-items:center;gap:6px;color:var(--dim)}
+.pl-closed svg.i{width:13px;height:13px}

@@ -192,6 +192,6 @@
   // using something ends its no-questions refund window
   window.addEventListener('xw:listing-opened', (e) => { const E = ents(); if (E[e.detail]) { E[e.detail].used = true; setEnts(E); } });
   function entitle(id, cap) { const E = ents(), x = byId(id); E[id] = mkEnt(x, now(), false, cap || 500); if (model(x) === 'per_use') { E[id].spent = 0; E[id].receipts = []; if (x.kind === 'mind') E[id].partition = { memories: 0, at: now() }; } setEnts(E); }
-  document.addEventListener('click', (e) => { const t = e.target.closest('[data-mk]'); if (!t || t.closest('.xd')) return; e.preventDefault(); e.stopPropagation(); begin(t.dataset.mk, t); ACT[t.dataset.mk]?.(t.dataset.arg); }, true);
+  document.addEventListener('click', (e) => { const t = e.target.closest('[data-mk]'); if (!t || t.closest('.xd')) return; e.preventDefault(); e.stopPropagation(); begin(t.dataset.mk, t); Promise.resolve(ACT[t.dataset.mk]?.(t.dataset.arg)).finally(() => { if (tx && tx.el === t) tx = null; }); }, true);
   window.XENO_MARKET = { route, entitle, ents, model };
 })();

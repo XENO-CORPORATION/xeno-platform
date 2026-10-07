@@ -2,12 +2,12 @@ import { createRequire } from 'node:module'; import path from 'node:path'; impor
 const require = createRequire(import.meta.url); const puppeteer = require('puppeteer');
 const b = await puppeteer.launch({ headless: true, args: ['--allow-file-access-from-files'] }); const p = await b.newPage(); const errs = []; p.on('pageerror', (e) => errs.push(e.message)); p.on('console', (m) => { if (m.type() === 'error') errs.push(m.text()); });
 const url = pathToFileURL(path.resolve('index.html')).href, wait = (ms) => new Promise((r) => setTimeout(r, ms));
-let fails = 0; const ok = (c, m) => { if (!c) fails++; console.log(c ? 'PASS' : 'FAIL', m); }; const ev = (f, ...a) => p.evaluate(f, ...a);
-const nav = async (r) => { await p.goto(url + '#/' + r); await p.reload(); await wait(1100); };
+let fails = 0; const ok = (c, m) => { if (!c) fails++; console.log(c ? 'PASS' : 'FAIL', m); }; const ev = (f, ...a) => p.evaluate(f, ...a); const idle = () => p.evaluate(() => window.XENO_NET?.idle?.());
+const nav = async (r) => { await p.goto(url + '#/' + r); await p.reload(); await wait(1100); await idle(); };
 const rclick = async (sel, extra = '') => { const bx = await ev((s, x) => { const n = [...document.querySelectorAll(s)].find((n) => n.offsetParent && (!x || n.matches(x))); if (!n) return null; n.scrollIntoView({ block: 'center' }); const r = n.getBoundingClientRect(); return { x: r.x + Math.min(30, r.width / 2), y: r.y + r.height / 2 }; }, sel, extra); if (!bx) return null; await p.mouse.click(bx.x, bx.y, { button: 'right' }); await wait(200); return bx; };
 const menu = () => ev(() => { const m = document.querySelector('.xcm:not(.out):not(.sub)'); if (!m) return null; return { role: m.getAttribute('role'), items: [...m.querySelectorAll('.xcm-i')].map((x) => x.querySelector('.xcm-l').textContent.trim()), seps: m.querySelectorAll('.xcm-sep').length, r: m.getBoundingClientRect().toJSON() }; });
-const pickItem = async (label) => { await ev((l) => { const it = [...document.querySelectorAll('.xcm:not(.out) .xcm-i')].find((x) => x.querySelector('.xcm-l').textContent.trim() === l); it.click(); }, label); await wait(350); };
-const esc = async () => { await p.keyboard.press('Escape'); await wait(180); };
+const pickItem = async (label) => { await ev((l) => { const it = [...document.querySelectorAll('.xcm:not(.out) .xcm-i')].find((x) => x.querySelector('.xcm-l').textContent.trim() === l); it.click(); }, label); await wait(350); await idle(); };
+const esc = async () => { await p.keyboard.press('Escape'); await wait(180); await idle(); };
 await p.setViewport({ width: 1440, height: 900 }); await p.goto(url); await ev(() => { localStorage.clear(); localStorage.setItem('xw.introSeen', JSON.stringify({ studio: 1, office: 1, social: 1, corpo: 1, dev: 1, tools: 1 })); });
 
 // ---- library file ----

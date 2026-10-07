@@ -14,7 +14,7 @@
   const ic = (k) => X().ic(k);
   const LS = { get(k, d) { try { const v = localStorage.getItem('xw.' + k); return v == null ? d : JSON.parse(v); } catch { return d; } }, set(k, v) { try { localStorage.setItem('xw.' + k, JSON.stringify(v)); } catch {} } };
   const SS = { get(k) { try { return sessionStorage.getItem('xw.' + k); } catch { return null; } }, set(k, v) { try { sessionStorage.setItem('xw.' + k, v); } catch {} } };
-  const cur = () => window.XA.currentWorkspace(), isAdmin = () => cur().id === 'xeno' || cur().id === 'personal' || /owner|admin/i.test(cur().sub || '');
+  const cur = () => window.XA.currentWorkspace(), isAdmin = () => (!window.XENO_ROLE || window.XENO_ROLE.can('manage')) && cur().id === 'xeno' || cur().id === 'personal' || /owner|admin/i.test(cur().sub || '');
   let peek = null, listView = false, editing = false;
 
   const runs = () => Object.values(window.XENO_PG_AREAS || {}).flatMap((A) => { const ai = A.cols.indexOf('Agent'), si = A.cols.indexOf('Status'); return ai < 0 ? [] : A.rows.map((r) => ({ name: r[0], agent: r[ai], status: r[si] })); });
@@ -48,6 +48,8 @@
       <div class="pl-desks">${t.members.map((mm) => desk(mm.name, mm.fn, walkers.has(mm.name))).join('')}</div></div>`;
   }
   function floorHTML(f, here) {
+    // VIEW-02: a floor the viewer has no scope for is a closed door — no name, no headcount, no activity
+    if (window.XENO_ROLE?.role() === 'guest' && f.key !== 'lobby') return `<section class="pl-floor pl-closed" aria-label="A floor you don’t have access to"><header><b>${ic('lock')} Closed</b><small>You don’t have access to this floor</small></header></section>`;
     const busy = f.teams.flatMap((t) => t.members).map((x) => body(x.name)).filter(Boolean).map(stateOf);
     return `<section class="pl-floor${here ? ' here' : ''}" data-floor="${esc(f.key)}"><header><b>${esc(f.name)}</b><small>${f.teams.length ? `${f.teams.length} team${f.teams.length > 1 ? 's' : ''} · ${busy.filter((s) => s.k === 'work').length} working${busy.some((s) => s.k === 'hand') ? ` · ${busy.filter((s) => s.k === 'hand').length} waiting on you` : ''}` : 'No teams on this floor'}</small>${here ? '<span class="pl-here">You are here</span>' : `<button class="pg-link" data-pl="walk" data-arg="${esc(f.key)}">Walk here</button>`}</header>
       <div class="pl-pods">${f.teams.map((t, i) => pod(t, f.key, i, f.teams.length)).join('') || '<p class="pg-dim">Empty floor. Teams this division owns sit here.</p>'}${f.loose?.length ? `<div class="pl-pod pl-loose"><div class="pl-pod-h"><b>Not on a team</b><small>${f.loose.length}</small></div><div class="pl-desks">${f.loose.map((m) => desk(m.name)).join('')}</div></div>` : ''}</div></section>`;
@@ -91,14 +93,14 @@
     list() { listView = !listView; X().render(); },
     edit() { editing = !editing; X().render(); if (!editing) X().toast('Layout saved for everyone in the workspace'); },
     walk(k) { SS.set('placesHere:' + cur().id, k); X().render(); },
-    move(arg) { const [fk, name, d] = arg.split('|'), B = building(), f = [B.lobby, ...B.floors].find((x) => x.key === fk), names = f.teams.map((t) => t.name), i = names.indexOf(name), j = i + +d; [names[i], names[j]] = [names[j], names[i]]; setLayout(fk, names); X().render(); },
+    move(arg) { const [fk, name, d] = arg.split('|'), B = building(), f = [B.lobby, ...B.floors].find((x) => x.key === fk), names = f.teams.map((t) => t.name), i = names.indexOf(name), j = i + +d; [names[i], names[j]] = [names[j], names[i]]; setLayout(fk, names); window.XENO_NET ? window.XENO_NET.end(() => X().render()) : X().render(); },
     profile(n) { const m = body(n); X().go('global', { global: 'workspace', item: (m?.kind === 'agent' ? 'Agents/' : 'Members/') + n }); },
     watch(run) { X().go('zone', { mode: 'dev', zone: 'agents', zoneOf: 'mode', item: run }); },
     handoff(n) { WF().handoff(n); },
     divs() { X().go('global', { global: 'workspace', item: 'Divisions' }); },
     accept(id) { const x = WF().st().handoffs.find((y) => y.id === id); if (!x) return; x.state = 'accepted'; x.rev.push({ at: Date.now(), by: WF().you(), what: 'Accepted in Places' }); WF().commit(`Accepted — ${x.from} sets ${x.work} down at your desk`); },
   };
-  document.addEventListener('click', (e) => { const t = e.target.closest('[data-pl]'); if (!t || t.closest('.xd')) return; e.preventDefault(); e.stopPropagation(); ACT[t.dataset.pl]?.(t.dataset.arg); }, true);
+  document.addEventListener('click', (e) => { const t = e.target.closest('[data-pl]'); if (!t || t.closest('.xd')) return; e.preventDefault(); e.stopPropagation(); window.XENO_NET?.begin('places', t.dataset.pl, t); Promise.resolve(ACT[t.dataset.pl]?.(t.dataset.arg)).finally(() => window.XENO_NET?.clear(t)); }, true);
   document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && peek && !document.querySelector('.xd')) { peek = null; X().render(); } });
   window.XENO_PLACES = { route: page, building, stateOf };
 })();

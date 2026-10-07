@@ -28,7 +28,7 @@
   let S = null;
   const st = () => { if (!S) { S = LS.get('wf', null); if (!S || S.v !== 1) { S = init(); persist(); } } return S; };
   const persist = () => { LS.set('wf', S); syncWorkspace(); };
-  const commit = (msg) => { persist(); window.XENO_PG_SYNC_NAV?.(); X().render(); if (msg) X().toast(msg); };
+  const commit = (msg) => { persist(); const show = () => { window.XENO_PG_SYNC_NAV?.(); X().render(); if (msg) X().toast(msg); }; return window.XENO_NET ? window.XENO_NET.end(show) : (show(), Promise.resolve(true)); };
   const you = () => { const y = W().you; return (typeof y === 'string' ? y : y?.name) || W().members.find((m) => m.kind === 'human' && m.role === (y?.role || 'owner'))?.name || 'Emilian'; };
   const member = (n) => W().members.find((m) => m.name === n);
   const divs = (all) => st().divisions.filter((d) => all || !d.archived);
@@ -270,7 +270,7 @@
     setTimeout(() => { m.status = 'departed'; m.departedAt = now(); persist(); X().render(); X().toast(`${n} has left — settled and archived`); }, 4000);
   }
 
-  document.addEventListener('click', (e) => { const t = e.target.closest('[data-wf]'); if (!t || t.closest('.xd')) return; e.preventDefault(); e.stopPropagation(); ACT[t.dataset.wf]?.(t.dataset.arg); }, true);
+  document.addEventListener('click', (e) => { const t = e.target.closest('[data-wf]'); if (!t || t.closest('.xd')) return; e.preventDefault(); e.stopPropagation(); window.XENO_NET?.begin('workforce', t.dataset.wf, t); Promise.resolve(ACT[t.dataset.wf]?.(t.dataset.arg)).finally(() => window.XENO_NET?.clear(t)); }, true);
   document.addEventListener('change', (e) => { const s = e.target.closest('[data-wf-sel]'); if (!s) return; const t = team(s.dataset.arg), f = s.dataset.wfSel, was = t[f]; t[f] = s.value || null;
     decide({ kind: 'division', subject: t.name, what: `${t.name}: ${f === 'ownDiv' ? 'reports to' : 'paid by'} ${div(s.value)?.name || 'the workspace'}`, supersedes: was ? div(was)?.name : null }); commit(f === 'ownDiv' ? `${t.name} reports to ${div(s.value)?.name || 'the workspace'}` : `${t.name}’s runs are paid by ${div(s.value)?.name || 'the workspace'}`); });
 
@@ -286,6 +286,7 @@
     return null;
   }
   const pendingForMe = () => (expire(), st().handoffs.filter((x) => x.state === 'offered' && (x.to === you() || teamOfMine(x.to))).length);
-  window.XENO_WF = { commit, persist, you, member, ownerOf, st, route, memberExtra, decide, removeWithSettlement, pendingForMe, divs, team, handoff: ACT.handoff, sync: syncWorkspace };
+  window.XENO_ROLE?.gate('wf', ['seed', 'newDiv', 'renameDiv', 'archiveDiv', 'restoreDiv', 'head', 'budget', 'newTeam', 'archiveTeam', 'addMember', 'unteam', 'fn', 'assign', 'unassign', 'memberDivs', 'act'], 'manage', 'Owners and admins manage divisions, teams and members');
+  window.XENO_WF = { reload: () => { S = null; }, commit, persist, you, member, ownerOf, st, route, memberExtra, decide, removeWithSettlement, pendingForMe, divs, team, handoff: ACT.handoff, sync: syncWorkspace };
   syncWorkspace();
 })();

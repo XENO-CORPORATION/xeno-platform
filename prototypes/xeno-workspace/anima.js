@@ -85,7 +85,7 @@
   // ---------- actions ----------
   const M = (id) => minds().find((m) => m.id === id);
   const resign = (m) => { m.signed = { at: now(), fp: fp(m.name + JSON.stringify(m.memories) + JSON.stringify(m.skillList)) }; };
-  const done = (msg) => { save(); X().render(); if (msg) X().toast(msg); };
+  const done = (msg) => { save(); return window.XENO_NET ? window.XENO_NET.end(() => { X().render(); if (msg) X().toast(msg); }) : (X().render(), msg && X().toast(msg), Promise.resolve(true)); };
   const ACT = {
     tab(arg) { const [base, t] = arg.split('|'); X().go('global', { global: 'anima', item: t === 'Overview' ? base : base + '/' + t }); },
     async purpose(id) { const m = M(id); const v = await D().form({ title: `What ${m.name} is for`, submit: 'Save', size: 'sm', fields: [{ id: 'p', label: 'Purpose', type: 'textarea', rows: 3, required: true, value: m.seed.purpose }] }); if (!v) return; m.seed.purpose = v.p.trim(); done('Saved — it works from this on its next step'); },
@@ -116,7 +116,7 @@
     rmSwarm(id) { A().swarms = A().swarms.filter((s) => s.id !== id); done('Removed'); },
     runSwarm(id) { const s = A().swarms.find((x) => x.id === id); window.XA.animaChat(s.lead); },
   };
-  document.addEventListener('click', (e) => { const t = e.target.closest('[data-an]'); if (!t || t.closest('.xd')) return; e.preventDefault(); e.stopPropagation(); ACT[t.dataset.an]?.(t.dataset.arg); }, true);
+  document.addEventListener('click', (e) => { const t = e.target.closest('[data-an]'); if (!t || t.closest('.xd')) return; e.preventDefault(); e.stopPropagation(); window.XENO_NET?.begin('anima', t.dataset.an, t); Promise.resolve(ACT[t.dataset.an]?.(t.dataset.arg)).finally(() => window.XENO_NET?.clear(t)); }, true);
   document.addEventListener('input', (e) => { const t = e.target.closest('[data-an-q]'); if (!t) return; q = t.value; P() && window.XENO_PAGES.repaint('[data-an-q]'); });
   window.XENO_ANIMA = { route, minds };
 })();

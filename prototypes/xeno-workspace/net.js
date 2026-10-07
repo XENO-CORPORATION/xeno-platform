@@ -62,8 +62,42 @@
     if (!v) return; SS.set('netMode', v.n); SS.set('viewAs', v.r); chip(); X().render(); X().toast(`${MODES.find((x) => x[0] === v.n)[1]} network · viewing as ${ROLES.find((x) => x[0] === v.r)[1].toLowerCase()}`);
   }
   document.addEventListener('keydown', (e) => { if (e.ctrlKey && e.altKey && e.key.toLowerCase() === 'p' && !document.querySelector('.xd')) { e.preventDefault(); panel(); } });
+  // ---------- one transaction per user action, for every area ----------
+  // begin() at the click snapshots what the browser holds for this workspace; the area makes its change; end() asks the
+  // server. A no restores the snapshot and reloads every in-memory copy from it — the screen shows exactly what was
+  // there before, never a half-applied change. Server events that arrive later (a confirmation, a reply) don't go
+  // through end(): they are the server speaking, not a request.
+  const LABELS = { 'community.vote': 'Saving your vote', 'community.flag': 'Sending the report', 'community.resolve': 'Applying the moderation', 'community.mod': 'Applying the moderation', 'community.publish': 'Making the ticket public', 'community.report': 'Sending your report', 'company.edit': 'Saving the company', 'company.addReg': 'Adding the registration', 'company.addId': 'Adding the identifier', 'company.rmId': 'Removing the identifier', 'company.topup': 'Adding credits', 'company.allocate': 'Allocating the budget', 'company.employ': 'Employing the agent', 'company.title': 'Changing the title', 'anima.forget': 'Forgetting', 'anima.keep': 'Keeping the skill', 'anima.discard': 'Discarding the skill', 'anima.purpose': 'Saving the purpose', 'anima.rule': 'Adding the rule', 'anima.tg': 'Connecting Telegram', 'anima.del': 'Deleting the Mind', 'anima.pause': 'Pausing', 'places.move': 'Saving the layout', 'places.accept': 'Taking the handoff' };
+  const MONEY = /^(company\.topup|settings\.(plan|buy|gift|credits).*)$/;
+  let tx = null;
+  const snapshot = () => { const o = {}; try { for (let i = 0; i < localStorage.length; i++) { const k = localStorage.key(i); if (k && k.startsWith('xw.')) o[k] = localStorage.getItem(k); } } catch {} return o; };
+  function restore(snap) {
+    try { const now = []; for (let i = 0; i < localStorage.length; i++) { const k = localStorage.key(i); if (k && k.startsWith('xw.')) now.push(k); } now.forEach((k) => { if (!(k in snap)) localStorage.removeItem(k); }); Object.entries(snap).forEach(([k, v]) => localStorage.setItem(k, v)); } catch {}
+    window.XENO_DB?.reload?.(); window.XENO_WF?.reload?.(); window.XD?.applyPrefs?.(); window.XENO_PG_SYNC_NAV?.(); X().render();
+  }
+  function begin(scope, act, el) { tx = { scope, act, el, snap: snapshot(), at: Date.now() }; }
+  // an action that ends without saving (cancelled dialog, early refusal) closes its transaction — a later, unrelated save
+  // must never inherit it, or that save would put the old control into the pending state
+  function clear(el) { if (tx && tx.el === el) tx = null; }
+  async function end(apply = () => {}, meta = {}) {
+    const t = tx; tx = null;
+    if (!t) { apply(); return true; }
+    const op = meta.op || `${t.scope}.${t.act}`;
+    const ok = await run({ op, label: meta.label || LABELS[op] || 'Saving', money: meta.money ?? MONEY.test(op), el: t.el, apply });
+    if (!ok) restore(t.snap);
+    return ok;
+  }
+  // ---------- role gates: an action a role can't take is shown unavailable with the reason, and refused on click ----------
+  const GATES = []; // [attr, Set(actions), capability, reason]
+  function gate(attr, acts, capability, reason) { GATES.push([attr, new Set(acts), capability, reason]); mark(); }
+  function blocked(el) { for (const [attr, acts, capb, reason] of GATES) { const a = el.getAttribute('data-' + attr); if (a && acts.has(a) && !can(capb)) return reason; } return null; }
+  function mark() { const main = document.getElementById('main'); if (!main) return; GATES.forEach(([attr]) => main.querySelectorAll(`[data-${attr}]`).forEach((el) => { const r = blocked(el); if (r) { el.setAttribute('aria-disabled', 'true'); el.classList.add('role-off'); el.title = r; } else if (el.classList.contains('role-off')) { el.removeAttribute('aria-disabled'); el.classList.remove('role-off'); el.removeAttribute('title'); } })); }
+  document.addEventListener('click', (e) => { const el = e.target.closest('[class~="role-off"]'); if (!el || el.closest('.xd')) return; e.preventDefault(); e.stopPropagation(); e.stopImmediatePropagation(); X().toast(el.title); }, true);
+  new MutationObserver(() => mark()).observe(document.documentElement, { childList: true, subtree: true });
   window.XENO_NET_LOG = [];
-  window.XENO_NET = { run, mode, setMode: (m) => { SS.set('netMode', m); chip(); }, panel };
-  window.XENO_ROLE = { role, can, who, set: (r) => { SS.set('viewAs', r); chip(); } };
+  // tests (and anything else) can wait for every request to settle instead of guessing a delay
+  const idle = async () => { while (inflight > 0) await wait(30); await wait(30); };
+  window.XENO_NET = { run, begin, end, clear, idle, mode, setMode: (m) => { SS.set('netMode', m); chip(); }, panel };
+  window.XENO_ROLE = { role, can, who, gate, set: (r) => { SS.set('viewAs', r); chip(); } };
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', chip); else chip();
 })();

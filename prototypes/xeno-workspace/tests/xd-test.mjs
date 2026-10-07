@@ -2,10 +2,10 @@ import { createRequire } from 'node:module'; import path from 'node:path'; impor
 const require = createRequire(import.meta.url); const puppeteer = require('puppeteer');
 const b = await puppeteer.launch({ headless: true, args: ['--allow-file-access-from-files'] }); const p = await b.newPage(); const errs = []; p.on('pageerror', (e) => errs.push(e.message));
 const url = pathToFileURL(path.resolve('index.html')).href, wait = (ms) => new Promise((r) => setTimeout(r, ms));
-let fails = 0; const ok = (c, m) => { if (!c) fails++; console.log(c ? 'PASS' : 'FAIL', m); }; const ev = (f, ...a) => p.evaluate(f, ...a);
-const nav = async (r) => { await p.goto(url + '#/' + r.split('/').map(encodeURIComponent).join('/')); await p.reload(); await wait(800); };
+let fails = 0; const ok = (c, m) => { if (!c) fails++; console.log(c ? 'PASS' : 'FAIL', m); }; const ev = (f, ...a) => p.evaluate(f, ...a); const idle = () => p.evaluate(() => window.XENO_NET?.idle?.());
+const nav = async (r) => { await p.goto(url + '#/' + r.split('/').map(encodeURIComponent).join('/')); await p.reload(); await wait(800); await idle(); };
 const open = () => ev(() => !!document.querySelector('.xd.on'));
-const ctrl = async (k) => { await p.keyboard.down('Control'); await p.keyboard.press(k); await p.keyboard.up('Control'); await wait(300); };
+const ctrl = async (k) => { await p.keyboard.down('Control'); await p.keyboard.press(k); await p.keyboard.up('Control'); await wait(300); await idle(); };
 await p.setViewport({ width: 1440, height: 900 }); await p.goto(url); await ev(() => { localStorage.clear(); localStorage.setItem('xw.introSeen', JSON.stringify({ studio: 1, office: 1, social: 1, corpo: 1, dev: 1, tools: 1 })); });
 // ---- Settings: the full-page account centre (MODES §7j) ----
 await nav('overview/g/projects'); await ctrl('Comma'); await wait(500);

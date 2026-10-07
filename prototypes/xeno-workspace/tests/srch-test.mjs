@@ -3,13 +3,13 @@ const require = createRequire(import.meta.url); const puppeteer = require('puppe
 const b = await puppeteer.launch({ headless: true, args: ['--allow-file-access-from-files'], protocolTimeout: 60000 }); const p = await b.newPage();
 const errs = []; p.on('pageerror', (e) => errs.push(e.message));
 const url = pathToFileURL(path.resolve('index.html')).href, wait = (ms) => new Promise((r) => setTimeout(r, ms));
-let fails = 0; const ok = (c, m) => { if (!c) fails++; console.log(c ? 'PASS' : 'FAIL', m); }; const ev = (f, ...a) => p.evaluate(f, ...a);
+let fails = 0; const ok = (c, m) => { if (!c) fails++; console.log(c ? 'PASS' : 'FAIL', m); }; const ev = (f, ...a) => p.evaluate(f, ...a); const idle = () => p.evaluate(() => window.XENO_NET?.idle?.());
 await p.setViewport({ width: 1440, height: 900 }); await p.goto(url);
 await ev(() => { localStorage.clear(); localStorage.setItem('xw.introSeen', JSON.stringify({ studio: 1, office: 1, social: 1, corpo: 1, dev: 1, tools: 1 })); localStorage.setItem('xw.workspace', '"xeno"'); });
 await p.goto(url + '#/overview'); await p.reload(); await wait(900);
 const q = async (s) => { await ev(() => window.XW.search('')); await wait(200); await ev((v) => { const i = document.querySelector('#palette input'); i.value = v; i.dispatchEvent(new Event('input')); }, s); await wait(200); return ev(() => [...document.querySelectorAll('#palette .row[data-pi]')].map((r) => ({ t: r.querySelector('.t').textContent, g: r.previousElementSibling?.classList.contains('grp') ? r.previousElementSibling.textContent : null }))); };
 const groups = () => ev(() => [...document.querySelectorAll('#palette .grp')].map((g) => g.textContent));
-const enter = async () => { await ev(() => document.querySelector('#palette input').dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }))); await wait(700); };
+const enter = async () => { await ev(() => document.querySelector('#palette input').dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }))); await wait(700); await idle(); };
 let r = await q('password'); ok(r[0]?.t === 'Sign-in & security', `Settings are found by the words people use ("password" → ${r[0]?.t})`);
 await enter(); ok(/settings/.test(await ev(() => location.hash)), 'Enter opens that settings section');
 r = await q('brand'); let gs = await groups(); ok(gs.includes('Projects') && gs.includes('Marketplace'), `one query reaches several kinds (${gs.join(', ')})`);
