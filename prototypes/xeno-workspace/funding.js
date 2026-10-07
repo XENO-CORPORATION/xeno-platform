@@ -12,7 +12,9 @@
   const cr = (n) => `${Math.round(n).toLocaleString('en')} cr`;
   const LS = { get(k, d) { try { const v = localStorage.getItem('xw.' + k); return v == null ? d : JSON.parse(v); } catch { return d; } }, set(k, v) { try { localStorage.setItem('xw.' + k, JSON.stringify(v)); } catch {} } };
   const CAPS = [['contribute', 'Contribute'], ['plan', 'Plan budgets'], ['approve', 'Approve budgets'], ['spend', 'Spend'], ['refund', 'Refund']];
-  const you = () => WF()?.you() || 'Emilian';
+  // who you are follows the prototype's view-as role: owner → Emilian, admin → Mira, member → Nova, guest → nobody on the project
+  const PERSONA = { owner: null, admin: 'Mira', member: 'Nova', guest: 'Guest' };
+  const you = () => PERSONA[window.XENO_ROLE?.role() || 'owner'] || WF()?.you() || 'Emilian';
   // the account's credit lots: only paid lots are eligible (FUND-02); promotional credit is shown, never counted
   const lots = () => LS.get('lots', [{ id: 'lot1', kind: 'paid', amount: 1800, from: 'Pro plan top-up' }, { id: 'lot2', kind: 'paid', amount: 600, from: 'Credit pack' }, { id: 'lot3', kind: 'promo', amount: 500, from: 'Welcome credit' }]);
   const eligible = () => lots().filter((l) => l.kind === 'paid').reduce((n, l) => n + l.amount, 0);
@@ -35,7 +37,11 @@
   }
   const all = () => LS.get('funding', {});
   const F = (name) => { const a = all(); if (!a[name]) { a[name] = seed(name); LS.set('funding', a); } return a[name]; };
-  const save = (name, f, msg) => { const a = all(); a[name] = f; LS.set('funding', a); X().render(); if (msg) X().toast(msg); };
+  // every change goes to the server first; only a yes persists it (a failure leaves the stored state untouched)
+  const OPS = { contribute: ['fund.contribute', 'Contributing', true], return: ['fund.return', 'Returning credits', true], consent: ['fund.consent', 'Agreeing to the new terms'], approve: ['fund.approve', 'Approving the budget'], start: ['fund.start', 'Starting the milestone'], done: ['fund.accept', 'Accepting the milestone'], addMs: ['fund.milestone.create', 'Adding the milestone'], editMs: ['fund.milestone.update', 'Saving the milestone'], campaign: ['fund.campaign', 'Changing the campaign'], cap: ['fund.rights', 'Changing a right'], grant: ['fund.rights', 'Giving a right'] };
+  let curAct = null, curEl = null;
+  const persist = (name, f, msg) => { const a = all(); a[name] = f; LS.set('funding', a); X().render(); if (msg) X().toast(msg); };
+  const save = (name, f, msg) => { const [op, label, money] = OPS[curAct] || ['fund.update', 'Saving']; const el = curEl; curAct = null; curEl = null; if (!window.XENO_NET) { persist(name, f, msg); return Promise.resolve(true); } return window.XENO_NET.run({ op, label, money, el, apply: () => persist(name, f, msg) }); };
   const has = (f, who, cap) => (f.caps[who] || []).includes(cap);
 
   // the money, derived — never a stored balance (FUND-01)
@@ -49,6 +55,7 @@
   function available(f, m) { const s = sums(f); let pool = s.general; for (const x of f.milestones) { const need = Math.max(0, x.threshold - s.funded(x)); const take = Math.min(pool, need); if (x.id === m.id) return s.funded(x) + take; pool -= take; } return s.funded(m); }
 
   function tab(name) {
+    if (window.XENO_ROLE?.role() === 'guest') return `<div class="fd"><p class="cm-banner">${ic('lock')}<span><b>Funding is visible to the project’s members.</b> You were shared parts of this project as a guest; its money isn’t one of them.</span></p></div>`;
     const h = P(), f = F(name), s = sums(f), me = you(), mine = f.contribs.filter((c) => c.who === me);
     const stale = f.contribs.filter((c) => c.state === 'confirmed' && c.terms < f.terms);
     const card = (k, v, sub, cls = '') => `<div class="fd-sum ${cls}"><small>${k}</small><b>${cr(v)}</b>${sub ? `<span>${sub}</span>` : ''}</div>`;
@@ -85,13 +92,13 @@
         aside: `<b class="xd-sum-h">Before you confirm</b><ul class="xd-caps"><li>${cr(el)} of your credits can be used — paid credits only${promo ? `; ${cr(promo)} of welcome credit can’t` : ''}</li><li>It’s held for this project and can’t be spent on anything else</li><li>Whatever isn’t spent or committed can be returned to you, as the same credits</li><li>It gives you no membership, ownership or say over which models run</li></ul>`,
         fields: [{ id: 'n', label: 'Credits', type: 'number', required: true, value: '500', validate: (x) => (!/^\d+$/.test(x) || +x <= 0 ? 'A whole number.' : +x > el ? `You can use up to ${cr(el)}.` : null) }, { id: 'm', label: 'For', type: 'choice', cols: 1, value: mid || '', options: opts }] });
       if (!v) return; const c = { id: 'c' + rid(), who: you(), amount: +v.n, milestone: v.m || null, state: 'pending', at: now(), terms: f.terms, lot: 'Paid credits' };
-      f.contribs.unshift(c); spendLots(+v.n); save(name, f, 'Contribution sent — confirming…');
-      setTimeout(() => { const f2 = F(name), c2 = f2.contribs.find((x) => x.id === c.id); if (c2 && c2.state === 'pending') { c2.state = 'confirmed'; save(name, f2, `${cr(c.amount)} confirmed for ${name}`); } }, 1500); },
+      f.contribs.unshift(c); if (!await save(name, f, 'Contribution sent — confirming…')) return; spendLots(+v.n);
+      setTimeout(() => { const f2 = F(name), c2 = f2.contribs.find((x) => x.id === c.id); if (c2 && c2.state === 'pending') { c2.state = 'confirmed'; persist(name, f2, `${cr(c.amount)} confirmed for ${name}`); } }, 1500); },
     async return(arg) { const [name, cid] = arg.split('|'), f = F(name), c = f.contribs.find((x) => x.id === cid), m = c.milestone && f.milestones.find((x) => x.id === c.milestone);
       const used = m ? Math.min(c.amount, m.spent + m.reserved) : 0, back = Math.max(0, c.amount - used);
       if (!back) return D().confirm({ title: 'Nothing to return', body: 'All of it has been spent or is committed to running work. Spent credits aren’t refundable by withdrawing.', action: 'OK', danger: false });
       if (!await D().confirm({ title: `Return ${cr(back)}?`, body: `${used ? `${cr(used)} is already spent or committed and stays. ` : ''}${cr(back)} goes back to your balance as the same paid credits. No fee.`, action: `Return ${cr(back)}`, danger: false })) return;
-      c.state = 'return_pending'; save(name, f, 'Returning…'); setTimeout(() => { const f2 = F(name), c2 = f2.contribs.find((x) => x.id === cid); c2.state = 'returned'; if (back < c2.amount) { f2.contribs.push({ ...c2, id: 'c' + rid(), amount: c2.amount - back, state: 'confirmed', lot: c2.lot + ' (kept for spent work)' }); c2.amount = back; } refundLots(back); save(name, f2, `${cr(back)} returned to your balance`); }, 1200); },
+      c.state = 'return_pending'; if (!await save(name, f, 'Returning…')) return; setTimeout(() => { const f2 = F(name), c2 = f2.contribs.find((x) => x.id === cid); if (!c2 || c2.state !== 'return_pending') return; c2.state = 'returned'; if (back < c2.amount) { f2.contribs.push({ ...c2, id: 'c' + rid(), amount: c2.amount - back, state: 'confirmed', lot: c2.lot + ' (kept for spent work)' }); c2.amount = back; } refundLots(back); persist(name, f2, `${cr(back)} returned to your balance`); }, 1200); },
     consent(arg) { const [name, cid] = arg.split('|'), f = F(name), c = f.contribs.find((x) => x.id === cid); c.terms = f.terms; save(name, f, `Agreed to terms v${f.terms}`); },
     approve(arg) { const [name, mid] = arg.split('|'), f = F(name), m = f.milestones.find((x) => x.id === mid); if (m.plannedBy === you()) return X().toast('You planned this budget — someone else approves it'); m.approved = true; WF()?.decide({ kind: 'budget', subject: name, what: `Approved ${cr(m.budget)} for “${m.title}”` }); window.XENO_WF?.persist(); save(name, f, 'Budget approved'); },
     start(arg) { const [name, mid] = arg.split('|'), f = F(name), m = f.milestones.find((x) => x.id === mid); if (available(f, m) < m.threshold || !m.approved) return X().toast('Not funded or not approved yet'); m.state = 'active'; m.reserved = Math.round(m.budget * 0.15); save(name, f, `“${m.title}” started — ${cr(m.reserved)} committed`); },
@@ -113,6 +120,6 @@
   };
   function spendLots(n) { const L = lots(); for (const l of L) { if (l.kind !== 'paid' || !n) continue; const t = Math.min(l.amount, n); l.amount -= t; n -= t; } LS.set('lots', L); }
   function refundLots(n) { const L = lots(); const l = L.find((x) => x.kind === 'paid'); l.amount += n; LS.set('lots', L); }
-  document.addEventListener('click', (e) => { const t = e.target.closest('[data-fd]'); if (!t || t.closest('.xd')) return; e.preventDefault(); e.stopPropagation(); ACT[t.dataset.fd]?.(t.dataset.arg); }, true);
+  document.addEventListener('click', (e) => { const t = e.target.closest('[data-fd]'); if (!t || t.closest('.xd')) return; e.preventDefault(); e.stopPropagation(); curAct = t.dataset.fd; curEl = t; ACT[t.dataset.fd]?.(t.dataset.arg); }, true);
   window.XENO_FUND = { tab, F, sums };
 })();
