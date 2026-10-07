@@ -297,7 +297,7 @@
       + bar(search(key, 'Search the forum', u.q), spaces.includes(view) ? '' : seg('space', 'Space', [['all', 'All'], ...spaces.map((s) => [s, s])], sp)) + `<div class="pg-body" data-pg-results>${res}</div>` + foot(key, 'GET /api/forum/threads', 'thread'));
   }
   function market(view) {
-    { const r = window.XENO_MARKET?.route(view); if (r) return r; }
+    { const r = mod('market:' + (view || ''), () => window.XENO_MARKET?.route(view)); if (r) return r; }
     const L = window.XENO_PG_MARKET, key = 'market', u = ui(key);
     const owned = view === 'Purchases' || view === 'Rentals';
     const mode = /Agents|Minds|Teams|Models/.test(view || '') ? 'agents' : (u.seg.mode || 'apps');
@@ -401,6 +401,9 @@
       + foot('product:' + id, `${p.name} · ${view}`));
   }
 
+  // a module's page goes through the same state switch as this file's (§7aa): first load, error and no-access are
+  // decided once, here, before the module builds its page — so its own h.page() draws the loading shapes
+  const mod = (fam, fn) => { const g = gate(fam, 'rows', () => null); if (g) return page(g); const r = fn(); if (!r) LOADING = false; return r; };
   function render() {
     LOADING = false;
     const s = S(), it = s.item;
@@ -409,15 +412,15 @@
       if (s.global === 'inbox') return null;
       if (s.global === 'projects') { if (!it) return projectsIndex(false); if (it === 'Archived projects') return projectsIndex(true); const [nm, tb] = it.split('/'); return projectPage(nm, tb); }
       if (s.global === 'library') { if (!it || LIBV[it]) return library(it || 'All files'); return itemPage(it); }
-      if (s.global === 'workspace') { const wf = window.XENO_COMPANY?.route(it) || window.XENO_RES?.route(it) || window.XENO_WF?.route(it); if (wf) return wf; if (it && it.startsWith('Members/')) return memberPage(it.slice(8)); if (it && it.startsWith('Knowledge/')) return knowledgePage(it.slice(10)); return workspace(it); }
-      if (s.global === 'places') return window.XENO_PLACES.route(it) || window.XENO_PLACES.route(null);
-      if (s.global === 'anima') { const ar = window.XENO_ANIMA?.route(it); if (ar) return ar; }
+      if (s.global === 'workspace') { const wf = mod('workspace:' + (it || ''), () => window.XENO_COMPANY?.route(it) || window.XENO_RES?.route(it) || window.XENO_WF?.route(it)); if (wf) return wf; if (it && it.startsWith('Members/')) return memberPage(it.slice(8)); if (it && it.startsWith('Knowledge/')) return knowledgePage(it.slice(10)); return workspace(it); }
+      if (s.global === 'places') return mod('places:' + (it || ''), () => window.XENO_PLACES.route(it) || window.XENO_PLACES.route(null));
+      if (s.global === 'anima') { const ar = mod('anima:' + (it || ''), () => window.XENO_ANIMA?.route(it)); if (ar) return ar; }
       if (s.global === 'anima') return it && /Memory|Skills|Plan|Summarise/.test(it) ? anima(null) : anima(it);
-      if (s.global === 'community') { const cr = window.XENO_COMM?.route(it); if (cr) return cr; const th = it && window.XENO_PG_FORUM.find((t) => t.title === it); return th ? threadPage(th) : community(it); }
+      if (s.global === 'community') { const cr = mod('community:' + (it || ''), () => window.XENO_COMM?.route(it)); if (cr) return cr; const th = it && window.XENO_PG_FORUM.find((t) => t.title === it); return th ? mod('community:' + it, () => threadPage(th)) : community(it); }
       if (s.global === 'market') return market(it);
       if (s.global === 'settings') return window.XENO_SETTINGS.render(it);
     }
-    if (s.view === 'zone') return it ? itemPage(it) : areaPage();
+    if (s.view === 'zone') return it ? mod('zone:' + it, () => itemPage(it)) : mod('area:' + location.hash.split('?')[0], () => areaPage());
     if (s.view === 'product') { if (PR[s.product]?.kind === 'chat') return null; return it ? (window.XENO_PRODUCT_NAV[s.product]?.views?.includes(it) ? productView(it) : itemPage(it)) : productPage(); }
     return null;
   }
