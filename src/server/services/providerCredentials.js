@@ -26,6 +26,7 @@
  */
 
 import crypto from 'node:crypto';
+import { fetchProviderModels } from './providerModelDiscovery.js';
 import { encrypt, decrypt, isConfigured } from '../utils/secretBox.js';
 import { safeGet, assertSafeEndpointUrl } from '../utils/safeEndpoint.js';
 
@@ -606,7 +607,7 @@ export async function annotateCatalogueRoutes(db, userId, { surface, modelIds })
  * Written this way on purpose: a function that RETURNED the secret would be
  * copied into a route handler within a week.
  */
-export async function useCredential(db, userId, credentialId, use) {
+export async function useCredential(db, userId, credentialId, use, { touch = true } = {}) {
   const { rows } = await db.query(
     `SELECT id, provider, secret_encrypted, base_url, status
        FROM user_provider_credentials
@@ -622,8 +623,27 @@ export async function useCredential(db, userId, credentialId, use) {
     return await use({ secret, provider: row.provider, baseUrl: row.base_url });
   } finally {
     // Best-effort touch; a failed timestamp must never fail the user's request.
-    db.query(`UPDATE user_provider_credentials SET last_used_at = NOW() WHERE id = $1`, [row.id]).catch(() => {});
+    if (touch) db.query(`UPDATE user_provider_credentials SET last_used_at = NOW() WHERE id = $1`, [row.id]).catch(() => {});
   }
+}
+
+/** Account-scoped discovery, without changing routes, model restrictions or key status. */
+export async function discoverCredentialModels(db, userId, credentialId) {
+  const { rows } = await db.query(
+    'SELECT id, provider, models FROM user_provider_credentials WHERE id=$1 AND user_id=$2',
+    [credentialId, userId],
+  );
+  if (!rows[0]) throw fail('credential_not_found', 'No such provider key', 404);
+  const result = await useCredential(db, userId, credentialId, fetchProviderModels, { touch: false });
+  const restricted = Array.isArray(rows[0].models) && rows[0].models.length > 0;
+  const passthrough = PASSTHROUGH_PROVIDERS.has(rows[0].provider);
+  return {
+    credential_id: credentialId, source: 'provider_catalog', checked_at: new Date().toISOString(),
+    complete: result.complete,
+    models: result.models.map(model => ({ ...model,
+      allowed_by_key: restricted ? rows[0].models.includes(model.id) : !passthrough,
+    })),
+  };
 }
 
 /**
