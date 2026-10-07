@@ -7,9 +7,10 @@
 @media (prefers-reduced-motion:reduce){.net-busy::after{animation-duration:2.4s}}
 #net-bar{position:fixed;top:10px;left:50%;transform:translate(-50%,-6px);padding:5px 12px;border-radius:6px;background:#1c1c1c;border:1px solid #2f2f2f;color:var(--text);font:500 12px Inter,system-ui,sans-serif;opacity:0;pointer-events:none;transition:opacity .15s,transform .15s;z-index:9000}
 #net-bar.on{opacity:1;transform:translate(-50%,0)}
-#net-chip{position:fixed;right:12px;bottom:12px;display:flex;align-items:center;gap:8px;height:28px;padding:0 10px;border-radius:6px;background:#141414;border:1px solid #262626;color:var(--dim);font:12px Inter,system-ui,sans-serif;cursor:pointer;z-index:8000;opacity:.7}
+#net-chip{position:fixed;right:16px;bottom:48px;display:flex;align-items:center;gap:8px;height:28px;padding:0 10px;border-radius:6px;background:#141414;border:1px solid #262626;color:var(--dim);font:12px Inter,system-ui,sans-serif;cursor:pointer;z-index:8000}
 #net-chip:hover{opacity:1;color:var(--text)}
-#net-chip b{font-weight:600;color:var(--muted)}
+#net-chip b{font-weight:600;color:var(--text)}
+#net-chip span{color:var(--muted)}
 #net-chip.alert{opacity:1;border-color:#e8e8ec;color:var(--text)}
 #net-chip.alert b{color:#0a0a0a;background:#e8e8ec;border-radius:3px;padding:1px 5px}
 /* role gates (net.js) */

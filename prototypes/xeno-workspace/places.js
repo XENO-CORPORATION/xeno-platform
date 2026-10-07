@@ -37,22 +37,28 @@
     return { floors, lobby: { key: 'lobby', name: 'Lobby', teams: lobbyTeams, loose: people().filter((m) => !seated.has(m.name)) }, handoffs: S.handoffs.filter((h) => h.state === 'offered') };
   }
   const body = (name) => people().find((m) => m.name === name);
-  function desk(name, fn, walking) {
+  // ONE body per person per building (Places §3): it sits at its home desk — the first team it belongs to; its desks on
+  // other teams are shown empty, saying where it sits, and still open its card
+  const homeTeam = (name) => WF().st().teams.find((t) => !t.archived && t.members.some((x) => x.name === name))?.name;
+  function desk(name, fn, walking, team) {
     const m = body(name); if (!m) return '';
+    const home = homeTeam(name);
+    if (team && home && team !== home) return `<button class="pl-desk pl-ghost${peek === name ? ' on' : ''}" data-pl="peek" data-arg="${esc(name)}"><span class="pl-mon" aria-hidden="true"></span><span class="pl-body" aria-hidden="true"></span><small>${esc(name)}</small><span class="pl-sr"> — desk on this team; sits with ${esc(home)}</span><em class="pl-at" aria-hidden="true">at ${esc(home)}</em></button>`;
     const s = stateOf(m), init = name.split(/\s+/).map((w) => w[0]).join('').slice(0, 2).toUpperCase();
-    return `<button class="pl-desk pl-${s.k}${walking ? ' pl-walk' : ''}${peek === name ? ' on' : ''}" data-pl="peek" data-arg="${esc(name)}" aria-label="${esc(name)} — ${esc(s.label)}${fn ? ', ' + fn : ''}"><span class="pl-mon"></span><span class="pl-body ${m.kind === 'agent' ? 'ag' : ''}">${esc(init)}</span><small>${esc(name)}</small>${s.k === 'hand' ? `<em class="pl-flag">${ic('bell')}</em>` : ''}</button>`;
+    return `<button class="pl-desk pl-${s.k}${walking ? ' pl-walk' : ''}${peek === name ? ' on' : ''}" data-pl="peek" data-arg="${esc(name)}"><span class="pl-mon" aria-hidden="true"></span><span class="pl-body ${m.kind === 'agent' ? 'pl-agent' : ''}" aria-hidden="true">${esc(init)}</span><small>${esc(name)}</small><span class="pl-sr"> — ${esc(s.label)}${fn ? ', ' + fn : ''}</span>${s.k === 'hand' ? `<em class="pl-flag" aria-hidden="true">${ic('bell')}</em>` : ''}</button>`;
   }
   function pod(t, fk, i, n) {
     const walkers = new Set(building().handoffs.map((h) => h.from));
     return `<div class="pl-pod"><div class="pl-pod-h"><b>${esc(t.name)}</b><small>${t.members.length}</small>${editing ? `<span class="pl-move">${i > 0 ? `<button class="pg-link" data-pl="move" data-arg="${esc(fk)}|${esc(t.name)}|-1" aria-label="Move ${esc(t.name)} left">←</button>` : ''}${i < n - 1 ? `<button class="pg-link" data-pl="move" data-arg="${esc(fk)}|${esc(t.name)}|1" aria-label="Move ${esc(t.name)} right">→</button>` : ''}</span>` : ''}</div>
-      <div class="pl-desks">${t.members.map((mm) => desk(mm.name, mm.fn, walkers.has(mm.name))).join('')}</div></div>`;
+      <div class="pl-desks">${t.members.map((mm) => desk(mm.name, mm.fn, walkers.has(mm.name), t.name)).join('')}</div></div>`;
   }
   function floorHTML(f, here) {
     // VIEW-02: a floor the viewer has no scope for is a closed door — no name, no headcount, no activity
     if (window.XENO_ROLE?.role() === 'guest' && f.key !== 'lobby') return `<section class="pl-floor pl-closed" aria-label="A floor you don’t have access to"><header><b>${ic('lock')} Closed</b><small>You don’t have access to this floor</small></header></section>`;
     const busy = f.teams.flatMap((t) => t.members).map((x) => body(x.name)).filter(Boolean).map(stateOf);
-    return `<section class="pl-floor${here ? ' here' : ''}" data-floor="${esc(f.key)}"><header><b>${esc(f.name)}</b><small>${f.teams.length ? `${f.teams.length} team${f.teams.length > 1 ? 's' : ''} · ${busy.filter((s) => s.k === 'work').length} working${busy.some((s) => s.k === 'hand') ? ` · ${busy.filter((s) => s.k === 'hand').length} waiting on you` : ''}` : 'No teams on this floor'}</small>${here ? '<span class="pl-here">You are here</span>' : `<button class="pg-link" data-pl="walk" data-arg="${esc(f.key)}">Walk here</button>`}</header>
-      <div class="pl-pods">${f.teams.map((t, i) => pod(t, f.key, i, f.teams.length)).join('') || '<p class="pg-dim">Empty floor. Teams this division owns sit here.</p>'}${f.loose?.length ? `<div class="pl-pod pl-loose"><div class="pl-pod-h"><b>Not on a team</b><small>${f.loose.length}</small></div><div class="pl-desks">${f.loose.map((m) => desk(m.name)).join('')}</div></div>` : ''}</div></section>`;
+    const vacant = !f.teams.length && !f.loose?.length;
+    return `<section class="pl-floor${here ? ' here' : ''}${vacant ? ' pl-vacant' : ''}" data-floor="${esc(f.key)}"><header><b>${esc(f.name)}</b><small>${f.teams.length ? `${f.teams.length} team${f.teams.length > 1 ? 's' : ''} · ${busy.filter((s) => s.k === 'work').length} working${busy.some((s) => s.k === 'hand') ? ` · ${busy.filter((s) => s.k === 'hand').length} waiting on you` : ''}` : 'Empty — teams this division owns sit here'}</small>${here ? '<span class="pl-here">You are here</span>' : `<button class="pg-link" data-pl="walk" data-arg="${esc(f.key)}">Walk here</button>`}</header>
+      ${vacant ? '' : `<div class="pl-pods">`}${f.teams.map((t, i) => pod(t, f.key, i, f.teams.length)).join('')}${f.loose?.length ? `<div class="pl-pod pl-loose"><div class="pl-pod-h"><b>Not on a team</b><small>${f.loose.length}</small></div><div class="pl-desks">${f.loose.map((m) => desk(m.name)).join('')}</div></div>` : ''}${vacant ? '' : '</div>'}</section>`;
   }
   function peekHTML() {
     const m = peek && body(peek); if (!m) return '';

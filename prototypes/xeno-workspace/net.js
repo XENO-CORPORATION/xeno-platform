@@ -55,7 +55,8 @@
 
   function chip() { let c = document.getElementById('net-chip'); if (!c) { c = document.createElement('button'); c.id = 'net-chip'; c.type = 'button'; c.addEventListener('click', panel); document.body.appendChild(c); }
     const off = mode() === 'normal' && role() === 'owner'; c.classList.toggle('alert', !off);
-    c.innerHTML = `<b>Prototype</b><span>${esc(MODES.find((x) => x[0] === mode())[1])} network · viewing as ${esc(ROLES.find((x) => x[0] === role())[1].toLowerCase())}</span>`; c.title = 'Prototype controls (Ctrl+Alt+P)'; }
+    // compact while nothing is being simulated; it spells out the network and role the moment either changes
+    c.innerHTML = `<b>Prototype</b>${off ? '' : `<span>${esc(MODES.find((x) => x[0] === mode())[1])} network · viewing as ${esc(ROLES.find((x) => x[0] === role())[1].toLowerCase())}</span>`}`; c.setAttribute('aria-label', `Prototype controls — ${MODES.find((x) => x[0] === mode())[1]} network, viewing as ${ROLES.find((x) => x[0] === role())[1].toLowerCase()}`); c.title = 'Prototype controls (Ctrl+Alt+P)'; }
   async function panel() {
     const v = await D().form({ title: 'Prototype controls', sub: 'Try how the workspace behaves when the server is slow or says no, and how it looks to other roles. Not part of the product.', submit: 'Apply', fields: [
       { id: 'n', label: 'Network', type: 'choice', cols: 2, value: mode(), options: MODES }, { id: 'r', label: 'View the workspace as', type: 'choice', cols: 2, value: role(), options: ROLES }] });

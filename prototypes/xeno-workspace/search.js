@@ -53,7 +53,8 @@
   function score(x, q) {
     const l = x.label.toLowerCase();
     let s = l === q ? 100 : l.startsWith(q) ? 80 : l.split(/[\s—\-/·]+/).some((w) => w.startsWith(q)) ? 60 : l.includes(q) ? 45 : ws(x.kw || '', q) ? 40 : ws(x.sub, q) ? 25 : 0;
-    if (!s) { let i = 0; for (const c of l) if (c === q[i]) i++; if (i === q.length && q.length > 2) s = 15; }
+    // fuzzy only for 4+ letters, and only when they fall close together — three letters spread over a long title match anything
+    if (!s && q.length >= 4) { let i = 0, start = -1, end = -1; [...l].forEach((c, k) => { if (i < q.length && c === q[i]) { if (i === 0) start = k; i++; end = k; } }); if (i === q.length && end - start <= q.length * 3) s = 15; }
     if (!s) return 0;
     const recent = LS.get('searchOpened', []).indexOf(x.id); if (recent >= 0) s += 12 - Math.min(10, recent);
     return s;

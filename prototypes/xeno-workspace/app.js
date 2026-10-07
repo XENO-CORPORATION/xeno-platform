@@ -1766,7 +1766,7 @@
     if (left == null) { b.textContent = '—'; b.dataset.tip = 'Usage'; b.setAttribute('aria-label', 'Usage'); return; }
     const alert = store.get('lowAlert', { on: true, at: 500 });
     b.textContent = left >= 1000 ? (Math.floor(left / 100) / 10) + 'k' : fmt(left); b.classList.toggle('low', alert.on && left < alert.at);
-    b.dataset.tip = `Usage — ${fmt(left)} credits available`; b.setAttribute('aria-label', b.dataset.tip);
+    b.dataset.tip = `Usage — ${fmt(left)} credits available`; b.setAttribute('aria-label', `${b.textContent} credits — usage, ${fmt(left)} available`);
   }
 
   // ---- live: new events arrive on their own (stand-in for the platform's push channel) ----
@@ -2121,11 +2121,13 @@
   // ---- resizable sidebar: drag the edge, double-click to reset, remembered ----
   (() => {
     const W0 = 268, MIN = 220, MAX = 420;
-    const setW = (w) => root.style.setProperty('--panel-w', Math.round(Math.max(MIN, Math.min(MAX, w))) + 'px');
+    // a focusable separator reports where it is (WAI-ARIA window splitter): value, range and a spoken value
+    const setW = (w) => { const v = Math.round(Math.max(MIN, Math.min(MAX, w))); root.style.setProperty('--panel-w', v + 'px'); const g = document.querySelector('#slot > .grip'); if (g) { g.setAttribute('aria-valuenow', v); g.setAttribute('aria-valuetext', `Sidebar ${v} pixels wide`); } };
     const saved = store.get('panelW', W0); if (saved !== W0) setW(saved);
-    const grip = document.createElement('div'); grip.className = 'grip'; grip.setAttribute('role', 'separator'); grip.setAttribute('aria-orientation', 'vertical'); grip.setAttribute('aria-label', 'Resize sidebar'); grip.tabIndex = 0;
+    const grip = document.createElement('div'); grip.className = 'grip'; grip.setAttribute('role', 'separator'); grip.setAttribute('aria-orientation', 'vertical'); grip.setAttribute('aria-label', 'Resize sidebar'); grip.setAttribute('aria-valuemin', MIN); grip.setAttribute('aria-valuemax', MAX); grip.tabIndex = 0;
     grip.dataset.tip = 'Drag to resize · double-click to reset';
     $('#slot').appendChild(grip);
+    { const w = Math.round(parseFloat(getComputedStyle(root).getPropertyValue('--panel-w')) || W0); grip.setAttribute('aria-valuenow', w); grip.setAttribute('aria-valuetext', `Sidebar ${w} pixels wide`); }
     let x0 = 0, w0 = 0;
     const cur = () => parseFloat(getComputedStyle(root).getPropertyValue('--panel-w')) || W0;
     grip.addEventListener('pointerdown', (e) => { if (root.dataset.panel !== 'open') return; x0 = e.clientX; w0 = cur(); grip.setPointerCapture(e.pointerId); root.classList.add('resizing'); });

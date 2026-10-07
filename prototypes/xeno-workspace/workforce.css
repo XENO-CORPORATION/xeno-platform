@@ -131,7 +131,7 @@ button.wf-fn:not([disabled]):hover{filter:brightness(1.15)}
 .fd-sum.bad b{color:#f2c9c9}
 .fd-mss{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:8px;counter-reset:ms}
 .fd-ms{display:grid;grid-template-columns:30px 1fr;gap:14px;padding:16px;border-radius:10px;background:#141414;border:1px solid #1f1f1f}
-.fd-ms--done{opacity:.72}
+.fd-ms--done{background:#131313}
 .fd-ms--active{border-color:#2f2f2f;background:#161616}
 .fd-n{display:grid;place-items:center;height:30px;border-radius:6px;background:#1c1c1c;border:1px solid #2a2a2a;font-weight:600;color:var(--muted)}
 .fd-ms--done .fd-n,.fd-ms--active .fd-n{background:#e8e8ec;color:#0a0a0a;border-color:#e8e8ec}

@@ -20,7 +20,7 @@
 .pl-desk small{font-size:11px;max-width:58px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .pl-mon{width:26px;height:4px;border-radius:1px;background:#2c2c2c}
 .pl-body{display:grid;place-items:center;width:28px;height:28px;border-radius:7px;background:#2a2a2a;color:var(--text);font-size:11px;font-weight:600}
-.pl-body.ag{border-radius:4px;background:#e8e8ec;color:#0a0a0a}
+.pl-body.pl-agent{border-radius:4px;background:#e8e8ec;color:#0a0a0a}
 .pl-work .pl-mon{background:#e8e8ec;box-shadow:0 0 10px rgba(232,232,236,.35);animation:pl-glow 2.4s ease-in-out infinite}
 .pl-hand{border-color:#5a5a5a}
 .pl-hand .pl-body{outline:2px dashed #8a8a8f;outline-offset:2px}
@@ -79,3 +79,14 @@
 /* search results (search.js) */
 .sr-ic{display:grid;place-items:center;width:20px;height:20px;flex:none;color:var(--muted)}
 .sr-ic svg.i{width:16px;height:16px}
+.pl-sr{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap;border:0}
+.pl-floor.pl-vacant{padding:10px 14px;background:#121212}
+.pl-floor.pl-vacant > header{margin-bottom:0}
+/* company spacing (screenshot review 2026-10-07) */
+.fd-sums + .mk-cols{margin-top:18px}
+.co-ids .mk-rcl li{grid-template-columns:56px 1fr auto}
+.pl-desk.pl-ghost{background:transparent;border-style:dashed}
+.pl-ghost .pl-body{background:transparent;border:1px dashed #3a3a3a}
+.pl-at{font-style:normal;font-size:10.5px;color:var(--dim);max-width:58px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.fd-sums + .pg-sec{margin-top:18px}
+.cm-acts .pg-link{line-height:26px}

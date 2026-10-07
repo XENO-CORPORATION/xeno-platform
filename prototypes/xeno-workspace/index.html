@@ -11,7 +11,7 @@
 :root{
   --canvas:#0a0a0a; --rail:#171717; --rail-stroke:#242424; --panel:#111111; --panel-stroke:#242424;
   --elevated:#262626; --control:#1f1f1f; --hover:rgba(255,255,255,.06); --hover-strong:#333333;
-  --text:#fafafa; --muted:#a3a3a3; --dim:#6f6f6f; --border:rgba(255,255,255,.10); --danger:#ef4444;
+  --text:#fafafa; --muted:#a3a3a3; --dim:#8b8b92; /* WCAG 2.2 AA: ≥4.5:1 on every dark surface (was #6f6f6f ≈ 3.7:1) */ --border:rgba(255,255,255,.10); --danger:#ef4444;
   --rail-w:56px; --panel-w:268px; --gap-x:7px; --gap-y:6.5px; --gap-yb:7px; --r:14px; --flare:15px;
   --open:cubic-bezier(.22,.9,.24,1); --close:cubic-bezier(.45,0,.2,1);
   color-scheme:dark;
@@ -1726,7 +1726,7 @@ html body .live-chat button[aria-label="Voice input options"][aria-label="Voice 
 /* ===== PANEL DESIGN v2 (2026-10-03, /isg) — Linear/Notion/Apple source-list rhythm in XENO's
    monochrome: one left column every row aligns to, two type levels, emphasis by lightness, the
    Agent Panel's 2px rail as the active marker, 30px rows, 6px radii, no circles. ===== */
-.panel{--p-t1:#f4f4f4;--p-t2:#d8d8de;--p-t3:#a9a9b0;--p-t4:#7f7f86;--p-t5:#5f5f66;--p-wash:rgba(255,255,255,.045);--p-wash2:rgba(255,255,255,.075);--p-line:rgba(255,255,255,.07)}
+.panel{--p-t1:#f4f4f4;--p-t2:#d8d8de;--p-t3:#a9a9b0;--p-t4:#8f8f96;--p-t5:#7e7e85;--p-wash:rgba(255,255,255,.045);--p-wash2:rgba(255,255,255,.075);--p-line:rgba(255,255,255,.07)}
 .panel .ph{height:48px;padding:0 8px 0 14px}
 .panel .ph .ttl{font-size:13.5px}
 .panel .ph .msw-count{color:var(--p-t5)}
@@ -1745,7 +1745,7 @@ html body .live-chat button[aria-label="Voice input options"][aria-label="Voice 
 /* sections: quiet labels, generous separation, count as a small plate */
 .panel .sec{margin-top:18px}
 .panel .views + .sec,.panel .act + .sec{margin-top:14px}
-.panel .sh{height:24px;padding:0 6px 0 8px;font-size:11px;font-weight:500;letter-spacing:.01em;color:rgba(244,244,244,.36)}
+.panel .sh{height:24px;padding:0 6px 0 8px;font-size:11px;font-weight:500;letter-spacing:.01em;color:var(--p-t5)}
 .panel .sh button.t{color:inherit}
 .panel .cnt-inline{margin-left:6px;padding:1px 5px;border-radius:3px;background:rgba(255,255,255,.08);color:var(--p-t2);font-size:10px;font-weight:600;font-variant-numeric:tabular-nums}
 .panel .views{margin:6px 0 0}
