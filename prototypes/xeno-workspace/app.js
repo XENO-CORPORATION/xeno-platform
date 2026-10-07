@@ -1461,20 +1461,25 @@
 
   // ---- notifications: model ----
   const NS = () => ({ read: new Set(store.get('readN', []) || []), arch: new Set(store.get('archN', []) || []), snooze: store.get('snoozeN', {}) || {}, done: store.get('doneN', {}) || {}, prefs: store.get('ntPrefs', { desktop: false, digest: 'daily', muted: [] }) });
+  // per-area notification level (§7z): all = everything · needs = only what needs you (activity leaves the inbox) ·
+  // off = nothing rings either. One store (ntPrefs.levels); the old muted list is kept in step for anything reading it.
+  const NT_LEVELS = [['all', 'Everything'], ['needs', 'Needs me'], ['off', 'Off']];
+  const ntLevel = (st, m) => st.prefs.levels?.[m] || (st.prefs.muted.includes(m) ? 'off' : 'all');
+  function ntSetLevel(m, lv) { const st = NS(); const was = ntLevel(st, m); if (was === lv) return; st.prefs.levels = { ...(st.prefs.levels || {}), [m]: lv }; st.prefs.muted = MODES.map((x) => x.id).filter((id) => ntLevel(st, id) === 'off'); ntSave('ntPrefs', st.prefs); syncBell(); window.XENO_HIST?.record(`${M[m]?.name || m} notifications: ${NT_LEVELS.find((x) => x[0] === lv)[1]}`, null); }
   const ntSave = (k, v) => store.set(k, k === 'snoozeN' || k === 'doneN' || k === 'ntPrefs' ? v : [...v]);
   const ntAll = () => (DS.notes && DS.notes.val) || [];
   const viewOf = (n, st) => (st.arch.has(n.id) ? 'archive' : st.snooze[n.id] ? 'snoozed' : 'inbox');
   const isUnread = (n, st) => n.g === 'needs' && !st.read.has(n.id) && viewOf(n, st) === 'inbox';
   function ntFiltered(view, filter) {
     const st = NS();
-    return ntAll().filter((n) => viewOf(n, st) === view && (filter === 'all' || (filter === 'mentions' ? n.mention : n.m === filter)));
+    return ntAll().filter((n) => viewOf(n, st) === view && !(n.g === 'act' && ntLevel(st, n.m) !== 'all') && (filter === 'all' || (filter === 'mentions' ? n.mention : n.m === filter)));
   }
   const INLINE = { permission: 'Approved', handoff: 'Accepted' }; // these complete in place; the rest open their item
   // A row is two lines and three zones (Vercel/Linear inbox): WHAT on top with WHEN at the right edge,
   // WHERE below with the one ACTION at the right edge. Hover swaps the time for snooze/archive, so the
   // controls never compete with the text for width.
   function ntRow(n, st, view) {
-    const un = isUnread(n, st), p = PR[n.p], done = st.done[n.id], snoozing = S.ntSnoozeOpen === n.id, muted = st.prefs.muted.includes(n.m);
+    const un = isUnread(n, st), p = PR[n.p], done = st.done[n.id], snoozing = S.ntSnoozeOpen === n.id, muted = ntLevel(st, n.m) === 'off';
     const tools = view === 'snoozed' ? iconBtn(`data-nt-unsnooze data-fk="u${n.id}"`, 'reset', 'Back to inbox')
       : view === 'archive' ? iconBtn(`data-nt-arch data-fk="r${n.id}"`, 'reset', 'Move to inbox')
         : done ? '' : `${iconBtn(`data-nt-snz data-fk="s${n.id}"`, 'clock', 'Snooze  S')}${iconBtn(`data-nt-arch data-fk="a${n.id}"`, 'archive', 'Archive  E')}`;
@@ -1496,11 +1501,12 @@
     const out = [], seen = new Set();
     items.forEach((n) => {
       if (seen.has(n.id)) return;
-      const same = n.actor ? items.filter((x) => x.actor === n.actor) : [n];
+      const gk = (x) => x.actor || (x.g === 'act' ? 'p:' + x.p : null), key = gk(n), who = n.actor || PR[n.p]?.name || n.p;
+      const same = key ? items.filter((x) => gk(x) === key) : [n];
       if (same.length < 2) { out.push(ntRow(n, st, view)); seen.add(n.id); return; }
-      same.forEach((x) => seen.add(x.id)); const open = (S.ntOpenGroups || []).includes(n.actor);
-      out.push(`<div class="nt2 nt2-grp${open ? ' open' : ''}" tabindex="0" role="button" aria-expanded="${open}" data-nt-grp="${esc(n.actor)}" data-fk="g${esc(n.actor)}"><span class="nt2-mark"></span><span class="nt2-ic nt2-stackic">${pIconFull(PR[n.p], 18)}<i>${same.length}</i></span>
-        <span class="nt2-main"><span class="nt2-top"><b>${esc(n.actor)}</b><time>${esc(agoShort(same[0].at))}</time></span><span class="nt2-bot"><small>${esc(same[0].t)}</small><span class="nt2-chev">${ic('chev')}</span></span></span></div>`
+      same.forEach((x) => seen.add(x.id)); const open = (S.ntOpenGroups || []).includes(key);
+      out.push(`<div class="nt2 nt2-grp${open ? ' open' : ''}" tabindex="0" role="button" aria-expanded="${open}" data-nt-grp="${esc(key)}" data-fk="g${esc(key)}"><span class="nt2-mark"></span><span class="nt2-ic nt2-stackic">${pIconFull(PR[n.p], 18)}<i>${same.length}</i></span>
+        <span class="nt2-main"><span class="nt2-top"><b>${esc(who)}</b><time>${esc(agoShort(same[0].at))}</time></span><span class="nt2-bot"><small>${same.length} updates · latest: ${esc(same[0].t)}</small><span class="nt2-chev">${ic('chev')}</span></span></span></div>`
         + (open ? `<div class="nt2-kids">${same.map((x) => ntRow(x, st, view)).join('')}</div>` : ''));
     });
     return out.join('');
@@ -1544,8 +1550,8 @@
           <button class="us-toggle" role="switch" aria-checked="${p.desktop}" data-nt-pref="desktop" data-fk="pd"><span class="hp-t">Desktop notifications<small>Shown by your operating system when XENO is in the background</small></span><span class="sw"><i></i></span></button>
           <div class="nt-seg-row"><span class="hp-t">Email digest<small>A summary of what you missed</small></span><div class="pl-seg" role="radiogroup" aria-label="Email digest">${['off', 'daily', 'weekly'].map((k) => `<button role="radio" aria-checked="${p.digest === k}" data-nt-digest="${k}" data-fk="dg${k}">${k[0].toUpperCase() + k.slice(1)}</button>`).join('')}</div></div>
         </section>
-        <section class="pl pl-list"><div class="pl-cap"><span>Modes</span><span>Muted modes stay in the inbox but never ring</span></div>
-          ${MODES.map((m) => `<button class="us-toggle" role="switch" aria-checked="${!p.muted.includes(m.id)}" data-nt-mute="${m.id}" data-fk="pm${m.id}"><span class="hp-t">${esc(M[m.id].name)}</span><span class="sw"><i></i></span></button>`).join('')}
+        <section class="pl pl-list"><div class="pl-cap"><span>Modes</span><span>What each mode tells you about</span></div>
+          ${MODES.map((m) => { const lv = ntLevel(NS(), m.id); return `<div class="nt-seg-row"><span class="hp-t">${esc(M[m.id].name)}</span><div class="pl-seg" role="radiogroup" aria-label="${esc(M[m.id].name)} notifications">${NT_LEVELS.map(([k, l]) => `<button role="radio" aria-checked="${lv === k}" data-nt-level="${m.id}:${k}" data-fk="lv${m.id}${k}">${l}</button>`).join('')}</div></div>`; }).join('')}
         </section>
       </div>`;
   }
@@ -1562,7 +1568,7 @@
     if (e.target.closest('[data-nt-back]')) { S.ntSettings = false; return repaint(); }
     const pf = e.target.closest('[data-nt-pref]'); if (pf) { st.prefs[pf.dataset.ntPref] = !st.prefs[pf.dataset.ntPref]; ntSave('ntPrefs', st.prefs); return repaint(); }
     const dg = e.target.closest('[data-nt-digest]'); if (dg) { st.prefs.digest = dg.dataset.ntDigest; ntSave('ntPrefs', st.prefs); return repaint(); }
-    const mu = e.target.closest('[data-nt-mute]'); if (mu) { const id = mu.dataset.ntMute, s = new Set(st.prefs.muted); s.has(id) ? s.delete(id) : s.add(id); st.prefs.muted = [...s]; ntSave('ntPrefs', st.prefs); syncBell(); return repaint(); }
+    const lvb = e.target.closest('[data-nt-level]'); if (lvb) { const [m, lv] = lvb.dataset.ntLevel.split(':'); ntSetLevel(m, lv); return repaint(); }
     if (e.target.closest('[data-nt-viewall]')) { hidePops(); return go('global', { global: 'inbox', item: null }); }
     const gr = e.target.closest('[data-nt-grp]'); if (gr) { const a = new Set(S.ntOpenGroups || []); a.has(gr.dataset.ntGrp) ? a.delete(gr.dataset.ntGrp) : a.add(gr.dataset.ntGrp); S.ntOpenGroups = [...a]; return repaint(); }
     const row = e.target.closest('[data-nt]'); if (!row) return;
@@ -1615,9 +1621,10 @@
     popKeys(m, '.nt2', (e, el) => ntKey(e, el, () => openBell(true)));
     if (!keep) (m.querySelector('.nt2') || m.querySelector('[role="tab"][aria-selected="true"]'))?.focus({ preventScroll: true });
   }
-  // the bell rings only for unread, unmuted inbox items
+  window.XENO_NT = { levels: NT_LEVELS, level: (m) => ntLevel(NS(), m), setLevel: ntSetLevel, modes: () => MODES.map((m) => [m.id, M[m.id].name]) };
+  // the bell rings only for unread inbox items in areas that are not off
   function syncBell() {
-    const st = NS(), un = ntAll().filter((n) => isUnread(n, st) && !st.prefs.muted.includes(n.m)).length;
+    const st = NS(), un = ntAll().filter((n) => isUnread(n, st) && ntLevel(st, n.m) !== 'off').length;
     const bt = railBtn('bell'); const bd = bt?.querySelector('.badge'); if (bd) bd.style.display = un ? '' : 'none';
     if (bt) { bt.dataset.tip = un ? `Notifications — ${un} unread` : 'Notifications'; bt.setAttribute('aria-label', bt.dataset.tip); }
   }
