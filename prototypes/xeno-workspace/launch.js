@@ -50,10 +50,7 @@
     ids.forEach((x) => (on ? w.delete(x) : w.add(x))); st.set('launchWatch', [...w]);
     const name = label || ids.map((x) => X().PR[x]?.name || x).join(', ');
     sync();
-    const t = document.getElementById('toast');
-    t.innerHTML = `${on ? `You won’t be told when ${name} launches` : `We’ll tell you when ${name} launches`} <button class="pg-undo">Undo</button>`; t.classList.add('on');
-    t.querySelector('.pg-undo').onclick = () => { const w2 = watched(); ids.forEach((x) => (on ? w2.add(x) : w2.delete(x))); st.set('launchWatch', [...w2]); sync(); t.classList.remove('on'); };
-    clearTimeout(t._pgT); t._pgT = setTimeout(() => t.classList.remove('on'), 5000);
+    window.XENO_HIST.record(on ? `You won’t be told when ${name} launches` : `We’ll tell you when ${name} launches`, () => { const w2 = watched(); ids.forEach((x) => (on ? w2.add(x) : w2.delete(x))); st.set('launchWatch', [...w2]); sync(); });
   }
   // every Notify button on screen reflects the watch list (no re-render needed)
   function sync() {

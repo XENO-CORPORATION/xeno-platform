@@ -1378,14 +1378,8 @@
   // screen readers hear what changed without focus moving
   function announce(msg) { let r = document.getElementById('xw-live'); if (!r) { r = document.createElement('div'); r.id = 'xw-live'; r.className = 'sr-only'; r.setAttribute('aria-live', 'polite'); document.body.appendChild(r); } r.textContent = ''; setTimeout(() => { r.textContent = msg; }, 40); }
   // undo for anything done from a list (Gmail/Linear): a toast with the action, Ctrl Z while it is up
-  let undoFn = null, undoT = 0;
-  function undoToast(msg, fn) {
-    let t = document.getElementById('utoast');
-    if (!t) { t = document.createElement('div'); t.id = 'utoast'; t.setAttribute('role', 'status'); document.body.appendChild(t); t.onclick = (e) => { if (e.target.closest('[data-undo]') && undoFn) { const f = undoFn; undoFn = null; t.classList.remove('on'); f(); } }; }
-    t.innerHTML = `<span>${esc(msg)}</span><button data-undo>Undo</button><kbd>Ctrl Z</kbd>`; t.classList.add('on'); undoFn = fn; clearTimeout(undoT);
-    undoT = setTimeout(() => { t.classList.remove('on'); undoFn = null; }, 6000); announce(msg);
-  }
-  document.addEventListener('keydown', (e) => { if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z' && undoFn && !e.target.closest('input,textarea,[contenteditable]')) { e.preventDefault(); const f = undoFn; undoFn = null; document.getElementById('utoast')?.classList.remove('on'); f(); } });
+  // one undo/redo history for every area — history.js (§7v); this name stays so existing call sites need no change
+  function undoToast(msg, fn) { window.XENO_HIST.record(msg, fn); announce(msg); }
 
   // ---- data: one cache, stale-while-revalidate, each source names where it will come from ----
   const SRC = {

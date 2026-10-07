@@ -27,7 +27,7 @@
   const A = () => { const a = { ...DEF(), ...(LS.get('acct', {}) || {}) }; return a; };
   const save = (a) => { LS.set('acct', a); };
   const edit = (fn, msg) => { const a = A(); fn(a); save(a); return window.XENO_NET ? window.XENO_NET.end(() => { X().render(); if (msg) X().toast(msg); }) : (X().render(), msg && X().toast(msg), Promise.resolve(true)); };
-  const undoT = (msg, fn) => { const t = document.getElementById('toast'); t.innerHTML = `${esc(msg)} <button class="pg-undo">Undo</button>`; t.classList.add('on'); t.querySelector('.pg-undo').onclick = () => { fn(); t.classList.remove('on'); }; clearTimeout(t._pgT); t._pgT = setTimeout(() => t.classList.remove('on'), 5000); };
+  const undoT = (msg, fn) => window.XENO_HIST.record(msg, fn);
 
   // ---------- confirm it's you (step-up): passkey or an authenticator code, then 10 minutes unlocked ----------
   async function stepUp(why) {

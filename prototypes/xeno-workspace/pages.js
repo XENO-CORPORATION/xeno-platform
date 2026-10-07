@@ -586,7 +586,7 @@
   }
   // double-click a file to open it (a single click selects it — Finder, Drive, Dropbox)
   document.addEventListener('dblclick', (e) => { const c = e.target.closest('#main .pg--lib [data-pg-file]'); if (!c) return; const f = libItem(c.dataset.pgFile); if (f) X().go('global', { global: 'library', item: f.name }); });
-  function undo(msg, fn) { const t = document.getElementById('toast'); t.innerHTML = `${esc(msg)} <button class="pg-undo">Undo</button>`; t.classList.add('on'); const bt = t.querySelector('.pg-undo'); let done = false; bt.onclick = () => { if (done) return; done = true; fn(); t.classList.remove('on'); }; clearTimeout(t._pgT); t._pgT = setTimeout(() => t.classList.remove('on'), 5000); }
+  function undo(msg, fn) { window.XENO_HIST.record(msg, fn); }
   // search: filters as you type; '/' focuses the page search (like GitHub, Linear)
   document.addEventListener('input', (e) => { const k = e.target.dataset?.pgQ; if (k == null) return; ui(k).q = e.target.value; repaint(); });
   document.addEventListener('keydown', (e) => {
