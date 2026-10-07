@@ -1395,6 +1395,7 @@
       { id: 'a2', t: 'Atlas updated the migration plan', m: 'dev', p: 'agent', actor: 'Atlas', at: Date.now() - 26 * 60000, g: 'act' },
       { id: 'a3', t: 'Atlas opened PR #412', m: 'dev', p: 'agent', actor: 'Atlas', at: Date.now() - 52 * 60000, g: 'act' },
       { id: 'a4', t: 'Nightly asset sync ran', m: 'tools', p: 'workflow', at: Date.now() - 2 * 3600000, g: 'act' },
+      { id: 'a7', t: 'Weekly usage report sent', m: 'tools', p: 'workflow', at: Date.now() - 5 * 3600000, g: 'act' },
       { id: 'a5', t: '3 posts scheduled', m: 'social', p: 'post', at: Date.now() - 3 * 3600000, g: 'act' },
       { id: 'a6', t: 'Invoice paid', m: 'corpo', p: 'company', at: Date.now() - 26 * 3600000, g: 'act' },
     ],
@@ -1506,8 +1507,8 @@
     const out = [], seen = new Set();
     items.forEach((n) => {
       if (seen.has(n.id)) return;
-      const gk = (x) => x.actor || (x.g === 'act' ? 'p:' + x.p : null), key = gk(n), who = n.actor || PR[n.p]?.name || n.p;
-      const same = key ? items.filter((x) => gk(x) === key) : [n];
+      const key = ntGroupKey(n), who = n.actor || PR[n.p]?.name || n.p;
+      const same = items.filter((x) => ntGroupKey(x) === key);
       if (same.length < 2) { out.push(ntRow(n, st, view)); seen.add(n.id); return; }
       same.forEach((x) => seen.add(x.id)); const open = (S.ntOpenGroups || []).includes(key);
       out.push(`<div class="nt2 nt2-grp${open ? ' open' : ''}" tabindex="0" role="button" aria-expanded="${open}" data-nt-grp="${esc(key)}" data-fk="g${esc(key)}"><span class="nt2-mark"></span><span class="nt2-ic nt2-stackic">${pIconFull(PR[n.p], 18)}<i>${same.length}</i></span>
@@ -1516,7 +1517,11 @@
     });
     return out.join('');
   }
-  const firstUnits = (items, n) => { const out = [], seen = new Set(); let u = 0; for (const x of items) { const k = x.actor || x.id; if (!seen.has(k)) { if (u === n) break; seen.add(k); u++; } out.push(x); } return out; };
+  // one key for 'these belong together': a named actor, else — for activity — the product it came from (§7z).
+  // The preview counts a group as one unit and keeps ALL of a chosen unit's items, wherever they fall in time;
+  // cutting first and grouping after split groups and showed wrong counts.
+  const ntGroupKey = (x) => x.actor || (x.g === 'act' ? 'p:' + x.p : x.id);
+  const firstUnits = (items, n) => { const keys = new Set(); for (const x of items) { if (keys.size === n) break; keys.add(ntGroupKey(x)); } return items.filter((x) => keys.has(ntGroupKey(x))); };
   const ntCounts = () => { const st = NS(); return { inbox: ntAll().filter((n) => viewOf(n, st) === 'inbox').length, snoozed: ntAll().filter((n) => viewOf(n, st) === 'snoozed').length, archive: 0 }; };
   const TABS = [['inbox', 'Inbox'], ['snoozed', 'Snoozed'], ['archive', 'Archived']];
   // text tabs with a sliding underline — they ARE the header, so the popover needs no separate title row
