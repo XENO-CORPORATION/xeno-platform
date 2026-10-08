@@ -47,3 +47,27 @@ node tests/mk-test.mjs           # one area (see tests/ for the rest)
 ```
 
 Each prints `ALL PASS` or the failing checks.
+
+### The history and the selection (`history-core.js`, `select-core.js`)
+
+Each is a framework-free model, loaded by its adapter (`history.js`, `select.js`). The models run in a bare JavaScript context with fake ports, and a purity test stops them from reaching a browser global. The adapters are covered by the browser suites. From this folder:
+
+```
+node --test tests/unit/history-core.test.mjs tests/unit/select-core.test.mjs tests/unit/sel-codec.test.mjs tests/unit/purity.test.mjs
+node tests/hist-test.mjs       # acceptance: the history (14 checks)
+node tests/sel-test.mjs        # acceptance: the selection (16)
+node tests/sellink-test.mjs    # acceptance: links with ?sel= (10)
+node tests/hist-fix-test.mjs   # one browser check per history fix (F-04 to F-18)
+node tests/sel-fix-test.mjs    # one browser check per selection fix, and the guards
+```
+
+Every browser suite exits 1 on any FAIL. `node --test` takes explicit file paths; the glob form differs between Node versions.
+
+**Known limits, not fixed here**, each with its exit condition:
+- A retry after a partial storage write reports the keys it had already restored as kept by someone else. Exit: `write()` counts a key that already holds its target value as done.
+- `XENO_DB.save` writes every area on each save (`pages-data.js`), not only the changed ones. Exit: per-area writes, owned by the pages-data owner.
+- `XENO_HIST.list()` exposes the stored values of each change (`before` and `after`). Exit: an owner decision on the public shape.
+- A selection can keep an id that is no longer on screen, and a restore does not wait for rows that arrive later. Exit: a product rule for both.
+- The lists a page declares are registered again each time it renders; the registry is not de-duplicated. Exit: de-duplicate by key (taken from the design review; not re-measured here).
+- The Ctrl Alt Z alias for undo is not built, and Alt is no longer a history key. Exit: an owner decision.
+- Puppeteer does not deliver `unhandledrejection` to a page listener in this harness; a rejection shows up as a page error, `Uncaught (in promise)`, and `sel-fix-test.mjs` reads that.
