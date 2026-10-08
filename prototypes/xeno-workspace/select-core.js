@@ -30,6 +30,19 @@
     return null;
   }
 
+  // the ?sel= address codec: the raw value of the sel parameter, read the way a query string is read (names are decoded,
+  // the first '=' splits, '+' is a space); each id is written with encodeURIComponent and the ids join with a literal comma
+  const decodePart = (s) => { try { return decodeURIComponent(s); } catch { return s; } };
+  function selRaw(query) {
+    for (const part of String(query ?? '').split('&')) {
+      const eq = part.indexOf('=');
+      if (decodePart((eq < 0 ? part : part.slice(0, eq)).replace(/\+/g, ' ')) === 'sel') return eq < 0 ? '' : part.slice(eq + 1);
+    }
+    return null;
+  }
+  // the separator is a literal comma, and only then is each id decoded; a part that is not valid percent-encoding is kept as written
+  const parseSel = (raw) => String(raw ?? '').split(',').map((p) => decodePart(p.replace(/\+/g, ' '))).filter(Boolean);
+  const formatSel = (ids) => ids.map((id) => encodeURIComponent(id)).join(',');
   function createSelection(ports) {
     const lists = [];       // the lists, in registration order; the core reads only noun and actions from each
     let cur = null;         // { def, ids: Set, anchor }
@@ -88,5 +101,5 @@
     };
   }
 
-  root.XENO_SEL_CORE = { createSelection, words, rangeIds, extendNext, flatten, barPick, clickIntent, keyIntent };
+  root.XENO_SEL_CORE = { createSelection, words, rangeIds, extendNext, flatten, barPick, clickIntent, keyIntent, selRaw, parseSel, formatSel };
 })(this);

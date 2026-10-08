@@ -1207,9 +1207,10 @@
     try { replace ? history.replaceState(null, '', h) : history.pushState(null, '', h); } catch { location.hash = h; }
   }
   // the selection on a page lives in its URL as ?sel=a,b (§7bb) — replaced, never pushed: selecting adds no Back step
+  const SELCODEC = window.XENO_SEL_CORE;   // the address codec lives in select-core.js, tested without a browser
   window.XENO_URLSEL = {
-    get: () => { const q = location.hash.split('?')[1] || ''; const v = new URLSearchParams(q).get('sel'); return v ? v.split(',').map((x) => decodeURIComponent(x)).filter(Boolean) : []; },
-    set: (ids) => { const base = location.hash.split('?')[0] || '#/'; const next = ids && ids.length ? `${base}?sel=${ids.map(encodeURIComponent).join(',')}` : base; if (next === location.hash) return; try { history.replaceState(history.state, '', next); } catch {} },
+    get: () => { const v = SELCODEC.selRaw(location.hash.split('?')[1] || ''); return v ? SELCODEC.parseSel(v) : []; },
+    set: (ids) => { const base = location.hash.split('?')[0] || '#/'; const next = ids && ids.length ? `${base}?sel=${SELCODEC.formatSel(ids)}` : base; if (next === location.hash) return; try { history.replaceState(history.state, '', next); } catch {} },
   };
   addEventListener('popstate', () => { const st = hashToState(location.hash); if (!st) return; applyingHash = true; go(st.view, st); applyingHash = false; });
   // ---- (2) return to where you were, per mode ----
