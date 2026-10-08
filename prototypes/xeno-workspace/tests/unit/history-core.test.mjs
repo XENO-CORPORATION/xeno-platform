@@ -37,6 +37,33 @@ test('isUndoKey matches z, y and h only with the modifier', () => {
   assert.equal(H.isUndoKey('z', false), false);
 });
 
+test('the Undo on a toast for one change names that change (F-09)', () => {
+  const { h, store, effects } = make({ 'xw.n': '0' });
+  h.gesture(); store.set('xw.n', '1'); const a = h.record('a', () => store.set('xw.n', '0'));
+  assert.equal(h.undoThrough(a), true);
+  assert.equal(store.get('xw.n'), '0');
+  assert.equal(effects.toasts.at(-1).msg, 'Undid: a');
+  assert.equal(effects.toasts.at(-1).spec.entryId, a);
+});
+
+test('the Redo on a toast restores the older undone change first, then the named one, under one summary (F-10)', () => {
+  const { h, store, effects } = make({ 'xw.n': '0' });
+  h.gesture(); store.set('xw.n', '1'); const a = h.record('a', () => store.set('xw.n', '0'));
+  h.gesture(); store.set('xw.n', '2'); const b = h.record('b', () => store.set('xw.n', '1'));
+  h.undo(); h.undo();
+  assert.equal(store.get('xw.n'), '0');
+  assert.equal(h.redoThrough(b), true);
+  assert.equal(store.get('xw.n'), '2');
+  assert.equal(effects.toasts.at(-1).msg, 'Redid 2 changes');
+  assert.equal(effects.toasts.at(-1).spec.entryId, b);
+});
+
+test('the Redo on a toast whose change is not undone says so (F-10)', () => {
+  const { h, effects } = make({});
+  assert.equal(h.redoThrough(42), false);
+  assert.equal(effects.toasts.at(-1).msg, 'Nothing to redo');
+});
+
 test('a write that fails keeps the entry on the stack, and its second failure in a row retires it (F-04)', () => {
   const { h, store, setFailWrites } = make({ 'xw.a': '1' });
   h.gesture(); store.set('xw.a', '2'); h.record('set a', () => {});
@@ -253,18 +280,19 @@ test('jump to an entry undoes what is newer; jump to the start undoes everything
   assert.equal(store.get('xw.n'), '3');
 });
 
-test('the Undo on an older toast jumps to that change, which undoes the newer ones (today)', () => {
-  const { h, store } = make({ 'xw.n': '0' });
+test('the Undo on an older toast takes back that change and the newer ones, under one summary (F-09)', () => {
+  const { h, store, effects } = make({ 'xw.n': '0' });
   h.gesture(); store.set('xw.n', '1'); const a = h.record('a', () => store.set('xw.n', '0'));
   h.gesture(); store.set('xw.n', '2'); h.record('b', () => store.set('xw.n', '1'));
-  h.undoFromToast(a);
-  assert.equal(store.get('xw.n'), '1');
-  assert.equal(h.canUndo(), true);
+  h.undoThrough(a);
+  assert.equal(store.get('xw.n'), '0');
+  assert.equal(h.canUndo(), false);
+  assert.equal(effects.toasts.at(-1).msg, 'Undid 2 changes');
 });
 
-test('the Undo on a toast whose change is no longer recorded, with nothing left, says Nothing to undo (today)', () => {
+test('the Undo on a toast whose change is no longer recorded says so (F-09)', () => {
   const { h, effects } = make({});
-  h.undoFromToast(999);
+  h.undoThrough(999);
   assert.equal(effects.toasts.at(-1).msg, 'Nothing to undo');
 });
 

@@ -44,13 +44,13 @@
   // spec: { entryId } gives a change its own Undo; { redo } gives the Redo of an undone change
   function showToast(msg, spec = {}) {
     const h = host(), n = document.createElement('div'); n.className = 'xh-toast'; n.setAttribute('role', 'status');
-    const own = spec.entryId != null; if (own) n.dataset.hid = spec.entryId;
-    n.innerHTML = `<span>${esc(msg)}</span>${own ? '<button data-h="undo">Undo</button><kbd>Ctrl Z</kbd>' : spec.redo ? '<button data-h="redo">Redo</button><kbd>Ctrl ⇧ Z</kbd>' : ''}<button class="xh-x" data-h="close" aria-label="Dismiss">×</button>`;
+    if (spec.entryId != null) n.dataset.hid = spec.entryId;
+    n.innerHTML = `<span>${esc(msg)}</span>${spec.undo ? '<button data-h="undo">Undo</button><kbd>Ctrl Z</kbd>' : spec.redo ? '<button data-h="redo">Redo</button><kbd>Ctrl ⇧ Z</kbd>' : ''}<button class="xh-x" data-h="close" aria-label="Dismiss">×</button>`;
     let t = 0; const arm = () => { clearTimeout(t); t = setTimeout(() => n.remove(), LIFE); };
     n.addEventListener('pointerenter', () => clearTimeout(t)); n.addEventListener('pointerleave', arm); n.addEventListener('focusin', () => clearTimeout(t)); n.addEventListener('focusout', arm);
     n.addEventListener('click', (ev) => { const b = ev.target.closest('[data-h]'); if (!b) return; n.remove();
-      if (b.dataset.h === 'undo' && own) core.undoFromToast(spec.entryId);
-      if (b.dataset.h === 'redo') core.redo(); });
+      if (b.dataset.h === 'undo' && spec.undo) core.undoThrough(spec.entryId);
+      if (b.dataset.h === 'redo' && spec.redo) core.redoThrough(spec.entryId); });
     h.appendChild(n); while (h.children.length > SHOW) h.firstElementChild.remove(); arm();
   }
 
@@ -86,7 +86,7 @@
   // the public surface, as before
   window.XENO_HIST = {
     record: (label, fn, opts) => core.record(label, fn, opts), undo: () => core.undo(), redo: () => core.redo(), jump: (id) => core.jump(id),
-    toggle: (on) => toggle(on), toast: (msg, e, o = {}) => showToast(msg, { entryId: e ? e.id : undefined, redo: !!o.redo }),
+    toggle: (on) => toggle(on), toast: (msg, e, o = {}) => showToast(msg, { entryId: e ? e.id : undefined, undo: !!e, redo: !!o.redo }),
     list: () => core.list(), canUndo: () => core.canUndo(), canRedo: () => core.canRedo(),
   };
 })();

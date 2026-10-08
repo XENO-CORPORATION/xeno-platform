@@ -17,6 +17,8 @@
     keptRedo: 'Redone — kept a change someone else made since',
     undid: (label) => `Undid: ${label}`,
     redid: (label) => `Redid: ${label}`,
+    undidMany: (n) => `Undid ${n} changes`,
+    redidMany: (n) => `Redid ${n} changes`,
   };
   const diff = (a, b) => [...new Set([...Object.keys(a), ...Object.keys(b)])].filter((k) => a[k] !== b[k]);
   const pick = (from, keys) => Object.fromEntries(keys.map((k) => [k, from[k] ?? null]));
@@ -104,16 +106,43 @@
       catch (err) { ports.logError(err); e.failures = (e.failures || 0) + 1; if (e.failures >= MAX_UNDO_FAILURES) return retireRedo(e); ports.toast(COPY.cantRedo); return false; }
       e.failures = 0; e.state = 'done'; return true;
     }
-    function undo() {
-      const e = past.pop(); if (!e) { ports.toast(COPY.nothingUndo); return false; }
-      if (!undoEntry(e)) { if (e.state === 'done') past.push(e); return false; }
-      future.push(e); ports.dismiss(e.id); ports.toast(COPY.undid(e.label), { redo: true }); ports.refresh();
+    // one step of each: the entry it moved, or null. A quiet step leaves its toast to the caller that sums up several.
+    function undoStep(quiet) {
+      const e = past.pop(); if (!e) { if (!quiet) ports.toast(COPY.nothingUndo); return null; }
+      if (!undoEntry(e)) { if (e.state === 'done') past.push(e); return null; }
+      future.push(e); ports.dismiss(e.id);
+      if (!quiet) { ports.toast(COPY.undid(e.label), { entryId: e.id, redo: true }); ports.refresh(); }
+      return e;
+    }
+    function redoStep(quiet) {
+      const e = future.pop(); if (!e) { if (!quiet) ports.toast(COPY.nothingRedo); return null; }
+      if (!redoEntry(e)) { if (e.state === 'undone') future.push(e); return null; }
+      past.push(e);
+      if (!quiet) { ports.toast(COPY.redid(e.label), { entryId: e.id, undo: true }); ports.refresh(); }
+      return e;
+    }
+    function undo() { return undoStep(false) !== null; }
+    function redo() { return redoStep(false) !== null; }
+    // the Undo on a toast takes back the named change and every newer one, newest first, under one summary. A step that
+    // fails ends the walk. The summary's Redo names the newest change taken back, so it restores all of them.
+    function undoThrough(id) {
+      if (!past.some((e) => e.id === id)) { ports.toast(COPY.nothingUndo); return false; }
+      const done = [];
+      while (past.some((e) => e.id === id)) { const e = undoStep(true); if (!e) break; done.push(e); }
+      if (!done.length) return false;
+      ports.toast(done.length === 1 ? COPY.undid(done[0].label) : COPY.undidMany(done.length), { entryId: done[0].id, redo: true });
+      ports.refresh();
       return true;
     }
-    function redo() {
-      const e = future.pop(); if (!e) { ports.toast(COPY.nothingRedo); return false; }
-      if (!redoEntry(e)) { if (e.state === 'undone') future.push(e); return false; }
-      past.push(e); ports.toast(COPY.redid(e.label), { entryId: e.id, undo: true }); ports.refresh();
+    // the Redo on a toast restores the older undone changes first, then the named one, under one summary
+    function redoThrough(id) {
+      if (!future.some((e) => e.id === id)) { ports.toast(COPY.nothingRedo); return false; }
+      const done = [];
+      while (future.some((e) => e.id === id)) { const e = redoStep(true); if (!e) break; done.push(e); }
+      if (!done.length) return false;
+      ports.dismiss(id);
+      ports.toast(done.length === 1 ? COPY.redid(done[0].label) : COPY.redidMany(done.length), { entryId: done[done.length - 1].id, undo: true });
+      ports.refresh();
       return true;
     }
     // jump: go to the state right after an entry; id 0 is the start of the session, before any of these changes
@@ -122,15 +151,8 @@
       const p = past.findIndex((e) => e.id === id); if (p >= 0) { while (past.length > p + 1 && undo()) { /* a failing step ends the walk */ } return; }
       const f = future.findIndex((e) => e.id === id); if (f >= 0) while (future.length > f && redo()) { /* a failing step ends the walk */ }
     }
-    // the Undo on a toast: the newest change is undone; an older one is jumped to
-    function undoFromToast(id) {
-      const i = past.findIndex((e) => e.id === id);
-      if (i === past.length - 1) return undo();
-      if (i >= 0) jump(id);
-      return undefined;
-    }
     return {
-      record, undo, redo, jump, undoFromToast,
+      record, undo, redo, jump, undoThrough, redoThrough,
       gesture() { pre = snap(); },
       // another window changed a key: this window's reading of it moves with the store, so its next record does not claim the change
       observe(key, value) { if (key == null) { pre = snap(); return; } if (!isWorkspaceKey(key)) return; if (value == null) delete pre[key]; else pre[key] = value; },
