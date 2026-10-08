@@ -12,13 +12,15 @@ await server.listen();
 const b = await puppeteer.launch({ headless: true, protocolTimeout: 60000 });
 async function open(me) {
   const p = await b.newPage(); await p.setViewport({ width: 1400, height: 900 });
-  const errs = []; p.on('pageerror', (e) => errs.push(e.message));
+  const errs = [], bad = []; p.on('pageerror', (e) => errs.push(e.message));
+  p.on('requestfailed', (q) => { if (!q.url().includes('fonts.g') && !q.url().endsWith('/api/auth/me')) bad.push('failed ' + q.url()); });
+  p.on('response', (r) => { if (r.status() >= 400 && !r.url().endsWith('/api/auth/me')) bad.push(r.status() + ' ' + r.url()); });
   await p.setRequestInterception(true);
   p.on('request', (q) => { const u = new URL(q.url());
     if (u.pathname === '/api/auth/me') return me === 'down' ? q.abort('failed') : q.respond(me);
     if (u.pathname === '/login') return q.respond({ status: 200, contentType: 'text/html', body: '<title>login</title>' });
     q.continue(); });
-  return { p, errs };
+  return { p, errs, bad };
 }
 const USER = { success: true, user: { id: 7, username: 'test-person', email: 'test@example.test', display_name: 'Test Person', avatar_url: null, email_verified: true } };
 try {
@@ -30,7 +32,7 @@ try {
     await p.close();
   }
   { // signed in
-    const { p, errs } = await open({ status: 200, contentType: 'application/json', body: JSON.stringify(USER) });
+    const { p, errs, bad } = await open({ status: 200, contentType: 'application/json', body: JSON.stringify(USER) });
     await p.goto(base + '/workspace', { waitUntil: 'networkidle0' }); await wait(500);
     ok(new URL(p.url()).pathname === '/workspace/', 'the address without a slash is redirected to /workspace/');
     const s = await p.evaluate(() => ({ wait: document.documentElement.classList.contains('xp-wait'), main: !!document.querySelector('#main') && getComputedStyle(document.querySelector('#main')).visibility, name: JSON.parse(localStorage.getItem('xw.acct') || '{}').profile?.name, email: JSON.parse(localStorage.getItem('xw.acct') || '{}').profile?.email, chip: document.getElementById('net-chip') ? getComputedStyle(document.getElementById('net-chip')).display : 'absent', note: document.getElementById('xp-note')?.textContent || '', user: window.XENO_PLATFORM.user?.username, hist: !!window.XENO_HIST, sel: !!window.XENO_SEL }));
@@ -40,6 +42,15 @@ try {
     ok(/sample data/.test(s.note), 'the page says the areas still show sample data');
     ok(s.hist && s.sel, 'the history and the selection are loaded');
     ok(errs.length === 0, 'no page errors (' + JSON.stringify(errs.slice(0, 2)) + ')');
+    // every image the workspace draws must load: on the first deploy the product icons pointed at a folder on one PC
+    const seen = { total: 0, broken: [] };
+    for (const place of ['#/', '#/studio', '#/office', '#/dev', '#/library']) {
+      await p.evaluate((h) => { location.hash = h; }, place); await wait(500);
+      const r = await p.evaluate(async () => { const imgs = [...document.images]; await Promise.all(imgs.map((i) => i.complete ? null : new Promise((res) => { i.onload = i.onerror = res; }))); return { n: imgs.length, broken: imgs.filter((i) => !i.naturalWidth).map((i) => i.getAttribute('src')) }; });
+      seen.total += r.n; seen.broken.push(...r.broken);
+    }
+    ok(seen.total > 10 && seen.broken.length === 0, 'every image loads across five places (' + seen.total + ' images, broken: ' + JSON.stringify([...new Set(seen.broken)].slice(0, 3)) + ')');
+    ok(bad.length === 0, 'no request fails or returns an error (' + JSON.stringify([...new Set(bad)].slice(0, 3)) + ')');
     await p.close();
   }
   { // the platform cannot be reached
