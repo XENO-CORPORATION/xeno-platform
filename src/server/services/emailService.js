@@ -33,7 +33,7 @@ import { upstreamFetch } from './upstream.js';
  * would mean one careless click permanently disables the only warning the
  * business gets. Nobody can opt out of being told they are being sued for a
  * chargeback. */
-const ESSENTIAL_TEMPLATES = new Set(['password_reset', 'email_verification', 'dispute_opened']);
+const ESSENTIAL_TEMPLATES = new Set(['password_reset', 'email_verification', 'dispute_opened', 'account_code', 'email_changed_notice']);
 
 // --------------------------------------------------------------------------
 // XENO branded email wrapper
@@ -587,6 +587,39 @@ const templates = {
    * is minted once per signup and shared with the welcome mail, so a caller that
    * has no code (a resend of address-verification alone) still sends a working
    * link rather than an empty box. */
+  /* A six-digit code the person types into the account page they are already on. Two uses, told
+   * apart by `purpose`: proving it is them before a sensitive change, and proving they can read a
+   * new address before it replaces the old one. There is no link on purpose: the code is only
+   * useful to the signed-in session that asked for it. */
+  account_code: ({ displayName, code = '000000', purpose, expiresIn }) => ({
+    subject: purpose === 'email_change' ? 'Confirm your new XENO email address' : 'Your XENO confirmation code',
+    html: wrapInLayout(purpose === 'email_change' ? 'Confirm your new email' : 'Confirm it’s you', `
+      ${mailHeading(purpose === 'email_change' ? 'Confirm this address' : 'Confirm it’s you')}
+      ${mailText(purpose === 'email_change'
+        ? `Hi ${escapeHtml(displayName)}, enter this code on your XENO account page to make this the address you sign in with.`
+        : `Hi ${escapeHtml(displayName)}, enter this code on your XENO account page to continue with the change you started.`)}
+      ${codeBlock(code)}
+      ${hairline(14, 12)}
+      ${mailText(`The code works once and expires in ${escapeHtml(String(expiresIn || '10 minutes'))}. XENO staff will never ask you for it.`, { muted: true })}
+      ${mailText(purpose === 'email_change'
+        ? 'If you did not ask for this, ignore this email. Nothing changes unless the code is entered.'
+        : 'If you did not ask for this, someone signed in to your account is trying to change it. Change your password and sign out everywhere from your account page.', { muted: true })}
+    `, purpose === 'email_change' ? 'Enter this code to confirm your new address.' : 'Enter this code on your account page.'),
+  }),
+
+  /* Sent to the OLD address after a change. This is the one message that reaches the real owner
+   * when an account has been taken over, so it says exactly what changed and what to do. */
+  email_changed_notice: ({ displayName, newEmailMasked = 'a new address', when = 'just now', supportUrl = 'mailto:support@xenosystem.ai' }) => ({
+    subject: 'Your XENO email address was changed',
+    html: wrapInLayout('Email address changed', `
+      ${mailHeading('Your sign-in address was changed')}
+      ${mailText(`Hi ${escapeHtml(displayName)}, the email address on your XENO account was changed to <strong>${escapeHtml(newEmailMasked)}</strong> on ${escapeHtml(when)}.`)}
+      ${mailText('This address no longer signs in to the account. Every other device was signed out when the change was made.')}
+      ${hairline(14, 12)}
+      ${mailText(`If this was you, there is nothing to do. If it was not, reply to this email or write to us at <a href="${escapeHtml(supportUrl)}" style="color:#ffffff;">${escapeHtml(supportUrl.replace(/^mailto:/, ''))}</a> straight away so we can return the account to you.`, { muted: true })}
+    `, 'The email address on your XENO account was changed.'),
+  }),
+
   email_verification: ({ displayName, verifyUrl, expiresIn, activationCode }) => ({
     subject: 'Verify your XENO email',
     html: wrapInLayout('Verify your email', `

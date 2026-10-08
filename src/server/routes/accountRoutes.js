@@ -12,6 +12,7 @@ import express from 'express';
 import authMiddleware from '../middleware/auth.js';
 import { getPlan } from '../services/billingService.js';
 import { creditsView, workspaceCount } from '../utils/accountViews.js';
+import accountSecurityRoutes from './accountSecurityRoutes.js';
 
 const router = express.Router();
 
@@ -151,5 +152,9 @@ router.delete('/sessions/:id', authMiddleware, async (req, res) => {
     res.status(500).json({ success: false, error: 'Failed to revoke session' });
   }
 });
+
+// Confirm-it's-you, email change, sign out everywhere, personal API keys and data export.
+// Mounted last: it puts authMiddleware on everything below it, and every route above carries its own.
+router.use(accountSecurityRoutes);
 
 export default router;

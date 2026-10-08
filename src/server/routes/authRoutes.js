@@ -365,7 +365,7 @@ export function hasUsablePassword(hashedPassword) {
  * exists to close, left open for exactly the accounts it was written to protect.
  * Routing every unusable hash through the dummy comparison closes it.
  */
-async function verifyPassword(password, hashedPassword) {
+export async function verifyPassword(password, hashedPassword) {
   if (!hasUsablePassword(hashedPassword)) {
     await bcrypt.compare(String(password ?? ''), ABSENT_PASSWORD_HASH);
     return false;
@@ -443,7 +443,7 @@ function clearBrowserSessionCookies(res) {
  * Revoke outstanding reset links, OIDC session states, refresh tokens, and increment
  * the OIDC auth epoch transactionally across all credential tables that exist.
  */
-async function revokeOidcAndResetsTransactional(client, userId) {
+export async function revokeOidcAndResetsTransactional(client, userId) {
   const check = await client.query(`
     SELECT
       to_regclass('public.password_resets') IS NOT NULL AS has_resets,

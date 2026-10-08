@@ -83,6 +83,7 @@ import { sweepExpiredIntents } from './services/downloadFunnel.js';
 import { sweepRetention, RETENTION_SWEEP_INTERVAL_MS } from './services/dataRetention.js';
 import { sweepExpiredArtifacts } from './services/artifactService.js';
 import { sweepLibraryTrash } from './services/libraryOrganise.js';
+import { sweepExports } from './services/accountExport.js';
 import { requireSupportedClient } from './middleware/requireSupportedClient.js';
 import clientPolicyRoutes from './routes/clientPolicyRoutes.js';
 import faviconRoutes from './routes/faviconRoutes.js';
@@ -3963,6 +3964,9 @@ startDownloadCleanup();
       // The Library's trash keeps an item for TRASH_DAYS, then it is deleted forever (services/libraryOrganise.js).
       .then(() => sweepLibraryTrash(pool))
       .then((r) => { if (r?.purged) console.log(`[Retention] library trash purged:${r.purged}`); })
+      // A data export is kept EXPORT_KEEP_DAYS; a build whose process died is marked failed (services/accountExport.js).
+      .then(() => sweepExports(pool))
+      .then((r) => { if (r?.expired || r?.stale) console.log(`[Retention] data exports expired:${r.expired} stale:${r.stale}`); })
       .catch((e) => console.error('[Retention] error:', e.message));
     backgroundLeader.whenLeader(() => {
       const t = setInterval(sweepRet, RETENTION_SWEEP_INTERVAL_MS);
