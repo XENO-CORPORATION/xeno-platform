@@ -9,7 +9,10 @@
  * facts. Equivalent guarantee, no per-field key management, because the immutable
  * data has no PII to shred in the first place.)
  */
+import fs from 'fs';
+import path from 'path';
 import { eraseForumContent } from '../services/forumWrite.js';
+import { exportDir } from '../services/accountExport.js';
 
 export async function eraseSubject(pool, userId) {
   const client = await pool.connect();
@@ -98,6 +101,28 @@ export async function eraseSubjectTx(client, userId, acc) {
     await client.query(`UPDATE email_logs SET to_email = 'erased+' || $1 || '@erased.invalid' WHERE user_id = $1 AND to_email NOT LIKE 'erased+%'`, [userId]);
     await client.query('DELETE FROM email_verifications WHERE user_id = $1', [userId]);
     await client.query('UPDATE security_events SET ip_address = NULL, user_agent = NULL WHERE user_id = $1 AND (ip_address IS NOT NULL OR user_agent IS NOT NULL)', [userId]);
+    // 6b. The account page's own records. The user row is tombstoned, not deleted, so none of the
+    //     ON DELETE CASCADEs on these fire. A data export is a full copy of the subject on disk: it
+    //     goes first. Pending codes carry the address they were sent to. Audit rows keep their type
+    //     and lose the addresses an email change recorded.
+    //     Each table is asked for first: this procedure also runs on databases that predate them, and
+    //     a missing relation inside the transaction would abort the whole erasure.
+    const has = (await client.query(
+      `SELECT to_regclass('public.account_exports') IS NOT NULL AS exports, to_regclass('public.account_codes') IS NOT NULL AS codes,
+              to_regclass('public.account_confirmations') IS NOT NULL AS confirmations, to_regclass('public.account_confirm_throttle') IS NOT NULL AS throttle,
+              to_regclass('public.library_item_stars') IS NOT NULL AS stars`,
+    )).rows[0];
+    if (has.exports) {
+      const exportsGone = await client.query('DELETE FROM account_exports WHERE user_id = $1 RETURNING id', [userId]);
+      for (const row of exportsGone.rows) {
+        for (const suffix of ['', '.part']) await fs.promises.rm(path.join(exportDir(), `${row.id}.tar.gz${suffix}`), { force: true }).catch(() => {});
+      }
+    }
+    if (has.codes) await client.query('DELETE FROM account_codes WHERE user_id = $1', [userId]);
+    if (has.confirmations) await client.query('DELETE FROM account_confirmations WHERE user_id = $1', [userId]);
+    if (has.throttle) await client.query('DELETE FROM account_confirm_throttle WHERE user_id = $1', [userId]);
+    if (has.stars) await client.query('DELETE FROM library_item_stars WHERE user_id = $1', [userId]);
+    await client.query(`UPDATE security_events SET metadata = metadata - 'old_email' - 'new_email' WHERE user_id = $1 AND (metadata ? 'old_email' OR metadata ? 'new_email')`, [userId]);
     // 7. Owned agents: each is a subject; erase it, then drop the relation.
     const owned = await client.query('SELECT user_id FROM agent_identities WHERE owner_user_id = $1', [userId]);
     for (const a of owned.rows) {

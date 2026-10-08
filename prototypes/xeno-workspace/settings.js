@@ -34,9 +34,9 @@
 
   // ---------- confirm it's you (step-up): passkey or an authenticator code, then 10 minutes unlocked ----------
   async function stepUp(why) {
-    // the platform has no step-up check yet. This dialog accepts any six digits, so showing it there would be a
-    // pretend security prompt. The server enforces what it enforces; a real re-authentication replaces this.
-    if (ON_PLATFORM) return true;
+    // on the platform the check is real: the server asks for the account's password, or a code it mails, and
+    // remembers the answer for this browser session for ten minutes (platform-account.js, POST /api/account/confirm)
+    if (ON_PLATFORM) return window.XENO_ACCOUNT.confirm(why);
     if (+(sessionStorage.getItem('xw.stepUp') || 0) > now()) return true;
     const a = A(), opts = [...(a.passkeys.length ? [['passkey', 'Use a passkey']] : []), ...(a.totp ? [['totp', 'Authenticator code']] : []), ...(!a.passkeys.length && !a.totp ? [['email', 'Email me a code']] : [])];
     const v = await D().form({ title: 'Confirm it’s you', sub: why, submit: 'Confirm', size: 'sm', fields: [
@@ -132,7 +132,7 @@
     password: () => window.open('https://xenostudio.ai/overview/settings', '_blank', 'noopener'),
     async editProfile() { const a = A(); const v = await D().form({ title: 'Edit profile', submit: 'Save', fields: [{ id: 'name', label: 'Display name', required: true, max: 60, value: a.profile.name }, { id: 'handle', label: 'Handle', required: true, max: 30, value: a.profile.handle, validate: (x) => (/^[a-z0-9][a-z0-9._-]{2,29}$/i.test(x.trim()) ? null : '3–30 letters, numbers, dots, dashes or underscores.') }, { id: 'bio', label: 'Bio', type: 'textarea', rows: 2, max: 160, value: a.profile.bio }] });
       if (v) edit((x) => { Object.assign(x.profile, { name: v.name.trim(), handle: v.handle.trim().toLowerCase(), bio: v.bio }); }, 'Profile saved'); },
-    async changeEmail() { if (!await stepUp('Changing your email signs you out on every other device.')) return; const v = await D().form({ title: 'Change email', sub: 'We send a link to the new address. Your email changes when you open it.', submit: 'Send link', size: 'sm', fields: [{ id: 'e', label: 'New email', required: true, validate: (x) => (/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(x.trim()) ? null : 'Enter an email address.') }] });
+    async changeEmail() { if (ON_PLATFORM) return window.XENO_ACCOUNT.changeEmail(); if (!await stepUp('Changing your email signs you out on every other device.')) return; const v = await D().form({ title: 'Change email', sub: 'We send a link to the new address. Your email changes when you open it.', submit: 'Send link', size: 'sm', fields: [{ id: 'e', label: 'New email', required: true, validate: (x) => (/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(x.trim()) ? null : 'Enter an email address.') }] });
       if (v) edit((x) => { x.profile.pending = v.e.trim(); }, `Link sent to ${v.e.trim()} — your email changes when you open it`); },
     async addPasskey() { if (!await stepUp('Adding a passkey changes how you sign in.')) return; const v = await D().form({ title: 'Add a passkey', sub: 'Your device will ask for your fingerprint, face or PIN.', submit: 'Create passkey', size: 'sm', fields: [{ id: 'n', label: 'Name it', required: true, value: navigator.userAgentData?.platform ? navigator.userAgentData.platform + ' computer' : 'This device', max: 40 }] });
       if (v) edit((x) => { x.passkeys.push({ id: 'pk' + rid(), name: v.n.trim(), added: now(), used: now() }); if (!x.codes) { x.codes = true; x.codesLeft = 10; } }, 'Passkey added'); },

@@ -44,6 +44,17 @@ export const EVENTS = Object.freeze({
   PASSWORD_RESET: 'password_reset',
   PASSWORD_RESET_ADMIN: 'password_reset_admin',
   PASSWORD_CHANGED: 'password_changed',
+  // Account changes made from the signed-in account page. Metadata never carries a code, a key or
+  // a password; an email change records both addresses because that is the fact being audited.
+  ACCOUNT_CONFIRMED: 'account_confirmed',               // "confirm it's you" succeeded
+  ACCOUNT_CONFIRM_FAILED: 'account_confirm_failed',
+  EMAIL_CHANGE_REQUESTED: 'email_change_requested',
+  EMAIL_CHANGED: 'email_changed',
+  SESSIONS_REVOKED_ALL: 'sessions_revoked_all',         // sign out everywhere
+  API_KEY_CREATED: 'api_key_created',
+  API_KEY_REVOKED: 'api_key_revoked',
+  DATA_EXPORT_REQUESTED: 'data_export_requested',
+  DATA_EXPORT_DOWNLOADED: 'data_export_downloaded',
   // OIDC / token lifecycle
   TOKEN_ISSUED: 'token_issued',         // an authorization_code or device grant completed
   TOKEN_REFRESHED: 'token_refreshed',
