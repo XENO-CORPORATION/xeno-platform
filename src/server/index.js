@@ -159,6 +159,7 @@ import { startNotificationEmailSweep } from './services/forumNotifyEmail.js';
 import { startWebhookPushSweep } from './services/forumWebhookPush.js';
 import { startWorkspaceInviteDeliveryWorker } from './services/workspaceInviteDelivery.js';
 import { startWebhookDeliveryWorker } from './services/webhookDelivery.js';
+import { describeRequestError } from './utils/requestErrorLog.js';
 
 // ── Internal-service JSON POST helper (replaces the axios dependency) ──────────
 // Uses the module's existing `fetch` + an AbortController timeout. Returns
@@ -3756,8 +3757,8 @@ app.get('/api/files/watched', databaseMiddleware, authMiddleware, (req, res) => 
 // GLOBAL ERROR HANDLER (must be last middleware)
 // =============================================================================
 app.use((err, req, res, next) => {
-  // Log the full error server-side
-  console.error('[Global Error Handler]', err.stack || err.message || err);
+  // Log the error server-side. A body-parser rejection is logged by kind, never by its body.
+  console.error('[Global Error Handler]', describeRequestError(err));
 
   // SECURITY: Never expose internal error details to clients in production
   const isDev = process.env.NODE_ENV !== 'production';
