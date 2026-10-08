@@ -58,6 +58,22 @@ test('the Redo on a toast restores the older undone change first, then the named
   assert.equal(effects.toasts.at(-1).spec.entryId, b);
 });
 
+test('walkLength counts the named change and every newer one, for an Undo and for a Redo (F-09, F-10)', () => {
+  const { h, store } = make({ 'xw.n': '0' });
+  h.gesture(); store.set('xw.n', '1'); const a = h.record('a', () => store.set('xw.n', '0'));
+  h.gesture(); store.set('xw.n', '2'); const b = h.record('b', () => store.set('xw.n', '1'));
+  h.gesture(); store.set('xw.n', '3'); const c = h.record('c', () => store.set('xw.n', '2'));
+  assert.equal(h.walkLength(c, 'undo'), 1);
+  assert.equal(h.walkLength(b, 'undo'), 2);
+  assert.equal(h.walkLength(a, 'undo'), 3);
+  assert.equal(h.walkLength(999, 'undo'), 0);
+  h.undoThrough(a);
+  assert.equal(h.walkLength(a, 'redo'), 1);
+  assert.equal(h.walkLength(b, 'redo'), 2);
+  assert.equal(h.walkLength(c, 'redo'), 3);
+  assert.equal(h.walkLength(a, 'undo'), 0, 'an undone change is not on the undo stack');
+});
+
 test('the Redo on a toast whose change is not undone says so (F-10)', () => {
   const { h, effects } = make({});
   assert.equal(h.redoThrough(42), false);

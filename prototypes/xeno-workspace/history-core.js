@@ -169,6 +169,8 @@
       canRedo: () => future.length > 0,
       list: () => log.map((e) => ({ ...e })),
       view: () => ({ log: log.slice(), past: past.length, future: future.length, top: past[past.length - 1], action: drawerAction }),
+      // how many changes a toast's Undo (kind 'undo') or Redo (kind 'redo') takes back: the named change and every newer one
+      walkLength(id, kind) { const stack = kind === 'redo' ? future : past; const i = stack.findIndex((e) => e.id === id); return i < 0 ? 0 : stack.length - i; },
       stats: () => ({ past: past.length, future: future.length, log: log.length, inverses: inverses.size }),
     };
   }

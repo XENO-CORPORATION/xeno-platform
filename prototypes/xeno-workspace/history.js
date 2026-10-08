@@ -29,7 +29,7 @@
     area: () => location.hash.split('/')[3] || location.hash.split('/')[1] || 'workspace',
     toast: (msg, spec) => showToast(msg, spec),
     dismiss: (id) => dismiss(id),
-    refresh: () => drawer(true),
+    refresh: () => { drawer(true); walkLabels(); },
     logError: (err) => console.error(err),
   });
   // the reading taken at the start of each user gesture: the state before whatever that gesture is about to do
@@ -41,6 +41,15 @@
   // ---------- the toast stack: several at once, each keeps its own Undo ----------
   function host() { let h = document.getElementById('xw-toasts'); if (!h) { h = document.createElement('div'); h.id = 'xw-toasts'; h.setAttribute('role', 'region'); h.setAttribute('aria-label', 'Notifications'); h.setAttribute('aria-live', 'polite'); document.body.appendChild(h); } return h; }
   function dismiss(id) { document.querySelectorAll(`#xw-toasts [data-hid="${id}"]`).forEach((n) => n.remove()); }
+  // the Undo or Redo on a toast says how many changes it takes back: the named change and every newer one (F-09, F-10)
+  function walkLabels() {
+    document.querySelectorAll('#xw-toasts .xh-toast[data-hid]').forEach((n) => {
+      const kind = n.querySelector('[data-h="undo"]') ? 'undo' : n.querySelector('[data-h="redo"]') ? 'redo' : null;
+      if (!kind) return;
+      const k = core.walkLength(+n.dataset.hid, kind), verb = kind === 'undo' ? 'Undo' : 'Redo';
+      n.querySelector(`[data-h='${kind}']`).textContent = k > 1 ? `${verb} ${k} changes` : verb;
+    });
+  }
   // spec: { entryId } gives a change its own Undo; { redo } gives the Redo of an undone change
   function showToast(msg, spec = {}) {
     const h = host(), n = document.createElement('div'); n.className = 'xh-toast'; n.setAttribute('role', 'status');
@@ -51,7 +60,7 @@
     n.addEventListener('click', (ev) => { const b = ev.target.closest('[data-h]'); if (!b) return; n.remove();
       if (b.dataset.h === 'undo' && spec.undo) core.undoThrough(spec.entryId);
       if (b.dataset.h === 'redo' && spec.redo) core.redoThrough(spec.entryId); });
-    h.appendChild(n); while (h.children.length > SHOW) h.firstElementChild.remove(); arm();
+    h.appendChild(n); while (h.children.length > SHOW) h.firstElementChild.remove(); arm(); walkLabels();
   }
 
   // ---------- the history drawer: every change, yours and your teammates', and you can jump to any of yours ----------

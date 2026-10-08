@@ -78,6 +78,14 @@ await check('F-09 an older toast Undo takes back its change and the newer ones',
   ok(n9 === n0, `F-09 an older toast's Undo takes back its own change as well as the newer ones (live ${n9}, expected ${n0})`);
 });
 
+await check('F-09 the older toast says how many changes its Undo takes back, and the count follows new changes', async () => {
+  await reset(p);
+  const labels = () => p.evaluate(() => [...document.querySelectorAll("#xw-toasts .xh-toast [data-h='undo']")].map((x) => x.textContent.trim()));
+  await trash(p); const one = await labels();
+  await trash(p); const two = await labels();
+  ok(one.join('|') === 'Undo' && two.join('|') === 'Undo 2 changes|Undo', 'F-09 the count follows new changes: one toast says Undo, then the older one says Undo 2 changes (after one ' + JSON.stringify(one) + ', after two ' + JSON.stringify(two) + ')');
+});
+
 await check('F-10 Redo on a toast redoes through the change it names', async () => {
   await reset(p); const n0 = await live(p);
   await trash(p); await trash(p);
