@@ -79,6 +79,7 @@ async function main() {
   const events = async (userId) => (await pool.query('SELECT event_type, metadata FROM security_events WHERE user_id = $1 ORDER BY created_at, id', [userId])).rows;
   const liveSessions = async (userId) => (await pool.query('SELECT id FROM user_sessions WHERE user_id = $1', [userId])).rows.map((r) => r.id);
 
+  const closers = [];
   try {
     // ── nothing sensitive happens before "confirm it's you" ──
     let sec = (await call('GET', '/security', A)).body.security;
@@ -193,30 +194,81 @@ async function main() {
     };
     const made = await portalKey(ada, 'Laptop CLI'); const stored = { key_hash: made.hash };
     const malloryKey = await portalKey(mallory, 'Mallory key');
-    // there is no second creator here: the routes that would make or rename a key do not exist
-    await call('POST', '/confirm', A, { password: 'correct horse' });
-    assert.equal((await call('POST', '/api-keys', A, { name: 'made here' })).status, 404, 'the platform does not make keys; the API portal does');
-    assert.equal((await call('PATCH', `/api-keys/${made.id}`, A, { name: 'renamed here' })).status, 404);
-    assert.equal((await pool.query('SELECT count(*)::int AS c FROM api_keys WHERE user_id = $1', [ada])).rows[0].c, 1);
+    // The API portal, on loopback. It does what the real one does: checks the token is a platform token for a
+    // person, lists that person's keys, and makes a key with BOTH rows, refusing past the plan's limit.
+    const portalSeen = []; let portalDown = false, portalLimit = 100;
+    const fakePortal = http.createServer(async (req, res) => {
+      const send = (status, body) => { res.writeHead(status, { 'content-type': 'application/json' }); res.end(JSON.stringify(body)); };
+      if (portalDown) return send(503, { error: 'down' });
+      let claims; try { claims = jwt.verify(String(req.headers.authorization || '').replace(/^Bearer /, ''), JWT_SECRET, { algorithms: ['HS256'] }); } catch { return send(401, { error: 'Unauthorized' }); }
+      let raw = ''; for await (const chunk of req) raw += chunk;
+      portalSeen.push({ method: req.method, url: req.url, userId: claims.userId, sid: claims.sid || null, life: claims.exp - claims.iat, cookie: req.headers.cookie || null });
+      if (req.url === '/api/keys' && req.method === 'GET') {
+        const rows = (await pool.query(`SELECT ak.id, ak.key_prefix, ak.name, ak.is_active, ak.created_at, ak.last_used_at, ak.expires_at, ak.usage_count FROM api_keys ak WHERE ak.user_id = $1 ORDER BY ak.created_at DESC`, [claims.userId])).rows;
+        return send(200, { keys: rows.map((k) => ({ id: k.id, keyPrefix: k.key_prefix, maskedKey: k.key_prefix + '...', name: k.name, status: k.is_active ? 'ACTIVE' : 'REVOKED', createdAt: k.created_at, lastUsedAt: k.last_used_at, expiresAt: k.expires_at, totalRequests: Number(k.usage_count), projectId: 'p1', projectName: 'Default project', workspaceId: 'w1', workspaceName: 'Personal' })) });
+      }
+      if (req.url === '/api/keys' && req.method === 'POST') {
+        const { name } = JSON.parse(raw || '{}'); if (!name) return send(400, { error: 'Key name is required' });
+        const count = (await pool.query('SELECT count(*)::int AS c FROM api_keys WHERE user_id = $1 AND is_active', [claims.userId])).rows[0].c;
+        if (count >= portalLimit) return send(403, { error: `You've reached the maximum of ${portalLimit} API keys for your FREE plan. Delete an unused key to create a new one.` });
+        const k = await portalKey(claims.userId, name);
+        return send(200, { key: k.secret, id: k.id, name, createdAt: new Date().toISOString(), workspaceId: 'w1', workspaceName: 'Personal', projectId: 'p1', projectName: 'Default project', message: 'Save this key securely. It will not be shown again.' });
+      }
+      return send(404, { error: 'not found' });
+    });
+    await new Promise((resolve) => fakePortal.listen(0, '127.0.0.1', resolve));
+    process.env.XENO_API_PORTAL_URL = `http://127.0.0.1:${fakePortal.address().port}`;
+    closers.push(() => new Promise((resolve) => fakePortal.close(resolve)));
+
+    // the list is the portal's list, asked as this person, with a token that lives a minute
     const listed = (await call('GET', '/api-keys', A)).body.keys;
     assert.equal(listed.length, 1); assert.equal(listed[0].name, 'Laptop CLI'); assert.equal(listed[0].preview, `${made.secret.slice(0, 16)}…`);
+    assert.equal(listed[0].project_name, 'Default project', 'each key says which project it belongs to');
     assert.equal(JSON.stringify(listed).includes(made.secret), false, 'the list never carries the key');
     assert.equal(JSON.stringify(listed).includes(made.hash), false, 'nor its hash');
+    assert.deepEqual([portalSeen[0].userId, portalSeen[0].sid, portalSeen[0].cookie], [ada, adaSid, null], 'the portal is told who is asking and from which session, and never sees a cookie');
+    assert.ok(portalSeen[0].life > 0 && portalSeen[0].life <= 60, `the token sent to the portal lives a minute at most, got ${portalSeen[0].life}s`);
+
+    // making a key: the platform asks for confirmation, the PORTAL makes the key
+    await pool.query('DELETE FROM account_confirmations WHERE user_id = $1', [ada]); portalSeen.length = 0;
+    assert.equal((await call('POST', '/api-keys', A, { name: 'CI' })).body.code, 'confirmation_required');
+    assert.equal(portalSeen.length, 0, 'the portal is not asked before the person has confirmed');
+    await call('POST', '/confirm', A, { password: 'correct horse' });
+    for (const bad of ['', '   ', 'x'.repeat(101), 'two\nlines', 7]) assert.equal((await call('POST', '/api-keys', A, { name: bad })).body.code, 'invalid_name');
+    const minted = await call('POST', '/api-keys', A, { name: '  CI   runner ' });
+    assert.equal(minted.status, 201); assert.equal(minted.headers.get('cache-control'), 'no-store');
+    assert.match(minted.body.secret, /^xeno-[0-9a-f]{48}$/); assert.equal(minted.body.key.name, 'CI runner'); assert.equal(minted.body.key.project_name, 'Default project');
+    const mintedRows = (await pool.query(`SELECT ak.key_hash, eak.legacy_status FROM api_keys ak LEFT JOIN external_api_keys eak ON eak.platform_api_key_id = ak.id WHERE ak.id = $1`, [minted.body.key.id])).rows;
+    assert.equal(mintedRows[0].key_hash, crypto.createHash('sha256').update(minted.body.secret).digest('hex'));
+    assert.equal(mintedRows[0].legacy_status, 'ACTIVE', 'the key has the portal’s project row: it was made by the portal, not by a second creator');
+    assert.equal((await call('GET', '/security', { authorization: `Bearer ${minted.body.secret}`, 'content-type': 'application/json' })).body.security.email, 'ada.new@xeno.test', 'the new key works');
+    assert.equal((await pool.query(`SELECT metadata->>'via' AS via FROM security_events WHERE user_id = $1 AND event_type = 'api_key_created'`, [ada])).rows[0].via, 'api-portal');
+    portalLimit = 2;
+    const keyCapped = await call('POST', '/api-keys', A, { name: 'one too many' });
+    assert.equal(keyCapped.status, 409); assert.equal(keyCapped.body.code, 'key_limit'); assert.match(keyCapped.body.error, /maximum of 2 API keys/, 'the limit and its wording are the portal’s');
+    portalLimit = 100; portalDown = true;
+    const portalOff = await call('POST', '/api-keys', A, { name: 'while down' });
+    assert.equal(portalOff.status, 502); assert.equal(portalOff.body.code, 'keys_unavailable');
+    assert.equal((await call('GET', '/api-keys', A)).status, 502, 'a list the portal cannot give is an error, never an empty list');
+    assert.equal((await pool.query('SELECT count(*)::int AS c FROM api_keys WHERE user_id = $1', [ada])).rows[0].c, 2, 'and no key was made here instead');
+    portalDown = false;
+    assert.equal((await call('PATCH', `/api-keys/${made.id}`, A, { name: 'renamed here' })).status, 404);
+    await call('DELETE', `/api-keys/${minted.body.key.id}`, A);
     // the key signs in as its owner, on the real middleware, and cannot do what needs a person
     const K = { authorization: `Bearer ${made.secret}`, 'content-type': 'application/json' };
     assert.equal((await call('GET', '/security', K)).body.security.email, 'ada.new@xeno.test');
     assert.equal((await call('POST', '/exports', K)).body.code, 'confirmation_unavailable', 'a key cannot do what needs a person');
     assert.equal((await call('POST', '/confirm', K, { password: 'correct horse' })).body.code, 'confirmation_unavailable');
-    assert.equal((await call('GET', '/api-keys', M)).body.keys.length, 1, 'each person sees only their own');
+    assert.deepEqual((await call('GET', '/api-keys', M)).body.keys.map((k) => k.name), ['Mallory key'], 'each person sees only their own');
     assert.equal((await call('DELETE', `/api-keys/${made.id}`, M)).status, 404, 'and cannot revoke another person’s');
     assert.equal((await call('DELETE', `/api-keys/${made.id}`, A)).body.key.revoked, true);
     assert.equal((await call('GET', '/security', K)).status, 401, 'a revoked key stops working at once');
     assert.equal((await pool.query('SELECT legacy_status FROM external_api_keys WHERE platform_api_key_id = $1', [made.id])).rows[0].legacy_status, 'REVOKED', 'the portal’s mirror row is marked too, as the portal’s own revoke does');
     assert.equal((await pool.query('SELECT legacy_status FROM external_api_keys WHERE platform_api_key_id = $1', [malloryKey.id])).rows[0].legacy_status, 'ACTIVE', 'and nobody else’s');
-    assert.equal((await call('GET', '/api-keys', A)).body.keys[0].is_active, false, 'it stays in the list as revoked');
+    assert.ok((await call('GET', '/api-keys', A)).body.keys.every((k) => k.is_active === false && k.revoked === true), 'revoked keys stay in the list as revoked');
     assert.equal((await call('DELETE', '/api-keys/not-an-id', A)).status, 404);
     const keyEvents = (await events(ada)).filter((e) => /^api_key_/.test(e.event_type));
-    assert.deepEqual(keyEvents.map((e) => e.event_type), ['api_key_revoked']);
+    assert.deepEqual(keyEvents.map((e) => e.event_type), ['api_key_created', 'api_key_revoked', 'api_key_revoked']);
     assert.equal(JSON.stringify(keyEvents).includes(made.secret), false, 'the audit record never holds the key');
 
     // ── a copy of your data ──
@@ -329,6 +381,7 @@ async function main() {
   } finally {
     await new Promise((resolve) => server.close(resolve));
     await new Promise((resolve) => fakeResend.close(resolve));
+    for (const close of closers) await close();
     rmSync(uploadDir, { recursive: true, force: true });   // plain directories this test created, holding plain files
     rmSync(exportDir, { recursive: true, force: true });
     await pool.end();
