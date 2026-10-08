@@ -43,4 +43,4 @@ ok(g.name === 'Renamed by Mira' && /someone else/.test(g.toast), `redo after som
 // typing is never hijacked
 await ev(() => { const i = document.createElement('input'); i.id = 'tt'; document.body.appendChild(i); i.focus(); }); const before = await live(); await key('z', ['Control']);
 ok(await live() === before, 'Ctrl Z inside a text field is the field’s own undo, not the workspace’s');
-console.log(fails ? `${fails} FAILED` : 'ALL PASS', '| errors', errs.slice(0, 5)); await b.close();
+console.log(fails ? `${fails} FAILED` : 'ALL PASS', '| errors', errs.slice(0, 5)); await b.close(); process.exitCode = fails ? 1 : 0;

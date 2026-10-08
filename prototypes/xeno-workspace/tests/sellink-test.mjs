@@ -40,4 +40,4 @@ await clickRow('[data-pg-file]', 3); const fid = await ev(() => document.querySe
 ok(!!fid && (await q()) === 'sel=' + encodeURIComponent(fid), `selecting one file puts it in the address (${await q()})`);
 await p.reload(); await wait(1400);
 ok(await ev(() => document.querySelector('#main [data-pg-file][aria-selected]:not([aria-selected="false"])')?.dataset.pgFile) === fid, 'and a reload opens the Library with that file selected');
-console.log(fails ? `${fails} FAILED` : 'ALL PASS', '| errors', errs.slice(0, 5)); await b.close();
+console.log(fails ? `${fails} FAILED` : 'ALL PASS', '| errors', errs.slice(0, 5)); await b.close(); process.exitCode = fails ? 1 : 0;

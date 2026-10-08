@@ -51,4 +51,4 @@ await clickRow(F, 0); await clickRow(F, 1, ['Control']);
 ok(/2 files selected/.test(await barTxt()) && /Move 2 files to Trash/.test(await barTxt()), `the Library shows the same bar with its own verbs (${(await barTxt()).slice(0, 70)})`);
 await ev(() => [...document.querySelectorAll('#xs-bar button')].find((x) => /Move 2 files to Trash/.test(x.textContent)).click()); await wait(400);
 ok(await ev(() => window.XENO_PG_LIBRARY.items.filter((f) => !f.trashedAt).length) === live0 - 2, 'and acts on both');
-console.log(fails ? `${fails} FAILED` : 'ALL PASS', '| errors', errs.slice(0, 5)); await b.close();
+console.log(fails ? `${fails} FAILED` : 'ALL PASS', '| errors', errs.slice(0, 5)); await b.close(); process.exitCode = fails ? 1 : 0;
