@@ -3624,112 +3624,21 @@ wss.on('connection', (ws, req) => {
 });
 
 // File operation handler
+// SECURITY (2026-10-08): this handler used to run read_file, write_file, delete_file and list_directory on
+// whatever path the client sent, with no containment. Any signed-in account could read, overwrite or delete any
+// file the server process can reach, including its own environment. The operations are removed, not filtered:
+// a path filter on a general file API loses to the next encoding trick. Files are served by /api/filesystem and
+// /api/library, which are scoped to the caller. The message is still answered so an old client gets a clear
+// reason instead of silence. scripts/ws-file-operation.test.mjs fails if a filesystem call returns here.
 async function handleFileOperation(ws, message) {
-  const clientInfo = wsClients.get(ws);
-  if (!clientInfo || !clientInfo.userId) {
-    ws.send(JSON.stringify({
-      type: 'error',
-      message: 'Authentication required'
-    }));
-    return;
-  }
-
-  try {
-    const { operation, filePath, content, data } = message;
-
-    switch (operation) {
-      case 'read_file':
-        if (fs.existsSync(filePath)) {
-          const fileContent = fs.readFileSync(filePath, 'utf8');
-          ws.send(JSON.stringify({
-            type: 'file_content',
-            filePath: filePath,
-            content: fileContent
-          }));
-        } else {
-          ws.send(JSON.stringify({
-            type: 'error',
-            message: 'File not found'
-          }));
-        }
-        break;
-
-      case 'write_file':
-        // Ensure directory exists
-        const dir = path.dirname(filePath);
-        if (!fs.existsSync(dir)) {
-          fs.mkdirSync(dir, { recursive: true });
-        }
-        fs.writeFileSync(filePath, content || '');
-        ws.send(JSON.stringify({
-          type: 'file_operation_success',
-          operation: 'write_file',
-          filePath: filePath
-        }));
-        // Broadcast file change to other clients
-        broadcastFileChange(filePath, 'write', clientInfo.userId);
-        break;
-
-      case 'delete_file':
-        if (fs.existsSync(filePath)) {
-          fs.unlinkSync(filePath);
-          ws.send(JSON.stringify({
-            type: 'file_operation_success',
-            operation: 'delete_file',
-            filePath: filePath
-          }));
-          // Broadcast file change to other clients
-          broadcastFileChange(filePath, 'delete', clientInfo.userId);
-        } else {
-          ws.send(JSON.stringify({
-            type: 'error',
-            message: 'File not found'
-          }));
-        }
-        break;
-
-      case 'list_directory':
-        if (fs.existsSync(filePath)) {
-          const items = fs.readdirSync(filePath).map(item => {
-            const itemPath = path.join(filePath, item);
-            const stats = fs.statSync(itemPath);
-            return {
-              name: item,
-              path: itemPath,
-              type: stats.isDirectory() ? 'directory' : 'file',
-              size: stats.size,
-              modified: stats.mtime
-            };
-          });
-          ws.send(JSON.stringify({
-            type: 'directory_listing',
-            directory: filePath,
-            items: items
-          }));
-        } else {
-          ws.send(JSON.stringify({
-            type: 'error',
-            message: 'Directory not found'
-          }));
-        }
-        break;
-
-      default:
-        ws.send(JSON.stringify({
-          type: 'error',
-          message: 'Unknown file operation'
-        }));
-    }
-  } catch (error) {
-    console.error('File operation error:', error);
-    ws.send(JSON.stringify({
-      type: 'error',
-      message: 'File operation failed'
-    }));
-  }
+  ws.send(JSON.stringify({
+    type: 'error',
+    code: 'file_operation_removed',
+    operation: typeof message?.operation === 'string' ? message.operation.slice(0, 40) : undefined,
+    message: 'File operations over this connection are not available.'
+  }));
 }
 
-// Broadcast file changes to authenticated clients
 function broadcastFileChange(filePath, changeType, userId) {
   const message = {
     type: 'file_change',
