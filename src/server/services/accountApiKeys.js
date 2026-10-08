@@ -1,28 +1,19 @@
 /**
- * Personal API keys: the keys a person makes for their own account, for the CLI and their scripts.
+ * A person's API keys, as the account page shows them: list, and revoke.
  *
- * They live in the same `api_keys` table every XENO service already authenticates against
- * (middleware/auth.js resolveApiKeyUser, and the gateway's own lookup), in the same at-rest form:
- * the first 16 characters as a prefix, plus sha256 of the whole key. Nothing here changes how a
- * key is checked; this only lets a person make, see, rename and revoke their own.
+ * Keys are MADE in one place only: the XENO API portal (api.xenosystem.ai, repo xeno-api-platform,
+ * portal/lib/platform-billing.ts createCanonicalApiKeyForLocalUser). It writes the `api_keys` row and
+ * the `external_api_keys` row that ties the key to a billing project, whose policy and limits the
+ * gateway applies, and it owns the per-tier key limit. A second creator here would make keys with no
+ * project and different limits, so this module has none. The account page links to the portal.
  *
- * - The key is shown once, when it is made. Only its hash is stored, so a lost key is replaced,
- *   never recovered.
- * - A person's own keys only. An agent's keys belong to the agent's own user row and are managed
- *   at /api/v2/agents, so they never appear here.
- * - Revoking keeps the row (is_active = false) so usage records still name the key they came from.
+ * Reading the list and revoking are safe to share: both act on the same rows the portal reads.
+ * Revoking sets `is_active = false` (the gateway and middleware/auth.js stop accepting the key at once)
+ * and marks the portal's mirror row, exactly as the portal's own revoke does.
+ *
+ * An agent's keys belong to the agent's own user row (/api/v2/agents) and never appear here.
  */
-import crypto from 'crypto';
-
-export const MAX_ACTIVE_KEYS = 20;
-export const EXPIRY_DAYS = Object.freeze([null, 30, 90, 365]);
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-
-export function cleanKeyName(value) {
-  if (typeof value !== 'string' || /[\u0000-\u001f\u007f]/.test(value)) return null;
-  const name = value.normalize('NFC').replace(/\s+/g, ' ').trim();
-  return name && name.length <= 100 ? name : null;
-}
 
 const view = (row) => ({
   id: row.id,
@@ -44,49 +35,22 @@ export async function listApiKeys(db, userId) {
   return rows.map(view);
 }
 
-export async function createApiKey(db, { userId, name, expiresInDays = null }) {
-  const clean = cleanKeyName(name);
-  if (!clean) return { invalid: true, code: 'invalid_name' };
-  const days = expiresInDays == null ? null : Number(expiresInDays);
-  if (!EXPIRY_DAYS.includes(days)) return { invalid: true, code: 'invalid_expiry' };
+export async function revokeApiKey(db, { userId, keyId }) {
+  if (!UUID_RE.test(String(keyId))) return { notFound: true };
   const client = typeof db.connect === 'function' ? await db.connect() : db;
   try {
     await client.query('BEGIN');
-    // Lock the account row so two requests cannot both pass the count.
-    await client.query('SELECT id FROM users WHERE id = $1 FOR UPDATE', [userId]);
-    const active = await client.query(
-      `SELECT count(*)::int AS n FROM api_keys WHERE user_id = $1 AND is_active = TRUE AND (expires_at IS NULL OR expires_at > NOW())`,
-      [userId],
-    );
-    if (active.rows[0].n >= MAX_ACTIVE_KEYS) { await client.query('ROLLBACK'); return { conflict: true, code: 'too_many_keys', limit: MAX_ACTIVE_KEYS }; }
-    // The canonical form the gateway mints: `xeno-` + 48 hex characters (192 bits).
-    const raw = `xeno-${crypto.randomBytes(24).toString('hex')}`;
-    const { rows } = await client.query(
-      `INSERT INTO api_keys (user_id, key_prefix, key_hash, name, is_active, expires_at)
-       VALUES ($1, $2, $3, $4, TRUE, CASE WHEN $5::int IS NULL THEN NULL ELSE NOW() + make_interval(days => $5::int) END)
-       RETURNING ${COLUMNS}`,
-      [userId, raw.slice(0, 16), crypto.createHash('sha256').update(raw).digest('hex'), clean, days],
-    );
+    const { rows } = await client.query(`UPDATE api_keys SET is_active = FALSE WHERE id = $1 AND user_id = $2 RETURNING ${COLUMNS}`, [keyId, userId]);
+    if (!rows[0]) { await client.query('ROLLBACK'); return { notFound: true }; }
+    // the portal's mirror of this key, when it has one (a key made before the portal existed has none)
+    const mirror = await client.query("SELECT to_regclass('public.external_api_keys') IS NOT NULL AS present");
+    if (mirror.rows[0].present) await client.query("UPDATE external_api_keys SET legacy_status = 'REVOKED', updated_at = NOW() WHERE platform_api_key_id = $1", [keyId]);
     await client.query('COMMIT');
-    return { ok: true, key: view(rows[0]), secret: raw };
+    return { ok: true, key: view(rows[0]) };
   } catch (error) {
     await client.query('ROLLBACK').catch(() => {});
     throw error;
   } finally {
     if (client !== db) client.release();
   }
-}
-
-export async function renameApiKey(db, { userId, keyId, name }) {
-  if (!UUID_RE.test(String(keyId))) return { notFound: true };
-  const clean = cleanKeyName(name);
-  if (!clean) return { invalid: true, code: 'invalid_name' };
-  const { rows } = await db.query(`UPDATE api_keys SET name = $3 WHERE id = $1 AND user_id = $2 RETURNING ${COLUMNS}`, [keyId, userId, clean]);
-  return rows[0] ? { ok: true, key: view(rows[0]) } : { notFound: true };
-}
-
-export async function revokeApiKey(db, { userId, keyId }) {
-  if (!UUID_RE.test(String(keyId))) return { notFound: true };
-  const { rows } = await db.query(`UPDATE api_keys SET is_active = FALSE WHERE id = $1 AND user_id = $2 RETURNING ${COLUMNS}`, [keyId, userId]);
-  return rows[0] ? { ok: true, key: view(rows[0]) } : { notFound: true };
 }

@@ -43,7 +43,6 @@ const { default: accountRoutes } = await import('../routes/accountRoutes.js');
 const { runAllMigrations } = await import('../services/migrationRunner.js');
 const { registerManagedLibraryFile } = await import('../services/libraryAssets.js');
 const { CODE_MAX_ATTEMPTS, PASSWORD_MAX_FAILURES } = await import('../services/accountConfirmation.js');
-const { MAX_ACTIVE_KEYS } = await import('../services/accountApiKeys.js');
 const { EXPORTS_PER_DAY, sweepExports } = await import('../services/accountExport.js');
 
 const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL });
@@ -84,7 +83,7 @@ async function main() {
     // ── nothing sensitive happens before "confirm it's you" ──
     let sec = (await call('GET', '/security', A)).body.security;
     assert.deepEqual(sec.methods, ['password']); assert.equal(sec.has_password, true); assert.equal(sec.confirmation.confirmed, false); assert.equal(sec.email, 'ada@xeno.test');
-    for (const [method, url, body] of [['POST', '/email', { new_email: 'ada2@xeno.test' }], ['POST', '/api-keys', { name: 'laptop' }], ['POST', '/exports', null]]) {
+    for (const [method, url, body] of [['POST', '/email', { new_email: 'ada2@xeno.test' }], ['POST', '/exports', null]]) {
       const refused = await call(method, url, A, body);
       assert.equal(refused.status, 403, `${method} ${url} before confirming`); assert.equal(refused.body.code, 'confirmation_required');
     }
@@ -93,7 +92,7 @@ async function main() {
     // a caller with no browser session (an API key, a bare token) can never confirm
     const bare = await call('POST', '/confirm', ANOSESSION, { password: 'correct horse' });
     assert.equal(bare.status, 403); assert.equal(bare.body.code, 'confirmation_unavailable');
-    assert.equal((await call('POST', '/api-keys', ANOSESSION, { name: 'x' })).body.code, 'confirmation_unavailable');
+    assert.equal((await call('POST', '/exports', ANOSESSION)).body.code, 'confirmation_unavailable');
 
     // wrong password: refused, counted, and the step locks before the account can be guessed
     const wrong = await call('POST', '/confirm', A, { password: 'nope' });
@@ -109,7 +108,7 @@ async function main() {
     assert.ok(minutes > 9 && minutes <= 10.1, `confirmed for ten minutes, got ${minutes}`);
     assert.equal((await call('GET', '/security', A)).body.security.confirmation.confirmed, true);
     assert.equal((await call('GET', '/security', APHONE)).body.security.confirmation.confirmed, false, 'confirming on one device says nothing about another');
-    assert.equal((await call('POST', '/api-keys', APHONE, { name: 'x' })).body.code, 'confirmation_required');
+    assert.equal((await call('POST', '/exports', APHONE)).body.code, 'confirmation_required');
     assert.equal((await call('POST', '/confirm', M, { password: 'correct horse' })).body.code, 'wrong_password', 'someone else’s password confirms nothing');
 
     // ── an account with no password confirms with a code sent to its address ──
@@ -165,7 +164,7 @@ async function main() {
     const notice = lastMailTo('ada@xeno.test');
     assert.ok(notice && /was changed/.test(notice.subject), 'the OLD address is told');
     assert.ok(/a\*+@xeno\.test/.test(notice.html) && !notice.html.includes('ada.new@xeno.test'), 'the notice masks the new address');
-    assert.equal((await call('POST', '/api-keys', A, { name: 'x' })).body.code, 'confirmation_required', 'the confirmation is spent by the change');
+    assert.equal((await call('POST', '/exports', A)).body.code, 'confirmation_required', 'the confirmation is spent by the change');
     const changeEvent = (await events(ada)).find((e) => e.event_type === 'email_changed');
     assert.deepEqual([changeEvent.metadata.old_email, changeEvent.metadata.new_email], ['ada@xeno.test', 'ada.new@xeno.test']);
     // a pending change can be dropped, and then its code is worthless
@@ -183,40 +182,42 @@ async function main() {
     const raced = await call('POST', '/email/confirm', A, { code: raceCode });
     assert.equal(raced.status, 409); assert.equal((await pool.query('SELECT email FROM users WHERE id = $1', [ada])).rows[0].email, 'ada.new@xeno.test');
 
-    // ── personal API keys ──
+    // ── API keys: made on the API portal, listed and revoked here ──
+    // The portal writes two rows for a key (xeno-api-platform portal/lib/platform-billing.ts): the key itself,
+    // and a mirror row that ties it to a billing project. This is that write, so the test acts on real shapes.
+    const portalKey = async (userId, name) => {
+      const secret = `xeno-${crypto.randomBytes(24).toString('hex')}`;
+      const id = (await pool.query(`INSERT INTO api_keys (user_id, key_prefix, key_hash, name, rate_limit_per_minute, rate_limit_per_day, is_active) VALUES ($1, $2, $3, $4, 120, 100000, TRUE) RETURNING id`, [userId, secret.slice(0, 16), crypto.createHash('sha256').update(secret).digest('hex'), name])).rows[0].id;
+      await pool.query(`INSERT INTO external_api_keys (source_system, external_key_id, platform_api_key_id, legacy_status) VALUES ('xeno_private_api', $1, $2, 'ACTIVE')`, [`portal:${crypto.randomUUID()}`, id]);
+      return { id, secret, hash: crypto.createHash('sha256').update(secret).digest('hex') };
+    };
+    const made = await portalKey(ada, 'Laptop CLI'); const stored = { key_hash: made.hash };
+    const malloryKey = await portalKey(mallory, 'Mallory key');
+    // there is no second creator here: the routes that would make or rename a key do not exist
     await call('POST', '/confirm', A, { password: 'correct horse' });
-    for (const [body, code] of [[{ name: '' }, 'invalid_name'], [{ name: 'x'.repeat(101) }, 'invalid_name'], [{ name: 'ok', expires_in_days: 7 }, 'invalid_expiry'], [{}, 'invalid_name']]) {
-      assert.equal((await call('POST', '/api-keys', A, body)).body.code, code);
-    }
-    const made = await call('POST', '/api-keys', A, { name: '  Laptop   CLI ', expires_in_days: 90 });
-    assert.equal(made.status, 201); assert.equal(made.headers.get('cache-control'), 'no-store');
-    assert.match(made.body.secret, /^xeno-[0-9a-f]{48}$/, 'the key is shown once, in the canonical form');
-    assert.equal(made.body.key.name, 'Laptop CLI');
-    const days = (new Date(made.body.key.expires_at) - Date.now()) / 86400000; assert.ok(Math.abs(days - 90) < 0.1);
-    const stored = (await pool.query('SELECT key_prefix, key_hash FROM api_keys WHERE id = $1', [made.body.key.id])).rows[0];
-    assert.equal(stored.key_hash, crypto.createHash('sha256').update(made.body.secret).digest('hex')); assert.equal(stored.key_prefix, made.body.secret.slice(0, 16));
+    assert.equal((await call('POST', '/api-keys', A, { name: 'made here' })).status, 404, 'the platform does not make keys; the API portal does');
+    assert.equal((await call('PATCH', `/api-keys/${made.id}`, A, { name: 'renamed here' })).status, 404);
+    assert.equal((await pool.query('SELECT count(*)::int AS c FROM api_keys WHERE user_id = $1', [ada])).rows[0].c, 1);
     const listed = (await call('GET', '/api-keys', A)).body.keys;
-    assert.equal(listed.length, 1); assert.equal(JSON.stringify(listed).includes(made.body.secret), false, 'the list never carries the key');
-    assert.equal(JSON.stringify(listed).includes(stored.key_hash), false);
+    assert.equal(listed.length, 1); assert.equal(listed[0].name, 'Laptop CLI'); assert.equal(listed[0].preview, `${made.secret.slice(0, 16)}…`);
+    assert.equal(JSON.stringify(listed).includes(made.secret), false, 'the list never carries the key');
+    assert.equal(JSON.stringify(listed).includes(made.hash), false, 'nor its hash');
     // the key signs in as its owner, on the real middleware, and cannot do what needs a person
-    const K = { authorization: `Bearer ${made.body.secret}`, 'content-type': 'application/json' };
+    const K = { authorization: `Bearer ${made.secret}`, 'content-type': 'application/json' };
     assert.equal((await call('GET', '/security', K)).body.security.email, 'ada.new@xeno.test');
-    assert.equal((await call('POST', '/api-keys', K, { name: 'self-made' })).body.code, 'confirmation_unavailable', 'a key cannot mint a key');
+    assert.equal((await call('POST', '/exports', K)).body.code, 'confirmation_unavailable', 'a key cannot do what needs a person');
     assert.equal((await call('POST', '/confirm', K, { password: 'correct horse' })).body.code, 'confirmation_unavailable');
-    assert.equal((await call('GET', '/api-keys', M)).body.keys.length, 0, 'nobody else sees it');
-    assert.equal((await call('PATCH', `/api-keys/${made.body.key.id}`, M, { name: 'mine now' })).status, 404);
-    assert.equal((await call('DELETE', `/api-keys/${made.body.key.id}`, M)).status, 404);
-    assert.equal((await call('PATCH', `/api-keys/${made.body.key.id}`, A, { name: 'Work laptop' })).body.key.name, 'Work laptop');
-    assert.equal((await call('DELETE', `/api-keys/${made.body.key.id}`, A)).body.key.revoked, true);
+    assert.equal((await call('GET', '/api-keys', M)).body.keys.length, 1, 'each person sees only their own');
+    assert.equal((await call('DELETE', `/api-keys/${made.id}`, M)).status, 404, 'and cannot revoke another person’s');
+    assert.equal((await call('DELETE', `/api-keys/${made.id}`, A)).body.key.revoked, true);
     assert.equal((await call('GET', '/security', K)).status, 401, 'a revoked key stops working at once');
-    assert.equal((await call('GET', '/api-keys', A)).body.keys[0].is_active, false, 'and stays in the list as revoked');
+    assert.equal((await pool.query('SELECT legacy_status FROM external_api_keys WHERE platform_api_key_id = $1', [made.id])).rows[0].legacy_status, 'REVOKED', 'the portal’s mirror row is marked too, as the portal’s own revoke does');
+    assert.equal((await pool.query('SELECT legacy_status FROM external_api_keys WHERE platform_api_key_id = $1', [malloryKey.id])).rows[0].legacy_status, 'ACTIVE', 'and nobody else’s');
+    assert.equal((await call('GET', '/api-keys', A)).body.keys[0].is_active, false, 'it stays in the list as revoked');
     assert.equal((await call('DELETE', '/api-keys/not-an-id', A)).status, 404);
-    await pool.query(`INSERT INTO api_keys (user_id, key_prefix, key_hash, name, is_active) SELECT $1, 'xeno-fill' || lpad(g::text, 7, '0'), md5(g::text), 'fill ' || g, TRUE FROM generate_series(1, $2::int) g`, [ada, MAX_ACTIVE_KEYS]);
-    const full = await call('POST', '/api-keys', A, { name: 'one too many' });
-    assert.equal(full.status, 409); assert.equal(full.body.code, 'too_many_keys');
     const keyEvents = (await events(ada)).filter((e) => /^api_key_/.test(e.event_type));
-    assert.deepEqual(keyEvents.map((e) => e.event_type), ['api_key_created', 'api_key_revoked']);
-    assert.equal(JSON.stringify(keyEvents).includes(made.body.secret), false, 'the audit record never holds the key');
+    assert.deepEqual(keyEvents.map((e) => e.event_type), ['api_key_revoked']);
+    assert.equal(JSON.stringify(keyEvents).includes(made.secret), false, 'the audit record never holds the key');
 
     // ── a copy of your data ──
     const projectId = (await pool.query(`INSERT INTO chat_projects (owner_user_id, created_by_user_id, name) VALUES ($1, $1, 'Analytical Engine') RETURNING id`, [ada])).rows[0].id;
@@ -266,7 +267,7 @@ async function main() {
     const fileEntry = names.find((n) => n.startsWith('xeno-data/library/files/') && n.endsWith('Notes on the engine.txt'));
     assert.equal(entries[fileEntry], 'the stored bytes of notes', 'the copy holds the file itself');
     const whole = Object.values(entries).join('\n');
-    for (const secret of ['password_hash', 'key_hash', 'token_hash', stored.key_hash, made.body.secret, 'mallory-secret-text', 'mallory-file-bytes', 'Mallory private plans', 'mallory@xeno.test']) {
+    for (const secret of ['password_hash', 'key_hash', 'token_hash', stored.key_hash, made.secret, 'mallory-secret-text', 'mallory-file-bytes', 'Mallory private plans', 'mallory@xeno.test']) {
       assert.equal(whole.includes(secret), false, `the copy must not contain ${secret.slice(0, 24)}`);
     }
     assert.ok(/data_export_requested/.test(JSON.stringify(await events(ada))) && /data_export_downloaded/.test(JSON.stringify(await events(ada))));

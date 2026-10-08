@@ -35,9 +35,8 @@ function accountSecurity(m, p, body) {
   if (p === '/api/account/email/confirm' && m === 'POST') { if (!db.pending || body.code !== db.pending.code) return json(400, { success: false, error: 'That code isn’t right', code: 'wrong_code', remaining: 4 }); db.user.email = db.pending.email; db.pending = null; db.confirmed = false; db.sessions = db.sessions.filter((s) => s.current); return json(200, { success: true, email: db.user.email, other_sessions_signed_out: true }); }
   if (p === '/api/account/sessions' && m === 'DELETE') { const n = db.sessions.filter((s) => !s.current).length; db.sessions = db.sessions.filter((s) => s.current); return json(200, { success: true, revoked_sessions: n, apps_signed_out: true, signed_out: false }); }
   if (p === '/api/account/api-keys' && m === 'GET') return json(200, { success: true, keys: db.keys.map(({ secret: _s, ...k }) => k) });
-  if (p === '/api/account/api-keys' && m === 'POST') { const no = need(); if (no) return no; if (!String(body.name || '').trim()) return json(400, { success: false, error: 'Give the key a name of up to 100 characters', code: 'invalid_name' }); const n = db.nextKey++; const secret = 'xeno-' + String(n).repeat(48).slice(0, 48); const key = { id: 'k' + n, name: body.name.trim(), preview: secret.slice(0, 16) + '…', is_active: true, revoked: false, expired: false, created_at: new Date().toISOString(), expires_at: body.expires_in_days ? new Date(Date.now() + body.expires_in_days * 864e5).toISOString() : null, last_used_at: null, usage_count: 0, secret }; db.keys.unshift(key); const { secret: _s, ...view } = key; return json(201, { success: true, key: view, secret }); }
   const key = p.match(/^\/api\/account\/api-keys\/([^/]+)$/);
-  if (key) { const k = db.keys.find((x) => x.id === decodeURIComponent(key[1])); if (!k) return json(404, { success: false, error: 'API key not found', code: 'not_found' }); if (m === 'PATCH') { k.name = String(body.name).trim(); return json(200, { success: true, key: k }); } if (m === 'DELETE') { k.is_active = false; k.revoked = true; return json(200, { success: true, key: k }); } }
+  if (key) { const k = db.keys.find((x) => x.id === decodeURIComponent(key[1])); if (!k) return json(404, { success: false, error: 'API key not found', code: 'not_found' }); if (m === 'DELETE') { k.is_active = false; k.revoked = true; return json(200, { success: true, key: k }); } }
   if (p === '/api/account/exports' && m === 'GET') { for (const x of db.exports) if (x.status === 'building' && Date.now() - x.t > 900) Object.assign(x, { status: 'ready', ready_at: new Date().toISOString(), expires_at: new Date(Date.now() + 7 * 864e5).toISOString(), size_bytes: 2400000, summary: { errors: [], skipped_files: [] } }); return json(200, { success: true, exports: db.exports.map(({ t: _t, ...x }) => x) }); }
   if (p === '/api/account/exports' && m === 'POST') { const no = need(); if (no) return no; if (db.exports.some((x) => x.status === 'building')) return json(409, { success: false, error: 'A copy is already being made', code: 'export_in_progress' }); const x = { id: 'e' + (db.exports.length + 1), status: 'building', requested_at: new Date().toISOString(), ready_at: null, expires_at: null, size_bytes: null, summary: {}, t: Date.now() }; db.exports.unshift(x); return json(202, { success: true, export: x }); }
   const exp = p.match(/^\/api\/account\/exports\/([^/]+)$/);
@@ -140,26 +139,14 @@ try {
   const closeAll = async () => { for (let i = 0; i < 4 && await dialog(); i++) { await p.evaluate(() => [...document.querySelectorAll('.xd')].pop().querySelector('[data-xd-close]')?.click()); await wait(250); } };
   const sent = (m, re) => db.calls.filter((c) => c.m === m && re.test(c.p));
 
-  // ---- confirm it's you, then a new API key ----
+  // ---- API keys: listed and revoked here, made on the API portal ----
+  db.keys = [{ id: 'k1', name: 'Work laptop', preview: 'xeno-1111111111a…', is_active: true, revoked: false, expired: false, created_at: new Date().toISOString(), expires_at: null, last_used_at: null, usage_count: 0 }];
+  await p.evaluate(() => window.XENO_ACCOUNT.load()); await wait(400);
   await open('API keys'); t = await text();
-  ok(/No keys/.test(t) && /New API key/.test(t), 'API keys is a real section, empty for a new account');
-  db.calls.length = 0; await p.click('.pg--set [data-acct="newKey"]'); await wait(500);
-  let d = await dialog();
-  ok(/Confirm it’s you/.test(d) && /An API key can act as you/.test(d) && sent('POST', /api-keys$/).length === 0, 'making a key asks to confirm it’s you first, before anything is sent');
-  ok(await p.evaluate(() => [...document.querySelectorAll('.xd')].pop().querySelector('input').type === 'password'), 'the password is typed into a password field');
-  await type('wrong horse'); await submit(); d = await dialog();
-  ok(/That password isn’t right/.test(d) && /4 tries left/.test(d) && /Confirm it’s you/.test(d), 'a wrong password is refused in the dialog, with the tries left (' + d.replace(/\s+/g, ' ').slice(-70) + ')');
-  await type('correct horse'); await submit(); d = await dialog();
-  ok(/New API key/.test(d) && db.confirmed === true, 'the right password opens the key form');
-  await type('Laptop CLI'); await submit(); d = await dialog();
-  const made = db.keys[0];
-  ok(/Copy your new key/.test(d) && d.includes(made.secret) && /only time/.test(d), 'the new key is shown once, to copy');
-  await closeAll(); t = await text();
-  ok(/Laptop CLI/.test(t) && t.includes(made.preview) && !t.includes(made.secret) && /never used/.test(t), 'afterwards the page shows its name and fingerprint, never the key');
-  ok(!(await p.evaluate(() => JSON.stringify(localStorage))).includes(made.secret), 'the key is not kept in the browser');
-
-  db.calls.length = 0; await p.click('.pg--set [data-acct="renameKey"]'); await wait(400); await type('Work laptop'); await submit(); await settle();
-  ok(sent('PATCH', /api-keys\/k1$/).length === 1 && /Work laptop/.test(await text()), 'renaming a key renames it on the platform');
+  ok(/Work laptop/.test(t) && /xeno-1111111111a…/.test(t) && /never used/.test(t), 'API keys lists the real keys by name and fingerprint');
+  const portal = await p.evaluate(() => { const a = document.querySelector('.pg--set a[href*="/dashboard/keys"]'); return a ? { href: a.href, target: a.target, rel: a.rel } : null; });
+  ok(!!portal && portal.href === 'https://api.xenosystem.ai/dashboard/keys' && portal.target === '_blank' && /noopener/.test(portal.rel), 'making a key is a link to the API portal (' + JSON.stringify(portal) + ')');
+  ok(!(await p.evaluate(() => !!document.querySelector('.pg--set [data-acct="newKey"], .pg--set [data-acct="renameKey"]'))) && /made on the XENO API portal/.test(t), 'the page offers no second way to make a key, and says where keys are made');
   db.calls.length = 0; await p.click('.pg--set [data-acct="revokeKey"]'); await wait(400);
   ok(/Revoke “Work laptop”\?/.test(await dialog()) && sent('DELETE', /api-keys/).length === 0, 'revoking asks first');
   await confirmYes(); await settle(); t = await text();
@@ -168,8 +155,14 @@ try {
   // ---- a copy of your data ----
   await open('Your data'); t = await text();
   ok(/Request a copy/.test(t) && /one archive/.test(t), 'Your data offers a copy');
-  db.calls.length = 0; await p.click('.pg--set [data-acct="export"]'); await settle(); t = await text();
-  ok(sent('POST', /exports$/).length === 1 && /Preparing/.test(t), 'asking for a copy starts it, with no second confirmation inside ten minutes');
+  db.calls.length = 0; await p.click('.pg--set [data-acct="export"]'); await wait(500);
+  let d = await dialog();
+  ok(/Confirm it’s you/.test(d) && /everything in your account/.test(d) && sent('POST', /exports$/).length === 0, 'asking for a copy asks to confirm it’s you first, before anything is sent');
+  ok(await p.evaluate(() => [...document.querySelectorAll('.xd')].pop().querySelector('input').type === 'password'), 'the password is typed into a password field');
+  await type('wrong horse'); await submit(); d = await dialog();
+  ok(/That password isn’t right/.test(d) && /4 tries left/.test(d) && /Confirm it’s you/.test(d), 'a wrong password is refused in the dialog, with the tries left (' + d.replace(/\s+/g, ' ').slice(-70) + ')');
+  await type('correct horse'); await submit(); await settle(); t = await text();
+  ok(db.confirmed === true && sent('POST', /exports$/).length === 1 && /Preparing/.test(t), 'the right password confirms, and the copy starts');
   await wait(5200); t = await text();
   const link = await p.evaluate(() => document.querySelector('.pg--set a[download]')?.getAttribute('href') || '');
   ok(/Download \(2\.4 MB\)/.test(t) && link === '/api/account/exports/e1/download' && /kept until/.test(t), 'when it is ready the page shows a real download link, its size and how long it is kept');
@@ -199,11 +192,12 @@ try {
 
   // ---- an account with no password confirms with a mailed code ----
   db.hasPassword = false; db.confirmed = false; db.pending = null; db.calls.length = 0;
-  await open('API keys'); await p.click('.pg--set [data-acct="newKey"]'); await wait(600); d = await dialog();
+  db.exports = []; await p.evaluate(() => window.XENO_ACCOUNT.load()); await wait(300);
+  await open('Your data'); await p.click('.pg--set [data-acct="export"]'); await wait(600); d = await dialog();
   ok(sent('POST', /confirm\/code$/).length === 1 && /We sent a 6-digit code to a\*\*@example\.test/.test(d), 'an account with no password is sent a code instead, and told where');
   ok(await p.evaluate(() => [...document.querySelectorAll('.xd')].pop().querySelector('input').type !== 'password'), 'and types it into a plain field');
   await type('424242'); await submit();
-  ok(/New API key/.test(await dialog()) && db.confirmed === true, 'the mailed code confirms it');
+  await settle(); ok(db.confirmed === true && !(await dialog()), 'the mailed code confirms it');
   await closeAll(); db.hasPassword = true;
 
   // any settings action that asks to confirm goes to the server, never to a dialog that accepts anything
