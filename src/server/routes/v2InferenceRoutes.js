@@ -25,11 +25,11 @@ import {
   SUPPORTED_PROVIDERS, DEFAULT_SURFACE, byokEnabled,
   createCredential, listCredentials, revokeCredential, deleteCredential,
   setRoute, clearRoute, listRoutes, listProducts, resolveInferenceRoute,
-  setCredentialModels,
+  setCredentialModels, discoverCredentialModels,
 } from '../services/providerCredentials.js';
 import { attachManagedGrant } from '../services/inferenceGrants.js';
 import { recordSecurityEventTransactional, EVENTS } from '../services/securityEvents.js';
-import { credentialProbeLimiter } from '../middleware/rateLimiter.js';
+import { credentialProbeLimiter, credentialModelDiscoveryLimiter } from '../middleware/rateLimiter.js';
 
 /**
  * Run a credential-lifecycle op and its audit row in ONE transaction.
@@ -126,6 +126,18 @@ router.post('/credentials', credentialProbeLimiter, async (req, res) => {
  * Body: { models: string[] | null }   200 { credential: { id, provider, label, models } }
  * 400 models_invalid · 404 credential_not_found
  */
+// Free GET only; never dispatch generation to discover models.
+router.get('/credentials/:id/models', credentialModelDiscoveryLimiter, async (req, res) => {
+  if (!byokEnabled()) return res.status(503).json({ error: { code: 'byok_disabled', message: 'Provider keys are not enabled' } });
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(req.params.id)) {
+    return res.status(400).json({ error: { code: 'credential_id_invalid', message: 'Invalid provider key identifier' } });
+  }
+  try {
+    res.setHeader('Cache-Control', 'no-store');
+    res.json(await discoverCredentialModels(req.db, req.user.id, req.params.id));
+  } catch (e) { sendError(res, e); }
+});
+
 router.put('/credentials/:id/models', async (req, res) => {
   try {
     const models = req.body && Object.prototype.hasOwnProperty.call(req.body, 'models') ? req.body.models : undefined;

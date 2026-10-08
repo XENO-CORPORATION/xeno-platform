@@ -190,6 +190,17 @@ export const credentialProbeLimiter = rateLimit({
   keyGenerator: (req) => (req.user?.id ? `cred-probe:user:${req.user.id}` : `cred-probe:ip:${normalizeIp(req)}`),
 });
 
+// Free catalog discovery has its own account budget and cannot consume key-save attempts.
+export const credentialModelDiscoveryLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 30,
+  standardHeaders: true,
+  legacyHeaders: false,
+  validate: { ip: false },
+  message: { error: { code: 'rate_limited', message: 'Too many model refreshes. Please try again later.' }, retryAfter: 900 },
+  keyGenerator: (req) => req.user?.id ? `cred-models:user:${req.user.id}` : `cred-models:ip:${normalizeIp(req)}`,
+});
+
 // --------------------------------------------------------------------------
 // 2. LLM / AI generation rate limiter — per-user (by JWT userId)
 // --------------------------------------------------------------------------
