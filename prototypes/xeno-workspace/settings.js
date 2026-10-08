@@ -24,13 +24,19 @@
     region: { lang: 'en', region: (navigator.language || 'en-GB').split('-')[1] || 'GB', tz: Intl.DateTimeFormat().resolvedOptions().timeZone },
     exportJob: null, deletion: null,
   });
-  const A = () => { const a = { ...DEF(), ...(LS.get('acct', {}) || {}) }; return a; };
+  // on the platform the starting point is an empty account, never the sample one: what shows is what the API returned
+  const BLANK = () => ({ ...DEF(), profile: { name: 'You', handle: '', email: '', verified: false, bio: '', photo: null }, methods: [], passkeys: [], totp: false, codes: null, codesLeft: 0, sessions: [], apps: [], apiKeys: [], providers: [], route: {}, plan: { name: 'Free', price: '', renews: Date.now(), allowance: 0, payg: true, card: '' }, invoices: [], cap: null, balance: 0, gifts: [] });
+  const ON_PLATFORM = !!(window.XENO_PLATFORM && window.XENO_PLATFORM.served);
+  const A = () => { const a = { ...(ON_PLATFORM ? BLANK() : DEF()), ...(LS.get('acct', {}) || {}) }; return a; };
   const save = (a) => { LS.set('acct', a); };
   const edit = (fn, msg) => { const a = A(); fn(a); save(a); return window.XENO_NET ? window.XENO_NET.end(() => { X().render(); if (msg) X().toast(msg); }) : (X().render(), msg && X().toast(msg), Promise.resolve(true)); };
   const undoT = (msg, fn) => window.XENO_HIST.record(msg, fn);
 
   // ---------- confirm it's you (step-up): passkey or an authenticator code, then 10 minutes unlocked ----------
   async function stepUp(why) {
+    // the platform has no step-up check yet. This dialog accepts any six digits, so showing it there would be a
+    // pretend security prompt. The server enforces what it enforces; a real re-authentication replaces this.
+    if (ON_PLATFORM) return true;
     if (+(sessionStorage.getItem('xw.stepUp') || 0) > now()) return true;
     const a = A(), opts = [...(a.passkeys.length ? [['passkey', 'Use a passkey']] : []), ...(a.totp ? [['totp', 'Authenticator code']] : []), ...(!a.passkeys.length && !a.totp ? [['email', 'Email me a code']] : [])];
     const v = await D().form({ title: 'Confirm it’s you', sub: why, submit: 'Confirm', size: 'sm', fields: [
@@ -115,7 +121,7 @@
     // the sidebar IS the settings nav (one list, from SECT) — the page carries only the section
     const nav0 = `<nav class="set-nav" aria-label="Settings">${SECT.map(([g, s]) => `<div class="set-grp">${g}</div>${s.map(([sid, l, i]) => `<button class="set-nl" data-set="go" data-arg="${sid}" aria-current="${sid === id}">${ic(i)}<span>${esc(l)}</span></button>`).join('')}`).join('')}</nav>`;
     return `<div class="pg pg--set"><header class="pg-head pg-head--obj"><div class="pg-ttl"><small>Settings</small><h1>${esc(title(id))}</h1></div></header>
-      <div class="set-wrap"><div class="set-body" data-set-body="${id}">${S[id](a)}</div></div><footer class="pg-foot" data-fam="settings" data-api="${esc(API[id] || '')}" data-noun=""></footer></div>`;
+      <div class="set-wrap"><div class="set-body" data-set-body="${id}">${(window.XENO_ACCOUNT && window.XENO_ACCOUNT.section(id, a, { card, row, b, tag, esc, when, ago, ic })) ?? S[id](a)}</div></div><footer class="pg-foot" data-fam="settings" data-api="${esc(API[id] || '')}" data-noun=""></footer></div>`;
   }
   const go = (sid) => X().go('global', { global: 'settings', item: title(sid) });
   const idOf = (item) => SECT.flatMap(([, s]) => s).find(([, l]) => l === item)?.[0] || ALIAS[item] || item;

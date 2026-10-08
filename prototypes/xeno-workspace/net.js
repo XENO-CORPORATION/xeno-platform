@@ -30,20 +30,35 @@
   }
   function bar() { let b = document.getElementById('net-bar'); if (!b) { b = document.createElement('div'); b.id = 'net-bar'; b.setAttribute('role', 'status'); document.body.appendChild(b); } b.classList.toggle('on', inflight > 0); b.textContent = inflight ? 'Saving…' : ''; }
 
-  async function run({ op, label = 'Saving', el = null, money = false, apply = () => {} }) {
-    const m = mode(), key = money ? op + ':' + Math.random().toString(36).slice(2, 10) : null;
+  // ---------- the real API. Served by the platform, an area that has been WIRED sends its saves to a handler
+  // registered for the op. A wired area's op with no handler is refused: the platform cannot do it yet, and saying
+  // so is the only honest answer. An area that is not wired keeps the prototype behaviour and its sample data.
+  //   XENO_NET.wire('settings')                         every settings.* op now needs a handler
+  //   XENO_NET.remote({ 'settings.editProfile': fn })    fn({ op, before, key }) -> { ok: true } | { ok: false, code, msg, final }
+  // `before` is the xw.* storage as it was when the action began; the handler reads what changed and sends that.
+  const REMOTE = {}, WIRED = new Set();
+  const onPlatform = () => !!(window.XENO_PLATFORM && window.XENO_PLATFORM.served);
+  const wired = (op) => onPlatform() && WIRED.has(String(op).split('.')[0]);
+  async function callRemote(op, before, key) {
+    const h = REMOTE[op];
+    if (!h) return { code: 'unavailable', msg: 'This isn’t available on XENO yet. Nothing was changed.', final: true };
+    try { const r = await h({ op, before: before || {}, key }); return r && r.ok ? null : { code: (r && r.code) || 'failed', msg: (r && r.msg) || 'XENO could not save that. Nothing was changed.', final: !!(r && r.final) }; }
+    catch { return { code: 'offline', msg: 'XENO could not be reached. Nothing was changed.' }; }
+  }
+  async function run({ op, label = 'Saving', el = null, money = false, apply = () => {}, before = null }) {
+    const m = mode(), key = money ? op + ':' + Math.random().toString(36).slice(2, 10) : null, live = wired(op);
     // someone else changed these records after you started? ask before overwriting (the 409, made human)
     if (window.XENO_LIVE && (await window.XENO_LIVE.resolve(op, label)) === 'review') return false;
     const attempt = async () => {
       window.XENO_NET_LOG?.push({ op, key, at: Date.now() });
       inflight++; bar(); setPending(el, true);
-      await wait(m === 'slow' ? 4000 : 150 + Math.random() * 150);
+      let e = null;
+      if (live) e = await callRemote(op, before, key);
+      else { await wait(m === 'slow' ? 4000 : 150 + Math.random() * 150); const fail = m === 'offline' || m === 'refuse' || m === 'conflict' || (m === 'flaky' && (flip++ % 2 === 0)); if (fail) e = errFor(m); }
       inflight--; bar(); setPending(el, false);
-      const fail = m === 'offline' || m === 'refuse' || m === 'conflict' || (m === 'flaky' && (flip++ % 2 === 0));
-      if (!fail) { apply(); return true; }
-      const e = errFor(m);
-      const again = await D().confirm({ title: `${label} didn’t go through`, body: e.msg + (money ? ' You were not charged — trying again uses the same request, so it can’t charge twice.' : ''), action: e.code === 'forbidden' ? 'OK' : e.code === 'conflict' ? 'Reload' : 'Try again', danger: false });
-      if (!again || e.code === 'forbidden') return false;
+      if (!e) { apply(); return true; }
+      const again = await D().confirm({ title: `${label} didn’t go through`, body: e.msg + (money ? ' You were not charged — trying again uses the same request, so it can’t charge twice.' : ''), action: e.code === 'forbidden' || e.final ? 'OK' : e.code === 'conflict' ? 'Reload' : 'Try again', danger: false });
+      if (!again || e.code === 'forbidden' || e.final) return false;
       if (e.code === 'conflict') { X().render(); return false; }
       return attempt();
     };
@@ -91,7 +106,7 @@
     const t = tx; tx = null;
     if (!t) { apply(); return true; }
     const op = meta.op || `${t.scope}.${t.act}`;
-    const ok = await run({ op, label: meta.label || LABELS[op] || 'Saving', money: meta.money ?? MONEY.test(op), el: t.el, apply });
+    const ok = await run({ op, label: meta.label || LABELS[op] || 'Saving', money: meta.money ?? MONEY.test(op), el: t.el, apply, before: t.snap });
     if (!ok) restore(t.snap, t.at);
     return ok;
   }
@@ -106,7 +121,7 @@
   // tests (and anything else) can wait for every request to settle instead of guessing a delay
   const idle = async () => { while (inflight > 0) await wait(30); await wait(30); };
   window.XENO_KEYS?.add('Prototype', 'Ctrl Alt P', 'Prototype controls — network and role');
-  window.XENO_NET = { run, begin, end, clear, idle, mode, setMode: (m) => { SS.set('netMode', m); chip(); }, panel };
+  window.XENO_NET = { run, begin, end, clear, idle, mode, wire: (scope) => { WIRED.add(scope); }, remote: (ops) => { Object.assign(REMOTE, ops); }, wired, handles: (op) => !!REMOTE[op], setMode: (m) => { SS.set('netMode', m); chip(); }, panel };
   window.XENO_ROLE = { role, can, who, gate, set: (r) => { SS.set('viewAs', r); chip(); } };
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', chip); else chip();
 })();
