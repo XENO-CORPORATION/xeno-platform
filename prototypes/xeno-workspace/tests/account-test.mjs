@@ -31,6 +31,9 @@ function answer(q) {
   if (p === '/api/dashboard/stats') return json(200, { success: true, stats: { credits: db.credits, plan: 'free', usage_available: true, usage_by_surface: [{ surface: 'chat', credits: 40 }, { surface: 'canvas', credits: 10 }] } });
   if (p === '/api/user-data/settings' && m === 'GET') return json(200, { success: true, settings: db.settings });
   if (p === '/api/user-data/settings' && m === 'PATCH') { for (const up of (body.updates || [{ path: body.path, value: body.value }])) { const [a, b] = String(up.path).split('.'); db.settings[a] = db.settings[a] || {}; db.settings[a][b] = up.value; } return json(200, { success: true, settings: db.settings }); }
+  if (p === '/api/workspaces' && m === 'GET') return json(200, { success: true, workspaces: [] });
+  if (p === '/api/chat/projects' && m === 'GET') return json(200, { success: true, projects: [] });
+  if (p === '/api/chat/conversations' && m === 'GET') return json(200, { success: true, conversations: [] });
   if (p === '/api/auth/profile' && m === 'PUT') {
     if (body.username === 'taken') return json(400, { success: false, error: 'Username is already taken' });
     if (body.display_name !== undefined) db.user.display_name = body.display_name; if (body.username !== undefined) db.user.username = body.username;

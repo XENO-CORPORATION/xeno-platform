@@ -9,6 +9,17 @@
   const served = /^https?:$/.test(location.protocol) && /^\/workspace(\/|$)/.test(location.pathname);
   const P = window.XENO_PLATFORM = { served, user: null, ready: Promise.resolve(null) };
   if (!served) return;
+  // one way to call the platform: the session cookie, the CSRF token on writes, and the surface name
+  const csrf = () => { for (const n of ['__Host-xeno_csrf', 'xeno_csrf']) { const m = document.cookie.split(';').map((p) => p.trim()).find((p) => p.startsWith(n + '=')); if (m) return decodeURIComponent(m.slice(n.length + 1)); } return null; };
+  P.api = async (method, url, body, extra) => {
+    const headers = { 'x-xeno-surface': 'xeno-web', ...(extra || {}) };
+    if (body !== undefined) headers['content-type'] = 'application/json';
+    if (!['GET', 'HEAD'].includes(method)) { const t = csrf(); if (t) headers['x-xeno-csrf'] = t; }
+    const r = await fetch(url, { method, credentials: 'same-origin', headers, body: body !== undefined ? JSON.stringify(body) : undefined });
+    let d = null; try { d = await r.json(); } catch {}
+    if (r.status === 401) location.replace('/login?returnUrl=' + encodeURIComponent(location.pathname + location.search + location.hash));
+    return { status: r.status, ok: r.ok && (!d || d.success !== false), d: d || {} };
+  };
   const root = document.documentElement;
   root.classList.add('on-platform', 'xp-wait');
   const style = document.createElement('style');

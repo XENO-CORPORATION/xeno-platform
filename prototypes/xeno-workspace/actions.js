@@ -21,9 +21,11 @@
       { id: 'goal', label: 'Goal', type: 'textarea', rows: 2, placeholder: 'What does done look like?' },
       { id: 'icon', label: 'Icon', type: 'icon', value: 'folder' }] });
     if (!v) return;
+    const net = window.XENO_NET && window.XENO_NET.wired('projects.create'); if (net) window.XENO_NET.begin('projects', 'create', null);
     P()[v.name] = { mode: v.mode, owner: window.XENO_ME.name(), goal: v.goal || '', milestone: '—', progress: '0 of 0 tasks', icon: v.icon, tasks: [], taskObjs: [], chats: [], teams: [], resources: [], funding: [], activity: [[window.XENO_ME.name() + ' created the project', 'just now']] };
     L().unshift({ id: 'prj_' + Date.now(), name: v.name, mode: v.mode, owner: { name: window.XENO_ME.name(), kind: 'human' }, status: 'active', health: 'on_track', goal: v.goal || '', icon: v.icon, milestone: { title: 'No milestone yet', due: '—' }, tasks: { total: 0, done: 0 }, members: [{ name: window.XENO_ME.name(), kind: 'human' }], needsYou: 0, updatedAt: new Date().toISOString() });
-    window.XENO_PG_SYNC_NAV?.(); X().go('global', { global: 'projects', item: v.name }); X().refreshPanel(); toast(`Created “${v.name}”`);
+    window.XENO_PG_SYNC_NAV?.(); if (net && !await window.XENO_NET.end(() => {}, { label: 'Creating the project' })) return;
+    X().go('global', { global: 'projects', item: v.name }); X().refreshPanel(); toast(`Created “${v.name}”`);
   }
   function rewriteProjectName(from, to) {
     P()[to] = P()[from]; delete P()[from];
@@ -35,20 +37,26 @@
   async function renameProject(name) {
     const v = await D().form({ title: 'Rename project', submit: 'Rename', size: 'sm', fields: [{ id: 'name', label: 'Name', required: true, value: name, validate: (x) => unique(x, name) }] });
     if (!v || v.name === name) return;
-    rewriteProjectName(name, v.name); window.XENO_PG_SYNC_NAV?.();
+    const net = window.XENO_NET && window.XENO_NET.wired('projects.rename'); if (net) window.XENO_NET.begin('projects', 'rename', null);
+    rewriteProjectName(name, v.name); window.XENO_PG_SYNC_NAV?.(); if (net && !await window.XENO_NET.end(() => {}, { label: 'Renaming the project' })) return;
     const s = X().S; if (s.view === 'global' && s.global === 'projects' && s.item && s.item.split('/')[0] === name) { X().go('global', { global: 'projects', item: [v.name, ...s.item.split('/').slice(1)].join('/') }); X().refreshPanel(); } else X().render();
     toast(`Renamed to “${v.name}”`);
   }
   async function iconProject(name) {
     const cur = (P()[name] || {}).icon || (L().find((p) => p.name === name) || {}).icon || 'folder';
     const v = await D().form({ title: 'Change icon', sub: name, submit: 'Use this icon', size: 'sm', fields: [{ id: 'icon', label: 'Icon', type: 'icon', value: cur }] });
-    if (!v) return; if (P()[name]) P()[name].icon = v.icon; const li = L().find((p) => p.name === name); if (li) li.icon = v.icon; refresh(); toast('Icon updated');
+    if (!v) return; const net = window.XENO_NET && window.XENO_NET.wired('projects.icon'); if (net) window.XENO_NET.begin('projects', 'icon', null);
+    if (P()[name]) P()[name].icon = v.icon; const li = L().find((p) => p.name === name); if (li) li.icon = v.icon; if (net && !await window.XENO_NET.end(() => {}, { label: 'Saving the icon' })) return;
+    refresh(); toast('Icon updated');
   }
   async function archiveProject(name) {
     if (!await D().confirm({ title: `Archive “${name}”?`, body: 'It leaves your active projects. Its chats, files, tasks and history are kept, and you can restore it any time from <b>Archived</b>.', action: 'Archive', danger: false })) return;
-    const li = L().find((p) => p.name === name); if (li) li.status = 'archived'; window.XENO_PG_SYNC_NAV?.(); X().go('global', { global: 'projects', item: null }); X().refreshPanel(); toast(`Archived “${name}”`);
+    const net = window.XENO_NET && window.XENO_NET.wired('projects.archive'); if (net) window.XENO_NET.begin('projects', 'archive', null);
+    const li = L().find((p) => p.name === name); if (li) li.status = 'archived'; window.XENO_PG_SYNC_NAV?.(); if (net && !await window.XENO_NET.end(() => {}, { label: 'Archiving the project' })) return;
+    X().go('global', { global: 'projects', item: null }); X().refreshPanel(); toast(`Archived “${name}”`);
   }
   async function deleteProject(name) {
+    if (window.XENO_WORK && window.XENO_WORK.blocked('deleteProject')) return;
     if (!await D().confirm({ title: `Delete “${name}”?`, body: `This removes the project for everyone on it. <b>Its chats and files stay in your Library</b>, but tasks, assignments and history are deleted. This can’t be undone.`, action: 'Delete project', typeToConfirm: name })) return;
     delete P()[name]; const i = L().findIndex((p) => p.name === name); if (i >= 0) L().splice(i, 1);
     window.XENO_PG_LIBRARY.items.forEach((f) => { if (f.project === name) f.project = null; });
@@ -58,6 +66,7 @@
     D().menu(btn, [{ id: 'rename', icon: 'edit', label: 'Rename', run: () => renameProject(name) }, { id: 'icon', icon: 'palette', label: 'Change icon', run: () => iconProject(name) }, { id: 'assign', icon: 'people', label: 'Assign people or agents', run: () => assign(name) }, { id: 'budget', icon: 'chart', label: 'Set a budget', run: () => budget(name) }, '-', { id: 'archive', icon: 'archive', label: 'Archive', run: () => archiveProject(name) }, { id: 'delete', icon: 'trash', label: 'Delete project', danger: true, run: () => deleteProject(name) }]);
   }
   async function assign(name) {
+    if (window.XENO_WORK && window.XENO_WORK.blocked('assign')) return;
     const p = P()[name]; if (!p) return;
     const teams = W().teams.map((t) => [t.name, t.name, `Team · lead ${t.lead} · ${t.members.length} members`, `<span class="pg-av">${esc(t.name[0])}</span>`]);
     const agents = AGENTS.map((a) => { const m = W().members.find((x) => x.name === a); return [a + ' (agent)', a, `Agent · ${m ? m.title : ''}`, avatar(a, 'agent')]; });
@@ -69,6 +78,7 @@
     p.activity.unshift([window.XENO_ME.name() + ' updated who works on this project', 'just now']); refresh(); toast('Assignments saved');
   }
   async function newTask(name) {
+    if (window.XENO_WORK && window.XENO_WORK.blocked('newTask')) return;
     const p = P()[name]; if (!p) return;
     const v = await D().form({ title: 'New task', sub: name, submit: 'Add task', fields: [
       { id: 'title', label: 'Task', required: true, placeholder: 'What needs doing?' },
@@ -80,6 +90,7 @@
     const li = L().find((x) => x.name === name); if (li) li.tasks.total++; p.activity.unshift([`${window.XENO_ME.name()} added “${v.title}”`, 'just now']); refresh(); toast('Task added');
   }
   async function budget(name) {
+    if (window.XENO_WORK && window.XENO_WORK.blocked('budget')) return;
     const p = P()[name]; if (!p) return;
     const v = await D().form({ title: 'Set a budget', sub: name, submit: 'Save budget', size: 'sm', fields: [
       { id: 'amount', label: 'Budget (€)', type: 'number', required: true, placeholder: '4000', validate: (x) => (/^\d+([.,]\d{1,2})?$/.test(x) && +x.replace(',', '.') > 0 ? null : 'Enter an amount, like 2500.') },
@@ -149,8 +160,11 @@
       { id: 'name', label: 'Company name', required: true, max: 60, placeholder: 'e.g. Lumen Studio', validate: (x) => (workspaces().some((w) => w.name.toLowerCase() === x.trim().toLowerCase()) ? 'You already have a workspace with this name.' : null) },
       { id: 'kind', label: 'What it is', type: 'seg', value: 'studio', options: [['studio', 'Studio'], ['agency', 'Agency'], ['startup', 'Startup'], ['other', 'Other']] }] });
     if (!v) return;
+    const wsNet = window.XENO_NET && window.XENO_NET.wired('workspaces.create'); if (wsNet) window.XENO_NET.begin('workspaces', 'create', null);
     const id = 'ws_' + Date.now().toString(36), all = workspaces().concat({ id, name: v.name.trim(), sub: 'Company · you are the owner', initial: v.name.trim()[0].toUpperCase() });
-    LS.set('workspaces', all); LS.set('workspace', id); X().applyWorkspace?.(); X().render(); toast(`Created ${v.name.trim()} — you are its owner`);
+    LS.set('workspaces', all); LS.set('workspace', id);
+    if (wsNet && !await window.XENO_NET.end(() => {}, { label: 'Creating the company' })) return; // the platform's answer replaces the list and selects the new workspace
+    X().applyWorkspace?.(); X().render(); toast(`Created ${v.name.trim()} — you are its owner`);
   }
 
   // ---------- sign out: the session ends, a reload stays signed out, signing in returns to the same place ----------
@@ -297,6 +311,7 @@
   function requestAccess(fam) { const r = store().get('accessRequested', {}) || {}; r[fam] = Date.now(); store().set('accessRequested', r); X().render(); toast('Request sent — the owners get it in their inbox'); }
   // ---- projects: tasks, waiting items, chats, resources ----
   async function openTask(arg) {
+    if (window.XENO_WORK && window.XENO_WORK.blocked('openTask')) return;
     const [pn, tid] = arg.split('|'), P2 = P()[pn], t = P2?.taskObjs.find((x) => x.id === tid); if (!t) return;
     const people = W().members.filter((m) => m.status !== 'invited');
     const v = await D().form({ title: t.title, sub: pn, submit: 'Save task', fields: [
@@ -311,6 +326,7 @@
     save(); refresh(); undoToast(`${n.meta === 'Approve' ? 'Approved' : 'Done'} — ${n.t}`, () => { N.splice(i, 0, n); refresh(); });
   }
   function newProjectChat(pn) {
+    if (window.XENO_WORK && window.XENO_WORK.blocked('newProjectChat')) return;
     const P2 = P()[pn]; if (P2) P2.chats.unshift(['New chat', 'Chat · just now']);
     const C = X().ctxChats(); const pj = C?.projects?.find((x) => x[0] === pn); if (pj) pj[2].unshift('New chat'); else C?.projects?.push([pn, null, ['New chat']]);
     save(); X().go('product', { product: 'chat' }); toast(`New chat in ${pn}`);

@@ -1,0 +1,146 @@
+// Workspaces and projects on the platform: the real lists, where each project lives, real saves, and honest gaps.
+// A Vite server serves the workspace; the test answers /api/ from a small in-memory platform. Nothing real is touched.
+import { createRequire } from 'node:module'; import path from 'node:path'; import { fileURLToPath } from 'node:url';
+const here = path.dirname(fileURLToPath(import.meta.url)), repo = path.resolve(here, '../../..');
+const require = createRequire(import.meta.url); const puppeteer = require('puppeteer');
+const { createServer } = await import('vite'); const { xenoWorkspace } = await import('../../../scripts/vite-workspace.mjs');
+const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+let fails = 0; const ok = (c, m) => { if (!c) fails++; console.log(c ? 'PASS' : 'FAIL', m); };
+const PORT = 5189, base = `http://127.0.0.1:${PORT}`;
+const server = await createServer({ configFile: false, root: repo, logLevel: 'error', appType: 'custom', optimizeDeps: { noDiscovery: true, entries: [] }, plugins: [xenoWorkspace(repo)], server: { host: '127.0.0.1', port: PORT, strictPort: true } });
+await server.listen();
+
+const U = '11111111-1111-4111-8111-111111111111', WP = '22222222-2222-4222-8222-222222222222', WT = '33333333-3333-4333-8333-333333333333';
+const pid = (n) => `aaaaaaaa-aaaa-4aaa-8aaa-${String(n).padStart(12, '0')}`;
+const db = {
+  user: { id: U, username: 'ada', email: 'ada@example.test', display_name: 'Ada Lovelace', email_verified: true },
+  workspaces: [{ id: WP, workspace_type: 'personal', name: 'ada', member_role: 'owner', member_count: 1 }, { id: WT, workspace_type: 'team', name: 'Analytical Engines', member_role: 'admin', member_count: 4 }],
+  projects: [
+    { id: pid(1), name: 'Website', description: 'Ship the new site', settings: { xw: { mode: 'Studio', icon: 'globe' } }, is_archived: false, owner_user_id: U, workspace_id: null, file_count: 3, chat_count: 1, updated_at: '2026-10-07T10:00:00Z', capabilities: { viewer: true, owner: true } },
+    { id: pid(2), name: 'Website', description: 'The company site', settings: {}, is_archived: false, owner_user_id: null, workspace_id: WT, file_count: 0, chat_count: 0, updated_at: '2026-10-06T10:00:00Z', capabilities: { viewer: true } },
+    { id: pid(3), name: 'Old notes', description: '', settings: {}, is_archived: true, owner_user_id: U, workspace_id: null, file_count: 0, chat_count: 0, updated_at: '2026-09-01T10:00:00Z', capabilities: { viewer: true, owner: true } },
+  ],
+  conversations: [{ id: 'c1', title: 'Homepage copy', project_id: pid(1) }, { id: 'c2', title: 'Loose chat', project_id: null }],
+  calls: [], next: 10,
+};
+const json = (status, body) => ({ status, contentType: 'application/json', body: JSON.stringify(body) });
+function answer(q) {
+  const u = new URL(q.url()), m = q.method(), p = u.pathname; let body = null; try { body = JSON.parse(q.postData() || 'null'); } catch {}
+  if (m !== 'GET') db.calls.push({ m, p, body, ws: q.headers()['x-xeno-workspace'] || null, csrf: q.headers()['x-xeno-csrf'] || null });
+  if (p === '/api/auth/me') return json(200, { success: true, user: db.user });
+  if (p === '/api/account/overview') return json(200, { success: true, overview: { user: db.user, credits: { balance: 0 }, workspace_count: 2 } });
+  if (p === '/api/account/sessions') return json(200, { success: true, sessions: [] });
+  if (p === '/api/auth/linked-accounts') return json(200, { success: true, accounts: [] });
+  if (p === '/api/billing/overview') return json(200, { success: true, overview: { credits: { balance: 0 }, subscription: null } });
+  if (p === '/api/dashboard/stats') return json(200, { success: true, stats: { usage_available: false, usage_by_surface: [] } });
+  if (p === '/api/user-data/settings') return json(200, { success: true, settings: {} });
+  if (p === '/api/workspaces' && m === 'GET') return json(200, { success: true, workspaces: db.workspaces });
+  if (p === '/api/workspaces' && m === 'POST') { const w = { id: `44444444-4444-4444-8444-${String(db.next++).padStart(12, '0')}`, workspace_type: 'team', name: body.name, member_role: 'owner', member_count: 1 }; db.workspaces.push(w); return json(200, { success: true, workspace: w }); }
+  if (p === '/api/chat/conversations') return json(200, { success: true, conversations: db.conversations, total: db.conversations.length });
+  if (p === '/api/chat/projects' && m === 'GET') return json(200, { success: true, projects: db.projects, limit: 100, offset: 0 });
+  if (p === '/api/chat/projects' && m === 'POST') {
+    if (body.name === 'Refused') return json(400, { success: false, error: 'Project name is not allowed' });
+    const ws = q.headers()['x-xeno-workspace'], team = ws && ws !== WP ? ws : null;
+    const pr = { id: pid(db.next++), name: body.name, description: body.description || '', settings: body.settings || {}, is_archived: false, owner_user_id: team ? null : U, workspace_id: team, file_count: 0, chat_count: 0, updated_at: new Date().toISOString(), capabilities: { viewer: true, owner: true } };
+    db.projects.unshift(pr); return json(200, { success: true, project: pr });
+  }
+  const mm = p.match(/^\/api\/chat\/projects\/([^/]+)$/);
+  if (mm && m === 'PUT') { const pr = db.projects.find((x) => x.id === decodeURIComponent(mm[1])); if (!pr) return json(404, { success: false, error: 'Project not found' }); if (body.name !== undefined) pr.name = body.name; if (body.is_archived !== undefined) pr.is_archived = !!body.is_archived; if (body.settings) pr.settings = { ...pr.settings, ...body.settings }; return json(200, { success: true, project: pr }); }
+  return json(404, { success: false, error: 'not in the fake platform: ' + m + ' ' + p });
+}
+
+const b = await puppeteer.launch({ headless: true, protocolTimeout: 60000 });
+const p = await b.newPage(); await p.setViewport({ width: 1500, height: 950 });
+const errs = [], missing = []; p.on('pageerror', (e) => errs.push(e.message));
+await p.setRequestInterception(true);
+p.on('request', (q) => { const u = new URL(q.url()); if (u.pathname.startsWith('/api/')) { const r = answer(q); if (r.status === 404) missing.push(q.method() + ' ' + u.pathname); return q.respond(r); } if (u.host.includes('fonts.g')) return q.abort(); q.continue(); });
+await p.setCookie({ name: 'xeno_csrf', value: 'csrf-test-token', url: base });
+const main = () => p.evaluate(() => document.querySelector('#main')?.innerText || '');
+const goProjects = async (item) => { await p.evaluate((it) => window.XW.go('global', { global: 'projects', item: it }), item || null); await wait(400); };
+const settle = async () => { await p.evaluate(() => window.XENO_NET.idle()); await wait(500); };
+const names = () => p.evaluate(() => window.XENO_PG_PROJECTS.items.map((x) => `${x.name}|${x.status}|${x.place}`));
+const SAMPLE = /Brand refresh|Q4 planning|Launch week|Auth gate|XENO launch|XENO Corp|Lumen Studio/;
+
+try {
+  await p.goto(base + '/workspace/', { waitUntil: 'networkidle0' }); await wait(700);
+  const st = await p.evaluate(() => window.XENO_WORK.state());
+  ok(st.scope === 'ready' && st.projects === 'ready', 'workspaces and projects load from the platform (' + JSON.stringify(st) + ')');
+
+  const ws = await p.evaluate(() => window.XA.workspaces().map((w) => `${w.name}|${w.sub}`));
+  ok(JSON.stringify(ws) === JSON.stringify(['Personal|Just you', 'Analytical Engines|Company · you are an admin']), 'the workspace list is the real one, with your role in each (' + JSON.stringify(ws) + ')');
+
+  await goProjects(); let t = await main();
+  const list = await names();
+  ok(list.length === 3 && !SAMPLE.test(t) && !SAMPLE.test(list.join()), 'the projects are the real ones and no sample project is shown (' + list.length + ')');
+  ok(list.includes('Website (Personal)|active|Personal') && list.includes('Website (Analytical Engines)|active|Analytical Engines'), 'two projects with one name are told apart by where they live (' + JSON.stringify(list.slice(0, 2)) + ')');
+  ok(list.includes('Old notes|archived|Personal') && !/Old notes/.test(t), 'an archived project is kept out of the active list');
+  ok(await p.evaluate(() => window.XENO_PG_PROJECTS.items.every((x) => /^[0-9a-f-]{36}$/.test(x.id))), 'every project carries the platform id');
+  ok(!/undefined|On track|At risk/.test(t), 'no health is shown for a project that has none recorded');
+
+  await goProjects('Website (Personal)'); t = await main();
+  ok(/Ship the new site/.test(t) && /Lives in/.test(t) && /Personal/.test(t) && /1\s*Conversation/.test(t) && /3\s*Files/.test(t), 'the project page shows its goal, where it lives, and real counts');
+  await goProjects('Website (Personal)/Conversations'); t = await main();
+  ok(/Homepage copy/.test(t) && !/Loose chat/.test(t), 'Conversations lists the chats that belong to this project');
+  await goProjects('Website (Personal)/Tasks'); t = await main();
+  const off = await p.evaluate(() => [...document.querySelectorAll('#main [data-xa="newTask"], #main [data-xa="assign"], #main [data-xa="budget"]')].map((el) => el.getAttribute('aria-disabled')));
+  ok(/Tasks aren’t available yet/.test(t) && off.every((v) => v === 'true'), 'a tab with no platform API says so, and any control for it is shown unavailable (' + off.length + ' controls)');
+  await goProjects('Website (Personal)/Funding'); ok(/Funding isn’t available yet/.test(await main()), 'Funding shows no sample campaign on a real project');
+
+  // ---- create, in the current workspace ----
+  await goProjects(); db.calls.length = 0;
+  await p.evaluate(() => { window.XA.newProject(); }); await wait(350);
+  await p.evaluate(() => { const i = document.querySelector('#xdf-name'); i.value = 'Difference Engine'; i.dispatchEvent(new Event('input', { bubbles: true })); });
+  await p.click('.xd [data-xd-submit]'); await settle();
+  let c = db.calls.find((x) => x.m === 'POST' && x.p === '/api/chat/projects');
+  ok(!!c && c.body.name === 'Difference Engine' && c.ws === WP && c.csrf === 'csrf-test-token' && c.body.settings?.xw?.icon, 'creating a project sends it to the platform, in the current workspace (' + JSON.stringify(c && { ws: c.ws, name: c.body.name }) + ')');
+  ok((await names()).some((n) => n.startsWith('Difference Engine|active|Personal')) && await p.evaluate(() => /^[0-9a-f-]{36}$/.test(window.XENO_PG_PROJECTS.items.find((x) => x.name === 'Difference Engine').id)), 'the new project is listed with the id the platform gave it');
+
+  await p.evaluate(() => window.XA.switchWorkspace('33333333-3333-4333-8333-333333333333')); await wait(300); db.calls.length = 0;
+  await p.evaluate(() => { window.XA.newProject(); }); await wait(350);
+  await p.evaluate(() => { const i = document.querySelector('#xdf-name'); i.value = 'Team plan'; i.dispatchEvent(new Event('input', { bubbles: true })); });
+  await p.click('.xd [data-xd-submit]'); await settle();
+  c = db.calls.find((x) => x.m === 'POST' && x.p === '/api/chat/projects');
+  ok(!!c && c.ws === WT && (await names()).includes('Team plan|active|Analytical Engines'), 'in a company workspace, the new project is created there and listed as living there');
+
+  // ---- a refusal is rolled back ----
+  db.calls.length = 0; const before = (await names()).length;
+  await p.evaluate(() => { window.XA.newProject(); }); await wait(350);
+  await p.evaluate(() => { const i = document.querySelector('#xdf-name'); i.value = 'Refused'; i.dispatchEvent(new Event('input', { bubbles: true })); });
+  await p.click('.xd [data-xd-submit]'); await wait(800);
+  const said = await p.evaluate(() => document.querySelector('.xd')?.innerText || '');
+  await p.evaluate(() => document.querySelector('.xd [data-xd-ok]')?.click()); await settle();
+  ok(/not allowed/.test(said) && (await names()).length === before && !(await names()).some((n) => n.startsWith('Refused')), 'a project the platform refuses is not left in the list (' + said.replace(/\s+/g, ' ').slice(0, 60) + ')');
+
+  // ---- rename and archive ----
+  db.calls.length = 0;
+  await p.evaluate(() => { window.XA.renameProject('Difference Engine'); }); await wait(350);
+  await p.evaluate(() => { const i = document.querySelector('#xdf-name'); i.value = 'Analytical Engine'; i.dispatchEvent(new Event('input', { bubbles: true })); });
+  await p.click('.xd [data-xd-submit]'); await settle();
+  c = db.calls.find((x) => x.m === 'PUT');
+  ok(!!c && c.body.name === 'Analytical Engine' && db.projects.some((x) => x.name === 'Analytical Engine') && (await names()).some((n) => n.startsWith('Analytical Engine|')), 'renaming a project renames it on the platform, by id');
+
+  db.calls.length = 0;
+  await p.evaluate(() => { window.XA.archiveProject('Analytical Engine'); }); await wait(350);
+  await p.click('.xd [data-xd-ok]'); await settle();
+  c = db.calls.find((x) => x.m === 'PUT');
+  ok(!!c && c.body.is_archived === true && (await names()).some((n) => n.startsWith('Analytical Engine|archived')), 'archiving a project archives it on the platform');
+
+  // ---- what the platform cannot do yet ----
+  db.calls.length = 0; const n0 = (await names()).length;
+  await p.evaluate(() => { window.XA.deleteProject('Team plan'); }); await wait(400);
+  ok(db.calls.length === 0 && (await names()).length === n0 && !(await p.evaluate(() => !!document.querySelector('.xd'))), 'deleting for good is refused up front and nothing changes');
+
+  // ---- create a company ----
+  db.calls.length = 0;
+  await p.evaluate(() => { window.XA.newCompany(); }); await wait(350);
+  await p.evaluate(() => { const i = document.querySelector('#xdf-name'); i.value = 'Babbage Works'; i.dispatchEvent(new Event('input', { bubbles: true })); });
+  await p.click('.xd [data-xd-submit]'); await settle();
+  c = db.calls.find((x) => x.m === 'POST' && x.p === '/api/workspaces');
+  const cur = await p.evaluate(() => { const w = window.XA.currentWorkspace(); return `${w.name}|${w.sub}|${/^[0-9a-f-]{36}$/.test(w.id)}`; });
+  ok(!!c && c.body.name === 'Babbage Works' && cur === 'Babbage Works|Company · you are the owner|true', 'creating a company creates the workspace on the platform and switches to it (' + cur + ')');
+
+  ok(missing.length === 0, 'the workspace asked for no route the platform lacks (' + JSON.stringify([...new Set(missing)].slice(0, 3)) + ')');
+  ok(errs.length === 0, 'no page errors (' + JSON.stringify(errs.slice(0, 2)) + ')');
+} catch (e) { ok(false, 'threw: ' + String(e.message).split('\n')[0]); }
+await b.close(); await server.close();
+console.log(fails ? fails + ' check(s) failed' : 'ALL PASS'); process.exitCode = fails ? 1 : 0;

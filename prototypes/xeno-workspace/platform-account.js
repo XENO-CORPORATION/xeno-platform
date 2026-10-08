@@ -15,16 +15,7 @@
   if (!P || !P.served) { window.XENO_ACCOUNT = { served: false, section: () => null }; return; }
   const X = () => window.XW;
   const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
-  const csrf = () => { for (const n of ['__Host-xeno_csrf', 'xeno_csrf']) { const m = document.cookie.split(';').map((p) => p.trim()).find((p) => p.startsWith(n + '=')); if (m) return decodeURIComponent(m.slice(n.length + 1)); } return null; };
-  async function api(method, url, body) {
-    const headers = { 'x-xeno-surface': 'xeno-web' };
-    if (body !== undefined) headers['content-type'] = 'application/json';
-    if (!['GET', 'HEAD'].includes(method)) { const t = csrf(); if (t) headers['x-xeno-csrf'] = t; }
-    const r = await fetch(url, { method, credentials: 'same-origin', headers, body: body !== undefined ? JSON.stringify(body) : undefined });
-    let d = null; try { d = await r.json(); } catch {}
-    if (r.status === 401) { location.replace('/login?returnUrl=' + encodeURIComponent(location.pathname + location.search + location.hash)); }
-    return { status: r.status, ok: r.ok && (!d || d.success !== false), d: d || {} };
-  }
+  const api = P.api;
   const readJson = (raw) => { try { return JSON.parse(raw || '{}') || {}; } catch { return {}; } };
   const acctNow = () => readJson(localStorage.getItem('xw.acct'));
   const title = (s) => String(s || '').replace(/^./, (c) => c.toUpperCase());
