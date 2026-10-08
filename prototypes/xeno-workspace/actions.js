@@ -21,8 +21,8 @@
       { id: 'goal', label: 'Goal', type: 'textarea', rows: 2, placeholder: 'What does done look like?' },
       { id: 'icon', label: 'Icon', type: 'icon', value: 'folder' }] });
     if (!v) return;
-    P()[v.name] = { mode: v.mode, owner: 'Emilian', goal: v.goal || '', milestone: '—', progress: '0 of 0 tasks', icon: v.icon, tasks: [], taskObjs: [], chats: [], teams: [], resources: [], funding: [], activity: [['Emilian created the project', 'just now']] };
-    L().unshift({ id: 'prj_' + Date.now(), name: v.name, mode: v.mode, owner: { name: 'Emilian', kind: 'human' }, status: 'active', health: 'on_track', goal: v.goal || '', icon: v.icon, milestone: { title: 'No milestone yet', due: '—' }, tasks: { total: 0, done: 0 }, members: [{ name: 'Emilian', kind: 'human' }], needsYou: 0, updatedAt: new Date().toISOString() });
+    P()[v.name] = { mode: v.mode, owner: window.XENO_ME.name(), goal: v.goal || '', milestone: '—', progress: '0 of 0 tasks', icon: v.icon, tasks: [], taskObjs: [], chats: [], teams: [], resources: [], funding: [], activity: [[window.XENO_ME.name() + ' created the project', 'just now']] };
+    L().unshift({ id: 'prj_' + Date.now(), name: v.name, mode: v.mode, owner: { name: window.XENO_ME.name(), kind: 'human' }, status: 'active', health: 'on_track', goal: v.goal || '', icon: v.icon, milestone: { title: 'No milestone yet', due: '—' }, tasks: { total: 0, done: 0 }, members: [{ name: window.XENO_ME.name(), kind: 'human' }], needsYou: 0, updatedAt: new Date().toISOString() });
     window.XENO_PG_SYNC_NAV?.(); X().go('global', { global: 'projects', item: v.name }); X().refreshPanel(); toast(`Created “${v.name}”`);
   }
   function rewriteProjectName(from, to) {
@@ -65,19 +65,19 @@
     if (!v) return;
     p.teams = v.who.map((n) => { const t = W().teams.find((x) => x.name === n); return t ? [n, `${t.members.length} members`] : [n, (W().members.find((m) => n.startsWith(m.name)) || {}).title || 'Agent']; });
     W().teams.forEach((t) => { const on = v.who.includes(t.name); t.projects = on ? [...new Set([...t.projects, name])] : t.projects.filter((x) => x !== name); });
-    const li = L().find((x) => x.name === name); if (li) li.members = [{ name: 'Emilian', kind: 'human' }, ...v.who.filter((n) => n.endsWith('(agent)')).map((n) => ({ name: n.replace(' (agent)', ''), kind: 'agent' }))];
-    p.activity.unshift(['Emilian updated who works on this project', 'just now']); refresh(); toast('Assignments saved');
+    const li = L().find((x) => x.name === name); if (li) li.members = [{ name: window.XENO_ME.name(), kind: 'human' }, ...v.who.filter((n) => n.endsWith('(agent)')).map((n) => ({ name: n.replace(' (agent)', ''), kind: 'agent' }))];
+    p.activity.unshift([window.XENO_ME.name() + ' updated who works on this project', 'just now']); refresh(); toast('Assignments saved');
   }
   async function newTask(name) {
     const p = P()[name]; if (!p) return;
     const v = await D().form({ title: 'New task', sub: name, submit: 'Add task', fields: [
       { id: 'title', label: 'Task', required: true, placeholder: 'What needs doing?' },
-      { id: 'who', label: 'Assignee', type: 'choice', cols: 3, value: 'none', options: [['none', 'Unassigned'], ['Emilian', 'Emilian'], ...AGENTS.map((a) => [a, a, 'Agent'])] },
+      { id: 'who', label: 'Assignee', type: 'choice', cols: 3, value: 'none', options: [['none', 'Unassigned'], [window.XENO_ME.name(), window.XENO_ME.name()], ...AGENTS.map((a) => [a, a, 'Agent'])] },
       { id: 'state', label: 'Status', type: 'seg', value: 'todo', options: [['todo', 'To do'], ['doing', 'In progress']] }] });
     if (!v) return;
     p.taskObjs = p.taskObjs || []; p.taskObjs.push({ id: 't' + Date.now(), title: v.title, state: v.state, assignee: v.who === 'none' ? null : { name: v.who, kind: AGENTS.includes(v.who) ? 'agent' : 'human' }, note: '', evidence: 0 });
     p.tasks.push([v.title, v.state === 'doing' ? 'In progress' : 'To do']);
-    const li = L().find((x) => x.name === name); if (li) li.tasks.total++; p.activity.unshift([`Emilian added “${v.title}”`, 'just now']); refresh(); toast('Task added');
+    const li = L().find((x) => x.name === name); if (li) li.tasks.total++; p.activity.unshift([`${window.XENO_ME.name()} added “${v.title}”`, 'just now']); refresh(); toast('Task added');
   }
   async function budget(name) {
     const p = P()[name]; if (!p) return;
@@ -95,8 +95,8 @@
       { id: 'div', label: 'Division', type: 'choice', cols: 4, value: 'Studio', options: W().divisions.map((d) => [d.name, d.name]) }] });
     if (!v) return;
     v.emails.forEach((e) => W().members.push({ id: 'mem_' + Date.now() + e, name: e.split('@')[0].replace(/^./, (c) => c.toUpperCase()), kind: 'human', role: v.role, title: e, divisions: [v.div], lastActiveAt: null, status: 'invited', ownedBy: null }));
-    v.agents.forEach((a) => W().members.push({ id: 'mem_' + Date.now() + a, name: a === 'Nova-bot' ? 'Scout' : a, kind: 'agent', role: 'member', title: a === 'Nova-bot' ? 'Research' : 'Bookkeeping', divisions: [v.div], lastActiveAt: new Date().toISOString(), status: 'idle', ownedBy: 'Emilian' }));
-    W().activity.unshift({ id: 'ac_' + Date.now(), text: `Emilian invited ${v.emails.length + v.agents.length} to ${v.div}`, kind: 'human', at: new Date().toISOString() });
+    v.agents.forEach((a) => W().members.push({ id: 'mem_' + Date.now() + a, name: a === 'Nova-bot' ? 'Scout' : a, kind: 'agent', role: 'member', title: a === 'Nova-bot' ? 'Research' : 'Bookkeeping', divisions: [v.div], lastActiveAt: new Date().toISOString(), status: 'idle', ownedBy: window.XENO_ME.name() }));
+    W().activity.unshift({ id: 'ac_' + Date.now(), text: `${window.XENO_ME.name()} invited ${v.emails.length + v.agents.length} to ${v.div}`, kind: 'human', at: new Date().toISOString() });
     refresh(); toast(`${v.emails.length ? v.emails.length + ' invite' + (v.emails.length > 1 ? 's' : '') + ' sent' : ''}${v.emails.length && v.agents.length ? ' · ' : ''}${v.agents.length ? v.agents.length + ' agent' + (v.agents.length > 1 ? 's' : '') + ' assigned' : ''}`);
   }
   async function newThread(space) {
@@ -108,7 +108,7 @@
     if (!v) return;
     const dups = window.XENO_COMM?.similar(v.title) || [];
     if (dups.length && !await D().confirm({ title: 'This may already be answered', body: `Similar: “${dups[0].title}”. Post yours anyway, or cancel to read that one first.`, action: 'Post anyway', danger: false })) return X().go('global', { global: 'community', item: dups[0].id });
-    const nid = 'th_' + Date.now().toString(36); window.XENO_PG_FORUM.unshift({ id: nid, title: v.title, space: v.space, author: { name: 'Emilian', kind: 'human' }, replies: 0, state: 'open', body: v.body, lastActivityAt: new Date().toISOString() }); window.XENO_DB?.save?.(); X().go('global', { global: 'community', item: nid }); toast('Thread posted');
+    const nid = 'th_' + Date.now().toString(36); window.XENO_PG_FORUM.unshift({ id: nid, title: v.title, space: v.space, author: { name: window.XENO_ME.name(), kind: 'human' }, replies: 0, state: 'open', body: v.body, lastActivityAt: new Date().toISOString() }); window.XENO_DB?.save?.(); X().go('global', { global: 'community', item: nid }); toast('Thread posted');
   }
   async function newMind() {
     const v = await D().form({ title: 'New Mind', sub: 'A Mind is given. A Soul is earned.', submit: 'Create Mind', fields: [
@@ -185,7 +185,7 @@
       { id: 'diag', label: 'Attach', type: 'checks', value: ['diag'], options: [['diag', `Technical details — ${diag}`]] }] });
     if (!v) return;
     if (v.vis === 'public') {
-      const F = window.XENO_PG_FORUM, th = { id: 'th_' + Date.now(), title: v.title.trim(), space: v.kind === 'bug' ? 'Questions' : 'Feedback', author: { name: 'Emilian', kind: 'human' }, replies: 0, state: 'open', lastActivityAt: new Date().toISOString(), body: v.body || '', diag: (v.diag || []).length ? diag : null };
+      const F = window.XENO_PG_FORUM, th = { id: 'th_' + Date.now(), title: v.title.trim(), space: v.kind === 'bug' ? 'Questions' : 'Feedback', author: { name: window.XENO_ME.name(), kind: 'human' }, replies: 0, state: 'open', lastActivityAt: new Date().toISOString(), body: v.body || '', diag: (v.diag || []).length ? diag : null };
       F.unshift(th); window.XENO_DB?.save?.();
       const t = document.getElementById('toast'); t.innerHTML = `Posted in Community <button class="pg-undo">View</button>`; t.classList.add('on'); t.querySelector('.pg-undo').onclick = () => { t.classList.remove('on'); X().go('global', { global: 'community', item: th.title }); };
       clearTimeout(t._pgT); t._pgT = setTimeout(() => t.classList.remove('on'), 5000);
@@ -248,7 +248,7 @@
   }
   // ---- leaving: an owner must hand the workspace on first (Slack, GitHub orgs) ----
   async function leaveWorkspace() {
-    const y = W().you, you = (typeof y === 'string' ? y : y?.name) || W().members.find((m) => m.kind === 'human' && m.role === (y?.role || 'owner'))?.name || 'Emilian', me = member(you), name = W().name;
+    const y = W().you, you = (typeof y === 'string' ? y : y?.name) || W().members.find((m) => m.kind === 'human' && m.role === (y?.role || 'owner'))?.name || window.XENO_ME.name(), me = member(you), name = W().name;
     if (me && me.role === 'owner') {
       const heirs = W().members.filter((m) => m.kind === 'human' && m.name !== you && m.status !== 'invited');
       if (!heirs.length) return D().confirm({ title: 'You are the only person here', body: 'Invite someone and make them owner first, or delete the workspace from its settings.', action: 'OK', danger: false });
