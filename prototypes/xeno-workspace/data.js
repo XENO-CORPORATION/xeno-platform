@@ -1,8 +1,11 @@
 // XENO Workspace shell — the data the shell renders. Placements follow XENO MODES - SPEC.md §3/§4
 // (lock candidate, 2026-09-17). Status follows XENO PRODUCTS - CATALOG.md: 'live' = has a real
 // product today, 'soon' = docs scaffold / planned. Icons come from xeno-product-icons/svg.
-window.XENO_ICON_DIR = 'file:///X:/code/xeno-corporation/xeno-product-icons/svg/';
-window.XENO_FILE_ICON_DIR = 'file:///X:/code/xeno-corporation/xeno-product-icons/file-icons/svg/';
+// Served by the platform, the icons are the copy it ships at /product-icons/ (scripts/sync-product-icons.mjs).
+// Opened from disk, they come from the workspace-root folder on this machine.
+window.XENO_ICON_BASE = /^https?:$/.test(location.protocol) ? '/product-icons/' : 'file:///X:/code/xeno-corporation/xeno-product-icons/';
+window.XENO_ICON_DIR = window.XENO_ICON_BASE + 'svg/';
+window.XENO_FILE_ICON_DIR = window.XENO_ICON_BASE + 'file-icons/svg/';
 
 // kind: 'desktop' (opens in Hub), 'web' (runs here), 'chat'
 const P = (id, name, opts = {}) => ({ id, name, icon: opts.icon === undefined ? `xeno-${id}` : opts.icon, code: opts.code, status: opts.status || 'live', kind: opts.kind || 'desktop', blurb: opts.blurb || '' });
