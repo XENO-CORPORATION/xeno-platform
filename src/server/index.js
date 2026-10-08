@@ -82,6 +82,7 @@ import { router as downloadFunnelRouter } from './routes/downloadFunnelRoutes.js
 import { sweepExpiredIntents } from './services/downloadFunnel.js';
 import { sweepRetention, RETENTION_SWEEP_INTERVAL_MS } from './services/dataRetention.js';
 import { sweepExpiredArtifacts } from './services/artifactService.js';
+import { sweepLibraryTrash } from './services/libraryOrganise.js';
 import { requireSupportedClient } from './middleware/requireSupportedClient.js';
 import clientPolicyRoutes from './routes/clientPolicyRoutes.js';
 import faviconRoutes from './routes/faviconRoutes.js';
@@ -3955,6 +3956,9 @@ startDownloadCleanup();
       // Artifacts expire per ARTIFACTS_RETENTION_DAYS_* (services/artifactService.js) — soft-deleted, bounded batches.
       .then(() => sweepExpiredArtifacts(pool))
       .then((r) => { if (r?.expired) console.log(`[Retention] artifacts expired:${r.expired}`); })
+      // The Library's trash keeps an item for TRASH_DAYS, then it is deleted forever (services/libraryOrganise.js).
+      .then(() => sweepLibraryTrash(pool))
+      .then((r) => { if (r?.purged) console.log(`[Retention] library trash purged:${r.purged}`); })
       .catch((e) => console.error('[Retention] error:', e.message));
     backgroundLeader.whenLeader(() => {
       const t = setInterval(sweepRet, RETENTION_SWEEP_INTERVAL_MS);

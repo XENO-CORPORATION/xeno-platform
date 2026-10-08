@@ -16,6 +16,9 @@ import {
   verifyAuthorizedLibraryContentRequest,
 } from '../services/libraryAssets.js';
 import { requireResourceRelation, sendChatAuthorityError } from '../services/chatProjectAuthority.js';
+import {
+  emptyLibraryTrash, purgeLibraryItem, renameLibraryItem, restoreLibraryItem, starLibraryItem, trashLibraryItem,
+} from '../services/libraryOrganise.js';
 
 const router = express.Router();
 
@@ -183,6 +186,50 @@ router.post('/assets/:id/ingestions/retry', async (req, res) => {
     console.error('Failed to retry Library ingestion:', error);
     res.status(500).json({ success: false, error: 'Could not retry Library ingestion' });
   }
+});
+
+// ── Organise: rename, star, trash, restore, delete forever ─────────────────────────────────────────
+// One answer shape for all of them. 404 covers both "no such item" and "you may not see it".
+const sendOrganised = (res, result, body = {}) => {
+  if (result.ok) return res.json({ success: true, ...body });
+  if (result.invalid) return res.status(400).json({ success: false, error: result.code === 'invalid_name' ? 'That name can’t be used' : 'Invalid Library item', code: result.code || 'invalid_item' });
+  if (result.unsupported) return res.status(400).json({ success: false, error: 'This kind of item can’t do that', code: result.code || 'unsupported' });
+  if (result.notFound) return res.status(404).json({ success: false, error: 'Library item not found', code: 'not_found' });
+  if (result.forbidden) return res.status(403).json({ success: false, error: 'You can see this item but can’t change it', code: 'forbidden' });
+  if (result.conflict) return res.status(409).json({ success: false, error: 'The item’s state refuses this change', code: result.code, ...(result.referenceCount ? { reference_count: result.referenceCount } : {}) });
+  return res.status(500).json({ success: false, error: 'Internal server error' });
+};
+const organise = (label, run) => async (req, res) => {
+  try { await run(req, res, { type: 'user', id: req.user.id }, String(req.params.source), req.params.id); }
+  catch (error) { console.error(`Failed to ${label} Library item:`, error); res.status(500).json({ success: false, error: 'Internal server error' }); }
+};
+
+router.patch('/assets/:source/:id', organise('rename', async (req, res, principal, source, id) => {
+  const result = await renameLibraryItem(req.db, principal, source, id, req.body?.name);
+  sendOrganised(res, result, { name: result.name });
+}));
+router.put('/assets/:source/:id/star', organise('star', async (req, res, principal, source, id) => {
+  sendOrganised(res, await starLibraryItem(req.db, principal, source, id, true), { starred: true });
+}));
+router.delete('/assets/:source/:id/star', organise('unstar', async (req, res, principal, source, id) => {
+  sendOrganised(res, await starLibraryItem(req.db, principal, source, id, false), { starred: false });
+}));
+router.post('/assets/:source/:id/trash', organise('trash', async (req, res, principal, source, id) => {
+  const result = await trashLibraryItem(req.db, principal, source, id);
+  sendOrganised(res, result, { trashed_at: result.trashedAt, purge_after: result.purgeAfter });
+}));
+router.post('/assets/:source/:id/restore', organise('restore', async (req, res, principal, source, id) => {
+  sendOrganised(res, await restoreLibraryItem(req.db, principal, source, id));
+}));
+// Delete forever. Only for an item already in the trash: the two-step is the protection.
+router.delete('/trash/:source/:id', organise('purge', async (req, res, principal, source, id) => {
+  sendOrganised(res, await purgeLibraryItem(req.db, principal, source, id));
+}));
+router.delete('/trash', async (req, res) => {
+  try {
+    const result = await emptyLibraryTrash(req.db, { type: 'user', id: req.user.id });
+    sendOrganised(res, result, { purged: result.purged });
+  } catch (error) { console.error('Failed to empty Library trash:', error); res.status(500).json({ success: false, error: 'Internal server error' }); }
 });
 
 router.delete('/assets/:source/:id', async (req, res) => {
