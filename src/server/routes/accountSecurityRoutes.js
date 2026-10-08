@@ -8,10 +8,8 @@
  *   POST   /email/confirm            { code } from the new address: makes the change
  *   DELETE /email                    drop a pending change
  *   DELETE /sessions                 sign out everywhere else (?all=1 includes this session)
- *   GET    /api-keys                 personal API keys
- *   POST   /api-keys                 make one; the key is in this response and never again [confirmed]
- *   PATCH  /api-keys/:id             rename
- *   DELETE /api-keys/:id             revoke
+ *   GET    /api-keys                 the person's API keys (made on the API portal; see services/accountApiKeys.js)
+ *   DELETE /api-keys/:id             revoke one
  *   GET    /exports                  copies of your data
  *   POST   /exports                  ask for a new copy                        [confirmed]
  *   GET    /exports/:id/download     the file
@@ -31,7 +29,7 @@ import {
   CODE_MINUTES, clearConfirmation, confirmMethods, confirmWithCode, confirmWithPassword, confirmationStatus, issueCode, requireConfirmation,
 } from '../services/accountConfirmation.js';
 import { cancelEmailChange, completeEmailChange, pendingEmailChange, requestEmailChange } from '../services/accountEmailChange.js';
-import { createApiKey, listApiKeys, renameApiKey, revokeApiKey } from '../services/accountApiKeys.js';
+import { listApiKeys, revokeApiKey } from '../services/accountApiKeys.js';
 import { deleteExport, exportFile, listExports, requestExport } from '../services/accountExport.js';
 
 const router = express.Router();
@@ -151,24 +149,6 @@ router.delete('/sessions', guard('sign out everywhere', async (req, res) => {
 // ── personal API keys ──────────────────────────────────────────────────────────────────────────────
 router.get('/api-keys', guard('api keys', async (req, res) => {
   res.json({ success: true, keys: await listApiKeys(req.db, req.user.id) });
-}));
-
-router.post('/api-keys', requireConfirmation(), guard('api key create', async (req, res) => {
-  const result = await createApiKey(req.db, { userId: req.user.id, name: req.body?.name, expiresInDays: req.body?.expires_in_days ?? null });
-  if (result.ok) {
-    recordSecurityEvent(req.db, EVENTS.API_KEY_CREATED, { userId: req.user.id, req, metadata: { key_id: result.key.id, name: result.key.name, expires_at: result.key.expires_at } });
-    res.set('Cache-Control', 'no-store');
-    return res.status(201).json({ success: true, key: result.key, secret: result.secret });
-  }
-  if (result.invalid) return fail(res, 400, result.code, result.code === 'invalid_expiry' ? 'Pick 30, 90 or 365 days, or no expiry' : 'Give the key a name of up to 100 characters');
-  return fail(res, 409, result.code, `You already have ${result.limit} active keys. Revoke one first.`, { limit: result.limit });
-}));
-
-router.patch('/api-keys/:id', guard('api key rename', async (req, res) => {
-  const result = await renameApiKey(req.db, { userId: req.user.id, keyId: req.params.id, name: req.body?.name });
-  if (result.ok) return res.json({ success: true, key: result.key });
-  if (result.invalid) return fail(res, 400, result.code, 'Give the key a name of up to 100 characters');
-  return fail(res, 404, 'not_found', 'API key not found');
 }));
 
 router.delete('/api-keys/:id', guard('api key revoke', async (req, res) => {

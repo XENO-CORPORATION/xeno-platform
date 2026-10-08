@@ -10,7 +10,7 @@
 // Type-only declarations kept for backward compatibility with components that still
 // reference these window properties during the migration. They carry NO values —
 // nothing in the shipped bundle assigns real keys to them.
-import { API_BASE_URL, siteUrl } from './hosts';
+import { API_BASE_URL, API_KEYS_URL } from './hosts';
 
 declare global {
   interface Window {
@@ -30,11 +30,11 @@ export const API_INSTRUCTIONS = {
     name: 'Xeno API',
     instructions: [
       'Visit Xeno Studio to get your API key',
-      'Go to your account settings',
+      'Sign in to the API portal with your XENO account',
       'Create an API key and copy it here'
     ],
     linkText: 'Get Xeno API Key',
-    linkUrl: siteUrl('/account/api-keys'),
+    linkUrl: API_KEYS_URL,
     placeholder: 'xeno_...'
   },
   gemini: {
@@ -93,12 +93,12 @@ export const API_INSTRUCTIONS_LEGACY = {
     title: 'Xeno API Key',
     description: 'To use AI generation features, you need a Xeno API key.',
     steps: [
-      'Visit Xeno Studio at https://xenostudio.ai/',
-      'Go to your account settings',
+      'Open the XENO API portal',
+      'Sign in with your XENO account',
       'Create an API key',
       'Enter it below'
     ],
-    url: siteUrl('/account/api-keys')
+    url: API_KEYS_URL
   },
   gemini: {
     title: 'Google Gemini API Token',

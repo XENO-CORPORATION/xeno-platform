@@ -122,6 +122,9 @@ export function siteUrl(pathname: string): string {
   return `${SITE_ORIGIN}${pathname.startsWith('/') ? pathname : `/${pathname}`}`;
 }
 
+/** Where a person makes and manages API keys: the API portal, on the API host. Keys are made nowhere else. */
+export const API_KEYS_URL = `${API_ORIGIN}/dashboard/keys`;
+
 /** Absolute URL on the release/update feed origin. */
 export function updatesUrl(pathname: string): string {
   return `${UPDATES_ORIGIN}${pathname.startsWith('/') ? pathname : `/${pathname}`}`;

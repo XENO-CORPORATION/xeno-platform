@@ -193,7 +193,7 @@ xeno chat
 xeno chat --api-key "xeno_..."
 \`\`\`
 
-Create and rotate keys from your account at [xenostudio.ai](https://xenostudio.ai/account/api-keys).
+Create and rotate keys on the XENO API portal at [api.xenosystem.ai](https://api.xenosystem.ai/dashboard/keys). Sign in with your XENO account.
 
 ## Pointing at a different endpoint
 

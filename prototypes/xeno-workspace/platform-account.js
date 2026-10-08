@@ -4,15 +4,16 @@
  *      Settings reads them (xw.acct), replacing every sample value;
  *   2. sends profile edits, session sign-outs, sign-in method removal and preferences to the API (XENO_NET.remote);
  *   2b. asks the server to confirm it's you before a sensitive change (password, or a mailed code for an account
- *      with no password), changes the sign-in email, signs out everywhere, makes and revokes personal API keys,
- *      and requests, downloads and removes a copy of the person's data;
+ *      with no password), changes the sign-in email, signs out everywhere, lists and revokes API keys, and
+ *      requests, downloads and removes a copy of the person's data. API keys are MADE on the XENO API portal
+ *      (api.xenosystem.ai), the one place that ties a key to a project and its limits; this page links there;
  *   3. shows a plain "not available yet" for the parts the platform has no API for. Nothing is invented:
  *      no sample key, device, invoice or gift is ever shown as the signed-in person's.
  * Routes used: GET /api/account/overview · GET+DELETE /api/account/sessions · GET+DELETE /api/auth/linked-accounts
  *   · PUT /api/auth/profile · GET /api/billing/overview · POST /api/billing/portal · GET /api/dashboard/stats
  *   · GET+PATCH /api/user-data/settings (bio and preferences) · GET /api/account/security · POST /api/account/confirm
  *   · POST /api/account/confirm/code · POST+DELETE /api/account/email · POST /api/account/email/confirm
- *   · DELETE /api/account/sessions · GET+POST /api/account/api-keys · PATCH+DELETE /api/account/api-keys/:id
+ *   · DELETE /api/account/sessions · GET /api/account/api-keys · DELETE /api/account/api-keys/:id
  *   · GET+POST /api/account/exports · GET /api/account/exports/:id/download · DELETE /api/account/exports/:id.
  * Missing on the platform (each section says so): passkeys, authenticator, recovery codes, adding a sign-in method,
  *   authorised apps, provider keys, gifts, deleting the account from here, spend cap. */
@@ -109,13 +110,16 @@
 
   // ---------- API keys ----------
   const btn = (label, act, arg = '', cls = 'ghost') => `<button class="pg-btn ${cls}" data-acct="${act}" data-arg="${esc(arg)}"><span>${esc(label)}</span></button>`;
+  // the API portal lives on the api. host of whichever XENO domain this page is on
+  const portal = () => `https://api.${/(^|\.)xenostudio\.ai$/.test(location.hostname) ? 'xenostudio.ai' : 'xenosystem.ai'}/dashboard/keys`;
   function keysSection(h) {
     if (!S.keys) return h.card('API keys', '<p class="set-p">XENO couldn’t load your keys.</p>', retry);
     const line = (k) => `<code>${esc(k.preview)}</code> · ${k.revoked ? 'revoked' : k.expired ? 'expired' : k.expires_at ? 'expires ' + h.when(ms(k.expires_at)) : 'never expires'} · ${k.last_used_at ? 'used ' + h.ago(ms(k.last_used_at)) : 'never used'}`;
     const live = S.keys.filter((k) => k.is_active), dead = S.keys.filter((k) => !k.is_active);
-    return h.card('API keys', (live.length ? live.map((k) => h.row(esc(k.name), line(k), btn('Rename', 'renameKey', k.id) + ' ' + btn('Revoke', 'revokeKey', k.id))).join('') : '<p class="pg-dim set-p">No keys. A key lets the XENO CLI, a script or an automated build act as you.</p>'), btn('New API key', 'newKey', '', ''))
+    const open = `<a class="pg-btn" href="${portal()}" target="_blank" rel="noopener"><span>Open the API portal</span></a>`;
+    return h.card('API keys', (live.length ? live.map((k) => h.row(esc(k.name), line(k), btn('Revoke', 'revokeKey', k.id))).join('') : '<p class="pg-dim set-p">No keys. A key lets the XENO CLI, a script or an automated build act as you.</p>'), open)
       + (dead.length ? h.card('Revoked and expired', dead.map((k) => h.row(esc(k.name), line(k), '')).join('')) : '')
-      + `<p class="pg-rule">${h.ic('lock')}A key is shown once, when you create it. XENO keeps only a fingerprint, so a lost key is replaced, not recovered.</p>`;
+      + `<p class="pg-rule">${h.ic('lock')}Keys are made on the XENO API portal, where each key belongs to a project with its own limits. Here you can see every key on your account and revoke one at once.</p>`;
   }
   // ---------- a copy of your data ----------
   const size = (n) => (n >= 1e9 ? (n / 1e9).toFixed(1) + ' GB' : n >= 1e6 ? (n / 1e6).toFixed(1) + ' MB' : n >= 1e3 ? Math.round(n / 1e3) + ' KB' : (n || 0) + ' B');
@@ -181,22 +185,6 @@
   }
 
   // ---------- keys and exports: actions ----------
-  async function newKey() {
-    if (!await confirm('An API key can act as you.')) return;
-    let made = null;
-    const v = await window.XD.form({ title: 'New API key', submit: 'Create key', size: 'sm', fields: [{ id: 'name', label: 'Name', required: true, max: 100, placeholder: 'e.g. Laptop CLI' }, { id: 'exp', label: 'Expires', type: 'seg', value: '90', options: [['30', '30 days'], ['90', '90 days'], ['365', '1 year'], ['0', 'Never']] }],
-      onSubmit: async (vals) => { const r = await api('POST', '/api/account/api-keys', { name: vals.name, expires_in_days: +vals.exp || null }); if (!r.ok) return say(r, 'The key couldn’t be created.'); made = r.d; return null; } });
-    if (!v || !made) return;
-    await load();
-    const secret = made.secret; made = null;   // kept only for this dialog
-    window.XD.info({ title: 'Copy your new key', sub: 'This is the only time it’s shown.', html: `<div class="set-secret"><code data-secret>${esc(secret)}</code></div><p class="xd-note">Store it in your password manager or your build’s secrets. If you lose it, revoke it and make a new one.</p>`, actions: [{ label: 'Copy key', close: false, run: () => window.XCM.H.copy(secret, 'Key copied') }] });
-  }
-  async function renameKey(id) {
-    const k = (S.keys || []).find((x) => x.id === id); if (!k) return;
-    const v = await window.XD.form({ title: 'Rename key', submit: 'Rename', size: 'sm', fields: [{ id: 'name', label: 'Name', required: true, max: 100, value: k.name }],
-      onSubmit: async (vals) => { const r = await api('PATCH', '/api/account/api-keys/' + encodeURIComponent(id), { name: vals.name }); return r.ok ? null : say(r, 'The key couldn’t be renamed.'); } });
-    if (v) load();
-  }
   let job = null;
   const take = () => { const v = job; job = null; return v; };
   const run = (op, payload, label) => { job = payload; return window.XENO_NET.run({ op, label }); };
@@ -223,8 +211,6 @@
     const act = t.dataset.acct;
     if (act === 'retry') return load();
     if (act === 'plans') return window.open('/pricing', '_blank', 'noopener');
-    if (act === 'newKey') return newKey();
-    if (act === 'renameKey') return renameKey(t.dataset.arg);
     if (act === 'revokeKey') return revokeKey(t.dataset.arg);
     if (act === 'export') return requestExport();
     if (act === 'removeExport') return removeExport(t.dataset.arg);
