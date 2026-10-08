@@ -124,6 +124,17 @@ test('the database is asked about the token\'s HASH, never the token itself', as
   assert.equal(JSON.stringify(db.calls).includes(TOKEN), false, 'the raw token reached the database');
 });
 
+test('a live token is revoked by writing its family, not merely answered 200', async () => {
+  const db = stubDb((sql) => (isFamilyLookup(sql) ? liveFamily : nothing));
+  await serve(db, async (base) => {
+    const r = await revoke(base, { json: { token: TOKEN } });
+    assert.equal(r.status, 200, r.text);
+  });
+  const write = db.calls.find((c) => isFamilyWrite(c.sql));
+  assert.ok(write, 'a live token was answered 200 but its family was never revoked');
+  assert.deepEqual(write.params, ['fam-1'], 'the family write names the wrong family');
+});
+
 test('a database failure is answered 503 with no database text, and the cause is logged', async () => {
   const db = stubDb(() => { throw Object.assign(new Error(DB_FAILURE), { code: '28P01' }); });
   let r;
@@ -138,7 +149,8 @@ test('a database failure is answered 503 with no database text, and the cause is
   }
   const line = logged.find((l) => l.includes('[oauth2/revoke]'));
   assert.ok(line, 'the failure was not logged server-side');
-  assert.ok(line.includes(DB_FAILURE), 'the log lost the underlying cause');
+  assert.ok(line.includes('28P01'), 'the log lost the SQLSTATE code, the part that is safe to keep');
+  assert.equal(line.includes(DB_FAILURE), false, 'the log carried database text (host, role, database)');
   assert.equal(logged.some((l) => l.includes(TOKEN)), false, 'the token value reached the log');
 });
 
