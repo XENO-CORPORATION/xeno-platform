@@ -17,6 +17,7 @@
     + '#xp-state div{max-width:360px;text-align:center}#xp-state button{margin-top:14px;padding:8px 14px;border-radius:8px;border:1px solid #3a3a3a;background:#1a1a1a;color:#fff;font:inherit;cursor:pointer}'
     + '#xp-note{position:fixed;left:50%;bottom:10px;transform:translateX(-50%);padding:6px 12px;border-radius:8px;border:1px solid #2e2e2e;background:#141414;color:#b8b8b8;font:12px/1.4 Inter,system-ui,sans-serif;z-index:9000}';
   document.head.appendChild(style);
+  const icon = document.createElement('link'); icon.rel = 'icon'; icon.href = '/favicon.svg'; document.head.appendChild(icon); // the platform's own icon; from disk there is none to point at
   const state = (html) => { let s = document.getElementById('xp-state'); if (!s) { s = document.createElement('div'); s.id = 'xp-state'; s.setAttribute('role', 'status'); (document.body || root).appendChild(s); } s.innerHTML = `<div>${html}</div>`; return s; };
   const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
   const toLogin = () => { location.replace('/login?returnUrl=' + encodeURIComponent(location.pathname + location.search + location.hash)); return null; };
