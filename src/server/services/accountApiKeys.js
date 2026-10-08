@@ -1,5 +1,6 @@
 /**
- * A person's API keys, as the account page shows them: list, and revoke.
+ * A person's API keys read straight from the table (used by the data export), and revoke.
+ * The account page's list and "new key" go through the API portal instead: services/apiPortalKeys.js.
  *
  * Keys are MADE in one place only: the XENO API portal (api.xenosystem.ai, repo xeno-api-platform,
  * portal/lib/platform-billing.ts createCanonicalApiKeyForLocalUser). It writes the `api_keys` row and

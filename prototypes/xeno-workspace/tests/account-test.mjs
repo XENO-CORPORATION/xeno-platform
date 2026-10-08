@@ -35,6 +35,7 @@ function accountSecurity(m, p, body) {
   if (p === '/api/account/email/confirm' && m === 'POST') { if (!db.pending || body.code !== db.pending.code) return json(400, { success: false, error: 'That code isn’t right', code: 'wrong_code', remaining: 4 }); db.user.email = db.pending.email; db.pending = null; db.confirmed = false; db.sessions = db.sessions.filter((s) => s.current); return json(200, { success: true, email: db.user.email, other_sessions_signed_out: true }); }
   if (p === '/api/account/sessions' && m === 'DELETE') { const n = db.sessions.filter((s) => !s.current).length; db.sessions = db.sessions.filter((s) => s.current); return json(200, { success: true, revoked_sessions: n, apps_signed_out: true, signed_out: false }); }
   if (p === '/api/account/api-keys' && m === 'GET') return json(200, { success: true, keys: db.keys.map(({ secret: _s, ...k }) => k) });
+  if (p === '/api/account/api-keys' && m === 'POST') { const no = need(); if (no) return no; if (!String(body.name || '').trim()) return json(400, { success: false, error: 'Give the key a name of up to 100 characters', code: 'invalid_name' }); if (db.keyLimit != null && db.keys.filter((k) => k.is_active).length >= db.keyLimit) return json(409, { success: false, error: `You've reached the maximum of ${db.keyLimit} API keys for your FREE plan. Delete an unused key to create a new one.`, code: 'key_limit' }); const n = db.nextKey++; const secret = 'xeno-' + String(n).repeat(48).slice(0, 48); const key = { id: 'k' + n + 'n', name: body.name.trim(), preview: secret.slice(0, 16) + '…', is_active: true, revoked: false, expired: false, created_at: new Date().toISOString(), expires_at: null, last_used_at: null, usage_count: 0, project_name: 'Default project', workspace_name: 'Personal', secret }; db.keys.unshift(key); const { secret: _s, ...view } = key; return json(201, { success: true, key: view, secret }); }
   const key = p.match(/^\/api\/account\/api-keys\/([^/]+)$/);
   if (key) { const k = db.keys.find((x) => x.id === decodeURIComponent(key[1])); if (!k) return json(404, { success: false, error: 'API key not found', code: 'not_found' }); if (m === 'DELETE') { k.is_active = false; k.revoked = true; return json(200, { success: true, key: k }); } }
   if (p === '/api/account/exports' && m === 'GET') { for (const x of db.exports) if (x.status === 'building' && Date.now() - x.t > 900) Object.assign(x, { status: 'ready', ready_at: new Date().toISOString(), expires_at: new Date(Date.now() + 7 * 864e5).toISOString(), size_bytes: 2400000, summary: { errors: [], skipped_files: [] } }); return json(200, { success: true, exports: db.exports.map(({ t: _t, ...x }) => x) }); }
@@ -140,13 +141,28 @@ try {
   const sent = (m, re) => db.calls.filter((c) => c.m === m && re.test(c.p));
 
   // ---- API keys: listed and revoked here, made on the API portal ----
-  db.keys = [{ id: 'k1', name: 'Work laptop', preview: 'xeno-1111111111a…', is_active: true, revoked: false, expired: false, created_at: new Date().toISOString(), expires_at: null, last_used_at: null, usage_count: 0 }];
+  db.keys = [{ id: 'k1', name: 'Work laptop', preview: 'xeno-1111111111a…', is_active: true, revoked: false, expired: false, created_at: new Date().toISOString(), expires_at: null, last_used_at: null, usage_count: 0, project_name: 'Engine research', workspace_name: 'Personal' }];
   await p.evaluate(() => window.XENO_ACCOUNT.load()); await wait(400);
   await open('API keys'); t = await text();
   ok(/Work laptop/.test(t) && /xeno-1111111111a…/.test(t) && /never used/.test(t), 'API keys lists the real keys by name and fingerprint');
+  ok(/Engine research/.test(t), 'each key says which project it belongs to');
   const portal = await p.evaluate(() => { const a = document.querySelector('.pg--set a[href*="/dashboard/keys"]'); return a ? { href: a.href, target: a.target, rel: a.rel } : null; });
-  ok(!!portal && portal.href === 'https://api.xenosystem.ai/dashboard/keys' && portal.target === '_blank' && /noopener/.test(portal.rel), 'making a key is a link to the API portal (' + JSON.stringify(portal) + ')');
-  ok(!(await p.evaluate(() => !!document.querySelector('.pg--set [data-acct="newKey"], .pg--set [data-acct="renameKey"]'))) && /made on the XENO API portal/.test(t), 'the page offers no second way to make a key, and says where keys are made');
+  ok(!!portal && portal.href === 'https://api.xenosystem.ai/dashboard/keys' && portal.target === '_blank' && /noopener/.test(portal.rel), 'projects and limits are a link to the API portal (' + JSON.stringify(portal) + ')');
+  // a new key: confirm first, then the portal makes it
+  db.calls.length = 0; db.confirmed = false; await p.click('.pg--set [data-acct="newKey"]'); await wait(500);
+  ok(/Confirm it’s you/.test(await dialog()) && /An API key can act as you/.test(await dialog()) && sent('POST', /api-keys$/).length === 0, 'making a key asks to confirm it’s you first, before anything is sent');
+  await type('correct horse'); await submit();
+  ok(/New API key/.test(await dialog()) && /default project/.test(await dialog()), 'then asks for a name, and says which project the key goes into');
+  await type('Laptop CLI'); await submit(); let shown = await dialog();
+  const fresh = db.keys[0];
+  ok(/Copy your new key/.test(shown) && shown.includes(fresh.secret) && /only time/.test(shown), 'the new key is shown once, to copy');
+  await closeAll(); t = await text();
+  ok(/Laptop CLI/.test(t) && /Default project/.test(t) && t.includes(fresh.preview) && !t.includes(fresh.secret), 'afterwards the page shows its name, project and fingerprint, never the key');
+  ok(!(await p.evaluate(() => JSON.stringify(localStorage))).includes(fresh.secret), 'the key is not kept in the browser');
+  db.keyLimit = 2; await p.click('.pg--set [data-acct="newKey"]'); await wait(500); await type('One too many'); await submit(); shown = await dialog();
+  ok(/maximum of 2 API keys/.test(shown) && /New API key/.test(shown) && db.keys.length === 2, 'the plan’s key limit is the portal’s, shown in its words, and no key is made');
+  await closeAll(); db.keyLimit = null;
+  db.keys = db.keys.filter((k) => k.id === 'k1'); await p.evaluate(() => window.XENO_ACCOUNT.load()); await wait(400); await open('API keys');
   db.calls.length = 0; await p.click('.pg--set [data-acct="revokeKey"]'); await wait(400);
   ok(/Revoke “Work laptop”\?/.test(await dialog()) && sent('DELETE', /api-keys/).length === 0, 'revoking asks first');
   await confirmYes(); await settle(); t = await text();
@@ -155,6 +171,7 @@ try {
   // ---- a copy of your data ----
   await open('Your data'); t = await text();
   ok(/Request a copy/.test(t) && /one archive/.test(t), 'Your data offers a copy');
+  db.confirmed = false;   // a new session: the earlier confirmation is not carried over
   db.calls.length = 0; await p.click('.pg--set [data-acct="export"]'); await wait(500);
   let d = await dialog();
   ok(/Confirm it’s you/.test(d) && /everything in your account/.test(d) && sent('POST', /exports$/).length === 0, 'asking for a copy asks to confirm it’s you first, before anything is sent');
