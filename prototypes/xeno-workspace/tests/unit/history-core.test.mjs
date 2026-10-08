@@ -114,6 +114,31 @@ test('a reload hook that throws is logged, and the undo still counts as done (F-
   assert.equal(h.list()[0].state, 'undone');
 });
 
+test('after an undo, the next record does not claim the undo\u2019s own writes (F-07)', () => {
+  const { h, store } = make({ 'xw.a': '1' });
+  h.gesture(); store.set('xw.a', '2'); h.record('set a', () => store.set('xw.a', '1'));
+  h.noteReload(); h.undo();
+  h.record('probe', null);
+  assert.equal(h.list()[0].before, undefined, 'the probe changed nothing; it holds no before');
+});
+
+test('after the area\u2019s own undo, the next record does not claim its writes (F-07, function path)', () => {
+  const { h, store } = make({ 'xw.a': '1' });
+  h.gesture(); store.set('xw.a', '2'); h.record('set a', () => store.set('xw.a', '1'));
+  assert.equal(h.undo(), true);
+  h.record('probe', null);
+  assert.equal(h.list()[0].before, undefined, 'the probe changed nothing; it holds no before');
+});
+
+test('a change another window made is not claimed by the next record of this window (F-18)', () => {
+  const { h, store } = make({ 'xw.a': '1' });
+  h.gesture();
+  store.set('xw.a', '5');
+  h.observe('xw.a', '5');
+  h.record('probe', null);
+  assert.equal(h.list()[0].before, undefined, 'the other window\u2019s change is the reading, not this record');
+});
+
 test('an inert record still ends the redo stack', () => {
   const { h, store } = make({ 'xw.a': '1' });
   h.gesture();

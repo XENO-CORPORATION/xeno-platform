@@ -47,8 +47,13 @@
     // writes the stored values back; a value is only written if it still holds what the history left there
     function write(vals, expect) {
       let kept = 0;
-      Object.entries(vals).forEach(([k, v]) => { const cur = ports.kv.get(k); if (expect && cur !== expect[k]) { kept++; return; } if (v == null) ports.kv.remove(k); else ports.kv.set(k, v); });
-      try { ports.reloadHooks(); } catch (err) { ports.logError(err); }   // the values are written by now: a render that fails is logged, not a failed undo
+      try {
+        Object.entries(vals).forEach(([k, v]) => { const cur = ports.kv.get(k); if (expect && cur !== expect[k]) { kept++; return; } if (v == null) ports.kv.remove(k); else ports.kv.set(k, v); });
+      } finally {
+        // the reading moves to what the store holds now, even after a failed write, so the next change is not charged with these writes
+        try { ports.reloadHooks(); } catch (err) { ports.logError(err); }   // the values are written by now: a render that fails is logged, not a failed undo
+        pre = snap();
+      }
       return kept;
     }
     function record(label, fn, opts = {}) {
@@ -80,7 +85,7 @@
         const s1 = snap();
         try { fn(); } catch (err) { ports.logError(err); return retire(e); }
         try { ports.persist(); } catch {}
-        const s2 = snap(), keys = diff(s1, s2);
+        const s2 = snap(), keys = diff(s1, s2); pre = s2;   // what the area's own undo left is the new reading
         if (keys.length) { e.after = pick(s1, keys); e.before = pick(s2, keys); }
         e.used = true;
       } else {
@@ -127,6 +132,8 @@
     return {
       record, undo, redo, jump, undoFromToast,
       gesture() { pre = snap(); },
+      // another window changed a key: this window's reading of it moves with the store, so its next record does not claim the change
+      observe(key, value) { if (key == null) { pre = snap(); return; } if (!isWorkspaceKey(key)) return; if (value == null) delete pre[key]; else pre[key] = value; },
       noteReload() { gen++; },
       canUndo: () => past.length > 0,
       canRedo: () => future.length > 0,

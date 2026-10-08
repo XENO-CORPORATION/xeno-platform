@@ -22,7 +22,10 @@
     clock: { now: () => Date.now() },
     persist: () => window.XENO_DB?.save?.(),
     reloadHooks: () => { window.XENO_DB?.reload?.(); window.XENO_WF?.reload?.(); window.XD?.applyPrefs?.(); window.XENO_PG_SYNC_NAV?.(); window.XW?.render?.(); },
-    watch: () => { const D = window.XENO_DB; if (D && !D.__hist) { const r = D.reload; D.reload = (...a) => { core.noteReload(); return r.apply(D, a); }; D.__hist = true; } },
+    watch: () => {
+      const D = window.XENO_DB; if (D && !D.__hist) { const r = D.reload; D.reload = (...a) => { core.noteReload(); return r.apply(D, a); }; D.__hist = true; }
+      const W = window.XENO_WF; if (W && !W.__hist) { const r = W.reload; W.reload = (...a) => { core.noteReload(); return r.apply(W, a); }; W.__hist = true; }   // a workforce reload makes the closures stale too (F-08)
+    },
     area: () => location.hash.split('/')[3] || location.hash.split('/')[1] || 'workspace',
     toast: (msg, spec) => showToast(msg, spec),
     dismiss: (id) => dismiss(id),
@@ -32,6 +35,8 @@
   // the reading taken at the start of each user gesture: the state before whatever that gesture is about to do
   document.addEventListener('pointerdown', () => core.gesture(), true);
   document.addEventListener('keydown', (e) => { if (!C.isUndoKey(e.key, e.ctrlKey || e.metaKey)) core.gesture(); }, true);
+  // another window's change moves this window's reading with it, so its next record does not claim the change (F-18)
+  window.addEventListener('storage', (e) => { if (e.storageArea === localStorage) core.observe(e.key, e.newValue); });
 
   // ---------- the toast stack: several at once, each keeps its own Undo ----------
   function host() { let h = document.getElementById('xw-toasts'); if (!h) { h = document.createElement('div'); h.id = 'xw-toasts'; h.setAttribute('role', 'region'); h.setAttribute('aria-label', 'Notifications'); h.setAttribute('aria-live', 'polite'); document.body.appendChild(h); } return h; }
