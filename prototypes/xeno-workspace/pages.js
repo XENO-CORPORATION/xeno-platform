@@ -139,7 +139,7 @@
     const kind = u.seg.kind || 'all';
     // a link with ?sel= opens with those files selected — once per address, never over a selection made since (§7bb)
     { const want = (window.XENO_URLSEL?.get() || []).filter((id) => items.some((f) => f.id === id)); if (want.length && libRestored !== location.hash && !u.sel && !u.picked.size) { libRestored = location.hash; u.sel = want[0]; if (want.length > 1) { u.picked = new Set(want); u.anchor = want[0]; } } }
-    let rows = items.filter((f) => (V.trash ? !!f.trashedAt : !f.trashedAt) && (!V.kind || V.kind.includes(f.kind)) && (!V.mode || f.source.mode === V.mode) && (!V.chat || f.source.chat) && (!V.starred || f.starred) && (!V.shared || f.sharedBy) && kindOk(f, V.kind ? 'all' : kind) && matchQ(u.q, f.name, pname(f.source.product), f.project || '', f.source.chat || ''));
+    let rows = items.filter((f) => (V.trash ? !!f.trashedAt : !f.trashedAt) && (!V.kind || V.kind.includes(f.kind)) && (!V.mode || f.source.mode === V.mode) && (!V.chat || f.source.chat) && (!V.starred || f.starred) && (!V.shared || f.sharedBy) && kindOk(f, V.kind ? 'all' : kind) && matchQ(u.q, f.name, pname(f.source.product), f.project || '', f.source.chat || '', f.place || ''));
     rows.sort(u.sort === 'name' ? (a, b) => a.name.localeCompare(b.name) : u.sort === 'size' ? (a, b) => b.bytes - a.bytes : (a, b) => Date.parse(b.updatedAt) - Date.parse(a.updatedAt));
     const live = items.filter((f) => !f.trashedAt), total = live.reduce((n, f) => n + f.bytes, 0), prods = new Set(live.map((f) => f.source.product)).size;
     const sel = rows.find((f) => f.id === u.sel) || null;
@@ -157,7 +157,7 @@
   const emptyDetail = (live, total) => `<aside class="pg-detail pg-detail--none"><div class="pg-detail-top"><span class="pg-tag">Details</span><button class="pg-ib" data-pg-info aria-label="Close details">${ic('x')}</button></div><span class="pg-state-ic">${ic('file')}</span><b>Select a file</b><p class="pg-dim">Its size, where it was made, the chat or project it belongs to, and what you can do with it show up here.</p><dl class="pg-props"><dt>Files</dt><dd>${live.length}</dd><dt>Stored</dt><dd>${bytes(total)}</dd></dl></aside>`;
   function fileDetail(f, inTrash) {
     const k = KIND[f.kind];
-    const props = [['Type', k[0]], ['Size', bytes(f.bytes)], f.media && ['Dimensions', `${f.media.width} × ${f.media.height}`], f.duration && ['Length', f.duration], ['Made in', `${esc(pname(f.source.product))} · ${esc(modeName(f.source.mode))}`], f.source.chat && ['From chat', `<a data-pg-chat="${esc(f.source.chat)}">${esc(f.source.chat)}</a>`], f.project && ['Project', `<a data-pg-go-project="${esc(f.project)}">${esc(f.project)}</a>`], f.sharedBy && ['Shared by', esc(f.sharedBy)], ['Created', ago(f.createdAt) + ' ago'], ['Updated', ago(f.updatedAt) + ' ago']].filter(Boolean);
+    const props = [['Type', k[0]], ['Size', bytes(f.bytes)], f.media && ['Dimensions', `${f.media.width} × ${f.media.height}`], f.duration && ['Length', f.duration], ['Made in', `${esc(pname(f.source.product))} · ${esc(modeName(f.source.mode))}`], f.source.chat && ['From chat', `<a data-pg-chat="${esc(f.source.chat)}">${esc(f.source.chat)}</a>`], f.project && ['Project', `<a data-pg-go-project="${esc(f.project)}">${esc(f.project)}</a>`], f.sharedBy && ['Shared by', esc(f.sharedBy)], f.place && ['Lives in', esc(f.place)], ['Created', ago(f.createdAt) + ' ago'], ['Updated', ago(f.updatedAt) + ' ago'], f.trashedAt && f.purgeAfter && ['Deleted for good', (() => { const d = Math.ceil((Date.parse(f.purgeAfter) - Date.now()) / 86400000); return d > 1 ? `in ${d} days` : d === 1 ? 'tomorrow' : 'today'; })()]].filter(Boolean);
     return `<aside class="pg-detail" aria-label="${esc(f.name)}"><div class="pg-detail-top"><span class="pg-tag">${esc(k[0])}</span><button class="pg-ib" data-pg-info aria-label="Close details">${ic('x')}</button></div>
       <div class="pg-detail-pv">${f.live ? window.XENO_LIB.preview(f, ic(k[1])) : X().mini(f.source.product === 'image' ? 'image' : f.source.product)}</div><b class="pg-detail-name">${esc(f.name)}</b>
       <div class="pg-detail-acts">${inTrash ? btn('Restore', `data-pg-restore="${f.id}"`, false, 'reset') + btn('Delete forever', `data-pg-purge="${f.id}"`, true, 'trash') : (PR[f.source.product] ? btn('Open in ' + pname(f.source.product), `data-pg-open-file="${f.id}"`, false, 'open') : '') + `<button class="pg-ib" data-pg-star="${f.id}" aria-pressed="${f.starred}" aria-label="${f.starred ? 'Unstar' : 'Star'}" data-tip="${f.starred ? 'Unstar' : 'Star'}">${ic('star')}</button><button class="pg-ib" data-pg-download="${f.id}" aria-label="Download" data-tip="Download">${ic('download')}</button><button class="pg-ib" data-pg-copylink="${f.id}" aria-label="Copy link" data-tip="Copy link">${ic('share')}</button><button class="pg-ib" data-pg-trash="${f.id}" aria-label="Move to trash" data-tip="Move to trash">${ic('trash')}</button>`}</div>
@@ -541,11 +541,11 @@
     if (d.pgGoProject) return x.go('global', { global: 'projects', item: d.pgGoProject });
     if (d.pgFile) { const u = ui('library'); if (s.global !== 'library') { const f = libItem(d.pgFile); return x.go('global', { global: 'library', item: f.name }); } if (e.detail > 1) return; if (e.ctrlKey || e.metaKey) return togglePick(d.pgFile); if (e.shiftKey) return rangePick(d.pgFile); return selectFile(d.pgFile); }
     if (d.pgUnsel !== undefined) return selectFile(null);
-    if (d.pgStar && window.XENO_LIB && window.XENO_LIB.served) return void window.XENO_LIB.refuse('star');
-    if (d.pgTrash && window.XENO_LIB && window.XENO_LIB.served) return void window.XENO_LIB.remove([libItem(d.pgTrash)]);
-    if (d.pgRestore && window.XENO_LIB && window.XENO_LIB.served) return void window.XENO_LIB.refuse('restore');
-    if (d.pgPurge && window.XENO_LIB && window.XENO_LIB.served) return void window.XENO_LIB.remove([libItem(d.pgPurge)]);
-    if (d.pgEmptyTrash !== undefined && window.XENO_LIB && window.XENO_LIB.served) return void window.XENO_LIB.refuse('emptyTrash');
+    if (d.pgStar && window.XENO_LIB && window.XENO_LIB.served) return void window.XENO_LIB.star([libItem(d.pgStar)]);
+    if (d.pgTrash && window.XENO_LIB && window.XENO_LIB.served) { ui('library').sel = null; return void window.XENO_LIB.trash([libItem(d.pgTrash)]); }
+    if (d.pgRestore && window.XENO_LIB && window.XENO_LIB.served) { ui('library').sel = null; return void window.XENO_LIB.restore([libItem(d.pgRestore)]); }
+    if (d.pgPurge && window.XENO_LIB && window.XENO_LIB.served) return void window.XENO_LIB.purge([libItem(d.pgPurge)]);
+    if (d.pgEmptyTrash !== undefined && window.XENO_LIB && window.XENO_LIB.served) return void window.XENO_LIB.emptyTrash();
     if (d.pgStar) { const f = libItem(d.pgStar); window.XENO_PG_SYNC_NAV?.(); f.starred = !f.starred; x.toast(f.starred ? 'Starred' : 'Removed from Starred'); return repaint(); }
     if (d.pgTrash) { const f = libItem(d.pgTrash); window.XENO_PG_SYNC_NAV?.(); f.trashedAt = new Date().toISOString(); ui('library').sel = null; repaint(); return undo(`Moved “${f.name}” to Trash`, () => { f.trashedAt = null; window.XENO_PG_SYNC_NAV?.(); repaint(); }); }
     if (d.pgRestore) { const f = libItem(d.pgRestore); window.XENO_PG_SYNC_NAV?.(); f.trashedAt = null; ui('library').sel = null; x.toast(`Restored “${f.name}”`); return repaint(); }
@@ -641,7 +641,7 @@
     const sync = () => window.XENO_PG_SYNC_NAV?.();
     const onLib = () => !!document.querySelector('#main .pg--lib');
     async function renameFile(f) {
-      if (window.XENO_LIB && window.XENO_LIB.served && window.XENO_LIB.refuse('rename')) return;
+      if (window.XENO_LIB && window.XENO_LIB.served) return void window.XENO_LIB.rename(f);
       const v = await window.XD.form({ title: 'Rename file', submit: 'Rename', size: 'sm', fields: [{ id: 'name', label: 'Name', required: true, max: 120, value: f.name,
         validate: (x) => (window.XENO_PG_LIBRARY.items.some((o) => o !== f && !o.trashedAt && o.name.toLowerCase() === x.trim().toLowerCase()) ? 'A file with this name already exists.' : null) }] });
       if (!v || v.name === f.name) return; const was = f.name; f.name = v.name.trim(); f.updatedAt = new Date().toISOString(); sync(); repaint();
@@ -656,9 +656,9 @@
       undo(`Duplicated as “${name}”`, () => { L.splice(L.indexOf(c), 1); sync(); repaint(); });
     }
     function moveFile(f, project) { if (window.XENO_LIB && window.XENO_LIB.served && window.XENO_LIB.refuse('move')) return; const was = f.project; f.project = project; f.updatedAt = new Date().toISOString(); sync(); repaint(); undo(project ? `Moved to ${project}` : 'Removed from its project', () => { f.project = was; sync(); repaint(); }); }
-    function trashFile(f) { if (window.XENO_LIB && window.XENO_LIB.served) return void window.XENO_LIB.remove([f]); f.trashedAt = new Date().toISOString(); ui('library').sel = null; sync(); repaint(); undo(`Moved “${f.name}” to Trash`, () => { f.trashedAt = null; sync(); repaint(); }); }
+    function trashFile(f) { if (window.XENO_LIB && window.XENO_LIB.served) { ui('library').sel = null; return void window.XENO_LIB.trash([f]); } f.trashedAt = new Date().toISOString(); ui('library').sel = null; sync(); repaint(); undo(`Moved “${f.name}” to Trash`, () => { f.trashedAt = null; sync(); repaint(); }); }
     async function purgeFile(f) {
-      if (window.XENO_LIB && window.XENO_LIB.served) return void window.XENO_LIB.remove([f]);
+      if (window.XENO_LIB && window.XENO_LIB.served) return void window.XENO_LIB.purge([f]);
       if (!await window.XD.confirm({ title: `Delete “${esc(f.name)}” forever?`, body: 'It is removed from your Library and every project and chat that links to it. This can’t be undone.', action: 'Delete forever' })) return;
       const L = window.XENO_PG_LIBRARY.items; L.splice(L.indexOf(f), 1); ui('library').sel = null; sync(); repaint(); X().toast(`Deleted “${f.name}” for good`);
     }
