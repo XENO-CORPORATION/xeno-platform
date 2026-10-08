@@ -163,11 +163,22 @@ export function getChatCostMicro(modelId, { inputTokens = 0, outputTokens = 0 } 
  * an enforceable provider bound and its pinned tariff; never promote this estimate
  * to a maximum liability merely by naming it a worst case.
  */
+/** The input half of a chat reservation, in µcr: the prompt at its padded estimate. The estimator and the
+ * admission lease both price input here, so neither can disagree about what a prompt costs. */
+export function chatInputCostMicro(modelId, { inputTokens = 0 } = {}) {
+  return chatRates(modelId).input * Math.ceil((inputTokens || 0) * 1.25);
+}
+
+/** The output half of a chat reservation: µcr per output token. */
+export function chatOutputRateMicro(modelId) {
+  return chatRates(modelId).output;
+}
+
 export function estimateChatCostMicro(modelId, { inputTokens = 0, maxOutputTokens = 1024 } = {}) {
   const r = chatRates(modelId);
   // Pad the input estimate 25%; chars/4 is not a strict upper bound (code/CJK
   // are token-denser). This padding does not make an unbounded provider bounded.
-  const est = r.input * Math.ceil((inputTokens || 0) * 1.25) + r.output * (maxOutputTokens || 1024);
+  const est = chatInputCostMicro(modelId, { inputTokens }) + r.output * (maxOutputTokens || 1024);
   // Floor the hold at a small non-zero amount so a 402 fires for empty wallets.
   return Math.max(Math.round(est), Math.round(0.05 * MICRO)); // >= 0.05 credit
 }

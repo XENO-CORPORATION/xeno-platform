@@ -168,6 +168,13 @@ async function callInhouse(baseUrl, model, messages, temperature, max_tokens, ex
  *   path='inhouse': xeno-rt open/local        → never metered
  * Auth is enforced at the mount (index.js: databaseMiddleware, authMiddleware).
  */
+/* A capped reply says so in headers, so the Interface can tell the person and the model why the reply stopped
+   short of what was asked (XENO ADMISSION - LEASE DECISION.md §3.4). Set only when capped, before any body. */
+function setAdmissionHeaders(res, admitted) {
+  res.setHeader('X-Xeno-Max-Output-Granted', String(admitted.grantedOutputTokens));
+  res.setHeader('X-Xeno-Max-Output-Requested', String(admitted.requestedOutputTokens));
+}
+
 /* canUse: the watch/use boundary. Mounted per-route, NOT on the router, because
    /models and /local-model-catalog below are browsing endpoints — gating the
    whole router would wall off the catalog an unpaid account is meant to be able
@@ -295,10 +302,12 @@ router.post('/chat', requireEntitlement('canUse'), async (req, res) => {
       model, provider: 'xeno', requestId: reqIdSeed,
       estInputTokens, maxTokens: max_tokens, surface,
       callerInputTokens: callerInputTokens(messages),
-      run: () => callXenoApi(model, messages, temperature, max_tokens, toolExtra, {
+      // The provider is told the ceiling the account can fund, never the requested one (admission lease).
+      run: ({ maxOutputTokens }) => callXenoApi(model, messages, temperature, maxOutputTokens, toolExtra, {
         'X-Xeno-Surface': surface,
       }),
     });
+    if (metered.capped) setAdmissionHeaders(res, metered);
 
     return res.json({
       ...metered.result,
@@ -624,6 +633,9 @@ router.post('/chat/stream', requireEntitlement('canUse'), async (req, res) => {
     return res.status(500).json({ error: 'inference_error', message: 'Metering failed' });
   }
 
+  // A capped reply says so before the first byte, so the headers are set before the stream opens.
+  if (meter.capped) setAdmissionHeaders(res, meter);
+
   // ── Switch to SSE. From here EVERY failure is an in-stream error event, and the
   // hold MUST be resolved (settle/void) on every exit path.
   res.status(200);
@@ -792,12 +804,12 @@ router.post('/chat/stream', requireEntitlement('canUse'), async (req, res) => {
    * utils/streamingToolCalls.js) — never parsed mid-stream, because a half-arrived
    * arguments string is not malformed, it is incomplete.
    */
-  async function* streamOneCall({ messages: callMessages, tools, signal }) {
+  async function* streamOneCall({ messages: callMessages, tools, signal, maxOutputTokens }) {
     const response = await xenoChatCompletionStream({
       model,
       messages: callMessages,
       temperature,
-      max_tokens,
+      max_tokens: maxOutputTokens,
       signal,
       extra: {
         // OpenRouter-style reasoning hint (the live catalog is OpenRouter-fronted);
@@ -904,6 +916,7 @@ router.post('/chat/stream', requireEntitlement('canUse'), async (req, res) => {
     if (!toolSurface) {
       for await (const event of streamOneCall({
         messages: finalMessages, tools: [], signal: upstreamAbort.signal,
+        maxOutputTokens: meter.grantedOutputTokens,
       })) {
         if (clientGone) break;
         if (event.type === 'delta') {
@@ -928,12 +941,13 @@ router.post('/chat/stream', requireEntitlement('canUse'), async (req, res) => {
       let iteration = 0;
       const streamModel = async function* streamModelCall({ messages: loopMessages, tools }) {
         const index = iteration;
-        await meterFor(index);
+        const callMeter = await meterFor(index);
         let callOutputChars = 0;
         let callUsageObj = null;
         try {
           for await (const event of streamOneCall({
             messages: loopMessages, tools, signal: upstreamAbort.signal,
+            maxOutputTokens: callMeter.grantedOutputTokens,
           })) {
             if (event.type === 'delta') callOutputChars += event.text.length;
             else if (event.type === 'usage') callUsageObj = event.usage;

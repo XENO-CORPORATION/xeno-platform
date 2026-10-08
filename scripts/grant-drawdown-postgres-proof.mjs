@@ -19,7 +19,7 @@ const client = new pg.Client({ host: process.env.DB_HOST, port: Number(process.e
 await client.connect();
 try {
   await client.query('BEGIN');
-  await client.query("SET LOCAL search_path = pg_temp, pg_catalog");
+  await client.query("SET LOCAL search_path = pg_temp, public, pg_catalog");
   await client.query("SET LOCAL statement_timeout = '10s'");
   await client.query('CREATE TEMP TABLE users (id uuid PRIMARY KEY, credits integer) ON COMMIT DROP');
   for (const table of ['credit_accounts', 'credit_grants', 'credit_holds', 'credit_transactions', 'api_usage_logs', 'spend_caps']) {
