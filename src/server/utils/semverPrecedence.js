@@ -10,7 +10,8 @@
  *
  * Precedence, per SemVer 2.0.0:
  *  - Build metadata (everything after the first `+`) is ignored, so 1.2.3+4.5 equals 1.2.3.
- *  - The core compares numerically, part by part. A missing part reads as zero.
+ *  - The core compares numerically, part by part, as digit strings: a part past 2^53 keeps its
+ *    order. A missing part reads as zero.
  *  - A prerelease (everything after the FIRST hyphen of the version, later hyphens
  *    included) sorts BELOW its release. Its dot-separated identifiers compare one by one:
  *    numeric identifiers as integers (rc.9 < rc.10), alphanumeric identifiers in ASCII
@@ -26,8 +27,19 @@
  */
 
 const NUMERIC_IDENTIFIER = /^\d+$/;
+const LEADING_DIGITS = /^\d+/;
 
-/** `{ nums, pre }`: the numeric core parts, and the prerelease text (or null). */
+/**
+ * One numeric core part, as a digit string with no leading zeros. It keeps the digits before any
+ * trailing text, as parseInt did, and a part with no leading digits reads as zero. It is a string,
+ * not a Number: Number() rounds past 2^53, and 309 digits or more become Infinity.
+ */
+function corePart(part) {
+  const digits = LEADING_DIGITS.exec(part.trimStart());
+  return digits ? digits[0].replace(/^0+(?=\d)/, '') : '0';
+}
+
+/** `{ nums, pre }`: the core parts as digit strings, and the prerelease text (or null). */
 function parseVersion(raw) {
   let text = String(raw || '0');
   const build = text.indexOf('+');
@@ -36,9 +48,15 @@ function parseVersion(raw) {
   const core = hyphen === -1 ? text : text.slice(0, hyphen);
   const pre = hyphen === -1 ? '' : text.slice(hyphen + 1);
   return {
-    nums: core.split('.').map((part) => Number.parseInt(part, 10) || 0),
+    nums: core.split('.').map(corePart),
     pre: pre === '' ? null : pre,
   };
+}
+
+/** Two digit strings with no leading zeros, compared as integers: -1, 0 or 1. */
+function compareNumeric(x, y) {
+  if (x.length !== y.length) return x.length < y.length ? -1 : 1;
+  return x === y ? 0 : x < y ? -1 : 1;
 }
 
 /** SemVer 11.4.1 to 11.4.3, for one pair of prerelease identifiers. */
@@ -46,12 +64,9 @@ function compareIdentifiers(a, b) {
   const aNumeric = NUMERIC_IDENTIFIER.test(a);
   const bNumeric = NUMERIC_IDENTIFIER.test(b);
   if (aNumeric && bNumeric) {
-    // Numeric identifiers compare as integers. Compare digit strings rather than
-    // Number(), so a value past 2^53 keeps its order. Leading zeros are not significant.
-    const x = a.replace(/^0+(?=\d)/, '');
-    const y = b.replace(/^0+(?=\d)/, '');
-    if (x.length !== y.length) return x.length < y.length ? -1 : 1;
-    return x === y ? 0 : x < y ? -1 : 1;
+    // Numeric identifiers compare as integers, by digit string, so a value past 2^53 keeps its
+    // order. Leading zeros are not significant.
+    return compareNumeric(a.replace(/^0+(?=\d)/, ''), b.replace(/^0+(?=\d)/, ''));
   }
   if (aNumeric) return -1; // a numeric identifier sorts below an alphanumeric one
   if (bNumeric) return 1;
@@ -78,8 +93,8 @@ export function compareVersions(a, b) {
   const B = parseVersion(b);
   const length = Math.max(A.nums.length, B.nums.length);
   for (let i = 0; i < length; i += 1) {
-    const diff = (A.nums[i] || 0) - (B.nums[i] || 0);
-    if (diff !== 0) return diff < 0 ? -1 : 1;
+    const diff = compareNumeric(A.nums[i] || '0', B.nums[i] || '0');
+    if (diff !== 0) return diff;
   }
   if (A.pre === B.pre) return 0; // both null, or the same prerelease text
   if (A.pre === null) return 1; // 11.3: a release outranks each of its prereleases
