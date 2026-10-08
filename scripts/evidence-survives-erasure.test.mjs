@@ -454,7 +454,11 @@ test('the runner really does wrap each migration', () => {
    * requirement that had become wrong. */
   const runner = read('src/server/services/migrationRunner.js');
   const i = runner.indexOf('for (const migration of pending)');
-  const body = runner.slice(i, i + 900);
+  const end = runner.indexOf('[Migrations] ${appliedCount}', i);
+  assert.ok(i > 0 && end > i, 'the migration loop or its summary line was not found');
+  // The loop ends at its summary line. A fixed 900-character window stopped short of ROLLBACK
+  // once a longer warning was added inside the loop, and the gate failed on a correct runner.
+  const body = runner.slice(i, end);
   assert.ok(/client\.query\('BEGIN'\)/.test(body), 'the runner no longer opens a transaction per migration');
   assert.ok(/client\.query\('COMMIT'\)/.test(body) && /ROLLBACK/.test(body),
     'the runner no longer commits or rolls back per migration');
