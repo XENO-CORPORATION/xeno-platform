@@ -361,11 +361,11 @@ export async function executeScheduledRun(pool, run) {
         maxTokens: 4096,
         surface: 'scheduled_chat',
         reopenVoidedHold: true,
-        run: () => Promise.race([
+        run: ({ maxOutputTokens }) => Promise.race([
           xenoChatCompletion({
             model: task.model_id,
             messages,
-            max_tokens: 4096,
+            max_tokens: maxOutputTokens,
             headers: {
               Authorization: `Bearer ${mintScheduledRunToken({ runId: run.id, userId: task.run_as_user_id })}`,
               'x-xeno-run-key': run.id,

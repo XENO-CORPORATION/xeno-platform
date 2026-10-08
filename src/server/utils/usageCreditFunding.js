@@ -12,7 +12,7 @@ export async function quarantinedGrantIds(client, userId) {
 
 // Account lock must be held by the caller. Reserve specific lots rather than a
 // Boolean promise: disabling overage cannot invalidate an already admitted request.
-export async function allocateFunding(client, userId, amountMicro) {
+export async function planFunding(client, userId) {
   const { rows: prefs } = await client.query('SELECT enabled FROM usage_credit_preferences WHERE user_id=$1', [userId]);
   const enabled = prefs[0]?.enabled === true;
   const quarantined = new Set(await quarantinedGrantIds(client, userId));
@@ -28,27 +28,45 @@ export async function allocateFunding(client, userId, amountMicro) {
     FROM credit_holds h WHERE h.user_id=$1 AND h.state='held' AND h.expires_at>now()
     AND NOT EXISTS (SELECT 1 FROM credit_hold_funding f WHERE f.hold_row_id=h.id)`,[userId]);
   let unallocated = BigInt(legacy[0]?.reserved || 0);
-  let need = BigInt(amountMicro);
-  const funding = [];
+  const eligible = [];
   for (const lot of lots) {
-    if (need <= 0n) break;
     if (quarantined.has(lot.id) || (!enabled && lot.kind !== 'allowance')) continue;
     let available = BigInt(lot.available);
     if (available <= 0n) continue;
     const withheld = unallocated < available ? unallocated : available;
     available -= withheld; unallocated -= withheld;
     if (available <= 0n) continue;
-    const take = available < need ? available : need;
-    funding.push({ grantId: lot.id, amountMicro: String(take) });
+    eligible.push({ grantId: lot.id, available });
+  }
+  const spendable = eligible.reduce((sum, lot) => sum + lot.available, 0n);
+  return { enabled, lots: eligible, spendable };
+}
+
+/** The refusal allocateFunding has always given when a plan cannot fund an amount. Shared so the admission lease
+ * refuses with the same code, message and reset time, and a caller cannot tell the two paths apart. */
+export async function fundingRefusal(enabled) {
+  const { windowFor } = await import('./quotaEngine.js');
+  return Object.assign(new Error(enabled ? 'Insufficient usage credits.' : 'Weekly limit reached. Turn on usage credits to keep working past your plan limit.'), {
+    code: enabled ? 'INSUFFICIENT_CREDITS' : 'QUOTA_EXCEEDED', resetsAt: windowFor().endsAt.toISOString(), usageCreditsEnabled: enabled,
+  });
+}
+
+/** Draw an amount from a plan, lot by lot in the plan's order. Throws the refusal when the plan cannot fund it. */
+export async function takeFunding(plan, amountMicro) {
+  let need = BigInt(amountMicro);
+  const funding = [];
+  for (const lot of plan.lots) {
+    if (need <= 0n) break;
+    const take = lot.available < need ? lot.available : need;
+    funding.push({ grantId: lot.grantId, amountMicro: String(take) });
     need -= take;
   }
-  if (need > 0n) {
-    const { windowFor } = await import('./quotaEngine.js');
-    throw Object.assign(new Error(enabled ? 'Insufficient usage credits.' : 'Weekly limit reached. Turn on usage credits to keep working past your plan limit.'), {
-      code: enabled ? 'INSUFFICIENT_CREDITS' : 'QUOTA_EXCEEDED', resetsAt: windowFor().endsAt.toISOString(), usageCreditsEnabled: enabled,
-    });
-  }
+  if (need > 0n) throw await fundingRefusal(plan.enabled);
   return funding;
+}
+
+export async function allocateFunding(client, userId, amountMicro) {
+  return takeFunding(await planFunding(client, userId), amountMicro);
 }
 
 /** Select transferable paid value on the caller's transaction, never from kind alone.

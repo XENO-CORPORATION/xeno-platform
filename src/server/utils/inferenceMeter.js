@@ -16,7 +16,8 @@
 import {
   holdV2, settleHoldV2, voidHoldV2, extendHoldV2, deterministicTxnId, MICRO_PER_CREDIT,
 } from './creditLedgerV2.js';
-import { getChatCostMicro, estimateChatCostMicro } from './creditCosts.js';
+import { getChatCostMicro } from './creditCosts.js';
+import { grantedOutputTokensForAmount, normalizeRequestedOutputTokens } from './admissionLease.js';
 import { billableInputTokens } from './billableInput.js';
 import { prepareAccountQuota } from '../services/usageCreditsService.js';
 
@@ -127,6 +128,14 @@ function meteringError(code, original) {
   const e = new Error('Metering failed'); e.code = code || 'METERING_ERROR'; e.http = 500; return e;
 }
 
+/** The ceiling a reservation covers, as the provider must be told it. Read back from the reserved amount, so a
+ * replayed hold yields the ceiling the attempt that created it was granted. */
+function admittedOutput(hold, { model, inputTokens, maxTokens }) {
+  const requested = normalizeRequestedOutputTokens(maxTokens);
+  const granted = grantedOutputTokensForAmount({ amountMicro: hold.amountMicro, model, inputTokens, requestedOutputTokens: requested });
+  return { grantedOutputTokens: granted, requestedOutputTokens: requested, capped: granted < requested };
+}
+
 /**
  * Meter a premium CHAT completion.
  *
@@ -157,17 +166,15 @@ export async function meterPremiumChat(db, userId, opts) {
   } = opts;
 
   const holdId = deterministicTxnId(userId, requestId, model).slice(0, 64);
-  const estimateMicro = estimateChatCostMicro(model, {
-    inputTokens: estInputTokens,
-    maxOutputTokens: maxTokens,
-  });
 
-  // Phase 1 — reserve worst-case cost. INSUFFICIENT_CREDITS → 402 before we spend
-  // a cent on the provider. Idempotent on holdId so client retries don't stack holds.
+  // Phase 1 — reserve as a LEASE (XENO ADMISSION - LEASE DECISION.md §3): the account is granted the largest
+  // output ceiling it can fund, never more than `maxTokens`. INSUFFICIENT_CREDITS and QUOTA_EXCEEDED → 402 before
+  // we spend a cent on the provider. Idempotent on holdId so client retries don't stack holds.
+  let hold;
   try {
-    await holdV2(db, userId, {
+    hold = await holdV2(db, userId, {
       holdId,
-      amountMicro: estimateMicro,
+      lease: { model, inputTokens: estInputTokens, requestedOutputTokens: maxTokens },
       surface,
       operation: 'chat.completion',
       expiresInSeconds: 900,
@@ -176,12 +183,15 @@ export async function meterPremiumChat(db, userId, opts) {
   } catch (e) {
     throw meteringError(e.code, e);
   }
+  const estimateMicro = hold.amountMicro;
+  const admitted = admittedOutput(hold, { model, inputTokens: estInputTokens, maxTokens });
 
-  // Run the provider. Any failure → void the hold (full refund) and bubble up.
+  // Run the provider with exactly the ceiling the account can fund. The reservation covers that ceiling and no
+  // more, so the requested one must never be sent. Any failure → void the hold (full refund) and bubble up.
   let result;
   const stopHeartbeat = startHoldHeartbeat(db, userId, holdId);
   try {
-    result = await run();
+    result = await run({ maxOutputTokens: admitted.grantedOutputTokens });
   } catch (e) {
     await voidHoldV2(db, userId, holdId).catch((ve) => reportMeterFailure('void', ve, {
       userId, holdId, surface, operation: 'chat.completion', heldMicro: estimateMicro,
@@ -235,6 +245,7 @@ export async function meterPremiumChat(db, userId, opts) {
     costMicro,
     creditsCharged: costMicro / MICRO_PER_CREDIT,
     holdId,
+    ...admitted,
     meteredTokens: { inputTokens, outputTokens, provider, model },
   };
 }
@@ -406,20 +417,18 @@ export async function meterPremiumChatStream(db, userId, opts) {
   } = opts;
 
   const holdId = deterministicTxnId(userId, requestId, model).slice(0, 64);
-  const estimateMicro = estimateChatCostMicro(model, {
-    inputTokens: estInputTokens,
-    maxOutputTokens: maxTokens,
-  });
 
-  // Phase 1 — reserve worst-case cost BEFORE opening the stream. A failure here is
-  // a normal HTTP error (402/403) the route returns before switching to SSE.
+  // Phase 1 — reserve BEFORE opening the stream, as a LEASE (XENO ADMISSION - LEASE DECISION.md §3): the account
+  // is granted the largest output ceiling it can fund, never more than `maxTokens`. A failure here is a normal
+  // HTTP error (402/403) the route returns before switching to SSE.
   // SHORT expiry (120s, not 900s): streaming settles/voids the hold the instant the
   // stream resolves, so if a settle ultimately fails the reserve frees fast instead
   // of locking the user's balance for 15 minutes.
+  let hold;
   try {
-    await holdV2(db, userId, {
+    hold = await holdV2(db, userId, {
       holdId,
-      amountMicro: estimateMicro,
+      lease: { model, inputTokens: estInputTokens, requestedOutputTokens: maxTokens },
       surface,
       operation: 'chat.completion.stream',
       expiresInSeconds: 120,
@@ -427,6 +436,8 @@ export async function meterPremiumChatStream(db, userId, opts) {
   } catch (e) {
     throw meteringError(e.code, e);
   }
+  const estimateMicro = hold.amountMicro;
+  const admitted = admittedOutput(hold, { model, inputTokens: estInputTokens, maxTokens });
 
   let done = false; // single-shot guard: settle XOR void, exactly once
   // The stream is driven by the route; keep its hold alive until settle() or voidHold() ends it.
@@ -486,6 +497,7 @@ export async function meterPremiumChatStream(db, userId, opts) {
   return {
     holdId,
     estimateMicro,
+    ...admitted,
     get settled() { return done; },
     settle,
     voidHold,

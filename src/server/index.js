@@ -462,6 +462,8 @@ app.use(cors({
       }
     : true, // Allow all origins in development
   maxAge: 86400, // 24 hours
+  // The admission headers say why a reply was capped, so a browser client must be able to read them cross-origin.
+  exposedHeaders: ['X-Xeno-Max-Output-Granted', 'X-Xeno-Max-Output-Requested'],
   credentials: true
 }));
 
@@ -1454,7 +1456,7 @@ app.post('/api/chat/generate', databaseMiddleware, authMiddleware, async (req, r
                 const metered = await meterPremiumChat(req.db, req.user?.id, {
                     model: selectedModelId, provider: 'xeno', requestId: randomUUID(),
                     estInputTokens: estimateMessageTokens(apiMessages), maxTokens: 1024,
-                    run: () => xenoChatCompletion({ model: selectedModelId, messages: apiMessages }),
+                    run: ({ maxOutputTokens }) => xenoChatCompletion({ model: selectedModelId, messages: apiMessages, max_tokens: maxOutputTokens }),
                 });
                 data = metered.result;
             } catch (err) {
@@ -1999,7 +2001,9 @@ app.post('/api/chat/generate', databaseMiddleware, authMiddleware, async (req, r
                     model: payload.model, provider: 'xeno', requestId,
                     estInputTokens: estimateMessageTokens(payload.messages || []),
                     maxTokens: payload.max_tokens || 4096,
-                    run: async () => {
+                    run: async ({ maxOutputTokens }) => {
+                        // The upstream is told the ceiling the reservation covers, never the requested one (admission lease).
+                        payload.max_tokens = maxOutputTokens;
                         /*
                          * 🔴 STREAM when the client opened a progress channel, buffer otherwise.
                          *

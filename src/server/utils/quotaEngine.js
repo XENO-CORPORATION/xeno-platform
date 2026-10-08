@@ -172,12 +172,14 @@ export async function issueAllowanceTx(client, userId, plan, { now = new Date() 
   if (existing.rows.length > 0) return { issued: false, reason: 'already-issued', windowIndex: index };
 
   // 🔴 The SELECT above is an optimisation, NOT the idempotency. Ten concurrent first
-  // calls at the top of a window all read "no grant" before any of them writes, so the
-  // guarantee has to come from `uq_grants_allowance_window` — a partial unique index on
-  // (user_id, source_ref). The loser of that race gets 23505 and must report
-  // already-issued, exactly as if it had lost by a millisecond on the read: one grant
-  // exists, which is the whole contract. Anything else fails an admission check for a
-  // user who is entitled to their allowance.
+  // calls at the top of a window all read "no grant" before any of them writes. The
+  // serialisation is ensureQuota's per-user advisory transaction lock, taken before this
+  // function runs (quotaService.js), so the racers queue there and the SELECT then sees the
+  // winner's grant. `uq_grants_allowance_window` — a partial unique index on (user_id,
+  // source_ref) — is the BACKSTOP for any caller that reaches here without that lock: its
+  // loser gets 23505 and must report already-issued, exactly as if it had lost by a
+  // millisecond on the read, so one grant exists either way. Anything else would fail an
+  // admission check for a user who is entitled to their allowance.
   try {
     await addGrantTx(client, userId, {
       amountMicro: credits * MICRO_PER_CREDIT,

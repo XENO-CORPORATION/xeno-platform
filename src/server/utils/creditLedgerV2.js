@@ -20,7 +20,8 @@
 import crypto from 'node:crypto';
 import { dimensionsJson } from './usageDimensions.js';
 import { pricePinnedChatUsage, pinChatTariff } from './creditCosts.js';
-import { allocateFunding, allocateContributionFunding, allocateGiftFunding, quarantinedGrantIds, saveHoldFunding, consumeFunding, readHoldFunding } from './usageCreditFunding.js';
+import { allocateFunding, allocateContributionFunding, allocateGiftFunding, quarantinedGrantIds, saveHoldFunding, consumeFunding, readHoldFunding, planFunding, takeFunding, fundingRefusal } from './usageCreditFunding.js';
+import { leaseOutput } from './admissionLease.js';
 
 export const MICRO_PER_CREDIT = 1_000_000;
 const REF_TYPE = 'xeno.usage';
@@ -525,21 +526,31 @@ export async function setSpendCap(pool, userId, { windowSec, limitMicro }) {
  * Callers must invoke this BEFORE inserting their own hold row, so the amount under
  * test is not also present in the reserved term.
  */
-async function assertWithinCaps(client, userId, costMicro) {
+/** The most the account's spend caps still admit, as the tightest window's headroom, or null when it has no
+ * cap. Headroom is limit − spent − held, the same sum assertWithinCaps has always tested. */
+async function capHeadroomMicro(client, userId) {
   const caps = await client.query('SELECT window_sec, limit_micro FROM spend_caps WHERE user_id=$1', [userId]);
-  if (caps.rows.length === 0) return; // no cap configured → nothing to enforce
+  if (caps.rows.length === 0) return null; // no cap configured → nothing to enforce
   const heldMicro = await activeHoldsMicro(client, userId);
+  let tightest = null;
   for (const cap of caps.rows) {
     const spent = await client.query(
       `SELECT COALESCE(SUM(-amount),0)::bigint s FROM credit_transactions
         WHERE user_id=$1 AND type='debit' AND created_at > now() - ($2 || ' seconds')::interval`,
       [userId, cap.window_sec],
     );
-    if (BigInt(spent.rows[0].s) + heldMicro + costMicro > BigInt(cap.limit_micro)) {
-      const e = new Error(`spend cap exceeded (${cap.window_sec}s window)`);
-      e.code = 'SPEND_CAP_EXCEEDED';
-      throw e;
-    }
+    const headroom = BigInt(cap.limit_micro) - BigInt(spent.rows[0].s) - heldMicro;
+    if (tightest === null || headroom < tightest.headroom) tightest = { headroom, windowSec: cap.window_sec };
+  }
+  return tightest;
+}
+
+async function assertWithinCaps(client, userId, costMicro) {
+  const tightest = await capHeadroomMicro(client, userId);
+  if (tightest && BigInt(costMicro) > tightest.headroom) {
+    const e = new Error(`spend cap exceeded (${tightest.windowSec}s window)`);
+    e.code = 'SPEND_CAP_EXCEEDED';
+    throw e;
   }
 }
 
@@ -835,38 +846,88 @@ export async function recordUsageV2(pool, userId, event) {
  * `outcome.held + amountMicro` below) — they are not re-read after the write.
  */
 export async function holdV2Tx(client, userId, req) {
-  const amountMicro = BigInt(Math.max(1, Math.round(req.amountMicro)));
-  return holdV2Body(client, userId, req, amountMicro);
+  // A leased hold names no amount: the lease decides it inside the transaction.
+  const fixedAmountMicro = req.lease ? 0n : BigInt(Math.max(1, Math.round(req.amountMicro)));
+  return holdV2Body(client, userId, req, fixedAmountMicro);
+}
+
+/** A refusal the ledger has always thrown for a hold it will not reserve. */
+function holdRefusal(code) {
+  const err = new Error('insufficient credits');
+  err.code = code;
+  return err;
+}
+
+/**
+ * Decide what a hold reserves and which lots fund it, on the caller's transaction and under the account lock.
+ *
+ * A fixed hold reserves the amount it was given, or refuses. A LEASED hold (req.lease) reserves the largest output
+ * ceiling the account can fund, never more than the caller asked for (admissionLease.js; decision §3). Both paths
+ * refuse with the codes allocateFunding has always used, so a caller cannot tell the paths apart by their refusals.
+ */
+async function reserveForHold(client, userId, acct, held, req, fixedAmountMicro) {
+  const balance = BigInt(acct.balance);
+  if (acct.is_frozen) throw holdRefusal('ACCOUNT_FROZEN');
+  if (!req.lease) {
+    if (balance - held < fixedAmountMicro) throw holdRefusal('INSUFFICIENT_CREDITS');
+    // Spend-cap invariant (§4.6), enforced at HOLD time — the only point where
+    // refusing means anything. Refusing at settle would be theatre: the compute has
+    // already run and the provider has already billed us, so the choice there is
+    // "charge the customer" or "eat the cost", never "don't spend". Gate the
+    // reservation and every settle that follows is in-budget by construction.
+    //
+    // This ran nowhere before: recordUsageV2 checked caps, holdV2 and settleHoldV2
+    // did not — so the hold path, which is how hosted agent runs bill, ignored caps
+    // entirely even when one was set.
+    await assertWithinCaps(client, userId, fixedAmountMicro);
+    await syncGrants(client, acct, userId);
+    return { amountMicro: fixedAmountMicro, funding: await allocateFunding(client, userId, fixedAmountMicro) };
+  }
+  // The lease prices from the lots, so legacy seeding must have run before the lots are read.
+  await syncGrants(client, acct, userId);
+  const plan = await planFunding(client, userId);
+  const headroom = await capHeadroomMicro(client, userId);
+  // The most this account can spend on this request right now: its eligible funding, its balance net of holds,
+  // and the tightest spend cap. Whichever binds decides which refusal the caller gets.
+  let spendable = plan.spendable;
+  let binding = 'funding';
+  if (balance - held < spendable) { spendable = balance - held; binding = 'balance'; }
+  if (headroom && headroom.headroom < spendable) { spendable = headroom.headroom; binding = 'cap'; }
+  const lease = leaseOutput({
+    spendableMicro: spendable, model: req.lease.model,
+    inputTokens: req.lease.inputTokens, requestedOutputTokens: req.lease.requestedOutputTokens,
+  });
+  if (lease.refused) {
+    if (binding === 'cap') throw Object.assign(new Error(`spend cap exceeded (${headroom.windowSec}s window)`), { code: 'SPEND_CAP_EXCEEDED' });
+    if (binding === 'balance') throw holdRefusal('INSUFFICIENT_CREDITS');
+    throw await fundingRefusal(plan.enabled);
+  }
+  const amountMicro = BigInt(lease.amountMicro);
+  await assertWithinCaps(client, userId, amountMicro);
+  return { amountMicro, funding: await takeFunding(plan, amountMicro) };
 }
 
 // Both entry points normalize once, before their first await. The pool-owning
 // wrapper must retain that snapshot while waiting for a connection.
-async function holdV2Body(client, userId, req, amountMicro) {
+async function holdV2Body(client, userId, req, fixedAmountMicro) {
   await requireOrdinaryWallet(client, userId);
   const existing = await client.query('SELECT * FROM credit_holds WHERE user_id = $1 AND hold_id = $2 FOR UPDATE', [userId, req.holdId]);
   if (existing.rows.length > 0 && req.reopenVoided === true && existing.rows[0].state === 'voided') {
     const acct = await ensureAccount(client, userId);
     const balance = BigInt(acct.balance);
     const held = await activeHoldsMicro(client, userId);
-    if (acct.is_frozen || balance - held < amountMicro) {
-      const err = new Error('insufficient credits');
-      err.code = acct.is_frozen ? 'ACCOUNT_FROZEN' : 'INSUFFICIENT_CREDITS';
-      throw err;
-    }
-    await assertWithinCaps(client, userId, amountMicro);
-    await syncGrants(client, acct, userId);
-    const funding = await allocateFunding(client, userId, amountMicro);
+    const reserved = await reserveForHold(client, userId, acct, held, req, fixedAmountMicro);
     const expiresAt = new Date(Date.now() + (req.expiresInSeconds ?? 900) * 1000);
     const reopened = await client.query(
       `UPDATE credit_holds
        SET state='held', amount_micro=$2, settled_micro=0, expires_at=$3, updated_at=now()
        WHERE id=$1 AND state='voided'
        RETURNING *`,
-      [existing.rows[0].id, amountMicro.toString(), expiresAt.toISOString()],
+      [existing.rows[0].id, reserved.amountMicro.toString(), expiresAt.toISOString()],
     );
     if (!reopened.rows[0]) throw Object.assign(new Error('voided hold could not be reopened'), { code: 'HOLD_REOPEN_CONFLICT' });
-    await saveHoldFunding(client, reopened.rows[0].id, funding);
-    return { row: reopened.rows[0], balance, held, isFrozen: Boolean(acct.is_frozen), amountMicro };
+    await saveHoldFunding(client, reopened.rows[0].id, reserved.funding);
+    return { row: reopened.rows[0], balance, held, isFrozen: Boolean(acct.is_frozen), amountMicro: reserved.amountMicro };
   }
   if (existing.rows.length > 0) {
     return { existingRow: existing.rows[0] };
@@ -874,31 +935,15 @@ async function holdV2Body(client, userId, req, amountMicro) {
   const acct = await ensureAccount(client, userId);
   const balance = BigInt(acct.balance);
   const held = await activeHoldsMicro(client, userId);
-  if (acct.is_frozen || balance - held < amountMicro) {
-    const err = new Error('insufficient credits');
-    err.code = acct.is_frozen ? 'ACCOUNT_FROZEN' : 'INSUFFICIENT_CREDITS';
-    throw err;
-  }
-  // Spend-cap invariant (§4.6), enforced at HOLD time — the only point where
-  // refusing means anything. Refusing at settle would be theatre: the compute has
-  // already run and the provider has already billed us, so the choice there is
-  // "charge the customer" or "eat the cost", never "don't spend". Gate the
-  // reservation and every settle that follows is in-budget by construction.
-  //
-  // This ran nowhere before: recordUsageV2 checked caps, holdV2 and settleHoldV2
-  // did not — so the hold path, which is how hosted agent runs bill, ignored caps
-  // entirely even when one was set.
-  await assertWithinCaps(client, userId, amountMicro);
-  await syncGrants(client, acct, userId);
-  const funding = await allocateFunding(client, userId, amountMicro);
+  const reserved = await reserveForHold(client, userId, acct, held, req, fixedAmountMicro);
   const expiresAt = new Date(Date.now() + (req.expiresInSeconds ?? 900) * 1000);
   const row = await client.query(
     `INSERT INTO credit_holds (user_id, account_id, hold_id, surface, operation, amount_micro, expires_at)
      VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING *`,
-    [userId, acct.id, req.holdId, req.surface, req.operation, amountMicro.toString(), expiresAt.toISOString()],
+    [userId, acct.id, req.holdId, req.surface, req.operation, reserved.amountMicro.toString(), expiresAt.toISOString()],
   );
-  await saveHoldFunding(client, row.rows[0].id, funding);
-  return { row: row.rows[0], balance, held, isFrozen: Boolean(acct.is_frozen), amountMicro };
+  await saveHoldFunding(client, row.rows[0].id, reserved.funding);
+  return { row: row.rows[0], balance, held, isFrozen: Boolean(acct.is_frozen), amountMicro: reserved.amountMicro };
 }
 
 /** Reserve credits (phase 1). Idempotent on holdId. Throws INSUFFICIENT_CREDITS.
@@ -906,12 +951,13 @@ async function holdV2Body(client, userId, req, amountMicro) {
  * wrapper is the only place that owns BEGIN/COMMIT/ROLLBACK/connect/getBalanceV2
  * for that transaction. */
 export async function holdV2(pool, userId, req) {
-  const amountMicro = BigInt(Math.max(1, Math.round(req.amountMicro)));
+  // A leased hold names no amount: the lease decides it inside the transaction (see reserveForHold).
+  const fixedAmountMicro = req.lease ? 0n : BigInt(Math.max(1, Math.round(req.amountMicro)));
   const client = await pool.connect();
   let outcome; // { existingRow } | { row, balance, held, isFrozen, amountMicro }
   try {
     await client.query('BEGIN');
-    outcome = await holdV2Body(client, userId, req, amountMicro);
+    outcome = await holdV2Body(client, userId, req, fixedAmountMicro);
     await client.query('COMMIT');
   } catch (err) {
     await client.query('ROLLBACK').catch(() => {});
@@ -923,7 +969,7 @@ export async function holdV2(pool, userId, req) {
     // Pool re-entrancy guard: getBalanceV2 needs its own connection → AFTER release.
     return holdView(outcome.existingRow, await getBalanceV2(pool, userId));
   }
-  return holdView(outcome.row, balanceView(outcome.balance, outcome.held + amountMicro, outcome.isFrozen));
+  return holdView(outcome.row, balanceView(outcome.balance, outcome.held + outcome.amountMicro, outcome.isFrozen));
 }
 
 /** Settle a hold for the actual cost (phase 2). Posting < held restores the rest. */

@@ -40,6 +40,8 @@
     "test:credit-mirror": "node --test scripts/credit-mirror-ceiling.test.mjs",
     "test:ledger-pricing": "node --test scripts/ledger-pricing-authority.test.mjs",
     "test:quota": "node --test scripts/quota-engine.test.mjs scripts/grant-drawdown.test.mjs scripts/usage-credit-funding.test.mjs scripts/usage-credit-settings.test.mjs scripts/usage-credit-ui.test.mjs",
+    "test:admission-lease": "node --test scripts/admission-lease.test.mjs scripts/admission-lease-reachability.test.mjs",
+    "test:admission-lease-db": "node --test scripts/admission-lease-database.test.mjs",
     "test:billing-subject": "node --test scripts/billing-subject.test.mjs",
     "test:forum-ranker": "node --test scripts/forum-ranker.test.mjs",
     "test:forum-edit-delete": "node --test scripts/forum-edit-delete.test.mjs scripts/forum-my-activity.test.mjs",

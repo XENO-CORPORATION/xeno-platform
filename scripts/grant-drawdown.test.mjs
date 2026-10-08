@@ -43,6 +43,9 @@ function ledgerFixture(kinds, cost) {
     // on the table rather than the column list keeps the stub about the ledger, not about wording.
     if (/^SELECT (1|amount) FROM credit_transactions/.test(sql) || sql.startsWith('SELECT entry_hash') || sql.startsWith('SELECT window_sec')) return { rows: [] };
     if (sql.startsWith('INSERT INTO credit_transactions') || sql.startsWith('INSERT INTO api_usage_logs') || sql.startsWith('UPDATE users SET credits')) return { rows: [] };
+    // refuseRunHold asks whether a workforce RUN owns this hold id. A drawdown hold never does, so the
+    // probe finds nothing; answering it keeps this stub about the drawdown, not about the run path.
+    if (sql.startsWith("SELECT 1 FROM credit_holds WHERE user_id=$1 AND hold_id=$2 AND surface=")) return { rows: [], rowCount: 0 };
     throw new Error(`Unexpected query: ${sql}`);
   };
   return { pool: { connect: async () => ({ query, release() {} }) }, lots, writes, balance: () => balance };

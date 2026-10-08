@@ -57,9 +57,14 @@ test('ACCT-01: one canonical ledger settles transfers, allocations, reservations
  assert.deepEqual(balanceCols,['credit_accounts.balance','credit_draw_consumption_lots.remaining_after_micro',
   'credit_grants.remaining_micro','credit_transactions.balance_after'],
   'spendable state lives in exactly these columns: account balances, grant remainders, and two append-only records');
- assert.deepEqual((await pool.query(`SELECT tablename FROM pg_tables WHERE schemaname='public'
-  AND (tablename LIKE '%wallet%' OR tablename LIKE '%spendable%' OR tablename LIKE '%mirror%') ORDER BY 1`)).rows,[],
-  'no wallet/mirror table exists to hold a second balance');
+ // A table NAMED like a wallet is a second balance only if it carries a balance column. The name alone
+ // was the test: forge_mirrors (migration 20261004510000) is a repository mirror with no balance in it,
+ // and it tripped the pin. The balance column is the property the pin exists to protect.
+ assert.deepEqual((await pool.query(`SELECT DISTINCT c.table_name FROM information_schema.columns c
+  WHERE c.table_schema='public' AND (c.table_name LIKE '%wallet%' OR c.table_name LIKE '%spendable%' OR c.table_name LIKE '%mirror%')
+  AND c.data_type IN ('bigint','integer','numeric') AND (c.column_name LIKE '%balance%' OR c.column_name LIKE '%remaining%'
+  OR c.column_name LIKE '%wallet%' OR c.column_name LIKE '%spendable%') ORDER BY 1`)).rows.map(r=>r.table_name),[],
+  'no wallet/mirror-named table carries a balance column');
  assert.equal((await pool.query(`SELECT data_type FROM information_schema.columns
   WHERE table_schema='public' AND table_name='users' AND column_name='credits'`)).rows[0]?.data_type,'integer',
   'users.credits is an INTEGER mirror: it cannot hold micro precision, so it cannot be authoritative');

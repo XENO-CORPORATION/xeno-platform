@@ -10,7 +10,7 @@ const ledger=await import(pathToFileURL(modulePath));
 const c=new pg.Client({host:process.env.DB_HOST,port:Number(process.env.DB_PORT||5432),database:process.env.DB_NAME,user:process.env.DB_USER,password:process.env.DB_PASSWORD});
 await c.connect();
 try {
- await c.query('BEGIN');await c.query('SET LOCAL search_path=pg_temp,pg_catalog');
+ await c.query('BEGIN');await c.query('SET LOCAL search_path=pg_temp,public,pg_catalog');
  await c.query("SET LOCAL statement_timeout='10s'");
  await c.query('CREATE TEMP TABLE users (id uuid PRIMARY KEY,credits integer) ON COMMIT DROP');
  for(const table of ['credit_accounts','credit_grants','credit_transactions','credit_holds','api_usage_logs','spend_caps'])await c.query(`CREATE TEMP TABLE ${table} (LIKE public.${table} INCLUDING DEFAULTS) ON COMMIT DROP`);
