@@ -35,13 +35,40 @@ async function ensureMigrationsTable(pool) {
 }
 
 // --------------------------------------------------------------------------
-// Get list of applied migration versions
+// What is applied. A migration's identity is its version AND its name.
+//
+// The table's UNIQUE key is the version alone, and the runner used to ask only "is this version
+// recorded?". On 2026-10-04 production applied a migration from a build that was never pushed,
+// `20261004120000 provider-usage-receipts`. The repository's migration with that same version is
+// `workforce-gifts`, a different file. Keyed on the version alone, the runner would have treated
+// workforce-gifts as applied, skipped it without a word, and failed several migrations later on a
+// table that was never created.
+//
+// So: a file is applied when a row carries its version and its name. When its version is recorded
+// under ANOTHER name, the file is still pending, and it is recorded as `<version>+<name>`, which is
+// unique and sorts beside its version. A row with no file on disk is reported, never acted on.
 // --------------------------------------------------------------------------
-async function getAppliedVersions(pool) {
+export const collisionKey = (m) => `${m.version}+${m.name}`;
+export function appliedIndex(rows) { return new Map(rows.map((r) => [String(r.version), String(r.name ?? '')])); }
+export function isApplied(index, m) { return index.get(m.version) === m.name || index.has(collisionKey(m)); }
+/** The version string a migration is recorded under: its own, or the collision key when its version is taken by another name. */
+export function recordAs(index, m) { return index.has(m.version) && index.get(m.version) !== m.name ? collisionKey(m) : m.version; }
+/** Applied rows that match no file on disk: a migration from a build this repository does not contain. */
+export function foreignRows(index, migrations) {
+  const known = new Set(migrations.flatMap((m) => [`${m.version}\u0000${m.name}`, `${collisionKey(m)}\u0000${m.name}`]));
+  return [...index].filter(([version, name]) => !known.has(`${version}\u0000${name}`)).map(([version, name]) => ({ version, name }));
+}
+/** Two files with one version cannot both be recorded under it. Refuse to run rather than apply one and skip the other. */
+export function duplicateVersions(migrations) {
+  const seen = new Map(), dup = [];
+  for (const m of migrations) { if (seen.has(m.version)) dup.push(`${m.version}: ${seen.get(m.version)} and ${m.name}`); else seen.set(m.version, m.name); }
+  return dup;
+}
+async function getApplied(pool) {
   const { rows } = await pool.query(
-    'SELECT version FROM schema_migrations ORDER BY version'
+    'SELECT version, name FROM schema_migrations ORDER BY version'
   );
-  return new Set(rows.map(r => r.version));
+  return appliedIndex(rows);
 }
 
 // --------------------------------------------------------------------------
@@ -112,9 +139,14 @@ function parseMigration(filepath) {
 export async function runAllMigrations(pool) {
   await ensureMigrationsTable(pool);
 
-  const applied = await getAppliedVersions(pool);
+  const applied = await getApplied(pool);
   const migrations = discoverMigrations();
-  const pending = migrations.filter(m => !applied.has(m.version));
+  const duplicates = duplicateVersions(migrations);
+  if (duplicates.length) throw new Error(`[Migrations] Two migration files share a version, so one would be skipped: ${duplicates.join('; ')}`);
+  for (const row of foreignRows(applied, migrations)) {
+    console.warn(`[Migrations] Applied but not in this build: ${row.version} — ${row.name}. Left untouched.`);
+  }
+  const pending = migrations.filter(m => !isApplied(applied, m));
 
   if (pending.length === 0) {
     console.log('[Migrations] All migrations are up to date.');
@@ -137,11 +169,16 @@ export async function runAllMigrations(pool) {
     try {
       await client.query('BEGIN');
       await client.query(up);
+      const recorded = recordAs(applied, migration);
+      if (recorded !== migration.version) {
+        console.warn(`[Migrations] Version ${migration.version} is recorded for "${applied.get(migration.version)}", a different migration. Recording "${migration.name}" as ${recorded}.`);
+      }
       await client.query(
         'INSERT INTO schema_migrations (version, name) VALUES ($1, $2)',
-        [migration.version, migration.name]
+        [recorded, migration.name]
       );
       await client.query('COMMIT');
+      applied.set(recorded, migration.name);
       appliedCount++;
       console.log(`[Migrations] Applied: ${migration.version} — ${migration.name}`);
     } catch (error) {
@@ -178,7 +215,7 @@ export async function rollbackMigrations(pool, count = 1) {
   let rolledBack = 0;
 
   for (const row of rows) {
-    const migration = migrations.find(m => m.version === row.version);
+    const migration = migrations.find(m => (m.version === row.version && m.name === row.name) || collisionKey(m) === row.version);
     if (!migration) {
       console.warn(`[Migrations] File not found for version ${row.version}, skipping rollback.`);
       continue;
@@ -215,13 +252,13 @@ export async function rollbackMigrations(pool, count = 1) {
 // --------------------------------------------------------------------------
 export async function migrationStatus(pool) {
   await ensureMigrationsTable(pool);
-  const applied = await getAppliedVersions(pool);
+  const applied = await getApplied(pool);
   const migrations = discoverMigrations();
 
   return migrations.map(m => ({
     version: m.version,
     name: m.name,
-    status: applied.has(m.version) ? 'applied' : 'pending',
+    status: isApplied(applied, m) ? 'applied' : 'pending',
   }));
 }
 
