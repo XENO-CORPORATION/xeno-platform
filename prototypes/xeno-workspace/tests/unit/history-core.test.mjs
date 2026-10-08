@@ -80,6 +80,29 @@ test('jump stops at the first failing step, so a failure cannot loop (F-04)', ()
   assert.equal(h.canUndo(), true);
 });
 
+test('a redo of a change that stored nothing is dropped at once, and says so (F-05)', () => {
+  const { h, effects } = make({});
+  h.gesture();
+  h.record('mem', () => {});
+  assert.equal(h.undo(), true);
+  assert.equal(h.redo(), false);
+  assert.equal(h.canRedo(), false);
+  assert.equal(h.list()[0].state, 'retired');
+  assert.equal(effects.toasts.at(-1).msg, 'That couldn’t be redone');
+});
+
+test('a redo whose write fails keeps the entry, and its second failure retires it (F-05)', () => {
+  const { h, store, setFailWrites } = make({ 'xw.a': '1' });
+  h.gesture(); store.set('xw.a', '2'); h.record('set a', () => store.set('xw.a', '1'));
+  h.noteReload(); h.undo();
+  setFailWrites(true);
+  assert.equal(h.redo(), false);
+  assert.equal(h.canRedo(), true, 'the first failure keeps the entry');
+  assert.equal(h.redo(), false);
+  assert.equal(h.canRedo(), false, 'the second failure retires it');
+  assert.equal(h.list()[0].state, 'retired');
+});
+
 test('a reload hook that throws is logged, and the undo still counts as done (F-04)', () => {
   const f = fakeHistoryPorts({ 'xw.a': '1' });
   const h = H.createHistory({ ...f.ports, reloadHooks: () => { throw new Error('render'); } });

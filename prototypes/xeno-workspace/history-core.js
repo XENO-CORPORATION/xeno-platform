@@ -10,6 +10,7 @@
   const MAX_UNDO_FAILURES = 2;   // a write that fails this many times in a row retires its entry
   const COPY = {
     cantUndo: 'That couldn’t be undone',
+    cantRedo: 'That couldn’t be redone',
     nothingUndo: 'Nothing to undo',
     nothingRedo: 'Nothing to redo',
     kept: 'Undone — kept a change someone else made since',
@@ -89,10 +90,14 @@
       }
       e.state = 'undone'; return true;
     }
+    // a redo that cannot be written is dropped: the entry is retired, and the toast says it could not be redone
+    function retireRedo(e) { e.state = 'retired'; forget(e); ports.toast(COPY.cantRedo); return false; }
     function redoEntry(e) {
-      if (!e || e.state !== 'undone' || !e.after) return false;
-      const kept = write(e.after, e.before); if (kept) ports.toast(COPY.keptRedo);
-      e.state = 'done'; return true;
+      if (!e || e.state !== 'undone') return false;
+      if (!e.after) return retireRedo(e);   // nothing was stored, so there is nothing to write
+      try { const kept = write(e.after, e.before); if (kept) ports.toast(COPY.keptRedo); }
+      catch (err) { ports.logError(err); e.failures = (e.failures || 0) + 1; if (e.failures >= MAX_UNDO_FAILURES) return retireRedo(e); ports.toast(COPY.cantRedo); return false; }
+      e.failures = 0; e.state = 'done'; return true;
     }
     function undo() {
       const e = past.pop(); if (!e) { ports.toast(COPY.nothingUndo); return false; }
@@ -102,7 +107,7 @@
     }
     function redo() {
       const e = future.pop(); if (!e) { ports.toast(COPY.nothingRedo); return false; }
-      if (!redoEntry(e)) return false;
+      if (!redoEntry(e)) { if (e.state === 'undone') future.push(e); return false; }
       past.push(e); ports.toast(COPY.redid(e.label), { entryId: e.id, undo: true }); ports.refresh();
       return true;
     }
