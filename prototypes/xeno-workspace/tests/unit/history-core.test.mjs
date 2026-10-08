@@ -37,6 +37,60 @@ test('isUndoKey matches z, y and h only with the modifier', () => {
   assert.equal(H.isUndoKey('z', false), false);
 });
 
+test('a write that fails keeps the entry on the stack, and its second failure in a row retires it (F-04)', () => {
+  const { h, store, setFailWrites } = make({ 'xw.a': '1' });
+  h.gesture(); store.set('xw.a', '2'); h.record('set a', () => {});
+  h.noteReload();
+  setFailWrites(true);
+  assert.equal(h.undo(), false);
+  assert.equal(h.canUndo(), true, 'the first failure keeps the entry');
+  assert.equal(h.undo(), false);
+  assert.equal(h.canUndo(), false, 'the second failure retires it');
+  assert.equal(h.list()[0].state, 'retired');
+});
+
+test('a write that succeeds after a failure clears the count and takes the change back (F-04)', () => {
+  const { h, store, setFailWrites } = make({ 'xw.a': '1' });
+  h.gesture(); store.set('xw.a', '2'); h.record('set a', () => {});
+  h.noteReload();
+  setFailWrites(true); h.undo(); setFailWrites(false);
+  assert.equal(h.undo(), true);
+  assert.equal(store.get('xw.a'), '1');
+  assert.equal(h.list()[0].state, 'undone');
+});
+
+test('a function that throws retires its entry at once, and its error is logged (F-04)', () => {
+  const { h, effects } = make({});
+  h.gesture();
+  h.record('throws', () => { throw new Error('x'); });
+  assert.equal(h.undo(), false);
+  assert.equal(h.canUndo(), false);
+  assert.equal(h.list()[0].state, 'retired');
+  assert.equal(effects.errors.length, 1);
+});
+
+test('jump stops at the first failing step, so a failure cannot loop (F-04)', () => {
+  const { h, store, setFailWrites, attempts } = make({ 'xw.n': '0' });
+  const ids = [];
+  for (const v of ['1', '2', '3']) { h.gesture(); store.set('xw.n', v); ids.push(h.record(`set ${v}`, () => {})); }
+  h.noteReload();
+  setFailWrites(true);
+  h.jump(ids[0]);
+  assert.equal(attempts(), 1, 'one attempt, then the walk stops');
+  assert.equal(h.canUndo(), true);
+});
+
+test('a reload hook that throws is logged, and the undo still counts as done (F-04)', () => {
+  const f = fakeHistoryPorts({ 'xw.a': '1' });
+  const h = H.createHistory({ ...f.ports, reloadHooks: () => { throw new Error('render'); } });
+  h.gesture(); f.store.set('xw.a', '2'); h.record('set a', () => {});
+  h.noteReload();
+  assert.equal(h.undo(), true);
+  assert.equal(f.store.get('xw.a'), '1');
+  assert.equal(f.effects.errors.length, 1);
+  assert.equal(h.list()[0].state, 'undone');
+});
+
 test('an inert record still ends the redo stack', () => {
   const { h, store } = make({ 'xw.a': '1' });
   h.gesture();

@@ -7,6 +7,7 @@
 (function (root) {
   'use strict';
   const MAX = 100;
+  const MAX_UNDO_FAILURES = 2;   // a write that fails this many times in a row retires its entry
   const COPY = {
     cantUndo: 'That couldn’t be undone',
     nothingUndo: 'Nothing to undo',
@@ -46,7 +47,7 @@
     function write(vals, expect) {
       let kept = 0;
       Object.entries(vals).forEach(([k, v]) => { const cur = ports.kv.get(k); if (expect && cur !== expect[k]) { kept++; return; } if (v == null) ports.kv.remove(k); else ports.kv.set(k, v); });
-      ports.reloadHooks();
+      try { ports.reloadHooks(); } catch (err) { ports.logError(err); }   // the values are written by now: a render that fails is logged, not a failed undo
       return kept;
     }
     function record(label, fn, opts = {}) {
@@ -67,21 +68,24 @@
     }
     // a generation: while an entry's generation is current its own undo function is safe (its closures still point at
     // live objects) and is preferred; after any reload only the recorded values are trusted
+    // a retired entry keeps its log row, but it cannot be taken back again and its function is released
+    function retire(e) { e.state = 'retired'; forget(e); ports.toast(COPY.cantUndo); return false; }
     function undoEntry(e) {
       if (!e || e.state !== 'done') return false;
       ports.watch();
       const fn = inverses.get(e.id);
-      if (!fn && !e.before) { ports.toast(COPY.cantUndo); return false; }
+      if (!fn && !e.before) return retire(e);
       if (!e.used && fn && (e.gen === gen || !e.before)) {  // the area's own undo, then measure what it changed
         const s1 = snap();
-        try { fn(); } catch (err) { ports.logError(err); ports.toast(COPY.cantUndo); return false; }
+        try { fn(); } catch (err) { ports.logError(err); return retire(e); }
         try { ports.persist(); } catch {}
         const s2 = snap(), keys = diff(s1, s2);
         if (keys.length) { e.after = pick(s1, keys); e.before = pick(s2, keys); }
         e.used = true;
       } else {
-        const kept = write(e.before, e.after);
-        if (kept) ports.toast(COPY.kept);
+        try { const kept = write(e.before, e.after); if (kept) ports.toast(COPY.kept); }
+        catch (err) { ports.logError(err); e.failures = (e.failures || 0) + 1; if (e.failures >= MAX_UNDO_FAILURES) return retire(e); ports.toast(COPY.cantUndo); return false; }
+        e.failures = 0;
       }
       e.state = 'undone'; return true;
     }
@@ -92,7 +96,7 @@
     }
     function undo() {
       const e = past.pop(); if (!e) { ports.toast(COPY.nothingUndo); return false; }
-      if (!undoEntry(e)) return false;
+      if (!undoEntry(e)) { if (e.state === 'done') past.push(e); return false; }
       future.push(e); ports.dismiss(e.id); ports.toast(COPY.undid(e.label), { redo: true }); ports.refresh();
       return true;
     }
@@ -104,9 +108,9 @@
     }
     // jump: go to the state right after an entry; id 0 is the start of the session, before any of these changes
     function jump(id) {
-      if (id === 0) { while (past.length) undo(); return; }
-      const p = past.findIndex((e) => e.id === id); if (p >= 0) { while (past.length > p + 1) undo(); return; }
-      const f = future.findIndex((e) => e.id === id); if (f >= 0) while (future.length > f) redo();
+      if (id === 0) { while (past.length && undo()) { /* a failing step ends the walk */ } return; }
+      const p = past.findIndex((e) => e.id === id); if (p >= 0) { while (past.length > p + 1 && undo()) { /* a failing step ends the walk */ } return; }
+      const f = future.findIndex((e) => e.id === id); if (f >= 0) while (future.length > f && redo()) { /* a failing step ends the walk */ }
     }
     // the Undo on a toast: the newest change is undone; an older one is jumped to
     function undoFromToast(id) {
