@@ -81,11 +81,13 @@ await check('F-13 selection', async () => {
 await check('F-14', async () => {
   await reset(MEM);
   await clickRow(M, 0, ['Control']); await clickRow(M, 1, ['Control']);
-  await p.evaluate(() => { const H = window.XCM.H; const o = H.copy; H.copy = (t, m) => new Promise((res) => setTimeout(() => { o.call(H, t, m); res(); }, 500)); });
+  await p.evaluate(() => { const H = window.XCM.H; const o = H.copy; window.__copyDone = false; window.__copyPending = false; H.copy = (t, m) => { window.__copyPending = true; return new Promise((res) => setTimeout(() => { o.call(H, t, m); window.__copyDone = true; res(); }, 2000)); }; });
   ok(await clickBar(/Copy 2 names/), 'F-14 precondition: the Copy 2 names verb is on the bar');
-  await wait(120);
   await clickRow(M, 2, ['Control']);                   // while the copy runs, the selection changes
-  await wait(800);
+  const during = await p.evaluate(() => window.__copyPending === true && window.__copyDone === false);
+  ok(during, 'F-14 precondition: the selection changed while the copy was still running');
+  await p.waitForFunction(() => window.__copyDone === true, { timeout: 8000 });
+  await wait(300);
   const n = await marks();
   ok(n === 3, `F-14 a finished action keeps a selection that changed while it ran (${n} selected, expected 3)`);
 });
