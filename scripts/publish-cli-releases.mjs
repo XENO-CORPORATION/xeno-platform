@@ -59,6 +59,7 @@ import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { updatesOrigin } from '../src/server/config/hosts.js';
 import { R2Publisher } from './lib/r2-upload.mjs';
+import { compareVersions } from '../src/server/utils/semverPrecedence.js';
 
 const PUBLIC = process.env.XENO_UPDATES_BASE || updatesOrigin();
 
@@ -178,10 +179,11 @@ export function mergeFeed({ generated = [], existing = [], latestTag } = {}) {
   return { feed, dropped, chosen };
 }
 
+// Newest first, by SemVer 2.0.0 precedence (section 11.4). The old body read only the first
+// three numbers, so 0.1.0-rc.9, 0.1.0-rc.10 and 0.1.0 compared equal and the feed fallback
+// picked whichever it met first.
 function cmpSemverDesc(a, b) {
-  const pa = a.split('.').map(Number), pb = b.split('.').map(Number);
-  for (let i = 0; i < 3; i++) { if ((pb[i] || 0) !== (pa[i] || 0)) return (pb[i] || 0) - (pa[i] || 0); }
-  return 0;
+  return compareVersions(b, a);
 }
 
 async function main() {
