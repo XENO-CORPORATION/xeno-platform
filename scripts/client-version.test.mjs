@@ -85,6 +85,18 @@ test('🔴 the floor and the publisher share ONE comparator', async () => {
   assert.equal(compareVersions, shared.compareVersions, 'the floor has its own copy of the comparator');
 });
 
+test('SemVer 2.0.0 §11.1: a core number past 2^53 keeps its order', () => {
+  /* Number() rounds 9007199254740993 down to ...992, so the publisher read a build as equal to
+   * the newer one it would replace, and the downgrade guard accepted it. Numeric parts compare as
+   * digit strings, and a part of 309 digits or more is not Infinity. */
+  assert.equal(compareVersions('9007199254740993.0.0', '9007199254740992.0.0'), 1);
+  assert.equal(compareVersions('9007199254740992.0.0', '9007199254740993.0.0'), -1);
+  const huge = `1${'0'.repeat(400)}.0.0`;
+  assert.equal(compareVersions(huge, huge), 0, 'a 401-digit core is not unequal to itself');
+  assert.equal(compareVersions(huge, `1${'0'.repeat(399)}.0.0`), 1, 'one more digit is a larger number');
+});
+
+
 test('SemVer 2.0.0 §11.4: prereleases order identifier by identifier', () => {
   /* The specification's own ordering. Plain string comparison puts beta.11 below beta.2,
    * which is the defect this gate exists to stop. */
