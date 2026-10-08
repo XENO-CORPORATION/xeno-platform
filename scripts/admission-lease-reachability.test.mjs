@@ -17,7 +17,8 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 
-const read = (path) => readFileSync(new URL(`../${path}`, import.meta.url), 'utf8');
+// Line endings are normalised: a Windows checkout with core.autocrlf writes CRLF, and every pattern below is LF.
+const read = (path) => readFileSync(new URL(`../${path}`, import.meta.url), 'utf8').replace(/\r\n/g, '\n');
 const meter = read('src/server/utils/inferenceMeter.js');
 const routes = read('src/server/routes/aiRoutes.js');
 const index = read('src/server/index.js');
