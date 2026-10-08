@@ -4,6 +4,7 @@ import path from 'path';
 import { fileURLToPath, URL } from 'node:url';
 
 import fs from 'node:fs';
+import { xenoWorkspace } from './scripts/vite-workspace.mjs';
 
 /** Path to XENO elements packages (in-repo vendor or sibling repo). */
 const localPackages = fileURLToPath(new URL('./packages/', import.meta.url));
@@ -29,7 +30,7 @@ if (!/^https?:\/\/[^\s]+$/i.test(developmentApiTarget)) {
 
 // https://vitejs.dev/config/
 export default defineConfig({
-  plugins: [react()],
+  plugins: [react(), xenoWorkspace(fileURLToPath(new URL('.', import.meta.url)))],
   resolve: {
     alias: {
       '@': fileURLToPath(new URL('./src', import.meta.url)),

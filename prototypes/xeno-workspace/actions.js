@@ -312,7 +312,7 @@
   }
   function newProjectChat(pn) {
     const P2 = P()[pn]; if (P2) P2.chats.unshift(['New chat', 'Chat · just now']);
-    const C = (window.XENO_CHATS_BY_CTX || {})[X().ctxKey()]; const pj = C?.projects?.find((x) => x[0] === pn); if (pj) pj[2].unshift('New chat'); else C?.projects?.push([pn, null, ['New chat']]);
+    const C = X().ctxChats(); const pj = C?.projects?.find((x) => x[0] === pn); if (pj) pj[2].unshift('New chat'); else C?.projects?.push([pn, null, ['New chat']]);
     save(); X().go('product', { product: 'chat' }); toast(`New chat in ${pn}`);
   }
   function openResource(arg) {
@@ -360,7 +360,7 @@
   }
   // ---- all chats in this context, searchable (Claude's "Chats", ChatGPT's search) ----
   function allChats() {
-    const C = (window.XENO_CHATS_BY_CTX || {})[X().ctxKey()] || window.XENO_CHATS, rows = [];
+    const C = X().ctxChats(), rows = [];
     (C.pinned || []).forEach((t) => rows.push([t, 'Pinned'])); (C.recents || []).forEach(([g, ts]) => ts.forEach((t) => rows.push([t, g]))); (C.projects || []).forEach(([p, , ts]) => ts.forEach((t) => rows.push([t, p])));
     const seen = new Set(), all = rows.filter(([t]) => (seen.has(t) ? false : seen.add(t)));
     const paint = (sh, q = '') => { const hit = all.filter(([t, w]) => (t + ' ' + w).toLowerCase().includes(q.toLowerCase())); sh.querySelector('.xd-chats').innerHTML = hit.map(([t, w]) => `<button class="xd-chat" data-ac="${esc(t)}"><span>${esc(t)}</span><small>${esc(w)}</small></button>`).join('') || `<p class="xd-note">No chats match “${esc(q)}”.</p>`; sh.querySelector('.xd-chats-n').textContent = `${hit.length} of ${all.length}`; };

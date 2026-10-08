@@ -265,7 +265,9 @@
   function backHeader(p, title) {
     return `<div class="ph"><button class="ib" data-back aria-label="Back to ${ctxName()}" data-tip="Back to ${ctxName()}">${ic('back')}</button><div class="ttl"><span class="crumb">${ctxName()} ${ic('right')} <b>${esc(title)}</b></span></div><button class="ib" data-go="search" aria-label="Search" data-tip="Search" data-kbd="Ctrl K">${ic('search')}</button><button class="ib" data-collapse aria-label="Collapse sidebar" data-tip="Collapse" data-kbd="Ctrl \\">${ic('side')}</button></div>`;
   }
-  const ctxChats = () => ((window.XENO_CHATS_BY_CTX || {})[ctxKey()] || window.XENO_CHATS);
+  // a context with no chat list of its own (the adaptive view, a custom mode) shares the default list. The default is kept with the
+  // others, so its moves are saved, survive a reload and can be undone; before, it lived only in memory
+  const ctxChats = () => { const map = window.XENO_CHATS_BY_CTX || (window.XENO_CHATS_BY_CTX = {}); return map[ctxKey()] || map.default || (map.default = JSON.parse(JSON.stringify(window.XENO_CHATS))); };
   function panelChat() {
     const C = ctxChats();
     const chatRow = (t, proj) => row(`data-chat="${esc(t)}" data-ctx="chat"`, `<span class="t">${esc(t)}</span><span class="more" data-more>${ic('more')}</span>`);
@@ -1108,7 +1110,7 @@
     return `<div class="topbar"><button class="ib opener" data-expand aria-label="Open sidebar" data-tip="Open sidebar" data-kbd="Ctrl \\">${ic('side')}</button><div class="crumbs">${crumbs()}</div><div class="sp"></div>${isChat ? `<button class="ib" aria-label="Share" data-tip="Share">${ic('share')}</button><button class="ib" aria-label="More" data-tip="Copy transcript, rename, delete">${ic('more')}</button>` : ''}</div>${isChat ? body : `<div class="mview">${body}</div>`}`;
   }
 
-  window.XW = { get S() { return S; }, go, esc, ic, PR, M, pIconFull, mini, toast: (s) => toast(s), store, ctxName, ctxKey, inOv, zoneNow, zoneKey, zonesFor, modeOf, mark, render: () => render(), hiddenModes, toggleHidden, modeOrder, renderRail: () => renderRail(), openShortcuts: (o) => openShortcuts(o), openUsage: () => openUsage(), openAdConsent: (o) => openAdConsent(o), hidePops: () => hidePops(), applyWorkspace: () => applyWorkspace(), markAllRead: () => markAllRead(() => render()), refreshSwitcher: () => refreshSwitcher(), search: (q) => { openPalette(); const i = document.querySelector('#palette input'); if (i && q) { i.value = q; i.dispatchEvent(new Event('input')); } }, refreshPanel: () => { const pv = $('#panel > .pv'); const top = pv?.querySelector('.pbody')?.scrollTop || 0; setPv($('#panel'), `<div class="pv">${panelHTML()}</div>`); const n = $('#panel > .pv .pbody'); if (n) n.scrollTop = top; } };
+  window.XW = { get S() { return S; }, go, esc, ic, PR, M, pIconFull, mini, toast: (s) => toast(s), store, ctxName, ctxKey, ctxChats, inOv, zoneNow, zoneKey, zonesFor, modeOf, mark, render: () => render(), hiddenModes, toggleHidden, modeOrder, renderRail: () => renderRail(), openShortcuts: (o) => openShortcuts(o), openUsage: () => openUsage(), openAdConsent: (o) => openAdConsent(o), hidePops: () => hidePops(), applyWorkspace: () => applyWorkspace(), markAllRead: () => markAllRead(() => render()), refreshSwitcher: () => refreshSwitcher(), search: (q) => { openPalette(); const i = document.querySelector('#palette input'); if (i && q) { i.value = q; i.dispatchEvent(new Event('input')); } }, refreshPanel: () => { const pv = $('#panel > .pv'); const top = pv?.querySelector('.pbody')?.scrollTop || 0; setPv($('#panel'), `<div class="pv">${panelHTML()}</div>`); const n = $('#panel > .pv .pbody'); if (n) n.scrollTop = top; } };
   // ---- render with crossfade ----
   let first = true;
   function render() {
@@ -1207,9 +1209,10 @@
     try { replace ? history.replaceState(null, '', h) : history.pushState(null, '', h); } catch { location.hash = h; }
   }
   // the selection on a page lives in its URL as ?sel=a,b (§7bb) — replaced, never pushed: selecting adds no Back step
+  const SELCODEC = window.XENO_SEL_CORE;   // the address codec lives in select-core.js, tested without a browser
   window.XENO_URLSEL = {
-    get: () => { const q = location.hash.split('?')[1] || ''; const v = new URLSearchParams(q).get('sel'); return v ? v.split(',').map((x) => decodeURIComponent(x)).filter(Boolean) : []; },
-    set: (ids) => { const base = location.hash.split('?')[0] || '#/'; const next = ids && ids.length ? `${base}?sel=${ids.map(encodeURIComponent).join(',')}` : base; if (next === location.hash) return; try { history.replaceState(history.state, '', next); } catch {} },
+    get: () => { const v = SELCODEC.selRaw(location.hash.split('?')[1] || ''); return v ? SELCODEC.parseSel(v) : []; },
+    set: (ids) => { const base = location.hash.split('?')[0] || '#/'; const next = ids && ids.length ? `${base}?sel=${SELCODEC.formatSel(ids)}` : base; if (next === location.hash) return; try { history.replaceState(history.state, '', next); } catch {} },
   };
   addEventListener('popstate', () => { const st = hashToState(location.hash); if (!st) return; applyingHash = true; go(st.view, st); applyingHash = false; });
   // ---- (2) return to where you were, per mode ----
@@ -1243,6 +1246,8 @@
     if (view === 'product') adTrack(S.product);
     if (root.dataset.panel === 'closed' && extra.openPanel) setPanel('open');
     S._softPanel = pk0 === pk() && !S.switching;
+    // an in-app place change is announced before the new place renders, so a selection made in the old place is let go (F-02)
+    if (!applyingHash && location.hash.split('?')[0] !== stateToHash()) window.dispatchEvent(new Event('xeno:place'));
     render(); hidePops();
     markItems(); setTimeout(() => markItems(), 140);
     if (view === 'adaptive') setTimeout(adMorph, 160);

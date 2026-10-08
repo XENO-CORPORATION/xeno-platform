@@ -105,6 +105,15 @@ test('frontend deploy ships every first-party source tree copied by its Dockerfi
   );
 });
 
+test('frontend deploy ships the workspace folder its Dockerfile copies', () => {
+  assert.match(frontendDockerfile, /COPY prototypes\/xeno-workspace\/ \.\/prototypes\/xeno-workspace\//, 'expected the frontend image to copy the workspace');
+  assert.match(
+    deploy,
+    /frontend:\s*\[[^\]]*['"]prototypes\/xeno-workspace['"]/,
+    'frontend PATHS must include prototypes/xeno-workspace, or the image build fails on the box at that COPY',
+  );
+});
+
 test('frontend image installation skips the unused Puppeteer browser payload', () => {
   const skip = frontendDockerfile.indexOf('ENV PUPPETEER_SKIP_DOWNLOAD=true');
   const install = frontendDockerfile.indexOf('npm ci --legacy-peer-deps');

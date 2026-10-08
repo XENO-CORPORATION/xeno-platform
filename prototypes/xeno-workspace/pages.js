@@ -595,6 +595,8 @@
   // double-click a file to open it (a single click selects it — Finder, Drive, Dropbox)
   document.addEventListener('dblclick', (e) => { const c = e.target.closest('#main .pg--lib [data-pg-file]'); if (!c) return; const f = libItem(c.dataset.pgFile); if (f) X().go('global', { global: 'library', item: f.name }); });
   function undo(msg, fn) { window.XENO_HIST.record(msg, fn); }
+  // leaving the page forgets the Library's picks, including a single selected file: state only, so no address is written (F-02)
+  window.XENO_SEL?.onLeave?.(() => { ui('library').sel = null; });
   // search: filters as you type; '/' focuses the page search (like GitHub, Linear)
   document.addEventListener('input', (e) => { const k = e.target.dataset?.pgQ; if (k == null) return; ui(k).q = e.target.value; repaint(); });
   document.addEventListener('keydown', (e) => {

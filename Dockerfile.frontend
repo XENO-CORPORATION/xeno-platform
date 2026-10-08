@@ -66,6 +66,9 @@ COPY public/ ./public/
 COPY src/ ./src/
 COPY packages/ ./packages/
 
+# The XENO workspace: plain files the build copies into dist/workspace (scripts/vite-workspace.mjs)
+COPY prototypes/xeno-workspace/ ./prototypes/xeno-workspace/
+
 # Copy build scripts (the build runs scripts/prerender-products.mjs — SEO §8)
 COPY scripts/ ./scripts/
 
