@@ -69,7 +69,7 @@
   // PROJECTS — index, then one project with its tabs (WORKFORCE §8.5, §11.2)
   // =====================================================================================
   const PROJ = () => window.XENO_PG_PROJECTS.items.filter((p) => !window.XENO_VIS || window.XENO_VIS.project(p));
-  const HEALTH = { on_track: 'On track', at_risk: 'At risk', blocked: 'Blocked', done: 'Done' };
+  const HEALTH = { on_track: 'On track', at_risk: 'At risk', blocked: 'Blocked', done: 'Done' }, hchip = (h) => (HEALTH[h] ? chip(HEALTH[h]) : '') /* a project with no health recorded shows none, never a guess */;
   function projectsIndex(arch) {
     const key = 'projects', u = ui(key, { extra: {} }), ctx = X().ctxName();
     const status = arch ? 'archived' : u.seg.status || (window.XENO_VIS?.guest() ? 'shared' : 'active');
@@ -81,14 +81,14 @@
     const firstUse = () => box('folder', 'Start your first project', 'A project keeps the chats, files, tasks and teams for one goal together — and it is the same project in every mode.', btn('New project', 'data-xa="newProject"', false, 'plus') + btn('Turn a chat into a project', 'data-xa="newProject"', true));
     const body = gate(key, u.view === 'grid' ? 'grid' : 'rows', firstUse) ?? (!rows.length ? (u.q ? filtered(key, u.q, 'projects') : modeF !== 'all' ? box('folder', `No ${status === 'active' ? '' : status + ' '}${modeF} projects`, `Projects from other modes are one click away.`, btn('Show all modes', 'data-pg-seg="mode" data-v="all"', true)) : box('archive', status === 'archived' ? 'Nothing archived' : 'Nothing shared with you yet', status === 'archived' ? 'Finished projects land here, with their history intact.' : 'When someone adds you to their project it shows up here.')) :
       u.view === 'grid' ? `<div class="pg-grid pg-grid--proj">${rows.map(projCard).join('')}</div>` :
-      table(['Project', 'Mode', 'Progress', 'Next milestone', 'Health', 'People', 'Updated'], rows.map((p) => tr(`data-pg-go-project="${esc(p.name)}"`, [`<b class="pg-name"><span class="pg-picon">${ic(p.icon || 'folder')}</span>${esc(p.name)}${p.needsYou ? `<em class="pg-need">${p.needsYou} need you</em>` : ''}</b>${p.goal ? `<small>${esc(p.goal)}</small>` : ''}`, esc(p.mode), meter(p.tasks.done, p.tasks.total), `<span class="pg-two"><span>${esc(p.milestone.title)}</span><small>${esc(p.milestone.due)}</small></span>`, chip(HEALTH[p.health]), stack(p.members), `<small>${ago(p.updatedAt)}</small>`])), 'pg-table--proj'));
+      table(['Project', 'Mode', 'Progress', 'Next milestone', 'Health', 'People', 'Updated'], rows.map((p) => tr(`data-pg-go-project="${esc(p.name)}"`, [`<b class="pg-name"><span class="pg-picon">${ic(p.icon || 'folder')}</span>${esc(p.name)}${p.needsYou ? `<em class="pg-need">${p.needsYou} need you</em>` : ''}</b>${p.goal ? `<small>${esc(p.goal)}</small>` : ''}`, esc(p.mode), meter(p.tasks.done, p.tasks.total), `<span class="pg-two"><span>${esc(p.milestone.title)}</span><small>${esc(p.milestone.due)}</small></span>`, hchip(p.health), stack(p.members), `<small>${ago(p.updatedAt)}</small>`])), 'pg-table--proj'));
     const modes = ['all', ...new Set(all.map((p) => p.mode))];
     return page(head({ eyebrow: `${esc(ctx)} · Projects`, title: arch ? 'Archived projects' : 'Projects', sub: 'One project per goal — its chats, files, tasks and teams, in every mode.', acts: btn('New project', 'data-xa="newProject"', false, 'plus'),
       meta: arch ? '' : `<span><b>${counts.active}</b> active</span><span><b>${needs}</b> waiting on you</span><span><b>${blocked}</b> blocked</span>` })
       + bar(search(key, 'Search projects', u.q), arch ? '' : seg('status', 'Status', [['active', 'Active', counts.active], ['shared', 'Shared with me', counts.shared], ['archived', 'Archived', counts.archived]], status), '<span class="pg-sp"></span>', dd(key, 'mode', 'Mode', modes.map((m) => [m, m === 'all' ? 'All' : m]), modeF), sortSel(key, [['recent', 'Recently updated'], ['progress', 'Progress'], ['name', 'Name']], u.sort), viewTog(key, u.view))
       + `<div class="pg-body" data-pg-results>${body}</div>` + foot(key, 'GET /api/v2/projects?status', 'project'));
   }
-  const projCard = (p) => `<div class="pg-card pg-card--proj" tabindex="0" data-pg-go-project="${esc(p.name)}"><div class="pg-card-top"><span class="pg-tag">${esc(p.mode)}</span><span class="pg-card-r">${p.needsYou ? `<em class="pg-need">${p.needsYou} need you</em>` : ''}${chip(HEALTH[p.health])}</span></div><b><span class="pg-picon">${ic(p.icon || 'folder')}</span>${esc(p.name)}</b><small class="pg-clamp">${esc(p.goal || p.milestone.title)}</small><div class="pg-card-mid">${meter(p.tasks.done, p.tasks.total)}</div><div class="pg-card-foot"><span>${esc(p.milestone.title)} · ${esc(p.milestone.due)}</span>${stack(p.members, 3)}</div></div>`;
+  const projCard = (p) => `<div class="pg-card pg-card--proj" tabindex="0" data-pg-go-project="${esc(p.name)}"><div class="pg-card-top"><span class="pg-tag">${esc(p.mode)}</span><span class="pg-card-r">${p.needsYou ? `<em class="pg-need">${p.needsYou} need you</em>` : ''}${hchip(p.health)}</span></div><b><span class="pg-picon">${ic(p.icon || 'folder')}</span>${esc(p.name)}</b><small class="pg-clamp">${esc(p.goal || p.milestone.title)}</small><div class="pg-card-mid">${meter(p.tasks.done, p.tasks.total)}</div><div class="pg-card-foot"><span>${esc(p.milestone.title)} · ${esc(p.milestone.due)}</span>${stack(p.members, 3)}</div></div>`;
 
   function projectPage(name, tab) {
     const L = PROJ().find((p) => p.name === name);
@@ -101,7 +101,9 @@
     const timeline = (rows) => rows.length ? `<ol class="pg-tl">${rows.map(([t, w]) => `<li><i></i><span>${esc(t)}</span><small>${esc(w)}</small></li>`).join('')}</ol>` : '<p class="pg-dim">Nothing yet.</p>';
     const libFor = window.XENO_PG_LIBRARY.items.filter((f) => f.project === name && !f.trashedAt);
     const empty = (icon, t, b, a = '') => box(icon, t, b, a, 'sm');
-    const body = gate(fam, 'rows', () => empty('folder', 'This project is empty', 'Add a task, attach a chat or file, or assign a team to get started.', btn('New task', `data-xa="newTask" data-arg="${esc(name)}"`, false, 'plus') + btn('Assign a team', `data-xa="assign" data-arg="${esc(name)}"`, true))) ?? ({
+    // on the platform, a tab with no API behind it says so, and Overview shows only what the platform knows
+    const liveTab = window.XENO_WORK && window.XENO_WORK.served ? window.XENO_WORK.projectTab(cur, name, { box, esc, ic, btn }) : null;
+    const body = liveTab ?? gate(fam, 'rows', () => empty('folder', 'This project is empty', 'Add a task, attach a chat or file, or assign a team to get started.', btn('New task', `data-xa="newTask" data-arg="${esc(name)}"`, false, 'plus') + btn('Assign a team', `data-xa="assign" data-arg="${esc(name)}"`, true))) ?? ({
       Overview: () => `<div class="pg-cols"><div>
           ${meta.needsYou ? `<section class="pg-sec"><h3>Waiting on you <em>${meta.needsYou}</em></h3>${(window.XENO_NEEDS || []).filter((n) => (P.mode || '').toLowerCase() === n.m).slice(0, meta.needsYou).map((n) => `<div class="pg-need-row"><span>${esc(n.t)}</span>${btn(n.meta, `data-xa="resolveNeed" data-arg="${esc(n.t)}"`, n.meta !== 'Approve')}</div>`).join('') || '<p class="pg-dim">Open the Inbox to act on it.</p>'}</section>` : ''}
           <section class="pg-sec"><h3>Tasks</h3><div class="pg-mini-board">${COL.map(([k, l]) => `<button class="pg-mb" data-ptab="Tasks"><b>${tasks.filter((t) => t.state === k).length}</b><small>${l}</small></button>`).join('')}</div></section>
@@ -117,7 +119,7 @@
       Activity: () => timeline(P.activity),
     }[cur])();
     return page(head({ obj: true, eyebrow: `${esc(P.mode)} · Owner ${esc(P.owner)}`, title: name, sub: P.goal, acts: `<button class="pg-ib" data-xa="projectMenu" data-arg="${esc(name)}" aria-label="More actions" data-tip="Rename, icon, archive…" aria-haspopup="menu" aria-expanded="false">${ic('more')}</button>` + btn('Assign', `data-xa="assign" data-arg="${esc(name)}"`, true, 'people') + btn('New task', `data-xa="newTask" data-arg="${esc(name)}"`, false, 'plus'),
-      meta: `<span class="pg-meta-prog">${meter(meta.tasks.done, meta.tasks.total)}</span><span>${chip(HEALTH[meta.health])}</span><span class="pg-top-next">Next: <b>${esc(meta.milestone.title)}</b> · ${esc(meta.milestone.due)}</span><span class="pg-sp"></span>${stack(meta.members)}` })
+      meta: `<span class="pg-meta-prog">${meter(meta.tasks.done, meta.tasks.total)}</span><span>${hchip(meta.health)}</span><span class="pg-top-next">Next: <b>${esc(meta.milestone.title)}</b> · ${esc(meta.milestone.due)}</span><span class="pg-sp"></span>${stack(meta.members)}` })
       + `<div class="pg-tabs" role="tablist">${tabs.map((t) => `<button role="tab" aria-selected="${t === cur}" data-ptab="${esc(t)}">${esc(t)}${t === 'Tasks' && tasks.length ? `<em>${tasks.length}</em>` : t === 'Conversations' && P.chats.length ? `<em>${P.chats.length}</em>` : ''}</button>`).join('')}</div>`
       + `<div class="pg-body">${body}</div>` + foot(fam, 'GET /api/v2/projects/:id'));
   }
