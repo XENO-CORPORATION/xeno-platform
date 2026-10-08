@@ -40,6 +40,7 @@ import { ensureQuota as defaultEnsureQuota } from '../services/quotaService.js';
 import { getEffectivePlan as defaultGetEffectivePlan } from '../services/effectivePlan.js';
 import { billingSubjectFor as defaultBillingSubjectFor } from '../services/agentIdentity.js';
 import { DRAW_REFUSAL_RESUME, resumeFields } from '../services/workforceRunRefusals.js';
+import { grantedOutputTokensForAmount, normalizeRequestedOutputTokens } from '../utils/admissionLease.js';
 
 // Same error taxonomy as v2LedgerRoutes.sendErr (kept local so the two files
 // share no mutable surface). 23505 (unique-violation on holdId replay) → 409.
@@ -208,6 +209,26 @@ export function createServiceLedgerRouter({
   }
 
   /**
+   * A LEASED hold prices a ceiling, not an amount: the platform reserves the largest output the account can fund,
+   * never more than was asked (admissionLease.js, the rule the platform's own chat meter applies). Same contract as
+   * holdAmount, with the lease in place of the fixed reservation. The caller is told the grant, and caps its upstream
+   * request to it, so the provider cannot produce output the hold does not cover.
+   */
+  function leaseInputs(b) {
+    if (b.amountMicro !== undefined) return { error: 'send either pricing or amountMicro, not both' };
+    const { model, estInputTokens, maxOutputTokens } = b.pricing;
+    if (!model || typeof model !== 'string') return { error: 'pricing.model required' };
+    const inTok = nonNegInt(estInputTokens ?? 0);
+    const maxOut = nonNegInt(maxOutputTokens ?? 4096);
+    if (inTok === null || maxOut === null) return { error: 'pricing.estInputTokens and pricing.maxOutputTokens must be non-negative integers' };
+    const requested = normalizeRequestedOutputTokens(maxOut);
+    return {
+      lease: { model, inputTokens: inTok, requestedOutputTokens: requested },
+      priced: { model, tier: pricing.chatTier(model), estInputTokens: inTok, maxOutputTokens: requested },
+    };
+  }
+
+  /**
    * Actual cost of what was consumed. `usage` is priced HERE; `actualCostMicro` is legacy.
    * `usage.measured === false` means the provider never reported output tokens: the caller's
    * numbers are an estimate, and an estimate must never settle BELOW the reservation — the
@@ -284,7 +305,10 @@ export function createServiceLedgerRouter({
     if (!userId || !holdId || !operation || !surface) {
       return badRequest(res, 'userId, holdId, operation, surface required');
     }
-    const amount = holdAmount(b);
+    // A leased hold (pricing.lease === true) reserves the largest ceiling the account can fund; any other hold keeps
+    // its fixed worst-case reservation, exactly as before, for callers that have not adopted the lease.
+    const leased = Boolean(b.pricing && typeof b.pricing === 'object' && b.pricing.lease === true);
+    const amount = leased ? leaseInputs(b) : holdAmount(b);
     if (amount.error) return badRequest(res, amount.error);
     try {
       // §8b: the weekly allowance is issued LAZILY, on the first call of a window — a
@@ -307,15 +331,23 @@ export function createServiceLedgerRouter({
       // silently became `free`. One human, one wallet, one quota.
       const subject = await billingSubjectFor(req.db, userId);
       await ensureQuota(req.db, subject.userId, (await getEffectivePlan(req.db, subject.userId)).plan);
-      const hold = await ledger.holdV2(req.db, subject.userId, {
-        surface,
-        holdId,
-        amountMicro: amount.amountMicro,
-        operation,
-        expiresInSeconds: b.expiresInSeconds ?? 3600,
-      });
+      const hold = leased
+        ? await ledger.holdV2(req.db, subject.userId, { surface, holdId, lease: amount.lease, operation, expiresInSeconds: b.expiresInSeconds ?? 3600 })
+        : await ledger.holdV2(req.db, subject.userId, { surface, holdId, amountMicro: amount.amountMicro, operation, expiresInSeconds: b.expiresInSeconds ?? 3600 });
       // The agent is still named, for attribution — the owner must be able to see WHICH
       // of their agents spent this. Attribution is a label; billing is the owner.
+      if (leased) {
+        // The grant is read back from the amount the hold actually reserved, so a replayed holdId reports the same grant.
+        const granted = grantedOutputTokensForAmount({
+          amountMicro: hold.amountMicro, model: amount.lease.model,
+          inputTokens: amount.lease.inputTokens, requestedOutputTokens: amount.lease.requestedOutputTokens,
+        });
+        return res.json({
+          ...hold, pricing: amount.priced,
+          grantedOutputTokens: granted, requestedOutputTokens: amount.lease.requestedOutputTokens,
+          billedUserId: subject.userId, actorUserId: subject.actorUserId,
+        });
+      }
       res.json({ ...hold, amountMicro: amount.amountMicro, pricing: amount.priced, billedUserId: subject.userId, actorUserId: subject.actorUserId });
     } catch (err) {
       sendErr(res, err);
