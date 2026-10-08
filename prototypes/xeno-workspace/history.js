@@ -34,7 +34,7 @@
   });
   // the reading taken at the start of each user gesture: the state before whatever that gesture is about to do
   document.addEventListener('pointerdown', () => core.gesture(), true);
-  document.addEventListener('keydown', (e) => { if (!C.isUndoKey(e.key, e.ctrlKey || e.metaKey)) core.gesture(); }, true);
+  document.addEventListener('keydown', (e) => { if (!C.isUndoKey(e.key, e.ctrlKey || e.metaKey, e.altKey)) core.gesture(); }, true);
   // another window's change moves this window's reading with it, so its next record does not claim the change (F-18)
   window.addEventListener('storage', (e) => { if (e.storageArea === localStorage) core.observe(e.key, e.newValue); });
 
@@ -57,27 +57,31 @@
   // ---------- the history drawer: every change, yours and your teammates', and you can jump to any of yours ----------
   let open = false, filter = 'mine';
   const ago = (t) => C.ago(t, Date.now());
+  // the action a drawer row offers, from the core's rule
+  const rowAction = (e, view) => { const a = view.action(e); return a === 'current' ? '<span class="xh-tag">Current</span>' : a === 'back' ? `<button data-h="jump" data-id="${e.id}">Back to here</button>` : a === 'redo' ? `<button data-h="jump" data-id="${e.id}">Redo to here</button>` : ''; };
   function drawer(refresh) {
     let d = document.getElementById('xw-history');
     if (refresh && !d) return;
     if (!d) { d = document.createElement('aside'); d.id = 'xw-history'; d.setAttribute('aria-label', 'History'); d.tabIndex = -1; document.body.appendChild(d);
       d.addEventListener('click', (ev) => { const b = ev.target.closest('[data-h]'); if (!b) return; const a = b.dataset.h;
         if (a === 'close') toggle(false); else if (a === 'f') { filter = b.dataset.v; drawer(true); } else if (a === 'jump') core.jump(+b.dataset.id); else if (a === 'undo') core.undo(); else if (a === 'redo') core.redo(); }); }
+    const focused = document.activeElement; const keep = d.contains(focused) ? { h: focused.dataset.h, id: focused.dataset.id ?? null, v: focused.dataset.v ?? null } : null;   // focus inside the drawer survives its redraw (F-12)
     const view = core.view();
     const others = (window.XENO_LIVE_LOG || []).filter((x) => x.tab !== 'self').map((x) => ({ id: 'r' + x.at, label: x.what, by: x.by, at: x.at, state: 'theirs' }));
     const rows = (filter === 'mine' ? view.log : [...view.log, ...others].sort((a, b) => b.at - a.at));
     const top = view.top;
     d.innerHTML = `<header><b>History</b><span class="xh-seg" role="group" aria-label="Show">${[['mine', 'Yours'], ['all', 'Everyone']].map(([v, l]) => `<button data-h="f" data-v="${v}" aria-pressed="${filter === v}">${l}</button>`).join('')}</span><button class="xh-x" data-h="close" aria-label="Close history">×</button></header>
       <div class="xh-acts"><button data-h="undo" ${view.past ? '' : 'disabled'}>Undo<kbd>Ctrl Z</kbd></button><button data-h="redo" ${view.future ? '' : 'disabled'}>Redo<kbd>Ctrl ⇧ Z</kbd></button></div>
-      ${rows.length ? `<ol>${rows.map((e) => `<li class="xh-${e.state}${e === top ? ' xh-now' : ''}"><div><b>${esc(e.label)}</b><small>${esc(e.by === 'you' ? 'You' : e.by)} · ${ago(e.at)}${e.state === 'undone' ? ' · undone' : ''}</small></div>${e.state === 'theirs' || e.state === 'inert' ? '' : e === top ? '<span class="xh-tag">Current</span>' : `<button data-h="jump" data-id="${e.id}">${e.state === 'undone' ? 'Redo to here' : 'Back to here'}</button>`}</li>`).join('')}${filter === 'mine' ? `<li class="xh-start${view.past ? '' : ' xh-now'}"><div><b>Start of this session</b><small>Before any of these changes</small></div>${view.past ? '<button data-h="jump" data-id="0">Back to here</button>' : '<span class="xh-tag">Current</span>'}</li>` : ''}</ol>`
+      ${rows.length ? `<ol>${rows.map((e) => `<li class="xh-${e.state}${e === top ? ' xh-now' : ''}"><div><b>${esc(e.label)}</b><small>${esc(e.by === 'you' ? 'You' : e.by)} · ${ago(e.at)}${e.state === 'undone' ? ' · undone' : ''}</small></div>${e.state === 'theirs' || e.state === 'inert' ? '' : rowAction(e, view)}</li>`).join('')}${filter === 'mine' ? `<li class="xh-start${view.past ? '' : ' xh-now'}"><div><b>Start of this session</b><small>Before any of these changes</small></div>${view.past ? '<button data-h="jump" data-id="0">Back to here</button>' : '<span class="xh-tag">Current</span>'}</li>` : ''}</ol>`
         : `<p class="xh-empty">Nothing yet. Changes you can take back appear here — Ctrl Z undoes the latest, Ctrl ⇧ Z brings it back.</p>`}`;
+    if (keep) { const same = [...d.querySelectorAll('[data-h]')].find((b) => b.dataset.h === keep.h && (b.dataset.id ?? null) === keep.id && (b.dataset.v ?? null) === keep.v); (same ?? d).focus(); }
   }
   function toggle(on = !open) { open = on; if (on) { drawer(); const d = document.getElementById('xw-history'); d.classList.add('on'); d.focus(); } else document.getElementById('xw-history')?.classList.remove('on'); }
 
   const typing = (t) => t.closest && t.closest('input,textarea,select,[contenteditable]');
   document.addEventListener('keydown', (e) => {
     if (!(e.ctrlKey || e.metaKey) || typing(e.target) || document.querySelector('.xd')) return;
-    const k = C.keyIntent({ key: e.key, shift: e.shiftKey, mod: true });
+    const k = C.keyIntent({ key: e.key, shift: e.shiftKey, mod: true, alt: e.altKey });
     if (k === 'undo') { e.preventDefault(); core.undo(); } else if (k === 'redo') { e.preventDefault(); core.redo(); } else if (k === 'drawer') { e.preventDefault(); toggle(); }
   });
   document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && open && document.getElementById('xw-history')?.contains(document.activeElement)) toggle(false); });

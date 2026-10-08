@@ -23,10 +23,10 @@
   const diff = (a, b) => [...new Set([...Object.keys(a), ...Object.keys(b)])].filter((k) => a[k] !== b[k]);
   const pick = (from, keys) => Object.fromEntries(keys.map((k) => [k, from[k] ?? null]));
   const isWorkspaceKey = (k) => !!k && k.startsWith('xw.') && !k.startsWith('xw.live.');
-  const isUndoKey = (key, mod) => !!mod && /^[zyh]$/i.test(String(key));
+  const isUndoKey = (key, mod, alt) => !!mod && !alt && /^[zyh]$/i.test(String(key));
   // which history action a key press asks for; the adapter has already checked the modifier and the focus
-  function keyIntent({ key, shift, mod }) {
-    if (!mod) return null;
+  function keyIntent({ key, shift, mod, alt }) {
+    if (!mod || alt) return null;   // Alt is a character key on some layouts (AltGr), never a history key
     const k = String(key).toLowerCase();
     if (k === 'z' && !shift) return 'undo';
     if ((k === 'z' && shift) || (k === 'y' && !shift)) return 'redo';
@@ -151,6 +151,14 @@
       const p = past.findIndex((e) => e.id === id); if (p >= 0) { while (past.length > p + 1 && undo()) { /* a failing step ends the walk */ } return; }
       const f = future.findIndex((e) => e.id === id); if (f >= 0) while (future.length > f && redo()) { /* a failing step ends the walk */ }
     }
+    // what a drawer row offers: Current for the top change; Back to here for a change still on the undo stack; Redo to
+    // here for an undone change still on the redo stack; nothing for anything else (inert, retired, or overtaken)
+    function drawerAction(e) {
+      if (past.length && past[past.length - 1] === e) return 'current';
+      if (past.includes(e)) return 'back';
+      if (future.includes(e)) return 'redo';
+      return null;
+    }
     return {
       record, undo, redo, jump, undoThrough, redoThrough,
       gesture() { pre = snap(); },
@@ -160,7 +168,7 @@
       canUndo: () => past.length > 0,
       canRedo: () => future.length > 0,
       list: () => log.map((e) => ({ ...e })),
-      view: () => ({ log: log.slice(), past: past.length, future: future.length, top: past[past.length - 1] }),
+      view: () => ({ log: log.slice(), past: past.length, future: future.length, top: past[past.length - 1], action: drawerAction }),
       stats: () => ({ past: past.length, future: future.length, log: log.length, inverses: inverses.size }),
     };
   }

@@ -166,6 +166,31 @@ test('a change another window made is not claimed by the next record of this win
   assert.equal(h.list()[0].before, undefined, 'the other window\u2019s change is the reading, not this record');
 });
 
+test('the drawer offers Back to here only for a change on the undo stack, and Redo to here only for an undone one on the redo stack (F-11)', () => {
+  const { h, store } = make({ 'xw.n': '0' });
+  h.gesture(); store.set('xw.n', '1'); const a = h.record('a', () => store.set('xw.n', '0'));
+  h.gesture(); store.set('xw.n', '2'); const b = h.record('b', () => store.set('xw.n', '1'));
+  const at = (id) => h.view().log.find((x) => x.id === id);
+  assert.equal(h.view().action(at(b)), 'current');
+  assert.equal(h.view().action(at(a)), 'back');
+  h.undo();
+  assert.equal(h.view().action(at(b)), 'redo');
+  h.gesture(); store.set('xw.m', '1'); h.record('c', () => {});
+  assert.equal(h.view().action(at(b)), null, 'a later change overtook the undone one');
+});
+
+test('an inert change offers no drawer action (F-11)', () => {
+  const { h } = make({});
+  h.record('nothing', null);
+  const inert = h.view().log.find((x) => x.label === 'nothing');
+  assert.equal(h.view().action(inert), null);
+});
+
+test('Alt is not a history key, so an AltGr character never undoes (F-13)', () => {
+  assert.equal(H.keyIntent({ key: 'z', shift: false, mod: true, alt: true }), null);
+  assert.equal(H.isUndoKey('z', true, true), false);
+});
+
 test('an inert record still ends the redo stack', () => {
   const { h, store } = make({ 'xw.a': '1' });
   h.gesture();
