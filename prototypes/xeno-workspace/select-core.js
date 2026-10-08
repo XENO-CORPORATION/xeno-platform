@@ -25,6 +25,7 @@
     if (key === 'Escape') return count > 0 && !menuOpen ? 'clear' : null;
     const k = String(key).toLowerCase();
     if (k === 'x' && !ctrl && !meta && !alt) return 'toggle';
+    if (alt) return null;   // Alt is a character key on some layouts (AltGr): it selects nothing
     if ((ctrl || meta) && k === 'a') return 'all';
     if (shift && (key === 'ArrowDown' || key === 'ArrowUp')) return key === 'ArrowDown' ? 'down' : 'up';
     return null;
@@ -43,6 +44,8 @@
   // the separator is a literal comma, and only then is each id decoded; a part that is not valid percent-encoding is kept as written
   const parseSel = (raw) => String(raw ?? '').split(',').map((p) => decodePart(p.replace(/\+/g, ' '))).filter(Boolean);
   const formatSel = (ids) => ids.map((id) => encodeURIComponent(id)).join(',');
+  // the groups a list or an owner hands out may hold a missing group or a missing action: both are skipped
+  const groupsOf = (groups, wrap = (it) => it) => (groups || []).filter(Boolean).map((g) => g.filter(Boolean).map(wrap)).filter((g) => g.length);
   function createSelection(ports) {
     const lists = [];       // the lists, in registration order; the core reads only noun and actions from each
     let cur = null;         // { def, ids: Set, anchor }
@@ -55,10 +58,11 @@
     const linkItem = () => ({ label: 'Copy link to this selection', icon: 'share', keep: true, run: () => ports.copyLink() });
     function clearSelection() { if (!cur) return false; cur = null; changed(); return true; }
     function sections() {
-      if (ext) return [...ext.sections(), [linkItem()]];
+      if (ext) return [...groupsOf(ext.sections()), [linkItem()]];
       if (!cur) return [];
       const ids = [...cur.ids], done = () => { clearSelection(); };
-      return [...(cur.def.actions(ids) || []).map((g) => g.filter(Boolean).map((it) => ({ ...it, run: async (...a) => { const r = await it.run?.(...a); if (!it.keep) done(); return r; } }))).filter((g) => g.length), [linkItem()]];
+      const wrap = (it) => ({ ...it, run: async (...a) => { const r = await it.run?.(...a); if (!it.keep) done(); return r; } });
+      return [...groupsOf(cur.def.actions(ids), wrap), [linkItem()]];
     }
     const count = () => (ext ? ext.count : cur ? cur.ids.size : 0);
     // what the bar shows: null when nothing is selected, else its label, its verbs and whether More is needed

@@ -71,9 +71,9 @@ test('keyIntent: Escape clears only with something selected and no menu open; X,
   assert.equal(S.keyIntent({ key: 'ArrowDown' }), null);
 });
 
-test('keyIntent does not look at Alt for Ctrl A or Shift arrows (today; F-13 changes this)', () => {
-  assert.equal(S.keyIntent({ key: 'a', ctrl: true, alt: true }), 'all');
-  assert.equal(S.keyIntent({ key: 'ArrowDown', shift: true, alt: true }), 'down');
+test('Alt selects nothing: Ctrl A and Shift arrows with Alt are not selection keys (F-13)', () => {
+  assert.equal(S.keyIntent({ key: 'a', ctrl: true, alt: true }), null);
+  assert.equal(S.keyIntent({ key: 'ArrowDown', shift: true, alt: true }), null);
 });
 
 test('toggle adds, moves the anchor, and clearing the last id ends the selection; every change paints and writes the address', () => {
@@ -197,6 +197,12 @@ test('sections: a verb runs, and afterwards the selection clears unless the verb
   assert.equal(core.count(), 1, 'the link keeps the selection');
 });
 
+test('an owner with a missing group still shows its other groups (F-17)', () => {
+  const { core } = fakeSelection({ list: ['a'] });
+  core.show({ count: 2, noun: ['file', 'files'], sections: () => [null, [{ label: 'Trash' }]], clear() {} });
+  assert.deepEqual(plain(core.sections().map((g) => g.map((x) => x.label))), [['Trash'], ['Copy link to this selection']]);
+});
+
 test('sections with an owner: the owner groups, then the link', () => {
   const { core } = fakeSelection({ list: ['a'] });
   core.show({ count: 2, noun: ['file', 'files'], sections: () => [[{ label: 'Trash' }]], clear() {} });
@@ -204,11 +210,12 @@ test('sections with an owner: the owner groups, then the link', () => {
   assert.deepEqual(plain(secs.map((g) => g[0].label)), ['Trash', 'Copy link to this selection']);
 });
 
-test('sections throws on a missing action group (today; F-17 changes this)', () => {
+test('a missing action group is skipped, not fatal (F-17)', () => {
   const { core } = fakeSelection({ list: ['a', 'b'] });
   const L = core.list({ key: 'list', noun: ['row', 'rows'], actions: () => [null, [{ label: 'Solo' }]] });
   core.toggle(L, 'a');
-  assert.throws(() => core.sections(), (e) => e.name === 'TypeError');
+  const secs = core.sections();
+  assert.deepEqual(plain(secs.map((g) => g.map((x) => x.label))), [['Solo'], ['Copy link to this selection']]);
 });
 
 test('barModel gives the label, the verbs on the bar and whether More is needed; null when nothing is selected', () => {
