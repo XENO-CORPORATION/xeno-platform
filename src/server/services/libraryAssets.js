@@ -389,6 +389,11 @@ export async function listLibraryItems(db, userId, params = {}) {
   const sort = ['updated', 'created', 'name', 'size'].includes(String(params.sort)) ? String(params.sort) : 'updated';
   const limit = Math.min(Math.max(parseInt(params.limit, 10) || 100, 1), 200);
   const offset = Math.max(parseInt(params.offset, 10) || 0, 0);
+  // view: what the person is looking at. 'active' is everything not in the trash.
+  const view = ['active', 'trash', 'starred'].includes(String(params.view)) ? String(params.view) : 'active';
+  // place: '' is everywhere the person can see; 'personal' is their own; a workspace id is that workspace.
+  const rawPlace = String(params.place || '').trim().toLowerCase();
+  const place = rawPlace === 'personal' || UUID_RE.test(rawPlace) ? rawPlace : '';
   const orderBy = {
     updated: 'updated_at DESC NULLS LAST, created_at DESC, id ASC',
     created: 'created_at DESC NULLS LAST, id ASC',
@@ -404,7 +409,8 @@ export async function listLibraryItems(db, userId, params = {}) {
         octet_length(a.content)::bigint AS size_bytes, a.preview_text AS description,
         CASE WHEN a.kind = 'image' AND (a.content LIKE 'https://%' OR a.content LIKE 'http://%' OR a.content LIKE '/%') THEN a.content ELSE NULL END AS preview_url,
         NULL::uuid AS asset_id,
-        a.conversation_id, c.title AS conversation_title, a.created_at, a.updated_at
+        a.conversation_id, c.title AS conversation_title, a.created_at, a.updated_at,
+        a.workspace_id AS workspace_id
       FROM chat_artifacts a LEFT JOIN chat_conversations c ON c.id = a.conversation_id
       WHERE a.is_archived = FALSE AND (
         EXISTS (SELECT 1 FROM relationship_tuples rt WHERE rt.object_type='artifact' AND rt.object_id=a.id::text
@@ -435,8 +441,11 @@ export async function listLibraryItems(db, userId, params = {}) {
         CASE WHEN f.storage_type = 'platform-upload' AND COALESCE(f.mime_type, f.file_type, '') LIKE 'image/%'
           THEN '/api/library/assets/' || f.id::text || '/content' ELSE NULL END,
         f.id,
-        NULL::uuid, NULL::text, f.created_at AT TIME ZONE 'UTC', COALESCE(f.last_used_at, f.created_at) AT TIME ZONE 'UTC'
-      FROM user_files f WHERE f.deleted_at IS NULL AND (
+        NULL::uuid, NULL::text, f.created_at AT TIME ZONE 'UTC', COALESCE(f.last_used_at, f.created_at) AT TIME ZONE 'UTC',
+        f.workspace_id
+      FROM user_files f
+      -- A trashed file keeps its row with deleted_at set, so it must be let through here to be listed in the trash.
+      WHERE (f.deleted_at IS NULL OR EXISTS (SELECT 1 FROM library_trash lt WHERE lt.source = 'file' AND lt.source_id = f.id)) AND (
         EXISTS (SELECT 1 FROM relationship_tuples rt WHERE rt.object_type='library_asset' AND rt.object_id=f.id::text
           AND rt.subject_type='user' AND rt.subject_id=$1::text AND rt.relation IN ('owner','admin','editor','reviewer','viewer'))
         OR EXISTS (SELECT 1 FROM relationship_tuples child
@@ -463,7 +472,8 @@ export async function listLibraryItems(db, userId, params = {}) {
         CASE WHEN migrated.id IS NOT NULL THEN '/api/library/assets/' || migrated.id::text || '/content'
           WHEN generated.url LIKE 'https://%' OR generated.url LIKE 'http://%' OR generated.url LIKE '/%' THEN generated.url ELSE NULL END,
         migrated.id,
-        NULL::uuid, NULL::text, g.created_at AT TIME ZONE 'UTC', g.created_at AT TIME ZONE 'UTC'
+        NULL::uuid, NULL::text, g.created_at AT TIME ZONE 'UTC', g.created_at AT TIME ZONE 'UTC',
+        NULL::uuid
       FROM image_generations g CROSS JOIN LATERAL jsonb_array_elements_text(
         CASE WHEN jsonb_typeof(g.image_urls) = 'array' THEN g.image_urls ELSE '[]'::jsonb END
       ) WITH ORDINALITY AS generated(url, ordinality)
@@ -483,15 +493,37 @@ export async function listLibraryItems(db, userId, params = {}) {
         CASE WHEN COALESCE(ia.thumbnail_url, ia.file_url) LIKE 'https://%' OR COALESCE(ia.thumbnail_url, ia.file_url) LIKE 'http://%'
           OR COALESCE(ia.thumbnail_url, ia.file_url) LIKE '/%' THEN COALESCE(ia.thumbnail_url, ia.file_url) ELSE NULL END,
         NULL::uuid,
-        NULL::uuid, NULL::text, ia.created_at AT TIME ZONE 'UTC', ia.created_at AT TIME ZONE 'UTC'
+        NULL::uuid, NULL::text, ia.created_at AT TIME ZONE 'UTC', ia.created_at AT TIME ZONE 'UTC',
+        NULL::uuid
       FROM image_assets ia WHERE ia.user_id = $1::uuid
+    ),
+    -- Where each item lives, and the two marks a person can put on it. A personal workspace is the
+    -- account's own wrapper, so an item parented to one is the person's own, not a company's.
+    marked AS (
+      SELECT li.*,
+        (s.user_id IS NOT NULL) AS starred,
+        t.trashed_at, t.purge_after,
+        CASE WHEN li.workspace_id IS NULL OR w.workspace_type = 'personal' THEN 'personal' ELSE 'workspace' END AS place_kind,
+        CASE WHEN li.workspace_id IS NULL OR w.workspace_type = 'personal' THEN NULL ELSE w.name END AS workspace_name
+      FROM library_items li
+      LEFT JOIN library_item_stars s ON s.user_id = $1::uuid AND s.source = li.source AND s.source_id = li.source_id
+      LEFT JOIN library_trash t ON t.source = li.source AND t.source_id = li.source_id
+      LEFT JOIN workspaces w ON w.id = li.workspace_id
     )
-    SELECT * FROM library_items
+    SELECT *, (count(*) OVER())::int AS total_count FROM marked
     WHERE ($2 = 'all' OR category = $2)
       AND ($3 = '' OR name ILIKE '%' || $3 || '%' OR description ILIKE '%' || $3 || '%')
+      AND (($6 = 'trash') = (trashed_at IS NOT NULL))
+      AND ($6 <> 'starred' OR starred)
+      AND ($7 = '' OR ($7 = 'personal' AND place_kind = 'personal') OR (place_kind = 'workspace' AND workspace_id::text = $7))
     ORDER BY ${orderBy} LIMIT $4 OFFSET $5`;
-  const { rows } = await db.query(sql, [userId, tab, query, limit, offset]);
-  return { items: rows, tab, sort, limit, offset };
+  const { rows } = await db.query(sql, [userId, tab, query, limit, offset, view, place]);
+  // The window count is the size of the whole filtered set. A page past the end has no rows to carry
+  // it, so that case asks once more for the first row only.
+  let total = rows.length ? rows[0].total_count : 0;
+  if (!rows.length && offset > 0) total = (await db.query(sql, [userId, tab, query, 1, 0, view, place])).rows[0]?.total_count || 0;
+  const items = rows.map(({ total_count: _total, ...item }) => item);
+  return { items, tab, sort, limit, offset, view, place, total, has_more: offset + items.length < total };
 }
 
 export async function deleteLibraryItem(db, principalOrUserId, source, id) {
