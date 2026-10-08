@@ -11,6 +11,7 @@
   if (!served) return;
   // one way to call the platform: the session cookie, the CSRF token on writes, and the surface name
   const csrf = () => { for (const n of ['__Host-xeno_csrf', 'xeno_csrf']) { const m = document.cookie.split(';').map((p) => p.trim()).find((p) => p.startsWith(n + '=')); if (m) return decodeURIComponent(m.slice(n.length + 1)); } return null; };
+  P.csrf = csrf;
   P.api = async (method, url, body, extra) => {
     const headers = { 'x-xeno-surface': 'xeno-web', ...(extra || {}) };
     if (body !== undefined) headers['content-type'] = 'application/json';

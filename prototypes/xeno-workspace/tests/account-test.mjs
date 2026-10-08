@@ -34,6 +34,7 @@ function answer(q) {
   if (p === '/api/workspaces' && m === 'GET') return json(200, { success: true, workspaces: [] });
   if (p === '/api/chat/projects' && m === 'GET') return json(200, { success: true, projects: [] });
   if (p === '/api/chat/conversations' && m === 'GET') return json(200, { success: true, conversations: [] });
+  if (p === '/api/library/assets' && m === 'GET') return json(200, { success: true, items: [] });
   if (p === '/api/auth/profile' && m === 'PUT') {
     if (body.username === 'taken') return json(400, { success: false, error: 'Username is already taken' });
     if (body.display_name !== undefined) db.user.display_name = body.display_name; if (body.username !== undefined) db.user.username = body.username;
