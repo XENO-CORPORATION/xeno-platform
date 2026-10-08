@@ -57,7 +57,7 @@
     if (f.type === 'checks') return `<div class="xd-f" data-f="${f.id}"><span class="xd-lab">${esc(f.label)}</span><div class="xd-checks">${f.options.map(([v, l, sub, av]) => `<button type="button" role="checkbox" aria-checked="${(f.value || []).includes(v)}" data-v="${esc(v)}">${av || ''}<span><b>${esc(l)}</b>${sub ? `<small>${esc(sub)}</small>` : ''}</span><i class="xd-tick">${ic('check')}</i></button>`).join('')}</div>${hint}<small class="xd-err" hidden></small></div>`;
     if (f.type === 'icon') return `<div class="xd-f" data-f="${f.id}"><span class="xd-lab" id="${id}">${esc(f.label)}</span><div class="xd-icons" role="radiogroup" aria-labelledby="${id}">${ICONS.map((k) => `<button type="button" role="radio" aria-checked="${k === (f.value || 'folder')}" tabindex="${k === (f.value || 'folder') ? 0 : -1}" data-v="${k}" aria-label="${k}">${ic(k)}</button>`).join('')}</div></div>`;
     if (f.type === 'chips') return `<div class="xd-f" data-f="${f.id}">${lab}<div class="xd-chips" data-chips><span class="xd-chiplist"></span><input id="${id}" placeholder="${esc(f.placeholder || '')}" autocomplete="off" spellcheck="false"></div>${hint}<small class="xd-err" hidden></small></div>`;
-    return `<div class="xd-f" data-f="${f.id}">${lab}<input id="${id}" value="${esc(f.value || '')}" maxlength="${f.max || 80}" placeholder="${esc(f.placeholder || '')}" autocomplete="off" spellcheck="false"${f.type === 'number' ? ' inputmode="decimal"' : ''}>${hint}<small class="xd-err" hidden></small></div>`;
+    return `<div class="xd-f" data-f="${f.id}">${lab}<input id="${id}" value="${esc(f.value || '')}" maxlength="${f.max || 80}" placeholder="${esc(f.placeholder || '')}" autocomplete="${f.type === 'password' ? 'current-password' : f.type === 'code' ? 'one-time-code' : 'off'}" spellcheck="false"${f.type === 'password' ? ' type="password"' : ''}${f.type === 'number' ? ' inputmode="decimal"' : ''}${f.type === 'code' ? ' inputmode="numeric"' : ''}>${hint}<small class="xd-err" hidden></small></div>`;
   }
   // radio groups and segmented controls: arrow keys move, Space/Enter pick (WAI-ARIA radio group)
   function wireChoices(sh) {
@@ -85,7 +85,7 @@
     if (f.type === 'choice' || f.type === 'seg' || f.type === 'icon') return w.querySelector('[aria-checked="true"]')?.dataset.v ?? null;
     if (f.type === 'checks') return [...w.querySelectorAll('[aria-checked="true"]')].map((x) => x.dataset.v);
     if (f.type === 'chips') { const inp = w.querySelector('input'); return [...w.querySelectorAll('[data-chip]')].map((x) => x.dataset.chip).concat(inp.value.trim() ? inp.value.split(/[,;\s]+/).filter(Boolean) : []); }
-    return w.querySelector('input,textarea').value.trim(); };
+    const el = w.querySelector('input,textarea'); return f.type === 'password' ? el.value : el.value.trim(); };
 
   // ---------- XD.form ----------
   function form({ title, sub, fields, submit = 'Save', danger = false, size = 'md', onSubmit, aside }) {

@@ -17,7 +17,33 @@ const db = {
   sessions: [{ id: 's-now', browser: 'Edge', os: 'Windows', device_type: 'desktop', ip_address: '203.0.113.9', last_active_at: new Date().toISOString(), current: true }, { id: 's-old', browser: 'Safari', os: 'iOS', device_type: 'mobile', ip_address: '198.51.100.4', last_active_at: new Date(Date.now() - 864e5).toISOString(), current: false }],
   linked: [{ provider: 'google', email: 'ada@example.test', username: null, linkedAt: new Date(Date.now() - 30 * 864e5).toISOString() }],
   settings: { workspace: { bio: 'First programmer.' } }, credits: 1234, calls: [],
+  // account security: the password, whether this session confirmed, a pending email change, keys and exports
+  password: 'correct horse', hasPassword: true, confirmed: false, pending: null, mailed: [], keys: [], exports: [], nextKey: 1,
 };
+const need = () => (db.confirmed ? null : json(403, { success: false, error: 'Confirm it’s you first', code: 'confirmation_required' }));
+const security = () => ({ confirmation: { confirmed: db.confirmed, available: true, expires_at: db.confirmed ? new Date(Date.now() + 6e5).toISOString() : null }, methods: [db.hasPassword ? 'password' : 'email_code'], has_password: db.hasPassword, email: db.user.email, pending_email: db.pending ? { new_email: db.pending.email, expires_at: new Date(Date.now() + 6e5).toISOString() } : null });
+function accountSecurity(m, p, body) {
+  if (p === '/api/account/security' && m === 'GET') return json(200, { success: true, security: security() });
+  if (p === '/api/account/confirm/code' && m === 'POST') { db.mailed.push({ to: db.user.email, code: '424242', purpose: 'confirm' }); return json(200, { success: true, sent_to: 'a**@example.test', expires_in: 600 }); }
+  if (p === '/api/account/confirm' && m === 'POST') {
+    const right = db.hasPassword ? body.password === db.password : body.code === '424242';
+    if (!right) return json(400, { success: false, error: db.hasPassword ? 'That password isn’t right' : 'That code isn’t right', code: db.hasPassword ? 'wrong_password' : 'wrong_code', remaining: 4 });
+    db.confirmed = true; return json(200, { success: true, confirmation: security().confirmation });
+  }
+  if (p === '/api/account/email' && m === 'POST') { const no = need(); if (no) return no; const email = String(body.new_email || '').trim().toLowerCase(); if (email === 'taken@example.test') return json(409, { success: false, error: 'That address can’t be used', code: 'email_unavailable' }); db.pending = { email, code: '135790' }; db.mailed.push({ to: email, code: '135790', purpose: 'email_change' }); return json(200, { success: true, pending_email: { new_email: email, expires_in: 600 } }); }
+  if (p === '/api/account/email' && m === 'DELETE') { const had = !!db.pending; db.pending = null; return json(200, { success: true, cancelled: had }); }
+  if (p === '/api/account/email/confirm' && m === 'POST') { if (!db.pending || body.code !== db.pending.code) return json(400, { success: false, error: 'That code isn’t right', code: 'wrong_code', remaining: 4 }); db.user.email = db.pending.email; db.pending = null; db.confirmed = false; db.sessions = db.sessions.filter((s) => s.current); return json(200, { success: true, email: db.user.email, other_sessions_signed_out: true }); }
+  if (p === '/api/account/sessions' && m === 'DELETE') { const n = db.sessions.filter((s) => !s.current).length; db.sessions = db.sessions.filter((s) => s.current); return json(200, { success: true, revoked_sessions: n, apps_signed_out: true, signed_out: false }); }
+  if (p === '/api/account/api-keys' && m === 'GET') return json(200, { success: true, keys: db.keys.map(({ secret: _s, ...k }) => k) });
+  if (p === '/api/account/api-keys' && m === 'POST') { const no = need(); if (no) return no; if (!String(body.name || '').trim()) return json(400, { success: false, error: 'Give the key a name of up to 100 characters', code: 'invalid_name' }); const n = db.nextKey++; const secret = 'xeno-' + String(n).repeat(48).slice(0, 48); const key = { id: 'k' + n, name: body.name.trim(), preview: secret.slice(0, 16) + '…', is_active: true, revoked: false, expired: false, created_at: new Date().toISOString(), expires_at: body.expires_in_days ? new Date(Date.now() + body.expires_in_days * 864e5).toISOString() : null, last_used_at: null, usage_count: 0, secret }; db.keys.unshift(key); const { secret: _s, ...view } = key; return json(201, { success: true, key: view, secret }); }
+  const key = p.match(/^\/api\/account\/api-keys\/([^/]+)$/);
+  if (key) { const k = db.keys.find((x) => x.id === decodeURIComponent(key[1])); if (!k) return json(404, { success: false, error: 'API key not found', code: 'not_found' }); if (m === 'PATCH') { k.name = String(body.name).trim(); return json(200, { success: true, key: k }); } if (m === 'DELETE') { k.is_active = false; k.revoked = true; return json(200, { success: true, key: k }); } }
+  if (p === '/api/account/exports' && m === 'GET') { for (const x of db.exports) if (x.status === 'building' && Date.now() - x.t > 900) Object.assign(x, { status: 'ready', ready_at: new Date().toISOString(), expires_at: new Date(Date.now() + 7 * 864e5).toISOString(), size_bytes: 2400000, summary: { errors: [], skipped_files: [] } }); return json(200, { success: true, exports: db.exports.map(({ t: _t, ...x }) => x) }); }
+  if (p === '/api/account/exports' && m === 'POST') { const no = need(); if (no) return no; if (db.exports.some((x) => x.status === 'building')) return json(409, { success: false, error: 'A copy is already being made', code: 'export_in_progress' }); const x = { id: 'e' + (db.exports.length + 1), status: 'building', requested_at: new Date().toISOString(), ready_at: null, expires_at: null, size_bytes: null, summary: {}, t: Date.now() }; db.exports.unshift(x); return json(202, { success: true, export: x }); }
+  const exp = p.match(/^\/api\/account\/exports\/([^/]+)$/);
+  if (exp && m === 'DELETE') { const x = db.exports.find((y) => y.id === exp[1]); if (!x) return json(404, { success: false, error: 'That copy is not available', code: 'not_found' }); x.status = 'expired'; return json(200, { success: true }); }
+  return null;
+}
 const json = (status, body) => ({ status, contentType: 'application/json', body: JSON.stringify(body) });
 function answer(q) {
   const u = new URL(q.url()), m = q.method(), p = u.pathname; let body = null; try { body = JSON.parse(q.postData() || 'null'); } catch {}
@@ -25,6 +51,7 @@ function answer(q) {
   if (p === '/api/auth/me') return json(200, { success: true, user: db.user });
   if (p === '/api/account/overview') return json(200, { success: true, overview: { user: { ...db.user, plan: 'free' }, credits: { balance: db.credits }, workspace_count: 1 } });
   if (p === '/api/account/sessions' && m === 'GET') return json(200, { success: true, sessions: db.sessions });
+  { const sec = accountSecurity(m, p, body || {}); if (sec) return sec; }
   if (p.startsWith('/api/account/sessions/') && m === 'DELETE') { const id = decodeURIComponent(p.split('/').pop()); const had = db.sessions.some((s) => s.id === id); db.sessions = db.sessions.filter((s) => s.id !== id); return had ? json(200, { success: true, revoked_session_id: id }) : json(404, { success: false, error: 'Session not found' }); }
   if (p === '/api/auth/linked-accounts') return json(200, { success: true, accounts: db.linked });
   if (p === '/api/billing/overview') return json(200, { success: true, overview: { credits: { balance: db.credits }, subscription: null } });
@@ -60,7 +87,7 @@ try {
 
   await open('Profile'); let t = await text();
   ok(/Ada Lovelace/.test(t) && /@ada/.test(t) && /ada@example\.test/.test(t) && /First programmer\./.test(t), 'Profile shows the real name, handle, email and bio');
-  ok(await p.evaluate(() => { const el = document.querySelector('.pg--set [data-set="changeEmail"]'); return !!el && el.getAttribute('aria-disabled') === 'true' && /Not available/.test(el.title); }), 'changing the email is shown as not available, with the reason');
+  ok(await p.evaluate(() => { const el = document.querySelector('.pg--set [data-set="changeEmail"]'); return !!el && el.getAttribute('aria-disabled') !== 'true'; }), 'changing the email is offered');
 
   await open('Sessions & devices'); t = await text();
   ok(/Edge on Windows/.test(t) && /Safari on iOS/.test(t) && /This device/.test(t), 'Sessions lists the real devices and marks this one');
@@ -77,7 +104,7 @@ try {
   const seen = [];
   for (const item of ['Profile', 'Sign-in & security', 'Sessions & devices', 'Apps & sign-in methods', 'API keys', 'Provider keys & inference', 'Plan & billing', 'Usage & limits', 'Gifts', 'Your data', 'Delete account', 'Workspace', 'Connections']) { await open(item); const s = await text(); if (SAMPLE.test(s)) seen.push(item + ': ' + s.match(SAMPLE)[0]); }
   ok(seen.length === 0, 'no account section shows sample data as yours (' + JSON.stringify(seen.slice(0, 3)) + ')');
-  await open('API keys'); ok(/can’t be created or listed here yet/.test(await text()), 'a section with no platform API says so');
+  await open('Gifts'); ok(/isn’t available here yet/.test(await text()), 'a section with no platform API says so');
 
   // ---- saves ----
   await open('Profile'); db.calls.length = 0;
@@ -104,6 +131,95 @@ try {
 
   const refused = await p.evaluate(async () => { window.XENO_NET.begin('settings', 'cap', null); const r = window.XENO_NET.end(() => { window.__applied = true; }); await new Promise((res) => setTimeout(res, 400)); const said = document.querySelector('.xd')?.innerText || ''; document.querySelector('.xd [data-xd-ok]')?.click(); return { ok: await r, said, applied: !!window.__applied }; });
   ok(refused.ok === false && !refused.applied && /isn’t available on XENO yet/.test(refused.said), 'a settings save with no platform API is refused and nothing is applied');
+
+  // ---- helpers for the dialogs ----
+  const dialog = () => p.evaluate(() => [...document.querySelectorAll('.xd')].pop()?.innerText || '');
+  const type = (value) => p.evaluate((v) => { const i = [...document.querySelectorAll('.xd')].pop().querySelector('input'); i.value = v; i.dispatchEvent(new Event('input', { bubbles: true })); }, value);
+  const submit = async () => { await p.evaluate(() => [...document.querySelectorAll('.xd')].pop().querySelector('[data-xd-submit]').click()); await wait(450); };
+  const confirmYes = async () => { await p.evaluate(() => [...document.querySelectorAll('.xd')].pop().querySelector('[data-xd-ok]').click()); await wait(450); };
+  const closeAll = async () => { for (let i = 0; i < 4 && await dialog(); i++) { await p.evaluate(() => [...document.querySelectorAll('.xd')].pop().querySelector('[data-xd-close]')?.click()); await wait(250); } };
+  const sent = (m, re) => db.calls.filter((c) => c.m === m && re.test(c.p));
+
+  // ---- confirm it's you, then a new API key ----
+  await open('API keys'); t = await text();
+  ok(/No keys/.test(t) && /New API key/.test(t), 'API keys is a real section, empty for a new account');
+  db.calls.length = 0; await p.click('.pg--set [data-acct="newKey"]'); await wait(500);
+  let d = await dialog();
+  ok(/Confirm it’s you/.test(d) && /An API key can act as you/.test(d) && sent('POST', /api-keys$/).length === 0, 'making a key asks to confirm it’s you first, before anything is sent');
+  ok(await p.evaluate(() => [...document.querySelectorAll('.xd')].pop().querySelector('input').type === 'password'), 'the password is typed into a password field');
+  await type('wrong horse'); await submit(); d = await dialog();
+  ok(/That password isn’t right/.test(d) && /4 tries left/.test(d) && /Confirm it’s you/.test(d), 'a wrong password is refused in the dialog, with the tries left (' + d.replace(/\s+/g, ' ').slice(-70) + ')');
+  await type('correct horse'); await submit(); d = await dialog();
+  ok(/New API key/.test(d) && db.confirmed === true, 'the right password opens the key form');
+  await type('Laptop CLI'); await submit(); d = await dialog();
+  const made = db.keys[0];
+  ok(/Copy your new key/.test(d) && d.includes(made.secret) && /only time/.test(d), 'the new key is shown once, to copy');
+  await closeAll(); t = await text();
+  ok(/Laptop CLI/.test(t) && t.includes(made.preview) && !t.includes(made.secret) && /never used/.test(t), 'afterwards the page shows its name and fingerprint, never the key');
+  ok(!(await p.evaluate(() => JSON.stringify(localStorage))).includes(made.secret), 'the key is not kept in the browser');
+
+  db.calls.length = 0; await p.click('.pg--set [data-acct="renameKey"]'); await wait(400); await type('Work laptop'); await submit(); await settle();
+  ok(sent('PATCH', /api-keys\/k1$/).length === 1 && /Work laptop/.test(await text()), 'renaming a key renames it on the platform');
+  db.calls.length = 0; await p.click('.pg--set [data-acct="revokeKey"]'); await wait(400);
+  ok(/Revoke “Work laptop”\?/.test(await dialog()) && sent('DELETE', /api-keys/).length === 0, 'revoking asks first');
+  await confirmYes(); await settle(); t = await text();
+  ok(sent('DELETE', /api-keys\/k1$/).length === 1 && /Revoked and expired/.test(t) && /No keys/.test(t), 'confirmed, the key is revoked and listed as revoked');
+
+  // ---- a copy of your data ----
+  await open('Your data'); t = await text();
+  ok(/Request a copy/.test(t) && /one archive/.test(t), 'Your data offers a copy');
+  db.calls.length = 0; await p.click('.pg--set [data-acct="export"]'); await settle(); t = await text();
+  ok(sent('POST', /exports$/).length === 1 && /Preparing/.test(t), 'asking for a copy starts it, with no second confirmation inside ten minutes');
+  await wait(5200); t = await text();
+  const link = await p.evaluate(() => document.querySelector('.pg--set a[download]')?.getAttribute('href') || '');
+  ok(/Download \(2\.4 MB\)/.test(t) && link === '/api/account/exports/e1/download' && /kept until/.test(t), 'when it is ready the page shows a real download link, its size and how long it is kept');
+  db.calls.length = 0; await p.click('.pg--set [data-acct="removeExport"]'); await wait(400); await confirmYes(); await settle();
+  ok(sent('DELETE', /exports\/e1$/).length === 1 && /Request a copy/.test(await text()), 'removing a copy removes it on the platform');
+
+  // ---- email change ----
+  await open('Profile'); db.calls.length = 0; db.confirmed = false;
+  await p.click('.pg--set [data-set="changeEmail"]'); await wait(500);
+  ok(/Confirm it’s you/.test(await dialog()) && /signs you out on every other device/.test(await dialog()), 'changing the email asks to confirm it’s you, and says what it does');
+  await type('correct horse'); await submit();
+  ok(/Change email/.test(await dialog()), 'then it asks for the new address');
+  await type('taken@example.test'); await submit();
+  ok(/can’t be used/.test(await dialog()) && db.user.email === 'ada@example.test', 'an address that cannot be used is refused in the dialog');
+  await type('ada.new@example.test'); await submit(); d = await dialog();
+  ok(/Enter the code/.test(d) && /ada\.new@example\.test/.test(d) && db.user.email === 'ada@example.test', 'a code is sent to the new address, and nothing has changed yet');
+  await type('000000'); await submit();
+  ok(/isn’t right/.test(await dialog()) && db.user.email === 'ada@example.test', 'a wrong code changes nothing');
+  await type(db.mailed.find((x) => x.purpose === 'email_change').code); await submit(); await settle(); t = await text();
+  ok(db.user.email === 'ada.new@example.test' && /ada\.new@example\.test/.test(t) && !(await dialog()), 'the right code changes the email, and the page shows the new one');
+
+  // a change left half-done is picked up again
+  db.confirmed = true; db.pending = { email: 'later@example.test', code: '246810' };
+  await p.click('.pg--set [data-set="changeEmail"]'); await wait(500);
+  ok(/Finish changing your email\?/.test(await dialog()) && /later@example\.test/.test(await dialog()), 'a pending change is offered to finish');
+  await closeAll();
+
+  // ---- an account with no password confirms with a mailed code ----
+  db.hasPassword = false; db.confirmed = false; db.pending = null; db.calls.length = 0;
+  await open('API keys'); await p.click('.pg--set [data-acct="newKey"]'); await wait(600); d = await dialog();
+  ok(sent('POST', /confirm\/code$/).length === 1 && /We sent a 6-digit code to a\*\*@example\.test/.test(d), 'an account with no password is sent a code instead, and told where');
+  ok(await p.evaluate(() => [...document.querySelectorAll('.xd')].pop().querySelector('input').type !== 'password'), 'and types it into a plain field');
+  await type('424242'); await submit();
+  ok(/New API key/.test(await dialog()) && db.confirmed === true, 'the mailed code confirms it');
+  await closeAll(); db.hasPassword = true;
+
+  // any settings action that asks to confirm goes to the server, never to a dialog that accepts anything
+  db.confirmed = false; db.calls.length = 0;
+  const stepped = p.evaluate(() => window.XENO_SETTINGS.stepUp('A test of the confirm step.')); await wait(500);
+  ok(/Confirm it’s you/.test(await dialog()) && /A test of the confirm step/.test(await dialog()), 'the settings page’s own confirm step is the real one');
+  await closeAll(); ok((await stepped) === false && db.confirmed === false, 'and closing it confirms nothing');
+
+  // ---- sign out everywhere ----
+  db.sessions.push({ id: 's-tab', browser: 'Firefox', os: 'Linux', device_type: 'desktop', ip_address: '192.0.2.7', last_active_at: new Date().toISOString(), current: false });
+  await p.evaluate(() => window.XENO_ACCOUNT.load()); await wait(400);
+  await open('Sessions & devices'); db.calls.length = 0;
+  await p.click('.pg--set [data-set="endOthers"]'); await wait(400); await confirmYes(); await settle();
+  const outs = db.calls.filter((c) => c.m === 'DELETE');
+  ok(outs.length === 1 && outs[0].p === '/api/account/sessions' && outs[0].csrf === 'csrf-test-token', 'signing out everywhere is one call that also reaches the apps (' + JSON.stringify(outs.map((c) => c.p)) + ')');
+  t = await text(); ok(!/Firefox on Linux/.test(t) && /Edge on Windows/.test(t), 'only this device is left');
 
   ok(missing.length === 0, 'the workspace asked for no route the platform lacks (' + JSON.stringify([...new Set(missing)].slice(0, 3)) + ')');
   ok(errs.length === 0, 'no page errors (' + JSON.stringify(errs.slice(0, 2)) + ')');

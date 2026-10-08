@@ -30,6 +30,9 @@ function answer(q) {
   if (p === '/api/auth/me') return json(200, { success: true, user: db.user });
   if (p === '/api/account/overview') return json(200, { success: true, overview: { user: db.user, credits: { balance: 0 }, workspace_count: 2 } });
   if (p === '/api/account/sessions') return json(200, { success: true, sessions: [] });
+  if (p === '/api/account/security') return json(200, { success: true, security: { confirmation: { confirmed: false, available: true, expires_at: null }, methods: ['password'], has_password: true, email: '', pending_email: null } });
+  if (p === '/api/account/api-keys') return json(200, { success: true, keys: [] });
+  if (p === '/api/account/exports') return json(200, { success: true, exports: [] });
   if (p === '/api/auth/linked-accounts') return json(200, { success: true, accounts: [] });
   if (p === '/api/billing/overview') return json(200, { success: true, overview: { credits: { balance: 0 }, subscription: null } });
   if (p === '/api/dashboard/stats') return json(200, { success: true, stats: { usage_available: false, usage_by_surface: [] } });
