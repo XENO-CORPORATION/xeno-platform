@@ -7,7 +7,7 @@ const S = loadCore('select-core.js').XENO_SEL_CORE;
 
 // rows: { key: [ids on screen, in order] }. The effects record what the model asked the page to do.
 function fakeSelection(rows = {}) {
-  const effects = { paints: 0, bars: 0, urls: [], copies: 0 };
+  const effects = { paints: 0, bars: 0, urls: [], copies: 0, errors: [] };
   const store = { rows: { ...rows } };
   const core = S.createSelection({
     rowIds: (def) => (store.rows[def.key] || []).slice(),
@@ -15,6 +15,7 @@ function fakeSelection(rows = {}) {
     urlWrite: (ids) => { effects.urls.push([...ids]); },
     bar: () => { effects.bars += 1; },
     copyLink: () => { effects.copies += 1; return 'copied'; },
+    logError: (err) => { effects.errors.push(err); },
   });
   return { core, effects, store };
 }
@@ -260,6 +261,47 @@ test('leavePlace drops the selection and repaints, and writes no address', () =>
   assert.equal(core.current(), null);
   assert.equal(effects.urls.length, urls, 'no address write');
   assert.ok(effects.paints >= 2);
+});
+
+test('a finished action clears only a selection that did not change while it ran (F-14)', async () => {
+  const { core } = fakeSelection({ list: ['a', 'b', 'c'] });
+  const L = core.list({ key: 'list', noun: ['row', 'rows'], actions: () => [[{ label: 'Slow', run: () => new Promise((res) => setTimeout(res, 5)) }]] });
+  core.toggle(L, 'a');
+  const pending = core.sections()[0][0].run();
+  core.toggle(L, 'b');
+  await pending;
+  assert.deepEqual(plain(ids(core)).sort(), ['a', 'b']);
+});
+
+test('a rejected action is logged, keeps the selection, and reports not ok (F-15)', async () => {
+  const { core, effects } = fakeSelection({ list: ['a', 'b'] });
+  const L = core.list({ key: 'list', noun: ['row', 'rows'], actions: () => [[{ label: 'Boom', run: () => Promise.reject(new Error('refused')) }]] });
+  core.toggle(L, 'a'); core.toggle(L, 'b');
+  const r = await core.sections()[0][0].run();
+  assert.equal(r.ok, false);
+  assert.equal(effects.errors.length, 1);
+  assert.deepEqual(plain(ids(core)).sort(), ['a', 'b']);
+});
+
+test('the bar runs the action it showed: the same label at the same place runs (F-16)', async () => {
+  const { core } = fakeSelection({ list: ['a', 'b'] });
+  const ran = [];
+  const L = core.list({ key: 'list', noun: ['row', 'rows'], actions: () => [[{ label: 'Copy', run: () => { ran.push('copy'); } }]] });
+  core.toggle(L, 'a');
+  const it = core.itemAt('0.0', 'Copy');
+  assert.ok(it, 'the action is found');
+  await it.run();
+  assert.deepEqual(ran, ['copy']);
+});
+
+test('a changed action at the place the bar drew runs nothing (F-16)', () => {
+  const { core } = fakeSelection({ list: ['a', 'b'] });
+  let n = 0; const ran = [];
+  const L = core.list({ key: 'list', noun: ['row', 'rows'], actions: () => { n += 1; return [[{ label: `Verb ${n}`, run: () => { ran.push(n); } }]]; } });
+  core.toggle(L, 'a');
+  core.barModel();                                  // the bar draws Verb 1
+  assert.equal(core.itemAt('0.0', 'Verb 1'), null, 'the place now holds another label');
+  assert.deepEqual(ran, []);
 });
 
 test('list fills in the default noun when none is given', () => {

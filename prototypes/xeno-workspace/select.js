@@ -20,6 +20,7 @@
     urlWrite: (ids) => window.XENO_URLSEL?.set(ids),
     bar: () => bar(),
     copyLink: () => window.XCM?.H?.copy(location.href, 'Link to the selection copied'),
+    logError: (err) => console.error(err),
   });
   // paints the marks on the rows that are selected, then the bar
   function paint() {
@@ -36,13 +37,13 @@
     if (!b) { b = document.createElement('div'); b.id = 'xs-bar'; b.setAttribute('role', 'toolbar'); document.body.appendChild(b);
       b.addEventListener('click', (e) => { const t = e.target.closest('[data-xs-i],[data-xs-more],[data-xs-clear]'); if (!t) return;
         if (t.dataset.xsClear !== undefined) { core.dismissFromBar(); return; }
-        const secs = core.sections();
-        if (t.dataset.xsMore !== undefined) { const r = t.getBoundingClientRect(); window.XCM?.show(secs, { x: r.left, y: r.top - 8, label: 'Selection', opener: t }); return; }
-        const [g, i] = t.dataset.xsI.split('.').map(Number); const it = secs[g]?.[i]; if (!it) return;
+        if (t.dataset.xsMore !== undefined) { const r = t.getBoundingClientRect(); window.XCM?.show(core.sections(), { x: r.left, y: r.top - 8, label: 'Selection', opener: t }); return; }
+        const it = core.itemAt(t.dataset.xsI, t.dataset.xsLabel);
+        if (!it) { paint(); return; }   // what was drawn is no longer selected: repaint, and run nothing
         if (it.sub) { const r = t.getBoundingClientRect(); window.XCM?.show(typeof it.sub === 'function' ? it.sub() : it.sub, { x: r.left, y: r.top - 8, label: it.label, opener: t }); } else it.run(); }); }
     const m = core.barModel();
     b.setAttribute('aria-label', `${m.label} selected`);
-    b.innerHTML = `<b>${esc(m.label)} selected</b><span class="xs-sep"></span>${m.pick.map(({ it, k }) => `<button data-xs-i="${k}"${it.danger ? ' class="xs-danger"' : ''}>${it.icon ? ic(it.icon) : ''}<span>${esc(it.label)}</span>${it.kbd ? `<kbd>${esc(it.kbd)}</kbd>` : ''}</button>`).join('')}${m.more ? '<button data-xs-more aria-haspopup="menu">More</button>' : ''}<span class="xs-sep"></span><button data-xs-clear aria-label="Clear selection">Clear<kbd>Esc</kbd></button>`;
+    b.innerHTML = `<b>${esc(m.label)} selected</b><span class="xs-sep"></span>${m.pick.map(({ it, k }) => `<button data-xs-i="${k}" data-xs-label="${esc(it.label)}"${it.danger ? ' class="xs-danger"' : ''}>${it.icon ? ic(it.icon) : ''}<span>${esc(it.label)}</span>${it.kbd ? `<kbd>${esc(it.kbd)}</kbd>` : ''}</button>`).join('')}${m.more ? '<button data-xs-more aria-haspopup="menu">More</button>' : ''}<span class="xs-sep"></span><button data-xs-clear aria-label="Clear selection">Clear<kbd>Esc</kbd></button>`;
   }
   function list(def) { const d = core.list(def);
     // right-click on a selected row acts on the whole selection, with the same verbs as the bar

@@ -51,8 +51,9 @@
     let cur = null;         // { def, ids: Set, anchor }
     let ext = null;         // a list that keeps its own model (the Library): { count, noun, sections, clear }
     let restored = '';      // the address whose ?sel= has been applied
+    let rev = 0;            // counts every change: an action that finishes after one does not clear the new selection
     // every change is shown and written to the address; leaving a place only repaints (it never writes an address)
-    const changed = () => { ports.paint(); ports.urlWrite(cur ? [...cur.ids] : []); };
+    const changed = () => { rev += 1; ports.paint(); ports.urlWrite(cur ? [...cur.ids] : []); };
     const state = (def) => { if (!cur || cur.def !== def) cur = { def, ids: new Set(), anchor: null }; return cur; };
     // the address of exactly this selection (Drive, Linear)
     const linkItem = () => ({ label: 'Copy link to this selection', icon: 'share', keep: true, run: () => ports.copyLink() });
@@ -61,7 +62,11 @@
       if (ext) return [...groupsOf(ext.sections()), [linkItem()]];
       if (!cur) return [];
       const ids = [...cur.ids], done = () => { clearSelection(); };
-      const wrap = (it) => ({ ...it, run: async (...a) => { const r = await it.run?.(...a); if (!it.keep) done(); return r; } });
+      const wrap = (it) => ({ ...it, run: async (...a) => {
+        const seen = rev;
+        try { const r = await it.run?.(...a); if (!it.keep && rev === seen) done(); return { ok: true, value: r }; }
+        catch (err) { ports.logError(err); return { ok: false, error: err }; }   // a rejected action is contained: the selection stays
+      } });
       return [...groupsOf(cur.def.actions(ids), wrap), [linkItem()]];
     }
     const count = () => (ext ? ext.count : cur ? cur.ids.size : 0);
@@ -97,10 +102,12 @@
       }
       return null;
     }
+    // the action drawn at a bar position, if it is still there with the label that was drawn; null otherwise
+    function itemAt(key, label) { const [g, i] = String(key).split('.').map(Number); const it = sections()[g]?.[i]; return it && it.label === label ? it : null; }
     function current() { return cur ? { def: cur.def, ids: [...cur.ids], anchor: cur.anchor } : null; }
     const selectedIn = (def, id) => !!(cur && cur.def === def && cur.ids.size > 1 && cur.ids.has(id));
     return {
-      list, toggle, range, selectAll, extend, clearSelection, dismissFromBar, show, leavePlace, restore,
+      list, toggle, range, selectAll, extend, clearSelection, dismissFromBar, show, leavePlace, restore, itemAt,
       sections, barModel, count, ids: () => (cur ? [...cur.ids] : []), current, selectedIn, defs: () => lists.slice(),
     };
   }
