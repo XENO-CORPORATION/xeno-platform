@@ -1244,6 +1244,8 @@
     if (view === 'product') adTrack(S.product);
     if (root.dataset.panel === 'closed' && extra.openPanel) setPanel('open');
     S._softPanel = pk0 === pk() && !S.switching;
+    // an in-app place change is announced before the new place renders, so a selection made in the old place is let go (F-02)
+    if (!applyingHash && location.hash.split('?')[0] !== stateToHash()) window.dispatchEvent(new Event('xeno:place'));
     render(); hidePops();
     markItems(); setTimeout(() => markItems(), 140);
     if (view === 'adaptive') setTimeout(adMorph, 160);

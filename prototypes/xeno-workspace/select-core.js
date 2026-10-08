@@ -52,6 +52,7 @@
     let ext = null;         // a list that keeps its own model (the Library): { count, noun, sections, clear }
     let restored = '';      // the address whose ?sel= has been applied
     let rev = 0;            // counts every change: an action that finishes after one does not clear the new selection
+    const leaveHooks = [];  // what a page keeps that a place change must forget (the Library's picks)
     // every change is shown and written to the address; leaving a place only repaints (it never writes an address)
     const changed = () => { rev += 1; ports.paint(); ports.urlWrite(cur ? [...cur.ids] : []); };
     const state = (def) => { if (!cur || cur.def !== def) cur = { def, ids: new Set(), anchor: null }; return cur; };
@@ -92,7 +93,14 @@
     // Escape and the bar's Clear: the owner clears its own model; otherwise the core's selection clears
     function dismissFromBar() { if (ext) { ext.clear(); return; } clearSelection(); }
     // a place is left (hash or Back): the selection and its restore memo go, and the marks are repainted
-    function leavePlace() { cur = null; restored = ''; ports.paint(); }
+    // a place is left: the selection, the owner's bar and the restore memo go, and each hook forgets what it keeps. The
+    // address is never written here: a hash change already carries one. inApp says the app itself changed place.
+    function leavePlace({ inApp = false } = {}) {
+      cur = null; ext = null; restored = '';
+      for (const h of leaveHooks) { try { h({ inApp }); } catch (err) { ports.logError(err); } }
+      ports.paint();
+    }
+    function onLeave(fn) { leaveHooks.push(fn); }
     // a link with ?sel= selects the ids that are on screen, once per address, in the first list that has any
     function restore(want, hash) {
       if (!want.length || cur || restored === hash) return null;
@@ -107,7 +115,7 @@
     function current() { return cur ? { def: cur.def, ids: [...cur.ids], anchor: cur.anchor } : null; }
     const selectedIn = (def, id) => !!(cur && cur.def === def && cur.ids.size > 1 && cur.ids.has(id));
     return {
-      list, toggle, range, selectAll, extend, clearSelection, dismissFromBar, show, leavePlace, restore, itemAt,
+      list, toggle, range, selectAll, extend, clearSelection, dismissFromBar, show, leavePlace, restore, itemAt, onLeave,
       sections, barModel, count, ids: () => (cur ? [...cur.ids] : []), current, selectedIn, defs: () => lists.slice(),
     };
   }

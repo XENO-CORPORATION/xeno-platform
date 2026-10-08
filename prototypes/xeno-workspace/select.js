@@ -70,8 +70,9 @@
     if (nid == null) return;
     e.preventDefault(); L[ids.indexOf(nid)].focus(); core.extend(def, def.id(r), nid);
   }, true);
-  window.addEventListener('hashchange', () => core.leavePlace());
-  window.addEventListener('popstate', () => { core.leavePlace(); setTimeout(restore, 0); });
+  window.addEventListener('hashchange', () => core.leavePlace({ inApp: false }));
+  window.addEventListener('xeno:place', () => core.leavePlace({ inApp: true }));   // the app is changing place (app.js go)
+  window.addEventListener('popstate', () => { core.leavePlace({ inApp: false }); setTimeout(restore, 0); });
   // a re-render replaces the rows; put the marks back on the new ones
   // opening a link with ?sel= (or Back/Forward to one) selects those rows once they are on screen — once per address
   function restore() {
@@ -82,6 +83,6 @@
   new MutationObserver(() => { restore(); const c = core.current(); if (c && rows(c.def).some((x) => c.ids.includes(c.def.id(x)) && !x.hasAttribute('data-xs'))) paint(); })
     .observe(document.documentElement, { childList: true, subtree: true });
   [['Ctrl Click', 'Add or remove a row'], ['⇧ Click', 'Select a range'], ['X', 'Select the focused row'], ['⇧ ↑ ↓', 'Extend the selection'], ['Ctrl A', 'Select every row'], ['Esc', 'Clear the selection']].forEach(([k, l]) => window.XENO_KEYS?.add('Selecting', k, l));
-  window.XENO_SEL = { list, clear: () => { core.clearSelection(); }, count: () => core.count(), ids: () => core.ids(),
+  window.XENO_SEL = { list, clear: () => { core.clearSelection(); }, count: () => core.count(), ids: () => core.ids(), onLeave: (fn) => core.onLeave(fn),
     show: (x) => core.show(x) };
 })();

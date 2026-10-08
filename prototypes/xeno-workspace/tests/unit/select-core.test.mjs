@@ -304,6 +304,32 @@ test('a changed action at the place the bar drew runs nothing (F-16)', () => {
   assert.deepEqual(ran, []);
 });
 
+test('leaving a place drops the selection and the owner\u2019s bar, and tells each hook whether the app changed place (F-02)', () => {
+  const { core, effects } = fakeSelection({ list: ['a', 'b'] });
+  const L = core.list({ key: 'list', noun: ['row', 'rows'] });
+  const seen = [];
+  core.onLeave(({ inApp }) => seen.push(inApp));
+  core.toggle(L, 'a');
+  core.show({ count: 2, noun: ['file', 'files'], sections: () => [], clear() {} });
+  const urls = effects.urls.length;
+  core.leavePlace({ inApp: true });
+  assert.equal(core.count(), 0, 'the bar goes');
+  assert.equal(effects.urls.length, urls, 'no address is written');
+  assert.deepEqual(seen, [true]);
+  core.leavePlace();
+  assert.deepEqual(seen, [true, false], 'a hash change or Back is not in-app');
+});
+
+test('a hook that throws is logged, and the other hooks still run (F-02)', () => {
+  const { core, effects } = fakeSelection({});
+  const ran = [];
+  core.onLeave(() => { throw new Error('hook'); });
+  core.onLeave(() => ran.push('second'));
+  core.leavePlace();
+  assert.deepEqual(ran, ['second']);
+  assert.equal(effects.errors.length, 1);
+});
+
 test('list fills in the default noun when none is given', () => {
   const { core } = fakeSelection({});
   const d = core.list({ key: 'x' });
