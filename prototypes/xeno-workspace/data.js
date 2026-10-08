@@ -5,6 +5,14 @@
 // Opened from disk, they come from the workspace-root folder on this machine.
 window.XENO_ICON_BASE = /^https?:$/.test(location.protocol) ? '/product-icons/' : 'file:///X:/code/xeno-corporation/xeno-product-icons/';
 window.XENO_ICON_DIR = window.XENO_ICON_BASE + 'svg/';
+// Who is using the workspace. The account profile is the one source: settings.js keeps it under xw.acct, and on the
+// platform platform.js fills it from the signed-in session. From disk it is the sample profile.
+window.XENO_ME = (() => {
+  const p = () => { try { return (JSON.parse(localStorage.getItem('xw.acct') || '{}') || {}).profile || {}; } catch { return {}; } };
+  const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  const name = () => String(p().name || 'Emilian').trim() || 'Emilian';
+  return { name, first: () => name().split(' ')[0], email: () => p().email || 'emilian@xenostudio.ai', handle: () => p().handle || 'emilian', nameHtml: () => esc(name()), firstHtml: () => esc(name().split(' ')[0]), emailHtml: () => esc(p().email || 'emilian@xenostudio.ai') };
+})();
 window.XENO_FILE_ICON_DIR = window.XENO_ICON_BASE + 'file-icons/svg/';
 
 // kind: 'desktop' (opens in Hub), 'web' (runs here), 'chat'

@@ -912,7 +912,7 @@
   const sentenceOf = (parts, fallback) => { const s = parts.length ? parts.join(', ').replace(/, ([^,]*)$/, parts.length > 1 ? ', and $1' : '$1') + '.' : fallback; return s[0].toUpperCase() + s.slice(1); };
   const notesNow = () => (notesReady() ? ntAll() : PH.notes());   // the sentence counts from placeholders while loading — and is drawn as a shape
   function homeHero({ eye, sentence, acts, cont }) {
-    return `<header class="hm2-hero"><div class="hm2-greet"><h1>${greet()}, Emilian.</h1><p class="${notesReady() ? '' : 'ghost-p'}">${esc(sentence)}</p><div class="hm2-acts">${acts}</div></div>${cont}</header>`;
+    return `<header class="hm2-hero"><div class="hm2-greet"><h1>${greet()}, ${window.XENO_ME.firstHtml()}.</h1><p class="${notesReady() ? '' : 'ghost-p'}">${esc(sentence)}</p><div class="hm2-acts">${acts}</div></div>${cont}</header>`;
   }
   const contCard = (last, label) => last ? `<button class="hm2-cont" data-item-p="${last.p}" data-item="${esc(last.t)}"><span class="hm2-cont-k">${esc(label)}</span>${mini(last.p)}<span class="hm2-cont-t"><b>${esc(last.t)}</b><small>${pIconFull(PR[last.p], 14)}${esc(PR[last.p].name)} · ${esc(last.ago)}</small></span><span class="hm2-cont-go">${ic('right')}</span></button>` : '';
   function kpiSection(mId) {
@@ -928,7 +928,7 @@
       ? [['modes', 'Choose the modes you work in', 'Each mode gives you its own home, sidebar and products.', 'Open the switcher', 'data-switch'], ['project', 'Start a project', 'One project holds the chats, files, tasks and teams for a goal — in every mode.', 'New project', 'data-go="projects"'], ['chat', 'Ask XENO something', 'Chat works across everything you have — it is the fastest way in.', 'New chat', 'data-go="chat"'], ['invite', 'Invite people or agents', 'Give each a role; agents always have a human owner.', 'Invite', 'data-go="workspace"']]
       : [['open', `Open ${sp ? sp.name : 'your first product'}`, sp ? sp.blurb : '', `Open ${sp ? sp.name : ''}`, sp ? `data-product="${sp.id}"` : ''], ['pins', 'Pin what you use', 'Pinned products sit on the rail, one click away.', 'Choose products', `data-intro="${ctx}"`], ['project', 'Start a project', 'Keep the work for one goal together.', 'New project', 'data-go="projects"'], ['invite', 'Invite people or agents', 'Work together in this mode.', 'Invite', 'data-go="workspace"']];
     const n = steps.filter(([id]) => done.has(id)).length;
-    return `<div class="wrap hm2" data-home="${ctx}"><header class="hm2-hero"><div class="hm2-greet"><span class="hm2-eye">${esc(ctx === 'overview' ? 'Overview' : M[ctx].name)} · first day</span><h1>Welcome, Emilian.</h1><p>${ctx === 'overview' ? 'This is your home across every mode. Four steps and it fills with your own work.' : `This is ${esc(M[ctx].name)}. Four steps and this page shows your own work.`}</p></div></header>
+    return `<div class="wrap hm2" data-home="${ctx}"><header class="hm2-hero"><div class="hm2-greet"><span class="hm2-eye">${esc(ctx === 'overview' ? 'Overview' : M[ctx].name)} · first day</span><h1>Welcome, ${window.XENO_ME.firstHtml()}.</h1><p>${ctx === 'overview' ? 'This is your home across every mode. Four steps and it fills with your own work.' : `This is ${esc(M[ctx].name)}. Four steps and this page shows your own work.`}</p></div></header>
       <section class="hm2-sec"><div class="hm2-h"><h2>Get started</h2><span class="hm2-sub">${n} of ${steps.length} done</span></div><div class="fd-meter"><i style="width:${(n / steps.length) * 100}%"></i></div>
       <ol class="fd-steps">${steps.map(([id, t, b, a, attrs], i) => `<li class="${done.has(id) ? 'done' : ''}"><span class="fd-n">${done.has(id) ? ic('check') : i + 1}</span><span class="fd-t"><b>${esc(t)}</b><small>${esc(b)}</small></span>${done.has(id) ? '<span class="fd-ok">Done</span>' : `<button class="us-ghost" ${attrs} data-fd-step="${ctx}:${id}">${esc(a)}</button>`}</li>`).join('')}</ol></section>
       <p class="note">This is the page a brand-new account sees. It turns into the normal home as soon as there is work to show.</p></div>`;
@@ -1351,7 +1351,7 @@
     const links = [['settings', 'gear', 'Settings', '<kbd>Ctrl ,</kbd>'], ['plan', 'star', 'Plan & credits', `<span class="acc-meta">${left == null ? '' : fmt(left) + ' credits'}</span>`], ['accounts', 'flow', 'Connected accounts', '<span class="acc-meta">3</span>'], ['apps', 'download', 'Get the apps', '']];
     const m = railPopOpen('account', 'accm', `<header class="pl acc-id">
         <span class="acc-av">E</span>
-        <span class="acc-who"><b>Emilian</b><small>emilian@xeno.test</small></span>
+        <span class="acc-who"><b>${window.XENO_ME.nameHtml()}</b><small>${window.XENO_ME.emailHtml()}</small></span>
         <span class="acc-plan">Pro</span>
       </header>
       <section class="pl pl-list"><div class="pl-cap"><span>Workspaces</span><span>${W.length}</span></div>

@@ -42,6 +42,11 @@ try {
     ok(/sample data/.test(s.note), 'the page says the areas still show sample data');
     ok(s.hist && s.sel, 'the history and the selection are loaded');
     ok(errs.length === 0, 'no page errors (' + JSON.stringify(errs.slice(0, 2)) + ')');
+    // the person named on screen is the signed-in account, wherever the workspace speaks to or about them
+    await p.evaluate(() => { location.hash = '#/studio'; }); await wait(500);
+    const who = await p.evaluate(() => ({ head: [...document.querySelectorAll('#main h1')].map((h) => h.textContent).join(' | '), me: window.XENO_ME.name(), first: window.XENO_ME.first(), email: window.XENO_ME.email(), sample: /\bEmilian\b/.test([...document.querySelectorAll('#main h1')].map((h) => h.textContent).join(' ')) }));
+    ok(who.me === 'Test Person' && who.first === 'Test' && who.email === 'test@example.test', 'the workspace knows the signed-in person (' + who.me + ', ' + who.email + ')');
+    ok(/\bTest\b/.test(who.head) && !who.sample, 'the home heading greets the signed-in person, not the sample name (' + who.head.slice(0, 60) + ')');
     // every image the workspace draws must load: on the first deploy the product icons pointed at a folder on one PC
     const seen = { total: 0, broken: [] };
     for (const place of ['#/', '#/studio', '#/office', '#/dev', '#/library']) {
