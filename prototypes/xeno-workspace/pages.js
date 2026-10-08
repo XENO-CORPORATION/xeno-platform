@@ -131,9 +131,10 @@
     'From chats': { chat: true }, Studio: { mode: 'studio' }, Office: { mode: 'office' }, Social: { mode: 'social' }, Dev: { mode: 'dev' }, Starred: { starred: true }, 'Shared with me': { shared: true }, Trash: { trash: true } };
   const KINDCHIPS = [['all', 'All'], ['image', 'Images'], ['video', 'Video'], ['audio', 'Audio'], ['docs', 'Documents'], ['design', 'Design'], ['code', 'Code'], ['chat', 'Chats']];
   const kindOk = (f, k) => k === 'all' || (k === 'docs' ? ['document', 'sheet', 'deck', 'post'].includes(f.kind) : f.kind === k);
-  const thumb = (f) => f.kind === 'image' || f.kind === 'video' || f.kind === 'design' || f.kind === 'audio' || f.kind === 'document' || f.kind === 'sheet' || f.kind === 'deck' || f.kind === 'code' || f.kind === 'post' ? `<span class="pg-thumb">${X().mini(f.source.product === 'image' ? 'image' : f.source.product)}${f.duration ? `<em>${esc(f.duration)}</em>` : ''}</span>` : `<span class="pg-thumb pg-thumb--ic">${ic(KIND[f.kind][1])}</span>`;
+  const thumb = (f) => f.live ? window.XENO_LIB.thumb(f, ic(KIND[f.kind][1])) : f.kind === 'image' || f.kind === 'video' || f.kind === 'design' || f.kind === 'audio' || f.kind === 'document' || f.kind === 'sheet' || f.kind === 'deck' || f.kind === 'code' || f.kind === 'post' ? `<span class="pg-thumb">${X().mini(f.source.product === 'image' ? 'image' : f.source.product)}${f.duration ? `<em>${esc(f.duration)}</em>` : ''}</span>` : `<span class="pg-thumb pg-thumb--ic">${ic(KIND[f.kind][1])}</span>`;
   const fileCard = (f, sel) => `<div class="pg-card pg-card--file" tabindex="0" data-pg-file="${esc(f.id)}"${sel ? ' aria-selected="true"' : ''}>${thumb(f)}<b title="${esc(f.name)}">${esc(f.name)}</b><small>${prodIcon(f.source.product, 12)}${esc(pname(f.source.product))} · ${f.trashedAt ? 'deleted ' + ago(f.trashedAt) + ' ago' : ago(f.updatedAt)}</small>${f.starred ? `<span class="pg-star" role="img" aria-label="Starred">${ic('star')}</span>` : ''}</div>`;
   function library(view) {
+    { const ny = window.XENO_LIB && window.XENO_LIB.served ? window.XENO_LIB.viewNotYet(view, { page, head, box }) : null; if (ny) return ny; }
     const key = 'library', u = ui(key, { view: 'grid' }), V = LIBV[view] || {}, items = window.XENO_PG_LIBRARY.items.filter((f) => !window.XENO_VIS || window.XENO_VIS.file(f));
     const kind = u.seg.kind || 'all';
     // a link with ?sel= opens with those files selected — once per address, never over a selection made since (§7bb)
@@ -158,7 +159,7 @@
     const k = KIND[f.kind];
     const props = [['Type', k[0]], ['Size', bytes(f.bytes)], f.media && ['Dimensions', `${f.media.width} × ${f.media.height}`], f.duration && ['Length', f.duration], ['Made in', `${esc(pname(f.source.product))} · ${esc(modeName(f.source.mode))}`], f.source.chat && ['From chat', `<a data-pg-chat="${esc(f.source.chat)}">${esc(f.source.chat)}</a>`], f.project && ['Project', `<a data-pg-go-project="${esc(f.project)}">${esc(f.project)}</a>`], f.sharedBy && ['Shared by', esc(f.sharedBy)], ['Created', ago(f.createdAt) + ' ago'], ['Updated', ago(f.updatedAt) + ' ago']].filter(Boolean);
     return `<aside class="pg-detail" aria-label="${esc(f.name)}"><div class="pg-detail-top"><span class="pg-tag">${esc(k[0])}</span><button class="pg-ib" data-pg-info aria-label="Close details">${ic('x')}</button></div>
-      <div class="pg-detail-pv">${X().mini(f.source.product === 'image' ? 'image' : f.source.product)}</div><b class="pg-detail-name">${esc(f.name)}</b>
+      <div class="pg-detail-pv">${f.live ? window.XENO_LIB.preview(f, ic(k[1])) : X().mini(f.source.product === 'image' ? 'image' : f.source.product)}</div><b class="pg-detail-name">${esc(f.name)}</b>
       <div class="pg-detail-acts">${inTrash ? btn('Restore', `data-pg-restore="${f.id}"`, false, 'reset') + btn('Delete forever', `data-pg-purge="${f.id}"`, true, 'trash') : (PR[f.source.product] ? btn('Open in ' + pname(f.source.product), `data-pg-open-file="${f.id}"`, false, 'open') : '') + `<button class="pg-ib" data-pg-star="${f.id}" aria-pressed="${f.starred}" aria-label="${f.starred ? 'Unstar' : 'Star'}" data-tip="${f.starred ? 'Unstar' : 'Star'}">${ic('star')}</button><button class="pg-ib" data-pg-download="${f.id}" aria-label="Download" data-tip="Download">${ic('download')}</button><button class="pg-ib" data-pg-copylink="${f.id}" aria-label="Copy link" data-tip="Copy link">${ic('share')}</button><button class="pg-ib" data-pg-trash="${f.id}" aria-label="Move to trash" data-tip="Move to trash">${ic('trash')}</button>`}</div>
       <dl class="pg-props">${props.map(([a, b]) => `<dt>${a}</dt><dd>${b}</dd>`).join('')}</dl></aside>`;
   }
@@ -207,7 +208,7 @@
       file ? [['Type', KIND[file.kind][0]], ['Size', bytes(file.bytes)], ['Made in', esc(pname(file.source.product))], file.project && ['Project', `<a data-pg-go-project="${esc(file.project)}">${esc(file.project)}</a>`], ['Updated', ago(file.updatedAt) + ' ago']].filter(Boolean) : [['Where', esc(owner)], ['Context', esc(x.ctxName())]];
     const steps = isAgentRun ? (status === 'Failed' ? [['Planned the change', 'done'], ['Edited 6 files', 'done'], ['Ran the test suite', 'failed', '3 tests failed — electron ABI mismatch']] : status === 'Waiting on you' ? [['Planned the change', 'done'], ['Edited 2 files', 'done'], ['Asked: “Can I delete the retry wrapper?”', 'need']] : status === 'Running' ? [['Planned the change', 'done'], ['Edited 4 files', 'done'], ['Running tests', 'live']] : [['Planned', 'done'], ['Made the change', 'done'], ['Tests passed', 'done'], ['Finished', 'done']]) : null;
     const body = gate(fam, 'rows', () => box('file', 'This item is gone', 'It may have been deleted or moved. Check the Trash in your Library.', btn('Open Library', 'data-go="library"', true))) ?? `<div class="pg-cols pg-cols--item"><div>
-        ${isAgentRun ? runLog(run, status) : `<div class="pg-item-pv">${x.mini(pid || 'docs')}</div>`}
+        ${isAgentRun ? runLog(run, status) : `<div class="pg-item-pv">${file && file.live ? window.XENO_LIB.preview(file, ic(KIND[file.kind][1])) : x.mini(pid || 'docs')}</div>`}
         ${steps ? `<section class="pg-sec">${status === 'Waiting on you' ? `<div class="pg-answer">${btn('Allow', `data-xa="allowRun" data-arg="${esc(name)}"`)}${btn('Answer in the session', `data-product="${pid}"`, true)}</div>` : status === 'Failed' ? `<div class="pg-answer">${btn('Retry', `data-xa="retryRun" data-arg="${esc(name)}"`)}${btn('Open the log', 'data-xa="showLog"', true)}</div>` : ''}</section>` : ''}
       </div><aside><section class="pg-sec pg-card-s"><h3>Details</h3><dl class="pg-props">${props.map(([a, b]) => `<dt>${esc(a)}</dt><dd>${b}</dd>`).join('')}</dl></section></aside></div>`;
     return page(head({ obj: true, eyebrow: `${esc(owner)} · ${esc(x.ctxName())}`, title: name, sub: run ? `${run.A.noun.replace(/s$/, '')} in ${esc(owner)}` : file ? `${KIND[file.kind][0]} from ${esc(pname(file.source.product))}` : '',
@@ -540,6 +541,11 @@
     if (d.pgGoProject) return x.go('global', { global: 'projects', item: d.pgGoProject });
     if (d.pgFile) { const u = ui('library'); if (s.global !== 'library') { const f = libItem(d.pgFile); return x.go('global', { global: 'library', item: f.name }); } if (e.detail > 1) return; if (e.ctrlKey || e.metaKey) return togglePick(d.pgFile); if (e.shiftKey) return rangePick(d.pgFile); return selectFile(d.pgFile); }
     if (d.pgUnsel !== undefined) return selectFile(null);
+    if (d.pgStar && window.XENO_LIB && window.XENO_LIB.served) return void window.XENO_LIB.refuse('star');
+    if (d.pgTrash && window.XENO_LIB && window.XENO_LIB.served) return void window.XENO_LIB.remove([libItem(d.pgTrash)]);
+    if (d.pgRestore && window.XENO_LIB && window.XENO_LIB.served) return void window.XENO_LIB.refuse('restore');
+    if (d.pgPurge && window.XENO_LIB && window.XENO_LIB.served) return void window.XENO_LIB.remove([libItem(d.pgPurge)]);
+    if (d.pgEmptyTrash !== undefined && window.XENO_LIB && window.XENO_LIB.served) return void window.XENO_LIB.refuse('emptyTrash');
     if (d.pgStar) { const f = libItem(d.pgStar); window.XENO_PG_SYNC_NAV?.(); f.starred = !f.starred; x.toast(f.starred ? 'Starred' : 'Removed from Starred'); return repaint(); }
     if (d.pgTrash) { const f = libItem(d.pgTrash); window.XENO_PG_SYNC_NAV?.(); f.trashedAt = new Date().toISOString(); ui('library').sel = null; repaint(); return undo(`Moved “${f.name}” to Trash`, () => { f.trashedAt = null; window.XENO_PG_SYNC_NAV?.(); repaint(); }); }
     if (d.pgRestore) { const f = libItem(d.pgRestore); window.XENO_PG_SYNC_NAV?.(); f.trashedAt = null; ui('library').sel = null; x.toast(`Restored “${f.name}”`); return repaint(); }
@@ -615,6 +621,7 @@
   });
   // uploads: a real file picker and real drag-and-drop onto the Library page
   function addFiles(list) {
+    if (window.XENO_LIB && window.XENO_LIB.served) return void window.XENO_LIB.upload(list);
     const kindOf = (f) => /^image/.test(f.type) ? 'image' : /^video/.test(f.type) ? 'video' : /^audio/.test(f.type) ? 'audio' : /pdf|word|text/.test(f.type) ? 'document' : /sheet|csv/.test(f.type) ? 'sheet' : 'code';
     const L = window.XENO_PG_LIBRARY.items, now = new Date().toISOString();
     [...list].forEach((f, i) => { const id = 'lib_u' + Date.now() + i; window.XENO_FILES?.put(id, f); L.unshift({ id, name: f.name, kind: kindOf(f), bytes: f.size, createdAt: now, updatedAt: now, source: { product: 'chat', mode: X().ctxKey() === 'overview' ? 'overview' : X().ctxKey(), chat: null }, project: null, starred: false, sharedBy: null, media: null, duration: null, trashedAt: null }); });
@@ -634,27 +641,31 @@
     const sync = () => window.XENO_PG_SYNC_NAV?.();
     const onLib = () => !!document.querySelector('#main .pg--lib');
     async function renameFile(f) {
+      if (window.XENO_LIB && window.XENO_LIB.served && window.XENO_LIB.refuse('rename')) return;
       const v = await window.XD.form({ title: 'Rename file', submit: 'Rename', size: 'sm', fields: [{ id: 'name', label: 'Name', required: true, max: 120, value: f.name,
         validate: (x) => (window.XENO_PG_LIBRARY.items.some((o) => o !== f && !o.trashedAt && o.name.toLowerCase() === x.trim().toLowerCase()) ? 'A file with this name already exists.' : null) }] });
       if (!v || v.name === f.name) return; const was = f.name; f.name = v.name.trim(); f.updatedAt = new Date().toISOString(); sync(); repaint();
       undo(`Renamed to “${f.name}”`, () => { f.name = was; sync(); repaint(); });
     }
     function duplicateFile(f) {
+      if (window.XENO_LIB && window.XENO_LIB.served && window.XENO_LIB.refuse('duplicate')) return;
       const L = window.XENO_PG_LIBRARY.items, dot = f.name.lastIndexOf('.'), stem = dot > 0 ? f.name.slice(0, dot) : f.name, ext = dot > 0 ? f.name.slice(dot) : '';
       let n = 1, name = `${stem} copy${ext}`; while (L.some((o) => o.name === name)) name = `${stem} copy ${++n}${ext}`;
       const now = new Date().toISOString(), c = { ...f, id: 'lib_' + Date.now(), name, createdAt: now, updatedAt: now, starred: false, source: { ...f.source }, media: f.media && { ...f.media } };
       L.splice(L.indexOf(f) + 1, 0, c); sync(); repaint(); if (onLib()) selectFile(c.id);
       undo(`Duplicated as “${name}”`, () => { L.splice(L.indexOf(c), 1); sync(); repaint(); });
     }
-    function moveFile(f, project) { const was = f.project; f.project = project; f.updatedAt = new Date().toISOString(); sync(); repaint(); undo(project ? `Moved to ${project}` : 'Removed from its project', () => { f.project = was; sync(); repaint(); }); }
-    function trashFile(f) { f.trashedAt = new Date().toISOString(); ui('library').sel = null; sync(); repaint(); undo(`Moved “${f.name}” to Trash`, () => { f.trashedAt = null; sync(); repaint(); }); }
+    function moveFile(f, project) { if (window.XENO_LIB && window.XENO_LIB.served && window.XENO_LIB.refuse('move')) return; const was = f.project; f.project = project; f.updatedAt = new Date().toISOString(); sync(); repaint(); undo(project ? `Moved to ${project}` : 'Removed from its project', () => { f.project = was; sync(); repaint(); }); }
+    function trashFile(f) { if (window.XENO_LIB && window.XENO_LIB.served) return void window.XENO_LIB.remove([f]); f.trashedAt = new Date().toISOString(); ui('library').sel = null; sync(); repaint(); undo(`Moved “${f.name}” to Trash`, () => { f.trashedAt = null; sync(); repaint(); }); }
     async function purgeFile(f) {
+      if (window.XENO_LIB && window.XENO_LIB.served) return void window.XENO_LIB.remove([f]);
       if (!await window.XD.confirm({ title: `Delete “${esc(f.name)}” forever?`, body: 'It is removed from your Library and every project and chat that links to it. This can’t be undone.', action: 'Delete forever' })) return;
       const L = window.XENO_PG_LIBRARY.items; L.splice(L.indexOf(f), 1); ui('library').sel = null; sync(); repaint(); X().toast(`Deleted “${f.name}” for good`);
     }
     const downloadFile = (f) => window.XENO_FILES.download([f]);
     // several files at once — every verb says how many it acts on (Finder: "Move 3 Items to Trash")
     function batchMenu(fs) {
+      if (window.XENO_LIB && window.XENO_LIB.served) return window.XENO_LIB.batchMenu(fs, { clear: () => selectFile(null) });
       const n = fs.length, N = `${n} files`, projects = (window.XENO_PG_PROJECTS?.items || []).filter((p) => p.status !== 'archived').map((p) => p.name);
       const done = () => { sync(); repaint(); };
       if (fs.every((f) => f.trashedAt)) return [[{ label: `Restore ${N}`, icon: 'undo', run: () => { fs.forEach((f) => { f.trashedAt = null; }); ui('library').sel = null; done(); X().toast(`Restored ${N}`); } }],
@@ -694,6 +705,7 @@
       const f = libItem(n.dataset.pgFile); if (!f) return null;
       const many = onLib() ? picks() : [];
       if (many.length > 1 && many.includes(f.id)) return batchMenu(many.map(libItem));
+      if (window.XENO_LIB && window.XENO_LIB.served && f.live) { if (onLib() && (ui('library').sel !== f.id || ui('library').picked.size)) selectFile(f.id); return window.XENO_LIB.fileMenu(f, { open: () => X().go('global', { global: 'library', item: f.name }), details: () => { store.set('pgLibInfo', true); repaint(); }, copy: H.copy }); }
       if (onLib() && (ui('library').sel !== f.id || ui('library').picked.size)) selectFile(f.id);   // right-click selects what it acts on (Finder, Drive)
       const open = () => X().go('global', { global: 'library', item: f.name }), h = libHash(f.name);
       if (f.trashedAt) return [[{ label: 'Restore', icon: 'undo', run: () => { f.trashedAt = null; ui('library').sel = null; sync(); repaint(); X().toast(`Restored “${f.name}”`); } }],

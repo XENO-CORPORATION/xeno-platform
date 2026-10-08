@@ -36,6 +36,7 @@ function answer(q) {
   if (p === '/api/user-data/settings') return json(200, { success: true, settings: {} });
   if (p === '/api/workspaces' && m === 'GET') return json(200, { success: true, workspaces: db.workspaces });
   if (p === '/api/workspaces' && m === 'POST') { const w = { id: `44444444-4444-4444-8444-${String(db.next++).padStart(12, '0')}`, workspace_type: 'team', name: body.name, member_role: 'owner', member_count: 1 }; db.workspaces.push(w); return json(200, { success: true, workspace: w }); }
+  if (p === '/api/library/assets') return json(200, { success: true, items: [] });
   if (p === '/api/chat/conversations') return json(200, { success: true, conversations: db.conversations, total: db.conversations.length });
   if (p === '/api/chat/projects' && m === 'GET') return json(200, { success: true, projects: db.projects, limit: 100, offset: 0 });
   if (p === '/api/chat/projects' && m === 'POST') {
