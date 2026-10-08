@@ -332,7 +332,7 @@ router.post('/device_authorization', async (req, res) => {
 //    required parameter invalid_request. Refused before the database is touched.
 //  - 503 temporarily_unavailable — the revocation write failed. Answering 200 would
 //    tell the client a token is dead while it may still be usable. The cause is
-//    logged below; the body says nothing about it. Retrying is safe, because the
+//    logged below by its error code or name, never its message. The body says nothing about it. Retrying is safe, because the
 //    state writes in revokeToken are idempotent.
 const REVOKE_UNAVAILABLE = 'The revocation service is temporarily unavailable. Retry the request.';
 
@@ -348,9 +348,9 @@ router.post('/revoke', async (req, res) => {
     await revokeToken(req.db, { token });
     return res.status(200).json({});
   } catch (error) {
-    // The token itself is not logged: this line carries only the error's code and
-    // message, and the token never enters a query (revokeToken queries its hash).
-    console.error('[oauth2/revoke] revocation failed, answering 503:', error?.code || error?.name || 'error', error?.message || '');
+    // The token itself is not logged: this line carries only the error's code, not its
+    // message: a driver's message can name the database host, role and database. The token never enters a query (revokeToken queries its hash).
+    console.error('[oauth2/revoke] revocation failed, answering 503:', error?.code || error?.name || 'error');
     return res.status(503).json({ error: 'temporarily_unavailable', error_description: REVOKE_UNAVAILABLE });
   }
 });
