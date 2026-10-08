@@ -322,11 +322,37 @@ router.post('/device_authorization', async (req, res) => {
 // POST /oauth2/revoke — RFC 7009; revoke a refresh token + its family. Public, so
 // it accepts ONLY a token (proof of possession) — NEVER a sid (that would let
 // anyone log out any session). sid-based logout is on /end_session (authed).
+//
+// The three answers, and why each one is the answer:
+//  - 200 {} — the token was revoked, or it is not a live token (unknown, expired,
+//    already revoked). RFC 7009 §2.2 requires this: the client cannot act on the
+//    difference, and the response must not reveal which tokens exist.
+//  - 400 invalid_request — the `token` parameter is missing, empty or not a string.
+//    RFC 7009 §2.1 makes it REQUIRED, and RFC 6749 §5.2 names a request that lacks a
+//    required parameter invalid_request. Refused before the database is touched.
+//  - 503 temporarily_unavailable — the revocation write failed. Answering 200 would
+//    tell the client a token is dead while it may still be usable. The cause is
+//    logged below; the body says nothing about it. Retrying is safe, because the
+//    state writes in revokeToken are idempotent.
+const REVOKE_UNAVAILABLE = 'The revocation service is temporarily unavailable. Retry the request.';
+
 router.post('/revoke', async (req, res) => {
+  const token = (req.body || {}).token;
+  if (typeof token !== 'string' || token === '') {
+    return res.status(400).json({
+      error: 'invalid_request',
+      error_description: 'the token parameter is required and must be a non-empty string',
+    });
+  }
   try {
-    await revokeToken(req.db, { token: (req.body || {}).token });
-    res.status(200).json({});
-  } catch (e) { res.status(200).json({}); }
+    await revokeToken(req.db, { token });
+    return res.status(200).json({});
+  } catch (error) {
+    // The token itself is not logged: this line carries only the error's code and
+    // message, and the token never enters a query (revokeToken queries its hash).
+    console.error('[oauth2/revoke] revocation failed, answering 503:', error?.code || error?.name || 'error', error?.message || '');
+    return res.status(503).json({ error: 'temporarily_unavailable', error_description: REVOKE_UNAVAILABLE });
+  }
 });
 
 // POST /oauth2/introspect — RFC 7662; phantom-token edge validation.
