@@ -19,11 +19,19 @@
  *
  * ── SEMVER, LOOSELY ─────────────────────────────────────────────────────────
  *
- * Comparison is numeric on dot-separated leading integers, and a prerelease
- * suffix (`0.1.0-beta.2`) sorts BELOW its release. That matters here: a beta
- * must not satisfy a floor set at its own release version, or a policy of
- * "0.1.0 minimum" would admit every 0.1.0-beta build it was written to exclude.
+ * Comparison is SemVer 2.0.0 precedence (utils/semverPrecedence.js), the same
+ * comparator the tool publisher's downgrade guard uses, so the two gates cannot
+ * disagree. A prerelease suffix (`0.1.0-beta.2`) sorts BELOW its release, and
+ * numeric identifiers compare as numbers, so `0.1.0-rc.10` sorts above
+ * `0.1.0-rc.9`. That matters here: a beta must not satisfy a floor set at its own
+ * release version, or a policy of "0.1.0 minimum" would admit every 0.1.0-beta
+ * build it was written to exclude.
  */
+
+import { compareVersions } from '../utils/semverPrecedence.js';
+
+// Re-exported under its established name, so the floor and its tests keep one import.
+export { compareVersions };
 
 const NAME_MAP = new Map([
   /* Product identity as clients actually report it. Lower-cased on lookup.
@@ -132,28 +140,6 @@ export function evaluateTokenClient({ clientId, headers }, policies, now = new D
     ? declared
     : { product, version: '0', source: 'oidc-client' };
   return evaluateClient(identity, policies, now);
-}
-
-/** Numeric-dotted comparison; a prerelease sorts below its release. */
-export function compareVersions(a, b) {
-  const parse = (v) => {
-    const [core, pre] = String(v || '0').split('-', 2);
-    const nums = core.split('.').map((x) => parseInt(x, 10) || 0);
-    return { nums, pre: pre || null };
-  };
-  const A = parse(a);
-  const B = parse(b);
-  const len = Math.max(A.nums.length, B.nums.length);
-  for (let i = 0; i < len; i += 1) {
-    const d = (A.nums[i] || 0) - (B.nums[i] || 0);
-    if (d !== 0) return d < 0 ? -1 : 1;
-  }
-  /* 🔴 Equal cores: a prerelease is OLDER than its release. Without this a floor
-   * of "0.1.0" would admit every 0.1.0-beta it exists to exclude. */
-  if (A.pre && !B.pre) return -1;
-  if (!A.pre && B.pre) return 1;
-  if (A.pre && B.pre) return A.pre < B.pre ? -1 : A.pre > B.pre ? 1 : 0;
-  return 0;
 }
 
 /* Policies change rarely and are read on every request, so they are cached —
