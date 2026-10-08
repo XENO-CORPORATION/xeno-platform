@@ -98,6 +98,13 @@ test('beta entries are preserved but never become latest', () => {
   assert.equal(feed.find((r) => r.version === '0.9.0').latest, false, 'a beta is never latest');
 });
 
+test('prereleases order by SemVer precedence, not by their first three numbers', () => {
+  const generated = [rel('0.1.0-rc.9'), rel('0.1.0'), rel('0.1.0-rc.10')];
+  const { feed, chosen } = mergeFeed({ generated, existing: [], latestTag: '9.9.9' });
+  assert.deepEqual(feed.map((r) => r.version), ['0.1.0', '0.1.0-rc.10', '0.1.0-rc.9']);
+  assert.equal(chosen.version, '0.1.0', 'with no latestTag match, the fallback is the newest stable, not the first one met');
+});
+
 test('a latestTag missing from the merged feed falls back to the newest stable', () => {
   const { chosen } = mergeFeed({ generated: [rel('0.2.0')], existing: [rel('0.1.0')], latestTag: '9.9.9' });
   assert.equal(chosen.version, '0.2.0');

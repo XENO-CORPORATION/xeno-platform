@@ -78,6 +78,74 @@ test('🔴 a prerelease sorts BELOW its release', () => {
   assert.ok(compareVersions('0.1.0-beta.1', '0.1.0-beta.2') < 0);
 });
 
+test('🔴 the floor and the publisher share ONE comparator', async () => {
+  /* Two copies drifted: the publisher ranked rc.10 below rc.9 and accepted an older
+   * build over a newer one. The shared module is the only definition. */
+  const shared = await import('../src/server/utils/semverPrecedence.js');
+  assert.equal(compareVersions, shared.compareVersions, 'the floor has its own copy of the comparator');
+});
+
+test('SemVer 2.0.0 §11.1: a core number past 2^53 keeps its order', () => {
+  /* Number() rounds 9007199254740993 down to ...992, so the publisher read a build as equal to
+   * the newer one it would replace, and the downgrade guard accepted it. Numeric parts compare as
+   * digit strings, and a part of 309 digits or more is not Infinity. */
+  assert.equal(compareVersions('9007199254740993.0.0', '9007199254740992.0.0'), 1);
+  assert.equal(compareVersions('9007199254740992.0.0', '9007199254740993.0.0'), -1);
+  const huge = `1${'0'.repeat(400)}.0.0`;
+  assert.equal(compareVersions(huge, huge), 0, 'a 401-digit core is not unequal to itself');
+  assert.equal(compareVersions(huge, `1${'0'.repeat(399)}.0.0`), 1, 'one more digit is a larger number');
+});
+
+
+test('SemVer 2.0.0 §11.4: prereleases order identifier by identifier', () => {
+  /* The specification's own ordering. Plain string comparison puts beta.11 below beta.2,
+   * which is the defect this gate exists to stop. */
+  const chain = [
+    '1.0.0-alpha', '1.0.0-alpha.1', '1.0.0-alpha.beta', '1.0.0-beta',
+    '1.0.0-beta.2', '1.0.0-beta.11', '1.0.0-rc.1', '1.0.0',
+  ];
+  for (let i = 0; i + 1 < chain.length; i += 1) {
+    assert.ok(compareVersions(chain[i], chain[i + 1]) < 0, `${chain[i]} must sort below ${chain[i + 1]}`);
+    assert.ok(compareVersions(chain[i + 1], chain[i]) > 0, `${chain[i + 1]} must sort above ${chain[i]}`);
+  }
+});
+
+test('🔴 0.1.0-rc.10 is NEWER than 0.1.0-rc.9', () => {
+  /* As strings "rc.10" sorts below "rc.9". The publisher then accepted rc.9 over a live
+   * rc.10, and a floor of rc.10 admitted rc.9 builds. */
+  assert.ok(compareVersions('0.1.0-rc.9', '0.1.0-rc.10') < 0);
+  assert.ok(compareVersions('0.1.0-rc.10', '0.1.0-rc.9') > 0);
+});
+
+test('a hyphen inside the prerelease is part of it, not a second separator', () => {
+  /* The old split('-', 2) discarded everything after the second hyphen, which made
+   * rc-1 and rc-2 the same prerelease. */
+  assert.ok(compareVersions('0.1.0-rc-1', '0.1.0-rc-2') < 0);
+  assert.ok(compareVersions('0.1.0-rc-2', '0.1.0-rc-1') > 0);
+});
+
+test('build metadata after + does not change precedence', () => {
+  /* 1.2.3+4.5 used to read as a fourth core part, so it sorted above 1.2.3. */
+  assert.equal(compareVersions('1.2.3+4.5', '1.2.3'), 0);
+  assert.equal(compareVersions('0.1.0-rc.9+build.7', '0.1.0-rc.9'), 0);
+  assert.ok(compareVersions('1.2.3+4.5', '1.2.4') < 0, 'build metadata must not cross a real version');
+});
+
+test('ordinary versions, and a missing version, compare as they always did', () => {
+  assert.ok(compareVersions('0.1.0', '0.2.0') < 0);
+  assert.ok(compareVersions('0.2.0', '0.1.0') > 0);
+  assert.equal(compareVersions(undefined, '0'), 0, 'a missing version reads as zero');
+  assert.equal(compareVersions('', '0.0.0'), 0, 'an empty version reads as zero');
+});
+
+test('🔴 a floor set at an rc refuses the rc below it', () => {
+  /* The same comparator as the publisher. Before this, an rc.9 build passed an rc.10 floor. */
+  const below = evaluateClient({ product: 'hub', version: '0.1.0-rc.9' }, policy({ min_supported: '0.1.0-rc.10' }));
+  assert.equal(below.ok, false);
+  assert.equal(below.reason, 'unsupported');
+  assert.equal(evaluateClient({ product: 'hub', version: '0.1.0-rc.10' }, policy({ min_supported: '0.1.0-rc.10' })).ok, true);
+});
+
 /* ── 3 · When it fires ───────────────────────────────────────────────────── */
 
 test('a build below the floor is refused', () => {

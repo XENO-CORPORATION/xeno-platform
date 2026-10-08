@@ -151,7 +151,7 @@
     "test:activation": "node --test scripts/account-activation.test.mjs scripts/oauth-password-recovery.test.mjs",
     "test:auth-routing": "node --test scripts/auth-routing.test.mjs scripts/express-route-compatibility.test.mjs",
     "test:linked-surfaces": "node --test src/server/tests/linked-surfaces.test.mjs",
-    "test:server-contracts": "node src/server/tests/hosts.test.mjs && node src/server/tests/oidc-authority-policy.test.mjs && node src/server/tests/register-oidc-client.test.mjs",
+    "test:server-contracts": "node src/server/tests/hosts.test.mjs && node src/server/tests/oidc-authority-policy.test.mjs && node src/server/tests/register-oidc-client.test.mjs && node src/server/tests/oauth2-revoke.test.mjs && node src/server/tests/request-error-log.test.mjs",
     "test:onboarding-funnel": "node --test scripts/onboarding-funnel.test.mjs",
     "test:backend-image-imports": "node --test scripts/backend-image-imports.test.mjs",
     "test:typecheck-real": "node --test scripts/typecheck-is-real.test.mjs",
