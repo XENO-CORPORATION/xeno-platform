@@ -64,10 +64,10 @@ node tests/sel-fix-test.mjs    # one browser check per selection fix, and the gu
 Every browser suite exits 1 on any FAIL. `node --test` takes explicit file paths; the glob form differs between Node versions.
 
 **Known limits, not fixed here**, each with its exit condition:
-- A retry after a partial storage write reports the keys it had already restored as kept by someone else. Exit: `write()` counts a key that already holds its target value as done.
-- `XENO_DB.save` writes every area on each save (`pages-data.js`), not only the changed ones. Exit: per-area writes, owned by the pages-data owner.
+- A retry after a partial storage write reports the keys it had already restored as kept by someone else. Exit: `write()` counts a key that already holds its target value as done. Recorded at C7; not re-run in this pass.
+- `XENO_DB.save` rewrites the whole stored object on each save (`pages-data.js:160-162`). The comment at lines 156-157 says an unchanged area keeps its stored copy; I have not checked each area's getter against that. Exit: each area written only when this window changed it, or a check that the getters keep the stored copy.
 - `XENO_HIST.list()` exposes the stored values of each change (`before` and `after`). Exit: an owner decision on the public shape.
-- A selection can keep an id that is no longer on screen, and a restore does not wait for rows that arrive later. Exit: a product rule for both.
+- A selection can keep an id that is no longer on screen, and a restore does not wait for rows that arrive later. Exit: a product rule for both. From the design review; not re-measured here.
 - The lists a page declares are registered again each time it renders; the registry is not de-duplicated. Exit: de-duplicate by key (taken from the design review; not re-measured here).
 - The Ctrl Alt Z alias for undo is not built, and Alt is no longer a history key. Exit: an owner decision.
 - Puppeteer does not deliver `unhandledrejection` to a page listener in this harness; a rejection shows up as a page error, `Uncaught (in promise)`, and `sel-fix-test.mjs` reads that.
