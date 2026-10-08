@@ -37,6 +37,20 @@ test('isUndoKey matches z, y and h only with the modifier', () => {
   assert.equal(H.isUndoKey('z', false), false);
 });
 
+test('an inert record still ends the redo stack', () => {
+  const { h, store } = make({ 'xw.a': '1' });
+  h.gesture();
+  store.set('xw.a', '2');
+  h.record('one', () => store.set('xw.a', '1'));
+  h.noteReload();
+  h.undo();
+  assert.equal(h.canRedo(), true);
+  h.gesture();
+  h.record('nothing', null);
+  assert.equal(h.list()[0].state, 'inert', 'the record is inert, so the test exercises the inert path');
+  assert.equal(h.canRedo(), false);
+});
+
 test('record stores the values it changed, and nothing when the store did not change', () => {
   const { h, store } = make({ 'xw.a': '1' });
   h.gesture();
@@ -176,10 +190,12 @@ test('a gesture takes the reading the next change is measured from', () => {
   assert.deepEqual(plain(h.list()[0].after), { 'xw.a': '3' });
 });
 
-test('a record with nothing stored and no function stays on the stack, and its undo fails (today)', () => {
+test('a record with nothing to take back is logged, is not on the stack, and offers no Undo (F-06)', () => {
   const { h, effects } = make({});
   h.record('nothing stored', null);
-  assert.equal(h.canUndo(), true);
+  assert.equal(h.canUndo(), false);
+  assert.equal(h.list()[0].state, 'inert');
+  assert.equal(effects.toasts.at(-1).spec, null, 'the toast has no Undo');
   assert.equal(h.undo(), false);
-  assert.equal(effects.toasts.some((t) => t.msg === 'That couldn’t be undone'), true);
+  assert.equal(effects.toasts.some((t) => t.msg === 'Nothing to undo'), true);
 });

@@ -56,10 +56,12 @@
       const now = snap(), keys = diff(pre, now);
       if (keys.length) { e.before = pick(pre, keys); e.after = pick(now, keys); }
       pre = now;
+      future.forEach(forget); future.length = 0;   // a new change ends the redo stack, whatever it is
+      log.unshift(e); if (log.length > MAX) log.pop();
+      // a change with nothing stored and no function cannot be taken back: it is logged, and it is not on the stack
+      if (!keys.length && typeof fn !== 'function') { e.state = 'inert'; ports.toast(label); ports.refresh(); return e.id; }
       if (typeof fn === 'function') inverses.set(e.id, fn);
       past.push(e); if (past.length > MAX) forget(past.shift());
-      future.forEach(forget); future.length = 0;
-      log.unshift(e); if (log.length > MAX) log.pop();
       ports.toast(label, { entryId: e.id, undo: true }); ports.refresh();
       return e.id;
     }
