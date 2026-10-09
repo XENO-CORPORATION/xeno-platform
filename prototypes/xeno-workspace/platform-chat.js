@@ -96,7 +96,10 @@
       { const parts = sel.split(',').map((part) => part.trim().match(BARE));
         if (parts.every(Boolean) && !parts.every((m) => /^(textarea|input)$/i.test(m[3] || ''))) continue; }
       out.push(r.cssText.replace(sel, sel.split('.live-chat').join('.chat-themed'))); } };
-    for (const sheet of document.styleSheets) { let rules = null; try { rules = sheet.cssRules; } catch { continue; } if (rules) take(rules); }
+    // `live-chat-css` is the picture's frozen COPY of the chat's whole stylesheet. The real chat has the current
+    // one; handing the old copy back, one class heavier, overrode it (the answer's first paragraph gained a 17px
+    // top margin under "Worked for", 2026-10-09). Only this page's own rules for the composer are handed over.
+    for (const sheet of document.styleSheets) { if (sheet.ownerNode && sheet.ownerNode.id === 'live-chat-css') continue; let rules = null; try { rules = sheet.cssRules; } catch { continue; } if (rules) take(rules); }
     // the send button: the picture marked it ready with a class; the real one is simply not disabled
     // (the attribute is repeated to outweigh the idle rule above, which repeats its own three times)
     out.push('html body .chat-themed button[data-composer-send-button][data-composer-send-button][data-composer-send-button][data-composer-send-button]:not(:disabled){background:var(--n233)!important;color:var(--n9)!important}');
