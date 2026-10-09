@@ -11,8 +11,7 @@
  *     its own (owner's rule: each area has its own work; only Overview shows everything);
  *   - Pinned (the Overview sidebar's sample pins: "Brand refresh — homepage", "Q4 planning"…) is emptied too:
  *     the platform keeps no pinned-work list yet;
- *   - Needs you stays empty: the platform has no approvals or questions feed to read yet, and an invented one
- *     is worse than none.
+ *   - Needs you is emptied here and filled by platform-area.js from what really waits on the person.
  *
  * A row keeps the shape the pages already read ({ t, p, m, ago }) plus `id` (what opens it) and `kind`.
  * Files are not listed yet: a library file has no single product to open in.

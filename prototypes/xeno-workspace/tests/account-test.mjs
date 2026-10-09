@@ -53,6 +53,8 @@ function answer(q) {
   if (p.startsWith('/api/account/sessions/') && m === 'DELETE') { const id = decodeURIComponent(p.split('/').pop()); const had = db.sessions.some((s) => s.id === id); db.sessions = db.sessions.filter((s) => s.id !== id); return had ? json(200, { success: true, revoked_session_id: id }) : json(404, { success: false, error: 'Session not found' }); }
   if (p === '/api/auth/linked-accounts') return json(200, { success: true, accounts: db.linked });
   if (p === '/api/billing/overview') return json(200, { success: true, overview: { credits: { balance: db.credits }, subscription: null } });
+  if (p === '/api/workspace/needs') return json(200, { success: true, items: [] });
+  if (p === '/api/v2/ledger/usage') return json(200, { rows: [] });
   if (p === '/api/dashboard/stats') return json(200, { success: true, stats: { credits: db.credits, plan: 'free', usage_available: true, usage_by_surface: [{ surface: 'chat', credits: 40 }, { surface: 'canvas', credits: 10 }] } });
   if (p === '/api/user-data/settings' && m === 'GET') return json(200, { success: true, settings: db.settings });
   if (p === '/api/user-data/settings' && m === 'PATCH') { for (const up of (body.updates || [{ path: body.path, value: body.value }])) { const [a, b] = String(up.path).split('.'); db.settings[a] = db.settings[a] || {}; db.settings[a][b] = up.value; } return json(200, { success: true, settings: db.settings }); }

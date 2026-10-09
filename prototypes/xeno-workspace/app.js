@@ -223,7 +223,7 @@
 
   // ── PANELS v2 (2026-10-03) — one job per panel kind; content lives in nav.js ──────────────
   const N = () => window.XENO_NEEDS || [];
-  const needRow = (n) => row(`data-item="${esc(n.t)}" data-item-p="${n.p}"`, `<span class="t">${esc(n.t)}</span><span class="need">${esc(n.meta)}</span>`, 'needrow');
+  const needRow = (n) => row(n.kind === 'schedule_failed' ? `data-need-schedule="${esc(n.id)}"` : `data-item="${esc(n.t)}" data-item-p="${n.p}"`, `<span class="t">${esc(n.t)}</span><span class="need">${esc(n.meta)}</span>`, 'needrow');
   const recentRow = (r) => (r.kind === 'project'
     ? row(`data-recent-project="${esc(r.id)}"`, `${ic('folder')}<span class="t">${esc(r.t)}</span><span class="meta">${esc(r.ago)}</span>`)
     : r.kind === 'chat'
@@ -1127,7 +1127,7 @@
     return `<div class="topbar"><button class="ib opener" data-expand aria-label="Open sidebar" data-tip="Open sidebar" data-kbd="Ctrl \\">${ic('side')}</button><div class="crumbs">${crumbs()}</div>${isChat && window.XENO_CHAT && window.XENO_CHAT.served ? `<button class="tb-mid" data-chat-transcript aria-live="polite" data-tip="Copy the whole conversation, with its diagnostics">${ic('copy')}<span>Copy transcript</span></button>` : ''}<div class="sp"></div>${isChat ? `<button class="ib" aria-label="Share" data-tip="Share">${ic('share')}</button><button class="ib" aria-label="More" data-tip="Copy transcript, rename, delete">${ic('more')}</button>` : ''}</div>${isChat ? body : `<div class="mview">${body}</div>`}`;
   }
 
-  window.XW = { get S() { return S; }, go, setChatItem, openModelMenu: (anchor) => openModelMenu(anchor, 'model'), openEffortMenu: (anchor) => openModelMenu(anchor, 'effort'), closeModelMenu: () => closeAp(), modelMenuOpen: () => !!document.querySelector('#apmenu.show'), crumbs: () => crumbs(), esc, ic, PR, M, pIconFull, mini, toast: (s) => toast(s), store, ctxName, ctxKey, ctxChats, inOv, zoneNow, zoneKey, zonesFor, modeOf, mark, render: () => render(), hiddenModes, toggleHidden, modeOrder, renderRail: () => renderRail(), openShortcuts: (o) => openShortcuts(o), openUsage: () => openUsage(), openAdConsent: (o) => openAdConsent(o), hidePops: () => hidePops(), applyWorkspace: () => applyWorkspace(), markAllRead: () => markAllRead(() => render()), refreshSwitcher: () => refreshSwitcher(), search: (q) => { openPalette(); const i = document.querySelector('#palette input'); if (i && q) { i.value = q; i.dispatchEvent(new Event('input')); } }, refreshPanel: () => { const pv = $('#panel > .pv'); const top = pv?.querySelector('.pbody')?.scrollTop || 0; setPv($('#panel'), `<div class="pv">${panelHTML()}</div>`); const n = $('#panel > .pv .pbody'); if (n) n.scrollTop = top; } };
+  window.XW = { get S() { return S; }, go, reloadData: (key) => { try { if (DS[key]) DS[key].err = null; load(key); } catch {} }, setChatItem, openModelMenu: (anchor) => openModelMenu(anchor, 'model'), openEffortMenu: (anchor) => openModelMenu(anchor, 'effort'), closeModelMenu: () => closeAp(), modelMenuOpen: () => !!document.querySelector('#apmenu.show'), crumbs: () => crumbs(), esc, ic, PR, M, pIconFull, mini, toast: (s) => toast(s), store, ctxName, ctxKey, ctxChats, inOv, zoneNow, zoneKey, zonesFor, modeOf, mark, render: () => render(), hiddenModes, toggleHidden, modeOrder, renderRail: () => renderRail(), openShortcuts: (o) => openShortcuts(o), openUsage: () => openUsage(), openAdConsent: (o) => openAdConsent(o), hidePops: () => hidePops(), applyWorkspace: () => applyWorkspace(), markAllRead: () => markAllRead(() => render()), refreshSwitcher: () => refreshSwitcher(), search: (q) => { openPalette(); const i = document.querySelector('#palette input'); if (i && q) { i.value = q; i.dispatchEvent(new Event('input')); } }, refreshPanel: () => { const pv = $('#panel > .pv'); const top = pv?.querySelector('.pbody')?.scrollTop || 0; setPv($('#panel'), `<div class="pv">${panelHTML()}</div>`); const n = $('#panel > .pv .pbody'); if (n) n.scrollTop = top; } };
   // ---- render with crossfade ----
   let first = true;
   function render() {
@@ -1415,10 +1415,14 @@
   function undoToast(msg, fn) { window.XENO_HIST.record(msg, fn); announce(msg); }
 
   // ---- data: one cache, stale-while-revalidate, each source names where it will come from ----
+  // A "needs you" item as an inbox entry. On the platform it carries its own id and time; the picture's samples do not.
+  const NEED_NOTES = () => (window.XENO_NEEDS || []).map((n, i) => ({ id: n.id ? 'n-' + n.id : 'n' + i, t: n.t, m: n.m, p: n.p, kind: n.kind, act: n.meta, at: Number.isFinite(Date.parse(n.at)) ? Date.parse(n.at) : Date.now() - [2, 18, 60, 64, 180][i] * 60000, g: 'needs', mention: n.kind === 'question' }));
   const SRC = {
     // notifications: no platform API yet (needs one — see the report); sample shaped like a feed
-    notes: () => [
-      ...(window.XENO_NEEDS || []).map((n, i) => ({ id: 'n' + i, t: n.t, m: n.m, p: n.p, kind: n.kind, act: n.meta, at: Date.now() - [2, 18, 60, 64, 180][i] * 60000, g: 'needs', mention: n.kind === 'question' })),
+    // Served by the platform there is no activity feed to read yet, so the inbox holds only what really waits on
+    // the person; the sample activity below is the picture's own and is never shown as theirs.
+    notes: () => (window.XENO_PLATFORM?.served ? NEED_NOTES() : [
+      ...NEED_NOTES(),
       { id: 'a1', t: 'Atlas finished a research brief', m: 'dev', p: 'agent', actor: 'Atlas', at: Date.now() - 4 * 60000, g: 'act' },
       { id: 'a2', t: 'Atlas updated the migration plan', m: 'dev', p: 'agent', actor: 'Atlas', at: Date.now() - 26 * 60000, g: 'act' },
       { id: 'a3', t: 'Atlas opened PR #412', m: 'dev', p: 'agent', actor: 'Atlas', at: Date.now() - 52 * 60000, g: 'act' },
@@ -1426,7 +1430,7 @@
       { id: 'a7', t: 'Weekly usage report sent', m: 'tools', p: 'workflow', at: Date.now() - 5 * 3600000, g: 'act' },
       { id: 'a5', t: '3 posts scheduled', m: 'social', p: 'post', at: Date.now() - 3 * 3600000, g: 'act' },
       { id: 'a6', t: 'Invoice paid', m: 'corpo', p: 'company', at: Date.now() - 26 * 3600000, g: 'act' },
-    ],
+    ]),
     // usage: GET /api/v2/ledger/balance + GET /api/v2/ledger/usage?from&to&groupBy=surface|model + the page's Activity Feed
     usage: () => ({
       availableMicro: 2480e6, postedMicro: 2540e6, frozen: false,
@@ -1447,7 +1451,7 @@
   const notesReady = () => !!(DS.notes && DS.notes.val);
   function load(key) {
     const d = (DS[key] = DS[key] || {}); if (d.loading) return d.loading;
-    d.loading = new Promise((res, rej) => setTimeout(() => (window.__xw.fail === key ? rej(new Error('offline')) : res(SRC[key]())), window.__xwLatency ?? 420))   // __xwLatency: QA hook to simulate a slow network
+    d.loading = new Promise((res, rej) => setTimeout(() => (window.__xw.fail === key ? rej(new Error('offline')) : res((window.XENO_SRC && window.XENO_SRC[key] ? window.XENO_SRC[key] : SRC[key])())), window.__xwLatency ?? 420))   // __xwLatency: QA hook to simulate a slow network
       .then((v) => { if (key === 'notes' && d.val) { const extra = d.val.filter((x) => x.live && !v.some((y) => y.id === x.id)); v = [...extra, ...v]; } d.val = v; d.at = Date.now(); d.err = null; }, (e) => { d.err = e; })
       .finally(() => { d.loading = null; dataChanged(key); });
     dataChanged(key); return d.loading;
@@ -1635,7 +1639,7 @@
       undoToast(`${label}: ${n.t}`, () => { const x = NS(); delete x.done[n.id]; x.arch.delete(n.id); ntSave('doneN', x.done); ntSave('archN', x.arch); syncBell(); repaint(); });
     }, 700);
   }
-  function ntOpen(n) { const st = NS(); st.read.add(n.id); ntSave('readN', st.read); syncBell(); hidePops(); go('product', { product: n.p, item: n.t }); }
+  function ntOpen(n) { const st = NS(); st.read.add(n.id); ntSave('readN', st.read); syncBell(); hidePops(); if (n.kind === 'schedule_failed') return window.XA.scheduled(); go('product', { product: n.p, item: n.t }); }
   function ntKey(e, el, repaint) {
     if (!el || !el.dataset.nt) { if (el && el.dataset.ntGrp && e.key === 'Enter') { e.preventDefault(); el.click(); } return; }
     const n = ntAll().find((x) => x.id === el.dataset.nt); if (!n) return;
@@ -1764,7 +1768,10 @@
     else {
       const u = d.val || PH.usage();
       const left = u.availableMicro / MICRO, held = (u.postedMicro - u.availableMicro) / MICRO, availPct = u.postedMicro ? (u.availableMicro / u.postedMicro) * 100 : 0;
-      const f = RANGES[range][1], rows = u.by[group === 'recent' ? 'surface' : group].map(([k, c, ev]) => [k, (c / MICRO) * f, Math.round(ev * f)]);
+      const real = u.byRange ? u.byRange[range] || {} : null, g2 = group === 'recent' && u.activity ? 'surface' : group === 'recent' ? 'surface' : group;
+      const f = real ? 1 : RANGES[range][1], rows = ((real ? real[g2] : u.by[g2]) || []).map(([k, c, ev]) => [k, (c / MICRO) * f, Math.round(ev * f)]);
+      const views = [['surface', 'By product'], ['model', 'By model'], ...(u.activity ? [['recent', 'Recent']] : [])];
+      const spendUnknown = !!real && real[g2] == null;
       const total = rows.reduce((s, r) => s + r[1], 0), events = rows.reduce((s, r) => s + r[2], 0);
       const tone = ['#fafafa', '#a3a3a3', '#6f6f6f', '#3a3a3a'], name = (k) => (group === 'model' ? k : SURFACE[k] || feat(k));
       const low = alert.on && left < alert.at;
@@ -1783,8 +1790,8 @@
           <div class="us-stat"><small>Charges</small><b>${fmt(events)}</b></div>
           <div class="us-stat"><small>Avg / charge</small><b>${events ? (total / events).toFixed(1) : '—'}</b></div>
         </div>
-        <div class="pl-seg us-view" role="tablist" aria-label="Show" data-seg="view" style="--i:${['surface', 'model', 'recent'].indexOf(group)};--n:3">${[['surface', 'By product'], ['model', 'By model'], ['recent', 'Recent']].map(([k, l]) => `<button role="tab" aria-selected="${group === k}" aria-checked="${group === k}" data-us-group="${k}" data-fk="g${k}">${l}</button>`).join('')}</div>
-        <div class="us-list">${group === 'recent'
+        <div class="pl-seg us-view" role="tablist" aria-label="Show" data-seg="view" style="--i:${Math.max(0, views.findIndex((v) => v[0] === group))};--n:${views.length}">${views.map(([k, l]) => `<button role="tab" aria-selected="${group === k}" aria-checked="${group === k}" data-us-group="${k}" data-fk="g${k}">${l}</button>`).join('')}</div>
+        <div class="us-list">${spendUnknown ? '<p class="us-none" data-us-none="unknown">Spending for this period couldn’t be loaded.</p>' : !rows.length && real ? '<p class="us-none" data-us-none="empty">Nothing spent in this period.</p>' : group === 'recent' && u.activity
           ? u.activity.slice(0, 4).map(([f2, c, t]) => `<div class="us-lg us-act"><span class="us-n">${esc(feat(f2))}</span><span class="us-t">${esc(agoShort(t))} ago</span><span class="us-v">−${c}</span></div>`).join('')
           : `<div class="us-stack" aria-hidden="true">${rows.map(([k, c], i) => `<i style="width:${(c / total) * 100}%;background:${tone[i % 4]}"></i>`).join('')}</div>${rows.map(([k, c], i) => `<div class="us-lg"><i style="background:${tone[i % 4]}"></i><span class="us-n">${esc(name(k))}</span><span class="us-pc">${Math.round((c / total) * 100)}%</span><span class="us-v">${fmt(c)}</span></div>`).join('')}`}</div>
       </section>`;
@@ -1814,7 +1821,11 @@
   }
 
   // ---- live: new events arrive on their own (stand-in for the platform's push channel) ----
+  // The picture's own: a sample charge and a sample notification that arrive by themselves. Served by the platform
+  // they were shown to the signed-in person as real (a 12-credit charge, "Launch trailer v3 — 4K export finished"),
+  // so there this does nothing: the platform has no push channel yet, and an invented event is worse than none.
   window.__xw.push = (kind) => {
+    if (window.XENO_PLATFORM?.served) return;
     if (kind === 'charge' || !kind) { const u = DS.usage && DS.usage.val; if (u) { u.availableMicro -= 12e6; u.postedMicro -= 12e6; u.activity.unshift(['video_export', 12, Date.now()]); DS.usage.at = Date.now(); dataChanged('usage'); } }
     if (kind === 'note' || !kind) {
       const d = DS.notes; if (!d || !d.val) return;
@@ -2027,14 +2038,17 @@
     const input = pal.querySelector('input');
     const all = [...MODES.map((m) => ({ k: 'Modes', label: M[m.id].name, sub: m.persona, html: noMark(m.id), run: () => openMode(m.id) })),
       ...Object.values(PR).map((p) => ({ k: 'Products', label: p.name, sub: (homeModeOf(p.id) ? M[homeModeOf(p.id).id].name : 'Global') + (p.status === 'soon' ? ' · soon' : ''), html: pIcon(p, 20), run: () => openProduct(p.id) })),
-      ...window.XENO_RECENT.map((r) => ({ k: 'Recent', label: r.t, sub: PR[r.p].name, html: pIcon(PR[r.p], 20), run: () => openProduct(r.p) }))];
+      ...window.XENO_RECENT.map((r) => ({ k: 'Recent', label: r.t, sub: PR[r.p].name, html: pIcon(PR[r.p], 20), run: () => (r.kind === 'chat' ? go('product', { product: 'chat', item: r.id }) : r.kind === 'project' ? go('global', { global: 'projects', item: r.t }) : openProduct(r.p)) }))];
     const draw = () => {
       const q = input.value.trim().toLowerCase();
       palItems = window.XENO_SEARCH ? window.XENO_SEARCH.rank(all, input.value) : all.filter((x) => !q || (x.label + ' ' + x.sub).toLowerCase().includes(q)).slice(0, 14);
+      // On the platform the server is asked too (chats by what was said in them, work not loaded in this page).
+      const live = window.XENO_SEARCH_LIVE, got = live && live.served ? live.find(input.value, () => { if (pal.classList.contains('on') && pal.contains(input)) draw(); }) : null;
+      if (got) palItems = live.merge(palItems, got.items);
       palSel = Math.min(palSel, Math.max(0, palItems.length - 1));
       let last = '', html = '';
       palItems.forEach((x, i) => { if (x.k !== last) { html += `<div class="grp">${x.k}</div>`; last = x.k; } html += `<button class="row ${i === palSel ? 'sel' : ''}" data-pi="${i}">${x.html.replace('class="mk"', 'class="mk" style="width:20px;height:20px"')}<span class="t">${esc(x.label)}</span><span class="meta" style="display:block">${esc(x.sub)}</span></button>`; });
-      pal.querySelector('.res').innerHTML = html || '<div class="row sub">No results</div>';
+      pal.querySelector('.res').innerHTML = (html || (got && got.pending ? '' : '<div class="row sub">No results</div>')) + (got && got.pending ? '<div class="row sub" data-pal-pending aria-live="polite">Searching your conversations…</div>' : '');
     };
     input.oninput = () => { palSel = 0; draw(); };
     input.onkeydown = (e) => { if (e.key === 'ArrowDown') { palSel = Math.min(palSel + 1, palItems.length - 1); draw(); e.preventDefault(); } if (e.key === 'ArrowUp') { palSel = Math.max(palSel - 1, 0); draw(); e.preventDefault(); } if (e.key === 'Enter' && palItems[palSel]) { window.XENO_SEARCH?.opened(palItems[palSel]); const r = palItems[palSel].run; closePalette(); r(); } };
@@ -2065,6 +2079,7 @@
     if (!t.closest('#switcher, #menu') ) hidePops();
     if (S.switching && !t.closest('#panel, #logo, #menu')) { closeSwitcher(); }
     if (t.closest('#scrim')) return closePalette();
+    if (t.closest('[data-need-schedule]')) return window.XA.scheduled();
     { const rc = t.closest('[data-recent-chat]'); if (rc) return go('product', { product: 'chat', item: rc.dataset.recentChat });
       const rp = t.closest('[data-recent-project]'); if (rp) { const pr = ((window.XENO_PG_PROJECTS || {}).items || []).find((x) => x.id === rp.dataset.recentProject); return go('global', { global: 'projects', item: pr ? pr.name : null }); } }
     const more = t.closest('[data-more]');
