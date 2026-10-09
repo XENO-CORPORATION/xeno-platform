@@ -8,10 +8,7 @@
  *   POST   /email/confirm            { code } from the new address: makes the change
  *   DELETE /email                    drop a pending change
  *   DELETE /sessions                 sign out everywhere else (?all=1 includes this session)
- *   DELETE /api-keys/:id             revoke one key. API keys are managed on the XENO API portal, not here; this
- *                                    one route stays as a named stand-in while the portal's own revoke route is broken
- *                                    (workspace brief 2026-10-09-api-portal-revoke-route-is-unreachable.md). No page
- *                                    calls it. It goes when the portal's revoke works.
+ *   (API keys are managed on the XENO API portal, api.xenosystem.ai: list, create and revoke. Nothing here.)
  *   GET    /exports                  copies of your data
  *   POST   /exports                  ask for a new copy                        [confirmed]
  *   GET    /exports/:id/download     the file
@@ -31,7 +28,6 @@ import {
   CODE_MINUTES, clearConfirmation, confirmMethods, confirmWithCode, confirmWithPassword, confirmationStatus, issueCode, requireConfirmation,
 } from '../services/accountConfirmation.js';
 import { cancelEmailChange, completeEmailChange, pendingEmailChange, requestEmailChange } from '../services/accountEmailChange.js';
-import { revokeApiKey } from '../services/accountApiKeys.js';
 import { deleteExport, exportFile, listExports, requestExport } from '../services/accountExport.js';
 
 const router = express.Router();
@@ -146,14 +142,6 @@ router.delete('/sessions', guard('sign out everywhere', async (req, res) => {
   } catch (error) { await client.query('ROLLBACK').catch(() => {}); throw error; }
   finally { if (client !== req.db) client.release(); }
   res.json({ success: true, revoked_sessions: revoked, apps_signed_out: true, signed_out: all });
-}));
-
-// ── personal API keys ──────────────────────────────────────────────────────────────────────────────
-router.delete('/api-keys/:id', guard('api key revoke', async (req, res) => {
-  const result = await revokeApiKey(req.db, { userId: req.user.id, keyId: req.params.id });
-  if (!result.ok) return fail(res, 404, 'not_found', 'API key not found');
-  recordSecurityEvent(req.db, EVENTS.API_KEY_REVOKED, { userId: req.user.id, req, metadata: { key_id: result.key.id, name: result.key.name } });
-  res.json({ success: true, key: result.key });
 }));
 
 // ── a copy of your data ────────────────────────────────────────────────────────────────────────────

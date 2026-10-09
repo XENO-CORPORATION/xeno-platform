@@ -204,16 +204,11 @@ async function main() {
     assert.equal((await call('GET', '/security', K)).body.security.email, 'ada.new@xeno.test');
     assert.equal((await call('POST', '/exports', K)).body.code, 'confirmation_unavailable', 'a key cannot do what needs a person');
     assert.equal((await call('POST', '/confirm', K, { password: 'correct horse' })).body.code, 'confirmation_unavailable');
-    assert.equal((await call('DELETE', `/api-keys/${made.id}`, M)).status, 404, 'and cannot revoke another person’s');
-    assert.equal((await call('DELETE', `/api-keys/${made.id}`, A)).body.key.revoked, true);
-    assert.equal((await call('GET', '/security', K)).status, 401, 'a revoked key stops working at once');
-    assert.equal((await pool.query('SELECT legacy_status FROM external_api_keys WHERE platform_api_key_id = $1', [made.id])).rows[0].legacy_status, 'REVOKED', 'the portal’s mirror row is marked too, as the portal’s own revoke does');
-    assert.equal((await pool.query('SELECT legacy_status FROM external_api_keys WHERE platform_api_key_id = $1', [malloryKey.id])).rows[0].legacy_status, 'ACTIVE', 'and nobody else’s');
-    assert.equal((await pool.query('SELECT is_active FROM api_keys WHERE id = $1', [malloryKey.id])).rows[0].is_active, true, 'nobody else’s key is touched');
-    assert.equal((await call('DELETE', '/api-keys/not-an-id', A)).status, 404);
-    const keyEvents = (await events(ada)).filter((e) => /^api_key_/.test(e.event_type));
-    assert.deepEqual(keyEvents.map((e) => e.event_type), ['api_key_revoked']);
-    assert.equal(JSON.stringify(keyEvents).includes(made.secret), false, 'the audit record never holds the key');
+    // revoking is the portal's too: the platform has no route that ends a key
+    assert.equal((await call('DELETE', `/api-keys/${made.id}`, A)).status, 404, 'the platform does not revoke keys');
+    assert.equal((await call('GET', '/security', K)).status, 200, 'so the key still works');
+    assert.equal((await pool.query('SELECT is_active FROM api_keys WHERE id = $1', [made.id])).rows[0].is_active, true);
+    assert.equal((await pool.query('SELECT count(*)::int AS c FROM security_events WHERE user_id = $1 AND event_type LIKE $2', [ada, 'api_key_%'])).rows[0].c, 0, 'and the platform records no key event of its own');
 
     // ── a copy of your data ──
     const projectId = (await pool.query(`INSERT INTO chat_projects (owner_user_id, created_by_user_id, name) VALUES ($1, $1, 'Analytical Engine') RETURNING id`, [ada])).rows[0].id;
