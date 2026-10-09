@@ -20,8 +20,12 @@ const reset = () => { db.convs = [{ id: A, title: 'Plan the launch week', update
 // the stand-in chat: it says where it is on load and after every in-page navigation, like the real one
 const CHAT = `<!doctype html><html><body><div class="chat-themed"><div class="chat-top-bar"><button aria-label="Share conversation" onclick="window.__shared=(window.__shared||0)+1">Share</button><button aria-label="Copy Session Transcript" onclick="if(!window.__mute)parent.postMessage({source:'xeno-chat',type:'transcript',text:'# Transcript\\nHello there'},location.origin)">T</button></div><button aria-label="Open conversation history">H</button>
   <div class="rounded-2xl" data-chat-composer-shell style="border-radius:16px;background:#2a2a2a"><div><div class="w-full"><div class="chat-input-container"><textarea></textarea></div></div></div></div>
-  <button data-composer-send-button aria-label="Send message" disabled>send</button>
-  <button data-chat-model-trigger class="xm-model apx" style="position:fixed;right:120px;bottom:20px"><span class="ap-txt" data-part="model"><span class="ap-model">Model A</span></span></button></div><script>
+  <div class="flex items-center" style="position:fixed;right:40px;bottom:20px;display:flex;align-items:center;gap:12px">
+    <div data-composer-model-group style="display:flex;align-items:center;height:26px"><button data-chat-model-trigger class="xm-model apx" style="min-width:120px"><span class="ap-txt" data-part="model"><span class="ap-model">Model A</span></span></button><span id="vr" style="width:1px;height:11px;margin:0 1px;background:#555"></span><div data-effort-control id="eff" style="display:flex;align-items:center"><button data-effort-trigger style="height:26px;padding:0 5px;border:0;background:none"><span data-effort-current style="padding:3px 7px;background:#333;border-radius:4px;font-size:10.5px">Medium</span></button></div></div>
+    <button aria-label="Start voice input" style="width:24px;height:24px;padding:0;border:0">m</button>
+    <button data-composer-send-button aria-label="Send message" disabled>send</button></div></div><script>
+  const group = document.querySelector('[data-composer-model-group]'), vr = document.getElementById('vr'), eff = document.getElementById('eff'); vr.remove(); eff.remove();
+  window.__effort = (on) => { if (on) group.append(vr, eff); else { vr.remove(); eff.remove(); } };
   window.__picks = []; window.__closed = 0;
   const MODELS = [['m-a', 'Model A', 'Fast and cheap.', 128000, false], ['m-b', 'Model B', '', 0, true], ['m-c', 'Model <i>C</i>', 'Careful.', 1000000, false], ['m-d', 'Model D', '', 0, false], ['m-e', 'Model E', 'The fifth.', 200000, false]];
   document.querySelector('[data-chat-model-trigger]').addEventListener('click', (e) => { const r = e.currentTarget.getBoundingClientRect(); parent.postMessage({ source: 'xeno-chat', type: 'model-menu', rect: { left: r.left, top: r.top, right: r.right, bottom: r.bottom, width: r.width, height: r.height }, selected: window.__sel || 'm-a', models: (window.__none ? [] : MODELS).map(([id, name, description, contextWindow, ownKey]) => ({ id, name, description, contextWindow, ownKey })) }, location.origin); });
@@ -102,6 +106,14 @@ try {
     ok(c.send === c.idle, 'with nothing typed the send button is the quiet one');
     await p.evaluate(() => { const d = document.getElementById('xw-chat-frame').contentDocument, t = d.querySelector('textarea'); t.value = 'hello'; t.dispatchEvent(new d.defaultView.Event('input', { bubbles: true })); }); await wait(350); c = await dressed();   // the button's colour glides for 160 ms
     ok(c.send === c.ready && c.ready !== c.idle, 'once there is something to send it is the bright one, from the chat’s real state');
+    // the control row: one rhythm, with an effort control or without one
+    const rhythm = () => p.evaluate(() => { const d = document.getElementById('xw-chat-frame').contentDocument, r = (s) => d.querySelector(s)?.getBoundingClientRect(); const name = r('.ap-model'), trig = r('[data-chat-model-trigger]'), pill = r('[data-effort-current]') || null, mic = r('[aria-label="Start voice input"]'), send = r('[data-composer-send-button]'); const n = (x) => Math.round(x * 10) / 10;
+      return { lastToMic: n(mic.left - (pill ? pill.right : name.right)), micToSend: n(send.left - mic.right), slack: n(trig.width - (name.width + 6)), nameToPill: pill ? n(pill.left - name.right) : null }; });
+    let row = await rhythm();
+    ok(row.micToSend === 7 && row.lastToMic === 7 && row.slack <= 0.5, 'a model with no effort control: the name ends 7px from the mic, the same as mic to send, and the control is only as wide as the name (' + JSON.stringify(row) + ')');
+    await p.evaluate(() => document.getElementById('xw-chat-frame').contentWindow.__effort(true)); row = await rhythm();
+    ok(row.micToSend === 7 && row.lastToMic === 7 && row.nameToPill > 8 && row.nameToPill < 20, 'a model with an effort control: the pill ends 7px from the mic, and sits right after the name with no dead space (' + JSON.stringify(row) + ')');
+    await p.evaluate(() => document.getElementById('xw-chat-frame').contentWindow.__effort(false));
     const before = c.bg; await p.evaluate(() => { localStorage.setItem('xeno_platform_theme', 'light'); localStorage.setItem('xeno_platform_theme_brightness', '100'); dispatchEvent(new CustomEvent('xeno_platform_theme_change')); }); await wait(300); c = await dressed();
     ok(c.bg !== before && c.bg === c.pageBg, 'when the theme changes the input box changes with the page (' + before + ' → ' + c.bg + ')');
     await p.evaluate(() => { localStorage.setItem('xeno_platform_theme', 'dark'); localStorage.setItem('xeno_platform_theme_brightness', '0'); dispatchEvent(new CustomEvent('xeno_platform_theme_change')); }); await wait(200);
