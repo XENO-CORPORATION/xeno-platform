@@ -2442,9 +2442,13 @@
   // PROTOTYPE ONLY — Ctrl Shift R (the browser's hard reload) brings the first-run sheets back, so we can
   // review them again. The key reaches the page just before the browser reloads; we leave a note in
   // sessionStorage and act on it here, on the fresh load. A plain F5 changes nothing.
-  addEventListener('keydown', (e) => { if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key.toLowerCase() === 'r') { try { sessionStorage.setItem('xw.firstRun', '1'); } catch {} } }, true);
+  // NEVER on the platform: there it wiped a real person's "I have seen this" and consent state on every hard
+  // refresh and showed them a designer's note (owner, 2026-10-09). It exists only when the picture is opened from disk.
+  const PICTURE_ONLY = !(window.XENO_PLATFORM && window.XENO_PLATFORM.served);
+  if (!PICTURE_ONLY) { try { sessionStorage.removeItem('xw.firstRun'); } catch {} }
+  addEventListener('keydown', (e) => { if (PICTURE_ONLY && (e.ctrlKey || e.metaKey) && e.shiftKey && e.key.toLowerCase() === 'r') { try { sessionStorage.setItem('xw.firstRun', '1'); } catch {} } }, true);
   let firstRunReset = false;
-  try { if (sessionStorage.getItem('xw.firstRun')) { sessionStorage.removeItem('xw.firstRun'); ['introSeen', 'adConsent', 'adOn', 'adUsage', 'adOrder', 'adPrev', 'adTrace', 'adHistory', 'adUndo'].forEach((k) => store.set(k, null)); store.set('adOn', false); firstRunReset = true; } } catch {}
+  try { if (PICTURE_ONLY && sessionStorage.getItem('xw.firstRun')) { sessionStorage.removeItem('xw.firstRun'); ['introSeen', 'adConsent', 'adOn', 'adUsage', 'adOrder', 'adPrev', 'adTrace', 'adHistory', 'adUndo'].forEach((k) => store.set(k, null)); store.set('adOn', false); firstRunReset = true; } } catch {}
   { const st = hashToState(location.hash); if (st) Object.assign(S, st); }
   render();
   restorePanelMem($('#panel > .pv'));

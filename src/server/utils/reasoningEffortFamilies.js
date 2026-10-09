@@ -19,6 +19,22 @@ const SUFFIX_RE = /^(.*)-(none|low|medium|high|xhigh|max)$/;
 /** Levels a parameter-driven model accepts (OpenRouter-shaped `reasoning.effort`). */
 const PARAM_LEVELS = ['low', 'medium', 'high'];
 
+/**
+ * The `reasoning` hint to send the gateway for a turn with thinking on, or null for none.
+ *
+ * 🔴 A suffixed id (`gpt-6.1-sol-max`) already NAMES its effort, and the gateway refuses a request whose
+ * hint says anything else: 400 `conflicting_reasoning_effort` — "implies reasoning_effort `max`, but
+ * request specified `medium`" (measured against the live gateway, 2026-10-09). The streaming chat used to
+ * send `medium` for every level that is not low/medium/high, so Max and X-High failed on every turn with
+ * "The inference stream failed". For such an id the hint carries the id's own effort; only a bare id
+ * takes the level the person chose (low/medium/high), or `medium` when they chose none.
+ */
+export function reasoningHintFor(modelId, requestedEffort) {
+  const alias = splitEffort(modelId);
+  if (alias) return alias.effort === 'none' ? null : { effort: alias.effort };
+  return { effort: PARAM_LEVELS.includes(requestedEffort) ? requestedEffort : 'medium' };
+}
+
 export function splitEffort(id) {
   const m = String(id || '').replace(/:thinking$/, '').match(SUFFIX_RE);
   return m ? { baseId: m[1], effort: m[2] } : null;
