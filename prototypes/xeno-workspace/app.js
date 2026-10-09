@@ -559,7 +559,7 @@
       // product: arrive at home first (the sidebar collapses), then the cursor does what a person would
       if (curPid === pid && mw.dataset.state === 'product') return;
       setTabs('product');
-      if (mw.dataset.state === 'sidebar') { mw.dataset.state = 'home'; if (!await pause(520, t)) return; }
+      if (mw.dataset.state === 'sidebar') { mw.dataset.state = 'home'; if (!await pause(300, t)) return; }
       // switching while a product is open keeps the window where it is and swaps what is inside it;
       // only the first open grows out of the icon it came from
       const switching = prod.classList.contains('open');
@@ -569,10 +569,10 @@
       const p = target ? at(target) : { x: MW.W / 2, y: MW.H / 2 };
       if (!cursor.classList.contains('on')) { cursor.style.left = `${MW.W * 0.62}px`; cursor.style.top = `${MW.H * 0.58}px`; cursor.classList.add('on'); void cursor.offsetWidth; }
       cursor.style.left = `${p.x}px`; cursor.style.top = `${p.y}px`;
-      if (!await pause(680, t)) return;
+      if (!await pause(360, t)) return;
       cursor.classList.remove('click'); void cursor.offsetWidth; cursor.classList.add('click'); target?.classList.add('hit'); setTimeout(() => target?.classList.remove('hit'), 360);
       if (!pinned) { kbar.querySelector('.mw-kq span').textContent = PR[pid].name; kbar.classList.remove('list'); kbar.classList.add('on'); if (!await pause(700, t)) return; kbar.classList.remove('on'); }
-      else if (!await pause(200, t)) return;
+      else if (!await pause(110, t)) return;
       if (switching) { swapWin(pid); curPid = pid; if (await pause(520, t)) cursor.classList.remove('on'); return; }
       prod.style.transformOrigin = `${p.x - MW.RAIL}px ${p.y}px`;
       prod.classList.add('open'); curPid = pid; mw.dataset.state = 'product';
@@ -634,8 +634,10 @@
   // leaving the mode (Back, the switcher, a link) closes its intro WITHOUT marking it seen — it returns next visit
   function dropStaleModeIntro() { const d = document.getElementById('modeIntro'); if (!d?.classList.contains('on')) return; if (S.view === 'mode' && S.mode === d.dataset.mode) return; sheetClose(d); }
   // the first time a mode home opens, its intro opens with it
-  function maybeModeIntro() {
-    dropStaleModeIntro(); if (S.view === 'mode' && MODE_INTRO[S.mode] && !introSeen()[S.mode] && !document.getElementById('adModal')?.classList.contains('on')) setTimeout(() => { if (S.view === 'mode' && !introSeen()[S.mode]) openModeIntro(S.mode); }, 220); }
+  function maybeModeIntro(atLoad) {
+    dropStaleModeIntro(); if (!(S.view === 'mode' && MODE_INTRO[S.mode] && !introSeen()[S.mode] && !document.getElementById('adModal')?.classList.contains('on'))) return;
+    if (atLoad) return openModeIntro(S.mode);
+    setTimeout(() => { if (S.view === 'mode' && !introSeen()[S.mode]) openModeIntro(S.mode); }, 220); }
   // ---- Adaptive consent (MODES §8b rule 7) ----
   // Informed, specific, unambiguous, and as easy to refuse or withdraw as to give (GDPR Art. 4(11),
   // 7(3); EDPB Guidelines 05/2020 and 03/2022). Two things make it informed rather than asserted:
@@ -2385,7 +2387,7 @@
   restorePanelMem($('#panel > .pv'));
   syncHash(true);
   applyWorkspace();
-  maybeModeIntro();
+  maybeModeIntro(true);
   if (firstRunReset) setTimeout(() => toast('First-run sheets restored — each mode shows its intro again'), 400);
   requestAnimationFrame(() => requestAnimationFrame(() => root.classList.remove('noanim')));
 })();

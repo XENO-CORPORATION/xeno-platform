@@ -1704,6 +1704,24 @@ button.hm2-li:hover{background:var(--hover);color:var(--text)}
 .mw-prod .mi-win.mw-out{opacity:0;transform:translateX(calc(var(--dir,1) * -22px));pointer-events:none;transition:opacity .22s ease,transform .3s cubic-bezier(.4,0,1,1)}
 .mw-prod .mi-win.mw-out .mi-demo *{animation-play-state:paused}
 @media (prefers-reduced-motion:reduce){.mw-prod .mi-win,.mw-prod .mi-win.mw-out{transition:opacity .12s!important;transform:none!important}}
+
+/* intro preview motion v3 — measured on recorded frames (2026-10-09), which showed: ~200 ms of nothing after a click
+   (a slow-start curve plus a delay), the camera and the sidebar finishing at different times, sidebar text cut
+   mid-letter while its column opened, and the product window half-transparent over the home behind it.
+   One clock (--mw-t) and one curve that starts moving at once; text is never visible while its column is narrower
+   than it; the window is opaque from its first frames. */
+#modeIntro{--mw-t:.44s;--mw-e:cubic-bezier(.22,1,.36,1)}
+#modeIntro .mw-cam{transition:transform var(--mw-t) var(--mw-e),opacity .2s ease}
+#modeIntro .mw-side{transition:width var(--mw-t) var(--mw-e),margin var(--mw-t) var(--mw-e),opacity .12s ease}
+#modeIntro .mw-side-in{transition:opacity .16s ease .2s;transform:none!important}
+#modeIntro .mw[data-state="home"] .mw-side-in,#modeIntro .mw[data-state="product"] .mw-side-in{opacity:0;transition:opacity .08s ease}
+#modeIntro .mw[data-state="home"] .mw-side,#modeIntro .mw[data-state="product"] .mw-side{transition:width var(--mw-t) var(--mw-e),margin var(--mw-t) var(--mw-e),opacity .12s ease .1s}
+#modeIntro .mw .mw-home{transform:none;transition:opacity .28s ease}
+#modeIntro .mw[data-state="product"] .mw-home{opacity:.12;transition:opacity .14s ease}
+#modeIntro .mw-prod{transform:scale(.94);transition:transform .34s var(--mw-e),opacity .1s ease}
+#modeIntro .mw-prod:not(.open){transition:transform .16s cubic-bezier(.4,0,1,1),opacity .12s ease}
+#modeIntro .mw-cursor{transition:left .34s var(--mw-e),top .34s var(--mw-e),opacity .14s}
+@media (prefers-reduced-motion:reduce){#modeIntro .mw-side-in{transition:none!important}}
 /* closing copy of the popover (see ghostMenu): same look, no interaction */
 #menu-ghost{pointer-events:none}
 /* composer = Agent Panel's .box + .controls (locked proto): a 6px plate holding only the field,

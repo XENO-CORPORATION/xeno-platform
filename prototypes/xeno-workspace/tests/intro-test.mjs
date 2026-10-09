@@ -41,7 +41,7 @@ ok(await ev(() => document.querySelector('#modeIntro .mi-stage').dataset.view ==
 ok(await ev(() => [...document.querySelectorAll('#modeIntro .mi-live')].filter((x) => x.offsetParent).length === 1), 'only the hint for the current view shows');
 ok(await ev(() => /Pinned/.test(document.querySelector('#modeIntro .mi-win-pin').textContent)), 'the demo says whether it is pinned');
 await p.screenshot({ path: 'intro-product.png' });
-await p.hover('#modeIntro [data-mi-pin="mail"]'); await wait(1300); ok(await ev(() => document.querySelector('#modeIntro .mw-kbar').classList.contains('on') && !document.querySelector('#modeIntro .mw-pin[data-p="mail"]')), 'an unpinned product is opened through Ctrl K'); await wait(1000);
+await p.hover('#modeIntro [data-mi-pin="mail"]'); await wait(800); ok(await ev(() => document.querySelector('#modeIntro .mw-kbar').classList.contains('on') && !document.querySelector('#modeIntro .mw-pin[data-p="mail"]')), 'an unpinned product is opened through Ctrl K'); await wait(1000);
 ok(await ev(() => document.querySelector('#modeIntro .mw-prod.open .mi-win')?.dataset.demo === 'mail'), 'moving to another product opens that one instead');
 await p.click('#modeIntro [data-mi-view="sidebar"]'); await wait(350);
 ok(await ev(() => document.querySelector('#modeIntro .mi-stage').dataset.view === 'sidebar'), 'the toggle returns to the sidebar');
