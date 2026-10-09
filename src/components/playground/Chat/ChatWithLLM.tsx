@@ -23,7 +23,7 @@ import {
 import ChatEmptyState, { ComposerRevealControls, type ChatEmptyStateTool } from './ChatEmptyState';
 import ChatModelSelector from './ChatModelSelector';
 import WorkspaceModelTrigger from './WorkspaceModelTrigger';
-import { isWorkspaceEmbed } from '@/lib/workspaceEmbed';
+import { isWorkspaceEmbed, tellWorkspace } from '@/lib/workspaceEmbed';
 import ChatEffortControl from './ChatEffortControl';
 import { effortOptionForTurn, readEffortPreferences, requestShapeFor, writeEffortPreference } from './chatReasoningEffort';
 import ChatShareModal from './ChatShareModal';
@@ -5602,7 +5602,10 @@ const ChatWithLLM: React.FC<ChatWithLLMProps> = ({
 
       readableLog += `---\n## Diagnostic JSON Snapshot\n\`\`\`json\n${JSON.stringify(telemetry, null, 2)}\n\`\`\`\n`;
 
-      await navigator.clipboard.writeText(readableLog);
+      // Inside the XENO workspace the Copy transcript button is the workspace's, in its top bar: the press
+      // happened in that page, so that page writes the clipboard. This chat supplies the text.
+      if (isWorkspaceEmbed()) tellWorkspace({ source: 'xeno-chat', type: 'transcript', text: readableLog });
+      else await navigator.clipboard.writeText(readableLog);
       setIsTranscriptCopied(true);
       setTimeout(() => setIsTranscriptCopied(false), 2200);
     } catch (err) {

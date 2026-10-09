@@ -54,7 +54,9 @@ export type WorkspaceChatMessage =
   | { source: 'xeno-chat'; type: 'changed' }
   /** Open the workspace's model menu at `rect` (this frame's coordinates) with the chat's real list. */
   | { source: 'xeno-chat'; type: 'model-menu'; rect: { left: number; top: number; right: number; bottom: number; width: number; height: number }; selected: string; models: Array<{ id: string; name: string; description: string; contextWindow: number; ownKey: boolean }> }
-  | { source: 'xeno-chat'; type: 'model-menu-close' };
+  | { source: 'xeno-chat'; type: 'model-menu-close' }
+  /** The session transcript, built by the chat. The workspace owns the button, so it does the copy. */
+  | { source: 'xeno-chat'; type: 'transcript'; text: string };
 
 export function tellWorkspace(message: WorkspaceChatMessage): void {
   if (!isWorkspaceEmbed()) return;
