@@ -2,6 +2,7 @@
 // Replaces localStorage-based chat history with database persistence
 
 const API_BASE = '/api/chat';
+import { embedArea } from '@/lib/workspaceEmbed';
 import {
   libraryService,
   type LibraryItemRecord,
@@ -248,10 +249,12 @@ export const chatService = {
     project_id?: string;
   }): Promise<Conversation | null> {
     try {
+      // Inside the XENO workspace a new chat lives in the area it was started in (a chat in a project takes the project's).
+      const area = data.project_id ? null : embedArea();
       const response = await fetch(`${API_BASE}/conversations`, {
         method: 'POST',
         headers: getAuthHeaders(),
-        body: JSON.stringify(data),
+        body: JSON.stringify(area ? { ...data, area } : data),
       });
 
       const result = await handleResponse<{ conversation: Conversation }>(response);
@@ -1076,10 +1079,11 @@ export const chatService = {
     settings?: any;
   }): Promise<any | null> {
     try {
+      const projectArea = embedArea();
       const response = await fetch(`${API_BASE}/projects`, {
         method: 'POST',
         headers: getAuthHeaders(),
-        body: JSON.stringify(data),
+        body: JSON.stringify(projectArea ? { ...data, area: projectArea } : data),
       });
       const result = await handleResponse<{ project: any }>(response);
       return result.project || null;

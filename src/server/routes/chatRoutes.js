@@ -1,4 +1,5 @@
 import express from 'express';
+import { readArea, readAreaFilter, EFFECTIVE_CONVERSATION_AREA } from '../utils/resourceArea.js';
 import { activePath, deepestLeafUnder, indexById } from '../utils/chatBranches.js';
 import { chatWorkspaceScope } from '../middleware/chatWorkspaceScope.js';
 import { resolveResourceScope } from '../services/personalScope.js';
@@ -499,6 +500,7 @@ router.get('/conversations', async (req, res) => {
         c.id, c.title, c.model_id, c.system_prompt, c.persona_id,
         c.interface_id, c.created_at, c.updated_at, c.last_message_at,
         c.is_archived, c.project_id,
+        ${EFFECTIVE_CONVERSATION_AREA} AS area,
         (SELECT COUNT(*) FROM chat_messages WHERE conversation_id = c.id) as message_count
       FROM chat_conversations c
       WHERE c.deleted_at IS NULL
@@ -506,6 +508,9 @@ router.get('/conversations', async (req, res) => {
     `;
 
     const params = [interface_id];
+    // AREA: `?area=dev` lists one area, `?area=none` the chats in no area, absent lists everything (Overview).
+    let areaFilter;
+    try { areaFilter = readAreaFilter(req.query.area); } catch (error) { return res.status(400).json({ success: false, code: 'invalid_area', error: error.message }); }
 
     // SES-01: the caller's OWN personal wrapper is their personal scope, so it lists their
     // personally owned chats (plus any still parented to the wrapper from before the adapter).
@@ -526,6 +531,10 @@ router.get('/conversations', async (req, res) => {
 
     if (!include_archived || include_archived === 'false') {
       query += ` AND c.is_archived = FALSE`;
+    }
+    if (areaFilter.filter) {
+      if (areaFilter.area === null) query += ` AND (${EFFECTIVE_CONVERSATION_AREA}) IS NULL`;
+      else { params.push(areaFilter.area); query += ` AND (${EFFECTIVE_CONVERSATION_AREA}) = $${params.length}`; }
     }
 
     query += ` ORDER BY c.updated_at DESC`;
@@ -621,6 +630,9 @@ router.post('/conversations', async (req, res) => {
     }
 
     const { title = 'New Chat', model_id, system_prompt, persona_id, interface_id = 'playground', project_id } = req.body;
+    // AREA: a new chat lives in the area it was started in. Inside a project it takes the project's, so none is stored.
+    let newArea;
+    try { newArea = readArea(req.body?.area).area; } catch (error) { return res.status(400).json({ success: false, code: 'invalid_area', error: error.message }); }
 
     if (project_id) await requireResourceRelation(req.db, userPrincipal(userId), 'project', project_id, 'reviewer');
     // SES-01: a New Chat under the caller's own personal wrapper is PERSONALLY owned -- the wrapper
@@ -640,11 +652,11 @@ router.post('/conversations', async (req, res) => {
       const result = await tx.query(
         `INSERT INTO chat_conversations (
            user_id, owner_user_id, created_by_user_id, title, model_id, system_prompt,
-           persona_id, interface_id, workspace_id, project_id
-         ) VALUES ($1, $2, $1, $3, $4, $5, $6, $7, $8, $9)
+           persona_id, interface_id, workspace_id, project_id, area
+         ) VALUES ($1, $2, $1, $3, $4, $5, $6, $7, $8, $9, $10)
          RETURNING *`,
         [userId, conversationOwnerId, title, model_id, system_prompt, persona_id,
-          interface_id, conversationWorkspaceId, project_id || null],
+          interface_id, conversationWorkspaceId, project_id || null, project_id ? null : newArea],
       );
       await writeTuples(tx, {
         writes: [{
@@ -714,6 +726,11 @@ router.put('/conversations/:id', async (req, res) => {
       updates.push(`is_archived = $${paramCount++}`);
       values.push(is_archived);
     }
+    // AREA: moving a chat to another area (or to none). A chat inside a project follows its project and
+    // cannot be placed on its own: that is refused below, once the row is locked.
+    let areaChange;
+    try { areaChange = readArea(req.body?.area); } catch (error) { return res.status(400).json({ success: false, code: 'invalid_area', error: error.message }); }
+    if (areaChange.given) { updates.push(`area = $${paramCount++}`); values.push(areaChange.area); }
     updates.push(`updated_at = NOW()`);
 
     const result = await withTransaction(req.db, async (tx) => {
@@ -722,6 +739,7 @@ router.put('/conversations/:id', async (req, res) => {
         [id],
       );
       if (current.rows.length === 0) return current;
+      if (areaChange.given && current.rows[0].project_id) { const refusal = new Error('A chat inside a project lives where its project lives. Move the project, or move the chat out of it first.'); refusal.areaRefusal = true; throw refusal; }
       values.push(id);
       const updated = await tx.query(
         `UPDATE chat_conversations
@@ -742,6 +760,7 @@ router.put('/conversations/:id', async (req, res) => {
       conversation: result.rows[0]
     });
   } catch (error) {
+    if (error?.areaRefusal) return res.status(409).json({ success: false, code: 'area_follows_project', error: error.message });
     if (sendChatAuthorityError(res, error)) return;
     console.error('Failed to update conversation:', error);
     res.status(500).json({ success: false, error: 'Internal server error' });
@@ -2600,6 +2619,9 @@ router.get('/projects', async (req, res) => {
     // SES-01: the caller's own personal wrapper lists their personal projects too.
     const listScope = await resolveResourceScope(req.db, { userId, workspaceId: requestedWorkspaceId });
     if (listScope.kind === 'refused') return res.json({ success: true, projects: [], limit, offset });
+    // AREA: `?area=dev` one area, `?area=none` projects in no area, absent everything (Overview).
+    let projectAreaFilter;
+    try { projectAreaFilter = readAreaFilter(req.query.area); } catch (error) { return res.status(400).json({ success: false, code: 'invalid_area', error: error.message }); }
     const personalOwner = listScope.kind === 'personal' && requestedWorkspaceId ? userId : null;
 
     const { rows: candidates } = await req.db.query(
@@ -2609,8 +2631,9 @@ router.get('/projects', async (req, res) => {
        FROM chat_projects p
        WHERE ($1::boolean OR p.is_archived = FALSE)
          AND ($2::uuid IS NULL OR p.workspace_id = $2::uuid OR p.owner_user_id = $3::uuid)
+         AND (NOT $4::boolean OR p.area IS NOT DISTINCT FROM $5::text)
        ORDER BY p.updated_at DESC`,
-      [includeArchived, requestedWorkspaceId, personalOwner]
+      [includeArchived, requestedWorkspaceId, personalOwner, projectAreaFilter.filter, projectAreaFilter.area]
     );
     const authorized = [];
     for (const project of candidates) {
@@ -2715,6 +2738,8 @@ router.post('/projects', async (req, res) => {
 
     const { name, description, custom_instructions, settings } = req.body;
     if (!name) return res.status(400).json({ success: false, error: 'Project name is required' });
+    let projectArea;
+    try { projectArea = readArea(req.body?.area).area; } catch (error) { return res.status(400).json({ success: false, code: 'invalid_area', error: error.message }); }
 
     const scope = await resolveResourceScope(req.db, { userId, workspaceId: req.chatWorkspaceId });
     if (scope.kind === 'refused') {
@@ -2728,6 +2753,8 @@ router.post('/projects', async (req, res) => {
       customInstructions: custom_instructions,
       settings,
     });
+    // AREA: a new project lives in the area it was made in.
+    if (projectArea) project.area = (await req.db.query('UPDATE chat_projects SET area = $2 WHERE id = $1 RETURNING area', [project.id, projectArea])).rows[0]?.area ?? null;
 
     res.json({ success: true, project });
   } catch (error) {
@@ -2745,6 +2772,9 @@ router.put('/projects/:id', async (req, res) => {
 
     const { id } = req.params;
     const { name, description, custom_instructions, settings, is_archived } = req.body;
+    // AREA: moving a project to another area (or to none). Its chats follow, because they read the project's.
+    let areaMove;
+    try { areaMove = readArea(req.body?.area); } catch (error) { return res.status(400).json({ success: false, code: 'invalid_area', error: error.message }); }
 
     await requireResourceRelation(req.db, userPrincipal(userId), 'project', id, 'editor');
     const { rows } = await req.db.query(
@@ -2757,11 +2787,12 @@ router.put('/projects/:id', async (req, res) => {
         custom_instructions = COALESCE($3, custom_instructions),
         settings = CASE WHEN $4::jsonb IS NULL THEN settings ELSE settings || $4::jsonb END,
         is_archived = COALESCE($5, is_archived),
+        area = CASE WHEN $8::boolean THEN $9::text ELSE area END,
         updated_by_user_id = $7,
         updated_at = NOW()
        WHERE id = $6
        RETURNING *`,
-      [name, description, custom_instructions, settings ? JSON.stringify(settings) : null, is_archived, id, userId]
+      [name, description, custom_instructions, settings ? JSON.stringify(settings) : null, is_archived, id, userId, areaMove.given, areaMove.area]
     );
 
     if (rows.length === 0) return res.status(404).json({ success: false, error: 'Project not found' });

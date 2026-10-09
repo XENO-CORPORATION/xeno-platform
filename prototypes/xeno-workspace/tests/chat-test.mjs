@@ -48,9 +48,9 @@ async function open(hash = '#/overview/p/chat') {
     if (u.pathname.startsWith('/overview/')) return q.respond({ status: 200, contentType: 'text/html', body: CHAT });
     if (!u.pathname.startsWith('/api/')) return q.continue();
     if (u.pathname === '/api/auth/me') return json({ success: true, user: USER });
-    if (u.pathname === '/api/chat/conversations') { db.lists++; return db.down ? json({ success: false, error: 'Internal server error' }, 500) : json({ success: true, conversations: db.convs, total: db.convs.length + (db.extra || 0) }); }
+    if (u.pathname === '/api/chat/conversations') { db.lists++; const want = u.searchParams.get('area'); (db.asked = db.asked || []).push(want); const rows = want === null ? db.convs : db.convs.filter((c) => (want === 'none' ? !c.area : c.area === want)); return db.down ? json({ success: false, error: 'Internal server error' }, 500) : json({ success: true, conversations: rows, total: rows.length + (db.extra || 0) }); }
     const one = u.pathname.match(/^\/api\/chat\/conversations\/([^/]+)$/);
-    if (one && q.method() === 'PUT') { db.writes.push(['PUT', one[1], q.postData()]); if (db.refuse) return json({ success: false, error: 'Internal server error' }, 500); const c = db.convs.find((x) => x.id === one[1]); if (!c) return json({ success: false, error: 'Not found' }, 404); c.title = JSON.parse(q.postData()).title; return json({ success: true, conversation: c }); }
+    if (one && q.method() === 'PUT') { db.writes.push(['PUT', one[1], q.postData()]); if (db.refuse) return json({ success: false, error: 'Internal server error' }, 500); const c = db.convs.find((x) => x.id === one[1]); if (!c) return json({ success: false, error: 'Not found' }, 404); { const sent = JSON.parse(q.postData()); if ('title' in sent) c.title = sent.title; if ('area' in sent) c.area = sent.area; } return json({ success: true, conversation: c }); }
     if (one && q.method() === 'DELETE') { db.writes.push(['DELETE', one[1]]); if (db.refuse) return json({ success: false, error: 'Internal server error' }, 500); db.convs = db.convs.filter((x) => x.id !== one[1]); return json({ success: true }); }
     if (u.pathname === '/api/chat/projects') return json({ success: true, projects: [{ id: PJ, name: 'Finance', icon: null }] });
     const body = { '/api/account/overview': { success: true, overview: { user: USER, credits: { balance: 0 }, workspace_count: 1 } }, '/api/account/sessions': { success: true, sessions: [] }, '/api/account/security': { success: true, security: { confirmation: { confirmed: false, available: true, expires_at: null }, methods: ['password'], has_password: true, email: '', pending_email: null } }, '/api/account/exports': { success: true, exports: [] }, '/api/auth/linked-accounts': { success: true, accounts: [] }, '/api/billing/overview': { success: true, overview: { credits: { balance: 0 }, subscription: null } }, '/api/dashboard/stats': { success: true, stats: { usage_available: false, usage_by_surface: [] } }, '/api/user-data/settings': { success: true, settings: {} }, '/api/workspaces': { success: true, workspaces: [] }, '/api/library/assets': { success: true, items: [] } }[u.pathname];
@@ -262,6 +262,31 @@ try {
     await p.close();
     reset(); db.extra = 40; ({ p } = await open()); v = await view(p); db.extra = 0;
     ok(/40 older chats/.test(v.panel), 'when there are more conversations than the sidebar holds, it says how many and where they are');
+    await p.close(); }
+  { // each area has its own chats; Overview shows everything
+    reset(); db.convs[0].area = 'dev'; db.convs[1].area = 'studio'; db.asked = [];
+    const { p, errs } = await open('#/overview/p/chat'); let v = await view(p);
+    const tags = () => p.evaluate(() => [...document.querySelectorAll('#panel [data-chat-live]')].map((r) => r.querySelector('.t').textContent + (r.querySelector('[data-chat-area]') ? ' [' + r.querySelector('[data-chat-area]').textContent + ']' : '')).join(' | '));
+    ok(v.rows.length === 3 && db.asked.at(-1) === null && await p.evaluate(() => window.XENO_CHAT.area()) === null, 'on Overview the list asks for everything, and there is no area');
+    ok((await tags()).split(' | ').sort().join(' | ') === 'Budget <b>questions</b> | New chat [Studio] | Plan the launch week [Dev]', 'each chat that lives in an area says which, by its name (' + await tags() + ')');
+    await p.evaluate(() => { location.hash = '#/dev/p/chat'; }); await wait(1200); v = await view(p);
+    ok(await p.evaluate(() => window.XENO_CHAT.area()) === 'dev' && db.asked.at(-1) === 'dev', 'in Dev the area is dev, which the real chat reads when it makes a chat, and the list asks for that area');
+    ok(v.rows.length === 1 && await tags() === 'Plan the launch week', 'Dev lists only its own chats, with no label (they are all here)');
+    await p.evaluate(() => { location.hash = '#/studio/p/chat'; }); await wait(1200); v = await view(p);
+    ok(db.asked.at(-1) === 'studio' && v.rows.length === 1 && v.rows[0].id === B, 'Studio lists its own, not Dev’s');
+    await p.evaluate(() => { location.hash = '#/office/p/chat'; }); await wait(1200); v = await view(p);
+    ok(db.asked.at(-1) === 'office' && v.rows.length === 0 && /No chats yet/.test(v.panel), 'an area with no chats says so; it does not fall back to everything');
+    // move a chat from Dev to Office, through its menu
+    await p.evaluate(() => { location.hash = '#/dev/p/chat'; }); await wait(1200);
+    await p.evaluate((A) => document.querySelector(`#panel [data-chat-live="${A}"] [data-more]`).click(), A); await wait(350);
+    const hit = await p.evaluate(() => { const el = [...document.querySelectorAll('button, [role=menuitem]')].find((n) => n.offsetParent && n.textContent.trim().startsWith('Move to') && !n.closest('#panel')); if (el) el.click(); return !!el; }); await wait(450);
+    const choices = await p.evaluate(() => [...document.querySelectorAll('[role=radio][data-v]')].filter((n) => n.offsetParent).map((n) => n.dataset.v + (n.getAttribute('aria-checked') === 'true' ? '*' : '')).join(','));
+    ok(hit && /^none,/.test(choices) && /dev\*/.test(choices) && /office/.test(choices) && /studio/.test(choices), 'Move to… offers no area and every area, with the current one chosen (' + choices + ')');
+    await p.evaluate(() => [...document.querySelectorAll('[role=radio][data-v="office"]')].find((n) => n.offsetParent).click()); await p.click('[data-xd-submit]').catch(() => {}); await wait(900); v = await view(p);
+    ok(JSON.stringify(db.writes.at(-1)) === JSON.stringify(['PUT', A, JSON.stringify({ area: 'office' })]) && v.rows.length === 0, 'moving it saves the new area, and it leaves Dev’s list at once (' + JSON.stringify(db.writes.at(-1)) + ')');
+    await p.evaluate(() => { location.hash = '#/office/p/chat'; }); await wait(1200); v = await view(p);
+    ok(v.rows.length === 1 && v.rows[0].id === A, 'and it is in Office’s');
+    ok(errs.length === 0, 'no page errors with areas (' + errs.slice(0, 2).join(' | ') + ')');
     await p.close(); }
 } catch (e) { ok(false, 'threw: ' + String(e.message).split('\n')[0]); }
 await b.close(); await server.close();
