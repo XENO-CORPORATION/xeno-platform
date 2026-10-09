@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { randomUUID, generateKeyPairSync } from 'node:crypto';
+import { request as httpRequest } from 'node:http';
 import { readFile } from 'node:fs/promises';
 import pg from 'pg';
 import express from 'express';
@@ -194,7 +195,17 @@ test('late provider corrections restore exact eligible lots or retain liability 
   let verifications=0;
   http.use('/verified',createServiceLedgerRouter({getServiceToken:()=> 'fixture-service',verifyCorrectionReceipt:async({evidence})=>{verifications++;return evidence?.receipt==='known-fixture'?f.proof:null;}}));
   const server=http.listen(0,'127.0.0.1');await new Promise(r=>server.once('listening',r));t.after(async()=>{server.closeAllConnections();await new Promise(r=>server.close(r))});
-  const post=async(prefix,body,token='fixture-service')=>fetch(`http://127.0.0.1:${server.address().port}/${prefix}/runs/${f.admissionId}/draws/${f.drawId}/corrections`,{method:'POST',headers:{'content-type':'application/json',authorization:`Bearer ${token}`},body:JSON.stringify(body)});
+  // node:http, not global fetch. On Node 24.13.1 (win32), process.exit() that runs while undici's fetch
+  // sockets are still closing aborts libuv (src/win/async.c, UV_HANDLE_CLOSING). --test-force-exit does that
+  // when this test returns; node:http does not. Remove this helper once the runtime no longer aborts.
+  const post=(prefix,body,token='fixture-service')=>new Promise((resolve,reject)=>{
+    const payload=JSON.stringify(body);
+    const req=httpRequest({host:'127.0.0.1',port:server.address().port,method:'POST',path:`/${prefix}/runs/${f.admissionId}/draws/${f.drawId}/corrections`,headers:{'content-type':'application/json','content-length':Buffer.byteLength(payload),authorization:`Bearer ${token}`}},res=>{
+      let text='';res.setEncoding('utf8');res.on('data',chunk=>{text+=chunk;});
+      res.on('end',()=>resolve({status:res.statusCode,json:async()=>JSON.parse(text)}));
+    });
+    req.on('error',reject);req.end(payload);
+  });
   assert.equal((await post('verified',{receipt:'known-fixture'},'wrong')).status,401);assert.equal(verifications,0);
   assert.equal((await post('closed',f.proof)).status,503,'service credential alone cannot certify a provider receipt');
   assert.equal((await post('verified',{...f.proof})).status,403,'caller counts are not a verified receipt');
