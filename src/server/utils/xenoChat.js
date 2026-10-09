@@ -108,7 +108,7 @@ export async function xenoChatCompletion({ model, messages, temperature, max_tok
  * final upstream chunk carries token usage (needed to settle the credit hold).
  * Throws Error with .http=503 if the key is unset, or .status=<code> on non-2xx.
  */
-export async function xenoChatCompletionStream({ model, messages, temperature, max_tokens, signal, extra = {} }) {
+export async function xenoChatCompletionStream({ model, messages, temperature, max_tokens, signal, extra = {}, headers = {} }) {
   if (!XENO_API_KEY) { const e = new Error('XENO_API_KEY not configured'); e.http = 503; throw e; }
   const response = await fetch(`${XENO_API_BASE}/chat/completions`, {
     method: 'POST',
@@ -116,6 +116,8 @@ export async function xenoChatCompletionStream({ model, messages, temperature, m
       'Content-Type': 'application/json',
       Accept: 'text/event-stream',
       Authorization: `Bearer ${XENO_API_KEY}`,
+      // per-call headers (an own-key grant, the surface); never able to replace the three above
+      ...Object.fromEntries(Object.entries(headers).filter(([k]) => !/^(authorization|content-type|accept)$/i.test(k))),
     },
     body: JSON.stringify({
       model: normalizeXenoModelId(model),
