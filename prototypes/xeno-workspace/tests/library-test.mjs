@@ -33,9 +33,9 @@ function answer(q) {
   if (p === '/api/auth/me') return json(200, { success: true, user: db.user });
   if (m === 'GET' && EMPTY[p]) { const b = EMPTY[p]; if (p === '/api/account/overview') b.overview.user = db.user; return json(200, b); }
   if (p === '/api/library/assets' && m === 'GET') {
-    const view = u.searchParams.get('view') || 'active', limit = Number(u.searchParams.get('limit')) || 100, offset = Number(u.searchParams.get('offset')) || 0;
-    db.gets.push({ view, limit, offset });
-    const all = db.items.filter((x) => (view === 'trash' ? !!x.trashed_at : !x.trashed_at) && (view !== 'starred' || x.starred));
+    const view = u.searchParams.get('view') || 'active', limit = Number(u.searchParams.get('limit')) || 100, offset = Number(u.searchParams.get('offset')) || 0, area = u.searchParams.get('area');
+    db.gets.push({ view, limit, offset, area });
+    const all = db.items.filter((x) => (view === 'trash' ? !!x.trashed_at : !x.trashed_at) && (view !== 'starred' || x.starred) && (area === null || (area === 'none' ? !x.area : x.area === area)));
     const items = all.slice(offset, offset + limit);
     return json(200, { success: true, items, tab: 'all', sort: 'updated', limit, offset, view, place: '', total: all.length, has_more: offset + items.length < all.length });
   }
@@ -44,15 +44,16 @@ function answer(q) {
   if (p === '/api/library/trash' && m === 'DELETE') { const mine = db.items.filter((x) => x.trashed_at && !db.notOwner.has(x.source_id)); db.items = db.items.filter((x) => !mine.includes(x)); return json(200, { success: true, purged: mine.length }); }
   const purge = p.match(/^\/api\/library\/trash\/([^/]+)\/([^/]+)$/);
   if (purge && m === 'DELETE') { const it = db.items.find((x) => x.source === purge[1] && x.source_id === purge[2]); if (!it) return refuse(404, 'not_found'); if (!it.trashed_at) return refuse(409, 'not_in_trash'); db.items = db.items.filter((x) => x !== it); return json(200, { success: true }); }
-  const act = p.match(/^\/api\/library\/assets\/([^/]+)\/([^/]+)(?:\/(star|trash|restore))?$/);
+  const act = p.match(/^\/api\/library\/assets\/([^/]+)\/([^/]+)(?:\/(star|trash|restore|area))?$/);
   if (act) {
     const it = db.items.find((x) => x.source === act[1] && x.source_id === act[2]); if (!it) return refuse(404, 'not_found');
+    if (act[3] === 'area' && m === 'PUT') { if (db.notOwner.has(it.source_id)) return refuse(403, 'forbidden'); it.area = JSON.parse(q.postData() || '{}').area ?? null; db.uploadAreas = db.uploadAreas || []; return json(200, { success: true, area: it.area }); }
     if (act[3] === 'star' && (m === 'PUT' || m === 'DELETE')) { it.starred = m === 'PUT'; return json(200, { success: true, starred: it.starred }); }
     if (act[3] === 'trash' && m === 'POST') { if (db.notOwner.has(it.source_id)) return refuse(403, 'forbidden'); if (db.linked.has(it.source_id)) return refuse(409, 'asset_has_project_references'); if (it.trashed_at) return refuse(409, 'already_in_trash'); it.trashed_at = '2026-10-08T12:00:00Z'; it.purge_after = '2026-11-07T12:00:00Z'; return json(200, { success: true, trashed_at: it.trashed_at, purge_after: it.purge_after }); }
     if (act[3] === 'restore' && m === 'POST') { if (!it.trashed_at) return refuse(409, 'not_in_trash'); it.trashed_at = null; it.purge_after = null; return json(200, { success: true }); }
     if (!act[3] && m === 'PATCH') { const name = String(JSON.parse(q.postData() || '{}').name || '').trim(); if (it.source === 'generation') return refuse(400, 'rename_unsupported'); if (!name || /[\\/]/.test(name)) return refuse(400, 'invalid_name'); it.name = name; return json(200, { success: true, name }); }
   }
-  if (p === '/api/upload' && m === 'POST') { const name = db.expect.shift() || 'upload'; if (/\.exe$/.test(name)) return json(400, { error: "File type 'application/x-msdownload' is not allowed" }); db.uploads.push(name); db.items.unshift(file(db.next++, name, /\.png$/.test(name) ? 'image/png' : 'text/plain', 12)); return json(200, { success: true, file: { name } }); }
+  if (p === '/api/upload' && m === 'POST') { (db.uploadAreas = db.uploadAreas || []).push(q.headers()['x-xeno-area'] || null); const name = db.expect.shift() || 'upload'; if (/\.exe$/.test(name)) return json(400, { error: "File type 'application/x-msdownload' is not allowed" }); db.uploads.push(name); db.items.unshift(file(db.next++, name, /\.png$/.test(name) ? 'image/png' : 'text/plain', 12)); return json(200, { success: true, file: { name } }); }
   return json(404, { success: false, error: 'not in the fake platform: ' + m + ' ' + p });
 }
 
@@ -73,7 +74,8 @@ const paste = (name, type) => p.evaluate((n, t) => { const dt = new DataTransfer
 const sent = (m, re) => db.calls.find((x) => x.m === m && re.test(x.p));
 
 try {
-  await p.goto(base + '/workspace/', { waitUntil: 'networkidle0' }); await wait(700);
+  // Overview: the library of everything (an area shows only its own, checked further down)
+  await p.goto(base + '/workspace/#/overview', { waitUntil: 'networkidle0' }); await wait(700);
   ok((await p.evaluate(() => window.XENO_LIB.state().status)) === 'ready', 'the Library loads from the platform');
   ok(db.gets.some((g) => g.view === 'active') && db.gets.some((g) => g.view === 'trash'), 'it asks for the Library and for the trash');
   await goLib(); let t = await main();
@@ -100,7 +102,7 @@ try {
   // ---- menus offer what works ----
   const menuOf = (name) => p.evaluate((n) => window.XENO_LIB.fileMenu(window.XENO_PG_LIBRARY.items.find((x) => x.name === n), { open() {}, details() {}, copy() {} }).flat().map((i) => i.label), name);
   let menu = await menuOf('Notes on the engine.pdf');
-  ok(JSON.stringify(menu) === JSON.stringify(['Open', 'Details', 'Star', 'Rename…', 'Download', 'Copy name', 'Move to Trash']), 'the file menu offers what works (' + menu.join(', ') + ')');
+  ok(JSON.stringify(menu) === JSON.stringify(['Open', 'Details', 'Star', 'Rename…', 'Download', 'Copy name', 'Move to area', 'Move to Trash']), 'the file menu offers what works (' + menu.join(', ') + ')');
   ok(!(await menuOf('a difference engine, brass')).includes('Rename…'), 'a generated picture, named by its prompt, is not offered Rename');
   await p.evaluate(() => window.XENO_LIB.refuse('duplicate')); await wait(200);
   ok(/Duplicating a file isn’t available on XENO yet/.test(await toastText()), 'an action the platform still lacks says so');
@@ -200,6 +202,29 @@ try {
   const loaded = (await names()).length, pages = db.gets.filter((g) => g.view === 'active').map((g) => g.offset);
   ok(loaded === db.items.length && loaded > 400 && JSON.stringify(pages) === JSON.stringify([0, 200, 400]), `a library past one page is loaded in full: ${loaded} files over ${pages.length} requests`);
   ok((await p.evaluate(() => window.XENO_LIB.state())).total === loaded, 'and the page knows the platform’s own count');
+
+  // ---- areas: each has its own library; Overview shows everything ----
+  db.items[0].area = 'dev'; db.items[1].area = 'studio';
+  await p.evaluate(() => { location.hash = '#/overview/g/library'; }); await wait(400); await p.evaluate(() => window.XENO_LIB.load()); await wait(500);
+  ok(db.gets.at(-1).area === null && (await p.evaluate(() => window.XENO_PG_LIBRARY.items.filter((f) => !f.trashedAt).length)) >= 3, 'on Overview the library asks for everything');
+  ok(await p.evaluate(() => window.XENO_PG_LIBRARY.items.find((f) => f.name === 'Engine diagram.png')?.areaName) === 'Dev', 'each file knows the area it lives in, by name');
+  await p.evaluate(() => { location.hash = '#/dev/g/library'; }); await wait(1500);
+  ok(db.gets.some((g) => g.area === 'dev') && JSON.stringify(await p.evaluate(() => window.XENO_PG_LIBRARY.items.filter((f) => !f.trashedAt).map((f) => f.name))) === JSON.stringify(['Engine diagram.png']), 'in Dev the library asks for Dev’s files and shows only them');
+  await p.evaluate(() => { location.hash = '#/office/g/library'; }); await wait(1500);
+  ok(db.gets.some((g) => g.area === 'office') && (await p.evaluate(() => window.XENO_PG_LIBRARY.items.filter((f) => !f.trashedAt).length)) === 0, 'an area with no files shows none; it does not fall back to everything');
+  const areaSub = await p.evaluate(() => { const f = window.XENO_PG_LIBRARY.items[0]; return null; });
+  void areaSub;
+  await p.evaluate(() => { location.hash = '#/dev/g/library'; }); await wait(1500);
+  const moveItems = await p.evaluate(() => { const f = window.XENO_PG_LIBRARY.items.find((x) => x.name === 'Engine diagram.png'); const m = window.XENO_LIB.fileMenu(f, { open() {}, details() {}, copy() {} }).flat().find((i) => i.label === 'Move to area'); return m.sub().flat().map((i) => i.label + (i.checked ? '*' : '')); });
+  ok(moveItems.includes('Dev*') && moveItems.includes('Office') && moveItems.at(-1) === 'No area', 'Move to area lists every area, ticks the one it is in, and offers none (' + moveItems.join(', ') + ')');
+  db.calls.length = 0;
+  await p.evaluate(() => { const f = window.XENO_PG_LIBRARY.items.find((x) => x.name === 'Engine diagram.png'); window.XENO_LIB.fileMenu(f, { open() {}, details() {}, copy() {} }).flat().find((i) => i.label === 'Move to area').sub().flat().find((i) => i.label === 'Office').run(); }); await settle(); await wait(600);
+  ok(!!sent('PUT', new RegExp(`/api/library/assets/file/${fid(1)}/area$`)) && JSON.parse(sent('PUT', /\/area$/).body).area === 'office' && sent('PUT', /\/area$/).csrf === 'csrf-test-token', 'moving a file to Office tells the platform, with the CSRF token');
+  ok((await p.evaluate(() => window.XENO_PG_LIBRARY.items.filter((f) => !f.trashedAt).length)) === 0, 'and it leaves Dev’s library');
+  db.expect.push('made-in-dev.txt'); await p.evaluate(() => window.XENO_LIB.upload([new File(['x'], 'made-in-dev.txt', { type: 'text/plain' })])); await settle(); await wait(600);
+  ok(db.uploadAreas.at(-1) === 'dev', 'an upload made in Dev says so, so it lands in Dev (' + db.uploadAreas.at(-1) + ')');
+  await p.evaluate(() => { location.hash = '#/overview/g/library'; }); await wait(1500);
+  ok(db.gets.at(-1).area === null, 'back on Overview it asks for everything again');
 
   ok(missing.length === 0, 'the workspace asked for no route the platform lacks (' + JSON.stringify([...new Set(missing)].slice(0, 3)) + ')');
   ok(errs.length === 0, 'no page errors (' + JSON.stringify(errs.slice(0, 2)) + ')');

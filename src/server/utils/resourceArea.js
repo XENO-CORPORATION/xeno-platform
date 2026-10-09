@@ -6,7 +6,25 @@
  * id, not membership in a list: lower-case letters, digits, '-' and '_', starting with a letter, at
  * most 40 characters. 'overview' is not an area: Overview is the view across all of them.
  */
+import { AsyncLocalStorage } from 'node:async_hooks';
+
 const SHAPE = /^[a-z][a-z0-9_-]{0,39}$/;
+
+/**
+ * The area a request was made IN, from its `X-Xeno-Area` header (the workspace and the chat shown inside it
+ * send it). Something stored while handling that request (an upload, an image a chat made, a file a sandbox
+ * produced) lands in that area. A missing or malformed header means no area: it is a label on the person's
+ * own items, never an authority, so it is ignored rather than refused.
+ */
+const areaContext = new AsyncLocalStorage();
+export function areaFromRequest(req, _res, next) {
+  const raw = req.headers['x-xeno-area'];
+  const value = typeof raw === 'string' ? raw.trim() : '';
+  req.xenoArea = SHAPE.test(value) && value !== 'overview' ? value : null;
+  areaContext.run({ area: req.xenoArea }, next);
+}
+/** The area of the request being handled, or null. Prefer passing `req.xenoArea` where the request is at hand. */
+export function currentArea() { return areaContext.getStore()?.area ?? null; }
 
 export class AreaError extends Error {
   constructor(message) { super(message); this.code = 'invalid_area'; this.status = 400; }

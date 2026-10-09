@@ -1,4 +1,5 @@
 import crypto from 'crypto';
+import { currentArea, readAreaFilter } from '../utils/resourceArea.js';
 import fs from 'fs';
 import path from 'path';
 import { CHAT_PROJECT_CONTRACTS } from '../config/chatProjectContracts.js';
@@ -190,7 +191,10 @@ export async function registerManagedLibraryFile(db, {
   fileSize,
   storagePath,
   metadata = {},
+  area = undefined,
 }) {
+  // AREA: the file lands in the area it was made in (passed, or the request's), or in none.
+  const placeIn = area === undefined ? currentArea() : (area && /^[a-z][a-z0-9_-]{0,39}$/.test(area) && area !== 'overview' ? area : null);
   if (!isLibraryUuid(userId) || (workspaceId && !isLibraryUuid(workspaceId))) {
     throw new Error('Library owner ids must be UUIDs');
   }
@@ -235,6 +239,7 @@ export async function registerManagedLibraryFile(db, {
         digest,
       ],
     );
+    if (placeIn) await tx.query('INSERT INTO library_item_areas (source, source_id, area) VALUES ($1, $2, $3) ON CONFLICT (source, source_id) DO NOTHING', ['file', rows[0].id, placeIn]);
     await writeTuples(tx, {
       writes: [{
         object: `library_asset:${rows[0].id}`,
@@ -509,21 +514,32 @@ export async function listLibraryItems(db, userId, params = {}) {
       LEFT JOIN library_item_stars s ON s.user_id = $1::uuid AND s.source = li.source AND s.source_id = li.source_id
       LEFT JOIN library_trash t ON t.source = li.source AND t.source_id = li.source_id
       LEFT JOIN workspaces w ON w.id = li.workspace_id
+    ),
+    -- AREA: an explicit placement, else (for a chat artifact) the area of the conversation that made it, read
+    -- through its project when it is in one. NULL = in no area (shown on Overview only).
+    placed AS (
+      SELECT m.*, COALESCE(la.area, CASE WHEN m.source = 'artifact' AND m.conversation_id IS NOT NULL THEN (
+          SELECT CASE WHEN cc.project_id IS NOT NULL THEN (SELECT ap.area FROM chat_projects ap WHERE ap.id = cc.project_id) ELSE cc.area END
+          FROM chat_conversations cc WHERE cc.id = m.conversation_id) END) AS area
+      FROM marked m LEFT JOIN library_item_areas la ON la.source = m.source AND la.source_id = m.source_id
     )
-    SELECT *, (count(*) OVER())::int AS total_count FROM marked
+    SELECT *, (count(*) OVER())::int AS total_count FROM placed
     WHERE ($2 = 'all' OR category = $2)
       AND ($3 = '' OR name ILIKE '%' || $3 || '%' OR description ILIKE '%' || $3 || '%')
       AND (($6 = 'trash') = (trashed_at IS NOT NULL))
       AND ($6 <> 'starred' OR starred)
       AND ($7 = '' OR ($7 = 'personal' AND place_kind = 'personal') OR (place_kind = 'workspace' AND workspace_id::text = $7))
+      AND (NOT $8::boolean OR area IS NOT DISTINCT FROM $9::text)
     ORDER BY ${orderBy} LIMIT $4 OFFSET $5`;
-  const { rows } = await db.query(sql, [userId, tab, query, limit, offset, view, place]);
+  // AREA: `area=dev` one area, `area=none` items in no area, absent everything (Overview). A malformed one is refused by the route.
+  const areaFilter = readAreaFilter(params.area);
+  const { rows } = await db.query(sql, [userId, tab, query, limit, offset, view, place, areaFilter.filter, areaFilter.area]);
   // The window count is the size of the whole filtered set. A page past the end has no rows to carry
   // it, so that case asks once more for the first row only.
   let total = rows.length ? rows[0].total_count : 0;
-  if (!rows.length && offset > 0) total = (await db.query(sql, [userId, tab, query, 1, 0, view, place])).rows[0]?.total_count || 0;
+  if (!rows.length && offset > 0) total = (await db.query(sql, [userId, tab, query, 1, 0, view, place, areaFilter.filter, areaFilter.area])).rows[0]?.total_count || 0;
   const items = rows.map(({ total_count: _total, ...item }) => item);
-  return { items, tab, sort, limit, offset, view, place, total, has_more: offset + items.length < total };
+  return { items, tab, sort, limit, offset, view, place, area: areaFilter.filter ? areaFilter.area : undefined, total, has_more: offset + items.length < total };
 }
 
 export async function deleteLibraryItem(db, principalOrUserId, source, id) {

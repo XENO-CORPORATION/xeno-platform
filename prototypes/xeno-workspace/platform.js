@@ -19,6 +19,8 @@
   P.csrf = csrf;
   P.api = async (method, url, body, extra) => {
     const headers = { 'x-xeno-surface': 'xeno-web', ...(extra || {}) };
+    // AREA: the area the person is in, so what this request stores (an upload) lands there. A label, never an authority.
+    try { const k = window.XW?.ctxKey?.(); if (typeof k === 'string' && k !== 'overview' && k !== 'adaptive' && /^[a-z][a-z0-9_-]{0,39}$/.test(k) && !headers['x-xeno-area']) headers['x-xeno-area'] = k; } catch {}
     if (body !== undefined) headers['content-type'] = 'application/json';
     if (!['GET', 'HEAD'].includes(method)) { const t = csrf(); if (t) headers['x-xeno-csrf'] = t; }
     const r = await fetch(url, { method, credentials: 'same-origin', headers, body: body !== undefined ? JSON.stringify(body) : undefined });

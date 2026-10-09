@@ -108,6 +108,21 @@ export async function renameLibraryItem(db, principal, source, id, rawName) {
   return rows.length ? { ok: true, name } : { notFound: true };
 }
 
+/**
+ * Move an item to an area, or to none (`area` null). Who may: an editor on it, as for rename. A chat artifact
+ * with no placement lives where its conversation does; placing it here gives it its own home from then on.
+ */
+export async function placeLibraryItem(db, principal, source, id, area) {
+  if (!validTarget(principal, source, id)) return { invalid: true };
+  const who = await standing(db, principal, source, id);
+  if (!who) return { notFound: true };
+  if (!who.editor) return { forbidden: true };
+  if (area === null) await db.query('DELETE FROM library_item_areas WHERE source = $1 AND source_id = $2', [source, id]);
+  else await db.query(`INSERT INTO library_item_areas (source, source_id, area) VALUES ($1, $2, $3)
+    ON CONFLICT (source, source_id) DO UPDATE SET area = EXCLUDED.area, placed_at = NOW()`, [source, id, area]);
+  return { ok: true, area };
+}
+
 export async function trashLibraryItem(db, principal, source, id) {
   if (!validTarget(principal, source, id)) return { invalid: true };
   const who = await standing(db, principal, source, id);

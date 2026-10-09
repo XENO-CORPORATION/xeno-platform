@@ -82,3 +82,16 @@ test('desktop xenoLicence client stamps X-Xeno-Surface derived from product', ()
     assert.notEqual(resolved, LEGACY_SURFACE);
   }
 });
+
+/*
+ * AREA (2026-10-09): inside the XENO workspace the chat stamps the area it is shown in, so a picture or file
+ * it makes lands in that area's library (the server reads X-Xeno-Area in utils/resourceArea.js). Stamped in
+ * the same interceptor for the same reason: a header added per call site is one a new call site forgets.
+ * Mutation: delete the line -> this test fails.
+ */
+test('inside the workspace the web client stamps the area it is in', () => {
+  assert.match(authSession, /if \(!headers\.has\('x-xeno-area'\)\) \{ const area = embedArea\(\); if \(area\) headers\.set\('x-xeno-area', area\); \}/);
+  const embed = readFileSync('src/lib/workspaceEmbed.ts', 'utf8');
+  assert.match(embed, /export function embedArea\(\): string \| null \{\s*if \(!isWorkspaceEmbed\(\)\) return null;/, 'only inside the workspace; the full-window chat is in no area');
+  assert.match(embed, /area !== 'overview'/, 'Overview is not an area');
+});
