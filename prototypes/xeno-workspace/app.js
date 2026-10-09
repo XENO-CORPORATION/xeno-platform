@@ -269,22 +269,28 @@
   // others, so its moves are saved, survive a reload and can be undone; before, it lived only in memory
   const ctxChats = () => { const map = window.XENO_CHATS_BY_CTX || (window.XENO_CHATS_BY_CTX = {}); return map[ctxKey()] || map.default || (map.default = JSON.parse(JSON.stringify(window.XENO_CHATS))); };
   function panelChat() {
-    const C = ctxChats();
-    const chatRow = (t, proj) => row(`data-chat="${esc(t)}" data-ctx="chat"`, `<span class="t">${esc(t)}</span><span class="more" data-more>${ic('more')}</span>`);
+    // on the platform the list is the person's real conversations (platform-chat.js); each row carries its id.
+    // Rename, move and delete are in the chat itself, so a real row has no menu of sample actions.
+    const live = window.XENO_CHAT && window.XENO_CHAT.served ? window.XENO_CHAT.data() : null;
+    const C = live || ctxChats();
+    const chatRow = (c, proj) => (c && c.id
+      ? row(`data-chat-live="${esc(c.id)}" aria-current="${String(live.current === c.id)}"`, `<span class="t">${esc(c.t)}</span>`)
+      : row(`data-chat="${esc(c)}" data-ctx="chat"`, `<span class="t">${esc(c)}</span><span class="more" data-more>${ic('more')}</span>`));
+    const liveState = !live ? '' : live.status === 'loading' ? '<div class="row sub" role="status">Loading your chats</div>' : live.status === 'error' ? `<div class="row sub">Your chats couldn’t be loaded.</div><button class="row sub" data-chat-retry>${ic('refresh')}<span class="t">Try again</span></button>` : !live.recents.length && !live.projects.some((p) => p[2].length) ? '<div class="row sub">No chats yet. Start one above.</div>' : '';
     const projects = C.projects.slice().sort((a, b) => S.pinnedProjects.has(b[0]) - S.pinnedProjects.has(a[0])).map(([name, , chats]) => {
       const open = S.openProjects.has(name), pinned = S.pinnedProjects.has(name);
       return `<div class="pj ${open ? 'open' : ''}">${row(`data-project="${esc(name)}" data-ctx="project"`, `<span class="tw">${ic('right')}</span>${ic('folder')}<span class="t">${esc(name)}</span>${pinned ? ic('pin', 'i pin') : ''}<span class="meta">${chats.length || ''}</span><span class="more" data-more>${ic('more')}</span>`)}
         <div class="kids">${chats.map((c) => chatRow(c, name)).join('') || '<div class="row sub">No chats yet</div>'}<button class="row sub" data-open-project="${esc(name)}">${ic('folder')}<span class="t">Open project</span></button><button class="row sub" data-newin="${esc(name)}">${ic('plus')}<span class="t">New chat in project</span></button></div></div>`;
     }).join('');
     return `${backHeader('chat', 'Chat')}
-      <div class="ctx-note">Chats in ${esc(ctxName())} — each mode keeps its own</div>
+      ${live ? '' : `<div class="ctx-note">Chats in ${esc(ctxName())} — each mode keeps its own</div>`}
       <div class="pbody">
         <button class="act primary" data-newchat>${ic('plus')}New chat<kbd>Ctrl ⇧ O</kbd></button>
         <button class="act" data-go-library="From chats">${ic('lib')}Library<kbd>From chats</kbd></button>
         <button class="act" data-xa="scheduled">${ic('clock')}Scheduled</button>
         ${sec('projects', 'Projects', projects + `<button class="row sub" data-go="projects">${ic('folder')}<span class="t">All projects</span></button>`, `<button class="ib" data-xa="newProject" aria-label="New project" data-tip="New project">${ic('plus')}</button>`)}
-        ${sec('pinned', 'Pinned', C.pinned.map((t) => chatRow(t)).join(''))}
-        ${sec('recents', 'Recents', C.recents.map(([g, ts]) => `<div class="grp">${g}</div>` + ts.map((t) => chatRow(t)).join('')).join('') + `<button class="row sub" data-xa="allChats">${ic('chat')}<span class="t">All chats</span></button>`)}
+        ${live ? '' : sec('pinned', 'Pinned', C.pinned.map((t) => chatRow(t)).join(''))}
+        ${sec('recents', 'Recents', live ? (liveState || C.recents.map(([g, ts]) => `<div class="grp">${g}</div>` + ts.map((t) => chatRow(t)).join('')).join('') + (live.more ? `<div class="row sub">${live.more} older chats are in the chat’s own history</div>` : '')) : C.recents.map(([g, ts]) => `<div class="grp">${g}</div>` + ts.map((t) => chatRow(t)).join('')).join('') + `<button class="row sub" data-xa="allChats">${ic('chat')}<span class="t">All chats</span></button>`)}
       </div>`;
   }
   // Product = the product's OWN sidebar (its views + its objects). Desktop apps keep their nav in
@@ -559,7 +565,7 @@
       // product: arrive at home first (the sidebar collapses), then the cursor does what a person would
       if (curPid === pid && mw.dataset.state === 'product') return;
       setTabs('product');
-      if (mw.dataset.state === 'sidebar') { mw.dataset.state = 'home'; if (!await pause(520, t)) return; }
+      if (mw.dataset.state === 'sidebar') { mw.dataset.state = 'home'; if (!await pause(300, t)) return; }
       // switching while a product is open keeps the window where it is and swaps what is inside it;
       // only the first open grows out of the icon it came from
       const switching = prod.classList.contains('open');
@@ -569,10 +575,10 @@
       const p = target ? at(target) : { x: MW.W / 2, y: MW.H / 2 };
       if (!cursor.classList.contains('on')) { cursor.style.left = `${MW.W * 0.62}px`; cursor.style.top = `${MW.H * 0.58}px`; cursor.classList.add('on'); void cursor.offsetWidth; }
       cursor.style.left = `${p.x}px`; cursor.style.top = `${p.y}px`;
-      if (!await pause(680, t)) return;
+      if (!await pause(360, t)) return;
       cursor.classList.remove('click'); void cursor.offsetWidth; cursor.classList.add('click'); target?.classList.add('hit'); setTimeout(() => target?.classList.remove('hit'), 360);
       if (!pinned) { kbar.querySelector('.mw-kq span').textContent = PR[pid].name; kbar.classList.remove('list'); kbar.classList.add('on'); if (!await pause(700, t)) return; kbar.classList.remove('on'); }
-      else if (!await pause(200, t)) return;
+      else if (!await pause(110, t)) return;
       if (switching) { swapWin(pid); curPid = pid; if (await pause(520, t)) cursor.classList.remove('on'); return; }
       prod.style.transformOrigin = `${p.x - MW.RAIL}px ${p.y}px`;
       prod.classList.add('open'); curPid = pid; mw.dataset.state = 'product';
@@ -634,8 +640,10 @@
   // leaving the mode (Back, the switcher, a link) closes its intro WITHOUT marking it seen — it returns next visit
   function dropStaleModeIntro() { const d = document.getElementById('modeIntro'); if (!d?.classList.contains('on')) return; if (S.view === 'mode' && S.mode === d.dataset.mode) return; sheetClose(d); }
   // the first time a mode home opens, its intro opens with it
-  function maybeModeIntro() {
-    dropStaleModeIntro(); if (S.view === 'mode' && MODE_INTRO[S.mode] && !introSeen()[S.mode] && !document.getElementById('adModal')?.classList.contains('on')) setTimeout(() => { if (S.view === 'mode' && !introSeen()[S.mode]) openModeIntro(S.mode); }, 220); }
+  function maybeModeIntro(atLoad) {
+    dropStaleModeIntro(); if (!(S.view === 'mode' && MODE_INTRO[S.mode] && !introSeen()[S.mode] && !document.getElementById('adModal')?.classList.contains('on'))) return;
+    if (atLoad) return openModeIntro(S.mode);
+    setTimeout(() => { if (S.view === 'mode' && !introSeen()[S.mode]) openModeIntro(S.mode); }, 220); }
   // ---- Adaptive consent (MODES §8b rule 7) ----
   // Informed, specific, unambiguous, and as easy to refuse or withdraw as to give (GDPR Art. 4(11),
   // 7(3); EDPB Guidelines 05/2020 and 03/2022). Two things make it informed rather than asserted:
@@ -1032,6 +1040,7 @@
   }
   function mainProduct() {
     const p = PR[S.product];
+    if (p.kind === 'chat' && window.XENO_CHAT && window.XENO_CHAT.served) return window.XENO_CHAT.host();
     if (p.kind === 'chat' && window.XENO_LIVE_CHAT) { const C = window.XENO_LIVE_CHAT; return `<div class="live-chat-host"><div class="live-chat chat-themed chat-theme-dark" style="${C.vars.replace(/"/g, '&quot;')}">${C.html}</div></div>`; }
     if (p.kind === 'chat') return `<div class="chat"><div class="thread"><div class="in"><div class="um">next one</div><div class="am"><p>Here is the next scenario. A company runs EC2 instances across three Availability Zones and needs a shared file system every instance can mount at once, with storage that grows automatically.</p><p>Which service fits best: <b>EFS</b>, <b>EBS Multi-Attach</b> or <b>FSx for Lustre</b>?</p></div></div></div>
       <div class="dock"><div class="in"><div class="shell"><textarea rows="1" placeholder="Ask anything — plan, explain, or rewrite"></textarea><div class="crow"><button class="icb" aria-label="Attach">${ic('plus')}</button><div class="grow"></div><div class="mgrp"><button><span class="model">GPT-5.6 Terra</span></button><button><span class="pill">Medium</span></button></div><button class="send" aria-label="Send">${ic('send')}</button></div></div></div></div></div>`;
@@ -1067,6 +1076,7 @@
     return `<div class="wrap"><div class="landing"><span class="ib" style="width:72px;height:72px;pointer-events:none">${ic('doc').replace('class="i"', 'class="i" style="width:40px;height:40px"')}</span><h1>${esc(S.item)}</h1><p>${esc(owner)} · ${esc(ctxName())}</p><div class="row2"><button class="btn ghost" data-back>Back</button></div><div class="note">Couldn’t find “${esc(S.item)}” in ${esc(owner)}. It may have been renamed, moved or deleted — check Trash in your Library.</div></div></div>`;
   }
   function crumbs() {
+    const liveChat = !!(window.XENO_CHAT && window.XENO_CHAT.served);
     if (S.view === 'zone') return `<span>${M[zoneKey()].name}</span><span class="sep">/</span>${zoneNow().of ? `<span>${M[zoneNow().of].name}</span><span class="sep">/</span>` : ''}${S.item ? `<span>${esc(zoneNow().label)}</span><span class="sep">/</span><b>${esc(S.item)}</b>` : `<b>${esc(zoneNow().label)}</b>`}`;
     const sep = '<span class="sep">/</span>';
     if (S.view === 'dashboard') return '<b>Overview</b>';
@@ -1077,7 +1087,7 @@
       const parts = S.item.split('/'), lbl = (x, i) => (S.global === 'community' && /^th_/.test(x) ? window.XENO_PG_FORUM.find((t) => t.id === x)?.title || x : S.global === 'community' && i > 0 && parts[0] === 'My reports' ? '#' + x : x);
       return `<a data-crumb="">${gn}</a>` + parts.map((x, i) => sep + (i < parts.length - 1 ? `<a data-crumb="${esc(parts.slice(0, i + 1).join('/'))}">${esc(lbl(x, i))}</a>` : `<b>${esc(lbl(x, i))}</b>`)).join(''); }
     const p = PR[S.product];
-    return `<span>${ctxName()}</span>${sep}${S.item ? `<span>${esc(p.name)}</span>${sep}<b>${esc(S.item)}</b>` : `<b>${esc(p.name)}</b>`}${S.product === 'chat' && !S.item ? `${sep}<span>${esc(ctxChats().pinned[0] || 'New chat')}</span>` : ''}`;
+    return `<span>${ctxName()}</span>${sep}${S.item ? `<span>${esc(p.name)}</span>${sep}<b>${esc(liveChat && S.product === 'chat' ? window.XENO_CHAT.title(S.item) : S.item)}</b>` : `<b>${esc(p.name)}</b>`}${S.product === 'chat' && !S.item ? `${sep}<span>${esc(liveChat ? 'New chat' : ctxChats().pinned[0] || 'New chat')}</span>` : ''}`;
   }
   function liveDashboard() {
     const D = window.XENO_LIVE_DASHBOARD;
@@ -1088,7 +1098,9 @@
     // full-page destinations (pages.js) get the three containers: header (path + the page's actions) · body · footer
     const pf = window.XENO_PAGES && window.XENO_PAGES.framed();
     if (pf) return `<div class="topbar pg-top"><button class="ib opener" data-expand aria-label="Open sidebar" data-tip="Open sidebar" data-kbd="Ctrl \\">${ic('side')}</button><div class="crumbs">${crumbs()}</div><div class="pg-top-sum">${pf.sum}</div><div class="pg-top-left">${pf.left}</div><div class="sp"></div><div class="pg-top-tools">${pf.tools}</div><div class="pg-top-acts">${pf.acts}</div></div><div class="mview pg-mview${pf.foot ? ' has-foot' : ''}">${pf.body}</div>${pf.foot ? `<footer class="mfoot">${pf.foot}</footer>` : ''}`;
-    if (S.item) return `<div class="topbar"><button class="ib opener" data-expand aria-label="Open sidebar" data-tip="Open sidebar" data-kbd="Ctrl \\">${ic('side')}</button><div class="crumbs">${crumbs()}</div><div class="sp"></div></div><div class="mview">${mainItem()}</div>`;
+    // a real conversation is the chat page showing that conversation, not a generic "item" page
+    const liveChatItem = S.item && S.view === 'product' && S.product === 'chat' && window.XENO_CHAT && window.XENO_CHAT.served;
+    if (S.item && !liveChatItem) return `<div class="topbar"><button class="ib opener" data-expand aria-label="Open sidebar" data-tip="Open sidebar" data-kbd="Ctrl \\">${ic('side')}</button><div class="crumbs">${crumbs()}</div><div class="sp"></div></div><div class="mview">${mainItem()}</div>`;
     const body = S.view === 'adaptive' ? mainAdaptive() : S.view === 'zone' ? mainZone() : S.view === 'dashboard' ? mainDashboard() : S.view === 'product' ? mainProduct() : S.view === 'global' ? mainGlobal() : mainMode();
     const isChat = S.view === 'product' && S.product === 'chat';
     if (S.view === 'mode' || S.view === 'dashboard') {
@@ -1110,7 +1122,7 @@
     return `<div class="topbar"><button class="ib opener" data-expand aria-label="Open sidebar" data-tip="Open sidebar" data-kbd="Ctrl \\">${ic('side')}</button><div class="crumbs">${crumbs()}</div><div class="sp"></div>${isChat ? `<button class="ib" aria-label="Share" data-tip="Share">${ic('share')}</button><button class="ib" aria-label="More" data-tip="Copy transcript, rename, delete">${ic('more')}</button>` : ''}</div>${isChat ? body : `<div class="mview">${body}</div>`}`;
   }
 
-  window.XW = { get S() { return S; }, go, esc, ic, PR, M, pIconFull, mini, toast: (s) => toast(s), store, ctxName, ctxKey, ctxChats, inOv, zoneNow, zoneKey, zonesFor, modeOf, mark, render: () => render(), hiddenModes, toggleHidden, modeOrder, renderRail: () => renderRail(), openShortcuts: (o) => openShortcuts(o), openUsage: () => openUsage(), openAdConsent: (o) => openAdConsent(o), hidePops: () => hidePops(), applyWorkspace: () => applyWorkspace(), markAllRead: () => markAllRead(() => render()), refreshSwitcher: () => refreshSwitcher(), search: (q) => { openPalette(); const i = document.querySelector('#palette input'); if (i && q) { i.value = q; i.dispatchEvent(new Event('input')); } }, refreshPanel: () => { const pv = $('#panel > .pv'); const top = pv?.querySelector('.pbody')?.scrollTop || 0; setPv($('#panel'), `<div class="pv">${panelHTML()}</div>`); const n = $('#panel > .pv .pbody'); if (n) n.scrollTop = top; } };
+  window.XW = { get S() { return S; }, go, setChatItem, crumbs: () => crumbs(), esc, ic, PR, M, pIconFull, mini, toast: (s) => toast(s), store, ctxName, ctxKey, ctxChats, inOv, zoneNow, zoneKey, zonesFor, modeOf, mark, render: () => render(), hiddenModes, toggleHidden, modeOrder, renderRail: () => renderRail(), openShortcuts: (o) => openShortcuts(o), openUsage: () => openUsage(), openAdConsent: (o) => openAdConsent(o), hidePops: () => hidePops(), applyWorkspace: () => applyWorkspace(), markAllRead: () => markAllRead(() => render()), refreshSwitcher: () => refreshSwitcher(), search: (q) => { openPalette(); const i = document.querySelector('#palette input'); if (i && q) { i.value = q; i.dispatchEvent(new Event('input')); } }, refreshPanel: () => { const pv = $('#panel > .pv'); const top = pv?.querySelector('.pbody')?.scrollTop || 0; setPv($('#panel'), `<div class="pv">${panelHTML()}</div>`); const n = $('#panel > .pv .pbody'); if (n) n.scrollTop = top; } };
   // ---- render with crossfade ----
   let first = true;
   function render() {
@@ -1230,6 +1242,12 @@
   const panelKey = () => stateToHash();
   function savePanelMem() { const pb = $('#panel > .pv .pbody'); if (!pb) return; panelMem[panelKey()] = { scroll: pb.scrollTop, closed: [...document.querySelectorAll('#panel > .pv .sec.closed')].map((s) => s.dataset.sec) }; store.set('panelMem', panelMem); }
   function restorePanelMem(pv) { const m = panelMem[panelKey()]; if (!m || !pv) return; m.closed.forEach((k) => pv.querySelector(`.sec[data-sec="${CSS.escape(k)}"]`)?.classList.add('closed')); const pb = pv.querySelector('.pbody'); if (pb) pb.scrollTop = m.scroll || 0; }
+  // the chat moved to another conversation by itself: the address follows, in place (the chat owns that history entry)
+  function setChatItem(item) {
+    if (S.view !== 'product' || S.product !== 'chat' || (S.item || null) === (item || null)) return;
+    S.item = item || null; const c = $('#main .crumbs'); if (c) c.innerHTML = crumbs();
+    rememberPlace(); syncHash(true);
+  }
   function go(view, extra = {}) {
     savePanelMem();
     // the context is sticky: only going home to a mode or to Overview changes it
@@ -2385,7 +2403,7 @@
   restorePanelMem($('#panel > .pv'));
   syncHash(true);
   applyWorkspace();
-  maybeModeIntro();
+  maybeModeIntro(true);
   if (firstRunReset) setTimeout(() => toast('First-run sheets restored — each mode shows its intro again'), 400);
   requestAnimationFrame(() => requestAnimationFrame(() => root.classList.remove('noanim')));
 })();

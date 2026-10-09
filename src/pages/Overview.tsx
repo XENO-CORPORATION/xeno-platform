@@ -1,6 +1,7 @@
 import React, { useState, createContext, useContext, useEffect } from 'react';
 import { lazyRoute } from '../components/platform/lazyRoute';
 import { announceSidebarExpanded, onSidebarCollapseRequest } from '../lib/sidebarExclusion';
+import { isWorkspaceEmbed, tellWorkspace } from '../lib/workspaceEmbed';
 import { BrowserRouter as Router, Routes, Route, Navigate, useLocation, useNavigate } from 'react-router-dom';
 import OverviewTaskbar from '../components/overview/OverviewTaskbar';
 import OSAuthInterface from '../components/os/OSAuthInterface';
@@ -125,6 +126,13 @@ const OverviewContent: React.FC = () => {
   const [isTopUpModalOpen, setIsTopUpModalOpen] = useState(false);
   const [isCreateLabModalOpen, setIsCreateLabModalOpen] = useState(false);
   const [isCommandPaletteOpen, setIsCommandPaletteOpen] = useState(false);
+  // Shown inside the XENO workspace, this app is ONLY the chat: the workspace already has the rail,
+  // the sidebar, the top bar and Ctrl K. See src/lib/workspaceEmbed.ts.
+  const embedded = isWorkspaceEmbed();
+  useEffect(() => {
+    if (!embedded) return;
+    tellWorkspace({ source: 'xeno-chat', type: 'location', path: location.pathname, title: document.title });
+  }, [embedded, location.pathname, location.search, location.hash]);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(
     () => localStorage.getItem('xeno_overview_sidebar_collapsed') === 'true',
   );
@@ -213,6 +221,7 @@ const OverviewContent: React.FC = () => {
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
+      if (embedded) return; // the workspace owns Ctrl K
       if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'k') {
         event.preventDefault();
         setIsCommandPaletteOpen(true);
@@ -227,6 +236,7 @@ const OverviewContent: React.FC = () => {
   useEffect(() => {
     const toggleTaskbar = () => setIsTaskbarHidden((prev) => !prev);
     const onKeyDown = (e: KeyboardEvent) => {
+      if (embedded) return; // there is no taskbar to toggle
       if (e.shiftKey && e.key === 'H') {
         e.preventDefault();
         toggleTaskbar();
@@ -270,7 +280,7 @@ const OverviewContent: React.FC = () => {
     >
       <LayoutContext.Provider value={{ isSidebarCollapsed }}>
         {/* Left Taskbar - Original taskbar with OS button and AI interfaces */}
-        <div data-taskbar-slot style={{ transition: 'transform 0.35s cubic-bezier(0.25, 0.1, 0.25, 1), margin 0.35s cubic-bezier(0.25, 0.1, 0.25, 1)', transform: isTaskbarHidden ? 'translateX(-100%)' : 'translateX(0)', marginRight: isTaskbarHidden ? (isSidebarCollapsed ? '-52px' : '-300px') : '0', zIndex: 60, position: 'relative' }}>
+        {!embedded && <div data-taskbar-slot style={{ transition: 'transform 0.35s cubic-bezier(0.25, 0.1, 0.25, 1), margin 0.35s cubic-bezier(0.25, 0.1, 0.25, 1)', transform: isTaskbarHidden ? 'translateX(-100%)' : 'translateX(0)', marginRight: isTaskbarHidden ? (isSidebarCollapsed ? '-52px' : '-300px') : '0', zIndex: 60, position: 'relative' }}>
         <OverviewTaskbar
           labs={labs}
           onCreateLab={handleCreateLab}
@@ -279,7 +289,7 @@ const OverviewContent: React.FC = () => {
           isCleanMode={isCleanMode}
           onOpenCommandPalette={() => setIsCommandPaletteOpen(true)}
         />
-        </div>
+        </div>}
         
         {/* Main content area - full width, minus taskbar width */}
         <div style={{ flex: 1, overflow: 'hidden' }}>

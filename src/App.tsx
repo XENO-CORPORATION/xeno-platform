@@ -2,6 +2,7 @@ import React, { useEffect } from 'react';
 import PlatformNotifications from './components/platform/Notifications';
 import { ConfirmActionHost } from './components/platform/confirmAction';
 import { Routes, Route, Navigate, useLocation, useParams } from 'react-router-dom';
+import { isEmbeddedChatPath, isWorkspaceEmbed, leaveEmbed } from './lib/workspaceEmbed';
 
 import Home3 from "./pages/Home3";
 import { lazyRoute } from './components/platform/lazyRoute';
@@ -144,6 +145,21 @@ const ProjectRouteRedirect: React.FC = () => {
   return <Navigate to={target} replace />;
 };
 
+
+/**
+ * Inside the XENO workspace's chat frame (src/lib/workspaceEmbed.ts) this app shows the chat and nothing
+ * else. Any other page it is sent to - sign-in, onboarding, billing, a product page - belongs to the
+ * whole tab, so the tab goes there instead of the frame showing a second site inside the workspace.
+ */
+function WorkspaceEmbedGuard(): null {
+  const location = useLocation();
+  const embedded = isWorkspaceEmbed();
+  React.useEffect(() => {
+    if (embedded && !isEmbeddedChatPath(location.pathname)) leaveEmbed(location.pathname + location.search + location.hash);
+  }, [embedded, location.pathname, location.search, location.hash]);
+  return null;
+}
+
 function App() {
   // Fix iOS Safari 100vh issue
   useEffect(() => {
@@ -197,6 +213,7 @@ function App() {
   // Default: the full xenostudio.ai experience
   return (
     <AuthProvider>
+      <WorkspaceEmbedGuard />
       <PlatformNotifications />
       <ConfirmActionHost />
       <WorkspaceProvider>

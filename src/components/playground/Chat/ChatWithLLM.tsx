@@ -14179,6 +14179,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
               onClick={() => {
                 window.dispatchEvent(new CustomEvent('toggle_overview_taskbar'));
               }}
+              data-chat-wordmark
               aria-label={isTaskbarHidden ? 'Show toolbar' : 'Hide toolbar'}
               title={isTaskbarHidden ? 'Show toolbar' : 'Hide toolbar'}
               className="animate-chat-history-chrome-enter-delay flex h-9 items-center px-1 font-display text-[1.05rem] font-semibold tracking-tight text-[var(--chat-text)]/80 transition-colors hover:text-[var(--chat-text)] active:scale-[0.98]"
