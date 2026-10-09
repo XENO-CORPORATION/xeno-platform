@@ -224,7 +224,11 @@
   // ── PANELS v2 (2026-10-03) — one job per panel kind; content lives in nav.js ──────────────
   const N = () => window.XENO_NEEDS || [];
   const needRow = (n) => row(`data-item="${esc(n.t)}" data-item-p="${n.p}"`, `<span class="t">${esc(n.t)}</span><span class="need">${esc(n.meta)}</span>`, 'needrow');
-  const recentRow = (r) => row(`data-item="${esc(r.t)}" data-item-p="${r.p}" data-ctx="product" data-product="${r.p}"`, `<span class="t">${esc(r.t)}</span><span class="meta">${esc(r.ago)}</span><span class="more" data-more>${ic('more')}</span>`);
+  const recentRow = (r) => (r.kind === 'project'
+    ? row(`data-recent-project="${esc(r.id)}"`, `${ic('folder')}<span class="t">${esc(r.t)}</span><span class="meta">${esc(r.ago)}</span>`)
+    : r.kind === 'chat'
+      ? row(`data-recent-chat="${esc(r.id)}"`, `<span class="t">${esc(r.t)}</span><span class="meta">${esc(r.ago)}</span>`)
+      : row(`data-item="${esc(r.t)}" data-item-p="${r.p}" data-ctx="product" data-product="${r.p}"`, `<span class="t">${esc(r.t)}</span><span class="meta">${esc(r.ago)}</span><span class="more" data-more>${ic('more')}</span>`));
   const SEC_GLYPH = { Channels: 'hash', Labels: 'hash', 'Direct messages': 'user', Members: 'user', Divisions: 'building', Projects: 'folder', Folders: 'folder', Workspaces: 'folder', Sessions: 'bot', Assigned: 'bot', Runs: 'play', Workflows: 'flow', Spaces: 'layers', Libraries: 'lib', Dashboards: 'chart', Lists: 'people', Teams: 'people', Minds: 'anima', Soul: 'star', Chats: 'chat', Conversations: 'chat', Today: 'activity', Open: 'handshake', Queue: 'send', 'Needs approval': 'clock', Renders: 'film', Generations: 'spark', Inbox: 'mail', Documents: 'doc', Sheets: 'grid', Decks: 'layers', Favorites: 'star', Files: 'file', Company: 'building', 'Your feed': 'activity', Pinned: 'pin' };  // destination lists (Marketplace shelves, feeds) keep the quiet square: one icon repeated down a list is noise, not meaning
   // a navigation row carries a leading glyph (Linear, Notion, Finder): the eye scans the column of shapes before it reads.
   // Rows that are ITEMS (a run, a doc) stay text-first; rows that are PLACES (a filter, a source) get their glyph.
@@ -243,7 +247,7 @@
         <button class="act primary" data-go="chat">${ic('plus')}New chat<kbd>Ctrl ⇧ O</kbd></button>
         ${N().length ? sec('needs', `Needs you<span class="cnt-inline">${N().length}</span>`, N().map(needRow).join('')) : ''}
         ${pinned ? sec('pinned', 'Pinned', pinned) : ''}
-        ${sec('recent', 'Recent', window.XENO_RECENT.slice(0, 8).map(recentRow).join(''))}
+        ${sec('recent', 'Recent', window.XENO_RECENT.slice(0, 8).map(recentRow).join('') || (window.XENO_RECENT_LIVE && window.XENO_RECENT_LIVE.served ? '<div class="ctx-note" data-recent-empty>Nothing recent yet</div>' : ''))}
       </div>`;
   }
   // Mode = that mode's home (MODES §7 dashboard + sidebar): start, what needs you HERE, pinned
@@ -923,7 +927,7 @@
   function homeHero({ eye, sentence, acts, cont }) {
     return `<header class="hm2-hero"><div class="hm2-greet"><h1>${greet()}, ${window.XENO_ME.firstHtml()}.</h1><p class="${notesReady() ? '' : 'ghost-p'}">${esc(sentence)}</p><div class="hm2-acts">${acts}</div></div>${cont}</header>`;
   }
-  const contCard = (last, label) => last ? `<button class="hm2-cont" data-item-p="${last.p}" data-item="${esc(last.t)}"><span class="hm2-cont-k">${esc(label)}</span>${mini(last.p)}<span class="hm2-cont-t"><b>${esc(last.t)}</b><small>${pIconFull(PR[last.p], 14)}${esc(PR[last.p].name)} · ${esc(last.ago)}</small></span><span class="hm2-cont-go">${ic('right')}</span></button>` : '';
+  const contCard = (last, label) => last ? `<button class="hm2-cont" ${last.kind === 'chat' ? `data-recent-chat="${esc(last.id)}"` : last.kind === 'project' ? `data-recent-project="${esc(last.id)}"` : `data-item-p="${last.p}" data-item="${esc(last.t)}"`}><span class="hm2-cont-k">${esc(label)}</span>${mini(last.p)}<span class="hm2-cont-t"><b>${esc(last.t)}</b><small>${pIconFull(PR[last.p], 14)}${esc(PR[last.p].name)} · ${esc(last.ago)}</small></span><span class="hm2-cont-go">${ic('right')}</span></button>` : '';
   function kpiSection(mId) {
     const ks = kpis(mId); if (!ks.length) return '';
     if (homeState() === 'error') return `<section class="hm2-sec"><div class="hm2-h"><h2>This week</h2></div><div class="hm2-err">${ic('reset')}<span><b>Couldn't load your numbers.</b> Everything else on this page is current.</span><button class="us-ghost" data-home-retry>Try again</button></div></section>`;
@@ -963,7 +967,7 @@
         ${window.XENO_SIG ? window.XENO_SIG.wall(window.XENO_SIG.libFor(null, 9)) : ''}</section>` },
     ]);
     return `<div class="wrap hm2${homeState() === 'loading' ? ' hm2--ghost' : ''}" data-home="overview">
-      ${homeHero({ eye: `Overview · ${esc(dayName())}`, sentence, acts: `<button class="us-primary" data-go="chat">${ic('plus')}New chat</button><button class="us-ghost" data-go="search">${ic('search')}Find anything<kbd>Ctrl K</kbd></button>`, cont: contCard(last, `Continue · ${(M[last.m]?.name || PR[last.p]?.name || "")}`) })}
+      ${homeHero({ eye: `Overview · ${esc(dayName())}`, sentence, acts: `<button class="us-primary" data-go="chat">${ic('plus')}New chat</button><button class="us-ghost" data-go="search">${ic('search')}Find anything<kbd>Ctrl K</kbd></button>`, cont: contCard(last, `Continue · ${(M[last?.m]?.name || PR[last?.p]?.name || "")}`) })}
       ${secs}${secs ? '' : '<p class="hm2-allhidden">Every section is hidden. <button class="hm2-link" data-home-custom>Customize</button> to bring them back.</p>'}</div>`;
   }
   function mainMode() {
@@ -2061,6 +2065,8 @@
     if (!t.closest('#switcher, #menu') ) hidePops();
     if (S.switching && !t.closest('#panel, #logo, #menu')) { closeSwitcher(); }
     if (t.closest('#scrim')) return closePalette();
+    { const rc = t.closest('[data-recent-chat]'); if (rc) return go('product', { product: 'chat', item: rc.dataset.recentChat });
+      const rp = t.closest('[data-recent-project]'); if (rp) { const pr = ((window.XENO_PG_PROJECTS || {}).items || []).find((x) => x.id === rp.dataset.recentProject); return go('global', { global: 'projects', item: pr ? pr.name : null }); } }
     const more = t.closest('[data-more]');
     if (more) { e.stopPropagation(); const r = more.closest('[data-ctx]'); const b = more.getBoundingClientRect(); return openMenu(r.dataset.ctx, r, b.right - 200, b.bottom + 4); }
     const logo = t.closest('#logo');
