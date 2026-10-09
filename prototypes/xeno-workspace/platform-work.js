@@ -21,6 +21,8 @@
   const P = window.XENO_PLATFORM;
   if (!P || !P.served) { window.XENO_SCOPE = { served: false }; window.XENO_WORK = { served: false, projectTab: () => null, blocked: () => false }; return; }
   const X = () => window.XW, api = P.api;
+  const AREA_SHAPE = /^[a-z][a-z0-9_-]{0,39}$/;
+  const area = () => P.area(), areaName = (id) => P.areaName(id), areas = () => P.areas();
   const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
   const LS = { get(k, d) { try { const v = localStorage.getItem('xw.' + k); return v == null ? d : JSON.parse(v); } catch { return d; } }, set(k, v) { try { localStorage.setItem('xw.' + k, JSON.stringify(v)); } catch {} } };
   const readJson = (raw, d) => { try { return JSON.parse(raw || 'null') ?? d; } catch { return d; } };
@@ -58,7 +60,11 @@
     return String(p.owner_user_id) === String(me()) ? 'Personal' : 'Shared with you';
   }
   async function loadProjects() {
-    const [pr, cv] = await Promise.all([api('GET', '/api/chat/projects?include_archived=true&limit=100').catch(() => ({ ok: false, d: {} })), api('GET', '/api/chat/conversations?limit=200').catch(() => ({ ok: false, d: {} }))]);
+    // AREA: one area's projects, or everything on Overview
+    const here = area(), q = here ? '&area=' + encodeURIComponent(here) : ''; W.loadingArea = here;
+    const [pr, cv] = await Promise.all([api('GET', '/api/chat/projects?include_archived=true&limit=100' + q).catch(() => ({ ok: false, d: {} })), api('GET', '/api/chat/conversations?limit=200' + q).catch(() => ({ ok: false, d: {} }))]);
+    if (area() !== here) return loadProjects();   // the person moved to another area while this was on its way
+    W.area = here; W.loadingArea = undefined;
     if (!pr.ok || !Array.isArray(pr.d.projects)) { W.status = 'error'; blank(); pstate('projects', 'error'); paint(); return false; }
     const chats = new Map(); if (cv.ok && Array.isArray(cv.d.conversations)) cv.d.conversations.forEach((c) => { if (c.project_id) { if (!chats.has(c.project_id)) chats.set(c.project_id, []); chats.get(c.project_id).push([String(c.title || 'Untitled chat'), 'Chat']); } });
     const rows = pr.d.projects, seen = new Map(); rows.forEach((p) => seen.set(p.name, (seen.get(p.name) || 0) + 1));
@@ -70,8 +76,9 @@
       if (used.has(key)) key = `${key} ${String(p.id).slice(0, 4)}`;
       used.add(key);
       const mine = String(p.owner_user_id) === String(me()), status = p.is_archived ? 'archived' : (!p.workspace_id && !mine ? 'shared' : 'active');
-      const mode = typeof xw.mode === 'string' && xw.mode ? xw.mode : 'Overview', icon = typeof xw.icon === 'string' && xw.icon ? xw.icon : 'folder';
-      const rec = { id: p.id, name: key, realName: p.name, mode, owner: { name: where, kind: 'human' }, status, health: null, goal: p.description || '', icon, milestone: { title: 'No milestone', due: '—' }, tasks: { total: 0, done: 0 }, members: [], needsYou: 0, updatedAt: p.updated_at || p.created_at || new Date().toISOString(), place: where, workspaceUuid: p.workspace_id || null, files: Number(p.file_count) || 0, chatCount: Number(p.chat_count) || 0, pinned: !!p.pinned, can: p.capabilities || {} };
+      // the area it lives in (its real home), shown by name; a project in none lives on Overview
+      const mode = p.area ? areaName(p.area) : 'Overview', icon = typeof xw.icon === 'string' && xw.icon ? xw.icon : 'folder';
+      const rec = { id: p.id, name: key, realName: p.name, mode, area: p.area || null, owner: { name: where, kind: 'human' }, status, health: null, goal: p.description || '', icon, milestone: { title: 'No milestone', due: '—' }, tasks: { total: 0, done: 0 }, members: [], needsYou: 0, updatedAt: p.updated_at || p.created_at || new Date().toISOString(), place: where, workspaceUuid: p.workspace_id || null, files: Number(p.file_count) || 0, chatCount: Number(p.chat_count) || 0, pinned: !!p.pinned, can: p.capabilities || {} };
       items.push(rec); W.byId.set(p.id, rec);
       detail[key] = { id: p.id, mode, owner: where, goal: rec.goal, milestone: '—', progress: '', icon, tasks: [], taskObjs: [], chats: chats.get(p.id) || [], teams: [], resources: [], funding: [], activity: [] };
     }
@@ -106,7 +113,8 @@
       const made = (window.XENO_PG_PROJECTS.items || []).find((p) => !W.byId.has(p.id));
       if (!made) return { ok: false, code: 'invalid', msg: 'The new project could not be read.', final: true };
       const ws = current(), headers = ws && ws.uuid ? { 'x-xeno-workspace': ws.uuid } : {};
-      const r = await api('POST', '/api/chat/projects', { name: made.name, description: made.goal || '', settings: { xw: { mode: made.mode, icon: made.icon || 'folder' } } }, headers);
+      const here = area();   // a new project lives in the area it was made in
+      const r = await api('POST', '/api/chat/projects', { name: made.name, description: made.goal || '', settings: { xw: { icon: made.icon || 'folder' } }, ...(here ? { area: here } : {}) }, headers);
       return r.ok ? settle({ ok: true }) : fail(r, 'The project couldn’t be created.');
     },
     'projects.rename': async ({ before }) => {
@@ -118,7 +126,7 @@
     'projects.icon': async ({ before }) => {
       const was = new Map(listOf(before['xw.db.v1']).map((p) => [p.id, p])), now = (window.XENO_PG_PROJECTS.items || []).find((p) => was.has(p.id) && was.get(p.id).icon !== p.icon);
       if (!now) return { ok: true };
-      const r = await api('PUT', '/api/chat/projects/' + encodeURIComponent(now.id), { settings: { xw: { mode: now.mode, icon: now.icon || 'folder' } } });
+      const r = await api('PUT', '/api/chat/projects/' + encodeURIComponent(now.id), { settings: { xw: { icon: now.icon || 'folder' } } });
       return r.ok ? settle({ ok: true }) : fail(r, 'The icon couldn’t be saved.');
     },
     'projects.archive': async ({ before }) => {
@@ -139,6 +147,20 @@
 
   document.addEventListener('click', (e) => { const t = e.target.closest('[data-pg-retry="projects"]'); if (t && W.status === 'error') { pstate('projects', 'loading'); paint(); load(); } }, true);
   async function load() { await loadScope(); return loadProjects(); }
-  window.XENO_WORK = { served: true, load, projectTab, blocked, state: () => ({ scope: SC.status, projects: W.status }), reload: loadProjects, idOf: (name) => ((window.XENO_PG_PROJECTS.items || []).find((p) => p.name === name) || {}).id || null };
+  // move a project to another area, or to none; its chats and files follow it (they read the project's area)
+  async function moveProject(name) {
+    const rec = (window.XENO_PG_PROJECTS.items || []).find((p) => p.name === name); if (!rec) return false;
+    const options = [['none', 'No area', 'Shown on Overview only'], ...areas().map(([v, l]) => [v, l, ''])];
+    let moved = false;
+    await window.XD.form({ title: 'Move project', submit: 'Move', size: 'sm', fields: [{ id: 'area', type: 'choice', label: 'Area', value: rec.area || 'none', options, cols: 2, hint: 'Its chats go with it.' }],
+      onSubmit: async (v) => { const to = v.area === 'none' ? null : v.area; const r = await api('PUT', '/api/chat/projects/' + encodeURIComponent(rec.id), { area: to }).catch(() => null);
+        if (!r || !r.ok) return (r && r.d && typeof r.d.error === 'string' && r.d.error) || 'The project couldn’t be moved. Nothing changed.';
+        moved = true; X()?.toast?.(to ? `Moved “${rec.realName}” to ${areaName(to)}` : `Moved “${rec.realName}” out of every area`); return null; } });
+    if (moved) { await loadProjects(); try { window.XENO_CHAT?.load?.(); } catch {} }
+    return moved;
+  }
+  // the Projects page asks on each paint: moved to another area, its own list
+  function sync() { if (W.status === 'ready' && W.area !== undefined && W.loadingArea === undefined && area() !== W.area) { W.status = 'loading'; pstate('projects', 'loading'); loadProjects(); } }
+  window.XENO_WORK = { served: true, moveProject, sync, load, projectTab, blocked, state: () => ({ scope: SC.status, projects: W.status }), reload: loadProjects, idOf: (name) => ((window.XENO_PG_PROJECTS.items || []).find((p) => p.name === name) || {}).id || null };
   Promise.resolve(P.ready).then((user) => { if (user) P.first(load()); });   // the page waits for this first load before it shows
 })();

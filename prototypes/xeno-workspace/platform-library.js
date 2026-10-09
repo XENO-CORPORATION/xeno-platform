@@ -32,9 +32,7 @@
   // AREA: each area has its own library; Overview shows everything (owner's rule). The area is the place in the
   // left rail the person is in; the list asks the platform for that area only.
   const AREA_SHAPE = /^[a-z][a-z0-9_-]{0,39}$/;
-  const area = () => { let k = null; try { k = X()?.ctxKey?.(); } catch {} return typeof k === 'string' && k !== 'overview' && k !== 'adaptive' && AREA_SHAPE.test(k) ? k : null; };
-  const areaName = (id) => { if (!id) return ''; try { const m = X()?.M?.[id]; if (m && m.name) return m.name; const c = (window.XENO_CUSTOM?.list?.() || []).find((x) => x.id === id); if (c) return c.name; } catch {} return id.charAt(0).toUpperCase() + id.slice(1); };
-  const areas = () => { const out = []; try { for (const m of window.XENO_MODES || []) out.push([m.id, areaName(m.id)]); for (const c of window.XENO_CUSTOM?.list?.() || []) if (AREA_SHAPE.test(c.id)) out.push([c.id, c.name]); } catch {} return out; };
+  const area = () => P.area(), areaName = (id) => P.areaName(id), areas = () => P.areas();
   window.XENO_PG_LIBRARY.items = []; pstate('loading');
   const PAGE = 200, MAX_PAGES = 50;   // 10,000 items; past that the page says it is showing the newest
 

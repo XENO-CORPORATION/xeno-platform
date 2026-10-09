@@ -71,6 +71,7 @@
   const PROJ = () => window.XENO_PG_PROJECTS.items.filter((p) => !window.XENO_VIS || window.XENO_VIS.project(p));
   const HEALTH = { on_track: 'On track', at_risk: 'At risk', blocked: 'Blocked', done: 'Done' }, hchip = (h) => (HEALTH[h] ? chip(HEALTH[h]) : '') /* a project with no health recorded shows none, never a guess */;
   function projectsIndex(arch) {
+    if (window.XENO_WORK && window.XENO_WORK.served) window.XENO_WORK.sync?.();   // a different area: its own projects
     const key = 'projects', u = ui(key, { extra: {} }), ctx = X().ctxName();
     const status = arch ? 'archived' : u.seg.status || (window.XENO_VIS?.guest() ? 'shared' : 'active');
     const modeF = u.seg.mode || 'all';

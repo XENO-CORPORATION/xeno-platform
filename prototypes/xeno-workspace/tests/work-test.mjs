@@ -39,16 +39,17 @@ function answer(q) {
   if (p === '/api/workspaces' && m === 'GET') return json(200, { success: true, workspaces: db.workspaces });
   if (p === '/api/workspaces' && m === 'POST') { const w = { id: `44444444-4444-4444-8444-${String(db.next++).padStart(12, '0')}`, workspace_type: 'team', name: body.name, member_role: 'owner', member_count: 1 }; db.workspaces.push(w); return json(200, { success: true, workspace: w }); }
   if (p === '/api/library/assets') return json(200, { success: true, items: [] });
-  if (p === '/api/chat/conversations') return json(200, { success: true, conversations: db.conversations, total: db.conversations.length });
-  if (p === '/api/chat/projects' && m === 'GET') return json(200, { success: true, projects: db.projects, limit: 100, offset: 0 });
+  const inArea = (x) => { const a = u.searchParams.get('area'); return a === null || (a === 'none' ? !x.area : x.area === a); };
+  if (p === '/api/chat/conversations') { const rows = db.conversations.filter((c) => inArea({ area: c.project_id ? (db.projects.find((x) => x.id === c.project_id) || {}).area : c.area })); return json(200, { success: true, conversations: rows, total: rows.length }); }
+  if (p === '/api/chat/projects' && m === 'GET') { (db.projectAsks = db.projectAsks || []).push(u.searchParams.get('area')); return json(200, { success: true, projects: db.projects.filter(inArea), limit: 100, offset: 0 }); }
   if (p === '/api/chat/projects' && m === 'POST') {
     if (body.name === 'Refused') return json(400, { success: false, error: 'Project name is not allowed' });
     const ws = q.headers()['x-xeno-workspace'], team = ws && ws !== WP ? ws : null;
-    const pr = { id: pid(db.next++), name: body.name, description: body.description || '', settings: body.settings || {}, is_archived: false, owner_user_id: team ? null : U, workspace_id: team, file_count: 0, chat_count: 0, updated_at: new Date().toISOString(), capabilities: { viewer: true, owner: true } };
+    const pr = { id: pid(db.next++), name: body.name, description: body.description || '', settings: body.settings || {}, area: body.area || null, is_archived: false, owner_user_id: team ? null : U, workspace_id: team, file_count: 0, chat_count: 0, updated_at: new Date().toISOString(), capabilities: { viewer: true, owner: true } };
     db.projects.unshift(pr); return json(200, { success: true, project: pr });
   }
   const mm = p.match(/^\/api\/chat\/projects\/([^/]+)$/);
-  if (mm && m === 'PUT') { const pr = db.projects.find((x) => x.id === decodeURIComponent(mm[1])); if (!pr) return json(404, { success: false, error: 'Project not found' }); if (body.name !== undefined) pr.name = body.name; if (body.is_archived !== undefined) pr.is_archived = !!body.is_archived; if (body.settings) pr.settings = { ...pr.settings, ...body.settings }; return json(200, { success: true, project: pr }); }
+  if (mm && m === 'PUT') { const pr = db.projects.find((x) => x.id === decodeURIComponent(mm[1])); if (!pr) return json(404, { success: false, error: 'Project not found' }); if (body.name !== undefined) pr.name = body.name; if (body.area !== undefined) pr.area = body.area; if (body.is_archived !== undefined) pr.is_archived = !!body.is_archived; if (body.settings) pr.settings = { ...pr.settings, ...body.settings }; return json(200, { success: true, project: pr }); }
   return json(404, { success: false, error: 'not in the fake platform: ' + m + ' ' + p });
 }
 
@@ -65,7 +66,8 @@ const names = () => p.evaluate(() => window.XENO_PG_PROJECTS.items.map((x) => `$
 const SAMPLE = /Brand refresh|Q4 planning|Launch week|Auth gate|XENO launch|XENO Corp|Lumen Studio/;
 
 try {
-  await p.goto(base + '/workspace/', { waitUntil: 'networkidle0' }); await wait(700);
+  // Overview: every project (an area shows only its own, checked further down)
+  await p.goto(base + '/workspace/#/overview', { waitUntil: 'networkidle0' }); await wait(700);
   const st = await p.evaluate(() => window.XENO_WORK.state());
   ok(st.scope === 'ready' && st.projects === 'ready', 'workspaces and projects load from the platform (' + JSON.stringify(st) + ')');
 
@@ -141,6 +143,32 @@ try {
   c = db.calls.find((x) => x.m === 'POST' && x.p === '/api/workspaces');
   const cur = await p.evaluate(() => { const w = window.XA.currentWorkspace(); return `${w.name}|${w.sub}|${/^[0-9a-f-]{36}$/.test(w.id)}`; });
   ok(!!c && c.body.name === 'Babbage Works' && cur === 'Babbage Works|Company · you are the owner|true', 'creating a company creates the workspace on the platform and switches to it (' + cur + ')');
+
+  // ---- areas: each has its own projects; Overview shows them all ----
+  await p.evaluate(() => window.XA.switchWorkspace('personal')); await wait(300);
+  db.projects.find((x) => x.id === pid(1)).area = 'studio';
+  const goArea = async (hash) => { await p.evaluate((h) => { location.hash = h; }, hash); await wait(1300); };
+  await goArea('#/overview/g/projects'); await p.evaluate(() => window.XENO_WORK.reload()); await wait(500);
+  ok(db.projectAsks.at(-1) === null, 'on Overview the projects asked for are everything');
+  const studioName = await p.evaluate(() => window.XENO_PG_PROJECTS.items.find((x) => x.realName === 'Website' && x.area === 'studio')?.mode);
+  ok(studioName === 'Studio', 'a project says which area it lives in, by name (' + studioName + ')');
+  await goArea('#/studio/g/projects');
+  ok(db.projectAsks.at(-1) === 'studio' && JSON.stringify(await p.evaluate(() => window.XENO_PG_PROJECTS.items.map((x) => x.realName))) === JSON.stringify(['Website']), 'in Studio the Projects page asks for Studio’s and shows only them');
+  db.calls.length = 0;
+  await p.evaluate(() => { window.XA.newProject(); }); await wait(350);
+  await p.evaluate(() => { const i = document.querySelector('#xdf-name'); i.value = 'Moodboard'; i.dispatchEvent(new Event('input', { bubbles: true })); });
+  await p.click('.xd [data-xd-submit]'); await settle();
+  c = db.calls.find((x) => x.m === 'POST' && x.p === '/api/chat/projects');
+  ok(!!c && c.body.area === 'studio' && c.body.settings?.xw?.mode === undefined, 'a project made in Studio is made in Studio (its home is the real area, not a label in its settings)');
+  await goArea('#/office/g/projects');
+  ok(db.projectAsks.at(-1) === 'office' && (await p.evaluate(() => window.XENO_PG_PROJECTS.items.length)) === 0, 'an area with no projects shows none; it does not fall back to everything');
+  await goArea('#/studio/g/projects'); db.calls.length = 0;
+  const moving = p.evaluate(() => window.XENO_WORK.moveProject(window.XENO_PG_PROJECTS.items.find((x) => x.realName === 'Moodboard').name)); await wait(500);
+  const choices = await p.evaluate(() => [...document.querySelectorAll('[role=radio][data-v]')].filter((n) => n.offsetParent).map((n) => n.dataset.v + (n.getAttribute('aria-checked') === 'true' ? '*' : '')).join(','));
+  ok(/^none,/.test(choices) && /studio\*/.test(choices) && /office/.test(choices), 'Move to area offers no area and every area, the current one chosen (' + choices + ')');
+  await p.evaluate(() => [...document.querySelectorAll('[role=radio][data-v="office"]')].find((n) => n.offsetParent).click()); await p.click('.xd [data-xd-submit]'); await moving; await wait(500);
+  const put = db.calls.find((x) => x.m === 'PUT' && /\/api\/chat\/projects\//.test(x.p));
+  ok(!!put && put.body.area === 'office' && put.csrf === 'csrf-test-token' && !(await p.evaluate(() => window.XENO_PG_PROJECTS.items.some((x) => x.realName === 'Moodboard'))), 'moving it to Office tells the platform and it leaves Studio’s list');
 
   ok(missing.length === 0, 'the workspace asked for no route the platform lacks (' + JSON.stringify([...new Set(missing)].slice(0, 3)) + ')');
   ok(errs.length === 0, 'no page errors (' + JSON.stringify(errs.slice(0, 2)) + ')');
