@@ -1,5 +1,5 @@
 /* ---------- marketplace (market.js) ---------- */
-.mk-hero{display:grid;grid-template-columns:64px 1fr auto;gap:16px;align-items:center;padding:16px;border-radius:10px;background:#141414;border:1px solid #1f1f1f;margin-bottom:16px}
+.mk-hero{display:grid;grid-template-columns:64px 1fr auto;gap:16px;align-items:center;padding:16px;border-radius:10px;background:var(--n20);border:1px solid var(--n31);margin-bottom:16px}
 .mk-big{width:64px;height:64px}
 .mk-big svg.i{width:28px;height:28px}
 .mk-hero-m{display:flex;flex-direction:column;gap:6px;min-width:0}
@@ -7,20 +7,20 @@
 .mk-row h3{margin:0;flex:1}
 .mk-buy{display:flex;flex-direction:column;align-items:flex-end;gap:8px}
 .mk-price{font-size:16px;color:var(--text);font-variant-numeric:tabular-nums}
-.mk-stars{color:#e8e8ec;letter-spacing:1px;font-size:12px}
-.mk-stars i{font-style:normal;color:#3a3a3a}
+.mk-stars{color:var(--n233);letter-spacing:1px;font-size:12px}
+.mk-stars i{font-style:normal;color:var(--n58)}
 .mk-cols{display:grid;grid-template-columns:minmax(0,1fr) 300px;gap:20px}
 .mk-side{display:flex;flex-direction:column;gap:12px}
 .mk-p{margin:0 0 8px;font-size:13px;color:var(--muted);line-height:1.55}
 .mk-p b{color:var(--text);font-weight:500}
 .mk-caps{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:6px}
 .mk-caps li{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--text)}
-.mk-caps svg.i{width:14px;height:14px;color:#e8e8ec;flex:none}
+.mk-caps svg.i{width:14px;height:14px;color:var(--n233);flex:none}
 .mk-revs{list-style:none;margin:0 0 10px;padding:0;display:flex;flex-direction:column}
-.mk-revs li{padding:12px 0;border-top:1px solid #1d1d1d}
+.mk-revs li{padding:12px 0;border-top:1px solid var(--n29)}
 .mk-revs li:first-child{border-top:0}
 .mk-revs p{margin:6px 0 0;font-size:13px;color:var(--muted);line-height:1.5}
-.mk-revs .mk-reply{margin-top:8px;padding:8px 10px;border-radius:6px;background:#181818}
+.mk-revs .mk-reply{margin-top:8px;padding:8px 10px;border-radius:6px;background:var(--n24)}
 .mk-reply b{color:var(--text);font-weight:500}
 .mk-dl{display:grid;grid-template-columns:auto 1fr;gap:6px 12px;margin:0;font-size:12.5px}
 .mk-dl dt{color:var(--dim)}
@@ -30,33 +30,33 @@
 .mk-vers b{color:var(--text);font-variant-numeric:tabular-nums}
 .mk-vers span{color:var(--muted)}
 .mk-vers small{grid-column:2;color:var(--dim)}
-.mk-ent{display:flex;flex-direction:column;gap:10px;padding:14px 16px;border-radius:10px;background:#161616;border:1px solid #2f2f2f;margin-bottom:16px}
+.mk-ent{display:flex;flex-direction:column;gap:10px;padding:14px 16px;border-radius:10px;background:var(--n22);border:1px solid var(--n47);margin-bottom:16px}
 .mk-ent-h{display:flex;align-items:baseline;gap:10px}
 .mk-ent-h b{font-size:13.5px;color:var(--text)}
 .mk-ent > p{margin:0;font-size:12.5px;color:var(--muted)}
-.mk-part{display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:8px;background:#121212;border:1px solid #232323;font-size:12.5px;color:var(--muted)}
+.mk-part{display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:8px;background:var(--n18);border:1px solid var(--n35);font-size:12.5px;color:var(--muted)}
 .mk-part > span{flex:1}
 .mk-part b{color:var(--text);font-weight:500}
-.mk-part svg.i{width:14px;height:14px;color:#e8e8ec;flex:none}
+.mk-part svg.i{width:14px;height:14px;color:var(--n233);flex:none}
 .mk-rc summary{cursor:pointer;font-size:12.5px;color:var(--muted)}
 .mk-rc ul,.mk-rcl{list-style:none;margin:8px 0 0;padding:0}
-.mk-rc li,.mk-rcl li{display:grid;grid-template-columns:110px 1fr auto;gap:10px;padding:7px 0;border-top:1px solid #1d1d1d;font-size:12.5px;color:var(--muted)}
+.mk-rc li,.mk-rcl li{display:grid;grid-template-columns:110px 1fr auto;gap:10px;padding:7px 0;border-top:1px solid var(--n29);font-size:12.5px;color:var(--muted)}
 .mk-rc li b,.mk-rcl li b{color:var(--text);font-variant-numeric:tabular-nums}
 .mk-owns,.mk-sls{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:8px}
-.mk-own{display:flex;align-items:center;gap:12px;padding:12px 14px;border-radius:10px;background:#141414;border:1px solid #1f1f1f}
+.mk-own{display:flex;align-items:center;gap:12px;padding:12px 14px;border-radius:10px;background:var(--n20);border:1px solid var(--n31)}
 .mk-own-m{flex:1;display:flex;flex-direction:column;gap:2px;min-width:0}
 .mk-own-m b{font-size:13.5px;color:var(--text)}
 /* a title link inside a column hugs its text — the .pg a underline must not span the whole row */
 .mk-own-m a{align-self:flex-start;max-width:100%}
 .mk-own-m small{font-size:12px;color:var(--dim)}
 .mk-sub{margin:20px 0 8px;font-size:12px;font-weight:500;color:var(--dim)}
-.mk-sl{display:flex;flex-direction:column;gap:8px;padding:14px 16px;border-radius:10px;background:#141414;border:1px solid #1f1f1f}
+.mk-sl{display:flex;flex-direction:column;gap:8px;padding:14px 16px;border-radius:10px;background:var(--n20);border:1px solid var(--n31)}
 .mk-sl b{font-size:13.5px;color:var(--text)}
 .mk-sl p{margin:0;font-size:12.5px}
 .mk-checks{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:4px}
 .mk-checks li{display:flex;align-items:center;gap:8px;font-size:12.5px;color:var(--muted)}
 .mk-checks svg.i{width:13px;height:13px}
-.mk-checks li.ok svg.i{color:#e8e8ec}
+.mk-checks li.ok svg.i{color:var(--n233)}
 .mk-checks li.wait{color:var(--dim)}
 .mk-checks li.bad{color:#f2c9c9}
 .mk-kyb{display:flex;align-items:center;gap:12px;flex-wrap:wrap}

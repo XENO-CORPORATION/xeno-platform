@@ -67,7 +67,7 @@
     usage: 'What you have used this period, and the limits that apply.',
     gifts: 'Credits you have sent to other people, and credits sent to you.',
     general: 'How XENO opens and behaves for you.',
-    appearance: 'Theme, density and motion.',
+    appearance: 'Theme and brightness, text size, density and motion.',
     notifications: 'What reaches you, and where.',
     modes: 'Which modes you see, their order, and the one XENO opens in.',
     keyboard: 'Shortcuts for getting around without the mouse.',
@@ -85,6 +85,15 @@
   const b = (label, act, arg = '', cls = 'ghost') => `<button class="pg-btn ${cls}" data-set="${act}" data-arg="${esc(arg)}"><span>${esc(label)}</span></button>`;
   const tag = (t, cls = '') => `<span class="set-tag ${cls}">${esc(t)}</span>`;
   const sw = (key, on) => `<button class="xd-sw" role="switch" aria-checked="${!!on}" data-set="pref" data-arg="${key}"><i></i></button>`;
+  // The theme is the PLATFORM's one appearance preference (theme.js): System, Dark, Dim, Light, or any point on the
+  // brightness line between Dark and Light. The same choice the chat and every other platform page read.
+  const themeCard = () => {
+    const T = window.XENO_THEME; if (!T) return '';
+    const s = T.get(), pos = T.position(s);
+    const pick = `<span class="xd-seg" role="radiogroup" aria-label="Theme">${T.options.map(([v, l]) => `<button type="button" role="radio" aria-checked="${String(s.preference === v)}" data-theme-pick="${v}">${esc(l)}</button>`).join('')}</span>`;
+    const slide = `<span class="set-range"><input type="range" min="0" max="100" step="${T.step}" value="${pos}" data-theme-bright aria-label="Brightness" aria-valuetext="${pos} percent"><output>${pos}%</output></span>`;
+    return card('Theme', row('Theme', 'System follows your device. The same theme shows in chat and across XENO.', pick) + row('Brightness', s.preference === 'custom' ? 'A custom point between Dark and Light' : 'Move it to set any point between Dark and Light', slide));
+  };
   const seg = (key, cur, opts) => `<span class="xd-seg" role="radiogroup">${opts.map(([v, l]) => `<button type="button" role="radio" aria-checked="${String(cur) === String(v)}" data-set="prefv" data-arg="${key}=${v}">${esc(l)}</button>`).join('')}</span>`;
 
   const S = {
@@ -114,7 +123,7 @@
     gifts: (a) => card('Send credits', `<p class="pg-dim set-p">Give credits from your balance to anyone on XENO. If they don’t accept within 30 days, the credits come back.</p>`, b('Send a gift', 'gift', '', ''))
       + card('Sent', a.gifts.length ? a.gifts.map((g) => row(`${g.amount.toLocaleString()} credits to @${esc(g.to)}`, `${esc(g.note || 'No message')} · ${when(g.at)}`, g.state === 'pending' ? `${tag('Waiting')} ${b('Take back', 'ungift', g.id)}` : tag(g.state === 'returned' ? 'Returned' : 'Accepted', 'on'))).join('') : '<p class="pg-dim set-p">No gifts yet.</p>'),
     general: () => { const p = D().prefs(); return card('Starting up', row('Open to', 'What you see when you open XENO', seg('startIn', p.startIn, [['last', 'Where I left off'], ['overview', 'Overview'], ['default', 'My default mode']])) + row('Links to other products', '', seg('links', p.links, [['same', 'Same window'], ['new', 'New window']]))); },
-    appearance: () => { const p = D().prefs(); return card('Appearance', row('Text size', '', seg('text', p.text, [['small', 'Small'], ['default', 'Default'], ['large', 'Large']])) + row('Density', '', seg('density', p.density, [['compact', 'Compact'], ['comfortable', 'Comfortable']])) + row('Motion', 'Follow your system, or reduce animation', seg('motion', p.motion, [['system', 'System'], ['reduce', 'Reduced']])) + row('High contrast', '', sw('contrast', p.contrast)) + row('Shortcut hints on buttons', '', sw('hints', p.hints))); },
+    appearance: () => { const p = D().prefs(); return themeCard() + card('Appearance', row('Text size', '', seg('text', p.text, [['small', 'Small'], ['default', 'Default'], ['large', 'Large']])) + row('Density', '', seg('density', p.density, [['compact', 'Compact'], ['comfortable', 'Comfortable']])) + row('Motion', 'Follow your system, or reduce animation', seg('motion', p.motion, [['system', 'System'], ['reduce', 'Reduced']])) + row('High contrast', '', sw('contrast', p.contrast)) + row('Shortcut hints on buttons', '', sw('hints', p.hints))); },
     notifications: () => { const p = D().prefs(); return card('Notifications', row('Desktop notifications', 'When something needs you', sw('ntDesktop', p.ntDesktop)) + row('Sound', '', sw('ntSound', p.ntSound)) + row('Email digest', 'What happened while you were away', seg('ntDigest', p.ntDigest, [['off', 'Off'], ['daily', 'Daily'], ['weekly', 'Weekly']])))
       // per mode — the same setting the inbox popover shows, one store (§7z)
       + (window.XENO_NT ? card('Notifications by mode', `<p class="set-p">Everything · Needs me (activity stays out of your inbox) · Off (nothing rings).</p>` + window.XENO_NT.modes().map(([id, name]) => row(esc(name), '', `<span class="xd-seg" role="radiogroup" aria-label="${esc(name)} notifications">${window.XENO_NT.levels.map(([v, l]) => `<button type="button" role="radio" aria-checked="${window.XENO_NT.level(id) === v}" data-set="ntlevel" data-arg="${id}=${v}">${esc(l)}</button>`).join('')}</span>`)).join('')) : '')
@@ -148,6 +157,15 @@
       <div class="set-wrap"><header class="set-intro"><small>${esc(group)}</small><h1>${esc(title(id))}</h1>${LEAD[id] ? `<p>${esc(LEAD[id])}</p>` : ''}</header><div class="set-body" data-set-body="${id}">${(window.XENO_ACCOUNT && window.XENO_ACCOUNT.section(id, a, { card, row, b, tag, esc, when, ago, ic })) ?? S[id](a)}</div></div><footer class="pg-foot" data-fam="settings" data-api="${esc(API[id] || '')}" data-noun=""></footer></div>`;
   }
   const go = (sid) => X().go('global', { global: 'settings', item: title(sid) });
+  // theme controls: save, and say so if the save is refused (nothing changes then)
+  const repaintTheme = () => { const b = document.querySelector('.pg--set [data-set-body="appearance"]'); if (b) X().render(); };
+  let themeBusy = false;
+  const setTheme = async (preference, brightness) => { if (themeBusy) return; themeBusy = true; const r = await window.XENO_THEME.set(preference, brightness); themeBusy = false; if (!r.ok) X().toast(r.msg); repaintTheme(); };
+  document.addEventListener('click', (e) => { const b = e.target.closest('[data-theme-pick]'); if (b && b.closest('.pg--set')) { e.preventDefault(); setTheme(b.dataset.themePick); } });
+  document.addEventListener('input', (e) => { const r = e.target.closest('[data-theme-bright]'); if (r) { const o = r.parentNode.querySelector('output'); if (o) o.textContent = r.value + '%'; r.setAttribute('aria-valuetext', r.value + ' percent'); } });
+  document.addEventListener('change', (e) => { const r = e.target.closest('[data-theme-bright]'); if (r && r.closest('.pg--set')) setTheme('custom', Number(r.value)); });
+  addEventListener('xeno_platform_theme_change', () => { if (!themeBusy) repaintTheme(); });
+  addEventListener('storage', (e) => { if (e.key === 'xeno_platform_theme' || e.key === 'xeno_platform_theme_brightness') repaintTheme(); });
   const idOf = (item) => SECT.flatMap(([, s]) => s).find(([, l]) => l === item)?.[0] || ALIAS[item] || item;
 
   // ---------- actions ----------
