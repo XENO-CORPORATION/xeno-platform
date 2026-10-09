@@ -21,7 +21,9 @@ const reset = () => Object.assign(db, { balance: 321, billDown: false, calls: []
     { id: 't-none', title: 'Loose <b>one</b>', prompt: 'p', cadence_label: 'Once · Oct 12, 10:00', status: 'active', next_run_at: soon(40), area: null, project_id: null, last_run_status: null, last_run_error: null },
     { id: 't-gone', title: 'Cancelled one', prompt: 'p', cadence_label: 'Every day · 07:00', status: 'cancelled', next_run_at: soon(2), area: 'dev', project_id: null, last_run_status: null, last_run_error: null },
   ],
-  convs: [{ id: CV, title: 'Zebra plan', updated_at: iso(2), last_message_at: iso(2), project_id: null, area: 'dev' }] });
+  convs: [{ id: CV, title: 'Zebra plan', updated_at: iso(2), last_message_at: iso(2), project_id: null, area: 'dev' }, { id: 'c-old1', title: 'Old trip notes', updated_at: iso(300), last_message_at: iso(300), project_id: null, area: null }, { id: 'c-old2', title: 'Old <b>recipe</b>', updated_at: iso(400), last_message_at: iso(400), project_id: null, area: null }, { id: 'c-inproj', title: 'Inside a project', updated_at: iso(500), last_message_at: iso(500), project_id: 'p-old', area: null }],
+  projects: [{ id: 'p-old', name: 'Old project', updated_at: iso(600), area: null }],
+  files: [{ id: 'f-1', name: 'Diagram.png', source: 'library_file', source_id: 's-1', updated_at: iso(3), area: null }, { id: 'f-2', name: 'Dev notes.md', source: 'library_file', source_id: 's-2', updated_at: iso(4), area: 'dev' }], failMove: null });
 const CHAT = `<!doctype html><html><body><div class="chat-themed"><div data-chat-composer-shell></div></div><script>const say = () => parent.postMessage({ source: 'xeno-chat', type: 'location', path: location.pathname, title: 'Chat' }, location.origin); addEventListener('popstate', say); say();</script></body></html>`;
 async function open(hash) {
   const p = await b.newPage(); await p.setViewport({ width: 1400, height: 900 });
@@ -31,7 +33,7 @@ async function open(hash) {
     if (u.pathname.startsWith('/overview/')) return q.respond({ status: 200, contentType: 'text/html', body: CHAT });
     if (!u.pathname.startsWith('/api/')) return q.continue();
     const sent = q.postData() ? JSON.parse(q.postData()) : null;
-    if (u.pathname.startsWith('/api/chat/scheduled') || u.pathname.startsWith('/api/workspace/')) db.calls.push([q.method(), u.pathname + u.search, sent, q.headers()['x-xeno-area'] || null]);
+    if (u.pathname.startsWith('/api/chat/scheduled') || u.pathname.startsWith('/api/workspace/') || (u.pathname === '/api/chat/conversations' && q.method() === 'GET')) db.calls.push([q.method(), u.pathname + u.search, sent, q.headers()['x-xeno-area'] || null]);
     if (u.pathname === '/api/auth/me') return json({ success: true, user: USER });
     if (u.pathname === '/api/chat/scheduled' && q.method() === 'GET') { if (db.down) return json({ success: false, error: 'Internal server error' }, 500); const want = u.searchParams.get('area'); return json({ success: true, tasks: db.tasks.filter((t) => want === null || (want === 'none' ? !t.area : t.area === want)) }); }
     if (u.pathname === '/api/chat/scheduled' && q.method() === 'POST') { if (db.refuse) return json({ success: false, error: 'Schedule has no future occurrence' }, 400); const t = { id: 't-new', status: 'active', next_run_at: soon(20), project_id: null, last_run_status: null, last_run_error: null, ...sent }; db.tasks.push(t); return json({ success: true, task: t }); }
@@ -45,14 +47,18 @@ async function open(hash) {
         { kind: 'chat', id: CM, title: 'Lunch <i>notes</i>', snippet: '…repaint the zebra crossing before launch…', matched: 'message', area: 'studio', at: iso(3) },
         { kind: 'chat', id: CV, title: 'Zebra plan', snippet: '', matched: 'title', area: 'dev', at: iso(2) },
         { kind: 'chat', id: '00000009-0000-4000-8000-000000000000', title: 'Zebra budget', snippet: '', matched: 'title', area: 'dev', at: iso(9) },
-        { kind: 'project', id: 'p-9', title: 'Zebra habitat', snippet: '', matched: 'name', area: 'office', at: iso(4) }], counts: {} }); }
+        { kind: 'project', id: 'p-9', title: 'Zebra habitat', snippet: '', matched: 'name', area: 'office', at: iso(4) }].filter((r) => !u.searchParams.get('area') || r.area === u.searchParams.get('area')), counts: {} }); }
     if (u.pathname === '/api/chat/conversations') { const want = u.searchParams.get('area'); const rows = want === null ? db.convs : db.convs.filter((c) => (want === 'none' ? !c.area : c.area === want)); return json({ success: true, conversations: rows, total: rows.length }); }
     if (u.pathname === '/api/user-data/settings') return json({ success: true, settings: db.settings });
     if (u.pathname === '/api/billing/overview') return db.billDown ? json({ success: false, error: 'Internal server error' }, 500) : json({ success: true, overview: { credits: { balance: db.balance }, subscription: null } });
     if (u.pathname === '/api/v2/ledger/usage') { const days = Math.round((Date.now() - Date.parse(u.searchParams.get('from'))) / 86400000), model = u.searchParams.get('groupBy') === 'model';
       if (days <= 1) return json({ from: '', to: '', groupBy: '', rows: [] });
       return json({ from: '', to: '', groupBy: '', rows: model ? [{ key: 'model-x', events: 4, costMicro: 30e6 }, { key: 'model-y', events: 1, costMicro: 12e6 }, ...(db.many ? Array.from({ length: 20 }, (_, n) => ({ key: 'tiny-' + n, events: 1, costMicro: 1e6 })) : [])] : [{ key: 'xeno_chat', events: 5, costMicro: days > 7 ? 42e6 : 17e6 }, { key: 'free_thing', events: 3, costMicro: 0 }] }); }
-    if (u.pathname === '/api/chat/projects') return json({ success: true, projects: [] });
+    if (u.pathname === '/api/chat/projects') { const want = u.searchParams.get('area'); return json({ success: true, projects: db.projects.filter((x) => want === null || (want === 'none' ? !x.area : x.area === want)) }); }
+    if (u.pathname === '/api/library/assets') { const want = u.searchParams.get('area'); return json({ success: true, items: db.files.filter((x) => want === null || (want === 'none' ? !x.area : x.area === want)) }); }
+    { const mv = u.pathname.match(/^\/api\/(chat\/conversations|chat\/projects)\/([^/]+)$/) || u.pathname.match(/^\/api\/(library\/assets)\/[^/]+\/([^/]+)\/area$/);
+      if (mv && q.method() === 'PUT') { db.calls.push(['MOVE', mv[1] + '/' + mv[2], sent, null]); if (db.failMove === mv[2]) return json({ success: false, error: 'Internal server error' }, 500);
+        const list = mv[1] === 'chat/conversations' ? db.convs : mv[1] === 'chat/projects' ? db.projects : db.files; const it = list.find((x) => x.id === mv[2] || x.source_id === mv[2]); if (!it) return json({ success: false, error: 'Not found' }, 404); it.area = sent.area; return json({ success: true }); } }
     const body = { '/api/account/overview': { success: true, overview: { user: USER, credits: { balance: 0 }, workspace_count: 1 } }, '/api/account/sessions': { success: true, sessions: [] }, '/api/account/security': { success: true, security: { confirmation: { confirmed: false, available: true, expires_at: null }, methods: ['password'], has_password: true, email: '', pending_email: null } }, '/api/account/exports': { success: true, exports: [] }, '/api/auth/linked-accounts': { success: true, accounts: [] }, '/api/billing/overview': { success: true, overview: { credits: { balance: 0 }, subscription: null } }, '/api/dashboard/stats': { success: true, stats: { usage_available: false, usage_by_surface: [] } }, '/api/workspaces': { success: true, workspaces: [] }, '/api/library/assets': { success: true, items: [] } }[u.pathname];
     return body ? json(body) : json({ success: false, error: 'not found' }, 404); });
   await p.goto(base + '/workspace/' + hash, { waitUntil: 'domcontentloaded' }); await wait(1600);
@@ -83,7 +89,7 @@ try {
     const made = calls('POST', '/api/chat/scheduled').at(-1);
     ok(made && made[2].title === 'Friday wrap-up' && made[2].prompt === 'Sum up the week' && made[2].area === 'dev', `a new scheduled chat is made in the area it was set up in (${made && JSON.stringify(made[2]).slice(0, 90)})`);
     ok(made && made[2].rrule === 'FREQ=WEEKLY;BYDAY=MO,TU,WE,TH,FR' && made[2].schedule_kind === 'recurring' && made[2].cadence === 'weekly' && made[2].dtstart_local.endsWith('T07:45:00') && made[2].dtstart_local.length === 19 && !!made[2].timezone && made[2].cadence_label === 'Weekdays · 07:45', `it says when in the platform’s terms: rule, local start, time zone, label (${made && made[2].dtstart_local})`);
-    ok(made && made[2].model_id === 'dev-model', 'it uses the model this area uses');
+    ok(made && !('model_id' in made[2]), 'it names no model: the platform picks the area’s, the person’s default, or its own');
     s = await sheet(p);
     ok(s.rows.map((r) => r.id).join() === 't-dev,t-new', 'the list shows it at once');
 
@@ -171,6 +177,55 @@ try {
     await p.evaluate(() => { const r = [...document.querySelectorAll('#palette [data-pi]')].find((x) => x.querySelector('.t').textContent.startsWith('Lunch')); r.click(); }); await wait(900);
     ok((await p.evaluate(() => location.hash)).includes('00000002-0000-4000-8000-000000000000'), 'opening a found chat opens that conversation');
     ok(errs.length === 0, `no page errors in search (${JSON.stringify(errs.slice(0, 2))})`); await p.close(); }
+  // ── the Chats sheet, files in Recent, and sorting what is in no area
+  reset();
+  { const { p, errs } = await open('#/dev/p/chat'); db.calls.length = 0;
+    await p.evaluate(() => window.XA.allChats()); await wait(800);
+    const chats = () => p.evaluate(() => { const sh = [...document.querySelectorAll('.xd')].at(-1); return { sub: sh.querySelector('.xd-head small')?.textContent || '', n: sh.querySelector('.xd-chats-n').textContent, rows: [...sh.querySelectorAll('[data-ac-id]')].map((r) => r.dataset.acId + ':' + r.querySelector('span').textContent + '|' + r.querySelector('small').textContent), head: sh.querySelector('.xd-chats-h')?.textContent || '', state: sh.querySelector('[data-ac-state]')?.dataset.acState || null }; });
+    let c = await chats();
+    ok(/In Dev/.test(c.sub) && calls('GET', '/api/chat/conversations').some((x) => x[1].includes('area=dev')) && c.rows.length === 1 && c.rows[0].startsWith(CV + ':Zebra plan'), `inside Dev the Chats sheet lists Dev’s chats (${c.rows.join(', ')})`);
+    await p.evaluate(() => { const i = [...document.querySelectorAll('.xd')].at(-1).querySelector('input'); i.value = 'zebra'; i.dispatchEvent(new Event('input', { bubbles: true })); }); await wait(900); c = await chats();
+    const asked = calls('GET', '/api/workspace/search').at(-1);
+    ok(asked && asked[1].includes('q=zebra') && asked[1].includes('area=dev'), 'typing asks the platform what was said, in this area only');
+    await closeAll(p);
+    await p.evaluate(() => { location.hash = '#/overview/p/chat'; }); await wait(900); await p.evaluate(() => window.XA.allChats()); await wait(700);
+    await p.evaluate(() => { const i = [...document.querySelectorAll('.xd')].at(-1).querySelector('input'); i.value = 'zebra'; i.dispatchEvent(new Event('input', { bubbles: true })); }); await wait(900); c = await chats();
+    ok(c.head === 'Said in a chat' && c.rows.some((r) => r.startsWith(CM + ':Lunch <i>notes</i>|') && r.includes('zebra crossing')) && c.rows.filter((r) => r.startsWith(CV + ':')).length === 1, `a chat is found by what was said in it, shown as text, and one found by title is not listed twice (${c.rows.length} rows)`);
+    await p.evaluate((id) => [...document.querySelectorAll('.xd')].at(-1).querySelector('[data-ac-id="' + id + '"]').click(), CM); await wait(800);
+    ok((await p.evaluate(() => location.hash)).includes(CM), 'opening one opens that conversation');
+    ok(errs.length === 0, `no page errors in the Chats sheet (${JSON.stringify(errs.slice(0, 2))})`); await p.close(); }
+
+  reset();
+  { const { p, errs } = await open('#/overview'); await wait(600);
+    const rec = await p.evaluate(() => [...document.querySelectorAll('#panel [data-recent-file]')].map((r) => r.dataset.recentFile + ':' + r.querySelector('.t').textContent));
+    ok(rec.includes('f-1:Diagram.png'), `Recent lists the person’s recent files too (${rec.join(', ')})`);
+    await p.evaluate(() => document.querySelector('#panel [data-recent-file="f-1"]').click()); await wait(700);
+    ok(/library/.test(await p.evaluate(() => location.hash)), 'a recent file opens in the Library');
+    await p.evaluate(() => { location.hash = '#/overview'; }); await wait(800);
+    const entry = await p.evaluate(() => document.querySelector('#panel [data-sort-entry]')?.textContent.trim() || '');
+    ok(/Sort into areas/.test(entry) && /4$/.test(entry), `Overview offers “Sort into areas” with how many items are in none (${entry})`);
+    db.calls.length = 0;
+    await p.evaluate(() => document.querySelector('#panel [data-sort-entry]').click()); await wait(900);
+    const sort = () => p.evaluate(() => { const sh = [...document.querySelectorAll('.xd')].at(-1); return { state: sh.querySelector('[data-sort-state]')?.dataset.sortState || null, rows: [...sh.querySelectorAll('[data-sort-pick]')].map((x) => x.dataset.sortPick + (x.checked ? '*' : '')), to: [...sh.querySelectorAll('[data-sort-to]')].map((x) => x.textContent + (x.disabled ? '-' : '')), html: sh.querySelector('.xd-sort b')?.innerHTML || '', text: sh.textContent }; });
+    let s = await sort();
+    ok(s.rows.join() === 'chat:c-old1,chat:c-old2,project:p-old,file:f-1', `the sheet lists what is in no area: loose chats, projects and files; a chat inside a project is moved with its project (${s.rows.join()})`);
+    ok(s.to.length >= 6 && s.to.every((x) => x.endsWith('-')), 'no area can be chosen until something is selected');
+    ok(/Old &lt;b&gt;recipe/.test(await p.evaluate(() => [...document.querySelectorAll('.xd-sort b')].map((b) => b.innerHTML).join('|'))), 'a title is shown as text');
+    await p.evaluate(() => { const sh = [...document.querySelectorAll('.xd')].at(-1); for (const k of ['chat:c-old1', 'project:p-old', 'file:f-1']) sh.querySelector('[data-sort-pick="' + k + '"]').click(); }); await wait(300); s = await sort();
+    ok(s.rows.filter((r) => r.endsWith('*')).length === 3 && /Move 3 to/.test(s.text) && s.to.some((x) => x === 'Dev'), 'selecting items enables the areas and says how many will move');
+    db.failMove = 's-1';
+    await p.evaluate(() => [...[...document.querySelectorAll('.xd')].at(-1).querySelectorAll('[data-sort-to]')].find((x) => x.textContent === 'Dev').click()); await wait(1300); s = await sort();
+    const moves = calls('MOVE', '/').map((x) => x[1] + '>' + x[2].area).sort().join();
+    ok(moves === 'chat/conversations/c-old1>dev,chat/projects/p-old>dev,library/assets/s-1>dev', `each selected item is moved on the platform (${moves})`);
+    ok(s.rows.join() === 'chat:c-old2,file:f-1*' && (await p.evaluate(() => document.body.textContent.includes('Moved 2 to Dev. 1 couldn’t be moved and stay where they were.'))), `what moved leaves the list; what the platform refused stays, selected, and the person is told (${s.rows.join()})`);
+    db.failMove = null;
+    await p.evaluate(() => { const sh = [...document.querySelectorAll('.xd')].at(-1); sh.querySelector('[data-sort-all="chat"]').click(); }); await wait(200);
+    await p.evaluate(() => [...[...document.querySelectorAll('.xd')].at(-1).querySelectorAll('[data-sort-to]')].find((x) => x.textContent === 'Studio').click()); await wait(1300); s = await sort();
+    ok(s.state === 'done', `when nothing is left the sheet says everything is in an area (${s.state})`);
+    await closeAll(p); await wait(500);
+    ok(!(await p.evaluate(() => !!document.querySelector('#panel [data-sort-entry]'))), 'and Overview stops offering it');
+    ok(errs.length === 0, `no page errors in sorting (${JSON.stringify(errs.slice(0, 2))})`); await p.close(); }
+
   // ── Usage: the person's real credits
   reset();
   { const { p, errs } = await open('#/overview'); await wait(900);

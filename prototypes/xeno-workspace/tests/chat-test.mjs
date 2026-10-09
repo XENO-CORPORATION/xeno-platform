@@ -111,6 +111,9 @@ try {
       const colour = (doc, v) => { const pr = doc.createElement('i'); doc.body.appendChild(pr); pr.style.color = v; const c = doc.defaultView.getComputedStyle(pr).color; pr.remove(); return c; };
       return { radius: cs('[data-chat-composer-shell]').borderRadius, bg: cs('[data-chat-composer-shell]').backgroundColor, wantBg: colour(d, 'var(--n23)'), pageBg: colour(document, 'var(--n23)'), bar: cs('.chat-top-bar').display, opener: cs('[aria-label="Open conversation history"]').display, font: cs('textarea').fontSize, send: cs('[data-composer-send-button]').backgroundColor, ready: colour(d, 'var(--n233)'), idle: colour(d, 'var(--w100)') }; });
     // the loading moment: the XENO mark loader stands in until the chat is on the page, then both cross-fade
+    // The loader stays still when the system asks for reduced motion, so the test says which it wants: this
+    // check failed on a machine whose Windows animations were off (2026-10-10).
+    await p.emulateMediaFeatures([{ name: 'prefers-reduced-motion', value: 'no-preference' }]);
     const ld = await p.evaluate(async () => { const f2 = document.getElementById('xw-chat-frame'), l = document.getElementById('xw-chat-loading'); const now = { made: !!l, ready: f2.classList.contains('ready'), shown: !!l?.classList.contains('show'), frameOp: getComputedStyle(f2).opacity, parts: window.XENO_MARK_LOADER ? window.XENO_MARK_LOADER.particles(88) : 0 };
       // a chat that has to load again: the frame is cleared and the loader shows at once, drawing
       window.XENO_CHAT.state(); f2.classList.remove('ready'); const host = document.createElement('div'); const stop = window.XENO_MARK_LOADER.mount(host, { size: 88, label: 'Loading chat' }); document.body.appendChild(host); await new Promise((r) => setTimeout(r, 200)); const drawing = Number(host.querySelector('[data-mark-loader]').dataset.frames) > 3, label = host.querySelector('[data-mark-loader]').getAttribute('aria-label'); stop(); const gone = !host.querySelector('[data-mark-loader]'); host.remove(); f2.classList.add('ready');
@@ -119,6 +122,10 @@ try {
     ok(rdy.before && !rdy.loadingOnly && rdy.after, 'the chat is ready when its input box is on the page; the app’s page-loading bar alone is not the chat (' + JSON.stringify(rdy) + ')');
     ok(rdy.hidden, 'the app’s page-loading bar is not shown inside the workspace');
     ok(ld.made && ld.ready && !ld.shown && ld.frameOp === '1', 'once the chat is on the page the frame is shown and the loader is not (' + JSON.stringify({ ready: ld.ready, shown: ld.shown, op: ld.frameOp }) + ')');
+    await p.emulateMediaFeatures([{ name: 'prefers-reduced-motion', value: 'reduce' }]);
+    const calm = await p.evaluate(async () => { const host = document.createElement('div'); const stop = window.XENO_MARK_LOADER.mount(host, { size: 88, label: 'Loading chat' }); document.body.appendChild(host); await new Promise((r) => setTimeout(r, 200)); const frames = Number(host.querySelector('[data-mark-loader]').dataset.frames); stop(); host.remove(); return frames; });
+    await p.emulateMediaFeatures([{ name: 'prefers-reduced-motion', value: 'no-preference' }]);
+    ok(calm === 1, 'with reduced motion asked for, the loader draws the mark once and does not move (' + calm + ' frame)');
     ok(ld.parts > 300 && ld.drawing && ld.label === 'Loading chat' && ld.gone, 'the loader is the XENO mark in particles (' + ld.parts + '), it draws, it is named, and stopping it removes it');
     let c = await dressed();
     ok(await p.evaluate(() => { const d = document.getElementById('xw-chat-frame').contentDocument; return d.defaultView.getComputedStyle(d.getElementById('qbar')).paddingTop; }) === '11px', 'the chat’s own components keep their own spacing: the picture’s element-wide resets are not handed over (the queue’s header bar keeps its padding)');

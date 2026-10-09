@@ -226,6 +226,8 @@
   const needRow = (n) => row(n.kind === 'schedule_failed' ? `data-need-schedule="${esc(n.id)}"` : `data-item="${esc(n.t)}" data-item-p="${n.p}"`, `<span class="t">${esc(n.t)}</span><span class="need">${esc(n.meta)}</span>`, 'needrow');
   const recentRow = (r) => (r.kind === 'project'
     ? row(`data-recent-project="${esc(r.id)}"`, `${ic('folder')}<span class="t">${esc(r.t)}</span><span class="meta">${esc(r.ago)}</span>`)
+    : r.kind === 'file'
+      ? row(`data-recent-file="${esc(r.id)}"`, `${ic('lib')}<span class="t">${esc(r.t)}</span><span class="meta">${esc(r.ago)}</span>`)
     : r.kind === 'chat'
       ? row(`data-recent-chat="${esc(r.id)}"`, `<span class="t">${esc(r.t)}</span><span class="meta">${esc(r.ago)}</span>`)
       : row(`data-item="${esc(r.t)}" data-item-p="${r.p}" data-ctx="product" data-product="${r.p}"`, `<span class="t">${esc(r.t)}</span><span class="meta">${esc(r.ago)}</span><span class="more" data-more>${ic('more')}</span>`));
@@ -247,6 +249,7 @@
         <button class="act primary" data-go="chat">${ic('plus')}New chat<kbd>Ctrl ⇧ O</kbd></button>
         ${N().length ? sec('needs', `Needs you<span class="cnt-inline">${N().length}</span>`, N().map(needRow).join('')) : ''}
         ${pinned ? sec('pinned', 'Pinned', pinned) : ''}
+        ${window.XENO_AREA_LIVE?.served && window.XENO_AREA_LIVE.unplaced().count ? `<button class="act" data-xa="sortAreas" data-sort-entry>${ic('grid')}Sort into areas<kbd>${window.XENO_AREA_LIVE.unplaced().count}</kbd></button>` : ''}
         ${sec('recent', 'Recent', window.XENO_RECENT.slice(0, 8).map(recentRow).join('') || (window.XENO_RECENT_LIVE && window.XENO_RECENT_LIVE.served ? '<div class="ctx-note" data-recent-empty>Nothing recent yet</div>' : ''))}
       </div>`;
   }
@@ -2038,7 +2041,7 @@
     const input = pal.querySelector('input');
     const all = [...MODES.map((m) => ({ k: 'Modes', label: M[m.id].name, sub: m.persona, html: noMark(m.id), run: () => openMode(m.id) })),
       ...Object.values(PR).map((p) => ({ k: 'Products', label: p.name, sub: (homeModeOf(p.id) ? M[homeModeOf(p.id).id].name : 'Global') + (p.status === 'soon' ? ' · soon' : ''), html: pIcon(p, 20), run: () => openProduct(p.id) })),
-      ...window.XENO_RECENT.map((r) => ({ k: 'Recent', label: r.t, sub: PR[r.p].name, html: pIcon(PR[r.p], 20), run: () => (r.kind === 'chat' ? go('product', { product: 'chat', item: r.id }) : r.kind === 'project' ? go('global', { global: 'projects', item: r.t }) : openProduct(r.p)) }))];
+      ...window.XENO_RECENT.map((r) => ({ k: 'Recent', label: r.t, sub: PR[r.p] ? PR[r.p].name : 'File', html: PR[r.p] ? pIcon(PR[r.p], 20) : `<span class="sr-ic">${ic('lib')}</span>`, run: () => (r.kind === 'file' ? go('global', { global: 'library', item: r.id }) : r.kind === 'chat' ? go('product', { product: 'chat', item: r.id }) : r.kind === 'project' ? go('global', { global: 'projects', item: r.t }) : openProduct(r.p)) }))];
     const draw = () => {
       const q = input.value.trim().toLowerCase();
       palItems = window.XENO_SEARCH ? window.XENO_SEARCH.rank(all, input.value) : all.filter((x) => !q || (x.label + ' ' + x.sub).toLowerCase().includes(q)).slice(0, 14);
@@ -2080,6 +2083,7 @@
     if (S.switching && !t.closest('#panel, #logo, #menu')) { closeSwitcher(); }
     if (t.closest('#scrim')) return closePalette();
     if (t.closest('[data-need-schedule]')) return window.XA.scheduled();
+    { const rf = t.closest('[data-recent-file]'); if (rf) return go('global', { global: 'library', item: rf.dataset.recentFile }); }
     { const rc = t.closest('[data-recent-chat]'); if (rc) return go('product', { product: 'chat', item: rc.dataset.recentChat });
       const rp = t.closest('[data-recent-project]'); if (rp) { const pr = ((window.XENO_PG_PROJECTS || {}).items || []).find((x) => x.id === rp.dataset.recentProject); return go('global', { global: 'projects', item: pr ? pr.name : null }); } }
     const more = t.closest('[data-more]');
