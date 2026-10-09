@@ -367,3 +367,18 @@ test('Chat search is a quick lookup: a small cap, and the prompt says so', () =>
     'the Chat capability statement must tell the model the budget is small, or it learns it by hitting the wall',
   );
 });
+
+/*
+ * 2026-10-09, Chat on gpt-6.1-sol: "hello" was answered "Hi! I'm XENO. What can I help you with?".
+ * Measured on the live gateway with the identity as it stood: six of six models introduced
+ * themselves to a bare greeting, three with a product tour. Knowing its name must not become
+ * announcing it; with the lines below, six of six gave a short greeting in the user's language and
+ * still answered "who are you?" as XENO. Each assertion fails when its line is removed.
+ */
+test('the identity does not make the model introduce itself to a greeting', () => {
+  const code = stripComments(CONFIG);
+  const identity = /export const XENO_IDENTITY = \[[\s\S]*?\]\.join/.exec(code)?.[0] ?? '';
+  assert.match(identity, /do not introduce yourself, state your name, or describe/, 'a greeting is not a cue for a self-introduction');
+  assert.match(identity, /unless the user asks who or what you are/, 'asked directly, it still says who it is');
+  assert.match(identity, /in the user’s language/, 'a greeting is answered in the language it came in');
+});
