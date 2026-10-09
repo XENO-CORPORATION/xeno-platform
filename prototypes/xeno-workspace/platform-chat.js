@@ -50,7 +50,31 @@
     })();
     return loading;
   }
-  const repaint = () => { try { X()?.refreshPanel?.(); const c = document.querySelector('#main .crumbs'); if (c && X()?.crumbs) c.innerHTML = X().crumbs(); } catch {} };
+  const repaint = () => { try { X()?.refreshPanel?.(); const c = document.querySelector('#main .crumbs'); if (c && X()?.crumbs) c.innerHTML = X().crumbs(); } catch {} paintViewer(); };
+  // ---------- a file preview inside the chat: this page's header is its header ----------
+  // The trail gains the file's name (the step before it walks back out of the preview), and the bar shows the
+  // preview's three actions in place of the conversation's. The chat draws no header of its own here.
+  function paintViewer() {
+    const bar = document.querySelector('#main .topbar'); if (!bar) return;
+    const v = S.viewer, esc = X()?.esc || ((s) => String(s)), ic = X()?.ic || (() => '');
+    bar.classList.toggle('viewing', !!v);
+    let box = bar.querySelector('.tb-viewer');
+    const c = bar.querySelector('.crumbs');
+    if (c && c.querySelector('[data-viewer-name]')) { try { if (X()?.crumbs) c.innerHTML = X().crumbs(); } catch {} }
+    if (!v) { if (box) box.remove(); return; }
+    if (c) { const last = c.querySelector('b:last-of-type'); if (last) { const a = document.createElement('a'); a.setAttribute('data-viewer-close', ''); a.textContent = last.textContent; last.replaceWith(a); }
+      c.insertAdjacentHTML('beforeend', '<span class="sep">/</span><b data-viewer-name>' + esc(v.name) + '</b>'); }
+    if (!box) { box = document.createElement('span'); box.className = 'tb-viewer'; bar.appendChild(box); }
+    const dis = v.canExport ? '' : ' disabled';
+    box.innerHTML = '<button class="ib" data-viewer-copy aria-label="Copy share link" data-tip="Copy share link"' + dis + '>' + ic('link') + '</button>'
+      + '<button class="ib" data-viewer-download aria-label="Download" data-tip="Download"' + dis + '>' + ic('download') + '</button>'
+      + '<button class="ib" data-viewer-close aria-label="Close preview" data-tip="Close preview" data-kbd="Esc">' + ic('x') + '</button>';
+  }
+  document.addEventListener('click', (e) => {
+    if (!S.viewer) return; const t = e.target.closest('#main .topbar [data-viewer-close], #main .topbar [data-viewer-copy], #main .topbar [data-viewer-download]'); if (!t || t.disabled) return;
+    e.preventDefault(); e.stopPropagation();
+    toChatFrame({ type: t.hasAttribute('data-viewer-copy') ? 'viewer-copy' : t.hasAttribute('data-viewer-download') ? 'viewer-download' : 'viewer-close' });
+  }, true);
   // the shape the sidebar draws: projects with their chats, then the rest by day
   function data() {
     const byProject = new Map(); const loose = [];
@@ -67,6 +91,8 @@
   const style = document.createElement('style');
   style.textContent = '#xw-chat-frame{position:fixed;z-index:2;border:0;margin:0;padding:0;background:transparent;color-scheme:dark;visibility:hidden;pointer-events:none}'
     + '#xw-chat-frame.on{visibility:visible;pointer-events:auto}'
+    + '#main .topbar.viewing [data-chat-transcript],#main .topbar.viewing > .ib[aria-label="Share"],#main .topbar.viewing > .ib[aria-label="More"]{display:none}'
+    + '#main .topbar .tb-viewer{display:inline-flex;align-items:center;gap:2px}#main .topbar .tb-viewer .ib:disabled{opacity:.3;cursor:not-allowed}#main .topbar .crumbs a[data-viewer-close]{cursor:pointer}'
     // While the chat is loading, the frame is kept clear and the XENO mark loader stands in its place: the chat's
     // own loading screen is never the one seen here (owner, 2026-10-09). Both fade over 200ms when it is ready.
     + '#xw-chat-frame{opacity:0;transition:opacity .2s ease-out}#xw-chat-frame.ready{opacity:1}'
@@ -167,7 +193,7 @@
     const want = X()?.S?.item || null;
     if (!frame) ensureFrame(pathFor(want)); else if ((want || null) !== (S.current || null)) show(pathFor(want), true);   // the address changed (Back, a link): follow it
     S.current = want;
-    fit(); frame.classList.add('on'); document.documentElement.classList.add('xw-chat-on');
+    fit(); frame.classList.add('on'); document.documentElement.classList.add('xw-chat-on'); paintViewer();
   }
   function fit() {
     if (!slot || !frame) return; const r = slot.getBoundingClientRect(), main = document.getElementById('main');
@@ -201,6 +227,8 @@
       X()?.openModelMenu?.(S.picker.anchor);
     }
     if (m.type === 'model-menu-close') X()?.closeModelMenu?.();
+    if (m.type === 'viewer') { S.viewer = m.open && typeof m.name === 'string' && m.name ? { name: m.name.slice(0, 200), canExport: !!m.canExport } : null; paintViewer(); }
+    if (m.type === 'viewer-copied' && S.viewer) X()?.toast?.('Link copied');
     // the chat's effort pill was pressed: this page's own effort menu opens, on the chat's real levels
     if (m.type === 'effort-menu' && Array.isArray(m.levels) && m.levels.length && m.rect) {
       const f = frame.getBoundingClientRect(), r = m.rect;
@@ -277,6 +305,6 @@
   const pickModel = (id) => toChatFrame({ type: 'pick-model', id });
   const pickerClosed = () => { if (S.effort) { S.effort = null; toChatFrame({ type: 'effort-menu-closed' }); } if (S.picker) { S.picker = null; toChatFrame({ type: 'model-menu-closed' }); } };
   const pickEffort = (id) => { if (S.effort) S.effort.selected = id; toChatFrame({ type: 'pick-effort', id }); };
-  window.XENO_CHAT = { served: true, get picker() { return S.picker; }, get effort() { return S.effort || null; }, pickModel, pickEffort, pickerClosed, data, title, open, load, rename, remove, dress, host: () => '<div class="live-chat-host" data-chat-frame aria-label="Chat"></div>', state: () => ({ ready: chatReady(), status: S.status, count: S.convs.length, current: S.current, path: S.path, shown: !!frame && frame.classList.contains('on') }) };
+  window.XENO_CHAT = { served: true, get picker() { return S.picker; }, get effort() { return S.effort || null; }, pickModel, pickEffort, pickerClosed, data, title, open, load, rename, remove, dress, host: () => '<div class="live-chat-host" data-chat-frame aria-label="Chat"></div>', state: () => ({ viewer: S.viewer || null, ready: chatReady(), status: S.status, count: S.convs.length, current: S.current, path: S.path, shown: !!frame && frame.classList.contains('on') }) };
   Promise.resolve(P.ready).then((user) => { if (!user) return; P.first(load()); watch(); });
 })();
