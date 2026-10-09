@@ -140,5 +140,5 @@
   document.addEventListener('click', (e) => { const t = e.target.closest('[data-pg-retry="projects"]'); if (t && W.status === 'error') { pstate('projects', 'loading'); paint(); load(); } }, true);
   async function load() { await loadScope(); return loadProjects(); }
   window.XENO_WORK = { served: true, load, projectTab, blocked, state: () => ({ scope: SC.status, projects: W.status }), reload: loadProjects, idOf: (name) => ((window.XENO_PG_PROJECTS.items || []).find((p) => p.name === name) || {}).id || null };
-  Promise.resolve(P.ready).then((user) => { if (user) load(); });
+  Promise.resolve(P.ready).then((user) => { if (user) P.first(load()); });   // the page waits for this first load before it shows
 })();

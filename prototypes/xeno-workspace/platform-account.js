@@ -268,5 +268,5 @@
   });
 
   window.XENO_ACCOUNT = { served: true, section, load, confirm, changeEmail, state: () => ({ status: S.status, parts: { ...S.parts } }), unavailable: () => [...UNAVAILABLE], notYet: () => Object.keys(NOT_YET) };
-  Promise.resolve(P.ready).then((user) => { if (user) load(); });
+  Promise.resolve(P.ready).then((user) => { if (user) P.first(load()); });   // the page waits for this first load before it shows
 })();

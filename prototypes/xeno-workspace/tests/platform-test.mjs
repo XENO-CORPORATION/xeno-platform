@@ -10,18 +10,21 @@ const PORT = 5187, base = `http://127.0.0.1:${PORT}`;
 const server = await createServer({ configFile: false, root: repo, logLevel: 'error', appType: 'custom', optimizeDeps: { noDiscovery: true, entries: [] }, plugins: [xenoWorkspace(repo)], server: { host: '127.0.0.1', port: PORT, strictPort: true } });
 await server.listen();
 const b = await puppeteer.launch({ headless: true, protocolTimeout: 60000 });
+let slow = 0;   // when set, the library's first answer is held this long
 async function open(me) {
   const p = await b.newPage(); await p.setViewport({ width: 1400, height: 900 });
   const errs = [], bad = []; p.on('pageerror', (e) => errs.push(e.message));
   p.on('requestfailed', (q) => { if (!q.url().includes('fonts.g') && !q.url().endsWith('/api/auth/me')) bad.push('failed ' + q.url()); });
   p.on('response', (r) => { if (r.status() >= 400 && !r.url().endsWith('/api/auth/me')) bad.push(r.status() + ' ' + r.url()); });
   await p.setRequestInterception(true);
-  p.on('request', (q) => { const u = new URL(q.url());
+  const handle = (q, late) => { const u = new URL(q.url());
+    if (slow && !late && u.pathname === '/api/library/assets') return void setTimeout(() => handle(q, true), slow);
     if (u.pathname === '/api/auth/me') return me === 'down' ? q.abort('failed') : q.respond(me);
     // the account pages load with the workspace; this suite is about the gate, so they get an empty, valid account
     if (me !== 'down' && me.status === 200 && u.pathname.startsWith('/api/')) { const user = JSON.parse(me.body).user; const body = { '/api/account/overview': { success: true, overview: { user, credits: { balance: 0 }, workspace_count: 1 } }, '/api/account/sessions': { success: true, sessions: [] }, '/api/account/security': { success: true, security: { confirmation: { confirmed: false, available: true, expires_at: null }, methods: ['password'], has_password: true, email: '', pending_email: null } }, '/api/account/api-keys': { success: true, keys: [] }, '/api/account/exports': { success: true, exports: [] }, '/api/auth/linked-accounts': { success: true, accounts: [] }, '/api/billing/overview': { success: true, overview: { credits: { balance: 0 }, subscription: null } }, '/api/dashboard/stats': { success: true, stats: { usage_available: false, usage_by_surface: [] } }, '/api/user-data/settings': { success: true, settings: {} }, '/api/workspaces': { success: true, workspaces: [] }, '/api/chat/projects': { success: true, projects: [] }, '/api/chat/conversations': { success: true, conversations: [] }, '/api/library/assets': { success: true, items: [] } }[u.pathname]; if (body) return q.respond({ status: 200, contentType: 'application/json', body: JSON.stringify(body) }); }
     if (u.pathname === '/login') return q.respond({ status: 200, contentType: 'text/html', body: '<title>login</title>' });
-    q.continue(); });
+    q.continue(); };
+  p.on('request', (q) => handle(q));
   return { p, errs, bad };
 }
 const USER = { success: true, user: { id: 7, username: 'test-person', email: 'test@example.test', display_name: 'Test Person', avatar_url: null, email_verified: true } };
@@ -66,6 +69,17 @@ try {
     const s = await p.evaluate(() => ({ text: document.getElementById('xp-state')?.textContent || '', main: getComputedStyle(document.querySelector('#main')).visibility, retry: !!document.getElementById('xp-retry') }));
     ok(/could not reach XENO/.test(s.text) && s.retry && s.main === 'hidden', 'a failed check says so, offers a retry, and shows no workspace');
     await p.close();
+  }
+  { // a refresh shows the page once, complete: nothing is visible while the first loads are still arriving
+    slow = 1500;
+    const { p } = await open({ status: 200, contentType: 'application/json', body: JSON.stringify(USER) });
+    const nav = p.goto(base + '/workspace/', { waitUntil: 'domcontentloaded' }); await nav; await wait(700);
+    const during = await p.evaluate(() => ({ held: document.documentElement.classList.contains('xp-wait'), main: getComputedStyle(document.querySelector('#main') || document.body).visibility, said: document.getElementById('xp-state')?.innerText || '' }));
+    ok(during.held && during.main === 'hidden' && /Opening your workspace/.test(during.said), 'while the first loads are still arriving the page stays held, with its message (' + JSON.stringify(during) + ')');
+    await wait(1700);
+    const after = await p.evaluate(() => ({ held: document.documentElement.classList.contains('xp-wait'), main: getComputedStyle(document.querySelector('#main')).visibility, lib: window.XENO_LIB.state().status, work: window.XENO_WORK.state().projects, acct: window.XENO_ACCOUNT.state().status }));
+    ok(!after.held && after.main === 'visible' && after.lib === 'ready' && after.work === 'ready' && after.acct === 'ready', 'it appears once every first load has landed (' + JSON.stringify(after) + ')');
+    slow = 0; await p.close();
   }
   { // what is never served
     const p = await b.newPage(); const st = async (u) => (await p.goto(base + u)).status();
