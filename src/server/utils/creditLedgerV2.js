@@ -1145,24 +1145,38 @@ export async function voidHoldV2(pool, userId, holdId) {
  * the rows accumulate forever in state='held'. This bounds the table and makes the
  * state truthful. Idempotent; FOR UPDATE SKIP LOCKED so it never contends with a live
  * settle. Returns the number of holds voided. (Blocker #7 INFRA-7.3.)
+ *
+ * It voids EVERY expired hold it finds, not one batch of them. `batchLimit` bounds each statement
+ * (the rows one statement locks), and the sweep repeats until a batch comes back short. A sweep that
+ * stopped after one batch (oldest first) left every expired hold beyond that batch in state='held'
+ * until the next tick. Readers that sum state='held' without an expiry filter (for example
+ * workforceRunFunding) would count those rows as reserved in the meantime. The hold-extension gate caught
+ * it: its control hold, the newest expired hold, stayed 'held' after the sweep once 1,000 older
+ * expired holds existed.
  */
 export async function sweepExpiredHolds(pool, { batchLimit = 1000 } = {}) {
-  const res = await pool.query(
-    `UPDATE credit_holds SET state='voided', updated_at=now()
-       WHERE id IN (
-         SELECT id FROM credit_holds h
-           WHERE state='held' AND expires_at <= now()
-             AND NOT EXISTS (SELECT 1 FROM credit_accounts a WHERE a.user_id=h.user_id
-               AND COALESCE(to_jsonb(a)->>'owner_kind','user') NOT IN ('user','workspace'))
-             -- An open draw is provider work in flight: expiry never releases it (FUND-09).
-             AND NOT ${OPEN_DRAW_ON_HOLD}
-           ORDER BY expires_at ASC
-           LIMIT $1
-           FOR UPDATE SKIP LOCKED
-       )`,
-    [batchLimit],
-  );
-  return res.rowCount;
+  let voided = 0;
+  for (;;) {
+    const res = await pool.query(
+      `UPDATE credit_holds SET state='voided', updated_at=now()
+         WHERE id IN (
+           SELECT id FROM credit_holds h
+             WHERE state='held' AND expires_at <= now()
+               AND NOT EXISTS (SELECT 1 FROM credit_accounts a WHERE a.user_id=h.user_id
+                 AND COALESCE(to_jsonb(a)->>'owner_kind','user') NOT IN ('user','workspace'))
+               -- An open draw is provider work in flight: expiry never releases it (FUND-09).
+               AND NOT ${OPEN_DRAW_ON_HOLD}
+             ORDER BY expires_at ASC
+             LIMIT $1
+             FOR UPDATE SKIP LOCKED
+         )`,
+      [batchLimit],
+    );
+    voided += res.rowCount;
+    // A short batch has reached every eligible hold it could lock. A hold a live settle has locked is
+    // skipped, and the next tick sees it again. A zero batch also stops, so batchLimit 0 cannot loop.
+    if (res.rowCount === 0 || res.rowCount < batchLimit) return voided;
+  }
 }
 
 async function insertUsageLog(client, userId, event, costMicro) {
