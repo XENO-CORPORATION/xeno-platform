@@ -51,7 +51,6 @@ export const EVENTS = Object.freeze({
   EMAIL_CHANGE_REQUESTED: 'email_change_requested',
   EMAIL_CHANGED: 'email_changed',
   SESSIONS_REVOKED_ALL: 'sessions_revoked_all',         // sign out everywhere
-  API_KEY_CREATED: 'api_key_created',                   // made by the API portal, asked for from the account page
   API_KEY_REVOKED: 'api_key_revoked',
   DATA_EXPORT_REQUESTED: 'data_export_requested',
   DATA_EXPORT_DOWNLOADED: 'data_export_downloaded',

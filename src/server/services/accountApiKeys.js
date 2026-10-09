@@ -1,16 +1,16 @@
 /**
- * A person's API keys read straight from the table (used by the data export), and revoke.
- * The account page's list and "new key" go through the API portal instead: services/apiPortalKeys.js.
+ * A person's API keys, read straight from the table for the data export, and one stand-in revoke.
  *
- * Keys are MADE in one place only: the XENO API portal (api.xenosystem.ai, repo xeno-api-platform,
- * portal/lib/platform-billing.ts createCanonicalApiKeyForLocalUser). It writes the `api_keys` row and
- * the `external_api_keys` row that ties the key to a billing project, whose policy and limits the
- * gateway applies, and it owns the per-tier key limit. A second creator here would make keys with no
- * project and different limits, so this module has none. The account page links to the portal.
+ * API keys are managed in one place: the XENO API portal (api.xenosystem.ai, repo xeno-api-platform,
+ * portal/lib/platform-billing.ts). It makes a key with the `external_api_keys` row that ties it to a
+ * billing project, applies the per-plan limit, lists and revokes. The platform has no key page and
+ * no create route. Leaders keep it the same way: OpenAI on its developer platform, Anthropic in its
+ * Console, both apart from the consumer app.
  *
- * Reading the list and revoking are safe to share: both act on the same rows the portal reads.
- * Revoking sets `is_active = false` (the gateway and middleware/auth.js stop accepting the key at once)
- * and marks the portal's mirror row, exactly as the portal's own revoke does.
+ * `revokeApiKey` is a NAMED STAND-IN. On 2026-10-09 the portal's revoke route writes a column
+ * `api_keys` does not have, and its working revoke sits at an unreachable path, so this was the
+ * only revoke that worked. It does what the portal's own function does: `is_active = false` and the
+ * mirror row marked. Exit: remove it when the portal's `DELETE /api/keys/:id` works.
  *
  * An agent's keys belong to the agent's own user row (/api/v2/agents) and never appear here.
  */

@@ -8,9 +8,10 @@
  *   POST   /email/confirm            { code } from the new address: makes the change
  *   DELETE /email                    drop a pending change
  *   DELETE /sessions                 sign out everywhere else (?all=1 includes this session)
- *   GET    /api-keys                 the person's API keys, asked of the API portal (services/apiPortalKeys.js)
- *   POST   /api-keys                 make one: the portal makes it; the key is in this response only   [confirmed]
- *   DELETE /api-keys/:id             revoke one (a named stand-in until the portal's revoke route works)
+ *   DELETE /api-keys/:id             revoke one key. API keys are managed on the XENO API portal, not here; this
+ *                                    one route stays as a named stand-in while the portal's own revoke route is broken
+ *                                    (workspace brief 2026-10-09-api-portal-revoke-route-is-unreachable.md). No page
+ *                                    calls it. It goes when the portal's revoke works.
  *   GET    /exports                  copies of your data
  *   POST   /exports                  ask for a new copy                        [confirmed]
  *   GET    /exports/:id/download     the file
@@ -31,7 +32,6 @@ import {
 } from '../services/accountConfirmation.js';
 import { cancelEmailChange, completeEmailChange, pendingEmailChange, requestEmailChange } from '../services/accountEmailChange.js';
 import { revokeApiKey } from '../services/accountApiKeys.js';
-import { createPortalKey, listPortalKeys } from '../services/apiPortalKeys.js';
 import { deleteExport, exportFile, listExports, requestExport } from '../services/accountExport.js';
 
 const router = express.Router();
@@ -149,26 +149,6 @@ router.delete('/sessions', guard('sign out everywhere', async (req, res) => {
 }));
 
 // ── personal API keys ──────────────────────────────────────────────────────────────────────────────
-// The API portal owns keys. These two routes ask it, as the signed-in person; nothing about a key is decided here.
-const who = (req) => ({ userId: req.user.id, sid: sidOf(req) });
-router.get('/api-keys', guard('api keys', async (req, res) => {
-  const result = await listPortalKeys(who(req));
-  if (!result.ok) return fail(res, 502, 'keys_unavailable', 'The API portal didn’t answer. Your keys are unchanged.');
-  res.json({ success: true, keys: result.keys });
-}));
-
-router.post('/api-keys', requireConfirmation(), guard('api key create', async (req, res) => {
-  const result = await createPortalKey(who(req), { name: req.body?.name });
-  if (result.ok) {
-    recordSecurityEvent(req.db, EVENTS.API_KEY_CREATED, { userId: req.user.id, req, metadata: { key_id: result.key.id, name: result.key.name, project: result.key.project_name, via: 'api-portal' } });
-    res.set('Cache-Control', 'no-store');
-    return res.status(201).json({ success: true, key: result.key, secret: result.secret });
-  }
-  if (result.invalid) return fail(res, 400, 'invalid_name', 'Give the key a name of up to 100 characters');
-  if (result.limit) return fail(res, 409, 'key_limit', result.message);
-  return fail(res, 502, 'keys_unavailable', 'The API portal didn’t answer. No key was made.');
-}));
-
 router.delete('/api-keys/:id', guard('api key revoke', async (req, res) => {
   const result = await revokeApiKey(req.db, { userId: req.user.id, keyId: req.params.id });
   if (!result.ok) return fail(res, 404, 'not_found', 'API key not found');
