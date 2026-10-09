@@ -110,6 +110,8 @@
     out.push('html body .chat-themed button[data-composer-send-button][data-composer-send-button][data-composer-send-button][data-composer-send-button]:not(:disabled){background:var(--n233)!important;color:var(--n9)!important}');
     // the chat's own history panel is not shown here (this page's sidebar is the history), so neither is its opener
     out.push('html body .chat-themed button[aria-label="Open conversation history"]{display:none!important}');
+    // the app's own page-loading bar is never the loading state seen here: this page's loader is
+    out.push('html body .route-loading{display:none!important}');
     return out.join('\n');
   }
   function dress() {
@@ -126,7 +128,10 @@
   addEventListener('storage', (e) => { if (e.key === 'xeno_platform_theme' || e.key === 'xeno_platform_theme_brightness') setTimeout(dress, 0); });
   // ---------- the loading moment: the XENO mark loader, from the first instant until the chat is on the page ----------
   let loadingEl = null, stopLoader = null, readyT = 0;
-  const chatReady = () => { try { const d = frame && frame.contentDocument; return !!(loaded && d && d.querySelector('.chat-themed')); } catch { return false; } };
+  // READY means the chat's own input box is on the page. Not `.chat-themed` alone: the app's page-loading state (a thin
+  // bar across the top, `.route-loading`) carries that class too, so the loader left early and revealed that bar
+  // (owner's report, 2026-10-09).
+  const chatReady = () => { try { const d = frame && frame.contentDocument; return !!(loaded && d && d.querySelector('[data-chat-composer-shell], [data-chat-route-notice]:not([data-chat-route-notice$="loading"])')); } catch { return false; } };
   function showLoading() {
     if (!frame) return;
     frame.classList.remove('ready');
@@ -272,6 +277,6 @@
   const pickModel = (id) => toChatFrame({ type: 'pick-model', id });
   const pickerClosed = () => { if (S.effort) { S.effort = null; toChatFrame({ type: 'effort-menu-closed' }); } if (S.picker) { S.picker = null; toChatFrame({ type: 'model-menu-closed' }); } };
   const pickEffort = (id) => { if (S.effort) S.effort.selected = id; toChatFrame({ type: 'pick-effort', id }); };
-  window.XENO_CHAT = { served: true, get picker() { return S.picker; }, get effort() { return S.effort || null; }, pickModel, pickEffort, pickerClosed, data, title, open, load, rename, remove, dress, host: () => '<div class="live-chat-host" data-chat-frame aria-label="Chat"></div>', state: () => ({ status: S.status, count: S.convs.length, current: S.current, path: S.path, shown: !!frame && frame.classList.contains('on') }) };
+  window.XENO_CHAT = { served: true, get picker() { return S.picker; }, get effort() { return S.effort || null; }, pickModel, pickEffort, pickerClosed, data, title, open, load, rename, remove, dress, host: () => '<div class="live-chat-host" data-chat-frame aria-label="Chat"></div>', state: () => ({ ready: chatReady(), status: S.status, count: S.convs.length, current: S.current, path: S.path, shown: !!frame && frame.classList.contains('on') }) };
   Promise.resolve(P.ready).then((user) => { if (!user) return; P.first(load()); watch(); });
 })();
