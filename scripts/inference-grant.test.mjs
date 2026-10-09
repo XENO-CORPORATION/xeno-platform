@@ -199,11 +199,21 @@ test('the stream route resolves before it meters — a stored byok cannot be bil
   const src = read('routes', 'aiRoutes.js');
   const start = src.indexOf("router.post('/chat/stream'");
   assert.ok(start !== -1, 'stream route must exist');
-  const hold = src.indexOf('meter = await meterPremiumChatStream', start);
+  const hold = src.indexOf('meterPremiumChatStream(req.db', start);
   assert.ok(hold > start, 'the stream hold must exist');
   const body = src.slice(start, hold);
   assert.match(body, /resolveInferenceRoute/);
   assert.match(body, /streamDecision\.path !== 'premium'/);
+  // Since 2026-10-09 an own-key turn STREAMS instead of being refused, so "cannot be billed" is no
+  // longer guaranteed by a 501 above the hold: it is guaranteed by every hold in this route being
+  // skipped for an own-key turn. Both call sites must carry the guard, and none may be bare.
+  const end = src.indexOf("router.post('/chat/estimate'", start);
+  const route = src.slice(start, end === -1 ? undefined : end);
+  const holds = route.match(/meterPremiumChatStream\(req\.db/g) || [];
+  const guarded = route.match(/ownKey \? freeMeter\(\) : await meterPremiumChatStream\(req\.db/g) || [];
+  assert.equal(holds.length, 2, 'the route places a hold in two places: before the stream, and per tool iteration');
+  assert.equal(guarded.length, holds.length, 'every hold is skipped for an own-key turn');
+  assert.match(route, /const ownKey = streamDecision\.path === 'byok';/);
 });
 
 // ── No silent fallback (break by catching a missing key and calling premium) ─

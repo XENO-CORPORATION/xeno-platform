@@ -368,7 +368,8 @@ router.post('/chat', requireEntitlement('canUse'), async (req, res) => {
  * pay for eleven calls: `settle` clamps to its own hold, so the excess would be absorbed
  * silently — an under-bill with nothing to show it. Every hold resolves on every exit path.
  *
- * byok/inhouse are 501 for now.
+ * An own-key (managed BYOK) turn streams the same way and is never metered; in-house answers
+ * 400 inhouse_unavailable, as POST /api/ai/chat does, until there is a server-side xeno-rt.
  *
  * ✅ WIRED 2026-09-14. `ChatWithLLM.tsx` routes every chat turn here; `task: 'image'` and
  * `refine_image_prompt` stay on `/api/chat/generate` because they are not chat turns — the
@@ -474,12 +475,39 @@ router.post('/chat/stream', requireEntitlement('canUse'), async (req, res) => {
         message: 'This product is set to call the provider itself. The key never reaches XENO.',
       });
     }
-    // Streaming BYOK is not implemented — refuse, do not bill (spec D5).
-    return res.status(501).json({
-      error: 'invalid_request',
-      message: 'Streaming currently supports the premium path only. Use POST /api/ai/chat for byok/inhouse.',
-    });
+    if (streamDecision.path === 'inhouse') {
+      // The same answer POST /api/ai/chat gives: there is no server-side xeno-rt to stream from.
+      return res.status(400).json({
+        error: 'inhouse_unavailable',
+        message: 'In-house models run locally via XENO Hub today. Server-side xeno-rt is not yet available — use a premium model or your own key.',
+      });
+    }
+    if (!streamDecision.credential || !streamDecision.credential.id) {
+      return res.status(409).json({ error: 'byok_credential_missing', message: 'no key is configured for this product' });
+    }
   }
+  /*
+   * ── OWN KEY (managed BYOK), streamed ───────────────────────────────────────────────
+   *
+   * 🔴 This route answered 501 for every model routed to the account's own key, and the chat
+   * client streams every turn - so a person whose account default is their own key could not
+   * chat at all ("Streaming currently supports the premium path only", owner's report,
+   * 2026-10-09). The non-streaming route served own-key turns; this one now does the same
+   * things it does, per upstream call: mint a single-use grant, send it to the gateway with the
+   * surface, and NEVER meter (spec D4/D5). The turn's usage is still recorded, at cost 0.
+   *
+   * Everything else on this route is unchanged for an own-key turn: the message shapes, the
+   * tool loop, the events. A tool that costs credits by itself (image generation, code
+   * execution) is metered by its own meter, as on a premium turn.
+   */
+  const ownKey = streamDecision.path === 'byok';
+  /** A meter for a call that is never charged: the same handles the premium meter has, all no-ops. */
+  const freeMeter = () => {
+    const m = { capped: false, settled: false, grantedOutputTokens: max_tokens, requestedOutputTokens: max_tokens };
+    m.settle = async () => { m.settled = true; return { creditsCharged: 0 }; };
+    m.voidHold = async () => { m.settled = true; };
+    return m;
+  };
   if (!xenoApiConfigured()) {
     return res.status(503).json({ error: 'inference_error', message: 'The inference service is not configured.' });
   }
@@ -613,7 +641,7 @@ router.post('/chat/stream', requireEntitlement('canUse'), async (req, res) => {
   // this pre-placed hold is the one it picks up rather than a second, orphaned reserve.
   let meter;
   try {
-    meter = await meterPremiumChatStream(req.db, userId, {
+    meter = ownKey ? freeMeter() : await meterPremiumChatStream(req.db, userId, {
       model, provider: 'xeno', requestId: `${reqIdSeed}:0`,
       estInputTokens, maxTokens: max_tokens, surface: requestSurface(req),
       callerInputTokens: callerInputTokens(finalMessages),
@@ -712,7 +740,7 @@ router.post('/chat/stream', requireEntitlement('canUse'), async (req, res) => {
   const meters = [meter];
   const meterFor = async (iteration) => {
     if (iteration < meters.length) return meters[iteration];
-    const next = await meterPremiumChatStream(req.db, userId, {
+    const next = ownKey ? freeMeter() : await meterPremiumChatStream(req.db, userId, {
       model, provider: 'xeno', requestId: `${reqIdSeed}:${iteration}`,
       estInputTokens, maxTokens: max_tokens, surface: requestSurface(req),
       // A later tool iteration carries the tool results the caller asked for; its input is
@@ -805,7 +833,15 @@ router.post('/chat/stream', requireEntitlement('canUse'), async (req, res) => {
    * arguments string is not malformed, it is incomplete.
    */
   async function* streamOneCall({ messages: callMessages, tools, signal, maxOutputTokens }) {
+    // An own-key call carries a grant the gateway exchanges for the stored key. A grant is
+    // single-use, so every upstream call of a tool turn mints its own.
+    const callHeaders = { 'X-Xeno-Surface': surface };
+    if (ownKey) {
+      const minted = await mintGrant(req.db, userId, { surface, model, credentialId: streamDecision.credential.id });
+      callHeaders['X-Xeno-Byok-Grant'] = minted.grant;
+    }
     const response = await xenoChatCompletionStream({
+      headers: callHeaders,
       model,
       messages: callMessages,
       temperature,
@@ -1238,6 +1274,19 @@ router.post('/chat/stream', requireEntitlement('canUse'), async (req, res) => {
 
   const totalInput = callUsage.reduce((n, u) => n + (u?.inputTokens || 0), 0) || estInputTokens;
   const totalOutput = callUsage.reduce((n, u) => n + (u?.outputTokens || 0), 0);
+
+  // An own-key turn costs nothing and is still recorded, so Usage shows it (spec D4).
+  if (ownKey) {
+    await recordInferenceUsage(req.db, userId, {
+      surface,
+      model,
+      provider: streamDecision.credential.provider || 'byok',
+      requestId: reqIdSeed,
+      inputTokens: totalInput,
+      outputTokens: totalOutput,
+      endpoint: '/api/ai/chat/stream',
+    }).catch(() => {});
+  }
 
   await send({
     type: 'usage',
