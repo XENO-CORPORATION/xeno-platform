@@ -33,7 +33,14 @@
   const X = () => window.XW, api = P.api;
   const NEW = '/overview/chat/llm';
   const ID = /^[A-Za-z0-9_.:-]{1,128}$/;
-  const S = { status: 'loading', convs: [], projects: [], current: null, path: null, total: 0, picker: null };
+  const S = { status: 'loading', convs: [], projects: [], current: null, path: null, total: 0, picker: null, area: undefined };
+  // ---------- the AREA: each has its own chats and projects; Overview shows everything ----------
+  // Owner's rule (2026-10-03, 2026-10-09). The area is the place in the left rail the person is in (Studio, Office,
+  // Dev… or one they made); on Overview there is none. The real chat reads this when it creates a chat or a project.
+  const AREA_SHAPE = /^[a-z][a-z0-9_-]{0,39}$/;
+  const area = () => { let k = null; try { k = X()?.ctxKey?.(); } catch {} return typeof k === 'string' && k !== 'overview' && k !== 'adaptive' && AREA_SHAPE.test(k) ? k : null; };
+  const areaName = (id) => { if (!id) return ''; try { const m = X()?.M?.[id]; if (m && m.name) return m.name; const c = (window.XENO_CUSTOM?.list?.() || []).find((x) => x.id === id); if (c) return c.name; } catch {} return id.charAt(0).toUpperCase() + id.slice(1); };
+  const areas = () => { const out = []; try { for (const m of window.XENO_MODES || []) out.push([m.id, areaName(m.id)]); for (const c of window.XENO_CUSTOM?.list?.() || []) if (AREA_SHAPE.test(c.id)) out.push([c.id, c.name]); } catch {} return out; };
 
   // ---------- the list ----------
   const DAY = 86400000;
@@ -43,7 +50,10 @@
   function load() {
     if (loading) return loading;
     loading = (async () => {
-      const [cv, pj] = await Promise.all([api('GET', '/api/chat/conversations?limit=200').catch(() => ({ ok: false, d: {} })), api('GET', '/api/chat/projects').catch(() => ({ ok: false, d: {} }))]);
+      const here = area(), q = here ? '&area=' + encodeURIComponent(here) : '';   // one area, or everything on Overview
+      const [cv, pj] = await Promise.all([api('GET', '/api/chat/conversations?limit=200' + q).catch(() => ({ ok: false, d: {} })), api('GET', '/api/chat/projects?limit=100' + q).catch(() => ({ ok: false, d: {} }))]);
+      if (here !== area()) { loading = null; return load(); }   // the person moved to another area while this was on its way
+      S.area = here;
       if (!cv.ok || !Array.isArray(cv.d.conversations)) { S.status = 'error'; }
       else { S.convs = cv.d.conversations; S.total = Number(cv.d.total) || S.convs.length; S.projects = pj.ok && Array.isArray(pj.d.projects) ? pj.d.projects : []; S.status = 'ready'; }
       loading = null; repaint();
@@ -79,7 +89,8 @@
   function data() {
     const byProject = new Map(); const loose = [];
     for (const c of S.convs) { if (c.project_id) { if (!byProject.has(c.project_id)) byProject.set(c.project_id, []); byProject.get(c.project_id).push(c); } else loose.push(c); }
-    const row = (c) => ({ t: titleOf(c), id: c.id });
+    const all = !area();   // on Overview each row says where it lives
+    const row = (c) => ({ t: titleOf(c), id: c.id, area: all && c.area ? areaName(c.area) : '' });
     const projects = S.projects.filter((p) => !p.archived_at && !p.is_archived).map((p) => [String(p.name || 'Project'), p.id, (byProject.get(p.id) || []).map(row)]);
     const recents = []; for (const c of loose) { const g = group(c.last_message_at || c.updated_at || c.created_at); const last = recents[recents.length - 1]; if (last && last[0] === g) last[1].push(row(c)); else recents.push([g, [row(c)]]); }
     return { live: true, status: S.status, current: S.current, projects, pinned: [], recents, more: Math.max(0, S.total - S.convs.length) };
@@ -190,6 +201,8 @@
     if (!el) { if (slot) { slot = null; ro?.disconnect(); } clearTimeout(hideT); hideT = setTimeout(() => { if (!document.querySelector('#main .live-chat-host[data-chat-frame]')) { frame?.classList.remove('on'); document.documentElement.classList.remove('xw-chat-on'); } }, 160); return; }
     clearTimeout(hideT);
     if (el !== slot) { slot = el; ro?.disconnect(); ro = new ResizeObserver(fit); ro.observe(el); ro.observe(document.getElementById('main')); }
+    // moved to another area: its own list, not the last one's
+    if (S.area !== undefined && S.area !== area() && !loading) { S.status = 'loading'; S.convs = []; S.projects = []; S.total = 0; load(); }
     const want = X()?.S?.item || null;
     if (!frame) ensureFrame(pathFor(want)); else if ((want || null) !== (S.current || null)) show(pathFor(want), true);   // the address changed (Back, a link): follow it
     S.current = want;
@@ -296,15 +309,25 @@
     if (S.current === id) open(null); else repaint();
     X()?.toast?.('Chat deleted'); load();
   }
+  // move a chat to another area, or to none (then it shows on Overview only)
+  async function move(id) {
+    const c = S.convs.find((x) => x.id === id); if (!c) return;
+    if (c.project_id) return void X()?.toast?.('This chat is in a project and lives where the project lives. Move the project instead.');
+    const options = [['none', 'No area', 'Shown on Overview only'], ...areas().map(([v, l]) => [v, l, ''])];
+    await window.XD.form({ title: 'Move chat', submit: 'Move', size: 'sm', fields: [{ id: 'area', type: 'choice', label: 'Area', value: c.area || 'none', options, cols: 2 }],
+      onSubmit: async (v) => { const to = v.area === 'none' ? null : v.area; const r = await api('PUT', '/api/chat/conversations/' + encodeURIComponent(id), { area: to }).catch(() => null); if (!r || !r.ok) return say(r, 'The chat couldn’t be moved. Nothing changed.');
+        c.area = to; if (area() && to !== area()) { S.convs = S.convs.filter((x) => x.id !== id); S.total = Math.max(0, S.total - 1); } repaint(); X()?.toast?.(to ? 'Moved to ' + areaName(to) : 'Moved out of every area'); return null; } });
+    load();
+  }
   const menu = () => { const C = window.XCM; if (!C || !C.register) return; C.register({ id: 'chat-live', sel: '[data-chat-live]', priority: 3, build: (n) => { const id = n.dataset.chatLive;
     return [[{ label: 'Open', icon: 'chat', run: () => open(id) }, { label: 'Copy link', icon: 'link', run: () => C.H.copy(location.origin + location.pathname + '#/' + (X().inOv() ? 'overview' : X().S.mode) + '/p/chat/' + encodeURIComponent(id), 'Link copied') }],
-      [{ label: 'Rename', icon: 'edit', run: () => rename(id) }], [{ label: 'Delete', icon: 'trash', danger: true, run: () => remove(id) }]]; } }); };
+      [{ label: 'Rename', icon: 'edit', run: () => rename(id) }, { label: 'Move to…', icon: 'folder', run: () => move(id) }], [{ label: 'Delete', icon: 'trash', danger: true, run: () => remove(id) }]]; } }); };
   if (document.readyState === 'loading') addEventListener('DOMContentLoaded', menu); else menu();
 
   const toChatFrame = (msg) => { try { frame.contentWindow.postMessage({ source: 'xeno-workspace', ...msg }, location.origin); } catch {} };
   const pickModel = (id) => toChatFrame({ type: 'pick-model', id });
   const pickerClosed = () => { if (S.effort) { S.effort = null; toChatFrame({ type: 'effort-menu-closed' }); } if (S.picker) { S.picker = null; toChatFrame({ type: 'model-menu-closed' }); } };
   const pickEffort = (id) => { if (S.effort) S.effort.selected = id; toChatFrame({ type: 'pick-effort', id }); };
-  window.XENO_CHAT = { served: true, get picker() { return S.picker; }, get effort() { return S.effort || null; }, pickModel, pickEffort, pickerClosed, data, title, open, load, rename, remove, dress, host: () => '<div class="live-chat-host" data-chat-frame aria-label="Chat"></div>', state: () => ({ viewer: S.viewer || null, ready: chatReady(), status: S.status, count: S.convs.length, current: S.current, path: S.path, shown: !!frame && frame.classList.contains('on') }) };
+  window.XENO_CHAT = { served: true, area, get picker() { return S.picker; }, get effort() { return S.effort || null; }, pickModel, pickEffort, pickerClosed, data, title, open, load, rename, remove, dress, host: () => '<div class="live-chat-host" data-chat-frame aria-label="Chat"></div>', state: () => ({ area: area(), listed: S.area, viewer: S.viewer || null, ready: chatReady(), status: S.status, count: S.convs.length, current: S.current, path: S.path, shown: !!frame && frame.classList.contains('on') }) };
   Promise.resolve(P.ready).then((user) => { if (!user) return; P.first(load()); watch(); });
 })();

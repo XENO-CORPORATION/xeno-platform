@@ -70,6 +70,24 @@ export type WorkspaceChatMessage =
   /** The session transcript, built by the chat. The workspace owns the button, so it does the copy. */
   | { source: 'xeno-chat'; type: 'transcript'; text: string };
 
+/**
+ * The AREA of the workspace this chat is being shown in (Studio, Office, Dev… or one the person made), or null
+ * on Overview and outside the workspace. A chat or project started here lives in that area (owner's rule:
+ * each area has its own chats; only Overview shows everything).
+ *
+ * Read from the workspace page at the moment it is needed, not sent as a message: the two documents are the
+ * same origin, and a value read when the chat is created cannot be stale or arrive late.
+ */
+export function embedArea(): string | null {
+  if (!isWorkspaceEmbed()) return null;
+  try {
+    const area = (window.parent as unknown as { XENO_CHAT?: { area?: () => unknown } }).XENO_CHAT?.area?.();
+    return typeof area === 'string' && /^[a-z][a-z0-9_-]{0,39}$/.test(area) && area !== 'overview' ? area : null;
+  } catch {
+    return null;
+  }
+}
+
 export function tellWorkspace(message: WorkspaceChatMessage): void {
   if (!isWorkspaceEmbed()) return;
   try {
