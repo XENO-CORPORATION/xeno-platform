@@ -54,7 +54,7 @@ async function open(hash = '#/overview/p/chat') {
     if (one && q.method() === 'DELETE') { db.writes.push(['DELETE', one[1]]); if (db.refuse) return json({ success: false, error: 'Internal server error' }, 500); db.convs = db.convs.filter((x) => x.id !== one[1]); return json({ success: true }); }
     if (u.pathname === '/api/user-data/settings' && q.method() === 'GET') return json({ success: true, settings: db.settings || {} });
     if (u.pathname === '/api/user-data/settings' && q.method() === 'PATCH') { const body = JSON.parse(q.postData()); db.writes.push(['PATCH', 'settings', q.postData()]); if (db.refuse) return json({ success: false, error: 'Internal server error' }, 500); db.settings = db.settings || {}; for (const up of body.updates || []) { const seg = up.path.split('.'); let c = db.settings; for (const s of seg.slice(0, -1)) c = c[s] = c[s] || {}; c[seg.at(-1)] = up.value; } return json({ success: true, settings: db.settings }); }
-    if (u.pathname === '/api/chat/projects') return json({ success: true, projects: [{ id: PJ, name: 'Finance', icon: null }] });
+    if (u.pathname === '/api/chat/projects') return json({ success: true, projects: [{ id: PJ, name: 'Finance', icon: null, updated_at: iso(5) }] });
     const body = { '/api/account/overview': { success: true, overview: { user: USER, credits: { balance: 0 }, workspace_count: 1 } }, '/api/account/sessions': { success: true, sessions: [] }, '/api/account/security': { success: true, security: { confirmation: { confirmed: false, available: true, expires_at: null }, methods: ['password'], has_password: true, email: '', pending_email: null } }, '/api/account/exports': { success: true, exports: [] }, '/api/auth/linked-accounts': { success: true, accounts: [] }, '/api/billing/overview': { success: true, overview: { credits: { balance: 0 }, subscription: null } }, '/api/dashboard/stats': { success: true, stats: { usage_available: false, usage_by_surface: [] } }, '/api/user-data/settings': { success: true, settings: {} }, '/api/workspaces': { success: true, workspaces: [] }, '/api/library/assets': { success: true, items: [] } }[u.pathname];
     return body ? json(body) : json({ success: false, error: 'not found' }, 404); });
   await p.goto(base + '/workspace/' + hash, { waitUntil: 'domcontentloaded' }); await wait(1500);
@@ -304,6 +304,18 @@ try {
     ok(/^settings:/.test(lastTold) && JSON.parse(lastTold.slice(9)).office.instructions === 'Answer like a lawyer.' && JSON.parse(lastTold.slice(9)).office.model === 'm-b', 'and the running chat is handed the new settings, the area’s model kept (' + lastTold.slice(0, 90) + ')');
     await p.evaluate(() => { location.hash = '#/overview/p/chat'; }); await wait(1200);
     ok(await row() === null, 'Overview is not an area: it offers no area instructions');
+    // Recent is the person's own work, per area; the picture's sample rows are gone
+    const SAMPLE = /Brand refresh|Product shot cleanup|Neon city|Launch trailer|Q4 planning|Budget 2027|Investor update|Launch week thread|Atlas wants/;
+    const recentOf = () => p.evaluate(() => ({ rows: [...document.querySelectorAll('#panel [data-recent-chat], #panel [data-recent-project]')].map((r) => r.querySelector('.t').textContent), panel: document.getElementById('panel').innerText, st: window.XENO_RECENT_LIVE.state(), all: window.XENO_RECENT.map((r) => r.t + '@' + r.m).join(' | '), needs: (window.XENO_NEEDS || []).length }));
+    await p.evaluate(() => { location.hash = '#/overview'; }); await wait(900); await p.evaluate(() => window.XENO_RECENT_LIVE.load()); await wait(700); let rc = await recentOf();
+    ok(rc.st.status === 'ready' && rc.rows.includes('Plan the launch week') && rc.rows.includes('Finance') && !SAMPLE.test(rc.panel) && rc.needs === 0, 'on Overview, Recent is the person’s own chats and projects, and no sample work or sample approval is shown (' + rc.rows.slice(0, 4).join(', ') + '; sample seen: ' + ((rc.panel.match(SAMPLE) || [])[0] || 'none') + '; needs ' + rc.needs + '; ' + rc.st.status + ')');
+    ok(/Plan the launch week@office/.test(rc.all) && /New chat@studio/.test(rc.all) && rc.all.includes('Budget <b>questions</b>@overview'), 'each recent item carries the area it lives in (' + rc.all.slice(0, 120) + ')');
+    await p.evaluate(() => { location.hash = '#/office'; }); await wait(900); rc = await recentOf();
+    ok(JSON.stringify(rc.rows) === JSON.stringify(['Plan the launch week']) && !SAMPLE.test(rc.panel), 'an area’s home lists only that area’s recent work (' + rc.rows.join(', ') + ')');
+    await p.evaluate(() => { location.hash = '#/social'; }); await wait(900); rc = await recentOf();
+    ok(rc.rows.length === 0 && !SAMPLE.test(rc.panel), 'an area with nothing recent shows none, and no sample');
+    await p.evaluate(() => { location.hash = '#/office'; }); await wait(900); await p.evaluate(() => document.querySelector('#panel [data-recent-chat]').click()); await wait(1200);   // (an area’s first-visit intro covers the panel here; the row itself is what is under test)
+    ok((await p.evaluate(() => location.hash)).startsWith('#/office/p/chat/') &&(await p.evaluate(() => window.XENO_CHAT.state().current)) === A, 'a recent chat opens that conversation, in the area it was opened from (' + await p.evaluate(() => location.hash) + ')');
     ok(errs.length === 0, 'no page errors with areas (' + errs.slice(0, 2).join(' | ') + ')');
     await p.close(); }
 } catch (e) { ok(false, 'threw: ' + String(e.message).split('\n')[0]); }
