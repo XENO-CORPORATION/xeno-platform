@@ -1,4 +1,5 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useRef, useCallback, useEffect, useMemo, useState } from 'react';
+import { isWorkspaceEmbed, tellWorkspace } from '@/lib/workspaceEmbed';
 import { Copy, Download, File, FileImage, X } from '@/lib/icons';
 import { libraryService, type LibraryAssetRef } from '@/services/libraryService';
 import LibraryAssetImage, { type LibraryAssetImageState } from './LibraryAssetImage';
@@ -101,6 +102,35 @@ export const LibraryAssetViewer: React.FC<LibraryAssetViewerProps> = ({ items, a
     return () => window.removeEventListener('keydown', onKeyDown);
   }, [items.length, onClose]);
 
+  /*
+   * Inside the XENO workspace there is already a header above this preview: the workspace's own. A second one
+   * under it (its own crumb trail, close, copy link, download) was a header under a header (owner, 2026-10-09).
+   * There the preview draws none: it tells the workspace what is open, the workspace shows the file's name in
+   * its trail and the three actions in its bar, and they come back here as messages. The logic stays here.
+   */
+  const embedded = isWorkspaceEmbed();
+  const actions = useRef<{ close: () => void; copy: () => void; download: () => void }>({ close: () => {}, copy: () => {}, download: () => {} });
+  const embedName = item?.name ?? null;
+  const embedCanExport = !!item && hasPreviewSource(item) && imageState !== 'unavailable';
+  useEffect(() => {
+    if (!embedded || !embedName) return undefined;
+    tellWorkspace({ source: 'xeno-chat', type: 'viewer', open: true, name: embedName, canExport: embedCanExport });
+    return undefined;
+  }, [embedded, embedName, embedCanExport]);
+  useEffect(() => {
+    if (!embedded) return undefined;
+    const onMessage = (event: MessageEvent) => {
+      if (event.origin !== window.location.origin || event.source !== window.parent) return;
+      const data = event.data as { source?: string; type?: string } | null;
+      if (!data || data.source !== 'xeno-workspace') return;
+      if (data.type === 'viewer-close') actions.current.close();
+      if (data.type === 'viewer-copy') actions.current.copy();
+      if (data.type === 'viewer-download') actions.current.download();
+    };
+    window.addEventListener('message', onMessage);
+    return () => { window.removeEventListener('message', onMessage); tellWorkspace({ source: 'xeno-chat', type: 'viewer', open: false }); };
+  }, [embedded]);
+
   if (!item) return null;
 
   const getShareUrl = async (download = false) => {
@@ -129,6 +159,7 @@ export const LibraryAssetViewer: React.FC<LibraryAssetViewerProps> = ({ items, a
   }, []);
 
   const canExport = hasPreviewSource(item) && imageState !== 'unavailable';
+  actions.current = { close: onClose, copy: () => { if (canExport) void copyLink().then(() => tellWorkspace({ source: 'xeno-chat', type: 'viewer-copied' })).catch(() => {}); }, download: () => { if (canExport) void download().catch(() => {}); } };
 
   return (
     <div
@@ -139,7 +170,7 @@ export const LibraryAssetViewer: React.FC<LibraryAssetViewerProps> = ({ items, a
       data-library-asset-viewer="true"
       data-library-viewer-left={Math.max(0, leftInset)}
     >
-      <header className="grid h-[50px] shrink-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-4 border-b border-[var(--chat-border)] bg-[var(--chat-surface)] px-3">
+      {!embedded && <header className="grid h-[50px] shrink-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-4 border-b border-[var(--chat-border)] bg-[var(--chat-surface)] px-3">
         <div className="flex min-w-0 items-center gap-2 overflow-hidden text-[12px] text-[var(--chat-muted)]">
           <button type="button" onClick={onClose} className="rounded-lg p-2 hover:bg-[var(--chat-hover)]" aria-label="Close preview"><X size={16} /></button>
           <span className="shrink-0 text-[13px] font-semibold tracking-tight text-[var(--chat-text)]">XENO</span>
@@ -152,7 +183,7 @@ export const LibraryAssetViewer: React.FC<LibraryAssetViewerProps> = ({ items, a
           <button type="button" disabled={!canExport} onClick={() => void copyLink()} className="rounded-lg p-2 hover:bg-[var(--chat-hover)] disabled:cursor-not-allowed disabled:opacity-30 disabled:hover:bg-transparent" aria-label="Copy share link"><Copy size={16} /></button>
           <button type="button" disabled={!canExport} onClick={() => void download()} className="rounded-lg p-2 hover:bg-[var(--chat-hover)] disabled:cursor-not-allowed disabled:opacity-30 disabled:hover:bg-transparent" aria-label="Download"><Download size={16} /></button>
         </div>
-      </header>
+      </header>}
       <div className="flex min-h-0 flex-1">
         <main className="flex min-h-0 flex-1 items-center justify-center overflow-hidden p-5" data-library-preview-state={imageState}>
           {isImage ? (

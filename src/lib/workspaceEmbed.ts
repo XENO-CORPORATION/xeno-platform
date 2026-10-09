@@ -18,11 +18,15 @@
  *   { source: 'xeno-chat', type: 'model-menu-close' }        close it
  *   { source: 'xeno-chat', type: 'effort-menu', rect, selected, levels }   the effort pill was pressed (same idea)
  *   { source: 'xeno-chat', type: 'effort-menu-close' }       close it
+ *   { source: 'xeno-chat', type: 'viewer', open, name, canExport }   a file preview opened or closed: the workspace's
+ *                                                            header carries its name and its actions (no second header)
+ *   { source: 'xeno-chat', type: 'viewer-copied' }           the preview's link was copied
  * And from the workspace back to the chat (WorkspaceModelTrigger.tsx):
  *   { source: 'xeno-workspace', type: 'pick-model', id }     the person chose this model
  *   { source: 'xeno-workspace', type: 'model-menu-closed' }  the menu is no longer showing
  *   { source: 'xeno-workspace', type: 'pick-effort', id }    an effort level was chosen in that menu
  *   { source: 'xeno-workspace', type: 'effort-menu-closed' } the effort menu is no longer showing
+ *   { source: 'xeno-workspace', type: 'viewer-close' | 'viewer-copy' | 'viewer-download' }   the header's preview actions
  */
 const WORKSPACE_PATH = /^\/workspace(\/|$)/;
 
@@ -61,6 +65,8 @@ export type WorkspaceChatMessage =
   | { source: 'xeno-chat'; type: 'model-menu-close' }
   | { source: 'xeno-chat'; type: 'effort-menu'; rect: { left: number; top: number; right: number; bottom: number; width: number; height: number }; selected: string; levels: Array<{ id: string; label: string; title?: string }> }
   | { source: 'xeno-chat'; type: 'effort-menu-close' }
+  | { source: 'xeno-chat'; type: 'viewer'; open: boolean; name?: string; canExport?: boolean }
+  | { source: 'xeno-chat'; type: 'viewer-copied' }
   /** The session transcript, built by the chat. The workspace owns the button, so it does the copy. */
   | { source: 'xeno-chat'; type: 'transcript'; text: string };
 

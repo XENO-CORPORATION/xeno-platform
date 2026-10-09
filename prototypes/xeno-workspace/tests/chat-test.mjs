@@ -30,8 +30,9 @@ const CHAT = `<!doctype html><html><body><div class="chat-themed"><div class="ch
   window.__picks = []; window.__closed = 0;
   const MODELS = [['m-a', 'Model A', 'Fast and cheap.', 128000, false], ['m-b', 'Model B', '', 0, true], ['m-c', 'Model <i>C</i>', 'Careful.', 1000000, false], ['m-d', 'Model D', '', 0, false], ['m-e', 'Model E', 'The fifth.', 200000, false]];
   document.querySelector('[data-chat-model-trigger]').addEventListener('click', (e) => { const r = e.currentTarget.getBoundingClientRect(); parent.postMessage({ source: 'xeno-chat', type: 'model-menu', rect: { left: r.left, top: r.top, right: r.right, bottom: r.bottom, width: r.width, height: r.height }, selected: window.__sel || 'm-a', models: (window.__none ? [] : window.__many ? MODELS.concat(Array.from({ length: 20 }, (_, n) => ['x-' + n, 'Extra ' + n, '', 0, false])) : MODELS).map(([id, name, description, contextWindow, ownKey]) => ({ id, name, description, contextWindow, ownKey })) }, location.origin); });
-  addEventListener('message', (e) => { if (e.source !== parent || !e.data || e.data.source !== 'xeno-workspace') return; if (e.data.type === 'pick-model') { window.__picks.push(e.data.id); window.__sel = e.data.id; } if (e.data.type === 'model-menu-closed') window.__closed++; if (e.data.type === 'pick-effort') window.__efforts.push(e.data.id); if (e.data.type === 'effort-menu-closed') window.__effClosed++; });
-  window.__efforts = []; window.__effClosed = 0;
+  addEventListener('message', (e) => { if (e.source !== parent || !e.data || e.data.source !== 'xeno-workspace') return; if (e.data.type === 'pick-model') { window.__picks.push(e.data.id); window.__sel = e.data.id; } if (e.data.type === 'model-menu-closed') window.__closed++; if (/^viewer-/.test(e.data.type)) window.__viewer.push(e.data.type); if (e.data.type === 'pick-effort') window.__efforts.push(e.data.id); if (e.data.type === 'effort-menu-closed') window.__effClosed++; });
+  window.__efforts = []; window.__effClosed = 0; window.__viewer = [];
+  window.__tellViewer = (open, name, canExport) => parent.postMessage({ source: 'xeno-chat', type: 'viewer', open, name, canExport }, location.origin);
   window.__askEffort = (selected) => parent.postMessage({ source: 'xeno-chat', type: 'effort-menu', rect: { left: 300, top: 400, right: 360, bottom: 426, width: 60, height: 26 }, selected, levels: [{ id: 'off', label: 'Off', title: 'No thinking' }, { id: 'low', label: 'Low' }, { id: 'high', label: 'High' }] }, location.origin);
   document.querySelector('textarea').addEventListener('input', (e) => { document.querySelector('[data-composer-send-button]').disabled = !e.target.value.trim(); });
   window.__born = Math.random(); window.__log = [];
@@ -219,6 +220,22 @@ try {
     ok(!e1.open && e1.closed === 1, 'a press elsewhere closes it and tells the chat');
     await p.evaluate(() => window.postMessage({ source: 'xeno-chat', type: 'effort-menu', rect: { left: 0, top: 0, right: 10, bottom: 10, width: 10, height: 10 }, selected: 'x', levels: [{ id: 'evil', label: 'Evil' }] }, location.origin)); await wait(200); e1 = await eff();
     ok(!e1.open, 'an effort message that does not come from the chat frame opens nothing');
+    // a file preview inside the chat: this page's header is its header (no second one)
+    const head = () => p.evaluate(() => { const bar = document.querySelector('#main .topbar'), cs = (s) => { const e = bar.querySelector(s); return e ? getComputedStyle(e).display !== 'none' : false; }; return { viewing: bar.classList.contains('viewing'), trail: bar.querySelector('.crumbs').innerText.split('\n').join(' '), transcript: cs('[data-chat-transcript]'), share: cs('.ib[aria-label="Share"]'), btns: [...bar.querySelectorAll('.tb-viewer .ib')].map((b) => b.getAttribute('aria-label') + (b.disabled ? ' (off)' : '')).join(','), got: document.getElementById('xw-chat-frame').contentWindow.__viewer.join(',') }; });
+    const trailBefore = (await head()).trail;
+    await p.evaluate(() => document.getElementById('xw-chat-frame').contentWindow.__tellViewer(true, 'A <b>dog</b>.png', true)); await wait(250); let hv = await head();
+    ok(hv.viewing && hv.trail === trailBefore + ' / A <b>dog</b>.png' && !hv.transcript && !hv.share, 'a preview opened in the chat shows its file name at the end of this page’s trail, as text, and the conversation’s buttons step aside (' + hv.trail + ')');
+    ok(hv.btns === 'Copy share link,Download,Close preview', 'the header carries the preview’s three actions (' + hv.btns + ')');
+    await p.click('#main .topbar [data-viewer-download]'); await p.click('#main .topbar [data-viewer-copy]'); await wait(150); hv = await head();
+    ok(hv.got === 'viewer-download,viewer-copy', 'pressing them tells the chat, which does the work (' + hv.got + ')');
+    await p.evaluate(() => document.getElementById('xw-chat-frame').contentWindow.__tellViewer(true, 'locked.png', false)); await wait(200); hv = await head();
+    ok(hv.btns === 'Copy share link (off),Download (off),Close preview', 'a file that cannot be exported has its two actions off');
+    await p.click('#main .topbar .crumbs [data-viewer-close]'); await wait(150); hv = await head();
+    ok(hv.got.endsWith('viewer-close'), 'the step before the file in the trail walks back out of the preview');
+    await p.evaluate(() => document.getElementById('xw-chat-frame').contentWindow.__tellViewer(false)); await wait(250); hv = await head();
+    ok(!hv.viewing && hv.trail === trailBefore && hv.transcript && hv.share && hv.btns === '', 'when the preview closes the header is the conversation’s again');
+    await p.evaluate(() => window.postMessage({ source: 'xeno-chat', type: 'viewer', open: true, name: 'evil.png', canExport: true }, location.origin)); await wait(200);
+    ok(!(await head()).viewing, 'a preview message that does not come from the chat frame changes nothing');
     // a message that is not from the chat cannot open a menu or name models
     await p.evaluate(() => window.postMessage({ source: 'xeno-chat', type: 'model-menu', rect: { left: 0, top: 0, right: 10, bottom: 10, width: 10, height: 10 }, selected: 'x', models: [{ id: 'evil', name: 'Evil' }] }, location.origin)); await wait(200); m = await menu();
     ok(!m.open, 'a message that does not come from the chat frame opens nothing');
