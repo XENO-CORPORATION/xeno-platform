@@ -377,3 +377,17 @@
 .chat-themed .chat-turn-head.xa-transcript .xa-turn.xa-live:not(.xa-asking) .xa-line:not(:has(.xa-tx:not(:empty))) .xa-vr { display: none; }
 .chat-themed .chat-turn-head.xa-transcript .xa-turn.xa-live:not(.xa-asking) .xa-line:has(.xa-tx:not(:empty)) .xa-vr { display: block; }
 .chat-themed .chat-turn-head.xa-transcript .xa-turn.xa-live.xa-asking:not(.xa-open):not(.xa-done) .xa-line .xa-vr { display: none; }
+
+/* Inside the XENO workspace (src/lib/workspaceEmbed.ts) the chat sits ON the workspace's own panel.
+   A frame with a different background would read as a box inside a box, so the layers around the chat
+   are see-through and the chat canvas takes the panel's exact colour (--xw-surface, read from the
+   workspace). color-scheme must match the parent page, or the browser paints the frame opaque. */
+html.xw-embed { color-scheme: dark; }
+html.xw-embed,
+html.xw-embed body,
+html.xw-embed #root,
+html.xw-embed [data-overview-shell],
+html.xw-embed [data-overview-shell] > div { background: transparent !important; background-color: transparent !important; }
+html.xw-embed .chat-themed { --chat-canvas: var(--xw-surface, #111111) !important; background-color: var(--xw-surface, #111111) !important; }
+/* The wordmark in the chat's header shows and hides the app's own taskbar. There is none here. */
+html.xw-embed [data-chat-wordmark] { display: none !important; }
