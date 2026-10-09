@@ -274,7 +274,7 @@
     const live = window.XENO_CHAT && window.XENO_CHAT.served ? window.XENO_CHAT.data() : null;
     const C = live || ctxChats();
     const chatRow = (c, proj) => (c && c.id
-      ? row(`data-chat-live="${esc(c.id)}" aria-current="${String(live.current === c.id)}"`, `<span class="t">${esc(c.t)}</span>`)
+      ? row(`data-chat-live="${esc(c.id)}" data-ctx="chat-live" aria-current="${String(live.current === c.id)}"`, `<span class="t">${esc(c.t)}</span><span class="more" data-more>${ic('more')}</span>`)
       : row(`data-chat="${esc(c)}" data-ctx="chat"`, `<span class="t">${esc(c)}</span><span class="more" data-more>${ic('more')}</span>`));
     const liveState = !live ? '' : live.status === 'loading' ? '<div class="row sub" role="status">Loading your chats</div>' : live.status === 'error' ? `<div class="row sub">Your chats couldn’t be loaded.</div><button class="row sub" data-chat-retry>${ic('refresh')}<span class="t">Try again</span></button>` : !live.recents.length && !live.projects.some((p) => p[2].length) ? '<div class="row sub">No chats yet. Start one above.</div>' : '';
     const projects = C.projects.slice().sort((a, b) => S.pinnedProjects.has(b[0]) - S.pinnedProjects.has(a[0])).map(([name, , chats]) => {

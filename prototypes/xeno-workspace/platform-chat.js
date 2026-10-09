@@ -18,7 +18,15 @@
  * Named stand-in, with its exit: the frame is how two runtimes share a page. It goes when the workspace moves
  * onto the XENO framework and mounts the chat as a component.
  *
- * Routes read here: GET /api/chat/conversations · GET /api/chat/projects. Everything else is the chat's own. */
+ * THE COMPOSER IS THE ONE DESIGNED IN THIS WORKSPACE. The chat's input box is restyled by this page's own rules
+ * (index.html, every rule whose selector names `.live-chat`): the 6px box with a hairline, 13px text, the compact
+ * 24px controls, no inner top bar. Those rules were written against a still picture of the chat. The real chat has
+ * the same markup, so the SAME rules are handed to it (`dress`): read from this page's stylesheets, re-aimed at the
+ * chat's root, and injected into the frame with the theme colours they use. One source for the design; nothing is
+ * copied into the chat's own code. What the box DOES is the real chat's: send, stop, the queue, questions, models.
+ *
+ * Routes used here: GET /api/chat/conversations · GET /api/chat/projects · PUT and DELETE /api/chat/conversations/:id
+ * (rename and delete from the sidebar, since the chat's own top bar is not shown). Everything else is the chat's own. */
 (() => {
   const P = window.XENO_PLATFORM;
   if (!P || !P.served) { window.XENO_CHAT = { served: false }; return; }
@@ -63,15 +71,44 @@
     + '.live-chat-host[data-chat-frame]{display:grid;place-items:center;color:var(--dim);font-size:13px}'
     // on the live chat the "areas still show sample data" note is untrue and would sit on the composer;
     // and the top bar's sample Share and More give way to the chat's own, which work
-    + 'html.xw-chat-on #xp-note{display:none}html.xw-chat-on #main .topbar > .ib:not(.opener){display:none}';
+    + 'html.xw-chat-on #xp-note{display:none}html.xw-chat-on #main .topbar > .ib[aria-label="More"]{display:none}';
   document.head.appendChild(style);
   let frame = null, loaded = false, slot = null, ro = null, hideT = 0;
   const pathFor = (id) => (id && ID.test(id) ? '/overview/c/' + encodeURIComponent(id) : NEW);
   const idIn = (path) => { const m = String(path || '').match(/\/(?:c|llm)\/([^/?#]+)$/); if (!m) return null; let v = m[1]; try { v = decodeURIComponent(v); } catch {} return ID.test(v) ? v : null; };
+  // ---------- the composer design, handed to the real chat ----------
+  // every rule this page wrote for `.live-chat`, re-aimed at the chat's own root. Rules about the slot the picture
+  // sat in (`.live-chat-host`, `.main …`) are this page's layout and stay here.
+  function composerRules() {
+    const out = [];
+    const take = (rules) => { for (const r of rules) {
+      if (r.cssRules && r.media) { const inner = []; const keep = out.length; take(r.cssRules); const got = out.splice(keep); if (got.length) out.push(`@media ${r.media.mediaText}{${got.join('')}}`); continue; }
+      const sel = r.selectorText; if (!sel || !sel.includes('.live-chat') || sel.includes('.live-chat-host') || /(^|,)\s*(html body )?\.main /.test(sel)) continue;
+      out.push(r.cssText.replace(sel, sel.split('.live-chat').join('.chat-themed'))); } };
+    for (const sheet of document.styleSheets) { let rules = null; try { rules = sheet.cssRules; } catch { continue; } if (rules) take(rules); }
+    // the send button: the picture marked it ready with a class; the real one is simply not disabled
+    // (the attribute is repeated to outweigh the idle rule above, which repeats its own three times)
+    out.push('html body .chat-themed button[data-composer-send-button][data-composer-send-button][data-composer-send-button][data-composer-send-button]:not(:disabled){background:var(--n233)!important;color:var(--n9)!important}');
+    // the chat's own history panel is not shown here (this page's sidebar is the history), so neither is its opener
+    out.push('html body .chat-themed button[aria-label="Open conversation history"]{display:none!important}');
+    return out.join('\n');
+  }
+  function dress() {
+    let d = null; try { d = frame && frame.contentDocument; } catch {} if (!d || !d.documentElement) return;
+    const css = composerRules();
+    // the colours those rules name are this page's theme colours: hand over each one they use, as it is now
+    const cs = getComputedStyle(document.documentElement), names = new Set(css.match(/--[a-z0-9-]+/gi) || []);
+    for (let grew = true; grew;) { grew = false; for (const n of [...names]) for (const m of (cs.getPropertyValue(n).match(/--[a-z0-9-]+/gi) || [])) if (!names.has(m)) { names.add(m); grew = true; } }
+    const vars = [...names].map((n) => { const v = cs.getPropertyValue(n).trim(); return v ? `${n}:${v}` : ''; }).filter(Boolean).join(';');
+    let s = d.getElementById('xw-composer'); if (!s) { s = d.createElement('style'); s.id = 'xw-composer'; (d.head || d.documentElement).appendChild(s); }
+    const text = `:root{${vars}}\n${css}`; if (s.textContent !== text) s.textContent = text;
+  }
+  addEventListener('xeno_platform_theme_change', () => setTimeout(dress, 0));
+  addEventListener('storage', (e) => { if (e.key === 'xeno_platform_theme' || e.key === 'xeno_platform_theme_brightness') setTimeout(dress, 0); });
   function ensureFrame(path) {
     if (frame) return frame;
     frame = document.createElement('iframe'); frame.id = 'xw-chat-frame'; frame.title = 'Chat'; frame.setAttribute('allow', 'clipboard-read; clipboard-write; microphone');
-    frame.addEventListener('load', () => { loaded = true; });
+    frame.addEventListener('load', () => { loaded = true; dress(); });
     frame.src = path; document.body.appendChild(frame);
     return frame;
   }
@@ -107,6 +144,7 @@
     if (e.origin !== location.origin || !frame || e.source !== frame.contentWindow) return;
     const m = e.data; if (!m || m.source !== 'xeno-chat') return;
     if (m.type === 'location') {
+      dress();
       const id = idIn(m.path); S.path = m.path;
       if (id !== S.current) { S.current = id; X()?.setChatItem?.(id); }
       // a conversation that is not in the list yet was just started; and a title may have been written
@@ -122,12 +160,43 @@
   function open(id) { S.current = id || null; toChat(id || null); show(pathFor(id), false); repaint(); }
   function openProject(name) { const pid = projectId(name); if (!pid) return false; S.current = null; toChat(null); show('/overview/chat/projects/' + encodeURIComponent(pid), false); return true; }
   document.addEventListener('click', (e) => {
+    if (e.target.closest('[data-more]')) return;   // the row's menu button is the app's: it opens the menu registered below
     const row = e.target.closest('[data-chat-live]'); if (row) { e.preventDefault(); e.stopPropagation(); return open(row.dataset.chatLive); }
     if (e.target.closest('[data-chat-retry]')) { e.preventDefault(); e.stopPropagation(); S.status = 'loading'; repaint(); return void load(); }
     const fresh = e.target.closest('[data-newchat]'); if (fresh) { e.preventDefault(); e.stopPropagation(); return open(null); }
     const inP = e.target.closest('[data-newin]'); if (inP && openProject(inP.dataset.newin)) { e.preventDefault(); e.stopPropagation(); }
   }, true);
 
-  window.XENO_CHAT = { served: true, data, title, open, load, host: () => '<div class="live-chat-host" data-chat-frame aria-label="Chat"></div>', state: () => ({ status: S.status, count: S.convs.length, current: S.current, path: S.path, shown: !!frame && frame.classList.contains('on') }) };
+  // Share, in this page's top bar, is the chat's own Share: the chat's top bar is not shown, its button still works
+  document.addEventListener('click', (e) => {
+    const share = e.target.closest('#main .topbar > .ib[aria-label="Share"]'); if (!share || !document.documentElement.classList.contains('xw-chat-on')) return;
+    e.preventDefault(); e.stopPropagation();
+    let b = null; try { b = frame.contentDocument.querySelector('.chat-top-bar [aria-label*="Share" i], .chat-top-bar [title*="Share" i]'); } catch {}
+    if (b) b.click(); else X()?.toast?.(S.current ? 'Sharing isn’t available for this chat yet' : 'Send a message first, then share the chat');
+  }, true);
+
+  // ---------- rename and delete, from the sidebar ----------
+  const say = (r, fallback) => (r && r.d && typeof r.d.error === 'string' && r.d.error) || fallback;
+  async function rename(id) {
+    const c = S.convs.find((x) => x.id === id); if (!c) return;
+    await window.XD.form({ title: 'Rename chat', submit: 'Rename', size: 'sm', fields: [{ id: 'name', label: 'Name', value: titleOf(c), required: true, max: 200 }],
+      onSubmit: async (v) => { const r = await api('PUT', '/api/chat/conversations/' + encodeURIComponent(id), { title: String(v.name).trim() }).catch(() => null); if (!r || !r.ok) return say(r, 'The chat couldn’t be renamed.'); c.title = String(v.name).trim(); repaint(); return null; } });
+    load();
+  }
+  async function remove(id) {
+    const c = S.convs.find((x) => x.id === id); if (!c) return;
+    const yes = await window.XD.confirm({ title: `Delete “${titleOf(c)}”?`, body: 'The chat and its messages are deleted. This can’t be undone.', action: 'Delete chat', danger: true }); if (!yes) return;
+    const r = await api('DELETE', '/api/chat/conversations/' + encodeURIComponent(id)).catch(() => null);
+    if (!r || !r.ok) return void X()?.toast?.(say(r, 'The chat couldn’t be deleted. Nothing changed.'));
+    S.convs = S.convs.filter((x) => x.id !== id); S.total = Math.max(0, S.total - 1);
+    if (S.current === id) open(null); else repaint();
+    X()?.toast?.('Chat deleted'); load();
+  }
+  const menu = () => { const C = window.XCM; if (!C || !C.register) return; C.register({ id: 'chat-live', sel: '[data-chat-live]', priority: 3, build: (n) => { const id = n.dataset.chatLive;
+    return [[{ label: 'Open', icon: 'chat', run: () => open(id) }, { label: 'Copy link', icon: 'link', run: () => C.H.copy(location.origin + location.pathname + '#/' + (X().inOv() ? 'overview' : X().S.mode) + '/p/chat/' + encodeURIComponent(id), 'Link copied') }],
+      [{ label: 'Rename', icon: 'edit', run: () => rename(id) }], [{ label: 'Delete', icon: 'trash', danger: true, run: () => remove(id) }]]; } }); };
+  if (document.readyState === 'loading') addEventListener('DOMContentLoaded', menu); else menu();
+
+  window.XENO_CHAT = { served: true, data, title, open, load, rename, remove, dress, host: () => '<div class="live-chat-host" data-chat-frame aria-label="Chat"></div>', state: () => ({ status: S.status, count: S.convs.length, current: S.current, path: S.path, shown: !!frame && frame.classList.contains('on') }) };
   Promise.resolve(P.ready).then((user) => { if (!user) return; P.first(load()); watch(); });
 })();
