@@ -20,7 +20,12 @@ const reset = () => { db.convs = [{ id: A, title: 'Plan the launch week', update
 // the stand-in chat: it says where it is on load and after every in-page navigation, like the real one
 const CHAT = `<!doctype html><html><body><div class="chat-themed"><div class="chat-top-bar"><button aria-label="Share conversation" onclick="window.__shared=(window.__shared||0)+1">Share</button></div><button aria-label="Open conversation history">H</button>
   <div class="rounded-2xl" data-chat-composer-shell style="border-radius:16px;background:#2a2a2a"><div><div class="w-full"><div class="chat-input-container"><textarea></textarea></div></div></div></div>
-  <button data-composer-send-button aria-label="Send message" disabled>send</button></div><script>
+  <button data-composer-send-button aria-label="Send message" disabled>send</button>
+  <button data-chat-model-trigger class="xm-model apx" style="position:fixed;right:120px;bottom:20px"><span class="ap-txt" data-part="model"><span class="ap-model">Model A</span></span></button></div><script>
+  window.__picks = []; window.__closed = 0;
+  const MODELS = [['m-a', 'Model A', 'Fast and cheap.', 128000, false], ['m-b', 'Model B', '', 0, true], ['m-c', 'Model <i>C</i>', 'Careful.', 1000000, false], ['m-d', 'Model D', '', 0, false], ['m-e', 'Model E', 'The fifth.', 200000, false]];
+  document.querySelector('[data-chat-model-trigger]').addEventListener('click', (e) => { const r = e.currentTarget.getBoundingClientRect(); parent.postMessage({ source: 'xeno-chat', type: 'model-menu', rect: { left: r.left, top: r.top, right: r.right, bottom: r.bottom, width: r.width, height: r.height }, selected: window.__sel || 'm-a', models: (window.__none ? [] : MODELS).map(([id, name, description, contextWindow, ownKey]) => ({ id, name, description, contextWindow, ownKey })) }, location.origin); });
+  addEventListener('message', (e) => { if (e.source !== parent || !e.data || e.data.source !== 'xeno-workspace') return; if (e.data.type === 'pick-model') { window.__picks.push(e.data.id); window.__sel = e.data.id; } if (e.data.type === 'model-menu-closed') window.__closed++; });
   document.querySelector('textarea').addEventListener('input', (e) => { document.querySelector('[data-composer-send-button]').disabled = !e.target.value.trim(); });
   window.__born = Math.random(); window.__log = [];
   const say = () => { window.__log.push(location.pathname); parent.postMessage({ source: 'xeno-chat', type: 'location', path: location.pathname, title: 'Chat' }, location.origin); };
@@ -111,6 +116,35 @@ try {
     ok(v.rows.some((r) => r.id === A) && /couldn’t be deleted|server error/i.test(await p.evaluate(() => document.querySelector('.toast')?.textContent || '')), 'a delete the server refuses changes nothing and says so');
     db.refuse = false; await p.click(`#panel [data-chat-live="${A}"]`); await wait(400); await pick('Delete'); await sure(); await wait(800); v = await view(p);
     ok(!v.rows.some((r) => r.id === A) && db.writes.at(-1)[0] === 'DELETE' && v.path === '/overview/chat/llm' && v.hash === '#/overview/p/chat', 'deleting the open chat removes it and leaves a new chat open (' + v.path + ' ' + v.hash + ')');
+    await p.close(); }
+  { // the model menu is the one designed in this workspace, with the chat's real list
+    reset(); const { p } = await open(); await wait(300);
+    const press = () => p.evaluate(() => document.getElementById('xw-chat-frame').contentDocument.querySelector('[data-chat-model-trigger]').click());
+    const menu = () => p.evaluate(() => { const m = document.getElementById('apmenu'), f = document.getElementById('xw-chat-frame'), tr = f.contentDocument.querySelector('[data-chat-model-trigger]').getBoundingClientRect(), fr = f.getBoundingClientRect(), r = m ? m.getBoundingClientRect() : null;
+      return { open: !!m && m.classList.contains('show'), rows: m ? [...m.querySelectorAll('.row[data-model]')].map((x) => x.dataset.model + (x.classList.contains('on') ? '*' : '')) : [], text: m ? m.innerText : '', html: m ? m.innerHTML : '', more: !!m?.querySelector('[data-more-models]'),
+        above: !!r && Math.abs(r.right - (fr.left + tr.right)) < 2 && r.bottom <= fr.top + tr.top, card: document.querySelector('#apcard.show')?.innerText || '', frame: { picks: f.contentWindow.__picks.slice(), closed: f.contentWindow.__closed } }; });
+    await press(); await wait(300); let m = await menu();
+    ok(m.open && m.rows.join() === 'm-a*,m-b,m-c,m-d' && m.more && m.above, 'pressing the chat’s model control opens this workspace’s model menu, over the control, with the chat’s real models and the current one marked (' + m.rows.join() + ')');
+    ok(!/XENO picks/.test(m.text) && /your key/.test(m.text) && !m.html.includes('<i>C</i>'), 'it shows only what is real: no “XENO picks”, a model on the person’s own key says so, and a name is text');
+    await p.hover('#apmenu .row[data-model="m-c"]'); await wait(200); m = await menu();
+    ok(/Careful\./.test(m.card) && /1M context/.test(m.card) && !/tok\/s|Speed|Depth|cr \/ msg/.test(m.card), 'the detail card says what the platform says about the model, and nothing estimated (' + m.card.replace(/\n/g, ' | ') + ')');
+    await p.hover('#apmenu .row[data-model="m-b"]'); await wait(200); m = await menu();
+    ok(m.card === '', 'a model the platform says nothing about has no card');
+    await p.click('#apmenu [data-more-models]'); await wait(200); m = await menu();
+    ok(m.rows.join() === 'm-a*,m-b,m-c,m-d,m-e', 'More models shows the whole list');
+    await p.click('#apmenu .row[data-model="m-e"]'); await wait(300); m = await menu();
+    ok(!m.open && m.frame.picks.join() === 'm-e' && m.frame.closed === 1, 'choosing a model tells the chat which one, and closes the menu (' + m.frame.picks.join() + ')');
+    await press(); await wait(300); m = await menu();
+    ok(m.open && m.rows.includes('m-e*'), 'the next time it opens, the chat’s current model is the marked one');
+    await press(); await wait(300); m = await menu();
+    ok(!m.open && m.frame.closed === 2, 'pressing the control again closes it');
+    await press(); await wait(200); await p.keyboard.press('Escape'); await wait(200); m = await menu();
+    ok(!m.open, 'Escape closes it');
+    // a message that is not from the chat cannot open a menu or name models
+    await p.evaluate(() => window.postMessage({ source: 'xeno-chat', type: 'model-menu', rect: { left: 0, top: 0, right: 10, bottom: 10, width: 10, height: 10 }, selected: 'x', models: [{ id: 'evil', name: 'Evil' }] }, location.origin)); await wait(200); m = await menu();
+    ok(!m.open, 'a message that does not come from the chat frame opens nothing');
+    await p.evaluate(() => { document.getElementById('xw-chat-frame').contentWindow.__none = true; }); await press(); await wait(300); m = await menu();
+    ok(m.open && /No models are available/.test(m.text) && !m.more, 'with no models the menu says so');
     await p.close(); }
   { // a link to a conversation, opened fresh
     reset(); const { p } = await open(`#/overview/p/chat/${A}`); const v = await view(p);

@@ -1122,7 +1122,7 @@
     return `<div class="topbar"><button class="ib opener" data-expand aria-label="Open sidebar" data-tip="Open sidebar" data-kbd="Ctrl \\">${ic('side')}</button><div class="crumbs">${crumbs()}</div><div class="sp"></div>${isChat ? `<button class="ib" aria-label="Share" data-tip="Share">${ic('share')}</button><button class="ib" aria-label="More" data-tip="Copy transcript, rename, delete">${ic('more')}</button>` : ''}</div>${isChat ? body : `<div class="mview">${body}</div>`}`;
   }
 
-  window.XW = { get S() { return S; }, go, setChatItem, crumbs: () => crumbs(), esc, ic, PR, M, pIconFull, mini, toast: (s) => toast(s), store, ctxName, ctxKey, ctxChats, inOv, zoneNow, zoneKey, zonesFor, modeOf, mark, render: () => render(), hiddenModes, toggleHidden, modeOrder, renderRail: () => renderRail(), openShortcuts: (o) => openShortcuts(o), openUsage: () => openUsage(), openAdConsent: (o) => openAdConsent(o), hidePops: () => hidePops(), applyWorkspace: () => applyWorkspace(), markAllRead: () => markAllRead(() => render()), refreshSwitcher: () => refreshSwitcher(), search: (q) => { openPalette(); const i = document.querySelector('#palette input'); if (i && q) { i.value = q; i.dispatchEvent(new Event('input')); } }, refreshPanel: () => { const pv = $('#panel > .pv'); const top = pv?.querySelector('.pbody')?.scrollTop || 0; setPv($('#panel'), `<div class="pv">${panelHTML()}</div>`); const n = $('#panel > .pv .pbody'); if (n) n.scrollTop = top; } };
+  window.XW = { get S() { return S; }, go, setChatItem, openModelMenu: (anchor) => openModelMenu(anchor, 'model'), closeModelMenu: () => closeAp(), modelMenuOpen: () => !!document.querySelector('#apmenu.show'), crumbs: () => crumbs(), esc, ic, PR, M, pIconFull, mini, toast: (s) => toast(s), store, ctxName, ctxKey, ctxChats, inOv, zoneNow, zoneKey, zonesFor, modeOf, mark, render: () => render(), hiddenModes, toggleHidden, modeOrder, renderRail: () => renderRail(), openShortcuts: (o) => openShortcuts(o), openUsage: () => openUsage(), openAdConsent: (o) => openAdConsent(o), hidePops: () => hidePops(), applyWorkspace: () => applyWorkspace(), markAllRead: () => markAllRead(() => render()), refreshSwitcher: () => refreshSwitcher(), search: (q) => { openPalette(); const i = document.querySelector('#palette input'); if (i && q) { i.value = q; i.dispatchEvent(new Event('input')); } }, refreshPanel: () => { const pv = $('#panel > .pv'); const top = pv?.querySelector('.pbody')?.scrollTop || 0; setPv($('#panel'), `<div class="pv">${panelHTML()}</div>`); const n = $('#panel > .pv .pbody'); if (n) n.scrollTop = top; } };
   // ---- render with crossfade ----
   let first = true;
   function render() {
@@ -2192,10 +2192,15 @@
   // slider: "the chosen cell opens up to hold the word", Ultra fuses into one bar with a lattice) —
   // with the platform's logic on top: "XENO picks" routing, how each model is paid, and the cost.
   const MODELS = window.XENO_MODELS || { list: [], recommended: [] };
-  const modelById = (id) => MODELS.list.find((m) => m.id === id) || MODELS.list[0];
+  // On the platform the list, the current model and the pick belong to the REAL chat (platform-chat.js hands them
+  // over when the chat's trigger is pressed). The menu below is the same design either way; with the real list it
+  // shows only what is real: no "XENO picks" row (the chat has no router), no speed, depth or cost that nobody measured.
+  const LP = () => (window.XENO_CHAT && window.XENO_CHAT.served && window.XENO_CHAT.picker) || null;
+  const liveModel = (m) => ({ id: m.id, name: m.name, blurb: m.description || '', provider: m.ownKey ? 'own' : '', ctx: m.contextWindow || 0, ownKey: !!m.ownKey });
+  const modelById = (id) => { const lp = LP(); if (lp) { const m = lp.models.find((x) => x.id === id); return m ? liveModel(m) : { id, name: 'Model', blurb: '' }; } return MODELS.list.find((m) => m.id === id) || MODELS.list[0]; };
   const EFFORT = ['Minimal', 'Low', 'Medium', 'High', 'Max', 'Ultra'];
   const MAIN_MODELS = ['gpt-5.6-terra', 'claude-opus-5.5', 'gemini-3.8-flash', 'claude-sonnet-5.5'];
-  const routeOf = (m) => (store.get('byok', ['anthropic']).includes(m.provider.toLowerCase()) ? 'your key' : '');
+  const routeOf = (m) => (LP() ? (m.ownKey ? 'your key' : '') : store.get('byok', ['anthropic']).includes(m.provider.toLowerCase()) ? 'your key' : '');
   const costFor = (m, lvl) => Math.max(1, Math.round((m.cost || 3) * [0.5, 0.75, 1, 1.5, 2.2, 3.2][lvl]));
   const META = window.XENO_MODEL_META || {}, HINT = window.XENO_EFFORT_HINT || [];
   const metaOf = (id) => META[id] || { speed: 3, depth: 3, ctx: '—', maxEffort: 5, secs: 5 };
@@ -2204,7 +2209,7 @@
   const maxEff = () => metaOf(effModelId()).maxEffort;
   const secsFor = (lvl) => Math.round(metaOf(effModelId()).secs * [0.5, 0.8, 1, 1.8, 3, 5][lvl]);
   const effIdx = () => { const v = store.get('effort', 'Medium'); const i = EFFORT.indexOf(v); return Math.min(i < 0 ? 2 : i, maxEff()); };
-  const curModel = () => (store.get('modelDefault', false) ? { id: 'auto', name: 'XENO picks', effort: true, cost: 3, provider: 'auto' } : modelById(store.get('model', 'gpt-5.6-terra')));
+  const curModel = () => (LP() ? modelById(LP().selected) : store.get('modelDefault', false) ? { id: 'auto', name: 'XENO picks', effort: true, cost: 3, provider: 'auto' } : modelById(store.get('model', 'gpt-5.6-terra')));
   function paintModelTrigger() {
     const t = document.querySelector('.live-chat [data-chat-model-trigger]'); if (!t) return;
     const m = curModel(), open = document.querySelector('#apmenu.show')?.dataset.kind;
@@ -2214,7 +2219,7 @@
       + (m.effort ? `<span class="ap-vr" aria-hidden="true"></span><span class="ap-txt ap-pillbtn${open === 'effort' ? ' open' : ''}" data-part="effort" title="How long the model thinks before it answers"><span class="ap-pill">${EFFORT[effIdx()]}</span></span>` : '');
   }
   function apMenu() { let m = document.getElementById('apmenu'); if (!m) { m = document.createElement('div'); m.id = 'apmenu'; m.className = 'apx ap-menu'; document.body.appendChild(m); } return m; }
-  function closeAp() { const m = document.getElementById('apmenu'); if (m) { m.classList.remove('show'); m.dataset.kind = ''; } hideCard(); paintModelTrigger(); paintAnsweredBy(); }
+  function closeAp() { const m = document.getElementById('apmenu'), was = !!(m && m.classList.contains('show')); if (m) { m.classList.remove('show'); m.dataset.kind = ''; } hideCard(); paintModelTrigger(); paintAnsweredBy(); if (was && LP()) window.XENO_CHAT.pickerClosed(); }
   function placeAp(anchor) { const m = apMenu(), r = anchor.getBoundingClientRect(), w = m.offsetWidth, h = m.offsetHeight;
     // effort centres over the whole trigger (stable — the pill's text cannot move it); the model list right-aligns
     const want = m.dataset.kind === 'effort' ? r.left + r.width / 2 - w / 2 : r.right - w;
@@ -2228,16 +2233,18 @@
     const live = document.querySelector('.live-chat [data-chat-model-trigger]'); if (live) placeAp(live);
   }
   function renderModels(m) {
-    const cur = curModel(), more = m.dataset.more === '1';
-    const rest = MODELS.list.map((x) => x.id).filter((id) => !MAIN_MODELS.includes(id));
-    const list = more ? [...MAIN_MODELS, ...rest] : MAIN_MODELS.concat(rest.includes(cur.id) ? [cur.id] : []);
+    const cur = curModel(), more = m.dataset.more === '1', lp = LP();
+    // the real list keeps the order the platform gives it; the first four are the short list
+    const all = lp ? lp.models.map((x) => x.id) : MODELS.list.map((x) => x.id), main = lp ? all.slice(0, 4) : MAIN_MODELS;
+    const rest = all.filter((id) => !main.includes(id));
+    const list = more ? [...main, ...rest] : main.concat(rest.includes(cur.id) ? [cur.id] : []);
     const row = (id, i) => { const x = modelById(id), on = cur.id === id;
       return `<button class="row${on ? ' on' : ''}" data-model="${id}"><span class="rail"></span><span>${esc(x.name)}</span>${routeOf(x) ? `<span class="key">${routeOf(x)}</span>` : ''}<span class="idx num">${i + 1}</span></button>`; };
     m.innerHTML = `<div class="h label">Model</div>
-      <button class="row tall${cur.id === 'auto' ? ' on' : ''}" data-model="auto"><span class="rail"></span><span class="col"><span>XENO picks</span><span class="sub">Now → ${esc(modelById(pickFor()).name)} for this message</span></span></button>
-      ${list.map(row).join('')}
-      <div class="hr"></div>
-      <button class="row" data-more-models><span class="rail"></span><span>${more ? 'Fewer models' : 'More models'}</span><span class="chev"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="square"><path d="${more ? 'M6 15l6-6 6 6' : 'M9 6l6 6-6 6'}"/></svg></span></button>`;
+      ${lp ? '' : `<button class="row tall${cur.id === 'auto' ? ' on' : ''}" data-model="auto"><span class="rail"></span><span class="col"><span>XENO picks</span><span class="sub">Now → ${esc(modelById(pickFor()).name)} for this message</span></span></button>`}
+      ${list.length ? list.map(row).join('') : '<div class="row" aria-disabled="true"><span class="rail"></span><span>No models are available</span></div>'}
+      ${(more && rest.length) || rest.some((id) => !list.includes(id)) ? `<div class="hr"></div>
+      <button class="row" data-more-models><span class="rail"></span><span>${more ? 'Fewer models' : 'More models'}</span><span class="chev"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="square"><path d="${more ? 'M6 15l6-6 6 6' : 'M9 6l6 6-6 6'}"/></svg></span></button>` : ''}`;
   }
   // the card is a satellite of the menu: whenever the menu re-renders or moves, the card follows it,
   // or leaves if the row it described is gone (More/Fewer models re-lays the list under the pointer)
@@ -2245,6 +2252,14 @@
   function syncCard() { const c = document.getElementById('apcard'); if (!c || !c.classList.contains('show')) return; const m = document.getElementById('apmenu'); if (m && m.dataset.kind === 'model' && m.querySelector('[data-model="' + cardId + '"]')) detailCard(cardId); else hideCard(); }
   function detailCard(id) {
     cardId = id;
+    if (LP()) { // the real list: the name, what the platform says about it, and its context. Nothing estimated.
+      const x = modelById(id); if (!x.blurb && !x.ctx) return hideCard();
+      let c = document.getElementById('apcard'); if (!c) { c = document.createElement('div'); c.id = 'apcard'; c.className = 'apx ap-card'; document.body.appendChild(c); }
+      const ctx = x.ctx >= 1000000 ? (x.ctx / 1000000).toFixed(x.ctx % 1000000 ? 1 : 0) + 'M' : x.ctx >= 1000 ? Math.round(x.ctx / 1000) + 'k' : String(x.ctx || '');
+      c.innerHTML = `<div class="ct">${esc(x.name)}</div>${x.blurb ? `<div class="cs">${esc(x.blurb)}</div>` : ''}<div class="cf">${ctx ? `<span>${ctx} context</span>` : ''}<span>${x.ownKey ? 'Your key' : 'Credits'}</span></div>`;
+      const m = document.getElementById('apmenu'), r = m.getBoundingClientRect(), w = 232; c.style.width = w + 'px'; c.style.left = (r.left - w - 8 >= 8 ? r.left - w - 8 : r.right + 8) + 'px';
+      const row = m.querySelector(`[data-model="${CSS.escape(id)}"]`), rr = row ? row.getBoundingClientRect() : r; c.classList.add('show'); c.style.top = Math.max(r.top, Math.min(r.bottom - c.offsetHeight, rr.top - 8)) + 'px'; return;
+    }
     let c = document.getElementById('apcard'); if (!c) { c = document.createElement('div'); c.id = 'apcard'; c.className = 'apx ap-card'; document.body.appendChild(c); }
     const isAuto = id === 'auto', mid = isAuto ? pickFor() : id, x = modelById(mid), mt = metaOf(mid);
     const bars = (n) => '<span class="bars">' + [1, 2, 3, 4, 5].map((k) => `<i class="${k <= n ? 'on' : ''}"></i>`).join('') + '</span>';
@@ -2371,8 +2386,9 @@
       const m = document.getElementById('apmenu'); if (m?.classList.contains('show') && m.dataset.kind === kind) return closeAp(); return openModelMenu(part || t, kind); }
     const m = document.getElementById('apmenu'); if (!m?.classList.contains('show')) return;
     if (!m.contains(e.target)) return closeAp();
-    if (e.target.closest('[data-more-models]')) { m.dataset.more = m.dataset.more === '1' ? '' : '1'; renderModels(m); const a = document.querySelector('.live-chat [data-part="model"]'); if (a) placeAp(a); return; }
-    const r = e.target.closest('[data-model]'); if (r) { if (r.dataset.model === 'auto') store.set('modelDefault', true); else { store.set('modelDefault', false); store.set('model', r.dataset.model); } closeAp(); }
+    if (e.target.closest('[data-more-models]')) { m.dataset.more = m.dataset.more === '1' ? '' : '1'; renderModels(m); const a = (LP() && LP().anchor) || document.querySelector('.live-chat [data-part="model"]'); if (a) placeAp(a); return; }
+    const r = e.target.closest('[data-model]'); if (r && LP()) { window.XENO_CHAT.pickModel(r.dataset.model); return closeAp(); }
+    if (r) { if (r.dataset.model === 'auto') store.set('modelDefault', true); else { store.set('modelDefault', false); store.set('model', r.dataset.model); } closeAp(); }
   }, true);
   function paintAnsweredBy() {
     const msgs = document.querySelectorAll('.live-chat [aria-label*="Copy" i], .live-chat [title*="Copy" i]');

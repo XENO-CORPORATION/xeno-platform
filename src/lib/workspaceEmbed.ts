@@ -14,6 +14,11 @@
  * Messages to the workspace are same-origin `postMessage`s, and the workspace checks the origin:
  *   { source: 'xeno-chat', type: 'location', path, title }   the chat is now showing `path`
  *   { source: 'xeno-chat', type: 'changed' }                 the list of conversations may have changed
+ *   { source: 'xeno-chat', type: 'model-menu', … }           open the workspace's model menu with this list
+ *   { source: 'xeno-chat', type: 'model-menu-close' }        close it
+ * And from the workspace back to the chat (WorkspaceModelTrigger.tsx):
+ *   { source: 'xeno-workspace', type: 'pick-model', id }     the person chose this model
+ *   { source: 'xeno-workspace', type: 'model-menu-closed' }  the menu is no longer showing
  */
 const WORKSPACE_PATH = /^\/workspace(\/|$)/;
 
@@ -46,7 +51,10 @@ export function isEmbeddedChatPath(pathname: string): boolean {
 
 export type WorkspaceChatMessage =
   | { source: 'xeno-chat'; type: 'location'; path: string; title: string }
-  | { source: 'xeno-chat'; type: 'changed' };
+  | { source: 'xeno-chat'; type: 'changed' }
+  /** Open the workspace's model menu at `rect` (this frame's coordinates) with the chat's real list. */
+  | { source: 'xeno-chat'; type: 'model-menu'; rect: { left: number; top: number; right: number; bottom: number; width: number; height: number }; selected: string; models: Array<{ id: string; name: string; description: string; contextWindow: number; ownKey: boolean }> }
+  | { source: 'xeno-chat'; type: 'model-menu-close' };
 
 export function tellWorkspace(message: WorkspaceChatMessage): void {
   if (!isWorkspaceEmbed()) return;
