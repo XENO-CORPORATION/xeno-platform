@@ -83,11 +83,18 @@
   // ---------- the composer design, handed to the real chat ----------
   // every rule this page wrote for `.live-chat`, re-aimed at the chat's own root. Rules about the slot the picture
   // sat in (`.live-chat-host`, `.main …`) are this page's layout and stay here.
+  const BARE = /^(html body )?\.live-chat(\s+|\s*>\s*)(\*|[a-z][a-z0-9]*)?(::?[a-z-]+(\([^)]*\))?)*$/i;
   function composerRules() {
     const out = [];
     const take = (rules) => { for (const r of rules) {
       if (r.cssRules && r.media) { const inner = []; const keep = out.length; take(r.cssRules); const got = out.splice(keep); if (got.length) out.push(`@media ${r.media.mediaText}{${got.join('')}}`); continue; }
       const sel = r.selectorText; if (!sel || !sel.includes('.live-chat') || sel.includes('.live-chat-host') || /(^|,)\s*(html body )?\.main /.test(sel)) continue;
+      // Not the picture's element-wide resets ("every button has no padding", "every list has no bullets"): the
+      // real chat has its own, and these, one class heavier, flattened its own components (the queue's header
+      // bar lost its padding: 20px tall instead of 42, 2026-10-09). Only rules that name something are handed over.
+      // (Rules about the text field alone stay: those are the composer's design, not a reset.)
+      { const parts = sel.split(',').map((part) => part.trim().match(BARE));
+        if (parts.every(Boolean) && !parts.every((m) => /^(textarea|input)$/i.test(m[3] || ''))) continue; }
       out.push(r.cssText.replace(sel, sel.split('.live-chat').join('.chat-themed'))); } };
     for (const sheet of document.styleSheets) { let rules = null; try { rules = sheet.cssRules; } catch { continue; } if (rules) take(rules); }
     // the send button: the picture marked it ready with a class; the real one is simply not disabled
