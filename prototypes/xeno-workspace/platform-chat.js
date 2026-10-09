@@ -67,6 +67,11 @@
   const style = document.createElement('style');
   style.textContent = '#xw-chat-frame{position:fixed;z-index:2;border:0;margin:0;padding:0;background:transparent;color-scheme:dark;visibility:hidden;pointer-events:none}'
     + '#xw-chat-frame.on{visibility:visible;pointer-events:auto}'
+    // While the chat is loading, the frame is kept clear and the XENO mark loader stands in its place: the chat's
+    // own loading screen is never the one seen here (owner, 2026-10-09). Both fade over 200ms when it is ready.
+    + '#xw-chat-frame{opacity:0;transition:opacity .2s ease-out}#xw-chat-frame.ready{opacity:1}'
+    + '#xw-chat-loading{position:fixed;z-index:3;display:grid;place-items:center;pointer-events:none;color:var(--text);opacity:0;visibility:hidden;transition:opacity .2s ease-out,visibility 0s .2s}'
+    + '#xw-chat-loading.show{opacity:1;visibility:visible;transition:opacity .2s ease-out}'
     + 'html.modal-open #xw-chat-frame{pointer-events:none}'
     + '.live-chat-host[data-chat-frame]{display:grid;place-items:center;color:var(--dim);font-size:13px}'
     // on the live chat the "areas still show sample data" note is untrue and would sit on the composer;
@@ -119,20 +124,35 @@
   }
   addEventListener('xeno_platform_theme_change', () => setTimeout(dress, 0));
   addEventListener('storage', (e) => { if (e.key === 'xeno_platform_theme' || e.key === 'xeno_platform_theme_brightness') setTimeout(dress, 0); });
+  // ---------- the loading moment: the XENO mark loader, from the first instant until the chat is on the page ----------
+  let loadingEl = null, stopLoader = null, readyT = 0;
+  const chatReady = () => { try { const d = frame && frame.contentDocument; return !!(loaded && d && d.querySelector('.chat-themed')); } catch { return false; } };
+  function showLoading() {
+    if (!frame) return;
+    frame.classList.remove('ready');
+    if (!loadingEl) { loadingEl = document.createElement('div'); loadingEl.id = 'xw-chat-loading'; loadingEl.setAttribute('role', 'status'); loadingEl.setAttribute('aria-label', 'Loading chat'); document.body.appendChild(loadingEl); }
+    if (!stopLoader && window.XENO_MARK_LOADER) stopLoader = window.XENO_MARK_LOADER.mount(loadingEl, { size: 88, label: 'Loading chat' });
+    loadingEl.classList.toggle('show', frame.classList.contains('on')); fit();
+    clearInterval(readyT); readyT = setInterval(() => { if (chatReady()) hideLoading(); else if (loadingEl) loadingEl.classList.toggle('show', frame.classList.contains('on')); }, 60);
+  }
+  function hideLoading() {
+    clearInterval(readyT); readyT = 0; if (frame) frame.classList.add('ready');
+    if (loadingEl) { loadingEl.classList.remove('show'); const stop = stopLoader; stopLoader = null; setTimeout(() => { if (stop && !stopLoader) stop(); else if (stop) stop(); }, 220); }
+  }
   function ensureFrame(path) {
     if (frame) return frame;
     frame = document.createElement('iframe'); frame.id = 'xw-chat-frame'; frame.title = 'Chat'; frame.setAttribute('allow', 'clipboard-read; clipboard-write; microphone');
     frame.addEventListener('load', () => { loaded = true; dress(); });
-    frame.src = path; document.body.appendChild(frame);
+    frame.src = path; document.body.appendChild(frame); showLoading();
     return frame;
   }
   // go to a conversation inside the running chat: no reload, the chat's own router picks it up
   function show(path, replace) {
     if (!frame) { ensureFrame(path); return; }
     let w = null; try { w = frame.contentWindow; if (!loaded || !w || !w.history || w.location.origin !== location.origin) w = null; } catch { w = null; }
-    if (!w) { loaded = false; frame.src = path; return; }
+    if (!w) { loaded = false; frame.src = path; showLoading(); return; }
     if (w.location.pathname === path) return;
-    try { w.history[replace ? 'replaceState' : 'pushState']({}, '', path); w.dispatchEvent(new w.PopStateEvent('popstate', { state: {} })); } catch { loaded = false; frame.src = path; }
+    try { w.history[replace ? 'replaceState' : 'pushState']({}, '', path); w.dispatchEvent(new w.PopStateEvent('popstate', { state: {} })); } catch { loaded = false; frame.src = path; showLoading(); }
   }
   function place() {
     const el = document.querySelector('#main .live-chat-host[data-chat-frame]');
@@ -148,6 +168,7 @@
     if (!slot || !frame) return; const r = slot.getBoundingClientRect(), main = document.getElementById('main');
     Object.assign(frame.style, { left: r.left + 'px', top: r.top + 'px', width: Math.max(0, r.width) + 'px', height: Math.max(0, r.height) + 'px' });
     if (main) { const br = getComputedStyle(main).borderBottomLeftRadius; frame.style.borderRadius = `0 0 ${br} ${br}`; }
+    if (loadingEl) Object.assign(loadingEl.style, { left: r.left + 'px', top: r.top + 'px', width: Math.max(0, r.width) + 'px', height: Math.max(0, r.height) + 'px' });
   }
   addEventListener('resize', fit);
   const watch = () => { const main = document.getElementById('main'); if (!main) return setTimeout(watch, 50); new MutationObserver(place).observe(main, { childList: true }); main.addEventListener('transitionend', fit); place(); };

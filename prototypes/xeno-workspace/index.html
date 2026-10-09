@@ -341,6 +341,19 @@ html body .live-chat button.xm-model.xm-model[data-chat-model-trigger] .ap-pillb
 .ap-menu .label{font-size:10px;line-height:1;font-weight:600;letter-spacing:.09em;text-transform:uppercase;color:var(--label)}
 .ap-menu .h{padding:7px 9px 6px}
 .ap-menu .hr{height:1px;margin:5px 9px;background:var(--line-soft)}
+/* the model list scrolls in a fixed height, with no bar; a fade at the end that has more says so */
+.ap-menu .ap-scroll{max-height:min(308px,calc(100vh - 220px));overflow-y:auto;overscroll-behavior:contain;scrollbar-width:none;--fa:0px;--fb:0px;-webkit-mask-image:linear-gradient(to bottom,transparent 0,#000 var(--fa),#000 calc(100% - var(--fb)),transparent 100%);mask-image:linear-gradient(to bottom,transparent 0,#000 var(--fa),#000 calc(100% - var(--fb)),transparent 100%)}
+.ap-menu .ap-scroll::-webkit-scrollbar{display:none}
+.ap-menu .ap-scroll.more-below{--fb:34px}
+.ap-menu .ap-scroll.more-above{--fa:22px}
+/* the header: "Model" with the magnifier at its right; pressed, the same 23px becomes the search field */
+.ap-menu .ap-head{display:flex;align-items:center;gap:7px;height:23px;padding:0 4px 0 9px;box-sizing:border-box}
+.ap-menu .ap-head .ap-find{margin-left:auto;display:inline-flex;align-items:center;justify-content:center;width:19px;height:19px;padding:0;border:0;border-radius:3px;background:none;color:var(--t6);cursor:pointer}
+.ap-menu .ap-head .ap-find:hover{background:var(--w40);color:var(--t2)}
+.ap-menu .ap-head.finding{padding:0 6px 0 9px;border-radius:4px;background:var(--w40);color:var(--t5)}
+.ap-menu .ap-head .ap-find-ic{flex:none}
+.ap-menu .ap-head .ap-q{flex:1;min-width:0;height:23px;padding:0;border:0;outline:0;background:none;font:12px/1 Inter,system-ui,sans-serif;color:var(--t1)}
+.ap-menu .ap-head .ap-q::placeholder{color:var(--t5)}
 .ap-menu .row{display:flex;align-items:center;gap:9px;width:100%;height:auto;padding:7px 9px;border-radius:4px;text-align:left;font-size:12px;color:var(--t3)}
 .ap-menu .row .rail{width:2px;height:13px;background:transparent;flex:none}
 .ap-menu .row.tall{align-items:stretch;padding:8px 9px}
@@ -1932,6 +1945,7 @@ html body .main .live-chat .chat-themed.chat-theme-dark{background:transparent!i
 <script src="pages-data.js"></script>
 <script src="platform-work.js"></script>
 <script src="platform-library.js"></script>
+<script src="mark-loader.js"></script>
 <script src="platform-chat.js"></script>
 <script src="workforce.js"></script>
 <script src="resources.js"></script>
