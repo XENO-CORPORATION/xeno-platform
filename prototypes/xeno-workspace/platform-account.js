@@ -4,17 +4,17 @@
  *      Settings reads them (xw.acct), replacing every sample value;
  *   2. sends profile edits, session sign-outs, sign-in method removal and preferences to the API (XENO_NET.remote);
  *   2b. asks the server to confirm it's you before a sensitive change (password, or a mailed code for an account
- *      with no password), changes the sign-in email, signs out everywhere, lists, makes and revokes API keys,
- *      and requests, downloads and removes a copy of the person's data. API keys belong to the XENO API portal
- *      (api.xenosystem.ai): the platform asks the portal to list and make them for the signed-in person, so a key
- *      made here is the same as one made there, in a project with that project's limits;
+ *      with no password), changes the sign-in email, signs out everywhere, and requests, downloads and removes a
+ *      copy of the person's data. API keys are NOT managed here. They live on the XENO API portal
+ *      (api.xenosystem.ai) with projects, limits and usage, the way OpenAI keeps keys on its developer platform and
+ *      Anthropic in its Console, apart from the consumer app. This page has one row that opens the portal;
  *   3. shows a plain "not available yet" for the parts the platform has no API for. Nothing is invented:
  *      no sample key, device, invoice or gift is ever shown as the signed-in person's.
  * Routes used: GET /api/account/overview · GET+DELETE /api/account/sessions · GET+DELETE /api/auth/linked-accounts
  *   · PUT /api/auth/profile · GET /api/billing/overview · POST /api/billing/portal · GET /api/dashboard/stats
  *   · GET+PATCH /api/user-data/settings (bio and preferences) · GET /api/account/security · POST /api/account/confirm
  *   · POST /api/account/confirm/code · POST+DELETE /api/account/email · POST /api/account/email/confirm
- *   · DELETE /api/account/sessions · GET+POST /api/account/api-keys · DELETE /api/account/api-keys/:id
+ *   · DELETE /api/account/sessions
  *   · GET+POST /api/account/exports · GET /api/account/exports/:id/download · DELETE /api/account/exports/:id.
  * Missing on the platform (each section says so): passkeys, authenticator, recovery codes, adding a sign-in method,
  *   authorised apps, provider keys, gifts, deleting the account from here, spend cap. */
@@ -29,7 +29,7 @@
   const title = (s) => String(s || '').replace(/^./, (c) => c.toUpperCase());
   const ms = (t) => { const n = t ? Date.parse(t) : NaN; return Number.isFinite(n) ? n : Date.now(); };
 
-  const S = { status: 'loading', parts: {}, usage: null, plan: null, security: null, keys: null, exports: null };
+  const S = { status: 'loading', parts: {}, usage: null, plan: null, security: null, exports: null };
   let poll = 0;
   const LOCAL = new Set(['general', 'appearance', 'notifications', 'modes', 'keyboard', 'region']);
   const NOT_YET = {
@@ -45,11 +45,10 @@
 
   async function load() {
     if (S.status !== 'ready') { S.status = 'loading'; paint(); } // a refresh after a save keeps what is on screen
-    const urls = ['/api/account/overview', '/api/account/sessions', '/api/auth/linked-accounts', '/api/billing/overview', '/api/dashboard/stats', '/api/user-data/settings', '/api/account/security', '/api/account/api-keys', '/api/account/exports'];
+    const urls = ['/api/account/overview', '/api/account/sessions', '/api/auth/linked-accounts', '/api/billing/overview', '/api/dashboard/stats', '/api/user-data/settings', '/api/account/security', '/api/account/exports'];
     const got = await Promise.all(urls.map((u) => api('GET', u).catch(() => ({ ok: false, status: 0, d: {} }))));
-    const [ov, ses, link, bill, dash, set, sec, keys, exps] = got;
+    const [ov, ses, link, bill, dash, set, sec, exps] = got;
     S.security = sec.ok && sec.d.security ? sec.d.security : null;
-    S.keys = keys.ok && Array.isArray(keys.d.keys) ? keys.d.keys : null;
     S.exports = exps.ok && Array.isArray(exps.d.exports) ? exps.d.exports : null;
     // a copy being built is checked again until it is ready; nothing is polled otherwise
     clearTimeout(poll); if (S.exports && S.exports.some((x) => x.status === 'building')) poll = setTimeout(load, 4000);
@@ -114,13 +113,8 @@
   // the API portal lives on the api. host of whichever XENO domain this page is on
   const portal = () => `https://api.${/(^|\.)xenostudio\.ai$/.test(location.hostname) ? 'xenostudio.ai' : 'xenosystem.ai'}/dashboard/keys`;
   function keysSection(h) {
-    if (!S.keys) return h.card('API keys', '<p class="set-p">XENO couldn’t load your keys.</p>', retry);
-    const line = (k) => `<code>${esc(k.preview)}</code> · ${k.project_name ? esc(k.project_name) + ' · ' : ''}${k.revoked ? 'revoked' : k.expired ? 'expired' : k.expires_at ? 'expires ' + h.when(ms(k.expires_at)) : 'never expires'} · ${k.last_used_at ? 'used ' + h.ago(ms(k.last_used_at)) : 'never used'}`;
-    const live = S.keys.filter((k) => k.is_active), dead = S.keys.filter((k) => !k.is_active);
-    const open = `${btn('New API key', 'newKey', '', '')} <a class="pg-btn ghost" href="${portal()}" target="_blank" rel="noopener"><span>Projects and limits</span></a>`;
-    return h.card('API keys', (live.length ? live.map((k) => h.row(esc(k.name), line(k), btn('Revoke', 'revokeKey', k.id))).join('') : '<p class="pg-dim set-p">No keys. A key lets the XENO CLI, a script or an automated build act as you.</p>'), open)
-      + (dead.length ? h.card('Revoked and expired', dead.map((k) => h.row(esc(k.name), line(k), '')).join('')) : '')
-      + `<p class="pg-rule">${h.ic('lock')}A key is shown once, when you create it. Each key belongs to a project on the XENO API portal, which sets its limits; a key made here goes into your default project.</p>`;
+    const open = `<a class="pg-btn" href="${portal()}" target="_blank" rel="noopener"><span>Open the API portal</span></a>`;
+    return h.card('API keys', h.row('Your keys live on the XENO API portal', 'Create, view and revoke keys there, next to your projects, limits and usage. You sign in with this same account.', open));
   }
   // ---------- a copy of your data ----------
   const size = (n) => (n >= 1e9 ? (n / 1e9).toFixed(1) + ' GB' : n >= 1e6 ? (n / 1e6).toFixed(1) + ' MB' : n >= 1e3 ? Math.round(n / 1e3) + ' KB' : (n || 0) + ' B');
@@ -186,24 +180,9 @@
   }
 
   // ---------- keys and exports: actions ----------
-  async function newKey() {
-    if (!await confirm('An API key can act as you.')) return;
-    let made = null;
-    const v = await window.XD.form({ title: 'New API key', sub: 'It goes into your default project on the XENO API portal.', submit: 'Create key', size: 'sm', fields: [{ id: 'name', label: 'Name', required: true, max: 100, placeholder: 'e.g. Laptop CLI' }],
-      onSubmit: async (vals) => { const r = await api('POST', '/api/account/api-keys', { name: vals.name }); if (!r.ok) return say(r, 'The key couldn’t be created.'); made = r.d; return null; } });
-    if (!v || !made) return;
-    await load();
-    const secret = made.secret; made = null;   // kept only for this dialog
-    window.XD.info({ title: 'Copy your new key', sub: 'This is the only time it’s shown.', html: `<div class="set-secret"><code data-secret>${esc(secret)}</code></div><p class="xd-note">Store it in your password manager or your build’s secrets. If you lose it, revoke it and make a new one.</p>`, actions: [{ label: 'Copy key', close: false, run: () => window.XCM.H.copy(secret, 'Key copied') }] });
-  }
   let job = null;
   const take = () => { const v = job; job = null; return v; };
   const run = (op, payload, label) => { job = payload; return window.XENO_NET.run({ op, label }); };
-  async function revokeKey(id) {
-    const k = (S.keys || []).find((x) => x.id === id); if (!k) return;
-    if (!await window.XD.confirm({ title: `Revoke “${esc(k.name)}”?`, body: 'Anything using it stops working immediately. This can’t be undone.', action: 'Revoke key' })) return;
-    if (await run('settings.revokeKey', id, 'Revoking the key')) X()?.toast?.(`Revoked ${k.name}`);
-  }
   async function requestExport() {
     if (!await confirm('The copy holds everything in your account.')) return;
     if (await run('settings.export', {}, 'Requesting your copy')) X()?.toast?.('We’re preparing your copy. It will be here when it is ready.');
@@ -222,8 +201,6 @@
     const act = t.dataset.acct;
     if (act === 'retry') return load();
     if (act === 'plans') return window.open('/pricing', '_blank', 'noopener');
-    if (act === 'newKey') return newKey();
-    if (act === 'revokeKey') return revokeKey(t.dataset.arg);
     if (act === 'export') return requestExport();
     if (act === 'removeExport') return removeExport(t.dataset.arg);
     if (act === 'portal') {
@@ -256,7 +233,6 @@
     'settings.endSession': ({ before }) => endSessions(before),
     // one call: every other browser session AND every app's refresh token. The per-device route cannot reach the apps.
     'settings.endOthers': async () => { const r = await api('DELETE', '/api/account/sessions'); return settle(r.ok ? { ok: true } : fail(r, 'The other devices couldn’t be signed out.')); },
-    'settings.revokeKey': async () => { const r = await api('DELETE', '/api/account/api-keys/' + encodeURIComponent(take())); return settle(r.ok ? { ok: true } : fail(r, 'The key couldn’t be revoked.')); },
     'settings.export': async () => { take(); const r = await api('POST', '/api/account/exports', {}); if (!r.ok) return settle(fail(r, 'The copy couldn’t be requested.')); await load(); return { ok: true }; },
     'settings.removeExport': async () => { const r = await api('DELETE', '/api/account/exports/' + encodeURIComponent(take())); if (!r.ok) return settle(fail(r, 'The copy couldn’t be removed.')); await load(); return { ok: true }; },
     'settings.removeMethod': async ({ before }) => {

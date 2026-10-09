@@ -37,7 +37,10 @@
   const icon = document.createElement('link'); icon.rel = 'icon'; icon.href = '/favicon.svg'; document.head.appendChild(icon); // the platform's own icon; from disk there is none to point at
   const state = (html) => { let s = document.getElementById('xp-state'); if (!s) { s = document.createElement('div'); s.id = 'xp-state'; s.setAttribute('role', 'status'); (document.body || root).appendChild(s); } s.innerHTML = `<div>${html}</div>`; return s; };
   const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
-  const toLogin = () => { location.replace('/login?returnUrl=' + encodeURIComponent(location.pathname + location.search + location.hash)); return null; };
+  // where the visitor asked to go, read before the app has had a chance to rewrite the address (it sends an unknown
+  // place to its default mode, and the sign-in check can answer after that)
+  const ASKED = location.pathname + location.search + location.hash;
+  const toLogin = () => { location.replace('/login?returnUrl=' + encodeURIComponent(ASKED)); return null; };
 
   function adopt(u) {
     P.user = u;
