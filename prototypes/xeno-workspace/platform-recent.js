@@ -14,9 +14,10 @@
  *   - Needs you is emptied here and filled by platform-area.js from what really waits on the person.
  *
  * A row keeps the shape the pages already read ({ t, p, m, ago }) plus `id` (what opens it) and `kind`.
- * Files are not listed yet: a library file has no single product to open in.
+ * A file opens in the Library.
  *
- * Routes: GET /api/chat/conversations?limit=200 · GET /api/chat/projects?limit=100 (both with no area filter).
+ * Routes: GET /api/chat/conversations?limit=200 · GET /api/chat/projects?limit=100 ·
+ *         GET /api/library/assets?limit=30&sort=updated (all with no area filter).
  */
 (() => {
   const P = window.XENO_PLATFORM;
@@ -33,12 +34,14 @@
   function load() {
     if (loading) { again = true; return loading; }
     loading = (async () => {
-      const [cv, pj] = await Promise.all([api('GET', '/api/chat/conversations?limit=200').catch(() => ({ ok: false, d: {} })), api('GET', '/api/chat/projects?limit=100').catch(() => ({ ok: false, d: {} }))]);
+      const [cv, pj, lb] = await Promise.all([api('GET', '/api/chat/conversations?limit=200').catch(() => ({ ok: false, d: {} })), api('GET', '/api/chat/projects?limit=100').catch(() => ({ ok: false, d: {} })), api('GET', '/api/library/assets?limit=30&sort=updated').catch(() => ({ ok: false, d: {} }))]);
       if (cv.ok && Array.isArray(cv.d.conversations)) {
         const projects = pj.ok && Array.isArray(pj.d.projects) ? pj.d.projects.filter((p) => !p.is_archived) : [];
         const rows = [
           ...cv.d.conversations.map((c) => ({ kind: 'chat', id: String(c.id), t: String(c.title || '').trim() || 'New chat', p: 'chat', m: home(c.area), at: c.last_message_at || c.updated_at || c.created_at })),
           ...projects.map((p) => ({ kind: 'project', id: String(p.id), t: String(p.name || 'Project'), p: 'chat', m: home(p.area), at: p.updated_at || p.created_at })),
+          // a file opens in the Library, which is a page and not a product: `p` names no product, and every reader that needs one skips it
+          ...(lb.ok && Array.isArray(lb.d.items) ? lb.d.items : []).map((f) => ({ kind: 'file', id: String(f.id), t: String(f.name || 'Untitled'), p: 'library', m: home(f.area), at: f.updated_at || f.created_at })),
         ].filter((r) => Number.isFinite(Date.parse(r.at))).sort((a, b) => Date.parse(b.at) - Date.parse(a.at)).slice(0, 60);
         rows.forEach((r) => { r.ago = ago(r.at); });
         window.XENO_RECENT = rows; R.status = 'ready'; R.count = rows.length;

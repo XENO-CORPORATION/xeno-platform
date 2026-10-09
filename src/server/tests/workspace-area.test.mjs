@@ -21,7 +21,7 @@ import workspaceAreaRoutes from '../routes/workspaceAreaRoutes.js';
 import { areaFromRequest } from '../utils/resourceArea.js';
 import { runAllMigrations } from '../services/migrationRunner.js';
 import { ENSURE_SCHEDULED_CONVERSATION_SQL } from '../workers/chatScheduledWorker.js';
-import { likePattern, snippetAround } from '../services/workspaceArea.js';
+import { likePattern, snippetAround, PLATFORM_DEFAULT_MODEL } from '../services/workspaceArea.js';
 
 if (!process.env.DATABASE_URL) throw new Error('DATABASE_URL is required');
 const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL });
@@ -70,6 +70,14 @@ async function main() {
     const cleared = await call('PUT', `/chat/scheduled/${sDev.id}`, { area: null });
     check(cleared.json.task.area === null, 'a scheduled chat can be moved to no area');
     await call('PUT', `/chat/scheduled/${sDev.id}`, { area: 'tools', title: 's-dev' });
+
+    // the model, when none is named
+    check(sNone.model_id === PLATFORM_DEFAULT_MODEL && !/gemini-2\.5-flash-preview/.test(sNone.model_id), 'with no model named and none set, a scheduled chat uses the platform’s current default');
+    await pool.query(`INSERT INTO user_settings(user_id, settings, updated_at) VALUES($1, $2, NOW()) ON CONFLICT (user_id) DO UPDATE SET settings = EXCLUDED.settings`, [ada, JSON.stringify({ models: { defaultModel: 'my-default' }, areas: { dev: { model: 'dev-own' }, office: { model: 'office-own' } } })]);
+    const mDev = await sched('m-dev', { area: 'dev' }), mStudio = await sched('m-studio', { area: 'studio' }), mNamed = await sched('m-named', { area: 'dev', model_id: 'named-one' }), mProj = await sched('m-proj', { project_id: proj.id });
+    check(mDev.model_id === 'dev-own' && mStudio.model_id === 'my-default' && mNamed.model_id === 'named-one', 'it uses the area’s model, else the person’s default; a named model wins');
+    check(mProj.model_id === 'office-own', 'in a project it uses the model of the project’s area');
+    for (const t of [mDev, mStudio, mNamed, mProj]) await pool.query('DELETE FROM chat_scheduled_tasks WHERE id = $1', [t.id]);
 
     // the conversation a run writes to
     const run = async (task) => (await pool.query(ENSURE_SCHEDULED_CONVERSATION_SQL, [ada, 'auto', 'm', task.project_id || null, task.area ?? null])).rows[0].id;

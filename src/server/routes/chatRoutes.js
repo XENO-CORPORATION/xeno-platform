@@ -8,6 +8,7 @@ import crypto from 'crypto';
 import fs from 'fs';
 import { workspaceFromReq, isWorkspaceMember, UUID_RE } from '../utils/workspaceContext.js';
 import { check, listObjectTuples, writeTuples } from '../utils/authzReBAC.js';
+import { defaultModelFor } from '../services/workspaceArea.js';
 import { computeNextRun, executeScheduledTask, sanitizeScheduledRunError } from '../workers/chatScheduledWorker.js';
 import { assertAuthorizedLibraryAttachments, deleteLibraryItem, getAuthorizedLibraryFile, listLibraryItems, resolveManagedLibraryPath } from '../services/libraryAssets.js';
 import {
@@ -2201,7 +2202,7 @@ router.post('/scheduled', async (req, res) => {
 
     const {
       title, prompt, cadence = 'daily', cadence_label,
-      model_id = 'google/gemini-2.5-flash-preview-05-20', conversation_id, project_id,
+      model_id: namedModel, conversation_id, project_id,
       next_run_at, schedule_kind, timezone = 'UTC', dtstart_local, rrule,
       misfire_policy = 'run_once', overlap_policy = 'skip',
       max_catch_up_runs = 1, catch_up_window_seconds = 86400, max_attempts = 3,
@@ -2238,6 +2239,12 @@ router.post('/scheduled', async (req, res) => {
     let taskArea;
     try { const named = readArea(req.body?.area); taskArea = project_id ? null : (named.given ? named.area : (req.xenoArea ?? null)); }
     catch (error) { return res.status(400).json({ success: false, code: 'invalid_area', error: error.message }); }
+
+    // The model: the one named, else the area's own, else the person's default, else the platform's (never a fixed
+    // id written here years ago).
+    let scheduleArea = taskArea;
+    if (project_id) { try { scheduleArea = (await req.db.query('SELECT area FROM chat_projects WHERE id = $1', [project_id])).rows[0]?.area ?? null; } catch { scheduleArea = null; } }
+    const model_id = typeof namedModel === 'string' && namedModel.trim() ? namedModel.trim() : await defaultModelFor(req.db, userId, scheduleArea);
 
     const task = await withTransaction(req.db, async (tx) => {
       const { rows } = await tx.query(

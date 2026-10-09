@@ -8,7 +8,11 @@
  *      and work that is not loaded in this page is still found. Results in the area you are in come first.
  *
  * Routes: GET/POST /api/chat/scheduled · PUT/DELETE /api/chat/scheduled/:id · GET /api/workspace/needs ·
- *         GET /api/workspace/search?q= · GET /api/user-data/settings (the model a new scheduled chat uses).
+ *         GET /api/workspace/search?q=[&area=] · GET /api/chat/conversations · GET /api/chat/projects ·
+ *         GET /api/library/assets · PUT …/area (the three ways an item is moved).
+ *   4. Chats. The sheet that lists an area's chats also finds them by what was said in them.
+ *   5. Sort into areas. Work made before areas existed lives on Overview only; one sheet lists it and moves the
+ *      chosen items to an area. Nothing is placed by guesswork: the person says where each thing belongs.
  */
 (() => {
   const P = window.XENO_PLATFORM;
@@ -56,11 +60,6 @@
     const r = await api('GET', '/api/chat/scheduled?limit=100' + (SC.area ? '&area=' + encodeURIComponent(SC.area) : '')).catch(() => null);
     if (r && r.ok && Array.isArray(r.d.tasks)) { SC.tasks = r.d.tasks.filter((t) => t.status !== 'cancelled'); SC.status = 'ready'; } else { SC.tasks = []; SC.status = 'error'; }
   }
-  async function modelFor(area) {
-    const got = await api('GET', '/api/user-data/settings').catch(() => null), s = (got && got.ok && got.d.settings) || {};
-    const own = area && s.areas && typeof s.areas === 'object' ? s.areas[area]?.model : null;
-    return (typeof own === 'string' && own) || (typeof s.models?.defaultModel === 'string' && s.models.defaultModel) || null;
-  }
   async function newScheduled() {
     const here = P.area();
     const v = await D().form({ title: 'New scheduled chat', sub: here ? `Runs in ${areaLabel(here)}. XENO runs the prompt on schedule and keeps the answers in one chat.` : 'XENO runs the prompt on schedule and keeps the answers in one chat.', submit: 'Schedule', fields: [
@@ -69,8 +68,7 @@
       { id: 'rep', label: 'Repeat', type: 'seg', value: 'Weekdays', options: [['Daily', 'Every day'], ['Weekdays', 'Weekdays'], ['Weekly', 'Weekly'], ['Once', 'Once']] },
       { id: 'at', label: 'Time', required: true, value: '09:00', validate: (x) => (/^([01]\d|2[0-3]):[0-5]\d$/.test(x.trim()) ? null : 'Use 24-hour time, like 09:00.') }] });
     if (!v) return false;
-    const model = await modelFor(here);
-    const r = await api('POST', '/api/chat/scheduled', { title: v.name.trim(), prompt: v.prompt.trim(), ...scheduleOf(v.rep, v.at.trim()), ...(model ? { model_id: model } : {}), area: here }).catch(() => null);
+    const r = await api('POST', '/api/chat/scheduled', { title: v.name.trim(), prompt: v.prompt.trim(), ...scheduleOf(v.rep, v.at.trim()), area: here }).catch(() => null);
     if (!r || !r.ok) { toast((r && r.d && r.d.error) || 'That couldn’t be scheduled. Nothing was saved.'); return false; }
     toast(`Scheduled “${v.name.trim()}”${here ? ' in ' + areaLabel(here) : ''}`); return true;
   }
@@ -152,8 +150,78 @@
   }
   window.XENO_SEARCH_LIVE = { served: true, find, merge, state: () => ({ q: SR.q, pending: SR.pending, count: SR.items.length }) };
 
-  if (window.XA) { window.XA.scheduled = scheduled; window.XA.newScheduled = newScheduled; }
-  addEventListener('message', (e) => { if (e.origin !== location.origin) return; const m = e.data; if (m && m.source === 'xeno-chat' && m.type === 'changed') SR.cache.clear(); });
-  window.XENO_AREA_LIVE = { served: true, loadNeeds, scheduleOf, moveItems: (id, done) => { const t = SC.tasks.find((x) => String(x.id) === id); return t ? moveItems(t, done) : []; }, scheduled: () => ({ status: SC.status, count: SC.tasks.length, area: SC.area }), needs: () => ({ status: N.status, count: N.count }) };
-  Promise.resolve(P.ready).then((user) => { if (user) loadNeeds(); });
+  // ───────────────────────────── chats in this area, by title and by what was said
+  function allChats() {
+    const here = P.area(), ic = (k) => X().ic(k), q0 = here ? '&area=' + encodeURIComponent(here) : '';
+    const C = { status: 'loading', rows: [], said: [], q: '', seq: 0, timer: 0 };
+    const paint = (sh) => { const box = sh.querySelector('.xd-chats'); if (!box) return; const q = C.q.trim().toLowerCase();
+      const hit = C.rows.filter((r) => !q || r.title.toLowerCase().includes(q));
+      const row = (r, sub) => `<button class="xd-chat" data-ac-id="${esc(r.id)}"><span>${esc(r.title)}</span><small>${esc(sub)}</small></button>`;
+      const titled = hit.map((r) => row(r, here ? r.when : areaLabel(r.area))).join('');
+      const said = C.said.filter((r) => !hit.some((h) => h.id === r.id)).map((r) => row(r, r.snippet)).join('');
+      box.innerHTML = C.status === 'loading' ? '<p class="xd-note" data-ac-state="loading">Loading chats…</p>' : C.status === 'error' ? '<p class="xd-note" data-ac-state="error">The chats couldn’t be loaded.</p>'
+        : (titled + (said ? `<div class="xd-chats-h">Said in a chat</div>${said}` : '')) || (C.searching ? '<p class="xd-note" data-ac-state="searching">Searching what was said…</p>' : `<p class="xd-note" data-ac-state="none">${q ? `No chats match “${esc(C.q.trim())}”.` : 'No chats here yet.'}</p>`);
+      sh.querySelector('.xd-chats-n').textContent = C.status === 'ready' ? `${hit.length} of ${C.rows.length}` : ''; };
+    const ask = (sh) => { clearTimeout(C.timer); const q = C.q.trim(), seq = ++C.seq; if (q.length < 2) { C.said = []; C.searching = false; return; } C.searching = true;
+      C.timer = setTimeout(async () => { const r = await api('GET', '/api/workspace/search?q=' + encodeURIComponent(q) + q0).catch(() => null); if (seq !== C.seq) return;
+        C.said = r && r.ok && Array.isArray(r.d.results) ? r.d.results.filter((x) => x.kind === 'chat' && x.matched === 'message').map((x) => ({ id: String(x.id), title: String(x.title || 'New chat'), snippet: String(x.snippet || '') })) : [];
+        C.searching = false; if (document.body.contains(sh)) paint(sh); }, 220); };
+    D().info({ title: 'Chats', sub: here ? 'In ' + areaLabel(here) : 'In every area', size: 'md', html: `<div class="xd-search">${ic('search')}<input type="search" placeholder="Search titles and what was said" aria-label="Search chats"><span class="xd-chats-n"></span></div><div class="xd-chats"></div>`,
+      onOpen: async (sh, shell) => { paint(sh); const i = sh.querySelector('input'); setTimeout(() => i.focus(), 30);
+        i.addEventListener('input', () => { C.q = i.value; ask(sh); paint(sh); });
+        sh.addEventListener('click', (e) => { const b = e.target.closest('[data-ac-id]'); if (!b) return; shell.close('pick'); X().go('product', { product: 'chat', item: b.dataset.acId }); });
+        const r = await api('GET', '/api/chat/conversations?limit=200' + q0).catch(() => null);
+        if (r && r.ok && Array.isArray(r.d.conversations)) { C.rows = r.d.conversations.map((c) => ({ id: String(c.id), title: String(c.title || '').trim() || 'New chat', area: c.area || null, when: when(c.last_message_at || c.updated_at) })); C.status = 'ready'; } else C.status = 'error';
+        if (document.body.contains(sh)) paint(sh); } });
+  }
+
+  // ───────────────────────────── sort into areas: what lives on Overview only
+  const U = { status: 'loading', count: 0, chats: [], projects: [], files: [] };
+  let unplacedLoading = null;
+  function loadUnplaced() {
+    if (unplacedLoading) return unplacedLoading;
+    unplacedLoading = (async () => {
+      const [cv, pj, lb] = await Promise.all([api('GET', '/api/chat/conversations?limit=200&area=none').catch(() => null), api('GET', '/api/chat/projects?limit=100&area=none').catch(() => null), api('GET', '/api/library/assets?limit=200&area=none').catch(() => null)]);
+      if (cv && cv.ok && pj && pj.ok && lb && lb.ok) {
+        U.chats = (cv.d.conversations || []).filter((c) => !c.project_id).map((c) => ({ kind: 'chat', id: String(c.id), title: String(c.title || '').trim() || 'New chat', meta: when(c.last_message_at || c.updated_at) }));
+        U.projects = (pj.d.projects || []).filter((p) => !p.is_archived).map((p) => ({ kind: 'project', id: String(p.id), title: String(p.name || 'Project'), meta: 'Project and its chats' }));
+        U.files = (lb.d.items || []).map((f) => ({ kind: 'file', id: String(f.id), title: String(f.name || 'Untitled'), meta: 'File', source: f.source, sourceId: f.source_id }));
+        U.status = 'ready';
+      } else { U.chats = []; U.projects = []; U.files = []; U.status = 'error'; }
+      const was = U.count; U.count = U.chats.length + U.projects.length + U.files.length; unplacedLoading = null;
+      if (was !== U.count) { try { X()?.refreshPanel?.(); } catch {} }
+    })();
+    return unplacedLoading;
+  }
+  const moveOne = (it, to) => (it.kind === 'chat' ? api('PUT', '/api/chat/conversations/' + encodeURIComponent(it.id), { area: to })
+    : it.kind === 'project' ? api('PUT', '/api/chat/projects/' + encodeURIComponent(it.id), { area: to })
+    : api('PUT', `/api/library/assets/${encodeURIComponent(it.source)}/${encodeURIComponent(it.sourceId)}/area`, { area: to })).catch(() => null);
+  function sortAreas() {
+    const picked = new Set(), key = (it) => it.kind + ':' + it.id, all = () => [...U.chats, ...U.projects, ...U.files];
+    const paint = (sh) => { const b = sh.querySelector('.xd-info'); if (!b) return;
+      const group = (name, items) => (items.length ? `<div class="xd-sort-h"><b>${name}</b><span>${items.length}</span><button class="xd-btn ghost sm" data-sort-all="${items[0].kind}">${items.every((it) => picked.has(key(it))) ? 'Clear' : 'Select all'}</button></div><ul class="xd-list xd-sort">${items.map((it) => `<li><label><input type="checkbox" data-sort-pick="${esc(key(it))}"${picked.has(key(it)) ? ' checked' : ''}><div><b>${esc(it.title)}</b><small>${esc(it.meta)}</small></div></label></li>`).join('')}</ul>` : '');
+      b.innerHTML = U.status === 'loading' ? '<p class="xd-note" data-sort-state="loading">Looking for work that is in no area…</p>'
+        : U.status === 'error' ? '<p class="xd-note" data-sort-state="error">That couldn’t be loaded. <button class="xd-btn ghost sm" data-sort-retry>Try again</button></p>'
+        : !U.count ? '<p class="xd-note" data-sort-state="done">Everything is in an area. Nothing left to sort.</p>'
+        : `<div class="xd-sort-to" role="group" aria-label="Move the selected items to"><span>${picked.size ? `Move ${picked.size} to` : 'Select items, then choose an area'}</span>${P.areas().map(([id, name]) => `<button class="xd-btn ghost sm" data-sort-to="${esc(id)}"${picked.size ? '' : ' disabled'}>${esc(name)}</button>`).join('')}</div>${group('Chats', U.chats)}${group('Projects', U.projects)}${group('Files', U.files)}`; };
+    D().info({ title: 'Sort into areas', sub: 'Work that lives on Overview only. Each item you move shows in its area from then on.', size: 'md', html: '',
+      onOpen: async (sh) => { U.status = 'loading'; paint(sh); await loadUnplaced(); if (!document.body.contains(sh)) return; paint(sh);
+        sh.addEventListener('change', (e) => { const c = e.target.closest('[data-sort-pick]'); if (!c) return; if (c.checked) picked.add(c.dataset.sortPick); else picked.delete(c.dataset.sortPick); paint(sh); });
+        sh.addEventListener('click', async (e) => {
+          if (e.target.closest('[data-sort-retry]')) { U.status = 'loading'; paint(sh); await loadUnplaced(); return paint(sh); }
+          const sa = e.target.closest('[data-sort-all]'); if (sa) { const items = all().filter((it) => it.kind === sa.dataset.sortAll), on = items.every((it) => picked.has(key(it))); items.forEach((it) => (on ? picked.delete(key(it)) : picked.add(key(it)))); return paint(sh); }
+          const to = e.target.closest('[data-sort-to]'); if (!to || to.disabled) return;
+          const items = all().filter((it) => picked.has(key(it))); sh.querySelectorAll('[data-sort-to]').forEach((x) => { x.disabled = true; });
+          const done = await Promise.all(items.map((it) => moveOne(it, to.dataset.sortTo))), moved = items.filter((_, i) => done[i] && done[i].ok), failed = items.length - moved.length;
+          moved.forEach((it) => picked.delete(key(it)));
+          toast(failed ? `Moved ${moved.length} to ${areaLabel(to.dataset.sortTo)}. ${failed} couldn’t be moved and stay where they were.` : `Moved ${moved.length} to ${areaLabel(to.dataset.sortTo)}`);
+          await loadUnplaced(); if (document.body.contains(sh)) paint(sh);
+          try { window.XENO_RECENT_LIVE?.load?.(); window.XENO_CHAT?.load?.(); } catch {}
+        }); } });
+  }
+
+  if (window.XA) { window.XA.scheduled = scheduled; window.XA.newScheduled = newScheduled; window.XA.allChats = allChats; window.XA.sortAreas = sortAreas; }
+  addEventListener('message', (e) => { if (e.origin !== location.origin) return; const m = e.data; if (m && m.source === 'xeno-chat' && m.type === 'changed') { SR.cache.clear(); setTimeout(loadUnplaced, 800); } });
+  window.XENO_AREA_LIVE = { served: true, loadNeeds, loadUnplaced, unplaced: () => ({ status: U.status, count: U.count }), scheduleOf, moveItems: (id, done) => { const t = SC.tasks.find((x) => String(x.id) === id); return t ? moveItems(t, done) : []; }, scheduled: () => ({ status: SC.status, count: SC.tasks.length, area: SC.area }), needs: () => ({ status: N.status, count: N.count }) };
+  Promise.resolve(P.ready).then((user) => { if (user) { loadNeeds(); loadUnplaced(); } });
 })();

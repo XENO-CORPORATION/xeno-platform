@@ -93,6 +93,22 @@ export async function searchWorkspace(db, userId, { query, areaFilter = { filter
   return { query: q, results: [...chats, ...projects, ...files], counts: { chat: chats.length, project: projects.length, file: files.length } };
 }
 
+/** The chat's own first choice (src/components/playground/Chat/ChatWithLLM.tsx DEFAULT_MODEL). Keep the two the same. */
+export const PLATFORM_DEFAULT_MODEL = 'gpt-5.6-terra';
+/**
+ * The model new work in `area` uses when none is named: the area's own (settings areas.<id>.model), else the
+ * person's default (settings models.defaultModel), else the platform's. Decided here, on the server, so a client
+ * that forgets to say cannot leave a scheduled chat on a model that no longer exists.
+ */
+export async function defaultModelFor(db, userId, area) {
+  let s = {};
+  try { s = (await db.query('SELECT settings FROM user_settings WHERE user_id = $1', [userId])).rows[0]?.settings || {}; } catch { s = {}; }
+  const own = area && s.areas && typeof s.areas === 'object' ? s.areas[area]?.model : null;
+  if (typeof own === 'string' && own.trim()) return own.trim();
+  const mine = s.models?.defaultModel;
+  return typeof mine === 'string' && mine.trim() ? mine.trim() : PLATFORM_DEFAULT_MODEL;
+}
+
 export async function listNeedsYou(db, userId, { areaFilter = { filter: false, area: null } } = {}) {
   const params = [];
   const effective = `CASE WHEN t.project_id IS NOT NULL THEN (SELECT ap.area FROM chat_projects ap WHERE ap.id = t.project_id) ELSE t.area END`;
