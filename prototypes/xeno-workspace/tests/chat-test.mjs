@@ -18,7 +18,7 @@ const A = '00000001-0000-4000-8000-000000000000', B = '00000002-0000-4000-8000-0
 const db = { convs: [], down: false, lists: 0, writes: [], refuse: false };
 const reset = () => { db.convs = [{ id: A, title: 'Plan the launch week', updated_at: iso(1), last_message_at: iso(1), project_id: null }, { id: B, title: '', updated_at: iso(30), last_message_at: iso(30), project_id: null }, { id: C, title: 'Budget <b>questions</b>', updated_at: iso(400), last_message_at: iso(400), project_id: PJ }]; db.down = false; db.lists = 0; db.writes = []; db.refuse = false; };
 // the stand-in chat: it says where it is on load and after every in-page navigation, like the real one
-const CHAT = `<!doctype html><html><body><div class="chat-themed"><div class="chat-top-bar"><button aria-label="Share conversation" onclick="window.__shared=(window.__shared||0)+1">Share</button></div><button aria-label="Open conversation history">H</button>
+const CHAT = `<!doctype html><html><body><div class="chat-themed"><div class="chat-top-bar"><button aria-label="Share conversation" onclick="window.__shared=(window.__shared||0)+1">Share</button><button aria-label="Copy Session Transcript" onclick="if(!window.__mute)parent.postMessage({source:'xeno-chat',type:'transcript',text:'# Transcript\\nHello there'},location.origin)">T</button></div><button aria-label="Open conversation history">H</button>
   <div class="rounded-2xl" data-chat-composer-shell style="border-radius:16px;background:#2a2a2a"><div><div class="w-full"><div class="chat-input-container"><textarea></textarea></div></div></div></div>
   <button data-composer-send-button aria-label="Send message" disabled>send</button>
   <button data-chat-model-trigger class="xm-model apx" style="position:fixed;right:120px;bottom:20px"><span class="ap-txt" data-part="model"><span class="ap-model">Model A</span></span></button></div><script>
@@ -107,6 +107,24 @@ try {
     await p.evaluate(() => { localStorage.setItem('xeno_platform_theme', 'dark'); localStorage.setItem('xeno_platform_theme_brightness', '0'); dispatchEvent(new CustomEvent('xeno_platform_theme_change')); }); await wait(200);
     await p.evaluate(() => document.querySelector('#main .topbar > .ib[aria-label="Share"]').click()); await wait(200);
     ok(await p.evaluate(() => document.getElementById('xw-chat-frame').contentWindow.__shared === 1 && getComputedStyle(document.querySelector('#main .topbar > .ib[aria-label="More"]')).display === 'none'), 'Share in the top bar presses the chat’s own Share; the sample More is not shown');
+    // Copy transcript: in the middle of this page's top bar, with the chat's own transcript
+    // a headless browser refuses the real clipboard, so this page's clipboard is a box the test can read; `__clipFail` makes it refuse
+    await p.evaluate(() => { let held = ''; Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText: async (v) => { if (window.__clipFail) throw new Error('denied'); held = String(v); }, readText: async () => held } }); });
+    const mid = () => p.evaluate(() => { const b = document.querySelector('#main .topbar [data-chat-transcript]'), bar = document.querySelector('#main .topbar'); if (!b) return null; const r = b.getBoundingClientRect(), tr = bar.getBoundingClientRect(); return { off: Math.abs((r.left + r.width / 2) - (tr.left + tr.width / 2)), text: b.innerText.trim(), done: b.classList.contains('done') }; });
+    let tb = await mid();
+    ok(!!tb && tb.off < 1.5 && tb.text === 'Copy transcript', 'Copy transcript sits in the middle of the top bar (' + JSON.stringify(tb) + ')');
+    await p.click('#main .topbar [data-chat-transcript]'); await wait(400); tb = await mid();
+    ok(await p.evaluate(() => navigator.clipboard.readText()) === '# Transcript\nHello there' && tb.text === 'Copied' && tb.done, 'pressing it puts the chat’s own transcript on the clipboard and says Copied');
+    await wait(2300); tb = await mid(); ok(tb.text === 'Copy transcript' && !tb.done, 'and it goes back to its label');
+    await p.evaluate(() => navigator.clipboard.writeText('untouched')); await p.evaluate(() => document.getElementById('xw-chat-frame').contentWindow.postMessage && window.postMessage({ source: 'xeno-chat', type: 'transcript', text: 'forged' }, location.origin)); await wait(200);
+    await p.evaluate(() => { document.getElementById('xw-chat-frame').contentWindow.eval("parent.postMessage({ source: 'xeno-chat', type: 'transcript', text: 'unasked' }, location.origin)"); }); await wait(200);
+    ok(await p.evaluate(() => navigator.clipboard.readText()) === 'untouched', 'nothing reaches the clipboard unless Copy transcript was pressed here, whoever sends a transcript');
+    await p.evaluate(() => { document.getElementById('xw-chat-frame').contentWindow.__mute = true; }); await p.click('#main .topbar [data-chat-transcript]'); await wait(4300);
+    ok(/couldn’t be copied/.test(await p.evaluate(() => document.querySelector('.toast')?.textContent || '')) && await p.evaluate(() => navigator.clipboard.readText()) === 'untouched', 'if the chat does not answer, the page says the transcript couldn’t be copied');
+    await p.evaluate(() => { document.getElementById('xw-chat-frame').contentWindow.__mute = false; });
+    await p.evaluate(() => { window.__clipFail = true; document.querySelector('.toast')?.classList.remove('on'); }); await p.click('#main .topbar [data-chat-transcript]'); await wait(400); tb = await mid();
+    ok(/blocked the clipboard/.test(await p.evaluate(() => document.querySelector('.toast')?.textContent || '')) && tb.text === 'Copy transcript' && !tb.done, 'if the browser refuses the clipboard, the page says so and does not claim Copied');
+    await p.evaluate(() => { window.__clipFail = false; });
     const pick = async (label) => { await p.evaluate((A) => document.querySelector(`#panel [data-chat-live="${A}"] [data-more]`).click(), A); await wait(350); const hit = await p.evaluate((label) => { const el = [...document.querySelectorAll('button, [role=menuitem]')].find((n) => n.offsetParent && n.textContent.trim().startsWith(label) && !n.closest('#panel')); if (el) el.click(); return !!el; }, label); await wait(450); return hit; };
     const sure = () => p.evaluate(() => { const b = [...document.querySelectorAll('button')].find((n) => n.offsetParent && /^Delete chat/.test(n.textContent.trim())); if (b) b.click(); return !!b; });
     const picked = await pick('Rename'); await p.evaluate(() => { const i = [...document.querySelectorAll('input')].find((n) => n.offsetParent && n.value === 'Plan the launch week'); if (i) { i.value = 'Launch plan'; i.dispatchEvent(new Event('input', { bubbles: true })); } }); await p.click('[data-xd-submit]').catch(() => {}); await wait(700);

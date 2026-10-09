@@ -71,6 +71,10 @@
     + '.live-chat-host[data-chat-frame]{display:grid;place-items:center;color:var(--dim);font-size:13px}'
     // on the live chat the "areas still show sample data" note is untrue and would sit on the composer;
     // and the top bar's sample Share and More give way to the chat's own, which work
+    // Copy transcript sits in the middle of the top bar, whatever the path on its left and the actions on its right take
+    + '.topbar .tb-mid{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);display:inline-flex;align-items:center;gap:7px;height:28px;padding:0 10px;border-radius:6px;border:1px solid var(--border);background:transparent;color:var(--muted);font-size:12px;white-space:nowrap;cursor:pointer}'
+    + '.topbar .tb-mid:hover{color:var(--text);background:var(--hover)}.topbar .tb-mid:focus-visible{outline:1px solid var(--text);outline-offset:2px}.topbar .tb-mid svg.i{width:13px;height:13px}.topbar .tb-mid.done{color:var(--text)}'
+    + '@media (max-width:1100px){.topbar .tb-mid span{display:none}.topbar .tb-mid{padding:0 8px}}'
     + 'html.xw-chat-on #xp-note{display:none}html.xw-chat-on #main .topbar > .ib[aria-label="More"]{display:none}';
   document.head.appendChild(style);
   let frame = null, loaded = false, slot = null, ro = null, hideT = 0;
@@ -161,6 +165,7 @@
       X()?.openModelMenu?.(S.picker.anchor);
     }
     if (m.type === 'model-menu-close') X()?.closeModelMenu?.();
+    if (m.type === 'transcript' && typeof m.text === 'string' && askedTranscript) copied(m.text);
   });
   addEventListener('focus', () => { if (S.status !== 'loading') load(); });
 
@@ -182,6 +187,24 @@
     e.preventDefault(); e.stopPropagation();
     let b = null; try { b = frame.contentDocument.querySelector('.chat-top-bar [aria-label*="Share" i], .chat-top-bar [title*="Share" i]'); } catch {}
     if (b) b.click(); else X()?.toast?.(S.current ? 'Sharing isn’t available for this chat yet' : 'Send a message first, then share the chat');
+  }, true);
+
+  // ---------- Copy transcript, in this page's top bar ----------
+  // The chat builds the transcript (its own button's logic, the button itself is not shown); this page asked for it
+  // from a press here, so this page writes the clipboard and says what happened.
+  let askedTranscript = 0, transcriptT = 0;
+  const mark = (text, done) => { const b = document.querySelector('#main .topbar [data-chat-transcript]'); if (!b) return; const s = b.querySelector('span'); if (s) s.textContent = text; b.classList.toggle('done', !!done); };
+  async function copied(text) {
+    clearTimeout(transcriptT); askedTranscript = 0;
+    try { await navigator.clipboard.writeText(text); mark('Copied', true); } catch { mark('Copy transcript', false); return void X()?.toast?.('The transcript couldn’t be copied. Your browser blocked the clipboard.'); }
+    setTimeout(() => mark('Copy transcript', false), 2200);
+  }
+  document.addEventListener('click', (e) => {
+    const b = e.target.closest('#main .topbar [data-chat-transcript]'); if (!b) return; e.preventDefault(); e.stopPropagation();
+    let real = null; try { real = frame.contentDocument.querySelector('[aria-label="Copy Session Transcript"]'); } catch {}
+    if (!real) return void X()?.toast?.('The chat is still opening. Try again in a moment.');
+    askedTranscript = 1; clearTimeout(transcriptT); transcriptT = setTimeout(() => { if (askedTranscript) { askedTranscript = 0; X()?.toast?.('The transcript couldn’t be copied.'); } }, 4000);
+    real.click();
   }, true);
 
   // ---------- rename and delete, from the sidebar ----------
