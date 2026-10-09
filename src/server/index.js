@@ -1,4 +1,5 @@
 import path from 'path';
+import workspaceAreaRoutes from './routes/workspaceAreaRoutes.js';
 import { areaFromRequest } from './utils/resourceArea.js';
 import { fileURLToPath } from 'url';
 import dotenv from 'dotenv';
@@ -609,6 +610,8 @@ console.log('👤 Account + dashboard routes integrated: /api/account/* + /api/d
 // (workspace:<id>#<role>@user:<id>). Standard authMiddleware — not OIDC-gated.
 app.use('/api/workspaces', databaseMiddleware, authMiddleware, requireActivated, workspaceRoutes);
 app.use('/api/workspace-invites', databaseMiddleware, authMiddleware, workspaceInviteRoutes);
+// One search and one "needs you" feed across a person's chats, projects and Library, each aware of the area.
+app.use('/api/workspace', databaseMiddleware, authMiddleware, requireActivated, areaFromRequest, workspaceAreaRoutes);
 console.log('🏢 Workspace routes integrated: /api/workspaces/* + /api/workspace-invites/*');
 
 // ── Account & Ledger v2 (additive, flag-gated) ───────────────────────────────

@@ -204,8 +204,10 @@ export async function claimScheduledRun(pool, workerId, leaseSeconds = 120) {
   });
 }
 
+// AREA ($5): the conversation is made in the task's area, so a scheduled chat's results show where it was set up.
+// Inside a project it stores none: it reads the project's.
 export const ENSURE_SCHEDULED_CONVERSATION_SQL = `INSERT INTO chat_conversations(
-  user_id, owner_user_id, created_by_user_id, title, model_id, project_id, workspace_id
+  user_id, owner_user_id, created_by_user_id, title, model_id, project_id, workspace_id, area
 ) VALUES (
   $1::uuid,
   CASE WHEN $4::uuid IS NULL THEN $1::uuid ELSE NULL::uuid END,
@@ -213,7 +215,8 @@ export const ENSURE_SCHEDULED_CONVERSATION_SQL = `INSERT INTO chat_conversations
   $2::text,
   $3::text,
   $4::uuid,
-  NULL::uuid
+  NULL::uuid,
+  CASE WHEN $4::uuid IS NULL THEN $5::text ELSE NULL::text END
 ) RETURNING id`;
 
 async function ensureConversation(pool, task, run) {
@@ -223,7 +226,7 @@ async function ensureConversation(pool, task, run) {
     if (locked.conversation_id) return locked.conversation_id;
     const { rows } = await tx.query(
       ENSURE_SCHEDULED_CONVERSATION_SQL,
-      [task.run_as_user_id, `[Automated] ${task.title}`, task.model_id, task.project_id],
+      [task.run_as_user_id, `[Automated] ${task.title}`, task.model_id, task.project_id, task.area ?? null],
     );
     await writeTuples(tx, { writes: [{
       object: `conversation:${rows[0].id}`, relation: task.project_id ? 'parent' : 'owner',

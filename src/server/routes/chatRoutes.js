@@ -632,7 +632,7 @@ router.post('/conversations', async (req, res) => {
     const { title = 'New Chat', model_id, system_prompt, persona_id, interface_id = 'playground', project_id } = req.body;
     // AREA: a new chat lives in the area it was started in. Inside a project it takes the project's, so none is stored.
     let newArea;
-    try { newArea = readArea(req.body?.area).area; } catch (error) { return res.status(400).json({ success: false, code: 'invalid_area', error: error.message }); }
+    try { const named = readArea(req.body?.area); newArea = named.given ? named.area : (req.xenoArea ?? null); } catch (error) { return res.status(400).json({ success: false, code: 'invalid_area', error: error.message }); }
 
     if (project_id) await requireResourceRelation(req.db, userPrincipal(userId), 'project', project_id, 'reviewer');
     // SES-01: a New Chat under the caller's own personal wrapper is PERSONALLY owned -- the wrapper
@@ -2131,8 +2131,17 @@ router.get('/scheduled', async (req, res) => {
     const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 50, 1), 100);
     const offset = Math.max(parseInt(req.query.offset, 10) || 0, 0);
 
-    let sql = `SELECT * FROM chat_scheduled_tasks WHERE TRUE`;
+    // AREA: `?area=dev` one area, `?area=none` the tasks in none, absent everything (Overview). A task in a project
+    // reads the project's area.
+    let scheduledArea;
+    try { scheduledArea = readAreaFilter(req.query.area); } catch (error) { return res.status(400).json({ success: false, code: 'invalid_area', error: error.message }); }
+    const SCHEDULED_AREA = `CASE WHEN project_id IS NOT NULL THEN (SELECT ap.area FROM chat_projects ap WHERE ap.id = chat_scheduled_tasks.project_id) ELSE area END`;
+    let sql = `SELECT chat_scheduled_tasks.*, ${SCHEDULED_AREA} AS area FROM chat_scheduled_tasks WHERE TRUE`;
     const params = [];
+    if (scheduledArea.filter) {
+      if (scheduledArea.area === null) sql += ` AND (${SCHEDULED_AREA}) IS NULL`;
+      else { params.push(scheduledArea.area); sql += ` AND (${SCHEDULED_AREA}) = $${params.length}`; }
+    }
 
     if (status && status !== 'all') {
       params.push(status);
@@ -2224,6 +2233,11 @@ router.post('/scheduled', async (req, res) => {
       after: new Date(Date.now() - 1000),
     });
     if (!nextRun) return res.status(400).json({ success: false, error: 'Schedule has no future occurrence' });
+    // AREA: a scheduled chat lives in the area it was set up in (named in the body, else the request's own area).
+    // Inside a project it takes the project's, so none is stored.
+    let taskArea;
+    try { const named = readArea(req.body?.area); taskArea = project_id ? null : (named.given ? named.area : (req.xenoArea ?? null)); }
+    catch (error) { return res.status(400).json({ success: false, code: 'invalid_area', error: error.message }); }
 
     const task = await withTransaction(req.db, async (tx) => {
       const { rows } = await tx.query(
@@ -2231,13 +2245,13 @@ router.post('/scheduled', async (req, res) => {
           user_id, created_by_user_id, run_as_user_id, conversation_id, project_id,
           title, prompt, model_id, cadence, cadence_label, next_run_at,
           schedule_kind, timezone, timezone_source, dtstart_local, rrule,
-          misfire_policy, overlap_policy, max_catch_up_runs, catch_up_window_seconds, max_attempts
-        ) VALUES ($1,$1,$1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,'user_confirmed',$12,$13,$14,$15,$16,$17,$18)
+          misfire_policy, overlap_policy, max_catch_up_runs, catch_up_window_seconds, max_attempts, area
+        ) VALUES ($1,$1,$1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,'user_confirmed',$12,$13,$14,$15,$16,$17,$18,$19)
         RETURNING *`,
         [
           userId, conversation_id || null, project_id || null, title, prompt, model_id, cadence, label, nextRun,
           kind, timezone, localStart, recurrenceRule, misfire_policy, overlap_policy,
-          max_catch_up_runs, catch_up_window_seconds, max_attempts,
+          max_catch_up_runs, catch_up_window_seconds, max_attempts, taskArea,
         ],
       );
       await writeTuples(tx, { writes: [{
@@ -2267,15 +2281,21 @@ router.put('/scheduled/:id', async (req, res) => {
 
     const { id } = req.params;
     const { title, prompt, cadence, cadence_label, status, model_id, schedule_kind, timezone, dtstart_local, rrule } = req.body;
+    // AREA: moving a scheduled chat to another area (or to none). One inside a project follows its project.
+    let areaMove;
+    try { areaMove = readArea(req.body?.area); } catch (error) { return res.status(400).json({ success: false, code: 'invalid_area', error: error.message }); }
 
     await requireResourceRelation(req.db, userPrincipal(userId), 'schedule', id, 'editor');
-    const existing = await req.db.query('SELECT * FROM chat_scheduled_tasks WHERE id = $1', [id]);
+    // dtstart_local is read back as text: the driver hands a timestamp over as a Date, and String(Date) is not a
+    // timestamp Postgres accepts, so every edit that did not resend the start time (pause, rename, move) failed.
+    const existing = await req.db.query(`SELECT *, to_char(dtstart_local, 'YYYY-MM-DD"T"HH24:MI:SS') AS dtstart_local_text FROM chat_scheduled_tasks WHERE id = $1`, [id]);
     if (existing.rows.length === 0) return res.status(404).json({ success: false, error: 'Task not found' });
+    if (areaMove.given && existing.rows[0].project_id) return res.status(409).json({ success: false, code: 'area_follows_project', error: 'A scheduled chat inside a project lives where its project lives. Move the project instead.' });
 
     const task = existing.rows[0];
     const kind = schedule_kind || task.schedule_kind;
     const zone = timezone || task.timezone;
-    const local = dtstart_local || String(task.dtstart_local).replace(' ', 'T').replace(/Z$/, '').slice(0, 19);
+    const local = dtstart_local || task.dtstart_local_text;
     const rule = kind === 'recurring' ? (rrule ?? task.rrule) : null;
     const recurrenceChanged = schedule_kind !== undefined || timezone !== undefined || dtstart_local !== undefined || rrule !== undefined;
     const nextRun = recurrenceChanged ? calculateNextScheduleOccurrence({
@@ -2295,10 +2315,11 @@ router.put('/scheduled/:id', async (req, res) => {
         timezone = $10,
         dtstart_local = $11,
         rrule = $12,
+        area = CASE WHEN $13::boolean THEN $14::text ELSE area END,
         updated_at = NOW()
        WHERE id = $8
        RETURNING *`,
-      [title, prompt, cadence, cadence_label, status, model_id, nextRun, id, kind, zone, local, rule]
+      [title, prompt, cadence, cadence_label, status, model_id, nextRun, id, kind, zone, local, rule, areaMove.given, areaMove.area]
     );
 
     res.json({ success: true, task: rows[0] });
