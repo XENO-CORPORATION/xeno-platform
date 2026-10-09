@@ -15,10 +15,13 @@ const b = await puppeteer.launch({ headless: true, protocolTimeout: 60000 });
 const USER = { id: 7, username: 'test-person', email: 'test@example.test', display_name: 'Test Person', avatar_url: null, email_verified: true };
 const iso = (h) => new Date(Date.now() - h * 3600000).toISOString();
 const A = '00000001-0000-4000-8000-000000000000', B = '00000002-0000-4000-8000-000000000000', C = '00000003-0000-4000-8000-000000000000', D = '00000004-0000-4000-8000-000000000000', PJ = '0000000a-0000-4000-8000-000000000000';
-const db = { convs: [], down: false, lists: 0 };
-const reset = () => { db.convs = [{ id: A, title: 'Plan the launch week', updated_at: iso(1), last_message_at: iso(1), project_id: null }, { id: B, title: '', updated_at: iso(30), last_message_at: iso(30), project_id: null }, { id: C, title: 'Budget <b>questions</b>', updated_at: iso(400), last_message_at: iso(400), project_id: PJ }]; db.down = false; db.lists = 0; };
+const db = { convs: [], down: false, lists: 0, writes: [], refuse: false };
+const reset = () => { db.convs = [{ id: A, title: 'Plan the launch week', updated_at: iso(1), last_message_at: iso(1), project_id: null }, { id: B, title: '', updated_at: iso(30), last_message_at: iso(30), project_id: null }, { id: C, title: 'Budget <b>questions</b>', updated_at: iso(400), last_message_at: iso(400), project_id: PJ }]; db.down = false; db.lists = 0; db.writes = []; db.refuse = false; };
 // the stand-in chat: it says where it is on load and after every in-page navigation, like the real one
-const CHAT = `<!doctype html><html><body><script>
+const CHAT = `<!doctype html><html><body><div class="chat-themed"><div class="chat-top-bar"><button aria-label="Share conversation" onclick="window.__shared=(window.__shared||0)+1">Share</button></div><button aria-label="Open conversation history">H</button>
+  <div class="rounded-2xl" data-chat-composer-shell style="border-radius:16px;background:#2a2a2a"><div><div class="w-full"><div class="chat-input-container"><textarea></textarea></div></div></div></div>
+  <button data-composer-send-button aria-label="Send message" disabled>send</button></div><script>
+  document.querySelector('textarea').addEventListener('input', (e) => { document.querySelector('[data-composer-send-button]').disabled = !e.target.value.trim(); });
   window.__born = Math.random(); window.__log = [];
   const say = () => { window.__log.push(location.pathname); parent.postMessage({ source: 'xeno-chat', type: 'location', path: location.pathname, title: 'Chat' }, location.origin); };
   addEventListener('popstate', say); say();
@@ -33,6 +36,9 @@ async function open(hash = '#/overview/p/chat') {
     if (!u.pathname.startsWith('/api/')) return q.continue();
     if (u.pathname === '/api/auth/me') return json({ success: true, user: USER });
     if (u.pathname === '/api/chat/conversations') { db.lists++; return db.down ? json({ success: false, error: 'Internal server error' }, 500) : json({ success: true, conversations: db.convs, total: db.convs.length + (db.extra || 0) }); }
+    const one = u.pathname.match(/^\/api\/chat\/conversations\/([^/]+)$/);
+    if (one && q.method() === 'PUT') { db.writes.push(['PUT', one[1], q.postData()]); if (db.refuse) return json({ success: false, error: 'Internal server error' }, 500); const c = db.convs.find((x) => x.id === one[1]); if (!c) return json({ success: false, error: 'Not found' }, 404); c.title = JSON.parse(q.postData()).title; return json({ success: true, conversation: c }); }
+    if (one && q.method() === 'DELETE') { db.writes.push(['DELETE', one[1]]); if (db.refuse) return json({ success: false, error: 'Internal server error' }, 500); db.convs = db.convs.filter((x) => x.id !== one[1]); return json({ success: true }); }
     if (u.pathname === '/api/chat/projects') return json({ success: true, projects: [{ id: PJ, name: 'Finance', icon: null }] });
     const body = { '/api/account/overview': { success: true, overview: { user: USER, credits: { balance: 0 }, workspace_count: 1 } }, '/api/account/sessions': { success: true, sessions: [] }, '/api/account/security': { success: true, security: { confirmation: { confirmed: false, available: true, expires_at: null }, methods: ['password'], has_password: true, email: '', pending_email: null } }, '/api/account/exports': { success: true, exports: [] }, '/api/auth/linked-accounts': { success: true, accounts: [] }, '/api/billing/overview': { success: true, overview: { credits: { balance: 0 }, subscription: null } }, '/api/dashboard/stats': { success: true, stats: { usage_available: false, usage_by_surface: [] } }, '/api/user-data/settings': { success: true, settings: {} }, '/api/workspaces': { success: true, workspaces: [] }, '/api/library/assets': { success: true, items: [] } }[u.pathname];
     return body ? json(body) : json({ success: false, error: 'not found' }, 404); });
@@ -79,6 +85,32 @@ try {
     await p.setViewport({ width: 1100, height: 700 }); await wait(400); v = await view(p);
     ok(v.over, 'the chat follows its slot when the window changes size');
     ok(errs.length === 0, 'no page errors (' + errs.slice(0, 2).join(' | ') + ')');
+    await p.close(); }
+  { // the composer is the one designed in this workspace, on the real chat
+    reset(); const { p } = await open(); await wait(300);
+    const dressed = () => p.evaluate(() => { const d = document.getElementById('xw-chat-frame').contentDocument, cs = (s) => { const el = d.querySelector(s); return el ? d.defaultView.getComputedStyle(el) : null; };
+      const colour = (doc, v) => { const pr = doc.createElement('i'); doc.body.appendChild(pr); pr.style.color = v; const c = doc.defaultView.getComputedStyle(pr).color; pr.remove(); return c; };
+      return { radius: cs('[data-chat-composer-shell]').borderRadius, bg: cs('[data-chat-composer-shell]').backgroundColor, wantBg: colour(d, 'var(--n23)'), pageBg: colour(document, 'var(--n23)'), bar: cs('.chat-top-bar').display, opener: cs('[aria-label="Open conversation history"]').display, font: cs('textarea').fontSize, send: cs('[data-composer-send-button]').backgroundColor, ready: colour(d, 'var(--n233)'), idle: colour(d, 'var(--w100)') }; });
+    let c = await dressed();
+    ok(c.radius === '6px' && c.bg === c.wantBg && c.bg === c.pageBg && c.font === '13px', 'the real chat’s input box takes this workspace’s design: the 6px box in this page’s own colour, 13px text (' + c.radius + ' ' + c.bg + ' ' + c.font + ')');
+    ok(c.bar === 'none' && c.opener === 'none', 'the chat’s own top bar and its history opener are not shown: this page has the path, Share and the history');
+    ok(c.send === c.idle, 'with nothing typed the send button is the quiet one');
+    await p.evaluate(() => { const d = document.getElementById('xw-chat-frame').contentDocument, t = d.querySelector('textarea'); t.value = 'hello'; t.dispatchEvent(new d.defaultView.Event('input', { bubbles: true })); }); await wait(350); c = await dressed();   // the button's colour glides for 160 ms
+    ok(c.send === c.ready && c.ready !== c.idle, 'once there is something to send it is the bright one, from the chat’s real state');
+    const before = c.bg; await p.evaluate(() => { localStorage.setItem('xeno_platform_theme', 'light'); localStorage.setItem('xeno_platform_theme_brightness', '100'); dispatchEvent(new CustomEvent('xeno_platform_theme_change')); }); await wait(300); c = await dressed();
+    ok(c.bg !== before && c.bg === c.pageBg, 'when the theme changes the input box changes with the page (' + before + ' → ' + c.bg + ')');
+    await p.evaluate(() => { localStorage.setItem('xeno_platform_theme', 'dark'); localStorage.setItem('xeno_platform_theme_brightness', '0'); dispatchEvent(new CustomEvent('xeno_platform_theme_change')); }); await wait(200);
+    await p.evaluate(() => document.querySelector('#main .topbar > .ib[aria-label="Share"]').click()); await wait(200);
+    ok(await p.evaluate(() => document.getElementById('xw-chat-frame').contentWindow.__shared === 1 && getComputedStyle(document.querySelector('#main .topbar > .ib[aria-label="More"]')).display === 'none'), 'Share in the top bar presses the chat’s own Share; the sample More is not shown');
+    const pick = async (label) => { await p.evaluate((A) => document.querySelector(`#panel [data-chat-live="${A}"] [data-more]`).click(), A); await wait(350); const hit = await p.evaluate((label) => { const el = [...document.querySelectorAll('button, [role=menuitem]')].find((n) => n.offsetParent && n.textContent.trim().startsWith(label) && !n.closest('#panel')); if (el) el.click(); return !!el; }, label); await wait(450); return hit; };
+    const sure = () => p.evaluate(() => { const b = [...document.querySelectorAll('button')].find((n) => n.offsetParent && /^Delete chat/.test(n.textContent.trim())); if (b) b.click(); return !!b; });
+    const picked = await pick('Rename'); await p.evaluate(() => { const i = [...document.querySelectorAll('input')].find((n) => n.offsetParent && n.value === 'Plan the launch week'); if (i) { i.value = 'Launch plan'; i.dispatchEvent(new Event('input', { bubbles: true })); } }); await p.click('[data-xd-submit]').catch(() => {}); await wait(700);
+    let v = await view(p);
+    ok(picked && JSON.stringify(db.writes.at(-1)) === JSON.stringify(['PUT', A, JSON.stringify({ title: 'Launch plan' })]) && v.rows.find((r) => r.id === A)?.t === 'Launch plan', 'Rename, from the row’s menu, saves the new name to the chat and the sidebar shows it (' + JSON.stringify(db.writes.at(-1)) + ')');
+    db.refuse = true; await pick('Delete'); await sure(); await wait(600); v = await view(p);
+    ok(v.rows.some((r) => r.id === A) && /couldn’t be deleted|server error/i.test(await p.evaluate(() => document.querySelector('.toast')?.textContent || '')), 'a delete the server refuses changes nothing and says so');
+    db.refuse = false; await p.click(`#panel [data-chat-live="${A}"]`); await wait(400); await pick('Delete'); await sure(); await wait(800); v = await view(p);
+    ok(!v.rows.some((r) => r.id === A) && db.writes.at(-1)[0] === 'DELETE' && v.path === '/overview/chat/llm' && v.hash === '#/overview/p/chat', 'deleting the open chat removes it and leaves a new chat open (' + v.path + ' ' + v.hash + ')');
     await p.close(); }
   { // a link to a conversation, opened fresh
     reset(); const { p } = await open(`#/overview/p/chat/${A}`); const v = await view(p);
