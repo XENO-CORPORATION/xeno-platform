@@ -209,5 +209,5 @@
 
   document.addEventListener('click', (e) => { const t = e.target.closest('[data-pg-retry="library"]'); if (t && L.status === 'error') { pstate('loading'); paint(); load(); } }, true);
   window.XENO_LIB = { served: true, load, refuse, star, rename, trash, restore, purge, emptyTrash, upload, download, thumb, preview, viewNotYet, fileMenu, batchMenu, state: () => ({ status: L.status, total: L.total, capped: L.capped }) };
-  Promise.resolve(P.ready).then((user) => { if (user) load(); });
+  Promise.resolve(P.ready).then((user) => { if (user) P.first(load()); });   // the page waits for this first load before it shows
 })();

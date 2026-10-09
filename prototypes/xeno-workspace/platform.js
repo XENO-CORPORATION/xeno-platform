@@ -1,14 +1,19 @@
 /* XENO_PLATFORM — the workspace running on the platform instead of from disk.
  * Opened as a file (the prototype), this does nothing. Served under /workspace, it:
- *   1. holds the page until the platform confirms who is signed in (GET /api/auth/me, the session cookie);
+ *   1. holds the page until the platform confirms who is signed in (GET /api/auth/me, the session cookie) AND the
+ *      first load of the account, workspaces, projects and library has landed, so the page appears once, complete,
+ *      instead of repainting as each answer arrives (at most FIRST_PAINT_MS, then it shows whatever it has);
  *   2. sends a signed-out visitor to /login and brings them back here;
  *   3. replaces the sample profile with the real account;
  *   4. hides the prototype's network controls, and says plainly that the areas still show sample data.
- * window.XENO_PLATFORM = { served, user, ready }   ready resolves to the user, or null when the page is leaving. */
+ * window.XENO_PLATFORM = { served, user, ready, first }   ready resolves to the user, or null when the page is leaving.
+ *   first(promise) registers a first load the page waits for before it is shown. */
 (() => {
   const served = /^https?:$/.test(location.protocol) && /^\/workspace(\/|$)/.test(location.pathname);
-  const P = window.XENO_PLATFORM = { served, user: null, ready: Promise.resolve(null) };
+  const P = window.XENO_PLATFORM = { served, user: null, ready: Promise.resolve(null), first: () => {} };
   if (!served) return;
+  const FIRST_PAINT_MS = 6000, firsts = [];
+  P.first = (p) => { firsts.push(Promise.resolve(p).catch(() => {})); };
   // one way to call the platform: the session cookie, the CSRF token on writes, and the surface name
   const csrf = () => { for (const n of ['__Host-xeno_csrf', 'xeno_csrf']) { const m = document.cookie.split(';').map((p) => p.trim()).find((p) => p.startsWith(n + '=')); if (m) return decodeURIComponent(m.slice(n.length + 1)); } return null; };
   P.csrf = csrf;
@@ -41,7 +46,9 @@
       a.profile = { ...(a.profile || {}), name: u.display_name || u.username || 'You', handle: u.username || '', email: u.email || '', verified: !!u.email_verified, photo: u.avatar_url || (a.profile && a.profile.photo) || null };
       localStorage.setItem('xw.acct', JSON.stringify(a));
     } catch {}
-    root.classList.remove('xp-wait'); document.getElementById('xp-state')?.remove();
+    // the adapters start their first loads when `ready` resolves, a moment after this returns; wait for them
+    const lift = () => { if (!root.classList.contains('xp-wait')) return; try { window.XW?.render?.(); } catch {} root.classList.remove('xp-wait'); document.getElementById('xp-state')?.remove(); };
+    setTimeout(() => { Promise.race([Promise.all(firsts), new Promise((r) => setTimeout(r, FIRST_PAINT_MS))]).then(lift); }, 0);
     const n = document.createElement('div'); n.id = 'xp-note'; n.setAttribute('role', 'note'); n.textContent = 'Preview. Your account is real; the workspace areas still show sample data.'; document.body.appendChild(n);
     try { window.XW?.render?.(); } catch {}
     return u;
