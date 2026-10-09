@@ -2264,8 +2264,10 @@
     const sc = m.querySelector('.ap-scroll');
     const edges = () => { sc.classList.toggle('more-below', sc.scrollTop + sc.clientHeight < sc.scrollHeight - 1); sc.classList.toggle('more-above', sc.scrollTop > 1); };
     sc.addEventListener('scroll', edges, { passive: true });
-    if (keep !== null && !finding) sc.scrollTop = keep; else { const on = sc.querySelector('.row.on'); if (on && !(finding && q)) sc.scrollTop = Math.max(0, on.offsetTop - sc.offsetTop - sc.clientHeight / 2 + on.offsetHeight / 2); }
-    edges();
+    // Where the list stands: where it was, or with the model in force in view. On opening, this runs while the menu
+    // is still hidden (nothing has a size yet), so it runs again on the next frame, when it is on the page.
+    const settle = () => { if (!sc.isConnected) return; if (keep !== null && !finding) sc.scrollTop = keep; else { const on = sc.querySelector('.row.on'); if (on && !(finding && q)) sc.scrollTop = Math.max(0, on.offsetTop - sc.offsetTop - sc.clientHeight / 2 + on.offsetHeight / 2); } edges(); };
+    settle(); if (!sc.clientHeight) requestAnimationFrame(settle);
     const reanchor = () => { const a = (LP() && LP().anchor) || document.querySelector('.live-chat [data-part="model"]'); if (a) placeAp(a); };
     const input = m.querySelector('[data-model-q]');
     if (input) { input.value = m.dataset.q || ''; input.focus({ preventScroll: true }); input.setSelectionRange(input.value.length, input.value.length);

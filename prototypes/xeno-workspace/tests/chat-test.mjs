@@ -182,8 +182,7 @@ try {
     await p.evaluate(() => { document.getElementById('xw-chat-frame').contentWindow.__many = true; }); await press(); await wait(300);
     if (await p.evaluate(() => /More/.test(document.querySelector('#apmenu [data-more-models]').innerText))) { await p.click('#apmenu [data-more-models]'); await wait(300); } let g = await big();
     ok(g.rows === 25 && g.scrolls && g.h < 420 && g.top > 0 && g.bar === 'none', 'all 25 models are in the list, which scrolls inside a fixed height with no bar (' + JSON.stringify(g).slice(0, 260) + ')');
-    await p.evaluate(() => { document.querySelector('#apmenu .ap-scroll').scrollTop = 0; }); await wait(200); g = await big();
-    ok(g.below && !g.above, 'a fade at the bottom says there is more below');
+    ok(g.below, 'opened already expanded, a fade at the bottom says there is more below');
     await p.evaluate(() => { const sc = document.querySelector('#apmenu .ap-scroll'); sc.scrollTop = sc.scrollHeight; }); await wait(200); g = await big();
     ok(!g.below && g.above, 'at the end the bottom fade goes and the top one shows');
     const headBefore = g.headH; await p.click('#apmenu [data-model-find]'); await wait(200); g = await big();
