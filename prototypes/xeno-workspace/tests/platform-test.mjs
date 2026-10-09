@@ -66,6 +66,13 @@ try {
   { // the platform cannot be reached
     const { p } = await open('down');
     await p.goto(base + '/workspace/', { waitUntil: 'networkidle0' }); await wait(300);
+    // the picture's hard-reload reset (Ctrl Shift R brings every intro back) does not exist on the platform
+    await p.evaluate(() => { localStorage.setItem('xw.introSeen', JSON.stringify({ chat: 1, kept: true })); });
+    await p.keyboard.down('Control'); await p.keyboard.down('Shift'); await p.keyboard.press('KeyR'); await p.keyboard.up('Shift'); await p.keyboard.up('Control');
+    await p.evaluate(() => { try { sessionStorage.setItem('xw.firstRun', '1'); } catch {} });   // and even a note left behind by an older page
+    await p.reload({ waitUntil: 'networkidle0' }); await wait(900);
+    const fr = await p.evaluate(() => ({ seen: localStorage.getItem('xw.introSeen'), note: /First-run sheets restored/.test(document.body.innerText), flag: sessionStorage.getItem('xw.firstRun') }));
+    ok(/"kept":true/.test(fr.seen || '') && !fr.note && !fr.flag, 'a hard refresh on the platform keeps what the person has already seen and shows no designer’s note (' + JSON.stringify(fr).slice(0, 120) + ')');
     const s = await p.evaluate(() => ({ text: document.getElementById('xp-state')?.textContent || '', main: getComputedStyle(document.querySelector('#main')).visibility, retry: !!document.getElementById('xp-retry') }));
     ok(/could not reach XENO/.test(s.text) && s.retry && s.main === 'hidden', 'a failed check says so, offers a retry, and shows no workspace');
     await p.close();

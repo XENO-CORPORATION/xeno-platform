@@ -112,7 +112,8 @@ test('reachability: thinking on/off folds into the effort control beside the mod
   assert.match(stream, /reasoningEffort: payload\.reasoningEffort,/, 'and the stream body carries it');
   const ai = src('../src/server/routes/aiRoutes.js');
   assert.match(ai, /reasoningEffort: requestedEffort/, 'the stream route reads it');
-  assert.match(ai, /reasoning: \{ effort: \['low', 'medium', 'high'\]\.includes\(requestedEffort\) \? requestedEffort : 'medium' \}/, 'and sends the chosen level, never a bare medium');
+  // (2026-10-09: the hint is built by reasoningHintFor, which also keeps an effort the model id names)
+  assert.match(ai, /reasoning: reasoningHintFor\(model, requestedEffort\)/, 'and sends the chosen level, never a bare medium');
   const index = src('../src/server/index.js');
   assert.match(index, /const efforts = effortOptionsFor\(String\(model\.id\), effortFamilies, supportsReasoning\);/, '/api/models attaches the levels per model');
   assert.match(index, /\.\.\.\(efforts\.length \? \{ efforts \} : \{\}\),/);
@@ -126,4 +127,26 @@ test('reachability: thinking on/off folds into the effort control beside the mod
   assert.match(control, /if \(thinking && !thinking\.on\) thinking\.onToggle\(\);\s*onChange\(next\);/, 'a level turns thinking on at that level');
   const css = src('../src/components/playground/Chat/chat-theme.css');
   assert.match(css, /\.chat-effort\.xa-dock \{ padding: 0; container-type: normal; \}/);
+});
+
+// ── the hint the STREAMING route sends (2026-10-09) ─────────────────────────────────────────
+// Measured against the live gateway: `gpt-6.1-sol-max` + `reasoning.effort: medium` is refused with
+// 400 conflicting_reasoning_effort; + `max`, or a bare id + `medium`, is served. The route used to
+// send `medium` for every level that is not low/medium/high, so Max and X-High failed every turn.
+test('the streaming hint never contradicts an effort the model id names', async () => {
+  const { reasoningHintFor } = await import('../src/server/utils/reasoningEffortFamilies.js');
+  assert.deepEqual(reasoningHintFor('gpt-6.1-sol-max', 'max'), { effort: 'max' });
+  assert.deepEqual(reasoningHintFor('gpt-6.1-sol-max', undefined), { effort: 'max' }, 'never the default medium');
+  assert.deepEqual(reasoningHintFor('gpt-6.1-sol-xhigh', 'medium'), { effort: 'xhigh' }, 'the id wins over a different chosen level');
+  assert.deepEqual(reasoningHintFor('gpt-6.1-sol-high', 'low'), { effort: 'high' });
+  assert.deepEqual(reasoningHintFor('gpt-6.1-sol', 'high'), { effort: 'high' }, 'a bare id takes the chosen level');
+  assert.deepEqual(reasoningHintFor('gpt-6.1-sol', 'max'), { effort: 'medium' }, 'a bare id cannot take max as a parameter');
+  assert.deepEqual(reasoningHintFor('gpt-6.1-sol', undefined), { effort: 'medium' });
+  assert.equal(reasoningHintFor('grok-4.6-none', 'high'), null, 'an id that names no reasoning sends no hint');
+});
+
+test('the streaming route builds its hint through that one function, and nowhere by hand', () => {
+  const route = src('../src/server/routes/aiRoutes.js');
+  assert.match(route, /reasoning && reasoningHintFor\(model, requestedEffort\) \? \{ reasoning: reasoningHintFor\(model, requestedEffort\) \}/);
+  assert.ok(!/reasoning: \{ effort: \[/.test(route), 'no hand-built effort hint is left in the route');
 });

@@ -1,4 +1,5 @@
 import express from 'express';
+import { reasoningHintFor } from '../utils/reasoningEffortFamilies.js';
 import { acceptsBundles, serializeLocalModelCatalogModel } from '../utils/localModelCatalog.js';
 import { readFileSync } from 'fs';
 import { fileURLToPath } from 'url';
@@ -851,7 +852,8 @@ router.post('/chat/stream', requireEntitlement('canUse'), async (req, res) => {
         // OpenRouter-style reasoning hint (the live catalog is OpenRouter-fronted);
         // the gateway streams thinking back as delta.reasoning when supported.
         // the level the person chose on the effort control; the bare toggle's default stays 'medium'
-        ...(reasoning ? { reasoning: { effort: ['low', 'medium', 'high'].includes(requestedEffort) ? requestedEffort : 'medium' } } : {}),
+        // (an id that names its own effort keeps that effort: reasoningHintFor)
+        ...(reasoning && reasoningHintFor(model, requestedEffort) ? { reasoning: reasoningHintFor(model, requestedEffort) } : {}),
         ...(tools?.length ? { tools, tool_choice: 'auto' } : {}),
       },
     });
