@@ -22,6 +22,8 @@ import {
 } from '../../../platform/platformTheme';
 import ChatEmptyState, { ComposerRevealControls, type ChatEmptyStateTool } from './ChatEmptyState';
 import ChatModelSelector from './ChatModelSelector';
+import WorkspaceModelTrigger from './WorkspaceModelTrigger';
+import { isWorkspaceEmbed } from '@/lib/workspaceEmbed';
 import ChatEffortControl from './ChatEffortControl';
 import { effortOptionForTurn, readEffortPreferences, requestShapeFor, writeEffortPreference } from './chatReasoningEffort';
 import ChatShareModal from './ChatShareModal';
@@ -12762,6 +12764,16 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                           (the approved hybrid design). Thinking on/off is the effort's `Off` level:
                           one control, never a separate Brain button beside a chip. */}
                       <div data-composer-model-group className="flex h-[26px] min-w-0 items-center">
+                        {/* Inside the XENO workspace the model menu is the workspace's own design, drawn
+                            by that page; this chat supplies the real list and takes the pick. */}
+                        {isWorkspaceEmbed() ? (
+                          <WorkspaceModelTrigger
+                            models={getAllModels(groupedModels)}
+                            selected={selectedModel}
+                            onSelect={handleModelSelect}
+                            loading={isModelsLoading}
+                          />
+                        ) : (
                         <ChatModelSelector
                           groupedModels={groupedModels}
                           isCompact={isMobile || isMultiInterface}
@@ -12775,6 +12787,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                           selectedModel={selectedModel}
                           triggerId={modelSelectorControlId}
                         />
+                        )}
                         {modelHasEffortLevels && (
                           <>
                             <span className="mx-px h-[11px] w-px flex-none bg-[var(--chat-border)]" aria-hidden="true" />
@@ -12941,12 +12954,14 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                     </div>
                     </div>
             )}
-            isActive={options?.forceCompact ? false : messages.length === 0}
+            /* Inside the XENO workspace the input box is always the docked one the workspace designed:
+               a new chat is an empty thread with that box under it, not the centred home box. */
+            isActive={options?.forceCompact || isWorkspaceEmbed() ? false : messages.length === 0}
             /* One composer, two homes (chat-input-hybrid.html): the empty chat AND the project page are
                `home` (controls inside the box); a running conversation is `dock`. The project page has
                no hero, which is what `isActive` used to mean here as well. */
-            placement={options?.forceCompact || messages.length === 0 ? 'home' : 'dock'}
-            showHero={!options?.forceCompact && messages.length === 0}
+            placement={isWorkspaceEmbed() ? 'dock' : options?.forceCompact || messages.length === 0 ? 'home' : 'dock'}
+            showHero={!isWorkspaceEmbed() && !options?.forceCompact && messages.length === 0}
             isCompact={isMultiInterface}
             isTemporaryChat={isTemporaryChat}
             hideToolRail={options?.forceCompact}

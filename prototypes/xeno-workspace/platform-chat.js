@@ -33,7 +33,7 @@
   const X = () => window.XW, api = P.api;
   const NEW = '/overview/chat/llm';
   const ID = /^[A-Za-z0-9_.:-]{1,128}$/;
-  const S = { status: 'loading', convs: [], projects: [], current: null, path: null, total: 0 };
+  const S = { status: 'loading', convs: [], projects: [], current: null, path: null, total: 0, picker: null };
 
   // ---------- the list ----------
   const DAY = 86400000;
@@ -152,6 +152,15 @@
       repaint();
     }
     if (m.type === 'changed') { clearTimeout(reloadT); reloadT = setTimeout(load, 300); }
+    // the chat's model trigger was pressed: this page's own menu opens, with the chat's real list
+    if (m.type === 'model-menu' && Array.isArray(m.models) && m.rect) {
+      if (X()?.modelMenuOpen?.()) return void X().closeModelMenu();
+      const f = frame.getBoundingClientRect(), r = m.rect;   // the trigger's place, in this page's coordinates
+      const box = { left: f.left + r.left, top: f.top + r.top, right: f.left + r.right, bottom: f.top + r.bottom, width: r.width, height: r.height };
+      S.picker = { models: m.models.filter((x) => x && typeof x.id === 'string').map((x) => ({ id: x.id, name: String(x.name || x.id), description: String(x.description || ''), contextWindow: Number(x.contextWindow) || 0, ownKey: !!x.ownKey })), selected: String(m.selected || ''), anchor: { getBoundingClientRect: () => box } };
+      X()?.openModelMenu?.(S.picker.anchor);
+    }
+    if (m.type === 'model-menu-close') X()?.closeModelMenu?.();
   });
   addEventListener('focus', () => { if (S.status !== 'loading') load(); });
 
@@ -197,6 +206,9 @@
       [{ label: 'Rename', icon: 'edit', run: () => rename(id) }], [{ label: 'Delete', icon: 'trash', danger: true, run: () => remove(id) }]]; } }); };
   if (document.readyState === 'loading') addEventListener('DOMContentLoaded', menu); else menu();
 
-  window.XENO_CHAT = { served: true, data, title, open, load, rename, remove, dress, host: () => '<div class="live-chat-host" data-chat-frame aria-label="Chat"></div>', state: () => ({ status: S.status, count: S.convs.length, current: S.current, path: S.path, shown: !!frame && frame.classList.contains('on') }) };
+  const toChatFrame = (msg) => { try { frame.contentWindow.postMessage({ source: 'xeno-workspace', ...msg }, location.origin); } catch {} };
+  const pickModel = (id) => toChatFrame({ type: 'pick-model', id });
+  const pickerClosed = () => { S.picker = null; toChatFrame({ type: 'model-menu-closed' }); };
+  window.XENO_CHAT = { served: true, get picker() { return S.picker; }, pickModel, pickerClosed, data, title, open, load, rename, remove, dress, host: () => '<div class="live-chat-host" data-chat-frame aria-label="Chat"></div>', state: () => ({ status: S.status, count: S.convs.length, current: S.current, path: S.path, shown: !!frame && frame.classList.contains('on') }) };
   Promise.resolve(P.ready).then((user) => { if (!user) return; P.first(load()); watch(); });
 })();
