@@ -51,7 +51,7 @@ async function open(hash) {
     if (u.pathname === '/api/billing/overview') return db.billDown ? json({ success: false, error: 'Internal server error' }, 500) : json({ success: true, overview: { credits: { balance: db.balance }, subscription: null } });
     if (u.pathname === '/api/v2/ledger/usage') { const days = Math.round((Date.now() - Date.parse(u.searchParams.get('from'))) / 86400000), model = u.searchParams.get('groupBy') === 'model';
       if (days <= 1) return json({ from: '', to: '', groupBy: '', rows: [] });
-      return json({ from: '', to: '', groupBy: '', rows: model ? [{ key: 'model-x', events: 4, costMicro: 30e6 }, { key: 'model-y', events: 1, costMicro: 12e6 }] : [{ key: 'xeno_chat', events: 5, costMicro: days > 7 ? 42e6 : 17e6 }, { key: 'free_thing', events: 3, costMicro: 0 }] }); }
+      return json({ from: '', to: '', groupBy: '', rows: model ? [{ key: 'model-x', events: 4, costMicro: 30e6 }, { key: 'model-y', events: 1, costMicro: 12e6 }, ...(db.many ? Array.from({ length: 20 }, (_, n) => ({ key: 'tiny-' + n, events: 1, costMicro: 1e6 })) : [])] : [{ key: 'xeno_chat', events: 5, costMicro: days > 7 ? 42e6 : 17e6 }, { key: 'free_thing', events: 3, costMicro: 0 }] }); }
     if (u.pathname === '/api/chat/projects') return json({ success: true, projects: [] });
     const body = { '/api/account/overview': { success: true, overview: { user: USER, credits: { balance: 0 }, workspace_count: 1 } }, '/api/account/sessions': { success: true, sessions: [] }, '/api/account/security': { success: true, security: { confirmation: { confirmed: false, available: true, expires_at: null }, methods: ['password'], has_password: true, email: '', pending_email: null } }, '/api/account/exports': { success: true, exports: [] }, '/api/auth/linked-accounts': { success: true, accounts: [] }, '/api/billing/overview': { success: true, overview: { credits: { balance: 0 }, subscription: null } }, '/api/dashboard/stats': { success: true, stats: { usage_available: false, usage_by_surface: [] } }, '/api/workspaces': { success: true, workspaces: [] }, '/api/library/assets': { success: true, items: [] } }[u.pathname];
     return body ? json(body) : json({ success: false, error: 'not found' }, 404); });
@@ -184,6 +184,8 @@ try {
     ok(v.tabs.join('|') === 'By product|By model', `no “Recent” list is offered when the platform has none (${v.tabs.join('|')})`);
     await p.evaluate(() => document.querySelector('.usm [data-us-group="model"]').click()); await wait(300); v = await pop();
     ok(/model-x/.test(v.text) && /model-y/.test(v.text), 'By model lists the real models');
+    db.many = true; await p.evaluate(() => document.querySelector('.usm [data-retry="usage"]').click()); await wait(1400); v = await pop(); db.many = false;
+    ok(/model-x/.test(v.text) && /tiny-2/.test(v.text) && !/tiny-3/.test(v.text) && /17 others/.test(v.text), 'a long list is the five that cost most and one line for the rest');
     await p.evaluate(() => document.querySelector('.usm [data-us-range="7d"]').click()); await wait(300);
     await p.evaluate(() => document.querySelector('.usm [data-us-group="surface"]').click()); await wait(300); v = await pop();
     ok(/17/.test(v.text) && !/11.3/.test(v.text), '7 days is read from the platform, not scaled from one month');
