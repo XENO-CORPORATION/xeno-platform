@@ -54,6 +54,29 @@
     ['Privacy', [['data', 'Your data', 'download'], ['danger', 'Delete account', 'trash']]],
     ['Workspace', [['workspace', 'Workspace', 'building'], ['connections', 'Connections', 'share']]],
   ];
+  // one sentence per section: what it is for. It heads the page, beside the controls (the layout Stripe and
+  // Vercel use for settings: the explanation on the left, the controls on the right, across the whole page).
+  const LEAD = {
+    profile: 'Your name, handle and photo, as people and agents see you across XENO.',
+    security: 'How you prove it’s you: your password, and confirming before a sensitive change.',
+    sessions: 'Every device signed in to your account. Sign one out, or all the others at once.',
+    apps: 'The ways you can sign in, and the apps you have allowed to act for you.',
+    keys: 'Keys let your own code call the XENO API. They are managed on the API portal.',
+    providers: 'Use your own provider keys, and choose where each product’s AI comes from.',
+    plan: 'Your plan, how you pay, and every invoice.',
+    usage: 'What you have used this period, and the limits that apply.',
+    gifts: 'Credits you have sent to other people, and credits sent to you.',
+    general: 'How XENO opens and behaves for you.',
+    appearance: 'Theme, density and motion.',
+    notifications: 'What reaches you, and where.',
+    modes: 'Which modes you see, their order, and the one XENO opens in.',
+    keyboard: 'Shortcuts for getting around without the mouse.',
+    region: 'Language, time zone, and how dates and numbers are written.',
+    data: 'Take a copy of everything XENO holds about you.',
+    danger: 'Close your account and remove your data.',
+    workspace: 'The workspace you are in, and its name and members.',
+    connections: 'Outside services this workspace is connected to.',
+  };
   const ALIAS = { account: 'profile', privacy: 'data' };
   const allIds = SECT.flatMap(([, s]) => s.map(([id]) => id));
   const title = (id) => SECT.flatMap(([, s]) => s).find(([x]) => x === id)?.[1] || 'Settings';
@@ -120,8 +143,9 @@
     const id = ALIAS[section] || (allIds.includes(section) ? section : 'profile'), a = A();
     // the sidebar IS the settings nav (one list, from SECT) — the page carries only the section
     const nav0 = `<nav class="set-nav" aria-label="Settings">${SECT.map(([g, s]) => `<div class="set-grp">${g}</div>${s.map(([sid, l, i]) => `<button class="set-nl" data-set="go" data-arg="${sid}" aria-current="${sid === id}">${ic(i)}<span>${esc(l)}</span></button>`).join('')}`).join('')}</nav>`;
-    return `<div class="pg pg--set"><header class="pg-head pg-head--obj"><div class="pg-ttl"><small>Settings</small><h1>${esc(title(id))}</h1></div></header>
-      <div class="set-wrap"><div class="set-body" data-set-body="${id}">${(window.XENO_ACCOUNT && window.XENO_ACCOUNT.section(id, a, { card, row, b, tag, esc, when, ago, ic })) ?? S[id](a)}</div></div><footer class="pg-foot" data-fam="settings" data-api="${esc(API[id] || '')}" data-noun=""></footer></div>`;
+    const group = SECT.find(([, s]) => s.some(([x]) => x === id))?.[0] || 'Settings';
+    return `<div class="pg pg--set">
+      <div class="set-wrap"><header class="set-intro"><small>${esc(group)}</small><h1>${esc(title(id))}</h1>${LEAD[id] ? `<p>${esc(LEAD[id])}</p>` : ''}</header><div class="set-body" data-set-body="${id}">${(window.XENO_ACCOUNT && window.XENO_ACCOUNT.section(id, a, { card, row, b, tag, esc, when, ago, ic })) ?? S[id](a)}</div></div><footer class="pg-foot" data-fam="settings" data-api="${esc(API[id] || '')}" data-noun=""></footer></div>`;
   }
   const go = (sid) => X().go('global', { global: 'settings', item: title(sid) });
   const idOf = (item) => SECT.flatMap(([, s]) => s).find(([, l]) => l === item)?.[0] || ALIAS[item] || item;
