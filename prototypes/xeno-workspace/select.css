@@ -1,16 +1,16 @@
 /* select.js — the selection action bar and selected rows (XENO MODES - SPEC §7w) */
-#xs-bar{position:fixed;left:50%;bottom:24px;transform:translateX(-50%);z-index:325;display:flex;align-items:center;gap:4px;padding:5px;border-radius:12px;background:var(--elevated,#1a1a1c);border:1px solid var(--border,rgba(255,255,255,.09));box-shadow:0 16px 48px rgba(0,0,0,.55);font-size:12.5px;color:var(--text,#f4f4f4);animation:xs-in .2s var(--open,ease-out);max-width:calc(100vw - 32px)}
+#xs-bar{position:fixed;left:50%;bottom:24px;transform:translateX(-50%);z-index:325;display:flex;align-items:center;gap:4px;padding:5px;border-radius:12px;background:var(--elevated,var(--n27));border:1px solid var(--border,var(--w90));box-shadow:0 16px 48px rgba(0,0,0,.55);font-size:12.5px;color:var(--text,var(--n244));animation:xs-in .2s var(--open,ease-out);max-width:calc(100vw - 32px)}
 #xs-bar b{padding:0 10px 0 8px;font-weight:600;white-space:nowrap}
-#xs-bar button{height:30px;display:flex;align-items:center;gap:7px;padding:0 10px;border-radius:8px;color:var(--text,#f4f4f4);white-space:nowrap}
-#xs-bar button:hover{background:rgba(255,255,255,.07)}
-#xs-bar button svg.i{width:14px;height:14px;color:var(--muted,#a1a1a8)}
+#xs-bar button{height:30px;display:flex;align-items:center;gap:7px;padding:0 10px;border-radius:8px;color:var(--text,var(--n244));white-space:nowrap}
+#xs-bar button:hover{background:var(--w70)}
+#xs-bar button svg.i{width:14px;height:14px;color:var(--muted,var(--n163))}
 #xs-bar button.xs-danger{color:#f2c9c9}
 #xs-bar button.xs-danger svg.i{color:#f2c9c9}
-#xs-bar kbd{font:10.5px Inter,sans-serif;color:var(--dim,#8b8b92)}
-#xs-bar :focus-visible{outline:2px solid var(--text,#f4f4f4);outline-offset:1px}
-.xs-sep{width:1px;height:18px;margin:0 4px;background:rgba(255,255,255,.1)}
+#xs-bar kbd{font:10.5px Inter,sans-serif;color:var(--dim,var(--n141))}
+#xs-bar :focus-visible{outline:2px solid var(--text,var(--n244));outline-offset:1px}
+.xs-sep{width:1px;height:18px;margin:0 4px;background:var(--w100)}
 body.xs-on #xw-toasts{bottom:82px}
-#main [data-xs]{background:rgba(255,255,255,.07)}
-#main tr[data-xs] td:first-child{box-shadow:inset 2px 0 0 var(--text,#f4f4f4)}
+#main [data-xs]{background:var(--w70)}
+#main tr[data-xs] td:first-child{box-shadow:inset 2px 0 0 var(--text,var(--n244))}
 @keyframes xs-in{from{opacity:0;transform:translate(-50%,8px)}to{opacity:1;transform:translate(-50%,0)}}
 @media (prefers-reduced-motion:reduce){#xs-bar{animation:none}}

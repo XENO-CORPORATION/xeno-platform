@@ -30,17 +30,10 @@ export function isWorkspaceEmbed(): boolean {
   } catch {
     cached = false;
   }
-  if (cached) {
-    document.documentElement.classList.add('xw-embed');
-    // The chat paints the workspace's own surface colour, so it reads as part of that panel and its
-    // header can still mask what scrolls under it (a see-through canvas cannot).
-    try {
-      const surface = window.parent.getComputedStyle(window.parent.document.getElementById('main') as Element).backgroundColor;
-      if (surface && surface !== 'rgba(0, 0, 0, 0)') document.documentElement.style.setProperty('--xw-surface', surface);
-    } catch {
-      // keep the stylesheet's fallback
-    }
-  }
+  // The chat paints the workspace's panel colour so it reads as part of that panel. Both sides derive it
+  // from the SAME platform theme (chat-theme.css: --xw-surface; workspace theme.js: --panel), so it follows
+  // a theme change live with nothing passed between the two.
+  if (cached) document.documentElement.classList.add('xw-embed');
   return cached;
 }
 

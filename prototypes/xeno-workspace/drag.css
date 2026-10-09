@@ -1,8 +1,8 @@
 /* drag.js — ghost, drop line, drop target (XENO MODES - SPEC §7x) */
 body.xd-dragging,body.xd-dragging *{cursor:grabbing!important;user-select:none}
-.xg-ghost{position:fixed;left:0;top:0;z-index:400;pointer-events:none;max-width:260px;padding:6px 10px;border-radius:8px;background:var(--elevated,#1a1a1c);border:1px solid var(--border,rgba(255,255,255,.12));box-shadow:0 12px 32px rgba(0,0,0,.5);font-size:12.5px;color:var(--text,#f4f4f4);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.xg-ghost{position:fixed;left:0;top:0;z-index:400;pointer-events:none;max-width:260px;padding:6px 10px;border-radius:8px;background:var(--elevated,var(--n27));border:1px solid var(--border,var(--w120));box-shadow:0 12px 32px rgba(0,0,0,.5);font-size:12.5px;color:var(--text,var(--n244));white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .xg-ghost.xg-no{opacity:.6}
 .xg-src{opacity:.45}
-.xg-line{position:fixed;z-index:399;height:2px;border-radius:1px;background:var(--text,#f4f4f4);pointer-events:none}
-.xg-over{background:rgba(255,255,255,.1)!important;box-shadow:inset 0 0 0 1px rgba(255,255,255,.35)}
+.xg-line{position:fixed;z-index:399;height:2px;border-radius:1px;background:var(--text,var(--n244));pointer-events:none}
+.xg-over{background:var(--w100)!important;box-shadow:inset 0 0 0 1px var(--w350)}
 @media (prefers-reduced-motion:reduce){.xg-ghost{transition:none}}

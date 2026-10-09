@@ -388,6 +388,7 @@ html.xw-embed body,
 html.xw-embed #root,
 html.xw-embed [data-overview-shell],
 html.xw-embed [data-overview-shell] > div { background: transparent !important; background-color: transparent !important; }
+html.xw-embed [data-overview-shell] { --xw-surface: color-mix(in srgb, var(--xeno-theme-canvas) 46%, var(--xeno-theme-surface)); }
 html.xw-embed .chat-themed { --chat-canvas: var(--xw-surface, #111111) !important; background-color: var(--xw-surface, #111111) !important; }
 /* The wordmark in the chat's header shows and hides the app's own taskbar. There is none here. */
 html.xw-embed [data-chat-wordmark] { display: none !important; }
