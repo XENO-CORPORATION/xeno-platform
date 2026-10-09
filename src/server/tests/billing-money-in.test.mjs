@@ -20,7 +20,7 @@ import { randomBytes, createHmac } from 'node:crypto';
 import express from 'express';
 import { CONSENT_HASH, requireCheckoutConsent, consumeConsent } from '../services/checkoutConsent.js';
 import { migrateAccountV2 } from '../database/migrate-account-v2.js';
-import { installBillingProviderFixture } from '../../../scripts/fixtures/billing-provider-fixture.mjs';
+import { installBillingProviderFixture } from './fixtures/billing-provider-fixture.mjs';
 import { billingAccountConfig, requireBillingDatabaseBinding } from '../utils/billingAccountBinding.js';
 // Local fixture credentials only. This suite never contacts a payment provider.
 if (process.env.NODE_ENV === 'production') throw new Error('Run billing fixtures only against an isolated test database');
