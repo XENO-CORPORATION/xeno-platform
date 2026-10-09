@@ -16,9 +16,13 @@
  *   { source: 'xeno-chat', type: 'changed' }                 the list of conversations may have changed
  *   { source: 'xeno-chat', type: 'model-menu', … }           open the workspace's model menu with this list
  *   { source: 'xeno-chat', type: 'model-menu-close' }        close it
+ *   { source: 'xeno-chat', type: 'effort-menu', rect, selected, levels }   the effort pill was pressed (same idea)
+ *   { source: 'xeno-chat', type: 'effort-menu-close' }       close it
  * And from the workspace back to the chat (WorkspaceModelTrigger.tsx):
  *   { source: 'xeno-workspace', type: 'pick-model', id }     the person chose this model
  *   { source: 'xeno-workspace', type: 'model-menu-closed' }  the menu is no longer showing
+ *   { source: 'xeno-workspace', type: 'pick-effort', id }    an effort level was chosen in that menu
+ *   { source: 'xeno-workspace', type: 'effort-menu-closed' } the effort menu is no longer showing
  */
 const WORKSPACE_PATH = /^\/workspace(\/|$)/;
 
@@ -55,6 +59,8 @@ export type WorkspaceChatMessage =
   /** Open the workspace's model menu at `rect` (this frame's coordinates) with the chat's real list. */
   | { source: 'xeno-chat'; type: 'model-menu'; rect: { left: number; top: number; right: number; bottom: number; width: number; height: number }; selected: string; models: Array<{ id: string; name: string; description: string; contextWindow: number; ownKey: boolean }> }
   | { source: 'xeno-chat'; type: 'model-menu-close' }
+  | { source: 'xeno-chat'; type: 'effort-menu'; rect: { left: number; top: number; right: number; bottom: number; width: number; height: number }; selected: string; levels: Array<{ id: string; label: string; title?: string }> }
+  | { source: 'xeno-chat'; type: 'effort-menu-close' }
   /** The session transcript, built by the chat. The workspace owns the button, so it does the copy. */
   | { source: 'xeno-chat'; type: 'transcript'; text: string };
 

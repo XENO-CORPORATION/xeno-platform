@@ -30,7 +30,9 @@ const CHAT = `<!doctype html><html><body><div class="chat-themed"><div class="ch
   window.__picks = []; window.__closed = 0;
   const MODELS = [['m-a', 'Model A', 'Fast and cheap.', 128000, false], ['m-b', 'Model B', '', 0, true], ['m-c', 'Model <i>C</i>', 'Careful.', 1000000, false], ['m-d', 'Model D', '', 0, false], ['m-e', 'Model E', 'The fifth.', 200000, false]];
   document.querySelector('[data-chat-model-trigger]').addEventListener('click', (e) => { const r = e.currentTarget.getBoundingClientRect(); parent.postMessage({ source: 'xeno-chat', type: 'model-menu', rect: { left: r.left, top: r.top, right: r.right, bottom: r.bottom, width: r.width, height: r.height }, selected: window.__sel || 'm-a', models: (window.__none ? [] : MODELS).map(([id, name, description, contextWindow, ownKey]) => ({ id, name, description, contextWindow, ownKey })) }, location.origin); });
-  addEventListener('message', (e) => { if (e.source !== parent || !e.data || e.data.source !== 'xeno-workspace') return; if (e.data.type === 'pick-model') { window.__picks.push(e.data.id); window.__sel = e.data.id; } if (e.data.type === 'model-menu-closed') window.__closed++; });
+  addEventListener('message', (e) => { if (e.source !== parent || !e.data || e.data.source !== 'xeno-workspace') return; if (e.data.type === 'pick-model') { window.__picks.push(e.data.id); window.__sel = e.data.id; } if (e.data.type === 'model-menu-closed') window.__closed++; if (e.data.type === 'pick-effort') window.__efforts.push(e.data.id); if (e.data.type === 'effort-menu-closed') window.__effClosed++; });
+  window.__efforts = []; window.__effClosed = 0;
+  window.__askEffort = (selected) => parent.postMessage({ source: 'xeno-chat', type: 'effort-menu', rect: { left: 300, top: 400, right: 360, bottom: 426, width: 60, height: 26 }, selected, levels: [{ id: 'off', label: 'Off', title: 'No thinking' }, { id: 'low', label: 'Low' }, { id: 'high', label: 'High' }] }, location.origin);
   document.querySelector('textarea').addEventListener('input', (e) => { document.querySelector('[data-composer-send-button]').disabled = !e.target.value.trim(); });
   window.__born = Math.random(); window.__log = [];
   const say = () => { window.__log.push(location.pathname); parent.postMessage({ source: 'xeno-chat', type: 'location', path: location.pathname, title: 'Chat' }, location.origin); };
@@ -175,6 +177,19 @@ try {
     ok(!m.open && m.frame.closed === 2, 'pressing the control again closes it');
     await press(); await wait(200); await p.keyboard.press('Escape'); await wait(200); m = await menu();
     ok(!m.open, 'Escape closes it');
+    // the effort menu: this page's design, on the chat's real levels
+    const eff = () => p.evaluate(() => { const m2 = document.getElementById('apmenu'), fw = document.getElementById('xw-chat-frame').contentWindow; return { open: !!m2?.classList.contains('show') && m2.dataset.kind === 'effort', labels: [...(m2?.querySelectorAll('.ef3-labels span') || [])].map((s) => s.textContent + (s.classList.contains('cur') ? '*' : '')).join(','), text: m2?.innerText || '', picks: fw.__efforts.join(','), closed: fw.__effClosed }; });
+    await p.evaluate(() => document.getElementById('xw-chat-frame').contentWindow.__askEffort('low')); await wait(300); let e1 = await eff();
+    ok(e1.open && e1.labels === 'Off,Low*,High', 'the chat’s effort pill opens this page’s effort menu with the chat’s real levels, the one in force marked (' + e1.labels + ')');
+    ok(!/ cr|~d+s/.test(e1.text), 'it shows no credits or seconds that nobody measured');
+    await p.focus('#aptrack'); await p.keyboard.press('ArrowRight'); await wait(250); e1 = await eff();
+    ok(e1.picks === 'high' && e1.labels === 'Off,Low,High*', 'choosing a level tells the chat its id, and the menu follows (' + e1.picks + ')');
+    await p.keyboard.press('ArrowRight'); await wait(200); e1 = await eff();
+    ok(e1.picks === 'high', 'there is no level past the chat’s last one');
+    await p.mouse.click(5, 300); await wait(250); e1 = await eff();
+    ok(!e1.open && e1.closed === 1, 'a press elsewhere closes it and tells the chat');
+    await p.evaluate(() => window.postMessage({ source: 'xeno-chat', type: 'effort-menu', rect: { left: 0, top: 0, right: 10, bottom: 10, width: 10, height: 10 }, selected: 'x', levels: [{ id: 'evil', label: 'Evil' }] }, location.origin)); await wait(200); e1 = await eff();
+    ok(!e1.open, 'an effort message that does not come from the chat frame opens nothing');
     // a message that is not from the chat cannot open a menu or name models
     await p.evaluate(() => window.postMessage({ source: 'xeno-chat', type: 'model-menu', rect: { left: 0, top: 0, right: 10, bottom: 10, width: 10, height: 10 }, selected: 'x', models: [{ id: 'evil', name: 'Evil' }] }, location.origin)); await wait(200); m = await menu();
     ok(!m.open, 'a message that does not come from the chat frame opens nothing');

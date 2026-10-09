@@ -1122,7 +1122,7 @@
     return `<div class="topbar"><button class="ib opener" data-expand aria-label="Open sidebar" data-tip="Open sidebar" data-kbd="Ctrl \\">${ic('side')}</button><div class="crumbs">${crumbs()}</div>${isChat && window.XENO_CHAT && window.XENO_CHAT.served ? `<button class="tb-mid" data-chat-transcript aria-live="polite" data-tip="Copy the whole conversation, with its diagnostics">${ic('copy')}<span>Copy transcript</span></button>` : ''}<div class="sp"></div>${isChat ? `<button class="ib" aria-label="Share" data-tip="Share">${ic('share')}</button><button class="ib" aria-label="More" data-tip="Copy transcript, rename, delete">${ic('more')}</button>` : ''}</div>${isChat ? body : `<div class="mview">${body}</div>`}`;
   }
 
-  window.XW = { get S() { return S; }, go, setChatItem, openModelMenu: (anchor) => openModelMenu(anchor, 'model'), closeModelMenu: () => closeAp(), modelMenuOpen: () => !!document.querySelector('#apmenu.show'), crumbs: () => crumbs(), esc, ic, PR, M, pIconFull, mini, toast: (s) => toast(s), store, ctxName, ctxKey, ctxChats, inOv, zoneNow, zoneKey, zonesFor, modeOf, mark, render: () => render(), hiddenModes, toggleHidden, modeOrder, renderRail: () => renderRail(), openShortcuts: (o) => openShortcuts(o), openUsage: () => openUsage(), openAdConsent: (o) => openAdConsent(o), hidePops: () => hidePops(), applyWorkspace: () => applyWorkspace(), markAllRead: () => markAllRead(() => render()), refreshSwitcher: () => refreshSwitcher(), search: (q) => { openPalette(); const i = document.querySelector('#palette input'); if (i && q) { i.value = q; i.dispatchEvent(new Event('input')); } }, refreshPanel: () => { const pv = $('#panel > .pv'); const top = pv?.querySelector('.pbody')?.scrollTop || 0; setPv($('#panel'), `<div class="pv">${panelHTML()}</div>`); const n = $('#panel > .pv .pbody'); if (n) n.scrollTop = top; } };
+  window.XW = { get S() { return S; }, go, setChatItem, openModelMenu: (anchor) => openModelMenu(anchor, 'model'), openEffortMenu: (anchor) => openModelMenu(anchor, 'effort'), closeModelMenu: () => closeAp(), modelMenuOpen: () => !!document.querySelector('#apmenu.show'), crumbs: () => crumbs(), esc, ic, PR, M, pIconFull, mini, toast: (s) => toast(s), store, ctxName, ctxKey, ctxChats, inOv, zoneNow, zoneKey, zonesFor, modeOf, mark, render: () => render(), hiddenModes, toggleHidden, modeOrder, renderRail: () => renderRail(), openShortcuts: (o) => openShortcuts(o), openUsage: () => openUsage(), openAdConsent: (o) => openAdConsent(o), hidePops: () => hidePops(), applyWorkspace: () => applyWorkspace(), markAllRead: () => markAllRead(() => render()), refreshSwitcher: () => refreshSwitcher(), search: (q) => { openPalette(); const i = document.querySelector('#palette input'); if (i && q) { i.value = q; i.dispatchEvent(new Event('input')); } }, refreshPanel: () => { const pv = $('#panel > .pv'); const top = pv?.querySelector('.pbody')?.scrollTop || 0; setPv($('#panel'), `<div class="pv">${panelHTML()}</div>`); const n = $('#panel > .pv .pbody'); if (n) n.scrollTop = top; } };
   // ---- render with crossfade ----
   let first = true;
   function render() {
@@ -2198,7 +2198,11 @@
   const LP = () => (window.XENO_CHAT && window.XENO_CHAT.served && window.XENO_CHAT.picker) || null;
   const liveModel = (m) => ({ id: m.id, name: m.name, blurb: m.description || '', provider: m.ownKey ? 'own' : '', ctx: m.contextWindow || 0, ownKey: !!m.ownKey });
   const modelById = (id) => { const lp = LP(); if (lp) { const m = lp.models.find((x) => x.id === id); return m ? liveModel(m) : { id, name: 'Model', blurb: '' }; } return MODELS.list.find((m) => m.id === id) || MODELS.list[0]; };
-  const EFFORT = ['Minimal', 'Low', 'Medium', 'High', 'Max', 'Ultra'];
+  const EFFORT_PICTURE = ['Minimal', 'Low', 'Medium', 'High', 'Max', 'Ultra'];
+  // On the platform the levels, the one in force and the pick belong to the REAL chat, as the model list does.
+  // The menu is the same design; it shows the chat's real levels and no cost or seconds that nobody measured.
+  const LE = () => (window.XENO_CHAT && window.XENO_CHAT.served && window.XENO_CHAT.effort) || null;
+  const EFFORT = new Proxy(EFFORT_PICTURE, { get: (t, k) => { const le = LE(); const src = le ? le.levels.map((l) => l.label) : t; const v = src[k]; return typeof v === 'function' ? v.bind(src) : v; } });
   const MAIN_MODELS = ['gpt-5.6-terra', 'claude-opus-5.5', 'gemini-3.8-flash', 'claude-sonnet-5.5'];
   const routeOf = (m) => (LP() ? (m.ownKey ? 'your key' : '') : store.get('byok', ['anthropic']).includes(m.provider.toLowerCase()) ? 'your key' : '');
   const costFor = (m, lvl) => Math.max(1, Math.round((m.cost || 3) * [0.5, 0.75, 1, 1.5, 2.2, 3.2][lvl]));
@@ -2206,9 +2210,9 @@
   const metaOf = (id) => META[id] || { speed: 3, depth: 3, ctx: '—', maxEffort: 5, secs: 5 };
   const pickFor = () => 'gpt-5.6-terra';   // what XENO picks would route the next message to (the router's verdict, sampled)
   const effModelId = () => (store.get('modelDefault', false) ? pickFor() : store.get('model', 'gpt-5.6-terra'));
-  const maxEff = () => metaOf(effModelId()).maxEffort;
+  const maxEff = () => (LE() ? LE().levels.length - 1 : metaOf(effModelId()).maxEffort);
   const secsFor = (lvl) => Math.round(metaOf(effModelId()).secs * [0.5, 0.8, 1, 1.8, 3, 5][lvl]);
-  const effIdx = () => { const v = store.get('effort', 'Medium'); const i = EFFORT.indexOf(v); return Math.min(i < 0 ? 2 : i, maxEff()); };
+  const effIdx = () => { const le = LE(); if (le) return Math.max(0, le.levels.findIndex((l) => l.id === le.selected)); const v = store.get('effort', 'Medium'); const i = EFFORT.indexOf(v); return Math.min(i < 0 ? 2 : i, maxEff()); };
   const curModel = () => (LP() ? modelById(LP().selected) : store.get('modelDefault', false) ? { id: 'auto', name: 'XENO picks', effort: true, cost: 3, provider: 'auto' } : modelById(store.get('model', 'gpt-5.6-terra')));
   function paintModelTrigger() {
     const t = document.querySelector('.live-chat [data-chat-model-trigger]'); if (!t) return;
@@ -2219,7 +2223,7 @@
       + (m.effort ? `<span class="ap-vr" aria-hidden="true"></span><span class="ap-txt ap-pillbtn${open === 'effort' ? ' open' : ''}" data-part="effort" title="How long the model thinks before it answers"><span class="ap-pill">${EFFORT[effIdx()]}</span></span>` : '');
   }
   function apMenu() { let m = document.getElementById('apmenu'); if (!m) { m = document.createElement('div'); m.id = 'apmenu'; m.className = 'apx ap-menu'; document.body.appendChild(m); } return m; }
-  function closeAp() { const m = document.getElementById('apmenu'), was = !!(m && m.classList.contains('show')); if (m) { m.classList.remove('show'); m.dataset.kind = ''; } hideCard(); paintModelTrigger(); paintAnsweredBy(); if (was && LP()) window.XENO_CHAT.pickerClosed(); }
+  function closeAp() { const m = document.getElementById('apmenu'), was = !!(m && m.classList.contains('show')); if (m) { m.classList.remove('show'); m.dataset.kind = ''; } hideCard(); paintModelTrigger(); paintAnsweredBy(); if (was && (LP() || LE())) window.XENO_CHAT.pickerClosed(); }
   function placeAp(anchor) { const m = apMenu(), r = anchor.getBoundingClientRect(), w = m.offsetWidth, h = m.offsetHeight;
     // effort centres over the whole trigger (stable — the pill's text cannot move it); the model list right-aligns
     const want = m.dataset.kind === 'effort' ? r.left + r.width / 2 - w / 2 : r.right - w;
@@ -2231,6 +2235,7 @@
     m.classList.add('show'); paintModelTrigger(); placeAp(anchor);
     // anchor to the WHOLE trigger's right edge — the changing pill text cannot move it
     const live = document.querySelector('.live-chat [data-chat-model-trigger]'); if (live) placeAp(live);
+    if (LE() && kind === 'effort') placeAp(anchor);   // the real chat's pill is in its frame: the place it handed over is the anchor
   }
   function renderModels(m) {
     const cur = curModel(), more = m.dataset.more === '1', lp = LP();
@@ -2284,9 +2289,9 @@
   // (DESIGN_SYSTEM plate construction), six square cells instead of a knob on a pill (no circles),
   // level names printed under the cells, the model's cap shown as hatched cells, Ultra = lattice.
   function renderEffort(m) {
-    m.style.width = '288px';
+    m.style.width = (LE() ? Math.max(168, Math.min(288, EFFORT.length * 48)) : 288) + 'px';
     m.innerHTML = `<div class="ef3-plate ef3-body">
-        <div class="ef3-cells" id="aptrack" tabindex="0" role="slider" aria-label="Effort" aria-valuemin="0" aria-valuemax="5">
+        <div class="ef3-cells" id="aptrack" tabindex="0" role="slider" aria-label="Effort" aria-valuemin="0" aria-valuemax="${EFFORT.length - 1}">
           ${EFFORT.map((l, k) => `<span class="ef3-cell" data-k="${k}"></span>`).join('')}
         </div>
         <div class="ef3-labels">${EFFORT.map((l, k) => `<span data-k="${k}">${l}</span>`).join('')}</div>
@@ -2320,7 +2325,7 @@
   }
   function paintEffort() {
     const t = document.getElementById('aptrack'); if (!t) return;
-    const on = effIdx(), mx = maxEff(), ultra = on === EFFORT.length - 1;
+    const on = effIdx(), mx = maxEff(), ultra = on === EFFORT.length - 1 && EFFORT[on] === 'Ultra' && EFFORT.length === 6;
     // FLIP: remember every cell and label box, let the layout snap, then glide each one home
     const moving = [...t.querySelectorAll('.ef3-cell'), ...document.querySelectorAll('#apmenu .ef3-labels span')];
     const before = moving.map((c) => c.getBoundingClientRect());
@@ -2350,6 +2355,7 @@
   }
   function hint(i) {
     const el = document.querySelector('#apmenu [data-hint]'); if (!el) return;
+    if (LE()) { el.textContent = (LE().levels[i] && LE().levels[i].title) || ''; el.classList.remove('na'); return; }
     if (i > maxEff()) { el.textContent = `Not on ${modelById(effModelId()).name}`; el.classList.add('na'); return; }
     el.classList.remove('na');
     el.innerHTML = `${i === effIdx() ? '' : `<b>${EFFORT[i]}</b> · `}≈ ${costFor(modelById(effModelId()), i)} cr · ~${secsFor(i)}s`;
@@ -2379,7 +2385,7 @@
     }
     t.appendChild(f);
   }
-  function setEffort(n) { n = Math.max(0, Math.min(maxEff(), n)); store.set('effort', EFFORT[n]); paintEffort(); paintModelTrigger(); }   // pinned where it opened — re-anchoring made the card chase the pill's width
+  function setEffort(n) { n = Math.max(0, Math.min(maxEff(), n)); if (LE()) { if (n !== effIdx()) window.XENO_CHAT.pickEffort(LE().levels[n].id); paintEffort(); return; } store.set('effort', EFFORT[n]); paintEffort(); paintModelTrigger(); }   // pinned where it opened — re-anchoring made the card chase the pill's width
   document.addEventListener('click', (e) => {
     const t = e.target.closest('.live-chat [data-chat-model-trigger]');
     if (t) { e.preventDefault(); e.stopPropagation(); const part = e.target.closest('[data-part]'); const kind = part?.dataset.part === 'effort' ? 'effort' : 'model';
