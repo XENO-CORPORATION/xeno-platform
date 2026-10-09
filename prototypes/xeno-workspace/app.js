@@ -2230,7 +2230,7 @@
     m.style.left = Math.min(innerWidth - w - 12, Math.max(12, want)) + 'px'; m.style.top = Math.max(12, r.top - h - 8) + 'px'; syncCard(); }
   function openModelMenu(anchor, kind) {
     hidePops();
-    const m = apMenu(); m.dataset.kind = kind; m.style.width = kind === 'effort' ? '268px' : '236px';
+    const m = apMenu(); m.dataset.kind = kind; m.dataset.find = ''; m.dataset.q = ''; m.style.width = kind === 'effort' ? '268px' : '236px';
     if (kind === 'effort') renderEffort(m); else renderModels(m);
     m.classList.add('show'); paintModelTrigger(); placeAp(anchor);
     // anchor to the WHOLE trigger's right edge — the changing pill text cannot move it
@@ -2238,18 +2238,38 @@
     if (LE() && kind === 'effort') placeAp(anchor);   // the real chat's pill is in its frame: the place it handed over is the anchor
   }
   function renderModels(m) {
-    const cur = curModel(), more = m.dataset.more === '1', lp = LP();
+    const cur = curModel(), more = m.dataset.allModels === '1', lp = LP();
     // the real list keeps the order the platform gives it; the first four are the short list
     const all = lp ? lp.models.map((x) => x.id) : MODELS.list.map((x) => x.id), main = lp ? all.slice(0, 4) : MAIN_MODELS;
     const rest = all.filter((id) => !main.includes(id));
     const list = more ? [...main, ...rest] : main.concat(rest.includes(cur.id) ? [cur.id] : []);
     const row = (id, i) => { const x = modelById(id), on = cur.id === id;
       return `<button class="row${on ? ' on' : ''}" data-model="${id}"><span class="rail"></span><span>${esc(x.name)}</span>${routeOf(x) ? `<span class="key">${routeOf(x)}</span>` : ''}<span class="idx num">${i + 1}</span></button>`; };
-    m.innerHTML = `<div class="h label">Model</div>
-      ${lp ? '' : `<button class="row tall${cur.id === 'auto' ? ' on' : ''}" data-model="auto"><span class="rail"></span><span class="col"><span>XENO picks</span><span class="sub">Now → ${esc(modelById(pickFor()).name)} for this message</span></span></button>`}
-      ${list.length ? list.map(row).join('') : '<div class="row" aria-disabled="true"><span class="rail"></span><span>No models are available</span></div>'}
-      ${(more && rest.length) || rest.some((id) => !list.includes(id)) ? `<div class="hr"></div>
-      <button class="row" data-more-models><span class="rail"></span><span>${more ? 'Fewer models' : 'More models'}</span><span class="chev"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="square"><path d="${more ? 'M6 15l6-6 6 6' : 'M9 6l6 6-6 6'}"/></svg></span></button>` : ''}`;
+    // SEARCH (owner, 2026-10-09): the magnifier at the right of the header turns the header itself, at its own
+    // height, into the field. A search looks through EVERY model, whatever "More models" is showing.
+    const finding = m.dataset.find === '1', q = (m.dataset.q || '').trim().toLowerCase();
+    const shown = finding && q ? all.filter((id) => { const x = modelById(id); return (x.name + ' ' + id).toLowerCase().includes(q); }) : list;
+    const glass = '<path d="M10.5 4a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13zM20 20l-4.7-4.7"/>';
+    const head = finding
+      ? `<div class="h ap-head finding"><svg class="ap-find-ic" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="square" aria-hidden="true">${glass}</svg><input class="ap-q" data-model-q type="text" placeholder="Search models" aria-label="Search models" autocomplete="off" spellcheck="false"></div>`
+      : `<div class="h label ap-head"><span>Model</span><button type="button" class="ap-find" data-model-find aria-label="Search models" title="Search models"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="square" aria-hidden="true">${glass}</svg></button></div>`;
+    const keep = m.querySelector('.ap-scroll') ? m.querySelector('.ap-scroll').scrollTop : null;
+    const picks = lp || (finding && q) ? '' : `<button class="row tall${cur.id === 'auto' ? ' on' : ''}" data-model="auto"><span class="rail"></span><span class="col"><span>XENO picks</span><span class="sub">Now → ${esc(modelById(pickFor()).name)} for this message</span></span></button>`;
+    const none = `<div class="row" aria-disabled="true"><span class="rail"></span><span>${finding && q ? 'No model matches' : 'No models are available'}</span></div>`;
+    const foot = !(finding && q) && ((more && rest.length) || rest.some((id) => !list.includes(id))) ? `<div class="hr"></div>
+      <button class="row" data-more-models><span class="rail"></span><span>${more ? 'Fewer models' : 'More models'}</span><span class="chev"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="square"><path d="${more ? 'M6 15l6-6 6 6' : 'M9 6l6 6-6 6'}"/></svg></span></button>` : '';
+    m.innerHTML = `${head}<div class="ap-scroll" data-model-scroll>${picks}${shown.length ? shown.map(row).join('') : none}</div>${foot}`;
+    // The list scrolls inside a fixed height (it used to grow to 23 rows, taller than the page). No bar: a fade at
+    // whichever end has more says there is more, and goes when that end is reached.
+    const sc = m.querySelector('.ap-scroll');
+    const edges = () => { sc.classList.toggle('more-below', sc.scrollTop + sc.clientHeight < sc.scrollHeight - 1); sc.classList.toggle('more-above', sc.scrollTop > 1); };
+    sc.addEventListener('scroll', edges, { passive: true });
+    if (keep !== null && !finding) sc.scrollTop = keep; else { const on = sc.querySelector('.row.on'); if (on && !(finding && q)) sc.scrollTop = Math.max(0, on.offsetTop - sc.offsetTop - sc.clientHeight / 2 + on.offsetHeight / 2); }
+    edges();
+    const reanchor = () => { const a = (LP() && LP().anchor) || document.querySelector('.live-chat [data-part="model"]'); if (a) placeAp(a); };
+    const input = m.querySelector('[data-model-q]');
+    if (input) { input.value = m.dataset.q || ''; input.focus({ preventScroll: true }); input.setSelectionRange(input.value.length, input.value.length);
+      input.addEventListener('input', () => { m.dataset.q = input.value; renderModels(m); reanchor(); }); }
   }
   // the card is a satellite of the menu: whenever the menu re-renders or moves, the card follows it,
   // or leaves if the row it described is gone (More/Fewer models re-lays the list under the pointer)
@@ -2392,7 +2412,8 @@
       const m = document.getElementById('apmenu'); if (m?.classList.contains('show') && m.dataset.kind === kind) return closeAp(); return openModelMenu(part || t, kind); }
     const m = document.getElementById('apmenu'); if (!m?.classList.contains('show')) return;
     if (!m.contains(e.target)) return closeAp();
-    if (e.target.closest('[data-more-models]')) { m.dataset.more = m.dataset.more === '1' ? '' : '1'; renderModels(m); const a = (LP() && LP().anchor) || document.querySelector('.live-chat [data-part="model"]'); if (a) placeAp(a); return; }
+    if (e.target.closest('[data-model-find]')) { m.dataset.find = '1'; m.dataset.q = ''; renderModels(m); const a = (LP() && LP().anchor) || document.querySelector('.live-chat [data-part="model"]'); if (a) placeAp(a); return; }
+    if (e.target.closest('[data-more-models]')) { m.dataset.allModels = m.dataset.allModels === '1' ? '' : '1'; renderModels(m); const a = (LP() && LP().anchor) || document.querySelector('.live-chat [data-part="model"]'); if (a) placeAp(a); return; }
     const r = e.target.closest('[data-model]'); if (r && LP()) { window.XENO_CHAT.pickModel(r.dataset.model); return closeAp(); }
     if (r) { if (r.dataset.model === 'auto') store.set('modelDefault', true); else { store.set('modelDefault', false); store.set('model', r.dataset.model); } closeAp(); }
   }, true);
@@ -2407,8 +2428,10 @@
   new MutationObserver(() => setTimeout(paintAnsweredBy, 50)).observe(document.getElementById('main'), { childList: true });
   document.addEventListener('keydown', (e) => {
     const m = document.getElementById('apmenu'); if (!m?.classList.contains('show')) return;
+    if (e.key === 'Escape' && m.dataset.kind === 'model' && m.dataset.find === '1') { e.stopPropagation(); e.preventDefault(); m.dataset.find = ''; m.dataset.q = ''; renderModels(m); const a = (LP() && LP().anchor) || document.querySelector('.live-chat [data-part="model"]'); if (a) placeAp(a); return; }
     if (e.key === 'Escape') { e.stopPropagation(); return closeAp(); }
-    if (m.dataset.kind === 'model' && /^[1-9]$/.test(e.key)) { const rows = m.querySelectorAll('.row[data-model]:not([data-model="auto"])'); const r = rows[+e.key - 1]; if (r) { e.preventDefault(); r.click(); } }
+    if (m.dataset.kind === 'model' && m.dataset.find === '1' && e.key === 'Enter') { const r = m.querySelector('.ap-scroll .row[data-model]'); if (r) { e.preventDefault(); r.click(); } return; }
+    if (m.dataset.kind === 'model' && m.dataset.find !== '1' && /^[1-9]$/.test(e.key)) { const rows = m.querySelectorAll('.row[data-model]:not([data-model="auto"])'); const r = rows[+e.key - 1]; if (r) { e.preventDefault(); r.click(); } }
   }, true);
   new MutationObserver(paintModelTrigger).observe(document.getElementById('main'), { childList: true });
   // ---- boot ----

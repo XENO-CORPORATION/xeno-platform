@@ -29,7 +29,7 @@ const CHAT = `<!doctype html><html><body><div class="chat-themed"><div class="ch
   window.__effort = (on) => { if (on) group.append(vr, eff); else { vr.remove(); eff.remove(); } };
   window.__picks = []; window.__closed = 0;
   const MODELS = [['m-a', 'Model A', 'Fast and cheap.', 128000, false], ['m-b', 'Model B', '', 0, true], ['m-c', 'Model <i>C</i>', 'Careful.', 1000000, false], ['m-d', 'Model D', '', 0, false], ['m-e', 'Model E', 'The fifth.', 200000, false]];
-  document.querySelector('[data-chat-model-trigger]').addEventListener('click', (e) => { const r = e.currentTarget.getBoundingClientRect(); parent.postMessage({ source: 'xeno-chat', type: 'model-menu', rect: { left: r.left, top: r.top, right: r.right, bottom: r.bottom, width: r.width, height: r.height }, selected: window.__sel || 'm-a', models: (window.__none ? [] : MODELS).map(([id, name, description, contextWindow, ownKey]) => ({ id, name, description, contextWindow, ownKey })) }, location.origin); });
+  document.querySelector('[data-chat-model-trigger]').addEventListener('click', (e) => { const r = e.currentTarget.getBoundingClientRect(); parent.postMessage({ source: 'xeno-chat', type: 'model-menu', rect: { left: r.left, top: r.top, right: r.right, bottom: r.bottom, width: r.width, height: r.height }, selected: window.__sel || 'm-a', models: (window.__none ? [] : window.__many ? MODELS.concat(Array.from({ length: 20 }, (_, n) => ['x-' + n, 'Extra ' + n, '', 0, false])) : MODELS).map(([id, name, description, contextWindow, ownKey]) => ({ id, name, description, contextWindow, ownKey })) }, location.origin); });
   addEventListener('message', (e) => { if (e.source !== parent || !e.data || e.data.source !== 'xeno-workspace') return; if (e.data.type === 'pick-model') { window.__picks.push(e.data.id); window.__sel = e.data.id; } if (e.data.type === 'model-menu-closed') window.__closed++; if (e.data.type === 'pick-effort') window.__efforts.push(e.data.id); if (e.data.type === 'effort-menu-closed') window.__effClosed++; });
   window.__efforts = []; window.__effClosed = 0;
   window.__askEffort = (selected) => parent.postMessage({ source: 'xeno-chat', type: 'effort-menu', rect: { left: 300, top: 400, right: 360, bottom: 426, width: 60, height: 26 }, selected, levels: [{ id: 'off', label: 'Off', title: 'No thinking' }, { id: 'low', label: 'Low' }, { id: 'high', label: 'High' }] }, location.origin);
@@ -177,6 +177,26 @@ try {
     ok(!m.open && m.frame.closed === 2, 'pressing the control again closes it');
     await press(); await wait(200); await p.keyboard.press('Escape'); await wait(200); m = await menu();
     ok(!m.open, 'Escape closes it');
+    // a long list scrolls inside a fixed height, with no bar and a fade where there is more; the header searches
+    const big = () => p.evaluate(() => { const m2 = document.getElementById('apmenu'), sc = m2.querySelector('.ap-scroll'), h = m2.querySelector('.ap-head'); return { open: m2.classList.contains('show'), h: Math.round(m2.getBoundingClientRect().height), top: Math.round(m2.getBoundingClientRect().top), rows: sc ? sc.querySelectorAll('.row[data-model]').length : -1, scrolls: sc ? sc.scrollHeight > sc.clientHeight + 1 : false, below: !!sc?.classList.contains('more-below'), above: !!sc?.classList.contains('more-above'), bar: sc ? getComputedStyle(sc).scrollbarWidth : '', headH: h ? Math.round(h.getBoundingClientRect().height) : 0, finding: !!m2.querySelector('[data-model-q]'), names: sc ? [...sc.querySelectorAll('.row')].map((r) => r.children[1]?.textContent).join('|') : '', sel: document.getElementById('xw-chat-frame').contentWindow.__picks.join(',') }; });
+    await p.evaluate(() => { document.getElementById('xw-chat-frame').contentWindow.__many = true; }); await press(); await wait(300);
+    if (await p.evaluate(() => /More/.test(document.querySelector('#apmenu [data-more-models]').innerText))) { await p.click('#apmenu [data-more-models]'); await wait(300); } let g = await big();
+    ok(g.rows === 25 && g.scrolls && g.h < 420 && g.top > 0 && g.bar === 'none', 'all 25 models are in the list, which scrolls inside a fixed height with no bar (' + JSON.stringify(g).slice(0, 260) + ')');
+    await p.evaluate(() => { document.querySelector('#apmenu .ap-scroll').scrollTop = 0; }); await wait(200); g = await big();
+    ok(g.below && !g.above, 'a fade at the bottom says there is more below');
+    await p.evaluate(() => { const sc = document.querySelector('#apmenu .ap-scroll'); sc.scrollTop = sc.scrollHeight; }); await wait(200); g = await big();
+    ok(!g.below && g.above, 'at the end the bottom fade goes and the top one shows');
+    const headBefore = g.headH; await p.click('#apmenu [data-model-find]'); await wait(200); g = await big();
+    ok(g.finding && g.headH === headBefore && headBefore === 23, 'the magnifier turns the header into the search field at the same height (' + g.headH + 'px)');
+    await p.keyboard.type('extra 1'); await wait(250); g = await big();
+    ok(g.names.split('|').length === 11 && g.names.split('|').every((n) => /^Extra 1/.test(n)), 'typing filters every model by name (' + g.names.split('|').length + ' match "extra 1"), and a digit typed there picks nothing (' + (g.sel || 'no pick') + ')');
+    const picksBefore = g.sel; await p.keyboard.type('zz'); await wait(200); g = await big();
+    ok(g.rows === 0 && g.names === 'No model matches' && g.sel === picksBefore, 'no match says so and picks nothing');
+    await p.keyboard.press('Escape'); await wait(200); g = await big();
+    ok(g.open && !g.finding && g.rows === 25, 'Escape leaves the search and keeps the menu open');
+    await p.click('#apmenu [data-model-find]'); await p.keyboard.type('extra 19'); await wait(200); await p.keyboard.press('Enter'); await wait(300); g = await big();
+    ok(!g.open && g.sel.split(',').pop() === 'x-19', 'Enter picks the first match and closes (' + g.sel.split(',').pop() + ')');
+    await p.evaluate(() => { const w = document.getElementById('xw-chat-frame').contentWindow; w.__many = false; w.__sel = 'm-a'; });
     // the effort menu: this page's design, on the chat's real levels
     const eff = () => p.evaluate(() => { const m2 = document.getElementById('apmenu'), fw = document.getElementById('xw-chat-frame').contentWindow; return { open: !!m2?.classList.contains('show') && m2.dataset.kind === 'effort', labels: [...(m2?.querySelectorAll('.ef3-labels span') || [])].map((s) => s.textContent + (s.classList.contains('cur') ? '*' : '')).join(','), text: m2?.innerText || '', picks: fw.__efforts.join(','), closed: fw.__effClosed }; });
     await p.evaluate(() => document.getElementById('xw-chat-frame').contentWindow.__askEffort('low')); await wait(300); let e1 = await eff();
