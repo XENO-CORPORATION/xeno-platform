@@ -328,6 +328,10 @@ html body .live-chat button.xm-model.xm-model[data-chat-model-trigger]{min-width
 html body .live-chat [data-composer-model-group] > button.xm-model.xm-model:last-child .ap-txt{padding-right:0}
 html body .live-chat [data-composer-model-group] [data-effort-trigger][data-effort-trigger]{padding-right:0!important}
 html body .live-chat [data-composer-model-group]{gap:0!important}
+/* The thread scrolls UNDER the input box. With nothing behind the box's column the text ran straight into its top edge
+   and showed between the box and its controls (seen on the real chat, 2026-10-09). The column the box sits in now has
+   the panel's own surface behind it, fading in over 28px above the box, so text leaves the page instead of colliding. */
+html body .live-chat div.absolute:has(> div > [data-conversation-composer-frame])::before{content:"";position:absolute;left:0;right:0;bottom:0;top:-28px;z-index:-1;pointer-events:none;background:linear-gradient(to bottom,transparent,var(--panel) 28px)}
 html body .live-chat button.xm-model.xm-model[data-chat-model-trigger] .ap-pillbtn{padding:0 0 0 4px;margin-right:-3px}  /* no right padding: the pill->mic gap then equals the row gap (7px), same as mic->send */
 html body .live-chat button.xm-model.xm-model[data-chat-model-trigger] .ap-pill{padding:3px 6px;background:var(--w60);border-radius:3px;font-size:10px;line-height:1;color:var(--t4)}
 html body .live-chat button.xm-model.xm-model[data-chat-model-trigger] .ap-pillbtn:hover .ap-pill{background:var(--seg-on);color:var(--t1)}
