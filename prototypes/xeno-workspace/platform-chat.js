@@ -38,9 +38,7 @@
   // Owner's rule (2026-10-03, 2026-10-09). The area is the place in the left rail the person is in (Studio, Office,
   // Dev… or one they made); on Overview there is none. The real chat reads this when it creates a chat or a project.
   const AREA_SHAPE = /^[a-z][a-z0-9_-]{0,39}$/;
-  const area = () => { let k = null; try { k = X()?.ctxKey?.(); } catch {} return typeof k === 'string' && k !== 'overview' && k !== 'adaptive' && AREA_SHAPE.test(k) ? k : null; };
-  const areaName = (id) => { if (!id) return ''; try { const m = X()?.M?.[id]; if (m && m.name) return m.name; const c = (window.XENO_CUSTOM?.list?.() || []).find((x) => x.id === id); if (c) return c.name; } catch {} return id.charAt(0).toUpperCase() + id.slice(1); };
-  const areas = () => { const out = []; try { for (const m of window.XENO_MODES || []) out.push([m.id, areaName(m.id)]); for (const c of window.XENO_CUSTOM?.list?.() || []) if (AREA_SHAPE.test(c.id)) out.push([c.id, c.name]); } catch {} return out; };
+  const area = () => P.area(), areaName = (id) => P.areaName(id), areas = () => P.areas();
 
   // ---------- the list ----------
   const DAY = 86400000;

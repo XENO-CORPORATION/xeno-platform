@@ -14,13 +14,19 @@
   if (!served) return;
   const FIRST_PAINT_MS = 6000, firsts = [];
   P.first = (p) => { firsts.push(Promise.resolve(p).catch(() => {})); };
+  // ---------- the AREA: the place in the left rail the person is in (Studio, Office, Dev… or one they made) ----------
+  // Each area has its own chats, projects and library; on Overview there is no area and everything shows (owner's
+  // rule, 2026-10-03 and 2026-10-09). One definition here; platform-chat, platform-library and platform-work use it.
+  P.area = () => { let k = null; try { k = window.XW?.ctxKey?.(); } catch {} return typeof k === 'string' && k !== 'overview' && k !== 'adaptive' && /^[a-z][a-z0-9_-]{0,39}$/.test(k) ? k : null; };
+  P.areaName = (id) => { if (!id) return ''; try { const m = window.XW?.M?.[id]; if (m && m.name) return m.name; const c = (window.XENO_CUSTOM?.list?.() || []).find((x) => x.id === id); if (c) return c.name; } catch {} return id.charAt(0).toUpperCase() + id.slice(1); };
+  P.areas = () => { const out = []; try { for (const m of window.XENO_MODES || []) out.push([m.id, P.areaName(m.id)]); for (const c of window.XENO_CUSTOM?.list?.() || []) if (/^[a-z][a-z0-9_-]{0,39}$/.test(c.id)) out.push([c.id, c.name]); } catch {} return out; };
   // one way to call the platform: the session cookie, the CSRF token on writes, and the surface name
   const csrf = () => { for (const n of ['__Host-xeno_csrf', 'xeno_csrf']) { const m = document.cookie.split(';').map((p) => p.trim()).find((p) => p.startsWith(n + '=')); if (m) return decodeURIComponent(m.slice(n.length + 1)); } return null; };
   P.csrf = csrf;
   P.api = async (method, url, body, extra) => {
     const headers = { 'x-xeno-surface': 'xeno-web', ...(extra || {}) };
     // AREA: the area the person is in, so what this request stores (an upload) lands there. A label, never an authority.
-    try { const k = window.XW?.ctxKey?.(); if (typeof k === 'string' && k !== 'overview' && k !== 'adaptive' && /^[a-z][a-z0-9_-]{0,39}$/.test(k) && !headers['x-xeno-area']) headers['x-xeno-area'] = k; } catch {}
+    { const k = P.area(); if (k && !headers['x-xeno-area']) headers['x-xeno-area'] = k; }
     if (body !== undefined) headers['content-type'] = 'application/json';
     if (!['GET', 'HEAD'].includes(method)) { const t = csrf(); if (t) headers['x-xeno-csrf'] = t; }
     const r = await fetch(url, { method, credentials: 'same-origin', headers, body: body !== undefined ? JSON.stringify(body) : undefined });

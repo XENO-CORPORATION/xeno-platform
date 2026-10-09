@@ -1889,6 +1889,7 @@
           { label: 'Set budget…', icon: 'chart', run: () => window.XA.budget(name) }],
         [{ label: 'Rename…', icon: 'edit', key: 'F2', kbd: 'F2', run: () => window.XA.renameProject(name) },
           { label: 'Change icon…', icon: 'palette', run: () => window.XA.iconProject(name) },
+          ...(window.XENO_WORK && window.XENO_WORK.served ? [{ label: 'Move to area…', icon: 'grid', run: () => window.XENO_WORK.moveProject(name) }] : []),
           { label: 'Pinned in the sidebar', icon: 'pin', checked: pinned, run: () => { pinned ? S.pinnedProjects.delete(name) : S.pinnedProjects.add(name); window.XW.refreshPanel(); toast(pinned ? 'Unpinned' : 'Pinned'); } },
           { label: 'Copy link', icon: 'link', run: () => H.copyLink(h) }],
         [{ label: 'Archive…', icon: 'archive', run: () => window.XA.archiveProject(name) },
