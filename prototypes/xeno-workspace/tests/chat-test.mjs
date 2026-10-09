@@ -14,6 +14,10 @@ await server.listen();
 const b = await puppeteer.launch({ headless: true, protocolTimeout: 60000 });
 const USER = { id: 7, username: 'test-person', email: 'test@example.test', display_name: 'Test Person', avatar_url: null, email_verified: true };
 const iso = (h) => new Date(Date.now() - h * 3600000).toISOString();
+// The day a conversation that old falls on, by the sidebar's own rule (midnight to midnight, local time). The
+// expected groups are worked out from the clock: "one hour ago" is Yesterday for the first hour of a day, and a
+// check that assumed Today failed every night just after midnight (2026-10-10).
+const dayOf = (h) => { const t = Date.now() - h * 3600000, d0 = new Date(); d0.setHours(0, 0, 0, 0); const start = d0.getTime(), DAY = 86400000; return t >= start ? 'Today' : t >= start - DAY ? 'Yesterday' : t >= start - 7 * DAY ? 'Previous 7 days' : t >= start - 30 * DAY ? 'Previous 30 days' : 'Earlier'; };
 const A = '00000001-0000-4000-8000-000000000000', B = '00000002-0000-4000-8000-000000000000', C = '00000003-0000-4000-8000-000000000000', D = '00000004-0000-4000-8000-000000000000', PJ = '0000000a-0000-4000-8000-000000000000';
 const db = { convs: [], down: false, lists: 0, writes: [], refuse: false };
 const reset = () => { db.convs = [{ id: A, title: 'Plan the launch week', updated_at: iso(1), last_message_at: iso(1), project_id: null }, { id: B, title: '', updated_at: iso(30), last_message_at: iso(30), project_id: null }, { id: C, title: 'Budget <b>questions</b>', updated_at: iso(400), last_message_at: iso(400), project_id: PJ }]; db.down = false; db.lists = 0; db.writes = []; db.refuse = false; };
@@ -70,7 +74,7 @@ try {
   { const { p, errs } = await open(); let v = await view(p);
     ok(v.frames === 1 && v.on && v.path === '/overview/chat/llm' && v.over && !v.still, `the chat page shows the real chat, placed exactly over its slot, not the picture (${v.path}, over ${v.over})`);
     ok(v.rows.length === 3 && v.rows.find((r) => r.id === A).t === 'Plan the launch week' && v.rows.find((r) => r.id === B).t === 'New chat', 'the sidebar lists the person’s conversations; one with no title yet reads “New chat”');
-    ok(v.groups.join('|') === 'Today|Yesterday' && /Finance/.test(v.panel) && v.rows.some((r) => r.id === C), `conversations are grouped by day, and a project’s conversation sits under its project (${v.groups.join('|')})`);
+    ok(v.groups.join('|') === [...new Set([dayOf(1), dayOf(30)])].join('|') && /Finance/.test(v.panel) && v.rows.some((r) => r.id === C), `conversations are grouped by day, and a project’s conversation sits under its project (${v.groups.join('|')})`);
     ok(!/each mode keeps its own/.test(v.panel) && !/Weekly planning template|YC application draft/.test(v.panel) && !/Pinned/.test(v.panel), 'no sample chats, no Pinned section the platform cannot back, and no claim that each mode keeps its own');
     ok(!v.html.includes('<b>questions</b>') && /Budget &lt;b&gt;questions/.test(v.html), 'a title is shown as text, never as markup');
     ok(v.note === 'none' && /New chat/.test(v.crumbs), `the “sample data” note is not shown on the live chat, and the path reads New chat (${v.crumbs})`);
