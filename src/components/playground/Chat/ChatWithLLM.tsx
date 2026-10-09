@@ -23,7 +23,8 @@ import {
 import ChatEmptyState, { ComposerRevealControls, type ChatEmptyStateTool } from './ChatEmptyState';
 import ChatModelSelector from './ChatModelSelector';
 import WorkspaceModelTrigger from './WorkspaceModelTrigger';
-import { isWorkspaceEmbed, tellWorkspace } from '@/lib/workspaceEmbed';
+import { embedArea, isWorkspaceEmbed, tellWorkspace } from '@/lib/workspaceEmbed';
+import { readAreaModel, readAreaSettings, withAreaInstructions, writeAreaModelLocal, type AreaSettingsMap } from './chatAreaDefaults';
 import ChatEffortControl from './ChatEffortControl';
 import { effortOptionForTurn, readEffortPreferences, requestShapeFor, writeEffortPreference } from './chatReasoningEffort';
 import ChatShareModal from './ChatShareModal';
@@ -3039,6 +3040,23 @@ const ChatWithLLM: React.FC<ChatWithLLMProps> = ({
   /* The best model preference seen so far and where it came from — see LAST_MODEL_STORAGE_KEY. */
   const [initialPreference] = useState<ModelPreference>(initialModelPreference);
   const modelPreferenceRef = useRef<ModelPreference>(initialPreference);
+  // AREA defaults (chatAreaDefaults.ts): inside the XENO workspace each area remembers the model its chats open
+  // with and a standing instruction. `areaSettingsRef` is the account's record; `applyAreaModel` puts the
+  // area's model on a NEW chat (never on an open conversation, which keeps its own).
+  const areaSettingsRef = useRef<AreaSettingsMap>({});
+  const accountDefaultModelRef = useRef<string | null>(null);
+  const openConversationRef = useRef<string | null>(null);
+  const applyAreaModel = useCallback(() => {
+    if (!isWorkspaceEmbed() || openConversationRef.current) return;
+    // the area's own, else the account-wide default: an area with nothing remembered (and Overview, which is
+    // not an area) must not keep whatever the LAST area had selected
+    const id = readAreaModel(embedArea(), areaSettingsRef.current) || accountDefaultModelRef.current || readLastModelId() || DEFAULT_MODEL.id;
+    if (!id) return;
+    const model = findModelById(groupedModelsRef.current, id);
+    if (!model) return;
+    modelPreferenceRef.current = { id, source: 'user' };
+    setSelectedModel(model);
+  }, []);
   /**
    * Record a model preference from `source` and apply it if the catalogue can resolve it.
    * Returns whether it took effect now. A preference outranked by one already recorded is
@@ -3348,6 +3366,20 @@ const ChatWithLLM: React.FC<ChatWithLLMProps> = ({
     }
   }, [conversationHistory, historyNavView]);
   const [activeConversationId, setActiveConversationId] = useState<string | null>(null);
+  openConversationRef.current = activeConversationId;
+  useEffect(() => { if (!activeConversationId && !isModelsLoading) applyAreaModel(); }, [activeConversationId, isModelsLoading, applyAreaModel]);
+  useEffect(() => {
+    if (!isWorkspaceEmbed()) return undefined;
+    const onMessage = (event: MessageEvent) => {
+      if (event.origin !== window.location.origin || event.source !== window.parent) return;
+      const data = event.data as { source?: string; type?: string; areas?: unknown } | null;
+      if (!data || data.source !== 'xeno-workspace') return;
+      if (data.type === 'area-settings') areaSettingsRef.current = readAreaSettings({ areas: data.areas });
+      if (data.type === 'area' || data.type === 'area-settings') applyAreaModel();
+    };
+    window.addEventListener('message', onMessage);
+    return () => window.removeEventListener('message', onMessage);
+  }, [applyAreaModel]);
   const [isDbAuthenticated, setIsDbAuthenticated] = useState<boolean>(false);
   const [isHistoryLoading, setIsHistoryLoading] = useState<boolean>(true);
   const [isSyncingToDb, setIsSyncingToDb] = useState<boolean>(false);
@@ -6221,6 +6253,10 @@ const ChatWithLLM: React.FC<ChatWithLLMProps> = ({
         // The account's default model follows the user across devices; it applies unless the
         // conversation or an explicit pick this session already outranks it.
         if (settings.models?.defaultModel) preferModel(settings.models.defaultModel, 'settings');
+        // the areas' own defaults outrank the account-wide one, for a new chat in that area
+        areaSettingsRef.current = readAreaSettings(settings);
+        accountDefaultModelRef.current = typeof settings.models?.defaultModel === 'string' ? settings.models.defaultModel : null;
+        applyAreaModel();
         console.log("User settings loaded from database.");
       } catch (error) {
         console.error("Error loading user settings:", error);
@@ -7168,7 +7204,8 @@ const ChatWithLLM: React.FC<ChatWithLLMProps> = ({
     // user-authored preferences without allowing them to override that boundary.
     const finalSystemPrompt = buildChatSystemPrompt(
         emptyStateMode,
-        savedSystemPrompt,
+        // the area's standing instruction (the user's own words) goes ahead of their saved prompt
+        withAreaInstructions(savedSystemPrompt, embedArea(), areaSettingsRef.current),
         xenoContext?.summary,
     );
     if (xenoContext?.summary) {
@@ -9063,11 +9100,21 @@ Keep the summary under 500 words. Preserve essential context needed to continue 
      * the highest-ranked source, so the pick is recorded at 'conversation' rank when one is
      * open and 'user' rank otherwise — either way the account setting can no longer undo it.
      */
-    writeLastModelId(model.id);
     const dbConversationId = activeConversationId && activeConversationId !== CHAT_DEMO_CONVERSATION_ID
       ? activeConversationId : null;
     modelPreferenceRef.current = { id: model.id, source: dbConversationId ? 'conversation' : 'user' };
-    void saveSettingsToDb('models.defaultModel', model.id);
+    // Inside an area of the XENO workspace the pick is THAT AREA's default, and the account-wide one is left
+    // alone: Dev and Office each keep their own (chatAreaDefaults.ts). Anywhere else it is the account's.
+    const pickedInArea = embedArea();
+    if (pickedInArea) {
+      writeAreaModelLocal(pickedInArea, model.id);
+      areaSettingsRef.current = { ...areaSettingsRef.current, [pickedInArea]: { ...areaSettingsRef.current[pickedInArea], model: model.id } };
+      void saveSettingsToDb(`areas.${pickedInArea}.model`, model.id);
+    } else {
+      writeLastModelId(model.id);
+      accountDefaultModelRef.current = model.id;
+      void saveSettingsToDb('models.defaultModel', model.id);
+    }
     if (dbConversationId && isDbAuthenticated) {
       chatService.updateConversation(dbConversationId, { model_id: model.id }).catch((error) => {
         console.error('Error saving the conversation model:', error);

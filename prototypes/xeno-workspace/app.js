@@ -288,6 +288,7 @@
         <button class="act primary" data-newchat>${ic('plus')}New chat<kbd>Ctrl ⇧ O</kbd></button>
         <button class="act" data-go-library="From chats">${ic('lib')}Library<kbd>From chats</kbd></button>
         <button class="act" data-xa="scheduled">${ic('clock')}Scheduled</button>
+        ${live && window.XENO_CHAT.area && window.XENO_CHAT.area() ? `<button class="act" data-chat-instructions data-tip="What every chat in ${esc(window.XENO_CHAT.areaName(window.XENO_CHAT.area()))} should know or do">${ic('edit')}Instructions<kbd>${esc(window.XENO_CHAT.areaName(window.XENO_CHAT.area()))}</kbd></button>` : ''}
         ${sec('projects', 'Projects', projects + `<button class="row sub" data-go="projects">${ic('folder')}<span class="t">All projects</span></button>`, `<button class="ib" data-xa="newProject" aria-label="New project" data-tip="New project">${ic('plus')}</button>`)}
         ${live ? '' : sec('pinned', 'Pinned', C.pinned.map((t) => chatRow(t)).join(''))}
         ${sec('recents', 'Recents', live ? (liveState || C.recents.map(([g, ts]) => `<div class="grp">${g}</div>` + ts.map((t) => chatRow(t)).join('')).join('') + (live.more ? `<div class="row sub">${live.more} older chats are in the chat’s own history</div>` : '')) : C.recents.map(([g, ts]) => `<div class="grp">${g}</div>` + ts.map((t) => chatRow(t)).join('')).join('') + `<button class="row sub" data-xa="allChats">${ic('chat')}<span class="t">All chats</span></button>`)}
