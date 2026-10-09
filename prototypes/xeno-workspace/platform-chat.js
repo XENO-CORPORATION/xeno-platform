@@ -200,7 +200,7 @@
     clearTimeout(hideT);
     if (el !== slot) { slot = el; ro?.disconnect(); ro = new ResizeObserver(fit); ro.observe(el); ro.observe(document.getElementById('main')); }
     // moved to another area: its own list, not the last one's
-    if (S.area !== undefined && S.area !== area() && !loading) { S.status = 'loading'; S.convs = []; S.projects = []; S.total = 0; load(); }
+    if (S.area !== undefined && S.area !== area() && !loading) { S.status = 'loading'; S.convs = []; S.projects = []; S.total = 0; load(); toChatFrame({ type: 'area', area: area() }); }
     const want = X()?.S?.item || null;
     if (!frame) ensureFrame(pathFor(want)); else if ((want || null) !== (S.current || null)) show(pathFor(want), true);   // the address changed (Back, a link): follow it
     S.current = want;
@@ -317,6 +317,27 @@
         c.area = to; if (area() && to !== area()) { S.convs = S.convs.filter((x) => x.id !== id); S.total = Math.max(0, S.total - 1); } repaint(); X()?.toast?.(to ? 'Moved to ' + areaName(to) : 'Moved out of every area'); return null; } });
     load();
   }
+  // ---------- an area's standing instruction for its chats ----------
+  // The person's own words, kept in their account settings under areas.<id>.instructions; the real chat puts
+  // them ahead of every turn it sends from this area (chatAreaDefaults.ts). Overview has none.
+  const MAX_INSTRUCTIONS = 4000;
+  async function instructions() {
+    const here = area(); if (!here) return false;
+    const got = await api('GET', '/api/user-data/settings').catch(() => null);
+    if (!got || !got.ok) { X()?.toast?.('Your settings couldn’t be loaded. Nothing changed.'); return false; }
+    const areasNow = (got.d.settings && typeof got.d.settings.areas === 'object' && got.d.settings.areas) || {};
+    const was = typeof areasNow[here]?.instructions === 'string' ? areasNow[here].instructions : '';
+    let saved = false;
+    await window.XD.form({ title: 'Instructions for ' + areaName(here), submit: 'Save', fields: [{ id: 'text', type: 'textarea', label: 'What every chat in ' + areaName(here) + ' should know or do', rows: 7, max: MAX_INSTRUCTIONS, value: was,
+      placeholder: 'For example: answer as a senior engineer; prefer TypeScript; keep answers short.', hint: 'Applies to chats started in ' + areaName(here) + ' only. Leave it empty for none.' }],
+      onSubmit: async (v) => { const text = String(v.text || '').trim().slice(0, MAX_INSTRUCTIONS);
+        const r = await api('PATCH', '/api/user-data/settings', { updates: [{ path: 'areas.' + here + '.instructions', value: text }] }).catch(() => null);
+        if (!r || !r.ok) return say(r, 'The instructions couldn’t be saved. Nothing changed.');
+        toChatFrame({ type: 'area-settings', areas: { ...areasNow, [here]: { ...(areasNow[here] || {}), instructions: text } } });
+        saved = true; X()?.toast?.(text ? 'Instructions saved for ' + areaName(here) : 'Instructions cleared for ' + areaName(here)); return null; } });
+    return saved;
+  }
+  document.addEventListener('click', (e) => { const t = e.target.closest('#panel [data-chat-instructions]'); if (!t) return; e.preventDefault(); e.stopPropagation(); instructions(); }, true);
   const menu = () => { const C = window.XCM; if (!C || !C.register) return; C.register({ id: 'chat-live', sel: '[data-chat-live]', priority: 3, build: (n) => { const id = n.dataset.chatLive;
     return [[{ label: 'Open', icon: 'chat', run: () => open(id) }, { label: 'Copy link', icon: 'link', run: () => C.H.copy(location.origin + location.pathname + '#/' + (X().inOv() ? 'overview' : X().S.mode) + '/p/chat/' + encodeURIComponent(id), 'Link copied') }],
       [{ label: 'Rename', icon: 'edit', run: () => rename(id) }, { label: 'Move to…', icon: 'folder', run: () => move(id) }], [{ label: 'Delete', icon: 'trash', danger: true, run: () => remove(id) }]]; } }); };
@@ -326,6 +347,6 @@
   const pickModel = (id) => toChatFrame({ type: 'pick-model', id });
   const pickerClosed = () => { if (S.effort) { S.effort = null; toChatFrame({ type: 'effort-menu-closed' }); } if (S.picker) { S.picker = null; toChatFrame({ type: 'model-menu-closed' }); } };
   const pickEffort = (id) => { if (S.effort) S.effort.selected = id; toChatFrame({ type: 'pick-effort', id }); };
-  window.XENO_CHAT = { served: true, area, get picker() { return S.picker; }, get effort() { return S.effort || null; }, pickModel, pickEffort, pickerClosed, data, title, open, load, rename, remove, dress, host: () => '<div class="live-chat-host" data-chat-frame aria-label="Chat"></div>', state: () => ({ area: area(), listed: S.area, viewer: S.viewer || null, ready: chatReady(), status: S.status, count: S.convs.length, current: S.current, path: S.path, shown: !!frame && frame.classList.contains('on') }) };
+  window.XENO_CHAT = { served: true, area, areaName, instructions, get picker() { return S.picker; }, get effort() { return S.effort || null; }, pickModel, pickEffort, pickerClosed, data, title, open, load, rename, remove, dress, host: () => '<div class="live-chat-host" data-chat-frame aria-label="Chat"></div>', state: () => ({ area: area(), listed: S.area, viewer: S.viewer || null, ready: chatReady(), status: S.status, count: S.convs.length, current: S.current, path: S.path, shown: !!frame && frame.classList.contains('on') }) };
   Promise.resolve(P.ready).then((user) => { if (!user) return; P.first(load()); watch(); });
 })();
