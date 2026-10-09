@@ -12957,14 +12957,15 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                     </div>
                     </div>
             )}
-            /* Inside the XENO workspace the input box is always the docked one the workspace designed:
-               a new chat is an empty thread with that box under it, not the centred home box. */
-            isActive={options?.forceCompact || isWorkspaceEmbed() ? false : messages.length === 0}
+            /* Inside the XENO workspace a new chat has the same home box as anywhere else — the + and the
+               model inside the box — and docks once the conversation starts (owner, 2026-10-09; it had been
+               forced to the docked box at all times). */
+            isActive={options?.forceCompact ? false : messages.length === 0}
             /* One composer, two homes (chat-input-hybrid.html): the empty chat AND the project page are
                `home` (controls inside the box); a running conversation is `dock`. The project page has
                no hero, which is what `isActive` used to mean here as well. */
-            placement={isWorkspaceEmbed() ? 'dock' : options?.forceCompact || messages.length === 0 ? 'home' : 'dock'}
-            showHero={!isWorkspaceEmbed() && !options?.forceCompact && messages.length === 0}
+            placement={options?.forceCompact || messages.length === 0 ? 'home' : 'dock'}
+            showHero={!options?.forceCompact && messages.length === 0}
             isCompact={isMultiInterface}
             isTemporaryChat={isTemporaryChat}
             hideToolRail={options?.forceCompact}
