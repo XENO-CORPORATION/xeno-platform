@@ -17,8 +17,9 @@ import {
 } from '../services/libraryAssets.js';
 import { requireResourceRelation, sendChatAuthorityError } from '../services/chatProjectAuthority.js';
 import {
-  emptyLibraryTrash, purgeLibraryItem, renameLibraryItem, restoreLibraryItem, starLibraryItem, trashLibraryItem,
+  emptyLibraryTrash, placeLibraryItem, purgeLibraryItem, renameLibraryItem, restoreLibraryItem, starLibraryItem, trashLibraryItem,
 } from '../services/libraryOrganise.js';
+import { readArea, readAreaFilter } from '../utils/resourceArea.js';
 
 const router = express.Router();
 
@@ -104,6 +105,7 @@ router.use(authMiddleware);
 
 router.get('/assets', async (req, res) => {
   try {
+    try { readAreaFilter(req.query.area); } catch (error) { return res.status(400).json({ success: false, code: 'invalid_area', error: error.message }); }
     const result = await listLibraryItems(req.db, req.user.id, req.query);
     res.json({ success: true, ...result });
   } catch (error) {
@@ -207,6 +209,12 @@ const organise = (label, run) => async (req, res) => {
 router.patch('/assets/:source/:id', organise('rename', async (req, res, principal, source, id) => {
   const result = await renameLibraryItem(req.db, principal, source, id, req.body?.name);
   sendOrganised(res, result, { name: result.name });
+}));
+// AREA: move an item to another area, or to none ({ area: null }).
+router.put('/assets/:source/:id/area', organise('place', async (req, res, principal, source, id) => {
+  let to; try { to = readArea(req.body?.area); } catch (error) { return res.status(400).json({ success: false, code: 'invalid_area', error: error.message }); }
+  if (!to.given) return res.status(400).json({ success: false, code: 'invalid_area', error: 'Say which area, or null for none.' });
+  sendOrganised(res, await placeLibraryItem(req.db, principal, source, id, to.area), { area: to.area });
 }));
 router.put('/assets/:source/:id/star', organise('star', async (req, res, principal, source, id) => {
   sendOrganised(res, await starLibraryItem(req.db, principal, source, id, true), { starred: true });

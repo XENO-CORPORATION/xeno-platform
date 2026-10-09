@@ -1,3 +1,4 @@
+import { embedArea } from './workspaceEmbed';
 const LEGACY_TOKEN_KEY = 'xenoos_auth_token';
 const CSRF_COOKIE_NAMES = ['__Host-xeno_csrf', 'xeno_csrf'];
 
@@ -65,6 +66,9 @@ export function installAuthenticatedFetch(): void {
     // Stamped HERE rather than per-service for the same reason auth and CSRF
     // are: a header added at each call site is one a new call site forgets.
     if (!headers.has('x-xeno-surface')) headers.set('x-xeno-surface', 'xeno-web');
+    // AREA: inside the XENO workspace, the area this chat is in (Studio, Dev…), so a picture or file it makes
+    // lands in that area's library. A label on the person's own items, never an authority.
+    if (!headers.has('x-xeno-area')) { const area = embedArea(); if (area) headers.set('x-xeno-area', area); }
     return nativeFetch(input, { ...init, credentials: init.credentials || 'same-origin', headers });
   };
 }

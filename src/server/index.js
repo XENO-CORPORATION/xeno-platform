@@ -1,4 +1,5 @@
 import path from 'path';
+import { areaFromRequest } from './utils/resourceArea.js';
 import { fileURLToPath } from 'url';
 import dotenv from 'dotenv';
 import { isLocalPreview } from './services/runtimePolicy.js';
@@ -688,6 +689,8 @@ const chatAuthMiddleware = (req, res, next) => {
   console.log('[ChatAuth] Applying auth for path:', req.path);
   return authMiddleware(req, res, next);
 };
+// AREA: the area a request was made in (X-Xeno-Area), so what it stores lands there. A label, never an authority.
+app.use('/api', areaFromRequest);
 app.use('/api/chat', databaseMiddleware, chatAuthMiddleware, chatRoutes);
 console.log('💬 Chat routes integrated: /api/chat/*');
 
@@ -1075,6 +1078,7 @@ app.post('/api/upload', databaseMiddleware, authMiddleware, upload.single('image
       // a CLIENT-declared source, from a closed list: `chat-generation` marks a file the server's own
       // image tool made, which a message may reference during its scan — no upload may claim it
       metadata: { source: CLIENT_UPLOAD_SOURCES.includes(req.body?.source) ? req.body.source : 'upload' },
+      area: req.xenoArea ?? null,   // AREA: an upload lands in the area it was made in
     });
     const libraryId = stored.id;
 
@@ -1287,6 +1291,7 @@ app.post('/api/chat/generate', databaseMiddleware, authMiddleware, async (req, r
                         fileSize: imageBuffer.length,
                         storagePath: storedPath,
                         metadata: { source: 'chat-generation', prompt: imagePrompt, model: modelLabel },
+                        area: req.xenoArea ?? null,   // AREA: a picture a chat made lands in that chat's area
                     });
                     libraryItemId = stored.id;
                 } catch (persistError) {

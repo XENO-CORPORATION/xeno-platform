@@ -135,6 +135,7 @@
   const fileCard = (f, sel) => `<div class="pg-card pg-card--file" tabindex="0" data-pg-file="${esc(f.id)}"${sel ? ' aria-selected="true"' : ''}>${thumb(f)}<b title="${esc(f.name)}">${esc(f.name)}</b><small>${prodIcon(f.source.product, 12)}${esc(pname(f.source.product))} · ${f.trashedAt ? 'deleted ' + ago(f.trashedAt) + ' ago' : ago(f.updatedAt)}</small>${f.starred ? `<span class="pg-star" role="img" aria-label="Starred">${ic('star')}</span>` : ''}</div>`;
   function library(view) {
     { const ny = window.XENO_LIB && window.XENO_LIB.served ? window.XENO_LIB.viewNotYet(view, { page, head, box }) : null; if (ny) return ny; }
+    if (window.XENO_LIB && window.XENO_LIB.served) window.XENO_LIB.sync?.();   // a different area: its own library
     const key = 'library', u = ui(key, { view: 'grid' }), V = LIBV[view] || {}, items = window.XENO_PG_LIBRARY.items.filter((f) => !window.XENO_VIS || window.XENO_VIS.file(f));
     const kind = u.seg.kind || 'all';
     // a link with ?sel= opens with those files selected — once per address, never over a selection made since (§7bb)

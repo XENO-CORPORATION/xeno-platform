@@ -28,7 +28,13 @@
   const pstate = (v) => { const m = LS.get('pgState', {}) || {}; m.library = v; LS.set('pgState', m); };
   const paint = () => { try { window.XENO_PG_SYNC_NAV?.(); X()?.refreshPanel?.(); X()?.render?.(); } catch {} };
   const toast = (s) => X()?.toast?.(s);
-  const L = { status: 'loading', total: 0, capped: false };
+  const L = { status: 'loading', total: 0, capped: false, area: undefined };
+  // AREA: each area has its own library; Overview shows everything (owner's rule). The area is the place in the
+  // left rail the person is in; the list asks the platform for that area only.
+  const AREA_SHAPE = /^[a-z][a-z0-9_-]{0,39}$/;
+  const area = () => { let k = null; try { k = X()?.ctxKey?.(); } catch {} return typeof k === 'string' && k !== 'overview' && k !== 'adaptive' && AREA_SHAPE.test(k) ? k : null; };
+  const areaName = (id) => { if (!id) return ''; try { const m = X()?.M?.[id]; if (m && m.name) return m.name; const c = (window.XENO_CUSTOM?.list?.() || []).find((x) => x.id === id); if (c) return c.name; } catch {} return id.charAt(0).toUpperCase() + id.slice(1); };
+  const areas = () => { const out = []; try { for (const m of window.XENO_MODES || []) out.push([m.id, areaName(m.id)]); for (const c of window.XENO_CUSTOM?.list?.() || []) if (AREA_SHAPE.test(c.id)) out.push([c.id, c.name]); } catch {} return out; };
   window.XENO_PG_LIBRARY.items = []; pstate('loading');
   const PAGE = 200, MAX_PAGES = 50;   // 10,000 items; past that the page says it is showing the newest
 
@@ -40,7 +46,7 @@
   function shape(it) {
     const created = it.created_at || it.updated_at || new Date().toISOString(), kind = kindOf(it);
     return { id: String(it.id), name: String(it.name || 'Untitled'), kind, bytes: Number(it.size_bytes) || 0, createdAt: created, updatedAt: it.updated_at || created,
-      source: { product: productOf(it), mode: 'overview', chat: it.conversation_title || null }, project: null, starred: it.starred === true, sharedBy: null, media: null, duration: null,
+      source: { product: productOf(it), mode: it.area || 'overview', chat: it.conversation_title || null }, area: it.area || null, areaName: it.area ? areaName(it.area) : '', project: null, starred: it.starred === true, sharedBy: null, media: null, duration: null,
       trashedAt: it.trashed_at || null, purgeAfter: it.purge_after || null,
       // where it lives: the person's own space, or a named workspace
       place: it.place_kind === 'workspace' ? String(it.workspace_name || 'A workspace') : 'Personal', workspaceUuid: it.place_kind === 'workspace' ? it.workspace_id : null,
@@ -50,15 +56,20 @@
   async function pages(view) {
     const out = []; let total = 0;
     for (let i = 0; i < MAX_PAGES; i++) {
-      const r = await api('GET', `/api/library/assets?limit=${PAGE}&offset=${i * PAGE}&sort=updated&view=${view}`).catch(() => ({ ok: false, d: {} }));
+      const here = area();
+      const r = await api('GET', `/api/library/assets?limit=${PAGE}&offset=${i * PAGE}&sort=updated&view=${view}${here ? '&area=' + encodeURIComponent(here) : ''}`).catch(() => ({ ok: false, d: {} }));
       if (!r.ok || !Array.isArray(r.d.items)) return null;
       out.push(...r.d.items); total = Number(r.d.total) || out.length;
       if (!r.d.has_more || !r.d.items.length) return { items: out, total, capped: false };
     }
     return { items: out, total, capped: true };
   }
+  let loadingArea = null;
   async function load() {
+    const here = area(); loadingArea = here;
     const [active, trash] = await Promise.all([pages('active'), pages('trash')]);
+    if (area() !== here) return load();   // the person moved to another area while this was on its way
+    L.area = here; loadingArea = null;
     if (!active || !trash) { L.status = 'error'; window.XENO_PG_LIBRARY.items = []; pstate('error'); paint(); return false; }
     window.XENO_PG_LIBRARY.items = [...active.items, ...trash.items].map(shape);
     L.status = 'ready'; L.total = active.total; L.capped = active.capped || trash.capped; pstate('normal'); paint(); return true;
@@ -97,6 +108,7 @@
     'library.star': async () => { const { files, on } = take(); return each(files, (f) => api(on ? 'PUT' : 'DELETE', `/api/library/assets/${at(f)}/star`), on ? 'starred' : 'unstarred'); },
     'library.rename': async () => { const { file, name } = take(); return each([file], (f) => api('PATCH', `/api/library/assets/${at(f)}`, { name }), 'renamed'); },
     'library.trash': async () => each(take(), (f) => api('POST', `/api/library/assets/${at(f)}/trash`), 'moved to the trash'),
+    'library.place': async () => { const { files, area: to } = take(); return each(files, (f) => api('PUT', `/api/library/assets/${at(f)}/area`, { area: to }), 'moved'); },
     'library.restore': async () => each(take(), (f) => api('POST', `/api/library/assets/${at(f)}/restore`), 'restored'),
     'library.purge': async () => each(take(), (f) => api('DELETE', `/api/library/trash/${at(f)}`), 'deleted'),
     'library.emptyTrash': async () => { take(); const r = await api('DELETE', '/api/library/trash'); if (!r.ok) { setTimeout(load, 0); return fail(r, 'The trash wasn’t emptied.'); } await load(); return { ok: true }; },
@@ -105,6 +117,7 @@
       for (const file of files) {
         const body = new FormData(); body.append('image', file, file.name);
         const headers = { 'x-xeno-surface': 'xeno-web' }; const t = P.csrf(); if (t) headers['x-xeno-csrf'] = t;
+        const here = area(); if (here) headers['x-xeno-area'] = here;   // an upload lands in the area it was made in
         let r, d = null;
         try { r = await fetch('/api/upload', { method: 'POST', credentials: 'same-origin', headers, body }); try { d = await r.json(); } catch {} }
         catch { setTimeout(load, 0); return { ok: false, code: 'offline', msg: `XENO could not be reached.${done ? ` ${done} of ${files.length} files were added.` : ' Nothing was added.'}` }; }
@@ -125,6 +138,15 @@
     if (ok) toast(on ? (files.length === 1 ? 'Starred' : `Starred ${files.length} files`) : (files.length === 1 ? 'Removed from Starred' : `Removed ${files.length} files from Starred`));
     return ok;
   }
+  // move files to another area, or to none (then they show on Overview only)
+  async function place(files, to) {
+    files = real(files).filter((f) => !f.trashedAt); if (!files.length) return false;
+    const ok = await run('library.place', { files, area: to }, 'Moving');
+    if (ok) toast(to ? `Moved ${many(files)} to ${areaName(to)}` : `Moved ${many(files)} out of every area`);
+    return ok;
+  }
+  // the library page asks on each paint: when the person has moved to another area, its list is reloaded
+  function sync() { if (L.status !== 'loading' && L.area !== undefined && area() !== L.area && loadingArea === null) { L.status = 'loading'; window.XENO_PG_LIBRARY.items = []; pstate('loading'); load(); } }
   async function rename(f) {
     if (!f || !f.live) return false;
     if (f.live.source === 'generation') { toast(WHY.rename_unsupported); return false; }
@@ -192,22 +214,26 @@
   if (window.XENO_FILES) Object.assign(window.XENO_FILES, { download, put: async () => {}, del: async () => {}, last: () => last });
 
   // ---------- menus: only what works ----------
+  // where a file lives: every area, and none; the one it is in is ticked
+  const areaMenu = (fs, label = 'Move to area') => ({ label, icon: 'grid', sub: () => [areas().map(([id, name]) => ({ label: name, icon: 'grid', checked: fs.every((f) => f.area === id), run: () => place(fs, id) })), [{ label: 'No area', hint: 'Overview only', icon: 'minus', checked: fs.every((f) => !f.area), run: () => place(fs, null) }]] });
   const fileMenu = (f, h) => (f.trashedAt
     ? [[{ label: 'Restore', icon: 'undo', run: () => restore([f]) }], [{ label: 'Copy name', icon: 'copy', run: () => h.copy(f.name, 'Name copied') }],
       [{ label: 'Delete forever…', icon: 'trash', danger: true, key: 'Delete', kbd: 'Del', run: () => purge([f]) }]]
     : [[{ label: 'Open', icon: 'open', key: 'Enter', kbd: '↵', run: h.open }, { label: 'Details', icon: 'info', kbd: 'I', run: h.details }],
       [{ label: f.starred ? 'Remove star' : 'Star', icon: 'star', key: 's', kbd: 'S', run: () => star([f]) }, ...(f.live.source === 'generation' ? [] : [{ label: 'Rename…', icon: 'edit', key: 'F2', kbd: 'F2', run: () => rename(f) }])],
       [{ label: 'Download', icon: 'download', run: () => download([f]) }, { label: 'Copy name', icon: 'copy', run: () => h.copy(f.name, 'Name copied') }],
+      [areaMenu([f])],
       [{ label: 'Move to Trash', icon: 'trash', danger: true, key: 'Delete', kbd: 'Del', run: () => trash([f]) }]]);
   const batchMenu = (fs, h) => { const N = `${fs.length} files`; return fs.every((f) => f.trashedAt)
     ? [[{ label: `Restore ${N}`, icon: 'undo', run: () => restore(fs) }], [{ label: 'Clear selection', icon: 'minus', kbd: 'Esc', run: h.clear }],
       [{ label: `Delete ${N} forever…`, icon: 'trash', danger: true, key: 'Delete', kbd: 'Del', run: () => purge(fs) }]]
     : [[{ label: fs.every((f) => f.starred) ? `Unstar ${N}` : `Star ${N}`, icon: 'star', key: 's', kbd: 'S', run: () => star(fs) }],
       [{ label: `Download ${N}`, hint: 'zip', icon: 'download', run: () => download(fs) }],
+      [areaMenu(fs, `Move ${N} to area`)],
       [{ label: 'Clear selection', icon: 'minus', kbd: 'Esc', run: h.clear }],
       [{ label: `Move ${N} to Trash`, icon: 'trash', danger: true, key: 'Delete', kbd: 'Del', run: () => trash(fs) }]]; };
 
   document.addEventListener('click', (e) => { const t = e.target.closest('[data-pg-retry="library"]'); if (t && L.status === 'error') { pstate('loading'); paint(); load(); } }, true);
-  window.XENO_LIB = { served: true, load, refuse, star, rename, trash, restore, purge, emptyTrash, upload, download, thumb, preview, viewNotYet, fileMenu, batchMenu, state: () => ({ status: L.status, total: L.total, capped: L.capped }) };
+  window.XENO_LIB = { served: true, place, sync, areas, areaName, area, load, refuse, star, rename, trash, restore, purge, emptyTrash, upload, download, thumb, preview, viewNotYet, fileMenu, batchMenu, state: () => ({ status: L.status, total: L.total, capped: L.capped }) };
   Promise.resolve(P.ready).then((user) => { if (user) P.first(load()); });   // the page waits for this first load before it shows
 })();

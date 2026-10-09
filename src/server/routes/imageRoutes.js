@@ -888,6 +888,7 @@ router.post('/generations', requireEntitlement('canUse'), async (req, res) => {
       const asset = await registerManagedLibraryFile(req.db, {
         userId,
         workspaceId,
+        area: req.xenoArea ?? null,
         filename,
         originalName: `Generated image ${ordinal}.${decoded.extension}`,
         mimeType: decoded.mimeType,
