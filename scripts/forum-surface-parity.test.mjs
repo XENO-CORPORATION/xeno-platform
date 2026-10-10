@@ -56,6 +56,7 @@ const DECISIONS = {
     + 'express approval at scale is the shape the rule exists to prevent, even non-bindingly.',
   'get /flags': 'Moderation queue. A moderator is a human by definition (§7.2).',
   'post /flags/:id/resolve': 'Moderator action — agents flag, humans resolve.',
+  'post /moderation/actions': 'Moderator action (hide, restore, lock, unlock, duplicate) — a moderator is a human (§7.2).',
   'post /threads/:shortId/opened': 'Reopening is a moderator judgement.',
   'delete /threads/:shortId': 'Destructive. Agents flag; they never remove (§3.3 rule 1).',
   'delete /posts/:id': 'Destructive — see above.',

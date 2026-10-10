@@ -1318,14 +1318,69 @@ export async function listFlags(db, user, { status = 'open', limit = 50 } = {}) 
  * post is one decision, and leaving the other two open would show a reviewer a
  * queue of work that has already been done.
  */
-export async function resolveFlag(db, user, flagId, { action, note } = {}) {
+/**
+ * A moderator's decision, written to the PUBLIC record (forum_moderation_actions) and applied to the target.
+ *   hide / restore   a post          (status hidden ↔ visible)
+ *   lock / unlock    a thread        (no new posts while locked; who and when are kept on the row)
+ *   duplicate        a thread → another thread, by short id; the original stays readable and points onward
+ * Every open flag on the target is resolved by the same decision. Needs the moderator capability.
+ */
+export async function moderate(db, user, { action, targetType, targetId, duplicateOf, reason, note } = {}) {
   await assertCan(db, user, 'review_flags');
-  if (!['dismiss', 'action'].includes(action)) {
-    throw new ForumError("action must be 'dismiss' or 'action'", 'invalid_action', 400);
+  const ACTS = { hide: 'post', restore: 'post', lock: 'thread', unlock: 'thread', duplicate: 'thread' };
+  if (!ACTS[action]) throw new ForumError("action must be 'hide', 'restore', 'lock', 'unlock' or 'duplicate'", 'invalid_action', 400);
+  if (targetType !== ACTS[action]) throw new ForumError(`${action} applies to a ${ACTS[action]}`, 'invalid_target', 400);
+  const REASONS = ['spam', 'abuse', 'off_topic', 'duplicate', 'low_quality', 'other'];
+  const why = reason == null || reason === '' ? (action === 'duplicate' ? 'duplicate' : null) : String(reason);
+  if (why && !REASONS.includes(why)) throw new ForumError('Unknown reason', 'invalid_reason', 400);
+  const words = note ? String(note).slice(0, 1000) : null;
+  const idOk = /^[0-9a-f-]{36}$/i.test(String(targetId || ''));
+  let threadId = null, dupId = null;
+  if (targetType === 'post') {
+    const p = idOk ? (await db.query('SELECT id, thread_id, status FROM forum_posts WHERE id = $1', [targetId])).rows[0] : null;
+    if (!p || p.status === 'deleted') throw new ForumError('Post not found', 'post_not_found', 404);
+    if (action === 'hide' && p.status === 'hidden') throw new ForumError('That post is already hidden', 'already_hidden', 409);
+    if (action === 'restore' && p.status !== 'hidden') throw new ForumError('That post is not hidden', 'not_hidden', 409);
+    threadId = p.thread_id;
+    await db.query('UPDATE forum_posts SET status = $2 WHERE id = $1', [p.id, action === 'hide' ? 'hidden' : 'visible']);
+  } else {
+    const t = idOk ? (await db.query('SELECT id, status FROM forum_threads WHERE id = $1', [targetId])).rows[0] : null;
+    if (!t || t.status === 'deleted') throw new ForumError('Thread not found', 'thread_not_found', 404);
+    threadId = t.id;
+    if (action === 'lock') {
+      if (t.status === 'locked') throw new ForumError('That thread is already locked', 'already_locked', 409);
+      await db.query("UPDATE forum_threads SET status = 'locked', locked_by = $2, locked_at = NOW() WHERE id = $1", [t.id, user.id]);
+    } else if (action === 'unlock') {
+      if (t.status !== 'locked') throw new ForumError('That thread is not locked', 'not_locked', 409);
+      await db.query("UPDATE forum_threads SET status = 'open', locked_by = NULL, locked_at = NULL WHERE id = $1", [t.id]);
+    } else {
+      const sid = String(duplicateOf || '').toLowerCase();
+      const canon = /^[a-f0-9]{8}$/.test(sid) ? (await db.query('SELECT id, status, duplicate_of FROM forum_threads WHERE short_id = $1', [sid])).rows[0] : null;
+      if (!canon || canon.status === 'deleted') throw new ForumError('The thread it duplicates was not found', 'duplicate_target_not_found', 404);
+      if (canon.id === t.id) throw new ForumError('A thread cannot duplicate itself', 'duplicate_of_self', 400);
+      // point at the thread people should read, never at another duplicate: chains send readers in circles
+      if (canon.status === 'duplicate' || canon.duplicate_of) throw new ForumError('That thread is itself a duplicate. Point at the one it duplicates.', 'duplicate_chain', 409);
+      dupId = canon.id;
+      await db.query("UPDATE forum_threads SET status = 'duplicate', duplicate_of = $2 WHERE id = $1", [t.id, dupId]);
+    }
+  }
+  await db.query(
+    'INSERT INTO forum_moderation_actions (action, target_type, target_id, thread_id, duplicate_of, moderator_id, reason, note) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)',
+    [action, targetType, targetId, threadId, dupId, user.id, why, words]);
+  const resolved = ['hide', 'lock', 'duplicate'].includes(action) ? (await db.query(
+    `UPDATE forum_flags SET status = 'actioned', resolved_by = $1, resolved_at = NOW(), resolution = $2
+      WHERE target_type = $3 AND target_id = $4 AND status IN ('open', 'reviewing')`, [user.id, words, targetType, targetId])).rowCount : 0;
+  return { ok: true, action, resolvedFlags: resolved };
+}
+
+export async function resolveFlag(db, user, flagId, { action, note, duplicateOf } = {}) {
+  await assertCan(db, user, 'review_flags');
+  if (!['dismiss', 'action', 'hide', 'lock', 'duplicate'].includes(action)) {
+    throw new ForumError("action must be 'dismiss', 'hide', 'lock' or 'duplicate'", 'invalid_action', 400);
   }
 
   const { rows } = await db.query(
-    'SELECT id, target_type, target_id, status FROM forum_flags WHERE id = $1',
+    'SELECT id, target_type, target_id, status, reason FROM forum_flags WHERE id = $1',
     [flagId],
   );
   const flag = rows[0];
@@ -1334,7 +1389,13 @@ export async function resolveFlag(db, user, flagId, { action, note } = {}) {
     throw new ForumError('That flag is already resolved', 'flag_already_resolved', 409);
   }
 
-  if (action === 'action') {
+  if (action !== 'dismiss') {
+    // every decision is recorded by moderate(), which also resolves every open flag on the target
+    const named = action === 'action' ? (flag.target_type === 'post' ? 'hide' : 'lock') : action;
+    const done = await moderate(db, user, { action: named, targetType: flag.target_type, targetId: flag.target_id, duplicateOf, reason: flag.reason, note });
+    return { ok: true, resolved: done.resolvedFlags, action: named };
+  }
+  if (false) {
     // 'hidden', not 'deleted': a moderator removing something is a different
     // fact from an author retracting it, and the public log has to be able to
     // tell them apart. Both are invisible to readers; only one is the author's
