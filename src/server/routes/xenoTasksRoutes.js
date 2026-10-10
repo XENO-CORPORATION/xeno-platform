@@ -26,6 +26,8 @@ import express from 'express';
 import * as tasks from '../services/xenoTasks.js';
 import { resolvePrincipal, assertPrincipalUsable } from '../services/agentIdentity.js';
 import * as mcp from '../services/tasksMcp.js';
+import { verifyTasksAccessToken, getClient } from '../utils/oidcProvider.js';
+import { acceptedSiteOrigins, issuer } from '../config/hosts.js';
 import { requireEntitlement } from '../middleware/requireEntitlement.js';
 
 const router = express.Router();   // mounted behind authMiddleware in index.js (see taskTokenAuth for agents)
@@ -33,8 +35,53 @@ const router = express.Router();   // mounted behind authMiddleware in index.js 
 /** Agents authenticate with their OWN Tasks credential (Authorization: Bearer xtk_…), never a person's.
  *  Mounted BEFORE authMiddleware: a valid credential becomes the agent principal; an invalid one is refused here
  *  (it never falls through to be read as something else). */
+/** Where an MCP client learns how to sign in (RFC 9728), for the host it was given. */
+export function resourceUrl(req) {
+  const origins = acceptedSiteOrigins();
+  const proto = String(req.headers['x-forwarded-proto'] || req.protocol || 'https').split(',')[0].trim();
+  // the edge terminates TLS (Cloudflare → nginx speaks http), so prefer the https form of the host asked for
+  const host = String(req.headers['x-forwarded-host'] || req.headers.host || '').split(',')[0].trim();
+  const secure = `https://${host}`, here = `${proto}://${host}`;
+  const origin = origins.includes(secure) ? secure : origins.includes(here) ? here : (origins.find((o) => o.startsWith('https://')) || issuer());
+  return { origin, resource: `${origin}/api/tasks/mcp`, metadata: `${origin}/.well-known/oauth-protected-resource/api/tasks/mcp` };
+}
+export function protectedResourceMetadata(req, res) {
+  const { resource } = resourceUrl(req);
+  res.set('cache-control', 'public, max-age=300');
+  res.json({ resource, resource_name: 'XENO Tasks', authorization_servers: [issuer()], scopes_supported: ['tasks:read', 'tasks:write'],
+    bearer_methods_supported: ['header'], resource_documentation: `${resourceUrl(req).origin}/workspace/tasks/Agents` });
+}
+const challenge = (req, res, body, error) => {
+  res.set('WWW-Authenticate', `Bearer resource_metadata="${resourceUrl(req).metadata}"${error ? `, error="${error}"` : ''}, scope="tasks:read tasks:write"`);
+  return res.status(401).json(body);
+};
+/** MCP clients discover sign-in from a 401 that names the resource metadata (MCP authorization spec). */
+export function mcpChallenge(req, res, next) {
+  if (req.path === '/mcp' && !req.headers.authorization) return challenge(req, res, { success: false, error: 'Sign in to use XENO Tasks', code: 'auth_required' });
+  next();
+}
+
 export async function taskTokenAuth(req, res, next) {
-  const h = String(req.headers.authorization || ''), raw = h.startsWith('Bearer xtk_') ? h.slice(7).trim() : null;
+  const h = String(req.headers.authorization || '');
+  const bearer = /^Bearer\s+(.+)$/i.exec(h)?.[1]?.trim() || null;
+  if (bearer && !bearer.startsWith('xtk_') && /^[\w-]+\.[\w-]+\.[\w-]+$/.test(bearer)) {
+    // an OAuth access token for the Tasks audience: the person's MCP agent, never the person
+    try {
+      const claims = await verifyTasksAccessToken(req.db, bearer);
+      if (!claims) return next();                       // a first-party token: authMiddleware handles it as the person
+      const scopes = String(claims.scope || '').split(/\s+/).filter((s) => s === 'tasks:read' || s === 'tasks:write');
+      if (!scopes.length) return challenge(req, res, { success: false, error: 'This sign-in has no Tasks access', code: 'insufficient_scope' }, 'insufficient_scope');
+      const client = claims.client_id ? await getClient(req.db, claims.client_id) : null;
+      const agentId = await tasks.mcpAgentFor(req.db, claims.sub, client ? client.name : null);
+      req.user = { id: agentId };
+      req.taskToken = { agentUserId: agentId, scopes, taskId: null, via: 'oauth', clientId: claims.client_id || null, ownerId: String(claims.sub) };
+      return next();
+    } catch (e) {
+      if (e instanceof tasks.TaskError) return res.status(e.status).json({ success: false, error: e.message, code: e.code });
+      return challenge(req, res, { success: false, error: 'This sign-in is no longer valid. Sign in again.', code: 'invalid_token' }, 'invalid_token');
+    }
+  }
+  const raw = bearer && bearer.startsWith('xtk_') ? bearer : null;
   if (!raw) return next();
   try {
     const tok = await tasks.resolveTaskToken(req.db, raw);
@@ -63,7 +110,8 @@ router.use(handledMw(async (req) => {
     if (!m || req.method === 'DELETE' && !/attachments/.test(req.path)) throw new tasks.TaskError('This credential is for one task only', 'single_task', 403);
     const id = (await req.db.query('SELECT id FROM tasks WHERE number = $1', [m[1].slice(2)])).rows[0];
     if (!id || String(id.id) !== tok.taskId) throw new tasks.TaskError('This credential is for one task only', 'single_task', 403);
-  } else if (/^\/agents(\/|$)/.test(req.path)) throw new tasks.TaskError('Agents can’t manage agents', 'not_allowed', 403);
+  }
+  if (/^\/agents(\/|$)/.test(req.path)) throw new tasks.TaskError('Agents can’t manage agents', 'not_allowed', 403);
 }));
 function handledMw(fn) { return async (req, res, next) => { try { await fn(req); next(); } catch (error) { if (error instanceof tasks.TaskError) return res.status(error.status).json({ success: false, error: error.message, code: error.code }); console.error('[tasks]', error); res.status(500).json({ success: false, error: 'Internal server error' }); } }; }
 const handled = (fn) => async (req, res) => {
@@ -94,8 +142,32 @@ router.delete('/agents/tokens/:id', handled(async (req, res) => { res.json({ suc
 router.put('/agents/webhook', handled(async (req, res) => { res.json({ success: true, ...(await tasks.setAgentWebhook(req.db, req.me, req.body || {})) }); }));
 router.get('/agent/events', handled(async (req, res) => { res.json({ success: true, ...(await tasks.agentEvents(req.db, req.me, { after: req.query.after, limit: req.query.limit })) }); }));
 router.get('/agent/me', handled(async (req, res) => { res.json({ success: true, agent: { id: String(req.me.id), name: req.me.name, kind: req.me.kind, scopes: req.taskToken ? req.taskToken.scopes : null, task: req.taskToken && req.taskToken.taskId ? true : false }, tasks: (await tasks.listTasks(req.db, req.me, { delegate: 'me', status: 'raised,todo,in_progress,blocked,in_review' })).filter((x) => !req.taskToken || !req.taskToken.taskId || String(x.id) === req.taskToken.taskId) }); }));
-router.get('/mcp', (req, res) => res.json(mcp.manifest()));
-router.post('/mcp', async (req, res) => { try { res.json(await mcp.dispatch(req.db, req.me, req.body || {})); } catch (error) { console.error('[tasks mcp]', error); res.status(500).json({ jsonrpc: '2.0', id: req.body && req.body.id != null ? req.body.id : null, error: { code: -32603, message: 'Internal error' } }); } });
+router.get('/projects', handled(async (req, res) => { res.json({ success: true, projects: await tasks.listTaskProjects(req.db, req.me) }); }));
+router.get('/agents/:id/projects', handled(async (req, res) => { res.json({ success: true, ...(await tasks.agentProjects(req.db, req.me, req.params.id)) }); }));
+router.put('/agents/:id/projects/:projectId', handled(async (req, res) => { res.json({ success: true, ...(await tasks.addAgentProject(req.db, req.me, req.params.id, req.params.projectId, req.body?.relation || 'editor')) }); }));
+router.delete('/agents/:id/projects/:projectId', handled(async (req, res) => { res.json({ success: true, ...(await tasks.removeAgentProject(req.db, req.me, req.params.id, req.params.projectId)) }); }));
+
+// MCP over Streamable HTTP (spec 2025-06-18): stateless JSON responses, no server-initiated stream.
+const mcpOriginOk = (req) => { const o = req.headers.origin; return !o || acceptedSiteOrigins().includes(o) || /^https?:\/\/(localhost|127\.0\.0\.1|\[::1\])(:\d+)?$/.test(o); };
+router.get('/mcp', (req, res) => {
+  if (String(req.headers.accept || '').includes('text/event-stream')) { res.set('Allow', 'POST'); return res.status(405).json({ error: 'This server does not open a server-to-client stream; send requests with POST.' }); }
+  res.json(mcp.manifest(resourceUrl(req)));
+});
+router.delete('/mcp', (req, res) => { res.set('Allow', 'POST'); res.status(405).end(); });
+router.post('/mcp', async (req, res) => {
+  const body = req.body;
+  // DNS-rebinding guard (the spec's MUST): a browser page on another origin may not drive this endpoint
+  if (!mcpOriginOk(req)) return res.status(403).json({ jsonrpc: '2.0', id: null, error: { code: -32600, message: 'Origin not allowed' } });
+  if (Array.isArray(body)) return res.status(400).json({ jsonrpc: '2.0', id: null, error: { code: -32600, message: 'Batched requests are not supported (MCP 2025-06-18)' } });
+  const pv = req.headers['mcp-protocol-version'];
+  if (pv && !mcp.PROTOCOL_VERSIONS.includes(String(pv))) return res.status(400).json({ jsonrpc: '2.0', id: body && body.id != null ? body.id : null, error: { code: -32600, message: `Unsupported MCP-Protocol-Version ${pv}; supported: ${mcp.PROTOCOL_VERSIONS.join(', ')}` } });
+  // a notification or a response carries no id: accept it, answer nothing
+  if (body && typeof body === 'object' && body.id === undefined) return res.status(202).end();
+  try {
+    const out = await mcp.dispatch(req.db, req.me, body || {}, { project: String(req.headers['x-xeno-tasks-project'] || '') || null });
+    res.json(out);
+  } catch (error) { console.error('[tasks mcp]', error); res.status(500).json({ jsonrpc: '2.0', id: body && body.id != null ? body.id : null, error: { code: -32603, message: 'Internal error' } }); }
+});
 router.get('/assignees', handled(async (req, res) => { res.json({ success: true, assignees: await tasks.listAssignees(req.db, req.me, { projectId: req.query.projectId }) }); }));
 router.get('/:key', handled(async (req, res) => { res.json({ success: true, task: await tasks.getTask(req.db, req.me, req.params.key) }); }));
 router.patch('/:key', handled(async (req, res) => { res.json({ success: true, task: await tasks.updateTask(req.db, req.me, req.params.key, req.body || {}) }); }));

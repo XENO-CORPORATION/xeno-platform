@@ -564,13 +564,45 @@
     if (T.agents === null) return '<p class="tk-msg" data-tk-state="loading">Loading agents…</p>';
     if (T.agents === 'error') return '<p class="tk-msg" data-tk-state="error">The agents couldn’t be loaded. <button class="pg-link" data-tk="agents-retry">Try again</button></p>';
     const top = `<div class="tk-bar">${H().btn('New agent', 'data-tk="agent-new"', false, 'plus')}<span class="tk-sp"></span><small class="tk-dim">An agent works through its own credential, never yours. Delegate a task to it from the task’s Agent field.</small></div>`;
-    if (!T.agents.length) return top + `<div class="tk-first" data-tk-state="empty"><p>No agents yet. Create one, give it a credential, and point your agent CLI at XENO Tasks over MCP or the API. Or open any task and use <b>Copy for agent</b>: that makes a hand-off agent with a credential for that one task.</p></div>`;
+    const connect = connectPanel();
+    if (!T.agents.length) return top + connect + `<div class="tk-first" data-tk-state="empty"><p>No agents yet. Create one, give it a credential, and point your agent CLI at XENO Tasks over MCP or the API. Or open any task and use <b>Copy for agent</b>: that makes a hand-off agent with a credential for that one task.</p></div>`;
     const fmt = (d) => (d ? new Date(d).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' }) : '');
-    return top + `<div class="tk-agents">${T.agents.map((a) => `<article class="tk-agent" data-tk-agent="${esc(a.id)}">
+    return top + connect + `<div class="tk-agents">${T.agents.map((a) => `<article class="tk-agent" data-tk-agent="${esc(a.id)}">
       <header>${face({ name: a.name, kind: 'agent' }, true)}<div><b>${esc(a.name)}</b><small>@${esc(a.username)}${a.origin === 'handoff' ? ' · hand-off agent' : ''} · ${a.openTasks || 0} open task${a.openTasks === 1 ? '' : 's'}</small></div><span class="tk-sp"></span>${H().btn('New credential', `data-tk="agent-token" data-arg="${esc(a.id)}"`, false, 'plus')}</header>
+      <div class="tk-agent-sec" data-tk-agent-projects><h4>Projects<button class="tk-link" data-tk="agent-addproj" data-arg="${esc(a.id)}">${ic('plus')}Add</button></h4>${(a.projects || []).length ? `<div class="tk-chips">${a.projects.map((p) => `<span class="tk-pchip" data-tk-proj="${esc(p.id)}">${ic('folder')}${esc(p.name)}<small>${p.canEdit ? 'can work' : 'can read'}</small><button class="tk-x" data-tk="agent-rmproj" data-arg="${esc(a.id)}|${esc(p.id)}" aria-label="Remove ${esc(p.name)}">${ic('x')}</button></span>`).join('')}</div>` : `<p class="tk-dim">${a.origin === 'mcp' ? 'Not on any project yet, so it only sees tasks delegated to it.' : 'None. It only sees tasks delegated to it.'} Add a project to let it find and take work there.</p>`}</div>
       <div class="tk-agent-sec"><h4>Credentials</h4>${a.tokens.length ? a.tokens.map((k) => `<div class="tk-tok" data-tk-tok="${esc(k.id)}"><code>${esc(k.hint)}</code><span>${esc(k.label || (k.task ? 'One task: ' + k.task : 'All delegated work'))}</span><small>${k.scopes.includes('tasks:write') ? 'Read and write' : 'Read only'} · ${k.lastUsedAt ? 'used ' + esc(when(k.lastUsedAt)) : 'never used'} · expires ${esc(fmt(k.expiresAt))}</small><button class="tk-link tk-link--danger" data-tk="agent-revoke" data-arg="${esc(k.id)}">Revoke</button></div>`).join('') : '<p class="tk-dim">None. Without a credential this agent can’t reach XENO Tasks.</p>'}</div>
       <div class="tk-agent-sec"><h4>Webhook</h4>${a.webhook ? `<div class="tk-tok"><code>${esc(a.webhook)}</code><small>Every delivery is signed (HMAC-SHA256) and retried if it fails</small><button class="tk-link" data-tk="agent-hook" data-arg="${esc(a.id)}">Change</button><button class="tk-link tk-link--danger" data-tk="agent-unhook" data-arg="${esc(a.id)}">Remove</button></div>` : `<p class="tk-dim">None. The agent can still poll its events. <button class="pg-link" data-tk="agent-hook" data-arg="${esc(a.id)}">Add a webhook</button></p>`}</div>
     </article>`).join('')}</div>`;
+  }
+  // how a person connects an agent CLI: one hosted MCP server, signed in with XENO (OAuth); nothing to install
+  function connectPanel() {
+    const url = location.origin + '/api/tasks/mcp';
+    const rows = [
+      ['Claude Code', `claude mcp add --transport http xeno-tasks ${url}`],
+      ['Codex', `codex mcp add xeno-tasks --url ${url}`],
+      ['Cursor / VS Code', JSON.stringify({ mcpServers: { 'xeno-tasks': { url } } })],
+      ['Link a folder to a project', 'npx @xenosystem/tasks link --project <id from the project’s Tasks tab>'],
+    ];
+    return `<section class="tk-connect" data-tk-connect><header><b>Connect an agent CLI</b><small>Add XENO Tasks as an MCP server, then sign in with XENO when the CLI asks. It works as its own agent, named after the app; add it to a project below so it can find work.</small></header>
+      ${rows.map(([l, c], i) => `<div class="tk-cmd"><span>${esc(l)}</span><code>${esc(c)}</code><button class="tk-link" data-tk="copy-cmd" data-arg="${i}">${ic('share')}Copy</button></div>`).join('')}</section>`;
+  }
+  async function agentProject(what, arg, el) {
+    if (what === 'add') {
+      const res = await api('GET', '/api/tasks/projects').catch(() => null);
+      if (!res || !res.ok) return toast(said(res, 'Your projects couldn’t be loaded.'));
+      const a = (T.agents || []).find((x) => x.id === arg), have = new Set((a && a.projects || []).map((p) => p.id));
+      const items = res.d.projects.filter((p) => !have.has(p.id)).map((p) => ({ id: p.id, label: p.name, sub: p.area ? P.areaName(p.area) : '', lead: ic('folder') }));
+      if (!items.length) return toast('It is already on every project you have');
+      return pick({ anchor: el, placeholder: 'Add to project…', items, footer: 'It can take tasks there, comment and send work for review. Needs you to be a project admin.', onPick: async (it) => {
+        const r2 = await api('PUT', `/api/tasks/agents/${encodeURIComponent(arg)}/projects/${encodeURIComponent(it.id)}`, {}).catch(() => null);
+        if (!r2 || !r2.ok) return toast(said(r2, 'It couldn’t be added.'));
+        T.agents = undefined; patch(); toast(`Added to ${it.label}`);
+      } });
+    }
+    const [agentId, projectId] = String(arg).split('|');
+    const r3 = await api('DELETE', `/api/tasks/agents/${encodeURIComponent(agentId)}/projects/${encodeURIComponent(projectId)}`).catch(() => null);
+    if (!r3 || !r3.ok) return toast(said(r3, 'It couldn’t be removed.'));
+    T.agents = undefined; patch(); toast('Removed from the project');
   }
   async function loadAgents() { const res = await api('GET', '/api/tasks/agents').catch(() => null); T.agents = res && res.ok ? res.d.agents : 'error'; patch(); }
   // how to connect, given a credential: MCP config for agent CLIs, plain HTTP for everything else
@@ -649,7 +681,7 @@
   }
   function projectRegion(id) {
     const got = T.byProject.get(id);
-    const top = `<div class="tk-bar">${H().btn('New task in this project', `data-tk="new" data-arg="${esc(id)}"`, false, 'plus')}<span class="tk-sp"></span><small class="tk-dim">Drag a card to move it · right-click for more</small></div>`;
+    const top = `<div class="tk-bar">${H().btn('New task in this project', `data-tk="new" data-arg="${esc(id)}"`, false, 'plus')}<button class="tk-link" data-tk="link-cmd" data-arg="${esc(id)}" title="Copy the command that links a local folder to this project for Claude Code, Codex and other agent CLIs">${ic('bot')}Connect an agent</button><span class="tk-sp"></span><small class="tk-dim">Drag a card to move it · right-click for more</small></div>`;
     if (!got || got === 'loading') return top + '<p class="tk-msg" data-tk-state="loading">Loading tasks…</p>';
     if (got === 'error') return top + `<p class="tk-msg" data-tk-state="error">The tasks couldn’t be loaded. <button class="pg-link" data-tk="retry-project" data-arg="${esc(id)}">Try again</button></p>`;
     return top + (got.length ? boardOf(got, true) + bulkBar(got) : '<p class="tk-msg" data-tk-state="empty">No tasks in this project yet.</p>');
@@ -1125,6 +1157,9 @@
     'clear-filters': () => { T.f = { ...F0(), sort: T.f.sort, layout: T.f.layout }; T.viewId = null; saveF(); patch(); },
     'save-view': () => saveViewNow(),
     view: (id) => (T.viewId === id ? ACT['clear-filters']() : applyView(id)),
+    'agent-addproj': (id, el) => agentProject('add', id, el), 'agent-rmproj': (arg) => agentProject('remove', arg),
+    'link-cmd': (id) => window.XCM.H.copy(`npx @xenosystem/tasks link --project ${id}`, 'Copied — run it in the folder, then sign in from your agent CLI'),
+    'copy-cmd': (i) => { const c = [...document.querySelectorAll('[data-tk-connect] code')][+i]; if (c) window.XCM.H.copy(c.textContent, 'Copied'); },
     'agent-new': () => agentAct('new'), 'agent-token': (id) => agentAct('token', id), 'agent-revoke': (id) => agentAct('revoke', id), 'agent-hook': (id) => agentAct('hook', id), 'agent-unhook': (id) => agentAct('unhook', id), 'agents-retry': () => { T.agents = undefined; patch(); },
     reply: (k) => { const c = document.querySelector(`[data-tk-keep="comment:${k}"]`); if (c) { c.scrollIntoView({ block: 'center' }); c.focus(); } },
     watch: (k) => watchToggle(k), prompt: (k) => copyPrompt(k), copylink: (k) => window.XCM.H.copyLink(`#/${P.area() || 'overview'}/g/tasks/${k}`), 'add-link': (k) => addLink(k), unlink: (arg) => { const [k, id] = arg.split('|'); return unlink(k, id); },

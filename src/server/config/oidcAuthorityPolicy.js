@@ -11,6 +11,8 @@ export const OIDC_SCOPES = Object.freeze([
   'workforce:read', 'workforce:manage',
   'billing:read', 'billing:manage', 'marketplace:payout', 'account:logout',
   'broker:enroll', 'broker:exchange',
+  // XENO Tasks over MCP: the only scopes a self-registered (RFC 7591) client can ever hold
+  'tasks:read', 'tasks:write',
 ]);
 
 const IDENTITY = ['openid', 'profile', 'email'];
