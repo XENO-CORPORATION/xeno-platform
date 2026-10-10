@@ -3462,19 +3462,19 @@ const ChatWithLLM: React.FC<ChatWithLLMProps> = ({
       return;
     }
     const path = pathname;
-    if (path.startsWith('/scheduled') || path.startsWith('/overview/chat/scheduled')) {
+    if (path.startsWith('/scheduled') || path.startsWith('/chat/scheduled') || path.startsWith('/overview/chat/scheduled')) {
       openScheduledPage();
       return;
     }
-    if (path.startsWith('/library') || path.startsWith('/overview/chat/library') || path.startsWith('/artifacts') || path.startsWith('/overview/chat/artifacts')) {
+    if (path.startsWith('/library') || path.startsWith('/chat/library') || path.startsWith('/overview/chat/library') || path.startsWith('/artifacts') || path.startsWith('/overview/chat/artifacts')) {
       openArtifactsPage();
       return;
     }
-    if (path.startsWith('/customize') || path.startsWith('/overview/chat/customize')) {
+    if (path.startsWith('/customize') || path.startsWith('/chat/customize') || path.startsWith('/overview/chat/customize')) {
       openCustomizePage();
       return;
     }
-    if (path.startsWith('/settings') || path.startsWith('/overview/chat/settings')) {
+    if (path.startsWith('/settings') || path.startsWith('/chat/settings') || path.startsWith('/overview/chat/settings')) {
       openGlobalSettingsPage();
       return;
     }

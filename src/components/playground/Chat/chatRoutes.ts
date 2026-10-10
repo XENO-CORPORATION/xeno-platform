@@ -1,11 +1,13 @@
 /**
  * The chat surface's URL scheme, in ONE pure module.
  *
- *   /overview/chat/llm                                  new chat
- *   /overview/chat/llm/:conversationId                  a conversation that belongs to no project
- *   /overview/chat/projects                             the project list
- *   /overview/chat/projects/:projectId                  a project's home (chats, instructions, files, composer)
- *   /overview/chat/projects/:projectId/c/:conversationId   a conversation INSIDE its project
+ *   /chat                                               new chat
+ *   /chat/c/:conversationId                             a conversation that belongs to no project
+ *   /chat/projects                                      the project list
+ *   /chat/projects/:projectId                           a project's home (chats, instructions, files, composer)
+ *   /chat/projects/:projectId/c/:conversationId         a conversation INSIDE its project
+ *
+ * The old /overview/chat/... and /overview/c/... forms still parse (links from before keep working).
  *
  * The compact forms (`/c/:id`, `/projects`, `/projects/:id`, `/projects/:id/c/:cid`, `/chat/c/:id`)
  * and the `/overview/c/:id` form parse to the same locations, so an old link, a pushed URL and a
@@ -119,12 +121,12 @@ export function parseChatLocation(pathname: string): ChatLocation {
 
 const enc = encodeURIComponent;
 
-export const CHAT_ROOT_PATH = '/overview/chat/llm';
-export const buildProjectsPath = (): string => '/overview/chat/projects';
-export const buildProjectPath = (projectId: string): string => `/overview/chat/projects/${enc(projectId)}`;
+export const CHAT_ROOT_PATH = '/chat';
+export const buildProjectsPath = (): string => '/chat/projects';
+export const buildProjectPath = (projectId: string): string => `/chat/projects/${enc(projectId)}`;
 export const buildProjectConversationPath = (projectId: string, conversationId: string): string =>
   `${buildProjectPath(projectId)}/c/${enc(conversationId)}`;
-export const buildConversationPath = (conversationId: string): string => `${CHAT_ROOT_PATH}/${enc(conversationId)}`;
+export const buildConversationPath = (conversationId: string): string => `/chat/c/${enc(conversationId)}`;
 
 /** The one URL a conversation lives at: project-scoped when it has a project, plain otherwise. */
 export function buildChatConversationPath(projectId: string | null | undefined, conversationId: string): string {

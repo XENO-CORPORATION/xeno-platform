@@ -120,14 +120,14 @@ const isXenoChatDomain = typeof window !== 'undefined' &&
 const ConversationRouteRedirect: React.FC = () => {
   const { conversationId } = useParams<{ conversationId?: string }>();
   const target = conversationId
-    ? `/overview/chat/llm/${encodeURIComponent(conversationId)}`
-    : '/overview/chat/llm';
+    ? `/chat/c/${encodeURIComponent(conversationId)}`
+    : '/chat';
   return <Navigate to={target} replace />;
 };
 
 const LibraryRouteRedirect: React.FC = () => {
   const location = useLocation();
-  return <Navigate to={`/overview/chat/library${location.search}`} replace />;
+  return <Navigate to={`/chat/library${location.search}`} replace />;
 };
 
 /**
@@ -138,10 +138,10 @@ const LibraryRouteRedirect: React.FC = () => {
 const ProjectRouteRedirect: React.FC = () => {
   const { projectId, conversationId } = useParams<{ projectId?: string; conversationId?: string }>();
   const target = projectId && conversationId
-    ? `/overview/chat/projects/${encodeURIComponent(projectId)}/c/${encodeURIComponent(conversationId)}`
+    ? `/chat/projects/${encodeURIComponent(projectId)}/c/${encodeURIComponent(conversationId)}`
     : projectId
-      ? `/overview/chat/projects/${encodeURIComponent(projectId)}`
-      : '/overview/chat/projects';
+      ? `/chat/projects/${encodeURIComponent(projectId)}`
+      : '/chat/projects';
   return <Navigate to={target} replace />;
 };
 
@@ -363,19 +363,22 @@ function App() {
             <Route path="/projects/:projectId/c/:conversationId" element={<ProjectRouteRedirect />} />
             <Route path="/projects/:projectId" element={<ProjectRouteRedirect />} />
             <Route path="/projects" element={<ProjectRouteRedirect />} />
-            <Route path="/scheduled" element={<Navigate to="/overview/chat/scheduled" replace />} />
+            <Route path="/scheduled" element={<Navigate to="/chat/scheduled" replace />} />
             <Route path="/library" element={<LibraryRouteRedirect />} />
             <Route path="/artifacts" element={<LibraryRouteRedirect />} />
-            <Route path="/customize" element={<Navigate to="/overview/chat/customize" replace />} />
+            <Route path="/customize" element={<Navigate to="/chat/customize" replace />} />
 
             {/* Public Shared Conversation Viewer (no auth required) */}
             <Route path="/share/:token" element={<SharedChatView />} />
             <Route path="/share/e/:token" element={<SharedChatView />} />
 
             {/* /chat -> the overview chat */}
-            <Route path="/chat" element={<Navigate to="/overview/chat/llm" replace />} />
-            <Route path="/chat/c/:conversationId" element={
-              <ConversationRouteRedirect />
+            {/* The chat: /chat, /chat/c/:id, /chat/projects/... (src/components/playground/Chat/chatRoutes.ts). It runs in
+                the same shell as before, which drops its chrome inside the workspace frame. */}
+            <Route path="/chat/*" element={
+              <ProtectedRoute>
+                <OverviewPage />
+              </ProtectedRoute>
             } />
 
             {/* Test comparison routes for user evaluation */}

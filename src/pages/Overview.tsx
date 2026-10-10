@@ -115,6 +115,8 @@ const CapabilityHandoff: React.FC<{ title: string; detail: string; productPath: 
 const OverviewContent: React.FC = () => {
   const navigate = useNavigate();
   const location = useLocation();
+  // mounted at /chat/* (the chat's own address) rather than /overview/*
+  const chatMount = location.pathname === '/chat' || location.pathname.startsWith('/chat/');
   const {
     preference: platformThemePreference,
     resolvedTheme: platformTheme,
@@ -294,7 +296,24 @@ const OverviewContent: React.FC = () => {
         {/* Main content area - full width, minus taskbar width */}
         <div style={{ flex: 1, overflow: 'hidden' }}>
           <DisplayContainer background={isImageGenerationCopyRoute ? '#000000' : undefined}>
-          <Routes>
+          {chatMount ? <Routes>
+            <Route path="/" element={<MultiChatContainer />} />
+            <Route path="c" element={<MultiChatContainer />} />
+            <Route path="c/:conversationId" element={<MultiChatContainer />} />
+            <Route path="llm/:conversationId" element={<MultiChatContainer />} />
+            <Route path="projects" element={<MultiChatContainer />} />
+            <Route path="projects/:projectId" element={<MultiChatContainer />} />
+            <Route path="projects/:projectId/c/:conversationId" element={<MultiChatContainer />} />
+            <Route path="library" element={<MultiChatContainer />} />
+            <Route path="library/:libraryItemId" element={<MultiChatContainer />} />
+            <Route path="artifacts" element={<MultiChatContainer />} />
+            <Route path="artifacts/:artifactId" element={<MultiChatContainer />} />
+            <Route path="scheduled" element={<MultiChatContainer />} />
+            <Route path="customize" element={<MultiChatContainer />} />
+            <Route path="settings" element={<MultiChatContainer />} />
+            <Route path="skills" element={<MultiChatContainer />} />
+            <Route path="*" element={<MultiChatContainer />} />
+          </Routes> : <Routes>
             {/* Full-screen canvas view - no header or sidebar */}
             <Route path="/labs/:labId/canvas" element={<CanvasView />} />
             {/* Main overview home */}
@@ -423,7 +442,7 @@ const OverviewContent: React.FC = () => {
             <Route path="playground/studio/video" element={<Navigate to="studio/video" replace />} />
             <Route path="playground/studio/audio" element={<Navigate to="studio/audio" replace />} />
             <Route path="playground/studio/inpainting" element={<Navigate to="studio/inpainting" replace />} />
-          </Routes>
+          </Routes>}
           </DisplayContainer>
         </div>
         
