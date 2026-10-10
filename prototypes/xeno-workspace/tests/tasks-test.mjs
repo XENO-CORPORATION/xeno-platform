@@ -100,6 +100,9 @@ try {
   await p.keyboard.press('c'); await p.waitForSelector('.xd [data-tk-new]', { timeout: 4000 });
   { const lay = await p.evaluate(() => { const m = document.querySelector('.xd .tk-nw-main').getBoundingClientRect(), s = document.querySelector('.xd .tk-nw-props').getBoundingClientRect(); return { right: s.left >= m.right - 1, rows: document.querySelectorAll('.xd .tk-nw-props .tk-prop').length, crumb: document.querySelector('.xd .tk-nw-crumb').textContent }; });
     ok(lay.right && lay.rows >= 9 && /Tasks\s*\/\s*New task/.test(lay.crumb) && !!(await p.$('.xd .tk-ed-bar')), 'C opens the New task window as a workspace pane: breadcrumb, editor, and the properties column on the right (' + lay.rows + ' rows)'); }
+  { const open = () => p.evaluate(() => !document.querySelector('.tk-pick').hidden), c = '.xd [data-n-chip="kind"]';
+    await p.click(c); await settle(250); const s1 = await open(); await p.click(c); await settle(250); const s2 = await open(); await p.click(c); await settle(250); const s3 = await open();
+    ok(s1 && !s2 && s3, `a field in the New task window toggles its picker: open, close, open (${[s1, s2, s3]})`); await p.keyboard.press('Escape'); await settle(200); }
   await p.type('.xd [data-n-title]', 'Write the launch post');
   await p.type('.xd textarea', 'Cover what changed.\n- [ ] draft\n- [ ] review\n');
   await pasteImage('.xd textarea'); await settle(300);
