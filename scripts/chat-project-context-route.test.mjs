@@ -72,10 +72,10 @@ test('other surfaces, and the ACCOUNT projects page, are not chat locations', ()
 });
 
 test('builders produce the canonical URL and round-trip through the parser', () => {
-  assert.equal(buildProjectsPath(), '/overview/chat/projects');
-  assert.equal(buildProjectPath(P), '/overview/chat/projects/p-1');
-  assert.equal(buildProjectConversationPath(P, C), `/overview/chat/projects/p-1/c/${C}`);
-  assert.equal(buildChatConversationPath(null, C), '/overview/chat/llm/' + C);
+  assert.equal(buildProjectsPath(), '/chat/projects');
+  assert.equal(buildProjectPath(P), '/chat/projects/p-1');
+  assert.equal(buildProjectConversationPath(P, C), `/chat/projects/p-1/c/${C}`);
+  assert.equal(buildChatConversationPath(null, C), '/chat/c/' + C);
   assert.equal(buildChatConversationPath(P, C), buildProjectConversationPath(P, C));
   for (const [p, c] of [[P, C], [null, C], ['convo-1', 'convo-1790000000000']]) {
     const parsed = parseChatLocation(buildChatConversationPath(p, c));
@@ -87,11 +87,11 @@ test('builders produce the canonical URL and round-trip through the parser', () 
 
 test('URL correction: wrong or missing project is replaced; project home and other chats are never rewritten', () => {
   // conversation belongs to B, URL says A -> B
-  assert.equal(conversationUrlCorrection(`/overview/chat/projects/A/c/${C}`, C, 'B'), `/overview/chat/projects/B/c/${C}`);
+  assert.equal(conversationUrlCorrection(`/overview/chat/projects/A/c/${C}`, C, 'B'), `/chat/projects/B/c/${C}`);
   // plain URL, conversation has a project -> project URL
   assert.equal(conversationUrlCorrection('/overview/chat/llm/' + C, C, P), buildProjectConversationPath(P, C));
   // moved OUT of a project -> plain URL
-  assert.equal(conversationUrlCorrection(buildProjectConversationPath(P, C), C, null), '/overview/chat/llm/' + C);
+  assert.equal(conversationUrlCorrection(buildProjectConversationPath(P, C), C, null), '/chat/c/' + C);
   // already right
   assert.equal(conversationUrlCorrection(buildProjectConversationPath(P, C), C, P), null);
   assert.equal(conversationUrlCorrection('/overview/chat/llm/' + C, C, null), null);
@@ -165,7 +165,10 @@ test('the project sidebar section, breadcrumb and route notices are mounted', ()
 test('the routes exist: Overview mounts the surface and App redirects the compact form', () => {
   assert.match(overview, /path="chat\/projects\/:projectId\/c\/:conversationId" element=\{<MultiChatContainer \/>\}/);
   assert.match(app, /path="\/projects\/:projectId\/c\/:conversationId" element=\{<ProjectRouteRedirect \/>\}/);
-  assert.match(app, /\/overview\/chat\/projects\/\$\{encodeURIComponent\(projectId\)\}\/c\/\$\{encodeURIComponent\(conversationId\)\}/);
+  assert.match(app, /\/chat\/projects\/\$\{encodeURIComponent\(projectId\)\}\/c\/\$\{encodeURIComponent\(conversationId\)\}/);
+  // the chat has its own address: /chat/* mounts the surface, and that shell answers it with the chat routes
+  assert.match(app, /<Route path="\/chat\/\*" element=\{/);
+  assert.match(overview, /chatMount \? <Routes>[\s\S]*?path="projects\/:projectId\/c\/:conversationId" element=\{<MultiChatContainer \/>\}/);
 });
 
 test('a project deleted while open does not leave its address behind', () => {

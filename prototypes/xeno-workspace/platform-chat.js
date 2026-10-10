@@ -6,7 +6,7 @@
  *   3. keeps the address in step: a conversation has a link, and reload, Back and Forward return to it.
  *
  * HOW. The chat is a React app and the workspace is plain scripts, so the chat runs in a same-origin frame
- * showing /overview/chat/…, where the app drops its own shell (src/lib/workspaceEmbed.ts). The frame is ONE
+ * showing /chat/…, where the app drops its own shell (src/lib/workspaceEmbed.ts). The frame is ONE
  * element that lives for the whole visit: the workspace rebuilds its main area on every navigation, and a frame
  * inside it would reload and lose a half-typed message or a running answer. So the frame sits above the page,
  * placed exactly over the chat's slot (`.live-chat-host[data-chat-frame]`), and is hidden, not removed, when
@@ -31,7 +31,7 @@
   const P = window.XENO_PLATFORM;
   if (!P || !P.served) { window.XENO_CHAT = { served: false }; return; }
   const X = () => window.XW, api = P.api;
-  const NEW = '/overview/chat/llm';
+  const NEW = '/chat';
   const ID = /^[A-Za-z0-9_.:-]{1,128}$/;
   const S = { status: 'loading', convs: [], projects: [], current: null, path: null, total: 0, picker: null, area: undefined, pins: [] };
   // ---------- the AREA: each has its own chats and projects; Overview shows everything ----------
@@ -119,7 +119,7 @@
     + 'html.xw-chat-on #xp-note{display:none}html.xw-chat-on #main .topbar > .ib[aria-label="More"]{display:none}';
   document.head.appendChild(style);
   let frame = null, loaded = false, slot = null, ro = null, hideT = 0;
-  const pathFor = (id) => (id && ID.test(id) ? '/overview/c/' + encodeURIComponent(id) : NEW);
+  const pathFor = (id) => (id && ID.test(id) ? '/chat/c/' + encodeURIComponent(id) : NEW);
   const idIn = (path) => { const m = String(path || '').match(/\/(?:c|llm)\/([^/?#]+)$/); if (!m) return null; let v = m[1]; try { v = decodeURIComponent(v); } catch {} return ID.test(v) ? v : null; };
   // ---------- the composer design, handed to the real chat ----------
   // every rule this page wrote for `.live-chat`, re-aimed at the chat's own root. Rules about the slot the picture
@@ -256,7 +256,7 @@
   // ---------- the sidebar's clicks ----------
   const toChat = (item) => { const x = X(); if (!x) return; if (!(x.S.view === 'product' && x.S.product === 'chat')) x.go('product', { product: 'chat', item: item || null }); else if ((x.S.item || null) !== (item || null)) x.setChatItem?.(item || null); };
   function open(id) { S.current = id || null; toChat(id || null); show(pathFor(id), false); repaint(); }
-  function openProject(name) { const pid = projectId(name); if (!pid) return false; S.current = null; toChat(null); show('/overview/chat/projects/' + encodeURIComponent(pid), false); return true; }
+  function openProject(name) { const pid = projectId(name); if (!pid) return false; S.current = null; toChat(null); show('/chat/projects/' + encodeURIComponent(pid), false); return true; }
   document.addEventListener('click', (e) => {
     if (e.target.closest('[data-more]')) return;   // the row's menu button is the app's: it opens the menu registered below
     const row = e.target.closest('[data-chat-live]'); if (row) { e.preventDefault(); e.stopPropagation(); return open(row.dataset.chatLive); }

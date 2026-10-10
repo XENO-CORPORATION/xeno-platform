@@ -1548,7 +1548,7 @@ router.post('/conversations/:id/share', requireDpopIfBound, async (req, res) => 
       [conversationId, userId, tokenDigest, visibility, visibility === 'workspace' ? convCheck.rows[0].workspace_id : null, expiresAt]
     );
 
-    const shareUrl = `${req.protocol}://${req.get('host')}/overview/chat/shared/${shareToken}`;
+    const shareUrl = `${req.protocol}://${req.get('host')}/share/${shareToken}`;
 
     res.json({
       success: true,

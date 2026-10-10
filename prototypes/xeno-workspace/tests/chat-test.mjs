@@ -49,7 +49,7 @@ async function open(hash = '#/overview/p/chat') {
   const errs = []; p.on('pageerror', (e) => errs.push(e.message));
   await p.setRequestInterception(true);
   p.on('request', (q) => { const u = new URL(q.url()); const json = (body, status = 200) => q.respond({ status, contentType: 'application/json', body: JSON.stringify(body) });
-    if (u.pathname.startsWith('/overview/')) return q.respond({ status: 200, contentType: 'text/html', body: CHAT });
+    if (u.pathname.startsWith('/overview/') || u.pathname === '/chat' || u.pathname.startsWith('/chat/')) return q.respond({ status: 200, contentType: 'text/html', body: CHAT });
     if (!u.pathname.startsWith('/api/')) return q.continue();
     if (u.pathname === '/api/auth/me') return json({ success: true, user: USER });
     if (u.pathname === '/api/chat/conversations') { db.lists++; const want = u.searchParams.get('area'); (db.asked = db.asked || []).push(want); const rows = want === null ? db.convs : db.convs.filter((c) => (want === 'none' ? !c.area : c.area === want)); return db.down ? json({ success: false, error: 'Internal server error' }, 500) : json({ success: true, conversations: rows, total: rows.length + (db.extra || 0) }); }
@@ -72,7 +72,7 @@ const view = (p) => p.evaluate(() => { const f = document.getElementById('xw-cha
 try {
   reset();
   { const { p, errs } = await open(); let v = await view(p);
-    ok(v.frames === 1 && v.on && v.path === '/overview/chat/llm' && v.over && !v.still, `the chat page shows the real chat, placed exactly over its slot, not the picture (${v.path}, over ${v.over})`);
+    ok(v.frames === 1 && v.on && v.path === '/chat' && v.over && !v.still, `the chat page shows the real chat, placed exactly over its slot, not the picture (${v.path}, over ${v.over})`);
     ok(v.rows.length === 3 && v.rows.find((r) => r.id === A).t === 'Plan the launch week' && v.rows.find((r) => r.id === B).t === 'New chat', 'the sidebar lists the person’s conversations; one with no title yet reads “New chat”');
     ok(v.groups.join('|') === [...new Set([dayOf(1), dayOf(30)])].join('|') && /Finance/.test(v.panel) && v.rows.some((r) => r.id === C), `conversations are grouped by day, and a project’s conversation sits under its project (${v.groups.join('|')})`);
     ok(!/each mode keeps its own/.test(v.panel) && !/Weekly planning template|YC application draft/.test(v.panel) && !/Pinned/.test(v.panel), 'no sample chats, no Pinned section the platform cannot back, and no claim that each mode keeps its own');
@@ -80,26 +80,26 @@ try {
     ok(v.note === 'none' && /New chat/.test(v.crumbs), `the “sample data” note is not shown on the live chat, and the path reads New chat (${v.crumbs})`);
     // open a conversation from the sidebar
     const born = v.born; await p.click(`#panel [data-chat-live="${A}"]`); await wait(500); v = await view(p);
-    ok(v.path === `/overview/c/${A}` && v.born === born, 'choosing a conversation moves the running chat to it, without reloading the chat');
+    ok(v.path === `/chat/c/${A}` && v.born === born, 'choosing a conversation moves the running chat to it, without reloading the chat');
     ok(v.hash === `#/overview/p/chat/${A}` && /Plan the launch week$/.test(v.crumbs) && v.rows.find((r) => r.id === A).cur && v.rows.filter((r) => r.cur).length === 1, `the address carries the conversation, the path names it, and its row is the current one (${v.hash} · ${v.crumbs})`);
     // the chat moves by itself (a new conversation is created inside it)
     db.convs.unshift({ id: D, title: 'Started in the chat', updated_at: iso(0), last_message_at: iso(0), project_id: null }); const lists = db.lists;
-    await p.evaluate((D) => document.getElementById('xw-chat-frame').contentWindow.goTo('/overview/chat/llm/' + D), D); await wait(1300); v = await view(p);
+    await p.evaluate((D) => document.getElementById('xw-chat-frame').contentWindow.goTo('/chat/c/' + D), D); await wait(1300); v = await view(p);
     ok(v.hash === `#/overview/p/chat/${D}` && db.lists > lists && v.rows.find((r) => r.id === D)?.cur && v.rows.filter((r) => r.cur).length === 1 && /Started in the chat$/.test(v.crumbs), 'when the chat starts a conversation itself, the address follows and the new conversation appears in the sidebar');
     // only the chat frame may move the workspace
-    await p.evaluate((A) => window.postMessage({ source: 'xeno-chat', type: 'location', path: '/overview/c/' + A }, location.origin), A); await wait(300); v = await view(p);
+    await p.evaluate((A) => window.postMessage({ source: 'xeno-chat', type: 'location', path: '/chat/c/' + A }, location.origin), A); await wait(300); v = await view(p);
     ok(v.hash === `#/overview/p/chat/${D}`, 'a message that does not come from the chat frame is ignored');
     // leaving and coming back keeps the same running chat
     await p.evaluate(() => { document.getElementById('xw-chat-frame').contentWindow.__draft = 'half a sentence'; window.XW.go('global', { global: 'library' }); }); await wait(600); v = await view(p);
     ok(!v.on && v.frames === 1 && v.note !== 'none', 'on another page the chat is hidden, not removed');
     await p.goBack(); await wait(700); v = await view(p);
-    ok(v.on && v.over && v.born === born && v.path === `/overview/chat/llm/${D}` && await p.evaluate(() => document.getElementById('xw-chat-frame').contentWindow.__draft === 'half a sentence'), 'Back returns to the same running chat, with what was in it');
+    ok(v.on && v.over && v.born === born && v.path === `/chat/c/${D}` && await p.evaluate(() => document.getElementById('xw-chat-frame').contentWindow.__draft === 'half a sentence'), 'Back returns to the same running chat, with what was in it');
     // New chat
     await p.click('#panel [data-newchat]'); await wait(500); v = await view(p);
-    ok(v.path === '/overview/chat/llm' && v.hash === '#/overview/p/chat' && v.born === born && !v.rows.some((r) => r.cur), 'New chat opens a blank chat in the same running chat, and no row is current');
+    ok(v.path === '/chat' && v.hash === '#/overview/p/chat' && v.born === born && !v.rows.some((r) => r.cur), 'New chat opens a blank chat in the same running chat, and no row is current');
     // Back steps through conversations once each
     await p.goBack(); await wait(600); v = await view(p);
-    ok(v.path === `/overview/chat/llm/${D}` && v.hash === `#/overview/p/chat/${D}`, `Back goes to the conversation before, in one step (${v.path} · ${v.hash})`);
+    ok(v.path === `/chat/c/${D}` && v.hash === `#/overview/p/chat/${D}`, `Back goes to the conversation before, in one step (${v.path} · ${v.hash})`);
     // the sidebar stays put when the frame's slot resizes
     await p.setViewport({ width: 1100, height: 700 }); await wait(400); v = await view(p);
     ok(v.over, 'the chat follows its slot when the window changes size');
@@ -176,7 +176,7 @@ try {
     db.refuse = true; await pick('Delete'); await sure(); await wait(600); v = await view(p);
     ok(v.rows.some((r) => r.id === A) && /couldn’t be deleted|server error/i.test(await p.evaluate(() => document.querySelector('.toast')?.textContent || '')), 'a delete the server refuses changes nothing and says so');
     db.refuse = false; await p.click(`#panel [data-chat-live="${A}"]`); await wait(400); await pick('Delete'); await sure(); await wait(800); v = await view(p);
-    ok(!v.rows.some((r) => r.id === A) && db.writes.at(-1)[0] === 'DELETE' && v.path === '/overview/chat/llm' && v.hash === '#/overview/p/chat', 'deleting the open chat removes it and leaves a new chat open (' + v.path + ' ' + v.hash + ')');
+    ok(!v.rows.some((r) => r.id === A) && db.writes.at(-1)[0] === 'DELETE' && v.path === '/chat' && v.hash === '#/overview/p/chat', 'deleting the open chat removes it and leaves a new chat open (' + v.path + ' ' + v.hash + ')');
     await p.close(); }
   { // the model menu is the one designed in this workspace, with the chat's real list
     reset(); const { p } = await open(); await wait(300);
@@ -257,7 +257,7 @@ try {
     await p.close(); }
   { // a link to a conversation, opened fresh
     reset(); const { p } = await open(`#/overview/p/chat/${A}`); const v = await view(p);
-    ok(v.on && v.path === `/overview/c/${A}` && v.rows.find((r) => r.id === A)?.cur && /Plan the launch week$/.test(v.crumbs) && v.log.length === 1, `a link to a conversation opens that conversation directly (${v.path}, loads ${v.log.length})`);
+    ok(v.on && v.path === `/chat/c/${A}` && v.rows.find((r) => r.id === A)?.cur && /Plan the launch week$/.test(v.crumbs) && v.log.length === 1, `a link to a conversation opens that conversation directly (${v.path}, loads ${v.log.length})`);
     await p.close(); }
   { // from another page: the chat is not loaded until it is opened
     reset(); const { p } = await open('#/overview'); let v = await p.evaluate(() => ({ frames: document.querySelectorAll('iframe#xw-chat-frame').length }));
