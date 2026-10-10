@@ -34,7 +34,7 @@
   const fresh = (kind) => C[kind] === null;
 
   const shapeThread = (t) => ({ id: t.shortId, title: t.title, space: (t.space && t.space.name) || 'Community', spaceSlug: t.space && t.space.slug, author: author(t.author),
-    replies: Math.max(0, (t.postCount || 1) - 1), state: t.isResolved && t.status === 'open' ? 'answered' : t.status, lastActivityAt: t.lastActivityAt || t.createdAt, tags: t.tags || [], score: t.score || 0, live: true });
+    replies: Math.max(0, (t.postCount || 1) - 1), state: t.isResolved && t.status === 'open' ? 'answered' : t.status, lastActivityAt: t.lastActivityAt || t.createdAt, tags: t.tags || [], score: t.score || 0, fixedIn: t.fixedIn || null, live: true });
   async function loadList() {
     const r = await api('GET', '/api/forum/threads?sort=active&limit=100').catch(() => null);
     if (r && r.ok && Array.isArray(r.d.threads)) { C.threads = r.d.threads.map(shapeThread); window.XENO_PG_FORUM = C.threads; C.status = 'ready'; }
@@ -44,8 +44,8 @@
   async function loadThread(id) {
     const r = await api('GET', '/api/forum/threads/' + encodeURIComponent(id)).catch(() => null);
     if (r && r.ok && r.d.thread) { const t = r.d.thread, posts = t.posts || [];
-      C.detail.set(id, { ...shapeThread(t), body: posts[0] ? posts[0].body : '', opId: posts[0] ? posts[0].id : null, subscribed: !!t.subscribed, duplicateOf: t.duplicateOf || null,
-        posts: posts.slice(1).map((p) => ({ id: p.id, author: author(p.author), body: p.body, at: p.createdAt, answer: p.isAnswer, score: p.score, advisory: p.advisoryCount, mine: P.user && p.author && p.author.handle === P.user.username })) });
+      C.detail.set(id, { ...shapeThread(t), body: posts[0] ? posts[0].body : '', opId: posts[0] ? posts[0].id : null, subscribed: !!t.subscribed, duplicateOf: t.duplicateOf || null, hidden: (t.hiddenReplies || []).map((h) => h.position),
+        posts: posts.slice(1).map((p) => ({ id: p.id, position: p.position, author: author(p.author), body: p.body, at: p.createdAt, answer: p.isAnswer, score: p.score, advisory: p.advisoryCount, myVote: p.myVote || 0, mine: P.user && p.author && p.author.handle === P.user.username })) });
     } else C.detail.set(id, { missing: true, error: r && r.status !== 404 });
     repaint();
   }
@@ -66,14 +66,17 @@
     if (!t) { loadThread(id); return loadingPage('Loading the thread'); }
     if (t.missing) return missingPage('Thread not found', t.error ? 'The thread couldn’t be loaded. Try again in a moment.' : 'It may have been removed, or the link is wrong.');
     const h = H(), mine = P.user && t.author.name && C.threads.find((x) => x.id === id)?.author?.name === nameOf({ displayName: P.user.display_name, handle: P.user.username }), locked = t.state === 'locked';
-    const acts = h.btn(t.subscribed ? 'Following' : 'Follow', `data-cml="follow" data-arg="${esc(id)}" aria-pressed="${t.subscribed}"`, true, t.subscribed ? 'check' : 'bell') + h.btn('Copy link', `data-xa="copyThreadLink" data-arg="${esc(id)}"`, true, 'link') + h.btn('Report', `data-cml="flag" data-arg="${esc(id)}|"`, true, 'flag') + (mod() ? h.btn('Moderate', `data-cml="mod" data-arg="${esc(id)}"`, true, 'gear') : '');
+    const acts = h.btn(t.subscribed ? 'Following' : 'Follow', `data-cml="follow" data-arg="${esc(id)}" aria-pressed="${t.subscribed}"`, true, t.subscribed ? 'check' : 'bell') + h.btn('Copy link', `data-xa="copyThreadLink" data-arg="${esc(id)}"`, true, 'link') + h.btn('Report', `data-cml="flag" data-arg="${esc(id)}|"`, true, 'flag') + (mod() ? h.btn('Moderate', `data-cml="mod" data-arg="${esc(id)}"`, true, 'gear') : '') + (C.me && C.me.actor && C.me.actor.isStaff && !t.fixedIn ? h.btn('Mark fixed', `data-cml="fixed" data-arg="${esc(id)}"`, true, 'check') : '');
     const post = (p) => `<article class="pg-post${p.answer ? ' answer' : ''}" id="post-${esc(p.id)}" data-cm-post="${esc(p.id)}">${h.avatar(p.author)}<div><header><b>${esc(p.author.name)}</b>${p.author.kind === 'agent' ? '<em class="pg-kind">Agent</em>' : ''}<small>${h.ago(p.at)} ago</small>${p.answer ? h.chip('Answer') : ''}</header><p>${esc(p.body)}</p>
-      <div class="cm-acts"><button class="cm-vote" data-cml="vote" data-arg="${esc(p.id)}"${p.mine ? ' disabled title="You can’t vote on your own reply"' : ''}>${ic('check')}<span>Helpful</span><b>${Math.max(0, p.score || 0)}</b></button>${p.advisory ? `<span class="cm-agents" title="Agents can surface a reply, never rank it">${p.advisory} agent${p.advisory > 1 ? 's' : ''} found this relevant</span>` : ''}
+      <div class="cm-acts"><button class="cm-vote" data-cml="vote" data-arg="${esc(p.id)}" aria-pressed="${p.myVote > 0}"${p.mine ? ' disabled title="You can’t vote on your own reply"' : ''}>${ic('check')}<span>Helpful</span><b>${Math.max(0, p.score || 0)}</b></button>${p.advisory ? `<span class="cm-agents" title="Agents can surface a reply, never rank it">${p.advisory} agent${p.advisory > 1 ? 's' : ''} found this relevant</span>` : ''}
       ${mine && !p.answer && !locked ? `<button class="pg-link" data-cml="answer" data-arg="${esc(p.id)}|${esc(id)}">Mark as the answer</button>` : ''}<button class="pg-link" data-cml="flag" data-arg="${esc(id)}|${esc(p.id)}">Report</button>${mod() ? `<button class="pg-link" data-cml="hide" data-arg="${esc(p.id)}|${esc(id)}">Hide</button>` : ''}</div></div></article>`;
     return h.page(h.head({ obj: true, eyebrow: `<a data-go="community">Community</a> · ${esc(t.space)}`, title: t.title, sub: `${t.author.name}${t.author.kind === 'agent' ? ' (agent)' : ''} · ${STATE[t.state] || h.cap(t.state)} · ${h.plural(t.posts.length, 'reply', 'replies')}`, acts })
+      + (t.fixedIn ? `<p class="cm-banner" data-cm-fixed>${ic('check')}<span><b>Fixed in ${esc(t.fixedIn)}.</b> Update to get it.</span></p>` : '')
       + (t.duplicateOf ? `<p class="cm-banner" data-cm-dup>${ic('link')}<span>This is a duplicate. The answer is in <a data-cml="open" data-arg="${esc(t.duplicateOf.shortId)}">${esc(t.duplicateOf.title)}</a>.</span></p>` : '')
       + `<div class="pg-thread">${t.body ? `<article class="pg-post op">${h.avatar(t.author)}<div><header><b>${esc(t.author.name)}</b><small>${h.ago(t.lastActivityAt)} ago</small></header><p>${esc(t.body)}</p></div></article>` : ''}
-        ${t.posts.map(post).join('') || '<p class="pg-dim">No replies yet — the first one helps most.</p>'}
+        ${(() => { const hid = (pos) => `<article class="pg-post cm-hidden" data-cm-hidden="${pos}"><div><p class="pg-dim">A moderator hid this reply. <a data-cml="openLog">Why</a></p></div></article>`;
+          const all = [...t.posts.map((p) => ({ pos: p.position || 0, html: post(p) })), ...(t.hidden || []).map((pos) => ({ pos, html: hid(pos) }))].sort((a, b) => a.pos - b.pos);
+          return all.map((x) => x.html).join('') || '<p class="pg-dim">No replies yet — the first one helps most.</p>'; })()}
         ${locked ? '<p class="cm-banner" data-cm-locked>' + ic('lock') + '<span>Locked by a moderator — the thread stays readable, no new replies.</span></p>' : `<form class="pg-reply" data-cm-reply="${esc(id)}"><textarea rows="3" placeholder="Write a reply" aria-label="Reply"></textarea><div><span class="pg-dim">Replies are public and permanent.</span><button class="pg-btn" type="submit">${ic('send')}<span>Reply</span></button></div></form>`}</div>`
       + h.foot('community:thread', `GET /api/forum/threads/${esc(id)}`));
   }
@@ -128,8 +131,15 @@
     open: (id) => go(id), mine: () => go('My reports'), ticket: (id) => go('My reports/' + id),
     async follow(id) { const t = C.detail.get(id); if (!t) return; const on = !t.subscribed; const r = await api('PUT', `/api/forum/threads/${encodeURIComponent(id)}/subscription`, { subscribed: on }).catch(() => null);
       if (!r || !r.ok) return toast(said(r, 'That couldn’t be changed.')); t.subscribed = on; repaint(); toast(on ? 'Following — replies come to your notifications' : 'No longer following'); },
-    async vote(pid) { const r = await api('POST', `/api/forum/posts/${encodeURIComponent(pid)}/vote`, { value: 1 }).catch(() => null);
-      if (!r || !r.ok) return toast(said(r, 'That couldn’t be counted.')); const t = [...C.detail.values()].find((x) => x.posts && x.posts.some((p) => p.id === pid)); if (t) await loadThread(t.id); toast('Marked helpful'); },
+    async vote(pid) { const t = [...C.detail.values()].find((x) => x.posts && x.posts.some((p) => p.id === pid)), p = t && t.posts.find((x) => x.id === pid), undo = !!(p && p.myVote > 0);
+      const r = await api(undo ? 'DELETE' : 'POST', `/api/forum/posts/${encodeURIComponent(pid)}/vote`, undo ? undefined : { value: 1 }).catch(() => null);
+      if (!r || !r.ok) return toast(said(r, undo ? 'That couldn’t be taken back.' : 'That couldn’t be counted.')); if (t) await loadThread(t.id); toast(undo ? 'Vote taken back' : 'Marked helpful'); },
+    openLog: () => go('Moderation'),
+    async fixed(id) { const v = await D().form({ title: 'Mark fixed by a release', sub: 'Everyone who asked or follows is told, and a private ticket it came from is marked fixed too.', submit: 'Mark fixed', size: 'sm', fields: [
+        { id: 'version', label: 'Fixed in version', required: true, max: 31, placeholder: 'e.g. 0.40.1', validate: (x) => (/^[a-z0-9][a-z0-9._-]{0,30}$/i.test(x.trim()) ? null : 'Use a version like 0.40.1.') },
+        { id: 'note', label: 'What changed', type: 'textarea', rows: 3, max: 4000 }] });
+      if (!v) return; const r = await api('POST', `/api/forum/threads/${encodeURIComponent(id)}/fixed`, { version: v.version.trim(), note: v.note || '' }).catch(() => null);
+      if (!r || !r.ok) return toast(said(r, 'It couldn’t be marked fixed.')); await afterThread(id); toast('Marked fixed — everyone following was told'); },
     async answer(arg) { const [pid, id] = arg.split('|'); const r = await api('POST', `/api/forum/posts/${encodeURIComponent(pid)}/accept`).catch(() => null);
       if (!r || !r.ok) return toast(said(r, 'That couldn’t be marked.')); await afterThread(id); toast('Marked as the answer'); },
     async flag(arg) { const [id, pid] = arg.split('|');

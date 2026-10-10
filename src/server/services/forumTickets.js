@@ -18,7 +18,7 @@
  */
 import { ForumError } from './forumError.js';
 import { newShortId } from './forumService.js';
-import { createThread } from './forumWrite.js';
+import { createThread, markThreadFixed } from './forumWrite.js';
 
 export const TICKET_KINDS = ['bug', 'feature', 'feedback'];
 export const TICKET_STATUSES = ['open', 'acknowledged', 'planned', 'fixed', 'wont_fix', 'closed'];
@@ -126,6 +126,12 @@ export async function setTicketStatus(db, user, shortId, { status, fixedIn, note
   const line = `${STATUS_WORDS[status]}${status === 'fixed' && ver ? ` in ${ver}` : ''}${note ? ` — ${text(note, 'note', 2000, { required: false })}` : ''}`;
   await db.query("INSERT INTO forum_ticket_posts (ticket_id, author_id, author_kind, kind, body) VALUES ($1,$2,$3,'status',$4)", [t.id, user.id, kindOf(user), line]);
   await notifyReporter(db, t, user, 'ticket_status');
+  // made public earlier: the public thread gets the same fix, so readers there see it shipped (staff only — that
+  // is markThreadFixed's own rule, and a dev agent's fix is recorded on the ticket for staff to carry over)
+  if (status === 'fixed' && ver && t.thread_id && ['admin', 'moderator'].includes(user.role)) {
+    const sid = (await db.query('SELECT short_id FROM forum_threads WHERE id = $1', [t.thread_id])).rows[0]?.short_id;
+    if (sid) await markThreadFixed(db, user, sid, { version: ver }).catch(() => {});
+  }
   return getTicket(db, user, shortId);
 }
 

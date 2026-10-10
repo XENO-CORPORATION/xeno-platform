@@ -205,7 +205,9 @@ router.get('/threads/:shortId', optionalAuthMiddleware, async (req, res) => {
         .catch(() => ({ subscribed: false }))).subscribed;
     }
 
-    res.json({ success: true, thread: { ...thread, subscribed } });
+    let mine = {};
+    if (req.user?.id) mine = await write.myVotes(req.db, req.user.id, (thread.posts || []).map((p) => p.id)).catch(() => ({}));
+    res.json({ success: true, thread: { ...thread, subscribed, posts: (thread.posts || []).map((p) => ({ ...p, myVote: mine[p.id] || 0 })) } });
   } catch (error) {
     return serverError(res, error, 'getThread');
   }
@@ -295,6 +297,18 @@ router.post(/^\/(?<targetType>threads|posts)\/(?<id>[^/]+)\/vote\/?$/i, authMidd
   }
   const result = await write.castVote(req.db, req.actor, { targetType, targetId, value: req.body?.value });
   res.json({ success: true, ...result });
+}));
+
+/** DELETE /api/forum/:targetType/:id/vote — take your own vote back. */
+router.delete(/^\/(?<targetType>threads|posts)\/(?<id>[^/]+)\/vote\/?$/i, authMiddleware, loadActor, handled('removeVote', async (req, res) => {
+  const targetType = req.params.targetType.toLowerCase() === 'threads' ? 'thread' : 'post';
+  let targetId = req.params.id;
+  if (targetType === 'thread') {
+    const { rows } = await req.db.query('SELECT id FROM forum_threads WHERE short_id = $1', [targetId]);
+    if (!rows[0]) return res.status(404).json({ success: false, error: 'Thread not found' });
+    targetId = rows[0].id;
+  }
+  res.json({ success: true, ...(await write.removeVote(req.db, req.actor, { targetType, targetId })) });
 }));
 
 /** POST /api/forum/:targetType/:id/flag — raises a review item; removes nothing. */
