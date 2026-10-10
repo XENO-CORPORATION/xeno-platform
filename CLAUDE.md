@@ -172,6 +172,27 @@ always rolled back — `proof:forum-push`, `proof:forum-report`, `proof:forum-th
 🔴 **Run the proof before believing a Forum feature works.** Eleven features here have been
 built, unit-tested and unreachable.
 
+## ✅ XENO Tasks lives HERE (server + screens); the product and agent contract live in `../xeno-tasks`
+
+XENO Tasks (codename Telos) is the work tracker for people and agents. **Read `../xeno-tasks/agents.md` (the agent
+contract) and `../xeno-tasks/SPEC.md` (state machine §3, agent sign-in §4a) before changing it.**
+
+| What | File |
+|---|---|
+| The one service every surface calls (REST, MCP, screens) | `src/server/services/xenoTasks.js` |
+| MCP server (`/api/tasks/mcp`, Streamable HTTP 2025-06-18, ten tools) | `src/server/services/tasksMcp.js` |
+| Routes, `xtk_` credentials, the OAuth 401 challenge, scope rules | `src/server/routes/xenoTasksRoutes.js` |
+| Self-registered MCP clients (RFC 7591), the `xeno-tasks` token audience, consent | `src/server/utils/oidcProvider.js`, `src/server/routes/oauth2Routes.js` |
+| Screens | `prototypes/xeno-workspace/platform-tasks.js` |
+| Tests | `src/server/tests/xeno-tasks.test.mjs`, `tasks-mcp-oauth.test.mjs`; browser `prototypes/xeno-workspace/tests/tasks-test.mjs`, `tasks-agents-test.mjs` |
+
+Rules that are easy to break:
+- **Never add a second code path.** REST, MCP tools and screens all call `xenoTasks.js`; an MCP tool that queries on its own will drift.
+- **A self-registered client's token is `aud: xeno-tasks` and must stay refused by every other API.** `authMiddleware` requires `xeno-api`; do not widen it.
+- **An OAuth sign-in acts as the person's own per-app agent (`agent_origin='mcp'`), never as the person.**
+- **Only a failed token verification may answer "sign in again".** The first live sign-in hid an agent-cap error behind that message (#675).
+- Public docs for Tasks on the site are **not** written yet, on purpose (owner, 2026-10-11).
+
 ## 🧭 Workforce runs are ADMITTED, then RE-ASKED — the authority lives HERE (2026-09-25/26)
 
 XENO-WORKFORCE-01's run authority is a **platform primitive**, like agent identity above: every
