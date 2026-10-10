@@ -79,6 +79,8 @@ const nav = async (hash) => { await p.evaluate((h) => (location.hash = h), hash)
 const countRenders = () => p.evaluate(() => { window.__renders = 0; if (!window.__wrapped) { window.__wrapped = 1; const o = window.XW.render; window.XW.render = function (...a) { window.__renders++; return o.apply(this, a); }; } });
 const renders = () => p.evaluate(() => window.__renders);
 const menuClick = (re) => p.evaluate((src) => { const rx = new RegExp(src); const b = [...document.querySelectorAll('.xcm .xcm-i')].reverse().find((x) => rx.test(x.textContent.trim())); if (b) b.click(); return !!b; }, re.source);
+const pickOpen = () => p.waitForSelector('.tk-pick:not([hidden])', { timeout: 3000 });
+const pickClick = (re) => p.evaluate((src) => { const rx = new RegExp(src); const b = [...document.querySelectorAll('.tk-pick:not([hidden]) .tk-pick-i')].find((x) => rx.test(x.textContent.trim())); if (b) b.click(); return !!b; }, re.source);
 const pasteImage = (sel) => p.evaluate((s) => { const dt = new DataTransfer(); dt.items.add(new File([new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10, 0, 0, 0, 13])], 'shot.png', { type: 'image/png' })); const el = document.querySelector(s); el.focus(); el.dispatchEvent(new ClipboardEvent('paste', { bubbles: true, cancelable: true, clipboardData: dt })); }, sel);
 const T3 = () => db.tasks.find((x) => x.key === 'T-3');
 try {
@@ -102,22 +104,31 @@ try {
   await p.type('.xd textarea', 'Cover what changed.\n- [ ] draft\n- [ ] review\n');
   await pasteImage('.xd textarea'); await settle(300);
   ok(await p.$$eval('.xd .tk-nimg', (els) => els.length) === 1 && /pending:1/.test(await p.$eval('.xd textarea', (e) => e.value)), 'an image pasted while writing shows as a thumbnail and is placed in the description');
-  await p.click('.xd [data-n-chip="assignee"]'); await p.waitForSelector('.xcm', { timeout: 3000 }); await settle(200); await menuClick(/^Codrin/); await settle(200);
-  await p.click('.xd [data-n-chip="priority"]'); await p.waitForSelector('.xcm', { timeout: 3000 }); await settle(200); await menuClick(/^Medium/); await settle(200);
+  await p.click('.xd [data-n-chip="assignee"]'); await pickOpen(); await settle(200);
+  const groups = await p.$$eval('.tk-pick:not([hidden]) .tk-pick-g', (els) => els.map((e) => e.textContent));
+  ok(groups.includes('People') && groups.includes('Agents') && !!(await p.$('.tk-pick:not([hidden]) .tk-face')), 'the assignee picker groups people and agents and shows their faces');
+  await p.type('.tk-pick .tk-pick-s input', 'cod'); await settle(100);
+  ok(await p.$$eval('.tk-pick:not([hidden]) .tk-pick-i', (els) => els.length) === 1, 'typing in a picker narrows it');
+  await p.keyboard.press('Enter'); await settle(200);
+  await p.click('.xd [data-n-chip="priority"]'); await pickOpen(); await p.keyboard.press('3'); await settle(200);
   ok(/Codrin/.test(await p.$eval('.xd [data-n-chips]', (e) => e.textContent)) && /Medium/.test(await p.$eval('.xd [data-n-chips]', (e) => e.textContent)), 'the chips set the assignee and priority in place');
   await p.keyboard.down('Control'); await p.keyboard.press('Enter'); await p.keyboard.up('Control'); await settle(1200);
   const created = T3();
   ok(created && created.area === 'studio' && created.assignee?.id === 'u2' && created.priority === 'medium' && db.uploads === 1 && /\(attachment:[0-9a-f-]{36}\)/.test(created.body) && !/pending:/.test(created.body), 'Ctrl+Enter creates the task with its fields, uploads the image and links it into the description');
   ok(!(await p.$('.xd [data-tk-new]')) && /Write the launch post/.test(await main()), 'the window closes and the new task opens');
   ok(!!(await p.$('.tk-md .tk-md-img')) && await p.$$eval('.tk-md-box', (els) => els.length) === 2 && /0 of 2/.test(await main()), 'the description renders: the inline image and a two-item checklist with its progress');
-  ok(!!(await p.$('.tk-props [data-tk-prop="assignee"]')) && await p.$$eval('.tk-prop', (els) => els.length > 8 && els.every((e) => e.getBoundingClientRect().height < 44)), 'each property is one row, label and value side by side');
+  ok(!!(await p.$('.tk-side [data-tk-prop="assignee"]')) && await p.$$eval('.tk-side .tk-prop', (els) => els.length > 8 && els.every((e) => e.getBoundingClientRect().height < 44)), 'each property is one row, label and value side by side');
+  { const lay = await p.evaluate(() => { const m = document.getElementById('main').getBoundingClientRect(), s = document.querySelector('.tk-side').getBoundingClientRect(), c = document.querySelector('.tk-main-in').getBoundingClientRect(); return { flush: Math.abs(m.right - s.right) < 4, full: s.height >= m.height - 120, read: c.width <= 870 }; });
+    ok(lay.flush && lay.full && lay.read, 'the details sidebar runs the full height at the right edge, and the work column keeps a readable width'); }
+  ok(/Accept/.test(await p.$eval('.tk-next .tk-act--main', (e) => e.textContent)) && /triage/i.test(await p.$eval('.tk-next-h', (e) => e.textContent)), 'the next step says what to do now and offers it as the one main action');
 
   await countRenders();
   await p.click('.tk-md-box'); await settle();
   ok(/- \[x\] draft/.test(T3().body) && /1 of 2/.test(await main()), 'ticking a checklist item saves it on the task');
   await p.click('[data-tk-move="todo"]'); await settle();
   ok(T3().status === 'todo' && /moved it\s*Triage\s*→\s*To do/.test(await main()), 'Accept moves it and the activity records it');
-  await p.click('[data-tk-prop="priority"]'); await p.waitForSelector('.xcm', { timeout: 3000 }); await menuClick(/^High/); await settle();
+  ok(/Start/.test(await p.$eval('.tk-next .tk-act--main', (e) => e.textContent)) && !/Accept/.test(await p.$eval('.tk-next', (e) => e.textContent)), 'after accepting, the main action becomes Start — no wrong labels like Accept on a task already accepted');
+  await p.click('[data-tk-prop="priority"]'); await pickOpen(); await p.keyboard.press('2'); await settle();
   ok(T3().priority === 'high' && /changed the priority from\s*Medium\s*to\s*High/.test(await main()), 'the history says what changed, from what, to what');
   await p.evaluate(() => window.XENO_HIST.undo()); await settle();
   ok(T3().priority === 'medium', 'undo puts the priority back');
