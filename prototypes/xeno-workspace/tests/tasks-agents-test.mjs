@@ -37,7 +37,13 @@ p.on('request', (q) => {
   if (u.pathname === '/api/tasks/views') return json(200, { success: true, views: [] });
   if (u.pathname === '/api/tasks' && method === 'GET') return json(200, { success: true, tasks: db.tasks.map(view) });
   if (u.pathname === '/api/tasks/assignees') return json(200, { success: true, assignees: PEOPLE });
-  if (u.pathname === '/api/tasks/agents' && method === 'GET') return json(200, { success: true, agents: db.agents });
+  if (u.pathname === '/api/tasks/agents' && method === 'GET') return json(200, { success: true, agents: db.agents.map((a) => ({ ...a, projects: a.projects || [] })) });
+  if (u.pathname === '/api/tasks/projects') return json(200, { success: true, projects: [{ id: 'p1', name: 'Website', area: 'studio', canEdit: true }, { id: 'p2', name: 'Docs', area: null, canEdit: true }] });
+  const ap = u.pathname.match(/^\/api\/tasks\/agents\/(\w+)\/projects\/(\w+)$/);
+  if (ap) { const a = db.agents.find((x) => x.id === ap[1]); a.projects = a.projects || [];
+    if (method === 'PUT') { if (ap[2] === 'p2') return json(403, { success: false, error: 'Only a project admin can add an agent to it', code: 'not_allowed' }); a.projects.push({ id: ap[2], name: 'Website', canEdit: true }); }
+    if (method === 'DELETE') a.projects = a.projects.filter((p) => p.id !== ap[2]);
+    return json(200, { success: true, agent: { id: a.id, name: a.name }, projects: a.projects }); }
   if (u.pathname === '/api/tasks/agents' && method === 'POST') { const a = { id: 'a' + (db.agents.length + 1), username: 'release-bot', name: b.name, role: 'worker', origin: 'tasks', webhook: null, openTasks: 0, tokens: [] }; db.agents.push(a); return json(201, { success: true, agent: a }); }
   if (u.pathname === '/api/tasks/agents/tokens' && method === 'POST') {
     const a = db.agents.find((x) => x.id === b.agentId), id = 'k' + ++db.tokSeq, token = `xtk_abcdefabcdef_SECRET${db.tokSeq}`;
@@ -116,6 +122,20 @@ try {
   ok(/whsec_SIGNING/.test(await dlg()) && /X-Xeno-Signature/.test(await dlg()), 'a webhook shows its signing secret once, and how to verify a delivery');
   await p.keyboard.press('Escape'); await settle(400);
   ok(/agent\.example\.com/.test(await main()), 'the webhook address is listed on the agent');
+  // connecting an agent CLI, and the projects an agent works in
+  const cmds = await p.$$eval('[data-tk-connect] code', (els) => els.map((e) => e.textContent));
+  ok(cmds.some((c) => /^claude mcp add --transport http xeno-tasks http:\/\/127\.0\.0\.1:\d+\/api\/tasks\/mcp$/.test(c)) && cmds.some((c) => /codex mcp add xeno-tasks --url/.test(c)) && cmds.some((c) => /mcpServers/.test(c)) && cmds.some((c) => /@xenosystem\/tasks link/.test(c)), 'the Agents page shows how to connect Claude Code, Codex, Cursor and how to link a folder, with this site’s MCP address');
+  await p.evaluate(() => { window.__clip = null; }); await p.click('[data-tk="copy-cmd"][data-arg="0"]'); await settle(300);
+  ok(/^claude mcp add/.test(await p.evaluate(() => window.__clip) || ''), 'Copy puts the command on the clipboard');
+  ok(/Not on any project yet|None\. It only sees tasks delegated/.test(await p.$eval('[data-tk-agent="a1"] [data-tk-agent-projects]', (e) => e.innerText)), 'an agent on no project says it only sees delegated tasks');
+  await p.click('[data-tk="agent-addproj"][data-arg="a1"]'); await p.waitForSelector('.tk-pick:not([hidden])', { timeout: 3000 }); await pickClick(/^Website/); await settle();
+  ok(db.agents[0].projects.some((x) => x.id === 'p1') && !!(await p.$('[data-tk-agent="a1"] [data-tk-proj="p1"]')), 'Add puts the agent on a project and it is listed');
+  await p.click('[data-tk="agent-addproj"][data-arg="a1"]'); await p.waitForSelector('.tk-pick:not([hidden])', { timeout: 3000 });
+  ok(!(await p.evaluate(() => [...document.querySelectorAll('.tk-pick:not([hidden]) .tk-pick-i')].some((b) => /^Website/.test(b.textContent.trim())))), 'a project it is already on is not offered again');
+  await pickClick(/^Docs/); await settle();
+  ok(/project admin/.test(await p.evaluate(() => [...document.querySelectorAll('.toast, [role="status"]')].map((e) => e.textContent).join(' '))) && !db.agents[0].projects.some((x) => x.id === 'p2'), 'a refused add says why');
+  await p.click('[data-tk="agent-rmproj"][data-arg="a1|p1"]'); await settle();
+  ok(!db.agents[0].projects.length && !(await p.$('[data-tk-proj="p1"]')), 'Remove takes the agent off the project');
 
   // Copy for agent, two-way
   await nav('#/studio/g/tasks/T-1');

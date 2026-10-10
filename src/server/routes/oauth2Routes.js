@@ -19,6 +19,7 @@ import {
   discovery,
   getClient,
   validateAuthorizationRequest,
+  registerDynamicClient,
   createAuthorizationCode,
   exchangeAuthorizationCode,
   refreshTokenGrant,
@@ -80,6 +81,22 @@ router.get('/jwks', async (req, res) => {
 // /api/oauth2/.well-known/openid-configuration.
 router.get('/openid-configuration', (req, res) => res.json(discovery()));
 router.get('/.well-known/openid-configuration', (req, res) => res.json(discovery()));
+// RFC 8414 authorization-server metadata — what MCP clients read (also served at the site root by nginx)
+router.get('/.well-known/oauth-authorization-server', (req, res) => res.json(discovery()));
+
+// POST /oauth2/register — RFC 7591 dynamic client registration, for MCP clients. Public,
+// PKCE-only, tasks:read/tasks:write only, own token audience; see registerDynamicClient.
+router.post('/register', async (req, res) => {
+  try {
+    const out = await registerDynamicClient(req.db, req.body || {}, { from: String(req.ip || '') || null });
+    res.set('cache-control', 'no-store');
+    return res.status(201).json(out);
+  } catch (e) {
+    if (e && e.oauthError) return res.status(e.statusCode || 400).json({ error: e.oauthError, error_description: e.description || e.message });
+    console.error('[oauth2] register', e);
+    return res.status(500).json({ error: 'server_error' });
+  }
+});
 
 // Public presentation metadata for the login consent sentence. Only registered
 // database values are returned; raw query text is never rendered as an app name.
@@ -136,6 +153,17 @@ body{font:15px/1.55 system-ui,-apple-system,"Segoe UI",sans-serif;background:var
 @keyframes spin{to{transform:rotate(360deg)}}
 .loader .msg{color:rgba(255,255,255,.7);font-size:14px}
 .loader .who{color:var(--muted);font-size:13px}.loader .who b{color:var(--text);font-weight:600}
+/* Consent for a self-registered (MCP) app */
+.consent h1{font-size:18px;line-height:1.35}
+.consent .can{margin:14px 0;padding:0;list-style:none;display:grid;gap:8px;font-size:13.5px}
+.consent .can li{padding-left:18px;position:relative}
+.consent .can li::before{content:"";position:absolute;left:3px;top:.55em;width:7px;height:7px;background:var(--text)}
+.consent .can li.no{color:var(--muted)}
+.consent .can li.no::before{background:transparent;border:1.5px solid var(--muted);width:6px;height:6px}
+.consent .warn{font-size:12.5px;color:var(--muted);border-top:1px solid var(--border);padding-top:12px}
+.consent .row{display:flex;gap:8px;justify-content:flex-end;margin-top:14px}
+.consent .row button{width:auto;padding:0 16px}
+.consent .ghost{background:transparent;color:var(--text);border:1px solid var(--border)}
 /* Sign-in card (fallback only — most users bounce to the branded /auth screen) */
 .card{width:384px;max-width:92vw;padding:34px 30px;background:var(--panel);border:1px solid var(--border);border-radius:18px;box-shadow:0 24px 70px rgba(0,0,0,.55)}
 .logo{display:flex;align-items:center;gap:10px;margin-bottom:20px}
@@ -159,6 +187,15 @@ button:hover{opacity:.92}button:disabled{opacity:.55;cursor:default}
     <div class="msg" id="status">Checking your XENO session…</div>
     <div class="who">Continue to <b id="app">${app}</b></div>
   </div>
+  <div id="consent" class="hide"><div class="card consent" role="dialog" aria-labelledby="cTitle">
+    <div class="logo"><div class="dot"></div><div class="name">XENO</div></div>
+    <h1 id="cTitle"><span id="cName"></span> wants to work on your tasks</h1>
+    <p class="sub">It will act as <b>your agent</b> in XENO Tasks — everything it does is shown as the agent's, and you can disconnect it at any time.</p>
+    <ul class="can"><li>See the tasks you can see, and the projects they are in</li><li id="cWrite">Take tasks, comment, report what it is doing, and send work for review — never accept its own work</li><li class="no">Nothing else: no chats, files, billing or account settings</li></ul>
+    <p class="warn">This app registered itself and has not been reviewed by XENO. Only continue if you started this sign-in from <span id="cApp"></span>. You will be sent back to <b id="cWhere"></b>.</p>
+    <div class="row"><button id="cDeny" type="button" class="ghost">Cancel</button><button id="cAllow" type="button">Allow</button></div>
+    <div class="foot">Secured by XENO</div>
+  </div></div>
   <div id="cardWrap" class="hide"><div class="card">
     <div class="logo"><div class="dot"></div><div class="name">XENO</div></div>
     <h1 id="title">Sign in to continue</h1>
@@ -194,15 +231,24 @@ button:hover{opacity:.92}button:disabled{opacity:.55;cursor:default}
     var hit=document.cookie.split(';').map(function(v){return v.trim()}).find(function(v){return v.indexOf('__Host-xeno_csrf=')===0||v.indexOf('xeno_csrf=')===0});
     return hit?decodeURIComponent(hit.slice(hit.indexOf('=')+1)):'';
   }
-  function continueWith(){
-    setStatus('Signing you in…');
+  function continueWith(extra){
+    setStatus(extra&&extra.deny?'Cancelling…':'Signing you in…');
     fetch('/api/oauth2/authorize',{method:'POST',credentials:'same-origin',headers:{'content-type':'application/json','x-xeno-csrf':csrf()},
-      body:JSON.stringify({client_id:p.get('client_id'),redirect_uri:p.get('redirect_uri'),scope:p.get('scope'),code_challenge:p.get('code_challenge'),code_challenge_method:p.get('code_challenge_method'),state:p.get('state'),nonce:p.get('nonce'),prompt:p.get('prompt'),max_age:p.get('max_age'),acr_values:p.get('acr_values')})})
+      body:JSON.stringify({consent:!!(extra&&extra.consent),deny:!!(extra&&extra.deny),client_id:p.get('client_id'),redirect_uri:p.get('redirect_uri'),scope:p.get('scope'),code_challenge:p.get('code_challenge'),code_challenge_method:p.get('code_challenge_method'),state:p.get('state'),nonce:p.get('nonce'),prompt:p.get('prompt'),max_age:p.get('max_age'),acr_values:p.get('acr_values')})})
     .then(function(r){ if(r.status===401){ toAuth(); throw 0;} return r.json(); })
-    .then(function(d){ if(d&&d.redirect){ location.href=d.redirect; } else { showForm((d&&(d.error_description||d.error))||'Authorization failed'); } })
+    .then(function(d){ if(d&&d.redirect){ location.href=d.redirect; } else if(d&&d.error==='consent_required'){ showConsent(d.consent); } else { showForm((d&&(d.error_description||d.error))||'Authorization failed'); } })
     .catch(function(e){ if(e!==0) showForm('Error: '+(e&&e.message||e)); });
   }
 
+  function showConsent(c){
+    var w=$('consent'); var tx=function(id,v){$(id).textContent=v};
+    tx('cName',c.name); tx('cApp',c.name); tx('cWhere',c.sendsTo||'the app');
+    var can=c.scopes||[]; $('cWrite').hidden=can.indexOf('tasks:write')<0;
+    show($('loader'),false); show($('cardWrap'),false); show(w,true);
+    $('cAllow').focus();
+  }
+  $('cAllow').onclick=function(){ $('cAllow').disabled=true; continueWith({consent:true}); };
+  $('cDeny').onclick=function(){ continueWith({deny:true}); };
   $('toggle').onclick=function(){
     mode=mode==='signin'?'signup':'signin';
     show($('nameRow'),mode==='signup');
@@ -243,6 +289,18 @@ button:hover{opacity:.92}button:disabled{opacity:.55;cursor:default}
 router.post('/authorize', authMiddleware, async (req, res) => {
   try {
     const b = req.body || {};
+    const client = await validateAuthorizationRequest(req.db, {
+      clientId: b.client_id, redirectUri: b.redirect_uri, codeChallenge: b.code_challenge, codeChallengeMethod: b.code_challenge_method,
+    });
+    if (client.dynamic && b.consent !== true) {
+      if (b.deny === true) {
+        const sep = String(b.redirect_uri).includes('?') ? '&' : '?';
+        return res.json({ redirect: `${b.redirect_uri}${sep}error=access_denied&error_description=${encodeURIComponent('The person declined')}${b.state ? `&state=${encodeURIComponent(b.state)}` : ''}` });
+      }
+      let host = ''; try { const u = new URL(b.redirect_uri); host = u.protocol === 'http:' ? 'this computer' : u.protocol === 'https:' ? u.host : u.protocol.slice(0, -1); } catch { host = ''; }
+      return res.status(400).json({ error: 'consent_required', consent: { name: client.name, registeredAt: client.created_at, sendsTo: host,
+        scopes: (client.allowed_scopes || []).filter((s) => s !== 'openid') } });
+    }
     const code = await createAuthorizationCode(req.db, {
       clientId: b.client_id,
       userId: req.user.id,

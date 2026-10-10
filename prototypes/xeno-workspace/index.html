@@ -2216,6 +2216,21 @@ body .xcm{z-index:410}
 .tk-deleg{position:relative;display:inline-flex;margin-right:-6px}
 .tk-deleg[data-tk-deleg="working"]::after{content:"";position:absolute;right:-1px;bottom:-1px;width:6px;height:6px;border-radius:50%;background:var(--text);box-shadow:0 0 0 2px var(--panel)}
 .tk-deleg[data-tk-deleg="awaiting_input"]::after{content:"?";position:absolute;right:-3px;bottom:-3px;width:10px;height:10px;border-radius:50%;background:var(--text);color:var(--bg);font-size:8px;font-weight:700;line-height:10px;text-align:center}
+.tk-connect{margin-top:12px;border:1px solid var(--n28);border-radius:8px;background:var(--panel);padding:12px 14px;display:grid;gap:6px}
+.tk-connect header{display:grid;gap:3px;margin-bottom:4px}
+.tk-connect header b{font-size:13.5px;font-weight:600}
+.tk-connect header small{font-size:12px;color:var(--muted);line-height:1.45}
+.tk-cmd{display:grid;grid-template-columns:150px 1fr auto;align-items:center;gap:10px;padding:6px 8px;border:1px solid var(--n26);border-radius:6px;background:var(--n18)}
+.tk-cmd span{font-size:12.5px;color:var(--muted)}
+.tk-cmd code{font-size:12px;font-family:var(--mono,ui-monospace,monospace);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;user-select:all}
+.tk-agent-sec h4 .tk-link{float:right;margin-top:-3px;text-transform:none;letter-spacing:0;font-weight:500}
+.tk-chips{display:flex;flex-wrap:wrap;gap:6px}
+.tk-pchip{display:inline-flex;align-items:center;gap:6px;height:26px;padding:0 4px 0 8px;border:1px solid var(--n26);border-radius:6px;background:var(--n18);font-size:12.5px}
+.tk-pchip .i{width:13px;height:13px}
+.tk-pchip small{color:var(--muted);font-size:11px}
+.tk-pchip .tk-x{display:inline-grid;place-items:center;width:18px;height:18px;border:0;border-radius:4px;background:transparent;color:var(--muted);cursor:pointer}
+.tk-pchip .tk-x:hover{color:var(--text);background:var(--hover)}
+@media (max-width:640px){.tk-cmd{grid-template-columns:1fr auto}.tk-cmd span{grid-column:1/-1}}
 .tk-agents{display:grid;gap:10px;margin-top:12px}
 .tk-agent{border:1px solid var(--n28);border-radius:8px;background:var(--panel);padding:12px 14px}
 .tk-agent>header{display:flex;align-items:center;gap:10px}

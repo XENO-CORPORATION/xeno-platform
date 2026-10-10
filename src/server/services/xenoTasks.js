@@ -18,7 +18,7 @@
  * claim, move and comment, never accept their own work.
  */
 import crypto from 'node:crypto';
-import { check } from '../utils/authzReBAC.js';
+import { check, writeTuples } from '../utils/authzReBAC.js';
 import { createAgent } from './agentIdentity.js';
 import { assertSafeEndpointUrl, safeRequest } from '../utils/safeEndpoint.js';
 
@@ -674,8 +674,11 @@ export async function listMyAgents(db, me) {
     FROM agent_identities ai JOIN users u ON u.id = ai.user_id WHERE ai.owner_user_id = $1 ORDER BY ai.created_at`, [me.id])).rows;
   const toks = (await db.query(`SELECT k.id, k.agent_user_id, k.token_prefix, k.scopes, k.label, k.expires_at, k.last_used_at, k.created_at, k.task_id, t.number
     FROM task_agent_tokens k LEFT JOIN tasks t ON t.id = k.task_id WHERE k.owner_user_id = $1 AND k.revoked_at IS NULL AND k.expires_at > now() ORDER BY k.created_at DESC`, [me.id])).rows;
-  return agents.map((a) => ({ id: String(a.id), username: a.username, name: a.name, role: a.agent_role, origin: a.agent_origin, webhook: a.webhook || null, openTasks: a.open_tasks,
+  const list = agents.map((a) => ({ id: String(a.id), username: a.username, name: a.name, role: a.agent_role, origin: a.agent_origin, webhook: a.webhook || null, openTasks: a.open_tasks,
     tokens: toks.filter((k) => String(k.agent_user_id) === String(a.id)).map((k) => ({ id: k.id, hint: `xtk_${k.token_prefix}_…`, scopes: k.scopes, label: k.label, expiresAt: k.expires_at, lastUsedAt: k.last_used_at, createdAt: k.created_at, task: k.number ? `T-${k.number}` : null })) }));
+  // the projects each agent may work in (what an MCP sign-in can see)
+  for (const a of list) a.projects = (await listTaskProjects(db, { id: a.id })).map((p) => ({ id: p.id, name: p.name, canEdit: p.canEdit }));
+  return list;
 }
 /** where the agent is told; the signing secret is shown once */
 export async function setAgentWebhook(db, me, { agentId, url } = {}) {
@@ -751,4 +754,63 @@ export async function createTaskAgent(db, me, { name } = {}) {
   const row = (await db.query('SELECT id, username FROM users WHERE username = $1', [made.agent.handle])).rows[0];
   await db.query('UPDATE api_keys SET is_active = false WHERE user_id = $1', [row.id]);
   return { agent: { id: String(row.id), username: row.username, name: label } };
+}
+
+// ───────────────────────────── MCP sign-in: the person's agent, and the projects it works in
+
+/** The agent a person's MCP sign-in acts as. Signing in an agent CLI never lets it act as the person:
+ *  it gets the person's own agent for that app (one per app name), owned by them, with its general
+ *  API key switched off. Reused on every later sign-in from the same app. */
+export async function mcpAgentFor(db, ownerId, appName) {
+  const label = String(appName || 'MCP app').replace(/[\u0000-\u001f<>]/g, '').trim().slice(0, 60) || 'MCP app';
+  const pick = async (byName) => (await db.query(`SELECT u.id FROM agent_identities ai JOIN users u ON u.id = ai.user_id
+    WHERE ai.owner_user_id = $1 AND ai.agent_origin = 'mcp' ${byName ? 'AND COALESCE(u.display_name, u.username) = $2' : ''} ORDER BY ai.created_at LIMIT 1`,
+    byName ? [ownerId, label] : [ownerId])).rows[0];
+  const hit = await pick(true); if (hit) return String(hit.id);
+  const owner = (await db.query('SELECT id, username FROM users WHERE id = $1', [ownerId])).rows[0];
+  if (!owner) throw new TaskError('Account not found', 'account_not_found', 401);
+  try {
+    const made = await createAgent(db, { id: owner.id, kind: 'human', handle: owner.username }, { name: label.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'mcp', displayName: label, agentRole: 'worker', agentOrigin: 'mcp' });
+    const row = (await db.query('SELECT id FROM users WHERE username = $1', [made.agent.handle])).rows[0];
+    await db.query('UPDATE api_keys SET is_active = false WHERE user_id = $1', [row.id]);
+    return String(row.id);
+  } catch (e) {
+    // at the agent cap, share the person's existing MCP agent rather than refusing the sign-in
+    const any = await pick(false); if (any) return String(any.id);
+    if (e && e.code && e.status) throw new TaskError(e.message, e.code, e.status);
+    throw e;
+  }
+}
+
+/** Projects the caller can see tasks in (people: their projects; agents: the ones shared with them). */
+export async function listTaskProjects(db, me) {
+  const rows = (await db.query(`SELECT DISTINCT p.id, p.name, p.area FROM relationship_tuples r JOIN chat_projects p ON p.id::text = r.object_id
+    WHERE r.object_type = 'project' AND r.subject_type = 'user' AND r.subject_id = $1 AND NOT p.is_archived ORDER BY p.name`, [String(me.id)])).rows;
+  const out = [];
+  for (const p of rows) { if (!(await rel(db, me.id, p.id, 'viewer'))) continue; out.push({ id: String(p.id), name: p.name, area: p.area || null, canEdit: await rel(db, me.id, p.id, 'editor') }); }
+  return out;
+}
+
+/** Which projects one of the caller's agents may work in. */
+export async function agentProjects(db, me, agentId) {
+  const a = await ownAgent(db, me, agentId);
+  return { agent: { id: String(a.id), name: a.name }, projects: await listTaskProjects(db, { id: a.id }) };
+}
+/** Let one of the caller's agents work in a project (editor: take tasks, comment, report, send for review;
+ *  it can still never accept its own work). Same tuple a project share writes; needs project admin. */
+export async function addAgentProject(db, me, agentId, projectId, relation = 'editor') {
+  const a = await ownAgent(db, me, agentId);
+  if (!UUID.test(String(projectId))) throw new TaskError('Project not found', 'project_not_found', 404);
+  if (!['viewer', 'editor'].includes(relation)) throw new TaskError('relation is viewer or editor', 'invalid_relation');
+  if (!(await rel(db, me.id, projectId, 'viewer'))) throw new TaskError('Project not found', 'project_not_found', 404);
+  if (!(await rel(db, me.id, projectId, 'admin'))) throw new TaskError('Only a project admin can add an agent to it', 'not_allowed', 403);
+  await db.query(`DELETE FROM relationship_tuples WHERE object_type = 'project' AND object_id = $1 AND subject_type = 'user' AND subject_id = $2 AND relation IN ('viewer','reviewer','editor','admin')`, [String(projectId), String(a.id)]);
+  await writeTuples(db, { writes: [{ object: `project:${projectId}`, relation, subject: `user:${a.id}` }] });
+  return agentProjects(db, me, agentId);
+}
+export async function removeAgentProject(db, me, agentId, projectId) {
+  const a = await ownAgent(db, me, agentId);
+  if (!UUID.test(String(projectId))) throw new TaskError('Project not found', 'project_not_found', 404);
+  await db.query(`DELETE FROM relationship_tuples WHERE object_type = 'project' AND object_id = $1 AND subject_type = 'user' AND subject_id = $2 AND relation IN ('viewer','reviewer','editor','admin')`, [String(projectId), String(a.id)]);
+  return agentProjects(db, me, agentId);
 }

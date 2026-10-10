@@ -77,6 +77,12 @@ export const FIRST_PARTY_CLIENTS = [
 
 const SQL = `
 ALTER TABLE oauth_clients ADD COLUMN IF NOT EXISTS loopback boolean NOT NULL DEFAULT false;
+-- Dynamic client registration (RFC 7591) for MCP clients: a self-registered client is
+-- flagged, gets tokens for its own audience (never 'xeno-api'), and is shown a consent screen.
+ALTER TABLE oauth_clients ADD COLUMN IF NOT EXISTS dynamic boolean NOT NULL DEFAULT false;
+ALTER TABLE oauth_clients ADD COLUMN IF NOT EXISTS access_audience text NOT NULL DEFAULT 'xeno-api';
+ALTER TABLE oauth_clients ADD COLUMN IF NOT EXISTS registered_from text;
+CREATE INDEX IF NOT EXISTS idx_oauth_clients_dynamic ON oauth_clients(created_at) WHERE dynamic;
 `;
 
 /** The redirect set a client is seeded with. A loopback client defaults to the

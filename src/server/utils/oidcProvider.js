@@ -34,6 +34,10 @@ const ID_TTL_SEC = 10 * 60;
 // `resolveAuthedUser`, `introspectToken` below) use the constants + predicate here,
 // so the two can never drift. LOCKED by XENO AUTH - SPEC.md §3.2.
 export const ACCESS_TOKEN_AUDIENCE = 'xeno-api';
+// Tokens for self-registered MCP clients name this audience instead, so the rest of the API
+// (which requires 'xeno-api') refuses them by construction. Only /api/tasks accepts it.
+export const TASKS_AUDIENCE = 'xeno-tasks';
+export const TASKS_SCOPES = Object.freeze(['tasks:read', 'tasks:write']);
 export const ACCESS_TOKEN_TYP = 'at+jwt';
 
 /** RFC 7519 `aud` may be a string or an array of strings. */
@@ -126,6 +130,7 @@ export function discovery() {
     end_session_endpoint: `${iss}/api/oauth2/end_session`,
     xeno_logout_everywhere_endpoint: `${iss}/api/oauth2/logout_everywhere`,
     jwks_uri: `${iss}/api/oauth2/jwks`,
+    registration_endpoint: `${iss}/api/oauth2/register`,
     userinfo_endpoint: `${iss}/api/v2/me`,
     response_types_supported: ['code'],
     grant_types_supported: [
@@ -156,6 +161,7 @@ export async function getClient(db, clientId) {
 function clientAllowsRedirect(client, redirectUri) {
   const uris = Array.isArray(client.redirect_uris) ? client.redirect_uris : [];
   if (uris.includes(redirectUri)) return true;
+  if (client.dynamic) return dynamicLoopbackMatch(uris, redirectUri);
   // RFC 8252 §7.3 loopback: a native/desktop client (`loopback` flag) may receive
   // the callback on ANY ephemeral port of 127.0.0.1 / [::1], provided the PATH
   // matches a registered loopback redirect. Loopback literals ONLY — never an
@@ -262,6 +268,7 @@ async function ensureRefreshSession(db, row) {
 
 async function mintTokens(db, { user, clientId, scope, sid, nonce, authTime = new Date(), dpopJkt = null }) {
   const key = await getSigningKey(db);
+  const aud = await audienceForClient(db, clientId);
   const now = Math.floor(Date.now() / 1000);
   const session = await registerSession(db, { sid, userId: user.id, authTime, dpopJkt });
   const base = {
@@ -269,7 +276,7 @@ async function mintTokens(db, { user, clientId, scope, sid, nonce, authTime = ne
     auth_time: Math.floor(session.authTime.getTime() / 1000),
   };
   const accessToken = jwt.sign(
-    { ...base, sub: user.id, aud: ACCESS_TOKEN_AUDIENCE, client_id: clientId, azp: clientId, scope, typ: ACCESS_TOKEN_TYP,
+    { ...base, sub: user.id, aud, client_id: clientId, azp: clientId, scope, typ: ACCESS_TOKEN_TYP,
       ...(dpopJkt ? { cnf: { jkt: dpopJkt } } : {}) },
     key.privatePem,
     { algorithm: key.alg, keyid: key.kid, expiresIn: ACCESS_TTL_SEC, header: { typ: ACCESS_TOKEN_TYP, kid: key.kid } },
@@ -370,7 +377,8 @@ export async function createAuthorizationCode(db, {
     codeChallenge,
     codeChallengeMethod,
   });
-  const grantedScope = downscope(scope || 'openid profile email', client.allowed_scopes);
+  const grantedScope = downscope(scope || (client.dynamic ? 'openid tasks:read tasks:write' : 'openid profile email'), client.allowed_scopes);
+  if (client.dynamic && !grantedScope.split(' ').some((s) => TASKS_SCOPES.includes(s))) throw oauthError('invalid_scope', 'this client may only request tasks:read and tasks:write');
   if (prompt !== null && prompt !== '' && prompt !== 'login') {
     throw oauthError('invalid_request', 'unsupported prompt');
   }
@@ -470,7 +478,7 @@ export async function refreshTokenGrant(db, { refreshToken, clientId, dpopJkt = 
       const now = Math.floor(Date.now() / 1000);
       const authTime = Math.floor(new Date(session.auth_time).getTime() / 1000);
       const access = jwt.sign(
-        { iss: issuer(), iat: now, sub: user.id, aud: ACCESS_TOKEN_AUDIENCE, client_id: clientId, azp: clientId,
+        { iss: issuer(), iat: now, sub: user.id, aud: await audienceForClient(tx, clientId), client_id: clientId, azp: clientId,
           scope: row.scope, sid: row.sid, auth_epoch: Number(session.auth_epoch), auth_time: authTime,
           typ: ACCESS_TOKEN_TYP, ...(session.dpop_jkt ? { cnf: { jkt: session.dpop_jkt } } : {}) },
         key.privatePem,
@@ -964,4 +972,92 @@ export function oauthError(error, description) {
   e.oauthError = error;
   e.statusCode = error === 'invalid_client' ? 401 : 400;
   return e;
+}
+
+// ── Dynamic client registration (RFC 7591) — for MCP clients ────────────────
+//
+// An agent CLI (Claude Code, Codex, Cursor…) that is pointed at the XENO Tasks MCP server
+// registers itself here, then signs the person in with the ordinary authorization-code + PKCE
+// flow. Four rules make an open registration endpoint safe:
+//   1. Such a client is PUBLIC (no secret) and PKCE-only, and may hold ONLY tasks:read/write.
+//   2. Its tokens name the 'xeno-tasks' audience; every other API requires 'xeno-api' and refuses
+//      them, so a self-registered client can never reach billing, chat, files or anything else.
+//   3. The person sees an explicit consent screen naming the app, flagged unverified, and where
+//      the sign-in will be sent (first-party clients skip it; self-registered ones never do).
+//   4. Registration is rate-limited per address, and its fields are bounded and validated.
+
+async function audienceForClient(db, clientId) {
+  const c = await getClient(db, clientId);
+  return (c && c.access_audience) || ACCESS_TOKEN_AUDIENCE;
+}
+
+const LOOPBACK_HOSTS = new Set(['127.0.0.1', '::1', 'localhost']);
+function dynamicLoopbackMatch(uris, redirectUri) {
+  // RFC 8252 §7.3: a native app picks its port at runtime, so a registered loopback path matches any port.
+  let req; try { req = new URL(redirectUri); } catch { return false; }
+  if (req.protocol !== 'http:' || !LOOPBACK_HOSTS.has(req.hostname.replace(/^\[|\]$/g, ''))) return false;
+  return uris.some((u) => { let reg; try { reg = new URL(u); } catch { return false; }
+    return reg.protocol === 'http:' && LOOPBACK_HOSTS.has(reg.hostname.replace(/^\[|\]$/g, '')) && reg.pathname === req.pathname; });
+}
+
+/** Which redirect URIs a self-registered client may use: a loopback callback (native apps,
+ *  RFC 8252 §7.3), a private-use scheme (§7.1, reverse-DNS with a dot), or https (a hosted
+ *  client such as a web IDE). Never plain http to another host, never javascript:/data:/file:. */
+export function validateDynamicRedirect(u) {
+  let url; try { url = new URL(u); } catch { return 'not a valid URL'; }
+  if (url.hash) return 'must not carry a fragment';
+  if (url.protocol === 'http:') return LOOPBACK_HOSTS.has(url.hostname.replace(/^\[|\]$/g, '')) ? null : 'http is allowed only on 127.0.0.1, [::1] or localhost';
+  if (url.protocol === 'https:') return url.hostname && !url.username && !url.password ? null : 'https URL needs a host and no credentials';
+  const scheme = url.protocol.slice(0, -1);
+  if (['javascript', 'data', 'file', 'vbscript', 'blob', 'about', 'ftp', 'ws', 'wss'].includes(scheme)) return `${scheme}: is not allowed`;
+  return /^[a-z][a-z0-9+.-]*\.[a-z0-9+.-]+$/i.test(scheme) ? null : 'a custom scheme must be reverse-DNS, like com.example.app';
+}
+
+export const DYNAMIC_REGISTRATION_LIMIT = { perAddressPerHour: 20 };
+
+export async function registerDynamicClient(db, meta = {}, { from = null } = {}) {
+  const bad = (d) => Object.assign(new Error(d), { oauthError: 'invalid_client_metadata', description: d, statusCode: 400 });
+  const name = String(meta.client_name || '').replace(/[\u0000-\u001f\u007f<>]/g, '').trim().slice(0, 80);
+  if (!name) throw bad('client_name is required');
+  const uris = Array.isArray(meta.redirect_uris) ? meta.redirect_uris.map(String) : [];
+  if (!uris.length || uris.length > 5) throw bad('redirect_uris must list 1 to 5 URIs');
+  for (const u of uris) { const why = validateDynamicRedirect(u); if (why) throw Object.assign(new Error(why), { oauthError: 'invalid_redirect_uri', description: `${u}: ${why}`, statusCode: 400 }); }
+  const auth = meta.token_endpoint_auth_method || 'none';
+  if (auth !== 'none') throw bad('only public clients may register: token_endpoint_auth_method must be "none" (use PKCE)');
+  const grants = Array.isArray(meta.grant_types) && meta.grant_types.length ? meta.grant_types : ['authorization_code', 'refresh_token'];
+  if (grants.some((g) => !['authorization_code', 'refresh_token'].includes(g))) throw bad('grant_types may be authorization_code and refresh_token');
+  const responses = Array.isArray(meta.response_types) && meta.response_types.length ? meta.response_types : ['code'];
+  if (responses.some((r) => r !== 'code')) throw bad('response_types must be ["code"]');
+  const requested = String(meta.scope || 'tasks:read tasks:write').split(/\s+/).filter(Boolean);
+  const scopes = requested.filter((s) => TASKS_SCOPES.includes(s));
+  if (!scopes.length) throw Object.assign(new Error('scope'), { oauthError: 'invalid_client_metadata', description: 'this server registers clients for tasks:read and tasks:write only', statusCode: 400 });
+  if (from) {
+    const recent = (await db.query(`SELECT count(*)::int AS n FROM oauth_clients WHERE dynamic AND registered_from = $1 AND created_at > now() - interval '1 hour'`, [from])).rows[0].n;
+    if (recent >= DYNAMIC_REGISTRATION_LIMIT.perAddressPerHour) throw Object.assign(new Error('rate'), { oauthError: 'invalid_client_metadata', description: 'too many registrations from this address; try again later', statusCode: 429 });
+  }
+  const clientId = `mcp_${crypto.randomBytes(12).toString('base64url')}`;
+  const allowed = ['openid', ...scopes];
+  await db.query(
+    `INSERT INTO oauth_clients (client_id, client_secret, name, redirect_uris, allowed_scopes, surface, is_first_party, loopback, dynamic, access_audience, registered_from)
+     VALUES ($1, NULL, $2, $3, $4, 'xeno_tasks_mcp', false, false, true, $5, $6)`,
+    [clientId, name, uris, allowed, TASKS_AUDIENCE, from]);
+  return {
+    client_id: clientId, client_id_issued_at: Math.floor(Date.now() / 1000), client_name: name, redirect_uris: uris,
+    token_endpoint_auth_method: 'none', grant_types: grants, response_types: ['code'], scope: scopes.join(' '),
+  };
+}
+
+/** Verify a Tasks-audience access token (minted for a self-registered MCP client). Returns its
+ *  claims, or null if it is not one. Throws on a token that claims to be one and is invalid. */
+export async function verifyTasksAccessToken(db, token) {
+  const header = jwt.decode(token, { complete: true })?.header;
+  if (!header || !header.kid || header.alg === 'HS256') return null;
+  const peek = jwt.decode(token);
+  if (!peek || !audienceIncludes(peek.aud, TASKS_AUDIENCE)) return null;
+  const key = await getKeyByKid(db, header.kid);
+  if (!key) throw oauthError('invalid_token', 'unknown signing key');
+  const payload = jwt.verify(token, key.publicKey, { algorithms: [key.alg], audience: TASKS_AUDIENCE, issuer: issuer() });
+  if (header.typ !== ACCESS_TOKEN_TYP || payload.typ !== ACCESS_TOKEN_TYP) throw oauthError('invalid_token', 'not an access token');
+  if (payload.sid && !(await isOidcSessionActive(db, { sid: payload.sid, userId: payload.sub, authEpoch: payload.auth_epoch }))) throw oauthError('invalid_token', 'session ended');
+  return payload;
 }

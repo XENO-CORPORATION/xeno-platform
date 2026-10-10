@@ -1,5 +1,5 @@
 import path from 'path';
-import xenoTasksRoutes, { taskTokenAuth, unlessTaskToken } from './routes/xenoTasksRoutes.js';
+import xenoTasksRoutes, { taskTokenAuth, unlessTaskToken, mcpChallenge, protectedResourceMetadata } from './routes/xenoTasksRoutes.js';
 import userNotificationsRoutes from './routes/userNotificationsRoutes.js';
 import { startTaskSweeps } from './services/taskNotifyEmail.js';
 import { sweepDueReminders, deliverAgentEvents } from './services/xenoTasks.js';
@@ -618,7 +618,10 @@ app.use('/api/workspace-invites', databaseMiddleware, authMiddleware, workspaceI
 app.use('/api/workspace', databaseMiddleware, authMiddleware, requireActivated, areaFromRequest, workspaceAreaRoutes);
 // XENO Tasks (codename Telos) — the shared work tracker for people and agents (xeno-tasks/SPEC.md).
 // agents reach Tasks with their own credential (Bearer xtk_...), checked before the person sign-in middleware
-app.use('/api/tasks', databaseMiddleware, taskTokenAuth, unlessTaskToken(authMiddleware), unlessTaskToken(requireActivated), xenoTasksRoutes);
+// MCP discovery (RFC 9728 protected-resource metadata; RFC 8414 authorization-server metadata) at the site root
+app.get(['/.well-known/oauth-protected-resource', '/.well-known/oauth-protected-resource/api/tasks/mcp'], protectedResourceMetadata);
+app.get('/.well-known/oauth-authorization-server', (req, res) => res.json(oidcDiscovery()));
+app.use('/api/tasks', databaseMiddleware, mcpChallenge, taskTokenAuth, unlessTaskToken(authMiddleware), unlessTaskToken(requireActivated), xenoTasksRoutes);
 app.use('/api/notifications', databaseMiddleware, authMiddleware, requireActivated, userNotificationsRoutes);
 console.log('🏢 Workspace routes integrated: /api/workspaces/* + /api/workspace-invites/*');
 
