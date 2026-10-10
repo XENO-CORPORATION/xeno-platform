@@ -988,7 +988,7 @@
     const secs = homeSections(m.id, [
       { id: 'needs', label: 'Needs you', html: () => homeState() === 'error' ? `<section class="hm2-sec"><div class="hm2-h"><h2>Needs you</h2></div><div class="hm2-err">${ic('reset')}<span><b>Couldn't load what needs you.</b> Your inbox is safe — nothing was changed.</span><button class="us-ghost" data-home-retry>Try again</button></div></section>` : homeNeeds(m.id, seen) },
       { id: 'kpis', label: 'This week', html: () => kpiSection(m.id) },
-      { id: 'sig', label: SIGL[m.id] || 'Your work', html: () => `<div class="hm2-sigwrap">${window.XENO_SIG?.[m.id] ? window.XENO_SIG[m.id](m) : (SIG[m.id] || SIG.studio)(m)}</div>` },
+      { id: 'sig', label: window.XENO_HOME_LIVE?.served ? 'Your work' : SIGL[m.id] || 'Your work', html: () => `<div class="hm2-sigwrap">${window.XENO_HOME_LIVE?.served ? window.XENO_HOME_LIVE.work(m) : window.XENO_SIG?.[m.id] ? window.XENO_SIG[m.id](m) : (SIG[m.id] || SIG.studio)(m)}</div>` },   // on the platform: the person's own work, never a sample section
       { id: 'areas', label: 'Areas', html: () => `<section class="hm2-sec"><div class="hm2-h"><h2>Areas</h2></div><div class="hm2-areas">${zonesFor(m.id).map((z) => { const n = (z.products || []).filter((id) => PR[id] && PR[id].status !== 'soon').length; return `<button class="hm2-area" data-zone="${z.id}">${ic(z.icon)}<span><b>${esc(z.label)}</b><small>${n ? plural(n, 'product', 'products') : 'Coming soon'}</small></span></button>`; }).join('')}</div></section>` },
     ]);
     return `<div class="wrap hm2${homeState() === 'loading' ? ' hm2--ghost' : ''}" data-home="${m.id}">

@@ -24,7 +24,7 @@ const reset = () => Object.assign(db, { balance: 321, billDown: false, calls: []
   convs: [{ id: CV, title: 'Zebra plan', updated_at: iso(2), last_message_at: iso(2), project_id: null, area: 'dev' }, { id: 'c-old1', title: 'Old trip notes', updated_at: iso(300), last_message_at: iso(300), project_id: null, area: null }, { id: 'c-old2', title: 'Old <b>recipe</b>', updated_at: iso(400), last_message_at: iso(400), project_id: null, area: null }, { id: 'c-inproj', title: 'Inside a project', updated_at: iso(500), last_message_at: iso(500), project_id: 'p-old', area: null }],
   projects: [{ id: 'p-old', name: 'Old project', updated_at: iso(600), area: null }],
   pins: [], extraLoose: 0,
-  files: [{ id: 'f-1', name: 'Diagram.png', source: 'library_file', source_id: 's-1', updated_at: iso(3), area: null }, { id: 'f-2', name: 'Dev notes.md', source: 'library_file', source_id: 's-2', updated_at: iso(4), area: 'dev' }], failMove: null });
+  files: [{ id: 'f-1', name: 'Diagram.png', source: 'library_file', source_id: 's-1', updated_at: iso(3), area: null }, { id: 'f-2', name: 'Dev <i>notes</i>.md', source: 'library_file', source_id: 's-2', updated_at: iso(4), area: 'dev' }], failMove: null });
 const CHAT = `<!doctype html><html><body><div class="chat-themed"><div data-chat-composer-shell></div></div><script>const say = () => parent.postMessage({ source: 'xeno-chat', type: 'location', path: location.pathname, title: 'Chat' }, location.origin); addEventListener('popstate', say); say();</script></body></html>`;
 async function open(hash) {
   const p = await b.newPage(); await p.setViewport({ width: 1400, height: 900 });
@@ -44,6 +44,7 @@ async function open(hash) {
       if (q.method() === 'DELETE') { t.status = 'cancelled'; return json({ success: true }); } }
     if (u.pathname === '/api/workspace/pins') return json({ success: true, items: db.pins.map((id) => db.convs.find((c) => c.id === id)).filter(Boolean).map((c) => ({ kind: 'chat', id: c.id, title: c.title, area: c.area || null, at: c.updated_at })) });
     { const pm = u.pathname.match(/^\/api\/chat\/conversations\/([^/]+)\/pin$/); if (pm) { db.calls.push(['PIN', q.method() + ' ' + pm[1], null, null]); if (db.refuse) return json({ success: false, error: 'Internal server error' }, 500); db.pins = db.pins.filter((x) => x !== pm[1]); if (q.method() === 'PUT') db.pins.push(pm[1]); return json({ success: true, pinned: q.method() === 'PUT' }); } }
+    if (u.pathname === '/api/workspace/summary') return db.sumDown ? json({ success: false, error: 'Internal server error' }, 500) : json({ success: true, days: 7, areas: { dev: { chats: [0, 1, 0, 2, 0, 1, 3], messages: [0, 4, 0, 9, 0, 2, 11], runs: [0, 0, 0, 0, 0, 0, 0] }, studio: { chats: [0, 0, 0, 0, 0, 0, 0], messages: [0, 0, 0, 0, 0, 0, 0], runs: [0, 0, 0, 0, 0, 0, 0] } } });
     if (u.pathname === '/api/workspace/needs') return json({ success: true, items: db.tasks.filter((t) => t.status !== 'cancelled' && t.last_run_status === 'failed').map((t) => ({ kind: 'schedule_failed', id: t.id, title: t.title, detail: t.last_run_error, area: t.area, conversation_id: null, at: iso(1) })) });
     if (u.pathname === '/api/workspace/search') { if (db.slow) await wait(db.slow); const qq = (u.searchParams.get('q') || '').toLowerCase(); if (qq === 'plan') return json({ success: true, query: qq, results: [{ kind: 'chat', id: CV, title: 'Zebra plan', snippet: '…the plan for the zebra…', matched: 'message', area: 'dev', at: iso(2) }], counts: {} }); if (qq !== 'zebra') return json({ success: true, query: qq, results: [], counts: {} });
       return json({ success: true, query: qq, results: [
@@ -254,6 +255,29 @@ try {
     await p.evaluate(() => window.XA.sortAreas()); await wait(900);
     const more = await p.evaluate(() => [...document.querySelectorAll('.xd')].at(-1).querySelector('[data-sort-more="chats"]')?.textContent || '');
     ok(/^57 more chats are in no area/.test(more), `a list longer than one request says how many more there are (${more.slice(0, 40)})`); await p.close(); }
+
+  // ── each area's home
+  reset();
+  { const { p, errs } = await open('#/dev'); await wait(900);
+    const home = () => p.evaluate(() => { const m = document.querySelector('#main'); return { text: m.textContent.replace(/\s+/g, ' '), kpis: [...m.querySelectorAll('.kpi')].map((k) => k.querySelector('small').textContent + '=' + k.querySelector('.kpi-v').textContent), work: [...m.querySelectorAll('[data-home-work]')].map((r) => r.dataset.homeWork + ':' + r.querySelector('b').innerHTML), empty: !!m.querySelector('[data-home-work-empty]'), head: m.querySelector('[data-home-work-sec] h2')?.textContent || '' }; });
+    let h = await home();
+    ok(h.kpis.join() === 'Chats started=7,Messages sent=26', `Dev’s “This week” is the person’s own week: chats started and messages sent; a count of nothing is not shown (${h.kpis.join()})`);
+    ok(!/128|Renders this week|Agent runs|Launch trailer|Refactor auth gate|Atlas|€/.test(h.text), 'none of the picture’s sample numbers, jobs or agent runs are on the page');
+    ok(h.head === 'Your work in Dev' && h.work.join() === 'chat:Zebra plan,file:Dev &lt;i&gt;notes&lt;/i&gt;.md', `“Your work in Dev” lists what the person touched there, newest first, as text (${h.work.join()})`);
+    await p.evaluate(() => document.querySelector('#main [data-home-work="chat"]').click()); await wait(800);
+    ok((await p.evaluate(() => location.hash)).includes(CV), 'opening a chat from the home opens that conversation');
+    await p.evaluate(() => { location.hash = '#/studio'; }); await wait(1000); h = await home();
+    ok(h.kpis.length === 0 && h.empty && /Nothing in Studio yet/.test(h.text) && !/Hero stills|Teaser 15s|rendering/i.test(h.text), `an area with nothing in it says so, shows no numbers and no sample production (${h.kpis.length})`);
+    await p.evaluate(() => { location.hash = '#/overview'; }); await wait(1000);
+    const ov = await p.evaluate(() => document.querySelector('#main').textContent.replace(/\s+/g, ' '));
+    ok(!/Running now|rendering|Launch trailer/i.test(ov) && /Chats started/.test(ov), 'Overview shows no sample running jobs, and each area’s headline number is real');
+    ok((await p.evaluate(() => document.getElementById('xp-note')?.textContent || '')).includes('each area’s home are real'), 'the note says which parts are real and which still show samples');
+    ok(errs.length === 0, `no page errors on the homes (${JSON.stringify(errs.slice(0, 2))})`); await p.close(); }
+  reset(); db.sumDown = true;
+  { const { p, errs } = await open('#/dev'); await wait(900);
+    const t = await p.evaluate(() => ({ k: document.querySelectorAll('#main .kpi').length, text: document.querySelector('#main').textContent }));
+    ok(t.k === 0 && !/128|Renders this week/.test(t.text), 'when the week cannot be loaded no numbers are shown, not sample ones');
+    ok(errs.length === 0, `no page errors when the week fails (${JSON.stringify(errs.slice(0, 2))})`); db.sumDown = false; await p.close(); }
 
   // ── Usage: the person's real credits
   reset();

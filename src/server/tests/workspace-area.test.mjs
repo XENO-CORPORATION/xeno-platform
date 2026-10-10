@@ -117,6 +117,30 @@ async function main() {
     check(shape(await search('zebra')) === '', 'one person’s search never finds another person’s work');
     actor = ada;
 
+    // ── the week, per area
+    const week0 = (await call('GET', '/workspace/summary')).json;
+    const sum = (a, m) => (week0.areas[a] ? week0.areas[a][m].reduce((x, y) => x + y, 0) : 0);
+    const mine = async (where) => Number((await pool.query(`SELECT count(*)::int AS n FROM chat_conversations c WHERE c.user_id = $1 AND c.deleted_at IS NULL AND ${where}`, [ada])).rows[0].n);
+    check(week0.days === 7 && week0.areas.dev.chats.length === 7 && sum('dev', 'chats') === await mine("c.area = 'dev' AND c.project_id IS NULL") && sum('studio', 'chats') === await mine("c.area = 'studio' AND c.project_id IS NULL"), `the week counts the chats I started, per area (dev ${sum('dev', 'chats')}, studio ${sum('studio', 'chats')})`);
+    check(week0.areas.dev.chats[6] === sum('dev', 'chats') && week0.areas.dev.chats[0] === 0, 'what happened in the last 24 hours is the last point of the series');
+    check(sum('studio', 'messages') === 1 && sum('dev', 'messages') === 1, 'it counts the messages I sent, in the area of their conversation');
+    const anyDev = (await pool.query("SELECT id FROM chat_conversations WHERE user_id = $1 AND area = 'dev' AND deleted_at IS NULL LIMIT 1", [ada])).rows[0].id;
+    await pool.query("UPDATE chat_conversations SET created_at = (now() AT TIME ZONE 'UTC') - interval '2 days 3 hours' WHERE id = $1", [anyDev]);
+    await pool.query("INSERT INTO chat_messages(conversation_id, user_id, role, content, message_index) VALUES($1,$2,'assistant','an answer',1)", [anyDev, ada]);
+    const old = (await call('POST', '/chat/conversations', { title: 'long ago', model_id: 'm', area: 'dev' })).json.conversation;
+    await pool.query("UPDATE chat_conversations SET created_at = (now() AT TIME ZONE 'UTC') - interval '9 days' WHERE id = $1", [old.id]);
+    const week1 = (await call('GET', '/workspace/summary')).json;
+    check(week1.areas.dev.chats[4] === 1 && week1.areas.dev.chats.reduce((x, y) => x + y, 0) === sum('dev', 'chats'), 'a chat from two days ago sits two days back; one from nine days ago is not in the week');
+    check(week1.areas.dev.messages.reduce((x, y) => x + y, 0) === 1, 'an assistant’s answer is not a message I sent');
+    const runTask = await sched('run-me', { area: 'tools' });
+    await pool.query("INSERT INTO chat_scheduled_runs(task_id, occurrence_key, scheduled_for, status, completed_at) VALUES($1,'k1',now(),'succeeded',now()), ($1,'k2',now(),'failed',now())", [runTask.id]);
+    const week2 = (await call('GET', '/workspace/summary')).json;
+    check(week2.areas.tools && week2.areas.tools.runs[6] === 1, 'it counts scheduled runs that finished, not the ones that failed');
+    actor = bob; const weekBob = (await call('GET', '/workspace/summary')).json; actor = ada;
+    check(Object.keys(weekBob.areas).length === 0, 'one person’s week holds nothing of another person’s');
+    await pool.query('DELETE FROM chat_scheduled_tasks WHERE id = $1', [runTask.id]); await call('DELETE', `/chat/conversations/${old.id}`);
+    await pool.query("UPDATE chat_conversations SET created_at = (now() AT TIME ZONE 'UTC') WHERE id = $1", [anyDev]);
+
     // ── pins
     const pins = async (extra = '') => (await call('GET', '/workspace/pins' + extra)).json.items.map((i) => `${i.kind}:${i.title}@${i.area ?? '-'}`).join(' | ');
     const zplan = (await search('Quarterly zebra')).results[0], lunchC = (await search('Lunch')).results.find((r) => r.title === 'Lunch');
