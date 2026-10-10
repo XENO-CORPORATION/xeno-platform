@@ -1004,7 +1004,8 @@
   // A button that opens a menu or picker toggles it: a second click closes it. The menus close themselves on any
   // outside mousedown, which runs before the click, so the opener's open state is read at pointerdown, first.
   let wasOpen = null;
-  document.addEventListener('pointerdown', (e) => { wasOpen = e.target.closest?.('[data-menu-open]') || null; }, true);
+  // the picker knows its own opener (an attribute can be cleared by other code); menus mark theirs with data-menu-open
+  document.addEventListener('pointerdown', (e) => { const pa = PK && PK.anchor && !pickEl.hidden && PK.anchor.contains(e.target) ? PK.anchor : null; wasOpen = pa || e.target.closest?.('[data-menu-open]') || null; }, true);
   const toggledShut = (el) => { if (!el || el !== wasOpen) return false; wasOpen = null; closePick(false); try { window.XCM?.close?.(false); } catch {} el.removeAttribute('data-menu-open'); return true; };
   const ACT = {
     board: () => go(null), retry: () => { T.status = 'loading'; patch(); load(); }, 'retry-project': (id) => { T.byProject.set(id, 'loading'); patch(); loadProject(id); },
