@@ -119,7 +119,7 @@ const VerifyEmail = () => {
             resend={resend}
             after={
               status === 'verified' ? (
-                <Link to="/overview">Go to dashboard</Link>
+                <a href="/workspace">Open your workspace</a>
               ) : status === 'failed' && !hasToken ? (
                 <Link to="/login">Sign in</Link>
               ) : undefined

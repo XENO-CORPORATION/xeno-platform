@@ -341,7 +341,7 @@ const Onboarding: React.FC = () => {
         const data = await res.json();
         if (!cancelled && data?.done) {
           sessionStorage.setItem(ONBOARDING_DONE_KEY, '1');
-          const to = destinationAfterOnboarding('/overview');
+          const to = destinationAfterOnboarding('/workspace');
           if (isExternalOnboardingNext(to)) { window.location.replace(to); return; }
           navigate(data?.welcomeAcknowledged ? to : welcomePathForDestination(to), { replace: true });
           return;
@@ -413,7 +413,7 @@ const Onboarding: React.FC = () => {
     // go to its product page to be downloaded.
     const productPath = product
       ? (product.delivery === 'web' && product.launchPath) || `/product/${product.slug}`
-      : '/overview';
+      : '/workspace';
     leaveTo(productPath);
   };
 

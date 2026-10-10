@@ -169,8 +169,9 @@ test('user_onboarding.user_id is UUID — INTEGER cannot FK to users.id and the 
 test('completed onboarding hands internal destinations to a dedicated welcome route', () => {
   assert.equal(welcomePathForDestination('/overview/projects'),
     `${ONBOARDING_WELCOME_PATH}?next=%2Foverview%2Fprojects`);
+  // an outside destination falls back to the signed-in home, the workspace
   assert.equal(welcomePathForDestination('https://evil.example'),
-    `${ONBOARDING_WELCOME_PATH}?next=%2Foverview`);
+    `${ONBOARDING_WELCOME_PATH}?next=%2Fworkspace`);
   assert.match(page, /navigate\(welcomePathForDestination\(to\), \{ replace: true \}\)/);
   assert.match(overview, /<Route path="welcome" element=\{<WelcomeCreditBonusModal \/>\}/);
   assert.doesNotMatch(overview, /isWelcomeModalOpen|user\.credits === 0/);

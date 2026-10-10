@@ -171,7 +171,19 @@
   // ---------- actions ----------
   const ACT = {
     go,
-    password: () => window.open('https://xenostudio.ai/overview/settings', '_blank', 'noopener'),
+    // change the password here, against PUT /api/auth/password: every OTHER session ends, this one stays signed in
+    async password() {
+      if (!ON_PLATFORM) return X().toast('Password changes happen on the XENO platform');
+      const api = window.XENO_PLATFORM.api;
+      const st = await api('GET', '/api/account/security').catch(() => null);
+      if (st && st.ok && st.d.security && st.d.security.has_password === false) return D().info({ title: 'No password to change', html: '<p>You sign in with a linked account (Google, GitHub or Microsoft), so there is no XENO password. Manage those under Apps & sign-in methods.</p>' });
+      const v = await D().form({ title: 'Change password', sub: 'You stay signed in here. Every other device and session is signed out.', submit: 'Change password', fields: [
+        { id: 'cur', label: 'Current password', type: 'password', required: true, max: 200 },
+        { id: 'next', label: 'New password', type: 'password', required: true, max: 200, hint: 'At least 8 characters.', validate: (x) => (String(x || '').length >= 8 ? null : 'Use at least 8 characters.') },
+        { id: 'again', label: 'New password again', type: 'password', required: true, max: 200, validate: (x, all) => (x === all.next ? null : 'The two new passwords don’t match.') }],
+        onSubmit: async (vals) => { const r = await api('PUT', '/api/auth/password', { current_password: vals.cur, new_password: vals.next }).catch(() => null); return r && r.ok ? null : (r && r.d && r.d.error) || 'XENO could not be reached. Your password is unchanged.'; } });
+      if (v) X().toast('Password changed — other sessions are signed out');
+    },
     async editProfile() { const a = A(); const v = await D().form({ title: 'Edit profile', submit: 'Save', fields: [{ id: 'name', label: 'Display name', required: true, max: 60, value: a.profile.name }, { id: 'handle', label: 'Handle', required: true, max: 30, value: a.profile.handle, validate: (x) => (/^[a-z0-9][a-z0-9._-]{2,29}$/i.test(x.trim()) ? null : '3–30 letters, numbers, dots, dashes or underscores.') }, { id: 'bio', label: 'Bio', type: 'textarea', rows: 2, max: 160, value: a.profile.bio }] });
       if (v) edit((x) => { Object.assign(x.profile, { name: v.name.trim(), handle: v.handle.trim().toLowerCase(), bio: v.bio }); }, 'Profile saved'); },
     async changeEmail() { if (ON_PLATFORM) return window.XENO_ACCOUNT.changeEmail(); if (!await stepUp('Changing your email signs you out on every other device.')) return; const v = await D().form({ title: 'Change email', sub: 'We send a link to the new address. Your email changes when you open it.', submit: 'Send link', size: 'sm', fields: [{ id: 'e', label: 'New email', required: true, validate: (x) => (/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(x.trim()) ? null : 'Enter an email address.') }] });

@@ -23,12 +23,13 @@ export const RETURN_URL_KEY = 'xeno_return_url';
 export function resolveOAuthLandingPath(returnUrl, isNew) {
   const dest = typeof returnUrl === 'string' && returnUrl.trim()
     ? returnUrl.trim()
-    : '/overview';
+    : '/workspace';
   if (!isNew) return dest;
   if (dest.startsWith('xeno://')) return dest;
   if (dest.startsWith('/cli-auth')) return dest;
   if (dest.startsWith('/api/oauth2/')) return dest;
-  if (dest === '/overview' || dest === '/overview/' || dest === '/') return ONBOARDING_PATH;
+  // the signed-in home (the workspace; /overview is its old address) sends a new account to onboarding first
+  if (dest === '/workspace' || dest === '/workspace/' || dest === '/overview' || dest === '/overview/' || dest === '/') return ONBOARDING_PATH;
   return dest;
 }
 
@@ -63,7 +64,7 @@ export function consumeOnboardingNext() {
   return next;
 }
 
-export function destinationAfterOnboarding(fallback = '/overview') {
+export function destinationAfterOnboarding(fallback = '/workspace') {
   return consumeOnboardingNext() || fallback;
 }
 
@@ -72,10 +73,10 @@ export function isExternalOnboardingNext(next) {
 }
 
 /** Route an internal post-onboarding destination through the one-time welcome. */
-export function welcomePathForDestination(destination = '/overview') {
+export function welcomePathForDestination(destination = '/workspace') {
   const safe = isAllowedOnboardingNext(destination) && !isExternalOnboardingNext(destination)
     ? destination
-    : '/overview';
+    : '/workspace';
   if (safe === ONBOARDING_WELCOME_PATH || safe.startsWith(`${ONBOARDING_WELCOME_PATH}?`)) {
     return ONBOARDING_WELCOME_PATH;
   }

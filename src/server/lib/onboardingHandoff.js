@@ -13,11 +13,12 @@ export const ONBOARDING_PATH = '/onboarding';
 export function resolveOAuthLandingPath(returnUrl, isNew) {
   const dest = typeof returnUrl === 'string' && returnUrl.trim()
     ? returnUrl.trim()
-    : '/overview';
+    : '/workspace';
   if (!isNew) return dest;
   if (dest.startsWith('xeno://')) return dest;
   if (dest.startsWith('/cli-auth')) return dest;
   if (dest.startsWith('/api/oauth2/')) return dest;
-  if (dest === '/overview' || dest === '/overview/' || dest === '/') return ONBOARDING_PATH;
+  // the signed-in home (the workspace; /overview is its old address) sends a new account to onboarding first
+  if (dest === '/workspace' || dest === '/workspace/' || dest === '/overview' || dest === '/overview/' || dest === '/') return ONBOARDING_PATH;
   return dest;
 }

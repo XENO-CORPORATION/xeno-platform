@@ -156,7 +156,7 @@ const AuthContent: React.FC<{ mode?: AuthMode }> = ({ mode = 'signin' }) => {
   const startSocial = (provider: 'google' | 'github' | 'x') => {
     const socialReturnUrl = returnUrl
       || (cliSession ? location.pathname + location.search : null)
-      || locationReturnPath((location.state as any)?.from, '/overview');
+      || locationReturnPath((location.state as any)?.from, '/workspace');
     // the API's slug for X is still `twitter`
     const slug = provider === 'x' ? 'twitter' : provider;
     window.location.href = `/api/auth/${slug}?returnUrl=${encodeURIComponent(socialReturnUrl)}`;
@@ -218,7 +218,7 @@ const AuthContent: React.FC<{ mode?: AuthMode }> = ({ mode = 'signin' }) => {
           window.location.href = returnUrl;
           return;
         }
-        const from = locationReturnPath((location.state as any)?.from, '/overview');
+        const from = locationReturnPath((location.state as any)?.from, '/workspace');
         navigate(from, { replace: true });
       } else {
         if (activeTab === 'signin') {
