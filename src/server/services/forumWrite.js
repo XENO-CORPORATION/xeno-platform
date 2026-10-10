@@ -637,6 +637,23 @@ export async function castVote(db, user, { targetType, targetId, value }) {
   return { counted: isBinding, weight };
 }
 
+/** Take your own vote back. Idempotent: no vote to remove is not an error. */
+export async function removeVote(db, user, { targetType, targetId }) {
+  assertNotService(user);
+  if (!['thread', 'post'].includes(targetType)) throw new ForumError('Invalid vote target', 'invalid_target', 400);
+  if (!/^[0-9a-f-]{36}$/i.test(String(targetId || ''))) throw new ForumError('Target not found', 'target_not_found', 404);
+  const { rowCount } = await db.query('DELETE FROM forum_votes WHERE target_type = $1 AND target_id = $2 AND voter_id = $3', [targetType, targetId, user.id]);
+  if (rowCount) await retallyVotes(db, targetType, targetId);
+  return { removed: rowCount > 0 };
+}
+
+/** The caller's own votes on a thread's posts: { postId: value }. */
+export async function myVotes(db, userId, postIds) {
+  if (!userId || !postIds.length) return {};
+  const { rows } = await db.query("SELECT target_id, value FROM forum_votes WHERE target_type = 'post' AND voter_id = $1 AND target_id = ANY($2::uuid[])", [userId, postIds]);
+  return Object.fromEntries(rows.map((r) => [String(r.target_id), Number(r.value)]));
+}
+
 /** Recompute the cached tallies. Binding and advisory are tallied separately. */
 export async function retallyVotes(db, targetType, targetId) {
   const table = targetType === 'thread' ? 'forum_threads' : 'forum_posts';
@@ -1563,6 +1580,21 @@ export async function markThreadFixed(db, user, shortId, { version, note } = {})
       userId: uid, kind: 'reply', threadId: thread.id, postId: postRows[0].id, actor,
     }))))
     .catch(() => {});
+
+  // The private ticket this thread was published from (forum_tickets.thread_id) is the same report: it moves to
+  // fixed with the same version, records it in its history, and its reporter is told — one fix, both lanes.
+  const ver = clean.toLowerCase();
+  if (/^[a-z0-9][a-z0-9._-]{0,30}$/.test(ver)) {
+    const { rows: linked } = await db.query(
+      "UPDATE forum_tickets SET status = 'fixed', fixed_in = $2, updated_at = now() WHERE thread_id = $1 AND status NOT IN ('fixed', 'closed') RETURNING id, reporter_id",
+      [thread.id, ver]);
+    for (const tk of linked) {
+      await db.query("INSERT INTO forum_ticket_posts (ticket_id, author_id, author_kind, kind, body) VALUES ($1, $2, $3, 'status', $4)", [tk.id, user.id, actorKind(user), `Fixed in ${ver}`]);
+      if (tk.reporter_id && String(tk.reporter_id) !== String(user.id)) {
+        await db.query("INSERT INTO forum_notifications (user_id, kind, ticket_id, actor_id, actor_kind) VALUES ($1, 'ticket_status', $2, $3, $4)", [tk.reporter_id, tk.id, user.id, actorKind(user)]);
+      }
+    }
+  }
 
   return { ok: true, version: clean, postId: postRows[0].id };
 }

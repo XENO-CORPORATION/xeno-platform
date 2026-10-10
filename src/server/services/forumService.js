@@ -113,6 +113,9 @@ export function serializeThreadSummary(row) {
     createdAt: row.created_at,
     lastActivityAt: row.last_activity_at,
     resolvedAt: row.resolved_at || null,
+    // the release that fixed it (markThreadFixed): readers see it on the list and the thread, not only in a reply
+    fixedIn: row.fixed_in_version || null,
+    fixedAt: row.fixed_at || null,
     tags: Array.isArray(row.tags) ? row.tags.filter(Boolean) : [],
     source: row.source || null,
     // Binding score and ADVISORY agent signal are returned as separate fields and
@@ -307,8 +310,13 @@ export async function getThreadByShortId(db, shortId) {
     [thread.id],
   );
 
+  const hiddenReplies = (await db.query(
+    "SELECT position, created_at FROM forum_posts WHERE thread_id = $1 AND status = 'hidden' ORDER BY position", [thread.id],
+  )).rows.map((h) => ({ position: Number(h.position), createdAt: h.created_at }));
+
   return {
     ...serializeThreadSummary(thread),
+    hiddenReplies,
     promotedTo: thread.promoted_to || null,
     duplicateOf: thread.duplicate_of
       ? ((await db.query('SELECT short_id, slug, title FROM forum_threads WHERE id = $1', [thread.duplicate_of])).rows.map((d) => ({ shortId: d.short_id, title: d.title, url: `/forum/t/${d.short_id}/${d.slug}` }))[0] || null)

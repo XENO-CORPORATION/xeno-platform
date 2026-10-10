@@ -19,7 +19,7 @@ const reset = () => Object.assign(db, { calls: [], refuse: null, moderator: fals
     { shortId: 'aaaa1111', slug: 'a', title: 'Exporting <b>layers</b> one by one', status: 'open', space: { slug: 'questions', name: 'Questions' }, author: A('Ada'), postCount: 3, isResolved: false, lastActivityAt: iso(1), tags: [], score: 2,
       posts: [{ id: 'p0', body: 'How do I export each layer?', author: A('Ada'), createdAt: iso(5), score: 0, isAnswer: false }, { id: 'p1', body: 'Use File > Export layers.', author: A('Rui'), createdAt: iso(3), score: 4, isAnswer: false, advisoryCount: 2 }, { id: 'p2', body: 'Seen this too.', author: A('Kit', 'agent'), createdAt: iso(2), score: 0, isAnswer: false }], duplicateOf: null, subscribed: false },
     { shortId: 'bbbb2222', slug: 'b', title: 'Layer export, separate files', status: 'duplicate', space: { slug: 'questions', name: 'Questions' }, author: A('Rui'), postCount: 1, isResolved: false, lastActivityAt: iso(9), tags: ['kind:bug'], score: 0,
-      posts: [{ id: 'q0', body: 'Same thing', author: A('Rui'), createdAt: iso(9), score: 0 }], duplicateOf: { shortId: 'aaaa1111', title: 'Exporting <b>layers</b> one by one' }, subscribed: false },
+      posts: [{ id: 'q0', body: 'Same thing', author: A('Rui'), createdAt: iso(9), score: 0, position: 1 }], hiddenReplies: [{ position: 2, createdAt: iso(8) }], duplicateOf: { shortId: 'aaaa1111', title: 'Exporting <b>layers</b> one by one' }, subscribed: false },
   ],
   tickets: [{ shortId: 'cccc3333', product: 'workspace', kind: 'bug', title: 'Rail jumps on resize', body: 'It jumps.', status: 'fixed', statusLabel: 'Fixed', fixedIn: '0.9.1', createdAt: iso(48), thread: null,
     posts: [{ id: 't1', kind: 'reply', body: 'Reproduced, thanks.', author: { kind: 'agent', name: 'workspace-dev', reporter: false }, createdAt: iso(40) }, { id: 't2', kind: 'status', body: 'Fixed in 0.9.1', author: { kind: 'human', name: 'Mira', reporter: false }, createdAt: iso(20) }] }],
@@ -44,10 +44,11 @@ async function open(hash) {
       let mm = path2.match(/^\/threads\/([a-z0-9]+)$/); if (mm) { const t = db.threads.find((x) => x.shortId === mm[1]); return t ? json({ success: true, thread: t }) : json({ success: false, error: 'Thread not found' }, 404); }
       mm = path2.match(/^\/threads\/([a-z0-9]+)\/posts$/); if (mm) { const t = db.threads.find((x) => x.shortId === mm[1]); t.posts.push({ id: 'r' + t.posts.length, body: sent.body, author: A('Ada'), createdAt: iso(0), score: 0 }); t.postCount++; return json({ success: true }, 201); }
       mm = path2.match(/^\/threads\/([a-z0-9]+)\/subscription$/); if (mm) { db.threads.find((x) => x.shortId === mm[1]).subscribed = sent.subscribed; return json({ success: true }); }
-      mm = path2.match(/^\/posts\/([^/]+)\/vote$/); if (mm) { for (const t of db.threads) for (const x of t.posts) if (x.id === mm[1]) x.score++; return json({ success: true }); }
+      mm = path2.match(/^\/posts\/([^/]+)\/vote$/); if (mm) { for (const t of db.threads) for (const x of t.posts) if (x.id === mm[1]) { if (m === 'DELETE') { if (x.myVote) x.score--; x.myVote = 0; } else { if (!x.myVote) x.score++; x.myVote = 1; } } return json({ success: true }); }
+      mm = path2.match(/^\/threads\/([a-z0-9]+)\/fixed$/); if (mm) { const t = db.threads.find((x) => x.shortId === mm[1]); t.fixedIn = sent.version; t.status = 'resolved'; return json({ success: true, version: sent.version }); }
       mm = path2.match(/^\/posts\/([^/]+)\/accept$/); if (mm) { for (const t of db.threads) for (const x of t.posts) x.isAnswer = x.id === mm[1] ? true : x.isAnswer; return json({ success: true }); }
       if (/\/flag$/.test(path2)) return json({ success: true }, 201);
-      if (path2 === '/me') return json({ success: true, actor: { handle: 'ada' }, capabilities: { review_flags: db.moderator } });
+      if (path2 === '/me') return json({ success: true, actor: { handle: 'ada', isStaff: db.moderator }, capabilities: { review_flags: db.moderator } });
       if (path2 === '/spaces') return json({ success: true, spaces: [{ slug: 'questions', name: 'Questions', postPolicy: 'open' }, { slug: 'announcements', name: 'Announcements', postPolicy: 'staff_only' }] });
       if (path2 === '/dedup-check') return json({ success: true, candidates: sent.title.includes('layer') ? [{ shortId: 'aaaa1111', title: 'Exporting layers one by one' }] : [] });
       if (path2 === '/report/preflight') return json({ success: true, candidates: [] });
@@ -90,7 +91,9 @@ try {
     await p.evaluate(() => { const f = document.querySelector('#main [data-cm-reply]'); f.querySelector('textarea').value = 'Thanks, that worked.'; f.requestSubmit(); }); await wait(1000); v = await main(p);
     ok(called('POST', '/threads/aaaa1111/posts')[0]?.[2].body === 'Thanks, that worked.' && /Thanks, that worked\./.test(v.text), 'a reply is posted to the platform and appears');
     await p.evaluate(() => document.querySelector('#main [data-cml="vote"][data-arg="p1"]').click()); await wait(900);
-    ok(called('POST', '/posts/p1/vote')[0]?.[2].value === 1 && /Helpful5/.test((await main(p)).text.replace(/\s/g, '')), 'Helpful is counted by the platform');
+    ok(called('POST', '/posts/p1/vote')[0]?.[2].value === 1 && /Helpful5/.test((await main(p)).text.replace(/\s/g, '')) && await p.evaluate(() => document.querySelector('#main [data-cml="vote"][data-arg="p1"]').getAttribute('aria-pressed') === 'true'), 'Helpful is counted by the platform, and shows as your vote');
+    await p.evaluate(() => document.querySelector('#main [data-cml="vote"][data-arg="p1"]').click()); await wait(900);
+    ok(called('DELETE', '/posts/p1/vote').length === 1 && /Helpful4/.test((await main(p)).text.replace(/\s/g, '')) && await p.evaluate(() => document.querySelector('#main [data-cml="vote"][data-arg="p1"]').getAttribute('aria-pressed') === 'false'), 'pressing it again takes the vote back');
     db.refuse = '/vote'; await p.evaluate(() => document.querySelector('#main [data-cml="vote"][data-arg="p2"]').click()); await wait(800); db.refuse = null;
     ok(await p.evaluate(() => document.body.textContent.includes('capability yet')), 'when the platform refuses a vote its reason is shown');
     await p.evaluate(() => document.querySelector('#main [data-cml="answer"][data-arg^="p1"]').click()); await wait(900);
@@ -100,6 +103,7 @@ try {
     p.evaluate(() => document.querySelector('#main [data-cml="flag"][data-arg="aaaa1111|p2"]').click()); await wait(500); await pickRadio(p, 'spam'); await submitLast(p); await wait(800);
     ok(called('POST', '/posts/p2/flag')[0]?.[2].reason === 'spam', 'reporting a reply sends it to the moderators');
     await goC(p, 'bbbb2222'); v = await main(p);
+    ok(/A moderator hid this reply/.test(v.text) && !/Same thing.*hid/.test(''), 'a hidden reply leaves a marker in its place');
     ok(/This is a duplicate\. The answer is in <a[^>]*data-arg="aaaa1111"[^>]*>Exporting &lt;b&gt;layers/.test(v.html), 'a duplicate points to the original, by its public link');
     await goC(p, 'zzzz9999'); ok(/It may have been removed, or the link is wrong/.test((await main(p)).text), 'a thread that does not exist says so');
 
@@ -141,6 +145,9 @@ try {
     await goC(p, 'aaaa1111'); p.evaluate(() => document.querySelector('#main [data-cml="mod"]').click()); await wait(600); await submitLast(p); await wait(1100);
     const act = called('POST', '/moderation/actions')[0];
     ok(act && act[2].action === 'lock' && act[2].targetId === 'aaaa1111' && /Locked by a moderator/.test((await main(p)).text), 'locking a thread goes to the platform and the thread shows it is locked');
+    p.evaluate(() => document.querySelector('#main [data-cml="fixed"]').click()); await wait(600); await fill(p, { version: '0.40.1', note: 'Decoding moved off the main thread.' }); await submitLast(p); await wait(1100);
+    const fx = called('POST', '/threads/aaaa1111/fixed')[0];
+    ok(fx && fx[2].version === '0.40.1' && /Fixed in 0\.40\.1\./.test((await main(p)).text) && !(await p.evaluate(() => !!document.querySelector('#main [data-cml="fixed"]'))), 'staff mark a thread fixed in a version; the thread shows it and stops offering it');
     ok(errs.length === 0, `no page errors in moderation (${JSON.stringify(errs.slice(0, 2))})`); await p.close(); }
 } catch (e) { fails++; console.log('FAIL the suite threw:', e.message); }
 await b.close(); await server.close();

@@ -51,6 +51,7 @@ const DECISIONS = {
   'post /posts/:id/accept':
     'D6 — agents propose, humans ratify. Accepting an answer is the ratification.',
   'delete /posts/:id/accept': 'D6 — see accept.',
+  'delete /:targetType(threads|posts)/:id/vote': '§11 — see vote: taking a vote back is the same advisory act.',
   'post /:targetType(threads|posts)/:id/vote':
     '§11 — an agent vote is advisory and never binding. Giving a swarm a one-call verb to '
     + 'express approval at scale is the shape the rule exists to prevent, even non-bindingly.',
