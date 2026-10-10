@@ -63,6 +63,15 @@ function answer(q) {
     if (perm && m === 'DELETE') { const pr = db.projects.find((x) => x.id === decodeURIComponent(perm[1])); if (!pr) return json(404, { success: false, error: 'Project not found' }); if (!pr.is_archived) return json(409, { success: false, code: 'archive_first', error: 'Archive the project first.' });
       const n = db.conversations.filter((c) => c.project_id === pr.id).length; if (n) return json(409, { success: false, code: 'project_not_empty', conversations: n, scheduled: 0, error: 'This project still holds chats.' });
       db.projects = db.projects.filter((x) => x !== pr); return json(200, { success: true, deleted: true }); } }
+  { const wm = p.match(/^\/api\/workspaces\/([^/]+)\/(members|invites)(?:\/([^/]+))?$/);
+    if (wm && wm[1] === WT) { db.people = db.people || { members: [{ id: U, user_id: U, member_role: 'admin', user: { display_name: 'Ada Lovelace', email: 'ada@example.test' } }, { id: 'u-own', user_id: 'u-own', member_role: 'owner', user: { display_name: 'Charles <i>B</i>', email: 'charles@example.test' } }, { id: 'u-bob', user_id: 'u-bob', member_role: 'member', user: { display_name: 'Bob', email: 'bob@example.test' } }], invites: [{ id: 'i-1', invited_email: 'pending@example.test', role: 'viewer', status: 'pending' }] };
+      const PP = db.people; if (db.refusePeople && m !== 'GET') return json(403, { success: false, error: 'Admin required' });
+      if (wm[2] === 'members' && m === 'GET') return json(200, { success: true, workspace: { id: WT, name: 'Analytical Engines', member_role: 'admin' }, members: PP.members });
+      if (wm[2] === 'invites' && m === 'GET') return json(200, { success: true, invites: PP.invites });
+      if (wm[2] === 'invites' && m === 'POST') { if (body.email === 'dup@example.test') return json(409, { success: false, error: 'Already invited' }); PP.invites.push({ id: 'i-' + (db.next++), invited_email: body.email, role: body.role, status: 'pending' }); return json(200, { success: true }); }
+      if (wm[2] === 'invites' && m === 'DELETE') { PP.invites = PP.invites.filter((i) => i.id !== wm[3]); return json(200, { success: true }); }
+      if (wm[2] === 'members' && m === 'PATCH') { const x = PP.members.find((y) => y.id === wm[3]); if (!x) return json(404, { success: false, error: 'Not found' }); x.member_role = body.member_role; return json(200, { success: true }); }
+      if (wm[2] === 'members' && m === 'DELETE') { PP.members = PP.members.filter((y) => y.id !== wm[3]); return json(200, { success: true }); } } }
   const mm = p.match(/^\/api\/chat\/projects\/([^/]+)$/);
   if (mm && m === 'PUT') { const pr = db.projects.find((x) => x.id === decodeURIComponent(mm[1])); if (!pr) return json(404, { success: false, error: 'Project not found' }); if (body.name !== undefined) pr.name = body.name; if (body.area !== undefined) pr.area = body.area; if (body.is_archived !== undefined) pr.is_archived = !!body.is_archived; if (body.settings) pr.settings = { ...pr.settings, ...body.settings }; return json(200, { success: true, project: pr }); }
   return json(404, { success: false, error: 'not in the fake platform: ' + m + ' ' + p });
@@ -215,6 +224,34 @@ try {
   ok(await del('Full archive', 'Full archive') && db.calls.some((x) => x.m === 'DELETE' && /\/permanent$/.test(x.p)) && db.projects.some((x) => x.name === 'Full archive') && (await p.evaluate(() => document.body.textContent.includes('still holds 1 chat. Move or delete them first.'))), 'an archived project that still holds a chat is not deleted, and the person is told what is in it');
   db.calls.length = 0;
   ok(await del('Old notes', 'Old notes') && !db.projects.some((x) => x.name === 'Old notes') && !(await p.evaluate(() => window.XENO_PG_PROJECTS.items.some((x) => x.realName === 'Old notes'))) && (await p.evaluate(() => document.body.textContent.includes('Deleted “Old notes” for good'))), 'an archived, empty project is deleted for good after its name is typed, and leaves the list');
+
+  // ---- people: the workspace's real members ----
+  const people = () => p.evaluate(() => ({ st: window.XENO_PEOPLE.state(), rows: window.XENO_PG_WORKSPACE.members.map((m) => m.name + '|' + m.role + '|' + m.status), name: window.XENO_PG_WORKSPACE.name, teams: window.XENO_PG_WORKSPACE.teams.length + window.XENO_WF.st().teams.length, main: document.querySelector('#main').textContent }));
+  await p.evaluate(() => { window.XA.switchWorkspace('personal'); }); await wait(500); await p.evaluate(() => window.XW.go('global', { global: 'workspace', item: 'Members' })); await wait(900);
+  let pv = await people();
+  ok(pv.rows.join() === 'Ada Lovelace|owner|active' && pv.teams === 0 && !/Mira|Nova|Atlas|Kit|Juno|XENO Corp/.test(pv.main), 'in Personal the People page is just the person; no sample people, agents or teams (' + pv.rows.join() + ')');
+  db.calls.length = 0; await p.evaluate(() => window.XA.invite()); await wait(400);
+  ok(db.calls.length === 0 && !(await p.evaluate(() => !!document.querySelector('.xd'))) && (await p.evaluate(() => document.body.textContent.includes('Create a workspace to invite people'))), 'inviting from Personal says to create a workspace, and asks the platform nothing');
+  await p.evaluate((id) => { window.XA.switchWorkspace(id); }, WT); await wait(1300); pv = await people();
+  ok(pv.name === 'Analytical Engines' && pv.rows.join() === 'Ada Lovelace|admin|active,Charles <i>B</i>|owner|active,Bob|member|active,pending@example.test|viewer|invited', 'in a workspace it lists the real members with their roles, and the invites still pending (' + pv.rows.length + ')');
+  ok(/Charles &lt;i&gt;B&lt;\/i&gt;/.test(await p.evaluate(() => document.querySelector('#main').innerHTML)) && /Invited/.test(pv.main), 'a name is shown as text, and a pending invite is marked');
+  p.evaluate(() => { window.XA.invite(); }); await wait(500);
+  await p.evaluate(() => { const i = document.querySelector('.xd [data-f="emails"] input'); for (const e of ['new@example.test', 'dup@example.test']) { i.value = e; i.dispatchEvent(new Event('input', { bubbles: true })); i.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true })); } }); await wait(200);
+  await p.click('.xd [data-xd-submit]'); await wait(1300); pv = await people();
+  const posts = db.calls.filter((x) => x.m === 'POST' && /\/invites$/.test(x.p));
+  ok(posts.length === 2 && posts[0].body.email === 'new@example.test' && posts[0].body.role === 'member' && pv.rows.includes('new@example.test|member|invited') && (await p.evaluate(() => document.body.textContent.includes('1 sent. dup@example.test: Already invited'))), 'Invite sends each address to the platform; one that is refused is named with the reason (' + posts.length + ')');
+  const role = p.evaluate(() => window.XA.changeRole('Bob')); await wait(500);
+  await p.evaluate(() => [...document.querySelectorAll('.xd [role=radio][data-v="admin"]')].find((n) => n.offsetParent).click()); await p.click('.xd [data-xd-submit]'); await role; await wait(600); pv = await people();
+  ok(db.calls.some((x) => x.m === 'PATCH' && /\/members\/u-bob$/.test(x.p) && x.body.member_role === 'admin') && pv.rows.includes('Bob|admin|active'), 'changing a role tells the platform');
+  db.calls.length = 0; await p.evaluate(() => window.XA.changeRole('Charles <i>B</i>')); await wait(300);
+  ok(db.calls.length === 0 && !(await p.evaluate(() => !!document.querySelector('.xd'))), 'the owner’s role cannot be changed here');
+  const confirmLast = async () => { await wait(400); await p.evaluate(() => [...document.querySelectorAll('.xd [data-xd-ok]')].at(-1).click()); await wait(1000); };
+  db.refusePeople = true; p.evaluate(() => { window.XA.removeMember('Bob'); }); await confirmLast(); db.refusePeople = false; pv = await people();
+  ok(pv.rows.includes('Bob|admin|active') && (await p.evaluate(() => document.body.textContent.includes('Admin required'))), 'when the platform refuses, the person stays and its reason is shown');
+  p.evaluate(() => { window.XA.removeMember('Bob'); }); await confirmLast(); pv = await people();
+  ok(db.calls.some((x) => x.m === 'DELETE' && /\/members\/u-bob$/.test(x.p)) && !pv.rows.some((r) => r.startsWith('Bob|')), 'Remove takes a member out of the workspace');
+  p.evaluate(() => { window.XA.removeMember('pending@example.test'); }); await confirmLast(); pv = await people();
+  ok(db.calls.some((x) => x.m === 'DELETE' && /\/invites\/i-1$/.test(x.p)) && !pv.rows.some((r) => r.startsWith('pending@')), 'removing a pending invite cancels the invite');
 
   ok(missing.length === 0, 'the workspace asked for no route the platform lacks (' + JSON.stringify([...new Set(missing)].slice(0, 3)) + ')');
   ok(errs.length === 0, 'no page errors (' + JSON.stringify(errs.slice(0, 2)) + ')');

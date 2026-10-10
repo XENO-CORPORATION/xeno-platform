@@ -254,6 +254,7 @@
   // =====================================================================================
   const WSV = ['Members', 'Agents', 'Teams', 'Knowledge', 'Automations', 'Activity', 'Settings'];
   function workspace(view) {
+    if (window.XENO_PEOPLE && window.XENO_PEOPLE.served) window.XENO_PEOPLE.sync?.();   // another workspace: its own people
     const W = window.XENO_PG_WORKSPACE, key = 'workspace', u = ui('ws:' + (view || 'home'));
     const div = W.divisions.find((d) => d.name === view);
     const memberRow = (m) => tr(`data-pg-ws="Members/${esc(m.name)}"`, [`${avatar(m)}<b class="pg-name">${esc(m.name)}</b>${m.kind === 'agent' ? '<em class="pg-kind">Agent</em>' : ''}`, `<small>${esc(m.title)}</small>`, esc(cap(m.role)), esc(m.divisions.join(', ')), m.status === 'departed' ? chip('Departed') : m.status === 'settling' ? chip('Settling') : m.kind === 'agent' ? chip(cap(m.status)) : m.status === 'invited' ? chip('Invited') : `<small>${m.lastActiveAt ? ago(m.lastActiveAt) : '—'}</small>`]);
