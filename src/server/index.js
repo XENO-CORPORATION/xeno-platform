@@ -1,4 +1,5 @@
 import path from 'path';
+import xenoTasksRoutes from './routes/xenoTasksRoutes.js';
 import workspaceAreaRoutes from './routes/workspaceAreaRoutes.js';
 import { areaFromRequest } from './utils/resourceArea.js';
 import { fileURLToPath } from 'url';
@@ -612,6 +613,8 @@ app.use('/api/workspaces', databaseMiddleware, authMiddleware, requireActivated,
 app.use('/api/workspace-invites', databaseMiddleware, authMiddleware, workspaceInviteRoutes);
 // One search and one "needs you" feed across a person's chats, projects and Library, each aware of the area.
 app.use('/api/workspace', databaseMiddleware, authMiddleware, requireActivated, areaFromRequest, workspaceAreaRoutes);
+// XENO Tasks (codename Telos) — the shared work tracker for people and agents (xeno-tasks/SPEC.md).
+app.use('/api/tasks', databaseMiddleware, authMiddleware, requireActivated, xenoTasksRoutes);
 console.log('🏢 Workspace routes integrated: /api/workspaces/* + /api/workspace-invites/*');
 
 // ── Account & Ledger v2 (additive, flag-gated) ───────────────────────────────
