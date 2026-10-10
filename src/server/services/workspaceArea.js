@@ -5,6 +5,7 @@
  *   searchWorkspace   one search over conversations (their titles and what was said in them), chat projects
  *                     and Library items. `area` narrows it to one area, or to the items in none.
  *   listPins          what the person pinned: conversations, chat projects, and the Library items they starred.
+ *   summarizeWeek     the person's last seven days, per area: chats started, messages sent, scheduled runs done.
  *   listNeedsYou      what is waiting on the person: today, scheduled chats whose last run failed. It is a
  *                     feed of FACTS the platform holds; nothing is invented to fill it.
  *
@@ -121,6 +122,32 @@ export async function listPins(db, userId, { areaFilter = { filter: false, area:
   const starred = await listLibraryItems(db, userId, { view: 'starred', limit: 50, ...(areaFilter.filter ? { area: areaFilter.area === null ? 'none' : areaFilter.area } : {}) });
   for (const it of starred.items) items.push({ kind: 'file', id: it.id, title: String(it.name || 'Untitled'), area: it.area || null, at: it.updated_at || it.created_at, source: it.source, source_id: it.source_id });
   return { items };
+}
+
+export const WEEK_DAYS = 7;
+/**
+ * The person's own last seven days, per area, as counts per day (index 0 = six days ago … index 6 = the last 24
+ * hours). Days are rolling 24-hour windows counted back from now, so the answer does not depend on a time zone.
+ * Three facts the platform holds: conversations the person started, messages they sent, and scheduled runs that
+ * finished for them. An area with nothing in the week is absent. The key for work in no area is "".
+ */
+export async function summarizeWeek(db, userId) {
+  const areas = {};
+  const put = (area, metric, ago, n) => { if (ago < 0 || ago >= WEEK_DAYS) return; const a = (areas[area || ''] = areas[area || ''] || { chats: Array(WEEK_DAYS).fill(0), messages: Array(WEEK_DAYS).fill(0), runs: Array(WEEK_DAYS).fill(0) }); a[metric][WEEK_DAYS - 1 - ago] += n; };
+  const ago = (col) => `floor(extract(epoch FROM ((now() AT TIME ZONE 'UTC') - ${col})) / 86400)::int`;
+  const agoTz = (col) => `floor(extract(epoch FROM (now() - ${col})) / 86400)::int`;
+  const chats = await db.query(`SELECT ${EFFECTIVE_CONVERSATION_AREA} AS area, ${ago('c.created_at')} AS ago, count(*)::int AS n
+    FROM chat_conversations c WHERE c.user_id = $1 AND c.deleted_at IS NULL AND c.created_at >= (now() AT TIME ZONE 'UTC') - interval '${WEEK_DAYS} days' GROUP BY 1, 2`, [userId]);
+  for (const r of chats.rows) put(r.area, 'chats', r.ago, r.n);
+  const msgs = await db.query(`SELECT ${EFFECTIVE_CONVERSATION_AREA} AS area, ${ago('m.created_at')} AS ago, count(*)::int AS n
+    FROM chat_messages m JOIN chat_conversations c ON c.id = m.conversation_id
+    WHERE m.user_id = $1 AND m.role = 'user' AND m.scheduled_run_id IS NULL AND c.deleted_at IS NULL AND m.created_at >= (now() AT TIME ZONE 'UTC') - interval '${WEEK_DAYS} days' GROUP BY 1, 2`, [userId]);
+  for (const r of msgs.rows) put(r.area, 'messages', r.ago, r.n);
+  const runs = await db.query(`SELECT CASE WHEN t.project_id IS NOT NULL THEN (SELECT ap.area FROM chat_projects ap WHERE ap.id = t.project_id) ELSE t.area END AS area, ${agoTz('r.completed_at')} AS ago, count(*)::int AS n
+    FROM chat_scheduled_runs r JOIN chat_scheduled_tasks t ON t.id = r.task_id
+    WHERE t.run_as_user_id = $1 AND r.status = 'succeeded' AND r.completed_at >= now() - interval '${WEEK_DAYS} days' GROUP BY 1, 2`, [userId]);
+  for (const r of runs.rows) put(r.area, 'runs', r.ago, r.n);
+  return { days: WEEK_DAYS, areas };
 }
 
 /** The chat's own first choice (src/components/playground/Chat/ChatWithLLM.tsx DEFAULT_MODEL). Keep the two the same. */

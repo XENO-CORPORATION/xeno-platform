@@ -3,13 +3,14 @@
  *
  *   GET /api/workspace/search?q=…&area=<id>|none     chats (titles and messages), projects and Library items
  *   GET /api/workspace/needs?area=<id>|none           what is waiting on the person
+ *   GET /api/workspace/summary                        the person's last seven days, per area
  *   GET /api/workspace/pins?area=<id>|none            what the person pinned (chats, projects, starred files)
  *
  * `area` absent means everything (Overview). A malformed one is refused, never ignored: a search that silently
  * widened would show a person results from places they did not ask about.
  */
 import express from 'express';
-import { listNeedsYou, listPins, searchWorkspace, SEARCH_MIN } from '../services/workspaceArea.js';
+import { listNeedsYou, listPins, searchWorkspace, summarizeWeek, SEARCH_MIN } from '../services/workspaceArea.js';
 import { readAreaFilter } from '../utils/resourceArea.js';
 
 const router = express.Router();   // mounted behind authMiddleware in index.js
@@ -38,6 +39,15 @@ router.get('/needs', async (req, res) => {
     res.json({ success: true, ...(await listNeedsYou(req.db, req.user.id, { areaFilter })) });
   } catch (error) {
     console.error('Workspace needs failed:', error);
+    res.status(500).json({ success: false, error: 'Internal server error' });
+  }
+});
+
+router.get('/summary', async (req, res) => {
+  try {
+    res.json({ success: true, ...(await summarizeWeek(req.db, req.user.id)) });
+  } catch (error) {
+    console.error('Workspace summary failed:', error);
     res.status(500).json({ success: false, error: 'Internal server error' });
   }
 });

@@ -54,6 +54,7 @@ function answer(q) {
   if (p === '/api/auth/linked-accounts') return json(200, { success: true, accounts: db.linked });
   if (p === '/api/billing/overview') return json(200, { success: true, overview: { credits: { balance: db.credits }, subscription: null } });
   if (p === '/api/workspace/needs') return json(200, { success: true, items: [] });
+  if (p === '/api/workspace/summary') return json(200, { success: true, days: 7, areas: {} });
   if (p === '/api/workspace/pins') return json(200, { success: true, items: [] });
   if (p === '/api/v2/ledger/usage') return json(200, { rows: [] });
   if (p === '/api/dashboard/stats') return json(200, { success: true, stats: { credits: db.credits, plan: 'free', usage_available: true, usage_by_surface: [{ surface: 'chat', credits: 40 }, { surface: 'canvas', credits: 10 }] } });
