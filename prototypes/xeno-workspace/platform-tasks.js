@@ -221,6 +221,101 @@
   }, true);
   document.addEventListener('focusout', (e) => { if (e.target === popFor) setTimeout(() => { if (document.activeElement !== popFor) closePop(); }, 120); }, true);
 
+
+  // ───────────────────────── pickers (Linear-style: search, groups, faces, keyboard, number keys)
+  // One popover for every property: pick({ anchor, items, multi, placeholder, onPick, onCreate, footer }).
+  // items: { id, label, sub?, lead? (html), group?, checked?, disabled? (reason), kbd? }
+  const PRI_SVG = (p) => {
+    if (p === 'urgent') return '<svg class="tk-pri-i" viewBox="0 0 14 14" aria-hidden="true"><rect x="1" y="1" width="12" height="12" rx="3" fill="currentColor"/><rect x="6.2" y="3.4" width="1.6" height="4.8" rx=".8" fill="var(--canvas)"/><rect x="6.2" y="9.4" width="1.6" height="1.6" rx=".8" fill="var(--canvas)"/></svg>';
+    if (p === 'none') return '<svg class="tk-pri-i" viewBox="0 0 14 14" aria-hidden="true"><rect x="1.5" y="6.3" width="2.4" height="1.4" rx=".5" fill="currentColor" opacity=".5"/><rect x="5.8" y="6.3" width="2.4" height="1.4" rx=".5" fill="currentColor" opacity=".5"/><rect x="10.1" y="6.3" width="2.4" height="1.4" rx=".5" fill="currentColor" opacity=".5"/></svg>';
+    const n = { high: 3, medium: 2, low: 1 }[p] || 0;
+    return `<svg class="tk-pri-i" viewBox="0 0 14 14" aria-hidden="true">${[[1.5, 8, 4.5], [5.8, 5, 7.5], [10.1, 2, 10.5]].map(([x, y, h], i) => `<rect x="${x}" y="${y}" width="2.4" height="${h}" rx=".6" fill="currentColor" opacity="${i < n ? 1 : 0.28}"/>`).join('')}</svg>`;
+  };
+  const priChip = (p) => (p === 'none' ? `${PRI_SVG('none')}<span class="tk-dim">No priority</span>` : `${PRI_SVG(p)}<span>${PRI[p]}</span>`);
+  const pickEl = document.createElement('div'); pickEl.className = 'tk-pick'; pickEl.hidden = true; pickEl.setAttribute('role', 'dialog'); document.body.appendChild(pickEl);
+  let PK = null;
+  function closePick(focusBack = true) { if (!PK) return; const a = PK.anchor; pickEl.hidden = true; a?.removeAttribute('data-menu-open'); PK = null; if (focusBack && a && document.body.contains(a)) a.focus({ preventScroll: true }); }
+  function drawPick() {
+    const q = PK.q.trim().toLowerCase();
+    const shown = PK.items.filter((it) => !q || `${it.label} ${it.sub || ''}`.toLowerCase().includes(q));
+    PK.shown = shown; if (PK.idx >= shown.length) PK.idx = Math.max(0, shown.length - 1);
+    let html = '', grp = null;
+    shown.forEach((it, i) => {
+      if (it.group && it.group !== grp) { grp = it.group; html += `<div class="tk-pick-g">${esc(grp)}</div>`; }
+      html += `<button type="button" class="tk-pick-i${i === PK.idx ? ' on' : ''}${it.checked ? ' sel' : ''}" data-pi="${i}" role="option" aria-selected="${!!it.checked}"${it.disabled ? ` aria-disabled="true" title="${esc(it.disabled)}"` : ''}><span class="tk-pick-lead">${it.lead || ''}</span><span class="tk-pick-l"><b>${esc(it.label)}</b>${it.sub ? `<small>${esc(it.sub)}</small>` : ''}</span>${it.kbd ? `<kbd>${esc(it.kbd)}</kbd>` : ''}<span class="tk-pick-c">${it.checked ? ic('check') : ''}</span></button>`;
+    });
+    if (!shown.length) html = PK.onCreate && q ? '' : '<p class="tk-pick-none">No matches</p>';
+    if (PK.onCreate && q && !PK.items.some((it) => it.label.toLowerCase() === q)) html += `<button type="button" class="tk-pick-i tk-pick-new${shown.length ? '' : ' on'}" data-pnew>${ic('plus')}<span class="tk-pick-l"><b>Create “${esc(PK.q.trim())}”</b></span></button>`;
+    pickEl.querySelector('.tk-pick-list').innerHTML = html;
+  }
+  function pick(o) {
+    closePick(false);
+    PK = { ...o, q: '', idx: Math.max(0, (o.items || []).findIndex((x) => x.checked)) };
+    pickEl.innerHTML = `${o.search === false ? '' : `<div class="tk-pick-s">${ic('search')}<input placeholder="${esc(o.placeholder || 'Search…')}" aria-label="${esc(o.placeholder || 'Search')}"></div>`}${o.top || ''}<div class="tk-pick-list" role="listbox"${o.multi ? ' aria-multiselectable="true"' : ''}></div>${o.footer ? `<div class="tk-pick-f">${o.footer}</div>` : ''}`;
+    drawPick(); pickEl.hidden = false; o.anchor?.setAttribute('data-menu-open', '');
+    const r = o.anchor.getBoundingClientRect(), w = o.width || 280; pickEl.style.width = w + 'px';
+    const h = pickEl.offsetHeight, left = Math.min(Math.max(8, r.left), innerWidth - w - 8), top = r.bottom + 6 + h > innerHeight - 8 ? Math.max(8, r.top - h - 6) : r.bottom + 6;
+    pickEl.style.left = left + 'px'; pickEl.style.top = top + 'px';
+    (pickEl.querySelector('.tk-pick-s input') || pickEl.querySelector('.tk-pick-i'))?.focus();
+    o.onOpen?.(pickEl);
+  }
+  function choose(i) {
+    const it = PK && PK.shown[i]; if (!it || it.disabled) { if (it && it.disabled) toast(it.disabled); return; }
+    if (PK.multi) { it.checked = !it.checked; PK.onPick(it, PK.items.filter((x) => x.checked)); drawPick(); return; }
+    const fn = PK.onPick; closePick(); fn(it);
+  }
+  pickEl.addEventListener('input', (e) => { if (!PK || !e.target.matches('.tk-pick-s input')) return; PK.q = e.target.value; PK.idx = 0; drawPick(); });
+  pickEl.addEventListener('mousedown', (e) => { if (e.target.closest('.tk-pick-i, [data-pnew], .tk-cal button')) e.preventDefault(); });
+  pickEl.addEventListener('click', (e) => {
+    if (!PK) return;
+    if (e.target.closest('[data-pnew]')) { const v = PK.q.trim(), fn = PK.onCreate; if (PK.multi) { PK.items.push({ id: v.toLowerCase(), label: v.toLowerCase(), checked: true, lead: ic('hash') }); PK.q = ''; const s = pickEl.querySelector('.tk-pick-s input'); if (s) s.value = ''; fn(v, PK.items.filter((x) => x.checked)); drawPick(); } else { closePick(); fn(v); } return; }
+    const b = e.target.closest('[data-pi]'); if (b) choose(+b.dataset.pi);
+  });
+  pickEl.addEventListener('keydown', (e) => {
+    if (!PK) return;
+    const n = PK.shown.length;
+    if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); PK.onClose?.(); closePick(); return; }
+    if (e.key === 'ArrowDown' || e.key === 'ArrowUp') { e.preventDefault(); if (!n) return; PK.idx = (PK.idx + (e.key === 'ArrowDown' ? 1 : n - 1)) % n; drawPick(); pickEl.querySelector('.tk-pick-i.on')?.scrollIntoView({ block: 'nearest' }); return; }
+    if (e.key === 'Enter') { e.preventDefault(); if (!n && PK.onCreate && PK.q.trim()) pickEl.querySelector('[data-pnew]')?.click(); else choose(PK.idx); return; }
+    if (/^[0-9]$/.test(e.key) && !PK.q) { const i = PK.shown.findIndex((x) => x.kbd === e.key); if (i >= 0) { e.preventDefault(); choose(i); } }
+  });
+  document.addEventListener('mousedown', (e) => { if (PK && !pickEl.contains(e.target) && !e.target.closest('[data-menu-open]')) { PK.onClose?.(); closePick(false); } }, true);
+  addEventListener('resize', () => closePick(false));
+  document.addEventListener('scroll', (e) => { if (PK && !pickEl.contains(e.target)) closePick(false); }, true);
+
+  // the items each property offers
+  const pickStatus = (t) => [...new Set([t.status, ...((t.can && t.can.moves) || [])])].map((s, i) => ({ id: s, label: LABEL[s], lead: `<span class="tk-dot tk-dot--${s}"></span>`, checked: s === t.status, kbd: String(i + 1), ...(s === t.status ? {} : {}) }));
+  const pickPriority = (cur) => PRI_ORDER.map((p, i) => ({ id: p, label: PRI[p], lead: PRI_SVG(p), checked: p === cur, kbd: String(i === 4 ? 0 : i + 1) }));
+  const pickKind = (cur) => Object.entries(KIND).map(([k, [i, l]], n) => ({ id: k, label: l, lead: ic(i), checked: k === cur, kbd: String(n + 1) }));
+  function pickPeople(list, cur, { noneLabel, exclude } = {}) {
+    const meP = list.find((p) => p.me);
+    const items = [{ id: '', label: noneLabel || 'Nobody', lead: `<span class="tk-face tk-face--none tk-face--sm">${ic('user')}</span>`, checked: !cur, kbd: '0' }];
+    if (meP && meP.id !== exclude) items.push({ id: meP.id, label: `${meP.name} (you)`, sub: meP.username ? '@' + meP.username : '', lead: face(meP, true), checked: cur === meP.id, group: 'People' });
+    for (const p of list) if (!p.me && p.kind !== 'agent' && p.id !== exclude) items.push({ id: p.id, label: p.name, sub: p.username ? '@' + p.username : '', lead: face(p, true), checked: cur === p.id, group: 'People' });
+    for (const p of list) if (p.kind === 'agent' && p.id !== exclude) items.push({ id: p.id, label: p.name, sub: p.needsShare ? 'Not on this project yet' : (p.username ? '@' + p.username : 'Agent'), lead: face(p, true), checked: cur === p.id, group: 'Agents', ...(p.needsShare ? { disabled: 'Share the project with this agent first' } : {}) });
+    return items;
+  }
+  const knownLabels = () => [...new Set(allLists().flat().flatMap((x) => x.labels || []))].sort();
+  const pickLabels = (cur) => [...new Set([...knownLabels(), ...cur])].map((l) => ({ id: l, label: l, lead: ic('hash'), checked: cur.includes(l) }));
+  /** A month calendar plus quick choices, for due dates. onPick(iso | null). */
+  function pickDue(anchor, cur, onPick) {
+    const at17 = (d) => { const x = new Date(d); x.setHours(17, 0, 0, 0); return x.toISOString(); };
+    const today = new Date(); today.setHours(0, 0, 0, 0);
+    let view = cur ? new Date(cur) : new Date(today); view.setDate(1);
+    const quick = [['Today', 0], ['Tomorrow', 1], ['In 3 days', 3], ['Next week', 7], ['In 2 weeks', 14]];
+    const cal = () => {
+      const y = view.getFullYear(), m = view.getMonth(), first = (new Date(y, m, 1).getDay() + 6) % 7, days = new Date(y, m + 1, 0).getDate();
+      const sel = cur ? new Date(cur).toDateString() : null;
+      let cells = ''; for (let i = 0; i < first; i++) cells += '<span></span>';
+      for (let d = 1; d <= days; d++) { const dt = new Date(y, m, d), past = dt < today; cells += `<button type="button" data-day="${dt.toISOString()}" class="${dt.toDateString() === today.toDateString() ? 'today ' : ''}${dt.toDateString() === sel ? 'sel ' : ''}${past ? 'past' : ''}">${d}</button>`; }
+      return `<div class="tk-cal"><div class="tk-cal-h"><button type="button" data-cal="-1" aria-label="Previous month">‹</button><b>${view.toLocaleDateString(undefined, { month: 'long', year: 'numeric' })}</b><button type="button" data-cal="1" aria-label="Next month">›</button></div><div class="tk-cal-w">${['M', 'T', 'W', 'T', 'F', 'S', 'S'].map((x) => `<span>${x}</span>`).join('')}</div><div class="tk-cal-d">${cells}</div></div>`;
+    };
+    pick({ anchor, search: false, width: 268, items: [...quick.map(([l, d]) => { const x = new Date(today); x.setDate(x.getDate() + d); return { id: at17(x), label: l, sub: x.toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short' }), lead: ic('calendar') }; }), ...(cur ? [{ id: '', label: 'No due date', lead: ic('x') }] : [])],
+      top: '<div data-calwrap></div>', onPick: (it) => onPick(it.id || null),
+      onOpen: (el) => { const w = el.querySelector('[data-calwrap]'); const paint = () => { w.innerHTML = cal(); }; paint();
+        w.addEventListener('click', (e) => { const c = e.target.closest('[data-cal]'); if (c) { view.setMonth(view.getMonth() + +c.dataset.cal); paint(); return; } const d = e.target.closest('[data-day]'); if (d) { closePick(); onPick(at17(d.dataset.day)); } }); } });
+  }
+
   // ───────────────────────── filters, sort, views
   const saveF = () => store.set('filters', T.f);
   const activeCount = () => ['assignee', 'priority', 'label', 'project', 'kind'].reduce((n, k) => n + T.f[k].length, 0) + (T.f.due ? 1 : 0) + (T.f.q ? 1 : 0);
@@ -378,6 +473,22 @@
       return `<p class="tk-ev" data-tk-ev="${esc(e.kind === 'run' ? 'status' : e.kind)}"><span class="tk-ev-dot"></span><span>${who(e.actor)} ${what}</span><small>${when(e.at)}</small></p>`;
     }).join('');
   }
+  // what to do next, decided by the workflow and what the caller may do (one primary step, the rest secondary)
+  const moveLabel = (from, to) => (to === 'todo' ? (from === 'raised' ? 'Accept' : CLOSED.includes(from) ? 'Reopen' : 'Back to To do') : to === 'raised' ? 'Reopen' : to === 'in_progress' ? (from === 'in_review' ? 'Ask for changes' : from === 'blocked' ? 'Resume' : 'Start') : to === 'done' ? (from === 'in_review' ? 'Accept and close' : 'Done') : MOVE[to] || LABEL[to]);
+  function nextStep(t) {
+    const moves = (t.can && t.can.moves) || [], mine = !!(t.assignee && t.assignee.id === me()), reviewer = !!(t.reviewer && t.reviewer.id === me());
+    const pref = { raised: ['todo', 'in_progress'], todo: ['in_progress'], in_progress: [t.reviewRequired || t.reviewer ? 'in_review' : 'done', 'in_review', 'done'], blocked: ['in_progress'], in_review: ['done', 'in_progress'], done: ['todo'], wont_do: ['raised'] }[t.status] || [];
+    const primary = pref.find((m) => moves.includes(m)) || null;
+    const hint = {
+      raised: moves.length ? 'Raised and waiting for triage. Accept it to put it on the board, or close it.' : 'Waiting for someone who manages the project to accept it.',
+      todo: t.assignee ? (mine ? 'Assigned to you. Start when you pick it up.' : `Assigned to ${t.assignee.name}.`) : 'Accepted and unassigned. Take it, or assign someone.',
+      in_progress: t.reviewer ? (mine ? `When it’s done, send it to ${t.reviewer.name} for review.` : `${t.assignee ? t.assignee.name : 'Someone'} is on it. ${t.reviewer.name} reviews it.`) : (mine ? 'When it’s done, mark it done — or name a reviewer to have it checked.' : `${t.assignee ? t.assignee.name + ' is on it.' : 'In progress.'}`),
+      blocked: 'Blocked. Resume it when what it waits on is resolved.',
+      in_review: reviewer ? 'Waiting for your review: accept it, or ask for changes.' : t.reviewer ? `Waiting for ${t.reviewer.name} to review it.` : 'In review.',
+      done: 'Done. Reopen it if something comes back.', wont_do: 'Closed without doing it. Reopen it if that changes.',
+    }[t.status];
+    return { primary, rest: moves.filter((m) => m !== primary), hint };
+  }
   function taskRegion(key) {
     const t = T.task.get(key);
     if (!t) { loadTask(key); return '<p class="tk-msg" data-tk-state="loading">Loading the task…</p>'; }
@@ -385,55 +496,62 @@
     const can = t.can || { moves: [] }, k = KIND[t.kind] || KIND.task;
     const mineIt = !!(t.assignee && t.assignee.id === me()), editAny = can.edit || mineIt;
     const canClaim = !t.assignee && !CLOSED.includes(t.status);
-    const acts = can.moves.map((m, i) => `<button class="tk-act${i === 0 ? ' tk-act--main' : ''}" data-tk="move" data-arg="${esc(t.key)}|${m}|${t.status}" data-tk-move="${m}">${m === 'done' ? ic('check') : ''}${esc(MOVE[m] || LABEL[m])}</button>`).join('')
-      + (canClaim ? `<button class="tk-act" data-tk="claim" data-arg="${esc(t.key)}">${ic('user')}Take it</button>` : '');
-    const prop = (id, label, value, editable, kbd) => `<div class="tk-prop"><span class="tk-prop-l">${label}</span>${editable ? `<button class="tk-prop-v" data-tk="prop" data-arg="${esc(t.key)}|${id}" data-tk-prop="${id}"${kbd ? ` title="${label} (${kbd})"` : ''}>${value}</button>` : `<span class="tk-prop-v tk-prop-v--ro">${value}</span>`}</div>`;
-    const person = (p) => (p ? `${face(p, true)}<span>${esc(p.name)}</span>` : '<span class="tk-dim">None</span>');
+    const ns = nextStep(t);
+    const mv = (m, main) => `<button class="tk-act${main ? ' tk-act--main' : ''}" data-tk="move" data-arg="${esc(t.key)}|${m}|${t.status}" data-tk-move="${m}">${m === 'done' ? ic('check') : ''}${esc(moveLabel(t.status, m))}</button>`;
+    const prop = (id, label, value, editable, kbd) => `<div class="tk-prop"><span class="tk-prop-l">${label}</span>${editable ? `<button class="tk-prop-v" data-tk="prop" data-arg="${esc(t.key)}|${id}" data-tk-prop="${id}"${kbd ? ` title="${label} · ${kbd}"` : ''}>${value}</button>` : `<span class="tk-prop-v tk-prop-v--ro">${value}</span>`}</div>`;
+    const person = (p) => (p ? `${face(p, true)}<span>${esc(p.name)}</span>` : '<span class="tk-dim">Nobody</span>');
     const imgs = t.attachments || [], cc = checkCount(t.body), kids = t.children || [], kd = kids.filter((c) => CLOSED.includes(c.status)).length;
     const desc = T.editing === t.key
-      ? `<form class="tk-dedit" data-tk-dedit="${esc(t.key)}">${editor({ keep: 'desc:' + t.key, value: t.body, rows: 10, placeholder: 'What needs doing, and how will we know it is done? Markdown, checklists (- [ ]), @mentions, paste images.', project: t.project && t.project.id, foot: `<div class="tk-ed-f"><small class="tk-dim">Markdown · paste or drop images · @ to mention · Ctrl+Enter saves · Esc cancels</small><span class="tk-sp"></span><button type="button" class="tk-btn" data-tk="desc-cancel">Cancel</button><button type="submit" class="tk-btn tk-btn--main">Save</button></div>` })}</form>`
-      : t.body ? `<div class="tk-md tk-desc${can.edit ? ' tk-desc--edit' : ''}" ${can.edit ? `data-tk-desc="${esc(t.key)}" title="Click to edit (E)"` : ''}>${md(t.body, t.key, { checks: editAny })}</div>${cc.n ? `<div class="tk-prog" title="${cc.d} of ${cc.n} done"><span style="width:${Math.round((cc.d / cc.n) * 100)}%"></span></div><small class="tk-dim">${cc.d} of ${cc.n} checklist items done</small>` : ''}`
+      ? `<form class="tk-dedit" data-tk-dedit="${esc(t.key)}">${editor({ keep: 'desc:' + t.key, value: t.body, rows: 12, placeholder: 'What needs doing, and how will we know it is done? Markdown, checklists (- [ ]), @mentions, paste images.', project: t.project && t.project.id, foot: `<div class="tk-ed-f"><small class="tk-dim">Markdown · paste or drop images · @ to mention · Ctrl+Enter saves · Esc cancels</small><span class="tk-sp"></span><button type="button" class="tk-btn" data-tk="desc-cancel">Cancel</button><button type="submit" class="tk-btn tk-btn--main">Save</button></div>` })}</form>`
+      : t.body ? `<div class="tk-md tk-desc${can.edit ? ' tk-desc--edit' : ''}" ${can.edit ? `data-tk-desc="${esc(t.key)}" title="Click to edit · E"` : ''}>${md(t.body, t.key, { checks: editAny })}</div>${cc.n ? `<div class="tk-checkline"><div class="tk-prog"><span style="width:${Math.round((cc.d / cc.n) * 100)}%"></span></div><small class="tk-dim">${cc.d} of ${cc.n} checklist items done</small></div>` : ''}`
       : can.edit ? `<button class="tk-add" data-tk="describe" data-arg="${esc(t.key)}">Add a description…</button>` : '<p class="tk-dim">No description.</p>';
     const linkGroups = {}; for (const l of t.links || []) (linkGroups[l.label] = linkGroups[l.label] || []).push(l);
+    const watchers = t.watchers || [];
     return `<div class="tk-page">
-      <div class="tk-main">
-        ${t.parent ? `<a class="tk-parent" data-tk="open" data-arg="${esc(t.parent.key)}">↳ Sub-task of <b>${esc(t.parent.key)}</b> ${esc(t.parent.title)}</a>` : ''}
-        <div class="tk-titlerow"><span class="tk-kind" title="${k[1]}">${ic(k[0])}</span><small class="tk-key">${esc(t.key)}</small><span class="tk-status" data-tk-status="${esc(t.status)}"><span class="tk-dot tk-dot--${esc(t.status)}"></span>${esc(LABEL[t.status])}</span><span class="tk-sp"></span>
-          <button class="tk-watch${t.watching ? ' on' : ''}" data-tk="watch" data-arg="${esc(t.key)}" aria-pressed="${!!t.watching}" title="${t.watching ? 'You hear about every change. Click to stop.' : 'Hear about every change'} (W)">${ic('bell')}${t.watching ? 'Watching' : 'Watch'}${(t.watchers || []).length ? `<em>${t.watchers.length}</em>` : ''}</button>
-          <button class="tk-watch" data-tk="prompt" data-arg="${esc(t.key)}" title="Copy a handoff brief for an agent CLI (Claude Code, xeno agent…) to the clipboard">${ic('bot')}Copy for agent</button>
-          <button class="tk-ib" data-tk="refresh" data-arg="${esc(t.key)}" title="Refresh" aria-label="Refresh">${ic('reset')}</button><button class="tk-ib" data-tk="menu" data-arg="${esc(t.key)}" title="More actions" aria-label="More actions">${ic('more')}</button></div>
-        ${can.edit ? `<h2 class="tk-title tk-title--edit" role="button" tabindex="0" data-tk="rename" data-arg="${esc(t.key)}" title="Rename (F2)">${esc(t.title)}</h2>` : `<h2 class="tk-title">${esc(t.title)}</h2>`}
-        ${acts ? `<div class="tk-acts" data-tk-acts>${acts}</div>` : ''}
-        <section class="tk-sec">${desc}</section>
+      <div class="tk-main"><div class="tk-main-in">
+        ${t.parent ? `<a class="tk-parent" data-tk="open" data-arg="${esc(t.parent.key)}">${ic('layers')}<span>Sub-task of <b>${esc(t.parent.key)}</b> ${esc(t.parent.title)}</span></a>` : ''}
+        <div class="tk-titlerow"><span class="tk-kind" title="${k[1]}">${ic(k[0])}</span><small class="tk-key">${esc(t.key)}</small><span class="tk-status" data-tk-status="${esc(t.status)}"><span class="tk-dot tk-dot--${esc(t.status)}"></span>${esc(LABEL[t.status])}</span>${t.priority !== 'none' ? `<span class="tk-titlepri">${PRI_SVG(t.priority)}${esc(PRI[t.priority])}</span>` : ''}<span class="tk-sp"></span><button class="tk-ib" data-tk="refresh" data-arg="${esc(t.key)}" title="Refresh" aria-label="Refresh">${ic('reset')}</button><button class="tk-ib" data-tk="menu" data-arg="${esc(t.key)}" title="More actions" aria-label="More actions">${ic('more')}</button></div>
+        ${can.edit ? `<h2 class="tk-title tk-title--edit" role="button" tabindex="0" data-tk="rename" data-arg="${esc(t.key)}" title="Rename · F2">${esc(t.title)}</h2>` : `<h2 class="tk-title">${esc(t.title)}</h2>`}
+        <section class="tk-sec tk-sec--desc">${desc}</section>
         <section class="tk-sec" data-tk-subtasks><h3>Sub-tasks${kids.length ? `<em>${kd}/${kids.length}</em>` : ''}</h3>
-          ${kids.length ? `<div class="tk-kids">${kids.map((c) => `<div class="tk-kid" role="button" tabindex="0" data-tk="open" data-arg="${esc(c.key)}" data-tk-rowkey="${esc(c.key)}"><span class="tk-dot tk-dot--${esc(c.status)}"></span><small class="tk-key">${esc(c.key)}</small><span class="tk-kid-t${CLOSED.includes(c.status) ? ' tk-kid-t--done' : ''}">${esc(c.title)}</span>${c.priority !== 'none' ? `<em class="tk-pri tk-pri--${esc(c.priority)}">${esc(PRI[c.priority])}</em>` : ''}${face(c.assignee, true)}</div>`).join('')}</div>` : ''}
-          ${editAny || can.edit ? `<form class="tk-kid-add" data-tk-kidadd="${esc(t.key)}">${ic('plus')}<input data-tk-keep="kid:${esc(t.key)}" placeholder="Add a sub-task — Enter to create" maxlength="300" aria-label="New sub-task title"></form>` : (kids.length ? '' : '<p class="tk-dim">None.</p>')}</section>
-        <section class="tk-sec" data-tk-links><h3>Links<span class="tk-sp"></span>${t.canLink ? `<button class="tk-link" data-tk="add-link" data-arg="${esc(t.key)}">${ic('plus')}Link a task</button>` : ''}</h3>
-          ${Object.keys(linkGroups).length ? Object.entries(linkGroups).map(([label, ls]) => `<div class="tk-links"><small class="tk-links-l">${esc(label)}</small><div>${ls.map((l) => `<span class="tk-linkc"><a data-tk="open" data-arg="${esc(l.task.key)}"><span class="tk-dot tk-dot--${esc(l.task.status)}"></span><small>${esc(l.task.key)}</small>${esc(l.task.title)}</a>${t.canLink ? `<button class="tk-linkx" data-tk="unlink" data-arg="${esc(t.key)}|${esc(l.id)}" aria-label="Remove this link">${ic('x')}</button>` : ''}</span>`).join('')}</div></div>`).join('') : '<p class="tk-dim">No linked tasks.</p>'}</section>
-        <section class="tk-sec" data-tk-images="${esc(t.key)}"><h3>Images<em>${imgs.length}</em><span class="tk-sp"></span>${can.attach ? `<button class="tk-link" data-tk="attach" data-arg="${esc(t.key)}">${ic('upload')}Add</button>` : ''}</h3>
+          ${kids.length ? `<div class="tk-kids">${kids.map((c) => `<div class="tk-kid" role="button" tabindex="0" data-tk="open" data-arg="${esc(c.key)}" data-tk-rowkey="${esc(c.key)}"><span class="tk-dot tk-dot--${esc(c.status)}"></span><small class="tk-key">${esc(c.key)}</small><span class="tk-kid-t${CLOSED.includes(c.status) ? ' tk-kid-t--done' : ''}">${esc(c.title)}</span>${c.priority !== 'none' ? PRI_SVG(c.priority) : ''}${face(c.assignee, true)}</div>`).join('')}</div>` : ''}
+          ${editAny ? `<form class="tk-kid-add" data-tk-kidadd="${esc(t.key)}">${ic('plus')}<input data-tk-keep="kid:${esc(t.key)}" placeholder="Add a sub-task — Enter to create" maxlength="300" aria-label="New sub-task title"></form>` : (kids.length ? '' : '<p class="tk-dim">None.</p>')}</section>
+        <section class="tk-sec" data-tk-images="${esc(t.key)}"><h3>Images${imgs.length ? `<em>${imgs.length}</em>` : ''}<span class="tk-sp"></span>${can.attach ? `<button class="tk-link" data-tk="attach" data-arg="${esc(t.key)}">${ic('upload')}Add</button>` : ''}</h3>
           ${imgs.length ? `<div class="tk-imgs">${imgs.map((a) => `<figure class="tk-img" data-tk-img="${esc(a.id)}"><a href="${imgUrl(t.key, a.id)}" target="_blank" rel="noopener" title="${esc(a.filename)}"><img src="${imgUrl(t.key, a.id)}" alt="${esc(a.filename)}" loading="lazy"></a><figcaption>${esc(a.filename)}</figcaption>${can.edit || (a.uploader && a.uploader.id === me()) ? `<button class="tk-img-x" data-tk="unattach" data-arg="${esc(t.key)}|${esc(a.id)}" aria-label="Remove ${esc(a.filename)}">${ic('x')}</button>` : ''}</figure>`).join('')}</div>` : ''}
-          ${can.attach ? `<div class="tk-drop" data-tk="attach" data-arg="${esc(t.key)}" role="button" tabindex="0">${ic('image')}<span>Drop images here, paste them, or <u>choose files</u></span><small>PNG, JPEG, GIF or WebP · up to 8 MB each</small></div>` : (imgs.length ? '' : '<p class="tk-dim">No images.</p>')}</section>
+          ${can.attach ? `<div class="tk-drop${imgs.length ? ' tk-drop--slim' : ''}" data-tk="attach" data-arg="${esc(t.key)}" role="button" tabindex="0">${ic('image')}<span>Drop images here, paste them anywhere on the page, or <u>choose files</u></span></div>` : (imgs.length ? '' : '<p class="tk-dim">No images.</p>')}</section>
         <section class="tk-sec"><h3>Activity</h3><div class="tk-activity" data-tk-history>${activity(t)}</div>
           <form class="tk-compose" data-tk-comment="${esc(t.key)}">${face({ name: myName() }, true)}<div class="tk-compose-b"><textarea rows="2" data-tk-keep="comment:${esc(t.key)}" data-tk-mention="${esc(t.project ? t.project.id : '')}" placeholder="Leave a comment — @ to mention, paste images, Ctrl+Enter to send" aria-label="Comment"></textarea><div class="tk-compose-f"><small class="tk-dim">Markdown works. Everyone on the task sees this.</small><span class="tk-sp"></span><button class="pg-btn" type="submit">${ic('send')}<span>Comment</span></button></div></div></form></section>
-      </div>
-      <aside class="tk-props" aria-label="Properties">
-        ${prop('status', 'Status', `<span class="tk-dot tk-dot--${esc(t.status)}"></span><span>${esc(LABEL[t.status])}</span>`, can.moves.length > 0, 'S')}
-        ${prop('assignee', 'Assignee', person(t.assignee), editAny, 'I')}
-        ${prop('reviewer', 'Reviewer', person(t.reviewer) + (t.reviewRequired ? '<small class="tk-req">required</small>' : ''), can.edit)}
-        ${prop('priority', 'Priority', t.priority === 'none' ? '<span class="tk-dim">No priority</span>' : `<em class="tk-pri tk-pri--${esc(t.priority)}">${esc(PRI[t.priority])}</em>`, editAny, 'P')}
-        ${prop('kind', 'Type', `${ic(k[0])}<span>${k[1]}</span>`, editAny)}
-        ${prop('due', 'Due date', t.dueAt ? `<span class="${late(t) ? 'tk-late' : ''}">${esc(new Date(t.dueAt).toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' }))}${late(t) ? ' · overdue' : ''}</span>` : '<span class="tk-dim">None</span>', editAny, 'D')}
-        ${prop('labels', 'Labels', (t.labels || []).length ? t.labels.map((l) => `<small class="tk-chip">${esc(l)}</small>`).join('') : '<span class="tk-dim">None</span>', editAny, 'L')}
-        ${prop('parent', 'Parent', t.parent ? `<span>${esc(t.parent.key)}</span>` : '<span class="tk-dim">None</span>', editAny)}
-        <div class="tk-props-sep"></div>
-        ${prop('project', 'Project', t.project ? esc(t.project.name) : 'Personal', false)}
-        ${prop('area', 'Area', esc(t.area ? P.areaName(t.area) : 'Overview'), false)}
-        ${prop('reporter', 'Reported by', person(t.reporter), false)}
-        ${prop('watchers', 'Watching', (t.watchers || []).length ? esc(t.watchers.map((w) => w.name).slice(0, 3).join(', ') + (t.watchers.length > 3 ? ` +${t.watchers.length - 3}` : '')) : '<span class="tk-dim">Nobody</span>', false)}
-        ${prop('created', 'Created', esc(when(t.createdAt)), false)}
-        ${prop('updated', 'Updated', esc(when(t.updatedAt)), false)}
-        <p class="tk-props-hint"><kbd>?</kbd> shortcuts</p>
-      </aside></div>`;
+      </div></div>
+      <aside class="tk-side" aria-label="Task details"><div class="tk-side-in">
+        <section class="tk-next" data-tk-next><p class="tk-next-h">${esc(ns.hint || '')}</p>
+          ${ns.primary || canClaim ? `<div class="tk-next-main">${canClaim ? `<button class="tk-act${ns.primary ? '' : ' tk-act--main'}" data-tk="claim" data-arg="${esc(t.key)}">${ic('user')}Take it</button>` : ''}${ns.primary ? mv(ns.primary, true) : ''}</div>` : ''}
+          ${ns.rest.length ? `<div class="tk-next-rest">${ns.rest.map((m) => mv(m, false)).join('')}</div>` : ''}</section>
+        <section class="tk-sgroup"><h4>Properties</h4>
+          ${prop('status', 'Status', `<span class="tk-dot tk-dot--${esc(t.status)}"></span><span>${esc(LABEL[t.status])}</span>`, can.moves.length > 0, 'S')}
+          ${prop('assignee', 'Assignee', person(t.assignee), editAny, 'I')}
+          ${prop('reviewer', 'Reviewer', person(t.reviewer) + (t.reviewRequired ? '<small class="tk-req">required</small>' : ''), can.edit)}
+          ${prop('priority', 'Priority', priChip(t.priority), editAny, 'P')}
+          ${prop('kind', 'Type', `${ic(k[0])}<span>${k[1]}</span>`, editAny)}
+          ${prop('due', 'Due date', t.dueAt ? `<span class="${late(t) ? 'tk-late' : ''}">${esc(new Date(t.dueAt).toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' }))}${late(t) ? ' · overdue' : ''}</span>` : '<span class="tk-dim">None</span>', editAny, 'D')}
+          ${prop('labels', 'Labels', (t.labels || []).length ? t.labels.map((l) => `<small class="tk-chip">${esc(l)}</small>`).join('') : '<span class="tk-dim">None</span>', editAny, 'L')}</section>
+        <section class="tk-sgroup" data-tk-links><h4>Relations${t.canLink ? `<button class="tk-link" data-tk="add-link" data-arg="${esc(t.key)}">${ic('plus')}Link</button>` : ''}</h4>
+          ${prop('parent', 'Parent', t.parent ? `<span>${esc(t.parent.key)} · ${esc(t.parent.title)}</span>` : '<span class="tk-dim">None</span>', editAny)}
+          <div class="tk-prop"><span class="tk-prop-l">Sub-tasks</span><span class="tk-prop-v tk-prop-v--ro">${kids.length ? `<span class="tk-mini"><span style="width:${Math.round((kd / kids.length) * 100)}%"></span></span><span>${kd} of ${kids.length} done</span>` : '<span class="tk-dim">None</span>'}</span></div>
+          ${Object.entries(linkGroups).map(([label, ls]) => `<div class="tk-prop tk-prop--top"><span class="tk-prop-l">${esc(label[0].toUpperCase() + label.slice(1))}</span><div class="tk-side-links">${ls.map((l) => `<span class="tk-linkc"><a data-tk="open" data-arg="${esc(l.task.key)}"><span class="tk-dot tk-dot--${esc(l.task.status)}"></span><small>${esc(l.task.key)}</small>${esc(l.task.title)}</a>${t.canLink ? `<button class="tk-linkx" data-tk="unlink" data-arg="${esc(t.key)}|${esc(l.id)}" aria-label="Remove this link">${ic('x')}</button>` : ''}</span>`).join('')}</div></div>`).join('')}</section>
+        <section class="tk-sgroup"><h4>People</h4>
+          ${prop('reporter', 'Reported by', person(t.reporter), false)}
+          <div class="tk-prop"><span class="tk-prop-l">Watching</span><span class="tk-prop-v tk-prop-v--ro tk-faces">${watchers.length ? watchers.slice(0, 6).map((w) => face({ name: w.name }, true)).join('') + (watchers.length > 6 ? `<small>+${watchers.length - 6}</small>` : '') : '<span class="tk-dim">Nobody</span>'}</span></div>
+          <button class="tk-watch${t.watching ? ' on' : ''}" data-tk="watch" data-arg="${esc(t.key)}" aria-pressed="${!!t.watching}" title="${t.watching ? 'You hear about every change. Click to stop.' : 'Hear about every change'} · W">${ic('bell')}${t.watching ? 'Watching — click to stop' : 'Watch this task'}</button></section>
+        <section class="tk-sgroup"><h4>Details</h4>
+          ${prop('project', 'Project', t.project ? esc(t.project.name) : 'Personal', false)}
+          ${prop('area', 'Area', esc(t.area ? P.areaName(t.area) : 'Overview'), false)}
+          ${prop('created', 'Created', `<span title="${esc(new Date(t.createdAt).toLocaleString())}">${esc(when(t.createdAt))}</span>`, false)}
+          ${prop('updated', 'Updated', `<span title="${esc(new Date(t.updatedAt).toLocaleString())}">${esc(when(t.updatedAt))}</span>`, false)}</section>
+        <section class="tk-sgroup tk-side-acts">
+          <button class="tk-sbtn" data-tk="prompt" data-arg="${esc(t.key)}" title="Copy a markdown handoff brief to paste into an agent CLI">${ic('bot')}Copy for agent</button>
+          <button class="tk-sbtn" data-tk="copylink" data-arg="${esc(t.key)}">${ic('share')}Copy link</button>
+          <p class="tk-props-hint"><kbd>?</kbd> keyboard shortcuts</p></section>
+      </div></aside></div>`;
   }
   function route(it) {
     if (T.list === null && T.status !== 'error' && !T.loading) load();
@@ -441,7 +559,7 @@
     if (it === 'My tasks') return shell('mine', 'My tasks', 'Assigned to you and still open');
     if (it === 'Needs triage') return shell('triage', 'Needs triage', 'Raised and not yet accepted');
     if (it === 'In review') return shell('review', 'In review', 'Waiting for a reviewer');
-    if (/^T-\d+$/i.test(it)) { const key = it.toUpperCase(); return H().page(head(key) + `<div data-tk-root="task:${esc(key)}">${taskRegion(key)}</div>` + H().foot('tasks:task', `GET /api/tasks/${esc(key)}`)); }
+    if (/^T-\d+$/i.test(it)) { const key = it.toUpperCase(); return H().page(head(key) + `<div class="tk-root-task" data-tk-root="task:${esc(key)}">${taskRegion(key)}</div>`, 'pg--task'); }
     return shell('board', 'Tasks', where());
   }
   function projectRegion(id) {
@@ -696,7 +814,7 @@
     if (field === 'assignee' && !(t.can && t.can.edit)) return mineIt ? [{ label: 'Unassign me', icon: 'x', run: () => set(null) }] : [];
     const list = cached.filter((p) => !(field === 'reviewer' && t.assignee && p.id === t.assignee.id));
     return [{ label: field === 'assignee' ? 'Unassigned' : 'No review', icon: 'x', checked: !current, run: () => set(null) },
-      ...list.map((p) => ({ label: p.name + (p.me ? ' (me)' : '') + (p.kind === 'agent' ? ' · agent' : ''), icon: p.kind === 'agent' ? 'bot' : 'user', checked: p.id === current, ...(p.needsShare ? { disabled: 'Share the project with this agent first' } : { run: () => set(p.id) }) }))];
+      ...list.map((p) => ({ label: p.name + (p.me ? ' (you)' : ''), icon: p.kind === 'agent' ? 'bot' : 'user', checked: p.id === current, ...(p.needsShare ? { disabled: 'Share the project with this agent first' } : { run: () => set(p.id) }) }))];
   }
   function menuFor(key) {
     const t = findTask(key); if (!t) return [[{ label: 'Open', icon: 'open', run: () => go(key) }]];
@@ -722,22 +840,23 @@
   }
   if (window.XCM) window.XCM.register({ id: 'tasks', priority: 5, sel: '[data-tk-card], [data-tk-rowkey], [data-tk-root^="task:"]', build: (n) => menuFor(n.dataset.tkCard || n.dataset.tkRowkey || n.dataset.tkRoot.slice(5)) });
   function propMenu(key, field, anchor) {
-    const t = findTask(key); if (!t || !window.XCM) return;
-    const r = anchor.getBoundingClientRect(), at = { x: r.left, y: r.bottom + 4, opener: anchor };
-    const end = (d) => { const x = new Date(Date.now() + d * 86400000); x.setHours(17, 0, 0, 0); return x.toISOString(); };
-    const needPeople = () => { if (T.people.has(pkey(t))) return false; people(t.project ? t.project.id : null).then(() => { if (document.body.contains(anchor)) propMenu(key, field, anchor); }); return true; };
-    const S = {
-      status: () => [t.can.moves.map((m) => ({ label: LABEL[m], run: () => move(key, m, t.status) }))],
-      assignee: () => (needPeople() ? [[{ label: 'Loading people…', disabled: 'Loading' }]] : [assignItems(t, 'assignee')]),
-      reviewer: () => (needPeople() ? [[{ label: 'Loading people…', disabled: 'Loading' }]] : [assignItems(t, 'reviewer')]),
-      priority: () => [PRI_ORDER.map((p) => ({ label: PRI[p], checked: t.priority === p, run: () => patchTask(key, { priority: p }, 'Priority set') }))],
-      kind: () => [Object.entries(KIND).map(([k, [icon, l]]) => ({ label: l, icon, checked: t.kind === k, run: () => patchTask(key, { kind: k }, 'Type set') }))],
-      due: () => [[{ label: 'Today', run: () => patchTask(key, { dueAt: end(0) }, 'Due today') }, { label: 'Tomorrow', run: () => patchTask(key, { dueAt: end(1) }, 'Due tomorrow') }, { label: 'In a week', run: () => patchTask(key, { dueAt: end(7) }, 'Due in a week') }, { label: 'In two weeks', run: () => patchTask(key, { dueAt: end(14) }, 'Due in two weeks') }],
-        [{ label: 'Pick a date…', icon: 'calendar', run: () => pickDate(key) }, ...(t.dueAt ? [{ label: 'Clear', icon: 'x', run: () => patchTask(key, { dueAt: null }, 'Due date cleared') }] : [])]],
-      labels: () => { labels(key); return null; },
-      parent: () => { pickParent(key); return null; },
-    };
-    const s = S[field] && S[field](); if (s && s.flat().length) window.XCM.show(s, at);
+    const t = findTask(key); if (!t) return;
+    const withPeople = async (fn) => { const list = await people(t.project ? t.project.id : null); if (document.body.contains(anchor)) fn(list); };
+    if (field === 'status') return pick({ anchor, placeholder: 'Change status…', items: pickStatus(t), onPick: (it) => { if (it.id !== t.status) move(key, it.id, t.status); } });
+    if (field === 'priority') return pick({ anchor, placeholder: 'Set priority…', items: pickPriority(t.priority), onPick: (it) => patchTask(key, { priority: it.id }, 'Priority set') });
+    if (field === 'kind') return pick({ anchor, placeholder: 'Change type…', items: pickKind(t.kind), onPick: (it) => patchTask(key, { kind: it.id }, 'Type set') });
+    if (field === 'assignee') return withPeople((list) => {
+      if (!(t.can && t.can.edit)) return pick({ anchor, search: false, items: [{ id: '', label: 'Unassign me', lead: ic('x') }], onPick: () => patchTask(key, { assigneeId: null }, 'Unassigned') });
+      pick({ anchor, placeholder: 'Assign to…', items: pickPeople(list, t.assignee && t.assignee.id, { noneLabel: 'Unassigned' }), onPick: (it) => patchTask(key, { assigneeId: it.id || null }, it.id ? `Assigned to ${it.label.replace(' (you)', '')}` : 'Unassigned') });
+    });
+    if (field === 'reviewer') return withPeople((list) => pick({ anchor, placeholder: 'Who reviews it…', items: pickPeople(list, t.reviewer && t.reviewer.id, { noneLabel: 'No review', exclude: t.assignee && t.assignee.id }), footer: 'The reviewer accepts the work. The assignee can’t review their own task.', onPick: (it) => patchTask(key, { reviewerId: it.id || null, reviewRequired: !!it.id }, it.id ? 'Reviewer set' : 'Review removed') }));
+    if (field === 'due') return pickDue(anchor, t.dueAt, (iso) => patchTask(key, { dueAt: iso }, iso ? 'Due date set' : 'Due date cleared'));
+    if (field === 'labels') {
+      let cur = [...(t.labels || [])], changed = false;
+      const save = () => { if (changed) patchTask(key, { labels: cur }, 'Labels saved'); changed = false; };
+      return pick({ anchor, multi: true, placeholder: 'Add or create labels…', items: pickLabels(cur), footer: 'Enter adds · Esc closes', onCreate: (v, sel) => { cur = sel.map((x) => x.id); changed = true; }, onPick: (_, sel) => { cur = sel.map((x) => x.id); changed = true; }, onClose: save });
+    }
+    if (field === 'parent') return pickParent(key);
   }
 
   // ───────────────────────── the New task window (the platform's plate construction, MODES SPEC §7f)
@@ -755,7 +874,7 @@
     const chips = () => [
       `<div class="tk-prop"><span class="tk-prop-l">Status</span><span class="tk-prop-v tk-prop-v--ro"><span class="tk-dot tk-dot--raised"></span><span>Triage</span></span></div>`,
       row('kind', 'Type', `${ic(KIND[N.kind][0])}<span>${KIND[N.kind][1]}</span>`, true),
-      row('priority', 'Priority', N.priority === 'none' ? none('No priority') : `<em class="tk-pri tk-pri--${N.priority}">${PRI[N.priority]}</em>`, N.priority !== 'none'),
+      row('priority', 'Priority', priChip(N.priority), N.priority !== 'none'),
       row('assignee', 'Assignee', who(N.assignee), !!N.assignee),
       row('reviewer', 'Reviewer', N.reviewer ? who(N.reviewer) + '<small class="tk-req">required</small>' : none('No review'), !!N.reviewer),
       row('due', 'Due date', N.dueAt ? `<span>${esc(new Date(N.dueAt).toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short' }))}</span>` : none('None'), !!N.dueAt),
@@ -793,17 +912,15 @@
       sh.querySelector('[data-n-imgs]').innerHTML = thumbs();
     };
     const menu = async (id, el) => {
-      const r = el.getBoundingClientRect(), at = { x: r.left, y: r.bottom + 4, opener: el };
-      const end = (d) => { const x = new Date(Date.now() + d * 86400000); x.setHours(17, 0, 0, 0); return x.toISOString(); };
-      const set = (k, v) => () => { N[k] = v; repaintChips(); };
-      if (id === 'kind') return window.XCM.show([Object.entries(KIND).map(([k, [i, l]]) => ({ label: l, icon: i, checked: N.kind === k, run: set('kind', k) }))], at);
-      if (id === 'priority') return window.XCM.show([PRI_ORDER.map((p) => ({ label: PRI[p], checked: N.priority === p, run: set('priority', p) }))], at);
-      if (id === 'due') return window.XCM.show([[['Today', 0], ['Tomorrow', 1], ['In a week', 7], ['In two weeks', 14]].map(([l, d]) => ({ label: l, run: set('dueAt', end(d)) })), N.dueAt ? [{ label: 'No due date', icon: 'x', run: set('dueAt', null) }] : []], at);
-      if (id === 'project') return window.XCM.show([[{ label: 'Personal — just me', checked: !N.projectId, run: () => { N.projectId = null; N.assignee = N.assignee && N.assignee.me ? N.assignee : null; N.reviewer = null; repaintChips(); } }, ...projects.map((p) => ({ label: p.realName || p.name, checked: N.projectId === p.id, run: () => { N.projectId = p.id; N.assignee = null; N.reviewer = null; repaintChips(); } }))]], at);
-      if (id === 'labels') { const v = await D().form({ title: 'Labels', submit: 'Done', size: 'sm', fields: [{ id: 'labels', label: 'Labels', type: 'chips', value: N.labels, placeholder: 'Type a label, Enter to add' }] }); if (v) { N.labels = v.labels || []; repaintChips(); } return; }
+      const set = (k, v) => { N[k] = v; repaintChips(); };
+      if (id === 'kind') return pick({ anchor: el, placeholder: 'Type…', items: pickKind(N.kind), onPick: (it) => set('kind', it.id) });
+      if (id === 'priority') return pick({ anchor: el, placeholder: 'Priority…', items: pickPriority(N.priority), onPick: (it) => set('priority', it.id) });
+      if (id === 'due') return pickDue(el, N.dueAt, (iso) => set('dueAt', iso));
+      if (id === 'project') return pick({ anchor: el, placeholder: 'Project…', items: [{ id: '', label: 'Personal — just you', lead: ic('user'), checked: !N.projectId }, ...projects.map((p) => ({ id: p.id, label: p.realName || p.name, lead: ic('folder'), checked: N.projectId === p.id }))], onPick: (it) => { N.projectId = it.id || null; N.assignee = null; N.reviewer = null; repaintChips(); } });
+      if (id === 'labels') { let changed = false; return pick({ anchor: el, multi: true, placeholder: 'Add or create labels…', items: pickLabels(N.labels), footer: 'Enter adds · Esc closes', onCreate: (v, sel) => { N.labels = sel.map((x) => x.id); changed = true; }, onPick: (_, sel) => { N.labels = sel.map((x) => x.id); changed = true; }, onClose: () => { if (changed) repaintChips(); } }); }
       if (id === 'assignee' || id === 'reviewer') {
         const list = await people(N.projectId);
-        return window.XCM.show([[{ label: id === 'assignee' ? 'Unassigned' : 'No review', icon: 'x', checked: !N[id], run: set(id, null) }, ...list.filter((p) => !(id === 'reviewer' && N.assignee && p.id === N.assignee.id)).map((p) => ({ label: p.name + (p.me ? ' (me)' : '') + (p.kind === 'agent' ? ' · agent' : ''), icon: p.kind === 'agent' ? 'bot' : 'user', checked: N[id] && N[id].id === p.id, ...(p.needsShare ? { disabled: 'Share the project with this agent first' } : { run: set(id, p) }) }))]], at);
+        return pick({ anchor: el, placeholder: id === 'assignee' ? 'Assign to…' : 'Who reviews it…', items: pickPeople(list, N[id] && N[id].id, { noneLabel: id === 'assignee' ? 'Unassigned' : 'No review', exclude: id === 'reviewer' && N.assignee ? N.assignee.id : null }), onPick: (it) => set(id, it.id ? list.find((p) => p.id === it.id) : null) });
       }
     };
     const create = async () => {
@@ -839,7 +956,7 @@
     });
     sh.addEventListener('tk-image-pick', () => pickFiles().then((f) => addFiles(f, true)));
     // Ctrl+Enter creates from anywhere while this window is the top one (focus can sit on the page after a menu closes)
-    const onKey = (e) => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey) && document.body.contains(sh) && !window.XCM?.isOpen?.() && [...document.querySelectorAll('.xd')].at(-1) === sh.closest('.xd')) { e.preventDefault(); e.stopPropagation(); create(); } };
+    const onKey = (e) => { if (PK) return; if (e.key === 'Enter' && (e.ctrlKey || e.metaKey) && document.body.contains(sh) && !window.XCM?.isOpen?.() && [...document.querySelectorAll('.xd')].at(-1) === sh.closest('.xd')) { e.preventDefault(); e.stopPropagation(); create(); } };
     document.addEventListener('keydown', onKey, true);
     new MutationObserver((_, mo) => { if (!document.body.contains(sh)) { document.removeEventListener('keydown', onKey, true); mo.disconnect(); } }).observe(document.body, { childList: true });
     sh.addEventListener('keydown', (e) => {
@@ -860,7 +977,7 @@
     D().info({ title: 'Task shortcuts', html: `<div class="tk-keys">${rows.map(([k, l]) => `<div><kbd>${esc(k)}</kbd><span>${esc(l)}</span></div>`).join('')}</div>` });
   }
   document.addEventListener('keydown', (e) => {
-    if (e.defaultPrevented || e.ctrlKey || e.metaKey || e.altKey || typing(e.target) || document.querySelector('.xd') || window.XCM?.isOpen?.() || !inTasks()) return;
+    if (e.defaultPrevented || e.ctrlKey || e.metaKey || e.altKey || typing(e.target) || document.querySelector('.xd') || window.XCM?.isOpen?.() || PK || !inTasks()) return;
     const k = e.key, open = document.querySelector('#main [data-tk-root^="task:"]'), key = open ? open.dataset.tkRoot.slice(5) : null;
     const fire = (fn) => { e.preventDefault(); e.stopPropagation(); fn(); };
     if (k === 'c' || k === 'C') return fire(() => { const pr = document.querySelector('#main [data-tk-proot]'); newTask(pr ? pr.dataset.tkProot : (key && findTask(key) && findTask(key).project ? findTask(key).project.id : null)); });
@@ -900,7 +1017,7 @@
     'clear-filters': () => { T.f = { ...F0(), sort: T.f.sort, layout: T.f.layout }; T.viewId = null; saveF(); patch(); },
     'save-view': () => saveViewNow(),
     view: (id) => (T.viewId === id ? ACT['clear-filters']() : applyView(id)),
-    watch: (k) => watchToggle(k), prompt: (k) => copyPrompt(k), 'add-link': (k) => addLink(k), unlink: (arg) => { const [k, id] = arg.split('|'); return unlink(k, id); },
+    watch: (k) => watchToggle(k), prompt: (k) => copyPrompt(k), copylink: (k) => window.XCM.H.copyLink(`#/${P.area() || 'overview'}/g/tasks/${k}`), 'add-link': (k) => addLink(k), unlink: (arg) => { const [k, id] = arg.split('|'); return unlink(k, id); },
     check: (arg) => { const [k, i] = arg.split('|'); return toggleChecklist(k, +i); },
     'desc-cancel': () => { T.editing = null; patch(); },
     'cedit-cancel': () => { T.editComment = null; patch(); },
