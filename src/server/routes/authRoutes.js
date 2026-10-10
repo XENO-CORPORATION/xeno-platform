@@ -2040,7 +2040,7 @@ router.get('/google', async (req, res) => {
     }
 
     const state = generateState();
-    const returnUrl = req.query.returnUrl || '/overview';
+    const returnUrl = req.query.returnUrl || '/workspace';
 
     // Store state in Redis
     await storeOAuthState(state, { provider: 'google', returnUrl, createdAt: Date.now() });
@@ -2124,7 +2124,7 @@ router.get('/google/callback', async (req, res) => {
 
     // Session-backed JWT (sid claim + unified user_sessions row; same issuer as
     // password login so revocation works identically for OAuth sign-ins).
-    const returnUrl = stateData.returnUrl || '/overview';
+    const returnUrl = stateData.returnUrl || '/workspace';
     const jwtToken = await issueOAuthCredential(req.db, user, req, res, returnUrl);
     handleOAuthRedirect(res, returnUrl, jwtToken, isNew);
 
@@ -2154,7 +2154,7 @@ router.get('/github', async (req, res) => {
     }
 
     const state = generateState();
-    const returnUrl = req.query.returnUrl || '/overview';
+    const returnUrl = req.query.returnUrl || '/workspace';
 
     await storeOAuthState(state, { provider: 'github', returnUrl, createdAt: Date.now() });
 
@@ -2258,7 +2258,7 @@ router.get('/github/callback', async (req, res) => {
 
     // Session-backed JWT (sid claim + unified user_sessions row; same issuer as
     // password login so revocation works identically for OAuth sign-ins).
-    const returnUrl = stateData.returnUrl || '/overview';
+    const returnUrl = stateData.returnUrl || '/workspace';
     const jwtToken = await issueOAuthCredential(req.db, user, req, res, returnUrl);
     handleOAuthRedirect(res, returnUrl, jwtToken, isNew);
 
@@ -2287,7 +2287,7 @@ router.get('/twitter', async (req, res) => {
     const state = generateState();
     const codeVerifier = generateCodeVerifier();
     const codeChallenge = generateCodeChallenge(codeVerifier);
-    const returnUrl = req.query.returnUrl || '/overview';
+    const returnUrl = req.query.returnUrl || '/workspace';
 
     // Store state and PKCE verifier in Redis
     await storeOAuthState(state, {
@@ -2381,7 +2381,7 @@ router.get('/twitter/callback', async (req, res) => {
 
     // Session-backed JWT (sid claim + unified user_sessions row; same issuer as
     // password login so revocation works identically for OAuth sign-ins).
-    const returnUrl = stateData.returnUrl || '/overview';
+    const returnUrl = stateData.returnUrl || '/workspace';
     const jwtToken = await issueOAuthCredential(req.db, user, req, res, returnUrl);
     handleOAuthRedirect(res, returnUrl, jwtToken, isNew);
 

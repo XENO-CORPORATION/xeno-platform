@@ -553,7 +553,7 @@ const Header: React.FC<HeaderProps> = ({ onGetStarted, visible = true }) => {
               <span aria-hidden="true" className="h-[18px] w-[52px] rounded-[4px] bg-white/[0.04]" />
             ) : isAuthenticated ? (
               <Link
-                to="/overview"
+                to="/workspace"
                 className="text-[13px] font-normal text-[#b6afa5] transition-colors hover:text-white"
                 title={`Signed in as ${accountName}`}
               >
@@ -610,7 +610,7 @@ const Header: React.FC<HeaderProps> = ({ onGetStarted, visible = true }) => {
           <div className="grid gap-3">
             {isLoading ? null : isAuthenticated ? (
               <Link
-                to="/overview"
+                to="/workspace"
                 onClick={() => setIsMobileMenuOpen(false)}
                 className="flex h-12 items-center justify-center rounded-[6px] border border-white/10 text-sm font-medium text-[#b6afa5]"
               >

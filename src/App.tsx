@@ -117,6 +117,13 @@ const isXenoChatDomain = typeof window !== 'undefined' &&
  * safely use `/c/:id`, but a hard reload must first enter the canonical route
  * so the conversation component mounts and hydrates the persisted messages.
  */
+/** /workspace/... is the XENO workspace, served as its own page; a link or navigate() to it loads that page. */
+const LeaveToWorkspace: React.FC = () => {
+  const location = useLocation();
+  React.useEffect(() => { window.location.replace(location.pathname + location.search + location.hash); }, [location.pathname, location.search, location.hash]);
+  return null;
+};
+
 const ConversationRouteRedirect: React.FC = () => {
   const { conversationId } = useParams<{ conversationId?: string }>();
   const target = conversationId
@@ -398,6 +405,7 @@ function App() {
             } />
 
             {/* Protected Routes - Only accessible after authentication */}
+            <Route path="/workspace/*" element={<LeaveToWorkspace />} />
             <Route path="/overview/*" element={
               <ProtectedRoute>
                 <OverviewPage />

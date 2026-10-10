@@ -474,7 +474,7 @@ const Pricing: React.FC = () => {
             },
             {
               q: 'Can I change plans?',
-              a: <>Yes. Upgrade or downgrade at any time from your <Link to="/overview/billing" className="text-[#ece7df] underline decoration-white/20 underline-offset-4 hover:decoration-white/60">account billing</Link> — changes take effect on your next cycle. See the <Link to="/refunds" className="text-[#ece7df] underline decoration-white/20 underline-offset-4 hover:decoration-white/60">refund policy</Link> for eligibility and timing.</>,
+              a: <>Yes. Upgrade or downgrade at any time from your <Link to="/workspace/settings/plan" className="text-[#ece7df] underline decoration-white/20 underline-offset-4 hover:decoration-white/60">account billing</Link> — changes take effect on your next cycle. See the <Link to="/refunds" className="text-[#ece7df] underline decoration-white/20 underline-offset-4 hover:decoration-white/60">refund policy</Link> for eligibility and timing.</>,
             },
           ].map((item, index) => (
             <details key={item.q} className="group py-5 sm:py-6" open={index === 0}>
