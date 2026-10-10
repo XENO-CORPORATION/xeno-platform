@@ -16,7 +16,9 @@
  * carry the name, so a rename changes the address; the exit is to route by id when the pages move onto the framework.
  *
  * Routes: GET+POST /api/workspaces · GET+POST /api/chat/projects · PUT /api/chat/projects/:id
- *   · GET /api/chat/conversations (to list a project's conversations). */
+ *   · GET /api/chat/conversations (to list a project's conversations)
+ *   · GET /api/chat/projects/:id/access · PUT …/access/user/by-email · PUT+DELETE …/access/user/:id (sharing)
+ *   · DELETE /api/chat/projects/:id/permanent (an archived, empty project, for good). */
 (() => {
   const P = window.XENO_PLATFORM;
   if (!P || !P.served) { window.XENO_SCOPE = { served: false }; window.XENO_WORK = { served: false, projectTab: () => null, blocked: () => false }; return; }
@@ -98,7 +100,7 @@
     return null;
   }
   // actions the platform cannot do yet say so, and change nothing
-  const BLOCKED = { deleteProject: 'Deleting a project for good', assign: 'Assigning people or agents', budget: 'Setting a budget', newTask: 'Adding a task', openTask: 'Opening a task', newProjectChat: 'Starting a chat from here' };
+  const BLOCKED = { budget: 'Setting a budget', newTask: 'Adding a task', openTask: 'Opening a task', newProjectChat: 'Starting a chat from here' };
   function blocked(action) { const what = BLOCKED[action]; if (!what) return false; X()?.toast?.(`${what} isn’t available on XENO yet`); return true; }
 
   function mark() { document.querySelectorAll('#main [data-xa]').forEach((el) => { if (BLOCKED[el.dataset.xa] && !el.classList.contains('role-off')) { el.setAttribute('aria-disabled', 'true'); el.classList.add('role-off'); el.title = `${BLOCKED[el.dataset.xa]} isn’t available on XENO yet`; } }); }
@@ -159,8 +161,54 @@
     if (moved) { await loadProjects(); try { window.XENO_CHAT?.load?.(); } catch {} }
     return moved;
   }
+  // ---------- sharing: who can open this project, and as what ----------
+  const ROLES = [['viewer', 'Can view'], ['reviewer', 'Can comment'], ['editor', 'Can edit'], ['admin', 'Can manage']];
+  const roleName = (r) => (ROLES.find((x) => x[0] === r) || [r, r])[1];
+  async function shareProject(name) {
+    const rec = (window.XENO_PG_PROJECTS.items || []).find((p) => p.name === name); if (!rec) return false;
+    const base = '/api/chat/projects/' + encodeURIComponent(rec.id) + '/access', toast = (m) => X()?.toast?.(m);
+    const SH = { status: 'loading', grants: [], error: '' };
+    const load = async () => { const r = await api('GET', base).catch(() => null);
+      if (r && r.ok && Array.isArray(r.d.grants)) { SH.grants = r.d.grants.filter((g) => String(g.subject || '').startsWith('user:')); SH.status = 'ready'; }
+      else { SH.status = r && r.status === 403 ? 'forbidden' : 'error'; } };
+    const paint = (sh) => { const b = sh.querySelector('.xd-info'); if (!b) return;
+      const who = (g) => (g.identity ? g.identity.display_name || g.identity.username || g.identity.email : 'An account');
+      const row = (g) => { const id = String(g.subject).slice(5), owner = g.relation === 'owner', me2 = id === String(me());
+        return `<li data-share="${esc(id)}"><div><b>${esc(who(g))}${me2 ? ' (you)' : ''}</b><small>${esc(g.identity && g.identity.email ? g.identity.email : '')}</small></div><span class="xd-list-acts">${owner ? '<span class="xd-share-owner">Owner</span>' : `<select data-share-role="${esc(id)}" aria-label="What ${esc(who(g))} can do">${ROLES.map(([v, l]) => `<option value="${v}"${v === g.relation ? ' selected' : ''}>${l}</option>`).join('')}</select><button class="xd-ib" data-share-remove="${esc(id)}" aria-label="Stop sharing with ${esc(who(g))}" data-tip="Stop sharing">${X().ic('x')}</button>`}</span></li>`; };
+      b.innerHTML = SH.status === 'loading' ? '<p class="xd-note" data-share-state="loading">Loading who can open this project…</p>'
+        : SH.status === 'forbidden' ? '<p class="xd-note" data-share-state="forbidden">Only someone who manages this project can change who it is shared with.</p>'
+        : SH.status === 'error' ? '<p class="xd-note" data-share-state="error">That couldn’t be loaded. <button class="xd-btn ghost sm" data-share-retry>Try again</button></p>'
+        : `<form class="xd-share-add" data-share-add><input type="email" required placeholder="Email of a XENO account" aria-label="Email of the person to share with"><select aria-label="What they can do">${ROLES.map(([v, l]) => `<option value="${v}">${l}</option>`).join('')}</select><button class="xd-btn sm" type="submit">Share</button></form>${SH.error ? `<p class="xd-err" data-share-error role="alert">${esc(SH.error)}</p>` : ''}<ul class="xd-list">${SH.grants.map(row).join('')}</ul>`; };
+    const again = async (sh) => { await load(); if (document.body.contains(sh)) paint(sh); };
+    await window.XD.info({ title: 'Share “' + rec.realName + '”', sub: 'People you add can open the project and its chats.', size: 'md', html: '',
+      onOpen: (sh) => { paint(sh); again(sh);
+        sh.addEventListener('submit', async (e) => { const f = e.target.closest('[data-share-add]'); if (!f) return; e.preventDefault(); const email = f.querySelector('input').value.trim(), relation = f.querySelector('select').value; if (!email) return;
+          const r = await api('PUT', base + '/user/by-email', { email, relation }).catch(() => null);
+          if (!r || !r.ok) { SH.error = r && r.d && r.d.code === 'account_not_found' ? 'No XENO account uses that email. They need an account first.' : (r && r.d && typeof r.d.error === 'string' && r.d.error) || 'That couldn’t be shared. Nothing changed.'; return paint(sh); }
+          SH.error = ''; toast(`Shared with ${email} · ${roleName(relation).toLowerCase()}`); again(sh); });
+        sh.addEventListener('change', async (e) => { const s = e.target.closest('[data-share-role]'); if (!s) return;
+          const r = await api('PUT', base + '/user/' + encodeURIComponent(s.dataset.shareRole), { relation: s.value }).catch(() => null);
+          if (!r || !r.ok) toast('That couldn’t be changed. It is as it was.'); else toast('Changed to ' + roleName(s.value).toLowerCase()); again(sh); });
+        sh.addEventListener('click', async (e) => { if (e.target.closest('[data-share-retry]')) { SH.status = 'loading'; paint(sh); return again(sh); }
+          const rm = e.target.closest('[data-share-remove]'); if (!rm) return;
+          const r = await api('DELETE', base + '/user/' + encodeURIComponent(rm.dataset.shareRemove)).catch(() => null);
+          if (!r || !r.ok) toast('That couldn’t be removed. They still have access.'); else toast('Stopped sharing'); again(sh); }); } });
+    return true;
+  }
+  // ---------- delete for good: an archived project with nothing left inside ----------
+  async function deleteProject(name) {
+    const rec = (window.XENO_PG_PROJECTS.items || []).find((p) => p.name === name); if (!rec) return false;
+    const toast = (m) => X()?.toast?.(m);
+    if (rec.status !== 'archived') { toast('Archive the project first. Only an archived project can be deleted for good.'); return false; }
+    if (!(await window.XD.confirm({ title: 'Delete “' + rec.realName + '” for good?', body: 'The project and its sharing are removed for everyone. <b>This can’t be undone.</b> A project that still holds chats is not deleted: you will be told, and nothing changes.', action: 'Delete for good', typeToConfirm: rec.realName }))) return false;
+    const r = await api('DELETE', '/api/chat/projects/' + encodeURIComponent(rec.id) + '/permanent').catch(() => null);
+    if (!r || !r.ok) { const d = (r && r.d) || {};
+      toast(d.code === 'project_not_empty' ? `“${rec.realName}” still holds ${[d.conversations ? d.conversations + (d.conversations === 1 ? ' chat' : ' chats') : '', d.scheduled ? d.scheduled + (d.scheduled === 1 ? ' scheduled chat' : ' scheduled chats') : ''].filter(Boolean).join(' and ')}. Move or delete them first.` : (typeof d.error === 'string' && d.error) || 'The project couldn’t be deleted. Nothing changed.'); return false; }
+    toast(`Deleted “${rec.realName}” for good`); await loadProjects(); try { X()?.go?.('global', { global: 'projects', item: null }); window.XENO_RECENT_LIVE?.load?.(); } catch {}
+    return true;
+  }
   // the Projects page asks on each paint: moved to another area, its own list
   function sync() { if (W.status === 'ready' && W.area !== undefined && W.loadingArea === undefined && area() !== W.area) { W.status = 'loading'; pstate('projects', 'loading'); loadProjects(); } }
-  window.XENO_WORK = { served: true, moveProject, sync, load, projectTab, blocked, state: () => ({ scope: SC.status, projects: W.status }), reload: loadProjects, idOf: (name) => ((window.XENO_PG_PROJECTS.items || []).find((p) => p.name === name) || {}).id || null };
+  window.XENO_WORK = { served: true, moveProject, shareProject, deleteProject, sync, load, projectTab, blocked, state: () => ({ scope: SC.status, projects: W.status }), reload: loadProjects, idOf: (name) => ((window.XENO_PG_PROJECTS.items || []).find((p) => p.name === name) || {}).id || null };
   Promise.resolve(P.ready).then((user) => { if (user) P.first(load()); });   // the page waits for this first load before it shows
 })();

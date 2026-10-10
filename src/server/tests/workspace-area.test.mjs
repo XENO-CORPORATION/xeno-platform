@@ -117,6 +117,28 @@ async function main() {
     check(shape(await search('zebra')) === '', 'one person’s search never finds another person’s work');
     actor = ada;
 
+    // ── deleting a project for good, and sharing it
+    const doomed = (await call('POST', '/chat/projects', { name: 'Doomed' })).json.project;
+    const inside = (await call('POST', '/chat/conversations', { title: 'inside doomed', model_id: 'm', project_id: doomed.id })).json.conversation;
+    check((await call('DELETE', `/chat/projects/${doomed.id}/permanent`)).json.code === 'archive_first', 'a project that is not archived cannot be deleted for good');
+    await call('DELETE', `/chat/projects/${doomed.id}`);
+    const full = await call('DELETE', `/chat/projects/${doomed.id}/permanent`);
+    check(full.status === 409 && full.json.code === 'project_not_empty' && full.json.conversations === 1, 'an archived project that still holds a chat is refused, with the count');
+    check((await pool.query('SELECT count(*)::int AS n FROM chat_projects WHERE id = $1', [doomed.id])).rows[0].n === 1, 'and nothing was removed');
+    const shared = await call('PUT', `/chat/projects/${doomed.id}/access/user/by-email`, { email: (await pool.query('SELECT email FROM users WHERE id = $1', [bob])).rows[0].email, relation: 'viewer' });
+    check(shared.status === 200 && shared.json.grant.relation === 'viewer', 'a project can be shared with another account by email');
+    const access = (await call('GET', `/chat/projects/${doomed.id}/access`)).json.grants;
+    check(access.some((g) => g.subject === 'user:' + bob && g.relation === 'viewer' && g.identity && g.identity.email), 'the access list names who it is shared with');
+    await call('DELETE', `/chat/conversations/${inside.id}`);
+    actor = bob;
+    { const tried = await call('DELETE', `/chat/projects/${doomed.id}/permanent`); check(tried.status >= 400 && tried.status < 500 && (await pool.query('SELECT count(*)::int AS n FROM chat_projects WHERE id = $1', [doomed.id])).rows[0].n === 1, `someone it is shared with as a viewer cannot delete it (${tried.status})`); }
+    actor = ada;
+    const done = await call('DELETE', `/chat/projects/${doomed.id}/permanent`);
+    check(done.status === 200 && done.json.deleted === true, 'an archived, empty project is deleted for good');
+    const left = (await pool.query("SELECT (SELECT count(*) FROM chat_projects WHERE id = $1)::int AS p, (SELECT count(*) FROM relationship_tuples WHERE (object_type='project' AND object_id=$2) OR (subject_type='project' AND subject_id=$2))::int AS t, (SELECT count(*) FROM chat_conversations WHERE id = $3)::int AS c", [doomed.id, String(doomed.id), inside.id])).rows[0];
+    check(left.p === 0 && left.t === 0 && left.c === 0, `the project, its access rows and its already-deleted chats are gone (${JSON.stringify(left)})`);
+    check((await call('DELETE', `/chat/projects/${doomed.id}/permanent`)).status >= 400, 'deleting it again is refused, not a server error');
+
     // ── the week, per area
     const week0 = (await call('GET', '/workspace/summary')).json;
     const sum = (a, m) => (week0.areas[a] ? week0.areas[a][m].reduce((x, y) => x + y, 0) : 0);
