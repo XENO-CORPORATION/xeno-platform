@@ -271,7 +271,7 @@ try {
     await p.evaluate(() => { location.hash = '#/overview'; }); await wait(1000);
     const ov = await p.evaluate(() => document.querySelector('#main').textContent.replace(/\s+/g, ' '));
     ok(!/Running now|rendering|Launch trailer/i.test(ov) && /Chats started/.test(ov), 'Overview shows no sample running jobs, and each area’s headline number is real');
-    ok((await p.evaluate(() => document.getElementById('xp-note')?.textContent || '')).includes('people and each area’s home are real'), 'the note says which parts are real and which still show samples');
+    ok((await p.evaluate(() => document.getElementById('xp-note')?.textContent || '')).includes('community and each area’s home are real'), 'the note says which parts are real and which still show samples');
     ok(errs.length === 0, `no page errors on the homes (${JSON.stringify(errs.slice(0, 2))})`); await p.close(); }
   reset(); db.sumDown = true;
   { const { p, errs } = await open('#/dev'); await wait(900);

@@ -310,7 +310,9 @@ export async function getThreadByShortId(db, shortId) {
   return {
     ...serializeThreadSummary(thread),
     promotedTo: thread.promoted_to || null,
-    duplicateOf: thread.duplicate_of || null,
+    duplicateOf: thread.duplicate_of
+      ? ((await db.query('SELECT short_id, slug, title FROM forum_threads WHERE id = $1', [thread.duplicate_of])).rows.map((d) => ({ shortId: d.short_id, title: d.title, url: `/forum/t/${d.short_id}/${d.slug}` }))[0] || null)
+      : null,
     posts: postRows.map(serializePost),
   };
 }
