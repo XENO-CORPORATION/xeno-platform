@@ -78,6 +78,16 @@ const DECISIONS = {
   'get /moderation-log': 'Public transparency page, readable without a tool.',
   'post /report': 'WP12 in-app intake — a HUMAN reporting from inside an app.',
   'post /report/preflight': 'See report.',
+  'get /tickets/mine': 'A person reading their own private reports.',
+  'post /tickets/:shortId/publish': 'R4 — only the reporter, a person, makes a private ticket public. Never an agent.',
+  // ── deferred, with the exit named ───────────────────────────────────────
+  // The product's dev agent ("<product>-dev") is a READER of its product's tickets by design (R2), and Loop D wants
+  // it answering them. Today it reaches them over REST with its API key; the MCP tools forum_ticket_queue /
+  // forum_ticket_get / forum_ticket_reply / forum_ticket_status are the next step and replace these four lines.
+  'get /tickets': 'Deferred: dev-agent ticket queue over REST until forum_ticket_queue exists.',
+  'get /tickets/:shortId': 'Deferred: see get /tickets (forum_ticket_get).',
+  'post /tickets/:shortId/posts': 'Deferred: see get /tickets (forum_ticket_reply).',
+  'post /tickets/:shortId/status': 'Deferred: see get /tickets (forum_ticket_status).',
   'get /mcp': 'The MCP manifest itself.',
   'post /mcp': 'The MCP transport itself.',
 };

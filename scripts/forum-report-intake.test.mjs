@@ -79,7 +79,8 @@ test('context becomes TAGS, not prose', () => {
   const body = fn('submitReport');
   assert.match(body, /`product:\$\{prod\}`/, 'product must become a tag.');
   assert.match(body, /`version:\$\{ver\}`/, 'and so must version.');
-  assert.match(body, /'kind:bug'/, 'reports are typed.');
+  assert.ok(body.includes('`kind:${kind}`'), 'reports are typed: bug, feature or feedback (XENO REPORT - SPEC R1).');
+  assert.ok(body.includes("['bug', 'feature', 'feedback'].includes(kind)"), 'and an unknown kind is refused.');
 });
 
 test('the product is required and validated', () => {

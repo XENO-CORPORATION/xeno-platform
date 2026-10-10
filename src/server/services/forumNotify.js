@@ -82,9 +82,11 @@ export async function listNotifications(db, userId, { unreadOnly = false, limit 
             t.short_id AS thread_short_id, t.slug AS thread_slug, t.title AS thread_title,
             n.post_id,
             n.actor_kind,
-            COALESCE(au.display_name, au.username) AS actor_name
+            COALESCE(au.display_name, au.username) AS actor_name,
+            tk.short_id AS ticket_short_id, tk.title AS ticket_title, tk.status AS ticket_status, tk.fixed_in AS ticket_fixed_in
        FROM forum_notifications n
        LEFT JOIN forum_threads t ON t.id = n.thread_id
+       LEFT JOIN forum_tickets tk ON tk.id = n.ticket_id
        LEFT JOIN users au       ON au.id = n.actor_id
       WHERE n.user_id = $1 ${unreadOnly ? 'AND n.read_at IS NULL' : ''}
       ORDER BY n.created_at DESC
@@ -105,6 +107,8 @@ export async function listNotifications(db, userId, { unreadOnly = false, limit 
           url: `/forum/t/${r.thread_short_id}/${r.thread_slug}` }
       : null,
     postId: r.post_id,
+    // a private report's reply or status change: the person sees which ticket, and where it stands now
+    ticket: r.ticket_short_id ? { shortId: r.ticket_short_id, title: r.ticket_title, status: r.ticket_status, fixedIn: r.ticket_fixed_in } : null,
   }));
 }
 

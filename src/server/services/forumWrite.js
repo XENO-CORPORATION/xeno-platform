@@ -1552,8 +1552,10 @@ const REPORT_PRODUCTS = /^[a-z0-9][a-z0-9-]{0,31}$/;
  * after the secret had already crossed the wire.
  */
 export async function submitReport(db, user, {
-  product, version, os, title, body, joinShortId,
+  product, version, os, title, body, joinShortId, kind = 'bug',
 } = {}) {
+  // what the report is: a bug, a feature request, or feedback (XENO REPORT - SPEC R1)
+  if (!['bug', 'feature', 'feedback'].includes(kind)) throw new ForumError("kind must be 'bug', 'feature' or 'feedback'", 'invalid_kind', 400);
   assertNotService(user);
 
   const prod = String(product || '').trim().toLowerCase();
@@ -1583,7 +1585,7 @@ export async function submitReport(db, user, {
   const tags = [`product:${prod}`];
   const ver = String(version || '').trim().toLowerCase();
   if (ver && /^[a-z0-9][a-z0-9._-]{0,30}$/.test(ver)) tags.push(`version:${ver}`);
-  tags.push('kind:bug');
+  tags.push(`kind:${kind}`);
 
   // The environment block is appended rather than merged into the user's words:
   // it is machine-written, and a reader should be able to tell which sentences
