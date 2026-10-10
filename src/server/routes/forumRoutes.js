@@ -687,9 +687,17 @@ router.post('/flags/:id/resolve', authMiddleware, loadActor, handled('resolveFla
   res.json({
     success: true,
     ...(await write.resolveFlag(req.db, req.actor, req.params.id, {
-      action: req.body?.action, note: req.body?.note,
+      action: req.body?.action, note: req.body?.note, duplicateOf: req.body?.duplicateOf,
     })),
   });
+}));
+
+/** POST /api/forum/moderation/actions { action, targetType, targetId, duplicateOf?, reason?, note? } — a moderator acts directly. */
+router.post('/moderation/actions', authMiddleware, loadActor, handled('moderate', async (req, res) => {
+  res.json({ success: true, ...(await write.moderate(req.db, req.actor, {
+    action: req.body?.action, targetType: req.body?.targetType, targetId: req.body?.targetId,
+    duplicateOf: req.body?.duplicateOf, reason: req.body?.reason, note: req.body?.note,
+  })) });
 }));
 
 router.get('/me/activity', authMiddleware, loadActor, handled('myActivity', async (req, res) => {

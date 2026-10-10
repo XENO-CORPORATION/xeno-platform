@@ -652,18 +652,17 @@ export async function listMyActivity(db, userId, { limit = 40 } = {}) {
 export async function listModerationLog(db, { limit = 50 } = {}) {
   const capped = Math.min(200, Math.max(1, Number(limit) || 50));
   const { rows } = await db.query(
-    `SELECT f.id, f.target_type, f.reason, f.resolved_at,
+    `SELECT a.id, a.target_type, a.reason, a.created_at AS resolved_at, a.action,
             COALESCE(mu.display_name, mu.username) AS moderator,
             t.short_id AS thread_short_id, t.slug AS thread_slug, t.title AS thread_title,
             p.position AS post_position,
-            CASE WHEN f.target_type = 'post' THEN p.status ELSE t.status END AS target_status
-       FROM forum_flags f
-       LEFT JOIN users mu ON mu.id = f.resolved_by
-       LEFT JOIN forum_posts p   ON f.target_type = 'post' AND p.id = f.target_id
-       LEFT JOIN forum_threads t ON t.id = COALESCE(p.thread_id,
-                                     CASE WHEN f.target_type = 'thread' THEN f.target_id END)
-      WHERE f.status = 'actioned'
-      ORDER BY f.resolved_at DESC
+            d.short_id AS dup_short_id, d.slug AS dup_slug, d.title AS dup_title
+       FROM forum_moderation_actions a
+       LEFT JOIN users mu ON mu.id = a.moderator_id
+       LEFT JOIN forum_posts p   ON a.target_type = 'post' AND p.id = a.target_id
+       LEFT JOIN forum_threads t ON t.id = a.thread_id
+       LEFT JOIN forum_threads d ON d.id = a.duplicate_of
+      ORDER BY a.created_at DESC, a.id
       LIMIT $1`,
     [capped],
   );
@@ -672,19 +671,20 @@ export async function listModerationLog(db, { limit = 50 } = {}) {
   // same post produced three flag rows and ONE moderator decision; listing it
   // three times would misrepresent both the volume of moderation and the
   // amount of trouble a single author caused.
-  const seen = new Set();
+  // Each row is already one decision (several flags on one target are resolved by one decision), so nothing is
+  // folded here: an unlock after a lock is two decisions, and the log shows both.
   const out = [];
+  const OUTCOME = { hide: 'hidden', restore: 'restored', lock: 'locked', unlock: 'unlocked', duplicate: 'duplicate' };
   for (const r of rows) {
-    const key = `${r.target_type}:${r.thread_short_id}:${r.post_position ?? 'thread'}`;
-    if (seen.has(key)) continue;
-    seen.add(key);
     out.push({
       at: r.resolved_at,
       what: r.target_type,
       // 'hidden' vs 'locked' vs the author's own 'deleted' are different facts.
       // The log states which, because "removed" flattens a moderator decision
       // and a retraction into one word.
-      outcome: r.target_status,
+      outcome: OUTCOME[r.action] || r.action,
+      action: r.action,
+      duplicateOf: r.dup_short_id ? { shortId: r.dup_short_id, title: r.dup_title, url: `/forum/t/${r.dup_short_id}/${r.dup_slug}` } : null,
       reason: r.reason,
       moderator: r.moderator || 'a moderator',
       thread: r.thread_short_id

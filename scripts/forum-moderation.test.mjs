@@ -98,8 +98,10 @@ test('reviewing needs the capability, and the action is validated', () => {
   assert.match(fn('listFlags'), /assertCan\(db, user, 'review_flags'\)/,
     'the queue exposes reporters and unpublished content.');
   assert.match(fn('resolveFlag'), /assertCan\(db, user, 'review_flags'\)/);
-  assert.match(fn('resolveFlag'), /\['dismiss', 'action'\]\.includes\(action\)/,
+  assert.ok(fn('resolveFlag').includes("['dismiss', 'action', 'hide', 'lock', 'duplicate'].includes(action)"),
     'an unrecognised action must be refused, never treated as a dismiss.');
+  assert.match(fn('moderate'), /assertCan\(db, user, 'review_flags'\)/, 'acting directly needs the same capability.');
+  assert.ok(fn('moderate').includes('if (!ACTS[action]) throw'), 'and its action is validated too.');
 });
 
 test('reviewers see who reported — readers never will', () => {
@@ -144,8 +146,12 @@ test('🔴 ACTIONS taken, never ACCUSATIONS made — dismissals stay private', (
   // weapon: anyone could put a neighbour into the public record by reporting
   // them.
   const body = logFn();
-  assert.match(body, /WHERE f\.status = 'actioned'/,
-    'only upheld decisions may be published.');
+  // The log reads the record of DECISIONS (forum_moderation_actions), which a dismissal never writes: only
+  // moderate() inserts there, and resolveFlag returns before calling it on 'dismiss'.
+  assert.match(body, /FROM forum_moderation_actions a/, 'only decisions taken may be published.');
+  assert.doesNotMatch(body, /FROM forum_flags/, 'the log must not read the flags, which hold accusations.');
+  assert.ok(fn('resolveFlag').includes("if (action !== 'dismiss')") && !fn('resolveFlag').includes('INSERT INTO forum_moderation_actions'),
+    'a dismissal writes nothing to the record.');
   assert.doesNotMatch(body, /'dismissed'/,
     'a dismissed report must never reach the public log.');
 });
@@ -170,15 +176,20 @@ test('one decision per target, not one row per report', () => {
   // Three people reporting one post produced three flag rows and ONE moderator
   // decision. Listing it three times misrepresents both the volume of
   // moderation and how much trouble a single author caused.
-  const body = logFn();
-  assert.match(body, /const seen = new Set\(\)/, 'must dedup by target.');
+  // One decision is one row: moderate() inserts ONE action and resolves every open flag on the target in ONE
+  // update, so three reports of one post are one row in the log.
+  const mod = fn('moderate');
+  assert.equal((mod.match(/INSERT INTO forum_moderation_actions/g) || []).length, 1, 'one decision, one record.');
+  assert.ok(mod.includes("WHERE target_type = $3 AND target_id = $4 AND status IN ('open', 'reviewing')"),
+    'every open flag on the target is resolved by that one decision.');
 });
 
 test('the outcome distinguishes a moderator hide from an author deletion', () => {
   // "removed" flattens a moderator decision and a retraction into one word.
   const body = logFn();
-  assert.match(body, /outcome: r\.target_status/,
+  assert.ok(body.includes("hide: 'hidden'") && body.includes("lock: 'locked'") && body.includes('outcome: OUTCOME[r.action]'),
     'the log must state hidden / locked, not a generic "removed".');
+  assert.doesNotMatch(body, /'removed'/);
 });
 
 test('and it is bounded', () => {
