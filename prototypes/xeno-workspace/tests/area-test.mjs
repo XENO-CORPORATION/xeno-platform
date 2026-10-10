@@ -45,6 +45,7 @@ async function open(hash) {
     if (u.pathname === '/api/workspace/pins') return json({ success: true, items: db.pins.map((id) => db.convs.find((c) => c.id === id)).filter(Boolean).map((c) => ({ kind: 'chat', id: c.id, title: c.title, area: c.area || null, at: c.updated_at })) });
     { const pm = u.pathname.match(/^\/api\/chat\/conversations\/([^/]+)\/pin$/); if (pm) { db.calls.push(['PIN', q.method() + ' ' + pm[1], null, null]); if (db.refuse) return json({ success: false, error: 'Internal server error' }, 500); db.pins = db.pins.filter((x) => x !== pm[1]); if (q.method() === 'PUT') db.pins.push(pm[1]); return json({ success: true, pinned: q.method() === 'PUT' }); } }
     if (u.pathname === '/api/workspace/summary') return db.sumDown ? json({ success: false, error: 'Internal server error' }, 500) : json({ success: true, days: 7, areas: { dev: { chats: [0, 1, 0, 2, 0, 1, 3], messages: [0, 4, 0, 9, 0, 2, 11], runs: [0, 0, 0, 0, 0, 0, 0] }, studio: { chats: [0, 0, 0, 0, 0, 0, 0], messages: [0, 0, 0, 0, 0, 0, 0], runs: [0, 0, 0, 0, 0, 0, 0] } } });
+    if (u.pathname === '/api/tasks') return json({ success: true, tasks: [] });
     if (u.pathname === '/api/workspace/needs') return json({ success: true, items: db.tasks.filter((t) => t.status !== 'cancelled' && t.last_run_status === 'failed').map((t) => ({ kind: 'schedule_failed', id: t.id, title: t.title, detail: t.last_run_error, area: t.area, conversation_id: null, at: iso(1) })) });
     if (u.pathname === '/api/workspace/search') { if (db.slow) await wait(db.slow); const qq = (u.searchParams.get('q') || '').toLowerCase(); if (qq === 'plan') return json({ success: true, query: qq, results: [{ kind: 'chat', id: CV, title: 'Zebra plan', snippet: '…the plan for the zebra…', matched: 'message', area: 'dev', at: iso(2) }], counts: {} }); if (qq !== 'zebra') return json({ success: true, query: qq, results: [], counts: {} });
       return json({ success: true, query: qq, results: [
@@ -271,7 +272,7 @@ try {
     await p.evaluate(() => { location.hash = '#/overview'; }); await wait(1000);
     const ov = await p.evaluate(() => document.querySelector('#main').textContent.replace(/\s+/g, ' '));
     ok(!/Running now|rendering|Launch trailer/i.test(ov) && /Chats started/.test(ov), 'Overview shows no sample running jobs, and each area’s headline number is real');
-    ok((await p.evaluate(() => document.getElementById('xp-note')?.textContent || '')).includes('community and each area’s home are real'), 'the note says which parts are real and which still show samples');
+    ok((await p.evaluate(() => document.getElementById('xp-note')?.textContent || '')).includes('tasks, library, people, community and each area’s home are real'), 'the note says which parts are real and which still show samples');
     ok(errs.length === 0, `no page errors on the homes (${JSON.stringify(errs.slice(0, 2))})`); await p.close(); }
   reset(); db.sumDown = true;
   { const { p, errs } = await open('#/dev'); await wait(900);

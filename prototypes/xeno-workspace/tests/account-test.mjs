@@ -54,6 +54,7 @@ function answer(q) {
   if (p === '/api/auth/linked-accounts') return json(200, { success: true, accounts: db.linked });
   if (p === '/api/billing/overview') return json(200, { success: true, overview: { credits: { balance: db.credits }, subscription: null } });
   if (p === '/api/workspace/needs') return json(200, { success: true, items: [] });
+  if (p === '/api/tasks') return json(200, { success: true, tasks: [] });
   if (p === '/api/forum/threads') return json(200, { success: true, threads: [], total: 0 });
   if (p === '/api/forum/me') return json(200, { success: true, actor: {}, capabilities: {} });
   if (p === '/api/workspace/summary') return json(200, { success: true, days: 7, areas: {} });

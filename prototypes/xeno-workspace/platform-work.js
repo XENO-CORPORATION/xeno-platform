@@ -92,6 +92,7 @@
     const rec = (window.XENO_PG_PROJECTS.items || []).find((p) => p.name === name);
     if (W.status === 'loading') return h.box('folder', 'Loading this project', '', '', 'sm');
     if (!rec) return null;
+    if (tab === 'Tasks' && window.XENO_TASKS && window.XENO_TASKS.served) return window.XENO_TASKS.projectTab(rec);
     if (NOT_YET[tab]) return h.box(NOT_YET[tab][0], NOT_YET[tab][1], esc(NOT_YET[tab][2]), '', 'sm');
     if (tab === 'Overview') return `<div class="pg-cols"><div>
         <section class="pg-sec"><h3>In this project</h3><div class="pg-mini-board"><button class="pg-mb" data-ptab="Conversations"><b>${rec.chatCount}</b><small>${rec.chatCount === 1 ? 'Conversation' : 'Conversations'}</small></button><button class="pg-mb" data-ptab="Resources"><b>${rec.files}</b><small>${rec.files === 1 ? 'File' : 'Files'}</small></button></div></section></div>

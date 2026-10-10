@@ -1858,6 +1858,32 @@ html body .live-chat button[aria-label="Voice input options"][aria-label="Voice 
 .xd-share-add{display:flex;gap:8px;margin:0 0 10px}
 .xd-share-add input{flex:1;min-width:0}
 .xd-share-owner{color:var(--muted);font-size:12.5px;padding:0 6px}
+.tk-board{display:grid;grid-template-columns:repeat(6,minmax(180px,1fr));gap:10px;overflow-x:auto;padding-bottom:6px}
+.tk-board--sm{grid-template-columns:repeat(6,minmax(160px,1fr))}
+.tk-col{background:var(--n20);border:1px solid var(--n31);border-radius:8px;padding:8px;display:flex;flex-direction:column;gap:6px;min-height:120px}
+.tk-col h3{display:flex;justify-content:space-between;margin:2px 4px 4px;font-size:12px;color:var(--muted);font-weight:600}
+.tk-col h3 em{font-style:normal;color:var(--dim)}
+.tk-card{display:flex;flex-direction:column;gap:6px;text-align:left;padding:9px 10px;border-radius:6px;background:var(--n26,var(--n20));border:1px solid var(--n31);color:var(--text);cursor:pointer}
+.tk-card:hover{border-color:var(--muted)}
+.tk-card-h{display:flex;justify-content:space-between;align-items:center;color:var(--dim);font-size:11px}
+.tk-card b{font-size:13px;font-weight:500;line-height:1.35}
+.tk-card-f{display:flex;gap:8px;align-items:center;color:var(--muted);font-size:11.5px}
+.tk-card-f .i{width:13px;height:13px}
+.tk-pri{font-style:normal;font-size:10.5px;padding:1px 6px;border-radius:4px;border:1px solid var(--n31);color:var(--muted)}
+.tk-pri--urgent,.tk-pri--high{color:var(--text);border-color:var(--muted)}
+.tk-dim,.tk-empty{color:var(--dim)}
+.tk-empty{margin:4px;font-size:12px}
+.tk-first{padding:22px;border:1px dashed var(--border);border-radius:8px;color:var(--muted);max-width:640px}
+.tk-first p{margin:0 0 12px}
+.tk-list{display:flex;flex-direction:column;gap:4px}
+.tk-row{display:grid;grid-template-columns:70px 1fr auto auto;gap:12px;align-items:center;text-align:left;padding:9px 12px;border-radius:6px;background:var(--n20);border:1px solid var(--n31);color:var(--text)}
+.tk-status{display:flex;gap:8px;align-items:center;margin:0 0 10px}
+.tk-body{white-space:pre-wrap;line-height:1.55;margin:0}
+.tk-ev{margin:6px 0;color:var(--muted);font-size:12.5px}
+.tk-ev small{color:var(--dim)}
+.tk-side{display:flex;flex-direction:column;gap:10px}
+.tk-f{display:flex;flex-direction:column;gap:2px}
+.tk-f small{color:var(--dim);font-size:11px}
 .us-none{margin:0;padding:10px 2px;color:var(--muted);font-size:12.5px}
 .xd-list small.xd-sc-fail{display:block;color:var(--text);font-weight:500}
 #palette .res .row .meta{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:100%}
@@ -1981,6 +2007,7 @@ html body .main .live-chat .chat-themed.chat-theme-dark{background:transparent!i
 <script src="platform-home.js"></script>
 <script src="platform-people.js"></script>
 <script src="platform-community.js"></script>
+<script src="platform-tasks.js"></script>
 <script src="homes-sig.js"></script>
 <script src="app.js"></script>
 <script src="panel-sel.js"></script>

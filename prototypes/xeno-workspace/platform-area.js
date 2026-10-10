@@ -30,7 +30,7 @@
     needsLoading = (async () => {
       const r = await api('GET', '/api/workspace/needs').catch(() => null);
       if (r && r.ok && Array.isArray(r.d.items)) {
-        window.XENO_NEEDS = r.d.items.map((i) => ({ id: String(i.id), kind: i.kind, t: String(i.title || 'Scheduled chat'), p: 'chat', m: i.area || 'overview', meta: 'Run failed', detail: String(i.detail || ''), at: i.at }));
+        window.XENO_NEEDS = r.d.items.map((i) => ({ id: String(i.id), kind: i.kind, t: String(i.title || 'Scheduled chat'), p: 'chat', m: i.area || 'overview', meta: i.kind === 'task_review' ? 'Review' : 'Run failed', detail: String(i.detail || ''), at: i.at }));
         N.status = 'ready';
       } else { window.XENO_NEEDS = []; N.status = 'error'; }
       N.count = window.XENO_NEEDS.length; needsLoading = null;
@@ -120,6 +120,7 @@
   const toItems = (results) => { const here = P.area();
     const out = results.map((r) => { const where = areaLabel(r.area);
       if (r.kind === 'chat') return { k: r.matched === 'message' ? 'In conversations' : 'Chats', label: r.title, sub: r.snippet ? `${where} · ${r.snippet}` : `Chat · ${where}`, html: sIcon('chat'), id: 'chat:' + r.id, area: r.area, remote: true, run: () => X().go('product', { product: 'chat', item: r.id }) };
+      if (r.kind === 'task') return { k: 'Tasks', label: r.title, sub: `Task · ${where}`, html: sIcon('check'), id: 'task:' + r.id, area: r.area, remote: true, run: () => X().go('global', { global: 'tasks', item: r.id }) };
       if (r.kind === 'project') return { k: 'Projects', label: r.title, sub: `Project · ${where}`, html: sIcon('folder'), id: 'project:' + r.id, area: r.area, remote: true, run: () => X().go('global', { global: 'projects', item: r.title }) };
       return { k: 'Files', label: r.title, sub: `File · ${where}`, html: sIcon('lib'), id: 'file:' + r.id, area: r.area, remote: true, run: () => X().go('global', { global: 'library', item: r.id }) }; });
     return here ? [...out.filter((x) => x.area === here), ...out.filter((x) => x.area !== here)] : out; };
@@ -145,7 +146,7 @@
     // "Recent" lists the person's own chats and projects too, so a title shown there counts as already listed
     const have = new Set(local.filter((x) => ['Recent', 'Chats', 'Projects', 'Files'].includes(x.k)).map((x) => String(x.label).toLowerCase()));
     const extra = remote.filter((x) => x.k === 'In conversations' || !have.has(String(x.label).toLowerCase())).slice(0, 10);
-    const order = ['In conversations', 'Chats', 'Projects', 'Files'];
+    const order = ['In conversations', 'Chats', 'Tasks', 'Projects', 'Files'];
     return [...local, ...order.flatMap((k) => extra.filter((x) => x.k === k))];
   }
   window.XENO_SEARCH_LIVE = { served: true, find, merge, state: () => ({ q: SR.q, pending: SR.pending, count: SR.items.length }) };

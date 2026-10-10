@@ -21,6 +21,7 @@ import workspaceAreaRoutes from '../routes/workspaceAreaRoutes.js';
 import { areaFromRequest } from '../utils/resourceArea.js';
 import { runAllMigrations } from '../services/migrationRunner.js';
 import { ENSURE_SCHEDULED_CONVERSATION_SQL } from '../workers/chatScheduledWorker.js';
+import { createTask, updateTask, transitionTask } from '../services/xenoTasks.js';
 import { likePattern, snippetAround, PLATFORM_DEFAULT_MODEL } from '../services/workspaceArea.js';
 
 if (!process.env.DATABASE_URL) throw new Error('DATABASE_URL is required');
@@ -196,6 +197,20 @@ async function main() {
     actor = bob;
     check(await needs() === '', 'one person’s needs-you never shows another person’s');
     actor = ada;
+
+    // ── XENO Tasks reach Needs you and search
+    const me = { id: ada, kind: 'human' };
+    const tk = await createTask(pool, me, { title: 'Zebra launch post', area: 'studio' });
+    await updateTask(pool, me, tk.key, { assigneeId: ada });
+    await transitionTask(pool, me, tk.key, { to: 'todo' }); await transitionTask(pool, me, tk.key, { to: 'in_progress' });
+    await updateTask(pool, me, tk.key, { reviewerId: bob, reviewRequired: true });
+    await transitionTask(pool, me, tk.key, { to: 'in_review' });
+    check(!(await needs()).includes('task_review'), 'a task in review is not in the assignee’s needs-you');
+    actor = bob;
+    check(await needs() === `task_review:${tk.key} · Zebra launch post@studio` && await needs('?area=office') === '', 'a task in review is in its reviewer’s needs-you, in its area only');
+    actor = ada;
+    const found = (await search(tk.key)).results.filter((r) => r.kind === 'task');
+    check(found.length === 1 && found[0].id === tk.key && (await search('zebra launch')).results.some((r) => r.kind === 'task' && r.id === tk.key), 'search finds a task by its key and by its words');
 
     console.log(`workspace-area: ${passed} checks passed`);
   } finally {

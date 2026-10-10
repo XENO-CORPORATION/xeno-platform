@@ -101,6 +101,8 @@ window.XENO_DESKTOP_NAV = { views: ['Recent files', 'Projects'] };
 // ── Globals (MODES §4): their real top level. Community = XENO's own forum (FORUM SPEC §2.1:
 //    Spaces by kind, the Record + your Feed). Marketplace = two storefront modes (MARKETPLACE §14).
 window.XENO_GLOBAL_NAV = {
+  // XENO Tasks (codename Telos): the shared work tracker — the board, then the views people use every day
+  tasks: ['Tasks', 'Raised, accepted, done', 'New task', [['Views', [['Board', ''], ['My tasks', ''], ['Needs triage', ''], ['In review', '']]]]],
   // the full notification inbox — the bell's 'View all'; one item per view, each with its own address
   inbox: ['Inbox', 'All modes', 'Mark all read', [['Views', [['Inbox', ''], ['Snoozed', ''], ['Archived', '']]]]],
   // ONE project object (WORKFORCE §8.5 goal · milestone · task + chat-projects context boundary)
