@@ -748,28 +748,41 @@
     const parentT = N.parentKey ? findTask(N.parentKey) : null;
     if (parentT) N.projectId = parentT.project ? parentT.project.id : null;
     const projName = () => (N.projectId ? ((projects.find((p) => p.id === N.projectId) || {}).realName || (projects.find((p) => p.id === N.projectId) || {}).name || (parentT && parentT.project && parentT.project.name) || 'Project') : 'Personal');
-    const chip = (id, icon, label, on) => `<button type="button" class="tk-nchip${on ? ' on' : ''}" data-n-chip="${id}">${ic(icon)}<span>${label}</span></button>`;
+    // the properties column: the task page's own rows, so a task looks the same before and after it exists
+    const row = (id, label, value, set) => `<div class="tk-prop"><span class="tk-prop-l">${label}</span><button type="button" class="tk-prop-v${set ? '' : ' tk-prop-v--unset'}" data-n-chip="${id}">${value}</button></div>`;
+    const none = (s) => `<span class="tk-dim">${s}</span>`;
+    const who = (p) => (p ? `${face(p, true)}<span>${esc(p.name)}</span>` : none('Nobody'));
     const chips = () => [
-      chip('kind', KIND[N.kind][0], KIND[N.kind][1], N.kind !== 'task'),
-      chip('priority', 'up', N.priority === 'none' ? 'Priority' : PRI[N.priority], N.priority !== 'none'),
-      chip('assignee', N.assignee && N.assignee.kind === 'agent' ? 'bot' : 'user', N.assignee ? esc(N.assignee.name) : 'Assignee', !!N.assignee),
-      chip('reviewer', 'check', N.reviewer ? `Review: ${esc(N.reviewer.name)}` : 'Reviewer', !!N.reviewer),
-      chip('due', 'calendar', N.dueAt ? esc(day(N.dueAt)) : 'Due date', !!N.dueAt),
-      chip('labels', 'hash', N.labels.length ? esc(N.labels.join(', ')) : 'Labels', N.labels.length > 0),
-      ...(parentT ? [] : [chip('project', 'folder', esc(projName()), !!N.projectId)]),
+      `<div class="tk-prop"><span class="tk-prop-l">Status</span><span class="tk-prop-v tk-prop-v--ro"><span class="tk-dot tk-dot--raised"></span><span>Triage</span></span></div>`,
+      row('kind', 'Type', `${ic(KIND[N.kind][0])}<span>${KIND[N.kind][1]}</span>`, true),
+      row('priority', 'Priority', N.priority === 'none' ? none('No priority') : `<em class="tk-pri tk-pri--${N.priority}">${PRI[N.priority]}</em>`, N.priority !== 'none'),
+      row('assignee', 'Assignee', who(N.assignee), !!N.assignee),
+      row('reviewer', 'Reviewer', N.reviewer ? who(N.reviewer) + '<small class="tk-req">required</small>' : none('No review'), !!N.reviewer),
+      row('due', 'Due date', N.dueAt ? `<span>${esc(new Date(N.dueAt).toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short' }))}</span>` : none('None'), !!N.dueAt),
+      row('labels', 'Labels', N.labels.length ? N.labels.map((l) => `<small class="tk-chip">${esc(l)}</small>`).join('') : none('None'), N.labels.length > 0),
+      '<div class="tk-props-sep"></div>',
+      parentT ? `<div class="tk-prop"><span class="tk-prop-l">Parent</span><span class="tk-prop-v tk-prop-v--ro">${esc(parentT.key)}</span></div>` : row('project', 'Project', `${ic('folder')}<span>${esc(projName())}</span>`, !!N.projectId),
+      `<div class="tk-prop"><span class="tk-prop-l">Area</span><span class="tk-prop-v tk-prop-v--ro">${esc(here ? P.areaName(here) : 'Overview')}</span></div>`,
+      `<div class="tk-prop"><span class="tk-prop-l">Reported by</span><span class="tk-prop-v tk-prop-v--ro">${who({ name: myName() })}</span></div>`,
     ].join('');
     const thumbs = () => N.files.map((f) => `<figure class="tk-nimg" data-n-file="${f.n}"><img src="${f.url}" alt="${esc(f.name)}"><figcaption>${esc(f.name)}</figcaption><button type="button" class="tk-img-x" data-n-unfile="${f.n}" aria-label="Remove ${esc(f.name)}">${ic('x')}</button></figure>`).join('');
-    const ctx = parentT ? `Sub-task of <b>${esc(parentT.key)}</b> ${esc(parentT.title)}` : `New task in <b>${esc(N.projectId ? projName() : where())}</b>`;
-    const html = `<header class="xd-pl xd-head tk-nh" data-tk-new><div><b>New task</b><small>${ctx} · it lands in Triage until someone accepts it</small></div><button class="xd-ib" data-xd-close aria-label="Close">${ic('x')}</button></header>
-      <div class="xd-pl xd-body tk-nb">
-        <input class="tk-ntitle" data-n-title maxlength="300" placeholder="Task title" aria-label="Task title" autocomplete="off">
-        ${editor({ keep: 'new-desc', rows: 7, placeholder: 'Add a description — what needs doing and how we’ll know it’s done. Markdown, checklists (- [ ]), @mentions. Paste or drop images.', project: N.projectId || '' })}
-        <div class="tk-nimgs" data-n-imgs>${thumbs()}</div>
-        <div class="tk-nchips" data-n-chips>${chips()}</div>
+    const crumb = parentT ? `<span>${esc(parentT.project ? parentT.project.name : 'Personal')}</span><i>/</i><span>${esc(parentT.key)}</span><i>/</i><b>New sub-task</b>`
+      : `<span>${esc(N.projectId ? projName() : where().replace(/^every area$/, 'Overview'))}</span><i>/</i><span>Tasks</span><i>/</i><b>New task</b>`;
+    const html = `<div class="tk-nw" data-tk-new>
+      <header class="tk-nw-top"><nav class="tk-nw-crumb" aria-label="Where this task goes">${crumb}</nav><span class="tk-sp"></span><small class="tk-dim">It lands in Triage until someone accepts it</small><button type="button" class="tk-ib" data-xd-close aria-label="Close">${ic('x')}</button></header>
+      <div class="tk-nw-body">
+        <div class="tk-nw-main">
+          <input class="tk-ntitle" data-n-title maxlength="300" placeholder="Task title" aria-label="Task title" autocomplete="off">
+          ${editor({ keep: 'new-desc', rows: 9, placeholder: 'Add a description — what needs doing and how we’ll know it’s done. Markdown, checklists (- [ ]), @mentions. Paste or drop images.', project: N.projectId || '' })}
+          <div class="tk-nimgs" data-n-imgs>${thumbs()}</div>
+          <button type="button" class="tk-drop tk-nw-drop" data-n-attach>${ic('image')}<span>Drop images here, paste them, or <u>choose files</u></span><small>PNG, JPEG, GIF or WebP · up to 8 MB each</small></button>
+        </div>
+        <aside class="tk-props tk-nw-props" aria-label="Properties" data-n-chips>${chips()}</aside>
       </div>
-      <footer class="xd-pl xd-foot tk-nf"><button type="button" class="xd-btn ghost sm" data-n-attach>${ic('image')}Add images</button><span class="xd-sp"></span><label class="tk-nmore"><input type="checkbox" data-n-more> Create more</label><button type="button" class="xd-btn ghost" data-xd-close>Cancel</button><button type="button" class="xd-btn" data-n-create>Create task <kbd>Ctrl ↵</kbd></button></footer>`;
+      <footer class="tk-nw-foot"><small class="tk-dim"><kbd>Ctrl</kbd> <kbd>↵</kbd> create · <kbd>Esc</kbd> close</small><span class="tk-sp"></span><label class="tk-nmore"><input type="checkbox" data-n-more> Create more</label><button type="button" class="tk-btn" data-xd-close>Cancel</button><button type="button" class="tk-btn tk-btn--main" data-n-create>Create task</button></footer>
+    </div>`;
     let sh = null, busy = false;
-    const dlg = D().openShell({ size: 'md tk-nwin', label: 'New task', html, dirty: () => !!(sh && (sh.querySelector('[data-n-title]').value.trim() || sh.querySelector('textarea').value.trim() || N.files.length)), onMount: (a) => { sh = a.sh; setTimeout(() => sh.querySelector('[data-n-title]').focus(), 30); }, onClose: () => { for (const f of N.files) URL.revokeObjectURL(f.url); } });
+    const dlg = D().openShell({ size: 'tk-nwin', label: 'New task', html, dirty: () => !!(sh && (sh.querySelector('[data-n-title]').value.trim() || sh.querySelector('textarea').value.trim() || N.files.length)), onMount: (a) => { sh = a.sh; setTimeout(() => sh.querySelector('[data-n-title]').focus(), 30); }, onClose: () => { for (const f of N.files) URL.revokeObjectURL(f.url); } });
     const ta = () => sh.querySelector('textarea[data-tk-ed]');
     const repaintChips = () => { const was = document.activeElement && document.activeElement.dataset ? document.activeElement.dataset.nChip : null; sh.querySelector('[data-n-chips]').innerHTML = chips(); sh.querySelector('textarea[data-tk-ed]').dataset.tkMention = N.projectId || ''; const back = sh.querySelector(`[data-n-chip="${was || lastChip}"]`); if (back) back.focus(); };
     let lastChip = null;
@@ -797,10 +810,10 @@
       if (busy) return;
       const title = sh.querySelector('[data-n-title]').value.trim(), body = ta().value;
       if (!title) { sh.querySelector('[data-n-title]').focus(); return toast('Give the task a title'); }
-      busy = true; const btn = sh.querySelector('[data-n-create]'); btn.disabled = true; btn.firstChild.textContent = 'Creating…';
+      busy = true; const btn = sh.querySelector('[data-n-create]'); btn.disabled = true; btn.textContent = 'Creating…';
       const payload = { title, body, kind: N.kind, priority: N.priority, labels: N.labels, ...(N.parentKey ? { parentKey: N.parentKey } : N.projectId ? { projectId: N.projectId } : { area: here }), ...(N.assignee ? { assigneeId: N.assignee.id } : {}), ...(N.reviewer ? { reviewerId: N.reviewer.id, reviewRequired: true } : {}), ...(N.dueAt ? { dueAt: N.dueAt } : {}) };
       const r = await api('POST', '/api/tasks', payload).catch(() => null);
-      if (!r || !r.ok) { busy = false; btn.disabled = false; btn.firstChild.textContent = 'Create task '; return toast(said(r, 'The task couldn’t be created. Nothing was saved.')); }
+      if (!r || !r.ok) { busy = false; btn.disabled = false; btn.textContent = 'Create task'; return toast(said(r, 'The task couldn’t be created. Nothing was saved.')); }
       const t = r.d.task; T.task.set(t.key, t);
       if (N.files.length) {
         const added = await uploadFiles(t.key, N.files.map((f) => new File([f.file], f.name, { type: f.file.type })), { quiet: true });
@@ -812,7 +825,7 @@
       toast(`Created ${t.key}${N.files.length ? ` with ${N.files.length} image${N.files.length > 1 ? 's' : ''}` : ''}`);
       if (N.parentKey) T.task.delete(N.parentKey);
       load(); for (const id of T.byProject.keys()) loadProject(id); if (N.parentKey) loadTask(N.parentKey);
-      if (more) { busy = false; btn.disabled = false; btn.firstChild.textContent = 'Create task '; sh.querySelector('[data-n-title]').value = ''; ta().value = ''; for (const f of N.files) URL.revokeObjectURL(f.url); N.files = []; sh.querySelector('[data-n-imgs]').innerHTML = ''; sh.querySelector('[data-n-title]').focus(); return; }
+      if (more) { busy = false; btn.disabled = false; btn.textContent = 'Create task'; sh.querySelector('[data-n-title]').value = ''; ta().value = ''; for (const f of N.files) URL.revokeObjectURL(f.url); N.files = []; sh.querySelector('[data-n-imgs]').innerHTML = ''; sh.querySelector('[data-n-title]').focus(); return; }
       const fromProject = !!projectId && !N.parentKey;
       dlg.close('created');
       if (!fromProject && !N.parentKey) go(t.key);

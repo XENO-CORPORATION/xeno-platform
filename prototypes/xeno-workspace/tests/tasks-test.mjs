@@ -96,7 +96,8 @@ try {
   // ── the New task window
   await nav('#/studio/g/tasks');
   await p.keyboard.press('c'); await p.waitForSelector('.xd [data-tk-new]', { timeout: 4000 });
-  ok(await p.$$eval('.xd .xd-pl', (els) => els.length) === 3 && !!(await p.$('.xd [data-n-chip="assignee"]')) && !!(await p.$('.xd .tk-ed-bar')), 'C opens the New task window: three plates, a formatting bar and field chips');
+  { const lay = await p.evaluate(() => { const m = document.querySelector('.xd .tk-nw-main').getBoundingClientRect(), s = document.querySelector('.xd .tk-nw-props').getBoundingClientRect(); return { right: s.left >= m.right - 1, rows: document.querySelectorAll('.xd .tk-nw-props .tk-prop').length, crumb: document.querySelector('.xd .tk-nw-crumb').textContent }; });
+    ok(lay.right && lay.rows >= 9 && /Tasks\s*\/\s*New task/.test(lay.crumb) && !!(await p.$('.xd .tk-ed-bar')), 'C opens the New task window as a workspace pane: breadcrumb, editor, and the properties column on the right (' + lay.rows + ' rows)'); }
   await p.type('.xd [data-n-title]', 'Write the launch post');
   await p.type('.xd textarea', 'Cover what changed.\n- [ ] draft\n- [ ] review\n');
   await pasteImage('.xd textarea'); await settle(300);
