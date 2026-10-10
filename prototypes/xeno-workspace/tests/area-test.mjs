@@ -23,6 +23,7 @@ const reset = () => Object.assign(db, { balance: 321, billDown: false, calls: []
   ],
   convs: [{ id: CV, title: 'Zebra plan', updated_at: iso(2), last_message_at: iso(2), project_id: null, area: 'dev' }, { id: 'c-old1', title: 'Old trip notes', updated_at: iso(300), last_message_at: iso(300), project_id: null, area: null }, { id: 'c-old2', title: 'Old <b>recipe</b>', updated_at: iso(400), last_message_at: iso(400), project_id: null, area: null }, { id: 'c-inproj', title: 'Inside a project', updated_at: iso(500), last_message_at: iso(500), project_id: 'p-old', area: null }],
   projects: [{ id: 'p-old', name: 'Old project', updated_at: iso(600), area: null }],
+  pins: [], extraLoose: 0,
   files: [{ id: 'f-1', name: 'Diagram.png', source: 'library_file', source_id: 's-1', updated_at: iso(3), area: null }, { id: 'f-2', name: 'Dev notes.md', source: 'library_file', source_id: 's-2', updated_at: iso(4), area: 'dev' }], failMove: null });
 const CHAT = `<!doctype html><html><body><div class="chat-themed"><div data-chat-composer-shell></div></div><script>const say = () => parent.postMessage({ source: 'xeno-chat', type: 'location', path: location.pathname, title: 'Chat' }, location.origin); addEventListener('popstate', say); say();</script></body></html>`;
 async function open(hash) {
@@ -41,14 +42,16 @@ async function open(hash) {
     if (one) { const t = db.tasks.find((x) => x.id === one[1]); if (!t) return json({ success: false, error: 'Task not found' }, 404); if (db.refuse) return json({ success: false, error: 'Internal server error' }, 500);
       if (q.method() === 'PUT') { Object.assign(t, sent); return json({ success: true, task: t }); }
       if (q.method() === 'DELETE') { t.status = 'cancelled'; return json({ success: true }); } }
+    if (u.pathname === '/api/workspace/pins') return json({ success: true, items: db.pins.map((id) => db.convs.find((c) => c.id === id)).filter(Boolean).map((c) => ({ kind: 'chat', id: c.id, title: c.title, area: c.area || null, at: c.updated_at })) });
+    { const pm = u.pathname.match(/^\/api\/chat\/conversations\/([^/]+)\/pin$/); if (pm) { db.calls.push(['PIN', q.method() + ' ' + pm[1], null, null]); if (db.refuse) return json({ success: false, error: 'Internal server error' }, 500); db.pins = db.pins.filter((x) => x !== pm[1]); if (q.method() === 'PUT') db.pins.push(pm[1]); return json({ success: true, pinned: q.method() === 'PUT' }); } }
     if (u.pathname === '/api/workspace/needs') return json({ success: true, items: db.tasks.filter((t) => t.status !== 'cancelled' && t.last_run_status === 'failed').map((t) => ({ kind: 'schedule_failed', id: t.id, title: t.title, detail: t.last_run_error, area: t.area, conversation_id: null, at: iso(1) })) });
-    if (u.pathname === '/api/workspace/search') { if (db.slow) await wait(db.slow); const qq = (u.searchParams.get('q') || '').toLowerCase(); if (qq !== 'zebra') return json({ success: true, query: qq, results: [], counts: {} });
+    if (u.pathname === '/api/workspace/search') { if (db.slow) await wait(db.slow); const qq = (u.searchParams.get('q') || '').toLowerCase(); if (qq === 'plan') return json({ success: true, query: qq, results: [{ kind: 'chat', id: CV, title: 'Zebra plan', snippet: '…the plan for the zebra…', matched: 'message', area: 'dev', at: iso(2) }], counts: {} }); if (qq !== 'zebra') return json({ success: true, query: qq, results: [], counts: {} });
       return json({ success: true, query: qq, results: [
         { kind: 'chat', id: CM, title: 'Lunch <i>notes</i>', snippet: '…repaint the zebra crossing before launch…', matched: 'message', area: 'studio', at: iso(3) },
         { kind: 'chat', id: CV, title: 'Zebra plan', snippet: '', matched: 'title', area: 'dev', at: iso(2) },
         { kind: 'chat', id: '00000009-0000-4000-8000-000000000000', title: 'Zebra budget', snippet: '', matched: 'title', area: 'dev', at: iso(9) },
         { kind: 'project', id: 'p-9', title: 'Zebra habitat', snippet: '', matched: 'name', area: 'office', at: iso(4) }].filter((r) => !u.searchParams.get('area') || r.area === u.searchParams.get('area')), counts: {} }); }
-    if (u.pathname === '/api/chat/conversations') { const want = u.searchParams.get('area'); const rows = want === null ? db.convs : db.convs.filter((c) => (want === 'none' ? !c.area : c.area === want)); return json({ success: true, conversations: rows, total: rows.length }); }
+    if (u.pathname === '/api/chat/conversations') { const want = u.searchParams.get('area'); const rows = want === null ? db.convs : db.convs.filter((c) => (want === 'none' ? !c.area : c.area === want)); return json({ success: true, conversations: rows, total: rows.length + (want === 'none' ? db.extraLoose : 0) }); }
     if (u.pathname === '/api/user-data/settings') return json({ success: true, settings: db.settings });
     if (u.pathname === '/api/billing/overview') return db.billDown ? json({ success: false, error: 'Internal server error' }, 500) : json({ success: true, overview: { credits: { balance: db.balance }, subscription: null } });
     if (u.pathname === '/api/v2/ledger/usage') { const days = Math.round((Date.now() - Date.parse(u.searchParams.get('from'))) / 86400000), model = u.searchParams.get('groupBy') === 'model';
@@ -187,6 +190,8 @@ try {
     await p.evaluate(() => { const i = [...document.querySelectorAll('.xd')].at(-1).querySelector('input'); i.value = 'zebra'; i.dispatchEvent(new Event('input', { bubbles: true })); }); await wait(900); c = await chats();
     const asked = calls('GET', '/api/workspace/search').at(-1);
     ok(asked && asked[1].includes('q=zebra') && asked[1].includes('area=dev'), 'typing asks the platform what was said, in this area only');
+    await p.evaluate(() => { const i = [...document.querySelectorAll('.xd')].at(-1).querySelector('input'); i.value = 'plan'; i.dispatchEvent(new Event('input', { bubbles: true })); }); await wait(900); c = await chats();
+    ok(c.rows.length === 1 && c.head === '', `a chat found both by its title and by what was said is listed once (${c.rows.length})`);
     await closeAll(p);
     await p.evaluate(() => { location.hash = '#/overview/p/chat'; }); await wait(900); await p.evaluate(() => window.XA.allChats()); await wait(700);
     await p.evaluate(() => { const i = [...document.querySelectorAll('.xd')].at(-1).querySelector('input'); i.value = 'zebra'; i.dispatchEvent(new Event('input', { bubbles: true })); }); await wait(900); c = await chats();
@@ -225,6 +230,30 @@ try {
     await closeAll(p); await wait(500);
     ok(!(await p.evaluate(() => !!document.querySelector('#panel [data-sort-entry]'))), 'and Overview stops offering it');
     ok(errs.length === 0, `no page errors in sorting (${JSON.stringify(errs.slice(0, 2))})`); await p.close(); }
+
+  // ── pins
+  reset(); db.pins = ['c-old1'];
+  { const { p, errs } = await open('#/overview/p/chat'); await wait(500); db.calls.length = 0;
+    const side = () => p.evaluate(() => { const secs = {}; let cur = null; for (const el of document.querySelectorAll('#panel .sec, #panel [data-chat-live]')) { if (el.classList.contains('sec')) { cur = el.textContent.trim().split('\n')[0].trim(); continue; } } const sec = (name) => { const h = [...document.querySelectorAll('#panel [data-sec]')].find((x) => x.dataset.sec === name); return h ? [...h.querySelectorAll('[data-chat-live]')].map((r) => r.dataset.chatLive) : null; }; return { pinned: sec('pinned'), recents: sec('recents'), pins: window.XENO_CHAT.pins() }; });
+    let v = await side();
+    ok(v.pinned && v.pinned.join() === 'c-old1' && v.recents && !v.recents.includes('c-old1') && v.recents.includes('c-old2'), `a pinned chat sits under Pinned and leaves the day groups (${JSON.stringify(v)})`);
+    await p.evaluate(() => window.XENO_CHAT.pin('c-old2', true)); await wait(700); v = await side();
+    ok(calls('PIN', 'PUT c-old2').length === 1 && v.pinned.join() === 'c-old1,c-old2', 'pinning a chat tells the platform and adds it to Pinned, after the ones already there');
+    await p.evaluate(() => window.XENO_CHAT.pin('c-old1', false)); await wait(700); v = await side();
+    ok(calls('PIN', 'DELETE c-old1').length === 1 && v.pinned.join() === 'c-old2' && v.recents.includes('c-old1'), 'unpinning returns it to its day');
+    db.refuse = true; await p.evaluate(() => window.XENO_CHAT.pin('c-old1', true)); await wait(700); v = await side(); db.refuse = false;
+    ok(v.pinned.join() === 'c-old2' && (await p.evaluate(() => document.body.textContent.includes('That couldn’t be pinned.'))), 'when the platform refuses, the pin is taken back and the person is told');
+    await p.evaluate(() => { location.hash = '#/overview'; }); await wait(1200);
+    const ov = await p.evaluate(() => { const h = [...document.querySelectorAll('#panel [data-sec]')].find((x) => x.dataset.sec === 'pinned'); return h ? [...h.querySelectorAll('[data-recent-chat]')].map((r) => r.dataset.recentChat + ':' + r.querySelector('.t').innerHTML) : null; });
+    ok(ov && ov.join() === 'c-old2:Old &lt;b&gt;recipe&lt;/b&gt;', `Overview’s Pinned is what the person pinned, shown as text (${ov && ov.join()})`);
+    await p.evaluate(() => document.querySelector('#panel [data-sec="pinned"] [data-recent-chat]').click()); await wait(800);
+    ok((await p.evaluate(() => location.hash)).includes('c-old2'), 'a pinned chat opens that conversation');
+    ok(errs.length === 0, `no page errors in pins (${JSON.stringify(errs.slice(0, 2))})`); await p.close(); }
+  reset(); db.extraLoose = 57;
+  { const { p } = await open('#/overview'); await wait(600);
+    await p.evaluate(() => window.XA.sortAreas()); await wait(900);
+    const more = await p.evaluate(() => [...document.querySelectorAll('.xd')].at(-1).querySelector('[data-sort-more="chats"]')?.textContent || '');
+    ok(/^57 more chats are in no area/.test(more), `a list longer than one request says how many more there are (${more.slice(0, 40)})`); await p.close(); }
 
   // ── Usage: the person's real credits
   reset();

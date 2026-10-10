@@ -4,6 +4,7 @@
  *
  *   searchWorkspace   one search over conversations (their titles and what was said in them), chat projects
  *                     and Library items. `area` narrows it to one area, or to the items in none.
+ *   listPins          what the person pinned: conversations, chat projects, and the Library items they starred.
  *   listNeedsYou      what is waiting on the person: today, scheduled chats whose last run failed. It is a
  *                     feed of FACTS the platform holds; nothing is invented to fill it.
  *
@@ -91,6 +92,35 @@ export async function searchWorkspace(db, userId, { query, areaFilter = { filter
     at: it.updated_at || it.created_at, source: it.source, source_id: it.source_id, asset_id: it.asset_id || null, mime_type: it.mime_type || '' }));
 
   return { query: q, results: [...chats, ...projects, ...files], counts: { chat: chats.length, project: projects.length, file: files.length } };
+}
+
+/**
+ * Everything the person pinned, in one list: pinned conversations and chat projects in the order they were
+ * pinned, then starred Library items. `area` narrows it. A pin on something the caller can no longer see is
+ * left out (the pin row stays: access may come back).
+ */
+export async function listPins(db, userId, { areaFilter = { filter: false, area: null } } = {}) {
+  const cParams = [userId];
+  const cSql = `SELECT c.id, c.title, c.project_id, COALESCE(c.last_message_at, c.updated_at) AS at, ${EFFECTIVE_CONVERSATION_AREA} AS area
+    FROM chat_conversation_pins pin JOIN chat_conversations c ON c.id = pin.conversation_id
+    WHERE pin.user_id = $1 AND c.deleted_at IS NULL AND c.is_archived = FALSE ${areaClause(EFFECTIVE_CONVERSATION_AREA, areaFilter, cParams)}
+    ORDER BY pin.position, pin.pinned_at LIMIT ${CANDIDATES}`;
+  const items = [];
+  for (const row of (await db.query(cSql, cParams)).rows) {
+    if (!(await viewable(db, 'conversation', row.id, userId))) continue;
+    items.push({ kind: 'chat', id: row.id, title: String(row.title || '').trim() || 'New chat', area: row.area || null, project_id: row.project_id || null, at: row.at });
+  }
+  const pParams = [userId];
+  const pSql = `SELECT p.id, p.name, p.area, p.updated_at FROM chat_project_pins pin JOIN chat_projects p ON p.id = pin.project_id
+    WHERE pin.user_id = $1 AND p.is_archived = FALSE ${areaClause('p.area', areaFilter, pParams)}
+    ORDER BY pin.position, pin.pinned_at LIMIT ${CANDIDATES}`;
+  for (const row of (await db.query(pSql, pParams)).rows) {
+    if (!(await viewable(db, 'project', row.id, userId))) continue;
+    items.push({ kind: 'project', id: row.id, title: String(row.name || 'Project'), area: row.area || null, at: row.updated_at });
+  }
+  const starred = await listLibraryItems(db, userId, { view: 'starred', limit: 50, ...(areaFilter.filter ? { area: areaFilter.area === null ? 'none' : areaFilter.area } : {}) });
+  for (const it of starred.items) items.push({ kind: 'file', id: it.id, title: String(it.name || 'Untitled'), area: it.area || null, at: it.updated_at || it.created_at, source: it.source, source_id: it.source_id });
+  return { items };
 }
 
 /** The chat's own first choice (src/components/playground/Chat/ChatWithLLM.tsx DEFAULT_MODEL). Keep the two the same. */

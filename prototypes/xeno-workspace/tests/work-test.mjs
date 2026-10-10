@@ -35,6 +35,7 @@ function answer(q) {
   if (p === '/api/auth/linked-accounts') return json(200, { success: true, accounts: [] });
   if (p === '/api/billing/overview') return json(200, { success: true, overview: { credits: { balance: 0 }, subscription: null } });
   if (p === '/api/workspace/needs') return json(200, { success: true, items: [] });
+  if (p === '/api/workspace/pins') return json(200, { success: true, items: [] });
   if (p === '/api/v2/ledger/usage') return json(200, { rows: [] });
   if (p === '/api/dashboard/stats') return json(200, { success: true, stats: { usage_available: false, usage_by_surface: [] } });
   if (p === '/api/user-data/settings') return json(200, { success: true, settings: {} });
