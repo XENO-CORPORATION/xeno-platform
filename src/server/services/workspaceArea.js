@@ -16,6 +16,7 @@
 import { check } from '../utils/authzReBAC.js';
 import { listLibraryItems } from './libraryAssets.js';
 import { EFFECTIVE_CONVERSATION_AREA } from '../utils/resourceArea.js';
+import { listTasks } from './xenoTasks.js';
 
 export const SEARCH_MIN = 2;
 export const SEARCH_MAX = 200;
@@ -92,7 +93,13 @@ export async function searchWorkspace(db, userId, { query, areaFilter = { filter
   const files = library.items.map((it) => ({ kind: 'file', id: it.id, title: String(it.name || 'Untitled'), snippet: '', matched: 'name', area: it.area || null,
     at: it.updated_at || it.created_at, source: it.source, source_id: it.source_id, asset_id: it.asset_id || null, mime_type: it.mime_type || '' }));
 
-  return { query: q, results: [...chats, ...projects, ...files], counts: { chat: chats.length, project: projects.length, file: files.length } };
+  let taskHits = [];
+  try {
+    const byKey = /^t-\d+$/i.test(q) ? q.toUpperCase() : null;
+    const found = await listTasks(db, { id: userId, kind: 'human' }, { q: byKey ? undefined : q, limit: per * 3, ...(areaFilter.filter ? { area: areaFilter.area === null ? 'none' : areaFilter.area } : {}) });
+    taskHits = (byKey ? found.filter((t) => t.key === byKey) : found).slice(0, per).map((t) => ({ kind: 'task', id: t.key, title: `${t.key} · ${t.title}`, snippet: '', matched: 'title', area: t.area, at: t.updatedAt, status: t.status }));
+  } catch { taskHits = []; }
+  return { query: q, results: [...chats, ...projects, ...taskHits, ...files], counts: { chat: chats.length, project: projects.length, task: taskHits.length, file: files.length } };
 }
 
 /**
@@ -181,5 +188,10 @@ export async function listNeedsYou(db, userId, { areaFilter = { filter: false, a
     items.push({ kind: 'schedule_failed', id: row.id, title: String(row.title || 'Scheduled chat'), detail: String(row.last_run_error || '').slice(0, 300),
       area: row.area || null, conversation_id: row.conversation_id || null, at: row.last_run_at });
   }
+  // XENO Tasks: work waiting for the caller to accept it (they are its reviewer, and it is in review)
+  try {
+    const review = await listTasks(db, { id: userId, kind: 'human' }, { status: 'in_review', ...(areaFilter.filter ? { area: areaFilter.area === null ? 'none' : areaFilter.area } : {}) });
+    for (const t of review) if (t.reviewer && t.reviewer.id === String(userId)) items.push({ kind: 'task_review', id: t.key, title: `${t.key} · ${t.title}`, detail: t.assignee ? `${t.assignee.name} asks you to review it` : 'Waiting for your review', area: t.area, conversation_id: null, at: t.updatedAt });
+  } catch { /* tasks are an addition here: a failure to read them must not hide the rest of what waits */ }
   return { items };
 }

@@ -35,6 +35,7 @@ function answer(q) {
   if (p === '/api/auth/linked-accounts') return json(200, { success: true, accounts: [] });
   if (p === '/api/billing/overview') return json(200, { success: true, overview: { credits: { balance: 0 }, subscription: null } });
   if (p === '/api/workspace/needs') return json(200, { success: true, items: [] });
+  if (p === '/api/tasks') return json(200, { success: true, tasks: [] });
   if (p === '/api/forum/threads') return json(200, { success: true, threads: [], total: 0 });
   if (p === '/api/forum/me') return json(200, { success: true, actor: {}, capabilities: {} });
   if (p === '/api/workspace/summary') return json(200, { success: true, days: 7, areas: {} });
@@ -113,8 +114,10 @@ try {
   await goProjects('Website (Personal)/Conversations'); t = await main();
   ok(/Homepage copy/.test(t) && !/Loose chat/.test(t), 'Conversations lists the chats that belong to this project');
   await goProjects('Website (Personal)/Tasks'); t = await main();
+  ok(/No tasks in this project yet/.test(t) && !/aren’t available/.test(t) && await p.$('#main [data-tk="new"]'), 'the Tasks tab is XENO Tasks: real (empty) list and a working New task');
+  await goProjects('Website (Personal)/Team assignments'); t = await main();
   const off = await p.evaluate(() => [...document.querySelectorAll('#main [data-xa="newTask"], #main [data-xa="budget"]')].map((el) => el.getAttribute('aria-disabled')));
-  ok(/Tasks aren’t available yet/.test(t) && off.every((v) => v === 'true'), 'a tab with no platform API says so, and any control for it is shown unavailable (' + off.length + ' controls)');
+  ok(/Team assignments aren’t available yet/.test(t) && off.every((v) => v === 'true'), 'a tab with no platform API says so, and any control for it is shown unavailable (' + off.length + ' controls)');
   await goProjects('Website (Personal)/Funding'); ok(/Funding isn’t available yet/.test(await main()), 'Funding shows no sample campaign on a real project');
 
   // ---- create, in the current workspace ----

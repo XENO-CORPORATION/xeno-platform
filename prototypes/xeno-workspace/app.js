@@ -192,6 +192,7 @@
       ${rb('home', 'home', `${M[S.mode].name} home`)}
       ${rb('chat', 'chat', 'Chat')}
       ${rb('projects', 'folder', 'Projects')}
+      ${rb('tasks', 'check', 'Tasks — raised, accepted, done, by people and agents')}
       ${rb('library', 'lib', 'Library — everything you made, account-wide')}
       ${rb('workspace', 'building', 'Workspace — agents, teams, knowledge, automations')}
       ${rb('places', 'places', 'Places — your workspace as a building')}
@@ -223,7 +224,7 @@
 
   // ── PANELS v2 (2026-10-03) — one job per panel kind; content lives in nav.js ──────────────
   const N = () => window.XENO_NEEDS || [];
-  const needRow = (n) => row(n.kind === 'schedule_failed' ? `data-need-schedule="${esc(n.id)}"` : `data-item="${esc(n.t)}" data-item-p="${n.p}"`, `<span class="t">${esc(n.t)}</span><span class="need">${esc(n.meta)}</span>`, 'needrow');
+  const needRow = (n) => row(n.kind === 'task_review' ? `data-need-task="${esc(n.id)}"` : n.kind === 'schedule_failed' ? `data-need-schedule="${esc(n.id)}"` : `data-item="${esc(n.t)}" data-item-p="${n.p}"`, `<span class="t">${esc(n.t)}</span><span class="need">${esc(n.meta)}</span>`, 'needrow');
   const recentRow = (r) => (r.kind === 'project'
     ? row(`data-recent-project="${esc(r.id)}"`, `${ic('folder')}<span class="t">${esc(r.t)}</span><span class="meta">${esc(r.ago)}</span>`)
     : r.kind === 'file'
@@ -335,7 +336,7 @@
     const [title, sub, primary0, groups0] = window.XENO_GLOBAL_NAV[k], [primary, groups] = window.XENO_VIS?.nav ? window.XENO_VIS.nav(k, primary0, groups0) : [primary0, groups0];
     return `<div class="ph"><div class="ttl msw-inline">${title}<span class="msw-bar"></span><span class="msw-count">${esc(sub)}</span></div><button class="ib" data-go="search" aria-label="Search" data-tip="Search" data-kbd="Ctrl K">${ic('search')}</button><button class="ib" data-collapse aria-label="Collapse sidebar" data-tip="Collapse" data-kbd="Ctrl \\">${ic('side')}</button></div>
       <div class="pbody">
-        ${primary ? `<button class="act primary" ${{ 'New project': 'data-xa="newProject"', 'Invite people or agents': 'data-xa="invite"', 'New thread': 'data-xa="newThread"', Upload: 'data-xa="upload"', 'Mark all read': 'data-xa="markAllRead"', 'New chat with Anima': 'data-xa="animaChat"', Browse: 'data-go="market"' }[primary] || 'disabled'}>${ic(k === 'market' ? 'market' : k === 'library' ? 'upload' : k === 'workspace' ? 'user' : k === 'inbox' ? 'check' : 'plus')}${esc(primary)}</button>` : ''}
+        ${primary ? `<button class="act primary" ${{ 'New project': 'data-xa="newProject"', 'Invite people or agents': 'data-xa="invite"', 'New thread': 'data-xa="newThread"', 'New task': 'data-tk="new"', Upload: 'data-xa="upload"', 'Mark all read': 'data-xa="markAllRead"', 'New chat with Anima': 'data-xa="animaChat"', Browse: 'data-go="market"' }[primary] || 'disabled'}>${ic(k === 'market' ? 'market' : k === 'library' ? 'upload' : k === 'workspace' ? 'user' : k === 'inbox' ? 'check' : 'plus')}${esc(primary)}</button>` : ''}
         ${groups.map(([t, rows]) => sec(t.toLowerCase().replace(/\W+/g, '-'), t, rows.map((r) => workRow(r, t)).join(''))).join('')}
       </div>`;
   }
@@ -1081,7 +1082,7 @@
   function mainItem() {
     if (S.view === 'global' && S.global === 'inbox') return mainInbox();
     if (S.view === 'global' && S.global === 'projects' && (window.XENO_PROJECTS || {})[S.item.split('/')[0]] !== undefined || (S.view === 'global' && S.global === 'projects' && !/^(Archived projects)$/.test(S.item))) { const [nm, tb] = S.item.split('/'); return mainProject(nm, tb); }
-    const owner = S.view === 'product' ? PR[S.product].name : S.view === 'zone' ? zoneNow().label : { anima: 'Anima', community: 'Community', market: 'Marketplace', library: 'Library', projects: 'Projects', workspace: 'Workspace', inbox: 'Inbox', settings: 'Settings', places: 'Places' }[S.global] || '';
+    const owner = S.view === 'product' ? PR[S.product].name : S.view === 'zone' ? zoneNow().label : { anima: 'Anima', community: 'Community', market: 'Marketplace', library: 'Library', projects: 'Projects', tasks: 'Tasks', workspace: 'Workspace', inbox: 'Inbox', settings: 'Settings', places: 'Places' }[S.global] || '';
     return `<div class="wrap"><div class="landing"><span class="ib" style="width:72px;height:72px;pointer-events:none">${ic('doc').replace('class="i"', 'class="i" style="width:40px;height:40px"')}</span><h1>${esc(S.item)}</h1><p>${esc(owner)} · ${esc(ctxName())}</p><div class="row2"><button class="btn ghost" data-back>Back</button></div><div class="note">Couldn’t find “${esc(S.item)}” in ${esc(owner)}. It may have been renamed, moved or deleted — check Trash in your Library.</div></div></div>`;
   }
   function crumbs() {
@@ -1091,9 +1092,9 @@
     if (S.view === 'dashboard') return '<b>Overview</b>';
     if (S.view === 'adaptive') return '<b>Adaptive</b><span class="sep">·</span><span>Beta</span>';
     if (S.view === 'mode') return `<b>${M[S.mode].name}</b>`;
-    if (S.view === 'global') { const gn = { anima: 'Anima', community: 'Community', market: 'Marketplace', library: 'Library', projects: 'Projects', workspace: 'Workspace', inbox: 'Inbox', settings: 'Settings', places: 'Places' }[S.global]; if (!S.item) return `<b>${gn}</b>`;
+    if (S.view === 'global') { const gn = { anima: 'Anima', community: 'Community', market: 'Marketplace', library: 'Library', projects: 'Projects', tasks: 'Tasks', workspace: 'Workspace', inbox: 'Inbox', settings: 'Settings', places: 'Places' }[S.global]; if (!S.item) return `<b>${gn}</b>`;
       // a path is a trail you can walk back up: every segment but the last is a link (GitHub, Finder)
-      const parts = S.item.split('/'), lbl = (x, i) => (S.global === 'community' && i === 0 && window.XENO_PG_FORUM.find((t) => t.id === x) ? window.XENO_PG_FORUM.find((t) => t.id === x).title : S.global === 'community' && i > 0 && parts[0] === 'My reports' ? '#' + x : x);
+      const parts = S.item.split('/'), lbl = (x, i) => (S.global === 'tasks' && window.XENO_TASKS?.label ? window.XENO_TASKS.label(x) : S.global === 'community' && i === 0 && window.XENO_PG_FORUM.find((t) => t.id === x) ? window.XENO_PG_FORUM.find((t) => t.id === x).title : S.global === 'community' && i > 0 && parts[0] === 'My reports' ? '#' + x : x);
       return `<a data-crumb="">${gn}</a>` + parts.map((x, i) => sep + (i < parts.length - 1 ? `<a data-crumb="${esc(parts.slice(0, i + 1).join('/'))}">${esc(lbl(x, i))}</a>` : `<b>${esc(lbl(x, i))}</b>`)).join(''); }
     const p = PR[S.product];
     return `<span>${ctxName()}</span>${sep}${S.item ? `<span>${esc(p.name)}</span>${sep}<b>${esc(liveChat && S.product === 'chat' ? window.XENO_CHAT.title(S.item) : S.item)}</b>` : `<b>${esc(p.name)}</b>`}${S.product === 'chat' && !S.item ? `${sep}<span>${esc(liveChat ? 'New chat' : ctxChats().pinned[0] || 'New chat')}</span>` : ''}`;
@@ -1216,12 +1217,12 @@
     if (m === 'adaptive') return { view: 'adaptive' };
     if (m === 'overview') { if (kind === 'z' && id && zonesFor('overview').some((z) => z.id === id)) return { view: 'zone', zone: id, zoneOf: 'overview', item };
       if (kind === 'p' && PR[id]) return { view: 'product', product: id, zoneOf: 'overview', item };
-      if (kind === 'g' && ['anima', 'community', 'market', 'library', 'projects', 'workspace', 'inbox', 'settings', 'places'].includes(id)) return { view: 'global', global: id, zoneOf: 'overview', item };
+      if (kind === 'g' && ['anima', 'community', 'market', 'library', 'projects', 'tasks', 'workspace', 'inbox', 'settings', 'places'].includes(id)) return { view: 'global', global: id, zoneOf: 'overview', item };
       return { view: 'dashboard' }; }
     if (!modeOk) return null;
     if (kind === 'z' && zonesFor(m).some((z) => z.id === id)) return { view: 'zone', mode: m, zone: id, zoneOf: 'mode', item };
     if (kind === 'p' && PR[id]) return { view: 'product', mode: m, product: id, zoneOf: 'mode', item };
-    if (kind === 'g' && ['anima', 'community', 'market', 'library', 'projects', 'workspace', 'inbox', 'settings', 'places'].includes(id)) return { view: 'global', mode: m, global: id, zoneOf: 'mode', item };
+    if (kind === 'g' && ['anima', 'community', 'market', 'library', 'projects', 'tasks', 'workspace', 'inbox', 'settings', 'places'].includes(id)) return { view: 'global', mode: m, global: id, zoneOf: 'mode', item };
     return { view: 'mode', mode: m };
   }
   let applyingHash = false;
@@ -2084,6 +2085,7 @@
     if (S.switching && !t.closest('#panel, #logo, #menu')) { closeSwitcher(); }
     if (t.closest('#scrim')) return closePalette();
     if (t.closest('[data-need-schedule]')) return window.XA.scheduled();
+    { const nt = t.closest('[data-need-task]'); if (nt) return go('global', { global: 'tasks', item: nt.dataset.needTask }); }
     { const rf = t.closest('[data-recent-file]'); if (rf) return go('global', { global: 'library', item: rf.dataset.recentFile }); }
     { const rc = t.closest('[data-recent-chat]'); if (rc) return go('product', { product: 'chat', item: rc.dataset.recentChat });
       const rp = t.closest('[data-recent-project]'); if (rp) { const pr = ((window.XENO_PG_PROJECTS || {}).items || []).find((x) => x.id === rp.dataset.recentProject); return go('global', { global: 'projects', item: pr ? pr.name : null }); } }
@@ -2116,7 +2118,7 @@
     if (g === 'search') return openPalette();
     if (g === 'home') { if ((S.view === 'mode' || S.view === 'dashboard') && b.closest('#rail')) return setPanel(root.dataset.panel === 'open' ? 'closed' : 'open'); return goModeHome(); }
     if (g === 'chat') { if (S.view === 'product' && S.product === 'chat' && b.closest('#rail')) return setPanel(root.dataset.panel === 'open' ? 'closed' : 'open'); return go('product', { product: 'chat' }); }
-    if (['anima', 'community', 'market', 'library', 'projects', 'workspace', 'places'].includes(g)) { if (S.view === 'global' && S.global === g) return setPanel(root.dataset.panel === 'open' ? 'closed' : 'open'); return go('global', { global: g }); }
+    if (['anima', 'community', 'market', 'library', 'projects', 'tasks', 'workspace', 'places'].includes(g)) { if (S.view === 'global' && S.global === g) return setPanel(root.dataset.panel === 'open' ? 'closed' : 'open'); return go('global', { global: g }); }
     if (['bell', 'help', 'usage', 'account'].includes(g)) { if (S._popWas === g) { S._popWas = null; return hidePops(); } return ({ bell: openBell, help: openHelp, usage: openUsage, account: openAccount })[g](); }
     if (b.dataset.projectsOf) { window.XENO_PAGES.query('projects', PR[b.dataset.projectsOf].name); return go('global', { global: 'projects', item: null }); }
     if (b.dataset.toast) return toast(b.dataset.toast);

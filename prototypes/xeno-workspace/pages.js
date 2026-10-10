@@ -425,6 +425,7 @@
       if (s.global === 'anima') { const ar = mod('anima:' + (it || ''), () => window.XENO_ANIMA?.route(it)); if (ar) return ar; }
       if (s.global === 'anima') return it && /Memory|Skills|Plan|Summarise/.test(it) ? anima(null) : anima(it);
       if (s.global === 'community') { const cr = mod('community:' + (it || ''), () => window.XENO_COMM?.route(it)); if (cr) return cr; const th = it && window.XENO_PG_FORUM.find((t) => t.title === it); return th ? mod('community:' + it, () => threadPage(th)) : community(it); }
+      if (s.global === 'tasks') { if (window.XENO_TASKS && window.XENO_TASKS.served) { window.XENO_TASKS.sync(); return mod('tasks:' + (it || ''), () => window.XENO_TASKS.route(it)); } return page(box('check', 'Tasks', 'Tasks are on the XENO platform: sign in at xenosystem.ai to use them.')); }
       if (s.global === 'market') return market(it);
       if (s.global === 'settings') return window.XENO_SETTINGS.render(it);
     }
