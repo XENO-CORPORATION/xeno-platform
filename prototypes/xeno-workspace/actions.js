@@ -56,17 +56,17 @@
     X().go('global', { global: 'projects', item: null }); X().refreshPanel(); toast(`Archived “${name}”`);
   }
   async function deleteProject(name) {
-    if (window.XENO_WORK && window.XENO_WORK.blocked('deleteProject')) return;
+    if (window.XENO_WORK && window.XENO_WORK.served) return window.XENO_WORK.deleteProject(name);   // on the platform: an archived, empty project, for good
     if (!await D().confirm({ title: `Delete “${name}”?`, body: `This removes the project for everyone on it. <b>Its chats and files stay in your Library</b>, but tasks, assignments and history are deleted. This can’t be undone.`, action: 'Delete project', typeToConfirm: name })) return;
     delete P()[name]; const i = L().findIndex((p) => p.name === name); if (i >= 0) L().splice(i, 1);
     window.XENO_PG_LIBRARY.items.forEach((f) => { if (f.project === name) f.project = null; });
     window.XENO_PG_SYNC_NAV?.(); X().go('global', { global: 'projects', item: null }); X().refreshPanel(); toast(`Deleted “${name}”`);
   }
   function projectMenu(btn, name) {
-    D().menu(btn, [{ id: 'rename', icon: 'edit', label: 'Rename', run: () => renameProject(name) }, { id: 'icon', icon: 'palette', label: 'Change icon', run: () => iconProject(name) }, { id: 'assign', icon: 'people', label: 'Assign people or agents', run: () => assign(name) }, { id: 'budget', icon: 'chart', label: 'Set a budget', run: () => budget(name) }, '-', { id: 'archive', icon: 'archive', label: 'Archive', run: () => archiveProject(name) }, { id: 'delete', icon: 'trash', label: 'Delete project', danger: true, run: () => deleteProject(name) }]);
+    D().menu(btn, [{ id: 'rename', icon: 'edit', label: 'Rename', run: () => renameProject(name) }, { id: 'icon', icon: 'palette', label: 'Change icon', run: () => iconProject(name) }, { id: 'assign', icon: 'people', label: window.XENO_WORK && window.XENO_WORK.served ? 'Share…' : 'Assign people or agents', run: () => assign(name) }, { id: 'budget', icon: 'chart', label: 'Set a budget', run: () => budget(name) }, '-', { id: 'archive', icon: 'archive', label: 'Archive', run: () => archiveProject(name) }, { id: 'delete', icon: 'trash', label: 'Delete project', danger: true, run: () => deleteProject(name) }]);
   }
   async function assign(name) {
-    if (window.XENO_WORK && window.XENO_WORK.blocked('assign')) return;
+    if (window.XENO_WORK && window.XENO_WORK.served) return window.XENO_WORK.shareProject(name);   // on the platform: share with real accounts
     const p = P()[name]; if (!p) return;
     const teams = W().teams.map((t) => [t.name, t.name, `Team · lead ${t.lead} · ${t.members.length} members`, `<span class="pg-av">${esc(t.name[0])}</span>`]);
     const agents = AGENTS.map((a) => { const m = W().members.find((x) => x.name === a); return [a + ' (agent)', a, `Agent · ${m ? m.title : ''}`, avatar(a, 'agent')]; });

@@ -1905,7 +1905,7 @@
       const h = homeHash('global', { global: 'projects', item: name }), pinned = S.pinnedProjects.has(name);
       return [H.nav(h, () => go('global', { global: 'projects', item: name })),
         [{ label: 'New task…', icon: 'plus', run: () => window.XA.newTask(name) },
-          { label: 'Assign people or agents…', icon: 'people', run: () => window.XA.assign(name) },
+          { label: window.XENO_WORK && window.XENO_WORK.served ? 'Share…' : 'Assign people or agents…', icon: 'people', run: () => window.XA.assign(name) },
           { label: 'Set budget…', icon: 'chart', run: () => window.XA.budget(name) }],
         [{ label: 'Rename…', icon: 'edit', key: 'F2', kbd: 'F2', run: () => window.XA.renameProject(name) },
           { label: 'Change icon…', icon: 'palette', run: () => window.XA.iconProject(name) },

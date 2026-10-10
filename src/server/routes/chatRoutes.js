@@ -3005,6 +3005,42 @@ router.delete('/projects/:id', async (req, res) => {
 });
 
 // GET /api/chat/projects/:id/files - List files in project
+// DELETE /api/chat/projects/:id/permanent - remove an ARCHIVED, EMPTY project for good.
+// DELETE /projects/:id archives (reversible). This one is not reversible, so it is allowed only when nothing can
+// be orphaned by it: a conversation or a scheduled chat inside a project is reachable THROUGH the project (its
+// access is the project's), so a project that still holds one is refused, with the counts, and the person moves
+// or deletes those first. Needs admin on the project.
+router.delete('/projects/:id/permanent', async (req, res) => {
+  try {
+    const userId = req.user?.id;
+    if (!userId) return res.status(401).json({ success: false, error: 'Unauthorized' });
+    const { id } = req.params;
+    await requireResourceRelation(req.db, userPrincipal(userId), 'project', id, 'admin');
+    const out = await withTransaction(req.db, async (tx) => {
+      const pr = (await tx.query('SELECT id, is_archived FROM chat_projects WHERE id = $1 FOR UPDATE', [id])).rows[0];
+      if (!pr) return { status: 404, body: { success: false, error: 'Project not found', code: 'project_not_found' } };
+      if (!pr.is_archived) return { status: 409, body: { success: false, code: 'archive_first', error: 'Archive the project first. Only an archived project can be deleted for good.' } };
+      const chats = Number((await tx.query('SELECT count(*)::int AS n FROM chat_conversations WHERE project_id = $1 AND deleted_at IS NULL', [id])).rows[0].n);
+      const tasks = Number((await tx.query("SELECT count(*)::int AS n FROM chat_scheduled_tasks WHERE project_id = $1 AND status <> 'cancelled'", [id])).rows[0].n);
+      if (chats || tasks) return { status: 409, body: { success: false, code: 'project_not_empty', conversations: chats, scheduled: tasks, error: 'This project still holds chats or scheduled chats. Move or delete them first.' } };
+      // what is left inside is already gone for the person (deleted chats, cancelled schedules): remove their rows
+      // and their relationship rows, then the project's own, then the project (its files and pins cascade)
+      const gone = (await tx.query('DELETE FROM chat_scheduled_tasks WHERE project_id = $1 RETURNING id', [id])).rows.map((r) => String(r.id));
+      if (gone.length) await tx.query("DELETE FROM relationship_tuples WHERE object_type = 'schedule' AND object_id = ANY($1::text[])", [gone]);
+      const dead = (await tx.query('DELETE FROM chat_conversations WHERE project_id = $1 AND deleted_at IS NOT NULL RETURNING id', [id])).rows.map((r) => String(r.id));
+      if (dead.length) await tx.query("DELETE FROM relationship_tuples WHERE object_type = 'conversation' AND object_id = ANY($1::text[])", [dead]);
+      await tx.query("DELETE FROM relationship_tuples WHERE (object_type = 'project' AND object_id = $1) OR (subject_type = 'project' AND subject_id = $1)", [String(id)]);
+      await tx.query('DELETE FROM chat_projects WHERE id = $1', [id]);
+      return { status: 200, body: { success: true, deleted: true } };
+    });
+    res.status(out.status).json(out.body);
+  } catch (error) {
+    if (sendChatAuthorityError(res, error)) return;
+    console.error('Failed to delete project for good:', error);
+    res.status(500).json({ success: false, error: 'Internal server error' });
+  }
+});
+
 router.get('/projects/:id/files', async (req, res) => {
   try {
     const userId = req.user?.id;

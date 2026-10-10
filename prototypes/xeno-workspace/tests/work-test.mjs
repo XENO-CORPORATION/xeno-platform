@@ -52,6 +52,17 @@ function answer(q) {
     const pr = { id: pid(db.next++), name: body.name, description: body.description || '', settings: body.settings || {}, area: body.area || null, is_archived: false, owner_user_id: team ? null : U, workspace_id: team, file_count: 0, chat_count: 0, updated_at: new Date().toISOString(), capabilities: { viewer: true, owner: true } };
     db.projects.unshift(pr); return json(200, { success: true, project: pr });
   }
+  { const acc = p.match(/^\/api\/chat\/projects\/([^/]+)\/access(?:\/user\/([^/]+))?$/), perm = p.match(/^\/api\/chat\/projects\/([^/]+)\/permanent$/);
+    if (acc) { const pr = db.projects.find((x) => x.id === decodeURIComponent(acc[1])); if (!pr) return json(404, { success: false, error: 'Project not found' }); pr.grants = pr.grants || [{ subject: 'user:' + U, relation: 'owner', identity: { id: U, display_name: 'Ada', email: 'ada@example.test' } }];
+      if (db.refuseShare) return json(500, { success: false, error: 'Internal server error' });
+      if (m === 'GET') return json(200, { success: true, grants: pr.grants });
+      if (acc[2] === 'by-email') { if (body.email !== 'bob@example.test') return json(404, { success: false, error: 'Account not found', code: 'account_not_found' }); pr.grants = pr.grants.filter((g) => g.subject !== 'user:bob-id'); pr.grants.push({ subject: 'user:bob-id', relation: body.relation, identity: { id: 'bob-id', display_name: 'Bob <b>B</b>', email: 'bob@example.test' } }); return json(200, { success: true, grant: {} }); }
+      const g = pr.grants.find((x) => x.subject === 'user:' + decodeURIComponent(acc[2])); if (!g) return json(404, { success: false, error: 'Not found' });
+      if (m === 'PUT') { g.relation = body.relation; return json(200, { success: true }); }
+      if (m === 'DELETE') { pr.grants = pr.grants.filter((x) => x !== g); return json(200, { success: true }); } }
+    if (perm && m === 'DELETE') { const pr = db.projects.find((x) => x.id === decodeURIComponent(perm[1])); if (!pr) return json(404, { success: false, error: 'Project not found' }); if (!pr.is_archived) return json(409, { success: false, code: 'archive_first', error: 'Archive the project first.' });
+      const n = db.conversations.filter((c) => c.project_id === pr.id).length; if (n) return json(409, { success: false, code: 'project_not_empty', conversations: n, scheduled: 0, error: 'This project still holds chats.' });
+      db.projects = db.projects.filter((x) => x !== pr); return json(200, { success: true, deleted: true }); } }
   const mm = p.match(/^\/api\/chat\/projects\/([^/]+)$/);
   if (mm && m === 'PUT') { const pr = db.projects.find((x) => x.id === decodeURIComponent(mm[1])); if (!pr) return json(404, { success: false, error: 'Project not found' }); if (body.name !== undefined) pr.name = body.name; if (body.area !== undefined) pr.area = body.area; if (body.is_archived !== undefined) pr.is_archived = !!body.is_archived; if (body.settings) pr.settings = { ...pr.settings, ...body.settings }; return json(200, { success: true, project: pr }); }
   return json(404, { success: false, error: 'not in the fake platform: ' + m + ' ' + p });
@@ -61,7 +72,7 @@ const b = await puppeteer.launch({ headless: true, protocolTimeout: 60000 });
 const p = await b.newPage(); await p.setViewport({ width: 1500, height: 950 });
 const errs = [], missing = []; p.on('pageerror', (e) => errs.push(e.message));
 await p.setRequestInterception(true);
-p.on('request', (q) => { const u = new URL(q.url()); if (u.pathname.startsWith('/api/')) { const r = answer(q); if (r.status === 404) missing.push(q.method() + ' ' + u.pathname); return q.respond(r); } if (u.host.includes('fonts.g')) return q.abort(); q.continue(); });
+p.on('request', (q) => { const u = new URL(q.url()); if (u.pathname.startsWith('/api/')) { const r = answer(q); if (r.status === 404 && !String(r.body || '').includes('account_not_found')) missing.push(q.method() + ' ' + u.pathname); return q.respond(r); } if (u.host.includes('fonts.g')) return q.abort(); q.continue(); });
 await p.setCookie({ name: 'xeno_csrf', value: 'csrf-test-token', url: base });
 const main = () => p.evaluate(() => document.querySelector('#main')?.innerText || '');
 const goProjects = async (item) => { await p.evaluate((it) => window.XW.go('global', { global: 'projects', item: it }), item || null); await wait(400); };
@@ -91,7 +102,7 @@ try {
   await goProjects('Website (Personal)/Conversations'); t = await main();
   ok(/Homepage copy/.test(t) && !/Loose chat/.test(t), 'Conversations lists the chats that belong to this project');
   await goProjects('Website (Personal)/Tasks'); t = await main();
-  const off = await p.evaluate(() => [...document.querySelectorAll('#main [data-xa="newTask"], #main [data-xa="assign"], #main [data-xa="budget"]')].map((el) => el.getAttribute('aria-disabled')));
+  const off = await p.evaluate(() => [...document.querySelectorAll('#main [data-xa="newTask"], #main [data-xa="budget"]')].map((el) => el.getAttribute('aria-disabled')));
   ok(/Tasks aren’t available yet/.test(t) && off.every((v) => v === 'true'), 'a tab with no platform API says so, and any control for it is shown unavailable (' + off.length + ' controls)');
   await goProjects('Website (Personal)/Funding'); ok(/Funding isn’t available yet/.test(await main()), 'Funding shows no sample campaign on a real project');
 
@@ -137,7 +148,7 @@ try {
   // ---- what the platform cannot do yet ----
   db.calls.length = 0; const n0 = (await names()).length;
   await p.evaluate(() => { window.XA.deleteProject('Team plan'); }); await wait(400);
-  ok(db.calls.length === 0 && (await names()).length === n0 && !(await p.evaluate(() => !!document.querySelector('.xd'))), 'deleting for good is refused up front and nothing changes');
+  ok(db.calls.length === 0 && (await names()).length === n0 && !(await p.evaluate(() => !!document.querySelector('.xd'))), 'deleting a project that is not archived is refused up front and nothing changes');
 
   // ---- create a company ----
   db.calls.length = 0;
@@ -173,6 +184,37 @@ try {
   await p.evaluate(() => [...document.querySelectorAll('[role=radio][data-v="office"]')].find((n) => n.offsetParent).click()); await p.click('.xd [data-xd-submit]'); await moving; await wait(500);
   const put = db.calls.find((x) => x.m === 'PUT' && /\/api\/chat\/projects\//.test(x.p));
   ok(!!put && put.body.area === 'office' && put.csrf === 'csrf-test-token' && !(await p.evaluate(() => window.XENO_PG_PROJECTS.items.some((x) => x.realName === 'Moodboard'))), 'moving it to Office tells the platform and it leaves Studio’s list');
+
+  // ---- share a project, and delete one for good ----
+  await p.evaluate(() => { location.hash = '#/overview'; }); await wait(700); await goProjects(); await wait(500); db.calls.length = 0;
+  const nameOf = (real) => p.evaluate((r) => (window.XENO_PG_PROJECTS.items.find((x) => x.realName === r) || {}).name, real);
+  const web = await p.evaluate(() => window.XENO_PG_PROJECTS.items.find((x) => x.realName === 'Website' && x.place === 'Personal').name);
+  p.evaluate((n) => { window.XA.assign(n); }, web); await wait(700);
+  const share = () => p.evaluate(() => { const sh = [...document.querySelectorAll('.xd')].at(-1); return { title: sh.querySelector('.xd-head b')?.textContent || '', state: sh.querySelector('[data-share-state]')?.dataset.shareState || null, rows: [...sh.querySelectorAll('[data-share]')].map((li) => li.querySelector('b').innerHTML + '|' + (li.querySelector('select')?.value || li.querySelector('.xd-share-owner')?.textContent || '')), err: sh.querySelector('[data-share-error]')?.textContent || '' }; });
+  let sv = await share();
+  ok(/Share “Website”/.test(sv.title) && sv.rows.join() === 'Ada (you)|Owner' && sv.state === null, 'Share opens the real access list: the owner, who cannot be changed (' + sv.rows.join() + ')');
+  const addShare = async (email, role) => { await p.evaluate((e, r) => { const sh = [...document.querySelectorAll('.xd')].at(-1), f = sh.querySelector('[data-share-add]'); f.querySelector('input').value = e; f.querySelector('select').value = r; f.requestSubmit(); }, email, role); await wait(700); };
+  await addShare('nobody@example.test', 'viewer'); sv = await share();
+  ok(/No XENO account uses that email/.test(sv.err) && sv.rows.length === 1, 'an email with no account is refused in words, and nothing is added');
+  await addShare('bob@example.test', 'editor'); sv = await share();
+  const by = db.calls.filter((x) => x.m === 'PUT' && /\/access\/user\/by-email$/.test(x.p)).at(-1);
+  ok(by && by.body.email === 'bob@example.test' && by.body.relation === 'editor' && sv.rows[1] === 'Bob &lt;b&gt;B&lt;/b&gt;|editor' && sv.err === '', 'sharing by email tells the platform and lists the person with their role, as text (' + sv.rows[1] + ')');
+  await p.evaluate(() => { const s = [...document.querySelectorAll('.xd')].at(-1).querySelector('[data-share-role="bob-id"]'); s.value = 'viewer'; s.dispatchEvent(new Event('change', { bubbles: true })); }); await wait(700); sv = await share();
+  ok(db.calls.some((x) => x.m === 'PUT' && /\/access\/user\/bob-id$/.test(x.p) && x.body.relation === 'viewer') && sv.rows[1].endsWith('|viewer'), 'changing a role tells the platform');
+  db.refuseShare = true; await p.evaluate(() => [...document.querySelectorAll('.xd')].at(-1).querySelector('[data-share-remove="bob-id"]').click()); await wait(700); db.refuseShare = false;
+  ok(await p.evaluate(() => document.body.textContent.includes('That couldn’t be removed. They still have access.')), 'when removing is refused the person is told they still have access');
+  await p.evaluate(() => [...document.querySelectorAll('.xd')].at(-1).querySelector('[data-share-retry]')?.click()); await wait(700);
+  await p.evaluate(() => [...document.querySelectorAll('.xd')].at(-1).querySelector('[data-share-remove="bob-id"]').click()); await wait(700); sv = await share();
+  ok(db.calls.some((x) => x.m === 'DELETE' && /\/access\/user\/bob-id$/.test(x.p)) && sv.rows.length === 1, 'Stop sharing removes them');
+  await p.evaluate(() => [...document.querySelectorAll('.xd')].at(-1).querySelector('[data-xd-close]').click()); await wait(400);
+
+  const del = async (real, typed) => { const n = await nameOf(real); p.evaluate((x) => { window.XA.deleteProject(x); }, n); await wait(500); const asked = await p.evaluate(() => !!document.querySelector('.xd #xd-type')); if (!asked) return false;
+    await p.evaluate((v) => { const i = document.querySelector('.xd #xd-type'); i.value = v; i.dispatchEvent(new Event('input', { bubbles: true })); }, typed); await wait(150); await p.evaluate(() => document.querySelector('.xd [data-xd-ok]').click()); await wait(900); return true; };
+  db.projects.push({ id: pid(8), name: 'Full archive', description: '', settings: {}, is_archived: true, owner_user_id: U, workspace_id: null, file_count: 0, chat_count: 1, updated_at: '2026-09-02T10:00:00Z', capabilities: { viewer: true, owner: true } }); db.conversations.push({ id: 'c9', title: 'still here', project_id: pid(8) });
+  await p.evaluate(() => window.XENO_WORK.reload()); await wait(700); db.calls.length = 0;
+  ok(await del('Full archive', 'Full archive') && db.calls.some((x) => x.m === 'DELETE' && /\/permanent$/.test(x.p)) && db.projects.some((x) => x.name === 'Full archive') && (await p.evaluate(() => document.body.textContent.includes('still holds 1 chat. Move or delete them first.'))), 'an archived project that still holds a chat is not deleted, and the person is told what is in it');
+  db.calls.length = 0;
+  ok(await del('Old notes', 'Old notes') && !db.projects.some((x) => x.name === 'Old notes') && !(await p.evaluate(() => window.XENO_PG_PROJECTS.items.some((x) => x.realName === 'Old notes'))) && (await p.evaluate(() => document.body.textContent.includes('Deleted “Old notes” for good'))), 'an archived, empty project is deleted for good after its name is typed, and leaves the list');
 
   ok(missing.length === 0, 'the workspace asked for no route the platform lacks (' + JSON.stringify([...new Set(missing)].slice(0, 3)) + ')');
   ok(errs.length === 0, 'no page errors (' + JSON.stringify(errs.slice(0, 2)) + ')');
