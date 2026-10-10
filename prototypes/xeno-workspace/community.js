@@ -99,7 +99,7 @@
 
   // ---------- report: one window, see what is sent, dedup, choose who reads it ----------
   async function report({ kind = 'bug', visibility = 'public', title = '' } = {}) {
-    const diag = `XENO Workspace · ${location.hash || '#/'} · ${innerWidth}×${innerHeight} · ${navigator.language}`;
+    const diag = `XENO Workspace · ${window.XENO_ADDR.toPath(window.XENO_ADDR.current())} · ${innerWidth}×${innerHeight} · ${navigator.language}`;
     const v = await D().form({ title: kind === 'feature' ? 'Suggest a feature' : title === 'Contact support' ? 'Contact support' : 'Report a problem', sub: 'Sent as you. You choose who can read it.', submit: 'Send', fields: [
       { id: 'kind', label: 'This is', type: 'seg', value: kind, options: [['bug', 'Something is broken'], ['feature', 'An idea'], ['feedback', 'Feedback']] },
       { id: 'title', label: 'In one line', required: true, max: 120, value: title === 'Contact support' ? '' : title, placeholder: 'e.g. Export stops at 80 %', validate: (x) => (x.trim().length < 8 ? 'A few more words, so others can find it.' : null) },

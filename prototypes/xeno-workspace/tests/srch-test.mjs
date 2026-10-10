@@ -11,7 +11,7 @@ const q = async (s) => { await ev(() => window.XW.search('')); await wait(200); 
 const groups = () => ev(() => [...document.querySelectorAll('#palette .grp')].map((g) => g.textContent));
 const enter = async () => { await ev(() => document.querySelector('#palette input').dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }))); await wait(700); await idle(); };
 let r = await q('password'); ok(r[0]?.t === 'Sign-in & security', `Settings are found by the words people use ("password" → ${r[0]?.t})`);
-await enter(); ok(/settings/.test(await ev(() => location.hash)), 'Enter opens that settings section');
+await enter(); ok(/settings/.test(await ev(() => window.XENO_ADDR.current())), 'Enter opens that settings section');
 r = await q('brand'); let gs = await groups(); ok(gs.includes('Projects') && gs.includes('Marketplace'), `one query reaches several kinds (${gs.join(', ')})`);
 r = await q('atlas'); ok(r.some((x) => x.t === 'Atlas'), 'agents and Minds are found by name');
 r = await q('vat'); ok(r[0]?.t === 'Company', `the company page is found by what it holds ("vat" → ${r[0]?.t})`);

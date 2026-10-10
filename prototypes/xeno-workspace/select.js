@@ -76,7 +76,7 @@
   // a re-render replaces the rows; put the marks back on the new ones
   // opening a link with ?sel= (or Back/Forward to one) selects those rows once they are on screen — once per address
   function restore() {
-    const r = core.restore(window.XENO_URLSEL?.get() || [], location.hash);
+    const r = core.restore(window.XENO_URLSEL?.get() || [], window.XENO_ADDR.current());
     if (!r) return;
     paint(); rows(r.def).find((x) => r.def.id(x) === r.first)?.scrollIntoView({ block: 'nearest' });
   }

@@ -31,7 +31,7 @@ await p.keyboard.press('Escape');
 await p.goto(url + '#/dev'); await p.reload(); await wait(900);
 g = await ev(() => [...document.querySelectorAll('.kpi')].map((k) => [k.querySelector('b').textContent, k.querySelector('.kpi-d').textContent, !!k.querySelector('.hc svg .hc-line'), k.dataset.zone]));
 ok(g.length === 3 && g.every(([v, d, s, z]) => v && /[↑↓] \d+%/.test(d) && s && z), `Dev shows 3 numbers, each with a trend, a 7-day line and a link: ${JSON.stringify(g)}`);
-await ev(() => document.querySelector('.kpi').click()); await wait(500); g = await ev(() => location.hash); ok(/#\/dev\/z\/agents/.test(g), `a number opens the area it measures (${g})`);
+await ev(() => document.querySelector('.kpi').click()); await wait(500); g = await ev(() => window.XENO_ADDR.current()); ok(/#\/dev\/z\/agents/.test(g), `a number opens the area it measures (${g})`);
 // error state is per section: the rest of the page still works
 await p.goto(url + '#/dev'); await p.reload(); await wait(900); await pickState('error'); await wait(300);
 g = await ev(() => ({ errs: document.querySelectorAll('.hm2-err').length, board: !!document.querySelector('.rb'), areas: !!document.querySelector('.hm2-areas') }));

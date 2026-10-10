@@ -27,13 +27,12 @@
   let opener = null, textCtx = null, kbdMode = false, hoverTimer = 0, lastPt = null;
 
   // ---------- shared helpers resolvers use ----------
-  const base = () => location.href.split('#')[0];
   async function copy(text, what = 'Copied') {
     try { await navigator.clipboard.writeText(text); }
     catch { const t = document.createElement('textarea'); t.value = text; t.style.cssText = 'position:fixed;opacity:0'; document.body.appendChild(t); t.select(); document.execCommand('copy'); t.remove(); }
     X().toast(what);
   }
-  const link = (hash) => base() + hash;
+  const link = (hash) => window.XENO_ADDR.url(hash);
   const openWindow = (hash) => { window.open(link(hash), '_blank', 'noopener'); };
   // reading the clipboard needs the person's permission (Chrome asks once per site; Safari asks every time). When it is
   // refused, say which of the two it is and what to do — never a silent nothing (Google Docs, Figma in the browser)
@@ -45,10 +44,10 @@
   const H = {
     copy, link, openWindow, clipboardHelp, clipboardState,
     copyLink: (hash, what = 'Link copied') => copy(link(hash), what),
-    open: (hash) => { location.hash = hash; },
+    open: (hash) => { window.XENO_ADDR.go(hash); },
     // the standard trio every navigable object gets, in this order (Finder, Drive, Linear)
     nav: (hash, openRun, label = 'Open') => [
-      { label, icon: 'open', key: 'Enter', kbd: '↵', run: openRun || (() => { location.hash = hash; }) },
+      { label, icon: 'open', key: 'Enter', kbd: '↵', run: openRun || (() => { window.XENO_ADDR.go(hash); }) },
       { label: 'Open in new window', icon: 'hub', run: () => openWindow(hash) },
     ],
     linkItems: (hash, name) => [

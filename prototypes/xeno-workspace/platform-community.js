@@ -197,7 +197,7 @@
     await loadList(); go(r.d.shortId || (r.d.thread && r.d.thread.shortId)); toast('Posted in Community');
   }
   async function report({ kind = 'bug', visibility = 'public', title = '' } = {}) {
-    const diag = `XENO Workspace · ${location.hash || '#/'} · ${innerWidth}×${innerHeight} · ${navigator.language}`, support = title === 'Contact support';
+    const diag = `XENO Workspace · ${window.XENO_ADDR.toPath(window.XENO_ADDR.current())} · ${innerWidth}×${innerHeight} · ${navigator.language}`, support = title === 'Contact support';
     const v = await D().form({ title: kind === 'feature' ? 'Suggest a feature' : support ? 'Contact support' : 'Report a problem', sub: 'Sent as you. You choose who can read it.', submit: 'Send', fields: [
       { id: 'kind', label: 'This is', type: 'seg', value: kind, options: [['bug', 'Something is broken'], ['feature', 'An idea'], ['feedback', 'Feedback']] },
       { id: 'title', label: 'In one line', required: true, max: 200, value: support ? '' : title, placeholder: 'e.g. Export stops at 80 %', validate: (x) => (x.trim().length < 8 ? 'A few more words, so others can find it.' : null) },

@@ -748,7 +748,7 @@
     let t = T.task.get(key);
     if (!t || t.missing || !t.events) { await loadTask(key); t = T.task.get(key); }
     if (!t || t.missing) return toast('The task couldn’t be loaded');
-    const site = location.origin, link = `${site}/workspace/#/${t.area || 'overview'}/g/tasks/${t.key}`;
+    const site = location.origin, link = window.XENO_ADDR.url(`#/${t.area || 'overview'}/g/tasks/${t.key}`);
     const abs = (s) => String(s || '').replace(/\(attachment:([0-9a-f-]{36})\)/gi, (_, id) => `(${site}${imgUrl(t.key, id)})`);
     const who = (p) => (p ? `${p.name}${p.kind === 'agent' ? ' (agent)' : ''}` : 'nobody');
     const open = [], done = [];

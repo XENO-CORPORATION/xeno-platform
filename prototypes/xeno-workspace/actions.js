@@ -173,7 +173,7 @@
     if (!await D().confirm({ title: 'Sign out of XENO?', body: 'You will need to sign in again to use your workspace on this device. Nothing you made is affected.', action: 'Sign out', danger: false })) return;
     signOutNow();
   }
-  function signOutNow() { LS.set('signedOut', { at: Date.now(), place: location.hash }); showSignedOut();
+  function signOutNow() { LS.set('signedOut', { at: Date.now(), place: window.XENO_ADDR.current() }); showSignedOut();
   }
   function showSignedOut() {
     if (document.getElementById('signedout')) return;
@@ -182,7 +182,7 @@
       <button class="so-btn" data-so-in>Sign in with XENO</button><button class="so-link" data-so-other>Use a different account</button></div>`;
     document.body.appendChild(s); document.documentElement.classList.add('is-signedout');
     s.querySelector('[data-so-in]').focus();
-    s.addEventListener('click', (e) => { if (e.target.closest('[data-so-in]')) { const p = LS.get('signedOut', {}); LS.set('signedOut', null); s.remove(); document.documentElement.classList.remove('is-signedout'); if (p?.place && p.place !== location.hash) location.hash = p.place; toast('Signed in'); }
+    s.addEventListener('click', (e) => { if (e.target.closest('[data-so-in]')) { const p = LS.get('signedOut', {}); LS.set('signedOut', null); s.remove(); document.documentElement.classList.remove('is-signedout'); if (p?.place && p.place !== window.XENO_ADDR.current()) window.XENO_ADDR.go(p.place); toast('Signed in'); }
       if (e.target.closest('[data-so-other]')) { s.querySelector('[data-so-in]').click(); toast('Choosing an account happens on the XENO sign-in page'); } });
   }
   if (LS.get('signedOut', null)) (document.readyState === 'loading' ? addEventListener('DOMContentLoaded', showSignedOut) : showSignedOut());
@@ -190,7 +190,7 @@
   // ---------- report a problem / suggest a feature / contact support (XENO REPORT spec; F1) ----------
   // Platform: POST /api/forum/report (public → a Community thread) · POST /api/support/tickets (private)
   async function report({ kind = 'bug', visibility = 'public', title = '' } = {}) {
-    const diag = `XENO Workspace prototype · ${location.hash || '#/'} · ${navigator.userAgentData?.brands?.map((b) => b.brand + ' ' + b.version).find((x) => !/Not/.test(x)) || navigator.userAgent.split(' ').slice(-1)[0]} · ${innerWidth}×${innerHeight}`;
+    const diag = `XENO Workspace prototype · ${window.XENO_ADDR.toPath(window.XENO_ADDR.current())} · ${navigator.userAgentData?.brands?.map((b) => b.brand + ' ' + b.version).find((x) => !/Not/.test(x)) || navigator.userAgent.split(' ').slice(-1)[0]} · ${innerWidth}×${innerHeight}`;
     const v = await D().form({ title: kind === 'feature' ? 'Suggest a feature' : title === 'Contact support' ? 'Contact support' : 'Report a problem', sub: 'Goes to the XENO team. You choose who can read it.', submit: 'Send', fields: [
       { id: 'kind', label: 'This is', type: 'seg', value: kind, options: [['bug', 'Something is broken'], ['feature', 'An idea'], ['feedback', 'Feedback']] },
       { id: 'title', label: 'In one line', required: true, max: 120, value: title === 'Contact support' ? '' : title, placeholder: kind === 'feature' ? 'e.g. Let me pin a chat to the rail' : 'e.g. Export stops at 80 %' },

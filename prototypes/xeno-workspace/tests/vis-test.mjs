@@ -22,7 +22,7 @@ await nav('overview/g/library'); const files = await ev(() => document.querySele
 await nav('overview/g/places'); ok(!(await ev(() => document.querySelectorAll('#main .pl-walks li').length)), 'Places doesn’t show the workspace’s handoffs to a guest');
 await nav('overview/g/settings/Workspace'); t = await text(); ok(/Guest — you see only what was shared/.test(t) && /Owners and admins manage/.test(t), 'workspace settings say what a guest is');
 await nav('overview/g/workspace'); t = await ev(() => document.querySelector('#panel')?.textContent || ''); ok(!/Members|Divisions|people/.test(t) && /Shared with you/.test(t), 'the Workspace sidebar shows only what was shared — no members or counts');
-await nav('overview/g/workspace/Home reno'); await wait(300); ok(/projects\/Home/.test(await ev(() => location.hash)), 'a shared project in the guest sidebar opens that project');
+await nav('overview/g/workspace/Home reno'); await wait(300); ok(/projects\/Home/.test(await ev(() => window.XENO_ADDR.current())), 'a shared project in the guest sidebar opens that project');
 await nav('studio/g/projects'); t = await ev(() => document.querySelector('#panel')?.textContent || ''); ok(!/Brand refresh|Q4 planning/.test(t) && /Home reno/.test(t), 'the Projects sidebar lists only shared projects');
 await nav('overview/g/community'); ok((await ev(() => document.querySelectorAll('#main [data-pg-gitem]').length)) > 0, 'Community is still theirs');
 await nav('overview/g/anima'); ok(/Atlas/.test(await text()), 'and so is their own Anima');

@@ -9,7 +9,7 @@ const trace = () => p.evaluate(() => document.querySelector('#panel > .pv .ad-tr
 // enter from the switcher (right-click the logo)
 await p.click('#logo', { button: 'right' }); await w(400);
 await p.click('[data-adaptive]'); await w(500);
-console.log('hash', await p.evaluate(() => location.hash), '| consent shown:', await p.evaluate(() => !!document.querySelector('.ad-consent')));
+console.log('hash', await p.evaluate(() => window.XENO_ADDR.current()), '| consent shown:', await p.evaluate(() => !!document.querySelector('.ad-consent')));
 await p.screenshot({ path: 'ad-1-consent.png', clip: { x: 0, y: 0, width: 400, height: 900 } });
 await p.click('[data-ad="on"]'); await w(500);
 console.log('on. order:', await order());

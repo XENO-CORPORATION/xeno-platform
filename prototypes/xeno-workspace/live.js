@@ -14,7 +14,7 @@
   const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
   const now = () => Date.now(), TAB = Math.random().toString(36).slice(2, 8);
   const SS = { get(k, d) { try { return sessionStorage.getItem('xw.' + k) ?? d; } catch { return d; } }, set(k, v) { try { sessionStorage.setItem('xw.' + k, v); } catch {} } };
-  const route = () => (location.hash || '#/').replace(/^#\/?/, '');
+  const route = () => window.XENO_ADDR.current().replace(/^#\/?/, '');
 
   // ---------- which records an action touches (op prefix → storage keys) — the unit a conflict is detected on ----------
   const DB_SETS = ['projects', 'projectList', 'workspace', 'library', 'forum', 'anima', 'chats', 'market', 'needs', 'areas', 'recent', 'home'];
@@ -64,7 +64,7 @@
     t.classList.add('on'); clearTimeout(t._lvT); t._lvT = setTimeout(() => t.classList.remove('on'), 4200);
     if (here) { const m = document.getElementById('main'); m?.classList.remove('lv-flash'); void m?.offsetWidth; m?.classList.add('lv-flash'); }
   }
-  document.addEventListener('click', (e) => { const b = e.target.closest('[data-live-go]'); if (!b) return; location.hash = '#/' + b.dataset.liveGo; });
+  document.addEventListener('click', (e) => { const b = e.target.closest('[data-live-go]'); if (!b) return; window.XENO_ADDR.go('#/' + b.dataset.liveGo); });
 
   // ---------- other windows (real): every local write is announced; other windows apply it ----------
   let pending = {}, flushT = 0, applying = false;
