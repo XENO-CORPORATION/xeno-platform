@@ -33,7 +33,7 @@
   const X = () => window.XW, api = P.api;
   const NEW = '/overview/chat/llm';
   const ID = /^[A-Za-z0-9_.:-]{1,128}$/;
-  const S = { status: 'loading', convs: [], projects: [], current: null, path: null, total: 0, picker: null, area: undefined };
+  const S = { status: 'loading', convs: [], projects: [], current: null, path: null, total: 0, picker: null, area: undefined, pins: [] };
   // ---------- the AREA: each has its own chats and projects; Overview shows everything ----------
   // Owner's rule (2026-10-03, 2026-10-09). The area is the place in the left rail the person is in (Studio, Office,
   // Dev… or one they made); on Overview there is none. The real chat reads this when it creates a chat or a project.
@@ -49,11 +49,11 @@
     if (loading) return loading;
     loading = (async () => {
       const here = area(), q = here ? '&area=' + encodeURIComponent(here) : '';   // one area, or everything on Overview
-      const [cv, pj] = await Promise.all([api('GET', '/api/chat/conversations?limit=200' + q).catch(() => ({ ok: false, d: {} })), api('GET', '/api/chat/projects?limit=100' + q).catch(() => ({ ok: false, d: {} }))]);
+      const [cv, pj, pn] = await Promise.all([api('GET', '/api/chat/conversations?limit=200' + q).catch(() => ({ ok: false, d: {} })), api('GET', '/api/chat/projects?limit=100' + q).catch(() => ({ ok: false, d: {} })), api('GET', '/api/workspace/pins').catch(() => ({ ok: false, d: {} }))]);
       if (here !== area()) { loading = null; return load(); }   // the person moved to another area while this was on its way
       S.area = here;
       if (!cv.ok || !Array.isArray(cv.d.conversations)) { S.status = 'error'; }
-      else { S.convs = cv.d.conversations; S.total = Number(cv.d.total) || S.convs.length; S.projects = pj.ok && Array.isArray(pj.d.projects) ? pj.d.projects : []; S.status = 'ready'; }
+      else { S.convs = cv.d.conversations; S.total = Number(cv.d.total) || S.convs.length; S.projects = pj.ok && Array.isArray(pj.d.projects) ? pj.d.projects : []; S.pins = pn.ok && Array.isArray(pn.d.items) ? pn.d.items.filter((i) => i.kind === 'chat').map((i) => String(i.id)) : []; S.status = 'ready'; }
       loading = null; repaint();
     })();
     return loading;
@@ -85,13 +85,14 @@
   }, true);
   // the shape the sidebar draws: projects with their chats, then the rest by day
   function data() {
-    const byProject = new Map(); const loose = [];
-    for (const c of S.convs) { if (c.project_id) { if (!byProject.has(c.project_id)) byProject.set(c.project_id, []); byProject.get(c.project_id).push(c); } else loose.push(c); }
+    const byProject = new Map(); const loose = [], pinnedIds = new Set(S.pins);
+    for (const c of S.convs) { if (pinnedIds.has(String(c.id))) continue; if (c.project_id) { if (!byProject.has(c.project_id)) byProject.set(c.project_id, []); byProject.get(c.project_id).push(c); } else loose.push(c); }
     const all = !area();   // on Overview each row says where it lives
     const row = (c) => ({ t: titleOf(c), id: c.id, area: all && c.area ? areaName(c.area) : '' });
     const projects = S.projects.filter((p) => !p.archived_at && !p.is_archived).map((p) => [String(p.name || 'Project'), p.id, (byProject.get(p.id) || []).map(row)]);
     const recents = []; for (const c of loose) { const g = group(c.last_message_at || c.updated_at || c.created_at); const last = recents[recents.length - 1]; if (last && last[0] === g) last[1].push(row(c)); else recents.push([g, [row(c)]]); }
-    return { live: true, status: S.status, current: S.current, projects, pinned: [], recents, more: Math.max(0, S.total - S.convs.length) };
+    const pinned = S.pins.map((id) => S.convs.find((c) => String(c.id) === id)).filter(Boolean).map(row);
+    return { live: true, status: S.status, current: S.current, projects, pinned, recents, more: Math.max(0, S.total - S.convs.length) };
   }
   const title = (id) => { const c = S.convs.find((x) => x.id === id); return c ? titleOf(c) : id ? 'Chat' : null; };
   const projectId = (name) => S.projects.find((p) => p.name === name)?.id || null;
@@ -337,16 +338,23 @@
         saved = true; X()?.toast?.(text ? 'Instructions saved for ' + areaName(here) : 'Instructions cleared for ' + areaName(here)); return null; } });
     return saved;
   }
+  // Pin or unpin a conversation for this person. Shown at once; put back if the platform refuses.
+  async function pin(id, on) {
+    const key = String(id), was = S.pins.slice(); S.pins = on ? [...S.pins.filter((x) => x !== key), key] : S.pins.filter((x) => x !== key); repaint();
+    const r = await api(on ? 'PUT' : 'DELETE', '/api/chat/conversations/' + encodeURIComponent(id) + '/pin').catch(() => null);
+    if (!r || !r.ok) { S.pins = was; repaint(); X()?.toast?.(on ? 'That couldn’t be pinned.' : 'That couldn’t be unpinned.'); return false; }
+    X()?.toast?.(on ? 'Pinned' : 'Unpinned'); try { window.XENO_RECENT_LIVE?.load?.(); } catch {} return true;
+  }
   document.addEventListener('click', (e) => { const t = e.target.closest('#panel [data-chat-instructions]'); if (!t) return; e.preventDefault(); e.stopPropagation(); instructions(); }, true);
   const menu = () => { const C = window.XCM; if (!C || !C.register) return; C.register({ id: 'chat-live', sel: '[data-chat-live]', priority: 3, build: (n) => { const id = n.dataset.chatLive;
     return [[{ label: 'Open', icon: 'chat', run: () => open(id) }, { label: 'Copy link', icon: 'link', run: () => C.H.copy(location.origin + location.pathname + '#/' + (X().inOv() ? 'overview' : X().S.mode) + '/p/chat/' + encodeURIComponent(id), 'Link copied') }],
-      [{ label: 'Rename', icon: 'edit', run: () => rename(id) }, { label: 'Move to…', icon: 'folder', run: () => move(id) }], [{ label: 'Delete', icon: 'trash', danger: true, run: () => remove(id) }]]; } }); };
+      [{ label: 'Pinned', icon: 'pin', checked: S.pins.includes(String(id)), run: () => pin(id, !S.pins.includes(String(id))) }, { label: 'Rename', icon: 'edit', run: () => rename(id) }, { label: 'Move to…', icon: 'folder', run: () => move(id) }], [{ label: 'Delete', icon: 'trash', danger: true, run: () => remove(id) }]]; } }); };
   if (document.readyState === 'loading') addEventListener('DOMContentLoaded', menu); else menu();
 
   const toChatFrame = (msg) => { try { frame.contentWindow.postMessage({ source: 'xeno-workspace', ...msg }, location.origin); } catch {} };
   const pickModel = (id) => toChatFrame({ type: 'pick-model', id });
   const pickerClosed = () => { if (S.effort) { S.effort = null; toChatFrame({ type: 'effort-menu-closed' }); } if (S.picker) { S.picker = null; toChatFrame({ type: 'model-menu-closed' }); } };
   const pickEffort = (id) => { if (S.effort) S.effort.selected = id; toChatFrame({ type: 'pick-effort', id }); };
-  window.XENO_CHAT = { served: true, area, areaName, instructions, get picker() { return S.picker; }, get effort() { return S.effort || null; }, pickModel, pickEffort, pickerClosed, data, title, open, load, rename, remove, dress, host: () => '<div class="live-chat-host" data-chat-frame aria-label="Chat"></div>', state: () => ({ area: area(), listed: S.area, viewer: S.viewer || null, ready: chatReady(), status: S.status, count: S.convs.length, current: S.current, path: S.path, shown: !!frame && frame.classList.contains('on') }) };
+  window.XENO_CHAT = { served: true, area, areaName, instructions, pin, pins: () => S.pins.slice(), get picker() { return S.picker; }, get effort() { return S.effort || null; }, pickModel, pickEffort, pickerClosed, data, title, open, load, rename, remove, dress, host: () => '<div class="live-chat-host" data-chat-frame aria-label="Chat"></div>', state: () => ({ area: area(), listed: S.area, viewer: S.viewer || null, ready: chatReady(), status: S.status, count: S.convs.length, current: S.current, path: S.path, shown: !!frame && frame.classList.contains('on') }) };
   Promise.resolve(P.ready).then((user) => { if (!user) return; P.first(load()); watch(); });
 })();

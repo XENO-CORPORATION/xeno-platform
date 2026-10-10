@@ -176,7 +176,7 @@
   }
 
   // ───────────────────────────── sort into areas: what lives on Overview only
-  const U = { status: 'loading', count: 0, chats: [], projects: [], files: [] };
+  const U = { status: 'loading', count: 0, chats: [], projects: [], files: [], moreChats: 0, moreFiles: false };
   let unplacedLoading = null;
   function loadUnplaced() {
     if (unplacedLoading) return unplacedLoading;
@@ -186,6 +186,8 @@
         U.chats = (cv.d.conversations || []).filter((c) => !c.project_id).map((c) => ({ kind: 'chat', id: String(c.id), title: String(c.title || '').trim() || 'New chat', meta: when(c.last_message_at || c.updated_at) }));
         U.projects = (pj.d.projects || []).filter((p) => !p.is_archived).map((p) => ({ kind: 'project', id: String(p.id), title: String(p.name || 'Project'), meta: 'Project and its chats' }));
         U.files = (lb.d.items || []).map((f) => ({ kind: 'file', id: String(f.id), title: String(f.name || 'Untitled'), meta: 'File', source: f.source, sourceId: f.source_id }));
+        // one request holds 200: say when there is more, so a long list is not mistaken for the whole of it
+        U.moreChats = Math.max(0, (Number(cv.d.total) || 0) - (cv.d.conversations || []).length); U.moreFiles = (lb.d.items || []).length >= 200;
         U.status = 'ready';
       } else { U.chats = []; U.projects = []; U.files = []; U.status = 'error'; }
       const was = U.count; U.count = U.chats.length + U.projects.length + U.files.length; unplacedLoading = null;
@@ -203,7 +205,7 @@
       b.innerHTML = U.status === 'loading' ? '<p class="xd-note" data-sort-state="loading">Looking for work that is in no area…</p>'
         : U.status === 'error' ? '<p class="xd-note" data-sort-state="error">That couldn’t be loaded. <button class="xd-btn ghost sm" data-sort-retry>Try again</button></p>'
         : !U.count ? '<p class="xd-note" data-sort-state="done">Everything is in an area. Nothing left to sort.</p>'
-        : `<div class="xd-sort-to" role="group" aria-label="Move the selected items to"><span>${picked.size ? `Move ${picked.size} to` : 'Select items, then choose an area'}</span>${P.areas().map(([id, name]) => `<button class="xd-btn ghost sm" data-sort-to="${esc(id)}"${picked.size ? '' : ' disabled'}>${esc(name)}</button>`).join('')}</div>${group('Chats', U.chats)}${group('Projects', U.projects)}${group('Files', U.files)}`; };
+        : `<div class="xd-sort-to" role="group" aria-label="Move the selected items to"><span>${picked.size ? `Move ${picked.size} to` : 'Select items, then choose an area'}</span>${P.areas().map(([id, name]) => `<button class="xd-btn ghost sm" data-sort-to="${esc(id)}"${picked.size ? '' : ' disabled'}>${esc(name)}</button>`).join('')}</div>${group('Chats', U.chats)}${U.moreChats ? `<p class="xd-note" data-sort-more="chats">${U.moreChats} more chats are in no area. They are listed here as you move these.</p>` : ''}${group('Projects', U.projects)}${group('Files', U.files)}${U.moreFiles ? '<p class="xd-note" data-sort-more="files">More files are in no area. They are listed here as you move these.</p>' : ''}`; };
     D().info({ title: 'Sort into areas', sub: 'Work that lives on Overview only. Each item you move shows in its area from then on.', size: 'md', html: '',
       onOpen: async (sh) => { U.status = 'loading'; paint(sh); await loadUnplaced(); if (!document.body.contains(sh)) return; paint(sh);
         sh.addEventListener('change', (e) => { const c = e.target.closest('[data-sort-pick]'); if (!c) return; if (c.checked) picked.add(c.dataset.sortPick); else picked.delete(c.dataset.sortPick); paint(sh); });

@@ -9,6 +9,7 @@ import fs from 'fs';
 import { workspaceFromReq, isWorkspaceMember, UUID_RE } from '../utils/workspaceContext.js';
 import { check, listObjectTuples, writeTuples } from '../utils/authzReBAC.js';
 import { defaultModelFor } from '../services/workspaceArea.js';
+import { pinConversation, unpinConversation } from '../services/chatConversationPins.js';
 import { computeNextRun, executeScheduledTask, sanitizeScheduledRunError } from '../workers/chatScheduledWorker.js';
 import { assertAuthorizedLibraryAttachments, deleteLibraryItem, getAuthorizedLibraryFile, listLibraryItems, resolveManagedLibraryPath } from '../services/libraryAssets.js';
 import {
@@ -2699,6 +2700,30 @@ router.put('/projects/pins/order', async (req, res) => {
   } catch (error) {
     if (sendChatAuthorityError(res, error) || sendChatPinError(res, error)) return;
     console.error('Failed to reorder pinned projects:', error);
+    res.status(500).json({ success: false, error: 'Internal server error' });
+  }
+});
+
+// PUT/DELETE /api/chat/conversations/:id/pin - pin a conversation for the caller, or clear the pin
+router.put('/conversations/:id/pin', async (req, res) => {
+  try {
+    const userId = req.user?.id;
+    if (!userId) return res.status(401).json({ success: false, error: 'Unauthorized' });
+    res.json({ success: true, conversation_id: req.params.id, ...(await pinConversation(req.db, userId, req.params.id)) });
+  } catch (error) {
+    if (sendChatAuthorityError(res, error)) return;
+    console.error('Failed to pin conversation:', error);
+    res.status(500).json({ success: false, error: 'Internal server error' });
+  }
+});
+router.delete('/conversations/:id/pin', async (req, res) => {
+  try {
+    const userId = req.user?.id;
+    if (!userId) return res.status(401).json({ success: false, error: 'Unauthorized' });
+    res.json({ success: true, conversation_id: req.params.id, ...(await unpinConversation(req.db, userId, req.params.id)) });
+  } catch (error) {
+    if (sendChatAuthorityError(res, error)) return;
+    console.error('Failed to unpin conversation:', error);
     res.status(500).json({ success: false, error: 'Internal server error' });
   }
 });

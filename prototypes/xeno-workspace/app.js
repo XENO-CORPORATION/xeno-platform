@@ -243,7 +243,7 @@
   // Overview = the cross-mode home: what needs you, what you pinned, what you touched. No mode cards
   // (the switcher owns modes) and no products (modes own those).
   function panelDashboard() {
-    const pinned = (window.XENO_PINNED || []).map(([t, p]) => workRow([t, '', p])).join('');
+    const pinned = (window.XENO_PINNED || []).map((x) => (Array.isArray(x) ? workRow([x[0], '', x[1]]) : recentRow(x))).join('');   // the platform's pins are records; the picture's are [title, product]
     return `${head('xeno', 'Overview', 'All modes')}
       <div class="pbody">
         <button class="act primary" data-go="chat">${ic('plus')}New chat<kbd>Ctrl ⇧ O</kbd></button>
@@ -264,6 +264,7 @@
         ${m.id === 'tools' ? `<button class="act primary" data-go="market">${ic('market')}Browse all tools<kbd>Marketplace</kbd></button>` : `<button class="act primary" data-product="${m.start}">${ic('plus')}New in ${M[m.id].name}<kbd>${esc(PR[m.start].name)}</kbd></button>`}
         ${needs.length ? sec('needs', `Needs you<span class="cnt-inline">${needs.length}</span>`, needs.map(needRow).join('')) : ''}
         ${sec('pinned', 'Pinned', pinsFor(m.id).map((id) => productRow(id)).join(''))}
+        ${(() => { const mine = (window.XENO_PINNED || []).filter((x) => !Array.isArray(x) && x.m === m.id); return mine.length ? sec('pinnedwork', 'Pinned work', mine.map(recentRow).join('')) : ''; })()}
         ${recent ? sec('recent', 'Recent', recent) : ''}
         ${sec('sections', 'Sections', zones.map((z) => row(`data-zone="${z.id}"`, `${ic(z.icon)}<span class="t">${esc(z.label)}</span><span class="meta">${(z.products || []).length <= 2 ? (z.products || []).map((id) => PR[id].name).filter((nm) => nm !== z.label).map(esc).join(' · ') : (z.products || []).length}</span>`)).join(''))}
       </div>
@@ -297,7 +298,7 @@
         <button class="act" data-xa="scheduled">${ic('clock')}Scheduled</button>
         ${live && window.XENO_CHAT.area && window.XENO_CHAT.area() ? `<button class="act" data-chat-instructions data-tip="What every chat in ${esc(window.XENO_CHAT.areaName(window.XENO_CHAT.area()))} should know or do">${ic('edit')}Instructions<kbd>${esc(window.XENO_CHAT.areaName(window.XENO_CHAT.area()))}</kbd></button>` : ''}
         ${sec('projects', 'Projects', projects + `<button class="row sub" data-go="projects">${ic('folder')}<span class="t">All projects</span></button>`, `<button class="ib" data-xa="newProject" aria-label="New project" data-tip="New project">${ic('plus')}</button>`)}
-        ${live ? '' : sec('pinned', 'Pinned', C.pinned.map((t) => chatRow(t)).join(''))}
+        ${live && !C.pinned.length ? '' : sec('pinned', 'Pinned', C.pinned.map((t) => chatRow(t)).join(''))}
         ${sec('recents', 'Recents', live ? (liveState || C.recents.map(([g, ts]) => `<div class="grp">${g}</div>` + ts.map((t) => chatRow(t)).join('')).join('') + (live.more ? `<div class="row sub">${live.more} older chats are in the chat’s own history</div>` : '')) : C.recents.map(([g, ts]) => `<div class="grp">${g}</div>` + ts.map((t) => chatRow(t)).join('')).join('') + `<button class="row sub" data-xa="allChats">${ic('chat')}<span class="t">All chats</span></button>`)}
       </div>`;
   }

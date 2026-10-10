@@ -117,6 +117,28 @@ async function main() {
     check(shape(await search('zebra')) === '', 'one person’s search never finds another person’s work');
     actor = ada;
 
+    // ── pins
+    const pins = async (extra = '') => (await call('GET', '/workspace/pins' + extra)).json.items.map((i) => `${i.kind}:${i.title}@${i.area ?? '-'}`).join(' | ');
+    const zplan = (await search('Quarterly zebra')).results[0], lunchC = (await search('Lunch')).results.find((r) => r.title === 'Lunch');
+    check(await pins() === '', 'nothing is pinned to begin with');
+    const p1 = await call('PUT', `/chat/conversations/${lunchC.id}/pin`), p2 = await call('PUT', `/chat/conversations/${zplan.id}/pin`);
+    check(p1.status === 200 && p1.json.pinned === true && p2.json.pin_position === 1, 'a conversation can be pinned; pins keep the order they were made in');
+    check((await call('PUT', `/chat/conversations/${lunchC.id}/pin`)).json.pin_position === 0, 'pinning it again changes nothing');
+    await call('PUT', `/chat/projects/${proj.id}/pin`);
+    check(await pins() === 'chat:Lunch@studio | chat:Quarterly zebra plan@dev | project:Office project@office', 'the pinned list holds pinned chats then pinned projects, each naming its area');
+    check(await pins('?area=dev') === 'chat:Quarterly zebra plan@dev' && await pins('?area=tools') === '', 'an area lists only its own pins');
+    check((await call('GET', '/workspace/pins?area=Bad%20One')).status === 400, 'a malformed area is refused on pins');
+    actor = bob;
+    check(await pins() === '' && (await call('PUT', `/chat/conversations/${lunchC.id}/pin`)).status >= 400, 'one person cannot pin, and never sees, another person’s conversation');
+    check((await call('DELETE', `/chat/conversations/${lunchC.id}/pin`)).status === 200, 'clearing a pin that is not there is not an error');
+    actor = ada;
+    check(await pins('?area=studio') === 'chat:Lunch@studio', 'another person’s unpin leaves mine alone');
+    const un = await call('DELETE', `/chat/conversations/${lunchC.id}/pin`);
+    check(un.json.pinned === false && await pins('?area=studio') === '', 'unpinning removes it from the list');
+    check((await call('PUT', '/chat/conversations/not-a-uuid/pin')).status >= 400 && (await call('PUT', '/chat/conversations/not-a-uuid/pin')).status < 500, 'a malformed id is refused, not a server error');
+    await call('DELETE', `/chat/conversations/${zplan.id}`);
+    check(await pins('?area=dev') === '', 'a deleted conversation leaves the pinned list');
+
     // ── needs you
     await pool.query(`UPDATE chat_scheduled_tasks SET last_run_status = 'failed', last_run_error = 'The model was not available', last_run_at = NOW() WHERE id = ANY($1)`, [[sDev.id, sProj.id]]);
     await pool.query(`UPDATE chat_scheduled_tasks SET last_run_status = 'succeeded', last_run_at = NOW() WHERE id = $1`, [sHdr.id]);
