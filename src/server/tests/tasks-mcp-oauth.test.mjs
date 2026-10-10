@@ -126,6 +126,19 @@ async function main() {
     const t2 = await exchangeAuthorizationCode(pool, { code: again, clientId: reg.j.client_id, redirectUri: redirect, codeVerifier: p1.v });
     check((await call('GET', '/api/tasks/agent/me', { token: t2.access_token })).j.agent.id === agentId, 'signing in again from the same app reuses the same agent');
 
+    // a person already at the general agent cap can still connect an agent CLI (found live: the first production
+    // sign-in failed because the owner ran 5 agents, and the error was mislabelled as an expired sign-in)
+    for (let i = 0; i < 5; i++) {
+      const u = await mk(`mcp-bob-bot${i}`);
+      await pool.query("INSERT INTO agent_identities (user_id, owner_user_id, agent_role, agent_origin) VALUES ($1, $2, 'other', 'xeno') ON CONFLICT DO NOTHING", [u, bob]);
+    }
+    const codex = await registerDynamicClient(pool, { client_name: 'Codex', redirect_uris: ['http://127.0.0.1:41000/callback'] });
+    const pb = pkce();
+    const cb = await createAuthorizationCode(pool, { clientId: codex.client_id, userId: bob, redirectUri: 'http://127.0.0.1:41000/callback', codeChallenge: pb.c, codeChallengeMethod: 'S256' });
+    const tb = await exchangeAuthorizationCode(pool, { code: cb, clientId: codex.client_id, redirectUri: 'http://127.0.0.1:41000/callback', codeVerifier: pb.v });
+    const bobMe = await call('GET', '/api/tasks/agent/me', { token: tb.access_token });
+    check(bobMe.s === 200 && bobMe.j.agent.name === 'Codex', `a person already running 5 agents still connects an agent CLI (${bobMe.s} ${bobMe.j && (bobMe.j.code || '')})`);
+
     // 5/6. projects and work, over MCP
     const init = await rpc(at, 'initialize', { protocolVersion: '2025-03-26', capabilities: {}, clientInfo: { name: 'test', version: '1' } });
     check(init.s === 200 && init.j.result.protocolVersion === '2025-03-26' && init.j.result.serverInfo.name === 'xeno-tasks', 'initialize answers with the client’s protocol version when supported');
