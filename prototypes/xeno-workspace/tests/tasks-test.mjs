@@ -132,6 +132,14 @@ try {
   ok(T3().priority === 'high' && /changed the priority from\s*Medium\s*to\s*High/.test(await main()), 'the history says what changed, from what, to what');
   await p.evaluate(() => window.XENO_HIST.undo()); await settle();
   ok(T3().priority === 'medium', 'undo puts the priority back');
+  { const pickShown = () => p.evaluate(() => !document.querySelector('.tk-pick').hidden), menuShown = () => p.evaluate(() => !!document.querySelector('.xcm'));
+    await p.click('[data-tk-prop="priority"]'); await settle(250); const a1 = await pickShown();
+    await p.click('[data-tk-prop="priority"]'); await settle(250); const a2 = await pickShown();
+    await p.click('[data-tk-prop="priority"]'); await settle(250); const a3 = await pickShown();
+    await p.keyboard.press('Escape'); await settle(150);
+    await p.click('.tk-titlerow [data-tk="menu"]'); await settle(250); const b1 = await menuShown();
+    await p.click('.tk-titlerow [data-tk="menu"]'); await settle(350); const b2 = await menuShown();
+    ok(a1 && !a2 && a3 && b1 && !b2, `a button toggles its picker or menu: click opens, click again closes, click again opens (${[a1, a2, a3, b1, b2]})`); }
   ok(await renders() === 0, 'none of that redrew the workspace around the task');
   db.tasks[2].status = 'blocked';    // someone else moved it; this screen still shows To do
   await p.click('[data-tk-move="in_progress"]'); await settle();
