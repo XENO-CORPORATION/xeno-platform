@@ -81,7 +81,7 @@ ok(await ev(() => /New notification/.test(document.getElementById('xw-live')?.te
 await shot('rp3-bell-live.png');
 // View all → Inbox page with its own address
 await p.click('#menu [data-nt-viewall]'); await wait(400);
-ok(await ev(() => location.hash.endsWith('/g/inbox') && !!document.querySelector('.rp-page .nt2')), `View all opens the Inbox page (${await ev(() => location.hash)})`);
+ok(await ev(() => location.hash.endsWith('/g/inbox') && !!document.querySelector('.rp-page .nt2')), `View all opens the Inbox page (${await ev(() => window.XENO_ADDR.current())})`);
 await p.screenshot({ path: 'rp3-inbox-page.png' });
 await p.reload(); await wait(1200);
 ok(await ev(() => !!document.querySelector('.rp-page .nt2')), 'Inbox page survives refresh');

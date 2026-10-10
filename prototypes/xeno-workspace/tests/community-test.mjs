@@ -114,7 +114,7 @@ try {
     await fill(p, { title: 'Another question about layer order', body: 'Which comes first?' }); await submitLast(p); await wait(800);
     ok(called('POST', '/dedup-check').length === 1 && await p.evaluate(() => document.body.textContent.includes('This may have been asked already')), 'before posting, a possible duplicate is offered');
     await pickRadio(p, 'new'); await submitLast(p); await wait(1200);
-    ok(called('POST', '/threads')[0]?.[2].title === 'Another question about layer order' && (await p.evaluate(() => location.hash)).includes('dddd4444'), 'posting it anyway creates the thread on the platform and opens it');
+    ok(called('POST', '/threads')[0]?.[2].title === 'Another question about layer order' && (await p.evaluate(() => window.XENO_ADDR.current())).includes('dddd4444'), 'posting it anyway creates the thread on the platform and opens it');
     ok(errs.length === 0, `no page errors in threads (${JSON.stringify(errs.slice(0, 2))})`); await p.close(); }
 
   // reports and tickets
@@ -129,11 +129,11 @@ try {
     ok(called('POST', '/tickets/cccc3333/publish').length === 1 && /Open public thread/.test((await main(p)).text), 'making a ticket public asks first, then links the public thread');
     p.evaluate(() => window.XA.report()); await wait(700); await fill(p, { title: 'Sidebar loses my place' }); await pickRadio(p, 'private'); await submitLast(p); await wait(1200);
     const rep = called('POST', '/report').at(-1);
-    ok(rep && rep[2].visibility === 'private' && rep[2].kind === 'bug' && rep[2].product === 'workspace' && (await p.evaluate(() => location.hash)).includes('eeee5555'), 'a private report becomes a ticket on the platform and opens it');
+    ok(rep && rep[2].visibility === 'private' && rep[2].kind === 'bug' && rep[2].product === 'workspace' && (await p.evaluate(() => window.XENO_ADDR.current())).includes('eeee5555'), 'a private report becomes a ticket on the platform and opens it');
     await wait(3000); ok(!/I can reproduce this and have passed it/.test((await main(p)).text), 'no invented reply writes itself into the new ticket');
     p.evaluate(() => window.XA.report({ kind: 'feature' })); await wait(700); await fill(p, { title: 'Let me group chats by colour' }); await submitLast(p); await wait(1200);
     const pub = called('POST', '/report').at(-1);
-    ok(pub && pub[2].visibility === 'public' && pub[2].kind === 'feature' && (await p.evaluate(() => location.hash)).includes('ffff6666'), 'a public idea is posted with its kind and opened');
+    ok(pub && pub[2].visibility === 'public' && pub[2].kind === 'feature' && (await p.evaluate(() => window.XENO_ADDR.current())).includes('ffff6666'), 'a public idea is posted with its kind and opened');
     ok(errs.length === 0, `no page errors in reports (${JSON.stringify(errs.slice(0, 2))})`); await p.close(); }
 
   // moderation

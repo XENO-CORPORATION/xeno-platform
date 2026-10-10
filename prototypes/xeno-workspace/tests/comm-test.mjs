@@ -13,7 +13,7 @@ const pick = (f, v) => ev((f2, v2) => [...document.querySelectorAll(`.xd [data-f
 const crumb = () => ev(() => document.querySelector('#main .crumbs b')?.textContent);
 await p.setViewport({ width: 1440, height: 900 }); await p.goto(url);
 await ev(() => { localStorage.clear(); localStorage.setItem('xw.introSeen', JSON.stringify({ studio: 1, office: 1, social: 1, corpo: 1, dev: 1, tools: 1 })); });
-await nav(); await click('#main [data-pg-gitem="th_0"]'); let g = await ev(() => location.hash);
+await nav(); await click('#main [data-pg-gitem="th_0"]'); let g = await ev(() => window.XENO_ADDR.current());
 ok(/community\/th_0$/.test(g), `threads are addressed by a stable id, not their title (${g})`);
 await nav('th_0'); ok(/export a Canvas frame/.test(await crumb()), 'and that address opens the thread after a refresh');
 g = await ev(() => { const v = document.querySelector('#main .cm-vote'); return +v.querySelector('b').textContent; }); await click('#main .cm-vote');

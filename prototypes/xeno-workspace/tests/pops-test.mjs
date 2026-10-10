@@ -10,6 +10,6 @@ await p.click('#menu [data-nt-p="agent"]'); await w(500); console.log('click a n
 await p.click('#rail [data-go="bell"]'); await w(300); await p.click('[data-nt-all]'); await w(300); console.log('mark all read:', JSON.stringify(await st()));
 await p.click('#rail [data-go="bell"]'); await w(300); console.log('bell toggles closed:', JSON.stringify(await st()));
 await p.click('#rail [data-go="help"]'); await w(300); console.log('help open:', JSON.stringify(await st()));
-await p.click('#menu [data-go-community]'); await w(500); console.log('help > community:', await p.evaluate(() => location.hash));
+await p.click('#menu [data-go-community]'); await w(500); console.log('help > community:', await p.evaluate(() => window.XENO_ADDR.current()));
 await p.click('#rail [data-go="help"]'); await w(300); await p.keyboard.press('Escape'); await w(300); console.log('esc closes:', JSON.stringify(await st()));
 console.log('errors', errs); await b.close();

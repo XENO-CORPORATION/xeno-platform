@@ -26,7 +26,7 @@
       const D = window.XENO_DB; if (D && !D.__hist) { const r = D.reload; D.reload = (...a) => { core.noteReload(); return r.apply(D, a); }; D.__hist = true; }
       const W = window.XENO_WF; if (W && !W.__hist) { const r = W.reload; W.reload = (...a) => { core.noteReload(); return r.apply(W, a); }; W.__hist = true; }   // a workforce reload makes the closures stale too (F-08)
     },
-    area: () => location.hash.split('/')[3] || location.hash.split('/')[1] || 'workspace',
+    area: () => window.XENO_ADDR.current().split('/')[3] || window.XENO_ADDR.current().split('/')[1] || 'workspace',
     toast: (msg, spec) => showToast(msg, spec),
     dismiss: (id) => dismiss(id),
     refresh: () => { drawer(true); walkLabels(); },

@@ -182,7 +182,7 @@ try {
     await type('zebr'); await wait(60); await type('zebra'); await wait(200); v = await pal();
     ok(!v.pending && calls('GET', '/api/workspace/search').length <= 2 && v.rows.some((r) => r.t.startsWith('Lunch')), 'a search already answered is shown at once the second time');
     await p.evaluate(() => { const r = [...document.querySelectorAll('#palette [data-pi]')].find((x) => x.querySelector('.t').textContent.startsWith('Lunch')); r.click(); }); await wait(900);
-    ok((await p.evaluate(() => location.hash)).includes('00000002-0000-4000-8000-000000000000'), 'opening a found chat opens that conversation');
+    ok((await p.evaluate(() => window.XENO_ADDR.current())).includes('00000002-0000-4000-8000-000000000000'), 'opening a found chat opens that conversation');
     ok(errs.length === 0, `no page errors in search (${JSON.stringify(errs.slice(0, 2))})`); await p.close(); }
   // ── the Chats sheet, files in Recent, and sorting what is in no area
   reset();
@@ -201,7 +201,7 @@ try {
     await p.evaluate(() => { const i = [...document.querySelectorAll('.xd')].at(-1).querySelector('input'); i.value = 'zebra'; i.dispatchEvent(new Event('input', { bubbles: true })); }); await wait(900); c = await chats();
     ok(c.head === 'Said in a chat' && c.rows.some((r) => r.startsWith(CM + ':Lunch <i>notes</i>|') && r.includes('zebra crossing')) && c.rows.filter((r) => r.startsWith(CV + ':')).length === 1, `a chat is found by what was said in it, shown as text, and one found by title is not listed twice (${c.rows.length} rows)`);
     await p.evaluate((id) => [...document.querySelectorAll('.xd')].at(-1).querySelector('[data-ac-id="' + id + '"]').click(), CM); await wait(800);
-    ok((await p.evaluate(() => location.hash)).includes(CM), 'opening one opens that conversation');
+    ok((await p.evaluate(() => window.XENO_ADDR.current())).includes(CM), 'opening one opens that conversation');
     ok(errs.length === 0, `no page errors in the Chats sheet (${JSON.stringify(errs.slice(0, 2))})`); await p.close(); }
 
   reset();
@@ -209,7 +209,7 @@ try {
     const rec = await p.evaluate(() => [...document.querySelectorAll('#panel [data-recent-file]')].map((r) => r.dataset.recentFile + ':' + r.querySelector('.t').textContent));
     ok(rec.includes('f-1:Diagram.png'), `Recent lists the person’s recent files too (${rec.join(', ')})`);
     await p.evaluate(() => document.querySelector('#panel [data-recent-file="f-1"]').click()); await wait(700);
-    ok(/library/.test(await p.evaluate(() => location.hash)), 'a recent file opens in the Library');
+    ok(/library/.test(await p.evaluate(() => window.XENO_ADDR.current())), 'a recent file opens in the Library');
     await p.evaluate(() => { location.hash = '#/overview'; }); await wait(800);
     const entry = await p.evaluate(() => document.querySelector('#panel [data-sort-entry]')?.textContent.trim() || '');
     ok(/Sort into areas/.test(entry) && /4$/.test(entry), `Overview offers “Sort into areas” with how many items are in none (${entry})`);
@@ -251,7 +251,7 @@ try {
     const ov = await p.evaluate(() => { const h = [...document.querySelectorAll('#panel [data-sec]')].find((x) => x.dataset.sec === 'pinned'); return h ? [...h.querySelectorAll('[data-recent-chat]')].map((r) => r.dataset.recentChat + ':' + r.querySelector('.t').innerHTML) : null; });
     ok(ov && ov.join() === 'c-old2:Old &lt;b&gt;recipe&lt;/b&gt;', `Overview’s Pinned is what the person pinned, shown as text (${ov && ov.join()})`);
     await p.evaluate(() => document.querySelector('#panel [data-sec="pinned"] [data-recent-chat]').click()); await wait(800);
-    ok((await p.evaluate(() => location.hash)).includes('c-old2'), 'a pinned chat opens that conversation');
+    ok((await p.evaluate(() => window.XENO_ADDR.current())).includes('c-old2'), 'a pinned chat opens that conversation');
     ok(errs.length === 0, `no page errors in pins (${JSON.stringify(errs.slice(0, 2))})`); await p.close(); }
   reset(); db.extraLoose = 57;
   { const { p } = await open('#/overview'); await wait(600);
@@ -268,7 +268,7 @@ try {
     ok(!/128|Renders this week|Agent runs|Launch trailer|Refactor auth gate|Atlas|€/.test(h.text), 'none of the picture’s sample numbers, jobs or agent runs are on the page');
     ok(h.head === 'Your work in Dev' && h.work.join() === 'chat:Zebra plan,file:Dev &lt;i&gt;notes&lt;/i&gt;.md', `“Your work in Dev” lists what the person touched there, newest first, as text (${h.work.join()})`);
     await p.evaluate(() => document.querySelector('#main [data-home-work="chat"]').click()); await wait(800);
-    ok((await p.evaluate(() => location.hash)).includes(CV), 'opening a chat from the home opens that conversation');
+    ok((await p.evaluate(() => window.XENO_ADDR.current())).includes(CV), 'opening a chat from the home opens that conversation');
     await p.evaluate(() => { location.hash = '#/studio'; }); await wait(1000); h = await home();
     ok(h.kpis.length === 0 && h.empty && /Nothing in Studio yet/.test(h.text) && !/Hero stills|Teaser 15s|rendering/i.test(h.text), `an area with nothing in it says so, shows no numbers and no sample production (${h.kpis.length})`);
     await p.evaluate(() => { location.hash = '#/overview'; }); await wait(1000);

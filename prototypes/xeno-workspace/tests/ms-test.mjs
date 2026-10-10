@@ -120,7 +120,7 @@ g = await tev(() => !!document.querySelector('.xcm:not(.out)')); ok(!g, 'a short
 await tev(() => document.querySelector('.xcm')?.remove());
 await t.touchscreen.touchStart(tc.x, tc.y); await wait(900);   /* measured after the 160 ms opening animation, never during it */
 m = await tev(() => { const m = document.querySelector('.xcm:not(.out)'); return m && { touch: m.classList.contains('touch'), h: Math.round(m.querySelector('.xcm-i').getBoundingClientRect().height), kbd: [...m.querySelectorAll('kbd')].some((k) => k.offsetParent), first: m.querySelector('.xcm-l').textContent.trim() }; });
-const route0 = await tev(() => location.hash);
+const route0 = await tev(() => window.XENO_ADDR.current());
 await t.touchscreen.touchEnd(); await wait(350);
 ok(m && m.touch && m.h >= 44 && !m.kbd && m.first === 'Open', `press and hold opens the file's menu, sized for a finger (rows ${m && m.h} px, no key hints)`);
 g = await tev((r) => ({ open: !!document.querySelector('.xcm:not(.out)'), same: location.hash === r }), route0); ok(g.open && g.same, 'lifting the finger keeps the menu open and does not open the file underneath');

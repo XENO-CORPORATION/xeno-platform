@@ -65,7 +65,7 @@ async function open(hash = '#/overview/p/chat') {
   return { p, errs };
 }
 const view = (p) => p.evaluate(() => { const f = document.getElementById('xw-chat-frame'), slot = document.querySelector('#main .live-chat-host[data-chat-frame]'); const fr = f?.getBoundingClientRect(), sr = slot?.getBoundingClientRect();
-  return { state: window.XENO_CHAT.state(), hash: location.hash, frames: document.querySelectorAll('iframe#xw-chat-frame').length, on: !!f && f.classList.contains('on'), path: f ? f.contentWindow.location.pathname : null, born: f ? f.contentWindow.__born : null, log: f ? f.contentWindow.__log.slice() : [],
+  return { state: window.XENO_CHAT.state(), hash: window.XENO_ADDR.current(), frames: document.querySelectorAll('iframe#xw-chat-frame').length, on: !!f && f.classList.contains('on'), path: f ? f.contentWindow.location.pathname : null, born: f ? f.contentWindow.__born : null, log: f ? f.contentWindow.__log.slice() : [],
     over: !!(fr && sr) && Math.abs(fr.left - sr.left) < 1 && Math.abs(fr.top - sr.top) < 1 && Math.abs(fr.width - sr.width) < 1 && Math.abs(fr.height - sr.height) < 1 && sr.width > 400 && sr.height > 300,
     rows: [...document.querySelectorAll('#panel [data-chat-live]')].map((r) => ({ id: r.dataset.chatLive, t: r.textContent.trim(), cur: r.getAttribute('aria-current') === 'true' })), groups: [...document.querySelectorAll('#panel .grp')].map((g) => g.textContent.trim()),
     panel: document.querySelector('#panel').innerText, crumbs: (document.querySelector('#main .crumbs')?.innerText || '').replace(/\s+/g, ' ').trim(), still: !!document.querySelector('#main .live-chat'), note: getComputedStyle(document.getElementById('xp-note')).display, html: document.querySelector('#panel').innerHTML }; });
@@ -326,7 +326,7 @@ try {
     await p.evaluate(() => { location.hash = '#/social'; }); await wait(900); rc = await recentOf();
     ok(rc.rows.length === 0 && !SAMPLE.test(rc.panel), 'an area with nothing recent shows none, and no sample');
     await p.evaluate(() => { location.hash = '#/office'; }); await wait(900); await p.evaluate(() => document.querySelector('#panel [data-recent-chat]').click()); await wait(1200);   // (an area’s first-visit intro covers the panel here; the row itself is what is under test)
-    ok((await p.evaluate(() => location.hash)).startsWith('#/office/p/chat/') &&(await p.evaluate(() => window.XENO_CHAT.state().current)) === A, 'a recent chat opens that conversation, in the area it was opened from (' + await p.evaluate(() => location.hash) + ')');
+    ok((await p.evaluate(() => window.XENO_ADDR.current())).startsWith('#/office/p/chat/') &&(await p.evaluate(() => window.XENO_CHAT.state().current)) === A, 'a recent chat opens that conversation, in the area it was opened from (' + await p.evaluate(() => window.XENO_ADDR.current()) + ')');
     ok(errs.length === 0, 'no page errors with areas (' + errs.slice(0, 2).join(' | ') + ')');
     await p.close(); }
 } catch (e) { ok(false, 'threw: ' + String(e.message).split('\n')[0]); }

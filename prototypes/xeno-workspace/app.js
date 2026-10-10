@@ -1227,16 +1227,16 @@
   }
   let applyingHash = false;
   function syncHash(replace) {
-    const h = stateToHash(); if (location.hash.split('?')[0] === h) return;   // same place: keep its ?sel= (§7bb)
-    try { replace ? history.replaceState(null, '', h) : history.pushState(null, '', h); } catch { location.hash = h; }
+    const h = stateToHash(); if (window.XENO_ADDR.current().split('?')[0] === h) return;   // same place: keep its ?sel= (§7bb)
+    try { replace ? window.XENO_ADDR.replace(h, null) : window.XENO_ADDR.push(h); } catch {}
   }
   // the selection on a page lives in its URL as ?sel=a,b (§7bb) — replaced, never pushed: selecting adds no Back step
   const SELCODEC = window.XENO_SEL_CORE;   // the address codec lives in select-core.js, tested without a browser
   window.XENO_URLSEL = {
-    get: () => { const v = SELCODEC.selRaw(location.hash.split('?')[1] || ''); return v ? SELCODEC.parseSel(v) : []; },
-    set: (ids) => { const base = location.hash.split('?')[0] || '#/'; const next = ids && ids.length ? `${base}?sel=${SELCODEC.formatSel(ids)}` : base; if (next === location.hash) return; try { history.replaceState(history.state, '', next); } catch {} },
+    get: () => { const v = SELCODEC.selRaw(window.XENO_ADDR.current().split('?')[1] || ''); return v ? SELCODEC.parseSel(v) : []; },
+    set: (ids) => { const cur = window.XENO_ADDR.current(), base = cur.split('?')[0] || '#/'; const next = ids && ids.length ? `${base}?sel=${SELCODEC.formatSel(ids)}` : base; if (next === cur) return; try { window.XENO_ADDR.replace(next); } catch {} },
   };
-  addEventListener('popstate', () => { const st = hashToState(location.hash); if (!st) return; applyingHash = true; go(st.view, st); applyingHash = false; });
+  addEventListener('popstate', () => { const st = hashToState(window.XENO_ADDR.current()); if (!st) return; applyingHash = true; go(st.view, st); applyingHash = false; });
   // ---- (2) return to where you were, per mode ----
   const lastPlace = store.get('last', {});
   // Adaptive is its own context (ctxKey 'adaptive'), never a place inside Overview or a mode —
@@ -1275,7 +1275,7 @@
     if (root.dataset.panel === 'closed' && extra.openPanel) setPanel('open');
     S._softPanel = pk0 === pk() && !S.switching;
     // an in-app place change is announced before the new place renders, so a selection made in the old place is let go (F-02)
-    if (!applyingHash && location.hash.split('?')[0] !== stateToHash()) window.dispatchEvent(new Event('xeno:place'));
+    if (!applyingHash && window.XENO_ADDR.current().split('?')[0] !== stateToHash()) window.dispatchEvent(new Event('xeno:place'));
     render(); hidePops();
     markItems(); setTimeout(() => markItems(), 140);
     if (view === 'adaptive') setTimeout(adMorph, 160);
@@ -2025,7 +2025,7 @@
     // the last stop: the app itself (Finder's desktop menu)
     C.register({ id: 'app', sel: 'body', priority: -10, build: () => [
       [{ label: 'Back', icon: 'back', kbd: 'Alt ←', run: () => history.back() }, { label: 'Forward', icon: 'forward', kbd: 'Alt →', run: () => history.forward() }],
-      [{ label: 'Copy link to this page', icon: 'link', run: () => H.copyLink(location.hash || '#/') }, { label: 'Open in new window', icon: 'hub', run: () => H.openWindow(location.hash || '#/') }],
+      [{ label: 'Copy link to this page', icon: 'link', run: () => H.copyLink(window.XENO_ADDR.current()) }, { label: 'Open in new window', icon: 'hub', run: () => H.openWindow(location.hash || '#/') }],
       [{ label: 'Search', icon: 'search', kbd: 'Ctrl K', run: () => openPalette() },
         { label: root.dataset.panel === 'open' ? 'Hide sidebar' : 'Show sidebar', icon: 'sidebar', kbd: 'Ctrl \\', run: () => setPanel(root.dataset.panel === 'open' ? 'closed' : 'open') },
         { label: 'Settings…', icon: 'sliders', kbd: 'Ctrl ,', run: () => window.XA.settings() },
@@ -2480,7 +2480,7 @@
   addEventListener('keydown', (e) => { if (PICTURE_ONLY && (e.ctrlKey || e.metaKey) && e.shiftKey && e.key.toLowerCase() === 'r') { try { sessionStorage.setItem('xw.firstRun', '1'); } catch {} } }, true);
   let firstRunReset = false;
   try { if (PICTURE_ONLY && sessionStorage.getItem('xw.firstRun')) { sessionStorage.removeItem('xw.firstRun'); ['introSeen', 'adConsent', 'adOn', 'adUsage', 'adOrder', 'adPrev', 'adTrace', 'adHistory', 'adUndo'].forEach((k) => store.set(k, null)); store.set('adOn', false); firstRunReset = true; } } catch {}
-  { const st = hashToState(location.hash); if (st) Object.assign(S, st); }
+  { const st = hashToState(window.XENO_ADDR.current()); if (st) Object.assign(S, st); window.XENO_ADDR.upgrade(); }
   render();
   restorePanelMem($('#panel > .pv'));
   syncHash(true);

@@ -43,6 +43,8 @@ export function xenoWorkspace(rootDir) {
         if (u.pathname === '/workspace') { res.statusCode = 301; res.setHeader('Location', '/workspace/' + u.search); return res.end(); }
         if (!u.pathname.startsWith('/workspace/')) return next();
         let rel; try { rel = decodeURIComponent(u.pathname.slice('/workspace/'.length)) || 'index.html'; } catch { rel = ''; }
+        // an app address (no file extension: /workspace/studio/tasks/T-4) is the workspace itself; a missing FILE stays a 404
+        if (rel && !/\.[a-z0-9]+$/i.test(rel)) rel = 'index.html';
         const abs = path.resolve(src, rel);
         if (!rel || !abs.startsWith(src + path.sep) || !shipped(path.relative(src, abs)) || !fs.existsSync(abs) || !fs.statSync(abs).isFile()) { res.statusCode = 404; return res.end('Not found'); }
         res.setHeader('Content-Type', TYPES[path.extname(abs)]); res.setHeader('Cache-Control', 'no-cache');

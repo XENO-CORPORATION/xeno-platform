@@ -89,6 +89,19 @@ try {
   ok(/Fix the signup copy/.test(t) && !/Office budget/.test(t) && await p.$('[data-tk-col="raised"] [data-tk-card="T-1"]'), 'an area board shows only that area’s tasks, in Triage');
   await nav('#/overview/g/tasks'); t = await main();
   ok(/Fix the signup copy/.test(t) && /Office budget/.test(t), 'Overview shows every area’s tasks');
+  // real addresses: clean paths, deep links, Back, old #/ links upgraded
+  { const loc = () => p.evaluate(() => location.pathname + location.search + location.hash);
+    ok(await loc() === '/workspace/tasks', `an old #/ address is upgraded to a clean path (${await loc()})`);
+    await nav('#/studio/g/tasks'); const a1 = await loc();
+    await p.click('[data-tk-card="T-1"]'); await settle(); const a2 = await loc();
+    await p.goBack(); await settle(); const a3 = await loc(), board = !!(await p.$('[data-tk-card="T-1"]'));
+    ok(a1 === '/workspace/studio/tasks' && a2 === '/workspace/studio/tasks/T-1' && a3 === '/workspace/studio/tasks' && board, `opening a task gives it its own path and Back returns to the board (${[a1, a2, a3]})`);
+    await p.goto(base + '/workspace/studio/tasks/T-1', { waitUntil: 'domcontentloaded' }); await settle(1800);
+    ok(/Fix the signup copy/.test(await main()) && await loc() === '/workspace/studio/tasks/T-1', 'a deep link opens that task on a fresh load');
+    await p.reload({ waitUntil: 'domcontentloaded' }); await settle(1800);
+    ok(/Fix the signup copy/.test(await main()) && await loc() === '/workspace/studio/tasks/T-1', 'refreshing keeps you on the same task');
+    const miss = await p.evaluate(async () => (await fetch('/workspace/no-such-script.js')).status);
+    ok(miss === 404, 'a missing script is still a 404, never the app page'); }
   ok(await p.evaluate(() => (window.XENO_NEEDS || []).some((n) => n.kind === 'task_assigned' && n.ref === 'T-1' && n.g === 'needs')), 'a notification that asks something of you (assigned) reaches the inbox and Needs you');
 
   const xss = await p.evaluate(() => window.XENO_TASKS.md('<img src=x onerror=alert(1)> [a](javascript:alert(1)) [b](https://ok.test/?q="><script>) ![c](attachment:x) <script>alert(2)</script> `<b>` **bold** T-1 @codrin\n- [ ] <i>x</i>', 'T-1'));

@@ -140,7 +140,7 @@
     const key = 'library', u = ui(key, { view: 'grid' }), V = LIBV[view] || {}, items = window.XENO_PG_LIBRARY.items.filter((f) => !window.XENO_VIS || window.XENO_VIS.file(f));
     const kind = u.seg.kind || 'all';
     // a link with ?sel= opens with those files selected — once per address, never over a selection made since (§7bb)
-    { const want = (window.XENO_URLSEL?.get() || []).filter((id) => items.some((f) => f.id === id)); if (want.length && libRestored !== location.hash && !u.sel && !u.picked.size) { libRestored = location.hash; u.sel = want[0]; if (want.length > 1) { u.picked = new Set(want); u.anchor = want[0]; } } }
+    { const want = (window.XENO_URLSEL?.get() || []).filter((id) => items.some((f) => f.id === id)); if (want.length && libRestored !== window.XENO_ADDR.current() && !u.sel && !u.picked.size) { libRestored = window.XENO_ADDR.current(); u.sel = want[0]; if (want.length > 1) { u.picked = new Set(want); u.anchor = want[0]; } } }
     let rows = items.filter((f) => (V.trash ? !!f.trashedAt : !f.trashedAt) && (!V.kind || V.kind.includes(f.kind)) && (!V.mode || f.source.mode === V.mode) && (!V.chat || f.source.chat) && (!V.starred || f.starred) && (!V.shared || f.sharedBy) && kindOk(f, V.kind ? 'all' : kind) && matchQ(u.q, f.name, pname(f.source.product), f.project || '', f.source.chat || '', f.place || ''));
     rows.sort(u.sort === 'name' ? (a, b) => a.name.localeCompare(b.name) : u.sort === 'size' ? (a, b) => b.bytes - a.bytes : (a, b) => Date.parse(b.updatedAt) - Date.parse(a.updatedAt));
     const live = items.filter((f) => !f.trashedAt), total = live.reduce((n, f) => n + f.bytes, 0), prods = new Set(live.map((f) => f.source.product)).size;
@@ -429,7 +429,7 @@
       if (s.global === 'market') return market(it);
       if (s.global === 'settings') return window.XENO_SETTINGS.render(it);
     }
-    if (s.view === 'zone') return it ? mod('zone:' + it, () => itemPage(it)) : mod('area:' + location.hash.split('?')[0], () => areaPage());
+    if (s.view === 'zone') return it ? mod('zone:' + it, () => itemPage(it)) : mod('area:' + window.XENO_ADDR.current().split('?')[0], () => areaPage());
     if (s.view === 'product') { if (PR[s.product]?.kind === 'chat') return null; return it ? (window.XENO_PRODUCT_NAV[s.product]?.views?.includes(it) ? productView(it) : itemPage(it)) : productPage(); }
     return null;
   }
@@ -766,7 +766,7 @@
     C.register({ id: 'card', sel: '#main .pg-card--agent, #main .pg-card--team', priority: 1, build: (n) => {
       const name = n.querySelector('b')?.textContent.trim(); if (!name) return null; const team = n.classList.contains('pg-card--team');
       const h = `#/${X().inOv() ? 'overview' : S().mode}/g/workspace/${team ? 'Teams' : 'Agents'}`;
-      return [[{ label: team ? 'Open Teams' : 'Open Agents', icon: 'open', run: () => { location.hash = h; } }, { label: 'Open in new window', icon: 'hub', run: () => H.openWindow(h) }],
+      return [[{ label: team ? 'Open Teams' : 'Open Agents', icon: 'open', run: () => { window.XENO_ADDR.go(h); } }, { label: 'Open in new window', icon: 'hub', run: () => H.openWindow(h) }],
         [{ label: 'Copy name', icon: 'copy', run: () => H.copy(name, 'Name copied') }]];
     } });
 
@@ -788,7 +788,7 @@
           ...(info ? [{ label: 'Details pane', icon: 'info', kbd: 'I', checked: !!store.get('pgLibInfo', false), run: () => info.click() }] : []),
           ...(sel ? [{ label: 'Clear selection', icon: 'minus', run: () => selectFile(null) }] : []),
           ...(refresh ? [{ label: 'Refresh', icon: 'refresh', run: () => refresh.click() }] : [])],
-        [{ label: 'Copy link to this page', icon: 'link', run: () => H.copyLink(location.hash || '#/') }, { label: 'Open in new window', icon: 'hub', run: () => H.openWindow(location.hash || '#/') }]];
+        [{ label: 'Copy link to this page', icon: 'link', run: () => H.copyLink(window.XENO_ADDR.current()) }, { label: 'Open in new window', icon: 'hub', run: () => H.openWindow(location.hash || '#/') }]];
     } });
   })();
   void keyOfInput;

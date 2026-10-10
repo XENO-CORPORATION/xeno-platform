@@ -11,10 +11,10 @@ for (const start of ['#/overview', '#/studio']) {
   await p.click('#logo', { button: 'right' }); await wait(300);
   ok(await ev(() => /Adaptive/.test(document.querySelector('.msw-ph .ttl')?.textContent || '') && !!document.querySelector('[data-mode="studio"]')), 'switcher in Adaptive is titled Adaptive and lists every mode');
   await ev(() => document.querySelector('[data-mode="overview"]').click()); await wait(500);
-  ok(await ev(() => location.hash === '#/overview'), `from Adaptive, choosing Overview lands on Overview (${await ev(() => location.hash)})`);
+  ok(await ev(() => location.hash === '#/overview'), `from Adaptive, choosing Overview lands on Overview (${await ev(() => window.XENO_ADDR.current())})`);
   await p.click('#logo', { button: 'right' }); await wait(300);
   await ev(() => document.querySelector('[data-mode="studio"]')?.click()); await wait(500);
-  ok(await ev(() => location.hash.startsWith('#/studio')), `then choosing Studio lands in Studio (${await ev(() => location.hash)})`);
+  ok(await ev(() => location.hash.startsWith('#/studio')), `then choosing Studio lands in Studio (${await ev(() => window.XENO_ADDR.current())})`);
 }
 // a poisoned memory from before the fix is cleaned on load
 await ev(() => localStorage.setItem('xw.last', JSON.stringify({ overview: { view: 'adaptive' } }))); await p.goto(url + '#/studio'); await wait(600);

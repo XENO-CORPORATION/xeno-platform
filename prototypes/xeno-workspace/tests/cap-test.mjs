@@ -35,7 +35,7 @@ await ev(() => window.XA.switchWorkspace('xeno')); await wait(300);
 // ---------------- Anima ----------------
 await nav('anima/Atlas%20%E2%80%94%20research'); g = await ev(() => ({ tabs: [...document.querySelectorAll('#main [role=tab][data-an="tab"]')].map((x) => x.textContent), banner: /taught itself something new/.test(document.querySelector('#main').textContent) }));
 ok(g.tabs.length === 4 && g.banner, `a Mind has Overview, Mind, Soul and Channels, and flags a skill it taught itself (${g.tabs.join(' | ')})`);
-await click('#main [data-an="tab"]', 'Soul'); g = await ev(() => location.hash); ok(/Soul$/.test(g), `each tab has its own address (${g})`);
+await click('#main [data-an="tab"]', 'Soul'); g = await ev(() => window.XENO_ADDR.current()); ok(/Soul$/.test(g), `each tab has its own address (${g})`);
 await click('#main [data-an="keep"]'); g = await ev(() => window.XENO_PG_ANIMA.minds.find((m) => m.name === 'Atlas').skillList.find((s) => s.id.endsWith('snew')).state); ok(g === 'kept', 'a new skill is kept only when you say so');
 const fp0 = await ev(() => window.XENO_PG_ANIMA.minds.find((m) => m.name === 'Atlas').signed.fp);
 await click('#main [data-an="forget"]'); await submit(); g = await ev(() => window.XENO_PG_ANIMA.minds.find((m) => m.name === 'Atlas')); ok(g.memories.length === 3 && g.signed.fp !== fp0, 'forgetting removes the memory and re-signs the Soul');

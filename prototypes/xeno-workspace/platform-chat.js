@@ -347,7 +347,7 @@
   }
   document.addEventListener('click', (e) => { const t = e.target.closest('#panel [data-chat-instructions]'); if (!t) return; e.preventDefault(); e.stopPropagation(); instructions(); }, true);
   const menu = () => { const C = window.XCM; if (!C || !C.register) return; C.register({ id: 'chat-live', sel: '[data-chat-live]', priority: 3, build: (n) => { const id = n.dataset.chatLive;
-    return [[{ label: 'Open', icon: 'chat', run: () => open(id) }, { label: 'Copy link', icon: 'link', run: () => C.H.copy(location.origin + location.pathname + '#/' + (X().inOv() ? 'overview' : X().S.mode) + '/p/chat/' + encodeURIComponent(id), 'Link copied') }],
+    return [[{ label: 'Open', icon: 'chat', run: () => open(id) }, { label: 'Copy link', icon: 'link', run: () => C.H.copy(window.XENO_ADDR.url('#/' + (X().inOv() ? 'overview' : X().S.mode) + '/p/chat/' + encodeURIComponent(id)), 'Link copied') }],
       [{ label: 'Pinned', icon: 'pin', checked: S.pins.includes(String(id)), run: () => pin(id, !S.pins.includes(String(id))) }, { label: 'Rename', icon: 'edit', run: () => rename(id) }, { label: 'Move to…', icon: 'folder', run: () => move(id) }], [{ label: 'Delete', icon: 'trash', danger: true, run: () => remove(id) }]]; } }); };
   if (document.readyState === 'loading') addEventListener('DOMContentLoaded', menu); else menu();
 

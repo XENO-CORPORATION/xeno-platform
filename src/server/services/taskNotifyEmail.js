@@ -45,7 +45,7 @@ export async function sendPendingTaskEmails(db, opts = {}) {
     if (!k || !r.email) { skipped++; continue; }
     const already = per.get(r.email) || 0; if (already >= perUser) { skipped++; continue; }
     try {
-      await send(db, 'task_notification', r.email, { displayName: r.display_name, heading: k[0], sentence: k[1], taskTitle: r.title, taskUrl: `${site}/workspace/#/${r.area || 'overview'}/g/tasks/${encodeURIComponent(r.ref)}`, excerpt: r.kind === 'mentioned' || r.kind === 'changes_requested' ? r.detail : '' }, r.user_id);
+      await send(db, 'task_notification', r.email, { displayName: r.display_name, heading: k[0], sentence: k[1], taskTitle: r.title, taskUrl: `${site}/workspace${r.area ? '/' + encodeURIComponent(r.area) : ''}/tasks/${encodeURIComponent(r.ref)}`, excerpt: r.kind === 'mentioned' || r.kind === 'changes_requested' ? r.detail : '' }, r.user_id);
       per.set(r.email, already + 1); sent++;
     } catch (err) { console.error(`[TaskNotifyEmail] send failed for ${r.id}:`, err.message); failed++; }
   }
