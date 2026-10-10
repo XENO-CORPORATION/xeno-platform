@@ -122,6 +122,90 @@ async function main() {
     check((await cyd('DELETE', `/tasks/${d2.key}`)).s === 403 && (await bob('DELETE', `/tasks/${d2.key}`)).s === 403 && (await ada('DELETE', `/tasks/${d2.key}`)).s === 200, 'once accepted, only a project admin deletes a task (not the reporter, not an editor)');
     check((await pool.query("SELECT deleted_at IS NOT NULL AS gone FROM tasks WHERE number = $1", [d2.number])).rows[0].gone && (await pool.query("SELECT count(*)::int AS n FROM task_events e JOIN tasks t ON t.id = e.task_id WHERE t.number = $1 AND e.kind = 'deleted'", [d2.number])).rows[0].n === 1, 'a deleted task keeps its row and its history, so its key is never reused');
 
+    // ── collaboration: notifications, watchers, mentions, history values, comments, sub-tasks, links, views, restore
+    const { listNotifications, sweepDueReminders } = await import('../services/xenoTasks.js');
+    const inbox = async (who) => (await listNotifications(pool, ids[who])).items;
+    const bobName = (await pool.query('SELECT username FROM users WHERE id = $1', [ids.bob])).rows[0].username;
+    const ct = (await ada('POST', '/tasks', { title: 'Collab task', projectId: proj.id, assigneeId: ids.bob })).j.task;
+    check((await inbox('bob')).some((n) => n.kind === 'assigned' && n.ref === ct.key && /assigned it to you/.test(n.detail)) && !(await inbox('ada')).some((n) => n.ref === ct.key), 'the assignee is told; the person who acted is not');
+    const pr1 = (await ada('PATCH', `/tasks/${ct.key}`, { priority: 'high' })).j.task;
+    const pe = pr1.events.find((e) => e.kind === 'edited' && e.field === 'priority');
+    check(pe && pe.from === 'none' && pe.to === 'high', 'the history records which field changed, from what, to what');
+    const ra = (await ada('PATCH', `/tasks/${ct.key}`, { reviewerId: ids.ada, reviewRequired: true })).j.task;
+    check(ra.events.some((e) => e.field === 'reviewer' && e.toName), 'a reviewer change names the person');
+    const cm = (await cyd('POST', `/tasks/${ct.key}/comments`, { body: `please check @${bobName} thanks` })).j.task;
+    check((await inbox('bob')).some((n) => n.kind === 'mentioned' && n.ref === ct.key) && !(await inbox('bob')).some((n) => n.kind === 'commented' && n.ref === ct.key), 'an @mention tells that person once (as a mention, not also as a comment)');
+    check((await inbox('ada')).some((n) => n.kind === 'commented' && n.ref === ct.key), 'other watchers hear about the comment');
+    check((await eve('POST', `/tasks/${ct.key}/comments`, { body: 'x' })).s === 404 && !(await inbox('eve')).length, 'someone outside the project is never notified');
+    const cid = cm.events.filter((e) => e.kind === 'comment').at(-1).id;
+    check((await bob('PATCH', `/tasks/${ct.key}/comments/${cid}`, { body: 'hijack' })).s === 403, 'only the author edits a comment');
+    const ed = (await cyd('PATCH', `/tasks/${ct.key}/comments/${cid}`, { body: 'please check, updated' })).j.task;
+    check(ed.events.find((e) => e.id === cid).note === 'please check, updated' && ed.events.find((e) => e.id === cid).editedAt, 'the author edits it and it shows as edited');
+    const rm = (await cyd('DELETE', `/tasks/${ct.key}/comments/${cid}`)).j.task;
+    check(rm.events.find((e) => e.id === cid).removed && rm.events.find((e) => e.id === cid).note === null, 'a removed comment keeps its place but loses its words');
+    // watching
+    check((await cyd('GET', `/tasks/${ct.key}`)).j.task.watching === true && (await cyd('DELETE', `/tasks/${ct.key}/watch`)).j.task.watching === false, 'commenting makes you a watcher; you can stop watching');
+    const before = (await inbox('cyd')).length; await bob('POST', `/tasks/${ct.key}/comments`, { body: 'more' });
+    check((await inbox('cyd')).length === before, 'someone who stopped watching hears nothing more');
+    // transitions: review requested, changes requested
+    await ada('POST', `/tasks/${ct.key}/transition`, { to: 'todo' }); await bob('POST', `/tasks/${ct.key}/transition`, { to: 'in_progress' }); await bob('POST', `/tasks/${ct.key}/transition`, { to: 'in_review' });
+    check((await inbox('ada')).some((n) => n.kind === 'review_requested' && n.ref === ct.key), 'sending to review tells the reviewer');
+    await ada('POST', `/tasks/${ct.key}/transition`, { to: 'in_progress', note: 'tighten the copy' });
+    check((await inbox('bob')).some((n) => n.kind === 'changes_requested' && /tighten the copy/.test(n.detail)), 'asking for changes tells the assignee, with the note');
+    // marking read
+    // sub-tasks
+    const sub = (await bob('POST', '/tasks', { title: 'Sub one', parentKey: ct.key })).j.task;
+    await bob('POST', '/tasks', { title: 'Sub two', parentKey: ct.key });
+    check(sub.parent && sub.parent.key === ct.key && sub.project && sub.project.id === proj.id, 'a sub-task lives under its parent, in the same project');
+    const par = (await ada('GET', `/tasks/${ct.key}`)).j.task;
+    check(par.children.length === 2 && par.subtasks.total === 2 && par.subtasks.done === 0, 'the parent lists its sub-tasks and their progress');
+    check((await ada('PATCH', `/tasks/${ct.key}`, { parentKey: sub.key })).j.code === 'parent_cycle', 'a task cannot become its own ancestor');
+    const personal = (await eve('POST', '/tasks', { title: 'Mine', area: 'office' })).j.task;
+    check((await bob('POST', '/tasks', { title: 'x', parentKey: personal.key })).s === 404, 'you cannot hang a sub-task under a task you cannot see');
+    // links
+    const t2b = (await bob('POST', '/tasks', { title: 'Blocker', projectId: proj.id })).j.task;
+    const lk = (await ada('POST', `/tasks/${ct.key}/links`, { kind: 'blocked_by', to: t2b.key })).j.task;
+    check(lk.links.some((l) => l.label === 'blocked by' && l.task.key === t2b.key) && (await ada('GET', `/tasks/${t2b.key}`)).j.task.links.some((l) => l.label === 'blocks' && l.task.key === ct.key), 'a link reads correctly from both ends (blocked by / blocks)');
+    check((await ada('POST', `/tasks/${ct.key}/links`, { kind: 'relates', to: personal.key })).s === 404, 'a link cannot point at a task you cannot see');
+    check((await cyd('POST', `/tasks/${ct.key}/links`, { kind: 'relates', to: t2b.key })).s === 403, 'a viewer cannot link');
+    const ul = (await ada('DELETE', `/tasks/${ct.key}/links/${lk.links.find((l) => l.task.key === t2b.key).id}`)).j.task;
+    check(!ul.links.some((l) => l.task.key === t2b.key), 'a link can be removed');
+    // restore after delete
+    const del = (await ada('POST', '/tasks', { title: 'Oops', projectId: proj.id })).j.task; await ada('DELETE', `/tasks/${del.key}`);
+    check((await cyd('POST', `/tasks/${del.key}/restore`)).s === 403 && (await ada('POST', `/tasks/${del.key}/restore`)).j.task.key === del.key && (await ada('GET', `/tasks/${del.key}`)).s === 200, 'a delete can be undone by whoever could delete it');
+    // saved views
+    const v1 = (await ada('POST', '/tasks/views', { name: 'My bugs', area: 'dev', filters: { assignee: 'me', kind: 'bug', evil: 'x' } })).j.views;
+    check(v1.length === 1 && v1[0].filters.kind === 'bug' && !('evil' in v1[0].filters) && (await bob('GET', '/tasks/views')).j.views.length === 0, 'a saved view keeps only known filters and belongs to its owner');
+    check((await bob('DELETE', `/tasks/views/${v1[0].id}`)).s === 404 && (await ada('DELETE', `/tasks/views/${v1[0].id}`)).j.views.length === 0, 'only its owner deletes a view');
+    // due reminders, once per due date
+    const due = (await ada('POST', '/tasks', { title: 'Due soon', projectId: proj.id, assigneeId: ids.bob, dueAt: new Date(Date.now() + 3600e3).toISOString() })).j.task;
+    await sweepDueReminders(pool); await sweepDueReminders(pool);
+    check((await inbox('bob')).filter((n) => n.kind === 'due_soon' && n.ref === due.key).length === 1, 'a due-soon reminder is sent once, not on every sweep');
+    await ada('PATCH', `/tasks/${due.key}`, { dueAt: new Date(Date.now() - 60e3).toISOString() }); await sweepDueReminders(pool);
+    check((await inbox('bob')).some((n) => n.kind === 'overdue' && n.ref === due.key) && (await inbox('ada')).some((n) => n.kind === 'overdue' && n.ref === due.key), 'an overdue task tells the assignee and the reporter');
+
+    // the inbox API and the email sweep
+    const napp = express(); napp.use(express.json()); napp.use((req, _r, next) => { req.db = pool; req.user = { id: actor }; next(); });
+    napp.use('/api/notifications', (await import('../routes/userNotificationsRoutes.js')).default);
+    const nsrv = http.createServer(napp); await new Promise((r) => nsrv.listen(0, '127.0.0.1', r)); const nbase = `http://127.0.0.1:${nsrv.address().port}/api/notifications`;
+    try {
+      actor = ids.bob; const nl = await (await fetch(nbase)).json();
+      check(nl.success && nl.unread > 0 && nl.items.every((n) => n.source === 'tasks'), 'GET /api/notifications lists the inbox with its unread count');
+      const one = nl.items.find((n) => !n.read);
+      const after1 = await (await fetch(nbase + '/read', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ ids: [one.id] }) })).json();
+      check(after1.unread === nl.unread - 1, 'marking one read lowers the count by one');
+      actor = ids.cyd; await fetch(nbase + '/read', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ ids: [nl.items[1].id] }) });
+      actor = ids.bob; check((await (await fetch(nbase)).json()).unread === nl.unread - 1, 'nobody can mark someone else’s notifications read');
+    } finally { await new Promise((r) => nsrv.close(r)); }
+    const { sendPendingTaskEmails } = await import('../services/taskNotifyEmail.js');
+    const sentTo = [];
+    const send = async (_db, tpl, to, data) => { sentTo.push([tpl, to, data.heading]); };
+    const m1 = await sendPendingTaskEmails(pool, { delayMinutes: 0, send, env: {} });
+    const m2 = await sendPendingTaskEmails(pool, { delayMinutes: 0, send, env: {} });
+    check(m1.sent > 0 && m2.claimed === 0 && sentTo.every(([tpl]) => tpl === 'task_notification'), `the email sweep sends each notification at most once (${m1.sent} sent, then ${m2.claimed})`);
+    check((await pool.query(`SELECT count(*)::int AS n FROM user_notifications WHERE kind IN ('commented', 'status') AND emailed_at IS NOT NULL`)).rows[0].n === 0, 'comments and status changes stay in the inbox and are never mailed');
+    check((await sendPendingTaskEmails(pool, { delayMinutes: 0, send, env: { TASK_NOTIFICATION_EMAILS: 'false' } })).enabled === false, 'TASK_NOTIFICATION_EMAILS=false turns the mail off');
+
     console.log(`xeno-tasks: ${passed} checks passed`);
   } finally {
     await pool.query('DELETE FROM tasks WHERE reporter_id = ANY($1) OR owner_user_id = ANY($1)', [Object.values(ids)]).catch(() => {});

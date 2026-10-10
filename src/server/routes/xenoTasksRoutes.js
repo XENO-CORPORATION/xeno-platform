@@ -14,6 +14,11 @@
  *   GET    /api/tasks/:key/attachments/:id                the image, to anyone who can see the task
  *   DELETE /api/tasks/:key/attachments/:id                remove it (whoever added it, or a manager)
  *   GET    /api/tasks/assignees?projectId=                who a task there can be assigned to (people and agents)
+ *   POST   /api/tasks/:key/restore                        undo a delete (30 days)
+ *   PATCH|DELETE /api/tasks/:key/comments/:id              edit or remove a comment (its author; a project admin removes)
+ *   PUT|DELETE /api/tasks/:key/watch                       watch / stop watching
+ *   POST   /api/tasks/:key/links {kind,to}  DELETE /api/tasks/:key/links/:id     blocks · blocked_by · relates · duplicates
+ *   GET|POST /api/tasks/views   DELETE /api/tasks/views/:id                       saved views (the caller's own)
  *
  * The caller is a principal (person or agent); agents act through the same routes as a person's screen.
  */
@@ -24,7 +29,7 @@ import { resolvePrincipal, assertPrincipalUsable } from '../services/agentIdenti
 const router = express.Router();   // mounted behind authMiddleware in index.js
 
 router.use(async (req, res, next) => {
-  try { const p = await resolvePrincipal(req.db, req.user.id); assertPrincipalUsable(p); req.me = { id: p.id, kind: p.kind, role: p.role }; next(); }
+  try { const p = await resolvePrincipal(req.db, req.user.id); assertPrincipalUsable(p); const u = (await req.db.query('SELECT COALESCE(display_name, username) AS name FROM users WHERE id = $1', [p.id])).rows[0]; req.me = { id: p.id, kind: p.kind, role: p.role, name: u ? u.name : 'Someone' }; next(); }
   catch (error) { res.status(error.statusCode || 403).json({ success: false, error: error.message || 'Not allowed', code: error.code || 'not_allowed' }); }
 });
 const handled = (fn) => async (req, res) => {
@@ -42,6 +47,9 @@ router.get('/', handled(async (req, res) => {
 router.post('/', handled(async (req, res) => {
   res.status(201).json({ success: true, task: await tasks.createTask(req.db, req.me, req.body || {}) });
 }));
+router.get('/views', handled(async (req, res) => { res.json({ success: true, views: await tasks.listViews(req.db, req.me) }); }));
+router.post('/views', handled(async (req, res) => { res.json({ success: true, views: await tasks.saveView(req.db, req.me, req.body || {}) }); }));
+router.delete('/views/:id', handled(async (req, res) => { res.json({ success: true, views: await tasks.deleteView(req.db, req.me, req.params.id) }); }));
 router.get('/assignees', handled(async (req, res) => { res.json({ success: true, assignees: await tasks.listAssignees(req.db, req.me, { projectId: req.query.projectId }) }); }));
 router.get('/:key', handled(async (req, res) => { res.json({ success: true, task: await tasks.getTask(req.db, req.me, req.params.key) }); }));
 router.patch('/:key', handled(async (req, res) => { res.json({ success: true, task: await tasks.updateTask(req.db, req.me, req.params.key, req.body || {}) }); }));
@@ -60,5 +68,13 @@ router.get('/:key/attachments/:id', handled(async (req, res) => {
   res.end(a.data);
 }));
 router.delete('/:key/attachments/:id', handled(async (req, res) => { res.json({ success: true, task: await tasks.removeAttachment(req.db, req.me, req.params.key, req.params.id) }); }));
+
+router.post('/:key/restore', handled(async (req, res) => { res.json({ success: true, task: await tasks.restoreTask(req.db, req.me, req.params.key) }); }));
+router.patch('/:key/comments/:id', handled(async (req, res) => { res.json({ success: true, task: await tasks.editComment(req.db, req.me, req.params.key, req.params.id, { body: req.body?.body }) }); }));
+router.delete('/:key/comments/:id', handled(async (req, res) => { res.json({ success: true, task: await tasks.removeComment(req.db, req.me, req.params.key, req.params.id) }); }));
+router.put('/:key/watch', handled(async (req, res) => { res.json({ success: true, task: await tasks.setWatching(req.db, req.me, req.params.key, true) }); }));
+router.delete('/:key/watch', handled(async (req, res) => { res.json({ success: true, task: await tasks.setWatching(req.db, req.me, req.params.key, false) }); }));
+router.post('/:key/links', handled(async (req, res) => { res.json({ success: true, task: await tasks.addLink(req.db, req.me, req.params.key, { kind: req.body?.kind, to: req.body?.to }) }); }));
+router.delete('/:key/links/:id', handled(async (req, res) => { res.json({ success: true, task: await tasks.removeLink(req.db, req.me, req.params.key, req.params.id) }); }));
 
 export default router;

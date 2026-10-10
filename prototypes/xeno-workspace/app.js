@@ -224,7 +224,7 @@
 
   // ── PANELS v2 (2026-10-03) — one job per panel kind; content lives in nav.js ──────────────
   const N = () => window.XENO_NEEDS || [];
-  const needRow = (n) => row(n.kind === 'task_review' ? `data-need-task="${esc(n.id)}"` : n.kind === 'schedule_failed' ? `data-need-schedule="${esc(n.id)}"` : `data-item="${esc(n.t)}" data-item-p="${n.p}"`, `<span class="t">${esc(n.t)}</span><span class="need">${esc(n.meta)}</span>`, 'needrow');
+  const needRow = (n) => row(n.ref ? `data-need-task="${esc(n.ref)}"` : n.kind === 'task_review' ? `data-need-task="${esc(n.id)}"` : n.kind === 'schedule_failed' ? `data-need-schedule="${esc(n.id)}"` : `data-item="${esc(n.t)}" data-item-p="${n.p}"`, `<span class="t">${esc(n.t)}</span><span class="need">${esc(n.meta)}</span>`, 'needrow');
   const recentRow = (r) => (r.kind === 'project'
     ? row(`data-recent-project="${esc(r.id)}"`, `${ic('folder')}<span class="t">${esc(r.t)}</span><span class="meta">${esc(r.ago)}</span>`)
     : r.kind === 'file'
@@ -1421,7 +1421,7 @@
 
   // ---- data: one cache, stale-while-revalidate, each source names where it will come from ----
   // A "needs you" item as an inbox entry. On the platform it carries its own id and time; the picture's samples do not.
-  const NEED_NOTES = () => (window.XENO_NEEDS || []).map((n, i) => ({ id: n.id ? 'n-' + n.id : 'n' + i, t: n.t, m: n.m, p: n.p, kind: n.kind, act: n.meta, at: Number.isFinite(Date.parse(n.at)) ? Date.parse(n.at) : Date.now() - [2, 18, 60, 64, 180][i] * 60000, g: 'needs', mention: n.kind === 'question' }));
+  const NEED_NOTES = () => (window.XENO_NEEDS || []).map((n, i) => ({ id: n.id ? 'n-' + n.id : 'n' + i, t: n.t, m: n.m, p: n.p, kind: n.kind, act: n.meta, ref: n.ref || null, serverId: n.serverId || null, seen: !!n.seen, detail: n.detail, actor: n.actor || undefined, live: !!n.serverId, at: Number.isFinite(Date.parse(n.at)) ? Date.parse(n.at) : Date.now() - [2, 18, 60, 64, 180][i] * 60000, g: n.g === 'act' ? 'act' : 'needs', mention: n.kind === 'question' || n.kind === 'task_mentioned' }));
   const SRC = {
     // notifications: no platform API yet (needs one — see the report); sample shaped like a feed
     // Served by the platform there is no activity feed to read yet, so the inbox holds only what really waits on
@@ -1512,7 +1512,7 @@
   const ntSave = (k, v) => store.set(k, k === 'snoozeN' || k === 'doneN' || k === 'ntPrefs' ? v : [...v]);
   const ntAll = () => (DS.notes && DS.notes.val) || [];
   const viewOf = (n, st) => (st.arch.has(n.id) ? 'archive' : st.snooze[n.id] ? 'snoozed' : 'inbox');
-  const isUnread = (n, st) => n.g === 'needs' && !st.read.has(n.id) && viewOf(n, st) === 'inbox';
+  const isUnread = (n, st) => (n.g === 'needs' || (n.g === 'act' && n.live)) && !n.seen && !st.read.has(n.id) && viewOf(n, st) === 'inbox';
   function ntFiltered(view, filter) {
     const st = NS();
     return ntAll().filter((n) => viewOf(n, st) === view && !(n.g === 'act' && ntLevel(st, n.m) !== 'all') && (filter === 'all' || (filter === 'mentions' ? n.mention : n.m === filter)));
@@ -1627,7 +1627,7 @@
     if (e.target.closest('[data-nt-do]') && INLINE[n.kind]) return ntInline(n, repaint);
     ntOpen(n);
   }
-  function markAllRead(repaint) { const st = NS(), ids = ntAll().filter((n) => isUnread(n, st)).map((n) => n.id); if (!ids.length) return toast('Nothing unread'); ids.forEach((i) => st.read.add(i)); ntSave('readN', st.read); syncBell(); repaint(); undoToast(`Marked ${ids.length} as read`, () => { const r = NS().read; ids.forEach((i) => r.delete(i)); ntSave('readN', r); syncBell(); repaint(); }); }
+  function markAllRead(repaint) { const st = NS(), ids = ntAll().filter((n) => isUnread(n, st)).map((n) => n.id); if (!ids.length) return toast('Nothing unread'); ids.forEach((i) => st.read.add(i)); ntSave('readN', st.read); { const srv = ntAll().filter((n) => ids.includes(n.id) && n.serverId).map((n) => n.serverId); if (srv.length) window.XENO_TASKS?.markRead?.(srv); } syncBell(); repaint(); undoToast(`Marked ${ids.length} as read`, () => { const r = NS().read; ids.forEach((i) => r.delete(i)); ntSave('readN', r); syncBell(); repaint(); }); }
   // the Inbox page's sidebar primary action is the same command
   document.addEventListener('click', (e) => { if (S.view === 'global' && S.global === 'inbox' && e.target.closest('#panel .act.primary')) { e.stopPropagation(); markAllRead(paintInboxPage); } }, true);
   function ntArchive(n, repaint) {
@@ -1644,7 +1644,8 @@
       undoToast(`${label}: ${n.t}`, () => { const x = NS(); delete x.done[n.id]; x.arch.delete(n.id); ntSave('doneN', x.done); ntSave('archN', x.arch); syncBell(); repaint(); });
     }, 700);
   }
-  function ntOpen(n) { const st = NS(); st.read.add(n.id); ntSave('readN', st.read); syncBell(); hidePops(); if (n.kind === 'schedule_failed') return window.XA.scheduled(); go('product', { product: n.p, item: n.t }); }
+  function ntOpen(n) { const st = NS(); st.read.add(n.id); ntSave('readN', st.read); syncBell(); hidePops(); if (n.kind === 'schedule_failed') return window.XA.scheduled();
+    if (n.ref && /^T-\d+$/.test(n.ref)) { if (n.serverId) window.XENO_TASKS?.markRead?.([n.serverId]); return go('global', { global: 'tasks', item: n.ref }); } go('product', { product: n.p, item: n.t }); }
   function ntKey(e, el, repaint) {
     if (!el || !el.dataset.nt) { if (el && el.dataset.ntGrp && e.key === 'Enter') { e.preventDefault(); el.click(); } return; }
     const n = ntAll().find((x) => x.id === el.dataset.nt); if (!n) return;

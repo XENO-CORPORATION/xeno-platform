@@ -28,9 +28,14 @@
   function loadNeeds() {
     if (needsLoading) return needsLoading;
     needsLoading = (async () => {
-      const r = await api('GET', '/api/workspace/needs').catch(() => null);
+      const [r, nr] = await Promise.all([api('GET', '/api/workspace/needs').catch(() => null), api('GET', '/api/notifications?limit=50').catch(() => null)]);
       if (r && r.ok && Array.isArray(r.d.items)) {
-        window.XENO_NEEDS = r.d.items.map((i) => ({ id: String(i.id), kind: i.kind, t: String(i.title || 'Scheduled chat'), p: 'chat', m: i.area || 'overview', meta: i.kind === 'task_review' ? 'Review' : 'Run failed', detail: String(i.detail || ''), at: i.at }));
+        window.XENO_NEEDS = r.d.items.map((i) => ({ id: String(i.id), kind: i.kind, t: String(i.title || 'Scheduled chat'), p: 'chat', m: i.area || 'overview', meta: i.kind === 'task_review' ? 'Review' : 'Run failed', detail: String(i.detail || ''), at: i.at, ...(i.kind === 'task_review' ? { ref: String(i.id) } : {}) }));
+        // the inbox: what was written for this person (XENO Tasks today). What asks something of them sits with
+        // Needs you until read; the rest is activity. Read state is the platform's, so it follows them across devices.
+        const ASK = { assigned: 'Assigned', review_requested: 'Review', review_assigned: 'Reviewer', changes_requested: 'Changes', mentioned: 'Mention', due_soon: 'Due soon', overdue: 'Overdue' };
+        if (nr && nr.ok && Array.isArray(nr.d.items)) for (const n of nr.d.items) window.XENO_NEEDS.push({ id: 'note-' + n.id, serverId: n.id, kind: 'task_' + n.kind, ref: n.ref, t: n.title, p: 'chat', m: n.area || 'overview', meta: ASK[n.kind] || (n.kind === 'commented' ? 'Comment' : n.kind === 'status' ? 'Update' : 'Activity'), detail: n.detail, at: n.at, seen: n.read, g: ASK[n.kind] && !n.read ? 'needs' : 'act', actor: n.actor && n.actor.name });
+        window.XENO_NOTIF_UNREAD = nr && nr.ok ? nr.d.unread : 0;
         N.status = 'ready';
       } else { window.XENO_NEEDS = []; N.status = 'error'; }
       N.count = window.XENO_NEEDS.length; needsLoading = null;
