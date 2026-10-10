@@ -9,6 +9,11 @@
  *                                                           the screen showed — refused with 409 if it has moved since
  *   POST   /api/tasks/:key/claim                          take it (atomic)
  *   POST   /api/tasks/:key/comments {body}                comment
+ *   DELETE /api/tasks/:key                                delete (project admin; the reporter while still in triage)
+ *   POST   /api/tasks/:key/attachments?name=              add an image (raw body; PNG, JPEG, GIF or WebP, by signature)
+ *   GET    /api/tasks/:key/attachments/:id                the image, to anyone who can see the task
+ *   DELETE /api/tasks/:key/attachments/:id                remove it (whoever added it, or a manager)
+ *   GET    /api/tasks/assignees?projectId=                who a task there can be assigned to (people and agents)
  *
  * The caller is a principal (person or agent); agents act through the same routes as a person's screen.
  */
@@ -37,10 +42,23 @@ router.get('/', handled(async (req, res) => {
 router.post('/', handled(async (req, res) => {
   res.status(201).json({ success: true, task: await tasks.createTask(req.db, req.me, req.body || {}) });
 }));
+router.get('/assignees', handled(async (req, res) => { res.json({ success: true, assignees: await tasks.listAssignees(req.db, req.me, { projectId: req.query.projectId }) }); }));
 router.get('/:key', handled(async (req, res) => { res.json({ success: true, task: await tasks.getTask(req.db, req.me, req.params.key) }); }));
 router.patch('/:key', handled(async (req, res) => { res.json({ success: true, task: await tasks.updateTask(req.db, req.me, req.params.key, req.body || {}) }); }));
 router.post('/:key/transition', handled(async (req, res) => { res.json({ success: true, task: await tasks.transitionTask(req.db, req.me, req.params.key, { to: req.body?.to, note: req.body?.note, from: req.body?.from }) }); }));
 router.post('/:key/claim', handled(async (req, res) => { res.json({ success: true, task: await tasks.claimTask(req.db, req.me, req.params.key) }); }));
 router.post('/:key/comments', handled(async (req, res) => { res.json({ success: true, task: await tasks.commentTask(req.db, req.me, req.params.key, { body: req.body?.body }) }); }));
+
+router.delete('/:key', handled(async (req, res) => { res.json({ success: true, ...(await tasks.deleteTask(req.db, req.me, req.params.key)) }); }));
+const rawImage = express.raw({ type: () => true, limit: tasks.ATTACH_MAX_BYTES + 1024 });
+router.post('/:key/attachments', (req, res, next) => rawImage(req, res, (err) => (err ? res.status(err.type === 'entity.too.large' ? 413 : 400).json({ success: false, error: err.type === 'entity.too.large' ? 'Images can be at most 8 MB' : 'The image could not be read', code: err.type === 'entity.too.large' ? 'image_too_large' : 'bad_body' }) : next())),
+  handled(async (req, res) => { res.status(201).json({ success: true, task: await tasks.addAttachment(req.db, req.me, req.params.key, { filename: req.query.name, data: Buffer.isBuffer(req.body) ? req.body : null }) }); }));
+router.get('/:key/attachments/:id', handled(async (req, res) => {
+  const a = await tasks.getAttachment(req.db, req.me, req.params.key, req.params.id);
+  // the type was decided from the file's signature at upload; nosniff + a sandboxing CSP keep it an image
+  res.set({ 'Content-Type': a.mime, 'Content-Length': String(a.size_bytes), 'X-Content-Type-Options': 'nosniff', 'Content-Security-Policy': "default-src 'none'; sandbox", 'Cache-Control': 'private, max-age=3600', 'Content-Disposition': `inline; filename*=UTF-8''${encodeURIComponent(a.filename)}` });
+  res.end(a.data);
+}));
+router.delete('/:key/attachments/:id', handled(async (req, res) => { res.json({ success: true, task: await tasks.removeAttachment(req.db, req.me, req.params.key, req.params.id) }); }));
 
 export default router;
