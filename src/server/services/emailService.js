@@ -804,6 +804,18 @@ const templates = {
       ${forumFooter(unsubUrl)}
     `, `${authorName || 'Someone'} named you in a thread.`),
   }),
+  // XENO Tasks: one template for every task notification (assigned, review requested, mentioned, due, overdue …)
+  task_notification: ({ displayName, heading, sentence, taskTitle, taskUrl, excerpt, unsubscribeUrl: unsubUrl }) => ({
+    subject: `${heading}: ${taskTitle}`,
+    html: wrapInLayout(heading, `
+      ${mailHeading(heading)}
+      ${mailText(`Hi ${escapeHtml(displayName || 'there')}, ${escapeHtml(sentence)} <a href="${escapeHtml(taskUrl)}" style="color:#f4f4f5;">${escapeHtml(taskTitle)}</a>.`)}
+      ${excerpt ? mailText(escapeHtml(excerpt), { muted: true }) : ''}
+      ${mailButton(taskUrl, 'Open the task')}
+      ${hairline(14, 12)}
+      ${mailText(`You are getting this because you work on this task.${unsubUrl ? ` <a href="${escapeHtml(unsubUrl)}" style="color:#acacb4;">Turn off these emails</a>. Security email like password resets will still reach you.` : ''}`, { muted: true })}
+    `, `${sentence} ${taskTitle}`),
+  }),
 };
 
 // --------------------------------------------------------------------------
