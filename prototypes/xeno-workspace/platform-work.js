@@ -93,6 +93,7 @@
     if (W.status === 'loading') return h.box('folder', 'Loading this project', '', '', 'sm');
     if (!rec) return null;
     if (tab === 'Tasks' && window.XENO_TASKS && window.XENO_TASKS.served) return window.XENO_TASKS.projectTab(rec);
+    if (INSIGHT_TABS.has(tab)) { const live = insightTab(tab, rec, h); if (live !== null) return live; }
     if (NOT_YET[tab]) return h.box(NOT_YET[tab][0], NOT_YET[tab][1], esc(NOT_YET[tab][2]), '', 'sm');
     if (tab === 'Overview') return `<div class="pg-cols"><div>
         <section class="pg-sec"><h3>In this project</h3><div class="pg-mini-board"><button class="pg-mb" data-ptab="Conversations"><b>${rec.chatCount}</b><small>${rec.chatCount === 1 ? 'Conversation' : 'Conversations'}</small></button><button class="pg-mb" data-ptab="Resources"><b>${rec.files}</b><small>${rec.files === 1 ? 'File' : 'Files'}</small></button></div></section></div>
@@ -101,11 +102,100 @@
     return null;
   }
   // actions the platform cannot do yet say so, and change nothing
-  const BLOCKED = { budget: 'Setting a budget', newTask: 'Adding a task', openTask: 'Opening a task', newProjectChat: 'Starting a chat from here' };
-  function blocked(action) { const what = BLOCKED[action]; if (!what) return false; X()?.toast?.(`${what} isn’t available on XENO yet`); return true; }
+  const BLOCKED = { budget: 'Setting a budget' };
+  // actions the platform CAN do: handled here, so the prototype's sample-data versions never run
+  const HANDLED = {
+    newTask: (name) => { const rec = byName(name); if (!rec || !window.XENO_TASKS?.served) return false; window.XENO_TASKS.newTask(rec.id); return true; },
+    // a new chat filed in the project: the real chat's project home, whose composer creates it there
+    newProjectChat: (name) => { const rec = byName(name); if (!rec || !window.XENO_CHAT?.served) return false; X()?.go?.('product', { product: 'chat' }); setTimeout(() => window.XENO_CHAT.openProjectId(rec.id), 0); return true; },
+    openTask: (arg) => { const key = String(arg || '').split('|').pop(); if (!/^T-\d+$/.test(key)) return false; openTaskKey(key); return true; },
+  };
+  function blocked(action, arg) { if (HANDLED[action] && HANDLED[action](arg)) return true; const what = BLOCKED[action]; if (!what) return false; X()?.toast?.(`${what} isn’t available on XENO yet`); return true; }
 
   function mark() { document.querySelectorAll('#main [data-xa]').forEach((el) => { if (BLOCKED[el.dataset.xa] && !el.classList.contains('role-off')) { el.setAttribute('aria-disabled', 'true'); el.classList.add('role-off'); el.title = `${BLOCKED[el.dataset.xa]} isn’t available on XENO yet`; } }); }
   new MutationObserver(mark).observe(document.documentElement, { childList: true, subtree: true });
+
+  // ---------- a project at a glance: Overview, Team, Activity (GET /api/chat/projects/:id/summary|people|activity) ----------
+  const INSIGHT_TABS = new Set(['Overview', 'Team assignments', 'Activity']);
+  const I = new Map();   // project id → { status, summary, people, feed: { items, next, more } }
+  const byName = (name) => (window.XENO_PG_PROJECTS.items || []).find((p) => p.name === name) || null;
+  const openTaskKey = (key) => { location.hash = `#/${area() || 'overview'}/g/tasks/${key}`; };
+  async function loadInsight(id, { more = false } = {}) {
+    const cur = I.get(id) || { status: 'loading', feed: { items: [], next: null } };
+    if (!more) { cur.status = cur.summary ? 'refreshing' : 'loading'; I.set(id, cur); }
+    const before = more && cur.feed.next ? `&before=${encodeURIComponent(cur.feed.next)}` : '';
+    const [s, p, a] = await Promise.all([
+      more ? null : api('GET', `/api/chat/projects/${encodeURIComponent(id)}/summary`).catch(() => null),
+      more ? null : api('GET', `/api/chat/projects/${encodeURIComponent(id)}/people`).catch(() => null),
+      api('GET', `/api/chat/projects/${encodeURIComponent(id)}/activity?limit=30${before}`).catch(() => null)]);
+    if (!more && (!s || !s.ok)) { cur.status = 'error'; I.set(id, cur); paint(); return; }
+    if (!more) { cur.summary = s.d; cur.people = p && p.ok ? p.d : null; cur.feed = { items: [], next: null }; }
+    if (a && a.ok) { cur.feed.items = [...(more ? cur.feed.items : []), ...a.d.items]; cur.feed.next = a.d.next; }
+    cur.status = 'ready'; cur.at = Date.now(); I.set(id, cur); paint();
+  }
+  const ago = (iso) => { const s = Math.max(0, (Date.now() - Date.parse(iso)) / 1000); return s < 60 ? 'just now' : s < 3600 ? `${Math.floor(s / 60)} min ago` : s < 86400 ? `${Math.floor(s / 3600)} h ago` : s < 604800 ? `${Math.floor(s / 86400)} d ago` : new Date(iso).toLocaleDateString(undefined, { day: 'numeric', month: 'short' }); };
+  const face = (p) => `<span class="pi-face${p && p.kind === 'agent' ? ' pi-face--agent' : ''}" title="${esc(p ? p.name : 'XENO')}">${p && p.kind === 'agent' ? X()?.ic?.('bot') || 'A' : esc(String(p ? p.name : 'X').trim().charAt(0).toUpperCase() || '?')}</span>`;
+  const ROLE = { owner: 'Owner', admin: 'Admin', editor: 'Can edit', reviewer: 'Can review', viewer: 'Can view', client: 'Client' };
+  const STATUS = { raised: 'Triage', todo: 'To do', in_progress: 'In progress', blocked: 'Blocked', in_review: 'In review', done: 'Done', wont_do: 'Won’t do' };
+  function line(it) {
+    const who = `<b>${esc(it.actor ? it.actor.name : 'XENO')}</b>${it.actor && it.actor.kind === 'agent' ? '<em class="pi-kind">Agent</em>' : ''}`;
+    const task = it.task ? `<a class="pi-ref" data-pi-task="${esc(it.task.key)}">${esc(it.task.key)}</a> ${esc(it.task.title)}` : '';
+    const what = it.type === 'member' ? `joined the project <span class="pi-dim">· ${esc(ROLE[it.relation] || it.relation)}</span>`
+      : it.type === 'conversation' ? `started a conversation <a class="pi-ref" data-pi-chat="${esc(it.conversation.id)}">${esc(it.conversation.title)}</a>`
+      : it.type === 'file' ? `added <i>${esc(it.file.name)}</i>`
+      : it.kind === 'created' ? `raised ${task}`
+      : it.kind === 'status' ? `moved ${task} to <b>${esc(STATUS[it.to] || it.to)}</b>`
+      : it.kind === 'comment' ? `commented on ${task}`
+      : it.kind === 'assigned' ? `${it.to ? 'assigned' : 'unassigned'} ${task}`
+      : it.kind === 'claimed' ? `took ${task}`
+      : it.kind === 'delegated' ? `${it.to ? 'handed' : 'took the agent off'} ${task}${it.to ? ' to an agent' : ''}`
+      : it.kind === 'activity' ? `${({ ask: 'asks about', result: 'reported on', error: 'hit a problem on' })[it.from] || 'worked on'} ${task}`
+      : it.kind === 'attached' ? `added an image to ${task}` : it.kind === 'linked' ? `linked ${task}` : it.kind === 'parent' ? `added a sub-task to ${task}`
+      : it.kind === 'deleted' ? `deleted ${task}` : it.kind === 'restored' ? `restored ${task}` : `updated ${task}`;
+    return `<li class="pi-ev" data-pi-ev="${esc(it.type)}:${esc(it.kind)}">${face(it.actor)}<div><p>${who} ${what}</p>${it.note ? `<q>${esc(it.note)}</q>` : ''}</div><time title="${esc(new Date(it.at).toLocaleString())}">${esc(ago(it.at))}</time></li>`;
+  }
+  const feed = (items) => (items.length ? `<ol class="pi-feed">${items.map(line).join('')}</ol>` : '<p class="pi-dim">Nothing has happened here yet.</p>');
+  function insightTab(tab, rec, h) {
+    const cur = I.get(rec.id);
+    if (!cur || (cur.at && Date.now() - cur.at > 60000 && cur.status === 'ready')) { if (!cur || cur.status !== 'loading') { I.set(rec.id, { ...(cur || { feed: { items: [], next: null } }), status: cur ? cur.status : 'loading' }); setTimeout(() => loadInsight(rec.id), 0); } }
+    const c = I.get(rec.id);
+    if (!c.summary && c.status === 'error') return h.box('folder', 'This project couldn’t be loaded', 'Check your connection and try again.', h.btn('Try again', `data-pi="retry" data-arg="${esc(rec.id)}"`, false, 'reset'), 'sm');
+    if (!c.summary) return h.box('folder', 'Loading this project', '', '', 'sm');
+    const s = c.summary, t = s.tasks, ppl = (c.people && c.people.people) || [], you = (c.people && c.people.you) || {};
+    if (tab === 'Activity') return `<section class="pi-sec" data-pi-activity>${feed(c.feed.items)}${c.feed.next ? `<button class="pi-more" data-pi="more" data-arg="${esc(rec.id)}">Show older</button>` : ''}</section>`;
+    if (tab === 'Team assignments') {
+      const row = (p) => `<div class="pi-person" data-pi-person="${esc(p.id)}">${face(p)}<div><b>${esc(p.name)}${p.me ? ' <span class="pi-dim">(you)</span>' : ''}</b><small>${p.kind === 'agent' ? `Agent${p.owner ? ` · ${esc(p.owner.name)}’s` : ''}` : esc(p.email || (p.username ? '@' + p.username : ''))}</small></div><span class="pi-role">${esc(ROLE[p.relation] || p.relation)}</span></div>`;
+      const humans = ppl.filter((p) => p.kind === 'human'), agents = ppl.filter((p) => p.kind === 'agent');
+      return `<div class="pi-team" data-pi-team>
+        <div class="pi-bar"><span>${humans.length} ${humans.length === 1 ? 'person' : 'people'} · ${agents.length} ${agents.length === 1 ? 'agent' : 'agents'}</span><span class="pi-sp"></span>${you.canManage ? h.btn('Manage access', `data-pi="share" data-arg="${esc(rec.name)}"`, false, 'people') : `<small class="pi-dim">You ${esc((ROLE[you.relation] || 'can view').toLowerCase())}. A project admin manages who is on it.</small>`}</div>
+        <section class="pi-sec"><h3>People</h3>${humans.map(row).join('') || '<p class="pi-dim">Only you.</p>'}</section>
+        <section class="pi-sec"><h3>Agents</h3>${agents.map(row).join('') || '<p class="pi-dim">No agents on this project. Add one from Tasks › Agents, or delegate a task to one.</p>'}</section></div>`;
+    }
+    // Overview
+    const pct = t.progress == null ? 0 : t.progress;
+    const stat = (n, l, k, warn) => `<button class="pi-stat${warn && n ? ' pi-stat--warn' : ''}" data-ptab="Tasks" data-pi-stat="${k}"><b>${n}</b><small>${l}</small></button>`;
+    return `<div class="pg-cols pi-over" data-pi-overview><div>
+        <section class="pi-sec"><h3>Progress<span class="pi-dim">${t.total ? `${t.done + t.wont_do} of ${t.total} closed` : 'No tasks yet'}</span></h3>
+          <div class="pi-prog" role="progressbar" aria-valuenow="${pct}" aria-valuemin="0" aria-valuemax="100"><span style="width:${pct}%"></span></div>
+          <div class="pi-stats">${stat(t.raised !== undefined ? t.triage : 0, 'In triage', 'triage')}${stat(t.in_progress, 'In progress', 'in_progress')}${stat(t.in_review, 'In review', 'in_review')}${stat(t.blocked, 'Blocked', 'blocked', true)}${stat(t.overdue, 'Overdue', 'overdue', true)}${stat(t.done_week, 'Done this week', 'done_week')}</div>
+          ${t.total ? '' : `<div class="pi-empty">${h.btn('New task', `data-xa="newTask" data-arg="${esc(rec.name)}"`, false, 'plus')}<small class="pi-dim">Raise the first task, or link a folder for an agent CLI from the Tasks tab.</small></div>`}</section>
+        <section class="pi-sec"><h3>Recent activity<button class="pi-link" data-ptab="Activity">See all</button></h3>${feed(c.feed.items.slice(0, 6))}</section></div>
+      <aside>
+        <section class="pg-sec pg-card-s"><h3>Goal</h3><p>${esc(rec.goal || 'No goal written yet.')}</p></section>
+        <section class="pg-sec pg-card-s"><h3>People<button class="pi-link" data-ptab="Team assignments">${ppl.length}</button></h3><div class="pi-faces">${ppl.slice(0, 10).map(face).join('')}</div>${s.agents ? `<small class="pi-dim">${s.agents} ${s.agents === 1 ? 'agent' : 'agents'} · ${t.with_agents} ${t.with_agents === 1 ? 'task' : 'tasks'} with agents</small>` : ''}</section>
+        <section class="pg-sec pg-card-s"><h3>In this project</h3><div class="pi-kv"><button data-ptab="Conversations"><b>${s.conversations}</b><small>${s.conversations === 1 ? 'Conversation' : 'Conversations'}</small></button><button data-ptab="Resources"><b>${s.files}</b><small>${s.files === 1 ? 'File' : 'Files'}</small></button><button data-ptab="Tasks"><b>${t.unassigned}</b><small>Unassigned</small></button></div></section>
+        <section class="pg-sec pg-card-s"><h3>Lives in</h3><p><b>${esc(rec.place)}</b><small>${s.lastActivityAt ? 'Last activity ' + esc(ago(s.lastActivityAt)) : 'No activity yet'}</small></p></section>
+      </aside></div>`;
+  }
+  document.addEventListener('click', (e) => {
+    const k = e.target.closest('[data-pi-task]'); if (k) { e.preventDefault(); openTaskKey(k.dataset.piTask); return; }
+    const c = e.target.closest('[data-pi-chat]'); if (c) { e.preventDefault(); location.hash = `#/${area() || 'overview'}/g/chat`; return; }
+    const b = e.target.closest('[data-pi]'); if (!b) return;
+    const what = b.dataset.pi, arg = b.dataset.arg;
+    if (what === 'retry') { I.delete(arg); loadInsight(arg); }
+    else if (what === 'more') { b.disabled = true; b.textContent = 'Loading…'; loadInsight(arg, { more: true }); }
+    else if (what === 'share') shareProject(arg).then(() => { const rec = byName(arg); if (rec) loadInsight(rec.id); });
+  });
 
   // ---------- saves ----------
   const listOf = (raw) => (readJson(raw, {}) || {}).projectList || [];

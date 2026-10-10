@@ -57,6 +57,19 @@ function answer(q) {
     const pr = { id: pid(db.next++), name: body.name, description: body.description || '', settings: body.settings || {}, area: body.area || null, is_archived: false, owner_user_id: team ? null : U, workspace_id: team, file_count: 0, chat_count: 0, updated_at: new Date().toISOString(), capabilities: { viewer: true, owner: true } };
     db.projects.unshift(pr); return json(200, { success: true, project: pr });
   }
+  if (/^\/api\/tasks\/T-\d+$/.test(p)) { const key = p.split('/').pop(), now = new Date().toISOString(); return json(200, { success: true, task: { id: 't-' + key, key, number: +key.slice(2), title: 'Task ' + key.slice(2), body: '', kind: 'task', priority: 'none', status: 'in_progress', area: null, project: null, assignee: null, reviewer: null, delegate: null, session: null, reporter: { id: U, name: 'Ada', kind: 'human' }, labels: [], attachments: [], children: [], links: [], watchers: [], events: [], can: { moves: [], edit: false, attach: false, delete: false }, createdAt: now, updatedAt: now } }); }
+  { const ins = p.match(/^\/api\/chat\/projects\/([^/]+)\/(summary|people|activity)$/);
+    if (ins) { const pr = db.projects.find((x) => x.id === ins[1]); if (!pr) return json(404, { success: false, error: 'Project not found', code: 'project_not_found' });
+      if (db.insightFail) return json(500, { success: false, error: 'Internal server error' });
+      if (ins[2] === 'summary') return json(200, { success: true, project: { id: pr.id, name: pr.name }, tasks: { open: 3, triage: 1, in_progress: 1, blocked: 0, in_review: 1, done: 1, wont_do: 0, done_week: 1, overdue: 1, unassigned: 1, with_agents: 1, total: 4, progress: 25 }, conversations: 1, files: 3, people: 2, agents: 1, lastActivityAt: new Date().toISOString() });
+      if (ins[2] === 'people') return json(200, { success: true, project: { id: pr.id, name: pr.name }, you: { relation: 'owner', canManage: true }, people: [
+        { id: U, name: 'Ada', username: 'ada', kind: 'human', relation: 'owner', me: true, email: 'ada@x.test' }, { id: 'u2', name: 'Bob', username: 'bob', kind: 'human', relation: 'editor', email: 'bob@x.test' },
+        { id: 'a1', name: 'Builder', username: 'builder', kind: 'agent', relation: 'editor', owner: { id: U, name: 'Ada' } }] });
+      const before = u.searchParams.get('before'); const all = Array.from({ length: 35 }, (_, i) => ({ id: 'task:e' + i, type: 'task', kind: i % 3 ? 'status' : 'comment', at: new Date(Date.now() - i * 60000).toISOString(), actor: { id: U, name: 'Ada', kind: 'human' }, task: { key: 'T-' + (i + 1), title: 'Task ' + (i + 1), status: 'in_progress' }, to: 'in_progress', ...(i % 3 ? {} : { note: 'Looks good ' + i }) }));
+      all.splice(2, 0, { id: 'member:m1', type: 'member', kind: 'joined', at: new Date(Date.now() - 90000).toISOString(), actor: { id: 'a1', name: 'Builder', kind: 'agent' }, relation: 'editor' });
+      const rows = all.filter((x) => !before || Date.parse(x.at) < Date.parse(before)); const page = rows.slice(0, 30);
+      (db.feedAsks = db.feedAsks || []).push(before || '');
+      return json(200, { success: true, items: page, next: rows.length > 30 ? page[page.length - 1].at : null }); } }
   { const acc = p.match(/^\/api\/chat\/projects\/([^/]+)\/access(?:\/user\/([^/]+))?$/), perm = p.match(/^\/api\/chat\/projects\/([^/]+)\/permanent$/);
     if (acc) { const pr = db.projects.find((x) => x.id === decodeURIComponent(acc[1])); if (!pr) return json(404, { success: false, error: 'Project not found' }); pr.grants = pr.grants || [{ subject: 'user:' + U, relation: 'owner', identity: { id: U, display_name: 'Ada', email: 'ada@example.test' } }];
       if (db.refuseShare) return json(500, { success: false, error: 'Internal server error' });
@@ -113,13 +126,22 @@ try {
 
   await goProjects('Website (Personal)'); t = await main();
   ok(/Ship the new site/.test(t) && /Lives in/.test(t) && /Personal/.test(t) && /1\s*Conversation/.test(t) && /3\s*Files/.test(t), 'the project page shows its goal, where it lives, and real counts');
+  ok(!!(await p.$('#main [data-pi-overview] .pi-prog[aria-valuenow="25"]')) && /1 of 4 closed/.test(t) && /Overdue/.test(t) && /Done this week/.test(t), 'the Overview shows task progress and the numbers that matter');
+  ok(/Recent activity/i.test(t) && (await p.$$('#main [data-pi-overview] .pi-ev')).length === 6 && /2 agent|1 agent/.test(t), 'it shows the six latest events and the agents on the project');
   await goProjects('Website (Personal)/Conversations'); t = await main();
   ok(/Homepage copy/.test(t) && !/Loose chat/.test(t), 'Conversations lists the chats that belong to this project');
   await goProjects('Website (Personal)/Tasks'); t = await main();
   ok(/No tasks in this project yet/.test(t) && !/aren’t available/.test(t) && await p.$('#main [data-tk="new"]'), 'the Tasks tab is XENO Tasks: real (empty) list and a working New task');
   await goProjects('Website (Personal)/Team assignments'); t = await main();
-  const off = await p.evaluate(() => [...document.querySelectorAll('#main [data-xa="newTask"], #main [data-xa="budget"]')].map((el) => el.getAttribute('aria-disabled')));
-  ok(/Team assignments aren’t available yet/.test(t) && off.every((v) => v === 'true'), 'a tab with no platform API says so, and any control for it is shown unavailable (' + off.length + ' controls)');
+  ok(/2 people · 1 agent/.test(t) && /Ada \(you\)/.test(t) && /bob@x\.test/.test(t) && /Agent · Ada’s/.test(t) && !!(await p.$('#main [data-pi="share"]')), 'Team lists people and agents with roles; an admin sees emails and Manage access');
+  ok(await p.evaluate(() => !document.querySelector('#main [data-xa="newTask"][aria-disabled="true"]')), 'Add a task is no longer shown unavailable');
+  await goProjects('Website (Personal)/Activity'); t = await main();
+  ok((await p.$$('#main [data-pi-activity] .pi-ev')).length === 30 && /joined the project/.test(t) && /Looks good 0/.test(t), 'Activity is a real feed: task changes, comments with excerpts, people joining');
+  await p.click('#main [data-pi="more"]'); await wait(700);
+  ok((await p.$$('#main [data-pi-activity] .pi-ev')).length === 36 && !(await p.$('#main [data-pi="more"]')) && db.feedAsks.some((x) => x), 'Show older loads the next page by its cursor, and stops at the end');
+  db.calls.length = 0;
+  await p.evaluate(() => document.querySelector('#main [data-pi-task]').click()); await wait(600);
+  ok(/\/tasks\/T-\d+/.test(await p.evaluate(() => location.pathname + location.hash)), 'a task in the feed opens that task');
   await goProjects('Website (Personal)/Funding'); ok(/Funding isn’t available yet/.test(await main()), 'Funding shows no sample campaign on a real project');
 
   // ---- create, in the current workspace ----

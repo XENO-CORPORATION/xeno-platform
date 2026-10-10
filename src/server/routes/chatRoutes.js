@@ -30,6 +30,7 @@ import { normalizeTurnRecord, turnImageAssetIds } from '../utils/chatTurnRecord.
 import { requireDpopIfBound } from '../middleware/dpopResource.js';
 import liveConversationCollaborationRoutes from './liveConversationCollaborationRoutes.js';
 import projectDirectoryBindingRoutes from './projectDirectoryBindingRoutes.js';
+import * as insights from '../services/projectInsights.js';
 import {
   assertLiveCollaborationAuthority,
   createLiveShare,
@@ -2856,6 +2857,21 @@ router.put('/projects/:id', async (req, res) => {
     res.status(500).json({ success: false, error: 'Internal server error' });
   }
 });
+
+// A project at a glance: people, progress and one activity feed (services/projectInsights.js). Viewer access.
+const insight = (fn) => async (req, res) => {
+  try {
+    if (!req.user?.id) return res.status(401).json({ success: false, error: 'Unauthorized' });
+    res.json({ success: true, ...(await fn(req)) });
+  } catch (error) {
+    if (error instanceof insights.ProjectInsightError) return res.status(error.status).json({ success: false, error: error.message, code: error.code });
+    console.error('[projects] insight', error);
+    res.status(500).json({ success: false, error: 'Internal server error' });
+  }
+};
+router.get('/projects/:id/people', insight((req) => insights.people(req.db, { id: req.user.id }, req.params.id)));
+router.get('/projects/:id/summary', insight((req) => insights.summary(req.db, { id: req.user.id }, req.params.id)));
+router.get('/projects/:id/activity', insight((req) => insights.activity(req.db, { id: req.user.id }, req.params.id, { before: req.query.before, limit: req.query.limit })));
 
 router.get('/projects/:id/access', async (req, res) => {
   try {

@@ -78,7 +78,7 @@
     p.activity.unshift([window.XENO_ME.name() + ' updated who works on this project', 'just now']); refresh(); toast('Assignments saved');
   }
   async function newTask(name) {
-    if (window.XENO_WORK && window.XENO_WORK.blocked('newTask')) return;
+    if (window.XENO_WORK && window.XENO_WORK.blocked('newTask', name)) return;
     const p = P()[name]; if (!p) return;
     const v = await D().form({ title: 'New task', sub: name, submit: 'Add task', fields: [
       { id: 'title', label: 'Task', required: true, placeholder: 'What needs doing?' },
@@ -311,7 +311,7 @@
   function requestAccess(fam) { const r = store().get('accessRequested', {}) || {}; r[fam] = Date.now(); store().set('accessRequested', r); X().render(); toast('Request sent — the owners get it in their inbox'); }
   // ---- projects: tasks, waiting items, chats, resources ----
   async function openTask(arg) {
-    if (window.XENO_WORK && window.XENO_WORK.blocked('openTask')) return;
+    if (window.XENO_WORK && window.XENO_WORK.blocked('openTask', arg)) return;
     const [pn, tid] = arg.split('|'), P2 = P()[pn], t = P2?.taskObjs.find((x) => x.id === tid); if (!t) return;
     const people = W().members.filter((m) => m.status !== 'invited');
     const v = await D().form({ title: t.title, sub: pn, submit: 'Save task', fields: [
@@ -326,7 +326,7 @@
     save(); refresh(); undoToast(`${n.meta === 'Approve' ? 'Approved' : 'Done'} — ${n.t}`, () => { N.splice(i, 0, n); refresh(); });
   }
   function newProjectChat(pn) {
-    if (window.XENO_WORK && window.XENO_WORK.blocked('newProjectChat')) return;
+    if (window.XENO_WORK && window.XENO_WORK.blocked('newProjectChat', pn)) return;
     const P2 = P()[pn]; if (P2) P2.chats.unshift(['New chat', 'Chat · just now']);
     const C = X().ctxChats(); const pj = C?.projects?.find((x) => x[0] === pn); if (pj) pj[2].unshift('New chat'); else C?.projects?.push([pn, null, ['New chat']]);
     save(); X().go('product', { product: 'chat' }); toast(`New chat in ${pn}`);
