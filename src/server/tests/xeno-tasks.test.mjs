@@ -94,6 +94,34 @@ async function main() {
     check((await ada('PATCH', `/tasks/${t1.key}`, { assigneeId: ids.eve })).j.code === 'assignee_without_access', 'a task cannot be assigned to someone who cannot see the project');
     check((await cyd('PATCH', `/tasks/${t1.key}`, { priority: 'urgent' })).s === 403, 'a viewer who is not the assignee cannot edit it');
 
+    // images
+    const PNG = Buffer.from('89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c4890000000d4944415478da63f8ffff3f0005fe02fea7d6a4a00000000049454e44ae426082', 'hex');
+    const up = async (who, key, buf, name = 'shot.png') => { actor = ids[who]; const r = await fetch(base + `/tasks/${key}/attachments?name=${encodeURIComponent(name)}`, { method: 'POST', headers: { 'content-type': 'application/octet-stream' }, body: buf }); return { s: r.status, j: await r.json().catch(() => ({})) }; };
+    const it = (await bob('POST', '/tasks', { title: 'Hero image', projectId: proj.id })).j.task;
+    const u1 = await up('bob', it.key, PNG, 'hero <1>.png');
+    check(u1.s === 201 && u1.j.task.attachments.length === 1 && u1.j.task.attachments[0].mime === 'image/png' && u1.j.task.attachments[0].filename === 'hero 1 .png'.replace(' 1 ', ' 1 ') && u1.j.task.events.some((e) => e.kind === 'attached'), 'a PNG is added to the task, its name cleaned, and the history records it');
+    const aid = u1.j.task.attachments[0].id;
+    actor = ids.cyd; const got = await fetch(base + `/tasks/${it.key}/attachments/${aid}`);
+    const gotBuf = Buffer.from(await got.arrayBuffer());
+    check(got.status === 200 && got.headers.get('content-type') === 'image/png' && got.headers.get('x-content-type-options') === 'nosniff' && /sandbox/.test(got.headers.get('content-security-policy') || '') && gotBuf.equals(PNG), 'anyone on the project gets the exact image back, served as an image that cannot run');
+    actor = ids.eve; check((await fetch(base + `/tasks/${it.key}/attachments/${aid}`)).status === 404, 'someone outside the project cannot fetch the image');
+    check((await up('bob', it.key, Buffer.from('<svg xmlns="http://www.w3.org/2000/svg"><script>alert(1)</script></svg>'), 'x.png')).s === 415, 'an SVG named .png is refused: the type comes from the bytes, not the name');
+    check((await up('cyd', it.key, PNG)).s === 403, 'a viewer who is not working on the task cannot add images');
+    check((await up('bob', it.key, Buffer.alloc(9 * 1024 * 1024, 1))).s === 413, 'an image over 8 MB is refused');
+    check((await cyd('DELETE', `/tasks/${it.key}/attachments/${aid}`)).s === 403 && (await bob('DELETE', `/tasks/${it.key}/attachments/${aid}`)).j.task.attachments.length === 0, 'only whoever added an image (or a manager) removes it');
+
+    // assignees: people and agents on the project; the caller's own agents are offered too
+    const as1 = (await ada('GET', `/tasks/assignees?projectId=${proj.id}`)).j.assignees;
+    check(as1.some((p) => p.id === String(ids.bob) && p.kind === 'human') && as1.some((p) => p.id === String(ids.bot) && p.kind === 'agent' && !p.needsShare) && !as1.some((p) => p.id === String(ids.eve)), 'assignees are the people and agents the project is shared with, and nobody else');
+    check((await eve('GET', `/tasks/assignees?projectId=${proj.id}`)).s === 404, 'someone outside the project cannot list who is on it');
+
+    // delete
+    const d1 = (await cyd('POST', '/tasks', { title: 'Raised by mistake', projectId: proj.id })).j.task;
+    check((await cyd('DELETE', `/tasks/${d1.key}`)).s === 200 && (await ada('GET', `/tasks/${d1.key}`)).s === 404 && !(await ada('GET', `/tasks?projectId=${proj.id}`)).j.tasks.some((x) => x.key === d1.key), 'the reporter withdraws a task still in triage; it is gone from the task and the board');
+    const d2 = (await cyd('POST', '/tasks', { title: 'Accepted work', projectId: proj.id })).j.task; await bob('POST', `/tasks/${d2.key}/transition`, { to: 'todo' });
+    check((await cyd('DELETE', `/tasks/${d2.key}`)).s === 403 && (await bob('DELETE', `/tasks/${d2.key}`)).s === 403 && (await ada('DELETE', `/tasks/${d2.key}`)).s === 200, 'once accepted, only a project admin deletes a task (not the reporter, not an editor)');
+    check((await pool.query("SELECT deleted_at IS NOT NULL AS gone FROM tasks WHERE number = $1", [d2.number])).rows[0].gone && (await pool.query("SELECT count(*)::int AS n FROM task_events e JOIN tasks t ON t.id = e.task_id WHERE t.number = $1 AND e.kind = 'deleted'", [d2.number])).rows[0].n === 1, 'a deleted task keeps its row and its history, so its key is never reused');
+
     console.log(`xeno-tasks: ${passed} checks passed`);
   } finally {
     await pool.query('DELETE FROM tasks WHERE reporter_id = ANY($1) OR owner_user_id = ANY($1)', [Object.values(ids)]).catch(() => {});
