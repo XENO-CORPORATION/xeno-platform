@@ -694,8 +694,14 @@ router.post('/flags/:id/resolve', authMiddleware, loadActor, handled('resolveFla
 
 /** POST /api/forum/moderation/actions { action, targetType, targetId, duplicateOf?, reason?, note? } — a moderator acts directly. */
 router.post('/moderation/actions', authMiddleware, loadActor, handled('moderate', async (req, res) => {
+  let targetId = req.body?.targetId;
+  if (req.body?.targetType === 'thread' && /^[a-f0-9]{8}$/.test(String(targetId || ''))) {
+    const { rows } = await req.db.query('SELECT id FROM forum_threads WHERE short_id = $1', [targetId]);
+    if (!rows[0]) return res.status(404).json({ success: false, error: 'Thread not found' });
+    targetId = rows[0].id;
+  }
   res.json({ success: true, ...(await write.moderate(req.db, req.actor, {
-    action: req.body?.action, targetType: req.body?.targetType, targetId: req.body?.targetId,
+    action: req.body?.action, targetType: req.body?.targetType, targetId,
     duplicateOf: req.body?.duplicateOf, reason: req.body?.reason, note: req.body?.note,
   })) });
 }));

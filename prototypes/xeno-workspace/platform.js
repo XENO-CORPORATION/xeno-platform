@@ -60,7 +60,7 @@
     // the adapters start their first loads when `ready` resolves, a moment after this returns; wait for them
     const lift = () => { if (!root.classList.contains('xp-wait')) return; try { window.XW?.render?.(); } catch {} root.classList.remove('xp-wait'); document.getElementById('xp-state')?.remove(); };
     setTimeout(() => { Promise.race([Promise.all(firsts), new Promise((r) => setTimeout(r, FIRST_PAINT_MS))]).then(lift); }, 0);
-    const n = document.createElement('div'); n.id = 'xp-note'; n.setAttribute('role', 'note'); n.textContent = 'Preview. Your account, chats, projects, library, people and each area’s home are real. Community, Marketplace, Company, Anima and Places still show sample data.'; document.body.appendChild(n);
+    const n = document.createElement('div'); n.id = 'xp-note'; n.setAttribute('role', 'note'); n.textContent = 'Preview. Your account, chats, projects, library, people, community and each area’s home are real. Marketplace, Company, Anima and Places still show sample data.'; document.body.appendChild(n);
     try { window.XW?.render?.(); } catch {}
     return u;
   }

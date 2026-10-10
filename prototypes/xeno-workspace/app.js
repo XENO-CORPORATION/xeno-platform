@@ -1093,7 +1093,7 @@
     if (S.view === 'mode') return `<b>${M[S.mode].name}</b>`;
     if (S.view === 'global') { const gn = { anima: 'Anima', community: 'Community', market: 'Marketplace', library: 'Library', projects: 'Projects', workspace: 'Workspace', inbox: 'Inbox', settings: 'Settings', places: 'Places' }[S.global]; if (!S.item) return `<b>${gn}</b>`;
       // a path is a trail you can walk back up: every segment but the last is a link (GitHub, Finder)
-      const parts = S.item.split('/'), lbl = (x, i) => (S.global === 'community' && /^th_/.test(x) ? window.XENO_PG_FORUM.find((t) => t.id === x)?.title || x : S.global === 'community' && i > 0 && parts[0] === 'My reports' ? '#' + x : x);
+      const parts = S.item.split('/'), lbl = (x, i) => (S.global === 'community' && i === 0 && window.XENO_PG_FORUM.find((t) => t.id === x) ? window.XENO_PG_FORUM.find((t) => t.id === x).title : S.global === 'community' && i > 0 && parts[0] === 'My reports' ? '#' + x : x);
       return `<a data-crumb="">${gn}</a>` + parts.map((x, i) => sep + (i < parts.length - 1 ? `<a data-crumb="${esc(parts.slice(0, i + 1).join('/'))}">${esc(lbl(x, i))}</a>` : `<b>${esc(lbl(x, i))}</b>`)).join(''); }
     const p = PR[S.product];
     return `<span>${ctxName()}</span>${sep}${S.item ? `<span>${esc(p.name)}</span>${sep}<b>${esc(liveChat && S.product === 'chat' ? window.XENO_CHAT.title(S.item) : S.item)}</b>` : `<b>${esc(p.name)}</b>`}${S.product === 'chat' && !S.item ? `${sep}<span>${esc(liveChat ? 'New chat' : ctxChats().pinned[0] || 'New chat')}</span>` : ''}`;
