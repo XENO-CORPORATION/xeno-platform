@@ -948,7 +948,7 @@
       if (!fromProject && !N.parentKey) go(t.key);
     };
     sh.addEventListener('click', (e) => {
-      const c = e.target.closest('[data-n-chip]'); if (c) { e.preventDefault(); lastChip = c.dataset.nChip; return menu(c.dataset.nChip, c); }
+      const c = e.target.closest('[data-n-chip]'); if (c) { e.preventDefault(); if (toggledShut(c)) return; lastChip = c.dataset.nChip; return menu(c.dataset.nChip, c); }
       const fx = e.target.closest('[data-tk-fmt]'); if (fx) { e.preventDefault(); return format(ta(), fx.dataset.tkFmt); }
       if (e.target.closest('[data-n-attach]')) { e.preventDefault(); return pickFiles().then((f) => addFiles(f, false)); }
       const un = e.target.closest('[data-n-unfile]'); if (un) { e.preventDefault(); const n = +un.dataset.nUnfile; const f = N.files.find((x) => x.n === n); if (f) URL.revokeObjectURL(f.url); N.files = N.files.filter((x) => x.n !== n); ta().value = ta().value.split(new RegExp(`!\\[[^\\]]*\\]\\(pending:${n}\\)\\n?`)).join(''); sh.querySelector('[data-n-imgs]').innerHTML = thumbs(); return; }
@@ -1001,11 +1001,16 @@
   });
 
   // ───────────────────────── events
+  // A button that opens a menu or picker toggles it: a second click closes it. The menus close themselves on any
+  // outside mousedown, which runs before the click, so the opener's open state is read at pointerdown, first.
+  let wasOpen = null;
+  document.addEventListener('pointerdown', (e) => { wasOpen = e.target.closest?.('[data-menu-open]') || null; }, true);
+  const toggledShut = (el) => { if (!el || el !== wasOpen) return false; wasOpen = null; closePick(false); try { window.XCM?.close?.(false); } catch {} el.removeAttribute('data-menu-open'); return true; };
   const ACT = {
     board: () => go(null), retry: () => { T.status = 'loading'; patch(); load(); }, 'retry-project': (id) => { T.byProject.set(id, 'loading'); patch(); loadProject(id); },
     open: (k) => go(k), new: (pid) => newTask(pid || null), rename, describe: (k) => editDescription(k), claim, attach: (k) => chooseFiles(k),
     refresh: (k) => { T.task.delete(k); patch(); loadTask(k); },
-    menu: (k, el) => { const r = el.getBoundingClientRect(); window.XCM?.show(menuFor(k), { x: r.left, y: r.bottom + 4, opener: el }); },
+    menu: (k, el) => { const r = el.getBoundingClientRect(); window.XCM?.show(menuFor(k).map((s) => s.filter(Boolean)).filter((s) => s.length), { x: r.left, y: r.bottom + 4, opener: el }); },
     prop: (arg, el) => { const [k, f] = arg.split('|'); propMenu(k, f, el); },
     move: (arg) => { const [k, to, from] = arg.split('|'); return move(k, to, from); },
     unattach: (arg) => { const [k, id] = arg.split('|'); return unattach(k, id); },
@@ -1036,6 +1041,7 @@
     const el = e.target.closest('[data-tk="menu"], [data-tk="unattach"], [data-tk="select"], [data-tk="check"], [data-tk="cmenu"], [data-tk="unlink"], .tk-md [data-tk="open"]') || e.target.closest('[data-tk]'); if (!el) return;
     const k = el.dataset.tk; if (!ACT[k]) return;
     e.preventDefault(); e.stopImmediatePropagation();
+    if (toggledShut(el)) return;
     Promise.resolve(ACT[k](el.dataset.arg, el)).catch(() => toast('Something went wrong. Nothing changed.'));
   }, true);
   addEventListener('input', (e) => { const s = e.target.closest?.('#main [data-tk-search]'); if (!s) return; T.f.q = s.value; T.viewId = null; saveF(); clearTimeout(s.__t); s.__t = setTimeout(patch, 120); }, true);
