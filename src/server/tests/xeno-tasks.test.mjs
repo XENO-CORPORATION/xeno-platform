@@ -7,7 +7,7 @@ import http from 'node:http';
 import express from 'express';
 import pg from 'pg';
 import chatRoutes from '../routes/chatRoutes.js';
-import xenoTasksRoutes from '../routes/xenoTasksRoutes.js';
+import xenoTasksRoutes, { taskTokenAuth } from '../routes/xenoTasksRoutes.js';
 import { runAllMigrations } from '../services/migrationRunner.js';
 
 if (!process.env.DATABASE_URL) throw new Error('DATABASE_URL is required');
@@ -23,8 +23,8 @@ async function main() {
   await pool.query("INSERT INTO agent_identities (user_id, owner_user_id, agent_role, agent_origin) VALUES ($1, $2, 'other', 'xeno') ON CONFLICT DO NOTHING", [ids.bot, ids.ada]).catch((e) => console.log('    (agent row:', e.message, ')'));
   let actor = ids.ada;
   const app = express(); app.use(express.json());
-  app.use((req, _res, next) => { req.db = pool; req.user = { id: actor }; next(); });
-  app.use('/api/chat', chatRoutes); app.use('/api/tasks', xenoTasksRoutes);
+  app.use((req, _res, next) => { req.db = pool; if (!String(req.headers.authorization || '').startsWith('Bearer ')) req.user = { id: actor }; next(); });
+  app.use('/api/chat', chatRoutes); app.use('/api/tasks', taskTokenAuth, xenoTasksRoutes);
   const server = http.createServer(app); await new Promise((r) => server.listen(0, '127.0.0.1', r));
   const base = `http://127.0.0.1:${server.address().port}/api`;
   const as = (who) => async (method, path, body) => { actor = ids[who]; const r = await fetch(base + path, { method, headers: { 'content-type': 'application/json' }, body: body === undefined ? undefined : JSON.stringify(body) }); return { s: r.status, j: await r.json().catch(() => ({})) }; };
@@ -51,8 +51,11 @@ async function main() {
 
     // claim (atomic), work, review
     const c1 = await bot('POST', `/tasks/${t1.key}/claim`);
-    check(c1.s === 200 && c1.j.task.assignee.id === ids.bot && c1.j.task.assignee.kind === 'agent', 'an agent claims the unassigned task');
-    check((await cyd('POST', `/tasks/${t1.key}/claim`)).j.code === 'already_claimed', 'a second claim is refused: two cannot hold one task');
+    check(c1.s === 200 && c1.j.task.delegate && c1.j.task.delegate.id === String(ids.bot) && c1.j.task.delegate.kind === 'agent' && !c1.j.task.assignee, 'an agent that takes a task becomes its delegate (an agent is never the assignee)');
+    const c2 = await cyd('POST', `/tasks/${t1.key}/claim`);
+    check(c2.j.task.assignee && c2.j.task.assignee.id === String(ids.cyd) && c2.j.task.delegate.id === String(ids.bot), 'a person can still take it as the accountable assignee, alongside the agent doing the work');
+    check((await cyd('POST', `/tasks/${t1.key}/claim`)).j.code === 'already_claimed', 'a second claim of the same role is refused: two cannot hold one task');
+    await cyd('PATCH', `/tasks/${t1.key}`, { assigneeId: null });   // the viewer lets go again (the checks below need them uninvolved)
     await ada('PATCH', `/tasks/${t1.key}`, { reviewerId: ids.ada, reviewRequired: true });
     check((await bot('POST', `/tasks/${t1.key}/transition`, { to: 'in_progress' })).j.task.status === 'in_progress', 'the assignee starts it');
     check((await bot('POST', `/tasks/${t1.key}/transition`, { to: 'done' })).s === 403, 'with review required, the assignee cannot close it directly');
@@ -206,6 +209,99 @@ async function main() {
     check((await pool.query(`SELECT count(*)::int AS n FROM user_notifications WHERE kind IN ('commented', 'status') AND emailed_at IS NOT NULL`)).rows[0].n === 0, 'comments and status changes stay in the inbox and are never mailed');
     check((await sendPendingTaskEmails(pool, { delayMinutes: 0, send, env: { TASK_NOTIFICATION_EMAILS: 'false' } })).enabled === false, 'TASK_NOTIFICATION_EMAILS=false turns the mail off');
 
+    // ── agents: delegation, credentials, sessions, events, MCP, hand-off
+    {
+    const tok = (raw) => async (method, path, body) => { const r = await fetch(base + path, { method, headers: { 'content-type': 'application/json', authorization: 'Bearer ' + raw }, body: body === undefined ? undefined : JSON.stringify(body) }); return { s: r.status, j: await r.json().catch(() => ({})) }; };
+    const ag = (await ada('POST', '/tasks', { title: 'Agent work', projectId: proj.id, body: 'Do the thing' })).j.task;
+    await ada('POST', `/tasks/${ag.key}/transition`, { to: 'todo' });
+    const dg = (await ada('PATCH', `/tasks/${ag.key}`, { assigneeId: ids.bot })).j.task;
+    check(dg.delegate && dg.delegate.id === String(ids.bot) && dg.delegate.kind === 'agent' && dg.assignee && dg.assignee.id === String(ids.ada) && dg.session && dg.session.state === 'pending' && dg.events.some((e) => e.kind === 'delegated'), 'choosing an agent as assignee makes it the DELEGATE; a person stays the accountable assignee; a session starts');
+    check(dg.events.find((e) => e.kind === 'delegated').toName === 'bot' || !!dg.events.find((e) => e.kind === 'delegated').toName, 'the hand-off event names the agent it went to');
+    check((await ada('POST', `/tasks/${ag.key}/delegate`, { agentId: ids.bob })).j.code === 'delegate_not_agent', 'only an agent can be a delegate');
+    { const refused = await ada('POST', '/tasks/agents', { name: 'Release bot' });
+      check(refused.s === 403 && refused.j.error === 'plan_upgrade_required', 'creating an agent from Tasks keeps the same paywall as the platform’s agents (free plan refused)');
+      const { createTaskAgent } = await import('../services/xenoTasks.js');
+      const made = await createTaskAgent(pool, { id: ids.ada, kind: 'human', name: 'Ada' }, { name: 'Release bot' });
+      const key = (await pool.query('SELECT bool_or(is_active) AS on FROM api_keys WHERE user_id = $1', [made.agent.id])).rows[0].on;
+      const owner = (await pool.query('SELECT owner_user_id FROM agent_identities WHERE user_id = $1', [made.agent.id])).rows[0];
+      check(made.agent.name === 'Release bot' && key !== true && String(owner.owner_user_id) === String(ids.ada), 'an entitled person creates an agent: owned by them, its general API key off');
+      let named = null; try { await createTaskAgent(pool, { id: ids.ada, kind: 'human' }, { name: '  ' }); } catch (e) { named = e.code; }
+      let agentMade = null; try { await createTaskAgent(pool, { id: ids.bot, kind: 'agent' }, { name: 'x' }); } catch (e) { agentMade = e.code; }
+      check(named === 'name_required' && agentMade === 'not_allowed', 'an agent needs a name, and an agent cannot create agents'); }
+    check((await pool.query("SELECT count(*)::int AS n FROM task_agent_events WHERE agent_user_id = $1 AND kind = 'delegated'", [ids.bot])).rows[0].n >= 1, 'the agent is told it was delegated a task');
+    // credentials
+    check((await bob('POST', '/tasks/agents/tokens', { agentId: ids.bot })).s === 404, 'only an agent’s owner can issue it a credential');
+    const ro = (await ada('POST', '/tasks/agents/tokens', { agentId: ids.bot, scopes: ['tasks:read'], label: 'reader' })).j;
+    const rw = (await ada('POST', '/tasks/agents/tokens', { agentId: ids.bot, label: 'worker' })).j;
+    check(/^xtk_[a-z0-9]{12}_/.test(ro.token) && rw.scopes.includes('tasks:write'), 'the owner issues scoped credentials to their agent');
+    const listed = (await ada('GET', '/tasks/agents')).j.agents.find((a) => a.id === String(ids.bot));
+    check(listed && listed.tokens.length >= 2 && listed.tokens.every((k) => k.hint.endsWith('_…') && !('token' in k)), 'listing agents never shows a credential’s secret');
+    check((await pool.query('SELECT token_hash FROM task_agent_tokens WHERE id = $1', [ro.id])).rows[0].token_hash !== ro.token, 'only a hash of the secret is stored');
+    const R = tok(ro.token), W = tok(rw.token);
+    const meR = await R('GET', '/tasks/agent/me');
+    check(meR.s === 200 && meR.j.agent.kind === 'agent' && meR.j.tasks.some((x) => x.key === ag.key), 'an agent with its own credential sees the work delegated to it');
+    check((await R('POST', `/tasks/${ag.key}/comments`, { body: 'x' })).j.code === 'scope_missing', 'a read-only credential cannot write');
+    check((await tok('xtk_aaaaaaaaaaaa_' + 'b'.repeat(43))('GET', '/tasks/agent/me')).s === 401, 'an unknown credential is refused, not treated as someone else');
+    check((await W('GET', '/tasks/agents')).s === 403, 'an agent can’t manage agents');
+    // session and activity
+    await W('POST', `/tasks/${ag.key}/claim`);
+    const asked = (await W('POST', `/tasks/${ag.key}/activity`, { type: 'ask', body: 'Which colour should the button be?' })).j.task;
+    check(asked.session.state === 'awaiting_input' && asked.events.some((e) => e.kind === 'activity' && e.from === 'ask'), 'the agent’s question shows on the task and its session waits for a reply');
+    check((await inbox('ada')).some((n) => n.kind === 'agent_question' && n.ref === ag.key), 'the assignee is told the agent asked something');
+    check((await bob('POST', `/tasks/${ag.key}/activity`, { type: 'thought', body: 'x' })).j.code === 'not_delegate', 'only the delegate reports activity');
+    await ada('POST', `/tasks/${ag.key}/comments`, { body: 'Use black.' });
+    await W('POST', `/tasks/${ag.key}/activity`, { type: 'action', body: 'Changing the button colour' });
+    await W('POST', `/tasks/${ag.key}/transition`, { to: 'in_progress', from: 'todo' });
+    await ada('PATCH', `/tasks/${ag.key}`, { reviewerId: ids.ada, reviewRequired: true });
+    const sent = (await W('POST', `/tasks/${ag.key}/transition`, { to: 'in_review', from: 'in_progress' })).j.task;
+    check(sent.status === 'in_review' && sent.session.state === 'done', 'the agent hands its work in for review and its session ends');
+    check((await W('POST', `/tasks/${ag.key}/transition`, { to: 'done', from: 'in_review' })).s === 403, 'an agent can never accept its own work');
+    await ada('POST', `/tasks/${ag.key}/transition`, { to: 'in_progress', from: 'in_review', note: 'Make it bigger' });
+    const ev = (await W('GET', '/tasks/agent/events?after=0')).j;
+    const kinds = ev.events.filter((e) => e.task.key === ag.key).map((e) => e.kind);
+    check(['delegated', 'reply', 'changes_requested'].every((k) => kinds.includes(k)) && ev.events.find((e) => e.kind === 'changes_requested').task.note === 'Make it bigger', `the agent’s feed has delegated, the reply and the change request with its note (${kinds})`);
+    check((await W('GET', `/tasks/agent/events?after=${ev.cursor}`)).j.events.length === 0, 'the feed pages by cursor');
+    // push: signed webhooks, unsafe addresses refused, failures retried
+    check((await ada('PUT', '/tasks/agents/webhook', { agentId: ids.bot, url: 'http://127.0.0.1:9/hook' })).j.code === 'unsafe_url', 'a webhook can’t point at an internal address');
+    const wh = (await ada('PUT', '/tasks/agents/webhook', { agentId: ids.bot, url: 'https://hooks.example.com/xeno' })).j;
+    const { deliverAgentEvents } = await import('../services/xenoTasks.js'); const crypto = await import('node:crypto');
+    const pushed = []; await deliverAgentEvents(pool, { send: async (url, o) => { pushed.push({ url, o }); return { status: 200 }; } });
+    const one = pushed[0]; const [ts, v1] = one ? one.o.headers['x-xeno-signature'].split(',').map((p) => p.split('=')[1]) : [];
+    check(pushed.length >= 3 && one.url === 'https://hooks.example.com/xeno' && v1 === crypto.createHmac('sha256', wh.secret).update(`${ts}.${one.o.body}`).digest('hex'), `queued events are pushed to the webhook, each signed with the agent’s secret (${pushed.length})`);
+    check((await pool.query('SELECT count(*)::int AS n FROM task_agent_events WHERE agent_user_id = $1 AND delivered_at IS NULL', [ids.bot])).rows[0].n === 0, 'a delivered event is not sent again');
+    await ada('POST', `/tasks/${ag.key}/comments`, { body: 'One more thing' });
+    await deliverAgentEvents(pool, { send: async () => ({ status: 503 }) });
+    const retry = (await pool.query("SELECT attempts, next_attempt_at > now() AS later, last_error FROM task_agent_events WHERE agent_user_id = $1 AND kind = 'reply' ORDER BY id DESC LIMIT 1", [ids.bot])).rows[0];
+    check(retry.attempts === 1 && retry.later && /503/.test(retry.last_error), 'a failed delivery is retried later, with the reason kept');
+    // MCP
+    const rpc = (f) => async (method, params) => (await f('POST', '/tasks/mcp', { jsonrpc: '2.0', id: 1, method, params })).j;
+    const mW = rpc(W), mR = rpc(R);
+    check((await mW('initialize')).result.serverInfo.name === 'xeno-tasks' && (await mW('tools/list')).result.tools.some((x) => x.name === 'report_activity'), 'MCP answers initialize and lists the task tools');
+    const mg = (await mW('tools/call', { name: 'get_task', arguments: { key: ag.key } })).result;
+    check(!mg.isError && mg.structuredContent.task.key === ag.key && /\/tasks\/T-\d+$/.test(mg.structuredContent.task.url), 'an MCP tool returns the task with its link');
+    check((await mR('tools/call', { name: 'comment', arguments: { key: ag.key, body: 'x' } })).result.isError, 'MCP enforces the credential’s scopes like the API does');
+    const ml = (await mW('tools/call', { name: 'list_my_tasks', arguments: {} })).result.structuredContent.tasks;
+    check(ml.some((x) => x.key === ag.key), 'list_my_tasks gives the agent its delegated work');
+    // revoke
+    await ada('DELETE', `/tasks/agents/tokens/${ro.id}`);
+    check((await R('GET', '/tasks/agent/me')).s === 401, 'a revoked credential stops working at once');
+    // the hand-off link: a task-only credential for the owner's hand-off agent
+    const hk = (await bob('POST', '/tasks', { title: 'Hand me off', projectId: proj.id })).j.task;
+    const other = (await bob('POST', '/tasks', { title: 'Not yours', projectId: proj.id })).j.task;
+    check((await cyd('POST', `/tasks/${hk.key}/handoff`)).s === 403, 'a viewer can’t hand a task to an agent');
+    const ho = (await bob('POST', `/tasks/${hk.key}/handoff`)).j;
+    check(/^xtk_/.test(ho.token) && ho.task.delegate && ho.task.delegate.id === ho.agent.id && ho.task.session.state === 'pending', 'handing off makes the hand-off agent the delegate and returns a credential');
+    const H = tok(ho.token);
+    check((await H('GET', `/tasks/${hk.key}`)).s === 200 && (await H('POST', `/tasks/${hk.key}/activity`, { type: 'thought', body: 'Reading the task' })).s === 200, 'the pasted agent reads its task and reports back');
+    check((await H('GET', `/tasks/${other.key}`)).j.code === 'single_task' && (await H('POST', '/tasks', { title: 'x' })).j.code === 'single_task' && (await H('PATCH', `/tasks/${other.key}`, { title: 'x' })).j.code === 'single_task', 'a hand-off credential reaches only its own task');
+    check((await H('GET', '/tasks')).j.tasks.length === 1, 'listing with a hand-off credential shows only its task');
+    check((await rpc(H)('tools/call', { name: 'create_task', arguments: { title: 'x' } })).result.isError, 'MCP keeps the hand-off credential to its one task');
+    check((await pool.query('SELECT count(*)::int AS n FROM api_keys WHERE user_id = $1 AND is_active', [ho.agent.id])).rows[0].n === 0, 'the hand-off agent has no general API key — only its task credential');
+    check((await pool.query('SELECT 1 FROM relationship_tuples WHERE object_id = $1 AND subject_id = $2', [String(proj.id), ho.agent.id])).rowCount === 0, 'handing off does not share the whole project with the agent');
+    const ho2 = (await bob('POST', `/tasks/${other.key}/handoff`)).j;
+    check(ho2.agent.id === ho.agent.id, 'the same hand-off agent is reused, not a new one each time');
+
+    }
     console.log(`xeno-tasks: ${passed} checks passed`);
   } finally {
     await pool.query('DELETE FROM tasks WHERE reporter_id = ANY($1) OR owner_user_id = ANY($1)', [Object.values(ids)]).catch(() => {});

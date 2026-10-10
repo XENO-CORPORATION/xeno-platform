@@ -1,8 +1,8 @@
 import path from 'path';
-import xenoTasksRoutes from './routes/xenoTasksRoutes.js';
+import xenoTasksRoutes, { taskTokenAuth, unlessTaskToken } from './routes/xenoTasksRoutes.js';
 import userNotificationsRoutes from './routes/userNotificationsRoutes.js';
 import { startTaskSweeps } from './services/taskNotifyEmail.js';
-import { sweepDueReminders } from './services/xenoTasks.js';
+import { sweepDueReminders, deliverAgentEvents } from './services/xenoTasks.js';
 import workspaceAreaRoutes from './routes/workspaceAreaRoutes.js';
 import { areaFromRequest } from './utils/resourceArea.js';
 import { fileURLToPath } from 'url';
@@ -617,7 +617,8 @@ app.use('/api/workspace-invites', databaseMiddleware, authMiddleware, workspaceI
 // One search and one "needs you" feed across a person's chats, projects and Library, each aware of the area.
 app.use('/api/workspace', databaseMiddleware, authMiddleware, requireActivated, areaFromRequest, workspaceAreaRoutes);
 // XENO Tasks (codename Telos) — the shared work tracker for people and agents (xeno-tasks/SPEC.md).
-app.use('/api/tasks', databaseMiddleware, authMiddleware, requireActivated, xenoTasksRoutes);
+// agents reach Tasks with their own credential (Bearer xtk_...), checked before the person sign-in middleware
+app.use('/api/tasks', databaseMiddleware, taskTokenAuth, unlessTaskToken(authMiddleware), unlessTaskToken(requireActivated), xenoTasksRoutes);
 app.use('/api/notifications', databaseMiddleware, authMiddleware, requireActivated, userNotificationsRoutes);
 console.log('🏢 Workspace routes integrated: /api/workspaces/* + /api/workspace-invites/*');
 
@@ -4001,7 +4002,7 @@ initBackgroundJobs(pool).catch(err => {
 // service being correct is not the same as it running.
 backgroundLeader.whenLeader(() => startNotificationEmailSweep(pool));
 // XENO Tasks: notification email (on unless TASK_NOTIFICATION_EMAILS=false) and due reminders, on the leader only
-backgroundLeader.whenLeader(() => startTaskSweeps(pool, { sweepDueReminders }));
+backgroundLeader.whenLeader(() => startTaskSweeps(pool, { sweepDueReminders, deliverAgentEvents }));
 // Loop D push half. The delivery engine it feeds had ZERO producers before this
 // line existed — see forumWebhookPush.js.
 backgroundLeader.whenLeader(() => startWebhookPushSweep(pool));

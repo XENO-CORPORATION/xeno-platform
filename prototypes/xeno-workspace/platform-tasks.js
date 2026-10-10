@@ -391,7 +391,7 @@
       <div class="tk-card-top">${selBox(t)}<span class="tk-kind" title="${k[1]}">${ic(k[0])}</span><small>${esc(t.key)}</small>${t.priority !== 'none' ? `<em class="tk-pri tk-pri--${esc(t.priority)}">${esc(PRI[t.priority])}</em>` : ''}<span class="tk-sp"></span><button class="tk-more" data-tk="menu" data-arg="${esc(t.key)}" aria-label="Actions for ${esc(t.key)}">${ic('more')}</button></div>
       ${t.parent ? `<small class="tk-card-parent" title="Sub-task of ${esc(t.parent.key)}">↳ ${esc(t.parent.key)} ${esc(t.parent.title)}</small>` : ''}
       <b class="tk-card-t">${esc(t.title)}</b>
-      <div class="tk-card-f">${t.project ? `<small class="tk-chip">${esc(t.project.name)}</small>` : ''}${(t.labels || []).slice(0, 2).map((l) => `<small class="tk-chip">${esc(l)}</small>`).join('')}${subChip(t)}${dueChip(t)}<span class="tk-sp"></span>${face(t.assignee, true)}</div></div>`;
+      <div class="tk-card-f">${t.project ? `<small class="tk-chip">${esc(t.project.name)}</small>` : ''}${(t.labels || []).slice(0, 2).map((l) => `<small class="tk-chip">${esc(l)}</small>`).join('')}${subChip(t)}${dueChip(t)}<span class="tk-sp"></span>${t.delegate ? `<span class="tk-deleg" title="${esc(t.delegate.name)} is working on it${t.session ? ' · ' + esc(SESSION[t.session.state] || '') : ''}" data-tk-deleg="${esc(t.session ? t.session.state : 'pending')}">${face(t.delegate, true)}</span>` : ''}${face(t.assignee, true)}</div></div>`;
   }
   const row = (t) => `<div class="tk-row${T.sel.has(t.key) ? ' tk-row--sel' : ''}" role="button" tabindex="0" data-tk="open" data-arg="${esc(t.key)}" data-tk-rowkey="${esc(t.key)}">${selBox(t)}<span class="tk-kind">${ic((KIND[t.kind] || KIND.task)[0])}</span><small class="tk-key">${esc(t.key)}</small><b>${esc(t.title)}</b><span class="tk-row-x">${(t.labels || []).slice(0, 2).map((l) => `<small class="tk-chip">${esc(l)}</small>`).join('')}${subChip(t)}${dueChip(t)}</span><span class="tk-status"><span class="tk-dot tk-dot--${esc(t.status)}"></span>${esc(LABEL[t.status])}</span>${t.priority !== 'none' ? `<em class="tk-pri tk-pri--${esc(t.priority)}">${esc(PRI[t.priority])}</em>` : '<span></span>'}${face(t.assignee, true)}<button class="tk-more" data-tk="menu" data-arg="${esc(t.key)}" aria-label="Actions for ${esc(t.key)}">${ic('more')}</button></div>`;
   function boardOf(list, small) {
@@ -418,6 +418,7 @@
   }
   function region(view) {
     if (view.startsWith('task:')) return taskRegion(view.slice(5));
+    if (view === 'agents') return agentsRegion();
     const s = loadingOrError(T.status, T.list); if (s) return s;
     const L = T.list;
     if (T.views === null) { T.views = []; loadViews(); }
@@ -452,7 +453,9 @@
       if (e.field) return `changed ${esc(e.field === 'kind' ? 'the type' : e.field === 'due' ? 'the due date' : 'the ' + e.field)} from ${val(e.field, e.from)} to ${val(e.field, e.to)}`;
       return `changed the ${esc(e.from || 'task')}`;
     };
+    const ACTV = { thought: ['is thinking', 'star'], action: ['is working', 'flow'], ask: ['asks', 'bell'], result: ['reports', 'check'], error: ['hit a problem', 'x'] };
     return out.map((e) => {
+      if (e.kind === 'activity') { const a = ACTV[e.from] || ACTV.action; return `<div class="tk-act-ev tk-act-ev--${esc(e.from || 'action')}" data-tk-ev="activity" data-tk-activity="${esc(e.from || '')}">${face(e.actor, true)}<div class="tk-act-ev-b"><header>${who(e.actor)} <span class="tk-act-ev-k">${ic(a[1])}${esc(a[0])}</span><small>${when(e.at)}</small></header>${e.note ? `<div class="tk-md">${md(e.note, t.key, {})}</div>` : ''}</div></div>`; }
       if (e.kind === 'comment') {
         if (e.removed) return `<p class="tk-ev tk-ev--removed" data-tk-ev="comment-removed"><span class="tk-ev-dot"></span><span>${who(e.actor)} removed a comment</span><small>${when(e.at)}</small></p>`;
         const mine = e.actor && e.actor.id === me();
@@ -469,6 +472,7 @@
         : e.kind === 'linked' ? `linked it: ${esc((LINKS.find(([k]) => k === e.from) || [0, e.from])[1].toLowerCase())} <a class="tk-ref" data-tk="open" data-arg="${esc(e.to)}">${esc(e.to)}</a>`
         : e.kind === 'unlinked' ? `removed the link to <a class="tk-ref" data-tk="open" data-arg="${esc(e.to)}">${esc(e.to)}</a>`
         : e.kind === 'parent' ? `added the sub-task <a class="tk-ref" data-tk="open" data-arg="${esc(e.to)}">${esc(e.to)}</a>`
+        : e.kind === 'delegated' ? (e.to ? `handed it to <b>${esc(e.toName || 'an agent')}</b><em class="pg-kind">Agent</em>${e.note === 'handed off' ? ' with a one-task credential' : ''}` : `took <b>${esc(e.fromName || 'the agent')}</b> off it`)
         : e.kind === 'restored' ? 'restored it' : e.kind === 'deleted' ? 'deleted it' : esc(e.kind);
       return `<p class="tk-ev" data-tk-ev="${esc(e.kind === 'run' ? 'status' : e.kind)}"><span class="tk-ev-dot"></span><span>${who(e.actor)} ${what}</span><small>${when(e.at)}</small></p>`;
     }).join('');
@@ -526,9 +530,11 @@
         <section class="tk-next" data-tk-next><p class="tk-next-h">${esc(ns.hint || '')}</p>
           ${ns.primary || canClaim ? `<div class="tk-next-main">${canClaim ? `<button class="tk-act${ns.primary ? '' : ' tk-act--main'}" data-tk="claim" data-arg="${esc(t.key)}">${ic('user')}Take it</button>` : ''}${ns.primary ? mv(ns.primary, true) : ''}</div>` : ''}
           ${ns.rest.length ? `<div class="tk-next-rest">${ns.rest.map((m) => mv(m, false)).join('')}</div>` : ''}</section>
+        ${t.delegate ? sessionCard(t) : ''}
         <section class="tk-sgroup"><h4>Properties</h4>
           ${prop('status', 'Status', `<span class="tk-dot tk-dot--${esc(t.status)}"></span><span>${esc(LABEL[t.status])}</span>`, can.moves.length > 0, 'S')}
           ${prop('assignee', 'Assignee', person(t.assignee), editAny, 'I')}
+          ${prop('delegate', 'Agent', t.delegate ? person(t.delegate) : '<span class="tk-dim">None</span>', can.edit, 'A')}
           ${prop('reviewer', 'Reviewer', person(t.reviewer) + (t.reviewRequired ? '<small class="tk-req">required</small>' : ''), can.edit)}
           ${prop('priority', 'Priority', priChip(t.priority), editAny, 'P')}
           ${prop('kind', 'Type', `${ic(k[0])}<span>${k[1]}</span>`, editAny)}
@@ -548,10 +554,88 @@
           ${prop('created', 'Created', `<span title="${esc(new Date(t.createdAt).toLocaleString())}">${esc(when(t.createdAt))}</span>`, false)}
           ${prop('updated', 'Updated', `<span title="${esc(new Date(t.updatedAt).toLocaleString())}">${esc(when(t.updatedAt))}</span>`, false)}</section>
         <section class="tk-sgroup tk-side-acts">
-          <button class="tk-sbtn" data-tk="prompt" data-arg="${esc(t.key)}" title="Copy a markdown handoff brief to paste into an agent CLI">${ic('bot')}Copy for agent</button>
+          <button class="tk-sbtn" data-tk="prompt" data-arg="${esc(t.key)}" title="${can.edit ? 'Hands the task to your agent and copies a brief with a credential for this task only — paste it into an agent CLI' : 'Copy a markdown brief to paste into an agent CLI'}">${ic('bot')}Copy for agent</button>
           <button class="tk-sbtn" data-tk="copylink" data-arg="${esc(t.key)}">${ic('share')}Copy link</button>
           <p class="tk-props-hint"><kbd>?</kbd> keyboard shortcuts</p></section>
       </div></aside></div>`;
+  }
+  function agentsRegion() {
+    if (T.agents === undefined) { T.agents = null; loadAgents(); }
+    if (T.agents === null) return '<p class="tk-msg" data-tk-state="loading">Loading agents…</p>';
+    if (T.agents === 'error') return '<p class="tk-msg" data-tk-state="error">The agents couldn’t be loaded. <button class="pg-link" data-tk="agents-retry">Try again</button></p>';
+    const top = `<div class="tk-bar">${H().btn('New agent', 'data-tk="agent-new"', false, 'plus')}<span class="tk-sp"></span><small class="tk-dim">An agent works through its own credential, never yours. Delegate a task to it from the task’s Agent field.</small></div>`;
+    if (!T.agents.length) return top + `<div class="tk-first" data-tk-state="empty"><p>No agents yet. Create one, give it a credential, and point your agent CLI at XENO Tasks over MCP or the API. Or open any task and use <b>Copy for agent</b>: that makes a hand-off agent with a credential for that one task.</p></div>`;
+    const fmt = (d) => (d ? new Date(d).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' }) : '');
+    return top + `<div class="tk-agents">${T.agents.map((a) => `<article class="tk-agent" data-tk-agent="${esc(a.id)}">
+      <header>${face({ name: a.name, kind: 'agent' }, true)}<div><b>${esc(a.name)}</b><small>@${esc(a.username)}${a.origin === 'handoff' ? ' · hand-off agent' : ''} · ${a.openTasks || 0} open task${a.openTasks === 1 ? '' : 's'}</small></div><span class="tk-sp"></span>${H().btn('New credential', `data-tk="agent-token" data-arg="${esc(a.id)}"`, false, 'plus')}</header>
+      <div class="tk-agent-sec"><h4>Credentials</h4>${a.tokens.length ? a.tokens.map((k) => `<div class="tk-tok" data-tk-tok="${esc(k.id)}"><code>${esc(k.hint)}</code><span>${esc(k.label || (k.task ? 'One task: ' + k.task : 'All delegated work'))}</span><small>${k.scopes.includes('tasks:write') ? 'Read and write' : 'Read only'} · ${k.lastUsedAt ? 'used ' + esc(when(k.lastUsedAt)) : 'never used'} · expires ${esc(fmt(k.expiresAt))}</small><button class="tk-link tk-link--danger" data-tk="agent-revoke" data-arg="${esc(k.id)}">Revoke</button></div>`).join('') : '<p class="tk-dim">None. Without a credential this agent can’t reach XENO Tasks.</p>'}</div>
+      <div class="tk-agent-sec"><h4>Webhook</h4>${a.webhook ? `<div class="tk-tok"><code>${esc(a.webhook)}</code><small>Every delivery is signed (HMAC-SHA256) and retried if it fails</small><button class="tk-link" data-tk="agent-hook" data-arg="${esc(a.id)}">Change</button><button class="tk-link tk-link--danger" data-tk="agent-unhook" data-arg="${esc(a.id)}">Remove</button></div>` : `<p class="tk-dim">None. The agent can still poll its events. <button class="pg-link" data-tk="agent-hook" data-arg="${esc(a.id)}">Add a webhook</button></p>`}</div>
+    </article>`).join('')}</div>`;
+  }
+  async function loadAgents() { const res = await api('GET', '/api/tasks/agents').catch(() => null); T.agents = res && res.ok ? res.d.agents : 'error'; patch(); }
+  // how to connect, given a credential: MCP config for agent CLIs, plain HTTP for everything else
+  function connectText(token, key) {
+    const base = location.origin + '/api/tasks';
+    const mcp = JSON.stringify({ mcpServers: { 'xeno-tasks': { type: 'http', url: base + '/mcp', headers: { Authorization: 'Bearer ' + token } } } }, null, 2);
+    return [
+      '## Connect to XENO Tasks', '',
+      key ? `This credential works for ${key} only, and expires in 7 days. Treat it like a password.` : 'Treat this credential like a password. It is shown once.', '',
+      '**MCP** (Claude Code, Codex, Cursor and other agent CLIs) — add this server:', '', '```json', mcp, '```', '',
+      `**HTTP** — every call sends \`Authorization: Bearer ${token}\` to ${base}`,
+      `- Read: \`GET ${base}/${key || 'T-12'}\`${key ? '' : ` · your queue: \`GET ${base}/agent/me\``}`,
+      `- Show what you are doing: \`POST ${base}/${key || 'T-12'}/activity\` with \`{"type":"action","body":"…"}\` (types: thought, action, ask, result, error; \`ask\` waits for the assignee)`,
+      `- Comment: \`POST ${base}/${key || 'T-12'}/comments\` with \`{"body":"…"}\``,
+      `- Hand it in: \`POST ${base}/${key || 'T-12'}/transition\` with \`{"to":"in_review","from":"in_progress"}\``,
+      `- Replies and decisions for you: \`GET ${base}/agent/events?after=<cursor>\``,
+    ].join('\n');
+  }
+  function showSecret({ title, sub, secret, extra, copyAll }) {
+    return D().info({ title, sub, size: 'md', html: `<div class="tk-secret"><p class="tk-secret-warn">${ic('bell')}Copy it now. It is shown once and can’t be retrieved again; revoke it and make a new one if it’s lost.</p><code class="tk-secret-v" data-tk-secret>${esc(secret)}</code>${extra ? `<pre class="tk-secret-pre">${esc(extra)}</pre>` : ''}</div>`,
+      actions: [{ label: 'Copy', close: false, run: () => window.XCM.H.copy(copyAll || secret, 'Copied') }] });
+  }
+  async function agentAct(what, arg) {
+    if (what === 'new') {
+      const v = await D().form({ title: 'New agent', sub: 'An agent is its own account, owned by you. It works through credentials you give it, and you can revoke them at any time.', submit: 'Create agent', size: 'sm', fields: [{ id: 'name', label: 'Name', required: true, max: 60, placeholder: 'Release bot' }] });
+      if (!v) return;
+      const res = await api('POST', '/api/tasks/agents', { name: v.name }).catch(() => null);
+      if (res && res.d && res.d.error === 'plan_upgrade_required') return toast(res.d.message || 'Agents are part of a paid plan.');
+      if (!res || !res.ok) return toast(said(res, 'The agent couldn’t be created.'));
+      T.agents = undefined; patch(); toast(`${res.d.agent.name} created — give it a credential next`);
+    } else if (what === 'token') {
+      const a = (T.agents || []).find((x) => x.id === arg);
+      const v = await D().form({ title: `New credential for ${a ? a.name : 'this agent'}`, sub: 'It reaches only the tasks delegated to this agent, and the projects it is on.', submit: 'Create credential', size: 'sm', fields: [
+        { id: 'label', label: 'Where it will be used', max: 80, placeholder: 'Claude Code on my laptop' },
+        { id: 'access', type: 'seg', label: 'Access', value: 'rw', options: [['rw', 'Read and write'], ['r', 'Read only']] },
+        { id: 'days', type: 'seg', label: 'Expires', value: '90', options: [['7', '7 days'], ['30', '30 days'], ['90', '90 days'], ['365', '1 year']] }] });
+      if (!v) return;
+      const res = await api('POST', '/api/tasks/agents/tokens', { agentId: arg, label: v.label, days: +v.days, scopes: v.access === 'r' ? ['tasks:read'] : ['tasks:read', 'tasks:write'] }).catch(() => null);
+      if (!res || !res.ok) return toast(said(res, 'The credential couldn’t be created.'));
+      T.agents = undefined; patch();
+      const conn = connectText(res.d.token, null);
+      await showSecret({ title: 'Credential created', sub: `For ${res.d.agent.name}`, secret: res.d.token, extra: conn, copyAll: conn });
+    } else if (what === 'revoke') {
+      if (!(await D().confirm({ title: 'Revoke this credential?', body: 'Anything using it stops working at once. This can’t be undone.', action: 'Revoke' }))) return;
+      const res = await api('DELETE', `/api/tasks/agents/tokens/${encodeURIComponent(arg)}`).catch(() => null);
+      if (!res || !res.ok) return toast(said(res, 'It couldn’t be revoked.'));
+      T.agents = undefined; patch(); toast('Credential revoked');
+    } else if (what === 'hook' || what === 'unhook') {
+      let url = '';
+      if (what === 'hook') { const v = await D().form({ title: 'Webhook', sub: 'XENO posts each event for this agent here: delegated, mentioned, a reply, changes requested, accepted. Failed deliveries are retried with backoff.', submit: 'Save', size: 'sm', fields: [{ id: 'url', label: 'HTTPS address', required: true, max: 500, placeholder: 'https://agent.example.com/xeno' }] }); if (!v) return; url = v.url; }
+      const res = await api('PUT', '/api/tasks/agents/webhook', { agentId: arg, url: url || null }).catch(() => null);
+      if (!res || !res.ok) return toast(said(res, 'The webhook couldn’t be saved.'));
+      T.agents = undefined; patch();
+      if (res.d.secret) await showSecret({ title: 'Webhook saved', sub: 'Verify each delivery with this signing secret', secret: res.d.secret, extra: 'Header: X-Xeno-Signature: t=<unix seconds>,v1=<hex HMAC-SHA256 of "<t>.<raw body>">\nRefuse a delivery whose t is more than 5 minutes old.' });
+      else toast('Webhook removed');
+    }
+  }
+  const SESSION = { pending: 'Waiting to start', working: 'Working', awaiting_input: 'Waiting for you', done: 'Finished', error: 'Hit a problem' };
+  // the delegate's session: what the agent is doing, in one glance (Linear's agent session, GitHub's Copilot status)
+  function sessionCard(t) {
+    const s = t.session || { state: 'pending', note: '' }, ask = s.state === 'awaiting_input';
+    return `<section class="tk-sess tk-sess--${esc(s.state)}" data-tk-session="${esc(s.state)}" aria-live="polite">
+      <header>${face(t.delegate, true)}<div><b>${esc(t.delegate.name)}</b><small>Agent · ${t.assignee ? 'for ' + esc(t.assignee.name) : 'working on it'}</small></div><span class="tk-sess-st"><span class="tk-sess-dot"></span>${esc(SESSION[s.state] || s.state)}</span></header>
+      ${s.note ? `<p class="tk-sess-note">${esc(s.note)}</p>` : ''}
+      <footer>${s.updatedAt ? `<small>${esc(when(s.updatedAt))}</small>` : '<small>Hasn’t connected yet</small>'}<span class="tk-sp"></span>${ask ? `<button class="tk-link" data-tk="reply" data-arg="${esc(t.key)}">Reply</button>` : ''}</footer></section>`;
   }
   function route(it) {
     if (T.list === null && T.status !== 'error' && !T.loading) load();
@@ -559,6 +643,7 @@
     if (it === 'My tasks') return shell('mine', 'My tasks', 'Assigned to you and still open');
     if (it === 'Needs triage') return shell('triage', 'Needs triage', 'Raised and not yet accepted');
     if (it === 'In review') return shell('review', 'In review', 'Waiting for a reviewer');
+    if (it === 'Agents') return shell('agents', 'Agents', 'The agents that work your tasks: their credentials, and where they hear about new work');
     if (/^T-\d+$/i.test(it)) { const key = it.toUpperCase(); return H().page(head(key) + `<div class="tk-root-task" data-tk-root="task:${esc(key)}">${taskRegion(key)}</div>`, 'pg--task'); }
     return shell('board', 'Tasks', where());
   }
@@ -744,10 +829,15 @@
   }
 
   // a handoff brief for an agent CLI: everything needed to do the task, as markdown, on the clipboard
-  async function copyPrompt(key) {
+  async function copyPrompt(key, { plain = false } = {}) {
     let t = T.task.get(key);
     if (!t || t.missing || !t.events) { await loadTask(key); t = T.task.get(key); }
     if (!t || t.missing) return toast('The task couldn’t be loaded');
+    let hand = null;
+    if (!plain && t.can && t.can.edit) {
+      const res = await api('POST', `/api/tasks/${encodeURIComponent(key)}/handoff`).catch(() => null);
+      if (res && res.ok) { hand = res.d; fresh(res.d.task); t = { ...t, ...res.d.task, events: res.d.task.events || t.events }; patch(); }
+    }
     const site = location.origin, link = window.XENO_ADDR.url(`#/${t.area || 'overview'}/g/tasks/${t.key}`);
     const abs = (s) => String(s || '').replace(/\(attachment:([0-9a-f-]{36})\)/gi, (_, id) => `(${site}${imgUrl(t.key, id)})`);
     const who = (p) => (p ? `${p.name}${p.kind === 'agent' ? ' (agent)' : ''}` : 'nobody');
@@ -774,9 +864,11 @@
       ...(done.length ? [`- (already done: ${done.join('; ')})`] : []),
       ...(t.reviewRequired && t.reviewer ? [`- It goes to ${who(t.reviewer)} for review. You do not mark it done yourself.`] : []),
       '', '## When you finish',
-      `Report: what you changed, how you verified it, and anything left open. Post that report as a comment on ${t.key} (${link})${t.reviewRequired ? ' and move it to In review' : ''}.`,
+      hand ? `Post your report (what you changed, how you verified it, anything left open) as a comment on ${t.key}, then move it to In review. While you work, show what you are doing as activity; if you need a decision, send an \`ask\` and wait for the reply. Your credential below does all of this.`
+        : `Report: what you changed, how you verified it, and anything left open. Post that report as a comment on ${t.key} (${link})${t.reviewRequired ? ' and move it to In review' : ''}.`,
+      ...(hand ? ['', connectText(hand.token, t.key)] : []),
     ];
-    await window.XCM.H.copy(lines.join('\n'), `Copied ${t.key} as an agent prompt`);
+    await window.XCM.H.copy(lines.join('\n'), hand ? `Copied — ${t.key} is handed to ${hand.agent.name}, with a credential for this task only` : `Copied ${t.key} as an agent prompt`);
   }
 
   // several at once
@@ -834,7 +926,7 @@
         can.attach ? { label: 'Add images…', icon: 'image', run: () => chooseFiles(key) } : null,
         { label: T.sel.has(key) ? 'Deselect' : 'Select', icon: 'check', key: 'x', kbd: 'X', run: () => { T.sel.has(key) ? T.sel.delete(key) : T.sel.add(key); patch(); } },
         { label: 'Refresh', icon: 'reset', run: () => { T.task.delete(key); loadTask(key); load(); } }],
-      [{ label: 'Copy as agent prompt', icon: 'bot', run: () => copyPrompt(key) }, { label: 'Copy link', icon: 'share', run: () => H2.copyLink(hash) }, { label: 'Copy key', icon: 'hash', run: () => H2.copy(key, 'Key copied') }],
+      [{ label: can.edit ? 'Hand to agent & copy brief' : 'Copy as agent prompt', icon: 'bot', run: () => copyPrompt(key) }, ...(can.edit ? [{ label: 'Copy brief only', icon: 'copy', run: () => copyPrompt(key, { plain: true }) }] : []), { label: 'Copy link', icon: 'share', run: () => H2.copyLink(hash) }, { label: 'Copy key', icon: 'hash', run: () => H2.copy(key, 'Key copied') }],
       [can.delete ? { label: 'Delete task', icon: 'trash', danger: true, key: 'Delete', kbd: 'Del', run: () => remove(key) } : { label: 'Delete task', icon: 'trash', danger: true, disabled: 'Only a project admin, or the reporter while it is in Triage, can delete it' }],
     ];
   }
@@ -857,6 +949,16 @@
       return pick({ anchor, multi: true, placeholder: 'Add or create labels…', items: pickLabels(cur), footer: 'Enter adds · Esc closes', onCreate: (v, sel) => { cur = sel.map((x) => x.id); changed = true; }, onPick: (_, sel) => { cur = sel.map((x) => x.id); changed = true; }, onClose: save });
     }
     if (field === 'parent') return pickParent(key);
+    if (field === 'delegate') return withPeople((list) => {
+      const agents = list.filter((p) => p.kind === 'agent');
+      const items = [{ id: '', label: 'No agent', lead: `<span class="tk-face tk-face--none tk-face--sm">${ic('bot')}</span>`, checked: !t.delegate }, ...agents.map((p) => ({ id: p.id, label: p.name, sub: p.needsShare ? 'Not on this project yet' : '@' + (p.username || 'agent'), lead: face(p, true), checked: !!(t.delegate && t.delegate.id === p.id), ...(p.needsShare ? { disabled: 'Share the project with this agent first' } : {}) }))];
+      pick({ anchor, placeholder: 'Delegate to an agent…', items, footer: agents.length ? 'The agent does the work; the assignee stays accountable.' : 'No agents yet — create one under Tasks › Agents.', onPick: (it) => delegate(key, it.id || null) });
+    });
+  }
+  async function delegate(key, agentId) {
+    const res = await api('POST', `/api/tasks/${encodeURIComponent(key)}/delegate`, { agentId }).catch(() => null);
+    if (!res || !res.ok) return toast(said(res, 'It couldn’t be delegated.'));
+    await after(key, res.d.task); toast(agentId ? `Delegated to ${res.d.task.delegate ? res.d.task.delegate.name : 'the agent'}` : 'Agent removed');
   }
 
   // ───────────────────────── the New task window (the platform's plate construction, MODES SPEC §7f)
@@ -973,7 +1075,7 @@
   const typing = (el) => !!el && (el.closest?.('input, textarea, select, [contenteditable=""], [contenteditable="true"]'));
   const inTasks = () => !!document.querySelector('#main [data-tk-root], #main [data-tk-proot]');
   function shortcuts() {
-    const rows = [['C', 'New task'], ['/', 'Search the board'], ['J / K', 'Next / previous task'], ['Enter', 'Open the focused task'], ['X', 'Select the focused task'], ['Esc', 'Clear the selection · close'], ['S', 'Status (on a task)'], ['I', 'Assignee'], ['P', 'Priority'], ['D', 'Due date'], ['L', 'Labels'], ['E', 'Edit the description'], ['M', 'Write a comment'], ['W', 'Watch / stop watching'], ['F2', 'Rename'], ['Ctrl+Z', 'Undo the last change']];
+    const rows = [['C', 'New task'], ['/', 'Search the board'], ['J / K', 'Next / previous task'], ['Enter', 'Open the focused task'], ['X', 'Select the focused task'], ['Esc', 'Clear the selection · close'], ['S', 'Status (on a task)'], ['I', 'Assignee'], ['A', 'Agent'], ['P', 'Priority'], ['D', 'Due date'], ['L', 'Labels'], ['E', 'Edit the description'], ['M', 'Write a comment'], ['W', 'Watch / stop watching'], ['F2', 'Rename'], ['Ctrl+Z', 'Undo the last change']];
     D().info({ title: 'Task shortcuts', html: `<div class="tk-keys">${rows.map(([k, l]) => `<div><kbd>${esc(k)}</kbd><span>${esc(l)}</span></div>`).join('')}</div>` });
   }
   document.addEventListener('keydown', (e) => {
@@ -986,7 +1088,7 @@
     if (k === 'Escape' && T.sel.size) return fire(() => { T.sel.clear(); patch(); });
     if (key) {
       const b = (f) => document.querySelector(`#main [data-tk-prop="${f}"]`);
-      const map = { s: 'status', i: 'assignee', p: 'priority', d: 'due', l: 'labels' };
+      const map = { s: 'status', i: 'assignee', a: 'delegate', p: 'priority', d: 'due', l: 'labels' };
       if (map[k.toLowerCase()] && b(map[k.toLowerCase()])) return fire(() => b(map[k.toLowerCase()]).click());
       if (k === 'e' || k === 'E') { const t = findTask(key); if (t && t.can && t.can.edit) return fire(() => editDescription(key)); }
       if (k === 'm' || k === 'M') return fire(() => document.querySelector('#main [data-tk-comment] textarea')?.focus());
@@ -1023,6 +1125,8 @@
     'clear-filters': () => { T.f = { ...F0(), sort: T.f.sort, layout: T.f.layout }; T.viewId = null; saveF(); patch(); },
     'save-view': () => saveViewNow(),
     view: (id) => (T.viewId === id ? ACT['clear-filters']() : applyView(id)),
+    'agent-new': () => agentAct('new'), 'agent-token': (id) => agentAct('token', id), 'agent-revoke': (id) => agentAct('revoke', id), 'agent-hook': (id) => agentAct('hook', id), 'agent-unhook': (id) => agentAct('unhook', id), 'agents-retry': () => { T.agents = undefined; patch(); },
+    reply: (k) => { const c = document.querySelector(`[data-tk-keep="comment:${k}"]`); if (c) { c.scrollIntoView({ block: 'center' }); c.focus(); } },
     watch: (k) => watchToggle(k), prompt: (k) => copyPrompt(k), copylink: (k) => window.XCM.H.copyLink(`#/${P.area() || 'overview'}/g/tasks/${k}`), 'add-link': (k) => addLink(k), unlink: (arg) => { const [k, id] = arg.split('|'); return unlink(k, id); },
     check: (arg) => { const [k, i] = arg.split('|'); return toggleChecklist(k, +i); },
     'desc-cancel': () => { T.editing = null; patch(); },

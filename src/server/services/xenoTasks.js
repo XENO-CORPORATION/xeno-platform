@@ -17,7 +17,10 @@
  * Every change is a row in task_events. Agents are principals like people (actor_kind 'agent'): they may raise,
  * claim, move and comment, never accept their own work.
  */
+import crypto from 'node:crypto';
 import { check } from '../utils/authzReBAC.js';
+import { createAgent } from './agentIdentity.js';
+import { assertSafeEndpointUrl, safeRequest } from '../utils/safeEndpoint.js';
 
 export class TaskError extends Error {
   constructor(message, code, status = 400) { super(message); this.code = code; this.status = status; }
@@ -47,12 +50,12 @@ const rel = async (db, userId, projectId, relation) => (await check(db, { object
 async function standing(db, me, t) {
   if (t.project_id) {
     const view = await rel(db, me.id, t.project_id, 'viewer');
-    if (!view) return { view: false };
+    if (!view) return String(t.delegate_id || '') === String(me.id) ? { view: true, edit: false, admin: false } : { view: false };
     const edit = await rel(db, me.id, t.project_id, 'editor'), admin = edit && await rel(db, me.id, t.project_id, 'admin');
     return { view, edit, admin };
   }
   const own = String(t.owner_user_id) === String(me.id);
-  const involved = own || String(t.reporter_id) === String(me.id) || String(t.assignee_id) === String(me.id) || String(t.reviewer_id) === String(me.id);
+  const involved = own || String(t.reporter_id) === String(me.id) || String(t.assignee_id) === String(me.id) || String(t.reviewer_id) === String(me.id) || String(t.delegate_id || '') === String(me.id);
   return { view: involved, edit: own, admin: own };
 }
 
@@ -60,17 +63,21 @@ const SELECT = `SELECT t.*, COALESCE(t.area, (SELECT p.area FROM chat_projects p
   (SELECT p.name FROM chat_projects p WHERE p.id = t.project_id) AS project_name,
   COALESCE(ru.display_name, ru.username) AS reporter_name, COALESCE(au.display_name, au.username) AS assignee_name, COALESCE(vu.display_name, vu.username) AS reviewer_name,
   EXISTS (SELECT 1 FROM agent_identities ai WHERE ai.user_id = t.assignee_id) AS assignee_is_agent,
+  COALESCE(du.display_name, du.username) AS delegate_name,
+  (SELECT row_to_json(x) FROM (SELECT s.state, s.last_note, s.updated_at FROM task_agent_sessions s WHERE s.task_id = t.id AND s.agent_user_id = t.delegate_id) x) AS session_row,
   (SELECT 'T-' || p.number FROM tasks p WHERE p.id = t.parent_id AND p.deleted_at IS NULL) AS parent_key,
   (SELECT p.title FROM tasks p WHERE p.id = t.parent_id AND p.deleted_at IS NULL) AS parent_title,
   (SELECT count(*)::int FROM tasks c WHERE c.parent_id = t.id AND c.deleted_at IS NULL) AS child_count,
   (SELECT count(*)::int FROM tasks c WHERE c.parent_id = t.id AND c.deleted_at IS NULL AND c.status IN ('done', 'wont_do')) AS child_done
-  FROM tasks t LEFT JOIN users ru ON ru.id = t.reporter_id LEFT JOIN users au ON au.id = t.assignee_id LEFT JOIN users vu ON vu.id = t.reviewer_id`;
+  FROM tasks t LEFT JOIN users ru ON ru.id = t.reporter_id LEFT JOIN users au ON au.id = t.assignee_id LEFT JOIN users vu ON vu.id = t.reviewer_id
+  LEFT JOIN users du ON du.id = t.delegate_id`;
 const person = (id, name, agent = false) => (id ? { id: String(id), name: name || 'Someone', kind: agent ? 'agent' : 'human' } : null);
 function shape(t, s, events, files, extra) {
   return {
     key: `T-${t.number}`, id: t.id, number: Number(t.number), title: t.title, body: t.body, kind: t.kind, status: t.status, priority: t.priority,
     project: t.project_id ? { id: t.project_id, name: t.project_name || 'Project' } : null, milestoneId: t.milestone_id || null, area: t.effective_area || null,
     reporter: person(t.reporter_id, t.reporter_name, t.reporter_kind === 'agent'), assignee: person(t.assignee_id, t.assignee_name, t.assignee_is_agent), reviewer: person(t.reviewer_id, t.reviewer_name),
+    delegate: person(t.delegate_id, t.delegate_name, true), session: t.session_row ? { state: t.session_row.state, note: t.session_row.last_note, updatedAt: t.session_row.updated_at } : null,
     reviewRequired: t.review_required, labels: t.labels || [], dueAt: t.due_at, source: t.source, sourceRef: t.source_ref, conversationId: t.conversation_id,
     createdAt: t.created_at, updatedAt: t.updated_at, closedAt: t.closed_at,
     parent: t.parent_key ? { key: t.parent_key, title: t.parent_title } : null, subtasks: { total: Number(t.child_count || 0), done: Number(t.child_done || 0) },
@@ -85,7 +92,7 @@ async function readable(db, me, key) { const t = await loadByKey(db, key), s = t
 const event = (db, t, me, kind, from, to, note, field = null) => db.query('INSERT INTO task_events (task_id, actor_id, actor_kind, kind, from_value, to_value, note, field) VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING id', [t.id, me.id, kindOf(me), kind, from ?? null, to ?? null, note ?? null, field]);
 /** The moves this caller may make from the task's current status. */
 function movesFor(me, t, s) {
-  const mine = String(t.assignee_id) === String(me.id), reviewer = String(t.reviewer_id) === String(me.id), reporter = String(t.reporter_id) === String(me.id);
+  const mine = String(t.assignee_id) === String(me.id) || String(t.delegate_id || '') === String(me.id), reviewer = String(t.reviewer_id) === String(me.id), reporter = String(t.reporter_id) === String(me.id);
   return allowedMoves(t.status).filter((to) => {
     if (t.status === 'raised') return s.edit;
     if (t.status === 'in_review' && to === 'done') return !mine && (reviewer || s.admin);
@@ -113,6 +120,8 @@ export async function createTask(db, me, input = {}) {
   if (projectId) { if (!UUID.test(String(projectId)) || !(await rel(db, me.id, projectId, 'viewer'))) throw new TaskError('Project not found', 'project_not_found', 404); }
   const area = projectId ? null : parent ? (parent.area || null) : (input.area == null || input.area === '' ? null : String(input.area));
   if (area && !AREA.test(area)) throw new TaskError('Unknown area', 'invalid_area');
+  let delegateAfter = input.delegateId || null;
+  if (input.assigneeId && await isAgent(db, input.assigneeId)) { delegateAfter = input.assigneeId; input = { ...input, assigneeId: kindOf(me) === 'human' ? me.id : null }; }
   if (input.assigneeId) await assertAssignable(db, input.assigneeId, projectId);
   if (input.reviewerId) await assertAssignable(db, input.reviewerId, projectId);
   const review = !!input.reviewRequired;
@@ -135,14 +144,15 @@ export async function createTask(db, me, input = {}) {
   if (input.assigneeId) { await watch(db, row.id, input.assigneeId); await notifyUsers(db, full, me, [input.assigneeId], 'assigned', `${actorName(me)} assigned it to you`); }
   if (input.reviewerId) await watch(db, row.id, input.reviewerId);
   await mentionPass(db, full, me, '', row.body);
+  if (delegateAfter) await applyDelegate(db, me, full, await standing(db, me, full), delegateAfter);
   return getTask(db, me, `T-${row.number}`);
 }
 
 export async function getTask(db, me, key) {
   const { t, s } = await readable(db, me, key);
   const events = (await db.query(`SELECT e.*, COALESCE(u.display_name, u.username) AS actor_name,
-      CASE WHEN e.kind = 'assigned' OR e.field = 'reviewer' THEN (SELECT COALESCE(x.display_name, x.username) FROM users x WHERE x.id::text = e.from_value) END AS from_name,
-      CASE WHEN e.kind = 'assigned' OR e.field = 'reviewer' THEN (SELECT COALESCE(x.display_name, x.username) FROM users x WHERE x.id::text = e.to_value) END AS to_name
+      CASE WHEN e.kind IN ('assigned', 'delegated') OR e.field = 'reviewer' THEN (SELECT COALESCE(x.display_name, x.username) FROM users x WHERE x.id::text = e.from_value) END AS from_name,
+      CASE WHEN e.kind IN ('assigned', 'delegated') OR e.field = 'reviewer' THEN (SELECT COALESCE(x.display_name, x.username) FROM users x WHERE x.id::text = e.to_value) END AS to_name
     FROM task_events e LEFT JOIN users u ON u.id = e.actor_id WHERE e.task_id = $1 ORDER BY e.created_at, e.id`, [t.id])).rows;
   const files = (await db.query(`SELECT a.id, a.filename, a.mime, a.size_bytes, a.created_at, a.uploader_id, COALESCE(u.display_name, u.username) AS uploader_name FROM task_attachments a LEFT JOIN users u ON u.id = a.uploader_id WHERE a.task_id = $1 ORDER BY a.created_at, a.id`, [t.id])).rows;
   return shape(t, { ...s, moves: movesFor(me, t, s), attach: mayAttach(me, t, s), del: mayDelete(me, t, s) }, events, files, await extrasFor(db, me, t, s));
@@ -155,12 +165,14 @@ export async function listTasks(db, me, f = {}) {
   where.push('t.deleted_at IS NULL');
   where.push(`(
     (t.project_id IS NULL AND (t.owner_user_id = $1 OR t.reporter_id = $1 OR t.assignee_id = $1 OR t.reviewer_id = $1))
-    OR (t.project_id IS NOT NULL AND t.project_id::text IN (SELECT object_id FROM relationship_tuples WHERE object_type = 'project' AND subject_type = 'user' AND subject_id = $1::text)))`);
+    OR (t.project_id IS NOT NULL AND t.project_id::text IN (SELECT object_id FROM relationship_tuples WHERE object_type = 'project' AND subject_type = 'user' AND subject_id = $1::text)) OR t.delegate_id = $1)`);
   const EFF = `COALESCE(t.area, (SELECT p.area FROM chat_projects p WHERE p.id = t.project_id))`;
   if (f.area === 'none') where.push(`${EFF} IS NULL`); else if (f.area) { if (!AREA.test(String(f.area))) throw new TaskError('Unknown area', 'invalid_area'); params.push(String(f.area)); where.push(`${EFF} = $${params.length}`); }
   if (f.projectId) { if (!UUID.test(String(f.projectId))) throw new TaskError('Project not found', 'project_not_found', 404); params.push(f.projectId); where.push(`t.project_id = $${params.length}`); }
   if (f.status) { const st = String(f.status).split(',').filter(Boolean); if (st.some((x) => !STATUSES.includes(x))) throw new TaskError('Unknown status', 'invalid_status'); params.push(st); where.push(`t.status = ANY($${params.length}::text[])`); }
-  if (f.assignee === 'me') where.push('t.assignee_id = $1'); else if (f.assignee === 'none') where.push('t.assignee_id IS NULL'); else if (f.assignee) { if (!UUID.test(String(f.assignee))) throw new TaskError('Unknown assignee', 'invalid_assignee'); params.push(f.assignee); where.push(`t.assignee_id = $${params.length}`); }
+  if (f.delegate === 'me') where.push('t.delegate_id = $1');
+  // an agent is never the assignee: its "assigned to me" is the work delegated to it
+  if (f.assignee === 'me') where.push(kindOf(me) === 'agent' ? 't.delegate_id = $1' : 't.assignee_id = $1'); else if (f.assignee === 'none') where.push('t.assignee_id IS NULL'); else if (f.assignee) { if (!UUID.test(String(f.assignee))) throw new TaskError('Unknown assignee', 'invalid_assignee'); params.push(f.assignee); where.push(`t.assignee_id = $${params.length}`); }
   if (f.q && String(f.q).trim()) { params.push(`%${String(f.q).trim().replace(/[\\%_]/g, (c) => `\\${c}`)}%`); where.push(`(t.title ILIKE $${params.length} ESCAPE '\\' OR t.body ILIKE $${params.length} ESCAPE '\\')`); }
   const limit = Math.min(Math.max(parseInt(f.limit, 10) || 200, 1), 500);
   const rows = (await db.query(`${SELECT} WHERE ${where.join(' AND ')} ORDER BY CASE t.priority WHEN 'urgent' THEN 0 WHEN 'high' THEN 1 WHEN 'medium' THEN 2 WHEN 'low' THEN 3 ELSE 4 END, t.updated_at DESC LIMIT ${limit}`, params)).rows;
@@ -170,16 +182,16 @@ export async function listTasks(db, me, f = {}) {
   const out = [], byProject = new Map();
   for (const t of rows) {
     let s;
-    if (t.project_id) { if (!byProject.has(t.project_id)) byProject.set(t.project_id, await standing(db, me, t)); s = byProject.get(t.project_id); if (!s.view) continue; }
+    if (t.project_id && String(t.delegate_id || '') !== String(me.id)) { if (!byProject.has(t.project_id)) byProject.set(t.project_id, await standing(db, me, t)); s = byProject.get(t.project_id); if (!s.view) continue; }
     else s = await standing(db, me, t);
     out.push(shape(t, { ...s, moves: movesFor(me, t, s), attach: mayAttach(me, t, s), del: mayDelete(me, t, s) }));
   }
   return out;
 }
 
-export async function updateTask(db, me, key, input = {}) {
+export async function updateTask(db, me, key, input = {}) { // eslint-disable-line no-param-reassign
   const { t, s } = await readable(db, me, key);
-  const mine = String(t.assignee_id) === String(me.id);
+  const mine = String(t.assignee_id) === String(me.id) || String(t.delegate_id || '') === String(me.id);
   if (!s.edit && !mine) throw new TaskError('Only the assignee or someone who manages the project can change this task', 'not_allowed', 403);
   const set = [], vals = [], changes = [];
   const put = (col, val, label, from) => { vals.push(val); set.push(`${col} = $${vals.length}`); changes.push([label, from, val]); };
@@ -195,6 +207,12 @@ export async function updateTask(db, me, key, input = {}) {
       for (let up = p, i = 0; up; i++) { if (String(up.id) === String(t.id) || i > 50) throw new TaskError('That would make the task its own ancestor', 'parent_cycle', 409); up = up.parent_id ? (await db.query('SELECT id, parent_id FROM tasks WHERE id = $1', [up.parent_id])).rows[0] : null; } }
     put('parent_id', p ? p.id : null, 'parent', t.parent_id); }
   if (input.area !== undefined) { if (t.project_id) throw new TaskError('A task in a project lives where its project lives', 'area_follows_project', 409); const a = input.area || null; if (a && !AREA.test(a)) throw new TaskError('Unknown area', 'invalid_area'); put('area', a, 'area', t.area); }
+  // an agent is never the assignee: choosing one makes it the DELEGATE, and the person stays accountable (Linear)
+  if (input.delegateId !== undefined || (input.assigneeId && await isAgent(db, input.assigneeId))) {
+    if (!s.edit) throw new TaskError('Only someone who manages the project can delegate this task', 'not_allowed', 403);
+    await applyDelegate(db, me, t, s, input.delegateId !== undefined ? input.delegateId : input.assigneeId);
+    input = { ...input }; delete input.delegateId; if (input.assigneeId && await isAgent(db, input.assigneeId)) delete input.assigneeId;
+  }
   // assigning someone else, and choosing the reviewer, are management acts
   if (input.assigneeId !== undefined) { if (!s.edit && !(input.assigneeId === null && mine)) throw new TaskError('Only someone who manages the project can assign this task', 'not_allowed', 403);
     if (input.assigneeId) await assertAssignable(db, input.assigneeId, t.project_id); put('assignee_id', input.assigneeId || null, 'assignee', t.assignee_id); }
@@ -229,7 +247,7 @@ export async function transitionTask(db, me, key, { to, note, from } = {}) {
   if (!STATUSES.includes(to)) throw new TaskError('Unknown status', 'invalid_status');
   if (!allowedMoves(t.status).includes(to)) throw new TaskError(`A task cannot go from ${t.status} to ${to}`, 'invalid_transition', 409);
   if (!movesFor(me, t, s).includes(to)) {
-    const why = t.status === 'in_review' && to === 'done' && String(t.assignee_id) === String(me.id) ? 'You cannot accept your own work. The reviewer does.'
+    const why = t.status === 'in_review' && to === 'done' && (String(t.assignee_id) === String(me.id) || String(t.delegate_id || '') === String(me.id)) ? 'You cannot accept your own work. The reviewer does.'
       : to === 'done' && t.review_required ? 'This task needs review: move it to In review.' : 'You are not allowed to make that move on this task.';
     throw new TaskError(why, 'not_allowed', 403);
   }
@@ -242,6 +260,11 @@ export async function transitionTask(db, me, key, { to, note, from } = {}) {
   if (to === 'in_review' && fresh.reviewer_id) { await notifyUsers(db, fresh, me, [fresh.reviewer_id], 'review_requested', `${actorName(me)} asked you to review it`); told.add(String(fresh.reviewer_id)); }
   if (t.status === 'in_review' && to === 'in_progress' && fresh.assignee_id) { await notifyUsers(db, fresh, me, [fresh.assignee_id], 'changes_requested', `${actorName(me)} asked for changes${note ? ': ' + String(note).slice(0, 200) : ''}`); told.add(String(fresh.assignee_id)); }
   await notifyUsers(db, fresh, me, (await watchersOf(db, t.id)).filter((id) => !told.has(id)), 'status', `${actorName(me)} moved it to ${label[to]}`);
+  if (fresh.delegate_id && String(fresh.delegate_id) !== String(me.id)) {
+    if (t.status === 'in_review' && to === 'in_progress') { await agentEvent(db, fresh.delegate_id, fresh, 'changes_requested', { from: actorName(me), note: note ? String(note).slice(0, 2000) : '' }); await session(db, fresh, fresh.delegate_id, 'pending', 'Changes requested'); }
+    if (to === 'done') await agentEvent(db, fresh.delegate_id, fresh, 'accepted', { from: actorName(me) });
+  }
+  if (fresh.delegate_id && String(fresh.delegate_id) === String(me.id) && (to === 'in_review' || to === 'done')) await session(db, fresh, me.id, 'done', to === 'in_review' ? 'Sent for review' : 'Done');
   return getTask(db, me, key);
 }
 
@@ -249,6 +272,12 @@ export async function transitionTask(db, me, key, { to, note, from } = {}) {
 export async function claimTask(db, me, key) {
   const { t } = await readable(db, me, key);
   if (['done', 'wont_do'].includes(t.status)) throw new TaskError('This task is closed', 'task_closed', 409);
+  if (kindOf(me) === 'agent') {
+    const got = (await db.query('UPDATE tasks SET delegate_id = $2, updated_at = now() WHERE id = $1 AND (delegate_id IS NULL OR delegate_id = $2) RETURNING id', [t.id, me.id])).rowCount;
+    if (!got) throw new TaskError('Another agent is already working on this task', 'already_claimed', 409);
+    await event(db, t, me, 'claimed', null, String(me.id), null); await session(db, t, me.id, 'working', 'Picked it up'); await watch(db, t.id, me.id);
+    return getTask(db, me, key);
+  }
   if (t.project_id && !(await rel(db, me.id, t.project_id, 'viewer'))) throw new TaskError('Task not found', 'task_not_found', 404);
   const ok = (await db.query('UPDATE tasks SET assignee_id = $2, updated_at = now() WHERE id = $1 AND assignee_id IS NULL RETURNING id', [t.id, me.id])).rowCount;
   if (!ok) throw new TaskError(String(t.assignee_id) === String(me.id) ? 'You already hold this task' : 'Someone already holds this task', 'already_claimed', 409);
@@ -264,6 +293,7 @@ export async function commentTask(db, me, key, { body } = {}) {
   await db.query('UPDATE tasks SET updated_at = now() WHERE id = $1', [t.id]);
   await watch(db, t.id, me.id);
   const mentioned = await mentionPass(db, t, me, '', note);
+  if (t.delegate_id && String(t.delegate_id) !== String(me.id) && !mentioned.includes(String(t.delegate_id))) await agentEvent(db, t.delegate_id, t, 'reply', { from: actorName(me), comment: note.slice(0, 2000) });
   await notifyUsers(db, t, me, (await watchersOf(db, t.id)).filter((id) => !mentioned.includes(id)), 'commented', `${actorName(me)}: ${note.slice(0, 160)}`);
   return getTask(db, me, key);
 }
@@ -272,7 +302,7 @@ export async function commentTask(db, me, key, { body } = {}) {
 
 const mine = (me, t, col) => String(t[col]) === String(me.id);
 /** Anyone working on the task may add images to it: whoever manages it, the assignee, the reviewer, the reporter. */
-const mayAttach = (me, t, s) => !!(s.edit || mine(me, t, 'assignee_id') || mine(me, t, 'reviewer_id') || mine(me, t, 'reporter_id'));
+const mayAttach = (me, t, s) => !!(s.edit || mine(me, t, 'assignee_id') || mine(me, t, 'delegate_id') || mine(me, t, 'reviewer_id') || mine(me, t, 'reporter_id'));
 /** Deleting is for whoever owns the place the task lives (project admin, or the owner of a personal task), and for the
  *  reporter while it is still waiting in triage — a task raised by mistake can be withdrawn, accepted work cannot. */
 const mayDelete = (me, t, s) => !!(s.admin || (mine(me, t, 'reporter_id') && t.status === 'raised'));
@@ -402,7 +432,7 @@ async function mentionPass(db, t, me, before, after) {
   if (!now.length) return [];
   const rows = (await db.query('SELECT id FROM users WHERE lower(username) = ANY($1::text[])', [now])).rows;
   const ids = [];
-  for (const r of rows) { const s = await standing(db, { id: r.id }, t); if (s.view && String(r.id) !== String(me.id)) { ids.push(String(r.id)); await watch(db, t.id, r.id); } }
+  for (const r of rows) { const s = await standing(db, { id: r.id }, t); if (s.view && String(r.id) !== String(me.id)) { ids.push(String(r.id)); await watch(db, t.id, r.id); if (await isAgent(db, r.id)) await agentEvent(db, r.id, t, 'mentioned', { from: actorName(me), text: String(after || '').slice(0, 2000) }); } }
   await notifyUsers(db, t, me, ids, 'mentioned', `${actorName(me)} mentioned you`);
   return ids;
 }
@@ -539,4 +569,186 @@ export async function sweepDueReminders(db) {
   for (const { id } of soon) { const t = (await db.query(`${SELECT} WHERE t.id = $1`, [id])).rows[0]; await notifyUsers(db, t, system, [t.assignee_id || t.owner_user_id || t.reporter_id], 'due_soon', 'Due within a day'); }
   for (const { id } of late) { const t = (await db.query(`${SELECT} WHERE t.id = $1`, [id])).rows[0]; await notifyUsers(db, t, system, [t.assignee_id || t.owner_user_id, t.reporter_id], 'overdue', 'Past its due date'); }
   return { dueSoon: soon.length, overdue: late.length };
+}
+
+// ───────────────────────────── agents: delegation, sessions, credentials, events, hand-off
+// The Linear-for-Agents model: a task keeps a HUMAN assignee (accountable) and gets an AGENT delegate (does the work).
+
+const isAgent = async (db, userId) => !!userId && (await db.query('SELECT 1 FROM agent_identities WHERE user_id = $1', [userId])).rowCount > 0;
+const sha256 = (s) => crypto.createHash('sha256').update(String(s)).digest('hex');
+/** queue something the agent must hear about (delivered by webhook if it has one; always pullable) */
+async function agentEvent(db, agentUserId, t, kind, payload = {}) {
+  if (!agentUserId) return;
+  await db.query('INSERT INTO task_agent_events (agent_user_id, task_id, kind, payload) VALUES ($1, $2, $3, $4)',
+    [agentUserId, t.id, kind, { key: `T-${t.number}`, title: t.title, status: t.status, ...payload }]);
+}
+async function session(db, t, agentUserId, state, note) {
+  await db.query(`INSERT INTO task_agent_sessions (task_id, agent_user_id, state, last_note) VALUES ($1, $2, $3, $4)
+    ON CONFLICT (task_id, agent_user_id) DO UPDATE SET state = EXCLUDED.state, last_note = CASE WHEN EXCLUDED.last_note = '' THEN task_agent_sessions.last_note ELSE EXCLUDED.last_note END, updated_at = now()`,
+    [t.id, agentUserId, state, String(note || '').slice(0, 500)]);
+}
+/** put an agent on a task as its delegate: checks, history, session, the agent told */
+async function applyDelegate(db, me, t, s, agentId) {
+  if (agentId != null && agentId !== '' && !UUID.test(String(agentId))) throw new TaskError('That agent was not found', 'delegate_not_found', 404);
+  const to = agentId || null, from = t.delegate_id || null;
+  if (String(to || '') === String(from || '')) return false;
+  if (to) {
+    if (!(await isAgent(db, to))) throw new TaskError('Only an agent can be the delegate. Assign people as the assignee.', 'delegate_not_agent', 409);
+    // the agent must be able to see where the task lives: on the project, or (personal task) owned by the task's owner
+    if (t.project_id) { if (!(await rel(db, to, t.project_id, 'viewer'))) throw new TaskError('That agent can’t see this project. Share the project with it first.', 'delegate_without_access', 409); }
+    else { const own = (await db.query('SELECT owner_user_id FROM agent_identities WHERE user_id = $1', [to])).rows[0]; if (!own || String(own.owner_user_id) !== String(t.owner_user_id)) throw new TaskError('A personal task can only be delegated to its owner’s own agents', 'delegate_not_yours', 409); }
+  }
+  await db.query('UPDATE tasks SET delegate_id = $2, assignee_id = COALESCE(assignee_id, $3), updated_at = now() WHERE id = $1', [t.id, to, to ? (kindOf(me) === 'human' ? me.id : null) : null]);
+  await event(db, t, me, 'delegated', from ? String(from) : null, to ? String(to) : null, null);
+  if (from) { await agentEvent(db, from, t, 'undelegated', {}); }
+  if (to) { await session(db, t, to, 'pending', 'Waiting for the agent to pick it up'); await watch(db, t.id, to); await agentEvent(db, to, t, 'delegated', { by: actorName(me) }); }
+  return true;
+}
+export async function delegateTask(db, me, key, { agentId } = {}) {
+  const { t, s } = await readable(db, me, key);
+  if (!s.edit) throw new TaskError('Only someone who manages the project can delegate this task', 'not_allowed', 403);
+  await applyDelegate(db, me, t, s, agentId);
+  return getTask(db, me, key);
+}
+
+const ACTIVITY = { thought: 'working', action: 'working', ask: 'awaiting_input', result: 'done', error: 'error' };
+/** the delegate reports what it is doing; the people on the task see it, and a question reaches the assignee */
+export async function reportActivity(db, me, key, { type, body } = {}) {
+  const { t } = await readable(db, me, key);
+  if (String(t.delegate_id) !== String(me.id)) throw new TaskError('Only the agent this task is delegated to can report on it', 'not_delegate', 403);
+  if (!ACTIVITY[type]) throw new TaskError('type must be thought, action, ask, result or error', 'invalid_activity');
+  const note = text(body, 'body', 20000);
+  await event(db, t, me, 'activity', type, null, note);
+  await session(db, t, me.id, ACTIVITY[type], note);
+  await db.query('UPDATE tasks SET updated_at = now() WHERE id = $1', [t.id]);
+  if (type === 'ask') await notifyUsers(db, t, me, [t.assignee_id, t.reviewer_id], 'agent_question', `${actorName(me)} asks: ${note.slice(0, 200)}`);
+  if (type === 'error') await notifyUsers(db, t, me, [t.assignee_id], 'agent_error', `${actorName(me)} hit a problem: ${note.slice(0, 200)}`);
+  return getTask(db, me, key);
+}
+
+// credentials: xtk_<prefix>_<secret>; the prefix finds the row, the SHA-256 of the whole token proves it
+const TOKEN_RE = /^xtk_([a-z0-9]{12})_([A-Za-z0-9_-]{32,64})$/;
+export async function resolveTaskToken(db, raw) {
+  const m = TOKEN_RE.exec(String(raw || '')); if (!m) return null;
+  const row = (await db.query('SELECT id, token_hash, agent_user_id, task_id, scopes, expires_at, revoked_at FROM task_agent_tokens WHERE token_prefix = $1', [m[1]])).rows[0];
+  if (!row || row.revoked_at || new Date(row.expires_at) <= new Date()) return null;
+  const a = Buffer.from(row.token_hash, 'hex'), b = Buffer.from(sha256(raw), 'hex');
+  if (a.length !== b.length || !crypto.timingSafeEqual(a, b)) return null;
+  db.query('UPDATE task_agent_tokens SET last_used_at = now() WHERE id = $1', [row.id]).catch(() => {});
+  return { tokenId: row.id, agentUserId: String(row.agent_user_id), taskId: row.task_id ? String(row.task_id) : null, scopes: row.scopes };
+}
+async function ownAgent(db, me, agentId) {
+  if (kindOf(me) !== 'human') throw new TaskError('Only a person manages agents', 'not_allowed', 403);
+  if (!UUID.test(String(agentId))) throw new TaskError('Agent not found', 'agent_not_found', 404);
+  const a = (await db.query(`SELECT u.id, COALESCE(u.display_name, u.username) AS name, u.username FROM agent_identities ai JOIN users u ON u.id = ai.user_id WHERE ai.user_id = $1 AND ai.owner_user_id = $2`, [agentId, me.id])).rows[0];
+  if (!a) throw new TaskError('Agent not found', 'agent_not_found', 404);
+  return a;
+}
+async function mint(db, owner, agentUserId, { scopes, label, days, taskId }) {
+  const sc = [...new Set(Array.isArray(scopes) && scopes.length ? scopes : ['tasks:read', 'tasks:write'])];
+  if (sc.some((x) => !['tasks:read', 'tasks:write'].includes(x))) throw new TaskError('scopes are tasks:read and tasks:write', 'invalid_scope');
+  const d = Math.min(Math.max(parseInt(days, 10) || 90, 1), 365);
+  const prefix = crypto.randomBytes(9).toString('base64').replace(/[^a-z0-9]/gi, '').toLowerCase().padEnd(12, '0').slice(0, 12);
+  const token = `xtk_${prefix}_${crypto.randomBytes(32).toString('base64url')}`;
+  const row = (await db.query(`INSERT INTO task_agent_tokens (token_prefix, token_hash, agent_user_id, owner_user_id, task_id, scopes, label, expires_at)
+    VALUES ($1, $2, $3, $4, $5, $6, $7, now() + ($8 || ' days')::interval) RETURNING id, expires_at`, [prefix, sha256(token), agentUserId, owner.id, taskId || null, sc, String(label || '').slice(0, 80), String(d)])).rows[0];
+  return { id: row.id, token, scopes: sc, expiresAt: row.expires_at, taskId: taskId || null };
+}
+/** a scoped Tasks credential for one of the caller's agents; the secret is shown once */
+export async function mintAgentToken(db, me, { agentId, scopes, label, days } = {}) {
+  const a = await ownAgent(db, me, agentId);
+  return { ...(await mint(db, me, a.id, { scopes, label, days })), agent: { id: String(a.id), name: a.name, username: a.username } };
+}
+export async function revokeAgentToken(db, me, tokenId) {
+  if (!UUID.test(String(tokenId))) throw new TaskError('Token not found', 'token_not_found', 404);
+  const r = await db.query('UPDATE task_agent_tokens SET revoked_at = now() WHERE id = $1 AND owner_user_id = $2 AND revoked_at IS NULL', [tokenId, me.id]);
+  if (!r.rowCount) throw new TaskError('Token not found', 'token_not_found', 404);
+  return { revoked: true };
+}
+/** the caller's agents, with their credentials (never the secrets), webhook, and the tasks delegated to them */
+export async function listMyAgents(db, me) {
+  if (kindOf(me) !== 'human') return [];
+  const agents = (await db.query(`SELECT u.id, u.username, COALESCE(u.display_name, u.username) AS name, ai.agent_role, ai.agent_origin, ai.created_at,
+      (SELECT url FROM task_agent_webhooks w WHERE w.agent_user_id = u.id) AS webhook,
+      (SELECT count(*)::int FROM tasks t WHERE t.delegate_id = u.id AND t.deleted_at IS NULL AND t.status NOT IN ('done', 'wont_do')) AS open_tasks
+    FROM agent_identities ai JOIN users u ON u.id = ai.user_id WHERE ai.owner_user_id = $1 ORDER BY ai.created_at`, [me.id])).rows;
+  const toks = (await db.query(`SELECT k.id, k.agent_user_id, k.token_prefix, k.scopes, k.label, k.expires_at, k.last_used_at, k.created_at, k.task_id, t.number
+    FROM task_agent_tokens k LEFT JOIN tasks t ON t.id = k.task_id WHERE k.owner_user_id = $1 AND k.revoked_at IS NULL AND k.expires_at > now() ORDER BY k.created_at DESC`, [me.id])).rows;
+  return agents.map((a) => ({ id: String(a.id), username: a.username, name: a.name, role: a.agent_role, origin: a.agent_origin, webhook: a.webhook || null, openTasks: a.open_tasks,
+    tokens: toks.filter((k) => String(k.agent_user_id) === String(a.id)).map((k) => ({ id: k.id, hint: `xtk_${k.token_prefix}_…`, scopes: k.scopes, label: k.label, expiresAt: k.expires_at, lastUsedAt: k.last_used_at, createdAt: k.created_at, task: k.number ? `T-${k.number}` : null })) }));
+}
+/** where the agent is told; the signing secret is shown once */
+export async function setAgentWebhook(db, me, { agentId, url } = {}) {
+  const a = await ownAgent(db, me, agentId);
+  if (!url) { await db.query('DELETE FROM task_agent_webhooks WHERE agent_user_id = $1', [a.id]); return { removed: true }; }
+  try { assertSafeEndpointUrl(String(url)); } catch (e) { throw new TaskError(e.message || 'That address can’t be used', 'unsafe_url'); }
+  const secret = crypto.randomBytes(32).toString('base64url');
+  await db.query(`INSERT INTO task_agent_webhooks (agent_user_id, owner_user_id, url, secret) VALUES ($1, $2, $3, $4)
+    ON CONFLICT (agent_user_id) DO UPDATE SET url = EXCLUDED.url, secret = EXCLUDED.secret, updated_at = now()`, [a.id, me.id, String(url).slice(0, 2000), secret]);
+  return { url: String(url), secret };
+}
+/** what the agent has been told, after a cursor (pull) */
+export async function agentEvents(db, me, { after, limit } = {}) {
+  if (kindOf(me) !== 'agent') throw new TaskError('Only an agent has an event feed', 'not_agent', 403);
+  const n = Math.min(Math.max(parseInt(limit, 10) || 50, 1), 200), cur = /^\d{1,18}$/.test(String(after || '')) ? String(after) : '0';
+  const rows = (await db.query(`SELECT id, kind, payload, created_at FROM task_agent_events WHERE agent_user_id = $1 AND id > $2 ORDER BY id LIMIT ${n}`, [me.id, cur])).rows;
+  return { events: rows.map((r) => ({ id: String(r.id), kind: r.kind, task: r.payload, at: r.created_at })), cursor: rows.length ? String(rows.at(-1).id) : cur };
+}
+/** push: POST each due event to its agent's webhook, signed (X-Xeno-Signature: t=<unix>,v1=<hmac-sha256(t.body)>) */
+export async function deliverAgentEvents(db, { send = safeRequest, batch = 50 } = {}) {
+  const rows = (await db.query(`SELECT e.id, e.agent_user_id, e.kind, e.payload, e.created_at, e.attempts, w.url, w.secret FROM task_agent_events e
+    JOIN task_agent_webhooks w ON w.agent_user_id = e.agent_user_id WHERE e.delivered_at IS NULL AND e.next_attempt_at <= now() AND e.attempts < 8 ORDER BY e.id LIMIT ${batch}`)).rows;
+  let sent = 0, failed = 0;
+  for (const r of rows) {
+    const body = JSON.stringify({ id: String(r.id), kind: r.kind, task: r.payload, at: r.created_at });
+    const ts = Math.floor(Date.now() / 1000), sig = crypto.createHmac('sha256', r.secret).update(`${ts}.${body}`).digest('hex');
+    let ok = false, err = '';
+    try { const res = await send(r.url, { method: 'POST', headers: { 'content-type': 'application/json', 'user-agent': 'XENO-Tasks/1', 'x-xeno-event': r.kind, 'x-xeno-delivery': String(r.id), 'x-xeno-signature': `t=${ts},v1=${sig}` }, body, timeoutMs: 8000, maxBytes: 64 * 1024 }); ok = res && res.status >= 200 && res.status < 300; if (!ok) err = `HTTP ${res && res.status}`; }
+    catch (e) { err = String(e.message || e).slice(0, 300); }
+    if (ok) { await db.query('UPDATE task_agent_events SET delivered_at = now(), attempts = attempts + 1, last_error = NULL WHERE id = $1', [r.id]); sent++; }
+    else { await db.query(`UPDATE task_agent_events SET attempts = attempts + 1, last_error = $2, next_attempt_at = now() + (power(2, attempts) * interval '30 seconds') WHERE id = $1`, [r.id, err]); failed++; }
+  }
+  return { sent, failed };
+}
+
+/** "Copy for agent", two-way: the caller's hand-off agent becomes the delegate, with a credential for THIS task only */
+export async function handoffTask(db, me, key) {
+  const { t, s } = await readable(db, me, key);
+  if (kindOf(me) !== 'human') throw new TaskError('Only a person hands a task off', 'not_allowed', 403);
+  if (!s.edit) throw new TaskError('Only someone who manages the project can hand this task to an agent', 'not_allowed', 403);
+  let agent = (await db.query(`SELECT u.id, u.username, COALESCE(u.display_name, u.username) AS name FROM agent_identities ai JOIN users u ON u.id = ai.user_id
+    WHERE ai.owner_user_id = $1 AND ai.agent_origin = 'handoff' ORDER BY ai.created_at LIMIT 1`, [me.id])).rows[0];
+  if (!agent) {
+    const owner = (await db.query('SELECT id, username FROM users WHERE id = $1', [me.id])).rows[0];
+    const made = await createAgent(db, { id: owner.id, kind: 'human', handle: owner.username }, { name: 'agent', displayName: `${me.name || owner.username}'s agent`, agentRole: 'personal', agentOrigin: 'handoff' });
+    const row = (await db.query('SELECT id, username FROM users WHERE username = $1', [made.agent.handle])).rows[0];
+    // createAgent also mints a general API key nobody will ever see; a hand-off agent works only through its
+    // task-scoped credential, so that key is switched off (least privilege)
+    await db.query('UPDATE api_keys SET is_active = false WHERE user_id = $1', [row.id]);
+    agent = { id: row.id, username: row.username, name: `${me.name || owner.username}'s agent` };
+  }
+  // a hand-off agent works the task it is handed: task-level access, not the whole project
+  if (String(t.delegate_id || '') !== String(agent.id)) {
+    await db.query('UPDATE tasks SET delegate_id = $2, assignee_id = COALESCE(assignee_id, $3), updated_at = now() WHERE id = $1', [t.id, agent.id, me.id]);
+    await event(db, t, me, 'delegated', t.delegate_id ? String(t.delegate_id) : null, String(agent.id), 'handed off');
+    await session(db, t, agent.id, 'pending', 'Handed off. Waiting for the agent to connect.');
+    await watch(db, t.id, agent.id);
+  }
+  const tok = await mint(db, me, agent.id, { scopes: ['tasks:read', 'tasks:write'], label: `Hand-off T-${t.number}`, days: 7, taskId: t.id });
+  return { token: tok.token, expiresAt: tok.expiresAt, agent: { id: String(agent.id), name: agent.name }, task: await getTask(db, me, key) };
+}
+
+/** a new agent for Tasks: the platform's agent identity, with its general API key switched off — it works only through
+ *  the scoped Tasks credentials minted for it (least privilege) */
+export async function createTaskAgent(db, me, { name } = {}) {
+  if (kindOf(me) !== 'human') throw new TaskError('Only a person creates agents', 'not_allowed', 403);
+  const label = String(name || '').trim().slice(0, 60);
+  if (!label) throw new TaskError('Give the agent a name', 'name_required');
+  const owner = (await db.query('SELECT id, username FROM users WHERE id = $1', [me.id])).rows[0];
+  let made;
+  try { made = await createAgent(db, { id: owner.id, kind: 'human', handle: owner.username }, { name: label.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'agent', displayName: label, agentRole: 'worker', agentOrigin: 'tasks' }); }
+  catch (e) { if (e && e.code && e.status) throw new TaskError(e.message, e.code, e.status); throw e; }
+  const row = (await db.query('SELECT id, username FROM users WHERE username = $1', [made.agent.handle])).rows[0];
+  await db.query('UPDATE api_keys SET is_active = false WHERE user_id = $1', [row.id]);
+  return { agent: { id: String(row.id), username: row.username, name: label } };
 }
