@@ -256,6 +256,8 @@
   // ---------- the sidebar's clicks ----------
   const toChat = (item) => { const x = X(); if (!x) return; if (!(x.S.view === 'product' && x.S.product === 'chat')) x.go('product', { product: 'chat', item: item || null }); else if ((x.S.item || null) !== (item || null)) x.setChatItem?.(item || null); };
   function open(id) { S.current = id || null; toChat(id || null); show(pathFor(id), false); repaint(); }
+  // a project's home in the real chat, by id: its composer files the new conversation in the project
+  function openProjectId(pid) { if (!/^[0-9a-f-]{36}$/i.test(String(pid || ''))) return false; S.current = null; toChat(null); show('/chat/projects/' + encodeURIComponent(pid), false); return true; }
   function openProject(name) { const pid = projectId(name); if (!pid) return false; S.current = null; toChat(null); show('/chat/projects/' + encodeURIComponent(pid), false); return true; }
   document.addEventListener('click', (e) => {
     if (e.target.closest('[data-more]')) return;   // the row's menu button is the app's: it opens the menu registered below
@@ -355,6 +357,6 @@
   const pickModel = (id) => toChatFrame({ type: 'pick-model', id });
   const pickerClosed = () => { if (S.effort) { S.effort = null; toChatFrame({ type: 'effort-menu-closed' }); } if (S.picker) { S.picker = null; toChatFrame({ type: 'model-menu-closed' }); } };
   const pickEffort = (id) => { if (S.effort) S.effort.selected = id; toChatFrame({ type: 'pick-effort', id }); };
-  window.XENO_CHAT = { served: true, area, areaName, instructions, pin, pins: () => S.pins.slice(), get picker() { return S.picker; }, get effort() { return S.effort || null; }, pickModel, pickEffort, pickerClosed, data, title, open, load, rename, remove, dress, host: () => '<div class="live-chat-host" data-chat-frame aria-label="Chat"></div>', state: () => ({ area: area(), listed: S.area, viewer: S.viewer || null, ready: chatReady(), status: S.status, count: S.convs.length, current: S.current, path: S.path, shown: !!frame && frame.classList.contains('on') }) };
+  window.XENO_CHAT = { served: true, openProjectId, area, areaName, instructions, pin, pins: () => S.pins.slice(), get picker() { return S.picker; }, get effort() { return S.effort || null; }, pickModel, pickEffort, pickerClosed, data, title, open, load, rename, remove, dress, host: () => '<div class="live-chat-host" data-chat-frame aria-label="Chat"></div>', state: () => ({ area: area(), listed: S.area, viewer: S.viewer || null, ready: chatReady(), status: S.status, count: S.convs.length, current: S.current, path: S.path, shown: !!frame && frame.classList.contains('on') }) };
   Promise.resolve(P.ready).then((user) => { if (!user) return; P.first(load()); watch(); });
 })();
