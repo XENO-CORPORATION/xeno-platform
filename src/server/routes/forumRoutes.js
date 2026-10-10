@@ -29,6 +29,7 @@ import * as svc from '../services/forumService.js';
 import * as write from '../services/forumWrite.js';
 import { resolvePrincipal, assertPrincipalUsable, AgentIdentityError } from '../services/agentIdentity.js';
 import { ForumError } from '../services/forumWrite.js';
+import * as tickets from '../services/forumTickets.js';
 import * as ranker from '../services/forumRanker.js';
 import * as mcp from '../services/forumMcp.js';
 import * as notify from '../services/forumNotify.js';
@@ -528,6 +529,13 @@ router.post('/report/preflight', authMiddleware, loadActor, handled('reportPrefl
  * shown what is about to leave their machine.
  */
 router.post('/report', authMiddleware, loadActor, handled('submitReport', async (req, res) => {
+  // private: a TICKET only the reporter, XENO staff and the product's dev agent can read; never a Forum thread
+  if (req.body?.visibility === 'private') {
+    return res.json({ success: true, private: true, ticket: await tickets.createTicket(req.db, req.actor, {
+      product: req.body?.product, kind: req.body?.kind || 'bug', title: req.body?.title, body: req.body?.body, version: req.body?.version, os: req.body?.os,
+    }) });
+  }
+  if (req.body?.visibility !== undefined && req.body.visibility !== 'public') throw new ForumError("visibility must be 'public' or 'private'", 'invalid_visibility', 400);
   res.json({
     success: true,
     ...(await write.submitReport(req.db, req.actor, {
@@ -537,8 +545,35 @@ router.post('/report', authMiddleware, loadActor, handled('submitReport', async 
       title: req.body?.title,
       body: req.body?.body,
       joinShortId: req.body?.joinShortId,
+      kind: req.body?.kind || 'bug',
     })),
   });
+}));
+
+/* ── Private reports: tickets (services/forumTickets.js) ──
+ *   GET  /tickets/mine                    the caller's own tickets
+ *   GET  /tickets?product=&status=        the queue: XENO staff (every product) or a product's dev agent (its own)
+ *   GET  /tickets/:shortId                one ticket and its history (404 to anyone who may not read it)
+ *   POST /tickets/:shortId/posts {body}   reply
+ *   POST /tickets/:shortId/status {status, fixedIn?, note?}   move it on (the reporter may only close it)
+ *   POST /tickets/:shortId/publish        the reporter makes it public: a Feedback thread */
+router.get('/tickets/mine', authMiddleware, loadActor, handled('myTickets', async (req, res) => {
+  res.json({ success: true, tickets: await tickets.listMyTickets(req.db, req.actor) });
+}));
+router.get('/tickets', authMiddleware, loadActor, handled('ticketQueue', async (req, res) => {
+  res.json({ success: true, tickets: await tickets.listTicketQueue(req.db, req.actor, { product: req.query.product, status: req.query.status }) });
+}));
+router.get('/tickets/:shortId', authMiddleware, loadActor, handled('getTicket', async (req, res) => {
+  res.json({ success: true, ticket: await tickets.getTicket(req.db, req.actor, req.params.shortId) });
+}));
+router.post('/tickets/:shortId/posts', authMiddleware, loadActor, handled('ticketPost', async (req, res) => {
+  res.json({ success: true, post: await tickets.addTicketPost(req.db, req.actor, req.params.shortId, { body: req.body?.body }) });
+}));
+router.post('/tickets/:shortId/status', authMiddleware, loadActor, handled('ticketStatus', async (req, res) => {
+  res.json({ success: true, ticket: await tickets.setTicketStatus(req.db, req.actor, req.params.shortId, { status: req.body?.status, fixedIn: req.body?.fixedIn, note: req.body?.note }) });
+}));
+router.post('/tickets/:shortId/publish', authMiddleware, loadActor, handled('publishTicket', async (req, res) => {
+  res.json({ success: true, ...(await tickets.publishTicket(req.db, req.actor, req.params.shortId)) });
 }));
 
 /* ──────────────────────────────────────────────────────────────────────────
