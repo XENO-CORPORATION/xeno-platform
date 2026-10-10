@@ -19,7 +19,12 @@
  */
 import crypto from 'node:crypto';
 import { check, writeTuples } from '../utils/authzReBAC.js';
-import { createAgent } from './agentIdentity.js';
+import { createAgent, DEFAULT_AGENT_CAP } from './agentIdentity.js';
+// agent-identity errors carry statusCode; Tasks errors carry status
+const asTaskError = (e) => (e && e.code && (e.status || e.statusCode) ? new TaskError(e.message, e.code, e.status || e.statusCode) : e);
+// MCP sign-in agents (one per app name, reused) may go past the general cap by this much, so a person who
+// already runs several agents can still connect an agent CLI
+const MCP_AGENT_HEADROOM = 5;
 import { assertSafeEndpointUrl, safeRequest } from '../utils/safeEndpoint.js';
 
 export class TaskError extends Error {
@@ -750,7 +755,7 @@ export async function createTaskAgent(db, me, { name } = {}) {
   const owner = (await db.query('SELECT id, username FROM users WHERE id = $1', [me.id])).rows[0];
   let made;
   try { made = await createAgent(db, { id: owner.id, kind: 'human', handle: owner.username }, { name: label.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'agent', displayName: label, agentRole: 'worker', agentOrigin: 'tasks' }); }
-  catch (e) { if (e && e.code && e.status) throw new TaskError(e.message, e.code, e.status); throw e; }
+  catch (e) { throw asTaskError(e); }
   const row = (await db.query('SELECT id, username FROM users WHERE username = $1', [made.agent.handle])).rows[0];
   await db.query('UPDATE api_keys SET is_active = false WHERE user_id = $1', [row.id]);
   return { agent: { id: String(row.id), username: row.username, name: label } };
@@ -770,15 +775,14 @@ export async function mcpAgentFor(db, ownerId, appName) {
   const owner = (await db.query('SELECT id, username FROM users WHERE id = $1', [ownerId])).rows[0];
   if (!owner) throw new TaskError('Account not found', 'account_not_found', 401);
   try {
-    const made = await createAgent(db, { id: owner.id, kind: 'human', handle: owner.username }, { name: label.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'mcp', displayName: label, agentRole: 'worker', agentOrigin: 'mcp' });
+    const made = await createAgent(db, { id: owner.id, kind: 'human', handle: owner.username }, { name: label.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'mcp', displayName: label, agentRole: 'worker', agentOrigin: 'mcp', cap: DEFAULT_AGENT_CAP + MCP_AGENT_HEADROOM });
     const row = (await db.query('SELECT id FROM users WHERE username = $1', [made.agent.handle])).rows[0];
     await db.query('UPDATE api_keys SET is_active = false WHERE user_id = $1', [row.id]);
     return String(row.id);
   } catch (e) {
     // at the agent cap, share the person's existing MCP agent rather than refusing the sign-in
     const any = await pick(false); if (any) return String(any.id);
-    if (e && e.code && e.status) throw new TaskError(e.message, e.code, e.status);
-    throw e;
+    throw asTaskError(e);
   }
 }
 

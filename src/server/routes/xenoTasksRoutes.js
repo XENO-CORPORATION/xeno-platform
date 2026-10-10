@@ -66,9 +66,11 @@ export async function taskTokenAuth(req, res, next) {
   const bearer = /^Bearer\s+(.+)$/i.exec(h)?.[1]?.trim() || null;
   if (bearer && !bearer.startsWith('xtk_') && /^[\w-]+\.[\w-]+\.[\w-]+$/.test(bearer)) {
     // an OAuth access token for the Tasks audience: the person's MCP agent, never the person
+    let claims;
+    try { claims = await verifyTasksAccessToken(req.db, bearer); }
+    catch { return challenge(req, res, { success: false, error: 'This sign-in is no longer valid. Sign in again.', code: 'invalid_token' }, 'invalid_token'); }
+    if (!claims) return next();                         // a first-party token: authMiddleware handles it as the person
     try {
-      const claims = await verifyTasksAccessToken(req.db, bearer);
-      if (!claims) return next();                       // a first-party token: authMiddleware handles it as the person
       const scopes = String(claims.scope || '').split(/\s+/).filter((s) => s === 'tasks:read' || s === 'tasks:write');
       if (!scopes.length) return challenge(req, res, { success: false, error: 'This sign-in has no Tasks access', code: 'insufficient_scope' }, 'insufficient_scope');
       const client = claims.client_id ? await getClient(req.db, claims.client_id) : null;
@@ -77,8 +79,10 @@ export async function taskTokenAuth(req, res, next) {
       req.taskToken = { agentUserId: agentId, scopes, taskId: null, via: 'oauth', clientId: claims.client_id || null, ownerId: String(claims.sub) };
       return next();
     } catch (e) {
+      // only a bad token reads as "sign in again"; anything else is a real error and must say so
       if (e instanceof tasks.TaskError) return res.status(e.status).json({ success: false, error: e.message, code: e.code });
-      return challenge(req, res, { success: false, error: 'This sign-in is no longer valid. Sign in again.', code: 'invalid_token' }, 'invalid_token');
+      console.error('[tasks] mcp sign-in', e);
+      return res.status(500).json({ success: false, error: 'Internal server error' });
     }
   }
   const raw = bearer && bearer.startsWith('xtk_') ? bearer : null;
