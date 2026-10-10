@@ -25,13 +25,47 @@
 import express from 'express';
 import * as tasks from '../services/xenoTasks.js';
 import { resolvePrincipal, assertPrincipalUsable } from '../services/agentIdentity.js';
+import * as mcp from '../services/tasksMcp.js';
+import { requireEntitlement } from '../middleware/requireEntitlement.js';
 
-const router = express.Router();   // mounted behind authMiddleware in index.js
+const router = express.Router();   // mounted behind authMiddleware in index.js (see taskTokenAuth for agents)
+
+/** Agents authenticate with their OWN Tasks credential (Authorization: Bearer xtk_…), never a person's.
+ *  Mounted BEFORE authMiddleware: a valid credential becomes the agent principal; an invalid one is refused here
+ *  (it never falls through to be read as something else). */
+export async function taskTokenAuth(req, res, next) {
+  const h = String(req.headers.authorization || ''), raw = h.startsWith('Bearer xtk_') ? h.slice(7).trim() : null;
+  if (!raw) return next();
+  try {
+    const tok = await tasks.resolveTaskToken(req.db, raw);
+    if (!tok) return res.status(401).json({ success: false, error: 'This Tasks credential is not valid (unknown, expired or revoked)', code: 'invalid_task_token' });
+    req.user = { id: tok.agentUserId }; req.taskToken = tok; next();
+  } catch (e) { console.error('[tasks] token', e); res.status(500).json({ success: false, error: 'Internal server error' }); }
+}
+/** skip a middleware for a request already authenticated by an agent credential */
+export const unlessTaskToken = (mw) => (req, res, next) => (req.taskToken ? next() : mw(req, res, next));
 
 router.use(async (req, res, next) => {
-  try { const p = await resolvePrincipal(req.db, req.user.id); assertPrincipalUsable(p); const u = (await req.db.query('SELECT COALESCE(display_name, username) AS name FROM users WHERE id = $1', [p.id])).rows[0]; req.me = { id: p.id, kind: p.kind, role: p.role, name: u ? u.name : 'Someone' }; next(); }
+  try { const p = await resolvePrincipal(req.db, req.user.id); assertPrincipalUsable(p); const u = (await req.db.query('SELECT COALESCE(display_name, username) AS name FROM users WHERE id = $1', [p.id])).rows[0]; req.me = { id: p.id, kind: p.kind, role: p.role, name: u ? u.name : 'Someone' }; if (req.taskToken) req.me.token = req.taskToken; next(); }
   catch (error) { res.status(error.statusCode || 403).json({ success: false, error: error.message || 'Not allowed', code: error.code || 'not_allowed' }); }
 });
+// what an agent credential may do: reads need tasks:read, everything else tasks:write; a single-task credential (the
+// hand-off link) reaches only its own task, and none of the management surfaces
+const SINGLE_TASK_OK = /^\/(T-\d+)(\/(?:transition|claim|comments(?:\/[\w-]+)?|activity|attachments(?:\/[\w-]+)?|watch))?$/i;
+router.use(handledMw(async (req) => {
+  const tok = req.taskToken; if (!tok) return;
+  const need = req.method === 'GET' || req.method === 'HEAD' || req.path === '/mcp' ? 'tasks:read' : 'tasks:write';
+  if (!tok.scopes.includes(need)) throw new tasks.TaskError(`This credential lacks ${need}`, 'scope_missing', 403);
+  if (tok.taskId) {
+    if (req.path === '/' && req.method === 'GET') return;            // the list, narrowed to the one task below
+    if (req.path === '/mcp' || req.path === '/agent/events' || req.path === '/agent/me') return;
+    const m = SINGLE_TASK_OK.exec(req.path);
+    if (!m || req.method === 'DELETE' && !/attachments/.test(req.path)) throw new tasks.TaskError('This credential is for one task only', 'single_task', 403);
+    const id = (await req.db.query('SELECT id FROM tasks WHERE number = $1', [m[1].slice(2)])).rows[0];
+    if (!id || String(id.id) !== tok.taskId) throw new tasks.TaskError('This credential is for one task only', 'single_task', 403);
+  } else if (/^\/agents(\/|$)/.test(req.path)) throw new tasks.TaskError('Agents can’t manage agents', 'not_allowed', 403);
+}));
+function handledMw(fn) { return async (req, res, next) => { try { await fn(req); next(); } catch (error) { if (error instanceof tasks.TaskError) return res.status(error.status).json({ success: false, error: error.message, code: error.code }); console.error('[tasks]', error); res.status(500).json({ success: false, error: 'Internal server error' }); } }; }
 const handled = (fn) => async (req, res) => {
   try { await fn(req, res); }
   catch (error) {
@@ -42,7 +76,9 @@ const handled = (fn) => async (req, res) => {
 };
 
 router.get('/', handled(async (req, res) => {
-  res.json({ success: true, tasks: await tasks.listTasks(req.db, req.me, { area: req.query.area, projectId: req.query.projectId, status: req.query.status, assignee: req.query.assignee, q: req.query.q, limit: req.query.limit }) });
+  let list = await tasks.listTasks(req.db, req.me, { area: req.query.area, projectId: req.query.projectId, status: req.query.status, assignee: req.query.assignee, delegate: req.query.delegate, q: req.query.q, limit: req.query.limit });
+  if (req.taskToken && req.taskToken.taskId) list = list.filter((x) => String(x.id) === req.taskToken.taskId);
+  res.json({ success: true, tasks: list });
 }));
 router.post('/', handled(async (req, res) => {
   res.status(201).json({ success: true, task: await tasks.createTask(req.db, req.me, req.body || {}) });
@@ -50,6 +86,16 @@ router.post('/', handled(async (req, res) => {
 router.get('/views', handled(async (req, res) => { res.json({ success: true, views: await tasks.listViews(req.db, req.me) }); }));
 router.post('/views', handled(async (req, res) => { res.json({ success: true, views: await tasks.saveView(req.db, req.me, req.body || {}) }); }));
 router.delete('/views/:id', handled(async (req, res) => { res.json({ success: true, views: await tasks.deleteView(req.db, req.me, req.params.id) }); }));
+// agents: the caller's own agents and their credentials; an agent's own feed; MCP
+router.get('/agents', handled(async (req, res) => { res.json({ success: true, agents: await tasks.listMyAgents(req.db, req.me) }); }));
+router.post('/agents', unlessTaskToken(requireEntitlement('agents')), handled(async (req, res) => { res.status(201).json({ success: true, ...(await tasks.createTaskAgent(req.db, req.me, req.body || {})) }); }));
+router.post('/agents/tokens', handled(async (req, res) => { res.status(201).json({ success: true, ...(await tasks.mintAgentToken(req.db, req.me, req.body || {})) }); }));
+router.delete('/agents/tokens/:id', handled(async (req, res) => { res.json({ success: true, ...(await tasks.revokeAgentToken(req.db, req.me, req.params.id)) }); }));
+router.put('/agents/webhook', handled(async (req, res) => { res.json({ success: true, ...(await tasks.setAgentWebhook(req.db, req.me, req.body || {})) }); }));
+router.get('/agent/events', handled(async (req, res) => { res.json({ success: true, ...(await tasks.agentEvents(req.db, req.me, { after: req.query.after, limit: req.query.limit })) }); }));
+router.get('/agent/me', handled(async (req, res) => { res.json({ success: true, agent: { id: String(req.me.id), name: req.me.name, kind: req.me.kind, scopes: req.taskToken ? req.taskToken.scopes : null, task: req.taskToken && req.taskToken.taskId ? true : false }, tasks: (await tasks.listTasks(req.db, req.me, { delegate: 'me', status: 'raised,todo,in_progress,blocked,in_review' })).filter((x) => !req.taskToken || !req.taskToken.taskId || String(x.id) === req.taskToken.taskId) }); }));
+router.get('/mcp', (req, res) => res.json(mcp.manifest()));
+router.post('/mcp', async (req, res) => { try { res.json(await mcp.dispatch(req.db, req.me, req.body || {})); } catch (error) { console.error('[tasks mcp]', error); res.status(500).json({ jsonrpc: '2.0', id: req.body && req.body.id != null ? req.body.id : null, error: { code: -32603, message: 'Internal error' } }); } });
 router.get('/assignees', handled(async (req, res) => { res.json({ success: true, assignees: await tasks.listAssignees(req.db, req.me, { projectId: req.query.projectId }) }); }));
 router.get('/:key', handled(async (req, res) => { res.json({ success: true, task: await tasks.getTask(req.db, req.me, req.params.key) }); }));
 router.patch('/:key', handled(async (req, res) => { res.json({ success: true, task: await tasks.updateTask(req.db, req.me, req.params.key, req.body || {}) }); }));
@@ -76,5 +122,9 @@ router.put('/:key/watch', handled(async (req, res) => { res.json({ success: true
 router.delete('/:key/watch', handled(async (req, res) => { res.json({ success: true, task: await tasks.setWatching(req.db, req.me, req.params.key, false) }); }));
 router.post('/:key/links', handled(async (req, res) => { res.json({ success: true, task: await tasks.addLink(req.db, req.me, req.params.key, { kind: req.body?.kind, to: req.body?.to }) }); }));
 router.delete('/:key/links/:id', handled(async (req, res) => { res.json({ success: true, task: await tasks.removeLink(req.db, req.me, req.params.key, req.params.id) }); }));
+
+router.post('/:key/delegate', handled(async (req, res) => { res.json({ success: true, task: await tasks.delegateTask(req.db, req.me, req.params.key, { agentId: req.body?.agentId }) }); }));
+router.post('/:key/activity', handled(async (req, res) => { res.json({ success: true, task: await tasks.reportActivity(req.db, req.me, req.params.key, { type: req.body?.type, body: req.body?.body }) }); }));
+router.post('/:key/handoff', handled(async (req, res) => { res.status(201).json({ success: true, ...(await tasks.handoffTask(req.db, req.me, req.params.key)) }); }));
 
 export default router;
