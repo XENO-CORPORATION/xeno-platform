@@ -390,3 +390,19 @@ test('when every model is out of quota the user is told so, and no other error i
   await assert.rejects(declined({ prompt: 'x', aspectRatio: '1:1', quality: 'high', index: 0 }), (e) => e.code === 'image_declined');
   assert.deepEqual(tried, ['primary'], 'a content refusal is not routed around by switching models');
 });
+
+test('a fallback model gets only the parameters it accepts, and never stands in for an edit', async () => {
+  const sent = [];
+  const make = (reference) => createChatImageExecutor({
+    db: {}, userId: 'u1', turnId: 'tr', meter: fakeMeter([]),
+    generate: async (p) => { sent.push(p); if (p.model.startsWith('gpt-image')) throw Object.assign(new Error('q'), { code: 'image_quota' }); return { data: [{ b64_json: PNG_2x1.toString('base64') }] }; },
+    resolveEntitlements: async () => ({ watermark: false }), watermark: async (b) => b, store: async () => ({ id: 'a' }),
+    model: 'gpt-image-2.5-sunburst', fallbackModels: ['nano_banana_pro'], microPerCredit: 1_000_000, reference,
+  });
+  await make(null)({ prompt: 'map', aspectRatio: '2:3', quality: 'high', index: 0 });
+  assert.deepEqual(Object.keys(sent[1]).sort(), ['aspect_ratio', 'model', 'prompt']);
+  sent.length = 0;
+  await assert.rejects(make({ dataUrl: 'data:image/png;base64,AAAA' })({ prompt: 'map', aspectRatio: '2:3', quality: 'high', index: 0, useReference: true }),
+    (e) => e.code === 'image_unavailable' && /quota/.test(e.message));
+  assert.deepEqual(sent.map((p) => p.model), ['gpt-image-2.5-sunburst'], 'the edit is not redrawn without its reference');
+});

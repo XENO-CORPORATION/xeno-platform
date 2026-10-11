@@ -72,6 +72,9 @@ export const CHAT_IMAGE_BUDGET = 2;
  */
 export const CHAT_IMAGE_CREDITS = getCreditCost('image', CHAT_IMAGE_MODEL);
 
+/** Only the GPT image models (Codex-backed) accept a reference image through the gateway. */
+export const takesReference = (model) => /^gpt-image/.test(String(model));
+
 /**
  * Models tried, in order, when the one before refuses with a quota error. The GPT image models run
  * on the gateway's Codex logins and share their image allowance, so when that pool is spent both
@@ -379,7 +382,9 @@ export function createChatImageExecutor({ db, userId, turnId, meter, generate, r
       unitCostMicro: getCreditCost('image', model) * microPerCredit,
       count: 1,
       run: async () => {
-        const response = await generate({
+        // The gateway's Google models accept only model, prompt and aspect_ratio (measured 2026-10-11:
+        // anything else is refused as unsupported_parameter), and no reference image at all.
+        const response = await generate(takesReference(model) ? {
           model,
           // the shape in words is what the model obeys; the parameters below are kept for the gateway
           prompt: shapedPrompt(prompt, aspectRatio),
@@ -389,7 +394,7 @@ export function createChatImageExecutor({ db, userId, turnId, meter, generate, r
           output_format: 'png',
           response_format: 'b64_json',
           ...(edited ? { reference_images: [reference.dataUrl] } : {}),
-        });
+        } : { model, prompt: shapedPrompt(prompt, aspectRatio), aspect_ratio: aspectRatio });
         usage = imageUsageFrom(response);
         const b64 = base64FromImageItem(response?.data?.[0]);
         if (!b64) throw Object.assign(new Error('The image service returned no image.'), { code: 'image_empty' });
@@ -423,10 +428,14 @@ export function createChatImageExecutor({ db, userId, turnId, meter, generate, r
     };
   };
   const models = [model, ...fallbackModels.filter((m) => m !== model)];
+  const quotaSpent = 'The image models have used their generation quota for now. Tell the user plainly, offer to prepare a reusable prompt, and let them retry this message later. Do not retry image generation this turn, and do not blame the prompt.';
   return async (args) => {
     let lastMessage = null;
     for (let attempt = 0; attempt < models.length; attempt += 1) {
       const candidate = models[attempt];
+      // An edit must use the user's image. A model that cannot take a reference would draw
+      // something unrelated, so it is never a fallback for one.
+      if (attempt > 0 && args.useReference && reference?.dataUrl && !takesReference(candidate)) continue;
       if (checkAvailable) {
         const status = await checkAvailable(candidate);
         if (!status.available) { lastMessage = status.message; continue; }
@@ -436,7 +445,7 @@ export function createChatImageExecutor({ db, userId, turnId, meter, generate, r
       } catch (error) {
         // A spent quota voided its hold; the next model gets its own hold. Anything else is real.
         if (error?.code !== 'image_quota') throw error;
-        lastMessage = 'Every image model has used its generation quota for now. Offer to prepare a reusable prompt, or let the user retry this message later. Do not retry image generation this turn.';
+        lastMessage = quotaSpent;
       }
     }
     throw Object.assign(new Error(lastMessage || 'No image model is available right now. Offer to prepare a reusable prompt or retry later; do not retry image generation this turn.'), { code: 'image_unavailable', http: 503 });
