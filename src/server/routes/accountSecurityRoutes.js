@@ -152,7 +152,7 @@ router.get('/exports', guard('exports', async (req, res) => {
 router.post('/exports', requireConfirmation(), guard('export request', async (req, res) => {
   const result = await requestExport(req.db, req.user.id);
   if (result.ok) {
-    recordSecurityEvent(req.db, EVENTS.DATA_EXPORT_REQUESTED, { userId: req.user.id, req, metadata: { export_id: result.export.id } });
+    await recordSecurityEvent(req.db, EVENTS.DATA_EXPORT_REQUESTED, { userId: req.user.id, req, metadata: { export_id: result.export.id } });
     return res.status(202).json({ success: true, export: result.export });
   }
   return fail(res, 409, result.code, result.code === 'export_in_progress' ? 'A copy is already being made' : `You can ask for ${result.limit} copies a day`, result.limit ? { limit: result.limit } : {});
@@ -163,7 +163,7 @@ router.get('/exports/:id/download', guard('export download', async (req, res) =>
   if (!sidOf(req)) return fail(res, 403, 'confirmation_unavailable', 'This needs a signed-in browser session');
   const file = await exportFile(req.db, { userId: req.user.id, exportId: req.params.id });
   if (!file) return fail(res, 404, 'not_found', 'That copy is not available');
-  recordSecurityEvent(req.db, EVENTS.DATA_EXPORT_DOWNLOADED, { userId: req.user.id, req, metadata: { export_id: req.params.id } });
+  await recordSecurityEvent(req.db, EVENTS.DATA_EXPORT_DOWNLOADED, { userId: req.user.id, req, metadata: { export_id: req.params.id } });
   res.setHeader('Content-Type', 'application/gzip');
   res.setHeader('Content-Length', String(file.size));
   res.setHeader('Content-Disposition', `attachment; filename="${file.name}"`);
