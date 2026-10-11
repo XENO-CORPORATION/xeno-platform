@@ -9530,7 +9530,7 @@ Keep the summary under 500 words. Preserve essential context needed to continue 
                         <Tab
                           key={section.id}
                           size="md"
-                          selectionStyle="ring"
+                          selectionStyle="fill"
                           selected={isActive}
                           {...projectTabsWide.tabProps(section.id)}
                           onClick={() => setActiveSection(section.id)}
@@ -9566,7 +9566,7 @@ Keep the summary under 500 words. Preserve essential context needed to continue 
                   <Tab
                     key={section.id}
                     size="lg"
-                    selectionStyle="ring"
+                    selectionStyle="fill"
                     selected={isActive}
                     {...projectTabsNarrow.tabProps(section.id)}
                     onClick={() => setActiveSection(section.id)}
@@ -15317,21 +15317,21 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                   {(() => {
                     const displayInstructions =
                       project.instructions?.trim() || 'No project instructions yet.';
+                    // Flat sections divided by hairlines, as in the workspace's task and project side
+                    // panes (prototypes/xeno-workspace .tk-side / .tk-props): no card around each
+                    // section and no box around each value — the boxes-in-boxes read as a form.
                     const railShellStyle: React.CSSProperties = {
-                      backgroundColor:
-                        'color-mix(in srgb, var(--chat-canvas) 88%, var(--chat-muted))',
-                      borderColor:
-                        'color-mix(in srgb, var(--chat-canvas) 74%, var(--chat-muted))',
+                      borderColor: 'color-mix(in srgb, var(--chat-text) 9%, transparent)',
                     };
                     const railChipStyle: React.CSSProperties = {
-                      backgroundColor: 'var(--chat-canvas)',
-                      borderColor: 'color-mix(in srgb, var(--chat-muted) 20%, transparent)',
+                      backgroundColor: 'color-mix(in srgb, var(--chat-text) 4%, transparent)',
+                      borderColor: 'transparent',
                     };
                     return (
-                      <div className="flex flex-col gap-3">
+                      <div className="flex flex-col gap-4">
                         {/* Instructions — same shell language as Files */}
                         <div
-                          className="flex flex-col rounded-[10px] border p-1.5"
+                          className="flex flex-col border-t pt-3 first:border-t-0 first:pt-0"
                           style={railShellStyle}
                         >
                           <div className="flex items-center justify-between gap-2 py-1 pl-2 pr-0.5">
@@ -15394,7 +15394,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
 
                         {/* Files */}
                         <div
-                          className="flex min-h-[10.5rem] flex-col rounded-[10px] border p-1.5"
+                          className="flex flex-col border-t pt-3"
                           style={railShellStyle}
                         >
                           <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-1 py-1 pl-2 pr-0.5">
@@ -15556,7 +15556,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
 
                         {/* Scheduled — same shell + black chips */}
                         <div
-                          className="flex flex-col rounded-[10px] border p-1.5"
+                          className="flex flex-col border-t pt-3 first:border-t-0 first:pt-0"
                           style={railShellStyle}
                         >
                           <div className="flex items-center justify-between gap-2 py-1 pl-2 pr-0.5">
@@ -17657,7 +17657,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
           >
           <div className="flex flex-col gap-4">
             <div>
-              <p className="text-[11px] font-medium uppercase tracking-wide text-[var(--chat-muted)]">
+              <p className="text-[12.5px] font-medium text-[var(--chat-muted)]">
                 Title
               </p>
               <p className="mt-1 text-[14px] font-medium text-[var(--chat-text)]">
@@ -17665,7 +17665,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
               </p>
             </div>
             <div>
-              <p className="text-[11px] font-medium uppercase tracking-wide text-[var(--chat-muted)]">
+              <p className="text-[12.5px] font-medium text-[var(--chat-muted)]">
                 When
               </p>
               <p className="mt-1 text-[13px] text-[var(--chat-text)]">
@@ -17673,7 +17673,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
               </p>
             </div>
             <div>
-              <p className="text-[11px] font-medium uppercase tracking-wide text-[var(--chat-muted)]">
+              <p className="text-[12.5px] font-medium text-[var(--chat-muted)]">
                 Instructions
               </p>
               <p className="mt-1 whitespace-pre-wrap text-[12.5px] leading-relaxed text-[var(--chat-text)]">
@@ -17681,7 +17681,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
               </p>
             </div>
             <div>
-              <p className="text-[11px] font-medium uppercase tracking-wide text-[var(--chat-muted)]">
+              <p className="text-[12.5px] font-medium text-[var(--chat-muted)]">
                 Recent runs
               </p>
               <div className="mt-1.5 flex max-h-40 flex-col gap-1 overflow-y-auto">
@@ -17709,7 +17709,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
             </div>
             <div className="flex items-center justify-between gap-3 rounded-lg border px-3 py-2" style={{ borderColor: 'var(--chat-border)' }}>
               <div>
-                <span className="block text-[11px] font-medium uppercase tracking-wide text-[var(--chat-muted)]">Status</span>
+                <span className="block text-[12.5px] font-medium text-[var(--chat-muted)]">Status</span>
                 <span className="mt-0.5 block text-[12px] font-medium capitalize text-[var(--chat-text)]">
                   {projectScheduledPreview.status || 'active'}
                 </span>
@@ -17780,7 +17780,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
           >
           <div className="flex flex-col gap-3">
             <label className="block">
-              <span className="mb-1.5 block text-[11px] font-medium uppercase tracking-wide text-[var(--chat-muted)]">
+              <span className="mb-1.5 block text-[12.5px] font-medium text-[var(--chat-muted)]">
                 Title
               </span>
               {/* Stays hand-written, and both halves of the reason are the familiar ones:
@@ -17809,7 +17809,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
               />
             </label>
             <label className="block">
-              <span className="mb-1.5 block text-[11px] font-medium uppercase tracking-wide text-[var(--chat-muted)]">
+              <span className="mb-1.5 block text-[12.5px] font-medium text-[var(--chat-muted)]">
                 Instructions
               </span>
               <textarea
@@ -17825,7 +17825,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
               />
             </label>
             <div className="block">
-              <span className="mb-1.5 block text-[11px] font-medium uppercase tracking-wide text-[var(--chat-muted)]">
+              <span className="mb-1.5 block text-[12.5px] font-medium text-[var(--chat-muted)]">
                 When
               </span>
               <div className="relative">
@@ -18461,7 +18461,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
               </div>
             </div>
             <label className="block">
-              <span className="mb-1.5 block text-[11px] font-medium uppercase tracking-wide text-[var(--chat-muted)]">
+              <span className="mb-1.5 block text-[12.5px] font-medium text-[var(--chat-muted)]">
                 Timezone
               </span>
               <input
@@ -18485,7 +18485,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
               aria-live="polite"
             >
               <div className="flex items-center justify-between gap-2">
-                <span className="text-[11px] font-medium uppercase tracking-wide text-[var(--chat-muted)]">
+                <span className="text-[12.5px] font-medium text-[var(--chat-muted)]">
                   Next occurrences
                 </span>
                 <span className="font-mono text-[10.5px] text-[var(--chat-muted)]">
