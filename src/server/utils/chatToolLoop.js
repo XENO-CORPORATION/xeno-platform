@@ -425,7 +425,7 @@ export const budgetExhaustedPayload = (searches) => ({
  * @yields { type:'delta'|'search_start'|'search_result'|'search_error'|'image_start'|'image_result'|
  *           'image_error'|'code_start'|'code_result'|'code_error'|'ask_user'|'usage'|'complete', … }
  */
-export async function* streamToolLoop({ messages, surface, turnId, streamModel, runSearch, tools: offered, runImage, runCode, imageReference = null }) {
+export async function* streamToolLoop({ messages, surface, turnId, streamModel, runSearch, tools: offered, runImage, runCode, runProject, imageReference = null }) {
   const budget = budgetFor(surface);
   const tools = Array.isArray(offered) ? offered : toolsForSurface(surface);
   const canSearch = tools.some((tool) => tool?.function?.name === 'web_search');
@@ -435,6 +435,9 @@ export async function* streamToolLoop({ messages, surface, turnId, streamModel, 
   const canAsk = tools.some((tool) => tool?.function?.name === 'ask_user');
   let images = 0;
   let codeRuns = 0;
+  let projectReads = 0;
+  let imageUnavailable = false;
+  const canReadProject = typeof runProject === 'function' && tools.some((tool) => tool?.function?.name === 'read_project');
 
   const working = [...messages];
   const sources = [];
@@ -506,6 +509,24 @@ export async function* streamToolLoop({ messages, surface, turnId, streamModel, 
       const name = call?.function?.name;
       const id = call?.id;
 
+      if (name === 'read_project' && canReadProject) {
+        if (projectReads >= 6) { working.push(toolResultMessage(id, { error: 'project_read_limit' })); continue; }
+        projectReads += 1;
+        try {
+          const args = JSON.parse(call.function.arguments || '{}');
+          const data = await runProject(args);
+          const serialized = JSON.stringify(data);
+          const bounded = serialized.length <= 24_000 ? data : {
+            truncated: true, excerpt: serialized.slice(0, 24_000),
+            note: 'Result exceeded the turn limit. Ask for a narrower section.',
+          };
+          working.push(toolResultMessage(id, { untrusted_project_data: true, data: bounded }));
+        } catch {
+          working.push(toolResultMessage(id, { error: 'project_read_failed', message: 'That project section could not be read. Access may have changed.' }));
+        }
+        continue;
+      }
+
       if (name === 'ask_user' && canAsk) {
         // One question per turn. A second one is answered with an error the model can read — it is
         // never queued, because the turn is about to end at the first.
@@ -518,6 +539,10 @@ export async function* streamToolLoop({ messages, surface, turnId, streamModel, 
       }
 
       if (name === 'generate_image' && canDraw) {
+        if (imageUnavailable) {
+          working.push(toolResultMessage(id, { error: 'image_unavailable', instruction: 'Do not retry this turn. Offer a reusable prompt or retry later. Each new user turn has a fresh image-attempt budget.' }));
+          continue;
+        }
         if (images >= CHAT_IMAGE_BUDGET) {
           working.push(toolResultMessage(id, imageBudgetExhaustedPayload(images)));
           continue;
@@ -542,7 +567,11 @@ export async function* streamToolLoop({ messages, surface, turnId, streamModel, 
           // A failed image is a RESULT on both channels, like a failed search: the model can say
           // so truthfully, and the user sees the attempt rather than a placeholder that vanishes.
           const message = error?.message || 'unknown error';
-          working.push(toolResultMessage(id, { error: `image generation failed: ${message}` }));
+          if (error?.code === 'image_unavailable') imageUnavailable = true;
+          working.push(toolResultMessage(id, {
+            error: error?.code === 'image_unavailable' ? 'image_unavailable' : `image generation failed: ${message}`,
+            ...(imageUnavailable ? { instruction: message } : {}),
+          }));
           yield { type: 'image_error', index, code: error?.code || 'image_failed', http: error?.http, message };
         }
         continue;

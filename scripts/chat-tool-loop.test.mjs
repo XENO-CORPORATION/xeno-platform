@@ -21,12 +21,38 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   runToolLoop,
+  streamToolLoop,
   parseToolArguments,
   toolsForSurface,
   budgetFor,
   TOOL_BUDGETS,
   WEB_SEARCH_TOOL,
 } from '../src/server/utils/chatToolLoop.js';
+
+test('streamed project reads feed authorized results back into the next model dispatch', async () => {
+  let calls = 0;
+  const events = [];
+  const tools = [{ type: 'function', function: { name: 'read_project' } }];
+  async function* streamModel({ messages }) {
+    calls += 1;
+    if (calls === 1) {
+      yield { type: 'tool_calls', toolCalls: [{ id: 'project-1', type: 'function', function: { name: 'read_project', arguments: '{"section":"tasks"}' } }] };
+    } else {
+      assert.match(JSON.stringify(messages), /PROJECT_TASK_SENTINEL/);
+      assert.match(JSON.stringify(messages), /untrusted_project_data/);
+      yield { type: 'delta', text: 'The project task is visible.' };
+    }
+  }
+  for await (const event of streamToolLoop({
+    messages: [{ role: 'user', content: 'What are our tasks?' }], surface: 'chat', turnId: 'project-test', tools,
+    streamModel, runProject: async (args) => {
+      assert.equal(args.section, 'tasks');
+      return { items: [{ key: 'T-7', title: 'PROJECT_TASK_SENTINEL' }] };
+    },
+  })) events.push(event);
+  assert.equal(calls, 2);
+  assert.ok(events.some((event) => event.type === 'complete'));
+});
 
 /** An upstream response carrying one web_search call. */
 const searchCall = (query, id = 'call_1') => ({

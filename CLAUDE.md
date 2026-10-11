@@ -193,6 +193,19 @@ Rules that are easy to break:
 - **Only a failed token verification may answer "sign in again".** The first live sign-in hid an agent-cap error behind that message (#675).
 - Public docs for Tasks on the site are **not** written yet, on purpose (owner, 2026-10-11).
 
+## Project-aware chat: context must reach the model, not only the audit
+
+`services/chatProjectContext.js` supplies persisted project identity, instructions and authorized file retrieval.
+`routes/aiRoutes.js` must inject `buildUntrustedProjectDataMessage(contentBlocks)` BEFORE token estimation
+and provider dispatch, exactly as the non-streamed and scheduled paths do. Reporting `projectSources` is
+not proof the model received them: streamed turns previously reported sources while omitting their contents.
+`services/chatProjectKnowledge.js` exposes bounded read-only `read_project` sections through the existing
+streamed tool loop: conversations/active history, project-linked library files/search, canonical XENO Tasks,
+schedules and activity. Bind scope server-side, recheck access on every call, refuse mismatched persisted
+conversation/project pairs, and treat returned content as untrusted evidence. This grants no local-machine
+access or access to unrelated library records. Regression suites: `stream-project-context.test.mjs` and
+`chat-tool-loop.test.mjs`. Local source work is not deployment or real-model acceptance evidence.
+
 ## 🧭 Workforce runs are ADMITTED, then RE-ASKED — the authority lives HERE (2026-09-25/26)
 
 XENO-WORKFORCE-01's run authority is a **platform primitive**, like agent identity above: every

@@ -351,8 +351,12 @@ export function imageDimensions(buffer) {
  * @param {function} [deps.makePreview]   (buffer) => data URL shown while the library copy is scanned
  * @returns {function} ({ prompt, aspectRatio, quality, index, useReference }) => stored image record
  */
-export function createChatImageExecutor({ db, userId, turnId, meter, generate, resolveEntitlements, watermark, store, model = CHAT_IMAGE_MODEL, microPerCredit, reference = null, makePreview = null }) {
+export function createChatImageExecutor({ db, userId, turnId, meter, generate, resolveEntitlements, watermark, store, model = CHAT_IMAGE_MODEL, microPerCredit, reference = null, makePreview = null, checkAvailable = null }) {
   return async ({ prompt, aspectRatio, quality, index, useReference = false }) => {
+    if (checkAvailable) {
+      const status = await checkAvailable(model);
+      if (!status.available) throw Object.assign(new Error(status.message), { code: 'image_unavailable', http: 503 });
+    }
     const entitlement = await resolveEntitlements(db, userId).catch(() => null);
     // an edit only ever uses the reference the SERVER resolved; asking without one is a fresh image
     const edited = Boolean(useReference && reference?.dataUrl);
