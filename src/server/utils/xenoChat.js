@@ -188,6 +188,7 @@ export async function xenoModelCatalog() {
   if (!XENO_API_KEY) { const e = new Error('XENO_API_KEY not configured'); e.http = 503; throw e; }
   const response = await fetch(`${XENO_API_BASE}/models`, {
     headers: { Authorization: `Bearer ${XENO_API_KEY}` },
+    signal: AbortSignal.timeout(5_000),
   });
   if (!response.ok) throw new Error(`XENO API models error: ${response.status}`);
   const data = await response.json();

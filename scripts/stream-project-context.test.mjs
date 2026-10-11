@@ -31,6 +31,8 @@ import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { openProjectContextTurn, closeProjectContextTurn } from '../src/server/utils/projectContextTurn.js';
+import { buildUntrustedProjectDataMessage } from '../src/server/services/chatProjectPrompt.js';
+import { toProviderMessages, looksLikePartsShape } from '../src/server/utils/chatMessageParts.js';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const ROUTE = readFileSync(join(ROOT, 'src', 'server', 'routes', 'aiRoutes.js'), 'utf8');
@@ -167,6 +169,78 @@ test('the result frame carries the linkage back to the sources', () => {
     STREAM, /projectSources: projectContext\.manifest\.sources/,
     'the sources themselves are what the UI renders under a project answer',
   );
+});
+
+test('retrieved project data reaches streamed model messages before token estimation', () => {
+  const start = STREAM.indexOf('const finalMessages =');
+  const end = STREAM.indexOf('const reqIdSeed', start);
+  assert.ok(start > 0 && end > start);
+  const build = new Function('messages', 'effectiveSystemPrompt', 'projectContext',
+    'looksLikePartsShape', 'toProviderMessages', 'buildUntrustedProjectDataMessage',
+    STREAM.slice(start, end) + '\nreturn finalMessages;');
+  const projectContext = { contentBlocks: [{ content: 'PROJECT_FILE_SENTINEL: the release date is October 20.' }] };
+  for (const input of [messages, [{ role: 'user', content: 'what does the spec say' }]]) {
+    const before = JSON.stringify(input);
+    const result = build(input, 'Use project sources.', projectContext,
+      looksLikePartsShape, toProviderMessages, buildUntrustedProjectDataMessage);
+    assert.equal(result[0].role, 'system');
+    assert.deepEqual(result[1], buildUntrustedProjectDataMessage(projectContext.contentBlocks),
+      'use the canonical untrusted-data wrapper, matching non-streamed turns');
+    assert.match(JSON.stringify(result[1]), /PROJECT_FILE_SENTINEL/);
+    assert.equal(JSON.stringify(input), before, 'message injection must not mutate request history');
+  }
+  assert.ok(end < STREAM.indexOf('estimateMessageTokens(finalMessages)', end));
+});
+
+test('project grounding validates persisted conversation ownership before retrieving files', async () => {
+  const source = readFileSync(join(ROOT, 'src/server/services/chatProjectContext.js'), 'utf8');
+  const start = source.indexOf('  const conversation =');
+  const end = source.indexOf('  const project =', start);
+  assert.ok(start > 0 && end > start);
+  const guard = new Function('db', 'conversationId', 'projectId',
+    'return (async () => {' + source.slice(start, end) + '})();');
+  const db = (projectId) => ({ query: async () => ({ rows: [{ project_id: projectId }] }) });
+  await guard(db('p1'), 'c1', 'p1');
+  await assert.rejects(guard(db('p2'), 'c1', 'p1'), { code: 'project_conversation_mismatch' });
+  await assert.rejects(guard({ query: async () => ({ rows: [] }) }, 'c1', 'p1'), { code: 'project_conversation_mismatch' });
+  assert.ok(end < source.indexOf('await retrieveAuthorizedAssetChunks'));
+});
+
+test('project instructions carry persisted project identity even with no matching files', () => {
+  const source = readFileSync(join(ROOT, 'src/server/services/chatProjectContext.js'), 'utf8');
+  const start = source.indexOf('  return {');
+  assert.ok(start > 0);
+  const result = new Function('project', 'conversationId', 'contentBlocks', 'manifest',
+    source.slice(start, source.lastIndexOf('}')))(
+      { id: 'p1', name: 'Aetherwyn', description: 'Build the world', custom_instructions: '', instructions_revision: 1 },
+      'c1', [], {});
+  assert.match(result.instructions, /Aetherwyn/);
+  assert.match(result.instructions, /Build the world/);
+  assert.match(result.instructions, /"project_id":"p1"/);
+});
+
+test('project read tools exclude denied conversations, files and schedules', async () => {
+  const source = readFileSync(join(ROOT, 'src/server/services/chatProjectKnowledge.js'), 'utf8');
+  const body = source.slice(source.indexOf('export async function readProjectKnowledge')).replace('export ', '');
+  const read = new Function('check', 'activePath', 'requireResourceRelation', 'retrieveAuthorizedAssetChunks', 'listTasks', 'activity', 'resolvePrincipal', 'PROJECT_READ_TOOL',
+    body + '\nreturn readProjectKnowledge;')(
+      async (_db, request) => ({ allowed: !request.object.endsWith(':denied') }),
+      () => [], async () => {}, async () => ({ chunks: [], diagnostic: {} }),
+      async () => [], async () => ({}), async () => ({ id: 'u1', usable: true, kind: 'human' }), {});
+  const seen = [];
+  const db = { query: async (sql, params) => {
+    seen.push({ sql, params });
+    return sql.startsWith('SELECT project_id')
+      ? { rows: [{ project_id: 'p1' }] }
+      : { rows: [{ id: 'allowed', name: 'visible' }, { id: 'denied', name: 'PRIVATE_SENTINEL' }] };
+  } };
+  for (const section of ['conversations', 'files', 'schedules']) {
+    const result = await read({ db, principal: { type: 'user', id: 'u1' }, projectId: 'p1', conversationId: 'c1', args: { section } });
+    assert.deepEqual(result.items.map((item) => item.id), ['allowed']);
+    assert.doesNotMatch(JSON.stringify(result), /PRIVATE_SENTINEL/);
+    assert.ok(seen.some((call) => call.params.includes('p1')));
+  }
+  await assert.rejects(read({ db: { query: async () => ({ rows: [{ project_id: 'p2' }] }) }, principal: { type: 'user', id: 'u1' }, projectId: 'p1', conversationId: 'c1', args: { section: 'files' } }), /project_conversation_mismatch/);
 });
 
 test('project instructions reach the model via the system prompt', () => {

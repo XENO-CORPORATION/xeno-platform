@@ -38,6 +38,8 @@ import { shapeChatResponse } from '../utils/chatResponseShape.js';
 import { searchInfoFromAnnotations } from '../utils/searchInfo.js';
 import { openProjectContextTurn, closeProjectContextTurn } from '../utils/projectContextTurn.js';
 import { assembleProjectContext } from '../services/chatProjectContext.js';
+import { buildUntrustedProjectDataMessage } from '../services/chatProjectPrompt.js';
+import { PROJECT_READ_TOOL, readProjectKnowledge } from '../services/chatProjectKnowledge.js';
 
 /** SSE keepalive interval — well inside Cloudflare's 100 s origin timeout and any proxy idle timeout. */
 const SSE_KEEPALIVE_MS = 15_000;
@@ -596,7 +598,17 @@ router.post('/chat/stream', requireEntitlement('canUse'), async (req, res) => {
     ? toProviderMessages(messages, { systemPrompt: effectiveSystemPrompt })
     : (effectiveSystemPrompt
       ? [{ role: 'system', content: effectiveSystemPrompt }, ...messages]
-      : messages);
+      : messages.slice());
+
+  // Retrieved project files are data, not instructions. Match the non-streaming path:
+  // include them before token estimation and the first dispatch, including tool-loop turns.
+  if (projectContext?.contentBlocks?.length) {
+    const projectDataMessage = buildUntrustedProjectDataMessage(projectContext.contentBlocks);
+    if (projectDataMessage) {
+      const insertAt = finalMessages[0]?.role === 'system' ? 1 : 0;
+      finalMessages.splice(insertAt, 0, projectDataMessage);
+    }
+  }
 
   const reqIdSeed = requestId || req.headers['x-request-id'] || randomUUID();
   const estInputTokens = estimateMessageTokens(finalMessages);
@@ -631,6 +643,7 @@ router.post('/chat/stream', requireEntitlement('canUse'), async (req, res) => {
       ...(xenoApiConfigured() ? [GENERATE_IMAGE_TOOL] : []),
       ...(codeAvailable ? [RUN_CODE_TOOL] : []),
       ...(askAvailable ? [ASK_USER_TOOL] : []),
+      ...(projectContext ? [PROJECT_READ_TOOL] : []),
     ]
     : [];
   const toolSurface = offeredTools.length ? chatSurface : null;
@@ -1012,6 +1025,15 @@ router.post('/chat/stream', requireEntitlement('canUse'), async (req, res) => {
         turnId: reqIdSeed,
         reference: imageReference,
         makePreview: makeImagePreview,
+        checkAvailable: async (imageModel) => {
+          try {
+            const catalog = await xenoModelCatalog();
+            const available = catalog.some((entry) => entry.id === imageModel && entry.available !== false && entry.enabled !== false);
+            return { available, message: 'The configured image model is not available right now. Offer to prepare a reusable prompt, or let the user retry this message later. Do not retry image generation this turn.' };
+          } catch {
+            return { available: false, message: 'Image model availability could not be verified right now. Offer to prepare a reusable prompt or retry later; do not claim that every image model is offline.' };
+          }
+        },
         meter: meterMediaGeneration,
         generate: (payload) => xenoImageGeneration(payload, { signal: upstreamAbort.signal }),
         resolveEntitlements,
@@ -1059,6 +1081,9 @@ router.post('/chat/stream', requireEntitlement('canUse'), async (req, res) => {
               return { ...result, creditsCharged };
             }
           : undefined,
+        runProject: projectContext ? (args) => readProjectKnowledge({
+          db: req.db, principal: { type: 'user', id: userId }, projectId, conversationId, args,
+        }) : undefined,
         runSearch: ({ query, depth }) => chatWebContextService.searchAndFetch({
           actorId: userId,
           conversationId: conversationId || null,
@@ -1153,7 +1178,9 @@ router.post('/chat/stream', requireEntitlement('canUse'), async (req, res) => {
               type: 'image_error',
               index: event.index,
               code: event.http === 402 ? 'insufficient_credits' : event.code,
-              message: event.http === 402
+              message: event.code === 'image_unavailable'
+                ? 'Image generation is unavailable right now. Ask for a reusable prompt, or retry your message later.'
+                : event.http === 402
                 ? 'Not enough credits to generate this image.'
                 : event.code === 'image_declined'
                   ? 'That image was declined by the content filter.'

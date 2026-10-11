@@ -46,6 +46,28 @@ const answer = (text) => streamOf([{ type: 'delta', text }, { type: 'usage', usa
 // a real 2x1 PNG, so the stored record carries real dimensions
 const PNG_2x1 = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAIAAAABCAYAAAD0In+KAAAAEUlEQVR4nGP4z8DwnwEIGAEAKHAEAMcNJ8gAAAAASUVORK5CYII=', 'base64');
 
+test('image availability is checked before a hold or generation dispatch', async () => {
+  let billed = false, generated = false;
+  const execute = createChatImageExecutor({
+    checkAvailable: async () => ({ available: false, message: 'Prepare a prompt or retry later.' }),
+    meter: async () => { billed = true; },
+    generate: async () => { generated = true; },
+  });
+  await assert.rejects(execute({ prompt: 'map', index: 0 }), { code: 'image_unavailable', http: 503 });
+  assert.equal(billed, false);
+  assert.equal(generated, false);
+});
+
+test('an unavailable image model is checked once per turn, not retried through the budget', async () => {
+  let checked = 0, calls = 0;
+  await drain(streamToolLoop({
+    messages: [{ role: 'user', content: 'Draw a map' }], surface: 'chat', turnId: 'availability', tools: [GENERATE_IMAGE_TOOL],
+    streamModel: () => ++calls < 3 ? imageCall({ prompt: 'map' }, 'image-' + calls) : answer('Prepare a prompt or retry later.'),
+    runImage: async () => { checked += 1; throw Object.assign(new Error('Image model unavailable. Prepare a prompt or retry later.'), { code: 'image_unavailable' }); },
+  }));
+  assert.equal(checked, 1);
+});
+
 test('the model writes the prompt and picks the shape — both reach the image service', async () => {
   const seen = [];
   let calls = 0;

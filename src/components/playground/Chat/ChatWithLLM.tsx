@@ -7219,9 +7219,10 @@ const ChatWithLLM: React.FC<ChatWithLLMProps> = ({
     // leaving its project selected in the sidebar. Resolve generation ownership from the
     // canonical conversation record before falling back to a new unsaved project draft.
     const generationConversationId = activeConversationIdRef.current ?? activeConversationId;
-    const generationProjectId = activeProjectId
-        || conversationHistoryRef.current.find((conversation) => conversation.id === generationConversationId)?.projectId
-        || undefined;
+    const generationConversation = conversationHistoryRef.current.find((conversation) => conversation.id === generationConversationId);
+    const generationProjectId = generationConversation
+        ? generationConversation.projectId ?? undefined
+        : activeProjectId || undefined;
 
     const payload = {
         messages: resolvedApiMessages,
