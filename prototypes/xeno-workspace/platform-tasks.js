@@ -379,7 +379,7 @@
 
   // ───────────────────────── regions
   const where = () => (P.area() ? P.areaName(P.area()) : 'every area');
-  const head = (title, sub) => H().head({ eyebrow: '<a data-tk="board">Tasks</a>', title, sub, acts: H().btn('New task', 'data-tk="new"', false, 'plus') });
+  const head = (title, sub, quiet) => H().head({ eyebrow: '<a data-tk="board">Tasks</a>', title, sub, acts: quiet ? `<button class="tk-link tk-head-new" data-tk="new" title="New task · C">${ic('plus')}New task</button>` : H().btn('New task', 'data-tk="new"', false, 'plus') });
   const shell = (view, title, sub) => H().page(head(title, sub) + `<div data-tk-root="${esc(view)}">${region(view)}</div>` + H().foot('tasks', 'GET /api/tasks'));
   const loadingOrError = (status, list) => (!list ? (status === 'error' ? `<p class="tk-msg" data-tk-state="error">Tasks couldn’t be loaded. <button class="pg-link" data-tk="retry">Try again</button></p>` : '<p class="tk-msg" data-tk-state="loading">Loading tasks…</p>') : null);
   const dueChip = (t) => (t.dueAt ? `<small class="tk-due${late(t) ? ' tk-due--late' : ''}" title="Due ${esc(new Date(t.dueAt).toLocaleDateString())}">${ic('calendar')}${esc(day(t.dueAt))}</small>` : '');
@@ -495,15 +495,28 @@
   }
   function taskRegion(key) {
     const t = T.task.get(key);
-    if (!t) { loadTask(key); return '<p class="tk-msg" data-tk-state="loading">Loading the task…</p>'; }
-    if (t.missing) return `<p class="tk-msg" data-tk-state="missing">${t.error ? `The task couldn’t be loaded. <button class="pg-link" data-tk="refresh" data-arg="${esc(key)}">Try again</button>` : 'This task doesn’t exist, was deleted, or belongs to someone else.'}</p>`;
+    if (!t) {
+      loadTask(key);
+      const bar = (w, h = 12) => `<span class="tk-sk" style="width:${w};height:${h}px"></span>`;
+      return `<div class="tk-page tk-page--sk" data-tk-state="loading" aria-busy="true"><span class="tk-vh" role="status">Loading the task…</span>
+        <div class="tk-main"><div class="tk-main-in">${bar('64px', 12)}${bar('58%', 26)}<div class="tk-sk-lines">${bar('100%')}${bar('92%')}${bar('74%')}</div><div class="tk-sk-lines">${bar('40%')}${bar('86%')}</div></div></div>
+        <aside class="tk-side"><div class="tk-side-in">${bar('100%', 92)}<div class="tk-sk-lines">${['70%', '60%', '80%', '50%', '66%'].map((w) => bar(w)).join('')}</div></div></aside></div>`;
+    }
+    if (t.missing) {
+      const err = !!t.error;
+      return `<div class="tk-state" data-tk-state="${err ? 'error' : 'missing'}" role="${err ? 'alert' : 'status'}"><span class="tk-state-i">${ic(err ? 'reset' : 'search')}</span>
+        <h3>${err ? 'This task didn’t load' : `${esc(key)} isn’t here`}</h3>
+        <p>${err ? 'The connection dropped or the server didn’t answer. Nothing was lost.' : 'It doesn’t exist, was deleted, or belongs to a project you’re not on.'}</p>
+        <div class="tk-state-a">${err ? `<button class="tk-act tk-act--main" data-tk="refresh" data-arg="${esc(key)}">Try again</button>` : ''}<button class="tk-act" data-tk="board">Back to tasks</button></div></div>`;
+    }
     const can = t.can || { moves: [] }, k = KIND[t.kind] || KIND.task;
     const mineIt = !!(t.assignee && t.assignee.id === me()), editAny = can.edit || mineIt;
     const canClaim = !t.assignee && !CLOSED.includes(t.status);
     const ns = nextStep(t);
     const mv = (m, main) => `<button class="tk-act${main ? ' tk-act--main' : ''}" data-tk="move" data-arg="${esc(t.key)}|${m}|${t.status}" data-tk-move="${m}">${m === 'done' ? ic('check') : ''}${esc(moveLabel(t.status, m))}</button>`;
     const prop = (id, label, value, editable, kbd) => `<div class="tk-prop"><span class="tk-prop-l">${label}</span>${editable ? `<button class="tk-prop-v" data-tk="prop" data-arg="${esc(t.key)}|${id}" data-tk-prop="${id}"${kbd ? ` title="${label} · ${kbd}"` : ''}>${value}</button>` : `<span class="tk-prop-v tk-prop-v--ro">${value}</span>`}</div>`;
-    const person = (p) => (p ? `${face(p, true)}<span>${esc(p.name)}</span>` : '<span class="tk-dim">Nobody</span>');
+    const person = (p) => (p ? `${face(p, true)}<span>${esc(p.name)}</span>` : '<span class="tk-unset">Nobody</span>');
+    const unset = (s) => `<span class="tk-unset">${s}</span>`;
     const imgs = t.attachments || [], cc = checkCount(t.body), kids = t.children || [], kd = kids.filter((c) => CLOSED.includes(c.status)).length;
     const desc = T.editing === t.key
       ? `<form class="tk-dedit" data-tk-dedit="${esc(t.key)}">${editor({ keep: 'desc:' + t.key, value: t.body, rows: 12, placeholder: 'What needs doing, and how will we know it is done? Markdown, checklists (- [ ]), @mentions, paste images.', project: t.project && t.project.id, foot: `<div class="tk-ed-f"><small class="tk-dim">Markdown · paste or drop images · @ to mention · Ctrl+Enter saves · Esc cancels</small><span class="tk-sp"></span><button type="button" class="tk-btn" data-tk="desc-cancel">Cancel</button><button type="submit" class="tk-btn tk-btn--main">Save</button></div>` })}</form>`
@@ -514,13 +527,14 @@
     return `<div class="tk-page">
       <div class="tk-main"><div class="tk-main-in">
         ${t.parent ? `<a class="tk-parent" data-tk="open" data-arg="${esc(t.parent.key)}">${ic('layers')}<span>Sub-task of <b>${esc(t.parent.key)}</b> ${esc(t.parent.title)}</span></a>` : ''}
-        <div class="tk-titlerow"><span class="tk-kind" title="${k[1]}">${ic(k[0])}</span><small class="tk-key">${esc(t.key)}</small><span class="tk-status" data-tk-status="${esc(t.status)}"><span class="tk-dot tk-dot--${esc(t.status)}"></span>${esc(LABEL[t.status])}</span>${t.priority !== 'none' ? `<span class="tk-titlepri">${PRI_SVG(t.priority)}${esc(PRI[t.priority])}</span>` : ''}<span class="tk-sp"></span><button class="tk-ib" data-tk="refresh" data-arg="${esc(t.key)}" title="Refresh" aria-label="Refresh">${ic('reset')}</button><button class="tk-ib" data-tk="menu" data-arg="${esc(t.key)}" title="More actions" aria-label="More actions">${ic('more')}</button></div>
+        <div class="tk-titlerow"><span class="tk-kind" title="${k[1]}">${ic(k[0])}</span><small class="tk-key">${esc(t.key)}</small>${t.project ? `<span class="tk-crumb">${esc(t.project.name)}</span>` : ''}<span class="tk-sp"></span><span class="tk-tools"><button class="tk-ib" data-tk="prompt" data-arg="${esc(t.key)}" title="${can.edit ? 'Copy for agent — hands the task to your agent with a credential for this task only' : 'Copy for agent — a markdown brief for an agent CLI'}" aria-label="Copy for agent">${ic('bot')}</button><button class="tk-ib" data-tk="copylink" data-arg="${esc(t.key)}" title="Copy link" aria-label="Copy link">${ic('share')}</button><button class="tk-ib" data-tk="menu" data-arg="${esc(t.key)}" title="More actions" aria-label="More actions">${ic('more')}</button></span></div>
         ${can.edit ? `<h2 class="tk-title tk-title--edit" role="button" tabindex="0" data-tk="rename" data-arg="${esc(t.key)}" title="Rename · F2">${esc(t.title)}</h2>` : `<h2 class="tk-title">${esc(t.title)}</h2>`}
         <section class="tk-sec tk-sec--desc">${desc}</section>
-        <section class="tk-sec" data-tk-subtasks><h3>Sub-tasks${kids.length ? `<em>${kd}/${kids.length}</em>` : ''}</h3>
+        ${(!kids.length && editAny && T.kidOpen !== t.key) || (!imgs.length && can.attach) ? `<div class="tk-addrow">${!kids.length && editAny && T.kidOpen !== t.key ? `<button class="tk-link" data-tk="kid-open" data-arg="${esc(t.key)}">${ic('plus')}Sub-task</button>` : ''}${!imgs.length && can.attach ? `<button class="tk-link" data-tk="attach" data-arg="${esc(t.key)}">${ic('image')}Image</button><small class="tk-dim">or paste images anywhere</small>` : ''}</div>` : ''}
+        <section class="tk-sec${kids.length || T.kidOpen === t.key ? '' : ' tk-sec--hide'}" data-tk-subtasks><h3>Sub-tasks${kids.length ? `<em>${kd}/${kids.length}</em>` : ''}</h3>
           ${kids.length ? `<div class="tk-kids">${kids.map((c) => `<div class="tk-kid" role="button" tabindex="0" data-tk="open" data-arg="${esc(c.key)}" data-tk-rowkey="${esc(c.key)}"><span class="tk-dot tk-dot--${esc(c.status)}"></span><small class="tk-key">${esc(c.key)}</small><span class="tk-kid-t${CLOSED.includes(c.status) ? ' tk-kid-t--done' : ''}">${esc(c.title)}</span>${c.priority !== 'none' ? PRI_SVG(c.priority) : ''}${face(c.assignee, true)}</div>`).join('')}</div>` : ''}
           ${editAny ? `<form class="tk-kid-add" data-tk-kidadd="${esc(t.key)}">${ic('plus')}<input data-tk-keep="kid:${esc(t.key)}" placeholder="Add a sub-task — Enter to create" maxlength="300" aria-label="New sub-task title"></form>` : (kids.length ? '' : '<p class="tk-dim">None.</p>')}</section>
-        <section class="tk-sec" data-tk-images="${esc(t.key)}"><h3>Images${imgs.length ? `<em>${imgs.length}</em>` : ''}<span class="tk-sp"></span>${can.attach ? `<button class="tk-link" data-tk="attach" data-arg="${esc(t.key)}">${ic('upload')}Add</button>` : ''}</h3>
+        <section class="tk-sec${imgs.length ? '' : ' tk-sec--hide'}" data-tk-images="${esc(t.key)}"><h3>Images${imgs.length ? `<em>${imgs.length}</em>` : ''}<span class="tk-sp"></span>${can.attach ? `<button class="tk-link" data-tk="attach" data-arg="${esc(t.key)}">${ic('upload')}Add</button>` : ''}</h3>
           ${imgs.length ? `<div class="tk-imgs">${imgs.map((a) => `<figure class="tk-img" data-tk-img="${esc(a.id)}"><a href="${imgUrl(t.key, a.id)}" target="_blank" rel="noopener" title="${esc(a.filename)}"><img src="${imgUrl(t.key, a.id)}" alt="${esc(a.filename)}" loading="lazy"></a><figcaption>${esc(a.filename)}</figcaption>${can.edit || (a.uploader && a.uploader.id === me()) ? `<button class="tk-img-x" data-tk="unattach" data-arg="${esc(t.key)}|${esc(a.id)}" aria-label="Remove ${esc(a.filename)}">${ic('x')}</button>` : ''}</figure>`).join('')}</div>` : ''}
           ${can.attach ? `<div class="tk-drop${imgs.length ? ' tk-drop--slim' : ''}" data-tk="attach" data-arg="${esc(t.key)}" role="button" tabindex="0">${ic('image')}<span>Drop images here, paste them anywhere on the page, or <u>choose files</u></span></div>` : (imgs.length ? '' : '<p class="tk-dim">No images.</p>')}</section>
         <section class="tk-sec"><h3>Activity</h3><div class="tk-activity" data-tk-history>${activity(t)}</div>
@@ -529,33 +543,30 @@
       <aside class="tk-side" aria-label="Task details"><div class="tk-side-in">
         <section class="tk-next" data-tk-next><p class="tk-next-h">${esc(ns.hint || '')}</p>
           ${ns.primary || canClaim ? `<div class="tk-next-main">${canClaim ? `<button class="tk-act${ns.primary ? '' : ' tk-act--main'}" data-tk="claim" data-arg="${esc(t.key)}">${ic('user')}Take it</button>` : ''}${ns.primary ? mv(ns.primary, true) : ''}</div>` : ''}
-          ${ns.rest.length ? `<div class="tk-next-rest">${ns.rest.map((m) => mv(m, false)).join('')}</div>` : ''}</section>
+          ${ns.rest.length ? `<div class="tk-next-rest"><small class="tk-dim">Or</small>${ns.rest.map((m) => mv(m, false)).join('')}</div>` : ''}</section>
         ${t.delegate ? sessionCard(t) : ''}
         <section class="tk-sgroup"><h4>Properties</h4>
           ${prop('status', 'Status', `<span class="tk-dot tk-dot--${esc(t.status)}"></span><span>${esc(LABEL[t.status])}</span>`, can.moves.length > 0, 'S')}
           ${prop('assignee', 'Assignee', person(t.assignee), editAny, 'I')}
-          ${prop('delegate', 'Agent', t.delegate ? person(t.delegate) : '<span class="tk-dim">None</span>', can.edit, 'A')}
+          ${prop('delegate', 'Agent', t.delegate ? person(t.delegate) : unset('None'), can.edit, 'A')}
           ${prop('reviewer', 'Reviewer', person(t.reviewer) + (t.reviewRequired ? '<small class="tk-req">required</small>' : ''), can.edit)}
           ${prop('priority', 'Priority', priChip(t.priority), editAny, 'P')}
           ${prop('kind', 'Type', `${ic(k[0])}<span>${k[1]}</span>`, editAny)}
-          ${prop('due', 'Due date', t.dueAt ? `<span class="${late(t) ? 'tk-late' : ''}">${esc(new Date(t.dueAt).toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' }))}${late(t) ? ' · overdue' : ''}</span>` : '<span class="tk-dim">None</span>', editAny, 'D')}
-          ${prop('labels', 'Labels', (t.labels || []).length ? t.labels.map((l) => `<small class="tk-chip">${esc(l)}</small>`).join('') : '<span class="tk-dim">None</span>', editAny, 'L')}</section>
+          ${prop('due', 'Due date', t.dueAt ? `<span class="${late(t) ? 'tk-late' : ''}">${esc(new Date(t.dueAt).toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' }))}${late(t) ? ' · overdue' : ''}</span>` : unset('None'), editAny, 'D')}
+          ${prop('labels', 'Labels', (t.labels || []).length ? t.labels.map((l) => `<small class="tk-chip">${esc(l)}</small>`).join('') : unset('None'), editAny, 'L')}</section>
         <section class="tk-sgroup" data-tk-links><h4>Relations${t.canLink ? `<button class="tk-link" data-tk="add-link" data-arg="${esc(t.key)}">${ic('plus')}Link</button>` : ''}</h4>
-          ${prop('parent', 'Parent', t.parent ? `<span>${esc(t.parent.key)} · ${esc(t.parent.title)}</span>` : '<span class="tk-dim">None</span>', editAny)}
+          ${prop('parent', 'Parent', t.parent ? `<span>${esc(t.parent.key)} · ${esc(t.parent.title)}</span>` : unset('None'), editAny)}
           <div class="tk-prop"><span class="tk-prop-l">Sub-tasks</span><span class="tk-prop-v tk-prop-v--ro">${kids.length ? `<span class="tk-mini"><span style="width:${Math.round((kd / kids.length) * 100)}%"></span></span><span>${kd} of ${kids.length} done</span>` : '<span class="tk-dim">None</span>'}</span></div>
           ${Object.entries(linkGroups).map(([label, ls]) => `<div class="tk-prop tk-prop--top"><span class="tk-prop-l">${esc(label[0].toUpperCase() + label.slice(1))}</span><div class="tk-side-links">${ls.map((l) => `<span class="tk-linkc"><a data-tk="open" data-arg="${esc(l.task.key)}"><span class="tk-dot tk-dot--${esc(l.task.status)}"></span><small>${esc(l.task.key)}</small>${esc(l.task.title)}</a>${t.canLink ? `<button class="tk-linkx" data-tk="unlink" data-arg="${esc(t.key)}|${esc(l.id)}" aria-label="Remove this link">${ic('x')}</button>` : ''}</span>`).join('')}</div></div>`).join('')}</section>
         <section class="tk-sgroup"><h4>People</h4>
           ${prop('reporter', 'Reported by', person(t.reporter), false)}
-          <div class="tk-prop"><span class="tk-prop-l">Watching</span><span class="tk-prop-v tk-prop-v--ro tk-faces">${watchers.length ? watchers.slice(0, 6).map((w) => face({ name: w.name }, true)).join('') + (watchers.length > 6 ? `<small>+${watchers.length - 6}</small>` : '') : '<span class="tk-dim">Nobody</span>'}</span></div>
-          <button class="tk-watch${t.watching ? ' on' : ''}" data-tk="watch" data-arg="${esc(t.key)}" aria-pressed="${!!t.watching}" title="${t.watching ? 'You hear about every change. Click to stop.' : 'Hear about every change'} · W">${ic('bell')}${t.watching ? 'Watching — click to stop' : 'Watch this task'}</button></section>
+          <div class="tk-prop"><span class="tk-prop-l">Watching</span><span class="tk-prop-v tk-prop-v--ro tk-faces">${watchers.slice(0, 5).map((w) => face({ name: w.name }, true)).join('')}${watchers.length > 5 ? `<small>+${watchers.length - 5}</small>` : ''}<button class="tk-watch${t.watching ? ' on' : ''}" data-tk="watch" data-arg="${esc(t.key)}" aria-pressed="${!!t.watching}" title="${t.watching ? 'You hear about every change. Click to stop.' : 'Hear about every change'} · W">${ic('bell')}${t.watching ? 'Watching' : 'Watch'}</button></span></div></section>
         <section class="tk-sgroup"><h4>Details</h4>
           ${prop('project', 'Project', t.project ? esc(t.project.name) : 'Personal', false)}
-          ${prop('area', 'Area', esc(t.area ? P.areaName(t.area) : 'Overview'), false)}
+          ${t.area ? prop('area', 'Area', esc(P.areaName(t.area)), false) : ''}
           ${prop('created', 'Created', `<span title="${esc(new Date(t.createdAt).toLocaleString())}">${esc(when(t.createdAt))}</span>`, false)}
-          ${prop('updated', 'Updated', `<span title="${esc(new Date(t.updatedAt).toLocaleString())}">${esc(when(t.updatedAt))}</span>`, false)}</section>
+          ${when(t.updatedAt) !== when(t.createdAt) ? prop('updated', 'Updated', `<span title="${esc(new Date(t.updatedAt).toLocaleString())}">${esc(when(t.updatedAt))}</span>`, false) : ''}</section>
         <section class="tk-sgroup tk-side-acts">
-          <button class="tk-sbtn" data-tk="prompt" data-arg="${esc(t.key)}" title="${can.edit ? 'Hands the task to your agent and copies a brief with a credential for this task only — paste it into an agent CLI' : 'Copy a markdown brief to paste into an agent CLI'}">${ic('bot')}Copy for agent</button>
-          <button class="tk-sbtn" data-tk="copylink" data-arg="${esc(t.key)}">${ic('share')}Copy link</button>
           <p class="tk-props-hint"><kbd>?</kbd> keyboard shortcuts</p></section>
       </div></aside></div>`;
   }
@@ -676,7 +687,7 @@
     if (it === 'Needs triage') return shell('triage', 'Needs triage', 'Raised and not yet accepted');
     if (it === 'In review') return shell('review', 'In review', 'Waiting for a reviewer');
     if (it === 'Agents') return shell('agents', 'Agents', 'The agents that work your tasks: their credentials, and where they hear about new work');
-    if (/^T-\d+$/i.test(it)) { const key = it.toUpperCase(); return H().page(head(key) + `<div class="tk-root-task" data-tk-root="task:${esc(key)}">${taskRegion(key)}</div>`, 'pg--task'); }
+    if (/^T-\d+$/i.test(it)) { const key = it.toUpperCase(); return H().page(head(key, undefined, true) + `<div class="tk-root-task" data-tk-root="task:${esc(key)}">${taskRegion(key)}</div>`, 'pg--task'); }
     return shell('board', 'Tasks', where());
   }
   function projectRegion(id) {
@@ -1145,6 +1156,7 @@
     board: () => go(null), retry: () => { T.status = 'loading'; patch(); load(); }, 'retry-project': (id) => { T.byProject.set(id, 'loading'); patch(); loadProject(id); },
     open: (k) => go(k), new: (pid) => newTask(pid || null), rename, describe: (k) => editDescription(k), claim, attach: (k) => chooseFiles(k),
     refresh: (k) => { T.task.delete(k); patch(); loadTask(k); },
+    'kid-open': (k) => { T.kidOpen = k; patch(); setTimeout(() => document.querySelector(`[data-tk-kidadd="${CSS.escape(k)}"] input`)?.focus(), 0); },
     menu: (k, el) => { const r = el.getBoundingClientRect(); window.XCM?.show(menuFor(k).map((s) => s.filter(Boolean)).filter((s) => s.length), { x: r.left, y: r.bottom + 4, opener: el }); },
     prop: (arg, el) => { const [k, f] = arg.split('|'); propMenu(k, f, el); },
     move: (arg) => { const [k, to, from] = arg.split('|'); return move(k, to, from); },

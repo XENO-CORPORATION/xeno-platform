@@ -190,6 +190,7 @@ try {
   // watch, sub-tasks
   await p.click('[data-tk="watch"]'); await settle();
   ok(T3().watching === false && /Watch\b/.test(await p.$eval('[data-tk="watch"]', (e) => e.textContent)), 'Watch can be turned off');
+  if (await p.$('[data-tk="kid-open"]')) { await p.click('[data-tk="kid-open"]'); await settle(200); }
   await p.type('[data-tk-kidadd] input', 'Pick the hero image'); await p.keyboard.press('Enter'); await settle(900);
   ok(db.tasks.some((x) => x.parentKey === 'T-3' && x.title === 'Pick the hero image') && /Pick the hero image/.test(await main()), 'a sub-task added under the task appears in its list');
   db.tasks[2].title = 'Write the launch post v2'; db.tasks[2].updatedAt = new Date(Date.now() + 5000).toISOString();
