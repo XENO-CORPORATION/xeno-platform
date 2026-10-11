@@ -81,7 +81,7 @@ test('a revoked key is listed, unavailable, and marked as revoked', () => {
   const own = d.sources.find((s) => s.source === 'byok');
   assert.equal(own.modes.cloud.state, 'unavailable');
   assert.equal(own.modes.cloud.reason, 'no_key');
-  assert.equal(own.modes.cloud.actionUrl, '/overview/integrations');
+  assert.equal(own.modes.cloud.actionUrl, 'https://api.xenostudio.ai/dashboard/inference?provider=openai');
 });
 
 test('a chosen source that cannot serve is refused with its own code, never another source', () => {
@@ -175,4 +175,10 @@ test('a chosen cloud mode that is unusable is refused by name, never switched to
   assert.equal(r.reason, 'key_unverified');
   assert.match(r.message, /cloud copy/);
   assert.equal(refusalForByokMode('local', group).code, 'local_mode_client_only');
+});
+
+test('a cloud key action opens the portal Add-a-key form with that provider chosen', () => {
+  const d = sourcesForModel({ balanceMicro: 1n, credentials: [{ id: 'a', provider: 'anthropic', label: 'w', status: 'revoked', verified_at: null }] });
+  const cloud = d.sources.find((x) => x.source === 'byok').modes.cloud;
+  assert.equal(cloud.actionUrl, 'https://api.xenostudio.ai/dashboard/inference?provider=anthropic');
 });

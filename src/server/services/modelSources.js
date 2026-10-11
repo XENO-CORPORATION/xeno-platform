@@ -79,6 +79,12 @@ export const ACTION_URLS = Object.freeze({
   quota_exhausted: '/pricing',
 });
 
+/** The portal's Add-a-key page for one provider. The portal validates the provider against its own allowlist. */
+export const PORTAL_ORIGIN = 'https://api.xenostudio.ai';
+export function addKeyUrlFor(provider) {
+  return `${PORTAL_ORIGIN}/dashboard/inference?provider=${encodeURIComponent(provider)}`;
+}
+
 const unavailable = (source, reason, extra = {}) => ({
   source, state: 'unavailable', reason, actionUrl: ACTION_URLS[reason], ...extra,
 });
@@ -103,10 +109,12 @@ export function byokByProvider(credentials) {
     const ranked = [...keys].sort((x, y) => Number(y.status === 'active') - Number(x.status === 'active'));
     const best = ranked[0];
     let cloud;
+    // The action opens the portal's Add-a-key form with this provider already chosen.
+    const addUrl = provider ? addKeyUrlFor(provider) : ACTION_URLS.no_key;
     if (best.status !== 'active') {
-      cloud = { state: 'unavailable', reason: best.status === 'revoked' ? 'no_key' : 'key_unverified', actionUrl: ACTION_URLS.no_key, label: best.label, verified: false };
+      cloud = { state: 'unavailable', reason: best.status === 'revoked' ? 'no_key' : 'key_unverified', actionUrl: addUrl, label: best.label, verified: false };
     } else if (!best.verified_at) {
-      cloud = { state: 'unavailable', reason: 'key_unverified', actionUrl: ACTION_URLS.key_unverified, label: best.label, verified: false };
+      cloud = { state: 'unavailable', reason: 'key_unverified', actionUrl: addUrl, label: best.label, verified: false };
     } else {
       cloud = { state: 'available', label: best.label, verified: true, credential_id: best.id };
     }
