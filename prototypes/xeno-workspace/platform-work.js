@@ -68,7 +68,7 @@
     if (area() !== here) return loadProjects();   // the person moved to another area while this was on its way
     W.area = here; W.loadingArea = undefined;
     if (!pr.ok || !Array.isArray(pr.d.projects)) { W.status = 'error'; blank(); pstate('projects', 'error'); paint(); return false; }
-    const chats = new Map(); if (cv.ok && Array.isArray(cv.d.conversations)) cv.d.conversations.forEach((c) => { if (c.project_id) { if (!chats.has(c.project_id)) chats.set(c.project_id, []); chats.get(c.project_id).push([String(c.title || 'Untitled chat'), 'Chat']); } });
+    const chats = new Map(); W.convs = new Map(); if (cv.ok && Array.isArray(cv.d.conversations)) cv.d.conversations.forEach((c) => { if (c.project_id) { if (!chats.has(c.project_id)) { chats.set(c.project_id, []); W.convs.set(c.project_id, []); } chats.get(c.project_id).push([String(c.title || 'Untitled chat'), 'Chat']); W.convs.get(c.project_id).push({ id: c.id, title: String(c.title || 'Untitled chat'), at: c.updated_at || c.created_at, model: c.model || '' }); } });
     const rows = pr.d.projects, seen = new Map(); rows.forEach((p) => seen.set(p.name, (seen.get(p.name) || 0) + 1));
     const used = new Set(), items = [], detail = {}; W.byId = new Map();
     for (const p of rows) {
@@ -87,13 +87,15 @@
     window.XENO_PROJECTS = detail; window.XENO_PG_PROJECTS.items = items;
     W.status = 'ready'; pstate('projects', 'normal'); paint(); return true;
   }
-  const NOT_YET = { Tasks: ['check', 'Tasks aren’t available yet', 'Tasks, their reviewers and their evidence aren’t connected on XENO yet.'], 'Team assignments': ['people', 'Team assignments aren’t available yet', 'Assigning a workspace team or an agent to a project isn’t connected on XENO yet.'], Funding: ['gear', 'Funding isn’t available yet', 'Budgets, milestones and contributions aren’t connected on XENO yet.'], Activity: ['clock', 'Activity isn’t available yet', 'The history of what happened in this project isn’t connected on XENO yet.'] };
+  const NOT_YET = { Tasks: ['check', 'Tasks aren’t available yet', 'Tasks, their reviewers and their evidence aren’t connected on XENO yet.'], Funding: ['gear', 'Funding isn’t available yet', 'Budgets, milestones and contributions aren’t connected on XENO yet.'], Activity: ['clock', 'Activity isn’t available yet', 'The history of what happened in this project isn’t connected on XENO yet.'] };
   function projectTab(tab, name, h) {
     const rec = (window.XENO_PG_PROJECTS.items || []).find((p) => p.name === name);
     if (W.status === 'loading') return h.box('folder', 'Loading this project', '', '', 'sm');
     if (!rec) return null;
     if (tab === 'Tasks' && window.XENO_TASKS && window.XENO_TASKS.served) return window.XENO_TASKS.projectTab(rec);
     if (INSIGHT_TABS.has(tab)) { const live = insightTab(tab, rec, h); if (live !== null) return live; }
+    if (tab === 'Conversations') return convTab(rec, h);
+    if (tab === 'Resources') return filesTab(rec, h);
     if (NOT_YET[tab]) return h.box(NOT_YET[tab][0], NOT_YET[tab][1], esc(NOT_YET[tab][2]), '', 'sm');
     if (tab === 'Overview') return `<div class="pg-cols"><div>
         <section class="pg-sec"><h3>In this project</h3><div class="pg-mini-board"><button class="pg-mb" data-ptab="Conversations"><b>${rec.chatCount}</b><small>${rec.chatCount === 1 ? 'Conversation' : 'Conversations'}</small></button><button class="pg-mb" data-ptab="Resources"><b>${rec.files}</b><small>${rec.files === 1 ? 'File' : 'Files'}</small></button></div></section></div>
@@ -108,12 +110,68 @@
     newTask: (name) => { const rec = byName(name); if (!rec || !window.XENO_TASKS?.served) return false; window.XENO_TASKS.newTask(rec.id); return true; },
     // a new chat filed in the project: the real chat's project home, whose composer creates it there
     newProjectChat: (name) => { const rec = byName(name); if (!rec || !window.XENO_CHAT?.served) return false; X()?.go?.('product', { product: 'chat' }); setTimeout(() => window.XENO_CHAT.openProjectId(rec.id), 0); return true; },
+    assign: (name) => { const rec = byName(name); if (!rec) return false; shareProject(name); return true; },
     openTask: (arg) => { const key = String(arg || '').split('|').pop(); if (!/^T-\d+$/.test(key)) return false; openTaskKey(key); return true; },
   };
   function blocked(action, arg) { if (HANDLED[action] && HANDLED[action](arg)) return true; const what = BLOCKED[action]; if (!what) return false; X()?.toast?.(`${what} isn’t available on XENO yet`); return true; }
 
   function mark() { document.querySelectorAll('#main [data-xa]').forEach((el) => { if (BLOCKED[el.dataset.xa] && !el.classList.contains('role-off')) { el.setAttribute('aria-disabled', 'true'); el.classList.add('role-off'); el.title = `${BLOCKED[el.dataset.xa]} isn’t available on XENO yet`; } }); }
   new MutationObserver(mark).observe(document.documentElement, { childList: true, subtree: true });
+
+  // ---------- Conversations: the chats filed in this project (GET /api/chat/conversations) ----------
+  function convTab(rec, h) {
+    const list = ((W.convs && W.convs.get(rec.id)) || []).slice().sort((a, b) => Date.parse(b.at || 0) - Date.parse(a.at || 0));
+    const top = `<div class="pi-bar"><span>${list.length} ${list.length === 1 ? 'conversation' : 'conversations'}</span><span class="pi-sp"></span>${h.btn('New chat in this project', `data-xa="newProjectChat" data-arg="${esc(rec.name)}"`, false, 'plus')}</div>`;
+    if (!list.length) return top + h.box('chat', 'No conversations yet', 'A chat started in this project keeps its files and instructions, so the context is never lost.', '', 'sm');
+    return top + `<ol class="pj-rows" data-pj-convs>${list.map((c) => `<li><button class="pj-row" data-pj-conv="${esc(c.id)}"><span class="pj-ic">${X()?.ic?.('chat') || ''}</span><b>${esc(c.title)}</b><small>${c.at ? esc(ago(c.at)) : ''}</small></button></li>`).join('')}</ol>`;
+  }
+  // ---------- Resources: files attached to the project (GET/POST/DELETE /api/chat/projects/:id/files) ----------
+  const PF = new Map();   // project id → { status, files }
+  async function loadFiles(id) {
+    const r = await api('GET', `/api/chat/projects/${encodeURIComponent(id)}/files`).catch(() => null);
+    PF.set(id, r && r.ok && Array.isArray(r.d.files) ? { status: 'ready', files: r.d.files } : { status: r && r.status === 403 ? 'forbidden' : 'error', files: [] });
+    paint();
+  }
+  const kb = (n) => (!Number.isFinite(+n) ? '' : n >= 1048576 ? (n / 1048576).toFixed(1) + ' MB' : n >= 1024 ? Math.round(n / 1024) + ' KB' : n + ' B');
+  function filesTab(rec, h) {
+    const cur = PF.get(rec.id);
+    if (!cur) { PF.set(rec.id, { status: 'loading', files: [] }); setTimeout(() => loadFiles(rec.id), 0); }
+    const c = PF.get(rec.id), canEdit = rec.can && rec.can.edit !== false;
+    if (c.status === 'loading') return h.box('file', 'Loading the files', '', '', 'sm');
+    if (c.status === 'error') return h.box('file', 'The files couldn’t be loaded', 'Check your connection and try again.', h.btn('Try again', `data-pj="files-retry" data-arg="${esc(rec.id)}"`, false, 'reset'), 'sm');
+    const top = `<div class="pi-bar"><span>${c.files.length} ${c.files.length === 1 ? 'file' : 'files'} · chats in this project can read them</span><span class="pi-sp"></span>${canEdit ? h.btn('Add files', `data-pj="files-add" data-arg="${esc(rec.id)}"`, false, 'upload') : ''}</div>`;
+    if (!c.files.length) return top + h.box('file', 'No files yet', 'Add documents, images or data. Every chat in this project can read them.', '', 'sm');
+    const state = (x) => (x.ingestion_state === 'failed' ? '<em class="pj-bad">Couldn’t be read</em>' : x.ingestion_state && x.ingestion_state !== 'ready' && x.ingestion_state !== 'indexed' ? '<em class="pj-dim">Reading…</em>' : '');
+    return top + `<ol class="pj-rows" data-pj-files>${c.files.map((x) => `<li class="pj-row pj-row--file"><a class="pj-main" href="${esc(x.content_url)}" target="_blank" rel="noopener"><span class="pj-ic">${X()?.ic?.(/^image\//.test(x.file_type) ? 'image' : 'file') || ''}</span><b>${esc(x.name || 'File')}</b>${state(x)}<small>${esc(kb(x.file_size))}${x.created_at ? ' · ' + esc(ago(x.created_at)) : ''}</small></a>${canEdit ? `<button class="pg-ib" data-pj="files-remove" data-arg="${esc(rec.id)}|${esc(x.id)}" aria-label="Remove ${esc(x.name || 'file')} from the project" data-tip="Remove from project">${X()?.ic?.('x') || '×'}</button>` : ''}</li>`).join('')}</ol>`;
+  }
+  async function addFiles(id) {
+    const inp = document.createElement('input'); inp.type = 'file'; inp.multiple = true;
+    inp.onchange = async () => {
+      const files = [...(inp.files || [])]; if (!files.length) return; const toast = (m) => X()?.toast?.(m); let done = 0;
+      toast(files.length > 1 ? `Adding ${files.length} files…` : `Adding “${files[0].name}”…`);
+      for (const file of files) {
+        const body = new FormData(); body.append('image', file, file.name);
+        const headers = { 'x-xeno-surface': 'xeno-web' }; const tk = window.XENO_PLATFORM?.csrf?.(); if (tk) headers['x-xeno-csrf'] = tk;
+        const r = await fetch('/api/upload', { method: 'POST', credentials: 'same-origin', headers, body }).catch(() => null); let d = null; try { d = r && await r.json(); } catch {}
+        const asset = d && (d.file?.id || d.id || d.asset?.id);
+        if (!r || !r.ok || !asset) { toast(`“${file.name}” wasn’t added: ${(d && d.error) || 'XENO refused it'}`); break; }
+        const l = await api('POST', `/api/chat/projects/${encodeURIComponent(id)}/files`, { storage_key: asset }).catch(() => null);
+        if (!l || !l.ok) { toast(`“${file.name}” is in your Library but couldn’t be added to the project`); break; }
+        done++;
+      }
+      if (done) toast(done > 1 ? `Added ${done} files to the project` : 'Added to the project');
+      loadFiles(id);
+    };
+    inp.click();
+  }
+  document.addEventListener('click', async (e) => {
+    const cv = e.target.closest('[data-pj-conv]'); if (cv) { e.preventDefault(); if (window.XENO_CHAT?.served) { X()?.go?.('product', { product: 'chat' }); setTimeout(() => window.XENO_CHAT.open(cv.dataset.pjConv), 0); } return; }
+    const b = e.target.closest('[data-pj]'); if (!b) return; e.preventDefault();
+    const [id, fid] = String(b.dataset.arg || '').split('|');
+    if (b.dataset.pj === 'files-retry') { PF.delete(id); paint(); }
+    else if (b.dataset.pj === 'files-add') addFiles(id);
+    else if (b.dataset.pj === 'files-remove') { const r = await api('DELETE', `/api/chat/projects/${encodeURIComponent(id)}/files/${encodeURIComponent(fid)}`).catch(() => null); X()?.toast?.(r && r.ok ? 'Removed from the project. It stays in your Library.' : 'That couldn’t be removed. It is still attached.'); loadFiles(id); }
+  });
 
   // ---------- a project at a glance: Overview, Team, Activity (GET /api/chat/projects/:id/summary|people|activity) ----------
   const INSIGHT_TABS = new Set(['Overview', 'Team assignments', 'Activity']);

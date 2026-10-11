@@ -48,6 +48,7 @@ function answer(q) {
   if (p === '/api/workspaces' && m === 'GET') return json(200, { success: true, workspaces: db.workspaces });
   if (p === '/api/workspaces' && m === 'POST') { const w = { id: `44444444-4444-4444-8444-${String(db.next++).padStart(12, '0')}`, workspace_type: 'team', name: body.name, member_role: 'owner', member_count: 1 }; db.workspaces.push(w); return json(200, { success: true, workspace: w }); }
   if (p === '/api/library/assets') return json(200, { success: true, items: [] });
+  { const mf = p.match(/^\/api\/chat\/projects\/([^/]+)\/files(?:\/([^/]+))?$/); if (mf) { db.pfiles = db.pfiles || [{ id: 'pf1', name: 'brief.pdf', file_type: 'application/pdf', file_size: 20480, content_url: '/api/library/assets/a1/content', created_at: '2026-09-02T10:00:00Z', ingestion_state: 'ready' }]; if (m === 'DELETE') { db.pfiles = db.pfiles.filter((x) => x.id !== mf[2]); return json(200, { success: true }); } return json(200, { success: true, files: db.pfiles }); } }
   const inArea = (x) => { const a = u.searchParams.get('area'); return a === null || (a === 'none' ? !x.area : x.area === a); };
   if (p === '/api/chat/conversations') { const rows = db.conversations.filter((c) => inArea({ area: c.project_id ? (db.projects.find((x) => x.id === c.project_id) || {}).area : c.area })); return json(200, { success: true, conversations: rows, total: rows.length }); }
   if (p === '/api/chat/projects' && m === 'GET') { (db.projectAsks = db.projectAsks || []).push(u.searchParams.get('area')); return json(200, { success: true, projects: db.projects.filter(inArea), limit: 100, offset: 0 }); }
@@ -129,7 +130,11 @@ try {
   ok(!!(await p.$('#main [data-pi-overview] .pi-prog[aria-valuenow="25"]')) && /1 of 4 closed/.test(t) && /Overdue/.test(t) && /Done this week/.test(t), 'the Overview shows task progress and the numbers that matter');
   ok(/Recent activity/i.test(t) && (await p.$$('#main [data-pi-overview] .pi-ev')).length === 6 && /2 agent|1 agent/.test(t), 'it shows the six latest events and the agents on the project');
   await goProjects('Website (Personal)/Conversations'); t = await main();
-  ok(/Homepage copy/.test(t) && !/Loose chat/.test(t), 'Conversations lists the chats that belong to this project');
+  ok(/Homepage copy/.test(t) && !/Loose chat/.test(t) && !!(await p.$('#main [data-pj-conv="c1"]')) && !!(await p.$('#main [data-xa="newProjectChat"]')), 'Conversations lists the chats that belong to this project, each opening the real chat, with New chat');
+  await goProjects('Website (Personal)/Resources'); await wait(500); t = await main();
+  ok(/brief.pdf/.test(t) && /20 KB/.test(t) && !!(await p.$('#main [data-pj="files-add"]')), 'Resources lists the files attached to the project, with Add files');
+  await p.click('#main [data-pj="files-remove"]'); await wait(600);
+  ok(!db.pfiles.length && /No files yet/.test(await main()), 'removing a file takes it off the project');
   await goProjects('Website (Personal)/Tasks'); t = await main();
   ok(/No tasks in this project yet/.test(t) && !/aren’t available/.test(t) && await p.$('#main [data-tk="new"]'), 'the Tasks tab is XENO Tasks: real (empty) list and a working New task');
   await goProjects('Website (Personal)/Team assignments'); t = await main();
