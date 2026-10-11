@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 /**
  * xenoChat — the ONE server-side door to the XENO API for chat + the model catalog.
  *
@@ -150,34 +151,76 @@ export async function xenoChatCompletionStream({ model, messages, temperature, m
  */
 export const CHAT_IMAGE_TIMEOUT_MS = 240_000;
 
-export async function xenoImageGeneration(payload, { signal, timeoutMs = CHAT_IMAGE_TIMEOUT_MS } = {}) {
+export async function xenoImageGeneration(payload, { signal, timeoutMs = CHAT_IMAGE_TIMEOUT_MS, pollMs = 3000 } = {}) {
   if (!XENO_API_KEY) { const e = new Error('XENO_API_KEY not configured'); e.http = 503; throw e; }
   const deadline = AbortSignal.timeout(timeoutMs);
   const combined = signal ? AbortSignal.any([signal, deadline]) : deadline;
-  let response;
-  try {
-    response = await fetch(`${XENO_API_BASE}/images/generations`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${XENO_API_KEY}` },
-      body: JSON.stringify(payload),
-      signal: combined,
-    });
-  } catch (error) {
-    if (deadline.aborted) { const e = new Error('The image took too long to generate.'); e.code = 'image_timeout'; throw e; }
-    throw error;
-  }
-  if (!response.ok) {
-    const text = await response.text().catch(() => '');
+  const auth = { Authorization: `Bearer ${XENO_API_KEY}` };
+  const call = async (url, init = {}) => {
+    try {
+      return await fetch(url, { ...init, headers: { ...auth, ...(init.headers || {}) }, signal: combined });
+    } catch (error) {
+      if (deadline.aborted) { const e = new Error('The image took too long to generate.'); e.code = 'image_timeout'; throw e; }
+      throw error;
+    }
+  };
+  const fail = (status, text) => {
     // The provider's body stays server-side: it can carry vendor detail the user is not shown.
-    const e = new Error(response.status === 400 && /moderation|safety|content_policy/i.test(text)
-      ? 'The image was declined by the content filter.'
-      : 'The image service returned an error.');
-    e.status = response.status;
-    e.code = response.status === 400 && /moderation|safety|content_policy/i.test(text) ? 'image_declined' : 'image_upstream';
-    e.detail = text.slice(0, 500);
-    throw e;
+    const declined = status === 400 && /moderation|safety|content_policy/i.test(text);
+    // The Codex-backed GPT image models answer 429 with this code when every login in the pool
+    // has used its image allowance; callers fall back to another model instead of failing.
+    const quota = status === 429 && /image_(generation_)?quota_exceeded/.test(text);
+    const e = new Error(declined ? 'The image was declined by the content filter.'
+      : quota ? 'The image model has used its generation quota for now.'
+        : 'The image service returned an error.');
+    e.status = status;
+    e.code = declined ? 'image_declined' : quota ? 'image_quota' : 'image_upstream';
+    e.detail = String(text).slice(0, 500);
+    return e;
+  };
+  const body = JSON.stringify(payload);
+  let response = await call(`${XENO_API_BASE}/images/generations`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body });
+  if (response.ok) return response.json();
+  const text = await response.text().catch(() => '');
+  // Some models (Google's) only run as durable gateway jobs: submit with async + an idempotency
+  // key, poll the job, then read its result.
+  if (!(response.status === 400 && /async_execution_required/.test(text))) throw fail(response.status, text);
+  response = await call(`${XENO_API_BASE}/images/generations`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'Idempotency-Key': randomUUID() },
+    body: JSON.stringify({ ...payload, async: true }),
+  });
+  if (!response.ok) throw fail(response.status, await response.text().catch(() => ''));
+  let job = await response.json();
+  const base = XENO_API_BASE.replace(/\/v1\/?$/, '');
+  const jobUrl = job?.links?.self ? `${base}${job.links.self}` : `${XENO_API_BASE}/jobs/${encodeURIComponent(job.id)}`;
+  while (!['succeeded', 'failed', 'cancelled', 'canceled', 'expired'].includes(job?.status)) {
+    await new Promise((resolve, reject) => {
+      const t = setTimeout(resolve, pollMs);
+      combined.addEventListener('abort', () => { clearTimeout(t); reject(Object.assign(new Error(deadline.aborted ? 'The image took too long to generate.' : 'aborted'), { code: deadline.aborted ? 'image_timeout' : 'aborted' })); }, { once: true });
+    });
+    const poll = await call(jobUrl);
+    if (!poll.ok) throw fail(poll.status, await poll.text().catch(() => ''));
+    job = await poll.json();
   }
-  return response.json();
+  if (job.status !== 'succeeded') throw fail(502, JSON.stringify(job.error || job.status));
+  const resultRes = await call(job?.links?.result ? `${base}${job.links.result}` : `${jobUrl}/result`);
+  if (!resultRes.ok) throw fail(resultRes.status, await resultRes.text().catch(() => ''));
+  const result = await resultRes.json();
+  // Normalise URL items to b64_json so every caller reads one shape.
+  for (const item of result?.data || []) {
+    if (!item.b64_json && item.url) {
+      // A provider CDN URL: never send our gateway key to it.
+      let img;
+      try { img = await fetch(item.url, { signal: combined }); } catch (error) {
+        if (deadline.aborted) throw Object.assign(new Error('The image took too long to generate.'), { code: 'image_timeout' });
+        throw error;
+      }
+      if (!img.ok) throw fail(img.status, 'image download failed');
+      item.b64_json = Buffer.from(await img.arrayBuffer()).toString('base64');
+    }
+  }
+  return result;
 }
 
 /**
