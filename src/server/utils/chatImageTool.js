@@ -72,6 +72,15 @@ export const CHAT_IMAGE_BUDGET = 2;
  */
 export const CHAT_IMAGE_CREDITS = getCreditCost('image', CHAT_IMAGE_MODEL);
 
+/**
+ * Models tried, in order, when the one before refuses with a quota error. The GPT image models run
+ * on the gateway's Codex logins and share their image allowance, so when that pool is spent both
+ * refuse together; Nano Banana Pro is a different provider (Google, as a gateway job).
+ */
+export const CHAT_IMAGE_FALLBACK_MODELS = Object.freeze(
+  (process.env.XENO_CHAT_IMAGE_FALLBACK_MODELS ?? 'nano_banana_pro').split(',').map((m) => m.trim()).filter(Boolean),
+);
+
 /** Prompt length the gateway is sent. Long enough for a real brief; bounded so one call cannot carry a book. */
 const MAX_PROMPT_CHARS = 4000;
 
@@ -351,12 +360,8 @@ export function imageDimensions(buffer) {
  * @param {function} [deps.makePreview]   (buffer) => data URL shown while the library copy is scanned
  * @returns {function} ({ prompt, aspectRatio, quality, index, useReference }) => stored image record
  */
-export function createChatImageExecutor({ db, userId, turnId, meter, generate, resolveEntitlements, watermark, store, model = CHAT_IMAGE_MODEL, microPerCredit, reference = null, makePreview = null, checkAvailable = null }) {
-  return async ({ prompt, aspectRatio, quality, index, useReference = false }) => {
-    if (checkAvailable) {
-      const status = await checkAvailable(model);
-      if (!status.available) throw Object.assign(new Error(status.message), { code: 'image_unavailable', http: 503 });
-    }
+export function createChatImageExecutor({ db, userId, turnId, meter, generate, resolveEntitlements, watermark, store, model = CHAT_IMAGE_MODEL, microPerCredit, reference = null, makePreview = null, checkAvailable = null, fallbackModels = CHAT_IMAGE_FALLBACK_MODELS }) {
+  const drawWith = (model) => async ({ prompt, aspectRatio, quality, index, useReference = false, attempt = 0 }) => {
     const entitlement = await resolveEntitlements(db, userId).catch(() => null);
     // an edit only ever uses the reference the SERVER resolved; asking without one is a fresh image
     const edited = Boolean(useReference && reference?.dataUrl);
@@ -370,8 +375,8 @@ export function createChatImageExecutor({ db, userId, turnId, meter, generate, r
       provider: 'xeno',
       // Deterministic per image of the turn: a retried turn reuses its hold (and is refused as a
       // duplicate rather than drawing twice), two images of one turn get two holds.
-      requestId: `${turnId}:image:${index}`,
-      unitCostMicro: CHAT_IMAGE_CREDITS * microPerCredit,
+      requestId: attempt ? `${turnId}:image:${index}:fallback-${attempt}` : `${turnId}:image:${index}`,
+      unitCostMicro: getCreditCost('image', model) * microPerCredit,
       count: 1,
       run: async () => {
         const response = await generate({
@@ -416,6 +421,25 @@ export function createChatImageExecutor({ db, userId, turnId, meter, generate, r
       ...(previewUrl ? { previewUrl } : {}),
       creditsCharged: metered.creditsCharged,
     };
+  };
+  const models = [model, ...fallbackModels.filter((m) => m !== model)];
+  return async (args) => {
+    let lastMessage = null;
+    for (let attempt = 0; attempt < models.length; attempt += 1) {
+      const candidate = models[attempt];
+      if (checkAvailable) {
+        const status = await checkAvailable(candidate);
+        if (!status.available) { lastMessage = status.message; continue; }
+      }
+      try {
+        return await drawWith(candidate)({ ...args, attempt });
+      } catch (error) {
+        // A spent quota voided its hold; the next model gets its own hold. Anything else is real.
+        if (error?.code !== 'image_quota') throw error;
+        lastMessage = 'Every image model has used its generation quota for now. Offer to prepare a reusable prompt, or let the user retry this message later. Do not retry image generation this turn.';
+      }
+    }
+    throw Object.assign(new Error(lastMessage || 'No image model is available right now. Offer to prepare a reusable prompt or retry later; do not retry image generation this turn.'), { code: 'image_unavailable', http: 503 });
   };
 }
 

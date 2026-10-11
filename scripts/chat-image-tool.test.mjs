@@ -345,3 +345,48 @@ test('an image step records which model drew it and its tokens — and only well
   assert.equal(normalizeTurnRecord({ ...base, steps: [{ ...step, usage: { input: 1, output: -2, total: 3 } }] }).ok, false, 'token counts are non-negative integers');
   assert.equal(normalizeTurnRecord({ ...base, steps: [{ ...step, usage: 'lots' }] }).ok, false);
 });
+
+test('a spent image quota falls back to the next model, with its own hold; the first hold is voided', async () => {
+  const log = [];
+  const sent = [];
+  const run = createChatImageExecutor({
+    db: {}, userId: 'u1', turnId: 'tq',
+    meter: fakeMeter(log),
+    generate: async (payload) => {
+      sent.push(payload.model);
+      if (payload.model === 'primary') throw Object.assign(new Error('quota'), { code: 'image_quota' });
+      return { data: [{ b64_json: PNG_2x1.toString('base64') }] };
+    },
+    resolveEntitlements: async () => ({ watermark: false }),
+    watermark: async (b) => b,
+    store: async ({ model }) => ({ id: 'a', contentUrl: '/x', model }),
+    model: 'primary',
+    fallbackModels: ['backup'],
+    microPerCredit: 1_000_000,
+  });
+  const image = await run({ prompt: 'map', aspectRatio: '2:3', quality: 'high', index: 0 });
+  assert.deepEqual(sent, ['primary', 'backup']);
+  assert.deepEqual(log.map((l) => l[0]), ['hold', 'void', 'hold', 'settle']);
+  assert.equal(log[2][1], 'tq:image:0:fallback-1', 'the fallback is a separate hold, never the voided one');
+  assert.equal(image.model, 'backup', 'the result names the model that actually drew it');
+});
+
+test('when every model is out of quota the user is told so, and no other error is swallowed', async () => {
+  const quota = createChatImageExecutor({
+    db: {}, userId: 'u1', turnId: 'tq2', meter: fakeMeter([]),
+    generate: async () => { throw Object.assign(new Error('quota'), { code: 'image_quota' }); },
+    resolveEntitlements: async () => ({}), watermark: async (b) => b, store: async () => ({}),
+    model: 'primary', fallbackModels: ['backup'], microPerCredit: 1_000_000,
+  });
+  await assert.rejects(quota({ prompt: 'x', aspectRatio: '1:1', quality: 'high', index: 0 }),
+    (e) => e.code === 'image_unavailable' && /quota/.test(e.message));
+  const tried = [];
+  const declined = createChatImageExecutor({
+    db: {}, userId: 'u1', turnId: 'tq3', meter: fakeMeter([]),
+    generate: async (p) => { tried.push(p.model); throw Object.assign(new Error('declined'), { code: 'image_declined' }); },
+    resolveEntitlements: async () => ({}), watermark: async (b) => b, store: async () => ({}),
+    model: 'primary', fallbackModels: ['backup'], microPerCredit: 1_000_000,
+  });
+  await assert.rejects(declined({ prompt: 'x', aspectRatio: '1:1', quality: 'high', index: 0 }), (e) => e.code === 'image_declined');
+  assert.deepEqual(tried, ['primary'], 'a content refusal is not routed around by switching models');
+});
