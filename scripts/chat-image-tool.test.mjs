@@ -68,6 +68,33 @@ test('an unavailable image model is checked once per turn, not retried through t
   assert.equal(checked, 1);
 });
 
+test('interactive image tool proposes approval without dispatch, image hold or a second model call', async () => {
+  let modelCalls = 0;
+  let draws = 0;
+  const generation = { id: '00000001-0000-4000-8000-000000000000', type: 'image', state: 'awaiting_approval' };
+  const events = await drain(streamToolLoop({
+    messages: [{ role: 'user', content: 'draw me a fox' }], surface: 'chat', turnId: 'proposal-turn', tools: [GENERATE_IMAGE_TOOL],
+    streamModel: () => { modelCalls += 1; return imageCall({ prompt: 'A fox', aspect_ratio: '16:9', quality: 'high' }); },
+    proposeImage: async (request) => { assert.equal(request.prompt, 'A fox'); assert.equal(request.aspectRatio, '16:9'); return generation; },
+    runImage: async () => { draws += 1; throw new Error('must not generate before approval'); },
+  }));
+  assert.equal(modelCalls, 1);
+  assert.equal(draws, 0);
+  assert.equal(events.find((event) => event.type === 'generation_proposal').generation, generation);
+  assert.equal(events.some((event) => event.type === 'image_start' || event.type === 'image_result'), false);
+  assert.equal(events.at(-1).type, 'complete');
+});
+
+test('generation presentation stores only a durable handle, never client approval or outcome', () => {
+  const normalized = normalizeTurnRecord({ schema: TURN_SCHEMA, startedAt: 1, steps: [{
+    id: 'generation-1', kind: 'generation', generationId: '00000001-0000-4000-8000-000000000000', type: 'image', startedAt: 1,
+    approved: true, quoteToken: 'not-authority', state: 'succeeded', prompt: 'forged',
+  }] });
+  assert.equal(normalized.ok, true);
+  assert.deepEqual(Object.keys(normalized.turn.steps[0]).sort(), ['generationId', 'id', 'kind', 'startedAt', 'type']);
+  assert.equal(normalizeTurnRecord({ schema: TURN_SCHEMA, startedAt: 1, steps: [{ id: 'x', kind: 'generation', generationId: 'not-an-id', type: 'image', startedAt: 1 }] }).ok, false);
+});
+
 test('the model writes the prompt and picks the shape — both reach the image service', async () => {
   const seen = [];
   let calls = 0;

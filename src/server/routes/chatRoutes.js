@@ -27,6 +27,7 @@ import { annotateProjectPins, pinProject, reorderPins, sendChatPinError, unpinPr
 import { requireActivated } from '../services/accountActivation.js';
 import { chatWebContextService, ChatWebContextError } from '../services/chatWebContext.js';
 import { normalizeTurnRecord, turnImageAssetIds } from '../utils/chatTurnRecord.js';
+import { assertGenerationConversation } from '../services/mediaGenerations.js';
 import { requireDpopIfBound } from '../middleware/dpopResource.js';
 import liveConversationCollaborationRoutes from './liveConversationCollaborationRoutes.js';
 import projectDirectoryBindingRoutes from './projectDirectoryBindingRoutes.js';
@@ -969,6 +970,7 @@ router.post('/conversations/:id/messages', async (req, res) => {
     await requireResourceRelation(req.db, userPrincipal(userId), 'conversation', conversationId, 'reviewer');
 
     try {
+      await assertGenerationConversation(req.db, userId, (turnRecord.turn?.steps || []).filter((step) => step.kind === 'generation').map((step) => step.generationId), conversationId);
       // An assistant turn's own generated images may still be in their malware scan when it is
       // saved; the turn names them, and the check accepts exactly those (libraryAssets.js).
       await assertAuthorizedLibraryAttachments(req.db, userPrincipal(userId), attachments, {
@@ -1132,6 +1134,7 @@ router.post('/conversations/:id/messages/batch', async (req, res) => {
 
     try {
       for (const [position, message] of messages.entries()) {
+        await assertGenerationConversation(req.db, userId, (turnRecords[position]?.steps || []).filter((step) => step.kind === 'generation').map((step) => step.generationId), conversationId);
         await assertAuthorizedLibraryAttachments(req.db, userPrincipal(userId), message.attachments, {
           pendingImageIds: message?.role === 'assistant' ? turnImageAssetIds(turnRecords[position]) : null,
         });

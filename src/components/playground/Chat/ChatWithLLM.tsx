@@ -23,6 +23,10 @@ import {
 import ChatEmptyState, { ComposerRevealControls, type ChatEmptyStateTool } from './ChatEmptyState';
 import ChatModelSelector from './ChatModelSelector';
 import WorkspaceModelTrigger from './WorkspaceModelTrigger';
+import { generations, validateGeneration, stableRequestKey, releaseRequestKey, GenerationError, type Generation, type GenerationRequest } from '@/lib/generations';
+import { GenerationRecord } from './GenerationRecord';
+import type { GenState, GenType } from './GenerateMode';
+import { GEN_CATALOG, currentGenModel, GenModeTrigger, GenSettings, atQuery, closeGenMenu, isGenMenuOpen, openAtMenu, useGenerateMode } from './GenerateMode';
 import { embedArea, isWorkspaceEmbed, tellWorkspace } from '@/lib/workspaceEmbed';
 import { readAreaModel, readAreaSettings, withAreaInstructions, writeAreaModelLocal, type AreaSettingsMap } from './chatAreaDefaults';
 import ChatEffortControl from './ChatEffortControl';
@@ -3122,6 +3126,20 @@ const ChatWithLLM: React.FC<ChatWithLLMProps> = ({
   const [isAttachMenuOpen, setIsAttachMenuOpen] = useState(false);
   const [isRecentFilesOpen, setIsRecentFilesOpen] = useState(false);
   const [attachedFiles, setAttachedFiles] = useState<AttachedFile[]>([]);
+  // Generate mode (@image …): the input box becomes that generator — GenerateMode.tsx. Workspace only for now:
+  // its menus are the workspace's model menu.
+  const atMenuOpenRef = useRef(false);
+  const stripAtWord = (value: string, caret: number) => {
+    const at = atQuery(value, caret);
+    return at ? (value.slice(0, at.start) + value.slice(caret)).replace(/\s{2,}/g, ' ').replace(/^\s+/, '') : value;
+  };
+  const generate = useGenerateMode(() => {
+    // the @word that opened it is an instruction, not part of the prompt
+    setInputValue((value) => stripAtWord(value, textareaRef.current?.selectionStart ?? value.length));
+    atMenuOpenRef.current = false;
+    setTimeout(() => textareaRef.current?.focus(), 0);
+  });
+  const genReferenceCount = attachedFiles.filter((f) => /^image\//.test(f.type) || f.type === 'image').length;
   const [isUploadingAttachments, setIsUploadingAttachments] = useState(false);
   // Drag-and-drop onto the composer: a depth counter, not a boolean, because dragenter/dragleave
   // fire for every child element the pointer crosses, so a single flag flickers off over the textarea.
@@ -7044,7 +7062,7 @@ const ChatWithLLM: React.FC<ChatWithLLMProps> = ({
         .map(async msg => {
             type ApiMessagePart =
               | { type: 'text'; text: string }
-              | { type: 'image'; media_type: string; data: string; name?: string } // Base64 data; `name` lets the server say which image an assistant made
+              | { type: 'image'; media_type: string; data: string; name?: string; asset_id?: string } // Base64 data; `name` lets the server say which image an assistant made
               | { type: 'file'; media_type: string; name: string; data_type: 'text' | 'base64'; data: string };
 
             const messagePayload: { role: string; parts: ApiMessagePart[] } = {
@@ -7083,7 +7101,8 @@ const ChatWithLLM: React.FC<ChatWithLLMProps> = ({
                     messagePayload.parts.push({
                         type: 'image',
                         media_type: image.type,
-                        data: base64Data
+                        data: base64Data,
+                        ...(image.assetId ? {asset_id:image.assetId} : {})
                     });
                 } catch (error) {
                     console.error("Error converting user image to base64 for API payload:", error);
@@ -7417,6 +7436,13 @@ const ChatWithLLM: React.FC<ChatWithLLMProps> = ({
                 setMessages(prev => prev.map(msg =>
                     msg.id === localPlaceholderId ? { ...msg, turn: record, imagePreviews: previews, isDotPlaceholder: false } : msg
                 ));
+                return;
+            }
+
+            if (event.type === 'generation_proposal') {
+                turnRecord = applyTurnEvent(turnRecord, event);
+                const record = turnRecord;
+                setMessages(prev => prev.map(msg => msg.id === localPlaceholderId ? {...msg,turn:record,isDotPlaceholder:false} : msg));
                 return;
             }
 
@@ -7938,6 +7964,71 @@ const ChatWithLLM: React.FC<ChatWithLLMProps> = ({
     }
   };
 
+  const [generationError, setGenerationError] = useState('');
+  const [generationBusy, setGenerationBusy] = useState(false);
+  const generationSendingRef = useRef(false);
+  const unresolvedGenerationRef = useRef(false);
+  const [durableGenerations, setDurableGenerations] = useState<Generation[]>([]);
+  const [generationListError, setGenerationListError] = useState('');
+  const [generationListReload, setGenerationListReload] = useState(0);
+  const studioType = new URLSearchParams(location.search).get('generationType') as GenType | null;
+  const studioGenerationId = new URLSearchParams(location.search).get('generationId');
+  useEffect(() => { if (studioType && ['image','video','audio','3d'].includes(studioType)) generate.setMode(studioType); }, [studioType, generate.setMode]);
+  useEffect(() => {
+    if (!activeConversationId || !isPersistedConversationId(activeConversationId)) { setDurableGenerations([]); return; }
+    const controller = new AbortController(); let timer: ReturnType<typeof setTimeout>;
+    setDurableGenerations([]);
+    const load = async () => { try { const records = await generations.list({conversationId:activeConversationId}, controller.signal); if (controller.signal.aborted) return; setDurableGenerations(records); setGenerationListError(''); timer=setTimeout(load,5000); } catch(e) { if (!controller.signal.aborted) setGenerationListError(e instanceof Error ? e.message : 'Generation history unavailable'); } };
+    void load(); return () => { controller.abort(); clearTimeout(timer); };
+  }, [activeConversationId, generationListReload]);
+  const sendDirectGeneration = async (prompt: string, files: AttachedFile[], state: GenState & {placement?:{projectId?:string;conversationId?:string;area?:string|null}}, clearComposer: boolean) => {
+    if (generationSendingRef.current || unresolvedGenerationRef.current) {setGenerationError('A prior submit is unresolved. Check Studio history before making another request.');return false;}
+    setGenerationError('');
+    if (generate.catalogLoading || generate.catalogError) { setGenerationError(generate.catalogError || 'Wait for the generation catalog.'); return false; }
+    if (files.some(f => f.ready === false || !f.assetId || !(/^image\//.test(f.type) || f.type === 'image'))) { setGenerationError('Every reference must be a scanned library image. No attachment will be dropped.'); return false; }
+    const type = state.mode as GenType;
+    const model = state.model[type] || '';
+    const selected = generate.catalog.types.find(t => t.type === type)?.models.find(m => m.id === model);
+    const settings = Object.fromEntries(Object.entries(state.values).filter(([key]) => key.startsWith(type + ':')).map(([key,value]) => [key.slice(type.length+1),value]));
+    for (const [key, option] of Object.entries(selected?.settings || {})) if (!(key in settings) && option.default) settings[key]=option.default;
+    const placement=state.placement ?? {projectId:projectContextId || undefined,conversationId:activeConversationIdRef.current || undefined,area:embedArea()};
+    if (state.placement && placement.conversationId !== (activeConversationIdRef.current || undefined)) {setGenerationError('The queued generation belongs to another chat. Return to that chat to send it.');return false;}
+    const request: GenerationRequest = {type,model,prompt:prompt.trim(),settings,referenceAssetIds:files.map(f => f.assetId!),...(placement.projectId ? {projectId:placement.projectId} : {}),...(placement.area ? {area:placement.area} : {})};
+    const refusal=validateGeneration(request,generate.catalog); if (refusal) {setGenerationError(refusal);return false;}
+    if (isTemporaryChat && !studioType) {setGenerationError('Turn off Temporary chat before creating durable generation work.');return false;}
+    generationSendingRef.current=true; setGenerationBusy(true);
+    try {
+      let conversationId=activeConversationIdRef.current;
+      const userMessage: ChatMessage = {id:'generation-user-' + crypto.randomUUID(),sender:'user',text:prompt.trim(),timestamp:Date.now(),userImageAttachments:files.map(f=>({name:f.name,type:f.type,assetId:f.assetId,contentUrl:f.contentUrl}))};
+      if (!studioType) {
+        if (!isDbAuthenticated) throw new Error('Sign in before creating durable generation work.');
+        if (!conversationId) conversationId=await createConversationForMessages([...messages,userMessage]);
+        else { const row=await chatService.addMessage(conversationId,{role:'user',content:prompt.trim(),attachments:messageLibraryAttachments(userMessage)}); if(!row) throw new Error('The prompt could not be saved. Nothing was submitted.'); }
+        if (!conversationId || !isPersistedConversationId(conversationId)) throw new Error('Generation needs a saved chat. Nothing was submitted.');
+        request.conversationId=conversationId;
+        setMessages(prev=>prev.some(m=>m.id===userMessage.id) ? prev : [...prev,userMessage]);
+      }
+      const quote=await generations.quote(request);
+      const displayed=selected?.tariff ?? generate.catalog.types.find(t=>t.type===type)?.tariff;
+      if (!displayed || quote.tariffRevision!==displayed.revision || quote.maxRetailCredits!==displayed.maxRetailCredits) throw new Error('The price changed. Reload the catalog and press Send again to confirm the new maximum.');
+      const record=await generations.submit(request,quote.quoteToken,stableRequestKey(request));
+      releaseRequestKey(request);
+      setDurableGenerations(prev=>[record,...prev.filter(g=>g.id!==record.id)]);
+      if (clearComposer) {setInputValue('');setAttachedFiles([]);}
+      if (studioType) window.parent.postMessage({source:'xeno-chat',type:'generation-location',generationId:record.id,generationType:type,path:`/workspace/studio/generate/${type}/g/${record.id}`},window.location.origin);
+      else {
+        const turn=applyTurnEvent(newTurnRecord(),{type:'generation_proposal',generation:record});
+        const local: ChatMessage={id:'generation-reply-'+record.id,sender:'ai',text:'Generation submitted.',parsedAnswer:'Generation submitted.',timestamp:Date.now(),turn};
+        setMessages(prev=>[...prev,local]);
+        const row=await chatService.addMessage(conversationId!,{role:'assistant',content:'Generation submitted.',turn});
+        if (!row) setGenerationError('Generation was admitted. Its chat presentation could not be saved; the durable status remains available below and in Studio.');
+        setGenerationListReload(n=>n+1);
+      }
+      return true;
+    } catch(e) {setGenerationError(e instanceof Error ? e.message : 'Generation refused'); if(e instanceof GenerationError && e.uncertain) { unresolvedGenerationRef.current=true; setGenerationListReload(n=>n+1); } return false;}
+    finally {generationSendingRef.current=false;setGenerationBusy(false);}
+  };
+
   // Queue system functions (state transitions live in chatQueue.ts)
   const addToQueue = () => {
     if (!inputValue.trim() && attachedFiles.length === 0) return;
@@ -7946,6 +8037,7 @@ const ChatWithLLM: React.FC<ChatWithLLMProps> = ({
       text: inputValue,
       attachedFiles: [...attachedFiles],
       timestamp: Date.now(),
+      generation: { ...structuredClone(generate.state), placement: {projectId:projectContextId || undefined,conversationId:activeConversationIdRef.current || undefined,area:embedArea()} },
     }));
     // Clear input after adding to queue
     setInputValue('');
@@ -7995,11 +8087,11 @@ const ChatWithLLM: React.FC<ChatWithLLMProps> = ({
     if (isLoading || isQueueSending) return;
     const next = nextSendable(queue, { held: isQueueHeld || Boolean(waitingQuestion) });
     if (!('item' in next)) return;
-    if (isUploadingAttachments || isContextLimitReached || isModelsLoading) return;
+    if (isUploadingAttachments) return;
+    if ((!next.item.generation || next.item.generation.mode === 'chat') && (isContextLimitReached || isModelsLoading)) return;
     const item = next.item;
     setIsQueueSending(true);
-    setQueue(prev => removeQueued(prev, item.id));
-    void Promise.resolve(handleGenerate(item.text, item.attachedFiles)).finally(() => setIsQueueSending(false));
+    void Promise.resolve(handleGenerate(item.text, item.attachedFiles, item.generation as GenState | undefined)).then(accepted => { if (accepted === false) setIsQueueHeld(true); else setQueue(prev => removeQueued(prev,item.id)); }).finally(() => setIsQueueSending(false));
   }, [isLoading, isQueueSending, queue, isQueueHeld, waitingQuestion, isUploadingAttachments, isContextLimitReached, isModelsLoading]); // eslint-disable-line react-hooks/exhaustive-deps
 
   /**
@@ -8007,13 +8099,17 @@ const ChatWithLLM: React.FC<ChatWithLLMProps> = ({
    * text only (the voice path); `filesOverride` makes it a send that is not the composer's at all — a
    * queued prompt — so the composer the user may be typing in is left untouched.
    */
-  const handleGenerate = async (inputOverride?: string, filesOverride?: AttachedFile[]) => {
+  const handleGenerate = async (inputOverride?: string, filesOverride?: AttachedFile[], generationOverride?: GenState) => {
     const composerText = inputOverride ?? inputValue;
     const turnFiles = filesOverride ?? attachedFiles;
     const canSend = composerText.trim() || turnFiles.length > 0;
     // An attachment still in its malware scan is not sendable yet — a file enters a conversation only
     // once it is scanned and valid (AttachedFile.ready), so a sent message never shows "still scanning".
     if (!canSend || isLoading || isUploadingAttachments || turnFiles.some(f => f.ready === false)) return;
+    const generationState = generationOverride ?? (filesOverride !== undefined ? {mode:'chat' as const,model:{},values:{}} : generate.state);
+    if (generationState.mode !== 'chat') {
+      return await sendDirectGeneration(composerText, turnFiles, generationState, filesOverride === undefined); // Generation never reaches fetchAiResponse or the text-model hold.
+    }
     if (isContextLimitReached) return;
     // Until the catalogue answers, `selectedModel` is the hard-coded fallback, not a choice.
     // A message sent now would go to a model the user never picked and the picker never showed.
@@ -12567,8 +12663,15 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
           <ChatEmptyState
             scrollAffordance={composerScrollAffordance}
             /* The prompt queue floats above the composer while a chat runs (ChatQueue.tsx). */
-            aboveComposer={(waitingQuestion || queue.messages.length > 0) && messages.length > 0 ? (
+            aboveComposer={(waitingQuestion || queue.messages.length > 0 || generationError || generationListError || generationBusy || generate.catalogError || durableGenerations.length || studioGenerationId || generate.state.mode !== 'chat') ? (
               <>
+              {generate.catalogError && <p role="alert" className="px-1 pb-1.5 text-[12px] leading-5 text-[#8b857c]">{generate.catalogError} <button type="button" className="underline" onClick={() => void generate.reloadCatalog()}>Reload</button></p>}
+              {generate.state.mode !== 'chat' && !generate.catalogError && <p role="status" className="px-1 pb-1.5 text-[12px] leading-5 text-[#8b857c]">{GEN_CATALOG[generate.state.mode].available ? `Up to ${currentGenModel(generate.state, 0)?.tariff?.maxRetailCredits ?? GEN_CATALOG[generate.state.mode].credits ?? '?'} credits. Send starts the generation.` : GEN_CATALOG[generate.state.mode].reason || 'Not available yet'}</p>}
+              {generationBusy && <p role="status" className="px-1 pb-1.5 text-[12px] leading-5 text-[#8b857c]">Submitting…</p>}
+              {generationError && <p role="alert" className="px-1 pb-1.5 text-[12px] leading-5 text-[#8b857c]">{generationError}</p>}
+              {generationListError && <p role="alert" className="px-1 pb-1.5 text-[12px] leading-5 text-[#8b857c]">{generationListError} <button type="button" className="underline" onClick={() => setGenerationListReload(n=>n+1)}>Reload</button></p>}
+              {studioGenerationId && <GenerationRecord id={studioGenerationId} />}
+              {durableGenerations.filter(g=>!messages.some(m=>m.turn?.steps.some(step=>step.kind==='generation' && step.generationId===g.id))).map(g=><GenerationRecord key={g.id} id={g.id} />)}
               {waitingQuestion && (
                 <ChatQuestionPanel step={waitingQuestion.step} onAnswer={answerQuestion} onSkip={skipQuestion} busy={isLoading} />
               )}
@@ -12593,6 +12696,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                   <div className="flex items-center gap-1 md:gap-2 relative">
                       {/* "+" reveals the mode tabs above the box; Upload rides out with it. */}
                       <ComposerRevealControls />
+                      {isWorkspaceEmbed() && <GenModeTrigger mode={generate.state.mode} />}
                       {/* Attach / Recent live on the hover tool rail (empty + conversation). */}
                       <div className="relative hidden">
                           <IconButton
@@ -12774,7 +12878,9 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                                      and side padding, and giving this one either would move the
                                      composer's status row. It reads as text because it is text that
                                      happens to be clickable. */
-                                  return (
+                                  if (studioType && ['image','video','audio','3d'].includes(studioType)) return <div className="chat-main-area">{renderPrimaryComposer()}</div>;
+
+  return (
                                     <button
                                       onClick={() => compactConversation(selectedModel)}
                                       disabled={isLoading}
@@ -12817,7 +12923,9 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                       <div data-composer-model-group className="flex h-[26px] min-w-0 items-center">
                         {/* Inside the XENO workspace the model menu is the workspace's own design, drawn
                             by that page; this chat supplies the real list and takes the pick. */}
-                        {isWorkspaceEmbed() ? (
+                        {isWorkspaceEmbed() && generate.state.mode !== 'chat' ? (
+                          <GenSettings state={generate.state} referenceCount={genReferenceCount} />
+                        ) : isWorkspaceEmbed() ? (
                           <WorkspaceModelTrigger
                             models={getAllModels(groupedModels)}
                             selected={selectedModel}
@@ -12839,7 +12947,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                           triggerId={modelSelectorControlId}
                         />
                         )}
-                        {modelHasEffortLevels && (
+                        {modelHasEffortLevels && generate.state.mode === 'chat' && (
                           <>
                             <span className="mx-px h-[11px] w-px flex-none bg-[var(--chat-border)]" aria-hidden="true" />
                             <ChatEffortControl model={selectedModel} value={selectedEffort} onChange={chooseEffort} thinking={{ on: isReasonToggled, onToggle: toggleReasoning }} disabled={isLoading} />
@@ -12991,7 +13099,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                             onClick={handleVoiceSend}
                             className={`flex items-center justify-center transition-[background-color,color,transform,opacity] duration-200 active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--chat-accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--chat-canvas)] ${(inputValue.trim() || attachedFiles.length > 0) && !isUploadingAttachments && !attachedFiles.some(f => f.ready === false) ? 'bg-[var(--chat-accent)] text-[var(--chat-on-accent)] hover:opacity-90 motion-safe:animate-send-button-enter' : 'cursor-not-allowed border border-[var(--chat-border)] bg-[var(--chat-control)] text-[var(--chat-muted)]'} ${composerActionButtonSizeClass}`}
                             aria-label={isModelsLoading ? 'Send message (waiting for models)' : (isUploadingAttachments || attachedFiles.some(f => f.ready === false)) ? 'Send message (scanning attachment…)' : 'Send message'}
-                            disabled={!(inputValue.trim() || attachedFiles.length > 0) || isContextLimitReached || isModelsLoading || isUploadingAttachments || attachedFiles.some(f => f.ready === false)}
+                            disabled={!(inputValue.trim() || attachedFiles.length > 0) || (generate.state.mode === 'chat' && (isContextLimitReached || isModelsLoading)) || (generate.state.mode !== 'chat' && (generationBusy || generate.catalogLoading || !!generate.catalogError || !GEN_CATALOG[generate.state.mode].available || !generate.state.model[generate.state.mode])) || isUploadingAttachments || attachedFiles.some(f => f.ready === false)}
                           >
                             {/* The send arrow was hand-drawn here — stroke 2, round caps — while every other
                                 glyph in the composer came from the set at 1.75 with butt caps. It never
@@ -13160,11 +13268,36 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                   Tier-2 container built ON this component rather than an instance of it. */}
               <textarea
                 ref={textareaRef}
-                placeholder={waitingQuestion ? 'Or type your own answer\u2026' : CHAT_MODE_PLACEHOLDERS[emptyStateMode]}
+                placeholder={waitingQuestion ? 'Or type your own answer\u2026' : generate.state.mode !== 'chat' ? GEN_CATALOG[generate.state.mode].placeholder : CHAT_MODE_PLACEHOLDERS[emptyStateMode]}
                 value={inputValue}
-                onChange={(e) => setInputValue(e.target.value)}
+                onChange={(e) => {
+                  setInputValue(e.target.value);
+                  if (!isWorkspaceEmbed() || generate.state.mode !== 'chat') return;
+                  const at = atQuery(e.target.value, e.target.selectionStart ?? e.target.value.length);
+                  if (at && at.matches.length) { openAtMenu(e.target.closest('[data-chat-composer-shell]') || e.target, at.matches); atMenuOpenRef.current = true; }
+                  else if (atMenuOpenRef.current) { closeGenMenu(); atMenuOpenRef.current = false; }
+                }}
                 onPaste={handleComposerPaste}
                 onKeyDown={(e) => {
+                  if (isWorkspaceEmbed()) {
+                    // the @ list: its menu is drawn by the workspace page, so its keys are handled here
+                    const caret = e.currentTarget.selectionStart ?? inputValue.length;
+                    if (atMenuOpenRef.current && (e.key === 'Enter' || e.key === 'Tab')) {
+                      const first = atQuery(inputValue, caret)?.matches.find((k) => GEN_CATALOG[k].available);
+                      if (first) {
+                        e.preventDefault();
+                        closeGenMenu();
+                        atMenuOpenRef.current = false;
+                        setInputValue(stripAtWord(inputValue, caret));
+                        generate.setMode(first);
+                        return;
+                      }
+                    }
+                    if (e.key === 'Escape' && (atMenuOpenRef.current || isGenMenuOpen())) { e.preventDefault(); closeGenMenu(); atMenuOpenRef.current = false; return; }
+                    if (generate.state.mode !== 'chat' && (e.key === 'Escape' || (e.key === 'Backspace' && e.currentTarget.selectionStart === 0 && e.currentTarget.selectionEnd === 0))) {
+                      e.preventDefault(); closeGenMenu(); generate.setMode('chat'); return;
+                    }
+                  }
                   // Enter without Shift sends the message
                   if (e.key === 'Enter' && !e.shiftKey) {
                     e.preventDefault();
@@ -17286,6 +17419,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                                           {/* run_code blocks (2026-09-27): the source, output and produced
                                               files of each run the turn made, in order — drawn under the head
                                               like generated images, live and on reload from the turn record. */}
+                                          {message.turn?.steps.filter(step => step.kind === 'generation').map(step => step.kind === 'generation' ? <GenerationRecord key={step.id} id={step.generationId} /> : null)}
                                           <ChatCodeExecution
                                               steps={turnCodeSteps(message.turn)}
                                               live={Boolean(message.isStreaming || message.isThinkingPlaceholder || message.isDotPlaceholder)}

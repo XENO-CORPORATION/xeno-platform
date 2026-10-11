@@ -66,6 +66,10 @@ async function ensureAccount(client, userId) {
 /** SQL predicate, for a `credit_holds h` row: a run draw on it is still open. The ONE definition of
  * "time alone may not free this hold", shared by every liveness read and by the expiry sweep. */
 export const OPEN_DRAW_ON_HOLD = "EXISTS (SELECT 1 FROM credit_hold_draws d WHERE d.hold_row_id=h.id AND d.state='open')";
+// Media commitments are ordinary action holds, NOT workforce draws. JSON read keeps older ledger
+// fixtures compatible; serving replicas must apply the additive migration before media admission.
+export const OPEN_MEDIA_ON_HOLD = "COALESCE((to_jsonb(h)->>'media_committed')::boolean, FALSE)";
+export const COMMITTED_HOLD = `(${OPEN_DRAW_ON_HOLD} OR ${OPEN_MEDIA_ON_HOLD})`;
 
 /** Sum of active holds (micro) for a user. */
 async function activeHoldsMicro(client, userId) {
@@ -77,7 +81,7 @@ async function activeHoldsMicro(client, userId) {
   // stays committed whatever its clock says (FUND-09). Time alone never frees in-flight dispatch.
   const r = await client.query(
     `SELECT COALESCE(SUM(amount_micro - settled_micro), 0)::bigint AS held
-       FROM credit_holds h WHERE user_id = $1 AND state = 'held' AND (expires_at > now() OR ${OPEN_DRAW_ON_HOLD})`,
+       FROM credit_holds h WHERE user_id = $1 AND state = 'held' AND (expires_at > now() OR ${COMMITTED_HOLD})`,
     [userId],
   );
   return BigInt(r.rows[0].held);
@@ -1155,7 +1159,7 @@ export async function sweepExpiredHolds(pool, { batchLimit = 1000 } = {}) {
              AND NOT EXISTS (SELECT 1 FROM credit_accounts a WHERE a.user_id=h.user_id
                AND COALESCE(to_jsonb(a)->>'owner_kind','user') NOT IN ('user','workspace'))
              -- An open draw is provider work in flight: expiry never releases it (FUND-09).
-             AND NOT ${OPEN_DRAW_ON_HOLD}
+             AND NOT ${COMMITTED_HOLD}
            ORDER BY expires_at ASC
            LIMIT $1
            FOR UPDATE SKIP LOCKED

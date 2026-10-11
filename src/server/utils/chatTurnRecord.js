@@ -200,6 +200,14 @@ export function normalizeTurnRecord(value) {
     if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return { ok: false, error: 'each step must be an object' };
     if (!shortString(raw.id, 128) || !raw.id || ids.has(raw.id)) return { ok: false, error: 'each step needs a unique id' };
     ids.add(raw.id);
+    if (raw.kind === 'generation') {
+      // A handle into the server-owned generation record, never spend approval or a client outcome.
+      if (!LIBRARY_ID.test(String(raw.generationId || ''))) return { ok: false, error: 'generation step needs a valid generationId' };
+      if (!['image', 'video', 'audio', '3d'].includes(raw.type)) return { ok: false, error: 'generation step.type is invalid' };
+      if (!isFiniteNumber(raw.startedAt) || raw.startedAt <= 0) return { ok: false, error: 'step.startedAt must be a timestamp' };
+      steps.push({ id: raw.id, kind: 'generation', generationId: raw.generationId, type: raw.type, startedAt: raw.startedAt });
+      continue;
+    }
     if (raw.kind === 'image') {
       const image = normalizeImageStep(raw);
       if (!image.ok) return image;

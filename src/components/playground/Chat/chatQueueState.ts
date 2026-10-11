@@ -22,6 +22,7 @@ export interface QueuedMessage<F extends QueuedAttachment = QueuedAttachment> {
   text: string;
   attachedFiles: F[];
   timestamp: number;
+  generation?: { mode: string; model: Partial<Record<string, string>>; values: Record<string, string>; placement?: {projectId?:string;conversationId?:string;area?:string|null} };
 }
 
 export interface QueueState<F extends QueuedAttachment = QueuedAttachment> {
@@ -32,9 +33,9 @@ export interface QueueState<F extends QueuedAttachment = QueuedAttachment> {
 export const emptyQueue = <F extends QueuedAttachment = QueuedAttachment>(): QueueState<F> => ({ messages: [], isExpanded: true });
 
 /** Add a prompt at the END. Empty prompts (no text, no file) are refused: there is nothing to send. */
-export function enqueue<F extends QueuedAttachment>(state: QueueState<F>, item: { id: string; text: string; attachedFiles: F[]; timestamp: number }): QueueState<F> {
+export function enqueue<F extends QueuedAttachment>(state: QueueState<F>, item: { id: string; text: string; attachedFiles: F[]; timestamp: number; generation?: QueuedMessage<F>['generation'] }): QueueState<F> {
   if (!item.text.trim() && item.attachedFiles.length === 0) return state;
-  return { ...state, messages: [...state.messages, { ...item, attachedFiles: [...item.attachedFiles] }] };
+  return { ...state, messages: [...state.messages, { ...item, attachedFiles: [...item.attachedFiles], ...(item.generation ? { generation: { ...item.generation, model: { ...item.generation.model }, values: { ...item.generation.values }, ...(item.generation.placement ? {placement:{...item.generation.placement}} : {}) } } : {}) }] };
 }
 
 export function removeQueued<F extends QueuedAttachment>(state: QueueState<F>, id: string): QueueState<F> {

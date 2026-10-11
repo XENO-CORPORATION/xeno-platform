@@ -76,7 +76,7 @@ const MONEY_SUITES = [
   'billing-money-in', 'media-metering', 'wallet-service',
   'service-ledger', 'ledger-audit-fixes', 'credit-mirror-drift',
   'marketplace-invoke-and-commission', 'hold-extension', 'meter-hold-heartbeat',
-  'run-backed-hold', 'marketplace-rentals', 'marketplace-rental-partitions', 'marketplace-agent-versions', 'marketplace-team-packages',
+  'run-backed-hold', 'marketplace-rentals', 'marketplace-rental-partitions', 'marketplace-agent-versions', 'marketplace-team-packages', 'media-generations',
 ];
 
 /* ── DATABASE PROOFS (scripts/*.test.mjs) ────────────────────────────────────
