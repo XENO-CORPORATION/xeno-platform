@@ -1097,7 +1097,7 @@
       const parts = S.item.split('/'), lbl = (x, i) => (S.global === 'tasks' && window.XENO_TASKS?.label ? window.XENO_TASKS.label(x) : S.global === 'community' && i === 0 && window.XENO_PG_FORUM.find((t) => t.id === x) ? window.XENO_PG_FORUM.find((t) => t.id === x).title : S.global === 'community' && i > 0 && parts[0] === 'My reports' ? '#' + x : x);
       return `<a data-crumb="">${gn}</a>` + parts.map((x, i) => sep + (i < parts.length - 1 ? `<a data-crumb="${esc(parts.slice(0, i + 1).join('/'))}">${esc(lbl(x, i))}</a>` : `<b>${esc(lbl(x, i))}</b>`)).join(''); }
     const p = PR[S.product];
-    return `<span>${ctxName()}</span>${sep}${S.item ? `<span>${esc(p.name)}</span>${sep}<b>${esc(liveChat && S.product === 'chat' ? window.XENO_CHAT.title(S.item) : S.item)}</b>` : `<b>${esc(p.name)}</b>`}${S.product === 'chat' && !S.item ? `${sep}<span>${esc(liveChat ? 'New chat' : ctxChats().pinned[0] || 'New chat')}</span>` : ''}`;
+    return `<span>${ctxName()}</span>${sep}${S.item ? (liveChat && S.product === 'chat' && window.XENO_CHAT.trail ? (() => { const t = window.XENO_CHAT.trail(S.item); return `<span>${esc(p.name)}</span>${sep}${t.map((x, i) => (i === t.length - 1 ? `<b>${esc(x)}</b>` : `<span>${esc(x)}</span>${sep}`)).join('')}`; })() : `<span>${esc(p.name)}</span>${sep}<b>${esc(liveChat && S.product === 'chat' ? window.XENO_CHAT.title(S.item) : S.item)}</b>`) : `<b>${esc(p.name)}</b>`}${S.product === 'chat' && !S.item ? `${sep}<span>${esc(liveChat ? 'New chat' : ctxChats().pinned[0] || 'New chat')}</span>` : ''}`;
   }
   function liveDashboard() {
     const D = window.XENO_LIVE_DASHBOARD;
@@ -1203,7 +1203,7 @@
   // ---- navigation ----
   // ---- routes: every place has an address; Back/Forward and refresh work ----
   function stateToHash() {
-    const base = inOv() ? 'overview' : S.mode, it = S.item ? '/' + encodeURIComponent(S.item) : '';
+    const base = inOv() ? 'overview' : S.mode, it = S.item ? '/' + String(S.item).split('/').map(encodeURIComponent).join('/') : '';
     if (S.view === 'dashboard') return '#/overview';
     if (S.view === 'adaptive') return '#/adaptive';
     if (S.view === 'zone') return `#/${base}/z/${S.zone}${it}`;

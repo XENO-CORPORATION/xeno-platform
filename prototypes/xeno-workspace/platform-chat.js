@@ -92,9 +92,12 @@
     const projects = S.projects.filter((p) => !p.archived_at && !p.is_archived).map((p) => [String(p.name || 'Project'), p.id, (byProject.get(p.id) || []).map(row)]);
     const recents = []; for (const c of loose) { const g = group(c.last_message_at || c.updated_at || c.created_at); const last = recents[recents.length - 1]; if (last && last[0] === g) last[1].push(row(c)); else recents.push([g, [row(c)]]); }
     const pinned = S.pins.map((id) => S.convs.find((c) => String(c.id) === id)).filter(Boolean).map(row);
-    return { live: true, status: S.status, current: S.current, projects, pinned, recents, more: Math.max(0, S.total - S.convs.length) };
+    return { live: true, status: S.status, current: convOf(S.current), currentProject: projOf(S.current), projects, pinned, recents, more: Math.max(0, S.total - S.convs.length) };
   }
-  const title = (id) => { const c = S.convs.find((x) => x.id === id); return c ? titleOf(c) : id ? 'Chat' : null; };
+  const projectName = (pid) => { const p = S.projects.find((x) => String(x.id) === String(pid)); return p ? String(p.name || 'Project') : 'Project'; };
+  const title = (item) => { const id = convOf(item); const c = id && S.convs.find((x) => x.id === id); return c ? titleOf(c) : id ? 'Chat' : projOf(item) ? projectName(projOf(item)) : item ? 'Chat' : null; };
+  /** the trail after "Chat": [project, chat] for a chat in a project, [project] for its home, [chat] otherwise */
+  const trail = (item) => { const p = projOf(item), id = convOf(item); const out = []; if (p) out.push(projectName(p)); if (id) out.push(title(id)); return out.length ? out : item ? [title(item)] : []; };
   const projectId = (name) => S.projects.find((p) => p.name === name)?.id || null;
 
   // ---------- the frame ----------
@@ -119,8 +122,17 @@
     + 'html.xw-chat-on #xp-note{display:none}html.xw-chat-on #main .topbar > .ib[aria-label="More"]{display:none}';
   document.head.appendChild(style);
   let frame = null, loaded = false, slot = null, ro = null, hideT = 0;
-  const pathFor = (id) => (id && ID.test(id) ? '/chat/c/' + encodeURIComponent(id) : NEW);
-  const idIn = (path) => { const m = String(path || '').match(/\/(?:c|llm)\/([^/?#]+)$/); if (!m) return null; let v = m[1]; try { v = decodeURIComponent(v); } catch {} return ID.test(v) ? v : null; };
+  const dec = (v) => { try { return decodeURIComponent(v); } catch { return v; } };
+  const projOf = (item) => { const m = String(item || '').match(/^projects\/([^/]+)/); return m && ID.test(m[1]) ? m[1] : null; };
+  const convOf = (item) => { const s = String(item || ''); if (ID.test(s)) return s; const m = s.match(/(?:^|\/)c\/([^/]+)$/); return m && ID.test(m[1]) ? m[1] : null; };
+  const pathFor = (item) => { const p = projOf(item), c = convOf(item); if (p) return '/chat/projects/' + encodeURIComponent(p) + (c ? '/c/' + encodeURIComponent(c) : ''); return c ? '/chat/c/' + encodeURIComponent(c) : NEW; };
+  /** the chat's own path (any prefix) → the item the workspace address carries */
+  const itemIn = (path) => { const s = String(path || '').split(/[?#]/)[0];
+    let m = s.match(/\/chat\/projects\/([^/]+)\/c\/([^/]+)$/); if (m && ID.test(dec(m[1])) && ID.test(dec(m[2]))) return `projects/${dec(m[1])}/c/${dec(m[2])}`;
+    m = s.match(/\/chat\/projects\/([^/]+)$/); if (m && ID.test(dec(m[1]))) return `projects/${dec(m[1])}`;
+    m = s.match(/\/(?:c|llm)\/([^/]+)$/); return m && ID.test(dec(m[1])) ? dec(m[1]) : null; };
+  /** a conversation's canonical item: inside its project when it has one */
+  const itemFor = (id) => { if (!id) return null; const c = S.convs.find((x) => x.id === id); return c && c.project_id && ID.test(String(c.project_id)) ? `projects/${c.project_id}/c/${id}` : id; };
   // ---------- the composer design, handed to the real chat ----------
   // every rule this page wrote for `.live-chat`, re-aimed at the chat's own root. Rules about the slot the picture
   // sat in (`.live-chat-host`, `.main …`) are this page's layout and stay here.
@@ -223,8 +235,8 @@
     const m = e.data; if (!m || m.source !== 'xeno-chat') return;
     if (m.type === 'location') {
       dress();
-      const id = idIn(m.path); S.path = m.path;
-      if (id !== S.current) { S.current = id; X()?.setChatItem?.(id); }
+      const item = itemIn(m.path), id = convOf(item); S.path = m.path;
+      if (item !== S.current) { S.current = item; X()?.setChatItem?.(item); }
       // a conversation that is not in the list yet was just started; and a title may have been written
       clearTimeout(reloadT); reloadT = setTimeout(load, id && !S.convs.some((c) => c.id === id) ? 600 : 2500);
       repaint();
@@ -255,10 +267,10 @@
 
   // ---------- the sidebar's clicks ----------
   const toChat = (item) => { const x = X(); if (!x) return; if (!(x.S.view === 'product' && x.S.product === 'chat')) x.go('product', { product: 'chat', item: item || null }); else if ((x.S.item || null) !== (item || null)) x.setChatItem?.(item || null); };
-  function open(id) { S.current = id || null; toChat(id || null); show(pathFor(id), false); repaint(); }
+  function open(id) { const item = itemFor(id); S.current = item; toChat(item); show(pathFor(item), false); repaint(); }
   // a project's home in the real chat, by id: its composer files the new conversation in the project
-  function openProjectId(pid) { if (!/^[0-9a-f-]{36}$/i.test(String(pid || ''))) return false; S.current = null; toChat(null); show('/chat/projects/' + encodeURIComponent(pid), false); return true; }
-  function openProject(name) { const pid = projectId(name); if (!pid) return false; S.current = null; toChat(null); show('/chat/projects/' + encodeURIComponent(pid), false); return true; }
+  function openProjectId(pid) { if (!/^[0-9a-f-]{36}$/i.test(String(pid || ''))) return false; const item = 'projects/' + pid; S.current = item; toChat(item); show(pathFor(item), false); repaint(); return true; }
+  function openProject(name) { const pid = projectId(name); return pid ? openProjectId(pid) : false; }
   document.addEventListener('click', (e) => {
     if (e.target.closest('[data-more]')) return;   // the row's menu button is the app's: it opens the menu registered below
     const row = e.target.closest('[data-chat-live]'); if (row) { e.preventDefault(); e.stopPropagation(); return open(row.dataset.chatLive); }
@@ -307,7 +319,7 @@
     const r = await api('DELETE', '/api/chat/conversations/' + encodeURIComponent(id)).catch(() => null);
     if (!r || !r.ok) return void X()?.toast?.(say(r, 'The chat couldn’t be deleted. Nothing changed.'));
     S.convs = S.convs.filter((x) => x.id !== id); S.total = Math.max(0, S.total - 1);
-    if (S.current === id) open(null); else repaint();
+    if (convOf(S.current) === id) open(null); else repaint();
     X()?.toast?.('Chat deleted'); load();
   }
   // move a chat to another area, or to none (then it shows on Overview only)
@@ -357,6 +369,6 @@
   const pickModel = (id) => toChatFrame({ type: 'pick-model', id });
   const pickerClosed = () => { if (S.effort) { S.effort = null; toChatFrame({ type: 'effort-menu-closed' }); } if (S.picker) { S.picker = null; toChatFrame({ type: 'model-menu-closed' }); } };
   const pickEffort = (id) => { if (S.effort) S.effort.selected = id; toChatFrame({ type: 'pick-effort', id }); };
-  window.XENO_CHAT = { served: true, openProjectId, area, areaName, instructions, pin, pins: () => S.pins.slice(), get picker() { return S.picker; }, get effort() { return S.effort || null; }, pickModel, pickEffort, pickerClosed, data, title, open, load, rename, remove, dress, host: () => '<div class="live-chat-host" data-chat-frame aria-label="Chat"></div>', state: () => ({ area: area(), listed: S.area, viewer: S.viewer || null, ready: chatReady(), status: S.status, count: S.convs.length, current: S.current, path: S.path, shown: !!frame && frame.classList.contains('on') }) };
+  window.XENO_CHAT = { served: true, openProjectId, trail, area, areaName, instructions, pin, pins: () => S.pins.slice(), get picker() { return S.picker; }, get effort() { return S.effort || null; }, pickModel, pickEffort, pickerClosed, data, title, open, load, rename, remove, dress, host: () => '<div class="live-chat-host" data-chat-frame aria-label="Chat"></div>', state: () => ({ area: area(), listed: S.area, viewer: S.viewer || null, ready: chatReady(), status: S.status, count: S.convs.length, current: convOf(S.current), item: S.current, path: S.path, shown: !!frame && frame.classList.contains('on') }) };
   Promise.resolve(P.ready).then((user) => { if (!user) return; P.first(load()); watch(); });
 })();
