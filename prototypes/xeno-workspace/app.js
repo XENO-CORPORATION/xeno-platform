@@ -38,7 +38,7 @@
     community: '<path d="M8.5 11a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM3.5 19c.6-3 2.6-4.5 5-4.5s4.4 1.5 5 4.5"/><path d="M15.5 11.5a2.5 2.5 0 1 0 0-5M17 14.5c1.8.4 3 1.7 3.5 4"/>',
     market: '<path d="M4 8h16l-1.3 11.5H5.3z"/><path d="M8.5 8V6.5a3.5 3.5 0 0 1 7 0V8"/>',
     bell: '<path d="M6 16.5V11a6 6 0 0 1 12 0v5.5l1.5 2h-15z"/><path d="M10 20.5h4"/>',
-    help: '<path d="M12 3.5a8.5 8.5 0 1 1 0 17 8.5 8.5 0 0 1 0-17z"/><path d="M9.6 9.5a2.5 2.5 0 1 1 3.4 2.3c-.6.3-1 .8-1 1.5v.4M12 16.8v.2"/>',
+    help: '<path d="M5 4.5h14a1.5 1.5 0 0 1 1.5 1.5v9.5a1.5 1.5 0 0 1-1.5 1.5h-7l-4.5 3.5V17H5a1.5 1.5 0 0 1-1.5-1.5V6A1.5 1.5 0 0 1 5 4.5z"/><path d="M9.9 8.9a2.1 2.1 0 1 1 2.9 2c-.5.2-.8.6-.8 1.1v.3M12 14.3v.1"/>',
     side: '<path d="M3.5 5h17v14h-17zM9.5 5v14"/>',
     back: '<path d="M14.5 6.5 9 12l5.5 5.5"/>',
     plus: '<path d="M12 5v14M5 12h14"/>',
@@ -1822,7 +1822,8 @@
     const b = railBtn('usage'); if (!b) return; const left = usageLeft();
     if (left == null) { b.textContent = '—'; b.dataset.tip = 'Usage'; b.setAttribute('aria-label', 'Usage'); return; }
     const alert = store.get('lowAlert', { on: true, at: 500 });
-    b.textContent = left >= 1000 ? (Math.floor(left / 100) / 10) + 'k' : fmt(left); b.classList.toggle('low', alert.on && left < alert.at);
+    const short = (v) => { const u = [[1e12, 'T'], [1e9, 'B'], [1e6, 'M'], [1e3, 'k']].find(([d]) => v >= d); if (!u) return String(Math.floor(v)); const x = v / u[0]; return (x >= 100 ? Math.floor(x) : Math.floor(x * 10) / 10) + u[1]; };
+    b.textContent = short(left); b.classList.toggle('low', alert.on && left < alert.at);
     b.dataset.tip = `Usage — ${fmt(left)} credits available`; b.setAttribute('aria-label', `${b.textContent} credits — usage, ${fmt(left)} available`);
   }
 

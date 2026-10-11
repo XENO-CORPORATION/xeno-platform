@@ -118,6 +118,12 @@ html[data-motion="reduce"] *,html[data-motion="reduce"] *::before,html[data-moti
 html[data-contrast="high"]{--dim:var(--n154);--muted:var(--n207);--panel-stroke:var(--n58)}
 html[data-hints="off"] .sb-keys{display:none}
 /* text inputs never take the global focus ring — the field's own border says where focus is */
+.xd input:not([type=checkbox]):not([type=radio]):not([type=range]):not([type=color]):not([type=file]),.xd select{box-sizing:border-box;height:34px;padding:0 10px;border:1px solid var(--n31);border-radius:7px;background:var(--n16);color:var(--text);font:13px Inter,system-ui;min-width:0;color-scheme:dark}
+.xd input::placeholder{color:var(--dim)}
+.xd input:hover:not(:focus),.xd select:hover:not(:focus){border-color:var(--n38)}
+.xd input:focus,.xd select:focus{border-color:var(--n51);outline:none}
+.xd select{appearance:none;-webkit-appearance:none;padding-right:28px;cursor:pointer;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' fill='none' stroke='%23999' stroke-width='1.5'%3E%3Cpath d='M1 1l4 4 4-4'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 10px center}
+.xd select option{background:var(--n20);color:var(--text)}
 .xd input:focus-visible,.xd textarea:focus-visible,.xd-search input:focus-visible,.pg-search input:focus-visible{outline:none!important;box-shadow:none!important}
 .xd-seg.grid3{display:grid;grid-template-columns:repeat(3,1fr);width:300px}.xd-seg.grid3 button{justify-content:center}
 
