@@ -13,7 +13,8 @@ import { getBalanceV2, MICRO_PER_CREDIT } from '../utils/creditLedgerV2.js';
 import { xenoChatCompletion, xenoChatCompletionStream, xenoApiConfigured, classifyUpstreamError, isContentDeclined, xenoModelCatalog, prettyModelName, PROVIDER_LABELS, xenoImageGeneration } from '../utils/xenoChat.js';
 import { enforceInHouseDailyLimit, limitExceededBody } from '../middleware/inHouseDailyLimit.js';
 import requireEntitlement from '../middleware/requireEntitlement.js';
-import { byokEnabled, resolveInferenceRoute, annotateCatalogueRoutes } from '../services/providerCredentials.js';
+import { byokEnabled, resolveInferenceRoute, annotateCatalogueRoutes, listCredentials, credentialServesModel } from '../services/providerCredentials.js';
+import { parseRequestedSource, pathForSource, sourcesForModel, refusalForSource } from '../services/modelSources.js';
 import { vendorLabelForCredential } from '../utils/modelCatalogueMerge.js';
 import { mintGrant } from '../services/inferenceGrants.js';
 import { requestSurface } from '../utils/requestSurface.js';
@@ -198,7 +199,14 @@ router.post('/chat', requireEntitlement('canUse'), async (req, res) => {
   const userId = req.user?.id;
   if (!userId) return res.status(401).json({ error: 'Authentication required' });
 
-  const requestedPath = reqPath != null && String(reqPath).trim() !== '' ? normalizePath(reqPath) : null;
+  const sourceChoice = parseRequestedSource({ headers: req.headers, body: req.body });
+  if (sourceChoice.error) return res.status(400).json({ error: sourceChoice.error, message: sourceChoice.message });
+  const requestedPath = sourceChoice.value
+    ? pathForSource(sourceChoice.value)
+    : (reqPath != null && String(reqPath).trim() !== '' ? normalizePath(reqPath) : null);
+  if (sourceChoice.value && reqPath != null && String(reqPath).trim() !== '' && normalizePath(reqPath) !== requestedPath) {
+    return res.status(400).json({ error: 'source_conflict', message: 'source and path name different routes' });
+  }
   const surface = requestSurface(req);
   const route = resolveRoute(model);
 
@@ -438,7 +446,14 @@ router.post('/chat/stream', requireEntitlement('canUse'), async (req, res) => {
   const userId = req.user?.id;
   if (!userId) return res.status(401).json({ error: 'unauthorized', message: 'Authentication required.' });
 
-  const requestedPath = reqPath != null && String(reqPath).trim() !== '' ? normalizePath(reqPath) : null;
+  const sourceChoice = parseRequestedSource({ headers: req.headers, body: req.body });
+  if (sourceChoice.error) return res.status(400).json({ error: sourceChoice.error, message: sourceChoice.message });
+  const requestedPath = sourceChoice.value
+    ? pathForSource(sourceChoice.value)
+    : (reqPath != null && String(reqPath).trim() !== '' ? normalizePath(reqPath) : null);
+  if (sourceChoice.value && reqPath != null && String(reqPath).trim() !== '' && normalizePath(reqPath) !== requestedPath) {
+    return res.status(400).json({ error: 'source_conflict', message: 'source and path name different routes' });
+  }
   const surface = requestSurface(req);
 
   if (requestedPath === 'byok' && !byokEnabled()) {
@@ -1492,6 +1507,54 @@ router.get('/models', async (req, res) => {
   } catch (error) {
     console.error('[ai/models] catalogue unavailable:', error.message);
     return res.status(503).json({ success: false, error: 'catalogue_unavailable', message: 'The model catalogue is not reachable right now.' });
+  }
+});
+
+/**
+ * GET /api/ai/models/routes
+ * Per-model SOURCES for the calling account (XENO INFERENCE ROUTING - SPEC.md, "Per-model
+ * sources"). For each model: plan quota, XENO credits, and every own-key credential that serves
+ * it, each with its state, plus the default an `auto` request would take. Read-only. Own-key
+ * facts are the caller's own rows only (user_id = caller), never a key or its secret.
+ */
+router.get('/models/routes', async (req, res) => {
+  res.setHeader('Cache-Control', 'private, no-cache, must-revalidate');
+  const userId = req.user?.id;
+  if (!userId) return res.status(401).json({ error: 'unauthorized', message: 'Authentication required.' });
+  try {
+    let ids = [];
+    try {
+      const live = await xenoModelCatalog();
+      ids = live
+        .filter((m) => String(m.type || 'text').toLowerCase() === 'text' && !EFFORT_SUFFIX.test(String(m.id)))
+        .map((m) => String(m.id));
+    } catch (error) {
+      console.warn('[ai/models/routes] live catalogue unavailable, using the synced copy:', error.message);
+    }
+    if (ids.length === 0) {
+      const { rows } = await req.db.query(
+        `SELECT public_id FROM gateway_model_aliases WHERE enabled AND NOT is_alias AND provider <> 'unknown' ORDER BY provider, public_id`,
+      );
+      ids = rows.map((r) => r.public_id).filter((id) => !EFFORT_SUFFIX.test(id));
+    }
+    const { rows: catalogRows } = await req.db.query(
+      'SELECT public_id, provider FROM gateway_model_aliases WHERE public_id = ANY($1::text[]) AND enabled',
+      [ids],
+    );
+    const catalogById = new Map(catalogRows.map((r) => [r.public_id, r]));
+    const credentials = (await listCredentials(req.db, userId)).filter((c) => c.status !== 'revoked');
+    const balance = await getBalanceV2(req.db, userId).catch(() => null);
+    const balanceMicro = balance && balance.availableMicro != null ? BigInt(balance.availableMicro) : null;
+
+    const models = ids.map((id) => {
+      const catalogRow = catalogById.get(id) || null;
+      const served = credentials.filter((c) => credentialServesModel(c, id, catalogRow).serves);
+      return { id, ...sourcesForModel({ balanceMicro, quota: null, credentials: served }) };
+    });
+    return res.json({ success: true, models });
+  } catch (error) {
+    console.error('[ai/models/routes] failed:', error.message);
+    return res.status(503).json({ success: false, error: 'routes_unavailable', message: 'Model sources are not reachable right now.' });
   }
 });
 
