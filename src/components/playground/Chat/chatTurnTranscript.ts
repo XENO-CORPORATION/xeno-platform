@@ -123,7 +123,8 @@ export interface ChatTurnQuestionStep {
 /** Caps mirror `utils/chatTurnRecord.js` QUESTION_LIMITS. */
 export const QUESTION_LIMITS = { question: 300, option: 300, minOptions: 2, maxOptions: 6, toolCallId: 128 } as const;
 
-export type ChatTurnStep = ChatTurnSearchStep | ChatTurnImageStep | ChatTurnCodeStep | ChatTurnQuestionStep;
+export interface ChatTurnGenerationStep { id: string; kind: 'generation'; generationId: string; type: 'image' | 'video' | 'audio' | '3d'; startedAt: number; endedAt?: number; }
+export type ChatTurnStep = ChatTurnGenerationStep | ChatTurnSearchStep | ChatTurnImageStep | ChatTurnCodeStep | ChatTurnQuestionStep;
 
 export interface ChatTurnRecord {
   schema: typeof TURN_SCHEMA;
@@ -141,6 +142,7 @@ export const newTurnRecord = (startedAt = Date.now()): ChatTurnRecord => ({
 
 /** The events the stream reader hands back that the turn record cares about. */
 export type TurnStreamEvent =
+  | { type: 'generation_proposal'; generation: {id:string;type:'image'|'video'|'audio'|'3d'} }
   | { type: 'search_start'; query?: string; iteration?: number }
   | { type: 'search_result'; query?: string; count?: number; sources?: Array<{ url?: string; title?: string }> }
   | { type: 'search_error'; query?: string; code?: string; message?: string }
@@ -189,6 +191,10 @@ const asSources = (raw: unknown): ChatTurnSource[] => {
  * of its own so nothing the server reported is dropped.
  */
 export function applyTurnEvent(record: ChatTurnRecord, event: TurnStreamEvent, now = Date.now()): ChatTurnRecord {
+  if (event.type === 'generation_proposal') {
+    const step = asGenerationStep({id:'generation:' + event.generation.id,kind:'generation',generationId:event.generation.id,type:event.generation.type,startedAt:now});
+    return step && !record.steps.some(s => s.kind === 'generation' && s.generationId === step.generationId) ? {...record,steps:[...record.steps,step]} : record;
+  }
   if (event.type === 'image_start' || event.type === 'image_result' || event.type === 'image_error') {
     return applyImageEvent(record, event, now);
   }
@@ -367,11 +373,16 @@ export function closeTurnRecord(record: ChatTurnRecord, endedAt = Date.now()): C
 }
 
 /** Read a stored `turn` column back; anything that is not a v1 record is treated as absent. */
+function asGenerationStep(raw: unknown): ChatTurnGenerationStep | null {
+  const s = raw as Partial<ChatTurnGenerationStep> | null;
+  return s && s.kind === 'generation' && typeof s.id === 'string' && typeof s.generationId === 'string' && /^[0-9a-f-]{36}$/i.test(s.generationId) && ['image','video','audio','3d'].includes(s.type || '') && typeof s.startedAt === 'number' && s.startedAt > 0 ? {id:s.id,kind:'generation',generationId:s.generationId,type:s.type!,startedAt:s.startedAt} : null;
+}
 export function normalizeStoredTurn(value: unknown): ChatTurnRecord | undefined {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return undefined;
   const record = value as Partial<ChatTurnRecord>;
   if (record.schema !== TURN_SCHEMA || typeof record.startedAt !== 'number' || !Array.isArray(record.steps)) return undefined;
   const steps = record.steps.flatMap((raw): ChatTurnStep[] => {
+    if ((raw as ChatTurnGenerationStep)?.kind === 'generation') { const step=asGenerationStep(raw); return step ? [step] : []; }
     if (raw && typeof raw === 'object' && (raw as ChatTurnImageStep).kind === 'image') {
       const image = raw as ChatTurnImageStep;
       if (typeof image.id !== 'string' || typeof image.prompt !== 'string' || typeof image.startedAt !== 'number') return [];
@@ -571,6 +582,7 @@ const questionToolCall = (step: ChatTurnQuestionStep): ToolCallInfo => ({
 });
 
 const toToolCall = (step: ChatTurnStep, turnLive: boolean): ToolCallInfo => {
+  if (step.kind === 'generation') return {id:step.id,toolName:'generation_proposal',params:{generationId:step.generationId},status:'done',startedAt:step.startedAt,category:'other'};
   if (isImageStep(step)) return imageToolCall(step, turnLive);
   if (isCodeStep(step)) return codeToolCall(step, turnLive);
   // 🔴 Before this, anything that was not an image or code step fell through to web_search below.
@@ -599,7 +611,7 @@ export function toTranscriptMessage(input: ChatTurnInput): TranscriptMessage {
   const turn = input.turn;
   const live = Boolean(input.streaming);
   const steps = turn?.steps ?? [];
-  const toolCalls = steps.map((step) => toToolCall(step, live));
+  const toolCalls = steps.filter(step => step.kind !== 'generation').map((step) => toToolCall(step, live));
   const segments: AssistantTurnSegment[] = toolCalls.map((toolCall, index) => ({
     id: `${input.id}:segment:${index}`,
     kind: 'tool_call',

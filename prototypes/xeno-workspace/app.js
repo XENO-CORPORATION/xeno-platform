@@ -1050,6 +1050,7 @@
   }
   function mainProduct() {
     const p = PR[S.product];
+    if (S.mode === 'studio' && ['image', 'video', 'audio', '3d'].includes(S.product) && window.XENO_GENERATIONS) return window.XENO_GENERATIONS.host();
     if (p.kind === 'chat' && window.XENO_CHAT && window.XENO_CHAT.served) return window.XENO_CHAT.host();
     if (p.kind === 'chat' && window.XENO_LIVE_CHAT) { const C = window.XENO_LIVE_CHAT; return `<div class="live-chat-host"><div class="live-chat chat-themed chat-theme-dark" style="${C.vars.replace(/"/g, '&quot;')}">${C.html}</div></div>`; }
     if (p.kind === 'chat') return `<div class="chat"><div class="thread"><div class="in"><div class="um">next one</div><div class="am"><p>Here is the next scenario. A company runs EC2 instances across three Availability Zones and needs a shared file system every instance can mount at once, with storage that grows automatically.</p><p>Which service fits best: <b>EFS</b>, <b>EBS Multi-Attach</b> or <b>FSx for Lustre</b>?</p></div></div></div>
@@ -1097,6 +1098,10 @@
       const parts = S.item.split('/'), lbl = (x, i) => (S.global === 'tasks' && window.XENO_TASKS?.label ? window.XENO_TASKS.label(x) : S.global === 'community' && i === 0 && window.XENO_PG_FORUM.find((t) => t.id === x) ? window.XENO_PG_FORUM.find((t) => t.id === x).title : S.global === 'community' && i > 0 && parts[0] === 'My reports' ? '#' + x : x);
       return `<a data-crumb="">${gn}</a>` + parts.map((x, i) => sep + (i < parts.length - 1 ? `<a data-crumb="${esc(parts.slice(0, i + 1).join('/'))}">${esc(lbl(x, i))}</a>` : `<b>${esc(lbl(x, i))}</b>`)).join(''); }
     const p = PR[S.product];
+    if (S.mode === 'studio' && ['image', 'video', 'audio', '3d'].includes(S.product) && window.XENO_GENERATIONS) {
+      const generationId = /^g\/[0-9a-f-]{36}$/i.test(S.item || '') ? S.item.slice(2) : null;
+      return `<a data-mode="studio">Studio</a>${sep}<a data-zone="generate">Generate</a>${sep}${generationId ? `<a data-product="${S.product}">${esc(p.name)}</a>${sep}<b>Generation</b>` : `<b>${esc(p.name)}</b>`}`;
+    }
     return `<span>${ctxName()}</span>${sep}${S.item ? (liveChat && S.product === 'chat' && window.XENO_CHAT.trail ? (() => { const t = window.XENO_CHAT.trail(S.item); return `<span>${esc(p.name)}</span>${sep}${t.map((x, i) => (i === t.length - 1 ? `<b>${esc(x)}</b>` : `<span>${esc(x)}</span>${sep}`)).join('')}`; })() : `<span>${esc(p.name)}</span>${sep}<b>${esc(liveChat && S.product === 'chat' ? window.XENO_CHAT.title(S.item) : S.item)}</b>`) : `<b>${esc(p.name)}</b>`}${S.product === 'chat' && !S.item ? `${sep}<span>${esc(liveChat ? 'New chat' : ctxChats().pinned[0] || 'New chat')}</span>` : ''}`;
   }
   function liveDashboard() {
@@ -1109,13 +1114,15 @@
     // and an old link by NAME becomes the id address in place (no extra Back step)
     if (S.view === 'global' && (S.global === 'projects' || S.global === 'workspace') && S.item) { const k = itemIn(S.item); if (k !== S.item) S.item = k; syncHash(true); }
     // full-page destinations (pages.js) get the three containers: header (path + the page's actions) · body · footer
-    const pf = window.XENO_PAGES && window.XENO_PAGES.framed();
+    // Studio Generate is the chat's own composer in a generation type: it mounts the frame, not a product landing page
+    const genHost = S.view === 'product' && S.mode === 'studio' && ['image', 'video', 'audio', '3d'].includes(S.product) && !!window.XENO_GENERATIONS;
+    const pf = !genHost && window.XENO_PAGES && window.XENO_PAGES.framed();
     if (pf) return `<div class="topbar pg-top"><button class="ib opener" data-expand aria-label="Open sidebar" data-tip="Open sidebar" data-kbd="Ctrl \\">${ic('side')}</button><div class="crumbs">${crumbs()}</div><div class="pg-top-sum">${pf.sum}</div><div class="pg-top-left">${pf.left}</div><div class="sp"></div><div class="pg-top-tools">${pf.tools}</div><div class="pg-top-acts">${pf.acts}</div></div><div class="mview pg-mview${pf.foot ? ' has-foot' : ''}">${pf.body}</div>${pf.foot ? `<footer class="mfoot">${pf.foot}</footer>` : ''}`;
     // a real conversation is the chat page showing that conversation, not a generic "item" page
-    const liveChatItem = S.item && S.view === 'product' && S.product === 'chat' && window.XENO_CHAT && window.XENO_CHAT.served;
+    const liveChatItem = S.item && S.view === 'product' && ((S.product === 'chat' && window.XENO_CHAT && window.XENO_CHAT.served) || (S.mode === 'studio' && ['image', 'video', 'audio', '3d'].includes(S.product) && window.XENO_GENERATIONS));
     if (S.item && !liveChatItem) return `<div class="topbar"><button class="ib opener" data-expand aria-label="Open sidebar" data-tip="Open sidebar" data-kbd="Ctrl \\">${ic('side')}</button><div class="crumbs">${crumbs()}</div><div class="sp"></div></div><div class="mview">${mainItem()}</div>`;
     const body = S.view === 'adaptive' ? mainAdaptive() : S.view === 'zone' ? mainZone() : S.view === 'dashboard' ? mainDashboard() : S.view === 'product' ? mainProduct() : S.view === 'global' ? mainGlobal() : mainMode();
-    const isChat = S.view === 'product' && S.product === 'chat';
+    const isChat = S.view === 'product' && (S.product === 'chat' || (S.mode === 'studio' && ['image', 'video', 'audio', '3d'].includes(S.product) && window.XENO_GENERATIONS));
     if (S.view === 'mode' || S.view === 'dashboard') {
       // homes: the header bar carries the place and the date; the status bar carries the feed's freshness,
       // what is waiting and running here, the keys that work everywhere, and the tucked-away preview
@@ -2262,7 +2269,7 @@
   // over when the chat's trigger is pressed). The menu below is the same design either way; with the real list it
   // shows only what is real: no "XENO picks" row (the chat has no router), no speed, depth or cost that nobody measured.
   const LP = () => (window.XENO_CHAT && window.XENO_CHAT.served && window.XENO_CHAT.picker) || null;
-  const liveModel = (m) => ({ id: m.id, name: m.name, blurb: m.description || '', provider: m.ownKey ? 'own' : '', ctx: m.contextWindow || 0, ownKey: !!m.ownKey });
+  const liveModel = (m) => ({ id: m.id, name: m.name, blurb: m.description || '', provider: m.ownKey ? 'own' : '', ctx: m.contextWindow || 0, ownKey: !!m.ownKey, note: m.note || '', disabled: !!m.disabled, reason: m.reason || '', sep: !!m.sep });
   const modelById = (id) => { const lp = LP(); if (lp) { const m = lp.models.find((x) => x.id === id); return m ? liveModel(m) : { id, name: 'Model', blurb: '' }; } return MODELS.list.find((m) => m.id === id) || MODELS.list[0]; };
   const EFFORT_PICTURE = ['Minimal', 'Low', 'Medium', 'High', 'Max', 'Ultra'];
   // On the platform the levels, the one in force and the pick belong to the REAL chat, as the model list does.
@@ -2270,7 +2277,7 @@
   const LE = () => (window.XENO_CHAT && window.XENO_CHAT.served && window.XENO_CHAT.effort) || null;
   const EFFORT = new Proxy(EFFORT_PICTURE, { get: (t, k) => { const le = LE(); const src = le ? le.levels.map((l) => l.label) : t; const v = src[k]; return typeof v === 'function' ? v.bind(src) : v; } });
   const MAIN_MODELS = ['gpt-5.6-terra', 'claude-opus-5.5', 'gemini-3.8-flash', 'claude-sonnet-5.5'];
-  const routeOf = (m) => (LP() ? (m.ownKey ? 'your key' : '') : store.get('byok', ['anthropic']).includes(m.provider.toLowerCase()) ? 'your key' : '');
+  const routeOf = (m) => (LP() ? (m.note || (m.ownKey ? 'your key' : '')) : store.get('byok', ['anthropic']).includes(m.provider.toLowerCase()) ? 'your key' : '');
   const costFor = (m, lvl) => Math.max(1, Math.round((m.cost || 3) * [0.5, 0.75, 1, 1.5, 2.2, 3.2][lvl]));
   const META = window.XENO_MODEL_META || {}, HINT = window.XENO_EFFORT_HINT || [];
   const metaOf = (id) => META[id] || { speed: 3, depth: 3, ctx: '—', maxEffort: 5, secs: 5 };
@@ -2292,25 +2299,28 @@
   function closeAp() { const m = document.getElementById('apmenu'), was = !!(m && m.classList.contains('show')); if (m) { m.classList.remove('show'); m.dataset.kind = ''; } hideCard(); paintModelTrigger(); paintAnsweredBy(); if (was && (LP() || LE())) window.XENO_CHAT.pickerClosed(); }
   function placeAp(anchor) { const m = apMenu(), r = anchor.getBoundingClientRect(), w = m.offsetWidth, h = m.offsetHeight;
     // effort centres over the whole trigger (stable — the pill's text cannot move it); the model list right-aligns
-    const want = m.dataset.kind === 'effort' ? r.left + r.width / 2 - w / 2 : r.right - w;
+    const want = m.dataset.kind === 'effort' ? r.left + r.width / 2 - w / 2 : (LP() && LP().align === 'left') ? r.left : r.right - w;
     m.style.left = Math.min(innerWidth - w - 12, Math.max(12, want)) + 'px'; m.style.top = Math.max(12, r.top - h - 8) + 'px'; syncCard(); }
   function openModelMenu(anchor, kind) {
     hidePops();
-    const m = apMenu(); m.dataset.kind = kind; m.dataset.find = ''; m.dataset.q = ''; m.style.width = kind === 'effort' ? '268px' : '236px';
+    const m = apMenu(); m.dataset.kind = kind; m.dataset.find = ''; m.dataset.q = '';
+    const atList = LP()?.menu === 'gen-at';
+    m.style.width = atList ? Math.min(anchor.getBoundingClientRect().width, innerWidth - 24) + 'px' : kind === 'effort' ? '268px' : '236px';
     if (kind === 'effort') renderEffort(m); else renderModels(m);
     m.classList.add('show'); paintModelTrigger(); placeAp(anchor);
-    // anchor to the WHOLE trigger's right edge — the changing pill text cannot move it
-    const live = document.querySelector('.live-chat [data-chat-model-trigger]'); if (live) placeAp(live);
+    // Embedded menus supply their own anchor: @ uses the input box's top edge, not the model button.
+    // Only the standalone prototype anchors to the whole trigger so changing effort text cannot move it.
+    const live = document.querySelector('.live-chat [data-chat-model-trigger]'); if (live && !LP()) placeAp(live);
     if (LE() && kind === 'effort') placeAp(anchor);   // the real chat's pill is in its frame: the place it handed over is the anchor
   }
   function renderModels(m) {
     const cur = curModel(), more = m.dataset.allModels === '1', lp = LP();
     // the real list keeps the order the platform gives it; the first four are the short list
-    const all = lp ? lp.models.map((x) => x.id) : MODELS.list.map((x) => x.id), main = lp ? all.slice(0, 4) : MAIN_MODELS;
+    const all = lp ? lp.models.map((x) => x.id) : MODELS.list.map((x) => x.id), main = lp ? (lp.short === false ? all : all.slice(0, 4)) : MAIN_MODELS;
     const rest = all.filter((id) => !main.includes(id));
     const list = more ? [...main, ...rest] : main.concat(rest.includes(cur.id) ? [cur.id] : []);
     const row = (id, i) => { const x = modelById(id), on = cur.id === id;
-      return `<button class="row${on ? ' on' : ''}" data-model="${id}"><span class="rail"></span><span>${esc(x.name)}</span>${routeOf(x) ? `<span class="key">${routeOf(x)}</span>` : ''}<span class="idx num">${i + 1}</span></button>`; };
+      return `${x.sep ? '<div class="hr"></div>' : ''}<button class="row${on ? ' on' : ''}" data-model="${esc(id)}"${x.disabled ? ` aria-disabled="true" title="${esc(x.reason)}"` : ''}><span class="rail"></span><span>${esc(x.name)}</span>${routeOf(x) ? `<span class="key">${esc(routeOf(x))}</span>` : ''}<span class="idx num">${i + 1}</span></button>`; };
     // SEARCH (owner, 2026-10-09): the magnifier at the right of the header turns the header itself, at its own
     // height, into the field. A search looks through EVERY model, whatever "More models" is showing.
     const finding = m.dataset.find === '1', q = (m.dataset.q || '').trim().toLowerCase();
@@ -2318,7 +2328,7 @@
     const glass = '<path d="M10.5 4a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13zM20 20l-4.7-4.7"/>';
     const head = finding
       ? `<div class="h ap-head finding"><svg class="ap-find-ic" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="square" aria-hidden="true">${glass}</svg><input class="ap-q" data-model-q type="text" placeholder="Search models" aria-label="Search models" autocomplete="off" spellcheck="false"></div>`
-      : `<div class="h label ap-head"><span>Model</span><button type="button" class="ap-find" data-model-find aria-label="Search models" title="Search models"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="square" aria-hidden="true">${glass}</svg></button></div>`;
+      : `<div class="h label ap-head"><span>${esc((lp && lp.title) || 'Model')}</span>${lp && lp.find === false ? '' : `<button type="button" class="ap-find" data-model-find aria-label="Search models" title="Search models"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="square" aria-hidden="true">${glass}</svg></button>`}</div>`;
     const keep = m.querySelector('.ap-scroll') ? m.querySelector('.ap-scroll').scrollTop : null;
     const picks = lp || (finding && q) ? '' : `<button class="row tall${cur.id === 'auto' ? ' on' : ''}" data-model="auto"><span class="rail"></span><span class="col"><span>XENO picks</span><span class="sub">Now → ${esc(modelById(pickFor()).name)} for this message</span></span></button>`;
     const none = `<div class="row" aria-disabled="true"><span class="rail"></span><span>${finding && q ? 'No model matches' : 'No models are available'}</span></div>`;
@@ -2482,7 +2492,8 @@
     if (!m.contains(e.target)) return closeAp();
     if (e.target.closest('[data-model-find]')) { m.dataset.find = '1'; m.dataset.q = ''; renderModels(m); const a = (LP() && LP().anchor) || document.querySelector('.live-chat [data-part="model"]'); if (a) placeAp(a); return; }
     if (e.target.closest('[data-more-models]')) { m.dataset.allModels = m.dataset.allModels === '1' ? '' : '1'; renderModels(m); const a = (LP() && LP().anchor) || document.querySelector('.live-chat [data-part="model"]'); if (a) placeAp(a); return; }
-    const r = e.target.closest('[data-model]'); if (r && LP()) { window.XENO_CHAT.pickModel(r.dataset.model); return closeAp(); }
+    const r = e.target.closest('[data-model]'); if (r && r.getAttribute('aria-disabled') === 'true') return;
+    if (r && LP()) { window.XENO_CHAT.pickModel(r.dataset.model); return closeAp(); }
     if (r) { if (r.dataset.model === 'auto') store.set('modelDefault', true); else { store.set('modelDefault', false); store.set('model', r.dataset.model); } closeAp(); }
   }, true);
   function paintAnsweredBy() {

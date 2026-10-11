@@ -128,6 +128,8 @@ import { startConversionWorker } from './services/conversionWorker.js';
 import { runRequiredStartupMigrations } from './services/startupSchema.js';
 import { startScheduledTasksWorker } from './workers/chatScheduledWorker.js';
 import { startLibraryIngestionWorker } from './workers/libraryIngestionWorker.js';
+import mediaGenerationRoutes from './routes/mediaGenerationRoutes.js';
+import { startMediaGenerationWorker } from './workers/mediaGenerationWorker.js';
 import { createLeaderElection } from './services/leaderElection.js';
 import { render as renderMetrics } from './services/metrics.js';
 import { enforceEnv } from './config/requiredEnv.js';
@@ -815,6 +817,7 @@ console.log('[Infra] Analytics routes: /api/analytics/*');
 
 // Background job management (admin only)
 app.use('/api/jobs', databaseMiddleware, authMiddleware, jobRoutes);
+app.use('/api/generations', databaseMiddleware, authMiddleware, mediaGenerationRoutes);
 console.log('[Infra] Job queue routes: /api/jobs/*');
 
 // API documentation (Swagger UI + OpenAPI spec)
@@ -4020,6 +4023,7 @@ backgroundLeader.whenLeader(() => startWorkspaceInviteDeliveryWorker(pool));
 if (process.env.NODE_ENV !== 'production' || process.env.CHAT_EMBEDDED_WORKERS === 'true') {
   startScheduledTasksWorker(pool);
   startLibraryIngestionWorker(pool);
+  startMediaGenerationWorker(pool);
 }
 } else {
   console.log('[Local preview] Background processing, notifications and file cleanup are disabled');

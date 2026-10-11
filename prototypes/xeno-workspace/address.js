@@ -29,6 +29,7 @@
     if (m === 'adaptive') return BASE + '/adaptive' + q;
     const area = m === 'overview' ? '' : '/' + m;
     if (!kind || !id) return BASE + area + q;
+    if (m === 'studio' && kind === 'p' && ['image', 'video', 'audio', '3d'].includes(id)) return `${BASE}/studio/generate/${id}${item}${q}`;
     const seg = kind === 'g' ? '/' + id : '/' + (KIND_OUT[kind] || kind) + '/' + id;
     return BASE + area + seg + item + q;
   }
@@ -44,6 +45,7 @@
     if (area === 'overview' && parts[0] === 'overview') parts.shift();
     if (!parts.length) return '#/' + area + q;
     const [a, b, ...rest] = parts;
+    if (area === 'studio' && a === 'generate' && ['image', 'video', 'audio', '3d'].includes(b)) return `#/studio/p/${b}${rest.length ? '/' + rest.join('/') : ''}${q}`;
     if (GLOBALS.includes(a)) return `#/${area}/g/${a}${[b, ...rest].filter((x) => x != null).length ? '/' + [b, ...rest].filter((x) => x != null).join('/') : ''}${q}`;
     if (KIND_IN[a] && b) return `#/${area}/${KIND_IN[a]}/${b}${rest.length ? '/' + rest.join('/') : ''}${q}`;
     return '#/' + area + q;

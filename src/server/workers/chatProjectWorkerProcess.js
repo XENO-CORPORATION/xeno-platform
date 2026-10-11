@@ -4,6 +4,7 @@ import { pool } from '../middleware/database.js';
 import { enforceEnv } from '../config/requiredEnv.js';
 import { startScheduledTasksWorker } from './chatScheduledWorker.js';
 import { startLibraryIngestionWorker } from './libraryIngestionWorker.js';
+import { startMediaGenerationWorker } from './mediaGenerationWorker.js';
 import { activeChatWorkerNames, resolveChatWorkerActivation } from './chatWorkerActivation.js';
 import {
   checkChatProjectWorkerDependencies,
@@ -31,6 +32,7 @@ await checkDependencies();
 const activation = resolveChatWorkerActivation();
 const workers = activeChatWorkerNames(activation);
 const stopSchedule = activation.scheduler ? startScheduledTasksWorker(pool) : () => {};
+const stopMedia = startMediaGenerationWorker(pool);
 const stopIngestion = activation.ingestion ? startLibraryIngestionWorker(pool) : () => {};
 console.log(`[ChatProjectWorkers] activation scheduler=${activation.scheduler} ingestion=${activation.ingestion}`);
 ready = true;
@@ -71,6 +73,7 @@ const shutdown = async () => {
   ready = false;
   stopSchedule();
   stopIngestion();
+  stopMedia();
   server.close();
   await pool.end();
   process.exit(0);

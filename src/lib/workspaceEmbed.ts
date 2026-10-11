@@ -60,8 +60,11 @@ export function isEmbeddedChatPath(pathname: string): boolean {
 export type WorkspaceChatMessage =
   | { source: 'xeno-chat'; type: 'location'; path: string; title: string }
   | { source: 'xeno-chat'; type: 'changed' }
+  | { source: 'xeno-chat'; type: 'generation-location'; generationId: string; generationType: 'image' | 'video' | 'audio' | '3d'; path: string }
   /** Open the workspace's model menu at `rect` (this frame's coordinates) with the chat's real list. */
-  | { source: 'xeno-chat'; type: 'model-menu'; rect: { left: number; top: number; right: number; bottom: number; width: number; height: number }; selected: string; models: Array<{ id: string; name: string; description: string; contextWindow: number; ownKey: boolean }> }
+  /** The same menu also serves generate mode's lists: `menu` names the list and comes back with the pick; a row may
+   *  carry a short `note` (where "your key" sits), be `disabled` with a `reason`, or start a group (`sep`). */
+  | { source: 'xeno-chat'; type: 'model-menu'; rect: { left: number; top: number; right: number; bottom: number; width: number; height: number }; selected: string; menu?: string; title?: string; align?: 'left' | 'right'; find?: boolean; short?: boolean; models: Array<{ id: string; name: string; description: string; contextWindow: number; ownKey: boolean; note?: string; disabled?: boolean; reason?: string; sep?: boolean }> }
   | { source: 'xeno-chat'; type: 'model-menu-close' }
   | { source: 'xeno-chat'; type: 'effort-menu'; rect: { left: number; top: number; right: number; bottom: number; width: number; height: number }; selected: string; levels: Array<{ id: string; label: string; title?: string }> }
   | { source: 'xeno-chat'; type: 'effort-menu-close' }

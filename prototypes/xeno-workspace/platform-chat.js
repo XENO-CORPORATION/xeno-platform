@@ -204,7 +204,7 @@
     if (!frame) { ensureFrame(path); return; }
     let w = null; try { w = frame.contentWindow; if (!loaded || !w || !w.history || w.location.origin !== location.origin) w = null; } catch { w = null; }
     if (!w) { loaded = false; frame.src = path; showLoading(); return; }
-    if (w.location.pathname === path) return;
+    if (w.location.pathname + w.location.search === path) return;
     try { w.history[replace ? 'replaceState' : 'pushState']({}, '', path); w.dispatchEvent(new w.PopStateEvent('popstate', { state: {} })); } catch { loaded = false; frame.src = path; showLoading(); }
   }
   function place() {
@@ -214,8 +214,10 @@
     if (el !== slot) { slot = el; ro?.disconnect(); ro = new ResizeObserver(fit); ro.observe(el); ro.observe(document.getElementById('main')); }
     // moved to another area: its own list, not the last one's
     if (S.area !== undefined && S.area !== area() && !loading) { S.status = 'loading'; S.convs = []; S.projects = []; S.total = 0; load(); toChatFrame({ type: 'area', area: area() }); }
-    const want = X()?.S?.item || null;
-    if (!frame) ensureFrame(pathFor(want)); else if ((want || null) !== (S.current || null)) show(pathFor(want), true);   // the address changed (Back, a link): follow it
+    const generation = window.XENO_GENERATIONS?.route?.();
+    const want = generation ? `generation:${generation.type}:${generation.id || ''}` : X()?.S?.item || null;
+    const framePath = generation ? generation.framePath : pathFor(want);
+    if (!frame) ensureFrame(framePath); else if ((want || null) !== (S.current || null)) show(framePath, true);   // the address changed (Back, a link): follow it
     S.current = want;
     fit(); frame.classList.add('on'); document.documentElement.classList.add('xw-chat-on'); paintViewer();
   }
@@ -233,8 +235,16 @@
   addEventListener('message', (e) => {
     if (e.origin !== location.origin || !frame || e.source !== frame.contentWindow) return;
     const m = e.data; if (!m || m.source !== 'xeno-chat') return;
+    if (m.type === 'generation-location') {
+      const types = ['image', 'video', 'audio', '3d'];
+      if (types.includes(m.generationType) && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(m.generationId || '') && window.XENO_GENERATIONS?.route?.()) {
+        window.XENO_GENERATIONS.open(m.generationType, m.generationId);
+      }
+      return;
+    }
     if (m.type === 'location') {
       dress();
+      if (window.XENO_GENERATIONS?.route?.()) return;
       const item = itemIn(m.path), id = convOf(item); S.path = m.path;
       if (item !== S.current) { S.current = item; X()?.setChatItem?.(item); }
       // a conversation that is not in the list yet was just started; and a title may have been written
@@ -247,7 +257,13 @@
       if (X()?.modelMenuOpen?.()) return void X().closeModelMenu();
       const f = frame.getBoundingClientRect(), r = m.rect;   // the trigger's place, in this page's coordinates
       const box = { left: f.left + r.left, top: f.top + r.top, right: f.left + r.right, bottom: f.top + r.bottom, width: r.width, height: r.height };
-      S.picker = { models: m.models.filter((x) => x && typeof x.id === 'string').map((x) => ({ id: x.id, name: String(x.name || x.id), description: String(x.description || ''), contextWindow: Number(x.contextWindow) || 0, ownKey: !!x.ownKey })), selected: String(m.selected || ''), anchor: { getBoundingClientRect: () => box } };
+      // The same menu serves every list the composer offers (models, and in generate mode the type, the image models and
+      // each setting): `menu` names which list it is and comes back with the pick; a row may carry a short `note` (where
+      // "your key" sits), be `disabled` with a reason, or start a new group (`sep`). Text only; the page escapes it.
+      const str = (v, n) => String(v == null ? '' : v).slice(0, n);
+      S.picker = { menu: str(m.menu || 'model', 40) || 'model', title: str(m.title, 40), align: m.align === 'left' ? 'left' : 'right', find: m.find !== false, short: m.short !== false,
+        models: m.models.filter((x) => x && typeof x.id === 'string').map((x) => ({ id: str(x.id, 120), name: str(x.name || x.id, 80), description: str(x.description, 300), contextWindow: Number(x.contextWindow) || 0, ownKey: !!x.ownKey, note: str(x.note, 24), disabled: !!x.disabled, reason: str(x.reason, 120), sep: !!x.sep })),
+        selected: String(m.selected || ''), anchor: { getBoundingClientRect: () => box } };
       X()?.openModelMenu?.(S.picker.anchor);
     }
     if (m.type === 'model-menu-close') X()?.closeModelMenu?.();
@@ -366,7 +382,7 @@
   if (document.readyState === 'loading') addEventListener('DOMContentLoaded', menu); else menu();
 
   const toChatFrame = (msg) => { try { frame.contentWindow.postMessage({ source: 'xeno-workspace', ...msg }, location.origin); } catch {} };
-  const pickModel = (id) => toChatFrame({ type: 'pick-model', id });
+  const pickModel = (id) => toChatFrame({ type: 'pick-model', id, menu: S.picker?.menu || 'model' });
   const pickerClosed = () => { if (S.effort) { S.effort = null; toChatFrame({ type: 'effort-menu-closed' }); } if (S.picker) { S.picker = null; toChatFrame({ type: 'model-menu-closed' }); } };
   const pickEffort = (id) => { if (S.effort) S.effort.selected = id; toChatFrame({ type: 'pick-effort', id }); };
   window.XENO_CHAT = { served: true, openProjectId, trail, area, areaName, instructions, pin, pins: () => S.pins.slice(), get picker() { return S.picker; }, get effort() { return S.effort || null; }, pickModel, pickEffort, pickerClosed, data, title, open, load, rename, remove, dress, host: () => '<div class="live-chat-host" data-chat-frame aria-label="Chat"></div>', state: () => ({ area: area(), listed: S.area, viewer: S.viewer || null, ready: chatReady(), status: S.status, count: S.convs.length, current: convOf(S.current), item: S.current, path: S.path, shown: !!frame && frame.classList.contains('on') }) };

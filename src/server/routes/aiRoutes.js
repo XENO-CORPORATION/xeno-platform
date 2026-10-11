@@ -25,11 +25,9 @@ import { RUN_CODE_TOOL } from '../utils/chatCodeTool.js';
 import { ASK_USER_TOOL } from '../utils/chatAskUserTool.js';
 import { runInSandbox, codeExecutionAvailable, runCodeMetered } from '../services/sandboxSession.js';
 import {
-  GENERATE_IMAGE_TOOL, createChatImageExecutor, storeChatImage, latestConversationImage, makeImagePreview,
+  GENERATE_IMAGE_TOOL, latestConversationImage,
 } from '../utils/chatImageTool.js';
 import { registerManagedLibraryFile } from '../services/libraryAssets.js';
-import { resolveEntitlements } from '../utils/entitlementGate.js';
-import { watermarkBuffer } from '../utils/watermark.js';
 import { ToolCallAccumulator } from '../utils/streamingToolCalls.js';
 import { chatWebContextService, webSearchAvailable } from '../services/chatWebContext.js';
 import { toProviderMessages, looksLikePartsShape } from '../utils/chatMessageParts.js';
@@ -40,6 +38,8 @@ import { openProjectContextTurn, closeProjectContextTurn } from '../utils/projec
 import { assembleProjectContext } from '../services/chatProjectContext.js';
 import { buildUntrustedProjectDataMessage } from '../services/chatProjectPrompt.js';
 import { PROJECT_READ_TOOL, readProjectKnowledge } from '../services/chatProjectKnowledge.js';
+import { proposeGeneration } from '../services/mediaGenerations.js';
+import { generationCatalog } from '../services/mediaGenerationCatalog.js';
 
 /** SSE keepalive interval — well inside Cloudflare's 100 s origin timeout and any proxy idle timeout. */
 const SSE_KEEPALIVE_MS = 15_000;
@@ -640,7 +640,7 @@ router.post('/chat/stream', requireEntitlement('canUse'), async (req, res) => {
   const offeredTools = surfaceHasTools
     ? [
       ...(webSearchAvailable() ? [WEB_SEARCH_TOOL] : []),
-      ...(xenoApiConfigured() ? [GENERATE_IMAGE_TOOL] : []),
+      ...(xenoApiConfigured() && conversationId && clientCapabilities.includes('generation_proposal') ? [GENERATE_IMAGE_TOOL] : []),
       ...(codeAvailable ? [RUN_CODE_TOOL] : []),
       ...(askAvailable ? [ASK_USER_TOOL] : []),
       ...(projectContext ? [PROJECT_READ_TOOL] : []),
@@ -1019,44 +1019,59 @@ router.post('/chat/stream', requireEntitlement('canUse'), async (req, res) => {
        * never name one.
        */
       const imageReference = offeredTools.includes(GENERATE_IMAGE_TOOL) ? latestConversationImage(messages) : null;
-      const runImage = createChatImageExecutor({
-        db: req.db,
-        userId,
-        turnId: reqIdSeed,
-        reference: imageReference,
-        makePreview: makeImagePreview,
-        checkAvailable: async (imageModel) => {
-          try {
-            const catalog = await xenoModelCatalog();
-            const available = catalog.some((entry) => entry.id === imageModel && entry.available !== false && entry.enabled !== false);
-            return { available, message: 'The configured image model is not available right now. Offer to prepare a reusable prompt, or let the user retry this message later. Do not retry image generation this turn.' };
-          } catch {
-            return { available: false, message: 'Image model availability could not be verified right now. Offer to prepare a reusable prompt or retry later; do not claim that every image model is offline.' };
-          }
-        },
-        meter: meterMediaGeneration,
-        generate: (payload) => xenoImageGeneration(payload, { signal: upstreamAbort.signal }),
-        resolveEntitlements,
-        watermark: watermarkBuffer,
-        store: ({ buffer, prompt, model: imageModel, aspectRatio }) => storeChatImage({
-          db: req.db,
-          userId,
-          uploadsDir: CHAT_IMAGE_UPLOADS_DIR,
-          register: registerManagedLibraryFile,
-          buffer,
-          prompt,
-          model: imageModel,
-          aspectRatio,
-        }),
-        microPerCredit: MICRO_PER_CREDIT,
-      });
+      const interactiveTools = offeredTools.map((tool) => tool === GENERATE_IMAGE_TOOL ? {
+        ...tool, function: { ...tool.function, description: 'Prepare an image generation request for the person to review when they ask to make, draw, edit or redesign an image. Write a complete concrete prompt preserving their requested subject, layout, labels and style; choose aspect_ratio and quality, and set use_latest_image when their attached or previous generated image should be the reference. This tool does not draw or spend credits. The person chooses the image model and approves the prompt, references, settings and cost before generation starts. Never claim an image was made by this call.' },
+      } : tool);
 
       for await (const event of streamToolLoop({
         messages: finalMessages,
         surface: toolSurface,
         turnId: reqIdSeed,
-        tools: offeredTools,
-        runImage,
+        tools: interactiveTools,
+        proposeImage: async ({ prompt, aspectRatio, quality, index, useReference }) => {
+          // Asset IDs come from the person's current attachments, not from tool arguments or a URL.
+          // The generation service rechecks relation, scan readiness and conversation/project scope.
+          const userMessages = messages.filter((message) => message?.role === 'user');
+          const newest = userMessages[userMessages.length - 1];
+          const referenceAssetIds = useReference
+            ? [...new Set((newest?.parts || []).filter((part) => part?.type === 'image').map((part) => part.asset_id || part.assetId).filter(Boolean))]
+            : [];
+          if (useReference && referenceAssetIds.length === 0 && conversationId) {
+            // Previous generated references are resolved from this conversation's persisted records,
+            // never an arbitrary ID the language model or a caller claims was in its history.
+            const previous = (await req.db.query(`SELECT turn FROM chat_messages WHERE conversation_id=$1 AND role='assistant' ORDER BY message_index DESC,created_at DESC LIMIT 20`, [conversationId])).rows;
+            for (const message of previous) {
+              const steps = Array.isArray(message.turn?.steps) ? message.turn.steps : [];
+              const latest = [...steps].reverse().find((step) => (step.kind === 'image' && step.assetId) || (step.kind === 'generation' && step.type === 'image'));
+              if (latest?.kind === 'image') { referenceAssetIds.push(latest.assetId); break; }
+              const durable = latest?.kind === 'generation' ? latest : null;
+              if (durable) {
+                const result = (await req.db.query(`SELECT result_asset_ids FROM media_generations WHERE id=$1 AND conversation_id=$2 AND state='succeeded'`, [durable.generationId, conversationId])).rows[0];
+                if (result?.result_asset_ids?.length) { referenceAssetIds.push(result.result_asset_ids[0]); break; }
+              }
+            }
+          }
+          if (useReference && referenceAssetIds.length === 0) {
+            throw Object.assign(new Error('Attach the reference image from your library before preparing this edit.'), { code: 'reference_asset_required', status: 400 });
+          }
+          // The proposal names a model that can run NOW (the catalog lists only those), preferring the chat's
+          // usual one. It is only a starting choice: the person sees the model and the cost, and approves or declines.
+          const offered = (await generationCatalog()).types.find((entry) => entry.type === 'image')?.models || [];
+          const usable = offered.filter((entry) => entry.references.max >= referenceAssetIds.length);
+          const chosen = usable.find((entry) => entry.id === 'gpt-image-2.5-sunburst') || usable[0];
+          if (!chosen) throw Object.assign(new Error('No image model can take this request right now.'), { code: 'image_unavailable', status: 503 });
+          const settings = {};
+          for (const [key, option] of Object.entries(chosen.settings)) {
+            const wanted = key === 'ratio' ? aspectRatio : key === 'quality' ? quality : undefined;
+            settings[key] = option.values.includes(wanted) ? wanted : option.default;
+          }
+          return proposeGeneration(req.db, userId, {
+            type: 'image', model: chosen.id, prompt,
+            settings, referenceAssetIds,
+            conversationId, projectId,
+            requestKey: `${reqIdSeed}:image-proposal:${index}`,
+          });
+        },
         imageReference,
         streamModel,
         runCode: codeAvailable
@@ -1169,6 +1184,10 @@ router.post('/chat/stream', requireEntitlement('canUse'), async (req, res) => {
             });
             break;
           }
+          case 'generation_proposal':
+            sawSearch = true;
+            await send({ type: 'generation_proposal', index: event.index, generation: event.generation });
+            break;
           case 'image_error':
             // Logged with its code, never its prompt (user content), and never the provider's text.
             console.warn('[chat/stream] image failed', {

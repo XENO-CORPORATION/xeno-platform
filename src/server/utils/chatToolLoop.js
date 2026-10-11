@@ -425,11 +425,11 @@ export const budgetExhaustedPayload = (searches) => ({
  * @yields { type:'delta'|'search_start'|'search_result'|'search_error'|'image_start'|'image_result'|
  *           'image_error'|'code_start'|'code_result'|'code_error'|'ask_user'|'usage'|'complete', … }
  */
-export async function* streamToolLoop({ messages, surface, turnId, streamModel, runSearch, tools: offered, runImage, runCode, runProject, imageReference = null }) {
+export async function* streamToolLoop({ messages, surface, turnId, streamModel, runSearch, tools: offered, runImage, proposeImage, runCode, runProject, imageReference = null }) {
   const budget = budgetFor(surface);
   const tools = Array.isArray(offered) ? offered : toolsForSurface(surface);
   const canSearch = tools.some((tool) => tool?.function?.name === 'web_search');
-  const canDraw = typeof runImage === 'function' && tools.some((tool) => tool?.function?.name === 'generate_image');
+  const canDraw = (typeof proposeImage === 'function' || typeof runImage === 'function') && tools.some((tool) => tool?.function?.name === 'generate_image');
   const canRun = typeof runCode === 'function' && tools.some((tool) => tool?.function?.name === 'run_code');
   // ask_user needs no executor: the person IS the executor, and the answer arrives as the next turn.
   const canAsk = tools.some((tool) => tool?.function?.name === 'ask_user');
@@ -556,6 +556,20 @@ export async function* streamToolLoop({ messages, surface, turnId, streamModel, 
         images += 1;
         const useReference = Boolean(args.useLatestImage && imageReference?.aspectRatio);
         const aspectRatio = useReference ? imageReference.aspectRatio : args.aspectRatio;
+        if (typeof proposeImage === 'function') {
+          // Interactive agent generation proposes a server-owned request. No provider or image hold
+          // runs here; only an explicit human approval of that durable record may start generation.
+          try {
+            const generation = await proposeImage({ prompt: args.prompt, aspectRatio, quality: args.quality, index, useReference });
+            yield { type: 'generation_proposal', index, generation };
+            yield { type: 'complete', sources, searches, images: 0, codeRuns, iterations, cappedOut: false, usage: lastUsage };
+            return;
+          } catch (error) {
+            working.push(toolResultMessage(id, { error: error?.code || 'generation_proposal_failed', instruction: 'No image was generated or charged. Explain the refusal; do not guess the cause.' }));
+            yield { type: 'image_error', index, code: error?.code || 'generation_proposal_failed', http: error?.http || error?.status, message: error?.message || 'The generation request could not be prepared.' };
+          }
+          continue;
+        }
         // The shape goes out BEFORE the wait: the chat sizes its placeholder to the image that is
         // coming, so nothing reflows when it lands (an image takes 20-60 s).
         yield { type: 'image_start', index, prompt: args.prompt, aspectRatio, quality: args.quality, edit: useReference };

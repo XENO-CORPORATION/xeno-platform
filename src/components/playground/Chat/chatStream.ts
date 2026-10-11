@@ -57,7 +57,9 @@ export interface ChatGeneratedImage {
   previewUrl?: string;
 }
 
+import type { Generation } from '@/lib/generations';
 export type ChatStreamEvent =
+  | { type: 'generation_proposal'; index?: number; generation: Generation }
   | { type: 'delta'; text: string }
   | { type: 'reasoning'; text: string }
   | { type: 'search_start'; query: string; iteration: number }
@@ -273,7 +275,7 @@ export const streamRequestBody = (payload: Record<string, any>): Record<string, 
   max_tokens: payload.max_tokens,
   // What this client can render. The server offers ask_user ONLY to a client that lists it: a
   // client that cannot show the panel would get a turn that ends on a question nobody can see.
-  clientCapabilities: ['ask_user'],
+  clientCapabilities: ['ask_user', 'generation_proposal'],
 });
 
 /**
@@ -422,6 +424,7 @@ export async function readStreamedTurn(
       case 'code_start':
       case 'code_result':
       case 'code_error':
+      case 'generation_proposal':
       case 'ask_user':
         onProgress?.(event);
         break;

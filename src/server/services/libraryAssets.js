@@ -192,6 +192,7 @@ export async function registerManagedLibraryFile(db, {
   storagePath,
   metadata = {},
   area = undefined,
+  transaction = false, // caller already owns a transaction (durable media output registration)
 }) {
   // AREA: the file lands in the area it was made in (passed, or the request's), or in none.
   const placeIn = area === undefined ? currentArea() : (area && /^[a-z][a-z0-9_-]{0,39}$/.test(area) && area !== 'overview' ? area : null);
@@ -205,7 +206,8 @@ export async function registerManagedLibraryFile(db, {
     && process.env.CHAT_SEMANTIC_RETRIEVAL !== '0';
   if (Number(fileSize) !== bytes.length) throw new Error('Stored Library file size changed before registration');
 
-  return withTransaction(db, async (tx) => {
+  const transact = transaction ? (operation) => operation(db) : (operation) => withTransaction(db, operation);
+  return transact(async (tx) => {
     // SES-01: an asset created under the caller's own personal wrapper is the caller's own, never
     // parented to the wrapper, where every member of it would inherit a relation on it.
     const scope = await resolveResourceScope(tx, { userId, workspaceId });

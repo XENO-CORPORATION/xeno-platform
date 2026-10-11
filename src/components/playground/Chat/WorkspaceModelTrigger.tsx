@@ -34,8 +34,10 @@ export const WorkspaceModelTrigger: React.FC<{
   useEffect(() => {
     const onMessage = (event: MessageEvent) => {
       if (event.origin !== window.location.origin || event.source !== window.parent) return;
-      const data = event.data as { source?: string; type?: string; id?: string } | null;
+      const data = event.data as { source?: string; type?: string; id?: string; menu?: string } | null;
       if (!data || data.source !== 'xeno-workspace') return;
+      // the same menu serves generate mode's lists (GenerateMode.tsx); their picks are not a model choice
+      if (typeof data.menu === 'string' && data.menu !== 'model') { if (data.type === 'model-menu-closed') setOpen(false); return; }
       if (data.type === 'model-menu-closed') setOpen(false);
       if (data.type === 'pick-model' && typeof data.id === 'string') {
         const model = latest.current.models.find((m) => m.id === data.id);

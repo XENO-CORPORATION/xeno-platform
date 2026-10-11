@@ -338,6 +338,14 @@ html body .live-chat button.xm-model.xm-model[data-chat-model-trigger] .ap-pillb
 html body .live-chat button.xm-model.xm-model[data-chat-model-trigger] .ap-pill{padding:3px 6px;background:var(--w60);border-radius:3px;font-size:10px;line-height:1;color:var(--t4)}
 html body .live-chat button.xm-model.xm-model[data-chat-model-trigger] .ap-pillbtn:hover .ap-pill{background:var(--seg-on);color:var(--t1)}
 html body .live-chat button.xm-model.xm-model[data-chat-model-trigger] .ap-pillbtn.open .ap-pill{background:var(--send);color:var(--ground);font-weight:600}
+/* generate mode (@image …): the type and each generator setting are the model trigger's own text buttons, and open the
+   same menu (the model-menu bridge with a `menu` name) — nothing about them is drawn differently */
+html body .live-chat button.xm-model[data-gen-trigger]{display:flex;align-items:center;height:24px;padding:0;gap:0;background:transparent;border:0;box-shadow:none;min-width:0;flex:none;cursor:pointer}
+html body .live-chat button.xm-model[data-gen-trigger] .ap-txt{display:inline-flex;align-items:center;gap:6px;height:24px;padding:0 6px;border-radius:4px;font-size:11.5px;line-height:1;font-weight:500;color:var(--t3);white-space:nowrap}
+html body .live-chat button.xm-model[data-gen-trigger] .ap-txt:hover,html body .live-chat button.xm-model[data-gen-trigger] .ap-txt.open{color:var(--t1)}
+html body .live-chat button.xm-model[data-gen-trigger] .ap-txt svg{width:13px;height:13px}
+html body .live-chat [data-gen-settings]{display:flex;align-items:center;height:24px}
+html body .live-chat [data-gen-settings] .ap-vr{display:inline-block;width:1px;height:12px;background:var(--w180);margin:0 2px}
 .ap-menu{position:fixed;z-index:2147483647;display:none;flex-direction:column;padding:5px;background:var(--menu);border:1px solid var(--line-menu);border-radius:8px;font:12px/1.4 Inter,system-ui,sans-serif;color:var(--t2)}
 .ap-menu.show{display:flex}
 .ap-menu .label{font-size:10px;line-height:1;font-weight:600;letter-spacing:.09em;text-transform:uppercase;color:var(--label)}
@@ -369,6 +377,7 @@ html body .live-chat button.xm-model.xm-model[data-chat-model-trigger] .ap-pillb
 .ap-menu .row + .row{margin-top:2px}
 .ap-menu .row.on{background:var(--wash-hover);color:var(--t1);font-weight:500}
 .ap-menu .row.on .rail{background:var(--send)}
+.ap-menu button.row[aria-disabled="true"]{opacity:.42;cursor:default}.ap-menu button.row[aria-disabled="true"]:hover{background:none;color:var(--t3)}
 .ap-menu .row .chev{margin-left:auto;color:var(--t6);display:inline-flex}
 .ap-menu .ends{display:flex;justify-content:space-between;padding:7px 9px 0;font-size:10px;line-height:1;color:var(--t5)}
 .ap-menu .line.cells{display:flex;align-items:center;padding:6px 8px 7px;width:100%}
@@ -2498,6 +2507,7 @@ html body .main .live-chat .chat-themed.chat-theme-dark{background:transparent!i
 <script src="platform-work.js"></script>
 <script src="platform-library.js"></script>
 <script src="mark-loader.js"></script>
+<script src="platform-generations.js"></script>
 <script src="platform-chat.js"></script>
 <script src="workforce.js"></script>
 <script src="resources.js"></script>
