@@ -401,6 +401,7 @@ test('a fallback model gets only the parameters it accepts, and never stands in 
   });
   await make(null)({ prompt: 'map', aspectRatio: '2:3', quality: 'high', index: 0 });
   assert.deepEqual(Object.keys(sent[1]).sort(), ['aspect_ratio', 'model', 'prompt']);
+  assert.equal(sent[1].aspect_ratio, '3:4', 'an unsupported 2:3 maps to the nearest shape the model accepts');
   sent.length = 0;
   await assert.rejects(make({ dataUrl: 'data:image/png;base64,AAAA' })({ prompt: 'map', aspectRatio: '2:3', quality: 'high', index: 0, useReference: true }),
     (e) => e.code === 'image_unavailable' && /quota/.test(e.message));
