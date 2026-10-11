@@ -311,6 +311,29 @@ terms) assumes we are the seller. Do not let a dashboard default decide it.
 (`XENOSYSTEM` / short `XENO`) and `src/content/support.ts`, which is what tells a
 cardholder what the charge is. Change one, change the other.
 
+## 🧭 EVERY view has a real address — id-based, parent in the path (MANDATORY, owner 2026-10-11)
+
+Every page, record, tab and nested object in the workspace gets a URL that survives refresh, Back/Forward
+and sharing. It is built from **stable ids, never display names**, and the **parent is in the path**; the
+breadcrumb shows the same hierarchy by name. Found the hard way: project chats lived at
+`/workspace/apps/chat/<chat-id>` with "Chat / New chat" on a project page, and projects and members were
+addressed by name, so a rename broke every link and two same-named records collided.
+
+| View | Address |
+|---|---|
+| chat in a project · project home · loose chat | `/workspace/apps/chat/projects/<pid>/c/<cid>` · `…/chat/projects/<pid>` · `…/chat/<cid>` |
+| project + tab | `/workspace/projects/<pid>[/tasks\|conversations\|team\|resources\|funding\|activity]` · archived: `/workspace/projects/archived` |
+| workspace member / agent | `/workspace/workspace/Members/<member id>` · `…/Agents/<id>` |
+| task | `/workspace/[<area>/]tasks/T-<n>` |
+| library selection | `?sel=<id>,<id>` on the page's own path |
+
+**How it is built, so the next view follows it:** inside the router a record may keep its listing key; the
+translation to the id form happens **only at the address** (`stateToHash` / the start of `mainHTML` in
+`prototypes/xeno-workspace/app.js`: `XENO_PROJECT_ROUTE`, `XENO_MEMBER_ROUTE`; the chat's in
+`platform-chat.js` `pathFor`/`itemIn`). An id read before its list has loaded is kept and resolves when the list
+arrives, and an **old link by name becomes the id link in place** (no extra Back step). Decide a new view's
+URL before building it; prove refresh, Back and a fresh tab on it in a browser test (see `work-test.mjs`).
+
 ## 🎨 EVERY page uses the site's design system — never hand-roll chrome
 
 **DIRECTIVE 2026-09-11.** A new or edited public page composes the EXISTING shell.

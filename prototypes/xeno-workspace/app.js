@@ -1105,6 +1105,9 @@
     return `<div class="live-dash" data-overview-shell style="${D.vars.replace(/"/g, '&quot;')}"><button class="ib opener-float" data-expand aria-label="Open sidebar" data-tip="Open sidebar" data-kbd="Ctrl \\">${ic('side')}</button>${D.html}</div>`;
   }
   function mainHTML() {
+    // a project address: read before the projects loaded it keeps its id; once they arrive it becomes the listing key,
+    // and an old link by NAME becomes the id address in place (no extra Back step)
+    if (S.view === 'global' && (S.global === 'projects' || S.global === 'workspace') && S.item) { const k = itemIn(S.item); if (k !== S.item) S.item = k; syncHash(true); }
     // full-page destinations (pages.js) get the three containers: header (path + the page's actions) · body · footer
     const pf = window.XENO_PAGES && window.XENO_PAGES.framed();
     if (pf) return `<div class="topbar pg-top"><button class="ib opener" data-expand aria-label="Open sidebar" data-tip="Open sidebar" data-kbd="Ctrl \\">${ic('side')}</button><div class="crumbs">${crumbs()}</div><div class="pg-top-sum">${pf.sum}</div><div class="pg-top-left">${pf.left}</div><div class="sp"></div><div class="pg-top-tools">${pf.tools}</div><div class="pg-top-acts">${pf.acts}</div></div><div class="mview pg-mview${pf.foot ? ' has-foot' : ''}">${pf.body}</div>${pf.foot ? `<footer class="mfoot">${pf.foot}</footer>` : ''}`;
@@ -1202,8 +1205,39 @@
 
   // ---- navigation ----
   // ---- routes: every place has an address; Back/Forward and refresh work ----
+  // A project's address carries its ID and a tab slug — /workspace/projects/<uuid>/team — never its display name, so a
+  // rename or two projects with one name cannot break or confuse a link. Inside the router a project is still its
+  // listing key (every page reads it by that); the translation happens only here, at the address.
+  const PTAB = { Tasks: 'tasks', Conversations: 'conversations', 'Team assignments': 'team', Resources: 'resources', Funding: 'funding', Activity: 'activity' };
+  const PTAB_IN = Object.fromEntries(Object.entries(PTAB).map(([k, v]) => [v, k]));
+  const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  const projItems = () => ((window.XENO_PG_PROJECTS || {}).items || []);
+  function projItemOut(item) {
+    if (item === 'Archived projects') return 'archived';
+    const i = item.indexOf('/'), nm = i < 0 ? item : item.slice(0, i), tb = i < 0 ? '' : item.slice(i + 1);
+    const rec = projItems().find((p) => p.name === nm), head = rec && rec.id && UUID.test(String(rec.id)) ? String(rec.id) : nm;
+    return head + (tb ? '/' + (PTAB[tb] || tb) : '');
+  }
+  function projItemIn(item) {
+    if (!item) return item; if (item === 'archived') return 'Archived projects';
+    const i = item.indexOf('/'), head = i < 0 ? item : item.slice(0, i), tb = i < 0 ? '' : item.slice(i + 1);
+    const rec = UUID.test(head) ? projItems().find((p) => String(p.id) === head) : null;
+    return (rec ? rec.name : head) + (tb ? '/' + (PTAB_IN[tb] || tb) : '');
+  }
+  window.XENO_PROJECT_ROUTE = { out: projItemOut, in: projItemIn };
+  // A workspace member's or agent's page: /workspace/workspace/Members/<member id>, never their display name (two
+  // people can share one, and a renamed person must keep their link). Same translation, at the address only.
+  const memList = () => ((window.XENO_PG_WORKSPACE || {}).members || []);
+  const MEM = /^(Members|Agents)\/(.+)$/;
+  const memId = (m) => (m && m.id && m.id !== 'me' && /^[A-Za-z0-9_-]+$/.test(String(m.id)) ? String(m.id) : null);
+  function memItemOut(item) { const x = String(item).match(MEM); if (!x) return item; const id = memId(memList().find((m) => m.name === x[2])); return id ? x[1] + '/' + id : item; }
+  function memItemIn(item) { const x = String(item || '').match(MEM); if (!x) return item; const m = memList().find((y) => memId(y) === x[2]); return m ? x[1] + '/' + m.name : item; }
+  window.XENO_MEMBER_ROUTE = { out: memItemOut, in: memItemIn };
+  const itemOut = () => (!S.item ? S.item : S.view === 'global' && S.global === 'projects' ? projItemOut(S.item) : S.view === 'global' && S.global === 'workspace' ? memItemOut(S.item) : S.item);
+  const itemIn = (item) => (!item ? item : S.view === 'global' && S.global === 'projects' ? projItemIn(item) : S.view === 'global' && S.global === 'workspace' ? memItemIn(item) : item);
   function stateToHash() {
-    const base = inOv() ? 'overview' : S.mode, it = S.item ? '/' + String(S.item).split('/').map(encodeURIComponent).join('/') : '';
+    const raw = itemOut();
+    const base = inOv() ? 'overview' : S.mode, it = raw ? '/' + String(raw).split('/').map(encodeURIComponent).join('/') : '';
     if (S.view === 'dashboard') return '#/overview';
     if (S.view === 'adaptive') return '#/adaptive';
     if (S.view === 'zone') return `#/${base}/z/${S.zone}${it}`;

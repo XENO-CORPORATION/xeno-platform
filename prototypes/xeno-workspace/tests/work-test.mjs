@@ -138,6 +138,11 @@ try {
   await goProjects('Website (Personal)/Tasks'); t = await main();
   ok(/No tasks in this project yet/.test(t) && !/aren’t available/.test(t) && await p.$('#main [data-tk="new"]'), 'the Tasks tab is XENO Tasks: real (empty) list and a working New task');
   await goProjects('Website (Personal)/Team assignments'); t = await main();
+  ok(await p.evaluate(() => location.pathname) === `/workspace/projects/${pid(1)}/team`, 'a project tab has an id address, never the project name: /workspace/projects/<id>/team');
+  await p.goto(base + '/workspace/projects/' + encodeURIComponent('Website (Personal)') + '/Activity', { waitUntil: 'domcontentloaded' }); await wait(1500);
+  ok(await p.evaluate(() => location.pathname) === `/workspace/projects/${pid(1)}/activity` && /joined the project|Show older/.test(await main()), 'an old link by name still opens the project and becomes its id address');
+  await p.goto(base + `/workspace/projects/${pid(1)}/team`, { waitUntil: 'domcontentloaded' }); await wait(1500); t = await main();
+  ok(/2 people · 1 agent/.test(t), 'opening the id address in a fresh tab shows that project and tab');
   ok(/2 people · 1 agent/.test(t) && /Ada \(you\)/.test(t) && /bob@x\.test/.test(t) && /Agent · Ada’s/.test(t) && !!(await p.$('#main [data-pi="share"]')), 'Team lists people and agents with roles; an admin sees emails and Manage access');
   ok(await p.evaluate(() => !document.querySelector('#main [data-xa="newTask"][aria-disabled="true"]')), 'Add a task is no longer shown unavailable');
   await goProjects('Website (Personal)/Activity'); t = await main();
@@ -274,6 +279,10 @@ try {
   await p.click('.xd [data-xd-submit]'); await wait(1300); pv = await people();
   const posts = db.calls.filter((x) => x.m === 'POST' && /\/invites$/.test(x.p));
   ok(posts.length === 2 && posts[0].body.email === 'new@example.test' && posts[0].body.role === 'member' && pv.rows.includes('new@example.test|member|invited') && (await p.evaluate(() => document.body.textContent.includes('1 sent. dup@example.test: Already invited'))), 'Invite sends each address to the platform; one that is refused is named with the reason (' + posts.length + ')');
+  await p.evaluate(() => window.XW.go('global', { global: 'workspace', item: 'Members/Bob' })); await wait(500);
+  ok(await p.evaluate(() => location.pathname.endsWith('/workspace/Members/u-bob')) && /Bob/.test(await main()), 'a member’s page has their id address, not their name: …/workspace/Members/<id>');
+  await p.goto(base + (await p.evaluate(() => location.pathname)), { waitUntil: 'domcontentloaded' }); await wait(1800);
+  ok(await p.evaluate(() => location.pathname.endsWith('/workspace/Members/u-bob')) && /Bob/.test(await main()), 'the member id address opens that member in a fresh tab');
   const role = p.evaluate(() => window.XA.changeRole('Bob')); await wait(500);
   await p.evaluate(() => [...document.querySelectorAll('.xd [role=radio][data-v="admin"]')].find((n) => n.offsetParent).click()); await p.click('.xd [data-xd-submit]'); await role; await wait(600); pv = await people();
   ok(db.calls.some((x) => x.m === 'PATCH' && /\/members\/u-bob$/.test(x.p) && x.body.member_role === 'admin') && pv.rows.includes('Bob|admin|active'), 'changing a role tells the platform');
