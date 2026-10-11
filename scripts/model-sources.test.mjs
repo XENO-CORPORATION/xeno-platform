@@ -3,17 +3,17 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  parseRequestedSource, pathForSource, sourcesForModel, refusalForSource,
+  parseRequestedSource, pathForSource, sourcesForModel, refusalForSource, parseByokMode, refusalForByokMode,
 } from '../src/server/services/modelSources.js';
 import { listCredentials } from '../src/server/services/providerCredentials.js';
 
 test('no source expressed keeps today’s resolution (value null)', () => {
-  assert.deepEqual(parseRequestedSource({ headers: {}, body: {} }), { value: null });
+  assert.equal(parseRequestedSource({ headers: {}, body: {} }).value, null);
 });
 
 test('header and body both read; each value is case-insensitive', () => {
-  assert.deepEqual(parseRequestedSource({ headers: { 'x-xeno-source': 'BYOK' } }), { value: 'byok' });
-  assert.deepEqual(parseRequestedSource({ body: { source: 'Credits' } }), { value: 'credits' });
+  assert.equal(parseRequestedSource({ headers: { 'x-xeno-source': 'BYOK' } }).value, 'byok');
+  assert.equal(parseRequestedSource({ body: { source: 'Credits' } }).value, 'credits');
 });
 
 test('an unknown source is refused with a typed error, never ignored', () => {
@@ -44,7 +44,7 @@ test('auto defaults to credits when quota is not offered, and never to the own k
 });
 
 test('auto picks quota before credits when quota remains', () => {
-  const d = sourcesForModel({ balanceMicro: 5_000_000n, quota: { remaining: 3 }, credentials: [] });
+  const d = sourcesForModel({ balanceMicro: 5_000_000n, quota: { metered: true, usedPercent: 38, exhausted: false, resetsAt: '2026-10-18T00:00:00Z' }, credentials: [] });
   assert.equal(d.default_source, 'quota');
 });
 
@@ -55,7 +55,7 @@ test('auto has NO default when only the own key could serve: it is refused, not 
   });
   assert.equal(d.default_source, null);
   const own = d.sources.find((s) => s.source === 'byok');
-  assert.equal(own.state, 'available', 'the key is usable, but only when chosen');
+  assert.equal(own.modes.cloud.state, 'available', 'the key is usable, but only when chosen');
   assert.equal(refusalForSource('auto', d.sources).code, 'no_source_available');
   assert.equal(refusalForSource('byok', d.sources).actionUrl, '/overview/integrations');
 });
@@ -79,9 +79,9 @@ test('a revoked key is listed, unavailable, and marked as revoked', () => {
     credentials: [{ id: 'c1', provider: 'openai', label: 'old', status: 'revoked', verified_at: null }],
   });
   const own = d.sources.find((s) => s.source === 'byok');
-  assert.equal(own.state, 'unavailable');
-  assert.equal(own.reason, 'no_key');
-  assert.equal(own.actionUrl, '/overview/integrations');
+  assert.equal(own.modes.cloud.state, 'unavailable');
+  assert.equal(own.modes.cloud.reason, 'no_key');
+  assert.equal(own.modes.cloud.actionUrl, '/overview/integrations');
 });
 
 test('a chosen source that cannot serve is refused with its own code, never another source', () => {
@@ -114,8 +114,8 @@ test('cross-account: the credential list is scoped to the caller’s user id', a
 test('an unverified active key is unavailable with key_unverified, not offered as usable', () => {
   const d = sourcesForModel({ balanceMicro: 1n, credentials: [{ id: 'c1', provider: 'openai', label: 'x', status: 'active', verified_at: null }] });
   const own = d.sources.find((s) => s.source === 'byok');
-  assert.equal(own.state, 'unavailable');
-  assert.equal(own.reason, 'key_unverified');
+  assert.equal(own.modes.cloud.state, 'unavailable');
+  assert.equal(own.modes.cloud.reason, 'key_unverified');
 });
 
 test('every unavailable source names a reason from the locked vocabulary and a real page', () => {
@@ -126,4 +126,53 @@ test('every unavailable source names a reason from the locked vocabulary and a r
     assert.ok(REASONS.has(src.reason), `reason ${src.reason}`);
     assert.ok(PAGES.has(src.actionUrl), `actionUrl ${src.actionUrl}`);
   }
+});
+
+test('quota is listed only for a plan with a metered allowance, and shows real remaining percent', () => {
+  const metered = sourcesForModel({ balanceMicro: 1n, quota: { metered: true, usedPercent: 38, exhausted: false, resetsAt: 'R' } });
+  const q = metered.sources.find((x) => x.source === 'quota');
+  assert.equal(q.state, 'available');
+  assert.equal(q.remaining_percent, 62);
+  assert.equal(metered.default_source, 'quota');
+  const unmetered = sourcesForModel({ balanceMicro: 1n, quota: { metered: false } });
+  assert.equal(unmetered.sources.some((x) => x.source === 'quota'), false, 'no fake quota row');
+  const none = sourcesForModel({ balanceMicro: 1n, quota: null });
+  assert.equal(none.sources.some((x) => x.source === 'quota'), false);
+});
+
+test('an exhausted allowance is unavailable with quota_exhausted and its reset time', () => {
+  const d = sourcesForModel({ balanceMicro: 1n, quota: { metered: true, usedPercent: 100, exhausted: true, resetsAt: 'R' } });
+  const q = d.sources.find((x) => x.source === 'quota');
+  assert.equal(q.reason, 'quota_exhausted');
+  assert.equal(q.resets_at, 'R');
+  assert.equal(d.default_source, 'credits');
+});
+
+test('own keys are grouped by provider with cloud and local modes', () => {
+  const d = sourcesForModel({ balanceMicro: 1n, credentials: [
+    { id: 'a', provider: 'anthropic', label: 'work', status: 'active', verified_at: 'T' },
+    { id: 'b', provider: 'anthropic', label: 'old', status: 'revoked', verified_at: null },
+  ] });
+  const rows = d.sources.filter((x) => x.source === 'byok');
+  assert.equal(rows.length, 1, 'one row per provider');
+  assert.equal(rows[0].keys, 2);
+  assert.equal(rows[0].modes.cloud.state, 'available');
+  assert.deepEqual(rows[0].modes.local, { state: 'unknown-to-server' });
+});
+
+test('byokMode is read from header or body and validated', () => {
+  assert.equal(parseByokMode({ body: { byokMode: 'Cloud' } }).value, 'cloud');
+  assert.equal(parseByokMode({ headers: { 'x-xeno-byok-mode': 'local' } }).value, 'local');
+  assert.equal(parseByokMode({ body: { byokMode: 'both' } }).error, 'invalid_byok_mode');
+  assert.equal(parseByokMode({ body: {} }).value, null);
+});
+
+test('a chosen cloud mode that is unusable is refused by name, never switched to local', () => {
+  const d = sourcesForModel({ balanceMicro: 1n, credentials: [{ id: 'a', provider: 'anthropic', label: 'w', status: 'invalid', verified_at: null }] });
+  const group = d.sources.find((x) => x.source === 'byok');
+  const r = refusalForByokMode('cloud', group);
+  assert.equal(r.code, 'cloud_key_unavailable');
+  assert.equal(r.reason, 'key_unverified');
+  assert.match(r.message, /cloud copy/);
+  assert.equal(refusalForByokMode('local', group).code, 'local_mode_client_only');
 });

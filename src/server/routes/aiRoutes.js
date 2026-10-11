@@ -14,7 +14,8 @@ import { xenoChatCompletion, xenoChatCompletionStream, xenoApiConfigured, classi
 import { enforceInHouseDailyLimit, limitExceededBody } from '../middleware/inHouseDailyLimit.js';
 import requireEntitlement from '../middleware/requireEntitlement.js';
 import { byokEnabled, resolveInferenceRoute, annotateCatalogueRoutes, listCredentials, credentialServesModel } from '../services/providerCredentials.js';
-import { parseRequestedSource, pathForSource, sourcesForModel, refusalForSource } from '../services/modelSources.js';
+import { parseRequestedSource, pathForSource, sourcesForModel, refusalForSource, refusalForByokMode } from '../services/modelSources.js';
+import { accountQuotaView } from '../services/usageCreditsService.js';
 import { vendorLabelForCredential } from '../utils/modelCatalogueMerge.js';
 import { mintGrant } from '../services/inferenceGrants.js';
 import { requestSurface } from '../utils/requestSurface.js';
@@ -201,6 +202,9 @@ router.post('/chat', requireEntitlement('canUse'), async (req, res) => {
 
   const sourceChoice = parseRequestedSource({ headers: req.headers, body: req.body });
   if (sourceChoice.error) return res.status(400).json({ error: sourceChoice.error, message: sourceChoice.message });
+  if (sourceChoice.byokMode === 'local') {
+    return res.status(409).json({ error: 'local_mode_client_only', message: 'A local key is used by the CLI on this device; the gateway never receives it.' });
+  }
   const requestedPath = sourceChoice.value
     ? pathForSource(sourceChoice.value)
     : (reqPath != null && String(reqPath).trim() !== '' ? normalizePath(reqPath) : null);
@@ -448,6 +452,9 @@ router.post('/chat/stream', requireEntitlement('canUse'), async (req, res) => {
 
   const sourceChoice = parseRequestedSource({ headers: req.headers, body: req.body });
   if (sourceChoice.error) return res.status(400).json({ error: sourceChoice.error, message: sourceChoice.message });
+  if (sourceChoice.byokMode === 'local') {
+    return res.status(409).json({ error: 'local_mode_client_only', message: 'A local key is used by the CLI on this device; the gateway never receives it.' });
+  }
   const requestedPath = sourceChoice.value
     ? pathForSource(sourceChoice.value)
     : (reqPath != null && String(reqPath).trim() !== '' ? normalizePath(reqPath) : null);
@@ -1544,12 +1551,14 @@ router.get('/models/routes', async (req, res) => {
     const catalogById = new Map(catalogRows.map((r) => [r.public_id, r]));
     const credentials = (await listCredentials(req.db, userId)).filter((c) => c.status !== 'revoked');
     const balance = await getBalanceV2(req.db, userId).catch(() => null);
+    // The plan's real weekly allowance. A plan with no metered allowance yields no quota source.
+    const quota = await accountQuotaView(req.db, userId).catch(() => null);
     const balanceMicro = balance && balance.availableMicro != null ? BigInt(balance.availableMicro) : null;
 
     const models = ids.map((id) => {
       const catalogRow = catalogById.get(id) || null;
       const served = credentials.filter((c) => credentialServesModel(c, id, catalogRow).serves);
-      return { id, ...sourcesForModel({ balanceMicro, quota: null, credentials: served }) };
+      return { id, ...sourcesForModel({ balanceMicro, quota, credentials: served }) };
     });
     return res.json({ success: true, models });
   } catch (error) {
