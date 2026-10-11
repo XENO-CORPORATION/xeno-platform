@@ -2167,8 +2167,41 @@ body .xcm{z-index:410}
 .tk-root-task{flex:1;display:flex;min-height:100%}
 .tk-root-task>.tk-page{display:grid;grid-template-columns:minmax(0,1fr) 340px;gap:0;flex:1;max-width:none;align-items:stretch;min-height:100%}
 .tk-main{padding:26px 40px 56px;min-width:0}
-.tk-main-in{max-width:860px;margin:0 auto}
-.tk-main .tk-title{font-size:24px;margin:8px 0 14px}
+.tk-main-in{max-width:780px;margin:0}
+.tk-main .tk-title{font-size:24px;margin:10px 0 16px;letter-spacing:-.015em}
+.tk-main .tk-title--edit{margin-left:-6px;margin-right:-6px}
+.tk-titlerow .tk-key{font-size:12px;color:var(--muted);font-variant-numeric:tabular-nums}
+.tk-crumb{font-size:12px;color:var(--dim)}.tk-crumb::before{content:"·";margin:0 6px 0 0}
+.tk-tools{display:inline-flex;gap:2px;padding:2px;border-radius:7px}
+.tk-tools .tk-ib{width:28px;height:28px;color:var(--muted)}.tk-tools .tk-ib:hover{color:var(--text)}
+.tk-desc,.tk-sec--desc .tk-md{color:var(--muted);font-size:14px;line-height:1.65}
+.tk-sec{margin:0 0 28px}.tk-sec--hide{display:none}
+.tk-sec h3{font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--dim);padding-bottom:8px;border-bottom:1px solid var(--n24);margin-bottom:12px}
+.tk-addrow{display:flex;align-items:center;gap:6px;margin:-8px 0 30px}
+.tk-addrow .tk-dim{margin-left:6px;font-size:12px}
+.tk-head-new{height:30px}
+.tk-unset{color:var(--dim)}.tk-prop-v:hover .tk-unset{color:var(--muted)}.tk-prop-v:hover .tk-unset::after{content:" — set";color:var(--dim)}
+.tk-prop-v--ro .tk-unset::after{content:none}
+.tk-prop-v.tk-faces{flex-wrap:nowrap;width:100%}
+.tk-faces .tk-watch{margin-left:auto;height:24px;padding:0 8px;font-size:12px;width:auto;border-radius:6px}
+.tk-next-rest{align-items:center;gap:2px}
+.tk-next-rest .tk-act{border:0;height:24px;padding:0 6px;text-decoration:underline;text-underline-offset:3px;text-decoration-color:var(--n38)}
+.tk-next-rest .tk-dim{font-size:12px;margin-right:2px}
+.tk-ev{grid-template-columns:24px minmax(0,1fr) auto;align-items:center;padding:6px 0}
+.tk-ev-dot{justify-self:center}
+.tk-compose{margin-top:10px}
+/* the task page while it loads: the real layout in outline, so nothing jumps when it lands */
+.tk-vh{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}
+.tk-sk{display:block;border-radius:5px;background:linear-gradient(90deg,var(--n20) 0,var(--n26) 50%,var(--n20) 100%);background-size:200% 100%;animation:tk-sk 1.4s ease-in-out infinite;margin:0 0 12px}
+.tk-sk-lines{margin:22px 0 0}.tk-sk-lines .tk-sk{margin-bottom:9px}
+@keyframes tk-sk{0%{background-position:100% 0}100%{background-position:-100% 0}}
+@media (prefers-reduced-motion:reduce){.tk-sk{animation:none}}
+/* a task that did not load, or is not there: centred in the page, with a way forward */
+.tk-state{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:64px 24px;min-height:60vh}
+.tk-state-i{display:grid;place-items:center;width:44px;height:44px;border-radius:10px;background:var(--n20);border:1px solid var(--n28);color:var(--muted);margin-bottom:16px}
+.tk-state h3{margin:0 0 6px;font-size:16px;font-weight:600;color:var(--text)}
+.tk-state p{margin:0 0 18px;max-width:360px;font-size:13px;line-height:1.55;color:var(--muted)}
+.tk-state-a{display:flex;gap:8px}.tk-state-a .tk-act{height:32px;padding:0 14px}
 .tk-titlepri{display:inline-flex;align-items:center;gap:5px;font-size:12px;color:var(--muted)}
 .tk-sec--desc{margin-bottom:26px}
 .tk-checkline{display:flex;align-items:center;gap:10px;margin-top:10px}
