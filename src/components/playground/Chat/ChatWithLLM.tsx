@@ -15156,8 +15156,15 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                   paddingRight: !isMobile && isProjectSidebarOpen ? 260 : undefined,
                 }}
               >
-                <div className="mx-auto w-full max-w-[52rem] px-4 sm:px-6">
-                  <div className="mt-6 mb-5 flex items-center md:mt-8">
+                {/* A project with no chats yet opens on its start view: name, description and
+                    composer centred in the page, like a new chat. Once it has chats, the page reads
+                    top-down with Recents under the composer. Back and the project actions share
+                    one top row in both, so neither layout leaves a button floating beside the title. */}
+                <div
+                  className="mx-auto flex min-h-full w-full max-w-[52rem] flex-col px-4 sm:px-6"
+                  data-project-home={projectChats.length === 0 ? 'start' : 'recents'}
+                >
+                  <div className="mt-4 mb-5 flex items-center justify-between gap-3 md:mt-6">
                     <IconButton
                       icon={ChevronRightDecl}
                       className="chat-icon-flip-x"
@@ -15168,12 +15175,6 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                       aria-label="Back to projects"
                       title="Back to projects"
                     />
-                  </div>
-
-                  <div className="flex items-start justify-between gap-3">
-                    <h1 className="min-w-0 pr-2 text-[1.5rem] font-semibold tracking-tight text-[var(--chat-text)]">
-                      {project.name}
-                    </h1>
                     <div className="flex flex-shrink-0 items-center gap-0.5">
                       <IconButton
                         icon={StarDecl}
@@ -15212,10 +15213,18 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                     </div>
                   </div>
 
+                  <div className={projectChats.length === 0 ? 'my-auto pb-[14vh]' : ''}>
+                  <h1
+                    className={`min-w-0 font-semibold tracking-tight text-[var(--chat-text)] ${
+                      projectChats.length === 0 ? 'text-center text-[1.75rem]' : 'text-[1.5rem]'
+                    }`}
+                  >
+                    {project.name}
+                  </h1>
                   <p
                     className={`mt-2 whitespace-pre-wrap text-[13px] leading-relaxed text-[var(--chat-muted)] ${
-                      isProjectDescExpanded ? '' : 'line-clamp-2'
-                    }`}
+                      projectChats.length === 0 ? 'mx-auto max-w-[36rem] text-center' : ''
+                    } ${isProjectDescExpanded ? '' : 'line-clamp-2'}`}
                   >
                     {description}
                   </p>
@@ -15234,20 +15243,13 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                     </button>
                   )}
 
-                  <div className="mt-5 min-w-0">
+                  <div className={`min-w-0 ${projectChats.length === 0 ? 'mt-7' : 'mt-5'}`}>
                     {renderPrimaryComposer({ forceCompact: true })}
 
                     {projectChats.length === 0 ? (
-                      <div className="mt-10 flex flex-col items-center justify-center px-4 py-8 text-center">
-                        <MessageSquare
-                          size={26}
-                          className="mb-3 text-[var(--chat-muted)]"
-                          aria-hidden="true"
-                        />
-                        <p className="max-w-[24rem] text-[13px] leading-relaxed text-[var(--chat-muted)]">
-                          Give XENO a task and it'll pick up your project context automatically.
-                        </p>
-                      </div>
+                      <p className="mt-3 text-center text-[12.5px] leading-relaxed text-[var(--chat-muted)]">
+                        Chats started here use this project’s files and standing rules.
+                      </p>
                     ) : (
                       <>
                         <h2 className="mt-7 mb-1 text-[12.5px] font-medium text-[var(--chat-muted)]">
@@ -15277,6 +15279,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                         </div>
                       </>
                     )}
+                  </div>
                   </div>
                 </div>
               </div>
