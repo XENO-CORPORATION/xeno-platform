@@ -25,6 +25,8 @@ import ChatModelSelector from './ChatModelSelector';
 import WorkspaceModelTrigger from './WorkspaceModelTrigger';
 import { generations, validateGeneration, stableRequestKey, releaseRequestKey, GenerationError, type Generation, type GenerationRequest } from '@/lib/generations';
 import { GenerationRecord } from './GenerationRecord';
+import { RESULT_DRAG, StudioGenerationFeed } from './StudioGenerationFeed';
+import { StudioEnhance } from './StudioEnhance';
 import type { GenState, GenType } from './GenerateMode';
 import { GEN_CATALOG, currentGenModel, GenModeTrigger, GenSettings, atQuery, closeGenMenu, isGenMenuOpen, openAtMenu, useGenerateMode } from './GenerateMode';
 import { embedArea, isWorkspaceEmbed, tellWorkspace } from '@/lib/workspaceEmbed';
@@ -723,7 +725,8 @@ const sourceBadgeColor = (url: string): string => {
 
 const CHAT_DEMO_ENABLED = (() => {
   try {
-    return import.meta.env.DEV && localStorage.getItem('xeno_chat_demo') !== 'off';
+    // Studio › Generate mounts this composer over its own feed; a sample chat there reads as an overlap.
+    return import.meta.env.DEV && localStorage.getItem('xeno_chat_demo') !== 'off' && !new URLSearchParams(location.search).get('generationType');
   } catch {
     return false;
   }
@@ -7972,7 +7975,17 @@ const ChatWithLLM: React.FC<ChatWithLLMProps> = ({
   const [generationListError, setGenerationListError] = useState('');
   const [generationListReload, setGenerationListReload] = useState(0);
   const studioType = new URLSearchParams(location.search).get('generationType') as GenType | null;
-  const studioGenerationId = new URLSearchParams(location.search).get('generationId');
+  // Enhance is a Studio page of its own: it fills the pane and brings its own console, so the prompt box stays out of it.
+  const studioEnhance = (studioType as string | null) === 'enhance';
+  const studioEnhanceKind = ((['image', 'video', 'audio', '3d'] as const).find(k => k === new URLSearchParams(location.search).get('enhanceType')) ?? 'image') as GenType;
+  // The addressed generation. Opening another one changes the address in place (no reload); Back and
+  // Forward arrive from the workspace as a message.
+  const [studioGenerationId, setStudioGenerationId] = useState<string | null>(() => new URLSearchParams(location.search).get('generationId'));
+  useEffect(() => {
+    if (!studioType) return;
+    const onMessage = (e: MessageEvent) => { if (e.origin === window.location.origin && e.source === window.parent && e.data?.source === 'xeno-workspace' && e.data.type === 'generation-active') setStudioGenerationId(typeof e.data.generationId === 'string' ? e.data.generationId : null); };
+    window.addEventListener('message', onMessage); return () => window.removeEventListener('message', onMessage);
+  }, [studioType]);
   useEffect(() => { if (studioType && ['image','video','audio','3d'].includes(studioType)) generate.setMode(studioType); }, [studioType, generate.setMode]);
   useEffect(() => {
     if (!activeConversationId || !isPersistedConversationId(activeConversationId)) { setDurableGenerations([]); return; }
@@ -8015,7 +8028,7 @@ const ChatWithLLM: React.FC<ChatWithLLMProps> = ({
       releaseRequestKey(request);
       setDurableGenerations(prev=>[record,...prev.filter(g=>g.id!==record.id)]);
       if (clearComposer) {setInputValue('');setAttachedFiles([]);}
-      if (studioType) window.parent.postMessage({source:'xeno-chat',type:'generation-location',generationId:record.id,generationType:type,path:`/workspace/studio/generate/${type}/g/${record.id}`},window.location.origin);
+      if (studioType) { setStudioGenerationId(record.id); window.parent.postMessage({source:'xeno-chat',type:'generation-location',generationId:record.id,generationType:type,path:`/workspace/studio/generate/${type}/g/${record.id}`},window.location.origin); }
       else {
         const turn=applyTurnEvent(newTurnRecord(),{type:'generation_proposal',generation:record});
         const local: ChatMessage={id:'generation-reply-'+record.id,sender:'ai',text:'Generation submitted.',parsedAnswer:'Generation submitted.',timestamp:Date.now(),turn};
@@ -10285,7 +10298,9 @@ Keep the summary under 500 words. Preserve essential context needed to continue 
    * SAME `attachFileObjects` the picker and paste-to-file use, so a dropped file uploads, chips and
    * sends exactly like a picked one, and multiple dropped files all attach.
    */
-  const dragHasFiles = (event: React.DragEvent) => Array.from(event.dataTransfer?.types || []).includes('Files');
+  // A Studio result being dragged carries a picture, which browsers also list as a file. It is not an upload:
+  // Studio opens its own drop boxes for it, so the box must not answer with "Drop files to attach".
+  const dragHasFiles = (event: React.DragEvent) => { const types = Array.from(event.dataTransfer?.types || []); return types.includes('Files') && !types.includes(RESULT_DRAG); };
   const handleComposerDragEnter = (event: React.DragEvent) => {
     if (!dragHasFiles(event)) return;
     event.preventDefault();
@@ -12663,15 +12678,17 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
           <ChatEmptyState
             scrollAffordance={composerScrollAffordance}
             /* The prompt queue floats above the composer while a chat runs (ChatQueue.tsx). */
-            aboveComposer={(waitingQuestion || queue.messages.length > 0 || generationError || generationListError || generationBusy || generate.catalogError || durableGenerations.length || studioGenerationId || generate.state.mode !== 'chat') ? (
+            aboveComposer={(studioEnhance || waitingQuestion || queue.messages.length > 0 || generationError || generationListError || generationBusy || generate.catalogError || durableGenerations.length || studioGenerationId || generate.state.mode !== 'chat') ? (
               <>
+              {studioEnhance && <StudioEnhance kind={studioEnhanceKind} activeId={studioGenerationId} onOpen={(id, replace) => { setStudioGenerationId(id || null); window.parent.postMessage({source:'xeno-chat',type:'generation-location',replace:Boolean(replace),generationId:id,generationType:'enhance-' + studioEnhanceKind,path:`/workspace/studio/enhance/${studioEnhanceKind}${id ? '/e/' + id : ''}`},window.location.origin); }} />}
+              {studioType && !studioEnhance && <StudioGenerationFeed type={studioType} onUsePrompt={text => setInputValue(text)} references={{ max: currentGenModel(generate.state, 0)?.references.max ?? 0, used: attachedFiles.length, modes: currentGenModel(generate.state, 0)?.references.modes }} onAddReference={(assetId, _prompt, role) => { const id = 'studio-reference-' + assetId; const name = role; setAttachedFiles(prev => prev.some(f => f.assetId === assetId) ? prev : [...prev, { id, name: name.slice(0, 60) || 'Reference', type: 'image/png', assetId, contentUrl: `/api/library/assets/${encodeURIComponent(assetId)}/content`, ready: true }]); /* the chip shows the picture once its link is ready */ void libraryService.createSignedLink(assetId).then(url => setAttachedFiles(prev => prev.map(f => f.id === id ? { ...f, previewUrl: url } : f)), () => {}); }} modelNames={Object.fromEntries(generate.catalog.types.flatMap(t=>t.models.map(m=>[m.id,m.name||m.id])))} activeId={studioGenerationId} reloadKey={durableGenerations.length + generationListReload} onOpen={(id, replace) => { setStudioGenerationId(id); window.parent.postMessage({source:'xeno-chat',type:'generation-location',replace:Boolean(replace),generationId:id,generationType:studioType,path:`/workspace/studio/generate/${studioType}/g/${id}`},window.location.origin); }} />}
               {generate.catalogError && <p role="alert" className="px-1 pb-1.5 text-[12px] leading-5 text-[#8b857c]">{generate.catalogError} <button type="button" className="underline" onClick={() => void generate.reloadCatalog()}>Reload</button></p>}
-              {generate.state.mode !== 'chat' && !generate.catalogError && <p role="status" className="px-1 pb-1.5 text-[12px] leading-5 text-[#8b857c]">{GEN_CATALOG[generate.state.mode].available ? `Up to ${currentGenModel(generate.state, 0)?.tariff?.maxRetailCredits ?? GEN_CATALOG[generate.state.mode].credits ?? '?'} credits. Send starts the generation.` : GEN_CATALOG[generate.state.mode].reason || 'Not available yet'}</p>}
+              {generate.state.mode !== 'chat' && !generate.catalogError && !GEN_CATALOG[generate.state.mode].available && <p role="status" className="px-1 pb-1.5 text-[12px] leading-5 text-[#8b857c]">{GEN_CATALOG[generate.state.mode].reason || 'Not available yet'}</p>}
               {generationBusy && <p role="status" className="px-1 pb-1.5 text-[12px] leading-5 text-[#8b857c]">Submitting…</p>}
               {generationError && <p role="alert" className="px-1 pb-1.5 text-[12px] leading-5 text-[#8b857c]">{generationError}</p>}
               {generationListError && <p role="alert" className="px-1 pb-1.5 text-[12px] leading-5 text-[#8b857c]">{generationListError} <button type="button" className="underline" onClick={() => setGenerationListReload(n=>n+1)}>Reload</button></p>}
-              {studioGenerationId && <GenerationRecord id={studioGenerationId} />}
-              {durableGenerations.filter(g=>!messages.some(m=>m.turn?.steps.some(step=>step.kind==='generation' && step.generationId===g.id))).map(g=><GenerationRecord key={g.id} id={g.id} />)}
+              {!studioType && studioGenerationId && <GenerationRecord id={studioGenerationId} />}
+              {!studioType && durableGenerations.filter(g=>!messages.some(m=>m.turn?.steps.some(step=>step.kind==='generation' && step.generationId===g.id))).map(g=><GenerationRecord key={g.id} id={g.id} />)}
               {waitingQuestion && (
                 <ChatQuestionPanel step={waitingQuestion.step} onAnswer={answerQuestion} onSkip={skipQuestion} busy={isLoading} />
               )}
@@ -13116,12 +13133,14 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
             /* Inside the XENO workspace a new chat has the same home box as anywhere else — the + and the
                model inside the box — and docks once the conversation starts (owner, 2026-10-09; it had been
                forced to the docked box at all times). */
-            isActive={options?.forceCompact ? false : messages.length === 0}
+            isActive={options?.forceCompact || studioType ? false : messages.length === 0}
             /* One composer, two homes (chat-input-hybrid.html): the empty chat AND the project page are
                `home` (controls inside the box); a running conversation is `dock`. The project page has
                no hero, which is what `isActive` used to mean here as well. */
-            placement={options?.forceCompact || messages.length === 0 ? 'home' : 'dock'}
-            showHero={!options?.forceCompact && messages.length === 0}
+            placement={!studioType && (options?.forceCompact || messages.length === 0) ? 'home' : 'dock'}
+            /* Studio › Generate has its own feed above the box: the chat hero would hide it (the hero drops
+               `aboveComposer`), which is how a generation's own address showed an empty chat home. */
+            showHero={!options?.forceCompact && !studioType && messages.length === 0}
             isCompact={isMultiInterface}
             isTemporaryChat={isTemporaryChat}
             hideToolRail={options?.forceCompact}
@@ -17645,7 +17664,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
 
         {/* Bottom Input Section — when history is open (desktop), shift right so
             the composer + update cards clear the sidebar (same size, not moved up). */}
-        <div ref={composerDockRef} className={`${isMultiInterface ? 'max-w-full px-2' : (messages.length === 0 ? 'max-w-[56rem]' : (isWideChatEnabled ? 'max-w-[72rem]' : 'max-w-[52rem]'))} w-full px-2 md:px-4 absolute left-0 right-0 z-10 main-content-transition ${
+        <div ref={composerDockRef} className={`${isMultiInterface ? 'max-w-full px-2' : (messages.length === 0 ? 'max-w-[56rem]' : (isWideChatEnabled ? 'max-w-[72rem]' : 'max-w-[52rem]'))} ${studioType ? 'sgf-dock' : ''} w-full px-2 md:px-4 absolute left-0 right-0 z-10 main-content-transition ${
           messages.length === 0
             ? `top-1/2 max-h-[calc(100dvh-5rem)] -translate-y-1/2 py-4 pb-2 md:pb-4 hide-scrollbar ${isMobile || isMultiInterface ? 'overflow-y-auto' : 'overflow-visible'}`
             : 'bottom-0 overflow-visible pb-2 md:pb-3'

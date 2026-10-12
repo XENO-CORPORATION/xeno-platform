@@ -20,7 +20,7 @@ export type GenerationModel = { id: string; name?: string; type: GenerationType;
 export type GenerationCatalog = { types: Array<{ type: GenerationType; available: boolean; reason?: string; models: GenerationModel[]; tariff: { revision: string; maxRetailCredits: number } | null }> };
 export type GenerationRequest = { type: GenerationType; model: string; prompt: string; settings: Record<string, string>; referenceAssetIds: string[]; projectId?: string; conversationId?: string; area?: string };
 export type GenerationQuote = { quoteToken: string; requestHash: string; tariffRevision: string; maxRetailCredits: number; expiresAt: string };
-export type Generation = { id: string; type: GenerationType; state: string; request: GenerationRequest; requestHash: string; version: number; quote: GenerationQuote; resultAssetIds: string[]; error?: { code?: string; message?: string }; url?: string };
+export type Generation = { id: string; type: GenerationType; state: string; request: GenerationRequest; requestHash: string; version: number; quote: GenerationQuote; resultAssetIds: string[]; error?: { code?: string; message?: string } | null; url?: string; createdAt?: string; updatedAt?: string };
 export class GenerationError extends Error { constructor(public code: string, message: string, public uncertain = false) { super(message); } }
 export const generationPath = (type: GenerationType, id?: string) => `/workspace/studio/generate/${type}${id ? '/g/' + encodeURIComponent(id) : ''}`;
 export const isGenerationTerminal = (state: string) => ['succeeded', 'failed', 'cancelled', 'denied', 'expired'].includes(state);
@@ -39,6 +39,7 @@ export const generations = {
   get: async (id: string, signal?: AbortSignal) => (await api<{ generation: Generation }>('/' + encodeURIComponent(id), undefined, signal)).generation,
   list: async (query: { conversationId?: string; type?: GenerationType; projectId?: string; area?: string }, signal?: AbortSignal) => (await api<{ generations: Generation[] }>('?' + new URLSearchParams(Object.entries(query).filter(([, v]) => v !== undefined) as [string, string][]), undefined, signal)).generations,
   approve: async (record: Generation, quote: GenerationQuote) => (await api<{ generation: Generation }>('/' + encodeURIComponent(record.id) + '/approve', { quoteToken: quote.quoteToken, requestHash: quote.requestHash, version: record.version })).generation,
+  retry: async (id: string, quoteToken: string, requestKey: string) => (await api<{ generation: Generation }>('/' + encodeURIComponent(id) + '/retry', { quoteToken, requestKey })).generation,
   cancel: async (id: string) => (await api<{ generation: Generation }>('/' + encodeURIComponent(id) + '/cancel', {})).generation,
 };
 export function validateGeneration(request: GenerationRequest, catalog: GenerationCatalog): string | null {

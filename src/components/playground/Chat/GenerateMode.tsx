@@ -24,7 +24,7 @@ let catalog: GenerationCatalog = { types: [] };
 export const GEN_CATALOG = new Proxy({} as Record<GenType, {name:string;placeholder:string;available:boolean;models:GenModel[];reason?:string;credits?:number}>, {
   ownKeys: () => Object.keys(TYPE_NAMES),
   getOwnPropertyDescriptor: () => ({ enumerable:true, configurable:true }),
-  get: (_target, type: GenType) => { const spec = catalog.types.find(t => t.type === type); return { name: TYPE_NAMES[type], placeholder: `Describe the ${TYPE_NAMES[type]?.toLowerCase()}`, available: Boolean(spec?.available), models: spec?.models || [], reason: spec?.reason ? 'Not available yet' : undefined, credits: spec?.tariff?.maxRetailCredits }; },
+  get: (_target, type: GenType) => { const spec = catalog.types.find(t => t.type === type); return { name: TYPE_NAMES[type], placeholder: type === '3d' ? 'Describe the 3D model' : `Describe the ${TYPE_NAMES[type]?.toLowerCase()}`, available: Boolean(spec?.available), models: spec?.models || [], reason: spec?.reason ? 'Not available yet' : undefined, credits: spec?.tariff?.maxRetailCredits }; },
 });
 const SETTING_LABEL: Record<string, string> = { ratio: 'Ratio', quality: 'Quality', mode: 'Mode', resolution: 'Resolution' };
 /** What the person reads for a wire value: `medium` → Medium, `text_to_video` → Text to video. The wire value is unchanged. */
@@ -205,6 +205,9 @@ export const GenSettings: React.FC<{ state: GenState; referenceCount: number }> 
           </React.Fragment>
         );
       })}
+      <span className="ap-vr" aria-hidden="true" />
+      {/* What Send can cost, said where Send is. It is a fact, not a control. */}
+      <span className="gen-cost" title="The most this can cost. Send starts the generation.">{model.tariff?.maxRetailCredits ?? spec.credits ?? '?'} credits</span>
       <span className="ap-vr" aria-hidden="true" />
     </div>
   );

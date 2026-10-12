@@ -33,6 +33,10 @@ window.XENO_PRODUCTS = Object.fromEntries([
   P('video', 'Video', { icon: null, code: 'Vi', kind: 'web', blurb: 'Generate video' }),
   P('audio', 'Audio', { icon: null, code: 'Au', kind: 'web', blurb: 'Voice, music and sound' }),
   P('3d', '3D', { kind: 'web', blurb: 'Generate 3D models' }),
+  P('enhance-image', 'Image', { icon: null, code: 'Im', kind: 'web', blurb: 'Upscale, restore, remove the background' }),
+  P('enhance-video', 'Video', { icon: null, code: 'Vi', kind: 'web', blurb: 'Upscale, smooth and steady' }),
+  P('enhance-audio', 'Audio', { icon: null, code: 'Au', kind: 'web', blurb: 'Clean up, separate, level' }),
+  P('enhance-3d', '3D', { kind: 'web', blurb: 'Retopologise, reduce, sharpen textures' }),
   P('assets', 'Assets', { status: 'soon', kind: 'web', blurb: 'Brand kits and shared libraries' }),
   P('fonts', 'Fonts', { status: 'soon', kind: 'web', blurb: 'Fonts and pairing' }),
   P('stock', 'Stock', { status: 'soon', kind: 'web', blurb: 'Stock media' }),
@@ -85,7 +89,7 @@ window.XENO_PRODUCTS = Object.fromEntries([
 
 window.XENO_MODES = [
   { id: 'studio', key: '1', persona: 'I make visual and audio things', start: 'canvas', pins: ['canvas', 'pixel', 'image'],
-    sections: [['Create', ['pixel', 'motion', 'sound', 'photo', 'form', 'architect']], ['Design', ['canvas', 'layout', 'sites']], ['Generate', ['image', 'video', 'audio', '3d']], ['Libraries', ['assets', 'fonts', 'stock']]],
+    sections: [['Create', ['pixel', 'motion', 'sound', 'photo', 'form', 'architect']], ['Design', ['canvas', 'layout', 'sites']], ['Generate', ['image', 'video', 'audio', '3d']], ['Enhance', ['enhance-image', 'enhance-video', 'enhance-audio', 'enhance-3d']], ['Libraries', ['assets', 'fonts', 'stock']]],
     metric: ['Renders this week', '128'] },
   { id: 'office', key: '2', persona: 'I do my work in documents', start: 'docs', pins: ['docs', 'sheets', 'slides'],
     sections: [['Write', ['docs']], ['Calculate', ['sheets']], ['Present', ['slides']], ['Notes', ['notes']], ['Mail', ['mail']], ['Files', ['pdf']]],
@@ -137,6 +141,7 @@ window.XENO_MODE_ZONES = {
   studio: [
     { id: 'create', label: 'Create', icon: 'create', blurb: 'Edit, design and produce', rows: [{ p: 'pixel' }, { p: 'motion' }, { p: 'sound' }, { p: 'canvas' }, { p: 'form' }, { p: 'architect' }] },
     { id: 'generate', label: 'Generate', icon: 'spark', blurb: 'Images, video, audio and 3D', rows: [{ p: 'image' }, { p: 'video' }, { p: 'audio' }, { p: '3d' }] },
+    { id: 'enhance', label: 'Enhance', icon: 'spark', blurb: 'Sharper, cleaner, bigger', rows: [{ p: 'enhance-image' }, { p: 'enhance-video' }, { p: 'enhance-audio' }, { p: 'enhance-3d' }] },
     { id: 'libraries', label: 'Libraries', icon: 'lib', blurb: 'Assets, fonts and stock', rows: [{ p: 'assets' }, { p: 'fonts' }, { p: 'stock' }] },
     { id: 'renders', label: 'Renders', icon: 'film', blurb: 'Exports and renders', rows: [['Launch trailer v3.mp4', 'Rendering 64%'], ['Homepage hero.png', 'Done'], ['Podcast ep 12.wav', 'Done']] },
   ],

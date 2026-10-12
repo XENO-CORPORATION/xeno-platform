@@ -31,7 +31,7 @@ function GenerationMedia({assetId, type}:{assetId:string;type:string}) {
 const say = (value: string) => { const text = String(value).replace(/_/g, ' '); return /^[a-z]/.test(text) ? text[0].toUpperCase() + text.slice(1) : text; };
 const TYPE_LABEL: Record<string, string> = { image: 'Image', video: 'Video', audio: 'Audio', '3d': '3D' };
 /** What a failure code means to the person. An unknown code is shown as it is rather than hidden. */
-const FAILURE: Record<string, string> = {
+export const GENERATION_FAILURE: Record<string, string> = {
   provider_failed: 'The model service could not make this. Nothing was charged.',
   gateway_refused: 'The model service refused this request. Nothing was charged.',
   INSUFFICIENT_CREDITS: 'Not enough credits for this generation.',
@@ -82,7 +82,7 @@ export function GenerationRecord({ id }: { id: string }) {
         </>}
       </>}
       {!isGenerationTerminal(record.state) && <button className="chat-q-btn" type="button" disabled={busy} onClick={() => void act('cancel')}>{record.state === 'awaiting_approval' ? 'Decline' : 'Cancel'}</button>}
-      {record.error && <p role="alert">{FAILURE[record.error.code || ''] || record.error.message || record.error.code}</p>}
+      {record.error && <p role="alert">{GENERATION_FAILURE[record.error.code || ''] || record.error.message || record.error.code}</p>}
       {record.resultAssetIds.map(assetId => record.type === 'image' ? <LibraryAssetImage key={assetId} asset={{assetId,name:record.request.prompt,mimeType:'image/*',contentUrl:''}} alt={record.request.prompt} /> : <GenerationMedia key={assetId} assetId={assetId} type={record.type}/>)}
       </div>
     </> : <p>Loading generation…</p>}

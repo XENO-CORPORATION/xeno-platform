@@ -230,15 +230,30 @@
   addEventListener('resize', fit);
   const watch = () => { const main = document.getElementById('main'); if (!main) return setTimeout(watch, 50); new MutationObserver(place).observe(main, { childList: true }); main.addEventListener('transitionend', fit); place(); };
 
+  // Back/Forward between generations of one type: tell the mounted frame, do not rebuild it.
+  addEventListener('popstate', () => {
+    const g = window.XENO_GENERATIONS?.route?.();
+    if (g && frame?.contentWindow && new URL(frame.src, location.origin).searchParams.get('generationType') === g.type) frame.contentWindow.postMessage({ source: 'xeno-workspace', type: 'generation-active', generationId: g.id }, location.origin);
+  });
+
   // ---------- the chat tells the workspace where it is ----------
   let reloadT = 0;
   addEventListener('message', (e) => {
     if (e.origin !== location.origin || !frame || e.source !== frame.contentWindow) return;
     const m = e.data; if (!m || m.source !== 'xeno-chat') return;
+    if (m.type === 'generation-view') { window.XENO_GENERATIONS?.showView?.(window.XENO_GENERATIONS.asView(m.view)); return; }
+    if (m.type === 'generation-grid-size') { window.XENO_GENERATIONS?.showSize?.(m.size); return; }
+    if (m.type === 'generation-open') { if (['image', 'video', 'audio', '3d', 'enhance-image', 'enhance-video', 'enhance-audio', 'enhance-3d'].includes(m.generationType) && window.XENO_GENERATIONS?.route?.()) { if (m.carry) window.XENO_GENERATIONS.carry(m.generationType, m.carry, frame); else window.XENO_GENERATIONS.open(m.generationType); } return; }
+    if (m.type === 'generation-landed') { window.XENO_GENERATIONS?.land?.(m.rect, frame); return; }
     if (m.type === 'generation-location') {
-      const types = ['image', 'video', 'audio', '3d'];
+      const types = ['image', 'video', 'audio', '3d', 'enhance-image', 'enhance-video', 'enhance-audio', 'enhance-3d'];
+      if (String(m.generationType).startsWith('enhance-') && !m.generationId && window.XENO_GENERATIONS?.route?.()?.type === m.generationType) { history.replaceState(history.state, '', window.XENO_GENERATIONS.pathFor(m.generationType)); return; }
       if (types.includes(m.generationType) && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(m.generationId || '') && window.XENO_GENERATIONS?.route?.()) {
-        window.XENO_GENERATIONS.open(m.generationType, m.generationId);
+        // Same type: change the address in place. A reload here closed whatever the person had open.
+        const here = window.XENO_GENERATIONS.route();
+        if (here.type !== m.generationType) window.XENO_GENERATIONS.open(m.generationType, m.generationId);
+        // Scrolling through results in theater view replaces the address; a deliberate open adds a Back step.
+        else if (here.id !== m.generationId) history[m.replace ? 'replaceState' : 'pushState'](history.state, '', window.XENO_GENERATIONS.pathFor(m.generationType, m.generationId));
       }
       return;
     }
