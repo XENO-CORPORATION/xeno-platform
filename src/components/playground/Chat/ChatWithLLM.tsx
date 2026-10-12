@@ -3135,6 +3135,7 @@ const ChatWithLLM: React.FC<ChatWithLLMProps> = ({
   // Generate mode (@image …): the input box becomes that generator — GenerateMode.tsx. Workspace only for now:
   // its menus are the workspace's model menu.
   const atMenuOpenRef = useRef(false);
+  const atPickRef = useRef<'' | 'image' | 'video' | 'audio' | '3d'>(''); // the lit row of the @ list
   const stripAtWord = (value: string, caret: number) => {
     const at = atQuery(value, caret);
     return at ? (value.slice(0, at.start) + value.slice(caret)).replace(/\s{2,}/g, ' ').replace(/^\s+/, '') : value;
@@ -13335,7 +13336,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                   setInputValue(e.target.value);
                   if (!isWorkspaceEmbed() || generate.state.mode !== 'chat') return;
                   const at = atQuery(e.target.value, e.target.selectionStart ?? e.target.value.length);
-                  if (at && at.matches.length) { openAtMenu(e.target.closest('[data-chat-composer-shell]') || e.target, at.matches); atMenuOpenRef.current = true; }
+                  if (at && at.matches.length) { atPickRef.current = at.matches.find((k) => GEN_CATALOG[k].available) ?? ''; openAtMenu(e.target.closest('[data-chat-composer-shell]') || e.target, at.matches, atPickRef.current); atMenuOpenRef.current = true; }
                   else if (atMenuOpenRef.current) { closeGenMenu(); atMenuOpenRef.current = false; }
                 }}
                 onPaste={handleComposerPaste}
@@ -13343,8 +13344,20 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                   if (isWorkspaceEmbed()) {
                     // the @ list: its menu is drawn by the workspace page, so its keys are handled here
                     const caret = e.currentTarget.selectionStart ?? inputValue.length;
+                    // Up and Down travel the list (types with no model are passed over); Enter takes the lit one
+                    if (atMenuOpenRef.current && (e.key === 'ArrowDown' || e.key === 'ArrowUp')) {
+                      const matches = atQuery(inputValue, caret)?.matches ?? [], open = matches.filter((k) => GEN_CATALOG[k].available);
+                      if (open.length) {
+                        e.preventDefault();
+                        const i = atPickRef.current ? open.indexOf(atPickRef.current) : -1;
+                        atPickRef.current = open[(i + (e.key === 'ArrowDown' ? 1 : -1) + open.length) % open.length];
+                        openAtMenu(e.currentTarget.closest('[data-chat-composer-shell]') || e.currentTarget, matches, atPickRef.current);
+                        return;
+                      }
+                    }
                     if (atMenuOpenRef.current && (e.key === 'Enter' || e.key === 'Tab')) {
-                      const first = atQuery(inputValue, caret)?.matches.find((k) => GEN_CATALOG[k].available);
+                      const available = atQuery(inputValue, caret)?.matches.filter((k) => GEN_CATALOG[k].available) ?? [];
+                      const first = available.find((k) => k === atPickRef.current) ?? available[0];
                       if (first) {
                         e.preventDefault();
                         closeGenMenu();
