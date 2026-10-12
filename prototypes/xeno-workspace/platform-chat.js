@@ -269,7 +269,8 @@
     if (m.type === 'changed') { clearTimeout(reloadT); reloadT = setTimeout(load, 300); }
     // the chat's model trigger was pressed: this page's own menu opens, with the chat's real list
     if (m.type === 'model-menu' && Array.isArray(m.models) && m.rect) {
-      if (X()?.modelMenuOpen?.()) return void X().closeModelMenu();
+      // pressing a trigger again closes its menu; the @ list is driven by typing and by Up/Down, so it is redrawn in place
+      if (X()?.modelMenuOpen?.() && !(m.menu === 'gen-at' && S.picker?.menu === 'gen-at')) return void X().closeModelMenu();
       const f = frame.getBoundingClientRect(), r = m.rect;   // the trigger's place, in this page's coordinates
       const box = { left: f.left + r.left, top: f.top + r.top, right: f.left + r.right, bottom: f.top + r.bottom, width: r.width, height: r.height };
       // The same menu serves every list the composer offers (models, and in generate mode the type, the image models and

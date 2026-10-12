@@ -127,14 +127,14 @@ export function useGenMenuPicks(onPick: (menu: string, id: string) => void) {
 }
 
 /** Open the type menu from the @ list as the person types. */
-export function openAtMenu(anchor: Element | null, matches: GenType[]) {
+export function openAtMenu(anchor: Element | null, matches: GenType[], selected: GenType | '' = '') {
   openList('gen-at', anchor, 'Generate', matches.map((k) => ({
     id: k,
     name: GEN_CATALOG[k].name,
     note: GEN_CATALOG[k].available ? `@${k}` : 'unavailable',
     disabled: false,
     reason: GEN_CATALOG[k].available ? '' : GEN_CATALOG[k].reason || 'Catalog unavailable',
-  })), '', { align: 'left' });
+  })), selected, { align: 'left' });
 }
 
 export function closeGenMenu() { genMenuOpen = false; tellWorkspace({ source: 'xeno-chat', type: 'model-menu-close' }); }

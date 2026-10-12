@@ -185,6 +185,15 @@ try {
     await page.mouse.move(from.x, from.y); await page.mouse.down(); await page.mouse.move(from.x + 30, from.y + 30, { steps: 6 }); await page.mouse.move(box.x, box.y, { steps: 14 }); await wait(400); await page.mouse.up(); await wait(1800);
     assert.equal(await frame.evaluate(() => document.querySelectorAll('[data-chat-composer-shell] img').length), 1); assert.equal(await frame.evaluate(() => /Drop files to attach/.test(document.body.innerText)), false);
   });
+  await open(`/workspace/apps/chat/${CHAT}`, '[data-chat-composer-shell] textarea');
+  await check('the @ list: Up and Down travel it (passing over types with no model), Enter takes the lit one', async () => {
+    await frame.click('[data-chat-composer-shell] textarea'); await page.keyboard.type('@'); await wait(900);
+    const lit = () => page.evaluate(() => { const m = document.getElementById('apmenu'); return m?.classList.contains('show') ? (m.querySelector('.row.on')?.textContent || '').replace(/@.*/, '') : 'closed'; });
+    assert.equal(await lit(), 'Image'); await page.keyboard.press('ArrowDown'); await wait(500); assert.equal(await lit(), 'Video');
+    await page.keyboard.press('ArrowDown'); await wait(500); assert.equal(await lit(), 'Image', 'audio and 3D have no model here, so it wraps');
+    await page.keyboard.press('ArrowUp'); await wait(500); assert.equal(await lit(), 'Video');
+    await page.keyboard.press('Enter'); await wait(900); assert.equal(await frame.$eval('[data-chat-composer-shell] textarea', (e) => e.placeholder), 'Describe the video');
+  });
   await check('no page error anywhere in the run', async () => { assert.deepEqual(pageErrors, []); });
 } finally { await browser.close(); await server.close(); process.chdir(previous); }
 console.log(`\nstudio-feed-browser: ${passed} passed, ${failures.length} failed`);
