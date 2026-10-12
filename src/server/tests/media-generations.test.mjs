@@ -11,7 +11,7 @@ import { migrateAccountV2 } from '../database/migrate-account-v2.js';
 import { installUsageCreditFixture,installMediaIdentityFixture,optInUsageCredits } from './usage-credit-fixture.mjs';
 import { getBalanceV2,sweepExpiredHolds } from '../utils/creditLedgerV2.js';
 import { generationCatalog,descriptorFor,tariffFor } from '../services/mediaGenerationCatalog.js';
-import { quoteGeneration,createGeneration,proposeGeneration,approveGeneration,cancelGeneration,retryGeneration,getGeneration,assertGenerationConversation } from '../services/mediaGenerations.js';
+import { quoteGeneration,createGeneration,proposeGeneration,approveGeneration,cancelGeneration,retryGeneration,getGeneration,assertGenerationConversation,listGenerations,setGenerationFavorite,removeGeneration } from '../services/mediaGenerations.js';
 import { runMediaGenerationBatch } from '../workers/mediaGenerationWorker.js';
 import { createMediaGateway } from '../utils/mediaGenerationGateway.js';
 import { fetchMediaResult } from '../utils/mediaResultFetch.js';
@@ -24,6 +24,7 @@ const pool=new pg.Pool({connectionString});
 let pass=0;const ok=(value,label)=>{assert(value,label);pass++;console.log(`PASS ${label}`);};
 const expectCode=async(fn,code)=>{await assert.rejects(fn,error=>error.code===code);pass++;console.log(`PASS refuses ${code}`);};
 const migration=await fs.readFile(new URL('../database/migrations/20261011160000-media-generations.sql',import.meta.url),'utf8');
+const keepMigration=await fs.readFile(new URL('../database/migrations/20261012090000-media-generation-keep.sql',import.meta.url),'utf8');
 const uploadsDir=path.join(os.tmpdir(),'xeno-media-proof-'+crypto.randomUUID()); // never inside the repo
 const secret='disposable-test-media-quote-key';
 const PNG=Buffer.from('89504e470d0a1a0a0000000049454e44','hex');
@@ -40,6 +41,7 @@ try{
   await pool.query(tablesDDL('library_asset_ingestions','library_item_areas'));
   await pool.query('CREATE UNIQUE INDEX uq_media_test_ingestion ON library_asset_ingestions(asset_id,content_sha256,extractor_version,embedding_model_id) NULLS NOT DISTINCT');
   await pool.query(migration.split('-- DOWN')[0]);await pool.query(migration.split('-- DOWN')[0]);
+  await pool.query(keepMigration.split('-- DOWN')[0]);await pool.query(keepMigration.split('-- DOWN')[0]); // idempotent, like the first
   const owner=(await pool.query('INSERT INTO users(credits) VALUES(1000) RETURNING id')).rows[0].id;
   const foreign=(await pool.query('INSERT INTO users(credits) VALUES(1000) RETURNING id')).rows[0].id;
   const agent=(await pool.query('INSERT INTO users(credits) VALUES(0) RETURNING id')).rows[0].id;
@@ -103,6 +105,26 @@ try{
   await cancelGeneration(pool,owner,v.id);ok((await getGeneration(pool,owner,v.id)).state==='cancel_requested','cancel intent not false cancellation');await pool.query('UPDATE media_generations SET next_attempt_at=now()');await runMediaGenerationBatch(pool,options);ok((await getGeneration(pool,owner,v.id)).state==='cancelled','observed provider cancellation releases hold');
   await expectCode(()=>retryGeneration(pool,owner,proposal.id,{requestKey:'retry-success'},options),'generation_not_retryable');
   await expectCode(()=>assertGenerationConversation(pool,owner,[proposal.id],crypto.randomUUID()),'generation_conversation_mismatch');
+  // --- favorites and removal ---
+  ok((await getGeneration(pool,owner,proposal.id)).favorite===false,'a generation is not a favorite until marked');
+  ok((await setGenerationFavorite(pool,owner,proposal.id,true)).favorite===true&&(await getGeneration(pool,owner,proposal.id)).favorite===true,'a favorite is stored and read back');
+  const favorites=await listGenerations(pool,owner,{favorite:true});ok(favorites.length===1&&favorites[0].id===proposal.id,'the favorites list holds only favorites');
+  await expectCode(()=>setGenerationFavorite(pool,owner,proposal.id,'yes'),'invalid_favorite');
+  await expectCode(()=>setGenerationFavorite(pool,foreign,proposal.id,true),'generation_not_found');
+  await expectCode(()=>removeGeneration(pool,foreign,proposal.id),'generation_not_found');
+  const waitingRequest={...request,prompt:'still waiting'};const waitingQuote=await quoteGeneration(pool,owner,waitingRequest,options);const waiting=await createGeneration(pool,owner,{...waitingRequest,requestKey:'still-waiting',quoteToken:waitingQuote.quoteToken},options);
+  await expectCode(()=>removeGeneration(pool,owner,waiting.id),'generation_in_progress');
+  await cancelGeneration(pool,owner,waiting.id);
+  const beforeRemoval=(await listGenerations(pool,owner,{})).length,balanceBeforeRemoval=(await getBalanceV2(pool,owner)).availableMicro;
+  ok((await removeGeneration(pool,owner,proposal.id)).removed===true,'a finished generation can be removed');
+  ok((await listGenerations(pool,owner,{})).length===beforeRemoval-1&&!(await listGenerations(pool,owner,{})).some(g=>g.id===proposal.id),'a removed generation leaves the history');
+  await expectCode(()=>getGeneration(pool,owner,proposal.id),'generation_not_found');
+  await expectCode(()=>setGenerationFavorite(pool,owner,proposal.id,false),'generation_not_found');
+  const kept=(await pool.query('SELECT removed_at,state,result_asset_ids FROM media_generations WHERE id=$1',[proposal.id])).rows[0];
+  ok(kept&&kept.removed_at&&kept.state==='succeeded','removal keeps the row: the record of the work and its charge is not erased');
+  ok((await getBalanceV2(pool,owner)).availableMicro===balanceBeforeRemoval,'removal moves no credits');
+  ok((await pool.query('SELECT 1 FROM user_files WHERE id=ANY($1)',[kept.result_asset_ids])).rowCount===kept.result_asset_ids.length,'removal leaves the result files in the Library');
+  await pool.query('UPDATE media_generations SET removed_at=NULL WHERE id=$1',[proposal.id]); // the HTTP read below uses it
   await expectCode(()=>fetchMediaResult('http://127.0.0.1:1234/private'),'ERR_URL_FORBIDDEN');
   const app=express();app.use(express.json());app.use((req,res,next)=>{req.db=pool;req.user={id:owner};next();});app.use('/api/generations',createMediaGenerationRouter(options));server=http.createServer(app);await new Promise(r=>server.listen(0,'127.0.0.1',r));
   const status=await fetch(`http://127.0.0.1:${server.address().port}/api/generations/${proposal.id}`).then(r=>r.json());ok(status.generation.id===proposal.id&&status.generation.state==='succeeded','real HTTP read durable stable identity without text inference');

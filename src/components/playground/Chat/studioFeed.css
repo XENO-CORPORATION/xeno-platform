@@ -416,3 +416,6 @@
 .sge-feed .sgf[data-view='theater'], .sge-feed .sgf[data-view='grid'] { flex: 1 1 auto; }
 .sge-feed .sgf-empty { margin: auto 0; }
 .sge-console { background: none; border-top: 0; }
+
+/* A favorite keeps its star lit. */
+.sgf-foot-acts button[aria-pressed='true'] { color: var(--chat-text); }

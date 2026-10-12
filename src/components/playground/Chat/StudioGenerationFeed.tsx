@@ -1,10 +1,11 @@
 import React, { Suspense, useContext, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { CornerDownLeft, Download, Expand, Link2, Maximize2, Pause, Play, RotateCw, Volume2, VolumeX, X } from 'lucide-react';
+import { CornerDownLeft, Download, Star, Trash2, Expand, Link2, Maximize2, Pause, Play, RotateCw, Volume2, VolumeX, X } from 'lucide-react';
 import { generations, generationAuthHeaders, generationPath, isGenerationTerminal, type Generation, type GenerationType } from '@/lib/generations';
 import { libraryService } from '@/services/libraryService';
 import { GenerationRecord, GENERATION_FAILURE } from './GenerationRecord';
 import { AudioDeck, AudioStage, Wave, playTrack, stopDeck, useDeck } from './StudioAudio';
+import { confirmAction } from '../../platform/confirmAction';
 import './studioFeed.css';
 
 // The 3D stage brings a 3D engine with it, so it is fetched only when someone opens that view.
@@ -188,6 +189,8 @@ function Card({ record, modelName, now, active, index, onOpen, onChanged, onExpa
   const copyLink = () => run(async () => { await navigator.clipboard.writeText(window.location.origin + (options.pathOf?.(record) ?? generationPath(record.type, record.id))); setNote('Link copied'); });
   const download = () => run(async () => { for (const assetId of record.resultAssetIds) { const url = await libraryService.createSignedLink(assetId, { download: true }); const a = document.createElement('a'); a.href = url; a.download = ''; a.rel = 'noopener'; document.body.appendChild(a); a.click(); a.remove(); } });
   const grab = useDraggable(record);
+  const favorite = () => run(() => generations.favorite(record.id, !record.favorite));
+  const remove = () => run(async () => { if (await confirmAction({ title: 'Remove from your history', detail: 'It leaves this page. The result files stay in your Library, and nothing is refunded or charged.', destructive: true })) await generations.remove(record.id); });
   const [open, setOpen] = useState(false); // the prompt is one quiet line until asked for
   const copyPrompt = () => run(async () => { await navigator.clipboard.writeText(record.request.prompt); setNote('Prompt copied'); });
   // Approval keeps its one tested implementation (cost, approve, decline) rather than a second copy here.
@@ -202,6 +205,7 @@ function Card({ record, modelName, now, active, index, onOpen, onChanged, onExpa
     <div className="sgf-actions">
       {!options.plain && <button type="button" className="sgf-act" disabled={busy} onClick={() => onUsePrompt(record.request.prompt)}><CornerDownLeft size={14} />Use prompt</button>}
       {!options.plain && (record.state === 'failed' || record.state === 'cancelled') && <button type="button" className="sgf-act" disabled={busy} onClick={tryAgain}><RotateCw size={14} />Try again</button>}
+      {!options.plain && isGenerationTerminal(record.state) && <button type="button" className="sgf-act" disabled={busy} aria-label="Remove from your history" title="Remove" onClick={remove}><Trash2 size={14} /></button>}
       {!options.plain && !isGenerationTerminal(record.state) && <button type="button" className="sgf-act" disabled={busy} onClick={() => run(() => generations.cancel(record.id))}><X size={14} />Cancel</button>}
     </div>
   </article>;
@@ -212,6 +216,7 @@ function Card({ record, modelName, now, active, index, onOpen, onChanged, onExpa
     <div className="sgf-foot">
       <button type="button" className="sgf-foot-prompt" data-open={open || undefined} aria-expanded={open} title={open ? 'Show less' : 'Show the whole prompt'} onClick={() => setOpen(v => !v)}>{record.request.prompt}</button>
       <div className="sgf-foot-acts">
+        {!options.plain && <button type="button" disabled={busy} aria-pressed={!!record.favorite} aria-label={record.favorite ? 'Remove from favorites' : 'Add to favorites'} title={record.favorite ? 'Favorite' : 'Add to favorites'} onClick={favorite}><Star size={15} fill={record.favorite ? 'currentColor' : 'none'} /></button>}
         {!options.plain && <button type="button" disabled={busy} aria-label="Use this prompt" title="Use prompt" onClick={() => onUsePrompt(record.request.prompt)}><CornerDownLeft size={15} /></button>}
         {record.resultAssetIds[0] && <button type="button" disabled={busy} aria-label="Download" title="Download" onClick={download}><Download size={15} /></button>}
         <button type="button" disabled={busy} aria-label="Copy link" title="Copy link" onClick={copyLink}><Link2 size={15} /></button>
@@ -321,6 +326,7 @@ export function StudioGenerationFeed({ type, modelNames, activeId, reloadKey, on
   const [records, setRecords] = useState<Generation[] | null>(null);
   const [error, setError] = useState('');
   const [reload, setReload] = useState(0);
+  const [onlyFavorites, setOnlyFavorites] = useState(false);
   const [now, setNow] = useState(() => Date.now());
   const scroller = useRef<HTMLDivElement | null>(null);
   const seen = useRef('');
@@ -335,14 +341,14 @@ export function StudioGenerationFeed({ type, modelNames, activeId, reloadKey, on
   const choose = (next: View, tell = true) => { seen.current = ''; if (next !== 'theater' && next !== 'stage') base.current = next; setView(next); try { localStorage.setItem(next === 'stage' ? 'xeno_studio_view_3d' : 'xeno_studio_view', next); if (type === '3d' && next !== 'stage') localStorage.removeItem('xeno_studio_view_3d'); } catch { /* a private window still switches */ } if (tell && window.parent !== window) window.parent.postMessage({ source: 'xeno-chat', type: 'generation-view', view: next }, window.location.origin); };
   const chooseRef = useRef(choose); chooseRef.current = choose;
   useEffect(() => {
-    const onMessage = (e: MessageEvent) => { if (e.origin === window.location.origin && e.source === window.parent && e.data?.source === 'xeno-workspace' && e.data.type === 'generation-view') chooseRef.current(asView(e.data.view, type), false); else if (e.origin === window.location.origin && e.source === window.parent && e.data?.source === 'xeno-workspace' && e.data.type === 'generation-grid-size') setRow(clampRow(Number(e.data.size))); };
+    const onMessage = (e: MessageEvent) => { if (e.origin === window.location.origin && e.source === window.parent && e.data?.source === 'xeno-workspace' && e.data.type === 'generation-view') chooseRef.current(asView(e.data.view, type), false); else if (e.origin === window.location.origin && e.source === window.parent && e.data?.source === 'xeno-workspace' && e.data.type === 'generation-filter') setOnlyFavorites(e.data.favorite === true); else if (e.origin === window.location.origin && e.source === window.parent && e.data?.source === 'xeno-workspace' && e.data.type === 'generation-grid-size') setRow(clampRow(Number(e.data.size))); };
     window.addEventListener('message', onMessage); return () => window.removeEventListener('message', onMessage);
   }, []);
   useEffect(() => {
     const controller = new AbortController(); let timer: ReturnType<typeof setTimeout>;
     const load = async () => {
       try {
-        const list = options.load ? await options.load(controller.signal) : await generations.list({ type }, controller.signal);
+        const list = options.load ? await options.load(controller.signal) : await generations.list(onlyFavorites ? { type, favorite: 'true' } : { type }, controller.signal);
         if (controller.signal.aborted) return;
         setRecords(list); setError('');
         // Poll only while something is still moving; a finished feed costs nothing.
@@ -350,7 +356,7 @@ export function StudioGenerationFeed({ type, modelNames, activeId, reloadKey, on
       } catch (e) { if (!controller.signal.aborted) setError(e instanceof Error ? e.message : 'Your generations could not be loaded.'); }
     };
     void load(); return () => { controller.abort(); clearTimeout(timer); };
-  }, [type, reload, reloadKey]);
+  }, [type, reload, reloadKey, onlyFavorites]);
   const moving = !!records?.some(g => !isGenerationTerminal(g.state));
   useEffect(() => { if (!moving) return; const t = setInterval(() => setNow(Date.now()), 1000); return () => clearInterval(t); }, [moving]);
   // Land on the addressed generation, otherwise on the newest (bottom), once per address or new record.
@@ -420,6 +426,8 @@ export function StudioGenerationFeed({ type, modelNames, activeId, reloadKey, on
     { label: 'Use prompt', run: () => onUsePrompt(menu.held.record.request.prompt) },
     { label: 'Copy prompt', run: () => void navigator.clipboard.writeText(menu.held.record.request.prompt).catch(() => {}) },
     { label: 'Copy link', run: () => void navigator.clipboard.writeText(window.location.origin + generationPath(menu.held.record.type, menu.held.record.id)).catch(() => {}) },
+    { label: menu.held.record.favorite ? 'Remove from favorites' : 'Add to favorites', run: () => void generations.favorite(menu.held.record.id, !menu.held.record.favorite).then(() => setReload(n => n + 1), () => {}) },
+    { label: 'Remove', run: () => void (async () => { if (await confirmAction({ title: 'Remove from your history', detail: 'It leaves this page. The result files stay in your Library, and nothing is refunded or charged.', destructive: true })) { await generations.remove(menu.held.record.id).catch(() => {}); setReload(n => n + 1); } })() },
   ];
   const resultMenu = menu && menuRoot ? <ResultMenu at={menu.at} items={menuItems} root={menuRoot} onClose={() => setMenu(null)} /> : null;
   // Audio: one player for the page. It stops when the page is left, and the box learns that it has a strip on top.
@@ -476,6 +484,7 @@ export function StudioGenerationFeed({ type, modelNames, activeId, reloadKey, on
   document.addEventListener('keydown', onKey, true); return () => document.removeEventListener('keydown', onKey, true); }, []);
   if (error) return <div className="sgf-empty" role="alert"><p>{error}</p><button type="button" className="sgf-btn" onClick={() => setReload(n => n + 1)}>Load again</button></div>;
   if (!records) return <div className="sgf-empty" role="status"><p>Loading your {TYPE_NOUN[type]}s</p></div>;
+  if (!records.length && onlyFavorites) return <div className="sgf-empty"><h2>No favorites yet</h2><p>Mark a result with the star and it is kept here.</p></div>;
   if (!records.length) return <div className="sgf-empty"><h2>{options.empty?.title ?? 'Nothing made yet'}</h2><p>{options.empty?.text ?? `Describe the ${TYPE_NOUN[type]} you want below. It will appear here, and stay here.`}</p></div>;
   const ordered = [...records].reverse();
   const theater = view === 'theater';

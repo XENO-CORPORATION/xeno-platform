@@ -78,7 +78,7 @@ export async function quoteGeneration(db,value,input,options={}){
   const payload={actor:options.approvalActorId||actor.id,payer:actor.payerId,requestHash:requestHash(request),tariffRevision:tariff.revision,maxRetailMicro:tariff.maxRetailMicro,expiresAt:(options.now?.()??Date.now())+300000};
   return {quoteToken:tokenFor(payload,options),requestHash:payload.requestHash,tariffRevision:tariff.revision,maxRetailCredits:tariff.maxRetailCredits,expiresAt:new Date(payload.expiresAt).toISOString()};
 }
-export function generationView(row){return {id:row.id,type:row.request.type,state:row.state,request:row.request,requestHash:row.request_hash,version:row.version,quote:row.quote,resultAssetIds:row.result_asset_ids,error:row.error_code?{code:row.error_code}:null,retailCostMicro:Number(row.retail_cost_micro),upstreamBilling:row.upstream_billing,createdAt:row.created_at,updatedAt:row.updated_at,url:`/workspace/studio/generate/${row.request.type}/g/${row.id}`};}
+export function generationView(row){return {id:row.id,type:row.request.type,state:row.state,request:row.request,requestHash:row.request_hash,version:row.version,quote:row.quote,resultAssetIds:row.result_asset_ids,error:row.error_code?{code:row.error_code}:null,favorite:row.favorite===true,retailCostMicro:Number(row.retail_cost_micro),upstreamBilling:row.upstream_billing,createdAt:row.created_at,updatedAt:row.updated_at,url:`/workspace/studio/generate/${row.request.type}/g/${row.id}`};}
 export async function createGeneration(db,value,input,options={}){return create(db,value,input,false,options);}
 export async function proposeGeneration(db,value,input,options={}){return create(db,value,input,true,options);}
 async function create(db,value,input,forceProposal,options){
@@ -106,14 +106,15 @@ async function create(db,value,input,forceProposal,options){
 }
 async function ownedRow(db,actor,id,lock=false){
   if(!UUID.test(id||''))throw generationError('generation_not_found',404);
-  const row=(await db.query(`SELECT * FROM media_generations WHERE id=$1 AND owner_user_id=$2 ${lock?'FOR UPDATE':''}`,[id,actor.payerId])).rows[0];
+  // a generation the person removed from their history reads as not found to them; the row itself is kept
+  const row=(await db.query(`SELECT * FROM media_generations WHERE id=$1 AND owner_user_id=$2 AND removed_at IS NULL ${lock?'FOR UPDATE':''}`,[id,actor.payerId])).rows[0];
   if(!row||(actor.kind==='agent'&&row.actor_user_id!==actor.id))throw generationError('generation_not_found',404);
   return row;
 }
 export async function getGeneration(db,value,id){return generationView(await ownedRow(db,await generationActor(db,value),id));}
-export async function listGenerations(db,value,{type=null,projectId=null,conversationId=null}={}){
+export async function listGenerations(db,value,{type=null,projectId=null,conversationId=null,favorite=false}={}){
   const actor=await generationActor(db,value);if((projectId&&!UUID.test(projectId))||(conversationId&&!UUID.test(conversationId)))throw generationError('invalid_placement');
-  const rows=(await db.query(`SELECT * FROM media_generations WHERE owner_user_id=$1 AND ($2::text IS NULL OR request->>'type'=$2) AND ($3::uuid IS NULL OR project_id=$3) AND ($4::uuid IS NULL OR actor_user_id=$4) AND ($5::uuid IS NULL OR conversation_id=$5) ORDER BY created_at DESC LIMIT 100`,[actor.payerId,type,projectId,actor.kind==='agent'?actor.id:null,conversationId])).rows;
+  const rows=(await db.query(`SELECT * FROM media_generations WHERE owner_user_id=$1 AND ($2::text IS NULL OR request->>'type'=$2) AND ($3::uuid IS NULL OR project_id=$3) AND ($4::uuid IS NULL OR actor_user_id=$4) AND ($5::uuid IS NULL OR conversation_id=$5) AND removed_at IS NULL AND ($6::boolean IS NOT TRUE OR favorite) ORDER BY created_at DESC LIMIT 100`,[actor.payerId,type,projectId,actor.kind==='agent'?actor.id:null,conversationId,favorite===true])).rows;
   return rows.map(generationView);
 }
 export async function approveGeneration(db,value,id,input,options={}){
@@ -134,6 +135,24 @@ export async function cancelGeneration(db,value,id){
   const actor=await generationActor(db,value);
   return withTransaction(db,async tx=>{const row=await ownedRow(tx,actor,id,true);if(['succeeded','failed','cancelled'].includes(row.state))return generationView(row);
     return generationView((await tx.query(`UPDATE media_generations SET cancel_requested_at=now(),state=CASE WHEN state='awaiting_approval' THEN 'cancelled' ELSE 'cancel_requested' END,updated_at=now() WHERE id=$1 RETURNING *`,[id])).rows[0]);});
+}
+/** Mark or unmark a favorite. It changes nothing but the mark. */
+export async function setGenerationFavorite(db,value,id,favorite){
+  if(typeof favorite!=='boolean')throw generationError('invalid_favorite');
+  const actor=await generationActor(db,value);await ownedRow(db,actor,id);
+  return generationView((await db.query('UPDATE media_generations SET favorite=$2 WHERE id=$1 RETURNING *',[id,favorite])).rows[0]);
+}
+/** Remove a generation from the person's history. Work that is still running is refused: cancel it first,
+    so nothing keeps running (and holding credits) out of sight. The row is kept as the record of the work
+    and of what was charged; the result files stay in the Library, where they are managed. */
+export async function removeGeneration(db,value,id){
+  const actor=await generationActor(db,value);
+  return withTransaction(db,async tx=>{
+    const row=await ownedRow(tx,actor,id,true);
+    if(!['succeeded','failed','cancelled'].includes(row.state))throw generationError('generation_in_progress',409);
+    await tx.query('UPDATE media_generations SET removed_at=now() WHERE id=$1',[id]);
+    return {id,removed:true};
+  });
 }
 export async function retryGeneration(db,value,id,input,options={}){
   const actor=await generationActor(db,value),row=await ownedRow(db,actor,id);

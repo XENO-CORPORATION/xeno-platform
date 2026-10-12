@@ -44,7 +44,8 @@
   const SIZE_KEY = 'xeno_studio_grid';
   const size = () => { try { return Math.min(440, Math.max(110, Number(localStorage.getItem(SIZE_KEY)) || 220)); } catch { return 220; } };
   const viewSwitch = () => { const now = view(); /* Enhance has the same three views as Generate */
-    return '<input class="tb-size" type="range" min="110" max="440" step="2" value="' + size() + '" data-gen-size aria-label="Tile size" data-tip="Tile size"' + (now === 'grid' ? '' : ' hidden') + '><div class="tb-view" role="group" aria-label="View">'
+    const fav = enh(route()?.type || '') ? '' : '<button type="button" class="tb-fav" data-gen-fav aria-pressed="false" aria-label="Favorites only" data-tip="Favorites only"><svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3.5l2.6 5.4 5.9.8-4.3 4.1 1 5.9L12 16.9l-5.2 2.8 1-5.9L3.5 9.7l5.9-.8L12 3.5z"/></svg></button>';
+    return fav + '<input class="tb-size" type="range" min="110" max="440" step="2" value="' + size() + '" data-gen-size aria-label="Tile size" data-tip="Tile size"' + (now === 'grid' ? '' : ' hidden') + '><div class="tb-view" role="group" aria-label="View">'
     + '<button type="button" data-gen-view="feed" aria-label="Feed view" data-tip="Feed" aria-pressed="' + (now === 'feed') + '"><svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="4" width="16" height="6" rx="1.5"/><rect x="4" y="14" width="16" height="6" rx="1.5"/></svg></button>'
     + '<button type="button" data-gen-view="theater" aria-label="Theater view" data-tip="Theater" aria-pressed="' + (now === 'theater') + '"><svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M7 4h10"/><rect x="4" y="8" width="16" height="12" rx="1.5"/></svg></button>'
     + '<button type="button" data-gen-view="grid" aria-label="Grid view" data-tip="Grid" aria-pressed="' + (now === 'grid') + '"><svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="4" width="7" height="7" rx="1.5"/><rect x="13" y="4" width="7" height="7" rx="1.5"/><rect x="4" y="13" width="7" height="7" rx="1.5"/><rect x="13" y="13" width="7" height="7" rx="1.5"/></svg></button>'
@@ -57,6 +58,7 @@
     // drawn by hand: the browser's own thumb is a circle, and XENO shapes are squares with a small radius
     + '.topbar .tb-size::-webkit-slider-runnable-track{height:3px;border-radius:1px;background:var(--border)}.topbar .tb-size::-moz-range-track{height:3px;border-radius:1px;background:var(--border)}'
     + '.topbar .tb-size::-webkit-slider-thumb{-webkit-appearance:none;width:11px;height:11px;margin-top:-4px;border:0;border-radius:2px;background:var(--text)}.topbar .tb-size::-moz-range-thumb{width:11px;height:11px;border:0;border-radius:2px;background:var(--text)}'
+    + '.topbar .tb-fav{width:28px;height:26px;margin-right:10px;display:inline-flex;align-items:center;justify-content:center;border:1px solid var(--border);border-radius:8px;background:none;color:var(--muted);cursor:pointer;transition:background .14s,color .14s}.topbar .tb-fav:hover{color:var(--text)}.topbar .tb-fav[aria-pressed="true"]{background:var(--hover);color:var(--text)}.topbar .tb-fav[aria-pressed="true"] svg{fill:currentColor}.topbar .tb-fav svg.i{width:14px;height:14px}'
     + '.topbar .tb-view button{width:28px;height:22px;display:inline-flex;align-items:center;justify-content:center;border:0;border-radius:6px;background:none;color:var(--muted);cursor:pointer;transition:background .14s,color .14s}'
     + '.topbar .tb-view button:hover{color:var(--text)}.topbar .tb-view button[aria-pressed="true"]{background:var(--hover);color:var(--text)}.topbar .tb-view svg.i{width:14px;height:14px}';
   document.head.appendChild(style);
@@ -67,6 +69,11 @@
     showView(next);
     const frame = document.getElementById('xw-chat-frame');
     try { frame?.contentWindow?.postMessage({ source: 'xeno-workspace', type: 'generation-view', view: next }, location.origin); } catch {}
+  });
+  document.addEventListener('click', (e) => {
+    const b = e.target.closest('#main .topbar [data-gen-fav]'); if (!b) return;
+    const on = b.getAttribute('aria-pressed') !== 'true'; b.setAttribute('aria-pressed', String(on));
+    try { document.getElementById('xw-chat-frame')?.contentWindow?.postMessage({ source: 'xeno-workspace', type: 'generation-filter', favorite: on }, location.origin); } catch {}
   });
   document.addEventListener('input', (e) => {
     const s = e.target.closest?.('#main .topbar [data-gen-size]'); if (!s) return;
