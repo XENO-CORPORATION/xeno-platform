@@ -10329,6 +10329,13 @@ Keep the summary under 500 words. Preserve essential context needed to continue 
   // A Studio result being dragged carries a picture, which browsers also list as a file. It is not an upload:
   // Studio opens its own drop boxes for it, so the box must not answer with "Drop files to attach".
   const dragHasFiles = (event: React.DragEvent) => { const types = Array.from(event.dataTransfer?.types || []); return types.includes('Files') && !types.includes(RESULT_DRAG); };
+  // One of the person's own results, dragged from the conversation onto the box: it becomes an attachment (Studio has its own boxes for this).
+  const dragIsResult = (event: React.DragEvent) => !studioType && Array.from(event.dataTransfer?.types || []).includes(RESULT_DRAG);
+  const attachResult = (assetId: string, prompt: string) => {
+    const id = 'chat-result-' + assetId;
+    setAttachedFiles(prev => prev.some(f => f.assetId === assetId) ? prev : [...prev, { id, name: (prompt || 'Generated image').slice(0, 60), type: 'image/png', assetId, contentUrl: `/api/library/assets/${encodeURIComponent(assetId)}/content`, ready: true }]);
+    void libraryService.createSignedLink(assetId).then(url => setAttachedFiles(prev => prev.map(f => f.id === id ? { ...f, previewUrl: url } : f)), () => {});
+  };
   const handleComposerDragEnter = (event: React.DragEvent) => {
     if (!dragHasFiles(event)) return;
     event.preventDefault();
@@ -10336,6 +10343,7 @@ Keep the summary under 500 words. Preserve essential context needed to continue 
     setIsDraggingFiles(true);
   };
   const handleComposerDragOver = (event: React.DragEvent) => {
+    if (dragIsResult(event)) { event.preventDefault(); event.dataTransfer.dropEffect = 'copy'; return; }
     if (!dragHasFiles(event)) return;
     event.preventDefault(); // required, or the browser opens the file instead of letting us drop it
     event.dataTransfer.dropEffect = 'copy';
@@ -10346,6 +10354,12 @@ Keep the summary under 500 words. Preserve essential context needed to continue 
     if (dragDepthRef.current <= 0) { dragDepthRef.current = 0; setIsDraggingFiles(false); }
   };
   const handleComposerDrop = (event: React.DragEvent) => {
+    if (dragIsResult(event)) {
+      event.preventDefault();
+      const id = event.dataTransfer.getData(RESULT_DRAG);
+      void generations.get(id).then(g => { if (g.type === 'image' && g.resultAssetIds[0]) attachResult(g.resultAssetIds[0], g.request.prompt); else setGenerationError('Only an image can be attached to a message.'); }, () => {});
+      return;
+    }
     if (!dragHasFiles(event)) return;
     event.preventDefault();
     dragDepthRef.current = 0;
@@ -12716,7 +12730,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
               {generationError && <p role="alert" className="px-1 pb-1.5 text-[12px] leading-5 text-[#8b857c]">{generationError}</p>}
               {generationListError && <p role="alert" className="px-1 pb-1.5 text-[12px] leading-5 text-[#8b857c]">{generationListError} <button type="button" className="underline" onClick={() => setGenerationListReload(n=>n+1)}>Reload</button></p>}
               {!studioType && studioGenerationId && <GenerationRecord id={studioGenerationId} />}
-              {!studioType && durableGenerations.filter(g=>!messages.some(m=>m.turn?.steps.some(step=>step.kind==='generation' && step.generationId===g.id))).map(g=><ChatGenerationCard key={g.id} id={g.id} onUsePrompt={text => setInputValue(text)} />)}
+              {!studioType && durableGenerations.filter(g=>!messages.some(m=>m.turn?.steps.some(step=>step.kind==='generation' && step.generationId===g.id))).map(g=><ChatGenerationCard key={g.id} id={g.id} onUsePrompt={(text, type) => { setInputValue(text); generate.setMode(type); }} onAttach={attachResult} />)}
               {waitingQuestion && (
                 <ChatQuestionPanel step={waitingQuestion.step} onAnswer={answerQuestion} onSkip={skipQuestion} busy={isLoading} />
               )}
@@ -17466,7 +17480,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                                           {/* run_code blocks (2026-09-27): the source, output and produced
                                               files of each run the turn made, in order — drawn under the head
                                               like generated images, live and on reload from the turn record. */}
-                                          {message.turn?.steps.filter(step => step.kind === 'generation').map(step => step.kind === 'generation' ? <ChatGenerationCard key={step.id} id={step.generationId} onUsePrompt={text => setInputValue(text)} /> : null)}
+                                          {message.turn?.steps.filter(step => step.kind === 'generation').map(step => step.kind === 'generation' ? <ChatGenerationCard key={step.id} id={step.generationId} onUsePrompt={(text, type) => { setInputValue(text); generate.setMode(type); }} onAttach={attachResult} /> : null)}
                                           <ChatCodeExecution
                                               steps={turnCodeSteps(message.turn)}
                                               live={Boolean(message.isStreaming || message.isThinkingPlaceholder || message.isDotPlaceholder)}

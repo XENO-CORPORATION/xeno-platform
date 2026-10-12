@@ -238,7 +238,7 @@ type Held = { record: Generation; assetId: string; lift?: Lift };
 /** Tell the workspace where a result that was sent here has come to rest (it flies the result there). */
 /** One generation inside a chat conversation: the SAME card Studio shows (result, player, favorite, download,
     link, use prompt, try again), live while it is being made. A retry continues in the same place. */
-export function ChatGenerationCard({ id, onUsePrompt }: { id: string; onUsePrompt: (prompt: string) => void }) {
+export function ChatGenerationCard({ id, onUsePrompt, onAttach }: { id: string; onUsePrompt: (prompt: string, type: GenerationType) => void; onAttach?: (assetId: string, prompt: string) => void }) {
   const [current, setCurrent] = useState(id);
   const [record, setRecord] = useState<Generation | null>(null);
   const [reload, setReload] = useState(0);
@@ -250,10 +250,31 @@ export function ChatGenerationCard({ id, onUsePrompt }: { id: string; onUsePromp
     void load(); return () => { controller.abort(); clearTimeout(timer); };
   }, [current, reload]);
   useEffect(() => { if (!record || isGenerationTerminal(record.state)) return; const t = setInterval(() => setNow(Date.now()), 1000); return () => clearInterval(t); }, [record]);
+  // Right-click: the same menu as Studio, plus "Use in this chat". A drag is taken by the chat's own box.
+  const holder = useRef<HTMLDivElement>(null);
+  const [menu, setMenu] = useState<{ held: Held; at: { x: number; y: number } } | null>(null);
+  const dragApi = useRef({ hold: (_value: Held | null) => {}, menu: (value: Held, at: { x: number; y: number }) => setMenu({ held: value, at }) }).current;
   if (!record) return <div className="sgf-chat" role="status"><MarkLoader size={48} label="Loading the generation" /></div>;
-  return <div className="sgf-chat" data-chat-generation={record.id}>
-    <Card record={record} modelName={record.request.model} now={now} active={false} index={0} onOpen={(next) => setCurrent(next)} onChanged={() => setReload(n => n + 1)} onUsePrompt={onUsePrompt} />
-  </div>;
+  const toStudio = (from: Held, to: StudioHandoff['to'], role: string) => {
+    try { sessionStorage.setItem(HANDOFF, JSON.stringify({ to, generationId: from.record.id, assetId: from.assetId, prompt: from.record.request.prompt, role } satisfies StudioHandoff)); } catch { /* the page still opens */ }
+    const path = String(to).startsWith('enhance-') ? `/workspace/studio/enhance/${String(to).slice(8)}` : `/workspace/studio/generate/${to}`;
+    if (window.parent !== window) window.parent.location.assign(path); else window.location.assign(path);
+  };
+  const usePrompt = (prompt: string) => onUsePrompt(prompt, record.type);
+  const items: MenuItem[] = !menu ? [] : [
+    ...(menu.held.record.type === 'image' && onAttach ? [{ label: 'Use in this chat', run: () => onAttach(menu.held.assetId, menu.held.record.request.prompt) }] : []),
+    ...(menu.held.record.type === 'image' ? [{ label: 'Animate', run: () => toStudio(menu.held, 'video', 'start_frame') }, { label: 'Make 3D', run: () => toStudio(menu.held, '3d', 'reference') }] : []),
+    { label: 'Enhance', run: () => toStudio(menu.held, `enhance-${menu.held.record.type}`, 'source') },
+    { label: 'Use prompt', run: () => usePrompt(menu.held.record.request.prompt) },
+    { label: 'Copy prompt', run: () => void navigator.clipboard.writeText(menu.held.record.request.prompt).catch(() => {}) },
+    { label: 'Copy link', run: () => void navigator.clipboard.writeText(window.location.origin + generationPath(menu.held.record.type, menu.held.record.id)).catch(() => {}) },
+    { label: menu.held.record.favorite ? 'Remove from favorites' : 'Add to favorites', run: () => void generations.favorite(menu.held.record.id, !menu.held.record.favorite).then(() => setReload(n => n + 1), () => {}) },
+  ];
+  const root = holder.current?.closest<HTMLElement>('.chat-themed') ?? null;
+  return <Drag.Provider value={dragApi}><div className="sgf-chat" ref={holder} data-chat-generation={record.id}>
+    <Card record={record} modelName={record.request.model} now={now} active={false} index={0} onOpen={(next) => setCurrent(next)} onChanged={() => setReload(n => n + 1)} onUsePrompt={usePrompt} />
+    {menu && root ? <ResultMenu at={menu.at} items={items} root={root} onClose={() => setMenu(null)} /> : null}
+  </div></Drag.Provider>;
 }
 
 export function reportLanding(find: () => Element | null | undefined) {

@@ -168,6 +168,23 @@ try {
     assert.equal(await frame.evaluate(() => /Generation submitted/.test(document.body.innerText)), false, 'no filler line beside the card');
     assert.equal(await frame.evaluate(() => document.querySelectorAll('.chat-q[data-generation-id]').length), 0, 'the older status box is gone from the chat');
   });
+  await check('in a chat: right-click offers the menu, and "Use in this chat" attaches the picture', async () => {
+    const spot = await at('[data-chat-generation] .sgf-card img'); await page.mouse.click(spot.x, spot.y, { button: 'right' }); await wait(500);
+    const labels = await frame.$$eval('.sgm button', (e) => e.map((x) => x.textContent)); assert.deepEqual(labels.slice(0, 7), ['Use in this chat', 'Animate', 'Make 3D', 'Enhance', 'Use prompt', 'Copy prompt', 'Copy link']);
+    await frame.$$eval('.sgm button', (e) => e.find((x) => x.textContent === 'Use in this chat').click()); await wait(1500);
+    assert.equal(await frame.evaluate(() => document.querySelectorAll('[data-chat-composer-shell] img').length), 1);
+  });
+  await check('in a chat: "Use prompt" puts the prompt in the box and switches the box to that mode', async () => {
+    assert.equal(await frame.$('[data-gen-trigger="model"]'), null, 'the box starts in chat mode');
+    await frame.$eval('[data-chat-generation] button[aria-label="Use this prompt"]', (e) => e.click()); await wait(1200);
+    assert.equal(await frame.$eval('[data-chat-composer-shell] textarea', (e) => e.value), 'A lattice of glass polyhedra'); assert.ok(await frame.$('[data-gen-trigger="model"]'), 'the image controls are shown');
+  });
+  await open(`/workspace/apps/chat/${CHAT}`, '[data-chat-generation] .sgf-card');
+  await check('in a chat: a real drag of the result onto the box attaches it', async () => {
+    const from = await at('[data-chat-generation] .sgf-card img'), box = await at('[data-chat-composer-shell]');
+    await page.mouse.move(from.x, from.y); await page.mouse.down(); await page.mouse.move(from.x + 30, from.y + 30, { steps: 6 }); await page.mouse.move(box.x, box.y, { steps: 14 }); await wait(400); await page.mouse.up(); await wait(1800);
+    assert.equal(await frame.evaluate(() => document.querySelectorAll('[data-chat-composer-shell] img').length), 1); assert.equal(await frame.evaluate(() => /Drop files to attach/.test(document.body.innerText)), false);
+  });
   await check('no page error anywhere in the run', async () => { assert.deepEqual(pageErrors, []); });
 } finally { await browser.close(); await server.close(); process.chdir(previous); }
 console.log(`\nstudio-feed-browser: ${passed} passed, ${failures.length} failed`);
