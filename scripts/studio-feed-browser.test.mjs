@@ -20,6 +20,7 @@ const catalog = { types: [
   { type: 'video', available: true, tariff: tariff(100), models: [{ id: 'vid-model', name: 'Video Model', type: 'video', endpoint: '/v1/videos/generations', settings: { ratio: { values: ['16:9'], default: '16:9' } }, references: { max: 1 }, tariff: tariff(100) }] },
   { type: 'audio', available: false, tariff: null, models: [], reason: 'gateway_adapter_unqualified' },
   { type: '3d', available: false, tariff: null, models: [], reason: 'gateway_adapter_unqualified' }] };
+const CHAT = '99999999-9999-4999-8999-999999999999';
 const uid = (n, tail) => `0000000${n}-0000-4000-8000-0000000000${tail}`;
 const make = (type, tail, model) => (n, state, prompt, mins, extra = {}) => ({ id: uid(n, tail), type, state, request: { type, model, prompt, settings: { ratio: '16:9' }, referenceAssetIds: [] }, requestHash: 'h', version: 1, quote: {}, resultAssetIds: [], error: null, favorite: false, createdAt: new Date(Date.now() - mins * 60000).toISOString(), ...extra });
 const image = make('image', 'bb', 'img-model'), video = make('video', 'aa', 'vid-model');
@@ -41,7 +42,12 @@ const plugin = { name: 'studio-feed-fixture', enforce: 'pre', configureServer(se
     if (p === '/api/auth/onboarding') return json({ done: true, welcomeAcknowledged: true });
     if (p === '/api/models') return json({ success: true, timestamp: '', totalCompanies: 1, companies: { OpenAI: [{ id: 'gpt-5', name: 'GPT-5', description: '', contextWindow: 128000, maxOutput: 16000, type: 'text', created: 1 }] } });
     if (p === '/api/generations/catalog') return json(catalog);
-    if (p === '/api/generations' && req.method === 'GET') { const type = u.searchParams.get('type'); const list = type ? records[type] || [] : everything(); return json({ generations: u.searchParams.get('favorite') === 'true' ? list.filter((g) => g.favorite) : list }); }
+    if (p === `/api/chat/conversations/${CHAT}`) { const g = records.image.find((x) => x.state === 'succeeded'); return json({ success: true, conversation: { id: CHAT, title: 'A chat with a generation', messages: [
+      { id: '11111111-1111-4111-8111-111111111111', role: 'user', content: 'Hello, help me plan a poster.', created_at: new Date(Date.now() - 900000).toISOString() },
+      { id: '22222222-2222-4222-8222-222222222222', role: 'assistant', content: 'Happy to. Start with the picture.', created_at: new Date(Date.now() - 890000).toISOString() },
+      { id: '33333333-3333-4333-8333-333333333333', role: 'user', content: g.request.prompt, created_at: new Date(Date.now() - 800000).toISOString() },
+      { id: '44444444-4444-4444-8444-444444444444', role: 'assistant', content: 'Generation submitted.', created_at: new Date(Date.now() - 799000).toISOString(), turn: { schema: 'xeno.chat.turn.v1', startedAt: Date.now() - 799000, steps: [{ id: 'gen-step-1', kind: 'generation', generationId: g.id, type: 'image', startedAt: Date.now() - 799000 }] } }] } }); }
+    if (p === '/api/generations' && req.method === 'GET') { const type = u.searchParams.get('type'); const list = u.searchParams.get('conversationId') ? [] : type ? records[type] || [] : everything(); return json({ generations: u.searchParams.get('favorite') === 'true' ? list.filter((g) => g.favorite) : list }); }
     const one = /^\/api\/generations\/([0-9a-f-]{36})(\/favorite)?$/.exec(p);
     if (one) { const g = everything().find((x) => x.id === one[1]); if (!g) return json({ error: 'generation_not_found' }, 404);
       if (one[2] && req.method === 'POST') { g.favorite = (await body(req)).favorite === true; return json({ generation: g }); }
@@ -154,6 +160,14 @@ try {
   await check('3D adds the Stage view; with no provider the page is whole and only the model selector says so', async () => { assert.ok(await page.$('.topbar [data-gen-view="stage"]')); assert.equal(await crumb(), 'Studio/Generate/3D'); const sel = await frame.$eval('[data-gen-trigger="model"]', (e) => [e.textContent, e.disabled]); assert.deepEqual(sel, ['No model available', true]); assert.equal(await frame.evaluate(() => /Not available yet|gateway_adapter/.test(document.body.innerText)), false); assert.ok(await frame.$('[data-chat-composer-shell] textarea')); });
   await page.goto(base + '/workspace/settings/appearance', { waitUntil: 'domcontentloaded', timeout: 90000 });
   await check('Interactive motion is a setting, and its switch shows its state', async () => { await page.waitForSelector('[data-arg="interactiveMotion"]', { timeout: 30000 }); await wait(2500); const read = () => page.evaluate(() => [document.querySelector('[data-arg="interactiveMotion"]').getAttribute('aria-checked'), document.documentElement.dataset.imotion]); const press = async () => { await page.evaluate(() => document.querySelector('[data-arg="interactiveMotion"]').click()); await wait(700); }; assert.deepEqual(await read(), ['true', 'on']); await press(); assert.deepEqual(await read(), ['false', 'off']); await press(); assert.deepEqual(await read(), ['true', 'on']); });
+  await open(`/workspace/apps/chat/${CHAT}`, '[data-chat-generation] .sgf-card');
+
+  await check('in a normal chat, a generation shows the same card as Studio, with its result', async () => {
+    const card = await frame.$eval('[data-chat-generation] .sgf-card', (e) => ({ img: !!e.querySelector('img'), prompt: e.querySelector('.sgf-foot-prompt')?.textContent, acts: [...e.querySelectorAll('.sgf-foot-acts button')].map((b) => b.getAttribute('aria-label')) }));
+    assert.equal(card.img, true); assert.equal(card.prompt, 'A lattice of glass polyhedra'); assert.deepEqual(card.acts.slice(1), ['Use this prompt', 'Download', 'Copy link']); assert.match(card.acts[0], /favorites/);
+    assert.equal(await frame.evaluate(() => /Generation submitted/.test(document.body.innerText)), false, 'no filler line beside the card');
+    assert.equal(await frame.evaluate(() => document.querySelectorAll('.chat-q[data-generation-id]').length), 0, 'the older status box is gone from the chat');
+  });
   await check('no page error anywhere in the run', async () => { assert.deepEqual(pageErrors, []); });
 } finally { await browser.close(); await server.close(); process.chdir(previous); }
 console.log(`\nstudio-feed-browser: ${passed} passed, ${failures.length} failed`);

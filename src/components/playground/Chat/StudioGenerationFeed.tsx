@@ -236,6 +236,26 @@ function Card({ record, modelName, now, active, index, onOpen, onChanged, onExpa
 type Lift = { x: number; y: number; w: number; h: number; src: string; kind: 'img' | 'video'; box?: { x: number; y: number; w: number; h: number }; mark?: () => void };
 type Held = { record: Generation; assetId: string; lift?: Lift };
 /** Tell the workspace where a result that was sent here has come to rest (it flies the result there). */
+/** One generation inside a chat conversation: the SAME card Studio shows (result, player, favorite, download,
+    link, use prompt, try again), live while it is being made. A retry continues in the same place. */
+export function ChatGenerationCard({ id, onUsePrompt }: { id: string; onUsePrompt: (prompt: string) => void }) {
+  const [current, setCurrent] = useState(id);
+  const [record, setRecord] = useState<Generation | null>(null);
+  const [reload, setReload] = useState(0);
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => { setCurrent(id); }, [id]);
+  useEffect(() => {
+    const controller = new AbortController(); let timer: ReturnType<typeof setTimeout>;
+    const load = async () => { try { const value = await generations.get(current, controller.signal); if (controller.signal.aborted) return; setRecord(value); setNow(Date.now()); if (!isGenerationTerminal(value.state)) timer = setTimeout(load, 2500); } catch { if (!controller.signal.aborted) timer = setTimeout(load, 5000); } };
+    void load(); return () => { controller.abort(); clearTimeout(timer); };
+  }, [current, reload]);
+  useEffect(() => { if (!record || isGenerationTerminal(record.state)) return; const t = setInterval(() => setNow(Date.now()), 1000); return () => clearInterval(t); }, [record]);
+  if (!record) return <div className="sgf-chat" role="status"><MarkLoader size={48} label="Loading the generation" /></div>;
+  return <div className="sgf-chat" data-chat-generation={record.id}>
+    <Card record={record} modelName={record.request.model} now={now} active={false} index={0} onOpen={(next) => setCurrent(next)} onChanged={() => setReload(n => n + 1)} onUsePrompt={onUsePrompt} />
+  </div>;
+}
+
 export function reportLanding(find: () => Element | null | undefined) {
   if (window.parent === window) return;
   let tries = 0;
