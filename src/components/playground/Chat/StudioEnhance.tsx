@@ -1,3 +1,4 @@
+import { MarkLoader } from '../../platform/MarkLoader';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { ArrowUp } from 'lucide-react';
@@ -100,7 +101,7 @@ export function StudioEnhance({ kind, activeId, onOpen }: { kind: GenerationType
   };
   const page = <div className="sge">
     <div className="sge-feed">
-      {sources ? <StudioGenerationFeed type={kind} modelNames={names} activeId={activeId} reloadKey={made + sources.length} onOpen={onOpen} onUsePrompt={() => {}} references={{ max: 0, used: 0 }} onAddReference={() => {}} options={feed} /> : <div className="sgf-empty" role="status"><p>Loading</p></div>}
+      {sources ? <StudioGenerationFeed type={kind} modelNames={names} activeId={activeId} reloadKey={made + sources.length} onOpen={onOpen} onUsePrompt={() => {}} references={{ max: 0, used: 0 }} onAddReference={() => {}} options={feed} /> : <div className="sgf-empty" role="status"><MarkLoader size={72} label="Loading" /></div>}
     </div>
     <div className="sge-console">
       {/* Built like the prompt box: one plate, and its controls in a row underneath. Here the plate holds your results. */}

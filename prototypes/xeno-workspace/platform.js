@@ -39,11 +39,15 @@
   const style = document.createElement('style');
   style.textContent = 'html.xp-wait body>*:not(#xp-state){visibility:hidden}html.on-platform #net-chip{display:none!important}'
     + '#xp-state{position:fixed;inset:0;display:grid;place-items:center;background:#0a0a0a;color:#e8e8e8;font:14px/1.5 Inter,system-ui,sans-serif;z-index:99999}'
+    + '#xp-state{transition:opacity .42s cubic-bezier(.2,.7,.2,1)}#xp-state[data-leaving]{opacity:0;pointer-events:none}#xp-state .xp-mark{display:grid;place-items:center;color:#e8e8e8}'
     + '#xp-state div{max-width:360px;text-align:center}#xp-state button{margin-top:14px;padding:8px 14px;border-radius:8px;border:1px solid #3a3a3a;background:#1a1a1a;color:#fff;font:inherit;cursor:pointer}'
     + '#xp-note{position:fixed;left:50%;bottom:10px;transform:translateX(-50%);padding:6px 12px;border-radius:8px;border:1px solid #2e2e2e;background:#141414;color:#b8b8b8;font:12px/1.4 Inter,system-ui,sans-serif;z-index:9000}';
   document.head.appendChild(style);
   const icon = document.createElement('link'); icon.rel = 'icon'; icon.href = '/favicon.svg'; document.head.appendChild(icon); // the platform's own icon; from disk there is none to point at
-  const state = (html) => { let s = document.getElementById('xp-state'); if (!s) { s = document.createElement('div'); s.id = 'xp-state'; s.setAttribute('role', 'status'); (document.body || root).appendChild(s); } s.innerHTML = `<div>${html}</div>`; return s; };
+  let stopMark = null;
+  const state = (html) => { let s = document.getElementById('xp-state'); if (!s) { s = document.createElement('div'); s.id = 'xp-state'; s.setAttribute('role', 'status'); (document.body || root).appendChild(s); } stopMark?.(); stopMark = null; s.innerHTML = `<div>${html}</div>`; return s; };
+  // Opening: the XENO mark (particles form it, it turns, they scatter). The label is for screen readers.
+  const opening = () => { const s = state(''); const m = document.createElement('div'); m.className = 'xp-mark'; s.firstChild.replaceWith(m); if (window.XENO_MARK_LOADER) stopMark = window.XENO_MARK_LOADER.mount(m, { size: 96, label: 'Opening your workspace' }); else m.textContent = 'Opening your workspace'; return s; };
   const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
   // where the visitor asked to go, read before the app has had a chance to rewrite the address (it sends an unknown
   // place to its default mode, and the sign-in check can answer after that)
@@ -58,7 +62,7 @@
       localStorage.setItem('xw.acct', JSON.stringify(a));
     } catch {}
     // the adapters start their first loads when `ready` resolves, a moment after this returns; wait for them
-    const lift = () => { if (!root.classList.contains('xp-wait')) return; try { window.XW?.render?.(); } catch {} root.classList.remove('xp-wait'); document.getElementById('xp-state')?.remove(); };
+    const lift = () => { if (!root.classList.contains('xp-wait')) return; const s = document.getElementById('xp-state'); try { window.XW?.render?.(); } catch {} root.classList.remove('xp-wait'); if (s && !s.isConnected) document.body.appendChild(s); /* the first render rewrites the page; the mark stays on top and fades away over it */ if (s) { s.dataset.leaving = ''; setTimeout(() => { stopMark?.(); stopMark = null; s.remove(); }, 440); } };
     setTimeout(() => { Promise.race([Promise.all(firsts), new Promise((r) => setTimeout(r, FIRST_PAINT_MS))]).then(lift); }, 0);
     const n = document.createElement('div'); n.id = 'xp-note'; n.setAttribute('role', 'note'); n.textContent = 'Preview. Your account, chats, projects, tasks, library, people, community and each area’s home are real. Marketplace, Company, Anima and Places still show sample data.'; document.body.appendChild(n);
     try { window.XW?.render?.(); } catch {}
@@ -68,12 +72,12 @@
   async function check() {
     let r;
     try { r = await fetch('/api/auth/me', { credentials: 'same-origin', headers: { 'x-xeno-surface': 'xeno-web' } }); }
-    catch { state('The workspace could not reach XENO. Check your connection.<br><button type="button" id="xp-retry">Try again</button>'); document.getElementById('xp-retry').onclick = () => { state('Opening your workspace'); P.ready = check(); }; return null; }
+    catch { state('The workspace could not reach XENO. Check your connection.<br><button type="button" id="xp-retry">Try again</button>'); document.getElementById('xp-retry').onclick = () => { opening(); P.ready = check(); }; return null; }
     if (r.status === 401 || r.status === 403) return toLogin();
     let d = null; try { d = await r.json(); } catch {}
-    if (!r.ok || !d || !d.success || !d.user) { state(`XENO could not open your workspace (${esc(r.status)}).<br><button type="button" id="xp-retry">Try again</button>`); document.getElementById('xp-retry').onclick = () => { state('Opening your workspace'); P.ready = check(); }; return null; }
+    if (!r.ok || !d || !d.success || !d.user) { state(`XENO could not open your workspace (${esc(r.status)}).<br><button type="button" id="xp-retry">Try again</button>`); document.getElementById('xp-retry').onclick = () => { opening(); P.ready = check(); }; return null; }
     return adopt(d.user);
   }
-  const start = () => { state('Opening your workspace'); P.ready = check(); };
+  const start = () => { opening(); P.ready = check(); };
   if (document.body) start(); else document.addEventListener('DOMContentLoaded', start, { once: true });
 })();

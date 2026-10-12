@@ -419,3 +419,7 @@
 
 /* A favorite keeps its star lit. */
 .sgf-foot-acts button[aria-pressed='true'] { color: var(--chat-text); }
+
+/* The XENO mark while the gallery or the stage loads, in the text colour. */
+.sgf-empty[role="status"], .sms[role="status"] { color: var(--chat-text); }
+.sms[role="status"] { display: grid; place-items: center; }

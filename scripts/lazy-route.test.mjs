@@ -56,13 +56,13 @@ test('real lazy route delays loading, preserves surrounding state and recovers f
   // card rendered dark on a light page (2026-09-25)
   assert.ok(status.classList.contains('xeno') && ['light', 'dark'].includes(status.getAttribute('data-theme')),
     `the loader carries the resolved platform theme (data-theme=${status.getAttribute('data-theme')})`);
-  assert.equal(status.querySelector('.xeno-card'), null, 'no card: a loading route is a bar, not a block in the page');
+  assert.equal(status.querySelector('.xeno-card'), null, 'no card: a loading route is the mark, not a block in the page');
   // nothing visible for a fast load — the bar appears only once the delay has passed
-  assert.equal(document.querySelector('[role="progressbar"]'), null, 'no bar before the delay, so a fast chunk never flashes');
+  assert.equal(document.querySelector('[data-mark-loader]'), null, 'no mark before the delay, so a fast chunk never flashes');
   await act(async () => { await new Promise(r => setTimeout(r, ROUTE_LOADING_DELAY_MS + 40)); });
-  const bar = document.querySelector('[role="progressbar"]');
-  assert.ok(bar, 'the bar appears once the route has taken longer than the delay');
-  assert.equal(bar.hasAttribute('aria-valuenow'), false, 'indeterminate: it claims no position');
+  const mark = document.querySelector('[data-mark-loader]');
+  assert.ok(mark, 'the XENO mark appears once the route has taken longer than the delay');
+  assert.equal(mark.getAttribute('aria-label'), 'Loading page', 'and names what is loading');
   assert.equal(document.querySelector('.xeno-progressbar-header'), null, 'no visible "Loading page —" caption');
   t.mock.method(console, 'error', () => {}); // Expected React error-boundary diagnostic.
   await act(async () => { rejectFirst(new Error('fixture chunk unavailable')); });
