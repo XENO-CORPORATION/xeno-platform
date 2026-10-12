@@ -189,6 +189,7 @@ try {
   await check('the @ list: Up and Down travel it (passing over types with no model), Enter takes the lit one', async () => {
     await frame.click('[data-chat-composer-shell] textarea'); await page.keyboard.type('@'); await wait(900);
     const lit = () => page.evaluate(() => { const m = document.getElementById('apmenu'); return m?.classList.contains('show') ? (m.querySelector('.row.on')?.textContent || '').replace(/@.*/, '') : 'closed'; });
+    assert.deepEqual(await page.$$eval('#apmenu .row', (e) => e.map((r) => r.textContent.replace(/@.*|unavailable.*/, '') + (r.getAttribute('aria-disabled') === 'true' ? ':off' : ''))), ['Image', 'Video', 'Audio:off', '3D:off'], 'types with no model are greyed out');
     assert.equal(await lit(), 'Image'); await page.keyboard.press('ArrowDown'); await wait(500); assert.equal(await lit(), 'Video');
     await page.keyboard.press('ArrowDown'); await wait(500); assert.equal(await lit(), 'Image', 'audio and 3D have no model here, so it wraps');
     await page.keyboard.press('ArrowUp'); await wait(500); assert.equal(await lit(), 'Video');

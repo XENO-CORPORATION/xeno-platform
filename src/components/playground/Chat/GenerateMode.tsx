@@ -132,8 +132,8 @@ export function openAtMenu(anchor: Element | null, matches: GenType[], selected:
     id: k,
     name: GEN_CATALOG[k].name,
     note: GEN_CATALOG[k].available ? `@${k}` : 'unavailable',
-    disabled: false,
-    reason: GEN_CATALOG[k].available ? '' : GEN_CATALOG[k].reason || 'Catalog unavailable',
+    disabled: !GEN_CATALOG[k].available, // greyed out: no model for it yet
+    reason: GEN_CATALOG[k].available ? '' : 'No model is available for this yet',
   })), selected, { align: 'left' });
 }
 
