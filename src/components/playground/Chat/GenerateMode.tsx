@@ -170,6 +170,8 @@ export const GenSettings: React.FC<{ state: GenState; referenceCount: number }> 
   if (state.mode === 'chat') return null;
   const spec = GEN_CATALOG[state.mode];
   const model = currentGenModel(state, referenceCount);
+  // No model for this type yet: the page stays whole (history, views, the box); only the selector says so.
+  if (!spec.models.length) return <button type="button" className="xm-model apx" data-gen-trigger="model" disabled aria-disabled="true" title="No model is available for this yet" style={{ opacity: 0.5, cursor: 'default' }}><span className="ap-txt"><span className="ap-model">No model available</span></span></button>;
   if (!model) return <button type="button" className="xm-model apx" ref={modelRef} onClick={() => openList(`gen-model:${state.mode}`, modelRef.current, 'Model', spec.models.map(m => ({id:m.id,name:m.name || m.id})), '', {find:true})}>Choose model</button>;
   const openModels = () => openList(`gen-model:${state.mode}`, modelRef.current, `${spec.name} model`, spec.models.map((m) => {
     const why = usableWith(m, referenceCount);
