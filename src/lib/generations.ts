@@ -1,5 +1,6 @@
 /** Shared Studio/composer REST boundary. Never dispatches a text model. */
 import { getAccessToken } from '@/lib/authSession';
+import { embedArea } from '@/lib/workspaceEmbed';
 /** The platform API authenticates by bearer token; a bare same-origin fetch is refused. */
 export const generationAuthHeaders = (): Record<string, string> => { const token = typeof window === 'undefined' ? null : getAccessToken(); return token ? { Authorization: `Bearer ${token}` } : {}; };
 /** One request key per exact request, kept across a reload: a submit whose reply was lost is REPLAYED under the
@@ -20,13 +21,13 @@ export type GenerationModel = { id: string; name?: string; type: GenerationType;
 export type GenerationCatalog = { types: Array<{ type: GenerationType; available: boolean; reason?: string; models: GenerationModel[]; tariff: { revision: string; maxRetailCredits: number } | null }> };
 export type GenerationRequest = { type: GenerationType; model: string; prompt: string; settings: Record<string, string>; referenceAssetIds: string[]; projectId?: string; conversationId?: string; area?: string };
 export type GenerationQuote = { quoteToken: string; requestHash: string; tariffRevision: string; maxRetailCredits: number; expiresAt: string };
-export type Generation = { id: string; type: GenerationType; state: string; request: GenerationRequest; requestHash: string; version: number; quote: GenerationQuote; resultAssetIds: string[]; error?: { code?: string; message?: string }; url?: string };
+export type Generation = { id: string; type: GenerationType; state: string; request: GenerationRequest; requestHash: string; version: number; quote: GenerationQuote; resultAssetIds: string[]; error?: { code?: string; message?: string } | null; url?: string; createdAt?: string; updatedAt?: string; favorite?: boolean };
 export class GenerationError extends Error { constructor(public code: string, message: string, public uncertain = false) { super(message); } }
 export const generationPath = (type: GenerationType, id?: string) => `/workspace/studio/generate/${type}${id ? '/g/' + encodeURIComponent(id) : ''}`;
 export const isGenerationTerminal = (state: string) => ['succeeded', 'failed', 'cancelled', 'denied', 'expired'].includes(state);
-async function api<T>(path: string, body?: unknown, signal?: AbortSignal): Promise<T> {
+async function api<T>(path: string, body?: unknown, signal?: AbortSignal, method?: 'DELETE'): Promise<T> {
   let response: Response;
-  try { response = await fetch('/api/generations' + path, { method: body === undefined ? 'GET' : 'POST', credentials: 'same-origin', headers: { ...generationAuthHeaders(), ...(body === undefined ? {} : { 'Content-Type': 'application/json' }) }, ...(body === undefined ? {} : { body: JSON.stringify(body) }), signal }); }
+  try { response = await fetch('/api/generations' + path, { method: method ?? (body === undefined ? 'GET' : 'POST'), credentials: 'same-origin', headers: { ...generationAuthHeaders(), ...(body === undefined ? {} : { 'Content-Type': 'application/json' }) }, ...(body === undefined ? {} : { body: JSON.stringify(body) }), signal }); }
   catch (error) { if (signal?.aborted) throw error; throw new GenerationError('network_lost', 'Connection lost. Accepted work may still be running; reopen its status before submitting again.', body !== undefined); }
   const data = await response.json().catch(() => null);
   if (!response.ok || !data) throw new GenerationError(typeof data?.error === 'string' ? data.error : data?.error?.code || 'generation_unavailable', data?.error?.message || data?.message || 'Generation service unavailable. Reload its status.', response.ok || response.status >= 500);
@@ -37,8 +38,11 @@ export const generations = {
   quote: (request: GenerationRequest) => api<GenerationQuote>('/quote', request),
   submit: async (request: GenerationRequest, quoteToken: string, requestKey: string) => (await api<{ generation: Generation }>('', { ...request, quoteToken, requestKey })).generation,
   get: async (id: string, signal?: AbortSignal) => (await api<{ generation: Generation }>('/' + encodeURIComponent(id), undefined, signal)).generation,
-  list: async (query: { conversationId?: string; type?: GenerationType; projectId?: string; area?: string }, signal?: AbortSignal) => (await api<{ generations: Generation[] }>('?' + new URLSearchParams(Object.entries(query).filter(([, v]) => v !== undefined) as [string, string][]), undefined, signal)).generations,
+  favorite: async (id: string, favorite: boolean) => (await api<{ generation: Generation }>('/' + encodeURIComponent(id) + '/favorite', { favorite })).generation,
+  remove: async (id: string) => api<{ id: string; removed: boolean }>('/' + encodeURIComponent(id), undefined, undefined, 'DELETE'),
+  list: async (query: { conversationId?: string; type?: GenerationType; projectId?: string; area?: string; favorite?: 'true' }, signal?: AbortSignal) => (await api<{ generations: Generation[] }>('?' + new URLSearchParams(Object.entries(query.area === undefined && !query.conversationId && embedArea() ? { ...query, area: embedArea()! } : query).filter(([, v]) => v !== undefined) as [string, string][]), undefined, signal)).generations,
   approve: async (record: Generation, quote: GenerationQuote) => (await api<{ generation: Generation }>('/' + encodeURIComponent(record.id) + '/approve', { quoteToken: quote.quoteToken, requestHash: quote.requestHash, version: record.version })).generation,
+  retry: async (id: string, quoteToken: string, requestKey: string) => (await api<{ generation: Generation }>('/' + encodeURIComponent(id) + '/retry', { quoteToken, requestKey })).generation,
   cancel: async (id: string) => (await api<{ generation: Generation }>('/' + encodeURIComponent(id) + '/cancel', {})).generation,
 };
 export function validateGeneration(request: GenerationRequest, catalog: GenerationCatalog): string | null {

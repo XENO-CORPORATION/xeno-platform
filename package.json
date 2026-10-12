@@ -239,6 +239,7 @@
     "test:chat-clamd-scanner": "node --test scripts/chat-clamd-scanner.test.mjs",
     "test:chat-queue": "node --test scripts/chat-queue.test.mjs",
     "test:generation-frontend": "node --test scripts/generation-frontend.test.mjs",
+    "test:studio-feed": "node scripts/studio-feed-browser.test.mjs",
     "test:chat-composer-placement": "node --test scripts/chat-composer-placement.test.mjs",
     "test:chat-project-pins": "node --test scripts/chat-project-pins.test.mjs",
     "test:chat-project-pins-db": "node --test --test-force-exit scripts/chat-project-pins-database.test.mjs",

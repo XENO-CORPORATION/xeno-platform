@@ -151,7 +151,7 @@
   // ---------- XD.settings — personal preferences, two panes (Spawn's Settings, adapted) ----------
   const PREF_DEF = { text: 'default', density: 'comfortable', motion: 'system', contrast: false, hints: true, startIn: 'last', links: 'same', ntDesktop: true, ntDigest: 'daily', ntSound: false, analytics: true, scope: 'all' };
   const prefs = () => ({ ...PREF_DEF, ...(store.get('prefs', {}) || {}) });
-  function applyPrefs() { const p = prefs(), r = document.documentElement; r.dataset.text = p.text; r.dataset.density = p.density; r.dataset.motion = p.motion; r.dataset.contrast = p.contrast ? 'high' : 'normal'; r.dataset.hints = p.hints ? 'on' : 'off'; }
+  function applyPrefs() { const p = prefs(), r = document.documentElement; r.dataset.text = p.text; r.dataset.density = p.density; r.dataset.motion = p.motion; r.dataset.imotion = p.interactiveMotion === false ? 'off' : 'on'; r.dataset.contrast = p.contrast ? 'high' : 'normal'; r.dataset.hints = p.hints ? 'on' : 'off'; }
   const SECTIONS = [['general', 'General', 'gear'], ['appearance', 'Appearance', 'palette'], ['notifications', 'Notifications', 'bell'], ['modes', 'Modes', 'layers'], ['privacy', 'Privacy & data', 'globe'], ['keyboard', 'Keyboard', 'terminal'], ['account', 'Account', 'user']];
   function settings(section = 'general') {
     if (window.XENO_SETTINGS) return window.XENO_SETTINGS.open(section);   // one place: the full-page account centre (MODES §7j)

@@ -29,7 +29,9 @@
     if (m === 'adaptive') return BASE + '/adaptive' + q;
     const area = m === 'overview' ? '' : '/' + m;
     if (!kind || !id) return BASE + area + q;
-    if (m === 'studio' && kind === 'p' && ['image', 'video', 'audio', '3d'].includes(id)) return `${BASE}/studio/generate/${id}${item}${q}`;
+    // Enhance improves a result that already exists, so it is its own Studio section, not one of the Generate pages
+    if (m === 'studio' && kind === 'p' && /^enhance-(image|video|audio|3d)$/.test(id)) return `${BASE}/studio/enhance/${id.slice(8)}${item.replace(/^\/g\//, '/e/').replace(/^\/Library$/, '/library')}${q}`;
+    if (m === 'studio' && kind === 'p' && ['image', 'video', 'audio', '3d'].includes(id)) return `${BASE}/studio/generate/${id}${item.replace(/^\/(Library|Favorites)$/, (s) => s.toLowerCase())}${q}`;
     const seg = kind === 'g' ? '/' + id : '/' + (KIND_OUT[kind] || kind) + '/' + id;
     return BASE + area + seg + item + q;
   }
@@ -45,7 +47,12 @@
     if (area === 'overview' && parts[0] === 'overview') parts.shift();
     if (!parts.length) return '#/' + area + q;
     const [a, b, ...rest] = parts;
-    if (area === 'studio' && a === 'generate' && ['image', 'video', 'audio', '3d'].includes(b)) return `#/studio/p/${b}${rest.length ? '/' + rest.join('/') : ''}${q}`;
+    // one Enhance page per type; the single shared page it was for a day opens the image one
+    if (area === 'studio' && a === 'enhance' && ['image', 'video', 'audio', '3d'].includes(b)) return `#/studio/p/enhance-${b}${rest[0] === 'e' && rest[1] ? '/g/' + rest[1] : /^library$/i.test(rest[0] || '') ? '/Library' : ''}${q}`;
+    if (area === 'studio' && a === 'enhance') return `#/studio/p/enhance-image${b === 'e' && rest[0] ? '/g/' + rest[0] : ''}${q}`;
+    // the address Enhance had for a day, under Generate, still opens it
+    if (area === 'studio' && a === 'generate' && b === 'enhance') return `#/studio/p/enhance-image${rest[0] === 'g' && rest[1] ? '/g/' + rest[1] : ''}${q}`;
+    if (area === 'studio' && a === 'generate' && ['image', 'video', 'audio', '3d'].includes(b)) return `#/studio/p/${b}${/^(library|favorites)$/i.test(rest[0] || '') && rest.length === 1 ? '/' + rest[0][0].toUpperCase() + rest[0].slice(1).toLowerCase() : rest.length ? '/' + rest.join('/') : ''}${q}`;
     if (GLOBALS.includes(a)) return `#/${area}/g/${a}${[b, ...rest].filter((x) => x != null).length ? '/' + [b, ...rest].filter((x) => x != null).join('/') : ''}${q}`;
     if (KIND_IN[a] && b) return `#/${area}/${KIND_IN[a]}/${b}${rest.length ? '/' + rest.join('/') : ''}${q}`;
     return '#/' + area + q;
