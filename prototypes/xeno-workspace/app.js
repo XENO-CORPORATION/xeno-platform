@@ -1100,6 +1100,7 @@
     const p = PR[S.product];
     if (S.mode === 'studio' && ['image', 'video', 'audio', '3d', 'enhance-image', 'enhance-video', 'enhance-audio', 'enhance-3d'].includes(S.product) && window.XENO_GENERATIONS) {
       const generationId = /^g\/[0-9a-f-]{36}$/i.test(S.item || '') ? S.item.slice(2) : null;
+      if (S.item === 'Library' || S.item === 'Favorites') return `<a data-mode="studio">Studio</a>${sep}<a data-zone="${S.product.startsWith('enhance-') ? 'enhance' : 'generate'}">${S.product.startsWith('enhance-') ? 'Enhance' : 'Generate'}</a>${sep}<a data-product="${S.product}">${esc(p.name)}</a>${sep}<b>${S.item}</b>`;
       if (S.product.startsWith('enhance-')) return `<a data-mode="studio">Studio</a>${sep}<a data-zone="enhance">Enhance</a>${sep}${generationId ? `<a data-product="${S.product}">${esc(p.name)}</a>${sep}<b>Enhancement</b>` : `<b>${esc(p.name)}</b>`}`;
       return `<a data-mode="studio">Studio</a>${sep}<a data-zone="generate">Generate</a>${sep}${generationId ? `<a data-product="${S.product}">${esc(p.name)}</a>${sep}<b>${S.product === 'enhance' ? 'Enhancement' : 'Generation'}</b>` : `<b>${esc(p.name)}</b>`}`;
     }

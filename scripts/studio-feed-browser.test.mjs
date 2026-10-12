@@ -100,8 +100,17 @@ try {
     const spot = await at('.sgg-tile[draggable="true"] img'); await page.mouse.click(spot.x, spot.y, { button: 'right' }); await wait(500);
     assert.deepEqual(await frame.$$eval('.sgm button', (e) => e.map((x) => x.textContent)), ['Animate', 'Make 3D', 'Enhance', 'Use prompt', 'Copy prompt', 'Copy link', 'Add to favorites', 'Remove']);
     await frame.$$eval('.sgm button', (e) => e.find((x) => x.textContent === 'Add to favorites').click()); await wait(1500);
-    await page.click('.topbar [data-gen-fav]'); await wait(1800); assert.equal(await frame.$$eval('[data-generation-card]', (e) => e.length), 1);
-    await page.click('.topbar [data-gen-fav]'); await wait(1800); assert.equal(await frame.$$eval('[data-generation-card]', (e) => e.length), 4);
+    await page.click('.topbar [data-gen-fav]'); await wait(2200); assert.equal(await here(), '/workspace/studio/generate/image/favorites'); assert.equal(await frame.$$eval('[data-generation-card]', (e) => e.length), 1); assert.equal(await crumb(), 'Studio/Generate/Image/Favorites');
+    await page.click('.topbar [data-gen-fav]'); await wait(2200); assert.equal(await here(), '/workspace/studio/generate/image'); assert.equal(await frame.$$eval('[data-generation-card]', (e) => e.length), 4);
+  });
+  await check('Favorites has its own address: a fresh load and Back both land on it', async () => {
+    await open('/workspace/studio/generate/image/favorites', '[data-generation-card]'); assert.equal(await frame.$$eval('[data-generation-card]', (e) => e.length), 1); assert.equal(await frame.$eval('.sgf', (e) => e.dataset.view), 'grid'); assert.equal(await page.$eval('.topbar [data-gen-fav]', (e) => e.getAttribute('aria-pressed')), 'true');
+    await page.click('.topbar [data-gen-fav]'); await wait(2000); await page.goBack(); await wait(2500); assert.equal(await here(), '/workspace/studio/generate/image/favorites'); assert.equal(await frame.$$eval('[data-generation-card]', (e) => e.length), 1);
+  });
+  await check('the sidebar Library opens the gallery of this type at its own address', async () => {
+    await page.evaluate(() => [...document.querySelectorAll('#panel [data-item="Library"]')][0].click()); await wait(2500);
+    assert.equal(await here(), '/workspace/studio/generate/image/library'); assert.equal(await crumb(), 'Studio/Generate/Image/Library'); assert.equal(await frame.$eval('.sgf', (e) => e.dataset.view), 'grid'); assert.equal(await frame.$$eval('[data-generation-card]', (e) => e.length), 4);
+    await open('/workspace/studio/generate/image', '[data-generation-card]');
   });
   await check('Remove asks first, then the result leaves the history', async () => {
     await view('feed'); await frame.$eval('.sgf-line button[aria-label="Remove from your history"]', (e) => e.click()); await wait(800);

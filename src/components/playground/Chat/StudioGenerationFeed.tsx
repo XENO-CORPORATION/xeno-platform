@@ -326,7 +326,12 @@ export function StudioGenerationFeed({ type, modelNames, activeId, reloadKey, on
   const [records, setRecords] = useState<Generation[] | null>(null);
   const [error, setError] = useState('');
   const [reload, setReload] = useState(0);
-  const [onlyFavorites, setOnlyFavorites] = useState(false);
+  // SHELF: `library` is everything of this type in the gallery; `favorites` only what was starred. It lives in
+  // the address (…/image/library, …/image/favorites), so refresh, Back and a shared link land on it.
+  const readShelf = () => { const s = new URLSearchParams(window.location.search).get('shelf'); return s === 'library' || s === 'favorites' ? s : null; };
+  const [shelf, setShelf] = useState<'library' | 'favorites' | null>(readShelf);
+  useEffect(() => { const on = () => setShelf(readShelf()); window.addEventListener('popstate', on); return () => window.removeEventListener('popstate', on); }, []);
+  const onlyFavorites = shelf === 'favorites';
   const [now, setNow] = useState(() => Date.now());
   const scroller = useRef<HTMLDivElement | null>(null);
   const seen = useRef('');
@@ -340,8 +345,9 @@ export function StudioGenerationFeed({ type, modelNames, activeId, reloadKey, on
   // The switch itself is in the workspace's top bar; both sides keep each other in step by message.
   const choose = (next: View, tell = true) => { seen.current = ''; if (next !== 'theater' && next !== 'stage') base.current = next; setView(next); try { localStorage.setItem(next === 'stage' ? 'xeno_studio_view_3d' : 'xeno_studio_view', next); if (type === '3d' && next !== 'stage') localStorage.removeItem('xeno_studio_view_3d'); } catch { /* a private window still switches */ } if (tell && window.parent !== window) window.parent.postMessage({ source: 'xeno-chat', type: 'generation-view', view: next }, window.location.origin); };
   const chooseRef = useRef(choose); chooseRef.current = choose;
+  useEffect(() => { if (shelf) chooseRef.current('grid'); }, [shelf]); // a shelf is looked through, so it opens as the grid
   useEffect(() => {
-    const onMessage = (e: MessageEvent) => { if (e.origin === window.location.origin && e.source === window.parent && e.data?.source === 'xeno-workspace' && e.data.type === 'generation-view') chooseRef.current(asView(e.data.view, type), false); else if (e.origin === window.location.origin && e.source === window.parent && e.data?.source === 'xeno-workspace' && e.data.type === 'generation-filter') setOnlyFavorites(e.data.favorite === true); else if (e.origin === window.location.origin && e.source === window.parent && e.data?.source === 'xeno-workspace' && e.data.type === 'generation-grid-size') setRow(clampRow(Number(e.data.size))); };
+    const onMessage = (e: MessageEvent) => { if (e.origin === window.location.origin && e.source === window.parent && e.data?.source === 'xeno-workspace' && e.data.type === 'generation-view') chooseRef.current(asView(e.data.view, type), false); else if (e.origin === window.location.origin && e.source === window.parent && e.data?.source === 'xeno-workspace' && e.data.type === 'area') setReload(n => n + 1); /* another area: its own history */ else if (e.origin === window.location.origin && e.source === window.parent && e.data?.source === 'xeno-workspace' && e.data.type === 'generation-grid-size') setRow(clampRow(Number(e.data.size))); };
     window.addEventListener('message', onMessage); return () => window.removeEventListener('message', onMessage);
   }, []);
   useEffect(() => {

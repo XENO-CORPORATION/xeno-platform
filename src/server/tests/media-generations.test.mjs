@@ -25,6 +25,7 @@ let pass=0;const ok=(value,label)=>{assert(value,label);pass++;console.log(`PASS
 const expectCode=async(fn,code)=>{await assert.rejects(fn,error=>error.code===code);pass++;console.log(`PASS refuses ${code}`);};
 const migration=await fs.readFile(new URL('../database/migrations/20261011160000-media-generations.sql',import.meta.url),'utf8');
 const keepMigration=await fs.readFile(new URL('../database/migrations/20261012090000-media-generation-keep.sql',import.meta.url),'utf8');
+const areaMigration=await fs.readFile(new URL('../database/migrations/20261012100000-media-generation-area.sql',import.meta.url),'utf8');
 const uploadsDir=path.join(os.tmpdir(),'xeno-media-proof-'+crypto.randomUUID()); // never inside the repo
 const secret='disposable-test-media-quote-key';
 const PNG=Buffer.from('89504e470d0a1a0a0000000049454e44','hex');
@@ -42,6 +43,7 @@ try{
   await pool.query('CREATE UNIQUE INDEX uq_media_test_ingestion ON library_asset_ingestions(asset_id,content_sha256,extractor_version,embedding_model_id) NULLS NOT DISTINCT');
   await pool.query(migration.split('-- DOWN')[0]);await pool.query(migration.split('-- DOWN')[0]);
   await pool.query(keepMigration.split('-- DOWN')[0]);await pool.query(keepMigration.split('-- DOWN')[0]); // idempotent, like the first
+  await pool.query(areaMigration.split('-- DOWN')[0]);await pool.query(areaMigration.split('-- DOWN')[0]);
   const owner=(await pool.query('INSERT INTO users(credits) VALUES(1000) RETURNING id')).rows[0].id;
   const foreign=(await pool.query('INSERT INTO users(credits) VALUES(1000) RETURNING id')).rows[0].id;
   const agent=(await pool.query('INSERT INTO users(credits) VALUES(0) RETURNING id')).rows[0].id;
@@ -105,6 +107,15 @@ try{
   await cancelGeneration(pool,owner,v.id);ok((await getGeneration(pool,owner,v.id)).state==='cancel_requested','cancel intent not false cancellation');await pool.query('UPDATE media_generations SET next_attempt_at=now()');await runMediaGenerationBatch(pool,options);ok((await getGeneration(pool,owner,v.id)).state==='cancelled','observed provider cancellation releases hold');
   await expectCode(()=>retryGeneration(pool,owner,proposal.id,{requestKey:'retry-success'},options),'generation_not_retryable');
   await expectCode(()=>assertGenerationConversation(pool,owner,[proposal.id],crypto.randomUUID()),'generation_conversation_mismatch');
+  // --- areas: each lists its own, Overview lists all ---
+  const inArea=async(area,key)=>{const r={...request,prompt:'made in '+area};const q=await quoteGeneration(pool,owner,r,options);const g=await createGeneration(pool,owner,{...r,requestKey:key,quoteToken:q.quoteToken},{...options,area});await cancelGeneration(pool,owner,g.id);return g;};
+  const devMade=await inArea('dev','area-dev'),studioMade=await inArea('studio','area-studio');
+  ok(devMade.area==='dev'&&(await getGeneration(pool,owner,devMade.id)).area==='dev','a generation keeps the area it was made in');
+  const ids=async area=>(await listGenerations(pool,owner,{area})).map(g=>g.id);
+  ok((await ids({filter:true,area:'dev'})).join()===devMade.id,'an area lists only its own');
+  ok((await ids({filter:true,area:'studio'})).join()===studioMade.id,'another area lists only its own');
+  const everywhere=await ids({filter:false,area:null});ok(everywhere.includes(devMade.id)&&everywhere.includes(studioMade.id)&&everywhere.includes(proposal.id),'Overview lists every area and what is in none');
+  const nowhere=await ids({filter:true,area:null});ok(nowhere.includes(proposal.id)&&!nowhere.includes(devMade.id),'"none" lists what is in no area');
   // --- favorites and removal ---
   ok((await getGeneration(pool,owner,proposal.id)).favorite===false,'a generation is not a favorite until marked');
   ok((await setGenerationFavorite(pool,owner,proposal.id,true)).favorite===true&&(await getGeneration(pool,owner,proposal.id)).favorite===true,'a favorite is stored and read back');

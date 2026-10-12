@@ -5,14 +5,18 @@
   const enh = (type) => String(type).startsWith('enhance-');
   const pathFor = (type, id) => enh(type) ? '/workspace/studio/enhance/' + type.slice(8) + (id ? '/e/' + encodeURIComponent(id) : '') : '/workspace/studio/generate/' + type + (id ? '/g/' + encodeURIComponent(id) : '');
   const route = (path = location.pathname) => {
-    const frameFor = (sub, id) => ({ type: 'enhance-' + sub, id: id || null, framePath: '/chat?generationType=enhance&enhanceType=' + sub + (id ? '&generationId=' + encodeURIComponent(id) : '') });
+    const frameFor = (sub, id, shelf) => ({ type: 'enhance-' + sub, id: id || null, shelf: shelf || null, framePath: '/chat?generationType=enhance&enhanceType=' + sub + (id ? '&generationId=' + encodeURIComponent(id) : '') + (shelf ? '&shelf=' + shelf : '') });
+    // the gallery of one type: everything made (library) or only what was starred (favorites)
+    const s = path.match(/^\/workspace\/studio\/(generate|enhance)\/(image|video|audio|3d)\/(library|favorites)\/?$/i);
+    if (s && s[1].toLowerCase() === 'enhance' && s[3].toLowerCase() === 'library') return frameFor(s[2].toLowerCase(), null, 'library');
+    if (s && s[1].toLowerCase() === 'generate') return { type: s[2].toLowerCase(), id: null, shelf: s[3].toLowerCase(), framePath: '/chat?generationType=' + s[2].toLowerCase() + '&shelf=' + s[3].toLowerCase() };
     const e = path.match(/^\/workspace\/studio\/enhance\/(image|video|audio|3d)(?:\/e\/([0-9a-f-]{36}))?\/?$/i);
     if (e) return frameFor(e[1].toLowerCase(), e[2]);
     // the addresses Enhance had before it was one page per type: they still open, and the bar is corrected in place
     const old = path.match(/^\/workspace\/studio\/(?:generate\/enhance(?:\/g\/([0-9a-f-]{36}))?|enhance(?:\/e\/([0-9a-f-]{36}))?)\/?$/i);
     if (old) { const id = old[1] || old[2]; if (path === location.pathname) history.replaceState(history.state, '', pathFor('enhance-image', id)); return frameFor('image', id); }
     const m = path.match(/^\/workspace\/studio\/generate\/(image|video|audio|3d)(?:\/g\/([0-9a-f-]{36}))?\/?$/i);
-    return m ? { type: m[1].toLowerCase(), id: m[2] || null, framePath: '/chat?generationType=' + m[1].toLowerCase() + (m[2] ? '&generationId=' + encodeURIComponent(m[2]) : '') } : null;
+    return m ? { type: m[1].toLowerCase(), id: m[2] || null, shelf: null, framePath: '/chat?generationType=' + m[1].toLowerCase() + (m[2] ? '&generationId=' + encodeURIComponent(m[2]) : '') } : null;
   };
   const host = () => '<div class="live-chat-host" data-chat-frame data-generation-host></div>';
   const open = (type, id) => {
@@ -44,7 +48,7 @@
   const SIZE_KEY = 'xeno_studio_grid';
   const size = () => { try { return Math.min(440, Math.max(110, Number(localStorage.getItem(SIZE_KEY)) || 220)); } catch { return 220; } };
   const viewSwitch = () => { const now = view(); /* Enhance has the same three views as Generate */
-    const fav = enh(route()?.type || '') ? '' : '<button type="button" class="tb-fav" data-gen-fav aria-pressed="false" aria-label="Favorites only" data-tip="Favorites only"><svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3.5l2.6 5.4 5.9.8-4.3 4.1 1 5.9L12 16.9l-5.2 2.8 1-5.9L3.5 9.7l5.9-.8L12 3.5z"/></svg></button>';
+    const fav = enh(route()?.type || '') ? '' : '<button type="button" class="tb-fav" data-gen-fav aria-pressed="' + (route()?.shelf === 'favorites') + '" aria-label="Favorites only" data-tip="Favorites only"><svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3.5l2.6 5.4 5.9.8-4.3 4.1 1 5.9L12 16.9l-5.2 2.8 1-5.9L3.5 9.7l5.9-.8L12 3.5z"/></svg></button>';
     return fav + '<input class="tb-size" type="range" min="110" max="440" step="2" value="' + size() + '" data-gen-size aria-label="Tile size" data-tip="Tile size"' + (now === 'grid' ? '' : ' hidden') + '><div class="tb-view" role="group" aria-label="View">'
     + '<button type="button" data-gen-view="feed" aria-label="Feed view" data-tip="Feed" aria-pressed="' + (now === 'feed') + '"><svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="4" width="16" height="6" rx="1.5"/><rect x="4" y="14" width="16" height="6" rx="1.5"/></svg></button>'
     + '<button type="button" data-gen-view="theater" aria-label="Theater view" data-tip="Theater" aria-pressed="' + (now === 'theater') + '"><svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M7 4h10"/><rect x="4" y="8" width="16" height="12" rx="1.5"/></svg></button>'
@@ -72,8 +76,9 @@
   });
   document.addEventListener('click', (e) => {
     const b = e.target.closest('#main .topbar [data-gen-fav]'); if (!b) return;
-    const on = b.getAttribute('aria-pressed') !== 'true'; b.setAttribute('aria-pressed', String(on));
-    try { document.getElementById('xw-chat-frame')?.contentWindow?.postMessage({ source: 'xeno-workspace', type: 'generation-filter', favorite: on }, location.origin); } catch {}
+    const here = route(); if (!here) return;
+    const to = '#/studio/p/' + here.type + (here.shelf === 'favorites' ? '' : '/Favorites');
+    if (window.XENO_ADDR?.go) window.XENO_ADDR.go(to); else window.location.assign('/workspace/studio/generate/' + here.type + (here.shelf === 'favorites' ? '' : '/favorites'));
   });
   document.addEventListener('input', (e) => {
     const s = e.target.closest?.('#main .topbar [data-gen-size]'); if (!s) return;

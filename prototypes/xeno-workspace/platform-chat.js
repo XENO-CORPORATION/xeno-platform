@@ -215,7 +215,7 @@
     // moved to another area: its own list, not the last one's
     if (S.area !== undefined && S.area !== area() && !loading) { S.status = 'loading'; S.convs = []; S.projects = []; S.total = 0; load(); toChatFrame({ type: 'area', area: area() }); }
     const generation = window.XENO_GENERATIONS?.route?.();
-    const want = generation ? `generation:${generation.type}:${generation.id || ''}` : X()?.S?.item || null;
+    const want = generation ? `generation:${generation.type}:${generation.id || generation.shelf || ''}` : X()?.S?.item || null;
     const framePath = generation ? generation.framePath : pathFor(want);
     if (!frame) ensureFrame(framePath); else if ((want || null) !== (S.current || null)) show(framePath, true);   // the address changed (Back, a link): follow it
     S.current = want;
