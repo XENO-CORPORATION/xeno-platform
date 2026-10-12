@@ -1,5 +1,6 @@
+import { MarkLoader } from './MarkLoader';
 import React, { Suspense, useEffect, useMemo, useState } from 'react';
-import { Button, Card, ProgressBar } from '@xenosystem/elements-react';
+import { Button, Card } from '@xenosystem/elements-react';
 import { useResolvedPlatformTheme } from '../../platform/platformTheme';
 
 /** How long a route may take before anything says so. Most chunks land well inside this, and a
@@ -33,7 +34,7 @@ function RouteLoading() {
   return <div className={`xeno chat-themed chat-theme-${resolvedTheme} route-loading`}
     data-theme={resolvedTheme === 'light' ? 'light' : 'dark'}
     role="status" aria-busy="true" aria-live="polite" data-shown={shown || undefined}>
-    {shown ? <ProgressBar value={null} /> : null}
+    {shown ? <MarkLoader size={88} label="Loading page" /> : null}
     <span className="sr-only">Loading page</span>
   </div>;
 }

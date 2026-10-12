@@ -1,3 +1,4 @@
+import { MarkLoader } from '../../platform/MarkLoader';
 import React, { Suspense, useContext, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { CornerDownLeft, Download, Star, Trash2, Expand, Link2, Maximize2, Pause, Play, RotateCw, Volume2, VolumeX, X } from 'lucide-react';
@@ -489,7 +490,7 @@ export function StudioGenerationFeed({ type, modelNames, activeId, reloadKey, on
   useEffect(() => { const onKey = (e: KeyboardEvent) => keys.current(e); // Capture: the prompt box handles Enter itself and would swallow it before it reached the page.
   document.addEventListener('keydown', onKey, true); return () => document.removeEventListener('keydown', onKey, true); }, []);
   if (error) return <div className="sgf-empty" role="alert"><p>{error}</p><button type="button" className="sgf-btn" onClick={() => setReload(n => n + 1)}>Load again</button></div>;
-  if (!records) return <div className="sgf-empty" role="status"><p>Loading your {TYPE_NOUN[type]}s</p></div>;
+  if (!records) return <div className="sgf-empty" role="status"><MarkLoader size={72} label={`Loading your ${TYPE_NOUN[type]}s`} /></div>;
   if (!records.length && onlyFavorites) return <div className="sgf-empty"><h2>No favorites yet</h2><p>Mark a result with the star and it is kept here.</p></div>;
   if (!records.length) return <div className="sgf-empty"><h2>{options.empty?.title ?? 'Nothing made yet'}</h2><p>{options.empty?.text ?? `Describe the ${TYPE_NOUN[type]} you want below. It will appear here, and stay here.`}</p></div>;
   const ordered = [...records].reverse();
@@ -498,7 +499,7 @@ export function StudioGenerationFeed({ type, modelNames, activeId, reloadKey, on
   // element keeps this component's place in the column, which is how the page learns the view.
   if (view === 'stage') return <>
     <div className="sgf sms-barhost" ref={node => { scroller.current = node; setBarHost(node); }} data-view="stage" />
-    {stageRoot && createPortal(<Suspense fallback={<div className="sms"><p className="sms-message" role="status">Opening the stage</p></div>}><StudioModelStage records={records} activeId={activeId} modelNames={modelNames} onOpen={onOpen} onExit={() => choose(base.current)} barHost={barHost} /></Suspense>, stageRoot)}
+    {stageRoot && createPortal(<Suspense fallback={<div className="sms" role="status"><MarkLoader size={88} label="Opening the stage" /></div>}><StudioModelStage records={records} activeId={activeId} modelNames={modelNames} onOpen={onOpen} onExit={() => choose(base.current)} barHost={barHost} /></Suspense>, stageRoot)}
   </>;
   if (view === 'grid') return <Options.Provider value={options}><Drag.Provider value={dragApi}><div className="sgf" ref={scroller} data-view="grid" data-holding={held ? '' : undefined} tabIndex={0} style={{ ['--row' as string]: row + 'px' }} aria-label="Results as a grid. Arrow keys move between them, Enter opens one in Theater.">
     <div className="sgg">
