@@ -420,6 +420,11 @@
 /* A favorite keeps its star lit. */
 .sgf-foot-acts button[aria-pressed='true'] { color: var(--chat-text); }
 
+/* A generation inside a chat: the Studio card at the width of an answer. */
+.sgf-chat { max-width: 640px; margin: 6px 0 2px; }
+.sgf-chat[role="status"] { color: var(--chat-text); padding: 12px 0; }
+.sgf-chat .sgf-card { animation: none; }
+
 /* The XENO mark while the gallery or the stage loads, in the text colour. */
 .sgf-empty[role="status"], .sms[role="status"] { color: var(--chat-text); }
 .sms[role="status"] { display: grid; place-items: center; }

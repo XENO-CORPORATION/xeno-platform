@@ -25,7 +25,7 @@ import ChatModelSelector from './ChatModelSelector';
 import WorkspaceModelTrigger from './WorkspaceModelTrigger';
 import { generations, validateGeneration, stableRequestKey, releaseRequestKey, GenerationError, type Generation, type GenerationRequest } from '@/lib/generations';
 import { GenerationRecord } from './GenerationRecord';
-import { RESULT_DRAG, StudioGenerationFeed } from './StudioGenerationFeed';
+import { ChatGenerationCard, RESULT_DRAG, StudioGenerationFeed } from './StudioGenerationFeed';
 import { StudioEnhance } from './StudioEnhance';
 import type { GenState, GenType } from './GenerateMode';
 import { GEN_CATALOG, currentGenModel, GenModeTrigger, GenSettings, atQuery, closeGenMenu, isGenMenuOpen, openAtMenu, useGenerateMode } from './GenerateMode';
@@ -614,6 +614,8 @@ const normalizePersistedSearchInfo = (value: unknown): ChatMessage['searchInfo']
   };
 };
 
+/** What is stored as the words of a turn that only started a generation (the row needs content; the chat shows the card instead). */
+const GENERATION_TURN_TEXT = 'Generation submitted.';
 const dbMessageToLocal = (msg: DBChatMessage, index: number): ChatMessage => {
   const isAi = msg.role === 'assistant';
   const attachments = Array.isArray(msg.attachments) ? msg.attachments : [];
@@ -643,8 +645,9 @@ const dbMessageToLocal = (msg: DBChatMessage, index: number): ChatMessage => {
     dbId: msg.id,
     parentDbId: msg.parent_id ?? null,
     sender: isAi ? 'ai' : 'user',
-    text: msg.content,
-    parsedAnswer: isAi ? msg.content : undefined,
+    // a turn that only started a generation has no words of its own: its card says everything
+    text: isAi && msg.content === GENERATION_TURN_TEXT && storedTurn?.steps.some(step => step.kind === 'generation') ? '' : msg.content,
+    parsedAnswer: isAi ? (msg.content === GENERATION_TURN_TEXT && storedTurn?.steps.some(step => step.kind === 'generation') ? '' : msg.content) : undefined,
     modelId: msg.model_id,
     modelIdUsed: msg.model_id,
     ...(isAi && Number.isInteger(msg.total_tokens) && (msg.total_tokens as number) > 0 ? {
@@ -7055,6 +7058,12 @@ const ChatWithLLM: React.FC<ChatWithLLMProps> = ({
     setMessages(prev => [...prev, placeholderMessageToAdd!]);
     }
 
+    // GENERATIONS in this conversation (made with @image, @video, @audio, @3d): the model is told what each one
+    // was, and the newest finished image travels as a picture, so "make it warmer" or "what's in it" works.
+    const generationSteps = currentHistory.flatMap(msg => msg.sender === 'ai' ? (msg.turn?.steps || []).filter(step => step.kind === 'generation').map(step => ({ msg, id: (step as { generationId: string }).generationId })) : []);
+    const generationRecords = new Map<string, Generation>();
+    await Promise.all(generationSteps.map(async ({ id }) => { try { generationRecords.set(id, await generations.get(id)); } catch { /* gone or unreadable: the note says so */ } }));
+    const latestImageGeneration = [...generationSteps].reverse().find(({ id }) => { const g = generationRecords.get(id); return g?.type === 'image' && g.state === 'succeeded' && g.resultAssetIds.length > 0; });
     // the newest turn that made images — the only one whose pictures travel with this message
     const latestImageTurnId = [...currentHistory].reverse()
         .find((msg) => msg.sender === 'ai' && turnImages(msg.turn).some((step) => step.assetId || msg.imagePreviews?.[step.id]))?.id;
@@ -7168,6 +7177,25 @@ const ChatWithLLM: React.FC<ChatWithLLMProps> = ({
              * are fetched: an edit starts from the newest picture, and fetching every image of a long
              * conversation on every message would be a cost for nothing.
              */
+            if (msg.sender === 'ai') {
+                for (const { msg: owner, id } of generationSteps) {
+                    if (owner !== msg) continue;
+                    const g = generationRecords.get(id);
+                    if (!g) { messagePayload.parts.push({ type: 'text', text: '[A media generation was started here; its record is no longer available.]' }); continue; }
+                    const what = g.type === '3d' ? '3D model' : g.type;
+                    const outcome = g.state === 'succeeded' ? `finished, ${g.resultAssetIds.length} result${g.resultAssetIds.length === 1 ? '' : 's'} in the Library` : g.state === 'failed' ? `failed (${g.error?.code || 'unknown reason'}), nothing charged` : g.state === 'cancelled' ? 'cancelled, nothing charged' : `still ${g.state.replace(/_/g, ' ')}`;
+                    const settings = Object.entries(g.request.settings).map(([k, v]) => `${k} ${v}`).join(', ');
+                    messagePayload.parts.push({ type: 'text', text: `[The user generated a ${what} with ${g.request.model}${settings ? ` (${settings})` : ''} from the prompt: "${g.request.prompt}". It is ${outcome}.${g.state === 'succeeded' && g.type !== 'image' ? ` You cannot see or play the ${what}; describe it only from its prompt.` : ''}]` });
+                    if (latestImageGeneration?.id === id) {
+                        const assetId = g.resultAssetIds[0];
+                        try {
+                            const blob = await libraryService.fetchAssetBlob({ assetId, name: g.request.prompt, mimeType: 'image/*', contentUrl: '' } as never);
+                            const data = (await fileToBase64(new globalThis.File([blob], 'generation', { type: blob.type || 'image/png' }))).split(',')[1];
+                            messagePayload.parts.push({ type: 'image', media_type: blob.type || 'image/png', data: data || '', name: `generated image ${id.slice(0, 8)}` });
+                        } catch (error) { console.warn('[API Prep] generated image unavailable for the model:', error); }
+                    }
+                }
+            }
             if (msg.sender === 'ai' && msg.id === latestImageTurnId) {
                 for (const step of turnImages(msg.turn)) {
                     const asset = imageAssetFor(step);
@@ -8031,9 +8059,9 @@ const ChatWithLLM: React.FC<ChatWithLLMProps> = ({
       if (studioType) { setStudioGenerationId(record.id); window.parent.postMessage({source:'xeno-chat',type:'generation-location',generationId:record.id,generationType:type,path:`/workspace/studio/generate/${type}/g/${record.id}`},window.location.origin); }
       else {
         const turn=applyTurnEvent(newTurnRecord(),{type:'generation_proposal',generation:record});
-        const local: ChatMessage={id:'generation-reply-'+record.id,sender:'ai',text:'Generation submitted.',parsedAnswer:'Generation submitted.',timestamp:Date.now(),turn};
+        const local: ChatMessage={id:'generation-reply-'+record.id,sender:'ai',text:'',parsedAnswer:'',timestamp:Date.now(),turn};
         setMessages(prev=>[...prev,local]);
-        const row=await chatService.addMessage(conversationId!,{role:'assistant',content:'Generation submitted.',turn});
+        const row=await chatService.addMessage(conversationId!,{role:'assistant',content:GENERATION_TURN_TEXT,turn});
         if (!row) setGenerationError('Generation was admitted. Its chat presentation could not be saved; the durable status remains available below and in Studio.');
         setGenerationListReload(n=>n+1);
       }
@@ -12688,7 +12716,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
               {generationError && <p role="alert" className="px-1 pb-1.5 text-[12px] leading-5 text-[#8b857c]">{generationError}</p>}
               {generationListError && <p role="alert" className="px-1 pb-1.5 text-[12px] leading-5 text-[#8b857c]">{generationListError} <button type="button" className="underline" onClick={() => setGenerationListReload(n=>n+1)}>Reload</button></p>}
               {!studioType && studioGenerationId && <GenerationRecord id={studioGenerationId} />}
-              {!studioType && durableGenerations.filter(g=>!messages.some(m=>m.turn?.steps.some(step=>step.kind==='generation' && step.generationId===g.id))).map(g=><GenerationRecord key={g.id} id={g.id} />)}
+              {!studioType && durableGenerations.filter(g=>!messages.some(m=>m.turn?.steps.some(step=>step.kind==='generation' && step.generationId===g.id))).map(g=><ChatGenerationCard key={g.id} id={g.id} onUsePrompt={text => setInputValue(text)} />)}
               {waitingQuestion && (
                 <ChatQuestionPanel step={waitingQuestion.step} onAnswer={answerQuestion} onSkip={skipQuestion} busy={isLoading} />
               )}
@@ -17438,7 +17466,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                                           {/* run_code blocks (2026-09-27): the source, output and produced
                                               files of each run the turn made, in order — drawn under the head
                                               like generated images, live and on reload from the turn record. */}
-                                          {message.turn?.steps.filter(step => step.kind === 'generation').map(step => step.kind === 'generation' ? <GenerationRecord key={step.id} id={step.generationId} /> : null)}
+                                          {message.turn?.steps.filter(step => step.kind === 'generation').map(step => step.kind === 'generation' ? <ChatGenerationCard key={step.id} id={step.generationId} onUsePrompt={text => setInputValue(text)} /> : null)}
                                           <ChatCodeExecution
                                               steps={turnCodeSteps(message.turn)}
                                               live={Boolean(message.isStreaming || message.isThinkingPlaceholder || message.isDotPlaceholder)}
