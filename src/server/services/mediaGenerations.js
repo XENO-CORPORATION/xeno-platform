@@ -1,3 +1,4 @@
+import { localLibraryPath } from './storageObjects.js';
 import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import fs from 'node:fs/promises';
@@ -41,6 +42,7 @@ export async function readGenerationReferences(db,actor,ids,{uploadsDir=null}={}
     if(!file)throw generationError('reference_forbidden',404);
     if(!file.ingestion_safe)throw generationError('reference_not_ready',409);
     if(!['image/png','image/jpeg','image/webp'].includes(file.mime_type)||Number(file.file_size)>MAX_REFERENCE_BYTES)throw generationError('invalid_reference_media',422);
+    await localLibraryPath(db,file);   // XENO Storage: bring the bytes back from the object store when the cached copy is gone
     const real=await fs.realpath(file.storage_path).catch(()=>null);
     if(!real||!roots.some(root=>real.startsWith(`${root}${path.sep}`)))throw generationError('reference_path_forbidden',422);
     const handle=await fs.open(real,'r');let bytes;

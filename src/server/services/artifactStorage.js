@@ -77,6 +77,10 @@ function fsBackend(root) {
         throw error;
       }
     },
+    /** Remove an object. Used only for account files (services/storageObjects.js); artifacts are never deleted here. */
+    async delete(key) {
+      try { await fs.unlink(target(key)); return true; } catch (error) { if (error.code === 'ENOENT') return false; throw error; }
+    },
   };
 }
 
@@ -153,6 +157,13 @@ function r2Backend({ accountId, accessKeyId, secretAccessKey, bucket, fetchImpl 
       if (response.status === 404) return null;
       if (!response.ok) throw new Error(`R2 HEAD ${key} failed: ${response.status}`);
       return { sizeBytes: Number(response.headers.get('content-length') ?? 0) };
+    },
+    /** Remove an object. Used only for account files (services/storageObjects.js); artifacts are never deleted here. */
+    async delete(key) {
+      const response = await request('DELETE', key);
+      if (response.status === 404) return false;
+      if (!response.ok) throw new Error(`R2 DELETE ${key} failed: ${response.status}`);
+      return true;
     },
   };
 }

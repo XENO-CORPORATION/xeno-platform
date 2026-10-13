@@ -1,3 +1,4 @@
+import { localLibraryPath } from '../services/storageObjects.js';
 import express from 'express';
 import { readArea, readAreaFilter, EFFECTIVE_CONVERSATION_AREA } from '../utils/resourceArea.js';
 import { activePath, deepestLeafUnder, indexById } from '../utils/chatBranches.js';
@@ -1933,7 +1934,7 @@ router.get('/library/file/:id/content', async (req, res) => {
     const file = await getAuthorizedLibraryFile(req.db, userPrincipal(userId), req.params.id);
     if (!file) return res.status(404).json({ success: false, error: 'File not found' });
     if (!file.ingestion_safe) return res.status(423).json({ success: false, error: 'File is still in security quarantine', code: 'asset_quarantined' });
-    const resolved = resolveManagedLibraryPath(file.storage_path);
+    const resolved = await localLibraryPath(req.db, file);   // XENO Storage: the disk is a cache; the object store is the home
     if (!resolved) {
       return res.status(404).json({ success: false, error: 'File data not found' });
     }

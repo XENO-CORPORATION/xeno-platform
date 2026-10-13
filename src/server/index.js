@@ -89,7 +89,7 @@ import { sweepExpiredIntents } from './services/downloadFunnel.js';
 import { sweepRetention, RETENTION_SWEEP_INTERVAL_MS } from './services/dataRetention.js';
 import { sweepExpiredArtifacts } from './services/artifactService.js';
 import { sweepLibraryTrash } from './services/libraryOrganise.js';
-import { syncFileObjects } from './services/storageObjects.js';
+import { evictLocalCopies, storeFileObject, sweepOrphanObjects, syncFileObjects } from './services/storageObjects.js';
 import { addVersion } from './services/storageVersions.js';
 import { sweepExports } from './services/accountExport.js';
 import { requireSupportedClient } from './middleware/requireSupportedClient.js';
@@ -1123,6 +1123,8 @@ app.post('/api/upload', databaseMiddleware, authMiddleware, upload.single('image
       area: req.xenoArea ?? null,   // AREA: an upload lands in the area it was made in
     });
     const libraryId = stored.id;
+    // XENO Storage: the bytes go to the object store now, not at the next sweep (the sweep is the safety net)
+    storeFileObject(req.db, { id: libraryId, storage_path: filePath, content_sha256: stored.content_sha256 }).catch((e) => console.warn('[Storage] immediate copy failed, the sweep will retry:', e.message));
 
     res.json({
       success: true,
@@ -3953,8 +3955,23 @@ startDownloadCleanup();
       .then((r) => { if (r.stored || r.failed) console.log(`[Storage] copied ${r.stored} file(s), ${r.bytes} bytes; failed ${r.failed} ${JSON.stringify(r.errors)}`); })
       .catch((e) => console.error('[Storage] error:', e.message));
     backgroundLeader.whenLeader(() => {
-      const t = setInterval(copyFiles, 5 * 60 * 1000);
+      const t = setInterval(copyFiles, 60 * 1000);
       t.unref(); copyFiles();
+      return () => clearInterval(t);
+    });
+
+    // XENO Storage: the object store is the home of a file's bytes and this disk is a cache. Cached copies that
+    // are verified in the object store and idle for STORAGE_CACHE_HOURS (default 24) are removed; the objects of
+    // files deleted for good are removed too. STORAGE_CACHE_HOURS=off keeps every copy on disk.
+    const cacheHours = String(process.env.STORAGE_CACHE_HOURS || '24').trim().toLowerCase();
+    const tidyStorage = () => (cacheHours === 'off' ? Promise.resolve(null) : evictLocalCopies(pool, { idleHours: Math.max(1, Number(cacheHours) || 24) }))
+      .then((r) => { if (r && (r.evicted || r.failed)) console.log(`[Storage] cache: removed ${r.evicted} local copy(ies), ${r.bytes} bytes; kept ${r.kept} recent; skipped ${r.failed}`); })
+      .then(() => sweepOrphanObjects(pool))
+      .then((r) => { if (r.records) console.log(`[Storage] deleted files: ${r.records} record(s), ${r.objects} object(s) removed`); })
+      .catch((e) => console.error('[Storage] tidy error:', e.message));
+    backgroundLeader.whenLeader(() => {
+      const t = setInterval(tidyStorage, 30 * 60 * 1000);
+      t.unref(); setTimeout(tidyStorage, 2 * 60 * 1000).unref();
       return () => clearInterval(t);
     });
 

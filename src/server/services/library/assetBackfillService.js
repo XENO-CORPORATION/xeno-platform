@@ -4,6 +4,7 @@ import fs from 'fs';
 import { CHAT_PROJECT_CONTRACTS } from '../../config/chatProjectContracts.js';
 import { withTransaction } from '../chatProjectAuthority.js';
 import { sniffMime } from '../libraryAssets.js';
+import { localLibraryPath } from '../storageObjects.js';
 
 function safeCode(error) {
   const value = String(error?.code || 'asset_backfill_failed');
@@ -64,7 +65,7 @@ export async function backfillLibraryAssets(db, {
     for (const asset of page.rows) {
       cursor = asset.id;
       try {
-        const bytes = await readFile(asset.storage_path);
+        const bytes = await readFile((await localLibraryPath(db, asset)) || asset.storage_path);   // XENO Storage: the disk is a cache
         if (bytes.length !== Number(asset.file_size)) {
           throw Object.assign(new Error('Managed byte length does not match the canonical asset'), {
             code: 'asset_size_mismatch',

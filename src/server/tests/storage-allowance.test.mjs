@@ -15,7 +15,7 @@ import libraryRoutes from '../routes/libraryRoutes.js';
 import { registerManagedLibraryFile } from '../services/libraryAssets.js';
 import { runAllMigrations } from '../services/migrationRunner.js';
 import { storageUsage, storageAllowance, StorageFullError } from '../services/storageAllowance.js';
-import { syncFileObjects, fileObjectKey } from '../services/storageObjects.js';
+import { syncFileObjects, fileObjectKey, evictLocalCopies, sweepOrphanObjects, localLibraryPath } from '../services/storageObjects.js';
 import { addVersion } from '../services/storageVersions.js';
 import { setFileStorageForTests } from '../services/artifactStorage.js';
 import { writeTuples } from '../utils/authzReBAC.js';
@@ -111,7 +111,7 @@ async function main() {
 
     // ── every file gets a verified copy in object storage, and a lost disk file comes back from it ──
     const objects = new Map();
-    const store = { kind: 'test', put: async (k, b) => { objects.set(k, Buffer.from(b)); }, get: async (k) => objects.get(k) ?? null, head: async (k) => (objects.has(k) ? { sizeBytes: objects.get(k).length } : null) };
+    const store = { kind: 'test', put: async (k, b) => { objects.set(k, Buffer.from(b)); }, get: async (k) => objects.get(k) ?? null, head: async (k) => (objects.has(k) ? { sizeBytes: objects.get(k).length } : null), delete: async (k) => objects.delete(k) };
     setFileStorageForTests(store);
     const kept = await add(other, 'keep.txt', 'bytes worth keeping');
     const twin = await add(other, 'twin.txt', 'bytes worth keeping');
@@ -129,6 +129,43 @@ async function main() {
     const lost = await fetch(`${base}/assets/${kept.id}/content`, { headers: as(other, 'sto_other') });
     assert.equal(lost.status, 200); assert.equal(await lost.text(), 'bytes worth keeping', 'a file whose disk copy is gone is served from its object');
     assert.ok(existsSync(keptPath), 'and is put back on disk');
+
+    // ── the object store is the home and the disk is a cache: idle, verified copies leave the disk ──
+    const waiting = await add(other, 'waiting.txt', 'still being checked');     // scan not finished
+    const orphan = await add(other, 'orphan.txt', 'object went missing');        // recorded, but its object is gone
+    const solo = await add(other, 'solo.txt', 'nobody else holds these bytes');
+    await syncFileObjects(pool, { limit: 1000 });
+    await pool.query(`UPDATE library_asset_ingestions SET state = 'ready' WHERE asset_id = ANY($1)`, [[orphan.id, solo.id]]);
+    const pathOf = async (id) => (await pool.query('SELECT storage_path FROM user_files WHERE id = $1', [id])).rows[0].storage_path;
+    const keyOf = async (id) => (await pool.query('SELECT object_key FROM storage_objects WHERE file_id = $1', [id])).rows[0]?.object_key;
+    const [waitingPath, orphanPath, soloPath, twinDisk] = [await pathOf(waiting.id), await pathOf(orphan.id), await pathOf(solo.id), await pathOf(twin.id)];
+    const soloKey = await keyOf(solo.id);
+    objects.delete(await keyOf(orphan.id));
+    const fresh = await evictLocalCopies(pool, { idleHours: 24 });
+    assert.equal(fresh.evicted, 0, 'a copy used in the last day stays'); assert.ok(fresh.kept >= 3);
+    const later = Date.now() + 48 * 3600000;
+    const swept = await evictLocalCopies(pool, { idleHours: 24, now: later });
+    assert.ok(swept.evicted >= 3 && swept.bytes > 0);
+    assert.equal(existsSync(keptPath), false); assert.equal(existsSync(twinDisk), false); assert.equal(existsSync(soloPath), false, 'idle copies with a verified object are removed');
+    assert.equal(existsSync(waitingPath), true, 'a file still being scanned stays where the scanner reads it');
+    assert.equal(existsSync(orphanPath), true, 'a copy whose object cannot be found right now is never removed');
+    assert.ok(swept.failed >= 1);
+    assert.equal((await evictLocalCopies(pool, { idleHours: 24, now: later })).evicted, 0, 'a second pass has nothing left to remove');
+    const back = await fetch(`${base}/assets/${solo.id}/content`, { headers: as(other, 'sto_other') });
+    assert.equal(back.status, 200); assert.equal(await back.text(), 'nobody else holds these bytes', 'an evicted file is still served');
+    assert.equal(await localLibraryPath(pool, { id: twin.id, storage_path: twinDisk }), twinDisk, 'any reader gets the bytes back'); assert.ok(existsSync(twinDisk));
+    assert.equal(await localLibraryPath(pool, { id: orphan.id, storage_path: '/nowhere/x' }), null);
+    // a file deleted for good: its record goes, and its object once nothing else holds the bytes
+    const gone = await add(other, 'gone.txt', 'deleted for good'); const pair = await add(other, 'pair.txt', 'bytes worth keeping');
+    await syncFileObjects(pool, { limit: 1000 });
+    const goneKey = await keyOf(gone.id), sharedKey = await keyOf(pair.id);
+    assert.equal(sharedKey, rows[0].object_key);
+    await pool.query('UPDATE user_files SET deleted_at = now() WHERE id = ANY($1)', [[gone.id, pair.id]]);
+    const tidy = await sweepOrphanObjects(pool);
+    assert.ok(tidy.records >= 2 && tidy.objects >= 1);
+    assert.equal(objects.has(goneKey), false, 'the object of a deleted file is removed');
+    assert.equal(objects.has(sharedKey), true, 'an object another file still holds is kept'); assert.equal(objects.has(soloKey), true);
+    assert.equal(await keyOf(gone.id), undefined);
     // a tampered object is never restored
     const twinPath = (await pool.query('SELECT storage_path FROM user_files WHERE id = $1', [twin.id])).rows[0].storage_path;
     rmSync(twinPath); objects.set(rows[0].object_key, Buffer.from('something else entirely'));
