@@ -535,7 +535,7 @@ export async function listLibraryItems(db, userId, params = {}) {
     ),
     -- FOLDER (XENO Storage): the caller's own folder this item is in, or NULL for the top.
     foldered AS (
-      SELECT p.*, sf.id AS folder_id,
+      SELECT p.*, sf.id AS folder_id, sf.name AS folder_name,
         -- MINE: the caller's own item. A file someone else shared with them is not theirs ("Shared with me").
         (p.source <> 'file' OR EXISTS (SELECT 1 FROM user_files uf WHERE uf.id = p.source_id AND (uf.workspace_id IS NOT NULL OR COALESCE(uf.owner_user_id, uf.user_id) = $1::uuid))) AS mine,
         (p.source = 'file' AND EXISTS (SELECT 1 FROM storage_shares ss WHERE ss.file_id = p.source_id AND ss.revoked_at IS NULL AND (ss.expires_at IS NULL OR ss.expires_at > now()))) AS shared,

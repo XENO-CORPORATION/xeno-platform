@@ -46,6 +46,8 @@
     return { id: String(it.id), name: String(it.name || 'Untitled'), kind, bytes: Number(it.size_bytes) || 0, createdAt: created, updatedAt: it.updated_at || created,
       source: { product: productOf(it), mode: it.area || 'overview', chat: it.conversation_title || null }, area: it.area || null, areaName: it.area ? areaName(it.area) : '', project: null, starred: it.starred === true, sharedBy: null, media: null, duration: null,
       trashedAt: it.trashed_at || null, purgeAfter: it.purge_after || null,
+      // the Storage folder it is filed in, if any (the Library stays flat; this only points at the folder)
+      folderId: it.folder_id || null, folderName: it.folder_id ? String(it.folder_name || 'Folder') : null,
       // where it lives: the person's own space, or a named workspace
       place: it.place_kind === 'workspace' ? String(it.workspace_name || 'A workspace') : 'Personal', workspaceUuid: it.place_kind === 'workspace' ? it.workspace_id : null,
       live: { source: it.source, sourceId: it.source_id, assetId: it.asset_id || null, preview: kind === 'image' && typeof it.preview_url === 'string' && it.preview_url ? it.preview_url : null, mime: it.mime_type || '' } };
