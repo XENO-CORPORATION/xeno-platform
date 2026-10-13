@@ -1,3 +1,4 @@
+import { localLibraryPath } from '../storageObjects.js';
 import { execFile } from 'child_process';
 import fs from 'fs';
 import net from 'net';
@@ -224,7 +225,8 @@ export async function ingestLibraryAsset(db, assetId, {
   const ingestion = rows[0];
   if (!ingestion) throw Object.assign(new Error('Ingestion not found'), { code: 'ingestion_not_found' });
   if (ingestion.state === 'ready') return semanticIndexer(db, ingestion.id);
-  const storagePath = resolveManagedLibraryPath(ingestion.storage_path);
+  // XENO Storage: the disk is a cache. A retried ingestion of an older file brings its bytes back first.
+  const storagePath = resolveManagedLibraryPath(ingestion.storage_path) || await localLibraryPath(db, { id: ingestion.asset_id, storage_path: ingestion.storage_path });
   if (!storagePath) {
     const error = Object.assign(new Error('Managed bytes not found'), { code: 'asset_bytes_missing' });
     await setFailure(db, ingestion.id, 'failed', error);

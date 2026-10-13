@@ -13,6 +13,7 @@
  * Every section is read on its own. A section that cannot be read is named in manifest.json and
  * the rest is still delivered: a partial copy that says what is missing beats no copy.
  */
+import { localLibraryPath } from './storageObjects.js';
 import fs from 'fs';
 import path from 'path';
 import zlib from 'zlib';
@@ -171,7 +172,7 @@ export async function buildExport(db, exportId, { now = () => new Date() } = {})
       return files.map(({ storage_path: _path, ...file }) => ({ ...file, archived_as: `library/files/${file.id}-${safeName(file.name)}` }));
     });
     for (const f of files) {
-      const resolved = resolveManagedLibraryPath(f.storage_path);
+      const resolved = await localLibraryPath(db, f);   // XENO Storage: the disk is a cache; the object store is the home
       const size = resolved ? (await fs.promises.stat(resolved)).size : 0;
       if (!resolved) { summary.skipped_files.push({ id: f.id, name: f.name, reason: 'stored file not found' }); continue; }
       if (summary.file_bytes + size > EXPORT_MAX_FILE_BYTES) { summary.skipped_files.push({ id: f.id, name: f.name, reason: 'this copy reached its size limit; download this file from your Library' }); continue; }
