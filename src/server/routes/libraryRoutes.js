@@ -1,3 +1,4 @@
+import { allFolders, createFolder, listFolders, moveItemToFolder, removeFolder, updateFolder } from '../services/storageFolders.js';
 import { restoreFileFromObject } from '../services/storageObjects.js';
 import { storageUsage } from '../services/storageAllowance.js';
 import express from 'express';
@@ -112,6 +113,29 @@ router.get('/storage', async (req, res) => {
   catch (error) { console.error('Failed to read storage usage:', error); res.status(500).json({ success: false, error: 'Internal server error' }); }
 });
 
+// XENO Storage: folders (services/storageFolders.js). A folder is the signed-in person's own.
+const folderReply = (res, result, body = {}) => {
+  if (result.ok) return res.json({ success: true, ...body });
+  if (result.invalid) return res.status(400).json({ success: false, code: result.code || 'invalid', error: 'That name can’t be used.' });
+  if (result.notFound) return res.status(404).json({ success: false, code: 'not_found', error: 'Folder not found' });
+  if (result.forbidden) return res.status(403).json({ success: false, code: 'forbidden', error: 'You can see this item but can’t move it' });
+  if (result.conflict) return res.status(409).json({ success: false, code: result.code, error: { folder_exists: 'A folder with that name is already here.', folder_not_empty: 'Move or delete what is inside first.', folder_inside_itself: 'A folder can’t be moved into itself.' }[result.code] || 'Refused' });
+  return res.status(500).json({ success: false, error: 'Internal server error' });
+};
+const folderId = (value) => (value === null || value === undefined || value === '' || value === 'root' ? null : String(value));
+const folders = (run) => async (req, res) => { try { await run(req, res); } catch (error) { console.error('Storage folder request failed:', error); res.status(500).json({ success: false, error: 'Internal server error' }); } };
+router.get('/folders', folders(async (req, res) => {
+  if (req.query.all === 'true') return res.json({ success: true, folders: await allFolders(req.db, req.user.id) });
+  const result = await listFolders(req.db, req.user.id, folderId(req.query.parent));
+  folderReply(res, result, { folders: result.folders, path: result.path });
+}));
+router.post('/folders', folders(async (req, res) => { const result = await createFolder(req.db, req.user.id, { name: req.body?.name, parentId: folderId(req.body?.parent) }); folderReply(res.status(result.ok ? 201 : res.statusCode), result, { folder: result.folder }); }));
+router.patch('/folders/:id', folders(async (req, res) => {
+  const result = await updateFolder(req.db, req.user.id, req.params.id, { name: req.body?.name, ...('parent' in (req.body || {}) ? { parentId: folderId(req.body.parent) } : {}) });
+  folderReply(res, result, { folder: result.folder });
+}));
+router.delete('/folders/:id', folders(async (req, res) => { folderReply(res, await removeFolder(req.db, req.user.id, req.params.id)); }));
+
 router.get('/assets', async (req, res) => {
   try {
     try { readAreaFilter(req.query.area); } catch (error) { return res.status(400).json({ success: false, code: 'invalid_area', error: error.message }); }
@@ -224,6 +248,11 @@ router.put('/assets/:source/:id/area', organise('place', async (req, res, princi
   let to; try { to = readArea(req.body?.area); } catch (error) { return res.status(400).json({ success: false, code: 'invalid_area', error: error.message }); }
   if (!to.given) return res.status(400).json({ success: false, code: 'invalid_area', error: 'Say which area, or null for none.' });
   sendOrganised(res, await placeLibraryItem(req.db, principal, source, id, to.area), { area: to.area });
+}));
+// FOLDER: put an item in one of your folders, or back at the top ({ folder: null }).
+router.put('/assets/:source/:id/folder', organise('move', async (req, res, principal, source, id) => {
+  const result = await moveItemToFolder(req.db, principal, source, id, folderId(req.body?.folder));
+  sendOrganised(res, result, { folder: result.folderId ?? null });
 }));
 router.put('/assets/:source/:id/star', organise('star', async (req, res, principal, source, id) => {
   sendOrganised(res, await starLibraryItem(req.db, principal, source, id, true), { starred: true });

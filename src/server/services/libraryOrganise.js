@@ -123,6 +123,15 @@ export async function placeLibraryItem(db, principal, source, id, area) {
   return { ok: true, area };
 }
 
+/** May this caller reorganise this item (move it between their folders)? The same standing as rename. */
+export async function folderStanding(db, principal, source, id) {
+  if (!validTarget(principal, source, id)) return { invalid: true };
+  const who = await standing(db, principal, source, id);
+  if (!who) return { notFound: true };
+  if (!who.editor) return { forbidden: true };
+  return { ok: true };
+}
+
 export async function trashLibraryItem(db, principal, source, id) {
   if (!validTarget(principal, source, id)) return { invalid: true };
   const who = await standing(db, principal, source, id);
