@@ -1,3 +1,4 @@
+import { createLink, fileForLink, listShares, revokeShare, shareWithPerson } from '../services/storageShares.js';
 import { allFolders, createFolder, listFolders, moveItemToFolder, removeFolder, updateFolder } from '../services/storageFolders.js';
 import { restoreFileFromObject } from '../services/storageObjects.js';
 import { storageUsage } from '../services/storageAllowance.js';
@@ -103,6 +104,18 @@ router.get('/assets/:id/content', async (req, res, next) => {
     if (error) return next(error);
     return streamAsset(req, res, { type: 'user', id: req.user.id }, false);
   });
+});
+
+// XENO Storage: a secret link to one file. Public by design: the link is the permission. The bytes go out
+// through the same streamer the owner uses (scan state honoured; only plain images inline, the rest download).
+router.get('/links/:token', async (req, res) => {
+  try {
+    const file = await fileForLink(req.db, req.params.token);
+    if (!file) return res.status(404).json({ success: false, code: 'link_not_found', error: 'This link does not open anything. It may have expired or been turned off.' });
+    res.setHeader('X-Robots-Tag', 'noindex, nofollow, noarchive');
+    res.setHeader('Referrer-Policy', 'no-referrer');
+    return streamAsset(req, res, file, true);
+  } catch (error) { console.error('Failed to serve a storage link:', error); return res.status(500).json({ success: false, error: 'Internal server error' }); }
 });
 
 router.use(authMiddleware);
@@ -249,6 +262,19 @@ router.put('/assets/:source/:id/area', organise('place', async (req, res, princi
   if (!to.given) return res.status(400).json({ success: false, code: 'invalid_area', error: 'Say which area, or null for none.' });
   sendOrganised(res, await placeLibraryItem(req.db, principal, source, id, to.area), { area: to.area });
 }));
+// SHARING one file (services/storageShares.js). Only the owner shares; both kinds are read-only and revocable.
+const shareReply = (res, result, body = {}) => {
+  if (result.ok) return res.json({ success: true, ...body });
+  if (result.invalid) return res.status(400).json({ success: false, code: result.code, error: { invalid_person: 'Give an email address or a username.', own_file: 'That is your own account.', invalid_expiry: 'A link can last 1 to 365 days.' }[result.code] || 'Invalid' });
+  if (result.notFound) return res.status(404).json({ success: false, code: result.code || 'not_found', error: result.code === 'person_not_found' ? 'No XENO account has that email or username.' : 'File not found' });
+  return res.status(500).json({ success: false, error: 'Internal server error' });
+};
+router.get('/assets/file/:id/shares', folders(async (req, res) => { const r = await listShares(req.db, req.user.id, req.params.id); shareReply(res, r, { shares: r.shares }); }));
+router.post('/assets/file/:id/shares', folders(async (req, res) => {
+  if (req.body?.link === true) { const r = await createLink(req.db, req.user.id, req.params.id, { expiresInDays: req.body?.expiresInDays ?? null }); return shareReply(res, r, r.ok ? { share: r.share, url: `${siteOrigin()}/api/library/links/${r.token}` } : {}); }
+  const r = await shareWithPerson(req.db, req.user.id, req.params.id, req.body?.with); shareReply(res, r, { share: r.share });
+}));
+router.delete('/shares/:id', folders(async (req, res) => { shareReply(res, await revokeShare(req.db, req.user.id, req.params.id)); }));
 // FOLDER: put an item in one of your folders, or back at the top ({ folder: null }).
 router.put('/assets/:source/:id/folder', organise('move', async (req, res, principal, source, id) => {
   const result = await moveItemToFolder(req.db, principal, source, id, folderId(req.body?.folder));

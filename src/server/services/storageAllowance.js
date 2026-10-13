@@ -39,7 +39,10 @@ async function personalBytes(db, userId) {
 /** The storage a plan includes, in bytes. `null` = no limit (internal accounts). */
 export async function storageAllowance(db, userId) {
   const { entitlements } = await getEffectiveEntitlements(db, userId);
-  return entitlements?.storageBytes === null ? null : Number(entitlements?.storageBytes) || 0;
+  if (entitlements?.storageBytes === null) return null;
+  // extra space on top of the plan: a purchase, or a grant by staff (storage_grants)
+  const extra = (await db.query('SELECT COALESCE(SUM(bytes), 0)::bigint AS bytes FROM storage_grants WHERE user_id = $1 AND revoked_at IS NULL AND (expires_at IS NULL OR expires_at > now())', [userId])).rows[0];
+  return (Number(entitlements?.storageBytes) || 0) + Number(extra.bytes);
 }
 
 /** What the account holds and what it may hold. */
