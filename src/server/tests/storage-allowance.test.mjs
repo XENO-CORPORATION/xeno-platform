@@ -134,6 +134,36 @@ async function main() {
     assert.equal((await fetch(`${base}/assets/${twin.id}/content`, { headers: as(other, 'sto_other') })).status, 404);
     assert.equal(existsSync(twinPath), false);
 
+    // ── folders: the account's own, nested, and a place for items ──
+    const J = (userId, name) => ({ ...as(userId, name), 'content-type': 'application/json' });
+    const call = async (method, url, headers, body) => { const r = await fetch(`${base}${url}`, { method, headers, body: body ? JSON.stringify(body) : undefined }); return { status: r.status, body: await r.json().catch(() => ({})) }; };
+    const P = J(paid, 'sto_paid'), O = J(other, 'sto_other');
+    const work = (await call('POST', '/folders', P, { name: 'Work' })).body.folder;
+    assert.ok(work.id && work.parentId === null);
+    assert.equal((await call('POST', '/folders', P, { name: 'work' })).body.code, 'folder_exists', 'two folders in one place cannot share a name');
+    const plans = (await call('POST', '/folders', P, { name: 'Plans', parent: work.id })).body.folder;
+    assert.equal(plans.parentId, work.id);
+    assert.equal((await call('POST', '/folders', O, { name: 'Sneak', parent: work.id })).status, 404, 'another account cannot put a folder in mine');
+    assert.equal((await call('GET', `/folders?parent=${work.id}`, O)).status, 404);
+    const doc = await add(paid, 'brief.txt', 'a brief');
+    const top = await add(paid, 'loose.txt', 'at the top');
+    assert.equal((await call('PUT', `/assets/file/${doc.id}/folder`, P, { folder: plans.id })).status, 200);
+    assert.equal((await call('PUT', `/assets/file/${doc.id}/folder`, O, { folder: null })).status, 404, 'a stranger cannot move my file');
+    assert.equal((await call('PUT', `/assets/file/${top.id}/folder`, P, { folder: (await call('POST', '/folders', O, { name: 'Theirs' })).body.folder.id })).status, 404, 'nor can I file into a stranger’s folder');
+    const inPlans = (await call('GET', `/assets?folder=${plans.id}`, P)).body;
+    assert.deepEqual(inPlans.items.map((i) => i.name), ['brief.txt']); assert.equal(inPlans.items[0].folder_id, plans.id);
+    assert.deepEqual((await call('GET', '/assets?folder=root', P)).body.items.map((i) => i.name), ['loose.txt'], 'the top holds what is in no folder');
+    assert.equal((await call('GET', '/assets', P)).body.items.length, 2, 'the Library’s flat view still shows everything');
+    const listed = (await call('GET', `/folders?parent=${work.id}`, P)).body;
+    assert.deepEqual(listed.folders.map((f) => [f.name, f.items]), [['Plans', 1]]); assert.deepEqual(listed.path.map((x) => x.name), ['Work']);
+    assert.deepEqual((await call('GET', `/folders?parent=${plans.id}`, P)).body.path.map((x) => x.name), ['Work', 'Plans']);
+    assert.equal((await call('PATCH', `/folders/${work.id}`, P, { parent: plans.id })).body.code, 'folder_inside_itself');
+    assert.equal((await call('DELETE', `/folders/${plans.id}`, P)).body.code, 'folder_not_empty', 'removing a folder never deletes what is in it');
+    assert.equal((await call('PATCH', `/folders/${plans.id}`, P, { name: 'Roadmap', parent: null })).body.folder.parentId, null);
+    assert.equal((await call('PUT', `/assets/file/${doc.id}/folder`, P, { folder: null })).status, 200);
+    assert.equal((await call('DELETE', `/folders/${plans.id}`, P)).status, 200);
+    assert.equal((await call('GET', '/folders?all=true', P)).body.folders.length, 1);
+
     console.log('storage-allowance: all checks passed');
   } finally {
     await new Promise((resolve) => server.close(resolve));

@@ -530,22 +530,32 @@ export async function listLibraryItems(db, userId, params = {}) {
           SELECT CASE WHEN cc.project_id IS NOT NULL THEN (SELECT ap.area FROM chat_projects ap WHERE ap.id = cc.project_id) ELSE cc.area END
           FROM chat_conversations cc WHERE cc.id = m.conversation_id) END) AS area
       FROM marked m LEFT JOIN library_item_areas la ON la.source = m.source AND la.source_id = m.source_id
+    ),
+    -- FOLDER (XENO Storage): the caller's own folder this item is in, or NULL for the top.
+    foldered AS (
+      SELECT p.*, sf.id AS folder_id FROM placed p
+      LEFT JOIN storage_item_folders sif ON sif.source = p.source AND sif.source_id = p.source_id
+      LEFT JOIN storage_folders sf ON sf.id = sif.folder_id AND sf.owner_user_id = $1::uuid
     )
-    SELECT *, (count(*) OVER())::int AS total_count FROM placed
+    SELECT *, (count(*) OVER())::int AS total_count FROM foldered
     WHERE ($2 = 'all' OR category = $2)
       AND ($3 = '' OR name ILIKE '%' || $3 || '%' OR description ILIKE '%' || $3 || '%')
       AND (($6 = 'trash') = (trashed_at IS NOT NULL))
       AND ($6 <> 'starred' OR starred)
       AND ($7 = '' OR ($7 = 'personal' AND place_kind = 'personal') OR (place_kind = 'workspace' AND workspace_id::text = $7))
       AND (NOT $8::boolean OR area IS NOT DISTINCT FROM $9::text)
+      AND (NOT $10::boolean OR folder_id IS NOT DISTINCT FROM $11::uuid)
     ORDER BY ${orderBy} LIMIT $4 OFFSET $5`;
   // AREA: `area=dev` one area, `area=none` items in no area, absent everything (Overview). A malformed one is refused by the route.
   const areaFilter = readAreaFilter(params.area);
-  const { rows } = await db.query(sql, [userId, tab, query, limit, offset, view, place, areaFilter.filter, areaFilter.area]);
+  // FOLDER: `folder=root` items at the top, `folder=<id>` one folder, absent everything (the Library's flat view).
+  const rawFolder = String(params.folder || '').trim().toLowerCase();
+  const folderFilter = rawFolder === 'root' ? { on: true, id: null } : UUID_RE.test(rawFolder) ? { on: true, id: rawFolder } : { on: false, id: null };
+  const { rows } = await db.query(sql, [userId, tab, query, limit, offset, view, place, areaFilter.filter, areaFilter.area, folderFilter.on, folderFilter.id]);
   // The window count is the size of the whole filtered set. A page past the end has no rows to carry
   // it, so that case asks once more for the first row only.
   let total = rows.length ? rows[0].total_count : 0;
-  if (!rows.length && offset > 0) total = (await db.query(sql, [userId, tab, query, 1, 0, view, place, areaFilter.filter, areaFilter.area])).rows[0]?.total_count || 0;
+  if (!rows.length && offset > 0) total = (await db.query(sql, [userId, tab, query, 1, 0, view, place, areaFilter.filter, areaFilter.area, folderFilter.on, folderFilter.id])).rows[0]?.total_count || 0;
   const items = rows.map(({ total_count: _total, ...item }) => item);
   return { items, tab, sort, limit, offset, view, place, area: areaFilter.filter ? areaFilter.area : undefined, total, has_more: offset + items.length < total };
 }
