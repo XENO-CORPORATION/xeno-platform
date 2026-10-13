@@ -189,7 +189,7 @@ async function main() {
     assert.equal((await call('PUT', `/assets/file/${doc.id}/folder`, O, { folder: null })).status, 404, 'a stranger cannot move my file');
     assert.equal((await call('PUT', `/assets/file/${top.id}/folder`, P, { folder: (await call('POST', '/folders', O, { name: 'Theirs' })).body.folder.id })).status, 404, 'nor can I file into a stranger’s folder');
     const inPlans = (await call('GET', `/assets?folder=${plans.id}`, P)).body;
-    assert.deepEqual(inPlans.items.map((i) => i.name), ['brief.txt']); assert.equal(inPlans.items[0].folder_id, plans.id);
+    assert.deepEqual(inPlans.items.map((i) => i.name), ['brief.txt']); assert.equal(inPlans.items[0].folder_id, plans.id); assert.equal(inPlans.items[0].folder_name, plans.name, 'an item says which folder it is in, for the Library');
     assert.deepEqual((await call('GET', '/assets?folder=root', P)).body.items.map((i) => i.name), ['loose.txt'], 'the top holds what is in no folder');
     assert.equal((await call('GET', '/assets', P)).body.items.length, 2, 'the Library’s flat view still shows everything');
     const listed = (await call('GET', `/folders?parent=${work.id}`, P)).body;
