@@ -533,7 +533,11 @@ export async function listLibraryItems(db, userId, params = {}) {
     ),
     -- FOLDER (XENO Storage): the caller's own folder this item is in, or NULL for the top.
     foldered AS (
-      SELECT p.*, sf.id AS folder_id FROM placed p
+      SELECT p.*, sf.id AS folder_id,
+        -- MINE: the caller's own item. A file someone else shared with them is not theirs ("Shared with me").
+        (p.source <> 'file' OR EXISTS (SELECT 1 FROM user_files uf WHERE uf.id = p.source_id AND (uf.workspace_id IS NOT NULL OR COALESCE(uf.owner_user_id, uf.user_id) = $1::uuid))) AS mine,
+        (p.source = 'file' AND EXISTS (SELECT 1 FROM storage_shares ss WHERE ss.file_id = p.source_id AND ss.revoked_at IS NULL AND (ss.expires_at IS NULL OR ss.expires_at > now()))) AS shared
+      FROM placed p
       LEFT JOIN storage_item_folders sif ON sif.source = p.source AND sif.source_id = p.source_id
       LEFT JOIN storage_folders sf ON sf.id = sif.folder_id AND sf.owner_user_id = $1::uuid
     )
@@ -545,17 +549,20 @@ export async function listLibraryItems(db, userId, params = {}) {
       AND ($7 = '' OR ($7 = 'personal' AND place_kind = 'personal') OR (place_kind = 'workspace' AND workspace_id::text = $7))
       AND (NOT $8::boolean OR area IS NOT DISTINCT FROM $9::text)
       AND (NOT $10::boolean OR folder_id IS NOT DISTINCT FROM $11::uuid)
+      AND ($12 = '' OR ($12 = 'mine' AND mine) OR ($12 = 'shared' AND NOT mine))
     ORDER BY ${orderBy} LIMIT $4 OFFSET $5`;
   // AREA: `area=dev` one area, `area=none` items in no area, absent everything (Overview). A malformed one is refused by the route.
   const areaFilter = readAreaFilter(params.area);
   // FOLDER: `folder=root` items at the top, `folder=<id>` one folder, absent everything (the Library's flat view).
   const rawFolder = String(params.folder || '').trim().toLowerCase();
   const folderFilter = rawFolder === 'root' ? { on: true, id: null } : UUID_RE.test(rawFolder) ? { on: true, id: rawFolder } : { on: false, id: null };
-  const { rows } = await db.query(sql, [userId, tab, query, limit, offset, view, place, areaFilter.filter, areaFilter.area, folderFilter.on, folderFilter.id]);
+  // OWNED: `owned=mine` the caller's own items, `owned=shared` what others shared with them, absent both.
+  const owned = ['mine', 'shared'].includes(String(params.owned)) ? String(params.owned) : '';
+  const { rows } = await db.query(sql, [userId, tab, query, limit, offset, view, place, areaFilter.filter, areaFilter.area, folderFilter.on, folderFilter.id, owned]);
   // The window count is the size of the whole filtered set. A page past the end has no rows to carry
   // it, so that case asks once more for the first row only.
   let total = rows.length ? rows[0].total_count : 0;
-  if (!rows.length && offset > 0) total = (await db.query(sql, [userId, tab, query, 1, 0, view, place, areaFilter.filter, areaFilter.area, folderFilter.on, folderFilter.id])).rows[0]?.total_count || 0;
+  if (!rows.length && offset > 0) total = (await db.query(sql, [userId, tab, query, 1, 0, view, place, areaFilter.filter, areaFilter.area, folderFilter.on, folderFilter.id, owned])).rows[0]?.total_count || 0;
   const items = rows.map(({ total_count: _total, ...item }) => item);
   return { items, tab, sort, limit, offset, view, place, area: areaFilter.filter ? areaFilter.area : undefined, total, has_more: offset + items.length < total };
 }

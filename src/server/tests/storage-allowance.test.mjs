@@ -164,6 +164,49 @@ async function main() {
     assert.equal((await call('DELETE', `/folders/${plans.id}`, P)).status, 200);
     assert.equal((await call('GET', '/folders?all=true', P)).body.folders.length, 1);
 
+    // ── sharing one file: with a person, and by link; only the owner; revocable at once ──
+    const gift = await add(paid, 'gift.txt', 'for a friend');
+    await pool.query(`UPDATE library_asset_ingestions SET state = 'ready' WHERE asset_id = $1`, [gift.id]);
+    const bytesOf = async (headers) => { const r = await fetch(`${base}/assets/${gift.id}/content`, { headers }); return r.status === 200 ? r.text() : r.status; };
+    assert.equal(await bytesOf(O), 404, 'before sharing, another account cannot read it');
+    assert.equal((await call('POST', `/assets/file/${gift.id}/shares`, O, { with: 'sto_paid' })).status, 404, 'only the owner can share');
+    assert.equal((await call('POST', `/assets/file/${gift.id}/shares`, P, { with: 'nobody-here' })).body.code, 'person_not_found');
+    assert.equal((await call('POST', `/assets/file/${gift.id}/shares`, P, { with: 'sto_paid' })).body.code, 'own_file');
+    const toOther = (await call('POST', `/assets/file/${gift.id}/shares`, P, { with: 'STO_OTHER@xeno.test' })).body.share;
+    assert.equal(toOther.person.username, 'sto_other');
+    assert.equal(await bytesOf(O), 'for a friend', 'the person can now read it');
+    assert.deepEqual((await call('GET', '/assets?owned=shared', O)).body.items.map((i) => i.name), ['gift.txt'], 'it is listed under what was shared with them');
+    assert.ok(!(await call('GET', '/assets?owned=mine', O)).body.items.some((i) => i.name === 'gift.txt'), 'and not among their own files');
+    assert.equal((await call('GET', '/assets?owned=mine', P)).body.items.find((i) => i.name === 'gift.txt').shared, true, 'the owner sees that it is shared');
+    assert.equal((await call('PATCH', `/assets/file/${gift.id}`, O, { name: 'mine now.txt' })).status, 403, 'read access is not edit access');
+    assert.equal((await storageUsage(pool, other)).usedBytes, (await storageUsage(pool, other)).usedBytes, 'a shared file does not count against the reader');
+    const usedBefore = (await storageUsage(pool, other)).files;
+    const link = (await call('POST', `/assets/file/${gift.id}/shares`, P, { link: true, expiresInDays: 7 })).body;
+    assert.match(link.url, /\/api\/library\/links\/[A-Za-z0-9_-]{43}$/);
+    const linkPath = `/links/${link.url.split('/').pop()}`;
+    const open = await fetch(`${base}${linkPath}`);
+    assert.equal(open.status, 200); assert.equal(await open.text(), 'for a friend'); assert.match(open.headers.get('content-disposition'), /^attachment/, 'a text file is downloaded, never shown inline');
+    assert.equal((await fetch(`${base}/links/${'A'.repeat(43)}`)).status, 404);
+    assert.equal((await pool.query('SELECT count(*)::int AS n FROM storage_shares WHERE token_sha256 = $1', [link.url.split('/').pop()])).rows[0].n, 0, 'the link itself is not stored, only its hash');
+    assert.equal((await call('POST', `/assets/file/${gift.id}/shares`, P, { link: true, expiresInDays: 0 })).body.code, 'invalid_expiry');
+    const shares = (await call('GET', `/assets/file/${gift.id}/shares`, P)).body.shares;
+    assert.deepEqual(shares.map((x) => x.kind).sort(), ['link', 'person']);
+    assert.equal((await call('DELETE', `/shares/${shares.find((x) => x.kind === 'link').id}`, O)).status, 404, 'only the owner turns a share off');
+    for (const x of shares) assert.equal((await call('DELETE', `/shares/${x.id}`, P)).status, 200);
+    assert.equal((await fetch(`${base}${linkPath}`)).status, 404, 'a link that was turned off stops at once');
+    assert.equal(await bytesOf(O), 404, 'and the person loses the file at once');
+    assert.equal((await storageUsage(pool, other)).files, usedBefore);
+    // an expired link does not open
+    const short = (await call('POST', `/assets/file/${gift.id}/shares`, P, { link: true, expiresInDays: 1 })).body;
+    await pool.query(`UPDATE storage_shares SET expires_at = now() - interval '1 minute' WHERE id = $1`, [short.share.id]);
+    assert.equal((await fetch(`${base}/links/${short.url.split('/').pop()}`)).status, 404);
+
+    // ── extra space on top of the plan ──
+    await pool.query(`INSERT INTO storage_grants (user_id, bytes, reason) VALUES ($1, $2, 'test grant')`, [paid, 50 * GB]);
+    assert.equal(await storageAllowance(pool, paid), 150 * GB);
+    await pool.query(`UPDATE storage_grants SET revoked_at = now() WHERE user_id = $1`, [paid]);
+    assert.equal(await storageAllowance(pool, paid), 100 * GB);
+
     console.log('storage-allowance: all checks passed');
   } finally {
     await new Promise((resolve) => server.close(resolve));
