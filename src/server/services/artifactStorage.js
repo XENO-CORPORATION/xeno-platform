@@ -30,8 +30,11 @@ const KEY_PATTERN = /^artifacts\/[A-Za-z0-9_-]+\/r\d+\/[A-Za-z0-9._\-/]+$/;
 // nor the artifacts namespace. Named `chat-sandboxes` because `workspace` is the tenancy scope here.
 const SANDBOX_KEY_PATTERN = /^chat-sandboxes\/[0-9a-fA-F-]{36}\/[A-Za-z0-9._\- /]+$/;
 
+// XENO Storage: an account file's bytes, content-addressed (services/storageObjects.js).
+const FILE_KEY_PATTERN = /^files\/[0-9a-f]{2}\/[0-9a-f]{64}$/;
+
 function assertKey(key) {
-  const inNamespace = typeof key === 'string' && (KEY_PATTERN.test(key) || SANDBOX_KEY_PATTERN.test(key));
+  const inNamespace = typeof key === 'string' && (KEY_PATTERN.test(key) || SANDBOX_KEY_PATTERN.test(key) || FILE_KEY_PATTERN.test(key));
   if (!inNamespace || key.includes('..') || key.includes('//')) {
     throw new Error(`Refusing storage key outside the allowed namespaces: ${key}`);
   }
@@ -167,6 +170,21 @@ export function artifactStorage(env = process.env) {
   }
   return active;
 }
+
+let files;
+/** The object store for account files (XENO Storage). Its own bucket when STORAGE_R2_BUCKET is set, else the
+    artifacts bucket under the `files/` namespace; the filesystem backend where no bucket is configured. */
+export function fileStorage(env = process.env) {
+  if (files) return files;
+  const bucket = (env.STORAGE_R2_BUCKET || env.ARTIFACTS_R2_BUCKET || '').trim();
+  if (bucket && env.R2_ACCOUNT_ID && env.R2_ACCESS_KEY_ID && env.R2_SECRET_ACCESS_KEY) {
+    files = r2Backend({ accountId: env.R2_ACCOUNT_ID, accessKeyId: env.R2_ACCESS_KEY_ID, secretAccessKey: env.R2_SECRET_ACCESS_KEY, bucket });
+  } else {
+    files = fsBackend(env.STORAGE_DIR?.trim() || env.ARTIFACTS_DIR?.trim() || path.join(__dirname, '..', 'data', 'artifacts'));
+  }
+  return files;
+}
+export function setFileStorageForTests(backend) { files = backend; }
 
 /** Tests inject a backend; production never calls this. */
 export function setArtifactStorageForTests(backend) {
