@@ -1,3 +1,4 @@
+import { storageUsage } from '../services/storageAllowance.js';
 import express from 'express';
 import fs from 'fs';
 import sharp from 'sharp';
@@ -102,6 +103,12 @@ router.get('/assets/:id/content', async (req, res, next) => {
 });
 
 router.use(authMiddleware);
+
+// XENO Storage: what the account holds and what its plan includes (services/storageAllowance.js).
+router.get('/storage', async (req, res) => {
+  try { res.json({ success: true, storage: await storageUsage(req.db, req.user.id) }); }
+  catch (error) { console.error('Failed to read storage usage:', error); res.status(500).json({ success: false, error: 'Internal server error' }); }
+});
 
 router.get('/assets', async (req, res) => {
   try {

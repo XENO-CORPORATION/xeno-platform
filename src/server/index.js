@@ -1087,6 +1087,7 @@ app.post('/api/upload', databaseMiddleware, authMiddleware, upload.single('image
     const fileUrl = `${req.protocol}://${req.get('host')}/uploads/${path.basename(filePath)}`;
     const stored = await registerManagedLibraryFile(req.db, {
       userId: req.user.id,
+      enforceAllowance: true, // XENO Storage: an upload the person is adding must fit the plan
       filename: path.basename(filePath),
       originalName: req.file.originalname,
       mimeType: req.file.mimetype,
@@ -1115,6 +1116,7 @@ app.post('/api/upload', databaseMiddleware, authMiddleware, upload.single('image
   } catch (error) {
     try { fs.unlinkSync(req.file.path); } catch { /* best-effort orphan cleanup */ }
     console.error('Failed to persist uploaded file:', error);
+    if (error?.code === 'storage_full') return res.status(507).json({ success: false, code: 'storage_full', error: error.message, usedBytes: error.usedBytes, allowanceBytes: error.allowanceBytes });
     res.status(500).json({ success: false, error: 'Failed to persist uploaded file' });
   }
 });

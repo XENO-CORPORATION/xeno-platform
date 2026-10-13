@@ -30,6 +30,9 @@ import { ensureSchema } from './billingSchema.js';
  * generations a day can now run none. That is the intended product change, and
  * it is one line to revert if it proves wrong.
  * ─────────────────────────────────────────────────────────────────────────── */
+/* `storageBytes` - XENO Storage (codename Arca): the storage a plan includes, in bytes. free 5 GB, pro and
+ * team 100 GB, studio 1 TB, internal no limit (null). Enforced by services/storageAllowance.js. The amounts
+ * are the owner's to set (XENO STORAGE - SPEC.md section 5); these are the opening values. */
 const PLAN_ENTITLEMENTS = {
   /* ── FREE — the local Tool, and it genuinely runs ────────────────────────
    * `canUse: true` with a real daily quota, NOT `canUse: false`.
@@ -75,22 +78,22 @@ const PLAN_ENTITLEMENTS = {
    * still a download, so gating the website alone would be theatre - see
    * routes/productDownloadRoutes.js and the grant work behind it. Do not
    * describe downloads as "closed" on the strength of this line alone. */
-  free:   { plan: 'free',   canUse: true,  canDownload: false, commercial: false, maxResolution: 'standard', priority: false, inHouseDailyLimit: 50,   privateProjects: false, teamSeats: 0,  cloudSync: false, crossApp: false, agents: false, collaboration: false, watermark: false },
+  free:   { plan: 'free', storageBytes: 5368709120,   canUse: true,  canDownload: false, commercial: false, maxResolution: 'standard', priority: false, inHouseDailyLimit: 50,   privateProjects: false, teamSeats: 0,  cloudSync: false, crossApp: false, agents: false, collaboration: false, watermark: false },
 
   /* Everything. `crossApp` is the Layer-3 differentiator and the reason this
    * tier exists - an agent that spans 26 applications is the one capability
    * neither an app vendor nor a model vendor can assemble. */
-  pro:    { plan: 'pro',    canUse: true,  canDownload: true,  commercial: true,  maxResolution: '4k',       priority: true,  inHouseDailyLimit: null, privateProjects: true,  teamSeats: 0,  cloudSync: true,  crossApp: true,  agents: true,  collaboration: false, watermark: false },
+  pro:    { plan: 'pro', storageBytes: 107374182400,    canUse: true,  canDownload: true,  commercial: true,  maxResolution: '4k',       priority: true,  inHouseDailyLimit: null, privateProjects: true,  teamSeats: 0,  cloudSync: true,  crossApp: true,  agents: true,  collaboration: false, watermark: false },
   /* Team seats are purchased as Stripe quantity; the live limit is stored on
    * the workspace, so the static entitlement must not invent an included five. */
-  team:   { plan: 'team',   canUse: true,  canDownload: true,  commercial: true,  maxResolution: '4k',       priority: true,  inHouseDailyLimit: null, privateProjects: true,  teamSeats: 0,  cloudSync: true,  crossApp: true,  agents: true,  collaboration: true,  watermark: false },
-  studio: { plan: 'studio', canUse: true,  canDownload: true,  commercial: true,  maxResolution: '4k',       priority: true,  inHouseDailyLimit: null, privateProjects: true,  teamSeats: 25, cloudSync: true,  crossApp: true,  agents: true,  collaboration: true,  watermark: false },
+  team:   { plan: 'team', storageBytes: 107374182400,   canUse: true,  canDownload: true,  commercial: true,  maxResolution: '4k',       priority: true,  inHouseDailyLimit: null, privateProjects: true,  teamSeats: 0,  cloudSync: true,  crossApp: true,  agents: true,  collaboration: true,  watermark: false },
+  studio: { plan: 'studio', storageBytes: 1099511627776, canUse: true,  canDownload: true,  commercial: true,  maxResolution: '4k',       priority: true,  inHouseDailyLimit: null, privateProjects: true,  teamSeats: 25, cloudSync: true,  crossApp: true,  agents: true,  collaboration: true,  watermark: false },
 
   // Staff / internal-service accounts (prod has real users with plan='internal').
   // NOT sellable - never in the CATALOG. All platform features enabled so internal
   // tooling and service accounts are never gated as free-tier. teamSeats 0: an
   // internal account is not itself a team container.
-  internal: { plan: 'internal', canUse: true, canDownload: true,  commercial: true, maxResolution: '4k', priority: true, inHouseDailyLimit: null, privateProjects: true, teamSeats: 0, cloudSync: true, crossApp: true, agents: true, collaboration: true, watermark: false },
+  internal: { plan: 'internal', storageBytes: null, canUse: true, canDownload: true,  commercial: true, maxResolution: '4k', priority: true, inHouseDailyLimit: null, privateProjects: true, teamSeats: 0, cloudSync: true, crossApp: true, agents: true, collaboration: true, watermark: false },
 };
 
 /* 🔴 NOT HERE YET: the EUR 9 single-app and EUR 19 single-suite rungs.

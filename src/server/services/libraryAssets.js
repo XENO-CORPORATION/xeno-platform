@@ -1,3 +1,4 @@
+import { assertStorageRoom } from './storageAllowance.js';
 import crypto from 'crypto';
 import { currentArea, readAreaFilter } from '../utils/resourceArea.js';
 import fs from 'fs';
@@ -193,6 +194,9 @@ export async function registerManagedLibraryFile(db, {
   metadata = {},
   area = undefined,
   transaction = false, // caller already owns a transaction (durable media output registration)
+  // XENO Storage: true for a file the PERSON is adding (an upload). Work the platform already did and may have
+  // charged for (a generated image, a sandbox output) is always kept, even over the allowance; it still counts.
+  enforceAllowance = false,
 }) {
   // AREA: the file lands in the area it was made in (passed, or the request's), or in none.
   const placeIn = area === undefined ? currentArea() : (area && /^[a-z][a-z0-9_-]{0,39}$/.test(area) && area !== 'overview' ? area : null);
@@ -221,6 +225,8 @@ export async function registerManagedLibraryFile(db, {
       });
       if (!workspaceAccess.allowed) throw new Error('Workspace editor access is required to register an asset');
     }
+    // XENO Storage: a personal file that would not fit the plan's allowance is refused before it is recorded
+    if (enforceAllowance) await assertStorageRoom(tx, { userId, workspaceId, bytes: bytes.length });
     const { rows } = await tx.query(
       `INSERT INTO user_files (
          user_id, owner_user_id, workspace_id, created_by_user_id,
