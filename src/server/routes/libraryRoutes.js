@@ -1,3 +1,5 @@
+import { listVersions, restoreVersion } from '../services/storageVersions.js';
+import { registerManagedLibraryFile } from '../services/libraryAssets.js';
 import { createLink, fileForLink, listShares, revokeShare, shareWithPerson } from '../services/storageShares.js';
 import { allFolders, createFolder, listFolders, moveItemToFolder, removeFolder, updateFolder } from '../services/storageFolders.js';
 import { restoreFileFromObject } from '../services/storageObjects.js';
@@ -132,17 +134,18 @@ const folderReply = (res, result, body = {}) => {
   if (result.invalid) return res.status(400).json({ success: false, code: result.code || 'invalid', error: 'That name can’t be used.' });
   if (result.notFound) return res.status(404).json({ success: false, code: 'not_found', error: 'Folder not found' });
   if (result.forbidden) return res.status(403).json({ success: false, code: 'forbidden', error: 'You can see this item but can’t move it' });
-  if (result.conflict) return res.status(409).json({ success: false, code: result.code, error: { folder_exists: 'A folder with that name is already here.', folder_not_empty: 'Move or delete what is inside first.', folder_inside_itself: 'A folder can’t be moved into itself.' }[result.code] || 'Refused' });
+  if (result.conflict) return res.status(409).json({ success: false, code: result.code, error: { folder_exists: 'A folder with that name is already here.', folder_not_empty: 'Move or delete what is inside first.', folder_inside_itself: 'A folder can’t be moved into itself.', folder_other_place: 'That belongs to a different place. A team’s files stay in that team’s folders.' }[result.code] || 'Refused' });
   return res.status(500).json({ success: false, error: 'Internal server error' });
 };
 const folderId = (value) => (value === null || value === undefined || value === '' || value === 'root' ? null : String(value));
 const folders = (run) => async (req, res) => { try { await run(req, res); } catch (error) { console.error('Storage folder request failed:', error); res.status(500).json({ success: false, error: 'Internal server error' }); } };
 router.get('/folders', folders(async (req, res) => {
-  if (req.query.all === 'true') return res.json({ success: true, folders: await allFolders(req.db, req.user.id) });
-  const result = await listFolders(req.db, req.user.id, folderId(req.query.parent));
-  folderReply(res, result, { folders: result.folders, path: result.path });
+  const team = req.query.workspace ? String(req.query.workspace) : null;   // a workspace's team folders
+  if (req.query.all === 'true') return res.json({ success: true, folders: await allFolders(req.db, req.user.id, team) });
+  const result = await listFolders(req.db, req.user.id, folderId(req.query.parent), team);
+  folderReply(res, result, { folders: result.folders, path: result.path, workspace: result.workspaceId });
 }));
-router.post('/folders', folders(async (req, res) => { const result = await createFolder(req.db, req.user.id, { name: req.body?.name, parentId: folderId(req.body?.parent) }); folderReply(res.status(result.ok ? 201 : res.statusCode), result, { folder: result.folder }); }));
+router.post('/folders', folders(async (req, res) => { const result = await createFolder(req.db, req.user.id, { name: req.body?.name, parentId: folderId(req.body?.parent), workspaceId: req.body?.workspace ? String(req.body.workspace) : null }); folderReply(res.status(result.ok ? 201 : res.statusCode), result, { folder: result.folder }); }));
 router.patch('/folders/:id', folders(async (req, res) => {
   const result = await updateFolder(req.db, req.user.id, req.params.id, { name: req.body?.name, ...('parent' in (req.body || {}) ? { parentId: folderId(req.body.parent) } : {}) });
   folderReply(res, result, { folder: result.folder });
@@ -275,6 +278,14 @@ router.post('/assets/file/:id/shares', folders(async (req, res) => {
   const r = await shareWithPerson(req.db, req.user.id, req.params.id, req.body?.with); shareReply(res, r, { share: r.share });
 }));
 router.delete('/shares/:id', folders(async (req, res) => { shareReply(res, await revokeShare(req.db, req.user.id, req.params.id)); }));
+// VERSIONS of a file (services/storageVersions.js). A new version is uploaded at POST …/versions (index.js, with the upload handler).
+router.get('/assets/file/:id/versions', folders(async (req, res) => { const r = await listVersions(req.db, req.user.id, req.params.id); if (r.notFound) return res.status(404).json({ success: false, code: 'not_found', error: 'File not found' }); res.json({ success: true, versions: r.versions }); }));
+router.post('/assets/file/:id/versions/:version/restore', folders(async (req, res) => {
+  const r = await restoreVersion(req.db, req.user.id, req.params.id, req.params.version, registerManagedLibraryFile);
+  if (r.notFound) return res.status(404).json({ success: false, code: 'not_found', error: 'Version not found' });
+  if (r.conflict) return res.status(409).json({ success: false, code: r.code, error: 'That version’s content is no longer available.' });
+  res.json({ success: true, file: r.file });
+}));
 // FOLDER: put an item in one of your folders, or back at the top ({ folder: null }).
 router.put('/assets/:source/:id/folder', organise('move', async (req, res, principal, source, id) => {
   const result = await moveItemToFolder(req.db, principal, source, id, folderId(req.body?.folder));

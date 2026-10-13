@@ -90,6 +90,7 @@ import { sweepRetention, RETENTION_SWEEP_INTERVAL_MS } from './services/dataRete
 import { sweepExpiredArtifacts } from './services/artifactService.js';
 import { sweepLibraryTrash } from './services/libraryOrganise.js';
 import { syncFileObjects } from './services/storageObjects.js';
+import { addVersion } from './services/storageVersions.js';
 import { sweepExports } from './services/accountExport.js';
 import { requireSupportedClient } from './middleware/requireSupportedClient.js';
 import clientPolicyRoutes from './routes/clientPolicyRoutes.js';
@@ -1065,6 +1066,26 @@ const ALLOWED_UPLOAD_MIMES = new Set([
 ]);
 const MAX_UPLOAD_SIZE = 100 * 1024 * 1024; // 100MB
 
+// XENO Storage: upload a NEW VERSION of a file the caller owns (services/storageVersions.js). The same type and
+// size rules as an upload; the bytes go through the same registration, allowance check and security scan.
+app.post('/api/library/assets/file/:id/versions', databaseMiddleware, authMiddleware, upload.single('image'), async (req, res) => {
+  if (!req.file) return res.status(400).json({ success: false, error: 'No file uploaded' });
+  const drop = () => { try { fs.unlinkSync(req.file.path); } catch { /* best-effort orphan cleanup */ } };
+  if (!ALLOWED_UPLOAD_MIMES.has(req.file.mimetype)) { drop(); return res.status(400).json({ success: false, error: `File type '${req.file.mimetype}' is not allowed` }); }
+  if (req.file.size > MAX_UPLOAD_SIZE) { drop(); return res.status(400).json({ success: false, error: 'File exceeds maximum size of 100MB' }); }
+  try {
+    const result = await addVersion(req.db, req.user.id, req.params.id, { filename: path.basename(req.file.path), mimeType: req.file.mimetype, fileSize: req.file.size, storagePath: req.file.path }, registerManagedLibraryFile);
+    if (result.notFound) { drop(); return res.status(404).json({ success: false, code: 'not_found', error: 'File not found' }); }
+    res.json({ success: true, file: result.file });
+  } catch (error) {
+    drop();
+    if (error?.code === 'storage_full') return res.status(507).json({ success: false, code: 'storage_full', error: error.message, usedBytes: error.usedBytes, allowanceBytes: error.allowanceBytes });
+    if (error?.code === 'version_conflict') return res.status(409).json({ success: false, code: 'version_conflict', error: error.message });
+    console.error('Failed to add a file version:', error);
+    res.status(500).json({ success: false, error: 'Failed to save the new version' });
+  }
+});
+
 app.post('/api/upload', databaseMiddleware, authMiddleware, upload.single('image'), async (req, res) => {
   if (!req.file) {
     return res.status(400).json({ error: 'No file uploaded' });
@@ -1088,6 +1109,8 @@ app.post('/api/upload', databaseMiddleware, authMiddleware, upload.single('image
     const fileUrl = `${req.protocol}://${req.get('host')}/uploads/${path.basename(filePath)}`;
     const stored = await registerManagedLibraryFile(req.db, {
       userId: req.user.id,
+      // XENO Storage: an upload into a team folder belongs to that workspace (edit rights are checked on registration)
+      workspaceId: /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(req.body?.workspace || '')) ? String(req.body.workspace) : null,
       enforceAllowance: true, // XENO Storage: an upload the person is adding must fit the plan
       filename: path.basename(filePath),
       originalName: req.file.originalname,
