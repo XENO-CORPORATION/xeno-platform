@@ -6,7 +6,7 @@
  */
 import assert from 'node:assert/strict';
 import http from 'node:http';
-import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import express from 'express';
 import jwt from 'jsonwebtoken';
@@ -15,6 +15,8 @@ import libraryRoutes from '../routes/libraryRoutes.js';
 import { registerManagedLibraryFile } from '../services/libraryAssets.js';
 import { runAllMigrations } from '../services/migrationRunner.js';
 import { storageUsage, storageAllowance, StorageFullError } from '../services/storageAllowance.js';
+import { syncFileObjects, fileObjectKey } from '../services/storageObjects.js';
+import { setFileStorageForTests } from '../services/artifactStorage.js';
 import { writeTuples } from '../utils/authzReBAC.js';
 
 if (!process.env.DATABASE_URL) throw new Error('DATABASE_URL is required');
@@ -105,6 +107,32 @@ async function main() {
     usage = await storageUsage(pool, free);
     assert.equal(usage.full, false); assert.equal(usage.trashBytes, 0);
     await add(free, 'room.txt', 'room again', { enforceAllowance: true });
+
+    // ── every file gets a verified copy in object storage, and a lost disk file comes back from it ──
+    const objects = new Map();
+    const store = { kind: 'test', put: async (k, b) => { objects.set(k, Buffer.from(b)); }, get: async (k) => objects.get(k) ?? null, head: async (k) => (objects.has(k) ? { sizeBytes: objects.get(k).length } : null) };
+    setFileStorageForTests(store);
+    const kept = await add(other, 'keep.txt', 'bytes worth keeping');
+    const twin = await add(other, 'twin.txt', 'bytes worth keeping');
+    await bulk(other, 10);   // a row whose bytes are not under a managed root
+    const first = await syncFileObjects(pool, { limit: 1000 });
+    assert.ok(first.stored >= 2 && first.errors.unmanaged_path >= 1, 'real files are copied; a row with no bytes is reported, not copied');
+    const rows = (await pool.query('SELECT file_id, sha256, object_key, size_bytes FROM storage_objects WHERE file_id = ANY($1)', [[kept.id, twin.id]])).rows;
+    assert.equal(rows.length, 2); assert.equal(rows[0].object_key, rows[1].object_key, 'the same bytes are one object');
+    assert.equal(rows[0].object_key, fileObjectKey(rows[0].sha256)); assert.equal(Number(rows[0].size_bytes), 19);
+    assert.equal((await syncFileObjects(pool, { limit: 1000 })).stored, 0, 'a second run copies nothing again');
+    // the security scan has passed these two (a quarantined file is never served, with or without a copy)
+    await pool.query(`UPDATE library_asset_ingestions SET state = 'ready' WHERE asset_id = ANY($1)`, [[kept.id, twin.id]]);
+    const keptPath = (await pool.query('SELECT storage_path FROM user_files WHERE id = $1', [kept.id])).rows[0].storage_path;
+    rmSync(keptPath);
+    const lost = await fetch(`${base}/assets/${kept.id}/content`, { headers: as(other, 'sto_other') });
+    assert.equal(lost.status, 200); assert.equal(await lost.text(), 'bytes worth keeping', 'a file whose disk copy is gone is served from its object');
+    assert.ok(existsSync(keptPath), 'and is put back on disk');
+    // a tampered object is never restored
+    const twinPath = (await pool.query('SELECT storage_path FROM user_files WHERE id = $1', [twin.id])).rows[0].storage_path;
+    rmSync(twinPath); objects.set(rows[0].object_key, Buffer.from('something else entirely'));
+    assert.equal((await fetch(`${base}/assets/${twin.id}/content`, { headers: as(other, 'sto_other') })).status, 404);
+    assert.equal(existsSync(twinPath), false);
 
     console.log('storage-allowance: all checks passed');
   } finally {

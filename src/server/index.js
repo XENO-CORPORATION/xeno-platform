@@ -89,6 +89,7 @@ import { sweepExpiredIntents } from './services/downloadFunnel.js';
 import { sweepRetention, RETENTION_SWEEP_INTERVAL_MS } from './services/dataRetention.js';
 import { sweepExpiredArtifacts } from './services/artifactService.js';
 import { sweepLibraryTrash } from './services/libraryOrganise.js';
+import { syncFileObjects } from './services/storageObjects.js';
 import { sweepExports } from './services/accountExport.js';
 import { requireSupportedClient } from './middleware/requireSupportedClient.js';
 import clientPolicyRoutes from './routes/clientPolicyRoutes.js';
@@ -3920,6 +3921,17 @@ startDownloadCleanup();
     backgroundLeader.whenLeader(() => {
       const t = setInterval(sweepHolds, 15 * 60 * 1000);
       t.unref(); sweepHolds();
+      return () => clearInterval(t);
+    });
+
+    // XENO Storage: every account file gets a verified copy in object storage (services/storageObjects.js).
+    // New files are picked up within five minutes; the first run backfills what is already there.
+    const copyFiles = () => syncFileObjects(pool)
+      .then((r) => { if (r.stored || r.failed) console.log(`[Storage] copied ${r.stored} file(s), ${r.bytes} bytes; failed ${r.failed} ${JSON.stringify(r.errors)}`); })
+      .catch((e) => console.error('[Storage] error:', e.message));
+    backgroundLeader.whenLeader(() => {
+      const t = setInterval(copyFiles, 5 * 60 * 1000);
+      t.unref(); copyFiles();
       return () => clearInterval(t);
     });
 

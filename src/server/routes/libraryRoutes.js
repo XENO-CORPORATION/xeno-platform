@@ -1,3 +1,4 @@
+import { restoreFileFromObject } from '../services/storageObjects.js';
 import { storageUsage } from '../services/storageAllowance.js';
 import express from 'express';
 import fs from 'fs';
@@ -33,7 +34,8 @@ const streamAsset = async (req, res, fileOrPrincipal, signed = false) => {
     if (file.ingestion_safe === false) {
       return res.status(423).json({ success: false, error: 'File is still in security quarantine', code: 'asset_quarantined' });
     }
-    const resolved = resolveManagedLibraryPath(file.storage_path);
+    // the disk copy is gone: put it back from its object (XENO Storage), then serve it as usual
+    const resolved = resolveManagedLibraryPath(file.storage_path) || (await restoreFileFromObject(req.db, file).catch(() => null) ? resolveManagedLibraryPath(file.storage_path) : null);
     if (!resolved) return res.status(404).json({ success: false, error: 'File data not found' });
     const name = String(file.original_name || file.filename || 'download').replace(/[\r\n"]/g, '_');
     const inlineMime = new Set(['image/jpeg', 'image/png', 'image/gif', 'image/webp']);
