@@ -15,20 +15,24 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
-import { check, writeTuples } from '../utils/authzReBAC.js';
+import { check } from '../utils/authzReBAC.js';
 import { withTransaction } from './chatProjectAuthority.js';
+import { reconcileShares } from './storageShares.js';
 
 const isId = (v) => typeof v === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(v);
 
-/** The current (newest) row of a file the caller owns, or null. A row that has been replaced is not current. */
-async function ownedCurrent(db, userId, fileId) {
+/** The current (newest) row of a file the caller owns (or, with `orEdits`, may edit), or null. A row that has been replaced is not current. */
+async function ownedCurrent(db, userId, fileId, orEdits = false) {
   if (!isId(fileId) || !isId(userId)) return null;
   const { rows } = await db.query(
     `SELECT f.* FROM user_files f WHERE f.id = $1 AND f.deleted_at IS NULL AND f.storage_type = 'platform-upload'
         AND NOT EXISTS (SELECT 1 FROM user_files n WHERE n.replaces_asset_id = f.id)`, [fileId]);
   if (!rows[0]) return null;
   const owner = await check(db, { object: `library_asset:${fileId}`, relation: 'owner', subject: `user:${userId}` });
-  return owner.allowed ? rows[0] : null;
+  if (owner.allowed) return rows[0];
+  // someone the owner gave "can edit" may add a version; the file stays the owner's
+  if (orEdits && !rows[0].workspace_id && (await db.query(`SELECT 1 FROM storage_access WHERE kind = 'file' AND target_id = $1 AND user_id = $2 AND role = 'editor'`, [fileId, userId])).rows.length) return rows[0];
+  return null;
 }
 
 /** Newest first: [{ id, sizeBytes, createdAt, current }]. */
@@ -47,10 +51,12 @@ export async function listVersions(db, userId, fileId) {
  * `register` is registerManagedLibraryFile, passed in so this module adds no second way to create a file.
  */
 export async function addVersion(db, userId, fileId, stored, register) {
-  const old = await ownedCurrent(db, userId, fileId);
+  const old = await ownedCurrent(db, userId, fileId, true);
   if (!old) return { notFound: true };
+  // the new version belongs to the file's owner (and counts toward the owner's storage), whoever uploads it
+  const ownerId = old.workspace_id ? userId : (old.owner_user_id || old.user_id);
   const created = await register(db, {
-    userId, workspaceId: old.workspace_id || null, enforceAllowance: true, area: null,
+    userId: ownerId, workspaceId: old.workspace_id || null, enforceAllowance: true, area: null,
     filename: stored.filename, originalName: old.original_name || old.filename, mimeType: stored.mimeType,
     fileSize: stored.fileSize, storagePath: stored.storagePath, metadata: { ...(old.metadata || {}), source: 'upload', version_of: old.id },
   });
@@ -63,12 +69,9 @@ export async function addVersion(db, userId, fileId, stored, register) {
       await tx.query(`DELETE FROM ${table} WHERE source = 'file' AND source_id = $1`, [created.id]);   // the new row's own defaults give way
       await tx.query(`UPDATE ${table} SET source_id = $2 WHERE source = 'file' AND source_id = $1`, [old.id, created.id]);
     }
-    const people = await tx.query(`UPDATE storage_shares SET file_id = $2 WHERE file_id = $1 AND revoked_at IS NULL RETURNING kind, grantee_user_id`, [old.id, created.id]);
-    const readers = people.rows.filter((r) => r.kind === 'person').map((r) => `user:${r.grantee_user_id}`);
-    if (readers.length) await writeTuples(tx, {
-      writes: readers.map((subject) => ({ object: `library_asset:${created.id}`, relation: 'viewer', subject })),
-      deletes: readers.map((subject) => ({ object: `library_asset:${old.id}`, relation: 'viewer', subject })),
-    });
+    await tx.query(`UPDATE storage_shares SET file_id = $2 WHERE file_id = $1 AND revoked_at IS NULL`, [old.id, created.id]);
+    // access follows the file to its newest version: direct shares and the shares of the folders it is in
+    if (!old.workspace_id) await reconcileShares(tx, ownerId);
   });
   // if it cannot become the new version, the row just made is withdrawn rather than left as a stray file
   try { await link(); } catch (error) { await db.query('UPDATE user_files SET deleted_at = now() WHERE id = $1', [created.id]); throw error; }

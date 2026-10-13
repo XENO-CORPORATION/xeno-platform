@@ -265,6 +265,58 @@ async function main() {
     assert.equal((await call('PATCH', `/folders/${sub.id}`, F, { parent: personalOfFree.id })).body.code, 'folder_other_place', 'a team folder stays in its team');
     assert.deepEqual((await call('GET', `/folders?parent=${sub.id}`, O)).body.path.map((x) => x.name), ['Clients', 'Acme']);
 
+    // ── sharing a folder: everything in it and under it, now and later; and "can edit" ──
+    const cab = (await call('POST', '/folders', P, { name: 'Cabinet' })).body.folder;
+    const privateTop = (await call('POST', '/folders', P, { name: 'Private top' })).body.folder;
+    await call('PATCH', `/folders/${cab.id}`, P, { parent: privateTop.id });
+    const drawer = (await call('POST', '/folders', P, { name: 'Drawer', parent: cab.id })).body.folder;
+    const ready = async (f) => { await pool.query(`UPDATE library_asset_ingestions SET state = 'ready' WHERE asset_id = $1`, [f.id]); return f; };
+    const inCab = await ready(await add(paid, 'cab.txt', 'in the cabinet')), inDrawer = await ready(await add(paid, 'deep.txt', 'in the drawer')), outside = await ready(await add(paid, 'outside.txt', 'not shared'));
+    await call('PUT', `/assets/file/${inCab.id}/folder`, P, { folder: cab.id });
+    await call('PUT', `/assets/file/${inDrawer.id}/folder`, P, { folder: drawer.id });
+    const read = async (f, headers) => (await fetch(`${base}/assets/${f.id}/content`, { headers })).status;
+    assert.equal((await call('POST', `/folders/${cab.id}/shares`, O, { with: 'sto_paid' })).status, 404, 'only the owner shares a folder');
+    const cabShare = (await call('POST', `/folders/${cab.id}/shares`, P, { with: 'sto_other' })).body.share;
+    assert.equal(cabShare.role, 'viewer');
+    assert.deepEqual([await read(inCab, O), await read(inDrawer, O), await read(outside, O)], [200, 200, 404], 'files in the folder and under it open; others do not');
+    assert.deepEqual((await call('GET', '/folders?shared=true', O)).body.folders.map((f) => [f.name, f.owner]), [['Cabinet', 'sto_paid']], 'the folder is listed as shared with them, once, at its top');
+    const lookIn = (await call('GET', `/folders?parent=${drawer.id}`, O)).body;
+    assert.deepEqual(lookIn.path.map((x) => x.name), ['Cabinet', 'Drawer'], 'the way down starts at what was shared, not at the owner’s folders above it');
+    assert.deepEqual((await call('GET', `/assets?folder=${drawer.id}`, O)).body.items.map((i) => i.name), ['deep.txt']);
+    assert.equal((await call('GET', `/folders?parent=${privateTop.id}`, O)).status, 404, 'the folder above stays private');
+    assert.equal((await call('POST', '/folders', O, { name: 'Mine in yours', parent: cab.id })).status, 404, 'a guest cannot rearrange the folder');
+    assert.equal((await call('DELETE', `/folders/${drawer.id}`, O)).status, 404);
+    // later: a file put in, and a file taken out
+    const late = await ready(await add(paid, 'late.txt', 'added later'));
+    await call('PUT', `/assets/file/${late.id}/folder`, P, { folder: drawer.id });
+    assert.equal(await read(late, O), 200, 'a file added later is shared too');
+    await call('PUT', `/assets/file/${inCab.id}/folder`, P, { folder: null });
+    assert.equal(await read(inCab, O), 404, 'a file moved out is no longer shared');
+    // a folder moved out of the shared one takes its files with it
+    await call('PATCH', `/folders/${drawer.id}`, P, { parent: privateTop.id });
+    assert.deepEqual([await read(inDrawer, O), await read(late, O)], [404, 404]);
+    await call('PATCH', `/folders/${drawer.id}`, P, { parent: cab.id });
+    assert.equal(await read(inDrawer, O), 200);
+    // can edit: rename and a new version, which stays the owner's; never delete or share
+    assert.equal((await call('PATCH', `/assets/file/${inDrawer.id}`, O, { name: 'renamed.txt' })).status, 403, 'can view is not can edit');
+    assert.equal((await call('POST', `/folders/${cab.id}/shares`, P, { with: 'sto_other', role: 'editor' })).body.share.role, 'editor');
+    assert.equal((await call('PATCH', `/assets/file/${inDrawer.id}`, O, { name: 'renamed.txt' })).status, 200, 'can edit renames');
+    const guestUsed = (await storageUsage(pool, other)).usedBytes, ownerUsed = (await storageUsage(pool, paid)).usedBytes;
+    const byGuest = (await addVersion(pool, other, inDrawer.id, stage('g.txt', 'edited by the guest!'), registerManagedLibraryFile)).file;
+    await ready(byGuest);
+    assert.equal((await storageUsage(pool, other)).usedBytes, guestUsed, 'a guest’s new version does not count against the guest');
+    assert.equal((await storageUsage(pool, paid)).usedBytes, ownerUsed + 20, 'it counts against the owner, whose file it still is');
+    assert.equal(await read(byGuest, O), 200); assert.equal(await (await fetch(`${base}/assets/${byGuest.id}/content`, { headers: P })).text(), 'edited by the guest!');
+    assert.equal((await call('POST', `/assets/file/${byGuest.id}/trash`, O)).status, 403, 'can edit never deletes');
+    assert.equal((await call('POST', `/assets/file/${byGuest.id}/shares`, O, { with: 'sto_free' })).status, 404, 'nor shares it on');
+    assert.equal((await call('POST', `/folders/${cab.id}/shares`, P, { with: 'sto_other', role: 'owner' })).body.share.role, 'viewer', 'an unknown role is the weakest one');
+    assert.equal((await call('PATCH', `/assets/file/${byGuest.id}`, O, { name: 'again.txt' })).status, 403, 'and the edit right is gone at once');
+    // taken back
+    assert.equal((await call('DELETE', `/shares/${cabShare.id}`, P)).status, 200);
+    assert.deepEqual([await read(byGuest, O), await read(late, O)], [404, 404], 'un-sharing the folder closes everything in it');
+    assert.equal((await call('GET', '/folders?shared=true', O)).body.folders.length, 0);
+    assert.equal((await pool.query('SELECT count(*)::int AS n FROM storage_access WHERE owner_user_id = $1', [paid])).rows[0].n, 0, 'nothing granted is left behind');
+
     console.log('storage-allowance: all checks passed');
   } finally {
     await new Promise((resolve) => server.close(resolve));
