@@ -192,7 +192,12 @@ async function purge(tx, source, id) {
   if (source === 'file') {
     await tx.query('UPDATE library_asset_link_grants SET revoked_at = NOW() WHERE asset_id = $1 AND revoked_at IS NULL', [id]);
     const { rows } = await tx.query('UPDATE user_files SET deleted_at = COALESCE(deleted_at, NOW()) WHERE id = $1 RETURNING storage_path', [id]);
-    return { ok: true, storagePath: rows[0]?.storage_path || null };
+    // XENO Storage: deleting a file for good removes its older versions with it (they are counted until then)
+    const older = await tx.query(`WITH RECURSIVE chain AS (
+        SELECT replaces_asset_id AS id, 1 AS depth FROM user_files WHERE id = $1 AND replaces_asset_id IS NOT NULL
+        UNION ALL SELECT p.replaces_asset_id, chain.depth + 1 FROM user_files p JOIN chain ON p.id = chain.id WHERE p.replaces_asset_id IS NOT NULL AND chain.depth < 500)
+      UPDATE user_files SET deleted_at = COALESCE(deleted_at, NOW()) WHERE id IN (SELECT id FROM chain) RETURNING storage_path`, [id]);
+    return { ok: true, storagePath: rows[0]?.storage_path || null, olderPaths: older.rows.map((r) => r.storage_path).filter(Boolean) };
   }
   const table = { artifact: 'chat_artifacts', generation: 'image_generations', image_asset: 'image_assets' }[source];
   await tx.query(`DELETE FROM ${table} WHERE id = $1`, [id]);
@@ -205,8 +210,8 @@ export async function purgeLibraryItem(db, principal, source, id) {
   if (!who) return { notFound: true };
   if (!who.owner) return { forbidden: true };
   const result = await withTransaction(db, (tx) => purge(tx, source, id));
-  if (result.ok) result.bytesRemoved = await removeBytes(db, result.storagePath);
-  delete result.storagePath;
+  if (result.ok) { result.bytesRemoved = await removeBytes(db, result.storagePath); for (const older of result.olderPaths || []) await removeBytes(db, older); }
+  delete result.storagePath; delete result.olderPaths;
   return result;
 }
 
@@ -238,7 +243,7 @@ export async function sweepLibraryTrash(db, { batch = 200, log = console } = {})
   for (const row of rows) {
     try {
       const result = await withTransaction(db, (tx) => purge(tx, row.source, row.source_id));
-      if (result.ok) { purged += 1; await removeBytes(db, result.storagePath, log); }
+      if (result.ok) { purged += 1; await removeBytes(db, result.storagePath, log); for (const older of result.olderPaths || []) await removeBytes(db, older, log); }
     } catch (error) {
       log.error?.(`[Library] trash sweep could not purge ${row.source}:${row.source_id}: ${error.message}`);
     }

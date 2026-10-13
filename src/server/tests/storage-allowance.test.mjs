@@ -16,6 +16,7 @@ import { registerManagedLibraryFile } from '../services/libraryAssets.js';
 import { runAllMigrations } from '../services/migrationRunner.js';
 import { storageUsage, storageAllowance, StorageFullError } from '../services/storageAllowance.js';
 import { syncFileObjects, fileObjectKey } from '../services/storageObjects.js';
+import { addVersion } from '../services/storageVersions.js';
 import { setFileStorageForTests } from '../services/artifactStorage.js';
 import { writeTuples } from '../utils/authzReBAC.js';
 
@@ -206,6 +207,63 @@ async function main() {
     assert.equal(await storageAllowance(pool, paid), 150 * GB);
     await pool.query(`UPDATE storage_grants SET revoked_at = now() WHERE user_id = $1`, [paid]);
     assert.equal(await storageAllowance(pool, paid), 100 * GB);
+
+    // ── versions: a new version is a new scanned file; what was on the file moves to it; older ones are kept ──
+    const v1 = await add(paid, 'report.txt', 'first draft');
+    await pool.query(`UPDATE library_asset_ingestions SET state = 'ready' WHERE asset_id = $1`, [v1.id]);
+    const box = (await call('POST', '/folders', P, { name: 'Reports' })).body.folder;
+    await call('PUT', `/assets/file/${v1.id}/folder`, P, { folder: box.id });
+    await call('PUT', `/assets/file/${v1.id}/star`, P);
+    await call('POST', `/assets/file/${v1.id}/shares`, P, { with: 'sto_other' });
+    const v1link = (await call('POST', `/assets/file/${v1.id}/shares`, P, { link: true })).body.url.split('/').pop();
+    const stage = (name, body) => { const storagePath = path.join(uploadDir, `${n += 1}-${name}`); writeFileSync(storagePath, body); return { filename: name, mimeType: 'text/plain', fileSize: Buffer.byteLength(body), storagePath }; };
+    await assert.rejects(() => addVersion(pool, other, v1.id, stage('x.txt', 'not yours'), registerManagedLibraryFile).then((r) => { if (r.notFound) throw new Error('refused'); }), /refused/, 'only the owner adds a version');
+    const usedV1 = (await storageUsage(pool, paid)).usedBytes;
+    const v2 = (await addVersion(pool, paid, v1.id, stage('report-2.txt', 'second, longer draft'), registerManagedLibraryFile)).file;
+    assert.equal(v2.replaces, v1.id);
+    assert.equal((await pool.query(`SELECT state FROM library_asset_ingestions WHERE asset_id = $1`, [v2.id])).rows[0].state, 'quarantined', 'a new version goes through the security scan like any upload');
+    await pool.query(`UPDATE library_asset_ingestions SET state = 'ready' WHERE asset_id = $1`, [v2.id]);
+    const inBox = (await call('GET', `/assets?folder=${box.id}`, P)).body.items;
+    assert.deepEqual(inBox.map((i) => [i.name, i.source_id, i.starred, i.shared]), [['report.txt', v2.id, true, true]], 'one file is listed: the newest, in the same folder, still starred and shared, under its name');
+    assert.equal((await storageUsage(pool, paid)).usedBytes, usedV1 + 20, 'older versions still count');
+    const openV2 = await fetch(`${base}/links/${v1link}`); assert.equal(await openV2.text(), 'second, longer draft', 'the link opens the newest version');
+    assert.equal(await (await fetch(`${base}/assets/${v2.id}/content`, { headers: O })).text(), 'second, longer draft', 'the person it was shared with reads the newest');
+    assert.equal((await fetch(`${base}/assets/${v1.id}/content`, { headers: O })).status, 404, 'and no longer the older one');
+    assert.equal(await (await fetch(`${base}/assets/${v1.id}/content`, { headers: P })).text(), 'first draft', 'the owner can still read the older version');
+    const history = (await call('GET', `/assets/file/${v2.id}/versions`, P)).body.versions;
+    assert.deepEqual(history.map((v) => [v.id, v.current]), [[v2.id, true], [v1.id, false]]);
+    assert.equal((await call('GET', `/assets/file/${v1.id}/versions`, P)).status, 404, 'an older version is not itself a file');
+    assert.equal((await call('GET', `/assets/file/${v2.id}/versions`, O)).status, 404);
+    const v3 = (await call('POST', `/assets/file/${v2.id}/versions/${v1.id}/restore`, P)).body.file;
+    await pool.query(`UPDATE library_asset_ingestions SET state = 'ready' WHERE asset_id = $1`, [v3.id]);
+    assert.equal(await (await fetch(`${base}/assets/${v3.id}/content`, { headers: P })).text(), 'first draft', 'restoring makes the old content the newest version');
+    assert.equal((await call('GET', `/assets/file/${v3.id}/versions`, P)).body.versions.length, 3, 'and nothing in between is lost');
+    // deleting the file for good removes every version, and the space comes back
+    await call('POST', `/assets/file/${v3.id}/trash`, P);
+    assert.equal((await call('DELETE', `/trash/file/${v3.id}`, P)).status, 200);
+    assert.equal((await storageUsage(pool, paid)).usedBytes, usedV1 - 11, 'all versions stop counting');
+    assert.equal((await pool.query('SELECT count(*)::int AS n FROM user_files WHERE id = ANY($1) AND deleted_at IS NULL', [[v1.id, v2.id, v3.id]])).rows[0].n, 0);
+
+    // ── team folders: a workspace's own, seen by its members, holding only that workspace's files ──
+    const F = J(free, 'sto_free');
+    await writeTuples(pool, { writes: [{ object: `workspace:${company}`, relation: 'editor', subject: `user:${other}` }] });
+    const teamTop = (await call('POST', '/folders', F, { name: 'Clients', workspace: company })).body.folder;
+    assert.equal(teamTop.workspaceId, company);
+    assert.equal((await call('POST', '/folders', P, { name: 'Sneak', workspace: company })).status, 404, 'an outsider cannot make a folder in a workspace');
+    assert.deepEqual((await call('GET', `/folders?workspace=${company}`, O)).body.folders.map((f) => f.name), ['Clients'], 'a member sees the team folder');
+    assert.equal((await call('GET', `/folders?workspace=${company}`, P)).status, 404, 'an outsider does not');
+    assert.ok(!(await call('GET', '/folders', F)).body.folders.some((f) => f.name === 'Clients'), 'it is not among the owner’s personal folders');
+    const sub = (await call('POST', '/folders', O, { name: 'Acme', parent: teamTop.id })).body.folder;
+    assert.equal(sub.workspaceId, company, 'a folder made inside inherits the workspace');
+    assert.equal((await call('POST', '/folders', F, { name: 'Clients' })).status, 201, 'the same name is free in a person’s own space');
+    assert.equal((await call('PUT', `/assets/file/${shared.id}/folder`, O, { folder: sub.id })).status, 200, 'a member files a workspace file into a team folder');
+    assert.deepEqual((await call('GET', `/assets?folder=${sub.id}`, F)).body.items.map((i) => i.name), ['team.txt'], 'and every member sees it there');
+    const personalOfFree = (await call('GET', '/folders', F)).body.folders.find((f) => f.name === 'Clients');
+    assert.equal((await call('PUT', `/assets/file/${shared.id}/folder`, F, { folder: personalOfFree.id })).body.code, 'folder_other_place', 'a team file does not go into a personal folder');
+    const loose = await add(free, 'mine.txt', 'x');
+    assert.equal((await call('PUT', `/assets/file/${loose.id}/folder`, F, { folder: sub.id })).body.code, 'folder_other_place', 'nor a personal file into a team folder');
+    assert.equal((await call('PATCH', `/folders/${sub.id}`, F, { parent: personalOfFree.id })).body.code, 'folder_other_place', 'a team folder stays in its team');
+    assert.deepEqual((await call('GET', `/folders?parent=${sub.id}`, O)).body.path.map((x) => x.name), ['Clients', 'Acme']);
 
     console.log('storage-allowance: all checks passed');
   } finally {

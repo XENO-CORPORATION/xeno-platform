@@ -458,7 +458,9 @@ export async function listLibraryItems(db, userId, params = {}) {
         f.workspace_id
       FROM user_files f
       -- A trashed file keeps its row with deleted_at set, so it must be let through here to be listed in the trash.
-      WHERE (f.deleted_at IS NULL OR EXISTS (SELECT 1 FROM library_trash lt WHERE lt.source = 'file' AND lt.source_id = f.id)) AND (
+      WHERE (f.deleted_at IS NULL OR EXISTS (SELECT 1 FROM library_trash lt WHERE lt.source = 'file' AND lt.source_id = f.id))
+        -- XENO Storage: an older version of a file is kept but not listed; its newest version is the file
+        AND NOT EXISTS (SELECT 1 FROM user_files newer WHERE newer.replaces_asset_id = f.id) AND (
         EXISTS (SELECT 1 FROM relationship_tuples rt WHERE rt.object_type='library_asset' AND rt.object_id=f.id::text
           AND rt.subject_type='user' AND rt.subject_id=$1::text AND rt.relation IN ('owner','admin','editor','reviewer','viewer'))
         OR EXISTS (SELECT 1 FROM relationship_tuples child
@@ -539,7 +541,8 @@ export async function listLibraryItems(db, userId, params = {}) {
         (p.source = 'file' AND EXISTS (SELECT 1 FROM storage_shares ss WHERE ss.file_id = p.source_id AND ss.revoked_at IS NULL AND (ss.expires_at IS NULL OR ss.expires_at > now()))) AS shared
       FROM placed p
       LEFT JOIN storage_item_folders sif ON sif.source = p.source AND sif.source_id = p.source_id
-      LEFT JOIN storage_folders sf ON sf.id = sif.folder_id AND sf.owner_user_id = $1::uuid
+      -- the caller's own folder, or a team folder (the item is only listed at all if the caller may see it)
+      LEFT JOIN storage_folders sf ON sf.id = sif.folder_id AND (sf.workspace_id IS NOT NULL OR sf.owner_user_id = $1::uuid)
     )
     SELECT *, (count(*) OVER())::int AS total_count FROM foldered
     WHERE ($2 = 'all' OR category = $2)

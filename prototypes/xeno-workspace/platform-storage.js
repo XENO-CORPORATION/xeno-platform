@@ -5,6 +5,7 @@
  *
  *   My files   /workspace/corpo/apps/storage            the top folder
  *   a folder   /workspace/corpo/apps/storage/f/<id>     by id, so a rename never breaks the address
+ *   a team     /workspace/corpo/apps/storage/t/<workspace id>   that workspace's shared folders and files
  *   Recent · Starred · Shared · Trash · Usage            the sidebar views
  *   a file's preview                                      ?view=<source>:<id> on the page's own address
  *
@@ -19,7 +20,7 @@
   const X = () => window.XW;
   const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
   const VIEWS = ['Recent', 'Starred', 'Shared', 'Trash', 'Usage'];
-  const S = { key: null, status: 'idle', folders: [], path: [], items: [], total: 0, meter: null, largest: [], q: '', note: '', edit: null, moving: null, all: [], busy: 0, sel: new Set(), anchor: null, preview: null, sharing: null };
+  const S = { key: null, status: 'idle', folders: [], path: [], items: [], total: 0, meter: null, largest: [], q: '', note: '', edit: null, moving: null, all: [], busy: 0, sel: new Set(), anchor: null, preview: null, sharing: null, versions: null, scope: null, teams: null };
   const UNITS = ['bytes', 'KB', 'MB', 'GB', 'TB'];
   const size = (n) => { let v = Number(n) || 0, i = 0; while (v >= 1024 && i < UNITS.length - 1) { v /= 1024; i += 1; } return `${i === 0 ? v : v >= 100 ? Math.round(v) : v.toFixed(1).replace(/\.0$/, '')} ${UNITS[i]}`; };
   const when = (iso) => { const d = new Date(iso); if (Number.isNaN(d.getTime())) return ''; const days = Math.floor((Date.now() - d.getTime()) / 86400000); return days < 1 ? d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : days < 7 ? `${days} d ago` : d.toLocaleDateString([], { day: 'numeric', month: 'short', year: d.getFullYear() === new Date().getFullYear() ? undefined : 'numeric' }); };
@@ -27,15 +28,17 @@
   const tag = (i) => { const m = String(i.mime_type || ''); const ext = (String(i.name).match(/\.([a-z0-9]{1,5})$/i) || [])[1]; return (m.startsWith('image/') ? 'IMG' : m.startsWith('video/') ? 'VID' : m.startsWith('audio/') ? 'AUD' : m === 'application/pdf' ? 'PDF' : ext ? ext.toUpperCase().slice(0, 4) : 'FILE'); };
   const paint = () => { try { X()?.render?.(); } catch {} };
   const say = (text) => { S.note = text; paint(); clearTimeout(say.t); say.t = setTimeout(() => { S.note = ''; paint(); }, 4200); };
-  const here = () => { const it = X()?.S?.item || ''; const f = /^f\/([0-9a-f-]{36})$/i.exec(it); return f ? { kind: 'folder', id: f[1].toLowerCase() } : VIEWS.includes(it) ? { kind: it.toLowerCase() } : { kind: 'folder', id: null }; };
+  const here = () => { const it = X()?.S?.item || ''; const f = /^f\/([0-9a-f-]{36})$/i.exec(it), t = /^t\/([0-9a-f-]{36})$/i.exec(it); return t ? { kind: 'folder', id: null, team: t[1].toLowerCase() } : f ? { kind: 'folder', id: f[1].toLowerCase() } : VIEWS.includes(it) ? { kind: it.toLowerCase() } : { kind: 'folder', id: null }; };
   const go = (item) => X()?.go?.('product', { product: 'storage', item: item || null });
   const api = (...a) => P.api(...a).catch(() => ({ ok: false, d: {} }));
   const whyNot = (r, fallback) => (r && r.d && (r.d.error || r.d.message)) || fallback;
 
   async function load() {
     if (!P || !P.served) { S.status = 'offline'; return; }
-    const at = here(), key = `${at.kind}:${at.id || ''}:${S.q}`;
+    const at = here(), key = `${at.kind}:${at.id || at.team || ''}:${S.q}`;
     S.key = key; if (!S.items.length && !S.folders.length) S.status = 'loading';
+    // the workspaces this person is in, for team folders (once)
+    if (S.teams === null) { S.teams = []; api('GET', '/api/workspaces').then((r) => { S.teams = ((r.ok && r.d.workspaces) || []).filter((w) => w.workspace_type !== 'personal').map((w) => ({ id: w.id, name: w.name })); paint(); }); }
     const meter = api('GET', '/api/library/storage');
     let folders = { ok: true, d: { folders: [], path: [] } }, list;
     const q = S.q ? `&query=${encodeURIComponent(S.q)}` : '';
@@ -45,11 +48,14 @@
     else if (at.kind === 'shared') list = api('GET', `/api/library/assets?owned=shared&sort=updated&limit=200${q}`);
     else if (at.kind === 'trash') list = api('GET', `/api/library/assets?view=trash&sort=updated&limit=200${q}`);
     else if (S.q) list = api('GET', `/api/library/assets?sort=updated&limit=200${q}`);   // a search looks everywhere
-    else { folders = api('GET', `/api/library/folders?parent=${at.id || 'root'}`); list = api('GET', `/api/library/assets?folder=${at.id || 'root'}&owned=mine&sort=name&limit=200`); }
+    else if (at.team) { folders = api('GET', `/api/library/folders?workspace=${at.team}`); list = api('GET', `/api/library/assets?folder=root&place=${at.team}&sort=name&limit=200`); }
+    else { folders = api('GET', `/api/library/folders?parent=${at.id || 'root'}`); list = api('GET', at.id ? `/api/library/assets?folder=${at.id}&sort=name&limit=200` : '/api/library/assets?folder=root&owned=mine&place=personal&sort=name&limit=200'); }
     const [m, f, l] = await Promise.all([meter, folders, list]);
     if (S.key !== key) return;   // the person moved on while this loaded
     if (m.ok && m.d.storage) S.meter = m.d.storage;
     if (!l.ok || (f.ok === false)) { S.status = f.status === 404 || (f.d && f.d.code === 'not_found') ? 'missing' : 'error'; return paint(); }
+    S.scope = at.kind === 'folder' ? (f.d.workspace || at.team || null) : null;
+    // My files (the top, no team): only what is the person's own; a team's files live under that team
     S.folders = f.d.folders || []; S.path = f.d.path || []; S.items = l.d.items || []; S.total = l.d.total || S.items.length;
     if (at.kind === 'usage') S.largest = S.items.filter((i) => Number(i.size_bytes) > 0);
     S.sel = new Set([...S.sel].filter((k) => S.items.some((i) => keyOf(i) === k)));
@@ -74,6 +80,7 @@
       + '.xst-r .nm{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.xst-r small{color:var(--muted);font-size:12.5px;font-variant-numeric:tabular-nums}.xst-r .ic{width:26px;height:26px;border-radius:6px;background:var(--control);display:grid;place-items:center;font-size:8.5px;font-weight:600;letter-spacing:.02em;color:var(--muted)}.xst-r .ic.fd{background:var(--text);color:var(--canvas)}'
       + '.xst-r{position:relative}.xst-r[data-sel]{background:rgba(255,255,255,.09)}.xst-r .ic img{width:100%;height:100%;object-fit:cover;border-radius:inherit;display:block}.xst-r .nm em{font-style:normal;font-size:11px;color:var(--dim);margin-left:8px}'
       + '.xst-r .acts{position:absolute;right:8px;top:8px;padding-left:18px;background:linear-gradient(90deg,transparent,var(--elevated) 16px);border-radius:6px}'
+      + '.xst-r .ic.tm{background:none;border:1px solid var(--border);color:var(--text)}.xst-sec{padding:10px 14px 6px;font-size:11.5px;color:var(--dim);border-top:1px solid var(--border)}'
       + '.xst-bulk{display:flex;align-items:center;gap:8px;margin-top:12px;padding:8px 10px 8px 14px;border:1px solid rgba(255,255,255,.22);border-radius:10px;background:var(--elevated);font-size:13px}.xst-bulk b{font-weight:500;margin-right:auto}'
       + '.xst-share{margin-top:12px;padding:14px;border:1px solid var(--border);border-radius:12px;background:var(--panel)}.xst-share h3{margin:0 0 10px;font-size:14px;font-weight:500}.xst-share .line{display:flex;gap:8px;align-items:center;margin-top:8px}.xst-share input,.xst-share select{height:32px;padding:0 10px;border:1px solid var(--border);border-radius:8px;background:var(--control);color:var(--text);font:inherit;font-size:13px;outline:none}.xst-share input{flex:1;min-width:0}.xst-share input:focus{border-color:rgba(255,255,255,.28)}.xst-share .who{display:flex;align-items:center;gap:8px;padding:8px 0;border-top:1px solid var(--border);font-size:13px}.xst-share .who span{flex:1}.xst-share .who small{color:var(--muted)}.xst-share .url{font-size:12.5px;color:var(--muted);word-break:break-all;margin-top:8px}'
       + '.xst-pv{position:fixed;inset:0;z-index:900;display:grid;grid-template-rows:auto 1fr;background:rgba(8,8,8,.94);animation:xst-in .18s ease-out}@keyframes xst-in{from{opacity:0}to{opacity:1}}.xst-pv header{display:flex;align-items:center;gap:8px;padding:12px 16px}.xst-pv header b{flex:1;font-size:14px;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.xst-pv header small{color:var(--muted);font-size:12.5px}'
@@ -109,18 +116,20 @@
     const pic = (i) => (!trash && i.asset_id && /^image\/(jpeg|png|gif|webp)$/.test(String(i.mime_type)) ? `<img src="/api/library/assets/${esc(i.asset_id)}/content?variant=thumbnail" alt="" loading="lazy" decoding="async">` : esc(tag(i)));
     const files = S.items.map((i) => `<div class="xst-r" data-xst-item="${esc(i.source)}:${esc(i.source_id)}"${S.sel.has(keyOf(i)) ? ' data-sel aria-selected="true"' : ''} draggable="${trash ? 'false' : 'true'}" tabindex="0"><span class="ic">${pic(i)}</span>${editing('item', i.source_id) ? `<input data-xst-name value="${esc(i.name)}" aria-label="File name">` : `<span class="nm" title="${esc(i.name)}">${esc(i.name)}${i.shared && i.mine !== false ? '<em>Shared</em>' : ''}${i.mine === false ? '<em>Shared with you</em>' : ''}</span>`}<small>${esc(when(trash ? i.trashed_at : i.updated_at || i.created_at))}</small><small>${Number(i.size_bytes) ? esc(size(i.size_bytes)) : ''}</small><span class="acts">${trash
       ? '<button type="button" data-xst="restore">Restore</button><button type="button" data-xst="purge">Delete forever</button>'
-      : `<button type="button" data-xst="star"${i.starred ? ' data-on' : ''}>${i.starred ? 'Starred' : 'Star'}</button><button type="button" data-xst="rename">Rename</button>${i.mine === false ? '' : '<button type="button" data-xst="move">Move</button>'}${i.mine !== false && i.source === 'file' ? '<button type="button" data-xst="share">Share</button>' : ''}${i.asset_id ? '<button type="button" data-xst="download">Download</button>' : ''}${i.mine === false ? '' : '<button type="button" data-xst="trash">Trash</button>'}`}</span></div>`).join('');
+      : `<button type="button" data-xst="star"${i.starred ? ' data-on' : ''}>${i.starred ? 'Starred' : 'Star'}</button><button type="button" data-xst="rename">Rename</button>${i.mine === false ? '' : '<button type="button" data-xst="move">Move</button>'}${i.mine !== false && i.source === 'file' ? '<button type="button" data-xst="share">Share</button><button type="button" data-xst="versions">Versions</button>' : ''}${i.asset_id ? '<button type="button" data-xst="download">Download</button>' : ''}${i.mine === false ? '' : '<button type="button" data-xst="trash">Trash</button>'}`}</span></div>`).join('');
+    const teams = inFolder && !at.id && !at.team && (S.teams || []).length ? `<div class="xst-sec">Teams</div>${S.teams.map((t) => `<div class="xst-r" data-xst-team="${t.id}" tabindex="0"><span class="ic tm">TEAM</span><span class="nm">${esc(t.name)}</span><small>shared folders</small><small></small><span></span></div>`).join('')}` : '';
     const fresh = S.edit && S.edit.kind === 'new' ? '<div class="xst-r"><span class="ic fd">DIR</span><input data-xst-name value="" placeholder="Folder name" aria-label="New folder name"><small></small><small></small><span></span></div>' : '';
-    if (!fold && !files && !fresh) return `<div class="xst-empty"><b>${S.q ? 'Nothing matches' : trash ? 'The trash is empty' : at.kind === 'starred' ? 'Nothing starred yet' : at.kind === 'shared' ? 'Nothing has been shared with you' : at.kind === 'recent' ? 'Nothing here yet' : 'This folder is empty'}</b>${S.q ? 'Try another word.' : trash ? 'Deleted files stay here for 30 days, then they are gone for good.' : inFolder ? 'Drop files here, or use Upload.' : ''}</div>`;
-    return `<div class="xst-hd"><span></span><span>Name</span><span>${trash ? 'Deleted' : 'Changed'}</span><span>Size</span><span></span></div>${fresh}${fold}${files}`;
+    if (!fold && !files && !fresh && !teams) return `<div class="xst-empty"><b>${S.q ? 'Nothing matches' : trash ? 'The trash is empty' : at.kind === 'starred' ? 'Nothing starred yet' : at.kind === 'shared' ? 'Nothing has been shared with you' : at.kind === 'recent' ? 'Nothing here yet' : 'This folder is empty'}</b>${S.q ? 'Try another word.' : trash ? 'Deleted files stay here for 30 days, then they are gone for good.' : inFolder ? 'Drop files here, or use Upload.' : ''}</div>`;
+    return `<div class="xst-hd"><span></span><span>Name</span><span>${trash ? 'Deleted' : 'Changed'}</span><span>Size</span><span></span></div>${fresh}${fold}${files}${teams}`;
   }
 
   function page() {
     style();
-    const at = here(), key = `${at.kind}:${at.id || ''}:${S.q}`;
-    if (S.key !== key) { S.items = []; S.folders = []; S.path = []; S.edit = null; S.moving = null; S.sharing = null; S.sel = new Set(); if (S.key !== null) S.preview = null; S.status = 'loading'; S.key = key; setTimeout(load, 0); }
+    const at = here(), key = `${at.kind}:${at.id || at.team || ''}:${S.q}`;
+    if (S.key !== key) { S.versions = null; S.items = []; S.folders = []; S.path = []; S.edit = null; S.moving = null; S.sharing = null; S.sel = new Set(); if (S.key !== null) S.preview = null; S.status = 'loading'; S.key = key; setTimeout(load, 0); }
     if (!P || !P.served) return '<div class="xst"><div class="xst-top"><div class="xst-path"><button type="button">Storage</button></div></div><div class="xst-list"><div class="xst-empty"><b>Storage is read from the platform</b>Open the workspace on xenosystem.ai to see your files.</div></div></div>';
-    const title = at.kind === 'folder' ? [{ id: null, name: 'My files' }, ...S.path] : [{ id: null, name: at.kind[0].toUpperCase() + at.kind.slice(1) }];
+    const teamName = S.scope ? ((S.teams || []).find((t) => t.id === S.scope)?.name || 'Team') : null;
+    const title = at.kind === 'folder' ? [{ id: null, name: 'My files' }, ...(S.scope ? [{ id: `t:${S.scope}`, name: teamName }] : []), ...S.path] : [{ id: null, name: at.kind[0].toUpperCase() + at.kind.slice(1) }];
     const path = title.map((p, i) => `${i ? '<i>/</i>' : ''}<button type="button" data-xst="crumb" data-id="${p.id || ''}"${at.kind === 'folder' ? ' data-xst-crumb' : ''}>${esc(p.name)}</button>`).join('');
     const tools = at.kind === 'usage' ? '' : `<input class="xst-find" type="search" placeholder="Search your storage" value="${esc(S.q)}" data-xst-find aria-label="Search your storage">${at.kind === 'folder' ? '<button type="button" class="xst-btn" data-xst="new">New folder</button><button type="button" class="xst-btn xst-go" data-xst="upload">Upload</button><input type="file" multiple hidden data-xst-files>' : ''}`;
     const body = S.status === 'missing' ? '<div class="xst-list"><div class="xst-empty"><b>This folder is gone</b>It may have been deleted. <button type="button" class="xst-btn" data-xst="crumb" data-id="">Back to My files</button></div></div>'
@@ -136,9 +145,16 @@
       <div class="line"><select data-xst-days aria-label="How long the link lasts"><option value="7">Link for 7 days</option><option value="30">Link for 30 days</option><option value="">Link with no end</option></select><button type="button" class="xst-btn" data-xst="share-link">Create link</button><button type="button" class="xst-btn" data-xst="share-close" style="margin-left:auto">Done</button></div>
       ${S.sharing.url ? `<p class="url">Anyone with this link can open the file. It is shown once: <br><span data-xst-url>${esc(S.sharing.url)}</span> <button type="button" class="xst-btn" data-xst="share-copy">Copy</button></p>` : ''}
       ${(S.sharing.shares || []).map((x) => `<div class="who"><span>${x.kind === 'person' ? esc(x.person.name || x.person.username) : 'A link'}</span><small>${x.kind === 'person' ? 'can view' : x.expiresAt ? `until ${esc(new Date(x.expiresAt).toLocaleDateString())}` : 'no end'}</small><button type="button" class="xst-btn" data-xst="share-off" data-id="${x.id}">Remove</button></div>`).join('')}</div>` : '';
-    return `<div class="xst"><div class="xst-top"><div class="xst-path">${path}</div>${tools}</div>${at.kind === 'usage' ? '' : mini()}${S.note ? `<div class="xst-note" role="status">${esc(S.note)}</div>` : ''}${bulk}${mover}${sh}${body}${previewPane()}</div>`;
+    return `<div class="xst"><div class="xst-top"><div class="xst-path">${path}</div>${tools}</div>${at.kind === 'usage' ? '' : mini()}${S.note ? `<div class="xst-note" role="status">${esc(S.note)}</div>` : ''}${bulk}${mover}${sh}${versionsPane()}${body}${previewPane()}</div>`;
   }
 
+  function versionsPane() {
+    const v = S.versions; if (!v) return '';
+    return `<div class="xst-share"><h3>Versions of “${esc(v.name)}”</h3>
+      <div class="line"><button type="button" class="xst-btn xst-go" data-xst="ver-upload">Upload a new version</button><input type="file" hidden data-xst-verfile><span style="font-size:12.5px;color:var(--muted)">A new version is checked like any upload. Every version counts toward your storage.</span><button type="button" class="xst-btn" data-xst="ver-close" style="margin-left:auto">Done</button></div>
+      ${(v.list || []).map((x, i) => `<div class="who"><span>${x.current ? 'Current version' : `Version ${v.list.length - i}`}</span><small>${esc(when(x.createdAt))} · ${esc(size(x.sizeBytes))}</small>${x.current ? '' : `<button type="button" class="xst-btn" data-xst="ver-get" data-id="${x.id}">Download</button><button type="button" class="xst-btn" data-xst="ver-restore" data-id="${x.id}">Restore</button>`}</div>`).join('')}</div>`;
+  }
+  const loadVersions = async () => { const r = await api('GET', `/api/library/assets/file/${S.versions.id}/versions`); if (S.versions) { S.versions.list = (r.ok && r.d.versions) || []; paint(); } };
   function previewPane() {
     const i = S.preview && S.items.find((x) => keyOf(x) === S.preview); if (!i) return '';
     const m = String(i.mime_type || ''), src = i.asset_id ? `/api/library/assets/${esc(i.asset_id)}/content` : i.preview_url ? esc(i.preview_url) : '';
@@ -164,7 +180,7 @@
   async function upload(files) {
     const at = here(); let added = 0; S.busy += 1; say(`Uploading ${files.length} ${files.length === 1 ? 'file' : 'files'}`);
     for (const file of files) {
-      const body = new FormData(); body.append('image', file, file.name);
+      const body = new FormData(); if (S.scope) body.append('workspace', S.scope); body.append('image', file, file.name);
       const headers = { 'x-xeno-surface': 'xeno-web' }; const t = P.csrf?.(); if (t) headers['x-xeno-csrf'] = t; const area = P.area?.(); if (area) headers['x-xeno-area'] = area;
       let r, d = null; try { r = await fetch('/api/upload', { method: 'POST', credentials: 'same-origin', headers, body }); d = await r.json().catch(() => null); } catch { say('XENO could not be reached.'); break; }
       if (!r.ok || !d || d.success === false) { say(`“${file.name}” wasn’t added: ${(d && d.error) || 'XENO refused it'}.`); break; }
@@ -177,7 +193,7 @@
     const edit = S.edit, name = input.value.trim(); S.edit = null;
     if (!edit) return; if (!name) return paint();
     const at = here();
-    if (edit.kind === 'new') return done(await api('POST', '/api/library/folders', { name, parent: at.id }), 'The folder wasn’t created.');
+    if (edit.kind === 'new') return done(await api('POST', '/api/library/folders', { name, parent: at.id, ...(at.id ? {} : S.scope ? { workspace: S.scope } : {}) }), 'The folder wasn’t created.');
     if (edit.kind === 'folder') return done(await api('PATCH', `/api/library/folders/${edit.id}`, { name }), 'The folder wasn’t renamed.');
     return done(await api('PATCH', `/api/library/assets/${edit.source}/${edit.id}`, { name }), 'The file wasn’t renamed.');
   }
@@ -189,6 +205,7 @@
     const b = e.target.closest('.xst [data-xst]');
     // a click on a folder opens it (its buttons and its name field are their own)
     if (!b) {
+      const team = e.target.closest('.xst [data-xst-team]'); if (team) return go(`t/${team.dataset.xstTeam}`);
       const f = e.target.closest('.xst [data-xst-folder]'); if (f && !e.target.closest('input') && !editing('folder', f.dataset.xstFolder)) return go(`f/${f.dataset.xstFolder}`);
       const row = e.target.closest('.xst [data-xst-item]'); if (!row || e.target.closest('input')) return;
       const key = row.dataset.xstItem, order = S.items.map(keyOf);
@@ -200,7 +217,7 @@
     const act = b.dataset.xst, ref = refOf(b);
     if (act === 'retry') return reload();
     if (act === 'usage') return go('Usage');
-    if (act === 'crumb') { const at = here(); return at.kind === 'folder' ? go(b.dataset.id ? `f/${b.dataset.id}` : null) : null; }
+    if (act === 'crumb') { const at = here(); if (at.kind !== 'folder') return; const id = b.dataset.id; return go(!id ? null : id.startsWith('t:') ? `t/${id.slice(2)}` : `f/${id}`); }
     if (act === 'new') { S.edit = { kind: 'new' }; paint(); return focusName(); }
     if (act === 'upload') return document.querySelector('.xst [data-xst-files]')?.click();
     if (act === 'movecancel') { S.moving = null; return paint(); }
@@ -211,13 +228,17 @@
     if (act === 'pv-download') { const i = S.items.find((x) => keyOf(x) === S.preview); return i && download(i); }
     if (act === 'bulk-clear') { S.sel.clear(); return paint(); }
     if (act === 'bulk-open') { const i = pickedItems()[0]; return i && setView(keyOf(i)); }
-    if (act === 'bulk-move') { const all = await api('GET', '/api/library/folders?all=true'); S.all = (all.d && all.d.folders) || []; const items = pickedItems(); S.moving = { kind: 'many', items, name: `${items.length} ${items.length === 1 ? 'file' : 'files'}` }; return paint(); }
+    if (act === 'bulk-move') { const all = await api('GET', `/api/library/folders?all=true${S.scope ? `&workspace=${S.scope}` : ''}`); S.all = (all.d && all.d.folders) || []; const items = pickedItems(); S.moving = { kind: 'many', items, name: `${items.length} ${items.length === 1 ? 'file' : 'files'}` }; return paint(); }
     if (act.startsWith('bulk-')) {
       const items = pickedItems(), verb = act.slice(5); let failed = 0;
       if (verb === 'download') { for (const i of items) if (i.asset_id) await download(i); return; }
       for (const i of items) { const base = `/api/library/assets/${i.source}/${i.source_id}`; const res = verb === 'star' ? await api('PUT', `${base}/star`) : verb === 'trash' ? await api('POST', `${base}/trash`) : await api('POST', `${base}/restore`); if (!res.ok) failed += 1; }
       S.sel.clear(); say(failed ? `${failed} of ${items.length} could not be changed.` : `${items.length} ${items.length === 1 ? 'file' : 'files'} ${verb === 'star' ? 'starred' : verb === 'trash' ? 'moved to the trash' : 'restored'}`); return reload();
     }
+    if (act === 'ver-close') { S.versions = null; return reload(); }
+    if (act === 'ver-upload') return document.querySelector('.xst [data-xst-verfile]')?.click();
+    if (act === 'ver-get') return download({ asset_id: b.dataset.id, name: S.versions.name });
+    if (act === 'ver-restore') { const res = await api('POST', `/api/library/assets/file/${S.versions.id}/versions/${b.dataset.id}/restore`); if (!res.ok) return say(whyNot(res, 'It was not restored.')); S.versions.id = res.d.file.id; say('Restored as the newest version'); return loadVersions(); }
     if (act === 'share-close') { S.sharing = null; await reload(); return; }
     if (act === 'share-person') { const who = document.querySelector('.xst [data-xst-who]')?.value.trim(); if (!who) return; const res = await api('POST', `/api/library/assets/file/${S.sharing.id}/shares`, { with: who }); if (!res.ok) return say(whyNot(res, 'It was not shared.')); say(`Shared with ${res.d.share.person.name || res.d.share.person.username}`); return loadShares(); }
     if (act === 'share-link') { const days = document.querySelector('.xst [data-xst-days]')?.value; const res = await api('POST', `/api/library/assets/file/${S.sharing.id}/shares`, { link: true, ...(days ? { expiresInDays: Number(days) } : {}) }); if (!res.ok) return say(whyNot(res, 'The link was not created.')); S.sharing.url = res.d.url; return loadShares(); }
@@ -225,8 +246,9 @@
     if (act === 'share-off') { const res = await api('DELETE', `/api/library/shares/${b.dataset.id}`); if (!res.ok) say(whyNot(res, 'It was not removed.')); return loadShares(); }
     if (!ref || !ref.row) return;
     if (act === 'share') { S.sharing = { id: ref.id, name: ref.row.name, shares: [], url: '' }; paint(); return loadShares(); }
+    if (act === 'versions') { S.versions = { id: ref.id, name: ref.row.name, list: [] }; paint(); return loadVersions(); }
     if (act === 'rename') { S.edit = ref.kind === 'folder' ? { kind: 'folder', id: ref.id } : { kind: 'item', id: ref.id, source: ref.source }; paint(); return focusName(); }
-    if (act === 'move') { const all = await api('GET', '/api/library/folders?all=true'); S.all = (all.d && all.d.folders) || []; S.moving = { ...ref, name: ref.row.name }; return paint(); }
+    if (act === 'move') { const all = await api('GET', `/api/library/folders?all=true${S.scope ? `&workspace=${S.scope}` : ''}`); S.all = (all.d && all.d.folders) || []; S.moving = { ...ref, name: ref.row.name }; return paint(); }
     if (act === 'remove') return done(await api('DELETE', `/api/library/folders/${ref.id}`), 'The folder wasn’t deleted.');
     const base = `/api/library/assets/${ref.source}/${ref.id}`;
     if (act === 'star') return done(await api(ref.row.starred ? 'DELETE' : 'PUT', `${base}/star`), 'That didn’t work.');
@@ -248,6 +270,14 @@
   });
   document.addEventListener('focusout', (e) => { const name = e.target.closest?.('.xst [data-xst-name]'); if (name && S.edit && name.isConnected && name.value.trim()) commitName(name); });
   document.addEventListener('input', (e) => { const find = e.target.closest?.('.xst [data-xst-find]'); if (find && !find.value && S.q) { S.q = ''; paint(); } });
+  document.addEventListener('change', async (e) => {
+    const input = e.target.closest?.('.xst [data-xst-verfile]'); if (!input || !input.files.length || !S.versions) return;
+    const file = input.files[0]; input.value = ''; const body = new FormData(); body.append('image', file, file.name);
+    const headers = { 'x-xeno-surface': 'xeno-web' }; const t = P.csrf?.(); if (t) headers['x-xeno-csrf'] = t;
+    let r, d = null; try { r = await fetch(`/api/library/assets/file/${S.versions.id}/versions`, { method: 'POST', credentials: 'same-origin', headers, body }); d = await r.json().catch(() => null); } catch { return say('XENO could not be reached.'); }
+    if (!r.ok || !d || d.success === false) return say(`The new version wasn’t added: ${(d && d.error) || 'XENO refused it'}.`);
+    S.versions.id = d.file.id; say('New version added. It is being checked and will open in a moment.'); loadVersions();
+  });
   document.addEventListener('change', (e) => { const input = e.target.closest?.('.xst [data-xst-files]'); if (input && input.files.length) { const files = [...input.files]; input.value = ''; upload(files); } });
   // drag: a row onto a folder or a breadcrumb moves it; files from the computer onto the list upload
   let held = null;
@@ -266,5 +296,14 @@
     const t = held && target(e); if (!t) return; e.preventDefault(); const ref = held; held = null;
     moveTo(ref, t.dataset.xstFolder || t.dataset.id || null);
   });
-  window.XENO_STORAGE = { page, reload, state: () => ({ status: S.status, meter: S.meter, folders: S.folders.length, items: S.items.length }) };
+  // the Library shows the same store: its header carries the account's storage and a way here
+  let chipAsked = false;
+  const chip = () => {
+    if (!P || !P.served) return '';
+    if (!S.meter && !chipAsked) { chipAsked = true; api('GET', '/api/library/storage').then((r) => { if (r.ok && r.d.storage) { S.meter = r.d.storage; paint(); } }); }
+    const m = S.meter; if (!m) return '';
+    return `Storage · ${size(m.usedBytes)}${m.allowanceBytes === null ? ' used' : ` of ${size(m.allowanceBytes)}`}`;   // plain text: the Library draws it as one of its own buttons
+  };
+  document.addEventListener('click', (e) => { if (e.target.closest('[data-xst-open]')) { e.preventDefault(); if (window.XENO_ADDR?.go) window.XENO_ADDR.go('#/corpo/p/storage'); else window.location.assign('/workspace/corpo/apps/storage'); } });
+  window.XENO_STORAGE = { chip, page, reload, state: () => ({ status: S.status, meter: S.meter, folders: S.folders.length, items: S.items.length }) };
 })();
