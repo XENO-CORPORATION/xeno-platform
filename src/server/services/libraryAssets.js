@@ -538,11 +538,14 @@ export async function listLibraryItems(db, userId, params = {}) {
       SELECT p.*, sf.id AS folder_id,
         -- MINE: the caller's own item. A file someone else shared with them is not theirs ("Shared with me").
         (p.source <> 'file' OR EXISTS (SELECT 1 FROM user_files uf WHERE uf.id = p.source_id AND (uf.workspace_id IS NOT NULL OR COALESCE(uf.owner_user_id, uf.user_id) = $1::uuid))) AS mine,
-        (p.source = 'file' AND EXISTS (SELECT 1 FROM storage_shares ss WHERE ss.file_id = p.source_id AND ss.revoked_at IS NULL AND (ss.expires_at IS NULL OR ss.expires_at > now()))) AS shared
+        (p.source = 'file' AND EXISTS (SELECT 1 FROM storage_shares ss WHERE ss.file_id = p.source_id AND ss.revoked_at IS NULL AND (ss.expires_at IS NULL OR ss.expires_at > now()))) AS shared,
+        -- what a share lets the caller do with someone else's file: 'viewer', 'editor', or NULL for their own
+        (SELECT sa.role FROM storage_access sa WHERE sa.kind = 'file' AND sa.target_id = p.source_id AND sa.user_id = $1::uuid) AS shared_role
       FROM placed p
       LEFT JOIN storage_item_folders sif ON sif.source = p.source AND sif.source_id = p.source_id
       -- the caller's own folder, or a team folder (the item is only listed at all if the caller may see it)
-      LEFT JOIN storage_folders sf ON sf.id = sif.folder_id AND (sf.workspace_id IS NOT NULL OR sf.owner_user_id = $1::uuid)
+      LEFT JOIN storage_folders sf ON sf.id = sif.folder_id AND (sf.workspace_id IS NOT NULL OR sf.owner_user_id = $1::uuid
+        OR EXISTS (SELECT 1 FROM storage_access sa WHERE sa.kind = 'folder' AND sa.target_id = sf.id AND sa.user_id = $1::uuid))
     )
     SELECT *, (count(*) OVER())::int AS total_count FROM foldered
     WHERE ($2 = 'all' OR category = $2)

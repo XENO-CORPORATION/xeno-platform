@@ -11,6 +11,7 @@
  */
 import { check } from '../utils/authzReBAC.js';
 import { cleanLibraryName, folderStanding } from './libraryOrganise.js';
+import { reconcileShares, sharedFolderAccess } from './storageShares.js';
 
 const isId = (v) => typeof v === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(v);
 const view = (r) => ({ id: r.id, name: r.name, parentId: r.parent_id, workspaceId: r.workspace_id || null, createdAt: r.created_at, updatedAt: r.updated_at, ...(r.items === undefined ? {} : { items: Number(r.items), folders: Number(r.folders) }) });
@@ -29,23 +30,27 @@ async function reach(db, userId, id, need = 'edit') {
   if (!isId(id)) return null;
   const folder = (await db.query('SELECT * FROM storage_folders WHERE id = $1', [id])).rows[0];
   if (!folder) return null;
-  const can = folder.workspace_id ? await inWorkspace(db, userId, folder.workspace_id) : folder.owner_user_id === userId ? 'edit' : null;
+  // a personal folder: its owner changes it; a person it was shared with may look inside, never rearrange it
+  const can = folder.workspace_id ? await inWorkspace(db, userId, folder.workspace_id) : folder.owner_user_id === userId ? 'edit' : (await sharedFolderAccess(db, userId, id)) ? 'view' : null;
   return can && RANK[can] >= RANK[need] ? folder : null;
 }
 
 /** The folders in one place, with how much each holds. `parentId` null is the top: the caller's own, or a workspace's. */
 export async function listFolders(db, userId, parentId = null, workspaceId = null) {
-  let scope = workspaceId;
-  if (parentId !== null) { const parent = await reach(db, userId, parentId, 'view'); if (!parent) return { notFound: true }; scope = parent.workspace_id || null; }
+  let scope = workspaceId, guest = false;
+  if (parentId !== null) { const parent = await reach(db, userId, parentId, 'view'); if (!parent) return { notFound: true }; scope = parent.workspace_id || null; guest = !parent.workspace_id && parent.owner_user_id !== userId; }
   else if (workspaceId !== null && !(await inWorkspace(db, userId, workspaceId))) return { notFound: true };
   const { rows } = await db.query(
     `SELECT f.*, (SELECT COUNT(*) FROM storage_item_folders i WHERE i.folder_id = f.id) AS items,
             (SELECT COUNT(*) FROM storage_folders c WHERE c.parent_id = f.id) AS folders
        FROM storage_folders f
       WHERE f.parent_id IS NOT DISTINCT FROM $2::uuid
-        AND (($3::uuid IS NULL AND f.workspace_id IS NULL AND f.owner_user_id = $1) OR f.workspace_id = $3::uuid)
-      ORDER BY lower(f.name)`, [userId, parentId, scope]);
-  return { ok: true, folders: rows.map(view), path: parentId ? await folderPath(db, parentId) : [], workspaceId: scope };
+        AND (($3::uuid IS NULL AND f.workspace_id IS NULL AND (f.owner_user_id = $1 OR $2::uuid IS NOT NULL)) OR f.workspace_id = $3::uuid)
+      ORDER BY lower(f.name)`, [userId, parentId, scope]);   // inside a folder the caller reached (their own or one shared with them), its folders are listed whoever owns them
+  let path = parentId ? await folderPath(db, parentId) : [];
+  // someone looking into a folder shared with them sees the way down from what was shared, never the owner's folders above it
+  if (guest) { const mine = new Set((await db.query(`SELECT target_id FROM storage_access WHERE kind = 'folder' AND user_id = $1 AND target_id = ANY($2::uuid[])`, [userId, path.map((p) => p.id)])).rows.map((r) => r.target_id)); path = path.filter((p) => mine.has(p.id)); }
+  return { ok: true, folders: rows.map(view), path, workspaceId: scope, shared: guest };
 }
 
 /** From the top down to this folder: [{ id, name }]. The caller's right to the folder is checked by the caller. */
@@ -92,7 +97,7 @@ export async function updateFolder(db, userId, id, { name, parentId }) {
     }
     nextParent = parentId;
   }
-  try { return { ok: true, folder: view((await db.query('UPDATE storage_folders SET name = $2, parent_id = $3, updated_at = now() WHERE id = $1 RETURNING *', [id, nextName, nextParent])).rows[0]) }; }
+  try { const row = (await db.query('UPDATE storage_folders SET name = $2, parent_id = $3, updated_at = now() WHERE id = $1 RETURNING *', [id, nextName, nextParent])).rows[0]; if (parentId !== undefined && !row.workspace_id) await reconcileShares(db, row.owner_user_id); /* a moved folder may enter or leave a shared one */ return { ok: true, folder: view(row) }; }
   catch (error) { if (sameName(error)) return { conflict: true, code: 'folder_exists' }; throw error; }
 }
 
@@ -110,7 +115,7 @@ export async function removeFolder(db, userId, id) {
 export async function moveItemToFolder(db, principal, source, id, folderId) {
   const who = await folderStanding(db, principal, source, id);
   if (who.invalid || who.notFound || who.forbidden) return who;
-  if (folderId === null) { await db.query('DELETE FROM storage_item_folders WHERE source = $1 AND source_id = $2', [source, id]); return { ok: true, folderId: null }; }
+  if (folderId === null) { const was = (await db.query('DELETE FROM storage_item_folders WHERE source = $1 AND source_id = $2 RETURNING folder_id', [source, id])).rows[0]; if (was) { const o = (await db.query('SELECT owner_user_id, workspace_id FROM storage_folders WHERE id = $1', [was.folder_id])).rows[0]; if (o && !o.workspace_id) await reconcileShares(db, o.owner_user_id); } return { ok: true, folderId: null }; }
   const folder = await reach(db, principal.id, folderId);
   if (!folder) return { notFound: true };
   // a team folder holds that workspace's own files; a personal folder holds what is not a team's
@@ -118,5 +123,6 @@ export async function moveItemToFolder(db, principal, source, id, folderId) {
   if ((folder.workspace_id || null) !== home) return { conflict: true, code: 'folder_other_place' };
   await db.query(`INSERT INTO storage_item_folders (source, source_id, folder_id) VALUES ($1, $2, $3)
     ON CONFLICT (source, source_id) DO UPDATE SET folder_id = EXCLUDED.folder_id, placed_at = now()`, [source, id, folderId]);
+  if (!folder.workspace_id) await reconcileShares(db, folder.owner_user_id);   // into or out of a shared folder: access follows
   return { ok: true, folderId };
 }

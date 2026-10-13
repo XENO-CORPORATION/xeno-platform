@@ -1,6 +1,6 @@
 import { listVersions, restoreVersion } from '../services/storageVersions.js';
 import { registerManagedLibraryFile } from '../services/libraryAssets.js';
-import { createLink, fileForLink, listShares, revokeShare, shareWithPerson } from '../services/storageShares.js';
+import { createLink, fileForLink, foldersSharedWith, listShares, revokeShare, shareWithPerson } from '../services/storageShares.js';
 import { allFolders, createFolder, listFolders, moveItemToFolder, removeFolder, updateFolder } from '../services/storageFolders.js';
 import { restoreFileFromObject } from '../services/storageObjects.js';
 import { storageUsage } from '../services/storageAllowance.js';
@@ -140,10 +140,11 @@ const folderReply = (res, result, body = {}) => {
 const folderId = (value) => (value === null || value === undefined || value === '' || value === 'root' ? null : String(value));
 const folders = (run) => async (req, res) => { try { await run(req, res); } catch (error) { console.error('Storage folder request failed:', error); res.status(500).json({ success: false, error: 'Internal server error' }); } };
 router.get('/folders', folders(async (req, res) => {
+  if (req.query.shared === 'true') return res.json({ success: true, folders: await foldersSharedWith(req.db, req.user.id), path: [] });   // folders other people shared with me
   const team = req.query.workspace ? String(req.query.workspace) : null;   // a workspace's team folders
   if (req.query.all === 'true') return res.json({ success: true, folders: await allFolders(req.db, req.user.id, team) });
   const result = await listFolders(req.db, req.user.id, folderId(req.query.parent), team);
-  folderReply(res, result, { folders: result.folders, path: result.path, workspace: result.workspaceId });
+  folderReply(res, result, { folders: result.folders, path: result.path, workspace: result.workspaceId, shared: result.shared === true });
 }));
 router.post('/folders', folders(async (req, res) => { const result = await createFolder(req.db, req.user.id, { name: req.body?.name, parentId: folderId(req.body?.parent), workspaceId: req.body?.workspace ? String(req.body.workspace) : null }); folderReply(res.status(result.ok ? 201 : res.statusCode), result, { folder: result.folder }); }));
 router.patch('/folders/:id', folders(async (req, res) => {
@@ -268,14 +269,17 @@ router.put('/assets/:source/:id/area', organise('place', async (req, res, princi
 // SHARING one file (services/storageShares.js). Only the owner shares; both kinds are read-only and revocable.
 const shareReply = (res, result, body = {}) => {
   if (result.ok) return res.json({ success: true, ...body });
-  if (result.invalid) return res.status(400).json({ success: false, code: result.code, error: { invalid_person: 'Give an email address or a username.', own_file: 'That is your own account.', invalid_expiry: 'A link can last 1 to 365 days.' }[result.code] || 'Invalid' });
-  if (result.notFound) return res.status(404).json({ success: false, code: result.code || 'not_found', error: result.code === 'person_not_found' ? 'No XENO account has that email or username.' : 'File not found' });
+  if (result.invalid) return res.status(400).json({ success: false, code: result.code, error: { invalid_person: 'Give an email address or a username.', own_file: 'That is your own account.', invalid_expiry: 'A link can last 1 to 365 days.', invalid_role: 'Choose can view or can edit.' }[result.code] || 'Invalid' });
+  if (result.notFound) return res.status(404).json({ success: false, code: result.code || 'not_found', error: result.code === 'person_not_found' ? 'No XENO account has that email or username.' : 'Not found' });
   return res.status(500).json({ success: false, error: 'Internal server error' });
 };
-router.get('/assets/file/:id/shares', folders(async (req, res) => { const r = await listShares(req.db, req.user.id, req.params.id); shareReply(res, r, { shares: r.shares }); }));
+router.get('/assets/file/:id/shares', folders(async (req, res) => { const r = await listShares(req.db, req.user.id, { fileId: req.params.id }); shareReply(res, r, { shares: r.shares }); }));
+// a FOLDER is shared with people (never by link): everything in it and under it, now and later
+router.get('/folders/:id/shares', folders(async (req, res) => { const r = await listShares(req.db, req.user.id, { folderId: req.params.id }); shareReply(res, r, { shares: r.shares }); }));
+router.post('/folders/:id/shares', folders(async (req, res) => { const r = await shareWithPerson(req.db, req.user.id, { folderId: req.params.id }, req.body?.with, req.body?.role === 'editor' ? 'editor' : 'viewer'); shareReply(res, r, { share: r.share }); }));
 router.post('/assets/file/:id/shares', folders(async (req, res) => {
   if (req.body?.link === true) { const r = await createLink(req.db, req.user.id, req.params.id, { expiresInDays: req.body?.expiresInDays ?? null }); return shareReply(res, r, r.ok ? { share: r.share, url: `${siteOrigin()}/api/library/links/${r.token}` } : {}); }
-  const r = await shareWithPerson(req.db, req.user.id, req.params.id, req.body?.with); shareReply(res, r, { share: r.share });
+  const r = await shareWithPerson(req.db, req.user.id, { fileId: req.params.id }, req.body?.with, req.body?.role === 'editor' ? 'editor' : 'viewer'); shareReply(res, r, { share: r.share });
 }));
 router.delete('/shares/:id', folders(async (req, res) => { shareReply(res, await revokeShare(req.db, req.user.id, req.params.id)); }));
 // VERSIONS of a file (services/storageVersions.js). A new version is uploaded at POST …/versions (index.js, with the upload handler).
