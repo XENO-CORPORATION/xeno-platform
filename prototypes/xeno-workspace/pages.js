@@ -430,7 +430,7 @@
       if (s.global === 'settings') return window.XENO_SETTINGS.render(it);
     }
     if (s.view === 'zone') return it ? mod('zone:' + it, () => itemPage(it)) : mod('area:' + window.XENO_ADDR.current().split('?')[0], () => areaPage());
-    if (s.view === 'product') { if (PR[s.product]?.kind === 'chat') return null; return it ? (window.XENO_PRODUCT_NAV[s.product]?.views?.includes(it) ? productView(it) : itemPage(it)) : productPage(); }
+    if (s.view === 'product') { if (PR[s.product]?.kind === 'chat' || (s.product === 'storage' && window.XENO_STORAGE)) return null; /* Storage draws its own page on the real meter (platform-storage.js) */ return it ? (window.XENO_PRODUCT_NAV[s.product]?.views?.includes(it) ? productView(it) : itemPage(it)) : productPage(); }
     return null;
   }
   // the page split into the main area's three containers: header actions · scrolling body · footer bar

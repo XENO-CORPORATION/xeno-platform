@@ -1051,6 +1051,7 @@
   function mainProduct() {
     const p = PR[S.product];
     if (S.mode === 'studio' && ['image', 'video', 'audio', '3d', 'enhance-image', 'enhance-video', 'enhance-audio', 'enhance-3d'].includes(S.product) && window.XENO_GENERATIONS) return window.XENO_GENERATIONS.host();
+    if (S.product === 'storage' && window.XENO_STORAGE) return window.XENO_STORAGE.page();   // XENO Storage: the account's space, on the real meter
     if (p.kind === 'chat' && window.XENO_CHAT && window.XENO_CHAT.served) return window.XENO_CHAT.host();
     if (p.kind === 'chat' && window.XENO_LIVE_CHAT) { const C = window.XENO_LIVE_CHAT; return `<div class="live-chat-host"><div class="live-chat chat-themed chat-theme-dark" style="${C.vars.replace(/"/g, '&quot;')}">${C.html}</div></div>`; }
     if (p.kind === 'chat') return `<div class="chat"><div class="thread"><div class="in"><div class="um">next one</div><div class="am"><p>Here is the next scenario. A company runs EC2 instances across three Availability Zones and needs a shared file system every instance can mount at once, with storage that grows automatically.</p><p>Which service fits best: <b>EFS</b>, <b>EBS Multi-Attach</b> or <b>FSx for Lustre</b>?</p></div></div></div>
