@@ -24,6 +24,13 @@ export function tariffFor(type,model) {
   const revision=createHash('sha256').update(JSON.stringify({version:1,type,model,maxRetailCredits})).digest('hex');
   return {revision,maxRetailCredits,maxRetailMicro:Math.round(maxRetailCredits*1_000_000)};
 }
+/**
+ * The model each type starts on (owner, 2026-10-14: GPT Image 2.5 Sunburst for images). The Generate panel
+ * and the chat both pick the catalog's FIRST model for a type the person has not chosen, so the order is a
+ * product decision — it must not be whatever order the gateway happens to list. A house default that is not
+ * available right now simply does not lead; the rest keep the gateway's order.
+ */
+export const HOUSE_DEFAULT_MODEL={image:'gpt-image-2.5-sunburst'};
 export async function generationCatalog({models=xenoModelCatalog}={}) {
   let raw;try{raw=await models();}catch{throw generationError('catalog_unavailable',503);}
   if(!Array.isArray(raw)) throw generationError('catalog_unavailable',503);
@@ -33,6 +40,8 @@ export async function generationCatalog({models=xenoModelCatalog}={}) {
       if(!d||d.type!==type||row.execution?.endpoint!==d.endpoint||row.execution?.async!==true||row.available===false||row.enabled===false)return [];
       return [{...d,name:row.display_name||row.name||row.id,tariff:tariffFor(type,d.id)}];
     });
+    const lead=qualified.findIndex(m=>m.id===HOUSE_DEFAULT_MODEL[type]);
+    if(lead>0)qualified.unshift(...qualified.splice(lead,1));
     return {type,available:qualified.length>0,models:qualified,tariff:qualified[0]?.tariff||null,...(!qualified.length?{reason:type==='audio'||type==='3d'?'gateway_adapter_unqualified':'qualified_models_unavailable'}:{})};
   })};
 }

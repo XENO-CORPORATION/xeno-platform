@@ -76,6 +76,12 @@ try{
   await expectCode(()=>quoteGeneration(pool,owner,{...request,model:'invented'},options),'model_unavailable');
   await expectCode(()=>quoteGeneration(pool,owner,{...request,settings:{duration:9}},options),'unsupported_setting');
   const catalog=await generationCatalog({models});ok(catalog.types[0].models.length===2&&catalog.types[1].models.length===1&&!catalog.types[2].available&&!catalog.types[3].available,'qualified live intersection and honest absent modalities');
+  // The gateway listed Nano Banana (gemini-3-pro-image) before Sunburst and the panel took the first one.
+  // The house default leads no matter where the gateway puts it, and when it is unavailable the order is the gateway's.
+  const asListed=async()=>['gemini-3-pro-image','gpt-image-2.5-flare','gpt-image-2.5-sunburst'].map(id=>({id,execution:{endpoint:'/v1/images/generations',async:true}}));
+  ok((await generationCatalog({models:asListed})).types[0].models.map(m=>m.id).join()==='gpt-image-2.5-sunburst,gemini-3-pro-image,gpt-image-2.5-flare','the image catalog starts on GPT Image 2.5 Sunburst whatever order the gateway lists');
+  const withoutDefault=async()=>(await asListed()).filter(m=>m.id!=='gpt-image-2.5-sunburst');
+  ok((await generationCatalog({models:withoutDefault})).types[0].models[0].id==='gemini-3-pro-image','an unavailable house default does not lead; the gateway order stands');
   const quote=await quoteGeneration(pool,owner,request,options);
   await expectCode(()=>createGeneration(pool,owner,{...request,prompt:'tampered',quoteToken:quote.quoteToken,requestKey:'tampered'},options),'quote_changed');
   await expectCode(()=>createGeneration(pool,owner,{...request,quoteToken:quote.quoteToken,requestKey:'expired'},{...options,now:()=>Date.now()+600000}),'quote_expired');
