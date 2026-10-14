@@ -221,3 +221,16 @@ html.is-signedout body > :not(#signedout):not(#toast){visibility:hidden}
 .xd-caps{margin:0 0 4px;padding:0;list-style:none;display:flex;flex-direction:column;gap:4px}
 .xd-caps li{position:relative;padding-left:14px;color:var(--text);font-size:12.5px;line-height:1.45}
 .xd-caps li::before{content:"";position:absolute;left:0;top:7px;width:5px;height:5px;border-radius:1px;background:var(--muted)}
+
+/* ONE DIALOG DESIGN (owner, 2026-10-14): every dialog takes the New task window's construction — a single panel
+   surface, hairline rules between header, body and footer, the action and Cancel together on the right. This
+   replaces the canvas shell + separate plates for every XD dialog; the wide two-pane shell (.xd-lg) keeps its own. */
+.xd-sh:not(.xd-lg){gap:0;padding:0;background:var(--panel);border-radius:var(--r,12px);overflow:hidden}
+.xd-sh:not(.xd-lg)>.xd-pl{background:transparent;border-radius:0}
+.xd-sh:not(.xd-lg)>.xd-head{align-items:center;min-height:52px;padding:10px 12px 10px 20px;border-bottom:1px solid var(--n24)}
+.xd-sh:not(.xd-lg)>.xd-head b{font-size:14px}
+.xd-sh:not(.xd-lg)>.xd-body{padding:20px}
+.xd-sh:not(.xd-lg)>.xd-foot{min-height:56px;padding:12px 12px 12px 20px;border-top:1px solid var(--n24)}
+.xd-foot>.xd-sp:not(:first-child){order:-1}
+.xd-sh:not(.xd-lg) .xd-btn{height:32px;font-size:13px}
+.xd-sh:not(.xd-lg) .xd-btn.ghost{border-color:var(--n38)}
