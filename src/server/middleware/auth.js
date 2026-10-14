@@ -73,12 +73,14 @@ async function resolveApiKeyUser(req, rawKey) {
        FROM api_keys ak
        JOIN users u ON u.id = ak.user_id
       WHERE ak.key_prefix = $1 AND ak.key_hash = $2 AND ak.is_active = true
+        -- expiry is decided by the DATABASE's clock, the clock that wrote expires_at. Comparing it in
+        -- Node let a key that had just expired still authenticate whenever the two clocks drifted.
+        AND (ak.expires_at IS NULL OR ak.expires_at > clock_timestamp())
       LIMIT 1`,
     [keyPrefix, keyHash],
   );
   if (rows.length === 0) return null;
   const row = rows[0];
-  if (row.expires_at && new Date(row.expires_at) < new Date()) return null;
   // The key's own user suspended → a distinct refusal (see resolveAuthedUser).
   if (row.is_active === false) return { suspended: true };
 

@@ -43,7 +43,8 @@ const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const read = (...p) => readFileSync(join(ROOT, ...p), 'utf8');
 const CHAT = read('src', 'components', 'playground', 'Chat', 'ChatWithLLM.tsx');
 const OVERVIEW = read('src', 'pages', 'Overview.tsx');
-const stripComments = (s) => s.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+// line endings normalised first: the sources are CRLF on a Windows checkout, and the bounds below match `\n  };`
+const stripComments = (s) => s.replace(/\r\n/g, '\n').replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
 
 test('both surfaces consume the one exclusion module', () => {
   for (const [name, src] of [['ChatWithLLM', CHAT], ['Overview', OVERVIEW]]) {
@@ -88,7 +89,9 @@ test('both surfaces yield the slot when the other expands', () => {
 });
 
 test('collapsing does not announce — freeing the slot must not force the other open', () => {
-  const code = stripComments(OVERVIEW);
+  // Bounded on the raw source: the comment stripper is a regex, and a `/*` inside a string earlier in
+  // the file swallows real code up to the next `*/` — it removed this very handler.
+  const code = OVERVIEW.replace(/\r\n/g, '\n');
   const handler = code.match(/const handleSidebarCollapseChange[\s\S]{0,600}?\n  \};/);
   assert.ok(handler, 'could not bound handleSidebarCollapseChange');
   assert.match(

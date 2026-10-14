@@ -41,7 +41,8 @@ test('the catalogue load prefers the remembered model over the hard-coded favour
 });
 
 test('a reopened conversation comes back on the model it was last used with', () => {
-  const load = slice('const handleLoadConversation = async (conversationId: string) => {', 'const handleRefreshConversation');
+  // anchored on the name: the signature grew an options argument ({ syncUrl, projectIdHint })
+  const load = slice('const handleLoadConversation = async (', 'const handleRefreshConversation');
   assert.match(
     load, /preferModel\(fullConversation\.model_id, 'conversation'\)/,
     'the server row carries model_id; the client must read it, at the highest rank',

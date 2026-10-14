@@ -167,7 +167,12 @@ test('capacity is derived from live admissions, leases and holds, and never stor
       JOIN information_schema.tables t ON t.table_schema=c.table_schema AND t.table_name=c.table_name
       WHERE c.table_schema = current_schema() AND t.table_type='BASE TABLE'
         AND (c.column_name ~ '(capacity|headcount|head_count)' OR (c.table_name LIKE 'workforce%' AND c.table_name ~ 'capacity'))`)).rows;
-    assert.deepEqual(stored, [], 'no capacity is stored anywhere in the schema');
+    /* RES-01's `resource_offers.capacity_quantity`/`capacity_unit` are a TERM OF AN OFFER — the amount a
+     * resource owner puts up (say, 40 GPU-hours) — set by its owner and bounding the leases it mints. LIFE-09
+     * forbids a stored figure for how much a WORKFORCE can take on; an offer's size is not that, and nothing
+     * derives workforce capacity from it. Named exactly, so any OTHER capacity column still fails here. */
+    const OFFER_TERMS = new Set(['resource_offers.capacity_quantity', 'resource_offers.capacity_unit']);
+    assert.deepEqual(stored.filter((r) => !OFFER_TERMS.has(r.ref)), [], 'no capacity is stored anywhere in the schema');
     const kinds = (await pool.query(`SELECT table_name, table_type FROM information_schema.tables
       WHERE table_schema=current_schema() AND table_name IN ('workforce_scope_capacity','workforce_admission_activity') ORDER BY 1`)).rows;
     assert.deepEqual(kinds.map((r) => r.table_type), ['VIEW', 'VIEW'], 'capacity is a view -- a query with a name -- never a table');

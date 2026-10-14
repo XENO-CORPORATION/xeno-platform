@@ -95,7 +95,10 @@ try {
     // The slot holds the ask_user panel ABOVE the queue when both exist (2026-10-02); the queue itself
     // still mounts whenever it has prompts.
     const slot = chat.slice(chat.indexOf('aboveComposer={'), chat.indexOf(') : undefined}', chat.indexOf('aboveComposer={')));
-    assert.match(slot, /^aboveComposer=\{\(waitingQuestion \|\| queue\.messages\.length > 0/);
+    // the slot opens for a waiting question or a non-empty queue (among other surfaces: Studio Enhance, generation states)
+    const condition = (/^aboveComposer=\{\(([\s\S]*?)\) \? \(/.exec(slot) || [, ''])[1];
+    assert.match(condition, /waitingQuestion/, 'a waiting question opens the slot');
+    assert.match(condition, /queue\.messages\.length > 0/, 'a non-empty queue opens the slot');
     assert.match(slot, /\{queue\.messages\.length > 0 && \(\s*<ChatQueue/);
     assert.ok(slot.indexOf('<ChatQuestionPanel') !== -1 && slot.indexOf('<ChatQuestionPanel') < slot.indexOf('<ChatQueue'), 'the question panel sits above the queue');
     for (const handler of ['onToggle={toggleQueueExpansion}', 'onRemove={removeFromQueue}', 'onMove={moveInQueue}', 'onSaveText={saveQueuedText}', 'onRemoveFile={removeQueuedFile}', 'onAttach={attachToQueued}', 'onHoldChange={setIsQueueHeld}']) {
