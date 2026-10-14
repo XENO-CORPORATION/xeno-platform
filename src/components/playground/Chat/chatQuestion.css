@@ -76,7 +76,7 @@
 .chat-q-bar-open { flex: none; font-size: 12px; color: var(--chat-muted); }
 
 /* The answered record inside the turn: one line, expands on click. */
-.chat-q-rec { margin: 2px 0 12px; border: 1px solid var(--chat-border); border-radius: 9px; background: var(--chat-surface); overflow: hidden; }
+.chat-q-rec { margin: 12px 0; /* the same 12px every block under a reply sits below the text (project sources: mt-3) */  border: 1px solid var(--chat-border); border-radius: 9px; background: var(--chat-surface); overflow: hidden; }
 .chat-q-rec-line { width: 100%; display: flex; align-items: center; gap: 8px; padding: 8px 11px; font-size: 12.5px; line-height: 1.4; text-align: left; color: var(--chat-muted); background: none; border: 0; cursor: pointer; }
 .chat-q-rec-line:hover { background: color-mix(in srgb, var(--chat-text) 3.5%, transparent); }
 .chat-q-rec .chat-q-sq { background: var(--chat-muted); }
