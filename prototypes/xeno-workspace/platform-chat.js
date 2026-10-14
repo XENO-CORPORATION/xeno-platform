@@ -179,7 +179,9 @@
   // READY means the chat's own input box is on the page. Not `.chat-themed` alone: the app's page-loading state (a thin
   // bar across the top, `.route-loading`) carries that class too, so the loader left early and revealed that bar
   // (owner's report, 2026-10-09).
-  const chatReady = () => { try { const d = frame && frame.contentDocument; return !!(loaded && d && d.querySelector('[data-chat-composer-shell], [data-chat-route-notice]:not([data-chat-route-notice$="loading"])')); } catch { return false; } };
+  // And never while the chat's own route notice is still LOADING: the app mounts its input box underneath that notice, so
+  // "input box present" alone revealed the app's loading state instead of the chat (owner's report, 2026-10-14).
+  const chatReady = () => { try { const d = frame && frame.contentDocument; return !!(loaded && d && !d.querySelector('[data-chat-route-notice$="loading"]') && d.querySelector('[data-chat-composer-shell], [data-chat-route-notice]')); } catch { return false; } };
   function showLoading() {
     if (!frame) return;
     frame.classList.remove('ready');
