@@ -8,8 +8,8 @@
 .chat-codes {
   display: flex;
   flex-direction: column;
-  gap: 10px;
-  margin: 6px 0 4px;
+  gap: 12px;
+  margin: 12px 0;
 }
 
 .chat-code {

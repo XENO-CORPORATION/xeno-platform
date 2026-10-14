@@ -318,7 +318,7 @@ const CodeBlockWithHeader: React.FC<CodeBlockWithHeaderProps> = memo(({
       {/* --- Separate Execution Output Container (RESTORED) --- */}
       {(currentIsRunning || currentRunOutput || currentRunError) && (
           // Restore original styling for a separate panel, remove top margin/bottom margin
-          <div className="execution-output-container relative rounded-lg bg-[var(--chat-surface)] border border-[var(--chat-border)] px-4 py-2 text-xs shadow-none">
+          <div className="execution-output-container relative mb-4 rounded-lg bg-[var(--chat-surface)] border border-[var(--chat-border)] px-4 py-2 text-xs shadow-none">
               {/* Close Button for Output - Conditionally Rendered */}
               {!currentIsRunning && (currentRunOutput || currentRunError) && (
                 <IconButton
