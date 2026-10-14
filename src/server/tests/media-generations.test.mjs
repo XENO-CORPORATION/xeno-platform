@@ -56,6 +56,12 @@ try{
   const calls=[],jobs=new Map();let ambiguous=true;
   const gatewayApp=express();gatewayApp.use(express.json({limit:'60mb'}));
   gatewayApp.post('/v1/jobs',(req,res)=>{const key=req.headers['idempotency-key'];calls.push({key,body:req.body});let job=jobs.get(key);if(!job){job={id:'job_'+jobs.size,status:'running',billing:{state:'held',held_microcredits:100},body:req.body};jobs.set(key,job);}if(ambiguous){ambiguous=false;req.socket.destroy();return;}res.status(202).json(job);});
+  // A queued job refuses inline media, so the worker uploads each reference as an asset first and the job
+  // names it by id. The recorder serves that flow and keeps what it was handed, so the bytes can be asserted.
+  const uploads=new Map(),received=[];
+  gatewayApp.post('/v1/assets/uploads',(req,res)=>{const id='asset_'+crypto.randomUUID().replace(/-/g,'');uploads.set(id,{...req.body,bytes:null});res.status(201).json({id,state:'pending_upload',upload:{method:'PUT',url:`http://127.0.0.1:${gatewayServer.address().port}/v1/assets/storage/object?key=${id}`,headers:{'content-type':req.body.mime_type}}});});
+  gatewayApp.put('/v1/assets/storage/object',express.raw({type:'*/*',limit:'60mb'}),(req,res)=>{const id=new URL(req.url,'http://x').searchParams.get('key');const up=uploads.get(id);if(!up)return res.status(404).end();up.bytes=Buffer.from(req.body);received.push(up);res.status(204).end();});
+  gatewayApp.post('/v1/assets/uploads/:id/complete',(req,res)=>{const up=uploads.get(req.params.id);if(!up||!up.bytes)return res.status(409).json({error:{message:'not uploaded'}});res.json({id:req.params.id,state:'ready',mime_type:up.mime_type});});
   gatewayApp.get('/v1/jobs/:id',(req,res)=>res.json([...jobs.values()].find(j=>j.id===req.params.id)));
   gatewayApp.get('/v1/jobs/:id/result',(req,res)=>{const job=[...jobs.values()].find(j=>j.id===req.params.id);res.json({data:[{b64_json:(job.body.body.model==='omni_11_flash'?video:PNG).toString('base64'),mime_type:job.body.body.model==='omni_11_flash'?'video/mp4':'image/png'}]});});
   gatewayApp.post('/v1/jobs/:id/cancel',(req,res)=>{const job=[...jobs.values()].find(j=>j.id===req.params.id);job.status='cancelled';res.json(job);});
@@ -88,7 +94,8 @@ try{
   await pool.query("UPDATE media_generations SET next_attempt_at=now()");
   const restarted={...options,gateway:{...gateway}};await runMediaGenerationBatch(pool,restarted);
   ok(calls.length===2&&jobs.size===1&&calls[0].key===calls[1].key&&JSON.stringify(calls[0].body)===JSON.stringify(calls[1].body),'restart replays exact bytes and stable gateway idempotency key');
-  ok(calls[0].body.body.aspect_ratio==='3:2'&&calls[0].body.body.quality==='high'&&calls[0].body.body.reference_images[0]===`data:image/png;base64,${PNG.toString('base64')}`,'recorder proves model ratio quality and authorized reference forwarding');
+  ok(calls[0].body.body.aspect_ratio==='3:2'&&calls[0].body.body.quality==='high'&&calls[0].body.body.reference_images[0]?.asset_id&&received.length===1&&received[0].bytes.equals(PNG)&&received[0].mime_type==='image/png','recorder proves model ratio quality, and the reference forwarded as an uploaded asset carrying the exact bytes');
+  ok(!JSON.stringify(calls[0].body).includes('data:image'),'no inline data URL reaches the gateway: a queued job refuses one (asset_required)');
   jobs.values().next().value.status='succeeded';await pool.query('UPDATE media_generations SET next_attempt_at=now()');await runMediaGenerationBatch(pool,options);
   let read=await getGeneration(pool,owner,proposal.id);ok(read.state==='importing'&&read.resultAssetIds.length===1,'provider success stored once while quarantined output remains importing');
   await pool.query('UPDATE media_generations SET next_attempt_at=now()');await runMediaGenerationBatch(pool,options);
@@ -103,7 +110,7 @@ try{
   ok((await getGeneration(pool,owner,conflict.id)).error?.code!=='gateway_payer_conflict','the house account is not refused its own product (cost and charge are separate ledgers)');
   const vrequest={type:'video',model:'omni_11_flash',prompt:'video prompt',settings:{ratio:'9:16',mode:'ingredients',resolution:'720p'},referenceAssetIds:[asset.id]};
   const vq=await quoteGeneration(pool,owner,vrequest,options);const v=await createGeneration(pool,owner,{...vrequest,requestKey:'video',quoteToken:vq.quoteToken},options);await runMediaGenerationBatch(pool,options);
-  const videoCall=calls.at(-1);ok(videoCall.body.endpoint==='/v1/videos/generations'&&videoCall.body.body.aspect_ratio==='9:16'&&videoCall.body.body.mode==='ingredients'&&videoCall.body.body.reference_images.length===1&&!('duration'in videoCall.body.body),'shared video forwarding exact ratio ingredients and no invented duration');
+  const videoCall=calls.at(-1);ok(videoCall.body.endpoint==='/v1/videos/generations'&&videoCall.body.body.aspect_ratio==='9:16'&&videoCall.body.body.mode==='ingredients'&&videoCall.body.body.reference_images.length===1&&videoCall.body.body.reference_images[0]?.asset_id&&!('duration'in videoCall.body.body),'shared video forwarding exact ratio ingredients and no invented duration');
   await cancelGeneration(pool,owner,v.id);ok((await getGeneration(pool,owner,v.id)).state==='cancel_requested','cancel intent not false cancellation');await pool.query('UPDATE media_generations SET next_attempt_at=now()');await runMediaGenerationBatch(pool,options);ok((await getGeneration(pool,owner,v.id)).state==='cancelled','observed provider cancellation releases hold');
   await expectCode(()=>retryGeneration(pool,owner,proposal.id,{requestKey:'retry-success'},options),'generation_not_retryable');
   await expectCode(()=>assertGenerationConversation(pool,owner,[proposal.id],crypto.randomUUID()),'generation_conversation_mismatch');

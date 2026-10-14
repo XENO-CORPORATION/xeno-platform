@@ -29,6 +29,19 @@ export function createMediaGateway({base=XENO_API_BASE,key=XENO_API_KEY,fetchImp
       if(!principal?.usable)throw generationError('gateway_payer_unavailable',503);
       return {payerId:principal.owner?.id||principal.id,credentialActorId:principal.id};
     },
+    // A queued job refuses inline data URLs (`asset_required`): reference bytes go to the gateway's asset store
+    // first — create, PUT the exact bytes, complete — and the job names them by asset id. The checksum is
+    // declared up front and re-verified by the store on complete, so a short or altered upload is refused there.
+    uploadAsset:async({bytes,mimeType})=>{
+      const created=await call('/assets/uploads',{method:'POST',body:{mime_type:mimeType,byte_size:bytes.length,
+        checksum_sha256:crypto.createHash('sha256').update(bytes).digest('base64'),purpose:'reference'}});
+      if(!/^asset_[A-Za-z0-9]{1,160}$/.test(created?.id||'')||!created.upload?.url)throw generationError('gateway_invalid_response',502);
+      const put=await fetchImpl(created.upload.url,{method:created.upload.method||'PUT',redirect:'error',signal:AbortSignal.timeout(60000),headers:created.upload.headers||{},body:bytes});
+      if(!put.ok){await put.body?.cancel();throw generationError('reference_upload_failed',502);}
+      const done=await call(`/assets/uploads/${encodeURIComponent(created.id)}/complete`,{method:'POST',body:{}});
+      if(done?.state!=='ready')throw generationError('reference_upload_failed',502);
+      return created.id;
+    },
     submit:(payload,idempotencyKey)=>call('/jobs',{method:'POST',body:payload,idempotencyKey}),
     status:id=>call(jobPath(id)),result:id=>call(`${jobPath(id)}/result`),cancel:id=>call(`${jobPath(id)}/cancel`,{method:'POST',body:{}})};
 }

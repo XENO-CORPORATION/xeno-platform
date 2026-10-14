@@ -3,7 +3,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { withTransaction, userPrincipal, linkAssetToProject } from '../services/chatProjectAuthority.js';
-import { generationActor, assertGenerationPlacement, readGenerationReferences } from '../services/mediaGenerations.js';
+import { generationActor, assertGenerationPlacement, uploadGenerationReferences } from '../services/mediaGenerations.js';
 import { validateGenerationRequest, gatewayBody, generationError } from '../services/mediaGenerationCatalog.js';
 import { registerManagedLibraryFile, getAuthorizedLibraryFile, sniffMime } from '../services/libraryAssets.js';
 import { prepareAccountQuota } from '../services/usageCreditsService.js';
@@ -90,7 +90,11 @@ async function execute(db,row,options){
     if(!identity?.payerId)throw generationError('gateway_payer_unavailable',503);
     // A plan whose output must be watermarked cannot take a type we cannot watermark: refuse BEFORE any hold or provider call.
     if(row.request.type!=='image'&&(await (options.resolveEntitlements||resolveEntitlements)(db,row.owner_user_id))?.watermark)throw generationError('plan_watermark_unsupported',403);
-    const references=await readGenerationReferences(db,actor,row.request.referenceAssetIds,{...options,uploadsDir:options.uploadsDir||uploads});
+    // A queued job refuses inline media, so the references become gateway assets and the job names their ids.
+    // With no references this is the plain path and nothing is uploaded.
+    const references=row.request.referenceAssetIds.length
+      ? await uploadGenerationReferences(db,actor,row.request.referenceAssetIds,{...options,uploadsDir:options.uploadsDir||uploads,gateway})
+      : [];
     const payload={endpoint:descriptor.endpoint,body:gatewayBody(row.request,references),metadata:{platform_generation_id:row.id}};
     await withTransaction(db,async tx=>{
       const locked=(await tx.query('SELECT * FROM media_generations WHERE id=$1 FOR UPDATE',[row.id])).rows[0];
