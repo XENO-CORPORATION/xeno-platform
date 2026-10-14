@@ -39,7 +39,8 @@ async function main() {
     const r1 = await cyd('POST', '/tasks', { title: 'Login button <b>misaligned</b>', body: 'On mobile.', kind: 'bug', projectId: proj.id });
     const t1 = r1.j.task;
     check(r1.s === 201 && /^T-\d+$/.test(t1.key) && t1.status === 'raised' && t1.kind === 'bug' && t1.area === 'dev' && t1.reporter.id === ids.cyd, `a viewer raises a task: it gets a key, lands in triage, and takes the project's area (${t1.key})`);
-    check(t1.events[0].kind === 'created' && t1.can.moves.length === 0, 'its history starts with "created", and the person who raised it cannot triage it');
+    // the creator owns it (owner, 2026-10-14): they may withdraw it from triage, but accepting it into the project is triage
+    check(t1.events[0].kind === 'created' && t1.can.moves.join() === 'wont_do' && t1.can.creator === true, 'its history starts with "created"; the person who raised it can withdraw it but not triage it');
     check((await eve('GET', `/tasks/${t1.key}`)).s === 404 && (await eve('POST', '/tasks', { title: 'x', projectId: proj.id })).s === 404, 'someone outside the project is told the task and the project do not exist');
     check((await ada('POST', '/tasks', { title: '' })).s === 400 && (await ada('POST', '/tasks', { title: 'x', kind: 'epic' })).j.code === 'invalid_kind', 'an empty title or an unknown kind is refused');
 
@@ -62,7 +63,7 @@ async function main() {
     await bot('POST', `/tasks/${t1.key}/comments`, { body: 'Fixed the flex rule; screenshot attached.' });
     check((await bot('POST', `/tasks/${t1.key}/transition`, { to: 'in_review' })).j.task.status === 'in_review', 'the assignee sends it to review');
     const own = await bot('POST', `/tasks/${t1.key}/transition`, { to: 'done' });
-    check(own.s === 403 && /cannot accept your own work/.test(own.j.error), 'the assignee cannot accept their own work');
+    check(own.s === 403 && /send it for review|accepts it/i.test(own.j.error), 'the assignee cannot accept their own work');
     const acc = await ada('POST', `/tasks/${t1.key}/transition`, { to: 'done' });
     check(acc.j.task.status === 'done' && !!acc.j.task.closedAt, 'the reviewer accepts it: done, with the time it closed');
     const hist = acc.j.task.events.map((e) => e.kind + (e.to ? ':' + e.to : '')).join(' ');
@@ -95,7 +96,9 @@ async function main() {
     check((await keys(ada, '?status=todo&q=changelog')) === t2.key && (await keys(ada, '?status=done&q=changelog')) === '' && (await keys(ada, '?q=Login')) === t1.key, 'status and text filters work');
     check((await ada('GET', '/tasks?status=nope')).s === 400, 'an unknown status filter is refused');
     check((await ada('PATCH', `/tasks/${t1.key}`, { assigneeId: ids.eve })).j.code === 'assignee_without_access', 'a task cannot be assigned to someone who cannot see the project');
-    check((await cyd('PATCH', `/tasks/${t1.key}`, { priority: 'urgent' })).s === 403, 'a viewer who is not the assignee cannot edit it');
+    // t1 is CYD's (she raised it), so she may edit it; BOB is a project editor and not its creator, so he may not
+    check((await bob('PATCH', `/tasks/${t1.key}`, { priority: 'urgent' })).s === 403, 'someone on the project who did not create it cannot edit it, even a project editor');
+    check((await cyd('PATCH', `/tasks/${t1.key}`, { priority: 'urgent' })).s === 200, 'the person who created it can edit it');
 
     // images
     const PNG = Buffer.from('89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c4890000000d4944415478da63f8ffff3f0005fe02fea7d6a4a00000000049454e44ae426082', 'hex');
@@ -117,12 +120,18 @@ async function main() {
     const as1 = (await ada('GET', `/tasks/assignees?projectId=${proj.id}`)).j.assignees;
     check(as1.some((p) => p.id === String(ids.bob) && p.kind === 'human') && as1.some((p) => p.id === String(ids.bot) && p.kind === 'agent' && !p.needsShare) && !as1.some((p) => p.id === String(ids.eve)), 'assignees are the people and agents the project is shared with, and nobody else');
     check((await eve('GET', `/tasks/assignees?projectId=${proj.id}`)).s === 404, 'someone outside the project cannot list who is on it');
+    // the owner's list and a member's list are the same people: a member must be able to pick the project's owner
+    const fromMember = (await bob('GET', `/tasks/assignees?projectId=${proj.id}`)).j.assignees.filter((p) => p.kind === 'human').map((p) => p.id).sort().join();
+    const fromOwner = as1.filter((p) => p.kind === 'human').map((p) => p.id).sort().join();
+    check(fromMember === fromOwner && fromMember.includes(String(ids.ada)), `a member sees everyone on the project, the owner included (${fromMember.split(',').length} people)`);
 
     // delete
     const d1 = (await cyd('POST', '/tasks', { title: 'Raised by mistake', projectId: proj.id })).j.task;
     check((await cyd('DELETE', `/tasks/${d1.key}`)).s === 200 && (await ada('GET', `/tasks/${d1.key}`)).s === 404 && !(await ada('GET', `/tasks?projectId=${proj.id}`)).j.tasks.some((x) => x.key === d1.key), 'the reporter withdraws a task still in triage; it is gone from the task and the board');
     const d2 = (await cyd('POST', '/tasks', { title: 'Accepted work', projectId: proj.id })).j.task; await bob('POST', `/tasks/${d2.key}/transition`, { to: 'todo' });
-    check((await cyd('DELETE', `/tasks/${d2.key}`)).s === 403 && (await bob('DELETE', `/tasks/${d2.key}`)).s === 403 && (await ada('DELETE', `/tasks/${d2.key}`)).s === 200, 'once accepted, only a project admin deletes a task (not the reporter, not an editor)');
+    check((await bob('DELETE', `/tasks/${d2.key}`)).s === 403 && (await cyd('DELETE', `/tasks/${d2.key}`)).s === 200, 'the person who created a task deletes it at any stage; another editor cannot');
+    const d3 = (await cyd('POST', '/tasks', { title: 'Its creator left', projectId: proj.id })).j.task; await bob('POST', `/tasks/${d3.key}/transition`, { to: 'todo' });
+    check((await ada('DELETE', `/tasks/${d3.key}`)).s === 200, 'a project admin can stand in for the creator (a task is never stranded)');
     check((await pool.query("SELECT deleted_at IS NOT NULL AS gone FROM tasks WHERE number = $1", [d2.number])).rows[0].gone && (await pool.query("SELECT count(*)::int AS n FROM task_events e JOIN tasks t ON t.id = e.task_id WHERE t.number = $1 AND e.kind = 'deleted'", [d2.number])).rows[0].n === 1, 'a deleted task keeps its row and its history, so its key is never reused');
 
     // ── collaboration: notifications, watchers, mentions, history values, comments, sub-tasks, links, views, restore

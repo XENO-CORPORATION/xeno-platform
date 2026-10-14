@@ -488,7 +488,7 @@
     const hint = {
       raised: moves.length ? 'Raised and waiting for triage. Accept it to put it on the board, or close it.' : 'Waiting for someone who manages the project to accept it.',
       todo: t.assignee ? (mine ? 'Assigned to you. Start when you pick it up.' : `Assigned to ${t.assignee.name}.`) : 'Accepted and unassigned. Take it, or assign someone.',
-      in_progress: t.reviewer ? (mine ? `When it’s done, send it to ${t.reviewer.name} for review.` : `${t.assignee ? t.assignee.name : 'Someone'} is on it. ${t.reviewer.name} reviews it.`) : (mine ? 'When it’s done, mark it done — or name a reviewer to have it checked.' : `${t.assignee ? t.assignee.name + ' is on it.' : 'In progress.'}`),
+      in_progress: t.reviewer ? (mine ? `When it’s done, send it to ${t.reviewer.name} for review.` : `${t.assignee ? t.assignee.name : 'Someone'} is on it. ${t.reviewer.name} reviews it.`) : (mine ? (t.can && t.can.creator ? 'When it’s done, mark it done — or name a reviewer to have it checked.' : `When it’s done, send it for review. ${t.reporter ? t.reporter.name : 'Whoever raised it'} accepts it.`) : `${t.assignee ? t.assignee.name + ' is on it.' : 'In progress.'}`),
       blocked: 'Blocked. Resume it when what it waits on is resolved.',
       in_review: reviewer ? 'Waiting for your review: accept it, or ask for changes.' : t.reviewer ? `Waiting for ${t.reviewer.name} to review it.` : 'In review.',
       done: 'Done. Reopen it if something comes back.', wont_do: 'Closed without doing it. Reopen it if that changes.',
@@ -962,17 +962,17 @@
       [{ label: 'Open', icon: 'open', key: 'Enter', kbd: '↵', run: () => go(key) }, { label: 'Open in new window', icon: 'hub', run: () => H2.openWindow(hash) }],
       [!t.assignee && !CLOSED.includes(t.status) ? { label: 'Take it', icon: 'user', run: () => claim(key) } : null,
         can.moves.length ? { label: 'Move to', icon: 'flow', sub: can.moves.map((m) => ({ label: LABEL[m], run: () => move(key, m, t.status) })) } : { label: 'Move to', icon: 'flow', disabled: 'You can’t move this task' },
-        editAny ? { label: 'Assign to', icon: 'people', sub: assignItems(t, 'assignee') } : { label: 'Assign to', icon: 'people', disabled: 'Only someone who manages the project can assign it' },
-        can.edit ? { label: 'Reviewer', icon: 'check', sub: assignItems(t, 'reviewer') } : { label: 'Reviewer', icon: 'check', disabled: 'Only someone who manages the project can set the review' },
+        editAny ? { label: 'Assign to', icon: 'people', sub: assignItems(t, 'assignee') } : { label: 'Assign to', icon: 'people', disabled: 'Only the person who created this task can assign it. Take it to work on it yourself' },
+        can.edit ? { label: 'Reviewer', icon: 'check', sub: assignItems(t, 'reviewer') } : { label: 'Reviewer', icon: 'check', disabled: 'Only the person who created this task can set its review' },
         editAny ? { label: 'Priority', icon: 'up', sub: PRI_ORDER.map((p) => ({ label: PRI[p], checked: t.priority === p, run: () => patchTask(key, { priority: p }, 'Priority set') })) } : { label: 'Priority', icon: 'up', disabled: 'Only the assignee or a manager can change it' }],
-      [can.edit ? { label: 'Rename', icon: 'edit', key: 'F2', kbd: 'F2', run: () => rename(key) } : { label: 'Rename', icon: 'edit', disabled: 'Only someone who manages the project can rename it' },
+      [can.edit ? { label: 'Rename', icon: 'edit', key: 'F2', kbd: 'F2', run: () => rename(key) } : { label: 'Rename', icon: 'edit', disabled: 'Only the person who created this task can rename it' },
         editAny ? { label: 'Add sub-task', icon: 'layers', run: () => newTask(t.project ? t.project.id : null, { parentKey: key }) } : null,
         t.canLink !== false && (can.edit || mineIt) ? { label: 'Link a task…', icon: 'share', run: () => { if (!T.task.get(key)) loadTask(key).then(() => addLink(key)); else addLink(key); } } : null,
         can.attach ? { label: 'Add images…', icon: 'image', run: () => chooseFiles(key) } : null,
         { label: T.sel.has(key) ? 'Deselect' : 'Select', icon: 'check', key: 'x', kbd: 'X', run: () => { T.sel.has(key) ? T.sel.delete(key) : T.sel.add(key); patch(); } },
         { label: 'Refresh', icon: 'reset', run: () => { T.task.delete(key); loadTask(key); load(); } }],
       [{ label: can.edit ? 'Hand to agent & copy brief' : 'Copy as agent prompt', icon: 'bot', run: () => copyPrompt(key) }, ...(can.edit ? [{ label: 'Copy brief only', icon: 'copy', run: () => copyPrompt(key, { plain: true }) }] : []), { label: 'Copy link', icon: 'share', run: () => H2.copyLink(hash) }, { label: 'Copy key', icon: 'hash', run: () => H2.copy(key, 'Key copied') }],
-      [can.delete ? { label: 'Delete task', icon: 'trash', danger: true, key: 'Delete', kbd: 'Del', run: () => remove(key) } : { label: 'Delete task', icon: 'trash', danger: true, disabled: 'Only a project admin, or the reporter while it is in Triage, can delete it' }],
+      [can.delete ? { label: 'Delete task', icon: 'trash', danger: true, key: 'Delete', kbd: 'Del', run: () => remove(key) } : { label: 'Delete task', icon: 'trash', danger: true, disabled: 'Only the person who created this task can delete it' }],
     ];
   }
   if (window.XCM) window.XCM.register({ id: 'tasks', priority: 5, sel: '[data-tk-card], [data-tk-rowkey], [data-tk-root^="task:"]', build: (n) => menuFor(n.dataset.tkCard || n.dataset.tkRowkey || n.dataset.tkRoot.slice(5)) });
