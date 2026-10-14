@@ -238,16 +238,26 @@ try {
   const nameOf = (real) => p.evaluate((r) => (window.XENO_PG_PROJECTS.items.find((x) => x.realName === r) || {}).name, real);
   const web = await p.evaluate(() => window.XENO_PG_PROJECTS.items.find((x) => x.realName === 'Website' && x.place === 'Personal').name);
   p.evaluate((n) => { window.XA.assign(n); }, web); await wait(700);
-  const share = () => p.evaluate(() => { const sh = [...document.querySelectorAll('.xd')].at(-1); return { title: sh.querySelector('.xd-head b')?.textContent || '', state: sh.querySelector('[data-share-state]')?.dataset.shareState || null, rows: [...sh.querySelectorAll('[data-share]')].map((li) => li.querySelector('b').innerHTML + '|' + (li.querySelector('select')?.value || li.querySelector('.xd-share-owner')?.textContent || '')), err: sh.querySelector('[data-share-error]')?.textContent || '' }; });
+  const share = () => p.evaluate(() => { const sh = [...document.querySelectorAll('.xd')].at(-1); return { title: sh.querySelector('.xd-head b')?.textContent || '', state: sh.querySelector('[data-share-state]')?.dataset.shareState || null, rows: [...sh.querySelectorAll('[data-share]')].map((li) => li.querySelector('b').innerHTML.replace(/<em>you<\/em>/, ' (you)') + '|' + (li.querySelector('[data-share-role]')?.dataset.role || li.querySelector('.xd-share-owner')?.textContent || '')), err: sh.querySelector('[data-share-error]')?.textContent || '' }; });
   let sv = await share();
   ok(/Share “Website”/.test(sv.title) && sv.rows.join() === 'Ada (you)|Owner' && sv.state === null, 'Share opens the real access list: the owner, who cannot be changed (' + sv.rows.join() + ')');
-  const addShare = async (email, role) => { await p.evaluate((e, r) => { const sh = [...document.querySelectorAll('.xd')].at(-1), f = sh.querySelector('[data-share-add]'); f.querySelector('input').value = e; f.querySelector('select').value = r; f.requestSubmit(); }, email, role); await wait(700); };
+  // A role is chosen from the workspace's own menu (each role with what it means), never a native select.
+  const pickMenu = async (label) => { await wait(150); await p.evaluate((l) => { const it = [...document.querySelectorAll('[role=menuitem],[role=menuitemcheckbox],[role=menuitemradio]')].find((n) => n.offsetParent && n.textContent.trim().startsWith(l)); if (!it) throw new Error('no menu item ' + l); it.click(); }, label); await wait(400); };
+  const ROLE_LABEL = { viewer: 'Can view', reviewer: 'Can comment', editor: 'Can edit', admin: 'Can manage' };
+  const addShare = async (email, role) => {
+    await p.evaluate(() => [...document.querySelectorAll('.xd')].at(-1).querySelector('[data-share-new-role]').click()); await pickMenu(ROLE_LABEL[role]);
+    await p.evaluate((e) => { const sh = [...document.querySelectorAll('.xd')].at(-1), f = sh.querySelector('[data-share-add]'); f.querySelector('input').value = e; f.requestSubmit(); }, email); await wait(700); };
+  // the role menu explains each role, so "Can manage" is never granted by guessing
+  await p.evaluate(() => [...document.querySelectorAll('.xd')].at(-1).querySelector('[data-share-new-role]').click()); await wait(250);
+  const explained = await p.evaluate(() => [...document.querySelectorAll('[role=menuitem],[role=menuitemcheckbox],[role=menuitemradio]')].filter((n) => n.offsetParent).map((n) => n.textContent.trim()));
+  ok(explained.length === 4 && explained.some((t) => /Can manage/.test(t) && /who it is shared with/.test(t)), 'the role picker is the workspace menu and says what each role allows (' + explained.length + ')');
+  await p.keyboard.press('Escape'); await wait(250);
   await addShare('nobody@example.test', 'viewer'); sv = await share();
   ok(/No XENO account uses that email/.test(sv.err) && sv.rows.length === 1, 'an email with no account is refused in words, and nothing is added');
   await addShare('bob@example.test', 'editor'); sv = await share();
   const by = db.calls.filter((x) => x.m === 'PUT' && /\/access\/user\/by-email$/.test(x.p)).at(-1);
   ok(by && by.body.email === 'bob@example.test' && by.body.relation === 'editor' && sv.rows[1] === 'Bob &lt;b&gt;B&lt;/b&gt;|editor' && sv.err === '', 'sharing by email tells the platform and lists the person with their role, as text (' + sv.rows[1] + ')');
-  await p.evaluate(() => { const s = [...document.querySelectorAll('.xd')].at(-1).querySelector('[data-share-role="bob-id"]'); s.value = 'viewer'; s.dispatchEvent(new Event('change', { bubbles: true })); }); await wait(700); sv = await share();
+  await p.evaluate(() => [...document.querySelectorAll('.xd')].at(-1).querySelector('[data-share-role="bob-id"]').click()); await pickMenu('Can view'); await wait(400); sv = await share();
   ok(db.calls.some((x) => x.m === 'PUT' && /\/access\/user\/bob-id$/.test(x.p) && x.body.relation === 'viewer') && sv.rows[1].endsWith('|viewer'), 'changing a role tells the platform');
   db.refuseShare = true; await p.evaluate(() => [...document.querySelectorAll('.xd')].at(-1).querySelector('[data-share-remove="bob-id"]').click()); await wait(700); db.refuseShare = false;
   ok(await p.evaluate(() => document.body.textContent.includes('That couldn’t be removed. They still have access.')), 'when removing is refused the person is told they still have access');

@@ -964,22 +964,37 @@
     const can = t.can || { moves: [] }, H2 = window.XCM.H, hash = `#/${P.area() || 'overview'}/g/tasks/${key}`;
     const mineIt = !!(t.assignee && t.assignee.id === me()), editAny = can.edit || mineIt;
     if (!T.people.has(pkey(t))) people(t.project ? t.project.id : null);
+    // Grouped by what the person is doing — open it, work it, change it, share it, remove it — and only the
+    // actions THIS person can take. The list was twenty-one items with six of them greyed out; a greyed item
+    // still costs a read, and the rule it hides is already shown where it applies (the task page's hint).
+    const open = !CLOSED.includes(t.status);
+    const work = [
+      !t.assignee && open ? { label: 'Take it', icon: 'user', run: () => claim(key) } : null,
+      can.moves.length ? { label: 'Move to', icon: 'flow', sub: can.moves.map((m) => ({ label: LABEL[m], run: () => move(key, m, t.status) })) } : null,
+      editAny ? { label: 'Assign to', icon: 'people', sub: assignItems(t, 'assignee') } : null,
+      can.edit ? { label: 'Reviewer', icon: 'check', sub: assignItems(t, 'reviewer') } : null,
+      can.edit ? { label: 'Priority', icon: 'up', sub: PRI_ORDER.map((p) => ({ label: PRI[p], checked: t.priority === p, run: () => patchTask(key, { priority: p }, 'Priority set') })) } : null,
+    ];
+    const change = [
+      can.edit ? { label: 'Rename', icon: 'edit', key: 'F2', kbd: 'F2', run: () => rename(key) } : null,
+      can.edit ? { label: 'Add sub-task', icon: 'layers', run: () => newTask(t.project ? t.project.id : null, { parentKey: key }) } : null,
+      t.canLink !== false && (can.edit || mineIt) ? { label: 'Link a task…', icon: 'share', run: () => { if (!T.task.get(key)) loadTask(key).then(() => addLink(key)); else addLink(key); } } : null,
+      can.attach ? { label: 'Add images…', icon: 'image', run: () => chooseFiles(key) } : null,
+    ];
+    const share = [
+      { label: can.edit || mineIt ? 'Hand to an agent' : 'Copy as agent prompt', icon: 'bot', run: () => copyPrompt(key) },
+      { label: 'Copy', icon: 'copy', sub: [
+        { label: 'Link', icon: 'share', run: () => H2.copyLink(hash) },
+        { label: 'Key  ' + key, icon: 'hash', run: () => H2.copy(key, 'Key copied') },
+        ...(can.edit ? [{ label: 'Brief', icon: 'doc', run: () => copyPrompt(key, { plain: true }) }] : []),
+      ] },
+    ];
     return [
       [{ label: 'Open', icon: 'open', key: 'Enter', kbd: '↵', run: () => go(key) }, { label: 'Open in new window', icon: 'hub', run: () => H2.openWindow(hash) }],
-      [!t.assignee && !CLOSED.includes(t.status) ? { label: 'Take it', icon: 'user', run: () => claim(key) } : null,
-        can.moves.length ? { label: 'Move to', icon: 'flow', sub: can.moves.map((m) => ({ label: LABEL[m], run: () => move(key, m, t.status) })) } : { label: 'Move to', icon: 'flow', disabled: 'You can’t move this task' },
-        editAny ? { label: 'Assign to', icon: 'people', sub: assignItems(t, 'assignee') } : { label: 'Assign to', icon: 'people', disabled: 'Only the person who created this task can assign it. Take it to work on it yourself' },
-        can.edit ? { label: 'Reviewer', icon: 'check', sub: assignItems(t, 'reviewer') } : { label: 'Reviewer', icon: 'check', disabled: 'Only the person who created this task can set its review' },
-        editAny ? { label: 'Priority', icon: 'up', sub: PRI_ORDER.map((p) => ({ label: PRI[p], checked: t.priority === p, run: () => patchTask(key, { priority: p }, 'Priority set') })) } : { label: 'Priority', icon: 'up', disabled: 'Only the assignee or a manager can change it' }],
-      [can.edit ? { label: 'Rename', icon: 'edit', key: 'F2', kbd: 'F2', run: () => rename(key) } : { label: 'Rename', icon: 'edit', disabled: 'Only the person who created this task can rename it' },
-        editAny ? { label: 'Add sub-task', icon: 'layers', run: () => newTask(t.project ? t.project.id : null, { parentKey: key }) } : null,
-        t.canLink !== false && (can.edit || mineIt) ? { label: 'Link a task…', icon: 'share', run: () => { if (!T.task.get(key)) loadTask(key).then(() => addLink(key)); else addLink(key); } } : null,
-        can.attach ? { label: 'Add images…', icon: 'image', run: () => chooseFiles(key) } : null,
-        { label: T.sel.has(key) ? 'Deselect' : 'Select', icon: 'check', key: 'x', kbd: 'X', run: () => { T.sel.has(key) ? T.sel.delete(key) : T.sel.add(key); patch(); } },
-        { label: 'Refresh', icon: 'reset', run: () => { T.task.delete(key); loadTask(key); load(); } }],
-      [{ label: can.edit ? 'Hand to agent & copy brief' : 'Copy as agent prompt', icon: 'bot', run: () => copyPrompt(key) }, ...(can.edit ? [{ label: 'Copy brief only', icon: 'copy', run: () => copyPrompt(key, { plain: true }) }] : []), { label: 'Copy link', icon: 'share', run: () => H2.copyLink(hash) }, { label: 'Copy key', icon: 'hash', run: () => H2.copy(key, 'Key copied') }],
-      [can.delete ? { label: 'Delete task', icon: 'trash', danger: true, key: 'Delete', kbd: 'Del', run: () => remove(key) } : { label: 'Delete task', icon: 'trash', danger: true, disabled: 'Only the person who created this task can delete it' }],
-    ];
+      work, change, share,
+      [{ label: T.sel.has(key) ? 'Deselect' : 'Select', icon: 'check', key: 'x', kbd: 'X', run: () => { T.sel.has(key) ? T.sel.delete(key) : T.sel.add(key); patch(); } }],
+      can.delete ? [{ label: 'Delete task', icon: 'trash', danger: true, key: 'Delete', kbd: 'Del', run: () => remove(key) }] : [],
+    ].map((section) => section.filter(Boolean)).filter((section) => section.length);
   }
   if (window.XCM) window.XCM.register({ id: 'tasks', priority: 5, sel: '[data-tk-card], [data-tk-rowkey], [data-tk-root^="task:"]', build: (n) => menuFor(n.dataset.tkCard || n.dataset.tkRowkey || n.dataset.tkRoot.slice(5)) });
   function propMenu(key, field, anchor) {

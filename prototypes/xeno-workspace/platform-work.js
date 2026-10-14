@@ -311,12 +311,14 @@
     return moved;
   }
   // ---------- sharing: who can open this project, and as what ----------
-  const ROLES = [['viewer', 'Can view'], ['reviewer', 'Can comment'], ['editor', 'Can edit'], ['admin', 'Can manage']];
+  // Each role says what it lets someone do — the picker shows it, so nobody grants "Can manage" by guessing.
+  const ROLES = [['viewer', 'Can view', 'Open the project, its chats and files'], ['reviewer', 'Can comment', 'View, and comment on its chats and tasks'],
+    ['editor', 'Can edit', 'Add chats, files and tasks, and work on them'], ['admin', 'Can manage', 'Everything, including who it is shared with']];
   const roleName = (r) => (ROLES.find((x) => x[0] === r) || [r, r])[1];
   async function shareProject(name) {
     const rec = (window.XENO_PG_PROJECTS.items || []).find((p) => p.name === name); if (!rec) return false;
     const base = '/api/chat/projects/' + encodeURIComponent(rec.id) + '/access', toast = (m) => X()?.toast?.(m);
-    const SH = { status: 'loading', grants: [], error: '' };
+    const SH = { status: 'loading', grants: [], error: '', newRole: 'editor' };
     const load = async () => { const r = await api('GET', base).catch(() => null);
       if (r && r.ok && Array.isArray(r.d.grants)) { SH.grants = r.d.grants.filter((g) => String(g.subject || '').startsWith('user:')); SH.status = 'ready'; }
       else { SH.status = r && r.status === 403 ? 'forbidden' : 'error'; } };
@@ -324,21 +326,30 @@
       const who = (g) => (g.identity ? g.identity.display_name || g.identity.username || g.identity.email : 'An account');
       const row = (g) => { const id = String(g.subject).slice(5), owner = g.relation === 'owner', me2 = id === String(me());
         const ini = String(who(g)).trim().split(/\s+/).slice(0, 2).map((w) => w[0] || '').join('').toUpperCase() || '·';
-        return `<li data-share="${esc(id)}"><span class="xd-share-face" aria-hidden="true">${esc(ini)}</span><div><b>${esc(who(g))}${me2 ? ' (you)' : ''}</b><small>${esc(g.identity && g.identity.email ? g.identity.email : '')}</small></div><span class="xd-list-acts">${owner ? '<span class="xd-share-owner">Owner</span>' : `<select data-share-role="${esc(id)}" aria-label="What ${esc(who(g))} can do">${ROLES.map(([v, l]) => `<option value="${v}"${v === g.relation ? ' selected' : ''}>${l}</option>`).join('')}</select><button class="xd-ib" data-share-remove="${esc(id)}" aria-label="Stop sharing with ${esc(who(g))}" data-tip="Stop sharing">${X().ic('x')}</button>`}</span></li>`; };
+        return `<li class="xd-share-row" data-share="${esc(id)}"${owner ? ' data-owner' : ''}><span class="xd-share-face" aria-hidden="true">${esc(ini)}</span><div class="xd-share-who"><b>${esc(who(g))}${me2 ? '<em>you</em>' : ''}</b><small>${esc(g.identity && g.identity.email ? g.identity.email : '')}</small></div>${owner ? '<span class="xd-share-owner">Owner</span>' : `<button type="button" class="xd-share-role" data-share-role="${esc(id)}" data-role="${esc(g.relation)}" aria-haspopup="menu" aria-label="What ${esc(who(g))} can do: ${esc(roleName(g.relation))}">${esc(roleName(g.relation))}${X().ic('down')}</button><button class="xd-ib" data-share-remove="${esc(id)}" aria-label="Stop sharing with ${esc(who(g))}" data-tip="Stop sharing">${X().ic('x')}</button>`}</li>`; };
+      // the owner leads, then everyone else by how much they can do
+      const RANK = { owner: 0, admin: 1, editor: 2, reviewer: 3, viewer: 4 };
+      const people = [...SH.grants].sort((a, b) => (RANK[a.relation] ?? 9) - (RANK[b.relation] ?? 9));
       b.innerHTML = SH.status === 'loading' ? '<p class="xd-note" data-share-state="loading">Loading who can open this project…</p>'
         : SH.status === 'forbidden' ? '<p class="xd-note" data-share-state="forbidden">Only someone who manages this project can change who it is shared with.</p>'
         : SH.status === 'error' ? '<p class="xd-note" data-share-state="error">That couldn’t be loaded. <button class="xd-btn ghost sm" data-share-retry>Try again</button></p>'
-        : `<form class="xd-share-add" data-share-add><input type="email" required placeholder="Email of a XENO account" aria-label="Email of the person to share with"><select aria-label="What they can do">${ROLES.map(([v, l]) => `<option value="${v}">${l}</option>`).join('')}</select><button class="xd-btn sm" type="submit">Share</button></form>${SH.error ? `<p class="xd-err" data-share-error role="alert">${esc(SH.error)}</p>` : ''}<ul class="xd-list">${SH.grants.map(row).join('')}</ul>`; };
+        : `<form class="xd-share-add" data-share-add><label class="xd-share-email">${X().ic('mail')}<input type="email" required placeholder="Add people by email" aria-label="Email of the person to share with" autocomplete="off"></label><button type="button" class="xd-share-role" data-share-new-role data-role="${esc(SH.newRole)}" aria-haspopup="menu" aria-label="What they can do: ${esc(roleName(SH.newRole))}">${esc(roleName(SH.newRole))}${X().ic('down')}</button><button class="xd-btn sm" type="submit">Invite</button></form>${SH.error ? `<p class="xd-err" data-share-error role="alert">${esc(SH.error)}</p>` : '<p class="xd-share-hint">They need a XENO account. They will see the project, its chats and its files.</p>'}<h4 class="xd-share-h">People with access <em>${people.length}</em></h4><ul class="xd-share-list">${people.map(row).join('')}</ul>`; };
     const again = async (sh) => { await load(); if (document.body.contains(sh)) paint(sh); };
     await window.XD.info({ title: 'Share “' + rec.realName + '”', sub: 'People you add can open the project and its chats.', size: 'md', html: '',
       onOpen: (sh) => { paint(sh); again(sh);
-        sh.addEventListener('submit', async (e) => { const f = e.target.closest('[data-share-add]'); if (!f) return; e.preventDefault(); const email = f.querySelector('input').value.trim(), relation = f.querySelector('select').value; if (!email) return;
+        sh.addEventListener('submit', async (e) => { const f = e.target.closest('[data-share-add]'); if (!f) return; e.preventDefault(); const email = f.querySelector('input').value.trim(), relation = SH.newRole; if (!email) return;
           const r = await api('PUT', base + '/user/by-email', { email, relation }).catch(() => null);
           if (!r || !r.ok) { SH.error = r && r.d && r.d.code === 'account_not_found' ? 'No XENO account uses that email. They need an account first.' : (r && r.d && typeof r.d.error === 'string' && r.d.error) || 'That couldn’t be shared. Nothing changed.'; return paint(sh); }
           SH.error = ''; toast(`Shared with ${email} · ${roleName(relation).toLowerCase()}`); again(sh); });
-        sh.addEventListener('change', async (e) => { const s = e.target.closest('[data-share-role]'); if (!s) return;
-          const r = await api('PUT', base + '/user/' + encodeURIComponent(s.dataset.shareRole), { relation: s.value }).catch(() => null);
-          if (!r || !r.ok) toast('That couldn’t be changed. It is as it was.'); else toast('Changed to ' + roleName(s.value).toLowerCase()); again(sh); });
+        // The role picker is the workspace's own menu: each role with what it means, the current one checked.
+        const pickRole = (btn, current, onPick) => { const r = btn.getBoundingClientRect();
+          window.XCM?.show([ROLES.map(([v, l, d]) => ({ label: l, hint: d, checked: v === current, run: () => onPick(v) }))], { x: r.left, y: r.bottom + 4, opener: btn }); };
+        sh.addEventListener('click', (e) => {
+          const nr = e.target.closest('[data-share-new-role]'); if (nr) { e.preventDefault(); return pickRole(nr, SH.newRole, (v) => { SH.newRole = v; const keep = sh.querySelector('[data-share-add] input')?.value || ''; paint(sh); const i = sh.querySelector('[data-share-add] input'); if (i) { i.value = keep; i.focus(); } }); }
+          const rb = e.target.closest('[data-share-role]'); if (!rb) return; e.preventDefault();
+          pickRole(rb, rb.dataset.role, async (v) => { if (v === rb.dataset.role) return;
+            const r = await api('PUT', base + '/user/' + encodeURIComponent(rb.dataset.shareRole), { relation: v }).catch(() => null);
+            if (!r || !r.ok) toast('That couldn’t be changed. It is as it was.'); else toast('Changed to ' + roleName(v).toLowerCase()); again(sh); }); });
         sh.addEventListener('click', async (e) => { if (e.target.closest('[data-share-retry]')) { SH.status = 'loading'; paint(sh); return again(sh); }
           const rm = e.target.closest('[data-share-remove]'); if (!rm) return;
           const r = await api('DELETE', base + '/user/' + encodeURIComponent(rm.dataset.shareRemove)).catch(() => null);
