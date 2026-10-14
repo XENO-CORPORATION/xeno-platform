@@ -421,7 +421,7 @@
 .sgf-foot-acts button[aria-pressed='true'] { color: var(--chat-text); }
 
 /* A generation inside a chat: the Studio card at the width of an answer. */
-.sgf-chat { max-width: 640px; margin: 6px 0 2px; }
+.sgf-chat { width: 100%; margin: 12px 0; } /* a generation in a reply takes the reply's full width, like its text; the stage keeps its own height cap */
 .sgf-chat[role="status"] { color: var(--chat-text); padding: 12px 0; }
 .sgf-chat .sgf-card { animation: none; }
 
