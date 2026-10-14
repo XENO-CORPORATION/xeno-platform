@@ -1,5 +1,6 @@
 import React from 'react';
 import { Button } from '@xenosystem/elements-react';
+import { MarkLoader } from '../../platform/MarkLoader';
 import { ChevronRight, Folder, MessagesSquare, Plus } from '@/lib/icons';
 import {
   buildChatConversationPath,
@@ -222,10 +223,10 @@ export function ChatRouteNotice({
       data-chat-route-conversation={conversationId ?? undefined}
     >
       <div className="flex max-w-[26rem] flex-col items-center gap-3 text-center">
-        {loading ? (
-          <span className="chat-skeleton h-3 w-[7rem]" aria-hidden="true">Loading</span>
-        ) : null}
-        <h2 className="text-[15px] font-semibold tracking-tight">{title}</h2>
+        {/* Loading is the ONE XENO loader (the mark), the same one the workspace and lazy pages show,
+            so the hand-off between them is invisible. The title stays for screen readers only. */}
+        {loading ? <MarkLoader size={88} label={title} /> : null}
+        <h2 className={loading ? 'sr-only' : 'text-[15px] font-semibold tracking-tight'}>{title}</h2>
         {body ? <p className="text-[13px] leading-relaxed text-[var(--chat-muted)]">{body}</p> : null}
         {!loading ? (
           <div className="mt-1 flex flex-wrap items-center justify-center gap-2">
