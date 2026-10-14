@@ -8004,6 +8004,27 @@ const ChatWithLLM: React.FC<ChatWithLLMProps> = ({
   const [generationListError, setGenerationListError] = useState('');
   const [generationListReload, setGenerationListReload] = useState(0);
   const studioType = new URLSearchParams(location.search).get('generationType') as GenType | null;
+  /*
+   * THE THREAD SHOWS EVERY GENERATION AS A REPLY. A generation is normally drawn by the AI message
+   * whose turn holds it. If that message is missing (its save failed, or the turn ended before it was
+   * written), the generation still belongs to this chat: it is shown as an AI reply at the moment it
+   * was made, never as a panel on the composer. Display only; nothing is written.
+   */
+  const threadMessages = useMemo(() => {
+    if (studioType || !durableGenerations.length) return messages;
+    const placed = new Set(messages.flatMap(m => (m.turn?.steps || []).flatMap(step => step.kind === 'generation' ? [step.generationId] : [])));
+    const orphans = durableGenerations.filter(g => !placed.has(g.id));
+    if (!orphans.length) return messages;
+    const out = [...messages];
+    for (const g of [...orphans].sort((a, b) => (Date.parse(a.createdAt || '') || 0) - (Date.parse(b.createdAt || '') || 0))) {
+      const at = Date.parse(g.createdAt || '') || Date.now();
+      const reply: ChatMessage = { id: 'generation-reply-' + g.id, sender: 'ai', text: '', parsedAnswer: '', timestamp: at, turn: applyTurnEvent(newTurnRecord(), { type: 'generation_proposal', generation: g }) };
+      let index = out.length;
+      while (index > 0 && Number(out[index - 1].timestamp) > at) index -= 1;
+      out.splice(index, 0, reply);
+    }
+    return out;
+  }, [messages, durableGenerations, studioType]);
   // Enhance is a Studio page of its own: it fills the pane and brings its own console, so the prompt box stays out of it.
   const studioEnhance = (studioType as string | null) === 'enhance';
   const studioEnhanceKind = ((['image', 'video', 'audio', '3d'] as const).find(k => k === new URLSearchParams(location.search).get('enhanceType')) ?? 'image') as GenType;
@@ -12721,7 +12742,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
           <ChatEmptyState
             scrollAffordance={composerScrollAffordance}
             /* The prompt queue floats above the composer while a chat runs (ChatQueue.tsx). */
-            aboveComposer={(studioEnhance || waitingQuestion || queue.messages.length > 0 || generationError || generationListError || generationBusy || generate.catalogError || durableGenerations.length || studioGenerationId || generate.state.mode !== 'chat') ? (
+            aboveComposer={(studioEnhance || waitingQuestion || queue.messages.length > 0 || generationError || generationListError || generationBusy || generate.catalogError || studioGenerationId || generate.state.mode !== 'chat') ? (
               <>
               {studioEnhance && <StudioEnhance kind={studioEnhanceKind} activeId={studioGenerationId} onOpen={(id, replace) => { setStudioGenerationId(id || null); window.parent.postMessage({source:'xeno-chat',type:'generation-location',replace:Boolean(replace),generationId:id,generationType:'enhance-' + studioEnhanceKind,path:`/workspace/studio/enhance/${studioEnhanceKind}${id ? '/e/' + id : ''}`},window.location.origin); }} />}
               {studioType && !studioEnhance && <StudioGenerationFeed type={studioType} onUsePrompt={text => setInputValue(text)} references={{ max: currentGenModel(generate.state, 0)?.references.max ?? 0, used: attachedFiles.length, modes: currentGenModel(generate.state, 0)?.references.modes }} onAddReference={(assetId, _prompt, role) => { const id = 'studio-reference-' + assetId; const name = role; setAttachedFiles(prev => prev.some(f => f.assetId === assetId) ? prev : [...prev, { id, name: name.slice(0, 60) || 'Reference', type: 'image/png', assetId, contentUrl: `/api/library/assets/${encodeURIComponent(assetId)}/content`, ready: true }]); /* the chip shows the picture once its link is ready */ void libraryService.createSignedLink(assetId).then(url => setAttachedFiles(prev => prev.map(f => f.id === id ? { ...f, previewUrl: url } : f)), () => {}); }} modelNames={Object.fromEntries(generate.catalog.types.flatMap(t=>t.models.map(m=>[m.id,m.name||m.id])))} activeId={studioGenerationId} reloadKey={durableGenerations.length + generationListReload} onOpen={(id, replace) => { setStudioGenerationId(id); window.parent.postMessage({source:'xeno-chat',type:'generation-location',replace:Boolean(replace),generationId:id,generationType:studioType,path:`/workspace/studio/generate/${studioType}/g/${id}`},window.location.origin); }} />}
@@ -12731,7 +12752,6 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
               {generationError && <p role="alert" className="px-1 pb-1.5 text-[12px] leading-5 text-[#8b857c]">{generationError}</p>}
               {generationListError && <p role="alert" className="px-1 pb-1.5 text-[12px] leading-5 text-[#8b857c]">{generationListError} <button type="button" className="underline" onClick={() => setGenerationListReload(n=>n+1)}>Reload</button></p>}
               {!studioType && studioGenerationId && <GenerationRecord id={studioGenerationId} />}
-              {!studioType && durableGenerations.filter(g=>!messages.some(m=>m.turn?.steps.some(step=>step.kind==='generation' && step.generationId===g.id))).map(g=><ChatGenerationCard key={g.id} id={g.id} onUsePrompt={(text, type) => { setInputValue(text); generate.setMode(type); }} onAttach={attachResult} />)}
               {waitingQuestion && (
                 <ChatQuestionPanel step={waitingQuestion.step} onAnswer={answerQuestion} onSkip={skipQuestion} busy={isLoading} />
               )}
@@ -16897,11 +16917,11 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                 </div>
               )} */}
             
-            {messages.length > 0 && (
-                 messages.map((message, index) => {
+            {threadMessages.length > 0 && (
+                 threadMessages.map((message, index) => {
                     // Moved these declarations up to be available for all conditions
                     const isUser = message.sender === 'user';
-                    const isLastMessage = index === messages.length - 1;
+                    const isLastMessage = index === threadMessages.length - 1;
                     const isLastAiMessage = isLastMessage && !isUser;
                     let firstMessageTopMargin = index === 0 ? 'mt-4' : '';
                     if (index === 0 && showTopBarBackground) {
