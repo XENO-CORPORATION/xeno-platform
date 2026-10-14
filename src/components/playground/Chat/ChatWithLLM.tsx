@@ -23,7 +23,7 @@ import {
 import ChatEmptyState, { ComposerRevealControls, type ChatEmptyStateTool } from './ChatEmptyState';
 import ChatModelSelector from './ChatModelSelector';
 import WorkspaceModelTrigger from './WorkspaceModelTrigger';
-import { generations, validateGeneration, stableRequestKey, releaseRequestKey, GenerationError, type Generation, type GenerationRequest } from '@/lib/generations';
+import { generations, validateGeneration, stableRequestKey, releaseRequestKey, GenerationError, isGenerationTerminal, type Generation, type GenerationRequest } from '@/lib/generations';
 import { GenerationRecord } from './GenerationRecord';
 import { ChatGenerationCard, RESULT_DRAG, StudioGenerationFeed } from './StudioGenerationFeed';
 import { StudioEnhance } from './StudioEnhance';
@@ -6945,6 +6945,9 @@ const ChatWithLLM: React.FC<ChatWithLLMProps> = ({
 
     // *** DIAGNOSTIC LOGGING: Track task parameter value ***
     console.log(`>>> [FETCHAIRESPONSE ENTRY] Received taskArg:`, taskArg);
+    // A reply to a finished generation follows the conversation's latest message, not the user's prompt
+    // (saved under the prompt it would become a sibling branch of the generation's own reply).
+    const isGenerationFollowUp = followUpInstructionRef.current !== null;
     
     if (isLoading && taskArg !== 'refine_image_prompt') {
       // console.log('[fetchAiResponse] Already loading, returning early for taskArg:', taskArg);
@@ -7249,6 +7252,11 @@ const ChatWithLLM: React.FC<ChatWithLLMProps> = ({
         });
 
     const resolvedApiMessages = await Promise.all(apiMessagesPromises);
+    if (followUpInstructionRef.current) {
+        // a generation just finished: the model is asked to answer it (narrateGenerationsRef)
+        resolvedApiMessages.push({ role: 'user', parts: [{ type: 'text', text: followUpInstructionRef.current }] });
+        followUpInstructionRef.current = null;
+    }
         
     // --- Updated Payload Construction --- 
     // Research evidence establishes its injection boundary first, then retains
@@ -7472,6 +7480,7 @@ const ChatWithLLM: React.FC<ChatWithLLMProps> = ({
             }
 
             if (event.type === 'generation_proposal') {
+                narrateGenerationsRef.current.add(event.generation.id);
                 turnRecord = applyTurnEvent(turnRecord, event);
                 const record = turnRecord;
                 setMessages(prev => prev.map(msg => msg.id === localPlaceholderId ? {...msg,turn:record,isDotPlaceholder:false} : msg));
@@ -7859,7 +7868,7 @@ const ChatWithLLM: React.FC<ChatWithLLMProps> = ({
                           ...(turnImages(updatedMessage.turn).some((step) => step.assetId)
                             ? { attachments: messageLibraryAttachments(updatedMessage) }
                             : {}),
-                          ...(answeredDbId ? { parent_id: answeredDbId } : {}),
+                          ...(answeredDbId && !isGenerationFollowUp ? { parent_id: answeredDbId } : {}),
                       });
                       if (!persistedAssistantMessage) throw new Error('The assistant turn was not persisted.');
                       rememberPersisted(updatedMessage.id, persistedAssistantMessage);
@@ -8001,6 +8010,14 @@ const ChatWithLLM: React.FC<ChatWithLLMProps> = ({
   const generationSendingRef = useRef(false);
   const unresolvedGenerationRef = useRef(false);
   const [durableGenerations, setDurableGenerations] = useState<Generation[]>([]);
+  /*
+   * THE CHAT ANSWERS A GENERATION. A generation made in this chat (from the composer, or by the model's
+   * own tool) is followed by the assistant's reply once it finishes: what was made, with what, and a next
+   * step, as ChatGPT does. Only generations started in this session are narrated, so opening an old chat
+   * never sends anything. The instruction rides on that one request and is never shown or saved.
+   */
+  const narrateGenerationsRef = useRef(new Set<string>());
+  const followUpInstructionRef = useRef<string | null>(null);
   const [generationListError, setGenerationListError] = useState('');
   const [generationListReload, setGenerationListReload] = useState(0);
   const studioType = new URLSearchParams(location.search).get('generationType') as GenType | null;
@@ -8078,6 +8095,8 @@ const ChatWithLLM: React.FC<ChatWithLLMProps> = ({
       releaseRequestKey(request);
       setDurableGenerations(prev=>[record,...prev.filter(g=>g.id!==record.id)]);
       if (clearComposer) {setInputValue('');setAttachedFiles([]);}
+      // In a chat, the composer returns to chat once the request is in, and the chat answers it when it finishes.
+      if (!studioType) { narrateGenerationsRef.current.add(record.id); generate.setMode('chat'); }
       if (studioType) { setStudioGenerationId(record.id); window.parent.postMessage({source:'xeno-chat',type:'generation-location',generationId:record.id,generationType:type,path:`/workspace/studio/generate/${type}/g/${record.id}`},window.location.origin); }
       else {
         const turn=applyTurnEvent(newTurnRecord(),{type:'generation_proposal',generation:record});
@@ -8137,6 +8156,18 @@ const ChatWithLLM: React.FC<ChatWithLLMProps> = ({
    * it is no longer pending, so a reload, a regenerate or a deleted answer all stay consistent.
    */
   const waitingQuestion = useMemo(() => (isLoading ? null : pendingQuestion(messages)), [messages, isLoading]);
+  useEffect(() => {
+    if (studioType || isLoading || !narrateGenerationsRef.current.size) return;
+    const done = durableGenerations.find(g => narrateGenerationsRef.current.has(g.id) && isGenerationTerminal(g.state));
+    if (!done) return;
+    narrateGenerationsRef.current.delete(done.id);
+    const what = done.type === '3d' ? '3D model' : done.type;
+    followUpInstructionRef.current = done.state === 'succeeded'
+      ? `[The ${what} generation above has finished. Reply to the user in two or three sentences: say what was made, with which model and settings, note anything worth knowing about the result, and offer a useful next step. Do not repeat the prompt word for word.]`
+      : `[The ${what} generation above did not finish (${done.state}${done.error?.code ? `: ${done.error.code}` : ''}). Tell the user plainly in one or two sentences and offer what they can do next.]`;
+    void fetchAiResponse(messages, systemPrompt, selectedModel, undefined, undefined, undefined);
+  }, [durableGenerations, isLoading, studioType]); // eslint-disable-line react-hooks/exhaustive-deps
+
   const answerQuestion = (picked: number[], reason: string) => {
     if (!waitingQuestion) return;
     // An empty file list makes this a send that is not the composer's: whatever the person was typing stays.
