@@ -51,17 +51,35 @@ const oneOf = (v, list, field, d) => { if (v == null || v === '') return d; if (
 const keyToNumber = (key) => { const m = /^T-(\d{1,15})$/i.exec(String(key || '').trim()); return m ? m[1] : null; };
 
 const rel = async (db, userId, projectId, relation) => (await check(db, { object: `project:${projectId}`, relation, subject: `user:${userId}` })).allowed;
-/** What this caller may do to this task: { view, edit, admin } (edit = triage/move/assign; admin = accept in place of the reviewer). */
+/** Who RAISED this task, as the person accountable for it: the reporter, or — when an agent raised it — the agent's
+ *  human owner (an agent acts for a person and is never the owner of record). */
+async function creatorOf(db, t) {
+  if (t.reporter_kind !== 'agent') return t.reporter_id ? String(t.reporter_id) : null;
+  const o = (await db.query('SELECT owner_user_id FROM agent_identities WHERE user_id = $1', [t.reporter_id])).rows[0];
+  return o ? String(o.owner_user_id) : null;
+}
+/**
+ * What this caller may do to this task.
+ *   view    see it
+ *   edit    a project editor — TRIAGE only (accepting a raised task into the project's To do)
+ *   admin   a project admin
+ *   creator raised it (or owns the agent that did)
+ *   manage  THE TASK IS ITS CREATOR'S (owner, 2026-10-14): only the creator edits it, assigns it, accepts it, closes it,
+ *           reopens it or deletes it. Everyone else on the project can claim it, work it and send it back for review.
+ *           A project admin may stand in — a task must not be stranded when its creator leaves — and every act is
+ *           recorded in the task's history with who did it.
+ */
 async function standing(db, me, t) {
+  const creator = (await creatorOf(db, t)) === String(me.id);
   if (t.project_id) {
     const view = await rel(db, me.id, t.project_id, 'viewer');
-    if (!view) return String(t.delegate_id || '') === String(me.id) ? { view: true, edit: false, admin: false } : { view: false };
+    if (!view) return String(t.delegate_id || '') === String(me.id) ? { view: true, edit: false, admin: false, creator: false, manage: false } : { view: false };
     const edit = await rel(db, me.id, t.project_id, 'editor'), admin = edit && await rel(db, me.id, t.project_id, 'admin');
-    return { view, edit, admin };
+    return { view, edit, admin, creator, manage: creator || admin };
   }
-  const own = String(t.owner_user_id) === String(me.id);
-  const involved = own || String(t.reporter_id) === String(me.id) || String(t.assignee_id) === String(me.id) || String(t.reviewer_id) === String(me.id) || String(t.delegate_id || '') === String(me.id);
-  return { view: involved, edit: own, admin: own };
+  const own = String(t.owner_user_id) === String(me.id) || creator;
+  const involved = own || String(t.assignee_id) === String(me.id) || String(t.reviewer_id) === String(me.id) || String(t.delegate_id || '') === String(me.id);
+  return { view: involved, edit: own, admin: own, creator: own, manage: own };
 }
 
 const SELECT = `SELECT t.*, COALESCE(t.area, (SELECT p.area FROM chat_projects p WHERE p.id = t.project_id)) AS effective_area,
@@ -87,7 +105,7 @@ function shape(t, s, events, files, extra) {
     createdAt: t.created_at, updatedAt: t.updated_at, closedAt: t.closed_at,
     parent: t.parent_key ? { key: t.parent_key, title: t.parent_title } : null, subtasks: { total: Number(t.child_count || 0), done: Number(t.child_done || 0) },
     ...(extra || {}),
-    ...(s ? { can: { edit: !!s.edit, moves: s.moves || [], attach: !!s.attach, delete: !!s.del } } : {}),
+    ...(s ? { can: { edit: !!s.manage, creator: !!s.creator, triage: !!s.edit, moves: s.moves || [], attach: !!s.attach, delete: !!s.del } } : {}),
     ...(files ? { attachments: files.map((a) => ({ id: a.id, filename: a.filename, mime: a.mime, size: a.size_bytes, at: a.created_at, uploader: person(a.uploader_id, a.uploader_name) })) } : {}),
     ...(events ? { events: events.map((e) => ({ id: e.id, kind: e.kind, field: e.field || null, from: e.from_value, to: e.to_value, fromName: e.from_name || null, toName: e.to_name || null, note: e.removed_at ? null : e.note, at: e.created_at, editedAt: e.edited_at || null, removed: !!e.removed_at, actor: person(e.actor_id, e.actor_name, e.actor_kind === 'agent') })) } : {}),
   };
@@ -95,16 +113,24 @@ function shape(t, s, events, files, extra) {
 async function loadByKey(db, key) { const n = keyToNumber(key); if (!n) return null; return (await db.query(`${SELECT} WHERE t.number = $1 AND t.deleted_at IS NULL`, [n])).rows[0] || null; }
 async function readable(db, me, key) { const t = await loadByKey(db, key), s = t ? await standing(db, me, t) : null; if (!s || !s.view) throw new TaskError('Task not found', 'task_not_found', 404); return { t, s }; }
 const event = (db, t, me, kind, from, to, note, field = null) => db.query('INSERT INTO task_events (task_id, actor_id, actor_kind, kind, from_value, to_value, note, field) VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING id', [t.id, me.id, kindOf(me), kind, from ?? null, to ?? null, note ?? null, field]);
-/** The moves this caller may make from the task's current status. */
+/**
+ * The moves this caller may make from the task's current status (the creator owns the task — see standing()).
+ *   triage (raised → to do)           a project editor; the creator may also withdraw it (→ won't do)
+ *   working moves, send for review    whoever is working on it, or the creator / an admin
+ *   accept (→ done)                   the creator. Never the person who did the work, unless the creator did it
+ *                                     themselves; an explicitly named reviewer accepts when review is required.
+ *   ask for changes                   the reviewer or the creator (or the worker taking it back)
+ *   won't do, reopen                  the creator (or an admin)
+ */
 function movesFor(me, t, s) {
-  const mine = String(t.assignee_id) === String(me.id) || String(t.delegate_id || '') === String(me.id), reviewer = String(t.reviewer_id) === String(me.id), reporter = String(t.reporter_id) === String(me.id);
+  const worker = String(t.assignee_id) === String(me.id) || String(t.delegate_id || '') === String(me.id), reviewer = String(t.reviewer_id) === String(me.id);
+  const accept = t.review_required && t.reviewer_id ? (reviewer || s.admin) && !worker : s.creator || ((reviewer || s.admin) && !worker);
   return allowedMoves(t.status).filter((to) => {
-    if (t.status === 'raised') return s.edit;
-    if (t.status === 'in_review' && to === 'done') return !mine && (reviewer || s.admin);
-    if (t.status === 'in_review') return reviewer || s.edit;
-    if (to === 'done') return !t.review_required && (mine || s.edit);
-    if (t.status === 'done' || t.status === 'wont_do') return s.edit || reporter;
-    return mine || s.edit;
+    if (t.status === 'raised') return to === 'wont_do' ? s.edit || s.manage : s.edit;
+    if (to === 'wont_do' || t.status === 'done' || t.status === 'wont_do') return s.manage;
+    if (to === 'done') return t.status === 'in_review' ? accept : !t.review_required && (s.creator || (s.admin && !worker));
+    if (t.status === 'in_review') return reviewer || s.manage || worker;
+    return worker || s.manage;
   });
 }
 
@@ -197,7 +223,9 @@ export async function listTasks(db, me, f = {}) {
 export async function updateTask(db, me, key, input = {}) { // eslint-disable-line no-param-reassign
   const { t, s } = await readable(db, me, key);
   const mine = String(t.assignee_id) === String(me.id) || String(t.delegate_id || '') === String(me.id);
-  if (!s.edit && !mine) throw new TaskError('Only the assignee or someone who manages the project can change this task', 'not_allowed', 403);
+  // the worker may hand it back (unassign themselves) and nothing else; every other change is the creator's
+  const handBack = mine && Object.keys(input).every((k) => k === 'assigneeId') && input.assigneeId === null;
+  if (!s.manage && !handBack) throw new TaskError('Only the person who created this task can change it. You can comment, or work on it and send it for review.', 'not_allowed', 403);
   const set = [], vals = [], changes = [];
   const put = (col, val, label, from) => { vals.push(val); set.push(`${col} = $${vals.length}`); changes.push([label, from, val]); };
   if (input.title !== undefined) put('title', text(input.title, 'title', 300), 'title', t.title);
@@ -206,7 +234,7 @@ export async function updateTask(db, me, key, input = {}) { // eslint-disable-li
   if (input.priority !== undefined) put('priority', oneOf(input.priority, PRIORITIES, 'priority', t.priority), 'priority', t.priority);
   if (input.labels !== undefined) put('labels', (Array.isArray(input.labels) ? input.labels : []).map((l) => String(l).trim().toLowerCase()).filter(Boolean).slice(0, 20), 'labels', null);
   if (input.dueAt !== undefined) { const d = input.dueAt ? new Date(input.dueAt) : null; if (d && Number.isNaN(d.getTime())) throw new TaskError('dueAt must be a date', 'invalid_due'); put('due_at', d, 'due', null); }
-  if (input.parentKey !== undefined || input.parentId !== undefined) { if (!s.edit && !mine) throw new TaskError('Only the assignee or someone who manages the project can change the parent', 'not_allowed', 403);
+  if (input.parentKey !== undefined || input.parentId !== undefined) { if (!s.manage) throw new TaskError('Only the person who created this task can change its parent', 'not_allowed', 403);
     const want = input.parentKey ?? input.parentId; const p = want ? await parentFor(db, me, want) : null;
     if (p) { if (String(p.project_id || '') !== String(t.project_id || '') || (!t.project_id && String(p.owner_user_id) !== String(t.owner_user_id))) throw new TaskError('A sub-task lives in the same place as its parent', 'parent_elsewhere', 409);
       for (let up = p, i = 0; up; i++) { if (String(up.id) === String(t.id) || i > 50) throw new TaskError('That would make the task its own ancestor', 'parent_cycle', 409); up = up.parent_id ? (await db.query('SELECT id, parent_id FROM tasks WHERE id = $1', [up.parent_id])).rows[0] : null; } }
@@ -214,14 +242,14 @@ export async function updateTask(db, me, key, input = {}) { // eslint-disable-li
   if (input.area !== undefined) { if (t.project_id) throw new TaskError('A task in a project lives where its project lives', 'area_follows_project', 409); const a = input.area || null; if (a && !AREA.test(a)) throw new TaskError('Unknown area', 'invalid_area'); put('area', a, 'area', t.area); }
   // an agent is never the assignee: choosing one makes it the DELEGATE, and the person stays accountable (Linear)
   if (input.delegateId !== undefined || (input.assigneeId && await isAgent(db, input.assigneeId))) {
-    if (!s.edit) throw new TaskError('Only someone who manages the project can delegate this task', 'not_allowed', 403);
+    if (!s.manage) throw new TaskError('Only the person who created this task can delegate it', 'not_allowed', 403);
     await applyDelegate(db, me, t, s, input.delegateId !== undefined ? input.delegateId : input.assigneeId);
     input = { ...input }; delete input.delegateId; if (input.assigneeId && await isAgent(db, input.assigneeId)) delete input.assigneeId;
   }
   // assigning someone else, and choosing the reviewer, are management acts
-  if (input.assigneeId !== undefined) { if (!s.edit && !(input.assigneeId === null && mine)) throw new TaskError('Only someone who manages the project can assign this task', 'not_allowed', 403);
+  if (input.assigneeId !== undefined) { if (!s.manage && !(input.assigneeId === null && mine)) throw new TaskError('Only the person who created this task can assign it. Claim it to work on it yourself.', 'not_allowed', 403);
     if (input.assigneeId) await assertAssignable(db, input.assigneeId, t.project_id); put('assignee_id', input.assigneeId || null, 'assignee', t.assignee_id); }
-  if (input.reviewerId !== undefined || input.reviewRequired !== undefined) { if (!s.edit) throw new TaskError('Only someone who manages the project can set the review', 'not_allowed', 403);
+  if (input.reviewerId !== undefined || input.reviewRequired !== undefined) { if (!s.manage) throw new TaskError('Only the person who created this task can set its review', 'not_allowed', 403);
     const reviewer = input.reviewerId !== undefined ? input.reviewerId : t.reviewer_id, required = input.reviewRequired !== undefined ? !!input.reviewRequired : t.review_required;
     if (reviewer) await assertAssignable(db, reviewer, t.project_id); if (required && !reviewer) throw new TaskError('Name a reviewer when review is required', 'reviewer_required');
     put('reviewer_id', reviewer || null, 'reviewer', t.reviewer_id); put('review_required', required, 'review', String(t.review_required)); }
@@ -252,14 +280,20 @@ export async function transitionTask(db, me, key, { to, note, from } = {}) {
   if (!STATUSES.includes(to)) throw new TaskError('Unknown status', 'invalid_status');
   if (!allowedMoves(t.status).includes(to)) throw new TaskError(`A task cannot go from ${t.status} to ${to}`, 'invalid_transition', 409);
   if (!movesFor(me, t, s).includes(to)) {
-    const why = t.status === 'in_review' && to === 'done' && (String(t.assignee_id) === String(me.id) || String(t.delegate_id || '') === String(me.id)) ? 'You cannot accept your own work. The reviewer does.'
-      : to === 'done' && t.review_required ? 'This task needs review: move it to In review.' : 'You are not allowed to make that move on this task.';
+    const worker = String(t.assignee_id) === String(me.id) || String(t.delegate_id || '') === String(me.id);
+    const why = to === 'done' && worker && !s.creator ? 'Send it for review: the person who created this task accepts it.'
+      : to === 'done' && t.review_required ? 'This task needs review: move it to In review.'
+      : (to === 'wont_do' || t.status === 'done' || t.status === 'wont_do') && !s.manage ? 'Only the person who created this task can close or reopen it.'
+      : 'You are not allowed to make that move on this task.';
     throw new TaskError(why, 'not_allowed', 403);
   }
   // the move only happens if nobody moved it first: a stale screen cannot overwrite a newer state
-  const done = (await db.query(`UPDATE tasks SET status = $2, updated_at = now(), closed_at = CASE WHEN $2 IN ('done', 'wont_do') THEN now() ELSE NULL END WHERE id = $1 AND status = $3 RETURNING id`, [t.id, to, t.status])).rowCount;
+  // work sent for review with no reviewer named goes back to the person who asked for it
+  const backTo = to === 'in_review' && !t.reviewer_id ? await creatorOf(db, t) : null;
+  const done = (await db.query(`UPDATE tasks SET status = $2, updated_at = now(), closed_at = CASE WHEN $2 IN ('done', 'wont_do') THEN now() ELSE NULL END, reviewer_id = COALESCE(reviewer_id, $4::uuid) WHERE id = $1 AND status = $3 RETURNING id`, [t.id, to, t.status, backTo])).rowCount;
   if (!done) throw new TaskError('Someone moved this task first. Reload it and try again.', 'conflict', 409);
   await event(db, t, me, 'status', t.status, to, note ? text(note, 'note', 20000, false) : null);
+  if (backTo) await event(db, t, me, 'edited', null, backTo, null, 'reviewer');
   const fresh = await loadByKey(db, key), label = { raised: 'Triage', todo: 'To do', in_progress: 'In progress', blocked: 'Blocked', in_review: 'In review', done: 'Done', wont_do: 'Won’t do' };
   const told = new Set();
   if (to === 'in_review' && fresh.reviewer_id) { await notifyUsers(db, fresh, me, [fresh.reviewer_id], 'review_requested', `${actorName(me)} asked you to review it`); told.add(String(fresh.reviewer_id)); }
@@ -307,10 +341,10 @@ export async function commentTask(db, me, key, { body } = {}) {
 
 const mine = (me, t, col) => String(t[col]) === String(me.id);
 /** Anyone working on the task may add images to it: whoever manages it, the assignee, the reviewer, the reporter. */
-const mayAttach = (me, t, s) => !!(s.edit || mine(me, t, 'assignee_id') || mine(me, t, 'delegate_id') || mine(me, t, 'reviewer_id') || mine(me, t, 'reporter_id'));
+const mayAttach = (me, t, s) => !!(s.manage || mine(me, t, 'assignee_id') || mine(me, t, 'delegate_id') || mine(me, t, 'reviewer_id') || mine(me, t, 'reporter_id'));
 /** Deleting is for whoever owns the place the task lives (project admin, or the owner of a personal task), and for the
  *  reporter while it is still waiting in triage — a task raised by mistake can be withdrawn, accepted work cannot. */
-const mayDelete = (me, t, s) => !!(s.admin || (mine(me, t, 'reporter_id') && t.status === 'raised'));
+const mayDelete = (me, t, s) => !!s.manage;   // the creator's (or an admin's); a delete is restorable for 30 days
 export const ATTACH_MAX_BYTES = 8 * 1024 * 1024, ATTACH_MAX_PER_TASK = 20;
 /** The image type from the file's own first bytes. Anything else is refused: no SVG (it can carry script), no HTML. */
 export function sniffImage(buf) {
@@ -359,7 +393,7 @@ export async function removeAttachment(db, me, key, id) {
   if (!UUID.test(String(id))) throw new TaskError('Image not found', 'image_not_found', 404);
   const a = (await db.query('SELECT id, uploader_id, filename FROM task_attachments WHERE id = $1 AND task_id = $2', [id, t.id])).rows[0];
   if (!a) throw new TaskError('Image not found', 'image_not_found', 404);
-  if (!s.edit && String(a.uploader_id) !== String(me.id)) throw new TaskError('Only whoever added it, or someone who manages the project, can remove this image', 'not_allowed', 403);
+  if (!s.manage && String(a.uploader_id) !== String(me.id)) throw new TaskError('Only whoever added it, or the person who created this task, can remove this image', 'not_allowed', 403);
   await db.query('DELETE FROM task_attachments WHERE id = $1', [a.id]);
   await event(db, t, me, 'detached', a.id, null, a.filename);
   await db.query('UPDATE tasks SET updated_at = now() WHERE id = $1', [t.id]);
@@ -367,7 +401,7 @@ export async function removeAttachment(db, me, key, id) {
 }
 export async function deleteTask(db, me, key) {
   const { t, s } = await readable(db, me, key);
-  if (!mayDelete(me, t, s)) throw new TaskError(mine(me, t, 'reporter_id') ? 'Once a task has been accepted, only someone who manages the project can delete it' : 'Only someone who manages the project can delete this task', 'not_allowed', 403);
+  if (!mayDelete(me, t, s)) throw new TaskError('Only the person who created this task can delete it', 'not_allowed', 403);
   const ok = (await db.query('UPDATE tasks SET deleted_at = now(), updated_at = now() WHERE id = $1 AND deleted_at IS NULL RETURNING id', [t.id])).rowCount;
   if (!ok) throw new TaskError('Task not found', 'task_not_found', 404);
   await event(db, t, me, 'deleted', t.status, null, null);
@@ -459,7 +493,7 @@ async function extrasFor(db, me, t, s) {
   }
   const w = (await db.query(`SELECT w.user_id, w.muted, COALESCE(u.display_name, u.username) AS name FROM task_watchers w JOIN users u ON u.id = w.user_id WHERE w.task_id = $1`, [t.id])).rows;
   const me_ = w.find((x) => String(x.user_id) === String(me.id));
-  return { children, links, watching: !!(me_ && !me_.muted), watchers: w.filter((x) => !x.muted).map((x) => ({ id: String(x.user_id), name: x.name })), canLink: !!(s.edit || String(t.assignee_id) === String(me.id)) };
+  return { children, links, watching: !!(me_ && !me_.muted), watchers: w.filter((x) => !x.muted).map((x) => ({ id: String(x.user_id), name: x.name })), canLink: !!(s.manage || String(t.assignee_id) === String(me.id)) };
 }
 
 export async function editComment(db, me, key, eventId, { body } = {}) {
@@ -486,7 +520,7 @@ export async function removeComment(db, me, key, eventId) {
 const LINK_KINDS = { blocks: ['blocks', false], blocked_by: ['blocks', true], relates: ['relates', false], duplicates: ['duplicates', false], duplicated_by: ['duplicates', true] };
 export async function addLink(db, me, key, { kind, to } = {}) {
   const { t, s } = await readable(db, me, key);
-  if (!s.edit && String(t.assignee_id) !== String(me.id)) throw new TaskError('Only the assignee or someone who manages the project can link this task', 'not_allowed', 403);
+  if (!s.manage && String(t.assignee_id) !== String(me.id)) throw new TaskError('Only the person who created this task, or whoever is working on it, can link it', 'not_allowed', 403);
   const k = LINK_KINDS[kind]; if (!k) throw new TaskError('Unknown link type', 'invalid_link');
   const { t: o } = await readable(db, me, to).catch(() => { throw new TaskError('That task was not found', 'link_target_not_found', 404); });
   if (String(o.id) === String(t.id)) throw new TaskError('A task cannot link to itself', 'link_self', 409);
@@ -497,7 +531,7 @@ export async function addLink(db, me, key, { kind, to } = {}) {
 }
 export async function removeLink(db, me, key, linkId) {
   const { t, s } = await readable(db, me, key);
-  if (!s.edit && String(t.assignee_id) !== String(me.id)) throw new TaskError('Only the assignee or someone who manages the project can unlink this task', 'not_allowed', 403);
+  if (!s.manage && String(t.assignee_id) !== String(me.id)) throw new TaskError('Only the person who created this task, or whoever is working on it, can unlink it', 'not_allowed', 403);
   if (!UUID.test(String(linkId))) throw new TaskError('Link not found', 'link_not_found', 404);
   const l = (await db.query('DELETE FROM task_links WHERE id = $1 AND (from_task = $2 OR to_task = $2) RETURNING kind, from_task, to_task', [linkId, t.id])).rows[0];
   if (!l) throw new TaskError('Link not found', 'link_not_found', 404);
@@ -611,7 +645,7 @@ async function applyDelegate(db, me, t, s, agentId) {
 }
 export async function delegateTask(db, me, key, { agentId } = {}) {
   const { t, s } = await readable(db, me, key);
-  if (!s.edit) throw new TaskError('Only someone who manages the project can delegate this task', 'not_allowed', 403);
+  if (!s.manage) throw new TaskError('Only the person who created this task can delegate it', 'not_allowed', 403);
   await applyDelegate(db, me, t, s, agentId);
   return getTask(db, me, key);
 }
@@ -723,7 +757,7 @@ export async function deliverAgentEvents(db, { send = safeRequest, batch = 50 } 
 export async function handoffTask(db, me, key) {
   const { t, s } = await readable(db, me, key);
   if (kindOf(me) !== 'human') throw new TaskError('Only a person hands a task off', 'not_allowed', 403);
-  if (!s.edit) throw new TaskError('Only someone who manages the project can hand this task to an agent', 'not_allowed', 403);
+  if (!s.manage && String(t.assignee_id) !== String(me.id)) throw new TaskError('Only the person who created this task, or whoever is working on it, can hand it to an agent', 'not_allowed', 403);
   let agent = (await db.query(`SELECT u.id, u.username, COALESCE(u.display_name, u.username) AS name FROM agent_identities ai JOIN users u ON u.id = ai.user_id
     WHERE ai.owner_user_id = $1 AND ai.agent_origin = 'handoff' ORDER BY ai.created_at LIMIT 1`, [me.id])).rows[0];
   if (!agent) {
