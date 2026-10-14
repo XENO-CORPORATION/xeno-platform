@@ -74,7 +74,7 @@ import { ChatUserMessage } from './ChatUserMessage';
 import { pasteBecomesFile, makePastedTextFile, pastedFiles } from './chatPaste';
 import { ChatQueue } from './ChatQueue';
 import { ChatQuestionPanel, ChatQuestionRecord } from './ChatQuestionPanel';
-import { formatAnswer, pendingQuestion, questionHistoryNote, questionOutcome } from './chatQuestion';
+import { formatAnswer, pendingQuestion, questionHistoryNote, questionOutcome, readAnswer } from './chatQuestion';
 import { enqueue, removeQueued, moveQueued, updateQueued, patchQueuedFile, nextSendable, type QueueState } from './chatQueueState';
 import {
   applyTurnEvent, chatFaviconUrl, closeTurnRecord, DEFAULT_STEPS_MODE, isStepsMode, newTurnRecord, normalizeStoredTurn, turnCitedSources, turnHasRail, turnImageModels, turnImages, turnCodeSteps, turnQuestion,
@@ -16921,6 +16921,14 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                  threadMessages.map((message, index) => {
                     // Moved these declarations up to be available for all conditions
                     const isUser = message.sender === 'user';
+                    // ask_user: an answer picked in the question panel is shown once, in the question's
+                    // record on the turn above. It stays a real message (the model reads it, it is saved);
+                    // it is just not drawn a second time as a bubble. Own-words answers keep their bubble.
+                    if (isUser) {
+                      const previous = threadMessages[index - 1];
+                      const asked = previous && previous.sender === 'ai' && !previous.isStreaming ? turnQuestion(previous.turn) : undefined;
+                      if (asked && !readAnswer(asked, message.text || '').ownWords) return null;
+                    }
                     const isLastMessage = index === threadMessages.length - 1;
                     const isLastAiMessage = isLastMessage && !isUser;
                     let firstMessageTopMargin = index === 0 ? 'mt-4' : '';
