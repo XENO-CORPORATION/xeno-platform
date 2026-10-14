@@ -78,7 +78,8 @@
     const b = e.target.closest('#main .topbar [data-gen-fav]'); if (!b) return;
     const here = route(); if (!here) return;
     const to = '#/studio/p/' + here.type + (here.shelf === 'favorites' ? '' : '/Favorites');
-    if (window.XENO_ADDR?.go) window.XENO_ADDR.go(to); else window.location.assign('/workspace/studio/generate/' + here.type + (here.shelf === 'favorites' ? '' : '/favorites'));
+    // stay in the area you are in (Overview stays Overview): the app's own go, never a hard-coded #/studio
+    if (window.XW?.go) window.XW.go('product', { product: here.type, item: here.shelf === 'favorites' ? null : 'Favorites' }); else if (window.XENO_ADDR?.go) window.XENO_ADDR.go(to); else window.location.assign('/workspace/studio/generate/' + here.type + (here.shelf === 'favorites' ? '' : '/favorites'));
   });
   document.addEventListener('input', (e) => {
     const s = e.target.closest?.('#main .topbar [data-gen-size]'); if (!s) return;
@@ -129,7 +130,7 @@
     carried = { el, copy, t: setTimeout(drop, 6000) };
     requestAnimationFrame(() => requestAnimationFrame(() => el.classList.add('up')));
     // the page changes under it once it has left the surface
-    setTimeout(() => { if (window.XENO_ADDR?.go) window.XENO_ADDR.go('#/studio/p/' + type); else open(type); }, 240);
+    setTimeout(() => { if (window.XW?.go) window.XW.go('product', { product: type }); else if (window.XENO_ADDR?.go) window.XENO_ADDR.go('#/studio/p/' + type); else open(type); }, 240);   // in the current area, never a jump to Studio
   }
   function land(to, frame) {
     const c = carried; if (!c || !to || !frame || !(to.w > 0)) return drop();

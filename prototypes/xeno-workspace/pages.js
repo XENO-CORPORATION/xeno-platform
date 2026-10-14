@@ -537,7 +537,7 @@
     if (!b) return;
     const x = X(), s = S(), d = b.dataset;
     if (b.matches('a[data-go]')) { e.preventDefault(); return x.go('global', { global: d.go }); }
-    if (d.pgFolder) { e.preventDefault(); return window.XENO_ADDR.go(`#/corpo/p/storage/f/${encodeURIComponent(d.pgFolder)}`); }   // the item's folder, in Storage
+    if (d.pgFolder) { e.preventDefault(); return x.go('product', { product: 'storage', item: 'f/' + d.pgFolder }); }   // the item's folder, in Storage — in the current area, never a jump to Corpo
     if (d.pgSeg) { if (d.pgSeg.startsWith('state:')) { const m = store.get('pgState', {}) || {}; m[d.pgSeg.slice(6)] = d.v; store.set('pgState', m); loaded.add(d.pgSeg.slice(6)); return d.pgSeg === 'state:home' ? X().render() : repaint(); } const u = ui(curKey()); u.seg[d.pgSeg] = d.v; u.sel = null; return repaint(); }
     if (d.pgView) { const u = ui(d.pgView); u.view = d.v; store.set('pgView.' + d.pgView, d.v); return repaint(); }
     if (d.pgClear) { ui(d.pgClear).q = ''; return repaint(`[data-pg-q="${d.pgClear}"]`); }
