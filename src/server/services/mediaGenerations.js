@@ -59,6 +59,24 @@ export async function readGenerationReferences(db,actor,ids,{uploadsDir=null}={}
   }
   return references;
 }
+/**
+ * The gateway refuses a queued job that carries inline media (`asset_required`), so a reference is uploaded
+ * to its asset store and the job names it by id. The bytes are the same verified bytes read above — one
+ * reader, two postures — and an upload that cannot be completed fails the generation rather than falling
+ * back to an inline payload the gateway will refuse anyway.
+ * Returns `{asset_id}` entries, which is what `rejectUnsafeQueuedMedia` and the image routes accept.
+ */
+export async function uploadGenerationReferences(db,actor,ids,{uploadsDir=null,gateway=mediaGateway,read=readGenerationReferences}={}){
+  const raw=await read(db,actor,ids,{uploadsDir});
+  const uploaded=[];
+  for(const dataUrl of raw){
+    const comma=dataUrl.indexOf(',');
+    const mimeType=dataUrl.slice(5,dataUrl.indexOf(';'));
+    const id=await gateway.uploadAsset({bytes:Buffer.from(dataUrl.slice(comma+1),'base64'),mimeType});
+    uploaded.push({asset_id:id});
+  }
+  return uploaded;
+}
 function signingSecret(options){const secret=options.quoteSecret||process.env.JWT_SECRET;if(!secret)throw generationError('quote_unavailable',503);return secret;}
 function tokenFor(payload,options){const data=Buffer.from(JSON.stringify(payload)).toString('base64url');return `${data}.${crypto.createHmac('sha256',signingSecret(options)).update(`media-quote:v1:${data}`).digest('base64url')}`;}
 function verifyQuote(token,{actor,payer,hash,tariff},options){
