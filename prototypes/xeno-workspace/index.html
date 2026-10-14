@@ -1874,7 +1874,32 @@ html body .live-chat button[aria-label="Voice input options"][aria-label="Voice 
 .xd-share-face{flex:none;display:grid;place-items:center;width:30px;height:30px;border-radius:7px;background:var(--n26);color:var(--text);font-size:11.5px;font-weight:600}
 .xd-list li[data-share]{align-items:center}
 .xd .xd-list-acts select{width:auto;height:28px;font-size:12px}
-.xd-share-owner{color:var(--muted);font-size:12.5px;padding:0 6px}
+.xd-share-owner{color:var(--muted);font-size:12.5px;padding:0 8px;border:1px solid var(--n31);border-radius:6px;line-height:22px}
+/* The invite row reads as one control: the email takes the room, the role and Invite sit inside it. */
+.xd-share-add{display:flex;align-items:center;gap:4px;margin:0 0 6px;padding:4px;border:1px solid var(--n31);border-radius:10px;background:var(--n16)}
+.xd-share-add:focus-within{border-color:var(--n51)}
+.xd-share-email{display:flex;align-items:center;gap:8px;flex:1;min-width:0;padding-left:9px;color:var(--muted)}
+.xd-share-email svg{width:14px;height:14px;flex:none;opacity:.7}
+.xd .xd-share-add input[type=email]{flex:1;min-width:0;border:0;background:transparent;height:30px;font-size:13px}
+.xd-share-add .xd-share-role{margin-right:2px}
+.xd-share-add .xd-btn{height:30px}
+.xd-share-hint{margin:0 0 16px;font-size:12.5px;line-height:1.5;color:var(--muted)}
+.xd-share-h{display:flex;align-items:center;gap:7px;margin:0 0 6px;font-size:12px;font-weight:600;letter-spacing:.02em;text-transform:uppercase;color:var(--muted)}
+.xd-share-h em{font-style:normal;font-weight:500;color:var(--dim)}
+/* The role button is a menu, not a native select: it shows what the person can do and the meaning is in the menu. */
+.xd-share-role{display:inline-flex;align-items:center;gap:5px;height:28px;padding:0 8px;border:1px solid var(--n31);border-radius:7px;background:transparent;color:var(--text);font-size:12.5px;cursor:pointer;white-space:nowrap}
+.xd-share-role:hover{background:var(--n24);border-color:var(--n42)}
+.xd-share-role svg{width:12px;height:12px;opacity:.6}
+.xd-share-list{list-style:none;margin:0;padding:0;display:flex;flex-direction:column}
+.xd-share-row{display:flex;align-items:center;gap:10px;padding:8px 8px;border-radius:8px}
+.xd-share-row:hover{background:var(--n16)}
+.xd-share-row+.xd-share-row{border-top:1px solid var(--n20)}
+.xd-share-row[data-owner]{background:var(--n13);border-radius:8px}
+.xd-share-who{flex:1;min-width:0;display:flex;flex-direction:column;gap:1px}
+.xd-share-who b{font-size:13.5px;font-weight:500;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.xd-share-who b em{font-style:normal;margin-left:6px;font-size:11px;color:var(--muted)}
+.xd-share-who small{font-size:11.5px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.xd-share-face{flex:none;display:grid;place-items:center;width:30px;height:30px;border-radius:8px;background:var(--n26);color:var(--text);font-size:11.5px;font-weight:600}
 /* XENO Tasks — monochrome (DESIGN_SYSTEM: emphasis from lightness, never hue; no circles) */
 .tk-sp{flex:1}
 .tk-dim{color:var(--dim)}
