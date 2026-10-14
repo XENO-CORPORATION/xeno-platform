@@ -329,6 +329,6 @@
     const m = S.meter; if (!m) return '';
     return `Storage · ${size(m.usedBytes)}${m.allowanceBytes === null ? ' used' : ` of ${size(m.allowanceBytes)}`}`;   // plain text: the Library draws it as one of its own buttons
   };
-  document.addEventListener('click', (e) => { if (e.target.closest('[data-xst-open]')) { e.preventDefault(); if (window.XENO_ADDR?.go) window.XENO_ADDR.go('#/corpo/p/storage'); else window.location.assign('/workspace/corpo/apps/storage'); } });
+  document.addEventListener('click', (e) => { if (e.target.closest('[data-xst-open]')) { e.preventDefault(); if (window.XW?.go) window.XW.go('product', { product: 'storage', item: null }); /* in the current area — Overview stays Overview */ else if (window.XENO_ADDR?.go) window.XENO_ADDR.go('#/corpo/p/storage'); else window.location.assign('/workspace/corpo/apps/storage'); } });
   window.XENO_STORAGE = { chip, page, reload, state: () => ({ status: S.status, meter: S.meter, folders: S.folders.length, items: S.items.length }) };
 })();
