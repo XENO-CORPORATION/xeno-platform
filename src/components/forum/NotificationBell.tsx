@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { MarkLoader } from '../platform/MarkLoader';
 import { useNavigate } from 'react-router-dom';
-import { Bell, Check, CheckCircle2, MessageSquare, Loader2 } from 'lucide-react';
+import { Bell, Check, CheckCircle2, MessageSquare } from 'lucide-react';
 import * as api from './api';
 
 /**
@@ -179,7 +180,7 @@ const NotificationBell: React.FC = () => {
           <div className="max-h-[380px] overflow-y-auto">
             {loading && items === null ? (
               <div className="flex items-center justify-center py-8 text-[#57575e]">
-                <Loader2 className="h-4 w-4 animate-spin" />
+                <MarkLoader size={40} label="Loading notifications" />
               </div>
             ) : !items?.length ? (
               // Honest, not chirpy. There is no "You're all caught up! 🎉" here —

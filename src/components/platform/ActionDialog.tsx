@@ -1,6 +1,6 @@
 import React, { useEffect, useId, useRef, useState } from 'react';
-import { Button, Modal, TextInput } from '@xenosystem/elements-react';
-import { usePlatformTheme } from '../../platform/platformTheme';
+import { Button, TextInput } from '@xenosystem/elements-react';
+import ChatModal from '../playground/Chat/ChatModal';
 
 export interface ActionChoice { value: string; label: string }
 
@@ -25,7 +25,10 @@ interface ActionDialogProps {
   recovery?: { label: string; onRecover: () => void };
 }
 
-/** Business composition only; shared Elements owns appearance and dialog behavior. */
+/**
+ * Business composition only. The dialog itself is the platform's ONE dialog (ChatModal: the New task window's
+ * construction, owner 2026-10-14); Elements supplies the buttons and field.
+ */
 export default function ActionDialog({ title, detail, confirmLabel, destructive = false,
   fieldLabel, initialValue = '', choices, onConfirm, onClose, recovery }: ActionDialogProps) {
   const formId = useId();
@@ -36,7 +39,6 @@ export default function ActionDialog({ title, detail, confirmLabel, destructive 
   const [error, setError] = useState('');
   const inFlight = useRef(false);
   const mounted = useRef(true);
-  const { resolvedTheme, themeStyle } = usePlatformTheme();
   useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
   // A choice dialog is invalid until something is chosen; a text dialog until it
   // has non-empty content. A plain confirmation is never invalid.
@@ -64,9 +66,8 @@ export default function ActionDialog({ title, detail, confirmLabel, destructive 
     }
   };
 
-  return <div className="xeno chat-themed" data-theme={resolvedTheme} data-style="industrial" style={themeStyle}>
-    <Modal open title={title} onClose={close} dismissDisabled={pending} aria-busy={pending}
-      aria-describedby={detailId} footer={<>
+  return <ChatModal size="md" title={title} onClose={pending ? undefined : close}
+      dialogProps={{ 'aria-busy': pending, 'aria-describedby': detailId, 'data-action-dialog': '' }} footer={<>
         <Button onClick={close} disabled={pending}>Cancel</Button>
         {error && recovery
           ? <Button variant="primary" onClick={recovery.onRecover}>{recovery.label}</Button>
@@ -90,6 +91,5 @@ export default function ActionDialog({ title, detail, confirmLabel, destructive 
         {pending ? <p role="status">Waiting for the server to confirm this operation.</p> : null}
         {error ? <p role="alert">{error}{recovery ? ' Sign in again to check the outcome; revocation was not confirmed.' : ''}</p> : null}
       </form>
-    </Modal>
-  </div>;
+    </ChatModal>;
 }

@@ -111,7 +111,7 @@ function page(kind) {
     React.createElement(Location));
 }
 const button = (name, root = document) => [...root.querySelectorAll('button')].find(node => node.textContent.trim() === name);
-const dialog = () => document.querySelector('.xeno-modal[role="dialog"]');
+const dialog = () => document.querySelector('[data-chat-modal][role="dialog"]');
 async function click(node) { assert.ok(node); await act(async () => { node.focus(); node.click(); }); }
 async function input(node, value) {
   await act(async () => {
@@ -156,7 +156,7 @@ test('pending operation blocks duplicate submit and every dismissal; rejected op
   assert.equal(document.activeElement, dialog());
   assert.ok([...dialog().querySelectorAll('button')].every(node => node.disabled));
   await key(dialog(), 'Escape');
-  const scrim = document.querySelector('.xeno-modal-overlay');
+  const scrim = document.querySelector('[data-chat-modal-scrim]');
   await act(async () => { scrim.dispatchEvent(new dom.window.MouseEvent('mousedown', { bubbles: true })); scrim.click(); });
   assert.equal(closes, 0);
   await act(async () => finish.reject(new Error('Retryable fixture failure')));

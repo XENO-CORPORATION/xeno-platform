@@ -145,3 +145,17 @@
 }
 .chat-modal-body input::placeholder, .chat-modal-body textarea::placeholder { color: var(--chat-muted); opacity: .8; }
 .chat-modal-footer button { min-height: 34px; border-radius: 6px; }
+
+/* ONE DIALOG DESIGN (owner, 2026-10-14) — the New task window's construction, the same as the workspace's
+   dialogs (prototypes/xeno-workspace/modals.css): a single panel surface, hairline rules between header, body
+   and footer, Cancel beside the action on the right. Overrides the plate construction above. */
+.chat-modal { gap: 0; padding: 0; background: var(--chat-surface); border-radius: 12px; overflow: hidden; }
+.chat-modal > .chat-modal-header, .chat-modal > .chat-modal-body, .chat-modal > .chat-modal-footer,
+.chat-modal > :first-child, .chat-modal > :last-child { border-radius: 0; background: transparent; }
+.chat-modal-header { min-height: 52px; padding: 10px 12px 10px 20px; border-bottom: 1px solid color-mix(in srgb, var(--chat-text) 9%, transparent); }
+.chat-modal-title { font-size: 14px; }
+.chat-modal-body { padding: 20px; }
+.chat-modal-body-bare { padding: 0; }
+.chat-modal-footer { min-height: 56px; padding: 12px 12px 12px 20px; border-top: 1px solid color-mix(in srgb, var(--chat-text) 9%, transparent); }
+.chat-modal-footer button { min-height: 32px; font-size: 13px; }
+.chat-modal-btn { height: 32px; }

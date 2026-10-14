@@ -84,7 +84,7 @@ test('ChatModal portals to document.body, always, and paints no blur or shadow',
   assert.match(modalSrc, /createPortal\(/, 'the primitive must createPortal');
   assert.match(modalSrc, /document\.body,\s*\n?\s*\)/, 'the portal target must be document.body');
   assert.doesNotMatch(modalSrc + modalCss, /backdrop-blur|backdrop-filter|backdropFilter/, 'no backdrop blur (DESIGN_SYSTEM: plain overlay)');
-  assert.doesNotMatch(modalCss.replace(/box-shadow:\s*none;/g, ''), /box-shadow/, 'no shadow on a modal');
+  assert.doesNotMatch(modalCss.replace(/box-shadow:\s*none(\s*!important)?;/g, ''), /box-shadow/, 'no shadow on a modal');
   assert.match(modalCss, /\.chat-modal-scrim\s*\{[^}]*position:\s*fixed;[^}]*inset:\s*0;/, 'the scrim is fixed, inset 0');
   assert.doesNotMatch(modalCss, /\.chat-modal-scrim\s*\{[^}]*\bleft:/, 'the scrim has no left offset');
   assert.match(modalSrc, /role="dialog"/);
