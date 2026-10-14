@@ -8,10 +8,11 @@ import { useResolvedPlatformTheme } from '../../platform/platformTheme';
 export const ROUTE_LOADING_DELAY_MS = 180;
 
 /**
- * What a route shows while its code arrives: a thin indeterminate bar across the TOP of the content
- * area and nothing else — the way GitHub, YouTube and Linear mark a route change.
+ * What a route shows while its code arrives: the ONE XENO loader (the mark, MarkLoader), in the page's
+ * theme and nothing else — the same loader the workspace and every in-app wait show, so a hand-off
+ * between them is invisible (owner, 2026-10-14). It briefly was a thin top bar; before that, a card.
  *
- * 🔴 It used to be `<Card className="xeno">` holding `<ProgressBar label="Loading page">`. Two
+ * 🔴 It used to be a Card holding a labelled ProgressBar. Two
  * defects, both reported 2026-09-25:
  *  - it was DARK IN LIGHT MODE. A bare `.xeno` is the elements library's dark default; light is
  *    `.xeno[data-theme='light']`, and nothing here set it. Every other element surface on the site

@@ -42,14 +42,15 @@ test('all statically declared app/router path strings use the installed Express 
 
 test('migrated route patterns preserve captures, optional versions and target restrictions', async () => {
   const app = express();
-  const select = (file, predicate) => {
-    const found = routes.filter(route => route.file.endsWith(file) && predicate(String(route.pattern)));
+  // The method is part of the match: one pattern can serve POST and DELETE (a vote and its removal).
+  const select = (file, predicate, method = null) => {
+    const found = routes.filter(route => route.file.endsWith(file) && predicate(String(route.pattern)) && (!method || route.method === method));
     assert.equal(found.length, 1, file);
     return found[0];
   };
   for (const [prefix, route] of [
     ['/browser', select('browserRoutes.js', p => p === String(/^\/(.*)$/))],
-    ['/forum', select('forumRoutes.js', p => p.includes('targetType') && p.includes('vote'))],
+    ['/forum', select('forumRoutes.js', p => p.includes('targetType') && p.includes('vote'), 'post')],
     ['/forum', select('forumRoutes.js', p => p.includes('targetType') && p.includes('flag'))],
     ['/products', select('productDownloadRoutes.js', p => p.includes(':slug/download/:os'))],
   ]) {

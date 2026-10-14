@@ -1,5 +1,9 @@
 /**
- * The route loader follows the page's theme and reads as a loading BAR, not a block in the page.
+ * The route loader follows the page's theme and is the ONE XENO loader — the mark — not a card.
+ *
+ * 2026-10-14 (owner: "one unified XENO loader, called where needed"): the 2px bar this gate first
+ * pinned was replaced by MarkLoader, the same loader the workspace and every in-app wait use. The gate
+ * now asserts that, and still asserts what the bar fixed: the theme is followed, nothing paints a block.
  *
  * Reported 2026-09-25: every lazy route (the chat itself included) showed a dark card captioned
  * `Loading page —` — dark on a light page, because a bare `.xeno` is the elements library's DARK
@@ -33,14 +37,12 @@ const css = cssFiles.map((f) => readFileSync(join(dist, f), 'utf8')).join('\n');
 const loader = (theme) => `
   <div class="xeno chat-themed chat-theme-${theme} route-loading" data-theme="${theme === 'light' ? 'light' : 'dark'}"
     role="status" aria-busy="true" aria-live="polite" data-shown="true">
-    <div class="xeno-progressbar">
-      <span role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-label="Progress" class="xeno-progressbar-track" data-state="indeterminate"><span class="xeno-progressbar-fill"></span></span>
-    </div>
+    <div role="img" aria-label="Loading page" data-mark-loader="" class="xeno-mark-loader" style="position:relative;width:88px;height:88px"><canvas aria-hidden="true"></canvas></div>
     <span class="sr-only">Loading page</span>
   </div>`;
 
 // Each loader sits on a page of its own theme, as it does in the app.
-const page = (id, theme, canvas) => `<section id="${id}" style="width:720px;height:120px;background:${canvas}">${loader(theme)}</section>`;
+const page = (id, theme, canvas) => `<section id="${id}" style="width:720px;height:600px;background:${canvas}">${loader(theme)}</section>`;
 const html = `<!doctype html><html><head><meta charset="utf-8"><style>${css}</style></head><body style="margin:0">
 ${page('light', 'light', '#ffffff')}
 ${page('dim', 'dim', '#3b4048')}
@@ -76,19 +78,18 @@ try {
 
   const read = (id) => tab.evaluate((sectionId) => {
     const root = document.getElementById(sectionId).querySelector('.route-loading');
-    const track = root.querySelector('.xeno-progressbar-track');
-    const fill = root.querySelector('.xeno-progressbar-fill');
+    const mark = root.querySelector('[data-mark-loader]');
+    const canvas = mark.querySelector('canvas');
     const label = root.querySelector('.sr-only');
     const cs = (el) => getComputedStyle(el);
     return {
-      height: root.getBoundingClientRect().height,
       background: cs(root).backgroundColor,
-      trackHeight: track.getBoundingClientRect().height,
-      fill: cs(fill).backgroundColor,
-      fillAnimated: cs(fill).animationName !== 'none',
+      // MarkLoader paints in its canvas's computed colour, so this IS the ink it draws with
+      fill: cs(canvas).color,
+      markSize: mark.getBoundingClientRect().width,
       labelHidden: label.getBoundingClientRect().width <= 1 && label.getBoundingClientRect().height <= 1,
       card: !!root.querySelector('.xeno-card'),
-      caption: !!root.querySelector('.xeno-progressbar-header'),
+      bar: !!root.querySelector('.xeno-progressbar'),
     };
   }, id);
 
@@ -96,21 +97,20 @@ try {
   const dark = await read('dark');
   const dim = await read('dim');
 
-  check('LIGHT page: the bar is DARK ink, not the library’s dark-default white-on-black', luminance(light.fill) < 0.2, `fill=${light.fill}`);
-  check('DARK page: the bar is LIGHT ink', luminance(dark.fill) > 0.6, `fill=${dark.fill}`);
-  check('DIM page: the bar is light ink on the dim ground', luminance(dim.fill) > 0.4, `fill=${dim.fill}`);
+  check('LIGHT page: the mark is DARK ink, not the library’s dark-default white-on-black', luminance(light.fill) < 0.2, `ink=${light.fill}`);
+  check('DARK page: the mark is LIGHT ink', luminance(dark.fill) > 0.6, `ink=${dark.fill}`);
+  check('DIM page: the mark is light ink on the dim ground', luminance(dim.fill) > 0.4, `ink=${dim.fill}`);
   for (const [name, r] of [['light', light], ['dim', dim], ['dark', dark]]) {
     check(`${name}: no block — the loader paints no background of its own`, r.background === 'rgba(0, 0, 0, 0)' || r.background === 'transparent', `background=${r.background}`);
-    check(`${name}: it is a bar — 2px tall, the whole loader no taller than that`, Math.abs(r.trackHeight - 2) < 0.5 && r.height <= 2.5, `track=${r.trackHeight}px loader=${r.height}px`);
-    check(`${name}: indeterminate — the fill sweeps`, r.fillAnimated);
-    check(`${name}: no card and no visible "Loading page —" caption; the label is for assistive tech only`, !r.card && !r.caption && r.labelHidden);
+    check(`${name}: it is the XENO mark at its page size, not a bar`, Math.abs(r.markSize - 88) < 0.5 && !r.bar, `mark=${r.markSize}px bar=${r.bar}`);
+    check(`${name}: no card; the label is for assistive tech only`, !r.card && r.labelHidden);
   }
 
   // the markup above must still be what the component renders
   const source = readFileSync('src/components/platform/lazyRoute.tsx', 'utf8');
-  check('lazyRoute.tsx still renders the theme by class + data-theme, with no labelled ProgressBar',
+  check('lazyRoute.tsx still renders the theme by class + data-theme, with the ONE loader (MarkLoader)',
     /chat-theme-\$\{resolvedTheme\}/.test(source) && /route-loading/.test(source) && /data-theme=\{/.test(source)
-      && /<ProgressBar value=\{null\} \/>/.test(source) && !/<Card[^>]*role="status"/.test(source));
+      && /<MarkLoader size=\{88\}/.test(source) && !/<ProgressBar/.test(source) && !/<Card[^>]*role="status"/.test(source));
 } finally {
   await browser.close();
 }

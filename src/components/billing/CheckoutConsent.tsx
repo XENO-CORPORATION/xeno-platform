@@ -21,7 +21,8 @@
  * with it.
  */
 import React from 'react';
-import { Loader2 } from 'lucide-react';
+import ChatModal from '../playground/Chat/ChatModal';
+import { MarkLoader } from '../platform/MarkLoader';
 import { getConsentText, recordConsent } from '../../services/billingService';
 
 interface Props {
@@ -69,16 +70,34 @@ const CheckoutConsent: React.FC<Props> = ({ itemId, planLabel, priceLabel, onCan
   const unavailable = lines !== null && lines.length === 0;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 px-6" role="dialog" aria-modal="true">
-      <div className="w-full max-w-[480px] rounded-[14px] border border-white/[0.09] bg-[#0d0d0d] p-7 text-[#ece7df]">
-        <h2 className="text-[17px] font-semibold tracking-[-0.01em]">Before you pay</h2>
-        <p className="mt-1.5 text-[13px] text-[#948d83]">
+    // The platform's ONE dialog (ChatModal, owner 2026-10-14). Only the chrome moved; every word is unchanged.
+    <ChatModal
+      size="md"
+      title="Before you pay"
+      onClose={busy ? undefined : onCancel}
+      dialogProps={{ 'data-checkout-consent': '' }}
+      footer={<>
+        <button type="button" className="chat-modal-btn" onClick={onCancel}>
+          Cancel
+        </button>
+        <button
+          type="button"
+          onClick={submit}
+          disabled={!ready}
+          className="chat-modal-btn"
+          style={{ background: 'var(--chat-text)', color: 'var(--chat-canvas)', borderColor: 'var(--chat-text)', fontWeight: 600, opacity: ready ? 1 : 0.4 }}
+        >
+          {busy ? 'Continuing…' : 'Continue to payment'}
+        </button>
+      </>}
+    >
+        <p className="text-[13px] text-[#948d83]">
           {planLabel} · {priceLabel}
         </p>
 
         {lines === null && (
-          <div className="mt-6 flex items-center gap-2 text-[13px] text-[#948d83]">
-            <Loader2 className="h-4 w-4 animate-spin" /> Loading…
+          <div className="mt-6 flex justify-center" role="status">
+            <MarkLoader size={48} label="Loading…" />
           </div>
         )}
 
@@ -128,32 +147,13 @@ const CheckoutConsent: React.FC<Props> = ({ itemId, planLabel, priceLabel, onCan
           </p>
         )}
 
-        <div className="mt-7 flex gap-3">
-          <button
-            type="button"
-            onClick={onCancel}
-            className="flex-1 rounded-[8px] border border-white/[0.12] px-4 py-2.5 text-[13.5px] font-semibold text-[#ece7df] transition-colors hover:border-white/[0.22]"
-          >
-            Cancel
-          </button>
-          <button
-            type="button"
-            onClick={submit}
-            disabled={!ready}
-            className="flex-1 rounded-[8px] bg-white px-4 py-2.5 text-[13.5px] font-semibold text-black transition-colors hover:bg-white/90 disabled:cursor-not-allowed disabled:opacity-40"
-          >
-            {busy ? 'Continuing…' : 'Continue to payment'}
-          </button>
-        </div>
-
         {/* Stated plainly rather than buried: someone who does NOT want to waive
             the withdrawal right is entitled to know that is a real option. */}
         <p className="mt-4 text-[11.5px] leading-[1.5] text-[#69635b]">
           Prefer to keep your 14-day withdrawal right? Email support instead of buying here and
           we will arrange delayed access.
         </p>
-      </div>
-    </div>
+    </ChatModal>
   );
 };
 

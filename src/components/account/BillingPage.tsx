@@ -1,4 +1,5 @@
 import AccountUsageCredits from './AccountUsageCredits';
+import { MarkLoader } from '../platform/MarkLoader';
 import React, { useEffect, useState, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Check, X, Loader2, Sparkles, ExternalLink, Coins, Crown } from 'lucide-react';
@@ -132,7 +133,7 @@ const BillingPage: React.FC = () => {
   if (loading) {
     return (
       <div className="xeno-platform-page xeno-billing-loading">
-        <Loader2 className="w-5 h-5 animate-spin mr-2" /> Loading your plan…
+        <MarkLoader size={72} label="Loading your plan" />
       </div>
     );
   }

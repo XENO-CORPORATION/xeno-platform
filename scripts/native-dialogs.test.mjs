@@ -179,7 +179,7 @@ test('ActionDialog is the sanctioned replacement and covers both decision shapes
   const dialog = fs.readFileSync(path.join(SRC, 'components/platform/ActionDialog.tsx'), 'utf8');
   assert.match(dialog, /fieldLabel/, 'a text answer — the prompt() replacement');
   assert.match(dialog, /choices/, 'a closed set of answers — a radio group, not a native select');
-  assert.match(dialog, /dismissDisabled=\{pending\}/, 'it cannot be dismissed mid-request');
+  assert.match(dialog, /onClose=\{pending \? undefined : close\}/, 'it cannot be dismissed mid-request');
   assert.doesNotMatch(code(dialog), /(^|[^.\w$])(?:window\s*\.\s*)?(confirm|prompt|alert)\s*\(/,
     'the replacement must not itself reach for a browser dialog');
 });

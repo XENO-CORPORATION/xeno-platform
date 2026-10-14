@@ -17,6 +17,8 @@ test('fresh project detail resolves by ID even when absent from the list page', 
       '@xenosystem/elements/elements': resolve(root, 'packages/elements/src/elements'),
       '@xenosystem/generate': resolve(root, 'packages/generate/src/index.ts'),
       '@xenosystem/elements': resolve(root, 'packages/elements/src/index.ts') },
+    // the shared dialog (ChatModal) imports its stylesheet; this harness checks behaviour, not paint
+    loader: { '.css': 'empty' },
     plugins: [{ name: 'fixture-account-context', setup(b) {
       if (process.env.PROJECT_DETAIL_MUTATION === 'omit-read') b.onLoad({ filter: /[\\/]ProjectsPage\.tsx$/ }, async args => {
         const source = await readFile(args.path, 'utf8');

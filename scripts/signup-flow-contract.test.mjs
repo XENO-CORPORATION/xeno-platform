@@ -87,7 +87,8 @@ test('the marketing header reflects whether you are signed in', () => {
    */
   assert.match(HEADER, /useAuth\(\)/, 'the header must read auth state');
   assert.match(HEADER, /isAuthenticated \?/, 'and branch on it');
-  assert.match(HEADER, /to="\/overview"/, 'a signed-in visitor gets a way into the workspace');
+  // the workspace is the signed-in home at /workspace (old /overview addresses redirect, 2e76800d)
+  assert.match(HEADER, /to="\/workspace"/, 'a signed-in visitor gets a way into the workspace');
 
   /*
    * isLoading is not optional polish. The session resolves asynchronously, so

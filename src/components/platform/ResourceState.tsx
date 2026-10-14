@@ -1,5 +1,6 @@
 import React from 'react';
-import { AlertCircle, Inbox, Loader2 } from 'lucide-react';
+import { AlertCircle, Inbox } from 'lucide-react';
+import { MarkLoader } from './MarkLoader';
 
 interface Props {
   kind: 'loading' | 'empty' | 'error' | 'unavailable';
@@ -23,11 +24,12 @@ const ResourcePreview: React.FC<{ label: string }> = ({ label }) => <div classNa
 </div>;
 
 const ResourceState: React.FC<Props> = ({ kind, title, detail, actionLabel, onRetry, secondaryActionLabel, onSecondaryAction, layout = 'inline', previewLabel = 'XENO / Platform' }) => {
-  const Icon = kind === 'loading' ? Loader2 : kind === 'empty' ? Inbox : AlertCircle;
+  const Icon = kind === 'empty' ? Inbox : AlertCircle;
   const fallback = kind === 'loading' ? 'Loading confirmed data' : kind === 'empty' ? 'Nothing here yet' : kind === 'unavailable' ? 'Capability unavailable' : 'Could not load this resource';
   return <div className={`xeno-resource-state is-${kind} is-${layout}`} role={kind === 'error' ? 'alert' : 'status'}>
     <div className="xeno-resource-copy">
-      <span className="xeno-resource-icon"><Icon size={20} className={kind === 'loading' ? 'xeno-spin' : ''} /></span>
+      {/* loading is the ONE XENO loader (the mark), never a separate spinner */}
+      {kind === 'loading' ? <MarkLoader size={56} label={title || fallback} /> : <span className="xeno-resource-icon"><Icon size={20} /></span>}
       <strong>{title || fallback}</strong>
       {detail ? <span>{detail}</span> : null}
       {onRetry || onSecondaryAction ? <div className="xeno-resource-actions">
