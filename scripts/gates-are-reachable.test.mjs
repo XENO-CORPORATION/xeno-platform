@@ -83,6 +83,29 @@ test('no *.test.mjs is ORPHANED — on disk but unreachable from npm test', () =
     .readdirSync(path.join(ROOT, 'scripts'))
     .filter((f) => f.endsWith('.test.mjs'));
 
+  /* The second runner: ci-local's `proofs` stage runs every scripts/*.test.mjs that reads one of its
+   * database fixtures, and counts a skip as a failure. Derived here by the SAME rule, from the same text
+   * (DB_PROOF_FIXTURES and the first `process.env.*TEST_DATABASE_URL` a suite reads), so a suite counts
+   * as reached exactly when that stage would run it. Read as text: importing ci-local starts Docker. */
+  const ciLocal = fs.readFileSync(path.join(ROOT, 'scripts/ci-local.mjs'), 'utf8').replace(/\r\n/g, '\n');
+  const fixtures = ciLocal.match(/const DB_PROOF_FIXTURES = \{([\s\S]*?)\n\};/);
+  assert.ok(fixtures, 'DB_PROOF_FIXTURES is no longer declared where this gate reads it');
+  const fixtureVars = new Set([...fixtures[1].matchAll(/^\s*([A-Z_]*TEST_DATABASE_URL):/gm)].map((m) => m[1]));
+  const external = ciLocal.match(/const EXTERNAL_SERVICE_SUITES = \{([\s\S]*?)\n\};/);
+  const excluded = new Set(external ? [...external[1].matchAll(/'([^']+\.test\.mjs)'/g)].map((m) => m[1]) : []);
+  for (const f of onDisk) {
+    const first = fs.readFileSync(path.join(ROOT, 'scripts', f), 'utf8').match(/process\.env\.([A-Z_]*TEST_DATABASE_URL)/);
+    if (first && fixtureVars.has(first[1]) && !excluded.has(f)) reached.add(f);
+  }
+
+  // The third runner: ci-local's `browser` stage (`--only=browser`) runs exactly the suites BROWSER_SUITES names.
+  const browser = ciLocal.match(/const BROWSER_SUITES = \[([\s\S]*?)\];/);
+  assert.ok(browser, 'BROWSER_SUITES is no longer declared where this gate reads it');
+  for (const m of browser[1].matchAll(/'([^']+\.test\.mjs)'/g)) {
+    assert.ok(onDisk.includes(m[1]), `BROWSER_SUITES names ${m[1]}, which is not on disk`);
+    reached.add(m[1]);
+  }
+
   const orphans = onDisk.filter((f) => !reached.has(f));
 
   /* Deliberately a hard failure with no allowlist.

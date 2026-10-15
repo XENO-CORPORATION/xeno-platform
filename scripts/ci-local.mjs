@@ -48,7 +48,7 @@
  *
  * Usage:
  *   node scripts/ci-local.mjs                 # everything
- *   node scripts/ci-local.mjs --only=gates    # gates | core | money | build | proofs | cross
+ *   node scripts/ci-local.mjs --only=gates    # gates | core | money | build | proofs | cross | browser
  *   node scripts/ci-local.mjs --check-drift   # only verify this matches the workflows
  *   node scripts/ci-local.mjs --keep-db       # leave the container up for debugging
  */
@@ -184,6 +184,14 @@ const CI_ENV = {
 };
 
 const PG = { container: 'xeno-ci-local-pg', port: '55995', password: 'test', image: 'pgvector/pgvector:0.8.6-pg15-bookworm' };
+
+/* Suites that drive the REAL app in a real browser against the dev server, with the API answered by a fixture. They
+ * take minutes, so they run only when asked (`--only=browser`), never in a default run -- but they are named here so
+ * gates-are-reachable.test.mjs counts them as reached, and so the one runner that executes them is this file. */
+const BROWSER_SUITES = [
+  'chat-project-context-browser.test.mjs',
+  'studio-feed-browser.test.mjs',
+];
 
 const argv = process.argv.slice(2);
 const has = (f) => argv.includes(f);
@@ -509,6 +517,15 @@ async function main() {
         const usermsg = run('npm', ['run', 'test:chat-user-message-rendered'], { quiet: true });
         record('build: a long user message collapses in the page theme (real browser, built CSS)', usermsg.code === 0);
         ok = ok && usermsg.code === 0;
+      }
+    }
+
+    if (only === 'browser') {
+      for (const file of BROWSER_SUITES) {
+        const { code, out } = run('node', [join('scripts', file)], { quiet: true });
+        if (code !== 0) log(out.split('\n').slice(-25).join('\n'));
+        record(`browser: ${file}`, code === 0);
+        ok = ok && code === 0;
       }
     }
 

@@ -98,8 +98,12 @@ export async function authorizeRead(db, actorId, owner) {
 /** Workspace authority gates in sorted order, then those rows -- the declared lock order. */
 async function lockWorkspaces(db, ids) {
   const sorted = [...new Set(ids)].sort();
-  for (const id of sorted) await lockWorkspaceAuthority(db, id);
   if (!sorted.length) return new Map();
+  if (sorted.length === 1) await lockWorkspaceAuthority(db, sorted[0]);
+  // NFR-04: the same advisory locks lockWorkspaceAuthority takes, in the same sorted order, in ONE round trip
+  // (100 workspaces was 100 sequential queries). The ORDER BY inside the aggregate fixes acquisition order.
+  else await db.query(`SELECT count(pg_advisory_xact_lock(hashtextextended(k, 0)))
+      FROM (SELECT 'workspace-authority-operations:' || lower(x) AS k FROM unnest($1::text[]) AS x ORDER BY lower(x)) s`, [sorted]);
   const { rows } = await db.query('SELECT id,status FROM workspaces WHERE id=ANY($1::uuid[]) ORDER BY id FOR SHARE', [sorted]);
   return new Map(rows.map(row => [row.id, row.status]));
 }
@@ -134,6 +138,14 @@ async function scopeReadable(db, principal, owner) {
   const verdict = await check(db, { object: `${owner.type}:${owner.id}`, subject: `${subjectType}:${principal.id}`,
     relation: owner.type === 'user' ? 'workforce_resource_reader' : 'viewer' });
   return verdict.allowed && ['direct', ...(principal.kind === 'human' ? ['role-hierarchy'] : [])].includes(verdict.via);
+}
+
+/** scopeReadable's verdict for a workspace from the relations held on it directly (see authorizeGlobal). Must agree
+ * with check(): `viewer` held directly, or for a human a role ranked at or above viewer. */
+const VIEWER_OR_ABOVE = new Set(['viewer', 'client', 'reviewer', 'editor', 'admin', 'owner']);
+function readsDirectly(principal, relations) {
+  if (relations.includes('viewer')) return true;
+  return principal.kind === 'human' && relations.some((r) => VIEWER_OR_ABOVE.has(r));
 }
 
 /** DIV-08, the VISIBILITY half: "a principal acting in `creative` sees creative surfaces". Which of this
@@ -174,10 +186,20 @@ async function authorizeGlobal(db, actorId) {
   const principal = await lockReader(db, actorId, []);
   const personalId = principal.kind === 'human' ? principal.id : principal.owner.id;
   const users = (await scopeReadable(db, principal, { type: 'user', id: personalId })) ? [personalId] : [];
-  const workspaces = [];
-  for (const [id, status] of [...statuses].sort(([a], [b]) => a.localeCompare(b))) {
-    if (status === 'active' && await scopeReadable(db, principal, { type: 'workspace', id })) workspaces.push(id);
+  // The workspace half of scopeReadable, for every candidate at once: it admits only a DIRECT relation (or, for a
+  // human, a role at or above viewer held directly), never one inherited through a parent -- so the caller's own
+  // tuples on each workspace decide it. Read under FOR SHARE as scopeReadable does, in one query instead of two per
+  // workspace (NFR-04: the global view did ~300 round trips at 100 workspaces).
+  const active = [...statuses].filter(([, status]) => status === 'active').map(([id]) => id).sort();
+  const subjectType = principal.kind === 'agent' ? 'agent' : 'user';
+  const held = new Map();
+  if (active.length) {
+    const { rows } = await db.query(`SELECT lower(object_id) AS id, relation FROM relationship_tuples
+      WHERE object_type='workspace' AND lower(object_id)=ANY($1::text[]) AND subject_type=$2 AND subject_id=$3
+      ORDER BY lower(object_id) FOR SHARE`, [active, subjectType, principal.id]);
+    for (const r of rows) held.set(r.id, [...(held.get(r.id) || []), r.relation]);
   }
+  const workspaces = active.filter((id) => readsDirectly(principal, held.get(id) || []));
   return { principal, users, workspaces };
 }
 
