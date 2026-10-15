@@ -378,6 +378,9 @@ html[data-panel="open"] .topbar .crumbs{display:flex}   /* the header always sho
 .pg:not(:has(> .pg-head)) > .pg-bar:first-child,.pg > .pg-bar:first-child{margin-top:0}
 .pg:has(> .pg-bar:first-child){padding-top:16px}
 .mfoot{justify-content:space-between}
+/* like the header: the last control sits 8 px from the right edge, (40 − 24) / 2 = its top and bottom gap; the left
+   text starts where that control's text ends on the right (8 px edge + its 8 px padding) */
+.mfoot{padding:0 8px 0 16px}
 .sb-l,.sb-r{display:flex;align-items:center;gap:10px;min-width:0}
 .sb-l{overflow:hidden}
 .sb-fresh{display:inline-flex;align-items:center;gap:7px;white-space:nowrap;color:var(--muted)}
