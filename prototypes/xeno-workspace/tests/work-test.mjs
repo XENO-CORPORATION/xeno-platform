@@ -336,6 +336,10 @@ try {
   p.evaluate(() => { window.XA.removeMember('pending@example.test'); }); await confirmLast(); pv = await people();
   ok(db.calls.some((x) => x.m === 'DELETE' && /\/invites\/i-1$/.test(x.p)) && !pv.rows.some((r) => r.startsWith('pending@')), 'removing a pending invite cancels the invite');
 
+  await goProjects(null); await wait(500);
+  const sel = '#panel > .pv .pbody .row[data-item]:not(:has(.more))';
+  const rowMeta = await p.$(sel + ' .meta');
+  if (rowMeta) { const bx = await p.evaluate((q) => { const r = [...document.querySelectorAll(q)].find((x) => x.offsetParent && x.querySelector('.meta')?.textContent.trim()); if (!r) return null; r.dataset.hoverMe = '1'; const b = r.getBoundingClientRect(); return { x: b.left + b.width / 2, y: b.top + b.height / 2 }; }, sel); if (bx) await p.mouse.move(bx.x, bx.y); await wait(150); ok(await p.$eval('[data-hover-me] .meta', (m) => getComputedStyle(m).display !== 'none' && m.textContent.trim().length > 0), 'hovering a sidebar row without a ⋯ button keeps its details (they no longer vanish)'); }
   // switching between projects in the sidebar must not redraw the sidebar or the rail (owner, 2026-10-15)
   await goProjects('Website (Personal)'); await wait(600);
   await p.evaluate(() => { window.__pv = document.querySelector('#panel > .pv'); window.__rail = document.querySelector('#rail .rmid'); });
