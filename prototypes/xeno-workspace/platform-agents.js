@@ -23,7 +23,7 @@
   const why = (r, d) => (r && r.d && (r.d.error || r.d.message)) || d;
   const ID = /^agt_[0-9a-f]{32}$/;
   const ENDPOINT = () => `${location.origin}/api/mcp`;
-  const S = { key: null, status: 'idle', list: [], one: null, projects: [], services: [], minted: null, busy: false, copied: '', tab: 'claude', q: '', choices: [], divisions: [], canManageDivisions: false, editingInstr: false, offers: [], models: [], runs: [], runsFor: null };
+  const S = { key: null, status: 'idle', list: [], one: null, projects: [], services: [], minted: null, busy: false, copied: '', tab: 'claude', q: '', choices: [], divisions: [], canManageDivisions: false, editingInstr: false, offers: [], models: [], runs: [], runsFor: null, moves: [], access: null, transfers: [], members: [] };
   const EFFORTS = ['minimal', 'low', 'medium', 'high', 'max'];
   const EFFORT_LABEL = { minimal: 'Minimal', low: 'Low', medium: 'Medium', high: 'High', max: 'Max' };
   const rtSet = (rt) => !!(rt && (rt.model || rt.effort || (rt.tools && ((rt.tools.allow || []).length || (rt.tools.deny || []).length))));
@@ -43,6 +43,7 @@
   };
   /** live (used in the last 5 minutes) · ready (has a credential) · new (never connected) */
   const state = (a) => {
+    if (a.paused === 'needs_owner') return ['off', 'Paused — needs an owner'];
     const last = a.connections.map((c) => c.lastUsedAt).filter(Boolean).sort().pop();
     if (last && Date.now() - new Date(last).getTime() < 5 * 60e3) return ['live', 'Working now'];
     if (last) return ['idle', `Last worked ${ago(last).toLowerCase()}`];
@@ -61,6 +62,7 @@
     if (!S.models.length) api('GET', '/api/models').then((m) => { if (m.ok && m.d) { const g = m.d.companies || m.d.models || m.d; const ids = []; for (const v of Object.values(g || {})) if (Array.isArray(v)) for (const x of v) if (x && x.id) ids.push(x.id); S.models = ids; } }).catch(() => {});
     const dv0 = await api('GET', '/api/divisions'); if (dv0.ok) { S.divisions = dv0.d.divisions || []; S.canManageDivisions = !!dv0.d.canManage; }
     const ib = await api('GET', '/api/agents/lends/inbox'); S.offers = ib.ok ? ib.d.offers || [] : [];
+    const mv = await api('GET', '/api/agents/transfers/inbox'); S.moves = mv.ok ? mv.d.transfers || [] : [];
     if (sv && sv.ok) S.services = sv.d.services || [];
     const id = at.startsWith('one:') ? at.slice(4) : null;
     if (id) {
@@ -72,10 +74,92 @@
       const [ch, dv] = await Promise.all([api('GET', `/api/agents/${id}/project-choices`), api('GET', '/api/divisions' + (S.one.workspace ? `?workspace=${S.one.workspace.id}` : ''))]);
       if (S.key !== at) return;
       S.choices = ch.ok ? ch.d.projects || [] : []; S.divisions = dv.ok ? dv.d.divisions || [] : []; S.canManageDivisions = !!(dv.ok && dv.d.canManage);
-      loadRuns(id);
+      loadRuns(id); loadAccess(id);
     }
     S.status = 'ready'; paint();
   }
+  // ownership: who owns it, who answers for it, who may do what (agentAccess.js)
+  async function loadAccess(id) {
+    const a = S.one; S.access = null; S.transfers = []; S.members = [];
+    if (!a || !a.rights || !a.rights.manage) return;
+    const [ac, tr] = await Promise.all([api('GET', `/api/agents/${id}/access`), api('GET', `/api/agents/${id}/transfers`)]);
+    if (!S.one || S.one.id !== id) return;
+    S.access = ac.ok ? ac.d.access : null; S.transfers = tr.ok ? tr.d.transfers || [] : [];
+    if (a.owner && a.owner.kind === 'company') { const m = await api('GET', `/api/workspaces/${a.owner.workspaceId}/members`); S.members = m.ok ? (m.d.members || []) : []; }
+    paint();
+  }
+  const memberId = (m) => String(m.user_id || m.userId || m.id);
+  const memberName = (m) => m.display_name || m.displayName || m.username || 'Member';
+  // every move and takeover asks the browser to confirm it is you first (account confirmation, 10 minutes)
+  const sure = (why) => (window.XENO_ACCOUNT && window.XENO_ACCOUNT.confirm ? window.XENO_ACCOUNT.confirm(why) : Promise.resolve(true));
+  async function moveTo() {
+    const a = S.one; if (!a) return;
+    const ws = await api('GET', '/api/workspaces');
+    const opts = ((ws.ok && ws.d.workspaces) || []).filter((w) => w.workspace_type !== 'personal' && String(w.id) !== (a.owner && a.owner.workspaceId)).map((w) => [String(w.id), w.name, 'Its admins decide whether to take it']);
+    if (!opts.length) return toast('You are in no other company workspace to move it to');
+    const v = await D().form({ title: `Move ${a.name} to a company`, sub: 'The company will own it, and it outlives whoever made it. Its admins see everything it uses before they accept. Until then nothing changes.', submit: 'Offer it', size: 'sm', fields: [
+      { id: 'ws', label: 'To', type: 'choice', cols: 1, required: true, options: opts }] });
+    if (!v) return;
+    if (!await sure(`Moving ${a.name} gives it to a company.`)) return;
+    const r = await call('POST', `/api/agents/${a.id}/transfers`, { workspaceId: v.ws }, 'It could not be offered.');
+    if (r) { toast('Offered. Its admins decide.'); loadAccess(a.id); }
+  }
+  async function takeOver(toUserId) {
+    const a = S.one; if (!a) return;
+    const who = toUserId ? S.members.find((m) => memberId(m) === toUserId) : null;
+    const v = await D().form({ title: toUserId ? `Hand ${a.name} to ${who ? memberName(who) : 'them'}` : `Take over ${a.name}`, sub: toUserId ? 'They answer for what it does from now on.' : 'You answer for what it does from now on, and it works again at once with the same credentials.', submit: toUserId ? 'Hand over' : 'Take over', size: 'sm', fields: [
+      { id: 'note', label: 'Why (kept in its history)', type: 'textarea', max: 1000, placeholder: toUserId ? 'Moving to the platform team' : 'The previous owner left' }] });
+    if (!v) return;
+    if (!await sure('This changes who answers for an agent.')) return;
+    const r = await call('POST', `/api/agents/${a.id}/accountable`, { userId: toUserId || undefined, note: v.note || undefined }, 'That could not be done.');
+    if (r) { const one = await api('GET', `/api/agents/${a.id}`); if (one.ok) S.one = one.d.agent; toast(toUserId ? 'Handed over' : `You now answer for ${a.name}`); loadAccess(a.id); }
+  }
+  async function handOver() {
+    const ms = S.members.filter((m) => ['owner', 'admin'].includes(m.role) && memberId(m) !== (S.one.accountable && S.one.accountable.userId));
+    if (!ms.length) return toast('There is no other admin to hand it to');
+    const v = await D().form({ title: 'Hand over to', submit: 'Next', size: 'sm', fields: [{ id: 'who', label: 'Admin', type: 'choice', cols: 1, required: true, options: ms.map((m) => [memberId(m), memberName(m), m.role]) }] });
+    if (v) takeOver(v.who);
+  }
+  async function grant() {
+    const a = S.one; if (!a) return;
+    const have = new Set((S.access ? S.access.people : []).map((p) => p.userId));
+    const people = S.members.filter((m) => !['owner', 'admin'].includes(m.role) && !have.has(memberId(m))).map((m) => [memberId(m), memberName(m), m.role || '']);
+    if (!people.length) return toast('Every member already has access, or administers the workspace');
+    const v = await D().form({ title: `Give someone access to ${a.name}`, sub: 'Admins of the workspace always have every right.', submit: 'Give access', size: 'sm', fields: [
+      { id: 'who', label: 'Person', type: 'choice', cols: 1, required: true, options: people },
+      { id: 'right', label: 'They can', type: 'choice', cols: 1, required: true, value: 'viewer', options: RIGHT_OPTS }] });
+    if (!v) return;
+    const r = await call('PUT', `/api/agents/${a.id}/access/${v.who}/${v.right}`, undefined, 'Access could not be given.');
+    if (r) { S.access = r.d.access; paint(); }
+  }
+  async function ungrant(userId, right) {
+    const a = S.one; if (!a) return;
+    const r = await call('DELETE', `/api/agents/${a.id}/access/${userId}/${right}`, undefined, 'Access could not be removed.');
+    if (r) { S.access = r.d.access; paint(); }
+  }
+  async function decideMove(id, accept) {
+    const m = (S.moves || []).find((x) => x.id === id); if (!m) return;
+    if (!accept) { const r = await call('POST', `/api/agents/transfers/${id}/decline`, { reason: 'Declined' }, 'It could not be declined.'); if (r) { S.moves = S.moves.filter((x) => x.id !== id); toast('Declined'); paint(); } return; }
+    const sub = await api('GET', `/api/agents/transfers/${id}/review-subject`);
+    if (!sub.ok) return toast(why(sub, 'Its contents could not be read.'));
+    const x = sub.d.subject, list = (k) => (x[k] || []).map((y) => typeof y === 'string' ? y : (y.name || y.ref || y.id || 'unnamed'));
+    const used = [...list('secretReferences').map((y) => 'secret ' + y), ...list('licenses').map((y) => 'licence ' + y)];
+    const v = await D().form({ title: `Take ${m.agent.name} into ${m.toName}`, sub: `${m.fromName || 'Its owner'} is offering it. ${used.length ? 'It uses: ' + used.join(', ') + '.' : 'It uses no secrets or licensed parts.'} Accepting makes ${m.toName} its owner and you the person who answers for it.`, submit: 'Accept', size: 'sm', fields: [
+      { id: 'why', label: 'Why (kept in its history)', type: 'textarea', required: true, max: 1000, placeholder: 'We run this agent now' }] });
+    if (!v) return;
+    if (!await sure(`Accepting makes you answer for ${m.agent.name}.`)) return;
+    if (m.state === 'authorized') {
+      const rv = await call('POST', `/api/agents/transfers/${id}/review`, { agentVersion: x.agentVersion, review: { schemaVersion: 1, secretReferences: x.secretReferences, licenses: x.licenses, dependencies: [], verdict: 'clear' } }, 'The review could not be saved.');
+      if (!rv) return;
+    }
+    const r = await call('POST', `/api/agents/transfers/${id}/accept`, { rationale: v.why }, 'It could not be accepted.');
+    if (r) { S.moves = S.moves.filter((y) => y.id !== id); toast(`${m.agent.name} now belongs to ${m.toName}`); go(`Agents/${m.agent.id}`); }
+  }
+  const RIGHT_OPTS = [['viewer', 'See it', 'Its instructions, runs and activity'], ['runner', 'Run it', 'Make credentials and start cloud runs'], ['editor', 'Change it', 'Edit its instructions and how it runs'], ['exporter', 'Export it', 'Take its definition out. Never implied by the others']];
+  const RIGHT_LABEL = { viewer: 'See', runner: 'Run', editor: 'Change', exporter: 'Export' };
+  const MOVE_STATE = { proposed: 'Move proposed', authorized: 'Offered to its new owner', reviewed: 'Reviewed, waiting to be accepted', accepted: 'Moved', declined: 'Move declined', cancelled: 'Move cancelled', expired: 'Move expired' };
+  const REASON = { transfer: 'moved to them', takeover: 'took it over', handover: 'handed to them' };
+
   // cloud runs: listed with the agent, refreshed every few seconds while one is live
   const LIVE_RUN = new Set(['starting', 'queued', 'running']);
   let runTimer = null;
@@ -126,7 +210,8 @@
         <span class="xag-mono" aria-hidden="true">${mono(a.name)}<i class="xag-dot xag-dot--${k}"></i></span>
         <span class="xag-card-b"><b>${esc(a.name)}</b><small>${esc(a.description || 'No description yet')}</small>${a.division ? `<em class="xag-div">${esc(a.division.name)}</em>` : ''}</span>
         <span class="xag-card-f"><span>${a.projects.length ? esc(a.projects.slice(0, 2).map((p) => p.name).join(', ')) + (a.projects.length > 2 ? ` +${a.projects.length - 2}` : '') : 'No projects yet'}</span><span class="xag-st xag-st--${k}">${esc(l)}</span></span></button>`; };
-    const offers = (S.offers.length ? `<section class="xag-offers" aria-label="Agents offered to you"><h3>${h.plural(S.offers.length, 'agent offered', 'agents offered')} to your workspaces</h3>${S.offers.map((o) => `<div class="xag-row"><span class="xag-row-ic">${ic('bot')}</span><span class="xag-row-b"><b>${esc(o.agent ? o.agent.name : 'An agent')}</b><small>${esc(o.from)} offers it to ${esc(o.division ? o.division.name + ' in ' + o.workspace.name : o.workspace.name)}. It keeps its owner and who pays; it works on what you give it there.</small></span><button type="button" class="pg-btn ghost" data-xag="decline" data-id="${esc(o.id)}">Decline</button><button type="button" class="pg-btn" data-xag="accept" data-id="${esc(o.id)}">Accept</button></div>`).join('')}</section>` : '');
+    const offers = (S.offers.length ? `<section class="xag-offers" aria-label="Agents offered to you"><h3>${h.plural(S.offers.length, 'agent offered', 'agents offered')} to your workspaces</h3>${S.offers.map((o) => `<div class="xag-row"><span class="xag-row-ic">${ic('bot')}</span><span class="xag-row-b"><b>${esc(o.agent ? o.agent.name : 'An agent')}</b><small>${esc(o.from)} offers it to ${esc(o.division ? o.division.name + ' in ' + o.workspace.name : o.workspace.name)}. It keeps its owner and who pays; it works on what you give it there.</small></span><button type="button" class="pg-btn ghost" data-xag="decline" data-id="${esc(o.id)}">Decline</button><button type="button" class="pg-btn" data-xag="accept" data-id="${esc(o.id)}">Accept</button></div>`).join('')}</section>` : '')
+      + (S.moves.length ? `<section class="xag-offers" aria-label="Agents being moved to you"><h3>${h.plural(S.moves.length, 'agent', 'agents')} offered to become yours</h3>${S.moves.map((m) => `<div class="xag-row"><span class="xag-row-ic">${ic('building')}</span><span class="xag-row-b"><b>${esc(m.agent.name)}</b><small>${esc(m.fromName || 'Someone')} wants ${esc(m.toName)} to own it. You see everything it uses before you accept, and you will answer for it.</small></span><button type="button" class="pg-btn ghost" data-xag="move-decline" data-id="${esc(m.id)}">Decline</button><button type="button" class="pg-btn" data-xag="move-accept" data-id="${esc(m.id)}">Review</button></div>`).join('')}</section>` : '');
     const body = !S.list.length ? `<div class="xag-first">
         <div class="xag-first-art" aria-hidden="true"><span>${ic('bot')}</span><i></i><span>${ic('folder')}</span><i></i><span>${ic('terminal')}</span></div>
         <h2>Give work to an agent that is really yours</h2>
@@ -186,9 +271,21 @@
     const conns = a.connections.length ? a.connections.map((c) => `<div class="xag-row"><span class="xag-row-ic">${ic('terminal')}</span><span class="xag-row-b"><b>${esc(c.client)}</b><small>Connected ${esc(ago(c.createdAt).toLowerCase())}</small></span><span class="xag-row-m">${esc(ago(c.lastUsedAt))}</span><button type="button" class="pg-btn ghost" data-xag="calls" data-id="${esc(c.id)}">Activity</button></div>`).join('')
       : '<p class="xag-none">It has not run anywhere yet. It appears here the first time a CLI uses one of its credentials.</p>';
 
-    const acts = h.btn('Edit', 'data-xag="edit"', true, 'edit') + h.btn('Delete', 'data-xag="delete"', true, 'trash');
+    const R = a.rights || {}, company = !!(a.owner && a.owner.kind === 'company'), ac = S.access;
+    const acts = (R.editor ? h.btn('Edit', 'data-xag="edit"', true, 'edit') : '') + (R.manage ? h.btn('Delete', 'data-xag="delete"', true, 'trash') : '');
+    const paused = a.paused === 'needs_owner' ? `<div class="xag-paused" role="alert"><div><b>${ic('lock')}${esc(a.name)} is paused</b><p>${esc(a.accountable ? a.accountable.name : 'The person')} no longer runs ${esc(a.owner.name)}, and somebody has to answer for what it does. Nothing is lost: its instructions, history and credentials are kept, and it works again the moment an admin takes it over.</p></div>${R.manage ? '<button type="button" class="pg-btn" data-xag="takeover">Take over</button>' : ''}</div>` : '';
+    const own = `<section class="pg-sec"><div class="pg-sec-h"><h3>Owner and access</h3>${R.manage ? `<button class="pg-link" data-xag="move">${company ? 'Move to another company' : 'Move to a company'}</button>` : ''}</div>
+      <dl class="pg-props xag-own"><dt>Owned by</dt><dd>${company ? esc(a.owner.name) : 'You, personally'}</dd>
+        <dt>Answers for it</dt><dd>${a.accountable ? esc(a.accountable.name) : '—'}${company && R.manage && !a.paused ? ' · <a data-xag="handover">Hand over</a>' : ''}</dd>
+        ${R.manage ? '' : `<dt>You can</dt><dd>${['viewer', 'runner', 'editor', 'exporter'].filter((x) => R[x]).map((x) => RIGHT_LABEL[x]).join(', ') || '—'}</dd>`}</dl>
+      ${company ? '' : '<p class="xag-none">A personal agent is only yours. Move it to a company and the company owns it: it outlives whoever made it, and members can be allowed to see, run, change or export it.</p>'}
+      ${company && R.manage && ac ? `<div class="pg-sec-h xag-sub"><h4>People</h4><button class="pg-link" data-xag="grant">Give access</button></div>
+        ${ac.people.length ? `<div class="xag-rows">${ac.people.map((p) => `<div class="xag-row"><span class="xag-row-ic">${ic('people')}</span><span class="xag-row-b"><b>${esc(p.name)}</b><small>${p.rights.map((x) => `<span class="xag-right">${esc(RIGHT_LABEL[x])}<button type="button" aria-label="Remove ${esc(RIGHT_LABEL[x])}" data-xag="ungrant" data-id="${esc(p.userId)}" data-k="${esc(x)}">${ic('x')}</button></span>`).join(' ')}</small></span><span></span><span></span></div>`).join('')}</div>`
+          : `<p class="xag-none">Only ${esc(a.owner.name)}’s admins. Give a member the right to see, run, change or export it.</p>`}` : ''}
+      ${R.manage && (S.transfers || []).some((t) => ['proposed', 'authorized', 'reviewed'].includes(t.state)) ? `<div class="xag-rows">${S.transfers.filter((t) => ['proposed', 'authorized', 'reviewed'].includes(t.state)).map((t) => `<div class="xag-row"><span class="xag-row-ic">${ic('send')}</span><span class="xag-row-b"><b>${esc(MOVE_STATE[t.state])}</b><small>${esc(ago(t.authorizedAt || t.createdAt))}</small></span><span></span><span></span></div>`).join('')}</div>` : ''}
+      ${ac && ac.history.length ? `<details class="xag-vers"><summary>Who has answered for it</summary><ol>${ac.history.map((x) => `<li><b>${esc(x.to)}</b><small>${esc(REASON[x.reason] || x.reason)}${x.from ? ', from ' + esc(x.from) : ''}${x.by && x.by !== x.to ? ' · by ' + esc(x.by) : ''} · ${esc(new Date(x.at).toLocaleString())}${x.note ? ' · “' + esc(x.note) + '”' : ''}</small></li>`).join('')}</ol></details>` : ''}</section>`;
     return h.page(h.head({ obj: true, eyebrow: `<a data-xag="list">Agents</a>`, title: a.name, sub: a.description || 'No description yet', acts })
-      + `<div class="pg-cols pg-cols--item"><div>${run}
+      + `<div class="pg-cols pg-cols--item"><div>${paused}${R.runner ? run : ''}${own}
           <section class="pg-sec"><div class="pg-sec-h"><h3>Division</h3>${S.canManageDivisions ? `<button class="pg-link" data-xag="division">${a.division ? 'Move' : 'Put in a division'}</button>` : ''}</div>
             <div class="xag-divbox">${a.division ? `<button class="pg-chip" data-xag="open-division" data-id="${esc(a.division.id)}">${ic('building')}${esc(a.division.name)}</button><p>${esc(a.name)} works only on ${esc(a.division.name)}’s projects. Moving it takes away projects outside the new division.</p>`
               : `<p>${esc(a.name)} is in no division, so it works only on projects that are in none either. ${S.divisions.length ? '' : 'This workspace has no divisions yet — <a data-xag="divisions">create one</a> to group agents and projects into departments.'}</p>`}</div></section>
@@ -217,7 +314,7 @@
         </div><aside><div class="xag-id">
           <span class="xag-mono xag-mono--lg" aria-hidden="true">${mono(a.name)}<i class="xag-dot xag-dot--${k}"></i></span>
           <b>${esc(a.name)}</b><span class="xag-st xag-st--${k}">${esc(l)}</span></div>
-          <dl class="pg-props"><dt>Owner</dt><dd>You</dd><dt>Created</dt><dd>${esc(new Date(a.createdAt).toLocaleDateString())}</dd><dt>Division</dt><dd>${a.division ? esc(a.division.name) : 'None'}</dd><dt>Version</dt><dd>${a.version ? 'v' + a.version : '—'}</dd><dt>Projects</dt><dd>${a.projects.length}</dd><dt>Ran from</dt><dd>${h.plural(a.connections.length, 'place', 'places')}</dd>
+          <dl class="pg-props"><dt>Owner</dt><dd>${company ? esc(a.owner.name) : 'You'}</dd><dt>Created</dt><dd>${esc(new Date(a.createdAt).toLocaleDateString())}</dd><dt>Division</dt><dd>${a.division ? esc(a.division.name) : 'None'}</dd><dt>Version</dt><dd>${a.version ? 'v' + a.version : '—'}</dd><dt>Projects</dt><dd>${a.projects.length}</dd><dt>Ran from</dt><dd>${h.plural(a.connections.length, 'place', 'places')}</dd>
             <dt>Id</dt><dd><button type="button" class="xag-idbtn" data-xag="copy" data-copy="${esc(a.id)}" title="Its permanent id — what Spawn and other tools store. It never changes, even if you rename it.">${S.copied === a.id ? 'Copied' : esc(a.id.slice(0, 12)) + '…'}</button></dd></dl>
           <p class="xag-note">It acts only as itself, never as you, and you can stop it at any moment by revoking its credentials.</p></aside></div>`, 'xag');
   }
@@ -401,6 +498,13 @@
     if (a === 'open-division') return go(`Divisions/${b.dataset.id}`);
     if (a === 'divisions') return go('Divisions');
     if (a === 'runtime') return editRuntime();
+    if (a === 'move') return moveTo();
+    if (a === 'takeover') return takeOver();
+    if (a === 'handover') return handOver();
+    if (a === 'grant') return grant();
+    if (a === 'ungrant') return ungrant(b.dataset.id, b.dataset.k);
+    if (a === 'move-accept') return decideMove(b.dataset.id, true);
+    if (a === 'move-decline') return decideMove(b.dataset.id, false);
     if (a === 'run-cloud') return S.one && startRun(S.one);
     if (a === 'stop-run') return stopRun(b.dataset.id);
     if (a === 'open-task') return b.dataset.k && X()?.go?.('tasks', { item: b.dataset.k });
@@ -460,6 +564,9 @@
       '.xag-instr-a{display:flex;align-items:center;gap:8px}.xag-instr-a small{flex:1;font-size:12px;color:var(--muted)}',
       '.xag-instr-v{margin:0;padding:12px 14px;border:1px solid var(--border);border-radius:10px;background:var(--panel);font:12.5px/1.55 ui-monospace,Consolas,monospace;white-space:pre-wrap;word-break:break-word;max-height:260px;overflow:auto}',
       '.xag-vers{margin-top:8px;font-size:12.5px;color:var(--muted)}.xag-vers summary{cursor:pointer}.xag-vers ol{margin:8px 0 0;padding:0;list-style:none;display:grid;gap:4px}.xag-vers li{display:flex;gap:8px;align-items:baseline}.xag-vers li b{color:var(--text);font-size:12px}.xag-vers small{font-size:11.5px}',
+      '.xag-paused{display:flex;gap:14px;align-items:center;justify-content:space-between;padding:14px 16px;margin-bottom:16px;border:1px solid var(--text);border-radius:12px}.xag-paused b{display:flex;gap:8px;align-items:center;font-size:14px}.xag-paused p{margin:4px 0 0;color:var(--muted);font-size:13px;line-height:1.5}',
+      '.xag-own dd a{cursor:pointer;text-decoration:underline;text-underline-offset:3px}.xag-sub{margin-top:14px}.xag-sub h4{margin:0;font-size:12px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.02em}',
+      '.xag-right{display:inline-flex;align-items:center;gap:4px;padding:1px 4px 1px 8px;margin-right:4px;border:1px solid var(--border);border-radius:999px;font-size:12px;color:var(--text)}.xag-right button{display:inline-flex;border:0;background:none;color:var(--muted);cursor:pointer;padding:2px}.xag-right button:hover{color:var(--text)}.xag-right svg{width:11px;height:11px}',
       '.xag-offers{display:flex;flex-direction:column;gap:0;margin-bottom:16px;border:1px solid var(--text);border-radius:12px;overflow:hidden}.xag-offers h3{margin:0;padding:10px 14px;font-size:12px;font-weight:600;letter-spacing:.02em;text-transform:uppercase;color:var(--muted);border-bottom:1px solid var(--border)}.xag-offers .xag-row{grid-template-columns:auto 1fr auto auto}',
       '.xag-none{margin:0;padding:14px;font-size:12.5px;color:var(--muted)}',
       '.xag-id{display:flex;flex-direction:column;align-items:center;gap:8px;padding:6px 0 18px;margin-bottom:16px;border-bottom:1px solid var(--border);text-align:center}.xag-id b{font-size:15px}',

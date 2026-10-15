@@ -108,10 +108,22 @@ export async function resolvePrincipal(db, userId) {
             a.owner_user_id, a.agent_role, a.agent_origin, a.status AS agent_status,
             o.username AS owner_handle, o.display_name AS owner_display_name,
             o.is_active AS owner_is_active, o.status AS owner_status,
-            o.role AS owner_role
+            o.role AS owner_role,
+            r.owner_workspace_id AS company_workspace_id,
+            -- OWN-05: a COMPANY agent's accountable human must still administer the owning workspace. When
+            -- they stop (left, demoted, workspace closed) the agent pauses until an admin takes it over.
+            CASE WHEN r.owner_workspace_id IS NULL THEN TRUE
+                 ELSE EXISTS (SELECT 1 FROM workspaces w WHERE w.id = r.owner_workspace_id AND w.status = 'active'
+                                AND (w.owner_user_id = a.owner_user_id OR EXISTS (
+                                  SELECT 1 FROM relationship_tuples t
+                                   WHERE t.object_type = 'workspace' AND t.object_id = r.owner_workspace_id::text
+                                     AND t.subject_type = 'user' AND t.subject_id = a.owner_user_id::text
+                                     AND t.relation IN ('owner', 'admin'))))
+            END AS accountable_holds
        FROM users u
        LEFT JOIN agent_identities a ON a.user_id = u.id
        LEFT JOIN users o ON o.id = a.owner_user_id
+       LEFT JOIN workforce_resources r ON r.id = a.workforce_resource_id
       WHERE u.id = $1`,
     [userId],
   );
@@ -132,6 +144,8 @@ export async function resolvePrincipal(db, userId) {
     unusableReason = 'owner_suspended';
   } else if (isAgent && row.agent_status !== 'active') {
     unusableReason = `agent_${row.agent_status}`;
+  } else if (isAgent && row.accountable_holds === false) {
+    unusableReason = 'needs_owner';
   }
 
   // `service` is a kind, so it must not also act as an authorization role.
@@ -166,7 +180,9 @@ export function assertPrincipalUsable(principal) {
       // Say WHY. An agent operator who sees a generic "suspended" will retry,
       // file a ticket, and mint a new agent — none of which fixes the owner.
       ? 'This agent is inactive because its owner account is suspended'
-      : 'This account has been suspended';
+      : principal.unusableReason === 'needs_owner'
+        ? 'This agent is paused: the person accountable for it no longer runs its workspace. A workspace admin can take it over.'
+        : 'This account has been suspended';
     throw new AgentIdentityError(message, principal.unusableReason, 403);
   }
 }

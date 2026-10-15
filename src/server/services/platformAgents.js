@@ -17,13 +17,14 @@
  *   - Only the person who owns the agent manages it. An agent never manages agents.
  */
 import { randomUUID } from 'node:crypto';
-import { createAgent, SYSTEM_AGENT_ORIGINS } from './agentIdentity.js';
+import { createAgent, SYSTEM_AGENT_ORIGINS, resolvePrincipal } from './agentIdentity.js';
 import { createWorkforceResource } from './workforceResources.js';
 import { reviseAgentDefinition } from './workforceAgentRevision.js';
 import { writeTuples, check } from '../utils/authzReBAC.js';
 import * as tasks from './xenoTasks.js';
 import * as divisions from './workforceDivisions.js';
 import * as lending from './agentLending.js';
+import * as access from './agentAccess.js';
 
 export class AgentError extends Error { constructor(message, code, status = 400) { super(message); this.code = code; this.status = status; } }
 
@@ -54,11 +55,22 @@ const ROW = `SELECT u.id, u.username, COALESCE(u.display_name, u.username) AS na
   LEFT JOIN workforce_division_ownership o ON o.resource_id = ai.workforce_resource_id
   LEFT JOIN workforce_divisions d ON d.id = o.division_id`;
 
-async function owned(db, me, publicId) {
+/**
+ * The agent, if `me` holds `need` on it (agentAccess.js): 'viewer' to see it, 'runner' to run it (credentials,
+ * cloud runs), 'editor' to change it, 'manage' for what only its owner or the company's admins do (delete, move
+ * division, lend, access). Someone without the right reads it as absent, never as forbidden.
+ */
+async function owned(db, me, publicId, need = 'manage') {
   person(me);
   if (!PUBLIC_ID.test(String(publicId || ''))) throw new AgentError('Agent not found', 'agent_not_found', 404);
-  const r = (await db.query(`${ROW} WHERE ai.public_id = $1 AND ai.owner_user_id = $2 AND ai.status <> 'retired'`, [publicId, me.id])).rows[0];
-  if (!r) throw new AgentError('Agent not found', 'agent_not_found', 404);   // someone else's reads as absent
+  const r = (await db.query(`${ROW} WHERE ai.public_id = $1 AND ai.status <> 'retired'`, [publicId])).rows[0];
+  if (!r) throw new AgentError('Agent not found', 'agent_not_found', 404);
+  const ok = need === 'manage' ? (await access.rightsOf(db, me.id, r.id)).manage : await access.holds(db, me.id, r.id, need);
+  if (!ok) {
+    // a right below the one asked for is a refusal, not absence: they can see it, so say why
+    if (need !== 'viewer' && await access.holds(db, me.id, r.id, 'viewer')) throw new AgentError(need === 'manage' ? 'Only its owner or a workspace admin can do that' : `You need the ${need === 'runner' ? 'run' : 'change'} right on this agent`, 'not_allowed', 403);
+    throw new AgentError('Agent not found', 'agent_not_found', 404);
+  }
   if (!r.workforce_resource_id) await adopt(db, me, r);                       // a pre-link agent gets its definition now
   return r.workforce_resource_id ? r : (await db.query(`${ROW} WHERE ai.public_id = $1`, [publicId])).rows[0];
 }
@@ -75,7 +87,7 @@ async function versions(db, resourceId) {
     .map((v) => ({ version: v.version, hash: v.content_hash, instructions: (v.content && v.content.instructions) || '', runtime: (v.content && v.content.runtime) || {}, createdAt: v.created_at, by: v.by_name || null }));
 }
 
-async function full(db, r) {
+async function full(db, r, me = null) {
   const projects = (await tasks.listTaskProjects(db, { id: r.id })).map((p) => ({ id: p.id, name: p.name, access: p.canEdit ? 'editor' : 'viewer' }));
   for (const p of projects) p.division = await divisions.projectDivision(db, p.id);
   const connections = (await db.query(`SELECT id, client_name, created_at, last_used_at FROM mcp_connections WHERE agent_user_id = $1 AND revoked_at IS NULL ORDER BY created_at DESC`, [r.id])).rows
@@ -92,6 +104,19 @@ async function full(db, r) {
     projects, credentials: await credentials(db, r.id), connections,
     webhook: ((await db.query('SELECT url FROM task_agent_webhooks WHERE agent_user_id = $1', [r.id])).rows[0] || {}).url || null,
     lentTo: r.workforce_resource_id ? await lending.lendsOf(db, r.workforce_resource_id) : [],
+    ...(await ownershipView(db, r, me)),
+  };
+}
+
+/** Who owns it, who answers for it, whether it is paused for want of an owner, and what `me` may do with it. */
+async function ownershipView(db, r, me) {
+  const o = await access.ownershipOf(db, r.id);
+  const principal = await resolvePrincipal(db, r.id);
+  return {
+    owner: o && o.owner_workspace_id ? { kind: 'company', workspaceId: String(o.owner_workspace_id), name: o.workspace_name } : { kind: 'personal' },
+    accountable: o ? { userId: String(o.owner_user_id), name: o.accountable_name } : null,
+    paused: principal && principal.unusableReason === 'needs_owner' ? 'needs_owner' : null,
+    rights: me ? await access.rightsOf(db, me.id, r.id) : null,
   };
 }
 
@@ -100,13 +125,19 @@ async function full(db, r) {
 export async function list(db, me, { divisionId } = {}) {
   person(me);
   const byDivision = divisionId && divisionId !== 'none';
-  const rows = (await db.query(`${ROW} WHERE ai.owner_user_id = $1 AND ai.status <> 'retired' AND COALESCE(ai.agent_origin, '') <> ALL($2::text[])
+  const rows = (await db.query(`${ROW} WHERE ai.status <> 'retired' AND COALESCE(ai.agent_origin, '') <> ALL($2::text[])
+      AND (ai.owner_user_id = $1
+        OR EXISTS (SELECT 1 FROM workspaces w WHERE w.id = r.owner_workspace_id AND w.status = 'active' AND (w.owner_user_id = $1
+             OR EXISTS (SELECT 1 FROM relationship_tuples t WHERE t.object_type = 'workspace' AND t.object_id = w.id::text
+                          AND t.subject_type = 'user' AND t.subject_id = $1::text AND t.relation IN ('owner', 'admin'))))
+        OR EXISTS (SELECT 1 FROM relationship_tuples t WHERE t.object_type = 'agent' AND t.object_id = ai.user_id::text
+                     AND t.subject_type = 'user' AND t.subject_id = $1::text AND t.relation IN ('viewer', 'runner', 'editor', 'exporter')))
     ${divisionId === 'none' ? 'AND o.division_id IS NULL' : byDivision ? 'AND o.division_id = $3' : ''} ORDER BY ai.created_at`,
     byDivision ? [me.id, SYSTEM_AGENT_ORIGINS, divisionId] : [me.id, SYSTEM_AGENT_ORIGINS])).rows;
-  const out = []; for (const r of rows) out.push(await full(db, r));
+  const out = []; for (const r of rows) out.push(await full(db, r, me));
   return out;
 }
-export async function get(db, me, publicId) { return full(db, await owned(db, me, publicId)); }
+export async function get(db, me, publicId) { return full(db, await owned(db, me, publicId, 'viewer'), me); }
 
 const ctx = (me) => ({ actorUserId: String(me.id), clientId: CLIENT });
 const defOf = (instructions, runtime) => ({ schemaVersion: 1, instructions: String(instructions || ''), skills: [], requestedCapabilities: [], ...(runtime ? { runtime } : {}), provenance: { source: 'authored' } });
@@ -177,7 +208,7 @@ export async function create(db, me, { name, description, instructions, runtime,
 }
 
 export async function update(db, me, publicId, { name, description, instructions, runtime } = {}) {
-  const r = await owned(db, me, publicId);
+  const r = await owned(db, me, publicId, 'editor');
   if (name !== undefined) {
     const label = String(name || '').replace(/[\u0000-\u001f<>]/g, '').trim().slice(0, 60);
     if (!label) throw new AgentError('Give the agent a name', 'name_required');
@@ -219,7 +250,7 @@ export async function remove(db, me, publicId) {
 }
 
 export async function mintCredential(db, me, publicId, { scopes, label, ttlHours } = {}) {
-  const r = await owned(db, me, publicId);
+  const r = await owned(db, me, publicId, 'runner');
   const h = ttlHours === undefined ? 1 : Number(ttlHours);
   if (!Number.isFinite(h) || h <= 0 || h > MAX_HOURS) throw new AgentError(`ttlHours is between a minute and ${MAX_HOURS} hours`, 'invalid_ttl');
   const out = await tasks.mintAgentToken(db, me, { agentId: r.id, scopes, label: label || 'Agent credential', days: 1 });
@@ -233,7 +264,7 @@ export async function setWebhook(db, me, publicId, url) {
   try { return await tasks.setAgentWebhook(db, me, { agentId: r.id, url: url || null }); } catch (e) { throw asAgentError(e, 'The webhook could not be saved'); }
 }
 export async function revokeCredential(db, me, publicId, credentialId) {
-  const r = await owned(db, me, publicId);
+  const r = await owned(db, me, publicId, 'runner');
   const x = await db.query('UPDATE task_agent_tokens SET revoked_at = now() WHERE id::text = $1 AND agent_user_id = $2 AND revoked_at IS NULL', [String(credentialId), r.id]);
   if (!x.rowCount) throw new AgentError('Credential not found', 'credential_not_found', 404);
   return { revoked: true };
@@ -309,7 +340,7 @@ export async function lend(db, me, publicId, target) {
 
 /** Projects this person could give the agent, each marked with whether its division matches. */
 export async function projectChoices(db, me, publicId) {
-  const r = await owned(db, me, publicId);
+  const r = await owned(db, me, publicId, 'viewer');
   const mine = r.division_id ? String(r.division_id) : null;
   const working = await lending.workingDivisions(db, r.workforce_resource_id);
   const out = [];
