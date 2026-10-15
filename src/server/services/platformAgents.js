@@ -138,6 +138,8 @@ export async function list(db, me, { divisionId } = {}) {
   return out;
 }
 export async function get(db, me, publicId) { return full(db, await owned(db, me, publicId, 'viewer'), me); }
+/** The agent, if `me` holds `need` on it ('viewer' | 'runner' | 'editor' | 'exporter' | 'manage'). */
+export async function getWith(db, me, publicId, need) { return full(db, await owned(db, me, publicId, need), me); }
 
 const ctx = (me) => ({ actorUserId: String(me.id), clientId: CLIENT });
 const defOf = (instructions, runtime) => ({ schemaVersion: 1, instructions: String(instructions || ''), skills: [], requestedCapabilities: [], ...(runtime ? { runtime } : {}), provenance: { source: 'authored' } });

@@ -45,6 +45,11 @@ p.on('request', (q) => {
   if (path === '/api/divisions' && method === 'POST') { const d = { id: uuid(), name: b.name, parent: b.parentId || null, archived: false }; db.divs.push(d); return json(201, { success: true, division: dd(d) }); }
   const pm = path.match(/^\/api\/divisions\/projects\/(.+)$/);
   if (pm) { const pr = db.proj.find((x) => x.id === pm[1]); pr.div = b.divisionId; let removed = 0; for (const a of db.agents) { const l = db.agentProj[a.id] || []; if (l.includes(pr.id) && a.div !== pr.div) { db.agentProj[a.id] = l.filter((x) => x !== pr.id); removed++; } } return json(200, { success: true, projectId: pr.id, division: null, agentsRemoved: removed }); }
+  const bm = path.match(/^\/api\/divisions\/([0-9a-f-]{36})\/agent-budget$/);
+  if (bm) {
+    if (method === 'PUT') db.budget = { limitCredits: b.credits, spentCredits: 12.5, leftCredits: b.credits - 12.5, windowDays: b.windowDays, autoApprove: b.autoApprove };
+    return json(200, { success: true, budget: db.budget || null, spend: db.budget ? [{ agent: { id: 'agt_' + 'a'.repeat(32), name: 'Pixel Bot' }, kind: 'image', credits: 12.5, released: false, at: new Date().toISOString() }] : [], canManage: true });
+  }
   const dm = path.match(/^\/api\/divisions\/([0-9a-f-]{36})(\/archive)?$/);
   if (dm) {
     const d = db.divs.find((x) => x.id === dm[1]); if (!d) return json(404, { success: false, error: 'Division not found', code: 'division_not_found' });
@@ -107,6 +112,14 @@ try {
   const patch = db.calls.find(([m, u, b]) => m === 'PATCH' && u === `/api/divisions/${creative.id}` && 'headId' in b);
   ok(patch && patch[2].headId === 'u1' && patch[2].reason === 'Leads the studio', 'Set head sends the head and the recorded reason');
 
+  // the agent budget: none, then set to 100 a month, started within it
+  ok(/Agent budget/.test(await main()) && /No budget/.test(await main()), 'a division with no agent budget says what that means');
+  await p.click('[data-xdv="budget"]'); await settle(500); await fill(['100']);
+  await p.evaluate(() => document.querySelector('.xd [data-f="auto"] [data-v="auto"]')?.click()); await submit();
+  const put = db.calls.find(([m, u]) => m === 'PUT' && u === `/api/divisions/${creative.id}/agent-budget`);
+  ok(put && put[2].credits === 100 && put[2].windowDays === 30 && put[2].autoApprove === true, 'Set a budget sends 100 credits a month, started within it');
+  ok(/12\.5 of 100 credits/.test(await main()) && /Pixel Bot/.test(await main()) && /start at once/.test(await main()), 'the page shows what was used, by which agent, and how images are approved');
+
   // move a project in
   await p.click('[data-xdv="add-project"]'); await settle(500); await choose('Brand film'); await submit();
   ok(db.proj.find((x) => x.name === 'Brand film').div === creative.id && /Brand film/.test(await main()), 'a project is moved into the division');
@@ -121,7 +134,7 @@ try {
   const film2 = await p.$('[data-xag-proj] '); void film2;
   const disabled = await p.$$eval('[data-xag-proj]', (xs) => xs.map((x) => [x.closest('label').innerText.split('\n')[0], x.disabled]));
   ok(disabled.some(([n, d]) => /Website/.test(n) && d) && disabled.some(([n, d]) => /Brand film/.test(n) && !d), `only the project in its division can be given (${JSON.stringify(disabled)})`);
-  await p.click(`[data-xag-proj="${db.proj.find((x) => x.name === 'Brand film').id}"]`); await settle(900);
+  await p.$eval(`[data-xag-proj="${db.proj.find((x) => x.name === 'Brand film').id}"]`, (x) => { x.scrollIntoView({ block: 'center' }); x.click(); }); await settle(900);
   ok((db.agentProj[ag.id] || []).length === 1, 'giving it the Creative project works');
 
   // instructions -> a new version

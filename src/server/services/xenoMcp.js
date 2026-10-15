@@ -16,6 +16,8 @@
  */
 import * as tasksMcp from './tasksMcp.js';
 import * as tasks from './xenoTasks.js';
+import * as agentMediaMcp from './agentMediaMcp.js';
+import * as agentMedia from './agentMedia.js';
 import { withTransaction } from './chatProjectAuthority.js';
 
 export const PROTOCOL_VERSIONS = tasksMcp.PROTOCOL_VERSIONS;
@@ -35,6 +37,18 @@ export const SERVICES = Object.freeze([
     call: (db, actor, name, args, ctx) => tasksMcp.callTool(db, actor, name, args, ctx),
     isToolError: (e) => e instanceof tasks.TaskError,
   },
+  // what an agent can make and use (agentMedia.js). Agents only: a person's own screens already do all of this.
+  ...[
+    ['image', 'Images', 'Make images from a prompt, billed to the agent’s owner and counted against its division’s budget.', agentMediaMcp.IMAGE, 180_000],
+    ['video', 'Video', 'Make short videos from a prompt, billed to the agent’s owner and counted against its division’s budget.', agentMediaMcp.VIDEO, 180_000],
+    ['library', 'Library', 'Read the files in the agent’s projects and the files it made, and add what it made to a project.', agentMediaMcp.LIBRARY, 30_000],
+    ['chat', 'Chat', 'Ask a XENO model a question, billed to the agent’s owner and counted against its division’s budget.', agentMediaMcp.CHAT, 120_000],
+  ].map(([category, title, description, svc, timeoutMs]) => ({
+    category, title, version: '1.0.0', timeoutMs, description, agentsOnly: true,
+    tools: () => svc.tools,
+    call: (db, actor, name, args) => svc.call(db, actor, name, args),
+    isToolError: (e) => e instanceof agentMedia.MediaError,
+  })),
 ]);
 export const CATEGORIES = Object.freeze(SERVICES.map((s) => s.category));
 const byCategory = new Map(SERVICES.map((s) => [s.category, s]));
@@ -50,9 +64,9 @@ export function route(prefixed, services = SERVICES) {
 export const enabledCategories = (connection, services = SERVICES) => (connection && Array.isArray(connection.categories) ? connection.categories : ['tasks']).filter((c) => services.some((s) => s.category === c));
 
 /** tools/list for one connection: only its categories, each tool under its prefix. */
-export function listTools(connection) {
+export function listTools(connection, actor = null) {
   const on = new Set(enabledCategories(connection));
-  return SERVICES.filter((s) => on.has(s.category)).flatMap((s) => s.tools().map(({ name, title, description, inputSchema, annotations }) => ({
+  return SERVICES.filter((s) => on.has(s.category) && (!s.agentsOnly || (actor && actor.kind === 'agent'))).flatMap((s) => s.tools().map(({ name, title, description, inputSchema, annotations }) => ({
     name: s.category + SEP + name, title: `${s.title}: ${title || name}`, description, inputSchema, ...(annotations ? { annotations } : {}),
   })));
 }
@@ -73,6 +87,9 @@ export async function callTool(db, actor, connection, prefixed, args = {}, ctx =
   const meta = (category, outcome, errorCode) => ({ tool: String(prefixed || '').slice(0, 120), category, outcome, errorCode: errorCode || null, latencyMs: Date.now() - started });
   if (!r || !r.service.tools().some((t) => t.name === r.tool)) return { result: toolError(`Unknown tool ${prefixed}`, 'unknown_tool'), log: meta(r ? r.service.category : 'unknown', 'refused', 'unknown_tool') };
   // rule 1: a category this connection has turned off cannot be called, whether or not the client listed it
+  if (r.service.agentsOnly && !(actor && actor.kind === 'agent')) {
+    return { result: toolError(`${r.service.title} tools are for agents. Sign in as one of your agents to use them.`, 'agents_only'), log: meta(r.service.category, 'refused', 'agents_only') };
+  }
   if (!enabledCategories(connection, services).includes(r.service.category)) {
     return { result: toolError(`${r.service.title} is turned off for this connection. Turn it on in XENO: Dev › XENO MCP.`, 'category_disabled'), log: meta(r.service.category, 'refused', 'category_disabled') };
   }
@@ -89,7 +106,7 @@ export async function callTool(db, actor, connection, prefixed, args = {}, ctx =
 }
 
 const INSTRUCTIONS = 'XENO MCP: the XENO services you are allowed to use, in one place. Tool names start with the service: '
-  + 'tasks_… is XENO Tasks. For tasks: if the folder you are working in has .xeno/tasks.json, pass its project.id as project. Start with tasks_list_my_tasks. '
+  + 'tasks_… is XENO Tasks; an agent also has image_… and video_… (make media), library_… (read files) and chat_… (ask a model). Media and model calls are billed to your owner within your division’s budget. For tasks: if the folder you are working in has .xeno/tasks.json, pass its project.id as project. Start with tasks_list_my_tasks. '
   + 'To work a task: tasks_claim_task, then tasks_report_activity as you go, then tasks_comment with what you changed and how you checked it, '
   + 'and tasks_move_task to in_review. The person who created a task accepts it; you never accept your own work.';
 
@@ -104,7 +121,7 @@ export async function dispatch(db, actor, connection, body, ctx = {}, onCall = (
       return { jsonrpc: '2.0', id, result: { protocolVersion: PROTOCOL_VERSIONS.includes(asked) ? asked : PROTOCOL_VERSION, serverInfo: { name: 'xeno-mcp', title: 'XENO MCP', version: '1.0.0' }, capabilities: { tools: { listChanged: true } }, instructions: INSTRUCTIONS } };
     }
     case 'ping': return { jsonrpc: '2.0', id, result: {} };
-    case 'tools/list': return { jsonrpc: '2.0', id, result: { tools: listTools(connection) } };
+    case 'tools/list': return { jsonrpc: '2.0', id, result: { tools: listTools(connection, actor) } };
     case 'tools/call': {
       const { result, log } = await callTool(db, actor, connection, body.params && body.params.name, (body.params && body.params.arguments) || {}, ctx);
       try { await onCall(log); } catch (e) { console.error('[xeno mcp] log', e); }
@@ -117,7 +134,7 @@ export async function dispatch(db, actor, connection, body, ctx = {}, onCall = (
 export function manifest(where = {}) {
   return { name: 'xeno-mcp', title: 'XENO MCP', protocolVersions: PROTOCOL_VERSIONS, transport: 'streamable-http', endpoint: where.resource || null,
     auth: { oauth: where.metadata || null, note: 'OAuth 2.1 with PKCE; clients register themselves (RFC 7591). Each sign-in is its own connection, managed in XENO: Dev › XENO MCP.' },
-    services: SERVICES.map((s) => ({ category: s.category, title: s.title, description: s.description, tools: s.tools().length })) };
+    services: SERVICES.map((s) => ({ category: s.category, title: s.title, description: s.description, tools: s.tools().length, ...(s.agentsOnly ? { agentsOnly: true } : {}) })) };
 }
 
 // ───────────────────────────── connections: one signed-in client for one person
@@ -126,15 +143,17 @@ const shapeConnection = (r) => ({ id: String(r.id), client: { id: r.client_id, n
   createdAt: r.created_at, lastUsedAt: r.last_used_at, calls: r.calls != null ? Number(r.calls) : undefined, revokedAt: r.revoked_at || null });
 
 /** The live connection for this person and client, created on first use. Signing the same client in again reuses it. */
-export async function connectionFor(db, { ownerId, agentId, clientId, clientName }) {
+/** The categories a platform agent's own credential starts with: every service an agent can use. */
+export const AGENT_DEFAULT_CATEGORIES = Object.freeze(SERVICES.map((s) => s.category));
+export async function connectionFor(db, { ownerId, agentId, clientId, clientName, categories = null }) {
   const found = (await db.query('SELECT * FROM mcp_connections WHERE owner_user_id = $1 AND client_id = $2 AND revoked_at IS NULL', [ownerId, clientId])).rows[0];
   if (found) {
     await db.query('UPDATE mcp_connections SET last_used_at = now(), agent_user_id = $2 WHERE id = $1', [found.id, agentId]);
     return found;
   }
-  return (await db.query(`INSERT INTO mcp_connections (owner_user_id, agent_user_id, client_id, client_name) VALUES ($1, $2, $3, $4)
+  return (await db.query(`INSERT INTO mcp_connections (owner_user_id, agent_user_id, client_id, client_name, categories) VALUES ($1, $2, $3, $4, COALESCE($5::text[], '{tasks}'))
     ON CONFLICT (owner_user_id, client_id) WHERE revoked_at IS NULL DO UPDATE SET last_used_at = now() RETURNING *`,
-    [ownerId, agentId, clientId, String(clientName || 'MCP app').slice(0, 80)])).rows[0];
+    [ownerId, agentId, clientId, String(clientName || 'MCP app').slice(0, 80), categories])).rows[0];
 }
 
 /** Is this connection revoked? A revoked connection is refused on its very next call. */

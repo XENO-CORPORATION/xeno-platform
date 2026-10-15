@@ -24,6 +24,8 @@
   const ID = /^agt_[0-9a-f]{32}$/;
   const ENDPOINT = () => `${location.origin}/api/mcp`;
   const S = { key: null, status: 'idle', list: [], one: null, projects: [], services: [], minted: null, busy: false, copied: '', tab: 'claude', q: '', choices: [], divisions: [], canManageDivisions: false, editingInstr: false, offers: [], models: [], runs: [], runsFor: null, moves: [], access: null, transfers: [], members: [] };
+  // the xeno-spawn:// link: on only once Spawn ships its link handler in a verified release (the command always works)
+  const SPAWN_LINK = false;
   const EFFORTS = ['minimal', 'low', 'medium', 'high', 'max'];
   const EFFORT_LABEL = { minimal: 'Minimal', low: 'Low', medium: 'Medium', high: 'High', max: 'Max' };
   const rtSet = (rt) => !!(rt && (rt.model || rt.effort || (rt.tools && ((rt.tools.allow || []).length || (rt.tools.deny || []).length))));
@@ -251,7 +253,7 @@
         ${minted ? `<div class="xag-secret" role="status"><div><b>${ic('lock')}Copy it now — it is never shown again</b><small>${esc(until(minted.expiresAt))}</small></div><div class="xag-secret-v"><code>${esc(minted.token)}</code>${copyBtn(minted.token)}</div></div>` : ''}
         <div class="xag-tabs" role="tablist" aria-label="Where it runs">${Object.entries(set).map(([key, s]) => `<button type="button" role="tab" aria-selected="${key === S.tab}" data-xag="tab" data-k="${key}">${esc(s.label)}</button>`).join('')}</div>
         <div class="xag-cmd"><pre>${esc(cur.cmd)}</pre>${minted || S.tab === 'spawn' ? copyBtn(cur.cmd) : '<span class="xag-cmd-hint">Make a credential to fill this in</span>'}</div>
-        ${S.tab === 'spawn' ? '<p class="xag-note">Spawn keeps the credential in your computer’s secure store, writes the XENO connection into that profile only, and makes a fresh short-lived credential for every launch.</p>' : ''}
+        ${S.tab === 'spawn' ? `${SPAWN_LINK ? `<div class="xag-spawn"><a class="pg-btn" href="xeno-spawn://bind?agent=${esc(a.id)}&issuer=${encodeURIComponent(location.origin)}">${ic('terminal')}<span>Open in Spawn</span></a><small>Nothing opened? Run the command above.</small></div>` : ''}<p class="xag-note">This binds it as Claude Code; add <code>--agent codex</code> to bind it as Codex. Spawn keeps the credential in your computer’s secure store, writes the XENO connection into that profile only, and makes a fresh short-lived credential for every launch.</p>` : ''}
       </section>`;
 
     // 2. what it works on
@@ -263,7 +265,7 @@
         : 'Not shared with it';
       return `<label class="xag-check${on ? ' on' : ''}${off ? ' off' : ''}"><input type="checkbox" data-xag-proj="${esc(p.id)}"${on ? ' checked' : ''}${S.busy || off ? ' disabled' : ''}><span><b>${esc(p.name)}</b><small>${esc(why)}</small></span>${p.division ? `<em class="xag-div">${esc(p.division.name)}</em>` : ''}</label>`; }).join('')}</div>`
       : h.box('folder', 'You have no projects yet', 'Create a project, then come back to give it to this agent.', '', 'sm');
-    const svc = S.services.map((s) => `<span class="xag-svc on">${ic('check')}${esc(s.title)}</span>`).join('') + ['Images', 'Video', 'Library', 'Chat'].map((n) => `<span class="xag-svc">${esc(n)}<em>Coming</em></span>`).join('');
+    const svc = S.services.map((s) => `<span class="xag-svc on" title="${esc(s.description || '')}">${ic('check')}${esc(s.title)}</span>`).join('');
 
     // 3. credentials and where it has run
     const creds = a.credentials.length ? a.credentials.map((c) => `<div class="xag-row"><span class="xag-row-ic">${ic('lock')}</span><span class="xag-row-b"><code>${esc(c.hint)}</code><small>${esc(c.label || 'Credential')} · made ${esc(ago(c.createdAt).toLowerCase())} · ${c.lastUsedAt ? 'used ' + esc(ago(c.lastUsedAt).toLowerCase()) : 'not used yet'}</small></span><span class="xag-row-m">${esc(until(c.expiresAt))}</span><button type="button" class="pg-btn ghost" data-xag="revoke" data-id="${esc(c.id)}">Revoke</button></div>`).join('')
@@ -304,7 +306,7 @@
             ${S.runsFor === a.id && S.runs.length ? `<div class="xag-rows">${S.runs.slice(0, 10).map((r) => `<div class="xag-row"><span class="xag-row-ic">${ic(LIVE_RUN.has(r.state) ? 'refresh' : r.state === 'completed' ? 'check' : 'x')}</span><span class="xag-row-b"><b><a data-xag="open-task" data-k="${esc(r.task || '')}">${esc(r.task || 'Task')}</a> · ${esc(RUN_STATE[r.state] || r.state)}</b><small>${esc(ago(r.createdAt))} · instructions v${esc(r.version)} · budget ${esc(r.budgetCredits)} credits${runReason(r) ? ' · ' + esc(runReason(r)) : ''}</small></span><span class="xag-row-m">${r.endedAt ? esc(ago(r.endedAt)) : ''}</span>${LIVE_RUN.has(r.state) ? `<button type="button" class="pg-btn ghost" data-xag="stop-run" data-id="${esc(r.id)}">Stop</button>` : '<span></span>'}</div>`).join('')}</div>`
               : `<p class="xag-none">Run ${esc(a.name)} on one of its tasks and it works in the cloud — no CLI, no computer of yours. It acts as ${esc(a.name)}, can only reach its projects, and stops at the budget you set.</p>`}</section>
           <section class="pg-sec"><div class="pg-sec-h"><h3>Works on</h3><small>${h.plural(a.projects.length, 'project', 'projects')}</small></div>${projects}</section>
-          <section class="pg-sec"><div class="pg-sec-h"><h3>Can use</h3></div><div class="xag-svcs">${svc}</div><p class="xag-note">What it can use grows as XENO services join XENO MCP. You can still turn a service off for one connection in Dev › MCP.</p></section>
+          <section class="pg-sec"><div class="pg-sec-h"><h3>Can use</h3></div><div class="xag-svcs">${svc}</div><p class="xag-note">Images, video and model calls are billed to ${company ? esc(a.owner.name) + '’s person answering for it' : 'you'}${a.division ? `, within ${esc(a.division.name)}’s agent budget` : ''}. An image or video waits for ${company ? 'them' : 'you'} to approve it unless ${a.division ? 'the division' : 'its division'} approves within its budget. You can turn a service off for one connection in Dev › MCP.</p></section>
           <section class="pg-sec"><div class="pg-sec-h"><h3>How it hears about new work</h3><button class="pg-link" data-xag="webhook">${a.webhook ? 'Change' : 'Add a webhook'}</button></div>
             ${a.webhook ? `<div class="xag-rows"><div class="xag-row"><span class="xag-row-ic">${ic('send')}</span><span class="xag-row-b"><code>${esc(a.webhook)}</code><small>Every task delegated to it is posted here, signed (HMAC-SHA256), and retried if it fails</small></span><span></span><button type="button" class="pg-btn ghost" data-xag="webhook-off">Remove</button></div></div>`
               : '<p class="xag-none">No webhook. It finds new work by asking XENO (its event feed, or the Tasks tools over MCP). Add one to be told the moment a task is delegated to it.</p>'}
