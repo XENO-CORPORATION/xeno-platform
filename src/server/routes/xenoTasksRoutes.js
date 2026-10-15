@@ -26,6 +26,7 @@ import express from 'express';
 import * as tasks from '../services/xenoTasks.js';
 import { resolvePrincipal, assertPrincipalUsable } from '../services/agentIdentity.js';
 import * as mcp from '../services/tasksMcp.js';
+import { TASKS_OPENAPI } from '../services/tasksOpenApi.js';
 import { verifyTasksAccessToken, getClient } from '../utils/oidcProvider.js';
 import { acceptedSiteOrigins, issuer } from '../config/hosts.js';
 import { requireEntitlement } from '../middleware/requireEntitlement.js';
@@ -112,7 +113,7 @@ router.use(handledMw(async (req) => {
   if (!tok.scopes.includes(need)) throw new tasks.TaskError(`This credential lacks ${need}`, 'scope_missing', 403);
   if (tok.taskId) {
     if (req.path === '/' && req.method === 'GET') return;            // the list, narrowed to the one task below
-    if (req.path === '/mcp' || req.path === '/agent/events' || req.path === '/agent/me') return;
+    if (req.path === '/mcp' || req.path === '/agent/events' || req.path === '/agent/me' || req.path === '/openapi.json') return;
     const m = SINGLE_TASK_OK.exec(req.path);
     if (!m || req.method === 'DELETE' && !/attachments/.test(req.path)) throw new tasks.TaskError('This credential is for one task only', 'single_task', 403);
     const id = (await req.db.query('SELECT id FROM tasks WHERE number = $1', [m[1].slice(2)])).rows[0];
@@ -147,8 +148,9 @@ router.post('/agents', unlessTaskToken(requireEntitlement('agents')), handled(as
 router.post('/agents/tokens', handled(async (req, res) => { res.status(201).json({ success: true, ...(await tasks.mintAgentToken(req.db, req.me, req.body || {})) }); }));
 router.delete('/agents/tokens/:id', handled(async (req, res) => { res.json({ success: true, ...(await tasks.revokeAgentToken(req.db, req.me, req.params.id)) }); }));
 router.put('/agents/webhook', handled(async (req, res) => { res.json({ success: true, ...(await tasks.setAgentWebhook(req.db, req.me, req.body || {})) }); }));
+router.get('/openapi.json', (req, res) => { res.json(TASKS_OPENAPI); });
 router.get('/agent/events', handled(async (req, res) => { res.json({ success: true, ...(await tasks.agentEvents(req.db, req.me, { after: req.query.after, limit: req.query.limit })) }); }));
-router.get('/agent/me', handled(async (req, res) => { res.json({ success: true, agent: { id: String(req.me.id), name: req.me.name, kind: req.me.kind, scopes: req.taskToken ? req.taskToken.scopes : null, task: req.taskToken && req.taskToken.taskId ? true : false }, tasks: (await tasks.listTasks(req.db, req.me, { delegate: 'me', status: 'raised,todo,in_progress,blocked,in_review' })).filter((x) => !req.taskToken || !req.taskToken.taskId || String(x.id) === req.taskToken.taskId) }); }));
+router.get('/agent/me', handled(async (req, res) => { const ai = (await req.db.query(`SELECT ai.public_id, d.id AS division_id, d.name AS division_name FROM agent_identities ai LEFT JOIN workforce_division_ownership o ON o.resource_id = ai.workforce_resource_id LEFT JOIN workforce_divisions d ON d.id = o.division_id WHERE ai.user_id = $1`, [req.me.id])).rows[0] || {}; res.json({ success: true, agent: { id: String(req.me.id), agentId: ai.public_id || null, division: ai.division_id ? { id: String(ai.division_id), name: ai.division_name } : null, expiresAt: req.taskToken ? req.taskToken.expiresAt : null, name: req.me.name, kind: req.me.kind, scopes: req.taskToken ? req.taskToken.scopes : null, task: req.taskToken && req.taskToken.taskId ? true : false }, tasks: (await tasks.listTasks(req.db, req.me, { delegate: 'me', status: 'raised,todo,in_progress,blocked,in_review' })).filter((x) => !req.taskToken || !req.taskToken.taskId || String(x.id) === req.taskToken.taskId) }); }));
 router.get('/projects', handled(async (req, res) => { res.json({ success: true, projects: await tasks.listTaskProjects(req.db, req.me) }); }));
 router.get('/agents/:id/projects', handled(async (req, res) => { res.json({ success: true, ...(await tasks.agentProjects(req.db, req.me, req.params.id)) }); }));
 router.put('/agents/:id/projects/:projectId', handled(async (req, res) => { res.json({ success: true, ...(await tasks.addAgentProject(req.db, req.me, req.params.id, req.params.projectId, req.body?.relation || 'editor')) }); }));

@@ -249,6 +249,28 @@ async function main() {
     const who4 = await call('GET', '/api/tasks/agent/me', { token: tok.j.access_token });
     check_(who4.s !== 200 || String((who4.j.agent || who4.j.me || who4.j).id) !== String(actorUser), 'once the agent is deleted, the app no longer acts as it');
 
+    // native clients (SDK/CLI): runtime config versioned with the instructions, whoami, the REST contract
+    const nat = (await call('POST', '/api/agents', { token: A, body: { name: 'Native', instructions: 'Be brief.', divisionId: creative.id, runtime: { model: 'gpt-5.5', effort: 'high', tools: { deny: ['Bash'] } } } })).j.agent;
+    check_(nat && nat.runtime.model === 'gpt-5.5' && nat.runtime.effort === 'high' && nat.runtime.tools.deny[0] === 'Bash', 'an agent carries a runtime config: model, effort and tool scope');
+    const natV = (await call('PATCH', `/api/agents/${nat.id}`, { token: A, body: { runtime: { model: 'gpt-5.5', effort: 'low' } } })).j.agent;
+    check_(natV.version === nat.version + 1 && natV.runtime.effort === 'low' && natV.instructions === 'Be brief.', 'changing only the runtime is a new version and keeps the instructions');
+    check_((await call('PATCH', `/api/agents/${nat.id}`, { token: A, body: { runtime: { effort: 'insane' } } })).j.code === 'invalid_runtime', 'an unknown effort is refused');
+    const natCred = (await call('POST', `/api/agents/${nat.id}/credentials`, { token: A, body: {} })).j.credential;
+    check_(natCred.expiresAt && Math.abs(new Date(natCred.expiresAt) - Date.now() - 3600e3) < 120e3, 'a minted credential reports expiresAt on the server clock (1 hour)');
+    const me = await call('GET', '/api/tasks/agent/me', { token: natCred.token });
+    check_(me.s === 200 && me.j.agent.agentId === nat.id && me.j.agent.division && me.j.agent.division.name === 'Creative' && me.j.agent.expiresAt, 'an agent credential asks who it is: agt_ id, division, expiry');
+    const spec = await call('GET', '/api/tasks/openapi.json', { token: natCred.token });
+    check_(spec.s === 200 && spec.j.openapi === '3.1.0' && spec.j.paths['/{key}/transition'], 'the Tasks REST contract is served as OpenAPI 3.1');
+    let routesOk = true;
+    for (const p of Object.keys(spec.j.paths)) {
+      if (p.includes('{key}') || p === '/') continue;
+      if ((await call('GET', '/api/tasks' + p, { token: natCred.token })).s === 404) routesOk = false;
+    }
+    check_(routesOk, 'every fixed path in the contract is a real route');
+    const natCid = (await call('GET', `/api/agents/${nat.id}`, { token: A })).j.agent.credentials[0].id;
+    await call('DELETE', `/api/agents/${nat.id}/credentials/${natCid}`, { token: A });
+    check_((await call('GET', '/api/tasks/agent/me', { token: natCred.token })).s === 401, 'a revoked credential is refused on the very next request');
+
     // where it hears about new work
     const keep = (await call('POST', '/api/agents', { token: A, body: { name: 'Hook bot' } })).j.agent;
     const hook = await call('PUT', `/api/agents/${keep.id}/webhook`, { token: A, body: { url: 'https://hooks.example.com/xeno' } });

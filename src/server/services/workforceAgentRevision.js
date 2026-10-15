@@ -77,9 +77,25 @@ function list(value, max, normalize, key) {
   return out;
 }
 
+
+// The agent's runtime config, versioned with its instructions: which model, how hard it reasons, which tools it
+// may use. Optional: a definition without it is unchanged (and hashes exactly as before).
+const EFFORTS = ['minimal', 'low', 'medium', 'high', 'max'];
+function runtimeOf(value, rec) {
+  const r = rec(value, ['model', 'effort', 'tools']);
+  const out = {};
+  if (Object.hasOwn(r, 'model')) out.model = identifier(r.model);
+  if (Object.hasOwn(r, 'effort')) { if (!EFFORTS.includes(r.effort)) fail('bad_input', 'invalid_effort'); out.effort = r.effort; }
+  if (Object.hasOwn(r, 'tools')) {
+    const t = rec(r.tools, ['allow', 'deny']);
+    out.tools = {};
+    for (const k of ['allow', 'deny']) if (Object.hasOwn(t, k)) out.tools[k] = list(t[k], 128, identifier, (x) => x);
+  }
+  return out;
+}
 /** The content of a revision -- the same grammar creation accepts, minus provenance and licence, which are inherited. */
 function content(value) {
-  const input = record(value, ['schemaVersion', 'instructions', 'skills', 'requestedCapabilities', 'secretReferences', 'provenance', 'license'], 'definition');
+  const input = record(value, ['schemaVersion', 'instructions', 'skills', 'requestedCapabilities', 'secretReferences', 'runtime', 'provenance', 'license'], 'definition');
   // Named, not merely unknown: a caller asking to relabel what it is revising is told why it cannot.
   if (Object.hasOwn(input, 'provenance') || Object.hasOwn(input, 'license')) fail('bad_input', 'provenance_and_license_are_inherited');
   if (input.schemaVersion !== 1) fail('bad_input', 'unsupported_definition_schema');
@@ -97,7 +113,8 @@ function content(value) {
     // A reference id only -- never a secret value, URI or env payload.
     return { name: reference.name, ref: uuid(reference.ref, 'secret_reference') };
   }, (r) => r.name);
-  return { instructions, skills, requestedCapabilities, secretReferences };
+  const runtime = Object.hasOwn(input, 'runtime') ? runtimeOf(input.runtime, (v, a) => record(v, a, 'runtime')) : null;
+  return { instructions, skills, requestedCapabilities, secretReferences, ...(runtime && Object.keys(runtime).length ? { runtime } : {}) };
 }
 function actorOf(context) {
   const ctx = record(context, ['actorUserId', 'clientId', 'apiKeyId'], 'context');
