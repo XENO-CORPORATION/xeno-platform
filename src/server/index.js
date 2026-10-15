@@ -1,5 +1,6 @@
 import path from 'path';
 import xenoTasksRoutes, { taskTokenAuth, unlessTaskToken, mcpChallenge, protectedResourceMetadata } from './routes/xenoTasksRoutes.js';
+import xenoMcpRoutes, { management as xenoMcpManagement, personOnly as mcpPersonOnly, mcpResourceMetadata } from './routes/xenoMcpRoutes.js';
 import userNotificationsRoutes from './routes/userNotificationsRoutes.js';
 import { startTaskSweeps } from './services/taskNotifyEmail.js';
 import { sweepDueReminders, deliverAgentEvents } from './services/xenoTasks.js';
@@ -626,6 +627,11 @@ app.use('/api/workspace', databaseMiddleware, authMiddleware, requireActivated, 
 app.get(['/.well-known/oauth-protected-resource', '/.well-known/oauth-protected-resource/api/tasks/mcp'], protectedResourceMetadata);
 app.get('/.well-known/oauth-authorization-server', (req, res) => res.json(oidcDiscovery()));
 app.use('/api/tasks', databaseMiddleware, mcpChallenge, taskTokenAuth, unlessTaskToken(authMiddleware), unlessTaskToken(requireActivated), xenoTasksRoutes);
+// XENO MCP — one hosted MCP address for every agent (XENO AGENT SURFACES & CONNECTORS - SPEC.md §7). The
+// management routes are the person's (their session); the endpoint itself is an agent's (its OAuth token).
+app.get('/.well-known/oauth-protected-resource/api/mcp', mcpResourceMetadata);
+app.use('/api/mcp', databaseMiddleware, (req, res, next) => (req.path === '/' ? xenoMcpRoutes(req, res, next) : next()));
+app.use('/api/mcp', databaseMiddleware, authMiddleware, requireActivated, mcpPersonOnly, xenoMcpManagement);
 app.use('/api/notifications', databaseMiddleware, authMiddleware, requireActivated, userNotificationsRoutes);
 console.log('🏢 Workspace routes integrated: /api/workspaces/* + /api/workspace-invites/*');
 

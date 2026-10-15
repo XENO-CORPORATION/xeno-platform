@@ -38,6 +38,9 @@ export const ACCESS_TOKEN_AUDIENCE = 'xeno-api';
 // (which requires 'xeno-api') refuses them by construction. Only /api/tasks accepts it.
 export const TASKS_AUDIENCE = 'xeno-tasks';
 export const TASKS_SCOPES = Object.freeze(['tasks:read', 'tasks:write']);
+// XENO MCP (/api/mcp, SURFACES spec §7) accepts these same tokens: Tasks is its only service today, so a client
+// signed in to /api/tasks/mcp works on /api/mcp with nothing to re-authorize. The audience stays one the rest of
+// the API refuses.
 export const ACCESS_TOKEN_TYP = 'at+jwt';
 
 /** RFC 7519 `aud` may be a string or an array of strings. */
