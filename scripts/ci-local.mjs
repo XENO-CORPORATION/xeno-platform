@@ -214,6 +214,7 @@ function run(cmd, args, opts = {}) {
     stdio: opts.quiet ? 'pipe' : 'inherit',
     shell: process.platform === 'win32',
     encoding: 'utf8',
+    windowsHide: true,   // the owner works on this PC: no console window may flash up (headless-only directive)
   });
   return { code: r.status ?? 1, out: `${r.stdout || ''}${r.stderr || ''}` };
 }

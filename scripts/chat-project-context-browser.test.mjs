@@ -55,7 +55,7 @@ let server = null;
 let base = process.env.BASE || '';
 if (!base) {
   const port = await freePort();
-  server = spawn(process.execPath, ['node_modules/vite/bin/vite.js', '--host', '127.0.0.1', '--port', String(port), '--strictPort'], { stdio: 'ignore' });
+  server = spawn(process.execPath, ['node_modules/vite/bin/vite.js', '--host', '127.0.0.1', '--port', String(port), '--strictPort'], { stdio: 'ignore', windowsHide: true });
   base = `http://127.0.0.1:${port}`;
   const deadline = Date.now() + 90_000;
   for (;;) {

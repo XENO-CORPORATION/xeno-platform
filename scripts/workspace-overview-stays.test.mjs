@@ -33,6 +33,7 @@ test('no workspace feature navigates by a hard-coded area address', () => {
 test('Tasks names each task\'s area on Overview', () => {
   const src = readFileSync(join(dir, 'platform-tasks.js'), 'utf8');
   assert.match(src, /const areaChip = \(t\) => \(!P\.area\(\) && t\.area/, 'the area label shows only on Overview');
-  assert.match(src, /tk-card-f">\$\{areaChip\(t\)\}/, 'on cards');
-  assert.match(src, /tk-row-x">\$\{areaChip\(t\)\}/, 'and on rows');
+  // the project chip (328d21c2, "names where it lives") comes first; the area chip follows it in the same strip
+  assert.match(src, /tk-card-f">(?:\$\{projChip\(t\)\})?\$\{areaChip\(t\)\}/, 'on cards');
+  assert.match(src, /tk-row-x">(?:\$\{projChip\(t\)\})?\$\{areaChip\(t\)\}/, 'and on rows');
 });
