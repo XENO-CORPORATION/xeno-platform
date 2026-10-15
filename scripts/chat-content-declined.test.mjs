@@ -63,3 +63,13 @@ test('the stream route REACHES the decline: it captures the finish reason and ca
   // the error it emits is the distinct code the client can act on
   assert.match(ROUTE, /error: 'content_declined'/);
 });
+
+// 2026-10-15: a turn whose whole answer is a TOOL (an image proposal) ends with text "" and reasoning on. The client
+// tested `data.text` for truthiness and threw "Invalid response format" above the card the turn produced.
+const CLIENT = readFileSync(join(ROOT, 'src', 'components', 'playground', 'Chat', 'ChatWithLLM.tsx'), 'utf8').replace(/\r\n/g, '\n');
+test('an empty answer with reasoning on is a valid turn, not "Invalid response format"', () => {
+  const branch = CLIENT.slice(CLIENT.indexOf('if (data.reasoningProcessed)'), CLIENT.indexOf('Invalid response format from server when reasoning was expected'));
+  assert.ok(branch.length > 0, 'the reasoning branch is found');
+  assert.ok(/else if \(typeof data\.text === 'string'\)/.test(branch), 'the text branch accepts an empty string');
+  assert.ok(!/else if \(data\.text\) \{/.test(branch), 'and never tests data.text for truthiness');
+});

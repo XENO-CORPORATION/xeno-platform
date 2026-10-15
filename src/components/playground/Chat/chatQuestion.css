@@ -127,10 +127,16 @@
 .chat-q-gen-prompt { padding: 0 13px; }
 .chat-q-gen-prompt button { all: unset; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; cursor: text; font-size: 13px; line-height: 1.5; color: var(--chat-text); }
 .chat-q-gen-prompt button[data-open] { -webkit-line-clamp: unset; max-height: 40vh; overflow-y: auto; }
-.chat-q-gen-settings { display: flex; flex-wrap: wrap; gap: 5px; padding: 9px 13px 0; }
+.chat-q-gen-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; padding: 9px 12px 11px 13px; }
+.chat-q-gen-settings { display: flex; flex-wrap: wrap; align-items: center; gap: 5px; }
 .chat-q-gen-settings span { display: inline-flex; align-items: baseline; gap: 5px; font-size: 11.5px; color: var(--chat-text); padding: 2px 7px; border-radius: 5px; background: var(--chat-control); }
 .chat-q-gen-settings i { font-style: normal; color: var(--chat-muted); }
-.chat-q-gen-note { margin: 10px 13px 0; font-size: 12px; color: var(--chat-muted); }
+/* said under the card, centred: a fact about the request, not part of the decision */
+.chat-q-gen-note { margin: -4px 0 12px; text-align: center; font-size: 12px; color: var(--chat-muted); }
 .chat-q-gen-error { margin: 8px 13px 0; font-size: 12.5px; line-height: 1.45; color: var(--chat-danger); }
-.chat-q-gen-actions { display: flex; align-items: center; gap: 6px; padding: 11px 12px 11px 13px; flex-wrap: wrap; }
+.chat-q-gen-actions { display: flex; align-items: center; gap: 5px; padding: 0 12px 11px 13px; flex-wrap: wrap; }
+/* in the shared row the actions sit right and match the chips' height */
+.chat-q-gen-row .chat-q-gen-actions { padding: 0; margin-left: auto; justify-content: flex-end; }
+.chat-q-gen-row .chat-q-btn { display: inline-flex; align-items: center; height: auto; padding: 2px 9px; border-radius: 5px; font: inherit; font-size: 11.5px; line-height: inherit; }
+.chat-q-gen-row .chat-q-gen-settings span { line-height: inherit; }
 .chat-q-gen-results { padding: 0 12px 12px; display: flex; flex-direction: column; gap: 8px; }
