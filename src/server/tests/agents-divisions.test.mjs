@@ -19,7 +19,10 @@ import express from 'express';
 import pg from 'pg';
 import jwt from 'jsonwebtoken';
 import chatRoutes from '../routes/chatRoutes.js';
+import oauth2Routes from '../routes/oauth2Routes.js';
+import crypto from 'node:crypto';
 import xenoMcpRoutes, { personOnly } from '../routes/xenoMcpRoutes.js';
+import xenoTasksRoutes, { taskTokenAuth, unlessTaskToken, mcpChallenge } from '../routes/xenoTasksRoutes.js';
 import platformAgentRoutes from '../routes/platformAgentRoutes.js';
 import workforceDivisionRoutes from '../routes/workforceDivisionRoutes.js';
 import { authMiddleware } from '../middleware/auth.js';
@@ -46,14 +49,17 @@ async function main() {
 
   const app = express(); app.use(express.json());
   app.use((req, _res, next) => { req.db = pool; next(); });
+  app.use(express.urlencoded({ extended: false }));
+  app.use('/api/oauth2', oauth2Routes);
   app.use('/api/chat', (req, _r, n) => { req.user = { id: req.headers['x-as'] || ada }; n(); }, chatRoutes);
   app.use('/api/mcp', (req, res, next) => (req.path === '/' ? xenoMcpRoutes(req, res, next) : next()));
+  app.use('/api/tasks', mcpChallenge, taskTokenAuth, unlessTaskToken(authMiddleware), xenoTasksRoutes);
   app.use('/api/agents', authMiddleware, personOnly, platformAgentRoutes);
   app.use('/api/divisions', authMiddleware, personOnly, workforceDivisionRoutes);
   const server = http.createServer(app); await new Promise((r) => server.listen(0, '127.0.0.1', r));
   const origin = `http://127.0.0.1:${server.address().port}`;
-  const call = async (method, path, { token, body, headers = {} } = {}) => {
-    const r = await fetch(origin + path, { method, headers: { ...(body !== undefined ? { 'content-type': 'application/json' } : {}), ...(token ? { authorization: 'Bearer ' + token } : {}), ...headers }, body: body === undefined ? undefined : JSON.stringify(body) });
+  const call = async (method, path, { token, body, headers = {}, raw } = {}) => {
+    const r = await fetch(origin + path, { method, headers: { ...(body !== undefined ? { 'content-type': 'application/json' } : {}), ...(token ? { authorization: 'Bearer ' + token } : {}), ...headers }, body: body === undefined ? undefined : raw ? body : JSON.stringify(body) });
     let j = null; const t = await r.text(); try { j = t ? JSON.parse(t) : null; } catch { j = t; }
     return { s: r.status, j };
   };
@@ -208,6 +214,40 @@ async function main() {
     check_(!(await call('GET', `/api/agents/${lender.id}`, { token: A })).j.agent.projects.some((x) => x.id === pDev2), 'ending the Dev lend takes away its Dev project');
     let del = null; try { await pool.query('DELETE FROM workforce_workspace_assignments WHERE id = $1', [devLend]); } catch (e) { del = e; }
     check_(del, 'a lend is never deleted, only revoked — its history stays (the database refuses)');
+
+    // "Act as": a browser sign-in from an agent app can become one of the person's own agents
+    const pk = () => { const v = crypto.randomBytes(32).toString('base64url'); return { v, c: crypto.createHash('sha256').update(v).digest('base64url') }; };
+    const reg = await call('POST', '/api/oauth2/register', { body: { client_name: 'Claude Code', redirect_uris: ['http://localhost:33418/callback'], token_endpoint_auth_method: 'none', scope: 'tasks:read tasks:write' } });
+    const red = 'http://localhost:51234/callback';
+    const authz = async (extra, pp) => call('POST', '/api/oauth2/authorize', { token: A, body: { client_id: reg.j.client_id, redirect_uri: red, scope: 'tasks:read tasks:write', code_challenge: pp.c, code_challenge_method: 'S256', state: 's', ...extra } });
+    const actor = (await call('POST', '/api/agents', { token: A, body: { name: 'Actor', divisionId: creative.id } })).j.agent;
+    const askP = pk(); const ask = await authz({}, askP);
+    check_(ask.j.error === 'consent_required' && ask.j.consent.agents.some((x) => x.id === actor.id && x.division === 'Creative'), 'the consent screen offers the person\u2019s own agents, with their division');
+    check_(!ask.j.consent.agents.some((x) => /claude-code|forum|probe/i.test(x.name)), 'and never the per-app or system agents');
+    const pageHtml = await (await fetch(origin + `/api/oauth2/authorize?client_id=${reg.j.client_id}&redirect_uri=${encodeURIComponent(red)}&code_challenge=${askP.c}&code_challenge_method=S256&scope=tasks:read`)).text();
+    const js = pageHtml.split('<script>')[1].split('</script>')[0];
+    let parses = true; try { new Function(js); } catch { parses = false; }
+    check_(parses && /Act as/.test(pageHtml), 'the sign-in page carries the Act as choice, and its script parses');
+    check_((await authz({ consent: true, act_as: 'agt_' + '0'.repeat(32) }, pk())).j.error === 'invalid_request', 'an unknown agent is refused');
+    const bobAgent = (await pool.query(`SELECT public_id FROM agent_identities WHERE owner_user_id = $1 AND public_id IS NOT NULL LIMIT 1`, [bob])).rows[0].public_id;
+    check_((await authz({ consent: true, act_as: bobAgent }, pk())).j.error === 'invalid_request', "someone else's agent is refused");
+    const p2 = pk(); const ok2 = await authz({ consent: true, act_as: actor.id }, p2);
+    const tok = await call('POST', '/api/oauth2/token', { body: new URLSearchParams({ grant_type: 'authorization_code', code: ok2.j.code, client_id: reg.j.client_id, redirect_uri: red, code_verifier: p2.v }).toString(), raw: true, headers: { 'content-type': 'application/x-www-form-urlencoded' } });
+    const who = await call('GET', '/api/tasks/agent/me', { token: tok.j.access_token });
+    const actorUser = (await pool.query('SELECT user_id FROM agent_identities WHERE public_id = $1', [actor.id])).rows[0].user_id;
+    check_(who.s === 200 && String((who.j.agent || who.j.me || who.j).id) === String(actorUser), `signing in with Act as = Actor makes the app act AS Actor (${who.s})`);
+    const conns = (await call('GET', '/api/agents/' + actor.id, { token: A })).j.agent.connections;
+    void conns;
+    // clearing it, by signing in again choosing "its own agent", returns to the per-app agent
+    const p3 = pk(); const ok3 = await authz({ consent: true, act_as: '' }, p3);
+    const tok3 = await call('POST', '/api/oauth2/token', { body: new URLSearchParams({ grant_type: 'authorization_code', code: ok3.j.code, client_id: reg.j.client_id, redirect_uri: red, code_verifier: p3.v }).toString(), raw: true, headers: { 'content-type': 'application/x-www-form-urlencoded' } });
+    const who3 = await call('GET', '/api/tasks/agent/me', { token: tok3.j.access_token });
+    check_(String((who3.j.agent || who3.j.me || who3.j).id) !== String(actorUser), 'choosing "its own agent" returns the app to a per-app agent');
+    // deleting the bound agent: the binding no longer applies
+    await authz({ consent: true, act_as: actor.id }, pk());
+    await call('DELETE', `/api/agents/${actor.id}`, { token: A });
+    const who4 = await call('GET', '/api/tasks/agent/me', { token: tok.j.access_token });
+    check_(who4.s !== 200 || String((who4.j.agent || who4.j.me || who4.j).id) !== String(actorUser), 'once the agent is deleted, the app no longer acts as it');
 
     // where it hears about new work
     const keep = (await call('POST', '/api/agents', { token: A, body: { name: 'Hook bot' } })).j.agent;

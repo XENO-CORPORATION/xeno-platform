@@ -800,6 +800,19 @@ export async function createTaskAgent(db, me, { name } = {}) {
 /** The agent a person's MCP sign-in acts as. Signing in an agent CLI never lets it act as the person:
  *  it gets the person's own agent for that app (one per app name), owned by them, with its general
  *  API key switched off. Reused on every later sign-in from the same app. */
+/** The agent a person bound this app to ("Act as" on the consent screen), when it is still theirs and usable. */
+export async function boundAgentFor(db, ownerId, clientId) {
+  const r = (await db.query(`SELECT b.agent_user_id FROM mcp_client_agent_bindings b JOIN agent_identities ai ON ai.user_id = b.agent_user_id
+    WHERE b.owner_user_id = $1 AND b.client_id = $2 AND ai.owner_user_id = $1 AND ai.status = 'active'`, [ownerId, clientId])).rows[0];
+  return r ? String(r.agent_user_id) : null;
+}
+/** Bind (or, with null, unbind) an app to one of the person's own agents. */
+export async function bindClientAgent(db, ownerId, clientId, agentUserId) {
+  if (!agentUserId) { await db.query('DELETE FROM mcp_client_agent_bindings WHERE owner_user_id = $1 AND client_id = $2', [ownerId, clientId]); return null; }
+  await db.query(`INSERT INTO mcp_client_agent_bindings (owner_user_id, client_id, agent_user_id) VALUES ($1, $2, $3)
+    ON CONFLICT (owner_user_id, client_id) DO UPDATE SET agent_user_id = EXCLUDED.agent_user_id`, [ownerId, clientId, agentUserId]);
+  return String(agentUserId);
+}
 export async function mcpAgentFor(db, ownerId, appName) {
   const label = String(appName || 'MCP app').replace(/[\u0000-\u001f<>]/g, '').trim().slice(0, 60) || 'MCP app';
   const pick = async (byName) => (await db.query(`SELECT u.id FROM agent_identities ai JOIN users u ON u.id = ai.user_id
