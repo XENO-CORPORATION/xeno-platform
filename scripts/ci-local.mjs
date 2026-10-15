@@ -371,9 +371,20 @@ function buildAgentsApi() {
   const dir = mkdtempSync(join(tmpdir(), 'ci-agents-api-'));
   const ref = spawnSync('git', ['-C', sibling, 'rev-parse', '--verify', 'origin/HEAD'], { encoding: 'utf8' }).status === 0
     ? 'origin/HEAD' : 'origin/main';
-  const archive = spawnSync('sh', ['-c', `git -C "${sibling}" archive ${ref} | tar -x -C "${dir}"`], { encoding: 'utf8' });
+  // No shell, no pipe: git writes the archive to a file and git's own `archive` format is extracted by tar from that
+  // file, with forward slashes and --force-local. Through `sh` on Windows the path reached tar as `C\:\\Users…`
+  // (escaped twice), and GNU tar reads any `C:` path as a remote host -- so this stage could never run here.
+  const tarFile = join(dir, '..', `${dir.split(/[\\/]/).pop()}.tar`);
+  const archive = spawnSync('git', ['-C', sibling, 'archive', '--format=tar', '-o', tarFile, ref], { encoding: 'utf8', windowsHide: true });
   if (archive.status !== 0) return { error: `git archive failed: ${archive.stderr}` };
-  symlinkSync(join(sibling, 'node_modules'), join(dir, 'node_modules'));
+  const fwd = (p) => p.replace(/\\/g, '/');
+  const untar = spawnSync('tar', [...(process.platform === 'win32' ? ['--force-local'] : []), '-xf', fwd(tarFile), '-C', fwd(dir)], { encoding: 'utf8', windowsHide: true });
+  rmSync(tarFile, { force: true });
+  if (untar.status !== 0) return { error: `extracting the agents-api archive failed: ${untar.stderr}` };
+  // A junction, not a symlink: creating a symlink needs administrator rights on Windows (EPERM). 🔴 The temp dir
+  // holding it is never deleted recursively by this script -- a recursive delete would follow the junction into
+  // the sibling's real node_modules (root CLAUDE.md, the 2026-08-03 loss).
+  symlinkSync(join(sibling, 'node_modules'), join(dir, 'node_modules'), 'junction');
   const tsc = spawnSync(process.execPath, [join(sibling, 'node_modules', 'typescript', 'bin', 'tsc'), '-p', 'tsconfig.build.json'],
     { cwd: dir, encoding: 'utf8' });
   if (tsc.status !== 0) return { error: `agents-api build failed:\n${(tsc.stdout + tsc.stderr).slice(-2000)}` };
