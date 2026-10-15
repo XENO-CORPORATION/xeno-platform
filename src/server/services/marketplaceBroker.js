@@ -50,7 +50,7 @@ export function agentsApiBaseUrl(env = process.env) {
  * A short-lived access token for `userId`, minted on its own one-purpose OIDC session so it passes the
  * ordinary session checks and can be revoked without touching any of the user's own sessions.
  */
-export async function mintDelegatedAccessToken(db, userId, { invocationId }) {
+export async function mintDelegatedAccessToken(db, userId, { invocationId, actor = BROKER_ACTOR, act = null, record = null }) {
   const key = await getSigningKey(db);
   const now = Math.floor(Date.now() / 1000);
   const sid = crypto.randomUUID();
@@ -64,16 +64,18 @@ export async function mintDelegatedAccessToken(db, userId, { invocationId }) {
      VALUES ($1, $2, $3, now(), NULL, now() + ($4 || ' seconds')::interval)`,
     [sid, userId, epoch, String(DELEGATED_TTL_SEC)],
   );
-  // Recorded against the invocation, so an audit can list every credential the broker minted for it.
-  await db.query(
+  // Recorded against what it was minted for, so an audit can list every credential minted for it. The default
+  // record is the marketplace invocation; another broker (agent cloud runs) passes its own.
+  if (record) await record(sid);
+  else await db.query(
     'UPDATE marketplace_invocations SET delegated_sids = array_append(delegated_sids, $2::uuid) WHERE id = $1',
     [invocationId, sid],
   );
   const token = jwt.sign(
     {
       iss: issuer(), iat: now, sub: userId, aud: ACCESS_TOKEN_AUDIENCE,
-      client_id: BROKER_ACTOR, azp: BROKER_ACTOR, scope: 'agents:run',
-      act: { sub: BROKER_ACTOR, invocation_id: invocationId },
+      client_id: actor, azp: actor, scope: 'agents:run',
+      act: act || { sub: actor, invocation_id: invocationId },
       sid, auth_epoch: epoch, auth_time: now, typ: ACCESS_TOKEN_TYP,
     },
     key.privatePem,
@@ -82,7 +84,7 @@ export async function mintDelegatedAccessToken(db, userId, { invocationId }) {
   return { token, sid };
 }
 
-async function revokeDelegatedSession(db, sid) {
+export async function revokeDelegatedSession(db, sid) {
   await db.query('UPDATE oauth_session_state SET revoked_at = now() WHERE sid = $1 AND revoked_at IS NULL', [sid]);
 }
 

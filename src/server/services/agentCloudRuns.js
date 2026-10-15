@@ -1,0 +1,233 @@
+/**
+ * agentCloudRuns.js — a person runs one of their own platform agents on a task, in the cloud.
+ *
+ * One code path for "run agent X on T-5":
+ *   1. the agent and the task are checked as the PERSON (owned agent; a task the person can see);
+ *   2. the agent's current instructions version is pinned to the run;
+ *   3. a Tasks credential is minted for the AGENT, living exactly as long as the run may;
+ *   4. the hosted run is started in xeno-agents-api as the person (a short delegated token, the same broker shape
+ *      the marketplace uses), with the agent's instructions, its runtime config and the credential handed to the
+ *      run privately -- never in a URL, never logged, never returned;
+ *   5. the run is recorded against the task, so the task and the agent page can show it.
+ *
+ * Who decides what: the hosted run's own ledger hold bills the person (budget_credits); every Tasks call the agent
+ * makes inside the run carries the AGENT's credential, so the division boundary and "an agent never accepts its
+ * own work" are enforced by the same server checks as anywhere else. Ending a run revokes the credential.
+ */
+import crypto from 'node:crypto';
+import { agentsApiBaseUrl, mintDelegatedAccessToken, revokeDelegatedSession } from './marketplaceBroker.js';
+import * as agents from './platformAgents.js';
+import * as tasks from './xenoTasks.js';
+import { issuer } from '../config/hosts.js';
+
+export const RUN_ACTOR = 'xeno-agent-runs';
+const DEFAULT_BUDGET_CREDITS = 20;
+const MAX_BUDGET_CREDITS = 200;
+const MAX_RUN_HOURS = 8;
+const LIVE = new Set(['starting', 'queued', 'running']);
+const TERMINAL_FROM_API = { completed: 'completed', failed: 'failed', cancelled: 'cancelled', skipped: 'cancelled', interrupted: 'failed' };
+
+/**
+ * The runner must SAY it runs platform agents. A runner that predates the capability accepts the run, drops the
+ * agent's identity without a word, and bills a plain run that can never touch the task -- so the platform asks
+ * first and refuses, rather than start something that looks right and is not.
+ */
+export const PLATFORM_AGENT_CAPABILITY = 'runs.platformAgent';
+async function runnerSupportsAgents(base, fetchImpl) {
+  try {
+    const res = await fetchImpl(`${base}/status`, { headers: { accept: 'application/json' } });
+    const j = await res.json().catch(() => null);
+    return !!(res.ok && j && Array.isArray(j.capabilities) && j.capabilities.includes(PLATFORM_AGENT_CAPABILITY));
+  } catch { return false; }
+}
+
+export class AgentRunError extends Error {
+  constructor(message, code, status = 400) { super(message); this.name = 'AgentRunError'; this.code = code; this.status = status; }
+}
+
+function view(r, agent) {
+  return {
+    id: String(r.id), state: r.state, reason: r.reason || null, runId: r.run_id || null,
+    agent: agent ? { id: agent.id, name: agent.name } : undefined,
+    task: r.task_key || undefined, version: r.agent_version, budgetCredits: Number(r.budget_credits),
+    createdAt: r.created_at, endedAt: r.ended_at || null,
+  };
+}
+
+/** What the agent is told to do: who it is, its instructions, and the task. */
+export function runPrompt(agent, task) {
+  const lines = [
+    `You are the XENO agent "${agent.name}" (${agent.id}${agent.division ? `, division ${agent.division.name}` : ''}, instructions v${agent.version}).`,
+    'Work the XENO task below. Use the XenoTask tools: take it (XenoTaskTake), report what you are doing as you go (XenoTaskReport),',
+    'comment with what you did and how you verified it (XenoTaskComment), then send it for review (XenoTaskMove to in_review).',
+    'You can never accept your own work. If you need a decision, ask with XenoTaskReport type "ask" and stop.',
+  ];
+  if (agent.instructions) lines.push('', 'Your instructions:', agent.instructions);
+  lines.push('', `Task ${task.key}: ${task.title}`, task.body ? `\n${task.body}` : '');
+  return lines.join('\n').slice(0, 60000);
+}
+
+async function revokeCredential(db, owner, agentId, credentialId) {
+  if (!credentialId) return;
+  await agents.revokeCredential(db, owner, agentId, credentialId).catch(() => {});
+}
+
+/**
+ * Start a cloud run of `agentId` (agt_) on `taskKey` (T-n). Idempotent per live run: while one is starting,
+ * queued or running for this agent and task, the same run is returned.
+ */
+export async function start(db, owner, agentId, { taskKey, budgetCredits } = {}, { fetchImpl = fetch, env = process.env } = {}) {
+  const base = agentsApiBaseUrl(env);
+  if (!base) throw new AgentRunError('Cloud runs are not available on this server', 'cloud_runs_unavailable', 503);
+  const agent = await agents.get(db, owner, agentId);                       // owned, or 404
+  let task = await tasks.getTask(db, owner, String(taskKey || ''));          // visible to the person, or the task error
+  const budget = budgetCredits === undefined ? DEFAULT_BUDGET_CREDITS : Number(budgetCredits);
+  if (!Number.isFinite(budget) || budget <= 0 || budget > MAX_BUDGET_CREDITS) {
+    throw new AgentRunError(`The budget is between 1 and ${MAX_BUDGET_CREDITS} credits`, 'invalid_budget');
+  }
+  if (!agent.version) throw new AgentRunError('This agent has no instructions version yet', 'agent_not_ready', 409);
+  if (!(await runnerSupportsAgents(base, fetchImpl))) {
+    throw new AgentRunError('The cloud runner cannot run XENO agents yet. Nothing was started and nothing was charged.', 'runner_lacks_agents', 503);
+  }
+
+  // The run works the task as its delegate, so the task is delegated to this agent first -- by the same rule as a
+  // delegation from the task page (only its creator may), and the same server check on the agent's projects.
+  if (!task.delegate || String(task.delegate.id) !== String(agent.userId)) {
+    task = await tasks.delegateTask(db, owner, task.key, { agentId: agent.userId });
+  }
+  const live = (await db.query(`SELECT * FROM agent_cloud_runs WHERE agent_user_id = $1 AND task_id = $2 AND state = ANY($3)`,
+    [agent.userId, task.id, [...LIVE]])).rows[0];
+  if (live) return { ...view({ ...live, task_key: task.key }, agent), existing: true };
+
+  let row;
+  try {
+    row = (await db.query(`INSERT INTO agent_cloud_runs (owner_user_id, agent_user_id, task_id, agent_version, budget_credits)
+      VALUES ($1, $2, $3, $4, $5) RETURNING *`, [owner.id, agent.userId, task.id, agent.version, budget])).rows[0];
+  } catch (e) {
+    if (e.code === '23505') {   // a concurrent start won the live slot
+      const won = (await db.query(`SELECT * FROM agent_cloud_runs WHERE agent_user_id = $1 AND task_id = $2 AND state = ANY($3)`,
+        [agent.userId, task.id, [...LIVE]])).rows[0];
+      if (won) return { ...view({ ...won, task_key: task.key }, agent), existing: true };
+    }
+    throw e;
+  }
+
+  // the agent's credential, for exactly as long as the run may live
+  const cred = await agents.mintCredential(db, owner, agent.id, { label: `Cloud run ${String(row.id).slice(0, 8)} on ${task.key}`, ttlHours: MAX_RUN_HOURS });
+  await db.query('UPDATE agent_cloud_runs SET credential_id = $2 WHERE id = $1', [row.id, cred.id]);
+
+  const fail = async (state, reason) => {
+    await revokeCredential(db, owner, agent.id, cred.id);
+    const r = (await db.query(`UPDATE agent_cloud_runs SET state = $2, reason = $3, ended_at = CASE WHEN $2 = 'uncertain' THEN NULL ELSE now() END
+      WHERE id = $1 RETURNING *`, [row.id, state, String(reason).slice(0, 200)])).rows[0];
+    return view({ ...r, task_key: task.key }, agent);
+  };
+
+  const { token, sid } = await mintDelegatedAccessToken(db, owner.id, {
+    actor: RUN_ACTOR, act: { sub: RUN_ACTOR, agent_run_id: String(row.id) },
+    record: (s) => db.query('UPDATE agent_cloud_runs SET delegated_sids = array_append(delegated_sids, $2::uuid) WHERE id = $1', [row.id, s]),
+  });
+  try {
+    let res;
+    try {
+      res = await fetchImpl(`${base}/runs`, {
+        method: 'POST',
+        headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json', 'idempotency-key': `agent-run:${row.id}` },
+        body: JSON.stringify({
+          prompt: runPrompt(agent, task),
+          title: `${agent.name} · ${task.key} ${task.title}`.slice(0, 200),
+          ...(agent.runtime && agent.runtime.model ? { model: agent.runtime.model } : {}),
+          ...(agent.runtime && agent.runtime.effort ? { effort: agent.runtime.effort } : {}),
+          permissionMode: 'auto',
+          agent: { name: agent.username, description: `platform agent ${agent.id} v${agent.version}` },
+          // The run acts AS the agent in XENO: the runner opens a native platform session with this credential
+          // (never logged, never returned) and gives the run the XenoTask* tools. The tool scope narrows them.
+          platformAgent: {
+            issuer: issuer(), agentId: agent.id, credential: cred.token, expiresAt: cred.expiresAt,
+            ...(agent.runtime && agent.runtime.tools ? { tools: agent.runtime.tools } : {}),
+          },
+          budget: { maxCredits: budget },
+        }),
+      });
+    } catch {
+      return await fail('uncertain', 'transport_error');
+    }
+    const body = await res.json().catch(() => null);
+    if (res.ok && body && body.run && body.run.runId) {
+      const r = (await db.query(`UPDATE agent_cloud_runs SET run_id = $2, state = $3 WHERE id = $1 RETURNING *`,
+        [row.id, String(body.run.runId), body.run.status === 'running' ? 'running' : 'queued'])).rows[0];
+      return view({ ...r, task_key: task.key }, agent);
+    }
+    if (res.status >= 400 && res.status < 500) {
+      const code = (typeof body?.error === 'string' ? body.error : body?.error?.code) || body?.code || `http_${res.status}`;
+      return await fail('refused', code);
+    }
+    return await fail('uncertain', `http_${res.status}`);
+  } finally {
+    await revokeDelegatedSession(db, sid);
+  }
+}
+
+/** Refresh one run's state from xeno-agents-api; a run that ended gets its credential revoked. */
+export async function refresh(db, owner, row, { fetchImpl = fetch, env = process.env } = {}) {
+  if (!row.run_id || !LIVE.has(row.state) && row.state !== 'uncertain') return row;
+  const base = agentsApiBaseUrl(env); if (!base) return row;
+  const { token, sid } = await mintDelegatedAccessToken(db, owner.id, {
+    actor: RUN_ACTOR, act: { sub: RUN_ACTOR, agent_run_id: String(row.id) },
+    record: (s) => db.query('UPDATE agent_cloud_runs SET delegated_sids = array_append(delegated_sids, $2::uuid) WHERE id = $1', [row.id, s]),
+  });
+  try {
+    let res;
+    try { res = await fetchImpl(`${base}/runs/${encodeURIComponent(row.run_id)}`, { headers: { authorization: `Bearer ${token}`, accept: 'application/json' } }); }
+    catch { return row; }
+    const body = await res.json().catch(() => null);
+    const status = body && body.run && body.run.status;
+    if (!status) return row;
+    const ended = TERMINAL_FROM_API[status];
+    const state = ended || (status === 'running' ? 'running' : 'queued');
+    if (state === row.state) return row;
+    const r = (await db.query(`UPDATE agent_cloud_runs SET state = $2, reason = $3, ended_at = CASE WHEN $4 THEN now() ELSE ended_at END WHERE id = $1 RETURNING *`,
+      [row.id, state, ended ? String(body.run.statusReason || status).slice(0, 200) : row.reason, !!ended])).rows[0];
+    if (ended) {
+      const a = (await db.query('SELECT public_id FROM agent_identities WHERE user_id = $1', [row.agent_user_id])).rows[0];
+      if (a) await revokeCredential(db, owner, a.public_id, row.credential_id);
+    }
+    return r;
+  } finally {
+    await revokeDelegatedSession(db, sid);
+  }
+}
+
+/** Stop a run. The hosted run is stopped and the credential revoked at once, whatever the runner answers. */
+export async function stop(db, owner, runRowId, { fetchImpl = fetch, env = process.env } = {}) {
+  const row = (await db.query('SELECT r.*, a.public_id FROM agent_cloud_runs r JOIN agent_identities a ON a.user_id = r.agent_user_id WHERE r.id::text = $1 AND r.owner_user_id = $2', [String(runRowId), owner.id])).rows[0];
+  if (!row) throw new AgentRunError('Run not found', 'run_not_found', 404);
+  await revokeCredential(db, owner, row.public_id, row.credential_id);
+  if (row.run_id && LIVE.has(row.state)) {
+    const base = agentsApiBaseUrl(env);
+    if (base) {
+      const { token, sid } = await mintDelegatedAccessToken(db, owner.id, {
+        actor: RUN_ACTOR, act: { sub: RUN_ACTOR, agent_run_id: String(row.id) },
+        record: (s) => db.query('UPDATE agent_cloud_runs SET delegated_sids = array_append(delegated_sids, $2::uuid) WHERE id = $1', [row.id, s]),
+      });
+      try { await fetchImpl(`${base}/runs/${encodeURIComponent(row.run_id)}/stop`, { method: 'POST', headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' }, body: '{}' }).catch(() => {}); }
+      finally { await revokeDelegatedSession(db, sid); }
+    }
+  }
+  const r = LIVE.has(row.state)
+    ? (await db.query(`UPDATE agent_cloud_runs SET state = 'cancelled', reason = 'stopped_by_owner', ended_at = now() WHERE id = $1 RETURNING *`, [row.id])).rows[0]
+    : row;
+  return view(r);
+}
+
+/** An agent's runs (newest first), refreshed when still live. */
+export async function listForAgent(db, owner, agentId, opts = {}) {
+  const agent = await agents.get(db, owner, agentId);
+  const rows = (await db.query(`SELECT r.*, 'T-' || t.number AS task_key FROM agent_cloud_runs r JOIN tasks t ON t.id = r.task_id
+    WHERE r.agent_user_id = $1 AND r.owner_user_id = $2 ORDER BY r.created_at DESC LIMIT 50`, [agent.userId, owner.id])).rows;
+  const out = [];
+  for (const row of rows) out.push(view({ ...(await refresh(db, owner, row, opts)), task_key: row.task_key }, agent));
+  return out;
+}
+
+export const _internals = { DEFAULT_BUDGET_CREDITS, MAX_BUDGET_CREDITS, MAX_RUN_HOURS, crypto };
