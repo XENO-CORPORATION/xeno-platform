@@ -68,6 +68,8 @@ async function importOutputs(db,row,options){
 async function finishFailure(db,row,state,code){
   const hold=(await db.query('SELECT state FROM credit_holds WHERE user_id=$1 AND hold_id=$2',[row.owner_user_id,row.hold_id])).rows[0];
   if(hold?.state==='held')await voidHoldV2(db,row.owner_user_id,row.hold_id);
+  // what an agent reserved against its division for this generation is given back: nothing was charged
+  await db.query(`UPDATE agent_spend_log SET state='released' WHERE ref=$1 AND state='reserved'`,[`generation:${row.id}`]).catch(e=>console.error('[media] release division budget',e.message));
   await withTransaction(db,async tx=>{await update(tx,row,{state,error_code:code});await tx.query('UPDATE credit_holds SET media_committed=false WHERE media_generation_id=$1 AND state<>\'held\'',[row.id]);});
 }
 async function execute(db,row,options){

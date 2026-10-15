@@ -101,7 +101,7 @@ export function GenerationRecord({ id }: { id: string }) {
   const references = record.request.referenceAssetIds || [];
   const waiting = record.state === 'awaiting_approval';
   const quoteReady = !!quote && Date.parse(quote.expiresAt) > Date.now();
-  return <section className="chat-q chat-q-gen" data-generation-id={id} data-state={record.state} aria-live="polite">
+  return <><section className="chat-q chat-q-gen" data-generation-id={id} data-state={record.state} aria-live="polite">
     <header className="chat-q-gen-head">
       <i className="chat-q-gen-mark" aria-hidden="true" />
       <div className="chat-q-gen-title">
@@ -119,19 +119,18 @@ export function GenerationRecord({ id }: { id: string }) {
       <button type="button" data-open={whole || undefined} aria-expanded={whole} title={whole ? 'Show less' : 'Show the whole prompt'} onClick={() => setWhole(v => !v)}>{record.request.prompt}</button>
     </div>
 
-    {settings.length > 0 && <div className="chat-q-gen-settings">
-      {settings.map(([key, value]) => <span key={key}><i>{SETTING_LABEL[key] || say(key)}</i>{key === 'n' ? `${value} ${record.type}s` : say(String(value))}</span>)}
-    </div>}
-
-    {record.state === 'awaiting_approval' && <>
-      <p className="chat-q-gen-note">Nothing has been generated or charged yet.</p>
-      {error && <p className="chat-q-gen-error" role="alert">{error}</p>}
-      <div className="chat-q-gen-actions">
-        <button className="chat-q-btn" data-variant="primary" type="button" disabled={busy || !quoteReady} onClick={() => void act('approve')}>{busy ? 'Starting…' : 'Generate'}{quoteReady ? ` · up to ${creditWord(quote!.maxRetailCredits)}` : ''}</button>
-        <button className="chat-q-btn" data-variant="ghost" type="button" disabled={busy} onClick={() => void act('cancel')}>Cancel</button>
-        {!quoteReady && !busy && <button className="chat-q-btn" data-variant="ghost" type="button" onClick={() => void act('quote')}>Price it again</button>}
+    {/* the settings and, while it waits, the decision share one row: settings left, actions right, one height */}
+    {(settings.length > 0 || waiting) && <div className="chat-q-gen-row">
+      <div className="chat-q-gen-settings">
+        {settings.map(([key, value]) => <span key={key}><i>{SETTING_LABEL[key] || say(key)}</i>{key === 'n' ? `${value} ${record.type}s` : say(String(value))}</span>)}
       </div>
-    </>}
+      {waiting && <div className="chat-q-gen-actions">
+        {!quoteReady && !busy && <button className="chat-q-btn" data-variant="ghost" type="button" onClick={() => void act('quote')}>Price it again</button>}
+        <button className="chat-q-btn" data-variant="ghost" type="button" disabled={busy} onClick={() => void act('cancel')}>Cancel</button>
+        <button className="chat-q-btn" data-variant="primary" type="button" disabled={busy || !quoteReady} onClick={() => void act('approve')}>{busy ? 'Starting…' : 'Generate'}{quoteReady ? ` · up to ${creditWord(quote!.maxRetailCredits)}` : ''}</button>
+      </div>}
+    </div>}
+    {waiting && error && <p className="chat-q-gen-error" role="alert">{error}</p>}
 
     {record.state !== 'awaiting_approval' && <>
       {record.error && <p className="chat-q-gen-error" role="alert">{GENERATION_FAILURE[record.error.code || ''] || record.error.message || record.error.code}</p>}
@@ -143,5 +142,6 @@ export function GenerationRecord({ id }: { id: string }) {
     </div>}
 
     {error && record.state !== 'awaiting_approval' && <p className="chat-q-gen-error" role="alert">{error} <button type="button" className="chat-q-btn" data-variant="ghost" onClick={() => setReload(n => n + 1)}>Reload status</button></p>}
-  </section>;
+  </section>
+  {waiting && <p className="chat-q-gen-note">Nothing has been generated or charged yet.</p>}</>;
 }

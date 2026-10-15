@@ -108,27 +108,33 @@ export async function resolvePrincipal(db, userId) {
             a.owner_user_id, a.agent_role, a.agent_origin, a.status AS agent_status,
             o.username AS owner_handle, o.display_name AS owner_display_name,
             o.is_active AS owner_is_active, o.status AS owner_status,
-            o.role AS owner_role,
-            r.owner_workspace_id AS company_workspace_id,
-            -- OWN-05: a COMPANY agent's accountable human must still administer the owning workspace. When
-            -- they stop (left, demoted, workspace closed) the agent pauses until an admin takes it over.
-            CASE WHEN r.owner_workspace_id IS NULL THEN TRUE
-                 ELSE EXISTS (SELECT 1 FROM workspaces w WHERE w.id = r.owner_workspace_id AND w.status = 'active'
-                                AND (w.owner_user_id = a.owner_user_id OR EXISTS (
-                                  SELECT 1 FROM relationship_tuples t
-                                   WHERE t.object_type = 'workspace' AND t.object_id = r.owner_workspace_id::text
-                                     AND t.subject_type = 'user' AND t.subject_id = a.owner_user_id::text
-                                     AND t.relation IN ('owner', 'admin'))))
-            END AS accountable_holds
+            o.role AS owner_role, to_jsonb(a)->>'workforce_resource_id' AS workforce_resource_id
        FROM users u
        LEFT JOIN agent_identities a ON a.user_id = u.id
        LEFT JOIN users o ON o.id = a.owner_user_id
-       LEFT JOIN workforce_resources r ON r.id = a.workforce_resource_id
       WHERE u.id = $1`,
     [userId],
   );
   const row = rows[0];
   if (!row) return null;
+  // OWN-05: a COMPANY agent's accountable human must still administer the owning workspace. When they stop (left,
+  // demoted, workspace closed) the agent pauses until an admin takes it over. A second query, asked only for an agent
+  // with a definition, so the identity read works on every schema that has users and agent_identities alone.
+  row.accountable_holds = true;
+  if (row.owner_user_id && row.workforce_resource_id) {
+    row.accountable_holds = (await db.query(
+      `SELECT CASE WHEN r.owner_workspace_id IS NULL THEN TRUE
+                ELSE EXISTS (SELECT 1 FROM workspaces w WHERE w.id = r.owner_workspace_id AND w.status = 'active'
+                               AND (w.owner_user_id = $2 OR EXISTS (
+                                 SELECT 1 FROM relationship_tuples t
+                                  WHERE t.object_type = 'workspace' AND t.object_id = r.owner_workspace_id::text
+                                    AND t.subject_type = 'user' AND t.subject_id = $2::text
+                                    AND t.relation IN ('owner', 'admin'))))
+              END AS holds
+         FROM workforce_resources r WHERE r.id = $1`,
+      [row.workforce_resource_id, row.owner_user_id],
+    )).rows[0]?.holds !== false;
+  }
 
   const isAgent = Boolean(row.owner_user_id);
   // A machine with no owner is a SERVICE, not a human. See "THE TWO AXES".

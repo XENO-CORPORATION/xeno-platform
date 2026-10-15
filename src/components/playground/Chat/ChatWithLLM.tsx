@@ -7601,7 +7601,10 @@ const ChatWithLLM: React.FC<ChatWithLLMProps> = ({
                 answer = data.answer;
                 localHasThinking = !!thinking;
                 rawTextForState = localHasThinking ? `Thinking Process:\n${thinking}\n\nFinal Answer:\n${answer}` : answer;
-            } else if (data.text) {
+            } else if (typeof data.text === 'string') {
+                 // 🔴 `typeof`, not truthiness: a turn whose whole answer was a TOOL (an image proposal,
+                 // a question card) ends with text "" — a valid turn, which `data.text` (falsy) turned
+                 // into "Invalid response format" above the very card it produced (2026-10-15).
                  const parseResult = parseResponse(data.text, true); // Pass true since reasoning is expected
                 // MODIFIED LOG
                 // console.log(`[FRONTEND PARSING] parseResponse output:`, parseResult);

@@ -24,7 +24,7 @@
   const paint = () => { try { X()?.render?.(); } catch {} };
   const go = (item) => X()?.go?.('global', { global: 'workspace', item });
   const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-  const S = { key: null, status: 'idle', list: [], canManage: false, workspaceId: null, one: null, agents: [], projects: [], busy: false, archived: [] };
+  const S = { key: null, status: 'idle', list: [], canManage: false, workspaceId: null, one: null, agents: [], projects: [], busy: false, archived: [], budget: null, spend: [] };
 
   const workspaceParam = () => { const w = window.XA?.currentWorkspace?.(); return w && UUID.test(String(w.id)) ? `?workspace=${w.id}` : ''; };
 
@@ -42,6 +42,7 @@
       if (one.status === 404) { S.status = 'missing'; return paint(); }
       if (!one.ok) { S.status = 'error'; return paint(); }
       S.one = one.d.division; S.agents = ag.ok ? ag.d.agents || [] : []; S.projects = pr.ok ? pr.d.projects || [] : [];
+      const bg = await api('GET', `/api/divisions/${id}/agent-budget`); S.budget = bg.ok ? bg.d.budget : null; S.spend = bg.ok ? bg.d.spend || [] : [];
     }
     S.status = 'ready'; paint();
   }
@@ -94,6 +95,12 @@
           ${d.agentsList.length ? h.table(['Agent', 'What it is for'], d.agentsList.map((a) => h.tr(`data-xdv="agent" data-id="${esc(a.id)}"`, [`${h.avatar({ name: a.name, kind: 'agent' })}<b class="pg-name">${esc(a.name)}</b>`, `<small class="pg-dim">${esc(a.description || '')}</small>`]))) : h.box('bot', 'No agents in this division yet', 'Add one. It will work only on this division’s projects.', '', 'sm')}</section>
         <section class="pg-sec"><div class="pg-sec-h"><h3>Projects</h3>${d.canManage && !archived && projectsOut.length ? h.btn('Move a project here', 'data-xdv="add-project"', true, 'plus') : ''}</div>
           ${d.projectsList.length ? `<div class="pg-chips">${d.projectsList.map((p) => `<span class="pg-chip">${ic('folder')}${esc(p.name)}${d.canManage && !archived ? `<button class="xdv-x" data-xdv="remove-project" data-id="${esc(p.id)}" aria-label="Take ${esc(p.name)} out of ${esc(d.name)}">${ic('x')}</button>` : ''}</span>`).join('')}</div>` : h.box('folder', 'No projects in this division yet', 'Move a project here. Only this division’s agents can then work on it.', '', 'sm')}</section>
+        <section class="pg-sec"><div class="pg-sec-h"><h3>Agent budget</h3>${d.canManage && !archived ? h.btn(S.budget ? 'Change' : 'Set a budget', 'data-xdv="budget"', true, S.budget ? 'edit' : 'plus') : ''}</div>
+          ${S.budget ? `<div class="xdv-budget"><div class="xdv-meter" role="meter" aria-valuemin="0" aria-valuemax="${S.budget.limitCredits}" aria-valuenow="${S.budget.spentCredits}" aria-label="Spent of the agent budget"><i style="width:${Math.min(100, S.budget.limitCredits ? (S.budget.spentCredits / S.budget.limitCredits) * 100 : 100).toFixed(1)}%"></i></div>
+            <p><b>${fmt(S.budget.spentCredits)}</b> of ${fmt(S.budget.limitCredits)} credits used in the last ${S.budget.windowDays === 30 ? 'month' : S.budget.windowDays + ' days'} · ${fmt(S.budget.leftCredits)} left</p>
+            <p class="pg-dim wf-note">${S.budget.autoApprove ? 'Its agents’ images and videos start at once while they fit in the budget. Past it, they are refused.' : 'Its agents’ images and videos still wait for the person who answers for each agent to approve them. Model calls stop when the budget is used up.'}</p></div>
+            ${S.spend.length ? h.table(['Agent', 'What', 'Credits', 'When'], S.spend.slice(0, 12).map((x) => h.tr(`data-xdv="agent" data-id="${esc(x.agent.id)}"`, [`<b class="pg-name">${esc(x.agent.name)}</b>`, esc(SPEND_KIND[x.kind] || x.kind) + (x.released ? ' <small class="pg-dim">(given back)</small>' : ''), fmt(x.credits), `<small class="pg-dim">${esc(new Date(x.at).toLocaleString())}</small>`]))) : ''}`
+            : `<p class="pg-dim">No budget. Its agents’ images, videos and model calls are billed to the person who answers for each agent, and every image or video waits for them to approve it.${d.canManage && !archived ? ' Set a budget to cap what this division’s agents spend, and to let them generate within it without waiting.' : ''}</p>`}</section>
         ${d.children.length ? `<section class="pg-sec"><h3>Inside it</h3><div class="pg-chips">${d.children.map((k) => `<a class="pg-chip" data-xdv="open" data-id="${esc(k.id)}">${esc(k.name)}</a>`).join('')}</div><p class="pg-dim wf-note">Its agents and head do not reach the divisions inside it — each is its own boundary.</p></section>` : ''}
       </div><aside><dl class="pg-props">
         <dt>Head</dt><dd>${d.head ? esc(d.head.name) + (d.head.kind === 'agent' ? ' (agent)' : '') : '—'}</dd>
@@ -188,6 +195,23 @@
     if (r) { toast('Taken out'); await refresh(); }
   }
 
+  const fmt = (n) => Number(n).toLocaleString(undefined, { maximumFractionDigits: 2 });
+  const SPEND_KIND = { image: 'Image', video: 'Video', model: 'Model call' };
+  async function setBudget() {
+    const d = S.one; if (!d) return;
+    const v = await window.XD.form({ title: `Agent budget for ${d.name}`, sub: 'What this division’s agents may spend on images, videos and model calls. It is a cap, not a wallet: the money still comes from the person who answers for each agent.', submit: 'Save', size: 'sm', fields: [
+      { id: 'credits', label: 'Credits', type: 'number', required: true, value: S.budget ? String(S.budget.limitCredits) : '100', max: 12, validate: (x) => (/^\d+(\.\d{1,2})?$/.test(String(x).trim()) && Number(x) <= 10000000 ? null : 'A number of credits, up to 10,000,000.') },
+      { id: 'window', label: 'Per', type: 'choice', cols: 3, value: S.budget ? String(S.budget.windowDays) : '30', options: [['7', 'Week'], ['30', 'Month'], ['365', 'Year']] },
+      { id: 'auto', label: 'Images and videos', type: 'choice', cols: 1, value: S.budget && S.budget.autoApprove ? 'auto' : 'ask', options: [['ask', 'Wait for approval', 'The person who answers for the agent approves each one'], ['auto', 'Start within the budget', 'They start at once while they fit; past the budget they are refused']] }] });
+    if (!v) return;
+    S.busy = true; paint();
+    const r = await api('PUT', `/api/divisions/${d.id}/agent-budget`, { credits: Number(v.credits), windowDays: Number(v.window), autoApprove: v.auto === 'auto' });
+    S.busy = false;
+    if (!r.ok) { X()?.toast?.((r.d && r.d.error) || 'The budget could not be saved.'); return paint(); }
+    S.budget = r.d.budget;
+    const bg = await api('GET', `/api/divisions/${d.id}/agent-budget`); if (bg.ok) { S.budget = bg.d.budget; S.spend = bg.d.spend || []; }
+    X()?.toast?.('Budget saved'); paint();
+  }
   document.addEventListener('click', (e) => {
     const b = e.target.closest('[data-xdv]'); if (!b || !b.closest('#main')) return;
     e.preventDefault();
@@ -201,6 +225,7 @@
     if (a === 'head') return head();
     if (a === 'archive') return archive();
     if (a === 'add-agent') return addAgent();
+    if (a === 'budget') return setBudget();
     if (a === 'add-project') return addProject();
     if (a === 'remove-project') { e.stopPropagation(); return removeProject(b.dataset.id); }
     if (a === 'retry') { S.key = null; return paint(); }
@@ -208,7 +233,7 @@
 
   const style = () => {
     if (document.getElementById('xdv-css')) return; const s = document.createElement('style'); s.id = 'xdv-css';
-    s.textContent = '.xdv-x{display:inline-grid;place-items:center;width:18px;height:18px;margin:0 -4px 0 4px;border:0;border-radius:5px;background:none;color:var(--muted);cursor:pointer}.xdv-x:hover{background:var(--hover);color:var(--text)}.xdv-x svg{width:12px;height:12px}'
+    s.textContent = '.xdv-budget p{margin:8px 0 0;font-size:13px}.xdv-meter{height:6px;border-radius:3px;background:var(--hover);overflow:hidden}.xdv-meter i{display:block;height:100%;background:var(--text);border-radius:3px}.xdv-x{display:inline-grid;place-items:center;width:18px;height:18px;margin:0 -4px 0 4px;border:0;border-radius:5px;background:none;color:var(--muted);cursor:pointer}.xdv-x:hover{background:var(--hover);color:var(--text)}.xdv-x svg{width:12px;height:12px}'
       + '.xdv-skel{display:grid;gap:8px;padding-top:60px;max-width:720px}.xdv-skel i{height:72px;border-radius:10px;background:var(--panel);animation:xdvs 1.2s ease-in-out infinite alternate}@keyframes xdvs{to{opacity:.5}}';
     document.head.appendChild(s);
   };

@@ -81,7 +81,7 @@ async function revokeCredential(db, owner, agentId, credentialId) {
 export async function start(db, owner, agentId, { taskKey, budgetCredits } = {}, { fetchImpl = fetch, env = process.env } = {}) {
   const base = agentsApiBaseUrl(env);
   if (!base) throw new AgentRunError('Cloud runs are not available on this server', 'cloud_runs_unavailable', 503);
-  const agent = await agents.get(db, owner, agentId);                       // owned, or 404
+  const agent = await agents.getWith(db, owner, agentId, 'runner');       // the run right, or 403/404
   let task = await tasks.getTask(db, owner, String(taskKey || ''));          // visible to the person, or the task error
   const budget = budgetCredits === undefined ? DEFAULT_BUDGET_CREDITS : Number(budgetCredits);
   if (!Number.isFinite(budget) || budget <= 0 || budget > MAX_BUDGET_CREDITS) {

@@ -78,7 +78,7 @@ router.post('/', (req, res, next) => {
     if (viaCredential) {
       const a = (await req.db.query(`SELECT ai.owner_user_id, ai.public_id, COALESCE(u.display_name, u.username) AS name FROM agent_identities ai JOIN users u ON u.id = ai.user_id WHERE ai.user_id = $1`, [tok.agentUserId])).rows[0];
       if (!a) return challenge(req, res, { jsonrpc: '2.0', id: body && body.id != null ? body.id : null, error: { code: -32001, message: 'This credential does not belong to an agent' } }, 'invalid_token');
-      connection = await mcp.connectionFor(req.db, { ownerId: String(a.owner_user_id), agentId: tok.agentUserId, clientId: `agent:${a.public_id}`, clientName: a.name });
+      connection = await mcp.connectionFor(req.db, { ownerId: String(a.owner_user_id), agentId: tok.agentUserId, clientId: `agent:${a.public_id}`, clientName: a.name, categories: [...mcp.AGENT_DEFAULT_CATEGORIES] });
     } else if (await mcp.isRevoked(req.db, tok.ownerId, tok.clientId)) {
       return challenge(req, res, { jsonrpc: '2.0', id: body && body.id != null ? body.id : null, error: { code: -32001, message: 'This connection was disconnected in XENO. Sign in again to reconnect.' } }, 'invalid_token');
     }
@@ -119,7 +119,7 @@ export async function personOnly(req, res, next) {
 }
 export const management = express.Router();
 management.get('/services', handled(async (req, res) => {
-  res.json({ success: true, services: mcp.SERVICES.map((s) => ({ category: s.category, title: s.title, description: s.description, tools: s.tools().length })) });
+  res.json({ success: true, services: mcp.SERVICES.map((s) => ({ category: s.category, title: s.title, description: s.description, tools: s.tools().length, ...(s.agentsOnly ? { agentsOnly: true } : {}) })) });
 }));
 management.get('/connections', handled(async (req, res) => { res.json({ success: true, connections: await mcp.listConnections(req.db, req.owner) }); }));
 management.get('/connections/:id', handled(async (req, res) => { res.json({ success: true, connection: await mcp.getConnection(req.db, req.owner, req.params.id) }); }));
