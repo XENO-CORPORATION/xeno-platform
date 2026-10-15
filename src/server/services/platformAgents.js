@@ -89,6 +89,7 @@ async function full(db, r) {
     division: r.division_id ? { id: String(r.division_id), name: r.division_name, archived: r.division_lifecycle !== 'active' } : null,
     instructions: vs[0] ? vs[0].instructions : '', version: vs[0] ? vs[0].version : null, versions: vs,
     projects, credentials: await credentials(db, r.id), connections,
+    webhook: ((await db.query('SELECT url FROM task_agent_webhooks WHERE agent_user_id = $1', [r.id])).rows[0] || {}).url || null,
   };
 }
 
@@ -220,6 +221,12 @@ export async function mintCredential(db, me, publicId, { scopes, label, ttlHours
   const out = await tasks.mintAgentToken(db, me, { agentId: r.id, scopes, label: label || 'Agent credential', days: 1 });
   const exp = (await db.query(`UPDATE task_agent_tokens SET expires_at = now() + ($2 || ' minutes')::interval WHERE id = $1 RETURNING expires_at`, [out.id, String(Math.max(1, Math.round(h * 60)))])).rows[0].expires_at;
   return { id: out.id, token: out.token, scopes: out.scopes, expiresAt: exp, agent: { id: publicId, name: r.name } };
+}
+/** Where the agent hears about new work: a signed webhook (or none: it pulls its event feed). The signing secret
+ *  is shown once. */
+export async function setWebhook(db, me, publicId, url) {
+  const r = await owned(db, me, publicId);
+  try { return await tasks.setAgentWebhook(db, me, { agentId: r.id, url: url || null }); } catch (e) { throw asAgentError(e, 'The webhook could not be saved'); }
 }
 export async function revokeCredential(db, me, publicId, credentialId) {
   const r = await owned(db, me, publicId);

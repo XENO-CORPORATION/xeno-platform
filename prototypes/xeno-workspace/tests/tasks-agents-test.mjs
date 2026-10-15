@@ -102,40 +102,10 @@ try {
   await nav('#/studio/g/tasks'); await poll();
   ok(!!(await p.$('[data-tk-card="T-1"] [data-tk-deleg="awaiting_input"]')), 'the card shows the agent working the task, and that it waits for you');
 
-  // the Agents view
-  await nav('#/studio/g/tasks/Agents');
-  ok(/Builder[\s\S]*None\. Without a credential/.test(await main()), 'the Agents view lists your agents and says one without a credential can’t connect');
-  await p.click('[data-tk="agent-new"]'); await p.waitForSelector('.xd input', { timeout: 3000 }); await p.type('.xd input', 'Release bot'); await p.keyboard.press('Enter'); await settle();
-  ok(db.agents.some((a) => a.name === 'Release bot') && /Release bot/.test(await main()), 'New agent creates one and it appears');
-  await p.click('[data-tk="agent-token"][data-arg="a1"]'); await p.waitForSelector('.xd input', { timeout: 3000 }); await p.type('.xd input', 'Claude Code on my laptop');
-  await p.click('.xd [data-xd-submit]'); await p.waitForSelector('[data-tk-secret]', { timeout: 3000 });
-  const dlg = () => p.$eval('[data-tk-secret]', (e) => e.closest('.xd-sh').innerText); const shown = await dlg();
-  ok(/xtk_abcdefabcdef_SECRET1/.test(shown) && /shown once/.test(shown) && /mcpServers/.test(shown) && /Authorization/.test(shown), 'a new credential is shown once, with an MCP config to paste');
-  await p.evaluate(() => [...document.querySelectorAll('.xd [data-xd-act]')].find((b) => /Copy/.test(b.textContent))?.click()); await settle(300);
-  ok(/xtk_abcdefabcdef_SECRET1/.test(await p.evaluate(() => window.__clip) || ''), 'Copy puts the credential and its config on the clipboard');
-  await p.keyboard.press('Escape'); await settle(400);
-  ok(/xtk_abcdefabcdef_…/.test(await main()) && !/SECRET1/.test(await main()), 'afterwards the list shows only the credential’s prefix, never the secret');
-  await p.click('[data-tk="agent-revoke"][data-arg="k1"]'); await p.waitForSelector('.xd [data-xd-ok]', { timeout: 3000 }); await p.click('.xd [data-xd-ok]'); await settle();
-  ok(!db.agents[0].tokens.length && !/xtk_abcdefabcdef_…/.test(await main()), 'Revoke removes the credential, after a confirmation');
-  await p.click('[data-tk="agent-hook"][data-arg="a1"]'); await p.waitForSelector('.xd input', { timeout: 3000 }); await p.type('.xd input', 'https://agent.example.com/xeno'); await p.keyboard.press('Enter');
-  await p.waitForSelector('[data-tk-secret]', { timeout: 3000 });
-  ok(/whsec_SIGNING/.test(await dlg()) && /X-Xeno-Signature/.test(await dlg()), 'a webhook shows its signing secret once, and how to verify a delivery');
-  await p.keyboard.press('Escape'); await settle(400);
-  ok(/agent\.example\.com/.test(await main()), 'the webhook address is listed on the agent');
-  // connecting an agent CLI, and the projects an agent works in
-  const cmds = await p.$$eval('[data-tk-connect] code', (els) => els.map((e) => e.textContent));
-  ok(cmds.some((c) => /^claude mcp add --transport http xeno-tasks http:\/\/127\.0\.0\.1:\d+\/api\/tasks\/mcp$/.test(c)) && cmds.some((c) => /codex mcp add xeno-tasks --url/.test(c)) && cmds.some((c) => /mcpServers/.test(c)) && cmds.some((c) => /@xenosystem\/tasks link/.test(c)), 'the Agents page shows how to connect Claude Code, Codex, Cursor and how to link a folder, with this site’s MCP address');
-  await p.evaluate(() => { window.__clip = null; }); await p.click('[data-tk="copy-cmd"][data-arg="0"]'); await settle(300);
-  ok(/^claude mcp add/.test(await p.evaluate(() => window.__clip) || ''), 'Copy puts the command on the clipboard');
-  ok(/Not on any project yet|None\. It only sees tasks delegated/.test(await p.$eval('[data-tk-agent="a1"] [data-tk-agent-projects]', (e) => e.innerText)), 'an agent on no project says it only sees delegated tasks');
-  await p.click('[data-tk="agent-addproj"][data-arg="a1"]'); await p.waitForSelector('.tk-pick:not([hidden])', { timeout: 3000 }); await pickClick(/^Website/); await settle();
-  ok(db.agents[0].projects.some((x) => x.id === 'p1') && !!(await p.$('[data-tk-agent="a1"] [data-tk-proj="p1"]')), 'Add puts the agent on a project and it is listed');
-  await p.click('[data-tk="agent-addproj"][data-arg="a1"]'); await p.waitForSelector('.tk-pick:not([hidden])', { timeout: 3000 });
-  ok(!(await p.evaluate(() => [...document.querySelectorAll('.tk-pick:not([hidden]) .tk-pick-i')].some((b) => /^Website/.test(b.textContent.trim())))), 'a project it is already on is not offered again');
-  await pickClick(/^Docs/); await settle();
-  ok(/project admin/.test(await p.evaluate(() => [...document.querySelectorAll('.toast, [role="status"]')].map((e) => e.textContent).join(' '))) && !db.agents[0].projects.some((x) => x.id === 'p2'), 'a refused add says why');
-  await p.click('[data-tk="agent-rmproj"][data-arg="a1|p1"]'); await settle();
-  ok(!db.agents[0].projects.length && !(await p.$('[data-tk-proj="p1"]')), 'Remove takes the agent off the project');
+  // the Agents view is ONE page now: Tasks › Agents opens Workspace › Agents (credentials, projects and webhook live there;
+  // agents-test.mjs covers them against the /api/agents contract)
+  await nav('#/studio/g/tasks/Agents'); await settle(1200);
+  ok(/\/workspace\/(?:[a-z]+\/)?workspace\/Agents$/.test(new URL(p.url()).pathname), `Tasks › Agents opens the one Agents page (${p.url()})`);
 
   // Copy for agent, two-way
   await nav('#/studio/g/tasks/T-1');
@@ -147,9 +117,9 @@ try {
   await p.evaluate(() => { window.__clip = null; });
   db.calls.length = 0;
   await p.click('[data-tk="menu"][data-arg="T-1"]').catch(() => {}); await p.evaluate(() => document.querySelector('[data-tk-root^="task:"]')?.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, clientX: 300, clientY: 300 })));
-  await p.waitForSelector('.xcm', { timeout: 3000 }); await menuClick(/^Copy brief only/); await settle(600);
+  await p.waitForSelector('.xcm', { timeout: 3000 }); await menuClick(/^Copy$/); await settle(300); await menuClick(/^Brief/); await settle(600);   // the menu groups copies under Copy › Brief
   const plain = await p.evaluate(() => window.__clip) || '';
-  ok(/^# T-1/.test(plain) && !/xtk_/.test(plain) && !db.calls.some(([, pth]) => /handoff/.test(pth)), '“Copy brief only” copies the brief without handing anything off');
+  ok(/^# T-1/.test(plain) && !/xtk_/.test(plain) && !db.calls.some(([, pth]) => /handoff/.test(pth)), 'Copy › Brief copies the brief without handing anything off');
 
   // a refusal says why
   db.refuseDelegate = true;

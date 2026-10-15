@@ -5,6 +5,7 @@
  *   POST   /api/agents                            { name, description, instructions?, divisionId? } → the agent (id = agt_…)
  *   GET    /api/agents/:id                        { id, name, description, owner, projects, credentials, connections }
  *   PATCH  /api/agents/:id                        { name?, description?, instructions? }  (instructions = a new version)
+ *   PUT    /api/agents/:id/webhook                { url | null } — where it hears about new work (the signing secret is shown once)
  *   PUT    /api/agents/:id/division               { divisionId | null } — its owning division; projects outside it are removed
  *   GET    /api/agents/:id/project-choices        projects it could be given, each saying whether its division matches
  *   DELETE /api/agents/:id                        deletes it; every credential and connection stops working
@@ -37,6 +38,7 @@ router.patch('/:id', handled(async (req, res) => { res.json({ success: true, age
 router.delete('/:id', handled(async (req, res) => { res.json({ success: true, ...(await agents.remove(req.db, req.me, req.params.id)) }); }));
 router.put('/:id/division', handled(async (req, res) => { res.json({ success: true, agent: await agents.setDivision(req.db, req.me, req.params.id, (req.body && req.body.divisionId) || null) }); }));
 router.get('/:id/project-choices', handled(async (req, res) => { res.json({ success: true, projects: await agents.projectChoices(req.db, req.me, req.params.id) }); }));
+router.put('/:id/webhook', handled(async (req, res) => { res.set('cache-control', 'no-store'); res.json({ success: true, ...(await agents.setWebhook(req.db, req.me, req.params.id, req.body && req.body.url)) }); }));
 router.post('/:id/credentials', handled(async (req, res) => {
   res.set('cache-control', 'no-store');
   res.status(201).json({ success: true, credential: await agents.mintCredential(req.db, req.me, req.params.id, req.body || {}) });
