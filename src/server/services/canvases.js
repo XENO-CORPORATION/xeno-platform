@@ -25,7 +25,7 @@ const AREA = /^[a-z][a-z0-9_-]{0,39}$/;
 const ID = /^[A-Za-z0-9_-]{1,64}$/;
 const TASK_KEY = /^T-\d{1,15}$/;
 const NODE_TYPES = new Set(['text', 'link', 'group', 'xeno-ref']);
-const REF_KINDS = new Set(['task']);
+const REF_KINDS = new Set(['task', 'file', 'chat']);
 const COLORS = /^([1-6]|#[0-9a-fA-F]{6})$/;
 const SIDES = new Set(['top', 'right', 'bottom', 'left']);
 const ENDS = new Set(['none', 'arrow']);
@@ -55,9 +55,10 @@ export function cleanContent(content) {
       const r = n.ref || {};
       if (!REF_KINDS.has(r.kind)) throw new CanvasError('Unknown reference kind', 'invalid_content');
       if (r.kind === 'task' && !TASK_KEY.test(String(r.id || '').toUpperCase())) throw new CanvasError('A task reference names a task key (T-12)', 'invalid_content');
-      const key = String(r.id).toUpperCase();
-      if (refs.has(key)) throw new CanvasError(`${key} is already on this canvas`, 'duplicate_ref', 409);
-      refs.add(key); out.ref = { kind: r.kind, id: key };
+      if ((r.kind === 'file' || r.kind === 'chat') && !UUID.test(String(r.id || ''))) throw new CanvasError(`A ${r.kind} reference names its id`, 'invalid_content');
+      const key = r.kind === 'task' ? String(r.id).toUpperCase() : String(r.id).toLowerCase();
+      if (refs.has(r.kind + ':' + key)) throw new CanvasError(`${r.kind === 'task' ? key : 'That ' + r.kind} is already on this canvas`, 'duplicate_ref', 409);
+      refs.add(r.kind + ':' + key); out.ref = { kind: r.kind, id: key };
     }
     return out;
   });
@@ -102,6 +103,26 @@ const summary = (c, s) => ({
   createdAt: c.created_at, updatedAt: c.updated_at, ...(s ? { can: { edit: !!s.edit, delete: !!s.del } } : {}),
 });
 
+/** A library file or a chat, read LIVE as this reader through the same relation check every screen uses. What the
+ *  reader may not see, or what is gone, is `missing` — never its name. */
+async function resolveFiles(db, me, ids) {
+  const out = {};
+  for (const id of ids) {
+    const can = (await check(db, { object: `library_asset:${id}`, relation: 'viewer', subject: `user:${me.id}` })).allowed;
+    const f = can ? (await db.query('SELECT id, original_name, mime_type, file_size FROM user_files WHERE id = $1 AND deleted_at IS NULL', [id])).rows[0] : null;
+    out[id] = f ? { id: String(f.id), name: f.original_name, type: f.mime_type, bytes: Number(f.file_size), url: `/workspace/library?sel=${f.id}` } : { id, missing: true };
+  }
+  return out;
+}
+async function resolveChats(db, me, ids) {
+  const out = {};
+  for (const id of ids) {
+    const c = (await db.query('SELECT id, user_id, title, last_message_at, updated_at FROM chat_conversations WHERE id = $1 AND deleted_at IS NULL', [id])).rows[0];
+    const can = c && (String(c.user_id) === String(me.id) || (await check(db, { object: `conversation:${id}`, relation: 'viewer', subject: `user:${me.id}` })).allowed);
+    out[id] = can ? { id: String(c.id), title: c.title, at: c.last_message_at || c.updated_at, url: `/workspace/apps/chat/${c.id}` } : { id, missing: true };
+  }
+  return out;
+}
 /** Resolve every task ref LIVE, as this reader. Unseen and deleted tasks are told apart from visible ones. */
 async function resolveRefs(db, me, nodes) {
   const keys = nodes.filter((n) => n.type === 'xeno-ref' && n.ref.kind === 'task').map((n) => n.ref.id);
@@ -144,7 +165,8 @@ export async function createCanvas(db, me, { name, projectId, area, content } = 
 export async function getCanvas(db, me, id) {
   const { c, s } = await load(db, me, id);
   const content = cleanContent(c.content);
-  return { ...summary(c, s), content, records: { tasks: await resolveRefs(db, me, content.nodes) } };
+  const of = (kind) => content.nodes.filter((n) => n.type === 'xeno-ref' && n.ref.kind === kind).map((n) => n.ref.id);
+  return { ...summary(c, s), content, records: { tasks: await resolveRefs(db, me, content.nodes), files: await resolveFiles(db, me, of('file')), chats: await resolveChats(db, me, of('chat')) } };
 }
 
 /**
@@ -163,7 +185,7 @@ export async function saveCanvas(db, me, id, { content, revision, name } = {}) {
   for (const e of body.edges) {
     if (!e.xeno?.link || before.has(`${e.fromNode}>${e.toNode}>${e.xeno.link}`)) continue;
     const a = byId.get(e.fromNode), b = byId.get(e.toNode);
-    if (a?.type !== 'xeno-ref' || b?.type !== 'xeno-ref') throw new CanvasError('Only a connection between two tasks can be a task link', 'invalid_link');
+    if (a?.type !== 'xeno-ref' || b?.type !== 'xeno-ref' || a.ref.kind !== 'task' || b.ref.kind !== 'task') throw new CanvasError('Only a connection between two tasks can be a task link', 'invalid_link');
     try { await tasks.addLink(db, me, a.ref.id, { kind: e.xeno.link, to: b.ref.id }); }
     catch (err) { if (err instanceof tasks.TaskError) throw new CanvasError(`${a.ref.id} → ${b.ref.id}: ${err.message}`, err.code, err.status); throw err; }
   }
