@@ -40,7 +40,8 @@ const asAgentError = (e, fallback) => {
   if (code === 'denied') return new AgentError('You cannot do that for this owner', reason || 'not_allowed', 403);
   if (code === 'conflict') return new AgentError('Someone changed this agent at the same time. Reload and try again.', reason || 'conflict', 409);
   if (code === 'bad_input') return new AgentError('That is not a valid agent definition', reason || 'bad_input', 400);
-  if (code === 'agent_cap_reached') return new AgentError(e.message, code, 409);
+  if (e && e.name === 'AgentIdentityError') return new AgentError(e.message, e.code, e.statusCode || 400);
+  console.error('[agents]', fallback, e && (e.code || ''), e && e.details ? JSON.stringify(e.details) : '', e && e.message, e && e.stack);
   return new AgentError(fallback, 'agent_failed', 500);
 };
 
@@ -129,6 +130,15 @@ function uuidFrom(s) {
   const t = x.join(''); return `${t.slice(0, 8)}-${t.slice(8, 12)}-${t.slice(12, 16)}-${t.slice(16, 20)}-${t.slice(20)}`;
 }
 
+/** The agent's account handle is `<slug>.<owner>` and must fit 32 characters (handleRoutes). It is an internal
+ *  account name, never how the agent is shown (its display name is) or addressed (its agt_ id is), so it is
+ *  short, from the name, with a random tail so two agents with the same name never collide. */
+function handleSlug(label, ownerHandle) {
+  const room = Math.max(4, 32 - String(ownerHandle || '').length - 1);
+  const tail = randomUUID().replace(/-/g, '').slice(0, 4);
+  const base = label.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, Math.max(1, room - 5)).replace(/-+$/, '') || 'a';
+  return `${base}-${tail}`.replace(/^[^a-z0-9]+/, 'a');
+}
 export async function create(db, me, { name, description, instructions, divisionId } = {}) {
   person(me);
   const label = String(name || '').replace(/[\u0000-\u001f<>]/g, '').trim().slice(0, 60);
@@ -144,13 +154,17 @@ export async function create(db, me, { name, description, instructions, division
       name: label, description: desc, definition: defOf(instructions) });
   } catch (e) { throw asAgentError(e, 'The agent could not be created'); }
   const rid = def.resource.id;
-  // then the principal, linked to it
+  // then the principal, linked to it. If that fails, the definition just made is archived: never a definition
+  // with no one to run it.
   const owner = (await db.query('SELECT id, username FROM users WHERE id = $1', [me.id])).rows[0];
   let made;
   try {
     made = await createAgent(db, { id: owner.id, kind: 'human', handle: owner.username },
-      { name: label.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'agent', displayName: label, agentRole: 'other', agentOrigin: 'platform' });
-  } catch (e) { throw asAgentError(e, 'The agent could not be created'); }
+      { name: handleSlug(label, owner.username), displayName: label, agentRole: 'other', agentOrigin: 'platform' });
+  } catch (e) {
+    await db.query(`UPDATE workforce_resources SET status = 'archived', revision = revision + 1 WHERE id = $1 AND status = 'active'`, [rid]).catch(() => {});
+    throw asAgentError(e, 'The agent could not be created');
+  }
   const row = (await db.query('SELECT id FROM users WHERE username = $1', [made.agent.handle])).rows[0];
   await db.query('UPDATE api_keys SET is_active = false WHERE user_id = $1', [row.id]);   // it acts only through its own credentials
   await db.query(`UPDATE agent_identities SET description = $2, workforce_resource_id = $3, workforce_resource_kind = 'agent' WHERE user_id = $1`, [row.id, desc, rid]);

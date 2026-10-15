@@ -166,6 +166,16 @@ async function main() {
     const sixth = await call('POST', '/api/agents', { token: B, body: { name: 'Bob 6' } });
     check_(sixth.s === 409 && (await call('GET', '/api/agents', { token: B })).j.agents.length === 5, 'the cap is 5 agents a person made, and the list shows exactly those 5');
 
+    // a long name still makes an agent (the account handle is internal and always fits), and two with the same name never collide
+    const longA = await call('POST', '/api/agents', { token: A, body: { name: 'Spawn bind test (delete me) with a long name', description: 'x' } });
+    const longB = await call('POST', '/api/agents', { token: A, body: { name: 'Spawn bind test (delete me) with a long name' } });
+    check_(longA.s === 201 && longB.s === 201 && longA.j.agent.name === 'Spawn bind test (delete me) with a long name' && longA.j.agent.id !== longB.j.agent.id,
+      `a long, repeated name still creates two separate agents (${longA.s}/${longB.s} ${longA.j && longA.j.error || ''})`);
+    const orphans = (await pool.query(`SELECT count(*)::int AS n FROM workforce_resources r WHERE r.kind = 'agent' AND r.status = 'active'
+      AND NOT EXISTS (SELECT 1 FROM agent_identities ai WHERE ai.workforce_resource_id = r.id)`)).rows[0].n;
+    check_(orphans === 0, 'no active agent definition is ever left without an agent to run it');
+    await call('DELETE', `/api/agents/${longA.j.agent.id}`, { token: A }); await call('DELETE', `/api/agents/${longB.j.agent.id}`, { token: A });
+
     // delete
     await call('DELETE', `/api/agents/${ag.id}`, { token: A });
     const st = (await pool.query('SELECT status FROM workforce_resources WHERE id = $1', [link.workforce_resource_id])).rows[0].status;
