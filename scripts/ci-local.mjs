@@ -408,7 +408,9 @@ function runCrossServiceSuites() {
  * So every suite must report at least one passing test and ZERO skipped ones --
  * the only reading under which "green" means the SQL was exercised. */
 function runDbProofs(baseUrl) {
-  const suites = deriveDbProofSuites();
+  // `--proof=<file>` reruns one proof with exactly this stage's setup (the way to check a single red one).
+  const one = (argv.find((a) => a.startsWith('--proof=')) || '').split('=')[1] || null;
+  const suites = deriveDbProofSuites().filter((s) => !one || s.file === one);
   if (!suites.length) {
     // Deriving nothing means the scan broke, not that there is nothing to prove.
     record('proofs: database suites were found to run', false, 'derivation returned no suites');

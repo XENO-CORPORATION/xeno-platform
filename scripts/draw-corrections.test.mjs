@@ -193,7 +193,9 @@ test('late provider corrections restore exact eligible lots or retain liability 
   // Verifier fixture returns known evidence only; arbitrary request-authored counts are never copied.
   let verifications=0;
   http.use('/verified',createServiceLedgerRouter({getServiceToken:()=> 'fixture-service',verifyCorrectionReceipt:async({evidence})=>{verifications++;return evidence?.receipt==='known-fixture'?f.proof:null;}}));
-  const server=http.listen(0,'127.0.0.1');await new Promise(r=>server.once('listening',r));t.after(async()=>{server.closeAllConnections();await new Promise(r=>server.close(r))});
+  const server=http.listen(0,'127.0.0.1');await new Promise(r=>server.once('listening',r));// One tick after close: on Windows the test runner tears the process down while the closed sockets' handles are
+  // still CLOSING, and libuv aborts (UV_HANDLE_CLOSING) after every assertion has passed -- read as a failure.
+  t.after(async()=>{server.closeAllConnections();await new Promise(r=>server.close(r));await new Promise(r=>setTimeout(r,50));});
   const post=async(prefix,body,token='fixture-service')=>fetch(`http://127.0.0.1:${server.address().port}/${prefix}/runs/${f.admissionId}/draws/${f.drawId}/corrections`,{method:'POST',headers:{'content-type':'application/json',authorization:`Bearer ${token}`},body:JSON.stringify(body)});
   assert.equal((await post('verified',{receipt:'known-fixture'},'wrong')).status,401);assert.equal(verifications,0);
   assert.equal((await post('closed',f.proof)).status,503,'service credential alone cannot certify a provider receipt');
