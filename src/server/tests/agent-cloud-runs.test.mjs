@@ -2,7 +2,9 @@
  * Agent cloud runs: a person runs one of their own platform agents on a task, in the cloud.
  *
  *   - the run starts in xeno-agents-api as the PERSON (a delegated token, revoked straight after), carrying the
- *     agent's pinned instructions, its runtime config and an agent credential the platform minted for the run;
+ *     agent's pinned instructions, its runtime config and a REFERENCE to the run -- never a credential;
+ *   - the runner, starting the run, asks for the agent credential once (service-authenticated); a second ask,
+ *     an ended run, a wrong hosted run id and a missing service token are all refused;
  *   - the task is delegated to the agent first, under the same rules as the task page;
  *   - the credential works as the agent, and is revoked when the run ends, when it is stopped, or when the
  *     runner refuses or cannot be reached;
@@ -20,6 +22,7 @@ import chatRoutes from '../routes/chatRoutes.js';
 import { personOnly } from '../routes/xenoMcpRoutes.js';
 import xenoTasksRoutes, { taskTokenAuth, unlessTaskToken, mcpChallenge } from '../routes/xenoTasksRoutes.js';
 import platformAgentRoutes from '../routes/platformAgentRoutes.js';
+import { createServiceLedgerRouter } from '../routes/serviceLedgerRoutes.js';
 import { authMiddleware } from '../middleware/auth.js';
 import { runAllMigrations } from '../services/migrationRunner.js';
 import { migrateAccountV2 } from '../database/migrate-account-v2.js';
@@ -68,6 +71,8 @@ async function main() {
   app.use('/api/chat', (req, _r, n) => { req.user = { id: req.headers['x-as'] || ada }; n(); }, chatRoutes);
   app.use('/api/tasks', mcpChallenge, taskTokenAuth, unlessTaskToken(authMiddleware), xenoTasksRoutes);
   app.use('/api/agents', authMiddleware, personOnly, platformAgentRoutes);
+  const SERVICE = 'svc-' + Math.random().toString(36).slice(2);
+  app.use('/api/v2/ledger/service', createServiceLedgerRouter({ getServiceToken: () => SERVICE }));
   const server = http.createServer(app); await new Promise((r) => server.listen(0, '127.0.0.1', r));
   const origin = `http://127.0.0.1:${server.address().port}`;
   const call = async (method, path, { token, body } = {}) => {
@@ -76,6 +81,8 @@ async function main() {
     return { s: r.status, j };
   };
   const A = session(ada), B = session(bob);
+  // what the runner does when it starts a run: ask for the agent credential by the run's reference
+  const issue = (runRef, runId, token = SERVICE) => call('POST', '/api/v2/ledger/service/agent-runs/credential', { token, body: { runRef, runId } });
 
   try {
     const proj = String((await call('POST', '/api/chat/projects', { body: { name: 'Runs project' } })).j.project?.id
@@ -94,7 +101,14 @@ async function main() {
     check_(claims && claims.sub === ada && claims.client_id === 'xeno-agent-runs' && claims.act && claims.act.agent_run_id === st.j.run.id, 'the runner is asked AS the person, by the agent-runs broker, naming this run');
     check_(sent.idem === `agent-run:${st.j.run.id}`, 'with an idempotency key fixed to this run, so a lost reply never starts a second run');
     const pa = sent.body.platformAgent;
-    check_(pa && pa.agentId === ag.id && /^xtk_/.test(pa.credential) && pa.issuer && pa.tools && pa.tools.deny[0] === 'Bash', 'the run is told which agent it is, with a credential, the XENO origin and the tool scope');
+    check_(pa && pa.agentId === ag.id && pa.runRef === st.j.run.id && pa.issuer && pa.tools && pa.tools.deny[0] === 'Bash', 'the run is told which agent it is, the XENO origin, the tool scope and its run reference');
+    check_(!JSON.stringify(sent.body).includes('xtk_') && !('credential' in pa), 'and NO credential: a queued run holds no live secret, not even in the runner');
+    check_((await issue(pa.runRef, 'run_1', 'wrong')).s === 401, 'only the runner (the service token) may ask for a credential');
+    check_((await issue(pa.runRef, 'run_999')).j.error.code === 'run_not_found', 'and only for the hosted run the platform started');
+    const got = await issue(pa.runRef, 'run_1');
+    check_(got.s === 200 && /^xtk_/.test(got.j.token) && got.j.agentId === ag.id && got.j.expiresAt, 'the runner, starting the run, gets the agent credential');
+    check_((await issue(pa.runRef, 'run_1')).j.error.code === 'credential_issued', 'once: a second ask is refused, so a leaked reference mints nothing');
+    pa.credential = got.j.token;
     check_(sent.body.model === 'gpt-5.5' && sent.body.effort === 'medium' && sent.body.budget.maxCredits === 5, 'its runtime config and the budget go with it');
     check_(/Keep it small\./.test(sent.body.prompt) && sent.body.prompt.includes(task.key) && /too tall/.test(sent.body.prompt), 'the prompt carries its instructions and the task');
     const sid = (await pool.query('SELECT delegated_sids FROM agent_cloud_runs WHERE id = $1', [st.j.run.id])).rows[0].delegated_sids[0];
@@ -126,18 +140,20 @@ async function main() {
     // stop
     const task2 = (await call('POST', '/api/tasks', { token: A, body: { title: 'Second', projectId: proj } })).j.task;
     const r2 = (await call('POST', `/api/agents/${ag.id}/runs`, { token: A, body: { task: task2.key } })).j.run;
-    const cred2 = seen.find((x) => x.url === '/runs').body.platformAgent.credential;
+    const ref2 = seen.find((x) => x.url === '/runs').body.platformAgent.runRef;
+    const cred2 = (await issue(ref2, r2.runId)).j.token;
     const stopped = await call('POST', `/api/agents/runs/${r2.id}/stop`, { token: A });
     check_(stopped.s === 200 && stopped.j.run.state === 'cancelled' && seen.some((x) => x.url === `/runs/${r2.runId}/stop`), 'Stop stops the hosted run');
     check_((await call('GET', '/api/tasks/agent/me', { token: cred2 })).s === 401, 'and revokes its credential at once');
     check_((await call('POST', `/api/agents/runs/${r2.id}/stop`, { token: B })).s === 404, "someone else cannot stop it");
+    check_((await issue(ref2, r2.runId)).j.error.code === 'run_ended', 'a stopped run can never be issued a credential');
 
     // the runner refuses / is down: recorded, credential revoked
     mode = 'refuse'; seen.length = 0;
     const task3 = (await call('POST', '/api/tasks', { token: A, body: { title: 'Third', projectId: proj } })).j.task;
     const r3 = (await call('POST', `/api/agents/${ag.id}/runs`, { token: A, body: { task: task3.key } })).j.run;
     check_(r3.state === 'refused' && r3.reason === 'insufficient_credits', 'a refusal by the runner is recorded with its reason (not enough credits)');
-    check_((await call('GET', '/api/tasks/agent/me', { token: seen.find((x) => x.url === '/runs').body.platformAgent.credential })).s === 401, 'and the credential it was given is revoked');
+    check_((await issue(seen.find((x) => x.url === '/runs').body.platformAgent.runRef, 'x')).s === 404, 'and a refused run has nothing to issue');
     mode = 'down'; seen.length = 0;
     const task4 = (await call('POST', '/api/tasks', { token: A, body: { title: 'Fourth', projectId: proj } })).j.task;
     const r4 = (await call('POST', `/api/agents/${ag.id}/runs`, { token: A, body: { task: task4.key } })).j.run;
