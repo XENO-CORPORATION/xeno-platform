@@ -50,6 +50,11 @@ function answer(q) {
   if (p === '/api/workspaces' && m === 'GET') return json(200, { success: true, workspaces: db.workspaces });
   if (p === '/api/workspaces' && m === 'POST') { const w = { id: `44444444-4444-4444-8444-${String(db.next++).padStart(12, '0')}`, workspace_type: 'team', name: body.name, member_role: 'owner', member_count: 1 }; db.workspaces.push(w); return json(200, { success: true, workspace: w }); }
   if (p === '/api/library/assets') return json(200, { success: true, items: [] });
+  if (p === '/api/canvases') return json(200, { success: true, canvases: [] });
+  if (p === '/api/mcp/services') return json(200, { success: true, services: [] });
+  if (p === '/api/mcp/connections') return json(200, { success: true, connections: [] });
+  if (p === '/api/library/folders') return json(200, { success: true, folders: [] });
+  if (p === '/api/library/storage') return json(200, { success: true, storage: { used: 0, limit: 0 } });
   { const mf = p.match(/^\/api\/chat\/projects\/([^/]+)\/files(?:\/([^/]+))?$/); if (mf) { db.pfiles = db.pfiles || [{ id: 'pf1', name: 'brief.pdf', file_type: 'application/pdf', file_size: 20480, content_url: '/api/library/assets/a1/content', created_at: '2026-09-02T10:00:00Z', ingestion_state: 'ready' }]; if (m === 'DELETE') { db.pfiles = db.pfiles.filter((x) => x.id !== mf[2]); return json(200, { success: true }); } return json(200, { success: true, files: db.pfiles }); } }
   const inArea = (x) => { const a = u.searchParams.get('area'); return a === null || (a === 'none' ? !x.area : x.area === a); };
   if (p === '/api/chat/conversations') { const rows = db.conversations.filter((c) => inArea({ area: c.project_id ? (db.projects.find((x) => x.id === c.project_id) || {}).area : c.area })); return json(200, { success: true, conversations: rows, total: rows.length }); }
@@ -327,6 +332,51 @@ try {
   p.evaluate(() => { window.XA.removeMember('pending@example.test'); }); await confirmLast(); pv = await people();
   ok(db.calls.some((x) => x.m === 'DELETE' && /\/invites\/i-1$/.test(x.p)) && !pv.rows.some((r) => r.startsWith('pending@')), 'removing a pending invite cancels the invite');
 
+  // EVERY page: the header's and footer's last control sits as far from the right edge as from its top and bottom,
+  // and the left text starts where that control's text ends (owner, 2026-10-15). Measured, not assumed, per page.
+  if (process.env.INSET_SWEEP !== '0') {
+    const pages = await p.evaluate(() => {
+      const out = ['#/overview', '#/overview/g/projects', '#/overview/g/tasks', '#/overview/g/library', '#/overview/g/inbox', '#/overview/g/community', '#/overview/g/market', '#/overview/g/workspace', '#/overview/g/workspace/Members', '#/overview/g/settings', '#/overview/g/anima', '#/overview/g/places', '#/overview/g/tasks/canvas'];
+      for (const m of ['studio', 'office', 'social', 'corpo', 'dev', 'tools']) { out.push('#/' + m); for (const z of (window.XENO_MODE_ZONES[m] || [])) out.push(`#/${m}/z/${z.id}`); }
+      for (const id of Object.keys(window.XENO_PRODUCTS || {})) out.push('#/studio/p/' + id);
+      return [...new Set(out)];
+    });
+    const bad = [], seen = { head: 0, foot: 0 };
+    for (const h of pages) {
+      await p.evaluate((x) => { location.hash = x; }, h); await wait(450);
+      const m = await p.evaluate(() => {
+        const vis = (e) => e && e.offsetParent !== null && e.getBoundingClientRect().width > 0;
+        const measure = (bar, sel, leftSel) => {
+          if (!vis(bar)) return null;
+          const R = bar.getBoundingClientRect();
+          // the right-most interactive control, and only if it sits in the right half (a bar with nothing on its right
+          // has no right inset to measure)
+          const last = [...bar.querySelectorAll('button, a, [role="button"], input, .pg-dd, .pg-search')].filter(vis).sort((x, y) => x.getBoundingClientRect().right - y.getBoundingClientRect().right).pop();
+          if (!last || last.getBoundingClientRect().left < R.left + R.width / 2) return null;
+          const b = last.getBoundingClientRect(), pad = parseFloat(getComputedStyle(last).paddingRight) || 0;
+          const first = [...bar.querySelectorAll(leftSel)].filter(vis)[0];
+          const lr = first && first.getBoundingClientRect();
+          return { right: Math.round(R.right - b.right), top: Math.round(b.top - R.top), bottom: Math.round(R.bottom - b.bottom), left: lr ? Math.round(lr.left - R.left) : null, text: Math.round(R.right - b.right + pad), h: Math.round(R.height), hb: Math.round(b.height) };
+        };
+        const top = document.querySelector('#main .topbar'), foot = document.querySelector('#main .mfoot');
+        return { head: measure(top, ':scope > button, :scope > a, :scope > * > button, :scope > * > a, :scope > * > .pg-dd, :scope > * > *:not(span):not(div) ', ':scope > .crumbs, :scope > button.opener:not([style*="hidden"])'), foot: measure(foot, '.sb-r button, .sb-r a, :scope > button', '.sb-l > *, :scope > *:first-child'), crumbs: document.querySelector('#main .topbar .crumbs')?.innerText.replace(/\s+/g, ' ').slice(0, 60) };
+      });
+      // a control shorter than the bar centres vertically: its right gap must equal its top gap (±1)
+      for (const k of ['head', 'foot']) { const g = m[k]; if (!g) continue; seen[k]++;
+        if (Math.abs(g.right - g.top) > 1 || Math.abs(g.top - g.bottom) > 1) bad.push(`${h} ${k}: right ${g.right} vs top ${g.top}/bottom ${g.bottom}`);
+        // the left text sits at ONE inset per bar on every page: the edge gap plus a text button's padding (header 8+12,
+        // footer 8+8) — the same place whatever control happens to be last on the right
+        else if (g.left != null && Math.abs(g.left - (k === 'head' ? 20 : 16)) > 1 && !(k === 'head' && g.left === 8)) bad.push(`${h} ${k}: left text at ${g.left}`); }
+    }
+    if (process.env.SHOT_DIR) for (const [n, h] of [['studio-image', '#/studio/p/image'], ['library', '#/overview/g/library'], ['market', '#/overview/g/market'], ['office', '#/office']]) { await p.evaluate((x) => { location.hash = x; document.getElementById('xp-note')?.remove(); }, h); await wait(700); await p.screenshot({ path: `${process.env.SHOT_DIR}/${n}.png` }); }
+    // and with the sidebar closed: the opener button takes the path's place on the left, 8 px in like the buttons
+    await p.evaluate(() => { location.hash = '#/overview/g/projects'; }); await wait(500);
+    await p.keyboard.down('Control'); await p.keyboard.press('Backslash'); await p.keyboard.up('Control'); await wait(600);
+    const closed = await p.evaluate(() => { const t = document.querySelector('#main .topbar'), o = t.querySelector('.opener'), R = t.getBoundingClientRect(), b = o.getBoundingClientRect(); return { panel: document.documentElement.dataset.panel, left: Math.round(b.left - R.left), top: Math.round(b.top - R.top), bottom: Math.round(R.bottom - b.bottom) }; });
+    if (closed.panel === 'closed' && (Math.abs(closed.left - closed.top) > 1 || Math.abs(closed.top - closed.bottom) > 1)) bad.push(`sidebar closed: opener left ${closed.left} vs top ${closed.top}/bottom ${closed.bottom}`);
+    await p.keyboard.down('Control'); await p.keyboard.press('Backslash'); await p.keyboard.up('Control'); await wait(600);
+    ok(bad.length === 0 && seen.head > 20, `every page's header and footer have even insets (${pages.length} pages, ${seen.head} headers, ${seen.foot} footers measured; sidebar closed ${JSON.stringify(closed)})${bad.length ? ': ' + bad.slice(0, 12).join(' · ') : ''}`);
+  }
   ok(missing.length === 0, 'the workspace asked for no route the platform lacks (' + JSON.stringify([...new Set(missing)].slice(0, 3)) + ')');
   ok(errs.length === 0, 'no page errors (' + JSON.stringify(errs.slice(0, 2)) + ')');
 } catch (e) { ok(false, 'threw: ' + String(e.message).split('\n')[0]); }
