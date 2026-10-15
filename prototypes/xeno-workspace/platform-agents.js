@@ -23,7 +23,7 @@
   const why = (r, d) => (r && r.d && (r.d.error || r.d.message)) || d;
   const ID = /^agt_[0-9a-f]{32}$/;
   const ENDPOINT = () => `${location.origin}/api/mcp`;
-  const S = { key: null, status: 'idle', list: [], one: null, projects: [], services: [], minted: null, busy: false, copied: '', tab: 'claude', q: '', choices: [], divisions: [], canManageDivisions: false, editingInstr: false, offers: [], models: [] };
+  const S = { key: null, status: 'idle', list: [], one: null, projects: [], services: [], minted: null, busy: false, copied: '', tab: 'claude', q: '', choices: [], divisions: [], canManageDivisions: false, editingInstr: false, offers: [], models: [], runs: [], runsFor: null };
   const EFFORTS = ['minimal', 'low', 'medium', 'high', 'max'];
   const EFFORT_LABEL = { minimal: 'Minimal', low: 'Low', medium: 'Medium', high: 'High', max: 'Max' };
   const rtSet = (rt) => !!(rt && (rt.model || rt.effort || (rt.tools && ((rt.tools.allow || []).length || (rt.tools.deny || []).length))));
@@ -72,9 +72,47 @@
       const [ch, dv] = await Promise.all([api('GET', `/api/agents/${id}/project-choices`), api('GET', '/api/divisions' + (S.one.workspace ? `?workspace=${S.one.workspace.id}` : ''))]);
       if (S.key !== at) return;
       S.choices = ch.ok ? ch.d.projects || [] : []; S.divisions = dv.ok ? dv.d.divisions || [] : []; S.canManageDivisions = !!(dv.ok && dv.d.canManage);
+      loadRuns(id);
     }
     S.status = 'ready'; paint();
   }
+  // cloud runs: listed with the agent, refreshed every few seconds while one is live
+  const LIVE_RUN = new Set(['starting', 'queued', 'running']);
+  let runTimer = null;
+  async function loadRuns(id) {
+    const r = await api('GET', `/api/agents/${id}/runs`);
+    if (!S.one || S.one.id !== id) return;
+    S.runs = r.ok ? r.d.runs || [] : []; S.runsFor = id;
+    clearTimeout(runTimer);
+    if (S.runs.some((x) => LIVE_RUN.has(x.state))) runTimer = setTimeout(() => { if (S.one && S.one.id === id && document.querySelector('.xag-runs')) loadRuns(id); }, 4000);
+    paint();
+  }
+  const RUN_STATE = { starting: 'Starting', queued: 'Queued', running: 'Running', completed: 'Finished', failed: 'Failed', cancelled: 'Stopped', refused: 'Not started', uncertain: 'Unclear' };
+  const RUN_REASON = {
+    budget_exceeded: 'It used its whole budget', insufficient_credits: 'Not enough credits', stopped_by_owner: 'You stopped it',
+    runner_lacks_agents: 'The cloud runner cannot run agents yet', transport_error: 'The cloud runner could not be reached',
+    platform_agent_unavailable: 'It could not sign in as the agent',
+  };
+  const runReason = (r) => { if (!r.reason || r.state === 'completed') return ''; const k = Object.keys(RUN_REASON).find((x) => r.reason.includes(x)); return k ? RUN_REASON[k] : r.reason.slice(0, 120); };
+  async function startRun(a) {
+    const open = (await api('GET', `/api/tasks?status=raised,todo,in_progress,blocked`)).d;
+    const mine = new Set(a.projects.map((p) => p.id));
+    const tasks = ((open && open.tasks) || []).filter((t) => !t.project || mine.has(t.project.id)).slice(0, 40);
+    if (!tasks.length) return toast(a.projects.length ? 'No open tasks in its projects' : `Give ${a.name} a project first, then run it on one of its tasks`);
+    const v = await D().form({ title: `Run ${a.name} in the cloud`, sub: `It takes the task, works on it as ${a.name}, and sends it for review. You pay for what it uses, up to the budget.`, submit: 'Run', size: 'sm', fields: [
+      { id: 'task', label: 'Task', type: 'choice', cols: 1, required: true, value: tasks[0].key, options: tasks.map((t) => [t.key, `${t.key} ${t.title}`, t.project ? t.project.name : '']) },
+      { id: 'budget', label: 'Budget (credits)', value: '50', max: 4, hint: 'It stops when it has used this much. Up to 200.' }] });
+    if (!v) return;
+    const r = await call('POST', `/api/agents/${a.id}/runs`, { task: v.task, budgetCredits: Number(v.budget) || 50 }, 'It could not be started.');
+    if (!r) return;
+    toast(r.d.run.existing ? `${a.name} is already running on ${v.task}` : r.d.run.state === 'refused' || r.d.run.state === 'uncertain' ? `Not started: ${runReason(r.d.run) || r.d.run.state}` : `${a.name} is working on ${v.task}`);
+    loadRuns(a.id);
+  }
+  async function stopRun(id) {
+    const r = await call('POST', `/api/agents/runs/${id}/stop`, {}, 'It could not be stopped.');
+    if (r && S.one) { toast('Stopped'); loadRuns(S.one.id); }
+  }
+
   const refreshOne = async () => { if (!S.one) return; const r = await api('GET', `/api/agents/${S.one.id}`); if (r.ok) { S.one = r.d.agent; const i = S.list.findIndex((x) => x.id === S.one.id); if (i >= 0) S.list[i] = S.one; } };
 
   // ───────────────────────── the list
@@ -165,6 +203,9 @@
           <section class="pg-sec"><div class="pg-sec-h"><h3>Runs with</h3><button class="pg-link" data-xag="runtime">${rtSet(a.runtime) ? 'Change' : 'Set'}</button></div>
             ${rtSet(a.runtime) ? `<dl class="pg-props xag-rt"><dt>Model</dt><dd>${a.runtime.model ? `<code>${esc(a.runtime.model)}</code>` : 'The CLI’s choice'}</dd><dt>Reasoning</dt><dd>${a.runtime.effort ? esc(EFFORT_LABEL[a.runtime.effort]) : 'The CLI’s choice'}</dd>${a.runtime.tools && (a.runtime.tools.allow || []).length ? `<dt>Only these tools</dt><dd>${a.runtime.tools.allow.map((t) => `<code>${esc(t)}</code>`).join(' ')}</dd>` : ''}${a.runtime.tools && (a.runtime.tools.deny || []).length ? `<dt>Never these tools</dt><dd>${a.runtime.tools.deny.map((t) => `<code>${esc(t)}</code>`).join(' ')}</dd>` : ''}</dl><p class="xag-note">Every XENO CLI or SDK that runs as ${esc(a.name)} uses these. Saved with the instructions as one version.</p>`
               : `<p class="xag-none">The CLI it runs in picks the model, reasoning and tools. Set them here to make ${esc(a.name)} run the same way everywhere.</p>`}</section>
+          <section class="pg-sec xag-runs"><div class="pg-sec-h"><h3>Runs in the cloud</h3><button class="pg-link" data-xag="run-cloud">Run on a task</button></div>
+            ${S.runsFor === a.id && S.runs.length ? `<div class="xag-rows">${S.runs.slice(0, 10).map((r) => `<div class="xag-row"><span class="xag-row-ic">${ic(LIVE_RUN.has(r.state) ? 'refresh' : r.state === 'completed' ? 'check' : 'x')}</span><span class="xag-row-b"><b><a data-xag="open-task" data-k="${esc(r.task || '')}">${esc(r.task || 'Task')}</a> · ${esc(RUN_STATE[r.state] || r.state)}</b><small>${esc(ago(r.createdAt))} · instructions v${esc(r.version)} · budget ${esc(r.budgetCredits)} credits${runReason(r) ? ' · ' + esc(runReason(r)) : ''}</small></span><span class="xag-row-m">${r.endedAt ? esc(ago(r.endedAt)) : ''}</span>${LIVE_RUN.has(r.state) ? `<button type="button" class="pg-btn ghost" data-xag="stop-run" data-id="${esc(r.id)}">Stop</button>` : '<span></span>'}</div>`).join('')}</div>`
+              : `<p class="xag-none">Run ${esc(a.name)} on one of its tasks and it works in the cloud — no CLI, no computer of yours. It acts as ${esc(a.name)}, can only reach its projects, and stops at the budget you set.</p>`}</section>
           <section class="pg-sec"><div class="pg-sec-h"><h3>Works on</h3><small>${h.plural(a.projects.length, 'project', 'projects')}</small></div>${projects}</section>
           <section class="pg-sec"><div class="pg-sec-h"><h3>Can use</h3></div><div class="xag-svcs">${svc}</div><p class="xag-note">What it can use grows as XENO services join XENO MCP. You can still turn a service off for one connection in Dev › MCP.</p></section>
           <section class="pg-sec"><div class="pg-sec-h"><h3>How it hears about new work</h3><button class="pg-link" data-xag="webhook">${a.webhook ? 'Change' : 'Add a webhook'}</button></div>
@@ -360,6 +401,9 @@
     if (a === 'open-division') return go(`Divisions/${b.dataset.id}`);
     if (a === 'divisions') return go('Divisions');
     if (a === 'runtime') return editRuntime();
+    if (a === 'run-cloud') return S.one && startRun(S.one);
+    if (a === 'stop-run') return stopRun(b.dataset.id);
+    if (a === 'open-task') return b.dataset.k && X()?.go?.('tasks', { item: b.dataset.k });
     if (a === 'instr-edit') { S.editingInstr = true; paint(); return setTimeout(() => document.querySelector('.xag-instr textarea')?.focus(), 0); }
     if (a === 'instr-cancel') { S.editingInstr = false; return paint(); }
     if (a === 'calls') return X()?.go?.('product', { product: 'mcp', item: `c/${b.dataset.id}` });
