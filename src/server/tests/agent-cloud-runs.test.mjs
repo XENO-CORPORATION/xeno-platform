@@ -31,6 +31,7 @@ import { migrateOidcClients } from '../database/migrate-oidc-clients.js';
 const JWT_SECRET = process.env.JWT_SECRET || 'xenostudio-super-secret-jwt-key-change-in-production';
 const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL });
 let passed = 0, failed = 0;
+const RUN = (n) => 'run_' + String(n).padStart(32, '0');
 const check_ = (c, m) => { if (c) { passed++; console.log('  ok  ' + m); } else { failed++; console.log('FAIL: ' + m); } };
 
 async function main() {
@@ -44,7 +45,7 @@ async function main() {
 
   // the stand-in agents-api: records each request, answers as the real one does
   const seen = [];
-  let mode = 'ok', capable = true;
+  let mode = 'ok', capable = true, claimUrl = '', claimToken = '', claimed = null;
   const runs = new Map();
   const runner = http.createServer(async (req, res) => {
     let raw = ''; for await (const c of req) raw += c;
@@ -55,7 +56,9 @@ async function main() {
     if (req.method === 'POST' && req.url === '/runs') {
       if (mode === 'refuse') return send(402, { error: 'insufficient_credits' });
       if (mode === 'down') { res.destroy(); return; }
-      const id = 'run_' + (runs.size + 1); runs.set(id, 'queued');
+      const id = 'run_' + String(runs.size + 1).padStart(32, '0'); runs.set(id, 'queued');
+      // the real runner can start the run and claim its credential BEFORE its answer reaches the platform
+      if (mode === 'claim-first') { const c = await fetch(claimUrl, { method: 'POST', headers: { 'content-type': 'application/json', authorization: 'Bearer ' + claimToken }, body: JSON.stringify({ runRef: body.platformAgent.runRef, runId: id }) }); claimed = { s: c.status, j: await c.json().catch(() => null) }; }
       return send(201, { run: { runId: id, status: 'queued' } });
     }
     const m = req.url.match(/^\/runs\/([^/]+)(\/stop)?$/);
@@ -82,6 +85,7 @@ async function main() {
   };
   const A = session(ada), B = session(bob);
   // what the runner does when it starts a run: ask for the agent credential by the run's reference
+  claimUrl = origin + '/api/v2/ledger/service/agent-runs/credential'; claimToken = SERVICE;
   const issue = (runRef, runId, token = SERVICE) => call('POST', '/api/v2/ledger/service/agent-runs/credential', { token, body: { runRef, runId } });
 
   try {
@@ -94,7 +98,7 @@ async function main() {
 
     // start
     const st = await call('POST', `/api/agents/${ag.id}/runs`, { token: A, body: { task: task.key, budgetCredits: 5 } });
-    check_(st.s === 201 && st.j.run.state === 'queued' && st.j.run.runId === 'run_1' && st.j.run.version === ag.version, `a run starts and is recorded against the pinned version (${st.s} ${st.j && st.j.code})`);
+    check_(st.s === 201 && st.j.run.state === 'queued' && st.j.run.runId === RUN(1) && st.j.run.version === ag.version, `a run starts and is recorded against the pinned version (${st.s} ${st.j && st.j.code})`);
     check_(!JSON.stringify(st.j).includes('xtk_'), 'the agent credential is never returned to the browser');
     const sent = seen.find((x) => x.method === 'POST' && x.url === '/runs');
     const claims = jwt.decode(String(sent.auth).slice(7));
@@ -103,11 +107,11 @@ async function main() {
     const pa = sent.body.platformAgent;
     check_(pa && pa.agentId === ag.id && pa.runRef === st.j.run.id && pa.issuer && pa.tools && pa.tools.deny[0] === 'Bash', 'the run is told which agent it is, the XENO origin, the tool scope and its run reference');
     check_(!JSON.stringify(sent.body).includes('xtk_') && !('credential' in pa), 'and NO credential: a queued run holds no live secret, not even in the runner');
-    check_((await issue(pa.runRef, 'run_1', 'wrong')).s === 401, 'only the runner (the service token) may ask for a credential');
-    check_((await issue(pa.runRef, 'run_999')).j.error.code === 'run_not_found', 'and only for the hosted run the platform started');
-    const got = await issue(pa.runRef, 'run_1');
+    check_((await issue(pa.runRef, RUN(1), 'wrong')).s === 401, 'only the runner (the service token) may ask for a credential');
+    check_((await issue(pa.runRef, RUN(999))).j.error.code === 'run_not_found', 'and only for the hosted run the platform started');
+    const got = await issue(pa.runRef, RUN(1));
     check_(got.s === 200 && /^xtk_/.test(got.j.token) && got.j.agentId === ag.id && got.j.expiresAt, 'the runner, starting the run, gets the agent credential');
-    check_((await issue(pa.runRef, 'run_1')).j.error.code === 'credential_issued', 'once: a second ask is refused, so a leaked reference mints nothing');
+    check_((await issue(pa.runRef, RUN(1))).j.error.code === 'credential_issued', 'once: a second ask is refused, so a leaked reference mints nothing');
     pa.credential = got.j.token;
     check_(sent.body.model === 'gpt-5.5' && sent.body.effort === 'medium' && sent.body.budget.maxCredits === 5, 'its runtime config and the budget go with it');
     check_(/Keep it small\./.test(sent.body.prompt) && sent.body.prompt.includes(task.key) && /too tall/.test(sent.body.prompt), 'the prompt carries its instructions and the task');
@@ -166,6 +170,14 @@ async function main() {
     check_((await call('POST', `/api/agents/${ag.id}/runs`, { token: A, body: { task: task.key, budgetCredits: 5000 } })).j.code === 'invalid_budget', 'a budget beyond the limit is refused');
     let trig = null; try { await pool.query('UPDATE agent_cloud_runs SET task_id = $2 WHERE id = $1', [st.j.run.id, task2.id]); } catch (e) { trig = e; }
     check_(trig && trig.code === '23514', 'the database refuses to re-point a run at another task');
+    // the race: the runner claims the credential before the platform has stored the run id it was given
+    mode = 'claim-first';
+    const task5 = (await call('POST', '/api/tasks', { token: A, body: { title: 'Fifth', projectId: proj } })).j.task;
+    const raced = await call('POST', `/api/agents/${ag.id}/runs`, { token: A, body: { task: task5.key, budgetCredits: 5 } });
+    mode = 'ok';
+    const rr = (await pool.query('SELECT run_id, state FROM agent_cloud_runs WHERE id = $1', [raced.j.run && raced.j.run.id])).rows[0];
+    check_(claimed && claimed.s === 200 && /^xtk_/.test(claimed.j.token) && rr && rr.run_id === raced.j.run.runId && rr.state === 'running', `a runner that claims its credential before the platform stored the run id still gets it, and the run stays running (${JSON.stringify({ claim: claimed && claimed.s, rr })})`);
+    await call('POST', `/api/agents/runs/${raced.j.run.id}/stop`, { token: A, body: {} });
     capable = false; seen.length = 0;
     const old = await call('POST', `/api/agents/${ag.id}/runs`, { token: A, body: { task: task4.key } });
     check_(old.s === 503 && old.j.code === 'runner_lacks_agents' && !seen.some((x) => x.url === '/runs'), 'a runner that does not advertise platform agents is refused BEFORE anything starts or is charged');
