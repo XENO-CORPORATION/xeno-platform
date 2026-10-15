@@ -145,6 +145,12 @@ try {
   ok(await p.evaluate(() => location.pathname) === `/workspace/projects/${pid(1)}/activity` && /joined the project|Show older/.test(await main()), 'an old link by name still opens the project and becomes its id address');
   await p.goto(base + `/workspace/projects/${pid(1)}/team`, { waitUntil: 'domcontentloaded' }); await wait(1500); t = await main();
   ok(/2 people · 1 agent/.test(t), 'opening the id address in a fresh tab shows that project and tab');
+  await p.goto(base + `/workspace/projects/${pid(1)}/tasks`, { waitUntil: 'domcontentloaded' }); await wait(1500);
+  const hdr = await p.evaluate(() => ({ tabsInHead: !!document.querySelector('.pg-top .pg-top-tabs [data-ptab="Tasks"][aria-selected="true"]'), tabsInBody: !!document.querySelector('.mview .pg-tabs'), facts: document.querySelector('.mfoot [data-sb-facts]')?.innerText.replace(/\s+/g, ' ') || '', sumInHead: (document.querySelector('.pg-top-sum')?.innerText || '').trim() }));
+  ok(hdr.tabsInHead && !hdr.tabsInBody && !hdr.sumInHead, `a project has ONE header: path and tabs in the header bar, no second tab row in the body (${JSON.stringify(hdr)})`);
+  ok(/Next:/.test(hdr.facts) && /0\/0/.test(hdr.facts), 'its progress and next milestone sit in the status bar');
+  if (process.env.WORK_SHOT) { await p.evaluate(() => document.getElementById('xp-note')?.remove()); await p.screenshot({ path: process.env.WORK_SHOT }); }
+  await p.goto(base + `/workspace/projects/${pid(1)}/team`, { waitUntil: 'domcontentloaded' }); await wait(1500); t = await main();
   ok(/2 people · 1 agent/.test(t) && /Ada \(you\)/.test(t) && /bob@x\.test/.test(t) && /Agent · Ada’s/.test(t) && !!(await p.$('#main [data-pi="share"]')), 'Team lists people and agents with roles; an admin sees emails and Manage access');
   ok(await p.evaluate(() => !document.querySelector('#main [data-xa="newTask"][aria-disabled="true"]')), 'Add a task is no longer shown unavailable');
   await goProjects('Website (Personal)/Activity'); t = await main();

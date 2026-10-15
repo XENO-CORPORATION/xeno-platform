@@ -453,7 +453,15 @@
         tools = tb.innerHTML; tb.remove();
         sumForBar = sum ? [...new DOMParser().parseFromString(`<div>${sum}</div>`, 'text/html').body.firstChild.children].map((x) => x.textContent.trim()).filter(Boolean).join(' · ') : ''; sum = '';
       } else sumForBar = '';
+      // An object page with tabs (a project: Overview · Tasks · Conversations …) puts its TABS in the header, beside
+      // the path — the tabs are where you are — and its facts (progress, status, next milestone, people) in the
+      // status bar, so the header is one line and the body never starts with a second header.
+      const tabs = h.classList.contains('pg-head--obj') && t.content.querySelector('.pg > .pg-tabs');
+      let facts = '';
+      if (tabs) { tabs.classList.add('pg-top-tabs'); left = tabs.outerHTML; tabs.remove(); facts = sum; sum = ''; }
       h.remove();
+      const f0 = t.content.querySelector('.pg-foot'); const foot0 = f0 ? statusBar(f0, t.content, facts) : ''; f0?.remove();
+      if (f0) return { acts, sum, left, tools, body: t.innerHTML, foot: foot0 };
       const f = t.content.querySelector('.pg-foot'); const foot = f ? statusBar(f, t.content) : ''; f?.remove();
       return { acts, sum, left, tools, body: t.innerHTML, foot }; }
     const f = t.content.querySelector('.pg-foot'); const foot = f ? statusBar(f, t.content) : ''; f?.remove();
@@ -463,7 +471,7 @@
   // looking at or have selected · the keys that work on this page · and, tucked away, the prototype's preview.
   const agoS = (t) => { const s2 = Math.round((Date.now() - t) / 1000); return s2 < 10 ? 'just now' : s2 < 60 ? `${s2} s ago` : s2 < 3600 ? `${Math.round(s2 / 60)} min ago` : `${Math.round(s2 / 3600)} h ago`; };
   const STATE_L = { normal: 'Normal', empty: 'First use', loading: 'Loading', error: 'Error', denied: 'No access' };
-  function statusBar(f, root) {
+  function statusBar(f, root, facts = '') {
     const fam = f.dataset.fam, api = f.dataset.api, noun = f.dataset.noun, st = pstate(fam), loading = !!root.querySelector('.pg--loading');
     const fresh = st === 'error' ? `<span class="sb-fresh bad"><i></i>Couldn't load</span>` : st === 'denied' ? '<span class="sb-fresh"><i></i>No access</span>' : loading ? '<span class="sb-fresh live"><i></i>Loading…</span>' : `<span class="sb-fresh ok"><i></i><span data-at="${AT[fam] || Date.now()}">Updated ${agoS(AT[fam] || Date.now())}</span></span><button class="sb-ib" data-pg-refresh="${esc(fam)}" aria-label="Refresh" data-tip="Refresh">${ic('reset')}</button>`;
     const n = root.querySelectorAll('[data-pg-results] .pg-tr:not(.pg-th), [data-pg-results] .pg-card:not(.pg-card--new), .pg-board .pg-task').length;
@@ -471,7 +479,7 @@
     const info = loading || st !== 'normal' ? '' : many.length > 1 ? selSummary(many) : sel ? `1 selected · ${esc(sel.name)} · ${bytes(sel.bytes)}` : [n && noun ? `${n} ${noun}${n === 1 ? '' : 's'}${ui(fam).q ? ` matching “${esc(ui(fam).q)}”` : ''}` : '', !ui(fam).q && sumForBar ? esc(sumForBar.split(' · ').filter((x) => x !== `${n} ${noun}${n === 1 ? '' : 's'}`).join(' · ')) : ''].filter(Boolean).join(' · ');
     const srch = hasSearchForBar || root.querySelector('[data-pg-q]'); hasSearchForBar = false;
     const keys = [srch && ['/', 'Search'], n && ['↑↓', 'Move'], n && ['↵', 'Open'], root.querySelector('.pg--lib') && ['I', 'Details'], srch && ['Esc', 'Clear']].filter(Boolean);
-    return `<div class="sb-l">${fresh}${info ? `<span class="sb-sep"></span><span class="sb-info" data-sb-info>${info}</span>` : '<span class="sb-info" data-sb-info></span>'}</div>
+    return `<div class="sb-l">${fresh}${facts ? `<span class="sb-sep"></span><span class="sb-facts" data-sb-facts>${facts}</span>` : ''}${info ? `<span class="sb-sep"></span><span class="sb-info" data-sb-info>${info}</span>` : '<span class="sb-info" data-sb-info></span>'}</div>
       <div class="sb-r"><span class="sb-keys">${keys.map(([k, l]) => `<span><kbd>${k}</kbd>${l}</span>`).join('')}</span><button class="sb-prev" data-pg-preview="${esc(fam)}" data-api="${esc(api)}" title="Prototype only — data in the shape of ${esc(api)}" aria-haspopup="listbox" aria-expanded="false">Preview <b>${STATE_L[st]}</b>${ic('chev')}</button></div>`;
   }
   // the body reserves its scrollbar strip (scrollbar-gutter: stable); measure it once so the body's right edge
