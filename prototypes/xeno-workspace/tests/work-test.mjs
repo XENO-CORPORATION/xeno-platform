@@ -138,7 +138,8 @@ try {
   await p.click('#main [data-pj="files-remove"]'); await wait(600);
   ok(!db.pfiles.length && /No files yet/.test(await main()), 'removing a file takes it off the project');
   await goProjects('Website (Personal)/Tasks'); t = await main();
-  ok(/No tasks in this project yet/.test(t) && !/aren’t available/.test(t) && await p.$('#main [data-tk="new"]'), 'the Tasks tab is XENO Tasks: real (empty) list and a working New task');
+  ok(/No tasks in this project yet/.test(t) && !/aren’t available/.test(t) && await p.$('#main .pg-top-acts [data-xa="newTask"]') && !(await p.$('#main .mview [data-tk="new"]')), 'the Tasks tab is XENO Tasks: real (empty) list; New task is in the header, not repeated in the body');
+  ok(await p.evaluate(() => !document.querySelector('#main .mview [data-tk="link-cmd"]')), 'Connect an agent is not a second toolbar in the body (it lives in the project menu)');
   await goProjects('Website (Personal)/Team assignments'); t = await main();
   ok(await p.evaluate(() => location.pathname) === `/workspace/projects/${pid(1)}/team`, 'a project tab has an id address, never the project name: /workspace/projects/<id>/team');
   await p.goto(base + '/workspace/projects/' + encodeURIComponent('Website (Personal)') + '/Activity', { waitUntil: 'domcontentloaded' }); await wait(1500);
