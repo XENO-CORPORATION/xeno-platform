@@ -151,7 +151,9 @@ export async function start(db, owner, agentId, { taskKey, budgetCredits } = {},
     }
     const body = await res.json().catch(() => null);
     if (res.ok && body && body.run && body.run.runId) {
-      const r = (await db.query(`UPDATE agent_cloud_runs SET run_id = $2, state = $3 WHERE id = $1 RETURNING *`,
+      // the runner may already have claimed its credential (and set `running`) before this answer is stored
+      const r = (await db.query(`UPDATE agent_cloud_runs SET run_id = COALESCE(run_id, $2),
+          state = CASE WHEN state = 'running' THEN state ELSE $3 END WHERE id = $1 RETURNING *`,
         [row.id, String(body.run.runId), body.run.status === 'running' ? 'running' : 'queued'])).rows[0];
       return view({ ...r, task_key: task.key }, agent);
     }
@@ -176,6 +178,12 @@ export async function issueRunCredential(db, { runRef, runId }) {
   const row = (await db.query(`SELECT r.*, a.public_id, u.id AS owner_id FROM agent_cloud_runs r
       JOIN agent_identities a ON a.user_id = r.agent_user_id JOIN users u ON u.id = r.owner_user_id
      WHERE r.id = $1 FOR UPDATE OF r`, [runRef])).rows[0];
+  // The runner can start the run and ask for its credential BEFORE our start call has stored the hosted run id it
+  // was given (a race: the runner answers, then claims, faster than we write). A run still `starting` with no id
+  // yet binds to the first id that asks; once an id is stored, only that id is answered.
+  if (row && !row.run_id && row.state === 'starting' && /^run_[0-9a-f]{32}$/.test(runId)) {
+    await db.query(`UPDATE agent_cloud_runs SET run_id = $2 WHERE id = $1`, [row.id, runId]); row.run_id = runId;
+  }
   if (!row || row.run_id !== runId) throw new AgentRunError('No such run', 'run_not_found', 404);
   if (!LIVE.has(row.state)) throw new AgentRunError('The run has ended', 'run_ended', 409);
   if (row.credential_id) throw new AgentRunError('This run already has its credential', 'credential_issued', 409);
