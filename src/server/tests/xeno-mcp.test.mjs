@@ -14,6 +14,8 @@
  *   7. the management API is the person's: another person gets 404, an agent's token is refused
  *   8. one service failing fails alone: a throwing service is a tool error, the session keeps working
  *   9. the old address /api/tasks/mcp still works for a connection signed in there
+ *  10. platform agents: create one, mint a short-lived credential, BECOME it over /api/mcp; scoped to its projects;
+ *      revoked, expired, disconnected or deleted credentials are refused; someone else's agent is 404
  *
  * Run: DATABASE_URL=postgres://… node src/server/tests/xeno-mcp.test.mjs
  */
@@ -25,6 +27,7 @@ import jwt from 'jsonwebtoken';
 import oauth2Routes from '../routes/oauth2Routes.js';
 import chatRoutes from '../routes/chatRoutes.js';
 import xenoTasksRoutes, { taskTokenAuth, unlessTaskToken, mcpChallenge } from '../routes/xenoTasksRoutes.js';
+import platformAgentRoutes from '../routes/platformAgentRoutes.js';
 import xenoMcpRoutes, { management, personOnly, mcpResourceMetadata } from '../routes/xenoMcpRoutes.js';
 import * as mcp from '../services/xenoMcp.js';
 import { authMiddleware } from '../middleware/auth.js';
@@ -57,6 +60,7 @@ async function main() {
   app.get('/.well-known/oauth-protected-resource/api/mcp', mcpResourceMetadata);
   app.use('/api/mcp', (req, res, next) => (req.path === '/' ? xenoMcpRoutes(req, res, next) : next()));
   app.use('/api/mcp', authMiddleware, personOnly, management);
+  app.use('/api/agents', authMiddleware, personOnly, platformAgentRoutes);
   const server = http.createServer(app); await new Promise((r) => server.listen(0, '127.0.0.1', r));
   const origin = `http://127.0.0.1:${server.address().port}`;
   const call = async (method, path, { token, body, headers = {}, raw } = {}) => {
@@ -162,6 +166,47 @@ async function main() {
     // 9. the old address still works
     const old = await rpc(cursor.at, 'tools/list', {}, '/api/tasks/mcp');
     check(old.s === 200 && old.j.result.tools.some((x) => x.name === 'list_projects'), 'a connection can still use the old /api/tasks/mcp address, unprefixed');
+    // 10. platform agents: create, mint, become
+    const made = await call('POST', '/api/agents', { token: session(ada), body: { name: 'Release Bot', description: 'Ships releases' } });
+    const ag = made.j.agent;
+    check(made.s === 201 && /^agt_[0-9a-f]{32}$/.test(ag.id) && ag.description === 'Ships releases' && ag.projects.length === 0, `a person creates an agent with a stable opaque id (${ag && ag.id})`);
+    check((await call('GET', `/api/agents/${ag.id}`, { token: session(bob) })).s === 404, "another person cannot see it (404)");
+    check((await call('POST', '/api/agents', { token: claude.at, body: { name: 'x' } })).s === 401, "an agent's token cannot create agents");
+    const minted = await call('POST', `/api/agents/${ag.id}/credentials`, { token: session(ada), body: {} });
+    const cred = minted.j.credential;
+    const ttl = new Date(cred.expiresAt) - Date.now();
+    check(minted.s === 201 && /^xtk_/.test(cred.token) && ttl > 50 * 60e3 && ttl <= 61 * 60e3 && minted.h.get('cache-control') === 'no-store', `a credential is minted, shown once, 1 hour by default (${Math.round(ttl / 60e3)} min)`);
+    check(!JSON.stringify((await call('GET', `/api/agents/${ag.id}`, { token: session(ada) })).j).includes(cred.token), 'the secret is never shown again');
+    const who = await rpc(cred.token, 'tools/call', { name: 'tasks_list_projects', arguments: {} });
+    check(who.s === 200 && !who.j.result.isError && who.j.result.structuredContent.projects.length === 0, 'the credential BECOMES the agent over /api/mcp, and it sees only the projects it was given (none yet)');
+    const pr = await call('POST', '/api/chat/projects', { body: { name: 'Releases' } });
+    const proj = (pr.j.project || pr.j.data || pr.j).id;
+    const added = await call('PUT', `/api/agents/${ag.id}/projects/${proj}`, { token: session(ada), body: { access: 'editor' } });
+    check(added.s === 200 && added.j.agent.projects.some((x) => x.id === String(proj) && x.access === 'editor'), 'the person gives it a project');
+    const seen = await rpc(cred.token, 'tools/call', { name: 'tasks_list_projects', arguments: {} });
+    check(seen.j.result.structuredContent.projects.some((x) => x.id === String(proj)), 'and the agent now sees that project');
+    const c1 = await rpc(cred.token, 'tools/call', { name: 'tasks_create_task', arguments: { title: 'Cut 1.0', projectId: String(proj) } });
+    check(!c1.j.result.isError, 'and works in it as itself');
+    const after1 = (await call('GET', `/api/agents/${ag.id}`, { token: session(ada) })).j.agent;
+    check(after1.connections.length === 1 && after1.connections[0].client === 'Release Bot', 'its use shows as one connection named after the agent');
+    const allConns = (await call('GET', '/api/mcp/connections', { token: session(ada) })).j.connections;
+    const agConn = allConns.find((x) => x.client.name === 'Release Bot');
+    check(Boolean(agConn), 'and in the person\'s MCP connections list');
+    // revocation, expiry, disconnect, delete
+    const second = (await call('POST', `/api/agents/${ag.id}/credentials`, { token: session(ada), body: { ttlHours: 2 } })).j.credential;
+    await call('DELETE', `/api/agents/${ag.id}/credentials/${second.id}`, { token: session(ada) });
+    check((await rpc(second.token, 'ping', {})).s === 401, 'a revoked credential is refused');
+    const third = (await call('POST', `/api/agents/${ag.id}/credentials`, { token: session(ada), body: {} })).j.credential;
+    await pool.query(`UPDATE task_agent_tokens SET expires_at = now() - interval '1 second' WHERE id = $1`, [third.id]);
+    check((await rpc(third.token, 'ping', {})).s === 401, 'an expired credential is refused');
+    check((await call('POST', `/api/agents/${ag.id}/credentials`, { token: session(ada), body: { ttlHours: 99999 } })).j.code === 'invalid_ttl', 'an over-long lifetime is refused');
+    await call('DELETE', `/api/mcp/connections/${agConn.id}`, { token: session(ada) });
+    check((await rpc(cred.token, 'ping', {})).s === 401, 'disconnecting it stops its live credentials');
+    const fresh = (await call('POST', `/api/agents/${ag.id}/credentials`, { token: session(ada), body: {} })).j.credential;
+    check((await rpc(fresh.token, 'ping', {})).s === 200, 'and a newly minted credential reconnects');
+    const del = await call('DELETE', `/api/agents/${ag.id}`, { token: session(ada) });
+    check(del.s === 200 && (await rpc(fresh.token, 'ping', {})).s === 401, 'deleting the agent stops everything bound to it');
+    check((await call('GET', `/api/agents/${ag.id}`, { token: session(ada) })).s === 404, 'and it is gone');
   } finally {
     server.close();
     await pool.end();

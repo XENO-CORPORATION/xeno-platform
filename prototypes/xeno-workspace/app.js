@@ -1099,7 +1099,7 @@
     if (S.view === 'mode') return `<b>${M[S.mode].name}</b>`;
     if (S.view === 'global') { const gn = { anima: 'Anima', community: 'Community', market: 'Marketplace', library: 'Library', projects: 'Projects', tasks: 'Tasks', workspace: 'Workspace', inbox: 'Inbox', settings: 'Settings', places: 'Places' }[S.global]; if (!S.item) return `<b>${gn}</b>`;
       // a path is a trail you can walk back up: every segment but the last is a link (GitHub, Finder)
-      const parts = S.item.split('/'), lbl = (x, i) => (S.global === 'tasks' && window.XENO_TASKS?.label ? window.XENO_TASKS.label(x) : S.global === 'community' && i === 0 && window.XENO_PG_FORUM.find((t) => t.id === x) ? window.XENO_PG_FORUM.find((t) => t.id === x).title : S.global === 'community' && i > 0 && parts[0] === 'My reports' ? '#' + x : x);
+      const parts = S.item.split('/'), lbl = (x, i) => (S.global === 'tasks' && window.XENO_TASKS?.label ? window.XENO_TASKS.label(x) : S.global === 'community' && i === 0 && window.XENO_PG_FORUM.find((t) => t.id === x) ? window.XENO_PG_FORUM.find((t) => t.id === x).title : S.global === 'community' && i > 0 && parts[0] === 'My reports' ? '#' + x : S.global === 'workspace' && i === 1 && parts[0] === 'Agents' && window.XENO_AGENTS?.isId?.(x) ? window.XENO_AGENTS.nameOf(x) : x);
       return `<a data-crumb="">${gn}</a>` + parts.map((x, i) => sep + (i < parts.length - 1 ? `<a data-crumb="${esc(parts.slice(0, i + 1).join('/'))}">${esc(lbl(x, i))}</a>` : `<b>${esc(lbl(x, i))}</b>`)).join(''); }
     const p = PR[S.product];
     if (S.mode === 'studio' && ['image', 'video', 'audio', '3d', 'enhance-image', 'enhance-video', 'enhance-audio', 'enhance-3d'].includes(S.product) && window.XENO_GENERATIONS) {
@@ -1249,8 +1249,8 @@
   const memList = () => ((window.XENO_PG_WORKSPACE || {}).members || []);
   const MEM = /^(Members|Agents)\/(.+)$/;
   const memId = (m) => (m && m.id && m.id !== 'me' && /^[A-Za-z0-9_-]+$/.test(String(m.id)) ? String(m.id) : null);
-  function memItemOut(item) { const x = String(item).match(MEM); if (!x) return item; const id = memId(memList().find((m) => m.name === x[2])); return id ? x[1] + '/' + id : item; }
-  function memItemIn(item) { const x = String(item || '').match(MEM); if (!x) return item; const m = memList().find((y) => memId(y) === x[2]); return m ? x[1] + '/' + m.name : item; }
+  function memItemOut(item) { const x = String(item).match(MEM); if (!x) return item; if (x[1] === 'Agents' && window.XENO_AGENTS?.served && window.XENO_AGENTS.isId(x[2])) return item; const id = memId(memList().find((m) => m.name === x[2])); return id ? x[1] + '/' + id : item; }
+  function memItemIn(item) { const x = String(item || '').match(MEM); if (!x) return item; if (x[1] === 'Agents' && window.XENO_AGENTS?.served && window.XENO_AGENTS.isId(x[2])) return item; const m = memList().find((y) => memId(y) === x[2]); return m ? x[1] + '/' + m.name : item; }
   window.XENO_MEMBER_ROUTE = { out: memItemOut, in: memItemIn };
   const itemOut = () => (!S.item ? S.item : S.view === 'global' && S.global === 'projects' ? projItemOut(S.item) : S.view === 'global' && S.global === 'workspace' ? memItemOut(S.item) : S.item);
   const itemIn = (item) => (!item ? item : S.view === 'global' && S.global === 'projects' ? projItemIn(item) : S.view === 'global' && S.global === 'workspace' ? memItemIn(item) : item);
