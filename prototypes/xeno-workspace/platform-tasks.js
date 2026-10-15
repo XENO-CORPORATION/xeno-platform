@@ -693,7 +693,8 @@
     if (it === 'My tasks') return shell('mine', 'My tasks', 'Assigned to you and still open');
     if (it === 'Needs triage') return shell('triage', 'Needs triage', 'Raised and not yet accepted');
     if (it === 'In review') return shell('review', 'In review', 'Waiting for a reviewer');
-    if (it === 'Agents') return shell('agents', 'Agents', 'The agents that work your tasks: their credentials, and where they hear about new work');
+    // ONE Agents page: on the platform, agents live in Workspace › Agents (their division, projects, credentials, webhook)
+    if (it === 'Agents') { if (window.XENO_AGENTS?.served) { setTimeout(() => X()?.go?.('global', { global: 'workspace', item: 'Agents' }), 0); return H().page('<div class="tk-msg" role="status">Opening Agents…</div>'); } return shell('agents', 'Agents', 'The agents that work your tasks: their credentials, and where they hear about new work'); }
     if (/^T-\d+$/i.test(it)) { const key = it.toUpperCase(); return H().page(head(key, undefined, true) + `<div class="tk-root-task" data-tk-root="task:${esc(key)}">${taskRegion(key)}</div>`, 'pg--task'); }
     return shell('board', 'Tasks', where());
   }

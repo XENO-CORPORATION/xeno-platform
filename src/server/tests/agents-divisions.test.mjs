@@ -176,6 +176,14 @@ async function main() {
     check_(orphans === 0, 'no active agent definition is ever left without an agent to run it');
     await call('DELETE', `/api/agents/${longA.j.agent.id}`, { token: A }); await call('DELETE', `/api/agents/${longB.j.agent.id}`, { token: A });
 
+    // where it hears about new work
+    const keep = (await call('POST', '/api/agents', { token: A, body: { name: 'Hook bot' } })).j.agent;
+    const hook = await call('PUT', `/api/agents/${keep.id}/webhook`, { token: A, body: { url: 'https://hooks.example.com/xeno' } });
+    check_(hook.s === 200 && /^.{20,}$/.test(hook.j.secret || '') && (await call('GET', `/api/agents/${keep.id}`, { token: A })).j.agent.webhook === 'https://hooks.example.com/xeno', 'an agent gets a webhook; its signing secret is returned once');
+    check_(!JSON.stringify((await call('GET', `/api/agents/${keep.id}`, { token: A })).j).includes(hook.j.secret), 'the secret is never returned again');
+    check_((await call('PUT', `/api/agents/${keep.id}/webhook`, { token: A, body: { url: 'http://127.0.0.1:9/x' } })).s === 400, 'a webhook to a private address is refused');
+    check_((await call('PUT', `/api/agents/${keep.id}/webhook`, { token: B, body: { url: 'https://evil.example.com' } })).s === 404, "someone else cannot set another person's agent webhook");
+
     // delete
     await call('DELETE', `/api/agents/${ag.id}`, { token: A });
     const st = (await pool.query('SELECT status FROM workforce_resources WHERE id = $1', [link.workforce_resource_id])).rows[0].status;

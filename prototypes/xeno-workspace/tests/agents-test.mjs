@@ -13,7 +13,7 @@ const ok = (c, m) => { if (c) console.log('PASS', m); else { failed++; console.l
 const PROJ = [{ id: 'p-1111', name: 'Releases', canEdit: true }, { id: 'p-2222', name: 'Website', canEdit: true }];
 const hex = () => [...Array(32)].map(() => '0123456789abcdef'[Math.floor(Math.random() * 16)]).join('');
 const db = { agents: [], calls: [] };
-const view = (a) => ({ ...a, projects: PROJ.filter((p) => a.pids.includes(p.id)).map((p) => ({ id: p.id, name: p.name, access: 'editor' })), credentials: a.creds.filter((c) => !c.revoked).map(({ token, revoked, ...c }) => c) });
+const view = (a) => ({ webhook: null, ...a, projects: PROJ.filter((p) => a.pids.includes(p.id)).map((p) => ({ id: p.id, name: p.name, access: 'editor' })), credentials: a.creds.filter((c) => !c.revoked).map(({ token, revoked, ...c }) => c) });
 
 const server = await createServer({ configFile: false, root: repo, logLevel: 'error', appType: 'custom', optimizeDeps: { noDiscovery: true, entries: [] }, plugins: [xenoWorkspace(repo)], server: { host: '127.0.0.1', port: PORT, strictPort: true } });
 await server.listen();
@@ -44,6 +44,7 @@ p.on('request', (q) => {
     if (!rest && method === 'DELETE') { db.agents = db.agents.filter((x) => x !== a); return json(200, { success: true, id: a.id, deleted: true }); }
     if (rest === '/credentials' && method === 'POST') { const c = { id: 'c' + a.creds.length, token: 'xtk_abcdefabcdef_' + hex(), hint: 'xtk_abcdefabcdef_…', label: b.label, scopes: ['tasks:read', 'tasks:write'], expiresAt: new Date(Date.now() + b.ttlHours * 3600e3).toISOString(), lastUsedAt: null, createdAt: new Date().toISOString() }; a.creds.push(c); return json(201, { success: true, credential: { id: c.id, token: c.token, expiresAt: c.expiresAt, scopes: c.scopes } }); }
     const cr = rest.match(/^\/credentials\/(.+)$/); if (cr && method === 'DELETE') { const c = a.creds.find((x) => x.id === cr[1]); c.revoked = true; return json(200, { success: true, revoked: true }); }
+    if (rest === '/webhook') { a.webhook = b.url || null; return json(200, { success: true, ...(b.url ? { url: b.url, secret: 'whsec_SIGNING' } : { removed: true }) }); }
     const pr = rest.match(/^\/projects\/(.+)$/);
     if (pr) { if (method === 'PUT') a.pids.push(pr[1]); else a.pids = a.pids.filter((x) => x !== pr[1]); return json(200, { success: true, agent: view(a) }); }
   }
@@ -104,6 +105,14 @@ try {
   // revoke
   await p.click('[data-xag="revoke"]'); await settle(400); await submit();
   ok(a.creds[0].revoked && /No live credential/.test(await main()), 'Revoke, after confirming, stops the credential');
+
+  // webhook: where it hears about new work; the signing secret is shown once
+  await p.click('[data-xag="webhook"]'); await settle(500); await fill(['https://agent.example.com/xeno']); await submit();
+  let t2 = await main();
+  ok(a.webhook === 'https://agent.example.com/xeno' && /whsec_SIGNING/.test(t2) && /never shown again/.test(t2), 'a webhook is saved and its signing secret shown once');
+  await fresh(`/workspace/workspace/Agents/${a.id}`);
+  t2 = await main();
+  ok(/agent\.example\.com/.test(t2) && !/whsec_SIGNING/.test(t2), 'afterwards the address is listed and the secret is gone');
 
   // edit keeps the id
   await p.click('[data-xag="edit"]'); await settle(500);

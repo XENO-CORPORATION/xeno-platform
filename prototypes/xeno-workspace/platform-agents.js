@@ -155,6 +155,10 @@
             ${a.versions && a.versions.length > 1 ? `<details class="xag-vers"><summary>${a.versions.length} versions</summary><ol>${a.versions.map((v) => `<li><b>v${v.version}</b><small>${esc(new Date(v.createdAt).toLocaleString())}${v.by ? ' · ' + esc(v.by) : ''} · <code>${esc(String(v.hash).slice(0, 10))}</code></small></li>`).join('')}</ol></details>` : ''}</section>
           <section class="pg-sec"><div class="pg-sec-h"><h3>Works on</h3><small>${h.plural(a.projects.length, 'project', 'projects')}</small></div>${projects}</section>
           <section class="pg-sec"><div class="pg-sec-h"><h3>Can use</h3></div><div class="xag-svcs">${svc}</div><p class="xag-note">What it can use grows as XENO services join XENO MCP. You can still turn a service off for one connection in Dev › MCP.</p></section>
+          <section class="pg-sec"><div class="pg-sec-h"><h3>How it hears about new work</h3><button class="pg-link" data-xag="webhook">${a.webhook ? 'Change' : 'Add a webhook'}</button></div>
+            ${a.webhook ? `<div class="xag-rows"><div class="xag-row"><span class="xag-row-ic">${ic('send')}</span><span class="xag-row-b"><code>${esc(a.webhook)}</code><small>Every task delegated to it is posted here, signed (HMAC-SHA256), and retried if it fails</small></span><span></span><button type="button" class="pg-btn ghost" data-xag="webhook-off">Remove</button></div></div>`
+              : '<p class="xag-none">No webhook. It finds new work by asking XENO (its event feed, or the Tasks tools over MCP). Add one to be told the moment a task is delegated to it.</p>'}
+            ${S.hook && S.hook.agentId === a.id ? `<div class="xag-secret" role="status"><div><b>${ic('lock')}Signing secret — copy it now, it is never shown again</b></div><div class="xag-secret-v"><code>${esc(S.hook.secret)}</code>${copyBtn(S.hook.secret)}</div></div>` : ''}</section>
           <section class="pg-sec"><div class="pg-sec-h"><h3>Where it has run</h3></div><div class="xag-rows">${conns}</div></section>
           <section class="pg-sec"><div class="pg-sec-h"><h3>Credentials</h3><small>${a.credentials.length} live</small></div><div class="xag-rows">${creds}</div></section>
         </div><aside><div class="xag-id">
@@ -261,6 +265,18 @@
     const r = await call('PATCH', `/api/agents/${a.id}`, { instructions: form.instructions.value }, 'The instructions could not be saved.');
     if (r) { S.one = r.d.agent; S.editingInstr = false; toast(`Saved as version ${S.one.version}`); paint(); }
   }
+  async function webhook(off) {
+    const a = S.one; if (!a) return;
+    let url = null;
+    if (!off) {
+      const v = await D().form({ title: `Where ${a.name} hears about new work`, sub: 'XENO posts each task delegated to it to this address, signed so it can check the message is really from XENO.', submit: 'Save', size: 'sm', fields: [{ id: 'url', label: 'Webhook address', required: true, value: a.webhook || '', placeholder: 'https://example.com/xeno-tasks', max: 2000 }] });
+      if (!v) return; url = v.url;
+    } else if (!(await D().confirm({ title: 'Remove the webhook?', body: `${esc(a.name)} will only find new work by asking XENO.`, action: 'Remove' }))) return;
+    const r = await call('PUT', `/api/agents/${a.id}/webhook`, { url }, 'The webhook could not be saved.');
+    if (!r) return;
+    S.hook = r.d.secret ? { agentId: a.id, secret: r.d.secret } : null;
+    await refreshOne(); toast(off ? 'Removed' : 'Saved'); paint();
+  }
   async function copy(text) {
     try { await navigator.clipboard.writeText(text); S.copied = text; paint(); clearTimeout(copy.t); copy.t = setTimeout(() => { S.copied = ''; paint(); }, 1600); }
     catch { toast('Copy is blocked here. Select the text and copy it yourself.'); }
@@ -279,6 +295,8 @@
     if (a === 'revoke') return revoke(b.dataset.id);
     if (a === 'copy') return copy(b.dataset.copy);
     if (a === 'tab') { S.tab = b.dataset.k; return paint(); }
+    if (a === 'webhook') return webhook(false);
+    if (a === 'webhook-off') return webhook(true);
     if (a === 'division') return moveDivision();
     if (a === 'open-division') return go(`Divisions/${b.dataset.id}`);
     if (a === 'divisions') return go('Divisions');
