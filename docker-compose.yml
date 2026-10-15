@@ -127,6 +127,10 @@ services:
       # Unset = sync disabled, routing falls back to catalogue-unknown -> attempt.
       - INFERENCE_CATALOGUE_URL=${INFERENCE_CATALOGUE_URL:-}
       - LEDGER_SERVICE_TOKEN=${LEDGER_SERVICE_TOKEN}
+      # The hosted agent runner (xeno-agents-api). Agent cloud runs and marketplace rentals start runs here;
+      # unset = both answer "unavailable". Public address, not a secret -- so it lives here, not only in .env
+      # (the same reason as LEDGER_V2_ENABLED above: a value only on the box vanishes on a reset).
+      - AGENTS_API_BASE_URL=${AGENTS_API_BASE_URL:-https://api.xenostudio.ai/v1/agents}
       - BACKEND_PORT=8080
       - PORT=8080
       - DB_HOST=postgres
