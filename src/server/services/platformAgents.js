@@ -23,6 +23,7 @@ import { reviseAgentDefinition } from './workforceAgentRevision.js';
 import { writeTuples, check } from '../utils/authzReBAC.js';
 import * as tasks from './xenoTasks.js';
 import * as divisions from './workforceDivisions.js';
+import * as lending from './agentLending.js';
 
 export class AgentError extends Error { constructor(message, code, status = 400) { super(message); this.code = code; this.status = status; } }
 
@@ -35,7 +36,7 @@ function person(me) {
 }
 const asAgentError = (e, fallback) => {
   if (e instanceof AgentError) return e;
-  if (e instanceof divisions.DivisionError || e instanceof tasks.TaskError) return new AgentError(e.message, e.code, e.status);
+  if (e instanceof divisions.DivisionError || e instanceof tasks.TaskError || e instanceof lending.LendError) return new AgentError(e.message, e.code, e.status);
   const code = e && e.code, reason = e && e.details && e.details.reason;
   if (code === 'denied') return new AgentError('You cannot do that for this owner', reason || 'not_allowed', 403);
   if (code === 'conflict') return new AgentError('Someone changed this agent at the same time. Reload and try again.', reason || 'conflict', 409);
@@ -90,6 +91,7 @@ async function full(db, r) {
     instructions: vs[0] ? vs[0].instructions : '', version: vs[0] ? vs[0].version : null, versions: vs,
     projects, credentials: await credentials(db, r.id), connections,
     webhook: ((await db.query('SELECT url FROM task_agent_webhooks WHERE agent_user_id = $1', [r.id])).rows[0] || {}).url || null,
+    lentTo: r.workforce_resource_id ? await lending.lendsOf(db, r.workforce_resource_id) : [],
   };
 }
 
@@ -269,7 +271,9 @@ export async function setDivision(db, me, publicId, divisionId) {
   // and every project outside it is taken away
   for (const p of await tasks.listTaskProjects(db, { id: r.id })) {
     const pd = await divisions.projectDivision(db, p.id);
-    if (String(pd ? pd.id : '') !== String(divisionId || '')) await tasks.removeAgentProject(db, me, r.id, p.id).catch(() => {});
+    const lent = await lending.workingDivisions(db, r.workforce_resource_id);
+    const keep = pd ? (String(pd.id) === String(divisionId || '') || lent.includes(String(pd.id))) : !divisionId;
+    if (!keep) await tasks.removeAgentProject(db, me, r.id, p.id).catch(() => {});
   }
   return get(db, me, publicId);
 }
@@ -279,8 +283,9 @@ export async function addProject(db, me, publicId, projectId, access = 'editor')
   const r = await owned(db, me, publicId);
   const pd = await divisions.projectDivision(db, projectId);
   const mine = r.division_id ? String(r.division_id) : null;
-  if (String(pd ? pd.id : '') !== String(mine || '')) {
-    throw new AgentError(pd ? `That project is in ${pd.name}. Put the agent in ${pd.name} first, or move the project.`
+  const working = await lending.workingDivisions(db, r.workforce_resource_id);
+  if (pd ? !working.includes(String(pd.id)) : !!mine) {
+    throw new AgentError(pd ? `That project is in ${pd.name}. Put ${r.name} in ${pd.name}, or lend it there, first.`
       : `That project is not in a division, and ${r.name} works in ${r.division_name}. Move the project into ${r.division_name} first.`,
     'division_mismatch', 409);
   }
@@ -293,15 +298,23 @@ export async function removeProject(db, me, publicId, projectId) {
   return get(db, me, publicId);
 }
 
+/** Lend the agent to a division or workspace (ASN-04: offered by its owner, accepted by the target's admin). */
+export async function lend(db, me, publicId, target) {
+  const r = await owned(db, me, publicId);
+  try { await lending.lend(db, me, r, target || {}); } catch (e) { throw asAgentError(e); }
+  return get(db, me, publicId);
+}
+
 /** Projects this person could give the agent, each marked with whether its division matches. */
 export async function projectChoices(db, me, publicId) {
   const r = await owned(db, me, publicId);
   const mine = r.division_id ? String(r.division_id) : null;
+  const working = await lending.workingDivisions(db, r.workforce_resource_id);
   const out = [];
   for (const p of await tasks.listTaskProjects(db, { id: me.id })) {
     const admin = (await check(db, { object: `project:${p.id}`, relation: 'admin', subject: `user:${me.id}` })).allowed;
     const pd = await divisions.projectDivision(db, p.id);
-    out.push({ id: p.id, name: p.name, division: pd, canGive: admin && String(pd ? pd.id : '') === String(mine || ''), admin });
+    out.push({ id: p.id, name: p.name, division: pd, canGive: admin && (pd ? working.includes(String(pd.id)) : !mine), lent: !!(pd && working.includes(String(pd.id)) && String(pd.id) !== String(mine || '')), admin });
   }
   return out;
 }

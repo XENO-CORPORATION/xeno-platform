@@ -15,11 +15,11 @@ const ok = (c, m) => { if (c) console.log('PASS', m); else { failed++; console.l
 const uuid = () => 'xxxxxxxx-xxxx-4xxx-8xxx-xxxxxxxxxxxx'.replace(/x/g, () => '0123456789abcdef'[Math.floor(Math.random() * 16)]);
 const hex = () => [...Array(32)].map(() => '0123456789abcdef'[Math.floor(Math.random() * 16)]).join('');
 const WS = uuid();
-const db = { calls: [], divs: [], proj: [{ id: uuid(), name: 'Website', div: null }, { id: uuid(), name: 'Brand film', div: null }], agents: [], agentProj: {} };
+const db = { lends: [], offers: [], calls: [], divs: [], proj: [{ id: uuid(), name: 'Website', div: null }, { id: uuid(), name: 'Brand film', div: null }], agents: [], agentProj: {} };
 const ad = (a) => ({ id: a.id, userId: a.userId, name: a.name, description: a.description, division: a.div ? { id: a.div, name: db.divs.find((d) => d.id === a.div).name, archived: false } : null,
   workspace: { id: WS, name: 'Me', personal: true }, instructions: a.versions[0].instructions, version: a.versions[0].version, versions: a.versions, createdAt: a.createdAt, status: 'active',
   projects: (db.agentProj[a.id] || []).map((pid) => { const p = db.proj.find((x) => x.id === pid); return { id: p.id, name: p.name, access: 'editor', division: p.div ? { id: p.div, name: db.divs.find((d) => d.id === p.div).name } : null }; }),
-  credentials: [], connections: [] });
+  credentials: [], connections: [], lentTo: db.lends.filter((l) => l.agent === a.id && l.state !== 'revoked').map((l) => ({ id: l.id, state: l.state, workspace: { id: WS, name: 'Me' }, division: { id: l.div, name: db.divs.find((d) => d.id === l.div).name }, acceptedAt: new Date().toISOString() })) });
 const dd = (d) => ({ id: d.id, workspaceId: WS, parentId: d.parent, key: d.name.toLowerCase(), name: d.name, lifecycle: d.archived ? 'archived' : 'active', revision: 1,
   head: d.head ? { id: d.head, name: d.headName, kind: d.headKind } : null, createdAt: new Date().toISOString(), archivedAt: null,
   agents: db.agents.filter((a) => a.div === d.id).length, projects: db.proj.filter((p) => p.div === d.id).length });
@@ -54,14 +54,18 @@ p.on('request', (q) => {
       projectsList: db.proj.filter((x) => x.div === d.id).map((x) => ({ id: x.id, name: x.name })), children: db.divs.filter((x) => x.parent === d.id && !x.archived).map(dd), parent: d.parent ? dd(db.divs.find((x) => x.id === d.parent)) : null };
     return json(200, { success: true, division: full });
   }
+  if (path === '/api/agents/lends/inbox') return json(200, { success: true, offers: db.offers });
+  const lm = path.match(/^\/api\/agents\/lends\/([0-9a-f-]{36})\/(accept|decline|revoke)$/);
+  if (lm) { const o = db.offers.find((x) => x.id === lm[1]); if (o) { o.state = lm[2] === 'accept' ? 'accepted' : 'revoked'; db.offers = db.offers.filter((x) => x !== o); return json(200, { success: true, lend: o }); } const l = db.lends.find((x) => x.id === lm[1]); l.state = 'revoked'; return json(200, { success: true, lend: { id: l.id, state: 'revoked' } }); }
   if (path === '/api/agents' && method === 'GET') return json(200, { success: true, agents: db.agents.map(ad) });
   if (path === '/api/agents' && method === 'POST') { const a = { id: 'agt_' + hex(), userId: uuid(), name: b.name, description: b.description || '', div: b.divisionId || null, createdAt: new Date().toISOString(), versions: [{ version: 1, instructions: '', hash: 'a'.repeat(64), createdAt: new Date().toISOString() }] }; db.agents.push(a); return json(201, { success: true, agent: ad(a) }); }
   const am = path.match(/^\/api\/agents\/(agt_[0-9a-f]{32})(\/.*)?$/);
   if (am) {
     const a = db.agents.find((x) => x.id === am[1]); if (!a) return json(404, { success: false, code: 'agent_not_found' });
     const rest = am[2] || '';
+    if (rest === '/lend') { db.lends.push({ id: uuid(), agent: a.id, div: b.divisionId, state: 'accepted' }); return json(201, { success: true, agent: ad(a) }); }
     if (rest === '/division') { a.div = b.divisionId; db.agentProj[a.id] = (db.agentProj[a.id] || []).filter((pid) => db.proj.find((x) => x.id === pid).div === a.div); return json(200, { success: true, agent: ad(a) }); }
-    if (rest === '/project-choices') return json(200, { success: true, projects: db.proj.map((x) => ({ id: x.id, name: x.name, admin: true, division: x.div ? { id: x.div, name: db.divs.find((d) => d.id === x.div).name } : null, canGive: x.div === a.div })) });
+    if (rest === '/project-choices') return json(200, { success: true, projects: db.proj.map((x) => ({ id: x.id, name: x.name, admin: true, division: x.div ? { id: x.div, name: db.divs.find((d) => d.id === x.div).name } : null, canGive: x.div === a.div || db.lends.some((l) => l.agent === a.id && l.div === x.div && l.state === 'accepted') })) });
     const pr = rest.match(/^\/projects\/(.+)$/);
     if (pr) { const x = db.proj.find((y) => y.id === pr[1]); if (method === 'PUT') { if (x.div !== a.div) return json(409, { success: false, code: 'division_mismatch', error: 'That project is in another division' }); (db.agentProj[a.id] = db.agentProj[a.id] || []).push(x.id); } else db.agentProj[a.id] = (db.agentProj[a.id] || []).filter((y) => y !== x.id); return json(200, { success: true, agent: ad(a) }); }
     if (!rest && method === 'PATCH') { if (b.instructions !== undefined) a.versions.unshift({ version: a.versions[0].version + 1, instructions: b.instructions, hash: 'b'.repeat(64), createdAt: new Date().toISOString() }); return json(200, { success: true, agent: ad(a) }); }
@@ -129,6 +133,20 @@ try {
   // move the agent out: its project goes
   await p.click('[data-xag="division"]'); await settle(500); await choose('No division'); await submit();
   ok(ag.div === null && !(db.agentProj[ag.id] || []).length, 'moving it out of the division takes away its Creative project');
+
+  // lend it to Creative: it keeps its own division (none) and may take Creative's project
+  await p.click('[data-xag="lend"]'); await settle(500); await choose('Creative'); await submit();
+  ok(db.lends.length === 1 && db.lends[0].div === creative.id && /Also works in[\s\S]*Creative[\s\S]*working there/.test(await main()), 'Lend it adds Creative under Also works in');
+  const canNow = await p.$$eval('[data-xag-proj]', (xs) => xs.map((x) => [x.closest('label').innerText.split('\n')[0], x.disabled]));
+  ok(canNow.some(([n, d]) => /Brand film/.test(n) && !d), 'once lent, the Creative project can be given');
+  await p.click('[data-xag="unlend"]'); await settle(400); await submit();
+  ok(db.lends[0].state === 'revoked' && /Only its own division/.test(await main()), 'ending the lend removes it');
+  // an offer into my workspace waits on the Agents page
+  db.offers.push({ id: uuid(), state: 'proposed', agent: { id: 'agt_' + 'c'.repeat(32), name: 'Visiting bot' }, from: 'Bob', workspace: { id: WS, name: 'Me' }, division: { id: creative.id, name: 'Creative' } });
+  await fresh('/workspace/workspace/Agents');
+  ok(/agent offered to your workspaces/i.test(await main()) && /Bob offers it to Creative/.test(await main()), 'an agent offered to your workspace waits on the Agents page, saying who offers it and where');
+  await p.click('[data-xag="accept"]'); await settle(900);
+  ok(!db.offers.length && !/Visiting bot/.test(await main()), 'Accept decides it and it leaves the list');
 
   // archive the child
   await fresh(`/workspace/workspace/Divisions/${film.id}`);

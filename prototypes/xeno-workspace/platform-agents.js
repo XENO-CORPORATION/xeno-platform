@@ -23,7 +23,7 @@
   const why = (r, d) => (r && r.d && (r.d.error || r.d.message)) || d;
   const ID = /^agt_[0-9a-f]{32}$/;
   const ENDPOINT = () => `${location.origin}/api/mcp`;
-  const S = { key: null, status: 'idle', list: [], one: null, projects: [], services: [], minted: null, busy: false, copied: '', tab: 'claude', q: '', choices: [], divisions: [], canManageDivisions: false, editingInstr: false };
+  const S = { key: null, status: 'idle', list: [], one: null, projects: [], services: [], minted: null, busy: false, copied: '', tab: 'claude', q: '', choices: [], divisions: [], canManageDivisions: false, editingInstr: false, offers: [] };
   const paint = () => { try { X()?.render?.(); } catch {} };
   const go = (item) => X()?.go?.('global', { global: 'workspace', item });
   const toast = (m) => X()?.toast?.(m);
@@ -56,6 +56,7 @@
     if (!list.ok) { S.status = list.status === 403 ? 'denied' : 'error'; return paint(); }
     S.list = list.d.agents || []; S.projects = pr.ok ? pr.d.projects || [] : [];
     const dv0 = await api('GET', '/api/divisions'); if (dv0.ok) { S.divisions = dv0.d.divisions || []; S.canManageDivisions = !!dv0.d.canManage; }
+    const ib = await api('GET', '/api/agents/lends/inbox'); S.offers = ib.ok ? ib.d.offers || [] : [];
     if (sv && sv.ok) S.services = sv.d.services || [];
     const id = at.startsWith('one:') ? at.slice(4) : null;
     if (id) {
@@ -83,6 +84,7 @@
         <span class="xag-mono" aria-hidden="true">${mono(a.name)}<i class="xag-dot xag-dot--${k}"></i></span>
         <span class="xag-card-b"><b>${esc(a.name)}</b><small>${esc(a.description || 'No description yet')}</small>${a.division ? `<em class="xag-div">${esc(a.division.name)}</em>` : ''}</span>
         <span class="xag-card-f"><span>${a.projects.length ? esc(a.projects.slice(0, 2).map((p) => p.name).join(', ')) + (a.projects.length > 2 ? ` +${a.projects.length - 2}` : '') : 'No projects yet'}</span><span class="xag-st xag-st--${k}">${esc(l)}</span></span></button>`; };
+    const offers = (S.offers.length ? `<section class="xag-offers" aria-label="Agents offered to you"><h3>${h.plural(S.offers.length, 'agent offered', 'agents offered')} to your workspaces</h3>${S.offers.map((o) => `<div class="xag-row"><span class="xag-row-ic">${ic('bot')}</span><span class="xag-row-b"><b>${esc(o.agent ? o.agent.name : 'An agent')}</b><small>${esc(o.from)} offers it to ${esc(o.division ? o.division.name + ' in ' + o.workspace.name : o.workspace.name)}. It keeps its owner and who pays; it works on what you give it there.</small></span><button type="button" class="pg-btn ghost" data-xag="decline" data-id="${esc(o.id)}">Decline</button><button type="button" class="pg-btn" data-xag="accept" data-id="${esc(o.id)}">Accept</button></div>`).join('')}</section>` : '');
     const body = !S.list.length ? `<div class="xag-first">
         <div class="xag-first-art" aria-hidden="true"><span>${ic('bot')}</span><i></i><span>${ic('folder')}</span><i></i><span>${ic('terminal')}</span></div>
         <h2>Give work to an agent that is really yours</h2>
@@ -91,7 +93,7 @@
         ${h.btn('Create your first agent', 'data-xag="new"', false, 'plus')}</div>`
       : `<div class="pg-bar"><label class="pg-search">${ic('search')}<input data-xag-q value="${esc(S.q)}" placeholder="Search your agents" aria-label="Search your agents"></label></div>`
         + (rows.length ? `<div class="xag-grid">${rows.map(card).join('')}</div>` : h.box('search', `No agent matches “${esc(S.q)}”`, 'Try a shorter word.', h.btn('Clear search', 'data-xag="clearq"', true)));
-    return h.page(h.head({ title: 'Agents', sub, acts: S.list.length ? h.btn('New agent', 'data-xag="new"', false, 'plus') : '' }) + body, 'xag');
+    return h.page(h.head({ title: 'Agents', sub, acts: S.list.length ? h.btn('New agent', 'data-xag="new"', false, 'plus') : '' }) + offers + body, 'xag');
   }
 
   // ───────────────────────── one agent
@@ -148,6 +150,9 @@
           <section class="pg-sec"><div class="pg-sec-h"><h3>Division</h3>${S.canManageDivisions ? `<button class="pg-link" data-xag="division">${a.division ? 'Move' : 'Put in a division'}</button>` : ''}</div>
             <div class="xag-divbox">${a.division ? `<button class="pg-chip" data-xag="open-division" data-id="${esc(a.division.id)}">${ic('building')}${esc(a.division.name)}</button><p>${esc(a.name)} works only on ${esc(a.division.name)}’s projects. Moving it takes away projects outside the new division.</p>`
               : `<p>${esc(a.name)} is in no division, so it works only on projects that are in none either. ${S.divisions.length ? '' : 'This workspace has no divisions yet — <a data-xag="divisions">create one</a> to group agents and projects into departments.'}</p>`}</div></section>
+          <section class="pg-sec"><div class="pg-sec-h"><h3>Also works in</h3><button class="pg-link" data-xag="lend">Lend it</button></div>
+            ${(a.lentTo || []).length ? `<div class="xag-rows">${a.lentTo.map((l) => `<div class="xag-row"><span class="xag-row-ic">${ic(l.division ? 'building' : 'people')}</span><span class="xag-row-b"><b>${esc(l.division ? l.division.name : l.workspace.name)}</b><small>${esc(l.division ? 'in ' + l.workspace.name : 'the whole workspace')} · ${l.state === 'accepted' ? 'working there' : 'offered — waiting for its admin to accept'}</small></span><span class="xag-row-m">${l.state === 'accepted' ? esc(ago(l.acceptedAt)) : ''}</span><button type="button" class="pg-btn ghost" data-xag="unlend" data-id="${esc(l.id)}">${l.state === 'accepted' ? 'End' : 'Withdraw'}</button></div>`).join('')}</div>`
+              : `<p class="xag-none">Only its own division. Lend it to another division — or another workspace — to let it work on that division’s projects too. It keeps its owner and who pays.</p>`}</section>
           <section class="pg-sec"><div class="pg-sec-h"><h3>Instructions</h3><small>${a.version ? `version ${a.version}` : ''}</small>${S.editingInstr ? '' : '<button class="pg-link" data-xag="instr-edit">Edit</button>'}</div>
             ${S.editingInstr ? `<form class="xag-instr" data-xag-form="instr"><textarea name="instructions" rows="8" maxlength="32768" placeholder="How it should work: what to do, what to avoid, how to report back">${esc(a.instructions)}</textarea>
               <div class="xag-instr-a"><small>Saving makes a new version. Work already running keeps the version it started with.</small><button type="button" class="pg-btn ghost" data-xag="instr-cancel">Cancel</button><button type="submit" class="pg-btn"${S.busy ? ' disabled' : ''}>Save version</button></div></form>`
@@ -265,6 +270,31 @@
     const r = await call('PATCH', `/api/agents/${a.id}`, { instructions: form.instructions.value }, 'The instructions could not be saved.');
     if (r) { S.one = r.d.agent; S.editingInstr = false; toast(`Saved as version ${S.one.version}`); paint(); }
   }
+  async function lend() {
+    const a = S.one; if (!a) return;
+    const taken = new Set((a.lentTo || []).map((l) => l.division ? l.division.id : 'ws:' + l.workspace.id));
+    const opts = S.divisions.filter((d) => d.id !== (a.division && a.division.id) && !taken.has(d.id)).map((d) => [d.id, d.name, `Works on ${d.name}’s projects too`]);
+    if (!opts.length) return toast(S.divisions.length ? 'It already works in every division here' : 'Create a division first — or lend it from the other workspace’s Divisions page');
+    const v = await D().form({ title: `Lend ${a.name}`, sub: 'It keeps its owner, its own division and who pays for it. You can end it at any time.', submit: 'Lend', size: 'sm', fields: [
+      { id: 'division', label: 'To', type: 'choice', cols: 1, required: true, options: opts }] });
+    if (!v) return;
+    const r = await call('POST', `/api/agents/${a.id}/lend`, { divisionId: v.division }, 'It could not be lent.');
+    if (!r) return;
+    S.one = r.d.agent; const l = S.one.lentTo.find((x) => x.division && x.division.id === v.division);
+    const ch = await api('GET', `/api/agents/${a.id}/project-choices`); if (ch.ok) S.choices = ch.d.projects || [];
+    toast(l && l.state === 'accepted' ? `${a.name} now also works in ${l.division.name}` : 'Offered — its admin decides'); paint();
+  }
+  async function unlend(id) {
+    const a = S.one; const l = (a.lentTo || []).find((x) => x.id === id); if (!l) return;
+    if (!(await D().confirm({ title: l.state === 'accepted' ? `Stop ${esc(a.name)} working in ${esc(l.division ? l.division.name : l.workspace.name)}?` : 'Withdraw the offer?', body: l.state === 'accepted' ? `It loses that division’s projects at once. Its history there stays.` : 'Nothing was granted yet.', action: l.state === 'accepted' ? 'End' : 'Withdraw' }))) return;
+    const r = await call('POST', `/api/agents/lends/${encodeURIComponent(id)}/revoke`, undefined, 'It could not be ended.');
+    if (r) { await refreshOne(); const ch = await api('GET', `/api/agents/${a.id}/project-choices`); if (ch.ok) S.choices = ch.d.projects || []; toast('Ended'); paint(); }
+  }
+  async function decideOffer(id, accept) {
+    const r = await call('POST', `/api/agents/lends/${encodeURIComponent(id)}/${accept ? 'accept' : 'decline'}`, undefined, 'That could not be decided.');
+    if (!r) return;
+    S.offers = S.offers.filter((o) => o.id !== id); toast(accept ? `Accepted — it works in ${r.d.lend.division ? r.d.lend.division.name : r.d.lend.workspace.name} now` : 'Declined'); paint();
+  }
   async function webhook(off) {
     const a = S.one; if (!a) return;
     let url = null;
@@ -295,6 +325,10 @@
     if (a === 'revoke') return revoke(b.dataset.id);
     if (a === 'copy') return copy(b.dataset.copy);
     if (a === 'tab') { S.tab = b.dataset.k; return paint(); }
+    if (a === 'lend') return lend();
+    if (a === 'unlend') return unlend(b.dataset.id);
+    if (a === 'accept') return decideOffer(b.dataset.id, true);
+    if (a === 'decline') return decideOffer(b.dataset.id, false);
     if (a === 'webhook') return webhook(false);
     if (a === 'webhook-off') return webhook(true);
     if (a === 'division') return moveDivision();
@@ -356,6 +390,7 @@
       '.xag-instr-a{display:flex;align-items:center;gap:8px}.xag-instr-a small{flex:1;font-size:12px;color:var(--muted)}',
       '.xag-instr-v{margin:0;padding:12px 14px;border:1px solid var(--border);border-radius:10px;background:var(--panel);font:12.5px/1.55 ui-monospace,Consolas,monospace;white-space:pre-wrap;word-break:break-word;max-height:260px;overflow:auto}',
       '.xag-vers{margin-top:8px;font-size:12.5px;color:var(--muted)}.xag-vers summary{cursor:pointer}.xag-vers ol{margin:8px 0 0;padding:0;list-style:none;display:grid;gap:4px}.xag-vers li{display:flex;gap:8px;align-items:baseline}.xag-vers li b{color:var(--text);font-size:12px}.xag-vers small{font-size:11.5px}',
+      '.xag-offers{display:flex;flex-direction:column;gap:0;margin-bottom:16px;border:1px solid var(--text);border-radius:12px;overflow:hidden}.xag-offers h3{margin:0;padding:10px 14px;font-size:12px;font-weight:600;letter-spacing:.02em;text-transform:uppercase;color:var(--muted);border-bottom:1px solid var(--border)}.xag-offers .xag-row{grid-template-columns:auto 1fr auto auto}',
       '.xag-none{margin:0;padding:14px;font-size:12.5px;color:var(--muted)}',
       '.xag-id{display:flex;flex-direction:column;align-items:center;gap:8px;padding:6px 0 18px;margin-bottom:16px;border-bottom:1px solid var(--border);text-align:center}.xag-id b{font-size:15px}',
       '.xag-idbtn{border:0;background:none;padding:0;color:var(--muted);font:11.5px ui-monospace,Consolas,monospace;cursor:pointer}.xag-idbtn:hover{color:var(--text)}',

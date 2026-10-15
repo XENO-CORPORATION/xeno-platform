@@ -176,6 +176,39 @@ async function main() {
     check_(orphans === 0, 'no active agent definition is ever left without an agent to run it');
     await call('DELETE', `/api/agents/${longA.j.agent.id}`, { token: A }); await call('DELETE', `/api/agents/${longB.j.agent.id}`, { token: A });
 
+    // lending (ASN-04, DIV-05): within Ada's own workspace, and into Bob's -- where only Bob can accept
+    const lender = (await call('POST', '/api/agents', { token: A, body: { name: 'Lender', divisionId: creative.id } })).j.agent;
+    const pDev2 = await project('Dev 2'); await call('PUT', `/api/divisions/projects/${pDev2}`, { token: A, body: { divisionId: dev.id } });
+    check_((await call('PUT', `/api/agents/${lender.id}/projects/${pDev2}`, { token: A, body: {} })).j.code === 'division_mismatch', 'before lending, a Creative agent cannot take a Dev project');
+    const lent = (await call('POST', `/api/agents/${lender.id}/lend`, { token: A, body: { divisionId: dev.id } })).j.agent;
+    check_(lent.lentTo.length === 1 && lent.lentTo[0].state === 'accepted' && lent.lentTo[0].division.id === dev.id && lent.division.id === creative.id, 'lending it to Dev in her own workspace is accepted at once, and its own division is unchanged (ASN-01)');
+    const asg = (await pool.query('SELECT source_approved_by_user_id, target_accepted_by_user_id FROM workforce_workspace_assignments WHERE id = $1', [lent.lentTo[0].id])).rows[0];
+    check_(String(asg.source_approved_by_user_id) === String(ada) && String(asg.target_accepted_by_user_id) === String(ada), 'both checks are recorded, even when one person holds both (ASN-04)');
+    check_((await call('PUT', `/api/agents/${lender.id}/projects/${pDev2}`, { token: A, body: {} })).s === 200, 'once lent, it can take the Dev project');
+    const fundL = (await pool.query('SELECT division_id FROM workforce_division_funding WHERE resource_id = (SELECT workforce_resource_id FROM agent_identities WHERE public_id = $1)', [lender.id])).rows[0];
+    check_(String(fundL.division_id) === creative.id, 'lending moved neither ownership nor who pays (DIV-05/07)');
+    check_((await call('POST', `/api/agents/${lender.id}/lend`, { token: A, body: { divisionId: dev.id } })).j.code === 'already_lent', 'it cannot be lent to the same place twice');
+    // into Bob's workspace: proposed, and only Bob may accept
+    const bobLend = (await call('POST', `/api/agents/${lender.id}/lend`, { token: A, body: { workspaceId: bobWs } })).s;
+    check_(bobLend === 404, "Ada cannot lend into a workspace she cannot see (404)");
+    await pool.query(`INSERT INTO relationship_tuples (object_type, object_id, relation, subject_type, subject_id) VALUES ('workspace', $1, 'viewer', 'user', $2) ON CONFLICT DO NOTHING`, [bobWs, String(ada)]);
+    const offer = (await call('POST', `/api/agents/${lender.id}/lend`, { token: A, body: { divisionId: bobDiv.id } })).j.agent.lentTo.find((l) => l.workspace.id === bobWs);
+    check_(offer && offer.state === 'proposed' && offer.waitingFor === 'target', 'lending into a workspace she does not administer stays an offer, waiting for its admin');
+    check_((await call('POST', `/api/agents/lends/${offer.id}/accept`, { token: A })).s === 403, "Ada cannot accept her own offer into Bob's workspace");
+    const inbox = (await call('GET', '/api/agents/lends/inbox', { token: B })).j.offers;
+    check_(inbox.some((o) => o.id === offer.id && o.agent.name === 'Lender' && o.from), 'Bob sees the offer in his inbox, with who it is from');
+    check_((await call('POST', `/api/agents/lends/${offer.id}/accept`, { token: B })).j.lend.state === 'accepted', 'Bob accepts it');
+    const lu = (await pool.query('SELECT user_id FROM agent_identities WHERE public_id = $1', [lender.id])).rows[0].user_id;
+    check_((await check(pool, { object: `division:${bobDiv.id}`, relation: 'editor', subject: `agent:${lu}` })).allowed, "and the agent now works inside Bob's division");
+    // revoke: by the target admin; the agent leaves and loses that division's projects
+    await call('POST', `/api/agents/lends/${offer.id}/revoke`, { token: B });
+    check_(!(await check(pool, { object: `division:${bobDiv.id}`, relation: 'editor', subject: `agent:${lu}` })).allowed, 'Bob ends the lend: the agent no longer works there');
+    const devLend = lent.lentTo[0].id;
+    await call('POST', `/api/agents/lends/${devLend}/revoke`, { token: A });
+    check_(!(await call('GET', `/api/agents/${lender.id}`, { token: A })).j.agent.projects.some((x) => x.id === pDev2), 'ending the Dev lend takes away its Dev project');
+    let del = null; try { await pool.query('DELETE FROM workforce_workspace_assignments WHERE id = $1', [devLend]); } catch (e) { del = e; }
+    check_(del, 'a lend is never deleted, only revoked — its history stays (the database refuses)');
+
     // where it hears about new work
     const keep = (await call('POST', '/api/agents', { token: A, body: { name: 'Hook bot' } })).j.agent;
     const hook = await call('PUT', `/api/agents/${keep.id}/webhook`, { token: A, body: { url: 'https://hooks.example.com/xeno' } });
