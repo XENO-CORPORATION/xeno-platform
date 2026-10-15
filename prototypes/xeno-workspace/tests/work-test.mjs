@@ -151,6 +151,12 @@ try {
   ok(hdr.tabsInHead && !hdr.tabsInBody && !hdr.sumInHead, `a project has ONE header: path and tabs in the header bar, no second tab row in the body (${JSON.stringify(hdr)})`);
   const inset = await p.evaluate(() => { const b = [...document.querySelectorAll('.pg-top-acts > *')].pop().getBoundingClientRect(), h = document.querySelector('#main .topbar').getBoundingClientRect(); return { right: Math.round(h.right - b.right), top: Math.round(b.top - h.top), bottom: Math.round(h.bottom - b.bottom) }; });
   ok(Math.abs(inset.right - inset.top) <= 1 && Math.abs(inset.top - inset.bottom) <= 1, `the last header button is as far from the right edge as from the top and bottom (${JSON.stringify(inset)})`);
+  const more = '#main .pg-top-acts [data-xa="projectMenu"]';
+  await p.click(more); await wait(300); const opened = !!(await p.$('.xcm'));
+  await p.click(more); await wait(300); const shut = !(await p.$('.xcm'));
+  await p.click(more); await wait(300); const again = !!(await p.$('.xcm'));
+  ok(opened && shut && again, `the ⋯ button toggles its menu: open, closed, open (${[opened, shut, again]})`);
+  await p.keyboard.press('Escape'); await wait(200);
   ok(/Next:/.test(hdr.facts) && /0\/0/.test(hdr.facts), 'its progress and next milestone sit in the status bar');
   if (process.env.WORK_SHOT) { await p.evaluate(() => document.getElementById('xp-note')?.remove()); await p.screenshot({ path: process.env.WORK_SHOT }); }
   await p.goto(base + `/workspace/projects/${pid(1)}/team`, { waitUntil: 'domcontentloaded' }); await wait(1500); t = await main();
