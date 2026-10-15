@@ -4,10 +4,12 @@
  * One code path for "run agent X on T-5":
  *   1. the agent and the task are checked as the PERSON (owned agent; a task the person can see);
  *   2. the agent's current instructions version is pinned to the run;
- *   3. a Tasks credential is minted for the AGENT, living exactly as long as the run may;
- *   4. the hosted run is started in xeno-agents-api as the person (a short delegated token, the same broker shape
- *      the marketplace uses), with the agent's instructions, its runtime config and the credential handed to the
- *      run privately -- never in a URL, never logged, never returned;
+ *   3. the hosted run is started in xeno-agents-api as the person (a short delegated token, the same broker shape
+ *      the marketplace uses), with the agent's instructions and runtime config, and a reference to this run --
+ *      NOT a credential. A queued run therefore holds no live secret anywhere, not even in the runner's database;
+ *   4. when the runner actually starts the run, it asks for the agent's credential by that reference
+ *      (`issueRunCredential`, service-authenticated). It is minted then, once, for this run only, and revoked
+ *      when the run ends;
  *   5. the run is recorded against the task, so the task and the agent page can show it.
  *
  * Who decides what: the hosted run's own ledger hold bills the person (budget_credits); every Tasks call the agent
@@ -112,12 +114,7 @@ export async function start(db, owner, agentId, { taskKey, budgetCredits } = {},
     throw e;
   }
 
-  // the agent's credential, for exactly as long as the run may live
-  const cred = await agents.mintCredential(db, owner, agent.id, { label: `Cloud run ${String(row.id).slice(0, 8)} on ${task.key}`, ttlHours: MAX_RUN_HOURS });
-  await db.query('UPDATE agent_cloud_runs SET credential_id = $2 WHERE id = $1', [row.id, cred.id]);
-
   const fail = async (state, reason) => {
-    await revokeCredential(db, owner, agent.id, cred.id);
     const r = (await db.query(`UPDATE agent_cloud_runs SET state = $2, reason = $3, ended_at = CASE WHEN $2 = 'uncertain' THEN NULL ELSE now() END
       WHERE id = $1 RETURNING *`, [row.id, state, String(reason).slice(0, 200)])).rows[0];
     return view({ ...r, task_key: task.key }, agent);
@@ -143,7 +140,7 @@ export async function start(db, owner, agentId, { taskKey, budgetCredits } = {},
           // The run acts AS the agent in XENO: the runner opens a native platform session with this credential
           // (never logged, never returned) and gives the run the XenoTask* tools. The tool scope narrows them.
           platformAgent: {
-            issuer: issuer(), agentId: agent.id, credential: cred.token, expiresAt: cred.expiresAt,
+            issuer: issuer(), agentId: agent.id, runRef: String(row.id),
             ...(agent.runtime && agent.runtime.tools ? { tools: agent.runtime.tools } : {}),
           },
           budget: { maxCredits: budget },
@@ -166,6 +163,26 @@ export async function start(db, owner, agentId, { taskKey, budgetCredits } = {},
   } finally {
     await revokeDelegatedSession(db, sid);
   }
+}
+
+/**
+ * The runner, starting a run, asks for its agent credential (service-authenticated; never a person or an agent).
+ * Issued ONCE per run, only while the run is live and has a hosted run id that matches; a second ask is refused,
+ * so a leaked reference cannot mint a second credential. Returns the token for the runner to hand to the run
+ * over its private channel.
+ */
+export async function issueRunCredential(db, { runRef, runId }) {
+  if (!/^[0-9a-f-]{36}$/i.test(String(runRef || '')) || typeof runId !== 'string' || !runId) throw new AgentRunError('runRef and runId are required', 'bad_request');
+  const row = (await db.query(`SELECT r.*, a.public_id, u.id AS owner_id FROM agent_cloud_runs r
+      JOIN agent_identities a ON a.user_id = r.agent_user_id JOIN users u ON u.id = r.owner_user_id
+     WHERE r.id = $1 FOR UPDATE OF r`, [runRef])).rows[0];
+  if (!row || row.run_id !== runId) throw new AgentRunError('No such run', 'run_not_found', 404);
+  if (!LIVE.has(row.state)) throw new AgentRunError('The run has ended', 'run_ended', 409);
+  if (row.credential_id) throw new AgentRunError('This run already has its credential', 'credential_issued', 409);
+  const owner = { id: row.owner_id, kind: 'human' };
+  const cred = await agents.mintCredential(db, owner, row.public_id, { label: `Cloud run ${String(row.id).slice(0, 8)}`, ttlHours: MAX_RUN_HOURS });
+  await db.query(`UPDATE agent_cloud_runs SET credential_id = $2, state = 'running' WHERE id = $1`, [row.id, cred.id]);
+  return { token: cred.token, expiresAt: cred.expiresAt, agentId: row.public_id };
 }
 
 /** Refresh one run's state from xeno-agents-api; a run that ended gets its credential revoked. */

@@ -30,6 +30,7 @@
  * no req.user) — service auth lives entirely in this file.
  */
 import express from 'express';
+import { issueRunCredential as issueAgentRunCredential } from '../services/agentCloudRuns.js';
 import { routingDimensions } from '../utils/usageDimensions.js';
 import { billableInputTokens } from '../utils/billableInput.js';
 import crypto from 'node:crypto';
@@ -118,6 +119,15 @@ export function createServiceLedgerRouter({
 } = {}) {
   const router = express.Router();
   router.use(makeRequireServiceToken(getServiceToken));
+  // The runner, starting an agent cloud run, asks for that run's agent credential -- once (agentCloudRuns.js).
+  router.post('/agent-runs/credential', async (req, res) => {
+    res.set('Cache-Control', 'no-store');
+    try { res.json(await issueAgentRunCredential(req.db, { runRef: req.body?.runRef, runId: req.body?.runId })); }
+    catch (error) {
+      if (error && error.name === 'AgentRunError') return res.status(error.status).json({ error: { code: error.code } });
+      sendErr(res, error);
+    }
+  });
   // This is a final aggregate provider receipt, not a user-authored run outcome.
   // Payer and tariff are resolved from admission; callers cannot select money.
   router.post('/project-runs/settle',async(req,res)=>{
