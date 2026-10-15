@@ -40,7 +40,7 @@ p.on('request', (q) => {
     const a = db.agents.find((x) => x.id === m[1]); if (!a) return json(404, { success: false, error: 'Agent not found', code: 'agent_not_found' });
     const rest = m[2] || '';
     if (!rest && method === 'GET') return json(200, { success: true, agent: view(a) });
-    if (!rest && method === 'PATCH') { if (b.name) a.name = b.name; if (b.description !== undefined) a.description = b.description; return json(200, { success: true, agent: view(a) }); }
+    if (!rest && method === 'PATCH') { if (b.runtime !== undefined) { a.runtime = b.runtime; a.version = (a.version || 1) + 1; } if (b.name) a.name = b.name; if (b.description !== undefined) a.description = b.description; return json(200, { success: true, agent: view(a) }); }
     if (!rest && method === 'DELETE') { db.agents = db.agents.filter((x) => x !== a); return json(200, { success: true, id: a.id, deleted: true }); }
     if (rest === '/credentials' && method === 'POST') { const c = { id: 'c' + a.creds.length, token: 'xtk_abcdefabcdef_' + hex(), hint: 'xtk_abcdefabcdef_…', label: b.label, scopes: ['tasks:read', 'tasks:write'], expiresAt: new Date(Date.now() + b.ttlHours * 3600e3).toISOString(), lastUsedAt: null, createdAt: new Date().toISOString() }; a.creds.push(c); return json(201, { success: true, credential: { id: c.id, token: c.token, expiresAt: c.expiresAt, scopes: c.scopes } }); }
     const cr = rest.match(/^\/credentials\/(.+)$/); if (cr && method === 'DELETE') { const c = a.creds.find((x) => x.id === cr[1]); c.revoked = true; return json(200, { success: true, revoked: true }); }
@@ -113,6 +113,21 @@ try {
   await fresh(`/workspace/workspace/Agents/${a.id}`);
   t2 = await main();
   ok(/agent\.example\.com/.test(t2) && !/whsec_SIGNING/.test(t2), 'afterwards the address is listed and the secret is gone');
+
+  // how it runs: model, reasoning, tools — saved as a new version
+  ok(/Runs with/.test(await main()) && /CLI it runs in picks the model/.test(await main()), 'an agent with no runtime says the CLI chooses');
+  await p.click('[data-xag="runtime"]'); await settle(500);
+  await fill(['gpt-5.5', 'Read, Edit, XenoTaskComment', 'Bash']);
+  await p.evaluate(() => [...document.querySelectorAll('.xd [data-f="effort"] [data-v]')].find((x) => x.dataset.v === 'high')?.click()); await settle(200);
+  await submit();
+  const rt = db.calls.filter((c) => c[0] === 'PATCH' && c[2].runtime).pop();
+  ok(rt && rt[2].runtime.model === 'gpt-5.5' && rt[2].runtime.effort === 'high' && rt[2].runtime.tools.allow.join() === 'Read,Edit,XenoTaskComment' && rt[2].runtime.tools.deny.join() === 'Bash', 'Set saves model, reasoning and allowed/blocked tools');
+  const t3 = await main();
+  ok(/gpt-5\.5/.test(t3) && /High/.test(t3) && /Never these tools/.test(t3) && /Saved as version/.test(await p.evaluate(() => document.body.innerText)), 'the page shows how it runs, and says it is a new version');
+  await p.click('[data-xag="runtime"]'); await settle(500);
+  ok(await p.evaluate(() => document.querySelector('.xd input')?.value === 'gpt-5.5'), 'Change opens with the current values');
+  await fill(['', '', '']); await p.evaluate(() => [...document.querySelectorAll('.xd [data-f="effort"] [data-v]')].find((x) => x.dataset.v === '')?.click()); await submit();
+  ok(JSON.stringify(db.calls.filter((c) => c[0] === 'PATCH' && c[2].runtime).pop()[2].runtime) === '{}', 'clearing everything hands the choice back to the CLI');
 
   // edit keeps the id
   await p.click('[data-xag="edit"]'); await settle(500);
