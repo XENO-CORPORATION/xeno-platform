@@ -31,6 +31,11 @@ const PLATFORM_PRELUDE = `
     id UUID PRIMARY KEY, owner_user_id UUID REFERENCES users(id),
     name TEXT NOT NULL, slug TEXT NOT NULL);
   CREATE TABLE api_keys(id UUID PRIMARY KEY, user_id UUID REFERENCES users(id));
+  -- agent_identities as 20260811130000 leaves it (the principal half of an agent). Since 20261015140000 the
+  -- workforce chain links a principal to its definition, so it is a real dependency outside the chain.
+  CREATE TABLE agent_identities(user_id UUID PRIMARY KEY REFERENCES users(id), owner_user_id UUID NOT NULL REFERENCES users(id),
+    agent_role VARCHAR(16) NOT NULL DEFAULT 'other', agent_origin TEXT, status VARCHAR(16) NOT NULL DEFAULT 'active',
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now());
   -- Funding references the EXISTING canonical account, never a second balance.
   CREATE TABLE credit_accounts(id UUID PRIMARY KEY, user_id UUID UNIQUE, owner_kind VARCHAR(16));
   -- chat_projects as the chat migrations (20260825120000, 20260829120000) leave it, both of which
@@ -98,7 +103,7 @@ test('every workforce migration applies in order from an empty database', { skip
       // workforce chain is exactly the thing this gate exists to make somebody write down.
       for (const { parent } of rows) {
         const bare = parent.replace(/^.*\./, '');
-        assert.ok(/^(workforce_|users$|workspaces$|api_keys$|chat_projects$|credit_accounts$)/.test(bare),
+        assert.ok(/^(workforce_|users$|workspaces$|api_keys$|chat_projects$|credit_accounts$|agent_identities$)/.test(bare),
           `workforce schema references ${bare}, which is neither workforce-owned nor in the prelude`);
       }
     });
@@ -151,6 +156,12 @@ test('every workforce migration applies in order from an empty database', { skip
         'workforce_funding_return_lots',
         'workforce_funding_returns',
         'workforce_funding_settlements',
+        // ACCT-03/04/05/06, 2026-10-04 -- account gifts: the gift, its lots, a recipient's return and the per-account
+        // opt-out; cited by account-gift-transfer, account-gift-return and account-gift-preferences tests.
+        'workforce_gift_lots',
+        'workforce_gift_preferences',
+        'workforce_gift_returns',
+        'workforce_gifts',
         'workforce_handoffs',
         // D21, 2026-09-25 -- the id mapping kept when `workspace_teams` was absorbed into the canonical
         // team model, cited by workforce-team-project-responsibility.test.mjs (the absorption case).
@@ -164,6 +175,9 @@ test('every workforce migration applies in order from an empty database', { skip
         // OWN-05, 2026-09-24 -- widened only because the requirement it implements is now cited by
         // a real test (workforce-ownership-transfer.test.mjs), exactly as the message below asks.
         'workforce_ownership_transfers',
+        // DIV-04, 2026-10-15 -- a PROJECT's owning division (agents and teams use workforce_division_ownership);
+        // cited by src/server/tests/agents-divisions.test.mjs (one owning division, same workspace, DIV-08 refusal).
+        'workforce_project_divisions',
         // ASN-09, 2026-09-24 -- the discriminated project-participation record, cited by
         // workforce-project-participation.test.mjs.
         'workforce_project_participations',
@@ -188,6 +202,8 @@ test('every workforce migration applies in order from an empty database', { skip
         'workforce_run_results',
         'workforce_run_revocations',
         'workforce_scope_spend_caps',
+        // ACCT-07, 2026-10-04 -- an owner's bounded spend approval for an agent; cited by account-agent-approval.test.mjs.
+        'workforce_spend_approvals',
         'workforce_team_memberships',
         'workforce_workspace_assignments',
       ], 'the workforce schema changed. If a table was ADDED, the requirements it implements are ' +
@@ -230,7 +246,14 @@ test('every workforce migration applies in order from an empty database', { skip
         'workforce_assignment_member_sets.admitted_by_user_id',
         // FUND-14 requires milestone acceptance criteria before contributions. This is
         // a deliverable condition, not employment consent or a membership grant.
+        // ACCT-07: a contribution an AGENT made names the owner's bounded spend approval it consumed. Not a way of
+        // JOINING: it authorizes one payment, grants no membership and touches no roster.
+        'workforce_funding_contributions.approval_id',
         'workforce_funding_milestones.acceptance_criteria',
+        // ACCT-06: a recipient's standing opt-out of unsolicited gifts -- a preference about receiving value, not joining.
+        'workforce_gift_preferences.accepts_unsolicited',
+        // ACCT-07: an agent-sent gift names the owner's spend approval it consumed, as a contribution does above.
+        'workforce_gifts.approval_id',
         'workforce_handoffs.accepted_at',
         // Deliverable acceptance binds completed run evidence and published criteria;
         // it grants no membership, assignment or permission to join a team.
