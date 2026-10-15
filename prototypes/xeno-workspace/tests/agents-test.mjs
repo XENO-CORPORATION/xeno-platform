@@ -44,10 +44,15 @@ p.on('request', (q) => {
     if (!rest && method === 'DELETE') { db.agents = db.agents.filter((x) => x !== a); return json(200, { success: true, id: a.id, deleted: true }); }
     if (rest === '/credentials' && method === 'POST') { const c = { id: 'c' + a.creds.length, token: 'xtk_abcdefabcdef_' + hex(), hint: 'xtk_abcdefabcdef_…', label: b.label, scopes: ['tasks:read', 'tasks:write'], expiresAt: new Date(Date.now() + b.ttlHours * 3600e3).toISOString(), lastUsedAt: null, createdAt: new Date().toISOString() }; a.creds.push(c); return json(201, { success: true, credential: { id: c.id, token: c.token, expiresAt: c.expiresAt, scopes: c.scopes } }); }
     const cr = rest.match(/^\/credentials\/(.+)$/); if (cr && method === 'DELETE') { const c = a.creds.find((x) => x.id === cr[1]); c.revoked = true; return json(200, { success: true, revoked: true }); }
+    if (rest === '/runs' && method === 'GET') return json(200, { success: true, runs: (a.runs || []) });
+    if (rest === '/runs' && method === 'POST') { a.runs = a.runs || []; const r = { id: 'r' + a.runs.length, state: 'queued', task: b.task, version: 1, budgetCredits: b.budgetCredits, createdAt: new Date().toISOString() }; a.runs.unshift(r); return json(201, { success: true, run: r }); }
     if (rest === '/webhook') { a.webhook = b.url || null; return json(200, { success: true, ...(b.url ? { url: b.url, secret: 'whsec_SIGNING' } : { removed: true }) }); }
     const pr = rest.match(/^\/projects\/(.+)$/);
     if (pr) { if (method === 'PUT') a.pids.push(pr[1]); else a.pids = a.pids.filter((x) => x !== pr[1]); return json(200, { success: true, agent: view(a) }); }
   }
+  const stopM = u.pathname.match(/^\/api\/agents\/runs\/(.+)\/stop$/);
+  if (stopM) { for (const a of db.agents) for (const r of a.runs || []) if (r.id === stopM[1]) { r.state = 'cancelled'; r.reason = 'stopped_by_owner'; r.endedAt = new Date().toISOString(); } return json(200, { success: true, run: {} }); }
+  if (u.pathname === '/api/tasks' && method === 'GET') return json(200, { success: true, tasks: [{ key: 'T-7', title: 'Ship the header', status: 'todo', project: { id: PROJ[0].id, name: PROJ[0].name } }, { key: 'T-8', title: 'Elsewhere', status: 'todo', project: { id: 'zz', name: 'Other' } }] });
   if (u.pathname === '/api/notifications') return json(200, { success: true, unread: 0, items: [] });
   if (u.pathname === '/api/workspace/search') return json(200, { success: true, results: [], counts: {} });
   if (u.pathname === '/api/workspace/needs') return json(200, { success: true, items: [] });
@@ -128,6 +133,20 @@ try {
   ok(await p.evaluate(() => document.querySelector('.xd input')?.value === 'gpt-5.5'), 'Change opens with the current values');
   await fill(['', '', '']); await p.evaluate(() => [...document.querySelectorAll('.xd [data-f="effort"] [data-v]')].find((x) => x.dataset.v === '')?.click()); await submit();
   ok(JSON.stringify(db.calls.filter((c) => c[0] === 'PATCH' && c[2].runtime).pop()[2].runtime) === '{}', 'clearing everything hands the choice back to the CLI');
+
+  // run it in the cloud on one of its tasks
+  ok(/Runs in the cloud/.test(await main()) && /no CLI, no computer of yours/.test(await main()), 'the agent page offers cloud runs, and says what they are');
+  if (!a.pids.length) { await p.evaluate(() => document.querySelector('.xag [data-xag-proj]')?.click()); await settle(500); }
+  await p.click('[data-xag="run-cloud"]'); await settle(600);
+  const offered = await p.evaluate(() => [...document.querySelectorAll('.xd [data-f="task"] [data-v]')].map((x) => x.dataset.v));
+  ok(offered.includes('T-7') && !offered.includes('T-8'), 'Run offers only tasks in its projects');
+  await submit();
+  const started = db.calls.filter((c) => c[0] === 'POST' && /\/runs$/.test(c[1])).pop();
+  ok(started && started[2].task === 'T-7' && started[2].budgetCredits === 50, 'it starts a run on the chosen task with the budget');
+  await settle(500);
+  ok(/T-7 · Queued/.test(await main()) && await p.$('[data-xag="stop-run"]'), 'the run shows on the page, live, with Stop');
+  await p.click('[data-xag="stop-run"]'); await settle(900);
+  ok(/T-7 · Stopped/.test(await main()) && /You stopped it/.test(await main()), 'Stop stops it and says so');
 
   // edit keeps the id
   await p.click('[data-xag="edit"]'); await settle(500);
