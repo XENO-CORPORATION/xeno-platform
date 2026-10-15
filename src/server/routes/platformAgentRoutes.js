@@ -22,12 +22,13 @@ import * as agents from '../services/platformAgents.js';
 import { TaskError } from '../services/xenoTasks.js';
 import { DivisionError } from '../services/workforceDivisions.js';
 import * as lending from '../services/agentLending.js';
+import * as cloudRuns from '../services/agentCloudRuns.js';
 
 const router = express.Router();
 const handled = (fn) => async (req, res) => {
   try { await fn(req, res); }
   catch (e) {
-    if (e instanceof agents.AgentError || e instanceof TaskError || e instanceof DivisionError || e instanceof lending.LendError) return res.status(e.status).json({ success: false, error: e.message, code: e.code });
+    if (e instanceof agents.AgentError || e instanceof TaskError || e instanceof DivisionError || e instanceof lending.LendError || e instanceof cloudRuns.AgentRunError) return res.status(e.status).json({ success: false, error: e.message, code: e.code });
     console.error('[agents]', e);
     res.status(500).json({ success: false, error: 'Internal server error' });
   }
@@ -43,6 +44,13 @@ router.post('/lends/:lendId/revoke', handled(async (req, res) => { res.json({ su
 router.get('/', handled(async (req, res) => { res.json({ success: true, agents: await agents.list(req.db, req.me, { divisionId: req.query.division ? String(req.query.division) : null }) }); }));
 router.post('/', handled(async (req, res) => { res.status(201).json({ success: true, agent: await agents.create(req.db, req.me, req.body || {}) }); }));
 router.get('/:id', handled(async (req, res) => { res.json({ success: true, agent: await agents.get(req.db, req.me, req.params.id) }); }));
+// cloud runs: run the agent on a task, in the cloud (agentCloudRuns.js)
+router.post('/runs/:runId/stop', handled(async (req, res) => { res.json({ success: true, run: await cloudRuns.stop(req.db, req.me, req.params.runId) }); }));
+router.get('/:id/runs', handled(async (req, res) => { res.json({ success: true, runs: await cloudRuns.listForAgent(req.db, req.me, req.params.id) }); }));
+router.post('/:id/runs', handled(async (req, res) => {
+  const run = await cloudRuns.start(req.db, req.me, req.params.id, { taskKey: req.body?.task, budgetCredits: req.body?.budgetCredits });
+  res.status(run.existing ? 200 : 201).json({ success: true, run });
+}));
 router.patch('/:id', handled(async (req, res) => { res.json({ success: true, agent: await agents.update(req.db, req.me, req.params.id, req.body || {}) }); }));
 router.delete('/:id', handled(async (req, res) => { res.json({ success: true, ...(await agents.remove(req.db, req.me, req.params.id)) }); }));
 router.put('/:id/division', handled(async (req, res) => { res.json({ success: true, agent: await agents.setDivision(req.db, req.me, req.params.id, (req.body && req.body.divisionId) || null) }); }));
