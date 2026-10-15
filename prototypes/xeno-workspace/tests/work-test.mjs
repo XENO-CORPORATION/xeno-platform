@@ -149,6 +149,8 @@ try {
   await p.goto(base + `/workspace/projects/${pid(1)}/tasks`, { waitUntil: 'domcontentloaded' }); await wait(1500);
   const hdr = await p.evaluate(() => ({ tabsInHead: !!document.querySelector('.pg-top .pg-top-tabs [data-ptab="Tasks"][aria-selected="true"]'), tabsInBody: !!document.querySelector('.mview .pg-tabs'), facts: document.querySelector('.mfoot [data-sb-facts]')?.innerText.replace(/\s+/g, ' ') || '', sumInHead: (document.querySelector('.pg-top-sum')?.innerText || '').trim() }));
   ok(hdr.tabsInHead && !hdr.tabsInBody && !hdr.sumInHead, `a project has ONE header: path and tabs in the header bar, no second tab row in the body (${JSON.stringify(hdr)})`);
+  const inset = await p.evaluate(() => { const b = [...document.querySelectorAll('.pg-top-acts > *')].pop().getBoundingClientRect(), h = document.querySelector('#main .topbar').getBoundingClientRect(); return { right: Math.round(h.right - b.right), top: Math.round(b.top - h.top), bottom: Math.round(h.bottom - b.bottom) }; });
+  ok(Math.abs(inset.right - inset.top) <= 1 && Math.abs(inset.top - inset.bottom) <= 1, `the last header button is as far from the right edge as from the top and bottom (${JSON.stringify(inset)})`);
   ok(/Next:/.test(hdr.facts) && /0\/0/.test(hdr.facts), 'its progress and next milestone sit in the status bar');
   if (process.env.WORK_SHOT) { await p.evaluate(() => document.getElementById('xp-note')?.remove()); await p.screenshot({ path: process.env.WORK_SHOT }); }
   await p.goto(base + `/workspace/projects/${pid(1)}/team`, { waitUntil: 'domcontentloaded' }); await wait(1500); t = await main();

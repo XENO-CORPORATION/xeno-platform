@@ -275,7 +275,9 @@
 :root{--g:clamp(20px,2.2vw,32px)}
 /* every main view, not only full pages: the same header row, the same gutter */
 .topbar{height:46px;padding:0 var(--g);gap:10px;border-bottom:1px solid var(--n28);background:var(--panel)}
-.topbar>.ib:last-child{margin-right:-8px}
+/* the header's last control sits as far from the right edge as from the top and bottom: (46 − 30) / 2 = 8 px */
+.topbar{padding-right:8px}
+.topbar>.ib:last-child{margin-right:0}
 .mview,.live-chat-host,.chat{top:46px}
 .wrap.hm2{max-width:none;margin:0;padding-left:var(--g);padding-right:calc(var(--g) - var(--sb, 0px))}
 html[data-panel="closed"] .topbar{padding-left:calc(var(--g) - 8px)}   /* the opener's glyph lands on the gutter */
