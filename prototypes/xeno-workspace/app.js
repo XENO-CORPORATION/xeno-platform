@@ -308,6 +308,8 @@
   function panelProduct(id) {
     const p = PR[id];
     if (p.kind === 'chat') return panelChat();
+    // XENO MCP draws its own sidebar: its views and the connected agents, from the platform — never "New mcp"
+    if (id === 'mcp' && window.XENO_MCP?.panel) return `${backHeader(id, p.name)}<div class="pbody">${window.XENO_MCP.panel()}</div>`;
     const nav = (window.XENO_PRODUCT_NAV || {})[id];
     const recents = window.XENO_RECENT.filter((r) => r.p === id);
     const fileIcon = `<img src="${window.XENO_FILE_ICON_DIR}${p.icon || 'xeno-tools'}-file.svg" alt="" width="20" height="20" onerror="this.replaceWith(Object.assign(document.createElement('span'),{className:'code',textContent:'${esc(p.code || p.name.slice(0, 2))}'}))">`;
@@ -1052,6 +1054,7 @@
     const p = PR[S.product];
     if (S.mode === 'studio' && ['image', 'video', 'audio', '3d', 'enhance-image', 'enhance-video', 'enhance-audio', 'enhance-3d'].includes(S.product) && window.XENO_GENERATIONS) return window.XENO_GENERATIONS.host();
     if (S.product === 'storage' && window.XENO_STORAGE) return window.XENO_STORAGE.page();   // XENO Storage: the account's space, on the real meter
+    if (S.product === 'mcp' && window.XENO_MCP) return window.XENO_MCP.page();   // XENO MCP: the agents connected to XENO, managed here
     if (p.kind === 'chat' && window.XENO_CHAT && window.XENO_CHAT.served) return window.XENO_CHAT.host();
     if (p.kind === 'chat' && window.XENO_LIVE_CHAT) { const C = window.XENO_LIVE_CHAT; return `<div class="live-chat-host"><div class="live-chat chat-themed chat-theme-dark" style="${C.vars.replace(/"/g, '&quot;')}">${C.html}</div></div>`; }
     if (p.kind === 'chat') return `<div class="chat"><div class="thread"><div class="in"><div class="um">next one</div><div class="am"><p>Here is the next scenario. A company runs EC2 instances across three Availability Zones and needs a shared file system every instance can mount at once, with storage that grows automatically.</p><p>Which service fits best: <b>EFS</b>, <b>EBS Multi-Attach</b> or <b>FSx for Lustre</b>?</p></div></div></div>
@@ -1105,6 +1108,8 @@
       if (S.product.startsWith('enhance-')) return `<a data-mode="studio">Studio</a>${sep}<a data-zone="enhance">Enhance</a>${sep}${generationId ? `<a data-product="${S.product}">${esc(p.name)}</a>${sep}<b>Enhancement</b>` : `<b>${esc(p.name)}</b>`}`;
       return `<a data-mode="studio">Studio</a>${sep}<a data-zone="generate">Generate</a>${sep}${generationId ? `<a data-product="${S.product}">${esc(p.name)}</a>${sep}<b>${S.product === 'enhance' ? 'Enhancement' : 'Generation'}</b>` : `<b>${esc(p.name)}</b>`}`;
     }
+    // a product that owns its sub-addresses names them here (an id in the address, its name in the trail)
+    if (S.item && S.product === 'mcp' && window.XENO_MCP?.trail) { const t = window.XENO_MCP.trail(S.item); return `<span>${ctxName()}</span>${sep}<a data-product="mcp">${esc(p.name)}</a>${sep}${t.map((x, i) => (i === t.length - 1 ? `<b>${esc(x)}</b>` : `<span>${esc(x)}</span>${sep}`)).join('')}`; }
     return `<span>${ctxName()}</span>${sep}${S.item ? (liveChat && S.product === 'chat' && window.XENO_CHAT.trail ? (() => { const t = window.XENO_CHAT.trail(S.item); return `<span>${esc(p.name)}</span>${sep}${t.map((x, i) => (i === t.length - 1 ? `<b>${esc(x)}</b>` : `<span>${esc(x)}</span>${sep}`)).join('')}`; })() : `<span>${esc(p.name)}</span>${sep}<b>${esc(liveChat && S.product === 'chat' ? window.XENO_CHAT.title(S.item) : S.item)}</b>`) : `<b>${esc(p.name)}</b>`}${S.product === 'chat' && !S.item ? `${sep}<span>${esc(liveChat ? 'New chat' : ctxChats().pinned[0] || 'New chat')}</span>` : ''}`;
   }
   function liveDashboard() {
@@ -1122,7 +1127,7 @@
     const pf = !genHost && window.XENO_PAGES && window.XENO_PAGES.framed();
     if (pf) return `<div class="topbar pg-top"><button class="ib opener" data-expand aria-label="Open sidebar" data-tip="Open sidebar" data-kbd="Ctrl \\">${ic('side')}</button><div class="crumbs">${crumbs()}</div><div class="pg-top-sum">${pf.sum}</div><div class="pg-top-left">${pf.left}</div><div class="sp"></div><div class="pg-top-tools">${pf.tools}</div><div class="pg-top-acts">${pf.acts}</div></div><div class="mview pg-mview${pf.foot ? ' has-foot' : ''}">${pf.body}</div>${pf.foot ? `<footer class="mfoot">${pf.foot}</footer>` : ''}`;
     // a real conversation is the chat page showing that conversation, not a generic "item" page
-    const liveChatItem = S.item && S.view === 'product' && ((S.product === 'chat' && window.XENO_CHAT && window.XENO_CHAT.served) || (S.mode === 'studio' && ['image', 'video', 'audio', '3d', 'enhance-image', 'enhance-video', 'enhance-audio', 'enhance-3d'].includes(S.product) && window.XENO_GENERATIONS) || (S.product === 'storage' && window.XENO_STORAGE) /* a folder or a view of Storage is the Storage page itself */);
+    const liveChatItem = S.item && S.view === 'product' && ((S.product === 'chat' && window.XENO_CHAT && window.XENO_CHAT.served) || (S.mode === 'studio' && ['image', 'video', 'audio', '3d', 'enhance-image', 'enhance-video', 'enhance-audio', 'enhance-3d'].includes(S.product) && window.XENO_GENERATIONS) || (S.product === 'storage' && window.XENO_STORAGE) /* a folder or a view of Storage is the Storage page itself */ || (S.product === 'mcp' && window.XENO_MCP) /* a connection or the activity log is the XENO MCP page itself */);
     if (S.item && !liveChatItem) return `<div class="topbar"><button class="ib opener" data-expand aria-label="Open sidebar" data-tip="Open sidebar" data-kbd="Ctrl \\">${ic('side')}</button><div class="crumbs">${crumbs()}</div><div class="sp"></div></div><div class="mview">${mainItem()}</div>`;
     const body = S.view === 'adaptive' ? mainAdaptive() : S.view === 'zone' ? mainZone() : S.view === 'dashboard' ? mainDashboard() : S.view === 'product' ? mainProduct() : S.view === 'global' ? mainGlobal() : mainMode();
     const isChat = S.view === 'product' && (S.product === 'chat' || (S.mode === 'studio' && ['image', 'video', 'audio', '3d', 'enhance-image', 'enhance-video', 'enhance-audio', 'enhance-3d'].includes(S.product) && window.XENO_GENERATIONS));
@@ -1173,7 +1178,11 @@
     return n;
   }
   function markItems(scope = document.querySelector('#panel > .pv')) {
-    scope?.querySelectorAll('[data-item]').forEach((r) => r.setAttribute('aria-current', String(!!S.item && r.dataset.item === S.item.split('/')[0] && (!r.dataset.itemP || r.dataset.itemP === S.product || S.view !== 'product'))));
+    // a row marked data-item-exact names a whole sub-address (`c/<id>`, or '' for the product's own home) and matches
+    // it exactly; every other row matches the item's first segment, as before
+    scope?.querySelectorAll('[data-item]').forEach((r) => r.setAttribute('aria-current', String('itemExact' in r.dataset
+      ? r.dataset.item === (S.item || '')
+      : !!S.item && r.dataset.item === S.item.split('/')[0] && (!r.dataset.itemP || r.dataset.itemP === S.product || S.view !== 'product'))));
   }
   function openSwitcher() {
     if (S.switching) return closeSwitcher();
