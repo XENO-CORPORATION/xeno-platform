@@ -276,11 +276,12 @@
 /* every main view, not only full pages: the same header row, the same gutter */
 .topbar{height:46px;padding:0 var(--g);gap:10px;border-bottom:1px solid var(--n28);background:var(--panel)}
 /* the header's last control sits as far from the right edge as from the top and bottom: (46 − 30) / 2 = 8 px */
-.topbar{padding-right:8px}
+/* left: the path text starts where the last button text ends on the right (8 px edge + the button 12 px padding) */
+.topbar{padding-right:8px;padding-left:20px}
 .topbar>.ib:last-child{margin-right:0}
 .mview,.live-chat-host,.chat{top:46px}
 .wrap.hm2{max-width:none;margin:0;padding-left:var(--g);padding-right:calc(var(--g) - var(--sb, 0px))}
-html[data-panel="closed"] .topbar{padding-left:calc(var(--g) - 8px)}   /* the opener's glyph lands on the gutter */
+html[data-panel="closed"] .topbar,html[data-panel="none"] .topbar{padding-left:8px}   /* the opener button sits 8 px in, like the buttons on the right */
 html[data-panel="open"] .topbar .crumbs{display:flex}   /* the header always shows the path: Projects / Brand refresh / Tasks */
 .topbar .crumbs{font-size:12.5px;overflow:hidden;white-space:nowrap}
 .topbar .crumbs>*{overflow:hidden;text-overflow:ellipsis}
