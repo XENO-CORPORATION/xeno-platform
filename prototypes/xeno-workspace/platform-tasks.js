@@ -707,7 +707,8 @@
   }
   function projectRegion(id) {
     const got = T.byProject.get(id);
-    const top = `<div class="tk-bar">${H().btn('New task in this project', `data-tk="new" data-arg="${esc(id)}"`, false, 'plus')}<button class="tk-link" data-tk="link-cmd" data-arg="${esc(id)}" title="Copy the command that links a local folder to this project for Claude Code, Codex and other agent CLIs">${ic('bot')}Connect an agent</button><span class="tk-sp"></span><small class="tk-dim">Drag a card to move it · right-click for more</small></div>`;
+    // the header carries New task and (in ⋯) Connect an agent CLI; the board needs no toolbar of its own
+    const top = '';
     if (!got || got === 'loading') return top + '<p class="tk-msg" data-tk-state="loading">Loading tasks…</p>';
     if (got === 'error') return top + `<p class="tk-msg" data-tk-state="error">The tasks couldn’t be loaded. <button class="pg-link" data-tk="retry-project" data-arg="${esc(id)}">Try again</button></p>`;
     T.inProject = true; // the cards are inside their own project here, so they need not name it
