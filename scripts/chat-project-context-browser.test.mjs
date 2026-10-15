@@ -55,7 +55,7 @@ let server = null;
 let base = process.env.BASE || '';
 if (!base) {
   const port = await freePort();
-  server = spawn(process.execPath, ['node_modules/vite/bin/vite.js', '--host', '127.0.0.1', '--port', String(port), '--strictPort'], { stdio: 'ignore' });
+  server = spawn(process.execPath, ['node_modules/vite/bin/vite.js', '--host', '127.0.0.1', '--port', String(port), '--strictPort'], { stdio: 'ignore', windowsHide: true });
   base = `http://127.0.0.1:${port}`;
   const deadline = Date.now() + 90_000;
   for (;;) {
@@ -68,6 +68,8 @@ if (!base) {
 const browser = await puppeteer.launch({ headless: true, args: ['--no-sandbox'] });
 const page = await browser.newPage();
 await page.setViewport({ width: 1440, height: 900 });
+// A render crash shows as "This page could not load" and fails every check with a misleading message, so print it.
+page.on('pageerror', (e) => console.log('page error:', String(e.stack || e.message).slice(0, 400)));
 await page.setRequestInterception(true);
 page.on('request', (req) => {
   const u = new URL(req.url());
@@ -90,7 +92,7 @@ async function waitFor(fn, label, timeout = 20000) {
     await settle(200);
   }
 }
-const PROJ_HOME = `/overview/chat/projects/${PROJECT.id}`;
+const PROJ_HOME = `/chat/projects/${PROJECT.id}`;
 const PROJ_CHAT = `${PROJ_HOME}/c/${IN_PROJECT}`;
 
 test.after(async () => { await browser.close(); if (server) server.kill(); });
@@ -99,11 +101,14 @@ test('project home -> click its chat stays project-scoped, with the project side
   await page.goto(base + PROJ_HOME, { waitUntil: 'networkidle2', timeout: 60000 });
   await waitFor(() => document.body.innerText.includes('Sentinel concept pass'), 'project home lists its chat');
   await page.evaluate(() => {
-    const row = [...document.querySelectorAll('button,[role="button"],a')].find((n) => n.textContent.trim().startsWith('Sentinel concept pass') && n.closest('[role="dialog"]'));
+    const row = [...document.querySelectorAll('button,[role="button"],a')].find((n) => n.textContent.includes('Sentinel concept pass') && n.closest('[role="dialog"]'));
     row.click();
   });
   await waitFor(() => !!document.querySelector('[data-chat-breadcrumb]'), 'breadcrumb appears');
   assert.equal(path(), PROJ_CHAT);
+  // The chat opens, then the project home overlay closes on the next render: wait for that settled state rather than
+  // reading the frame in between (the assertions below still hold it to closed).
+  await waitFor(() => !document.querySelector('[role="dialog"][aria-label^="Project:"]'), 'the project home overlay closes');
   const state = await page.evaluate(() => ({
     section: !!document.querySelector('[data-project-chats-section]'),
     crumb: document.querySelector('[data-chat-breadcrumb]')?.innerText,
@@ -134,25 +139,25 @@ test('reload keeps the project chat; Back returns to the project home; Forward r
 });
 
 test('deep link with the wrong project id is corrected in place', async () => {
-  await page.goto(`${base}/overview/chat/projects/99999999-9999-4999-8999-999999999999/c/${IN_PROJECT}`, { waitUntil: 'networkidle2' });
+  await page.goto(`${base}/chat/projects/99999999-9999-4999-8999-999999999999/c/${IN_PROJECT}`, { waitUntil: 'networkidle2' });
   await waitFor(() => !!document.querySelector('[data-chat-breadcrumb]'), 'breadcrumb');
   assert.equal(path(), PROJ_CHAT);
 });
 
 test('a bare conversation link for a project chat lands on the project URL; a loose chat keeps the plain URL', async () => {
-  await page.goto(`${base}/overview/chat/llm/${IN_PROJECT}`, { waitUntil: 'networkidle2' });
+  await page.goto(`${base}/chat/c/${IN_PROJECT}`, { waitUntil: 'networkidle2' });
   await waitFor(() => !!document.querySelector('[data-chat-breadcrumb]'), 'breadcrumb');
   assert.equal(path(), PROJ_CHAT);
-  await page.goto(`${base}/overview/chat/llm/${LOOSE}`, { waitUntil: 'networkidle2' });
+  await page.goto(`${base}/chat/c/${LOOSE}`, { waitUntil: 'networkidle2' });
   await settle(2500);
-  assert.equal(path(), `/overview/chat/llm/${LOOSE}`);
+  assert.equal(path(), `/chat/c/${LOOSE}`);
   assert.equal(await page.evaluate(() => !!document.querySelector('[data-chat-breadcrumb],[data-project-chats-section]')), false);
 });
 
 test('unknown project and unavailable chat say so and offer a way back', async () => {
-  await page.goto(`${base}/overview/chat/projects/does-not-exist`, { waitUntil: 'networkidle2' });
+  await page.goto(`${base}/chat/projects/does-not-exist`, { waitUntil: 'networkidle2' });
   await waitFor(() => document.querySelector('[data-chat-route-notice]')?.getAttribute('data-chat-route-notice') === 'project-missing', 'project-missing');
-  await page.goto(`${base}/overview/chat/llm/55555555-5555-4555-8555-555555555555`, { waitUntil: 'networkidle2' });
+  await page.goto(`${base}/chat/c/55555555-5555-4555-8555-555555555555`, { waitUntil: 'networkidle2' });
   await waitFor(() => document.querySelector('[data-chat-route-notice]')?.getAttribute('data-chat-route-notice') === 'chat-unavailable', 'chat-unavailable');
   assert.ok(await page.evaluate(() => document.querySelector('[data-chat-route-notice]').innerText.includes('All chats')));
 });

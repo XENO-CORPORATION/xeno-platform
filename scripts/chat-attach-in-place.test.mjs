@@ -105,7 +105,15 @@ test('no JSX comment renders as text in the chat or library components', () => {
         let j = i - 1;
         while (j > 0 && !lines[j].trim()) j -= 1;
         const prev = lines[j].trim();
-        if (/(>|\/>|\)\}|<\/[A-Za-z.]+>)$/.test(prev) && !/=>\s*$/.test(prev)) offenders.push(`${dir}/${name}:${i + 1}`);
+        if (!/(>|\/>|\)\}|<\/[A-Za-z.]+>)$/.test(prev) || /=>\s*$/.test(prev)) continue;
+        // A comment BETWEEN PROPS (the next code line is `name=` or `{...spread}`) is an ordinary JS comment
+        // inside the tag, not text — and wrapping it in {} would not even compile.
+        let k = i;
+        while (k < lines.length && !/\*\//.test(lines[k])) k += 1;
+        k += 1;
+        while (k < lines.length && !lines[k].trim()) k += 1;
+        if (k < lines.length && /^\s*([A-Za-z_$][\w$-]*=|\{\.\.\.)/.test(lines[k])) continue;
+        offenders.push(`${dir}/${name}:${i + 1}`);
       }
     }
   }

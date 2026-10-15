@@ -93,7 +93,10 @@ test('API key workforce grants and use through real isolated PostgreSQL + HTTP',
 
     await t.test('grant updates require fresh sender-bound OIDC session, no key self-escalation or body freshness', async () => {
       const input = grantRequest();
-      for (const options of [{ key: rawKey }, { token: token({ bound: false }) }, { token: token(), proof: false }, { token: token({ authTime: Math.floor(Date.now() / 1000) - 301 }) }, { token: token({ authTime: Math.floor(Date.now() / 1000) + 61 }) }]) {
+      // Clearly outside the 300 s / +60 s window: auth_time is in whole seconds, so ±1 s sat on a rounding
+      // edge — a token minted at x.999 s and checked at the next second was correctly ACCEPTED, committing a
+      // grant that put every later subtest out of step.
+      for (const options of [{ key: rawKey }, { token: token({ bound: false }) }, { token: token(), proof: false }, { token: token({ authTime: Math.floor(Date.now() / 1000) - 310 }) }, { token: token({ authTime: Math.floor(Date.now() / 1000) + 70 }) }]) {
         assert.equal((await post('/api-key-capabilities/operations', input, options)).status, 401);
       }
       assert.equal((await post('/api-key-capabilities/operations', { ...input, authTime: Date.now() })).status, 400);

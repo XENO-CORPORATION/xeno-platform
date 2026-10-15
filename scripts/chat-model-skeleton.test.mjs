@@ -50,11 +50,16 @@ test('nothing can be sent to the fallback model while the catalogue loads', () =
   const send = CHAT.slice(CHAT.indexOf('data-composer-send-button'), CHAT.indexOf('data-composer-send-button') + 1600);
   // A clause of the button's `disabled`, wherever it sits in the list: the scan-before-send check now
   // follows it (2026-09-30), and the rule is that the button refuses what handleGenerate refuses.
-  assert.match(send, /disabled=\{[^}]*\|\| isModelsLoading(?: \|\||\})/, 'the affordance matches the guard');
+  // handleGenerate refuses a CHAT send while models load (a generation needs no chat model), so the button's
+  // `disabled` carries the same clause, scoped to chat mode.
+  assert.match(send, /disabled=\{[^\n]*generate\.state\.mode === 'chat' && \([^)]*\bisModelsLoading\b/, 'the affordance matches the guard');
 });
 
 test('the skeleton is a real primitive: chat tokens, a shimmer, and stillness under reduced motion', () => {
-  const block = CSS.slice(CSS.indexOf('.chat-skeleton {'));
+  // the skeleton's own rules only — from its block through its reduced-motion rule — not the rest of the file
+  const from = CSS.indexOf('.chat-skeleton {');
+  const rm = CSS.indexOf('@media (prefers-reduced-motion: reduce)', from);
+  const block = CSS.slice(from, CSS.indexOf('}', CSS.indexOf('}', rm) + 1) + 1);
   assert.match(block, /background: var\(--chat-control\);/, 'surface from the chat tokens, no hex');
   assert.match(block, /color: transparent !important;/, 'the placeholder text is for layout only');
   assert.match(block, /animation: chat-skeleton-sweep/, 'it shimmers');

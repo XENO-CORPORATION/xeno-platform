@@ -99,6 +99,11 @@ test('a handoff shows its audience and included history, and discloses nothing e
     // Canonical ledger identity is an external prerequisite of the funding migrations,
     // not a workforce-owned wallet. Match the migration-chain fixture's prelude.
     await pool.query('CREATE TABLE credit_accounts(id UUID PRIMARY KEY, user_id UUID UNIQUE, owner_kind VARCHAR(16))');
+    // agent_identities as 20260811130000 leaves it: since 20261015140000 the workforce chain links a principal to its
+    // definition, so it is a real prerequisite outside the chain (the same prelude as workforce-migration-chain).
+    await pool.query(`CREATE TABLE agent_identities(user_id UUID PRIMARY KEY REFERENCES users(id), owner_user_id UUID NOT NULL REFERENCES users(id),
+      agent_role VARCHAR(16) NOT NULL DEFAULT 'other', agent_origin TEXT, status VARCHAR(16) NOT NULL DEFAULT 'active',
+      created_at TIMESTAMPTZ NOT NULL DEFAULT now())`);
     const chain = (await readdir(MIGRATIONS)).filter((f) => f.endsWith('.sql')
       && (/workforce/.test(f) || f === '20260711120000-workspaces.sql')).sort().filter((f) => f !== THIS);
     for (const f of chain) await pool.query((await readFile(new URL(f, MIGRATIONS), 'utf8')).split('-- DOWN')[0]);

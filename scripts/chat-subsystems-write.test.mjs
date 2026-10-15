@@ -22,7 +22,9 @@ import { fileURLToPath } from 'node:url';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const chat = (...p) => join(ROOT, 'src', 'components', 'playground', 'Chat', ...p);
-const codeOnly = (s) => s.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+// A `/*` straight after a quote is the glob in a string ('image/*'), not a comment: the naive strip read it as one
+// and deleted ~6 KB of real code up to the next `*/`, including the generation-ownership resolver this file checks.
+const codeOnly = (s) => s.replace(/(^|[^\w'"`*])\/\*[\s\S]*?\*\//g, '$1').replace(/^\s*\/\/.*$/gm, '');
 
 const ARTIFACTS = codeOnly(readFileSync(chat('chatArtifacts.ts'), 'utf8'));
 const ARTIFACTS_PAGE = codeOnly(readFileSync(chat('ChatLibraryPage.tsx'), 'utf8'));
@@ -219,7 +221,8 @@ test('project chat membership persists on create, move, list, and direct load', 
   );
   assert.match(
     generation,
-    /conversationHistoryRef\.current\.find\(\(conversation\) => conversation\.id === generationConversationId\)\?\.projectId/,
+    // the row is found first, then its projectId is read (a found row with no project stays undefined, never the sidebar's)
+    /const (\w+) = conversationHistoryRef\.current\.find\(\(conversation\) => conversation\.id === generationConversationId\);[\s\S]{0,200}?\1\s*\?\s*\1\.projectId/,
     'a project conversation opened on /c/:id loses its persisted project context.',
   );
   assert.match(

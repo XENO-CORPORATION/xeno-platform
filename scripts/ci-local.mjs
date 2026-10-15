@@ -48,7 +48,7 @@
  *
  * Usage:
  *   node scripts/ci-local.mjs                 # everything
- *   node scripts/ci-local.mjs --only=gates    # gates | core | money | build | proofs | cross
+ *   node scripts/ci-local.mjs --only=gates    # gates | core | money | build | proofs | cross | browser
  *   node scripts/ci-local.mjs --check-drift   # only verify this matches the workflows
  *   node scripts/ci-local.mjs --keep-db       # leave the container up for debugging
  */
@@ -185,6 +185,14 @@ const CI_ENV = {
 
 const PG = { container: 'xeno-ci-local-pg', port: '55995', password: 'test', image: 'pgvector/pgvector:0.8.6-pg15-bookworm' };
 
+/* Suites that drive the REAL app in a real browser against the dev server, with the API answered by a fixture. They
+ * take minutes, so they run only when asked (`--only=browser`), never in a default run -- but they are named here so
+ * gates-are-reachable.test.mjs counts them as reached, and so the one runner that executes them is this file. */
+const BROWSER_SUITES = [
+  'chat-project-context-browser.test.mjs',
+  'studio-feed-browser.test.mjs',
+];
+
 const argv = process.argv.slice(2);
 const has = (f) => argv.includes(f);
 const only = (argv.find((a) => a.startsWith('--only=')) || '').split('=')[1] || null;
@@ -206,6 +214,7 @@ function run(cmd, args, opts = {}) {
     stdio: opts.quiet ? 'pipe' : 'inherit',
     shell: process.platform === 'win32',
     encoding: 'utf8',
+    windowsHide: true,   // the owner works on this PC: no console window may flash up (headless-only directive)
   });
   return { code: r.status ?? 1, out: `${r.stdout || ''}${r.stderr || ''}` };
 }
@@ -362,9 +371,20 @@ function buildAgentsApi() {
   const dir = mkdtempSync(join(tmpdir(), 'ci-agents-api-'));
   const ref = spawnSync('git', ['-C', sibling, 'rev-parse', '--verify', 'origin/HEAD'], { encoding: 'utf8' }).status === 0
     ? 'origin/HEAD' : 'origin/main';
-  const archive = spawnSync('sh', ['-c', `git -C "${sibling}" archive ${ref} | tar -x -C "${dir}"`], { encoding: 'utf8' });
+  // No shell, no pipe: git writes the archive to a file and git's own `archive` format is extracted by tar from that
+  // file, with forward slashes and --force-local. Through `sh` on Windows the path reached tar as `C\:\\Users…`
+  // (escaped twice), and GNU tar reads any `C:` path as a remote host -- so this stage could never run here.
+  const tarFile = join(dir, '..', `${dir.split(/[\\/]/).pop()}.tar`);
+  const archive = spawnSync('git', ['-C', sibling, 'archive', '--format=tar', '-o', tarFile, ref], { encoding: 'utf8', windowsHide: true });
   if (archive.status !== 0) return { error: `git archive failed: ${archive.stderr}` };
-  symlinkSync(join(sibling, 'node_modules'), join(dir, 'node_modules'));
+  const fwd = (p) => p.replace(/\\/g, '/');
+  const untar = spawnSync('tar', [...(process.platform === 'win32' ? ['--force-local'] : []), '-xf', fwd(tarFile), '-C', fwd(dir)], { encoding: 'utf8', windowsHide: true });
+  rmSync(tarFile, { force: true });
+  if (untar.status !== 0) return { error: `extracting the agents-api archive failed: ${untar.stderr}` };
+  // A junction, not a symlink: creating a symlink needs administrator rights on Windows (EPERM). 🔴 The temp dir
+  // holding it is never deleted recursively by this script -- a recursive delete would follow the junction into
+  // the sibling's real node_modules (root CLAUDE.md, the 2026-08-03 loss).
+  symlinkSync(join(sibling, 'node_modules'), join(dir, 'node_modules'), 'junction');
   const tsc = spawnSync(process.execPath, [join(sibling, 'node_modules', 'typescript', 'bin', 'tsc'), '-p', 'tsconfig.build.json'],
     { cwd: dir, encoding: 'utf8' });
   if (tsc.status !== 0) return { error: `agents-api build failed:\n${(tsc.stdout + tsc.stderr).slice(-2000)}` };
@@ -399,7 +419,9 @@ function runCrossServiceSuites() {
  * So every suite must report at least one passing test and ZERO skipped ones --
  * the only reading under which "green" means the SQL was exercised. */
 function runDbProofs(baseUrl) {
-  const suites = deriveDbProofSuites();
+  // `--proof=<file>` reruns one proof with exactly this stage's setup (the way to check a single red one).
+  const one = (argv.find((a) => a.startsWith('--proof=')) || '').split('=')[1] || null;
+  const suites = deriveDbProofSuites().filter((s) => !one || s.file === one);
   if (!suites.length) {
     // Deriving nothing means the scan broke, not that there is nothing to prove.
     record('proofs: database suites were found to run', false, 'derivation returned no suites');
@@ -509,6 +531,15 @@ async function main() {
         const usermsg = run('npm', ['run', 'test:chat-user-message-rendered'], { quiet: true });
         record('build: a long user message collapses in the page theme (real browser, built CSS)', usermsg.code === 0);
         ok = ok && usermsg.code === 0;
+      }
+    }
+
+    if (only === 'browser') {
+      for (const file of BROWSER_SUITES) {
+        const { code, out } = run('node', [join('scripts', file)], { quiet: true });
+        if (code !== 0) log(out.split('\n').slice(-25).join('\n'));
+        record(`browser: ${file}`, code === 0);
+        ok = ok && code === 0;
       }
     }
 

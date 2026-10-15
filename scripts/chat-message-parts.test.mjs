@@ -261,7 +261,8 @@ test('🔴 the streaming route converts parts[], so attachments survive it', () 
    * false branch spreads `...messages` rather than converting them.
    */
   assert.match(
-    stripped, /:\s*\(\w+\s*\?\s*\[\{ role: 'system', content: \w+ \}, \.\.\.messages\]\s*:\s*messages\)/,
+    // `messages.slice()` is the same passthrough: a copy, so project context appended later never mutates the caller's array
+    stripped, /:\s*\(\w+\s*\?\s*\[\{ role: 'system', content: \w+ \}, \.\.\.messages\]\s*:\s*messages(?:\.slice\(\))?\)/,
     'API clients already sending OpenAI messages must not be re-converted',
   );
 });

@@ -32,8 +32,9 @@ test('placement is its own axis: home puts the controls inside, dock puts them u
 });
 
 test('the project page is a home without a hero (it must not fake isActive to be compact)', () => {
-  assert.match(llm, /placement=\{options\?\.forceCompact \|\| messages\.length === 0 \? 'home' : 'dock'\}/);
-  assert.match(llm, /showHero=\{!options\?\.forceCompact && messages\.length === 0\}/);
+  // Studio › Generate always docks (its feed sits above the box); everywhere else an empty chat or the project page is `home`
+  assert.match(llm, /placement=\{!studioType && \(options\?\.forceCompact \|\| messages\.length === 0\) \? 'home' : 'dock'\}/);
+  assert.match(llm, /showHero=\{!options\?\.forceCompact && !studioType && messages\.length === 0\}/);
 });
 
 test('the geometry is the approved one: 12px plate, 14px field, 28px/7px controls, 11/12/9 and 12/14 padding', () => {
