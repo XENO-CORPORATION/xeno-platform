@@ -23,7 +23,10 @@
   const why = (r, d) => (r && r.d && (r.d.error || r.d.message)) || d;
   const ID = /^agt_[0-9a-f]{32}$/;
   const ENDPOINT = () => `${location.origin}/api/mcp`;
-  const S = { key: null, status: 'idle', list: [], one: null, projects: [], services: [], minted: null, busy: false, copied: '', tab: 'claude', q: '', choices: [], divisions: [], canManageDivisions: false, editingInstr: false, offers: [] };
+  const S = { key: null, status: 'idle', list: [], one: null, projects: [], services: [], minted: null, busy: false, copied: '', tab: 'claude', q: '', choices: [], divisions: [], canManageDivisions: false, editingInstr: false, offers: [], models: [] };
+  const EFFORTS = ['minimal', 'low', 'medium', 'high', 'max'];
+  const EFFORT_LABEL = { minimal: 'Minimal', low: 'Low', medium: 'Medium', high: 'High', max: 'Max' };
+  const rtSet = (rt) => !!(rt && (rt.model || rt.effort || (rt.tools && ((rt.tools.allow || []).length || (rt.tools.deny || []).length))));
   const paint = () => { try { X()?.render?.(); } catch {} };
   const go = (item) => X()?.go?.('global', { global: 'workspace', item });
   const toast = (m) => X()?.toast?.(m);
@@ -55,6 +58,7 @@
     if (S.key !== at) return;
     if (!list.ok) { S.status = list.status === 403 ? 'denied' : 'error'; return paint(); }
     S.list = list.d.agents || []; S.projects = pr.ok ? pr.d.projects || [] : [];
+    if (!S.models.length) api('GET', '/api/models').then((m) => { if (m.ok && m.d) { const g = m.d.companies || m.d.models || m.d; const ids = []; for (const v of Object.values(g || {})) if (Array.isArray(v)) for (const x of v) if (x && x.id) ids.push(x.id); S.models = ids; } }).catch(() => {});
     const dv0 = await api('GET', '/api/divisions'); if (dv0.ok) { S.divisions = dv0.d.divisions || []; S.canManageDivisions = !!dv0.d.canManage; }
     const ib = await api('GET', '/api/agents/lends/inbox'); S.offers = ib.ok ? ib.d.offers || [] : [];
     if (sv && sv.ok) S.services = sv.d.services || [];
@@ -158,6 +162,9 @@
               <div class="xag-instr-a"><small>Saving makes a new version. Work already running keeps the version it started with.</small><button type="button" class="pg-btn ghost" data-xag="instr-cancel">Cancel</button><button type="submit" class="pg-btn"${S.busy ? ' disabled' : ''}>Save version</button></div></form>`
               : a.instructions ? `<pre class="xag-instr-v">${esc(a.instructions)}</pre>` : '<p class="xag-none">No instructions yet. The CLI it runs in uses its own defaults until you add some.</p>'}
             ${a.versions && a.versions.length > 1 ? `<details class="xag-vers"><summary>${a.versions.length} versions</summary><ol>${a.versions.map((v) => `<li><b>v${v.version}</b><small>${esc(new Date(v.createdAt).toLocaleString())}${v.by ? ' · ' + esc(v.by) : ''} · <code>${esc(String(v.hash).slice(0, 10))}</code></small></li>`).join('')}</ol></details>` : ''}</section>
+          <section class="pg-sec"><div class="pg-sec-h"><h3>Runs with</h3><button class="pg-link" data-xag="runtime">${rtSet(a.runtime) ? 'Change' : 'Set'}</button></div>
+            ${rtSet(a.runtime) ? `<dl class="pg-props xag-rt"><dt>Model</dt><dd>${a.runtime.model ? `<code>${esc(a.runtime.model)}</code>` : 'The CLI’s choice'}</dd><dt>Reasoning</dt><dd>${a.runtime.effort ? esc(EFFORT_LABEL[a.runtime.effort]) : 'The CLI’s choice'}</dd>${a.runtime.tools && (a.runtime.tools.allow || []).length ? `<dt>Only these tools</dt><dd>${a.runtime.tools.allow.map((t) => `<code>${esc(t)}</code>`).join(' ')}</dd>` : ''}${a.runtime.tools && (a.runtime.tools.deny || []).length ? `<dt>Never these tools</dt><dd>${a.runtime.tools.deny.map((t) => `<code>${esc(t)}</code>`).join(' ')}</dd>` : ''}</dl><p class="xag-note">Every XENO CLI or SDK that runs as ${esc(a.name)} uses these. Saved with the instructions as one version.</p>`
+              : `<p class="xag-none">The CLI it runs in picks the model, reasoning and tools. Set them here to make ${esc(a.name)} run the same way everywhere.</p>`}</section>
           <section class="pg-sec"><div class="pg-sec-h"><h3>Works on</h3><small>${h.plural(a.projects.length, 'project', 'projects')}</small></div>${projects}</section>
           <section class="pg-sec"><div class="pg-sec-h"><h3>Can use</h3></div><div class="xag-svcs">${svc}</div><p class="xag-note">What it can use grows as XENO services join XENO MCP. You can still turn a service off for one connection in Dev › MCP.</p></section>
           <section class="pg-sec"><div class="pg-sec-h"><h3>How it hears about new work</h3><button class="pg-link" data-xag="webhook">${a.webhook ? 'Change' : 'Add a webhook'}</button></div>
@@ -265,6 +272,24 @@
     const ch = await api('GET', `/api/agents/${a.id}/project-choices`); if (ch.ok) S.choices = ch.d.projects || [];
     toast(`${S.one.name} ${S.one.division ? 'now works in ' + S.one.division.name : 'is in no division'}${lost > 0 ? ` — ${lost} project${lost > 1 ? 's' : ''} taken away` : ''}`); paint();
   }
+  async function editRuntime() {
+    const a = S.one; if (!a) return;
+    const rt = a.runtime || {}; const tools = rt.tools || {};
+    const v = await D().form({ title: `How ${a.name} runs`, sub: 'Saved with its instructions as a new version. Work already running keeps its version.', submit: 'Save version', size: 'sm', fields: [
+      { id: 'model', label: 'Model', value: rt.model || '', max: 128, placeholder: 'Leave empty to let the CLI choose', hint: S.models.length ? 'For example ' + S.models.slice(0, 4).join(', ') : '' },
+      { id: 'effort', label: 'Reasoning', type: 'seg', value: rt.effort || '', options: [['', 'CLI'], ...EFFORTS.map((e) => [e, EFFORT_LABEL[e]])] },
+      { id: 'allow', label: 'Only these tools', value: (tools.allow || []).join(', '), max: 2000, placeholder: 'Empty = every tool', hint: 'Tool names, separated by commas. For example Read, Edit, XenoTaskComment' },
+      { id: 'deny', label: 'Never these tools', value: (tools.deny || []).join(', '), max: 2000, placeholder: 'For example Bash' }] });
+    if (!v) return;
+    const runtime = {};
+    if (v.model) runtime.model = v.model;
+    if (v.effort) runtime.effort = v.effort;
+    const names = (x) => [...new Set(String(x || '').split(/[,\s]+/).map((t) => t.trim()).filter(Boolean))];
+    const allow = names(v.allow), deny = names(v.deny);
+    if (allow.length || deny.length) runtime.tools = { ...(allow.length ? { allow } : {}), ...(deny.length ? { deny } : {}) };
+    const r = await call('PATCH', `/api/agents/${a.id}`, { runtime }, 'It could not be saved.');
+    if (r) { S.one = r.d.agent; toast(`Saved as version ${S.one.version}`); paint(); }
+  }
   async function saveInstructions(form) {
     const a = S.one; if (!a) return;
     const r = await call('PATCH', `/api/agents/${a.id}`, { instructions: form.instructions.value }, 'The instructions could not be saved.');
@@ -334,6 +359,7 @@
     if (a === 'division') return moveDivision();
     if (a === 'open-division') return go(`Divisions/${b.dataset.id}`);
     if (a === 'divisions') return go('Divisions');
+    if (a === 'runtime') return editRuntime();
     if (a === 'instr-edit') { S.editingInstr = true; paint(); return setTimeout(() => document.querySelector('.xag-instr textarea')?.focus(), 0); }
     if (a === 'instr-cancel') { S.editingInstr = false; return paint(); }
     if (a === 'calls') return X()?.go?.('product', { product: 'mcp', item: `c/${b.dataset.id}` });
