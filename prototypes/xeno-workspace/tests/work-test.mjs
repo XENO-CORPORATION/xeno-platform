@@ -340,6 +340,12 @@ try {
   const sel = '#panel > .pv .pbody .row[data-item]:not(:has(.more))';
   const rowMeta = await p.$(sel + ' .meta');
   if (rowMeta) { const bx = await p.evaluate((q) => { const r = [...document.querySelectorAll(q)].find((x) => x.offsetParent && x.querySelector('.meta')?.textContent.trim()); if (!r) return null; r.dataset.hoverMe = '1'; const b = r.getBoundingClientRect(); return { x: b.left + b.width / 2, y: b.top + b.height / 2 }; }, sel); if (bx) await p.mouse.move(bx.x, bx.y); await wait(150); ok(await p.$eval('[data-hover-me] .meta', (m) => getComputedStyle(m).display !== 'none' && m.textContent.trim().length > 0), 'hovering a sidebar row without a ⋯ button keeps its details (they no longer vanish)'); }
+  // a fresh load of a page draws it ONCE: data arriving afterwards updates it in place, never with the fade-out
+  // that reads as a second reload (owner, 2026-10-15)
+  await p.evaluateOnNewDocument(() => { window.__fades = []; new MutationObserver((ms) => { for (const m of ms) if (m.type === 'attributes' && m.target.classList?.contains('swap-out')) window.__fades.push(m.target.className); }).observe(document, { attributes: true, attributeFilter: ['class'], subtree: true }); });
+  await p.goto(base + `/workspace/projects/${pid(1)}/activity`, { waitUntil: 'domcontentloaded' }); await wait(3000);
+  const fades = await p.evaluate(() => window.__fades);
+  ok(fades.length === 0, `a hard refresh draws the page once — no second fade as the data arrives (${JSON.stringify(fades)})`);
   // switching between projects in the sidebar must not redraw the sidebar or the rail (owner, 2026-10-15)
   await goProjects('Website (Personal)'); await wait(600);
   await p.evaluate(() => { window.__pv = document.querySelector('#panel > .pv'); window.__rail = document.querySelector('#rail .rmid'); });

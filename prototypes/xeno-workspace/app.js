@@ -1154,6 +1154,7 @@
   window.XW = { get S() { return S; }, go, reloadData: (key) => { try { if (DS[key]) DS[key].err = null; load(key); } catch {} }, setChatItem, openModelMenu: (anchor) => openModelMenu(anchor, 'model'), openEffortMenu: (anchor) => openModelMenu(anchor, 'effort'), closeModelMenu: () => closeAp(), modelMenuOpen: () => !!document.querySelector('#apmenu.show'), crumbs: () => crumbs(), esc, ic, PR, M, pIconFull, mini, toast: (s) => toast(s), store, ctxName, ctxKey, ctxChats, inOv, zoneNow, zoneKey, zonesFor, modeOf, mark, render: () => render(), hiddenModes, toggleHidden, modeOrder, renderRail: () => renderRail(), openShortcuts: (o) => openShortcuts(o), openUsage: () => openUsage(), openAdConsent: (o) => openAdConsent(o), hidePops: () => hidePops(), applyWorkspace: () => applyWorkspace(), markAllRead: () => markAllRead(() => render()), refreshSwitcher: () => refreshSwitcher(), search: (q) => { openPalette(); const i = document.querySelector('#palette input'); if (i && q) { i.value = q; i.dispatchEvent(new Event('input')); } }, refreshPanel: () => { const pv = $('#panel > .pv'); const html = panelHTML(); if (pv && pv.__html === html) return markItems(pv); const top = pv?.querySelector('.pbody')?.scrollTop || 0; setPv($('#panel'), `<div class="pv">${html}</div>`).__html = html; const n = $('#panel > .pv .pbody'); if (n) n.scrollTop = top; } };
   // ---- render with crossfade ----
   let first = true;
+  let lastPlaceDrawn = null;
   function render() {
     store.set('view', S.view === 'global' ? 'mode' : S.view); store.set('mode', S.mode); store.set('product', S.product);
     root.dataset.view = S.view;
@@ -1170,7 +1171,12 @@
     // sidebar it would rebuild is usually identical — replacing it anyway made it flash on every switch.
     if (!soft) { const html = panelHTML(), cur = panel.querySelector(':scope > .pv'); if (!cur || cur.__html !== html) { swap(panel, html, 'pv'); const n = panel.querySelector(':scope > .pv'); if (n) n.__html = html; } else markItems(cur); }
     const mv = main.querySelector('.mview, .chat, .live-dash, .live-chat-host');
-    if (mv && !first) { mv.classList.add('swap-out'); setTimeout(() => { main.innerHTML = mainHTML(); }, 90); } else main.innerHTML = mainHTML();
+    // the page fades only when you GO somewhere. The same place drawn again (its data arrived, a module refreshed)
+    // updates in place: fading it made one load look like several reloads (owner, 2026-10-15)
+    const place = stateToHash(), samePlace = lastPlaceDrawn === place; lastPlaceDrawn = place;
+    if (mv && !first && !samePlace) { mv.classList.add('swap-out'); setTimeout(() => { main.innerHTML = mainHTML(); }, 90); }
+    else if (mv && samePlace && window.XENO_PAGES?.repaint && main.querySelector('.mview.pg-mview') && window.XENO_PAGES.framed?.() != null) { window.XENO_PAGES.repaint(); const c = main.querySelector('.topbar .crumbs'); if (c) { const h = crumbs(); if (c.innerHTML !== h) c.innerHTML = h; } }
+    else main.innerHTML = mainHTML();
     first = false;
   }
   // replace the panel's content node only — never the switcher layer that may sit above it
