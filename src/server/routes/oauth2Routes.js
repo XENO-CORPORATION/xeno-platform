@@ -14,6 +14,7 @@ import { authMiddleware } from '../middleware/auth.js';
 import { issuer } from '../config/hosts.js';
 import { verifyDpopProof } from '../utils/dpop.js';
 import { requireSupportedTokenClient } from '../middleware/requireSupportedClient.js';
+import { bindClientAgent } from '../services/xenoTasks.js';
 import {
   jwks,
   discovery,
@@ -162,7 +163,8 @@ body{font:15px/1.55 system-ui,-apple-system,"Segoe UI",sans-serif;background:var
 .consent .can li.no::before{background:transparent;border:1.5px solid var(--muted);width:6px;height:6px}
 .consent .warn{font-size:12.5px;color:var(--muted);border-top:1px solid var(--border);padding-top:12px}
 .consent .row{display:flex;gap:8px;justify-content:flex-end;margin-top:14px}
-.consent .row button{width:auto;padding:0 16px}
+.consent .row button{width:auto;height:38px;margin:0;padding:0 18px;border-radius:10px;font-size:14px}
+.consent #cAllow{background:#ededed;color:#0c0c0e}.consent #cAllow:hover{opacity:.9}
 .consent .ghost{background:transparent;color:var(--text);border:1px solid var(--border)}
 /* Sign-in card (fallback only — most users bounce to the branded /auth screen) */
 .card{width:384px;max-width:92vw;padding:34px 30px;background:var(--panel);border:1px solid var(--border);border-radius:18px;box-shadow:0 24px 70px rgba(0,0,0,.55)}
@@ -180,6 +182,12 @@ button:hover{opacity:.92}button:disabled{opacity:.55;cursor:default}
 .err{color:#ff7a7a;font-size:13px;margin-top:10px;min-height:18px}
 .foot{margin-top:22px;text-align:center;color:#565660;font-size:11.5px}
 .hide{display:none}
+.as{margin:14px 0 4px}.as-h{font-size:11.5px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:#8a8a93;margin-bottom:8px}
+.as-list{display:flex;flex-direction:column;gap:6px;max-height:220px;overflow:auto}
+.as-o{width:100%;margin:0;display:flex;align-items:flex-start;gap:10px;padding:10px 12px;font-weight:400;border:1px solid #2a2a30;border-radius:10px;background:none;color:inherit;font:inherit;text-align:left;cursor:pointer}
+.as-o:hover{border-color:#4a4a52}.as-o[aria-checked="true"]{border-color:#ededed;background:#16161a}
+.as-o i{flex:none;width:14px;height:14px;margin-top:2px;border:1.5px solid #6a6a72;border-radius:50%}.as-o[aria-checked="true"] i{border-color:#ededed;box-shadow:inset 0 0 0 3px #0c0c0e;background:#ededed}
+.as-o span{display:flex;flex-direction:column;gap:2px;min-width:0}.as-o b{font-size:13.5px;font-weight:500}.as-o small{font-size:12px;color:#8a8a93}
 </style></head>
 <body>
   <div id="loader" class="loader">
@@ -190,7 +198,8 @@ button:hover{opacity:.92}button:disabled{opacity:.55;cursor:default}
   <div id="consent" class="hide"><div class="card consent" role="dialog" aria-labelledby="cTitle">
     <div class="logo"><div class="dot"></div><div class="name">XENO</div></div>
     <h1 id="cTitle"><span id="cName"></span> wants to work on your tasks</h1>
-    <p class="sub">It will act as <b>your agent</b> in XENO Tasks — everything it does is shown as the agent's, and you can disconnect it at any time.</p>
+    <p class="sub">It will act as <b id="cWho">your agent</b> in XENO Tasks — everything it does is shown as the agent's, and you can disconnect it at any time.</p>
+    <div id="cAs" class="as hide"><div class="as-h">Act as</div><div id="cAsList" class="as-list" role="radiogroup" aria-label="Which agent it acts as"></div></div>
     <ul class="can"><li>See the tasks you can see, and the projects they are in</li><li id="cWrite">Take tasks, comment, report what it is doing, and send work for review — never accept its own work</li><li class="no">Nothing else: no chats, files, billing or account settings</li></ul>
     <p class="warn">This app registered itself and has not been reviewed by XENO. Only continue if you started this sign-in from <span id="cApp"></span>. You will be sent back to <b id="cWhere"></b>.</p>
     <div class="row"><button id="cDeny" type="button" class="ghost">Cancel</button><button id="cAllow" type="button">Allow</button></div>
@@ -234,20 +243,37 @@ button:hover{opacity:.92}button:disabled{opacity:.55;cursor:default}
   function continueWith(extra){
     setStatus(extra&&extra.deny?'Cancelling…':'Signing you in…');
     fetch('/api/oauth2/authorize',{method:'POST',credentials:'same-origin',headers:{'content-type':'application/json','x-xeno-csrf':csrf()},
-      body:JSON.stringify({consent:!!(extra&&extra.consent),deny:!!(extra&&extra.deny),client_id:p.get('client_id'),redirect_uri:p.get('redirect_uri'),scope:p.get('scope'),code_challenge:p.get('code_challenge'),code_challenge_method:p.get('code_challenge_method'),state:p.get('state'),nonce:p.get('nonce'),prompt:p.get('prompt'),max_age:p.get('max_age'),acr_values:p.get('acr_values')})})
+      body:JSON.stringify(Object.assign((extra&&extra.actAs!==null&&extra.actAs!==undefined)?{act_as:extra.actAs}:{},{consent:!!(extra&&extra.consent),deny:!!(extra&&extra.deny),client_id:p.get('client_id'),redirect_uri:p.get('redirect_uri'),scope:p.get('scope'),code_challenge:p.get('code_challenge'),code_challenge_method:p.get('code_challenge_method'),state:p.get('state'),nonce:p.get('nonce'),prompt:p.get('prompt'),max_age:p.get('max_age'),acr_values:p.get('acr_values')}))})
     .then(function(r){ if(r.status===401){ toAuth(); throw 0;} return r.json(); })
     .then(function(d){ if(d&&d.redirect){ location.href=d.redirect; } else if(d&&d.error==='consent_required'){ showConsent(d.consent); } else { showForm((d&&(d.error_description||d.error))||'Authorization failed'); } })
     .catch(function(e){ if(e!==0) showForm('Error: '+(e&&e.message||e)); });
   }
 
+  var actAs=null;
   function showConsent(c){
     var w=$('consent'); var tx=function(id,v){$(id).textContent=v};
+    var ags=c.agents||[];
+    if(ags.length){
+      var list=$('cAsList'); list.textContent='';
+      var opts=[{id:'',name:'Its own agent',description:'A new agent named after '+c.name+', made for this app'}].concat(ags);
+      actAs=String(ags[0].id);
+      opts.forEach(function(o){
+        var b=document.createElement('button'); b.type='button'; b.className='as-o'; b.setAttribute('role','radio'); b.dataset.id=o.id;
+        var i=document.createElement('i'); var sp=document.createElement('span'); var bb=document.createElement('b'); bb.textContent=o.name;
+        var sm=document.createElement('small'); sm.textContent=(o.division?o.division+' · ':'')+(o.description||'');
+        sp.appendChild(bb); if(sm.textContent) sp.appendChild(sm); b.appendChild(i); b.appendChild(sp);
+        b.onclick=function(){ actAs=o.id; [].forEach.call(list.children,function(x){x.setAttribute('aria-checked',String(x.dataset.id===String(o.id)))}); tx('cWho',o.id?o.name:'your agent'); };
+        list.appendChild(b);
+      });
+      [].forEach.call(list.children,function(x){x.setAttribute('aria-checked',String(x.dataset.id===actAs))});
+      tx('cWho',ags[0].name); show($('cAs'),true);
+    }
     tx('cName',c.name); tx('cApp',c.name); tx('cWhere',c.sendsTo||'the app');
     var can=c.scopes||[]; $('cWrite').hidden=can.indexOf('tasks:write')<0;
     show($('loader'),false); show($('cardWrap'),false); show(w,true);
     $('cAllow').focus();
   }
-  $('cAllow').onclick=function(){ $('cAllow').disabled=true; continueWith({consent:true}); };
+  $('cAllow').onclick=function(){ $('cAllow').disabled=true; continueWith({consent:true,actAs:actAs}); };
   $('cDeny').onclick=function(){ continueWith({deny:true}); };
   $('toggle').onclick=function(){
     mode=mode==='signin'?'signup':'signin';
@@ -298,8 +324,24 @@ router.post('/authorize', authMiddleware, async (req, res) => {
         return res.json({ redirect: `${b.redirect_uri}${sep}error=access_denied&error_description=${encodeURIComponent('The person declined')}${b.state ? `&state=${encodeURIComponent(b.state)}` : ''}` });
       }
       let host = ''; try { const u = new URL(b.redirect_uri); host = u.protocol === 'http:' ? 'this computer' : u.protocol === 'https:' ? u.host : u.protocol.slice(0, -1); } catch { host = ''; }
-      return res.status(400).json({ error: 'consent_required', consent: { name: client.name, registeredAt: client.created_at, sendsTo: host,
+      const agents = (await req.db.query(`SELECT ai.public_id AS id, COALESCE(u.display_name, u.username) AS name, ai.description, d.name AS division
+          FROM agent_identities ai JOIN users u ON u.id = ai.user_id
+          LEFT JOIN workforce_division_ownership o ON o.resource_id = ai.workforce_resource_id LEFT JOIN workforce_divisions d ON d.id = o.division_id
+         WHERE ai.owner_user_id = $1 AND ai.status = 'active' AND ai.public_id IS NOT NULL
+           AND COALESCE(ai.agent_origin, '') NOT IN ('mcp', 'forum-loop-d', 'status-probe') ORDER BY ai.created_at`, [req.user.id])).rows;
+      return res.status(400).json({ error: 'consent_required', consent: { name: client.name, registeredAt: client.created_at, sendsTo: host, agents,
         scopes: (client.allowed_scopes || []).filter((s) => s !== 'openid') } });
+    }
+    // "Act as": bind this app to one of the person's own agents (by its agt_ id), or clear the binding ("" = the
+    // app's own agent). Only on the consent step of a self-registered client; an unknown or foreign id is refused.
+    if (client.dynamic && b.consent === true && Object.hasOwn(b, 'act_as')) {
+      let agentUserId = null;
+      if (b.act_as) {
+        const a = (await req.db.query(`SELECT user_id FROM agent_identities WHERE public_id = $1 AND owner_user_id = $2 AND status = 'active'`, [String(b.act_as), req.user.id])).rows[0];
+        if (!a) return res.status(400).json({ error: 'invalid_request', error_description: 'unknown agent' });
+        agentUserId = String(a.user_id);
+      }
+      await bindClientAgent(req.db, req.user.id, b.client_id, agentUserId);
     }
     const code = await createAuthorizationCode(req.db, {
       clientId: b.client_id,

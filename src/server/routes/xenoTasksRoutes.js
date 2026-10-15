@@ -74,7 +74,10 @@ export async function taskTokenAuth(req, res, next) {
       const scopes = String(claims.scope || '').split(/\s+/).filter((s) => s === 'tasks:read' || s === 'tasks:write');
       if (!scopes.length) return challenge(req, res, { success: false, error: 'This sign-in has no Tasks access', code: 'insufficient_scope' }, 'insufficient_scope');
       const client = claims.client_id ? await getClient(req.db, claims.client_id) : null;
-      const agentId = await tasks.mcpAgentFor(req.db, claims.sub, client ? client.name : null);
+      // "Act as": the person may have bound this app to one of their own agents on the consent screen. Read at use
+      // time, so a changed or deleted binding applies on the next request. Otherwise the app's own per-app agent.
+      const bound = claims.client_id ? await tasks.boundAgentFor(req.db, claims.sub, claims.client_id) : null;
+      const agentId = bound || await tasks.mcpAgentFor(req.db, claims.sub, client ? client.name : null);
       req.user = { id: agentId };
       req.taskToken = { agentUserId: agentId, scopes, taskId: null, via: 'oauth', clientId: claims.client_id || null, ownerId: String(claims.sub) };
       return next();
