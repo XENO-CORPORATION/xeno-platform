@@ -51,6 +51,10 @@ function answer(q) {
   if (p === '/api/workspaces' && m === 'POST') { const w = { id: `44444444-4444-4444-8444-${String(db.next++).padStart(12, '0')}`, workspace_type: 'team', name: body.name, member_role: 'owner', member_count: 1 }; db.workspaces.push(w); return json(200, { success: true, workspace: w }); }
   if (p === '/api/library/assets') return json(200, { success: true, items: [] });
   if (p === '/api/canvases') return json(200, { success: true, canvases: [] });
+  if (p === '/api/tasks/projects') return json(200, { success: true, projects: [] });
+  if (p === '/api/models') return json(200, { success: true, models: [] });
+  if (p === '/api/agents/lends/inbox') return json(200, { success: true, lends: [] });
+  if (p === '/api/agents/transfers/inbox') return json(200, { success: true, transfers: [] });
   if (p === '/api/mcp/services') return json(200, { success: true, services: [] });
   if (p === '/api/mcp/connections') return json(200, { success: true, connections: [] });
   if (p === '/api/library/folders') return json(200, { success: true, folders: [] });
@@ -332,6 +336,25 @@ try {
   p.evaluate(() => { window.XA.removeMember('pending@example.test'); }); await confirmLast(); pv = await people();
   ok(db.calls.some((x) => x.m === 'DELETE' && /\/invites\/i-1$/.test(x.p)) && !pv.rows.some((r) => r.startsWith('pending@')), 'removing a pending invite cancels the invite');
 
+  // switching between projects in the sidebar must not redraw the sidebar or the rail (owner, 2026-10-15)
+  await goProjects('Website (Personal)'); await wait(600);
+  await p.evaluate(() => { window.__pv = document.querySelector('#panel > .pv'); window.__rail = document.querySelector('#rail .rmid'); });
+  const row = await p.$$eval('#panel [data-item]', (rs) => rs.map((r) => r.dataset.item + ':' + r.getAttribute('aria-current')));
+  await p.evaluate(() => { const r = [...document.querySelectorAll('#panel [data-item]')].find((x) => x.getAttribute('aria-current') !== 'true' && /Website/.test(x.dataset.item)); r?.click(); });
+  await wait(700);
+  const kept = await p.evaluate(() => ({ samePanel: document.querySelector('#panel > .pv') === window.__pv, sameRail: document.querySelector('#rail .rmid') === window.__rail, current: document.querySelector('#panel [aria-current="true"]')?.dataset.item }));
+  ok(kept.samePanel && kept.sameRail && /Analytical/.test(kept.current || ''), `switching projects keeps the sidebar and rail as they are; only the selection moves (${JSON.stringify(kept)} of ${JSON.stringify(row)})`);
+  // and every other sidebar: moving between the items of one section keeps the sidebar (Library views, Tasks views,
+  // workspace pages) — the panel is redrawn only when the SECTION changes
+  for (const [hash, label] of [['#/overview/g/library', 'Library'], ['#/overview/g/tasks', 'Tasks'], ['#/overview/g/workspace', 'Workspace'], ['#/overview/g/settings', 'Settings']]) {
+    await p.evaluate((h) => { location.hash = h; }, hash); await wait(900);
+    const items = await p.$$eval('#panel > .pv .pbody [data-item]', (rs) => rs.filter((r) => r.offsetParent && !r.dataset.itemP && !/upload|sign|new|delete|leave/i.test(r.dataset.item)).map((r) => r.dataset.item));
+    if (items.length < 2) continue;
+    await p.evaluate(() => { window.__pv2 = document.querySelector('#panel > .pv'); });
+    for (const it of items.slice(0, 3)) { await p.evaluate((x) => { const r = document.querySelector(`#panel > .pv .pbody [data-item="${CSS.escape(x)}"]`); window.XW.go(window.XW.S.view, { global: window.XW.S.global, item: x }); return !!r; }, it); await wait(700); }
+    const same = await p.evaluate(() => document.querySelector('#panel > .pv') === window.__pv2);
+    ok(same, `${label}: moving between its sidebar items keeps the sidebar (${items.slice(0, 3).join(', ')})`);
+  }
   // EVERY page: the header's and footer's last control sits as far from the right edge as from its top and bottom,
   // and the left text starts where that control's text ends (owner, 2026-10-15). Measured, not assumed, per page.
   if (process.env.INSET_SWEEP !== '0') {
