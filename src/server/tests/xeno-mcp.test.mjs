@@ -28,6 +28,7 @@ import oauth2Routes from '../routes/oauth2Routes.js';
 import chatRoutes from '../routes/chatRoutes.js';
 import xenoTasksRoutes, { taskTokenAuth, unlessTaskToken, mcpChallenge } from '../routes/xenoTasksRoutes.js';
 import platformAgentRoutes from '../routes/platformAgentRoutes.js';
+import canvasRoutes from '../routes/canvasRoutes.js';
 import xenoMcpRoutes, { management, personOnly, mcpResourceMetadata } from '../routes/xenoMcpRoutes.js';
 import * as mcp from '../services/xenoMcp.js';
 import { authMiddleware } from '../middleware/auth.js';
@@ -61,6 +62,7 @@ async function main() {
   app.use('/api/mcp', (req, res, next) => (req.path === '/' ? xenoMcpRoutes(req, res, next) : next()));
   app.use('/api/mcp', authMiddleware, personOnly, management);
   app.use('/api/agents', authMiddleware, personOnly, platformAgentRoutes);
+  app.use('/api/canvases', authMiddleware, canvasRoutes);
   const server = http.createServer(app); await new Promise((r) => server.listen(0, '127.0.0.1', r));
   const origin = `http://127.0.0.1:${server.address().port}`;
   const call = async (method, path, { token, body, headers = {}, raw } = {}) => {
@@ -192,6 +194,33 @@ async function main() {
     const allConns = (await call('GET', '/api/mcp/connections', { token: session(ada) })).j.connections;
     const agConn = allConns.find((x) => x.client.name === 'Release Bot');
     check(Boolean(agConn), 'and in the person\'s MCP connections list');
+    // 11. canvases over XENO MCP: the agent lays work out on a canvas, through the same rules as the screen
+    const cl = await rpc(cred.token, 'tools/list', {});
+    check(cl.j.result.tools.some((t) => t.name === 'canvas_add') && cl.j.result.tools.some((t) => t.name === 'canvas_connect'), 'an agent has the canvas tools');
+    const t2 = (await rpc(cred.token, 'tools/call', { name: 'tasks_create_task', arguments: { title: 'Write notes', projectId: String(proj) } })).j.result.structuredContent;
+    const k1 = c1.j.result.structuredContent.task ? c1.j.result.structuredContent.task.key : c1.j.result.structuredContent.key, k2 = t2.task ? t2.task.key : t2.key;
+    const cvMade = (await rpc(cred.token, 'tools/call', { name: 'canvas_create', arguments: { name: 'Release plan', project: String(proj) } })).j.result;
+    check(!cvMade.isError && cvMade.structuredContent.id && cvMade.structuredContent.items.length === 0, `the agent starts a canvas on its project (${cvMade.isError ? cvMade.structuredContent.error : cvMade.structuredContent.id})`);
+    const cvId = cvMade.structuredContent.id;
+    const addRes = (await rpc(cred.token, 'tools/call', { name: 'canvas_add', arguments: { canvas: cvId, items: [{ type: 'task', task: k1 }, { type: 'task', task: k2 }, { type: 'note', text: 'Ship **Friday**' }] } })).j.result;
+    const [n1, n2] = addRes.structuredContent.added || [];
+    check(!addRes.isError && addRes.structuredContent.canvas.items.length === 3 && addRes.structuredContent.canvas.items.find((x) => x.id === n1).title === 'Cut 1.0', `it puts its tasks and a note on it; task cards read live (${addRes.isError ? addRes.structuredContent.error : 'ok'})`);
+    const cvConn = (await rpc(cred.token, 'tools/call', { name: 'canvas_connect', arguments: { canvas: cvId, from: n1, to: n2, link: 'blocks' } })).j.result;
+    check(!cvConn.isError && cvConn.structuredContent.canvas.connections.some((x) => x.link === 'blocks'), `it connects them as "blocks" (${cvConn.isError ? cvConn.structuredContent.error : 'ok'})`);
+    const linkedTask = (await rpc(cred.token, 'tools/call', { name: 'tasks_get_task', arguments: { key: k1 } })).j.result.structuredContent;
+    check(JSON.stringify(linkedTask).includes(k2), 'and that is a REAL task link, on the task itself');
+    const seenByPerson = (await call('GET', `/api/canvases/${cvId}`, { token: session(ada) }));
+    check(seenByPerson.s === 200 && seenByPerson.j.canvas.content.nodes.length === 3, 'the person sees the same canvas the agent built');
+    const moved = (await rpc(cred.token, 'tools/call', { name: 'canvas_update', arguments: { canvas: cvId, items: [{ id: n1, x: 500, y: 40 }], remove: [n2] } })).j.result;
+    check(!moved.isError && moved.structuredContent.canvas.items.length === 2 && moved.structuredContent.canvas.items.find((x) => x.id === n1).x === 500, 'it moves a card and takes one off');
+    check((await rpc(cred.token, 'tools/call', { name: 'tasks_get_task', arguments: { key: k2 } })).j.result.isError !== true, 'taking a card off never deletes the task');
+    const hidden = String((await pool.query(`INSERT INTO chat_conversations (user_id, owner_user_id, created_by_user_id, title) VALUES ($1, $1, $1, 'Private planning') RETURNING id`, [ada])).rows[0].id);
+    const refAdd = (await rpc(cred.token, 'tools/call', { name: 'canvas_add', arguments: { canvas: cvId, items: [{ type: 'chat', chat: hidden }] } })).j.result;
+    const hc = !refAdd.isError && refAdd.structuredContent.canvas.items.find((x) => x.type === 'chat');
+    check(hc && hc.missing === true && !hc.title, `a chat the agent cannot open shows as missing on its canvas, never its title (${refAdd.isError ? refAdd.structuredContent.error : 'ok'})`);
+    const outsider = (await rpc(cred.token, 'tools/call', { name: 'canvas_get', arguments: { canvas: '00000000-0000-4000-8000-000000000000' } })).j.result;
+    check(outsider.isError && outsider.structuredContent.code === 'canvas_not_found', 'a canvas it cannot see does not exist for it');
+
     // revocation, expiry, disconnect, delete
     const second = (await call('POST', `/api/agents/${ag.id}/credentials`, { token: session(ada), body: { ttlHours: 2 } })).j.credential;
     await call('DELETE', `/api/agents/${ag.id}/credentials/${second.id}`, { token: session(ada) });

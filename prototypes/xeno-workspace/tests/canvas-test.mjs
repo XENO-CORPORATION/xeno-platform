@@ -18,7 +18,7 @@ const db = { tasks: [], seq: 0, canvases: [], links: [], puts: [] };
 const mk = (b) => { const t = { key: 'T-' + ++db.seq, number: db.seq, title: b.title, status: b.status || 'todo', kind: 'task', priority: b.priority || 'none', area: 'studio', project: null, assignee: null, labels: [], events: [], links: [], reporter: ME, createdAt: now(), updatedAt: now(), can: { edit: true, moves: [] } }; db.tasks.push(t); return t; };
 mk({ title: 'Design the onboarding', status: 'in_progress', priority: 'high' }); mk({ title: 'Write the copy' }); mk({ title: 'Ship it' });
 const recs = (c) => Object.fromEntries(c.content.nodes.filter((n) => n.type === 'xeno-ref').map((n) => { const t = db.tasks.find((x) => x.key === n.ref.id); return [n.ref.id, t ? { key: t.key, title: t.title, status: t.status, priority: t.priority, project: null, assignee: null } : { key: n.ref.id, missing: true }]; }));
-const out = (c) => ({ id: c.id, name: c.name, area: 'studio', project: null, revision: String(c.revision), items: c.content.nodes.length, updatedAt: now(), can: { edit: !c.readonly, delete: !c.readonly }, content: c.content, records: { tasks: recs(c) } });
+const out = (c) => ({ id: c.id, name: c.name, area: 'studio', project: null, revision: String(c.revision), items: c.content.nodes.length, updatedAt: now(), can: { edit: !c.readonly, delete: !c.readonly }, content: c.content, records: { tasks: recs(c), files: { 'f0000000-0000-4000-8000-000000000001': { id: 'f0000000-0000-4000-8000-000000000001', name: 'brief.pdf', type: 'application/pdf', bytes: 2400000, url: '/workspace/library?sel=f0000000-0000-4000-8000-000000000001' }, 'f0000000-0000-4000-8000-000000000002': { id: 'f0000000-0000-4000-8000-000000000002', missing: true } }, chats: { 'c0000000-0000-4000-8000-000000000001': { id: 'c0000000-0000-4000-8000-000000000001', title: 'Kickoff notes', url: '/workspace/apps/chat/c0000000-0000-4000-8000-000000000001' } } } });
 
 const server = await createServer({ configFile: false, root: repo, logLevel: 'error', appType: 'custom', optimizeDeps: { noDiscovery: true, entries: [] }, plugins: [xenoWorkspace(repo)], server: { host: '127.0.0.1', port: PORT, strictPort: true } });
 await server.listen();
@@ -139,6 +139,15 @@ try {
   await p2.goto(base + `/workspace/studio/tasks/canvas/${id}`, { waitUntil: 'domcontentloaded' }); await new Promise((r) => setTimeout(r, 1800));
   ok(!!(await p2.$('[data-cv-stage]')) && /Launch plan/.test(await p2.$eval('#main', (e) => e.innerText)), 'the address opens the canvas in a fresh tab');
   await p2.close();
+
+  // library files and chats as live cards
+  db.canvases[0].content.nodes.push({ id: 'rf1', type: 'xeno-ref', ref: { kind: 'file', id: 'f0000000-0000-4000-8000-000000000001' }, x: 0, y: 900, width: 260, height: 100 }, { id: 'rf2', type: 'xeno-ref', ref: { kind: 'file', id: 'f0000000-0000-4000-8000-000000000002' }, x: 300, y: 900, width: 260, height: 100 }, { id: 'rc1', type: 'xeno-ref', ref: { kind: 'chat', id: 'c0000000-0000-4000-8000-000000000001' }, x: 600, y: 900, width: 260, height: 100 });
+  db.canvases[0].revision++; await p.reload({ waitUntil: 'domcontentloaded' }); await settle(1800);
+  const cardTxt = async (id) => p.$eval(`[data-cv-node="${id}"]`, (e) => e.innerText).catch(() => '');
+  ok(/brief\.pdf/.test(await cardTxt('rf1')) && /2\.4 MB/.test(await cardTxt('rf1')), 'a library file shows as a card with its live name and size');
+  ok(/Kickoff notes/.test(await cardTxt('rc1')) && !!(await p.$('[data-cv-node="rc1"] a[href="/workspace/apps/chat/c0000000-0000-4000-8000-000000000001"]')), 'a chat shows as a card that opens the chat');
+  ok(/Not available/.test(await cardTxt('rf2')), 'a file the reader cannot open says Not available, never its name');
+  ok(!!(await p.$('[data-cv-act="add-file"]')) && !!(await p.$('[data-cv-act="add-chat"]')), 'the toolbar can put files and chats on the canvas');
 
   // view-only
   db.canvases[0].readonly = true; await p.reload({ waitUntil: 'domcontentloaded' }); await settle(1800);

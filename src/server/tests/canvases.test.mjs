@@ -76,11 +76,27 @@ async function main() {
     const s3 = await bob('PUT', `/canvases/${cv.id}`, { content: withSecret, revision: '2' });
     check(s3.s === 200 && s3.j.canvas.records.tasks[secret.key].missing === true && !s3.j.canvas.records.tasks[secret.key].title, 'a task the reader cannot see shows as missing, never its title');
 
+    // Library files and chats are live references too, each read as the reader
+    const mkFile = async (owner, name) => { const id = (await pool.query(`INSERT INTO user_files (user_id, owner_user_id, filename, original_name, file_type, mime_type, file_size, storage_path, storage_type) VALUES ($1, $1, $2, $2, 'text', 'text/plain', 5, '/tmp/x', 'platform-upload') RETURNING id`, [owner, name])).rows[0].id;
+      await pool.query(`INSERT INTO relationship_tuples (object_type, object_id, relation, subject_type, subject_id) VALUES ('library_asset', $1, 'owner', 'user', $2) ON CONFLICT DO NOTHING`, [String(id), String(owner)]); return String(id); };
+    const bobFile = await mkFile(ids.bob, 'brief.txt'), eveFile = await mkFile(ids.eve, 'eve-secret.txt');
+    const bobChat = String((await pool.query(`INSERT INTO chat_conversations (user_id, owner_user_id, created_by_user_id, title) VALUES ($1, $1, $1, 'Kickoff notes') RETURNING id`, [ids.bob])).rows[0].id);
+    const refs = { nodes: [...withSecret.nodes, { id: 'f1', type: 'xeno-ref', ref: { kind: 'file', id: bobFile.toUpperCase() }, x: 0, y: 700, width: 260, height: 100 }, { id: 'f2', type: 'xeno-ref', ref: { kind: 'file', id: eveFile }, x: 300, y: 700, width: 260, height: 100 }, { id: 'c1', type: 'xeno-ref', ref: { kind: 'chat', id: bobChat }, x: 600, y: 700, width: 260, height: 100 }], edges: withSecret.edges };
+    const s4 = await bob('PUT', `/canvases/${cv.id}`, { content: refs, revision: '3' });
+    const rec = s4.j.canvas?.records || {};
+    check(s4.s === 200 && rec.files?.[bobFile]?.name === 'brief.txt' && rec.chats?.[bobChat]?.title === 'Kickoff notes', 'a library file and a chat sit on the canvas and show their live name');
+    check(rec.files?.[eveFile]?.missing === true && !rec.files?.[eveFile]?.name, 'a file the reader cannot open shows as missing, never its name');
+    const asCyd = (await cyd('GET', `/canvases/${cv.id}`)).j.canvas.records;
+    check(asCyd.chats[bobChat].missing === true && !asCyd.chats[bobChat].title, 'another member who cannot open the chat sees it as missing, not its title');
+    await pool.query('UPDATE user_files SET original_name = $2 WHERE id = $1', [bobFile, 'brief-v2.txt']);
+    check((await bob('GET', `/canvases/${cv.id}`)).j.canvas.records.files[bobFile].name === 'brief-v2.txt', 'renaming the file shows on the canvas at once');
+    check((await bob('PUT', `/canvases/${cv.id}`, { content: { nodes: [{ id: 'q', type: 'xeno-ref', ref: { kind: 'file', id: 'nope' }, x: 0, y: 0, width: 260, height: 100 }], edges: [] }, revision: '4' })).j.code === 'invalid_content', 'a file reference must name a file id');
+
     // validation
-    check((await bob('PUT', `/canvases/${cv.id}`, { content: { nodes: [content.nodes[0], { ...content.nodes[0], id: 'a2' }], edges: [] }, revision: '3' })).j.code === 'duplicate_ref', 'the same task twice on one canvas is refused');
-    check((await bob('PUT', `/canvases/${cv.id}`, { content: { nodes: [{ id: 'x', type: 'script', x: 0, y: 0, width: 1, height: 1 }], edges: [] }, revision: '3' })).j.code === 'invalid_content', 'an unknown item type is refused');
-    check((await bob('PUT', `/canvases/${cv.id}`, { content: { nodes: [{ id: 'x', type: 'link', url: 'javascript:alert(1)', x: 0, y: 0, width: 100, height: 50 }], edges: [] }, revision: '3' })).j.code === 'invalid_content', 'a javascript: link is refused');
-    check((await bob('PUT', `/canvases/${cv.id}`, { content: { nodes: [content.nodes[2], content.nodes[3]], edges: [{ id: 'z', fromNode: 'n', toNode: 'g', xeno: { link: 'blocks' } }] }, revision: '3' })).j.code === 'invalid_link', 'only a wire between two tasks can be a task link');
+    check((await bob('PUT', `/canvases/${cv.id}`, { content: { nodes: [content.nodes[0], { ...content.nodes[0], id: 'a2' }], edges: [] }, revision: '4' })).j.code === 'duplicate_ref', 'the same task twice on one canvas is refused');
+    check((await bob('PUT', `/canvases/${cv.id}`, { content: { nodes: [{ id: 'x', type: 'script', x: 0, y: 0, width: 1, height: 1 }], edges: [] }, revision: '4' })).j.code === 'invalid_content', 'an unknown item type is refused');
+    check((await bob('PUT', `/canvases/${cv.id}`, { content: { nodes: [{ id: 'x', type: 'link', url: 'javascript:alert(1)', x: 0, y: 0, width: 100, height: 50 }], edges: [] }, revision: '4' })).j.code === 'invalid_content', 'a javascript: link is refused');
+    check((await bob('PUT', `/canvases/${cv.id}`, { content: { nodes: [content.nodes[2], content.nodes[3]], edges: [{ id: 'z', fromNode: 'n', toNode: 'g', xeno: { link: 'blocks' } }] }, revision: '4' })).j.code === 'invalid_link', 'only a wire between two tasks can be a task link');
 
     // list, personal canvas, delete
     check((await cyd('GET', `/canvases?projectId=${proj.id}`)).j.canvases.some((c) => c.id === cv.id), 'project members see its canvases');
