@@ -192,6 +192,8 @@ export async function disconnect(db, ownerId, id) {
   await withTransaction(db, async (tx) => {
     await tx.query('UPDATE mcp_connections SET revoked_at = now() WHERE id = $1', [row.id]);
     await tx.query('UPDATE oauth_refresh_tokens SET revoked = true WHERE client_id = $1 AND user_id = $2 AND NOT revoked', [row.client_id, ownerId]);
+    // an agent's credential connection: its live credentials stop working too (minting a new one reconnects)
+    if (String(row.client_id).startsWith('agent:')) await tx.query('UPDATE task_agent_tokens SET revoked_at = now() WHERE agent_user_id = $1 AND revoked_at IS NULL', [row.agent_user_id]);
   });
   return { id: String(row.id), disconnected: true };
 }

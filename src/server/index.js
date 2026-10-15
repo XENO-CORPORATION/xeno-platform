@@ -1,5 +1,6 @@
 import path from 'path';
 import xenoTasksRoutes, { taskTokenAuth, unlessTaskToken, mcpChallenge, protectedResourceMetadata } from './routes/xenoTasksRoutes.js';
+import platformAgentRoutes from './routes/platformAgentRoutes.js';
 import xenoMcpRoutes, { management as xenoMcpManagement, personOnly as mcpPersonOnly, mcpResourceMetadata } from './routes/xenoMcpRoutes.js';
 import userNotificationsRoutes from './routes/userNotificationsRoutes.js';
 import { startTaskSweeps } from './services/taskNotifyEmail.js';
@@ -632,6 +633,7 @@ app.use('/api/tasks', databaseMiddleware, mcpChallenge, taskTokenAuth, unlessTas
 app.get('/.well-known/oauth-protected-resource/api/mcp', mcpResourceMetadata);
 app.use('/api/mcp', databaseMiddleware, (req, res, next) => (req.path === '/' ? xenoMcpRoutes(req, res, next) : next()));
 app.use('/api/mcp', databaseMiddleware, authMiddleware, requireActivated, mcpPersonOnly, xenoMcpManagement);
+app.use('/api/agents', databaseMiddleware, authMiddleware, requireActivated, mcpPersonOnly, platformAgentRoutes);
 app.use('/api/notifications', databaseMiddleware, authMiddleware, requireActivated, userNotificationsRoutes);
 console.log('🏢 Workspace routes integrated: /api/workspaces/* + /api/workspace-invites/*');
 

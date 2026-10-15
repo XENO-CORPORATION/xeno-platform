@@ -36,7 +36,7 @@ export function mcpResourceMetadata(req, res) {
   const { resource, origin } = resourceUrl(req);
   res.set('cache-control', 'public, max-age=300');
   res.json({ resource, resource_name: 'XENO MCP', authorization_servers: [issuer()], scopes_supported: ['tasks:read', 'tasks:write'],
-    bearer_methods_supported: ['header'], resource_documentation: `${origin}/workspace/dev/mcp` });
+    bearer_methods_supported: ['header'], resource_documentation: `${origin}/workspace/dev/apps/mcp` });
 }
 const challenge = (req, res, body, error) => {
   res.set('WWW-Authenticate', `Bearer resource_metadata="${resourceUrl(req).metadata}"${error ? `, error="${error}"` : ''}, scope="tasks:read tasks:write"`);
@@ -53,8 +53,8 @@ router.delete('/', (req, res) => { res.set('Allow', 'POST'); res.status(405).end
 
 /**
  * The MCP endpoint. A request with no token gets the 401 that names the resource metadata — that is how a
- * client discovers it must sign in. A token that is not an OAuth MCP token (an xtk_ credential, a session) is
- * refused: XENO MCP is for signed-in connections, each of which the person can see and disconnect.
+ * client discovers it must sign in. An OAuth MCP token or a platform agent's xtk_ credential is accepted; anything
+ * else (a session) is refused. Either way the call is one CONNECTION the person can see and disconnect.
  */
 router.post('/', (req, res, next) => {
   if (!req.headers.authorization) return challenge(req, res, { jsonrpc: '2.0', id: null, error: { code: -32001, message: 'Sign in to use XENO MCP' } });
@@ -63,7 +63,10 @@ router.post('/', (req, res, next) => {
   const body = req.body;
   if (!mcpOriginOk(req)) return res.status(403).json({ jsonrpc: '2.0', id: null, error: { code: -32600, message: 'Origin not allowed' } });
   const tok = req.taskToken;
-  if (!tok || tok.via !== 'oauth' || !tok.clientId) {
+  // two ways in: an OAuth sign-in (one connection per signed-in client), or a platform agent's own xtk_ credential
+  // (one connection per agent; the credential's expiry and revocation are its gate)
+  const viaCredential = Boolean(tok && tok.via !== 'oauth' && tok.tokenId);
+  if (!tok || (!viaCredential && (tok.via !== 'oauth' || !tok.clientId))) {
     return challenge(req, res, { jsonrpc: '2.0', id: null, error: { code: -32001, message: 'XENO MCP needs a signed-in connection. Add https://xenosystem.ai/api/mcp to your agent and sign in.' } }, 'invalid_token');
   }
   if (Array.isArray(body)) return res.status(400).json({ jsonrpc: '2.0', id: null, error: { code: -32600, message: 'Batched requests are not supported (MCP 2025-06-18)' } });
@@ -71,11 +74,18 @@ router.post('/', (req, res, next) => {
   if (pv && !mcp.PROTOCOL_VERSIONS.includes(String(pv))) return res.status(400).json({ jsonrpc: '2.0', id: body && body.id != null ? body.id : null, error: { code: -32600, message: `Unsupported MCP-Protocol-Version ${pv}; supported: ${mcp.PROTOCOL_VERSIONS.join(', ')}` } });
   try {
     // a disconnected connection is refused on its very next call, before anything runs
-    if (await mcp.isRevoked(req.db, tok.ownerId, tok.clientId)) {
+    let connection;
+    if (viaCredential) {
+      const a = (await req.db.query(`SELECT ai.owner_user_id, ai.public_id, COALESCE(u.display_name, u.username) AS name FROM agent_identities ai JOIN users u ON u.id = ai.user_id WHERE ai.user_id = $1`, [tok.agentUserId])).rows[0];
+      if (!a) return challenge(req, res, { jsonrpc: '2.0', id: body && body.id != null ? body.id : null, error: { code: -32001, message: 'This credential does not belong to an agent' } }, 'invalid_token');
+      connection = await mcp.connectionFor(req.db, { ownerId: String(a.owner_user_id), agentId: tok.agentUserId, clientId: `agent:${a.public_id}`, clientName: a.name });
+    } else if (await mcp.isRevoked(req.db, tok.ownerId, tok.clientId)) {
       return challenge(req, res, { jsonrpc: '2.0', id: body && body.id != null ? body.id : null, error: { code: -32001, message: 'This connection was disconnected in XENO. Sign in again to reconnect.' } }, 'invalid_token');
     }
-    const client = await getClient(req.db, tok.clientId);
-    const connection = await mcp.connectionFor(req.db, { ownerId: tok.ownerId, agentId: tok.agentUserId, clientId: tok.clientId, clientName: client ? client.name : null });
+    if (!connection) {
+      const client = await getClient(req.db, tok.clientId);
+      connection = await mcp.connectionFor(req.db, { ownerId: tok.ownerId, agentId: tok.agentUserId, clientId: tok.clientId, clientName: client ? client.name : null });
+    }
     if (body && typeof body === 'object' && body.id === undefined) return res.status(202).end();   // a notification: accept, answer nothing
     const p = await resolvePrincipal(req.db, tok.agentUserId); assertPrincipalUsable(p);
     const u = (await req.db.query('SELECT COALESCE(display_name, username) AS name FROM users WHERE id = $1', [p.id])).rows[0];
