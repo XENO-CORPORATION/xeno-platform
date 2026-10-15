@@ -29,6 +29,9 @@
   const LS = { get(k, d) { try { const v = localStorage.getItem('xw.' + k); return v == null ? d : JSON.parse(v); } catch { return d; } }, set(k, v) { try { localStorage.setItem('xw.' + k, JSON.stringify(v)); } catch {} } };
   const readJson = (raw, d) => { try { return JSON.parse(raw || 'null') ?? d; } catch { return d; } };
   const paint = () => { try { window.XENO_PG_SYNC_NAV?.(); X()?.applyWorkspace?.(); X()?.refreshPanel?.(); X()?.render?.(); } catch {} };
+  // ONE project's data arrived (its summary, people, activity or files): only the page body changes, so only the
+  // page body is redrawn — never the sidebar or the rail, which would flash on every project switch
+  const paintBody = () => { try { if (window.XENO_PAGES?.repaint && document.querySelector('#main .mview')) window.XENO_PAGES.repaint(); else paint(); } catch {} };
   const pstate = (fam, v) => { const m = LS.get('pgState', {}) || {}; m[fam] = v; LS.set('pgState', m); };
   const fail = (r, fallback) => ({ ok: false, code: r.status === 403 ? 'forbidden' : 'invalid', msg: (r.d && typeof r.d.error === 'string' && r.d.error) || fallback, final: r.status >= 400 && r.status < 500 });
 
@@ -130,7 +133,7 @@
   async function loadFiles(id) {
     const r = await api('GET', `/api/chat/projects/${encodeURIComponent(id)}/files`).catch(() => null);
     PF.set(id, r && r.ok && Array.isArray(r.d.files) ? { status: 'ready', files: r.d.files } : { status: r && r.status === 403 ? 'forbidden' : 'error', files: [] });
-    paint();
+    paintBody();
   }
   const kb = (n) => (!Number.isFinite(+n) ? '' : n >= 1048576 ? (n / 1048576).toFixed(1) + ' MB' : n >= 1024 ? Math.round(n / 1024) + ' KB' : n + ' B');
   function filesTab(rec, h) {
@@ -168,7 +171,7 @@
     const cv = e.target.closest('[data-pj-conv]'); if (cv) { e.preventDefault(); if (window.XENO_CHAT?.served) { X()?.go?.('product', { product: 'chat' }); setTimeout(() => window.XENO_CHAT.open(cv.dataset.pjConv), 0); } return; }
     const b = e.target.closest('[data-pj]'); if (!b) return; e.preventDefault();
     const [id, fid] = String(b.dataset.arg || '').split('|');
-    if (b.dataset.pj === 'files-retry') { PF.delete(id); paint(); }
+    if (b.dataset.pj === 'files-retry') { PF.delete(id); paintBody(); }
     else if (b.dataset.pj === 'files-add') addFiles(id);
     else if (b.dataset.pj === 'files-remove') { const r = await api('DELETE', `/api/chat/projects/${encodeURIComponent(id)}/files/${encodeURIComponent(fid)}`).catch(() => null); X()?.toast?.(r && r.ok ? 'Removed from the project. It stays in your Library.' : 'That couldn’t be removed. It is still attached.'); loadFiles(id); }
   });
@@ -186,10 +189,10 @@
       more ? null : api('GET', `/api/chat/projects/${encodeURIComponent(id)}/summary`).catch(() => null),
       more ? null : api('GET', `/api/chat/projects/${encodeURIComponent(id)}/people`).catch(() => null),
       api('GET', `/api/chat/projects/${encodeURIComponent(id)}/activity?limit=30${before}`).catch(() => null)]);
-    if (!more && (!s || !s.ok)) { cur.status = 'error'; I.set(id, cur); paint(); return; }
+    if (!more && (!s || !s.ok)) { cur.status = 'error'; I.set(id, cur); paintBody(); return; }
     if (!more) { cur.summary = s.d; cur.people = p && p.ok ? p.d : null; cur.feed = { items: [], next: null }; }
     if (a && a.ok) { cur.feed.items = [...(more ? cur.feed.items : []), ...a.d.items]; cur.feed.next = a.d.next; }
-    cur.status = 'ready'; cur.at = Date.now(); I.set(id, cur); paint();
+    cur.status = 'ready'; cur.at = Date.now(); I.set(id, cur); paintBody();
   }
   const ago = (iso) => { const s = Math.max(0, (Date.now() - Date.parse(iso)) / 1000); return s < 60 ? 'just now' : s < 3600 ? `${Math.floor(s / 60)} min ago` : s < 86400 ? `${Math.floor(s / 3600)} h ago` : s < 604800 ? `${Math.floor(s / 86400)} d ago` : new Date(iso).toLocaleDateString(undefined, { day: 'numeric', month: 'short' }); };
   const face = (p) => `<span class="pi-face${p && p.kind === 'agent' ? ' pi-face--agent' : ''}" title="${esc(p ? p.name : 'XENO')}">${p && p.kind === 'agent' ? X()?.ic?.('bot') || 'A' : esc(String(p ? p.name : 'X').trim().charAt(0).toUpperCase() || '?')}</span>`;
