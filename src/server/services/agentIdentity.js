@@ -197,11 +197,18 @@ export function agentHandleFor(agentName, ownerHandle) {
   return handle;
 }
 
-export async function countAgentsFor(db, ownerId) {
+/** Origins the platform provisions on the person's behalf -- Forum dev-loop agents, status probes and the per-app
+ *  agent an MCP sign-in creates. They do not count against the cap on agents a person CREATES: each has its own
+ *  control (the Forum loop's operator, the MCP headroom), and counting them made the cap unreachable from the
+ *  Agents page, which neither lists nor deletes them (found 2026-10-15: 6 system agents, 0 listed, create refused). */
+export const SYSTEM_AGENT_ORIGINS = Object.freeze(['forum-loop-d', 'status-probe', 'mcp']);
+
+export async function countAgentsFor(db, ownerId, { includeSystem = false } = {}) {
   const { rows } = await db.query(
     `SELECT COUNT(*)::int AS n FROM agent_identities
-      WHERE owner_user_id = $1 AND status <> 'retired'`,
-    [ownerId],
+      WHERE owner_user_id = $1 AND status <> 'retired'
+        ${includeSystem ? '' : "AND COALESCE(agent_origin, '') <> ALL($2::text[])"}`,
+    includeSystem ? [ownerId] : [ownerId, SYSTEM_AGENT_ORIGINS],
   );
   return Number(rows[0]?.n ?? 0);
 }
@@ -242,7 +249,9 @@ export async function createAgent(db, owner, { name, displayName, agentRole, age
     throw new AgentIdentityError('An agent cannot create another agent', 'agent_cannot_own', 403);
   }
 
-  const existing = await countAgentsFor(db, owner.id);
+  // a system origin is counted against ALL the owner's agents (its own headroom, via `cap`); a person's agent only
+  // against the agents a person made
+  const existing = await countAgentsFor(db, owner.id, { includeSystem: SYSTEM_AGENT_ORIGINS.includes(agentOrigin) });
   if (existing >= cap) {
     throw new AgentIdentityError(`Agent limit reached (${cap})`, 'agent_cap_reached', 409);
   }
