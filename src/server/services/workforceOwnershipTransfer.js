@@ -34,6 +34,7 @@ import { resolvePrincipal } from './agentIdentity.js';
 import { check } from '../utils/authzReBAC.js';
 import { authorityTransaction, lockWorkspaceAuthority, operationHash } from './workspaceOperationReceipts.js';
 import { normalizeOwnerScope } from './workforceScope.js';
+import { completeTransferAccountability } from './agentAccess.js';
 
 export class OwnershipTransferError extends Error {
   constructor(code, reason, status) {
@@ -272,6 +273,13 @@ export function acceptOwnershipTransfer(pool, args) {
            accepted_at=clock_timestamp(), operation_actor_user_id=$2, operation_client_id=$3, operation_id=$4,
            updated_at=clock_timestamp()
          WHERE id=$1 RETURNING *`, [transfer.id, args.actorUserId, clientId, operationId])).rows[0];
+      // An agent's PRINCIPAL follows its definition, in this transaction: the accepting admin (a company
+      // destination) or the receiving person becomes accountable for it. Without this the definition moves and
+      // the agent still answers to -- and dies with -- the person it came from.
+      if (transfer.resource_kind === 'agent') {
+        await completeTransferAccountability(db, { resourceId: transfer.resource_id, acceptedByUserId: args.actorUserId,
+          toWorkspaceId: to.type === 'workspace' ? to.id : null, toUserId: to.type === 'user' ? to.id : null });
+      }
       return publicTransfer(row);
     } catch (error) {
       if (error.code === '23514') {

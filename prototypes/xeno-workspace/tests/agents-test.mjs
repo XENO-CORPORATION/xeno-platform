@@ -13,7 +13,8 @@ const ok = (c, m) => { if (c) console.log('PASS', m); else { failed++; console.l
 const PROJ = [{ id: 'p-1111', name: 'Releases', canEdit: true }, { id: 'p-2222', name: 'Website', canEdit: true }];
 const hex = () => [...Array(32)].map(() => '0123456789abcdef'[Math.floor(Math.random() * 16)]).join('');
 const db = { agents: [], calls: [] };
-const view = (a) => ({ webhook: null, ...a, projects: PROJ.filter((p) => a.pids.includes(p.id)).map((p) => ({ id: p.id, name: p.name, access: 'editor' })), credentials: a.creds.filter((c) => !c.revoked).map(({ token, revoked, ...c }) => c) });
+const ALL = { viewer: true, runner: true, editor: true, exporter: true, manage: true };
+const view = (a) => ({ webhook: null, owner: { kind: 'personal' }, accountable: { userId: 'u1', name: 'Me' }, paused: null, rights: ALL, ...a, projects: PROJ.filter((p) => a.pids.includes(p.id)).map((p) => ({ id: p.id, name: p.name, access: 'editor' })), credentials: a.creds.filter((c) => !c.revoked).map(({ token, revoked, ...c }) => c) });
 
 const server = await createServer({ configFile: false, root: repo, logLevel: 'error', appType: 'custom', optimizeDeps: { noDiscovery: true, entries: [] }, plugins: [xenoWorkspace(repo)], server: { host: '127.0.0.1', port: PORT, strictPort: true } });
 await server.listen();
@@ -46,6 +47,12 @@ p.on('request', (q) => {
     const cr = rest.match(/^\/credentials\/(.+)$/); if (cr && method === 'DELETE') { const c = a.creds.find((x) => x.id === cr[1]); c.revoked = true; return json(200, { success: true, revoked: true }); }
     if (rest === '/runs' && method === 'GET') return json(200, { success: true, runs: (a.runs || []) });
     if (rest === '/runs' && method === 'POST') { a.runs = a.runs || []; const r = { id: 'r' + a.runs.length, state: 'queued', task: b.task, version: 1, budgetCredits: b.budgetCredits, createdAt: new Date().toISOString() }; a.runs.unshift(r); return json(201, { success: true, run: r }); }
+    if (rest === '/access' && method === 'GET') return json(200, { success: true, access: { owner: a.owner || { kind: 'personal' }, accountable: a.accountable || { userId: 'u1', name: 'Me' }, people: a.people || [], history: a.history || [] } });
+    const ar = rest.match(/^\/access\/(.+)\/(viewer|runner|editor|exporter)$/);
+    if (ar) { a.people = a.people || []; let pp = a.people.find((x) => x.userId === ar[1]); if (!pp) { pp = { userId: ar[1], name: 'Cal', rights: [] }; a.people.push(pp); } if (method === 'PUT') pp.rights.push(ar[2]); else pp.rights = pp.rights.filter((x) => x !== ar[2]); a.people = a.people.filter((x) => x.rights.length); return json(200, { success: true, access: { owner: a.owner, accountable: a.accountable, people: a.people, history: a.history || [] } }); }
+    if (rest === '/accountable' && method === 'POST') { a.paused = null; a.accountable = { userId: 'u1', name: 'Me' }; a.history = [{ reason: 'takeover', note: b.note || null, at: new Date().toISOString(), from: 'Bea', to: 'Me', by: 'Me' }]; return json(200, { success: true, access: {} }); }
+    if (rest === '/transfers' && method === 'GET') return json(200, { success: true, transfers: a.transfers || [] });
+    if (rest === '/transfers' && method === 'POST') { a.transfers = [{ id: 't1', state: 'authorized', authorizedAt: new Date().toISOString(), to: { type: 'workspace', id: b.workspaceId } }]; return json(200, { success: true, transfer: a.transfers[0] }); }
     if (rest === '/webhook') { a.webhook = b.url || null; return json(200, { success: true, ...(b.url ? { url: b.url, secret: 'whsec_SIGNING' } : { removed: true }) }); }
     const pr = rest.match(/^\/projects\/(.+)$/);
     if (pr) { if (method === 'PUT') a.pids.push(pr[1]); else a.pids = a.pids.filter((x) => x !== pr[1]); return json(200, { success: true, agent: view(a) }); }
@@ -53,6 +60,9 @@ p.on('request', (q) => {
   const stopM = u.pathname.match(/^\/api\/agents\/runs\/(.+)\/stop$/);
   if (stopM) { for (const a of db.agents) for (const r of a.runs || []) if (r.id === stopM[1]) { r.state = 'cancelled'; r.reason = 'stopped_by_owner'; r.endedAt = new Date().toISOString(); } return json(200, { success: true, run: {} }); }
   if (u.pathname === '/api/tasks' && method === 'GET') return json(200, { success: true, tasks: [{ key: 'T-7', title: 'Ship the header', status: 'todo', project: { id: PROJ[0].id, name: PROJ[0].name } }, { key: 'T-8', title: 'Elsewhere', status: 'todo', project: { id: 'zz', name: 'Other' } }] });
+  if (u.pathname === '/api/workspaces') return json(200, { success: true, workspaces: [{ id: 'w-acme', name: 'Acme', workspace_type: 'team' }, { id: 'w-me', name: 'Mine', workspace_type: 'personal' }] });
+  if (u.pathname === '/api/workspaces/w-acme/members') return json(200, { success: true, members: [{ user_id: 'u1', display_name: 'Me', role: 'owner' }, { user_id: 'u-cal', display_name: 'Cal', role: 'editor' }] });
+  if (u.pathname === '/api/account/security') return json(200, { success: true, security: { confirmation: { confirmed: true }, methods: ['password'] } });
   if (u.pathname === '/api/notifications') return json(200, { success: true, unread: 0, items: [] });
   if (u.pathname === '/api/workspace/search') return json(200, { success: true, results: [], counts: {} });
   if (u.pathname === '/api/workspace/needs') return json(200, { success: true, items: [] });
@@ -147,6 +157,30 @@ try {
   ok(/T-7 · Queued/.test(await main()) && await p.$('[data-xag="stop-run"]'), 'the run shows on the page, live, with Stop');
   await p.click('[data-xag="stop-run"]'); await settle(900);
   ok(/T-7 · Stopped/.test(await main()) && /You stopped it/.test(await main()), 'Stop stops it and says so');
+
+  // ownership: a personal agent can be offered to a company, after confirming it is you
+  ok(/Owner and access/.test(await main()) && /You, personally/.test(await main()), 'the page says who owns it and who answers for it');
+  await p.click('[data-xag="move"]'); await settle(500);
+  await p.evaluate(() => document.querySelector('.xd [data-v="w-acme"], .xd [value="w-acme"]')?.click()); await submit();
+  ok(db.calls.some(([m, u, b]) => m === 'POST' && u === `/api/agents/${a.id}/transfers` && b.workspaceId === 'w-acme'), 'Move to a company offers it to the chosen company (personal workspaces are not offered)');
+  ok(/Offered to its new owner/.test(await main()), 'the pending move is shown on its page');
+  // a company agent whose accountable admin left: paused, and an admin takes it over
+  Object.assign(a, { owner: { kind: 'company', workspaceId: 'w-acme', name: 'Acme' }, accountable: { userId: 'u-bea', name: 'Bea' }, paused: 'needs_owner', transfers: [] });
+  await fresh(`/workspace/workspace/Agents/${a.id}`); let tt = await main();
+  if (process.env.SHOT) await p.screenshot({ path: process.env.SHOT, fullPage: false });
+  ok(/is paused/.test(tt) && /Nothing is lost/.test(tt) && /Owned by\s*Acme/.test(tt), 'a company agent whose accountable person left shows as paused, kept, owned by the company');
+  await p.click('[data-xag="takeover"]'); await settle(500); await fill(['Bea left']); await submit();
+  tt = await main();
+  ok(!/is paused/.test(tt) && db.calls.some(([m, u, b]) => m === 'POST' && u.endsWith('/accountable') && b.note === 'Bea left'), 'Take over clears the pause and records why');
+  await p.click('[data-xag="grant"]'); await settle(500);
+  await p.evaluate(() => { document.querySelector('.xd [data-f="who"] [data-v="u-cal"]')?.click(); document.querySelector('.xd [data-f="right"] [data-v="runner"]')?.click(); }); await submit();
+  ok(db.calls.some(([m, u]) => m === 'PUT' && u === `/api/agents/${a.id}/access/u-cal/runner`) && /Cal/.test(await main()), 'Give access grants a member one of the four rights, and lists them');
+  // someone with only the run right sees no edit or delete
+  Object.assign(a, { rights: { viewer: true, runner: true, editor: false, exporter: false, manage: false } });
+  await fresh(`/workspace/workspace/Agents/${a.id}`); tt = await main();
+  ok(!(await p.$('[data-xag="edit"]')) && !(await p.$('[data-xag="delete"]')) && /You can\s*See, Run/.test(tt), 'a person who may only run it sees what they can do, and no Edit or Delete');
+  Object.assign(a, { owner: { kind: 'personal' }, accountable: { userId: 'u1', name: 'Me' }, paused: null, rights: ALL, people: [], history: [] });
+  await fresh(`/workspace/workspace/Agents/${a.id}`);
 
   // edit keeps the id
   await p.click('[data-xag="edit"]'); await settle(500);

@@ -20,6 +20,7 @@
 import crypto from 'node:crypto';
 import { check, writeTuples } from '../utils/authzReBAC.js';
 import { createAgent, DEFAULT_AGENT_CAP } from './agentIdentity.js';
+import * as agentAccess from './agentAccess.js';
 // agent-identity errors carry statusCode; Tasks errors carry status
 const asTaskError = (e) => (e && e.code && (e.status || e.statusCode) ? new TaskError(e.message, e.code, e.status || e.statusCode) : e);
 // MCP sign-in agents (one per app name, reused) may go past the general cap by this much, so a person who
@@ -676,11 +677,15 @@ export async function resolveTaskToken(db, raw) {
   db.query('UPDATE task_agent_tokens SET last_used_at = now() WHERE id = $1', [row.id]).catch(() => {});
   return { tokenId: row.id, agentUserId: String(row.agent_user_id), taskId: row.task_id ? String(row.task_id) : null, scopes: row.scopes, expiresAt: row.expires_at };
 }
-async function ownAgent(db, me, agentId) {
+/** One of the caller's agents, by the same rights rule as everywhere (agentAccess.js): the accountable human and,
+ *  for a company agent, its workspace admins hold every right; members hold what they were granted. */
+async function ownAgent(db, me, agentId, need = 'manage') {
   if (kindOf(me) !== 'human') throw new TaskError('Only a person manages agents', 'not_allowed', 403);
   if (!UUID.test(String(agentId))) throw new TaskError('Agent not found', 'agent_not_found', 404);
-  const a = (await db.query(`SELECT u.id, COALESCE(u.display_name, u.username) AS name, u.username FROM agent_identities ai JOIN users u ON u.id = ai.user_id WHERE ai.user_id = $1 AND ai.owner_user_id = $2`, [agentId, me.id])).rows[0];
+  const a = (await db.query(`SELECT u.id, COALESCE(u.display_name, u.username) AS name, u.username FROM agent_identities ai JOIN users u ON u.id = ai.user_id WHERE ai.user_id = $1 AND ai.status <> 'retired'`, [agentId])).rows[0];
   if (!a) throw new TaskError('Agent not found', 'agent_not_found', 404);
+  const ok = need === 'manage' ? (await agentAccess.rightsOf(db, me.id, a.id)).manage : await agentAccess.holds(db, me.id, a.id, need);
+  if (!ok) throw new TaskError('Agent not found', 'agent_not_found', 404);
   return a;
 }
 async function mint(db, owner, agentUserId, { scopes, label, days, taskId }) {
@@ -695,7 +700,7 @@ async function mint(db, owner, agentUserId, { scopes, label, days, taskId }) {
 }
 /** a scoped Tasks credential for one of the caller's agents; the secret is shown once */
 export async function mintAgentToken(db, me, { agentId, scopes, label, days } = {}) {
-  const a = await ownAgent(db, me, agentId);
+  const a = await ownAgent(db, me, agentId, 'runner');
   return { ...(await mint(db, me, a.id, { scopes, label, days })), agent: { id: String(a.id), name: a.name, username: a.username } };
 }
 export async function revokeAgentToken(db, me, tokenId) {
