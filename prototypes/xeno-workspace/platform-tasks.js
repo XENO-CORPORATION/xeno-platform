@@ -413,13 +413,18 @@
     const keys = [...T.sel].filter((k) => scope.some((t) => t.key === k)); if (!keys.length) return '';
     return `<div class="tk-bulk" role="toolbar" aria-label="Selected tasks"><b>${keys.length} selected</b><button class="tk-bulk-b" data-tk="bulk" data-arg="move">${ic('flow')}Move</button><button class="tk-bulk-b" data-tk="bulk" data-arg="assign">${ic('people')}Assign</button><button class="tk-bulk-b" data-tk="bulk" data-arg="priority">${ic('up')}Priority</button><button class="tk-bulk-b tk-bulk-b--danger" data-tk="bulk" data-arg="delete">${ic('trash')}Delete</button><span class="tk-sp"></span><button class="tk-bulk-b" data-tk="unselect">Clear <kbd>Esc</kbd></button></div>`;
   }
+  // Board | List | Canvas — Canvas is its own page (platform-canvas.js) with its own address, so it is a link, not a filter
+  function layoutSeg(on) {
+    const b = (k, icon, l) => `<button class="${on === k ? 'on' : ''}" data-tk="layout" data-arg="${k}" aria-pressed="${on === k}">${ic(icon)}${l}</button>`;
+    return `<span class="tk-seg" role="group" aria-label="Layout">${b('board', 'grid', 'Board')}${b('list', 'layers', 'List')}${window.XENO_CANVAS?.served ? b('canvas', 'flow', 'Canvas') : ''}</span>`;
+  }
   function toolbar(L, shown) {
     const n = activeCount() - (T.f.q ? 1 : 0);
     return `<div class="tk-bar">
       <label class="tk-search">${ic('search')}<input type="search" data-tk-keep="q" data-tk-keep-empty data-tk-search placeholder="Search tasks  /" value="${esc(T.f.q)}" aria-label="Search tasks"></label>
       <button class="tk-tool${n ? ' on' : ''}" data-tk="filters">${ic('sliders')}Filter${n ? `<em>${n}</em>` : ''}</button>
       <button class="tk-tool" data-tk="sort">${ic('up')}${esc({ priority: 'Priority', due: 'Due date', updated: 'Updated', created: 'Newest', title: 'Title' }[T.f.sort])}</button>
-      <span class="tk-seg" role="group" aria-label="Layout"><button class="${T.f.layout === 'board' ? 'on' : ''}" data-tk="layout" data-arg="board" aria-pressed="${T.f.layout === 'board'}">${ic('grid')}Board</button><button class="${T.f.layout === 'list' ? 'on' : ''}" data-tk="layout" data-arg="list" aria-pressed="${T.f.layout === 'list'}">${ic('layers')}List</button></span>
+      ${layoutSeg(T.f.layout)}
       <span class="tk-sp"></span><small class="tk-dim">${shown} of ${L.length}</small>${activeCount() ? `<button class="tk-tool" data-tk="save-view">${ic('star')}Save view</button>` : ''}</div>
       ${(T.views && T.views.length) || chipsHtml() ? `<div class="tk-bar tk-bar--2">${(T.views || []).filter((v) => !v.area || v.area === (P.area() || null) || !P.area()).map((v) => `<button class="tk-view${T.viewId === v.id ? ' on' : ''}" data-tk="view" data-arg="${esc(v.id)}" data-tk-view="${esc(v.id)}">${ic('star')}${esc(v.name)}</button>`).join('')}${chipsHtml()}</div>` : ''}`;
   }
@@ -695,6 +700,8 @@
     if (it === 'In review') return shell('review', 'In review', 'Waiting for a reviewer');
     // ONE Agents page: on the platform, agents live in Workspace › Agents (their division, projects, credentials, webhook)
     if (it === 'Agents') { if (window.XENO_AGENTS?.served) { setTimeout(() => X()?.go?.('global', { global: 'workspace', item: 'Agents' }), 0); return H().page('<div class="tk-msg" role="status">Opening Agents…</div>'); } return shell('agents', 'Agents', 'The agents that work your tasks: their credentials, and where they hear about new work'); }
+    // canvases: /workspace/<area>/tasks/canvas[/<id>]
+    if (/^canvas(\/|$)/.test(it) && window.XENO_CANVAS?.served) return window.XENO_CANVAS.route(it.split('/').slice(1).filter(Boolean));
     if (/^T-\d+$/i.test(it)) { const key = it.toUpperCase(); return H().page(head(key, undefined, true) + `<div class="tk-root-task" data-tk-root="task:${esc(key)}">${taskRegion(key)}</div>`, 'pg--task'); }
     return shell('board', 'Tasks', where());
   }
@@ -1188,7 +1195,7 @@
     select: (k) => { T.sel.has(k) ? T.sel.delete(k) : T.sel.add(k); patch(); }, unselect: () => { T.sel.clear(); patch(); },
     bulk: (what, el) => bulk(what, el),
     filters: (_, el) => filterMenu(el), sort: (_, el) => sortMenu(el),
-    layout: (v) => { T.f.layout = v; saveF(); patch(); },
+    layout: (v) => { if (v === 'canvas') return go('canvas'); T.f.layout = v; saveF(); if (!document.querySelector('#main [data-tk-root="board"]')) return go(null); patch(); },
     unfilter: (arg) => { const [k, v] = arg.split('|'); if (k === 'due') T.f.due = ''; else T.f[k] = T.f[k].filter((x) => x !== v); T.viewId = null; saveF(); patch(); },
     'clear-filters': () => { T.f = { ...F0(), sort: T.f.sort, layout: T.f.layout }; T.viewId = null; saveF(); patch(); },
     'save-view': () => saveViewNow(),
@@ -1288,7 +1295,7 @@
   addEventListener('dragstart', (e) => { const c = e.target.closest?.('[data-tk-card]'); if (!c) return; c.setAttribute('data-tk-dragging', ''); e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', c.dataset.tkCard); });
   addEventListener('dragend', (e) => { e.target.closest?.('[data-tk-card]')?.removeAttribute('data-tk-dragging'); clearOver(); });
 
-  const label = (x) => { const t = findTask(x); return t && !t.missing ? `${t.key} · ${t.title}` : x; };
-  window.XENO_TASKS = { served: true, label, route, projectTab, load, sync, patch, poll, newTask, markRead, md, state: () => ({ status: T.status, area: T.area === undefined ? undefined : T.area, count: (T.list || []).length, selected: T.sel.size }) };
+  const label = (x) => { if (x === 'canvas') return 'Canvases'; if (window.XENO_CANVAS?.nameOf?.(x)) return window.XENO_CANVAS.nameOf(x); const t = findTask(x); return t && !t.missing ? `${t.key} · ${t.title}` : x; };
+  window.XENO_TASKS = { served: true, label, route, layoutSeg, projectTab, load, sync, patch, poll, newTask, markRead, md, state: () => ({ status: T.status, area: T.area === undefined ? undefined : T.area, count: (T.list || []).length, selected: T.sel.size }) };
   Promise.resolve(P.ready).then((user) => { if (user) load(); });
 })();
