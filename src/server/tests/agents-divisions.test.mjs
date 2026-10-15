@@ -261,6 +261,11 @@ async function main() {
     check_(me.s === 200 && me.j.agent.agentId === nat.id && me.j.agent.division && me.j.agent.division.name === 'Creative' && me.j.agent.expiresAt, 'an agent credential asks who it is: agt_ id, division, expiry');
     const spec = await call('GET', '/api/tasks/openapi.json', { token: natCred.token });
     check_(spec.s === 200 && spec.j.openapi === '3.1.0' && spec.j.paths['/{key}/transition'], 'the Tasks REST contract is served as OpenAPI 3.1');
+    {
+      const idx = (await import('node:fs')).readFileSync(new URL('../index.js', import.meta.url), 'utf8');
+      const pub = idx.indexOf("app.get('/api/tasks/openapi.json'"), chain = idx.indexOf("app.use('/api/tasks',");
+      check_(pub > 0 && chain > pub, 'production serves the contract publicly, before the Tasks auth chain');
+    }
     let routesOk = true;
     for (const p of Object.keys(spec.j.paths)) {
       if (p.includes('{key}') || p === '/') continue;

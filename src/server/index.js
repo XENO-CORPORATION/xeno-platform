@@ -1,5 +1,6 @@
 import path from 'path';
 import xenoTasksRoutes, { taskTokenAuth, unlessTaskToken, mcpChallenge, protectedResourceMetadata } from './routes/xenoTasksRoutes.js';
+import { TASKS_OPENAPI } from './services/tasksOpenApi.js';
 import platformAgentRoutes from './routes/platformAgentRoutes.js';
 import workforceDivisionRoutes from './routes/workforceDivisionRoutes.js';
 import xenoMcpRoutes, { management as xenoMcpManagement, personOnly as mcpPersonOnly, mcpResourceMetadata } from './routes/xenoMcpRoutes.js';
@@ -628,6 +629,9 @@ app.use('/api/workspace', databaseMiddleware, authMiddleware, requireActivated, 
 // MCP discovery (RFC 9728 protected-resource metadata; RFC 8414 authorization-server metadata) at the site root
 app.get(['/.well-known/oauth-protected-resource', '/.well-known/oauth-protected-resource/api/tasks/mcp'], protectedResourceMetadata);
 app.get('/.well-known/oauth-authorization-server', (req, res) => res.json(oidcDiscovery()));
+// The Tasks REST contract is public: a document with no data in it, so native clients can check their schemas
+// against it in CI without a credential.
+app.get('/api/tasks/openapi.json', (req, res) => { res.set('cache-control', 'public, max-age=300'); res.json(TASKS_OPENAPI); });
 app.use('/api/tasks', databaseMiddleware, mcpChallenge, taskTokenAuth, unlessTaskToken(authMiddleware), unlessTaskToken(requireActivated), xenoTasksRoutes);
 // XENO MCP — one hosted MCP address for every agent (XENO AGENT SURFACES & CONNECTORS - SPEC.md §7). The
 // management routes are the person's (their session); the endpoint itself is an agent's (its OAuth token).
