@@ -56,8 +56,24 @@ function list(value, max, normalize, key) {
   if (new Set(result.map(key)).size !== result.length) fail('bad_input', 'duplicate_reference');
   return result;
 }
+
+// The agent's runtime config, versioned with its instructions: which model, how hard it reasons, which tools it
+// may use. Optional: a definition without it is unchanged (and hashes exactly as before).
+const EFFORTS = ['minimal', 'low', 'medium', 'high', 'max'];
+function runtimeOf(value, rec) {
+  const r = rec(value, ['model', 'effort', 'tools']);
+  const out = {};
+  if (Object.hasOwn(r, 'model')) out.model = identifier(r.model);
+  if (Object.hasOwn(r, 'effort')) { if (!EFFORTS.includes(r.effort)) fail('bad_input', 'invalid_effort'); out.effort = r.effort; }
+  if (Object.hasOwn(r, 'tools')) {
+    const t = rec(r.tools, ['allow', 'deny']);
+    out.tools = {};
+    for (const k of ['allow', 'deny']) if (Object.hasOwn(t, k)) out.tools[k] = list(t[k], 128, identifier, (x) => x);
+  }
+  return out;
+}
 function definition(value) {
-  const input = record(value, ['schemaVersion', 'instructions', 'skills', 'requestedCapabilities', 'secretReferences', 'provenance', 'license']);
+  const input = record(value, ['schemaVersion', 'instructions', 'skills', 'requestedCapabilities', 'secretReferences', 'runtime', 'provenance', 'license']);
   if (input.schemaVersion !== 1) fail('bad_input', 'unsupported_definition_schema');
   const instructions = text(input.instructions, 32768, { empty: true });
   const skills = list(input.skills, 64, value => {
@@ -84,7 +100,8 @@ function definition(value) {
     const l = record(input.license, ['identifier']);
     license = { identifier: identifier(l.identifier) };
   }
-  return { schemaVersion: 1, content: { instructions, skills, requestedCapabilities, secretReferences }, provenance, license };
+  const runtime = Object.hasOwn(input, 'runtime') ? runtimeOf(input.runtime, record) : null;
+  return { schemaVersion: 1, content: { instructions, skills, requestedCapabilities, secretReferences, ...(runtime && Object.keys(runtime).length ? { runtime } : {}) }, provenance, license };
 }
 function context(value) {
   const input = record(value, ['actorUserId', 'clientId', 'apiKeyId']);

@@ -674,7 +674,7 @@ export async function resolveTaskToken(db, raw) {
   const a = Buffer.from(row.token_hash, 'hex'), b = Buffer.from(sha256(raw), 'hex');
   if (a.length !== b.length || !crypto.timingSafeEqual(a, b)) return null;
   db.query('UPDATE task_agent_tokens SET last_used_at = now() WHERE id = $1', [row.id]).catch(() => {});
-  return { tokenId: row.id, agentUserId: String(row.agent_user_id), taskId: row.task_id ? String(row.task_id) : null, scopes: row.scopes };
+  return { tokenId: row.id, agentUserId: String(row.agent_user_id), taskId: row.task_id ? String(row.task_id) : null, scopes: row.scopes, expiresAt: row.expires_at };
 }
 async function ownAgent(db, me, agentId) {
   if (kindOf(me) !== 'human') throw new TaskError('Only a person manages agents', 'not_allowed', 403);

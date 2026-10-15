@@ -72,7 +72,7 @@ async function versions(db, resourceId) {
   if (!resourceId) return [];
   return (await db.query(`SELECT v.version, v.content, v.content_hash, v.created_at, COALESCE(u.display_name, u.username) AS by_name
     FROM workforce_agent_versions v LEFT JOIN users u ON u.id = v.created_by_user_id WHERE v.resource_id = $1 ORDER BY v.version DESC LIMIT 50`, [resourceId])).rows
-    .map((v) => ({ version: v.version, hash: v.content_hash, instructions: (v.content && v.content.instructions) || '', createdAt: v.created_at, by: v.by_name || null }));
+    .map((v) => ({ version: v.version, hash: v.content_hash, instructions: (v.content && v.content.instructions) || '', runtime: (v.content && v.content.runtime) || {}, createdAt: v.created_at, by: v.by_name || null }));
 }
 
 async function full(db, r) {
@@ -88,7 +88,7 @@ async function full(db, r) {
     name: r.name, username: r.username, description: r.description || '', createdAt: r.created_at, status: r.status || 'active',
     workspace: w ? { id: String(w.id), name: w.name, personal: w.workspace_type === 'personal' } : null,
     division: r.division_id ? { id: String(r.division_id), name: r.division_name, archived: r.division_lifecycle !== 'active' } : null,
-    instructions: vs[0] ? vs[0].instructions : '', version: vs[0] ? vs[0].version : null, versions: vs,
+    instructions: vs[0] ? vs[0].instructions : '', runtime: vs[0] ? vs[0].runtime : {}, version: vs[0] ? vs[0].version : null, versions: vs,
     projects, credentials: await credentials(db, r.id), connections,
     webhook: ((await db.query('SELECT url FROM task_agent_webhooks WHERE agent_user_id = $1', [r.id])).rows[0] || {}).url || null,
     lentTo: r.workforce_resource_id ? await lending.lendsOf(db, r.workforce_resource_id) : [],
@@ -109,7 +109,7 @@ export async function list(db, me, { divisionId } = {}) {
 export async function get(db, me, publicId) { return full(db, await owned(db, me, publicId)); }
 
 const ctx = (me) => ({ actorUserId: String(me.id), clientId: CLIENT });
-const defOf = (instructions) => ({ schemaVersion: 1, instructions: String(instructions || ''), skills: [], requestedCapabilities: [], provenance: { source: 'authored' } });
+const defOf = (instructions, runtime) => ({ schemaVersion: 1, instructions: String(instructions || ''), skills: [], requestedCapabilities: [], ...(runtime ? { runtime } : {}), provenance: { source: 'authored' } });
 
 /** Make the workforce definition for an existing principal that predates the link (Tasks agents, earlier
  *  platform agents). Idempotent: the operation id is derived from the principal, so a retry replays. */
@@ -142,7 +142,7 @@ function handleSlug(label, ownerHandle) {
   const base = label.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, Math.max(1, room - 5)).replace(/-+$/, '') || 'a';
   return `${base}-${tail}`.replace(/^[^a-z0-9]+/, 'a');
 }
-export async function create(db, me, { name, description, instructions, divisionId } = {}) {
+export async function create(db, me, { name, description, instructions, runtime, divisionId } = {}) {
   person(me);
   const label = String(name || '').replace(/[\u0000-\u001f<>]/g, '').trim().slice(0, 60);
   if (!label) throw new AgentError('Give the agent a name', 'name_required');
@@ -154,7 +154,7 @@ export async function create(db, me, { name, description, instructions, division
   let def;
   try {
     def = await createWorkforceResource(db, ctx(me), { operationId: randomUUID(), owner: { type: 'user', id: String(me.id) }, kind: 'agent',
-      name: label, description: desc, definition: defOf(instructions) });
+      name: label, description: desc, definition: defOf(instructions, runtime) });
   } catch (e) { throw asAgentError(e, 'The agent could not be created'); }
   const rid = def.resource.id;
   // then the principal, linked to it. If that fails, the definition just made is archived: never a definition
@@ -176,7 +176,7 @@ export async function create(db, me, { name, description, instructions, division
   return get(db, me, pid);
 }
 
-export async function update(db, me, publicId, { name, description, instructions } = {}) {
+export async function update(db, me, publicId, { name, description, instructions, runtime } = {}) {
   const r = await owned(db, me, publicId);
   if (name !== undefined) {
     const label = String(name || '').replace(/[\u0000-\u001f<>]/g, '').trim().slice(0, 60);
@@ -190,15 +190,17 @@ export async function update(db, me, publicId, { name, description, instructions
     await db.query('UPDATE agent_identities SET description = $2 WHERE user_id = $1', [r.id, desc]);
     await db.query('UPDATE workforce_resources SET description = $2, revision = revision + 1 WHERE id = $1', [r.workforce_resource_id, desc]);
   }
-  if (instructions !== undefined) {
+  if (instructions !== undefined || runtime !== undefined) {
     const cur = (await db.query('SELECT max(version)::int AS v FROM workforce_agent_versions WHERE resource_id = $1', [r.workforce_resource_id])).rows[0].v;
     if (String(instructions || '').length > 32768) throw new AgentError('The instructions are longer than 32,768 characters', 'instructions_too_long');
     const last = (await db.query('SELECT content FROM workforce_agent_versions WHERE resource_id = $1 AND version = $2', [r.workforce_resource_id, cur])).rows[0];
-    if (!last || (last.content.instructions || '') !== String(instructions || '')) {
+    const nextInstr = instructions !== undefined ? String(instructions || '') : (last ? last.content.instructions || '' : '');
+    const nextRt = runtime !== undefined ? (runtime || {}) : (last ? last.content.runtime || {} : {});
+    if (!last || (last.content.instructions || '') !== nextInstr || JSON.stringify(last.content.runtime || {}) !== JSON.stringify(nextRt)) {
       try {
         await reviseAgentDefinition(db, ctx(me), { operationId: randomUUID(), resourceId: String(r.workforce_resource_id), baseVersion: cur,
-          definition: { schemaVersion: 1, instructions: String(instructions || ''), secretReferences: last ? last.content.secretReferences || [] : [], skills: last ? last.content.skills || [] : [], requestedCapabilities: last ? last.content.requestedCapabilities || [] : [] } });
-      } catch (e) { throw asAgentError(e, 'The instructions could not be saved'); }
+          definition: { schemaVersion: 1, instructions: nextInstr, ...(Object.keys(nextRt).length ? { runtime: nextRt } : {}), secretReferences: last ? last.content.secretReferences || [] : [], skills: last ? last.content.skills || [] : [], requestedCapabilities: last ? last.content.requestedCapabilities || [] : [] } });
+      } catch (e) { if (e && e.details && /effort|identifier|runtime|list/.test(e.details.reason || '')) throw new AgentError('The runtime config is not valid (model and tools are identifiers; effort is minimal, low, medium, high or max)', 'invalid_runtime'); throw asAgentError(e, 'The instructions could not be saved'); }
     }
   }
   return get(db, me, publicId);
