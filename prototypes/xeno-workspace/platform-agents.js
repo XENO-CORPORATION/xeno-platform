@@ -23,7 +23,7 @@
   const why = (r, d) => (r && r.d && (r.d.error || r.d.message)) || d;
   const ID = /^agt_[0-9a-f]{32}$/;
   const ENDPOINT = () => `${location.origin}/api/mcp`;
-  const S = { key: null, status: 'idle', list: [], one: null, projects: [], services: [], minted: null, busy: false, copied: '', tab: 'claude', q: '' };
+  const S = { key: null, status: 'idle', list: [], one: null, projects: [], services: [], minted: null, busy: false, copied: '', tab: 'claude', q: '', choices: [], divisions: [], canManageDivisions: false, editingInstr: false };
   const paint = () => { try { X()?.render?.(); } catch {} };
   const go = (item) => X()?.go?.('global', { global: 'workspace', item });
   const toast = (m) => X()?.toast?.(m);
@@ -55,6 +55,7 @@
     if (S.key !== at) return;
     if (!list.ok) { S.status = list.status === 403 ? 'denied' : 'error'; return paint(); }
     S.list = list.d.agents || []; S.projects = pr.ok ? pr.d.projects || [] : [];
+    const dv0 = await api('GET', '/api/divisions'); if (dv0.ok) { S.divisions = dv0.d.divisions || []; S.canManageDivisions = !!dv0.d.canManage; }
     if (sv && sv.ok) S.services = sv.d.services || [];
     const id = at.startsWith('one:') ? at.slice(4) : null;
     if (id) {
@@ -63,6 +64,9 @@
       if (one.status === 404) { S.status = 'missing'; return paint(); }
       if (!one.ok) { S.status = 'error'; return paint(); }
       S.one = one.d.agent;
+      const [ch, dv] = await Promise.all([api('GET', `/api/agents/${id}/project-choices`), api('GET', '/api/divisions' + (S.one.workspace ? `?workspace=${S.one.workspace.id}` : ''))]);
+      if (S.key !== at) return;
+      S.choices = ch.ok ? ch.d.projects || [] : []; S.divisions = dv.ok ? dv.d.divisions || [] : []; S.canManageDivisions = !!(dv.ok && dv.d.canManage);
     }
     S.status = 'ready'; paint();
   }
@@ -77,7 +81,7 @@
     const card = (a) => { const [k, l] = state(a);
       return `<button type="button" class="xag-card" data-xag="open" data-id="${esc(a.id)}">
         <span class="xag-mono" aria-hidden="true">${mono(a.name)}<i class="xag-dot xag-dot--${k}"></i></span>
-        <span class="xag-card-b"><b>${esc(a.name)}</b><small>${esc(a.description || 'No description yet')}</small></span>
+        <span class="xag-card-b"><b>${esc(a.name)}</b><small>${esc(a.description || 'No description yet')}</small>${a.division ? `<em class="xag-div">${esc(a.division.name)}</em>` : ''}</span>
         <span class="xag-card-f"><span>${a.projects.length ? esc(a.projects.slice(0, 2).map((p) => p.name).join(', ')) + (a.projects.length > 2 ? ` +${a.projects.length - 2}` : '') : 'No projects yet'}</span><span class="xag-st xag-st--${k}">${esc(l)}</span></span></button>`; };
     const body = !S.list.length ? `<div class="xag-first">
         <div class="xag-first-art" aria-hidden="true"><span>${ic('bot')}</span><i></i><span>${ic('folder')}</span><i></i><span>${ic('terminal')}</span></div>
@@ -122,8 +126,13 @@
       </section>`;
 
     // 2. what it works on
-    const projects = S.projects.length ? `<div class="xag-checks">${S.projects.map((p) => { const on = mine.has(p.id);
-      return `<label class="xag-check${on ? ' on' : ''}"><input type="checkbox" data-xag-proj="${esc(p.id)}"${on ? ' checked' : ''}${S.busy ? ' disabled' : ''}><span><b>${esc(p.name)}</b><small>${on ? 'Takes tasks, comments and sends work for review — never accepts its own work' : 'Not shared with it'}</small></span></label>`; }).join('')}</div>`
+    const choices = S.choices.length ? S.choices : S.projects.map((p) => ({ ...p, canGive: true, admin: true, division: null }));
+    const projects = choices.length ? `<div class="xag-checks">${choices.map((p) => { const on = mine.has(p.id), off = !on && !p.canGive;
+      const why = on ? 'Takes tasks, comments and sends work for review — never accepts its own work'
+        : !p.admin ? 'Only a project admin can give it this project'
+        : off ? (p.division ? `In ${p.division.name} — ${a.division ? `${a.name} works in ${a.division.name}` : `put ${a.name} in ${p.division.name} to give it`}` : `Not in a division — ${a.name} works in ${a.division ? a.division.name : 'none'}`)
+        : 'Not shared with it';
+      return `<label class="xag-check${on ? ' on' : ''}${off ? ' off' : ''}"><input type="checkbox" data-xag-proj="${esc(p.id)}"${on ? ' checked' : ''}${S.busy || off ? ' disabled' : ''}><span><b>${esc(p.name)}</b><small>${esc(why)}</small></span>${p.division ? `<em class="xag-div">${esc(p.division.name)}</em>` : ''}</label>`; }).join('')}</div>`
       : h.box('folder', 'You have no projects yet', 'Create a project, then come back to give it to this agent.', '', 'sm');
     const svc = S.services.map((s) => `<span class="xag-svc on">${ic('check')}${esc(s.title)}</span>`).join('') + ['Images', 'Video', 'Library', 'Chat'].map((n) => `<span class="xag-svc">${esc(n)}<em>Coming</em></span>`).join('');
 
@@ -136,6 +145,14 @@
     const acts = h.btn('Edit', 'data-xag="edit"', true, 'edit') + h.btn('Delete', 'data-xag="delete"', true, 'trash');
     return h.page(h.head({ obj: true, eyebrow: `<a data-xag="list">Agents</a>`, title: a.name, sub: a.description || 'No description yet', acts })
       + `<div class="pg-cols pg-cols--item"><div>${run}
+          <section class="pg-sec"><div class="pg-sec-h"><h3>Division</h3>${S.canManageDivisions ? `<button class="pg-link" data-xag="division">${a.division ? 'Move' : 'Put in a division'}</button>` : ''}</div>
+            <div class="xag-divbox">${a.division ? `<button class="pg-chip" data-xag="open-division" data-id="${esc(a.division.id)}">${ic('building')}${esc(a.division.name)}</button><p>${esc(a.name)} works only on ${esc(a.division.name)}’s projects. Moving it takes away projects outside the new division.</p>`
+              : `<p>${esc(a.name)} is in no division, so it works only on projects that are in none either. ${S.divisions.length ? '' : 'This workspace has no divisions yet — <a data-xag="divisions">create one</a> to group agents and projects into departments.'}</p>`}</div></section>
+          <section class="pg-sec"><div class="pg-sec-h"><h3>Instructions</h3><small>${a.version ? `version ${a.version}` : ''}</small>${S.editingInstr ? '' : '<button class="pg-link" data-xag="instr-edit">Edit</button>'}</div>
+            ${S.editingInstr ? `<form class="xag-instr" data-xag-form="instr"><textarea name="instructions" rows="8" maxlength="32768" placeholder="How it should work: what to do, what to avoid, how to report back">${esc(a.instructions)}</textarea>
+              <div class="xag-instr-a"><small>Saving makes a new version. Work already running keeps the version it started with.</small><button type="button" class="pg-btn ghost" data-xag="instr-cancel">Cancel</button><button type="submit" class="pg-btn"${S.busy ? ' disabled' : ''}>Save version</button></div></form>`
+              : a.instructions ? `<pre class="xag-instr-v">${esc(a.instructions)}</pre>` : '<p class="xag-none">No instructions yet. The CLI it runs in uses its own defaults until you add some.</p>'}
+            ${a.versions && a.versions.length > 1 ? `<details class="xag-vers"><summary>${a.versions.length} versions</summary><ol>${a.versions.map((v) => `<li><b>v${v.version}</b><small>${esc(new Date(v.createdAt).toLocaleString())}${v.by ? ' · ' + esc(v.by) : ''} · <code>${esc(String(v.hash).slice(0, 10))}</code></small></li>`).join('')}</ol></details>` : ''}</section>
           <section class="pg-sec"><div class="pg-sec-h"><h3>Works on</h3><small>${h.plural(a.projects.length, 'project', 'projects')}</small></div>${projects}</section>
           <section class="pg-sec"><div class="pg-sec-h"><h3>Can use</h3></div><div class="xag-svcs">${svc}</div><p class="xag-note">What it can use grows as XENO services join XENO MCP. You can still turn a service off for one connection in Dev › MCP.</p></section>
           <section class="pg-sec"><div class="pg-sec-h"><h3>Where it has run</h3></div><div class="xag-rows">${conns}</div></section>
@@ -143,13 +160,15 @@
         </div><aside><div class="xag-id">
           <span class="xag-mono xag-mono--lg" aria-hidden="true">${mono(a.name)}<i class="xag-dot xag-dot--${k}"></i></span>
           <b>${esc(a.name)}</b><span class="xag-st xag-st--${k}">${esc(l)}</span></div>
-          <dl class="pg-props"><dt>Owner</dt><dd>You</dd><dt>Created</dt><dd>${esc(new Date(a.createdAt).toLocaleDateString())}</dd><dt>Projects</dt><dd>${a.projects.length}</dd><dt>Ran from</dt><dd>${h.plural(a.connections.length, 'place', 'places')}</dd>
+          <dl class="pg-props"><dt>Owner</dt><dd>You</dd><dt>Created</dt><dd>${esc(new Date(a.createdAt).toLocaleDateString())}</dd><dt>Division</dt><dd>${a.division ? esc(a.division.name) : 'None'}</dd><dt>Version</dt><dd>${a.version ? 'v' + a.version : '—'}</dd><dt>Projects</dt><dd>${a.projects.length}</dd><dt>Ran from</dt><dd>${h.plural(a.connections.length, 'place', 'places')}</dd>
             <dt>Id</dt><dd><button type="button" class="xag-idbtn" data-xag="copy" data-copy="${esc(a.id)}" title="Its permanent id — what Spawn and other tools store. It never changes, even if you rename it.">${S.copied === a.id ? 'Copied' : esc(a.id.slice(0, 12)) + '…'}</button></dd></dl>
           <p class="xag-note">It acts only as itself, never as you, and you can stop it at any moment by revoking its credentials.</p></aside></div>`, 'xag');
   }
 
   // ───────────────────────── page entry, called by the workspace router
   function route(it) {
+    // 'All my agents' (across workspaces) is the same list on the platform: every agent you own, wherever it works
+    if (it === 'All my agents') { setTimeout(() => go('Agents'), 0); return null; }
     if (it !== 'Agents' && !(it || '').startsWith('Agents/')) return null;
     style();
     const id = it.startsWith('Agents/') ? it.slice(7) : null;
@@ -178,9 +197,10 @@
   async function create() {
     const v = await D().form({ title: 'New agent', sub: 'It gets its own identity in XENO. You choose what it works on next.', submit: 'Create agent', size: 'sm', fields: [
       { id: 'name', label: 'Name', required: true, placeholder: 'Release Bot', max: 60 },
-      { id: 'description', label: 'What it is for', type: 'textarea', placeholder: 'Takes release tasks, cuts builds and reports back', max: 500 }] });
+      { id: 'description', label: 'What it is for', type: 'textarea', placeholder: 'Takes release tasks, cuts builds and reports back', max: 500 },
+      ...(S.divisions.length && S.canManageDivisions ? [{ id: 'division', label: 'Division', type: 'choice', cols: 1, value: '', options: [['', 'No division', 'Works only on projects in no division'], ...S.divisions.map((d) => [d.id, d.name, `Works only on ${d.name}’s projects`])] }] : [])] });
     if (!v) return;
-    const r = await call('POST', '/api/agents', { name: v.name, description: v.description || '' }, 'The agent could not be created.');
+    const r = await call('POST', '/api/agents', { name: v.name, description: v.description || '', divisionId: v.division || null }, 'The agent could not be created.');
     if (!r) return;
     toast(`Created ${r.d.agent.name}`); S.list.push(r.d.agent); go(`Agents/${r.d.agent.id}`);
   }
@@ -220,7 +240,26 @@
     const a = S.one; if (!a) return;
     const r = await call(on ? 'PUT' : 'DELETE', `/api/agents/${a.id}/projects/${encodeURIComponent(pid)}`, on ? { access: 'editor' } : undefined, 'That could not be changed.');
     if (r) { S.one = r.d.agent; toast(on ? 'It can work there now' : 'It can no longer see that project'); }
+    const ch = await api('GET', `/api/agents/${a.id}/project-choices`); if (ch.ok) S.choices = ch.d.projects || [];
     paint();
+  }
+  async function moveDivision() {
+    const a = S.one; if (!a) return;
+    const opts = [['', 'No division', 'Works only on projects in no division'], ...S.divisions.map((d) => [d.id, d.name, d.id === (a.division && a.division.id) ? 'Where it is now' : ''])];
+    const v = await D().form({ title: a.division ? `Move ${a.name}` : `Put ${a.name} in a division`, sub: 'An agent belongs to one division and works only on its projects. Projects outside the new division are taken away.', submit: 'Move', size: 'sm', fields: [
+      { id: 'division', label: 'Division', type: 'choice', cols: 1, value: a.division ? a.division.id : '', options: opts }] });
+    if (!v) return;
+    const before = a.projects.length;
+    const r = await call('PUT', `/api/agents/${a.id}/division`, { divisionId: v.division || null }, 'It could not be moved.');
+    if (!r) return;
+    S.one = r.d.agent; const lost = before - S.one.projects.length;
+    const ch = await api('GET', `/api/agents/${a.id}/project-choices`); if (ch.ok) S.choices = ch.d.projects || [];
+    toast(`${S.one.name} ${S.one.division ? 'now works in ' + S.one.division.name : 'is in no division'}${lost > 0 ? ` — ${lost} project${lost > 1 ? 's' : ''} taken away` : ''}`); paint();
+  }
+  async function saveInstructions(form) {
+    const a = S.one; if (!a) return;
+    const r = await call('PATCH', `/api/agents/${a.id}`, { instructions: form.instructions.value }, 'The instructions could not be saved.');
+    if (r) { S.one = r.d.agent; S.editingInstr = false; toast(`Saved as version ${S.one.version}`); paint(); }
   }
   async function copy(text) {
     try { await navigator.clipboard.writeText(text); S.copied = text; paint(); clearTimeout(copy.t); copy.t = setTimeout(() => { S.copied = ''; paint(); }, 1600); }
@@ -240,10 +279,16 @@
     if (a === 'revoke') return revoke(b.dataset.id);
     if (a === 'copy') return copy(b.dataset.copy);
     if (a === 'tab') { S.tab = b.dataset.k; return paint(); }
+    if (a === 'division') return moveDivision();
+    if (a === 'open-division') return go(`Divisions/${b.dataset.id}`);
+    if (a === 'divisions') return go('Divisions');
+    if (a === 'instr-edit') { S.editingInstr = true; paint(); return setTimeout(() => document.querySelector('.xag-instr textarea')?.focus(), 0); }
+    if (a === 'instr-cancel') { S.editingInstr = false; return paint(); }
     if (a === 'calls') return X()?.go?.('product', { product: 'mcp', item: `c/${b.dataset.id}` });
     if (a === 'retry') { S.key = null; return paint(); }
     if (a === 'clearq') { S.q = ''; return paint(); }
   });
+  document.addEventListener('submit', (e) => { const f = e.target.closest('.xag [data-xag-form="instr"]'); if (!f) return; e.preventDefault(); saveInstructions(f); });
   document.addEventListener('change', (e) => { const c = e.target.closest('.xag [data-xag-proj]'); if (c) project(c.dataset.xagProj, c.checked); });
   document.addEventListener('input', (e) => { const q = e.target.closest('.xag [data-xag-q]'); if (!q) return; S.q = q.value; const pos = q.selectionStart; paint(); const n = document.querySelector('.xag [data-xag-q]'); if (n) { n.focus(); n.setSelectionRange(pos, pos); } });
 
@@ -286,6 +331,13 @@
       '.xag-rows{border:1px solid var(--border);border-radius:12px;overflow:hidden}.xag-row{display:grid;grid-template-columns:auto 1fr auto auto;align-items:center;gap:12px;padding:10px 14px;border-bottom:1px solid var(--border)}.xag-row:last-child{border-bottom:0}',
       '.xag-row-ic{display:grid;place-items:center;width:30px;height:30px;border-radius:8px;background:var(--control)}.xag-row-ic svg{width:15px;height:15px}.xag-row-b{display:flex;flex-direction:column;gap:2px;min-width:0}.xag-row-b b{font-size:13px;font-weight:500}',
       '.xag-row-b code{font:12px ui-monospace,Consolas,monospace}.xag-row-b small{font-size:11.5px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.xag-row-m{font-size:12px;color:var(--muted);white-space:nowrap;font-variant-numeric:tabular-nums}',
+      '.xag-check.off{opacity:.55;cursor:default}.xag-check.off:hover{border-color:var(--border)}.xag-check{position:relative}.xag-check .xag-div{position:absolute;top:10px;right:10px;margin:0}',
+      '.xag-div{display:inline-block;margin-top:6px;padding:1px 7px;border:1px solid var(--border);border-radius:99px;font-style:normal;font-size:11px;color:var(--muted);width:max-content}',
+      '.xag-divbox{display:flex;flex-direction:column;align-items:flex-start;gap:8px}.xag-divbox p{margin:0;font-size:12.5px;line-height:1.5;color:var(--muted)}.xag-divbox a{color:var(--text);cursor:pointer;text-decoration:underline}',
+      '.xag-instr{display:flex;flex-direction:column;gap:8px}.xag-instr textarea{width:100%;padding:10px 12px;border:1px solid var(--border);border-radius:10px;background:var(--canvas);color:var(--text);font:12.5px/1.55 ui-monospace,Consolas,monospace;resize:vertical;outline:none}.xag-instr textarea:focus{border-color:var(--muted)}',
+      '.xag-instr-a{display:flex;align-items:center;gap:8px}.xag-instr-a small{flex:1;font-size:12px;color:var(--muted)}',
+      '.xag-instr-v{margin:0;padding:12px 14px;border:1px solid var(--border);border-radius:10px;background:var(--panel);font:12.5px/1.55 ui-monospace,Consolas,monospace;white-space:pre-wrap;word-break:break-word;max-height:260px;overflow:auto}',
+      '.xag-vers{margin-top:8px;font-size:12.5px;color:var(--muted)}.xag-vers summary{cursor:pointer}.xag-vers ol{margin:8px 0 0;padding:0;list-style:none;display:grid;gap:4px}.xag-vers li{display:flex;gap:8px;align-items:baseline}.xag-vers li b{color:var(--text);font-size:12px}.xag-vers small{font-size:11.5px}',
       '.xag-none{margin:0;padding:14px;font-size:12.5px;color:var(--muted)}',
       '.xag-id{display:flex;flex-direction:column;align-items:center;gap:8px;padding:6px 0 18px;margin-bottom:16px;border-bottom:1px solid var(--border);text-align:center}.xag-id b{font-size:15px}',
       '.xag-idbtn{border:0;background:none;padding:0;color:var(--muted);font:11.5px ui-monospace,Consolas,monospace;cursor:pointer}.xag-idbtn:hover{color:var(--text)}',
