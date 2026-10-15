@@ -253,7 +253,22 @@
     }
   }, true);
   // after a press-and-hold the browser still sends the compatibility mouse events for that touch — they are not a click away
-  document.addEventListener('mousedown', (e) => { if (stack.length && !e.target.closest('.xcm') && !lpQuiet()) close(false); }, true);
+  // A menu button is a TOGGLE (macOS, Windows, Figma): pressing the button of the open menu closes it. The press
+  // closes it here, so the click that follows must not open it again — remember the opener for that one click.
+  let shutBy = null;
+  document.addEventListener('mousedown', (e) => {
+    if (!stack.length || e.target.closest('.xcm') || lpQuiet()) return;
+    // the header can be redrawn while its menu is open, so the button may be a fresh element: match it by what it
+    // does (its data-* attributes and label), not by the element
+    const op = stack[0].opener, hit = op && e.target.closest?.('button,[role="button"]');
+    const sig = (el) => el && el.nodeType === 1 ? [...el.attributes].filter((a) => /^data-(?!menu-open)|^aria-label$/.test(a.name)).map((a) => a.name + '=' + a.value).sort().join('&') : '';
+    shutBy = hit && (op === hit || op.contains?.(e.target) || (sig(op) && sig(op) === sig(hit))) ? hit : null;
+    close(false);
+  }, true);
+  addEventListener('click', (e) => {
+    const b = shutBy; shutBy = null;
+    if (b && b.contains(e.target)) { e.preventDefault(); e.stopImmediatePropagation(); }
+  }, true);
   addEventListener('blur', () => close(false));
   addEventListener('resize', () => close(false));
   // the PERSON scrolling away closes the menu (wheel, swipe); a layout shift the app makes underneath it does not
