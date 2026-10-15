@@ -124,7 +124,8 @@ html[data-panel="closed"] .peekzone{display:block}
 .row:hover .more,.row:focus-within .more,.row[data-menu-open] .more{display:grid}
 .row:hover .more ~ .meta,.row:has(.more):hover .meta,.row[data-menu-open] .meta{display:none}
 .row .meta{margin-left:auto}
-.row:hover .meta,.row[data-menu-open] .meta{display:none}
+/* a row's details give way only to its ⋯ button — a row without one keeps them on hover */
+.row:not(:has(.more)):hover .meta{display:block}
 .row .more:hover{background:var(--hover-strong);color:var(--text)}
 .row.soon .t{color:var(--dim)}
 .row .tag{font-size:10px;color:var(--dim);border:1px solid var(--border);border-radius:5px;padding:0 5px;line-height:16px;flex:none}
