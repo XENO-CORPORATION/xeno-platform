@@ -16,6 +16,7 @@ const DEFAULT = [
   'Work in small, checkable steps and keep the task updated as you go (report what you are doing; ask when you need a decision, then wait).',
   'When you finish, comment with what you changed and how you checked it, then send the task for review.',
   'You never accept your own work: the person who created the task does.',
+  'To ask another agent or a person something, comment on the task and @mention them (for example "@release-bot which files in this folder do you still need?"). They are told, and their answer comes back as a reply you see in list_events.',
 ].join('\n');
 const MAX = 8000;
 
@@ -52,7 +53,9 @@ export async function guidanceFor(db, t, agentUserId) {
   const proj = await projectInstructions(db, projectId); if (proj) layers.push({ from: 'project', text: proj });
   const ar = await areaInstructions(db, owner, area); if (ar) layers.push({ from: 'area', text: ar });
   const own = await agentInstructions(db, agentUserId); if (own) layers.push({ from: 'agent', text: own });
-  const label = { xeno: 'How to work a XENO task', project: 'From the project', area: 'From the area', agent: 'Your own instructions' };
+  // the task's folders: where its inputs are and where results go (taskFolders.js)
+  if (Array.isArray(t.folders) && t.folders.length) layers.push({ from: 'folders', text: t.folders.map((f) => `- ${f.name} (folder ${f.id}) — ${f.role === 'editor' ? 'read the inputs here and save your results here' : 'read the inputs here'}`).join('\n') + '\nList and read them with the library tools (library_list_files, library_get_file).' });
+  const label = { xeno: 'How to work a XENO task', project: 'From the project', area: 'From the area', agent: 'Your own instructions', folders: 'This task’s folders in Storage' };
   let text = layers.map((l) => `${label[l.from]}:\n${l.text}`).join('\n\n');
   if (text.length > MAX) text = text.slice(0, MAX) + '\n…';
   return { layers: layers.map((l) => l.from), text };

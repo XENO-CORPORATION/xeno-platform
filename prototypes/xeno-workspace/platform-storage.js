@@ -71,11 +71,11 @@
 
   const style = () => {
     if (document.getElementById('xst-css')) return; const s = document.createElement('style'); s.id = 'xst-css';
-    s.textContent = '.xst{display:flex;flex-direction:column;min-height:100%;padding:18px 28px 60px}.xst-top{display:flex;align-items:center;gap:10px;min-height:36px}'
+    s.textContent = '.xst{display:flex;flex-direction:column;min-height:100%;padding:18px 28px 60px}.xst.xst-tb{display:flex;flex-direction:row;align-items:center;gap:8px;min-height:0;padding:0}.xst-tb .xst-find{width:240px}.pg-top-sep{width:1px;height:16px;background:var(--border);margin:0 10px;flex:none}.xst-top{display:flex;align-items:center;gap:10px;min-height:36px}'
       + '.xst-path{display:flex;align-items:center;gap:2px;min-width:0;flex:1;font-size:18px;font-weight:600;letter-spacing:-.015em}.xst-path button{border:0;background:none;color:var(--muted);font:inherit;padding:4px 7px;border-radius:6px;cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:240px}.xst-path button:hover,.xst-path button[data-over]{background:var(--hover);color:var(--text)}.xst-path button:last-of-type{color:var(--text)}.xst-path i{color:var(--dim);font-style:normal;font-weight:400}'
       + '.xst-find{width:230px;height:32px;padding:0 11px;border:1px solid var(--border);border-radius:8px;background:var(--control);color:var(--text);font:inherit;font-size:13px;outline:none}.xst-find:focus{border-color:rgba(255,255,255,.28)}'
       + '.xst-btn{height:32px;padding:0 12px;border:1px solid var(--border);border-radius:8px;background:none;color:var(--text);font:inherit;font-size:13px;cursor:pointer;white-space:nowrap}.xst-btn:hover{background:var(--hover)}.xst-btn.xst-go{background:var(--text);color:var(--canvas);border-color:transparent;font-weight:500}.xst-btn.xst-go:hover{opacity:.9}'
-      + '.xst-mini{display:flex;align-items:center;gap:9px;margin:14px 0 0;font-size:12.5px;color:var(--muted);border:0;background:none;padding:0;cursor:pointer;font:inherit;font-size:12.5px}.xst-mini .bar{width:160px;height:5px;border-radius:3px;background:var(--control);overflow:hidden}.xst-mini .bar i{display:block;height:100%;background:var(--text);border-radius:3px}.xst-mini:hover{color:var(--text)}'
+      + '.xst-mini{display:flex;align-items:center;gap:9px;margin:0;white-space:nowrap;font-size:12.5px;color:var(--muted);border:0;background:none;padding:0;cursor:pointer;font:inherit;font-size:12.5px}.xst-mini .bar{width:160px;height:5px;border-radius:3px;background:var(--control);overflow:hidden}.xst-mini .bar i{display:block;height:100%;background:var(--text);border-radius:3px}.xst-mini:hover{color:var(--text)}'
       + '.xst-note{margin:12px 0 0;padding:9px 12px;border:1px solid var(--border);border-radius:8px;font-size:13px;color:var(--text);background:var(--panel)}'
       + '.xst-list{margin-top:14px;border:1px solid var(--border);border-radius:12px;background:var(--panel);overflow:hidden}.xst-list[data-drop]{border-color:rgba(255,255,255,.4)}'
       + '.xst-hd,.xst-r{display:grid;grid-template-columns:34px minmax(0,1fr) 110px 96px 150px;gap:10px;align-items:center;padding:0 14px}.xst-hd{height:34px;font-size:11.5px;color:var(--dim);border-bottom:1px solid var(--border)}'
@@ -151,7 +151,8 @@
       <div class="line"${S.sharing.folder ? ' hidden' : ''}><select data-xst-days aria-label="How long the link lasts"><option value="7">Link for 7 days</option><option value="30">Link for 30 days</option><option value="">Link with no end</option></select><button type="button" class="xst-btn" data-xst="share-link">Create link</button><button type="button" class="xst-btn" data-xst="share-close" style="margin-left:auto">Done</button></div>
       ${S.sharing.url ? `<p class="url">Anyone with this link can open the file. It is shown once: <br><span data-xst-url>${esc(S.sharing.url)}</span> <button type="button" class="xst-btn" data-xst="share-copy">Copy</button></p>` : ''}
       ${(S.sharing.shares || []).map((x) => `<div class="who"><span>${x.kind === 'person' ? esc(x.person.name || x.person.username) : 'A link'}</span><small>${x.kind === 'person' ? (x.role === 'editor' ? 'can edit' : 'can view') : x.expiresAt ? `until ${esc(new Date(x.expiresAt).toLocaleDateString())}` : 'no end'}</small><button type="button" class="xst-btn" data-xst="share-off" data-id="${x.id}">Remove</button></div>`).join('')}</div>` : '';
-    return `<div class="xst"><div class="xst-top"><div class="xst-path">${path}</div>${tools}</div>${at.kind === 'usage' ? '' : mini()}${S.note ? `<div class="xst-note" role="status">${esc(S.note)}</div>` : ''}${bulk}${mover}${sh}${versionsPane()}${body}${previewPane()}</div>`;
+    S.top = { tools, meter: at.kind === 'usage' ? '' : mini() };   // the workspace top bar draws these (top())
+    return `<div class="xst"><div class="xst-top"><div class="xst-path">${path}</div></div>${S.note ? `<div class="xst-note" role="status">${esc(S.note)}</div>` : ''}${bulk}${mover}${sh}${versionsPane()}${body}${previewPane()}</div>`;
   }
 
   function versionsPane() {
@@ -330,5 +331,7 @@
     return `Storage · ${size(m.usedBytes)}${m.allowanceBytes === null ? ' used' : ` of ${size(m.allowanceBytes)}`}`;   // plain text: the Library draws it as one of its own buttons
   };
   document.addEventListener('click', (e) => { if (e.target.closest('[data-xst-open]')) { e.preventDefault(); if (window.XW?.go) window.XW.go('product', { product: 'storage', item: null }); /* in the current area — Overview stays Overview */ else if (window.XENO_ADDR?.go) window.XENO_ADDR.go('#/corpo/p/storage'); else window.location.assign('/workspace/corpo/apps/storage'); } });
-  window.XENO_STORAGE = { chip, page, reload, state: () => ({ status: S.status, meter: S.meter, folders: S.folders.length, items: S.items.length }) };
+  /** The workspace top bar for Storage: the usage meter beside the path (left), search · New folder · Upload (right). */
+  const top = () => ({ left: S.top ? S.top.meter : '', right: S.top ? `<div class="xst xst-tb">${S.top.tools}</div>` : '' });
+  window.XENO_STORAGE = { chip, page, reload, top, state: () => ({ status: S.status, meter: S.meter, folders: S.folders.length, items: S.items.length }) };
 })();

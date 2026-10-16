@@ -24,6 +24,7 @@
  */
 import express from 'express';
 import * as tasks from '../services/xenoTasks.js';
+import * as taskFolders from '../services/taskFolders.js';
 import { resolvePrincipal, assertPrincipalUsable } from '../services/agentIdentity.js';
 import * as mcp from '../services/tasksMcp.js';
 import { TASKS_OPENAPI } from '../services/tasksOpenApi.js';
@@ -125,7 +126,7 @@ function handledMw(fn) { return async (req, res, next) => { try { await fn(req);
 const handled = (fn) => async (req, res) => {
   try { await fn(req, res); }
   catch (error) {
-    if (error instanceof tasks.TaskError) return res.status(error.status).json({ success: false, error: error.message, code: error.code });
+    if (error instanceof tasks.TaskError || error instanceof taskFolders.TaskFolderError) return res.status(error.status).json({ success: false, error: error.message, code: error.code });
     console.error('[tasks]', error);
     res.status(500).json({ success: false, error: 'Internal server error' });
   }
@@ -177,6 +178,11 @@ router.post('/mcp', async (req, res) => {
     res.json(out);
   } catch (error) { console.error('[tasks mcp]', error); res.status(500).json({ jsonrpc: '2.0', id: body && body.id != null ? body.id : null, error: { code: -32603, message: 'Internal error' } }); }
 });
+// task folders (taskFolders.js): the Storage folders a task's work lives in; whoever works the task can open them
+router.get('/folders/linkable', handled(async (req, res) => { res.json({ success: true, folders: await taskFolders.linkableFolders(req.db, req.me, { q: req.query.q }) }); }));
+router.get('/:key/folders', handled(async (req, res) => { res.json({ success: true, folders: await taskFolders.listTaskFolders(req.db, req.me, req.params.key) }); }));
+router.post('/:key/folders', handled(async (req, res) => { res.status(201).json({ success: true, folders: await taskFolders.addTaskFolder(req.db, req.me, req.params.key, { folderId: req.body?.folderId, role: req.body?.role || 'viewer' }) }); }));
+router.delete('/:key/folders/:folderId', handled(async (req, res) => { res.json({ success: true, folders: await taskFolders.removeTaskFolder(req.db, req.me, req.params.key, req.params.folderId) }); }));
 router.get('/assignees', handled(async (req, res) => { res.json({ success: true, assignees: await tasks.listAssignees(req.db, req.me, { projectId: req.query.projectId }) }); }));
 router.get('/:key', handled(async (req, res) => { res.json({ success: true, task: await tasks.getTask(req.db, req.me, req.params.key) }); }));
 router.patch('/:key', handled(async (req, res) => { res.json({ success: true, task: await tasks.updateTask(req.db, req.me, req.params.key, req.body || {}) }); }));

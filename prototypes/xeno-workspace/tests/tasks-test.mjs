@@ -41,6 +41,8 @@ p.on('request', (q) => {
   if (u.pathname === '/api/tasks' && method === 'GET') { if (fail) return json(500, { success: false }); const a = u.searchParams.get('area'), pid = u.searchParams.get('projectId'); return json(200, { success: true, tasks: db.tasks.filter((t) => (!a || t.area === a) && (!pid || (t.project && t.project.id === pid))).map(view) }); }
   if (u.pathname === '/api/tasks' && method === 'POST') { const t = mk(b); return json(201, { success: true, task: view(t) }); }
   if (u.pathname === '/api/tasks/assignees') return json(200, { success: true, assignees: PEOPLE });
+  if (u.pathname === '/api/tasks/folders/linkable') return json(200, { success: true, folders: [{ id: 'f0000000-0000-4000-8000-000000000001', name: 'Weapon renders', path: 'Assets / Weapon renders', team: null }, { id: 'f0000000-0000-4000-8000-000000000002', name: 'Voice lines', path: 'Voice lines', team: null }] });
+  { const fm = u.pathname.match(/^\/api\/tasks\/(T-\d+)\/folders$/); if (fm && method === 'POST') { (db.folderLinks ||= []).push({ key: fm[1], ...b }); return json(201, { success: true, folders: [] }); } }
   const am = u.pathname.match(/^\/api\/tasks\/(T-\d+)\/attachments(?:\/([\w-]+))?$/);
   if (am) {
     const t = db.tasks.find((x) => x.key === am[1]); t.attachments = t.attachments || [];
@@ -117,6 +119,12 @@ try {
     await p.click(c); await settle(250); const s1 = await open(); await p.click(c); await settle(250); const s2 = await open(); await p.click(c); await settle(250); const s3 = await open();
     ok(s1 && !s2 && s3, `a field in the New task window toggles its picker: open, close, open (${[s1, s2, s3]})`); await p.keyboard.press('Escape'); await settle(200); }
   await p.type('.xd [data-n-title]', 'Write the launch post');
+  // #folder: typing # lists your Storage folders; Enter writes #Name and adds it to the Folders row
+  await p.type('.xd textarea', 'Inputs in #wea'); await settle(700);
+  ok(/Weapon renders/.test(await p.evaluate(() => document.querySelector('.tk-mpop:not([hidden])')?.innerText || '')), 'typing # in the description lists your Storage folders');
+  await p.keyboard.press('Enter'); await settle(300);
+  ok(/#Weapon renders /.test(await p.$eval('.xd textarea', (e) => e.value)) && /Weapon renders/.test(await p.$eval('.xd [data-n-chips]', (e) => e.textContent)), 'picking one writes #Weapon renders and adds it to the task’s Folders');
+  await p.evaluate(() => { const t = document.querySelector('.xd textarea'); t.value = ''; t.dispatchEvent(new Event('input', { bubbles: true })); });
   await p.type('.xd textarea', 'Cover what changed.\n- [ ] draft\n- [ ] review\n');
   await pasteImage('.xd textarea'); await settle(300);
   ok(await p.$$eval('.xd .tk-nimg', (els) => els.length) === 1 && /pending:1/.test(await p.$eval('.xd textarea', (e) => e.value)), 'an image pasted while writing shows as a thumbnail and is placed in the description');
@@ -132,6 +140,7 @@ try {
   const created = T3();
   ok(created && created.area === 'studio' && created.assignee?.id === 'u2' && created.priority === 'medium' && db.uploads === 1 && /\(attachment:[0-9a-f-]{36}\)/.test(created.body) && !/pending:/.test(created.body), 'Ctrl+Enter creates the task with its fields, uploads the image and links it into the description');
   ok(!(await p.$('.xd [data-tk-new]')) && /Write the launch post/.test(await main()), 'the window closes and the new task opens');
+  ok((db.folderLinks || []).some((l) => l.key === created.key && l.folderId === 'f0000000-0000-4000-8000-000000000001'), 'and the folder is linked to the created task, so whoever works it can open it');
   ok(!!(await p.$('.tk-md .tk-md-img')) && await p.$$eval('.tk-md-box', (els) => els.length) === 2 && /0 of 2/.test(await main()), 'the description renders: the inline image and a two-item checklist with its progress');
   ok(!!(await p.$('.tk-side [data-tk-prop="assignee"]')) && await p.$$eval('.tk-side .tk-prop', (els) => els.length > 8 && els.every((e) => e.getBoundingClientRect().height < 44)), 'each property is one row, label and value side by side');
   { const lay = await p.evaluate(() => { const m = document.getElementById('main').getBoundingClientRect(), s = document.querySelector('.tk-side').getBoundingClientRect(), c = document.querySelector('.tk-main-in').getBoundingClientRect(); return { flush: Math.abs(m.right - s.right) < 4, full: s.height >= m.height - 120, read: c.width <= 870 }; });

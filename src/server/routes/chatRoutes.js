@@ -910,7 +910,7 @@ router.put('/conversations/:id/active-leaf', async (req, res) => {
 // the person may run it. services/chatHandoff.js.
 router.post('/conversations/:id/handoff', requireActivated, async (req, res) => {
   try {
-    const out = await handOff(req.db, { id: req.user.id, kind: 'human' }, req.params.id, { agentId: req.body?.agentId, prompt: req.body?.prompt, run: req.body?.run !== false });
+    const out = await handOff(req.db, { id: req.user.id, kind: 'human' }, req.params.id, { agentId: req.body?.agentId, prompt: req.body?.prompt, run: req.body?.run !== false, folders: req.body?.folders });
     res.status(201).json({ success: true, handoff: out });
   } catch (error) {
     if (error instanceof ChatAuthorizationError) return res.status(404).json({ success: false, error: 'Conversation not found', code: 'conversation_not_found' });

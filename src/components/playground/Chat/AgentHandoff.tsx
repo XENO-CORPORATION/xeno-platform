@@ -14,7 +14,7 @@ export type HandoffAgent = { id: string; name: string; division: string | null; 
 export type HandoffResult = {
   task: { key: string; title: string; status: string };
   agent: { id: string; name: string };
-  delegated: boolean; reason?: string;
+  delegated: boolean; reason?: string; folders?: string[]; folderNote?: string;
   run: { id: string; state: string } | null; runNote?: string;
 };
 
@@ -40,8 +40,24 @@ export async function loadHandoffAgents(): Promise<HandoffAgent[]> {
 }
 export const agentMatches = (list: HandoffAgent[], q: string) => list.filter((a) => !q || a.name.toLowerCase().startsWith(q.toLowerCase()) || a.name.toLowerCase().split(/\s+/).some((w) => w.startsWith(q.toLowerCase())));
 
-export const sendHandoff = (conversationId: string, agentId: string, prompt: string): Promise<HandoffResult> =>
-  api('POST', `/api/chat/conversations/${encodeURIComponent(conversationId)}/handoff`, { agentId, prompt }).then((j) => j.handoff);
+export type HandoffFolder = { id: string; name: string; path: string; team: string | null };
+let folderCache: { at: number; list: HandoffFolder[] } | null = null;
+/** Your Storage folders, for `#folder` while handing off (taskFolders.linkableFolders). */
+export async function loadHandoffFolders(): Promise<HandoffFolder[]> {
+  if (folderCache && Date.now() - folderCache.at < 30_000) return folderCache.list;
+  const j = await api('GET', '/api/tasks/folders/linkable');
+  folderCache = { at: Date.now(), list: j.folders || [] };
+  return folderCache.list;
+}
+export const folderMatches = (list: HandoffFolder[], q: string) => list.filter((f) => !q || f.name.toLowerCase().startsWith(q.toLowerCase()) || f.name.toLowerCase().split(/\s+/).some((w) => w.startsWith(q.toLowerCase())));
+/** `#wea` at the caret → the query; null when the caret is not on a #word. */
+export function hashQuery(text: string, caret: number): { q: string; start: number } | null {
+  const m = text.slice(0, caret).match(/(^|\s)#([^\s#]{0,60})$/);
+  return m ? { q: m[2], start: caret - m[2].length - 1 } : null;
+}
+
+export const sendHandoff = (conversationId: string, agentId: string, prompt: string, folders: { id: string; role?: string }[] = []): Promise<HandoffResult> =>
+  api('POST', `/api/chat/conversations/${encodeURIComponent(conversationId)}/handoff`, { agentId, prompt, ...(folders.length ? { folders } : {}) }).then((j) => j.handoff);
 
 const STATUS: Record<string, string> = { raised: 'Raised', todo: 'To do', in_progress: 'In progress', blocked: 'Blocked', in_review: 'In review', done: 'Done', cancelled: 'Cancelled' };
 

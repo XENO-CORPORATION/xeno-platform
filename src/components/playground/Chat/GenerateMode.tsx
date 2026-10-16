@@ -141,6 +141,11 @@ export function openAtMenu(anchor: Element | null, matches: GenType[], selected:
   ], selected, { align: 'left' });
 }
 
+/** `#folder` while handing off: your Storage folders, in the same workspace menu. Picks come back as `gen-hash`. */
+export function openHashMenu(anchor: Element | null, folders: { id: string; name: string; path: string; team: string | null }[], selected = '') {
+  openList('gen-hash', anchor, 'Folders', folders.map((f) => ({ id: `folder:${f.id}`, name: f.name, note: f.team || (f.path !== f.name ? f.path : 'Folder') })), selected, { align: 'left' });
+}
+
 export function closeGenMenu() { genMenuOpen = false; tellWorkspace({ source: 'xeno-chat', type: 'model-menu-close' }); }
 
 const chevron = (
@@ -220,9 +225,11 @@ export const GenSettings: React.FC<{ state: GenState; referenceCount: number }> 
 };
 
 /** State + the menu picks, in one place for the composer. */
-export function useGenerateMode(onPickedFromAt?: () => void, onPickAgent?: (agentId: string) => void) {
+export function useGenerateMode(onPickedFromAt?: () => void, onPickAgent?: (agentId: string) => void, onPickFolder?: (folderId: string) => void) {
   const agentPickRef = useRef(onPickAgent);
   agentPickRef.current = onPickAgent;
+  const folderPickRef = useRef(onPickFolder);
+  folderPickRef.current = onPickFolder;
   const [state, setState] = useState<GenState>(GEN_INITIAL);
   const [catalogState, setCatalogState] = useState<{data:GenerationCatalog;loading:boolean;error:string}>({data:catalog,loading:true,error:''});
   const reload = useCallback(async () => { setCatalogState(s => ({...s,loading:true,error:''})); try { const data = await generations.catalog(); catalog=data; setCatalogState({data,loading:false,error:''}); } catch(error) { setCatalogState({data:catalog,loading:false,error:error instanceof Error ? error.message : 'Catalog unavailable'}); } }, []);
@@ -242,6 +249,7 @@ export function useGenerateMode(onPickedFromAt?: () => void, onPickAgent?: (agen
   atRef.current = onPickedFromAt;
   useGenMenuPicks((menu, id) => {
     if (menu === 'gen-at' && id.startsWith('agent:')) { agentPickRef.current?.(id.slice(6)); return; }
+    if (menu === 'gen-hash' && id.startsWith('folder:')) { folderPickRef.current?.(id.slice(7)); return; }
     if (menu === 'gen-mode' || menu === 'gen-at') {
       if (id !== 'chat' && !Object.keys(TYPE_NAMES).includes(id)) return;
       if (menu === 'gen-at') atRef.current?.();
