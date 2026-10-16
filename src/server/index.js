@@ -114,6 +114,7 @@ import shellSessionRoutes from './routes/shellSessionRoutes.js';
 import v2MeRoutes from './routes/v2MeRoutes.js';
 import v2AuthzRoutes from './routes/v2AuthzRoutes.js';
 import v2InferenceRoutes from './routes/v2InferenceRoutes.js';
+import inferenceSessionKeyRoutes from './routes/inferenceSessionKeyRoutes.js';
 import inferenceCredentialRoutes from './routes/inferenceCredentialRoutes.js';
 import inferenceServiceRoutes from './routes/inferenceServiceRoutes.js';
 import handleRoutes from './routes/handleRoutes.js';
@@ -686,6 +687,9 @@ if (process.env.OIDC_ENABLED === 'true') {
   // 🔴 POST /api/v2/inference/credentials CARRIES A USER'S PROVIDER KEY.
   // It must never be added to a request-body logger, and nothing under this
   // mount returns plaintext. See `XENO CREDENTIAL HYGIENE - PLAYBOOK.md`.
+  // Short-lived model keys for a person's own agent session (XENO Spawn's XENO mode). 🔴 The response carries a live
+  // key: never add this route to a body logger. Mounted with the auth that records req.auth (scope, DPoP binding).
+  app.use('/api/v2/inference/session-keys', databaseMiddleware, authMiddleware, inferenceSessionKeyRoutes);
   app.use('/api/v2/inference', databaseMiddleware, oidcAuth, v2InferenceRoutes);
   // XENO handle registry (handle = login = identity = @xenostudio.ai address)
   app.use('/api/v2/handles', databaseMiddleware, oidcAuth, handleRoutes);
