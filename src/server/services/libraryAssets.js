@@ -233,7 +233,7 @@ export async function registerManagedLibraryFile(db, {
          filename, original_name, file_type, mime_type, file_size,
          storage_path, storage_type, metadata, content_sha256
        ) VALUES (CASE WHEN $3::uuid IS NULL THEN $1::uuid ELSE NULL::uuid END, $2, $3, $1, $4, $5, $6, $6, $7, $8, 'platform-upload', $9, $10)
-       RETURNING id, created_at, content_sha256, mime_type`,
+       RETURNING id, file_id, created_at, content_sha256, mime_type`,
       [
         userId,
         workspaceId ? null : userId,
