@@ -564,4 +564,6 @@ html[data-panel="closed"] .topbar .opener,html[data-panel="none"] .topbar .opene
 @media (prefers-reduced-motion:reduce){.xag-dot.xag-dot--working,.xag-dot.xag-dot--asking{animation:none}}
 
 /* sidebar: each agent's presence (platform-agents.js `dotOf`; agentPresence.js on the server) */
-.side-dot{position:static;flex:none;width:8px;height:8px;margin:0 7px 0 2px;border-radius:2px;border:0;align-self:center}
+/* In the sidebar the mark sits at the row's lead, bottom-aligned with the name's baseline: small, beside the text,
+   never floating. Scoped with the row so it beats the agent page's absolutely-positioned avatar badge (.xag-dot). */
+.row .xag-dot.side-dot{position:static;inset:auto;flex:none;width:6px;height:6px;margin:0 2px 0 1px;border:0;border-radius:1.5px;box-sizing:border-box;align-self:center;transform:translateY(3px)}

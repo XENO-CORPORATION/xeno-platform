@@ -114,6 +114,8 @@ try {
   ok(/Activity/.test(await main()) && /commented on\s*T-7/.test(await main()) && /tasks_claim_task/.test(await main()), 'its activity lists what it did on tasks and the tools it called');
   await fresh('/workspace/workspace');
   ok(!!(await p.$('#panel .side-dot.xag-dot--working')) && /Release Bot/.test(await p.$eval('#panel', (e) => e.innerText)) && parseFloat(await p.$eval('#panel .side-dot', (d) => getComputedStyle(d).borderTopLeftRadius)) < 4, 'the sidebar lists your agents with the same square status mark');
+  { const g = await p.evaluate(() => { const row = [...document.querySelectorAll('#panel .row')].find((x) => x.querySelector('.side-dot')); const d = row.querySelector('.side-dot').getBoundingClientRect(), t = row.querySelector('.t').getBoundingClientRect(), r = row.getBoundingClientRect(); return { leftOfText: d.right <= t.left, inRowStart: d.left - r.left < 16, lowHalf: d.top >= t.top + t.height / 2 - 1 && d.bottom <= t.bottom, w: d.width }; });
+    ok(g.leftOfText && g.inRowStart && g.lowHalf && g.w <= 7, `the sidebar mark is small, at the start of the row, before the name and level with its bottom (${JSON.stringify(g)})`); }
   await fresh(`/workspace/workspace/Agents/${a.id}`);
 
   // projects
