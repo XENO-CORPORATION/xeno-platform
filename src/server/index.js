@@ -95,7 +95,7 @@ import { sweepRetention, RETENTION_SWEEP_INTERVAL_MS } from './services/dataRete
 import { sweepExpiredArtifacts } from './services/artifactService.js';
 import { sweepLibraryTrash } from './services/libraryOrganise.js';
 import { evictLocalCopies, storeFileObject, sweepOrphanObjects, syncFileObjects } from './services/storageObjects.js';
-import { addVersion } from './services/storageVersions.js';
+import { addVersion, latestFor, revisionFor } from './services/storageVersions.js';
 import { sweepExports } from './services/accountExport.js';
 import { requireSupportedClient } from './middleware/requireSupportedClient.js';
 import clientPolicyRoutes from './routes/clientPolicyRoutes.js';
@@ -1090,7 +1090,13 @@ app.post('/api/library/assets/file/:id/versions', databaseMiddleware, authMiddle
   if (!ALLOWED_UPLOAD_MIMES.has(req.file.mimetype)) { drop(); return res.status(400).json({ success: false, error: `File type '${req.file.mimetype}' is not allowed` }); }
   if (req.file.size > MAX_UPLOAD_SIZE) { drop(); return res.status(400).json({ success: false, error: 'File exceeds maximum size of 100MB' }); }
   try {
-    const result = await addVersion(req.db, req.user.id, req.params.id, { filename: path.basename(req.file.path), mimeType: req.file.mimetype, fileSize: req.file.size, storagePath: req.file.path }, registerManagedLibraryFile);
+    // the file's id or its newest version's id; with If-Match (a sync client), only on top of the version it last saw
+    const fileId = await revisionFor(req.db, req.params.id);
+    const ifMatch = String(req.get('if-match') || '').trim();
+    if (ifMatch && ifMatch !== '*' && ifMatch.replace(/^W\//, '').replace(/"/g, '') !== String(await latestFor(req.db, fileId))) {
+      drop(); return res.status(412).json({ success: false, code: 'version_conflict', error: 'The file has a newer version than the one this change was made on.', current: await latestFor(req.db, fileId) });
+    }
+    const result = await addVersion(req.db, req.user.id, fileId, { filename: path.basename(req.file.path), mimeType: req.file.mimetype, fileSize: req.file.size, storagePath: req.file.path }, registerManagedLibraryFile);
     if (result.notFound) { drop(); return res.status(404).json({ success: false, code: 'not_found', error: 'File not found' }); }
     res.json({ success: true, file: result.file });
   } catch (error) {

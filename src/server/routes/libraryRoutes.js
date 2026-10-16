@@ -1,4 +1,4 @@
-import { listVersions, restoreVersion } from '../services/storageVersions.js';
+import { listVersions, restoreVersion, revisionFor } from '../services/storageVersions.js';
 import { registerManagedLibraryFile } from '../services/libraryAssets.js';
 import { createLink, fileForLink, foldersSharedWith, listShares, revokeShare, shareWithPerson } from '../services/storageShares.js';
 import { allFolders, createFolder, listFolders, moveItemToFolder, removeFolder, updateFolder } from '../services/storageFolders.js';
@@ -29,6 +29,13 @@ import { readArea, readAreaFilter } from '../utils/resourceArea.js';
 
 const router = express.Router();
 
+// XENO Storage: a file keeps one id through every version (storageVersions.revisionFor). Wherever a route names a
+// file by `:id`, the file's id means its newest version and a version's own id means that exact version, so a link,
+// a sync client or a canvas card that remembered the file keeps working after a new version is uploaded.
+router.param('id', async (req, _res, next, id) => {
+  try { req.params.id = await revisionFor(req.db, id); next(); } catch (error) { next(error); }
+});
+
 const streamAsset = async (req, res, fileOrPrincipal, signed = false) => {
   try {
     const file = fileOrPrincipal?.storage_path
@@ -42,6 +49,9 @@ const streamAsset = async (req, res, fileOrPrincipal, signed = false) => {
     if (!resolved) return res.status(404).json({ success: false, error: 'File data not found' });
     const name = String(file.original_name || file.filename || 'download').replace(/[\r\n"]/g, '_');
     const inlineMime = new Set(['image/jpeg', 'image/png', 'image/gif', 'image/webp']);
+    // the version served, as an entity tag a sync client compares, and the file it is a version of
+    res.setHeader('ETag', `"${file.id}"`);
+    if (file.file_id) res.setHeader('X-Xeno-File-Id', String(file.file_id));
     const download = req.query.download === '1';
     const thumbnail = req.query.variant === 'thumbnail' && !download && inlineMime.has(file.mime_type);
     const disposition = download || !inlineMime.has(file.mime_type) ? 'attachment' : 'inline';
@@ -282,7 +292,7 @@ router.post('/assets/file/:id/shares', folders(async (req, res) => {
 }));
 router.delete('/shares/:id', folders(async (req, res) => { shareReply(res, await revokeShare(req.db, req.user.id, req.params.id)); }));
 // VERSIONS of a file (services/storageVersions.js). A new version is uploaded at POST …/versions (index.js, with the upload handler).
-router.get('/assets/file/:id/versions', folders(async (req, res) => { const r = await listVersions(req.db, req.user.id, req.params.id); if (r.notFound) return res.status(404).json({ success: false, code: 'not_found', error: 'File not found' }); res.json({ success: true, versions: r.versions }); }));
+router.get('/assets/file/:id/versions', folders(async (req, res) => { const r = await listVersions(req.db, req.user.id, req.params.id); if (r.notFound) return res.status(404).json({ success: false, code: 'not_found', error: 'File not found' }); res.json({ success: true, fileId: r.fileId, versions: r.versions }); }));
 router.post('/assets/file/:id/versions/:version/restore', folders(async (req, res) => {
   const r = await restoreVersion(req.db, req.user.id, req.params.id, req.params.version, registerManagedLibraryFile);
   if (r.notFound) return res.status(404).json({ success: false, code: 'not_found', error: 'Version not found' });

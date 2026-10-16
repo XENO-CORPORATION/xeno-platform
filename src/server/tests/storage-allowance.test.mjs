@@ -16,7 +16,7 @@ import { registerManagedLibraryFile } from '../services/libraryAssets.js';
 import { runAllMigrations } from '../services/migrationRunner.js';
 import { storageUsage, storageAllowance, StorageFullError } from '../services/storageAllowance.js';
 import { syncFileObjects, fileObjectKey, evictLocalCopies, sweepOrphanObjects, localLibraryPath } from '../services/storageObjects.js';
-import { addVersion } from '../services/storageVersions.js';
+import { addVersion, latestFor, revisionFor } from '../services/storageVersions.js';
 import { setFileStorageForTests } from '../services/artifactStorage.js';
 import { writeTuples } from '../utils/authzReBAC.js';
 
@@ -271,10 +271,28 @@ async function main() {
     assert.deepEqual(history.map((v) => [v.id, v.current]), [[v2.id, true], [v1.id, false]]);
     assert.equal((await call('GET', `/assets/file/${v1.id}/versions`, P)).status, 404, 'an older version is not itself a file');
     assert.equal((await call('GET', `/assets/file/${v2.id}/versions`, O)).status, 404);
+    // ── one file id through every version (Drive/Dropbox model: a file id, and a revision id per version) ──
+    const fileId = (await call('GET', `/assets/file/${v2.id}/versions`, P)).body.fileId;
+    assert.ok(fileId && fileId !== v1.id && fileId !== v2.id, 'the file has its own id, distinct from every version id');
+    assert.equal(v2.fileId, fileId, 'a new version reports the file it belongs to');
+    assert.equal(inBox[0].file_id, fileId, 'the listing carries the file id beside the version id');
+    const byFile = await fetch(`${base}/assets/${fileId}/content`, { headers: P });
+    assert.equal(await byFile.text(), 'second, longer draft', 'the file id opens the newest version');
+    assert.equal(byFile.headers.get('etag'), `"${v2.id}"`, 'and names the version served, for a sync client to compare');
+    assert.equal(byFile.headers.get('x-xeno-file-id'), fileId);
+    assert.equal(await (await fetch(`${base}/assets/${v1.id}/content`, { headers: P })).text(), 'first draft', 'a version id still means that exact version (what a chat message attached)');
+    assert.equal((await call('GET', `/assets/file/${fileId}/versions`, P)).body.versions.length, 2, 'the file id lists the versions');
+    assert.equal((await fetch(`${base}/assets/${fileId}/content`, { headers: O })).status, 200, 'the person it was shared with opens it by the file id');
+    assert.equal(await latestFor(pool, v1.id), v2.id, 'any id of the file leads to its newest version');
+    assert.equal(await revisionFor(pool, v1.id), v1.id, 'while a version id given as such is left alone');
+    await pool.query('UPDATE user_files SET file_id = gen_random_uuid() WHERE id = $1', [v2.id]);
+    assert.equal((await pool.query('SELECT file_id FROM user_files WHERE id = $1', [v2.id])).rows[0].file_id, fileId, 'no write can move a version to another file');
     const v3 = (await call('POST', `/assets/file/${v2.id}/versions/${v1.id}/restore`, P)).body.file;
     await pool.query(`UPDATE library_asset_ingestions SET state = 'ready' WHERE asset_id = $1`, [v3.id]);
     assert.equal(await (await fetch(`${base}/assets/${v3.id}/content`, { headers: P })).text(), 'first draft', 'restoring makes the old content the newest version');
     assert.equal((await call('GET', `/assets/file/${v3.id}/versions`, P)).body.versions.length, 3, 'and nothing in between is lost');
+    assert.equal(v3.fileId, fileId, 'a restored version is still the same file');
+    assert.equal(await (await fetch(`${base}/assets/${fileId}/content`, { headers: P })).text(), 'first draft', 'and the file id follows it');
     // deleting the file for good removes every version, and the space comes back
     await call('POST', `/assets/file/${v3.id}/trash`, P);
     assert.equal((await call('DELETE', `/trash/file/${v3.id}`, P)).status, 200);

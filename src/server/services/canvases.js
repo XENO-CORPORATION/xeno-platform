@@ -16,6 +16,7 @@
  */
 import { check } from '../utils/authzReBAC.js';
 import * as tasks from './xenoTasks.js';
+import { latestFor } from './storageVersions.js';
 
 export class CanvasError extends Error {
   constructor(message, code, status = 400) { super(message); this.code = code; this.status = status; }
@@ -108,9 +109,11 @@ const summary = (c, s) => ({
 async function resolveFiles(db, me, ids) {
   const out = {};
   for (const id of ids) {
-    const can = (await check(db, { object: `library_asset:${id}`, relation: 'viewer', subject: `user:${me.id}` })).allowed;
-    const f = can ? (await db.query('SELECT id, original_name, mime_type, file_size FROM user_files WHERE id = $1 AND deleted_at IS NULL', [id])).rows[0] : null;
-    out[id] = f ? { id: String(f.id), name: f.original_name, type: f.mime_type, bytes: Number(f.file_size), url: `/workspace/library?sel=${f.id}` } : { id, missing: true };
+    // a card names the FILE: it shows the newest version, whichever of the file's ids the card was made with
+    const rev = await latestFor(db, id);
+    const can = (await check(db, { object: `library_asset:${rev}`, relation: 'viewer', subject: `user:${me.id}` })).allowed;
+    const f = can ? (await db.query('SELECT id, file_id, original_name, mime_type, file_size FROM user_files WHERE id = $1 AND deleted_at IS NULL', [rev])).rows[0] : null;
+    out[id] = f ? { id: String(f.file_id), version: String(f.id), name: f.original_name, type: f.mime_type, bytes: Number(f.file_size), url: `/workspace/library?sel=${f.id}` } : { id, missing: true };
   }
   return out;
 }

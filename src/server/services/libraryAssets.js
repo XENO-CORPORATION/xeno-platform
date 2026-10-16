@@ -296,7 +296,7 @@ export async function getAuthorizedLibraryFile(db, principal, assetId, relation 
   });
   if (!authorization.allowed) return null;
   const { rows } = await db.query(
-    `SELECT f.id, f.original_name, f.filename, f.mime_type, f.file_size, f.storage_path,
+    `SELECT f.id, f.file_id, f.original_name, f.filename, f.mime_type, f.file_size, f.storage_path,
             f.owner_user_id, f.workspace_id, f.content_sha256,
             f.metadata->>'source' AS metadata_source,
             latest.state AS ingestion_state,
@@ -570,6 +570,12 @@ export async function listLibraryItems(db, userId, params = {}) {
   let total = rows.length ? rows[0].total_count : 0;
   if (!rows.length && offset > 0) total = (await db.query(sql, [userId, tab, query, 1, 0, view, place, areaFilter.filter, areaFilter.area, folderFilter.on, folderFilter.id, owned])).rows[0]?.total_count || 0;
   const items = rows.map(({ total_count: _total, ...item }) => item);
+  // XENO Storage: a file's id (the same through every version) beside the id of the version listed
+  const fileRows = items.filter((i) => i.source === 'file').map((i) => i.source_id);
+  if (fileRows.length) {
+    const ids = new Map((await db.query('SELECT id, file_id FROM user_files WHERE id = ANY($1::uuid[])', [fileRows])).rows.map((r) => [String(r.id), String(r.file_id)]));
+    for (const i of items) if (i.source === 'file') i.file_id = ids.get(String(i.source_id)) || null;
+  }
   return { items, tab, sort, limit, offset, view, place, area: areaFilter.filter ? areaFilter.area : undefined, total, has_more: offset + items.length < total };
 }
 

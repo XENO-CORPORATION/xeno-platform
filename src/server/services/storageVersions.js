@@ -21,6 +21,40 @@ import { reconcileShares } from './storageShares.js';
 
 const isId = (v) => typeof v === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(v);
 
+/**
+ * A file's id and a version's id (migration 20261016160000). Every row is one VERSION and keeps its own id; every
+ * version of one file shares a FILE id (`user_files.file_id`) that never changes, as Drive and Dropbox do it.
+ *
+ * `revisionFor`: what a route should act on. A file id means the file, so its newest version; a version id means that
+ * exact version, as it always has. Anything else comes back unchanged (a folder id, an unknown id), so callers can
+ * pass every id through it.
+ */
+export async function revisionFor(db, id) {
+  if (!isId(id)) return id;
+  const { rows } = await db.query(
+    `SELECT f.id FROM user_files f WHERE f.file_id = $1 AND f.id <> $1
+        AND NOT EXISTS (SELECT 1 FROM user_files n WHERE n.replaces_asset_id = f.id)
+      ORDER BY f.created_at DESC LIMIT 1`, [id]);
+  return rows[0] ? String(rows[0].id) : id;
+}
+
+/** The newest version of whatever file `id` names, whether `id` is the file's id or any of its versions' ids. */
+export async function latestFor(db, id) {
+  if (!isId(id)) return id;
+  const { rows } = await db.query(
+    `SELECT f.id FROM user_files f WHERE f.file_id = (SELECT COALESCE((SELECT file_id FROM user_files WHERE id = $1), $1::uuid))
+        AND NOT EXISTS (SELECT 1 FROM user_files n WHERE n.replaces_asset_id = f.id)
+      ORDER BY f.created_at DESC LIMIT 1`, [id]);
+  return rows[0] ? String(rows[0].id) : id;
+}
+
+/** The file id of a version (or of a file id itself), or null when there is no such file. */
+export async function fileIdOf(db, id) {
+  if (!isId(id)) return null;
+  const { rows } = await db.query('SELECT file_id FROM user_files WHERE id = $1 OR file_id = $1 LIMIT 1', [id]);
+  return rows[0] ? String(rows[0].file_id) : null;
+}
+
 /** The current (newest) row of a file the caller owns (or, with `orEdits`, may edit), or null. A row that has been replaced is not current. */
 async function ownedCurrent(db, userId, fileId, orEdits = false) {
   if (!isId(fileId) || !isId(userId)) return null;
@@ -35,7 +69,7 @@ async function ownedCurrent(db, userId, fileId, orEdits = false) {
   return null;
 }
 
-/** Newest first: [{ id, sizeBytes, createdAt, current }]. */
+/** Newest first: [{ id, sizeBytes, createdAt, current }] — `id` is each VERSION's id; `fileId` is the file's. */
 export async function listVersions(db, userId, fileId) {
   if (!(await ownedCurrent(db, userId, fileId))) return { notFound: true };
   const { rows } = await db.query(
@@ -43,7 +77,7 @@ export async function listVersions(db, userId, fileId) {
        SELECT id, replaces_asset_id, file_size, created_at, 0 AS depth FROM user_files WHERE id = $1
        UNION ALL SELECT p.id, p.replaces_asset_id, p.file_size, p.created_at, chain.depth + 1 FROM user_files p JOIN chain ON p.id = chain.replaces_asset_id WHERE chain.depth < 500)
      SELECT id, file_size, created_at, depth FROM chain ORDER BY depth`, [fileId]);
-  return { ok: true, versions: rows.map((r) => ({ id: r.id, sizeBytes: Number(r.file_size), createdAt: r.created_at, current: r.depth === 0 })) };
+  return { ok: true, fileId: await fileIdOf(db, fileId), versions: rows.map((r) => ({ id: r.id, sizeBytes: Number(r.file_size), createdAt: r.created_at, current: r.depth === 0 })) };
 }
 
 /**
@@ -75,7 +109,7 @@ export async function addVersion(db, userId, fileId, stored, register) {
   });
   // if it cannot become the new version, the row just made is withdrawn rather than left as a stray file
   try { await link(); } catch (error) { await db.query('UPDATE user_files SET deleted_at = now() WHERE id = $1', [created.id]); throw error; }
-  return { ok: true, file: { id: created.id, replaces: old.id } };
+  return { ok: true, file: { id: created.id, replaces: old.id, fileId: await fileIdOf(db, created.id) } };
 }
 
 /** Bring an older version back: its bytes become a NEW newest version, so nothing in between is lost. */
