@@ -68,6 +68,10 @@ export const EVENTS = Object.freeze({
   BYOK_CREDENTIAL_MODELS_SET: 'byok_credential_models_set',
   BYOK_ROUTE_SET: 'byok_route_set',
   BYOK_ROUTE_CLEARED: 'byok_route_cleared',
+  // Short-lived model keys for a person's own agent session (XENO Spawn's XENO mode). Metadata: key id, prefix,
+  // ttl, the asking OIDC client. Never the key.
+  SESSION_KEY_ISSUED: 'session_key_issued',
+  SESSION_KEY_REVOKED: 'session_key_revoked',
   // XENO Artifacts — publish / share / delete, the same family Claude Code audits as
   // claude_artifact_* (code.claude.com/docs/en/artifacts, "Review the audit log").
   ARTIFACT_PUBLISHED: 'artifact_published',
