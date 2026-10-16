@@ -23,7 +23,7 @@
   const why = (r, d) => (r && r.d && (r.d.error || r.d.message)) || d;
   const ID = /^agt_[0-9a-f]{32}$/;
   const ENDPOINT = () => `${location.origin}/api/mcp`;
-  const S = { key: null, status: 'idle', list: [], one: null, projects: [], services: [], minted: null, busy: false, copied: '', tab: 'claude', q: '', choices: [], divisions: [], canManageDivisions: false, editingInstr: false, offers: [], models: [], runs: [], runsFor: null, moves: [], access: null, transfers: [], members: [] };
+  const S = { key: null, status: 'idle', list: [], presence: {}, activity: null, one: null, projects: [], services: [], minted: null, busy: false, copied: '', tab: 'claude', q: '', choices: [], divisions: [], canManageDivisions: false, editingInstr: false, offers: [], models: [], runs: [], runsFor: null, moves: [], access: null, transfers: [], members: [] };
   // the xeno-spawn:// link: on only once Spawn ships its link handler in a verified release (the command always works)
   const SPAWN_LINK = false;
   const EFFORTS = ['minimal', 'low', 'medium', 'high', 'max'];
@@ -44,12 +44,16 @@
     return s < 3600 ? `${Math.max(1, Math.floor(s / 60))} min left` : s < 86400 ? `${Math.floor(s / 3600)} h left` : `${Math.floor(s / 86400)} days left`;
   };
   /** live (used in the last 5 minutes) · ready (has a credential) · new (never connected) */
+  // the server's presence (agentPresence.js) — derived from runs, credentials and calls, never guessed here
+  const PRES_DOT = { working: 'live', online: 'live', cloud: 'ready', offline: 'idle', new: 'new', paused: 'off' };
   const state = (a) => {
+    const pr = S.presence[a.id];
+    if (pr) return [PRES_DOT[pr.state] || 'idle', pr.label, pr];
     if (a.paused === 'needs_owner') return ['off', 'Paused — needs an owner'];
-    const last = a.connections.map((c) => c.lastUsedAt).filter(Boolean).sort().pop();
+    const last = (a.connections || []).map((c) => c.lastUsedAt).filter(Boolean).sort().pop();
     if (last && Date.now() - new Date(last).getTime() < 5 * 60e3) return ['live', 'Working now'];
     if (last) return ['idle', `Last worked ${ago(last).toLowerCase()}`];
-    if (a.credentials.length) return ['ready', 'Ready to connect'];
+    if ((a.credentials || []).length) return ['ready', 'Ready to connect'];
     return ['new', 'Not connected yet'];
   };
   const mono = (name) => esc(String(name || '?').trim().split(/\s+/).map((w) => w[0]).join('').slice(0, 2).toUpperCase());
@@ -61,6 +65,7 @@
     if (S.key !== at) return;
     if (!list.ok) { S.status = list.status === 403 ? 'denied' : 'error'; return paint(); }
     S.list = list.d.agents || []; S.projects = pr.ok ? pr.d.projects || [] : [];
+    loadPresence();
     if (!S.models.length) api('GET', '/api/models').then((m) => { if (m.ok && m.d) { const g = m.d.companies || m.d.models || m.d; const ids = []; for (const v of Object.values(g || {})) if (Array.isArray(v)) for (const x of v) if (x && x.id) ids.push(x.id); S.models = ids; } }).catch(() => {});
     const dv0 = await api('GET', '/api/divisions'); if (dv0.ok) { S.divisions = dv0.d.divisions || []; S.canManageDivisions = !!dv0.d.canManage; }
     const ib = await api('GET', '/api/agents/lends/inbox'); S.offers = ib.ok ? ib.d.offers || [] : [];
@@ -76,9 +81,22 @@
       const [ch, dv] = await Promise.all([api('GET', `/api/agents/${id}/project-choices`), api('GET', '/api/divisions' + (S.one.workspace ? `?workspace=${S.one.workspace.id}` : ''))]);
       if (S.key !== at) return;
       S.choices = ch.ok ? ch.d.projects || [] : []; S.divisions = dv.ok ? dv.d.divisions || [] : []; S.canManageDivisions = !!(dv.ok && dv.d.canManage);
-      loadRuns(id); loadAccess(id);
+      loadRuns(id); loadAccess(id); loadActivity(id);
     }
     S.status = 'ready'; paint();
+  }
+  async function loadPresence() {
+    const r = await api('GET', '/api/agents/presence');
+    if (r.ok) { S.presence = Object.fromEntries((r.d.agents || []).map((x) => [x.id, x])); paint(); }
+  }
+  async function loadActivity(id, more = false) {
+    const before = more && S.activity && S.activity.next ? '&before=' + encodeURIComponent(S.activity.next) : '';
+    const r = await api('GET', `/api/agents/${id}/activity?limit=40${before}`);
+    if (!S.one || S.one.id !== id) return;
+    if (!r.ok) { S.activity = { error: true, items: [] }; return paint(); }
+    S.activity = { items: [...(more && S.activity ? S.activity.items : []), ...(r.d.items || [])], next: r.d.next };
+    if (r.d.presence) S.presence[id] = { ...(S.presence[id] || {}), ...r.d.presence };
+    paint();
   }
   // ownership: who owns it, who answers for it, who may do what (agentAccess.js)
   async function loadAccess(id) {
@@ -238,6 +256,21 @@
   };
   const copyBtn = (text, label = 'Copy') => `<button type="button" class="xag-copy" data-xag="copy" data-copy="${esc(text)}">${ic(S.copied === text ? 'check' : 'copy')}<span>${S.copied === text ? 'Copied' : label}</span></button>`;
 
+  const ACT_IC = { task: 'check', call: 'plug', run: 'refresh' };
+  const TASK_WHAT = { created: 'raised', status: 'moved', comment: 'commented on', activity: 'reported on', claimed: 'took', delegated: 'was handed', linked: 'linked' };
+  function activityHTML(a) {
+    const A = S.activity;
+    if (!A) return '<p class="xag-none">Loading…</p>';
+    if (A.error) return '<p class="xag-none">Its activity couldn’t be loaded. <button class="pg-link" data-xag="activity-refresh">Try again</button></p>';
+    if (!A.items.length) return `<p class="xag-none">Nothing yet. What ${esc(a.name)} does on tasks, every XENO tool it calls and each cloud run shows here.</p>`;
+    const line = (x) => {
+      const head = x.kind === 'task' ? `${esc(TASK_WHAT[x.what] || x.what)} <a href="#" data-xag="open-task" data-k="${esc(x.task)}">${esc(x.task)}</a> ${esc(x.title || '')}`
+        : x.kind === 'run' ? `cloud run on <a href="#" data-xag="open-task" data-k="${esc(x.task)}">${esc(x.task)}</a> — ${esc(x.what)}`
+        : `called <code>${esc(x.what)}</code>${x.where ? ` from ${esc(x.where)}` : ''}`;
+      return `<li class="xag-log xag-log--${esc(x.kind)}${x.ok === false ? ' xag-log--bad' : ''}"><span class="xag-row-ic">${ic(ACT_IC[x.kind] || 'dot')}</span><span class="xag-row-b"><span>${head}</span>${x.detail ? `<small>${esc(x.detail)}</small>` : ''}</span><time datetime="${esc(x.at)}">${esc(ago(x.at))}</time></li>`;
+    };
+    return `<ol class="xag-logs">${A.items.map(line).join('')}</ol>${A.next ? '<button class="pg-link" data-xag="activity-more">Older</button>' : ''}`;
+  }
   function onePage() {
     const h = H(), a = S.one; if (!a) return null;
     const [k, l] = state(a);
@@ -311,11 +344,12 @@
             ${a.webhook ? `<div class="xag-rows"><div class="xag-row"><span class="xag-row-ic">${ic('send')}</span><span class="xag-row-b"><code>${esc(a.webhook)}</code><small>Every task delegated to it is posted here, signed (HMAC-SHA256), and retried if it fails</small></span><span></span><button type="button" class="pg-btn ghost" data-xag="webhook-off">Remove</button></div></div>`
               : '<p class="xag-none">No webhook. It finds new work by asking XENO (its event feed, or the Tasks tools over MCP). Add one to be told the moment a task is delegated to it.</p>'}
             ${S.hook && S.hook.agentId === a.id ? `<div class="xag-secret" role="status"><div><b>${ic('lock')}Signing secret — copy it now, it is never shown again</b></div><div class="xag-secret-v"><code>${esc(S.hook.secret)}</code>${copyBtn(S.hook.secret)}</div></div>` : ''}</section>
+          <section class="pg-sec xag-act" id="xag-activity"><div class="pg-sec-h"><h3>Activity</h3><button class="pg-link" data-xag="activity-refresh">Refresh</button></div>${activityHTML(a)}</section>
           <section class="pg-sec"><div class="pg-sec-h"><h3>Where it has run</h3></div><div class="xag-rows">${conns}</div></section>
           <section class="pg-sec"><div class="pg-sec-h"><h3>Credentials</h3><small>${a.credentials.length} live</small></div><div class="xag-rows">${creds}</div></section>
         </div><aside><div class="xag-id">
           <span class="xag-mono xag-mono--lg" aria-hidden="true">${mono(a.name)}<i class="xag-dot xag-dot--${k}"></i></span>
-          <b>${esc(a.name)}</b><span class="xag-st xag-st--${k}">${esc(l)}</span></div>
+          <b>${esc(a.name)}</b><span class="xag-st xag-st--${k}" data-xag-presence="${esc((state(a)[2] || {}).state || k)}">${esc(l)}</span>${(() => { const pr = state(a)[2]; if (!pr) return ''; return `<small class="xag-avail">${pr.canTakeWork ? 'Can take work now' : pr.state === 'paused' ? 'Can’t take work' : 'Work handed to it waits until it connects'}${pr.seenAt ? ` · seen ${esc(ago(pr.seenAt).toLowerCase())}` : ''}</small>`; })()}</div>
           <dl class="pg-props"><dt>Owner</dt><dd>${company ? esc(a.owner.name) : 'You'}</dd><dt>Created</dt><dd>${esc(new Date(a.createdAt).toLocaleDateString())}</dd><dt>Division</dt><dd>${a.division ? esc(a.division.name) : 'None'}</dd><dt>Version</dt><dd>${a.version ? 'v' + a.version : '—'}</dd><dt>Projects</dt><dd>${a.projects.length}</dd><dt>Ran from</dt><dd>${h.plural(a.connections.length, 'place', 'places')}</dd>
             <dt>Id</dt><dd><button type="button" class="xag-idbtn" data-xag="copy" data-copy="${esc(a.id)}" title="Its permanent id — what Spawn and other tools store. It never changes, even if you rename it.">${S.copied === a.id ? 'Copied' : esc(a.id.slice(0, 12)) + '…'}</button></dd></dl>
           <p class="xag-note">It acts only as itself, never as you, and you can stop it at any moment by revoking its credentials.</p></aside></div>`, 'xag');
@@ -487,6 +521,8 @@
     if (a === 'edit') return edit();
     if (a === 'delete') return remove();
     if (a === 'mint') return mint();
+    if (a === 'activity-refresh') { if (S.one) { loadActivity(S.one.id); loadPresence(); } return; }
+    if (a === 'activity-more') return S.one && loadActivity(S.one.id, true);
     if (a === 'revoke') return revoke(b.dataset.id);
     if (a === 'copy') return copy(b.dataset.copy);
     if (a === 'tab') { S.tab = b.dataset.k; return paint(); }
@@ -530,6 +566,7 @@
       '.xag-card-f{display:flex;align-items:center;justify-content:space-between;gap:10px;padding-top:10px;border-top:1px solid var(--border);font-size:12px;color:var(--muted)}.xag-card-f>span:first-child{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}',
       '.xag-mono{position:relative;display:grid;place-items:center;width:38px;height:38px;border-radius:11px;background:var(--control);font-size:13px;font-weight:600;letter-spacing:.02em;flex:none}.xag-mono--lg{width:64px;height:64px;border-radius:18px;font-size:21px}',
       '.xag-dot{position:absolute;right:-2px;bottom:-2px;width:11px;height:11px;border-radius:50%;border:2px solid var(--panel);background:var(--dim)}.xag-mono--lg .xag-dot{width:15px;height:15px}',
+      '.xag-avail{display:block;margin-top:4px;color:var(--muted);font-size:12px}.xag-logs{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:2px}.xag-log{display:flex;align-items:flex-start;gap:10px;padding:7px 8px;border-radius:8px}.xag-log:hover{background:var(--hover,rgba(255,255,255,.04))}.xag-log .xag-row-b{flex:1;min-width:0;display:flex;flex-direction:column;gap:1px}.xag-log .xag-row-b small{color:var(--muted)}.xag-log time{flex:none;color:var(--muted);font-size:12px}.xag-log--bad .xag-row-b small{color:var(--text)}.xag-log code{font-size:12px}.xag-dot--off{background:transparent;border:1px solid var(--muted)}.xag-dot--new{background:transparent;border:1px dashed var(--muted)}',
       '.xag-dot--live{background:#4ade80;box-shadow:0 0 0 0 #4ade8066;animation:xagp 2s infinite}.xag-dot--idle{background:var(--muted)}.xag-dot--ready{background:var(--text)}',
       '@keyframes xagp{70%{box-shadow:0 0 0 6px #4ade8000}100%{box-shadow:0 0 0 0 #4ade8000}}@media (prefers-reduced-motion:reduce){.xag-dot--live{animation:none}}',
       '.xag-st{font-size:12px;color:var(--muted);white-space:nowrap}.xag-st--live{color:#4ade80}.xag-st--ready{color:var(--text)}',
@@ -581,5 +618,11 @@
 
   // the sidebar counts real agents: read the list once in the background
   setTimeout(async () => { if (S.list.length) return; const r = await api('GET', '/api/agents'); if (r.ok && !S.list.length) { S.list = r.d.agents || []; paint(); } }, 1500);
-  window.XENO_AGENTS = { served: true, count: () => (S.status === 'ready' || S.list.length ? S.list.length : null), route, nameOf, isId: (s) => ID.test(String(s || '')), reload: () => { S.key = null; paint(); } };
+  // the Workspace sidebar: each agent with its presence, newest activity first; the dot class rides the meta
+  const sidebar = () => S.list.slice().sort((x, y) => String((S.presence[y.id] || {}).seenAt || '').localeCompare(String((S.presence[x.id] || {}).seenAt || '')))
+    .slice(0, 8).map((a) => { const [, l] = state(a); return [a.name, l, '', `Agents/${a.id}`]; });
+  const dotOf = (item) => { const id = String(item || '').replace(/^Agents\//, ''); const a = S.list.find((x) => x.id === id); return a ? state(a)[0] : null; };
+  // presence stays current while the page is open: every 30 s, only when the tab is visible
+  setInterval(() => { if (document.visibilityState === 'visible' && S.list.length) loadPresence(); }, 30_000);
+  window.XENO_AGENTS = { served: true, sidebar, dotOf, count: () => (S.status === 'ready' || S.list.length ? S.list.length : null), route, nameOf, isId: (s) => ID.test(String(s || '')), reload: () => { S.key = null; paint(); } };
 })();

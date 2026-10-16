@@ -127,7 +127,7 @@ export function useGenMenuPicks(onPick: (menu: string, id: string) => void) {
 }
 
 /** Open the type menu from the @ list as the person types. */
-export function openAtMenu(anchor: Element | null, matches: GenType[], selected: string = '', agents: { id: string; name: string; division: string | null }[] = []) {
+export function openAtMenu(anchor: Element | null, matches: GenType[], selected: string = '', agents: { id: string; name: string; division: string | null; presence?: string }[] = []) {
   openList('gen-at', anchor, agents.length && !matches.length ? 'Hand off to' : 'Generate', [
     ...matches.map((k) => ({
       id: k,
@@ -137,7 +137,7 @@ export function openAtMenu(anchor: Element | null, matches: GenType[], selected:
       reason: GEN_CATALOG[k].available ? '' : 'No model is available for this yet',
     })),
     // your agents: picking one hands the prompt to it (AgentHandoff.tsx)
-    ...agents.map((a, i) => ({ id: `agent:${a.id}`, name: a.name, note: a.division || 'Agent', sep: i === 0 && matches.length > 0 })),
+    ...agents.map((a, i) => ({ id: `agent:${a.id}`, name: a.name, note: a.presence || a.division || 'Agent', sep: i === 0 && matches.length > 0 })),
   ], selected, { align: 'left' });
 }
 

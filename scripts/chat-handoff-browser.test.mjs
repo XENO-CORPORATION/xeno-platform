@@ -96,7 +96,7 @@ try {
     await page.keyboard.press('Escape'); await wait(400);
     assert.equal(await frame.$('[data-handoff-to]'), null, 'still in hand-off mode'); const sent = writes.slice(before).filter((w) => !w.includes('/api/tokenize/')); assert.deepEqual(sent, [], JSON.stringify(sent));
   });
-  await check('no page error anywhere in the run', async () => { assert.deepEqual(pageErrors, []); });
+  await check('no page error anywhere in the run', async () => { assert.deepEqual(pageErrors, [], JSON.stringify(pageErrors).slice(0, 400)); });
 } finally { await browser.close(); await server.close(); process.chdir(previous); }
 console.log(`\nchat-handoff-browser: ${passed} passed, ${failures.length} failed`);
 if (failures.length) { console.log(failures.map((f) => '  - ' + f).join('\n')); process.exit(1); }
