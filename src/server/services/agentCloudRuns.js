@@ -20,6 +20,7 @@ import crypto from 'node:crypto';
 import { agentsApiBaseUrl, mintDelegatedAccessToken, revokeDelegatedSession } from './marketplaceBroker.js';
 import * as agents from './platformAgents.js';
 import * as tasks from './xenoTasks.js';
+import { guidanceFor } from './agentGuidance.js';
 import { issuer } from '../config/hosts.js';
 
 export const RUN_ACTOR = 'xeno-agent-runs';
@@ -57,14 +58,17 @@ function view(r, agent) {
 }
 
 /** What the agent is told to do: who it is, its instructions, and the task. */
-export function runPrompt(agent, task) {
+export function runPrompt(agent, task, guidance = null) {
   const lines = [
     `You are the XENO agent "${agent.name}" (${agent.id}${agent.division ? `, division ${agent.division.name}` : ''}, instructions v${agent.version}).`,
     'Work the XENO task below. Use the XenoTask tools: take it (XenoTaskTake), report what you are doing as you go (XenoTaskReport),',
     'comment with what you did and how you verified it (XenoTaskComment), then send it for review (XenoTaskMove to in_review).',
     'You can never accept your own work. If you need a decision, ask with XenoTaskReport type "ask" and stop.',
   ];
-  if (agent.instructions) lines.push('', 'Your instructions:', agent.instructions);
+  // inherited guidance (agentGuidance.js): XENO's way of working, then the project's, the area's and the agent's
+  // own words — the same text a local CLI reads from get_task, so both runs are told the same thing
+  if (guidance) lines.push('', guidance);
+  else if (agent.instructions) lines.push('', 'Your instructions:', agent.instructions);
   lines.push('', `Task ${task.key}: ${task.title}`, task.body ? `\n${task.body}` : '');
   return lines.join('\n').slice(0, 60000);
 }
@@ -131,7 +135,7 @@ export async function start(db, owner, agentId, { taskKey, budgetCredits } = {},
         method: 'POST',
         headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json', 'idempotency-key': `agent-run:${row.id}` },
         body: JSON.stringify({
-          prompt: runPrompt(agent, task),
+          prompt: runPrompt(agent, task, (await guidanceFor(db, task, agent.userId)).text),
           title: `${agent.name} · ${task.key} ${task.title}`.slice(0, 200),
           ...(agent.runtime && agent.runtime.model ? { model: agent.runtime.model } : {}),
           ...(agent.runtime && agent.runtime.effort ? { effort: agent.runtime.effort } : {}),
