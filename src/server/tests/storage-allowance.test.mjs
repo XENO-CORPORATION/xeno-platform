@@ -473,6 +473,50 @@ async function main() {
     assert.equal((await call('POST', `/assets/file/${eVersion.id}/shares`, O, { with: 'sto_free' })).status, 404, 'an editor does not share it on');
     assert.equal((await call('POST', `/assets/file/${eVersion.id}/versions/${edited.id}/restore`, O)).status, 404, 'an editor does not restore');
 
+    // ── company workspaces (workspace_type 'company', 2026-10-16): Storage keys on membership, never on the type ──
+    const co = (await pool.query(`INSERT INTO workspaces (owner_user_id, workspace_type, name, slug) VALUES ($1, 'company', 'Sto Company', 'sto-company') RETURNING id`, [paid])).rows[0].id;
+    const coB = (await pool.query(`INSERT INTO workspaces (owner_user_id, workspace_type, name, slug) VALUES ($1, 'company', 'Other Company', 'other-company') RETURNING id`, [paid])).rows[0].id;
+    await writeTuples(pool, { writes: [
+      { object: `workspace:${co}`, relation: 'owner', subject: `user:${paid}` },
+      { object: `workspace:${coB}`, relation: 'owner', subject: `user:${paid}` },
+      { object: `workspace:${co}`, relation: 'editor', subject: `user:${other}` },
+    ] });
+    const coTop = (await call('POST', '/folders', O, { name: 'Contracts', workspace: co })).body.folder;
+    assert.equal(coTop?.workspaceId, co, 'a company member makes a company folder');
+    const coSub = (await call('POST', '/folders', O, { name: '2026', parent: coTop.id })).body.folder;
+    assert.equal(coSub.workspaceId, co, 'a folder inside inherits the company');
+    assert.deepEqual((await call('GET', `/folders?workspace=${co}`, P)).body.folders.map((f) => f.name), ['Contracts'], 'every member lists it');
+    assert.equal((await call('GET', `/folders?workspace=${co}`, F)).status, 404, 'a non-member does not');
+    assert.equal((await call('POST', '/folders', F, { name: 'Sneak', workspace: co })).status, 404, 'nor makes folders in it');
+    const coSide = (await call('POST', '/folders', P, { name: 'Archive', workspace: co })).body.folder;
+    assert.equal((await call('PATCH', `/folders/${coSub.id}`, O, { parent: coSide.id })).status, 200, 'a member reparents within the company');
+    const coFile = await ready(await add(other, 'nda.txt', 'company bytes', { workspaceId: co }));
+    assert.equal((await call('PUT', `/assets/file/${coFile.id}/folder`, O, { folder: coSub.id })).status, 200, 'a member files a company file');
+    assert.deepEqual((await call('GET', `/assets?folder=${coSub.id}`, P)).body.items.map((i) => i.name), ['nda.txt'], 'and every member sees it there');
+    assert.equal(await read(coFile, P), 200, 'members read it');
+    assert.equal(await read(coFile, F), 404, 'a non-member cannot read it');
+    // versions and restore on a company file keep it the company's
+    const coV2 = await ready((await addVersion(pool, other, coFile.id, stage('nda-2.txt', 'company bytes v2'), registerManagedLibraryFile)).file);
+    assert.equal((await pool.query('SELECT workspace_id FROM user_files WHERE id = $1', [coV2.id])).rows[0].workspace_id, co, 'a new version stays in the company');
+    const coRestored = (await call('POST', `/assets/file/${coV2.id}/versions/${coFile.id}/restore`, O)).body;
+    assert.ok(coRestored.file?.id, `a member restores a company version (${JSON.stringify(coRestored).slice(0, 120)})`);
+    await ready(coRestored.file);
+    assert.equal(await (await fetch(`${base}/assets/${coRestored.file.fileId}/content`, { headers: P })).text(), 'company bytes', 'the restored bytes are served by the file id');
+    assert.equal((await pool.query('SELECT workspace_id FROM user_files WHERE id = $1', [coRestored.file.id])).rows[0].workspace_id, co);
+    // moves never cross a boundary
+    const personalOfPaid = (await call('POST', '/folders', P, { name: 'Mine only' })).body.folder;
+    assert.equal((await call('PUT', `/assets/file/${coRestored.file.id}/folder`, P, { folder: personalOfPaid.id })).body.code, 'folder_other_place', 'company → personal refused');
+    const coBTop = (await call('POST', '/folders', P, { name: 'B', workspace: coB })).body.folder;
+    assert.equal((await call('PUT', `/assets/file/${coRestored.file.id}/folder`, P, { folder: coBTop.id })).body.code, 'folder_other_place', 'company A → company B refused');
+    const paidLoose = await add(paid, 'personal.txt', 'mine');
+    assert.equal((await call('PUT', `/assets/file/${paidLoose.id}/folder`, P, { folder: coSub.id })).body.code, 'folder_other_place', 'personal → company refused');
+    assert.equal((await call('PATCH', `/folders/${coSide.id}`, P, { parent: coBTop.id })).body.code, 'folder_other_place', 'a company folder stays in its company');
+    // the meter: company bytes count toward the company, never the person's own allowance
+    const meterO = await storageUsage(pool, other);
+    const coEntry = meterO.workspaces.find((w) => w.id === co);
+    assert.ok(coEntry && coEntry.bytes > 0, 'company bytes are metered under the company');
+    assert.equal((await pool.query(`SELECT count(*)::int AS n FROM user_files WHERE workspace_id IS NULL AND id = ANY($1)`, [[coFile.id, coV2.id, coRestored.file.id]])).rows[0].n, 0, 'none of them is a personal file');
+
     console.log('storage-allowance: all checks passed');
   } finally {
     await new Promise((resolve) => server.close(resolve));

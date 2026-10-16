@@ -63,6 +63,13 @@ async function ownedCurrent(db, userId, fileId, orEdits = false) {
     `SELECT f.* FROM user_files f WHERE f.id = $1 AND f.deleted_at IS NULL AND f.storage_type = 'platform-upload'
         AND NOT EXISTS (SELECT 1 FROM user_files n WHERE n.replaces_asset_id = f.id)`, [fileId]);
   if (!rows[0]) return null;
+  // A workspace's file (team or company) has no personal owner: its tuple is `parent → workspace`, so the workspace's
+  // editors are the ones who may version and restore it — the same rule as filing it into a workspace folder.
+  // Membership decides, never the workspace's type.
+  if (rows[0].workspace_id) {
+    const editor = await check(db, { object: `workspace:${rows[0].workspace_id}`, relation: 'editor', subject: `user:${userId}` });
+    return editor.allowed ? rows[0] : null;
+  }
   const owner = await check(db, { object: `library_asset:${fileId}`, relation: 'owner', subject: `user:${userId}` });
   if (owner.allowed) return rows[0];
   // someone the owner gave "can edit" may add a version; the file stays the owner's
