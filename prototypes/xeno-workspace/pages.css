@@ -546,10 +546,22 @@ html[data-panel="closed"] .topbar .opener,html[data-panel="none"] .topbar .opene
 .sb-facts .pg-st{font-size:11px}
 @media (max-width:980px){.pg-top-left:has(.pg-top-tabs){display:flex;overflow-x:auto}}
 
+/* the agent status mark — one definition for the agent page, the list, the sidebar (agentPresence.js states).
+   A square with a small radius, never a circle (DESIGN_SYSTEM.md §3). Colour only for status (§2): green working /
+   online, yellow idle or waiting on you, red error; white means "ready, runs in the cloud"; grey offline; an outline
+   means not connected yet or paused. Working BLINKS — a slow pulse of the mark itself, not a halo — and stops
+   under reduced motion (§ motion). */
+.xag-dot.xag-dot--working,.xag-dot.xag-dot--online{background:#22c55e}
+.xag-dot.xag-dot--asking{background:#eab308}
+.xag-dot.xag-dot--error{background:#ef4444}
+.xag-dot.xag-dot--ready{background:var(--text)}
+.xag-dot.xag-dot--idle{background:#eab308;opacity:.55}
+.xag-dot.xag-dot--new{background:transparent;outline:1px dashed var(--muted);outline-offset:-1px}
+.xag-dot.xag-dot--off{background:transparent;outline:1px solid var(--muted);outline-offset:-1px}
+.xag-dot.xag-dot--working{animation:xag-blink 1.2s ease-in-out infinite}
+.xag-dot.xag-dot--asking{animation:xag-blink 2.4s ease-in-out infinite}
+@keyframes xag-blink{0%,100%{opacity:1}50%{opacity:.35}}
+@media (prefers-reduced-motion:reduce){.xag-dot.xag-dot--working,.xag-dot.xag-dot--asking{animation:none}}
+
 /* sidebar: each agent's presence (platform-agents.js `dotOf`; agentPresence.js on the server) */
-.side-dot{position:static;flex:none;width:8px;height:8px;margin:0 6px 0 2px;border-radius:50%;border:0;background:var(--muted);align-self:center}
-.side-dot.xag-dot--live{background:#4ade80}
-.side-dot.xag-dot--ready{background:var(--text)}
-.side-dot.xag-dot--idle{background:var(--muted);opacity:.6}
-.side-dot.xag-dot--new{background:transparent;border:1px dashed var(--muted)}
-.side-dot.xag-dot--off{background:transparent;border:1px solid var(--muted)}
+.side-dot{position:static;flex:none;width:8px;height:8px;margin:0 7px 0 2px;border-radius:2px;border:0;align-self:center}

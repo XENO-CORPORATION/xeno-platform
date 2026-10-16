@@ -22,6 +22,7 @@ import chatRoutes from '../routes/chatRoutes.js';
 import { personOnly } from '../routes/xenoMcpRoutes.js';
 import xenoTasksRoutes, { taskTokenAuth, unlessTaskToken, mcpChallenge } from '../routes/xenoTasksRoutes.js';
 import platformAgentRoutes from '../routes/platformAgentRoutes.js';
+import { stopListening } from '../services/agentPresenceStream.js';
 import { createServiceLedgerRouter } from '../routes/serviceLedgerRoutes.js';
 import { authMiddleware } from '../middleware/auth.js';
 import { runAllMigrations } from '../services/migrationRunner.js';
@@ -136,6 +137,25 @@ async function main() {
     check_(log.presence && log.presence.state === 'working', 'with its presence');
     check_((await call('GET', `/api/agents/${ag.id}/activity`, { token: B })).s === 404, 'someone else cannot read its log');
 
+    // LIVE: the stream sends a snapshot, then a change the moment it happens (NOTIFY from the database)
+    {
+      const ctl = new AbortController(); const got = [];
+      const res = await fetch(`${origin}/api/agents/presence/stream`, { headers: { authorization: `Bearer ${A}`, accept: 'text/event-stream' }, signal: ctl.signal });
+      check_(res.status === 200 && /text\/event-stream/.test(res.headers.get('content-type') || ''), 'the presence stream opens as Server-Sent Events');
+      const reader = res.body.getReader(), dec = new TextDecoder(); let buf = '';
+      const until = async (pred, ms) => { const end = Date.now() + ms; while (Date.now() < end) { const r = await Promise.race([reader.read(), new Promise((ok) => setTimeout(() => ok({ wait: true }), end - Date.now()))]); if (r.wait || r.done) break; buf += dec.decode(r.value); let i; while ((i = buf.indexOf('\n\n')) >= 0) { const block = buf.slice(0, i); buf = buf.slice(i + 2); const ev = /event: (\w+)/.exec(block), d = /data: (.*)/.exec(block); if (ev) got.push({ event: ev[1], data: d ? JSON.parse(d[1]) : null }); } if (pred()) return true; } return pred(); };
+      check_(await until(() => got.some((x) => x.event === 'ready'), 5000) && got.some((x) => x.event === 'presence' && x.data.id === ag.id && x.data.state === 'working'), 'it starts with a snapshot: the agent is working');
+      const t0 = Date.now();
+      await call('POST', `/api/tasks/${task.key}/activity`, { token: pa.credential, body: { type: 'ask', body: 'Which export size?' } });
+      check_(await until(() => got.some((x) => x.event === 'presence' && x.data.id === ag.id && x.data.state === 'asking'), 5000), 'when the agent asks a question, the stream says so at once');
+      const asked = got.find((x) => x.event === 'presence' && x.data.state === 'asking');
+      check_(asked && /Needs you on T-\d+/.test(asked.data.label) && asked.data.asking.note === 'Which export size?' && Date.now() - t0 < 3000, `with what it asked, within a moment (${Date.now() - t0} ms)`);
+      ctl.abort();
+    }
+    await call('POST', `/api/tasks/${task.key}/activity`, { token: pa.credential, body: { type: 'action', body: 'exporting at 1080p' } });
+    const back = (await call('GET', '/api/agents/presence', { token: A })).j.agents.find((x) => x.id === ag.id);
+    check_(back.state === 'working' && back.doing && back.doing.note === 'exporting at 1080p', 'once it carries on, it is working again, and says on what');
+
     // a second press while it is live returns the same run
     const again = await call('POST', `/api/agents/${ag.id}/runs`, { token: A, body: { task: task.key } });
     check_(again.s === 200 && again.j.run.id === st.j.run.id && seen.filter((x) => x.url === '/runs').length === 1, 'pressing Run again while it is live returns the same run, and starts nothing');
@@ -197,7 +217,7 @@ async function main() {
     check_((await call('POST', `/api/agents/${ag.id}/runs`, { token: A, body: { task: task4.key } })).j.code === 'cloud_runs_unavailable', 'without a runner configured, it says cloud runs are unavailable');
     process.env.AGENTS_API_BASE_URL = saved;
   } finally {
-    server.close(); runner.close();
+    stopListening(); server.closeAllConnections?.(); server.close(); runner.close();
     await pool.end();
   }
   console.log(`\nagent-cloud-runs: ${passed} passed, ${failed} failed`);
