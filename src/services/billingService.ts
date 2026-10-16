@@ -167,13 +167,13 @@ export async function startTeamCheckout(
     if (!listRes.ok) return { ok: false, error: listData?.error || `Could not load workspaces (${listRes.status})` };
 
     let workspace = (listData?.workspaces || []).find(
-      (w: { workspace_type?: string; member_role?: string }) => w.workspace_type === 'team' && w.member_role === 'owner',
+      (w: { workspace_type?: string; member_role?: string }) => w.workspace_type !== 'personal' && w.member_role === 'owner',
     );
     if (!workspace) {
       const createRes = await fetch(`${API_BASE}/workspaces`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', ...authHeaders() },
-        body: JSON.stringify({ name: opts.workspaceName || 'My Team', workspace_type: 'team' }),
+        body: JSON.stringify({ name: opts.workspaceName || 'My Company', workspace_type: 'company' }),
       });
       const createData = await createRes.json().catch(() => ({}));
       if (!createRes.ok || !createData?.workspace) {

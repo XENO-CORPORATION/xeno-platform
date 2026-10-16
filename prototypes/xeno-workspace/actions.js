@@ -154,7 +154,7 @@
   const WS_DEFAULT = [{ id: 'personal', name: 'Personal', sub: 'Just you', initial: 'E' }, { id: 'xeno', name: 'XENO Corp', sub: 'Company · you are the owner', initial: 'X' }, { id: 'lumen', name: 'Lumen Studio', sub: 'Guest · 2 projects', initial: 'L' }];
   const workspaces = () => LS.get('workspaces', null) || WS_DEFAULT;
   const currentWorkspace = () => { const all = workspaces(), id = LS.get('workspace', 'personal'); return all.find((w) => w.id === id) || all[0]; };
-  function switchWorkspace(id) { const w = workspaces().find((x) => x.id === id); if (!w || w.id === currentWorkspace().id) return; LS.set('workspace', id); X().applyWorkspace?.(); X().render(); toast(`Switched to ${w.name}`); }
+  function switchWorkspace(id) { const w = workspaces().find((x) => x.id === id); if (!w || w.id === currentWorkspace().id) return; LS.set('workspace', id); window.XENO_ADDR?.setWorkspace?.(w.personal || !w.uuid ? null : w.uuid); X().applyWorkspace?.(); X().render(); toast(`Switched to ${w.name}`); }
   async function newCompany() {
     const v = await D().form({ title: 'Create a company', sub: 'A company is a workspace you share: people and agents, one wallet, one Library.', submit: 'Create company', size: 'sm', fields: [
       { id: 'name', label: 'Company name', required: true, max: 60, placeholder: 'e.g. Lumen Studio', validate: (x) => (workspaces().some((w) => w.name.toLowerCase() === x.trim().toLowerCase()) ? 'You already have a workspace with this name.' : null) },

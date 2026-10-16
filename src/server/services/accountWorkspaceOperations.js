@@ -8,8 +8,9 @@ const rejections=new Set(['invite_not_found','invite_not_pending','invite_expire
 export function accountWorkspaceRequest(value) {
   if(!value||typeof value!=='object'||Array.isArray(value))throw fail(400,'invalid_account_workspace_request');
   if(value.action==='workspace.create'){
-    if(Object.keys(value).some(k=>!['action','name','workspace_type'].includes(k))||typeof value.name!=='string'||!value.name.trim()||value.name.length>128||value.workspace_type!=='team')throw fail(400,'invalid_account_workspace_request');
-    return {action:value.action,name:value.name,workspace_type:'team'};
+    if(Object.keys(value).some(k=>!['action','name','workspace_type'].includes(k))||typeof value.name!=='string'||!value.name.trim()||value.name.length>128||!['team','company'].includes(value.workspace_type))throw fail(400,'invalid_account_workspace_request');
+    // a new organization is a COMPANY; 'team' (the older word) is accepted and means the same
+    return {action:value.action,name:value.name,workspace_type:'company'};
   }
   if(!['invite.accept','invite.decline'].includes(value.action)||Object.keys(value).some(k=>!['action','inviteId'].includes(k))||!UUID.test(value.inviteId))throw fail(400,'invalid_account_workspace_request');
   return {action:value.action,inviteId:value.inviteId.toLowerCase()};
@@ -63,7 +64,7 @@ export async function changeAccountWorkspaceOperation(pool,actor,client,operatio
         let result;
         if(request.action==='workspace.create'){
           if(!await isActivated(db,ids[0]))throw fail(403,'account_not_activated');
-          const ws=await createAccountWorkspace(db,ids[0],request.name,'team');
+          const ws=await createAccountWorkspace(db,ids[0],request.name,'company');
           result={workspace:{id:ws.id,owner_user_id:ws.owner_user_id,workspace_type:ws.workspace_type,name:ws.name,slug:ws.slug,status:ws.status,created_at:ws.created_at,updated_at:ws.updated_at,metadata:ws.metadata??{},member_role:'owner',member_count:1}};
         }else result=await decideWorkspaceInvite(db,ids[0],request.inviteId,request.action==='invite.accept'?'accept':'decline',targetHash);
         operation={...base,state:result.rejection?'rejected':'committed',...(result.rejection?{rejection:result.rejection}:{result}),completed_at:new Date().toISOString()};

@@ -122,9 +122,12 @@ async function ownershipView(db, r, me) {
 
 /** The agents a person owns and manages here: every non-retired agent except the per-app ones an OAuth sign-in
  *  makes on its own (those are listed in Dev › MCP as connections). */
-export async function list(db, me, { divisionId } = {}) {
+export async function list(db, me, { divisionId, workspaceId } = {}) {
   person(me);
   const byDivision = divisionId && divisionId !== 'none';
+  // SCOPE (XENO-WORKFORCE-01 VIEW-02): a company's agents, or (the caller's personal workspace) the caller's own;
+  // absent: everything the caller can see, as before
+  const scope = workspaceId ? await scopeFilter(db, me, workspaceId) : null;
   const rows = (await db.query(`${ROW} WHERE ai.status <> 'retired' AND COALESCE(ai.agent_origin, '') <> ALL($2::text[])
       AND (ai.owner_user_id = $1
         OR EXISTS (SELECT 1 FROM workspaces w WHERE w.id = r.owner_workspace_id AND w.status = 'active' AND (w.owner_user_id = $1
@@ -132,8 +135,9 @@ export async function list(db, me, { divisionId } = {}) {
                           AND t.subject_type = 'user' AND t.subject_id = $1::text AND t.relation IN ('owner', 'admin'))))
         OR EXISTS (SELECT 1 FROM relationship_tuples t WHERE t.object_type = 'agent' AND t.object_id = ai.user_id::text
                      AND t.subject_type = 'user' AND t.subject_id = $1::text AND t.relation IN ('viewer', 'runner', 'editor', 'exporter')))
-    ${divisionId === 'none' ? 'AND o.division_id IS NULL' : byDivision ? 'AND o.division_id = $3' : ''} ORDER BY ai.created_at`,
-    byDivision ? [me.id, SYSTEM_AGENT_ORIGINS, divisionId] : [me.id, SYSTEM_AGENT_ORIGINS])).rows;
+    ${divisionId === 'none' ? 'AND o.division_id IS NULL' : byDivision ? 'AND o.division_id = $3' : ''}
+    ${scope ? (scope.company ? `AND r.owner_workspace_id = $${byDivision ? 4 : 3}` : `AND r.owner_workspace_id IS NULL AND ai.owner_user_id = $1`) : ''} ORDER BY ai.created_at`,
+    [me.id, SYSTEM_AGENT_ORIGINS, ...(byDivision ? [divisionId] : []), ...(scope && scope.company ? [scope.id] : [])])).rows;
   const out = []; for (const r of rows) out.push(await full(db, r, me));
   return out;
 }
@@ -175,28 +179,32 @@ function handleSlug(label, ownerHandle) {
   const base = label.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, Math.max(1, room - 5)).replace(/-+$/, '') || 'a';
   return `${base}-${tail}`.replace(/^[^a-z0-9]+/, 'a');
 }
-export async function create(db, me, { name, description, instructions, runtime, divisionId } = {}) {
+export async function create(db, me, { name, description, instructions, runtime, divisionId, workspaceId } = {}) {
   person(me);
   const label = String(name || '').replace(/[\u0000-\u001f<>]/g, '').trim().slice(0, 60);
   if (!label) throw new AgentError('Give the agent a name', 'name_required');
   const desc = String(description || '').trim();
   if (desc.length > 500) throw new AgentError('The description is longer than 500 characters', 'description_too_long');
   if (String(instructions || '').length > 32768) throw new AgentError('The instructions are longer than 32,768 characters', 'instructions_too_long');
-  if (divisionId) await requireDivisionUsable(db, me, divisionId);
+  const division = divisionId ? await requireDivisionUsable(db, me, divisionId) : null;
+  // WHO OWNS IT (XENO-WORKFORCE-01 OWN-01, D01): made inside a company (named, or the company a division is in), the
+  // COMPANY owns it and its creator is the human accountable for it; made anywhere else, the person owns it. A
+  // personal workspace is the person's own scope, never a company owner.
+  const owner = await ownerScopeFor(db, me, workspaceId || (division && division.workspace_id) || null);
   // the definition first, through the workforce command (its receipt is the creation audit)
   let def;
   try {
-    def = await createWorkforceResource(db, ctx(me), { operationId: randomUUID(), owner: { type: 'user', id: String(me.id) }, kind: 'agent',
+    def = await createWorkforceResource(db, ctx(me), { operationId: randomUUID(), owner, kind: 'agent',
       name: label, description: desc, definition: defOf(instructions, runtime) });
   } catch (e) { throw asAgentError(e, 'The agent could not be created'); }
   const rid = def.resource.id;
   // then the principal, linked to it. If that fails, the definition just made is archived: never a definition
   // with no one to run it.
-  const owner = (await db.query('SELECT id, username FROM users WHERE id = $1', [me.id])).rows[0];
+  const creator = (await db.query('SELECT id, username FROM users WHERE id = $1', [me.id])).rows[0];
   let made;
   try {
-    made = await createAgent(db, { id: owner.id, kind: 'human', handle: owner.username },
-      { name: handleSlug(label, owner.username), displayName: label, agentRole: 'other', agentOrigin: 'platform' });
+    made = await createAgent(db, { id: creator.id, kind: 'human', handle: creator.username },
+      { name: handleSlug(label, creator.username), displayName: label, agentRole: 'other', agentOrigin: 'platform' });
   } catch (e) {
     await db.query(`UPDATE workforce_resources SET status = 'archived', revision = revision + 1 WHERE id = $1 AND status = 'active'`, [rid]).catch(() => {});
     throw asAgentError(e, 'The agent could not be created');
@@ -273,6 +281,29 @@ export async function revokeCredential(db, me, publicId, credentialId) {
 }
 
 // ───────────── division (DIV-04 / DIV-08)
+
+/** A list scope the caller may ask for: a company they belong to, or their own personal workspace. */
+async function scopeFilter(db, me, workspaceId) {
+  const w = (await db.query('SELECT id, workspace_type, status, owner_user_id FROM workspaces WHERE id = $1', [workspaceId])).rows[0];
+  if (!w || w.status !== 'active') throw new AgentError('Workspace not found', 'workspace_not_found', 404);
+  if (w.workspace_type === 'personal') { if (String(w.owner_user_id) !== String(me.id)) throw new AgentError('Workspace not found', 'workspace_not_found', 404); return { company: false }; }
+  const v = await check(db, { object: `workspace:${w.id}`, relation: 'viewer', subject: `user:${me.id}` });
+  if (!v.allowed) throw new AgentError('Workspace not found', 'workspace_not_found', 404);
+  return { company: true, id: String(w.id) };
+}
+
+/** The owner scope a new agent gets: a company the caller administers, or the caller. */
+async function ownerScopeFor(db, me, workspaceId) {
+  if (!workspaceId) return { type: 'user', id: String(me.id) };
+  const w = (await db.query('SELECT id, workspace_type, status, owner_user_id FROM workspaces WHERE id = $1', [workspaceId])).rows[0];
+  if (!w || w.status !== 'active') throw new AgentError('Workspace not found', 'workspace_not_found', 404);
+  if (w.workspace_type === 'personal') {
+    if (String(w.owner_user_id) !== String(me.id)) throw new AgentError('Workspace not found', 'workspace_not_found', 404);
+    return { type: 'user', id: String(me.id) };
+  }
+  if (!(await divisions.mayManage(db, me, String(w.id)))) throw new AgentError('Only an admin of the company makes agents it owns', 'not_allowed', 403);
+  return { type: 'workspace', id: String(w.id) };
+}
 
 async function requireDivisionUsable(db, me, divisionId) {
   const d = await divisions.readable(db, me, divisionId).catch((e) => { throw asAgentError(e); });

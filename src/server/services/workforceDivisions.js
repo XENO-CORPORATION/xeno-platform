@@ -19,22 +19,15 @@
 import { check, writeTuples } from '../utils/authzReBAC.js';
 import { createHash, randomUUID } from 'node:crypto';
 import { resolvePrincipal } from './agentIdentity.js';
+import { ensurePersonalWorkspace as ensurePersonalRoot } from './personalWorkspace.js';
 
 export class DivisionError extends Error { constructor(message, code, status = 400) { super(message); this.code = code; this.status = status; } }
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const notFound = () => new DivisionError('Division not found', 'division_not_found', 404);
 
-/** The caller's personal workspace, created when it does not exist yet (the same rule workspaceRoutes applies). */
+/** The caller's personal workspace (personalWorkspace.ensurePersonalWorkspace, the one creator). */
 export async function personalWorkspace(db, userId) {
-  const found = (await db.query(`SELECT id FROM workspaces WHERE owner_user_id = $1 AND workspace_type = 'personal' ORDER BY created_at LIMIT 1`, [userId])).rows[0];
-  if (found) return String(found.id);
-  const u = (await db.query('SELECT username, display_name FROM users WHERE id = $1', [userId])).rows[0] || {};
-  const label = String(u.display_name || u.username || 'Personal').trim();
-  const slug = (label.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'personal') + '-' + String(userId).slice(0, 6);
-  const made = (await db.query(`INSERT INTO workspaces (owner_user_id, workspace_type, name, slug) VALUES ($1, 'personal', $2, $3) RETURNING id`,
-    [userId, /workspace/i.test(label) ? label : `${label}'s Workspace`, slug])).rows[0];
-  await writeTuples(db, { writes: [{ object: `workspace:${made.id}`, relation: 'owner', subject: `user:${userId}` }] });
-  return String(made.id);
+  return String((await ensurePersonalRoot(db, userId)).id);
 }
 
 /** Which workspace a request means: the given one (when the caller can see it) or the caller's personal one. */

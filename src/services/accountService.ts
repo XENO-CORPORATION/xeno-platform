@@ -66,7 +66,7 @@ export interface PricingTier {
 export interface Workspace {
   id: string;
   owner_user_id: string;
-  workspace_type: 'personal' | 'team';
+  workspace_type: 'personal' | 'team' | 'company';   // 'team' = an organization made before companies existed
   name: string;
   slug: string;
   status: string;
@@ -269,7 +269,7 @@ export const getPricingTiers = () =>
 export const listWorkspaces = () =>
   apiFetch<{ success: true; workspaces: Workspace[] }>('/workspaces');
 
-export const createWorkspace = (name: string, type: 'personal' | 'team' = 'team') =>
+export const createWorkspace = (name: string, type: 'team' | 'company' = 'company') =>
   apiFetch<{ success: true; workspace: Workspace }>('/workspaces', {
     method: 'POST',
     body: JSON.stringify({ name, workspace_type: type }),

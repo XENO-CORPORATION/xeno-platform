@@ -32,6 +32,7 @@ import { resolveAuthedUser, authMiddleware, requireAdmin } from '../middleware/a
 import { issuePreviewSession } from '../middleware/previewSession.js';
 import { PREVIEW_MODE } from '../lib/previewPolicy.mjs';
 import { creditsView, wholeCredits } from '../utils/accountViews.js';
+import { ensurePersonalWorkspace } from '../services/personalWorkspace.js';
 import {
   requireRegistrationOpen,
   assertRegistrationAllowed,
@@ -257,6 +258,7 @@ async function findOrCreateOAuthUser(db, provider, profile, req = null) {
 
     user = insertResult.rows[0];
     isNew = true;
+    await ensurePersonalWorkspace(db, user.id);   // every account has its root from the start (migration 20261016180000)
     // The OAuth path is the majority path — 160 of 221 accounts were created here —
     // so an onboarding email wired only into /register would miss most new users.
     sendWelcomeEmail(db, user);
@@ -695,6 +697,7 @@ router.post('/register', requireRegistrationOpen, async (req, res) => {
     `, [userId, username.toLowerCase(), email.toLowerCase(), passwordHash, display_name, 0, false]);
 
     const user = result.rows[0];
+    await ensurePersonalWorkspace(req.db, user.id);   // every account has its root from the start (migration 20261016180000)
 
     /* Mint the activation code ONCE and hand it to BOTH mails.
      *
@@ -2821,6 +2824,7 @@ router.post('/register-with-handle', requireRegistrationOpen, async (req, res) =
       RETURNING id, username, email, display_name, avatar_url, created_at, email_verified, is_active, credits, bonus_credits_claimed
     `, [userId, handle, address, passwordHash, handle, recovery, 0, false]);
     const user = result.rows[0];
+    await ensurePersonalWorkspace(req.db, user.id);   // every account has its root from the start (migration 20261016180000)
     // This flow's `email` column holds the XENO ADDRESS, which is not necessarily a
     // deliverable mailbox — the reachable address is `recovery_email`. Sending to
     // user.email here would post the welcome into a void and log it as delivered.

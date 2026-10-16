@@ -48,12 +48,20 @@
     SC.list = r.d.workspaces.map(shape).sort((a, b) => (b.personal ? 1 : 0) - (a.personal ? 1 : 0));
     if (!SC.list.some((w) => w.personal)) SC.list.unshift({ id: 'personal', uuid: null, name: 'Personal', sub: 'Just you', initial: 'P', role: 'owner', personal: true });
     LS.set('workspaces', SC.list);
+    { const fromUrl = wsFromUrl(); if (fromUrl && SC.list.some((w) => w.id === fromUrl)) LS.set('workspace', fromUrl); }
     if (!SC.list.some((w) => w.id === LS.get('workspace', 'personal'))) LS.set('workspace', 'personal');
-    SC.status = 'ready'; return true;
+    SC.status = 'ready'; writeWsToUrl(); return true;
   }
+  // THE ADDRESS CARRIES THE WORKSPACE (owner, 2026-10-11: every view has a real address): a company is ?ws=<id> on
+  // whatever page is open, the personal workspace has none. On load the address wins over the remembered choice,
+  // so a shared link opens in the workspace it was made in; switching writes it back without a Back step.
+  const wsFromUrl = () => { try { const v = new URLSearchParams(location.search).get('ws'); return v && /^[0-9a-f-]{36}$/i.test(v) ? v.toLowerCase() : null; } catch { return null; } };
+  const writeWsToUrl = () => { const c = SC.list.find((w) => w.id === LS.get('workspace', 'personal')); window.XENO_ADDR?.setWorkspace?.(c && !c.personal ? c.uuid : null); };
   const current = () => SC.list.find((w) => w.id === LS.get('workspace', 'personal')) || SC.list[0] || null;
   const labelOf = (uuid) => (SC.list.find((w) => w.uuid === uuid) || {}).name || 'A workspace';
   window.XENO_SCOPE = { served: true, load: loadScope, list: () => SC.list.slice(), current, uuid: () => (current() || {}).uuid || null, label: labelOf, status: () => SC.status };
+  // Back/Forward to an address of another workspace switches to it
+  addEventListener('popstate', () => { const v = wsFromUrl() || 'personal'; if (SC.status === 'ready' && v !== LS.get('workspace', 'personal') && SC.list.some((w) => w.id === v)) { LS.set('workspace', v); paint(); } else setTimeout(writeWsToUrl, 0); });
 
   // ================= projects =================
   const W = { status: 'loading', byId: new Map() };
@@ -67,9 +75,14 @@
   async function loadProjects() {
     // AREA: one area's projects, or everything on Overview
     const here = area(), q = here ? '&area=' + encodeURIComponent(here) : ''; W.loadingArea = here;
-    const [pr, cv] = await Promise.all([api('GET', '/api/chat/projects?include_archived=true&limit=100' + q).catch(() => ({ ok: false, d: {} })), api('GET', '/api/chat/conversations?limit=200' + q).catch(() => ({ ok: false, d: {} }))]);
-    if (area() !== here) return loadProjects();   // the person moved to another area while this was on its way
-    W.area = here; W.loadingArea = undefined;
+    // SCOPE (XENO-WORKFORCE-01 VIEW-02): a company shows its own projects; the personal workspace shows the person's
+    // own and those shared with them, never a company's
+    const scope = current(), company = scope && !scope.personal && scope.uuid ? scope.uuid : null; W.loadingScope = company || 'personal';
+    const scoped = company ? { 'x-xeno-workspace': company } : undefined;
+    const [pr, cv] = await Promise.all([api('GET', '/api/chat/projects?include_archived=true&limit=100' + q, undefined, scoped).catch(() => ({ ok: false, d: {} })), api('GET', '/api/chat/conversations?limit=200' + q).catch(() => ({ ok: false, d: {} }))]);
+    if (area() !== here || (current() && !current().personal && current().uuid ? current().uuid : 'personal') !== W.loadingScope) return loadProjects();   // the person moved on while this was on its way
+    W.area = here; W.scope = W.loadingScope; W.loadingArea = undefined;
+    if (pr.ok && Array.isArray(pr.d.projects) && !company) { const companies = new Set(SC.list.filter((w) => !w.personal).map((w) => w.uuid)); pr.d.projects = pr.d.projects.filter((p) => !p.workspace_id || !companies.has(p.workspace_id)); }
     if (!pr.ok || !Array.isArray(pr.d.projects)) { W.status = 'error'; blank(); pstate('projects', 'error'); paint(); return false; }
     const chats = new Map(); W.convs = new Map(); if (cv.ok && Array.isArray(cv.d.conversations)) cv.d.conversations.forEach((c) => { if (c.project_id) { if (!chats.has(c.project_id)) { chats.set(c.project_id, []); W.convs.set(c.project_id, []); } chats.get(c.project_id).push([String(c.title || 'Untitled chat'), 'Chat']); W.convs.get(c.project_id).push({ id: c.id, title: String(c.title || 'Untitled chat'), at: c.updated_at || c.created_at, model: c.model || '' }); } });
     const rows = pr.d.projects, seen = new Map(); rows.forEach((p) => seen.set(p.name, (seen.get(p.name) || 0) + 1));
@@ -372,7 +385,12 @@
     return true;
   }
   // the Projects page asks on each paint: moved to another area, its own list
-  function sync() { if (W.status === 'ready' && W.area !== undefined && W.loadingArea === undefined && area() !== W.area) { W.status = 'loading'; pstate('projects', 'loading'); loadProjects(); } }
+  const scopeKey = () => { const c = current(); return c && !c.personal && c.uuid ? c.uuid : 'personal'; };
+  function sync() { if (W.status === 'ready' && W.area !== undefined && W.loadingArea === undefined && (area() !== W.area || scopeKey() !== W.scope)) { W.status = 'loading'; pstate('projects', 'loading'); loadProjects(); } }
+  // switching workspace, from any page: the projects (and the chat's project list) are that workspace's at once
+  const hookSwitch = () => { if (!window.XA || window.XA.__workSwitch) return; const sw = window.XA.switchWorkspace;
+    window.XA.switchWorkspace = (...a2) => { const r = sw(...a2); if (scopeKey() !== W.scope && W.loadingScope === W.scope) { W.status = 'loading'; pstate('projects', 'loading'); loadProjects(); } return r; }; window.XA.__workSwitch = true; };
+  hookSwitch(); if (document.readyState === 'loading') addEventListener('DOMContentLoaded', hookSwitch);
   window.XENO_WORK = { served: true, moveProject, shareProject, deleteProject, sync, load, projectTab, blocked, state: () => ({ scope: SC.status, projects: W.status }), reload: loadProjects, idOf: (name) => ((window.XENO_PG_PROJECTS.items || []).find((p) => p.name === name) || {}).id || null };
   Promise.resolve(P.ready).then((user) => { if (user) P.first(load()); });   // the page waits for this first load before it shows
 })();

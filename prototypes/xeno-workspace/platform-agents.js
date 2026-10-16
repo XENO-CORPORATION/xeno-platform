@@ -23,6 +23,10 @@
   const why = (r, d) => (r && r.d && (r.d.error || r.d.message)) || d;
   const ID = /^agt_[0-9a-f]{32}$/;
   const ENDPOINT = () => `${location.origin}/api/mcp`;
+  // SCOPE: the workspace selected in the switcher. Its agents are listed and new ones are made in it — a company's
+  // agents are the company's (XENO-WORKFORCE-01 OWN-01, VIEW-02); the personal workspace lists the person's own
+  const wsId = () => (window.XENO_SCOPE && window.XENO_SCOPE.served && window.XENO_SCOPE.uuid && window.XENO_SCOPE.uuid()) || null;
+  const wsQ = () => { const w = wsId(); return w ? `?workspace=${encodeURIComponent(w)}` : ''; };
   const S = { key: null, status: 'idle', list: [], presence: {}, livePushed: new Set(), activity: null, one: null, projects: [], services: [], minted: null, busy: false, copied: '', tab: 'claude', q: '', choices: [], divisions: [], canManageDivisions: false, editingInstr: false, offers: [], models: [], runs: [], runsFor: null, moves: [], access: null, transfers: [], members: [] };
   // the xeno-spawn:// link: on only once Spawn ships its link handler in a verified release (the command always works)
   const SPAWN_LINK = false;
@@ -61,7 +65,7 @@
 
   async function load() {
     const at = S.key;
-    const [list, pr, sv] = await Promise.all([api('GET', '/api/agents'), api('GET', '/api/tasks/projects'),
+    const [list, pr, sv] = await Promise.all([api('GET', '/api/agents' + wsQ()), api('GET', '/api/tasks/projects'),
       S.services.length ? null : api('GET', '/api/mcp/services')]);
     if (S.key !== at) return;
     if (!list.ok) { S.status = list.status === 403 ? 'denied' : 'error'; return paint(); }
@@ -72,7 +76,7 @@
     const ib = await api('GET', '/api/agents/lends/inbox'); S.offers = ib.ok ? ib.d.offers || [] : [];
     const mv = await api('GET', '/api/agents/transfers/inbox'); S.moves = mv.ok ? mv.d.transfers || [] : [];
     if (sv && sv.ok) S.services = sv.d.services || [];
-    const id = at.startsWith('one:') ? at.slice(4) : null;
+    const id = at.startsWith('one:') ? at.slice(4).split('@')[0] : null;
     if (id) {
       const one = await api('GET', `/api/agents/${id}`);
       if (S.key !== at) return;
@@ -365,7 +369,7 @@
     style();
     const id = it.startsWith('Agents/') ? it.slice(7) : null;
     if (id && !ID.test(id)) return H().page(H().head({ eyebrow: '<a data-xag="list">Agents</a>', title: 'Agent not found' }) + H().box('bot', 'This agent link is not valid', 'Agents are addressed by their id. Open it from your agents.', H().btn('All agents', 'data-xag="list"', true)), 'xag');
-    const key = id ? 'one:' + id : 'list';
+    const key = (id ? 'one:' + id : 'list') + '@' + (wsId() || '');
     if (S.key !== key) { S.key = key; S.status = 'loading'; S.one = null; if (!id || !S.minted || S.minted.agentId !== id) S.minted = null; setTimeout(load, 0); }
     const h = H();
     if (S.status === 'loading') return h.page(`<div class="xag-skel" aria-busy="true"><i></i><i></i><i></i></div>`, 'xag');
@@ -392,7 +396,7 @@
       { id: 'description', label: 'What it is for', type: 'textarea', placeholder: 'Takes release tasks, cuts builds and reports back', max: 500 },
       ...(S.divisions.length && S.canManageDivisions ? [{ id: 'division', label: 'Division', type: 'choice', cols: 1, value: '', options: [['', 'No division', 'Works only on projects in no division'], ...S.divisions.map((d) => [d.id, d.name, `Works only on ${d.name}’s projects`])] }] : [])] });
     if (!v) return;
-    const r = await call('POST', '/api/agents', { name: v.name, description: v.description || '', divisionId: v.division || null }, 'The agent could not be created.');
+    const r = await call('POST', '/api/agents', { name: v.name, description: v.description || '', divisionId: v.division || null, workspaceId: wsId() }, 'The agent could not be created.');
     if (!r) return;
     toast(`Created ${r.d.agent.name}`); S.list.push(r.d.agent); go(`Agents/${r.d.agent.id}`);
   }
@@ -619,7 +623,7 @@
   };
 
   // the sidebar counts real agents: read the list once in the background
-  setTimeout(async () => { if (S.list.length) return; const r = await api('GET', '/api/agents'); if (r.ok && !S.list.length) { S.list = r.d.agents || []; paint(); } }, 1500);
+  setTimeout(async () => { if (S.list.length) return; const r = await api('GET', '/api/agents' + wsQ()); if (r.ok && !S.list.length) { S.list = r.d.agents || []; paint(); } }, 1500);
   // the Workspace sidebar: each agent with its presence, newest activity first; the dot class rides the meta
   const sidebar = () => S.list.slice().sort((x, y) => String((S.presence[y.id] || {}).seenAt || '').localeCompare(String((S.presence[x.id] || {}).seenAt || '')))
     .slice(0, 8).map((a) => { const [, l] = state(a); return [a.name, l, '', `Agents/${a.id}`]; });

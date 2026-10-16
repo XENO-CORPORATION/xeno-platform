@@ -19,7 +19,7 @@ async function activeAccount(db, actor) {
 /** Called within a transaction. Account serialization also protects lazy personal
  * provisioning. No random workspace is used as an account operation namespace. */
 export async function createAccountWorkspace(db, actor, name, type='team') {
-  if(!uuid.test(actor)||!['personal','team'].includes(type)||typeof name!=='string'||!name.trim()||name.trim().length>200)throw operationError(400,'invalid_workspace_request');
+  if(!uuid.test(actor)||!['personal','team','company'].includes(type)||typeof name!=='string'||!name.trim()||name.trim().length>200)throw operationError(400,'invalid_workspace_request');
   await db.query('SELECT pg_advisory_xact_lock(hashtextextended($1,0))',[`account-workspace-creation:${actor}`]);
   await activeAccount(db,actor);
   let workspace;
@@ -34,9 +34,14 @@ export async function createAccountWorkspace(db, actor, name, type='team') {
   const created=!workspace;
   if(created)workspace=(await db.query('INSERT INTO workspaces(owner_user_id,workspace_type,name,slug) VALUES($1,$2,$3,$4) RETURNING *',[actor,type,name.trim(),slug(name)])).rows[0];
   await writeTuples(db,{writes:[{object:`workspace:${workspace.id}`,subject:`user:${actor}`,relation:'owner'}]});
+  if(created&&type!=='personal'){   // an organization's wallet is made with it (xeno-company/SPEC.md §4.1b ordering invariant)
+    const ins=await db.query(`INSERT INTO credit_accounts(user_id,owner_kind,balance,lifetime_earned,lifetime_spent) VALUES($1,'workspace',0,0,0) ON CONFLICT(user_id) DO NOTHING RETURNING id`,[workspace.id]);
+    if(!ins.rows.length&&(await db.query('SELECT owner_kind FROM credit_accounts WHERE user_id=$1',[workspace.id])).rows[0]?.owner_kind!=='workspace')throw operationError(409,'workspace_identity_changed');
+  }
   if(created)await audit(db,workspace.id,actor,'workspace.create',workspace.id,{type});
   return workspace;
 }
+export { ensurePersonalWorkspace } from './personalWorkspace.js';
 export async function provisionPersonalWorkspace(pool, user) {
   const label=String(user.display_name||user.username||'Personal').trim();
   return authorityTransaction(pool,db=>createAccountWorkspace(db,user.id,(/workspace/i.test(label)?label:`${label}'s Workspace`).slice(0,200),'personal'));

@@ -60,8 +60,14 @@
   const legacy = () => (location.hash && location.hash.startsWith('#/') ? location.hash : null);
   /** where the person is, in the router's internal form */
   const current = () => legacy() || toHash(location.pathname + location.search);
-  const push = (h, state = null) => history.pushState(state, '', toPath(h));
-  const replace = (h, state = history.state) => history.replaceState(state, '', toPath(h));
+  // the selected workspace rides EVERY address as ?ws=<id> (platform-work.js sets it): the router builds paths from
+  // its own state, so the workspace is carried here, once, rather than in every place that makes a link
+  let WS = null;
+  const withWs = (p) => { if (!WS) return p; const [path, q] = split(p); const sp = new URLSearchParams(q.replace(/^\?/, '')); sp.set('ws', WS); return path + '?' + sp.toString(); };
+  const push = (h, state = null) => history.pushState(state, '', withWs(toPath(h)));
+  const replace = (h, state = history.state) => history.replaceState(state, '', withWs(toPath(h)));
+  /** set the workspace every address carries (null: the personal workspace, no ?ws) */
+  const setWorkspace = (id) => { WS = id || null; try { const u = new URL(location.href); if ((u.searchParams.get('ws') || null) === WS) return; if (WS) u.searchParams.set('ws', WS); else u.searchParams.delete('ws'); history.replaceState(history.state, '', u); } catch {} };
   /** go somewhere by internal form: a new history step, and the router told (as a real navigation would) */
   function go(h) {
     if (current() === h) return;
@@ -70,9 +76,9 @@
     dispatchEvent(new HashChangeEvent('hashchange'));
   }
   /** a full, shareable URL for an internal form */
-  const url = (h) => location.origin + toPath(h);
+  const url = (h) => location.origin + withWs(toPath(h));
   // an old "#/…" address (a bookmark, a link from before, a test setting location.hash) is honoured, then upgraded
   const upgrade = () => { const h = legacy(); if (h) history.replaceState(history.state, '', toPath(h)); };
   addEventListener('hashchange', () => setTimeout(upgrade, 0));
-  window.XENO_ADDR = { BASE, RESERVED, GLOBALS, toPath, toHash, current, push, replace, go, url, upgrade };
+  window.XENO_ADDR = { BASE, RESERVED, GLOBALS, toPath, toHash, current, push, replace, go, url, upgrade, setWorkspace, workspace: () => WS };
 })();
