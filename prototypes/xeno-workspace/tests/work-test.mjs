@@ -54,7 +54,6 @@ function answer(q) {
   if (p === '/api/user-data/settings') return json(200, { success: true, settings: {} });
   if (p === '/api/workspaces' && m === 'GET') return json(200, { success: true, workspaces: db.workspaces });
   if (p === '/api/workspaces' && m === 'POST') { const w = { id: `44444444-4444-4444-8444-${String(db.next++).padStart(12, '0')}`, workspace_type: 'team', name: body.name, member_role: 'owner', member_count: 1 }; db.workspaces.push(w); return json(200, { success: true, workspace: w }); }
-  if (/^\/api\/library\/assets\/file\/[0-9a-f-]{36}\/star$/.test(p)) return json(200, { success: true, starred: true });
   if (p === '/api/library/assets') return json(200, { success: true, items: u.searchParams.get('folder') === 'root' && u.searchParams.get('owned') === 'mine' ? db.files : [] });
   if (p === '/api/canvases') return json(200, { success: true, canvases: [] });
   if (p === '/api/tasks/projects') return json(200, { success: true, projects: [] });
