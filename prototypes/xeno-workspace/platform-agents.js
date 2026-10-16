@@ -69,7 +69,7 @@
       S.services.length ? null : api('GET', '/api/mcp/services')]);
     if (S.key !== at) return;
     if (!list.ok) { S.status = list.status === 403 ? 'denied' : 'error'; return paint(); }
-    S.list = list.d.agents || []; S.projects = pr.ok ? pr.d.projects || [] : [];
+    S.list = list.d.agents || []; S.sideWs = wsId() || ''; S.projects = pr.ok ? pr.d.projects || [] : [];
     loadPresence();
     if (!S.models.length) api('GET', '/api/models').then((m) => { if (m.ok && m.d) { const g = m.d.companies || m.d.models || m.d; const ids = []; for (const v of Object.values(g || {})) if (Array.isArray(v)) for (const x of v) if (x && x.id) ids.push(x.id); S.models = ids; } }).catch(() => {});
     const dv0 = await api('GET', '/api/divisions'); if (dv0.ok) { S.divisions = dv0.d.divisions || []; S.canManageDivisions = !!dv0.d.canManage; }
@@ -622,8 +622,13 @@
     document.head.appendChild(s);
   };
 
-  // the sidebar counts real agents: read the list once in the background
-  setTimeout(async () => { if (S.list.length) return; const r = await api('GET', '/api/agents' + wsQ()); if (r.ok && !S.list.length) { S.list = r.d.agents || []; paint(); } }, 1500);
+  // the sidebar counts real agents of the SELECTED workspace: read them in the background, and again whenever the
+  // workspace changes (the sidebar shows on every Workspace page, not only on Agents)
+  S.sideWs = undefined;
+  const refreshSide = async () => { const w = wsId() || ''; if (S.sideWs === w) return; S.sideWs = w; const r = await api('GET', '/api/agents' + wsQ()); if (r.ok && (wsId() || '') === w) { S.list = r.d.agents || []; loadPresence(); paint(); } };
+  setTimeout(refreshSide, 1500);
+  const hookSwitch = () => { if (!window.XA || window.XA.__agentsSwitch) return; const sw = window.XA.switchWorkspace; window.XA.switchWorkspace = (...a2) => { const r = sw(...a2); setTimeout(refreshSide, 0); return r; }; window.XA.__agentsSwitch = true; };
+  hookSwitch(); if (document.readyState === 'loading') addEventListener('DOMContentLoaded', hookSwitch);
   // the Workspace sidebar: each agent with its presence, newest activity first; the dot class rides the meta
   const sidebar = () => S.list.slice().sort((x, y) => String((S.presence[y.id] || {}).seenAt || '').localeCompare(String((S.presence[x.id] || {}).seenAt || '')))
     .slice(0, 8).map((a) => { const [, l] = state(a); return [a.name, l, '', `Agents/${a.id}`]; });

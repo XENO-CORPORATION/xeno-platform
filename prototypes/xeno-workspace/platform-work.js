@@ -61,7 +61,10 @@
   const labelOf = (uuid) => (SC.list.find((w) => w.uuid === uuid) || {}).name || 'A workspace';
   window.XENO_SCOPE = { served: true, load: loadScope, list: () => SC.list.slice(), current, uuid: () => (current() || {}).uuid || null, label: labelOf, status: () => SC.status };
   // Back/Forward to an address of another workspace switches to it
-  addEventListener('popstate', () => { const v = wsFromUrl() || 'personal'; if (SC.status === 'ready' && v !== LS.get('workspace', 'personal') && SC.list.some((w) => w.id === v)) { LS.set('workspace', v); paint(); } else setTimeout(writeWsToUrl, 0); });
+  // Back/Forward across a switch: the address names the workspace, so switch to it the same way a click does (lists
+  // reload, sidebars follow) without adding another step
+  addEventListener('popstate', () => { const v = wsFromUrl() || 'personal'; if (SC.status !== 'ready' || v === LS.get('workspace', 'personal') || !SC.list.some((w) => w.id === v)) return;
+    const w = SC.list.find((x) => x.id === v); window.XENO_ADDR?.setWorkspace?.(w.personal ? null : w.uuid); if (window.XA?.switchWorkspace) window.XA.switchWorkspace(v); else { LS.set('workspace', v); paint(); } });
 
   // ================= projects =================
   const W = { status: 'loading', byId: new Map() };

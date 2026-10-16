@@ -67,7 +67,9 @@
   const push = (h, state = null) => history.pushState(state, '', withWs(toPath(h)));
   const replace = (h, state = history.state) => history.replaceState(state, '', withWs(toPath(h)));
   /** set the workspace every address carries (null: the personal workspace, no ?ws) */
-  const setWorkspace = (id) => { WS = id || null; try { const u = new URL(location.href); if ((u.searchParams.get('ws') || null) === WS) return; if (WS) u.searchParams.set('ws', WS); else u.searchParams.delete('ws'); history.replaceState(history.state, '', u); } catch {} };
+  // a deliberate switch (`step`) is a new history entry, so Back returns to the workspace you came from; reading the
+  // workspace from the address on load only aligns it (no step)
+  const setWorkspace = (id, step = false) => { WS = id || null; try { const u = new URL(location.href); if ((u.searchParams.get('ws') || null) === WS) return; if (WS) u.searchParams.set('ws', WS); else u.searchParams.delete('ws'); if (step) history.pushState(history.state, '', u); else history.replaceState(history.state, '', u); } catch {} };
   /** go somewhere by internal form: a new history step, and the router told (as a real navigation would) */
   function go(h) {
     if (current() === h) return;
