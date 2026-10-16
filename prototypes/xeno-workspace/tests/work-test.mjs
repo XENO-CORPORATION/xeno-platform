@@ -67,7 +67,7 @@ function answer(q) {
   { const mf = p.match(/^\/api\/chat\/projects\/([^/]+)\/files(?:\/([^/]+))?$/); if (mf) { db.pfiles = db.pfiles || [{ id: 'pf1', name: 'brief.pdf', file_type: 'application/pdf', file_size: 20480, content_url: '/api/library/assets/a1/content', created_at: '2026-09-02T10:00:00Z', ingestion_state: 'ready' }]; if (m === 'DELETE') { db.pfiles = db.pfiles.filter((x) => x.id !== mf[2]); return json(200, { success: true }); } return json(200, { success: true, files: db.pfiles }); } }
   const inArea = (x) => { const a = u.searchParams.get('area'); return a === null || (a === 'none' ? !x.area : x.area === a); };
   if (p === '/api/chat/conversations') { const rows = db.conversations.filter((c) => inArea({ area: c.project_id ? (db.projects.find((x) => x.id === c.project_id) || {}).area : c.area })); return json(200, { success: true, conversations: rows, total: rows.length }); }
-  if (p === '/api/chat/projects' && m === 'GET') { (db.projectAsks = db.projectAsks || []).push(u.searchParams.get('area')); return json(200, { success: true, projects: db.projects.filter(inArea), limit: 100, offset: 0 }); }
+  if (p === '/api/chat/projects' && m === 'GET') { (db.projectAsks = db.projectAsks || []).push(u.searchParams.get('area')); const sws = q.headers()['x-xeno-workspace']; (db.projectScopes = db.projectScopes || []).push(sws || null); return json(200, { success: true, projects: db.projects.filter(inArea).filter((x) => !sws || x.workspace_id === sws), limit: 100, offset: 0 }); }
   if (p === '/api/chat/projects' && m === 'POST') {
     if (body.name === 'Refused') return json(400, { success: false, error: 'Project name is not allowed' });
     const ws = q.headers()['x-xeno-workspace'], team = ws && ws !== WP ? ws : null;
@@ -135,28 +135,37 @@ try {
 
   await goProjects(); let t = await main();
   const list = await names();
-  ok(list.length === 3 && !SAMPLE.test(t) && !SAMPLE.test(list.join()), 'the projects are the real ones and no sample project is shown (' + list.length + ')');
-  ok(list.includes('Website (Personal)|active|Personal') && list.includes('Website (Analytical Engines)|active|Analytical Engines'), 'two projects with one name are told apart by where they live (' + JSON.stringify(list.slice(0, 2)) + ')');
+  // SCOPED (XENO-WORKFORCE-01 VIEW-02): the personal workspace lists the person's own projects, never a company's
+  ok(list.length === 2 && !SAMPLE.test(t) && !SAMPLE.test(list.join()), 'the projects are the real ones and no sample project is shown (' + list.length + ')');
+  ok(list.includes('Website|active|Personal') && !list.some((x) => /Analytical Engines/.test(x)), 'the personal workspace shows the person’s own projects, not the company’s (' + JSON.stringify(list) + ')');
   ok(list.includes('Old notes|archived|Personal') && !/Old notes/.test(t), 'an archived project is kept out of the active list');
+  await p.evaluate((id) => window.XA.switchWorkspace(id), WT); await wait(900);
+  const coList = await names();
+  ok(coList.length === 1 && coList[0] === 'Website|active|Analytical Engines' && (db.projectScopes || []).includes(WT), `the company shows only its projects, asked for with the company as the scope (${JSON.stringify(coList)})`);
+  ok(new URL(await p.evaluate(() => location.href)).searchParams.get('ws') === WT, 'and the address carries the company (?ws=), so the link opens in it');
+  await p.goto(await p.evaluate(() => location.href), { waitUntil: 'networkidle0' }); await wait(900);
+  ok(await p.evaluate((id) => window.XA.currentWorkspace().id === id, WT), 'a fresh load of that address opens the company');
+  await p.evaluate(() => window.XA.switchWorkspace('personal')); await wait(900);
+  ok(!new URL(await p.evaluate(() => location.href)).searchParams.has('ws'), 'switching back to Personal takes ?ws= off the address');
   ok(await p.evaluate(() => window.XENO_PG_PROJECTS.items.every((x) => /^[0-9a-f-]{36}$/.test(x.id))), 'every project carries the platform id');
   ok(!/undefined|On track|At risk/.test(t), 'no health is shown for a project that has none recorded');
 
-  await goProjects('Website (Personal)'); t = await main();
+  await goProjects('Website'); t = await main();
   ok(/Ship the new site/.test(t) && /Lives in/.test(t) && /Personal/.test(t) && /1\s*Conversation/.test(t) && /3\s*Files/.test(t), 'the project page shows its goal, where it lives, and real counts');
   ok(!!(await p.$('#main [data-pi-overview] .pi-prog[aria-valuenow="25"]')) && /1 of 4 closed/.test(t) && /Overdue/.test(t) && /Done this week/.test(t), 'the Overview shows task progress and the numbers that matter');
   ok(/Recent activity/i.test(t) && (await p.$$('#main [data-pi-overview] .pi-ev')).length === 6 && /2 agent|1 agent/.test(t), 'it shows the six latest events and the agents on the project');
-  await goProjects('Website (Personal)/Conversations'); t = await main();
+  await goProjects('Website/Conversations'); t = await main();
   ok(/Homepage copy/.test(t) && !/Loose chat/.test(t) && !!(await p.$('#main [data-pj-conv="c1"]')) && !!(await p.$('#main [data-xa="newProjectChat"]')), 'Conversations lists the chats that belong to this project, each opening the real chat, with New chat');
-  await goProjects('Website (Personal)/Resources'); await wait(500); t = await main();
+  await goProjects('Website/Resources'); await wait(500); t = await main();
   ok(/brief.pdf/.test(t) && /20 KB/.test(t) && !!(await p.$('#main [data-pj="files-add"]')), 'Resources lists the files attached to the project, with Add files');
   await p.click('#main [data-pj="files-remove"]'); await wait(600);
   ok(!db.pfiles.length && /No files yet/.test(await main()), 'removing a file takes it off the project');
-  await goProjects('Website (Personal)/Tasks'); t = await main();
+  await goProjects('Website/Tasks'); t = await main();
   ok(/No tasks in this project yet/.test(t) && !/aren’t available/.test(t) && await p.$('#main .pg-top-acts [data-xa="newTask"]') && !(await p.$('#main .mview [data-tk="new"]')), 'the Tasks tab is XENO Tasks: real (empty) list; New task is in the header, not repeated in the body');
   ok(await p.evaluate(() => !document.querySelector('#main .mview [data-tk="link-cmd"]')), 'Connect an agent is not a second toolbar in the body (it lives in the project menu)');
-  await goProjects('Website (Personal)/Team assignments'); t = await main();
+  await goProjects('Website/Team assignments'); t = await main();
   ok(await p.evaluate(() => location.pathname) === `/workspace/projects/${pid(1)}/team`, 'a project tab has an id address, never the project name: /workspace/projects/<id>/team');
-  await p.goto(base + '/workspace/projects/' + encodeURIComponent('Website (Personal)') + '/Activity', { waitUntil: 'domcontentloaded' }); await wait(1500);
+  await p.goto(base + '/workspace/projects/' + encodeURIComponent('Website') + '/Activity', { waitUntil: 'domcontentloaded' }); await wait(1500);
   ok(await p.evaluate(() => location.pathname) === `/workspace/projects/${pid(1)}/activity` && /joined the project|Show older/.test(await main()), 'an old link by name still opens the project and becomes its id address');
   await p.goto(base + `/workspace/projects/${pid(1)}/team`, { waitUntil: 'domcontentloaded' }); await wait(1500); t = await main();
   ok(/2 people · 1 agent/.test(t), 'opening the id address in a fresh tab shows that project and tab');
@@ -180,14 +189,14 @@ try {
   await p.goto(base + `/workspace/projects/${pid(1)}/team`, { waitUntil: 'domcontentloaded' }); await wait(1500); t = await main();
   ok(/2 people · 1 agent/.test(t) && /Ada \(you\)/.test(t) && /bob@x\.test/.test(t) && /Agent · Ada’s/.test(t) && !!(await p.$('#main [data-pi="share"]')), 'Team lists people and agents with roles; an admin sees emails and Manage access');
   ok(await p.evaluate(() => !document.querySelector('#main [data-xa="newTask"][aria-disabled="true"]')), 'Add a task is no longer shown unavailable');
-  await goProjects('Website (Personal)/Activity'); t = await main();
+  await goProjects('Website/Activity'); t = await main();
   ok((await p.$$('#main [data-pi-activity] .pi-ev')).length === 30 && /joined the project/.test(t) && /Looks good 0/.test(t), 'Activity is a real feed: task changes, comments with excerpts, people joining');
   await p.click('#main [data-pi="more"]'); await wait(700);
   ok((await p.$$('#main [data-pi-activity] .pi-ev')).length === 36 && !(await p.$('#main [data-pi="more"]')) && db.feedAsks.some((x) => x), 'Show older loads the next page by its cursor, and stops at the end');
   db.calls.length = 0;
   await p.evaluate(() => document.querySelector('#main [data-pi-task]').click()); await wait(600);
   ok(/\/tasks\/T-\d+/.test(await p.evaluate(() => location.pathname + location.hash)), 'a task in the feed opens that task');
-  await goProjects('Website (Personal)/Funding'); ok(/Funding isn’t available yet/.test(await main()), 'Funding shows no sample campaign on a real project');
+  await goProjects('Website/Funding'); ok(/Funding isn’t available yet/.test(await main()), 'Funding shows no sample campaign on a real project');
 
   // ---- create, in the current workspace ----
   await goProjects(); db.calls.length = 0;
@@ -214,7 +223,8 @@ try {
   await p.evaluate(() => document.querySelector('.xd [data-xd-ok]')?.click()); await settle();
   ok(/not allowed/.test(said) && (await names()).length === before && !(await names()).some((n) => n.startsWith('Refused')), 'a project the platform refuses is not left in the list (' + said.replace(/\s+/g, ' ').slice(0, 60) + ')');
 
-  // ---- rename and archive ----
+  // ---- rename and archive (the project is personal: back to the personal workspace, where it is listed) ----
+  await p.evaluate(() => window.XA.switchWorkspace('personal')); await wait(900);
   db.calls.length = 0;
   await p.evaluate(() => { window.XA.renameProject('Difference Engine'); }); await wait(350);
   await p.evaluate(() => { const i = document.querySelector('#xdf-name'); i.value = 'Analytical Engine'; i.dispatchEvent(new Event('input', { bubbles: true })); });
@@ -352,13 +362,13 @@ try {
   const fades = await p.evaluate(() => window.__fades);
   ok(fades.length === 0, `a hard refresh draws the page once — no second fade as the data arrives (${JSON.stringify(fades)})`);
   // switching between projects in the sidebar must not redraw the sidebar or the rail (owner, 2026-10-15)
-  await goProjects('Website (Personal)'); await wait(600);
+  await goProjects('Website'); await wait(600);
   await p.evaluate(() => { window.__pv = document.querySelector('#panel > .pv'); window.__rail = document.querySelector('#rail .rmid'); });
   const row = await p.$$eval('#panel [data-item]', (rs) => rs.map((r) => r.dataset.item + ':' + r.getAttribute('aria-current')));
-  await p.evaluate(() => { const r = [...document.querySelectorAll('#panel [data-item]')].find((x) => x.getAttribute('aria-current') !== 'true' && /Website/.test(x.dataset.item)); r?.click(); });
+  await p.evaluate(() => { const r = [...document.querySelectorAll('#panel [data-item]')].find((x) => x.getAttribute('aria-current') !== 'true' && !/^Archived/.test(x.dataset.item)); r?.click(); });
   await wait(700);
   const kept = await p.evaluate(() => ({ samePanel: document.querySelector('#panel > .pv') === window.__pv, sameRail: document.querySelector('#rail .rmid') === window.__rail, current: document.querySelector('#panel [aria-current="true"]')?.dataset.item }));
-  ok(kept.samePanel && kept.sameRail && /Analytical/.test(kept.current || ''), `switching projects keeps the sidebar and rail as they are; only the selection moves (${JSON.stringify(kept)} of ${JSON.stringify(row)})`);
+  ok(kept.samePanel && kept.sameRail && kept.current && kept.current !== 'Website', `switching projects keeps the sidebar and rail as they are; only the selection moves (${JSON.stringify(kept)} of ${JSON.stringify(row)})`);
   // and every other sidebar: moving between the items of one section keeps the sidebar (Library views, Tasks views,
   // workspace pages) — the panel is redrawn only when the SECTION changes
   for (const [hash, label] of [['#/overview/g/library', 'Library'], ['#/overview/g/tasks', 'Tasks'], ['#/overview/g/workspace', 'Workspace'], ['#/overview/g/settings', 'Settings']]) {

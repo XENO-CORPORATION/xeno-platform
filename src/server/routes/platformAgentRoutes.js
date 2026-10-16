@@ -53,7 +53,7 @@ router.post('/lends/:lendId/revoke', handled(async (req, res) => { res.json({ su
 router.get('/presence/stream', async (req, res) => { try { await presenceStream.serve(req, res); } catch (e) { console.error('[agents presence stream]', e); if (!res.headersSent) res.status(500).json({ success: false, error: 'Internal server error' }); else res.end(); } });
 router.get('/presence', handled(async (req, res) => { res.json({ success: true, agents: await presence.presenceAll(req.db, req.me) }); }));
 router.get('/:id/activity', handled(async (req, res) => { res.json({ success: true, ...(await presence.activity(req.db, req.me, req.params.id, { limit: req.query.limit, before: req.query.before })) }); }));
-router.get('/', handled(async (req, res) => { res.json({ success: true, agents: await agents.list(req.db, req.me, { divisionId: req.query.division ? String(req.query.division) : null }) }); }));
+router.get('/', handled(async (req, res) => { res.json({ success: true, agents: await agents.list(req.db, req.me, { divisionId: req.query.division ? String(req.query.division) : null, workspaceId: req.query.workspace ? String(req.query.workspace) : null }) }); }));
 router.post('/', handled(async (req, res) => { res.status(201).json({ success: true, agent: await agents.create(req.db, req.me, req.body || {}) }); }));
 router.get('/:id', handled(async (req, res) => { res.json({ success: true, agent: await agents.get(req.db, req.me, req.params.id) }); }));
 // cloud runs: run the agent on a task, in the cloud (agentCloudRuns.js)

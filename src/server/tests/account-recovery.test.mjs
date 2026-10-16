@@ -11,6 +11,7 @@
 import express from 'express';
 import pg from 'pg';
 import crypto from 'crypto';
+import fs from 'node:fs';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import { migrateAccountV2 } from '../database/migrate-account-v2.js';
@@ -56,6 +57,10 @@ async function main() {
   // a stateless token with no sid, and two assertions failed two steps later.
   await pool.query(tableDDL('user_sessions'));
   await pool.query(tableDDL('security_events'));
+  // signup makes the account's personal workspace (migration 20261016180000), so the workspace tables come from
+  // the migrations too, never hand-written here
+  await pool.query(fs.readFileSync(new URL('../database/migrations/20260711120000-workspaces.sql', import.meta.url), 'utf8').split('-- DOWN')[0]);
+  await pool.query(`CREATE TABLE IF NOT EXISTS agent_identities (user_id uuid PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE, owner_user_id uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE)`);
   await migrateAccountV2(pool); // credit_grants + uq_credit_txn_ref (the idempotency index)
 
   const app = express();

@@ -31,6 +31,7 @@ import workspaceTeamRoutes from './workspaceTeamRoutes.js';
 import { workspaceKeyRoutes } from './workspaceKeyRoutes.js';
 import workspaceNotificationRoutes from './workspaceNotificationRoutes.js';
 import { requireWorkspaceAuthority } from '../middleware/workspaceScopes.js';
+import { ensurePersonalWorkspace as ensurePersonalRoot } from '../services/personalWorkspace.js';
 
 // ── ref helpers ──────────────────────────────────────────────────────────────
 const WS = (id) => `workspace:${id}`;
@@ -155,36 +156,10 @@ async function ensureOwnerTuple(db, wsId, userId) {
   await writeTuples(db, { writes: [{ object: WS(wsId), relation: 'owner', subject: USER(userId) }] });
 }
 
-// Lazily provision the caller's personal workspace (idempotent under races).
+// The caller's personal workspace: made at signup (personalWorkspace.ensurePersonalWorkspace, the one creator);
+// asked for here too, so an account that predates that still gets its root and a missing owner tuple is healed.
 async function ensurePersonalWorkspace(db, user) {
-  const found = await db.query(
-    "SELECT * FROM workspaces WHERE owner_user_id = $1 AND workspace_type = 'personal' LIMIT 1",
-    [user.id],
-  );
-  if (found.rows.length) {
-    await ensureOwnerTuple(db, found.rows[0].id, user.id); // heal a missing tuple
-    return found.rows[0];
-  }
-  const label = String(user.display_name || user.username || 'Personal').trim();
-  const name = /workspace/i.test(label) ? label : `${label}'s Workspace`;
-  try {
-    return await withTransaction(db, async (tx) => {
-      const workspace = (await tx.query(
-        "INSERT INTO workspaces (owner_user_id, workspace_type, name, slug) VALUES ($1,'personal',$2,$3) RETURNING *",
-        [user.id, name, slugify(label)],
-      )).rows[0];
-      await ensureOwnerTuple(tx, workspace.id, user.id);
-      await auditStrict(tx, workspace.id, user.id, 'workspace.create', workspace.id, { type: 'personal' });
-      return workspace;
-    });
-  } catch (e) {
-    const again = await db.query(
-      "SELECT * FROM workspaces WHERE owner_user_id = $1 AND workspace_type = 'personal' LIMIT 1",
-      [user.id],
-    );
-    if (again.rows.length) return again.rows[0];
-    throw e;
-  }
+  return ensurePersonalRoot(db, user.id);
 }
 
 async function sendInviteEmail(db, ws, invite, inviter) {
@@ -293,17 +268,19 @@ router.get('/', wrap(async (req, res) => {
   res.json({ success: true, workspaces });
 }));
 
-// POST /api/workspaces { name, workspace_type } — create a team workspace.
+// POST /api/workspaces { name } — found a COMPANY workspace (xeno-company/SPEC.md §4.1). Its wallet is made with it,
+// so no ledger primitive ever meets the company id before its wallet exists (§4.1b's ordering invariant).
 router.post('/', wrap(async (req, res) => {
   const name = String(req.body?.name || '').trim();
   if (!name) return res.status(400).json({ success: false, error: 'Workspace name is required' });
   const ins = await withTransaction(req.db, async (tx) => {
     const workspace = (await tx.query(
-      "INSERT INTO workspaces (owner_user_id, workspace_type, name, slug) VALUES ($1,'team',$2,$3) RETURNING *",
+      "INSERT INTO workspaces (owner_user_id, workspace_type, name, slug) VALUES ($1,'company',$2,$3) RETURNING *",
       [req.user.id, name.slice(0, 200), slugify(name)],
     )).rows[0];
     await ensureOwnerTuple(tx, workspace.id, req.user.id);
-    await auditStrict(tx, workspace.id, req.user.id, 'workspace.create', workspace.id, { type: 'team' });
+    await ensureWorkspaceWallet(tx, workspace.id);
+    await auditStrict(tx, workspace.id, req.user.id, 'workspace.create', workspace.id, { type: 'company' });
     return workspace;
   });
   res.json({ success: true, workspace: await shapeWorkspace(req.db, ins, req.user.id) });

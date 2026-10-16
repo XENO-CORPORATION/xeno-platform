@@ -20,5 +20,5 @@ export function scopeLabel(workspace: Pick<Workspace, 'workspace_type' | 'name'>
 
 /** The secondary line under a scope in the switcher. */
 export function scopeDetail(workspace: Pick<Workspace, 'workspace_type' | 'member_count'>): string {
-  return workspace.workspace_type === 'team' ? `${workspace.member_count ?? 0} members` : 'Your own account';
+  return workspace.workspace_type !== 'personal' ? `${workspace.member_count ?? 0} members` : 'Your own account';
 }

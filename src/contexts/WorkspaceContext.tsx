@@ -153,7 +153,8 @@ export const WorkspaceProvider: React.FC<{ children: React.ReactNode }> = ({ chi
 
   const userRole = activeWorkspace?.member_role || members.find(m => m.user_id === user?.id)?.member_role || null;
   const isOwner = userRole === 'owner';
-  const isTeam = activeWorkspace?.workspace_type === 'team';
+  // an organization: a company (or a workspace made before companies existed, typed 'team')
+  const isTeam = !!activeWorkspace && activeWorkspace.workspace_type !== 'personal';
 
   return (
     <WorkspaceContext.Provider

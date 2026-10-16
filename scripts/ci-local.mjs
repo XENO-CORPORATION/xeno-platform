@@ -66,7 +66,7 @@ const WF = join(ROOT, '.github', 'workflows');
 const CORE_DB_SUITES = [
   'authz-v2', 'oidc-v2', 'erasure', 'account-recovery',
   'auth-token-confusion', 'api-key-auth', 'browser-bff-session',
-  'inference-routing-live', 'chat-stream-own-key', 'chat-area', 'library-area', 'workspace-area', 'forum-tickets', 'forum-moderation-actions', 'forum-writeback', 'xeno-tasks', 'canvases', 'chat-handoff', 'task-folders', 'tasks-mcp-oauth', 'xeno-mcp', 'agents-divisions', 'agent-cloud-runs', 'agent-company-ownership', 'agent-media-tools', 'dpop-token-exchange', 'readonly-preview-lifecycle',
+  'inference-routing-live', 'chat-stream-own-key', 'chat-area', 'library-area', 'workspace-area', 'forum-tickets', 'forum-moderation-actions', 'forum-writeback', 'xeno-tasks', 'canvases', 'chat-handoff', 'task-folders', 'workspace-foundation', 'tasks-mcp-oauth', 'xeno-mcp', 'agents-divisions', 'agent-cloud-runs', 'agent-company-ownership', 'agent-media-tools', 'dpop-token-exchange', 'readonly-preview-lifecycle',
   'leader-election', 'fresh-db-boot', 'password-change-atomicity',
   'byok-lifecycle-audit', 'gateway-catalogue-sync', 'email-delivery-events', 'suspension-gate', 'chat-branches', 'artifacts', 'library-organise', 'storage-allowance', 'account-security',
 ];
@@ -191,6 +191,7 @@ const PG = { container: 'xeno-ci-local-pg', port: '55995', password: 'test', ima
 const BROWSER_SUITES = [
   'chat-project-context-browser.test.mjs',
   'studio-feed-browser.test.mjs',
+  'chat-handoff-browser.test.mjs',
 ];
 
 const argv = process.argv.slice(2);
