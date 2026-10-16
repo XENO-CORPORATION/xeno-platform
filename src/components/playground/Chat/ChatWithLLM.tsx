@@ -26,6 +26,7 @@ import WorkspaceModelTrigger from './WorkspaceModelTrigger';
 import { generations, validateGeneration, stableRequestKey, releaseRequestKey, GenerationError, isGenerationTerminal, type Generation, type GenerationRequest } from '@/lib/generations';
 import { GenerationRecord } from './GenerationRecord';
 import { ChatGenerationCard, RESULT_DRAG, StudioGenerationFeed } from './StudioGenerationFeed';
+import { ChatHandoffCard, agentMatches, loadHandoffAgents, sendHandoff, type HandoffAgent } from './AgentHandoff';
 import { StudioEnhance } from './StudioEnhance';
 import type { GenState, GenType } from './GenerateMode';
 import { GEN_CATALOG, currentGenModel, GenModeTrigger, GenSettings, atQuery, closeGenMenu, isGenMenuOpen, openAtMenu, useGenerateMode } from './GenerateMode';
@@ -3135,17 +3136,30 @@ const ChatWithLLM: React.FC<ChatWithLLMProps> = ({
   // Generate mode (@image …): the input box becomes that generator — GenerateMode.tsx. Workspace only for now:
   // its menus are the workspace's model menu.
   const atMenuOpenRef = useRef(false);
-  const atPickRef = useRef<'' | 'image' | 'video' | 'audio' | '3d'>(''); // the lit row of the @ list
+  const atPickRef = useRef<string>(''); // the lit row of the @ list: a type, or `agent:<id>`
   const stripAtWord = (value: string, caret: number) => {
     const at = atQuery(value, caret);
     return at ? (value.slice(0, at.start) + value.slice(caret)).replace(/\s{2,}/g, ' ').replace(/^\s+/, '') : value;
+  };
+  // `@agent`: who the next Send is handed to (AgentHandoff.tsx). Null = a normal chat turn.
+  const [handoffTo, setHandoffTo] = useState<HandoffAgent | null>(null);
+  const [handoffAgents, setHandoffAgents] = useState<HandoffAgent[]>([]);
+  const handoffAgentsRef = useRef<HandoffAgent[]>([]);
+  handoffAgentsRef.current = handoffAgents;
+  const pickHandoffAgent = (agentId: string) => {
+    const agent = handoffAgentsRef.current.find((a) => a.id === agentId);
+    if (!agent) return;
+    setInputValue((value) => stripAtWord(value, textareaRef.current?.selectionStart ?? value.length));
+    atMenuOpenRef.current = false;
+    setHandoffTo(agent);
+    setTimeout(() => textareaRef.current?.focus(), 0);
   };
   const generate = useGenerateMode(() => {
     // the @word that opened it is an instruction, not part of the prompt
     setInputValue((value) => stripAtWord(value, textareaRef.current?.selectionStart ?? value.length));
     atMenuOpenRef.current = false;
     setTimeout(() => textareaRef.current?.focus(), 0);
-  });
+  }, pickHandoffAgent);
   const genReferenceCount = attachedFiles.filter((f) => /^image\//.test(f.type) || f.type === 'image').length;
   const [isUploadingAttachments, setIsUploadingAttachments] = useState(false);
   // Drag-and-drop onto the composer: a depth counter, not a boolean, because dragenter/dragleave
@@ -3406,6 +3420,8 @@ const ChatWithLLM: React.FC<ChatWithLLMProps> = ({
     return () => window.removeEventListener('message', onMessage);
   }, [applyAreaModel]);
   const [isDbAuthenticated, setIsDbAuthenticated] = useState<boolean>(false);
+  // the agents are fetched once, the first time this chat can show the @ list
+  useEffect(() => { if (!isWorkspaceEmbed() || !isDbAuthenticated) return; loadHandoffAgents().then(setHandoffAgents, () => {}); }, [isDbAuthenticated]);
   const [isHistoryLoading, setIsHistoryLoading] = useState<boolean>(true);
   const [isSyncingToDb, setIsSyncingToDb] = useState<boolean>(false);
   // --- END NEW ---
@@ -8196,6 +8212,33 @@ const ChatWithLLM: React.FC<ChatWithLLMProps> = ({
    * text only (the voice path); `filesOverride` makes it a send that is not the composer's at all — a
    * queued prompt — so the composer the user may be typing in is left untouched.
    */
+  // `@agent` + Send: the prompt is saved as your message, handed to the agent (a task delegated to it, and its
+  // cloud run when you may run it), and the reply is a card that follows the task live. No model is asked.
+  const handoffSendingRef = useRef(false);
+  const sendAgentHandoff = async (prompt: string) => {
+    const agent = handoffTo; const text = prompt.trim();
+    if (!agent || !text || handoffSendingRef.current) return;
+    if (attachedFiles.length) { setGenerationError(`Attachments can’t be handed to ${agent.name} yet. Remove them, or attach them to the task after.`); return; }
+    if (!isDbAuthenticated || isTemporaryChat) { setGenerationError('Hand-offs need a saved chat. Turn off Temporary chat and sign in.'); return; }
+    handoffSendingRef.current = true; setGenerationError('');
+    const userMessage: ChatMessage = { id: 'handoff-user-' + crypto.randomUUID(), sender: 'user', text: `@${agent.name} ${text}`, timestamp: Date.now() };
+    try {
+      let conversationId = activeConversationIdRef.current;
+      if (!conversationId) conversationId = await createConversationForMessages([...messages, userMessage]);
+      else { const row = await chatService.addMessage(conversationId, { role: 'user', content: userMessage.text }); if (!row) throw new Error('Your message could not be saved. Nothing was handed off.'); }
+      if (!conversationId || !isPersistedConversationId(conversationId)) throw new Error('Hand-offs need a saved chat. Nothing was handed off.');
+      setMessages((prev) => (prev.some((m) => m.id === userMessage.id) ? prev : [...prev, userMessage]));
+      setInputValue('');
+      const out = await sendHandoff(conversationId, agent.id, text);
+      const turn = { ...newTurnRecord(), steps: [{ id: 'handoff-' + out.task.key, kind: 'handoff' as const, taskKey: out.task.key, agentId: out.agent.id, agentName: out.agent.name, startedAt: Date.now() }] };
+      const note = !out.delegated ? `I filed ${out.task.key}, but couldn’t hand it to ${out.agent.name}: ${out.reason}` : out.run ? `${out.agent.name} is on it.` : out.runNote ? `${out.agent.name} has it. ${out.runNote}` : `${out.agent.name} has it.`;
+      setMessages((prev) => [...prev, { id: 'handoff-reply-' + out.task.key, sender: 'ai', text: note, parsedAnswer: note, timestamp: Date.now(), turn }]);
+      await chatService.addMessage(conversationId, { role: 'assistant', content: note, turn });
+      setHandoffTo(null);
+    } catch (e) { setGenerationError(e instanceof Error ? e.message : 'The hand-off failed'); }
+    finally { handoffSendingRef.current = false; }
+  };
+
   const handleGenerate = async (inputOverride?: string, filesOverride?: AttachedFile[], generationOverride?: GenState) => {
     const composerText = inputOverride ?? inputValue;
     const turnFiles = filesOverride ?? attachedFiles;
@@ -8203,6 +8246,7 @@ const ChatWithLLM: React.FC<ChatWithLLMProps> = ({
     // An attachment still in its malware scan is not sendable yet — a file enters a conversation only
     // once it is scanned and valid (AttachedFile.ready), so a sent message never shows "still scanning".
     if (!canSend || isLoading || isUploadingAttachments || turnFiles.some(f => f.ready === false)) return;
+    if (handoffTo && inputOverride === undefined) return void (await sendAgentHandoff(composerText));
     const generationState = generationOverride ?? (filesOverride !== undefined ? {mode:'chat' as const,model:{},values:{}} : generate.state);
     if (generationState.mode !== 'chat') {
       return await sendDirectGeneration(composerText, turnFiles, generationState, filesOverride === undefined); // Generation never reaches fetchAiResponse or the text-model hold.
@@ -12811,6 +12855,11 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                       {/* "+" reveals the mode tabs above the box; Upload rides out with it. */}
                       <ComposerRevealControls />
                       {isWorkspaceEmbed() && <GenModeTrigger mode={generate.state.mode} />}
+                      {handoffTo && (
+                        <button type="button" className="xm-model apx" data-handoff-to={handoffTo.id} title={`Send hands this to ${handoffTo.name}. Esc to go back to chat.`} aria-label={`Handing off to ${handoffTo.name}. Press to go back to chat`} onClick={() => { setHandoffTo(null); textareaRef.current?.focus(); }}>
+                          <span className="ap-txt"><span>@{handoffTo.name}</span><span aria-hidden="true" style={{ opacity: 0.6, marginLeft: 4 }}>×</span></span>
+                        </button>
+                      )}
                       {/* Attach / Recent live on the hover tool rail (empty + conversation). */}
                       <div className="relative hidden">
                           <IconButton
@@ -13384,13 +13433,14 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                   Tier-2 container built ON this component rather than an instance of it. */}
               <textarea
                 ref={textareaRef}
-                placeholder={waitingQuestion ? 'Or type your own answer\u2026' : generate.state.mode !== 'chat' ? GEN_CATALOG[generate.state.mode].placeholder : CHAT_MODE_PLACEHOLDERS[emptyStateMode]}
+                placeholder={handoffTo ? `What should ${handoffTo.name} do? It becomes a task delegated to it` : waitingQuestion ?'Or type your own answer\u2026' : generate.state.mode !== 'chat' ? GEN_CATALOG[generate.state.mode].placeholder : CHAT_MODE_PLACEHOLDERS[emptyStateMode]}
                 value={inputValue}
                 onChange={(e) => {
                   setInputValue(e.target.value);
                   if (!isWorkspaceEmbed() || generate.state.mode !== 'chat') return;
                   const at = atQuery(e.target.value, e.target.selectionStart ?? e.target.value.length);
-                  if (at && at.matches.length) { atPickRef.current = at.matches.find((k) => GEN_CATALOG[k].available) ?? ''; openAtMenu(e.target.closest('[data-chat-composer-shell]') || e.target, at.matches, atPickRef.current); atMenuOpenRef.current = true; }
+                  const ags = at && !handoffTo ? agentMatches(handoffAgents, at.q) : [];
+                  if (at && (at.matches.length || ags.length)) { atPickRef.current = at.matches.find((k) => GEN_CATALOG[k].available) ?? (ags[0] ? 'agent:' + ags[0].id : ''); openAtMenu(e.target.closest('[data-chat-composer-shell]') || e.target, at.matches, atPickRef.current, ags); atMenuOpenRef.current = true; }
                   else if (atMenuOpenRef.current) { closeGenMenu(); atMenuOpenRef.current = false; }
                 }}
                 onPaste={handleComposerPaste}
@@ -13400,17 +13450,23 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                     const caret = e.currentTarget.selectionStart ?? inputValue.length;
                     // Up and Down travel the list (types with no model are passed over); Enter takes the lit one
                     if (atMenuOpenRef.current && (e.key === 'ArrowDown' || e.key === 'ArrowUp')) {
-                      const matches = atQuery(inputValue, caret)?.matches ?? [], open = matches.filter((k) => GEN_CATALOG[k].available);
+                      const aq = atQuery(inputValue, caret), matches = aq?.matches ?? [], ags = aq && !handoffTo ? agentMatches(handoffAgents, aq.q) : [];
+                      const open: string[] = [...matches.filter((k) => GEN_CATALOG[k].available), ...ags.map((a) => 'agent:' + a.id)];
                       if (open.length) {
                         e.preventDefault();
                         const i = atPickRef.current ? open.indexOf(atPickRef.current) : -1;
                         atPickRef.current = open[(i + (e.key === 'ArrowDown' ? 1 : -1) + open.length) % open.length];
-                        openAtMenu(e.currentTarget.closest('[data-chat-composer-shell]') || e.currentTarget, matches, atPickRef.current);
+                        openAtMenu(e.currentTarget.closest('[data-chat-composer-shell]') || e.currentTarget, matches, atPickRef.current, ags);
                         return;
                       }
                     }
                     if (atMenuOpenRef.current && (e.key === 'Enter' || e.key === 'Tab')) {
-                      const available = atQuery(inputValue, caret)?.matches.filter((k) => GEN_CATALOG[k].available) ?? [];
+                      const aq = atQuery(inputValue, caret), ags = aq && !handoffTo ? agentMatches(handoffAgents, aq.q) : [];
+                      const lit = ags.find((a) => 'agent:' + a.id === atPickRef.current);
+                      if (lit || (!aq?.matches.some((k) => GEN_CATALOG[k].available) && ags.length)) {
+                        e.preventDefault(); closeGenMenu(); pickHandoffAgent((lit || ags[0]).id); return;
+                      }
+                      const available = aq?.matches.filter((k) => GEN_CATALOG[k].available) ?? [];
                       const first = available.find((k) => k === atPickRef.current) ?? available[0];
                       if (first) {
                         e.preventDefault();
@@ -13422,6 +13478,9 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                       }
                     }
                     if (e.key === 'Escape' && (atMenuOpenRef.current || isGenMenuOpen())) { e.preventDefault(); closeGenMenu(); atMenuOpenRef.current = false; return; }
+                    if (handoffTo && (e.key === 'Escape' || (e.key === 'Backspace' && e.currentTarget.selectionStart === 0 && e.currentTarget.selectionEnd === 0))) {
+                      e.preventDefault(); setHandoffTo(null); return;
+                    }
                     if (generate.state.mode !== 'chat' && (e.key === 'Escape' || (e.key === 'Backspace' && e.currentTarget.selectionStart === 0 && e.currentTarget.selectionEnd === 0))) {
                       e.preventDefault(); closeGenMenu(); generate.setMode('chat'); return;
                     }
@@ -17555,6 +17614,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                                           {/* run_code blocks (2026-09-27): the source, output and produced
                                               files of each run the turn made, in order — drawn under the head
                                               like generated images, live and on reload from the turn record. */}
+                                          {message.turn?.steps.map(step => step.kind === 'handoff' ? <ChatHandoffCard key={step.id} taskKey={step.taskKey} agentName={step.agentName} /> : null)}
                                           {message.turn?.steps.filter(step => step.kind === 'generation').map(step => step.kind === 'generation' ? <ChatGenerationCard key={step.id} id={step.generationId} onUsePrompt={(text, type) => { setInputValue(text); generate.setMode(type); }} onAttach={attachResult} /> : null)}
                                           <ChatCodeExecution
                                               steps={turnCodeSteps(message.turn)}

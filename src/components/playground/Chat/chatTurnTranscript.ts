@@ -124,7 +124,9 @@ export interface ChatTurnQuestionStep {
 export const QUESTION_LIMITS = { question: 300, option: 300, minOptions: 2, maxOptions: 6, toolCallId: 128 } as const;
 
 export interface ChatTurnGenerationStep { id: string; kind: 'generation'; generationId: string; type: 'image' | 'video' | 'audio' | '3d'; startedAt: number; endedAt?: number; }
-export type ChatTurnStep = ChatTurnGenerationStep | ChatTurnSearchStep | ChatTurnImageStep | ChatTurnCodeStep | ChatTurnQuestionStep;
+/** Work handed to an agent from this chat: a task delegated to it (services/chatHandoff.js). The card reads the task live. */
+export interface ChatTurnHandoffStep { id: string; kind: 'handoff'; taskKey: string; agentId: string; agentName: string; startedAt: number; endedAt?: number; }
+export type ChatTurnStep = ChatTurnHandoffStep | ChatTurnGenerationStep | ChatTurnSearchStep | ChatTurnImageStep | ChatTurnCodeStep | ChatTurnQuestionStep;
 
 export interface ChatTurnRecord {
   schema: typeof TURN_SCHEMA;
@@ -383,6 +385,7 @@ export function normalizeStoredTurn(value: unknown): ChatTurnRecord | undefined 
   if (record.schema !== TURN_SCHEMA || typeof record.startedAt !== 'number' || !Array.isArray(record.steps)) return undefined;
   const steps = record.steps.flatMap((raw): ChatTurnStep[] => {
     if ((raw as ChatTurnGenerationStep)?.kind === 'generation') { const step=asGenerationStep(raw); return step ? [step] : []; }
+    if ((raw as ChatTurnHandoffStep)?.kind === 'handoff') { const h = raw as ChatTurnHandoffStep; return typeof h.id === 'string' && /^T-\d{1,15}$/.test(String(h.taskKey)) && /^agt_[0-9a-f]{32}$/.test(String(h.agentId)) && typeof h.startedAt === 'number' ? [{ id: h.id, kind: 'handoff', taskKey: h.taskKey, agentId: h.agentId, agentName: String(h.agentName || ''), startedAt: h.startedAt }] : []; }
     if (raw && typeof raw === 'object' && (raw as ChatTurnImageStep).kind === 'image') {
       const image = raw as ChatTurnImageStep;
       if (typeof image.id !== 'string' || typeof image.prompt !== 'string' || typeof image.startedAt !== 'number') return [];
@@ -582,6 +585,7 @@ const questionToolCall = (step: ChatTurnQuestionStep): ToolCallInfo => ({
 });
 
 const toToolCall = (step: ChatTurnStep, turnLive: boolean): ToolCallInfo => {
+  if (step.kind === 'handoff') return {id:step.id,toolName:'agent_handoff',params:{taskKey:step.taskKey,agentId:step.agentId},status:'done',startedAt:step.startedAt,category:'other'};
   if (step.kind === 'generation') return {id:step.id,toolName:'generation_proposal',params:{generationId:step.generationId},status:'done',startedAt:step.startedAt,category:'other'};
   if (isImageStep(step)) return imageToolCall(step, turnLive);
   if (isCodeStep(step)) return codeToolCall(step, turnLive);
