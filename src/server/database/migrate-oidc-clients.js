@@ -42,6 +42,10 @@ export const FIRST_PARTY_CLIENTS = [
   { id: 'xeno-comms', name: 'XENO Comms', loopback: true },
   { id: 'xeno-shell', name: 'XENO Shell', loopback: true },
   { id: 'xeno-rt', name: 'XENO RT', loopback: true },
+  // XENO Storage desktop (Electron + Rust, xeno-storage): signs in with loopback PKCE like every desktop app, then
+  // uses the same /api/library routes as the web Storage page. Its version floor and door are operator rows
+  // (client_version_policy, product_access_policy for 'storage'), set when it ships, never by this seed.
+  { id: 'xeno-storage', name: 'XENO Storage', loopback: true },
   // CLI (device grant + loopback PKCE)
   { id: 'xeno-agent-cli', name: 'XENO Agent CLI', loopback: true },
   { id: 'xeno-anima', name: 'XENO Anima', loopback: true },
