@@ -247,6 +247,7 @@ async function main() {
 
     // ── versions: a new version is a new scanned file; what was on the file moves to it; older ones are kept ──
     const v1 = await add(paid, 'report.txt', 'first draft');
+    assert.equal(String(v1.file_id), String((await pool.query('SELECT file_id FROM user_files WHERE id = $1', [v1.id])).rows[0].file_id), 'registration returns the new file id (what /api/upload answers as fileId)');
     await pool.query(`UPDATE library_asset_ingestions SET state = 'ready' WHERE asset_id = $1`, [v1.id]);
     const box = (await call('POST', '/folders', P, { name: 'Reports' })).body.folder;
     await call('PUT', `/assets/file/${v1.id}/folder`, P, { folder: box.id });

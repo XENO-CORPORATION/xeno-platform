@@ -1153,6 +1153,7 @@ app.post('/api/upload', databaseMiddleware, authMiddleware, upload.single('image
       message: 'File uploaded successfully',
       file: {
         id: libraryId,
+        fileId: stored.file_id ? String(stored.file_id) : null,   // XENO Storage: the file's id, the same through every version
         name: req.file.originalname,
         size: req.file.size,
         type: req.file.mimetype,
