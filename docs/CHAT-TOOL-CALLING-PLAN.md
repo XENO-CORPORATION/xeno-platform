@@ -131,3 +131,66 @@ per-chat workspace and an on-demand sandbox) is a subsystem in its own right, wi
 concern this plan does not own: a persistent per-chat workspace over `xenorun` (the owned
 code-execution engine — NOT `xeno-use`, which is device/computer use). It is specified in
 **`CHAT-CODE-EXECUTION-SPEC.md`**. Add the `run_code` tool here only once that ships.
+
+## Browser tools — the chat drives the person's own browser through XENO Extension
+
+**Status:** design APPROVED by the owner 2026-10-16 (phase 1 first). Platform side built here; extension side built by
+the xeno-extension session against this contract. Precedent: Claude in Chrome — a session reaches the extension the
+person is signed into through a relay; several connected browsers → the person picks one; the tabs a session opens are
+grouped; site permissions live in the extension (code.claude.com/docs/en/chrome, read 2026-10-16).
+
+**Measured before designing (2026-10-16):** the extension has 33 browser tools, its own model loop (metered through
+`/api/ai/chat`), a legacy CLI device-code sign-in against xenostudio.ai with no refresh token, no installation
+identity, no connection of any kind to the platform, and chats only in `chrome.storage.local`. The platform chat runs
+every tool server-side; nothing can hand a step to another device and wait; a turn ends when its stream drops.
+
+### Decisions (owner, 2026-10-16)
+
+1. **Approval happens in the browser that acts.** A sensitive browser step is approved in the extension's own prompt;
+   the web chat shows "waiting for approval in <browser>". There is no web approve button — the web page cannot see the
+   page the extension is about to act on, and the extension's safety gate is the one that knows.
+2. **Every remote step goes through the extension's safety gate** — the same classify → block / approve → injection-
+   taint path its own model loop uses. No path that bypasses it, including the internal `RUN_TOOL` (which, measured,
+   skipped the classifier; fixed first).
+3. **Opt-in per browser:** "Allow XENO chats to use this browser" is off until the person turns it on.
+4. **Only the person's own browsers**, and the person picks which one when several are connected.
+
+### Phase 1 contract
+
+**Sign-in.** `xeno-extension` is a first-party OIDC public client on `/api/oauth2` using the RFC 8628 device grant with
+a rotating refresh token and DPoP (key generated in the extension, non-extractable, kept in IndexedDB). Scopes:
+`openid profile email inference:run ledger:read ledger:spend browser:connect`. Issuer: the platform issuer (today
+`https://xenostudio.ai`; it moves with rebrand Wave C — the client follows discovery, never a hard-coded host).
+
+**Installation = a device the person owns.** `POST /api/v2/browser/installations` (OIDC + DPoP, scope `browser:connect`)
+`{ installationId (uuid v4 generated once at install), label, browser, os }` → `{ installation: { id, label, enabled, createdAt } }`.
+Idempotent per (user, installationId). `GET` lists the caller's own; `PATCH /:id { label?, enabled? }`; `DELETE /:id`
+revokes (open connection closed, queued calls failed `revoked`). Shown on the account page at
+`/workspace/account/browsers/<id>`. An installation is bound to the DPoP key it registered with: only a token bound to
+that key can connect as it.
+
+**The connection.** `wss://<platform>/api/v2/browser/connect?installation=<id>` — the extension's service worker opens it
+when signed in AND opted in, authenticates with the access token + DPoP proof in the first frame, and keeps it alive with a
+20 s ping (Chrome ≥116 resets the worker idle timer on WebSocket traffic). Reconnect with backoff; `chrome.alarms`
+(30 s) re-wakes a dead worker. Frames (JSON):
+- server → extension `call` `{ callId, tool, args, conversationId, turnId, tabGroup }`
+- extension → server `ack` `{ callId }` · `approval` `{ callId, state: 'waiting'|'approved'|'denied' }` ·
+  `result` `{ callId, ok, output | error: { code, message } }` · `hello` `{ tools: [names], extensionVersion }`
+A `callId` is unique; a duplicate `result` is ignored (idempotent). Calls are queued server-side: a call sent while the
+socket is down is delivered on reconnect until its deadline.
+
+**The chat side.** When the caller has an enabled, connected installation (or picks one), the chat's tool list gains a
+`browser` tool family mirroring the tool names the extension declared in `hello`. A browser tool call is dispatched to
+that installation and the turn awaits the `result` (deadline 120 s for a step, extended while `approval: waiting`, up to
+10 min). Steps render as ordinary tool steps; `approval: waiting` renders "waiting for approval in <label>".
+**Phase 1 limit:** the turn waits only while its stream is open; if the page closes mid-step the turn ends as today.
+
+**Refusals.** No connected installation → the tool is not offered (never a fake). Installation of another person →
+not found. Revoked/disabled → `revoked`. Deadline → `timeout`. Extension refusal (blocked by its gate, denied by the
+person) → returned to the model as a tool error, which it must report truthfully.
+
+### Phase 2 / 3 (approved direction, not in phase 1)
+
+Phase 2: the extension's side panel lists the person's platform chats and continues them (one conversation, no copy);
+the panel keeps its own UI until the xeno-workshop conversation interface is published, then adopts it — never a fork.
+Phase 3: resumable turns, so a browser task survives closing the page.
