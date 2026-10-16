@@ -18,6 +18,7 @@ import crypto from 'node:crypto';
 import { check } from '../utils/authzReBAC.js';
 import { withTransaction } from './chatProjectAuthority.js';
 import { reconcileShares } from './storageShares.js';
+import { localLibraryPath } from './storageObjects.js';
 
 const isId = (v) => typeof v === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(v);
 
@@ -95,8 +96,11 @@ export async function addVersion(db, userId, fileId, stored, register) {
     fileSize: stored.fileSize, storagePath: stored.storagePath, metadata: { ...(old.metadata || {}), source: 'upload', version_of: old.id },
   });
   const link = () => withTransaction(db, async (tx) => {
-    // two people replacing the same file at once: the second finds it already replaced and stops
-    const raced = await tx.query('SELECT 1 FROM user_files WHERE replaces_asset_id = $1 FOR UPDATE', [old.id]);
+    // two people replacing the same file at once: the second finds it already replaced and stops. The lock is on the
+    // REPLACED row, which exists: FOR UPDATE over "rows that replace it" locks nothing when there are none, so two
+    // transactions could both see none and both link.
+    await tx.query('SELECT 1 FROM user_files WHERE id = $1 FOR UPDATE', [old.id]);
+    const raced = await tx.query('SELECT 1 FROM user_files WHERE replaces_asset_id = $1', [old.id]);
     if (raced.rows.length) throw Object.assign(new Error('The file was replaced by someone else just now.'), { code: 'version_conflict', status: 409 });
     await tx.query('UPDATE user_files SET replaces_asset_id = $2 WHERE id = $1', [created.id, old.id]);
     for (const table of ['storage_item_folders', 'library_item_stars', 'library_item_areas']) {
@@ -113,15 +117,24 @@ export async function addVersion(db, userId, fileId, stored, register) {
 }
 
 /** Bring an older version back: its bytes become a NEW newest version, so nothing in between is lost. */
-export async function restoreVersion(db, userId, fileId, versionId, register) {
+export async function restoreVersion(db, userId, fileId, versionId, register, { expectedRevision = null } = {}) {
   const listed = await listVersions(db, userId, fileId);
   if (listed.notFound) return listed;
   if (!listed.versions.some((v) => v.id === versionId && !v.current)) return { notFound: true };
-  const source = (await db.query('SELECT storage_path, mime_type, file_size FROM user_files WHERE id = $1', [versionId])).rows[0];
-  const from = path.resolve(source.storage_path || '');
-  if (!fs.existsSync(from)) return { conflict: true, code: 'version_bytes_missing' };
+  const current = listed.versions.find((v) => v.current);
+  // If-Match: restore only on top of the version the caller last saw (the same rule as a new version)
+  if (expectedRevision && current && String(current.id) !== String(expectedRevision)) return { stale: true, current: String(current.id) };
+  const source = (await db.query('SELECT id, storage_path, mime_type, file_size, content_sha256 FROM user_files WHERE id = $1', [versionId])).rows[0];
+  // the old revision's bytes through the ONE reader: the cached copy, or the object store when the copy was evicted
+  // (hash-verified there); never storage_path directly (xeno-storage CLAUDE.md rule 11)
+  const from = await localLibraryPath(db, source);
+  if (!from) return { conflict: true, code: 'version_bytes_missing' };
   const to = path.join(path.dirname(from), `${Date.now()}-${crypto.randomBytes(6).toString('hex')}${path.extname(from)}`);
   await fs.promises.copyFile(from, to);
+  if (source.content_sha256) {   // the copy is what the revision recorded, byte for byte
+    const got = crypto.createHash('sha256').update(await fs.promises.readFile(to)).digest('hex');
+    if (got !== source.content_sha256) { await fs.promises.unlink(to).catch(() => {}); return { conflict: true, code: 'version_bytes_changed' }; }
+  }
   try { return await addVersion(db, userId, fileId, { filename: path.basename(to), mimeType: source.mime_type, fileSize: Number(source.file_size), storagePath: to }, register); }
   catch (error) { await fs.promises.unlink(to).catch(() => {}); throw error; }
 }

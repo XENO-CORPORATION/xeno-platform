@@ -123,12 +123,20 @@ export async function placeLibraryItem(db, principal, source, id, area) {
   return { ok: true, area };
 }
 
-/** May this caller reorganise this item (move it between their folders)? The same standing as rename. */
+/**
+ * May this caller move this item between folders? A folder placement is one row per ITEM, not per person, so moving
+ * a personal file moves it for its owner too (and can take it into or out of a shared folder). So a personal file is
+ * moved only by its owner; a team file by anyone who may edit it, since the folders are the team's.
+ */
 export async function folderStanding(db, principal, source, id) {
   if (!validTarget(principal, source, id)) return { invalid: true };
   const who = await standing(db, principal, source, id);
   if (!who) return { notFound: true };
   if (!who.editor) return { forbidden: true };
+  if (source === 'file' && !who.owner) {
+    const team = (await db.query('SELECT workspace_id FROM user_files WHERE id = $1', [id])).rows[0]?.workspace_id;
+    if (!team) return { forbidden: true };
+  }
   return { ok: true };
 }
 

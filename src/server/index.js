@@ -95,7 +95,9 @@ import { sweepRetention, RETENTION_SWEEP_INTERVAL_MS } from './services/dataRete
 import { sweepExpiredArtifacts } from './services/artifactService.js';
 import { sweepLibraryTrash } from './services/libraryOrganise.js';
 import { evictLocalCopies, storeFileObject, sweepOrphanObjects, syncFileObjects } from './services/storageObjects.js';
-import { addVersion, latestFor, revisionFor } from './services/storageVersions.js';
+import { addVersion, latestFor, revisionFor, fileIdOf } from './services/storageVersions.js';
+import * as storageOps from './services/storageOperations.js';
+import { ifMatchRevision } from './routes/libraryRoutes.js';
 import { sweepExports } from './services/accountExport.js';
 import { requireSupportedClient } from './middleware/requireSupportedClient.js';
 import clientPolicyRoutes from './routes/clientPolicyRoutes.js';
@@ -1089,20 +1091,28 @@ app.post('/api/library/assets/file/:id/versions', databaseMiddleware, authMiddle
   const drop = () => { try { fs.unlinkSync(req.file.path); } catch { /* best-effort orphan cleanup */ } };
   if (!ALLOWED_UPLOAD_MIMES.has(req.file.mimetype)) { drop(); return res.status(400).json({ success: false, error: `File type '${req.file.mimetype}' is not allowed` }); }
   if (req.file.size > MAX_UPLOAD_SIZE) { drop(); return res.status(400).json({ success: false, error: 'File exceeds maximum size of 100MB' }); }
+  let opKey; try { opKey = storageOps.keyFrom(req); } catch (e) { drop(); return res.status(e.status).json({ success: false, code: e.code, error: e.message }); }
   try {
     // the file's id or its newest version's id; with If-Match (a sync client), only on top of the version it last saw
     const fileId = await revisionFor(req.db, req.params.id);
-    const ifMatch = String(req.get('if-match') || '').trim();
-    if (ifMatch && ifMatch !== '*' && ifMatch.replace(/^W\//, '').replace(/"/g, '') !== String(await latestFor(req.db, fileId))) {
-      drop(); return res.status(412).json({ success: false, code: 'version_conflict', error: 'The file has a newer version than the one this change was made on.', current: await latestFor(req.db, fileId) });
-    }
-    const result = await addVersion(req.db, req.user.id, fileId, { filename: path.basename(req.file.path), mimeType: req.file.mimetype, fileSize: req.file.size, storagePath: req.file.path }, registerManagedLibraryFile);
-    if (result.notFound) { drop(); return res.status(404).json({ success: false, code: 'not_found', error: 'File not found' }); }
-    res.json({ success: true, file: result.file });
+    const expected = ifMatchRevision(req);
+    // Idempotency-Key: a retry returns the first committed outcome; its bytes are dropped, never registered twice
+    const out = await storageOps.run(req.db, { userId: req.user.id, key: opKey, route: 'version',
+      binding: { fileId: (await fileIdOf(req.db, fileId)) || fileId, expected, workspace: null, bytes: opKey ? await storageOps.fileFingerprint(req.file.path) : null, mime: req.file.mimetype },
+      apply: async () => {
+        if (expected && expected !== String(await latestFor(req.db, fileId))) return { status: 412, body: { success: false, code: 'version_conflict', error: 'The file has a newer version than the one this change was made on.', current: await latestFor(req.db, fileId) } };
+        const result = await addVersion(req.db, req.user.id, fileId, { filename: path.basename(req.file.path), mimeType: req.file.mimetype, fileSize: req.file.size, storagePath: req.file.path }, registerManagedLibraryFile);
+        if (result.notFound) return { status: 404, body: { success: false, code: 'not_found', error: 'File not found' } };
+        return { status: 200, body: { success: true, file: result.file } };
+      } });
+    if (out.replayed || out.status >= 300) drop();
+    if (out.replayed) res.set('Idempotent-Replayed', 'true');
+    res.status(out.status).json(out.body);
   } catch (error) {
     drop();
+    if (error instanceof storageOps.IdempotencyError) return res.status(error.status).json({ success: false, code: error.code, error: error.message });
     if (error?.code === 'storage_full') return res.status(507).json({ success: false, code: 'storage_full', error: error.message, usedBytes: error.usedBytes, allowanceBytes: error.allowanceBytes });
-    if (error?.code === 'version_conflict') return res.status(409).json({ success: false, code: 'version_conflict', error: error.message });
+    if (error?.code === 'version_conflict') return res.status(412).json({ success: false, code: 'version_conflict', error: error.message });
     console.error('Failed to add a file version:', error);
     res.status(500).json({ success: false, error: 'Failed to save the new version' });
   }
@@ -1126,13 +1136,29 @@ app.post('/api/upload', databaseMiddleware, authMiddleware, upload.single('image
     return res.status(400).json({ error: 'File exceeds maximum size of 100MB' });
   }
 
+  let opKey; try { opKey = storageOps.keyFrom(req); } catch (e) { try { fs.unlinkSync(req.file.path); } catch {} return res.status(e.status).json({ success: false, code: e.code, error: e.message }); }
+  const uploadWorkspace = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(req.body?.workspace || '')) ? String(req.body.workspace) : null;
   try {
+    // Idempotency-Key (xeno-storage/SPEC.md 7.3): a retry of a committed upload returns its response; these bytes are dropped
+    const out = await storageOps.run(req.db, { userId: req.user.id, key: opKey, route: 'upload',
+      binding: { workspace: uploadWorkspace, name: req.file.originalname, mime: req.file.mimetype, bytes: opKey ? await storageOps.fileFingerprint(req.file.path) : null },
+      apply: async () => ({ status: 200, body: await registerUpload() }) });
+    if (out.replayed) { try { fs.unlinkSync(req.file.path); } catch {} res.set('Idempotent-Replayed', 'true'); }
+    return res.status(out.status).json(out.body);
+  } catch (error) {
+    try { fs.unlinkSync(req.file.path); } catch { /* best-effort orphan cleanup */ }
+    if (error instanceof storageOps.IdempotencyError) return res.status(error.status).json({ success: false, code: error.code, error: error.message });
+    console.error('Failed to persist uploaded file:', error);
+    if (error?.code === 'storage_full') return res.status(507).json({ success: false, code: 'storage_full', error: error.message, usedBytes: error.usedBytes, allowanceBytes: error.allowanceBytes });
+    return res.status(500).json({ success: false, error: 'Failed to persist uploaded file' });
+  }
+  async function registerUpload() {
     const filePath = req.file.path;
     const fileUrl = `${req.protocol}://${req.get('host')}/uploads/${path.basename(filePath)}`;
     const stored = await registerManagedLibraryFile(req.db, {
       userId: req.user.id,
       // XENO Storage: an upload into a team folder belongs to that workspace (edit rights are checked on registration)
-      workspaceId: /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(req.body?.workspace || '')) ? String(req.body.workspace) : null,
+      workspaceId: uploadWorkspace,
       enforceAllowance: true, // XENO Storage: an upload the person is adding must fit the plan
       filename: path.basename(filePath),
       originalName: req.file.originalname,
@@ -1148,7 +1174,7 @@ app.post('/api/upload', databaseMiddleware, authMiddleware, upload.single('image
     // XENO Storage: the bytes go to the object store now, not at the next sweep (the sweep is the safety net)
     storeFileObject(req.db, { id: libraryId, storage_path: filePath, content_sha256: stored.content_sha256 }).catch((e) => console.warn('[Storage] immediate copy failed, the sweep will retry:', e.message));
 
-    res.json({
+    return {
       success: true,
       message: 'File uploaded successfully',
       file: {
@@ -1161,12 +1187,7 @@ app.post('/api/upload', databaseMiddleware, authMiddleware, upload.single('image
         content_url: `/api/library/assets/${libraryId}/content`,
         created_at: stored.created_at,
       }
-    });
-  } catch (error) {
-    try { fs.unlinkSync(req.file.path); } catch { /* best-effort orphan cleanup */ }
-    console.error('Failed to persist uploaded file:', error);
-    if (error?.code === 'storage_full') return res.status(507).json({ success: false, code: 'storage_full', error: error.message, usedBytes: error.usedBytes, allowanceBytes: error.allowanceBytes });
-    res.status(500).json({ success: false, error: 'Failed to persist uploaded file' });
+    };
   }
 });
 
@@ -3991,6 +4012,7 @@ startDownloadCleanup();
       .then((r) => { if (r && (r.evicted || r.failed)) console.log(`[Storage] cache: removed ${r.evicted} local copy(ies), ${r.bytes} bytes; kept ${r.kept} recent; skipped ${r.failed}`); })
       .then(() => sweepOrphanObjects(pool))
       .then((r) => { if (r.records) console.log(`[Storage] deleted files: ${r.records} record(s), ${r.objects} object(s) removed`); })
+      .then(() => storageOps.sweep(pool)) // retry records past their 24 h retention
       .catch((e) => console.error('[Storage] tidy error:', e.message));
     backgroundLeader.whenLeader(() => {
       const t = setInterval(tidyStorage, 30 * 60 * 1000);
