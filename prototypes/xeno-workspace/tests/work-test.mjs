@@ -21,6 +21,8 @@ const db = {
     { id: pid(3), name: 'Old notes', description: '', settings: {}, is_archived: true, owner_user_id: U, workspace_id: null, file_count: 0, chat_count: 0, updated_at: '2026-09-01T10:00:00Z', capabilities: { viewer: true, owner: true } },
   ],
   conversations: [{ id: 'c1', title: 'Homepage copy', project_id: pid(1) }, { id: 'c2', title: 'Loose chat', project_id: null }],
+  // a file on its second version: the FILE id stays, the version (source_id) is new
+  files: [{ id: 'file:bbbbbbbb-bbbb-4bbb-8bbb-000000000002', source: 'file', source_id: 'bbbbbbbb-bbbb-4bbb-8bbb-000000000002', file_id: 'ffffffff-ffff-4fff-8fff-000000000001', name: 'brief.txt', mime_type: 'text/plain', size_bytes: 12, updated_at: '2026-10-16T10:00:00Z', mine: true }],
   calls: [], next: 10,
 };
 const json = (status, body) => ({ status, contentType: 'application/json', body: JSON.stringify(body) });
@@ -28,6 +30,8 @@ function answer(q) {
   const u = new URL(q.url()), m = q.method(), p = u.pathname; let body = null; try { body = JSON.parse(q.postData() || 'null'); } catch {}
   if (m !== 'GET') db.calls.push({ m, p, body, ws: q.headers()['x-xeno-workspace'] || null, csrf: q.headers()['x-xeno-csrf'] || null });
   if (p === '/api/auth/me') return json(200, { success: true, user: db.user });
+  if (p === '/api/agents/presence/stream') return { status: 200, contentType: 'text/event-stream', body: 'event: ready\ndata: {}\n\n' };
+  if (/^\/api\/library\/assets\/file\/[0-9a-f-]{36}\/star$/.test(p)) return json(200, { success: true, starred: true });
   if (p === '/api/agents/presence') return json(200, { success: true, agents: [] });
   if (p === '/api/agents' && m === 'GET') return json(200, { success: true, agents: [] });
   if (p === '/api/divisions' && m === 'GET') return json(200, { success: true, workspaceId: null, canManage: true, divisions: [] });
@@ -50,7 +54,8 @@ function answer(q) {
   if (p === '/api/user-data/settings') return json(200, { success: true, settings: {} });
   if (p === '/api/workspaces' && m === 'GET') return json(200, { success: true, workspaces: db.workspaces });
   if (p === '/api/workspaces' && m === 'POST') { const w = { id: `44444444-4444-4444-8444-${String(db.next++).padStart(12, '0')}`, workspace_type: 'team', name: body.name, member_role: 'owner', member_count: 1 }; db.workspaces.push(w); return json(200, { success: true, workspace: w }); }
-  if (p === '/api/library/assets') return json(200, { success: true, items: [] });
+  if (/^\/api\/library\/assets\/file\/[0-9a-f-]{36}\/star$/.test(p)) return json(200, { success: true, starred: true });
+  if (p === '/api/library/assets') return json(200, { success: true, items: u.searchParams.get('folder') === 'root' && u.searchParams.get('owned') === 'mine' ? db.files : [] });
   if (p === '/api/canvases') return json(200, { success: true, canvases: [] });
   if (p === '/api/tasks/projects') return json(200, { success: true, projects: [] });
   if (p === '/api/models') return json(200, { success: true, models: [] });
@@ -378,6 +383,15 @@ try {
         bodyTools: !!document.querySelector('#main .mview [data-xst-find], #main .mview .xst-mini') };
     });
     ok(st.meter && st.find && st.up && st.nf && st.order && !st.bodyTools && /51/.test(st.text), `Storage puts its meter beside the path and search · New folder · Upload on the right of the one header (${JSON.stringify(st)})`);
+    // a file is addressed by its FILE id, so a preview link survives a new version; an older link by version id still opens it
+    const row = await p.$eval('#main [data-xst-item]', (e) => ({ key: e.dataset.xstItem, rev: e.dataset.xstRev })).catch(() => null);
+    ok(row && row.key === 'file:ffffffff-ffff-4fff-8fff-000000000001' && row.rev === 'bbbbbbbb-bbbb-4bbb-8bbb-000000000002', `a Storage row is keyed by the file id and still knows its version (${JSON.stringify(row)})`);
+    await p.goto(`${base}/workspace/studio/apps/storage?view=file:bbbbbbbb-bbbb-4bbb-8bbb-000000000002`, { waitUntil: 'domcontentloaded' }); await wait(2200);
+    const old = await p.evaluate(() => new URL(location.href).searchParams.get('view'));
+    ok(old === 'file:ffffffff-ffff-4fff-8fff-000000000001', `an older preview link by version id opens the file and the address moves to its file id (${old})`);
+    db.calls.length = 0;
+    await p.evaluate(() => { const b = document.querySelector('#main [data-xst-item] [data-xst="star"]'); b && b.click(); }); await wait(500);
+    ok(db.calls.some((c) => c.p === '/api/library/assets/file/bbbbbbbb-bbbb-4bbb-8bbb-000000000002/star'), `actions on a row still name the version listed (${JSON.stringify(db.calls.map((c) => c.p))})`);
   }
   if (process.env.INSET_SWEEP !== '0') {
     const pages = await p.evaluate(() => {
