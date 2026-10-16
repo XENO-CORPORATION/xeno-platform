@@ -194,6 +194,15 @@ async function main() {
     const allConns = (await call('GET', '/api/mcp/connections', { token: session(ada) })).j.connections;
     const agConn = allConns.find((x) => x.client.name === 'Release Bot');
     check(Boolean(agConn), 'and in the person\'s MCP connections list');
+    // 10b. instructions are INHERITED: an agent with none still gets XENO's way of working and the project's words
+    await pool.query('UPDATE chat_projects SET custom_instructions = $2 WHERE id = $1', [proj, 'Always write release notes in plain English.']);
+    const cg = (await rpc(cred.token, 'tools/call', { name: 'tasks_create_task', arguments: { title: 'Notes for 1.0', project: String(proj) } })).j.result.structuredContent;
+    const kCut = cg.task ? cg.task.key : cg.key;
+    const gt = (await rpc(cred.token, 'tools/call', { name: 'tasks_get_task', arguments: { key: kCut } })).j.result.structuredContent;
+    check(/never accept your own work/i.test(gt.guidance || '') && /plain English/.test(gt.guidance || ''), 'an agent reading a task is told how to work it, inheriting the project’s instructions');
+    await call('PATCH', `/api/agents/${ag.id}`, { token: session(ada), body: { instructions: 'Sign every comment as RB.' } });
+    const gt2 = (await rpc(cred.token, 'tools/call', { name: 'tasks_get_task', arguments: { key: kCut } })).j.result.structuredContent.guidance || '';
+    check(gt2.indexOf('plain English') < gt2.indexOf('Sign every comment') && gt2.indexOf('never accept') < gt2.indexOf('plain English'), 'and its own instructions, when written, come last: XENO, then project, then the agent');
     // 11. canvases over XENO MCP: the agent lays work out on a canvas, through the same rules as the screen
     const cl = await rpc(cred.token, 'tools/list', {});
     check(cl.j.result.tools.some((t) => t.name === 'canvas_add') && cl.j.result.tools.some((t) => t.name === 'canvas_connect'), 'an agent has the canvas tools');

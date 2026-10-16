@@ -9,6 +9,7 @@
  *    credential's scopes and single-task limit apply to tools exactly as they do to routes.
  */
 import * as svc from './xenoTasks.js';
+import { guidanceFor } from './agentGuidance.js';
 
 const SITE = process.env.SITE_URL || 'https://xenosystem.ai';
 // Newest first. initialize answers with the client's version when we support it, else our newest.
@@ -69,10 +70,10 @@ export async function callTool(db, actor, name, args = {}, ctx = {}) {
       }
       return ok(out);
     }
-    case 'get_task': return ok({ task: withLink(await svc.getTask(db, actor, args.key)) });
+    case 'get_task': { const t = await svc.getTask(db, actor, args.key); return ok({ task: withLink(t), ...(actor.kind === 'agent' ? { guidance: (await guidanceFor(db, t, actor.id)).text } : {}) }); }
     case 'list_events': return ok(await svc.agentEvents(db, actor, { after: args.after }));
     case 'create_task': return ok({ task: withLink(await svc.createTask(db, actor, { title: args.title, body: args.body || '', kind: args.kind, priority: args.priority, projectId: args.parent_key ? undefined : (project || undefined), area: args.area, parentKey: args.parent_key })) });
-    case 'claim_task': return ok({ task: withLink(await svc.claimTask(db, actor, args.key)) });
+    case 'claim_task': { const t = await svc.claimTask(db, actor, args.key); return ok({ task: withLink(t), ...(actor.kind === 'agent' ? { guidance: (await guidanceFor(db, t, actor.id)).text } : {}) }); }
     case 'move_task': return ok({ task: withLink(await svc.transitionTask(db, actor, args.key, { to: args.to, from: args.from, note: args.note })) });
     case 'comment': return ok({ task: withLink(await svc.commentTask(db, actor, args.key, { body: args.body })) });
     case 'report_activity': return ok({ task: withLink(await svc.reportActivity(db, actor, args.key, { type: args.type, body: args.body })) });
