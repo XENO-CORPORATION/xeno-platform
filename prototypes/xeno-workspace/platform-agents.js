@@ -33,7 +33,8 @@
   const EFFORTS = ['minimal', 'low', 'medium', 'high', 'max'];
   const EFFORT_LABEL = { minimal: 'Minimal', low: 'Low', medium: 'Medium', high: 'High', max: 'Max' };
   const rtSet = (rt) => !!(rt && (rt.model || rt.effort || (rt.tools && ((rt.tools.allow || []).length || (rt.tools.deny || []).length))));
-  const paint = () => { try { X()?.render?.(); } catch {} };
+  // the sidebar is derived data (pages-data.js XENO_PG_SYNC_NAV): re-derive it before drawing, or it shows the last list
+  const paint = () => { try { window.XENO_PG_SYNC_NAV?.(); X()?.render?.(); } catch {} };
   const go = (item) => X()?.go?.('global', { global: 'workspace', item });
   const toast = (m) => X()?.toast?.(m);
 
