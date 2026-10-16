@@ -143,10 +143,14 @@ try {
   const coList = await names();
   ok(coList.length === 1 && coList[0] === 'Website|active|Analytical Engines' && (db.projectScopes || []).includes(WT), `the company shows only its projects, asked for with the company as the scope (${JSON.stringify(coList)})`);
   ok(new URL(await p.evaluate(() => location.href)).searchParams.get('ws') === WT, 'and the address carries the company (?ws=), so the link opens in it');
+  ok(await p.evaluate(() => (window.XENO_GLOBAL_NAV?.workspace || [])[1]) === 'Analytical Engines', 'the Workspace header names the company you are in, not a sample name');
   await p.goto(await p.evaluate(() => location.href), { waitUntil: 'networkidle0' }); await wait(900);
   ok(await p.evaluate((id) => window.XA.currentWorkspace().id === id, WT), 'a fresh load of that address opens the company');
   await p.evaluate(() => window.XA.switchWorkspace('personal')); await wait(900);
   ok(!new URL(await p.evaluate(() => location.href)).searchParams.has('ws'), 'switching back to Personal takes ?ws= off the address');
+  await p.goBack({ waitUntil: 'domcontentloaded' }); await wait(1200);
+  ok(await p.evaluate((id) => window.XA.currentWorkspace().id === id, WT) && (await names()).every((x) => /Analytical Engines/.test(x)), 'Back returns to the company you came from, with its projects');
+  await p.evaluate(() => window.XA.switchWorkspace('personal')); await wait(900);
   ok(await p.evaluate(() => window.XENO_PG_PROJECTS.items.every((x) => /^[0-9a-f-]{36}$/.test(x.id))), 'every project carries the platform id');
   ok(!/undefined|On track|At risk/.test(t), 'no health is shown for a project that has none recorded');
 
