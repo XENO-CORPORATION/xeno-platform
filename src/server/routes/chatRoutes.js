@@ -1,5 +1,6 @@
 import { localLibraryPath } from '../services/storageObjects.js';
 import express from 'express';
+import { handOff } from '../services/chatHandoff.js';
 import { readArea, readAreaFilter, EFFECTIVE_CONVERSATION_AREA } from '../utils/resourceArea.js';
 import { activePath, deepestLeafUnder, indexById } from '../utils/chatBranches.js';
 import { chatWorkspaceScope } from '../middleware/chatWorkspaceScope.js';
@@ -14,6 +15,7 @@ import { pinConversation, unpinConversation } from '../services/chatConversation
 import { computeNextRun, executeScheduledTask, sanitizeScheduledRunError } from '../workers/chatScheduledWorker.js';
 import { assertAuthorizedLibraryAttachments, deleteLibraryItem, getAuthorizedLibraryFile, listLibraryItems, resolveManagedLibraryPath } from '../services/libraryAssets.js';
 import {
+  ChatAuthorizationError,
   createAuthorizedProject,
   linkAssetToProject,
   requireResourceRelation,
@@ -901,6 +903,20 @@ router.put('/conversations/:id/active-leaf', async (req, res) => {
     if (sendChatAuthorityError(res, error)) return;
     console.error('Failed to switch branch:', error);
     res.status(500).json({ success: false, error: 'Internal server error' });
+  }
+});
+
+// Hand work to an agent from this chat (`@agent …` in the composer): a task delegated to it, and a cloud run when
+// the person may run it. services/chatHandoff.js.
+router.post('/conversations/:id/handoff', requireActivated, async (req, res) => {
+  try {
+    const out = await handOff(req.db, { id: req.user.id, kind: 'human' }, req.params.id, { agentId: req.body?.agentId, prompt: req.body?.prompt, run: req.body?.run !== false });
+    res.status(201).json({ success: true, handoff: out });
+  } catch (error) {
+    if (error instanceof ChatAuthorizationError) return res.status(404).json({ success: false, error: 'Conversation not found', code: 'conversation_not_found' });
+    if (error && error.status && error.code) return res.status(error.status).json({ success: false, error: error.message, code: error.code });
+    console.error('[chat handoff]', error);
+    res.status(500).json({ success: false, error: 'The handoff failed' });
   }
 });
 

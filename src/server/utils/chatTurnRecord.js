@@ -208,6 +208,15 @@ export function normalizeTurnRecord(value) {
       steps.push({ id: raw.id, kind: 'generation', generationId: raw.generationId, type: raw.type, startedAt: raw.startedAt });
       continue;
     }
+    if (raw.kind === 'handoff') {
+      // A handle into the task the handoff made; the card reads the task live, as the reader.
+      if (!/^T-\d{1,15}$/.test(String(raw.taskKey || ''))) return { ok: false, error: 'handoff step needs a taskKey' };
+      if (!/^agt_[0-9a-f]{32}$/.test(String(raw.agentId || ''))) return { ok: false, error: 'handoff step needs an agentId' };
+      if (!shortString(raw.agentName, 120)) return { ok: false, error: 'handoff step.agentName must be a short string' };
+      if (!isFiniteNumber(raw.startedAt) || raw.startedAt <= 0) return { ok: false, error: 'step.startedAt must be a timestamp' };
+      steps.push({ id: raw.id, kind: 'handoff', taskKey: raw.taskKey, agentId: raw.agentId, agentName: raw.agentName || '', startedAt: raw.startedAt });
+      continue;
+    }
     if (raw.kind === 'image') {
       const image = normalizeImageStep(raw);
       if (!image.ok) return image;

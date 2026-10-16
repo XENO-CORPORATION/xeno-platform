@@ -127,14 +127,18 @@ export function useGenMenuPicks(onPick: (menu: string, id: string) => void) {
 }
 
 /** Open the type menu from the @ list as the person types. */
-export function openAtMenu(anchor: Element | null, matches: GenType[], selected: GenType | '' = '') {
-  openList('gen-at', anchor, 'Generate', matches.map((k) => ({
-    id: k,
-    name: GEN_CATALOG[k].name,
-    note: GEN_CATALOG[k].available ? `@${k}` : 'unavailable',
-    disabled: !GEN_CATALOG[k].available, // greyed out: no model for it yet
-    reason: GEN_CATALOG[k].available ? '' : 'No model is available for this yet',
-  })), selected, { align: 'left' });
+export function openAtMenu(anchor: Element | null, matches: GenType[], selected: string = '', agents: { id: string; name: string; division: string | null }[] = []) {
+  openList('gen-at', anchor, agents.length && !matches.length ? 'Hand off to' : 'Generate', [
+    ...matches.map((k) => ({
+      id: k,
+      name: GEN_CATALOG[k].name,
+      note: GEN_CATALOG[k].available ? `@${k}` : 'unavailable',
+      disabled: !GEN_CATALOG[k].available, // greyed out: no model for it yet
+      reason: GEN_CATALOG[k].available ? '' : 'No model is available for this yet',
+    })),
+    // your agents: picking one hands the prompt to it (AgentHandoff.tsx)
+    ...agents.map((a, i) => ({ id: `agent:${a.id}`, name: a.name, note: a.division || 'Agent', sep: i === 0 && matches.length > 0 })),
+  ], selected, { align: 'left' });
 }
 
 export function closeGenMenu() { genMenuOpen = false; tellWorkspace({ source: 'xeno-chat', type: 'model-menu-close' }); }
@@ -216,7 +220,9 @@ export const GenSettings: React.FC<{ state: GenState; referenceCount: number }> 
 };
 
 /** State + the menu picks, in one place for the composer. */
-export function useGenerateMode(onPickedFromAt?: () => void) {
+export function useGenerateMode(onPickedFromAt?: () => void, onPickAgent?: (agentId: string) => void) {
+  const agentPickRef = useRef(onPickAgent);
+  agentPickRef.current = onPickAgent;
   const [state, setState] = useState<GenState>(GEN_INITIAL);
   const [catalogState, setCatalogState] = useState<{data:GenerationCatalog;loading:boolean;error:string}>({data:catalog,loading:true,error:''});
   const reload = useCallback(async () => { setCatalogState(s => ({...s,loading:true,error:''})); try { const data = await generations.catalog(); catalog=data; setCatalogState({data,loading:false,error:''}); } catch(error) { setCatalogState({data:catalog,loading:false,error:error instanceof Error ? error.message : 'Catalog unavailable'}); } }, []);
@@ -235,6 +241,7 @@ export function useGenerateMode(onPickedFromAt?: () => void) {
   const atRef = useRef(onPickedFromAt);
   atRef.current = onPickedFromAt;
   useGenMenuPicks((menu, id) => {
+    if (menu === 'gen-at' && id.startsWith('agent:')) { agentPickRef.current?.(id.slice(6)); return; }
     if (menu === 'gen-mode' || menu === 'gen-at') {
       if (id !== 'chat' && !Object.keys(TYPE_NAMES).includes(id)) return;
       if (menu === 'gen-at') atRef.current?.();
