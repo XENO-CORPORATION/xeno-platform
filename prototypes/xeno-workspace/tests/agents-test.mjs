@@ -31,6 +31,8 @@ p.on('request', (q) => {
   if (u.pathname === '/api/auth/me') return json(200, { success: true, user: USER });
   if (u.pathname === '/api/tasks/projects') return json(200, { success: true, projects: PROJ });
   if (u.pathname === '/api/mcp/services') return json(200, { success: true, services: [{ category: 'tasks', title: 'Tasks', description: 'Projects and tasks.', tools: 10 }] });
+  if (u.pathname === '/api/agents/presence') return json(200, { success: true, agents: db.agents.map((a) => ({ id: a.id, name: a.name, state: 'cloud', label: 'Runs in the cloud', canTakeWork: true, seenAt: null })) });
+  { const m = u.pathname.match(/^\/api\/agents\/(agt_[0-9a-f]{32})\/activity$/); if (m) return json(200, { success: true, agent: { id: m[1] }, presence: { state: 'cloud', label: 'Runs in the cloud', canTakeWork: true }, items: [{ id: 'e1', at: new Date(Date.now() - 120000).toISOString(), kind: 'task', what: 'comment', task: 'T-7', title: 'Ship the notes', detail: 'Done, checked in the preview' }, { id: 'c1', at: new Date(Date.now() - 180000).toISOString(), kind: 'call', what: 'tasks_claim_task', detail: 'ok · 41 ms', where: 'Claude Code', ok: true }], next: null }); }
   if (u.pathname === '/api/agents' && method === 'GET') { if (fail) return json(500, { success: false }); return json(200, { success: true, agents: db.agents.map(view) }); }
   if (u.pathname === '/api/agents' && method === 'POST') {
     const a = { id: 'agt_' + hex(), userId: 'x', name: b.name, description: b.description || '', createdAt: new Date().toISOString(), status: 'active', pids: [], creds: [], connections: [] };
@@ -98,6 +100,13 @@ try {
   ok(/Release Bot/.test(await main()) && new URL(p.url()).pathname === '/workspace/workspace/Agents', 'the trail goes back to the list');
   await p.goBack(); await settle();
   ok(/Run Release Bot anywhere/.test(await main()), 'Back returns to the agent');
+
+  // presence and activity
+  ok((await p.$eval('[data-xag-presence]', (e) => e.dataset.xagPresence).catch(() => '')) === 'cloud' && /Runs in the cloud/.test(await main()) && /Can take work now/.test(await main()), 'the agent says whether it can take work, from the server’s presence');
+  ok(/Activity/.test(await main()) && /commented on\s*T-7/.test(await main()) && /tasks_claim_task/.test(await main()), 'its activity lists what it did on tasks and the tools it called');
+  await fresh('/workspace/workspace');
+  ok(!!(await p.$('#panel .side-dot')) && /Release Bot/.test(await p.$eval('#panel', (e) => e.innerText)), 'the sidebar lists your agents with a presence dot');
+  await fresh(`/workspace/workspace/Agents/${a.id}`);
 
   // projects
   await p.click('[data-xag-proj="p-1111"]'); await settle(900);

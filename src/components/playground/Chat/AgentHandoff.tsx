@@ -10,7 +10,7 @@ import React, { useEffect, useState } from 'react';
 import './agentHandoff.css';
 import { generationAuthHeaders } from '@/lib/generations';
 
-export type HandoffAgent = { id: string; name: string; division: string | null; canRun: boolean };
+export type HandoffAgent = { id: string; name: string; division: string | null; canRun: boolean; presence?: string; canTakeWork?: boolean };
 export type HandoffResult = {
   task: { key: string; title: string; status: string };
   agent: { id: string; name: string };
@@ -28,10 +28,13 @@ const api = async (method: string, path: string, body?: unknown, signal?: AbortS
 let cache: { at: number; list: HandoffAgent[] } | null = null;
 /** Your agents, for the @ list. Kept for a minute so typing does not refetch. */
 export async function loadHandoffAgents(): Promise<HandoffAgent[]> {
-  if (cache && Date.now() - cache.at < 60_000) return cache.list;
+  if (cache && Date.now() - cache.at < 30_000) return cache.list;
   const j = await api('GET', '/api/agents');
   const list = (j.agents || []).filter((a: { status?: string; paused?: string }) => a.status !== 'retired' && !a.paused)
     .map((a: { id: string; name: string; division?: { name: string } | null; rights?: { runner?: boolean; manage?: boolean } }) => ({ id: a.id, name: a.name, division: a.division ? a.division.name : null, canRun: !!(a.rights && (a.rights.runner || a.rights.manage)) }));
+  // presence (agentPresence.js): who can take work now, so the @ list says it before you hand anything over
+  try { const pr = await api('GET', '/api/agents/presence'); const by = new Map((pr.agents || []).map((x: { id: string; label: string; canTakeWork: boolean }) => [x.id, x]));
+    for (const a of list) { const x = by.get(a.id) as { label: string; canTakeWork: boolean } | undefined; if (x) { a.presence = x.label; a.canTakeWork = x.canTakeWork; } } } catch { /* the list still works without it */ }
   cache = { at: Date.now(), list };
   return list;
 }

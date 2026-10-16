@@ -5,6 +5,8 @@
  *   POST   /api/agents                            { name, description, instructions?, divisionId? } → the agent (id = agt_…)
  *   GET    /api/agents/:id                        { id, name, description, owner, projects, credentials, connections }
  *   PATCH  /api/agents/:id                        { name?, description?, instructions? }  (instructions = a new version)
+ *   GET    /api/agents/presence                   each agent: working | online | cloud | offline | new | paused, and canTakeWork
+ *   GET    /api/agents/:id/activity               its log: task actions, XENO MCP calls (metadata only) and cloud runs, newest first
  *   GET    /api/agents/lends/inbox                offers to lend an agent into a workspace you administer
  *   POST   /api/agents/lends/:lendId/accept|decline|revoke
  *   POST   /api/agents/:id/lend                   { divisionId? , workspaceId? } — lend it there (accepted at once when you administer the target)
@@ -24,6 +26,7 @@ import { DivisionError } from '../services/workforceDivisions.js';
 import * as lending from '../services/agentLending.js';
 import * as cloudRuns from '../services/agentCloudRuns.js';
 import * as access from '../services/agentAccess.js';
+import * as presence from '../services/agentPresence.js';
 import { requireConfirmation } from '../services/accountConfirmation.js';
 import * as transfer from '../services/workforceOwnershipTransfer.js';
 
@@ -44,6 +47,9 @@ router.get('/lends/inbox', handled(async (req, res) => { res.json({ success: tru
 router.post('/lends/:lendId/accept', handled(async (req, res) => { res.json({ success: true, lend: await lending.decide(req.db, req.me, req.params.lendId, true) }); }));
 router.post('/lends/:lendId/decline', handled(async (req, res) => { res.json({ success: true, lend: await lending.decide(req.db, req.me, req.params.lendId, false) }); }));
 router.post('/lends/:lendId/revoke', handled(async (req, res) => { res.json({ success: true, lend: await lending.revoke(req.db, req.me, req.params.lendId) }); }));
+// presence (online / working / cloud / offline …) for every agent you can see, and one agent's activity log
+router.get('/presence', handled(async (req, res) => { res.json({ success: true, agents: await presence.presenceAll(req.db, req.me) }); }));
+router.get('/:id/activity', handled(async (req, res) => { res.json({ success: true, ...(await presence.activity(req.db, req.me, req.params.id, { limit: req.query.limit, before: req.query.before })) }); }));
 router.get('/', handled(async (req, res) => { res.json({ success: true, agents: await agents.list(req.db, req.me, { divisionId: req.query.division ? String(req.query.division) : null }) }); }));
 router.post('/', handled(async (req, res) => { res.status(201).json({ success: true, agent: await agents.create(req.db, req.me, req.body || {}) }); }));
 router.get('/:id', handled(async (req, res) => { res.json({ success: true, agent: await agents.get(req.db, req.me, req.params.id) }); }));

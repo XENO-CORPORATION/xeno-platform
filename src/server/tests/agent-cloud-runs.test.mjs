@@ -127,6 +127,15 @@ async function main() {
     const rep = await call('POST', `/api/tasks/${task.key}/activity`, { token: pa.credential, body: { type: 'action', body: 'reading the CSS' } });
     check_(rep.s === 200, 'so the run can report on it as its delegate');
 
+    // presence and activity: is it available, and what has it done?
+    const pres = (await call('GET', '/api/agents/presence', { token: A })).j.agents.find((x) => x.id === ag.id);
+    check_(pres && pres.state === 'working' && pres.canTakeWork === true && pres.run && pres.run.state === 'running', `a live cloud run shows the agent as working (${JSON.stringify(pres)})`);
+    const log = (await call('GET', `/api/agents/${ag.id}/activity`, { token: A })).j;
+    check_(log.items.some((x) => x.kind === 'task' && x.task === task.key && /reading the CSS/.test(x.detail)), 'its activity shows what it reported on the task');
+    check_(log.items.some((x) => x.kind === 'run' && x.task === task.key), 'and the cloud run');
+    check_(log.presence && log.presence.state === 'working', 'with its presence');
+    check_((await call('GET', `/api/agents/${ag.id}/activity`, { token: B })).s === 404, 'someone else cannot read its log');
+
     // a second press while it is live returns the same run
     const again = await call('POST', `/api/agents/${ag.id}/runs`, { token: A, body: { task: task.key } });
     check_(again.s === 200 && again.j.run.id === st.j.run.id && seen.filter((x) => x.url === '/runs').length === 1, 'pressing Run again while it is live returns the same run, and starts nothing');
@@ -140,6 +149,8 @@ async function main() {
     const after = await call('GET', `/api/agents/${ag.id}/runs`, { token: A });
     check_(after.j.runs[0].state === 'completed' && after.j.runs[0].endedAt, 'when the runner reports it finished, the run ends');
     check_((await call('GET', '/api/tasks/agent/me', { token: pa.credential })).s === 401, 'and its credential stops working');
+    const pres2 = (await call('GET', '/api/agents/presence', { token: A })).j.agents.find((x) => x.id === ag.id);
+    check_(pres2 && pres2.state !== 'working' && !pres2.run, `when the run ends it is no longer shown as working (${pres2 && pres2.state})`);
 
     // stop
     const task2 = (await call('POST', '/api/tasks', { token: A, body: { title: 'Second', projectId: proj } })).j.task;
