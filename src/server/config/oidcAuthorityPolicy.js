@@ -33,6 +33,10 @@ export const CLIENT_AUTHORITY = Object.freeze({
   'xeno-sound': PRODUCT,
   'xeno-canvas': [...PRODUCT, 'collaboration:use'],
   'xeno-browser': PRODUCT,
+  // XENO Storage desktop: the product set (its files go through /api/library, which ReBAC decides) plus team:read,
+  // so it can list the person's team workspaces and show their team folders. No team:manage: membership is managed
+  // on the web, never from a sync client.
+  'xeno-storage': [...PRODUCT, 'team:read'],
   'xeno-docs': PRODUCT,
   'xeno-sheets': PRODUCT,
   'xeno-slides': PRODUCT,
