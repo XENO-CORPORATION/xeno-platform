@@ -6,6 +6,7 @@
  *   GET    /api/agents/:id                        { id, name, description, owner, projects, credentials, connections }
  *   PATCH  /api/agents/:id                        { name?, description?, instructions? }  (instructions = a new version)
  *   GET    /api/agents/presence                   each agent: working | online | cloud | offline | new | paused, and canTakeWork
+ *   GET    /api/agents/presence/stream            the same, live (Server-Sent Events): a snapshot, then each change
  *   GET    /api/agents/:id/activity               its log: task actions, XENO MCP calls (metadata only) and cloud runs, newest first
  *   GET    /api/agents/lends/inbox                offers to lend an agent into a workspace you administer
  *   POST   /api/agents/lends/:lendId/accept|decline|revoke
@@ -27,6 +28,7 @@ import * as lending from '../services/agentLending.js';
 import * as cloudRuns from '../services/agentCloudRuns.js';
 import * as access from '../services/agentAccess.js';
 import * as presence from '../services/agentPresence.js';
+import * as presenceStream from '../services/agentPresenceStream.js';
 import { requireConfirmation } from '../services/accountConfirmation.js';
 import * as transfer from '../services/workforceOwnershipTransfer.js';
 
@@ -48,6 +50,7 @@ router.post('/lends/:lendId/accept', handled(async (req, res) => { res.json({ su
 router.post('/lends/:lendId/decline', handled(async (req, res) => { res.json({ success: true, lend: await lending.decide(req.db, req.me, req.params.lendId, false) }); }));
 router.post('/lends/:lendId/revoke', handled(async (req, res) => { res.json({ success: true, lend: await lending.revoke(req.db, req.me, req.params.lendId) }); }));
 // presence (online / working / cloud / offline …) for every agent you can see, and one agent's activity log
+router.get('/presence/stream', async (req, res) => { try { await presenceStream.serve(req, res); } catch (e) { console.error('[agents presence stream]', e); if (!res.headersSent) res.status(500).json({ success: false, error: 'Internal server error' }); else res.end(); } });
 router.get('/presence', handled(async (req, res) => { res.json({ success: true, agents: await presence.presenceAll(req.db, req.me) }); }));
 router.get('/:id/activity', handled(async (req, res) => { res.json({ success: true, ...(await presence.activity(req.db, req.me, req.params.id, { limit: req.query.limit, before: req.query.before })) }); }));
 router.get('/', handled(async (req, res) => { res.json({ success: true, agents: await agents.list(req.db, req.me, { divisionId: req.query.division ? String(req.query.division) : null }) }); }));

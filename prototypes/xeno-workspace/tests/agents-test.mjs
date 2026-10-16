@@ -31,6 +31,7 @@ p.on('request', (q) => {
   if (u.pathname === '/api/auth/me') return json(200, { success: true, user: USER });
   if (u.pathname === '/api/tasks/projects') return json(200, { success: true, projects: PROJ });
   if (u.pathname === '/api/mcp/services') return json(200, { success: true, services: [{ category: 'tasks', title: 'Tasks', description: 'Projects and tasks.', tools: 10 }] });
+  if (u.pathname === '/api/agents/presence/stream') { db.streamOpen = (db.streamOpen || 0) + 1; return q.respond({ status: 200, contentType: 'text/event-stream', headers: { 'Cache-Control': 'no-cache' }, body: db.agents.map((a) => `event: presence\ndata: ${JSON.stringify({ id: a.id, name: a.name, state: 'working', label: 'Working in the cloud', canTakeWork: true, run: { state: 'running' } })}\n\n`).join('') + 'retry: 600000\nevent: ready\ndata: {}\n\n' }); }
   if (u.pathname === '/api/agents/presence') return json(200, { success: true, agents: db.agents.map((a) => ({ id: a.id, name: a.name, state: 'cloud', label: 'Runs in the cloud', canTakeWork: true, seenAt: null })) });
   { const m = u.pathname.match(/^\/api\/agents\/(agt_[0-9a-f]{32})\/activity$/); if (m) return json(200, { success: true, agent: { id: m[1] }, presence: { state: 'cloud', label: 'Runs in the cloud', canTakeWork: true }, items: [{ id: 'e1', at: new Date(Date.now() - 120000).toISOString(), kind: 'task', what: 'comment', task: 'T-7', title: 'Ship the notes', detail: 'Done, checked in the preview' }, { id: 'c1', at: new Date(Date.now() - 180000).toISOString(), kind: 'call', what: 'tasks_claim_task', detail: 'ok · 41 ms', where: 'Claude Code', ok: true }], next: null }); }
   if (u.pathname === '/api/agents' && method === 'GET') { if (fail) return json(500, { success: false }); return json(200, { success: true, agents: db.agents.map(view) }); }
@@ -101,11 +102,18 @@ try {
   await p.goBack(); await settle();
   ok(/Run Release Bot anywhere/.test(await main()), 'Back returns to the agent');
 
+  // the status mark: a square with a small radius (never a circle), green and blinking while it works — pushed live
+  await settle(900);
+  const mark = await p.evaluate(() => { const d = document.querySelector('.xag-mono--lg .xag-dot'); if (!d) return null; const c = getComputedStyle(d); return { cls: d.className, radius: c.borderTopLeftRadius, w: c.width, bg: c.backgroundColor, anim: c.animationName }; });
+  ok(mark && /xag-dot--working/.test(mark.cls) && parseFloat(mark.radius) > 0 && parseFloat(mark.radius) < parseFloat(mark.w) / 2 && mark.bg === 'rgb(34, 197, 94)' && mark.anim === 'xag-blink' && db.streamOpen >= 1, `the status mark is a green square that blinks while the agent works, pushed live (${JSON.stringify(mark)})`);
+  await p.emulateMediaFeatures([{ name: 'prefers-reduced-motion', value: 'reduce' }]);
+  ok((await p.$eval('.xag-mono--lg .xag-dot', (d) => getComputedStyle(d).animationName)) === 'none', 'and it stops blinking for people who turn motion off');
+  await p.emulateMediaFeatures([{ name: 'prefers-reduced-motion', value: 'no-preference' }]);
   // presence and activity
-  ok((await p.$eval('[data-xag-presence]', (e) => e.dataset.xagPresence).catch(() => '')) === 'cloud' && /Runs in the cloud/.test(await main()) && /Can take work now/.test(await main()), 'the agent says whether it can take work, from the server’s presence');
+  ok((await p.$eval('[data-xag-presence]', (e) => e.dataset.xagPresence).catch(() => '')) === 'working' && /Working in the cloud/.test(await main()) && /Can take work now/.test(await main()), 'the agent says whether it can take work, from the server’s presence');
   ok(/Activity/.test(await main()) && /commented on\s*T-7/.test(await main()) && /tasks_claim_task/.test(await main()), 'its activity lists what it did on tasks and the tools it called');
   await fresh('/workspace/workspace');
-  ok(!!(await p.$('#panel .side-dot')) && /Release Bot/.test(await p.$eval('#panel', (e) => e.innerText)), 'the sidebar lists your agents with a presence dot');
+  ok(!!(await p.$('#panel .side-dot.xag-dot--working')) && /Release Bot/.test(await p.$eval('#panel', (e) => e.innerText)) && parseFloat(await p.$eval('#panel .side-dot', (d) => getComputedStyle(d).borderTopLeftRadius)) < 4, 'the sidebar lists your agents with the same square status mark');
   await fresh(`/workspace/workspace/Agents/${a.id}`);
 
   // projects

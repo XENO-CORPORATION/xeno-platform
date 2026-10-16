@@ -23,7 +23,7 @@
   const why = (r, d) => (r && r.d && (r.d.error || r.d.message)) || d;
   const ID = /^agt_[0-9a-f]{32}$/;
   const ENDPOINT = () => `${location.origin}/api/mcp`;
-  const S = { key: null, status: 'idle', list: [], presence: {}, activity: null, one: null, projects: [], services: [], minted: null, busy: false, copied: '', tab: 'claude', q: '', choices: [], divisions: [], canManageDivisions: false, editingInstr: false, offers: [], models: [], runs: [], runsFor: null, moves: [], access: null, transfers: [], members: [] };
+  const S = { key: null, status: 'idle', list: [], presence: {}, livePushed: new Set(), activity: null, one: null, projects: [], services: [], minted: null, busy: false, copied: '', tab: 'claude', q: '', choices: [], divisions: [], canManageDivisions: false, editingInstr: false, offers: [], models: [], runs: [], runsFor: null, moves: [], access: null, transfers: [], members: [] };
   // the xeno-spawn:// link: on only once Spawn ships its link handler in a verified release (the command always works)
   const SPAWN_LINK = false;
   const EFFORTS = ['minimal', 'low', 'medium', 'high', 'max'];
@@ -45,13 +45,14 @@
   };
   /** live (used in the last 5 minutes) · ready (has a credential) · new (never connected) */
   // the server's presence (agentPresence.js) — derived from runs, credentials and calls, never guessed here
-  const PRES_DOT = { working: 'live', online: 'live', cloud: 'ready', offline: 'idle', new: 'new', paused: 'off' };
+  // one mark per real state (agentPresence.js): green working (it blinks) · green online · yellow idle/asking · red error · white cloud-ready · grey offline · outline new/paused
+  const PRES_DOT = { working: 'working', online: 'online', asking: 'asking', error: 'error', cloud: 'ready', offline: 'idle', new: 'new', paused: 'off' };
   const state = (a) => {
     const pr = S.presence[a.id];
     if (pr) return [PRES_DOT[pr.state] || 'idle', pr.label, pr];
     if (a.paused === 'needs_owner') return ['off', 'Paused — needs an owner'];
     const last = (a.connections || []).map((c) => c.lastUsedAt).filter(Boolean).sort().pop();
-    if (last && Date.now() - new Date(last).getTime() < 5 * 60e3) return ['live', 'Working now'];
+    if (last && Date.now() - new Date(last).getTime() < 5 * 60e3) return ['working', 'Working now'];
     if (last) return ['idle', `Last worked ${ago(last).toLowerCase()}`];
     if ((a.credentials || []).length) return ['ready', 'Ready to connect'];
     return ['new', 'Not connected yet'];
@@ -87,7 +88,8 @@
   }
   async function loadPresence() {
     const r = await api('GET', '/api/agents/presence');
-    if (r.ok) { S.presence = Object.fromEntries((r.d.agents || []).map((x) => [x.id, x])); paint(); }
+    // the live stream is fresher than this one-off answer: never let an older read overwrite what it pushed
+    if (r.ok) { for (const x of r.d.agents || []) if (!S.livePushed.has(x.id)) S.presence[x.id] = x; paint(); }
   }
   async function loadActivity(id, more = false) {
     const before = more && S.activity && S.activity.next ? '&before=' + encodeURIComponent(S.activity.next) : '';
@@ -95,7 +97,7 @@
     if (!S.one || S.one.id !== id) return;
     if (!r.ok) { S.activity = { error: true, items: [] }; return paint(); }
     S.activity = { items: [...(more && S.activity ? S.activity.items : []), ...(r.d.items || [])], next: r.d.next };
-    if (r.d.presence) S.presence[id] = { ...(S.presence[id] || {}), ...r.d.presence };
+    if (r.d.presence && !S.livePushed.has(id)) S.presence[id] = { ...(S.presence[id] || {}), ...r.d.presence };
     paint();
   }
   // ownership: who owns it, who answers for it, who may do what (agentAccess.js)
@@ -223,7 +225,7 @@
   function listPage() {
     const h = H(), q = S.q.toLowerCase();
     const rows = S.list.filter((a) => !q || a.name.toLowerCase().includes(q) || (a.description || '').toLowerCase().includes(q));
-    const live = S.list.filter((a) => state(a)[0] === 'live').length;
+    const live = S.list.filter((a) => state(a)[0] === 'working').length;
     const sub = S.list.length ? `${h.plural(S.list.length, 'agent', 'agents')} you own${live ? ` · ${live} working now` : ''}` : 'Agents you create work as themselves, from any computer, on what you give them.';
     const card = (a) => { const [k, l] = state(a);
       return `<button type="button" class="xag-card" data-xag="open" data-id="${esc(a.id)}">
@@ -565,11 +567,11 @@
       '.xag-card-b{display:flex;flex-direction:column;gap:4px;min-height:44px}.xag-card-b b{font-size:14px;font-weight:600}.xag-card-b small{font-size:12.5px;color:var(--muted);line-height:1.45;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}',
       '.xag-card-f{display:flex;align-items:center;justify-content:space-between;gap:10px;padding-top:10px;border-top:1px solid var(--border);font-size:12px;color:var(--muted)}.xag-card-f>span:first-child{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}',
       '.xag-mono{position:relative;display:grid;place-items:center;width:38px;height:38px;border-radius:11px;background:var(--control);font-size:13px;font-weight:600;letter-spacing:.02em;flex:none}.xag-mono--lg{width:64px;height:64px;border-radius:18px;font-size:21px}',
-      '.xag-dot{position:absolute;right:-2px;bottom:-2px;width:11px;height:11px;border-radius:50%;border:2px solid var(--panel);background:var(--dim)}.xag-mono--lg .xag-dot{width:15px;height:15px}',
+      '.xag-dot{position:absolute;right:-3px;bottom:-3px;width:10px;height:10px;border-radius:3px;border:2px solid var(--panel);box-sizing:content-box;background:var(--dim)}.xag-mono--lg .xag-dot{width:13px;height:13px;border-radius:4px}',
       '.xag-avail{display:block;margin-top:4px;color:var(--muted);font-size:12px}.xag-logs{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:2px}.xag-log{display:flex;align-items:flex-start;gap:10px;padding:7px 8px;border-radius:8px}.xag-log:hover{background:var(--hover,rgba(255,255,255,.04))}.xag-log .xag-row-b{flex:1;min-width:0;display:flex;flex-direction:column;gap:1px}.xag-log .xag-row-b small{color:var(--muted)}.xag-log time{flex:none;color:var(--muted);font-size:12px}.xag-log--bad .xag-row-b small{color:var(--text)}.xag-log code{font-size:12px}.xag-dot--off{background:transparent;border:1px solid var(--muted)}.xag-dot--new{background:transparent;border:1px dashed var(--muted)}',
-      '.xag-dot--live{background:#4ade80;box-shadow:0 0 0 0 #4ade8066;animation:xagp 2s infinite}.xag-dot--idle{background:var(--muted)}.xag-dot--ready{background:var(--text)}',
-      '@keyframes xagp{70%{box-shadow:0 0 0 6px #4ade8000}100%{box-shadow:0 0 0 0 #4ade8000}}@media (prefers-reduced-motion:reduce){.xag-dot--live{animation:none}}',
-      '.xag-st{font-size:12px;color:var(--muted);white-space:nowrap}.xag-st--live{color:#4ade80}.xag-st--ready{color:var(--text)}',
+      '',
+      '',
+      '.xag-st{font-size:12px;color:var(--muted);white-space:nowrap}.xag-st--working,.xag-st--online{color:#5a9a6a}.xag-st--asking{color:rgba(234,179,8,.8)}.xag-st--error{color:rgba(239,68,68,.75)}.xag-st--ready{color:var(--text)}',
       '.xag-first{display:flex;flex-direction:column;align-items:center;text-align:center;max-width:620px;margin:40px auto 0;gap:14px}',
       '.xag-first-art{display:flex;align-items:center;gap:0;margin-bottom:8px}.xag-first-art span{display:grid;place-items:center;width:52px;height:52px;border-radius:15px;border:1px solid var(--border);background:var(--panel)}.xag-first-art span:first-child{background:var(--control)}',
       '.xag-first-art i{width:44px;height:1px;background:linear-gradient(90deg,var(--border),var(--muted),var(--border))}',
@@ -623,6 +625,24 @@
     .slice(0, 8).map((a) => { const [, l] = state(a); return [a.name, l, '', `Agents/${a.id}`]; });
   const dotOf = (item) => { const id = String(item || '').replace(/^Agents\//, ''); const a = S.list.find((x) => x.id === id); return a ? state(a)[0] : null; };
   // presence stays current while the page is open: every 30 s, only when the tab is visible
-  setInterval(() => { if (document.visibilityState === 'visible' && S.list.length) loadPresence(); }, 30_000);
+  // LIVE: the server pushes each agent's presence the moment it changes (agentPresenceStream.js — a database NOTIFY
+  // when a run, a session, a credential or a connection moves, plus a 20 s server-side re-check for time-based
+  // changes). The stream is one per tab, reconnects on its own, and pauses while the tab is hidden. If it cannot
+  // open (an old server), the page falls back to asking every 30 s.
+  let es = null, fallback = null;
+  const live = () => {
+    if (es || document.visibilityState !== 'visible' || typeof EventSource === 'undefined') return;
+    es = new EventSource('/api/agents/presence/stream', { withCredentials: true });
+    let painted = 0;
+    es.addEventListener('presence', (ev) => {
+      try { const x = JSON.parse(ev.data); S.presence[x.id] = x; S.livePushed.add(x.id); } catch { return; }
+      // a burst (the snapshot) paints once; a single change paints at once
+      clearTimeout(painted); painted = setTimeout(() => { paint(); try { X()?.refreshPanel?.(); } catch {} }, 60);
+    });
+    es.addEventListener('ready', () => { if (fallback) { clearInterval(fallback); fallback = null; } });
+    es.onerror = () => { if (es && es.readyState === 2) { es = null; if (!fallback) fallback = setInterval(() => { if (document.visibilityState === 'visible' && S.list.length) loadPresence(); }, 30_000); setTimeout(live, 5000); } };
+  };
+  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') { live(); } else if (es) { es.close(); es = null; } });
+  setTimeout(live, 0);
   window.XENO_AGENTS = { served: true, sidebar, dotOf, count: () => (S.status === 'ready' || S.list.length ? S.list.length : null), route, nameOf, isId: (s) => ID.test(String(s || '')), reload: () => { S.key = null; paint(); } };
 })();

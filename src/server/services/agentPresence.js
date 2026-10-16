@@ -2,7 +2,8 @@
  * Is an agent available, and what has it been doing? (owner, 2026-10-16: "see if this agent is online or not,
  * connected or not, so that we see if it's available to delegate / hand off to, and see the logs".)
  *
- * PRESENCE is derived, never set by the agent, from four facts the platform already records (a revoked credential
+ * PRESENCE (one of: asking · error · working · online · cloud · offline · new · paused) is derived, never set by the
+ * agent, from facts the platform already records (a revoked credential
  * or connection counts for nothing: a run that ended and lost its credential is not still "working"):
  *   working  — a cloud run of it is live, or one of its credentials / connections answered in the last 2 minutes
  *   online   — it was seen in the last 15 minutes (a local CLI between calls)
@@ -24,15 +25,32 @@ const LIVE_RUN = ['starting', 'queued', 'running'];
 
 async function facts(db, agentUserId) {
   const q = (sql, p = [agentUserId]) => db.query(sql, p).then((r) => r.rows[0] || {});
-  const [seen, run, cred, hook] = await Promise.all([
+  const [seen, run, cred, hook, ask, err, doing] = await Promise.all([
     q(`SELECT GREATEST(
          (SELECT max(last_used_at) FROM task_agent_tokens WHERE agent_user_id = $1 AND revoked_at IS NULL AND expires_at > now()),
          (SELECT max(last_used_at) FROM mcp_connections WHERE agent_user_id = $1 AND revoked_at IS NULL)) AS at`),
     q(`SELECT id, state, created_at FROM agent_cloud_runs WHERE agent_user_id = $1 AND state = ANY($2) ORDER BY created_at DESC LIMIT 1`, [agentUserId, LIVE_RUN]),
     q(`SELECT count(*)::int AS n FROM task_agent_tokens WHERE agent_user_id = $1 AND revoked_at IS NULL AND expires_at > now()`),
     q(`SELECT 1 AS yes FROM task_agent_webhooks WHERE agent_user_id = $1`),
+    // it asked a question and is waiting on a person (report_activity type ask) — on a task that is still open
+    q(`SELECT 'T-' || t.number AS task, s.last_note, s.updated_at FROM task_agent_sessions s JOIN tasks t ON t.id = s.task_id AND t.deleted_at IS NULL AND t.status NOT IN ('done', 'wont_do')
+        WHERE s.agent_user_id = $1 AND s.state = 'awaiting_input' ORDER BY s.updated_at DESC LIMIT 1`),
+    // its newest outcome was a failure: a session it reported as an error, or a cloud run that failed, in the last day
+    q(`SELECT * FROM (
+         SELECT 'T-' || t.number AS task, s.last_note AS note, s.updated_at AS at FROM task_agent_sessions s JOIN tasks t ON t.id = s.task_id AND t.deleted_at IS NULL AND t.status NOT IN ('done', 'wont_do')
+          WHERE s.agent_user_id = $1 AND s.state = 'error' AND s.updated_at > now() - interval '1 day'
+         UNION ALL
+         SELECT 'T-' || t.number, r.reason, r.ended_at FROM agent_cloud_runs r JOIN tasks t ON t.id = r.task_id
+          WHERE r.agent_user_id = $1 AND r.state IN ('failed', 'refused') AND r.ended_at > now() - interval '1 day'
+           AND NOT EXISTS (SELECT 1 FROM agent_cloud_runs n WHERE n.agent_user_id = $1 AND n.created_at > r.created_at)) e ORDER BY at DESC LIMIT 1`),
+    // what it is working on now: its most recently active session
+    q(`SELECT 'T-' || t.number AS task, t.title, s.state, s.last_note, s.updated_at FROM task_agent_sessions s JOIN tasks t ON t.id = s.task_id AND t.deleted_at IS NULL
+        WHERE s.agent_user_id = $1 AND s.state IN ('working', 'pending') ORDER BY s.updated_at DESC LIMIT 1`),
   ]);
-  return { seenAt: seen.at || null, run: run.id ? { id: String(run.id), state: run.state, since: run.created_at } : null, credentials: cred.n || 0, webhook: !!hook.yes };
+  return { seenAt: seen.at || null, run: run.id ? { id: String(run.id), state: run.state, since: run.created_at } : null, credentials: cred.n || 0, webhook: !!hook.yes,
+    asking: ask.task ? { task: ask.task, note: ask.last_note || '', at: ask.updated_at } : null,
+    error: err.task ? { task: err.task, note: err.note || '', at: err.at } : null,
+    doing: doing.task ? { task: doing.task, title: doing.title, note: doing.last_note || '', at: doing.updated_at } : null };
 }
 
 /** The presence of one agent (by its user id), as `viewerRights` allow (they decide whether `cloud` applies). */
@@ -42,7 +60,10 @@ export async function presenceOf(db, agentUserId, viewerRights = null) {
   const f = await facts(db, agentUserId);
   const age = f.seenAt ? Date.now() - new Date(f.seenAt).getTime() : Infinity;
   const canRun = !!(viewerRights && (viewerRights.runner || viewerRights.manage));
-  const base = { seenAt: f.seenAt, run: f.run };
+  const base = { seenAt: f.seenAt, run: f.run, doing: f.doing, asking: f.asking, error: f.error };
+  // a question waiting on a person beats everything: it is the one state that needs someone to act
+  if (f.asking) return { ...base, state: 'asking', label: `Needs you on ${f.asking.task}`, canTakeWork: true };
+  if (f.error && !f.run && age >= WORKING_MS) return { ...base, state: 'error', label: `Hit a problem on ${f.error.task}`, canTakeWork: true };
   if (f.run) return { ...base, state: 'working', label: f.run.state === 'running' ? 'Working in the cloud' : 'Starting in the cloud', canTakeWork: true };
   if (age < WORKING_MS) return { ...base, state: 'working', label: 'Working now', canTakeWork: true };
   if (age < ONLINE_MS) return { ...base, state: 'online', label: 'Online', canTakeWork: true };
