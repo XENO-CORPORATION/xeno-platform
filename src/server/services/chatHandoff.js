@@ -12,6 +12,7 @@
 import * as tasks from './xenoTasks.js';
 import * as agents from './platformAgents.js';
 import * as cloudRuns from './agentCloudRuns.js';
+import * as taskFolders from './taskFolders.js';
 import { requireResourceRelation, userPrincipal } from './chatProjectAuthority.js';
 
 export class HandoffError extends Error {
@@ -25,7 +26,7 @@ export function titleOf(prompt) {
   return line.length > 120 ? line.slice(0, 117).trimEnd() + '…' : line;
 }
 
-export async function handOff(db, me, conversationId, { agentId, prompt, run = true } = {}, opts = {}) {
+export async function handOff(db, me, conversationId, { agentId, prompt, run = true, folders = [] } = {}, opts = {}) {
   if (!UUID.test(String(conversationId || ''))) throw new HandoffError('Conversation not found', 'conversation_not_found', 404);
   const text = String(prompt || '').trim();
   if (!text) throw new HandoffError('Write what the agent should do', 'prompt_required');
@@ -38,6 +39,12 @@ export async function handOff(db, me, conversationId, { agentId, prompt, run = t
 
   const body = `${text}\n\n— Handed off from the chat "${convo.title || 'Untitled'}" (/workspace/apps/chat/${convo.project_id ? `projects/${convo.project_id}/c/` : ''}${convo.id}).`;
   let task = await tasks.createTask(db, me, { title: titleOf(text), body, source: 'chat', conversationId: convo.id, ...(convo.project_id ? { projectId: convo.project_id } : {}) });
+  // `#folder` in the prompt: the folders its work lives in, linked BEFORE the agent gets it so it can open them at once
+  const linked = [], refused = [];
+  for (const f of (Array.isArray(folders) ? folders : []).slice(0, 10)) {
+    try { await taskFolders.addTaskFolder(db, me, task.key, { folderId: f && f.id, role: f && f.role === 'editor' ? 'editor' : 'viewer' }); linked.push(String(f.id)); }
+    catch (e) { if (e instanceof taskFolders.TaskFolderError) refused.push(e.message); else throw e; }
+  }
   try { task = await tasks.delegateTask(db, me, task.key, { agentId: agent.userId }); }
   catch (e) {
     // the task stays (it is the person's, filed where the chat lives); the delegation's reason is what they need
@@ -53,6 +60,7 @@ export async function handOff(db, me, conversationId, { agentId, prompt, run = t
     task: { key: task.key, title: task.title, status: task.status },
     agent: { id: agent.id, name: agent.name },
     delegated: true,
+    folders: linked, ...(refused.length ? { folderNote: refused[0] } : {}),
     run: started ? { id: started.id, state: started.state } : null,
     ...(runNote ? { runNote } : {}),
   };

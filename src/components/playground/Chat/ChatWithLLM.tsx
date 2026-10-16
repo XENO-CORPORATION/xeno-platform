@@ -26,10 +26,10 @@ import WorkspaceModelTrigger from './WorkspaceModelTrigger';
 import { generations, validateGeneration, stableRequestKey, releaseRequestKey, GenerationError, isGenerationTerminal, type Generation, type GenerationRequest } from '@/lib/generations';
 import { GenerationRecord } from './GenerationRecord';
 import { ChatGenerationCard, RESULT_DRAG, StudioGenerationFeed } from './StudioGenerationFeed';
-import { ChatHandoffCard, agentMatches, loadHandoffAgents, sendHandoff, type HandoffAgent } from './AgentHandoff';
+import { ChatHandoffCard, agentMatches, folderMatches, hashQuery, loadHandoffAgents, loadHandoffFolders, sendHandoff, type HandoffAgent, type HandoffFolder } from './AgentHandoff';
 import { StudioEnhance } from './StudioEnhance';
 import type { GenState, GenType } from './GenerateMode';
-import { GEN_CATALOG, currentGenModel, GenModeTrigger, GenSettings, atQuery, closeGenMenu, isGenMenuOpen, openAtMenu, useGenerateMode } from './GenerateMode';
+import { GEN_CATALOG, currentGenModel, GenModeTrigger, GenSettings, atQuery, closeGenMenu, isGenMenuOpen, openAtMenu, openHashMenu, useGenerateMode } from './GenerateMode';
 import { embedArea, isWorkspaceEmbed, tellWorkspace } from '@/lib/workspaceEmbed';
 import { readAreaModel, readAreaSettings, withAreaInstructions, writeAreaModelLocal, type AreaSettingsMap } from './chatAreaDefaults';
 import ChatEffortControl from './ChatEffortControl';
@@ -3154,12 +3154,25 @@ const ChatWithLLM: React.FC<ChatWithLLMProps> = ({
     setHandoffTo(agent);
     setTimeout(() => textareaRef.current?.focus(), 0);
   };
+  // `#folder` while handing off: the folders the task will name, so the agent can open them (taskFolders.js).
+  // The #word stays in the prompt as plain words ("look in #Weapon renders"); the chip is what links it.
+  const [handoffFolders, setHandoffFolders] = useState<HandoffFolder[]>([]);
+  const folderListRef = useRef<HandoffFolder[]>([]);
+  const hashOpenRef = useRef(false);
+  const pickHandoffFolder = (folderId: string) => {
+    const f = folderListRef.current.find((x) => x.id === folderId); if (!f) return;
+    const caret = textareaRef.current?.selectionStart ?? inputValue.length;
+    setInputValue((value) => { const h = hashQuery(value, caret); return h ? value.slice(0, h.start) + '#' + f.name + ' ' + value.slice(caret) : value; });
+    setHandoffFolders((prev) => (prev.some((x) => x.id === f.id) ? prev : [...prev, f]));
+    hashOpenRef.current = false;
+    setTimeout(() => textareaRef.current?.focus(), 0);
+  };
   const generate = useGenerateMode(() => {
     // the @word that opened it is an instruction, not part of the prompt
     setInputValue((value) => stripAtWord(value, textareaRef.current?.selectionStart ?? value.length));
     atMenuOpenRef.current = false;
     setTimeout(() => textareaRef.current?.focus(), 0);
-  }, pickHandoffAgent);
+  }, pickHandoffAgent, pickHandoffFolder);
   const genReferenceCount = attachedFiles.filter((f) => /^image\//.test(f.type) || f.type === 'image').length;
   const [isUploadingAttachments, setIsUploadingAttachments] = useState(false);
   // Drag-and-drop onto the composer: a depth counter, not a boolean, because dragenter/dragleave
@@ -8229,12 +8242,13 @@ const ChatWithLLM: React.FC<ChatWithLLMProps> = ({
       if (!conversationId || !isPersistedConversationId(conversationId)) throw new Error('Hand-offs need a saved chat. Nothing was handed off.');
       setMessages((prev) => (prev.some((m) => m.id === userMessage.id) ? prev : [...prev, userMessage]));
       setInputValue('');
-      const out = await sendHandoff(conversationId, agent.id, text);
+      const out = await sendHandoff(conversationId, agent.id, text, handoffFolders.map((f) => ({ id: f.id })));
       const turn = { ...newTurnRecord(), steps: [{ id: 'handoff-' + out.task.key, kind: 'handoff' as const, taskKey: out.task.key, agentId: out.agent.id, agentName: out.agent.name, startedAt: Date.now() }] };
       const note = !out.delegated ? `I filed ${out.task.key}, but couldn’t hand it to ${out.agent.name}: ${out.reason}` : out.run ? `${out.agent.name} is on it.` : out.runNote ? `${out.agent.name} has it. ${out.runNote}` : `${out.agent.name} has it.`;
       setMessages((prev) => [...prev, { id: 'handoff-reply-' + out.task.key, sender: 'ai', text: note, parsedAnswer: note, timestamp: Date.now(), turn }]);
       await chatService.addMessage(conversationId, { role: 'assistant', content: note, turn });
-      setHandoffTo(null);
+      setHandoffTo(null); setHandoffFolders([]);
+      if (out.folderNote) setGenerationError(out.folderNote);
     } catch (e) { setGenerationError(e instanceof Error ? e.message : 'The hand-off failed'); }
     finally { handoffSendingRef.current = false; }
   };
@@ -12860,6 +12874,11 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                           <span className="ap-txt"><span>@{handoffTo.name}</span><span aria-hidden="true" style={{ opacity: 0.6, marginLeft: 4 }}>×</span></span>
                         </button>
                       )}
+                      {handoffTo && handoffFolders.map((f) => (
+                        <button key={f.id} type="button" className="xm-model apx" data-handoff-folder={f.id} title={`${f.name}: ${handoffTo.name} can open this folder while it works the task. Press to remove.`} onClick={() => setHandoffFolders((prev) => prev.filter((x) => x.id !== f.id))}>
+                          <span className="ap-txt"><span>#{f.name}</span><span aria-hidden="true" style={{ opacity: 0.6, marginLeft: 4 }}>×</span></span>
+                        </button>
+                      ))}
                       {/* Attach / Recent live on the hover tool rail (empty + conversation). */}
                       <div className="relative hidden">
                           <IconButton
@@ -13438,6 +13457,11 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                 onChange={(e) => {
                   setInputValue(e.target.value);
                   if (!isWorkspaceEmbed() || generate.state.mode !== 'chat') return;
+                  if (handoffTo) {
+                    const h = hashQuery(e.target.value, e.target.selectionStart ?? e.target.value.length);
+                    if (h) { const anchor = e.target.closest('[data-chat-composer-shell]') || e.target; void loadHandoffFolders().then((all) => { folderListRef.current = all; const fs = folderMatches(all, h.q).slice(0, 8); if (fs.length) { openHashMenu(anchor, fs, 'folder:' + fs[0].id); hashOpenRef.current = true; } else if (hashOpenRef.current) { closeGenMenu(); hashOpenRef.current = false; } }, () => {}); return; }
+                    if (hashOpenRef.current) { closeGenMenu(); hashOpenRef.current = false; }
+                  }
                   const at = atQuery(e.target.value, e.target.selectionStart ?? e.target.value.length);
                   const ags = at && !handoffTo ? agentMatches(handoffAgents, at.q) : [];
                   if (at && (at.matches.length || ags.length)) { atPickRef.current = at.matches.find((k) => GEN_CATALOG[k].available) ?? (ags[0] ? 'agent:' + ags[0].id : ''); openAtMenu(e.target.closest('[data-chat-composer-shell]') || e.target, at.matches, atPickRef.current, ags); atMenuOpenRef.current = true; }
@@ -13478,8 +13502,13 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                       }
                     }
                     if (e.key === 'Escape' && (atMenuOpenRef.current || isGenMenuOpen())) { e.preventDefault(); closeGenMenu(); atMenuOpenRef.current = false; return; }
+                    if (hashOpenRef.current && (e.key === 'Enter' || e.key === 'Tab')) {
+                      const h = hashQuery(inputValue, caret); const f = h ? folderMatches(folderListRef.current, h.q)[0] : undefined;
+                      if (f) { e.preventDefault(); closeGenMenu(); pickHandoffFolder(f.id); return; }
+                    }
+                    if (hashOpenRef.current && e.key === 'Escape') { e.preventDefault(); closeGenMenu(); hashOpenRef.current = false; return; }
                     if (handoffTo && (e.key === 'Escape' || (e.key === 'Backspace' && e.currentTarget.selectionStart === 0 && e.currentTarget.selectionEnd === 0))) {
-                      e.preventDefault(); setHandoffTo(null); return;
+                      e.preventDefault(); setHandoffTo(null); setHandoffFolders([]); return;
                     }
                     if (generate.state.mode !== 'chat' && (e.key === 'Escape' || (e.key === 'Backspace' && e.currentTarget.selectionStart === 0 && e.currentTarget.selectionEnd === 0))) {
                       e.preventDefault(); closeGenMenu(); generate.setMode('chat'); return;

@@ -154,9 +154,21 @@ function asMediaError(e) {
  * Never a person's private library — a file is reachable only through a project the agent was given, or because
  * the agent made it.
  */
-export async function listFiles(db, actor, { projectId, query } = {}) {
+export async function listFiles(db, actor, { projectId, query, folderId } = {}) {
   const agent = await agentOf(db, actor);
   const p = userPrincipal(agent.id);
+  // a Storage folder a task gave it (taskFolders.js): the folder's files and sub-folders, as far as it may open them
+  if (folderId) {
+    if (!UUID.test(String(folderId))) throw new MediaError('folder is a folder id', 'invalid_folder');
+    const f = (await db.query('SELECT id, name, workspace_id FROM storage_folders WHERE id = $1', [folderId])).rows[0];
+    const may = f && ((await db.query(`SELECT 1 FROM storage_access WHERE kind = 'folder' AND target_id = $1 AND user_id = $2`, [folderId, agent.id])).rows.length
+      || (f.workspace_id && (await check(db, { object: `workspace:${f.workspace_id}`, relation: 'viewer', subject: `user:${agent.id}` })).allowed));
+    if (!may) throw new MediaError('No such folder you can open. A task gives you a folder while you work it.', 'folder_not_found', 404);
+    const files = (await db.query(`SELECT f.id, f.original_name, f.mime_type, f.file_size, f.created_at FROM storage_item_folders i
+        JOIN user_files f ON f.id = i.source_id AND f.deleted_at IS NULL WHERE i.source = 'file' AND i.folder_id = $1 ORDER BY lower(f.original_name) LIMIT 200`, [folderId])).rows;
+    const subs = (await db.query('SELECT id, name FROM storage_folders WHERE parent_id = $1 ORDER BY lower(name) LIMIT 100', [folderId])).rows;
+    return { folder: { id: String(f.id), name: f.name }, folders: subs.map((x) => ({ id: String(x.id), name: x.name })), files: files.map(fileRow) };
+  }
   if (projectId) {
     if (!UUID.test(String(projectId))) throw new MediaError('project_id is a project id', 'invalid_project');
     await requireResourceRelation(db, p, 'project', projectId, 'viewer').catch(() => { throw new MediaError('You are not on that project', 'project_not_yours', 404); });

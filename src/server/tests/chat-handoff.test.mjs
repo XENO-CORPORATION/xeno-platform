@@ -54,6 +54,15 @@ async function main() {
     const r2 = (await ada('POST', `/chat/conversations/${loose}/handoff`, { agentId: atlas.id, prompt: 'Sketch three names' })).j.handoff;
     check(r2 && r2.delegated === true && !(await ada('GET', `/tasks/${r2.task.key}`)).j.task.project, 'from a loose chat it becomes one of your own tasks');
 
+    // `#folder`: the folder rides with the handoff, so the agent can open it as soon as it has the task
+    const { createFolder } = await import('../services/storageFolders.js');
+    const fold = (await createFolder(pool, ids.ada, { name: 'Release inputs' })).folder;
+    const r3 = (await ada('POST', `/chat/conversations/${convo}/handoff`, { agentId: atlas.id, prompt: 'Read #Release inputs and summarise', folders: [{ id: fold.id }] })).j.handoff;
+    const t3 = (await ada('GET', `/tasks/${r3.task.key}`)).j.task;
+    check(r3.folders && r3.folders[0] === fold.id && t3.folders && t3.folders[0].name === 'Release inputs', 'a #folder in the handoff is linked to the task');
+    const sawFolder = (await pool.query(`SELECT 1 FROM storage_access WHERE kind = 'folder' AND target_id = $1 AND user_id = $2`, [fold.id, atlas.userId])).rows.length === 1;
+    check(sawFolder, 'and the agent it was handed to can open that folder');
+
     check((await eve('POST', `/chat/conversations/${convo}/handoff`, { agentId: atlas.id, prompt: 'Do it' })).s === 404, 'someone outside the chat cannot hand off from it');
     const eves = await agents.create(pool, { id: ids.eve, kind: 'human' }, { name: 'Mole' });
     check((await ada('POST', `/chat/conversations/${convo}/handoff`, { agentId: eves.id, prompt: 'Do it' })).s === 404, 'you cannot hand work to someone else’s agent');

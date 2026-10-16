@@ -112,6 +112,14 @@ function shape(t, s, events, files, extra) {
   };
 }
 async function loadByKey(db, key) { const n = keyToNumber(key); if (!n) return null; return (await db.query(`${SELECT} WHERE t.number = $1 AND t.deleted_at IS NULL`, [n])).rows[0] || null; }
+/** Task folders (taskFolders.js) grant access to whoever works a task; after anything that changes who that is or
+ *  whether the task is open, their access is reconciled. Loaded lazily: taskFolders imports this module. */
+async function folderAccess(db, taskId) {
+  const has = (await db.query('SELECT 1 FROM task_folders WHERE task_id = $1 LIMIT 1', [taskId]).catch(() => ({ rows: [] }))).rows.length;
+  if (!has) return;
+  const { reconcileTask } = await import('./taskFolders.js');
+  await reconcileTask(db, taskId);
+}
 async function readable(db, me, key) { const t = await loadByKey(db, key), s = t ? await standing(db, me, t) : null; if (!s || !s.view) throw new TaskError('Task not found', 'task_not_found', 404); return { t, s }; }
 const event = (db, t, me, kind, from, to, note, field = null) => db.query('INSERT INTO task_events (task_id, actor_id, actor_kind, kind, from_value, to_value, note, field) VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING id', [t.id, me.id, kindOf(me), kind, from ?? null, to ?? null, note ?? null, field]);
 /**
@@ -187,7 +195,11 @@ export async function getTask(db, me, key) {
       CASE WHEN e.kind IN ('assigned', 'delegated') OR e.field = 'reviewer' THEN (SELECT COALESCE(x.display_name, x.username) FROM users x WHERE x.id::text = e.to_value) END AS to_name
     FROM task_events e LEFT JOIN users u ON u.id = e.actor_id WHERE e.task_id = $1 ORDER BY e.created_at, e.id`, [t.id])).rows;
   const files = (await db.query(`SELECT a.id, a.filename, a.mime, a.size_bytes, a.created_at, a.uploader_id, COALESCE(u.display_name, u.username) AS uploader_name FROM task_attachments a LEFT JOIN users u ON u.id = a.uploader_id WHERE a.task_id = $1 ORDER BY a.created_at, a.id`, [t.id])).rows;
-  return shape(t, { ...s, moves: movesFor(me, t, s), attach: mayAttach(me, t, s), del: mayDelete(me, t, s) }, events, files, await extrasFor(db, me, t, s));
+  // the Storage folders its work lives in (taskFolders.js): name, path and the address to open; the reader's own
+  // access to them is Storage's check, which the link grants to whoever works the task
+  const folders = (await db.query(`SELECT tf.folder_id, tf.role, f.name FROM task_folders tf JOIN storage_folders f ON f.id = tf.folder_id WHERE tf.task_id = $1 ORDER BY tf.created_at`, [t.id]).catch(() => ({ rows: [] }))).rows
+    .map((r) => ({ id: String(r.folder_id), name: r.name, role: r.role, url: `/workspace/storage/f/${r.folder_id}` }));
+  return { ...shape(t, { ...s, moves: movesFor(me, t, s), attach: mayAttach(me, t, s), del: mayDelete(me, t, s) }, events, files, await extrasFor(db, me, t, s)), folders };
 }
 
 /** Tasks the caller can see. Filters: area (id | 'none'), projectId, status (one or a comma list), assignee ('me' | 'none' | id), q. */
@@ -270,6 +282,7 @@ export async function updateTask(db, me, key, input = {}) { // eslint-disable-li
     if (label === 'reviewer' && to) { await watch(db, t.id, to); await notifyUsers(db, fresh, me, [to], 'review_assigned', `${actorName(me)} made you the reviewer`); }
   }
   if (input.body !== undefined) await mentionPass(db, fresh, me, t.body, fresh.body);
+  await folderAccess(db, t.id);   // who works it may have changed: task folders follow (taskFolders.js)
   return getTask(db, me, key);
 }
 
@@ -305,6 +318,7 @@ export async function transitionTask(db, me, key, { to, note, from } = {}) {
     if (to === 'done') await agentEvent(db, fresh.delegate_id, fresh, 'accepted', { from: actorName(me) });
   }
   if (fresh.delegate_id && String(fresh.delegate_id) === String(me.id) && (to === 'in_review' || to === 'done')) await session(db, fresh, me.id, 'done', to === 'in_review' ? 'Sent for review' : 'Done');
+  await folderAccess(db, t.id);   // who works it may have changed: task folders follow (taskFolders.js)
   return getTask(db, me, key);
 }
 
@@ -316,6 +330,7 @@ export async function claimTask(db, me, key) {
     const got = (await db.query('UPDATE tasks SET delegate_id = $2, updated_at = now() WHERE id = $1 AND (delegate_id IS NULL OR delegate_id = $2) RETURNING id', [t.id, me.id])).rowCount;
     if (!got) throw new TaskError('Another agent is already working on this task', 'already_claimed', 409);
     await event(db, t, me, 'claimed', null, String(me.id), null); await session(db, t, me.id, 'working', 'Picked it up'); await watch(db, t.id, me.id);
+  await folderAccess(db, t.id);   // who works it may have changed: task folders follow (taskFolders.js)
     return getTask(db, me, key);
   }
   if (t.project_id && !(await rel(db, me.id, t.project_id, 'viewer'))) throw new TaskError('Task not found', 'task_not_found', 404);
@@ -323,6 +338,7 @@ export async function claimTask(db, me, key) {
   if (!ok) throw new TaskError(String(t.assignee_id) === String(me.id) ? 'You already hold this task' : 'Someone already holds this task', 'already_claimed', 409);
   await event(db, t, me, 'claimed', null, String(me.id), null);
   await watch(db, t.id, me.id);
+  await folderAccess(db, t.id);   // who works it may have changed: task folders follow (taskFolders.js)
   return getTask(db, me, key);
 }
 
@@ -642,6 +658,7 @@ async function applyDelegate(db, me, t, s, agentId) {
   await event(db, t, me, 'delegated', from ? String(from) : null, to ? String(to) : null, null);
   if (from) { await agentEvent(db, from, t, 'undelegated', {}); }
   if (to) { await session(db, t, to, 'pending', 'Waiting for the agent to pick it up'); await watch(db, t.id, to); await agentEvent(db, to, t, 'delegated', { by: actorName(me) }); }
+  await folderAccess(db, t.id);
   return true;
 }
 export async function delegateTask(db, me, key, { agentId } = {}) {

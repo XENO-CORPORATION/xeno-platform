@@ -28,6 +28,7 @@ function answer(q) {
   const u = new URL(q.url()), m = q.method(), p = u.pathname; let body = null; try { body = JSON.parse(q.postData() || 'null'); } catch {}
   if (m !== 'GET') db.calls.push({ m, p, body, ws: q.headers()['x-xeno-workspace'] || null, csrf: q.headers()['x-xeno-csrf'] || null });
   if (p === '/api/auth/me') return json(200, { success: true, user: db.user });
+  if (p === '/api/agents/presence') return json(200, { success: true, agents: [] });
   if (p === '/api/agents' && m === 'GET') return json(200, { success: true, agents: [] });
   if (p === '/api/divisions' && m === 'GET') return json(200, { success: true, workspaceId: null, canManage: true, divisions: [] });
   if (p === '/api/account/overview') return json(200, { success: true, overview: { user: db.user, credits: { balance: 0 }, workspace_count: 2 } });
@@ -58,7 +59,7 @@ function answer(q) {
   if (p === '/api/mcp/services') return json(200, { success: true, services: [] });
   if (p === '/api/mcp/connections') return json(200, { success: true, connections: [] });
   if (p === '/api/library/folders') return json(200, { success: true, folders: [] });
-  if (p === '/api/library/storage') return json(200, { success: true, storage: { used: 0, limit: 0 } });
+  if (p === '/api/library/storage') return json(200, { success: true, storage: { usedBytes: 51 * 1024 * 1024, allowanceBytes: 100 * 1024 ** 3, remainingBytes: 100 * 1024 ** 3 - 51 * 1024 * 1024, files: 12, byKind: [], full: false } });
   { const mf = p.match(/^\/api\/chat\/projects\/([^/]+)\/files(?:\/([^/]+))?$/); if (mf) { db.pfiles = db.pfiles || [{ id: 'pf1', name: 'brief.pdf', file_type: 'application/pdf', file_size: 20480, content_url: '/api/library/assets/a1/content', created_at: '2026-09-02T10:00:00Z', ingestion_state: 'ready' }]; if (m === 'DELETE') { db.pfiles = db.pfiles.filter((x) => x.id !== mf[2]); return json(200, { success: true }); } return json(200, { success: true, files: db.pfiles }); } }
   const inArea = (x) => { const a = u.searchParams.get('area'); return a === null || (a === 'none' ? !x.area : x.area === a); };
   if (p === '/api/chat/conversations') { const rows = db.conversations.filter((c) => inArea({ area: c.project_id ? (db.projects.find((x) => x.id === c.project_id) || {}).area : c.area })); return json(200, { success: true, conversations: rows, total: rows.length }); }
@@ -367,6 +368,17 @@ try {
   }
   // EVERY page: the header's and footer's last control sits as far from the right edge as from its top and bottom,
   // and the left text starts where that control's text ends (owner, 2026-10-15). Measured, not assumed, per page.
+  // Storage: ONE header — the usage meter beside the path (left), search · New folder · Upload on the right
+  {
+    await p.evaluate(() => { location.hash = '#/studio/p/storage'; }); await wait(1600);
+    const st = await p.evaluate(() => {
+      const top = document.querySelector('#main .topbar'), r = (el) => el && el.getBoundingClientRect();
+      const crumbs = top && top.querySelector('.crumbs'), meter = top && top.querySelector('.xst-mini'), find = top && top.querySelector('[data-xst-find]'), up = top && top.querySelector('[data-xst="upload"]'), nf = top && top.querySelector('[data-xst="new"]');
+      return { meter: !!meter, text: meter ? meter.textContent : '', find: !!find, up: !!up, nf: !!nf, order: !!(crumbs && meter && find && r(crumbs).right <= r(meter).left + 1 && r(meter).right < r(find).left),
+        bodyTools: !!document.querySelector('#main .mview [data-xst-find], #main .mview .xst-mini') };
+    });
+    ok(st.meter && st.find && st.up && st.nf && st.order && !st.bodyTools && /51/.test(st.text), `Storage puts its meter beside the path and search · New folder · Upload on the right of the one header (${JSON.stringify(st)})`);
+  }
   if (process.env.INSET_SWEEP !== '0') {
     const pages = await p.evaluate(() => {
       const out = ['#/overview', '#/overview/g/projects', '#/overview/g/tasks', '#/overview/g/library', '#/overview/g/inbox', '#/overview/g/community', '#/overview/g/market', '#/overview/g/workspace', '#/overview/g/workspace/Members', '#/overview/g/settings', '#/overview/g/anima', '#/overview/g/places', '#/overview/g/tasks/canvas'];

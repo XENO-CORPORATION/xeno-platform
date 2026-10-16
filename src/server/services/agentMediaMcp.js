@@ -35,13 +35,13 @@ export const VIDEO = { tools: genTools('video'), call: (db, actor, name, args) =
 
 export const LIBRARY = {
   tools: [
-    { name: 'list_files', title: 'List files', annotations: RO, description: 'Files you can read: those attached to your projects, and those you made. With `project`, only that project’s files; add `query` to search inside them.',
-      inputSchema: { type: 'object', properties: { project: { type: 'string' }, query: { type: 'string' } } } },
+    { name: 'list_files', title: 'List files', annotations: RO, description: 'Files you can read: those attached to your projects, and those you made. With `project`, only that project’s files; add `query` to search inside them. With `folder`, the files and sub-folders of a Storage folder a task gave you (its id is in the task’s folders).',
+      inputSchema: { type: 'object', properties: { project: { type: 'string' }, query: { type: 'string' }, folder: { type: 'string', description: 'A Storage folder id from a task you work.' } } } },
     { name: 'get_file', title: 'Read a file', annotations: RO, description: 'One file: its details, a link people can open, and its text if it is a text file.', inputSchema: { type: 'object', required: ['asset_id'], properties: { asset_id: { type: 'string' } } } },
     { name: 'attach_to_project', title: 'Add a file to a project', annotations: RW, description: 'Attach a file you made to one of your projects, so the people and agents on it can see it.', inputSchema: { type: 'object', required: ['asset_id', 'project'], properties: { asset_id: { type: 'string' }, project: { type: 'string' } } } },
   ],
   call: async (db, actor, name, args) => {
-    if (name === 'list_files') return ok(await media.listFiles(db, actor, { projectId: args.project || args.project_id, query: args.query }));
+    if (name === 'list_files') return ok(await media.listFiles(db, actor, { projectId: args.project || args.project_id, query: args.query, folderId: args.folder || args.folder_id }));
     if (name === 'get_file') return ok(await media.getFile(db, actor, args.asset_id));
     if (name === 'attach_to_project') return ok(await media.attachFile(db, actor, args.asset_id, args.project || args.project_id));
     throw new media.MediaError(`Unknown tool ${name}`, 'unknown_tool', 404);

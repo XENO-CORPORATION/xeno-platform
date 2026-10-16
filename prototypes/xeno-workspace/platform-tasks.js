@@ -191,12 +191,38 @@
     else if (k === 'image') ta.dispatchEvent(new CustomEvent('tk-image-pick', { bubbles: true }));
   }
 
+  /** Pick task folders (Linear-style picker, multi): your folders and your teams', each "can view" or "can add". */
+  async function pickFolders(anchor, current, done) {
+    const r = await api('GET', '/api/tasks/folders/linkable').catch(() => null);
+    const all = r && r.ok ? r.d.folders || [] : [];
+    if (!all.length) return toast('You have no folders yet. Make one in Storage, then add it here.');
+    const role = new Map(current.map((f) => [f.id, f.role || 'viewer']));
+    return pick({ anchor, multi: true, placeholder: 'Folders in Storage…', footer: 'Whoever works the task can open these · Enter adds',
+      items: all.map((f) => ({ id: f.id, label: f.name, sub: (f.team ? f.team + ' · ' : '') + f.path, lead: ic('folder'), checked: role.has(f.id) })),
+      onPick: (_it, sel) => done((sel || []).map((x) => { const f = all.find((y) => y.id === x.id) || { id: x.id, name: x.label }; return { id: f.id, name: f.name, role: role.get(f.id) || 'viewer' }; })) });
+  }
+
   // @mention suggestions under any editor textarea
   const pop = document.createElement('div'); pop.className = 'tk-mpop'; pop.setAttribute('role', 'listbox'); pop.hidden = true; document.body.appendChild(pop);
   let popFor = null, popItems = [], popIdx = 0;
   const closePop = () => { pop.hidden = true; popFor = null; };
+  // #folder: your Storage folders (taskFolders.js). Picking one writes `#Name` and links it to the task, so whoever
+  // works the task can open it. A heading's "## " never opens it: the # must follow a space and start a word.
+  let foldersAt = 0, foldersList = [];
+  const linkable = async () => { if (Date.now() - foldersAt > 30000) { const r = await api('GET', '/api/tasks/folders/linkable').catch(() => null); foldersList = r && r.ok ? r.d.folders || [] : []; foldersAt = Date.now(); } return foldersList; };
   async function mentionCheck(ta) {
-    const upto = ta.value.slice(0, ta.selectionStart), m = /(^|[\s(])@([A-Za-z0-9_.-]{0,40})$/.exec(upto);
+    const upto = ta.value.slice(0, ta.selectionStart);
+    const h = /(^|[\s(])#([^\s#][^\n#]{0,60})?$/.exec(upto);
+    if (h && !/^#+ /.test(upto.slice(upto.lastIndexOf('\n') + 1))) {
+      const q = String(h[2] || '').toLowerCase();
+      const list = (await linkable()).filter((f) => !q || f.name.toLowerCase().startsWith(q) || f.name.toLowerCase().split(/\s+/).some((w) => w.startsWith(q))).slice(0, 7);
+      if (!list.length) return closePop();
+      popFor = ta; popIdx = 0; popItems = list.map((f) => ({ folder: f }));
+      pop.innerHTML = list.map((f, i) => `<button type="button" class="tk-mpop-i${i === 0 ? ' on' : ''}" role="option" data-i="${i}"><span class="tk-face tk-face--sm" aria-hidden="true">${ic('folder')}</span><b>${esc(f.name)}</b><small>${esc(f.team ? f.team + ' · ' : '')}${esc(f.path)}</small></button>`).join('');
+      const r = ta.getBoundingClientRect(); pop.style.left = `${Math.round(r.left + 8)}px`; pop.style.top = `${Math.round(Math.min(r.bottom + 4, innerHeight - 260))}px`; pop.style.width = `${Math.min(320, r.width - 16)}px`; pop.hidden = false;
+      return;
+    }
+    const m = /(^|[\s(])@([A-Za-z0-9_.-]{0,40})$/.exec(upto);
     if (!m) return closePop();
     const list = await people(ta.dataset.tkMention || null);
     const q = m[2].toLowerCase();
@@ -208,11 +234,27 @@
   }
   function mentionPick(i) {
     const ta = popFor, p = popItems[i]; if (!ta || !p) return closePop();
+    if (p.folder) {
+      const s = ta.selectionStart, at = ta.value.slice(0, s).lastIndexOf('#');
+      ta.setRangeText(`#${p.folder.name} `, at, s, 'end'); closePop(); ta.focus(); ta.dispatchEvent(new Event('input', { bubbles: true }));
+      // the folder rides with the editor: linked now on a saved task, or at Create on a new one
+      ta.dispatchEvent(new CustomEvent('tk-folder-pick', { bubbles: true, detail: p.folder }));
+      return;
+    }
     const s = ta.selectionStart, upto = ta.value.slice(0, s), at = upto.lastIndexOf('@');
     ta.setRangeText(`@${p.username} `, at, s, 'end'); closePop(); ta.focus(); ta.dispatchEvent(new Event('input', { bubbles: true }));
   }
   pop.addEventListener('mousedown', (e) => { const b = e.target.closest('[data-i]'); if (b) { e.preventDefault(); mentionPick(+b.dataset.i); } });
   document.addEventListener('input', (e) => { if (e.target.matches?.('textarea[data-tk-ed], textarea[data-tk-mention]')) mentionCheck(e.target).catch(() => {}); }, true);
+  // `#folder` in a SAVED task's description or comment links the folder at once (a new task links it at Create)
+  document.addEventListener('tk-folder-pick', async (e) => {
+    const keep = e.target.dataset?.tkKeep || ''; const m = /^(?:desc|comment):(T-\d+)$/.exec(keep);
+    const key = m && m[1]; if (!key) return;
+    const t = findTask(key); if (t && (t.folders || []).some((f) => f.id === e.detail.id)) return;
+    const r = await api('POST', `/api/tasks/${encodeURIComponent(key)}/folders`, { folderId: e.detail.id, role: 'viewer' }).catch(() => null);
+    if (!r || !r.ok) return toast(said(r, `“${e.detail.name}” couldn’t be added to ${key}`));
+    toast(`${e.detail.name} added to ${key}: whoever works it can open the folder`); T.task.delete(key); loadTask(key);
+  });
   document.addEventListener('keydown', (e) => {
     if (pop.hidden || e.target !== popFor) return;
     if (e.key === 'ArrowDown' || e.key === 'ArrowUp') { e.preventDefault(); popIdx = (popIdx + (e.key === 'ArrowDown' ? 1 : popItems.length - 1)) % popItems.length; pop.querySelectorAll('.tk-mpop-i').forEach((b, i) => b.classList.toggle('on', i === popIdx)); }
@@ -565,7 +607,8 @@
           ${prop('priority', 'Priority', priChip(t.priority), editAny, 'P')}
           ${prop('kind', 'Type', `${ic(k[0])}<span>${k[1]}</span>`, editAny)}
           ${prop('due', 'Due date', t.dueAt ? `<span class="${late(t) ? 'tk-late' : ''}">${esc(new Date(t.dueAt).toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' }))}${late(t) ? ' · overdue' : ''}</span>` : unset('None'), editAny, 'D')}
-          ${prop('labels', 'Labels', (t.labels || []).length ? t.labels.map((l) => `<small class="tk-chip">${esc(l)}</small>`).join('') : unset('None'), editAny, 'L')}</section>
+          ${prop('labels', 'Labels', (t.labels || []).length ? t.labels.map((l) => `<small class="tk-chip">${esc(l)}</small>`).join('') : unset('None'), editAny, 'L')}
+          ${prop('folders', 'Folders', (t.folders || []).length ? t.folders.map((f) => `<a class="tk-chip tk-chip--folder" href="${esc(f.url)}" data-tk-folder="${esc(f.id)}" title="${f.role === 'editor' ? 'Whoever works it can open this folder and add results to it' : 'Whoever works it can open this folder'}">${ic('folder')}${esc(f.name)}${f.role === 'editor' ? '<i class="tk-dim"> · can add</i>' : ''}</a>`).join('') : unset('None'), editAny)}</section>
         <section class="tk-sgroup" data-tk-links><h4>Relations${t.canLink ? `<button class="tk-link" data-tk="add-link" data-arg="${esc(t.key)}">${ic('plus')}Link</button>` : ''}</h4>
           ${prop('parent', 'Parent', t.parent ? `<span>${esc(t.parent.key)} · ${esc(t.parent.title)}</span>` : unset('None'), editAny)}
           <div class="tk-prop"><span class="tk-prop-l">Sub-tasks</span><span class="tk-prop-v tk-prop-v--ro">${kids.length ? `<span class="tk-mini"><span style="width:${Math.round((kd / kids.length) * 100)}%"></span></span><span>${kd} of ${kids.length} done</span>` : '<span class="tk-dim">None</span>'}</span></div>
@@ -1018,6 +1061,16 @@
     });
     if (field === 'reviewer') return withPeople((list) => pick({ anchor, placeholder: 'Who reviews it…', items: pickPeople(list, t.reviewer && t.reviewer.id, { noneLabel: 'No review', exclude: t.assignee && t.assignee.id }), footer: 'The reviewer accepts the work. The assignee can’t review their own task.', onPick: (it) => patchTask(key, { reviewerId: it.id || null, reviewRequired: !!it.id }, it.id ? 'Reviewer set' : 'Review removed') }));
     if (field === 'due') return pickDue(anchor, t.dueAt, (iso) => patchTask(key, { dueAt: iso }, iso ? 'Due date set' : 'Due date cleared'));
+    if (field === 'folders') {
+      // each pick links or unlinks at once (taskFolders.js): access follows whoever works the task
+      const before = new Map((t.folders || []).map((f) => [f.id, f]));
+      return pickFolders(anchor, t.folders || [], async (list) => {
+        const now = new Set(list.map((f) => f.id));
+        for (const f of list) if (!before.has(f.id)) { const r = await api('POST', `/api/tasks/${encodeURIComponent(key)}/folders`, { folderId: f.id, role: 'viewer' }).catch(() => null); if (!r || !r.ok) toast(said(r, `“${f.name}” couldn’t be added`)); else before.set(f.id, f); }
+        for (const [id, f] of [...before]) if (!now.has(id)) { const r = await api('DELETE', `/api/tasks/${encodeURIComponent(key)}/folders/${encodeURIComponent(id)}`).catch(() => null); if (!r || !r.ok) toast(said(r, `“${f.name}” couldn’t be removed`)); else before.delete(id); }
+        T.task.delete(key); loadTask(key);
+      });
+    }
     if (field === 'labels') {
       let cur = [...(t.labels || [])], changed = false;
       const save = () => { if (changed) patchTask(key, { labels: cur }, 'Labels saved'); changed = false; };
@@ -1040,7 +1093,7 @@
   async function newTask(projectId, preset = {}) {
     if (document.querySelector('.xd [data-tk-new]')) return;
     const here = P.area(), projects = ((window.XENO_PG_PROJECTS || {}).items || []).filter((p) => p.id && p.status !== 'archived' && (!here || p.area === here));
-    const N = { kind: 'task', priority: 'none', assignee: null, reviewer: null, dueAt: null, labels: [], projectId: projectId || null, parentKey: preset.parentKey || null, files: [], seq: 0 };
+    const N = { kind: 'task', priority: 'none', assignee: null, reviewer: null, dueAt: null, labels: [], projectId: projectId || null, parentKey: preset.parentKey || null, files: [], seq: 0, folders: [] };
     const parentT = N.parentKey ? findTask(N.parentKey) : null;
     if (parentT) N.projectId = parentT.project ? parentT.project.id : null;
     const projName = () => (N.projectId ? ((projects.find((p) => p.id === N.projectId) || {}).realName || (projects.find((p) => p.id === N.projectId) || {}).name || (parentT && parentT.project && parentT.project.name) || 'Project') : 'Personal');
@@ -1056,6 +1109,8 @@
       row('reviewer', 'Reviewer', N.reviewer ? who(N.reviewer) + '<small class="tk-req">required</small>' : none('No review'), !!N.reviewer),
       row('due', 'Due date', N.dueAt ? `<span>${esc(new Date(N.dueAt).toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short' }))}</span>` : none('None'), !!N.dueAt),
       row('labels', 'Labels', N.labels.length ? N.labels.map((l) => `<small class="tk-chip">${esc(l)}</small>`).join('') : none('None'), N.labels.length > 0),
+      // the Storage folders its work lives in: whoever works the task can open them (taskFolders.js). Type # in the description too.
+      row('folders', 'Folders', N.folders.length ? N.folders.map((f) => `<small class="tk-chip tk-chip--folder">${ic('folder')}${esc(f.name)}${f.role === 'editor' ? '<i class="tk-dim"> · can add</i>' : ''}</small>`).join('') : none('None — type # to add'), N.folders.length > 0),
       '<div class="tk-props-sep"></div>',
       parentT ? `<div class="tk-prop"><span class="tk-prop-l">Parent</span><span class="tk-prop-v tk-prop-v--ro">${esc(parentT.key)}</span></div>` : row('project', 'Project', `${ic('folder')}<span>${esc(projName())}</span>`, !!N.projectId),
       `<div class="tk-prop"><span class="tk-prop-l">Area</span><span class="tk-prop-v tk-prop-v--ro">${esc(here ? P.areaName(here) : 'Overview')}</span></div>`,
@@ -1090,6 +1145,7 @@
     };
     const menu = async (id, el) => {
       const set = (k, v) => { N[k] = v; repaintChips(); };
+      if (id === 'folders') return pickFolders(el, N.folders, (list) => { N.folders = list; repaintChips(); });
       if (id === 'kind') return pick({ anchor: el, placeholder: 'Type…', items: pickKind(N.kind), onPick: (it) => set('kind', it.id) });
       if (id === 'priority') return pick({ anchor: el, placeholder: 'Priority…', items: pickPriority(N.priority), onPick: (it) => set('priority', it.id) });
       if (id === 'due') return pickDue(el, N.dueAt, (iso) => set('dueAt', iso));
@@ -1109,6 +1165,9 @@
       const r = await api('POST', '/api/tasks', payload).catch(() => null);
       if (!r || !r.ok) { busy = false; btn.disabled = false; btn.textContent = 'Create task'; return toast(said(r, 'The task couldn’t be created. Nothing was saved.')); }
       const t = r.d.task; T.task.set(t.key, t);
+      // link the chosen folders; a refusal is said, the task itself stays created
+      for (const f of N.folders) { const fr = await api('POST', `/api/tasks/${encodeURIComponent(t.key)}/folders`, { folderId: f.id, role: f.role || 'viewer' }).catch(() => null); if (!fr || !fr.ok) toast(said(fr, `“${f.name}” couldn’t be added to ${t.key}`)); }
+      if (N.folders.length) T.task.delete(t.key);
       if (N.files.length) {
         const added = await uploadFiles(t.key, N.files.map((f) => new File([f.file], f.name, { type: f.file.type })), { quiet: true });
         let nb = body; N.files.forEach((f, i) => { const a = added[i]; nb = nb.split(`(pending:${f.n})`).join(a ? `(attachment:${a.id})` : '()'); });
@@ -1132,6 +1191,7 @@
       if (e.target.closest('[data-n-create]')) { e.preventDefault(); return create(); }
     });
     sh.addEventListener('tk-image-pick', () => pickFiles().then((f) => addFiles(f, true)));
+    sh.addEventListener('tk-folder-pick', (e) => { const f = e.detail; if (f && !N.folders.some((x) => x.id === f.id)) { N.folders.push({ id: f.id, name: f.name, role: 'viewer' }); repaintChips(); } });
     // Ctrl+Enter creates from anywhere while this window is the top one (focus can sit on the page after a menu closes)
     const onKey = (e) => { if (PK) return; if (e.key === 'Enter' && (e.ctrlKey || e.metaKey) && document.body.contains(sh) && !window.XCM?.isOpen?.() && [...document.querySelectorAll('.xd')].at(-1) === sh.closest('.xd')) { e.preventDefault(); e.stopPropagation(); create(); } };
     document.addEventListener('keydown', onKey, true);

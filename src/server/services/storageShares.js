@@ -4,6 +4,7 @@
  * What can be shared, by its OWNER only, revocable at once:
  *   a file   with a person (can view, or can edit) or by a secret link (view only, may expire)
  *   a folder with a person (can view, or can edit): everything in it, and in the folders inside it, now and later
+ *   a folder with a TASK (task_folders): the same, for whoever works the task, while it is open
  *
  * "Can edit" on a file means: rename it and upload a new version. It never means delete, share or move.
  *
@@ -52,6 +53,15 @@ export async function reconcileShares(db, ownerUserId) {
     `WITH RECURSIVE tree AS (
        SELECT s.folder_id AS id, s.grantee_user_id AS user_id, s.role, 0 AS depth FROM storage_shares s
         WHERE s.owner_user_id = $1 AND s.kind = 'person' AND s.folder_id IS NOT NULL AND ${LIVE}
+       UNION ALL
+       -- a folder linked to a task: whoever works the task (assignee, delegate, reviewer) may open it while the
+       -- link stands and the task is open (task_folders, 20261016120000). Closing the task or removing the link
+       -- takes it away on the next reconcile.
+       SELECT tf.folder_id, w.user_id, tf.role, 0 FROM task_folders tf
+         JOIN storage_folders sf ON sf.id = tf.folder_id AND sf.owner_user_id = $1 AND sf.workspace_id IS NULL
+         JOIN tasks t ON t.id = tf.task_id AND t.deleted_at IS NULL AND t.status NOT IN ('done', 'wont_do')
+         CROSS JOIN LATERAL (VALUES (t.assignee_id), (t.delegate_id), (t.reviewer_id)) AS w(user_id)
+        WHERE w.user_id IS NOT NULL AND w.user_id <> $1
        UNION ALL SELECT c.id, tree.user_id, tree.role, tree.depth + 1 FROM storage_folders c JOIN tree ON c.parent_id = tree.id WHERE tree.depth < 64)
      SELECT id, user_id, MAX(CASE role WHEN 'editor' THEN 2 ELSE 1 END) AS rank FROM tree GROUP BY id, user_id`, [ownerUserId])).rows;
   const want = new Map();   // "kind|target|user" -> role
