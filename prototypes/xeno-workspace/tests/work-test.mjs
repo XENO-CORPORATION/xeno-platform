@@ -33,7 +33,8 @@ function answer(q) {
   if (p === '/api/agents/presence/stream') return { status: 200, contentType: 'text/event-stream', body: 'event: ready\ndata: {}\n\n' };
   if (/^\/api\/library\/assets\/file\/[0-9a-f-]{36}\/star$/.test(p)) return json(200, { success: true, starred: true });
   if (p === '/api/agents/presence') return json(200, { success: true, agents: [] });
-  if (p === '/api/agents' && m === 'GET') return json(200, { success: true, agents: [] });
+  // one agent per workspace, so the sidebar can be seen to follow a switch
+  if (p === '/api/agents' && m === 'GET') { const w = u.searchParams.get('workspace'); const a = w === WT ? { id: 'agt_' + 'c'.repeat(32), name: 'Company Agent' } : { id: 'agt_' + 'a'.repeat(32), name: 'Own Agent' }; return json(200, { success: true, agents: [{ ...a, description: '', credentials: [], projects: [], owner: { kind: w === WT ? 'company' : 'personal' } }] }); }
   if (p === '/api/divisions' && m === 'GET') return json(200, { success: true, workspaceId: null, canManage: true, divisions: [] });
   if (p === '/api/account/overview') return json(200, { success: true, overview: { user: db.user, credits: { balance: 0 }, workspace_count: 2 } });
   if (p === '/api/account/sessions') return json(200, { success: true, sessions: [] });
@@ -150,6 +151,11 @@ try {
   ok(!new URL(await p.evaluate(() => location.href)).searchParams.has('ws'), 'switching back to Personal takes ?ws= off the address');
   await p.goBack({ waitUntil: 'domcontentloaded' }); await wait(1200);
   ok(await p.evaluate((id) => window.XA.currentWorkspace().id === id, WT) && (await names()).every((x) => /Analytical Engines/.test(x)), 'Back returns to the company you came from, with its projects');
+  await p.evaluate(() => window.XW.go('global', { global: 'workspace', item: 'Members' })); await wait(1500);
+  const sideAgents = () => p.$$eval('#panel [data-item^="Agents/"]', (rs) => rs.map((r) => r.innerText.split(String.fromCharCode(10))[0].trim()));
+  ok((await sideAgents()).join() === 'Company Agent', `the Workspace sidebar lists the company's agents after Back (${JSON.stringify(await sideAgents())})`);
+  await p.evaluate(() => window.XA.switchWorkspace('personal')); await wait(1500);
+  ok((await sideAgents()).join() === 'Own Agent', `and the person's own after switching to Personal (${JSON.stringify(await sideAgents())})`);
   await p.evaluate(() => window.XA.switchWorkspace('personal')); await wait(900);
   ok(await p.evaluate(() => window.XENO_PG_PROJECTS.items.every((x) => /^[0-9a-f-]{36}$/.test(x.id))), 'every project carries the platform id');
   ok(!/undefined|On track|At risk/.test(t), 'no health is shown for a project that has none recorded');
