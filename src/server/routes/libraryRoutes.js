@@ -1,4 +1,7 @@
-import { listVersions, restoreVersion, revisionFor } from '../services/storageVersions.js';
+import { fileIdOf, listVersions, restoreVersion, revisionFor } from '../services/storageVersions.js';
+import { run as runOperation, lookup as lookupOperation, keyFrom, IdempotencyError } from '../services/storageOperations.js';
+/** The revision an If-Match names ("<id>", W/"<id>" or <id>), or null; '*' means any. */
+export const ifMatchRevision = (req) => { const v = String(req.get('if-match') || '').trim().replace(/^W\//, '').replace(/"/g, ''); return v && v !== '*' ? v : null; };
 import { registerManagedLibraryFile } from '../services/libraryAssets.js';
 import { createLink, fileForLink, foldersSharedWith, listShares, revokeShare, shareWithPerson } from '../services/storageShares.js';
 import { allFolders, createFolder, listFolders, moveItemToFolder, removeFolder, updateFolder } from '../services/storageFolders.js';
@@ -293,11 +296,37 @@ router.post('/assets/file/:id/shares', folders(async (req, res) => {
 router.delete('/shares/:id', folders(async (req, res) => { shareReply(res, await revokeShare(req.db, req.user.id, req.params.id)); }));
 // VERSIONS of a file (services/storageVersions.js). A new version is uploaded at POST …/versions (index.js, with the upload handler).
 router.get('/assets/file/:id/versions', folders(async (req, res) => { const r = await listVersions(req.db, req.user.id, req.params.id); if (r.notFound) return res.status(404).json({ success: false, code: 'not_found', error: 'File not found' }); res.json({ success: true, fileId: r.fileId, versions: r.versions }); }));
+// RESTORE (xeno-storage/SPEC.md §7.3): an older version's bytes become the newest version. If-Match restores only on
+// top of the version the caller last saw; Idempotency-Key makes a retry return the first outcome instead of a second
+// restore.
 router.post('/assets/file/:id/versions/:version/restore', folders(async (req, res) => {
-  const r = await restoreVersion(req.db, req.user.id, req.params.id, req.params.version, registerManagedLibraryFile);
-  if (r.notFound) return res.status(404).json({ success: false, code: 'not_found', error: 'Version not found' });
-  if (r.conflict) return res.status(409).json({ success: false, code: r.code, error: 'That version’s content is no longer available.' });
-  res.json({ success: true, file: r.file });
+  let key; try { key = keyFrom(req); } catch (e) { return res.status(e.status).json({ success: false, code: e.code, error: e.message }); }
+  const expected = ifMatchRevision(req);
+  try {
+    const out = await runOperation(req.db, { userId: req.user.id, key, route: 'restore',
+      // bound to the FILE id, not the revision the id resolved to: after a commit the same request resolves to the
+      // new revision, and a retry must still be recognised as the same request
+      binding: { fileId: (await fileIdOf(req.db, req.params.id)) || req.params.id, version: req.params.version, expected, workspace: null },
+      apply: async () => {
+        const r = await restoreVersion(req.db, req.user.id, req.params.id, req.params.version, registerManagedLibraryFile, { expectedRevision: expected });
+        if (r.notFound) return { status: 404, body: { success: false, code: 'not_found', error: 'Version not found' } };
+        if (r.stale) return { status: 412, body: { success: false, code: 'version_conflict', error: 'The file has a newer version than the one this restore was made on.', current: r.current } };
+        if (r.conflict) return { status: 409, body: { success: false, code: r.code, error: 'That version’s content is no longer available.' } };
+        return { status: 200, body: { success: true, file: r.file } };
+      } });
+    if (out.replayed) res.set('Idempotent-Replayed', 'true');
+    return res.status(out.status).json(out.body);
+  } catch (e) {
+    if (e instanceof IdempotencyError) return res.status(e.status).json({ success: false, code: e.code, error: e.message });
+    if (e?.code === 'version_conflict') return res.status(412).json({ success: false, code: 'version_conflict', error: e.message });
+    if (e?.code === 'storage_full') return res.status(507).json({ success: false, code: 'storage_full', error: e.message, usedBytes: e.usedBytes, allowanceBytes: e.allowanceBytes });
+    throw e;
+  }
+}));
+// what became of a write whose reply was lost: committed (with its response) or unknown. Never replays anything.
+router.get('/operations/:key', folders(async (req, res) => {
+  try { res.json({ success: true, operation: await lookupOperation(req.db, req.user.id, req.params.key) }); }
+  catch (e) { if (e instanceof IdempotencyError) return res.status(e.status).json({ success: false, code: e.code, error: e.message }); throw e; }
 }));
 // FOLDER: put an item in one of your folders, or back at the top ({ folder: null }).
 router.put('/assets/:source/:id/folder', organise('move', async (req, res, principal, source, id) => {

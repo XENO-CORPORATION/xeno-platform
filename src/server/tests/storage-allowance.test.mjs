@@ -373,6 +373,106 @@ async function main() {
     assert.equal((await call('GET', '/folders?shared=true', O)).body.folders.length, 0);
     assert.equal((await pool.query('SELECT count(*)::int AS n FROM storage_access WHERE owner_user_id = $1', [paid])).rows[0].n, 0, 'nothing granted is left behind');
 
+    // ── restore and retry contract (xeno-storage/SPEC.md §7.3, agreed 2026-10-16) ──
+    const K = (headers, key, ifMatch) => ({ ...headers, ...(key ? { 'idempotency-key': key } : {}), ...(ifMatch ? { 'if-match': `"${ifMatch}"` } : {}) });
+    const restore = async (fileRef, versionId, headers) => { const r = await fetch(`${base}/assets/file/${fileRef}/versions/${versionId}/restore`, { method: 'POST', headers }); return { status: r.status, replayed: r.headers.get('idempotent-replayed'), body: await r.json().catch(() => ({})) }; };
+    const versionsOf = async (id) => (await call('GET', `/assets/file/${id}/versions`, P)).body;
+    const r1 = await ready(await add(paid, 'contract.txt', 'version one'));
+    await syncFileObjects(pool, { limit: 1000 });
+    const r2 = await ready((await addVersion(pool, paid, r1.id, stage('contract-2.txt', 'version two'), registerManagedLibraryFile)).file);
+    const contractFile = (await versionsOf(r2.id)).fileId;
+    // the old revision exists ONLY as an object: its disk copy is gone, so restore must read through localLibraryPath
+    const r1Path = await pathOf(r1.id); rmSync(r1Path);
+    const usedBeforeRestore = (await storageUsage(pool, paid)).usedBytes;
+    // a stale If-Match is refused and changes nothing
+    const stale = await restore(contractFile, r1.id, K(P, null, r1.id));
+    assert.equal(stale.status, 412); assert.equal(stale.body.code, 'version_conflict'); assert.equal(stale.body.current, r2.id, 'the refusal names the version that is current');
+    assert.equal((await versionsOf(r2.id)).versions.length, 2);
+    // an unusable key is refused before anything happens
+    assert.equal((await restore(contractFile, r1.id, K(P, 'short'))).body.code, 'invalid_idempotency_key');
+    // a keyed, conditional restore of an object-only revision
+    const key = 'restore-key-0001-abcdef';
+    const firstRestore = await restore(contractFile, r1.id, K(P, key, r2.id));
+    assert.equal(firstRestore.status, 200, JSON.stringify(firstRestore.body)); assert.equal(firstRestore.replayed, null);
+    const r3 = firstRestore.body.file;
+    assert.equal(r3.fileId, contractFile, 'a restored version keeps the file id');
+    await ready(r3);
+    assert.equal(await (await fetch(`${base}/assets/${contractFile}/content`, { headers: P })).text(), 'version one', 'the object-only revision came back as the newest, byte for byte');
+    assert.equal((await pool.query('SELECT owner_user_id FROM user_files WHERE id = $1', [r3.id])).rows[0].owner_user_id, paid, 'and stays the owner’s');
+    assert.equal((await storageUsage(pool, paid)).usedBytes, usedBeforeRestore + 11, 'and counts toward the owner’s storage like any version');
+    // the same key and the same request: the first outcome, not a second restore
+    const again = await restore(contractFile, r1.id, K(P, key, r2.id));
+    assert.equal(again.status, 200); assert.equal(again.replayed, 'true'); assert.equal(again.body.file.id, r3.id);
+    assert.equal((await versionsOf(r3.id)).versions.length, 3, 'a retried restore makes no second version');
+    // the same key for a different request is a conflict, never a replay
+    const other3 = await restore(contractFile, r2.id, K(P, key, r3.id));
+    assert.equal(other3.status, 409); assert.equal(other3.body.code, 'idempotency_key_mismatch');
+    // what became of a key whose reply was lost
+    const known = (await call('GET', `/operations/${key}`, P)).body.operation;
+    assert.equal(known.state, 'committed'); assert.equal(known.route, 'restore'); assert.equal(known.response.file.id, r3.id);
+    assert.equal((await call('GET', `/operations/${key}`, O)).body.operation.state, 'unknown', 'a key is private to the person who used it');
+    assert.equal((await call('GET', '/operations/never-used-key-000001', P)).body.operation.state, 'unknown');
+    assert.equal((await pool.query('SELECT count(*)::int AS n FROM storage_operations WHERE key_sha256 = $1', [key])).rows[0].n, 0, 'the key itself is never stored');
+    // a refused write records nothing, so the key stays free for a corrected request
+    const refusedKey = 'refused-key-000000001';
+    assert.equal((await restore(contractFile, r1.id, K(P, refusedKey, r1.id))).status, 412);
+    assert.equal((await call('GET', `/operations/${refusedKey}`, P)).body.operation.state, 'unknown');
+    // two restores on top of the same version at once: one applies, the other is told the file moved on
+    const both = await Promise.all([restore(contractFile, r2.id, K(P, null, r3.id)), restore(contractFile, r1.id, K(P, null, r3.id))]);
+    assert.deepEqual(both.map((x) => x.status).sort(), [200, 412], JSON.stringify(both.map((x) => x.body)));
+    for (const x of both) if (x.status === 200) await ready(x.body.file);
+    assert.equal((await versionsOf(contractFile)).versions.length, 4, 'exactly one of them made a version');
+    // the same key sent twice at once: one write, and the twin gets that write's outcome
+    const twinKey = 'twin-key-0000000000001';
+    const head = (await versionsOf(contractFile)).versions[0].id;
+    const twins = await Promise.all([restore(contractFile, r1.id, K(P, twinKey, head)), restore(contractFile, r1.id, K(P, twinKey, head))]);
+    assert.deepEqual(twins.map((x) => x.status), [200, 200]); assert.equal(twins[0].body.file.id, twins[1].body.file.id, 'both answers name the one write');
+    assert.deepEqual(twins.map((x) => x.replayed).sort(), [null, 'true']);
+    await ready(twins[0].body.file);
+    assert.equal((await versionsOf(contractFile)).versions.length, 5);
+    // a revision whose object was tampered with, and no disk copy, is not restored
+    const r1Key = await keyOf(r1.id); objects.set(r1Key, Buffer.from('not what was stored')); rmSync(r1Path);   // the earlier restores brought the copy back
+    const tampered = await restore(contractFile, r1.id, K(P, null, (await versionsOf(contractFile)).versions[0].id));
+    assert.equal(tampered.status, 409); assert.equal(tampered.body.code, 'version_bytes_missing');
+    assert.equal((await versionsOf(contractFile)).versions.length, 5, 'and nothing is made');
+    // a new version under a key (the service the upload routes use): replay makes no second version
+    const { run: runOp, sweep: sweepOps } = await import('../services/storageOperations.js');
+    const verKey = 'version-key-00000000001';
+    const doVersion = (body) => runOp(pool, { userId: paid, key: verKey, route: 'version', binding: { fileId: contractFile, expected: null, workspace: null, bytes: body, mime: 'text/plain' },
+      apply: async () => ({ status: 200, body: { success: true, file: (await addVersion(pool, paid, await revisionFor(pool, contractFile), stage('v.txt', body), registerManagedLibraryFile)).file } }) });
+    const madeOnce = await doVersion('keyed version'); const replay = await doVersion('keyed version');
+    assert.equal(replay.replayed, true); assert.equal(replay.body.file.id, madeOnce.body.file.id);
+    await assert.rejects(() => doVersion('different bytes'), (e) => e.code === 'idempotency_key_mismatch' && e.status === 409, 'different bytes under the same key are refused');
+    assert.equal((await versionsOf(contractFile)).versions.length, 6);
+    // records past retention are forgotten by the sweep
+    await pool.query(`UPDATE storage_operations SET created_at = now() - interval '25 hours' WHERE user_id = $1`, [paid]);
+    assert.equal((await call('GET', `/operations/${key}`, P)).body.operation.state, 'unknown', 'an expired record reads as unknown');
+    assert.ok((await sweepOps(pool)) >= 3);
+
+    // ── roles: what "can view" and "can edit" allow, and revocation closing content and preview at once ──
+    const viewed = await ready(await add(paid, 'viewed.txt', 'for viewing'));
+    const vshare = (await call('POST', `/assets/file/${viewed.id}/shares`, P, { with: 'sto_other' })).body.share;
+    assert.equal(await read(viewed, O), 200, 'a viewer reads');
+    assert.equal((await call('PATCH', `/assets/file/${viewed.id}`, O, { name: 'x.txt' })).status, 403, 'a viewer does not rename');
+    assert.equal((await addVersion(pool, other, viewed.id, stage('vv.txt', 'nope'), registerManagedLibraryFile)).notFound, true, 'a viewer does not add a version');
+    assert.notEqual((await call('PUT', `/assets/file/${viewed.id}/folder`, O, { folder: null })).status, 200, 'a viewer does not move it');
+    assert.equal((await call('POST', `/assets/file/${viewed.id}/trash`, O)).status, 403, 'a viewer does not delete it');
+    assert.equal((await call('POST', `/assets/file/${viewed.id}/shares`, O, { with: 'sto_free' })).status, 404, 'a viewer does not share it on');
+    assert.equal((await call('POST', `/assets/file/${viewed.id}/versions/${viewed.id}/restore`, O)).status, 404, 'a viewer does not restore');
+    await call('DELETE', `/shares/${vshare.id}`, P);
+    assert.equal(await read(viewed, O), 404, 'revoked: the content closes at once');
+    assert.equal((await fetch(`${base}/assets/${viewed.id}/content?variant=thumbnail`, { headers: O })).status, 404, 'and so does the preview');
+    const edited = await ready(await add(paid, 'edited.txt', 'for editing'));
+    await call('POST', `/assets/file/${edited.id}/shares`, P, { with: 'sto_other', role: 'editor' });
+    assert.equal((await call('PATCH', `/assets/file/${edited.id}`, O, { name: 'edited-by-guest.txt' })).status, 200, 'an editor renames');
+    const eVersion = (await addVersion(pool, other, edited.id, stage('ev.txt', 'a guest edit'), registerManagedLibraryFile)).file;
+    assert.ok(eVersion?.id, 'an editor adds a version');
+    assert.equal((await pool.query('SELECT owner_user_id FROM user_files WHERE id = $1', [eVersion.id])).rows[0].owner_user_id, paid, 'which stays the owner’s');
+    assert.notEqual((await call('PUT', `/assets/file/${eVersion.id}/folder`, O, { folder: null })).status, 200, 'an editor does not move it');
+    assert.equal((await call('POST', `/assets/file/${eVersion.id}/trash`, O)).status, 403, 'an editor does not delete it');
+    assert.equal((await call('POST', `/assets/file/${eVersion.id}/shares`, O, { with: 'sto_free' })).status, 404, 'an editor does not share it on');
+    assert.equal((await call('POST', `/assets/file/${eVersion.id}/versions/${edited.id}/restore`, O)).status, 404, 'an editor does not restore');
+
     console.log('storage-allowance: all checks passed');
   } finally {
     await new Promise((resolve) => server.close(resolve));
