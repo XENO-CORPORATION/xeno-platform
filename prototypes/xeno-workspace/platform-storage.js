@@ -7,7 +7,7 @@
  *   a folder   /workspace/corpo/apps/storage/f/<id>     by id, so a rename never breaks the address
  *   a team     /workspace/corpo/apps/storage/t/<workspace id>   that workspace's shared folders and files
  *   Recent · Starred · Shared · Trash · Usage            the sidebar views
- *   a file's preview                                      ?view=<source>:<id> on the page's own address
+ *   a file's preview                                      ?view=<source>:<id> on the page's own address (a file: its file id)
  *
  *   GET /api/library/folders?parent=    GET /api/library/assets?folder=|view=|sort=|query=
  *   POST|PATCH|DELETE /api/library/folders[/:id]     PUT /api/library/assets/:source/:id/folder
@@ -63,10 +63,12 @@
     if (at.kind === 'usage') S.largest = S.items.filter((i) => Number(i.size_bytes) > 0);
     S.sel = new Set([...S.sel].filter((k) => S.items.some((i) => keyOf(i) === k)));
     // a preview named in the address opens once its file is listed
-    const wanted = new URLSearchParams(location.search).get('view'); if (wanted && !S.preview && S.items.some((i) => keyOf(i) === wanted)) S.preview = wanted;
+    // an older link may name a version's own id; it opens the file it belongs to
+    const wanted = new URLSearchParams(location.search).get('view'); const hit = wanted && !S.preview && S.items.find((i) => keyOf(i) === wanted || `${i.source}:${i.source_id}` === wanted); if (hit) { S.preview = keyOf(hit); if (wanted !== S.preview) setTimeout(() => setView(S.preview), 0); }
     S.status = 'ready'; paint();
   }
-  const keyOf = (i) => `${i.source}:${i.source_id}`;
+  // a file is addressed by its FILE id, the same through every version, so a preview link survives a new version
+  const keyOf = (i) => `${i.source}:${(i.source === 'file' && i.file_id) || i.source_id}`;
   const reload = () => { S.key = null; return load(); };
 
   const style = () => {
@@ -119,7 +121,7 @@
     const guestFolders = at.kind === 'shared' || S.guest;
     const fold = (inFolder || (at.kind === 'shared' && !S.q)) ? S.folders.map((f) => `<div class="xst-r" data-xst-folder="${f.id}" draggable="true" tabindex="0"><span class="ic fd">DIR</span>${editing('folder', f.id) ? `<input data-xst-name value="${esc(f.name)}" aria-label="Folder name">` : `<span class="nm">${esc(f.name)}</span>`}<small>${f.owner ? `from ${esc(f.owner)}` : `${f.items + f.folders} ${f.items + f.folders === 1 ? 'item' : 'items'}`}</small><small></small><span class="acts">${guestFolders ? '' : `<button type="button" data-xst="rename">Rename</button><button type="button" data-xst="move">Move</button>${S.scope ? '' : '<button type="button" data-xst="share">Share</button>'}<button type="button" data-xst="remove">Delete</button>`}</span></div>`).join('') : '';
     const pic = (i) => (!trash && i.asset_id && /^image\/(jpeg|png|gif|webp)$/.test(String(i.mime_type)) ? `<img src="/api/library/assets/${esc(i.asset_id)}/content?variant=thumbnail" alt="" loading="lazy" decoding="async">` : esc(tag(i)));
-    const files = S.items.map((i) => `<div class="xst-r" data-xst-item="${esc(i.source)}:${esc(i.source_id)}"${S.sel.has(keyOf(i)) ? ' data-sel aria-selected="true"' : ''} draggable="${trash ? 'false' : 'true'}" tabindex="0"><span class="ic">${pic(i)}</span>${editing('item', i.source_id) ? `<input data-xst-name value="${esc(i.name)}" aria-label="File name">` : `<span class="nm" title="${esc(i.name)}">${esc(i.name)}${i.shared && i.mine !== false ? '<em>Shared</em>' : ''}${i.mine === false ? `<em>Shared with you${i.shared_role === 'editor' ? ' · can edit' : ''}</em>` : ''}</span>`}<small>${esc(when(trash ? i.trashed_at : i.updated_at || i.created_at))}</small><small>${Number(i.size_bytes) ? esc(size(i.size_bytes)) : ''}</small><span class="acts">${trash
+    const files = S.items.map((i) => `<div class="xst-r" data-xst-item="${esc(keyOf(i))}" data-xst-rev="${esc(i.source_id)}"${S.sel.has(keyOf(i)) ? ' data-sel aria-selected="true"' : ''} draggable="${trash ? 'false' : 'true'}" tabindex="0"><span class="ic">${pic(i)}</span>${editing('item', i.source_id) ? `<input data-xst-name value="${esc(i.name)}" aria-label="File name">` : `<span class="nm" title="${esc(i.name)}">${esc(i.name)}${i.shared && i.mine !== false ? '<em>Shared</em>' : ''}${i.mine === false ? `<em>Shared with you${i.shared_role === 'editor' ? ' · can edit' : ''}</em>` : ''}</span>`}<small>${esc(when(trash ? i.trashed_at : i.updated_at || i.created_at))}</small><small>${Number(i.size_bytes) ? esc(size(i.size_bytes)) : ''}</small><span class="acts">${trash
       ? '<button type="button" data-xst="restore">Restore</button><button type="button" data-xst="purge">Delete forever</button>'
       : `<button type="button" data-xst="star"${i.starred ? ' data-on' : ''}>${i.starred ? 'Starred' : 'Star'}</button>${i.mine === false && i.shared_role !== 'editor' ? '' : '<button type="button" data-xst="rename">Rename</button>'}${i.mine === false && i.shared_role === 'editor' && i.source === 'file' ? '<button type="button" data-xst="versions">New version</button>' : ''}${i.mine === false ? '' : '<button type="button" data-xst="move">Move</button>'}${i.mine !== false && i.source === 'file' ? '<button type="button" data-xst="share">Share</button><button type="button" data-xst="versions">Versions</button>' : ''}${i.asset_id ? '<button type="button" data-xst="download">Download</button>' : ''}${i.mine === false ? '' : '<button type="button" data-xst="trash">Trash</button>'}`}</span></div>`).join('');
     const teams = inFolder && !at.id && !at.team && (S.teams || []).length ? `<div class="xst-sec">Teams</div>${S.teams.map((t) => `<div class="xst-r" data-xst-team="${t.id}" tabindex="0"><span class="ic tm">TEAM</span><span class="nm">${esc(t.name)}</span><small>shared folders</small><small></small><span></span></div>`).join('')}` : '';
@@ -196,7 +198,7 @@
   const loadShares = async () => { const r = await api('GET', shareBase()); if (S.sharing) { S.sharing.shares = (r.ok && r.d.shares) || []; paint(); } };
   const pickedItems = () => S.items.filter((i) => S.sel.has(keyOf(i)));
   // ---- actions ----
-  const refOf = (el) => { const r = el.closest('[data-xst-item]'); if (r) { const [source, id] = r.dataset.xstItem.split(':'); return { kind: 'item', source, id, row: S.items.find((i) => i.source === source && i.source_id === id) }; } const f = el.closest('[data-xst-folder]'); return f ? { kind: 'folder', id: f.dataset.xstFolder, row: S.folders.find((x) => x.id === f.dataset.xstFolder) } : null; };
+  const refOf = (el) => { const r = el.closest('[data-xst-item]'); if (r) { const source = r.dataset.xstItem.split(':')[0], id = r.dataset.xstRev; return { kind: 'item', source, id, row: S.items.find((i) => i.source === source && i.source_id === id) }; } const f = el.closest('[data-xst-folder]'); return f ? { kind: 'folder', id: f.dataset.xstFolder, row: S.folders.find((x) => x.id === f.dataset.xstFolder) } : null; };
   const done = async (r, fail) => { if (!r.ok) say(whyNot(r, fail)); await reload(); };
   async function moveTo(ref, folderId) {
     if (ref.kind === 'folder') { if (ref.id === folderId) return; return done(await api('PATCH', `/api/library/folders/${ref.id}`, { parent: folderId }), 'The folder wasn’t moved.'); }
