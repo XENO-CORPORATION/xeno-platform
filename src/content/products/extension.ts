@@ -207,11 +207,9 @@ const extension: ProductContent = {
         body: 'Page content and instructions are sent to the AI provider you choose, and to nobody else:',
         bullets: [
           { term: 'XENO Cloud.', text: 'Routed through the XENO platform at xenostudio.ai using your signed-in account, which meters usage. Governed by the XENO platform privacy policy.' },
-          { term: 'XENO Direct API.', text: 'Sent to the XENO inference API at api.xenostudio.ai using a XENO API key that you enter yourself.' },
           { term: 'Ollama (local).', text: 'Stays on your machine. Nothing leaves your computer.' },
-          { term: 'Custom endpoint.', text: 'Sent to the OpenAI-compatible URL you configure, using your own key.' },
         ],
-        footnote: 'You choose which provider is active in Settings → AI Provider, and the local and bring-your-own options need no XENO account. For the research tools (web search and read-web-page) only the search query or the public URL is sent to the configured provider, and the extension blocks and redacts outbound queries that contain secret-shaped tokens.',
+        footnote: 'You choose which provider is active in Settings → AI Provider; the local option needs no XENO account. The extension has no field for a provider key: if you want your own provider key used, you configure it on your XENO account, never in the extension. For the research tools (web search and read-web-page) only the search query or the public URL is sent to the configured provider, and the extension blocks and redacts outbound queries that contain secret-shaped tokens.',
       },
       {
         heading: 'XENO chats using this browser — off unless you turn it on',
@@ -228,7 +226,7 @@ const extension: ProductContent = {
       {
         heading: 'What is stored, and where',
         bullets: [
-          { term: 'Locally on your device.', text: 'In chrome.storage.local: your settings, provider configuration, any custom endpoint key you enter, and your chat history. Chat history is truncated and never includes image attachments.' },
+          { term: 'Locally on your device.', text: 'In chrome.storage.local: your settings, provider configuration and your chat history. No provider key is stored — the extension has no field for one. Chat history is truncated and never includes image attachments.' },
           { term: 'Your XENO session.', text: 'An access token and a refresh token, stored locally and used only to authenticate requests to your XENO account. Each is bound to a signing key created inside the extension and stored so that it cannot be read out — not even by the extension — so a copied token is useless on another machine. None of it is ever exposed to web pages.' },
           { term: 'No server of our own.', text: 'The extension runs no server and keeps no server-side copy of your page content or chats beyond what your chosen AI provider processes to fulfil a request.' },
         ],
@@ -252,7 +250,7 @@ const extension: ProductContent = {
         bullets: [
           { text: 'Sign out at any time (Settings → Sign out) to stop all cloud requests; this also revokes the session on your account.' },
           { text: 'Turn off "Allow XENO chats to use this browser" to disconnect it from chats.' },
-          { text: 'Use Ollama or a custom endpoint to keep your data local or on your own provider.' },
+          { text: 'Use Ollama to keep everything on your own machine.' },
           { text: 'Clear chat history from the side panel.' },
           { text: 'Configure site allow and block lists to bound where the agent may act.' },
         ],
