@@ -115,6 +115,8 @@ import v2MeRoutes from './routes/v2MeRoutes.js';
 import v2AuthzRoutes from './routes/v2AuthzRoutes.js';
 import v2InferenceRoutes from './routes/v2InferenceRoutes.js';
 import inferenceSessionKeyRoutes from './routes/inferenceSessionKeyRoutes.js';
+import browserRelayRoutes from './routes/browserRelayRoutes.js';
+import { handleRelayConnection, isRelayRequest } from './services/browserRelaySocket.js';
 import inferenceCredentialRoutes from './routes/inferenceCredentialRoutes.js';
 import inferenceServiceRoutes from './routes/inferenceServiceRoutes.js';
 import handleRoutes from './routes/handleRoutes.js';
@@ -690,6 +692,9 @@ if (process.env.OIDC_ENABLED === 'true') {
   // Short-lived model keys for a person's own agent session (XENO Spawn's XENO mode). 🔴 The response carries a live
   // key: never add this route to a body logger. Mounted with the auth that records req.auth (scope, DPoP binding).
   app.use('/api/v2/inference/session-keys', databaseMiddleware, authMiddleware, inferenceSessionKeyRoutes);
+  // XENO Extension browser relay: the person's connected browsers. Mounted with the auth that records
+  // req.auth (scope + DPoP binding) because every route here requires a BOUND token (see the routes file).
+  app.use('/api/v2/browser', databaseMiddleware, authMiddleware, browserRelayRoutes);
   app.use('/api/v2/inference', databaseMiddleware, oidcAuth, v2InferenceRoutes);
   // XENO handle registry (handle = login = identity = @xenostudio.ai address)
   app.use('/api/v2/handles', databaseMiddleware, oidcAuth, handleRoutes);
@@ -3155,6 +3160,17 @@ function getCollabSessionUsers(sessionId) {
 
 // WebSocket connection handler
 wss.on('connection', (ws, req) => {
+  // The browser relay owns one path. `wss` is created with no `path`, so every upgrade arrives here and
+  // the two owners are told apart once, at the top, rather than by whichever `message` handler runs first.
+  // The relay's own frames are decoded by services/browserRelaySocket.js; the collaboration socket below
+  // never sees them, and neither branch can shadow the other.
+  if (isRelayRequest(req)) {
+    handleRelayConnection(ws, req).catch((e) => {
+      console.error('[browser-relay] connection failed', e && e.message);
+      try { ws.close(1011, 'relay error'); } catch {}
+    });
+    return;
+  }
   const clientId = Date.now() + Math.random().toString(36).substr(2, 9);
   const clientInfo = {
     id: clientId,

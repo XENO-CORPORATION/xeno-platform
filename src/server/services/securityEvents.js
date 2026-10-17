@@ -77,6 +77,11 @@ export const EVENTS = Object.freeze({
   ARTIFACT_PUBLISHED: 'artifact_published',
   ARTIFACT_SHARED: 'artifact_shared',
   ARTIFACT_DELETED: 'artifact_deleted',
+  // XENO Extension browser relay — a browser connected to the account, or was disconnected. Metadata:
+  // the installation id and the browser/os the extension reported. NEVER the DPoP thumbprint or a token:
+  // the binding is a credential-shaped fact and the audit log is read by more people than the row is.
+  BROWSER_INSTALLATION_REGISTERED: 'browser_installation_registered',
+  BROWSER_INSTALLATION_REVOKED: 'browser_installation_revoked',
 });
 
 const KNOWN = new Set(Object.values(EVENTS));

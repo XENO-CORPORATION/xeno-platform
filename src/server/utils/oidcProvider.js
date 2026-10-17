@@ -119,6 +119,11 @@ export async function jwks(db) {
   return { keys: rows.rows.map((r) => r.public_jwk) };
 }
 
+/** The public site origin the ecosystem already treats as "where we are now" (services/agentMedia.js,
+ *  services/tasksMcp.js): `SITE_URL`, defaulting to the xenosystem host. Used only for resource URLs
+ *  advertised in discovery — never for anything that identifies a token. */
+const siteUrl = () => String(process.env.SITE_URL || 'https://xenosystem.ai').replace(/\/+$/, '');
+
 /** OIDC discovery document. */
 export function discovery() {
   const iss = issuer();
@@ -151,6 +156,18 @@ export function discovery() {
     // stay in JWKS so older tokens keep verifying. Advertise honestly (XENO AUTH §3.2).
     id_token_signing_alg_values_supported: ['ES256', 'RS256'],
     scopes_supported: [...OIDC_SCOPES],
+    /*
+     * XENO Extension: where to register a browser and where to open the relay socket. Non-standard keys,
+     * deliberately additive — the extension reads them from discovery rather than hard-coding a host, so
+     * the rebrand's Wave C host move reaches it with no rebuild (docs/CHAT-TOOL-CALLING-PLAN.md).
+     *
+     * ⚠️ Both point at the CANONICAL site host, not at the issuer, because they are resource URLs rather
+     * than identity: the issuer is the one value that must never move, and pinning these to it would make
+     * a host migration require an issuer change — exactly what XENO AUTH forbids. Until the host move,
+     * `SITE_URL` is the same origin the extension already talks to, and both answer on either host.
+     */
+    xeno_browser_installations_endpoint: `${siteUrl()}/api/v2/browser/installations`,
+    xeno_browser_connect_endpoint: `${siteUrl().replace(/^https:/, 'wss:')}/api/v2/browser/connect`,
   };
 }
 
