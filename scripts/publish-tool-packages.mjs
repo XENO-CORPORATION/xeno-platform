@@ -22,6 +22,8 @@ import { readFileSync, readdirSync, existsSync, statSync } from 'node:fs'
 import { join, resolve } from 'node:path'
 import { createHash, createPublicKey, verify as cryptoVerify } from 'node:crypto'
 import { R2Publisher } from './lib/r2-upload.mjs'
+// One SemVer 2.0.0 comparator for the publisher and the server's version floor (see that file).
+import { compareVersions } from '../src/server/utils/semverPrecedence.js'
 
 const R2_REMOTE = 'r2:xeno-hub-releases'
 
@@ -127,24 +129,6 @@ function verifyPackageDir(dir) {
 }
 
 const REGISTRY_URL = 'https://updates.xenostudio.ai/apps/tools/registry.json'
-
-/** Numeric semver compare: -1 / 0 / 1. Pre-release tags are compared lexically after the core. */
-function compareVersions(a, b) {
-  const parse = (v) => {
-    const [core, pre = ''] = String(v).split('-')
-    return { nums: core.split('.').map((n) => Number.parseInt(n, 10) || 0), pre }
-  }
-  const A = parse(a)
-  const B = parse(b)
-  for (let i = 0; i < 3; i += 1) {
-    const d = (A.nums[i] ?? 0) - (B.nums[i] ?? 0)
-    if (d !== 0) return d < 0 ? -1 : 1
-  }
-  // A release outranks any pre-release of the same core version.
-  if (!A.pre && B.pre) return 1
-  if (A.pre && !B.pre) return -1
-  return A.pre === B.pre ? 0 : A.pre < B.pre ? -1 : 1
-}
 
 /**
  * Read the live registry so the new pointer can be MERGED into it.
