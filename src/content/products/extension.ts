@@ -191,7 +191,7 @@ const extension: ProductContent = {
    * sync and keep `updated` equal to the date in that file: the policy text last
    * changed 2026-07-17, and publishing it later does not make it newer. */
   privacy: {
-    updated: '2026-07-17',
+    updated: '2026-10-17',
     intro: 'XENO Extension is an AI agent that acts on web pages on your behalf. This policy explains what data it processes, where that data goes, and what it never does.',
     sections: [
       {
@@ -214,10 +214,22 @@ const extension: ProductContent = {
         footnote: 'You choose which provider is active in Settings → AI Provider, and the local and bring-your-own options need no XENO account. For the research tools (web search and read-web-page) only the search query or the public URL is sent to the configured provider, and the extension blocks and redacts outbound queries that contain secret-shaped tokens.',
       },
       {
+        heading: 'XENO chats using this browser — off unless you turn it on',
+        body: 'Settings → XENO chats → "Allow XENO chats to use this browser" lets a chat on your own XENO account ask this browser to read pages and act in tabs. It is off by default. When you turn it on:',
+        bullets: [
+          { term: 'This browser is registered on your account', text: 'with a random installation id, a label you can see (for example "Chrome on Windows"), the browser name and the operating system. Nothing else about your machine is sent.' },
+          { term: 'One connection stays open', text: 'to your XENO account while you are signed in, so a chat can reach it. Only chats on your account can use it.' },
+          { term: 'A chat never reads the tab you are looking at', text: 'unless it switches to that tab on purpose. Tabs it opens are kept together in one labelled tab group.' },
+          { term: 'What a chat asks this browser to read', text: 'is sent to that chat on your account, the same way page content goes to XENO Cloud for your own requests.' },
+          { term: 'Approvals stay in the extension.', text: 'Anything that would ask you for permission still asks you in the extension\'s side panel, never on the website. Declining stops the step.' },
+          { term: 'Turning it off', text: 'disconnects and disables this browser on your account. You can also turn it off or remove it under Settings → Connected browsers on your XENO account.' },
+        ],
+      },
+      {
         heading: 'What is stored, and where',
         bullets: [
           { term: 'Locally on your device.', text: 'In chrome.storage.local: your settings, provider configuration, any custom endpoint key you enter, and your chat history. Chat history is truncated and never includes image attachments.' },
-          { term: 'Your XENO session token.', text: 'Stored locally and used only to authenticate cloud requests. It is never exposed to web pages.' },
+          { term: 'Your XENO session.', text: 'An access token and a refresh token, stored locally and used only to authenticate requests to your XENO account. Each is bound to a signing key created inside the extension and stored so that it cannot be read out — not even by the extension — so a copied token is useless on another machine. None of it is ever exposed to web pages.' },
           { term: 'No server of our own.', text: 'The extension runs no server and keeps no server-side copy of your page content or chats beyond what your chosen AI provider processes to fulfil a request.' },
         ],
       },
@@ -238,7 +250,8 @@ const extension: ProductContent = {
       {
         heading: 'Your controls',
         bullets: [
-          { text: 'Sign out at any time (Settings → Sign out) to stop all cloud requests.' },
+          { text: 'Sign out at any time (Settings → Sign out) to stop all cloud requests; this also revokes the session on your account.' },
+          { text: 'Turn off "Allow XENO chats to use this browser" to disconnect it from chats.' },
           { text: 'Use Ollama or a custom endpoint to keep your data local or on your own provider.' },
           { text: 'Clear chat history from the side panel.' },
           { text: 'Configure site allow and block lists to bound where the agent may act.' },

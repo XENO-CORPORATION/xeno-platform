@@ -177,6 +177,45 @@ function normalizeQuestionStep(raw) {
   };
 }
 
+// A `browser` step: the chat acted in the person's own browser through XENO Extension (2026-10-17). The record holds
+// what the person watched — which tool, its arguments, and a one-line outcome — never the page content, which went to
+// the model only. Names are the chat's `browser_<tool>` form (services/chatBrowserTools.js).
+const BROWSER_TOOL = /^browser_[a-z0-9_]{1,56}$/;
+const BROWSER_STATES = new Set(['running', 'waiting_approval', 'done', 'failed']);
+const BROWSER_LIMITS = Object.freeze({ args: 2000, browser: 80, summary: 512 });
+
+function normalizeBrowserStep(raw) {
+  if (typeof raw.tool !== 'string' || !BROWSER_TOOL.test(raw.tool)) return { ok: false, error: 'browser step.tool must be a browser_<name> tool' };
+  if (!isFiniteNumber(raw.startedAt) || raw.startedAt <= 0) return { ok: false, error: 'step.startedAt must be a timestamp' };
+  if (raw.endedAt !== undefined && (!isFiniteNumber(raw.endedAt) || raw.endedAt < raw.startedAt)) {
+    return { ok: false, error: 'step.endedAt must be a timestamp at or after its startedAt' };
+  }
+  if (raw.state !== undefined && !BROWSER_STATES.has(raw.state)) return { ok: false, error: 'browser step.state must be a known state' };
+  if (raw.browser !== undefined && !shortString(raw.browser, BROWSER_LIMITS.browser)) return { ok: false, error: 'browser step.browser must be a short string' };
+  if (raw.summary !== undefined && !shortString(raw.summary, BROWSER_LIMITS.summary)) return { ok: false, error: 'browser step.summary too long' };
+  if (raw.error !== undefined && !shortString(raw.error, TURN_LIMITS.text)) return { ok: false, error: 'step.error must be a short string' };
+  if (raw.args !== undefined) {
+    if (!raw.args || typeof raw.args !== 'object' || Array.isArray(raw.args) || JSON.stringify(raw.args).length > BROWSER_LIMITS.args) {
+      return { ok: false, error: `browser step.args must be an object of at most ${BROWSER_LIMITS.args} characters` };
+    }
+  }
+  return {
+    ok: true,
+    step: {
+      id: raw.id,
+      kind: 'browser',
+      tool: raw.tool,
+      startedAt: raw.startedAt,
+      ...(raw.endedAt !== undefined ? { endedAt: raw.endedAt } : {}),
+      ...(raw.state !== undefined ? { state: raw.state } : {}),
+      ...(raw.browser !== undefined ? { browser: raw.browser } : {}),
+      ...(raw.args !== undefined ? { args: raw.args } : {}),
+      ...(raw.summary !== undefined ? { summary: raw.summary } : {}),
+      ...(raw.error !== undefined ? { error: raw.error } : {}),
+    },
+  };
+}
+
 /**
  * @returns {{ ok: true, turn: object } | { ok: false, error: string }}
  */
@@ -227,6 +266,12 @@ export function normalizeTurnRecord(value) {
       const code = normalizeCodeStep(raw);
       if (!code.ok) return code;
       steps.push(code.step);
+      continue;
+    }
+    if (raw.kind === 'browser') {
+      const browser = normalizeBrowserStep(raw);
+      if (!browser.ok) return browser;
+      steps.push(browser.step);
       continue;
     }
     if (raw.kind === 'question') {

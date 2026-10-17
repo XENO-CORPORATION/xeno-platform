@@ -425,7 +425,7 @@ export const budgetExhaustedPayload = (searches) => ({
  * @yields { type:'delta'|'search_start'|'search_result'|'search_error'|'image_start'|'image_result'|
  *           'image_error'|'code_start'|'code_result'|'code_error'|'ask_user'|'usage'|'complete', … }
  */
-export async function* streamToolLoop({ messages, surface, turnId, streamModel, runSearch, tools: offered, runImage, proposeImage, runCode, runProject, imageReference = null }) {
+export async function* streamToolLoop({ messages, surface, turnId, streamModel, runSearch, tools: offered, runImage, proposeImage, runCode, runProject, runBrowser, browserLabel = null, browserStepBudget = 25, imageReference = null }) {
   const budget = budgetFor(surface);
   const tools = Array.isArray(offered) ? offered : toolsForSurface(surface);
   const canSearch = tools.some((tool) => tool?.function?.name === 'web_search');
@@ -438,6 +438,10 @@ export async function* streamToolLoop({ messages, surface, turnId, streamModel, 
   let projectReads = 0;
   let imageUnavailable = false;
   const canReadProject = typeof runProject === 'function' && tools.some((tool) => tool?.function?.name === 'read_project');
+  // Browser tools (docs/CHAT-TOOL-CALLING-PLAN.md → "Browser tools"): every offered `browser_*` name must have
+  // this executor, or the model could name a step the relay never receives.
+  const canBrowse = typeof runBrowser === 'function' && tools.some((tool) => String(tool?.function?.name || '').startsWith('browser_'));
+  let browserSteps = 0;
 
   const working = [...messages];
   const sources = [];
@@ -448,7 +452,9 @@ export async function* streamToolLoop({ messages, surface, turnId, streamModel, 
   // text the model wrote on an earlier iteration, before a tool call — the answer that follows needs a break from it
   let narrated = false;
 
-  const maxIterations = budget.maxSearches + 1;
+  // A browser task is many small steps (open, read, click, read again), so a turn that may browse gets the
+  // browser's own step budget as its iteration bound — each step is still one metered model call.
+  const maxIterations = Math.max(budget.maxSearches, canBrowse ? browserStepBudget : 0) + 1;
 
   while (iterations < maxIterations) {
     // Distinct per iteration (holds derive from requestId and are idempotent on it, so a
@@ -523,6 +529,48 @@ export async function* streamToolLoop({ messages, surface, turnId, streamModel, 
           working.push(toolResultMessage(id, { untrusted_project_data: true, data: bounded }));
         } catch {
           working.push(toolResultMessage(id, { error: 'project_read_failed', message: 'That project section could not be read. Access may have changed.' }));
+        }
+        continue;
+      }
+
+      if (canBrowse && typeof name === 'string' && name.startsWith('browser_')) {
+        if (browserSteps >= browserStepBudget) {
+          working.push(toolResultMessage(id, { error: 'browser_step_limit', instruction: `This turn has used its ${browserStepBudget} browser steps. Tell the person what is done and what is left.` }));
+          continue;
+        }
+        let args;
+        try { args = JSON.parse(call?.function?.arguments || '{}'); } catch { args = null; }
+        if (!args || typeof args !== 'object' || Array.isArray(args)) {
+          working.push(toolResultMessage(id, { error: 'invalid_args', message: 'The step arguments were not a JSON object.' }));
+          continue;
+        }
+        const index = browserSteps;
+        browserSteps += 1;
+        // BEFORE the wait, like every other tool: the row says what is happening in the person's browser.
+        yield { type: 'browser_start', index, tool: name, args, browser: browserLabel };
+        // The relay reports "waiting for approval" while the step is pending; those states are forwarded live so
+        // the transcript can say whose turn it is, instead of showing a stalled step.
+        const states = [];
+        let wake = null;
+        const pending = Promise.resolve(runBrowser({ name, args, index, onState: (state) => { states.push(state); wake?.(); } }))
+          .then((value) => ({ value }), (error) => ({ error }));
+        let settled = null;
+        while (!settled) {
+          settled = await Promise.race([pending, new Promise((resolve) => { wake = () => resolve(null); })]);
+          while (states.length) yield { type: 'browser_state', index, state: states.shift() };
+        }
+        const outcome = settled.error
+          ? { ok: false, error: { code: 'internal', message: 'The browser step could not be completed.' } }
+          : settled.value;
+        if (outcome?.ok) {
+          // Page content is the web's, not the person's: marked untrusted for the model, as project data is.
+          working.push(toolResultMessage(id, { untrusted_page_content: true, browser: browserLabel, data: outcome.output ?? null }));
+          yield { type: 'browser_result', index, output: outcome.output ?? null };
+        } else {
+          const error = outcome?.error || { code: 'tool_error', message: 'The browser step could not be completed.' };
+          working.push(toolResultMessage(id, { error: error.code, message: error.message,
+            instruction: ['denied', 'interrupted'].includes(error.code) ? 'Do not retry this step on your own; tell the person.' : undefined }));
+          yield { type: 'browser_error', index, code: error.code, message: error.message };
         }
         continue;
       }

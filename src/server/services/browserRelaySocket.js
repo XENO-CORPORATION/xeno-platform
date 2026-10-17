@@ -123,7 +123,7 @@ export async function handleRelayConnection(ws, req, db = pool) {
         installationId = String(row.id);
         userId = String(resolved.user.id);
         clearTimeout(authTimer);
-        relay.attach({ installation: row, installationId, socket: ws, np: nonce });
+        relay.attach({ db: req.db, installation: row, installationId, socket: ws, np: nonce });
         send(ws, outbound.ready({ id: installationId, label: row.label, enabled: row.enabled }));
         // A browser that reconnects picks up whatever its conversation left waiting: the row survived
         // the socket, which is the reason the row exists at all.
@@ -133,7 +133,10 @@ export async function handleRelayConnection(ws, req, db = pool) {
             conversationId: call.conversation_id, tabGroup: call.tab_group,
           }));
         }
-        ping = setInterval(() => send(ws, outbound.pong()), PING_INTERVAL_MS);
+        // The heartbeat also stamps last_seen_at, so "is this browser connected?" is answerable from the ROW on
+        // every replica — the chat offers browser tools only for a browser seen within the last minute.
+        await relay.touch(req.db, installationId);
+        ping = setInterval(() => { send(ws, outbound.pong()); relay.touch(req.db, installationId); }, PING_INTERVAL_MS);
         if (typeof ping.unref === 'function') ping.unref();
         return;
       } catch (e) {

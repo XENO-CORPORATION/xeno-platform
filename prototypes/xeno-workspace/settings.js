@@ -48,7 +48,7 @@
 
   // ---------- the sections ----------
   const SECT = [
-    ['Personal', [['profile', 'Profile', 'user'], ['security', 'Sign-in & security', 'lock'], ['sessions', 'Sessions & devices', 'hub'], ['apps', 'Apps & sign-in methods', 'flow'], ['keys', 'API keys', 'code'], ['providers', 'Provider keys & inference', 'box']]],
+    ['Personal', [['profile', 'Profile', 'user'], ['security', 'Sign-in & security', 'lock'], ['sessions', 'Sessions & devices', 'hub'], ['browsers', 'Connected browsers', 'globe'], ['apps', 'Apps & sign-in methods', 'flow'], ['keys', 'API keys', 'code'], ['providers', 'Provider keys & inference', 'box']]],
     ['Billing', [['plan', 'Plan & billing', 'star'], ['usage', 'Usage & limits', 'chart'], ['gifts', 'Gifts', 'send']]],
     ['Preferences', [['general', 'General', 'gear'], ['appearance', 'Appearance', 'palette'], ['notifications', 'Notifications', 'bell'], ['modes', 'Modes', 'layers'], ['keyboard', 'Keyboard', 'terminal'], ['region', 'Language & region', 'globe']]],
     ['Privacy', [['data', 'Your data', 'download'], ['danger', 'Delete account', 'trash']]],
@@ -60,6 +60,7 @@
     profile: 'Your name, handle and photo, as people and agents see you across XENO.',
     security: 'How you prove it’s you: your password, and confirming before a sensitive change.',
     sessions: 'Every device signed in to your account. Sign one out, or all the others at once.',
+    browsers: 'Browsers you connected with XENO Extension. A chat can use one only while you allow it here.',
     apps: 'The ways you can sign in, and the apps you have allowed to act for you.',
     keys: 'Keys let your own code call the XENO API. They are managed on the API portal.',
     providers: 'Use your own provider keys, and choose where each product’s AI comes from.',
@@ -105,6 +106,7 @@
         + row('Authenticator app', a.totp ? 'On — codes from your authenticator app' : 'Codes from an app like 1Password or Google Authenticator', a.totp ? b('Turn off', 'totpOff') : b('Set up', 'totpOn'))
         + row('Recovery codes', a.codes ? `${a.codesLeft} of 10 left — each works once if you lose your devices` : 'Created when you turn on two-step sign-in', a.codes ? b('Make new codes', 'codes') : (a.passkeys.length || a.totp ? b('Create', 'codes') : '')))
       + card('Sign-in methods', a.methods.map((m) => row(esc(m.kind), `${esc(m.who)} · added ${when(m.added)}`, a.methods.length > 1 ? b('Remove', 'removeMethod', m.id) : tag('Only method'))).join('') + row('', '', b('Connect Google, Apple or GitHub', 'addMethod'))),
+    browsers: () => card('Connected browsers', '<p class="pg-dim set-p">Sign in to see the browsers you connected with XENO Extension.</p>'),
     sessions: (a) => card('Signed-in devices', a.sessions.map((s) => row(`${esc(s.device)}${s.current ? ' ' + tag('This device', 'on') : ''}`, `${esc(s.where)} · ${s.current ? 'active now' : 'last active ' + ago(s.last)}`, s.current ? '' : b('Sign out', 'endSession', s.id))).join(''), a.sessions.length > 1 ? b('Sign out everywhere else', 'endOthers') : ''),
     apps: (a) => card('Apps you’re signed into', a.apps.length ? a.apps.map((x) => row(esc(x.name), `Can see: ${esc(x.scope)} · used ${ago(x.last)}`, b('Remove access', 'removeApp', x.id))).join('') : '<p class="pg-dim">No apps have access to your account.</p>')
       + card('Sign-in methods', `<p class="pg-dim set-p">Google, Apple and GitHub sign-in are managed in <a data-set="go" data-arg="security">Sign-in & security</a>.</p>`)
@@ -146,7 +148,7 @@
     connections: () => { const C = LS.get('connections', [{ id: 'c1', name: 'Google Drive', by: 'Emilian', scope: 'Read files you pick', at: now() - 40 * DAY }, { id: 'c2', name: 'GitHub', by: 'Emilian', scope: 'Repositories: xeno-platform', at: now() - 12 * DAY }]);
       return card('Connected services', C.length ? C.map((c) => row(esc(c.name), `${esc(c.scope)} · by ${esc(c.by)} · ${when(c.at)}`, b('Disconnect', 'disconnect', c.id))).join('') : '<p class="pg-dim set-p">Nothing connected.</p>', b('Connect a service', 'connect', '', '')); },
   };
-  const API = { profile: 'GET/PATCH /api/v2/me', security: '/api/v2/me/security (passkeys · totp · recovery-codes · identities)', sessions: 'GET/DELETE /api/v2/me/sessions', apps: 'GET/DELETE /api/v2/me/authorized-clients', keys: 'GET/POST/DELETE /api/v2/me/api-keys', providers: '/api/v2/me/provider-credentials · /api/v2/me/inference-routes', plan: '/api/v2/billing/subscription · /invoices', usage: '/api/v2/ledger/balance · /usage · /spend-cap', gifts: 'POST /api/v2/ledger/gifts', general: 'PATCH /api/v2/me/preferences', appearance: 'PATCH /api/v2/me/preferences', notifications: 'PATCH /api/v2/me/preferences', modes: '/api/v2/me/modes', keyboard: '', region: 'PATCH /api/v2/me/preferences', data: 'POST /api/v2/me/export', danger: 'POST /api/v2/me/deletion', workspace: 'GET /api/v2/workspaces/:id', connections: '/api/v2/workspaces/:id/connections' };
+  const API = { profile: 'GET/PATCH /api/v2/me', security: '/api/v2/me/security (passkeys · totp · recovery-codes · identities)', sessions: 'GET/DELETE /api/v2/me/sessions', browsers: 'GET/PATCH/DELETE /api/account/browsers', apps: 'GET/DELETE /api/v2/me/authorized-clients', keys: 'GET/POST/DELETE /api/v2/me/api-keys', providers: '/api/v2/me/provider-credentials · /api/v2/me/inference-routes', plan: '/api/v2/billing/subscription · /invoices', usage: '/api/v2/ledger/balance · /usage · /spend-cap', gifts: 'POST /api/v2/ledger/gifts', general: 'PATCH /api/v2/me/preferences', appearance: 'PATCH /api/v2/me/preferences', notifications: 'PATCH /api/v2/me/preferences', modes: '/api/v2/me/modes', keyboard: '', region: 'PATCH /api/v2/me/preferences', data: 'POST /api/v2/me/export', danger: 'POST /api/v2/me/deletion', workspace: 'GET /api/v2/workspaces/:id', connections: '/api/v2/workspaces/:id/connections' };
 
   function render(section) {
     const id = ALIAS[section] || (allIds.includes(section) ? section : 'profile'), a = A();

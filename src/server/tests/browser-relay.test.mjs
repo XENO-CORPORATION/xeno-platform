@@ -20,7 +20,10 @@ import { WebSocketServer, WebSocket } from 'ws';
 import { runAllMigrations } from '../services/migrationRunner.js';
 import { migrateAccountV2 } from '../database/migrate-account-v2.js';
 import { authMiddleware } from '../middleware/auth.js';
-import browserRelayRoutes from '../routes/browserRelayRoutes.js';
+import browserRelayRoutes, { accountBrowserRouter } from '../routes/browserRelayRoutes.js';
+import { resolveChatBrowser, browserToolDeclarations } from '../services/chatBrowserTools.js';
+import { streamToolLoop } from '../utils/chatToolLoop.js';
+import { normalizeTurnRecord } from '../utils/chatTurnRecord.js';
 import { handleRelayConnection, isRelayRequest } from '../services/browserRelaySocket.js';
 import * as relay from '../services/browserRelay.js';
 import * as installations from '../services/browserInstallations.js';
@@ -109,6 +112,7 @@ async function main() {
   app.use(express.json());
   app.use((req, _res, next) => { req.db = pool; next(); });
   app.use('/api/v2/browser', authMiddleware, browserRelayRoutes);
+  app.use('/api/account/browsers', authMiddleware, accountBrowserRouter);
   const server = http.createServer(app);
   const wss = new WebSocketServer({ server });
   wss.on('connection', (ws, req) => { if (isRelayRequest(req)) handleRelayConnection(ws, req, pool); });
@@ -229,6 +233,80 @@ async function main() {
     const bad = await impostor.auth({ htu: HTU });
     check(bad.type !== 'ready', `a proof from the wrong key never becomes ready (saw ${bad.type})`);
     impostor.close();
+
+    // ── 6b. a call queued by ANOTHER replica reaches this socket through LISTEN/NOTIFY ───────────
+    // Simulated exactly as another replica would do it: insert the row, then pg_notify. No local callTool, so the
+    // only way the browser can receive it is the listener (which before 2026-10-17 was never started).
+    const foreignCall = crypto.randomUUID();
+    await pool.query(`INSERT INTO browser_calls (call_id, installation, user_id, tool, args, state, deadline)
+      VALUES ($1,$2,$3,'navigate','{"url":"https://other-replica.test"}'::jsonb,'queued', now() + interval '1 minute')`, [foreignCall, installationId, alice.id]);
+    await pool.query(`SELECT pg_notify('browser_calls', $1)`, [JSON.stringify({ installation: String(installationId), callId: foreignCall })]);
+    let reached = null;
+    for (let i = 0; i < 80 && !reached; i += 1) { reached = browser.frames.find((f) => f.type === 'call' && f.callId === foreignCall); if (!reached) await new Promise((r) => setTimeout(r, 50)); }
+    check(Boolean(reached), 'a call queued on another replica is delivered to the browser through LISTEN/NOTIFY');
+    if (reached) browser.send({ type: 'result', callId: foreignCall, ok: true, output: 'ok' });
+
+    // ── 6c. the chat offers browser tools only for a connected, allowed browser ─────────────────
+    const offered = await resolveChatBrowser(pool, alice.id);
+    check(offered && offered.id === String(installationId) && browserToolDeclarations(offered)[0]?.function.name === 'browser_navigate',
+      `a connected, allowed browser is offered to the chat as browser_<tool> (${offered && browserToolDeclarations(offered).map((t) => t.function.name)})`);
+    check((await resolveChatBrowser(pool, bob.id)) === null, "another person's browser is never offered");
+
+    // ── 6d. the chat loop runs a browser step end to end against the real relay ──────────────────
+    let modelCalls = 0;
+    const streamModel = async function* () {
+      modelCalls += 1;
+      if (modelCalls === 1) yield { type: 'tool_calls', toolCalls: [{ id: 't1', function: { name: 'browser_navigate', arguments: '{"url":"https://loop.test"}' } }] };
+      else yield { type: 'delta', text: 'done' };
+    };
+    const loopEvents = [];
+    const loopDone = (async () => {
+      for await (const ev of streamToolLoop({
+        messages: [{ role: 'user', content: 'open it' }], surface: 'chat', turnId: crypto.randomUUID(), streamModel,
+        tools: browserToolDeclarations(offered), browserLabel: offered.label,
+        runBrowser: ({ name, args, onState }) => relay.callTool(pool, { installationId, tool: name.replace(/^browser_/, ''), args, actorUserId: alice.id, conversationId: 'c-loop', stepMs: 5000, onEvent: ({ state }) => onState(state) }),
+        runSearch: async () => ({ sources: [] }),
+      })) loopEvents.push(ev);
+    })();
+    let loopCall = null;
+    for (let i = 0; i < 80 && !loopCall; i += 1) { loopCall = browser.frames.find((f) => f.type === 'call' && f.args?.url === 'https://loop.test'); if (!loopCall) await new Promise((r) => setTimeout(r, 50)); }
+    if (loopCall) {
+      browser.send({ type: 'approval', callId: loopCall.callId, state: 'waiting' });
+      await new Promise((r) => setTimeout(r, 2500));
+      browser.send({ type: 'result', callId: loopCall.callId, ok: true, output: { title: 'Loop page' } });
+    }
+    await loopDone;
+    const kinds = loopEvents.map((e) => e.type);
+    check(kinds.includes('browser_start') && kinds.includes('browser_result') && kinds.at(-1) === 'complete',
+      `the chat loop runs a browser step and answers (${kinds.join(',')})`);
+    check(loopEvents.some((e) => e.type === 'browser_state' && e.state === 'waiting_approval'),
+      'a pending approval in the browser reaches the chat as a live "waiting" state');
+
+    // ── 6e. the turn record keeps a browser step, and refuses a forged one ──────────────────────
+    const okTurn = normalizeTurnRecord({ schema: 'xeno.chat.turn.v1', startedAt: 1, steps: [{ id: 'browser-1', kind: 'browser', tool: 'browser_navigate', startedAt: 1, endedAt: 2, state: 'done', browser: 'Work Chrome', args: { url: 'https://a.test' }, summary: 'Loop page' }] });
+    const badTurn = normalizeTurnRecord({ schema: 'xeno.chat.turn.v1', startedAt: 1, steps: [{ id: 'b', kind: 'browser', tool: 'rm -rf', startedAt: 1 }] });
+    check(okTurn.ok && okTurn.turn.steps[0].kind === 'browser' && !badTurn.ok, 'the turn record keeps a browser step and refuses a malformed one');
+
+    // ── 6f. the account page: list, turn OFF (not a revoke), turn back on ───────────────────────
+    const acct = async (method, path, body) => {
+      const r = await fetch(`http://127.0.0.1:${port}/api/account/browsers${path}`, { method, headers: { 'content-type': 'application/json', authorization: `Bearer ${legacy}` }, body: body === undefined ? undefined : JSON.stringify(body) });
+      return { status: r.status, body: await r.json().catch(() => ({})) };
+    };
+    const listed = await acct('GET', '');
+    check(listed.status === 200 && listed.body.browsers.some((b) => b.id === installationId && b.connected && b.enabled),
+      'the account page lists the browser as connected and allowed');
+    const off = await acct('PATCH', `/${installationId}`, { enabled: false });
+    const offClose = await browser.closed();
+    const stillThere = (await pool.query('SELECT revoked_at, enabled FROM browser_installations WHERE id=$1', [installationId])).rows[0];
+    check(off.status === 200 && Number(offClose) === 4403 && stillThere.revoked_at === null && stillThere.enabled === false,
+      `turning chats OFF closes the socket but does NOT revoke the browser (close ${offClose}, revoked_at ${stillThere.revoked_at})`);
+    const backOn = await acct('PATCH', `/${installationId}`, { enabled: true });
+    check(backOn.status === 200 && backOn.body.browser.enabled === true, 'and it can be turned back on');
+    browser.close();
+    const browserAgain = await Browser.open({ url: wsUrl, installationId, token: aliceToken, key: aliceKey });
+    const readyAgain = await browserAgain.auth({ htu: HTU });
+    check(readyAgain.type === 'ready', 'a browser turned back on reconnects');
+    Object.assign(browser, { ws: browserAgain.ws, frames: browserAgain.frames });
 
     // ── 7. revocation closes the live socket AND fails what was waiting ─────────────────────────
     const stuck = relay.callTool(pool, { installationId, tool: 'navigate', args: {}, actorUserId: alice.id, stepMs: 8000 });

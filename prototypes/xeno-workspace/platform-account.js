@@ -29,7 +29,7 @@
   const title = (s) => String(s || '').replace(/^./, (c) => c.toUpperCase());
   const ms = (t) => { const n = t ? Date.parse(t) : NaN; return Number.isFinite(n) ? n : Date.now(); };
 
-  const S = { status: 'loading', parts: {}, usage: null, plan: null, security: null, exports: null };
+  const S = { status: 'loading', parts: {}, usage: null, plan: null, security: null, exports: null, browsers: null };
   let poll = 0;
   const LOCAL = new Set(['general', 'appearance', 'notifications', 'modes', 'keyboard', 'region']);
   const NOT_YET = {
@@ -45,9 +45,10 @@
 
   async function load() {
     if (S.status !== 'ready') { S.status = 'loading'; paint(); } // a refresh after a save keeps what is on screen
-    const urls = ['/api/account/overview', '/api/account/sessions', '/api/auth/linked-accounts', '/api/billing/overview', '/api/dashboard/stats', '/api/user-data/settings', '/api/account/security', '/api/account/exports'];
+    const urls = ['/api/account/overview', '/api/account/sessions', '/api/auth/linked-accounts', '/api/billing/overview', '/api/dashboard/stats', '/api/user-data/settings', '/api/account/security', '/api/account/exports', '/api/account/browsers'];
     const got = await Promise.all(urls.map((u) => api('GET', u).catch(() => ({ ok: false, status: 0, d: {} }))));
-    const [ov, ses, link, bill, dash, set, sec, exps] = got;
+    const [ov, ses, link, bill, dash, set, sec, exps, brs] = got;
+    S.browsers = brs.ok && Array.isArray(brs.d.browsers) ? brs.d.browsers : null;
     S.security = sec.ok && sec.d.security ? sec.d.security : null;
     S.exports = exps.ok && Array.isArray(exps.d.exports) ? exps.d.exports : null;
     // a copy being built is checked again until it is ready; nothing is polled otherwise
@@ -85,6 +86,7 @@
     if (S.status === 'error') return h.card('We couldn’t load your account', '<p class="set-p">XENO didn’t answer. Nothing here was changed.</p>', retry);
     if (NOT_YET[id]) return h.card(esc(NOT_YET[id][0]), `<p class="pg-dim set-p">${esc(NOT_YET[id][1])}</p>`);
     if (id === 'keys') return keysSection(h);
+    if (id === 'browsers') return browsersSection(h);
     if (id === 'data') return dataSection(h);
     if (id === 'sessions' && !S.parts.sessions) return h.card('Signed-in devices', '<p class="set-p">XENO couldn’t load your devices.</p>', retry);
     if (id === 'plan') {
@@ -116,6 +118,35 @@
     const open = `<a class="pg-btn" href="${portal()}" target="_blank" rel="noopener"><span>Open the API portal</span></a>`;
     return h.card('API keys', h.row('Your keys live on the XENO API portal', 'Create, view and revoke keys there, next to your projects, limits and usage. You sign in with this same account.', open));
   }
+  // ---------- connected browsers (XENO Extension) ----------
+  // Rows come from /api/account/browsers. Turning chats off takes effect now (the browser's socket is closed and any
+  // waiting step fails); Remove disconnects it for good — the extension has to sign in again to come back.
+  function browsersSection(h) {
+    if (!S.browsers) return h.card('Connected browsers', '<p class="set-p">XENO couldn’t load your browsers.</p>', retry);
+    const get = '<a class="pg-btn ghost" href="/product/extension" target="_blank" rel="noopener"><span>Get XENO Extension</span></a>';
+    if (!S.browsers.length) return h.card('Connected browsers', '<p class="pg-dim set-p">No browser is connected. Install XENO Extension and sign in with this account, then allow chats to use it here.</p>', get);
+    const rows = S.browsers.map((b) => {
+      const what = [b.browser, b.os].filter(Boolean).map(title).join(' on ') || 'Browser';
+      const seen = b.connected ? 'Connected now' : b.lastSeenAt ? `Last seen ${h.ago(ms(b.lastSeenAt))}` : 'Not connected yet';
+      const sub = `${esc(what)} · ${esc(seen)}${b.tools ? ` · ${b.tools} tool${b.tools === 1 ? '' : 's'}` : ''}`;
+      const toggle = btn(b.enabled ? 'Stop chats using it' : 'Allow chats to use it', 'browserEnable', `${b.id}|${b.enabled ? 'off' : 'on'}`, b.enabled ? 'ghost' : '');
+      return h.row(`${esc(b.label)}${b.enabled ? ' ' + h.tag('Chats allowed') : ''}`, sub, `${toggle} ${btn('Remove', 'browserRemove', b.id)}`);
+    }).join('');
+    return h.card('Connected browsers', rows)
+      + '<p class="pg-rule">A chat acts in the browser you allow, through the extension. Steps that change something ask for your approval in that browser, never here.</p>';
+  }
+  async function browserEnable(arg) {
+    const [id, to] = String(arg || '').split('|');
+    const r = await api('PATCH', '/api/account/browsers/' + encodeURIComponent(id), { enabled: to === 'on' }).catch(() => ({ ok: false, status: 0, d: {} }));
+    if (!r.ok) X()?.toast?.('That browser couldn’t be changed.');
+    return load();
+  }
+  async function browserRemove(id) {
+    const r = await api('DELETE', '/api/account/browsers/' + encodeURIComponent(id)).catch(() => ({ ok: false, status: 0, d: {} }));
+    if (!r.ok && r.status !== 404) X()?.toast?.('That browser couldn’t be removed.');
+    return load();
+  }
+
   // ---------- a copy of your data ----------
   const size = (n) => (n >= 1e9 ? (n / 1e9).toFixed(1) + ' GB' : n >= 1e6 ? (n / 1e6).toFixed(1) + ' MB' : n >= 1e3 ? Math.round(n / 1e3) + ' KB' : (n || 0) + ' B');
   function dataSection(h) {
@@ -203,6 +234,8 @@
     if (act === 'plans') return window.open('/pricing', '_blank', 'noopener');
     if (act === 'export') return requestExport();
     if (act === 'removeExport') return removeExport(t.dataset.arg);
+    if (act === 'browserEnable') return browserEnable(t.dataset.arg);
+    if (act === 'browserRemove') return browserRemove(t.dataset.arg);
     if (act === 'portal') {
       t.disabled = true;
       try { const r = await api('POST', '/api/billing/portal', {}); if (r.ok && r.d.url) window.open(r.d.url, '_blank', 'noopener'); else X()?.toast?.(r.status === 503 ? 'Billing isn’t open yet.' : 'The billing portal couldn’t be opened.'); }
