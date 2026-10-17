@@ -40,6 +40,11 @@ async function main() {
   app.use(browserSessionMiddleware(pool));
   app.use((req, _res, next) => { req.db = pool; next(); });
   app.use('/api/auth', authRoutes);
+  // Probes for the OAuth exemption: they report whether the cookie was translated into a session.
+  const probe = (req, res) => res.json({ ok: true, translated: Boolean(req.browserSession) });
+  app.post('/api/oauth2/device_authorization', probe);
+  app.post('/api/oauth2/token', probe);
+  app.post('/api/oauth2/device/approve', probe);
   const server = http.createServer(app);
   await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
   const base = `http://127.0.0.1:${server.address().port}`;
@@ -63,6 +68,18 @@ async function main() {
 
     const rejectedLogout = await fetch(`${base}/api/auth/logout`, { method: 'POST', headers: { cookie: cookies } });
     assert.equal(rejectedLogout.status, 403, 'unsafe request without CSRF is refused');
+
+    // 🔴 2026-10-17: XENO Extension's sign-in carried the site cookie (same Chrome) and was refused as a CSRF-less
+    // website form. OAuth protocol endpoints authenticate the client and grant, so the cookie is ignored there…
+    for (const path of ['/api/oauth2/device_authorization', '/api/oauth2/token']) {
+      const r = await fetch(`${base}${path}`, { method: 'POST', headers: { cookie: cookies, 'content-type': 'application/json' }, body: '{}' });
+      const body = await r.json();
+      assert.equal(r.status, 200, `${path} must not be refused for carrying the site cookie`);
+      assert.equal(body.translated, false, `${path} must not act as the website session`);
+    }
+    // …while the step a PERSON performs keeps its CSRF protection.
+    const approveNoCsrf = await fetch(`${base}/api/oauth2/device/approve`, { method: 'POST', headers: { cookie: cookies } });
+    assert.equal(approveNoCsrf.status, 403, 'approving a device with only a cookie is still refused');
 
     const logout = await fetch(`${base}/api/auth/logout`, {
       method: 'POST',

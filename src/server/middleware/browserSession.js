@@ -6,6 +6,24 @@ const SESSION_COOKIE = `${COOKIE_PREFIX}xeno_session`;
 const CSRF_COOKIE = `${COOKIE_PREFIX}xeno_csrf`;
 const JWT_SECRET = process.env.JWT_SECRET || 'xenostudio-super-secret-jwt-key-change-in-production';
 const SAFE_METHODS = new Set(['GET', 'HEAD', 'OPTIONS']);
+/**
+ * OAuth PROTOCOL endpoints authenticate the CLIENT and the GRANT (device code, refresh token, PKCE), never a website
+ * session, so a browser cookie must not be translated on them. Before 2026-10-17 it was: XENO Extension runs inside
+ * the same Chrome as the website, its `device_authorization` POST carried the person's `xeno_session` cookie, and
+ * this middleware refused it as a website form without a CSRF header — "CSRF validation failed" on Sign in, for
+ * exactly the people already signed in to the site. A native app or CLI never saw it because it has no cookies.
+ *
+ * Only machine-to-machine endpoints are listed. The consent steps a PERSON performs (`POST /oauth2/authorize`,
+ * `/oauth2/device/approve`, `/oauth2/device/inspect`) stay cookie + CSRF protected.
+ */
+const OAUTH_PROTOCOL_PATHS = new Set([
+  '/api/oauth2/token',
+  '/api/oauth2/device_authorization',
+  '/api/oauth2/revoke',
+  '/api/oauth2/introspect',
+  '/api/oauth2/register',
+]);
+const isOAuthProtocolRequest = (req) => OAUTH_PROTOCOL_PATHS.has(String(req.originalUrl || req.url || '').split('?')[0].replace(/\/+$/, ''));
 
 function parseCookies(header = '') {
   const values = new Map();
@@ -38,6 +56,7 @@ export function browserSessionMiddleware(pool) {
   return async (req, res, next) => {
     try {
       if (req.headers.authorization) return next();
+      if (isOAuthProtocolRequest(req)) return next();
       const cookies = parseCookies(req.headers.cookie);
       const sessionToken = cookies.get(SESSION_COOKIE);
       if (!sessionToken) return next();
