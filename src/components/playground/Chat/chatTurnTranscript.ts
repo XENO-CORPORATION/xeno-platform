@@ -126,7 +126,30 @@ export const QUESTION_LIMITS = { question: 300, option: 300, minOptions: 2, maxO
 export interface ChatTurnGenerationStep { id: string; kind: 'generation'; generationId: string; type: 'image' | 'video' | 'audio' | '3d'; startedAt: number; endedAt?: number; }
 /** Work handed to an agent from this chat: a task delegated to it (services/chatHandoff.js). The card reads the task live. */
 export interface ChatTurnHandoffStep { id: string; kind: 'handoff'; taskKey: string; agentId: string; agentName: string; startedAt: number; endedAt?: number; }
-export type ChatTurnStep = ChatTurnHandoffStep | ChatTurnGenerationStep | ChatTurnSearchStep | ChatTurnImageStep | ChatTurnCodeStep | ChatTurnQuestionStep;
+/**
+ * A step in the person's own browser through XENO Extension (2026-10-17). `tool` is the chat's `browser_<name>`
+ * form, which the shared transcript already draws as a browser row. The page content went to the model only; the
+ * record keeps the arguments and a one-line outcome. Validated server-side by `utils/chatTurnRecord.js`.
+ */
+export interface ChatTurnBrowserStep {
+  id: string;
+  kind: 'browser';
+  tool: string;
+  startedAt: number;
+  endedAt?: number;
+  state?: 'running' | 'waiting_approval' | 'done' | 'failed';
+  browser?: string;
+  args?: Record<string, unknown>;
+  summary?: string;
+  error?: string;
+}
+const BROWSER_TOOL = /^browser_[a-z0-9_]{1,56}$/;
+const BROWSER_STATES: ReadonlyArray<ChatTurnBrowserStep['state']> = ['running', 'waiting_approval', 'done', 'failed'];
+export const isBrowserStep = (step: ChatTurnStep): step is ChatTurnBrowserStep => step.kind === 'browser';
+const asBrowserArgs = (raw: unknown): Record<string, unknown> | undefined =>
+  raw && typeof raw === 'object' && !Array.isArray(raw) && JSON.stringify(raw).length <= 2000 ? raw as Record<string, unknown> : undefined;
+
+export type ChatTurnStep = ChatTurnHandoffStep | ChatTurnGenerationStep | ChatTurnSearchStep | ChatTurnImageStep | ChatTurnCodeStep | ChatTurnQuestionStep | ChatTurnBrowserStep;
 
 export interface ChatTurnRecord {
   schema: typeof TURN_SCHEMA;
@@ -154,7 +177,11 @@ export type TurnStreamEvent =
   | { type: 'code_start'; index?: number; language?: string; code?: string }
   | { type: 'code_result'; index?: number; status?: string; exitCode?: number | null; stdout?: string; stderr?: string; files?: Array<{ path?: string }>; libraryAssets?: Array<{ path?: string; assetId?: string }> }
   | { type: 'code_error'; index?: number; message?: string }
-  | { type: 'ask_user'; toolCallId?: string | null; question?: string; options?: unknown[]; multiple?: boolean };
+  | { type: 'ask_user'; toolCallId?: string | null; question?: string; options?: unknown[]; multiple?: boolean }
+  | { type: 'browser_start'; index?: number; tool?: string; browser?: string | null; args?: unknown }
+  | { type: 'browser_state'; index?: number; state?: string }
+  | { type: 'browser_result'; index?: number; summary?: string }
+  | { type: 'browser_error'; index?: number; code?: string; message?: string };
 
 export const TURN_IMAGE_ASPECTS: ReadonlyArray<string> = ['1:1', '16:9', '9:16', '4:3', '3:4', '3:2', '2:3'];
 /** Mirrors `utils/chatTurnRecord.js`: what the server accepts is what the client records. */
@@ -202,6 +229,9 @@ export function applyTurnEvent(record: ChatTurnRecord, event: TurnStreamEvent, n
   }
   if (event.type === 'code_start' || event.type === 'code_result' || event.type === 'code_error') {
     return applyCodeEvent(record, event, now);
+  }
+  if (event.type === 'browser_start' || event.type === 'browser_state' || event.type === 'browser_result' || event.type === 'browser_error') {
+    return applyBrowserEvent(record, event, now);
   }
   if (event.type === 'ask_user') {
     const step = asQuestionStep({ ...event, id: 'question-1', startedAt: now });
@@ -321,6 +351,37 @@ function applyCodeEvent(
   return { ...record, steps };
 }
 
+/** Fold a browser event into the record, keyed by the step's per-turn index (like code runs). */
+function applyBrowserEvent(
+  record: ChatTurnRecord,
+  event: Extract<TurnStreamEvent, { type: 'browser_start' | 'browser_state' | 'browser_result' | 'browser_error' }>,
+  now: number,
+): ChatTurnRecord {
+  const index = Number.isInteger(event.index) ? (event.index as number) : 0;
+  const id = `browser-${index + 1}`;
+  const existing = record.steps.find((step) => step.id === id);
+  if (event.type === 'browser_start') {
+    if (existing) return record;
+    const tool = typeof event.tool === 'string' && BROWSER_TOOL.test(event.tool) ? event.tool : 'browser_step';
+    const args = asBrowserArgs(event.args);
+    const browser = typeof event.browser === 'string' && event.browser.trim() ? event.browser.trim().slice(0, 80) : undefined;
+    return { ...record, steps: [...record.steps, { id, kind: 'browser', tool, startedAt: now, state: 'running', ...(browser ? { browser } : {}), ...(args ? { args } : {}) }] };
+  }
+  const base: ChatTurnBrowserStep = existing && isBrowserStep(existing) ? existing : { id, kind: 'browser', tool: 'browser_step', startedAt: now, state: 'running' };
+  let next: ChatTurnBrowserStep;
+  if (event.type === 'browser_state') {
+    if (base.endedAt !== undefined) return record;
+    next = { ...base, state: event.state === 'waiting_approval' ? 'waiting_approval' : 'running' };
+  } else if (event.type === 'browser_result') {
+    const summary = typeof event.summary === 'string' ? event.summary.slice(0, 512) : '';
+    next = { ...base, endedAt: now, state: 'done', ...(summary ? { summary } : {}) };
+  } else {
+    next = { ...base, endedAt: now, state: 'failed', error: (typeof event.message === 'string' && event.message.trim().slice(0, 512)) || 'That browser step could not be completed.' };
+  }
+  const steps = existing ? record.steps.map((step) => (step.id === id ? next : step)) : [...record.steps, next];
+  return { ...record, steps };
+}
+
 /**
  * The image models a turn used, for the message's info row: each model once, with how many images it
  * drew and their tokens summed. Failed images drew nothing and are not counted.
@@ -425,6 +486,20 @@ export function normalizeStoredTurn(value: unknown): ChatTurnRecord | undefined 
         ...(typeof c.stderr === 'string' ? { stderr: c.stderr.slice(0, CODE_LIMITS.stderr) } : {}),
         ...(files.length ? { files } : {}),
         ...(typeof c.error === 'string' ? { error: c.error } : {}),
+      }];
+    }
+    if (raw && typeof raw === 'object' && (raw as ChatTurnBrowserStep).kind === 'browser') {
+      const b = raw as ChatTurnBrowserStep;
+      if (typeof b.id !== 'string' || typeof b.tool !== 'string' || !BROWSER_TOOL.test(b.tool) || typeof b.startedAt !== 'number') return [];
+      const args = asBrowserArgs(b.args);
+      return [{
+        id: b.id, kind: 'browser', tool: b.tool, startedAt: b.startedAt,
+        ...(typeof b.endedAt === 'number' ? { endedAt: b.endedAt } : {}),
+        ...(BROWSER_STATES.includes(b.state) ? { state: b.state } : {}),
+        ...(typeof b.browser === 'string' ? { browser: b.browser.slice(0, 80) } : {}),
+        ...(args ? { args } : {}),
+        ...(typeof b.summary === 'string' ? { summary: b.summary.slice(0, 512) } : {}),
+        ...(typeof b.error === 'string' ? { error: b.error.slice(0, 512) } : {}),
       }];
     }
     if (raw && typeof raw === 'object' && (raw as ChatTurnQuestionStep).kind === 'question') {
@@ -584,7 +659,32 @@ const questionToolCall = (step: ChatTurnQuestionStep): ToolCallInfo => ({
   category: 'other',
 });
 
+/**
+ * A browser step as the transcript's own `browser_<tool>` call — the canonical step model draws the browser family
+ * (verb from the action, object from url/selector/text). A step waiting on the person's approval in that browser is
+ * still running, and says so in its result line.
+ */
+const browserToolCall = (step: ChatTurnBrowserStep, turnLive: boolean): ToolCallInfo => {
+  const done = step.endedAt !== undefined || !turnLive;
+  const endedAt = step.endedAt ?? (done ? step.startedAt : undefined);
+  const failed = Boolean(step.error) || step.state === 'failed';
+  const waiting = !done && step.state === 'waiting_approval';
+  return {
+    id: step.id,
+    toolName: step.tool,
+    params: step.args ?? {},
+    status: done ? 'done' : 'running',
+    success: done ? !failed : undefined,
+    ...(done ? { outcome: failed ? ('failed' as const) : ('succeeded' as const) } : {}),
+    result: done ? (step.error || step.summary || '') : waiting ? `Waiting for your approval in ${step.browser || 'your browser'}` : undefined,
+    startedAt: step.startedAt,
+    ...(endedAt !== undefined ? { endedAt, durationMs: Math.max(0, endedAt - step.startedAt) } : {}),
+    category: 'other',
+  };
+};
+
 const toToolCall = (step: ChatTurnStep, turnLive: boolean): ToolCallInfo => {
+  if (isBrowserStep(step)) return browserToolCall(step, turnLive);
   if (step.kind === 'handoff') return {id:step.id,toolName:'agent_handoff',params:{taskKey:step.taskKey,agentId:step.agentId},status:'done',startedAt:step.startedAt,category:'other'};
   if (step.kind === 'generation') return {id:step.id,toolName:'generation_proposal',params:{generationId:step.generationId},status:'done',startedAt:step.startedAt,category:'other'};
   if (isImageStep(step)) return imageToolCall(step, turnLive);

@@ -62,7 +62,7 @@ async function listen(db, onCallReady) {
     const drop = () => {
       if (notifier === client) notifier = null;
       try { client.release(true); } catch {}
-      if (waiters.size) setTimeout(() => listen(db, onCallReady).catch(() => {}), 2000);
+      if (waiters.size || connections.size) setTimeout(() => listen(db, onCallReady).catch(() => {}), 2000);
     };
     client.on('error', drop); client.on('end', drop);
     await client.query('LISTEN browser_calls');
@@ -77,6 +77,29 @@ const waiters = new Map();
 function signal(callId) {
   const set = waiters.get(String(callId));
   if (set) for (const resolve of set) resolve();
+}
+
+/**
+ * 🔴 What a notification MEANS on this replica. Before 2026-10-17 `listen()` existed and nothing ever called it, so
+ * a call queued on replica A never reached a browser connected to replica B — it sat until that browser reconnected.
+ *   { callId }               → wake a local waiter (its row changed)
+ *   { installation }         → if that browser's socket is HERE, deliver every queued call for it
+ *   { installation, close }  → if that browser's socket is HERE, close it (revoked or turned off elsewhere)
+ */
+function onNotification(db, payload) {
+  let msg; try { msg = JSON.parse(payload); } catch { return; }
+  if (msg.callId) signal(msg.callId);
+  const key = msg.installation ? String(msg.installation) : null;
+  if (!key || !connections.has(key)) return;
+  if (msg.close) { closeConnection(key, CLOSE.FORBIDDEN, msg.reason || 'revoked'); return; }
+  db.query(`SELECT * FROM browser_calls WHERE installation = $1 AND state = 'queued' AND deadline > now() ORDER BY created_at LIMIT 32`, [key])
+    .then(({ rows }) => Promise.all(rows.map((call) => deliverHere(db, call))))
+    .catch((e) => console.error('[browser-relay] delivery after notify failed', e && e.message));
+}
+
+/** Start this replica's listener. Idempotent; called by whoever first needs it (a socket or a waiting call). */
+export function ensureListening(db) {
+  return listen(db, (payload) => onNotification(db, payload)).catch((e) => console.error('[browser-relay] LISTEN failed', e && e.message));
 }
 
 /** Stop listening (tests, shutdown). */
@@ -104,15 +127,25 @@ export async function revoke(db, installationId) {
     `UPDATE browser_installations SET revoked_at = now(), enabled = false, updated_at = now()
       WHERE id = $1 AND revoked_at IS NULL RETURNING id`, [key]);
   if (!rows[0]) {
-    // Already revoked (or never existed). Distinguish the two, because the EFFECT below must not depend
-    // on which request flipped the column — 🔴 a route that revokes in two steps would otherwise leave a
-    // live socket open and a queued call waiting forever when the second step found nothing to update.
+    // Already revoked (or never existed). The EFFECT below must not depend on which request flipped the column —
+    // a route that revokes in two steps would otherwise leave a socket open and a call waiting forever.
     const exists = (await db.query('SELECT 1 FROM browser_installations WHERE id = $1', [key])).rows[0];
     if (!exists) return null;
   }
-  closeConnection(key, CLOSE.FORBIDDEN, 'revoked');
-  await failQueued(db, key, 'revoked', 'This browser was disconnected from XENO.');
+  await disconnect(db, key, 'revoked', 'This browser was disconnected from XENO.');
   return { id: key };
+}
+
+/**
+ * Stop a browser being used NOW without touching its row: close its socket on whichever replica holds it, and fail
+ * every call still waiting on it. Used by revoke and by the person turning chats OFF — 🔴 which must not revoke:
+ * before 2026-10-17 "turn off" called revoke(), so pausing a browser permanently deleted the connection.
+ */
+export async function disconnect(db, installationId, code = 'revoked', message = 'XENO chats are not allowed to use this browser.') {
+  const key = String(installationId);
+  closeConnection(key, CLOSE.FORBIDDEN, code === 'revoked' ? 'revoked' : 'XENO chats are not allowed to use this browser');
+  await notify(db, { installation: key, close: true, reason: code });
+  await failQueued(db, key, code, message);
 }
 
 /** Close the socket this installation is using, if it is on this replica. Removing the map entry alone
@@ -128,9 +161,9 @@ function closeConnection(installationId, code, reason) {
 /** Every call still waiting for an answer on `installation` is failed with one reason. */
 async function failQueued(db, installationId, code, message) {
   await db.query(
-    `UPDATE browser_calls SET state = 'failed', ok = false, error_code = $2, updated_at = now()
+    `UPDATE browser_calls SET state = 'failed', ok = false, error_code = $2, result = $3::jsonb, updated_at = now()
       WHERE installation = $1 AND state IN ('queued','sent','acked','waiting_approval')`,
-    [installationId, code]).catch(() => {});
+    [installationId, code, JSON.stringify({ message })]).catch(() => {});
   await notify(db, { installation: String(installationId) });
 }
 
@@ -139,8 +172,9 @@ async function failQueued(db, installationId, code, message) {
 /** Register a live socket for an installation; the newest wins and the older one is closed as REPLACED.
  *  Chrome can hold two workers briefly during an update, and two sockets for one browser would deliver
  *  every call twice. */
-export function attach({ installation, installationId, socket, np }) {
+export function attach({ db, installation, installationId, socket, np }) {
   const key = String(installationId);
+  if (db) ensureListening(db);
   const previous = connections.get(key);
   if (previous && previous.socket !== socket) { try { previous.close(CLOSE.REPLACED, 'replaced'); } catch {} }
   const entry = { installation, installationId: key, socket, np, close: (code, reason) => { try { socket.close(code, reason); } catch {} } };
@@ -192,6 +226,7 @@ export async function callTool(db, {
   installationId, tool, args, conversationId = null, turnId = null, tabGroup = null,
   actorUserId, stepMs = STEP_DEADLINE_MS, approvalMs = APPROVAL_DEADLINE_MS, onEvent = null, signal: abort = null,
 }) {
+  ensureListening(db);
   const callId = uuid();
   const deadline = new Date(nowMs() + stepMs);
   // The row is inserted BEFORE anything is sent, so a call that crashes the replica mid-flight is still

@@ -94,7 +94,7 @@ router.patch('/installations/:id', requireBoundProof, requireMatchingProof, muta
     const { installation } = await installations.patch(req.db, req.user.id, req.params.id, req.body);
     // Turning the switch OFF must take effect now, not at the next reconnect: the socket is closed and
     // queued calls fail, so a browser the person just disabled cannot act on a step already in flight.
-    if (installation.enabled === false) await relay.revoke(req.db, req.params.id).catch(() => {});
+    if (installation.enabled === false) await relay.disconnect(req.db, req.params.id, 'revoked').catch(() => {});
     res.json({ installation });
   } catch (e) { sendError(res, e); }
 });
@@ -120,6 +120,44 @@ router.get('/calls/:callId', requireBoundProof, async (req, res) => {
          FROM browser_calls WHERE call_id = $1 AND user_id = $2`, [req.params.callId, req.user.id]);
     if (!rows[0]) return res.status(404).json({ error: { code: 'not_found', message: 'No such step.' } });
     res.json({ call: rows[0] });
+  } catch (e) { sendError(res, e); }
+});
+
+/**
+ * The account page's view of the same rows: `/api/account/browsers`, authenticated by the person's WEB SESSION.
+ * The page holds no DPoP key, and needs none — listing, turning chats on or off, and removing a browser are the
+ * person acting on their own account. Registering stays DPoP-only above: only the browser itself can bind its key.
+ */
+export const accountBrowserRouter = express.Router();
+
+accountBrowserRouter.get('/', async (req, res) => {
+  try {
+    const { installations: rows } = await installations.list(req.db, req.user.id);
+    const cutoff = Date.now() - 60_000;
+    res.json({ browsers: rows.map((b) => ({
+      id: b.id, label: b.label, browser: b.browser, os: b.os, enabled: b.enabled,
+      extensionVersion: b.extensionVersion, tools: Array.isArray(b.tools) ? b.tools.length : 0,
+      lastSeenAt: b.lastSeenAt, connected: Boolean(b.lastSeenAt && Date.parse(b.lastSeenAt) > cutoff), createdAt: b.createdAt,
+    })) });
+  } catch (e) { sendError(res, e); }
+});
+
+accountBrowserRouter.patch('/:id', mutateLimiter, async (req, res) => {
+  try {
+    const { installation } = await installations.patch(req.db, req.user.id, req.params.id, req.body);
+    if (installation.enabled === false) await relay.disconnect(req.db, req.params.id, 'revoked').catch(() => {});
+    res.json({ browser: { id: installation.id, label: installation.label, enabled: installation.enabled } });
+  } catch (e) { sendError(res, e); }
+});
+
+accountBrowserRouter.delete('/:id', mutateLimiter, async (req, res) => {
+  try {
+    const out = await installations.remove(req.db, req.user.id, req.params.id);
+    await relay.revoke(req.db, req.params.id).catch(() => {});
+    await recordSecurityEventTransactional(req.db, EVENTS.BROWSER_INSTALLATION_REVOKED, {
+      userId: req.user.id, req, metadata: { installationId: out.id, via: 'account' },
+    }).catch(() => {});
+    res.json(out);
   } catch (e) { sendError(res, e); }
 });
 

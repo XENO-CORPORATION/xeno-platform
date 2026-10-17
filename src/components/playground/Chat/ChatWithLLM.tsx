@@ -7527,6 +7527,17 @@ const ChatWithLLM: React.FC<ChatWithLLMProps> = ({
                 return;
             }
 
+            if (event.type === 'browser_start' || event.type === 'browser_state' || event.type === 'browser_result' || event.type === 'browser_error') {
+                // A step in the person's own browser, through XENO Extension (2026-10-17). The shared transcript
+                // draws `browser_*` as browser rows; a pending approval in that browser shows as "waiting".
+                turnRecord = applyTurnEvent(turnRecord, event as Parameters<typeof applyTurnEvent>[1]);
+                const record = turnRecord;
+                setMessages(prev => prev.map(msg =>
+                    msg.id === localPlaceholderId ? { ...msg, turn: record, isDotPlaceholder: false } : msg
+                ));
+                return;
+            }
+
             if (event.type === 'code_start' || event.type === 'code_result' || event.type === 'code_error') {
                 /*
                  * A run is a step of the turn too (2026-09-27): `code_start` opens the block with the

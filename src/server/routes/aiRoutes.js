@@ -38,6 +38,7 @@ import { openProjectContextTurn, closeProjectContextTurn } from '../utils/projec
 import { assembleProjectContext } from '../services/chatProjectContext.js';
 import { buildUntrustedProjectDataMessage } from '../services/chatProjectPrompt.js';
 import { PROJECT_READ_TOOL, readProjectKnowledge } from '../services/chatProjectKnowledge.js';
+import { resolveChatBrowser, browserToolDeclarations, tabGroupFor, runBrowserTool, BROWSER_STEP_BUDGET } from '../services/chatBrowserTools.js';
 import { proposeGeneration } from '../services/mediaGenerations.js';
 import { generationCatalog } from '../services/mediaGenerationCatalog.js';
 
@@ -646,6 +647,15 @@ router.post('/chat/stream', requireEntitlement('canUse'), async (req, res) => {
       ...(projectContext ? [PROJECT_READ_TOOL] : []),
     ]
     : [];
+  /*
+   * The person's own browser, through XENO Extension (docs/CHAT-TOOL-CALLING-PLAN.md → "Browser tools"). Offered
+   * only on a SAVED conversation (the extension's taint scope and tab group are keyed by it), to a client that says
+   * it can draw browser steps, and only for a browser the person enabled that is connected right now.
+   */
+  const chatBrowser = surfaceHasTools && conversationId && clientCapabilities.includes('browser')
+    ? await resolveChatBrowser(req.db, userId, typeof req.body?.browserInstallationId === 'string' ? req.body.browserInstallationId : null).catch(() => null)
+    : null;
+  if (chatBrowser) offeredTools.push(...browserToolDeclarations(chatBrowser));
   const toolSurface = offeredTools.length ? chatSurface : null;
 
   // ── Phase 1 — hold worst-case BEFORE opening the stream, so an over-budget wallet
@@ -1096,6 +1106,15 @@ router.post('/chat/stream', requireEntitlement('canUse'), async (req, res) => {
               return { ...result, creditsCharged };
             }
           : undefined,
+        ...(chatBrowser ? {
+          browserLabel: chatBrowser.label,
+          browserStepBudget: BROWSER_STEP_BUDGET,
+          runBrowser: async ({ name, args, onState }) => runBrowserTool(req.db, {
+            browser: chatBrowser, name, args, conversationId,
+            tabGroup: await tabGroupFor(req.db, conversationId),
+            userId, signal: upstreamAbort.signal, onState,
+          }),
+        } : {}),
         runProject: projectContext ? (args) => readProjectKnowledge({
           db: req.db, principal: { type: 'user', id: userId }, projectId, conversationId, args,
         }) : undefined,
@@ -1240,6 +1259,25 @@ router.post('/chat/stream', requireEntitlement('canUse'), async (req, res) => {
             // Reported, never silent, never fatal: the model got the failure as a tool result.
             console.warn('[chat/stream] code execution failed', { requestId: reqIdSeed, index: event.index });
             await send({ type: 'code_error', index: event.index, message: 'That code could not be executed.' });
+            break;
+          case 'browser_start':
+            sawSearch = true;
+            // The step BEFORE the wait. Arguments are the model's own; clipped for the wire, never the page.
+            await send({ type: 'browser_start', index: event.index, tool: event.tool, browser: event.browser,
+              args: JSON.stringify(event.args || {}).length <= 2000 ? event.args : {} });
+            break;
+          case 'browser_state':
+            await send({ type: 'browser_state', index: event.index, state: event.state });
+            break;
+          case 'browser_result': {
+            // The person sees a one-line summary; the full page content went to the model only.
+            const raw = typeof event.output === 'string' ? event.output : JSON.stringify(event.output ?? '');
+            await send({ type: 'browser_result', index: event.index, summary: String(raw || '').replace(/\s+/g, ' ').slice(0, 280) });
+            break;
+          }
+          case 'browser_error':
+            console.warn('[chat/stream] browser step failed', { requestId: reqIdSeed, index: event.index, code: event.code });
+            await send({ type: 'browser_error', index: event.index, code: event.code, message: event.message || 'That browser step could not be completed.' });
             break;
           case 'ask_user':
             // The turn ends here; the panel needs the question before the result frame lands, so the

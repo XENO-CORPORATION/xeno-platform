@@ -75,6 +75,12 @@ export type ChatStreamEvent =
   | { type: 'code_start'; index: number; language: string; code: string }
   | { type: 'code_result'; index: number; status: string; exitCode: number | null; stdout: string; stderr: string; files?: Array<{ path: string; size?: number }>; libraryAssets?: Array<{ path: string; assetId: string }>; creditsCharged?: number; filesTruncated?: boolean }
   | { type: 'code_error'; index: number; message: string }
+  // browser (2026-10-17): a step in the person's own browser through XENO Extension — the step first, then
+  // "waiting for approval" while the person decides in that browser, then a one-line outcome or a refusal.
+  | { type: 'browser_start'; index: number; tool: string; browser?: string | null; args?: Record<string, unknown> }
+  | { type: 'browser_state'; index: number; state: string }
+  | { type: 'browser_result'; index: number; summary: string }
+  | { type: 'browser_error'; index: number; code: string; message: string }
   // ask_user (2026-10-02): the turn ENDS on a question; the composer shows it as a panel and the
   // person's answer is their next message (chatAskUserTool.js on the server).
   | { type: 'ask_user'; toolCallId: string | null; question: string; options: string[]; multiple: boolean }
@@ -275,7 +281,7 @@ export const streamRequestBody = (payload: Record<string, any>): Record<string, 
   max_tokens: payload.max_tokens,
   // What this client can render. The server offers ask_user ONLY to a client that lists it: a
   // client that cannot show the panel would get a turn that ends on a question nobody can see.
-  clientCapabilities: ['ask_user', 'generation_proposal'],
+  clientCapabilities: ['ask_user', 'generation_proposal', 'browser'],
 });
 
 /**
@@ -424,6 +430,10 @@ export async function readStreamedTurn(
       case 'code_start':
       case 'code_result':
       case 'code_error':
+      case 'browser_start':
+      case 'browser_state':
+      case 'browser_result':
+      case 'browser_error':
       case 'generation_proposal':
       case 'ask_user':
         onProgress?.(event);

@@ -115,7 +115,7 @@ import v2MeRoutes from './routes/v2MeRoutes.js';
 import v2AuthzRoutes from './routes/v2AuthzRoutes.js';
 import v2InferenceRoutes from './routes/v2InferenceRoutes.js';
 import inferenceSessionKeyRoutes from './routes/inferenceSessionKeyRoutes.js';
-import browserRelayRoutes from './routes/browserRelayRoutes.js';
+import browserRelayRoutes, { accountBrowserRouter } from './routes/browserRelayRoutes.js';
 import { handleRelayConnection, isRelayRequest } from './services/browserRelaySocket.js';
 import inferenceCredentialRoutes from './routes/inferenceCredentialRoutes.js';
 import inferenceServiceRoutes from './routes/inferenceServiceRoutes.js';
@@ -695,6 +695,7 @@ if (process.env.OIDC_ENABLED === 'true') {
   // XENO Extension browser relay: the person's connected browsers. Mounted with the auth that records
   // req.auth (scope + DPoP binding) because every route here requires a BOUND token (see the routes file).
   app.use('/api/v2/browser', databaseMiddleware, authMiddleware, browserRelayRoutes);
+  app.use('/api/account/browsers', databaseMiddleware, authMiddleware, accountBrowserRouter);
   app.use('/api/v2/inference', databaseMiddleware, oidcAuth, v2InferenceRoutes);
   // XENO handle registry (handle = login = identity = @xenostudio.ai address)
   app.use('/api/v2/handles', databaseMiddleware, oidcAuth, handleRoutes);
