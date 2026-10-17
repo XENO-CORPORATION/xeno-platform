@@ -1,0 +1,126 @@
+/**
+ * /api/v2/browser/* — the platform side of "a chat drives the person's own browser through XENO Extension".
+ * Contract: docs/CHAT-TOOL-CALLING-PLAN.md → "Browser tools".
+ *
+ *   GET    /installations            the person's own connected browsers
+ *   POST   /installations            register THIS browser (bound to the proof's DPoP key; starts disabled)
+ *   GET    /installations/:id        one of them
+ *   PATCH  /installations/:id        { enabled?, label? } — the one switch that lets chats use it
+ *   DELETE /installations/:id        revoke (closes the socket, fails queued calls)
+ *   GET    /calls/:callId            what one step is doing — the read side of §12.1 rule 2
+ *
+ * 🔴 EVERY ROUTE REQUIRES A DPoP-BOUND TOKEN. `requireDpopIfBound` is not enough here: an unbound token
+ * must not reach these at all, or "the installation is bound to a key" would be true of the row and
+ * false of the caller. `requireBoundProof` below refuses an unbound caller outright.
+ *
+ * The scope is `browser:connect`, held by the extension client alone (asserted by
+ * scripts/oidc-extension-client.test.mjs) — driving a browser is a different authority from spending
+ * credits, so it is a different scope.
+ */
+import express from 'express';
+import rateLimit from 'express-rate-limit';
+import * as installations from '../services/browserInstallations.js';
+import * as relay from '../services/browserRelay.js';
+import { requireDpopIfBound } from '../middleware/dpopResource.js';
+import { recordSecurityEventTransactional, EVENTS } from '../services/securityEvents.js';
+
+const router = express.Router();
+
+const mutateLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, max: 120, standardHeaders: true, legacyHeaders: false, validate: { ip: false },
+  message: { error: { code: 'rate_limited', message: 'Too many browser settings changes. Try again shortly.' } },
+  keyGenerator: (req) => `browser-relay:user:${req.user?.id || 'anon'}`,
+});
+
+function sendError(res, e) {
+  if (e instanceof installations.InstallationError) {
+    return res.status(e.status).json({ error: { code: e.code, message: e.message } });
+  }
+  console.error(`[browser-relay] unhandled (${e?.code || 'error'})`);   // the code only: a stack can carry the request
+  return res.status(500).json({ error: { code: 'PLATFORM_ERROR', message: 'The browser request failed.' } });
+}
+
+/** A token bound to a key, carrying `browser:connect`. Anything else is refused BEFORE any row is read. */
+function requireBoundProof(req, res, next) {
+  const jkt = req.auth?.dpopJkt;
+  if (!jkt) {
+    return res.status(403).json({
+      error: { code: 'dpop_bound_required', message: 'Connecting a browser needs a sign-in bound to this browser’s key. Sign in from the extension.' },
+    });
+  }
+  const scope = String(req.auth?.scope || '').split(/\s+/);
+  if (!scope.includes('browser:connect')) {
+    return res.status(403).json({ error: { code: 'INSUFFICIENT_SCOPE', message: 'This sign-in was not granted browser:connect.' } });
+  }
+  req.browserJkt = jkt;
+  return next();
+}
+
+/** The proof that accompanies a registration must be the SAME key the token is bound to — otherwise a
+ *  token could register an installation for a key it does not hold, and the binding would be decoration. */
+function requireMatchingProof(req, res, next) {
+  requireDpopIfBound(req, res, () => {
+    if (req.dpopJkt && req.dpopJkt !== req.browserJkt) {
+      return res.status(403).json({ error: { code: 'invalid_dpop_proof', message: 'That proof is from a different key than this sign-in.' } });
+    }
+    return next();
+  });
+}
+
+router.get('/installations', requireBoundProof, async (req, res) => {
+  try { res.json({ ...(await installations.list(req.db, req.user.id)), live: relay.liveInstallationIds() }); }
+  catch (e) { sendError(res, e); }
+});
+
+router.post('/installations', requireBoundProof, requireMatchingProof, mutateLimiter, async (req, res) => {
+  try {
+    const out = await installations.register(req.db, req.user.id, req.body, req.browserJkt);
+    if (out.created) {
+      await recordSecurityEventTransactional(req.db, EVENTS.BROWSER_INSTALLATION_REGISTERED, {
+        userId: req.user.id, req, metadata: { installationId: out.installation.id, browser: out.installation.browser || null },
+      }).catch(() => {});
+    }
+    res.status(out.created ? 201 : 200).json({ installation: out.installation, created: out.created });
+  } catch (e) { sendError(res, e); }
+});
+
+router.get('/installations/:id', requireBoundProof, async (req, res) => {
+  try { res.json({ installation: await installations.get(req.db, req.user.id, req.params.id) }); }
+  catch (e) { sendError(res, e); }
+});
+
+router.patch('/installations/:id', requireBoundProof, requireMatchingProof, mutateLimiter, async (req, res) => {
+  try {
+    const { installation } = await installations.patch(req.db, req.user.id, req.params.id, req.body);
+    // Turning the switch OFF must take effect now, not at the next reconnect: the socket is closed and
+    // queued calls fail, so a browser the person just disabled cannot act on a step already in flight.
+    if (installation.enabled === false) await relay.revoke(req.db, req.params.id).catch(() => {});
+    res.json({ installation });
+  } catch (e) { sendError(res, e); }
+});
+
+router.delete('/installations/:id', requireBoundProof, requireMatchingProof, mutateLimiter, async (req, res) => {
+  try {
+    const out = await installations.remove(req.db, req.user.id, req.params.id);
+    await relay.revoke(req.db, req.params.id).catch(() => {});
+    await recordSecurityEventTransactional(req.db, EVENTS.BROWSER_INSTALLATION_REVOKED, {
+      userId: req.user.id, req, metadata: { installationId: out.id },
+    }).catch(() => {});
+    res.json(out);
+  } catch (e) { sendError(res, e); }
+});
+
+/** §12.1 rule 2 — a mutating verb needs a reading verb. This is how a caller (or the account page)
+ *  answers "what is that step doing?" without polling the socket. */
+router.get('/calls/:callId', requireBoundProof, async (req, res) => {
+  try {
+    const { rows } = await req.db.query(
+      `SELECT call_id AS "callId", installation, tool, state, ok, error_code AS "errorCode",
+              conversation_id AS "conversationId", created_at AS "createdAt", deadline
+         FROM browser_calls WHERE call_id = $1 AND user_id = $2`, [req.params.callId, req.user.id]);
+    if (!rows[0]) return res.status(404).json({ error: { code: 'not_found', message: 'No such step.' } });
+    res.json({ call: rows[0] });
+  } catch (e) { sendError(res, e); }
+});
+
+export default router;

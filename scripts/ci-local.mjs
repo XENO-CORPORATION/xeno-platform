@@ -68,7 +68,7 @@ const CORE_DB_SUITES = [
   'auth-token-confusion', 'api-key-auth', 'browser-bff-session',
   'inference-routing-live', 'chat-stream-own-key', 'chat-area', 'library-area', 'workspace-area', 'forum-tickets', 'forum-moderation-actions', 'forum-writeback', 'xeno-tasks', 'canvases', 'chat-handoff', 'task-folders', 'workspace-foundation', 'tasks-mcp-oauth', 'xeno-mcp', 'agents-divisions', 'agent-cloud-runs', 'agent-company-ownership', 'agent-media-tools', 'dpop-token-exchange', 'readonly-preview-lifecycle',
   'leader-election', 'fresh-db-boot', 'password-change-atomicity',
-  'byok-lifecycle-audit', 'gateway-catalogue-sync', 'email-delivery-events', 'suspension-gate', 'chat-branches', 'artifacts', 'library-organise', 'storage-allowance', 'account-security', 'inference-session-keys',
+  'byok-lifecycle-audit', 'gateway-catalogue-sync', 'email-delivery-events', 'suspension-gate', 'chat-branches', 'artifacts', 'library-organise', 'storage-allowance', 'account-security', 'inference-session-keys', 'browser-relay',
 ];
 const CORE_NODB_SUITES = ['ai-tools-passthrough', 'entitlement-gate', 'upstream'];
 const MONEY_SUITES = [

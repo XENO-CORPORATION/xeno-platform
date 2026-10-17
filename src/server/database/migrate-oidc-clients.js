@@ -31,6 +31,9 @@ export const FIRST_PARTY_CLIENTS = [
   { id: 'xeno-sound', name: 'XENO Sound', loopback: true },
   { id: 'xeno-canvas', name: 'XENO Canvas', loopback: true },
   { id: 'xeno-browser', name: 'XENO Browser', loopback: true },
+  // XENO Extension (MV3): device grant only (RFC 8628). No redirect: an extension page is not a loopback
+  // listener, and chrome-extension:// redirect URIs would tie the client to one extension id per build.
+  { id: 'xeno-extension', name: 'XENO Extension', loopback: false, redirects: [] },
   { id: 'xeno-docs', name: 'XENO Docs', loopback: true },
   { id: 'xeno-sheets', name: 'XENO Sheets', loopback: true },
   { id: 'xeno-slides', name: 'XENO Slides', loopback: true },

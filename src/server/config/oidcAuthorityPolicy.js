@@ -13,6 +13,9 @@ export const OIDC_SCOPES = Object.freeze([
   'broker:enroll', 'broker:exchange',
   // XENO Tasks over MCP: the only scopes a self-registered (RFC 7591) client can ever hold
   'tasks:read', 'tasks:write',
+  // XENO Extension: let platform chats use THIS browser (register an installation, hold the relay connection).
+  // Separate from inference on purpose: driving a browser is a different authority from spending credits.
+  'browser:connect',
 ]);
 
 const IDENTITY = ['openid', 'profile', 'email'];
@@ -33,6 +36,9 @@ export const CLIENT_AUTHORITY = Object.freeze({
   'xeno-sound': PRODUCT,
   'xeno-canvas': [...PRODUCT, 'collaboration:use'],
   'xeno-browser': PRODUCT,
+  // XENO Extension (MV3, RFC 8628 device grant + DPoP): its own metered model loop, plus browser:connect so a
+  // platform chat can use this browser (CHAT-TOOL-CALLING-PLAN.md, "Browser tools"). No projects, team or billing.
+  'xeno-extension': [...IDENTITY, 'inference:run', 'ledger:read', 'ledger:spend', 'browser:connect'],
   // XENO Storage desktop: the product set (its files go through /api/library, which ReBAC decides) plus team:read,
   // so it can list the person's team workspaces and show their team folders. No team:manage: membership is managed
   // on the web, never from a sync client.
