@@ -16,6 +16,26 @@ import { useAuth } from '../contexts/AuthContext';
  * redirect, the inspect/approve (or legacy verify) calls, and the consent
  * copy for the registered client.
  * ────────────────────────────────────────────────────────────────────── */
+/* What each scope lets the device do, in the words a person approving it needs. An unknown scope is
+ * shown as its id rather than guessed at: describing access we did not define would be a false claim. */
+const SCOPE_WORDS: Record<string, string> = {
+  openid: 'Confirm who you are',
+  profile: 'See your name',
+  email: 'See your e-mail address',
+  'inference:run': 'Run AI models on your account',
+  'ledger:read': 'See your credit balance',
+  'ledger:spend': 'Spend credits on what you approve',
+  'projects:read': 'Read your projects',
+  'projects:write': 'Create and change your projects',
+  'tasks:read': 'Read your tasks',
+  'tasks:write': 'Create and change your tasks',
+  offline_access: 'Stay signed in until you sign out',
+};
+
+export function describeScopes(scopes: string[]): string[] {
+  return scopes.map((scope) => SCOPE_WORDS[scope] ?? scope);
+}
+
 const DeviceAuthContent: React.FC<{ protocol?: 'oidc' | 'legacy' }> = ({ protocol = 'oidc' }) => {
   const { app: appSlug } = useParams();
   const location = useLocation();
@@ -118,17 +138,21 @@ const DeviceAuthContent: React.FC<{ protocol?: 'oidc' | 'legacy' }> = ({ protoco
               hint: authorization ? 'Confirm the registered client and requested access.' : 'Enter the code shown on your device.',
               submit: authorization ? `Approve ${authorization.client_name}` : 'Continue',
               busy: 'Checking…',
+              connectedTitle: `Signed in to ${displayName}`,
+              connectedBody: 'You can close this page and return to your device.',
             }}
             after={authorization && status !== 'connected' ? (
-              <div>
-                <p>
-                  Approve only if you started <span>{authorization.client_name}</span> on your device.
+              <div className="mt-5 space-y-3 text-sm">
+                <p className="text-white/60">
+                  Approve only if you started <span className="text-white">{authorization.client_name}</span> on your device.
+                  It will be able to:
                 </p>
-                <div>
-                  {authorization.scope.map((scope) => (
-                    <span key={scope}>{scope}</span>
+                <ul className="space-y-1.5 rounded-lg bg-white/[0.04] px-4 py-3 text-white/80">
+                  {describeScopes(authorization.scope).map((line) => (
+                    <li key={line}>{line}</li>
                   ))}
-                </div>
+                </ul>
+                <p className="text-white/40">You can sign it out at any time from your account.</p>
               </div>
             ) : undefined}
           />
