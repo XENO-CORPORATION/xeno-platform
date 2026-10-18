@@ -173,6 +173,8 @@ const BACKEND_SUITES = [
   // breakers. Both need a real database — which is why they belong in THIS runner rather
   // than the npm chain, where they would fail ECONNREFUSED on every developer machine.
   'leader-election', 'upstream',
+  // XENO Tasks claim leases, typed activity and the agent event feed (2026-10-18)
+  'task-leases',
 ];
 
 const BACKEND_EVIDENCE = {

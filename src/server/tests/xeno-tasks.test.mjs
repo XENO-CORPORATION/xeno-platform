@@ -58,7 +58,7 @@ async function main() {
     check((await cyd('POST', `/tasks/${t1.key}/claim`)).j.code === 'already_claimed', 'a second claim of the same role is refused: two cannot hold one task');
     await cyd('PATCH', `/tasks/${t1.key}`, { assigneeId: null });   // the viewer lets go again (the checks below need them uninvolved)
     await ada('PATCH', `/tasks/${t1.key}`, { reviewerId: ids.ada, reviewRequired: true });
-    check((await bot('POST', `/tasks/${t1.key}/transition`, { to: 'in_progress' })).j.task.status === 'in_progress', 'the assignee starts it');
+    check((await bob('GET', `/tasks/${t1.key}`)).j.task.status === 'in_progress', 'an agent claiming To do work starts it: the claim moved it to In progress');
     check((await bot('POST', `/tasks/${t1.key}/transition`, { to: 'done' })).s === 403, 'with review required, the assignee cannot close it directly');
     await bot('POST', `/tasks/${t1.key}/comments`, { body: 'Fixed the flex rule; screenshot attached.' });
     check((await bot('POST', `/tasks/${t1.key}/transition`, { to: 'in_review' })).j.task.status === 'in_review', 'the assignee sends it to review');

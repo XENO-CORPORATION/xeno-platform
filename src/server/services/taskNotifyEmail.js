@@ -53,13 +53,15 @@ export async function sendPendingTaskEmails(db, opts = {}) {
 }
 
 /** The sweeps: mail every 2 minutes, due reminders every 10. Returns a stop function. */
-export function startTaskSweeps(db, { sweepDueReminders, deliverAgentEvents, mailMs = 120000, dueMs = 600000, pushMs = 15000 } = {}) {
+export function startTaskSweeps(db, { sweepDueReminders, deliverAgentEvents, sweepExpiredLeases, mailMs = 120000, dueMs = 600000, pushMs = 15000, leaseMs = 60000 } = {}) {
   const run = (name, fn) => () => fn().catch((e) => console.error(`[Tasks] ${name} sweep failed:`, e.message));
   const a = setInterval(run('email', () => sendPendingTaskEmails(db)), mailMs);
   const b = setInterval(run('due', () => sweepDueReminders(db)), dueMs);
   // agents: deliver queued events to their webhooks (signed, retried with backoff)
   const c = deliverAgentEvents ? setInterval(run('agent push', () => deliverAgentEvents(db)), pushMs) : null;
-  a.unref?.(); b.unref?.(); c?.unref?.();
+  // claim leases: a run that stopped heartbeating lets go of its task (leader replica only; the sweep is also safe on two)
+  const d = sweepExpiredLeases ? setInterval(run('claim leases', () => sweepExpiredLeases(db)), leaseMs) : null;
+  a.unref?.(); b.unref?.(); c?.unref?.(); d?.unref?.();
   console.log(`[Tasks] email sweep every ${mailMs / 1000}s (${taskEmailsEnabled() ? 'on' : 'off'}), due reminders every ${dueMs / 1000}s`);
-  return () => { clearInterval(a); clearInterval(b); if (c) clearInterval(c); };
+  return () => { clearInterval(a); clearInterval(b); if (c) clearInterval(c); if (d) clearInterval(d); };
 }
