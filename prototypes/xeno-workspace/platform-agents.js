@@ -40,7 +40,7 @@
   const spawnProfileName = (a) => (String(a.name || '').replace(/[^\p{L}\p{N} ._-]/gu, '').trim().slice(0, 48) || `xeno-agent-${String(a.id).slice(4, 12)}`);
   // One line launches it as that identity (first run binds after asking, later runs reuse the profile). Needs
   // SPAWN_AGENT_FLAG_RELEASE; bind-only stays as the secondary line.
-  const SPAWN_AGENT_FLAG_RELEASE = '__SPAWN_RELEASE__';
+  const SPAWN_AGENT_FLAG_RELEASE = '0.1.0-rc.42';
   const spawnCommands = (a, prog) => ({
     launch: `spawn ${prog} --agent ${a.id}`,
     bind: `spawn profiles bind ${a.id} --agent ${prog}`,
