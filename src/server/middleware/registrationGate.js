@@ -26,6 +26,8 @@
  * them. assertAccountUsable() is what makes a suspension real on every path.
  */
 
+import { hasGateInvite } from '../utils/siteGateCode.js';
+
 /** Thrown when account creation is refused. Callers map it to 403 / a redirect. */
 export class AccountCreationBlockedError extends Error {
   constructor(reason = 'registration_closed') {
@@ -81,8 +83,12 @@ function allowlist() {
  * Is this specific email allowed to create an account right now?
  * @returns {{allowed: boolean, reason: string}}
  */
-export function registrationDecision(email) {
+export function registrationDecision(email, { gateInvite = false } = {}) {
   if (isRegistrationOpen()) return { allowed: true, reason: 'open' };
+
+  // An INVITED person (owner, 2026-10-18: "signups only with the access code"): a valid site-gate cookie is the
+  // invitation. It is checked from the signed cookie, never from a body field, so it cannot be asserted by a caller.
+  if (gateInvite) return { allowed: true, reason: 'site_gate_code' };
 
   const normalized = String(email || '').trim().toLowerCase();
   if (normalized) {
@@ -103,8 +109,8 @@ export function registrationDecision(email) {
  * Throwing form, for non-route code paths (the OAuth auto-create).
  * @throws {AccountCreationBlockedError}
  */
-export function assertRegistrationAllowed(email) {
-  const decision = registrationDecision(email);
+export function assertRegistrationAllowed(email, { gateInvite = false } = {}) {
+  const decision = registrationDecision(email, { gateInvite });
   if (!decision.allowed) throw new AccountCreationBlockedError(decision.reason);
   return decision;
 }
@@ -125,10 +131,11 @@ export function assertAccountUsable(user) {
 
 /**
  * Express middleware for the two JSON registration endpoints.
- * Reads the email from the body so the allowlist can apply per-request.
+ * Reads the email from the body so the allowlist can apply per-request, and the signed site-gate cookie so an
+ * invited person (who holds the access code) can create an account while the public cannot.
  */
 export function requireRegistrationOpen(req, res, next) {
-  const decision = registrationDecision(req.body?.email);
+  const decision = registrationDecision(req.body?.email, { gateInvite: hasGateInvite(req.headers?.cookie) });
   if (decision.allowed) return next();
 
   console.warn(`[registrationGate] refused signup attempt (${req.body?.email ? 'email supplied' : 'no email'})`);
