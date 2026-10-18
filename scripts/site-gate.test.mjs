@@ -59,3 +59,15 @@ test('the sign-in bypass never falls back through the gated location', () => {
   assert.doesNotMatch(shell, /auth_request/, '@spa_shell must never be gated');
   assert.match(shell, /try_files \/index\.html =404;/);
 });
+
+// REGRESSION, 2026-10-18: robots.txt answered with the "Coming soon" page while the gate was on - a crawler
+// contract served as HTML - because .txt is not in the static-asset rule and fell into `location /`. The same
+// hole would swallow a .mp4 or a .otf. Crawler files must be exact, ungated and uncached; media must be static.
+test('crawler files and media answer as themselves behind the gate', () => {
+  const robots = block('    location = /robots.txt {');
+  assert.doesNotMatch(robots, /auth_request/, 'robots.txt must never be gated');
+  assert.match(robots, /expires -1;/, 'robots.txt must not be pinned like a hashed asset');
+  const sitemap = block('    location = /sitemap.xml {');
+  assert.match(sitemap, /return 404;/, 'the disabled sitemap stays a true 404, never HTML');
+  assert.match(block(String.raw`    location ~* \.(js|css|png`), /\|otf\|.*\|mp4\|webm\|/, 'media and fonts are static files');
+});
