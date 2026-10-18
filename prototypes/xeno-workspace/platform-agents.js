@@ -298,6 +298,17 @@
     };
     return `<ol class="xag-logs">${A.items.map(line).join('')}</ol>${A.next ? '<button class="pg-link" data-xag="activity-more">Older</button>' : ''}`;
   }
+  /** One agent's page, ordered by the main task: RUN IT (setup + where it has run) · GIVE IT WORK (projects, cloud runs,
+   * webhook, activity) · HOW IT WORKS (instructions, runtime, services, division, lending) · ACCESS (owner, credentials).
+   * States, each walked by tests/agents-test.mjs:
+   *   new          — no credential, never seen: "Not connected yet · Last seen never"
+   *   never run    — presence `cloud` with no seenAt is a capability, not an event: "Never run · Last seen never"
+   *   ran          — measured presence (working/online/asking/error): "Last seen <seenAt> · Can take work now"
+   *   offline      — "Last seen <seenAt> · Work handed to it waits until it connects"
+   *   suspended    — paused/needs_owner: the pause notice comes first; "Can’t take work"
+   *   no permission— without the run right there is no setup; "You can …" lists what they may do
+   *   mobile 390px — one column, no sideways scroll, still leads with running it
+   * Every status word comes from presence.state / seenAt / connections, or says "never". */
   function onePage() {
     const h = H(), a = S.one; if (!a) return null;
     const [k, l] = state(a);
