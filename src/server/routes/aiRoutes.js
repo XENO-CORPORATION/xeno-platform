@@ -8,6 +8,7 @@ import path from 'path';
 import { generateSignedUrl } from '../middleware/cdnOptimization.js';
 import { resolveRoute, normalizePath, catalogPaths } from '../utils/modelPaths.js';
 import { meterPremiumChat, meterPremiumChatStream, meterMediaGeneration } from '../utils/inferenceMeter.js';
+import { streamCallSettlement } from '../utils/streamCallSettlement.js';
 import { estimateChatCostMicro, estimateMessageTokens, getCreditCost } from '../utils/creditCosts.js';
 import { getBalanceV2, MICRO_PER_CREDIT } from '../utils/creditLedgerV2.js';
 import { xenoChatCompletion, xenoChatCompletionStream, xenoApiConfigured, classifyUpstreamError, isContentDeclined, xenoModelCatalog, prettyModelName, PROVIDER_LABELS, xenoImageGeneration } from '../utils/xenoChat.js';
@@ -782,7 +783,9 @@ router.post('/chat/stream', requireEntitlement('canUse'), async (req, res) => {
       const m = meters[i];
       if (m.settled) continue;
       const used = perCallUsage?.[i];
-      if (used && (used.outputTokens > 0 || used.inputTokens > 0)) {
+      // A call with no provider count and no output produced nothing: void it, never charge
+      // the reserved worst case for it (utils/streamCallSettlement.js, 2026-10-18 overcharge).
+      if (streamCallSettlement(used) !== 'void') {
         const res = await m.settle({
           inputTokens: used.inputTokens,
           outputTokens: used.outputTokens,

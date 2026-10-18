@@ -20,6 +20,7 @@ import * as agentMediaMcp from './agentMediaMcp.js';
 import * as agentMedia from './agentMedia.js';
 import * as canvasMcp from './canvasMcp.js';
 import * as canvases from './canvases.js';
+import * as agentsMcp from './agentsMcp.js';
 import { withTransaction } from './chatProjectAuthority.js';
 
 export const PROTOCOL_VERSIONS = tasksMcp.PROTOCOL_VERSIONS;
@@ -45,6 +46,15 @@ export const SERVICES = Object.freeze([
     tools: () => canvasMcp.TOOLS,
     call: (db, actor, name, args) => canvasMcp.callTool(db, actor, name, args),
     isToolError: (e) => e instanceof canvases.CanvasError,
+  },
+  // what an agent can learn about itself (agentsMcp.js). On by default for a platform agent's own credential
+  // (AGENT_DEFAULT_CATEGORIES); an app sign-in turns it on in Dev › XENO MCP like any other category.
+  {
+    category: 'agents', title: 'Agents', version: '1.0.0', timeoutMs: 15_000, agentsOnly: true,
+    description: 'Who you are on XENO: your agent id, workspace, division, owner, projects and budget.',
+    tools: () => agentsMcp.TOOLS,
+    call: (db, actor, name, args) => agentsMcp.callTool(db, actor, name, args),
+    isToolError: (e) => e instanceof agentsMcp.AgentsMcpError,
   },
   // what an agent can make and use (agentMedia.js). Agents only: a person's own screens already do all of this.
   ...[
@@ -115,7 +125,7 @@ export async function callTool(db, actor, connection, prefixed, args = {}, ctx =
 }
 
 const INSTRUCTIONS = 'XENO MCP: the XENO services you are allowed to use, in one place. Tool names start with the service: '
-  + 'tasks_… is XENO Tasks; canvas_… lays work out on canvases (tasks stay live on them); an agent also has image_… and video_… (make media), library_… (read files) and chat_… (ask a model). Media and model calls are billed to your owner within your division’s budget. For tasks: if the folder you are working in has .xeno/tasks.json, pass its project.id as project. Start with tasks_list_my_tasks. '
+  + 'agents_whoami tells an agent who it is (id, workspace, division, owner, projects, budget); tasks_… is XENO Tasks; canvas_… lays work out on canvases (tasks stay live on them); an agent also has image_… and video_… (make media), library_… (read files) and chat_… (ask a model). Media and model calls are billed to your owner within your division’s budget. For tasks: if the folder you are working in has .xeno/tasks.json, pass its project.id as project. Start with tasks_list_my_tasks. '
   + 'To work a task: tasks_claim_task, then tasks_report_activity as you go, then tasks_comment with what you changed and how you checked it, '
   + 'and tasks_move_task to in_review. The person who created a task accepts it; you never accept your own work.';
 

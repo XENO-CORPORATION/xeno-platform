@@ -87,7 +87,7 @@ async function main() {
     const names = (await rpc(tok, 'tools/list', {})).j.result.tools.map((t) => t.name);
     check(['image_generate', 'video_generate', 'library_list_files', 'library_get_file', 'chat_ask', 'tasks_list_projects'].every((n) => names.includes(n)), `an agent's credential lists Images, Video, Library and Chat beside Tasks (${names.length} tools)`);
     const services = (await call('GET', '/api/mcp/services', { token: session(ada) })).j.services;
-    check(services.filter((s) => s.agentsOnly).map((s) => s.category).sort().join() === 'chat,image,library,video', 'the services list marks the four as agent services');
+    check(services.filter((s) => s.agentsOnly).map((s) => s.category).sort().join() === 'agents,chat,image,library,video', 'the services list marks the five as agent services (agents_whoami joined 2026-10-18)');
 
     // 2. no division budget: a generation waits for the owner, and says so
     const g1 = await media.generate(pool, actor, 'image', { prompt: 'A launch banner, white on black', projectId: proj }, opts);
