@@ -9,6 +9,7 @@
  * First-party clients (xeno-post, …) skip the consent screen; the grant is still
  * recorded as an authorization_code row.
  */
+import { CONNECT_AUDIENCE, connectExchangeGrant } from '../services/connectAuthority.js';
 import express from 'express';
 import { authMiddleware } from '../middleware/auth.js';
 import { issuer } from '../config/hosts.js';
@@ -379,6 +380,14 @@ router.post('/token', requireSupportedTokenClient, async (req, res) => {
         proof: String(req.headers.dpop || ''), method: 'POST', url: `${issuer()}/api/oauth2/token`,
         accessToken: b.subject_token, requiredJkt: subjectPayload.cnf?.jkt,
       });
+      // XENO Connect: the client's own key, not the Hub broker — see services/connectAuthority.js.
+      if (b.audience === CONNECT_AUDIENCE) {
+        return res.json(await connectExchangeGrant(req.db, {
+          subjectPayload, proofJkt: hubProof.jkt,
+          subjectTokenType: b.subject_token_type, requestedTokenType: b.requested_token_type,
+          resource: b.resource, audience: b.audience, scope: b.scope,
+        }));
+      }
       return res.json(await tokenExchangeGrant(req.db, {
         subjectToken: b.subject_token, subjectPayload, hubDpopJkt: hubProof.jkt,
         subjectTokenType: b.subject_token_type, requestedTokenType: b.requested_token_type,

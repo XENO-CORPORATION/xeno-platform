@@ -419,7 +419,19 @@
     if (!v) return;
     const r = await call('POST', '/api/agents', { name: v.name, description: v.description || '', divisionId: v.division || null, workspaceId: wsId() }, 'The agent could not be created.');
     if (!r) return;
-    toast(`Created ${r.d.agent.name}`); S.list.push(r.d.agent); go(`Agents/${r.d.agent.id}`);
+    toast(`Created ${r.d.agent.name}`); S.list.push(r.d.agent);
+    // The next decision is WHERE it runs. Ask it now, then land on the part of its page that does it; skipping lands on
+    // the page as before. Its instructions stay inherited from the task or project it is given, so none are asked here.
+    const w = await D().form({ title: `Where will ${r.d.agent.name} run?`, sub: 'You can change this, or run it in more than one place, any time.', submit: 'Continue', size: 'sm', fields: [
+      { id: 'where', label: 'Runs', type: 'choice', cols: 1, value: 'spawn', options: [
+        ['spawn', 'On my computer, with XENO Spawn', 'Claude Code or Codex in a terminal, signed in as this agent'],
+        ['cloud', 'In the cloud', 'XENO runs it when you hand it a task. Nothing to install'],
+        ['claude', 'In another agent CLI', 'Claude Code, Codex or any MCP client, with a credential you make'],
+      ] }] });
+    S.tab = w && w.where === 'spawn' ? 'spawn' : 'claude';
+    S.focusCloud = !!(w && w.where === 'cloud');
+    go(`Agents/${r.d.agent.id}`);
+    setTimeout(() => { const el = document.querySelector(S.focusCloud ? '.xag-runs' : '.xag-run'); if (w && el) el.scrollIntoView({ block: 'start', behavior: 'smooth' }); S.focusCloud = false; }, 400);
   }
   async function edit() {
     const a = S.one; if (!a) return;

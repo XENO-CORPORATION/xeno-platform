@@ -86,6 +86,11 @@ try {
   // create
   await p.click('[data-xag="new"]'); await settle(500);
   await fill(['Release Bot', 'Takes release tasks and reports back']); await submit();
+  // the next question is where it runs; the default is this computer, through Spawn
+  ok(/Where will Release Bot run\?/.test(await p.$eval('.xd', (e) => e.innerText).catch(() => '')) && /XENO Spawn/.test(await p.$eval('.xd', (e) => e.innerText).catch(() => '')) && /In the cloud/.test(await p.$eval('.xd', (e) => e.innerText).catch(() => '')), 'after creating, it asks where the agent will run: this computer, the cloud, or another CLI');
+  await submit();
+  ok(/spawn profiles bind/.test(await main()) && /aria-selected="true"[^>]*data-k="spawn"/.test(await p.$eval('.xag-tabs', (e) => e.outerHTML).catch(() => '')), 'choosing this computer lands on its Spawn setup');
+  await p.click('[data-xag="tab"][data-k="claude"]'); await settle(300);
   const a = db.agents[0];
   ok(a && a.name === 'Release Bot' && a.description === 'Takes release tasks and reports back', 'New agent creates it on the platform with its name and purpose');
   ok(new URL(p.url()).pathname === `/workspace/workspace/Agents/${a.id}`, `it opens at its id address (${new URL(p.url()).pathname})`);
@@ -116,6 +121,12 @@ try {
   ok(!!(await p.$('#panel .side-dot.xag-dot--working')) && /Release Bot/.test(await p.$eval('#panel', (e) => e.innerText)) && parseFloat(await p.$eval('#panel .side-dot', (d) => getComputedStyle(d).borderTopLeftRadius)) < 4, 'the sidebar lists your agents with the same square status mark');
   { const g = await p.evaluate(() => { const row = [...document.querySelectorAll('#panel .row')].find((x) => x.querySelector('.side-dot')); const d = row.querySelector('.side-dot').getBoundingClientRect(), t = row.querySelector('.t').getBoundingClientRect(), r = row.getBoundingClientRect(); return { leftOfText: d.right <= t.left, inRowStart: d.left - r.left < 16, lowHalf: d.top >= t.top + t.height / 2 - 1 && d.bottom <= t.bottom, w: d.width }; });
     ok(g.leftOfText && g.inRowStart && g.lowHalf && g.w <= 7, `the sidebar mark is small, at the start of the row, before the name and level with its bottom (${JSON.stringify(g)})`); }
+  // Overview's sidebar lists them too, and a row opens the agent's own page by its id
+  await fresh('/workspace'); await settle(1500);
+  { const side = await p.$eval('#panel', (e) => e.innerText).catch(() => '');
+    ok(/Your agents/.test(side) && /Release Bot/.test(side) && !!(await p.$('#panel [data-ws-item] .side-dot')), `Overview's sidebar lists your agents with their status mark (${side.replace(/\s+/g, ' ').slice(0, 160)})`);
+    await p.click(`#panel [data-ws-item="Agents/${a.id}"]`); await settle(900);
+    ok(new URL(p.url()).pathname === `/workspace/workspace/Agents/${a.id}` && /Run Release Bot anywhere/.test(await main()), 'clicking it there opens the agent at its id address'); }
   await fresh(`/workspace/workspace/Agents/${a.id}`);
 
   // projects
