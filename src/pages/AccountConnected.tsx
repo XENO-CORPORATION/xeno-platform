@@ -43,7 +43,6 @@ const AccountConnected: React.FC = () => {
           </div>
           <h1 className="text-[22px] font-semibold tracking-[-0.01em] text-white">{v.title}</h1>
           <p className="mt-2 text-[14px] leading-relaxed text-white/60">{v.body}</p>
-          {ok && <p className="mt-6 text-[12.5px] text-white/35">This tab can be closed.</p>}
         </div>
       </div>
     </>
