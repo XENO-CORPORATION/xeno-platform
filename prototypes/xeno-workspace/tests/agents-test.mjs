@@ -86,6 +86,11 @@ try {
   // create
   await p.click('[data-xag="new"]'); await settle(500);
   await fill(['Release Bot', 'Takes release tasks and reports back']); await submit();
+  // the next question is where it runs; the default is this computer, through Spawn
+  ok(/Where will Release Bot run\?/.test(await p.$eval('.xd', (e) => e.innerText).catch(() => '')) && /XENO Spawn/.test(await p.$eval('.xd', (e) => e.innerText).catch(() => '')) && /In the cloud/.test(await p.$eval('.xd', (e) => e.innerText).catch(() => '')), 'after creating, it asks where the agent will run: this computer, the cloud, or another CLI');
+  await submit();
+  ok(/spawn profiles bind/.test(await main()) && /aria-selected="true"[^>]*data-k="spawn"/.test(await p.$eval('.xag-tabs', (e) => e.outerHTML).catch(() => '')), 'choosing this computer lands on its Spawn setup');
+  await p.click('[data-xag="tab"][data-k="claude"]'); await settle(300);
   const a = db.agents[0];
   ok(a && a.name === 'Release Bot' && a.description === 'Takes release tasks and reports back', 'New agent creates it on the platform with its name and purpose');
   ok(new URL(p.url()).pathname === `/workspace/workspace/Agents/${a.id}`, `it opens at its id address (${new URL(p.url()).pathname})`);
