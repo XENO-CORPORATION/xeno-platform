@@ -26,3 +26,19 @@ test('no link where Spawn would refuse it', () => {
 test('the rendered button uses the builder, never a hand-written link', () => {
   assert.equal((src.match(/xeno-spawn:\/\//g) || []).length, 1);
 });
+
+// The copyable commands must be Spawn's real CLI: `spawn profiles bind <agt_id> --agent claude|codex`, then
+// `spawn <program> --profile <program>/<name>`, where <name> is bind's own cleanup of the agent name (agentBinding.js).
+const cmds = (() => {
+  const b = src.slice(src.indexOf('const SPAWN_PROGRAMS'), src.indexOf('const EFFORTS'));
+  return new Function(`${b}; return { spawnCommands, spawnProfileName };`)();
+})();
+test('copy commands are Spawn\'s bind and launch, with the profile bind will create', () => {
+  const a = { id: AGT, name: 'Release <Bot> #2' };
+  assert.deepEqual(cmds.spawnCommands(a, 'codex'), {
+    bind: `spawn profiles bind ${AGT} --agent codex`,
+    run: 'spawn codex --profile "codex/Release Bot 2"',
+  });
+  assert.equal(cmds.spawnProfileName({ id: AGT, name: '!!!' }), 'xeno-agent-01234567');
+  assert.equal(cmds.spawnProfileName({ id: AGT, name: 'x'.repeat(60) }).length, 48);
+});

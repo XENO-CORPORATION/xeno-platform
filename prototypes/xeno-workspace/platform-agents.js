@@ -27,13 +27,21 @@
   // agents are the company's (XENO-WORKFORCE-01 OWN-01, VIEW-02); the personal workspace lists the person's own
   const wsId = () => (window.XENO_SCOPE && window.XENO_SCOPE.served && window.XENO_SCOPE.uuid && window.XENO_SCOPE.uuid()) || null;
   const wsQ = () => { const w = wsId(); return w ? `?workspace=${encodeURIComponent(w)}` : ''; };
-  const S = { key: null, status: 'idle', list: [], presence: {}, livePushed: new Set(), activity: null, one: null, projects: [], services: [], minted: null, busy: false, copied: '', tab: 'claude', q: '', choices: [], divisions: [], canManageDivisions: false, editingInstr: false, offers: [], models: [], runs: [], runsFor: null, moves: [], access: null, transfers: [], members: [] };
+  const S = { key: null, status: 'idle', list: [], presence: {}, livePushed: new Set(), activity: null, one: null, projects: [], services: [], minted: null, busy: false, copied: '', tab: 'claude', spawnProg: 'claude', q: '', choices: [], divisions: [], canManageDivisions: false, editingInstr: false, offers: [], models: [], runs: [], runsFor: null, moves: [], access: null, transfers: [], members: [] };
   // the Open in Spawn link (shape agreed with Spawn 2026-10-15; handler `spawn open-link` ships in 0.1.0-rc.41). The link
   // carries no credential: Spawn binds with the person's own signed-in session after they confirm. Spawn accepts only
   // these two issuers, so a dev/staging origin shows the command alone rather than a link Spawn would refuse.
   const SPAWN_ISSUERS = ['https://xenosystem.ai', 'https://xenostudio.ai'];
   const spawnLink = (agentId, program) => (SPAWN_ISSUERS.includes(location.origin) && /^agt_[0-9a-f]{32}$/.test(String(agentId))
     ? `xeno-spawn://bind?agent=${agentId}&issuer=${encodeURIComponent(location.origin)}${program ? `&program=${program}` : ''}` : null);
+  // Spawn's own CLI (xeno-spawn server/src/profilesCli.js, agentCli.js): bind once, then start by profile. Bind names the
+  // profile after the agent with this exact cleanup (agentBinding.js), so `<program>/<name>` names it unambiguously.
+  const SPAWN_PROGRAMS = { claude: 'Claude Code', codex: 'Codex' };
+  const spawnProfileName = (a) => (String(a.name || '').replace(/[^\p{L}\p{N} ._-]/gu, '').trim().slice(0, 48) || `xeno-agent-${String(a.id).slice(4, 12)}`);
+  const spawnCommands = (a, prog) => ({
+    bind: `spawn profiles bind ${a.id} --agent ${prog}`,
+    run: `spawn ${prog} --profile "${prog}/${spawnProfileName(a)}"`,
+  });
   const EFFORTS = ['minimal', 'low', 'medium', 'high', 'max'];
   const EFFORT_LABEL = { minimal: 'Minimal', low: 'Low', medium: 'Medium', high: 'High', max: 'Max' };
   const rtSet = (rt) => !!(rt && (rt.model || rt.effort || (rt.tools && ((rt.tools.allow || []).length || (rt.tools.deny || []).length))));
@@ -296,8 +304,13 @@
             <button type="button" class="pg-btn" data-xag="mint"${S.busy ? ' disabled' : ''}>${ic('plus')}<span>New credential</span></button></div></div>
         ${minted ? `<div class="xag-secret" role="status"><div><b>${ic('lock')}Copy it now — it is never shown again</b><small>${esc(until(minted.expiresAt))}</small></div><div class="xag-secret-v"><code>${esc(minted.token)}</code>${copyBtn(minted.token)}</div></div>` : ''}
         <div class="xag-tabs" role="tablist" aria-label="Where it runs">${Object.entries(set).map(([key, s]) => `<button type="button" role="tab" aria-selected="${key === S.tab}" data-xag="tab" data-k="${key}">${esc(s.label)}</button>`).join('')}</div>
-        <div class="xag-cmd"><pre>${esc(cur.cmd)}</pre>${minted || S.tab === 'spawn' ? copyBtn(cur.cmd) : '<span class="xag-cmd-hint">Make a credential to fill this in</span>'}</div>
-        ${S.tab === 'spawn' ? `${spawnLink(a.id) ? `<div class="xag-spawn"><a class="pg-btn" href="${esc(spawnLink(a.id, 'claude'))}">${ic('terminal')}<span>Open in Spawn · Claude Code</span></a><a class="pg-btn" href="${esc(spawnLink(a.id, 'codex'))}">${ic('terminal')}<span>Open in Spawn · Codex</span></a><small>Needs XENO Spawn 0.1.0-rc.41 or later on this computer; Spawn asks you to confirm before binding. Nothing opened? Run the command above.</small></div>` : ''}<p class="xag-note">This binds it as Claude Code; add <code>--agent codex</code> to bind it as Codex. Spawn keeps the credential in your computer’s secure store, writes the XENO connection into that profile only, and makes a fresh short-lived credential for every launch.</p>` : ''}
+        ${S.tab === 'spawn' ? '' : `<div class="xag-cmd"><pre>${esc(cur.cmd)}</pre>${minted ? copyBtn(cur.cmd) : '<span class="xag-cmd-hint">Make a credential to fill this in</span>'}</div>`}
+        ${S.tab === 'spawn' ? (() => { const c = spawnCommands(a, S.spawnProg); return `<div class="xag-tabs" role="tablist" aria-label="Program">${Object.entries(SPAWN_PROGRAMS).map(([k, l]) => `<button type="button" role="tab" aria-selected="${k === S.spawnProg}" data-xag="spawnprog" data-k="${k}">${esc(l)}</button>`).join('')}</div>
+        <p class="xag-note">Identity <code>${esc(a.id)}</code> · profile <code>${esc(S.spawnProg)}/${esc(spawnProfileName(a))}</code></p>
+        <p class="xag-note">1. Once, on this computer: make the profile that is ${esc(a.name)}</p><div class="xag-cmd"><pre>${esc(c.bind)}</pre>${copyBtn(c.bind)}</div>
+        <p class="xag-note">2. Every time: start it in the folder you are in</p><div class="xag-cmd"><pre>${esc(c.run)}</pre>${copyBtn(c.run)}</div>
+        ${spawnLink(a.id) ? `<div class="xag-spawn"><a class="pg-btn" href="${esc(spawnLink(a.id, S.spawnProg))}">${ic('terminal')}<span>Open in Spawn · ${esc(SPAWN_PROGRAMS[S.spawnProg])}</span></a><small>Does step 1 for you. Needs XENO Spawn 0.1.0-rc.41 or later; Spawn asks you to confirm before binding.</small></div>` : ''}
+        <p class="xag-note">Spawn keeps the credential in your computer’s secure store, writes the XENO connection into that profile only, and makes a fresh short-lived credential for every launch.</p>`; })() : ''}
       </section>`;
 
     // 2. what it works on
@@ -537,6 +550,7 @@
     if (a === 'revoke') return revoke(b.dataset.id);
     if (a === 'copy') return copy(b.dataset.copy);
     if (a === 'tab') { S.tab = b.dataset.k; return paint(); }
+    if (a === 'spawnprog' && SPAWN_PROGRAMS[b.dataset.k]) { S.spawnProg = b.dataset.k; return paint(); }
     if (a === 'lend') return lend();
     if (a === 'unlend') return unlend(b.dataset.id);
     if (a === 'accept') return decideOffer(b.dataset.id, true);
