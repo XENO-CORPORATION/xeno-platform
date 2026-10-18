@@ -38,9 +38,12 @@
   // profile after the agent with this exact cleanup (agentBinding.js), so `<program>/<name>` names it unambiguously.
   const SPAWN_PROGRAMS = { claude: 'Claude Code', codex: 'Codex' };
   const spawnProfileName = (a) => (String(a.name || '').replace(/[^\p{L}\p{N} ._-]/gu, '').trim().slice(0, 48) || `xeno-agent-${String(a.id).slice(4, 12)}`);
+  // One line launches it as that identity (first run binds after asking, later runs reuse the profile). Needs
+  // SPAWN_AGENT_FLAG_RELEASE; bind-only stays as the secondary line.
+  const SPAWN_AGENT_FLAG_RELEASE = '__SPAWN_RELEASE__';
   const spawnCommands = (a, prog) => ({
+    launch: `spawn ${prog} --agent ${a.id}`,
     bind: `spawn profiles bind ${a.id} --agent ${prog}`,
-    run: `spawn ${prog} --profile "${prog}/${spawnProfileName(a)}"`,
   });
   const EFFORTS = ['minimal', 'low', 'medium', 'high', 'max'];
   const EFFORT_LABEL = { minimal: 'Minimal', low: 'Low', medium: 'Medium', high: 'High', max: 'Max' };
@@ -307,9 +310,9 @@
         ${S.tab === 'spawn' ? '' : `<div class="xag-cmd"><pre>${esc(cur.cmd)}</pre>${minted ? copyBtn(cur.cmd) : '<span class="xag-cmd-hint">Make a credential to fill this in</span>'}</div>`}
         ${S.tab === 'spawn' ? (() => { const c = spawnCommands(a, S.spawnProg); return `<div class="xag-tabs" role="tablist" aria-label="Program">${Object.entries(SPAWN_PROGRAMS).map(([k, l]) => `<button type="button" role="tab" aria-selected="${k === S.spawnProg}" data-xag="spawnprog" data-k="${k}">${esc(l)}</button>`).join('')}</div>
         <p class="xag-note">Identity <code>${esc(a.id)}</code> · profile <code>${esc(S.spawnProg)}/${esc(spawnProfileName(a))}</code></p>
-        <p class="xag-note">1. Once, on this computer: make the profile that is ${esc(a.name)}</p><div class="xag-cmd"><pre>${esc(c.bind)}</pre>${copyBtn(c.bind)}</div>
-        <p class="xag-note">2. Every time: start it in the folder you are in</p><div class="xag-cmd"><pre>${esc(c.run)}</pre>${copyBtn(c.run)}</div>
-        ${spawnLink(a.id) ? `<div class="xag-spawn"><a class="pg-btn" href="${esc(spawnLink(a.id, S.spawnProg))}">${ic('terminal')}<span>Open in Spawn · ${esc(SPAWN_PROGRAMS[S.spawnProg])}</span></a><small>Does step 1 for you. Needs XENO Spawn 0.1.0-rc.41 or later; Spawn asks you to confirm before binding.</small></div>` : ''}
+        <p class="xag-note">Start it as ${esc(a.name)}, in the folder you are in. The first time, Spawn asks you to confirm and makes the profile; after that it reuses it. Needs XENO Spawn ${esc(SPAWN_AGENT_FLAG_RELEASE)} or later.</p><div class="xag-cmd"><pre>${esc(c.launch)}</pre>${copyBtn(c.launch)}</div>
+        <p class="xag-note">Bind only (make the profile without starting it)</p><div class="xag-cmd"><pre>${esc(c.bind)}</pre>${copyBtn(c.bind)}</div>
+        ${spawnLink(a.id) ? `<div class="xag-spawn"><a class="pg-btn" href="${esc(spawnLink(a.id, S.spawnProg))}">${ic('terminal')}<span>Open in Spawn · ${esc(SPAWN_PROGRAMS[S.spawnProg])}</span></a><small>Binds without a terminal. Needs XENO Spawn 0.1.0-rc.41 or later; Spawn asks you to confirm before binding.</small></div>` : ''}
         <p class="xag-note">Spawn keeps the credential in your computer’s secure store, writes the XENO connection into that profile only, and makes a fresh short-lived credential for every launch.</p>`; })() : ''}
       </section>`;
 

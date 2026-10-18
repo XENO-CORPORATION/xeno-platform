@@ -36,9 +36,13 @@ const cmds = (() => {
 test('copy commands are Spawn\'s bind and launch, with the profile bind will create', () => {
   const a = { id: AGT, name: 'Release <Bot> #2' };
   assert.deepEqual(cmds.spawnCommands(a, 'codex'), {
+    launch: `spawn codex --agent ${AGT}`,
     bind: `spawn profiles bind ${AGT} --agent codex`,
-    run: 'spawn codex --profile "codex/Release Bot 2"',
   });
   assert.equal(cmds.spawnProfileName({ id: AGT, name: '!!!' }), 'xeno-agent-01234567');
   assert.equal(cmds.spawnProfileName({ id: AGT, name: 'x'.repeat(60) }).length, 48);
+});
+
+test('the Spawn release that ships --agent is named before this can merge', () => {
+  assert.doesNotMatch(src, /__SPAWN_RELEASE__/);
 });
