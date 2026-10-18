@@ -4,7 +4,7 @@ import MarketingPage from '../components/marketing/MarketingPage';
 
 const Privacy: React.FC = () => {
   return (
-    <MarketingPage eyebrow="Legal" title="Privacy Policy" updated="September 2026">
+    <MarketingPage eyebrow="Legal" title="Privacy Policy" updated="October 2026">
       <div className="legal-prose">
           {/* Introduction */}
           <section>
@@ -80,9 +80,34 @@ const Privacy: React.FC = () => {
             <p>
               You can create an account with an email address and password, or sign in with Google.
               If you sign in with Google we receive your email address and basic profile
-              information, and nothing else — we do not gain access to your Gmail, Drive,
-              YouTube channel, contacts or any other Google service.
+              information, and nothing else — signing in does not give us access to your Gmail,
+              Drive, YouTube channel, contacts or any other Google service. Google Drive is
+              reached only if you separately connect it, as described next.
             </p>
+
+            <h3>Google user data (Google Drive, through XENO Connect)</h3>
+            <p>
+              If you choose to connect a Google Drive account, XENO Connect — the part of XENO that
+              links outside services — accesses that Drive on your behalf. It lists and reads your
+              files, uploads files you choose, and renames, moves, trashes and restores your files,
+              and it does so only when you, or an agent you have authorised, ask it to. It does not
+              act on your Drive on its own.
+            </p>
+            <p>
+              XENO&rsquo;s use and transfer to any other app of information received from Google APIs
+              will adhere to the{' '}
+              <a href="https://developers.google.com/terms/api-services-user-data-policy" target="_blank" rel="noreferrer">
+                Google API Services User Data Policy
+              </a>
+              , including the Limited Use requirements.
+            </p>
+            <ul>
+              <li>We do not use Google user data for advertising, we do not sell it, and we do not use it to train AI models.</li>
+              <li>No person at XENO reads it, except with your consent, where needed for security (for example investigating abuse), or where the law requires it.</li>
+              <li>The access tokens Google issues are held by XENO Connect, encrypted separately for each workspace, and are never shared with third parties.</li>
+              <li>You can disconnect a Google account at any time. Disconnecting revokes XENO&rsquo;s access at Google and deletes the stored credentials.</li>
+              <li>To ask us to delete any other data obtained from Google, contact us at the address in section 12.</li>
+            </ul>
 
             <h3>Downloading media from a link</h3>
             <p>
