@@ -25,12 +25,13 @@ import form from './form';
 import photo from './photo';
 import anima from './anima';
 import shell from './shell';
+import spawn from './spawn';
 
 /* Registry of rich landing-page content modules. A product listed here renders
  * the full ProductLanding; any product NOT here falls back to the lean
  * ProductPage (PRODUCT-LANDING-SPEC L3). Add a product = author its module and
  * import it here. */
-const MODULES: ProductContent[] = [comms, agent, agentCli, pixel, post, canvas, motion, hub, extension, workflow, acp, sdk, docs, sheets, notes, slides, use, engine, rt, architect, sound, browser, form, photo, anima, shell];
+const MODULES: ProductContent[] = [comms, agent, agentCli, pixel, post, canvas, motion, hub, extension, workflow, acp, sdk, docs, sheets, notes, slides, use, engine, rt, architect, sound, browser, form, photo, anima, shell, spawn];
 
 const BY_SLUG = new Map(MODULES.map((m) => [m.slug, m]));
 

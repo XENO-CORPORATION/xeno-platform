@@ -240,3 +240,18 @@ test('the notice answers all four questions a visitor has', () => {
   assert.match(n.detail, /Code signing is coming/, 'is this permanent');
   assert.match(n.label, /Experimental/, 'the label leads with maturity, not alarm');
 });
+
+test('Spawn installs by a checksum-verifying script: unsigned build, never npm, never a SmartScreen click-through', () => {
+  // 0.1.0-rc.42 shipped 2026-10-18 (apps/spawn/, beta, Windows x64) behind `irm https://xenosystem.ai/install/spawn.ps1 | iex`.
+  // A script piped from the terminal carries no mark-of-the-web, so SmartScreen does not prompt; what IS true is that the
+  // build it fetches is unsigned and checked by its SHA-256. The npm wording ("installs from npm, nothing to warn
+  // about") would be false twice over.
+  const p = bySlug('spawn');
+  const n = noticeFor('spawn');
+  assert.equal(installChannel(p), 'script');
+  assert.equal(artifactSigning(p), 'unsigned');
+  assert.match(p.install, /^irm https:\/\/xenosystem\.ai\/install\/spawn\.ps1 \| iex$/);
+  assert.ok(n && n.smartScreen === false, 'spawn: no SmartScreen claim for a terminal install');
+  assert.match(`${n.short} ${n.detail}`, /SHA-256/);
+  assert.doesNotMatch(`${n.label} ${n.short} ${n.detail}`, /npm|Run anyway|More info/);
+});
