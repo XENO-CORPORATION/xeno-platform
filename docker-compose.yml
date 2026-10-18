@@ -136,6 +136,9 @@ services:
       # else gets /coming-soon.html. Unset = open. SITE_GATE_CODE empty = the code form refuses (accounts only);
       # SITE_GATE_SECRET signs the gate cookie (falls back to JWT_SECRET), and changing the CODE invalidates
       # every cookie already issued.
+      # Where a Spawn/CLI session key sends inference (services/inferenceSessionKeys.js). One setting: switch it here, no
+      # client release. Unset = https://api.xenosystem.ai/anthropic. 2026-10-18: the direct API on :8443 (owner).
+      - XENO_SESSION_KEY_BASE_URL=${XENO_SESSION_KEY_BASE_URL:-}
       - SITE_GATE=${SITE_GATE:-}
       - SITE_GATE_ALLOW=${SITE_GATE_ALLOW:-}
       - SITE_GATE_CODE=${SITE_GATE_CODE:-}
