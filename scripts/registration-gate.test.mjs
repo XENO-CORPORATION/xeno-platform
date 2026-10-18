@@ -18,6 +18,7 @@ import {
   AccountCreationBlockedError,
   AccountSuspendedError,
 } from '../src/server/middleware/registrationGate.js';
+import { gateCookieName, hasGateInvite, mintGateCookie } from '../src/server/utils/siteGateCode.js';
 
 function withEnv(vars, fn) {
   const saved = {};
@@ -262,4 +263,35 @@ test('availability and eligibility stay SEPARATE fields', () => {
     'the free-handle branch must still report ok:true — ok means "the handle is free"');
   assert.ok(!/ok:\s*signupOpen|ok:\s*.*&&\s*signupOpen/.test(handler),
     'ok has been made dependent on signupOpen — that conflates "taken" with "closed"');
+});
+
+// --- invited signup: the access code is the invitation (owner, 2026-10-18) -------------------------------
+
+test('an invited visitor (valid access-code cookie) may register while the public cannot', () => {
+  withEnv({ REGISTRATION_OPEN: undefined, REGISTRATION_ALLOWLIST: undefined,
+    SITE_GATE: 'on', SITE_GATE_CODE: 'the-code', SITE_GATE_SECRET: 's' }, () => {
+    const name = gateCookieName(process.env);
+    const valid = `${name}=${mintGateCookie('the-code', 's')}`;
+    assert.equal(registrationDecision('invited@example.com').allowed, false, 'no cookie: closed');
+    assert.equal(registrationDecision('invited@example.com', { gateInvite: hasGateInvite(valid) }).allowed, true);
+    assert.equal(registrationDecision('invited@example.com', { gateInvite: hasGateInvite(`${name}=v1.1.nope`) }).allowed, false, 'a made-up cookie');
+    assert.equal(registrationDecision('invited@example.com', { gateInvite: hasGateInvite(`${name}=${mintGateCookie('other-code', 's')}`) }).allowed, false, 'a cookie for a DIFFERENT code');
+    assert.equal(registrationDecision('invited@example.com', { gateInvite: hasGateInvite(valid) }).reason, 'site_gate_code');
+  });
+});
+
+test('the invitation cannot be claimed from the request body, only from the signed cookie', () => {
+  withEnv({ REGISTRATION_OPEN: undefined, SITE_GATE: 'on', SITE_GATE_CODE: 'the-code', SITE_GATE_SECRET: 's' }, () => {
+    let next = false;
+    const res = { status() { return this; }, json() { return this; } };
+    requireRegistrationOpen({ body: { email: 'x@y.com', gateInvite: true, siteGateInvite: true, invited: true }, headers: {} }, res, () => { next = true; });
+    assert.equal(next, false, 'a body field must never be the invitation');
+  });
+});
+
+test('with the gate off, the access-code cookie is not an invitation either', () => {
+  withEnv({ REGISTRATION_OPEN: undefined, SITE_GATE: undefined, SITE_GATE_CODE: 'the-code', SITE_GATE_SECRET: 's' }, () => {
+    const name = gateCookieName(process.env);
+    assert.equal(hasGateInvite(`${name}=${mintGateCookie('the-code', 's')}`), false);
+  });
 });

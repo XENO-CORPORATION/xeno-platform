@@ -41,6 +41,7 @@ import {
   AccountCreationBlockedError,
   AccountSuspendedError,
 } from '../middleware/registrationGate.js';
+import { hasGateInvite } from '../utils/siteGateCode.js';
 
 // Free-tier starter credits granted on signup so new users can try premium generation.
 // The free tier is ONE mechanism: the weekly allowance (utils/quotaEngine.js,
@@ -233,7 +234,7 @@ async function findOrCreateOAuthUser(db, provider, profile, req = null) {
     // a fully verified account here with no form and no friction — it is how 160
     // of 218 accounts arrived. Gating only the two /register endpoints would
     // leave this wide open.
-    assertRegistrationAllowed(email);
+    assertRegistrationAllowed(email, { gateInvite: hasGateInvite(req?.headers?.cookie) });
 
     const userId = uuidv4();
     const generatedUsername = username || email?.split('@')[0] || `user_${providerId.substring(0, 8)}`;
