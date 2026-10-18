@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex, nofollow, noarchive">
+  <title>XENOsystem — Coming soon</title>
+  <link rel="icon" href="/favicon-v2.svg" type="image/svg+xml">
+  <!-- The site gate's page (routes/siteGateRoutes.js, nginx `@site_gate`). Self-contained on purpose: it must render
+       with nothing else from the site, so it reveals nothing about the products behind the gate. -->
+  <style>
+    :root { --bg: #060606; --card: #101010; --line: rgba(255,255,255,0.06); --title: #ece7df; --body: #948d83; --dim: #69635b; }
+    * { box-sizing: border-box; }
+    html, body { height: 100%; margin: 0; }
+    body { background: var(--bg); color: var(--body); font: 15px/1.6 Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+      display: flex; align-items: center; justify-content: center; padding: 24px; }
+    main { width: 100%; max-width: 440px; text-align: center; }
+    img { height: 26px; width: auto; opacity: 0.92; }
+    .eyebrow { margin: 40px 0 10px; font-size: 11px; letter-spacing: 0.24em; text-transform: uppercase; color: var(--dim); }
+    h1 { margin: 0 0 14px; color: var(--title); font-weight: 500; font-size: clamp(30px, 6vw, 40px); line-height: 1.12; letter-spacing: -0.01em; }
+    p { margin: 0 0 32px; }
+    a.btn { display: inline-block; padding: 10px 20px; border-radius: 9px; border: 1px solid var(--line); background: var(--card);
+      color: var(--title); text-decoration: none; font-size: 14px; }
+    a.btn:hover { background: #151515; }
+    footer { margin-top: 48px; font-size: 12px; color: var(--dim); }
+    footer a { color: var(--dim); }
+  </style>
+</head>
+<body>
+  <main>
+    <img src="/xeno-logo.svg" alt="XENOsystem">
+    <div class="eyebrow">Private preview</div>
+    <h1>Coming soon.</h1>
+    <p>XENOsystem is open to invited people for now.</p>
+    <a class="btn" href="/login">Sign in</a>
+    <footer><a href="/impressum">Impressum</a> · <a href="/privacy">Privacy</a> · <a href="/terms">Terms</a></footer>
+  </main>
+</body>
+</html>
