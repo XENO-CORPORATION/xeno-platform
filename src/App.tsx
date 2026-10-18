@@ -90,6 +90,7 @@ const ActivateAccount = lazyRoute(() => import('./pages/ActivateAccount'));
 const Onboarding = lazyRoute(() => import('./pages/Onboarding'));
 const DownloadResume = lazyRoute(() => import('./pages/DownloadResume'));
 const DeviceAuthContent = lazyRoute(() => import('./pages/DeviceAuthContent'));
+const AccountConnected = lazyRoute(() => import('./pages/AccountConnected'));
 const ContactContent = lazyRoute(() => import('./pages/ContactContent'));
 const ForgotPassword = lazyRoute(() => import('./pages/ForgotPassword'));
 const ResetPassword = lazyRoute(() => import('./pages/ResetPassword'));
@@ -304,6 +305,12 @@ function App() {
                 must be a real route rather than falling through to home. */}
             <Route element={<AuthLayout />}>
               <Route path="/activate" element={<DeviceAuthContent protocol="oidc" />} />
+            </Route>
+
+            {/* The ONE page every flow lands on after a third party (Google, Meta, LinkedIn, X) sends the person back.
+                Display only, closed vocabulary; outside the site gate (nginx). See pages/AccountConnected.tsx. */}
+            <Route element={<AuthLayout />}>
+              <Route path="/account/connected" element={<AccountConnected />} />
             </Route>
 
             <Route element={<AuthLayout />}>

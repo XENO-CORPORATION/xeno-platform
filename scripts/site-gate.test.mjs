@@ -101,7 +101,7 @@ test('nginx gates the pages, and only the pages', () => {
   for (const head of ['    location / {', '    location ^~ /workspace/ {', '    location ~ ^/product/[^/]+/download/[^/]+ {', '    location ~ "^/a/a_']) {
     assert.match(block(head), /auth_request \/__site_gate;[\s\S]*error_page 401 = \/coming-soon\.html;/, `${head} must be gated`);
   }
-  for (const head of ['    location /api/ {', '    location = /install/spawn.ps1 {', String.raw`    location ~* \.(js|css|png`, '    location = /coming-soon.html {', '    location ~ ^/(login|signup']) {
+  for (const head of ['    location /api/ {', '    location = /install/spawn.ps1 {', String.raw`    location ~* \.(js|css|png`, '    location = /coming-soon.html {', '    location ~ ^/(account/connected|login|signup']) {
     assert.doesNotMatch(block(head), /auth_request/, `${head} must never be gated`);
   }
   assert.match(block('    location = /__site_gate {'), /internal;[\s\S]*\/api\/site-gate\/check/);
@@ -111,7 +111,7 @@ test('nginx gates the pages, and only the pages', () => {
 // redirect that re-runs location matching, so it lands in `location /` and gets gated — /login then served
 // "Coming soon" and nobody, the owner included, could sign in to a site whose access needs a sign-in.
 test('the sign-in bypass never falls back through the gated location', () => {
-  for (const head of ['    location ~ ^/(login|signup', '    location ~ ^/product/[^/]+/privacy']) {
+  for (const head of ['    location ~ ^/(account/connected|login|signup', '    location ~ ^/product/[^/]+/privacy']) {
     const b = block(head);
     assert.doesNotMatch(b, /try_files[^;]*\s\/index\.html;/, `${head} must not internal-redirect to /index.html`);
     assert.match(b, /@spa_shell;/, `${head} must fall back to the ungated shell`);
