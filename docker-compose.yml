@@ -127,6 +127,10 @@ services:
       # Unset = sync disabled, routing falls back to catalogue-unknown -> attempt.
       - INFERENCE_CATALOGUE_URL=${INFERENCE_CATALOGUE_URL:-}
       - LEDGER_SERVICE_TOKEN=${LEDGER_SERVICE_TOKEN}
+      # XENO Connect (services/connectAuthority.js). Origins the xeno-connect audience may be minted for (https,
+      # comma-separated); unset = the exchange refuses. The service token gates /api/connect/authority; unset = 401.
+      - XENO_CONNECT_ORIGINS=${XENO_CONNECT_ORIGINS:-}
+      - CONNECT_SERVICE_TOKEN=${CONNECT_SERVICE_TOKEN:-}
       # The hosted agent runner (xeno-agents-api). Agent cloud runs and marketplace rentals start runs here;
       # unset = both answer "unavailable". Public address, not a secret -- so it lives here, not only in .env
       # (the same reason as LEDGER_V2_ENABLED above: a value only on the box vanishes on a reset).

@@ -91,3 +91,25 @@ export function assertAuthorityPolicy() {
   }
   return true;
 }
+
+// ── XENO Connect (audience `xeno-connect`) ──────────────────────────────────
+// Connect is a separate resource server (xeno-connect/docs/STORAGE-HANDOFF.md §1). A client reaches it ONLY by
+// RFC 8693-exchanging its own DPoP-bound `xeno-api` token for a short `xeno-connect` token bound to the same key.
+// These scopes are therefore NOT OIDC scopes and never appear in an authorize request or a `xeno-api` token: the
+// two ceilings are kept apart so neither audience can carry the other's authority.
+export const CONNECT_SCOPES = Object.freeze(['connect:read', 'connect:use', 'connect:manage']);
+// connect:manage (link/revoke/grant) is honoured for HUMAN principals only; an agent asking for it is refused.
+export const CONNECT_HUMAN_ONLY_SCOPES = Object.freeze(['connect:manage']);
+const DRIVE_READ = ['drive.files.list', 'drive.files.stat', 'drive.files.read', 'drive.quota.read', 'drive.changes.read'];
+const DRIVE_WRITE = ['drive.files.create', 'drive.files.rename', 'drive.files.move', 'drive.files.trash', 'drive.files.restore',
+  'drive.uploads.start', 'drive.uploads.status', 'drive.uploads.write', 'drive.uploads.finish', 'drive.uploads.cancel'];
+// The client ceiling: which Connect scopes and provider operations a consumer may ever hold. `drive.files.replace` is
+// absent on purpose: Connect refuses conditional replace until an atomic Drive precondition is qualified.
+export const CONNECT_CLIENT_AUTHORITY = Object.freeze({
+  'xeno-storage': Object.freeze({ scopes: CONNECT_SCOPES, operations: Object.freeze([...DRIVE_READ, ...DRIVE_WRITE]) }),
+});
+
+export function connectAuthorityForClient(clientId) {
+  const c = CONNECT_CLIENT_AUTHORITY[clientId];
+  return c ? { scopes: [...c.scopes], operations: [...c.operations] } : null;
+}
