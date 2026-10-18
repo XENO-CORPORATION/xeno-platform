@@ -19,7 +19,11 @@ const view = (a) => ({ webhook: null, owner: { kind: 'personal' }, accountable: 
 const server = await createServer({ configFile: false, root: repo, logLevel: 'error', appType: 'custom', optimizeDeps: { noDiscovery: true, entries: [] }, plugins: [xenoWorkspace(repo)], server: { host: '127.0.0.1', port: PORT, strictPort: true } });
 await server.listen();
 const br = await puppeteer.launch({ headless: true, protocolTimeout: 60000 });
-const p = await br.newPage(); await p.setViewport({ width: 1400, height: 900 }); const errs = []; p.on('pageerror', (e) => errs.push(e.message));
+const p = await br.newPage(); await p.setViewport({ width: 1400, height: 900 }); const errs = [], cerrs = []; p.on('pageerror', (e) => errs.push(e.message)); p.on('console', (m) => { if (m.type() === 'error') cerrs.push(m.text() + ' @ ' + ((m.location() || {}).url || '')); });
+// the Open in Spawn link renders only on the two real issuers; the test serves from 127.0.0.1, so it names its own origin as one
+await p.evaluateOnNewDocument((o) => { window.XENO_SPAWN_TEST_ISSUER = o; }, base);
+const SHOTS = process.env.AGENT_SHOTS || '', TAG = process.env.AGENT_SHOTS_TAG || 'after';
+const shot = async (name) => { if (!SHOTS) return; const fs = await import('node:fs'); fs.mkdirSync(SHOTS, { recursive: true }); await p.screenshot({ path: path.join(SHOTS, `${TAG}-${name}.png`), fullPage: true }); };
 await p.setRequestInterception(true);
 p.on('request', (q) => {
   const u = new URL(q.url());
@@ -31,9 +35,9 @@ p.on('request', (q) => {
   if (u.pathname === '/api/auth/me') return json(200, { success: true, user: USER });
   if (u.pathname === '/api/tasks/projects') return json(200, { success: true, projects: PROJ });
   if (u.pathname === '/api/mcp/services') return json(200, { success: true, services: [{ category: 'tasks', title: 'Tasks', description: 'Projects and tasks.', tools: 10 }] });
-  if (u.pathname === '/api/agents/presence/stream') { db.streamOpen = (db.streamOpen || 0) + 1; return q.respond({ status: 200, contentType: 'text/event-stream', headers: { 'Cache-Control': 'no-cache' }, body: db.agents.map((a) => `event: presence\ndata: ${JSON.stringify({ id: a.id, name: a.name, state: 'working', label: 'Working in the cloud', canTakeWork: true, run: { state: 'running' } })}\n\n`).join('') + 'retry: 600000\nevent: ready\ndata: {}\n\n' }); }
-  if (u.pathname === '/api/agents/presence') return json(200, { success: true, agents: db.agents.map((a) => ({ id: a.id, name: a.name, state: 'cloud', label: 'Runs in the cloud', canTakeWork: true, seenAt: null })) });
-  { const m = u.pathname.match(/^\/api\/agents\/(agt_[0-9a-f]{32})\/activity$/); if (m) return json(200, { success: true, agent: { id: m[1] }, presence: { state: 'cloud', label: 'Runs in the cloud', canTakeWork: true }, items: [{ id: 'e1', at: new Date(Date.now() - 120000).toISOString(), kind: 'task', what: 'comment', task: 'T-7', title: 'Ship the notes', detail: 'Done, checked in the preview' }, { id: 'c1', at: new Date(Date.now() - 180000).toISOString(), kind: 'call', what: 'tasks_claim_task', detail: 'ok · 41 ms', where: 'Claude Code', ok: true }], next: null }); }
+  if (u.pathname === '/api/agents/presence/stream') { db.streamOpen = (db.streamOpen || 0) + 1; return q.respond({ status: 200, contentType: 'text/event-stream', headers: { 'Cache-Control': 'no-cache' }, body: db.agents.map((a) => `event: presence\ndata: ${JSON.stringify(a.pres ? { id: a.id, name: a.name, ...a.pres } : { id: a.id, name: a.name, state: 'working', label: 'Working in the cloud', canTakeWork: true, run: { state: 'running' } })}\n\n`).join('') + 'retry: 600000\nevent: ready\ndata: {}\n\n' }); }
+  if (u.pathname === '/api/agents/presence') return json(200, { success: true, agents: db.agents.map((a) => (a.pres ? { id: a.id, name: a.name, ...a.pres } : { id: a.id, name: a.name, state: 'cloud', label: 'Runs in the cloud', canTakeWork: true, seenAt: null })) });
+  { const m = u.pathname.match(/^\/api\/agents\/(agt_[0-9a-f]{32})\/activity$/); if (m) return json(200, { success: true, agent: { id: m[1] }, presence: (db.agents.find((x) => x.id === m[1]) || {}).pres || { state: 'cloud', label: 'Runs in the cloud', canTakeWork: true }, items: [{ id: 'e1', at: new Date(Date.now() - 120000).toISOString(), kind: 'task', what: 'comment', task: 'T-7', title: 'Ship the notes', detail: 'Done, checked in the preview' }, { id: 'c1', at: new Date(Date.now() - 180000).toISOString(), kind: 'call', what: 'tasks_claim_task', detail: 'ok · 41 ms', where: 'Claude Code', ok: true }], next: null }); }
   if (u.pathname === '/api/agents' && method === 'GET') { if (fail) return json(500, { success: false }); return json(200, { success: true, agents: db.agents.map(view) }); }
   if (u.pathname === '/api/agents' && method === 'POST') {
     const a = { id: 'agt_' + hex(), userId: 'x', name: b.name, description: b.description || '', createdAt: new Date().toISOString(), status: 'active', pids: [], creds: [], connections: [] };
@@ -227,9 +231,69 @@ try {
   fail = true; await fresh('/workspace/workspace/Agents');
   ok(/could not be loaded/.test(await main()) && await p.$('[data-xag="retry"]'), 'a failed load says so and offers to try again'); fail = false;
 
+
+  // ── EVERY STATE OF ONE AGENT'S PAGE (the redesign, 2026-10-18). Each status line must come from a measured field
+  // (presence state / seenAt / runs) or say "never"; nothing shows a status nobody measured.
+  const before = (ms) => new Date(Date.now() - ms).toISOString();
+  const seed = (name, extra) => { const x = { id: 'agt_' + hex(), userId: 'x', name, description: '', createdAt: new Date().toISOString(), status: 'active', pids: [], creds: [], connections: [], ...extra }; db.agents.push(x); return x; };
+  const sNew = seed('Fresh Bot', { pres: { state: 'new', label: 'Not connected yet', canTakeWork: false, seenAt: null } });
+  const sNever = seed('Idle Bot', { creds: [{ id: 'c0', token: 'xtk_n', hint: 'xtk_n…', label: 'Credential', expiresAt: new Date(Date.now() + 864e5).toISOString(), lastUsedAt: null, createdAt: before(1000) }], pres: { state: 'cloud', label: 'Runs in the cloud', canTakeWork: true, seenAt: null } });
+  const sRan = seed('Busy Bot', { connections: [{ id: 'k1', client: 'Claude Code', createdAt: before(864e5), lastUsedAt: before(180e3) }], pres: { state: 'online', label: 'Online', canTakeWork: true, seenAt: before(180e3) } });
+  const sOff = seed('Away Bot', { connections: [{ id: 'k2', client: 'Codex', createdAt: before(5 * 864e5), lastUsedAt: before(2 * 864e5) }], pres: { state: 'offline', label: 'Offline — work waits until it connects', canTakeWork: false, seenAt: before(2 * 864e5) } });
+  const sSus = seed('Kept Bot', { owner: { kind: 'company', workspaceId: 'w-acme', name: 'Acme' }, accountable: { userId: 'u-bea', name: 'Bea' }, paused: 'needs_owner', pres: { state: 'paused', label: 'Paused — needs an owner', canTakeWork: false, seenAt: null } });
+  const sRo = seed('Shared Bot', { rights: { viewer: true, runner: false, editor: false, exporter: false, manage: false }, pres: { state: 'offline', label: 'Offline — work waits until it connects', canTakeWork: false, seenAt: before(3600e3) } });
+  await p.setViewport({ width: 1440, height: 900 });
+  const avail = () => p.$eval('.xag-id', (e) => e.innerText).catch(() => '');
+  const one = (s) => s.replace(/\s+/g, ' '); const ce0 = cerrs.length;
+
+  await fresh(`/workspace/workspace/Agents/${sNew.id}`); await shot('new');
+  { const id = await avail(); ok(/Not connected yet/.test(id) && /Last seen never/.test(id) && !/Can take work/.test(id), `new: not connected, never seen (${one(id)})`); }
+  { const order = await p.evaluate(() => { const t = document.querySelector('#main').innerText; return ['Run Fresh Bot anywhere', 'Where it has run', 'Works on', 'Runs in the cloud', 'Activity', 'Instructions', 'Owner and access', 'Credentials'].map((s) => t.indexOf(s)); });
+    ok(order.every((v, i) => v >= 0 && (i === 0 || v > order[i - 1])), `the page reads: run it, where it ran, give it work, settings, access (${order})`); }
+  await p.click('[data-xag="tab"][data-k="spawn"]'); await settle(300); await shot('spawn-tab');
+  ok(!(await p.$('[data-xag="mint"]')) && !(await p.$('[data-xag-ttl]')), 'the Spawn tab shows no credential controls: Spawn makes its own');
+  { const sp = await p.evaluate(() => { const e = document.querySelector('.xag-spawn'); if (!e) return null; const c = getComputedStyle(e); const l = getComputedStyle(e.querySelector('a.pg-btn')); return { display: c.display, pad: parseFloat(c.paddingTop), border: c.borderTopStyle, bg: c.backgroundColor, ink: l.color, btn: l.backgroundColor }; });
+    ok(sp && sp.display === 'flex' && sp.pad > 0 && sp.border !== 'none' && sp.bg !== 'rgb(255, 255, 255)' && sp.ink !== sp.btn, `the Open in Spawn block is styled and its button label is readable (${JSON.stringify(sp)})`); }
+  { const tx = await main(); const vs = [...new Set((tx.match(/XENO Spawn 0\.1\.0-rc\.\d+/g) || []))];
+    ok(vs.length === 1 && vs[0] === 'XENO Spawn 0.1.0-rc.42' && (tx.match(/XENO Spawn 0\.1\.0-rc/g) || []).length >= 2, `every Spawn version on the page is the same one (${JSON.stringify(vs)})`); }
+  await p.click('[data-xag="tab"][data-k="claude"]'); await settle(300);
+  ok(!!(await p.$('[data-xag="mint"]')) && !!(await p.$('[data-xag-ttl]')), 'the Claude Code tab keeps its credential controls');
+  { const ov = await p.evaluate(async () => { const n = document.getElementById('xp-note'); if (!n) return { note: false };
+      for (const el of [document.scrollingElement, ...document.querySelectorAll('#main, #main *')]) if (el && el.scrollHeight > el.clientHeight + 4) el.scrollTop = el.scrollHeight;
+      await new Promise((r) => setTimeout(r, 250)); const secs = [...document.querySelectorAll('#main .pg-sec')]; const last = secs[secs.length - 1].getBoundingClientRect(), nr = n.getBoundingClientRect();
+      return { note: true, lastBottom: Math.round(last.bottom), noteTop: Math.round(nr.top) }; });
+    if (SHOTS) await p.screenshot({ path: path.join(SHOTS, `${TAG}-bottom.png`) }).catch(() => {});
+    ok(ov.note && ov.lastBottom <= ov.noteTop, `the Preview note does not cover the last section (${JSON.stringify(ov)})`); }
+
+  await fresh(`/workspace/workspace/Agents/${sNever.id}`); await shot('never-run');
+  { const id = await avail(); ok(/Never run/.test(id) && /Last seen never/.test(id) && !/Can take work now/.test(id) && !/Runs in the cloud/.test(id), `never run: says so, not "runs in the cloud, can take work now" (${one(id)})`); }
+  await fresh(`/workspace/workspace/Agents/${sRan.id}`); await shot('ran');
+  { const id = await avail(); ok(/Online/.test(id) && /seen 3 min ago/.test(id) && /Can take work now/.test(id), `ran: online, seen 3 min ago (${one(id)})`); }
+  await fresh(`/workspace/workspace/Agents/${sOff.id}`); await shot('offline');
+  { const id = await avail(); ok(/Offline/.test(id) && /seen 2 d ago/.test(id) && /waits until it connects/.test(id), `offline: seen 2 d ago, work waits (${one(id)})`); }
+  await fresh(`/workspace/workspace/Agents/${sSus.id}`); await shot('suspended');
+  { const first = await p.evaluate(() => { const c = document.querySelector('.pg-cols--item > div'); return c && c.firstElementChild ? c.firstElementChild.className : ''; });
+    ok(/xag-paused/.test(first) && /Can’t take work/.test(await avail()), `suspended: the pause comes first, it can’t take work (${first})`); }
+  await fresh(`/workspace/workspace/Agents/${sRo.id}`); await shot('no-permission');
+  ok(!(await p.$('.xag-run')) && !(await p.$('[data-xag="edit"]')) && /You can\s*See/.test(await main()), 'no permission to run: no run section, no Edit, says what you can do');
+
+  if (process.env.AXE_PATH) {
+    await fresh(`/workspace/workspace/Agents/${sRan.id}`); await p.addScriptTag({ path: process.env.AXE_PATH });
+    const ax = await p.evaluate(async () => { const r = await window.axe.run(document.querySelector('#main'), { resultTypes: ['violations'] }); return r.violations.map((v) => ({ id: v.id, impact: v.impact, n: v.nodes.length, t: v.nodes.slice(0, 2).map((x) => x.target.join(' ')) })); });
+    console.log('AXE', JSON.stringify(ax));
+    ok(!ax.some((v) => v.impact === 'critical' || v.impact === 'serious'), `axe: no serious or critical violations (${ax.map((v) => v.id + ':' + v.impact).join(', ') || 'none'})`);
+  } else console.log('SKIP axe — set AXE_PATH to an axe.min.js');
+
+  await p.setViewport({ width: 390, height: 844 }); await fresh(`/workspace/workspace/Agents/${sRan.id}`); await shot('mobile-390');
+  ok(await p.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1) && !!(await p.$('.xag-run')), 'at 390px the agent page fits and still leads with running it');
+  ok(cerrs.length === ce0, `no console error on any agent state (${JSON.stringify(cerrs.slice(ce0, ce0 + 3))})`);
+  db.agents = [];
+
   await p.setViewport({ width: 390, height: 844 }); await fresh('/workspace/workspace/Agents');
   ok(await p.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), 'no sideways scroll at phone width');
 
   ok(errs.length === 0, 'no page errors (' + JSON.stringify(errs.slice(0, 2)) + ')');
+  // the deleted-agent (404) and failed-load (500) steps provoke their responses on purpose; anything else is a defect
+  { const real = cerrs.filter((m) => !/status of (404|500) .*\/api\/agents/.test(m)); ok(real.length === 0, 'no console errors beyond the deliberate 404/500 steps (' + JSON.stringify(real.slice(0, 3)) + ')'); }
 } catch (e) { failed++; console.log('FAIL the suite threw:', e.message); } finally { await br.close(); await server.close(); }
 console.log(failed ? failed + ' check(s) failed' : 'ALL PASS'); process.exit(failed ? 1 : 0);
