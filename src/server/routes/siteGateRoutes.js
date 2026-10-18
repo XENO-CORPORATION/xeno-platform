@@ -3,14 +3,29 @@
  * with access, and everyone else gets the "Coming soon" page. nginx asks here before serving a page
  * (`auth_request /__site_gate`, nginx/default.conf); 204 = show it, 401 = show Coming soon.
  *
- * Access = a signed-in website session (the browser cookie, resolved by browserSessionMiddleware) on an ACTIVE account
- * that is an admin or matches SITE_GATE_ALLOW. Signed in alone is NOT access: signup is open, so anyone can make an
- * account. SITE_GATE_ALLOW is a comma list of full emails and/or "@domain" entries.
+ * TWO ways in, and only two:
+ *   1. An ACCESS CODE — one shared code, typed on the Coming soon page (POST /unlock). It sets a signed, HttpOnly
+ *      cookie that the check accepts, so a person with the code sees the site without an account. The code is a
+ *      bearer secret: constant-time compare, per-address attempt limit, bounded cookie life, and rotating
+ *      SITE_GATE_CODE invalidates every cookie already issued (the code's digest is inside the signature).
+ *   2. A signed-in website session (browserSessionMiddleware) on an ACTIVE account that is an admin or matches
+ *      SITE_GATE_ALLOW. Signed in alone is NOT access: signup is open, so anyone can make an account.
+ *      SITE_GATE_ALLOW is a comma list of full emails and/or "@domain" entries.
  *
- * Off (unset, or anything but "on") answers 204 for everyone, so the flag is the whole switch. The API, OAuth, update
- * downloads and the install script are never routed through this check: installed apps keep working either way.
+ * 🔴 The code and the cookie open PAGES ONLY. They are not an auth token: /api/ still requires a real account, so
+ * the gate can never widen API authority. OAuth, update downloads and the install script are not routed through the
+ * check at all, so installed apps keep working whether the gate is on or off.
+ *
+ * Off (unset, or anything but "on") answers 204 for everyone, so the flag is the whole switch.
  */
+import crypto from 'node:crypto';
 import express from 'express';
+import { clientIp } from '../utils/clientIp.js';
+
+const GATE_DAYS = 7;
+/** `__Host-` in production: the cookie then cannot be set from a subdomain and cannot be read by script. Derived
+ *  from the env the router was built with, not module-load state, so a test can drive both shapes. */
+export const gateCookieName = (env = process.env) => `${env.NODE_ENV === 'production' ? '__Host-' : ''}xeno_gate`;
 
 export function parseAllow(value = '') {
   return String(value).split(',').map((s) => s.trim().toLowerCase()).filter(Boolean);
@@ -26,11 +41,69 @@ export function hasSiteAccess(user, allow) {
   return allow.some((a) => (a.startsWith('@') ? a === domain : a === email));
 }
 
-export function createSiteGateRouter({ env = process.env } = {}) {
+// The code is compared against a digest, never the raw value: `timingSafeEqual` needs equal lengths, and hashing
+// first means neither the length nor the bytes of the configured code leak through the comparison.
+const digest = (value) => crypto.createHash('sha256').update(String(value)).digest();
+
+export function codeMatches(given, expected) {
+  if (!expected) return false;
+  return crypto.timingSafeEqual(digest(given), digest(expected));
+}
+
+function sign(secret, code, expiresAt) {
+  // The code's own digest is part of the signed message, so changing SITE_GATE_CODE invalidates old cookies.
+  return crypto.createHmac('sha256', secret).update(`v1.${expiresAt}.${digest(code).toString('hex').slice(0, 32)}`).digest('base64url');
+}
+
+/** Issue a gate cookie value, or null when no code is configured. */
+export function mintGateCookie(code, secret, now = Date.now()) {
+  if (!code || !secret) return null;
+  const expiresAt = Math.floor(now / 1000) + GATE_DAYS * 86400;
+  return `v1.${expiresAt}.${sign(secret, code, expiresAt)}`;
+}
+
+/** Is this cookie value one WE issued for the CURRENT code, and not expired? */
+export function gateCookieValid(value, code, secret, now = Date.now()) {
+  const m = /^v1\.(\d{1,12})\.([A-Za-z0-9_-]{43})$/.exec(String(value || ''));
+  if (!m || !code || !secret) return false;
+  const expiresAt = Number(m[1]);
+  if (!Number.isFinite(expiresAt) || expiresAt * 1000 <= now) return false;
+  const expected = sign(secret, code, expiresAt);
+  const a = Buffer.from(m[2]); const b = Buffer.from(expected);
+  return a.length === b.length && crypto.timingSafeEqual(a, b);
+}
+
+function readCookie(header, name) {
+  for (const part of String(header || '').split(';')) {
+    const i = part.indexOf('=');
+    if (i < 1) continue;
+    if (part.slice(0, i).trim() !== name) continue;
+    try { return decodeURIComponent(part.slice(i + 1).trim()); } catch { return part.slice(i + 1).trim(); }
+  }
+  return null;
+}
+
+/** A tiny fixed-window attempt counter, keyed by client address. Exported so a test can prove it refuses. */
+export function createAttemptLimiter({ max = 10, windowMs = 15 * 60_000, now = () => Date.now() } = {}) {
+  const hits = new Map();
+  return function take(key) {
+    const t = now();
+    const row = hits.get(key);
+    if (!row || row.reset <= t) { hits.set(key, { count: 1, reset: t + windowMs }); return true; }
+    row.count += 1;
+    return row.count <= max;
+  };
+}
+
+export function createSiteGateRouter({ env = process.env, attempt = createAttemptLimiter() } = {}) {
   const router = express.Router();
+  const secret = env.SITE_GATE_SECRET || env.JWT_SECRET;
+  const code = String(env.SITE_GATE_CODE || '');
+
   router.get('/check', async (req, res) => {
     res.set('cache-control', 'no-store');
     if (env.SITE_GATE !== 'on') return res.status(204).end();
+    if (gateCookieValid(readCookie(req.headers.cookie, gateCookieName(env)), code, secret)) return res.status(204).end();
     const userId = req.browserSession?.userId;
     if (!userId) return res.status(401).end();
     try {
@@ -42,6 +115,27 @@ export function createSiteGateRouter({ env = process.env } = {}) {
       return res.status(401).end();
     }
   });
+
+  router.post('/unlock', (req, res) => {
+    res.set('cache-control', 'no-store');
+    if (env.SITE_GATE !== 'on') return res.status(204).end();          // nothing to unlock
+    if (!code) return res.status(404).json({ error: 'no_access_code' }); // configured off: do not pretend
+    if (!attempt(clientIp(req) || 'unknown')) return res.status(429).json({ error: 'too_many_attempts' });
+    if (!codeMatches((req.body || {}).code, code)) return res.status(401).json({ error: 'invalid_code' });
+    const value = mintGateCookie(code, secret);
+    if (!value) return res.status(404).json({ error: 'no_access_code' });
+    res.cookie(gateCookieName(env), value, {
+      httpOnly: true, secure: env.NODE_ENV === 'production', sameSite: 'lax', path: '/',
+      maxAge: GATE_DAYS * 86400 * 1000,
+    });
+    return res.status(204).end();
+  });
+
+  router.post('/lock', (req, res) => {
+    res.clearCookie(gateCookieName(env), { path: '/' });
+    return res.status(204).end();
+  });
+
   return router;
 }
 

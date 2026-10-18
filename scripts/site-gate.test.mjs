@@ -4,7 +4,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import express from 'express';
-import { createSiteGateRouter, hasSiteAccess, parseAllow } from '../src/server/routes/siteGateRoutes.js';
+import { createSiteGateRouter, gateCookieValid, hasSiteAccess, mintGateCookie, parseAllow } from '../src/server/routes/siteGateRoutes.js';
 
 const allow = parseAllow(' @xenosystem.ai, Friend@Example.com ,');
 test('access: admins and the allowlist only; signed in alone is not access', () => {
@@ -17,14 +17,26 @@ test('access: admins and the allowlist only; signed in alone is not access', () 
   assert.equal(hasSiteAccess(undefined, allow), false);
 });
 
-async function ask(env, { userId, row, throws } = {}) {
+async function harness(env, { userId, row, throws, attempt } = {}) {
   const app = express();
+  app.use(express.json());
   app.use((req, _r, n) => { req.browserSession = userId ? { userId } : undefined;
     req.db = { query: async () => { if (throws) throw new Error('db down'); return { rows: row ? [row] : [] }; } }; n(); });
-  app.use('/api/site-gate', createSiteGateRouter({ env }));
+  app.use('/api/site-gate', createSiteGateRouter({ env, attempt }));
   const s = await new Promise((r) => { const x = app.listen(0, '127.0.0.1', () => r(x)); });
-  try { return (await fetch(`http://127.0.0.1:${s.address().port}/api/site-gate/check`)).status; } finally { s.close(); }
+  const base = `http://127.0.0.1:${s.address().port}/api/site-gate`;
+  return {
+    get: (cookie) => fetch(base + '/check', { headers: cookie ? { cookie } : {} }),
+    post: (path, body, cookie) => fetch(base + path, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', ...(cookie ? { cookie } : {}) },
+      body: JSON.stringify(body || {}),
+    }),
+    close: () => s.close(),
+  };
 }
+async function ask(env, opts) { const h = await harness(env, opts); try { return (await h.get()).status; } finally { h.close(); } }
+
 test('the check: off is open to all, on refuses strangers and fails closed', async () => {
   assert.equal(await ask({}), 204);
   const on = { SITE_GATE: 'on', SITE_GATE_ALLOW: '@xenosystem.ai' };
@@ -32,6 +44,55 @@ test('the check: off is open to all, on refuses strangers and fails closed', asy
   assert.equal(await ask(on, { userId: 'u', row: { email: 'me@xenosystem.ai', role: 'user', is_active: true } }), 204);
   assert.equal(await ask(on, { userId: 'u', row: { email: 'me@gmail.com', role: 'user', is_active: true } }), 401);
   assert.equal(await ask(on, { userId: 'u', throws: true }), 401, 'an error never opens the site');
+});
+
+// ── The access code (owner, 2026-10-18: "if the user has the access code he gets access further") ──────────────
+const CODE_ENV = { SITE_GATE: 'on', SITE_GATE_CODE: 'xeno-preview-2026', SITE_GATE_SECRET: 'test-secret', NODE_ENV: 'test' };
+
+test('unlock: the right code issues a cookie, the wrong one does not, and neither needs an account', async () => {
+  const h = await harness(CODE_ENV);
+  try {
+    assert.equal((await h.get()).status, 401, 'no cookie, no session: refused');
+    assert.equal((await h.post('/unlock', { code: 'nope' })).status, 401);
+    const ok = await h.post('/unlock', { code: 'xeno-preview-2026' });
+    assert.equal(ok.status, 204);
+    const cookie = ok.headers.getSetCookie()[0].split(';')[0];
+    assert.match(cookie, /^xeno_gate=v1\.\d+\./);
+    assert.match(ok.headers.getSetCookie()[0], /HttpOnly/i);
+    assert.equal((await h.get(cookie)).status, 204, 'the cookie alone opens the pages: no session needed');
+    assert.equal((await h.get('xeno_gate=v1.9999999999.AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA')).status, 401, 'forged cookie refused');
+  } finally { h.close(); }
+});
+test('unlock: no session is ever required, but the gate being off means there is nothing to unlock', async () => {
+  const h = await harness({ ...CODE_ENV, SITE_GATE: 'off' });
+  try {
+    const r = await h.post('/unlock', { code: '' });
+    assert.equal(r.status, 204);
+    assert.equal(r.headers.getSetCookie().length, 0, 'off issues no cookie');
+  } finally { h.close(); }
+  const none = await harness({ SITE_GATE: 'on', SITE_GATE_SECRET: 's' });
+  try { assert.equal((await none.post('/unlock', { code: 'anything' })).status, 404, 'no code configured: refused, never claimed'); } finally { none.close(); }
+});
+test('unlock: attempts are limited per address so the code cannot be guessed', async () => {
+  const h = await harness(CODE_ENV);
+  try {
+    const codes = [];
+    for (let i = 0; i < 10; i++) codes.push((await h.post('/unlock', { code: `guess-${i}` })).status);
+    assert.deepEqual(codes, Array(10).fill(401));
+    assert.equal((await h.post('/unlock', { code: 'xeno-preview-2026' })).status, 429, 'the right code is refused too once the ceiling is hit');
+  } finally { h.close(); }
+});
+test('cookie: expired, rotated-code and wrong-secret cookies are refused', () => {
+  const secret = 's';
+  const now = 1_800_000_000_000;
+  const good = mintGateCookie('code-a', secret, now);
+  assert.equal(gateCookieValid(good, 'code-a', secret, now), true);
+  assert.equal(gateCookieValid(good, 'code-a', secret, now + 8 * 86400_000), false, 'expired after 7 days');
+  assert.equal(gateCookieValid(good, 'code-b', secret, now), false, 'rotating the code invalidates issued cookies');
+  assert.equal(gateCookieValid(good, 'code-a', 'other', now), false, 'another secret cannot sign it');
+  assert.equal(gateCookieValid(good, '', secret, now), false, 'no code configured means no cookie access');
+  assert.equal(mintGateCookie('', secret, now), null);
+  assert.equal(gateCookieValid('v1.1.x', 'code-a', secret, now), false);
 });
 
 const conf = readFileSync(new URL('../nginx/default.conf', import.meta.url), 'utf8');

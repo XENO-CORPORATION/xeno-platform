@@ -6,8 +6,10 @@
   <meta name="robots" content="noindex, nofollow, noarchive">
   <title>XENOsystem — Coming soon</title>
   <link rel="icon" href="/favicon-v2.svg" type="image/svg+xml">
-  <!-- The site gate's page (routes/siteGateRoutes.js, nginx `@site_gate`). Self-contained on purpose: it must render
-       with nothing else from the site, so it reveals nothing about the products behind the gate. -->
+  <!-- The site gate's page (routes/siteGateRoutes.js, nginx `location = /coming-soon.html`). Self-contained on
+       purpose: it must render with nothing else from the site, so it reveals nothing about the products behind the
+       gate. The code form posts to /api/site-gate/unlock, which sets the signed gate cookie; the page then reloads
+       and the gate lets the visitor through. The code opens PAGES only - /api/ still needs a real account. -->
   <style>
     :root { --bg: #060606; --card: #101010; --line: rgba(255,255,255,0.06); --title: #ece7df; --body: #948d83; --dim: #69635b; }
     * { box-sizing: border-box; }
@@ -19,11 +21,22 @@
     .eyebrow { margin: 40px 0 10px; font-size: 11px; letter-spacing: 0.24em; text-transform: uppercase; color: var(--dim); }
     h1 { margin: 0 0 14px; color: var(--title); font-weight: 500; font-size: clamp(30px, 6vw, 40px); line-height: 1.12; letter-spacing: -0.01em; }
     p { margin: 0 0 32px; }
-    a.btn { display: inline-block; padding: 10px 20px; border-radius: 9px; border: 1px solid var(--line); background: var(--card);
-      color: var(--title); text-decoration: none; font-size: 14px; }
-    a.btn:hover { background: #151515; }
+    a.btn, button { display: inline-block; padding: 10px 20px; border-radius: 9px; border: 1px solid var(--line); background: var(--card);
+      color: var(--title); text-decoration: none; font: inherit; font-size: 14px; cursor: pointer; }
+    a.btn:hover, button:hover { background: #151515; }
     footer { margin-top: 48px; font-size: 12px; color: var(--dim); }
     footer a { color: var(--dim); }
+    .code { margin-top: 28px; }
+    .code summary { cursor: pointer; color: var(--dim); font-size: 13px; list-style: none; }
+    .code summary::-webkit-details-marker { display: none; }
+    .code summary:hover { color: var(--body); }
+    .code form { display: flex; gap: 8px; margin-top: 14px; }
+    .code input { flex: 1; min-width: 0; padding: 10px 12px; border-radius: 9px; border: 1px solid var(--line);
+      background: var(--card); color: var(--title); font: inherit; font-size: 14px; }
+    .code input:focus { outline: 2px solid rgba(236,231,223,0.28); outline-offset: 1px; }
+    .code button { padding: 10px 16px; }
+    .code button:disabled { opacity: 0.6; cursor: default; }
+    .err { min-height: 20px; margin: 10px 0 0; font-size: 13px; color: #d08a72; }
   </style>
 </head>
 <body>
@@ -33,7 +46,54 @@
     <h1>Coming soon.</h1>
     <p>XENOsystem is open to invited people for now.</p>
     <a class="btn" href="/login">Sign in</a>
+
+    <details class="code">
+      <summary>Have an access code?</summary>
+      <form id="f" novalidate>
+        <input id="c" name="code" type="text" placeholder="Access code" autocomplete="off"
+               autocapitalize="off" spellcheck="false" aria-label="Access code" required>
+        <button id="b" type="submit">Continue</button>
+      </form>
+      <p class="err" id="e" role="status" aria-live="polite"></p>
+    </details>
+
     <footer><a href="/impressum">Impressum</a> · <a href="/privacy">Privacy</a> · <a href="/terms">Terms</a></footer>
   </main>
+  <script>
+    (function () {
+      var form = document.getElementById('f');
+      var input = document.getElementById('c');
+      var button = document.getElementById('b');
+      var error = document.getElementById('e');
+      var MESSAGES = {
+        invalid_code: 'That code is not right.',
+        too_many_attempts: 'Too many attempts. Try again in a few minutes.',
+        no_access_code: 'This site is invitation only right now. Ask for access.',
+        default: 'Could not check that code. Try again.',
+      };
+      form.addEventListener('submit', function (event) {
+        event.preventDefault();
+        var code = input.value.trim();
+        if (!code || button.disabled) return;
+        button.disabled = true;
+        error.textContent = '';
+        fetch('/api/site-gate/unlock', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ code: code }),
+          credentials: 'same-origin',
+        }).then(function (r) {
+          if (r.status === 204) { window.location.reload(); return null; }
+          return r.json().catch(function () { return {}; }).then(function (body) {
+            error.textContent = MESSAGES[body.error] || MESSAGES.default;
+            button.disabled = false;
+          });
+        }).catch(function () {
+          error.textContent = MESSAGES.default;
+          button.disabled = false;
+        });
+      });
+    })();
+  </script>
 </body>
 </html>
