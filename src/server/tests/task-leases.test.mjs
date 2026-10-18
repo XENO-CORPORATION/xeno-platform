@@ -157,6 +157,21 @@ async function main() {
       'MCP: claim_task with run_id → heartbeat → report_activity handover → release');
     const bad = await mcp.dispatch(pool, bot, { jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name: 'report_activity', arguments: { key: t1.key, kind: 'plan', data: { steps: 'not a list' } } } });
     check(bad.result.isError && bad.result.structuredContent.code === 'invalid_activity', 'MCP refuses an invalid field with invalid_activity');
+
+    // ── every feed event names who caused it by stable id, not only by display name
+    const agt = async (u) => (await pool.query('SELECT public_id FROM agent_identities WHERE user_id = $1', [u.id])).rows[0].public_id;
+    const [botAgt, bot2Agt] = [await agt(U.bot), await agt(U.bot2)];
+    const mark = (await svc.agentEvents(pool, bot, { after: '0', limit: 200 })).cursor;
+    await svc.reportActivity(pool, bot, t1.key, { kind: 'handover', data: { state: 'mine', nextStep: 'n' } });
+    await svc.commentTask(pool, bot2, t1.key, { body: 'from the other agent' });
+    await svc.commentTask(pool, ada, t1.key, { body: 'from a person' });
+    const fresh = (await svc.agentEvents(pool, bot, { after: mark, limit: 50 })).events;
+    const self = fresh.find((e) => e.kind === 'handover'), other = fresh.find((e) => e.kind === 'reply' && e.task.comment === 'from the other agent'), human = fresh.find((e) => e.kind === 'reply' && e.task.comment === 'from a person');
+    check(/^agt_/.test(botAgt) && self.task.byAgentId === botAgt && self.task.byId === String(U.bot.id) && self.task.byKind === 'agent' && self.task.by, 'a self-authored event carries the agent’s own agt_ id, user id and kind (and still its name)');
+    check(other.task.byAgentId === bot2Agt && other.task.byAgentId !== botAgt && other.task.byKind === 'agent', 'another agent’s event carries a different agt_ id');
+    check(human.task.byKind === 'human' && human.task.byId === String(U.ada.id) && !('byAgentId' in human.task), 'a person’s event carries byId and byKind human, no agent id');
+    const viaMcp = (await mcp.callTool(pool, bot, 'list_events', { after: mark })).structuredContent.events;
+    check(viaMcp.find((e) => e.kind === 'handover').task.byAgentId === botAgt, 'MCP list_events carries the same fields');
   } finally { server.close(); }
   console.log(`task-leases: ${passed} checks passed`);
 }

@@ -316,12 +316,12 @@ export async function transitionTask(db, me, key, { to, note, from } = {}) {
   if (t.status === 'in_review' && to === 'in_progress' && fresh.assignee_id) { await notifyUsers(db, fresh, me, [fresh.assignee_id], 'changes_requested', `${actorName(me)} asked for changes${note ? ': ' + String(note).slice(0, 200) : ''}`); told.add(String(fresh.assignee_id)); }
   await notifyUsers(db, fresh, me, (await watchersOf(db, t.id)).filter((id) => !told.has(id)), 'status', `${actorName(me)} moved it to ${label[to]}`);
   if (fresh.delegate_id && String(fresh.delegate_id) !== String(me.id)) {
-    if (t.status === 'in_review' && to === 'in_progress') { await agentEvent(db, fresh.delegate_id, fresh, 'changes_requested', { from: actorName(me), note: note ? String(note).slice(0, 2000) : '' }); await session(db, fresh, fresh.delegate_id, 'pending', 'Changes requested'); }
-    else if (to === 'done') await agentEvent(db, fresh.delegate_id, fresh, 'accepted', { from: actorName(me) });
-    else await agentEvent(db, fresh.delegate_id, fresh, 'status_changed', { by: actorName(me), from: t.status, to, note: note ? String(note).slice(0, 2000) : '' });
+    if (t.status === 'in_review' && to === 'in_progress') { await agentEvent(db, fresh.delegate_id, fresh, 'changes_requested', { from: actorName(me), note: note ? String(note).slice(0, 2000) : '' }, me); await session(db, fresh, fresh.delegate_id, 'pending', 'Changes requested'); }
+    else if (to === 'done') await agentEvent(db, fresh.delegate_id, fresh, 'accepted', { from: actorName(me) }, me);
+    else await agentEvent(db, fresh.delegate_id, fresh, 'status_changed', { by: actorName(me), from: t.status, to, note: note ? String(note).slice(0, 2000) : '' }, me);
   }
   // an agent named as the reviewer hears that the work is waiting for it
-  if (to === 'in_review' && fresh.reviewer_id && String(fresh.reviewer_id) !== String(me.id) && await isAgent(db, fresh.reviewer_id)) await agentEvent(db, fresh.reviewer_id, fresh, 'review_requested', { by: actorName(me) });
+  if (to === 'in_review' && fresh.reviewer_id && String(fresh.reviewer_id) !== String(me.id) && await isAgent(db, fresh.reviewer_id)) await agentEvent(db, fresh.reviewer_id, fresh, 'review_requested', { by: actorName(me) }, me);
   // work handed in or closed ends the claim: there is nothing left to hold
   if (['in_review', 'done', 'wont_do'].includes(to)) await db.query('DELETE FROM task_claim_leases WHERE task_id = $1', [t.id]);
   if (fresh.delegate_id && String(fresh.delegate_id) === String(me.id) && (to === 'in_review' || to === 'done')) await session(db, fresh, me.id, 'done', to === 'in_review' ? 'Sent for review' : 'Done');
@@ -375,7 +375,7 @@ export async function commentTask(db, me, key, { body } = {}) {
   await db.query('UPDATE tasks SET updated_at = now() WHERE id = $1', [t.id]);
   await watch(db, t.id, me.id);
   const mentioned = await mentionPass(db, t, me, '', note);
-  if (t.delegate_id && String(t.delegate_id) !== String(me.id) && !mentioned.includes(String(t.delegate_id))) await agentEvent(db, t.delegate_id, t, 'reply', { from: actorName(me), comment: note.slice(0, 2000) });
+  if (t.delegate_id && String(t.delegate_id) !== String(me.id) && !mentioned.includes(String(t.delegate_id))) await agentEvent(db, t.delegate_id, t, 'reply', { from: actorName(me), comment: note.slice(0, 2000) }, me);
   await notifyUsers(db, t, me, (await watchersOf(db, t.id)).filter((id) => !mentioned.includes(id)), 'commented', `${actorName(me)}: ${note.slice(0, 160)}`);
   return getTask(db, me, key);
 }
@@ -514,7 +514,7 @@ async function mentionPass(db, t, me, before, after) {
   if (!now.length) return [];
   const rows = (await db.query('SELECT id FROM users WHERE lower(username) = ANY($1::text[])', [now])).rows;
   const ids = [];
-  for (const r of rows) { const s = await standing(db, { id: r.id }, t); if (s.view && String(r.id) !== String(me.id)) { ids.push(String(r.id)); await watch(db, t.id, r.id); if (await isAgent(db, r.id)) await agentEvent(db, r.id, t, 'mentioned', { from: actorName(me), text: String(after || '').slice(0, 2000) }); } }
+  for (const r of rows) { const s = await standing(db, { id: r.id }, t); if (s.view && String(r.id) !== String(me.id)) { ids.push(String(r.id)); await watch(db, t.id, r.id); if (await isAgent(db, r.id)) await agentEvent(db, r.id, t, 'mentioned', { from: actorName(me), text: String(after || '').slice(0, 2000) }, me); } }
   await notifyUsers(db, t, me, ids, 'mentioned', `${actorName(me)} mentioned you`);
   return ids;
 }
@@ -659,14 +659,21 @@ export async function sweepDueReminders(db) {
 const isAgent = async (db, userId) => !!userId && (await db.query('SELECT 1 FROM agent_identities WHERE user_id = $1', [userId])).rowCount > 0;
 const sha256 = (s) => crypto.createHash('sha256').update(String(s)).digest('hex');
 /** queue something the agent must hear about (delivered by webhook if it has one; always pullable) */
-async function agentEvent(db, agentUserId, t, kind, payload = {}) {
+async function agentEvent(db, agentUserId, t, kind, payload = {}, actor = null) {
   if (!agentUserId) return;
   // One agent's events are written one at a time (a transaction-scoped advisory lock taken in the same statement), so
   // ids commit in the order they are assigned: a reader paging by `id > cursor` can never step past an id that
   // commits later. Without it two concurrent writes could commit 8 before 7 and a reader at 8 would never see 7.
   await db.query(`WITH l AS (SELECT pg_advisory_xact_lock(hashtextextended('task_agent_events:' || $1::text, 0)))
-    INSERT INTO task_agent_events (agent_user_id, task_id, kind, payload) SELECT $1::uuid, $2::uuid, $3::text, $4::jsonb FROM l`,
-    [agentUserId, t.id, kind, { key: `T-${t.number}`, title: t.title, status: t.status, ...payload }]);
+    INSERT INTO task_agent_events (agent_user_id, task_id, kind, payload)
+    SELECT $1::uuid, $2::uuid, $3::text, $4::jsonb || CASE WHEN $5::uuid IS NULL THEN '{}'::jsonb ELSE jsonb_strip_nulls(jsonb_build_object(
+      'byId', $5::text,
+      'byKind', CASE WHEN ai.user_id IS NOT NULL THEN 'agent' WHEN u.role = 'service' THEN 'service' ELSE 'human' END,
+      'byAgentId', ai.public_id)) END
+    FROM l LEFT JOIN users u ON u.id = $5::uuid LEFT JOIN agent_identities ai ON ai.user_id = $5::uuid`,
+    // who caused it, by stable id (2026-10-18): a display name is not an identity — two agents can share one, so an
+    // agent filtering out its own events needs byId / byAgentId, not `by`
+    [agentUserId, t.id, kind, { key: `T-${t.number}`, title: t.title, status: t.status, ...payload }, actor && actor.id ? actor.id : null]);
 }
 async function session(db, t, agentUserId, state, note) {
   await db.query(`INSERT INTO task_agent_sessions (task_id, agent_user_id, state, last_note) VALUES ($1, $2, $3, $4)
@@ -693,8 +700,8 @@ async function applyDelegate(db, me, t, s, agentId) { // eslint-disable-line no-
   }
   await event(db, t, me, 'delegated', from ? String(from) : null, to ? String(to) : null, null);
   await db.query('DELETE FROM task_claim_leases WHERE task_id = $1 AND agent_user_id IS DISTINCT FROM $2', [t.id, to]);   // a claim belongs to the delegate it was made by
-  if (from) { await agentEvent(db, from, t, 'undelegated', {}); }
-  if (to) { await session(db, t, to, 'pending', 'Waiting for the agent to pick it up'); await watch(db, t.id, to); await agentEvent(db, to, t, 'delegated', { by: actorName(me) }); }
+  if (from) { await agentEvent(db, from, t, 'undelegated', {}, me); }
+  if (to) { await session(db, t, to, 'pending', 'Waiting for the agent to pick it up'); await watch(db, t.id, to); await agentEvent(db, to, t, 'delegated', { by: actorName(me) }, me); }
   await folderAccess(db, t.id);
   return true;
 }
@@ -756,7 +763,7 @@ export async function reportActivity(db, me, key, { type, kind, body, data } = {
     await db.query('UPDATE tasks SET updated_at = now() WHERE id = $1', [t.id]);
     if (kind === 'question') await notifyUsers(db, t, me, [t.assignee_id, t.reviewer_id], 'agent_question', `${actorName(me)} asks: ${d.question.slice(0, 200)}`);
     // a handover is for the NEXT run: it lands in the agent's own feed, so whichever run picks the task up next reads it
-    if (kind === 'handover') await agentEvent(db, me.id, t, 'handover', { by: actorName(me), handover: d });
+    if (kind === 'handover') await agentEvent(db, me.id, t, 'handover', { by: actorName(me), handover: d }, me);
     return getTask(db, me, key);
   }
   if (!ACTIVITY[type]) throw new TaskError('Pass kind (plan, action, question, handover, done) or type (thought, action, ask, result, error)', 'invalid_activity');
@@ -802,7 +809,7 @@ async function endLease(db, where, params, reason) {
   await session(db, t, l.agent_user_id, 'pending', expired ? 'The run stopped answering; waiting for a new run' : 'Released; waiting for a new run');
   if (expired) {
     const fresh = (await db.query(`${SELECT} WHERE t.id = $1`, [t.id])).rows[0];
-    await agentEvent(db, l.agent_user_id, fresh, 'lease_expired', { runId: l.run_id, expiredAt: l.expires_at, statusBefore: t.status, statusNow: fresh.status, stillDelegated: !clearDelegate });
+    await agentEvent(db, l.agent_user_id, fresh, 'lease_expired', { runId: l.run_id, expiredAt: l.expires_at, statusBefore: t.status, statusNow: fresh.status, stillDelegated: !clearDelegate }, agent);
   }
   await folderAccess(db, t.id);
   return l;
@@ -946,8 +953,8 @@ export async function handoffTask(db, me, key) {
     await db.query('UPDATE tasks SET delegate_id = $2, assignee_id = COALESCE(assignee_id, $3), updated_at = now() WHERE id = $1', [t.id, agent.id, me.id]);
     await event(db, t, me, 'delegated', t.delegate_id ? String(t.delegate_id) : null, String(agent.id), 'handed off');
     await db.query('DELETE FROM task_claim_leases WHERE task_id = $1 AND agent_user_id <> $2', [t.id, agent.id]);
-    if (t.delegate_id) await agentEvent(db, t.delegate_id, t, 'undelegated', {});
-    await agentEvent(db, agent.id, t, 'delegated', { by: actorName(me), handoff: true });
+    if (t.delegate_id) await agentEvent(db, t.delegate_id, t, 'undelegated', {}, me);
+    await agentEvent(db, agent.id, t, 'delegated', { by: actorName(me), handoff: true }, me);
     await session(db, t, agent.id, 'pending', 'Handed off. Waiting for the agent to connect.');
     await watch(db, t.id, agent.id);
   }
