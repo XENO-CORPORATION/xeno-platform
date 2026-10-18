@@ -7,7 +7,9 @@
  *   PATCH  /api/tasks/:key                                edit, assign, set the review
  *   POST   /api/tasks/:key/transition {to, from?, note?}  move it (the state machine and who may); `from` = the status
  *                                                           the screen showed — refused with 409 if it has moved since
- *   POST   /api/tasks/:key/claim                          take it (atomic)
+ *   POST   /api/tasks/:key/claim                          take it (atomic); an agent may pass {runId} to hold a lease
+ *   POST   /api/tasks/:key/heartbeat                      {runId}: keep the lease alive (10 minutes without one ends it)
+ *   POST   /api/tasks/:key/release                        {runId}: end the lease; the task goes back to the queue
  *   POST   /api/tasks/:key/comments {body}                comment
  *   DELETE /api/tasks/:key                                delete (project admin; the reporter while still in triage)
  *   POST   /api/tasks/:key/attachments?name=              add an image (raw body; PNG, JPEG, GIF or WebP, by signature)
@@ -107,7 +109,7 @@ router.use(async (req, res, next) => {
 });
 // what an agent credential may do: reads need tasks:read, everything else tasks:write; a single-task credential (the
 // hand-off link) reaches only its own task, and none of the management surfaces
-const SINGLE_TASK_OK = /^\/(T-\d+)(\/(?:transition|claim|comments(?:\/[\w-]+)?|activity|attachments(?:\/[\w-]+)?|watch))?$/i;
+const SINGLE_TASK_OK = /^\/(T-\d+)(\/(?:transition|claim|heartbeat|release|comments(?:\/[\w-]+)?|activity|attachments(?:\/[\w-]+)?|watch))?$/i;
 router.use(handledMw(async (req) => {
   const tok = req.taskToken; if (!tok) return;
   const need = req.method === 'GET' || req.method === 'HEAD' || req.path === '/mcp' ? 'tasks:read' : 'tasks:write';
@@ -187,7 +189,9 @@ router.get('/assignees', handled(async (req, res) => { res.json({ success: true,
 router.get('/:key', handled(async (req, res) => { res.json({ success: true, task: await tasks.getTask(req.db, req.me, req.params.key) }); }));
 router.patch('/:key', handled(async (req, res) => { res.json({ success: true, task: await tasks.updateTask(req.db, req.me, req.params.key, req.body || {}) }); }));
 router.post('/:key/transition', handled(async (req, res) => { res.json({ success: true, task: await tasks.transitionTask(req.db, req.me, req.params.key, { to: req.body?.to, note: req.body?.note, from: req.body?.from }) }); }));
-router.post('/:key/claim', handled(async (req, res) => { res.json({ success: true, task: await tasks.claimTask(req.db, req.me, req.params.key) }); }));
+router.post('/:key/claim', handled(async (req, res) => { res.json({ success: true, task: await tasks.claimTask(req.db, req.me, req.params.key, { runId: req.body?.runId }) }); }));
+router.post('/:key/heartbeat', handled(async (req, res) => { res.json({ success: true, ...(await tasks.heartbeatTask(req.db, req.me, req.params.key, { runId: req.body?.runId })) }); }));
+router.post('/:key/release', handled(async (req, res) => { res.json({ success: true, ...(await tasks.releaseTask(req.db, req.me, req.params.key, { runId: req.body?.runId })) }); }));
 router.post('/:key/comments', handled(async (req, res) => { res.json({ success: true, task: await tasks.commentTask(req.db, req.me, req.params.key, { body: req.body?.body }) }); }));
 
 router.delete('/:key', handled(async (req, res) => { res.json({ success: true, ...(await tasks.deleteTask(req.db, req.me, req.params.key)) }); }));
@@ -211,7 +215,7 @@ router.post('/:key/links', handled(async (req, res) => { res.json({ success: tru
 router.delete('/:key/links/:id', handled(async (req, res) => { res.json({ success: true, task: await tasks.removeLink(req.db, req.me, req.params.key, req.params.id) }); }));
 
 router.post('/:key/delegate', handled(async (req, res) => { res.json({ success: true, task: await tasks.delegateTask(req.db, req.me, req.params.key, { agentId: req.body?.agentId }) }); }));
-router.post('/:key/activity', handled(async (req, res) => { res.json({ success: true, task: await tasks.reportActivity(req.db, req.me, req.params.key, { type: req.body?.type, body: req.body?.body }) }); }));
+router.post('/:key/activity', handled(async (req, res) => { res.json({ success: true, task: await tasks.reportActivity(req.db, req.me, req.params.key, { type: req.body?.type, kind: req.body?.kind, body: req.body?.body, data: req.body?.data }) }); }));
 router.post('/:key/handoff', handled(async (req, res) => { res.status(201).json({ success: true, ...(await tasks.handoffTask(req.db, req.me, req.params.key)) }); }));
 
 export default router;

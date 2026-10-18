@@ -203,7 +203,7 @@ contract) and `../xeno-tasks/SPEC.md` (state machine §3, agent sign-in §4a) be
 | What | File |
 |---|---|
 | The one service every surface calls (REST, MCP, screens) | `src/server/services/xenoTasks.js` |
-| MCP server (`/api/tasks/mcp`, Streamable HTTP 2025-06-18, ten tools) | `src/server/services/tasksMcp.js` |
+| MCP server (`/api/tasks/mcp`, Streamable HTTP 2025-06-18, twelve tools incl. `heartbeat`/`release` for claim leases) | `src/server/services/tasksMcp.js` |
 | Routes, `xtk_` credentials, the OAuth 401 challenge, scope rules | `src/server/routes/xenoTasksRoutes.js` |
 | Self-registered MCP clients (RFC 7591), the `xeno-tasks` token audience, consent | `src/server/utils/oidcProvider.js`, `src/server/routes/oauth2Routes.js` |
 | Screens | `prototypes/xeno-workspace/platform-tasks.js` |

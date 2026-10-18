@@ -507,9 +507,20 @@
       if (e.field) return `changed ${esc(e.field === 'kind' ? 'the type' : e.field === 'due' ? 'the due date' : 'the ' + e.field)} from ${val(e.field, e.from)} to ${val(e.field, e.to)}`;
       return `changed the ${esc(e.from || 'task')}`;
     };
-    const ACTV = { thought: ['is thinking', 'star'], action: ['is working', 'flow'], ask: ['asks', 'bell'], result: ['reports', 'check'], error: ['hit a problem', 'x'] };
+    const ACTV = { thought: ['is thinking', 'star'], action: ['is working', 'flow'], ask: ['asks', 'bell'], result: ['reports', 'check'], error: ['hit a problem', 'x'],
+      plan: ['made a plan', 'flow'], question: ['asks', 'bell'], handover: ['handed over', 'flow'], done: ['finished', 'check'] };
+    // typed activity (plan | action | question | handover | done) carries structured fields: draw each as what it is
+    const list = (xs, ordered) => (xs && xs.length ? `<${ordered ? 'ol' : 'ul'} class="tk-act-list">${xs.map((x) => `<li>${esc(x)}</li>`).join('')}</${ordered ? 'ol' : 'ul'}>` : '');
+    const typed = (e) => {
+      const d = e.data || {};
+      if (e.from === 'plan') return list(d.steps, true);
+      if (e.from === 'question') return `<p class="tk-act-q">${esc(d.question || '')}</p>${d.options ? `<div class="tk-act-opts">${d.options.map((o) => `<span class="tk-act-opt">${esc(o)}</span>`).join('')}</div>` : ''}`;
+      if (e.from === 'handover') return `<dl class="tk-act-dl"><dt>Where it stands</dt><dd>${esc(d.state || '')}</dd><dt>Next step</dt><dd>${esc(d.nextStep || '')}</dd>${d.openQuestions && d.openQuestions.length ? `<dt>Open questions</dt><dd>${list(d.openQuestions)}</dd>` : ''}</dl>`;
+      if (e.from === 'done') return `<dl class="tk-act-dl"><dt>Summary</dt><dd>${esc(d.summary || '')}</dd><dt>How it was checked</dt><dd>${esc(d.verification || '')}</dd></dl>`;
+      return null;
+    };
     return out.map((e) => {
-      if (e.kind === 'activity') { const a = ACTV[e.from] || ACTV.action; return `<div class="tk-act-ev tk-act-ev--${esc(e.from || 'action')}" data-tk-ev="activity" data-tk-activity="${esc(e.from || '')}">${face(e.actor, true)}<div class="tk-act-ev-b"><header>${who(e.actor)} <span class="tk-act-ev-k">${ic(a[1])}${esc(a[0])}</span><small>${when(e.at)}</small></header>${e.note ? `<div class="tk-md">${md(e.note, t.key, {})}</div>` : ''}</div></div>`; }
+      if (e.kind === 'activity') { const a = ACTV[e.from] || ACTV.action; return `<div class="tk-act-ev tk-act-ev--${esc(e.from || 'action')}" data-tk-ev="activity" data-tk-activity="${esc(e.from || '')}">${face(e.actor, true)}<div class="tk-act-ev-b"><header>${who(e.actor)} <span class="tk-act-ev-k">${ic(a[1])}${esc(a[0])}</span><small>${when(e.at)}</small></header>${(e.data && typed(e)) || (e.note ? `<div class="tk-md">${md(e.note, t.key, {})}</div>` : '')}</div></div>`; }
       if (e.kind === 'comment') {
         if (e.removed) return `<p class="tk-ev tk-ev--removed" data-tk-ev="comment-removed"><span class="tk-ev-dot"></span><span>${who(e.actor)} removed a comment</span><small>${when(e.at)}</small></p>`;
         const mine = e.actor && e.actor.id === me();
@@ -520,6 +531,8 @@
         : e.kind === 'status' ? `moved it ${st(e.from)} → ${st(e.to)}${e.note ? ` — “${esc(e.note)}”` : ''}`
         : e.kind === 'created' ? 'raised this task'
         : e.kind === 'claimed' ? 'took it'
+        : e.kind === 'released' ? 'let go of it; it is back in the queue'
+        : e.kind === 'lease_expired' ? 'stopped answering, so its claim ended and the task went back to the queue'
         : e.kind === 'assigned' ? (e.to ? (e.to === e.actor?.id ? 'assigned it to themselves' : `assigned it to <b>${esc(e.toName || 'someone')}</b>`) : `unassigned <b>${esc(e.fromName || 'it')}</b>`)
         : e.kind === 'edited' ? edited(e)
         : e.kind === 'attached' ? `added <i>${esc(e.note || 'an image')}</i>` : e.kind === 'detached' ? `removed <i>${esc(e.note || 'an image')}</i>`

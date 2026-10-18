@@ -7,7 +7,7 @@ import workforceDivisionRoutes from './routes/workforceDivisionRoutes.js';
 import xenoMcpRoutes, { management as xenoMcpManagement, personOnly as mcpPersonOnly, mcpResourceMetadata } from './routes/xenoMcpRoutes.js';
 import userNotificationsRoutes from './routes/userNotificationsRoutes.js';
 import { startTaskSweeps } from './services/taskNotifyEmail.js';
-import { sweepDueReminders, deliverAgentEvents } from './services/xenoTasks.js';
+import { sweepDueReminders, deliverAgentEvents, sweepExpiredLeases } from './services/xenoTasks.js';
 import workspaceAreaRoutes from './routes/workspaceAreaRoutes.js';
 import { areaFromRequest } from './utils/resourceArea.js';
 import { fileURLToPath } from 'url';
@@ -4134,7 +4134,7 @@ initBackgroundJobs(pool).catch(err => {
 // service being correct is not the same as it running.
 backgroundLeader.whenLeader(() => startNotificationEmailSweep(pool));
 // XENO Tasks: notification email (on unless TASK_NOTIFICATION_EMAILS=false) and due reminders, on the leader only
-backgroundLeader.whenLeader(() => startTaskSweeps(pool, { sweepDueReminders, deliverAgentEvents }));
+backgroundLeader.whenLeader(() => startTaskSweeps(pool, { sweepDueReminders, deliverAgentEvents, sweepExpiredLeases }));
 // Loop D push half. The delivery engine it feeds had ZERO producers before this
 // line existed — see forumWebhookPush.js.
 backgroundLeader.whenLeader(() => startWebhookPushSweep(pool));

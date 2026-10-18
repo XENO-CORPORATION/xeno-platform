@@ -89,6 +89,7 @@ const SELECT = `SELECT t.*, COALESCE(t.area, (SELECT p.area FROM chat_projects p
   EXISTS (SELECT 1 FROM agent_identities ai WHERE ai.user_id = t.assignee_id) AS assignee_is_agent,
   COALESCE(du.display_name, du.username) AS delegate_name,
   (SELECT row_to_json(x) FROM (SELECT s.state, s.last_note, s.updated_at FROM task_agent_sessions s WHERE s.task_id = t.id AND s.agent_user_id = t.delegate_id) x) AS session_row,
+  (SELECT row_to_json(x) FROM (SELECT l.agent_user_id, l.run_id, l.expires_at, l.heartbeat_at FROM task_claim_leases l WHERE l.task_id = t.id) x) AS lease_row,
   (SELECT 'T-' || p.number FROM tasks p WHERE p.id = t.parent_id AND p.deleted_at IS NULL) AS parent_key,
   (SELECT p.title FROM tasks p WHERE p.id = t.parent_id AND p.deleted_at IS NULL) AS parent_title,
   (SELECT count(*)::int FROM tasks c WHERE c.parent_id = t.id AND c.deleted_at IS NULL) AS child_count,
@@ -101,14 +102,15 @@ function shape(t, s, events, files, extra) {
     key: `T-${t.number}`, id: t.id, number: Number(t.number), title: t.title, body: t.body, kind: t.kind, status: t.status, priority: t.priority,
     project: t.project_id ? { id: t.project_id, name: t.project_name || 'Project' } : null, milestoneId: t.milestone_id || null, area: t.effective_area || null,
     reporter: person(t.reporter_id, t.reporter_name, t.reporter_kind === 'agent'), assignee: person(t.assignee_id, t.assignee_name, t.assignee_is_agent), reviewer: person(t.reviewer_id, t.reviewer_name),
-    delegate: person(t.delegate_id, t.delegate_name, true), session: t.session_row ? { state: t.session_row.state, note: t.session_row.last_note, updatedAt: t.session_row.updated_at } : null,
+    delegate: person(t.delegate_id, t.delegate_name, true),
+    lease: t.lease_row ? { agentId: String(t.lease_row.agent_user_id), runId: t.lease_row.run_id, expiresAt: t.lease_row.expires_at, heartbeatAt: t.lease_row.heartbeat_at } : null, session: t.session_row ? { state: t.session_row.state, note: t.session_row.last_note, updatedAt: t.session_row.updated_at } : null,
     reviewRequired: t.review_required, labels: t.labels || [], dueAt: t.due_at, source: t.source, sourceRef: t.source_ref, conversationId: t.conversation_id,
     createdAt: t.created_at, updatedAt: t.updated_at, closedAt: t.closed_at,
     parent: t.parent_key ? { key: t.parent_key, title: t.parent_title } : null, subtasks: { total: Number(t.child_count || 0), done: Number(t.child_done || 0) },
     ...(extra || {}),
     ...(s ? { can: { edit: !!s.manage, creator: !!s.creator, triage: !!s.edit, moves: s.moves || [], attach: !!s.attach, delete: !!s.del } } : {}),
     ...(files ? { attachments: files.map((a) => ({ id: a.id, filename: a.filename, mime: a.mime, size: a.size_bytes, at: a.created_at, uploader: person(a.uploader_id, a.uploader_name) })) } : {}),
-    ...(events ? { events: events.map((e) => ({ id: e.id, kind: e.kind, field: e.field || null, from: e.from_value, to: e.to_value, fromName: e.from_name || null, toName: e.to_name || null, note: e.removed_at ? null : e.note, at: e.created_at, editedAt: e.edited_at || null, removed: !!e.removed_at, actor: person(e.actor_id, e.actor_name, e.actor_kind === 'agent') })) } : {}),
+    ...(events ? { events: events.map((e) => ({ id: e.id, kind: e.kind, field: e.field || null, from: e.from_value, to: e.to_value, fromName: e.from_name || null, toName: e.to_name || null, note: e.removed_at ? null : e.note, ...(e.data ? { data: e.data } : {}), at: e.created_at, editedAt: e.edited_at || null, removed: !!e.removed_at, actor: person(e.actor_id, e.actor_name, e.actor_kind === 'agent') })) } : {}),
   };
 }
 async function loadByKey(db, key) { const n = keyToNumber(key); if (!n) return null; return (await db.query(`${SELECT} WHERE t.number = $1 AND t.deleted_at IS NULL`, [n])).rows[0] || null; }
@@ -121,7 +123,7 @@ async function folderAccess(db, taskId) {
   await reconcileTask(db, taskId);
 }
 async function readable(db, me, key) { const t = await loadByKey(db, key), s = t ? await standing(db, me, t) : null; if (!s || !s.view) throw new TaskError('Task not found', 'task_not_found', 404); return { t, s }; }
-const event = (db, t, me, kind, from, to, note, field = null) => db.query('INSERT INTO task_events (task_id, actor_id, actor_kind, kind, from_value, to_value, note, field) VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING id', [t.id, me.id, kindOf(me), kind, from ?? null, to ?? null, note ?? null, field]);
+const event = (db, t, me, kind, from, to, note, field = null, data = null) => db.query('INSERT INTO task_events (task_id, actor_id, actor_kind, kind, from_value, to_value, note, field, data) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING id', [t.id, me.id, kindOf(me), kind, from ?? null, to ?? null, note ?? null, field, data]);
 /**
  * The moves this caller may make from the task's current status (the creator owns the task — see standing()).
  *   triage (raised → to do)           a project editor; the creator may also withdraw it (→ won't do)
@@ -315,21 +317,45 @@ export async function transitionTask(db, me, key, { to, note, from } = {}) {
   await notifyUsers(db, fresh, me, (await watchersOf(db, t.id)).filter((id) => !told.has(id)), 'status', `${actorName(me)} moved it to ${label[to]}`);
   if (fresh.delegate_id && String(fresh.delegate_id) !== String(me.id)) {
     if (t.status === 'in_review' && to === 'in_progress') { await agentEvent(db, fresh.delegate_id, fresh, 'changes_requested', { from: actorName(me), note: note ? String(note).slice(0, 2000) : '' }); await session(db, fresh, fresh.delegate_id, 'pending', 'Changes requested'); }
-    if (to === 'done') await agentEvent(db, fresh.delegate_id, fresh, 'accepted', { from: actorName(me) });
+    else if (to === 'done') await agentEvent(db, fresh.delegate_id, fresh, 'accepted', { from: actorName(me) });
+    else await agentEvent(db, fresh.delegate_id, fresh, 'status_changed', { by: actorName(me), from: t.status, to, note: note ? String(note).slice(0, 2000) : '' });
   }
+  // an agent named as the reviewer hears that the work is waiting for it
+  if (to === 'in_review' && fresh.reviewer_id && String(fresh.reviewer_id) !== String(me.id) && await isAgent(db, fresh.reviewer_id)) await agentEvent(db, fresh.reviewer_id, fresh, 'review_requested', { by: actorName(me) });
+  // work handed in or closed ends the claim: there is nothing left to hold
+  if (['in_review', 'done', 'wont_do'].includes(to)) await db.query('DELETE FROM task_claim_leases WHERE task_id = $1', [t.id]);
   if (fresh.delegate_id && String(fresh.delegate_id) === String(me.id) && (to === 'in_review' || to === 'done')) await session(db, fresh, me.id, 'done', to === 'in_review' ? 'Sent for review' : 'Done');
   await folderAccess(db, t.id);   // who works it may have changed: task folders follow (taskFolders.js)
   return getTask(db, me, key);
 }
 
-/** Take an unassigned task. Atomic: if someone already holds it, nothing changes and the caller is told. */
-export async function claimTask(db, me, key) {
-  const { t } = await readable(db, me, key);
+/** Take an unassigned task. Atomic: if someone already holds it, nothing changes and the caller is told.
+ *  An agent may pass a `runId` (its run's own opaque id): the claim then holds a LEASE for that one run, renewed by
+ *  heartbeatTask and ended by releaseTask or by expiry (LEASE_MS without a heartbeat), when the task goes back to the
+ *  queue. While a lease is live every other claim — another agent, or another run of the same agent — is refused. */
+export async function claimTask(db, me, key, { runId } = {}) {
+  let { t } = await readable(db, me, key);
   if (['done', 'wont_do'].includes(t.status)) throw new TaskError('This task is closed', 'task_closed', 409);
   if (kindOf(me) === 'agent') {
+    const run = runIdOf(runId, false);
+    if (await expireLeaseIfDue(db, t.id)) t = await loadByKey(db, key);   // a lapsed lease the sweep has not reached yet does not block anyone
+    const held = (await db.query('SELECT agent_user_id, run_id FROM task_claim_leases WHERE task_id = $1', [t.id])).rows[0];
+    if (held) {
+      if (run && String(held.agent_user_id) === String(me.id) && held.run_id === run) { await renewLease(db, t.id, me.id, run); return getTask(db, me, key); }   // the same run again: idempotent
+      throw new TaskError(String(held.agent_user_id) === String(me.id) ? 'Another run of yours is already working on this task' : 'Another agent is already working on this task', 'already_claimed', 409);
+    }
+    if (run) {
+      const got = (await db.query(`INSERT INTO task_claim_leases (task_id, agent_user_id, run_id, status_before, delegate_before, expires_at)
+        SELECT id, $2, $3, status, delegate_id, now() + ($4 || ' milliseconds')::interval FROM tasks WHERE id = $1 AND (delegate_id IS NULL OR delegate_id = $2)
+        ON CONFLICT (task_id) DO NOTHING RETURNING task_id`, [t.id, me.id, run, String(LEASE_MS)])).rowCount;
+      if (!got) throw new TaskError('Another agent is already working on this task', 'already_claimed', 409);
+    }
     const got = (await db.query('UPDATE tasks SET delegate_id = $2, updated_at = now() WHERE id = $1 AND (delegate_id IS NULL OR delegate_id = $2) RETURNING id', [t.id, me.id])).rowCount;
-    if (!got) throw new TaskError('Another agent is already working on this task', 'already_claimed', 409);
-    await event(db, t, me, 'claimed', null, String(me.id), null); await session(db, t, me.id, 'working', 'Picked it up'); await watch(db, t.id, me.id);
+    if (!got) { if (run) await db.query('DELETE FROM task_claim_leases WHERE task_id = $1 AND run_id = $2', [t.id, run]); throw new TaskError('Another agent is already working on this task', 'already_claimed', 409); }
+    await event(db, t, me, 'claimed', null, String(me.id), run ? `run ${run}` : null);
+    // an agent claims work to do it: To do becomes In progress (an expired lease puts it back, from status_before)
+    if (t.status === 'todo' && (await db.query(`UPDATE tasks SET status = 'in_progress', updated_at = now() WHERE id = $1 AND status = 'todo' RETURNING id`, [t.id])).rowCount) await event(db, t, me, 'status', 'todo', 'in_progress', null);
+    await session(db, t, me.id, 'working', 'Picked it up'); await watch(db, t.id, me.id);
   await folderAccess(db, t.id);   // who works it may have changed: task folders follow (taskFolders.js)
     return getTask(db, me, key);
   }
@@ -635,7 +661,11 @@ const sha256 = (s) => crypto.createHash('sha256').update(String(s)).digest('hex'
 /** queue something the agent must hear about (delivered by webhook if it has one; always pullable) */
 async function agentEvent(db, agentUserId, t, kind, payload = {}) {
   if (!agentUserId) return;
-  await db.query('INSERT INTO task_agent_events (agent_user_id, task_id, kind, payload) VALUES ($1, $2, $3, $4)',
+  // One agent's events are written one at a time (a transaction-scoped advisory lock taken in the same statement), so
+  // ids commit in the order they are assigned: a reader paging by `id > cursor` can never step past an id that
+  // commits later. Without it two concurrent writes could commit 8 before 7 and a reader at 8 would never see 7.
+  await db.query(`WITH l AS (SELECT pg_advisory_xact_lock(hashtextextended('task_agent_events:' || $1::text, 0)))
+    INSERT INTO task_agent_events (agent_user_id, task_id, kind, payload) SELECT $1::uuid, $2::uuid, $3::text, $4::jsonb FROM l`,
     [agentUserId, t.id, kind, { key: `T-${t.number}`, title: t.title, status: t.status, ...payload }]);
 }
 async function session(db, t, agentUserId, state, note) {
@@ -644,7 +674,7 @@ async function session(db, t, agentUserId, state, note) {
     [t.id, agentUserId, state, String(note || '').slice(0, 500)]);
 }
 /** put an agent on a task as its delegate: checks, history, session, the agent told */
-async function applyDelegate(db, me, t, s, agentId) {
+async function applyDelegate(db, me, t, s, agentId) { // eslint-disable-line no-param-reassign
   if (agentId != null && agentId !== '' && !UUID.test(String(agentId))) throw new TaskError('That agent was not found', 'delegate_not_found', 404);
   const to = agentId || null, from = t.delegate_id || null;
   if (String(to || '') === String(from || '')) return false;
@@ -655,7 +685,14 @@ async function applyDelegate(db, me, t, s, agentId) {
     else { const own = (await db.query('SELECT owner_user_id FROM agent_identities WHERE user_id = $1', [to])).rows[0]; if (!own || String(own.owner_user_id) !== String(t.owner_user_id)) throw new TaskError('A personal task can only be delegated to its owner’s own agents', 'delegate_not_yours', 409); }
   }
   await db.query('UPDATE tasks SET delegate_id = $2, assignee_id = COALESCE(assignee_id, $3), updated_at = now() WHERE id = $1', [t.id, to, to ? (kindOf(me) === 'human' ? me.id : null) : null]);
+  // delegating raised work, by someone who may triage it, IS accepting it (2026-10-18): it moves to To do, because an
+  // agent can never triage and would otherwise hold work it can never move. Someone who may not triage leaves it raised.
+  if (to && t.status === 'raised' && s && s.edit && kindOf(me) === 'human') {
+    const moved = (await db.query(`UPDATE tasks SET status = 'todo', updated_at = now() WHERE id = $1 AND status = 'raised' RETURNING id`, [t.id])).rowCount;
+    if (moved) { await event(db, t, me, 'status', 'raised', 'todo', 'Accepted by delegating it to an agent'); t = { ...t, status: 'todo' }; }
+  }
   await event(db, t, me, 'delegated', from ? String(from) : null, to ? String(to) : null, null);
+  await db.query('DELETE FROM task_claim_leases WHERE task_id = $1 AND agent_user_id IS DISTINCT FROM $2', [t.id, to]);   // a claim belongs to the delegate it was made by
   if (from) { await agentEvent(db, from, t, 'undelegated', {}); }
   if (to) { await session(db, t, to, 'pending', 'Waiting for the agent to pick it up'); await watch(db, t.id, to); await agentEvent(db, to, t, 'delegated', { by: actorName(me) }); }
   await folderAccess(db, t.id);
@@ -669,11 +706,60 @@ export async function delegateTask(db, me, key, { agentId } = {}) {
 }
 
 const ACTIVITY = { thought: 'working', action: 'working', ask: 'awaiting_input', result: 'done', error: 'error' };
+// Typed activity (2026-10-18): `kind` plus structured fields, validated strictly and kept with the event, so another
+// run can continue from a handover and a screen can draw a plan as a plan. The old free-text `type` still works.
+export const ACTIVITY_KINDS = ['plan', 'action', 'question', 'handover', 'done'];
+const KIND_STATE = { plan: 'working', action: 'working', question: 'awaiting_input', handover: 'pending', done: 'done' };
+const str = (v, field, max, required = true) => {
+  if (v == null || v === '') { if (required) throw new TaskError(`${field} is required`, 'invalid_activity'); return undefined; }
+  if (typeof v !== 'string') throw new TaskError(`${field} must be text`, 'invalid_activity');
+  const x = v.trim();
+  if (required && !x) throw new TaskError(`${field} is required`, 'invalid_activity');
+  if (x.length > max) throw new TaskError(`${field} is longer than ${max} characters`, 'invalid_activity');
+  return x;
+};
+const strs = (v, field, maxItems, maxLen, min = 0) => {
+  const list = v == null ? [] : v;
+  if (!Array.isArray(list)) throw new TaskError(`${field} must be a list`, 'invalid_activity');
+  if (list.length < min || list.length > maxItems) throw new TaskError(`${field} takes ${min ? `${min} to ` : 'at most '}${maxItems} items`, 'invalid_activity');
+  return list.map((x, i) => str(x, `${field}[${i}]`, maxLen));
+};
+const ACTIVITY_FIELDS = {
+  plan: (d) => ({ steps: strs(d.steps, 'steps', 50, 500, 1) }),
+  action: (d) => { const sm = str(d.summary, 'summary', 2000, false); return sm ? { summary: sm } : {}; },
+  question: (d) => ({ question: str(d.question, 'question', 2000), ...(d.options != null ? { options: strs(d.options, 'options', 10, 200, 1) } : {}) }),
+  handover: (d) => ({ state: str(d.state, 'state', 10000), nextStep: str(d.nextStep, 'nextStep', 2000), openQuestions: strs(d.openQuestions, 'openQuestions', 20, 1000) }),
+  done: (d) => ({ summary: str(d.summary, 'summary', 10000), verification: str(d.verification, 'verification', 10000) }),
+};
+const ALLOWED_FIELDS = { plan: ['steps'], action: ['summary'], question: ['question', 'options'], handover: ['state', 'nextStep', 'openQuestions'], done: ['summary', 'verification'] };
+/** the structured fields for a typed activity: exactly the kind's fields, each bounded; anything else is refused */
+export function activityData(kind, data) {
+  if (!ACTIVITY_KINDS.includes(kind)) throw new TaskError('kind must be plan, action, question, handover or done', 'invalid_activity');
+  const d = data == null ? {} : data;
+  if (typeof d !== 'object' || Array.isArray(d)) throw new TaskError('data must be an object', 'invalid_activity');
+  const extra = Object.keys(d).filter((k) => !ALLOWED_FIELDS[kind].includes(k));
+  if (extra.length) throw new TaskError(`${kind} does not take ${extra.join(', ')}`, 'invalid_activity');
+  return ACTIVITY_FIELDS[kind](d);
+}
+const activityText = (kind, d) => (kind === 'plan' ? d.steps.map((x, i) => `${i + 1}. ${x}`).join('\n')
+  : kind === 'question' ? d.question : kind === 'handover' ? `${d.state}\n\nNext: ${d.nextStep}` : kind === 'done' ? d.summary : (d.summary || ''));
 /** the delegate reports what it is doing; the people on the task see it, and a question reaches the assignee */
-export async function reportActivity(db, me, key, { type, body } = {}) {
+export async function reportActivity(db, me, key, { type, kind, body, data } = {}) {
   const { t } = await readable(db, me, key);
   if (String(t.delegate_id) !== String(me.id)) throw new TaskError('Only the agent this task is delegated to can report on it', 'not_delegate', 403);
-  if (!ACTIVITY[type]) throw new TaskError('type must be thought, action, ask, result or error', 'invalid_activity');
+  if (kind != null) {
+    const d = activityData(kind, data);
+    const note = text(body, 'body', 20000, false) || activityText(kind, d);
+    if (!note) throw new TaskError('body is required', 'body_required');
+    await event(db, t, me, 'activity', kind, null, note, null, d);
+    await session(db, t, me.id, KIND_STATE[kind], activityText(kind, d) || note);
+    await db.query('UPDATE tasks SET updated_at = now() WHERE id = $1', [t.id]);
+    if (kind === 'question') await notifyUsers(db, t, me, [t.assignee_id, t.reviewer_id], 'agent_question', `${actorName(me)} asks: ${d.question.slice(0, 200)}`);
+    // a handover is for the NEXT run: it lands in the agent's own feed, so whichever run picks the task up next reads it
+    if (kind === 'handover') await agentEvent(db, me.id, t, 'handover', { by: actorName(me), handover: d });
+    return getTask(db, me, key);
+  }
+  if (!ACTIVITY[type]) throw new TaskError('Pass kind (plan, action, question, handover, done) or type (thought, action, ask, result, error)', 'invalid_activity');
   const note = text(body, 'body', 20000);
   await event(db, t, me, 'activity', type, null, note);
   await session(db, t, me.id, ACTIVITY[type], note);
@@ -681,6 +767,70 @@ export async function reportActivity(db, me, key, { type, body } = {}) {
   if (type === 'ask') await notifyUsers(db, t, me, [t.assignee_id, t.reviewer_id], 'agent_question', `${actorName(me)} asks: ${note.slice(0, 200)}`);
   if (type === 'error') await notifyUsers(db, t, me, [t.assignee_id], 'agent_error', `${actorName(me)} hit a problem: ${note.slice(0, 200)}`);
   return getTask(db, me, key);
+}
+
+// ───────────────────────────── claim leases (2026-10-18)
+/** How long a claim lasts without a heartbeat. Server-side; a run heartbeats well inside it. */
+export const LEASE_MS = 10 * 60 * 1000;
+const RUN_ID = /^[A-Za-z0-9._:-]{1,128}$/;
+function runIdOf(v, required = true) {
+  if (v == null || v === '') { if (required) throw new TaskError('runId is required', 'run_id_required'); return null; }
+  if (typeof v !== 'string' || !RUN_ID.test(v)) throw new TaskError('runId is 1 to 128 letters, digits or . _ : -', 'invalid_run_id');
+  return v;
+}
+const renewLease = (db, taskId, agentId, run) => db.query(`UPDATE task_claim_leases SET expires_at = now() + ($4 || ' milliseconds')::interval, heartbeat_at = now()
+  WHERE task_id = $1 AND agent_user_id = $2 AND run_id = $3 AND expires_at > now() RETURNING run_id, expires_at, heartbeat_at`, [taskId, agentId, run, String(LEASE_MS)]);
+/**
+ * End a lease and put the task back where it was before the claim. The DELETE is the gate: whichever caller removes
+ * the row (the sweep on either replica, a claim that found it lapsed, or the run releasing it) does the rest, and
+ * nobody else does. Back in the queue means: the delegate the claim set is cleared (a person's delegation stays), and
+ * a task the run moved on (in progress, blocked) returns to its earlier status when the state machine allows it.
+ */
+async function endLease(db, where, params, reason) {
+  const l = (await db.query(`DELETE FROM task_claim_leases WHERE ${where} RETURNING *`, params)).rows[0];
+  if (!l) return null;
+  const t = (await db.query(`${SELECT} WHERE t.id = $1`, [l.task_id])).rows[0];
+  if (!t) return l;
+  const agent = { id: l.agent_user_id, kind: 'agent', name: null };
+  const expired = reason === 'lease_expired';
+  const clearDelegate = String(t.delegate_id || '') === String(l.agent_user_id) && !l.delegate_before;
+  const back = t.status !== l.status_before && ['in_progress', 'blocked'].includes(t.status) && allowedMoves(t.status).includes(l.status_before) ? l.status_before : null;
+  if (clearDelegate || back) await db.query('UPDATE tasks SET delegate_id = CASE WHEN $2 THEN NULL ELSE delegate_id END, status = COALESCE($3, status), updated_at = now() WHERE id = $1', [t.id, clearDelegate, back]);
+  await event(db, t, agent, reason, null, null, `run ${l.run_id}`);
+  if (back) await event(db, t, agent, 'status', t.status, back, expired ? 'The run stopped answering; back in the queue' : 'Released; back in the queue');
+  if (clearDelegate) await event(db, t, agent, 'delegated', String(l.agent_user_id), null, expired ? 'lease expired' : 'released');
+  await session(db, t, l.agent_user_id, 'pending', expired ? 'The run stopped answering; waiting for a new run' : 'Released; waiting for a new run');
+  if (expired) {
+    const fresh = (await db.query(`${SELECT} WHERE t.id = $1`, [t.id])).rows[0];
+    await agentEvent(db, l.agent_user_id, fresh, 'lease_expired', { runId: l.run_id, expiredAt: l.expires_at, statusBefore: t.status, statusNow: fresh.status, stillDelegated: !clearDelegate });
+  }
+  await folderAccess(db, t.id);
+  return l;
+}
+const expireLeaseIfDue = (db, taskId, now = null) => endLease(db, 'task_id = $1 AND expires_at <= COALESCE($2::timestamptz, now())', [taskId, now], 'lease_expired');
+/** keep a claim alive: the same agent and run, before it lapses */
+export async function heartbeatTask(db, me, key, { runId } = {}) {
+  const { t } = await readable(db, me, key); const run = runIdOf(runId);
+  const r = (await renewLease(db, t.id, me.id, run)).rows[0];
+  if (r) return { key: `T-${t.number}`, lease: { runId: r.run_id, expiresAt: r.expires_at, heartbeatAt: r.heartbeat_at, ttlMs: LEASE_MS } };
+  await expireLeaseIfDue(db, t.id);
+  const held = (await db.query('SELECT agent_user_id, run_id FROM task_claim_leases WHERE task_id = $1', [t.id])).rows[0];
+  if (held) throw new TaskError('Another run holds this task', 'already_claimed', 409);
+  throw new TaskError('This run does not hold the task (its lease ended). Read the task and its handover, then claim it again.', 'lease_lost', 409);
+}
+/** end a claim on purpose: the task goes back to the queue (post a handover first so the next run can continue) */
+export async function releaseTask(db, me, key, { runId } = {}) {
+  const { t } = await readable(db, me, key); const run = runIdOf(runId);
+  const l = await endLease(db, 'task_id = $1 AND agent_user_id = $2 AND run_id = $3', [t.id, me.id, run], 'released');
+  return { released: !!l, task: await getTask(db, me, key) };
+}
+/** the sweep (leader replica, every minute): every lapsed lease ends, and its task goes back to the queue. `now` is
+ *  injectable for tests. Safe on two replicas even without the leader lock: endLease's DELETE has one winner. */
+export async function sweepExpiredLeases(db, { now = new Date(), batch = 200 } = {}) {
+  const due = (await db.query('SELECT task_id FROM task_claim_leases WHERE expires_at <= $1 ORDER BY expires_at LIMIT $2', [now, batch])).rows;
+  let expired = 0;
+  for (const r of due) if (await expireLeaseIfDue(db, r.task_id, now)) expired++;
+  return { expired };
 }
 
 // credentials: xtk_<prefix>_<secret>; the prefix finds the row, the SHA-256 of the whole token proves it
@@ -795,6 +945,9 @@ export async function handoffTask(db, me, key) {
   if (String(t.delegate_id || '') !== String(agent.id)) {
     await db.query('UPDATE tasks SET delegate_id = $2, assignee_id = COALESCE(assignee_id, $3), updated_at = now() WHERE id = $1', [t.id, agent.id, me.id]);
     await event(db, t, me, 'delegated', t.delegate_id ? String(t.delegate_id) : null, String(agent.id), 'handed off');
+    await db.query('DELETE FROM task_claim_leases WHERE task_id = $1 AND agent_user_id <> $2', [t.id, agent.id]);
+    if (t.delegate_id) await agentEvent(db, t.delegate_id, t, 'undelegated', {});
+    await agentEvent(db, agent.id, t, 'delegated', { by: actorName(me), handoff: true });
     await session(db, t, agent.id, 'pending', 'Handed off. Waiting for the agent to connect.');
     await watch(db, t.id, agent.id);
   }
