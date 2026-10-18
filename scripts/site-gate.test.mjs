@@ -45,3 +45,17 @@ test('nginx gates the pages, and only the pages', () => {
   }
   assert.match(block('    location = /__site_gate {'), /internal;[\s\S]*\/api\/site-gate\/check/);
 });
+
+// REGRESSION, 2026-10-18: the sign-in bypass must be a NAMED location. `try_files … /index.html` is an internal
+// redirect that re-runs location matching, so it lands in `location /` and gets gated — /login then served
+// "Coming soon" and nobody, the owner included, could sign in to a site whose access needs a sign-in.
+test('the sign-in bypass never falls back through the gated location', () => {
+  for (const head of ['    location ~ ^/(login|signup', '    location ~ ^/product/[^/]+/privacy']) {
+    const b = block(head);
+    assert.doesNotMatch(b, /try_files[^;]*\s\/index\.html;/, `${head} must not internal-redirect to /index.html`);
+    assert.match(b, /@spa_shell;/, `${head} must fall back to the ungated shell`);
+  }
+  const shell = block('    location @spa_shell {');
+  assert.doesNotMatch(shell, /auth_request/, '@spa_shell must never be gated');
+  assert.match(shell, /try_files \/index\.html =404;/);
+});
