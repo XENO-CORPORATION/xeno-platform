@@ -20,6 +20,7 @@ import BrowserFileIO from './BrowserFileIO';
 import BrowserSpaces from './BrowserSpaces';
 import WorkflowGraph from './WorkflowGraph';
 import AcpGateway from './AcpGateway';
+import SpawnTerminal from './SpawnTerminal';
 import SdkEmbed from './SdkEmbed';
 import NotesEditor from './NotesEditor';
 import UseInspector from './UseInspector';
@@ -74,6 +75,7 @@ const MOCKUPS: Record<string, React.ComponentType> = {
   '3d-hero': Xeno3DEditor,
   'anima-hero': AnimaMind,
   'anima-swarm': AnimaSwarm,
+  'spawn-hero': SpawnTerminal,
   'shell-hero': ShellDesktop,
   'shell-mounts': ShellMounts,
   'shell-displays': ShellDisplays,

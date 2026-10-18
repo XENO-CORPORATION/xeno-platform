@@ -1,5 +1,6 @@
 import React from 'react';
 import {
+  Rocket,
   Image, Video, Music, Box, Frame, Film, Brush, AudioWaveform,
   Camera, BookOpen, Rotate3d, Ruler,
   FileText, NotebookPen, Table2, Presentation, FileType2,
@@ -66,6 +67,7 @@ export const PRODUCT_ICON: Record<string, React.ReactNode> = {
   rt:        <Cpu className={I} />,
   sdk:       <Package className={I} />,
   shell:     <SquareTerminal className={I} />,
+  spawn:     <Rocket className={I} />,
   workflow:  <Workflow className={I} />,
   engine:    <Gamepad2 className={I} />,
   use:       <MousePointerClick className={I} />,

@@ -161,7 +161,7 @@ try {
 // reads this array out of the source text instead of importing it.
 const BACKEND_SUITES = [
   'ledger-v2', 'ledger-chain', 'ledger-billing', 'ledger-correctness', 'project-insights',
-  'media-metering', 'wallet-service', 'authz-v2', 'oidc-v2', 'erasure',
+  'media-metering', 'wallet-service', 'authz-v2', 'oidc-v2', 'connect-authority', 'erasure',
   'account-recovery', 'auth-token-confusion', 'api-key-auth', 'browser-bff-session',
   'credit-mirror-drift', 'dpop-token-exchange', 'fresh-db-boot',
   'ledger-audit-fixes', 'service-ledger', 'readonly-preview-lifecycle',

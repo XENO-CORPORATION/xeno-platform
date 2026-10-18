@@ -49,7 +49,7 @@ export type Maturity = 'experimental' | 'stable';
 export type Signing = 'unsigned' | 'signed' | 'none';
 
 /** What a visitor receives — derived, not authored (see `installChannel`). */
-export type InstallChannel = 'installer' | 'archive' | 'npm' | 'hosted' | 'none';
+export type InstallChannel = 'installer' | 'archive' | 'npm' | 'script' | 'hosted' | 'none';
 
 export interface Product {
   slug: string;            // url + R2 app id (kebab). e.g. 'pixel'
@@ -64,6 +64,9 @@ export interface Product {
   launchPath?: string;
   /** cli: the install command shown on the page */
   install?: string;
+  /** cli: 'script' when `install` runs a hosted install script (irm … | iex) that fetches and checks a binary build,
+   *  rather than a package manager. Changes the notice: there IS an unsigned build, and it is not an npm package. */
+  installVia?: 'script';
   /** Optional schema.org override when a product supports fewer platforms than its delivery class. */
   operatingSystem?: string;
   repo?: string;
@@ -261,6 +264,10 @@ export const PRODUCTS: Product[] = [
   // x86_64 AppImage alongside the Windows installer, both built from the same
   // commit and both verified through the live auto-update chain. Leaving this
   // as 'Windows' would hide a platform the feed actually serves.
+  // XENO Spawn — every agent CLI (Claude Code, Codex, agy, opencode, XENO agent) in one place, and a XENO platform agent
+  // started in a terminal with one line. 0.1.0-rc.42 is on R2 (apps/spawn/, beta, Windows x64), installed by a
+  // checksum-verifying script; /install/spawn.ps1 302s to apps/spawn/install.ps1 (nginx). Not on npm.
+  { slug: 'spawn', name: 'XENO Spawn', tagline: 'Every coding agent in one place — and your XENO agents, one line away.', category: 'Develop', status: 'beta', delivery: 'cli', installVia: 'script', install: 'irm https://xenosystem.ai/install/spawn.ps1 | iex', operatingSystem: 'Windows', repo: 'xeno-spawn' },
   { slug: 'shell', name: 'XENO Shell', tagline: 'A desktop you can share, with a real terminal and folder-level permissions.', category: 'Develop', status: 'beta', delivery: 'desktop', operatingSystem: 'Windows', repo: 'xeno-shell' },
   // Anima SHIPS. All 8 packages are live on npm at 0.0.2 (verified against the
   // registry 2026-07-27), so 'coming-soon'/'soon' was telling visitors a product
@@ -300,7 +307,7 @@ export function getProduct(slug?: string): Product | undefined {
 /** What a visitor actually receives from this product's CTA. */
 export function installChannel(p: Product): InstallChannel {
   if (p.delivery === 'web') return 'hosted';
-  if (p.delivery === 'cli') return 'npm';
+  if (p.delivery === 'cli') return p.installVia === 'script' ? 'script' : 'npm';
   if (p.delivery === 'desktop') return 'installer';
   // 'soon' publishes nothing through the R2 feed — unless it is distributed
   // off-site, which is how xeno-rt ships (public GitHub release archives).
@@ -312,7 +319,7 @@ export function installChannel(p: Product): InstallChannel {
 export function artifactSigning(p: Product): Signing {
   if (p.signing) return p.signing;
   const ch = installChannel(p);
-  return ch === 'installer' || ch === 'archive' ? 'unsigned' : 'none';
+  return ch === 'installer' || ch === 'archive' || ch === 'script' ? 'unsigned' : 'none';
 }
 
 export function productMaturity(p: Product): Maturity {
@@ -379,6 +386,17 @@ export function experimentalNotice(p: Product): ExperimentalNotice | null {
         'If Windows warns, choose More info → Run anyway.',
         'Verify the checksum published alongside the download if you want to check the file yourself.',
       ],
+    };
+  }
+
+  if (signing === 'unsigned' && channel === 'script') {
+    // A script run from the terminal (irm … | iex) is not a downloaded file, so Windows attaches no mark-of-the-web and
+    // SmartScreen does not prompt. The honest statement is about the build: unsigned, and checked by its checksum.
+    return {
+      channel, signing, smartScreen: false,
+      label: experimental ? 'Experimental · unsigned build' : 'Unsigned build',
+      short: 'One command installs it. The build isn’t code-signed yet; the script refuses it unless its SHA-256 matches the published value.',
+      detail: `${lead} The install command downloads the published build and installs it only if its SHA-256 matches the value published with the release. The build isn’t code-signed yet — when signing lands, this notice goes away.`.trim(),
     };
   }
 
