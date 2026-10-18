@@ -77,9 +77,14 @@
         if (!code || button.disabled) return;
         button.disabled = true;
         error.textContent = '';
+        // Signed in already (an account without access)? Then /api/ checks the session's CSRF pair on this POST,
+        // exactly as it does for the app; send the readable half, or the code is refused with "CSRF validation failed".
+        var csrf = (document.cookie.match(/(?:^|;\s*)(?:__Host-)?xeno_csrf=([^;]+)/) || [])[1];
+        var headers = { 'content-type': 'application/json' };
+        if (csrf) headers['x-xeno-csrf'] = decodeURIComponent(csrf);
         fetch('/api/site-gate/unlock', {
           method: 'POST',
-          headers: { 'content-type': 'application/json' },
+          headers: headers,
           body: JSON.stringify({ code: code }),
           credentials: 'same-origin',
         }).then(function (r) {

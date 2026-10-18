@@ -234,7 +234,10 @@ async function findOrCreateOAuthUser(db, provider, profile, req = null) {
     // a fully verified account here with no form and no friction — it is how 160
     // of 218 accounts arrived. Gating only the two /register endpoints would
     // leave this wide open.
-    assertRegistrationAllowed(email, { gateInvite: hasGateInvite(req?.headers?.cookie) });
+    // The invite is the cookie on this request, or the one captured server-side when this OAuth flow started; either
+    // way it only counts while the site gate is on (hasGateInvite checks that; the captured one is re-checked here).
+    assertRegistrationAllowed(email, { gateInvite: hasGateInvite(req?.headers?.cookie)
+      || (req?.oauthGateInvite === true && process.env.SITE_GATE === 'on') });
 
     const userId = uuidv4();
     const generatedUsername = username || email?.split('@')[0] || `user_${providerId.substring(0, 8)}`;
@@ -2047,7 +2050,11 @@ router.get('/google', async (req, res) => {
     const returnUrl = req.query.returnUrl || '/workspace';
 
     // Store state in Redis
-    await storeOAuthState(state, { provider: 'google', returnUrl, createdAt: Date.now() });
+    await storeOAuthState(state, {
+      // The access-code invitation, captured where the flow STARTS (that host has the cookie) and kept server-side,
+      // because the provider returns to OIDC/OAuth callback on xenostudio.ai, where a __Host- cookie set on
+      // xenosystem.ai is never sent.
+      gateInvite: hasGateInvite(req.headers.cookie), provider: 'google', returnUrl, createdAt: Date.now() });
 
     const params = new URLSearchParams({
       client_id: config.clientId,
@@ -2085,6 +2092,7 @@ router.get('/google/callback', async (req, res) => {
     if (!stateData || stateData.provider !== 'google') {
       return res.redirect(`${FRONTEND_URL}/login?error=invalid_state`);
     }
+    req.oauthGateInvite = stateData.gateInvite === true;
 
     const config = OAUTH_CONFIG.google;
 
@@ -2160,7 +2168,11 @@ router.get('/github', async (req, res) => {
     const state = generateState();
     const returnUrl = req.query.returnUrl || '/workspace';
 
-    await storeOAuthState(state, { provider: 'github', returnUrl, createdAt: Date.now() });
+    await storeOAuthState(state, {
+      // The access-code invitation, captured where the flow STARTS (that host has the cookie) and kept server-side,
+      // because the provider returns to OIDC/OAuth callback on xenostudio.ai, where a __Host- cookie set on
+      // xenosystem.ai is never sent.
+      gateInvite: hasGateInvite(req.headers.cookie), provider: 'github', returnUrl, createdAt: Date.now() });
 
     const params = new URLSearchParams({
       client_id: config.clientId,
@@ -2194,6 +2206,7 @@ router.get('/github/callback', async (req, res) => {
     if (!stateData || stateData.provider !== 'github') {
       return res.redirect(`${FRONTEND_URL}/login?error=invalid_state`);
     }
+    req.oauthGateInvite = stateData.gateInvite === true;
 
     const config = OAUTH_CONFIG.github;
 
@@ -2295,6 +2308,10 @@ router.get('/twitter', async (req, res) => {
 
     // Store state and PKCE verifier in Redis
     await storeOAuthState(state, {
+      // The access-code invitation, captured where the flow STARTS (that host has the cookie) and kept server-side,
+      // because the provider returns to OIDC/OAuth callback on xenostudio.ai, where a __Host- cookie set on
+      // xenosystem.ai is never sent.
+      gateInvite: hasGateInvite(req.headers.cookie),
       provider: 'twitter',
       returnUrl,
       codeVerifier,
@@ -2336,6 +2353,7 @@ router.get('/twitter/callback', async (req, res) => {
     if (!stateData || stateData.provider !== 'twitter') {
       return res.redirect(`${FRONTEND_URL}/login?error=invalid_state`);
     }
+    req.oauthGateInvite = stateData.gateInvite === true;
 
     const config = OAUTH_CONFIG.twitter;
     const basicAuth = Buffer.from(`${config.clientId}:${config.clientSecret}`).toString('base64');
