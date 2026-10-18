@@ -95,6 +95,29 @@ in `nginx/default.conf`, `public/robots.txt`, `scripts/prerender-products.mjs` o
 sign-in for every shipped product. `updates.xenostudio.ai` (R2) and `api.xenostudio.ai` are
 **different hosts**, so the site can be locked hard without breaking installed apps.
 
+### 🔒 The SITE GATE is ON (owner, 2026-10-18) — pages are invitation-only
+
+`SITE_GATE=on` in the box `.env`, enforced by `nginx` (`auth_request /__site_gate` →
+`src/server/routes/siteGateRoutes.js`, `public/coming-soon.html`). Nothing outside the gate:
+the API, OAuth, static assets, `/install/spawn.ps1`, and the sign-in/legal pages.
+
+| Way in | How | Note |
+|---|---|---|
+| **Access code** | `SITE_GATE_CODE` typed on Coming soon → signed `__Host-xeno_gate` cookie, 7 days, 10 attempts / 15 min per address | Opens **pages only**. Rotating the code invalidates every issued cookie; there is no per-person revocation |
+| **Account** | An ACTIVE account that is an admin or matches `SITE_GATE_ALLOW` (`@xenosystem.ai,@bnkrsys.com`) | Signed in alone is NOT access — signup is open |
+| Off | `SITE_GATE=` (anything but `on`) → 204 for everyone | The flag is the whole switch |
+
+🔴 **The sign-in page must never be gated.** The bypass serves the shell from the named
+`@spa_shell` location; `try_files … /index.html` is an internal redirect that re-enters the
+gated `location /`, and on 2026-10-18 that served "Coming soon" on `/login` and locked
+everyone out. `scripts/site-gate.test.mjs` pins it, plus robots.txt answering as itself and
+the disabled sitemap staying a true 404.
+
+⚠️ **The code and its cookie are not auth.** `/api/` still requires an account, and
+`/workspace` still redirects to `/login` for a code holder. A client-rendered site cannot hide
+its JS bundle either: the gate hides pages, not compiled assets.
+
+
 ⚠️ **De-indexed ≠ inaccessible, and that distinction is deliberate.** Every page still returns
 200 to anyone with the URL — a YC reviewer clicking the link in the application sees the full
 site. `noindex` is a note to crawlers only. **Do not put up the Cloudflare Access wall while
