@@ -869,10 +869,33 @@ function holdRefusal(code) {
  * ceiling the account can fund, never more than the caller asked for (admissionLease.js; decision §3). Both paths
  * refuse with the codes allocateFunding has always used, so a caller cannot tell the paths apart by their refusals.
  */
+/**
+ * What a capped API key may still reserve (2026-10-18, session-key `maxSpendMicro`), or null when the hold names no
+ * capped key. Spent = every usage row the key produced (settled holds and one-shot usage both write one) plus its
+ * outstanding, unexpired holds. Called with the account row already locked FOR UPDATE, and a key's holds all live on
+ * that one account, so two concurrent holds on the key are serialised here and cannot both fit into the last of the cap.
+ */
+export async function keyRemainingMicro(client, req) {
+  const key = req.apiKey;
+  if (!key || !key.id || key.capMicro === undefined || key.capMicro === null) return null;
+  const r = (await client.query(
+    `SELECT (SELECT COALESCE(sum(amount_micro), 0) FROM credit_holds WHERE api_key_id = $1::uuid AND state = 'held' AND expires_at > now())
+          + (SELECT COALESCE(sum(actual_cost_micro), 0) FROM api_usage_logs WHERE api_key_id = $1::uuid) AS spent`,
+    [key.id])).rows[0];
+  const left = BigInt(key.capMicro) - BigInt(r.spent);
+  return left > 0n ? left : 0n;
+}
+
+function keyBudgetRefusal() {
+  return Object.assign(new Error('This session key has reached its spending limit.'), { code: 'SESSION_KEY_BUDGET_EXHAUSTED' });
+}
+
 async function reserveForHold(client, userId, acct, held, req, fixedAmountMicro) {
   const balance = BigInt(acct.balance);
   if (acct.is_frozen) throw holdRefusal('ACCOUNT_FROZEN');
+  const keyLeft = await keyRemainingMicro(client, req);
   if (!req.lease) {
+    if (keyLeft !== null && fixedAmountMicro > keyLeft) throw keyBudgetRefusal();
     if (balance - held < fixedAmountMicro) throw holdRefusal('INSUFFICIENT_CREDITS');
     // Spend-cap invariant (§4.6), enforced at HOLD time — the only point where
     // refusing means anything. Refusing at settle would be theatre: the compute has
@@ -897,11 +920,13 @@ async function reserveForHold(client, userId, acct, held, req, fixedAmountMicro)
   let binding = 'funding';
   if (balance - held < spendable) { spendable = balance - held; binding = 'balance'; }
   if (headroom && headroom.headroom < spendable) { spendable = headroom.headroom; binding = 'cap'; }
+  if (keyLeft !== null && keyLeft < spendable) { spendable = keyLeft; binding = 'key'; }
   const lease = leaseOutput({
     spendableMicro: spendable, model: req.lease.model,
     inputTokens: req.lease.inputTokens, requestedOutputTokens: req.lease.requestedOutputTokens,
   });
   if (lease.refused) {
+    if (binding === 'key') throw keyBudgetRefusal();
     if (binding === 'cap') throw Object.assign(new Error(`spend cap exceeded (${headroom.windowSec}s window)`), { code: 'SPEND_CAP_EXCEEDED' });
     if (binding === 'balance') throw holdRefusal('INSUFFICIENT_CREDITS');
     throw await fundingRefusal(plan.enabled);
@@ -942,9 +967,13 @@ async function holdV2Body(client, userId, req, fixedAmountMicro) {
   const reserved = await reserveForHold(client, userId, acct, held, req, fixedAmountMicro);
   const expiresAt = new Date(Date.now() + (req.expiresInSeconds ?? 900) * 1000);
   const row = await client.query(
-    `INSERT INTO credit_holds (user_id, account_id, hold_id, surface, operation, amount_micro, expires_at)
-     VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING *`,
-    [userId, acct.id, req.holdId, req.surface, req.operation, reserved.amountMicro.toString(), expiresAt.toISOString()],
+    // api_key_id is written only when the hold names a key, so a hold without one is the same statement as before
+    req.apiKey?.id
+      ? `INSERT INTO credit_holds (user_id, account_id, hold_id, surface, operation, amount_micro, expires_at, api_key_id)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8::uuid) RETURNING *`
+      : `INSERT INTO credit_holds (user_id, account_id, hold_id, surface, operation, amount_micro, expires_at)
+         VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING *`,
+    [userId, acct.id, req.holdId, req.surface, req.operation, reserved.amountMicro.toString(), expiresAt.toISOString(), ...(req.apiKey?.id ? [req.apiKey.id] : [])],
   );
   await saveHoldFunding(client, row.rows[0].id, reserved.funding);
   return { row: row.rows[0], balance, held, isFrozen: Boolean(acct.is_frozen), amountMicro: reserved.amountMicro };
@@ -1010,6 +1039,12 @@ export async function settleHoldV2(pool, userId, holdId, actualCostMicro, usage 
       // every reasoning call. Charge what was actually used, bounded only by what the
       // account holds (below).
       const held = BigInt(hold.amount_micro);
+      // A hold made with an agent's session key names that agent on its usage row (the person still pays). The agent
+      // comes from the key row the mint route set after its run-right check, never from the settle body.
+      if (hold.api_key_id && !(usage.dimensions && usage.dimensions.agent_user_id)) {
+        const k = (await client.query('SELECT agent_user_id::text AS a FROM api_keys WHERE id = $1', [hold.api_key_id])).rows[0];
+        if (k && k.a) usage = { ...usage, dimensions: { ...(usage.dimensions || {}), agent_user_id: k.a } };
+      }
       // An UNMEASURED settle charges the reserved worst case — the hold — never more.
       // (The old sentinel for this, MAX_SAFE_INTEGER, drained a whole account once the
       // clamp below it was removed; the intent is now a flag, not a magic number.)
@@ -1065,7 +1100,8 @@ export async function settleHoldV2(pool, userId, holdId, actualCostMicro, usage 
         surface: hold.surface, operation: hold.operation, transactionId: holdId,
         model: usage.model ?? null, provider: usage.provider ?? null,
         inputTokens: usage.inputTokens ?? 0, outputTokens: usage.outputTokens ?? 0,
-        dimensions: usage.dimensions,
+        // the key the hold was made with wins: it is what the cap counted against
+        dimensions: usage.dimensions, apiKeyId: hold.api_key_id || usage.apiKeyId || null,
       }, actual);
       await mirrorLegacy(client, userId, newBalance);
       await client.query('COMMIT');
@@ -1177,12 +1213,14 @@ async function insertUsageLog(client, userId, event, costMicro) {
   await client.query(
     `INSERT INTO api_usage_logs
        (user_id, surface, operation, model, provider, actual_cost_micro, estimated_cost_micro,
-        input_tokens, output_tokens, status, request_id, endpoint, method, dimensions, created_at)
-     VALUES ($1,$2,$3,$4,$5,$6,$6,$7,$8,'ok',$9,$10,'POST',$11::jsonb, now())`,
+        input_tokens, output_tokens, status, request_id, endpoint, method, dimensions, api_key_id, created_at)
+     VALUES ($1,$2,$3,$4,$5,$6,$6,$7,$8,'ok',$9,$10,'POST',$11::jsonb,$12::uuid, now())`,
     [
       userId, event.surface, event.operation, event.model ?? null, event.provider ?? null,
       costMicro.toString(), event.inputTokens ?? 0, event.outputTokens ?? 0, event.transactionId,
       `/api/v2/ledger/usage:${event.operation}`, dimensionsJson(event.dimensions),
+      // The key that made the call, when the caller verified one (serviceLedgerRoutes keyAttribution). Null otherwise.
+      event.apiKeyId ?? null,
     ],
   );
 }

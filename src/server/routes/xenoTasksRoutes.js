@@ -22,6 +22,7 @@
  *
  * The caller is a principal (person or agent); agents act through the same routes as a person's screen.
  */
+import { agentMe } from '../services/agentsMcp.js';
 import express from 'express';
 import * as tasks from '../services/xenoTasks.js';
 import * as taskFolders from '../services/taskFolders.js';
@@ -151,7 +152,8 @@ router.delete('/agents/tokens/:id', handled(async (req, res) => { res.json({ suc
 router.put('/agents/webhook', handled(async (req, res) => { res.json({ success: true, ...(await tasks.setAgentWebhook(req.db, req.me, req.body || {})) }); }));
 router.get('/openapi.json', (req, res) => { res.json(TASKS_OPENAPI); });
 router.get('/agent/events', handled(async (req, res) => { res.json({ success: true, ...(await tasks.agentEvents(req.db, req.me, { after: req.query.after, limit: req.query.limit })) }); }));
-router.get('/agent/me', handled(async (req, res) => { const ai = (await req.db.query(`SELECT ai.public_id, d.id AS division_id, d.name AS division_name FROM agent_identities ai LEFT JOIN workforce_division_ownership o ON o.resource_id = ai.workforce_resource_id LEFT JOIN workforce_divisions d ON d.id = o.division_id WHERE ai.user_id = $1`, [req.me.id])).rows[0] || {}; res.json({ success: true, agent: { id: String(req.me.id), agentId: ai.public_id || null, division: ai.division_id ? { id: String(ai.division_id), name: ai.division_name } : null, expiresAt: req.taskToken ? req.taskToken.expiresAt : null, name: req.me.name, kind: req.me.kind, scopes: req.taskToken ? req.taskToken.scopes : null, task: req.taskToken && req.taskToken.taskId ? true : false }, tasks: (await tasks.listTasks(req.db, req.me, { delegate: 'me', status: 'raised,todo,in_progress,blocked,in_review' })).filter((x) => !req.taskToken || !req.taskToken.taskId || String(x.id) === req.taskToken.taskId) }); }));
+// one code path with XENO MCP agents_whoami (services/agentsMcp.js agentMe): same function, same JSON
+router.get('/agent/me', handled(async (req, res) => { res.json(await agentMe(req.db, req.me)); }));
 router.get('/projects', handled(async (req, res) => { res.json({ success: true, projects: await tasks.listTaskProjects(req.db, req.me) }); }));
 router.get('/agents/:id/projects', handled(async (req, res) => { res.json({ success: true, ...(await tasks.agentProjects(req.db, req.me, req.params.id)) }); }));
 router.put('/agents/:id/projects/:projectId', handled(async (req, res) => { res.json({ success: true, ...(await tasks.addAgentProject(req.db, req.me, req.params.id, req.params.projectId, req.body?.relation || 'editor')) }); }));

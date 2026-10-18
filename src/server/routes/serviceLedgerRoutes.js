@@ -56,6 +56,7 @@ function sendErr(res, err) {
     HOLD_NOT_ACTIVE: 409,
     HOLD_EXPIRED: 409,
     SPEND_CAP_EXCEEDED: 429,
+    SESSION_KEY_BUDGET_EXHAUSTED: 402,
   };
   // A Postgres unique-violation on the holdId (concurrent replay racing past the
   // idempotency SELECT) is a conflict, not a 500.
@@ -277,6 +278,23 @@ export function createServiceLedgerRouter({
     return { actualCostMicro: legacy, priced: null };
   }
 
+  /**
+   * The API key a metered call was made with, and the agent that key runs as (2026-10-18).
+   *
+   * The gateway sends `apiKeyId` = the platform key it authenticated the call with. It is honoured only when that key
+   * belongs to the actor the call bills (`userId`), so a gateway bug cannot pin one person's usage on another's key.
+   * The AGENT is read from the key row (`api_keys.agent_user_id`, set by the session-key mint after its run-right check),
+   * never from anything the caller of the model sent. No key, a foreign key, or a key with no agent: no attribution, and
+   * the charge is unchanged either way — attribution is a label, never a reason to refuse money.
+   */
+  async function keyAttribution(db, actorUserId, apiKeyId) {
+    if (typeof apiKeyId !== 'string' || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(apiKeyId)) return {};
+    const row = (await db.query('SELECT id::text AS id, agent_user_id::text AS agent, max_spend_micro::text AS cap FROM api_keys WHERE id = $1::uuid AND user_id = $2::uuid',
+      [apiKeyId, actorUserId])).rows[0];
+    if (!row) return {};
+    return { apiKeyId: row.id, ...(row.agent ? { agentUserId: row.agent } : {}), capMicro: row.cap };
+  }
+
   // GET /api/v2/ledger/service/balance?userId= — for a caller's admission gate.
   router.get('/balance', async (req, res) => {
     const userId = typeof req.query.userId === 'string' ? req.query.userId : '';
@@ -341,9 +359,13 @@ export function createServiceLedgerRouter({
       // silently became `free`. One human, one wallet, one quota.
       const subject = await billingSubjectFor(req.db, userId);
       await ensureQuota(req.db, subject.userId, (await getEffectivePlan(req.db, subject.userId)).plan);
+      // The key the gateway authenticated the call with: the hold records it, and a capped key's limit is enforced
+      // here, inside the hold's own transaction (creditLedgerV2 keyRemainingMicro), never by the gateway alone.
+      const keyed = await keyAttribution(req.db, userId, b.apiKeyId);
+      const apiKey = keyed.apiKeyId ? { id: keyed.apiKeyId, capMicro: keyed.capMicro ?? null } : null;
       const hold = leased
-        ? await ledger.holdV2(req.db, subject.userId, { surface, holdId, lease: amount.lease, operation, expiresInSeconds: b.expiresInSeconds ?? 3600 })
-        : await ledger.holdV2(req.db, subject.userId, { surface, holdId, amountMicro: amount.amountMicro, operation, expiresInSeconds: b.expiresInSeconds ?? 3600 });
+        ? await ledger.holdV2(req.db, subject.userId, { surface, holdId, lease: amount.lease, operation, expiresInSeconds: b.expiresInSeconds ?? 3600, apiKey })
+        : await ledger.holdV2(req.db, subject.userId, { surface, holdId, amountMicro: amount.amountMicro, operation, expiresInSeconds: b.expiresInSeconds ?? 3600, apiKey });
       // The agent is still named, for attribution — the owner must be able to see WHICH
       // of their agents spent this. Attribution is a label; billing is the owner.
       if (leased) {
@@ -375,6 +397,7 @@ export function createServiceLedgerRouter({
       // settling under the agent's own id would look for a hold that is not there and
       // strand the reservation until it expired. Resolve identically on every leg.
       const subject = await billingSubjectFor(req.db, b.userId);
+      const keyed = await keyAttribution(req.db, b.userId, b.apiKeyId);
       // The usage row for a held call carries what the settle measured (model,
       // tokens) and WHY it was routed here (gateway f6087f3 sends routeReason /
       // routeMismatchBasis on the settle body). Unknown values are dropped, never
@@ -388,8 +411,9 @@ export function createServiceLedgerRouter({
           ...routingDimensions(b),
           ...(amount.priced ? { usage_source: amount.priced.measured ? 'provider' : 'estimated' } : {}),
           ...(amount.priced?.absorbedInputTokens ? { absorbed_input_tokens: amount.priced.absorbedInputTokens } : {}),
-          ...(subject.isAgent ? { agent_user_id: subject.actorUserId } : {}),
+          ...(subject.isAgent ? { agent_user_id: subject.actorUserId } : keyed.agentUserId ? { agent_user_id: keyed.agentUserId } : {}),
         },
+        apiKeyId: keyed.apiKeyId ?? null,
       });
       res.json({ ...settled, pricing: amount.priced, billedUserId: subject.userId });
     } catch (err) {
@@ -450,6 +474,7 @@ export function createServiceLedgerRouter({
       // the money is the owner's either way.
       const subject = await billingSubjectFor(req.db, userId);
       await ensureQuota(req.db, subject.userId, (await getEffectivePlan(req.db, subject.userId)).plan);
+      const keyed = await keyAttribution(req.db, userId, b.apiKeyId);
       const result = await ledger.recordUsageV2(req.db, subject.userId, {
         transactionId,
         surface,
@@ -461,8 +486,9 @@ export function createServiceLedgerRouter({
         dimensions: {
           ...routingDimensions(b),
           usage_source: measured === false ? 'estimated' : 'provider',
-          ...(subject.isAgent ? { agent_user_id: subject.actorUserId } : {}),
+          ...(subject.isAgent ? { agent_user_id: subject.actorUserId } : keyed.agentUserId ? { agent_user_id: keyed.agentUserId } : {}),
         },
+        apiKeyId: keyed.apiKeyId ?? null,
       });
       res.json({ ...result, costMicro, billedUserId: subject.userId, pricing: { model, measured: measured !== false, inputTokens: inTok, outputTokens: outTok } });
     } catch (err) {

@@ -58,6 +58,21 @@ export function readTtl(value) {
   return n;
 }
 
+/**
+ * The most a session key may ever spend, in ledger micro units (1 credit = 1,000,000), or null for no cap.
+ * The ceiling is 10,000,000 credits — the same ceiling a division's agent budget accepts (divisionAgentBudget.js) —
+ * so a key cannot be given a cap larger than any budget the platform can express, and a typo of extra zeros is refused
+ * rather than becoming an effectively unlimited key.
+ */
+export const MAX_SPEND_MICRO_LIMIT = 10_000_000 * 1_000_000;
+export function readMaxSpend(value) {
+  if (value === undefined || value === null) return null;
+  if (typeof value !== 'number' || !Number.isSafeInteger(value) || value < 1 || value > MAX_SPEND_MICRO_LIMIT) {
+    throw new SessionKeyError(`maxSpendMicro is a whole number of micro-credits from 1 to ${MAX_SPEND_MICRO_LIMIT}.`, 'INVALID_MAX_SPEND', 400);
+  }
+  return value;
+}
+
 /** A short, plain label (what the key is for, shown on the portal), or a refusal. */
 export function readLabel(value) {
   if (value === undefined || value === null || value === '') return 'session key';
@@ -95,11 +110,16 @@ async function defaultProject(client, user) {
 }
 
 /**
+ * The key's usage is ATTRIBUTED to `agent` ({ id: 'agt_…', userId }) when given: the route has already checked the person
+ * may run it. The person still pays; `api_keys.agent_user_id` only names who the key runs as, and the ledger copies it
+ * onto every usage row the key produces (serviceLedgerRoutes.js `keyAttribution`).
+ *
  * Mint one session key for `user` (a person; the route refuses agents and services). `clientId` is the OIDC client that
  * asked (recorded, so the portal can say "made by XENO Spawn"). Returns the plaintext ONCE.
  */
-export async function createSessionKey(client, user, { ttlMinutes, label, clientId = null } = {}) {
+export async function createSessionKey(client, user, { ttlMinutes, label, clientId = null, agent = null, maxSpendMicro } = {}) {
   const ttl = readTtl(ttlMinutes);
+  const cap = readMaxSpend(maxSpendMicro);
   const name = readLabel(label);
   const target = sessionKeyTarget();
   // one person's mints are serialized, so the live limit holds under concurrency
@@ -118,20 +138,20 @@ export async function createSessionKey(client, user, { ttlMinutes, label, client
   const hash = crypto.createHash('sha256').update(raw).digest('hex');
   const row = (await client.query(
     `INSERT INTO api_keys (user_id, key_prefix, key_hash, name, rate_limit_per_minute, rate_limit_per_day, daily_credit_limit,
-                           is_active, usage_count, created_at, expires_at)
-     VALUES ($1::uuid, $2, $3, $4, 120, 100000, NULL, true, 0, now() AT TIME ZONE 'UTC', (now() AT TIME ZONE 'UTC') + make_interval(mins => $5))
+                           is_active, usage_count, created_at, expires_at, agent_user_id, max_spend_micro)
+     VALUES ($1::uuid, $2, $3, $4, 120, 100000, NULL, true, 0, now() AT TIME ZONE 'UTC', (now() AT TIME ZONE 'UTC') + make_interval(mins => $5), $6::uuid, $7::bigint)
      RETURNING id::text AS id, to_char(expires_at, 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') AS expires_at`,
-    [user.id, prefix, hash, name, ttl])).rows[0];
+    [user.id, prefix, hash, name, ttl, agent?.userId || null, cap === null ? null : String(cap)])).rows[0];
   await client.query(
     `INSERT INTO external_api_keys (source_system, external_key_id, platform_api_key_id, platform_project_id, external_user_id,
                                     external_email, key_prefix, legacy_status, legacy_created_at, legacy_expires_at,
                                     legacy_total_requests, legacy_total_tokens, metadata)
      VALUES ($1, $2, $3::uuid, $4::uuid, $5, $6, $7, 'ACTIVE', now(), $8::timestamptz, 0, 0, $9::jsonb)`,
     [SOURCE_SYSTEM, `session:${row.id}`, row.id, projectId, user.id, String(user.email || '').toLowerCase() || null, prefix,
-      row.expires_at, JSON.stringify({ keyName: name, source: 'session-key', clientId })]);
+      row.expires_at, JSON.stringify({ keyName: name, source: 'session-key', clientId, ...(agent ? { agentId: agent.id } : {}) })]);
   return {
-    key: { id: row.id, token: raw, expiresAt: row.expires_at, baseUrl: target.baseUrl, models: target.models },
-    audit: { keyId: row.id, ttlMinutes: ttl, clientId, keyPrefix: prefix },
+    key: { id: row.id, token: raw, expiresAt: row.expires_at, baseUrl: target.baseUrl, models: target.models, ...(agent ? { agentId: agent.id } : {}), ...(cap !== null ? { maxSpendMicro: cap } : {}) },
+    audit: { keyId: row.id, ttlMinutes: ttl, clientId, keyPrefix: prefix, ...(agent ? { agentId: agent.id } : {}), ...(cap !== null ? { maxSpendMicro: cap } : {}) },
   };
 }
 
