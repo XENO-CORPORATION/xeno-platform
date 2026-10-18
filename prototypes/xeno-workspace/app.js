@@ -253,7 +253,16 @@
         ${pinned ? sec('pinned', 'Pinned', pinned) : ''}
         ${window.XENO_AREA_LIVE?.served && window.XENO_AREA_LIVE.unplaced().count ? `<button class="act" data-xa="sortAreas" data-sort-entry>${ic('grid')}Sort into areas<kbd>${window.XENO_AREA_LIVE.unplaced().count}</kbd></button>` : ''}
         ${sec('recent', 'Recent', window.XENO_RECENT.slice(0, 8).map(recentRow).join('') || (window.XENO_RECENT_LIVE && window.XENO_RECENT_LIVE.served ? '<div class="ctx-note" data-recent-empty>Nothing recent yet</div>' : ''))}
+        ${ovAgents()}
       </div>`;
+  }
+  // Overview shows the same "Your agents" list as the Workspace sidebar (each with its live state), and a row opens the
+  // agent's own page in the Workspace area, where it lives — the address is the agent's id, never its name.
+  function ovAgents() {
+    const A = window.XENO_AGENTS, rows = A?.served ? A.sidebar() : [];
+    if (!rows.length) return '';
+    return sec('agents', 'Your agents', rows.map(([t, meta, , addr]) => row(`data-ws-item="${esc(addr)}"`,
+      `${placeLead(t, 'Your agents', addr)}<span class="t">${esc(t)}</span><span class="meta">${esc(meta || '')}</span>`)).join(''));
   }
   // Mode = that mode's home (MODES §7 dashboard + sidebar): start, what needs you HERE, pinned
   // products, recent work here, and the sections as entries into their zones — not repeated lists.
@@ -2172,6 +2181,7 @@
     if (b.dataset.chat) { document.querySelectorAll('[data-chat][aria-current]').forEach((n) => n.setAttribute('aria-current', 'false')); b.setAttribute('aria-current', 'true'); return; }
     if (b.hasAttribute('data-newchat') || b.dataset.newin) return toast(b.dataset.newin ? `New chat in ${b.dataset.newin}` : 'New chat');
     if (b.dataset.mode) return openMode(b.dataset.mode);
+    if (b.dataset.wsItem) return go('global', { global: 'workspace', item: b.dataset.wsItem });
     if (b.dataset.item !== undefined) { const p = b.dataset.itemP; if (p && !(S.view === 'product' && S.product === p)) return go('product', { product: p, item: b.dataset.item }); return go(S.view, { item: b.dataset.item }); }
     if (b.dataset.ptab) return go('global', { global: 'projects', item: S.item.split('/')[0] + (b.dataset.ptab === 'Overview' ? '' : '/' + b.dataset.ptab) });
     if (b.dataset.openProjectOv) return go('global', { global: 'projects', item: b.dataset.openProjectOv });
