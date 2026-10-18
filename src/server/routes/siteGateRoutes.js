@@ -41,11 +41,14 @@ export function hasSiteAccess(user, allow) {
   return allow.some((a) => (a.startsWith('@') ? a === domain : a === email));
 }
 
-/** A tiny fixed-window attempt counter, keyed by client address. Exported so a test can prove it refuses. */
+/** A tiny fixed-window attempt counter, keyed by client address. Exported so a test can prove it refuses.
+ *  Per backend replica (in memory): with N replicas behind nginx the real ceiling is N × max per window. */
 export function createAttemptLimiter({ max = 10, windowMs = 15 * 60_000, now = () => Date.now() } = {}) {
   const hits = new Map();
   return function take(key) {
     const t = now();
+    // Bounded: a flood of distinct addresses must not grow this forever. Expired windows are dropped once it is large.
+    if (hits.size > 10_000) for (const [k, v] of hits) if (v.reset <= t) hits.delete(k);
     const row = hits.get(key);
     if (!row || row.reset <= t) { hits.set(key, { count: 1, reset: t + windowMs }); return true; }
     row.count += 1;

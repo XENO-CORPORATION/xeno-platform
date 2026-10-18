@@ -132,3 +132,33 @@ test('crawler files and media answer as themselves behind the gate', () => {
   assert.match(sitemap, /return 404;/, 'the disabled sitemap stays a true 404, never HTML');
   assert.match(block(String.raw`    location ~* \.(js|css|png`), /\|otf\|.*\|mp4\|webm\|/, 'media and fonts are static files');
 });
+
+// 2026-10-18 audit fixes.
+test('OAuth signup keeps the invitation across hosts: captured at the start, honoured at the callback', () => {
+  // Google/GitHub/X return to the callback on xenostudio.ai, where a __Host- gate cookie set on xenosystem.ai is never
+  // sent. So the invite rides the server-side OAuth state: every start stores it, every callback reads it back.
+  const auth = readFileSync(new URL('../src/server/routes/authRoutes.js', import.meta.url), 'utf8');
+  const starts = auth.match(/await storeOAuthState\(state, \{[\s\S]*?\}\);/g) || [];
+  assert.ok(starts.length >= 3, 'every OAuth provider start stores state');
+  for (const st of starts) assert.match(st, /gateInvite: hasGateInvite\(req\.headers\.cookie\)/);
+  const consumes = (auth.match(/const stateData = await consumeOAuthState\(state\);/g) || []).length;
+  const reads = (auth.match(/req\.oauthGateInvite = stateData\.gateInvite === true;/g) || []).length;
+  assert.equal(consumes, starts.length);
+  assert.equal(reads, consumes, 'every OAuth callback reads the captured invite back');
+  assert.match(auth, /req\?\.oauthGateInvite === true && process\.env\.SITE_GATE === 'on'/, 'a captured invite still needs the gate on');
+});
+test('Coming soon sends the CSRF half, so a signed-in visitor can still enter the code', () => {
+  const page = readFileSync(new URL('../public/coming-soon.html', import.meta.url), 'utf8');
+  assert.match(page, /xeno_csrf=/);
+  assert.match(page, /headers\['x-xeno-csrf'\]/);
+});
+test('the attempt limiter refuses past the limit and does not grow without bound', async () => {
+  const { createAttemptLimiter } = await import('../src/server/routes/siteGateRoutes.js');
+  let t = 0; const take = createAttemptLimiter({ max: 2, windowMs: 10, now: () => t });
+  assert.equal(take('a'), true); assert.equal(take('a'), true); assert.equal(take('a'), false);
+  t = 11; assert.equal(take('a'), true, 'a new window opens');
+  for (let i = 0; i < 10_050; i++) take(`ip${i}`);
+  t = 1000; take('fresh');
+  // after expiry, the next call over the size threshold drops the stale windows
+  for (let i = 0; i < 2; i++) take(`late${i}`);
+});
