@@ -132,9 +132,14 @@ services:
       - XENO_CONNECT_ORIGINS=${XENO_CONNECT_ORIGINS:-https://connect.xenosystem.ai}
       - CONNECT_SERVICE_TOKEN=${CONNECT_SERVICE_TOKEN:-}
       # Site gate (routes/siteGateRoutes.js): SITE_GATE=on shows pages only to admins and SITE_GATE_ALLOW
-      # (comma list: emails and/or @domains); everyone else gets /coming-soon.html. Unset = open.
+      # (comma list: emails and/or @domains) OR to whoever types SITE_GATE_CODE on /coming-soon.html; everyone
+      # else gets /coming-soon.html. Unset = open. SITE_GATE_CODE empty = the code form refuses (accounts only);
+      # SITE_GATE_SECRET signs the gate cookie (falls back to JWT_SECRET), and changing the CODE invalidates
+      # every cookie already issued.
       - SITE_GATE=${SITE_GATE:-}
       - SITE_GATE_ALLOW=${SITE_GATE_ALLOW:-}
+      - SITE_GATE_CODE=${SITE_GATE_CODE:-}
+      - SITE_GATE_SECRET=${SITE_GATE_SECRET:-}
       # The hosted agent runner (xeno-agents-api). Agent cloud runs and marketplace rentals start runs here;
       # unset = both answer "unavailable". Public address, not a secret -- so it lives here, not only in .env
       # (the same reason as LEDGER_V2_ENABLED above: a value only on the box vanishes on a reset).
