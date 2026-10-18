@@ -109,6 +109,7 @@ import accountRoutes from './routes/accountRoutes.js';
 import dashboardRoutes from './routes/dashboardRoutes.js';
 import v2LedgerRoutes from './routes/v2LedgerRoutes.js';
 import serviceLedgerRoutes from './routes/serviceLedgerRoutes.js';
+import connectAuthorityRoutes from './routes/connectAuthorityRoutes.js';
 import oauth2Routes from './routes/oauth2Routes.js';
 import shellSessionRoutes from './routes/shellSessionRoutes.js';
 import v2MeRoutes from './routes/v2MeRoutes.js';
@@ -630,6 +631,8 @@ app.use('/api/workspaces', databaseMiddleware, authMiddleware, requireActivated,
 app.use('/api/workspace-invites', databaseMiddleware, authMiddleware, workspaceInviteRoutes);
 // One search and one "needs you" feed across a person's chats, projects and Library, each aware of the area.
 app.use('/api/workspace', databaseMiddleware, authMiddleware, requireActivated, areaFromRequest, workspaceAreaRoutes);
+// XENO Connect's host adapter asks here what a token or person may do right now (CONNECT_SERVICE_TOKEN; fails closed).
+app.use('/api/connect/authority', databaseMiddleware, connectAuthorityRoutes);
 // XENO Tasks (codename Telos) — the shared work tracker for people and agents (xeno-tasks/SPEC.md).
 // agents reach Tasks with their own credential (Bearer xtk_...), checked before the person sign-in middleware
 // MCP discovery (RFC 9728 protected-resource metadata; RFC 8414 authorization-server metadata) at the site root
