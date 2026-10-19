@@ -55,14 +55,14 @@ Method: every ID grepped across src/, prototypes/, scripts/ on the remote main r
 | VIEW-04 | Every list row resolves to the same canonical ID across views. View switching pr | PARTIAL | viewConsistency.js unrouted (session-view-consistency.test) | VIEW-01 |
 | VIEW-05 | Scope-bound query keys and revisions fence stale A→B→A responses, optimistic | PARTIAL | scopedReads.js unrouted (session-scoped-reads.test) | NFR-07 |
 | SES-01 | Global New Chat defaults to personal conversation ownership with no organization | BUILT | src/lib/workspaceLabel.ts:4 ; scripts/chat-workspace-scope.database.test.mjs:1 | - |
-| SES-02 | Chat does not require directory selection. If a provider needs cwd, the host sup | PARTIAL | providerSessionCwd.js unrouted; host half in Interface | SES-01 |
-| SES-03 | Chat→Agent requires an explicit authorized root, records mode/context change,  | PARTIAL | conversationModes.js unrouted (session-agent-transition.test) | ASN-07 |
-| SES-04 | Agent→Chat occurs at a safe execution boundary; stop/settle active workspace o | PARTIAL | conversationModes.js unrouted (session-agent-handoff.test) | SES-03 |
+| SES-02 | Chat does not require directory selection. If a provider needs cwd, the host sup | BUILT | routed at /api/workforce/sessions (routes/workforceSessionRoutes.js) with a conversation-access guard; proof scripts/workforce-session-routes.test.mjs; was: providerSessionCwd.js unrouted; host half in Interface | SES-01 |
+| SES-03 | Chat→Agent requires an explicit authorized root, records mode/context change,  | BUILT | routed at /api/workforce/sessions (routes/workforceSessionRoutes.js) with a conversation-access guard; proof scripts/workforce-session-routes.test.mjs; was: conversationModes.js unrouted (session-agent-transition.test) | ASN-07 |
+| SES-04 | Agent→Chat occurs at a safe execution boundary; stop/settle active workspace o | BUILT | routed at /api/workforce/sessions (routes/workforceSessionRoutes.js) with a conversation-access guard; proof scripts/workforce-session-routes.test.mjs; was: conversationModes.js unrouted (session-agent-handoff.test) | SES-03 |
 | SES-05 | Moving/sharing a conversation is separate from mode/root changes. Show the targe | BUILT | src/components/playground/Chat/ChatMoveModal.tsx:7 ; scripts/chat-subsystems-write.test.mjs:187 | - |
-| SES-06 | Resume loads persisted identity, mode, project and root binding, not incidental  | PARTIAL | conversationModes.js:193 unrouted (session-resume-persisted.test) | SES-03 |
-| SES-07 | CLI, GUI, Hub embed and provider TUI adapters retain a single authoritative sess | PARTIAL | sessionLineage.js unrouted; adapters out-of-repo | SES-06 |
+| SES-06 | Resume loads persisted identity, mode, project and root binding, not incidental  | BUILT | routed at /api/workforce/sessions (routes/workforceSessionRoutes.js) with a conversation-access guard; proof scripts/workforce-session-routes.test.mjs; was: conversationModes.js:193 unrouted (session-resume-persisted.test) | SES-03 |
+| SES-07 | CLI, GUI, Hub embed and provider TUI adapters retain a single authoritative sess | BUILT | routed at /api/workforce/sessions (routes/workforceSessionRoutes.js) with a conversation-access guard; proof scripts/workforce-session-routes.test.mjs; was: sessionLineage.js unrouted; adapters out-of-repo | SES-06 |
 | SES-08 | Provider/model availability is discovered through the existing catalogs. Selecti | PARTIAL | providerSelection.js unrouted | SES-07 |
-| SES-09 | New storage/admission contracts preserve crash recovery, deliberate branch/rewin | PARTIAL | conversationTurns.js unrouted | SES-07 |
+| SES-09 | New storage/admission contracts preserve crash recovery, deliberate branch/rewin | BUILT | routed at /api/workforce/sessions (routes/workforceSessionRoutes.js) with a conversation-access guard; proof scripts/workforce-session-routes.test.mjs; was: conversationTurns.js unrouted | SES-07 |
 | RUN-01 | Admission records exact actor/principal, agent version, conversation, optional t | BUILT | src/server/database/migrations/20260925130000-workforce-run-admissions.sql:2 ; scripts/workforce-migration-chain.test.mjs:189 ; host flow: src/server/services/agentCloudRuns.js admit() + src/server/tests/agent-cloud-runs.test.mjs (2026-10-19) | - |
 | RUN-02 | Contextual rights are the intersection of actor authorization, resource-use righ | BUILT | src/server/database/migrations/20260922130000-workforce-handoffs-and-decisions.sql:94 ; scripts/workforce-migration-chain.test.mjs:189 | - |
 | RUN-03 | Pins preserve reproducibility; live revocation still overrides pinned grants bef | BUILT | src/server/database/migrations/20260925130000-workforce-run-admissions.sql:41 ; scripts/workforce-migration-chain.test.mjs:196 | - |
@@ -153,7 +153,7 @@ Method: every ID grepped across src/, prototypes/, scripts/ on the remote main r
 ## Counts
 At measurement: BUILT 96 · PARTIAL 45 · MISSING 4 · OUT-OF-REPO 0
 
-Current (after the 2026-10-19 PRs): BUILT 102 · PARTIAL 39 · MISSING 4
+Current (after the 2026-10-19 PRs): BUILT 108 · PARTIAL 33 · MISSING 4
 
 ## MISSING/PARTIAL ordered by dependency (wire-up order)
 
@@ -179,3 +179,4 @@ Current (after the 2026-10-19 PRs): BUILT 102 · PARTIAL 39 · MISSING 4
   admission; revocation stops the hosted run and refuses credentials (service + trigger). Previously no user
   action admitted a run.
 - ACCT-02/03/04/05/06/08: gifts, returns, opt-out and account history routed at `/api/account/gifts`; closed until `ACCOUNT_GIFTS_OPEN=true` (§22.1).
+- SES-02/03/04/06/07/09: session API at `/api/workforce/sessions`; conversation-access guard (stranger = not_found), host-owned `XENO_SESSION_ROOT`. SES-08 person half routed; host ack/registration intentionally unrouted, so it stays PARTIAL.
