@@ -261,12 +261,19 @@ table fails that gate on purpose: the requirement it implements must be cited by
   that calls `authorize-step`. ✅ **The host half landed too** (xeno-agent-interface #73): a turn that
   names an admission runs under a `runAuthority`, on the SDK lane only. SDK #59/#60 add
   `createWorkforceRunAdmissionClient` (admit / revoke / authority), and `/run-admissions/pin` gives a
-  host the pin it must name. 🔴 **Nothing admits a run yet**: no host calls `POST /run-admissions` from a
-  user action, so no real run is revocation-enforced end to end.
-- DIV-08: admission does not yet check that the actor sits inside the division.
-- The payer is always the actor's own account. No workspace or project pool exists (FUND-06), and there is no silent fallback.
-
-Do not describe runs as revocation-enforced end to end until a host admits a run from a real user action and runs it under that admission.
+  host the pin it must name.
+- ✅ **A real user action admits a run (2026-10-19).** Pressing Run on the agent page
+  (`agentCloudRuns.start`) admits through `admitAccountRun` before anything starts; the run row carries
+  `admission_id`. Revoking that admission (from anywhere) stops the hosted run on the next refresh, revokes
+  its credential, and the runner can no longer mint one — the service checks the fence and a trigger
+  (`20261019090000-agent-cloud-runs-admission.sql`) refuses it too. Gate: `agent-cloud-runs.test.mjs`,
+  mutation-checked on both halves. ⚠️ The hosted runner bills its own ledger hold as well, so a run reserves
+  its budget twice while live (the admission hold is released when the run ends). Removing the duplicate is
+  the runner forwarding leases (xeno-agents-api), not a platform change.
+- ✅ DIV-08 **is** checked at admission (`resolveRunnable` → `actsInDivision`) and on every step. This line
+  said otherwise; re-measured 2026-10-19.
+- ✅ FUND-06 project pools exist: `budget.fundingBudgetId` admits against a project funding pool
+  (`workforceRunFunding.js`), with no personal fallback. This line said none existed; re-measured 2026-10-19.
 
 ## Working in `../xeno-elements-foundations` from this repo
 
