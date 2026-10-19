@@ -98,7 +98,7 @@ window.XENO_PRODUCT_NAV = {
   'enhance-3d': { primary: 'New enhancement', views: ['Library'], sections: [] },
   company: { primary: 'Invite a member', views: ['Members', 'Agent workforce', 'Divisions', 'Wallet', 'Seller account'], sections: [['Divisions', [['Studio', '4 people · 2 agents'], ['Office', '2 people · 1 agent'], ['Dev', '3 people · 4 agents']]]] },
   seats: { primary: 'Invite', views: ['Members', 'Seats', 'Roles'] },
-  storage: { primary: 'Upload', views: ['Recent', 'Starred', 'Shared', 'Trash', 'Usage'] },
+  storage: { primary: 'Upload', views: ['Recent', 'Starred', 'Shared', 'Trash', 'Usage', 'connections'] },
   community: { primary: 'New space', views: ['Feed', 'Spaces', 'Moderation'], sections: [['Spaces', [['Help & questions', 'Q&A'], ['Showcase', 'Showcase'], ['Announcements', 'Announcement']]]] },
 };
 // desktop apps: their nav lives in the app; the panel is a launcher into recent files + projects

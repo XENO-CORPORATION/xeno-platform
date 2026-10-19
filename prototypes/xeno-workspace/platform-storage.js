@@ -7,6 +7,7 @@
  *   a folder   /workspace/corpo/apps/storage/f/<id>     by id, so a rename never breaks the address
  *   a team     /workspace/corpo/apps/storage/t/<workspace id>   that workspace's shared folders and files
  *   Recent · Starred · Shared · Trash · Usage            the sidebar views
+ *   …/storage/connections[/<connection id>[/folders/<id>][/items/drive/<id>]]   Connected clouds (platform-storage-clouds.js)
  *   a file's preview                                      ?view=<source>:<id> on the page's own address (a file: its file id)
  *
  *   GET /api/library/folders?parent=    GET /api/library/assets?folder=|view=|sort=|query=
@@ -130,8 +131,10 @@
     return `<div class="xst-hd"><span></span><span>Name</span><span>${trash ? 'Deleted' : 'Changed'}</span><span>Size</span><span></span></div>${fresh}${fold}${files}${teams}`;
   }
 
+  const clouds = () => window.XENO_STORAGE_CLOUDS && window.XENO_STORAGE_CLOUDS.route();   // Connected clouds: platform-storage-clouds.js
   function page() {
     style();
+    if (clouds()) return window.XENO_STORAGE_CLOUDS.page();
     const at = here(), key = `${at.kind}:${at.id || at.team || ''}:${S.q}`;
     if (S.key !== key) { S.versions = null; S.items = []; S.folders = []; S.path = []; S.edit = null; S.moving = null; S.sharing = null; S.sel = new Set(); if (S.key !== null) S.preview = null; S.status = 'loading'; S.key = key; setTimeout(load, 0); }
     if (!P || !P.served) return '<div class="xst"><div class="xst-top"><div class="xst-path"><button type="button">Storage</button></div></div><div class="xst-list"><div class="xst-empty"><b>Storage is read from the platform</b>Open the workspace on xenosystem.ai to see your files.</div></div></div>';
@@ -334,6 +337,6 @@
   };
   document.addEventListener('click', (e) => { if (e.target.closest('[data-xst-open]')) { e.preventDefault(); if (window.XW?.go) window.XW.go('product', { product: 'storage', item: null }); /* in the current area — Overview stays Overview */ else if (window.XENO_ADDR?.go) window.XENO_ADDR.go('#/corpo/p/storage'); else window.location.assign('/workspace/corpo/apps/storage'); } });
   /** The workspace top bar for Storage: the usage meter beside the path (left), search · New folder · Upload (right). */
-  const top = () => ({ left: S.top ? S.top.meter : '', right: S.top ? `<div class="xst xst-tb">${S.top.tools}</div>` : '' });
+  const top = () => clouds() ? window.XENO_STORAGE_CLOUDS.top() : ({ left: S.top ? S.top.meter : '', right: S.top ? `<div class="xst xst-tb">${S.top.tools}</div>` : '' });
   window.XENO_STORAGE = { chip, page, reload, top, state: () => ({ status: S.status, meter: S.meter, folders: S.folders.length, items: S.items.length }) };
 })();

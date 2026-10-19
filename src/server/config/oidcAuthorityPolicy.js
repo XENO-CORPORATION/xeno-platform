@@ -107,7 +107,12 @@ const DRIVE_WRITE = ['drive.files.create', 'drive.files.rename', 'drive.files.mo
 // absent on purpose: Connect refuses conditional replace until an atomic Drive precondition is qualified.
 export const CONNECT_CLIENT_AUTHORITY = Object.freeze({
   'xeno-storage': Object.freeze({ scopes: CONNECT_SCOPES, operations: Object.freeze([...DRIVE_READ, ...DRIVE_WRITE]) }),
+  // The WEBSITE's Storage (services/webConnect.js). Not an OIDC client: no browser ever holds its token. It is minted
+  // in-process for a live website session and is NEVER reachable by RFC 8693 exchange (connectExchangeGrant refuses it).
+  'xeno-web-storage': Object.freeze({ scopes: CONNECT_SCOPES, operations: Object.freeze([...DRIVE_READ, ...DRIVE_WRITE]) }),
 });
+/** The website's first-party Connect consumer: minted server-side only, bound to a website session. */
+export const CONNECT_WEB_CONSUMER = 'xeno-web-storage';
 
 export function connectAuthorityForClient(clientId) {
   const c = CONNECT_CLIENT_AUTHORITY[clientId];
