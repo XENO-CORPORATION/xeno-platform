@@ -22,6 +22,9 @@ import * as canvasMcp from './canvasMcp.js';
 import * as canvases from './canvases.js';
 import * as agentsMcp from './agentsMcp.js';
 import { withTransaction } from './chatProjectAuthority.js';
+import crypto from 'node:crypto';
+import { CATALOGUE, byName, mcpCapabilities } from '../capabilities/catalogue.js';
+import { toWire, fromWire } from '../capabilities/define.js';
 
 export const PROTOCOL_VERSIONS = tasksMcp.PROTOCOL_VERSIONS;
 export const PROTOCOL_VERSION = tasksMcp.PROTOCOL_VERSION;
@@ -72,23 +75,75 @@ export const SERVICES = Object.freeze([
 export const CATEGORIES = Object.freeze(SERVICES.map((s) => s.category));
 const byCategory = new Map(SERVICES.map((s) => [s.category, s]));
 
-/** `tasks_create_task` → the Tasks service and its own `create_task`. An unknown prefix routes nowhere. */
+/**
+ * Two names reach one tool. The canonical wire name `tasks__task__create` (generated from the capability
+ * catalogue, SPEC §19.3) and the grandfathered `tasks_create_task` (§3: kept until no client calls it). Either way
+ * the call lands on the same service row and tool, so the category gate and the code path are the same.
+ * An unknown name routes nowhere.
+ */
 export function route(prefixed, services = SERVICES) {
   const name = String(prefixed || '');
-  for (const s of services) if (name.startsWith(s.category + SEP)) return { service: s, tool: name.slice(s.category.length + SEP.length) };
+  if (name.includes('__')) {
+    const c = byName.get(fromWire(name));
+    const s = c && c.surfaces.includes('mcp') && services.find((x) => x.category === c.bind.category);
+    return s ? { service: s, tool: c.bind.tool, capability: c } : null;
+  }
+  for (const s of services) if (name.startsWith(s.category + SEP)) {
+    const tool = name.slice(s.category.length + SEP.length);
+    return { service: s, tool, capability: CATALOGUE.find((c) => c.bind.category === s.category && c.bind.tool === tool && c.surfaces.includes('mcp')) || null };
+  }
   return null;
 }
 
 /** The categories a connection may reach, from what it stored — never from anything the client sends. */
 export const enabledCategories = (connection, services = SERVICES) => (connection && Array.isArray(connection.categories) ? connection.categories : ['tasks']).filter((c) => services.some((s) => s.category === c));
 
-/** tools/list for one connection: only its categories, each tool under its prefix. */
+/** May this caller, on this connection, reach this service row at all? One predicate for list, catalogue and call. */
+const reachable = (s, on, actor) => on.has(s.category) && (!s.agentsOnly || (actor && actor.kind === 'agent'));
+
+/**
+ * The catalogue declarations THIS caller can use (SPEC §19.3). Nothing outside it is shown: a caller learns only
+ * what it may call. ⚠️ Until per-capability grants land (§19.7 step 3) "may use" is the connection's categories
+ * plus agentsOnly — the same predicate the call itself enforces.
+ */
+export function visibleCapabilities(connection, actor = null) {
+  const on = new Set(enabledCategories(connection));
+  return CATALOGUE.filter((c) => c.surfaces.includes('mcp') && byCategory.has(c.bind.category) && reachable(byCategory.get(c.bind.category), on, actor));
+}
+
+/** The public shape of one declaration (no `bind`: where it executes is ours, not the caller's). */
+export const publicDeclaration = (c) => ({
+  name: c.name, wire: toWire(c.name), version: c.version, division: c.division, title: c.title, description: c.description,
+  input: c.input, reply: c.reply, class: c.class, mode: c.mode, provenance: c.provenance, cost: c.cost, idempotency: c.idempotency,
+  preview: c.preview, aliases: c.aliases, ...(c.agentsOnly ? { agentsOnly: true } : {}),
+});
+
+/** What a generated tool carries for an MCP client: standard annotations derived from the class, the rest in _meta. */
+function generatedTool(c, serviceTitle) {
+  return {
+    name: toWire(c.name), title: `${serviceTitle}: ${c.title}`, description: c.description, inputSchema: c.input,
+    annotations: { readOnlyHint: c.class === 'safe', destructiveHint: c.class === 'irreversible', idempotentHint: c.class === 'safe' || c.idempotency.strategy !== 'none', openWorldHint: false },
+    _meta: {
+      'xeno/name': c.name, 'xeno/version': c.version, 'xeno/division': c.division, 'xeno/class': c.class, 'xeno/mode': c.mode,
+      'xeno/provenance': c.provenance, 'xeno/cost': c.cost, 'xeno/idempotency': c.idempotency, 'xeno/preview': c.preview,
+      'xeno/reply': c.reply, 'xeno/aliases': c.aliases,
+    },
+  };
+}
+
+/** tools/list for one connection: only its categories. Each service's grandfathered names, then its generated ones. */
 export function listTools(connection, actor = null) {
   const on = new Set(enabledCategories(connection));
-  return SERVICES.filter((s) => on.has(s.category) && (!s.agentsOnly || (actor && actor.kind === 'agent'))).flatMap((s) => s.tools().map(({ name, title, description, inputSchema, annotations }) => ({
-    name: s.category + SEP + name, title: `${s.title}: ${title || name}`, description, inputSchema, ...(annotations ? { annotations } : {}),
-  })));
+  return SERVICES.filter((s) => reachable(s, on, actor)).flatMap((s) => [
+    ...s.tools().map(({ name, title, description, inputSchema, annotations }) => ({
+      name: s.category + SEP + name, title: `${s.title}: ${title || name}`, description, inputSchema, ...(annotations ? { annotations } : {}),
+    })),
+    ...mcpCapabilities(s.category).map((c) => generatedTool(c, s.title)),
+  ]);
 }
+
+/** A stable version of what this caller sees: changes when a visible declaration changes. */
+export const catalogueVersion = (caps) => crypto.createHash('sha256').update(JSON.stringify(caps.map(publicDeclaration))).digest('base64url').slice(0, 27);
 
 const toolError = (text, code) => ({ isError: true, content: [{ type: 'text', text }], structuredContent: { error: text, code } });
 const withTimeout = (promise, ms) => new Promise((resolve, reject) => {
@@ -96,9 +151,24 @@ const withTimeout = (promise, ms) => new Promise((resolve, reject) => {
   promise.then((v) => { clearTimeout(t); resolve(v); }, (e) => { clearTimeout(t); reject(e); });
 });
 
+/** What the call actually charged, read from the reply's own fields; never a guess. */
+export function chargedOf(capability, result) {
+  if (!capability) return null;
+  if (capability.cost.model === 'free') return { credits: 0, settled: true };
+  const d = (result && result.structuredContent) || {};
+  if (typeof d.credits === 'number') return { credits: d.credits, settled: true };
+  if (typeof d.max_credits === 'number') return { reservedCredits: d.max_credits, settled: false, note: 'reserved at most; settled when the generation ends (see its get)' };
+  return { credits: null, settled: false, note: 'this reply did not report a charge' };
+}
+const withMeta = (result, meta) => (result && typeof result === 'object' ? { ...result, _meta: { ...(result._meta || {}), ...meta } } : result);
+const IDEMPOTENCY_TTL_SQL = "now() - interval '24 hours'";
+
 /**
  * Run one tools/call for one connection. Returns the MCP result AND the metadata the log keeps; the log never
  * receives `args` or the result's content.
+ *
+ * ctx.idempotencyKey (the `Idempotency-Key` header): for a non-safe capability the first call with a key records
+ * its result and every repeat replays it instead of acting again. ctx.runId fills a declared `run_id` argument.
  */
 export async function callTool(db, actor, connection, prefixed, args = {}, ctx = {}, services = SERVICES) {
   const started = Date.now();
@@ -112,16 +182,44 @@ export async function callTool(db, actor, connection, prefixed, args = {}, ctx =
   if (!enabledCategories(connection, services).includes(r.service.category)) {
     return { result: toolError(`${r.service.title} is turned off for this connection. Turn it on in XENO: Dev › XENO MCP.`, 'category_disabled'), log: meta(r.service.category, 'refused', 'category_disabled') };
   }
+  const cap = r.capability;
+  const callArgs = { ...(args || {}) };
+  if (cap && ctx.runId && (cap.input.properties || {}).run_id && callArgs.run_id === undefined) callArgs.run_id = String(ctx.runId);
+  const key = cap && cap.class !== 'safe' && ctx.idempotencyKey ? String(ctx.idempotencyKey).slice(0, 255) : null;
+  if (key && cap.idempotency.strategy === 'key' && callArgs[cap.idempotency.key] === undefined) callArgs[cap.idempotency.key] = key;
+  const claimed = key && connection && connection.id ? await claimKey(db, connection.id, key, cap.name) : null;
+  if (claimed && claimed.replay) return { result: withMeta(claimed.replay, { 'xeno/replayed': true }), log: meta(r.service.category, 'ok', 'idempotent_replay') };
+  if (claimed && claimed.error) return { result: toolError(claimed.error.text, claimed.error.code), log: meta(r.service.category, 'refused', claimed.error.code) };
+  const finish = async (result, log) => {
+    const out = cap ? withMeta(result, { 'xeno/capability': cap.name, 'xeno/charged': chargedOf(cap, result) }) : result;
+    if (claimed && claimed.claimed) {
+      if (result && result.isError) await db.query('DELETE FROM mcp_idempotency WHERE connection_id = $1 AND key = $2', [connection.id, key]);   // a refusal may be retried
+      else await db.query('UPDATE mcp_idempotency SET result = $3 WHERE connection_id = $1 AND key = $2', [connection.id, key, JSON.stringify(out)]);
+    }
+    return { result: out, log };
+  };
   try {
-    const result = await withTimeout(r.service.call(db, actor, r.tool, args || {}, ctx), r.service.timeoutMs);
-    return { result, log: meta(r.service.category, result && result.isError ? 'tool_error' : 'ok', null) };
+    const result = await withTimeout(r.service.call(db, actor, r.tool, callArgs, ctx), r.service.timeoutMs);
+    return await finish(result, meta(r.service.category, result && result.isError ? 'tool_error' : 'ok', null));
   } catch (e) {
-    if (e && e.mcpTimeout) return { result: toolError(`${r.service.title} did not answer in time. Nothing else is affected; try again.`, 'service_timeout'), log: meta(r.service.category, 'timeout', 'service_timeout') };
-    if (r.service.isToolError(e)) return { result: toolError(e.message, e.code), log: meta(r.service.category, 'tool_error', e.code) };
+    if (e && e.mcpTimeout) return finish(toolError(`${r.service.title} did not answer in time. Nothing else is affected; try again.`, 'service_timeout'), meta(r.service.category, 'timeout', 'service_timeout'));
+    if (r.service.isToolError(e)) return finish(toolError(e.message, e.code), meta(r.service.category, 'tool_error', e.code));
     // rule 2: an unexpected failure is still a tool error for this one call, not a broken session
     console.error('[xeno mcp]', r.service.category, e);
-    return { result: toolError(`${r.service.title} failed on this call. Other tools still work.`, 'service_failed'), log: meta(r.service.category, 'failed', 'service_failed') };
+    return finish(toolError(`${r.service.title} failed on this call. Other tools still work.`, 'service_failed'), meta(r.service.category, 'failed', 'service_failed'));
   }
+}
+
+/** Claim an idempotency key before acting; a repeat gets the stored result, a different capability is refused. */
+async function claimKey(db, connectionId, key, capability) {
+  await db.query(`DELETE FROM mcp_idempotency WHERE connection_id = $1 AND key = $2 AND created_at < ${IDEMPOTENCY_TTL_SQL}`, [connectionId, key]);
+  const ins = await db.query('INSERT INTO mcp_idempotency (connection_id, key, capability) VALUES ($1, $2, $3) ON CONFLICT DO NOTHING RETURNING key', [connectionId, key, capability]);
+  if (ins.rowCount) return { claimed: true };
+  const row = (await db.query('SELECT capability, result FROM mcp_idempotency WHERE connection_id = $1 AND key = $2', [connectionId, key])).rows[0];
+  if (!row) return claimKey(db, connectionId, key, capability);
+  if (row.capability !== capability) return { error: { text: `This Idempotency-Key was already used for ${row.capability}. Use a new key for a different action.`, code: 'idempotency_key_reused' } };
+  if (!row.result) return { error: { text: 'A call with this Idempotency-Key is still running. Try again shortly with the same key.', code: 'idempotency_in_progress' } };
+  return { replay: row.result };
 }
 
 const INSTRUCTIONS = 'XENO MCP: the XENO services you are allowed to use, in one place. Tool names start with the service: '

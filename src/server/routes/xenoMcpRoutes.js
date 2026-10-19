@@ -56,42 +56,80 @@ router.delete('/', (req, res) => { res.set('Allow', 'POST'); res.status(405).end
  * client discovers it must sign in. An OAuth MCP token or a platform agent's xtk_ credential is accepted; anything
  * else (a session) is refused. Either way the call is one CONNECTION the person can see and disconnect.
  */
-router.post('/', (req, res, next) => {
+const needsToken = (req, res, next) => {
   if (!req.headers.authorization) return challenge(req, res, { jsonrpc: '2.0', id: null, error: { code: -32001, message: 'Sign in to use XENO MCP' } });
   next();
-}, taskTokenAuth, async (req, res) => {
-  const body = req.body;
-  if (!mcpOriginOk(req)) return res.status(403).json({ jsonrpc: '2.0', id: null, error: { code: -32600, message: 'Origin not allowed' } });
+};
+
+/**
+ * The connection and principal behind a request's MCP credential, or null once it has answered (401/403). One
+ * function for the endpoint and the catalogue, so both see exactly the same caller.
+ */
+async function callerOf(req, res, rid, { principal = true } = {}) {
+  if (!mcpOriginOk(req)) { res.status(403).json({ jsonrpc: '2.0', id: null, error: { code: -32600, message: 'Origin not allowed' } }); return null; }
   const tok = req.taskToken;
   // two ways in: an OAuth sign-in (one connection per signed-in client), or a platform agent's own xtk_ credential
   // (one connection per agent; the credential's expiry and revocation are its gate)
   const viaCredential = Boolean(tok && tok.via !== 'oauth' && tok.tokenId);
   if (!tok || (!viaCredential && (tok.via !== 'oauth' || !tok.clientId))) {
-    return challenge(req, res, { jsonrpc: '2.0', id: null, error: { code: -32001, message: 'XENO MCP needs a signed-in connection. Add https://xenosystem.ai/api/mcp to your agent and sign in.' } }, 'invalid_token');
+    challenge(req, res, { jsonrpc: '2.0', id: null, error: { code: -32001, message: 'XENO MCP needs a signed-in connection. Add https://xenosystem.ai/api/mcp to your agent and sign in.' } }, 'invalid_token'); return null;
   }
+  // a disconnected connection is refused on its very next call, before anything runs
+  let connection;
+  if (viaCredential) {
+    const a = (await req.db.query(`SELECT ai.owner_user_id, ai.public_id, COALESCE(u.display_name, u.username) AS name FROM agent_identities ai JOIN users u ON u.id = ai.user_id WHERE ai.user_id = $1`, [tok.agentUserId])).rows[0];
+    if (!a) { challenge(req, res, { jsonrpc: '2.0', id: rid, error: { code: -32001, message: 'This credential does not belong to an agent' } }, 'invalid_token'); return null; }
+    connection = await mcp.connectionFor(req.db, { ownerId: String(a.owner_user_id), agentId: tok.agentUserId, clientId: `agent:${a.public_id}`, clientName: a.name, categories: [...mcp.AGENT_DEFAULT_CATEGORIES] });
+  } else if (await mcp.isRevoked(req.db, tok.ownerId, tok.clientId)) {
+    challenge(req, res, { jsonrpc: '2.0', id: rid, error: { code: -32001, message: 'This connection was disconnected in XENO. Sign in again to reconnect.' } }, 'invalid_token'); return null;
+  }
+  if (!connection) {
+    const client = await getClient(req.db, tok.clientId);
+    connection = await mcp.connectionFor(req.db, { ownerId: tok.ownerId, agentId: tok.agentUserId, clientId: tok.clientId, clientName: client ? client.name : null });
+  }
+  if (!principal) return { connection, actor: null };
+  const p = await resolvePrincipal(req.db, tok.agentUserId); assertPrincipalUsable(p);
+  const u = (await req.db.query('SELECT COALESCE(display_name, username) AS name FROM users WHERE id = $1', [p.id])).rows[0];
+  return { connection, actor: { id: p.id, kind: p.kind, role: p.role, name: u ? u.name : 'Someone', token: tok } };
+}
+
+/**
+ * GET /api/mcp/catalogue — the capability declarations THIS caller may use (SPEC §19.3), with its own MCP
+ * credential. A capability it cannot use is not listed. ETag is the catalogue version for this caller.
+ */
+router.get('/catalogue', needsToken, taskTokenAuth, async (req, res) => {
+  try {
+    const caller = await callerOf(req, res, null); if (!caller) return;
+    const caps = mcp.visibleCapabilities(caller.connection, caller.actor);
+    const version = mcp.catalogueVersion(caps), etag = `"${version}"`;
+    res.set({ ETag: etag, 'Cache-Control': 'private, no-cache', Vary: 'Authorization' });
+    const inm = String(req.headers['if-none-match'] || '').split(',').map((x) => x.trim().replace(/^W\//, ''));
+    if (inm.includes(etag) || inm.includes('*')) return res.status(304).end();
+    res.json({ success: true, version, capabilities: caps.map(mcp.publicDeclaration) });
+  } catch (error) {
+    if (error && error.statusCode) return res.status(error.statusCode).json({ success: false, error: error.message, code: error.code });
+    console.error('[xeno mcp]', error);
+    res.status(500).json({ success: false, error: 'Internal error' });
+  }
+});
+
+router.post('/', needsToken, taskTokenAuth, async (req, res) => {
+  const body = req.body;
   if (Array.isArray(body)) return res.status(400).json({ jsonrpc: '2.0', id: null, error: { code: -32600, message: 'Batched requests are not supported (MCP 2025-06-18)' } });
   const pv = req.headers['mcp-protocol-version'];
   if (pv && !mcp.PROTOCOL_VERSIONS.includes(String(pv))) return res.status(400).json({ jsonrpc: '2.0', id: body && body.id != null ? body.id : null, error: { code: -32600, message: `Unsupported MCP-Protocol-Version ${pv}; supported: ${mcp.PROTOCOL_VERSIONS.join(', ')}` } });
   try {
-    // a disconnected connection is refused on its very next call, before anything runs
-    let connection;
-    if (viaCredential) {
-      const a = (await req.db.query(`SELECT ai.owner_user_id, ai.public_id, COALESCE(u.display_name, u.username) AS name FROM agent_identities ai JOIN users u ON u.id = ai.user_id WHERE ai.user_id = $1`, [tok.agentUserId])).rows[0];
-      if (!a) return challenge(req, res, { jsonrpc: '2.0', id: body && body.id != null ? body.id : null, error: { code: -32001, message: 'This credential does not belong to an agent' } }, 'invalid_token');
-      connection = await mcp.connectionFor(req.db, { ownerId: String(a.owner_user_id), agentId: tok.agentUserId, clientId: `agent:${a.public_id}`, clientName: a.name, categories: [...mcp.AGENT_DEFAULT_CATEGORIES] });
-    } else if (await mcp.isRevoked(req.db, tok.ownerId, tok.clientId)) {
-      return challenge(req, res, { jsonrpc: '2.0', id: body && body.id != null ? body.id : null, error: { code: -32001, message: 'This connection was disconnected in XENO. Sign in again to reconnect.' } }, 'invalid_token');
-    }
-    if (!connection) {
-      const client = await getClient(req.db, tok.clientId);
-      connection = await mcp.connectionFor(req.db, { ownerId: tok.ownerId, agentId: tok.agentUserId, clientId: tok.clientId, clientName: client ? client.name : null });
-    }
-    if (body && typeof body === 'object' && body.id === undefined) return res.status(202).end();   // a notification: accept, answer nothing
-    const p = await resolvePrincipal(req.db, tok.agentUserId); assertPrincipalUsable(p);
-    const u = (await req.db.query('SELECT COALESCE(display_name, username) AS name FROM users WHERE id = $1', [p.id])).rows[0];
-    const actor = { id: p.id, kind: p.kind, role: p.role, name: u ? u.name : 'Someone', token: tok };
-    const out = await mcp.dispatch(req.db, actor, connection, body || {}, { project: String(req.headers['x-xeno-tasks-project'] || '') || null },
-      (log) => mcp.logCall(req.db, connection.id, log));
+    const notification = body && typeof body === 'object' && body.id === undefined;
+    const caller = await callerOf(req, res, body && body.id != null ? body.id : null, { principal: !notification }); if (!caller) return;
+    const { connection, actor } = caller;
+    if (notification) return res.status(202).end();   // a notification: accept, answer nothing
+    const ctx = {
+      project: String(req.headers['x-xeno-tasks-project'] || '') || null,
+      // SPEC §19.3: a key for every non-safe capability, and the run the call belongs to
+      idempotencyKey: String(req.headers['idempotency-key'] || '') || null,
+      runId: String(req.headers['x-xeno-run-id'] || '') || null,
+    };
+    const out = await mcp.dispatch(req.db, actor, connection, body || {}, ctx, (log) => mcp.logCall(req.db, connection.id, log));
     res.json(out);
   } catch (error) {
     console.error('[xeno mcp]', error);

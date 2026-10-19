@@ -1,0 +1,1623 @@
+{
+ "agent": [
+  {
+   "name": "tasks_list_projects",
+   "title": "Tasks: List projects",
+   "description": "The projects you can work in. Pass an id as `project` to the other tools to stay inside one.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {}
+   },
+   "annotations": {
+    "readOnlyHint": true,
+    "openWorldHint": false
+   }
+  },
+  {
+   "name": "tasks_list_my_tasks",
+   "title": "Tasks: List my tasks",
+   "description": "Open tasks delegated to you (an agent) or assigned to you (a person). Start here. With `project` (or a linked folder) also lists that project’s unassigned tasks you could take.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "status": {
+      "type": "string",
+      "description": "Comma list: raised,todo,in_progress,blocked,in_review,done,wont_do"
+     },
+     "project": {
+      "type": "string",
+      "description": "A project id (see list_projects). Defaults to the project this folder is linked to, if any."
+     }
+    }
+   },
+   "annotations": {
+    "readOnlyHint": true,
+    "openWorldHint": false
+   }
+  },
+  {
+   "name": "tasks_get_task",
+   "title": "Tasks: Read a task",
+   "description": "One task: description (markdown), status, people, sub-tasks, links, images, and the full activity.",
+   "inputSchema": {
+    "type": "object",
+    "required": [
+     "key"
+    ],
+    "properties": {
+     "key": {
+      "type": "string",
+      "description": "The task key, like T-12",
+      "pattern": "^T-\\d+$"
+     }
+    }
+   },
+   "annotations": {
+    "readOnlyHint": true,
+    "openWorldHint": false
+   }
+  },
+  {
+   "name": "tasks_list_events",
+   "title": "Tasks: What you were told",
+   "description": "What you have been told, in order, after a cursor: delegated, undelegated, mentioned, reply (a comment on your task), status_changed, review_requested, changes_requested, accepted, lease_expired, handover. Pass the returned cursor as after next time. Agents only.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "after": {
+      "type": "string"
+     }
+    }
+   },
+   "annotations": {
+    "readOnlyHint": true,
+    "openWorldHint": false
+   }
+  },
+  {
+   "name": "tasks_create_task",
+   "title": "Tasks: Raise a task",
+   "description": "Raise a new task. It lands in Triage until someone accepts it.",
+   "inputSchema": {
+    "type": "object",
+    "required": [
+     "title"
+    ],
+    "properties": {
+     "title": {
+      "type": "string"
+     },
+     "body": {
+      "type": "string"
+     },
+     "kind": {
+      "enum": [
+       "task",
+       "bug",
+       "feature",
+       "question"
+      ]
+     },
+     "priority": {
+      "enum": [
+       "none",
+       "low",
+       "medium",
+       "high",
+       "urgent"
+      ]
+     },
+     "project": {
+      "type": "string",
+      "description": "A project id (see list_projects). Defaults to the project this folder is linked to, if any."
+     },
+     "project_id": {
+      "type": "string",
+      "description": "Same as project (kept for compatibility)"
+     },
+     "area": {
+      "type": "string"
+     },
+     "parent_key": {
+      "type": "string",
+      "description": "The task key, like T-12",
+      "pattern": "^T-\\d+$"
+     }
+    }
+   },
+   "annotations": {
+    "readOnlyHint": false,
+    "destructiveHint": false,
+    "openWorldHint": false
+   }
+  },
+  {
+   "name": "tasks_claim_task",
+   "title": "Tasks: Take a task",
+   "description": "Take a task: a person becomes its assignee, an agent its delegate. An agent should pass run_id: the claim then holds a lease for that run, refused to any other run (yours on another machine too) while it lives.",
+   "inputSchema": {
+    "type": "object",
+    "required": [
+     "key"
+    ],
+    "properties": {
+     "key": {
+      "type": "string",
+      "description": "The task key, like T-12",
+      "pattern": "^T-\\d+$"
+     },
+     "run_id": {
+      "type": "string",
+      "description": "Your run’s own id (1-128 of A-Z a-z 0-9 . _ : -). Claiming with it holds a lease for this run only; heartbeat at least every few minutes (it ends 10 minutes after the last one) and the task goes back to the queue.",
+      "pattern": "^[A-Za-z0-9._:-]{1,128}$"
+     }
+    }
+   },
+   "annotations": {
+    "readOnlyHint": false,
+    "destructiveHint": false,
+    "openWorldHint": false,
+    "idempotentHint": true
+   }
+  },
+  {
+   "name": "tasks_heartbeat",
+   "title": "Tasks: Keep your claim",
+   "description": "Renew the lease your run holds on a task. Without one for 10 minutes the lease ends and the task goes back to the queue (code lease_lost: read the task and its handover, then claim again).",
+   "inputSchema": {
+    "type": "object",
+    "required": [
+     "key",
+     "run_id"
+    ],
+    "properties": {
+     "key": {
+      "type": "string",
+      "description": "The task key, like T-12",
+      "pattern": "^T-\\d+$"
+     },
+     "run_id": {
+      "type": "string",
+      "description": "Your run’s own id (1-128 of A-Z a-z 0-9 . _ : -). Claiming with it holds a lease for this run only; heartbeat at least every few minutes (it ends 10 minutes after the last one) and the task goes back to the queue.",
+      "pattern": "^[A-Za-z0-9._:-]{1,128}$"
+     }
+    }
+   },
+   "annotations": {
+    "readOnlyHint": false,
+    "destructiveHint": false,
+    "openWorldHint": false,
+    "idempotentHint": true
+   }
+  },
+  {
+   "name": "tasks_release",
+   "title": "Tasks: Let go of a task",
+   "description": "End your run’s lease: the task goes back to the queue. Post a handover activity first so the next run can continue.",
+   "inputSchema": {
+    "type": "object",
+    "required": [
+     "key",
+     "run_id"
+    ],
+    "properties": {
+     "key": {
+      "type": "string",
+      "description": "The task key, like T-12",
+      "pattern": "^T-\\d+$"
+     },
+     "run_id": {
+      "type": "string",
+      "description": "Your run’s own id (1-128 of A-Z a-z 0-9 . _ : -). Claiming with it holds a lease for this run only; heartbeat at least every few minutes (it ends 10 minutes after the last one) and the task goes back to the queue.",
+      "pattern": "^[A-Za-z0-9._:-]{1,128}$"
+     }
+    }
+   },
+   "annotations": {
+    "readOnlyHint": false,
+    "destructiveHint": false,
+    "openWorldHint": false
+   }
+  },
+  {
+   "name": "tasks_move_task",
+   "title": "Tasks: Move a task",
+   "description": "Move a task: todo, in_progress, blocked, in_review, done, wont_do, raised. Send work to in_review; you can never accept your own work. Pass `from` (the status you saw) so you never overwrite a newer state.",
+   "inputSchema": {
+    "type": "object",
+    "required": [
+     "key",
+     "to"
+    ],
+    "properties": {
+     "key": {
+      "type": "string",
+      "description": "The task key, like T-12",
+      "pattern": "^T-\\d+$"
+     },
+     "to": {
+      "type": "string"
+     },
+     "from": {
+      "type": "string"
+     },
+     "note": {
+      "type": "string"
+     }
+    }
+   },
+   "annotations": {
+    "readOnlyHint": false,
+    "destructiveHint": false,
+    "openWorldHint": false
+   }
+  },
+  {
+   "name": "tasks_comment",
+   "title": "Tasks: Comment",
+   "description": "Comment on a task (markdown; @username mentions someone).",
+   "inputSchema": {
+    "type": "object",
+    "required": [
+     "key",
+     "body"
+    ],
+    "properties": {
+     "key": {
+      "type": "string",
+      "description": "The task key, like T-12",
+      "pattern": "^T-\\d+$"
+     },
+     "body": {
+      "type": "string"
+     }
+    }
+   },
+   "annotations": {
+    "readOnlyHint": false,
+    "destructiveHint": false,
+    "openWorldHint": false
+   }
+  },
+  {
+   "name": "tasks_report_activity",
+   "title": "Tasks: Report what you are doing",
+   "description": "As the task’s delegate, show what you are doing. Pass kind with its data: plan {steps[]}, action {summary?} (with body), question {question, options?} (you wait for the reply in list_events), handover {state, nextStep, openQuestions[]} (so another run can continue), done {summary, verification}. The older type (thought, action, ask, result, error) with body still works.",
+   "inputSchema": {
+    "type": "object",
+    "required": [
+     "key"
+    ],
+    "properties": {
+     "key": {
+      "type": "string",
+      "description": "The task key, like T-12",
+      "pattern": "^T-\\d+$"
+     },
+     "kind": {
+      "enum": [
+       "plan",
+       "action",
+       "question",
+       "handover",
+       "done"
+      ]
+     },
+     "data": {
+      "type": "object",
+      "description": "The kind’s fields, nothing else",
+      "properties": {
+       "steps": {
+        "type": "array",
+        "items": {
+         "type": "string"
+        },
+        "maxItems": 50
+       },
+       "summary": {
+        "type": "string"
+       },
+       "question": {
+        "type": "string"
+       },
+       "options": {
+        "type": "array",
+        "items": {
+         "type": "string"
+        },
+        "maxItems": 10
+       },
+       "state": {
+        "type": "string"
+       },
+       "nextStep": {
+        "type": "string"
+       },
+       "openQuestions": {
+        "type": "array",
+        "items": {
+         "type": "string"
+        },
+        "maxItems": 20
+       },
+       "verification": {
+        "type": "string"
+       }
+      }
+     },
+     "type": {
+      "enum": [
+       "thought",
+       "action",
+       "ask",
+       "result",
+       "error"
+      ]
+     },
+     "body": {
+      "type": "string"
+     }
+    }
+   },
+   "annotations": {
+    "readOnlyHint": false,
+    "destructiveHint": false,
+    "openWorldHint": false
+   }
+  },
+  {
+   "name": "tasks_update_task",
+   "title": "Tasks: Edit a task",
+   "description": "Change a task’s title, description, priority, labels or due date.",
+   "inputSchema": {
+    "type": "object",
+    "required": [
+     "key"
+    ],
+    "properties": {
+     "key": {
+      "type": "string",
+      "description": "The task key, like T-12",
+      "pattern": "^T-\\d+$"
+     },
+     "title": {
+      "type": "string"
+     },
+     "body": {
+      "type": "string"
+     },
+     "priority": {
+      "enum": [
+       "none",
+       "low",
+       "medium",
+       "high",
+       "urgent"
+      ]
+     },
+     "labels": {
+      "type": "array",
+      "items": {
+       "type": "string"
+      }
+     },
+     "due_at": {
+      "type": "string"
+     }
+    }
+   },
+   "annotations": {
+    "readOnlyHint": false,
+    "destructiveHint": false,
+    "openWorldHint": false,
+    "idempotentHint": true
+   }
+  },
+  {
+   "name": "canvas_list",
+   "title": "Canvases: List canvases",
+   "description": "The canvases you can see: yours, and those on projects you are on. With `project`, only that project’s.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "project": {
+      "type": "string"
+     }
+    }
+   },
+   "annotations": {
+    "readOnlyHint": true,
+    "openWorldHint": false
+   }
+  },
+  {
+   "name": "canvas_get",
+   "title": "Canvases: Read a canvas",
+   "description": "A canvas: every item (task cards with their live title and status, notes, links, groups) with its position, and the connections between items.",
+   "inputSchema": {
+    "type": "object",
+    "required": [
+     "canvas"
+    ],
+    "properties": {
+     "canvas": {
+      "type": "string",
+      "description": "A canvas id (see canvas_list)."
+     }
+    }
+   },
+   "annotations": {
+    "readOnlyHint": true,
+    "openWorldHint": false
+   }
+  },
+  {
+   "name": "canvas_create",
+   "title": "Canvases: Start a canvas",
+   "description": "Start a canvas. With `project`, everyone on the project sees it (you must be able to edit the project); without, it is yours alone.",
+   "inputSchema": {
+    "type": "object",
+    "required": [
+     "name"
+    ],
+    "properties": {
+     "name": {
+      "type": "string"
+     },
+     "project": {
+      "type": "string"
+     }
+    }
+   },
+   "annotations": {
+    "readOnlyHint": false,
+    "destructiveHint": false,
+    "openWorldHint": false
+   }
+  },
+  {
+   "name": "canvas_add",
+   "title": "Canvases: Put items on a canvas",
+   "description": "Put items on a canvas: tasks (by key, e.g. T-12 — the card always shows the task as it is now), Library files and chats (by id, also live), notes (markdown), links and groups. Without x/y they are laid out to the right of what is there. Returns each new item’s id.",
+   "inputSchema": {
+    "type": "object",
+    "required": [
+     "canvas",
+     "items"
+    ],
+    "properties": {
+     "canvas": {
+      "type": "string",
+      "description": "A canvas id (see canvas_list)."
+     },
+     "items": {
+      "type": "array",
+      "items": {
+       "type": "object",
+       "required": [
+        "type"
+       ],
+       "properties": {
+        "type": {
+         "type": "string",
+         "enum": [
+          "task",
+          "file",
+          "chat",
+          "note",
+          "link",
+          "group"
+         ]
+        },
+        "task": {
+         "type": "string",
+         "description": "For a task card: its key, e.g. T-12."
+        },
+        "file": {
+         "type": "string",
+         "description": "For a file card: a Library file id (see library_list_files)."
+        },
+        "chat": {
+         "type": "string",
+         "description": "For a chat card: a conversation id."
+        },
+        "text": {
+         "type": "string",
+         "description": "For a note: markdown."
+        },
+        "url": {
+         "type": "string",
+         "description": "For a link."
+        },
+        "label": {
+         "type": "string",
+         "description": "For a group."
+        },
+        "x": {
+         "type": "number"
+        },
+        "y": {
+         "type": "number"
+        },
+        "width": {
+         "type": "number"
+        },
+        "height": {
+         "type": "number"
+        }
+       }
+      }
+     }
+    }
+   },
+   "annotations": {
+    "readOnlyHint": false,
+    "destructiveHint": false,
+    "openWorldHint": false
+   }
+  },
+  {
+   "name": "canvas_connect",
+   "title": "Canvases: Connect two items",
+   "description": "Draw a connection between two items. Between two task cards, `link` makes it a real task link (blocks, relates or duplicates) that shows on both task pages — it follows the task rules, so you must be able to link those tasks.",
+   "inputSchema": {
+    "type": "object",
+    "required": [
+     "canvas",
+     "from",
+     "to"
+    ],
+    "properties": {
+     "canvas": {
+      "type": "string",
+      "description": "A canvas id (see canvas_list)."
+     },
+     "from": {
+      "type": "string",
+      "description": "An item id."
+     },
+     "to": {
+      "type": "string",
+      "description": "An item id."
+     },
+     "link": {
+      "type": "string",
+      "enum": [
+       "blocks",
+       "relates",
+       "duplicates"
+      ]
+     },
+     "label": {
+      "type": "string"
+     }
+    }
+   },
+   "annotations": {
+    "readOnlyHint": false,
+    "destructiveHint": false,
+    "openWorldHint": false
+   }
+  },
+  {
+   "name": "canvas_update",
+   "title": "Canvases: Move, edit or remove items",
+   "description": "Move or resize items, change a note’s text or a group’s label, or remove items or connections from the canvas. Removing a task card never deletes the task.",
+   "inputSchema": {
+    "type": "object",
+    "required": [
+     "canvas"
+    ],
+    "properties": {
+     "canvas": {
+      "type": "string",
+      "description": "A canvas id (see canvas_list)."
+     },
+     "items": {
+      "type": "array",
+      "items": {
+       "type": "object",
+       "required": [
+        "id"
+       ],
+       "properties": {
+        "id": {
+         "type": "string"
+        },
+        "x": {
+         "type": "number"
+        },
+        "y": {
+         "type": "number"
+        },
+        "width": {
+         "type": "number"
+        },
+        "height": {
+         "type": "number"
+        },
+        "text": {
+         "type": "string"
+        },
+        "label": {
+         "type": "string"
+        }
+       }
+      }
+     },
+     "remove": {
+      "type": "array",
+      "items": {
+       "type": "string"
+      },
+      "description": "Item or connection ids to take off the canvas."
+     }
+    }
+   },
+   "annotations": {
+    "readOnlyHint": false,
+    "destructiveHint": true,
+    "openWorldHint": false
+   }
+  },
+  {
+   "name": "agents_whoami",
+   "title": "Agents: Who am I",
+   "description": "Your own identity on XENO: your agt_ id, name, owning workspace and division, the person who owns you, the projects you can see, and your division’s agent budget (null when it has none). Takes no arguments.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {},
+    "additionalProperties": false
+   },
+   "annotations": {
+    "readOnlyHint": true,
+    "idempotentHint": true,
+    "openWorldHint": false
+   }
+  },
+  {
+   "name": "image_list_models",
+   "title": "Images: Image models",
+   "description": "The image models you can use, and the most one image can cost in credits.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {}
+   },
+   "annotations": {
+    "readOnlyHint": true,
+    "openWorldHint": false
+   }
+  },
+  {
+   "name": "image_generate",
+   "title": "Images: Make an image",
+   "description": "Make an image from a prompt. It is billed to your owner and counted against your division’s agent budget. If your division lets agents generate within its budget, it starts at once; otherwise it waits for your owner to approve it, and the result says so. Check progress with image_get.",
+   "inputSchema": {
+    "type": "object",
+    "required": [
+     "prompt"
+    ],
+    "properties": {
+     "prompt": {
+      "type": "string"
+     },
+     "model": {
+      "type": "string",
+      "description": "A model id from image_list_models. Defaults to the first one."
+     },
+     "settings": {
+      "type": "object",
+      "description": "Model settings, e.g. { \"ratio\": \"16:9\", \"quality\": \"high\" }"
+     },
+     "reference_asset_ids": {
+      "type": "array",
+      "items": {
+       "type": "string"
+      },
+      "description": "Library files to start from (asset ids you can read)."
+     },
+     "project": {
+      "type": "string",
+      "description": "A project id (see tasks_list_projects). The result is attached to it."
+     },
+     "request_key": {
+      "type": "string",
+      "description": "Your own id for this request; sending the same key again returns the same generation instead of making another."
+     }
+    }
+   },
+   "annotations": {
+    "readOnlyHint": false,
+    "destructiveHint": false,
+    "openWorldHint": false
+   }
+  },
+  {
+   "name": "image_get",
+   "title": "Images: Check an image",
+   "description": "One of your image generations: its state and, once done, its files (read them with library_get_file).",
+   "inputSchema": {
+    "type": "object",
+    "required": [
+     "id"
+    ],
+    "properties": {
+     "id": {
+      "type": "string"
+     }
+    }
+   },
+   "annotations": {
+    "readOnlyHint": true,
+    "openWorldHint": false
+   }
+  },
+  {
+   "name": "image_list",
+   "title": "Images: Your images",
+   "description": "Your recent image generations, newest first.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {}
+   },
+   "annotations": {
+    "readOnlyHint": true,
+    "openWorldHint": false
+   }
+  },
+  {
+   "name": "video_list_models",
+   "title": "Video: Video models",
+   "description": "The video models you can use, and the most one video can cost in credits.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {}
+   },
+   "annotations": {
+    "readOnlyHint": true,
+    "openWorldHint": false
+   }
+  },
+  {
+   "name": "video_generate",
+   "title": "Video: Make a video",
+   "description": "Make a short video from a prompt. It is billed to your owner and counted against your division’s agent budget. If your division lets agents generate within its budget, it starts at once; otherwise it waits for your owner to approve it, and the result says so. Check progress with video_get.",
+   "inputSchema": {
+    "type": "object",
+    "required": [
+     "prompt"
+    ],
+    "properties": {
+     "prompt": {
+      "type": "string"
+     },
+     "model": {
+      "type": "string",
+      "description": "A model id from video_list_models. Defaults to the first one."
+     },
+     "settings": {
+      "type": "object",
+      "description": "Model settings, e.g. { \"ratio\": \"16:9\", \"resolution\": \"720p\" }"
+     },
+     "reference_asset_ids": {
+      "type": "array",
+      "items": {
+       "type": "string"
+      },
+      "description": "Library files to start from (asset ids you can read)."
+     },
+     "project": {
+      "type": "string",
+      "description": "A project id (see tasks_list_projects). The result is attached to it."
+     },
+     "request_key": {
+      "type": "string",
+      "description": "Your own id for this request; sending the same key again returns the same generation instead of making another."
+     }
+    }
+   },
+   "annotations": {
+    "readOnlyHint": false,
+    "destructiveHint": false,
+    "openWorldHint": false
+   }
+  },
+  {
+   "name": "video_get",
+   "title": "Video: Check a video",
+   "description": "One of your video generations: its state and, once done, its files (read them with library_get_file).",
+   "inputSchema": {
+    "type": "object",
+    "required": [
+     "id"
+    ],
+    "properties": {
+     "id": {
+      "type": "string"
+     }
+    }
+   },
+   "annotations": {
+    "readOnlyHint": true,
+    "openWorldHint": false
+   }
+  },
+  {
+   "name": "video_list",
+   "title": "Video: Your videos",
+   "description": "Your recent video generations, newest first.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {}
+   },
+   "annotations": {
+    "readOnlyHint": true,
+    "openWorldHint": false
+   }
+  },
+  {
+   "name": "library_list_files",
+   "title": "Library: List files",
+   "description": "Files you can read: those attached to your projects, and those you made. With `project`, only that project’s files; add `query` to search inside them. With `folder`, the files and sub-folders of a Storage folder a task gave you (its id is in the task’s folders).",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "project": {
+      "type": "string"
+     },
+     "query": {
+      "type": "string"
+     },
+     "folder": {
+      "type": "string",
+      "description": "A Storage folder id from a task you work."
+     }
+    }
+   },
+   "annotations": {
+    "readOnlyHint": true,
+    "openWorldHint": false
+   }
+  },
+  {
+   "name": "library_get_file",
+   "title": "Library: Read a file",
+   "description": "One file: its details, a link people can open, and its text if it is a text file.",
+   "inputSchema": {
+    "type": "object",
+    "required": [
+     "asset_id"
+    ],
+    "properties": {
+     "asset_id": {
+      "type": "string"
+     }
+    }
+   },
+   "annotations": {
+    "readOnlyHint": true,
+    "openWorldHint": false
+   }
+  },
+  {
+   "name": "library_attach_to_project",
+   "title": "Library: Add a file to a project",
+   "description": "Attach a file you made to one of your projects, so the people and agents on it can see it.",
+   "inputSchema": {
+    "type": "object",
+    "required": [
+     "asset_id",
+     "project"
+    ],
+    "properties": {
+     "asset_id": {
+      "type": "string"
+     },
+     "project": {
+      "type": "string"
+     }
+    }
+   },
+   "annotations": {
+    "readOnlyHint": false,
+    "destructiveHint": false,
+    "openWorldHint": false
+   }
+  },
+  {
+   "name": "chat_ask",
+   "title": "Chat: Ask a model",
+   "description": "Ask a XENO model one question and get its answer: a second opinion, a summary, a translation, a draft. Billed to your owner and counted against your division’s agent budget.",
+   "inputSchema": {
+    "type": "object",
+    "required": [
+     "prompt"
+    ],
+    "properties": {
+     "prompt": {
+      "type": "string"
+     },
+     "model": {
+      "type": "string",
+      "description": "A XENO model id. Defaults to the platform’s default."
+     },
+     "system": {
+      "type": "string",
+      "description": "Optional instructions for the model."
+     },
+     "max_tokens": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 4096
+     }
+    }
+   },
+   "annotations": {
+    "readOnlyHint": true,
+    "openWorldHint": true
+   }
+  }
+ ],
+ "human": [
+  {
+   "name": "tasks_list_projects",
+   "title": "Tasks: List projects",
+   "description": "The projects you can work in. Pass an id as `project` to the other tools to stay inside one.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {}
+   },
+   "annotations": {
+    "readOnlyHint": true,
+    "openWorldHint": false
+   }
+  },
+  {
+   "name": "tasks_list_my_tasks",
+   "title": "Tasks: List my tasks",
+   "description": "Open tasks delegated to you (an agent) or assigned to you (a person). Start here. With `project` (or a linked folder) also lists that project’s unassigned tasks you could take.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "status": {
+      "type": "string",
+      "description": "Comma list: raised,todo,in_progress,blocked,in_review,done,wont_do"
+     },
+     "project": {
+      "type": "string",
+      "description": "A project id (see list_projects). Defaults to the project this folder is linked to, if any."
+     }
+    }
+   },
+   "annotations": {
+    "readOnlyHint": true,
+    "openWorldHint": false
+   }
+  },
+  {
+   "name": "tasks_get_task",
+   "title": "Tasks: Read a task",
+   "description": "One task: description (markdown), status, people, sub-tasks, links, images, and the full activity.",
+   "inputSchema": {
+    "type": "object",
+    "required": [
+     "key"
+    ],
+    "properties": {
+     "key": {
+      "type": "string",
+      "description": "The task key, like T-12",
+      "pattern": "^T-\\d+$"
+     }
+    }
+   },
+   "annotations": {
+    "readOnlyHint": true,
+    "openWorldHint": false
+   }
+  },
+  {
+   "name": "tasks_list_events",
+   "title": "Tasks: What you were told",
+   "description": "What you have been told, in order, after a cursor: delegated, undelegated, mentioned, reply (a comment on your task), status_changed, review_requested, changes_requested, accepted, lease_expired, handover. Pass the returned cursor as after next time. Agents only.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "after": {
+      "type": "string"
+     }
+    }
+   },
+   "annotations": {
+    "readOnlyHint": true,
+    "openWorldHint": false
+   }
+  },
+  {
+   "name": "tasks_create_task",
+   "title": "Tasks: Raise a task",
+   "description": "Raise a new task. It lands in Triage until someone accepts it.",
+   "inputSchema": {
+    "type": "object",
+    "required": [
+     "title"
+    ],
+    "properties": {
+     "title": {
+      "type": "string"
+     },
+     "body": {
+      "type": "string"
+     },
+     "kind": {
+      "enum": [
+       "task",
+       "bug",
+       "feature",
+       "question"
+      ]
+     },
+     "priority": {
+      "enum": [
+       "none",
+       "low",
+       "medium",
+       "high",
+       "urgent"
+      ]
+     },
+     "project": {
+      "type": "string",
+      "description": "A project id (see list_projects). Defaults to the project this folder is linked to, if any."
+     },
+     "project_id": {
+      "type": "string",
+      "description": "Same as project (kept for compatibility)"
+     },
+     "area": {
+      "type": "string"
+     },
+     "parent_key": {
+      "type": "string",
+      "description": "The task key, like T-12",
+      "pattern": "^T-\\d+$"
+     }
+    }
+   },
+   "annotations": {
+    "readOnlyHint": false,
+    "destructiveHint": false,
+    "openWorldHint": false
+   }
+  },
+  {
+   "name": "tasks_claim_task",
+   "title": "Tasks: Take a task",
+   "description": "Take a task: a person becomes its assignee, an agent its delegate. An agent should pass run_id: the claim then holds a lease for that run, refused to any other run (yours on another machine too) while it lives.",
+   "inputSchema": {
+    "type": "object",
+    "required": [
+     "key"
+    ],
+    "properties": {
+     "key": {
+      "type": "string",
+      "description": "The task key, like T-12",
+      "pattern": "^T-\\d+$"
+     },
+     "run_id": {
+      "type": "string",
+      "description": "Your run’s own id (1-128 of A-Z a-z 0-9 . _ : -). Claiming with it holds a lease for this run only; heartbeat at least every few minutes (it ends 10 minutes after the last one) and the task goes back to the queue.",
+      "pattern": "^[A-Za-z0-9._:-]{1,128}$"
+     }
+    }
+   },
+   "annotations": {
+    "readOnlyHint": false,
+    "destructiveHint": false,
+    "openWorldHint": false,
+    "idempotentHint": true
+   }
+  },
+  {
+   "name": "tasks_heartbeat",
+   "title": "Tasks: Keep your claim",
+   "description": "Renew the lease your run holds on a task. Without one for 10 minutes the lease ends and the task goes back to the queue (code lease_lost: read the task and its handover, then claim again).",
+   "inputSchema": {
+    "type": "object",
+    "required": [
+     "key",
+     "run_id"
+    ],
+    "properties": {
+     "key": {
+      "type": "string",
+      "description": "The task key, like T-12",
+      "pattern": "^T-\\d+$"
+     },
+     "run_id": {
+      "type": "string",
+      "description": "Your run’s own id (1-128 of A-Z a-z 0-9 . _ : -). Claiming with it holds a lease for this run only; heartbeat at least every few minutes (it ends 10 minutes after the last one) and the task goes back to the queue.",
+      "pattern": "^[A-Za-z0-9._:-]{1,128}$"
+     }
+    }
+   },
+   "annotations": {
+    "readOnlyHint": false,
+    "destructiveHint": false,
+    "openWorldHint": false,
+    "idempotentHint": true
+   }
+  },
+  {
+   "name": "tasks_release",
+   "title": "Tasks: Let go of a task",
+   "description": "End your run’s lease: the task goes back to the queue. Post a handover activity first so the next run can continue.",
+   "inputSchema": {
+    "type": "object",
+    "required": [
+     "key",
+     "run_id"
+    ],
+    "properties": {
+     "key": {
+      "type": "string",
+      "description": "The task key, like T-12",
+      "pattern": "^T-\\d+$"
+     },
+     "run_id": {
+      "type": "string",
+      "description": "Your run’s own id (1-128 of A-Z a-z 0-9 . _ : -). Claiming with it holds a lease for this run only; heartbeat at least every few minutes (it ends 10 minutes after the last one) and the task goes back to the queue.",
+      "pattern": "^[A-Za-z0-9._:-]{1,128}$"
+     }
+    }
+   },
+   "annotations": {
+    "readOnlyHint": false,
+    "destructiveHint": false,
+    "openWorldHint": false
+   }
+  },
+  {
+   "name": "tasks_move_task",
+   "title": "Tasks: Move a task",
+   "description": "Move a task: todo, in_progress, blocked, in_review, done, wont_do, raised. Send work to in_review; you can never accept your own work. Pass `from` (the status you saw) so you never overwrite a newer state.",
+   "inputSchema": {
+    "type": "object",
+    "required": [
+     "key",
+     "to"
+    ],
+    "properties": {
+     "key": {
+      "type": "string",
+      "description": "The task key, like T-12",
+      "pattern": "^T-\\d+$"
+     },
+     "to": {
+      "type": "string"
+     },
+     "from": {
+      "type": "string"
+     },
+     "note": {
+      "type": "string"
+     }
+    }
+   },
+   "annotations": {
+    "readOnlyHint": false,
+    "destructiveHint": false,
+    "openWorldHint": false
+   }
+  },
+  {
+   "name": "tasks_comment",
+   "title": "Tasks: Comment",
+   "description": "Comment on a task (markdown; @username mentions someone).",
+   "inputSchema": {
+    "type": "object",
+    "required": [
+     "key",
+     "body"
+    ],
+    "properties": {
+     "key": {
+      "type": "string",
+      "description": "The task key, like T-12",
+      "pattern": "^T-\\d+$"
+     },
+     "body": {
+      "type": "string"
+     }
+    }
+   },
+   "annotations": {
+    "readOnlyHint": false,
+    "destructiveHint": false,
+    "openWorldHint": false
+   }
+  },
+  {
+   "name": "tasks_report_activity",
+   "title": "Tasks: Report what you are doing",
+   "description": "As the task’s delegate, show what you are doing. Pass kind with its data: plan {steps[]}, action {summary?} (with body), question {question, options?} (you wait for the reply in list_events), handover {state, nextStep, openQuestions[]} (so another run can continue), done {summary, verification}. The older type (thought, action, ask, result, error) with body still works.",
+   "inputSchema": {
+    "type": "object",
+    "required": [
+     "key"
+    ],
+    "properties": {
+     "key": {
+      "type": "string",
+      "description": "The task key, like T-12",
+      "pattern": "^T-\\d+$"
+     },
+     "kind": {
+      "enum": [
+       "plan",
+       "action",
+       "question",
+       "handover",
+       "done"
+      ]
+     },
+     "data": {
+      "type": "object",
+      "description": "The kind’s fields, nothing else",
+      "properties": {
+       "steps": {
+        "type": "array",
+        "items": {
+         "type": "string"
+        },
+        "maxItems": 50
+       },
+       "summary": {
+        "type": "string"
+       },
+       "question": {
+        "type": "string"
+       },
+       "options": {
+        "type": "array",
+        "items": {
+         "type": "string"
+        },
+        "maxItems": 10
+       },
+       "state": {
+        "type": "string"
+       },
+       "nextStep": {
+        "type": "string"
+       },
+       "openQuestions": {
+        "type": "array",
+        "items": {
+         "type": "string"
+        },
+        "maxItems": 20
+       },
+       "verification": {
+        "type": "string"
+       }
+      }
+     },
+     "type": {
+      "enum": [
+       "thought",
+       "action",
+       "ask",
+       "result",
+       "error"
+      ]
+     },
+     "body": {
+      "type": "string"
+     }
+    }
+   },
+   "annotations": {
+    "readOnlyHint": false,
+    "destructiveHint": false,
+    "openWorldHint": false
+   }
+  },
+  {
+   "name": "tasks_update_task",
+   "title": "Tasks: Edit a task",
+   "description": "Change a task’s title, description, priority, labels or due date.",
+   "inputSchema": {
+    "type": "object",
+    "required": [
+     "key"
+    ],
+    "properties": {
+     "key": {
+      "type": "string",
+      "description": "The task key, like T-12",
+      "pattern": "^T-\\d+$"
+     },
+     "title": {
+      "type": "string"
+     },
+     "body": {
+      "type": "string"
+     },
+     "priority": {
+      "enum": [
+       "none",
+       "low",
+       "medium",
+       "high",
+       "urgent"
+      ]
+     },
+     "labels": {
+      "type": "array",
+      "items": {
+       "type": "string"
+      }
+     },
+     "due_at": {
+      "type": "string"
+     }
+    }
+   },
+   "annotations": {
+    "readOnlyHint": false,
+    "destructiveHint": false,
+    "openWorldHint": false,
+    "idempotentHint": true
+   }
+  },
+  {
+   "name": "canvas_list",
+   "title": "Canvases: List canvases",
+   "description": "The canvases you can see: yours, and those on projects you are on. With `project`, only that project’s.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "project": {
+      "type": "string"
+     }
+    }
+   },
+   "annotations": {
+    "readOnlyHint": true,
+    "openWorldHint": false
+   }
+  },
+  {
+   "name": "canvas_get",
+   "title": "Canvases: Read a canvas",
+   "description": "A canvas: every item (task cards with their live title and status, notes, links, groups) with its position, and the connections between items.",
+   "inputSchema": {
+    "type": "object",
+    "required": [
+     "canvas"
+    ],
+    "properties": {
+     "canvas": {
+      "type": "string",
+      "description": "A canvas id (see canvas_list)."
+     }
+    }
+   },
+   "annotations": {
+    "readOnlyHint": true,
+    "openWorldHint": false
+   }
+  },
+  {
+   "name": "canvas_create",
+   "title": "Canvases: Start a canvas",
+   "description": "Start a canvas. With `project`, everyone on the project sees it (you must be able to edit the project); without, it is yours alone.",
+   "inputSchema": {
+    "type": "object",
+    "required": [
+     "name"
+    ],
+    "properties": {
+     "name": {
+      "type": "string"
+     },
+     "project": {
+      "type": "string"
+     }
+    }
+   },
+   "annotations": {
+    "readOnlyHint": false,
+    "destructiveHint": false,
+    "openWorldHint": false
+   }
+  },
+  {
+   "name": "canvas_add",
+   "title": "Canvases: Put items on a canvas",
+   "description": "Put items on a canvas: tasks (by key, e.g. T-12 — the card always shows the task as it is now), Library files and chats (by id, also live), notes (markdown), links and groups. Without x/y they are laid out to the right of what is there. Returns each new item’s id.",
+   "inputSchema": {
+    "type": "object",
+    "required": [
+     "canvas",
+     "items"
+    ],
+    "properties": {
+     "canvas": {
+      "type": "string",
+      "description": "A canvas id (see canvas_list)."
+     },
+     "items": {
+      "type": "array",
+      "items": {
+       "type": "object",
+       "required": [
+        "type"
+       ],
+       "properties": {
+        "type": {
+         "type": "string",
+         "enum": [
+          "task",
+          "file",
+          "chat",
+          "note",
+          "link",
+          "group"
+         ]
+        },
+        "task": {
+         "type": "string",
+         "description": "For a task card: its key, e.g. T-12."
+        },
+        "file": {
+         "type": "string",
+         "description": "For a file card: a Library file id (see library_list_files)."
+        },
+        "chat": {
+         "type": "string",
+         "description": "For a chat card: a conversation id."
+        },
+        "text": {
+         "type": "string",
+         "description": "For a note: markdown."
+        },
+        "url": {
+         "type": "string",
+         "description": "For a link."
+        },
+        "label": {
+         "type": "string",
+         "description": "For a group."
+        },
+        "x": {
+         "type": "number"
+        },
+        "y": {
+         "type": "number"
+        },
+        "width": {
+         "type": "number"
+        },
+        "height": {
+         "type": "number"
+        }
+       }
+      }
+     }
+    }
+   },
+   "annotations": {
+    "readOnlyHint": false,
+    "destructiveHint": false,
+    "openWorldHint": false
+   }
+  },
+  {
+   "name": "canvas_connect",
+   "title": "Canvases: Connect two items",
+   "description": "Draw a connection between two items. Between two task cards, `link` makes it a real task link (blocks, relates or duplicates) that shows on both task pages — it follows the task rules, so you must be able to link those tasks.",
+   "inputSchema": {
+    "type": "object",
+    "required": [
+     "canvas",
+     "from",
+     "to"
+    ],
+    "properties": {
+     "canvas": {
+      "type": "string",
+      "description": "A canvas id (see canvas_list)."
+     },
+     "from": {
+      "type": "string",
+      "description": "An item id."
+     },
+     "to": {
+      "type": "string",
+      "description": "An item id."
+     },
+     "link": {
+      "type": "string",
+      "enum": [
+       "blocks",
+       "relates",
+       "duplicates"
+      ]
+     },
+     "label": {
+      "type": "string"
+     }
+    }
+   },
+   "annotations": {
+    "readOnlyHint": false,
+    "destructiveHint": false,
+    "openWorldHint": false
+   }
+  },
+  {
+   "name": "canvas_update",
+   "title": "Canvases: Move, edit or remove items",
+   "description": "Move or resize items, change a note’s text or a group’s label, or remove items or connections from the canvas. Removing a task card never deletes the task.",
+   "inputSchema": {
+    "type": "object",
+    "required": [
+     "canvas"
+    ],
+    "properties": {
+     "canvas": {
+      "type": "string",
+      "description": "A canvas id (see canvas_list)."
+     },
+     "items": {
+      "type": "array",
+      "items": {
+       "type": "object",
+       "required": [
+        "id"
+       ],
+       "properties": {
+        "id": {
+         "type": "string"
+        },
+        "x": {
+         "type": "number"
+        },
+        "y": {
+         "type": "number"
+        },
+        "width": {
+         "type": "number"
+        },
+        "height": {
+         "type": "number"
+        },
+        "text": {
+         "type": "string"
+        },
+        "label": {
+         "type": "string"
+        }
+       }
+      }
+     },
+     "remove": {
+      "type": "array",
+      "items": {
+       "type": "string"
+      },
+      "description": "Item or connection ids to take off the canvas."
+     }
+    }
+   },
+   "annotations": {
+    "readOnlyHint": false,
+    "destructiveHint": true,
+    "openWorldHint": false
+   }
+  }
+ ]
+}
