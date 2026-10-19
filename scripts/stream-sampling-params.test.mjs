@@ -109,3 +109,14 @@ test('the client is never sent the provider’s own error text', () => {
   );
   assert.match(sendCall, /message: 'The inference stream failed\.'/, 'the generic message remains the fallback');
 });
+
+// 2026-10-19: the NON-streamed /api/ai/chat kept `temperature = 0.7`, so the XENO extension's side-panel chat
+// got the same 400 on Claude Opus 5.5. Same rule, same mechanism.
+test('the non-streamed /chat route invents no temperature either', () => {
+  const code = stripComments(ROUTE);
+  const at = code.indexOf("router.post('/chat',");
+  assert.ok(at >= 0, 'the /chat route exists');
+  const head = code.slice(at, code.indexOf('\n', code.indexOf('= req.body', at)));
+  assert.match(head, /\btemperature\b/, '/chat still reads a caller-sent temperature');
+  assert.doesNotMatch(head, /temperature\s*=/, '/chat must not default temperature');
+});

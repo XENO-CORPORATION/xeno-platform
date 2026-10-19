@@ -20,7 +20,7 @@
  */
 import Stripe from 'stripe';
 import { ensureSchema } from './billingSchema.js';
-import { getPlan, entitlementsFor } from './accountPlan.js';
+import { getPlan, entitlementsFor, getEntitlements } from './accountPlan.js';
 export { PLAN_ALIASES, canonicalPlan, entitlementsFor, getPlan, getEntitlements } from './accountPlan.js';
 import { requireCheckoutConsent, consumeConsent } from './checkoutConsent.js';
 import { authorityTransaction, lockWorkspaceAuthority } from './workspaceOperationReceipts.js';
