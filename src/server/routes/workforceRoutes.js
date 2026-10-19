@@ -8,6 +8,7 @@ import { apiKeyWorkforceNamespace, validApiKeyWorkforceScopes } from '../service
 import apiKeyWorkforceCapabilityRoutes from './apiKeyWorkforceCapabilityRoutes.js';
 import workforceOwnershipTransferRoutes from './workforceOwnershipTransferRoutes.js';
 import workforceFundingRoutes from './workforceFundingRoutes.js';
+import { createWorkforceSessionRouter } from './workforceSessionRoutes.js';
 
 const MAX_BODY_BYTES = 256 * 1024;
 const ERRORS = Object.freeze({
@@ -568,12 +569,16 @@ export function createWorkforceRouter({ createWorkforceResource = defaultCreate,
   reviseAgentDefinition = agentRevision('reviseAgentDefinition'), readAgentRevision = agentRevision('readAgentRevision'),
   readAgentDefinition = agentRevision('readAgentDefinition'),
   authorizeRunStep = defaultAuthorizeStep,
-  revokeRun = defaultRevokeRun, readRunAuthority = defaultReadAuthority } = {}) {
+  revokeRun = defaultRevokeRun, readRunAuthority = defaultReadAuthority, sessionEnv = process.env } = {}) {
   const router = express.Router();
   router.use('/api-key-capabilities', apiKeyWorkforceCapabilityRoutes);
   // OWN-05: two-sided, reviewed, audited ownership transfer. Its own stricter auth bar -- see the router.
   router.use('/ownership-transfers', workforceOwnershipTransferRoutes);
   router.use('/funding', workforceFundingRoutes);
+  // SES-02..09: the session API. Every session act changes or reads a conversation's execution state, so it is a
+  // workforce:manage act; the adapter itself adds the conversation-access guard the services leave to their caller.
+  router.use('/sessions', authMiddleware, requireDpopIfBound, requireWorkforceScope('workforce:manage'),
+    express.json({ limit: MAX_BODY_BYTES, strict: true }), createWorkforceSessionRouter({ env: sessionEnv }));
   const parse = express.json({ limit: MAX_BODY_BYTES, strict: true });
   const handle = (service, readOnly = false, project = responseObservation) => async (req, res) => {
     try {
