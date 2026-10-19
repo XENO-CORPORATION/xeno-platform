@@ -229,3 +229,100 @@ export async function completeGoal(poolOrClient, { actorUserId, goalId }) {
     return { goalId: gid, status: 'completed' };
   });
 }
+
+// ── LIFE-08: objectives, the top of the same tree ─────────────────────────────────────────────
+// An objective is the workspace- or division-level parent goals roll up to: owner, window, success
+// evidence. Creating one is an act FOR its scope (a workspace editor; for a division, acting INSIDE that
+// division under DIV-08's own rule). Linking a goal needs the goal's project AND the objective's scope.
+// It completes only when every goal under it has -- derived, as milestones and goals are -- and the
+// database refuses the same shapes on its own (20261019120000-project-objectives.sql).
+async function objectiveActor(client, actor) {
+  const { resolvePrincipal } = await import('./agentIdentity.js');
+  const p = await resolvePrincipal(client, actor);
+  if (!p?.usable || p.kind !== 'human') bad('denied', 'objective_not_authorized');
+  return { principal: p, subject: `user:${p.id}` };
+}
+async function actsForObjectiveScope(client, who, workspaceId, divisionId) {
+  if (divisionId) {
+    const { actsInDivision } = await import('./workforceRunAdmission.js');
+    return actsInDivision(client, who, workspaceId, divisionId);
+  }
+  const v = await check(client, { object: `workspace:${workspaceId}`, relation: 'editor', subject: who.subject });
+  return v.allowed;
+}
+const isoDate = (value, what) => {
+  if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(value) || Number.isNaN(Date.parse(value))) bad('bad_input', `invalid_${what}`);
+  return value;
+};
+
+export async function createObjective(poolOrClient, { actorUserId, workspaceId, divisionId = null, title, successEvidence, ownerUserId, windowStart, windowEnd }) {
+  const actor = uuid(actorUserId, 'actor'), ws = uuid(workspaceId, 'workspace');
+  const division = divisionId == null ? null : uuid(divisionId, 'division');
+  const owner = uuid(ownerUserId ?? actorUserId, 'owner');
+  const t = text(title, 'title'), ev = text(successEvidence, 'success_evidence');
+  const start = isoDate(windowStart, 'window_start'), end = isoDate(windowEnd, 'window_end');
+  if (end < start) bad('bad_input', 'invalid_window');
+  return withTx(poolOrClient, async (client) => {
+    const who = await objectiveActor(client, actor);
+    const w = (await client.query('SELECT status FROM workspaces WHERE id=$1', [ws])).rows[0];
+    if (!w || w.status !== 'active') bad('not_found', 'workspace_not_found');
+    if (division) {
+      const d = (await client.query('SELECT workspace_id, lifecycle FROM workforce_divisions WHERE id=$1', [division])).rows[0];
+      if (!d || d.workspace_id !== ws) bad('not_found', 'division_not_found');
+      if (d.lifecycle !== 'active') bad('denied', 'division_not_live');
+    }
+    if (!(await actsForObjectiveScope(client, who, ws, division))) bad('denied', 'objective_not_authorized');
+    // The owner answers for it, so the owner must belong to the workspace.
+    if (!(await check(client, { object: `workspace:${ws}`, relation: 'viewer', subject: `user:${owner}` })).allowed) bad('denied', 'owner_not_in_workspace');
+    const row = (await client.query(`INSERT INTO project_objectives(workspace_id,division_id,title,success_evidence,owner_user_id,window_start,window_end,created_by_user_id)
+      VALUES($1,$2,$3,$4,$5,$6,$7,$8) RETURNING id`, [ws, division, t, ev, owner, start, end, actor])).rows[0];
+    return { objectiveId: row.id, workspaceId: ws, divisionId: division, ownerUserId: owner, windowStart: start, windowEnd: end, status: 'open' };
+  });
+}
+
+export async function linkGoalToObjective(poolOrClient, { actorUserId, goalId, objectiveId }) {
+  const actor = uuid(actorUserId, 'actor'), gid = uuid(goalId, 'goal'), oid = uuid(objectiveId, 'objective');
+  return withTx(poolOrClient, async (client) => {
+    const who = await objectiveActor(client, actor);
+    const goal = await goalProject(client, gid);
+    if (!(await holdsProject(client, actor, goal.project_id))) bad('denied', 'goal_not_authorized');
+    const o = (await client.query('SELECT workspace_id, division_id, status FROM project_objectives WHERE id=$1 FOR SHARE', [oid])).rows[0];
+    if (!o) bad('not_found', 'objective_not_found');
+    if (o.status !== 'open') bad('conflict', 'objective_completed');
+    const p = (await client.query('SELECT workspace_id FROM chat_projects WHERE id=$1', [goal.project_id])).rows[0];
+    if (!p || p.workspace_id !== o.workspace_id) bad('denied', 'objective_outside_project_workspace');
+    if (!(await actsForObjectiveScope(client, who, o.workspace_id, o.division_id))) bad('denied', 'objective_not_authorized');
+    await client.query('UPDATE project_goals SET objective_id=$2 WHERE id=$1', [gid, oid]);
+    return { goalId: gid, objectiveId: oid };
+  });
+}
+
+export async function completeObjective(poolOrClient, { actorUserId, objectiveId }) {
+  const actor = uuid(actorUserId, 'actor'), oid = uuid(objectiveId, 'objective');
+  return withTx(poolOrClient, async (client) => {
+    const who = await objectiveActor(client, actor);
+    const o = (await client.query('SELECT * FROM project_objectives WHERE id=$1 FOR UPDATE', [oid])).rows[0];
+    if (!o) bad('not_found', 'objective_not_found');
+    if (o.owner_user_id !== actor && !(await actsForObjectiveScope(client, who, o.workspace_id, o.division_id))) bad('denied', 'objective_not_authorized');
+    if (o.status === 'completed') return { objectiveId: oid, status: 'completed', replayed: true };
+    const { rows } = await client.query("SELECT count(*) FILTER (WHERE status<>'completed')::int AS open, count(*)::int AS n FROM project_goals WHERE objective_id=$1", [oid]);
+    if (rows[0].n === 0) bad('conflict', 'objective_has_no_goals');
+    if (rows[0].open > 0) throw Object.assign(new Error('goals_incomplete'), { code: 'conflict', details: { open: rows[0].open } });
+    await client.query("UPDATE project_objectives SET status='completed', completed_at=now() WHERE id=$1", [oid]);
+    return { objectiveId: oid, status: 'completed' };
+  });
+}
+
+export async function readObjective(poolOrClient, { actorUserId, objectiveId }) {
+  const actor = uuid(actorUserId, 'actor'), oid = uuid(objectiveId, 'objective');
+  return withTx(poolOrClient, async (client) => {
+    const o = (await client.query('SELECT * FROM project_objectives WHERE id=$1', [oid])).rows[0];
+    // Existence is not disclosed outside the workspace.
+    if (!o || !(await check(client, { object: `workspace:${o.workspace_id}`, relation: 'viewer', subject: `user:${actor}` })).allowed) bad('not_found', 'objective_not_found');
+    const goals = (await client.query('SELECT id, project_id, title, status FROM project_goals WHERE objective_id=$1 ORDER BY created_at', [oid])).rows;
+    return { objectiveId: o.id, workspaceId: o.workspace_id, divisionId: o.division_id, title: o.title, successEvidence: o.success_evidence,
+      ownerUserId: o.owner_user_id, status: o.status,
+      goals: goals.map((g) => ({ goalId: g.id, projectId: g.project_id, title: g.title, status: g.status })),
+      progress: { goals: goals.length, completed: goals.filter((g) => g.status === 'completed').length } };
+  });
+}
