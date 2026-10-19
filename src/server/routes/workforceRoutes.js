@@ -9,6 +9,9 @@ import apiKeyWorkforceCapabilityRoutes from './apiKeyWorkforceCapabilityRoutes.j
 import workforceOwnershipTransferRoutes from './workforceOwnershipTransferRoutes.js';
 import workforceFundingRoutes from './workforceFundingRoutes.js';
 import { createWorkforceSessionRouter } from './workforceSessionRoutes.js';
+import { createResourceRouter } from './workforceResourceRoutes.js';
+import { createPublicContributionRouter } from './workforcePublicContributionRoutes.js';
+import { createPublicationRouter } from './workforcePublicationRoutes.js';
 import { createWorkforceCoordinationRouter } from './workforceCoordinationRoutes.js';
 import { createWorkforceViewRouter } from './workforceViewRoutes.js';
 
@@ -581,6 +584,12 @@ export function createWorkforceRouter({ createWorkforceResource = defaultCreate,
   // workforce:manage act; the adapter itself adds the conversation-access guard the services leave to their caller.
   router.use('/sessions', authMiddleware, requireDpopIfBound, requireWorkforceScope('workforce:manage'),
     express.json({ limit: MAX_BODY_BYTES, strict: true }), createWorkforceSessionRouter({ env: sessionEnv }));
+  // RES-01..06: contributed resources. Qualification and driver admission are operator acts; nothing executes here.
+  router.use('/contributed', authMiddleware, requireDpopIfBound, requireWorkforceScope('workforce:manage'),
+    express.json({ limit: MAX_BODY_BYTES, strict: true }), createResourceRouter());
+  // PUB-03..07/10/12: offers, contributions, lifecycle, claims, reviews and discussion. Identity is always the session.
+  router.use('/public', authMiddleware, requireDpopIfBound, requireWorkforceScope('workforce:manage'),
+    express.json({ limit: MAX_BODY_BYTES, strict: true }), createPublicContributionRouter(), createPublicationRouter());
   // RUN-05/06/08: child sessions, goal/milestone/task with evidence and review, concurrent ownership.
   router.use('/coordination', authMiddleware, requireDpopIfBound, requireWorkforceScope('workforce:manage'),
     express.json({ limit: MAX_BODY_BYTES, strict: true }), createWorkforceCoordinationRouter());
