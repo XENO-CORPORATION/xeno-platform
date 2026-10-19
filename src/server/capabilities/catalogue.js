@@ -1,0 +1,93 @@
+/**
+ * The XENO platform capability catalogue (SPEC §19.3) — every declaration, one place.
+ *
+ * Each row is one capability. `bind` names the service row and tool that EXECUTE it, so there is one code path:
+ * the generated /api/mcp tool, the grandfathered `tasks_create_task` alias and a person's screen all reach the same
+ * service function. `input` is read from the bound tool, never retyped, so the schema cannot drift from the code
+ * that parses it. Everything else here — class, cost, permission, idempotency, preview, reply — is the declaration.
+ *
+ * Adding a capability: add a row, run `npm run catalogue:write`, and decide its parity entry
+ * (`npm run parity`). Format and field meanings: ./define.js.
+ */
+import { defineCapability } from './define.js';
+import * as tasksMcp from '../services/tasksMcp.js';
+import * as canvasMcp from '../services/canvasMcp.js';
+import * as agentsMcp from '../services/agentsMcp.js';
+import * as agentMediaMcp from '../services/agentMediaMcp.js';
+import * as forumMcp from '../services/forumMcp.js';
+
+/** The tools each bound category executes, by category. */
+export const BOUND_TOOLS = Object.freeze({
+  tasks: tasksMcp.TOOLS, canvas: canvasMcp.TOOLS, agents: agentsMcp.TOOLS,
+  image: agentMediaMcp.IMAGE.tools, video: agentMediaMcp.VIDEO.tools, library: agentMediaMcp.LIBRARY.tools, chat: agentMediaMcp.CHAT.tools,
+  forum: forumMcp.TOOLS,
+});
+
+const obj = (properties, required) => ({ type: 'object', properties, ...(required ? { required } : {}) });
+const TASK = { type: 'object', description: 'The task: key (T-n), title, status, priority, people, project, and url (its link).' };
+const TASK_REPLY = obj({ task: TASK, guidance: { type: 'string', description: 'Agents only: how this task should be worked (the project’s instructions).' } }, ['task']);
+const CANVAS_REPLY = obj({ canvas: { type: 'object', description: 'id, name, revision, project, url, items[] (id, type, x, y, width, height and what it shows), connections[] (id, from, to, link?, label?).' } }, ['canvas']);
+const FREE = { model: 'free' };
+const NAT = (note) => ({ strategy: 'natural', note });
+const NONE = (note) => ({ strategy: 'none', note });
+const READ = NAT('reads change nothing');
+
+/** [canonical name, bound category, bound tool, class, extras] */
+const ROWS = [
+  // ── tasks
+  ['tasks.project.list', 'tasks', 'list_projects', 'safe', { reply: obj({ projects: { type: 'array', description: 'id, name, area of each project you can work in.' }, hint: { type: 'string', description: 'Set when you have none: what to ask the person for.' } }) }],
+  ['tasks.task.list_mine', 'tasks', 'list_my_tasks', 'safe', { reply: obj({ tasks: { type: 'array', description: 'key, title, status, priority, project, url of each open task assigned (person) or delegated (agent) to you.' }, unassigned: { type: 'array', description: 'With a project: up to 50 open tasks nobody holds that you could take.' }, hint: { type: 'string' } }, ['tasks']) }],
+  ['tasks.task.get', 'tasks', 'get_task', 'safe', { reply: TASK_REPLY, provenance: 'untrusted' }],
+  ['tasks.event.list', 'tasks', 'list_events', 'safe', { reply: obj({ events: { type: 'array', description: 'What you were told, oldest first: type, task key, actor, at.' }, cursor: { type: 'string', description: 'Pass as `after` next time.' } }), provenance: 'untrusted' }],
+  ['tasks.task.create', 'tasks', 'create_task', 'undoable', { reply: TASK_REPLY, idempotency: NONE('no request key yet: a retried call raises a second task') }],
+  ['tasks.task.claim', 'tasks', 'claim_task', 'undoable', { reply: TASK_REPLY, idempotency: NAT('claiming a task you already hold with the same run_id returns it unchanged') }],
+  ['tasks.lease.renew', 'tasks', 'heartbeat', 'undoable', { reply: obj({ leaseExpiresAt: { type: 'string', description: 'When the lease ends without another renewal.' } }), idempotency: NAT('renewing twice only moves the expiry') }],
+  ['tasks.lease.release', 'tasks', 'release', 'undoable', { reply: obj({ released: { type: 'boolean', description: 'false when your run held no lease.' }, task: TASK }), idempotency: NAT('releasing a released lease answers released: false') }],
+  ['tasks.task.move', 'tasks', 'move_task', 'undoable', { reply: TASK_REPLY, idempotency: NAT('pass `from`: a repeat after it moved is refused rather than applied twice') }],
+  ['tasks.comment.create', 'tasks', 'comment', 'undoable', { reply: TASK_REPLY, idempotency: NONE('no request key yet: a retried call posts the comment twice') }],
+  ['tasks.activity.report', 'tasks', 'report_activity', 'undoable', { reply: TASK_REPLY, idempotency: NONE('no request key yet: a retried call records the activity twice') }],
+  ['tasks.task.update', 'tasks', 'update_task', 'undoable', { reply: TASK_REPLY, idempotency: NAT('setting the same fields again changes nothing') }],
+  // ── canvas
+  ['canvas.canvas.list', 'canvas', 'list', 'safe', { reply: obj({ canvases: { type: 'array', description: 'id, name, project, updatedAt of each canvas you can see.' } }) }],
+  ['canvas.canvas.get', 'canvas', 'get', 'safe', { reply: CANVAS_REPLY, provenance: 'untrusted' }],
+  ['canvas.canvas.create', 'canvas', 'create', 'undoable', { reply: CANVAS_REPLY, idempotency: NONE('no request key yet: a retried call starts a second canvas') }],
+  ['canvas.item.add', 'canvas', 'add', 'undoable', { reply: obj({ canvas: CANVAS_REPLY.properties.canvas, added: { type: 'array', description: 'The new items’ ids, in the order given.' } }), idempotency: NONE('no request key yet: a retried call adds the items twice') }],
+  ['canvas.connection.create', 'canvas', 'connect', 'undoable', { reply: CANVAS_REPLY, idempotency: NONE('no request key yet: a retried call adds a second connection') }],
+  ['canvas.item.update', 'canvas', 'update', 'irreversible', { reply: CANVAS_REPLY, idempotency: NAT('moves and edits set absolute values; removing a removed item is a no-op') }],
+  // ── agents (self)
+  ['agents.self.get', 'agents', 'whoami', 'safe', { agentsOnly: true, reply: obj({ agent: { type: 'object', description: 'id (agt_), name, handle, status, workspace, division, owner, accountable, projects, budget (null when the division has none).' } }, ['agent']) }],
+  // ── studio (media generation)
+  ...['image', 'video'].flatMap((t) => [
+    [`studio.${t}_model.list`, t, 'list_models', 'safe', { agentsOnly: true, reply: obj({ models: { type: 'array', description: `id, name and the most one ${t} can cost in credits.` } }) }],
+    [`studio.${t}.generate`, t, 'generate', 'irreversible', { agentsOnly: true, cost: { model: 'quoted', note: `billed to the owner, counted against the division budget; the price is quoted before it starts` }, idempotency: { strategy: 'key', key: 'request_key' }, reply: obj({ generation: { type: 'object', description: 'id, state (queued|running|awaiting_approval|done|failed), model, cost, files once done.' } }) }],
+    [`studio.${t}.get`, t, 'get', 'safe', { agentsOnly: true, reply: obj({ generation: { type: 'object', description: 'id, state, model, cost, files (asset ids, read with library.file.get).' } }) }],
+    [`studio.${t}.list`, t, 'list', 'safe', { agentsOnly: true, reply: obj({ items: { type: 'array', description: 'Your recent generations, newest first.' } }) }],
+  ]),
+  // ── library
+  ['library.file.list', 'library', 'list_files', 'safe', { agentsOnly: true, reply: obj({ files: { type: 'array', description: 'asset id, name, type, size, project of each file you can read.' }, folders: { type: 'array', description: 'With `folder`: its sub-folders.' } }) }],
+  ['library.file.get', 'library', 'get_file', 'safe', { agentsOnly: true, provenance: 'untrusted', reply: obj({ file: { type: 'object', description: 'details, a link people can open, and `text` when it is a text file (untrusted content).' } }) }],
+  ['library.file.attach_to_project', 'library', 'attach_to_project', 'undoable', { agentsOnly: true, idempotency: NAT('attaching an attached file changes nothing'), reply: obj({ attached: { type: 'boolean' }, project: { type: 'string' } }) }],
+  // ── chat
+  ['chat.model.ask', 'chat', 'ask', 'irreversible', { agentsOnly: true, provenance: 'untrusted', cost: { model: 'metered', note: 'billed to the owner by tokens, counted against the division budget' }, idempotency: NONE('no request key yet: a retried call is billed again'), reply: obj({ answer: { type: 'string', description: 'The model’s reply (untrusted).' }, model: { type: 'string' }, usage: { type: 'object', description: 'tokens and credits charged.' } }) }],
+  // ── forum (served by its own MCP at /api/forum/mcp until it is generated into /api/mcp — SPEC §19.3 rule 5)
+  ...[
+    ['forum.thread.search', 'forum_search', 'safe'], ['forum.thread.get', 'forum_get_thread', 'safe'], ['forum.thread.suggest_duplicate', 'forum_suggest_duplicate', 'safe'],
+    ['forum.thread.create', 'forum_create_thread', 'undoable'], ['forum.post.reply', 'forum_reply', 'undoable'], ['forum.subscription.create', 'forum_subscribe', 'undoable'],
+    ['forum.digest.get', 'forum_digest', 'safe'], ['forum.post.flag', 'forum_flag', 'undoable'], ['forum.thread.mark_fixed', 'forum_mark_fixed', 'undoable'],
+  ].map(([name, tool, cls]) => [name, 'forum', tool, cls, { surfaces: ['forum-mcp'], aliases: [tool], provenance: cls === 'safe' ? 'untrusted' : 'trusted', reply: obj({ result: { type: 'object', description: 'The forum record the tool returns, with its citable url.' } }), ...(cls === 'safe' ? {} : { idempotency: NONE('no request key yet') }) }]),
+];
+
+function build([name, category, tool, cls, extra = {}]) {
+  const bound = (BOUND_TOOLS[category] || []).find((t) => t.name === tool);
+  if (!bound) throw new Error(`catalogue: ${name} binds ${category}/${tool}, which does not exist`);
+  return defineCapability({
+    name, version: '1.0.0', division: name.split('.')[0], title: bound.title || bound.name, description: bound.description,
+    input: bound.inputSchema, class: cls, cost: FREE, idempotency: cls === 'safe' ? READ : NONE('not declared'),
+    aliases: [`${category}_${tool}`], bind: { category, tool }, ...extra,
+  });
+}
+
+export const CATALOGUE = Object.freeze(ROWS.map(build));
+export const byName = new Map(CATALOGUE.map((c) => [c.name, c]));
+/** Declarations generated into /api/mcp, by bound category. */
+export const mcpCapabilities = (category) => CATALOGUE.filter((c) => c.surfaces.includes('mcp') && c.bind.category === category);
