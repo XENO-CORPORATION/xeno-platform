@@ -103,13 +103,16 @@ export const CONNECT_HUMAN_ONLY_SCOPES = Object.freeze(['connect:manage']);
 const DRIVE_READ = ['drive.files.list', 'drive.files.stat', 'drive.files.read', 'drive.quota.read', 'drive.changes.read'];
 const DRIVE_WRITE = ['drive.files.create', 'drive.files.rename', 'drive.files.move', 'drive.files.trash', 'drive.files.restore',
   'drive.uploads.start', 'drive.uploads.status', 'drive.uploads.write', 'drive.uploads.finish', 'drive.uploads.cancel'];
-// The client ceiling: which Connect scopes and provider operations a consumer may ever hold. `drive.files.replace` is
-// absent on purpose: Connect refuses conditional replace until an atomic Drive precondition is qualified.
+// Overwriting an existing file's content in place. A separate grant from upload, so an upload ceiling never implies
+// overwrite. Added 2026-10-19 once Connect (ca099bd) qualified it with an md5/version precondition; Storage needs it
+// to save edits made on a mounted Google Drive.
+const DRIVE_REPLACE = ['drive.files.replace'];
+// The client ceiling: which Connect scopes and provider operations a consumer may ever hold.
 export const CONNECT_CLIENT_AUTHORITY = Object.freeze({
-  'xeno-storage': Object.freeze({ scopes: CONNECT_SCOPES, operations: Object.freeze([...DRIVE_READ, ...DRIVE_WRITE]) }),
+  'xeno-storage': Object.freeze({ scopes: CONNECT_SCOPES, operations: Object.freeze([...DRIVE_READ, ...DRIVE_WRITE, ...DRIVE_REPLACE]) }),
   // The WEBSITE's Storage (services/webConnect.js). Not an OIDC client: no browser ever holds its token. It is minted
   // in-process for a live website session and is NEVER reachable by RFC 8693 exchange (connectExchangeGrant refuses it).
-  'xeno-web-storage': Object.freeze({ scopes: CONNECT_SCOPES, operations: Object.freeze([...DRIVE_READ, ...DRIVE_WRITE]) }),
+  'xeno-web-storage': Object.freeze({ scopes: CONNECT_SCOPES, operations: Object.freeze([...DRIVE_READ, ...DRIVE_WRITE, ...DRIVE_REPLACE]) }),
 });
 /** The website's first-party Connect consumer: minted server-side only, bound to a website session. */
 export const CONNECT_WEB_CONSUMER = 'xeno-web-storage';
