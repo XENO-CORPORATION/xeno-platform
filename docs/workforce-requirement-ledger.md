@@ -52,8 +52,8 @@ Method: every ID grepped across src/, prototypes/, scripts/ on the remote main r
 | VIEW-01 | Global lists are authorized aggregates, never a tenant or permission bypass. Fil | BUILT | prototypes/xeno-workspace/resources.js:6 ; scripts/workforce-catalog-global-view.test.mjs:2 | - |
 | VIEW-02 | Workspace lists show assigned resources only; project views narrow participation | BUILT | prototypes/xeno-workspace/places.js:56 ; prototypes/xeno-workspace/tests/work-test.mjs:139 | - |
 | VIEW-03 | Global creation requires explicit/default-displayed owner and optional assignmen | BUILT | src/server/database/migrations/20260927140000-workforce-create-and-assign.sql:2 ; scripts/workforce-create-and-assign.test.mjs:2 | - |
-| VIEW-04 | Every list row resolves to the same canonical ID across views. View switching pr | PARTIAL | viewConsistency.js unrouted (session-view-consistency.test) | VIEW-01 |
-| VIEW-05 | Scope-bound query keys and revisions fence stale A→B→A responses, optimistic | PARTIAL | scopedReads.js unrouted (session-scoped-reads.test) | NFR-07 |
+| VIEW-04 | Every list row resolves to the same canonical ID across views. View switching pr | BUILT | routed at /api/workforce/views (routes/workforceViewRoutes.js); proof scripts/workforce-view-routes.test.mjs; was: viewConsistency.js unrouted (session-view-consistency.test) | VIEW-01 |
+| VIEW-05 | Scope-bound query keys and revisions fence stale A→B→A responses, optimistic | BUILT | routed at /api/workforce/views (routes/workforceViewRoutes.js); proof scripts/workforce-view-routes.test.mjs; was: scopedReads.js unrouted (session-scoped-reads.test) | NFR-07 |
 | SES-01 | Global New Chat defaults to personal conversation ownership with no organization | BUILT | src/lib/workspaceLabel.ts:4 ; scripts/chat-workspace-scope.database.test.mjs:1 | - |
 | SES-02 | Chat does not require directory selection. If a provider needs cwd, the host sup | BUILT | routed at /api/workforce/sessions (routes/workforceSessionRoutes.js) with a conversation-access guard; proof scripts/workforce-session-routes.test.mjs; was: providerSessionCwd.js unrouted; host half in Interface | SES-01 |
 | SES-03 | Chat→Agent requires an explicit authorized root, records mode/context change,  | BUILT | routed at /api/workforce/sessions (routes/workforceSessionRoutes.js) with a conversation-access guard; proof scripts/workforce-session-routes.test.mjs; was: conversationModes.js unrouted (session-agent-transition.test) | ASN-07 |
@@ -153,7 +153,7 @@ Method: every ID grepped across src/, prototypes/, scripts/ on the remote main r
 ## Counts
 At measurement: BUILT 96 · PARTIAL 45 · MISSING 4 · OUT-OF-REPO 0
 
-Current (after the 2026-10-19 PRs): BUILT 108 · PARTIAL 33 · MISSING 4
+Current (after the 2026-10-19 PRs): BUILT 110 · PARTIAL 31 · MISSING 4
 
 ## MISSING/PARTIAL ordered by dependency (wire-up order)
 
@@ -180,3 +180,4 @@ Current (after the 2026-10-19 PRs): BUILT 108 · PARTIAL 33 · MISSING 4
   action admitted a run.
 - ACCT-02/03/04/05/06/08: gifts, returns, opt-out and account history routed at `/api/account/gifts`; closed until `ACCOUNT_GIFTS_OPEN=true` (§22.1).
 - SES-02/03/04/06/07/09: session API at `/api/workforce/sessions`; conversation-access guard (stranger = not_found), host-owned `XENO_SESSION_ROOT`. SES-08 person half routed; host ack/registration intentionally unrouted, so it stays PARTIAL.
+- VIEW-04/05: fenced scoped reads/polls, canonical id resolution (guarded by the resolved conversation) and per-view drafts at `/api/workforce/views`.
