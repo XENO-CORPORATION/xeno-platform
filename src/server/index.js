@@ -106,6 +106,7 @@ import xenoRoutes from './routes/xenoRoutes.js';
 import marketplaceRoutes from './routes/marketplaceRoutes.js';
 import billingRoutes, { stripeWebhook } from './routes/billingRoutes.js';
 import accountRoutes from './routes/accountRoutes.js';
+import accountGiftRoutes from './routes/accountGiftRoutes.js';
 import dashboardRoutes from './routes/dashboardRoutes.js';
 import v2LedgerRoutes from './routes/v2LedgerRoutes.js';
 import serviceLedgerRoutes from './routes/serviceLedgerRoutes.js';
@@ -618,6 +619,8 @@ console.log('💳 Billing routes integrated: /api/billing/* (checkout, portal, c
 
 // Account + dashboard read-aggregation surface (account UI / home dashboard).
 // Pure reads over users + v2 ledger + plan + ReBAC workspaces. Auth per-route.
+// ACCT-02..08 gifts, returns, gift preferences and history. Money movement is CLOSED until ACCOUNT_GIFTS_OPEN=true (§22.1).
+app.use('/api/account/gifts', databaseMiddleware, accountGiftRoutes);
 app.use('/api/account', databaseMiddleware, accountRoutes);
 // Workforce definitions are not agent principal/key provisioning. Auth and
 // fine-grained workforce scopes are enforced per route by the canonical router.

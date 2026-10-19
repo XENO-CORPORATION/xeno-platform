@@ -102,13 +102,13 @@ Method: every ID grepped across src/, prototypes/, scripts/ on the remote main r
 | FUND-18 | Milestone terms, threshold, budget purpose and price-consent envelope are versio | BUILT | prototypes/xeno-workspace/funding.js:4 ; scripts/workforce-funding-version-bound-terms.test.mjs:1 | - |
 | FUND-19 | Fee arithmetic is exact and partition-independent: compute commission as `floor( | BUILT | src/server/database/migrations/20261004160000-marketplace-commission-postings.sql:2 ; scripts/marketplace-commission-arithmetic.test.mjs:1 | - |
 | ACCT-01 | A XENO account is the principal-facing owner of its eligible credit balance. The | BUILT | (test-only) ; scripts/account-ledger-authority.test.mjs:1 | - |
-| ACCT-02 | Distinguish three operations in UI/API: gift changes beneficiary to another XENO | PARTIAL | accountGifts.js unreachable: gift op has no route | ACCT-01 |
-| ACCT-03 | A gift names an existing canonical recipient account, exact eligible micro-credi | PARTIAL | accountGifts.js + migration 20261004120000; no route imports it | ACCT-01 |
-| ACCT-04 | Debit and recipient credit commit atomically with a durable gift receipt and ori | PARTIAL | accountGifts.js tested (account-gift-transfer.test) but unrouted | ACCT-03 |
-| ACCT-05 | A completed gift is not cancellable by its sender. A recipient may initiate a se | PARTIAL | gift returns migration 20261004130000; service unrouted | ACCT-04 |
-| ACCT-06 | Support recipient gift opt-out and transaction/security notifications using exis | PARTIAL | gift-preferences migration 20261004140000; service unrouted | ACCT-03 |
+| ACCT-02 | Distinguish three operations in UI/API: gift changes beneficiary to another XENO | BUILT | routed at /api/account/gifts (routes/accountGiftRoutes.js; money movement closed until ACCOUNT_GIFTS_OPEN=true); proof scripts/account-gift-routes.test.mjs; was: accountGifts.js unreachable: gift op has no route | ACCT-01 |
+| ACCT-03 | A gift names an existing canonical recipient account, exact eligible micro-credi | BUILT | routed at /api/account/gifts (routes/accountGiftRoutes.js; money movement closed until ACCOUNT_GIFTS_OPEN=true); proof scripts/account-gift-routes.test.mjs; was: accountGifts.js + migration 20261004120000; no route imports it | ACCT-01 |
+| ACCT-04 | Debit and recipient credit commit atomically with a durable gift receipt and ori | BUILT | routed at /api/account/gifts (routes/accountGiftRoutes.js; money movement closed until ACCOUNT_GIFTS_OPEN=true); proof scripts/account-gift-routes.test.mjs; was: accountGifts.js tested (account-gift-transfer.test) but unrouted | ACCT-03 |
+| ACCT-05 | A completed gift is not cancellable by its sender. A recipient may initiate a se | BUILT | routed at /api/account/gifts (routes/accountGiftRoutes.js; money movement closed until ACCOUNT_GIFTS_OPEN=true); proof scripts/account-gift-routes.test.mjs; was: gift returns migration 20261004130000; service unrouted | ACCT-04 |
+| ACCT-06 | Support recipient gift opt-out and transaction/security notifications using exis | BUILT | routed at /api/account/gifts (routes/accountGiftRoutes.js; money movement closed until ACCOUNT_GIFTS_OPEN=true); proof scripts/account-gift-routes.test.mjs; was: gift-preferences migration 20261004140000; service unrouted | ACCT-03 |
 | ACCT-07 | UI, CLI, company and project surfaces call shared typed account methods. Request | BUILT | src/server/database/migrations/20261004150000-workforce-spend-approvals.sql:1 ; scripts/account-agent-approval.test.mjs:1 | - |
-| ACCT-08 | Credit amounts are exact micro-credit values; model tokens are measured usage wi | PARTIAL | accountHistory.js unrouted (account-history.test only) | ACCT-04 |
+| ACCT-08 | Credit amounts are exact micro-credit values; model tokens are measured usage wi | BUILT | routed at /api/account/gifts (routes/accountGiftRoutes.js; money movement closed until ACCOUNT_GIFTS_OPEN=true); proof scripts/account-gift-routes.test.mjs; was: accountHistory.js unrouted (account-history.test only) | ACCT-04 |
 | PUB-01 | Project ownership, visibility, contribution policy and execution permissions are | BUILT | src/server/database/migrations/20261004350000-project-policies.sql:2 ; scripts/workforce-project-visibility.test.mjs:1 | - |
 | PUB-02 | Public projects expose an explicitly published projection: purpose, maintainer i | BUILT | src/server/config/projectPublicationContract.js:80 ; scripts/workforce-published-projection.test.mjs:1 | - |
 | PUB-03 | Maintainers assign their own teams normally. External developers submit agent/te | PARTIAL | participationOffers.js unrouted | PUB-01 |
@@ -151,7 +151,9 @@ Method: every ID grepped across src/, prototypes/, scripts/ on the remote main r
 | NFR-10 | The 60-second lease uses signed/validated expiry and a monotonic elapsed-time bo | BUILT | src/server/database/migrations/20260925140000-workforce-run-authority-leases.sql:2 ; scripts/workforce-migration-chain.test.mjs:196 | - |
 
 ## Counts
-BUILT 96 · PARTIAL 45 · MISSING 4 · OUT-OF-REPO 0
+At measurement: BUILT 96 · PARTIAL 45 · MISSING 4 · OUT-OF-REPO 0
+
+Current (after the 2026-10-19 PRs): BUILT 102 · PARTIAL 39 · MISSING 4
 
 ## MISSING/PARTIAL ordered by dependency (wire-up order)
 
@@ -176,3 +178,4 @@ BUILT 96 · PARTIAL 45 · MISSING 4 · OUT-OF-REPO 0
 - RUN-01 / RUN-03: the agent-page Run button now admits through `admitAccountRun` and runs under that
   admission; revocation stops the hosted run and refuses credentials (service + trigger). Previously no user
   action admitted a run.
+- ACCT-02/03/04/05/06/08: gifts, returns, opt-out and account history routed at `/api/account/gifts`; closed until `ACCOUNT_GIFTS_OPEN=true` (§22.1).
