@@ -21,7 +21,7 @@ import { fileURLToPath } from 'node:url';
 import { DatabaseSync } from 'node:sqlite';
 import {
   COMPONENTS, FAIL_THRESHOLD, RECOVER_THRESHOLD, USER_AGENT,
-  dayBuckets, escapeHtml, handleFetch, loadModel, nextState, probe, renderPage, runScheduled, uptimePercent,
+  dayBuckets, escapeHtml, groupEvents, handleFetch, loadModel, nextState, probe, renderPage, runScheduled, uptimePercent,
 } from '../status/worker.mjs';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
@@ -269,6 +269,31 @@ test('one component down reads as a partial outage, with the incident listed', a
   assert.equal(model.overall, 'partial_outage');
   assert.equal(model.incidents.length, 1);
   assert.match(renderPage(model), /Inference Gateway is unavailable/);
+});
+
+test('🔴 a long-running open incident is never pushed off the page by newer resolved ones', async () => {
+  const db = d1();
+  const now = Date.UTC(2026, 9, 19, 12, 0);
+  const ins = db.sqlite.prepare('INSERT INTO incidents (component, started_at, resolved_at, summary) VALUES (?, ?, ?, ?)');
+  ins.run('chat', now - 3 * 86_400_000, null, 'the turn timed out');
+  for (let i = 0; i < 40; i += 1) ins.run('website', now - 86_400_000 + i * 3_600_000, now - 86_400_000 + i * 3_600_000 + 60_000, 'HTTP 530');
+  const model = await loadModel(db, () => now);
+  assert.ok(model.incidents.some((i) => i.component === 'chat' && !i.resolvedAt), 'the open chat incident must be in the model');
+  const html = renderPage(model);
+  assert.match(html, /Ongoing incidents[\s\S]*Chat is unavailable[\s\S]*Past incidents/);
+});
+
+test('components failing within minutes of each other read as ONE event', () => {
+  const t = Date.UTC(2026, 9, 18, 21, 6);
+  const events = groupEvents([
+    { name: 'Website', startedAt: t, resolvedAt: t + 55_000_000, summary: 'HTTP 530' },
+    { name: 'XENO Post', startedAt: t + 60_000, resolvedAt: t + 56_000_000, summary: 'HTTP 530' },
+    { name: 'Chat', startedAt: t - 86_400_000, resolvedAt: null, summary: 'timed out' },
+  ]);
+  assert.equal(events.length, 2);
+  assert.deepEqual(events[0].names, ['Website', 'XENO Post']);
+  assert.equal(events[0].resolvedAt, t + 56_000_000);
+  assert.equal(events[1].ongoing, true);
 });
 
 test('incident text is escaped — probe error strings are not trusted markup', () => {

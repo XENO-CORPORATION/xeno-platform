@@ -483,12 +483,19 @@ export async function loadModel(db, now = Date.now) {
   const ts = now();
   const today = utcDay(ts);
   const windowStart = utcDay(ts - (UPTIME_WINDOW_DAYS - 1) * DAY_MS);
-  const [states, daily, incidents] = await Promise.all([
+  const [states, daily, recent, open] = await Promise.all([
     db.prepare('SELECT component, status, since, last_checked, last_latency_ms FROM component_state').all(),
     db.prepare('SELECT component, day, total, ok FROM daily WHERE day >= ?').bind(windowStart).all(),
     db.prepare('SELECT component, started_at, resolved_at, summary FROM incidents WHERE started_at >= ? ORDER BY started_at DESC LIMIT 30')
       .bind(ts - UPTIME_WINDOW_DAYS * DAY_MS).all(),
+    // Open incidents are read on their own: a long-running one must never be pushed off the page
+    // by newer, shorter ones (2026-10-19: Chat was Down for three days with no incident shown).
+    db.prepare('SELECT component, started_at, resolved_at, summary FROM incidents WHERE resolved_at IS NULL ORDER BY started_at DESC').all(),
   ]);
+  const seen = new Set();
+  const incidentRowsRaw = [...(open.results || []), ...(recent.results || [])]
+    .filter((row) => { const k = `${row.component}:${row.started_at}`; if (seen.has(k)) return false; seen.add(k); return true; })
+    .sort((a, b) => b.started_at - a.started_at);
   const stateBy = new Map((states.results || []).map((row) => [row.component, row]));
   // Deep components are drawn only once they have been measured: a check that was never
   // switched on is absent from the page, never shown as operational.
@@ -515,7 +522,7 @@ export async function loadModel(db, now = Date.now) {
     generatedAt: new Date(ts).toISOString(),
     overall,
     components,
-    incidents: (incidents.results || []).map((row) => ({
+    incidents: incidentRowsRaw.map((row) => ({
       component: row.component,
       name: ALL_COMPONENTS.find((c) => c.id === row.component)?.name ?? row.component,
       startedAt: row.started_at,
@@ -523,6 +530,32 @@ export async function loadModel(db, now = Date.now) {
       summary: row.summary,
     })),
   };
+}
+
+/**
+ * Group incidents into events: components that failed within EVENT_GAP_MS of each other are one
+ * event (a host outage takes several down at once and should read as one thing that happened).
+ * An event is ongoing while any of its incidents is unresolved.
+ */
+export const EVENT_GAP_MS = 15 * 60_000;
+export function groupEvents(incidents) {
+  const sorted = [...incidents].sort((a, b) => a.startedAt - b.startedAt);
+  const events = [];
+  for (const i of sorted) {
+    const last = events[events.length - 1];
+    if (last && i.startedAt - last.startedAt <= EVENT_GAP_MS) last.items.push(i);
+    else events.push({ startedAt: i.startedAt, items: [i] });
+  }
+  return events.map((e) => {
+    const ongoing = e.items.some((i) => !i.resolvedAt);
+    return {
+      startedAt: e.startedAt,
+      ongoing,
+      resolvedAt: ongoing ? null : Math.max(...e.items.map((i) => i.resolvedAt)),
+      names: [...new Set(e.items.map((i) => i.name))],
+      summaries: [...new Set(e.items.map((i) => i.summary).filter(Boolean))],
+    };
+  }).sort((a, b) => b.startedAt - a.startedAt);
 }
 
 export const escapeHtml = (value) => String(value ?? '')
@@ -563,15 +596,21 @@ export function renderPage(model) {
         </div>
       </section>`).join('');
 
-  const incidentRows = model.incidents.length === 0
+  const fmt = (ms) => new Date(ms).toISOString().replace('T', ' ').slice(0, 16);
+  const events = groupEvents(model.incidents);
+  const eventHtml = (e) => `
+      <article class="incident${e.ongoing ? ' ongoing' : ''}">
+        <h3>${escapeHtml(e.names.join(', '))} ${e.ongoing ? (e.names.length > 1 ? 'are' : 'is') : (e.names.length > 1 ? 'were' : 'was')} unavailable</h3>
+        <p class="summary">${escapeHtml(e.summaries.join(' · '))}</p>
+        <p class="when">${escapeHtml(fmt(e.startedAt))} UTC
+          ${e.ongoing ? '— <strong>ongoing</strong>' : `— resolved after ${escapeHtml(formatDuration(e.resolvedAt - e.startedAt))}`}</p>
+      </article>`;
+  const ongoing = events.filter((e) => e.ongoing);
+  const past = events.filter((e) => !e.ongoing);
+  const activeRows = ongoing.length === 0 ? '<p class="empty">No ongoing incidents.</p>' : ongoing.map(eventHtml).join('');
+  const incidentRows = past.length === 0
     ? '<p class="empty">No incidents in the last 90 days.</p>'
-    : model.incidents.map((i) => `
-      <article class="incident">
-        <h3>${escapeHtml(i.name)} ${i.resolvedAt ? 'was unavailable' : 'is unavailable'}</h3>
-        <p class="summary">${escapeHtml(i.summary)}</p>
-        <p class="when">${escapeHtml(new Date(i.startedAt).toISOString().replace('T', ' ').slice(0, 16))} UTC
-          ${i.resolvedAt ? `— resolved after ${escapeHtml(formatDuration(i.resolvedAt - i.startedAt))}` : '— <strong>ongoing</strong>'}</p>
-      </article>`).join('');
+    : past.map(eventHtml).join('');
 
   return `<!doctype html>
 <html lang="en">
@@ -585,7 +624,7 @@ export function renderPage(model) {
           --up:#ece7df; --degraded:#948d83; --down:#e5484d; --none:#1c1c1c; }
   * { box-sizing:border-box; }
   body { margin:0; background:var(--page); color:var(--body); font:15px/1.55 Inter, system-ui, -apple-system, "Segoe UI", sans-serif; }
-  main { max-width:880px; margin:0 auto; padding:48px 16px 64px; }
+  main { max-width:1240px; margin:0 auto; padding:48px 16px 64px; }
   header h1 { color:var(--title); font-size:clamp(22px,4vw,30px); font-weight:600; letter-spacing:-.01em; margin:0 0 28px; }
   .overall { background:var(--card); border:1px solid var(--line); border-radius:10px; padding:18px 20px; color:var(--title); font-weight:600; margin-bottom:32px; }
   .overall.partial_outage, .overall.major_outage { border-color:rgba(229,72,77,.45); }
@@ -603,6 +642,11 @@ export function renderPage(model) {
   .incident h3 { color:var(--title); font-size:15px; font-weight:500; margin:0 0 4px; }
   .incident p { margin:0 0 2px; } .when, .empty, footer { color:var(--dim); font-size:13px; }
   footer { margin-top:48px; }
+  .layout { display:grid; gap:32px; grid-template-columns:minmax(0,1fr); }
+  .layout aside h2:first-child { margin-top:0; }
+  .incident.ongoing { border-left-color:var(--down); }
+  @media (min-width:1000px) { .layout { grid-template-columns:minmax(0,1fr) 340px; }
+    .layout aside { position:sticky; top:24px; align-self:start; max-height:calc(100vh - 48px); overflow:auto; } }
   .narrow { display:none; }
   /* Narrow screens show the last 30 days, and the axis label says so rather than claiming 90. */
   @media (max-width:560px) { .bars .bar:nth-child(-n+60) { display:none; } .wide { display:none; } .narrow { display:inline; } }
@@ -612,9 +656,15 @@ export function renderPage(model) {
 <main>
   <header><h1>XENO Status</h1></header>
   <div class="overall ${escapeHtml(model.overall)}">${escapeHtml(OVERALL_TEXT[model.overall] ?? OVERALL_TEXT.unknown)}</div>
-  ${componentRows}
-  <h2>Past incidents</h2>
-  ${incidentRows}
+  <div class="layout">
+    <div class="components">${componentRows}</div>
+    <aside aria-label="Incidents">
+      <h2>Ongoing incidents</h2>
+      ${activeRows}
+      <h2>Past incidents</h2>
+      ${incidentRows}
+    </aside>
+  </div>
   <footer>Availability is checked every 2 minutes, and chat and web search by a real conversation every 30, from outside XENO's own infrastructure. Updated ${escapeHtml(model.generatedAt.replace('T', ' ').slice(0, 19))} UTC.</footer>
 </main>
 </body>
