@@ -129,12 +129,12 @@ Method: every ID grepped across src/, prototypes/, scripts/ on the remote main r
 | RES-04 | Worker-reported output or GPU-hours are not automatically trustworthy. Bind job  | BUILT | routed at /api/workforce/contributed (routes/workforceResourceRoutes.js; qualification and driver admission operator-only, lease reads holder/owner-only); proof scripts/workforce-resource-routes.test.mjs. RES-03 execution still needs a qualified Box backend; was: computeReceipts.js unrouted | RES-03 |
 | RES-05 | Track revocation/expiry and verified settlement for resource leases. Capacity th | BUILT | routed at /api/workforce/contributed (routes/workforceResourceRoutes.js; qualification and driver admission operator-only, lease reads holder/owner-only); proof scripts/workforce-resource-routes.test.mjs. RES-03 execution still needs a qualified Box backend; was: resourceLeases.js unrouted | RES-01 |
 | RES-06 | Marketplace rentals, free agent offers, donated resources and credit contributio | BUILT | routed at /api/workforce/contributed (routes/workforceResourceRoutes.js; qualification and driver admission operator-only, lease reads holder/owner-only); proof scripts/workforce-resource-routes.test.mjs. RES-03 execution still needs a qualified Box backend; was: grantComposition.js unrouted | RES-01,MKT-05,FUND-06 |
-| FORGE-01 | Define a repository-host-neutral binding and contribution adapter. Domain operat | PARTIAL | forgeAdapter.js (1 importer), no route | PUB-05 |
-| FORGE-02 | A project may bind several repositories and non-code resource stores. Each bindi | PARTIAL | forge-bindings migration; no route | FORGE-01 |
+| FORGE-01 | Define a repository-host-neutral binding and contribution adapter. Domain operat | BUILT | routed at /api/workforce/forge (routes/workforceForgeRoutes.js); proof scripts/workforce-forge-routes.test.mjs; was: forgeAdapter.js (1 importer), no route | PUB-05 |
+| FORGE-02 | A project may bind several repositories and non-code resource stores. Each bindi | BUILT | routed at /api/workforce/forge (routes/workforceForgeRoutes.js); proof scripts/workforce-forge-routes.test.mjs; was: forge-bindings migration; no route | FORGE-01 |
 | FORGE-03 | GitHub integration uses an approved GitHub App with minimum installation/reposit | PARTIAL | forgeGithubApp.js unrouted; no App installed | FORGE-02 |
-| FORGE-04 | On GitHub-backed code, GitHub is authoritative for commits, branch protections,  | PARTIAL | forgeAuthority.js unrouted | FORGE-03 |
+| FORGE-04 | On GitHub-backed code, GitHub is authoritative for commits, branch protections,  | BUILT | routed at /api/workforce/forge (routes/workforceForgeRoutes.js); proof scripts/workforce-forge-routes.test.mjs; was: forgeAuthority.js unrouted | FORGE-03 |
 | FORGE-05 | Authenticate webhook deliveries, durably deduplicate and reconcile duplicates, g | PARTIAL | forgeWebhooks.js unrouted: no webhook endpoint | FORGE-03 |
-| FORGE-06 | External PRs/issues continue working without a XENO account. Mirror their public | PARTIAL | forgeExternalActors.js unrouted | FORGE-05 |
+| FORGE-06 | External PRs/issues continue working without a XENO account. Mirror their public | BUILT | routed at /api/workforce/forge (routes/workforceForgeRoutes.js); proof scripts/workforce-forge-routes.test.mjs; was: forgeExternalActors.js unrouted | FORGE-05 |
 | FORGE-07 | A GitHub integration does not require GitHub Actions. Checks may run on an appro | MISSING | no reference in src/scripts | FORGE-04 |
 | FORGE-08 | XENO-native hosting must meet the same contribution/review/access/audit contract | MISSING | no reference (XENO-native hosting) | FORGE-01 |
 | FORGE-09 | Export project metadata and standard code/artifacts with provenance, subject to  | MISSING | no reference (export/migration) | FORGE-02 |
@@ -153,7 +153,7 @@ Method: every ID grepped across src/, prototypes/, scripts/ on the remote main r
 ## Counts
 At measurement: BUILT 96 · PARTIAL 45 · MISSING 4 · OUT-OF-REPO 0
 
-Current (after the 2026-10-19 PRs): BUILT 131 · PARTIAL 10 · MISSING 4
+Current (after the 2026-10-19 PRs): BUILT 135 · PARTIAL 6 · MISSING 4
 
 ## MISSING/PARTIAL ordered by dependency (wire-up order)
 
@@ -187,3 +187,4 @@ Current (after the 2026-10-19 PRs): BUILT 131 · PARTIAL 10 · MISSING 4
 - PUB-08/09/11/13/14: external-agent scope, project-funded work grants, conversation publication, repository visibility/retreat, export and fork at `/api/workforce/public`; identity bound to the session, private reads guarded.
 - RES-01..06: contributed-resource API at `/api/workforce/contributed`. Found and closed while routing: `qualifyComputeWorker` and `admitResourceDriver` checked nobody, so a donor could have qualified their own worker; the route makes both platform-operator acts. Worker-side token calls are left to the runner/Box transport.
 - RES-03 stays PARTIAL: scheduling and qualification are routed; execution needs Box.
+- FORGE-01/02/04/06: host-neutral bindings, change requests/checks/reviews/integration, single-owner mirrors and self-linked external identities at `/api/workforce/forge`. FORGE-03/05 stay PARTIAL (no approved GitHub App; webhook HMAC master falls back to a dev secret when WEBHOOK_MASTER_SECRET is unset, so no public intake was exposed).

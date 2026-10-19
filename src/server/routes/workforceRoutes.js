@@ -9,6 +9,7 @@ import apiKeyWorkforceCapabilityRoutes from './apiKeyWorkforceCapabilityRoutes.j
 import workforceOwnershipTransferRoutes from './workforceOwnershipTransferRoutes.js';
 import workforceFundingRoutes from './workforceFundingRoutes.js';
 import { createWorkforceSessionRouter } from './workforceSessionRoutes.js';
+import { createForgeRouter } from './workforceForgeRoutes.js';
 import { createResourceRouter } from './workforceResourceRoutes.js';
 import { createPublicContributionRouter } from './workforcePublicContributionRoutes.js';
 import { createPublicationRouter } from './workforcePublicationRoutes.js';
@@ -584,6 +585,9 @@ export function createWorkforceRouter({ createWorkforceResource = defaultCreate,
   // workforce:manage act; the adapter itself adds the conversation-access guard the services leave to their caller.
   router.use('/sessions', authMiddleware, requireDpopIfBound, requireWorkforceScope('workforce:manage'),
     express.json({ limit: MAX_BODY_BYTES, strict: true }), createWorkforceSessionRouter({ env: sessionEnv }));
+  // FORGE-01/02/04/06: host-neutral bindings, change requests, single-owner mirrors, external identities.
+  router.use('/forge', authMiddleware, requireDpopIfBound, requireWorkforceScope('workforce:manage'),
+    express.json({ limit: MAX_BODY_BYTES, strict: true }), createForgeRouter());
   // RES-01..06: contributed resources. Qualification and driver admission are operator acts; nothing executes here.
   router.use('/contributed', authMiddleware, requireDpopIfBound, requireWorkforceScope('workforce:manage'),
     express.json({ limit: MAX_BODY_BYTES, strict: true }), createResourceRouter());

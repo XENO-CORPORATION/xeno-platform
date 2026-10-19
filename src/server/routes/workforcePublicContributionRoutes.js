@@ -33,6 +33,8 @@ export function classify(e) {
   const m = String(e?.message || '');
   if (/not found/i.test(m)) return Object.assign(e, { code: 'not_found', reason: m });
   if (/already|conflict|mismatch|collid|key_conflict/i.test(m) && !/not found/i.test(m)) return Object.assign(e, { code: 'conflict', reason: m });
+  if (/^operation_unavailable/.test(m)) return Object.assign(e, { code: 'conflict', reason: m });
+  if (/_not_self$|_unlinked$|_unverified$/.test(m)) return Object.assign(e, { code: 'denied', reason: m });
   if (/no_live_scope|external_agent_denied|not_owner|_required$/i.test(m)) return Object.assign(e, { code: /_required$/.test(m) ? 'bad_input' : 'denied', reason: m });
   if (/not_authorized|not authorized|only the|maintainer|administrator|blocked|refused|forbidden|not allowed/i.test(m)) return Object.assign(e, { code: 'denied', reason: m });
   if (e instanceof Error && !e.code) return Object.assign(e, { code: 'bad_input', reason: m });
