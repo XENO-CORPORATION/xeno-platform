@@ -128,7 +128,7 @@ async function main() {
   assert.deepEqual({ k: a.principalKind, c: a.consumerId, act: a.active, m: a.membershipActive },
     { k: 'human', c: 'xeno-storage', act: true, m: true });
   assert.deepEqual(new Set(a.scopes), new Set(['connect:read', 'connect:use', 'connect:manage']));
-  assert.ok(a.operations.includes('drive.files.list') && a.operations.includes('drive.files.replace'));
+  assert.ok(a.operations.includes('drive.files.list') && a.operations.includes('drive.files.replace') && a.operations.includes('drive.drives.list'));
   assert.equal(a.authorityExpiresAt, claims.exp * 1000);
   await assert.rejects(authorityForToken(pool, { token: out.access_token, workspaceId: null }), { code: 'workspace_required' });
   a = await authorityForToken(pool, { token: out.access_token, workspaceId: crypto.randomUUID() });

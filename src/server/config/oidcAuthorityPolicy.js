@@ -100,7 +100,7 @@ export function assertAuthorityPolicy() {
 export const CONNECT_SCOPES = Object.freeze(['connect:read', 'connect:use', 'connect:manage']);
 // connect:manage (link/revoke/grant) is honoured for HUMAN principals only; an agent asking for it is refused.
 export const CONNECT_HUMAN_ONLY_SCOPES = Object.freeze(['connect:manage']);
-const DRIVE_READ = ['drive.files.list', 'drive.files.stat', 'drive.files.read', 'drive.quota.read', 'drive.changes.read'];
+const DRIVE_READ = ['drive.files.list', 'drive.files.stat', 'drive.files.read', 'drive.quota.read', 'drive.changes.read', 'drive.drives.list'];
 const DRIVE_WRITE = ['drive.files.create', 'drive.files.rename', 'drive.files.move', 'drive.files.trash', 'drive.files.restore',
   'drive.uploads.start', 'drive.uploads.status', 'drive.uploads.write', 'drive.uploads.finish', 'drive.uploads.cancel'];
 // Overwriting an existing file's content in place. A separate grant from upload, so an upload ceiling never implies
