@@ -47,7 +47,7 @@ Method: every ID grepped across src/, prototypes/, scripts/ on the remote main r
 | LIFE-05 | Promotion and demotion change a FUNCTION, never authority directly. Changing a t | BUILT | prototypes/xeno-workspace/workforce.js:226 ; prototypes/xeno-workspace/tests/wf-test.mjs:36 | - |
 | LIFE-06 | A DECISION RECORD is a first-class durable record. Who decided, what was decided | BUILT | prototypes/xeno-workspace/workforce.js:8 ; prototypes/xeno-workspace/tests/wf-test.mjs:26 | - |
 | LIFE-07 | An agent may hold the decision, and its owner still answers for it. An agent | BUILT | src/server/database/migrations/20260922130000-workforce-handoffs-and-decisions.sql:2 ; scripts/workforce-evaluation.test.mjs:84 | - |
-| LIFE-08 | Objectives are the missing top of the work tree, and they extend the existing on | PARTIAL | only scripts/workforce-handoff-migration.test.mjs:36 cites it; no objective record | RUN-06 |
+| LIFE-08 | Objectives are the missing top of the work tree, and they extend the existing on | BUILT | project_objectives + project_goals.objective_id (20261019120000-project-objectives.sql), service projectWorktree.createObjective/linkGoalToObjective/completeObjective, routed at /api/workforce/coordination/objectives; proof scripts/workforce-coordination-routes.test.mjs; was: only scripts/workforce-handoff-migration.test.mjs:36 cites it; no objective record | RUN-06 |
 | LIFE-09 | Capacity is DERIVED, never declared. How much a workforce can take on is a | BUILT | src/server/database/migrations/20260927100000-workforce-derived-capacity.sql:2 ; scripts/workforce-capacity.test.mjs:2 | - |
 | VIEW-01 | Global lists are authorized aggregates, never a tenant or permission bypass. Fil | BUILT | prototypes/xeno-workspace/resources.js:6 ; scripts/workforce-catalog-global-view.test.mjs:2 | - |
 | VIEW-02 | Workspace lists show assigned resources only; project views narrow participation | BUILT | prototypes/xeno-workspace/places.js:56 ; prototypes/xeno-workspace/tests/work-test.mjs:139 | - |
@@ -67,10 +67,10 @@ Method: every ID grepped across src/, prototypes/, scripts/ on the remote main r
 | RUN-02 | Contextual rights are the intersection of actor authorization, resource-use righ | BUILT | src/server/database/migrations/20260922130000-workforce-handoffs-and-decisions.sql:94 ; scripts/workforce-migration-chain.test.mjs:189 | - |
 | RUN-03 | Pins preserve reproducibility; live revocation still overrides pinned grants bef | BUILT | src/server/database/migrations/20260925130000-workforce-run-admissions.sql:41 ; scripts/workforce-migration-chain.test.mjs:196 | - |
 | RUN-04 | Children inherit a subset of the parent's authorized context, not all membership | BUILT | src/server/database/migrations/20260927120000-workforce-run-results.sql:2 ; scripts/workforce-handoff-migration.test.mjs:19 | - |
-| RUN-05 | Open any child conversation and return without cancelling it. Shared tool previe | PARTIAL | childConversations.js unrouted; UI half in Interface | RUN-04 |
-| RUN-06 | Projects support goal→milestone→task records referencing the existing coordi | PARTIAL | project_goals/milestones tables exist; projectWorktree.js unrouted | RUN-01 |
+| RUN-05 | Open any child conversation and return without cancelling it. Shared tool previe | BUILT | routed at /api/workforce/coordination (routes/workforceCoordinationRoutes.js); proof scripts/workforce-coordination-routes.test.mjs; was: childConversations.js unrouted; UI half in Interface | RUN-04 |
+| RUN-06 | Projects support goal→milestone→task records referencing the existing coordi | BUILT | routed at /api/workforce/coordination (routes/workforceCoordinationRoutes.js); proof scripts/workforce-coordination-routes.test.mjs; was: project_goals/milestones tables exist; projectWorktree.js unrouted | RUN-01 |
 | RUN-07 | Goals, loops and scheduled tasks may continue while authorized, funded and progr | BUILT | src/server/database/migrations/20260927120000-workforce-run-results.sql:22 ; scripts/workforce-member-removal.test.mjs:5 | - |
-| RUN-08 | Concurrent code work uses explicit file/task ownership or isolated worktrees and | PARTIAL | concurrentOwnership.js unrouted | RUN-06 |
+| RUN-08 | Concurrent code work uses explicit file/task ownership or isolated worktrees and | BUILT | routed at /api/workforce/coordination (routes/workforceCoordinationRoutes.js); proof scripts/workforce-coordination-routes.test.mjs; was: concurrentOwnership.js unrouted | RUN-06 |
 | RUN-09 | Direct provider TUI sessions that cannot enforce pooled-budget admission must no | PARTIAL | sessionBudgetAdmission.js unrouted | FUND-06 |
 | RUN-10 | Nested runs share a parent budget through atomic child sub-reservations, not cop | BUILT | src/server/database/migrations/20260925140000-workforce-run-authority-leases.sql:23 ; scripts/workforce-capacity.test.mjs:5 | - |
 | MKT-01 | Distinguish ownership, visibility, invoke permission, definition-edit permission | BUILT | src/server/database/migrations/20260927150000-workforce-agent-revision.sql:2 ; scripts/live-conversation-collaboration.test.mjs:1 | - |
@@ -153,7 +153,7 @@ Method: every ID grepped across src/, prototypes/, scripts/ on the remote main r
 ## Counts
 At measurement: BUILT 96 · PARTIAL 45 · MISSING 4 · OUT-OF-REPO 0
 
-Current (after the 2026-10-19 PRs): BUILT 110 · PARTIAL 31 · MISSING 4
+Current (after the 2026-10-19 PRs): BUILT 114 · PARTIAL 27 · MISSING 4
 
 ## MISSING/PARTIAL ordered by dependency (wire-up order)
 
@@ -181,3 +181,5 @@ Current (after the 2026-10-19 PRs): BUILT 110 · PARTIAL 31 · MISSING 4
 - ACCT-02/03/04/05/06/08: gifts, returns, opt-out and account history routed at `/api/account/gifts`; closed until `ACCOUNT_GIFTS_OPEN=true` (§22.1).
 - SES-02/03/04/06/07/09: session API at `/api/workforce/sessions`; conversation-access guard (stranger = not_found), host-owned `XENO_SESSION_ROOT`. SES-08 person half routed; host ack/registration intentionally unrouted, so it stays PARTIAL.
 - VIEW-04/05: fenced scoped reads/polls, canonical id resolution (guarded by the resolved conversation) and per-view drafts at `/api/workforce/views`.
+- RUN-05/06/08: child sessions (guarded by the parent), goal/milestone/task with evidence and review, file/task ownership and reviewed worktree integration at `/api/workforce/coordination`.
+- LIFE-08: objectives built as the workspace/division top of the RUN-06 tree (one table + one edge, service + trigger, DOWN drilled).
