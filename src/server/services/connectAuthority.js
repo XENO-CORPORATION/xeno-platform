@@ -16,7 +16,7 @@ import crypto from 'node:crypto';
 import jwt from 'jsonwebtoken';
 import { issuer } from '../config/hosts.js';
 import {
-  CONNECT_HUMAN_ONLY_SCOPES, CONNECT_SCOPES, connectAuthorityForClient,
+  CONNECT_HUMAN_ONLY_SCOPES, CONNECT_SCOPES, CONNECT_WEB_CONSUMER, connectAuthorityForClient,
 } from '../config/oidcAuthorityPolicy.js';
 import {
   ACCESS_TOKEN_TYP, getKeyByKid, getSigningKey, isOidcSessionActive, oauthError,
@@ -59,6 +59,9 @@ export async function connectExchangeGrant(db, {
   if (!subjectPayload.cnf?.jkt || subjectPayload.cnf.jkt !== proofJkt) {
     throw oauthError('invalid_grant', 'a DPoP-bound subject token is required');
   }
+  // The website consumer is minted in-process for a website session (services/webConnect.js), never exchanged:
+  // an OIDC client that happened to be registered under that id must not borrow its ceiling.
+  if (subjectPayload.client_id === CONNECT_WEB_CONSUMER) throw oauthError('unauthorized_client', 'this client may not reach XENO Connect');
   const ceiling = connectAuthorityForClient(subjectPayload.client_id);
   if (!ceiling) throw oauthError('unauthorized_client', 'this client may not reach XENO Connect');
   const requested = scopeList(scope);
@@ -108,10 +111,22 @@ export async function verifyConnectAccessToken(db, token) {
       || decoded.header.typ !== ACCESS_TOKEN_TYP || !payload.cnf?.jkt) {
     throw oauthError('invalid_token', 'invalid access token type');
   }
-  if (!await isOidcSessionActive(db, { sid: payload.sid, userId: payload.sub, authEpoch: payload.auth_epoch })) {
-    throw oauthError('invalid_token', 'session expired or revoked');
-  }
+  // A website token's liveness is its WEBSITE session (user_sessions + browser_session_state), not an OIDC session:
+  // signing out of the site, or the session expiring, ends Connect access on the next request.
+  const live = payload.client_id === CONNECT_WEB_CONSUMER
+    ? payload.xeno_session === 'web' && await isWebSessionActive(db, { sid: payload.sid, userId: payload.sub })
+    : payload.xeno_session === undefined
+      && await isOidcSessionActive(db, { sid: payload.sid, userId: payload.sub, authEpoch: payload.auth_epoch });
+  if (!live) throw oauthError('invalid_token', 'session expired or revoked');
   return payload;
+}
+
+/** A website (cookie) session is live: the row exists, is unexpired, and is a standard browser session. */
+export async function isWebSessionActive(db, { sid, userId }) {
+  if (!UUID_RE.test(String(sid || '')) || !UUID_RE.test(String(userId || ''))) return false;
+  const r = await db.query(`SELECT 1 FROM user_sessions us JOIN browser_session_state bss ON bss.sid = us.id
+    WHERE us.id = $1 AND us.user_id = $2 AND us.expires_at > now() AND bss.purpose = 'standard'`, [sid, userId]);
+  return r.rows.length === 1;
 }
 
 class ConnectAuthorityError extends Error {

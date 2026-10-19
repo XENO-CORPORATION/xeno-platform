@@ -175,6 +175,8 @@ const BACKEND_SUITES = [
   'leader-election', 'upstream',
   // XENO Tasks claim leases, typed activity and the agent event feed (2026-10-18)
   'task-leases',
+  // Website Storage → XENO Connect BFF: session-bound minting, DPoP, grant renewal, refusals (2026-10-19)
+  'web-connect',
 ];
 
 const BACKEND_EVIDENCE = {

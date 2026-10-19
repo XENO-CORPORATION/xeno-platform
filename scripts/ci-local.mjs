@@ -192,6 +192,7 @@ const BROWSER_SUITES = [
   'chat-project-context-browser.test.mjs',
   'studio-feed-browser.test.mjs',
   'chat-handoff-browser.test.mjs',
+  'storage-clouds-browser.test.mjs',
 ];
 
 const argv = process.argv.slice(2);
