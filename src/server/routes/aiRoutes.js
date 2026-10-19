@@ -187,7 +187,9 @@ function setAdmissionHeaders(res, admitted) {
    /chat/estimate is deliberately open too: telling somebody what a request WOULD
    cost is how they decide to buy, and it spends nothing to answer. */
 router.post('/chat', requireEntitlement('canUse'), async (req, res) => {
-  const { model, messages, temperature = 0.7, max_tokens = 4096, path: reqPath, requestId, tools, tool_choice } = req.body;
+  // No default temperature, for the same reason as /chat/stream below: Claude Opus 5 refuses ANY value
+  // (400 unsupported_sampling_parameter). An undefined value is omitted from the upstream body.
+  const { model, messages, temperature, max_tokens = 4096, path: reqPath, requestId, tools, tool_choice } = req.body;
 
   if (!model || !Array.isArray(messages) || messages.length === 0) {
     return res.status(400).json({ error: 'Model and messages are required' });
