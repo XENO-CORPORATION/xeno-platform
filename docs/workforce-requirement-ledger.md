@@ -1,0 +1,178 @@
+# Workforce spec ledger — platform main @ dd02d21c, measured 2026-10-19
+
+Method: every ID grepped across src/, prototypes/, scripts/ on the remote main ref (1,399 refs). BUILT = schema/service references the ID, a test cites it, and the service is reachable from a route (or from a routed service). PARTIAL = schema + service + test exist but **no route and no index.js imports the service** (built, tested, unreachable), or only a test cites the ID. MISSING = no reference at all. OUT-OF-REPO halves are noted in the evidence column; no ID is purely out-of-repo, because every one has a platform record. Evidence = first source hit ; first test hit (file:line).
+
+| ID | requirement | status | evidence | depends on |
+|---|---|---|---|---|
+| OWN-01 | Every persistent agent/team has one explicit canonical owner scope and independe | BUILT | prototypes/xeno-workspace/platform-agents.js:2 ; scripts/workforce-migration-chain.test.mjs:337 | - |
+| OWN-02 | Agent identity, versioned agent definition and runtime principal are distinguish | BUILT | prototypes/xeno-workspace/resources.js:2 ; scripts/workforce-resources.test.mjs:70 | - |
+| OWN-03 | Agent versions pin instructions, skill references and requested capabilities by  | BUILT | prototypes/xeno-workspace/resources.js:79 ; scripts/workforce-agent-revision.test.mjs:2 | - |
+| OWN-04 | Teams reference memberships with role and revision. Team removal, member removal | BUILT | (test-only) ; scripts/workforce-team-membership-migration.test.mjs:122 | - |
+| OWN-05 | Company-owned resources survive creator departure. Ownership transfer requires s | BUILT | src/server/database/migrations/20260922120000-workforce-divisions.sql:45 ; scripts/workforce-division-migration.test.mjs:147 | - |
+| OWN-06 | Archive blocks new admissions. Retained histories remain accessible to authorize | BUILT | src/server/database/migrations/20260905123000-workforce-team-membership-snapshots.sql:131 ; scripts/workforce-division-migration.test.mjs:225 | - |
+| ASN-01 | Agents and teams may have multiple workspace assignments. Assignment does not ch | BUILT | prototypes/xeno-workspace/resources.js:3 ; scripts/workforce-division-assignment-migration.test.mjs:4 | - |
+| ASN-02 | Workspace participation and project responsibility are explicit records, not inf | BUILT | src/server/database/migrations/20260925110000-workforce-team-project-responsibility.sql:2 ; scripts/workforce-team-project-responsibility.test.mjs:2 | - |
+| ASN-03 | Direct agent assignments are first-class and do not manufacture a General team.  | BUILT | src/server/services/workforceScope.js:2 ; scripts/workforce-workspace-assignment-migration.test.mjs:75 | - |
+| ASN-04 | Cross-owner assignments require both the owner's sharing permission and target a | BUILT | prototypes/xeno-workspace/resources.js:3 ; prototypes/xeno-workspace/tests/rs-test.mjs:34 | - |
+| ASN-05 | Default membership admission is an explicit approved member set/revision. Later  | BUILT | prototypes/xeno-workspace/resources.js:5 ; prototypes/xeno-workspace/tests/rs-test.mjs:41 | - |
+| ASN-06 | Permissions use explicit modes such as `none`, `explicit`, `inherit_parent`. Emp | BUILT | src/server/database/migrations/20260922120000-workforce-divisions.sql:138 ; scripts/workforce-assignment-inherit-parent.test.mjs:2 | - |
+| ASN-07 | Directory resource bindings include host/environment identity and canonical root | BUILT | src/server/database/migrations/20260924170000-project-directory-bindings.sql:2 ; scripts/project-directory-bindings.test.mjs:2 | - |
+| ASN-08 | Keep existing project identities and personal/workspace ownership semantics. Rec | BUILT | src/server/database/migrations/20260924170000-project-directory-bindings.sql:2 ; scripts/project-directory-bindings.test.mjs:2 | - |
+| ASN-09 | A project participation target is a discriminated personal-project OR workspace- | BUILT | src/server/database/migrations/20260924180000-workforce-project-participation.sql:2 ; scripts/workforce-catalog-scoped-views.test.mjs:9 | - |
+| ROLE-01 | A principal carries THREE independent role axes. They must never be collapsed. | BUILT | prototypes/xeno-workspace/workforce.js:3 ; scripts/workforce-team-membership-migration.test.mjs:136 | - |
+| ROLE-02 | Proposed team-function values — `manager` · `worker` · `observer`. Three, be | BUILT | prototypes/xeno-workspace/workforce.js:3 ; scripts/workforce-function-change.test.mjs:3 | - |
+| ROLE-03 | Function is per membership, not per principal. §7.4 already requires this: *"An | BUILT | prototypes/xeno-workspace/workforce.js:99 ; scripts/workforce-team-membership-migration.test.mjs:166 | - |
+| ROLE-04 | Humans and agents take the same functions. There is no agent-only or human-only | BUILT | src/server/database/migrations/20260922120000-workforce-divisions.sql:44 ; scripts/workforce-division-migration.test.mjs:210 | - |
+| ROLE-05 | Function never widens platform or workspace authority. The effective right for a | BUILT | prototypes/xeno-workspace/workforce.js:3 ; scripts/workforce-function-change.test.mjs:4 | - |
+| DIV-01 | A division is an OPERATING UNIT INSIDE a workspace. It owns teams and projects,  | BUILT | prototypes/xeno-workspace/platform-divisions.js:1 ; prototypes/xeno-workspace/tests/wf-test.mjs:24 | - |
+| DIV-02 | A division adds no tenancy and no tier above the workspace. The workspace remain | BUILT | src/server/database/migrations/20260922120000-workforce-divisions.sql:32 ; scripts/workforce-division-migration.test.mjs:99 | - |
+| DIV-03 | Division vocabulary is per workspace, with a seeded default set. The seeded valu | BUILT | prototypes/xeno-workspace/workforce.js:4 ; prototypes/xeno-workspace/tests/w2-test.mjs:24 | - |
+| DIV-04 | Ownership: a team or project has AT MOST ONE owning division, inside its owning | BUILT | prototypes/xeno-workspace/workforce.js:4 ; prototypes/xeno-workspace/tests/wf-test.mjs:30 | - |
+| DIV-05 | Assignment: a team owned by one division MAY be assigned to another. This mirror | BUILT | prototypes/xeno-workspace/workforce.js:130 ; scripts/workforce-division-assignment-migration.test.mjs:2 | - |
+| DIV-06 | A division has a HEAD — a principal holding the `manager` team function (8.2a  | BUILT | prototypes/xeno-workspace/workforce.js:5 ; prototypes/xeno-workspace/tests/wf-test.mjs:26 | - |
+| DIV-07 | A division's budget is a SCOPE ON THE EXISTING LEDGER, never a second wallet. It | BUILT | prototypes/xeno-workspace/company.js:7 ; prototypes/xeno-workspace/tests/wf-test.mjs:28 | - |
+| DIV-08 | A division scope is a VISIBILITY and an EXECUTION boundary, enforced at admissio | BUILT | src/server/services/agentLending.js:13 ; scripts/workforce-catalog-scoped-views.test.mjs:40 | - |
+| DIV-09 | Cross-division handoff is permitted and is the NORMAL case (8.2c). A render fini | BUILT | (test-only) ; scripts/workforce-handoff-migration.test.mjs:286 | - |
+| DIV-10 | Divisions are additive to the existing model and must reuse it. Concretely: the | BUILT | src/server/database/migrations/20260922120000-workforce-divisions.sql:2 ; scripts/workforce-division-migration.test.mjs:2 | - |
+| HAND-01 | A handoff is a first-class durable record, not a message. It carries: source | BUILT | prototypes/xeno-workspace/workforce.js:6 ; scripts/workforce-handoff-migration.test.mjs:2 | - |
+| HAND-02 | Handoff moves WORK, never AUTHORITY. The receiving principal executes under its | BUILT | prototypes/xeno-workspace/workforce.js:182 ; scripts/workforce-handoff-migration.test.mjs:225 | - |
+| HAND-03 | Acceptance is explicit and revocable. A handed-off task is `offered` until accep | BUILT | src/server/database/migrations/20260922130000-workforce-handoffs-and-decisions.sql:112 ; prototypes/xeno-workspace/tests/wf-test.mjs:52 | - |
+| HAND-04 | Every trust boundary crossed is recorded, per §17: `user↔agent principal`, | BUILT | src/server/database/migrations/20260922130000-workforce-handoffs-and-decisions.sql:53 ; scripts/workforce-handoff-migration.test.mjs:291 | - |
+| HAND-05 | Handoff is billable and attributable. The receipt chain attributes consumption t | BUILT | src/server/database/migrations/20260922130000-workforce-handoffs-and-decisions.sql:118 ; scripts/workforce-handoff-migration.test.mjs:244 | - |
+| HAND-06 | No silent history transfer. As with SES-05, a handoff shows the target audience  | BUILT | prototypes/xeno-workspace/workforce.js:180 ; prototypes/xeno-workspace/tests/wf-test.mjs:46 | - |
+| LIFE-01 | Joining is an ADMISSION, not a creation. Creating an agent (OWN-01/OWN-03) and | BUILT | prototypes/xeno-workspace/company.js:8 ; scripts/workforce-handoff-migration.test.mjs:11 | - |
+| LIFE-02 | Removal is REVOCATION plus SETTLEMENT, and the two are separate. Revoking | BUILT | prototypes/xeno-workspace/actions.js:240 ; prototypes/xeno-workspace/tests/wf-test.mjs:55 | - |
+| LIFE-03 | Removal never deletes history. OWN-06 already governs this: archive blocks new | BUILT | prototypes/xeno-workspace/workforce.js:7 ; prototypes/xeno-workspace/tests/wf-test.mjs:58 | - |
+| LIFE-04 | Evaluation is EVIDENCE-DERIVED, never a rating column. The estate already persis | BUILT | prototypes/xeno-workspace/workforce.js:7 ; scripts/workforce-evaluation.test.mjs:2 | - |
+| LIFE-05 | Promotion and demotion change a FUNCTION, never authority directly. Changing a t | BUILT | prototypes/xeno-workspace/workforce.js:226 ; prototypes/xeno-workspace/tests/wf-test.mjs:36 | - |
+| LIFE-06 | A DECISION RECORD is a first-class durable record. Who decided, what was decided | BUILT | prototypes/xeno-workspace/workforce.js:8 ; prototypes/xeno-workspace/tests/wf-test.mjs:26 | - |
+| LIFE-07 | An agent may hold the decision, and its owner still answers for it. An agent | BUILT | src/server/database/migrations/20260922130000-workforce-handoffs-and-decisions.sql:2 ; scripts/workforce-evaluation.test.mjs:84 | - |
+| LIFE-08 | Objectives are the missing top of the work tree, and they extend the existing on | PARTIAL | only scripts/workforce-handoff-migration.test.mjs:36 cites it; no objective record | RUN-06 |
+| LIFE-09 | Capacity is DERIVED, never declared. How much a workforce can take on is a | BUILT | src/server/database/migrations/20260927100000-workforce-derived-capacity.sql:2 ; scripts/workforce-capacity.test.mjs:2 | - |
+| VIEW-01 | Global lists are authorized aggregates, never a tenant or permission bypass. Fil | BUILT | prototypes/xeno-workspace/resources.js:6 ; scripts/workforce-catalog-global-view.test.mjs:2 | - |
+| VIEW-02 | Workspace lists show assigned resources only; project views narrow participation | BUILT | prototypes/xeno-workspace/places.js:56 ; prototypes/xeno-workspace/tests/work-test.mjs:139 | - |
+| VIEW-03 | Global creation requires explicit/default-displayed owner and optional assignmen | BUILT | src/server/database/migrations/20260927140000-workforce-create-and-assign.sql:2 ; scripts/workforce-create-and-assign.test.mjs:2 | - |
+| VIEW-04 | Every list row resolves to the same canonical ID across views. View switching pr | PARTIAL | viewConsistency.js unrouted (session-view-consistency.test) | VIEW-01 |
+| VIEW-05 | Scope-bound query keys and revisions fence stale A→B→A responses, optimistic | PARTIAL | scopedReads.js unrouted (session-scoped-reads.test) | NFR-07 |
+| SES-01 | Global New Chat defaults to personal conversation ownership with no organization | BUILT | src/lib/workspaceLabel.ts:4 ; scripts/chat-workspace-scope.database.test.mjs:1 | - |
+| SES-02 | Chat does not require directory selection. If a provider needs cwd, the host sup | PARTIAL | providerSessionCwd.js unrouted; host half in Interface | SES-01 |
+| SES-03 | Chat→Agent requires an explicit authorized root, records mode/context change,  | PARTIAL | conversationModes.js unrouted (session-agent-transition.test) | ASN-07 |
+| SES-04 | Agent→Chat occurs at a safe execution boundary; stop/settle active workspace o | PARTIAL | conversationModes.js unrouted (session-agent-handoff.test) | SES-03 |
+| SES-05 | Moving/sharing a conversation is separate from mode/root changes. Show the targe | BUILT | src/components/playground/Chat/ChatMoveModal.tsx:7 ; scripts/chat-subsystems-write.test.mjs:187 | - |
+| SES-06 | Resume loads persisted identity, mode, project and root binding, not incidental  | PARTIAL | conversationModes.js:193 unrouted (session-resume-persisted.test) | SES-03 |
+| SES-07 | CLI, GUI, Hub embed and provider TUI adapters retain a single authoritative sess | PARTIAL | sessionLineage.js unrouted; adapters out-of-repo | SES-06 |
+| SES-08 | Provider/model availability is discovered through the existing catalogs. Selecti | PARTIAL | providerSelection.js unrouted | SES-07 |
+| SES-09 | New storage/admission contracts preserve crash recovery, deliberate branch/rewin | PARTIAL | conversationTurns.js unrouted | SES-07 |
+| RUN-01 | Admission records exact actor/principal, agent version, conversation, optional t | BUILT | src/server/database/migrations/20260925130000-workforce-run-admissions.sql:2 ; scripts/workforce-migration-chain.test.mjs:189 ; host flow: src/server/services/agentCloudRuns.js admit() + src/server/tests/agent-cloud-runs.test.mjs (2026-10-19) | - |
+| RUN-02 | Contextual rights are the intersection of actor authorization, resource-use righ | BUILT | src/server/database/migrations/20260922130000-workforce-handoffs-and-decisions.sql:94 ; scripts/workforce-migration-chain.test.mjs:189 | - |
+| RUN-03 | Pins preserve reproducibility; live revocation still overrides pinned grants bef | BUILT | src/server/database/migrations/20260925130000-workforce-run-admissions.sql:41 ; scripts/workforce-migration-chain.test.mjs:196 | - |
+| RUN-04 | Children inherit a subset of the parent's authorized context, not all membership | BUILT | src/server/database/migrations/20260927120000-workforce-run-results.sql:2 ; scripts/workforce-handoff-migration.test.mjs:19 | - |
+| RUN-05 | Open any child conversation and return without cancelling it. Shared tool previe | PARTIAL | childConversations.js unrouted; UI half in Interface | RUN-04 |
+| RUN-06 | Projects support goal→milestone→task records referencing the existing coordi | PARTIAL | project_goals/milestones tables exist; projectWorktree.js unrouted | RUN-01 |
+| RUN-07 | Goals, loops and scheduled tasks may continue while authorized, funded and progr | BUILT | src/server/database/migrations/20260927120000-workforce-run-results.sql:22 ; scripts/workforce-member-removal.test.mjs:5 | - |
+| RUN-08 | Concurrent code work uses explicit file/task ownership or isolated worktrees and | PARTIAL | concurrentOwnership.js unrouted | RUN-06 |
+| RUN-09 | Direct provider TUI sessions that cannot enforce pooled-budget admission must no | PARTIAL | sessionBudgetAdmission.js unrouted | FUND-06 |
+| RUN-10 | Nested runs share a parent budget through atomic child sub-reservations, not cop | BUILT | src/server/database/migrations/20260925140000-workforce-run-authority-leases.sql:23 ; scripts/workforce-capacity.test.mjs:5 | - |
+| MKT-01 | Distinguish ownership, visibility, invoke permission, definition-edit permission | BUILT | src/server/database/migrations/20260927150000-workforce-agent-revision.sql:2 ; scripts/live-conversation-collaboration.test.mjs:1 | - |
+| MKT-02 | Shared conversation collaboration is live and role-bound: viewer, participant an | BUILT | (test-only) ; scripts/live-conversation-collaboration.test.mjs:1 | - |
+| MKT-03 | Publish immutable licensed agent versions and coordinated-agent packages through | BUILT | src/server/database/migrations/20260925100000-marketplace-agent-versions-immutable.sql:2 ; scripts/workforce-marketplace-rights.test.mjs:8 | - |
+| MKT-04 | Exported team packages include authorized configuration and redistributable depe | BUILT | src/server/database/migrations/20260925120000-marketplace-team-packages.sql:2 ; src/server/tests/marketplace-team-packages.test.mjs:2 | - |
+| MKT-05 | Rental assignment references an active entitlement and hosted serving version, n | BUILT | src/server/database/migrations/20260924130000-marketplace-rental-bindings.sql:1 ; scripts/workforce-marketplace-rights.test.mjs:9 | - |
+| MKT-06 | Broker invocation must create/adopt a durable hosted run, expose actual queued/r | BUILT | scripts/ci-local.mjs:358 ; src/server/tests/marketplace-broker.test.mjs:2 | - |
+| MKT-07 | Physically exclude seller-private memory at context load. Rental context include | BUILT | src/server/database/migrations/20260924140000-marketplace-rental-partitions.sql:1 ; src/server/tests/marketplace-rental-partitions.test.mjs:2 | - |
+| MKT-08 | Locked default: rental learning stays partition-local; seller cannot inspect/pro | BUILT | src/server/database/migrations/20260924140000-marketplace-rental-partitions.sql:1 ; src/server/tests/marketplace-rental-partitions.test.mjs:2 | - |
+| MKT-09 | Renter export/deletion applies to their content without exposing seller model/de | BUILT | src/server/database/migrations/20260924140000-marketplace-rental-partitions.sql:1 ; src/server/tests/marketplace-rental-partitions.test.mjs:2 | - |
+| FUND-01 | Add a project funding pool as a restricted allocation on the canonical ledger, n | BUILT | prototypes/xeno-workspace/funding.js:1 ; scripts/workforce-funding-pool-allocation.test.mjs:1 | - |
+| FUND-02 | Contributions initially accept explicitly eligible paid XENO-credit lots. Free/p | BUILT | prototypes/xeno-workspace/funding.js:2 ; prototypes/xeno-workspace/tests/fund-test.mjs:18 | - |
+| FUND-03 | A contributor confirms amount, project/milestone restrictions and terms version. | BUILT | (test-only) ; scripts/workforce-funding-contributor-confirmation.test.mjs:1 | - |
+| FUND-04 | Create contribution with stable caller idempotency key, canonical payload hash a | BUILT | (test-only) ; scripts/credit-payment-origin.test.mjs:2 | - |
+| FUND-05 | A campaign can be `draft`, `open`, `paused`, `closed`, `cancelled`, `reconciling | BUILT | prototypes/xeno-workspace/funding.js:5 ; prototypes/xeno-workspace/tests/fund-test.mjs:19 | - |
+| FUND-06 | Each run has one selected payer and a project/milestone budget reservation. Proj | BUILT | src/server/database/migrations/20260927100000-workforce-derived-capacity.sql:23 ; scripts/workforce-funding-no-fallback.test.mjs:1 | - |
+| FUND-07 | Before dispatch, reserve the maximum admitted cost using pinned price/version, i | BUILT | src/server/database/migrations/20260930100000-credit-hold-draws.sql:22 ; scripts/workforce-funding-loss-allocation.test.mjs:16 | - |
+| FUND-08 | Retain durable reservation allocations to contribution lots and run IDs. Settlem | BUILT | (test-only) ; scripts/workforce-funding-settlement-receipts.test.mjs:1 | - |
+| FUND-09 | Do not release a reservation merely because a lease/HTTP request expired. Runnin | BUILT | src/server/database/migrations/20260925140000-workforce-run-authority-leases.sql:33 ; scripts/workforce-nested-run-envelopes.test.mjs:174 | - |
+| FUND-10 | Unspent eligible contributions can be returned under the accepted terms, minus n | BUILT | prototypes/xeno-workspace/funding.js:4 ; prototypes/xeno-workspace/tests/fund-test.mjs:25 | - |
+| FUND-11 | Chargebacks, disputes and account freezes trace affected contribution lots. Quar | BUILT | (test-only) ; scripts/workforce-funding-dispute-quarantine.test.mjs:1 | - |
+| FUND-12 | Contributors see confirmed funding, committed, consumed, returned and disputed a | BUILT | prototypes/xeno-workspace/funding.js:5 ; prototypes/xeno-workspace/tests/fund-test.mjs:15 | - |
+| FUND-13 | Funding managers cannot approve their own privilege escalation or increase contr | BUILT | prototypes/xeno-workspace/funding.js:3 ; prototypes/xeno-workspace/tests/fund-test.mjs:22 | - |
+| FUND-14 | Funding is milestone-gated. Each milestone declares its minimum funding threshol | BUILT | prototypes/xeno-workspace/funding.js:2 ; prototypes/xeno-workspace/tests/fund-test.mjs:16 | - |
+| FUND-15 | No additional fee for a contribution or gift transfer. Execution uses the publis | BUILT | prototypes/xeno-workspace/funding.js:3 ; scripts/workforce-funding-fee-basis.test.mjs:1 | - |
+| FUND-16 | Unused/uncommitted project contributions return to the original eligible XENO cr | BUILT | (test-only) ; scripts/workforce-funding-loss-allocation.test.mjs:1 | - |
+| FUND-17 | Restricted project value must be excluded from every unrelated debit/transfer pa | BUILT | src/server/database/migrations/20260928120000-workforce-funding-foundation.sql:1 ; scripts/credit-restricted-account.test.mjs:1 | - |
+| FUND-18 | Milestone terms, threshold, budget purpose and price-consent envelope are versio | BUILT | prototypes/xeno-workspace/funding.js:4 ; scripts/workforce-funding-version-bound-terms.test.mjs:1 | - |
+| FUND-19 | Fee arithmetic is exact and partition-independent: compute commission as `floor( | BUILT | src/server/database/migrations/20261004160000-marketplace-commission-postings.sql:2 ; scripts/marketplace-commission-arithmetic.test.mjs:1 | - |
+| ACCT-01 | A XENO account is the principal-facing owner of its eligible credit balance. The | BUILT | (test-only) ; scripts/account-ledger-authority.test.mjs:1 | - |
+| ACCT-02 | Distinguish three operations in UI/API: gift changes beneficiary to another XENO | PARTIAL | accountGifts.js unreachable: gift op has no route | ACCT-01 |
+| ACCT-03 | A gift names an existing canonical recipient account, exact eligible micro-credi | PARTIAL | accountGifts.js + migration 20261004120000; no route imports it | ACCT-01 |
+| ACCT-04 | Debit and recipient credit commit atomically with a durable gift receipt and ori | PARTIAL | accountGifts.js tested (account-gift-transfer.test) but unrouted | ACCT-03 |
+| ACCT-05 | A completed gift is not cancellable by its sender. A recipient may initiate a se | PARTIAL | gift returns migration 20261004130000; service unrouted | ACCT-04 |
+| ACCT-06 | Support recipient gift opt-out and transaction/security notifications using exis | PARTIAL | gift-preferences migration 20261004140000; service unrouted | ACCT-03 |
+| ACCT-07 | UI, CLI, company and project surfaces call shared typed account methods. Request | BUILT | src/server/database/migrations/20261004150000-workforce-spend-approvals.sql:1 ; scripts/account-agent-approval.test.mjs:1 | - |
+| ACCT-08 | Credit amounts are exact micro-credit values; model tokens are measured usage wi | PARTIAL | accountHistory.js unrouted (account-history.test only) | ACCT-04 |
+| PUB-01 | Project ownership, visibility, contribution policy and execution permissions are | BUILT | src/server/database/migrations/20261004350000-project-policies.sql:2 ; scripts/workforce-project-visibility.test.mjs:1 | - |
+| PUB-02 | Public projects expose an explicitly published projection: purpose, maintainer i | BUILT | src/server/config/projectPublicationContract.js:80 ; scripts/workforce-published-projection.test.mjs:1 | - |
+| PUB-03 | Maintainers assign their own teams normally. External developers submit agent/te | PARTIAL | participationOffers.js unrouted | PUB-01 |
+| PUB-04 | Distinguish a public project from open-source licensing. Public code/artifacts w | PARTIAL | contributions.js (1 service importer), no route | PUB-03 |
+| PUB-05 | Every contribution has a type, author, responsible human/account, optional agent | PARTIAL | contributions.js unrouted | PUB-04 |
+| PUB-06 | Use a shared lifecycle: proposed → admitted/claimed → in_progress → submit | PARTIAL | contributionLifecycle.js imported by 2 services, no route | PUB-05 |
+| PUB-07 | Task claims have bounded leases, explicit nonexclusive/exclusive policy and main | PARTIAL | taskClaims.js unrouted | PUB-06 |
+| PUB-08 | External agent work executes against an approved public snapshot or minimal expl | PARTIAL | externalAgentScope.js unrouted; sandbox via Box | PUB-07 |
+| PUB-09 | External work is contributor-funded by default. Project-funded work requires a s | PARTIAL | workFunding.js unrouted | PUB-03,FUND-06 |
+| PUB-10 | Submission carries a diff or versioned artifact, reproducible checks where appli | PARTIAL | submissionIntegrity.js (1 importer), no route | PUB-05 |
+| PUB-11 | Public conversations and full session transcripts are not identical. Publish sel | PARTIAL | conversationPublication.js unrouted | PUB-02 |
+| PUB-12 | Provide issue/task discussion, contributor attribution, report/appeal, spam/abus | PARTIAL | taskDiscussion.js unrouted | PUB-06 |
+| PUB-13 | A public→private change removes future public access in controlled services an | PARTIAL | visibilityRetreat.js not imported by any route | PUB-02 |
+| PUB-14 | Public project fork/export includes only redistributable published artifacts and | PARTIAL | projectFork.js unrouted | PUB-02 |
+| RES-01 | A `ResourceOffer` declares kind, owner, capacity/quantity, allowed project/task, | PARTIAL | resourceOffers.js imported by 1 service, no route | RUN-02 |
+| RES-02 | Supported target resource families include licensed assets/data, storage allocat | PARTIAL | resourceDrivers.js unrouted | RES-01 |
+| RES-03 | Contributed compute is an untrusted worker unless separately qualified. Execute  | PARTIAL | contributedCompute.js unrouted; needs Box isolation | RES-02 |
+| RES-04 | Worker-reported output or GPU-hours are not automatically trustworthy. Bind job  | PARTIAL | computeReceipts.js unrouted | RES-03 |
+| RES-05 | Track revocation/expiry and verified settlement for resource leases. Capacity th | PARTIAL | resourceLeases.js unrouted | RES-01 |
+| RES-06 | Marketplace rentals, free agent offers, donated resources and credit contributio | PARTIAL | grantComposition.js unrouted | RES-01,MKT-05,FUND-06 |
+| FORGE-01 | Define a repository-host-neutral binding and contribution adapter. Domain operat | PARTIAL | forgeAdapter.js (1 importer), no route | PUB-05 |
+| FORGE-02 | A project may bind several repositories and non-code resource stores. Each bindi | PARTIAL | forge-bindings migration; no route | FORGE-01 |
+| FORGE-03 | GitHub integration uses an approved GitHub App with minimum installation/reposit | PARTIAL | forgeGithubApp.js unrouted; no App installed | FORGE-02 |
+| FORGE-04 | On GitHub-backed code, GitHub is authoritative for commits, branch protections,  | PARTIAL | forgeAuthority.js unrouted | FORGE-03 |
+| FORGE-05 | Authenticate webhook deliveries, durably deduplicate and reconcile duplicates, g | PARTIAL | forgeWebhooks.js unrouted: no webhook endpoint | FORGE-03 |
+| FORGE-06 | External PRs/issues continue working without a XENO account. Mirror their public | PARTIAL | forgeExternalActors.js unrouted | FORGE-05 |
+| FORGE-07 | A GitHub integration does not require GitHub Actions. Checks may run on an appro | MISSING | no reference in src/scripts | FORGE-04 |
+| FORGE-08 | XENO-native hosting must meet the same contribution/review/access/audit contract | MISSING | no reference (XENO-native hosting) | FORGE-01 |
+| FORGE-09 | Export project metadata and standard code/artifacts with provenance, subject to  | MISSING | no reference (export/migration) | FORGE-02 |
+| FORGE-10 | For automated GitHub integration, bind reviews/checks to repository ID, PR head  | MISSING | no reference (head-SHA-bound merge) | FORGE-04 |
+| NFR-01 | Zero cross-owner/workspace disclosure or unexpected additional grants in the mig | BUILT | (test-only) ; scripts/workforce-security-matrix.test.mjs:2 | - |
+| NFR-02 | Zero acknowledged-record loss across forced process termination; no silent trunc | BUILT | (test-only) ; scripts/workforce-handoff-migration.test.mjs:360 | - |
+| NFR-03 | At most one effective contribution, reservation, settlement and result delivery  | BUILT | (test-only) ; scripts/workforce-handoff-migration.test.mjs:52 | - |
+| NFR-04 | List API p95 ≤500 ms on a documented local qualification environment with 10,0 | BUILT | src/server/services/workforceCatalog.js:103 ; scripts/workforce-catalog-scale.test.mjs:2 | - |
+| NFR-05 | UI interaction response p95 ≤100 ms excluding network completion; 10,000-turn  | PARTIAL | turnReads.js unrouted; UI p95 is Interface | SES-09 |
+| NFR-06 | Connected revocation blocks the next privileged operation; disconnected executio | BUILT | src/server/database/migrations/20260925140000-workforce-run-authority-leases.sql:2 ; scripts/workforce-member-removal.test.mjs:218 | - |
+| NFR-07 | API cursors, caches, subscriptions, deep links and exports are scope-bound and r | BUILT | src/server/index.js:369 ; scripts/live-conversation-collaboration.test.mjs:606 | - |
+| NFR-08 | Full keyboard navigation, labeled controls, non-color-only statuses and accessib | BUILT | src/components/workforce/ScopeDialog.tsx:13 ; scripts/workforce-accessibility.test.mjs:1 | - |
+| NFR-09 | No new third-party distributed service is required solely for normalization. Kee | BUILT | src/server/services/divisionAgentBudget.js:5 ; scripts/workforce-deployment-boundary.test.mjs:2 | - |
+| NFR-10 | The 60-second lease uses signed/validated expiry and a monotonic elapsed-time bo | BUILT | src/server/database/migrations/20260925140000-workforce-run-authority-leases.sql:2 ; scripts/workforce-migration-chain.test.mjs:196 | - |
+
+## Counts
+BUILT 96 · PARTIAL 45 · MISSING 4 · OUT-OF-REPO 0
+
+## MISSING/PARTIAL ordered by dependency (wire-up order)
+
+1. ACCT-03/04 → ACCT-05/06/08 → ACCT-02: route accountGifts.js / accountHistory.js (no endpoint exists).
+2. SES-03 → SES-04/SES-06 (conversationModes.js) → SES-02 → SES-07 → SES-08/SES-09 → NFR-05.
+3. VIEW-05 (scopedReads) → VIEW-04 (viewConsistency).
+4. RUN-05 (childConversations), RUN-06 (projectWorktree) → RUN-08 → LIFE-08 (objectives: no record at all).
+5. RUN-09 (sessionBudgetAdmission).
+6. RES-01 → RES-02 → RES-03 → RES-04; RES-05; RES-06.
+7. PUB-03 → PUB-04 → PUB-05 → PUB-06/PUB-10 → PUB-07 → PUB-08/PUB-12; PUB-09; PUB-11/PUB-13/PUB-14.
+8. FORGE-01 → FORGE-02 → FORGE-03 → FORGE-04/FORGE-05 → FORGE-06; then MISSING FORGE-07, FORGE-10, FORGE-09, FORGE-08.
+
+## Caveats on this measurement
+
+- BUILT here means *reachable and cited by a test*, not *proven correct*. Reachability was read from static
+  imports; a service loaded dynamically would be under-counted.
+- Several BUILT rows are platform halves only; the SDK, Interface, CLI and Box own the rest (noted per row).
+- This is a measurement from 2026-10-19 against `dd02d21c`. Re-measure before quoting it.
+
+## Changes since the measurement (2026-10-19)
+
+- RUN-01 / RUN-03: the agent-page Run button now admits through `admitAccountRun` and runs under that
+  admission; revocation stops the hosted run and refuses credentials (service + trigger). Previously no user
+  action admitted a run.

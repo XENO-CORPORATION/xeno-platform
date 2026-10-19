@@ -28,6 +28,8 @@ import { authMiddleware } from '../middleware/auth.js';
 import { runAllMigrations } from '../services/migrationRunner.js';
 import { migrateAccountV2 } from '../database/migrate-account-v2.js';
 import { migrateOidcClients } from '../database/migrate-oidc-clients.js';
+import { addGrant } from '../utils/creditLedgerV2.js';
+import { revokeRun } from '../services/workforceRunAuthority.js';
 
 const JWT_SECRET = process.env.JWT_SECRET || 'xenostudio-super-secret-jwt-key-change-in-production';
 const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL });
@@ -41,7 +43,10 @@ async function main() {
   await migrateOidcClients(pool);
   const mk = async (m) => (await pool.query(`INSERT INTO users(username,email,password_hash,display_name,email_verified,workspace_activated_at) VALUES($1,$2,'x',$1,TRUE,NOW())
     ON CONFLICT (username) DO UPDATE SET username = EXCLUDED.username RETURNING id`, [m, `${m}@example.test`])).rows[0].id;
-  const ada = await mk('acr-ada'), bob = await mk('acr-bob');
+  const ada = await mk('acr-ada'), bob = await mk('acr-bob'), poor = await mk('acr-poor');
+  // RUN-01: an admission reserves the run's ceiling on the canonical ledger, so the person needs credits to start one
+  await addGrant(pool, ada, { amountMicro: 100_000_000, kind: 'paid', sourceRef: 'seed:acr-ada' });
+  const heldMicro = async () => BigInt((await pool.query(`SELECT coalesce(sum(amount_micro - settled_micro),0)::text AS h FROM credit_holds WHERE user_id=$1 AND state='held'`, [ada])).rows[0].h);
   const session = (id) => jwt.sign({ userId: id, email: 'x@y.z' }, JWT_SECRET, { expiresIn: '1h' });
 
   // the stand-in agents-api: records each request, answers as the real one does
@@ -101,6 +106,13 @@ async function main() {
     const st = await call('POST', `/api/agents/${ag.id}/runs`, { token: A, body: { task: task.key, budgetCredits: 5 } });
     check_(st.s === 201 && st.j.run.state === 'queued' && st.j.run.runId === RUN(1) && st.j.run.version === ag.version, `a run starts and is recorded against the pinned version (${st.s} ${st.j && st.j.code})`);
     check_(!JSON.stringify(st.j).includes('xtk_'), 'the agent credential is never returned to the browser');
+    // RUN-01: the press that started it ADMITTED it, through the one admission service
+    const adm = (await pool.query('SELECT a.* FROM agent_cloud_runs r JOIN workforce_run_admissions a ON a.id = r.admission_id WHERE r.id = $1', [st.j.run.id])).rows[0];
+    check_(adm && st.j.run.admissionId === adm.id && adm.actor_user_id === ada && adm.target_kind === 'personal' && adm.agent_resource_id === ag.definitionId
+      && adm.agent_version === ag.version && adm.task_ref === task.key && adm.budget_ceiling_micro === '5000000', `the run was admitted by its person, for its agent's pinned definition, with its budget (${JSON.stringify(adm && { k: adm.target_kind, b: adm.budget_ceiling_micro })})`);
+    check_(await heldMicro() === 5_000_000n, 'and its ceiling is reserved on the ledger');
+    let noAdm = null; try { await pool.query(`INSERT INTO agent_cloud_runs (owner_user_id, agent_user_id, task_id, agent_version, budget_credits) VALUES ($1,$2,$3,1,1)`, [ada, ag.userId, task.id]); } catch (e) { noAdm = e; }
+    check_(noAdm && noAdm.code === '23514', 'the database refuses a cloud run that was never admitted');
     const sent = seen.find((x) => x.method === 'POST' && x.url === '/runs');
     const claims = jwt.decode(String(sent.auth).slice(7));
     check_(claims && claims.sub === ada && claims.client_id === 'xeno-agent-runs' && claims.act && claims.act.agent_run_id === st.j.run.id, 'the runner is asked AS the person, by the agent-runs broker, naming this run');
@@ -168,6 +180,7 @@ async function main() {
     runs.set(st.j.run.runId, 'completed'); seen.length = 0;
     const after = await call('GET', `/api/agents/${ag.id}/runs`, { token: A });
     check_(after.j.runs[0].state === 'completed' && after.j.runs[0].endedAt, 'when the runner reports it finished, the run ends');
+    check_((await pool.query('SELECT 1 FROM workforce_run_revocations WHERE admission_id = $1', [adm.id])).rowCount === 1 && await heldMicro() === 0n, 'its admission is closed and its reservation released');
     check_((await call('GET', '/api/tasks/agent/me', { token: pa.credential })).s === 401, 'and its credential stops working');
     const pres2 = (await call('GET', '/api/agents/presence', { token: A })).j.agents.find((x) => x.id === ag.id);
     check_(pres2 && pres2.state !== 'working' && !pres2.run, `when the run ends it is no longer shown as working (${pres2 && pres2.state})`);
@@ -182,6 +195,34 @@ async function main() {
     check_((await call('GET', '/api/tasks/agent/me', { token: cred2 })).s === 401, 'and revokes its credential at once');
     check_((await call('POST', `/api/agents/runs/${r2.id}/stop`, { token: B })).s === 404, "someone else cannot stop it");
     check_((await issue(ref2, r2.runId)).j.error.code === 'run_ended', 'a stopped run can never be issued a credential');
+
+    // RUN-03: revoking the ADMISSION (from anywhere: /run-admissions/revoke) ends the run end to end
+    {
+      const t = (await call('POST', '/api/tasks', { token: A, body: { title: 'Revoked', projectId: proj } })).j.task;
+      seen.length = 0;
+      const r = (await call('POST', `/api/agents/${ag.id}/runs`, { token: A, body: { task: t.key } })).j.run;
+      const ref = seen.find((x) => x.url === '/runs').body.platformAgent.runRef;
+      await revokeRun(pool, { actorUserId: ada }, r.admissionId);
+      const denied = await issue(ref, r.runId);
+      check_(denied.s === 409 && denied.j.error.code === 'run_revoked', `a revoked admission mints no credential (${denied.s} ${denied.j && denied.j.error && denied.j.error.code})`);
+      let dbRefused = null; try { await pool.query(`UPDATE agent_cloud_runs SET credential_id = gen_random_uuid(), state = 'running' WHERE id = $1`, [r.id]); } catch (e) { dbRefused = e; }
+      check_(dbRefused && dbRefused.code === '23514', 'and the database refuses one written past the service');
+      const t2 = (await call('POST', '/api/tasks', { token: A, body: { title: 'Revoked live', projectId: proj } })).j.task;
+      seen.length = 0;
+      const r2 = (await call('POST', `/api/agents/${ag.id}/runs`, { token: A, body: { task: t2.key } })).j.run;
+      const c2 = (await issue(seen.find((x) => x.url === '/runs').body.platformAgent.runRef, r2.runId)).j.token;
+      await revokeRun(pool, { actorUserId: ada }, r2.admissionId);
+      const listed = (await call('GET', `/api/agents/${ag.id}/runs`, { token: A })).j.runs.find((x) => x.id === r2.id);
+      check_(listed.state === 'cancelled' && listed.reason === 'admission_revoked' && seen.some((x) => x.url === `/runs/${r2.runId}/stop`), 'a live run whose admission is revoked is stopped at the runner');
+      check_((await call('GET', '/api/tasks/agent/me', { token: c2 })).s === 401, 'and its credential stops working');
+      // a ceiling beyond what the person can fund (the free allowance is 50) is refused before anything starts
+      const P = session(poor);
+      const pag = (await call('POST', '/api/agents', { token: P, body: { name: 'Poor runner', instructions: 'x' } })).j.agent;
+      const pt = (await call('POST', '/api/tasks', { token: P, body: { title: 'Unfunded' } })).j.task;
+      seen.length = 0;
+      const pr = await call('POST', `/api/agents/${pag.id}/runs`, { token: P, body: { task: pt.key, budgetCredits: 150 } });
+      check_(pr.s === 403 && pr.j.code === 'budget_exceeds_available' && !seen.some((x) => x.url === '/runs'), `an unfunded run is not admitted and nothing starts (${pr.s} ${pr.j && pr.j.code})`);
+    }
 
     // the runner refuses / is down: recorded, credential revoked
     mode = 'refuse'; seen.length = 0;

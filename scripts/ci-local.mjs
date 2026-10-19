@@ -326,8 +326,17 @@ function freshDb(name, template = null) {
   if (EXTERNAL_PG) {
     const admin = new URL(`${EXTERNAL_PG}/postgres`);
     for (const sql of statements) {
-      check(spawnSync('psql', [admin.href, '-v', 'ON_ERROR_STOP=1', '-q', '-c', sql],
-        { stdio: ['ignore', 'ignore', 'pipe'], encoding: 'utf8', env: { ...process.env, PGPASSWORD: decodeURIComponent(admin.password || '') } }), sql);
+      let r = spawnSync('psql', [admin.href, '-v', 'ON_ERROR_STOP=1', '-q', '-c', sql],
+        { stdio: ['ignore', 'ignore', 'pipe'], encoding: 'utf8', env: { ...process.env, PGPASSWORD: decodeURIComponent(admin.password || '') } });
+      // No psql on PATH (an embedded Postgres ships none): run the same statement through the server's own
+      // `pg` driver. ENOENT used to surface as "could not prepare database" with an EMPTY reason.
+      if (r.error?.code === 'ENOENT') {
+        r = spawnSync(process.execPath, ['--input-type=module', '-e',
+          "import pg from 'pg'; const c = new pg.Client(process.env.CI_ADMIN_URL); await c.connect();"
+          + " try { await c.query(process.env.CI_SQL); } catch (e) { console.error(e.message); process.exitCode = 1; } finally { await c.end(); }"],
+        { cwd: SERVER, stdio: ['ignore', 'ignore', 'pipe'], encoding: 'utf8', env: { ...process.env, CI_ADMIN_URL: admin.href, CI_SQL: sql } });
+      }
+      check(r, sql);
     }
     return `${EXTERNAL_PG}/${name}`;
   }
