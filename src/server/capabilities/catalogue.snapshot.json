@@ -1,0 +1,485 @@
+{
+ "$generated": "npm run catalogue -- --write",
+ "capabilities": [
+  {
+   "name": "tasks.project.list",
+   "wire": "tasks__project__list",
+   "version": "1.0.0",
+   "class": "safe",
+   "surfaces": [
+    "mcp"
+   ],
+   "aliases": [
+    "tasks_list_projects"
+   ]
+  },
+  {
+   "name": "tasks.task.list_mine",
+   "wire": "tasks__task__list_mine",
+   "version": "1.0.0",
+   "class": "safe",
+   "surfaces": [
+    "mcp"
+   ],
+   "aliases": [
+    "tasks_list_my_tasks"
+   ]
+  },
+  {
+   "name": "tasks.task.get",
+   "wire": "tasks__task__get",
+   "version": "1.0.0",
+   "class": "safe",
+   "surfaces": [
+    "mcp"
+   ],
+   "aliases": [
+    "tasks_get_task"
+   ]
+  },
+  {
+   "name": "tasks.event.list",
+   "wire": "tasks__event__list",
+   "version": "1.0.0",
+   "class": "safe",
+   "surfaces": [
+    "mcp"
+   ],
+   "aliases": [
+    "tasks_list_events"
+   ]
+  },
+  {
+   "name": "tasks.task.create",
+   "wire": "tasks__task__create",
+   "version": "1.0.0",
+   "class": "undoable",
+   "surfaces": [
+    "mcp"
+   ],
+   "aliases": [
+    "tasks_create_task"
+   ]
+  },
+  {
+   "name": "tasks.task.claim",
+   "wire": "tasks__task__claim",
+   "version": "1.0.0",
+   "class": "undoable",
+   "surfaces": [
+    "mcp"
+   ],
+   "aliases": [
+    "tasks_claim_task"
+   ]
+  },
+  {
+   "name": "tasks.lease.renew",
+   "wire": "tasks__lease__renew",
+   "version": "1.0.0",
+   "class": "undoable",
+   "surfaces": [
+    "mcp"
+   ],
+   "aliases": [
+    "tasks_heartbeat"
+   ]
+  },
+  {
+   "name": "tasks.lease.release",
+   "wire": "tasks__lease__release",
+   "version": "1.0.0",
+   "class": "undoable",
+   "surfaces": [
+    "mcp"
+   ],
+   "aliases": [
+    "tasks_release"
+   ]
+  },
+  {
+   "name": "tasks.task.move",
+   "wire": "tasks__task__move",
+   "version": "1.0.0",
+   "class": "undoable",
+   "surfaces": [
+    "mcp"
+   ],
+   "aliases": [
+    "tasks_move_task"
+   ]
+  },
+  {
+   "name": "tasks.comment.create",
+   "wire": "tasks__comment__create",
+   "version": "1.0.0",
+   "class": "undoable",
+   "surfaces": [
+    "mcp"
+   ],
+   "aliases": [
+    "tasks_comment"
+   ]
+  },
+  {
+   "name": "tasks.activity.report",
+   "wire": "tasks__activity__report",
+   "version": "1.0.0",
+   "class": "undoable",
+   "surfaces": [
+    "mcp"
+   ],
+   "aliases": [
+    "tasks_report_activity"
+   ]
+  },
+  {
+   "name": "tasks.task.update",
+   "wire": "tasks__task__update",
+   "version": "1.0.0",
+   "class": "undoable",
+   "surfaces": [
+    "mcp"
+   ],
+   "aliases": [
+    "tasks_update_task"
+   ]
+  },
+  {
+   "name": "canvas.canvas.list",
+   "wire": "canvas__canvas__list",
+   "version": "1.0.0",
+   "class": "safe",
+   "surfaces": [
+    "mcp"
+   ],
+   "aliases": [
+    "canvas_list"
+   ]
+  },
+  {
+   "name": "canvas.canvas.get",
+   "wire": "canvas__canvas__get",
+   "version": "1.0.0",
+   "class": "safe",
+   "surfaces": [
+    "mcp"
+   ],
+   "aliases": [
+    "canvas_get"
+   ]
+  },
+  {
+   "name": "canvas.canvas.create",
+   "wire": "canvas__canvas__create",
+   "version": "1.0.0",
+   "class": "undoable",
+   "surfaces": [
+    "mcp"
+   ],
+   "aliases": [
+    "canvas_create"
+   ]
+  },
+  {
+   "name": "canvas.item.add",
+   "wire": "canvas__item__add",
+   "version": "1.0.0",
+   "class": "undoable",
+   "surfaces": [
+    "mcp"
+   ],
+   "aliases": [
+    "canvas_add"
+   ]
+  },
+  {
+   "name": "canvas.connection.create",
+   "wire": "canvas__connection__create",
+   "version": "1.0.0",
+   "class": "undoable",
+   "surfaces": [
+    "mcp"
+   ],
+   "aliases": [
+    "canvas_connect"
+   ]
+  },
+  {
+   "name": "canvas.item.update",
+   "wire": "canvas__item__update",
+   "version": "1.0.0",
+   "class": "irreversible",
+   "surfaces": [
+    "mcp"
+   ],
+   "aliases": [
+    "canvas_update"
+   ]
+  },
+  {
+   "name": "agents.self.get",
+   "wire": "agents__self__get",
+   "version": "1.0.0",
+   "class": "safe",
+   "surfaces": [
+    "mcp"
+   ],
+   "aliases": [
+    "agents_whoami"
+   ]
+  },
+  {
+   "name": "studio.image_model.list",
+   "wire": "studio__image_model__list",
+   "version": "1.0.0",
+   "class": "safe",
+   "surfaces": [
+    "mcp"
+   ],
+   "aliases": [
+    "image_list_models"
+   ]
+  },
+  {
+   "name": "studio.image.generate",
+   "wire": "studio__image__generate",
+   "version": "1.0.0",
+   "class": "irreversible",
+   "surfaces": [
+    "mcp"
+   ],
+   "aliases": [
+    "image_generate"
+   ]
+  },
+  {
+   "name": "studio.image.get",
+   "wire": "studio__image__get",
+   "version": "1.0.0",
+   "class": "safe",
+   "surfaces": [
+    "mcp"
+   ],
+   "aliases": [
+    "image_get"
+   ]
+  },
+  {
+   "name": "studio.image.list",
+   "wire": "studio__image__list",
+   "version": "1.0.0",
+   "class": "safe",
+   "surfaces": [
+    "mcp"
+   ],
+   "aliases": [
+    "image_list"
+   ]
+  },
+  {
+   "name": "studio.video_model.list",
+   "wire": "studio__video_model__list",
+   "version": "1.0.0",
+   "class": "safe",
+   "surfaces": [
+    "mcp"
+   ],
+   "aliases": [
+    "video_list_models"
+   ]
+  },
+  {
+   "name": "studio.video.generate",
+   "wire": "studio__video__generate",
+   "version": "1.0.0",
+   "class": "irreversible",
+   "surfaces": [
+    "mcp"
+   ],
+   "aliases": [
+    "video_generate"
+   ]
+  },
+  {
+   "name": "studio.video.get",
+   "wire": "studio__video__get",
+   "version": "1.0.0",
+   "class": "safe",
+   "surfaces": [
+    "mcp"
+   ],
+   "aliases": [
+    "video_get"
+   ]
+  },
+  {
+   "name": "studio.video.list",
+   "wire": "studio__video__list",
+   "version": "1.0.0",
+   "class": "safe",
+   "surfaces": [
+    "mcp"
+   ],
+   "aliases": [
+    "video_list"
+   ]
+  },
+  {
+   "name": "library.file.list",
+   "wire": "library__file__list",
+   "version": "1.0.0",
+   "class": "safe",
+   "surfaces": [
+    "mcp"
+   ],
+   "aliases": [
+    "library_list_files"
+   ]
+  },
+  {
+   "name": "library.file.get",
+   "wire": "library__file__get",
+   "version": "1.0.0",
+   "class": "safe",
+   "surfaces": [
+    "mcp"
+   ],
+   "aliases": [
+    "library_get_file"
+   ]
+  },
+  {
+   "name": "library.file.attach_to_project",
+   "wire": "library__file__attach_to_project",
+   "version": "1.0.0",
+   "class": "undoable",
+   "surfaces": [
+    "mcp"
+   ],
+   "aliases": [
+    "library_attach_to_project"
+   ]
+  },
+  {
+   "name": "chat.model.ask",
+   "wire": "chat__model__ask",
+   "version": "1.0.0",
+   "class": "irreversible",
+   "surfaces": [
+    "mcp"
+   ],
+   "aliases": [
+    "chat_ask"
+   ]
+  },
+  {
+   "name": "forum.thread.search",
+   "wire": "forum__thread__search",
+   "version": "1.0.0",
+   "class": "safe",
+   "surfaces": [
+    "forum-mcp"
+   ],
+   "aliases": [
+    "forum_search"
+   ]
+  },
+  {
+   "name": "forum.thread.get",
+   "wire": "forum__thread__get",
+   "version": "1.0.0",
+   "class": "safe",
+   "surfaces": [
+    "forum-mcp"
+   ],
+   "aliases": [
+    "forum_get_thread"
+   ]
+  },
+  {
+   "name": "forum.thread.suggest_duplicate",
+   "wire": "forum__thread__suggest_duplicate",
+   "version": "1.0.0",
+   "class": "safe",
+   "surfaces": [
+    "forum-mcp"
+   ],
+   "aliases": [
+    "forum_suggest_duplicate"
+   ]
+  },
+  {
+   "name": "forum.thread.create",
+   "wire": "forum__thread__create",
+   "version": "1.0.0",
+   "class": "undoable",
+   "surfaces": [
+    "forum-mcp"
+   ],
+   "aliases": [
+    "forum_create_thread"
+   ]
+  },
+  {
+   "name": "forum.post.reply",
+   "wire": "forum__post__reply",
+   "version": "1.0.0",
+   "class": "undoable",
+   "surfaces": [
+    "forum-mcp"
+   ],
+   "aliases": [
+    "forum_reply"
+   ]
+  },
+  {
+   "name": "forum.subscription.create",
+   "wire": "forum__subscription__create",
+   "version": "1.0.0",
+   "class": "undoable",
+   "surfaces": [
+    "forum-mcp"
+   ],
+   "aliases": [
+    "forum_subscribe"
+   ]
+  },
+  {
+   "name": "forum.digest.get",
+   "wire": "forum__digest__get",
+   "version": "1.0.0",
+   "class": "safe",
+   "surfaces": [
+    "forum-mcp"
+   ],
+   "aliases": [
+    "forum_digest"
+   ]
+  },
+  {
+   "name": "forum.post.flag",
+   "wire": "forum__post__flag",
+   "version": "1.0.0",
+   "class": "undoable",
+   "surfaces": [
+    "forum-mcp"
+   ],
+   "aliases": [
+    "forum_flag"
+   ]
+  },
+  {
+   "name": "forum.thread.mark_fixed",
+   "wire": "forum__thread__mark_fixed",
+   "version": "1.0.0",
+   "class": "undoable",
+   "surfaces": [
+    "forum-mcp"
+   ],
+   "aliases": [
+    "forum_mark_fixed"
+   ]
+  }
+ ]
+}

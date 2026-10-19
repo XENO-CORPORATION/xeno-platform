@@ -1,0 +1,4689 @@
+{
+ "$doc": "Parity decisions for every action a person can take. Gate: npm run parity. Format: scripts/agent-parity.mjs.",
+ "divisions": {
+  "accountGiftRoutes.js": "commerce",
+  "accountRoutes.js": "account",
+  "accountSecurityRoutes.js": "account",
+  "accountWorkspaceOperationRoutes.js": "workspace",
+  "actions.js": "workspace-ui",
+  "agentRoutes.js": "agents",
+  "aiRoutes.js": "chat",
+  "analyticsRoutes.js": "platform",
+  "anima.js": "agents",
+  "apiKeyWorkforceCapabilityRoutes.js": "workforce",
+  "app.js": "workspace-ui",
+  "artifactRoutes.js": "studio",
+  "artifactViewerRoutes.js": "studio",
+  "authRoutes.js": "account",
+  "billingRoutes.js": "commerce",
+  "blogRoutes.js": "platform",
+  "browserRelayRoutes.js": "browser-shell",
+  "browserRoutes.js": "browser-shell",
+  "canvasRoutes.js": "canvas",
+  "chatRoutes.js": "chat",
+  "cliAuthRoutes.js": "account",
+  "clientPolicyRoutes.js": "platform",
+  "collaborationRoutes.js": "storage",
+  "community.js": "forum",
+  "company.js": "workspace",
+  "connectAuthorityRoutes.js": "storage",
+  "containerRoutes.js": "platform",
+  "conversionRoutes.js": "studio",
+  "dashboardRoutes.js": "platform",
+  "docsRoutes.js": "platform",
+  "downloadFunnelRoutes.js": "commerce",
+  "downloadRoutes.js": "commerce",
+  "drag.js": "workspace-ui",
+  "emailRoutes.js": "platform",
+  "emailWebhookRoutes.js": "platform",
+  "faviconRoutes.js": "platform",
+  "fileSystemRoutes.js": "storage",
+  "forumRoutes.js": "forum",
+  "funding.js": "workforce",
+  "handleRoutes.js": "account",
+  "healthRoutes.js": "platform",
+  "history.js": "workspace-ui",
+  "imageRoutes.js": "studio",
+  "inferenceCredentialRoutes.js": "inference",
+  "inferenceServiceRoutes.js": "inference",
+  "inferenceSessionKeyRoutes.js": "inference",
+  "jobRoutes.js": "studio",
+  "learnRoutes.js": "platform",
+  "libraryRoutes.js": "storage",
+  "live.js": "workspace-ui",
+  "liveConversationCollaborationRoutes.js": "chat",
+  "market.js": "commerce",
+  "marketplaceRoutes.js": "commerce",
+  "mediaGenerationRoutes.js": "studio",
+  "modals.js": "workspace-ui",
+  "oauth2Routes.js": "platform",
+  "officeCanvasRoutes.js": "canvas",
+  "pages.js": "workspace-ui",
+  "places.js": "workspace",
+  "platform-account.js": "account",
+  "platform-agents.js": "agents",
+  "platform-area.js": "workspace",
+  "platform-canvas.js": "canvas",
+  "platform-chat.js": "chat",
+  "platform-divisions.js": "workforce",
+  "platform-mcp.js": "agents",
+  "platform-storage-clouds.js": "storage",
+  "platform-storage.js": "storage",
+  "platform-tasks.js": "tasks",
+  "platform-work.js": "workspace",
+  "platformAgentRoutes.js": "agents",
+  "productDownloadRoutes.js": "commerce",
+  "projectDirectoryBindingRoutes.js": "storage",
+  "projectPublicationRoutes.js": "workspace",
+  "resources.js": "workspace-ui",
+  "serviceLedgerRoutes.js": "commerce",
+  "settings.js": "account",
+  "shellSessionRoutes.js": "browser-shell",
+  "siteGateRoutes.js": "platform",
+  "tokenizerRoutes.js": "chat",
+  "userDataRoutes.js": "storage",
+  "userNotificationsRoutes.js": "account",
+  "v2AuthzRoutes.js": "account",
+  "v2InferenceRoutes.js": "inference",
+  "v2LedgerRoutes.js": "commerce",
+  "v2MeRoutes.js": "account",
+  "videoRoutes.js": "studio",
+  "visibility.js": "workspace-ui",
+  "webConnectRoutes.js": "storage",
+  "webhookRoutes.js": "platform",
+  "workforce.js": "workforce",
+  "workforceCoordinationRoutes.js": "workforce",
+  "workforceDivisionRoutes.js": "workforce",
+  "workforceForgeRoutes.js": "workforce",
+  "workforceFundingRoutes.js": "workforce",
+  "workforceOwnershipTransferRoutes.js": "workforce",
+  "workforcePublicationRoutes.js": "workforce",
+  "workforcePublicContributionRoutes.js": "workforce",
+  "workforceResourceRoutes.js": "workforce",
+  "workforceRoutes.js": "workforce",
+  "workforceSessionRoutes.js": "workforce",
+  "workforceViewRoutes.js": "workforce",
+  "workspaceAreaRoutes.js": "workspace",
+  "workspaceKeyRoutes.js": "workspace",
+  "workspaceMembershipOperationRoutes.js": "workspace",
+  "workspaceNotificationRoutes.js": "workspace",
+  "workspaceRoutes.js": "workspace",
+  "workspaceTeamRoutes.js": "workspace",
+  "xenoMcpRoutes.js": "agents",
+  "xenoRoutes.js": "studio",
+  "xenoTasksRoutes.js": "tasks",
+  "youtubeRoutes.js": "studio"
+ },
+ "actions": {
+  "route:accountGiftRoutes.js:POST /": {
+   "status": "planned"
+  },
+  "route:accountGiftRoutes.js:POST /account-history": {
+   "status": "planned"
+  },
+  "route:accountGiftRoutes.js:POST /history": {
+   "status": "planned"
+  },
+  "route:accountGiftRoutes.js:POST /preferences": {
+   "status": "planned"
+  },
+  "route:accountGiftRoutes.js:POST /preview": {
+   "status": "planned"
+  },
+  "route:accountGiftRoutes.js:POST /returns": {
+   "status": "planned"
+  },
+  "route:accountGiftRoutes.js:POST /returns/preview": {
+   "status": "planned"
+  },
+  "route:accountRoutes.js:DELETE /sessions/:id": {
+   "status": "planned"
+  },
+  "route:accountRoutes.js:GET /notifications": {
+   "status": "planned"
+  },
+  "route:accountRoutes.js:GET /overview": {
+   "status": "planned"
+  },
+  "route:accountRoutes.js:GET /sessions": {
+   "status": "planned"
+  },
+  "route:accountSecurityRoutes.js:DELETE /email": {
+   "status": "planned"
+  },
+  "route:accountSecurityRoutes.js:DELETE /exports/:id": {
+   "status": "planned"
+  },
+  "route:accountSecurityRoutes.js:DELETE /sessions": {
+   "status": "planned"
+  },
+  "route:accountSecurityRoutes.js:GET /exports": {
+   "status": "planned"
+  },
+  "route:accountSecurityRoutes.js:GET /exports/:id/download": {
+   "status": "planned"
+  },
+  "route:accountSecurityRoutes.js:GET /security": {
+   "status": "planned"
+  },
+  "route:accountSecurityRoutes.js:POST /confirm": {
+   "status": "planned"
+  },
+  "route:accountSecurityRoutes.js:POST /confirm/code": {
+   "status": "planned"
+  },
+  "route:accountSecurityRoutes.js:POST /email": {
+   "status": "planned"
+  },
+  "route:accountSecurityRoutes.js:POST /email/confirm": {
+   "status": "planned"
+  },
+  "route:accountSecurityRoutes.js:POST /exports": {
+   "status": "planned"
+  },
+  "route:accountWorkspaceOperationRoutes.js:GET /:operationId (accountWorkspaceOperationRoutes)": {
+   "status": "planned"
+  },
+  "route:accountWorkspaceOperationRoutes.js:POST /:operationId/:phase (accountWorkspaceOperationRoutes)": {
+   "status": "planned"
+  },
+  "route:agentRoutes.js:DELETE /:handle": {
+   "status": "planned"
+  },
+  "route:agentRoutes.js:GET /": {
+   "status": "planned"
+  },
+  "route:agentRoutes.js:GET /whoami": {
+   "status": "planned"
+  },
+  "route:agentRoutes.js:POST /": {
+   "status": "planned"
+  },
+  "route:agentRoutes.js:POST /:handle/keys": {
+   "status": "planned"
+  },
+  "route:aiRoutes.js:GET /local-model-catalog": {
+   "status": "planned"
+  },
+  "route:aiRoutes.js:GET /models": {
+   "status": "planned"
+  },
+  "route:aiRoutes.js:POST /chat": {
+   "status": "planned"
+  },
+  "route:aiRoutes.js:POST /chat/estimate": {
+   "status": "planned"
+  },
+  "route:aiRoutes.js:POST /chat/stream": {
+   "status": "planned"
+  },
+  "route:analyticsRoutes.js:GET /active-users": {
+   "status": "planned"
+  },
+  "route:analyticsRoutes.js:GET /api-usage": {
+   "status": "planned"
+  },
+  "route:analyticsRoutes.js:GET /credit-usage": {
+   "status": "planned"
+  },
+  "route:analyticsRoutes.js:GET /dashboard": {
+   "status": "planned"
+  },
+  "route:analyticsRoutes.js:GET /downloads": {
+   "status": "planned"
+  },
+  "route:analyticsRoutes.js:GET /my-usage": {
+   "status": "planned"
+  },
+  "route:analyticsRoutes.js:POST /event": {
+   "status": "planned"
+  },
+  "route:apiKeyWorkforceCapabilityRoutes.js:POST /operations": {
+   "status": "planned"
+  },
+  "route:apiKeyWorkforceCapabilityRoutes.js:POST /read": {
+   "status": "planned"
+  },
+  "route:artifactRoutes.js:DELETE /:id": {
+   "status": "planned"
+  },
+  "route:artifactRoutes.js:GET /": {
+   "status": "planned"
+  },
+  "route:artifactRoutes.js:GET /:id": {
+   "status": "planned"
+  },
+  "route:artifactRoutes.js:GET /:id/comments": {
+   "status": "planned"
+  },
+  "route:artifactRoutes.js:POST /": {
+   "status": "planned"
+  },
+  "route:artifactRoutes.js:POST /:id/comments": {
+   "status": "planned"
+  },
+  "route:artifactRoutes.js:POST /:id/comments/:commentId/reply": {
+   "status": "planned"
+  },
+  "route:artifactRoutes.js:POST /:id/comments/delivered": {
+   "status": "planned"
+  },
+  "route:artifactRoutes.js:POST /:id/revisions": {
+   "status": "planned"
+  },
+  "route:artifactRoutes.js:POST /:id/share": {
+   "status": "planned"
+  },
+  "route:artifactRoutes.js:POST /:id/view-token": {
+   "status": "planned"
+  },
+  "route:artifactViewerRoutes.js:GET /:id": {
+   "status": "planned"
+  },
+  "route:artifactViewerRoutes.js:GET /:id/*rest": {
+   "status": "planned"
+  },
+  "route:artifactViewerRoutes.js:GET /:id/v/:token/r/:revision/*filePath": {
+   "status": "planned"
+  },
+  "route:authRoutes.js:DELETE /account": {
+   "status": "planned"
+  },
+  "route:authRoutes.js:DELETE /linked-accounts/:provider": {
+   "status": "planned"
+  },
+  "route:authRoutes.js:GET /activate": {
+   "status": "planned"
+  },
+  "route:authRoutes.js:GET /activation-status": {
+   "status": "planned"
+  },
+  "route:authRoutes.js:GET /github": {
+   "status": "excluded",
+   "category": "unauthenticated",
+   "reason": "signing in or signing up happens before there is a person to act for"
+  },
+  "route:authRoutes.js:GET /github/callback": {
+   "status": "excluded",
+   "category": "unauthenticated",
+   "reason": "signing in or signing up happens before there is a person to act for"
+  },
+  "route:authRoutes.js:GET /google": {
+   "status": "excluded",
+   "category": "unauthenticated",
+   "reason": "signing in or signing up happens before there is a person to act for"
+  },
+  "route:authRoutes.js:GET /google/callback": {
+   "status": "excluded",
+   "category": "unauthenticated",
+   "reason": "signing in or signing up happens before there is a person to act for"
+  },
+  "route:authRoutes.js:GET /handle-available": {
+   "status": "planned"
+  },
+  "route:authRoutes.js:GET /linked-accounts": {
+   "status": "planned"
+  },
+  "route:authRoutes.js:GET /me": {
+   "status": "planned"
+  },
+  "route:authRoutes.js:GET /onboarding": {
+   "status": "planned"
+  },
+  "route:authRoutes.js:GET /twitter": {
+   "status": "planned"
+  },
+  "route:authRoutes.js:GET /twitter/callback": {
+   "status": "excluded",
+   "category": "unauthenticated",
+   "reason": "signing in or signing up happens before there is a person to act for"
+  },
+  "route:authRoutes.js:GET /usage": {
+   "status": "planned"
+  },
+  "route:authRoutes.js:GET /validate": {
+   "status": "planned"
+  },
+  "route:authRoutes.js:POST /activate": {
+   "status": "planned"
+  },
+  "route:authRoutes.js:POST /activate/code": {
+   "status": "planned"
+  },
+  "route:authRoutes.js:POST /admin-reset-password": {
+   "status": "excluded",
+   "category": "unauthenticated",
+   "reason": "signing in or signing up happens before there is a person to act for"
+  },
+  "route:authRoutes.js:POST /browser-session": {
+   "status": "planned"
+  },
+  "route:authRoutes.js:POST /claim-bonus": {
+   "status": "planned"
+  },
+  "route:authRoutes.js:POST /forgot-password": {
+   "status": "excluded",
+   "category": "unauthenticated",
+   "reason": "signing in or signing up happens before there is a person to act for"
+  },
+  "route:authRoutes.js:POST /init": {
+   "status": "planned"
+  },
+  "route:authRoutes.js:POST /login": {
+   "status": "excluded",
+   "category": "unauthenticated",
+   "reason": "signing in or signing up happens before there is a person to act for"
+  },
+  "route:authRoutes.js:POST /logout": {
+   "status": "planned"
+  },
+  "route:authRoutes.js:POST /migrate": {
+   "status": "planned"
+  },
+  "route:authRoutes.js:POST /onboarding": {
+   "status": "planned"
+  },
+  "route:authRoutes.js:POST /onboarding/welcome/acknowledge": {
+   "status": "planned"
+  },
+  "route:authRoutes.js:POST /refresh": {
+   "status": "excluded",
+   "category": "unauthenticated",
+   "reason": "signing in or signing up happens before there is a person to act for"
+  },
+  "route:authRoutes.js:POST /register": {
+   "status": "excluded",
+   "category": "unauthenticated",
+   "reason": "signing in or signing up happens before there is a person to act for"
+  },
+  "route:authRoutes.js:POST /register-with-handle": {
+   "status": "excluded",
+   "category": "unauthenticated",
+   "reason": "signing in or signing up happens before there is a person to act for"
+  },
+  "route:authRoutes.js:POST /resend-activation": {
+   "status": "planned"
+  },
+  "route:authRoutes.js:POST /resend-verification": {
+   "status": "excluded",
+   "category": "unauthenticated",
+   "reason": "signing in or signing up happens before there is a person to act for"
+  },
+  "route:authRoutes.js:POST /reset-password": {
+   "status": "excluded",
+   "category": "unauthenticated",
+   "reason": "signing in or signing up happens before there is a person to act for"
+  },
+  "route:authRoutes.js:POST /use-credits": {
+   "status": "planned"
+  },
+  "route:authRoutes.js:POST /verify-email": {
+   "status": "excluded",
+   "category": "unauthenticated",
+   "reason": "signing in or signing up happens before there is a person to act for"
+  },
+  "route:authRoutes.js:PUT /password": {
+   "status": "planned"
+  },
+  "route:authRoutes.js:PUT /profile": {
+   "status": "planned"
+  },
+  "route:billingRoutes.js:GET /checkout/:sessionId/status": {
+   "status": "planned"
+  },
+  "route:billingRoutes.js:GET /config": {
+   "status": "planned"
+  },
+  "route:billingRoutes.js:GET /consent-text": {
+   "status": "planned"
+  },
+  "route:billingRoutes.js:GET /entitlements": {
+   "status": "planned"
+  },
+  "route:billingRoutes.js:GET /ledger": {
+   "status": "planned"
+  },
+  "route:billingRoutes.js:GET /overview": {
+   "status": "planned"
+  },
+  "route:billingRoutes.js:GET /pricing-tiers": {
+   "status": "planned"
+  },
+  "route:billingRoutes.js:GET /subscription": {
+   "status": "planned"
+  },
+  "route:billingRoutes.js:GET /summary": {
+   "status": "planned"
+  },
+  "route:billingRoutes.js:POST /checkout": {
+   "status": "planned"
+  },
+  "route:billingRoutes.js:POST /consent": {
+   "status": "planned"
+  },
+  "route:billingRoutes.js:POST /portal": {
+   "status": "planned"
+  },
+  "route:blogRoutes.js:GET /": {
+   "status": "planned"
+  },
+  "route:blogRoutes.js:GET /:slug": {
+   "status": "planned"
+  },
+  "route:blogRoutes.js:GET /categories": {
+   "status": "planned"
+  },
+  "route:browserRelayRoutes.js:DELETE /:id (accountBrowserRouter)": {
+   "status": "planned"
+  },
+  "route:browserRelayRoutes.js:DELETE /installations/:id": {
+   "status": "planned"
+  },
+  "route:browserRelayRoutes.js:GET / (accountBrowserRouter)": {
+   "status": "planned"
+  },
+  "route:browserRelayRoutes.js:GET /calls/:callId": {
+   "status": "planned"
+  },
+  "route:browserRelayRoutes.js:GET /installations": {
+   "status": "planned"
+  },
+  "route:browserRelayRoutes.js:GET /installations/:id": {
+   "status": "planned"
+  },
+  "route:browserRelayRoutes.js:PATCH /:id (accountBrowserRouter)": {
+   "status": "planned"
+  },
+  "route:browserRelayRoutes.js:PATCH /installations/:id": {
+   "status": "planned"
+  },
+  "route:browserRelayRoutes.js:POST /installations": {
+   "status": "planned"
+  },
+  "route:browserRoutes.js:GET /browserless-status": {
+   "status": "planned"
+  },
+  "route:browserRoutes.js:GET /config": {
+   "status": "planned"
+  },
+  "route:browserRoutes.js:GET /content": {
+   "status": "planned"
+  },
+  "route:browserRoutes.js:GET /proxy": {
+   "status": "planned"
+  },
+  "route:browserRoutes.js:GET /status": {
+   "status": "planned"
+  },
+  "route:browserRoutes.js:POST /action": {
+   "status": "planned"
+  },
+  "route:browserRoutes.js:POST /extract": {
+   "status": "planned"
+  },
+  "route:browserRoutes.js:POST /navigate": {
+   "status": "planned"
+  },
+  "route:browserRoutes.js:POST /proxy": {
+   "status": "planned"
+  },
+  "route:browserRoutes.js:POST /render": {
+   "status": "planned"
+  },
+  "route:browserRoutes.js:POST /screenshot": {
+   "status": "planned"
+  },
+  "route:browserRoutes.js:POST /screenshot-url": {
+   "status": "planned"
+  },
+  "route:canvasRoutes.js:DELETE /:id": {
+   "status": "planned"
+  },
+  "route:canvasRoutes.js:GET /": {
+   "status": "capability",
+   "capability": "canvas.canvas.list"
+  },
+  "route:canvasRoutes.js:GET /:id": {
+   "status": "capability",
+   "capability": "canvas.canvas.get"
+  },
+  "route:canvasRoutes.js:POST /": {
+   "status": "capability",
+   "capability": "canvas.canvas.create"
+  },
+  "route:canvasRoutes.js:PUT /:id": {
+   "status": "capability",
+   "capability": [
+    "canvas.item.add",
+    "canvas.item.update",
+    "canvas.connection.create"
+   ]
+  },
+  "route:chatRoutes.js:DELETE /artifacts/:id": {
+   "status": "planned"
+  },
+  "route:chatRoutes.js:DELETE /conversations/:id": {
+   "status": "planned"
+  },
+  "route:chatRoutes.js:DELETE /conversations/:id/pin": {
+   "status": "planned"
+  },
+  "route:chatRoutes.js:DELETE /conversations/:id/share": {
+   "status": "planned"
+  },
+  "route:chatRoutes.js:DELETE /library/:source/:id": {
+   "status": "planned"
+  },
+  "route:chatRoutes.js:DELETE /memories/:id": {
+   "status": "planned"
+  },
+  "route:chatRoutes.js:DELETE /messages/:id": {
+   "status": "planned"
+  },
+  "route:chatRoutes.js:DELETE /personas/:id": {
+   "status": "planned"
+  },
+  "route:chatRoutes.js:DELETE /projects/:id": {
+   "status": "planned"
+  },
+  "route:chatRoutes.js:DELETE /projects/:id/access/:subjectType/:subjectId": {
+   "status": "planned"
+  },
+  "route:chatRoutes.js:DELETE /projects/:id/files/:fileId": {
+   "status": "planned"
+  },
+  "route:chatRoutes.js:DELETE /projects/:id/permanent": {
+   "status": "planned"
+  },
+  "route:chatRoutes.js:DELETE /projects/:id/pin": {
+   "status": "planned"
+  },
+  "route:chatRoutes.js:DELETE /scheduled/:id": {
+   "status": "planned"
+  },
+  "route:chatRoutes.js:DELETE /skills/:id": {
+   "status": "planned"
+  },
+  "route:chatRoutes.js:GET /artifacts": {
+   "status": "planned"
+  },
+  "route:chatRoutes.js:GET /artifacts/:id": {
+   "status": "planned"
+  },
+  "route:chatRoutes.js:GET /conversations": {
+   "status": "planned"
+  },
+  "route:chatRoutes.js:GET /conversations/:id": {
+   "status": "planned"
+  },
+  "route:chatRoutes.js:GET /conversations/:id/shares": {
+   "status": "planned"
+  },
+  "route:chatRoutes.js:GET /customize/connectors": {
+   "status": "planned"
+  },
+  "route:chatRoutes.js:GET /customize/plugins": {
+   "status": "planned"
+  },
+  "route:chatRoutes.js:GET /library": {
+   "status": "planned"
+  },
+  "route:chatRoutes.js:GET /library/file/:id/content": {
+   "status": "planned"
+  },
+  "route:chatRoutes.js:GET /memories": {
+   "status": "planned"
+  },
+  "route:chatRoutes.js:GET /personas": {
+   "status": "planned"
+  },
+  "route:chatRoutes.js:GET /projects": {
+   "status": "planned"
+  },
+  "route:chatRoutes.js:GET /projects/:id": {
+   "status": "planned"
+  },
+  "route:chatRoutes.js:GET /projects/:id/access": {
+   "status": "planned"
+  },
+  "route:chatRoutes.js:GET /projects/:id/activity": {
+   "status": "planned"
+  },
+  "route:chatRoutes.js:GET /projects/:id/files": {
+   "status": "planned"
+  },
+  "route:chatRoutes.js:GET /projects/:id/people": {
+   "status": "planned"
+  },
+  "route:chatRoutes.js:GET /projects/:id/summary": {
+   "status": "planned"
+  },
+  "route:chatRoutes.js:GET /scheduled": {
+   "status": "planned"
+  },
+  "route:chatRoutes.js:GET /scheduled/:id/runs": {
+   "status": "planned"
+  },
+  "route:chatRoutes.js:GET /share/:token": {
+   "status": "planned"
+  },
+  "route:chatRoutes.js:GET /skills": {
+   "status": "planned"
+  },
+  "route:chatRoutes.js:POST /artifacts": {
+   "status": "planned"
+  },
+  "route:chatRoutes.js:POST /conversations": {
+   "status": "planned"
+  },
+  "route:chatRoutes.js:POST /conversations/:id/handoff": {
+   "status": "planned"
+  },
+  "route:chatRoutes.js:POST /conversations/:id/messages": {
+   "status": "planned"
+  },
+  "route:chatRoutes.js:POST /conversations/:id/messages/batch": {
+   "status": "planned"
+  },
+  "route:chatRoutes.js:POST /conversations/:id/move": {
+   "status": "planned"
+  },
+  "route:chatRoutes.js:POST /conversations/:id/move/preview": {
+   "status": "planned"
+  },
+  "route:chatRoutes.js:POST /conversations/:id/share": {
+   "status": "planned"
+  },
+  "route:chatRoutes.js:POST /init": {
+   "status": "planned"
+  },
+  "route:chatRoutes.js:POST /memories": {
+   "status": "planned"
+  },
+  "route:chatRoutes.js:POST /personas": {
+   "status": "planned"
+  },
+  "route:chatRoutes.js:POST /personas/:id/use": {
+   "status": "planned"
+  },
+  "route:chatRoutes.js:POST /projects": {
+   "status": "planned"
+  },
+  "route:chatRoutes.js:POST /projects/:id/files": {
+   "status": "planned"
+  },
+  "route:chatRoutes.js:POST /scheduled": {
+   "status": "planned"
+  },
+  "route:chatRoutes.js:POST /scheduled-runs/:id/retry": {
+   "status": "planned"
+  },
+  "route:chatRoutes.js:POST /scheduled/:id/run": {
+   "status": "planned"
+  },
+  "route:chatRoutes.js:POST /scheduled/:id/run-now": {
+   "status": "planned"
+  },
+  "route:chatRoutes.js:POST /scheduled/preview": {
+   "status": "planned"
+  },
+  "route:chatRoutes.js:POST /share/:token/accept": {
+   "status": "planned"
+  },
+  "route:chatRoutes.js:POST /skills": {
+   "status": "planned"
+  },
+  "route:chatRoutes.js:POST /sync": {
+   "status": "planned"
+  },
+  "route:chatRoutes.js:POST /web-context/search": {
+   "status": "planned"
+  },
+  "route:chatRoutes.js:POST /web-context/stream": {
+   "status": "planned"
+  },
+  "route:chatRoutes.js:PUT /conversations/:id": {
+   "status": "planned"
+  },
+  "route:chatRoutes.js:PUT /conversations/:id/active-leaf": {
+   "status": "planned"
+  },
+  "route:chatRoutes.js:PUT /conversations/:id/pin": {
+   "status": "planned"
+  },
+  "route:chatRoutes.js:PUT /customize/connectors/:key": {
+   "status": "planned"
+  },
+  "route:chatRoutes.js:PUT /customize/plugins/:listingId": {
+   "status": "planned"
+  },
+  "route:chatRoutes.js:PUT /messages/:id": {
+   "status": "planned"
+  },
+  "route:chatRoutes.js:PUT /personas/:id": {
+   "status": "planned"
+  },
+  "route:chatRoutes.js:PUT /projects/:id": {
+   "status": "planned"
+  },
+  "route:chatRoutes.js:PUT /projects/:id/access/:subjectType/:subjectId": {
+   "status": "planned"
+  },
+  "route:chatRoutes.js:PUT /projects/:id/access/user/by-email": {
+   "status": "planned"
+  },
+  "route:chatRoutes.js:PUT /projects/:id/pin": {
+   "status": "planned"
+  },
+  "route:chatRoutes.js:PUT /projects/pins/order": {
+   "status": "planned"
+  },
+  "route:chatRoutes.js:PUT /scheduled/:id": {
+   "status": "planned"
+  },
+  "route:chatRoutes.js:PUT /skills/:id": {
+   "status": "planned"
+  },
+  "route:cliAuthRoutes.js:GET /poll": {
+   "status": "excluded",
+   "category": "self-authority",
+   "reason": "mints the caller’s own credentials; an agent must not widen its own authority"
+  },
+  "route:cliAuthRoutes.js:POST /cancel": {
+   "status": "excluded",
+   "category": "self-authority",
+   "reason": "mints the caller’s own credentials; an agent must not widen its own authority"
+  },
+  "route:cliAuthRoutes.js:POST /complete": {
+   "status": "excluded",
+   "category": "self-authority",
+   "reason": "mints the caller’s own credentials; an agent must not widen its own authority"
+  },
+  "route:cliAuthRoutes.js:POST /device-code": {
+   "status": "excluded",
+   "category": "self-authority",
+   "reason": "mints the caller’s own credentials; an agent must not widen its own authority"
+  },
+  "route:cliAuthRoutes.js:POST /device-code/poll": {
+   "status": "excluded",
+   "category": "self-authority",
+   "reason": "mints the caller’s own credentials; an agent must not widen its own authority"
+  },
+  "route:cliAuthRoutes.js:POST /device-code/verify": {
+   "status": "excluded",
+   "category": "self-authority",
+   "reason": "mints the caller’s own credentials; an agent must not widen its own authority"
+  },
+  "route:cliAuthRoutes.js:POST /start": {
+   "status": "excluded",
+   "category": "self-authority",
+   "reason": "mints the caller’s own credentials; an agent must not widen its own authority"
+  },
+  "route:clientPolicyRoutes.js:GET /": {
+   "status": "excluded",
+   "category": "protocol",
+   "reason": "protocol endpoint, not an action a person takes"
+  },
+  "route:collaborationRoutes.js:DELETE /sessions/:sessionId": {
+   "status": "planned"
+  },
+  "route:collaborationRoutes.js:GET /my-sessions": {
+   "status": "planned"
+  },
+  "route:collaborationRoutes.js:GET /sessions/:sessionId": {
+   "status": "planned"
+  },
+  "route:collaborationRoutes.js:GET /sessions/:sessionId/participants": {
+   "status": "planned"
+  },
+  "route:collaborationRoutes.js:PATCH /sessions/:sessionId/cursor": {
+   "status": "planned"
+  },
+  "route:collaborationRoutes.js:PATCH /sessions/:sessionId/participants/:participantId/kick": {
+   "status": "planned"
+  },
+  "route:collaborationRoutes.js:POST /invitations/:token/accept": {
+   "status": "planned"
+  },
+  "route:collaborationRoutes.js:POST /sessions": {
+   "status": "planned"
+  },
+  "route:collaborationRoutes.js:POST /sessions/:sessionId/activity": {
+   "status": "planned"
+  },
+  "route:collaborationRoutes.js:POST /sessions/:sessionId/invite": {
+   "status": "planned"
+  },
+  "route:collaborationRoutes.js:POST /sessions/:sessionId/leave": {
+   "status": "planned"
+  },
+  "route:collaborationRoutes.js:POST /sessions/:token/join": {
+   "status": "planned"
+  },
+  "route:connectAuthorityRoutes.js:POST /callback": {
+   "status": "excluded",
+   "category": "service",
+   "reason": "called by another XENO service with a service credential"
+  },
+  "route:connectAuthorityRoutes.js:POST /token": {
+   "status": "excluded",
+   "category": "service",
+   "reason": "called by another XENO service with a service credential"
+  },
+  "route:containerRoutes.js:DELETE /:id": {
+   "status": "planned"
+  },
+  "route:containerRoutes.js:GET /": {
+   "status": "planned"
+  },
+  "route:containerRoutes.js:GET /:containerId/storage": {
+   "status": "planned"
+  },
+  "route:containerRoutes.js:GET /:id": {
+   "status": "planned"
+  },
+  "route:containerRoutes.js:GET /:id/stats": {
+   "status": "planned"
+  },
+  "route:containerRoutes.js:GET /check-limit": {
+   "status": "planned"
+  },
+  "route:containerRoutes.js:GET /pricing": {
+   "status": "planned"
+  },
+  "route:containerRoutes.js:POST /:id/exec": {
+   "status": "planned"
+  },
+  "route:containerRoutes.js:POST /:id/start": {
+   "status": "planned"
+  },
+  "route:containerRoutes.js:POST /:id/stop": {
+   "status": "planned"
+  },
+  "route:containerRoutes.js:POST /create": {
+   "status": "planned"
+  },
+  "route:containerRoutes.js:PUT /:id/config": {
+   "status": "planned"
+  },
+  "route:conversionRoutes.js:DELETE /:id": {
+   "status": "planned"
+  },
+  "route:conversionRoutes.js:GET /download/:id": {
+   "status": "planned"
+  },
+  "route:conversionRoutes.js:GET /formats": {
+   "status": "planned"
+  },
+  "route:conversionRoutes.js:GET /history": {
+   "status": "planned"
+  },
+  "route:conversionRoutes.js:GET /status/:id": {
+   "status": "planned"
+  },
+  "route:conversionRoutes.js:GET /storage": {
+   "status": "planned"
+  },
+  "route:conversionRoutes.js:POST /batch": {
+   "status": "planned"
+  },
+  "route:conversionRoutes.js:POST /convert": {
+   "status": "planned"
+  },
+  "route:conversionRoutes.js:POST /html-to-docx": {
+   "status": "planned"
+  },
+  "route:conversionRoutes.js:POST /upload": {
+   "status": "planned"
+  },
+  "route:dashboardRoutes.js:GET /stats": {
+   "status": "planned"
+  },
+  "route:docsRoutes.js:GET /": {
+   "status": "excluded",
+   "category": "unauthenticated",
+   "reason": "public, no signed-in person"
+  },
+  "route:docsRoutes.js:GET /openapi.json": {
+   "status": "excluded",
+   "category": "unauthenticated",
+   "reason": "public, no signed-in person"
+  },
+  "route:downloadFunnelRoutes.js:GET /intent/:token": {
+   "status": "planned"
+  },
+  "route:downloadFunnelRoutes.js:POST /intent": {
+   "status": "planned"
+  },
+  "route:downloadFunnelRoutes.js:POST /intent/:token/claim": {
+   "status": "planned"
+  },
+  "route:downloadRoutes.js:DELETE /:id": {
+   "status": "planned"
+  },
+  "route:downloadRoutes.js:DELETE /cookies": {
+   "status": "planned"
+  },
+  "route:downloadRoutes.js:GET /cookies/status": {
+   "status": "planned"
+  },
+  "route:downloadRoutes.js:GET /extension/releases": {
+   "status": "planned"
+  },
+  "route:downloadRoutes.js:GET /file/:id": {
+   "status": "planned"
+  },
+  "route:downloadRoutes.js:GET /list": {
+   "status": "planned"
+  },
+  "route:downloadRoutes.js:GET /status/:id": {
+   "status": "planned"
+  },
+  "route:downloadRoutes.js:POST /cleanup": {
+   "status": "planned"
+  },
+  "route:downloadRoutes.js:POST /cookies": {
+   "status": "planned"
+  },
+  "route:downloadRoutes.js:POST /info": {
+   "status": "planned"
+  },
+  "route:downloadRoutes.js:POST /start": {
+   "status": "planned"
+  },
+  "route:emailRoutes.js:GET /unsubscribe": {
+   "status": "planned"
+  },
+  "route:emailRoutes.js:POST /unsubscribe": {
+   "status": "planned"
+  },
+  "route:emailWebhookRoutes.js:POST /resend": {
+   "status": "excluded",
+   "category": "protocol",
+   "reason": "protocol endpoint, not an action a person takes"
+  },
+  "route:faviconRoutes.js:GET /": {
+   "status": "excluded",
+   "category": "unauthenticated",
+   "reason": "public, no signed-in person"
+  },
+  "route:fileSystemRoutes.js:DELETE /:id": {
+   "status": "planned"
+  },
+  "route:fileSystemRoutes.js:GET /": {
+   "status": "planned"
+  },
+  "route:fileSystemRoutes.js:GET /:id": {
+   "status": "planned"
+  },
+  "route:fileSystemRoutes.js:GET /:id/download": {
+   "status": "planned"
+  },
+  "route:fileSystemRoutes.js:GET /:id/history": {
+   "status": "planned"
+  },
+  "route:fileSystemRoutes.js:GET /search": {
+   "status": "planned"
+  },
+  "route:fileSystemRoutes.js:POST /folders": {
+   "status": "planned"
+  },
+  "route:fileSystemRoutes.js:POST /upload": {
+   "status": "planned"
+  },
+  "route:fileSystemRoutes.js:PUT /:id": {
+   "status": "planned"
+  },
+  "route:forumRoutes.js:DELETE /posts/:id": {
+   "status": "planned"
+  },
+  "route:forumRoutes.js:DELETE /posts/:id/accept": {
+   "status": "planned"
+  },
+  "route:forumRoutes.js:DELETE /subscriptions": {
+   "status": "planned"
+  },
+  "route:forumRoutes.js:DELETE /threads/:shortId": {
+   "status": "planned"
+  },
+  "route:forumRoutes.js:GET /digest": {
+   "status": "capability",
+   "capability": "forum.digest.get"
+  },
+  "route:forumRoutes.js:GET /feed": {
+   "status": "planned"
+  },
+  "route:forumRoutes.js:GET /flags": {
+   "status": "planned"
+  },
+  "route:forumRoutes.js:GET /mcp": {
+   "status": "excluded",
+   "category": "protocol",
+   "reason": "the Forum MCP transport"
+  },
+  "route:forumRoutes.js:GET /me": {
+   "status": "planned"
+  },
+  "route:forumRoutes.js:GET /me/activity": {
+   "status": "planned"
+  },
+  "route:forumRoutes.js:GET /moderation-log": {
+   "status": "planned"
+  },
+  "route:forumRoutes.js:GET /notifications": {
+   "status": "planned"
+  },
+  "route:forumRoutes.js:GET /predicate": {
+   "status": "planned"
+  },
+  "route:forumRoutes.js:GET /search": {
+   "status": "capability",
+   "capability": "forum.thread.search"
+  },
+  "route:forumRoutes.js:GET /spaces": {
+   "status": "planned"
+  },
+  "route:forumRoutes.js:GET /subscriptions": {
+   "status": "planned"
+  },
+  "route:forumRoutes.js:GET /tags": {
+   "status": "planned"
+  },
+  "route:forumRoutes.js:GET /threads": {
+   "status": "planned"
+  },
+  "route:forumRoutes.js:GET /threads/:shortId": {
+   "status": "capability",
+   "capability": "forum.thread.get"
+  },
+  "route:forumRoutes.js:GET /tickets": {
+   "status": "planned"
+  },
+  "route:forumRoutes.js:GET /tickets/:shortId": {
+   "status": "planned"
+  },
+  "route:forumRoutes.js:GET /tickets/mine": {
+   "status": "planned"
+  },
+  "route:forumRoutes.js:PATCH /posts/:id": {
+   "status": "planned"
+  },
+  "route:forumRoutes.js:POST /dedup-check": {
+   "status": "capability",
+   "capability": "forum.thread.suggest_duplicate"
+  },
+  "route:forumRoutes.js:POST /flags/:id/resolve": {
+   "status": "planned"
+  },
+  "route:forumRoutes.js:POST /mcp": {
+   "status": "excluded",
+   "category": "protocol",
+   "reason": "the Forum MCP transport"
+  },
+  "route:forumRoutes.js:POST /moderation/actions": {
+   "status": "planned"
+  },
+  "route:forumRoutes.js:POST /notifications/read": {
+   "status": "planned"
+  },
+  "route:forumRoutes.js:POST /posts/:id/accept": {
+   "status": "planned"
+  },
+  "route:forumRoutes.js:POST /report": {
+   "status": "planned"
+  },
+  "route:forumRoutes.js:POST /report/preflight": {
+   "status": "planned"
+  },
+  "route:forumRoutes.js:POST /subscriptions": {
+   "status": "planned"
+  },
+  "route:forumRoutes.js:POST /threads": {
+   "status": "capability",
+   "capability": "forum.thread.create"
+  },
+  "route:forumRoutes.js:POST /threads/:shortId/fixed": {
+   "status": "capability",
+   "capability": "forum.thread.mark_fixed"
+  },
+  "route:forumRoutes.js:POST /threads/:shortId/opened": {
+   "status": "planned"
+  },
+  "route:forumRoutes.js:POST /threads/:shortId/posts": {
+   "status": "capability",
+   "capability": "forum.post.reply"
+  },
+  "route:forumRoutes.js:POST /tickets/:shortId/posts": {
+   "status": "planned"
+  },
+  "route:forumRoutes.js:POST /tickets/:shortId/publish": {
+   "status": "planned"
+  },
+  "route:forumRoutes.js:POST /tickets/:shortId/status": {
+   "status": "planned"
+  },
+  "route:forumRoutes.js:PUT /predicate": {
+   "status": "planned"
+  },
+  "route:forumRoutes.js:PUT /threads/:shortId/subscription": {
+   "status": "capability",
+   "capability": "forum.subscription.create"
+  },
+  "route:handleRoutes.js:GET /check": {
+   "status": "planned"
+  },
+  "route:handleRoutes.js:POST /claim": {
+   "status": "planned"
+  },
+  "route:healthRoutes.js:GET /health": {
+   "status": "excluded",
+   "category": "unauthenticated",
+   "reason": "public, no signed-in person"
+  },
+  "route:healthRoutes.js:GET /live": {
+   "status": "excluded",
+   "category": "unauthenticated",
+   "reason": "public, no signed-in person"
+  },
+  "route:healthRoutes.js:GET /ready": {
+   "status": "excluded",
+   "category": "unauthenticated",
+   "reason": "public, no signed-in person"
+  },
+  "route:imageRoutes.js:DELETE /assets/:assetId": {
+   "status": "planned"
+  },
+  "route:imageRoutes.js:DELETE /generations/:generationId": {
+   "status": "planned"
+  },
+  "route:imageRoutes.js:DELETE /projects/:projectId": {
+   "status": "planned"
+  },
+  "route:imageRoutes.js:DELETE /sessions/:sessionId": {
+   "status": "planned"
+  },
+  "route:imageRoutes.js:GET /assets/:projectId": {
+   "status": "planned"
+  },
+  "route:imageRoutes.js:GET /generations": {
+   "status": "planned"
+  },
+  "route:imageRoutes.js:GET /health": {
+   "status": "planned"
+  },
+  "route:imageRoutes.js:GET /projects": {
+   "status": "planned"
+  },
+  "route:imageRoutes.js:GET /projects/:projectId": {
+   "status": "planned"
+  },
+  "route:imageRoutes.js:GET /sessions/:projectId": {
+   "status": "planned"
+  },
+  "route:imageRoutes.js:PATCH /generations/:generationId/favorite": {
+   "status": "planned"
+  },
+  "route:imageRoutes.js:POST /assets/create": {
+   "status": "planned"
+  },
+  "route:imageRoutes.js:POST /generations": {
+   "status": "planned"
+  },
+  "route:imageRoutes.js:POST /generations/init": {
+   "status": "planned"
+  },
+  "route:imageRoutes.js:POST /projects/create": {
+   "status": "planned"
+  },
+  "route:imageRoutes.js:POST /sessions/save": {
+   "status": "planned"
+  },
+  "route:imageRoutes.js:POST /xeno-flow/generate": {
+   "status": "planned"
+  },
+  "route:imageRoutes.js:POST /xeno-flow/generate (publicRouter)": {
+   "status": "planned"
+  },
+  "route:imageRoutes.js:PUT /projects/:projectId": {
+   "status": "planned"
+  },
+  "route:inferenceCredentialRoutes.js:POST /": {
+   "status": "excluded",
+   "category": "self-authority",
+   "reason": "mints the caller’s own credentials; an agent must not widen its own authority"
+  },
+  "route:inferenceServiceRoutes.js:POST /invalidate": {
+   "status": "excluded",
+   "category": "service",
+   "reason": "called by another XENO service with a service credential"
+  },
+  "route:inferenceServiceRoutes.js:POST /resolve": {
+   "status": "excluded",
+   "category": "service",
+   "reason": "called by another XENO service with a service credential"
+  },
+  "route:inferenceServiceRoutes.js:POST /usage": {
+   "status": "excluded",
+   "category": "service",
+   "reason": "called by another XENO service with a service credential"
+  },
+  "route:inferenceSessionKeyRoutes.js:DELETE /:id": {
+   "status": "excluded",
+   "category": "self-authority",
+   "reason": "mints the caller’s own credentials; an agent must not widen its own authority"
+  },
+  "route:inferenceSessionKeyRoutes.js:POST /": {
+   "status": "excluded",
+   "category": "self-authority",
+   "reason": "mints the caller’s own credentials; an agent must not widen its own authority"
+  },
+  "route:jobRoutes.js:GET /": {
+   "status": "planned"
+  },
+  "route:jobRoutes.js:GET /:id": {
+   "status": "planned"
+  },
+  "route:jobRoutes.js:GET /stats": {
+   "status": "planned"
+  },
+  "route:jobRoutes.js:POST /:id/cancel": {
+   "status": "planned"
+  },
+  "route:jobRoutes.js:POST /:id/retry": {
+   "status": "planned"
+  },
+  "route:jobRoutes.js:POST /cleanup": {
+   "status": "planned"
+  },
+  "route:learnRoutes.js:GET /": {
+   "status": "planned"
+  },
+  "route:learnRoutes.js:GET /:slug": {
+   "status": "planned"
+  },
+  "route:learnRoutes.js:GET /categories": {
+   "status": "planned"
+  },
+  "route:libraryRoutes.js:DELETE /assets/:source/:id": {
+   "status": "planned"
+  },
+  "route:libraryRoutes.js:DELETE /assets/:source/:id/star": {
+   "status": "planned"
+  },
+  "route:libraryRoutes.js:DELETE /folders/:id": {
+   "status": "planned"
+  },
+  "route:libraryRoutes.js:DELETE /shares/:id": {
+   "status": "planned"
+  },
+  "route:libraryRoutes.js:DELETE /trash": {
+   "status": "planned"
+  },
+  "route:libraryRoutes.js:DELETE /trash/:source/:id": {
+   "status": "planned"
+  },
+  "route:libraryRoutes.js:GET /assets": {
+   "status": "capability",
+   "capability": "library.file.list"
+  },
+  "route:libraryRoutes.js:GET /assets/:id/content": {
+   "status": "capability",
+   "capability": "library.file.get"
+  },
+  "route:libraryRoutes.js:GET /assets/:id/status": {
+   "status": "planned"
+  },
+  "route:libraryRoutes.js:GET /assets/file/:id/shares": {
+   "status": "planned"
+  },
+  "route:libraryRoutes.js:GET /assets/file/:id/versions": {
+   "status": "planned"
+  },
+  "route:libraryRoutes.js:GET /folders": {
+   "status": "planned"
+  },
+  "route:libraryRoutes.js:GET /folders/:id/shares": {
+   "status": "planned"
+  },
+  "route:libraryRoutes.js:GET /links/:token": {
+   "status": "planned"
+  },
+  "route:libraryRoutes.js:GET /operations/:key": {
+   "status": "planned"
+  },
+  "route:libraryRoutes.js:GET /storage": {
+   "status": "planned"
+  },
+  "route:libraryRoutes.js:PATCH /assets/:source/:id": {
+   "status": "planned"
+  },
+  "route:libraryRoutes.js:PATCH /folders/:id": {
+   "status": "planned"
+  },
+  "route:libraryRoutes.js:POST /assets/:id/ingestions/retry": {
+   "status": "planned"
+  },
+  "route:libraryRoutes.js:POST /assets/:id/link": {
+   "status": "planned"
+  },
+  "route:libraryRoutes.js:POST /assets/:source/:id/restore": {
+   "status": "planned"
+  },
+  "route:libraryRoutes.js:POST /assets/:source/:id/trash": {
+   "status": "planned"
+  },
+  "route:libraryRoutes.js:POST /assets/file/:id/shares": {
+   "status": "planned"
+  },
+  "route:libraryRoutes.js:POST /assets/file/:id/versions/:version/restore": {
+   "status": "planned"
+  },
+  "route:libraryRoutes.js:POST /folders": {
+   "status": "planned"
+  },
+  "route:libraryRoutes.js:POST /folders/:id/shares": {
+   "status": "planned"
+  },
+  "route:libraryRoutes.js:PUT /assets/:source/:id/area": {
+   "status": "planned"
+  },
+  "route:libraryRoutes.js:PUT /assets/:source/:id/folder": {
+   "status": "planned"
+  },
+  "route:libraryRoutes.js:PUT /assets/:source/:id/star": {
+   "status": "planned"
+  },
+  "route:liveConversationCollaborationRoutes.js:DELETE /conversations/:id/collaborators/:participantUserId": {
+   "status": "planned"
+  },
+  "route:liveConversationCollaborationRoutes.js:DELETE /conversations/:id/shares/:shareId/live": {
+   "status": "planned"
+  },
+  "route:liveConversationCollaborationRoutes.js:GET /conversations/:id/collaboration/events": {
+   "status": "planned"
+  },
+  "route:liveConversationCollaborationRoutes.js:GET /conversations/:id/collaborators": {
+   "status": "planned"
+  },
+  "route:liveConversationCollaborationRoutes.js:POST /agent-conversations/register": {
+   "status": "planned"
+  },
+  "route:liveConversationCollaborationRoutes.js:POST /conversations/:id/collaboration/entries": {
+   "status": "planned"
+  },
+  "route:liveConversationCollaborationRoutes.js:POST /conversations/:id/collaboration/owner-events": {
+   "status": "planned"
+  },
+  "route:liveConversationCollaborationRoutes.js:POST /conversations/:id/collaboration/v2/entries": {
+   "status": "planned"
+  },
+  "route:liveConversationCollaborationRoutes.js:POST /conversations/:id/collaboration/v2/owner-events": {
+   "status": "planned"
+  },
+  "route:marketplaceRoutes.js:DELETE /rental-partitions/:id/content": {
+   "status": "planned"
+  },
+  "route:marketplaceRoutes.js:GET /catalog": {
+   "status": "planned"
+  },
+  "route:marketplaceRoutes.js:GET /developer/earnings": {
+   "status": "planned"
+  },
+  "route:marketplaceRoutes.js:GET /developer/listings/:id/rental-disclosures": {
+   "status": "planned"
+  },
+  "route:marketplaceRoutes.js:GET /developer/me": {
+   "status": "planned"
+  },
+  "route:marketplaceRoutes.js:GET /download/:listingVersionId": {
+   "status": "planned"
+  },
+  "route:marketplaceRoutes.js:GET /invocations/:id": {
+   "status": "planned"
+  },
+  "route:marketplaceRoutes.js:GET /listings/:slug": {
+   "status": "planned"
+  },
+  "route:marketplaceRoutes.js:GET /me/entitlements": {
+   "status": "planned"
+  },
+  "route:marketplaceRoutes.js:GET /rental-bindings": {
+   "status": "planned"
+  },
+  "route:marketplaceRoutes.js:GET /rental-partitions": {
+   "status": "planned"
+  },
+  "route:marketplaceRoutes.js:GET /rental-partitions/:id/export": {
+   "status": "planned"
+  },
+  "route:marketplaceRoutes.js:GET /submissions": {
+   "status": "planned"
+  },
+  "route:marketplaceRoutes.js:GET /team-imports/:teamId": {
+   "status": "planned"
+  },
+  "route:marketplaceRoutes.js:POST /developer/payouts": {
+   "status": "planned"
+  },
+  "route:marketplaceRoutes.js:POST /developer/register": {
+   "status": "planned"
+  },
+  "route:marketplaceRoutes.js:POST /invoke/:listingId": {
+   "status": "planned"
+  },
+  "route:marketplaceRoutes.js:POST /listings": {
+   "status": "planned"
+  },
+  "route:marketplaceRoutes.js:POST /listings/:id/import-team": {
+   "status": "planned"
+  },
+  "route:marketplaceRoutes.js:POST /listings/:id/purchase": {
+   "status": "planned"
+  },
+  "route:marketplaceRoutes.js:POST /listings/:id/rent": {
+   "status": "planned"
+  },
+  "route:marketplaceRoutes.js:POST /listings/:id/rental/bind": {
+   "status": "planned"
+  },
+  "route:marketplaceRoutes.js:POST /listings/:id/reviews": {
+   "status": "planned"
+  },
+  "route:marketplaceRoutes.js:POST /listings/:id/submit": {
+   "status": "planned"
+  },
+  "route:marketplaceRoutes.js:POST /listings/:id/subscribe": {
+   "status": "planned"
+  },
+  "route:marketplaceRoutes.js:POST /listings/:id/versions": {
+   "status": "planned"
+  },
+  "route:marketplaceRoutes.js:POST /rental-bindings/:id/revoke": {
+   "status": "planned"
+  },
+  "route:marketplaceRoutes.js:POST /rental-partitions/:id/disclosures": {
+   "status": "planned"
+  },
+  "route:marketplaceRoutes.js:POST /submissions/:id/approve": {
+   "status": "planned"
+  },
+  "route:marketplaceRoutes.js:POST /submissions/:id/reject": {
+   "status": "planned"
+  },
+  "route:mediaGenerationRoutes.js:DELETE /:id": {
+   "status": "planned"
+  },
+  "route:mediaGenerationRoutes.js:GET /": {
+   "status": "capability",
+   "capability": [
+    "studio.image.list",
+    "studio.video.list"
+   ]
+  },
+  "route:mediaGenerationRoutes.js:GET /:id": {
+   "status": "capability",
+   "capability": [
+    "studio.image.get",
+    "studio.video.get"
+   ]
+  },
+  "route:mediaGenerationRoutes.js:GET /catalog": {
+   "status": "capability",
+   "capability": [
+    "studio.image_model.list",
+    "studio.video_model.list"
+   ]
+  },
+  "route:mediaGenerationRoutes.js:POST /": {
+   "status": "capability",
+   "capability": [
+    "studio.image.generate",
+    "studio.video.generate"
+   ]
+  },
+  "route:mediaGenerationRoutes.js:POST /:id/approve": {
+   "status": "planned"
+  },
+  "route:mediaGenerationRoutes.js:POST /:id/cancel": {
+   "status": "planned"
+  },
+  "route:mediaGenerationRoutes.js:POST /:id/favorite": {
+   "status": "planned"
+  },
+  "route:mediaGenerationRoutes.js:POST /:id/retry": {
+   "status": "planned"
+  },
+  "route:mediaGenerationRoutes.js:POST /quote": {
+   "status": "planned"
+  },
+  "route:oauth2Routes.js:GET /.well-known/oauth-authorization-server": {
+   "status": "excluded",
+   "category": "protocol",
+   "reason": "protocol endpoint, not an action a person takes"
+  },
+  "route:oauth2Routes.js:GET /.well-known/openid-configuration": {
+   "status": "excluded",
+   "category": "protocol",
+   "reason": "protocol endpoint, not an action a person takes"
+  },
+  "route:oauth2Routes.js:GET /authorize": {
+   "status": "excluded",
+   "category": "protocol",
+   "reason": "protocol endpoint, not an action a person takes"
+  },
+  "route:oauth2Routes.js:GET /client_info": {
+   "status": "excluded",
+   "category": "protocol",
+   "reason": "protocol endpoint, not an action a person takes"
+  },
+  "route:oauth2Routes.js:GET /jwks": {
+   "status": "excluded",
+   "category": "protocol",
+   "reason": "protocol endpoint, not an action a person takes"
+  },
+  "route:oauth2Routes.js:GET /openid-configuration": {
+   "status": "excluded",
+   "category": "protocol",
+   "reason": "protocol endpoint, not an action a person takes"
+  },
+  "route:oauth2Routes.js:POST /authorize": {
+   "status": "excluded",
+   "category": "protocol",
+   "reason": "protocol endpoint, not an action a person takes"
+  },
+  "route:oauth2Routes.js:POST /broker/installations": {
+   "status": "excluded",
+   "category": "protocol",
+   "reason": "protocol endpoint, not an action a person takes"
+  },
+  "route:oauth2Routes.js:POST /device_authorization": {
+   "status": "excluded",
+   "category": "protocol",
+   "reason": "protocol endpoint, not an action a person takes"
+  },
+  "route:oauth2Routes.js:POST /device/approve": {
+   "status": "excluded",
+   "category": "protocol",
+   "reason": "protocol endpoint, not an action a person takes"
+  },
+  "route:oauth2Routes.js:POST /device/inspect": {
+   "status": "excluded",
+   "category": "protocol",
+   "reason": "protocol endpoint, not an action a person takes"
+  },
+  "route:oauth2Routes.js:POST /end_session": {
+   "status": "excluded",
+   "category": "protocol",
+   "reason": "protocol endpoint, not an action a person takes"
+  },
+  "route:oauth2Routes.js:POST /introspect": {
+   "status": "excluded",
+   "category": "protocol",
+   "reason": "protocol endpoint, not an action a person takes"
+  },
+  "route:oauth2Routes.js:POST /logout_everywhere": {
+   "status": "excluded",
+   "category": "protocol",
+   "reason": "protocol endpoint, not an action a person takes"
+  },
+  "route:oauth2Routes.js:POST /register": {
+   "status": "excluded",
+   "category": "protocol",
+   "reason": "protocol endpoint, not an action a person takes"
+  },
+  "route:oauth2Routes.js:POST /revoke": {
+   "status": "excluded",
+   "category": "protocol",
+   "reason": "protocol endpoint, not an action a person takes"
+  },
+  "route:oauth2Routes.js:POST /token": {
+   "status": "excluded",
+   "category": "protocol",
+   "reason": "protocol endpoint, not an action a person takes"
+  },
+  "route:officeCanvasRoutes.js:DELETE /canvases/:canvasId": {
+   "status": "planned"
+  },
+  "route:officeCanvasRoutes.js:DELETE /canvases/:canvasId/collaborators/:collaboratorUserId": {
+   "status": "planned"
+  },
+  "route:officeCanvasRoutes.js:GET /canvases": {
+   "status": "planned"
+  },
+  "route:officeCanvasRoutes.js:GET /canvases/:canvasId": {
+   "status": "planned"
+  },
+  "route:officeCanvasRoutes.js:GET /canvases/:canvasId/collaborators": {
+   "status": "planned"
+  },
+  "route:officeCanvasRoutes.js:POST /canvases": {
+   "status": "planned"
+  },
+  "route:officeCanvasRoutes.js:POST /canvases/:canvasId/share": {
+   "status": "planned"
+  },
+  "route:officeCanvasRoutes.js:POST /canvases/:canvasId/share/disable": {
+   "status": "planned"
+  },
+  "route:officeCanvasRoutes.js:POST /join/:token": {
+   "status": "planned"
+  },
+  "route:officeCanvasRoutes.js:PUT /canvases/:canvasId": {
+   "status": "planned"
+  },
+  "route:platformAgentRoutes.js:DELETE /:id": {
+   "status": "planned"
+  },
+  "route:platformAgentRoutes.js:DELETE /:id/access/:userId/:right": {
+   "status": "planned"
+  },
+  "route:platformAgentRoutes.js:DELETE /:id/credentials/:cid": {
+   "status": "planned",
+   "note": "revoking is narrowing, so an agent may revoke; needs a capability"
+  },
+  "route:platformAgentRoutes.js:DELETE /:id/projects/:projectId": {
+   "status": "planned"
+  },
+  "route:platformAgentRoutes.js:GET /": {
+   "status": "planned"
+  },
+  "route:platformAgentRoutes.js:GET /:id": {
+   "status": "planned"
+  },
+  "route:platformAgentRoutes.js:GET /:id/access": {
+   "status": "planned"
+  },
+  "route:platformAgentRoutes.js:GET /:id/activity": {
+   "status": "planned"
+  },
+  "route:platformAgentRoutes.js:GET /:id/project-choices": {
+   "status": "planned"
+  },
+  "route:platformAgentRoutes.js:GET /:id/runs": {
+   "status": "planned"
+  },
+  "route:platformAgentRoutes.js:GET /:id/transfers": {
+   "status": "planned"
+  },
+  "route:platformAgentRoutes.js:GET /lends/inbox": {
+   "status": "planned"
+  },
+  "route:platformAgentRoutes.js:GET /presence": {
+   "status": "planned"
+  },
+  "route:platformAgentRoutes.js:GET /presence/stream": {
+   "status": "planned"
+  },
+  "route:platformAgentRoutes.js:GET /transfers/:tid/review-subject": {
+   "status": "planned"
+  },
+  "route:platformAgentRoutes.js:GET /transfers/inbox": {
+   "status": "planned"
+  },
+  "route:platformAgentRoutes.js:PATCH /:id": {
+   "status": "planned"
+  },
+  "route:platformAgentRoutes.js:POST /": {
+   "status": "planned"
+  },
+  "route:platformAgentRoutes.js:POST /:id/accountable": {
+   "status": "planned"
+  },
+  "route:platformAgentRoutes.js:POST /:id/credentials": {
+   "status": "excluded",
+   "category": "self-authority",
+   "reason": "mints an agent credential; an agent must not mint its own"
+  },
+  "route:platformAgentRoutes.js:POST /:id/lend": {
+   "status": "planned"
+  },
+  "route:platformAgentRoutes.js:POST /:id/runs": {
+   "status": "planned"
+  },
+  "route:platformAgentRoutes.js:POST /:id/transfers": {
+   "status": "planned"
+  },
+  "route:platformAgentRoutes.js:POST /lends/:lendId/accept": {
+   "status": "planned"
+  },
+  "route:platformAgentRoutes.js:POST /lends/:lendId/decline": {
+   "status": "planned"
+  },
+  "route:platformAgentRoutes.js:POST /lends/:lendId/revoke": {
+   "status": "planned"
+  },
+  "route:platformAgentRoutes.js:POST /runs/:runId/stop": {
+   "status": "planned"
+  },
+  "route:platformAgentRoutes.js:POST /transfers/:tid/accept": {
+   "status": "planned"
+  },
+  "route:platformAgentRoutes.js:POST /transfers/:tid/decline": {
+   "status": "planned"
+  },
+  "route:platformAgentRoutes.js:POST /transfers/:tid/review": {
+   "status": "planned"
+  },
+  "route:platformAgentRoutes.js:PUT /:id/access/:userId/:right": {
+   "status": "planned"
+  },
+  "route:platformAgentRoutes.js:PUT /:id/division": {
+   "status": "planned"
+  },
+  "route:platformAgentRoutes.js:PUT /:id/projects/:projectId": {
+   "status": "planned"
+  },
+  "route:platformAgentRoutes.js:PUT /:id/webhook": {
+   "status": "planned"
+  },
+  "route:productDownloadRoutes.js:GET /:slug/download/:os{/:version}": {
+   "status": "planned"
+  },
+  "route:productDownloadRoutes.js:GET /:slug/grant (updateGrantRouter)": {
+   "status": "planned"
+  },
+  "route:productDownloadRoutes.js:POST /grant (grantRouter)": {
+   "status": "planned"
+  },
+  "route:projectDirectoryBindingRoutes.js:GET /projects/:id/directories": {
+   "status": "planned"
+  },
+  "route:projectDirectoryBindingRoutes.js:GET /projects/:id/execution-root": {
+   "status": "planned"
+  },
+  "route:projectDirectoryBindingRoutes.js:POST /directories/:bindingId/revoke": {
+   "status": "planned"
+  },
+  "route:projectDirectoryBindingRoutes.js:POST /directories/resolve": {
+   "status": "planned"
+  },
+  "route:projectDirectoryBindingRoutes.js:POST /projects/:id/directories": {
+   "status": "planned"
+  },
+  "route:projectPublicationRoutes.js:ALL /": {
+   "status": "planned"
+  },
+  "route:projectPublicationRoutes.js:ALL /:projectId": {
+   "status": "planned"
+  },
+  "route:projectPublicationRoutes.js:ALL /operations/read": {
+   "status": "planned"
+  },
+  "route:projectPublicationRoutes.js:GET /": {
+   "status": "planned"
+  },
+  "route:projectPublicationRoutes.js:GET /:projectId": {
+   "status": "planned"
+  },
+  "route:serviceLedgerRoutes.js:GET /balance": {
+   "status": "excluded",
+   "category": "service",
+   "reason": "called by another XENO service with a service credential"
+  },
+  "route:serviceLedgerRoutes.js:GET /quote": {
+   "status": "excluded",
+   "category": "service",
+   "reason": "called by another XENO service with a service credential"
+  },
+  "route:serviceLedgerRoutes.js:POST /agent-runs/credential": {
+   "status": "excluded",
+   "category": "service",
+   "reason": "called by another XENO service with a service credential"
+  },
+  "route:serviceLedgerRoutes.js:POST /holds": {
+   "status": "excluded",
+   "category": "service",
+   "reason": "called by another XENO service with a service credential"
+  },
+  "route:serviceLedgerRoutes.js:POST /holds/:holdId/extend": {
+   "status": "excluded",
+   "category": "service",
+   "reason": "called by another XENO service with a service credential"
+  },
+  "route:serviceLedgerRoutes.js:POST /holds/:holdId/settle": {
+   "status": "excluded",
+   "category": "service",
+   "reason": "called by another XENO service with a service credential"
+  },
+  "route:serviceLedgerRoutes.js:POST /holds/:holdId/void": {
+   "status": "excluded",
+   "category": "service",
+   "reason": "called by another XENO service with a service credential"
+  },
+  "route:serviceLedgerRoutes.js:POST /project-runs/settle": {
+   "status": "excluded",
+   "category": "service",
+   "reason": "called by another XENO service with a service credential"
+  },
+  "route:serviceLedgerRoutes.js:POST /runs/:admissionId/close": {
+   "status": "excluded",
+   "category": "service",
+   "reason": "called by another XENO service with a service credential"
+  },
+  "route:serviceLedgerRoutes.js:POST /runs/:admissionId/draws": {
+   "status": "excluded",
+   "category": "service",
+   "reason": "called by another XENO service with a service credential"
+  },
+  "route:serviceLedgerRoutes.js:POST /runs/:admissionId/draws/:drawId/corrections": {
+   "status": "excluded",
+   "category": "service",
+   "reason": "called by another XENO service with a service credential"
+  },
+  "route:serviceLedgerRoutes.js:POST /runs/:admissionId/draws/:drawId/corrections/read": {
+   "status": "excluded",
+   "category": "service",
+   "reason": "called by another XENO service with a service credential"
+  },
+  "route:serviceLedgerRoutes.js:POST /runs/:admissionId/draws/:drawId/extend": {
+   "status": "excluded",
+   "category": "service",
+   "reason": "called by another XENO service with a service credential"
+  },
+  "route:serviceLedgerRoutes.js:POST /runs/:admissionId/draws/:drawId/settle": {
+   "status": "excluded",
+   "category": "service",
+   "reason": "called by another XENO service with a service credential"
+  },
+  "route:serviceLedgerRoutes.js:POST /runs/:admissionId/draws/:drawId/void": {
+   "status": "excluded",
+   "category": "service",
+   "reason": "called by another XENO service with a service credential"
+  },
+  "route:serviceLedgerRoutes.js:POST /usage": {
+   "status": "excluded",
+   "category": "service",
+   "reason": "called by another XENO service with a service credential"
+  },
+  "route:shellSessionRoutes.js:GET /:id/signal": {
+   "status": "planned"
+  },
+  "route:shellSessionRoutes.js:GET /ice": {
+   "status": "planned"
+  },
+  "route:shellSessionRoutes.js:POST /": {
+   "status": "planned"
+  },
+  "route:shellSessionRoutes.js:POST /:id/code": {
+   "status": "planned"
+  },
+  "route:shellSessionRoutes.js:POST /:id/leave": {
+   "status": "planned"
+  },
+  "route:shellSessionRoutes.js:POST /:id/signal": {
+   "status": "planned"
+  },
+  "route:shellSessionRoutes.js:POST /join": {
+   "status": "planned"
+  },
+  "route:siteGateRoutes.js:GET /check": {
+   "status": "excluded",
+   "category": "unauthenticated",
+   "reason": "public, no signed-in person"
+  },
+  "route:siteGateRoutes.js:POST /lock": {
+   "status": "excluded",
+   "category": "unauthenticated",
+   "reason": "public, no signed-in person"
+  },
+  "route:siteGateRoutes.js:POST /unlock": {
+   "status": "excluded",
+   "category": "unauthenticated",
+   "reason": "public, no signed-in person"
+  },
+  "route:tokenizerRoutes.js:GET /health": {
+   "status": "planned"
+  },
+  "route:tokenizerRoutes.js:POST /count": {
+   "status": "planned"
+  },
+  "route:tokenizerRoutes.js:POST /messages": {
+   "status": "planned"
+  },
+  "route:userDataRoutes.js:DELETE /files/:id": {
+   "status": "planned"
+  },
+  "route:userDataRoutes.js:GET /files": {
+   "status": "planned"
+  },
+  "route:userDataRoutes.js:GET /settings": {
+   "status": "planned"
+  },
+  "route:userDataRoutes.js:GET /usage": {
+   "status": "planned"
+  },
+  "route:userDataRoutes.js:GET /usage/summary": {
+   "status": "planned"
+  },
+  "route:userDataRoutes.js:PATCH /settings": {
+   "status": "planned"
+  },
+  "route:userDataRoutes.js:POST /files": {
+   "status": "planned"
+  },
+  "route:userDataRoutes.js:POST /init": {
+   "status": "planned"
+  },
+  "route:userDataRoutes.js:POST /usage": {
+   "status": "planned"
+  },
+  "route:userDataRoutes.js:PUT /files/:id/touch": {
+   "status": "planned"
+  },
+  "route:userDataRoutes.js:PUT /settings": {
+   "status": "planned"
+  },
+  "route:userNotificationsRoutes.js:GET /": {
+   "status": "planned"
+  },
+  "route:userNotificationsRoutes.js:POST /read": {
+   "status": "planned"
+  },
+  "route:v2AuthzRoutes.js:GET /objects/:type/:id": {
+   "status": "planned"
+  },
+  "route:v2AuthzRoutes.js:POST /check": {
+   "status": "planned"
+  },
+  "route:v2AuthzRoutes.js:POST /write": {
+   "status": "planned"
+  },
+  "route:v2InferenceRoutes.js:DELETE /credentials/:id": {
+   "status": "planned"
+  },
+  "route:v2InferenceRoutes.js:DELETE /routes/:surface": {
+   "status": "planned"
+  },
+  "route:v2InferenceRoutes.js:GET /credentials": {
+   "status": "planned"
+  },
+  "route:v2InferenceRoutes.js:GET /credentials/:id/models": {
+   "status": "planned"
+  },
+  "route:v2InferenceRoutes.js:GET /products": {
+   "status": "planned"
+  },
+  "route:v2InferenceRoutes.js:GET /providers": {
+   "status": "planned"
+  },
+  "route:v2InferenceRoutes.js:GET /routes": {
+   "status": "planned"
+  },
+  "route:v2InferenceRoutes.js:POST /credentials": {
+   "status": "planned"
+  },
+  "route:v2InferenceRoutes.js:POST /credentials/:id/revoke": {
+   "status": "planned"
+  },
+  "route:v2InferenceRoutes.js:POST /resolve": {
+   "status": "planned"
+  },
+  "route:v2InferenceRoutes.js:PUT /credentials/:id/models": {
+   "status": "planned"
+  },
+  "route:v2InferenceRoutes.js:PUT /routes/:surface": {
+   "status": "planned"
+  },
+  "route:v2LedgerRoutes.js:GET /balance": {
+   "status": "planned"
+  },
+  "route:v2LedgerRoutes.js:GET /quota": {
+   "status": "planned"
+  },
+  "route:v2LedgerRoutes.js:GET /usage": {
+   "status": "planned"
+  },
+  "route:v2LedgerRoutes.js:GET /verify": {
+   "status": "planned"
+  },
+  "route:v2LedgerRoutes.js:PATCH /usage-credits": {
+   "status": "planned"
+  },
+  "route:v2LedgerRoutes.js:POST /grants": {
+   "status": "planned"
+  },
+  "route:v2LedgerRoutes.js:POST /holds": {
+   "status": "planned"
+  },
+  "route:v2LedgerRoutes.js:POST /holds/:holdId/settle": {
+   "status": "planned"
+  },
+  "route:v2LedgerRoutes.js:POST /holds/:holdId/void": {
+   "status": "planned"
+  },
+  "route:v2LedgerRoutes.js:POST /usage": {
+   "status": "planned"
+  },
+  "route:v2LedgerRoutes.js:PUT /caps": {
+   "status": "planned"
+  },
+  "route:v2MeRoutes.js:GET /": {
+   "status": "planned"
+  },
+  "route:v2MeRoutes.js:POST /activate-workspace": {
+   "status": "planned"
+  },
+  "route:v2MeRoutes.js:POST /erase": {
+   "status": "planned"
+  },
+  "route:videoRoutes.js:DELETE /projects/:projectId": {
+   "status": "planned"
+  },
+  "route:videoRoutes.js:GET /assets/:projectId": {
+   "status": "planned"
+  },
+  "route:videoRoutes.js:GET /projects": {
+   "status": "planned"
+  },
+  "route:videoRoutes.js:GET /projects/:projectId": {
+   "status": "planned"
+  },
+  "route:videoRoutes.js:GET /render/:jobId/status": {
+   "status": "planned"
+  },
+  "route:videoRoutes.js:GET /sessions/:projectId": {
+   "status": "planned"
+  },
+  "route:videoRoutes.js:POST /assets/upload": {
+   "status": "planned"
+  },
+  "route:videoRoutes.js:POST /export": {
+   "status": "planned"
+  },
+  "route:videoRoutes.js:POST /projects/create": {
+   "status": "planned"
+  },
+  "route:videoRoutes.js:POST /render": {
+   "status": "planned"
+  },
+  "route:videoRoutes.js:POST /render/:jobId/cancel": {
+   "status": "planned"
+  },
+  "route:videoRoutes.js:POST /sessions/save": {
+   "status": "planned"
+  },
+  "route:videoRoutes.js:PUT /projects/:projectId": {
+   "status": "planned"
+  },
+  "route:webConnectRoutes.js:ALL /workspaces/:workspaceId/*rest": {
+   "status": "planned"
+  },
+  "route:webhookRoutes.js:DELETE /:id": {
+   "status": "planned"
+  },
+  "route:webhookRoutes.js:GET /": {
+   "status": "planned"
+  },
+  "route:webhookRoutes.js:GET /:id/deliveries": {
+   "status": "planned"
+  },
+  "route:webhookRoutes.js:POST /": {
+   "status": "planned"
+  },
+  "route:webhookRoutes.js:POST /:id/deliveries/:deliveryId/:operation": {
+   "status": "planned"
+  },
+  "route:webhookRoutes.js:PUT /:id": {
+   "status": "planned"
+  },
+  "route:workforceCoordinationRoutes.js:POST /children/open": {
+   "status": "planned"
+  },
+  "route:workforceCoordinationRoutes.js:POST /children/read": {
+   "status": "planned"
+  },
+  "route:workforceCoordinationRoutes.js:POST /goals": {
+   "status": "planned"
+  },
+  "route:workforceCoordinationRoutes.js:POST /goals/complete": {
+   "status": "planned"
+  },
+  "route:workforceCoordinationRoutes.js:POST /milestones": {
+   "status": "planned"
+  },
+  "route:workforceCoordinationRoutes.js:POST /milestones/complete": {
+   "status": "planned"
+  },
+  "route:workforceCoordinationRoutes.js:POST /objectives": {
+   "status": "planned"
+  },
+  "route:workforceCoordinationRoutes.js:POST /objectives/complete": {
+   "status": "planned"
+  },
+  "route:workforceCoordinationRoutes.js:POST /objectives/link-goal": {
+   "status": "planned"
+  },
+  "route:workforceCoordinationRoutes.js:POST /objectives/read": {
+   "status": "planned"
+  },
+  "route:workforceCoordinationRoutes.js:POST /ownership/check": {
+   "status": "planned"
+  },
+  "route:workforceCoordinationRoutes.js:POST /ownership/files": {
+   "status": "planned"
+  },
+  "route:workforceCoordinationRoutes.js:POST /ownership/files/release": {
+   "status": "planned"
+  },
+  "route:workforceCoordinationRoutes.js:POST /ownership/tasks": {
+   "status": "planned"
+  },
+  "route:workforceCoordinationRoutes.js:POST /previews/collapse": {
+   "status": "planned"
+  },
+  "route:workforceCoordinationRoutes.js:POST /previews/read": {
+   "status": "planned"
+  },
+  "route:workforceCoordinationRoutes.js:POST /tasks": {
+   "status": "planned"
+  },
+  "route:workforceCoordinationRoutes.js:POST /tasks/accept": {
+   "status": "planned"
+  },
+  "route:workforceCoordinationRoutes.js:POST /tasks/complete": {
+   "status": "planned"
+  },
+  "route:workforceCoordinationRoutes.js:POST /tasks/evidence": {
+   "status": "planned"
+  },
+  "route:workforceCoordinationRoutes.js:POST /worktrees": {
+   "status": "planned"
+  },
+  "route:workforceCoordinationRoutes.js:POST /worktrees/integrate": {
+   "status": "planned"
+  },
+  "route:workforceDivisionRoutes.js:GET /": {
+   "status": "planned"
+  },
+  "route:workforceDivisionRoutes.js:GET /:id": {
+   "status": "planned"
+  },
+  "route:workforceDivisionRoutes.js:GET /:id/agent-budget": {
+   "status": "planned"
+  },
+  "route:workforceDivisionRoutes.js:PATCH /:id": {
+   "status": "planned"
+  },
+  "route:workforceDivisionRoutes.js:POST /": {
+   "status": "planned"
+  },
+  "route:workforceDivisionRoutes.js:POST /:id/archive": {
+   "status": "planned"
+  },
+  "route:workforceDivisionRoutes.js:PUT /:id/agent-budget": {
+   "status": "planned"
+  },
+  "route:workforceDivisionRoutes.js:PUT /projects/:projectId": {
+   "status": "planned"
+  },
+  "route:workforceForgeRoutes.js:POST /bindings": {
+   "status": "planned"
+  },
+  "route:workforceForgeRoutes.js:POST /bindings/list": {
+   "status": "planned"
+  },
+  "route:workforceForgeRoutes.js:POST /branches": {
+   "status": "planned"
+  },
+  "route:workforceForgeRoutes.js:POST /capabilities": {
+   "status": "planned"
+  },
+  "route:workforceForgeRoutes.js:POST /change-requests": {
+   "status": "planned"
+  },
+  "route:workforceForgeRoutes.js:POST /change-requests/check": {
+   "status": "planned"
+  },
+  "route:workforceForgeRoutes.js:POST /change-requests/checks": {
+   "status": "planned"
+  },
+  "route:workforceForgeRoutes.js:POST /change-requests/integrate": {
+   "status": "planned"
+  },
+  "route:workforceForgeRoutes.js:POST /change-requests/reconcile": {
+   "status": "planned"
+  },
+  "route:workforceForgeRoutes.js:POST /change-requests/review": {
+   "status": "planned"
+  },
+  "route:workforceForgeRoutes.js:POST /change-requests/reviews": {
+   "status": "planned"
+  },
+  "route:workforceForgeRoutes.js:POST /change-requests/update": {
+   "status": "planned"
+  },
+  "route:workforceForgeRoutes.js:POST /external/attribution": {
+   "status": "planned"
+  },
+  "route:workforceForgeRoutes.js:POST /external/consent": {
+   "status": "planned"
+  },
+  "route:workforceForgeRoutes.js:POST /external/consent/revoke": {
+   "status": "planned"
+  },
+  "route:workforceForgeRoutes.js:POST /external/link": {
+   "status": "planned"
+  },
+  "route:workforceForgeRoutes.js:POST /forks": {
+   "status": "planned"
+  },
+  "route:workforceForgeRoutes.js:POST /mirrors": {
+   "status": "planned"
+  },
+  "route:workforceForgeRoutes.js:POST /mirrors/read": {
+   "status": "planned"
+  },
+  "route:workforceForgeRoutes.js:POST /mirrors/update": {
+   "status": "planned"
+  },
+  "route:workforceForgeRoutes.js:POST /revisions/read": {
+   "status": "planned"
+  },
+  "route:workforceFundingRoutes.js:POST /budgets": {
+   "status": "planned"
+  },
+  "route:workforceFundingRoutes.js:POST /budgets/decide": {
+   "status": "planned"
+  },
+  "route:workforceFundingRoutes.js:POST /budgets/price": {
+   "status": "planned"
+  },
+  "route:workforceFundingRoutes.js:POST /budgets/read": {
+   "status": "planned"
+  },
+  "route:workforceFundingRoutes.js:POST /budgets/revoke": {
+   "status": "planned"
+  },
+  "route:workforceFundingRoutes.js:POST /campaigns": {
+   "status": "planned"
+  },
+  "route:workforceFundingRoutes.js:POST /campaigns/open": {
+   "status": "planned"
+  },
+  "route:workforceFundingRoutes.js:POST /campaigns/status": {
+   "status": "planned"
+  },
+  "route:workforceFundingRoutes.js:POST /contributions": {
+   "status": "planned"
+  },
+  "route:workforceFundingRoutes.js:POST /contributions/accounting": {
+   "status": "planned"
+  },
+  "route:workforceFundingRoutes.js:POST /contributions/read": {
+   "status": "planned"
+  },
+  "route:workforceFundingRoutes.js:POST /contributions/return": {
+   "status": "planned"
+  },
+  "route:workforceFundingRoutes.js:POST /milestones": {
+   "status": "planned"
+  },
+  "route:workforceFundingRoutes.js:POST /milestones/accept": {
+   "status": "planned"
+  },
+  "route:workforceFundingRoutes.js:POST /offers/read": {
+   "status": "planned"
+  },
+  "route:workforceFundingRoutes.js:POST /runs/release-undispatched": {
+   "status": "planned"
+  },
+  "route:workforceFundingRoutes.js:POST /scope-caps": {
+   "status": "planned"
+  },
+  "route:workforceFundingRoutes.js:POST /scope-caps/decide": {
+   "status": "planned"
+  },
+  "route:workforceFundingRoutes.js:POST /scope-caps/read": {
+   "status": "planned"
+  },
+  "route:workforceOwnershipTransferRoutes.js:GET /:id": {
+   "status": "planned"
+  },
+  "route:workforceOwnershipTransferRoutes.js:GET /:id/review-subject": {
+   "status": "planned"
+  },
+  "route:workforceOwnershipTransferRoutes.js:POST /": {
+   "status": "planned"
+  },
+  "route:workforceOwnershipTransferRoutes.js:POST /:id/accept": {
+   "status": "planned"
+  },
+  "route:workforceOwnershipTransferRoutes.js:POST /:id/authorize": {
+   "status": "planned"
+  },
+  "route:workforceOwnershipTransferRoutes.js:POST /:id/decline": {
+   "status": "planned"
+  },
+  "route:workforceOwnershipTransferRoutes.js:POST /:id/review": {
+   "status": "planned"
+  },
+  "route:workforcePublicationRoutes.js:POST /artifact-links": {
+   "status": "planned"
+  },
+  "route:workforcePublicationRoutes.js:POST /artifact-links/revoke": {
+   "status": "planned"
+  },
+  "route:workforcePublicationRoutes.js:POST /conversations/full/consent": {
+   "status": "planned"
+  },
+  "route:workforcePublicationRoutes.js:POST /conversations/full/publish": {
+   "status": "planned"
+  },
+  "route:workforcePublicationRoutes.js:POST /conversations/full/request": {
+   "status": "planned"
+  },
+  "route:workforcePublicationRoutes.js:POST /conversations/full/withdraw": {
+   "status": "planned"
+  },
+  "route:workforcePublicationRoutes.js:POST /conversations/live": {
+   "status": "planned"
+  },
+  "route:workforcePublicationRoutes.js:POST /conversations/revoke": {
+   "status": "planned"
+  },
+  "route:workforcePublicationRoutes.js:POST /conversations/transcript": {
+   "status": "planned"
+  },
+  "route:workforcePublicationRoutes.js:POST /conversations/updates": {
+   "status": "planned"
+  },
+  "route:workforcePublicationRoutes.js:POST /conversations/updates/read": {
+   "status": "planned"
+  },
+  "route:workforcePublicationRoutes.js:POST /export": {
+   "status": "planned"
+  },
+  "route:workforcePublicationRoutes.js:POST /external/bind": {
+   "status": "planned"
+  },
+  "route:workforcePublicationRoutes.js:POST /fork": {
+   "status": "planned"
+  },
+  "route:workforcePublicationRoutes.js:POST /fork/provenance": {
+   "status": "planned"
+  },
+  "route:workforcePublicationRoutes.js:POST /grants": {
+   "status": "planned"
+  },
+  "route:workforcePublicationRoutes.js:POST /grants/accept": {
+   "status": "planned"
+  },
+  "route:workforcePublicationRoutes.js:POST /grants/consent": {
+   "status": "planned"
+  },
+  "route:workforcePublicationRoutes.js:POST /grants/decline": {
+   "status": "planned"
+  },
+  "route:workforcePublicationRoutes.js:POST /grants/dispatch": {
+   "status": "planned"
+  },
+  "route:workforcePublicationRoutes.js:POST /grants/read": {
+   "status": "planned"
+  },
+  "route:workforcePublicationRoutes.js:POST /grants/revoke": {
+   "status": "planned"
+  },
+  "route:workforcePublicationRoutes.js:POST /repository": {
+   "status": "planned"
+  },
+  "route:workforcePublicationRoutes.js:POST /repository/read": {
+   "status": "planned"
+  },
+  "route:workforcePublicationRoutes.js:POST /repository/visibility": {
+   "status": "planned"
+  },
+  "route:workforcePublicationRoutes.js:POST /retreat": {
+   "status": "planned"
+  },
+  "route:workforcePublicContributionRoutes.js:POST /attributions": {
+   "status": "planned"
+  },
+  "route:workforcePublicContributionRoutes.js:POST /attributions/mine": {
+   "status": "planned"
+  },
+  "route:workforcePublicContributionRoutes.js:POST /claims": {
+   "status": "planned"
+  },
+  "route:workforcePublicContributionRoutes.js:POST /claims/award": {
+   "status": "planned"
+  },
+  "route:workforcePublicContributionRoutes.js:POST /claims/read": {
+   "status": "planned"
+  },
+  "route:workforcePublicContributionRoutes.js:POST /claims/release": {
+   "status": "planned"
+  },
+  "route:workforcePublicContributionRoutes.js:POST /claims/reveal": {
+   "status": "planned"
+  },
+  "route:workforcePublicContributionRoutes.js:POST /contributions": {
+   "status": "planned"
+  },
+  "route:workforcePublicContributionRoutes.js:POST /contributions/checks": {
+   "status": "planned"
+  },
+  "route:workforcePublicContributionRoutes.js:POST /contributions/checks/read": {
+   "status": "planned"
+  },
+  "route:workforcePublicContributionRoutes.js:POST /contributions/integrate": {
+   "status": "planned"
+  },
+  "route:workforcePublicContributionRoutes.js:POST /contributions/read": {
+   "status": "planned"
+  },
+  "route:workforcePublicContributionRoutes.js:POST /contributions/reviews": {
+   "status": "planned"
+  },
+  "route:workforcePublicContributionRoutes.js:POST /contributions/reviews/read": {
+   "status": "planned"
+  },
+  "route:workforcePublicContributionRoutes.js:POST /contributions/revise": {
+   "status": "planned"
+  },
+  "route:workforcePublicContributionRoutes.js:POST /contributions/transition": {
+   "status": "planned"
+  },
+  "route:workforcePublicContributionRoutes.js:POST /contributions/transitions": {
+   "status": "planned"
+  },
+  "route:workforcePublicContributionRoutes.js:POST /discussion": {
+   "status": "planned"
+  },
+  "route:workforcePublicContributionRoutes.js:POST /discussion/appeal": {
+   "status": "planned"
+  },
+  "route:workforcePublicContributionRoutes.js:POST /discussion/appeals/decide": {
+   "status": "planned"
+  },
+  "route:workforcePublicContributionRoutes.js:POST /discussion/block": {
+   "status": "planned"
+  },
+  "route:workforcePublicContributionRoutes.js:POST /discussion/read": {
+   "status": "planned"
+  },
+  "route:workforcePublicContributionRoutes.js:POST /discussion/report": {
+   "status": "planned"
+  },
+  "route:workforcePublicContributionRoutes.js:POST /discussion/reports/decide": {
+   "status": "planned"
+  },
+  "route:workforcePublicContributionRoutes.js:POST /discussion/unblock": {
+   "status": "planned"
+  },
+  "route:workforcePublicContributionRoutes.js:POST /engagements/read": {
+   "status": "planned"
+  },
+  "route:workforcePublicContributionRoutes.js:POST /offers": {
+   "status": "planned"
+  },
+  "route:workforcePublicContributionRoutes.js:POST /offers/accept": {
+   "status": "planned"
+  },
+  "route:workforcePublicContributionRoutes.js:POST /offers/decline": {
+   "status": "planned"
+  },
+  "route:workforcePublicContributionRoutes.js:POST /offers/policy": {
+   "status": "planned"
+  },
+  "route:workforcePublicContributionRoutes.js:POST /offers/read": {
+   "status": "planned"
+  },
+  "route:workforcePublicContributionRoutes.js:POST /offers/withdraw": {
+   "status": "planned"
+  },
+  "route:workforcePublicContributionRoutes.js:POST /terms": {
+   "status": "planned"
+  },
+  "route:workforceResourceRoutes.js:POST /drivers/admit": {
+   "status": "planned"
+  },
+  "route:workforceResourceRoutes.js:POST /grants": {
+   "status": "planned"
+  },
+  "route:workforceResourceRoutes.js:POST /grants/compose": {
+   "status": "planned"
+  },
+  "route:workforceResourceRoutes.js:POST /grants/revoke": {
+   "status": "planned"
+  },
+  "route:workforceResourceRoutes.js:POST /leases/read": {
+   "status": "planned"
+  },
+  "route:workforceResourceRoutes.js:POST /leases/release": {
+   "status": "planned"
+  },
+  "route:workforceResourceRoutes.js:POST /leases/retention": {
+   "status": "planned"
+  },
+  "route:workforceResourceRoutes.js:POST /leases/revoke": {
+   "status": "planned"
+  },
+  "route:workforceResourceRoutes.js:POST /leases/settle": {
+   "status": "planned"
+  },
+  "route:workforceResourceRoutes.js:POST /offers": {
+   "status": "planned"
+  },
+  "route:workforceResourceRoutes.js:POST /offers/accept": {
+   "status": "planned"
+  },
+  "route:workforceResourceRoutes.js:POST /offers/revoke": {
+   "status": "planned"
+  },
+  "route:workforceResourceRoutes.js:POST /offers/usable": {
+   "status": "planned"
+  },
+  "route:workforceResourceRoutes.js:POST /proposals": {
+   "status": "planned"
+  },
+  "route:workforceResourceRoutes.js:POST /receipts/accept": {
+   "status": "planned"
+  },
+  "route:workforceResourceRoutes.js:POST /receipts/verify": {
+   "status": "planned"
+  },
+  "route:workforceResourceRoutes.js:POST /tasks/cancel": {
+   "status": "planned"
+  },
+  "route:workforceResourceRoutes.js:POST /workers": {
+   "status": "planned"
+  },
+  "route:workforceResourceRoutes.js:POST /workers/caps": {
+   "status": "planned"
+  },
+  "route:workforceResourceRoutes.js:POST /workers/qualify": {
+   "status": "planned"
+  },
+  "route:workforceResourceRoutes.js:POST /workers/schedule": {
+   "status": "planned"
+  },
+  "route:workforceRoutes.js:POST /capacity": {
+   "status": "planned"
+  },
+  "route:workforceRoutes.js:POST /evaluation": {
+   "status": "planned"
+  },
+  "route:workforceRoutes.js:POST /member-removals": {
+   "status": "planned"
+  },
+  "route:workforceRoutes.js:POST /member-removals/archive": {
+   "status": "planned"
+  },
+  "route:workforceRoutes.js:POST /member-removals/read": {
+   "status": "planned"
+  },
+  "route:workforceRoutes.js:POST /resource-operations/read": {
+   "status": "planned"
+  },
+  "route:workforceRoutes.js:POST /resources": {
+   "status": "planned"
+  },
+  "route:workforceRoutes.js:POST /resources/create-and-assign": {
+   "status": "planned"
+  },
+  "route:workforceRoutes.js:POST /resources/definition/read": {
+   "status": "planned"
+  },
+  "route:workforceRoutes.js:POST /resources/list": {
+   "status": "planned"
+  },
+  "route:workforceRoutes.js:POST /resources/revise-definition": {
+   "status": "planned"
+  },
+  "route:workforceRoutes.js:POST /resources/revise-definition/read": {
+   "status": "planned"
+  },
+  "route:workforceRoutes.js:POST /run-admissions": {
+   "status": "planned"
+  },
+  "route:workforceRoutes.js:POST /run-admissions/authority": {
+   "status": "planned"
+  },
+  "route:workforceRoutes.js:POST /run-admissions/authorize-step": {
+   "status": "planned"
+  },
+  "route:workforceRoutes.js:POST /run-admissions/deliver": {
+   "status": "planned"
+  },
+  "route:workforceRoutes.js:POST /run-admissions/operations/read": {
+   "status": "planned"
+  },
+  "route:workforceRoutes.js:POST /run-admissions/outcome": {
+   "status": "planned"
+  },
+  "route:workforceRoutes.js:POST /run-admissions/pin": {
+   "status": "planned"
+  },
+  "route:workforceRoutes.js:POST /run-admissions/read": {
+   "status": "planned"
+  },
+  "route:workforceRoutes.js:POST /run-admissions/result": {
+   "status": "planned"
+  },
+  "route:workforceRoutes.js:POST /run-admissions/revoke": {
+   "status": "planned"
+  },
+  "route:workforceSessionRoutes.js:POST /branch-intents": {
+   "status": "planned"
+  },
+  "route:workforceSessionRoutes.js:POST /commands": {
+   "status": "planned"
+  },
+  "route:workforceSessionRoutes.js:POST /commands/execute": {
+   "status": "planned"
+  },
+  "route:workforceSessionRoutes.js:POST /commands/read": {
+   "status": "planned"
+  },
+  "route:workforceSessionRoutes.js:POST /cwd": {
+   "status": "planned"
+  },
+  "route:workforceSessionRoutes.js:POST /cwd/release": {
+   "status": "planned"
+  },
+  "route:workforceSessionRoutes.js:POST /events": {
+   "status": "planned"
+  },
+  "route:workforceSessionRoutes.js:POST /lease/acquire": {
+   "status": "planned"
+  },
+  "route:workforceSessionRoutes.js:POST /lease/release": {
+   "status": "planned"
+  },
+  "route:workforceSessionRoutes.js:POST /lineage": {
+   "status": "planned"
+  },
+  "route:workforceSessionRoutes.js:POST /mode/agent": {
+   "status": "planned"
+  },
+  "route:workforceSessionRoutes.js:POST /mode/chat": {
+   "status": "planned"
+  },
+  "route:workforceSessionRoutes.js:POST /models": {
+   "status": "planned"
+  },
+  "route:workforceSessionRoutes.js:POST /models/select": {
+   "status": "planned"
+  },
+  "route:workforceSessionRoutes.js:POST /resume": {
+   "status": "planned"
+  },
+  "route:workforceViewRoutes.js:POST /poll": {
+   "status": "planned"
+  },
+  "route:workforceViewRoutes.js:POST /read": {
+   "status": "planned"
+  },
+  "route:workforceViewRoutes.js:POST /resolve/message": {
+   "status": "planned"
+  },
+  "route:workforceViewRoutes.js:POST /resolve/move": {
+   "status": "planned"
+  },
+  "route:workforceViewRoutes.js:POST /state": {
+   "status": "planned"
+  },
+  "route:workforceViewRoutes.js:POST /state/read": {
+   "status": "planned"
+  },
+  "route:workspaceAreaRoutes.js:GET /needs": {
+   "status": "planned"
+  },
+  "route:workspaceAreaRoutes.js:GET /pins": {
+   "status": "planned"
+  },
+  "route:workspaceAreaRoutes.js:GET /search": {
+   "status": "planned"
+  },
+  "route:workspaceAreaRoutes.js:GET /summary": {
+   "status": "planned"
+  },
+  "route:workspaceKeyRoutes.js:DELETE /:keyId (workspaceKeyRoutes)": {
+   "status": "excluded",
+   "category": "self-authority",
+   "reason": "mints the caller’s own credentials; an agent must not widen its own authority"
+  },
+  "route:workspaceKeyRoutes.js:GET / (workspaceKeyRoutes)": {
+   "status": "excluded",
+   "category": "self-authority",
+   "reason": "mints the caller’s own credentials; an agent must not widen its own authority"
+  },
+  "route:workspaceKeyRoutes.js:GET /operations/:operationId (workspaceKeyRoutes)": {
+   "status": "excluded",
+   "category": "self-authority",
+   "reason": "mints the caller’s own credentials; an agent must not widen its own authority"
+  },
+  "route:workspaceKeyRoutes.js:POST / (workspaceKeyRoutes)": {
+   "status": "excluded",
+   "category": "self-authority",
+   "reason": "mints the caller’s own credentials; an agent must not widen its own authority"
+  },
+  "route:workspaceKeyRoutes.js:POST /:keyId/rotate (workspaceKeyRoutes)": {
+   "status": "excluded",
+   "category": "self-authority",
+   "reason": "mints the caller’s own credentials; an agent must not widen its own authority"
+  },
+  "route:workspaceKeyRoutes.js:POST /operations/:operationId/abandon (workspaceKeyRoutes)": {
+   "status": "excluded",
+   "category": "self-authority",
+   "reason": "mints the caller’s own credentials; an agent must not widen its own authority"
+  },
+  "route:workspaceMembershipOperationRoutes.js:GET /membership-operations/:operationId (workspaceMembershipOperationRoutes)": {
+   "status": "planned"
+  },
+  "route:workspaceMembershipOperationRoutes.js:POST /membership-operations/:operationId/abandon (workspaceMembershipOperationRoutes)": {
+   "status": "planned"
+  },
+  "route:workspaceNotificationRoutes.js:GET /": {
+   "status": "planned"
+  },
+  "route:workspaceNotificationRoutes.js:GET /destination-operations/:operationId": {
+   "status": "planned"
+  },
+  "route:workspaceNotificationRoutes.js:GET /v2": {
+   "status": "planned"
+  },
+  "route:workspaceNotificationRoutes.js:POST /destination-operations/:operationId": {
+   "status": "planned"
+  },
+  "route:workspaceNotificationRoutes.js:POST /events": {
+   "status": "planned"
+  },
+  "route:workspaceNotificationRoutes.js:POST /settings": {
+   "status": "planned"
+  },
+  "route:workspaceNotificationRoutes.js:POST /v2/settings": {
+   "status": "planned"
+  },
+  "route:workspaceNotificationRoutes.js:PUT /destination-operations/:operationId": {
+   "status": "planned"
+  },
+  "route:workspaceRoutes.js:DELETE /:id/invites/:inviteId": {
+   "status": "planned"
+  },
+  "route:workspaceRoutes.js:DELETE /:id/members/:memberId": {
+   "status": "planned"
+  },
+  "route:workspaceRoutes.js:GET /": {
+   "status": "planned"
+  },
+  "route:workspaceRoutes.js:GET / (inviteRouter)": {
+   "status": "planned"
+  },
+  "route:workspaceRoutes.js:GET /:id": {
+   "status": "planned"
+  },
+  "route:workspaceRoutes.js:GET /:id/audit": {
+   "status": "planned"
+  },
+  "route:workspaceRoutes.js:GET /:id/billing": {
+   "status": "planned"
+  },
+  "route:workspaceRoutes.js:GET /:id/invites": {
+   "status": "planned"
+  },
+  "route:workspaceRoutes.js:GET /:id/members": {
+   "status": "planned"
+  },
+  "route:workspaceRoutes.js:PATCH /:id": {
+   "status": "planned"
+  },
+  "route:workspaceRoutes.js:PATCH /:id/billing/mode": {
+   "status": "planned"
+  },
+  "route:workspaceRoutes.js:PATCH /:id/budget": {
+   "status": "planned"
+  },
+  "route:workspaceRoutes.js:PATCH /:id/members/:memberId": {
+   "status": "planned"
+  },
+  "route:workspaceRoutes.js:POST /": {
+   "status": "planned"
+  },
+  "route:workspaceRoutes.js:POST /:id/billing/subscribe": {
+   "status": "planned"
+  },
+  "route:workspaceRoutes.js:POST /:id/billing/transfer": {
+   "status": "planned"
+  },
+  "route:workspaceRoutes.js:POST /:id/invites": {
+   "status": "planned"
+  },
+  "route:workspaceRoutes.js:POST /:id/invites/:inviteId/resend": {
+   "status": "planned"
+  },
+  "route:workspaceRoutes.js:POST /:id/owner-transfer": {
+   "status": "planned"
+  },
+  "route:workspaceRoutes.js:POST /:id/select": {
+   "status": "planned"
+  },
+  "route:workspaceRoutes.js:POST /:inviteId/${action} (inviteRouter)": {
+   "status": "planned"
+  },
+  "route:workspaceTeamRoutes.js:DELETE /:teamId": {
+   "status": "planned"
+  },
+  "route:workspaceTeamRoutes.js:GET /": {
+   "status": "planned"
+  },
+  "route:workspaceTeamRoutes.js:POST /": {
+   "status": "planned"
+  },
+  "route:workspaceTeamRoutes.js:PUT /:teamId": {
+   "status": "planned"
+  },
+  "route:xenoMcpRoutes.js:DELETE /": {
+   "status": "excluded",
+   "category": "protocol",
+   "reason": "the /api/mcp transport"
+  },
+  "route:xenoMcpRoutes.js:DELETE /connections/:id (management)": {
+   "status": "planned"
+  },
+  "route:xenoMcpRoutes.js:GET /": {
+   "status": "excluded",
+   "category": "protocol",
+   "reason": "the /api/mcp transport"
+  },
+  "route:xenoMcpRoutes.js:GET /activity (management)": {
+   "status": "planned"
+  },
+  "route:xenoMcpRoutes.js:GET /connections (management)": {
+   "status": "planned"
+  },
+  "route:xenoMcpRoutes.js:GET /connections/:id (management)": {
+   "status": "planned"
+  },
+  "route:xenoMcpRoutes.js:GET /services (management)": {
+   "status": "planned"
+  },
+  "route:xenoMcpRoutes.js:PATCH /connections/:id (management)": {
+   "status": "planned"
+  },
+  "route:xenoMcpRoutes.js:POST /": {
+   "status": "excluded",
+   "category": "protocol",
+   "reason": "the /api/mcp transport"
+  },
+  "route:xenoRoutes.js:GET /remote/runs": {
+   "status": "planned"
+  },
+  "route:xenoRoutes.js:GET /remote/runs/:runId": {
+   "status": "planned"
+  },
+  "route:xenoRoutes.js:GET /remote/runs/:runId/attach": {
+   "status": "planned"
+  },
+  "route:xenoRoutes.js:GET /remote/runs/:runId/events": {
+   "status": "planned"
+  },
+  "route:xenoRoutes.js:GET /remote/status": {
+   "status": "planned"
+  },
+  "route:xenoRoutes.js:POST /audio/generate": {
+   "status": "planned"
+  },
+  "route:xenoRoutes.js:POST /images/edit": {
+   "status": "planned"
+  },
+  "route:xenoRoutes.js:POST /images/generate": {
+   "status": "planned"
+  },
+  "route:xenoRoutes.js:POST /remote/runs": {
+   "status": "planned"
+  },
+  "route:xenoRoutes.js:POST /remote/runs/:runId/stop": {
+   "status": "planned"
+  },
+  "route:xenoRoutes.js:POST /videos/generate": {
+   "status": "planned"
+  },
+  "route:xenoTasksRoutes.js:DELETE /:key": {
+   "status": "planned"
+  },
+  "route:xenoTasksRoutes.js:DELETE /:key/attachments/:id": {
+   "status": "planned"
+  },
+  "route:xenoTasksRoutes.js:DELETE /:key/comments/:id": {
+   "status": "planned"
+  },
+  "route:xenoTasksRoutes.js:DELETE /:key/folders/:folderId": {
+   "status": "planned"
+  },
+  "route:xenoTasksRoutes.js:DELETE /:key/links/:id": {
+   "status": "planned"
+  },
+  "route:xenoTasksRoutes.js:DELETE /:key/watch": {
+   "status": "planned"
+  },
+  "route:xenoTasksRoutes.js:DELETE /agents/:id/projects/:projectId": {
+   "status": "planned"
+  },
+  "route:xenoTasksRoutes.js:DELETE /agents/tokens/:id": {
+   "status": "excluded",
+   "category": "self-authority",
+   "reason": "mints the caller’s own credentials; an agent must not widen its own authority"
+  },
+  "route:xenoTasksRoutes.js:DELETE /mcp": {
+   "status": "excluded",
+   "category": "protocol",
+   "reason": "the Tasks MCP transport / its OpenAPI document"
+  },
+  "route:xenoTasksRoutes.js:DELETE /views/:id": {
+   "status": "planned"
+  },
+  "route:xenoTasksRoutes.js:GET /": {
+   "status": "capability",
+   "capability": "tasks.task.list_mine"
+  },
+  "route:xenoTasksRoutes.js:GET /:key": {
+   "status": "capability",
+   "capability": "tasks.task.get"
+  },
+  "route:xenoTasksRoutes.js:GET /:key/attachments/:id": {
+   "status": "planned"
+  },
+  "route:xenoTasksRoutes.js:GET /:key/folders": {
+   "status": "planned"
+  },
+  "route:xenoTasksRoutes.js:GET /agent/events": {
+   "status": "capability",
+   "capability": "tasks.event.list"
+  },
+  "route:xenoTasksRoutes.js:GET /agent/me": {
+   "status": "capability",
+   "capability": "agents.self.get"
+  },
+  "route:xenoTasksRoutes.js:GET /agents": {
+   "status": "planned"
+  },
+  "route:xenoTasksRoutes.js:GET /agents/:id/projects": {
+   "status": "planned"
+  },
+  "route:xenoTasksRoutes.js:GET /assignees": {
+   "status": "planned"
+  },
+  "route:xenoTasksRoutes.js:GET /folders/linkable": {
+   "status": "planned"
+  },
+  "route:xenoTasksRoutes.js:GET /mcp": {
+   "status": "excluded",
+   "category": "protocol",
+   "reason": "the Tasks MCP transport / its OpenAPI document"
+  },
+  "route:xenoTasksRoutes.js:GET /openapi.json": {
+   "status": "excluded",
+   "category": "protocol",
+   "reason": "the Tasks MCP transport / its OpenAPI document"
+  },
+  "route:xenoTasksRoutes.js:GET /projects": {
+   "status": "capability",
+   "capability": "tasks.project.list"
+  },
+  "route:xenoTasksRoutes.js:GET /views": {
+   "status": "planned"
+  },
+  "route:xenoTasksRoutes.js:PATCH /:key": {
+   "status": "capability",
+   "capability": "tasks.task.update"
+  },
+  "route:xenoTasksRoutes.js:PATCH /:key/comments/:id": {
+   "status": "planned"
+  },
+  "route:xenoTasksRoutes.js:POST /": {
+   "status": "capability",
+   "capability": "tasks.task.create"
+  },
+  "route:xenoTasksRoutes.js:POST /:key/activity": {
+   "status": "capability",
+   "capability": "tasks.activity.report"
+  },
+  "route:xenoTasksRoutes.js:POST /:key/attachments": {
+   "status": "planned"
+  },
+  "route:xenoTasksRoutes.js:POST /:key/claim": {
+   "status": "capability",
+   "capability": "tasks.task.claim"
+  },
+  "route:xenoTasksRoutes.js:POST /:key/comments": {
+   "status": "capability",
+   "capability": "tasks.comment.create"
+  },
+  "route:xenoTasksRoutes.js:POST /:key/delegate": {
+   "status": "planned"
+  },
+  "route:xenoTasksRoutes.js:POST /:key/folders": {
+   "status": "planned"
+  },
+  "route:xenoTasksRoutes.js:POST /:key/handoff": {
+   "status": "planned"
+  },
+  "route:xenoTasksRoutes.js:POST /:key/heartbeat": {
+   "status": "capability",
+   "capability": "tasks.lease.renew"
+  },
+  "route:xenoTasksRoutes.js:POST /:key/links": {
+   "status": "planned"
+  },
+  "route:xenoTasksRoutes.js:POST /:key/release": {
+   "status": "capability",
+   "capability": "tasks.lease.release"
+  },
+  "route:xenoTasksRoutes.js:POST /:key/restore": {
+   "status": "planned"
+  },
+  "route:xenoTasksRoutes.js:POST /:key/transition": {
+   "status": "capability",
+   "capability": "tasks.task.move"
+  },
+  "route:xenoTasksRoutes.js:POST /agents": {
+   "status": "planned"
+  },
+  "route:xenoTasksRoutes.js:POST /agents/tokens": {
+   "status": "excluded",
+   "category": "self-authority",
+   "reason": "mints the caller’s own credentials; an agent must not widen its own authority"
+  },
+  "route:xenoTasksRoutes.js:POST /mcp": {
+   "status": "excluded",
+   "category": "protocol",
+   "reason": "the Tasks MCP transport / its OpenAPI document"
+  },
+  "route:xenoTasksRoutes.js:POST /views": {
+   "status": "planned"
+  },
+  "route:xenoTasksRoutes.js:PUT /:key/watch": {
+   "status": "planned"
+  },
+  "route:xenoTasksRoutes.js:PUT /agents/:id/projects/:projectId": {
+   "status": "planned"
+  },
+  "route:xenoTasksRoutes.js:PUT /agents/webhook": {
+   "status": "planned"
+  },
+  "route:youtubeRoutes.js:DELETE /channels/:id": {
+   "status": "planned"
+  },
+  "route:youtubeRoutes.js:DELETE /channels/:id/languages/:languageCode": {
+   "status": "planned"
+  },
+  "route:youtubeRoutes.js:DELETE /groups/:id": {
+   "status": "planned"
+  },
+  "route:youtubeRoutes.js:DELETE /groups/:id/channels/:channelId": {
+   "status": "planned"
+  },
+  "route:youtubeRoutes.js:GET /analytics/daily/:channelId": {
+   "status": "planned"
+  },
+  "route:youtubeRoutes.js:GET /analytics/demographics/:channelId": {
+   "status": "planned"
+  },
+  "route:youtubeRoutes.js:GET /analytics/overview": {
+   "status": "planned"
+  },
+  "route:youtubeRoutes.js:GET /analytics/overview/:channelId": {
+   "status": "planned"
+  },
+  "route:youtubeRoutes.js:GET /analytics/traffic/:channelId": {
+   "status": "planned"
+  },
+  "route:youtubeRoutes.js:GET /analytics/videos/:channelId": {
+   "status": "planned"
+  },
+  "route:youtubeRoutes.js:GET /auth": {
+   "status": "planned"
+  },
+  "route:youtubeRoutes.js:GET /callback (publicRouter)": {
+   "status": "planned"
+  },
+  "route:youtubeRoutes.js:GET /channels": {
+   "status": "planned"
+  },
+  "route:youtubeRoutes.js:GET /channels/:id": {
+   "status": "planned"
+  },
+  "route:youtubeRoutes.js:GET /channels/:id/groups": {
+   "status": "planned"
+  },
+  "route:youtubeRoutes.js:GET /channels/:id/languages": {
+   "status": "planned"
+  },
+  "route:youtubeRoutes.js:GET /comments/:channelId": {
+   "status": "planned"
+  },
+  "route:youtubeRoutes.js:GET /dashboard/:channelId": {
+   "status": "planned"
+  },
+  "route:youtubeRoutes.js:GET /groups": {
+   "status": "planned"
+  },
+  "route:youtubeRoutes.js:GET /history/:channelId": {
+   "status": "planned"
+  },
+  "route:youtubeRoutes.js:GET /languages": {
+   "status": "planned"
+  },
+  "route:youtubeRoutes.js:GET /realtime/:channelId": {
+   "status": "planned"
+  },
+  "route:youtubeRoutes.js:GET /sync/status": {
+   "status": "planned"
+  },
+  "route:youtubeRoutes.js:GET /video/:channelId/:videoId": {
+   "status": "planned"
+  },
+  "route:youtubeRoutes.js:GET /videos/:channelId": {
+   "status": "planned"
+  },
+  "route:youtubeRoutes.js:POST /cache/clear": {
+   "status": "planned"
+  },
+  "route:youtubeRoutes.js:POST /channels/:id/languages": {
+   "status": "planned"
+  },
+  "route:youtubeRoutes.js:POST /channels/:id/reauthorize": {
+   "status": "planned"
+  },
+  "route:youtubeRoutes.js:POST /channels/:id/sync": {
+   "status": "planned"
+  },
+  "route:youtubeRoutes.js:POST /groups": {
+   "status": "planned"
+  },
+  "route:youtubeRoutes.js:POST /groups/:id/channels": {
+   "status": "planned"
+  },
+  "route:youtubeRoutes.js:POST /history/:channelId/snapshot": {
+   "status": "planned"
+  },
+  "route:youtubeRoutes.js:POST /history/sync-all": {
+   "status": "planned"
+  },
+  "route:youtubeRoutes.js:POST /init": {
+   "status": "planned"
+  },
+  "route:youtubeRoutes.js:POST /sync/all": {
+   "status": "planned"
+  },
+  "route:youtubeRoutes.js:PUT /groups/:id": {
+   "status": "planned"
+  },
+  "route:youtubeRoutes.js:PUT /groups/:id/channels/reorder": {
+   "status": "planned"
+  },
+  "route:youtubeRoutes.js:PUT /groups/reorder": {
+   "status": "planned"
+  },
+  "ui:actions.js:data-ac": {
+   "status": "planned"
+  },
+  "ui:actions.js:data-sc-del": {
+   "status": "planned"
+  },
+  "ui:actions.js:data-sc-tog": {
+   "status": "planned"
+  },
+  "ui:actions.js:data-so-in": {
+   "status": "excluded",
+   "category": "view-state",
+   "reason": "changes only what the screen shows"
+  },
+  "ui:actions.js:data-so-other": {
+   "status": "excluded",
+   "category": "view-state",
+   "reason": "changes only what the screen shows"
+  },
+  "ui:actions.js:data-xa": {
+   "status": "planned"
+  },
+  "ui:anima.js:data-an-q": {
+   "status": "planned"
+  },
+  "ui:anima.js:data-an=auto": {
+   "status": "planned"
+  },
+  "ui:anima.js:data-an=chan": {
+   "status": "planned"
+  },
+  "ui:anima.js:data-an=del": {
+   "status": "planned"
+  },
+  "ui:anima.js:data-an=discard": {
+   "status": "planned"
+  },
+  "ui:anima.js:data-an=export": {
+   "status": "planned"
+  },
+  "ui:anima.js:data-an=forget": {
+   "status": "planned"
+  },
+  "ui:anima.js:data-an=keep": {
+   "status": "planned"
+  },
+  "ui:anima.js:data-an=model": {
+   "status": "planned"
+  },
+  "ui:anima.js:data-an=newSwarm": {
+   "status": "planned"
+  },
+  "ui:anima.js:data-an=pause": {
+   "status": "planned"
+  },
+  "ui:anima.js:data-an=pin": {
+   "status": "planned"
+  },
+  "ui:anima.js:data-an=purpose": {
+   "status": "planned"
+  },
+  "ui:anima.js:data-an=rmRule": {
+   "status": "planned"
+  },
+  "ui:anima.js:data-an=rmSched": {
+   "status": "planned"
+  },
+  "ui:anima.js:data-an=rmSwarm": {
+   "status": "planned"
+  },
+  "ui:anima.js:data-an=rule": {
+   "status": "planned"
+  },
+  "ui:anima.js:data-an=runSwarm": {
+   "status": "planned"
+  },
+  "ui:anima.js:data-an=sched": {
+   "status": "planned"
+  },
+  "ui:anima.js:data-an=schedOn": {
+   "status": "planned"
+  },
+  "ui:anima.js:data-an=skill": {
+   "status": "planned"
+  },
+  "ui:anima.js:data-an=tab": {
+   "status": "planned"
+  },
+  "ui:anima.js:data-an=tg": {
+   "status": "planned"
+  },
+  "ui:anima.js:data-an=tgOff": {
+   "status": "planned"
+  },
+  "ui:anima.js:data-an=tool": {
+   "status": "planned"
+  },
+  "ui:app.js:data-acc-close": {
+   "status": "planned"
+  },
+  "ui:app.js:data-act=company": {
+   "status": "planned"
+  },
+  "ui:app.js:data-act=signout": {
+   "status": "planned"
+  },
+  "ui:app.js:data-ad=dismiss": {
+   "status": "planned"
+  },
+  "ui:app.js:data-ad=freeze": {
+   "status": "planned"
+  },
+  "ui:app.js:data-ad=later": {
+   "status": "planned"
+  },
+  "ui:app.js:data-ad=off": {
+   "status": "planned"
+  },
+  "ui:app.js:data-ad=on": {
+   "status": "planned"
+  },
+  "ui:app.js:data-ad=sim": {
+   "status": "planned"
+  },
+  "ui:app.js:data-ad=undo": {
+   "status": "planned"
+  },
+  "ui:app.js:data-adaptive": {
+   "status": "planned"
+  },
+  "ui:app.js:data-adc-accept": {
+   "status": "planned"
+  },
+  "ui:app.js:data-adc-dismiss": {
+   "status": "planned"
+  },
+  "ui:app.js:data-adc-privacy": {
+   "status": "planned"
+  },
+  "ui:app.js:data-adhide": {
+   "status": "planned"
+  },
+  "ui:app.js:data-adp=adaptive": {
+   "status": "planned"
+  },
+  "ui:app.js:data-adp=today": {
+   "status": "planned"
+  },
+  "ui:app.js:data-adpin": {
+   "status": "planned"
+  },
+  "ui:app.js:data-ctx=chat": {
+   "status": "planned"
+  },
+  "ui:app.js:data-ctx=chat-live": {
+   "status": "planned"
+  },
+  "ui:app.js:data-ctx=mode": {
+   "status": "planned"
+  },
+  "ui:app.js:data-ctx=product": {
+   "status": "planned"
+  },
+  "ui:app.js:data-ctx=project": {
+   "status": "planned"
+  },
+  "ui:app.js:data-fd-step": {
+   "status": "planned"
+  },
+  "ui:app.js:data-hc-done": {
+   "status": "excluded",
+   "category": "view-state",
+   "reason": "changes only what the screen shows"
+  },
+  "ui:app.js:data-hc-mv": {
+   "status": "excluded",
+   "category": "view-state",
+   "reason": "changes only what the screen shows"
+  },
+  "ui:app.js:data-hc-reset": {
+   "status": "excluded",
+   "category": "view-state",
+   "reason": "changes only what the screen shows"
+  },
+  "ui:app.js:data-hc-tog": {
+   "status": "excluded",
+   "category": "view-state",
+   "reason": "changes only what the screen shows"
+  },
+  "ui:app.js:data-hmn": {
+   "status": "excluded",
+   "category": "view-state",
+   "reason": "changes only what the screen shows"
+  },
+  "ui:app.js:data-hmn-do": {
+   "status": "excluded",
+   "category": "view-state",
+   "reason": "changes only what the screen shows"
+  },
+  "ui:app.js:data-home-custom": {
+   "status": "excluded",
+   "category": "view-state",
+   "reason": "changes only what the screen shows"
+  },
+  "ui:app.js:data-hp=community": {
+   "status": "excluded",
+   "category": "view-state",
+   "reason": "changes only what the screen shows"
+  },
+  "ui:app.js:data-hp=doc": {
+   "status": "excluded",
+   "category": "view-state",
+   "reason": "changes only what the screen shows"
+  },
+  "ui:app.js:data-hp=docs": {
+   "status": "excluded",
+   "category": "view-state",
+   "reason": "changes only what the screen shows"
+  },
+  "ui:app.js:data-hp=idea": {
+   "status": "excluded",
+   "category": "view-state",
+   "reason": "changes only what the screen shows"
+  },
+  "ui:app.js:data-hp=intro": {
+   "status": "excluded",
+   "category": "view-state",
+   "reason": "changes only what the screen shows"
+  },
+  "ui:app.js:data-hp=new": {
+   "status": "excluded",
+   "category": "view-state",
+   "reason": "changes only what the screen shows"
+  },
+  "ui:app.js:data-hp=search": {
+   "status": "excluded",
+   "category": "view-state",
+   "reason": "changes only what the screen shows"
+  },
+  "ui:app.js:data-hp=status": {
+   "status": "excluded",
+   "category": "view-state",
+   "reason": "changes only what the screen shows"
+  },
+  "ui:app.js:data-hp=tip": {
+   "status": "excluded",
+   "category": "view-state",
+   "reason": "changes only what the screen shows"
+  },
+  "ui:app.js:data-kb-close": {
+   "status": "planned"
+  },
+  "ui:app.js:data-manage": {
+   "status": "planned"
+  },
+  "ui:app.js:data-manage-back": {
+   "status": "planned"
+  },
+  "ui:app.js:data-mi-pin": {
+   "status": "planned"
+  },
+  "ui:app.js:data-mi-skip": {
+   "status": "planned"
+  },
+  "ui:app.js:data-mi-start": {
+   "status": "planned"
+  },
+  "ui:app.js:data-mi-view=home": {
+   "status": "planned"
+  },
+  "ui:app.js:data-mi-view=product": {
+   "status": "planned"
+  },
+  "ui:app.js:data-mi-view=sidebar": {
+   "status": "planned"
+  },
+  "ui:app.js:data-mm-default": {
+   "status": "planned"
+  },
+  "ui:app.js:data-mm-down": {
+   "status": "planned"
+  },
+  "ui:app.js:data-mm-hide": {
+   "status": "planned"
+  },
+  "ui:app.js:data-mm-up": {
+   "status": "planned"
+  },
+  "ui:app.js:data-model-find": {
+   "status": "excluded",
+   "category": "view-state",
+   "reason": "changes only what the screen shows"
+  },
+  "ui:app.js:data-model=' + cardId + '": {
+   "status": "excluded",
+   "category": "view-state",
+   "reason": "changes only what the screen shows"
+  },
+  "ui:app.js:data-model=auto": {
+   "status": "excluded",
+   "category": "view-state",
+   "reason": "changes only what the screen shows"
+  },
+  "ui:app.js:data-more": {
+   "status": "excluded",
+   "category": "view-state",
+   "reason": "changes only what the screen shows"
+  },
+  "ui:app.js:data-more-models": {
+   "status": "excluded",
+   "category": "view-state",
+   "reason": "changes only what the screen shows"
+  },
+  "ui:app.js:data-need-schedule": {
+   "status": "planned"
+  },
+  "ui:app.js:data-need-task": {
+   "status": "planned"
+  },
+  "ui:app.js:data-nt": {
+   "status": "planned"
+  },
+  "ui:app.js:data-nt-all": {
+   "status": "planned"
+  },
+  "ui:app.js:data-nt-arch": {
+   "status": "planned"
+  },
+  "ui:app.js:data-nt-back": {
+   "status": "planned"
+  },
+  "ui:app.js:data-nt-digest": {
+   "status": "planned"
+  },
+  "ui:app.js:data-nt-do": {
+   "status": "planned"
+  },
+  "ui:app.js:data-nt-filter": {
+   "status": "planned"
+  },
+  "ui:app.js:data-nt-ftog": {
+   "status": "planned"
+  },
+  "ui:app.js:data-nt-grp": {
+   "status": "planned"
+  },
+  "ui:app.js:data-nt-level": {
+   "status": "planned"
+  },
+  "ui:app.js:data-nt-pref=desktop": {
+   "status": "planned"
+  },
+  "ui:app.js:data-nt-set": {
+   "status": "planned"
+  },
+  "ui:app.js:data-nt-snooze": {
+   "status": "planned"
+  },
+  "ui:app.js:data-nt-snz": {
+   "status": "planned"
+  },
+  "ui:app.js:data-nt-tab": {
+   "status": "planned"
+  },
+  "ui:app.js:data-nt-unsnooze": {
+   "status": "planned"
+  },
+  "ui:app.js:data-nt-viewall": {
+   "status": "planned"
+  },
+  "ui:app.js:data-nt-viewall-page": {
+   "status": "planned"
+  },
+  "ui:app.js:data-part=effort": {
+   "status": "planned"
+  },
+  "ui:app.js:data-part=model": {
+   "status": "planned"
+  },
+  "ui:app.js:data-pi": {
+   "status": "excluded",
+   "category": "view-state",
+   "reason": "changes only what the screen shows"
+  },
+  "ui:app.js:data-r=close": {
+   "status": "planned"
+  },
+  "ui:app.js:data-r=home": {
+   "status": "planned"
+  },
+  "ui:app.js:data-r=search": {
+   "status": "planned"
+  },
+  "ui:app.js:data-r=side": {
+   "status": "planned"
+  },
+  "ui:app.js:data-recent-chat": {
+   "status": "planned"
+  },
+  "ui:app.js:data-recent-file": {
+   "status": "planned"
+  },
+  "ui:app.js:data-recent-project": {
+   "status": "planned"
+  },
+  "ui:app.js:data-retry=notes": {
+   "status": "excluded",
+   "category": "view-state",
+   "reason": "changes only what the screen shows"
+  },
+  "ui:app.js:data-retry=usage": {
+   "status": "excluded",
+   "category": "view-state",
+   "reason": "changes only what the screen shows"
+  },
+  "ui:app.js:data-tip=Account, settings, connected accounts, get the apps": {
+   "status": "excluded",
+   "category": "view-state",
+   "reason": "changes only what the screen shows"
+  },
+  "ui:app.js:data-tip=Back": {
+   "status": "excluded",
+   "category": "view-state",
+   "reason": "changes only what the screen shows"
+  },
+  "ui:app.js:data-tip=Close": {
+   "status": "excluded",
+   "category": "view-state",
+   "reason": "changes only what the screen shows"
+  },
+  "ui:app.js:data-tip=Close  Esc": {
+   "status": "excluded",
+   "category": "view-state",
+   "reason": "changes only what the screen shows"
+  },
+  "ui:app.js:data-tip=Collapse": {
+   "status": "excluded",
+   "category": "view-state",
+   "reason": "changes only what the screen shows"
+  },
+  "ui:app.js:data-tip=Connection and build": {
+   "status": "excluded",
+   "category": "view-state",
+   "reason": "changes only what the screen shows"
+  },
+  "ui:app.js:data-tip=Copy the whole conversation, with its diagnostics": {
+   "status": "excluded",
+   "category": "view-state",
+   "reason": "changes only what the screen shows"
+  },
+  "ui:app.js:data-tip=Copy transcript, rename, delete": {
+   "status": "excluded",
+   "category": "view-state",
+   "reason": "changes only what the screen shows"
+  },
+  "ui:app.js:data-tip=Delete": {
+   "status": "excluded",
+   "category": "view-state",
+   "reason": "changes only what the screen shows"
+  },
+  "ui:app.js:data-tip=Edit": {
+   "status": "excluded",
+   "category": "view-state",
+   "reason": "changes only what the screen shows"
+  },
+  "ui:app.js:data-tip=Never suggest this": {
+   "status": "excluded",
+   "category": "view-state",
+   "reason": "changes only what the screen shows"
+  },
+  "ui:app.js:data-tip=New project": {
+   "status": "excluded",
+   "category": "view-state",
+   "reason": "changes only what the screen shows"
+  },
+  "ui:app.js:data-tip=Open sidebar": {
+   "status": "excluded",
+   "category": "view-state",
+   "reason": "changes only what the screen shows"
+  },
+  "ui:app.js:data-tip=Search": {
+   "status": "excluded",
+   "category": "view-state",
+   "reason": "changes only what the screen shows"
+  },
+  "ui:app.js:data-tip=Share": {
+   "status": "excluded",
+   "category": "view-state",
+   "reason": "changes only what the screen shows"
+  },
+  "ui:app.js:data-tip=Usage": {
+   "status": "excluded",
+   "category": "view-state",
+   "reason": "changes only what the screen shows"
+  },
+  "ui:app.js:data-us-alert": {
+   "status": "planned"
+  },
+  "ui:app.js:data-us-group": {
+   "status": "planned"
+  },
+  "ui:app.js:data-us-held": {
+   "status": "planned"
+  },
+  "ui:app.js:data-us-range": {
+   "status": "planned"
+  },
+  "ui:app.js:data-us=buy": {
+   "status": "planned"
+  },
+  "ui:app.js:data-us=page": {
+   "status": "planned"
+  },
+  "ui:app.js:data-ws": {
+   "status": "excluded",
+   "category": "view-state",
+   "reason": "changes only what the screen shows"
+  },
+  "ui:community.js:data-cm=flag": {
+   "status": "planned"
+  },
+  "ui:community.js:data-cm=mine": {
+   "status": "planned"
+  },
+  "ui:community.js:data-cm=mod": {
+   "status": "planned"
+  },
+  "ui:community.js:data-cm=open": {
+   "status": "planned"
+  },
+  "ui:community.js:data-cm=openLog": {
+   "status": "planned"
+  },
+  "ui:community.js:data-cm=publish": {
+   "status": "planned"
+  },
+  "ui:community.js:data-cm=resolve": {
+   "status": "planned"
+  },
+  "ui:community.js:data-cm=ticket": {
+   "status": "planned"
+  },
+  "ui:community.js:data-cm=vote": {
+   "status": "planned"
+  },
+  "ui:community.js:data-ticket": {
+   "status": "planned"
+  },
+  "ui:company.js:data-co=addId": {
+   "status": "planned"
+  },
+  "ui:company.js:data-co=addReg": {
+   "status": "planned"
+  },
+  "ui:company.js:data-co=agent": {
+   "status": "planned"
+  },
+  "ui:company.js:data-co=allocate": {
+   "status": "planned"
+  },
+  "ui:company.js:data-co=edit": {
+   "status": "planned"
+  },
+  "ui:company.js:data-co=employ": {
+   "status": "planned"
+  },
+  "ui:company.js:data-co=rmId": {
+   "status": "planned"
+  },
+  "ui:company.js:data-co=title": {
+   "status": "planned"
+  },
+  "ui:company.js:data-co=topup": {
+   "status": "planned"
+  },
+  "ui:drag.js:data-drag-handle": {
+   "status": "planned"
+  },
+  "ui:funding.js:data-fd=addMs": {
+   "status": "planned"
+  },
+  "ui:funding.js:data-fd=approve": {
+   "status": "planned"
+  },
+  "ui:funding.js:data-fd=campaign": {
+   "status": "planned"
+  },
+  "ui:funding.js:data-fd=cap": {
+   "status": "planned"
+  },
+  "ui:funding.js:data-fd=consent": {
+   "status": "planned"
+  },
+  "ui:funding.js:data-fd=contribute": {
+   "status": "planned"
+  },
+  "ui:funding.js:data-fd=done": {
+   "status": "planned"
+  },
+  "ui:funding.js:data-fd=editMs": {
+   "status": "planned"
+  },
+  "ui:funding.js:data-fd=grant": {
+   "status": "planned"
+  },
+  "ui:funding.js:data-fd=return": {
+   "status": "planned"
+  },
+  "ui:funding.js:data-fd=start": {
+   "status": "planned"
+  },
+  "ui:history.js:data-h=close": {
+   "status": "excluded",
+   "category": "view-state",
+   "reason": "changes only what the screen shows"
+  },
+  "ui:history.js:data-h=f": {
+   "status": "excluded",
+   "category": "view-state",
+   "reason": "changes only what the screen shows"
+  },
+  "ui:history.js:data-h=jump": {
+   "status": "excluded",
+   "category": "view-state",
+   "reason": "changes only what the screen shows"
+  },
+  "ui:history.js:data-h=redo": {
+   "status": "excluded",
+   "category": "view-state",
+   "reason": "changes only what the screen shows"
+  },
+  "ui:history.js:data-h=undo": {
+   "status": "excluded",
+   "category": "view-state",
+   "reason": "changes only what the screen shows"
+  },
+  "ui:live.js:data-live-go": {
+   "status": "planned"
+  },
+  "ui:market.js:data-mk=cancel": {
+   "status": "planned"
+  },
+  "ui:market.js:data-mk=cap": {
+   "status": "planned"
+  },
+  "ui:market.js:data-mk=console": {
+   "status": "planned"
+  },
+  "ui:market.js:data-mk=deletePart": {
+   "status": "planned"
+  },
+  "ui:market.js:data-mk=endRent": {
+   "status": "planned"
+  },
+  "ui:market.js:data-mk=exportPart": {
+   "status": "planned"
+  },
+  "ui:market.js:data-mk=kyb": {
+   "status": "planned"
+  },
+  "ui:market.js:data-mk=open": {
+   "status": "planned"
+  },
+  "ui:market.js:data-mk=payout": {
+   "status": "planned"
+  },
+  "ui:market.js:data-mk=refund": {
+   "status": "planned"
+  },
+  "ui:market.js:data-mk=remove": {
+   "status": "planned"
+  },
+  "ui:market.js:data-mk=reply": {
+   "status": "planned"
+  },
+  "ui:market.js:data-mk=report": {
+   "status": "planned"
+  },
+  "ui:market.js:data-mk=request": {
+   "status": "planned"
+  },
+  "ui:market.js:data-mk=resubmit": {
+   "status": "planned"
+  },
+  "ui:market.js:data-mk=resume": {
+   "status": "planned"
+  },
+  "ui:market.js:data-mk=review": {
+   "status": "planned"
+  },
+  "ui:market.js:data-mk=soul": {
+   "status": "planned"
+  },
+  "ui:market.js:data-mk=unlist": {
+   "status": "planned"
+  },
+  "ui:modals.js:data-adaptive-settings": {
+   "status": "planned"
+  },
+  "ui:modals.js:data-all-keys": {
+   "status": "planned"
+  },
+  "ui:modals.js:data-chip-x": {
+   "status": "planned"
+  },
+  "ui:modals.js:data-chips": {
+   "status": "planned"
+  },
+  "ui:modals.js:data-clear-local": {
+   "status": "excluded",
+   "category": "view-state",
+   "reason": "changes only what the screen shows"
+  },
+  "ui:modals.js:data-export": {
+   "status": "planned"
+  },
+  "ui:modals.js:data-i": {
+   "status": "excluded",
+   "category": "view-state",
+   "reason": "changes only what the screen shows"
+  },
+  "ui:modals.js:data-mode-sw": {
+   "status": "excluded",
+   "category": "view-state",
+   "reason": "changes only what the screen shows"
+  },
+  "ui:modals.js:data-plan": {
+   "status": "planned"
+  },
+  "ui:modals.js:data-pref-sw": {
+   "status": "planned"
+  },
+  "ui:modals.js:data-sec": {
+   "status": "excluded",
+   "category": "view-state",
+   "reason": "changes only what the screen shows"
+  },
+  "ui:modals.js:data-signout": {
+   "status": "planned"
+  },
+  "ui:modals.js:data-xd-act": {
+   "status": "planned"
+  },
+  "ui:modals.js:data-xd-close": {
+   "status": "excluded",
+   "category": "view-state",
+   "reason": "changes only what the screen shows"
+  },
+  "ui:pages.js:data-pg-ddv": {
+   "status": "excluded",
+   "category": "view-state",
+   "reason": "changes only what the screen shows"
+  },
+  "ui:pages.js:data-reply": {
+   "status": "planned"
+  },
+  "ui:pages.js:data-v=all": {
+   "status": "excluded",
+   "category": "view-state",
+   "reason": "changes only what the screen shows"
+  },
+  "ui:pages.js:data-v=All": {
+   "status": "excluded",
+   "category": "view-state",
+   "reason": "changes only what the screen shows"
+  },
+  "ui:pages.js:data-v=grid": {
+   "status": "excluded",
+   "category": "view-state",
+   "reason": "changes only what the screen shows"
+  },
+  "ui:pages.js:data-v=list": {
+   "status": "excluded",
+   "category": "view-state",
+   "reason": "changes only what the screen shows"
+  },
+  "ui:places.js:data-pl=accept": {
+   "status": "planned"
+  },
+  "ui:places.js:data-pl=close": {
+   "status": "planned"
+  },
+  "ui:places.js:data-pl=divs": {
+   "status": "planned"
+  },
+  "ui:places.js:data-pl=edit": {
+   "status": "planned"
+  },
+  "ui:places.js:data-pl=handoff": {
+   "status": "planned"
+  },
+  "ui:places.js:data-pl=list": {
+   "status": "planned"
+  },
+  "ui:places.js:data-pl=move": {
+   "status": "planned"
+  },
+  "ui:places.js:data-pl=peek": {
+   "status": "planned"
+  },
+  "ui:places.js:data-pl=profile": {
+   "status": "planned"
+  },
+  "ui:places.js:data-pl=walk": {
+   "status": "planned"
+  },
+  "ui:places.js:data-pl=watch": {
+   "status": "planned"
+  },
+  "ui:platform-account.js:data-acct=plans": {
+   "status": "planned"
+  },
+  "ui:platform-account.js:data-acct=portal": {
+   "status": "planned"
+  },
+  "ui:platform-account.js:data-acct=retry": {
+   "status": "planned"
+  },
+  "ui:platform-agents.js:data-xag=accept": {
+   "status": "planned"
+  },
+  "ui:platform-agents.js:data-xag=activity-more": {
+   "status": "planned"
+  },
+  "ui:platform-agents.js:data-xag=activity-refresh": {
+   "status": "planned"
+  },
+  "ui:platform-agents.js:data-xag=calls": {
+   "status": "planned"
+  },
+  "ui:platform-agents.js:data-xag=clearq": {
+   "status": "planned"
+  },
+  "ui:platform-agents.js:data-xag=copy": {
+   "status": "planned"
+  },
+  "ui:platform-agents.js:data-xag=decline": {
+   "status": "planned"
+  },
+  "ui:platform-agents.js:data-xag=delete": {
+   "status": "planned"
+  },
+  "ui:platform-agents.js:data-xag=division": {
+   "status": "planned"
+  },
+  "ui:platform-agents.js:data-xag=divisions": {
+   "status": "planned"
+  },
+  "ui:platform-agents.js:data-xag=edit": {
+   "status": "planned"
+  },
+  "ui:platform-agents.js:data-xag=grant": {
+   "status": "planned"
+  },
+  "ui:platform-agents.js:data-xag=handover": {
+   "status": "planned"
+  },
+  "ui:platform-agents.js:data-xag=instr-cancel": {
+   "status": "planned"
+  },
+  "ui:platform-agents.js:data-xag=instr-edit": {
+   "status": "planned"
+  },
+  "ui:platform-agents.js:data-xag=lend": {
+   "status": "planned"
+  },
+  "ui:platform-agents.js:data-xag=list": {
+   "status": "planned"
+  },
+  "ui:platform-agents.js:data-xag=mint": {
+   "status": "planned"
+  },
+  "ui:platform-agents.js:data-xag=move": {
+   "status": "planned"
+  },
+  "ui:platform-agents.js:data-xag=move-accept": {
+   "status": "planned"
+  },
+  "ui:platform-agents.js:data-xag=move-decline": {
+   "status": "planned"
+  },
+  "ui:platform-agents.js:data-xag=new": {
+   "status": "planned"
+  },
+  "ui:platform-agents.js:data-xag=open": {
+   "status": "planned"
+  },
+  "ui:platform-agents.js:data-xag=open-division": {
+   "status": "planned"
+  },
+  "ui:platform-agents.js:data-xag=open-task": {
+   "status": "planned"
+  },
+  "ui:platform-agents.js:data-xag=retry": {
+   "status": "planned"
+  },
+  "ui:platform-agents.js:data-xag=revoke": {
+   "status": "planned"
+  },
+  "ui:platform-agents.js:data-xag=run-cloud": {
+   "status": "planned"
+  },
+  "ui:platform-agents.js:data-xag=runtime": {
+   "status": "planned"
+  },
+  "ui:platform-agents.js:data-xag=spawnprog": {
+   "status": "planned"
+  },
+  "ui:platform-agents.js:data-xag=stop-run": {
+   "status": "planned"
+  },
+  "ui:platform-agents.js:data-xag=tab": {
+   "status": "planned"
+  },
+  "ui:platform-agents.js:data-xag=takeover": {
+   "status": "planned"
+  },
+  "ui:platform-agents.js:data-xag=ungrant": {
+   "status": "planned"
+  },
+  "ui:platform-agents.js:data-xag=unlend": {
+   "status": "planned"
+  },
+  "ui:platform-agents.js:data-xag=webhook": {
+   "status": "planned"
+  },
+  "ui:platform-agents.js:data-xag=webhook-off": {
+   "status": "planned"
+  },
+  "ui:platform-area.js:data-ac-id": {
+   "status": "planned"
+  },
+  "ui:platform-area.js:data-sc-del": {
+   "status": "planned"
+  },
+  "ui:platform-area.js:data-sc-move": {
+   "status": "planned"
+  },
+  "ui:platform-area.js:data-sc-retry": {
+   "status": "excluded",
+   "category": "view-state",
+   "reason": "changes only what the screen shows"
+  },
+  "ui:platform-area.js:data-sc-tog": {
+   "status": "planned"
+  },
+  "ui:platform-area.js:data-sort-all": {
+   "status": "excluded",
+   "category": "view-state",
+   "reason": "changes only what the screen shows"
+  },
+  "ui:platform-area.js:data-sort-pick": {
+   "status": "excluded",
+   "category": "view-state",
+   "reason": "changes only what the screen shows"
+  },
+  "ui:platform-area.js:data-sort-retry": {
+   "status": "excluded",
+   "category": "view-state",
+   "reason": "changes only what the screen shows"
+  },
+  "ui:platform-area.js:data-sort-to": {
+   "status": "excluded",
+   "category": "view-state",
+   "reason": "changes only what the screen shows"
+  },
+  "ui:platform-canvas.js:data-cv-edge": {
+   "status": "planned"
+  },
+  "ui:platform-canvas.js:data-cv-grip": {
+   "status": "planned"
+  },
+  "ui:platform-canvas.js:data-cv-node": {
+   "status": "planned"
+  },
+  "ui:platform-canvas.js:data-cv-text": {
+   "status": "planned"
+  },
+  "ui:platform-canvas.js:data-cv-wire": {
+   "status": "planned"
+  },
+  "ui:platform-chat.js:data-chat-live": {
+   "status": "planned"
+  },
+  "ui:platform-chat.js:data-chat-retry": {
+   "status": "planned"
+  },
+  "ui:platform-chat.js:data-more": {
+   "status": "excluded",
+   "category": "view-state",
+   "reason": "changes only what the screen shows"
+  },
+  "ui:platform-chat.js:data-newchat": {
+   "status": "planned"
+  },
+  "ui:platform-chat.js:data-newin": {
+   "status": "planned"
+  },
+  "ui:platform-divisions.js:data-xdv=add-agent": {
+   "status": "planned"
+  },
+  "ui:platform-divisions.js:data-xdv=add-project": {
+   "status": "planned"
+  },
+  "ui:platform-divisions.js:data-xdv=agent": {
+   "status": "planned"
+  },
+  "ui:platform-divisions.js:data-xdv=archive": {
+   "status": "planned"
+  },
+  "ui:platform-divisions.js:data-xdv=budget": {
+   "status": "planned"
+  },
+  "ui:platform-divisions.js:data-xdv=head": {
+   "status": "planned"
+  },
+  "ui:platform-divisions.js:data-xdv=list": {
+   "status": "planned"
+  },
+  "ui:platform-divisions.js:data-xdv=new": {
+   "status": "planned"
+  },
+  "ui:platform-divisions.js:data-xdv=new-inside": {
+   "status": "planned"
+  },
+  "ui:platform-divisions.js:data-xdv=open": {
+   "status": "planned"
+  },
+  "ui:platform-divisions.js:data-xdv=remove-project": {
+   "status": "planned"
+  },
+  "ui:platform-divisions.js:data-xdv=rename": {
+   "status": "planned"
+  },
+  "ui:platform-divisions.js:data-xdv=retry": {
+   "status": "planned"
+  },
+  "ui:platform-mcp.js:data-xmc-cat": {
+   "status": "planned"
+  },
+  "ui:platform-mcp.js:data-xmc=copy": {
+   "status": "planned"
+  },
+  "ui:platform-mcp.js:data-xmc=disconnect": {
+   "status": "planned"
+  },
+  "ui:platform-mcp.js:data-xmc=open": {
+   "status": "planned"
+  },
+  "ui:platform-mcp.js:data-xmc=retry": {
+   "status": "planned"
+  },
+  "ui:platform-mcp.js:data-xmc=tab": {
+   "status": "planned"
+  },
+  "ui:platform-storage-clouds.js:data-xsc-conn": {
+   "status": "planned"
+  },
+  "ui:platform-storage-clouds.js:data-xsc-file": {
+   "status": "planned"
+  },
+  "ui:platform-storage-clouds.js:data-xsc-item": {
+   "status": "planned"
+  },
+  "ui:platform-storage.js:data-xst-folder": {
+   "status": "planned"
+  },
+  "ui:platform-storage.js:data-xst-item": {
+   "status": "planned"
+  },
+  "ui:platform-storage.js:data-xst-open": {
+   "status": "planned"
+  },
+  "ui:platform-tasks.js:data-cal=-1": {
+   "status": "planned"
+  },
+  "ui:platform-tasks.js:data-cal=1": {
+   "status": "planned"
+  },
+  "ui:platform-tasks.js:data-day": {
+   "status": "planned"
+  },
+  "ui:platform-tasks.js:data-i": {
+   "status": "excluded",
+   "category": "view-state",
+   "reason": "changes only what the screen shows"
+  },
+  "ui:platform-tasks.js:data-menu-open": {
+   "status": "planned"
+  },
+  "ui:platform-tasks.js:data-n-attach": {
+   "status": "planned"
+  },
+  "ui:platform-tasks.js:data-n-chip": {
+   "status": "planned"
+  },
+  "ui:platform-tasks.js:data-n-create": {
+   "status": "planned"
+  },
+  "ui:platform-tasks.js:data-n-unfile": {
+   "status": "planned"
+  },
+  "ui:platform-tasks.js:data-pi": {
+   "status": "excluded",
+   "category": "view-state",
+   "reason": "changes only what the screen shows"
+  },
+  "ui:platform-tasks.js:data-pnew": {
+   "status": "planned"
+  },
+  "ui:platform-tasks.js:data-tk-cedit": {
+   "status": "planned"
+  },
+  "ui:platform-tasks.js:data-tk-dedit": {
+   "status": "planned"
+  },
+  "ui:platform-tasks.js:data-tk-desc": {
+   "status": "planned"
+  },
+  "ui:platform-tasks.js:data-tk-fmt": {
+   "status": "planned"
+  },
+  "ui:platform-tasks.js:data-tk=add-link": {
+   "status": "planned"
+  },
+  "ui:platform-tasks.js:data-tk=agent-addproj": {
+   "status": "planned"
+  },
+  "ui:platform-tasks.js:data-tk=agent-hook": {
+   "status": "planned"
+  },
+  "ui:platform-tasks.js:data-tk=agent-new": {
+   "status": "planned"
+  },
+  "ui:platform-tasks.js:data-tk=agent-revoke": {
+   "status": "planned"
+  },
+  "ui:platform-tasks.js:data-tk=agent-rmproj": {
+   "status": "planned"
+  },
+  "ui:platform-tasks.js:data-tk=agent-token": {
+   "status": "planned"
+  },
+  "ui:platform-tasks.js:data-tk=agent-unhook": {
+   "status": "planned"
+  },
+  "ui:platform-tasks.js:data-tk=agents-retry": {
+   "status": "planned"
+  },
+  "ui:platform-tasks.js:data-tk=attach": {
+   "status": "planned"
+  },
+  "ui:platform-tasks.js:data-tk=board": {
+   "status": "planned"
+  },
+  "ui:platform-tasks.js:data-tk=bulk": {
+   "status": "planned"
+  },
+  "ui:platform-tasks.js:data-tk=cedit-cancel": {
+   "status": "planned"
+  },
+  "ui:platform-tasks.js:data-tk=check": {
+   "status": "planned"
+  },
+  "ui:platform-tasks.js:data-tk=claim": {
+   "status": "planned"
+  },
+  "ui:platform-tasks.js:data-tk=clear-filters": {
+   "status": "planned"
+  },
+  "ui:platform-tasks.js:data-tk=cmenu": {
+   "status": "planned"
+  },
+  "ui:platform-tasks.js:data-tk=copy-cmd": {
+   "status": "planned"
+  },
+  "ui:platform-tasks.js:data-tk=copylink": {
+   "status": "planned"
+  },
+  "ui:platform-tasks.js:data-tk=desc-cancel": {
+   "status": "planned"
+  },
+  "ui:platform-tasks.js:data-tk=describe": {
+   "status": "planned"
+  },
+  "ui:platform-tasks.js:data-tk=filters": {
+   "status": "planned"
+  },
+  "ui:platform-tasks.js:data-tk=kid-open": {
+   "status": "planned"
+  },
+  "ui:platform-tasks.js:data-tk=layout": {
+   "status": "planned"
+  },
+  "ui:platform-tasks.js:data-tk=menu": {
+   "status": "planned"
+  },
+  "ui:platform-tasks.js:data-tk=move": {
+   "status": "planned"
+  },
+  "ui:platform-tasks.js:data-tk=new": {
+   "status": "planned"
+  },
+  "ui:platform-tasks.js:data-tk=open": {
+   "status": "planned"
+  },
+  "ui:platform-tasks.js:data-tk=prompt": {
+   "status": "planned"
+  },
+  "ui:platform-tasks.js:data-tk=prop": {
+   "status": "planned"
+  },
+  "ui:platform-tasks.js:data-tk=refresh": {
+   "status": "planned"
+  },
+  "ui:platform-tasks.js:data-tk=rename": {
+   "status": "planned"
+  },
+  "ui:platform-tasks.js:data-tk=reply": {
+   "status": "planned"
+  },
+  "ui:platform-tasks.js:data-tk=retry": {
+   "status": "planned"
+  },
+  "ui:platform-tasks.js:data-tk=retry-project": {
+   "status": "planned"
+  },
+  "ui:platform-tasks.js:data-tk=save-view": {
+   "status": "planned"
+  },
+  "ui:platform-tasks.js:data-tk=select": {
+   "status": "planned"
+  },
+  "ui:platform-tasks.js:data-tk=sort": {
+   "status": "planned"
+  },
+  "ui:platform-tasks.js:data-tk=unattach": {
+   "status": "planned"
+  },
+  "ui:platform-tasks.js:data-tk=unfilter": {
+   "status": "planned"
+  },
+  "ui:platform-tasks.js:data-tk=unlink": {
+   "status": "planned"
+  },
+  "ui:platform-tasks.js:data-tk=unselect": {
+   "status": "planned"
+  },
+  "ui:platform-tasks.js:data-tk=view": {
+   "status": "planned"
+  },
+  "ui:platform-tasks.js:data-tk=watch": {
+   "status": "planned"
+  },
+  "ui:platform-work.js:data-pi-chat": {
+   "status": "excluded",
+   "category": "view-state",
+   "reason": "changes only what the screen shows"
+  },
+  "ui:platform-work.js:data-pi-task": {
+   "status": "excluded",
+   "category": "view-state",
+   "reason": "changes only what the screen shows"
+  },
+  "ui:platform-work.js:data-pi=more": {
+   "status": "excluded",
+   "category": "view-state",
+   "reason": "changes only what the screen shows"
+  },
+  "ui:platform-work.js:data-pi=retry": {
+   "status": "excluded",
+   "category": "view-state",
+   "reason": "changes only what the screen shows"
+  },
+  "ui:platform-work.js:data-pi=share": {
+   "status": "excluded",
+   "category": "view-state",
+   "reason": "changes only what the screen shows"
+  },
+  "ui:platform-work.js:data-pj-conv": {
+   "status": "planned"
+  },
+  "ui:platform-work.js:data-pj=files-add": {
+   "status": "planned"
+  },
+  "ui:platform-work.js:data-pj=files-remove": {
+   "status": "planned"
+  },
+  "ui:platform-work.js:data-pj=files-retry": {
+   "status": "planned"
+  },
+  "ui:platform-work.js:data-share-add": {
+   "status": "planned"
+  },
+  "ui:platform-work.js:data-share-new-role": {
+   "status": "planned"
+  },
+  "ui:platform-work.js:data-share-remove": {
+   "status": "planned"
+  },
+  "ui:platform-work.js:data-share-retry": {
+   "status": "excluded",
+   "category": "view-state",
+   "reason": "changes only what the screen shows"
+  },
+  "ui:platform-work.js:data-share-role": {
+   "status": "planned"
+  },
+  "ui:resources.js:data-rs=accept": {
+   "status": "planned"
+  },
+  "ui:resources.js:data-rs=access": {
+   "status": "planned"
+  },
+  "ui:resources.js:data-rs=activate": {
+   "status": "planned"
+  },
+  "ui:resources.js:data-rs=ask": {
+   "status": "planned"
+  },
+  "ui:resources.js:data-rs=decline": {
+   "status": "planned"
+  },
+  "ui:resources.js:data-rs=filter": {
+   "status": "planned"
+  },
+  "ui:resources.js:data-rs=here": {
+   "status": "planned"
+  },
+  "ui:resources.js:data-rs=home": {
+   "status": "planned"
+  },
+  "ui:resources.js:data-rs=propose": {
+   "status": "planned"
+  },
+  "ui:resources.js:data-rs=request": {
+   "status": "planned"
+  },
+  "ui:resources.js:data-rs=revoke": {
+   "status": "planned"
+  },
+  "ui:resources.js:data-rs=version": {
+   "status": "planned"
+  },
+  "ui:settings.js:data-set-sel=lang": {
+   "status": "excluded",
+   "category": "view-state",
+   "reason": "changes only what the screen shows"
+  },
+  "ui:settings.js:data-set-sel=region": {
+   "status": "excluded",
+   "category": "view-state",
+   "reason": "changes only what the screen shows"
+  },
+  "ui:settings.js:data-set-sel=tz": {
+   "status": "excluded",
+   "category": "view-state",
+   "reason": "changes only what the screen shows"
+  },
+  "ui:settings.js:data-set=adaptive": {
+   "status": "planned"
+  },
+  "ui:settings.js:data-set=go": {
+   "status": "planned"
+  },
+  "ui:settings.js:data-set=manageModes": {
+   "status": "planned"
+  },
+  "ui:settings.js:data-set=ntlevel": {
+   "status": "planned"
+  },
+  "ui:settings.js:data-set=pref": {
+   "status": "planned"
+  },
+  "ui:settings.js:data-set=prefv": {
+   "status": "planned"
+  },
+  "ui:settings.js:data-set=route": {
+   "status": "planned"
+  },
+  "ui:settings.js:data-set=shortcuts": {
+   "status": "planned"
+  },
+  "ui:settings.js:data-theme-bright": {
+   "status": "excluded",
+   "category": "view-state",
+   "reason": "changes only what the screen shows"
+  },
+  "ui:settings.js:data-theme-pick": {
+   "status": "excluded",
+   "category": "view-state",
+   "reason": "changes only what the screen shows"
+  },
+  "ui:visibility.js:data-vis-project": {
+   "status": "excluded",
+   "category": "view-state",
+   "reason": "changes only what the screen shows"
+  },
+  "ui:workforce.js:data-wf-sel": {
+   "status": "excluded",
+   "category": "view-state",
+   "reason": "changes only what the screen shows"
+  },
+  "ui:workforce.js:data-wf=accept": {
+   "status": "planned"
+  },
+  "ui:workforce.js:data-wf=act": {
+   "status": "planned"
+  },
+  "ui:workforce.js:data-wf=actTeam": {
+   "status": "planned"
+  },
+  "ui:workforce.js:data-wf=addMember": {
+   "status": "planned"
+  },
+  "ui:workforce.js:data-wf=archiveDiv": {
+   "status": "planned"
+  },
+  "ui:workforce.js:data-wf=archiveTeam": {
+   "status": "planned"
+  },
+  "ui:workforce.js:data-wf=assign": {
+   "status": "planned"
+  },
+  "ui:workforce.js:data-wf=budget": {
+   "status": "planned"
+  },
+  "ui:workforce.js:data-wf=decline": {
+   "status": "planned"
+  },
+  "ui:workforce.js:data-wf=fn": {
+   "status": "planned"
+  },
+  "ui:workforce.js:data-wf=handoff": {
+   "status": "planned"
+  },
+  "ui:workforce.js:data-wf=head": {
+   "status": "planned"
+  },
+  "ui:workforce.js:data-wf=memberDivs": {
+   "status": "planned"
+  },
+  "ui:workforce.js:data-wf=newDiv": {
+   "status": "planned"
+  },
+  "ui:workforce.js:data-wf=newTeam": {
+   "status": "planned"
+  },
+  "ui:workforce.js:data-wf=renameDiv": {
+   "status": "planned"
+  },
+  "ui:workforce.js:data-wf=restoreDiv": {
+   "status": "planned"
+  },
+  "ui:workforce.js:data-wf=seed": {
+   "status": "planned"
+  },
+  "ui:workforce.js:data-wf=unassign": {
+   "status": "planned"
+  },
+  "ui:workforce.js:data-wf=unteam": {
+   "status": "planned"
+  },
+  "ui:workforce.js:data-wf=win": {
+   "status": "planned"
+  },
+  "ui:workforce.js:data-wf=withdraw": {
+   "status": "planned"
+  }
+ }
+}
