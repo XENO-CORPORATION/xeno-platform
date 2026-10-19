@@ -59,7 +59,7 @@ async function main() {
   app.use('/api/tasks', mcpChallenge, taskTokenAuth, unlessTaskToken(authMiddleware), xenoTasksRoutes);
   // mounted exactly as index.js mounts it: the endpoint at the root, management behind the person's session
   app.get('/.well-known/oauth-protected-resource/api/mcp', mcpResourceMetadata);
-  app.use('/api/mcp', (req, res, next) => (req.path === '/' ? xenoMcpRoutes(req, res, next) : next()));
+  app.use('/api/mcp', (req, res, next) => (req.path === '/' || req.path === '/catalogue' ? xenoMcpRoutes(req, res, next) : next()));
   app.use('/api/mcp', authMiddleware, personOnly, management);
   app.use('/api/agents', authMiddleware, personOnly, platformAgentRoutes);
   app.use('/api/canvases', authMiddleware, canvasRoutes);
@@ -107,9 +107,33 @@ async function main() {
     // 3. prefixed names, routed by prefix
     const list = await rpc(claude.at, 'tools/list', {});
     const names = list.j.result.tools.map((t) => t.name);
-    check(names.length === mcp.SERVICES[0].tools().length && names.every((n) => /^tasks_[a-z_]+$/.test(n)), `every tool is prefixed by its service (${names.length} tools, e.g. ${names[0]})`);
+    const legacy = names.filter((n) => !n.includes('__')), generated = names.filter((n) => n.includes('__'));
+    check(legacy.length === mcp.SERVICES[0].tools().length && legacy.every((n) => /^tasks_[a-z_]+$/.test(n)), `every grandfathered tool is prefixed by its service (${legacy.length} tools, e.g. ${legacy[0]})`);
+    check(generated.length === mcp.visibleCapabilities({ categories: ['tasks'] }, { kind: 'human' }).length && generated.every((n) => n.startsWith('tasks__')), `the catalogue generates the canonical names beside them (${generated.length}, e.g. ${generated[0]})`);
     const projects = await rpc(claude.at, 'tools/call', { name: 'tasks_list_projects', arguments: {} });
     check(projects.s === 200 && !projects.j.result.isError && Array.isArray(projects.j.result.structuredContent.projects), 'a prefixed call routes to the Tasks service and answers');
+    const canon = await rpc(claude.at, 'tools/call', { name: 'tasks__project__list', arguments: {} });
+    check(!canon.j.result.isError && Array.isArray(canon.j.result.structuredContent.projects) && canon.j.result._meta['xeno/capability'] === 'tasks.project.list' && canon.j.result._meta['xeno/charged'].credits === 0, 'the canonical wire name reaches the same tool, and the reply says what it charged (0)');
+
+    // 3b. GET /api/mcp/catalogue — only what THIS caller may use, cacheable by ETag
+    const cat = await call('GET', '/api/mcp/catalogue', { token: claude.at });
+    const catNames = cat.s === 200 ? cat.j.capabilities.map((c) => c.name) : [];
+    check(cat.s === 200 && catNames.length === generated.length && catNames.every((n) => n.startsWith('tasks.')) && !catNames.includes('agents.self.get'), `the catalogue lists only the caller's categories (${catNames.length}: no canvas, no agents-only)`);
+    check(cat.s === 200 && cat.j.capabilities.every((c) => c.wire && c.class && c.cost && c.idempotency && c.preview && c.input && c.reply && !('bind' in c)), 'each declaration carries its contract fields and never its binding');
+    const etag = cat.h.get('etag');
+    check(Boolean(etag) && (await call('GET', '/api/mcp/catalogue', { token: claude.at, headers: { 'if-none-match': etag } })).s === 304, `an unchanged catalogue answers 304 to its ETag (${etag})`);
+    check((await call('GET', '/api/mcp/catalogue')).s === 401, 'the catalogue needs the caller’s own credential');
+
+    // 3c. Idempotency-Key: a repeat replays, never acts twice
+    const idk = 'idem-' + crypto.randomUUID();
+    const mk1 = await call('POST', '/api/mcp', { token: claude.at, headers: { 'idempotency-key': idk }, body: { jsonrpc: '2.0', id: ++rid, method: 'tools/call', params: { name: 'tasks__task__create', arguments: { title: 'Idempotent ' + idk } } } });
+    const mk2 = await call('POST', '/api/mcp', { token: claude.at, headers: { 'idempotency-key': idk }, body: { jsonrpc: '2.0', id: ++rid, method: 'tools/call', params: { name: 'tasks__task__create', arguments: { title: 'Idempotent ' + idk } } } });
+    const idemKey = mk1.j.result.structuredContent && mk1.j.result.structuredContent.task && mk1.j.result.structuredContent.task.key;
+    check(Boolean(idemKey) && mk2.j.result.structuredContent.task.key === idemKey && mk2.j.result._meta['xeno/replayed'] === true, `the same Idempotency-Key replays the first result (${idemKey}) instead of raising a second task`);
+    const made2 = (await pool.query('SELECT count(*)::int AS n FROM tasks WHERE title = $1', ['Idempotent ' + idk])).rows[0].n;
+    check(made2 === 1, `and exactly one task exists (${made2})`);
+    const reuse = await call('POST', '/api/mcp', { token: claude.at, headers: { 'idempotency-key': idk }, body: { jsonrpc: '2.0', id: ++rid, method: 'tools/call', params: { name: 'tasks__comment__create', arguments: { key: idemKey, body: 'x' } } } });
+    check(reuse.j.result.isError === true && reuse.j.result.structuredContent.code === 'idempotency_key_reused', 'a key reused for a different capability is refused');
     const unknown = await rpc(claude.at, 'tools/call', { name: 'forum_post', arguments: {} });
     check(unknown.j.result.isError === true && unknown.j.result.structuredContent.code === 'unknown_tool', 'a tool of a service that does not exist is refused, as a tool error');
 
@@ -117,6 +141,9 @@ async function main() {
     const off = await call('PATCH', `/api/mcp/connections/${claudeConn.id}`, { token: session(ada), body: { categories: [] } });
     check(off.s === 200 && off.j.connection.categories.length === 0, 'the person turns Tasks off for one connection');
     check((await rpc(claude.at, 'tools/list', {})).j.result.tools.length === 0, 'its tools leave the list');
+    const catOff = await call('GET', '/api/mcp/catalogue', { token: claude.at });
+    check(catOff.s === 200 && catOff.j.capabilities.length === 0 && catOff.h.get('etag') !== etag, 'and the catalogue: a capability the caller cannot use is not shown, and the ETag changes');
+    check((await rpc(claude.at, 'tools/call', { name: 'tasks__project__list', arguments: {} })).j.result.structuredContent.code === 'category_disabled', 'the canonical name is refused exactly like the old one');
     const blocked = await rpc(claude.at, 'tools/call', { name: 'tasks_list_projects', arguments: {} });
     check(blocked.j.result.isError === true && blocked.j.result.structuredContent.code === 'category_disabled', 'and a call to a turned-off tool is REFUSED, not just hidden (falsifier §7)');
     check((await rpc(cursor.at, 'tools/list', {})).j.result.tools.length > 0, 'the other connection is unaffected');
@@ -206,6 +233,10 @@ async function main() {
     // 11. canvases over XENO MCP: the agent lays work out on a canvas, through the same rules as the screen
     const cl = await rpc(cred.token, 'tools/list', {});
     check(cl.j.result.tools.some((t) => t.name === 'canvas_add') && cl.j.result.tools.some((t) => t.name === 'canvas_connect'), 'an agent has the canvas tools');
+    const gen = cl.j.result.tools.find((t) => t.name === 'studio__image__generate');
+    check(Boolean(gen) && gen.annotations.destructiveHint === true && gen.annotations.readOnlyHint === false && gen._meta['xeno/class'] === 'irreversible' && gen._meta['xeno/cost'].model === 'quoted' && gen._meta['xeno/idempotency'].key === 'request_key' && gen._meta['xeno/preview'].supported === false, 'a generated tool carries its class as annotations and its contract under _meta');
+    const agCat = (await call('GET', '/api/mcp/catalogue', { token: cred.token })).j.capabilities.map((c) => c.name);
+    check(agCat.includes('agents.self.get') && agCat.includes('studio.image.generate') && agCat.includes('canvas.item.add'), `an agent's own credential sees the agents-only capabilities in its catalogue (${agCat.length})`);
     const t2 = (await rpc(cred.token, 'tools/call', { name: 'tasks_create_task', arguments: { title: 'Write notes', projectId: String(proj) } })).j.result.structuredContent;
     const k1 = c1.j.result.structuredContent.task ? c1.j.result.structuredContent.task.key : c1.j.result.structuredContent.key, k2 = t2.task ? t2.task.key : t2.key;
     const cvMade = (await rpc(cred.token, 'tools/call', { name: 'canvas_create', arguments: { name: 'Release plan', project: String(proj) } })).j.result;

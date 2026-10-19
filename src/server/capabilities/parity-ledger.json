@@ -2889,6 +2889,11 @@
   "route:xenoMcpRoutes.js:GET /activity (management)": {
    "status": "planned"
   },
+  "route:xenoMcpRoutes.js:GET /catalogue": {
+   "status": "excluded",
+   "category": "protocol",
+   "reason": "capability discovery for MCP clients: it describes the catalogue, it is not an action"
+  },
   "route:xenoMcpRoutes.js:GET /connections (management)": {
    "status": "planned"
   },

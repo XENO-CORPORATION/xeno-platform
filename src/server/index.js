@@ -655,7 +655,7 @@ app.use('/api/tasks', databaseMiddleware, mcpChallenge, taskTokenAuth, unlessTas
 // XENO MCP — one hosted MCP address for every agent (XENO AGENT SURFACES & CONNECTORS - SPEC.md §7). The
 // management routes are the person's (their session); the endpoint itself is an agent's (its OAuth token).
 app.get('/.well-known/oauth-protected-resource/api/mcp', mcpResourceMetadata);
-app.use('/api/mcp', databaseMiddleware, (req, res, next) => (req.path === '/' ? xenoMcpRoutes(req, res, next) : next()));
+app.use('/api/mcp', databaseMiddleware, (req, res, next) => (req.path === '/' || req.path === '/catalogue' ? xenoMcpRoutes(req, res, next) : next()));
 app.use('/api/mcp', databaseMiddleware, authMiddleware, requireActivated, mcpPersonOnly, xenoMcpManagement);
 app.use('/api/agents', databaseMiddleware, authMiddleware, requireActivated, mcpPersonOnly, platformAgentRoutes);
 app.use('/api/divisions', databaseMiddleware, authMiddleware, requireActivated, mcpPersonOnly, workforceDivisionRoutes);
