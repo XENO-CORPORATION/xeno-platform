@@ -9,6 +9,7 @@ import apiKeyWorkforceCapabilityRoutes from './apiKeyWorkforceCapabilityRoutes.j
 import workforceOwnershipTransferRoutes from './workforceOwnershipTransferRoutes.js';
 import workforceFundingRoutes from './workforceFundingRoutes.js';
 import { createWorkforceSessionRouter } from './workforceSessionRoutes.js';
+import { createWorkforceViewRouter } from './workforceViewRoutes.js';
 
 const MAX_BODY_BYTES = 256 * 1024;
 const ERRORS = Object.freeze({
@@ -579,6 +580,9 @@ export function createWorkforceRouter({ createWorkforceResource = defaultCreate,
   // workforce:manage act; the adapter itself adds the conversation-access guard the services leave to their caller.
   router.use('/sessions', authMiddleware, requireDpopIfBound, requireWorkforceScope('workforce:manage'),
     express.json({ limit: MAX_BODY_BYTES, strict: true }), createWorkforceSessionRouter({ env: sessionEnv }));
+  // VIEW-04/05: fenced scoped reads, canonical id resolution and per-view drafts. Reads, so workforce:read.
+  router.use('/views', authMiddleware, requireDpopIfBound, requireWorkforceScope('workforce:read'),
+    express.json({ limit: MAX_BODY_BYTES, strict: true }), createWorkforceViewRouter());
   const parse = express.json({ limit: MAX_BODY_BYTES, strict: true });
   const handle = (service, readOnly = false, project = responseObservation) => async (req, res) => {
     try {
