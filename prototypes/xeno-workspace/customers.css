@@ -1,0 +1,28 @@
+/* customers.css — Corpo › Customers (platform-customers.js). Workspace tokens only; emphasis by surface and text
+   brightness, never hue (DESIGN_SYSTEM.md). Text inputs take no focus ring: the border brightens instead.
+   A draft (an agent's words waiting for a person) reads as a dashed, darker plate — the same as support drafts. */
+.cr .in{padding:8px 10px;border-radius:6px;background:var(--n20);border:1px solid var(--n38);color:var(--text);font:13px/1.5 Inter,system-ui,sans-serif;outline:0;box-shadow:none}
+.cr .in:focus{border-color:var(--n58);outline:0}
+.cr textarea.in{resize:vertical;min-height:72px;width:100%;box-sizing:border-box}
+.cr-sum{display:flex;gap:18px;flex-wrap:wrap;font-size:13px;color:var(--muted);margin:4px 0 12px}.cr-sum b{color:var(--text)}
+.cr-tabs{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px}
+.cr-row{display:flex;gap:8px;justify-content:flex-end;align-items:center;flex-wrap:wrap}
+.cr-form{display:flex;flex-direction:column;gap:10px;max-width:720px;margin:0 0 14px;padding:14px;border-radius:10px;background:var(--n18);border:1px solid var(--n31)}
+.cr-form.cr-inline{flex-direction:row;flex-wrap:wrap;align-items:center}
+.cr-search{margin-bottom:10px}.cr-search .in{width:100%;max-width:420px;box-sizing:border-box}
+.cr-list{display:flex;flex-direction:column;gap:2px}
+.cr-li{display:grid;grid-template-columns:minmax(140px,1.2fr) minmax(120px,1fr) minmax(100px,1fr) minmax(80px,auto);gap:12px;align-items:center;text-align:left;padding:10px 12px;border-radius:8px;background:var(--n18);border:1px solid var(--n26);color:var(--text);font:13px Inter,system-ui,sans-serif;cursor:pointer}
+.cr-li:hover{background:var(--n22)}.cr-li small{color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.cr-detail{display:grid;grid-template-columns:minmax(0,1fr) 300px;gap:16px}
+.cr-main h2{margin:0 0 4px;font-size:20px}.cr-main h3,.cr .sp-console h3{margin:14px 0 6px;font-size:12px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.04em}
+.cr-compose{display:flex;flex-direction:column;gap:8px;margin:12px 0}.cr-compose .btn{align-self:flex-end}
+.cr-timeline{display:flex;flex-direction:column;gap:8px}
+.pg-post.cr-draft{background:var(--n15);border-color:var(--n42);border-style:dashed}
+.cr-deal{display:flex;flex-direction:column;gap:4px;padding:8px 10px;border-radius:8px;background:var(--n20);border:1px solid var(--n31);font-size:13px}
+.cr-deal small{color:var(--muted)}.cr-deal.draft{background:var(--n15);border-style:dashed}
+.cr-link{font-size:13px;padding:4px 0;cursor:pointer}.cr-link small{color:var(--dim)}
+.cr-board{display:grid;grid-auto-flow:column;grid-auto-columns:minmax(200px,1fr);gap:10px;overflow-x:auto;padding-bottom:6px}
+.cr-col{display:flex;flex-direction:column;gap:8px;padding:10px;border-radius:10px;background:var(--n18);border:1px solid var(--n26);min-height:120px}
+.cr-col-h{display:flex;justify-content:space-between;font-size:13px}.cr-col-h small{color:var(--muted)}
+.cr-report{font-size:13px;color:var(--text);padding:8px 10px;border-radius:6px;background:var(--n26)}
+@media (max-width:860px){.cr-detail{grid-template-columns:1fr}.cr-li{grid-template-columns:1fr 1fr}}

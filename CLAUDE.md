@@ -231,6 +231,23 @@ Private requests to XENO: `services/supportTickets.js` (the one service), `route
   `xenoTasks.transitionTask`). Mail only when `SUPPORT_EMAILS` is exactly `true` (in compose's `environment:` too).
 - Proofs: `npm run test:support-tickets` (real Postgres, mutation-checked) and `npm run test:support-ui` (browser).
 
+## 🤝 XENO Customers lives HERE — Corpo › Customers, the workspace CRM (2026-10-20)
+
+`services/customers.js` (the one service), `routes/customersRoutes.js` (`/api/customers`), `services/customersMcp.js`
+(`customers.*`), screens `prototypes/xeno-workspace/platform-customers.js` at
+`/workspace/corpo/spaces/customers[/contacts|/pipeline|/companies|/import|/duplicates|/contacts/<id>]`.
+
+- **The WORKSPACE owns contacts, companies and deals** (§8.11): viewers read, editors write, a HUMAN admin deletes
+  and GDPR-erases (erasure leaves a tombstone in `crm_erasures` with no personal data).
+- **Agents read and DRAFT.** An agent's note is `state='draft'` and its deal `state='draft'` until a person keeps or
+  confirms it; a CHECK and a trigger on `crm_activities` hold the note rule. No agent tool deletes, erases, merges,
+  exports, keeps, confirms or runs an import (it may preview one).
+- **Links, not copies.** Support tickets on a contact come from `supportTickets.getTicket` as the caller (explicit
+  links + tickets raised from this workspace by that email); tasks are XENO Tasks. A link never shows what its owner hides.
+- **Dedupe**: one contact per email per workspace (unique index); CSV import is a dry run unless `confirm`, skips or
+  fills blanks on an existing email, never overwrites.
+- Proofs: `npm run test:customers` (real Postgres, 60 checks, mutation-checked ×4) and `npm run test:customers-ui`.
+
 ## Project-aware chat: context must reach the model, not only the audit
 
 `services/chatProjectContext.js` supplies persisted project identity, instructions and authorized file retrieval.
