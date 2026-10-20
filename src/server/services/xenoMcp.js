@@ -31,6 +31,7 @@ import * as publishMcp from './publishMcp.js';
 import * as analyticsMcp from './analyticsMcp.js';
 import * as formsMcp from './formsMcp.js';
 import * as docsMcp from './docsMcp.js';
+import * as schedulingMcp from './schedulingMcp.js';
 import * as workforceMcp from './workforceMcp.js';
 import * as forumMcp from './forumMcp.js';
 import { resolvePrincipal } from './agentIdentity.js';
@@ -153,6 +154,14 @@ export const SERVICES = Object.freeze([
     tools: () => formsMcp.TOOLS,
     call: (db, actor, name, args) => formsMcp.callTool(db, actor, name, args),
     isToolError: (e) => e instanceof formsMcp.FormsMcpError,
+  },
+  // XENO Scheduling (schedulingMcp.js): read-only availability, booking pages, free slots and bookings.
+  {
+    category: 'scheduling', title: 'Scheduling', version: '1.0.0', timeoutMs: 30_000,
+    description: 'Scheduling: read availability, booking pages, free times and bookings of a workspace. Creating public booking links is a person’s act.',
+    tools: () => schedulingMcp.TOOLS,
+    call: (db, actor, name, args) => schedulingMcp.callTool(db, actor, name, args),
+    isToolError: (e) => e instanceof schedulingMcp.SchedulingMcpError,
   },
   // XENO Forum, folded in from /api/forum/mcp (kept): the same tools, the same function. Its wire names were
   // always `forum_<verb>`, so as a category the grandfathered alias is exactly the old name.

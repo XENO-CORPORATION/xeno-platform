@@ -26,6 +26,7 @@ import * as supportMcp from '../services/supportMcp.js';
 import * as publishMcp from '../services/publishMcp.js';
 import * as analyticsMcp from '../services/analyticsMcp.js';
 import * as docsMcp from '../services/docsMcp.js';
+import * as schedulingMcp from '../services/schedulingMcp.js';
 import * as workforceMcp from '../services/workforceMcp.js';
 import * as formsMcp from '../services/formsMcp.js';
 
@@ -33,7 +34,7 @@ import * as formsMcp from '../services/formsMcp.js';
 export const BOUND_TOOLS = Object.freeze({
   tasks: tasksMcp.TOOLS, canvas: canvasMcp.TOOLS, agents: agentsMcp.TOOLS,
   image: agentMediaMcp.IMAGE.tools, video: agentMediaMcp.VIDEO.tools, library: agentMediaMcp.LIBRARY.tools, chat: agentMediaMcp.CHAT.tools,
-  forum: forumMcp.TOOLS.map((t) => ({ ...t, name: t.name.replace(/^forum_/, '') })), places: placesMcp.TOOLS, storage: storageMcp.TOOLS, support: supportMcp.TOOLS, publish: publishMcp.TOOLS, analytics: analyticsMcp.TOOLS, docs: docsMcp.TOOLS, forms: formsMcp.TOOLS, modes: modesMcp.TOOLS, people: peopleMcp.TOOLS, corpus: corpusMcp.TOOLS, workforce: workforceMcp.TOOLS,
+  forum: forumMcp.TOOLS.map((t) => ({ ...t, name: t.name.replace(/^forum_/, '') })), places: placesMcp.TOOLS, storage: storageMcp.TOOLS, support: supportMcp.TOOLS, publish: publishMcp.TOOLS, analytics: analyticsMcp.TOOLS, docs: docsMcp.TOOLS, forms: formsMcp.TOOLS, scheduling: schedulingMcp.TOOLS, modes: modesMcp.TOOLS, people: peopleMcp.TOOLS, corpus: corpusMcp.TOOLS, workforce: workforceMcp.TOOLS,
 });
 
 const obj = (properties, required) => ({ type: 'object', properties, ...(required ? { required } : {}) });
@@ -153,6 +154,11 @@ const ROWS = [
   // ── analytics (Corpo › Analytics, services/analytics.js). Read-only for agents: a person saves dashboards.
   ['analytics.metric.list', 'analytics', 'list_metrics', 'safe', { provenance: 'trusted', reply: obj({ metrics: { type: 'array', description: 'id, title, scope (workspace|division), description of each metric.' }, divisions: { type: 'array', description: 'id, name of the workspace’s active divisions.' } }, ['metrics']) }],
   ['analytics.metric.query', 'analytics', 'query_metric', 'safe', { provenance: 'trusted', reply: obj({ metric: { type: 'string' }, scope: { type: 'string', description: 'workspace or division.' }, days: { type: 'integer' }, value: { type: 'object', description: 'The metric’s value; its shape is the metric’s (series of {day, value}, totals, medians).' } }, ['metric', 'value']) }],
+  // ── scheduling (Corpo › Scheduling, services/scheduling.js). Read-only for agents: a public booking link is a person's act.
+  ['scheduling.availability.get', 'scheduling', 'get_availability', 'safe', { provenance: 'trusted', reply: obj({ timezone: { type: 'string' }, weekly: { type: 'object', description: 'ISO weekday (1–7) → [["HH:MM","HH:MM"]] local intervals.' }, timeOff: { type: 'array', description: 'id, startsAt, endsAt of upcoming time off.' } }, ['timezone', 'weekly']) }],
+  ['scheduling.page.list', 'scheduling', 'list_pages', 'safe', { provenance: 'untrusted', reply: obj({ pages: { type: 'array', description: 'id, slug, url, title, durationMinutes, active — titles are written by people.' } }, ['pages']) }],
+  ['scheduling.slot.list', 'scheduling', 'list_slots', 'safe', { provenance: 'trusted', reply: obj({ pageId: { type: 'string' }, slots: { type: 'array', description: 'Free start times, ISO 8601 UTC.' } }, ['slots']) }],
+  ['scheduling.booking.list', 'scheduling', 'list_bookings', 'safe', { provenance: 'untrusted', reply: obj({ bookings: { type: 'array', description: 'id, pageTitle, startsAt, endsAt, status, guestName, guestEmail, note — guest fields are untrusted.' } }, ['bookings']) }],
   ['analytics.dashboard.list', 'analytics', 'list_dashboards', 'safe', { provenance: 'untrusted', reply: obj({ dashboards: { type: 'array', description: 'id, name, widgets [{metric, days}] — names are written by people.' } }, ['dashboards']) }],
   // ── forms (Corpo › Forms, services/forms.js). Agents make SIGN-IN links only; public links and deletes are a person's.
   ['forms.form.list', 'forms', 'list_forms', 'safe', { provenance: 'untrusted', reply: obj({ forms: { type: 'array', description: 'id, title, status, responses, url of each form — titles are written by people.' } }, ['forms']) }],

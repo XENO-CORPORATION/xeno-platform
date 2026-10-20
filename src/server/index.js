@@ -7,6 +7,7 @@ import { TASKS_OPENAPI } from './services/tasksOpenApi.js';
 import platformAgentRoutes from './routes/platformAgentRoutes.js';
 import workforceDivisionRoutes from './routes/workforceDivisionRoutes.js';
 import workforcePeopleRoutes from './routes/workforcePeopleRoutes.js';
+import peopleLifecycleRoutes from './routes/peopleLifecycleRoutes.js';
 import orchestratorRoutes from './routes/orchestratorRoutes.js';
 import workforceEventRoutes from './routes/workforceEventRoutes.js';
 import corpusRoutes from './routes/corpusRoutes.js';
@@ -144,6 +145,8 @@ import blogRoutes from './routes/blogRoutes.js';
 import learnRoutes from './routes/learnRoutes.js';
 import forumRoutes from './routes/forumRoutes.js';
 import supportRoutes from './routes/supportRoutes.js';
+import schedulingRoutes from './routes/schedulingRoutes.js';
+import { sendDueReminders as sendSchedulingReminders } from './services/scheduling.js';
 import { requireActivated } from './services/accountActivation.js';
 import agentRoutes from './routes/agentRoutes.js';
 import artifactRoutes from './routes/artifactRoutes.js';
@@ -690,6 +693,7 @@ app.use('/api/v1', databaseMiddleware, workspaceApiRoutes);
 app.use('/api/agents', databaseMiddleware, authMiddleware, requireActivated, mcpPersonOnly, platformAgentRoutes);
 app.use('/api/divisions', databaseMiddleware, authMiddleware, requireActivated, mcpPersonOnly, workforceDivisionRoutes);
 // People in a company workspace (xeno-company SPEC §7.3 D-EMP): profiles, org chart, directory, time off, on/offboarding.
+app.use('/api/people', databaseMiddleware, authMiddleware, requireActivated, mcpPersonOnly, peopleLifecycleRoutes);
 app.use('/api/people', databaseMiddleware, authMiddleware, requireActivated, mcpPersonOnly, workforcePeopleRoutes);
 app.use('/api/orchestrator', databaseMiddleware, authMiddleware, requireActivated, mcpPersonOnly, orchestratorRoutes);
 app.use('/api/audit', databaseMiddleware, authMiddleware, requireActivated, mcpPersonOnly, workforceEventRoutes);
@@ -868,6 +872,8 @@ app.use('/api/learn', databaseMiddleware, learnRoutes);
 app.use('/api/forum', databaseMiddleware, forumRoutes);
 // XENO support — Help ▸ Contact support (supportTickets.js): private requests, XENO staff, agent drafts ratified by a person.
 app.use('/api/support', databaseMiddleware, supportRoutes);
+// Corpo › Scheduling (services/scheduling.js): workspace booking pages + public guest booking/manage pages + ICS feed.
+app.use('/api/scheduling', databaseMiddleware, schedulingRoutes);
 // Agent identity — a PLATFORM primitive shared with Marketplace, Company and
 // Comms (XENO FORUM - SPEC.md D8). Under /api/v2/* per the identity plan's
 // rule that new surfaces sit beside the frozen legacy /api/auth/*.
@@ -4057,6 +4063,16 @@ startDownloadCleanup();
     // Phantom-hold sweeper: void expired credit_holds every 15 min so stranded holds do
     // not linger in state='held' (the available-balance math already ignores expired holds,
     // but this keeps the table bounded and the state truthful). (Blocker #7 INFRA-7.3.)
+    // Corpo › Scheduling reminders: once per booking, a page's reminder_minutes before it starts (mail only when
+    // SCHEDULING_EMAILS=true; the host's notification always).
+    const remindBookings = () => sendSchedulingReminders(pool)
+      .then((r) => { if (r.reminded) console.log(`[Scheduling] reminded ${r.reminded} booking(s)`); })
+      .catch((e) => console.error('[Scheduling] reminders error:', e.message));
+    backgroundLeader.whenLeader(() => {
+      const t = setInterval(remindBookings, 60 * 1000);
+      t.unref(); remindBookings();
+      return () => clearInterval(t);
+    });
     const sweepHolds = () => sweepExpiredHolds(pool)
       .then((n) => { if (n) console.log(`[HoldSweeper] voided ${n} expired hold(s)`); })
       .catch((e) => console.error('[HoldSweeper] error:', e.message));

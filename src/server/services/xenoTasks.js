@@ -160,6 +160,10 @@ async function assertNotAway(db, me, userId, projectId, override) {
   catch (e) { if (e instanceof AwayError) throw new TaskError(e.message, e.code, e.status); throw e; }
 }
 
+/** Called after a task moves to done, in registration order (a service registers once at load). */
+const TASK_DONE_HOOKS = [];
+export function onTaskDone(fn) { if (typeof fn === 'function' && !TASK_DONE_HOOKS.includes(fn)) TASK_DONE_HOOKS.push(fn); }
+
 export async function createTask(db, me, input = {}) {
   let projectId = input.projectId || null, parent = null;
   if (input.parentId || input.parentKey) {
@@ -336,8 +340,9 @@ export async function transitionTask(db, me, key, { to, note, from } = {}) {
   if (['in_review', 'done', 'wont_do'].includes(to)) await db.query('DELETE FROM task_claim_leases WHERE task_id = $1', [t.id]);
   if (fresh.delegate_id && String(fresh.delegate_id) === String(me.id) && (to === 'in_review' || to === 'done')) await session(db, fresh, me.id, 'done', to === 'in_review' ? 'Sent for review' : 'Done');
   await folderAccess(db, t.id);   // who works it may have changed: task folders follow (taskFolders.js)
-  // the fix written back: a support request linked to this task tells its requester (supportTickets.js)
-  if (to === 'done') await (await import('./supportTickets.js')).taskDone(db, t.id, me);
+  // the fix written back: whoever registered onTaskDone (supportTickets.js tells a support request's requester). A hook,
+  // not an import: Tasks must not load support mail for every caller (the workforce NFR-09 gate walks this graph).
+  if (to === 'done') for (const hook of TASK_DONE_HOOKS) await hook(db, t.id, me);
   return getTask(db, me, key);
 }
 

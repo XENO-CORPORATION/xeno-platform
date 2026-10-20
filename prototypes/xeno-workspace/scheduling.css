@@ -1,0 +1,15 @@
+/* scheduling.css — Corpo › Scheduling (platform-scheduling.js). Workspace tokens only; emphasis by surface and text
+   brightness, never hue (DESIGN_SYSTEM.md). Text inputs take no focus ring: the border brightens instead. */
+.sc-tabs,.sc-actions{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin:12px 0}
+.sc-make,.sc-card{display:flex;flex-direction:column;gap:10px;padding:14px;border-radius:8px;background:var(--n20);margin:10px 0;max-width:760px}
+.sc-make label,.sc-card label{display:flex;gap:8px;align-items:center;font-size:12px;color:var(--muted)}
+[data-sc-page] .in{padding:7px 10px;border-radius:6px;background:var(--n26);border:1px solid var(--n38);color:var(--text);font:13px/1.5 Inter,system-ui,sans-serif;outline:0;box-shadow:none}
+[data-sc-page] .in:focus{border-color:var(--n58);outline:0}
+.sc-day{display:flex;gap:8px;align-items:center;flex-wrap:wrap;font-size:13px;color:var(--text)}
+.sc-day label{min-width:64px}
+.sc-row{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:10px 12px;border-radius:8px;background:var(--n20);margin:6px 0}
+.sc-row > div:first-child{display:flex;flex-direction:column;gap:2px;min-width:0}
+.sc-row small{color:var(--muted);font-size:12px}
+.sc-link{color:var(--muted);font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.sc-undo{padding:8px 10px;border-radius:6px;background:var(--n26);font-size:13px;display:flex;gap:10px;align-items:center}
+.sc-card code{word-break:break-all;color:var(--text)}

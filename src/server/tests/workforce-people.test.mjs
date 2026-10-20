@@ -25,6 +25,7 @@ import { runAllMigrations } from '../services/migrationRunner.js';
 import { writeTuples, check } from '../utils/authzReBAC.js';
 import { createAgent } from '../services/agentIdentity.js';
 import * as people from '../services/workforcePeople.js';
+import * as lifecycle from '../services/peopleLifecycle.js';
 import * as peopleMcp from '../services/peopleMcp.js';
 import * as modes from '../services/modeApply.js';
 import * as divisions from '../services/workforceDivisions.js';
@@ -120,22 +121,22 @@ async function main() {
     assert.equal(people.availabilityAt({ working_hours: { days: [1], start: '09:00', end: '10:00' }, timezone: 'UTC' }, [], new Date('2026-10-20T12:00:00Z')).reason, 'outside_hours', 'outside stated hours');
 
     // 6. onboarding (once) + my work
-    await refused(people.onboard(pool, me(mgr), { workspaceId: W, principalId: peer }), 'admin_required', 'a non-admin cannot onboard');
-    const ob = await people.onboard(pool, me(owner), { workspaceId: W, principalId: peer });
-    assert.equal(ob.onboarding.tasks.length, people.ONBOARDING_TASKS.length, 'the checklist became tasks');
-    assert.equal(await n(`SELECT count(*) n FROM tasks WHERE project_id = $1 AND assignee_id = $2`, [ob.onboarding.projectId, peer]), people.ONBOARDING_TASKS.length, 'assigned to the new member, in a project of the workspace');
-    assert.equal((await people.onboard(pool, me(owner), { workspaceId: W, principalId: peer })).replayed, true, 'a second onboarding returns the first');
-    assert.equal((await people.myWork(pool, me(peer), { workspaceId: W })).tasks.length, people.ONBOARDING_TASKS.length, 'my work shows them');
+    await refused(lifecycle.onboard(pool, me(mgr), { workspaceId: W, principalId: peer }), 'admin_required', 'a non-admin cannot onboard');
+    const ob = await lifecycle.onboard(pool, me(owner), { workspaceId: W, principalId: peer });
+    assert.equal(ob.onboarding.tasks.length, lifecycle.ONBOARDING_TASKS.length, 'the checklist became tasks');
+    assert.equal(await n(`SELECT count(*) n FROM tasks WHERE project_id = $1 AND assignee_id = $2`, [ob.onboarding.projectId, peer]), lifecycle.ONBOARDING_TASKS.length, 'assigned to the new member, in a project of the workspace');
+    assert.equal((await lifecycle.onboard(pool, me(owner), { workspaceId: W, principalId: peer })).replayed, true, 'a second onboarding returns the first');
+    assert.equal((await people.myWork(pool, me(peer), { workspaceId: W })).tasks.length, lifecycle.ONBOARDING_TASKS.length, 'my work shows them');
     await assert.rejects(pool.query(`UPDATE workforce_lifecycle_events SET report = '{}'`), /append-only/, 'receipts are append-only');
 
     // 7. offboarding
     const div = await divisions.create(pool, { id: owner, kind: 'human' }, { workspaceId: W, name: `${tag} Platform` });
     await divisions.update(pool, { id: owner, kind: 'human' }, div.id, { headId: mgr });
-    const plan = await people.offboardPlan(pool, me(owner), { workspaceId: W, principalId: mgr });
+    const plan = await lifecycle.offboardPlan(pool, me(owner), { workspaceId: W, principalId: mgr });
     assert.equal(plan.successorId, owner); assert.deepEqual(plan.reportsToSuccessor, [emp]);
-    await refused(people.offboard(pool, me(owner), { workspaceId: W, principalId: mgr }), 'confirmation_required', 'offboarding needs confirm');
-    await refused(people.offboard(pool, me(peer), { workspaceId: W, principalId: mgr, confirm: true }), 'admin_required', 'a peer cannot offboard');
-    await people.offboard(pool, me(owner), { workspaceId: W, principalId: mgr, confirm: true });
+    await refused(lifecycle.offboard(pool, me(owner), { workspaceId: W, principalId: mgr }), 'confirmation_required', 'offboarding needs confirm');
+    await refused(lifecycle.offboard(pool, me(peer), { workspaceId: W, principalId: mgr, confirm: true }), 'admin_required', 'a peer cannot offboard');
+    await lifecycle.offboard(pool, me(owner), { workspaceId: W, principalId: mgr, confirm: true });
     assert.equal((await check(pool, { object: `workspace:${W}`, relation: 'viewer', subject: `user:${mgr}` })).allowed, false, 'access removed');
     assert.equal((await pool.query(`SELECT manager_principal_id FROM workforce_employee_profiles WHERE workspace_id=$1 AND principal_id=$2`, [W, emp])).rows[0].manager_principal_id, owner, 'the report moved to the successor');
     assert.equal((await pool.query('SELECT head_principal_id FROM workforce_divisions WHERE id=$1', [div.id])).rows[0].head_principal_id, owner, 'the headship moved');
