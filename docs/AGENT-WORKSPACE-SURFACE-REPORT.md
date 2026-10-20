@@ -15,13 +15,14 @@ Per division: how many actions a person can take, how many an agent can take tod
 | workspace | 113 | 5 | 91 | 17 | 38 | 70 | 5 | 0 | `workspace:admin` 69, `workspace:read` 22 |
 | places | 6 | 3 | 1 | 2 | 5 | 1 | 0 | 0 | `places:read` 1 |
 | forum | 51 | 8 | 41 | 2 | 19 | 28 | 4 | 0 | `forum:write` 27, `forum:read` 14 |
-| workforce | 277 | 35 | 239 | 3 | 23 | 243 | 11 | 0 | `agents:write` 235, `agents:read` 3, `workspace:read` 1 |
+| workforce | 277 | 35 | 239 | 3 | 23 | 243 | 11 | 0 | `agents:write` 235, `agents:read` 4 |
 | workspace-ui | 165 | 3 | 100 | 62 | 63 | 102 | 0 | 0 | `workspace:admin` 100 |
 | account | 86 | 0 | 60 | 26 | 30 | 50 | 6 | 0 | `workspace:admin` 41, `workspace:read` 19 |
 | platform | 65 | 0 | 34 | 31 | 39 | 23 | 2 | 1 | `workspace:read` 22, `workspace:admin` 12 |
 | browser-shell | 28 | 0 | 28 | 0 | 11 | 15 | 2 | 0 | `workspace:admin` 17, `workspace:read` 11 |
 | canvas | 20 | 4 | 16 | 0 | 5 | 11 | 4 | 0 | `tasks:write` 13, `tasks:read` 3 |
 | inference | 18 | 0 | 12 | 6 | 5 | 10 | 3 | 0 | `chat:write` 7, `chat:read` 5 |
+| support | 21 | 8 | 12 | 1 | 4 | 14 | 1 | 2 | `forum:write` 11, `forum:read` 1 |
 | publish | 13 | 6 | 4 | 3 | 6 | 4 | 0 | 3 | `publish:write` 3, `publish:read` 1 |
 
 Scopes (one-way names, approved 2026-10-20): `storage:read`, `storage:write`, `share:create`, `library:read`, `library:write`, `tasks:read`, `tasks:write`, `chat:read`, `chat:write`, `agents:read`, `agents:write`, `wallet:read`, `wallet:spend`, `workspace:read`, `workspace:admin`, `places:read`, `places:write`, `marketplace:read`, `marketplace:write`, `forum:read`, `forum:write`, `publish:read`, `publish:write`.
