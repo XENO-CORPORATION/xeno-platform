@@ -108,9 +108,13 @@
     const libFor = window.XENO_PG_LIBRARY.items.filter((f) => f.project === name && !f.trashedAt);
     const empty = (icon, t, b, a = '') => box(icon, t, b, a, 'sm');
     // on the platform, a tab with no API behind it says so, and Overview shows only what the platform knows
-    const wfRec = window.XENO_WFP?.served && window.XENO_WFP.tabs.includes(cur) ? (window.XENO_PG_PROJECTS.items || []).find((p) => p.name === name) : null;
+    // research first: its tabs, and a research run (rr_…) inside Runs, which a workforce run id can never look like
+    const rsTab = !!window.XENO_RESEARCH?.served && (['Notebooks', 'Claims'].includes(cur) || (cur === 'Runs' && window.XENO_RESEARCH.isRun(sub)));
+    // a link made before the project list loaded (or from another area) names the project by its id: that is enough here
+    const rsRec = rsTab ? ((window.XENO_PG_PROJECTS.items || []).find((p) => p.name === name || String(p.id) === name) || (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(name) ? { id: name, name } : null)) : null;
+    const wfRec = !rsTab && window.XENO_WFP?.served && window.XENO_WFP.tabs.includes(cur) ? (window.XENO_PG_PROJECTS.items || []).find((p) => p.name === name) : null;
     const cpRec = !wfRec && window.XENO_CORPUS?.served && cur === 'Corpus' ? (window.XENO_PG_PROJECTS.items || []).find((p) => p.name === name) : null;
-    const liveTab = wfRec ? window.XENO_WFP.projectTab(cur, sub, wfRec, window.XENO_PAGES.h) : cpRec ? window.XENO_CORPUS.projectTab(cur, sub, cpRec, window.XENO_PAGES.h) : window.XENO_WORK && window.XENO_WORK.served ? window.XENO_WORK.projectTab(cur, name, { box, esc, ic, btn }) : null;
+    const liveTab = rsTab ? (rsRec ? window.XENO_RESEARCH.projectTab(cur, sub, rsRec, window.XENO_PAGES.h) : box('refresh', 'Loading the project', '', '', 'sm')) : wfRec ? window.XENO_WFP.projectTab(cur, sub, wfRec, window.XENO_PAGES.h) : cpRec ? window.XENO_CORPUS.projectTab(cur, sub, cpRec, window.XENO_PAGES.h) : window.XENO_WORK && window.XENO_WORK.served ? window.XENO_WORK.projectTab(cur, name, { box, esc, ic, btn }) : null;
     const body = liveTab ?? gate(fam, 'rows', () => empty('folder', 'This project is empty', 'Add a task, attach a chat or file, or assign a team to get started.', btn('New task', `data-xa="newTask" data-arg="${esc(name)}"`, false, 'plus') + btn('Assign a team', `data-xa="assign" data-arg="${esc(name)}"`, true))) ?? ({
       Overview: () => `<div class="pg-cols"><div>
           ${meta.needsYou ? `<section class="pg-sec"><h3>Waiting on you <em>${meta.needsYou}</em></h3>${(window.XENO_NEEDS || []).filter((n) => (P.mode || '').toLowerCase() === n.m).slice(0, meta.needsYou).map((n) => `<div class="pg-need-row"><span>${esc(n.t)}</span>${btn(n.meta, `data-xa="resolveNeed" data-arg="${esc(n.t)}"`, n.meta !== 'Approve')}</div>`).join('') || '<p class="pg-dim">Open the Inbox to act on it.</p>'}</section>` : ''}

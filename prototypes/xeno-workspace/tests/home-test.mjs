@@ -4,7 +4,7 @@ const b = await puppeteer.launch({ headless: true, args: ['--allow-file-access-f
 const url = pathToFileURL(path.resolve('index.html')).href, wait = (ms) => new Promise((r) => setTimeout(r, ms));
 let fails = 0; const ok = (c, m) => { if (!c) fails++; console.log(c ? 'PASS' : 'FAIL', m); }; const ev = (f) => p.evaluate(f);
 await p.setViewport({ width: 1440, height: 900 }); await p.goto(url); await ev(() => { localStorage.clear(); localStorage.setItem('xw.introSeen', JSON.stringify({ studio: 1, office: 1, social: 1, corpo: 1, dev: 1, tools: 1 })); });
-for (const m of ['studio', 'office', 'social', 'corpo', 'dev', 'tools']) {
+for (const m of ['studio', 'office', 'social', 'corpo', 'dev', 'tools', 'research']) {
   await p.goto(url + '#/' + m); await wait(600);
   const r = await ev(() => { const h = document.querySelector('.hm2'); if (!h) return null; const esc = [...h.querySelectorAll('.mn')].filter((mn) => { const a = mn.getBoundingClientRect(), c = mn.parentElement.getBoundingClientRect(); return a.left < c.left - 1 || a.right > c.right + 1 || a.top < c.top - 1 || a.bottom > c.bottom + 1; }).length; return { esc, cont: !!h.querySelector('.hm2-cont') }; });
   ok(r && r.cont && r.esc === 0, `${m}: home renders, Continue present, no miniature escapes its card`);

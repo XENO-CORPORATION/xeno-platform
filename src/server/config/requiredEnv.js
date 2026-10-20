@@ -75,6 +75,11 @@ export const REQUIRED_ENV = {
       { key: 'XENO_API_KEY', why: 'chat requests to the inference gateway are unauthenticated' },
       { key: 'CF_TURN_KEY_ID', why: 'XENO Shell sessions fall back to STUN only, so shells behind a blocking NAT cannot meet' },
       { key: 'CF_TURN_KEY_API_TOKEN', why: 'XENO Shell sessions fall back to STUN only, so shells behind a blocking NAT cannot meet' },
+      { key: 'XENO_BOX_URL', why: 'XENO Research refuses every notebook run with box_not_configured' },
+      { key: 'XENO_BOX_TOKEN', why: 'XENO Research refuses every notebook run with box_not_configured' },
+      { key: 'XENO_BOX_CA_FILE', why: 'Box presents a privately issued certificate; without its CA every research run fails TLS and is refused' },
+      { key: 'XENO_RESEARCH_SIGNING_KEY', why: 'XENO Research refuses runs with signing_unavailable (a provenance record must be signed)' },
+      { key: 'XENO_INTERNAL_WORKSPACE_ID', why: 'while Box is unqualified, research runs are refused for everyone, the XENO workspace included' },
     ],
   },
   'chat-workers': {

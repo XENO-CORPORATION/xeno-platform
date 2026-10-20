@@ -4,7 +4,7 @@ const require = createRequire(import.meta.url); const puppeteer = require('puppe
 const b = await puppeteer.launch({ headless: true, args: ['--allow-file-access-from-files'] }); const p = await b.newPage(); const errs = []; p.on('pageerror', (e) => errs.push(e.message));
 const url = pathToFileURL(path.resolve('index.html')).href, wait = (ms) => new Promise((r) => setTimeout(r, ms)); const ev = (f, ...a) => p.evaluate(f, ...a);
 const src = fs.readFileSync(new URL('./pages-test.mjs', import.meta.url), 'utf8'); const routes = eval(src.slice(src.indexOf("['studio/g/projects'"), src.indexOf("];", src.indexOf("['studio/g/projects'")) + 1));
-const extra = await (async () => { await p.goto(url); await wait(500); return ev(() => { const out = ['overview', 'adaptive']; for (const m of ['studio', 'office', 'social', 'corpo', 'dev', 'tools']) { out.push(m); for (const z of XW.zonesFor(m)) out.push(`${m}/z/${z.id}`); } for (const id of Object.keys(XW.PR)) out.push(`overview/p/${id}`); return out; }); })();
+const extra = await (async () => { await p.goto(url); await wait(500); return ev(() => { const out = ['overview', 'adaptive']; for (const m of ['studio', 'office', 'social', 'corpo', 'dev', 'tools', 'research']) { out.push(m); for (const z of XW.zonesFor(m)) out.push(`${m}/z/${z.id}`); } for (const id of Object.keys(XW.PR)) out.push(`overview/p/${id}`); return out; }); })();
 const all = [...new Set([...routes, ...extra])];
 await p.setViewport({ width: 1440, height: 900 }); await ev(() => { localStorage.clear(); localStorage.setItem('xw.introSeen', JSON.stringify({ studio: 1, office: 1, social: 1, corpo: 1, dev: 1, tools: 1 })); });
 const found = new Map();

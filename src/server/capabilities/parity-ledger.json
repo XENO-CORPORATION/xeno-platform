@@ -141,7 +141,9 @@
   "customersRoutes.js": "customers",
   "platform-customers.js": "customers",
   "releaseRoutes.js": "releases",
-  "platform-releases.js": "releases"
+  "platform-releases.js": "releases",
+  "researchRoutes.js": "workspace",
+  "platform-research.js": "workspace"
  },
  "actions": {
   "route:accountGiftRoutes.js:POST /": {
@@ -9041,6 +9043,158 @@
    "class": "reversible",
    "scope": "none",
    "because": "handing out or revoking access to the site is a person's decision about who may see it; an agent must not grant access"
+  },
+  "route:researchRoutes.js:GET /home": {
+   "status": "capability",
+   "capability": "research.home.get",
+   "class": "safe",
+   "scope": "workspace:read"
+  },
+  "route:researchRoutes.js:GET /projects/:id/notebooks": {
+   "status": "capability",
+   "capability": "research.notebook.list",
+   "class": "safe",
+   "scope": "workspace:read"
+  },
+  "route:researchRoutes.js:POST /projects/:id/notebooks": {
+   "status": "planned",
+   "class": "reversible",
+   "scope": "workspace:admin"
+  },
+  "route:researchRoutes.js:GET /projects/:id/runs": {
+   "status": "planned",
+   "class": "safe",
+   "scope": "workspace:read"
+  },
+  "route:researchRoutes.js:GET /projects/:id/claims": {
+   "status": "capability",
+   "capability": "research.claim.list",
+   "class": "safe",
+   "scope": "workspace:read"
+  },
+  "route:researchRoutes.js:GET /notebooks/:id": {
+   "status": "capability",
+   "capability": "research.notebook.get",
+   "class": "safe",
+   "scope": "workspace:read"
+  },
+  "route:researchRoutes.js:POST /notebooks/:id/lock": {
+   "status": "planned",
+   "class": "irreversible",
+   "scope": "agents:write"
+  },
+  "route:researchRoutes.js:POST /notebooks/:id/runs": {
+   "status": "capability",
+   "capability": "research.run.create",
+   "class": "irreversible",
+   "scope": "agents:write"
+  },
+  "route:researchRoutes.js:GET /runs/:id": {
+   "status": "capability",
+   "capability": "research.run.get",
+   "class": "safe",
+   "scope": "workspace:read"
+  },
+  "route:researchRoutes.js:POST /runs/:id/verify": {
+   "status": "capability",
+   "capability": "research.run.verify",
+   "class": "irreversible",
+   "scope": "agents:write"
+  },
+  "route:researchRoutes.js:GET /runs/:id/export": {
+   "status": "excluded",
+   "category": "covered-by",
+   "of": "route:researchRoutes.js:GET /runs/:id",
+   "class": "safe",
+   "scope": "none",
+   "because": "a download of the same run record and its outputs"
+  },
+  "route:researchRoutes.js:POST /runs/:id/claims": {
+   "status": "planned",
+   "class": "irreversible",
+   "scope": "workspace:admin"
+  },
+  "route:researchRoutes.js:GET /claims/:id": {
+   "status": "excluded",
+   "category": "covered-by",
+   "of": "route:corpusRoutes.js:GET /tenets/:id/verdicts",
+   "class": "safe",
+   "scope": "none",
+   "because": "the claim is a Corpus tenet; its verdict history is read through Corpus"
+  },
+  "route:researchRoutes.js:POST /claims/:id/recheck": {
+   "status": "excluded",
+   "category": "covered-by",
+   "of": "route:researchRoutes.js:POST /runs/:id/verify",
+   "class": "irreversible",
+   "scope": "none",
+   "because": "a verify of the claimed run; its verdict is recorded through corpus.verdict.record"
+  },
+  "ui:platform-research.js:data-xrs=go": {
+   "status": "excluded",
+   "category": "view-state",
+   "class": "safe",
+   "scope": "none",
+   "because": "navigation to a notebook, run or claim"
+  },
+  "ui:platform-research.js:data-xrs=retry": {
+   "status": "excluded",
+   "category": "view-state",
+   "class": "safe",
+   "scope": "none",
+   "because": "re-reads what the screen shows"
+  },
+  "ui:platform-research.js:data-xrs=new-notebook": {
+   "status": "excluded",
+   "category": "covered-by",
+   "of": "route:researchRoutes.js:POST /projects/:id/notebooks",
+   "class": "reversible",
+   "scope": "none",
+   "because": "the screen for the same route"
+  },
+  "ui:platform-research.js:data-xrs=lock": {
+   "status": "excluded",
+   "category": "covered-by",
+   "of": "route:researchRoutes.js:POST /notebooks/:id/lock",
+   "class": "irreversible",
+   "scope": "none",
+   "because": "the screen for the same route"
+  },
+  "ui:platform-research.js:data-xrs=run": {
+   "status": "capability",
+   "capability": "research.run.create",
+   "class": "irreversible",
+   "scope": "agents:write"
+  },
+  "ui:platform-research.js:data-xrs=verify": {
+   "status": "capability",
+   "capability": "research.run.verify",
+   "class": "irreversible",
+   "scope": "agents:write"
+  },
+  "ui:platform-research.js:data-xrs=export": {
+   "status": "excluded",
+   "category": "covered-by",
+   "of": "route:researchRoutes.js:GET /runs/:id/export",
+   "class": "safe",
+   "scope": "none",
+   "because": "the screen for the same route"
+  },
+  "ui:platform-research.js:data-xrs=claim": {
+   "status": "excluded",
+   "category": "covered-by",
+   "of": "route:researchRoutes.js:POST /runs/:id/claims",
+   "class": "irreversible",
+   "scope": "none",
+   "because": "the screen for the same route"
+  },
+  "ui:platform-research.js:data-xrs=recheck": {
+   "status": "excluded",
+   "category": "covered-by",
+   "of": "route:researchRoutes.js:POST /claims/:id/recheck",
+   "class": "irreversible",
+   "scope": "none",
+   "because": "the screen for the same route"
   }
  }
 }

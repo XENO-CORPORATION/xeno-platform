@@ -71,6 +71,14 @@ window.XENO_MODE_ZONES = {
     { id: 'data', label: 'Data', icon: 'grid', blurb: 'Data tools', products: ['tool-csv'] },
     { id: 'developer', label: 'Developer', icon: 'box', blurb: 'Developer tools', products: ['tool-json'] },
   ],
+  // Research: one product, five areas — what a lab does with a result, in the order it does it
+  research: [
+    { id: 'notebooks', label: 'Notebooks', icon: 'doc', blurb: 'Jupyter notebooks on your projects', products: ['research'] },
+    { id: 'runs', label: 'Runs', icon: 'play', blurb: 'Every run in XENO Box, signed', products: ['research'] },
+    { id: 'claims', label: 'Claims', icon: 'check', blurb: 'Results that are re-checked, held or lapsed', products: ['research'] },
+    { id: 'data', label: 'Data', icon: 'grid', blurb: 'The inputs a result was computed from', products: ['research'] },
+    { id: 'publish', label: 'Publish', icon: 'send', blurb: 'Export a result with its provenance', products: ['research'] },
+  ],
 };
 window.XENO_BADGES = { 'social.publish': 2, 'social.message': 1, 'dev.agents': 'live', 'dev.automate': 'live', 'studio.create': 'live', 'overview.activity': 4 };
 
@@ -165,5 +173,5 @@ window.XENO_PROJECTS = {
 //    "<mode>-<zone>"; the zone object is the mode's own, so content can never diverge.
 window.XENO_OVERVIEW_MAIN = { studio: ['create'], office: ['write'], social: ['publish'], corpo: ['company'], dev: ['agents'], tools: ['image'] };  // ONE main area per mode — six icons fit every screen; the rest is one click away (Open <mode> mode)
 // every area of every mode is addressable from Overview; the rail shows them grouped under their mode
-window.XENO_MODE_ZONES.overview = ['studio', 'office', 'social', 'corpo', 'dev', 'tools'].flatMap((m) => window.XENO_MODE_ZONES[m].map((z) => ({ ...z, id: m + '-' + z.id, of: m })));
+window.XENO_MODE_ZONES.overview = ['studio', 'office', 'social', 'corpo', 'dev', 'tools', 'research'].flatMap((m) => window.XENO_MODE_ZONES[m].map((z) => ({ ...z, id: m + '-' + z.id, of: m })));
 Object.entries({ ...window.XENO_BADGES }).forEach(([k, v]) => { const [m, z] = k.split('.'); if (m !== 'overview') window.XENO_BADGES['overview.' + m + '-' + z] = v; });

@@ -190,7 +190,7 @@
       return;
     }
     rail.innerHTML = `
-      <button class="logo" id="logo" aria-label="${logoLabel}" aria-haspopup="menu" data-tip="${logoTip}" data-kbd="Alt 0–6"><span class="mk" data-mode="${logoMark}">${M[logoMark].svg}</span></button>
+      <button class="logo" id="logo" aria-label="${logoLabel}" aria-haspopup="menu" data-tip="${logoTip}" data-kbd="Alt 0–7"><span class="mk" data-mode="${logoMark}">${M[logoMark].svg}</span></button>
       <div class="rmid" id="rmid">
       ${rb('home', 'home', `${M[S.mode].name} home`)}
       ${rb('chat', 'chat', 'Chat')}
@@ -479,6 +479,7 @@
     corpo: ['Run the business — with people and agents.', 'Your company, its wallet, its team, its customers and its numbers, in one view.'],
     dev: ['Build things that run.', 'Agent sessions, automations and the SDKs — with the runs that need you surfaced first.'],
     tools: ['A tool when you need one, not a product.', 'Resize, trim, transcribe, convert — open one, use it, close it.'],
+    research: ['Results that reproduce — and say so.', 'Notebooks run in an isolated sandbox, every run is signed, and each result you claim is re-checked — held, lapsed or not yet observed.'],
   };
   const DEMO_LINE = { frame: 'Lay out pages, components and prototypes', photo: 'Edit and retouch images layer by layer', timeline: 'Cut, grade and animate on a timeline', wave: 'Record, mix and master audio', page: 'Write and format documents', grid: 'Model numbers with formulas and charts', slide: 'Build presentations', post: 'Write once, publish to every channel', chat: 'Talk to people and agents', term: 'Run agents that write and test code', flow: 'Automate steps between your tools' };
   function productDemo(pid) {
@@ -1012,11 +1013,11 @@
     const newN = seen ? needs.filter((n) => n.at > seen).length : 0;
     const sentence = sentenceOf([needs.length && plural(needs.length, 'thing needs you', 'things need you'), running && `${plural(running, 'job is', 'jobs are')} running`, last && `you were last in ${PR[last.p].name}`].filter(Boolean), 'Nothing is waiting — a good moment to start something.') + (newN ? ` ${newN === 1 ? 'One is' : newN + ' are'} new since you were last here, ${agoWhen(seen)}.` : '');
     const sp = PR[m.start] || PR[last?.p];
-    const SIGL = { studio: 'In production and your work', office: 'Your desk and mail', social: 'This week and conversations', corpo: 'The company and its people', dev: 'Agent runs and automations', tools: 'Tools' };
+    const SIGL = { studio: 'In production and your work', office: 'Your desk and mail', social: 'This week and conversations', corpo: 'The company and its people', dev: 'Agent runs and automations', tools: 'Tools', research: 'Notebooks, runs and claims' };
     const secs = homeSections(m.id, [
       { id: 'needs', label: 'Needs you', html: () => homeState() === 'error' ? `<section class="hm2-sec"><div class="hm2-h"><h2>Needs you</h2></div><div class="hm2-err">${ic('reset')}<span><b>Couldn't load what needs you.</b> Your inbox is safe — nothing was changed.</span><button class="us-ghost" data-home-retry>Try again</button></div></section>` : homeNeeds(m.id, seen) },
       { id: 'kpis', label: 'This week', html: () => kpiSection(m.id) },
-      { id: 'sig', label: window.XENO_HOME_LIVE?.served ? 'Your work' : SIGL[m.id] || 'Your work', html: () => `<div class="hm2-sigwrap">${window.XENO_HOME_LIVE?.served ? window.XENO_HOME_LIVE.work(m) : window.XENO_SIG?.[m.id] ? window.XENO_SIG[m.id](m) : (SIG[m.id] || SIG.studio)(m)}</div>` },   // on the platform: the person's own work, never a sample section
+      { id: 'sig', label: window.XENO_HOME_LIVE?.served ? 'Your work' : SIGL[m.id] || 'Your work', html: () => `<div class="hm2-sigwrap">${m.id === 'research' && window.XENO_RESEARCH?.served ? window.XENO_RESEARCH.homeWork() : window.XENO_HOME_LIVE?.served ? window.XENO_HOME_LIVE.work(m) : window.XENO_SIG?.[m.id] ? window.XENO_SIG[m.id](m) : (SIG[m.id] || SIG.studio)(m)}</div>` },   // on the platform: the person's own work, never a sample section
       { id: 'areas', label: 'Areas', html: () => `<section class="hm2-sec"><div class="hm2-h"><h2>Areas</h2></div><div class="hm2-areas">${zonesFor(m.id).map((z) => { const n = (z.products || []).filter((id) => PR[id] && PR[id].status !== 'soon').length; return `<button class="hm2-area" data-zone="${z.id}">${ic(z.icon)}<span><b>${esc(z.label)}</b><small>${n ? plural(n, 'product', 'products') : 'Coming soon'}</small></span></button>`; }).join('')}</div></section>` },
     ]);
     return `<div class="wrap hm2${homeState() === 'loading' ? ' hm2--ghost' : ''}" data-home="${m.id}">
@@ -1082,6 +1083,7 @@
     if (S.mode === 'studio' && ['image', 'video', 'audio', '3d', 'enhance-image', 'enhance-video', 'enhance-audio', 'enhance-3d'].includes(S.product) && window.XENO_GENERATIONS) return window.XENO_GENERATIONS.host();
     if (S.product === 'storage' && window.XENO_STORAGE) return window.XENO_STORAGE.page();   // XENO Storage: the account's space, on the real meter
     if (S.product === 'mcp' && window.XENO_MCP) return window.XENO_MCP.page();   // XENO MCP: the agents connected to XENO, managed here
+    if (S.product === 'research' && window.XENO_RESEARCH?.served) return window.XENO_RESEARCH.page();   // XENO Research: notebooks, runs and claims, from the platform
     if (p.kind === 'chat' && window.XENO_CHAT && window.XENO_CHAT.served) return window.XENO_CHAT.host();
     if (p.kind === 'chat' && window.XENO_LIVE_CHAT) { const C = window.XENO_LIVE_CHAT; return `<div class="live-chat-host"><div class="live-chat chat-themed chat-theme-dark" style="${C.vars.replace(/"/g, '&quot;')}">${C.html}</div></div>`; }
     if (p.kind === 'chat') return `<div class="chat"><div class="thread"><div class="in"><div class="um">next one</div><div class="am"><p>Here is the next scenario. A company runs EC2 instances across three Availability Zones and needs a shared file system every instance can mount at once, with storage that grows automatically.</p><p>Which service fits best: <b>EFS</b>, <b>EBS Multi-Attach</b> or <b>FSx for Lustre</b>?</p></div></div></div>
@@ -1173,7 +1175,7 @@
         : d.err ? `<span class="sb-fresh bad"><i></i>Inbox offline</span>${refresh('Retry')}`
         : `<span class="sb-fresh ok"><i></i><span data-at="${d.at}">Updated ${agoTxt(d.at)}</span></span>${refresh('Refresh')}`;
       const info = hs !== 'normal' || needN == null ? '' : `${needN} need${needN === 1 ? 's' : ''} you · ${runN} running`;
-      const keys = [['Ctrl K', 'Find'], ['Alt 0–6', 'Modes'], ['Ctrl \\', 'Sidebar']].map(([k, l]) => `<span><kbd>${k}</kbd>${l}</span>`).join('');
+      const keys = [['Ctrl K', 'Find'], ['Alt 0–7', 'Modes'], ['Ctrl \\', 'Sidebar']].map(([k, l]) => `<span><kbd>${k}</kbd>${l}</span>`).join('');
       const L = { normal: 'Normal', empty: 'First day', loading: 'Loading', error: 'Error' };
       return `<div class="topbar pg-top"><button class="ib opener" data-expand aria-label="Open sidebar" data-tip="Open sidebar" data-kbd="Ctrl \\">${ic('side')}</button><div class="crumbs">${crumbs()}</div><div class="pg-top-sum"><span>${esc(dayName())}</span></div><div class="sp"></div><div class="pg-top-acts">${hs === 'empty' ? '' : `<button class="pg-btn ghost" data-home-custom aria-haspopup="dialog" aria-expanded="false">${ic('sliders')}<span>Customize</span></button>`}</div></div><div class="mview pg-mview has-foot">${body}</div><footer class="mfoot"><div class="sb-l">${fresh}${info ? `<span class="sb-sep"></span><span class="sb-info">${info}</span>` : ''}</div><div class="sb-r"><span class="sb-keys">${keys}</span><button class="sb-prev" data-pg-preview="home" title="Prototype only — data in the shape of GET /api/v2/modes/:mode/metrics + the inbox feed" aria-haspopup="listbox" aria-expanded="false">Preview <b>${L[hs]}</b>${ic('chev')}</button></div></footer>`;
     }
@@ -1267,7 +1269,7 @@
   // listing key (every page reads it by that); the translation happens only here, at the address.
   // A workforce tab can carry a record id after it — /workspace/projects/<pid>/runs/<admission id> — so only the
   // tab's own segment is translated; the id after it is kept exactly as it is.
-  const PTAB = { Tasks: 'tasks', Conversations: 'conversations', 'Team assignments': 'team', Resources: 'resources', Funding: 'funding', Activity: 'activity', Objectives: 'objectives', Runs: 'runs', Changes: 'changes', Corpus: 'corpus' };
+  const PTAB = { Tasks: 'tasks', Conversations: 'conversations', 'Team assignments': 'team', Resources: 'resources', Funding: 'funding', Activity: 'activity', Objectives: 'objectives', Runs: 'runs', Changes: 'changes', Corpus: 'corpus', Notebooks: 'notebooks', Claims: 'claims' };
   const tabOut = (tb) => { const j = tb.indexOf('/'), t = j < 0 ? tb : tb.slice(0, j); return (PTAB[t] || t) + (j < 0 ? '' : tb.slice(j)); };
   const tabIn = (tb) => { const j = tb.indexOf('/'), t = j < 0 ? tb : tb.slice(0, j); return (PTAB_IN[t] || t) + (j < 0 ? '' : tb.slice(j)); };
   const PTAB_IN = Object.fromEntries(Object.entries(PTAB).map(([k, v]) => [v, k]));
@@ -2227,7 +2229,7 @@
     if (e.key === 'Escape') { if (S.switching) closeSwitcher(); hidePops(); closePalette(); }
     if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') { e.preventDefault(); openPalette(); }
     if ((e.ctrlKey || e.metaKey) && e.code === 'Backslash') { e.preventDefault(); setPanel(root.dataset.panel === 'open' ? 'closed' : 'open'); }
-    if (e.altKey && /^Digit[0-6]$/.test(e.code)) { e.preventDefault(); const n = +e.code.slice(5); n === 0 ? go('dashboard') : openMode(MODES[n - 1].id); }
+    if (e.altKey && /^Digit[0-7]$/.test(e.code)) { e.preventDefault(); const n = +e.code.slice(5); n === 0 ? go('dashboard') : openMode(MODES[n - 1].id); }
     if ((e.key === 'ContextMenu' || (e.shiftKey && e.key === 'F10')) && document.activeElement?.id === 'logo') { e.preventDefault(); openSwitcher(); }
     if (e.key === 'F1' && !document.querySelector('.xd')) { e.preventDefault(); hidePops(); window.XA.report(); }
   });
@@ -2244,7 +2246,7 @@
     if (up || dn) { e.stopPropagation(); const id = (up || dn).dataset.mmUp || (up || dn).dataset.mmDown, ord = modeOrder(), i = ord.indexOf(id), j = i + (up ? -1 : 1);
       if (j < 0 || j >= ord.length) return; [ord[i], ord[j]] = [ord[j], ord[i]]; setOrder(ord); const layer = $('#panel > .msw-layer'); if (layer) layer.innerHTML = panelManage(); return; }
   }, true);
-  // switcher keyboard: type to filter, arrows move, Enter opens, digits 0-6 jump
+  // switcher keyboard: type to filter, arrows move, Enter opens, digits 0-7 jump
   document.addEventListener('input', (e) => {
     if (!e.target.matches('[data-msw-filter]')) return;
     const q = e.target.value.trim().toLowerCase(); let any = false;
@@ -2259,7 +2261,7 @@
     let i = rows.findIndex((r) => r.classList.contains('kb')); if (i < 0) i = Math.max(0, rows.findIndex((r) => r.getAttribute('aria-selected') === 'true'));
     if (e.key === 'ArrowDown' || e.key === 'ArrowUp') { e.preventDefault(); rows.forEach((r) => r.classList.remove('kb')); const n = rows[(i + (e.key === 'ArrowDown' ? 1 : rows.length - 1)) % rows.length]; n.classList.add('kb'); n.scrollIntoView({ block: 'nearest' }); }
     else if (e.key === 'Enter') { e.preventDefault(); (rows[i] || rows[0]).click(); }
-    else if (/^[0-6]$/.test(e.key) && !document.activeElement?.matches('[data-msw-filter]')) { e.preventDefault(); const n = +e.key; n === 0 ? go('dashboard') : openMode(MODES[n - 1].id); }
+    else if (/^[0-7]$/.test(e.key) && !document.activeElement?.matches('[data-msw-filter]')) { e.preventDefault(); const n = +e.key; n === 0 ? go('dashboard') : openMode(MODES[n - 1].id); }
   });
   // tooltips
   const tip = $('#tip'); let tipT = 0;

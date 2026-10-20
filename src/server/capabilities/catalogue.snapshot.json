@@ -184,6 +184,104 @@
    ]
   },
   {
+   "name": "research.home.get",
+   "wire": "research__home__get",
+   "version": "1.0.0",
+   "class": "safe",
+   "scope": "workspace:read",
+   "surfaces": [
+    "mcp",
+    "rest"
+   ],
+   "aliases": [
+    "research_home"
+   ]
+  },
+  {
+   "name": "research.notebook.list",
+   "wire": "research__notebook__list",
+   "version": "1.0.0",
+   "class": "safe",
+   "scope": "workspace:read",
+   "surfaces": [
+    "mcp",
+    "rest"
+   ],
+   "aliases": [
+    "research_notebooks"
+   ]
+  },
+  {
+   "name": "research.notebook.get",
+   "wire": "research__notebook__get",
+   "version": "1.0.0",
+   "class": "safe",
+   "scope": "workspace:read",
+   "surfaces": [
+    "mcp",
+    "rest"
+   ],
+   "aliases": [
+    "research_notebook"
+   ]
+  },
+  {
+   "name": "research.run.create",
+   "wire": "research__run__create",
+   "version": "1.0.0",
+   "class": "irreversible",
+   "scope": "agents:write",
+   "surfaces": [
+    "mcp",
+    "rest"
+   ],
+   "aliases": [
+    "research_run"
+   ]
+  },
+  {
+   "name": "research.run.verify",
+   "wire": "research__run__verify",
+   "version": "1.0.0",
+   "class": "irreversible",
+   "scope": "agents:write",
+   "surfaces": [
+    "mcp",
+    "rest"
+   ],
+   "aliases": [
+    "research_verify"
+   ]
+  },
+  {
+   "name": "research.run.get",
+   "wire": "research__run__get",
+   "version": "1.0.0",
+   "class": "safe",
+   "scope": "workspace:read",
+   "surfaces": [
+    "mcp",
+    "rest"
+   ],
+   "aliases": [
+    "research_run_get"
+   ]
+  },
+  {
+   "name": "research.claim.list",
+   "wire": "research__claim__list",
+   "version": "1.0.0",
+   "class": "safe",
+   "scope": "workspace:read",
+   "surfaces": [
+    "mcp",
+    "rest"
+   ],
+   "aliases": [
+    "research_claims"
+   ]
+  },
+  {
    "name": "corpus.corpus.query",
    "wire": "corpus__corpus__query",
    "version": "1.0.0",

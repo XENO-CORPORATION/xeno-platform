@@ -4,7 +4,7 @@
 
 Every action a person can take on the platform, and whether an agent can take it (XENO AGENT CAPABILITY - SPEC.md §19.4). **Planned** entries are the owning division’s backlog: each is a feature agents are missing.
 
-**Total:** 1647 actions · 156 agent capability · 1260 planned (debt) · 231 excluded · **coverage 11%** of the 1416 owed.
+**Total:** 1670 actions · 165 agent capability · 1264 planned (debt) · 241 excluded · **coverage 11.5%** of the 1429 owed.
 
 | division | actions | capability | planned (debt) | excluded | coverage |
 |---|---:|---:|---:|---:|---:|
@@ -12,9 +12,9 @@ Every action a person can take on the platform, and whether an agent can take it
 | studio | 121 | 4 | 117 | 0 | 3.3% |
 | agents | 122 | 0 | 112 | 10 | 0% |
 | workspace-ui | 171 | 4 | 101 | 66 | 3.8% |
+| workspace | 155 | 23 | 97 | 35 | 19.2% |
 | chat | 97 | 0 | 96 | 1 | 0% |
 | commerce | 112 | 0 | 96 | 16 | 0% |
-| workspace | 132 | 14 | 93 | 25 | 13.1% |
 | tasks | 105 | 13 | 84 | 8 | 13.4% |
 | storage | 82 | 5 | 75 | 2 | 6.3% |
 | account | 86 | 0 | 60 | 26 | 0% |
@@ -1158,7 +1158,7 @@ Every action a person can take on the platform, and whether an agent can take it
 - `ui:workforce.js:data-wf=win`
 - `ui:workforce.js:data-wf=withdraw`
 
-## workspace — 93 planned
+## workspace — 97 planned
 
 - `route:accountWorkspaceOperationRoutes.js:GET /:operationId (accountWorkspaceOperationRoutes)`
 - `route:accountWorkspaceOperationRoutes.js:POST /:operationId/:phase (accountWorkspaceOperationRoutes)`
@@ -1174,6 +1174,10 @@ Every action a person can take on the platform, and whether an agent can take it
 - `route:projectPublicationRoutes.js:ALL /operations/read`
 - `route:projectPublicationRoutes.js:GET /`
 - `route:projectPublicationRoutes.js:GET /:projectId`
+- `route:researchRoutes.js:GET /projects/:id/runs`
+- `route:researchRoutes.js:POST /notebooks/:id/lock`
+- `route:researchRoutes.js:POST /projects/:id/notebooks`
+- `route:researchRoutes.js:POST /runs/:id/claims`
 - `route:workspaceAreaRoutes.js:GET /needs`
 - `route:workspaceAreaRoutes.js:GET /pins`
 - `route:workspaceAreaRoutes.js:GET /search`

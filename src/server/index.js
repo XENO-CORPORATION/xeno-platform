@@ -11,6 +11,8 @@ import peopleLifecycleRoutes from './routes/peopleLifecycleRoutes.js';
 import orchestratorRoutes from './routes/orchestratorRoutes.js';
 import workforceEventRoutes from './routes/workforceEventRoutes.js';
 import corpusRoutes from './routes/corpusRoutes.js';
+import { createResearchRouter } from './routes/researchRoutes.js';
+import { recoverInterrupted as recoverResearchRuns } from './services/xenoResearch.js';
 import workspaceApiRoutes from './routes/workspaceApiRoutes.js';
 import xenoMcpRoutes, { management as xenoMcpManagement, personOnly as mcpPersonOnly, mcpResourceMetadata } from './routes/xenoMcpRoutes.js';
 import userNotificationsRoutes from './routes/userNotificationsRoutes.js';
@@ -137,7 +139,7 @@ import inferenceServiceRoutes from './routes/inferenceServiceRoutes.js';
 import handleRoutes from './routes/handleRoutes.js';
 import { oidcAuth } from './middleware/oidcAuth.js';
 import { discovery as oidcDiscovery } from './utils/oidcProvider.js';
-import { databaseMiddleware } from './middleware/database.js';
+import { databaseMiddleware, pool as researchPool } from './middleware/database.js';
 import { browserSessionMiddleware } from './middleware/browserSession.js';
 import { previewSessionMiddleware } from './middleware/previewSession.js';
 import blogRoutes from './routes/blogRoutes.js';
@@ -698,6 +700,8 @@ app.use('/api/orchestrator', databaseMiddleware, authMiddleware, requireActivate
 app.use('/api/audit', databaseMiddleware, authMiddleware, requireActivated, mcpPersonOnly, workforceEventRoutes);
 // XENO Corpus: tenets, signed verdicts, proposals (services/xenoCorpus.js). Not person-only: an agent proposes here too.
 app.use('/api/corpus', databaseMiddleware, authMiddleware, requireActivated, corpusRoutes);
+// XENO Research (services/xenoResearch.js): notebooks on a project, runs in XENO Box, claims in Corpus.
+app.use('/api/research', databaseMiddleware, authMiddleware, requireActivated, createResearchRouter({ pool: researchPool }));
 app.use('/api/notifications', databaseMiddleware, authMiddleware, requireActivated, userNotificationsRoutes);
 console.log('🏢 Workspace routes integrated: /api/workspaces/* + /api/workspace-invites/*');
 
@@ -4232,6 +4236,8 @@ server.listen(PORT, process.env.BACKEND_HOST, () => {
   console.log(`🎯 SAM 2 segmentation available via FAL.ai integration`);
   console.log(`📊 Real-time file synchronization enabled`);
   console.log(`\n✅ Server ready! Use Ctrl+C to stop.`);
+  // a research run that was in Box when the process stopped cannot be resumed: fail it, then pick up the queue
+  recoverResearchRuns(researchPool).catch((e) => console.error('[research] recover', e.message));
 }); 
 
 export default app;
