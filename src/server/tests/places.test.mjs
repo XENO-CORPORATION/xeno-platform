@@ -134,7 +134,10 @@ async function main() {
 
   // ── layout save: admin only, coordinates only, revision, idempotency ──
   const rev = adminView.result.place.revision;
-  const layout = { bays: 6, slots: { [s.memberships[0].id]: 2 }, pods: { [tDev]: { x: 3, z: -2, level: 1 } } };
+  const layout = { bays: 6, slots: { [s.memberships[0].id]: 2 }, pods: { [tDev]: { x0: 9.5, zc: 3.8 } },
+    fixtures: { [dDev]: [{ id: 'x1', kind: 'table', label: 'Standup', x: 20, z: 8, w: 1.4, d: 2.4, h: 0.75 }] }, removed: { lobby: ['b0-board'] } };
+  refused(await places.call(pool, me(owner, 'Owner'), 'places.layout.save', { placeId: pCo.id, layout: { pods: { [tDev]: { x0: 1, zc: 2, teamName: 'x' } } }, expectedRevision: rev, requestId: rid() }), 'bad_input', 'pods_invalid');
+  refused(await places.call(pool, me(owner, 'Owner'), 'places.layout.save', { placeId: pCo.id, layout: { fixtures: { [dDev]: [{ kind: 'table', x: 1, z: 1, member: 'x' }] } }, expectedRevision: rev, requestId: rid() }), 'bad_input', 'fixtures_invalid');
   refused(await places.call(pool, me(member, 'Member'), 'places.layout.save', { placeId: pCo.id, layout, expectedRevision: rev, requestId: rid() }), 'denied', 'no_edit');
   refused(await places.call(pool, me(owner, 'Owner'), 'places.layout.save', { placeId: pCo.id, layout: { ...layout, memberships: [] }, expectedRevision: rev, requestId: rid() }), 'bad_input', 'layout_not_coordinates');
   refused(await places.call(pool, me(owner, 'Owner'), 'places.layout.save', { placeId: pCo.id, layout, expectedRevision: rev }), 'bad_input', 'request_id_required');
@@ -148,7 +151,8 @@ async function main() {
   refused(await places.call(pool, me(owner, 'Owner'), 'places.layout.save', { placeId: pCo.id, layout: { bays: 7 }, expectedRevision: rev, requestId: key }), 'conflict', 'request_reused');
   refused(await places.call(pool, me(owner, 'Owner'), 'places.layout.save', { placeId: pCo.id, layout, expectedRevision: rev, requestId: rid() }), 'conflict', 'stale_revision');
   const after = await places.call(pool, me(owner, 'Owner'), 'places.get', { placeId: pCo.id });
-  assert.deepEqual([after.result.spec.record.bays, after.result.spec.record.pods[tDev]], [6, { x: 3, z: -2, level: 1 }]);
+  assert.deepEqual([after.result.spec.record.bays, after.result.spec.record.pods[tDev], after.result.spec.record.removed], [6, { x0: 9.5, zc: 3.8 }, { lobby: ['b0-board'] }]);
+  assert.equal(after.result.spec.record.fixtures[dDev][0].label, 'Standup', 'the record round-trips in the place model’s own shape');
 
   // ── the MCP tool is the same code path ──
   const mcp = await placesMcp.callTool(pool, { id: member, kind: 'human', name: 'Member' }, 'get', { place: pCo.id });
