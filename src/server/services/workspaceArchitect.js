@@ -146,12 +146,36 @@ async function appliedState(db, workspaceId, modeId) {
   return { live, titles: new Set(titles), applicationId: app };
 }
 
+/**
+ * The architect's divisions, agents, teams, projects and objectives as pack fields modeApply applies
+ * (modeApplyWorkforce.js). Anything whose name already lives in the workspace is left out, so a re-run never makes a
+ * second one and never touches the person's. Layout hints stay suggestions: Places stores coordinates, not prose.
+ */
+async function workforcePart(db, workspaceId, proposal) {
+  const names = async (sql) => new Set((await db.query(sql, [workspaceId])).rows.map((r) => String(r.n).toLowerCase()));
+  const liveDiv = await names(`SELECT name n FROM workforce_divisions WHERE workspace_id = $1 AND lifecycle = 'active'`);
+  const liveTeam = await names(`SELECT name n FROM workforce_resources WHERE kind = 'team' AND owner_workspace_id = $1 AND status = 'active'`);
+  const liveAgent = await names(`SELECT r.name n FROM workforce_resources r WHERE r.kind = 'agent' AND r.owner_workspace_id = $1 AND r.status = 'active'`);
+  const liveProj = await names(`SELECT name n FROM chat_projects WHERE workspace_id = $1 AND NOT is_archived`);
+  const key = (prefix, i) => `${prefix}-${i + 1}`;
+  const divisions = proposal.divisions.filter((d) => !liveDiv.has(d.name.toLowerCase())).map((d, i) => ({ key: key('d', i), name: d.name }));
+  const divKey = (name) => divisions.find((d) => d.name.toLowerCase() === String(name || '').toLowerCase())?.key || null;
+  const teamDiv = Object.fromEntries(proposal.teams.map((t) => [t.name.toLowerCase(), divKey(t.division)]));
+  const agents = proposal.agents.filter((a) => !liveAgent.has(a.name.toLowerCase())).map((a, i) => ({ key: key('a', i), name: a.name, description: a.role, division: teamDiv[String(a.team || '').toLowerCase()] || null, team: a.team }));
+  const teams = proposal.teams.filter((t) => !liveTeam.has(t.name.toLowerCase())).map((t, i) => ({ key: key('t', i), name: t.name, description: t.purpose,
+    agents: agents.filter((a) => String(a.team || '').toLowerCase() === t.name.toLowerCase()).map((a) => a.key) }));
+  const projects = proposal.projects.filter((p) => !liveProj.has(p.name.toLowerCase())).map((p, i) => ({ key: key('p', i), name: p.name, description: p.goal }));
+  const objectives = proposal.objectives.map((o, i) => ({ key: key('o', i), title: o.title, successEvidence: o.measure || 'Agreed by the workspace admin' }));
+  return { divisions, agents: agents.map(({ team, ...a }) => a), teams, projects, objectives };
+}
+
 /** Build the applicable pack (modeApply format) and, when the mode exists, the diff against it. */
 async function packFor(db, workspaceId, proposal, proposalId) {
   const mode = validateMode({ id: slug(proposal.mode.name), name: proposal.mode.name, products: proposal.mode.products });
   const prior = await appliedState(db, workspaceId, mode.id);
   const base = { format: 'xeno-mode-pack', schemaVersion: 1, status: 'draft', id: `proposal:${proposalId}`, version: '1', title: proposal.title || mode.name,
     summary: proposal.summary, questions: [], mode };
+  Object.assign(base, await workforcePart(db, workspaceId, proposal));
   if (!prior) return { pack: { ...base, tasks: proposal.tasks.map((t) => ({ title: t.title, body: t.body })) }, diff: null, basedOn: null };
   const liveProducts = Array.isArray(prior.live.products) ? prior.live.products : [];
   const diff = { modeId: mode.id, modeEditedByPerson: !!prior.live.edited_at,
@@ -212,7 +236,7 @@ export async function list(db, actor, { workspaceId } = {}) {
 }
 
 /** A person edits the pack before applying: the mode's name/products and the task list. Human admins only. */
-export async function edit(db, actor, { workspaceId, proposalId, mode, tasks } = {}) {
+export async function edit(db, actor, { workspaceId, proposalId, mode, tasks, ...more } = {}) {
   const { w, p } = await workspaceFor(db, actor, workspaceId);
   humanOnly(p);
   const cur = (await get(db, actor, { workspaceId: w.id, proposalId })).proposal;
@@ -221,6 +245,8 @@ export async function edit(db, actor, { workspaceId, proposalId, mode, tasks } =
     const next = validateMode({ id: pack.mode.id, name: mode.name ?? pack.mode.name, products: mode.products ?? pack.mode.products });
     pack.mode = { ...pack.mode, name: next.name, products: next.products };
   }
+  // the workforce lists (divisions, agents, teams, projects, objectives, places) are replaced whole; plan validates them
+  for (const k of ['divisions', 'agents', 'teams', 'projects', 'objectives', 'goals', 'places']) if (more[k] !== undefined) pack[k] = more[k];
   if (tasks !== undefined) {
     if (!Array.isArray(tasks) || tasks.length > LIMITS.tasks * 2) fail('tasks is a list of up to 40', 'invalid_tasks');
     pack.tasks = tasks.map((t) => ({ title: str(t?.title, 300), body: str(t?.body, 2000) })).filter((t) => t.title);
