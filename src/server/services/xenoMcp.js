@@ -21,6 +21,7 @@ import * as agentMedia from './agentMedia.js';
 import * as canvasMcp from './canvasMcp.js';
 import * as placesMcp from './placesMcp.js';
 import * as modesMcp from './modesMcp.js';
+import * as corpusMcp from './corpusMcp.js';
 import * as canvases from './canvases.js';
 import * as agentsMcp from './agentsMcp.js';
 import * as storageMcp from './storageMcp.js';
@@ -77,6 +78,14 @@ export const SERVICES = Object.freeze([
     tools: () => modesMcp.TOOLS,
     call: (db, actor, name, args) => modesMcp.callTool(db, actor, name, args),
     isToolError: (e) => e instanceof modesMcp.ModesMcpError,
+  },
+  // XENO Corpus (corpusMcp.js): read a scope's verified truth, assess it, propose a change a PERSON ratifies.
+  {
+    category: 'corpus', title: 'Corpus', version: '1.0.0', timeoutMs: 20_000,
+    description: 'Corpus: the verified truth of a workspace, division or project — tenets, signed verdicts, inherited doctrine; agents propose, people ratify.',
+    tools: () => corpusMcp.TOOLS,
+    call: (db, actor, name, args) => corpusMcp.callTool(db, actor, name, args),
+    isToolError: (e) => e instanceof corpusMcp.CorpusMcpError,
   },
   // XENO Storage (storageMcp.js, WORKSPACE AGENT SURFACE P1): an agent works in its owner's Storage, the person in their own.
   {

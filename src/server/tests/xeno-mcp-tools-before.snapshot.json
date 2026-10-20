@@ -478,7 +478,7 @@
   {
    "name": "canvas_add",
    "title": "Canvases: Put items on a canvas",
-   "description": "Put items on a canvas: tasks (by key, e.g. T-12 — the card always shows the task as it is now), Library files, chats, projects, divisions, objectives and runs (by id, also live — a card shows the record’s status now; a canvas never changes the record), notes (markdown), links and groups. Without x/y they are laid out to the right of what is there. Returns each new item’s id.",
+   "description": "Put items on a canvas: tasks (by key, e.g. T-12 — the card always shows the task as it is now), Library files, chats, projects, divisions, objectives, runs and Corpus tenets (by id, also live; a tenet card shows its latest signed verdict — a card shows the record’s status now; a canvas never changes the record), notes (markdown), links and groups. Without x/y they are laid out to the right of what is there. Returns each new item’s id.",
    "inputSchema": {
     "type": "object",
     "required": [
@@ -508,6 +508,7 @@
           "division",
           "objective",
           "run",
+          "tenet",
           "note",
           "link",
           "group"
@@ -528,6 +529,10 @@
         "run": {
          "type": "string",
          "description": "For a run card: its admission id."
+        },
+        "tenet": {
+         "type": "string",
+         "description": "For a verdict card: a Corpus tenet id (see corpus_query)."
         },
         "task": {
          "type": "string",
@@ -1487,7 +1492,7 @@
   {
    "name": "canvas_add",
    "title": "Canvases: Put items on a canvas",
-   "description": "Put items on a canvas: tasks (by key, e.g. T-12 — the card always shows the task as it is now), Library files, chats, projects, divisions, objectives and runs (by id, also live — a card shows the record’s status now; a canvas never changes the record), notes (markdown), links and groups. Without x/y they are laid out to the right of what is there. Returns each new item’s id.",
+   "description": "Put items on a canvas: tasks (by key, e.g. T-12 — the card always shows the task as it is now), Library files, chats, projects, divisions, objectives, runs and Corpus tenets (by id, also live; a tenet card shows its latest signed verdict — a card shows the record’s status now; a canvas never changes the record), notes (markdown), links and groups. Without x/y they are laid out to the right of what is there. Returns each new item’s id.",
    "inputSchema": {
     "type": "object",
     "required": [
@@ -1517,6 +1522,7 @@
           "division",
           "objective",
           "run",
+          "tenet",
           "note",
           "link",
           "group"
@@ -1537,6 +1543,10 @@
         "run": {
          "type": "string",
          "description": "For a run card: its admission id."
+        },
+        "tenet": {
+         "type": "string",
+         "description": "For a verdict card: a Corpus tenet id (see corpus_query)."
         },
         "task": {
          "type": "string",

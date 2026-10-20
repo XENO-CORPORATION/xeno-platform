@@ -100,6 +100,48 @@
    ]
   },
   {
+   "name": "corpus.corpus.query",
+   "wire": "corpus__corpus__query",
+   "version": "1.0.0",
+   "class": "safe",
+   "scope": "workspace:read",
+   "surfaces": [
+    "mcp",
+    "rest"
+   ],
+   "aliases": [
+    "corpus_query"
+   ]
+  },
+  {
+   "name": "corpus.corpus.assess",
+   "wire": "corpus__corpus__assess",
+   "version": "1.0.0",
+   "class": "safe",
+   "scope": "workspace:read",
+   "surfaces": [
+    "mcp",
+    "rest"
+   ],
+   "aliases": [
+    "corpus_assess"
+   ]
+  },
+  {
+   "name": "corpus.proposal.create",
+   "wire": "corpus__proposal__create",
+   "version": "1.0.0",
+   "class": "undoable",
+   "scope": "workspace:read",
+   "surfaces": [
+    "mcp",
+    "rest"
+   ],
+   "aliases": [
+    "corpus_propose"
+   ]
+  },
+  {
    "name": "tasks.project.list",
    "wire": "tasks__project__list",
    "version": "1.0.0",
