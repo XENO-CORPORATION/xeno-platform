@@ -126,6 +126,39 @@ function requirePoolSpend(req,res,next) {
   return next();
 }
 
+
+function admissionOperationObservation(value, request) {
+  const operationId = uuid(request.operationId);
+  if (!value || value.schemaVersion !== 1 || value.operationId !== operationId) return null;
+  if (value.state === 'not-observed' && value.admission === null) return { schemaVersion: 1, state: value.state, operationId: value.operationId, admission: null };
+  if (value.state !== 'committed' || value.admission?.operationId !== operationId) return null;
+  const projected = admissionObservation(value.admission);
+  return projected ? { schemaVersion: 1, state: 'committed', operationId: value.operationId, admission: projected.admission } : null;
+}
+
+/**
+ * ONE response shaping per path, used by the route AND by the agent capability that calls the same service
+ * (services/workforceMcp.js, WORKSPACE AGENT SURFACE): [project, readOnly]. A field a route hides is hidden from an
+ * agent too, because both run THIS function — tests/workforce-capability-shaping.test.mjs pins it.
+ */
+export const WORKFORCE_SHAPES = Object.freeze({
+  '/resources': [responseObservation, false],
+  '/resources/create-and-assign': [createAndAssignObservation, false],
+  '/resources/list': [catalogObservation, true],
+  '/resource-operations/read': [responseObservation, true],
+  '/run-admissions': [admissionObservation, false],
+  '/run-admissions/read': [admissionObservation, true],
+  '/run-admissions/list': [admissionListObservation, true],
+  '/run-admissions/operations/read': [admissionOperationObservation, true],
+  '/run-admissions/pin': [pinObservation, true],
+  '/run-admissions/revoke': [authorityObservation, false],
+  '/run-admissions/authority': [authorityObservation, true],
+  '/resources/revise-definition': [revisionObservation, false],
+  '/resources/revise-definition/read': [revisionObservation, true],
+  '/resources/definition/read': [definitionReadObservation, true],
+});
+const shaped = (path) => { const s = WORKFORCE_SHAPES[path]; if (!s) throw new Error(`no shape for ${path}`); return [s[1], s[0]]; };
+
 const defaultCreate = async (...args) => (await import('../services/workforceResources.js')).createWorkforceResource(...args);
 const defaultCreateAndAssign = async (...args) => (await import('../services/workforceResources.js')).createAndAssignWorkforceResource(...args);
 const defaultRead = async (...args) => (await import('../services/workforceResources.js')).readWorkforceResourceOperation(...args);
@@ -671,35 +704,28 @@ export function createWorkforceRouter({ createWorkforceResource = defaultCreate,
       return fail(res, Object.hasOwn(ERRORS, error?.code) ? error.code : 'internal');
     }
   };
-  router.post('/resources', authMiddleware, requireDpopIfBound, requireWorkforceScope('workforce:manage'), parse, handle(createWorkforceResource));
+  router.post('/resources', authMiddleware, requireDpopIfBound, requireWorkforceScope('workforce:manage'), parse, handle(createWorkforceResource, ...shaped('/resources')));
   // VIEW-03: create a resource and assign it in ONE durable command. A SIBLING of /resources rather than an
   // extra field on it: shipped clients parse that response strictly, and an added key would fail every one.
   router.post('/resources/create-and-assign', authMiddleware, requireDpopIfBound, requireWorkforceScope('workforce:manage'), parse,
-    handle(createAndAssignWorkforceResource, false, createAndAssignObservation));
-  router.post('/resources/list', authMiddleware, requireDpopIfBound, requireWorkforceScope('workforce:read'), parse, handle(listOwnedWorkforceResources, true, catalogObservation));
-  router.post('/resource-operations/read', authMiddleware, requireDpopIfBound, requireWorkforceScope('workforce:read'), parse, handle(readWorkforceResourceOperation, true));
+    handle(createAndAssignWorkforceResource, ...shaped('/resources/create-and-assign')));
+  router.post('/resources/list', authMiddleware, requireDpopIfBound, requireWorkforceScope('workforce:read'), parse, handle(listOwnedWorkforceResources, ...shaped('/resources/list')));
+  router.post('/resource-operations/read', authMiddleware, requireDpopIfBound, requireWorkforceScope('workforce:read'), parse, handle(readWorkforceResourceOperation, ...shaped('/resource-operations/read')));
   // RUN-01/RUN-02: admit one run. The service resolves every fact from authoritative rows and computes
   // the intersection; this adapter only authenticates (workforce:manage -- admitting a run commits a
   // payer's budget) and bounds the body. Reading an admission back is a workforce:read.
   router.post('/run-admissions', authMiddleware, requireDpopIfBound, requireWorkforceScope('workforce:manage'), parse, requirePoolSpend,
-    handle(admitRun, false, admissionObservation));
+    handle(admitRun, ...shaped('/run-admissions')));
   router.post('/run-admissions/read', authMiddleware, requireDpopIfBound, requireWorkforceScope('workforce:read'), parse,
     handle((db, context, body) => {
       if (Object.keys(body).some(key => !['admissionId','expectedActorAccountId'].includes(key))) throw Object.assign(new Error('unknown field'), { code: 'bad_input' });
       return readRunAdmission(db, context, body.admissionId, { expectedActorAccountId: body.expectedActorAccountId });
-    }, true, admissionObservation));
+    }, ...shaped('/run-admissions/read')));
   // The Runs screens: a project's or an agent's admissions, each under readRunAdmission's own visibility rule.
   router.post('/run-admissions/list', authMiddleware, requireDpopIfBound, requireWorkforceScope('workforce:read'), parse,
-    handle(listRunAdmissions, true, admissionListObservation));
+    handle(listRunAdmissions, ...shaped('/run-admissions/list')));
   router.post('/run-admissions/operations/read', authMiddleware, requireDpopIfBound, requireWorkforceScope('workforce:read'), parse,
-    handle(readRunAdmissionOperation,true,(value,request)=>{
-      const operationId=uuid(request.operationId);
-      if(!value||value.schemaVersion!==1||value.operationId!==operationId)return null;
-      if(value.state==='not-observed'&&value.admission===null)return {schemaVersion:1,state:value.state,operationId:value.operationId,admission:null};
-      if(value.state!=='committed'||value.admission?.operationId!==operationId)return null;
-      const projected=admissionObservation(value.admission);
-      return projected?{schemaVersion:1,state:'committed',operationId:value.operationId,admission:projected.admission}:null;
-    }));
+    handle(readRunAdmissionOperation, ...shaped('/run-admissions/operations/read')));
   // LIFE-09: what a scope is running and can still fund, derived at the read. A read, like the catalog.
   router.post('/capacity', authMiddleware, requireDpopIfBound, requireWorkforceScope('workforce:read'), parse,
     handle(readWorkforceCapacity, true, capacityObservation));
@@ -709,7 +735,7 @@ export function createWorkforceRouter({ createWorkforceResource = defaultCreate,
   // RUN-01's precondition: the current pin of an agent as runnable at one target, by this actor -- what an
   // admission must name. A read, resolved under admission's own rule; it commits nothing.
   router.post('/run-admissions/pin', authMiddleware, requireDpopIfBound, requireWorkforceScope('workforce:read'), parse,
-    handle(readRunnablePin, true, pinObservation));
+    handle(readRunnablePin, ...shaped('/run-admissions/pin')));
   // RUN-03: before each privileged call and each new provider dispatch the runtime asks again, and the
   // answer -- a signed lease of at most 60 s, or a typed refusal -- is re-derived from live rows. A
   // manage act because a lease authorizes spending. Stopping a run is too; reading its state is a read.
@@ -720,9 +746,9 @@ export function createWorkforceRouter({ createWorkforceResource = defaultCreate,
   router.post('/run-admissions/authorize-step', authMiddleware, requireDpopIfBound, requireWorkforceScope('workforce:manage'), parse,
     handle(authorizeRunStep, false, leaseObservation));
   router.post('/run-admissions/revoke', authMiddleware, requireDpopIfBound, requireWorkforceScope('workforce:manage'), parse,
-    handle(onlyAdmission(revokeRun), false, authorityObservation));
+    handle(onlyAdmission(revokeRun), ...shaped('/run-admissions/revoke')));
   router.post('/run-admissions/authority', authMiddleware, requireDpopIfBound, requireWorkforceScope('workforce:read'), parse,
-    handle(onlyAdmission(readRunAuthority), true, authorityObservation));
+    handle(onlyAdmission(readRunAuthority), ...shaped('/run-admissions/authority')));
   // RUN-04: a run's result is reported and delivered to its parent -- both manage acts, because a delivered
   // outcome is what the parent then acts on; reading a run's outcome is a read.
   router.post('/run-admissions/result', authMiddleware, requireDpopIfBound, requireWorkforceScope('workforce:manage'), parse,
@@ -742,14 +768,14 @@ export function createWorkforceRouter({ createWorkforceResource = defaultCreate,
   // MKT-01/OWN-03: revising a definition is a manage act -- the right to change what an agent IS -- and reconciling
   // one by its operation id is a read.
   router.post('/resources/revise-definition', authMiddleware, requireDpopIfBound, requireWorkforceScope('workforce:manage'), parse,
-    handle(reviseAgentDefinition, false, revisionObservation));
+    handle(reviseAgentDefinition, ...shaped('/resources/revise-definition')));
   router.post('/resources/revise-definition/read', authMiddleware, requireDpopIfBound, requireWorkforceScope('workforce:read'), parse,
-    handle(readAgentRevision, true, revisionObservation));
+    handle(readAgentRevision, ...shaped('/resources/revise-definition/read')));
   // MKT-01: reading a definition's exact pinned content -- resourceId, version and the hash it is believed to
   // hold -- is a read of the same definition-edit right, additive beside the receipt-by-operation-id read
   // above: no write, no receipt, workforce:read (not manage).
   router.post('/resources/definition/read', authMiddleware, requireDpopIfBound, requireWorkforceScope('workforce:read'), parse,
-    handle(readAgentDefinition, true, definitionReadObservation));
+    handle(readAgentDefinition, ...shaped('/resources/definition/read')));
   for (const path of ['/resources', '/resources/create-and-assign', '/resources/revise-definition', '/resources/revise-definition/read', '/resources/definition/read', '/resources/list', '/resource-operations/read', '/run-admissions', '/run-admissions/read', '/run-admissions/list', '/run-admissions/pin', '/capacity', '/evaluation',
     '/run-admissions/authorize-step', '/run-admissions/revoke', '/run-admissions/authority',
     '/run-admissions/result', '/run-admissions/deliver', '/run-admissions/outcome',

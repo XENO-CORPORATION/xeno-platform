@@ -23,6 +23,7 @@ import { writeTuples, check } from '../utils/authzReBAC.js';
 import { scopedCapability } from './servicePrincipalGate.js';
 import { personalWorkspace } from './workforceDivisions.js';
 import { mcpAgentFor } from './xenoTasks.js';
+import { budgetOf } from './divisionAgentBudget.js';
 
 export const STEP_UP_WINDOW_SEC = 10 * 60;
 export const STEP_UP_EUR = 50;
@@ -77,15 +78,51 @@ export async function assertCanGrantIn(db, ownerId, workspaceId) {
 /**
  * Step-up rule (§5 Q2). Returns null when the call may go ahead, or the reason it needs a fresh sign-in.
  *   - an `irreversible` capability: always
- *   - spend: when the estimate is above the lower of the team's (division) budget left and EUR 50
+ *   - spend: when the SERVER-DERIVED cost (serverCostCredits — what the service will hold) is above the lower of
+ *     the team's (division) budget left and EUR 50. A spending capability whose cost the server cannot derive is
+ *     treated as above the limit (fail closed). A caller-stated cost is never consulted.
  */
-export function stepUpReason(cap, { estimatedCredits = null, teamLeftCredits = null } = {}) {
+export function stepUpReason(cap, { serverCredits = null, teamLeftCredits = null } = {}) {
   if (cap.class === 'irreversible') return 'irreversible';
-  if (estimatedCredits != null && (cap.cost.model === 'quoted' || cap.cost.model === 'metered')) {
-    const limit = Math.min(STEP_UP_EUR * CREDITS_PER_EUR, teamLeftCredits == null ? Infinity : teamLeftCredits);
-    if (Number(estimatedCredits) > limit) return 'spend';
+  if (cap.cost.model === 'quoted' || cap.cost.model === 'metered') {
+    if (serverCredits == null || !Number.isFinite(Number(serverCredits))) return 'spend';
+    const limit = Math.min(STEP_UP_EUR * CREDITS_PER_EUR, teamLeftCredits == null ? Infinity : Number(teamLeftCredits));
+    if (Number(serverCredits) > limit) return 'spend';
   }
   return null;
+}
+
+/**
+ * What the platform will hold for this call, in credits, derived from ITS OWN price tables — never from the
+ * arguments' own statement of cost. null = cannot be derived (the caller then steps up). Injectable for tests.
+ */
+export async function serverCostCredits(db, cap, args = {}, actor = null, { mediaModels = null } = {}) {
+  const m = /^studio\.(image|video)\.generate$/.exec(cap.name);
+  if (m) {
+    const list = mediaModels ? await mediaModels(db, actor, m[1]) : await (await import('./agentMedia.js')).mediaModels(db, actor, m[1]);
+    const models = (list && list.models) || [];
+    const chosen = args.model ? models.filter((x) => x.id === args.model) : models;
+    const prices = chosen.map((x) => Number(x.maxCredits)).filter(Number.isFinite);
+    return prices.length ? Math.max(...prices) : null;
+  }
+  return null;
+}
+
+/** The team's (division) agent budget left, in credits, or null when it has none. */
+export async function teamLeftCredits(db, agentUserId) {
+  const r = (await db.query(`SELECT o.division_id FROM agent_identities ai JOIN workforce_division_ownership o ON o.resource_id = ai.workforce_resource_id WHERE ai.user_id = $1`, [agentUserId])).rows[0];
+  if (!r || !r.division_id) return null;
+  const b = await budgetOf(db, r.division_id);
+  return b ? b.view.leftCredits : null;
+}
+
+/** The whole step-up decision for one call: server cost and team budget, then the rule. */
+export async function stepUpFor(db, cap, args, actor, deps = {}) {
+  if (cap.class === 'irreversible') return 'irreversible';
+  if (cap.cost.model !== 'quoted' && cap.cost.model !== 'metered') return null;
+  const serverCredits = await serverCostCredits(db, cap, args, actor, deps).catch(() => null);
+  const left = deps.teamLeftCredits !== undefined ? deps.teamLeftCredits : await teamLeftCredits(db, actor.id).catch(() => null);
+  return stepUpReason(cap, { serverCredits, teamLeftCredits: left });
 }
 export const isFresh = (authTimeSec, now = Date.now()) => Number.isFinite(Number(authTimeSec)) && now / 1000 - Number(authTimeSec) <= STEP_UP_WINDOW_SEC;
 

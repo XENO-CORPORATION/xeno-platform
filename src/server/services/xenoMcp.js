@@ -254,7 +254,7 @@ export async function callTool(db, actor, connection, prefixed, args = {}, ctx =
     const ws = ctx.workspaceId || (UUID_RE.test(String(callArgs.workspace || '')) ? String(callArgs.workspace) : null) || wt.workspaceId || await personalWorkspace(db, wt.ownerId);
     if (wt.workspaceId && ws !== wt.workspaceId) return { result: toolError('This key works in one workspace only', 'workspace_mismatch'), log: meta(r.service.category, 'refused', 'workspace_mismatch') };
     if (!(await creds.hasGrant(db, wt.agentUserId, cap.name, ws))) return { result: toolError(`${cap.name} is not granted to this app in that workspace. The person can grant it in XENO: Settings › Connected apps.`, 'grant_missing'), log: meta(r.service.category, 'refused', 'grant_missing') };
-    const why = creds.stepUpReason(cap, { estimatedCredits: typeof callArgs.max_credits === 'number' ? callArgs.max_credits : null });
+    const why = await creds.stepUpFor(db, cap, callArgs, actor);   // server-derived cost, never a caller-stated one
     if (why && !(wt.via === 'oauth' && creds.isFresh(wt.authTime))) {
       return { result: toolError(why === 'irreversible' ? `${cap.name} cannot be undone, so it needs a fresh sign-in (within 10 minutes). Sign in again with prompt=login.` : 'This spend is above the step-up limit, so it needs a fresh sign-in.', 'step_up_required'), log: meta(r.service.category, 'refused', 'step_up_required') };
     }

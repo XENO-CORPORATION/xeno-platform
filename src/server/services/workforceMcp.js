@@ -21,6 +21,7 @@ import * as authority from './workforceRunAuthority.js';
 import * as divisions from './workforceDivisions.js';
 import * as goals from './projectWorktree.js';
 import * as funding from './workforceFunding.js';
+import { WORKFORCE_SHAPES } from '../routes/workforceRoutes.js';
 
 /** §11.1 closed error vocabulary: a service error with one of these codes is the caller's answer, not a crash. */
 export const WORKFORCE_CODES = Object.freeze(['bad_input', 'not_found', 'denied', 'needs_approval', 'conflict', 'rate_limited', 'unavailable', 'timeout', 'internal',
@@ -81,13 +82,47 @@ const DEFS = [
 ];
 const meOf = (actor) => ({ id: String(actor.id), kind: actor.kind || 'agent' });
 
+/**
+ * What each tool's ROUTE answers, so a capability answers exactly that (owner/coordinator 2026-10-20):
+ *   path      → the route's own projection (WORKFORCE_SHAPES, shared with the route — one function)
+ *   wrap      → the route returns the service result unprojected, under this key ('result', 'division') or spread
+ */
+export const TOOL_ROUTE = Object.freeze({
+  resource_create: { path: '/resources' }, resource_create_and_assign: { path: '/resources/create-and-assign' },
+  resource_operation_get: { path: '/resource-operations/read' }, resource_get: { path: '/resources/definition/read' },
+  resource_update: { path: '/resources/revise-definition' }, resource_revision_get: { path: '/resources/revise-definition/read' },
+  catalog_list: { path: '/resources/list' },
+  admission_create: { path: '/run-admissions' }, admission_get: { path: '/run-admissions/read' }, admission_list: { path: '/run-admissions/list' },
+  admission_operation_get: { path: '/run-admissions/operations/read' }, pin_get: { path: '/run-admissions/pin' },
+  admission_revoke: { path: '/run-admissions/revoke' }, authority_get: { path: '/run-admissions/authority' },
+  division_list: { wrap: '...' }, division_get: { wrap: 'division' }, division_create: { wrap: 'division' }, division_update: { wrap: 'division' }, division_archive: { wrap: 'division' },
+  objective_create: { wrap: 'result' }, objective_get: { wrap: 'result' }, objective_update: { wrap: 'result' }, objective_complete: { wrap: 'result' }, objective_link_goal: { wrap: 'result' },
+  funding_price: { wrap: 'result' }, funding_budget_propose: { wrap: 'result' }, funding_budget_get: { wrap: 'result' }, funding_offer_get: { wrap: 'result' },
+  funding_contribute: { wrap: 'result' }, funding_contribution_get: { wrap: 'result' }, funding_contribution_return: { wrap: 'result' },
+});
+
+/** Shape a service result exactly as its route would. Null from a projection is a refusal, as on the route. */
+export function shapeResult(tool, value, request) {
+  const r = TOOL_ROUTE[tool];
+  if (!r) throw new WorkforceMcpError(`No route shape for ${tool}`, 'internal');
+  if (r.path) {
+    const [project, readOnly] = WORKFORCE_SHAPES[r.path];
+    const out = project(value, request, readOnly);
+    if (!out) throw new WorkforceMcpError('Workforce request failed.', 'internal');
+    return out;
+  }
+  if (r.wrap === '...') return { ...(value || {}) };
+  return { [r.wrap]: value === undefined ? null : value };
+}
+
 export const TOOLS = DEFS.map(([name, title, annotations, description, inputSchema]) => ({ name, title, annotations, description, inputSchema }));
 const RUN = new Map(DEFS.map((d) => [d[0], d[5]]));
 
 export async function callTool(db, actor, name, args = {}) {
   const run = RUN.get(name);
   if (!run) throw new WorkforceMcpError(`Unknown tool ${name}`, 'not_found');
-  try { return ok(await run(db, actor, body(args))); }
+  const request = body(args);
+  try { return ok(shapeResult(name, await run(db, actor, request), request)); }
   catch (e) {
     if (e instanceof WorkforceMcpError) throw e;
     if (isWorkforceError(e)) throw new WorkforceMcpError(e.details && e.details.reason ? `${e.code}: ${e.details.reason}` : (e.reason || e.message || e.code), e.code);
