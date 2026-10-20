@@ -28,6 +28,8 @@
     "test:workforce-capability-shaping": "node --test scripts/workforce-capability-shaping.test.mjs",
     "test:publish-xeno-post": "cd src/server && node tests/publish-xeno-post.test.mjs",
     "test:publish-ui": "node prototypes/xeno-workspace/tests/publish-test.mjs",
+    "test:support-tickets": "node src/server/tests/support-tickets.test.mjs",
+    "test:support-ui": "node prototypes/xeno-workspace/tests/support-test.mjs",
     "test:agent-parity": "node --test scripts/agent-parity.test.mjs && node scripts/agent-parity.mjs",
     "ci:local:drift": "node scripts/ci-local.mjs --check-drift",
     "qualify:workforce-gateway": "node --test scripts/qualify-workforce-gateway.mjs",

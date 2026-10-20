@@ -216,6 +216,21 @@ Rules that are easy to break:
 - **Only a failed token verification may answer "sign in again".** The first live sign-in hid an agent-cap error behind that message (#675).
 - Public docs for Tasks on the site are **not** written yet, on purpose (owner, 2026-10-11).
 
+## 🛟 XENO support lives HERE — Help ▸ Contact support (2026-10-20)
+
+Private requests to XENO: `services/supportTickets.js` (the one service), `routes/supportRoutes.js` (`/api/support`),
+`services/supportMcp.js` (`support.ticket.*`), screens `prototypes/xeno-workspace/platform-support.js` at
+`/workspace/support[/new|/queue|/macros|/T-<n>]`. Product bug reports from apps stay `forumTickets.js` (dev-agent lane).
+
+- **A ticket is never a private Forum thread.** Only the requester may make it public (a Forum Help thread).
+- **The requester's response is filtered on the SERVER**: internal notes, internal files and unsent drafts are not in it.
+- **Agents propose, humans ratify.** A staff-side agent's reply is a draft; only a HUMAN moderator/admin sends it
+  (`ratifyDraft`). A CHECK and a trigger on `support_messages` hold the same rule. There is no agent tool that sends.
+- **An agent is never staff**, whatever its role column says (`isStaff` tests `kind === 'human'`).
+- Engineering work is a XENO Tasks task (`linkTask`); moving it to done writes the fix back (`taskDone`, called from
+  `xenoTasks.transitionTask`). Mail only when `SUPPORT_EMAILS` is exactly `true` (in compose's `environment:` too).
+- Proofs: `npm run test:support-tickets` (real Postgres, mutation-checked) and `npm run test:support-ui` (browser).
+
 ## Project-aware chat: context must reach the model, not only the audit
 
 `services/chatProjectContext.js` supplies persisted project identity, instructions and authorized file retrieval.
