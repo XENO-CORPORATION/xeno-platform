@@ -788,7 +788,13 @@
   const INVERSE = { title: 'title', body: 'body', priority: 'priority', kind: 'kind', dueAt: 'dueAt', labels: 'labels' };
   async function patchTask(key, body, ok, { undo = true } = {}) {
     const before = findTask(key);
-    const r = await api('PATCH', `/api/tasks/${encodeURIComponent(key)}`, body).catch(() => null);
+    let r = await api('PATCH', `/api/tasks/${encodeURIComponent(key)}`, body).catch(() => null);
+    // time off (People): the server refuses an absent assignee until the assigner says so explicitly
+    if (r && !r.ok && r.d && r.d.code === 'assignee_away' && !body.overrideAway) {
+      if (!(await D().confirm({ title: 'They are on time off', body: esc(r.d.error || 'This person is away.'), action: 'Assign anyway' }))) return loadTask(key);
+      body = { ...body, overrideAway: true };
+      r = await api('PATCH', `/api/tasks/${encodeURIComponent(key)}`, body).catch(() => null);
+    }
     if (!r || !r.ok) { toast(said(r, 'That couldn’t be saved. The task is as it was.')); return loadTask(key); }
     await after(key, r.d.task);
     if (undo && before) {

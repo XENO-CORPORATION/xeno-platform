@@ -60,7 +60,7 @@ router.get('/:id', handled(async (req, res) => { res.json({ success: true, agent
 router.post('/runs/:runId/stop', handled(async (req, res) => { res.json({ success: true, run: await cloudRuns.stop(req.db, req.me, req.params.runId) }); }));
 router.get('/:id/runs', handled(async (req, res) => { res.json({ success: true, runs: await cloudRuns.listForAgent(req.db, req.me, req.params.id) }); }));
 router.post('/:id/runs', handled(async (req, res) => {
-  const run = await cloudRuns.start(req.db, req.me, req.params.id, { taskKey: req.body?.task, budgetCredits: req.body?.budgetCredits });
+  const run = await cloudRuns.start(req.db, req.me, req.params.id, { taskKey: req.body?.task, budgetCredits: req.body?.budgetCredits, overrideAway: req.body?.overrideAway === true });
   res.status(run.existing ? 200 : 201).json({ success: true, run });
 }));
 // company ownership and the four rights (agentAccess.js). Changing who answers for an agent, or giving it away, is

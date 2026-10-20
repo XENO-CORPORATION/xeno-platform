@@ -218,7 +218,7 @@ router.delete('/:key/watch', handled(async (req, res) => { res.json({ success: t
 router.post('/:key/links', handled(async (req, res) => { res.json({ success: true, task: await tasks.addLink(req.db, req.me, req.params.key, { kind: req.body?.kind, to: req.body?.to }) }); }));
 router.delete('/:key/links/:id', handled(async (req, res) => { res.json({ success: true, task: await tasks.removeLink(req.db, req.me, req.params.key, req.params.id) }); }));
 
-router.post('/:key/delegate', handled(async (req, res) => { res.json({ success: true, task: await tasks.delegateTask(req.db, req.me, req.params.key, { agentId: req.body?.agentId }) }); }));
+router.post('/:key/delegate', handled(async (req, res) => { res.json({ success: true, task: await tasks.delegateTask(req.db, req.me, req.params.key, { agentId: req.body?.agentId, overrideAway: req.body?.overrideAway === true }) }); }));
 router.post('/:key/activity', handled(async (req, res) => { res.json({ success: true, task: await tasks.reportActivity(req.db, req.me, req.params.key, { type: req.body?.type, kind: req.body?.kind, body: req.body?.body, data: req.body?.data }) }); }));
 router.post('/:key/handoff', handled(async (req, res) => { res.status(201).json({ success: true, ...(await tasks.handoffTask(req.db, req.me, req.params.key)) }); }));
 
