@@ -566,7 +566,7 @@ export async function startDeviceAuthorization(db, { clientId, scope }) {
 export async function inspectDeviceAuthorization(db, { userCode }) {
   const normalized = String(userCode || '').toUpperCase();
   const r = await db.query(
-    `SELECT dc.client_id, dc.scope, c.name AS client_name
+    `SELECT dc.client_id, dc.scope, c.name AS client_name, c.dynamic, c.access_audience
        FROM oauth_device_codes dc
        JOIN oauth_clients c ON c.client_id = dc.client_id
       WHERE dc.user_code = $1
@@ -577,7 +577,8 @@ export async function inspectDeviceAuthorization(db, { userCode }) {
   );
   const row = r.rows[0];
   if (!row) throw oauthError('invalid_request', 'invalid or expired user_code');
-  return { client_id: row.client_id, client_name: row.client_name, scope: row.scope };
+  // a self-registered app (RFC 7591) is flagged so the approval screen warns that XENO has not reviewed it
+  return { client_id: row.client_id, client_name: row.client_name, scope: row.scope, unverified: row.dynamic === true };
 }
 
 /** Approve a device code for an authenticated user (called from the activate UI/API). */
@@ -1052,7 +1053,8 @@ export async function registerDynamicClient(db, meta = {}, { from = null } = {})
   const auth = meta.token_endpoint_auth_method || 'none';
   if (auth !== 'none') throw bad('only public clients may register: token_endpoint_auth_method must be "none" (use PKCE)');
   const grants = Array.isArray(meta.grant_types) && meta.grant_types.length ? meta.grant_types : ['authorization_code', 'refresh_token'];
-  if (grants.some((g) => !['authorization_code', 'refresh_token'].includes(g))) throw bad('grant_types may be authorization_code and refresh_token');
+  // RFC 8628 device grant: a terminal app (`xeno ws login`) signs in on another screen; approval names the app as unverified
+  if (grants.some((g) => !['authorization_code', 'refresh_token', 'urn:ietf:params:oauth:grant-type:device_code'].includes(g))) throw bad('grant_types may be authorization_code, refresh_token and urn:ietf:params:oauth:grant-type:device_code');
   const responses = Array.isArray(meta.response_types) && meta.response_types.length ? meta.response_types : ['code'];
   if (responses.some((r) => r !== 'code')) throw bad('response_types must be ["code"]');
   const requested = String(meta.scope || 'tasks:read tasks:write').split(/\s+/).filter(Boolean);

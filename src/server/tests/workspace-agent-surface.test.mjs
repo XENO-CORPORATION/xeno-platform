@@ -185,6 +185,20 @@ async function main() {
     const rk = await call('POST', '/api/v1/run/admission/revoke', { token: w.token, body: { admissionId: crypto.randomUUID() } });
     check(rk.s >= 400 && rk.s < 500 && rk.j.code !== 'step_up_required' && rk.j.code !== 'scope_missing', `a fresh sign-in passes step-up and reaches revokeRun, which answers in its own closed vocabulary (${rk.s} ${rk.j && rk.j.code})`);
 
+    // RFC 8628 device grant for a workspace app (what `xeno ws login` does)
+    const dreg = await call('POST', '/api/oauth2/register', { body: { client_name: 'xeno ws', redirect_uris: ['http://127.0.0.1/callback'], token_endpoint_auth_method: 'none', grant_types: ['urn:ietf:params:oauth:grant-type:device_code', 'refresh_token'], scope: 'storage:read storage:write' } });
+    check(dreg.s === 201, `a terminal app registers for the device grant (${dreg.s} ${dreg.j && dreg.j.error_description})`);
+    const dstart = await call('POST', '/api/oauth2/device_authorization', { body: { client_id: dreg.j.client_id, scope: 'openid storage:read storage:write' } });
+    const dinspect = await call('POST', '/api/oauth2/device/inspect', { token: legacy(ada), body: { user_code: dstart.j.user_code } });
+    check(dinspect.s === 200 && dinspect.j.unverified === true && /storage:write/.test(dinspect.j.scope), 'the approval screen is told it is a self-registered app and which scopes it asks for');
+    const pending = await call('POST', '/api/oauth2/token', { raw: true, body: new URLSearchParams({ grant_type: 'urn:ietf:params:oauth:grant-type:device_code', device_code: dstart.j.device_code, client_id: dreg.j.client_id }).toString() });
+    check(pending.s === 400 && pending.j.error === 'authorization_pending', 'before approval the CLI is told to keep waiting');
+    await call('POST', '/api/oauth2/device/approve', { token: legacy(ada), body: { user_code: dstart.j.user_code } });
+    const dtok = await call('POST', '/api/oauth2/token', { raw: true, body: new URLSearchParams({ grant_type: 'urn:ietf:params:oauth:grant-type:device_code', device_code: dstart.j.device_code, client_id: dreg.j.client_id }).toString() });
+    check(dtok.s === 200 && jwt.decode(dtok.j.access_token).aud === 'xeno-workspace', 'after approval the CLI gets a xeno-workspace token');
+    const dl2 = await call('GET', '/api/v1/storage/folder/list', { token: dtok.j.access_token });
+    check(dl2.s === 200 && Array.isArray(dl2.j.data.folders), 'and uses it over REST');
+
     // headless xwk_ keys
     const noExp = await call('POST', '/api/mcp/keys', { token: legacy(ada), body: { name: 'ci', scopes: ['storage:write'] } });
     check(noExp.s === 400 && noExp.j.code === 'invalid_expiry', 'a key without an expiry is refused');
