@@ -48,7 +48,7 @@
       if (S.key !== at) return;
       if (one.status === 404) { S.status = 'missing'; return paint(); }
       if (!one.ok) { S.status = 'error'; return paint(); }
-      S.one = one.d.division; S.home = hm.ok ? hm.d.home : null; S.agents = ag.ok ? ag.d.agents || [] : []; S.projects = pr.ok ? pr.d.projects || [] : [];
+      S.one = one.d.division; S.home = hm.ok ? hm.d.home : null; S.audit = null; loadAudit(S.one.id); S.agents = ag.ok ? ag.d.agents || [] : []; S.projects = pr.ok ? pr.d.projects || [] : [];
       const bg = await api('GET', `/api/divisions/${id}/agent-budget`); S.budget = bg.ok ? bg.d.budget : null; S.spend = bg.ok ? bg.d.spend || [] : [];
     }
     S.status = 'ready'; paint();
@@ -102,6 +102,7 @@
         <section class="pg-sec"><div class="pg-sec-h"><h3>Agents</h3>${d.canManage && !archived && outside.length ? h.btn('Add an agent', 'data-xdv="add-agent"', true, 'plus') : ''}</div>
           ${d.agentsList.length ? h.table(['Agent', 'What it is for'], d.agentsList.map((a) => h.tr(`data-xdv="agent" data-id="${esc(a.id)}"`, [`${h.avatar({ name: a.name, kind: 'agent' })}<b class="pg-name">${esc(a.name)}</b>`, `<small class="pg-dim">${esc(a.description || '')}</small>`]))) : h.box('bot', 'No agents in this division yet', 'Add one. It will work only on this division’s projects.', '', 'sm')}</section>
         ${homeSections(d, archived)}
+        ${auditSection()}
         <section class="pg-sec"><div class="pg-sec-h"><h3>Agent budget</h3>${d.canManage && !archived ? h.btn(S.budget ? 'Change' : 'Set a budget', 'data-xdv="budget"', true, S.budget ? 'edit' : 'plus') : ''}</div>
           ${S.budget ? `<div class="xdv-budget"><div class="xdv-meter" role="meter" aria-valuemin="0" aria-valuemax="${S.budget.limitCredits}" aria-valuenow="${S.budget.spentCredits}" aria-label="Spent of the agent budget"><i style="width:${Math.min(100, S.budget.limitCredits ? (S.budget.spentCredits / S.budget.limitCredits) * 100 : 100).toFixed(1)}%"></i></div>
             <p><b>${fmt(S.budget.spentCredits)}</b> of ${fmt(S.budget.limitCredits)} credits used in the last ${S.budget.windowDays === 30 ? 'month' : S.budget.windowDays + ' days'} · ${fmt(S.budget.leftCredits)} left</p>
@@ -145,12 +146,35 @@
         ${closedNote(m.projects.hidden, m.projects.hidden === 1 ? 'project' : 'projects')}</section>
       ${m.funding.rows.length || m.funding.hidden ? `<section class="pg-sec" data-sec="funding"><h3>Funding pools</h3>${m.funding.rows.length ? h.table(['Pool', 'Status', 'Balance'], m.funding.rows.map((f) => h.tr('', [esc(f.milestone || f.beneficiary), esc(f.status), `${fmt(f.balanceCredits)} credits`]))) : ''}${closedNote(m.funding.hidden, m.funding.hidden === 1 ? 'pool' : 'pools')}</section>` : ''}
       ${m.handoffs.rows.length || m.handoffs.hidden ? `<section class="pg-sec" data-sec="handoffs"><h3>Handoffs</h3>${m.handoffs.rows.length ? h.table(['From', 'To', 'Work', 'State'], m.handoffs.rows.map((x) => h.tr('', [esc(x.from.name), esc(x.to.name), esc(x.work.type), esc(x.state)]))) : ''}${closedNote(m.handoffs.hidden, m.handoffs.hidden === 1 ? 'handoff' : 'handoffs')}</section>` : ''}
+      ${window.XENO_CORPUS?.served ? window.XENO_CORPUS.section('division', d.id, h) : ''}
       ${m.decisions.length ? `<section class="pg-sec" data-sec="decisions"><h3>Decisions</h3>${h.table(['Decision', 'By', 'Why', 'When'], m.decisions.map((x) => h.tr('', [esc(DECISION[x.kind] || x.kind), esc(x.by), `<small class="pg-dim">${esc(x.rationale || '—')}</small>`, day(x.at)])))}</section>` : ''}`;
   }
 
+  // ───────── the audit view (§15): this division's workforce events, each row decided for the reader on the server
+  async function loadAudit(id) {
+    const r = await api('GET', '/api/audit/events?scope=division:' + encodeURIComponent(id) + '&limit=30').catch(() => null);
+    if (!S.one || S.one.id !== id) return;
+    S.audit = r && r.ok ? r.d : { events: [], hidden: 0, failed: true }; paint();
+  }
+  const EVENT = { 'division.created': 'Division created', 'division.updated': 'Division changed', 'division.archived': 'Division archived', 'run.admitted': 'Run admitted', 'run.revoked': 'Run stopped',
+    'run.lease_issued': 'Run step authorized', 'run.result_reported': 'Run finished', 'orchestrator.edge_added': 'Dependency added', 'orchestrator.edge_removed': 'Dependency removed',
+    'orchestrator.plan_created': 'Plan created', 'orchestrator.attempt_started': 'Attempt started' };
+  const eventLabel = (t) => EVENT[t] || t.replace(/^[a-z]+\./, '').replace(/[._]/g, ' ').replace(/^./, (c) => c.toUpperCase());
+  function auditSection() {
+    const h = H(), a = S.audit;
+    if (!a) return '<section class="pg-sec" data-sec="activity"><h3>Activity</h3><p class="pg-dim">Loading…</p></section>';
+    if (a.failed) return '<section class="pg-sec" data-sec="activity"><h3>Activity</h3><p class="pg-dim">The activity could not be read just now.</p></section>';
+    return `<section class="pg-sec" data-sec="activity"><h3>Activity</h3>
+      ${a.events.length ? h.table(['What', 'Detail', 'When'], a.events.map((e) => h.tr(`data-xdv-event="${esc(e.id)}"`, [esc(eventLabel(e.type)),
+        `<small class="pg-dim">${esc(e.data && (e.data.reason || e.data.outcome || e.data.operation) || e.subject.kind)}</small>`, esc(new Date(e.at).toLocaleString())]))) : '<p class="pg-dim">Nothing has happened in this division yet.</p>'}
+      ${closedNote(a.hidden, a.hidden === 1 ? 'event' : 'events')}</section>`;
+  }
+
   // ───────── routing
+  const CORPUS_TENET = /^Divisions\/([0-9a-f-]{36})\/corpus\/([0-9a-f-]{36})$/i;
   function route(it) {
     if (it !== 'Divisions' && !(it || '').startsWith('Divisions/')) return null;
+    { const m = String(it).match(CORPUS_TENET); if (m && window.XENO_CORPUS?.served) { style(); return window.XENO_CORPUS.divisionTenet(m[1], m[2]); } }
     style();
     const id = it.startsWith('Divisions/') ? it.slice(10) : null;
     const h = H();

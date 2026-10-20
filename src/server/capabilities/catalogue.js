@@ -17,6 +17,7 @@ import * as agentMediaMcp from '../services/agentMediaMcp.js';
 import * as forumMcp from '../services/forumMcp.js';
 import * as placesMcp from '../services/placesMcp.js';
 import * as modesMcp from '../services/modesMcp.js';
+import * as corpusMcp from '../services/corpusMcp.js';
 import { MODES_ROWS } from './modes.js';
 import * as storageMcp from '../services/storageMcp.js';
 import * as supportMcp from '../services/supportMcp.js';
@@ -28,7 +29,7 @@ import * as workforceMcp from '../services/workforceMcp.js';
 export const BOUND_TOOLS = Object.freeze({
   tasks: tasksMcp.TOOLS, canvas: canvasMcp.TOOLS, agents: agentsMcp.TOOLS,
   image: agentMediaMcp.IMAGE.tools, video: agentMediaMcp.VIDEO.tools, library: agentMediaMcp.LIBRARY.tools, chat: agentMediaMcp.CHAT.tools,
-  forum: forumMcp.TOOLS.map((t) => ({ ...t, name: t.name.replace(/^forum_/, '') })), places: placesMcp.TOOLS, storage: storageMcp.TOOLS, support: supportMcp.TOOLS, publish: publishMcp.TOOLS, analytics: analyticsMcp.TOOLS, modes: modesMcp.TOOLS, workforce: workforceMcp.TOOLS,
+  forum: forumMcp.TOOLS.map((t) => ({ ...t, name: t.name.replace(/^forum_/, '') })), places: placesMcp.TOOLS, storage: storageMcp.TOOLS, support: supportMcp.TOOLS, publish: publishMcp.TOOLS, analytics: analyticsMcp.TOOLS, modes: modesMcp.TOOLS, corpus: corpusMcp.TOOLS, workforce: workforceMcp.TOOLS,
 });
 
 const obj = (properties, required) => ({ type: 'object', properties, ...(required ? { required } : {}) });
@@ -44,6 +45,11 @@ const READ = NAT('reads change nothing');
 const ROWS = [
   // ── modes (custom modes + trade packs; rows in ./modes.js)
   ...MODES_ROWS,
+  // ── corpus (XENO CORPUS - SPEC.md; services/xenoCorpus.js). No new scope name (scopes are one-way): reading is
+  // workspace:read, and a proposal is workspace:read too because it changes nothing until a PERSON ratifies it.
+  ['corpus.corpus.query', 'corpus', 'query', 'safe', { scope: 'workspace:read', provenance: 'untrusted', reply: obj({ corpus: { type: 'object', description: 'id, scope, scopeId, subject, workspaceId.' }, tenets: { type: 'array', description: 'Own live tenets: key, kind, subject, claim, assay, expect, cadence, latest (signed verdict or null), freshness.' }, inheritedDoctrine: { type: 'array', description: 'Doctrine from wider scopes, binding here (from = where it lives).' }, aggregated: { type: 'array', description: 'Narrower scopes’ tenets BY REFERENCE: id, key, subject, from, state, freshness.' } }, ['corpus', 'tenets']) }],
+  ['corpus.corpus.assess', 'corpus', 'assess', 'safe', { scope: 'workspace:read', reply: obj({ corpus: { type: 'object' }, summary: { type: 'object', description: 'tenets, held, lapsed, error, never, aging.' }, tenets: { type: 'array', description: 'id, key, from, state, freshness (fresh|due|warn|expired|never), stale.' } }, ['summary', 'tenets']) }],
+  ['corpus.proposal.create', 'corpus', 'propose', 'undoable', { scope: 'workspace:read', idempotency: NONE('no request key yet: a retried call files a second proposal (each is decided by a person)'), reply: obj({ proposal: { type: 'object', description: 'id, action, tenet, rationale, state ("proposed" until a person ratifies or rejects it).' }, note: { type: 'string' } }, ['proposal']) }],
   // ── tasks
   ['tasks.project.list', 'tasks', 'list_projects', 'safe', { reply: obj({ projects: { type: 'array', description: 'id, name, area of each project you can work in.' }, hint: { type: 'string', description: 'Set when you have none: what to ask the person for.' } }) }],
   ['tasks.task.list_mine', 'tasks', 'list_my_tasks', 'safe', { reply: obj({ tasks: { type: 'array', description: 'key, title, status, priority, project, url of each open task assigned (person) or delegated (agent) to you.' }, unassigned: { type: 'array', description: 'With a project: up to 50 open tasks nobody holds that you could take.' }, hint: { type: 'string' } }, ['tasks']) }],
@@ -106,6 +112,11 @@ const ROWS = [
     ['funding.offer.get', 'funding_offer_get', 'safe'],
     ['funding.contribution.create', 'funding_contribute', 'irreversible', { cost: { model: 'quoted', note: 'moves the owner’s credits into the project; the amount is in the body' } }],
     ['funding.contribution.get', 'funding_contribution_get', 'safe'], ['funding.contribution.return', 'funding_contribution_return', 'irreversible'],
+    ['orchestrator.graph.get', 'orchestrator_graph_get', 'safe'], ['orchestrator.ready.list', 'orchestrator_ready_list', 'safe'],
+    ['orchestrator.edge.add', 'orchestrator_edge_add', 'undoable'], ['orchestrator.edge.remove', 'orchestrator_edge_remove', 'undoable'],
+    ['orchestrator.plan.list', 'orchestrator_plan_list', 'safe'], ['orchestrator.plan.create', 'orchestrator_plan_create', 'undoable'], ['orchestrator.plan.get', 'orchestrator_plan_get', 'safe'],
+    ['orchestrator.attempt.start', 'orchestrator_attempt_start', 'irreversible'],
+    ['audit.event.list', 'audit_events_list', 'safe'],
   ].map(([name, tool, cls, extra = {}]) => [name, 'workforce', tool, cls, { provenance: cls === 'safe' ? 'untrusted' : 'trusted',
     reply: obj({}, undefined), ...(cls === 'safe' ? {} : { idempotency: NAT('the service keys a mutation by its operationId (or its natural target); a repeat reads the same result back') }), ...extra }]),
   // ── publish (XENO Post, server-to-server). Drafts and PROPOSED times only: publish, retract and approve reach an

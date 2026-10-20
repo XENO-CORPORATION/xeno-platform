@@ -100,6 +100,48 @@
    ]
   },
   {
+   "name": "corpus.corpus.query",
+   "wire": "corpus__corpus__query",
+   "version": "1.0.0",
+   "class": "safe",
+   "scope": "workspace:read",
+   "surfaces": [
+    "mcp",
+    "rest"
+   ],
+   "aliases": [
+    "corpus_query"
+   ]
+  },
+  {
+   "name": "corpus.corpus.assess",
+   "wire": "corpus__corpus__assess",
+   "version": "1.0.0",
+   "class": "safe",
+   "scope": "workspace:read",
+   "surfaces": [
+    "mcp",
+    "rest"
+   ],
+   "aliases": [
+    "corpus_assess"
+   ]
+  },
+  {
+   "name": "corpus.proposal.create",
+   "wire": "corpus__proposal__create",
+   "version": "1.0.0",
+   "class": "undoable",
+   "scope": "workspace:read",
+   "surfaces": [
+    "mcp",
+    "rest"
+   ],
+   "aliases": [
+    "corpus_propose"
+   ]
+  },
+  {
    "name": "tasks.project.list",
    "wire": "tasks__project__list",
    "version": "1.0.0",
@@ -1091,6 +1133,132 @@
    ],
    "aliases": [
     "workforce_funding_contribution_return"
+   ]
+  },
+  {
+   "name": "orchestrator.graph.get",
+   "wire": "orchestrator__graph__get",
+   "version": "1.0.0",
+   "class": "safe",
+   "scope": "tasks:read",
+   "surfaces": [
+    "mcp",
+    "rest"
+   ],
+   "aliases": [
+    "workforce_orchestrator_graph_get"
+   ]
+  },
+  {
+   "name": "orchestrator.ready.list",
+   "wire": "orchestrator__ready__list",
+   "version": "1.0.0",
+   "class": "safe",
+   "scope": "tasks:read",
+   "surfaces": [
+    "mcp",
+    "rest"
+   ],
+   "aliases": [
+    "workforce_orchestrator_ready_list"
+   ]
+  },
+  {
+   "name": "orchestrator.edge.add",
+   "wire": "orchestrator__edge__add",
+   "version": "1.0.0",
+   "class": "undoable",
+   "scope": "tasks:write",
+   "surfaces": [
+    "mcp",
+    "rest"
+   ],
+   "aliases": [
+    "workforce_orchestrator_edge_add"
+   ]
+  },
+  {
+   "name": "orchestrator.edge.remove",
+   "wire": "orchestrator__edge__remove",
+   "version": "1.0.0",
+   "class": "undoable",
+   "scope": "tasks:write",
+   "surfaces": [
+    "mcp",
+    "rest"
+   ],
+   "aliases": [
+    "workforce_orchestrator_edge_remove"
+   ]
+  },
+  {
+   "name": "orchestrator.plan.list",
+   "wire": "orchestrator__plan__list",
+   "version": "1.0.0",
+   "class": "safe",
+   "scope": "tasks:read",
+   "surfaces": [
+    "mcp",
+    "rest"
+   ],
+   "aliases": [
+    "workforce_orchestrator_plan_list"
+   ]
+  },
+  {
+   "name": "orchestrator.plan.create",
+   "wire": "orchestrator__plan__create",
+   "version": "1.0.0",
+   "class": "undoable",
+   "scope": "tasks:write",
+   "surfaces": [
+    "mcp",
+    "rest"
+   ],
+   "aliases": [
+    "workforce_orchestrator_plan_create"
+   ]
+  },
+  {
+   "name": "orchestrator.plan.get",
+   "wire": "orchestrator__plan__get",
+   "version": "1.0.0",
+   "class": "safe",
+   "scope": "tasks:read",
+   "surfaces": [
+    "mcp",
+    "rest"
+   ],
+   "aliases": [
+    "workforce_orchestrator_plan_get"
+   ]
+  },
+  {
+   "name": "orchestrator.attempt.start",
+   "wire": "orchestrator__attempt__start",
+   "version": "1.0.0",
+   "class": "irreversible",
+   "scope": "tasks:write",
+   "surfaces": [
+    "mcp",
+    "rest"
+   ],
+   "aliases": [
+    "workforce_orchestrator_attempt_start"
+   ]
+  },
+  {
+   "name": "audit.event.list",
+   "wire": "audit__event__list",
+   "version": "1.0.0",
+   "class": "safe",
+   "scope": "workspace:read",
+   "surfaces": [
+    "mcp",
+    "rest"
+   ],
+   "aliases": [
+    "workforce_audit_events_list"
    ]
   },
   {
