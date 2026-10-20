@@ -2079,13 +2079,13 @@
    "status": "capability",
    "capability": "library.file.list",
    "class": "safe",
-   "scope": "storage:read"
+   "scope": "library:read"
   },
   "route:libraryRoutes.js:GET /assets/:id/content": {
    "status": "capability",
    "capability": "library.file.get",
    "class": "safe",
-   "scope": "storage:read"
+   "scope": "library:read"
   },
   "route:libraryRoutes.js:GET /assets/:id/status": {
    "status": "planned",
@@ -4985,7 +4985,7 @@
    "status": "capability",
    "capability": "agents.self.get",
    "class": "safe",
-   "scope": "tasks:read"
+   "scope": "agents:read"
   },
   "route:xenoTasksRoutes.js:GET /agents": {
    "status": "planned",

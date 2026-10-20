@@ -20,7 +20,7 @@ const SNAPSHOT = join(ROOT, 'src', 'server', 'capabilities', 'catalogue.snapshot
 const DOC = join(ROOT, 'docs', 'AGENT-CAPABILITIES.md');
 
 export function snapshot() {
-  return JSON.stringify({ $generated: 'npm run catalogue -- --write', capabilities: CATALOGUE.map((c) => ({ name: c.name, wire: toWire(c.name), version: c.version, class: c.class, surfaces: c.surfaces, aliases: c.aliases })) }, null, 1) + '\n';
+  return JSON.stringify({ $generated: 'npm run catalogue -- --write', capabilities: CATALOGUE.map((c) => ({ name: c.name, wire: toWire(c.name), version: c.version, class: c.class, scope: c.scope, surfaces: c.surfaces, aliases: c.aliases })) }, null, 1) + '\n';
 }
 
 export function doc() {
