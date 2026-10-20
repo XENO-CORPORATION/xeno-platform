@@ -93,6 +93,21 @@ async function main() {
     assert.equal((await storageUsage(pool, free)).usedBytes, 5 * GB + 15);
     // ── a workspace file is not held to the person's allowance ──
     await add(free, 'team2.txt', 'still fine', { workspaceId: company, enforceAllowance: true });
+    // ── D-1 (2026-10-20): the WORKSPACE pool is enforced against the workspace's plan, apart from the person ──
+    const { workspaceStorageAllowance } = await import('../services/storageAllowance.js');
+    assert.equal(await workspaceStorageAllowance(pool, company), 5 * GB, 'a workspace with no plan of its own takes its owner\'s (Free) pool');
+    const wsBulk = (await pool.query(`INSERT INTO user_files (user_id, owner_user_id, created_by_user_id, workspace_id, filename, original_name, file_type, mime_type, file_size, storage_path, storage_type, metadata)
+      VALUES ($1, NULL, $1, $2, 'wsbulk.bin', 'wsbulk.bin', 'application/octet-stream', 'video/mp4', $3, '/nowhere/wsbulk.bin', 'platform-upload', '{}') RETURNING id`, [free, company, 5 * GB])).rows[0].id;
+    await assert.rejects(add(free, 'over.txt', 'over the pool', { workspaceId: company, enforceAllowance: true }), (e) => e instanceof StorageFullError && e.allowanceBytes === 5 * GB, 'a full workspace pool refuses a new file held to the workspace pool, not the person');
+    await pool.query(`UPDATE workspaces SET metadata = jsonb_build_object('billing', jsonb_build_object('plan','team','status','active','seat_limit',3)) WHERE id = $1`, [company]);
+    assert.equal(await workspaceStorageAllowance(pool, company), 100 * GB, 'the workspace\'s own Team plan sets its pool');
+    await add(free, 'fits.txt', 'fits now', { workspaceId: company, enforceAllowance: true });
+    await pool.query(`UPDATE workspaces SET metadata = '{}'::jsonb WHERE id = $1`, [company]);
+    await pool.query('DELETE FROM user_files WHERE id = $1', [wsBulk]);
+    // ── a file in the person's PERSONAL workspace is the same pool as their workspace-less files ──
+    const { ensurePersonalWorkspace } = await import('../services/personalWorkspace.js');
+    const freePersonal = (await ensurePersonalWorkspace(pool, free)).id;
+    await assert.rejects(add(free, 'pw.txt', 'personal ws', { workspaceId: freePersonal, enforceAllowance: true }), StorageFullError, 'a full person cannot route around the allowance through their personal workspace');
 
     // ── two uploads racing for the last room: one is admitted ──
     await pool.query('UPDATE user_files SET file_size = file_size - 25 WHERE id = $1', [big]);   // 10 bytes of room again
