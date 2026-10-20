@@ -92,37 +92,37 @@ export async function apply(db, { me, workspaceId, w, created }) {
     for (const d of w.divisions) {
       const r = await divisions.create(db, me, { workspaceId, name: d.name, parentId: d.parent ? ids.division[d.parent] : null });
       ids.division[d.key] = r.id;
-      created.push({ type: 'division', key: d.key, id: r.id, revision: r.revision });
+      created.push({ wf: true, type: 'division', key: d.key, id: r.id, revision: r.revision });
     }
     for (const a of w.agents) {
       const r = await agents.create(db, me, { name: a.name, description: a.description, instructions: a.instructions, workspaceId, divisionId: a.division ? ids.division[a.division] : undefined });
       const rev = (await db.query('SELECT revision FROM workforce_resources WHERE id = $1', [r.definitionId])).rows[0];
       ids.agent[a.key] = r.id; ids.agentUser[a.key] = r.userId;
-      created.push({ type: 'agent', key: a.key, id: r.id, userId: r.userId, definitionId: r.definitionId, revision: Number(rev.revision), name: r.name });
+      created.push({ wf: true, type: 'agent', key: a.key, id: r.id, userId: r.userId, definitionId: r.definitionId, revision: Number(rev.revision), name: r.name });
     }
     for (const p of w.projects) {
       const pr = await createAuthorizedProject(db, { principal: { type: 'user', id: String(me.id) }, workspaceId, name: p.name, description: p.description || null, settings: { source: 'mode-setup' } });
       if (p.division) await divisions.setProjectDivision(db, me, pr.id, ids.division[p.division]);
       ids.project[p.key] = pr.id;
-      created.push({ type: 'project', key: p.key, id: pr.id });
+      created.push({ wf: true, type: 'project', key: p.key, id: pr.id });
     }
     for (const t of w.teams) {
       await saveWorkspaceTeam(db, { workspaceId, userId: me.id, input: { name: t.name, description: t.description, project_ids: [], agent_ids: t.agents.map((k) => ids.agentUser[k]) } });
       const r = (await db.query(`SELECT id, revision FROM workforce_resources WHERE kind = 'team' AND owner_workspace_id = $1 AND status = 'active' AND lower(name) = lower($2)`, [workspaceId, t.name])).rows[0];
-      created.push({ type: 'team', key: t.key, id: r.id, revision: Number(r.revision) });
+      created.push({ wf: true, type: 'team', key: t.key, id: r.id, revision: Number(r.revision) });
     }
     const today = new Date();
     for (const o of w.objectives) {
       const r = await createObjective(db, { actorUserId: me.id, workspaceId, divisionId: o.division ? ids.division[o.division] : null, title: o.title, successEvidence: o.successEvidence,
         ownerUserId: me.id, windowStart: day(today), windowEnd: day(new Date(today.getTime() + o.windowDays * 86400000)) });
       ids.objective[o.key] = r.objectiveId;
-      created.push({ type: 'objective', key: o.key, id: r.objectiveId, title: o.title, successEvidence: o.successEvidence });
+      created.push({ wf: true, type: 'objective', key: o.key, id: r.objectiveId, title: o.title, successEvidence: o.successEvidence });
     }
     for (const g of w.goals) {
       const r = await createGoal(db, { actorUserId: me.id, projectId: ids.project[g.project], title: g.title, successEvidence: g.successEvidence });
       const goalId = r.goalId || r.id;
       if (g.objective) await linkGoalToObjective(db, { actorUserId: me.id, goalId, objectiveId: ids.objective[g.objective] });
-      created.push({ type: 'goal', id: goalId, projectId: ids.project[g.project], objectiveId: g.objective ? ids.objective[g.objective] : null });
+      created.push({ wf: true, type: 'goal', id: goalId, projectId: ids.project[g.project], objectiveId: g.objective ? ids.objective[g.objective] : null });
     }
     if (w.places) {
       const place = (await db.query(`SELECT p.id, p.style, l.layout, l.bays, l.revision FROM places p JOIN place_layouts l ON l.place_id = p.id WHERE p.workspace_id = $1 AND p.lifecycle = 'active' ORDER BY p.created_at LIMIT 1`, [workspaceId])).rows[0];
@@ -131,8 +131,8 @@ export async function apply(db, { me, workspaceId, w, created }) {
         const reply = await places.call(db, me, 'places.layout.save', { placeId: place.id, expectedRevision: Number(place.revision), requestId: `mode-${crypto.randomUUID()}`,
           layout: { ...(place.layout || {}), bays: w.places.bays ?? place.bays, ...(w.places.style ? { style: w.places.style } : place.style ? { style: place.style } : {}) } });
         if (!reply.ok) svcFail(reply.error);
-        created.push({ type: 'places', id: place.id, prior, revision: reply.result.placeRevision });
-      } else created.push({ type: 'places', id: null, skipped: 'this workspace has no building yet' });
+        created.push({ wf: true, type: 'places', id: place.id, prior, revision: reply.result.placeRevision });
+      } else created.push({ wf: true, type: 'places', id: null, skipped: 'this workspace has no building yet' });
     }
   } catch (e) { if (e.modeError) throw e; svcFail(e); }
   return { projectsByKey: ids.project };
