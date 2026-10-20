@@ -60,6 +60,9 @@ async function occupants(db, me, snap, admin) {
   const rows = ids.length ? (await db.query(`SELECT id, number, title, status, assignee_id, reviewer_id, owner_user_id FROM tasks
     WHERE assignee_id = ANY($1::uuid[]) AND status IN ('in_progress','blocked','in_review') ORDER BY updated_at DESC`, [ids])).rows : [];
   const running = new Set(snap.runs.map((r) => r.principalId));
+  // Corpo › Scheduling: someone in a booked meeting right now is shown in it (busy until its end), never "idle".
+  const booked = new Map(ids.length ? (await db.query(`SELECT DISTINCT ON (host_user_id) host_user_id, ends_at FROM scheduling_bookings
+    WHERE host_user_id = ANY($1::uuid[]) AND status = 'confirmed' AND starts_at <= NOW() AND ends_at > NOW() ORDER BY host_user_id, ends_at DESC`, [ids])).rows.map((r) => [String(r.host_user_id), r.ends_at.toISOString()]) : []);
   const out = {};
   for (const p of snap.principals) {
     const mine = rows.filter((t) => t.assignee_id === p.id);
@@ -68,8 +71,9 @@ async function occupants(db, me, snap, admin) {
     if (t && t.status === 'in_review' && t.reviewer_id === me.id) status = 'needs-you';
     else if (t && t.status === 'blocked') status = 'blocked';
     else if (running.has(p.id) || (t && t.status === 'in_progress')) status = 'working';
+    if (booked.has(String(p.id)) && status !== 'needs-you') status = 'in-meeting';
     const see = t && (admin || [t.assignee_id, t.reviewer_id, t.owner_user_id].includes(me.id));
-    out[p.id] = { status, task: t ? { id: t.id, key: `T-${t.number}`, label: see ? t.title : '', status: t.status } : null };
+    out[p.id] = { status, task: t ? { id: t.id, key: `T-${t.number}`, label: see ? t.title : '', status: t.status } : null, ...(booked.has(String(p.id)) ? { busyUntil: booked.get(String(p.id)) } : {}) };
   }
   return out;
 }
