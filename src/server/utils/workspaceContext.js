@@ -9,7 +9,7 @@
  * being a member of the workspace.
  */
 import { check, writeTuples } from './authzReBAC.js';
-import { entitlementsFor, getPlan } from '../services/billingService.js';
+import { entitlementsFor, getPlan } from '../services/accountPlan.js';   // not billingService: reading a plan must not load the Stripe client (NFR-09 gate)
 
 export const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
