@@ -1116,7 +1116,7 @@
     // a live area that addresses its own records (items: true) draws them itself, e.g. customers/contacts/<id>
     if (S.view === 'zone') { const L = zoneLive(zoneNow()); if (L && L.items && L.page) { const html = L.page(zoneNow()); if (html) return html; } }
     if (S.view === 'global' && S.global === 'projects' && (window.XENO_PROJECTS || {})[S.item.split('/')[0]] !== undefined || (S.view === 'global' && S.global === 'projects' && !/^(Archived projects)$/.test(S.item))) { const [nm, tb] = S.item.split('/'); return mainProject(nm, tb); }
-    const owner = S.view === 'product' ? PR[S.product].name : S.view === 'zone' ? zoneNow().label : { anima: 'Anima', community: 'Community', market: 'Marketplace', library: 'Library', projects: 'Projects', tasks: 'Tasks', workspace: 'Workspace', inbox: 'Inbox', settings: 'Settings', places: 'Places', support: 'Support' }[S.global] || '';
+    const owner = S.view === 'product' ? PR[S.product].name : S.view === 'zone' ? zoneNow().label : { anima: 'Anima', community: 'Community', market: 'Marketplace', library: 'Library', projects: 'Projects', tasks: 'Tasks', workspace: 'Workspace', inbox: 'Inbox', settings: 'Settings', places: 'Places', support: 'Support', releases: 'Releases' }[S.global] || '';
     return `<div class="wrap"><div class="landing"><span class="ib" style="width:72px;height:72px;pointer-events:none">${ic('doc').replace('class="i"', 'class="i" style="width:40px;height:40px"')}</span><h1>${esc(S.item)}</h1><p>${esc(owner)} · ${esc(ctxName())}</p><div class="row2"><button class="btn ghost" data-back>Back</button></div><div class="note">Couldn’t find “${esc(S.item)}” in ${esc(owner)}. It may have been renamed, moved or deleted — check Trash in your Library.</div></div></div>`;
   }
   function crumbs() {
@@ -1126,9 +1126,9 @@
     if (S.view === 'dashboard') return '<b>Overview</b>';
     if (S.view === 'adaptive') return '<b>Adaptive</b><span class="sep">·</span><span>Beta</span>';
     if (S.view === 'mode') return `<b>${M[S.mode].name}</b>`;
-    if (S.view === 'global') { const gn = { anima: 'Anima', community: 'Community', market: 'Marketplace', library: 'Library', projects: 'Projects', tasks: 'Tasks', workspace: 'Workspace', inbox: 'Inbox', settings: 'Settings', places: 'Places', support: 'Support' }[S.global]; if (!S.item) return `<b>${gn}</b>`;
+    if (S.view === 'global') { const gn = { anima: 'Anima', community: 'Community', market: 'Marketplace', library: 'Library', projects: 'Projects', tasks: 'Tasks', workspace: 'Workspace', inbox: 'Inbox', settings: 'Settings', places: 'Places', support: 'Support', releases: 'Releases' }[S.global]; if (!S.item) return `<b>${gn}</b>`;
       // a path is a trail you can walk back up: every segment but the last is a link (GitHub, Finder)
-      const parts = S.item.split('/'), lbl = (x, i) => (S.global === 'tasks' && window.XENO_TASKS?.label ? window.XENO_TASKS.label(x) : S.global === 'support' && window.XENO_SUPPORT?.label ? window.XENO_SUPPORT.label(x) : S.global === 'community' && i === 0 && window.XENO_PG_FORUM.find((t) => t.id === x) ? window.XENO_PG_FORUM.find((t) => t.id === x).title : S.global === 'community' && i > 0 && parts[0] === 'My reports' ? '#' + x : S.global === 'workspace' && i === 1 && parts[0] === 'Agents' && window.XENO_AGENTS?.isId?.(x) ? window.XENO_AGENTS.nameOf(x) : S.global === 'workspace' && i === 1 && parts[0] === 'Divisions' && window.XENO_DIVISIONS?.isId?.(x) ? window.XENO_DIVISIONS.nameOf(x) : S.global === 'workspace' && i === 1 && parts[0] === 'Directory' && window.XENO_DIRECTORY?.isId?.(x) ? window.XENO_DIRECTORY.nameOf(x) : S.global === 'workspace' && i === 1 && parts[0] === 'Services' && window.XENO_SERVICES?.isId?.(x) ? window.XENO_SERVICES.nameOf(x) : x);
+      const parts = S.item.split('/'), lbl = (x, i) => (S.global === 'tasks' && window.XENO_TASKS?.label ? window.XENO_TASKS.label(x) : S.global === 'support' && window.XENO_SUPPORT?.label ? window.XENO_SUPPORT.label(x) : S.global === 'releases' && window.XENO_RELEASES?.label ? window.XENO_RELEASES.label(x) : S.global === 'community' && i === 0 && window.XENO_PG_FORUM.find((t) => t.id === x) ? window.XENO_PG_FORUM.find((t) => t.id === x).title : S.global === 'community' && i > 0 && parts[0] === 'My reports' ? '#' + x : S.global === 'workspace' && i === 1 && parts[0] === 'Agents' && window.XENO_AGENTS?.isId?.(x) ? window.XENO_AGENTS.nameOf(x) : S.global === 'workspace' && i === 1 && parts[0] === 'Divisions' && window.XENO_DIVISIONS?.isId?.(x) ? window.XENO_DIVISIONS.nameOf(x) : S.global === 'workspace' && i === 1 && parts[0] === 'Directory' && window.XENO_DIRECTORY?.isId?.(x) ? window.XENO_DIRECTORY.nameOf(x) : S.global === 'workspace' && i === 1 && parts[0] === 'Services' && window.XENO_SERVICES?.isId?.(x) ? window.XENO_SERVICES.nameOf(x) : x);
       return `<a data-crumb="">${gn}</a>` + parts.map((x, i) => sep + (i < parts.length - 1 ? `<a data-crumb="${esc(parts.slice(0, i + 1).join('/'))}">${esc(lbl(x, i))}</a>` : `<b>${esc(lbl(x, i))}</b>`)).join(''); }
     const p = PR[S.product];
     if (S.mode === 'studio' && ['image', 'video', 'audio', '3d', 'enhance-image', 'enhance-video', 'enhance-audio', 'enhance-3d'].includes(S.product) && window.XENO_GENERATIONS) {
@@ -1312,12 +1312,12 @@
     if (m === 'adaptive') return { view: 'adaptive' };
     if (m === 'overview') { if (kind === 'z' && id && zonesFor('overview').some((z) => z.id === id)) return { view: 'zone', zone: id, zoneOf: 'overview', item };
       if (kind === 'p' && PR[id]) return { view: 'product', product: id, zoneOf: 'overview', item };
-      if (kind === 'g' && ['anima', 'community', 'market', 'library', 'projects', 'tasks', 'workspace', 'inbox', 'settings', 'places', 'support'].includes(id)) return { view: 'global', global: id, zoneOf: 'overview', item };
+      if (kind === 'g' && ['anima', 'community', 'market', 'library', 'projects', 'tasks', 'workspace', 'inbox', 'settings', 'places', 'support', 'releases'].includes(id)) return { view: 'global', global: id, zoneOf: 'overview', item };
       return { view: 'dashboard' }; }
     if (!modeOk) return null;
     if (kind === 'z' && zonesFor(m).some((z) => z.id === id)) return { view: 'zone', mode: m, zone: id, zoneOf: 'mode', item };
     if (kind === 'p' && PR[id]) return { view: 'product', mode: m, product: id, zoneOf: 'mode', item };
-    if (kind === 'g' && ['anima', 'community', 'market', 'library', 'projects', 'tasks', 'workspace', 'inbox', 'settings', 'places', 'support'].includes(id)) return { view: 'global', mode: m, global: id, zoneOf: 'mode', item };
+    if (kind === 'g' && ['anima', 'community', 'market', 'library', 'projects', 'tasks', 'workspace', 'inbox', 'settings', 'places', 'support', 'releases'].includes(id)) return { view: 'global', mode: m, global: id, zoneOf: 'mode', item };
     return { view: 'mode', mode: m };
   }
   let applyingHash = false;

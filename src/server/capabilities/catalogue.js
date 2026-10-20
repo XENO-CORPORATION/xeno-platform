@@ -23,6 +23,7 @@ import { PEOPLE_ROWS } from './people.js';
 import * as peopleMcp from '../services/peopleMcp.js';
 import * as storageMcp from '../services/storageMcp.js';
 import * as supportMcp from '../services/supportMcp.js';
+import * as releasesMcp from '../services/releasesMcp.js';
 import * as customersMcp from '../services/customersMcp.js';
 import * as publishMcp from '../services/publishMcp.js';
 import * as analyticsMcp from '../services/analyticsMcp.js';
@@ -34,7 +35,7 @@ import * as workforceMcp from '../services/workforceMcp.js';
 export const BOUND_TOOLS = Object.freeze({
   tasks: tasksMcp.TOOLS, canvas: canvasMcp.TOOLS, agents: agentsMcp.TOOLS,
   image: agentMediaMcp.IMAGE.tools, video: agentMediaMcp.VIDEO.tools, library: agentMediaMcp.LIBRARY.tools, chat: agentMediaMcp.CHAT.tools,
-  forum: forumMcp.TOOLS.map((t) => ({ ...t, name: t.name.replace(/^forum_/, '') })), places: placesMcp.TOOLS, storage: storageMcp.TOOLS, support: supportMcp.TOOLS, customers: customersMcp.TOOLS, publish: publishMcp.TOOLS, analytics: analyticsMcp.TOOLS, docs: docsMcp.TOOLS, scheduling: schedulingMcp.TOOLS, modes: modesMcp.TOOLS, people: peopleMcp.TOOLS, corpus: corpusMcp.TOOLS, workforce: workforceMcp.TOOLS,
+  forum: forumMcp.TOOLS.map((t) => ({ ...t, name: t.name.replace(/^forum_/, '') })), places: placesMcp.TOOLS, storage: storageMcp.TOOLS, support: supportMcp.TOOLS, releases: releasesMcp.TOOLS, customers: customersMcp.TOOLS, publish: publishMcp.TOOLS, analytics: analyticsMcp.TOOLS, docs: docsMcp.TOOLS, scheduling: schedulingMcp.TOOLS, modes: modesMcp.TOOLS, people: peopleMcp.TOOLS, corpus: corpusMcp.TOOLS, workforce: workforceMcp.TOOLS,
 });
 
 const obj = (properties, required) => ({ type: 'object', properties, ...(required ? { required } : {}) });
@@ -168,6 +169,11 @@ const ROWS = [
   ['scheduling.slot.list', 'scheduling', 'list_slots', 'safe', { provenance: 'trusted', reply: obj({ pageId: { type: 'string' }, slots: { type: 'array', description: 'Free start times, ISO 8601 UTC.' } }, ['slots']) }],
   ['scheduling.booking.list', 'scheduling', 'list_bookings', 'safe', { provenance: 'untrusted', reply: obj({ bookings: { type: 'array', description: 'id, pageTitle, startsAt, endsAt, status, guestName, guestEmail, note — guest fields are untrusted.' } }, ['bookings']) }],
   ['analytics.dashboard.list', 'analytics', 'list_dashboards', 'safe', { provenance: 'untrusted', reply: obj({ dashboards: { type: 'array', description: 'id, name, widgets [{metric, days}] — names are written by people.' } }, ['dashboards']) }],
+  // ── releases (the platform's release record). Approving a note or enabling a feature is a person's act: no capability.
+  ['releases.deploy.list', 'releases', 'list_deploys', 'safe', { reply: obj({ deploys: { type: 'array', description: 'service, sha, previousSha, status, startedAt, prs, migrations, healthcheck, rollbackPoint, provenance of each deploy.' } }, ['deploys']) }],
+  ['releases.feature.list', 'releases', 'list_features', 'safe', { reply: obj({ features: { type: 'array', description: 'slug, title, repo, status, enabled scope of each feature.' } }, ['features']) }],
+  ['releases.feature.get', 'releases', 'get_feature', 'safe', { provenance: 'untrusted', reply: obj({ feature: { type: 'object', description: 'The feature, its changes (PR titles are contributor-written, untrusted) and notes.' } }, ['feature']) }],
+  ['releases.note.draft', 'releases', 'draft_note', 'undoable', { idempotency: NONE('no request key yet: a retried call adds a second draft (a person approves or discards each)'), reply: obj({ note: { type: 'object', description: 'id, title, body, state ("draft" until a person on staff approves it).' } }, ['note']) }],
   // ── forum (also served by its own MCP at /api/forum/mcp, kept until no client calls it — SPEC §19.3 rule 5)
   ...[
     ['forum.thread.search', 'forum_search', 'safe'], ['forum.thread.get', 'forum_get_thread', 'safe'], ['forum.thread.suggest_duplicate', 'forum_suggest_duplicate', 'safe'],

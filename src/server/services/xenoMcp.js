@@ -27,6 +27,7 @@ import * as canvases from './canvases.js';
 import * as agentsMcp from './agentsMcp.js';
 import * as storageMcp from './storageMcp.js';
 import * as supportMcp from './supportMcp.js';
+import * as releasesMcp from './releasesMcp.js';
 import * as customersMcp from './customersMcp.js';
 import * as publishMcp from './publishMcp.js';
 import * as analyticsMcp from './analyticsMcp.js';
@@ -162,6 +163,14 @@ export const SERVICES = Object.freeze([
     tools: () => schedulingMcp.TOOLS,
     call: (db, actor, name, args) => schedulingMcp.callTool(db, actor, name, args),
     isToolError: (e) => e instanceof schedulingMcp.SchedulingMcpError,
+  },
+  // The platform's release record (releasesMcp.js): staff agents read deploys and features and DRAFT notes a person approves.
+  {
+    category: 'releases', title: 'Releases', version: '1.0.0', timeoutMs: 20_000,
+    description: 'The XENO platform release record: deploys, features and their changes; drafts customer notes a person approves. Staff agents only.',
+    tools: () => releasesMcp.TOOLS,
+    call: (db, actor, name, args) => releasesMcp.callTool(db, actor, name, args),
+    isToolError: (e) => e instanceof releasesMcp.ReleasesMcpError,
   },
   // XENO Forum, folded in from /api/forum/mcp (kept): the same tools, the same function. Its wire names were
   // always `forum_<verb>`, so as a category the grandfathered alias is exactly the old name.

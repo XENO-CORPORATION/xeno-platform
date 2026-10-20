@@ -4,7 +4,7 @@
 
 Every action a person can take on the platform, and whether an agent can take it (XENO AGENT CAPABILITY - SPEC.md §19.4). **Planned** entries are the owning division’s backlog: each is a feature agents are missing.
 
-**Total:** 1628 actions · 150 agent capability · 1254 planned (debt) · 224 excluded · **coverage 10.7%** of the 1404 owed.
+**Total:** 1642 actions · 156 agent capability · 1258 planned (debt) · 228 excluded · **coverage 11%** of the 1414 owed.
 
 | division | actions | capability | planned (debt) | excluded | coverage |
 |---|---:|---:|---:|---:|---:|
@@ -29,6 +29,7 @@ Every action a person can take on the platform, and whether an agent can take it
 | analytics | 10 | 5 | 4 | 1 | 55.6% |
 | places | 9 | 3 | 4 | 2 | 42.9% |
 | publish | 13 | 6 | 4 | 3 | 60% |
+| releases | 14 | 6 | 4 | 4 | 60% |
 | docs | 10 | 10 | 0 | 0 | 100% |
 
 ## account — 60 planned
@@ -585,6 +586,13 @@ Every action a person can take on the platform, and whether an agent can take it
 - `route:publishRoutes.js:POST /approvals/:kind/:id`
 - `route:publishRoutes.js:POST /posts/:id/publish`
 - `route:publishRoutes.js:POST /posts/:id/retract`
+
+## releases — 4 planned
+
+- `route:releaseRoutes.js:GET /notes`
+- `route:releaseRoutes.js:GET /summary`
+- `route:releaseRoutes.js:GET /whats-new`
+- `ui:platform-releases.js:data-rl-form=filter`
 
 ## scheduling — 12 planned
 

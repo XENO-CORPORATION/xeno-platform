@@ -144,6 +144,7 @@ import blogRoutes from './routes/blogRoutes.js';
 import learnRoutes from './routes/learnRoutes.js';
 import forumRoutes from './routes/forumRoutes.js';
 import supportRoutes from './routes/supportRoutes.js';
+import releaseRoutes from './routes/releaseRoutes.js';
 import customersRoutes from './routes/customersRoutes.js';
 import schedulingRoutes from './routes/schedulingRoutes.js';
 import { sendDueReminders as sendSchedulingReminders } from './services/scheduling.js';
@@ -870,6 +871,8 @@ app.use('/api/learn', databaseMiddleware, learnRoutes);
 app.use('/api/forum', databaseMiddleware, forumRoutes);
 // XENO support — Help ▸ Contact support (supportTickets.js): private requests, XENO staff, agent drafts ratified by a person.
 app.use('/api/support', databaseMiddleware, supportRoutes);
+// The platform's own release record (releaseRecord.js): deploys, features, notes — staff only; customers read What's new.
+app.use('/api/releases', databaseMiddleware, releaseRoutes);
 // XENO Customers — Corpo › Customers (customers.js): the workspace CRM; agents read and draft, people keep and delete.
 app.use('/api/customers', databaseMiddleware, customersRoutes);
 // Corpo › Scheduling (services/scheduling.js): workspace booking pages + public guest booking/manage pages + ICS feed.

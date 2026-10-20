@@ -36,7 +36,7 @@ export const DIVISION_AREA = Object.freeze({
   storage: 'storage', studio: 'library', canvas: 'tasks', tasks: 'tasks', chat: 'chat', inference: 'chat',
   agents: 'agents', workforce: 'agents', commerce: 'wallet', workspace: 'workspace', 'workspace-ui': 'workspace',
   account: 'workspace', platform: 'workspace', places: 'places', forum: 'forum', 'browser-shell': 'workspace',
-  marketplace: 'marketplace', publish: 'publish', analytics: 'analytics', docs: 'docs', scheduling: 'scheduling', support: 'forum', customers: 'customers',
+  marketplace: 'marketplace', publish: 'publish', analytics: 'analytics', docs: 'docs', scheduling: 'scheduling', support: 'forum', customers: 'customers', releases: 'workspace',
   // XENO-WORKFORCE-01 capability divisions (catalogue first segments)
   agent: 'agents', run: 'agents', objective: 'agents', division: 'workspace', funding: 'wallet',
   orchestrator: 'tasks', audit: 'workspace',
