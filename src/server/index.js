@@ -5,6 +5,7 @@ import xenoTasksRoutes, { taskTokenAuth, unlessTaskToken, mcpChallenge, protecte
 import { TASKS_OPENAPI } from './services/tasksOpenApi.js';
 import platformAgentRoutes from './routes/platformAgentRoutes.js';
 import workforceDivisionRoutes from './routes/workforceDivisionRoutes.js';
+import workspaceApiRoutes from './routes/workspaceApiRoutes.js';
 import xenoMcpRoutes, { management as xenoMcpManagement, personOnly as mcpPersonOnly, mcpResourceMetadata } from './routes/xenoMcpRoutes.js';
 import userNotificationsRoutes from './routes/userNotificationsRoutes.js';
 import { startTaskSweeps } from './services/taskNotifyEmail.js';
@@ -664,6 +665,8 @@ app.use('/api/tasks', databaseMiddleware, mcpChallenge, taskTokenAuth, unlessTas
 app.get('/.well-known/oauth-protected-resource/api/mcp', mcpResourceMetadata);
 app.use('/api/mcp', databaseMiddleware, (req, res, next) => (req.path === '/' || req.path === '/catalogue' ? xenoMcpRoutes(req, res, next) : next()));
 app.use('/api/mcp', databaseMiddleware, authMiddleware, requireActivated, mcpPersonOnly, xenoMcpManagement);
+// REST over the same catalogue (WORKSPACE AGENT SURFACE P1): /api/v1/<division>/<domain>/<verb> + /api/v1/openapi.json
+app.use('/api/v1', databaseMiddleware, workspaceApiRoutes);
 app.use('/api/agents', databaseMiddleware, authMiddleware, requireActivated, mcpPersonOnly, platformAgentRoutes);
 app.use('/api/divisions', databaseMiddleware, authMiddleware, requireActivated, mcpPersonOnly, workforceDivisionRoutes);
 app.use('/api/notifications', databaseMiddleware, authMiddleware, requireActivated, userNotificationsRoutes);

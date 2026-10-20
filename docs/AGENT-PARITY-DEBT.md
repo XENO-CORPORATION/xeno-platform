@@ -4,7 +4,7 @@
 
 Every action a person can take on the platform, and whether an agent can take it (XENO AGENT CAPABILITY - SPEC.md §19.4). **Planned** entries are the owning division’s backlog: each is a feature agents are missing.
 
-**Total:** 1434 actions · 34 agent capability · 1229 planned (debt) · 171 excluded · **coverage 2.7%** of the 1263 owed.
+**Total:** 1437 actions · 37 agent capability · 1226 planned (debt) · 174 excluded · **coverage 2.9%** of the 1263 owed.
 
 | division | actions | capability | planned (debt) | excluded | coverage |
 |---|---:|---:|---:|---:|---:|
@@ -16,10 +16,10 @@ Every action a person can take on the platform, and whether an agent can take it
 | commerce | 112 | 0 | 96 | 16 | 0% |
 | workspace | 103 | 0 | 86 | 17 | 0% |
 | tasks | 105 | 13 | 84 | 8 | 13.4% |
-| storage | 82 | 2 | 78 | 2 | 2.5% |
+| storage | 82 | 5 | 75 | 2 | 6.3% |
 | account | 86 | 0 | 60 | 26 | 0% |
 | forum | 51 | 8 | 41 | 2 | 16.3% |
-| platform | 62 | 0 | 34 | 28 | 0% |
+| platform | 65 | 0 | 34 | 31 | 0% |
 | browser-shell | 28 | 0 | 28 | 0 | 0% |
 | canvas | 20 | 4 | 16 | 0 | 20% |
 | inference | 18 | 0 | 12 | 6 | 0% |
@@ -547,7 +547,7 @@ Every action a person can take on the platform, and whether an agent can take it
 - `route:webhookRoutes.js:POST /:id/deliveries/:deliveryId/:operation`
 - `route:webhookRoutes.js:PUT /:id`
 
-## storage — 78 planned
+## storage — 75 planned
 
 - `route:collaborationRoutes.js:DELETE /sessions/:sessionId`
 - `route:collaborationRoutes.js:GET /my-sessions`
@@ -581,7 +581,6 @@ Every action a person can take on the platform, and whether an agent can take it
 - `route:libraryRoutes.js:GET /assets/file/:id/shares`
 - `route:libraryRoutes.js:GET /assets/file/:id/versions`
 - `route:libraryRoutes.js:GET /folder-links/:id/activity`
-- `route:libraryRoutes.js:GET /folders`
 - `route:libraryRoutes.js:GET /folders/:id/links`
 - `route:libraryRoutes.js:GET /folders/:id/shares`
 - `route:libraryRoutes.js:GET /links/:token`
@@ -595,8 +594,6 @@ Every action a person can take on the platform, and whether an agent can take it
 - `route:libraryRoutes.js:POST /assets/:source/:id/trash`
 - `route:libraryRoutes.js:POST /assets/file/:id/shares`
 - `route:libraryRoutes.js:POST /assets/file/:id/versions/:version/restore`
-- `route:libraryRoutes.js:POST /folders`
-- `route:libraryRoutes.js:POST /folders/:id/links`
 - `route:libraryRoutes.js:POST /folders/:id/shares`
 - `route:libraryRoutes.js:PUT /assets/:source/:id/area`
 - `route:libraryRoutes.js:PUT /assets/:source/:id/folder`

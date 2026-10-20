@@ -9,21 +9,26 @@ import { toWire, fromWire, defineCapability } from '../src/server/capabilities/d
 
 const before = JSON.parse(readFileSync(new URL('../src/server/tests/xeno-mcp-tools-before.snapshot.json', import.meta.url)));
 const ALL = { categories: [...mcp.CATEGORIES] };
+const ADDED = new Set(['places', 'storage', 'forum']);   // categories added after the snapshot: places (2026-10-19), storage + forum (WORKSPACE AGENT SURFACE P1)
 
 for (const who of ['agent', 'human']) {
   test(`snapshot: every tool ${who}s listed before is listed after, byte for byte`, () => {
     const after = mcp.listTools(ALL, { kind: who });
+    // byte for byte for every tool that existed; a tool may be ADDED only by a category folded in since (P1: storage, forum)
+    const names = new Set(before[who].map((t) => t.name));
     const legacy = after.filter((t) => !t.name.includes('__'));
-    assert.deepEqual(legacy, before[who]);
+    assert.deepEqual(legacy.filter((t) => names.has(t.name)), before[who]);
+    assert.deepEqual(legacy.filter((t) => !names.has(t.name)).map((t) => t.name.split('_')[0]).filter((c) => !ADDED.has(c)), []);
     const added = after.filter((t) => t.name.includes('__')).map((t) => t.name).sort();
     const expected = mcp.visibleCapabilities(ALL, { kind: who }).map((c) => toWire(c.name)).sort();
     assert.deepEqual(added, expected);
-    assert.equal(after.length, before[who].length + expected.length);
+    assert.equal(after.length, legacy.length + expected.length);
   });
 }
 
 test('every Tasks, Canvas and media tool has a catalogue declaration, and every alias is a real tool', () => {
-  const legacyNames = new Set(before.agent.map((t) => t.name));
+  const legacyNames = new Set(mcp.listTools(ALL, { kind: 'agent' }).filter((t) => !t.name.includes('__')).map((t) => t.name));
+  for (const t of before.agent) assert.ok(legacyNames.has(t.name), `${t.name} is no longer served`);
   const aliased = new Set(CATALOGUE.filter((c) => c.surfaces.includes('mcp')).flatMap((c) => c.aliases));
   for (const n of legacyNames) assert.ok(aliased.has(n), `${n} has no declaration`);
   for (const a of aliased) assert.ok(legacyNames.has(a), `alias ${a} is not a served tool`);
@@ -55,13 +60,15 @@ test('the canonical name and the alias route to the same service tool; a wire ro
     assert.equal(a.service, b.service); assert.equal(a.tool, b.tool); assert.equal(a.capability, c); assert.equal(b.capability, c);
     assert.equal(fromWire(toWire(c.name)), c.name);
   }
-  assert.equal(mcp.route('forum__thread__search'), null, 'a forum-mcp capability is not routed on /api/mcp yet');
+  // P1: the Forum is folded in; its old wire names are the aliases, and both reach the same tool
+  assert.equal(mcp.route('forum__thread__search').tool, 'search');
+  assert.equal(mcp.route('forum_search').tool, 'search');
 });
 
 test('MUTATION: an invalid declaration cannot load', () => {
-  const ok = { name: 'x.y.z', version: '1.0.0', division: 'x', title: 't', description: 'long enough description here', input: { type: 'object', properties: {} }, reply: { type: 'object' }, class: 'undoable', cost: { model: 'free' }, idempotency: { strategy: 'natural', note: 'n' }, bind: { category: 'c', tool: 't' } };
+  const ok = { name: 'x.y.z', version: '1.0.0', division: 'x', title: 't', description: 'long enough description here', input: { type: 'object', properties: {} }, reply: { type: 'object' }, class: 'undoable', cost: { model: 'free' }, idempotency: { strategy: 'natural', note: 'n' }, bind: { category: 'c', tool: 't' }, scope: 'tasks:write' };
   assert.ok(defineCapability(ok));
-  for (const bad of [{ name: 'x.y' }, { class: 'maybe' }, { cost: { model: 'cheap' } }, { idempotency: { strategy: 'key', key: 'nope' } }, { preview: {} }, { division: 'q' }, { name: 'x.y__a.z' }]) {
+  for (const bad of [{ name: 'x.y' }, { class: 'maybe' }, { cost: { model: 'cheap' } }, { idempotency: { strategy: 'key', key: 'nope' } }, { preview: {} }, { division: 'q' }, { name: 'x.y__a.z' }, { scope: 'everything:*' }]) {
     assert.throws(() => defineCapability({ ...ok, ...bad }), /Invalid capability/, JSON.stringify(bad));
   }
 });
