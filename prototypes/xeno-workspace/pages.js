@@ -431,7 +431,7 @@
       if (s.global === 'inbox') return null;
       if (s.global === 'projects') { if (!it) return projectsIndex(false); if (it === 'Archived projects' || it === 'archived') return projectsIndex(true); const k = window.XENO_PROJECT_ROUTE ? window.XENO_PROJECT_ROUTE.in(it) : it; if (k !== it) s.item = k; const j = k.indexOf('/'); return projectPage(j < 0 ? k : k.slice(0, j), j < 0 ? undefined : k.slice(j + 1)); }
       if (s.global === 'library') { if (!it || LIBV[it]) return library(it || 'All files'); return itemPage(it); }
-      if (s.global === 'workspace') { if (it && window.XENO_MEMBER_ROUTE) { const k = window.XENO_MEMBER_ROUTE.in(it); if (k !== it) { s.item = k; return render(); } } const wf = mod('workspace:' + (it || ''), () => (window.XENO_WFP?.served ? window.XENO_WFP.route(it) : null) || window.XENO_COMPANY?.route(it) || (window.XENO_AGENTS?.served ? window.XENO_AGENTS.route(it) : null) || (window.XENO_DIVISIONS?.served ? window.XENO_DIVISIONS.route(it) : null) || (window.XENO_SERVICES?.served ? window.XENO_SERVICES.route(it) : null) || window.XENO_RES?.route(it) || window.XENO_WF?.route(it)); if (wf) return wf; if (it && it.startsWith('Members/')) return memberPage(it.slice(8)); if (it && it.startsWith('Knowledge/')) return knowledgePage(it.slice(10)); return workspace(it); }
+      if (s.global === 'workspace') { if (it && window.XENO_MEMBER_ROUTE) { const k = window.XENO_MEMBER_ROUTE.in(it); if (k !== it) { s.item = k; return render(); } } const wf = mod('workspace:' + (it || ''), () => (window.XENO_WFP?.served ? window.XENO_WFP.route(it) : null) || window.XENO_COMPANY?.route(it) || (window.XENO_DIRECTORY?.served ? window.XENO_DIRECTORY.route(it) : null) || (window.XENO_AGENTS?.served ? window.XENO_AGENTS.route(it) : null) || (window.XENO_DIVISIONS?.served ? window.XENO_DIVISIONS.route(it) : null) || (window.XENO_SERVICES?.served ? window.XENO_SERVICES.route(it) : null) || window.XENO_RES?.route(it) || window.XENO_WF?.route(it)); if (wf) return wf; if (it && it.startsWith('Members/')) return memberPage(it.slice(8)); if (it && it.startsWith('Knowledge/')) return knowledgePage(it.slice(10)); return workspace(it); }
       if (s.global === 'places') return mod('places:' + (it || ''), () => window.XENO_PLACES.route(it) || window.XENO_PLACES.route(null));
       if (s.global === 'anima') { const ar = mod('anima:' + (it || ''), () => window.XENO_ANIMA?.route(it)); if (ar) return ar; }
       if (s.global === 'anima') return it && /Memory|Skills|Plan|Summarise/.test(it) ? anima(null) : anima(it);
@@ -441,6 +441,9 @@
       if (s.global === 'market') return market(it);
       if (s.global === 'settings') return window.XENO_SETTINGS.render(it);
     }
+    // a live area that addresses its own records (`items: true`, e.g. Write and Notes by file id) draws them itself
+    if (s.view === 'zone' && it) { const x = X(), z = x.zoneNow(), mk = z.of || x.zoneKey(), zid = z.of ? z.id.slice(z.of.length + 1) : z.id, L = (window.XENO_ZONE_LIVE || {})[mk + '.' + zid];
+      if (L && L.items && L.page) return mod('area:' + window.XENO_ADDR.current().split('?')[0], () => L.page(z)); }
     if (s.view === 'zone') return it ? mod('zone:' + it, () => itemPage(it)) : mod('area:' + window.XENO_ADDR.current().split('?')[0], () => areaPage());
     if (s.view === 'product') { if (PR[s.product]?.kind === 'chat' || (s.product === 'storage' && window.XENO_STORAGE) || (s.product === 'mcp' && window.XENO_MCP)) return null; /* Storage draws its own page on the real meter (platform-storage.js) */ return it ? (window.XENO_PRODUCT_NAV[s.product]?.views?.includes(it) ? productView(it) : itemPage(it)) : productPage(); }
     return null;

@@ -21,6 +21,7 @@ import * as agentMedia from './agentMedia.js';
 import * as canvasMcp from './canvasMcp.js';
 import * as placesMcp from './placesMcp.js';
 import * as modesMcp from './modesMcp.js';
+import * as peopleMcp from './peopleMcp.js';
 import * as corpusMcp from './corpusMcp.js';
 import * as canvases from './canvases.js';
 import * as agentsMcp from './agentsMcp.js';
@@ -29,6 +30,7 @@ import * as supportMcp from './supportMcp.js';
 import * as customersMcp from './customersMcp.js';
 import * as publishMcp from './publishMcp.js';
 import * as analyticsMcp from './analyticsMcp.js';
+import * as docsMcp from './docsMcp.js';
 import * as workforceMcp from './workforceMcp.js';
 import * as forumMcp from './forumMcp.js';
 import { resolvePrincipal } from './agentIdentity.js';
@@ -80,6 +82,14 @@ export const SERVICES = Object.freeze([
     call: (db, actor, name, args) => modesMcp.callTool(db, actor, name, args),
     isToolError: (e) => e instanceof modesMcp.ModesMcpError,
   },
+  // People (peopleMcp.js): the directory, profiles, org chart and my work for agents; HR changes are a person's (human_only).
+  {
+    category: 'people', title: 'People', version: '1.0.0', timeoutMs: 20_000,
+    description: 'People: who works in a workspace, their title, division, team, manager and availability, and the org chart.',
+    tools: () => peopleMcp.TOOLS,
+    call: (db, actor, name, args) => peopleMcp.callTool(db, actor, name, args),
+    isToolError: (e) => e instanceof peopleMcp.PeopleMcpError,
+  },
   // XENO Corpus (corpusMcp.js): read a scope's verified truth, assess it, propose a change a PERSON ratifies.
   {
     category: 'corpus', title: 'Corpus', version: '1.0.0', timeoutMs: 20_000,
@@ -127,6 +137,14 @@ export const SERVICES = Object.freeze([
     tools: () => supportMcp.TOOLS,
     call: (db, actor, name, args) => supportMcp.callTool(db, actor, name, args),
     isToolError: (e) => e instanceof supportMcp.SupportMcpError,
+  },
+  // XENO Docs and Notes (docsMcp.js): documents that are Storage files. Writes are new versions or trash: reversible.
+  {
+    category: 'docs', title: 'Docs and Notes', version: '1.0.0', timeoutMs: 30_000,
+    description: 'Docs and Notes: list, search, read, create and edit documents and notes (Markdown, versioned in Storage), with backlinks.',
+    tools: () => docsMcp.TOOLS,
+    call: (db, actor, name, args) => docsMcp.callTool(db, actor, name, args),
+    isToolError: (e) => e instanceof docsMcp.DocsMcpError,
   },
   // XENO Analytics (analyticsMcp.js): read-only metrics and saved dashboards of a workspace.
   {
