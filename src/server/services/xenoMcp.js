@@ -28,6 +28,7 @@ import * as storageMcp from './storageMcp.js';
 import * as supportMcp from './supportMcp.js';
 import * as publishMcp from './publishMcp.js';
 import * as analyticsMcp from './analyticsMcp.js';
+import * as formsMcp from './formsMcp.js';
 import * as workforceMcp from './workforceMcp.js';
 import * as forumMcp from './forumMcp.js';
 import { resolvePrincipal } from './agentIdentity.js';
@@ -126,6 +127,14 @@ export const SERVICES = Object.freeze([
     tools: () => analyticsMcp.TOOLS,
     call: (db, actor, name, args) => analyticsMcp.callTool(db, actor, name, args),
     isToolError: (e) => e instanceof analyticsMcp.AnalyticsMcpError,
+  },
+  // XENO Forms (formsMcp.js): build forms, sign-in links only (a public link is a person's), read and act on responses.
+  {
+    category: 'forms', title: 'Forms', version: '1.0.0', timeoutMs: 20_000,
+    description: 'Forms: build a workspace’s forms, share them by sign-in link, read responses and turn them into contacts, tasks or support requests.',
+    tools: () => formsMcp.TOOLS,
+    call: (db, actor, name, args) => formsMcp.callTool(db, actor, name, args),
+    isToolError: (e) => e instanceof formsMcp.FormsMcpError,
   },
   // XENO Forum, folded in from /api/forum/mcp (kept): the same tools, the same function. Its wire names were
   // always `forum_<verb>`, so as a category the grandfathered alias is exactly the old name.

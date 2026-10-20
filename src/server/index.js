@@ -17,6 +17,7 @@ import { sweepDueReminders, deliverAgentEvents, sweepExpiredLeases } from './ser
 import workspaceAreaRoutes from './routes/workspaceAreaRoutes.js';
 import publishRoutes from './routes/publishRoutes.js';
 import workspaceAnalyticsRoutes from './routes/workspaceAnalyticsRoutes.js';
+import formsRoutes from './routes/formsRoutes.js';
 import { areaFromRequest } from './utils/resourceArea.js';
 import { fileURLToPath } from 'url';
 import dotenv from 'dotenv';
@@ -649,6 +650,8 @@ app.use('/api/workspace-invites', databaseMiddleware, authMiddleware, workspaceI
 // One search and one "needs you" feed across a person's chats, projects and Library, each aware of the area.
 app.use('/api/workspace', databaseMiddleware, authMiddleware, requireActivated, areaFromRequest, workspaceAreaRoutes);
 app.use('/api/publish', databaseMiddleware, authMiddleware, requireActivated, publishRoutes);
+// Corpo › Forms (services/forms.js): auth per route — the respondent's /public/:token side needs no account
+app.use('/api/forms', databaseMiddleware, formsRoutes);
 app.use('/api/workspace-analytics', databaseMiddleware, authMiddleware, requireActivated, workspaceAnalyticsRoutes);   // Corpo › Analytics: a workspace's own dashboards (services/analytics.js)   // XENO Publish = XENO Post, server-to-server (services/xenoPost.js)
 // XENO Connect's host adapter asks here what a token or person may do right now (CONNECT_SERVICE_TOKEN; fails closed).
 app.use('/api/connect/authority', databaseMiddleware, connectAuthorityRoutes);

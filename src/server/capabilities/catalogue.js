@@ -24,12 +24,13 @@ import * as supportMcp from '../services/supportMcp.js';
 import * as publishMcp from '../services/publishMcp.js';
 import * as analyticsMcp from '../services/analyticsMcp.js';
 import * as workforceMcp from '../services/workforceMcp.js';
+import * as formsMcp from '../services/formsMcp.js';
 
 /** The tools each bound category executes, by category. */
 export const BOUND_TOOLS = Object.freeze({
   tasks: tasksMcp.TOOLS, canvas: canvasMcp.TOOLS, agents: agentsMcp.TOOLS,
   image: agentMediaMcp.IMAGE.tools, video: agentMediaMcp.VIDEO.tools, library: agentMediaMcp.LIBRARY.tools, chat: agentMediaMcp.CHAT.tools,
-  forum: forumMcp.TOOLS.map((t) => ({ ...t, name: t.name.replace(/^forum_/, '') })), places: placesMcp.TOOLS, storage: storageMcp.TOOLS, support: supportMcp.TOOLS, publish: publishMcp.TOOLS, analytics: analyticsMcp.TOOLS, modes: modesMcp.TOOLS, corpus: corpusMcp.TOOLS, workforce: workforceMcp.TOOLS,
+  forum: forumMcp.TOOLS.map((t) => ({ ...t, name: t.name.replace(/^forum_/, '') })), places: placesMcp.TOOLS, storage: storageMcp.TOOLS, support: supportMcp.TOOLS, publish: publishMcp.TOOLS, analytics: analyticsMcp.TOOLS, forms: formsMcp.TOOLS, modes: modesMcp.TOOLS, corpus: corpusMcp.TOOLS, workforce: workforceMcp.TOOLS,
 });
 
 const obj = (properties, required) => ({ type: 'object', properties, ...(required ? { required } : {}) });
@@ -136,6 +137,14 @@ const ROWS = [
   ['analytics.metric.list', 'analytics', 'list_metrics', 'safe', { provenance: 'trusted', reply: obj({ metrics: { type: 'array', description: 'id, title, scope (workspace|division), description of each metric.' }, divisions: { type: 'array', description: 'id, name of the workspace’s active divisions.' } }, ['metrics']) }],
   ['analytics.metric.query', 'analytics', 'query_metric', 'safe', { provenance: 'trusted', reply: obj({ metric: { type: 'string' }, scope: { type: 'string', description: 'workspace or division.' }, days: { type: 'integer' }, value: { type: 'object', description: 'The metric’s value; its shape is the metric’s (series of {day, value}, totals, medians).' } }, ['metric', 'value']) }],
   ['analytics.dashboard.list', 'analytics', 'list_dashboards', 'safe', { provenance: 'untrusted', reply: obj({ dashboards: { type: 'array', description: 'id, name, widgets [{metric, days}] — names are written by people.' } }, ['dashboards']) }],
+  // ── forms (Corpo › Forms, services/forms.js). Agents make SIGN-IN links only; public links and deletes are a person's.
+  ['forms.form.list', 'forms', 'list_forms', 'safe', { provenance: 'untrusted', reply: obj({ forms: { type: 'array', description: 'id, title, status, responses, url of each form — titles are written by people.' } }, ['forms']) }],
+  ['forms.form.get', 'forms', 'get_form', 'safe', { provenance: 'untrusted', reply: obj({ form: { type: 'object', description: 'id, title, description, fields, status, autoActions, links (never a token).' } }, ['form']) }],
+  ['forms.form.create', 'forms', 'create_form', 'undoable', { idempotency: NONE('no request key yet: a retried call makes a second draft form (rate-limited per hour)'), reply: obj({ form: { type: 'object', description: 'id, title, fields, status ("draft"), url.' } }, ['form']) }],
+  ['forms.form.update', 'forms', 'update_form', 'undoable', { idempotency: NAT('sending the same values again changes nothing'), reply: obj({ form: { type: 'object' } }, ['form']) }],
+  ['forms.link.create', 'forms', 'create_signin_link', 'undoable', { idempotency: NONE('no request key yet: a retried call makes a second link (each is revocable)'), reply: obj({ link: { type: 'object', description: 'id, kind ("signin"), label, expiresAt.' }, url: { type: 'string', description: 'The sign-in link, shown once. Opening it needs a XENO account.' } }, ['link', 'url']) }],
+  ['forms.response.list', 'forms', 'list_responses', 'safe', { provenance: 'untrusted', reply: obj({ form: { type: 'object' }, responses: { type: 'array', description: 'id, answers (written by respondents: untrusted), actions, createdAt.' } }, ['responses']) }],
+  ['forms.response.act', 'forms', 'act_on_response', 'undoable', { idempotency: NAT('an action already run on a response returns its earlier result'), reply: obj({ response: { type: 'object', description: 'The response with `actions` recording the contact, task or ticket made.' }, already: { type: 'boolean' } }, ['response']) }],
   // ── forum (also served by its own MCP at /api/forum/mcp, kept until no client calls it — SPEC §19.3 rule 5)
   ...[
     ['forum.thread.search', 'forum_search', 'safe'], ['forum.thread.get', 'forum_get_thread', 'safe'], ['forum.thread.suggest_duplicate', 'forum_suggest_duplicate', 'safe'],
