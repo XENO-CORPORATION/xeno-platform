@@ -1,5 +1,6 @@
 import { UUID_RE, isWorkspaceMember } from '../utils/workspaceContext.js';
 import { resolveResourceScope } from '../services/personalScope.js';
+import { check } from '../utils/authzReBAC.js';
 
 /** An explicit workspace is a boundary, never a hint that may fall back to personal scope. */
 export function requestedChatWorkspace(req) {
@@ -51,6 +52,10 @@ export async function chatWorkspaceScope(req, res, next) {
             LEFT JOIN chat_projects p ON p.id=c.project_id
             WHERE c.id=$1 AND (COALESCE(p.workspace_id,c.workspace_id)=$2
               OR COALESCE(p.owner_user_id,c.owner_user_id)=$3::uuid) AND c.deleted_at IS NULL`, [id, workspaceId, personalOwner]);
+      // A person invited to a project or chat (ReBAC grant) reaches it from any workspace they are in: the grant is
+      // the authority, not the container. Before this, every invitee got "not found" (2026-10-20). The handler still
+      // re-checks the same grant, so this only stops the pre-filter refusing what the resource itself allows.
+      if (!result.rows.length && (await check(req.db, { object: `${kind}:${id}`, relation: 'viewer', subject: `user:${req.user.id}` })).allowed) continue;
       if (!result.rows.length) {
         return res.status(404).json({ success: false, error: 'Resource not found in active workspace', code: 'resource_not_found' });
       }
