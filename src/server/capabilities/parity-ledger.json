@@ -114,7 +114,9 @@
   "xenoTasksRoutes.js": "tasks",
   "youtubeRoutes.js": "studio",
   "placesRoutes.js": "places",
-  "storageSharedRoutes.js": "storage"
+  "storageSharedRoutes.js": "storage",
+  "modesRoutes.js": "modes",
+  "setup.js": "modes"
  },
  "actions": {
   "route:accountGiftRoutes.js:POST /": {
@@ -4728,6 +4730,68 @@
   },
   "route:storageSharedRoutes.js:GET /:token/files/:fileId": {
    "status": "planned"
+  },
+  "route:modesRoutes.js:GET / (meModesRouter)": {
+   "status": "planned"
+  },
+  "route:modesRoutes.js:POST / (meModesRouter)": {
+   "status": "planned"
+  },
+  "route:modesRoutes.js:PATCH /:modeId (meModesRouter)": {
+   "status": "planned"
+  },
+  "route:modesRoutes.js:DELETE /:modeId (meModesRouter)": {
+   "status": "planned"
+  },
+  "route:modesRoutes.js:GET /:wid/modes/packs (workspaceModesRouter)": {
+   "status": "capability",
+   "capability": "modes.pack.list"
+  },
+  "route:modesRoutes.js:POST /:wid/modes/plan (workspaceModesRouter)": {
+   "status": "capability",
+   "capability": "modes.mode.plan"
+  },
+  "route:modesRoutes.js:POST /:wid/modes/apply (workspaceModesRouter)": {
+   "status": "capability",
+   "capability": "modes.mode.apply"
+  },
+  "route:modesRoutes.js:GET /:wid/modes/applications (workspaceModesRouter)": {
+   "status": "capability",
+   "capability": "modes.mode.status"
+  },
+  "route:modesRoutes.js:POST /:wid/modes/:applicationId/revert (workspaceModesRouter)": {
+   "status": "capability",
+   "capability": "modes.mode.revert"
+  },
+  "route:modesRoutes.js:PATCH /:wid/modes/items/:modeId (workspaceModesRouter)": {
+   "status": "planned"
+  },
+  "ui:setup.js:data-xsu=trade": {
+   "status": "excluded",
+   "category": "view-state",
+   "reason": "changes only what the screen shows"
+  },
+  "ui:setup.js:data-xsu=back": {
+   "status": "excluded",
+   "category": "view-state",
+   "reason": "changes only what the screen shows"
+  },
+  "ui:setup.js:data-xsu=custom": {
+   "status": "excluded",
+   "category": "view-state",
+   "reason": "changes only what the screen shows"
+  },
+  "ui:setup.js:data-xsu=next": {
+   "status": "capability",
+   "capability": "modes.mode.plan"
+  },
+  "ui:setup.js:data-xsu=apply": {
+   "status": "capability",
+   "capability": "modes.mode.apply"
+  },
+  "ui:setup.js:data-xsu=undo": {
+   "status": "capability",
+   "capability": "modes.mode.revert"
   }
  }
 }

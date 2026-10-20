@@ -177,6 +177,8 @@ const BACKEND_SUITES = [
   'task-leases',
   // Website Storage → XENO Connect BFF: session-bound minting, DPoP, grant renewal, refusals (2026-10-19)
   'web-connect',
+  // Custom modes + trade packs: account modes, plan/apply/receipt/revert, kind `mode` (2026-10-20)
+  'custom-modes',
 ];
 
 const BACKEND_EVIDENCE = {

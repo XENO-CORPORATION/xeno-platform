@@ -4,25 +4,28 @@
 
 Every action a person can take on the platform, and whether an agent can take it (XENO AGENT CAPABILITY - SPEC.md §19.4). **Planned** entries are the owning division’s backlog: each is a feature agents are missing.
 
-**Total:** 1395 actions · 31 agent capability · 1193 planned (debt) · 171 excluded · **coverage 2.5%** of the 1224 owed.
+**Total:** 1450 actions · 42 agent capability · 1205 planned (debt) · 174 excluded · **coverage 3.3%** of the 1276 owed.
 
 | division | actions | capability | planned (debt) | excluded | coverage |
 |---|---:|---:|---:|---:|---:|
-| workforce | 249 | 0 | 248 | 1 | 0% |
+| workforce | 262 | 0 | 248 | 1 | 0% |
 | studio | 121 | 4 | 117 | 0 | 3.3% |
 | agents | 117 | 0 | 112 | 5 | 0% |
 | workspace-ui | 159 | 0 | 100 | 59 | 0% |
 | chat | 97 | 0 | 96 | 1 | 0% |
 | commerce | 112 | 0 | 96 | 16 | 0% |
 | tasks | 105 | 13 | 84 | 8 | 13.4% |
+| storage | 82 | 2 | 78 | 2 | 2.5% |
 | workspace | 95 | 0 | 78 | 17 | 0% |
-| storage | 75 | 2 | 71 | 2 | 2.7% |
 | account | 86 | 0 | 60 | 26 | 0% |
 | forum | 51 | 8 | 41 | 2 | 16.3% |
 | platform | 62 | 0 | 34 | 28 | 0% |
 | browser-shell | 28 | 0 | 28 | 0 | 0% |
 | canvas | 20 | 4 | 16 | 0 | 20% |
 | inference | 18 | 0 | 12 | 6 | 0% |
+| modes | 16 | 8 | 5 | 3 | 61.5% |
+| (none) | 16 | 0 | 0 | 0 | 0% |
+| places | 3 | 3 | 0 | 0 | 100% |
 
 ## account — 60 planned
 
@@ -509,6 +512,14 @@ Every action a person can take on the platform, and whether an agent can take it
 - `route:v2InferenceRoutes.js:PUT /credentials/:id/models`
 - `route:v2InferenceRoutes.js:PUT /routes/:surface`
 
+## modes — 5 planned
+
+- `route:modesRoutes.js:DELETE /:modeId (meModesRouter)`
+- `route:modesRoutes.js:GET / (meModesRouter)`
+- `route:modesRoutes.js:PATCH /:modeId (meModesRouter)`
+- `route:modesRoutes.js:PATCH /:wid/modes/items/:modeId (workspaceModesRouter)`
+- `route:modesRoutes.js:POST / (meModesRouter)`
+
 ## platform — 34 planned
 
 - `route:analyticsRoutes.js:GET /active-users`
@@ -546,7 +557,7 @@ Every action a person can take on the platform, and whether an agent can take it
 - `route:webhookRoutes.js:POST /:id/deliveries/:deliveryId/:operation`
 - `route:webhookRoutes.js:PUT /:id`
 
-## storage — 71 planned
+## storage — 78 planned
 
 - `route:collaborationRoutes.js:DELETE /sessions/:sessionId`
 - `route:collaborationRoutes.js:GET /my-sessions`
@@ -571,6 +582,7 @@ Every action a person can take on the platform, and whether an agent can take it
 - `route:fileSystemRoutes.js:PUT /:id`
 - `route:libraryRoutes.js:DELETE /assets/:source/:id`
 - `route:libraryRoutes.js:DELETE /assets/:source/:id/star`
+- `route:libraryRoutes.js:DELETE /folder-links/:id`
 - `route:libraryRoutes.js:DELETE /folders/:id`
 - `route:libraryRoutes.js:DELETE /shares/:id`
 - `route:libraryRoutes.js:DELETE /trash`
@@ -578,7 +590,9 @@ Every action a person can take on the platform, and whether an agent can take it
 - `route:libraryRoutes.js:GET /assets/:id/status`
 - `route:libraryRoutes.js:GET /assets/file/:id/shares`
 - `route:libraryRoutes.js:GET /assets/file/:id/versions`
+- `route:libraryRoutes.js:GET /folder-links/:id/activity`
 - `route:libraryRoutes.js:GET /folders`
+- `route:libraryRoutes.js:GET /folders/:id/links`
 - `route:libraryRoutes.js:GET /folders/:id/shares`
 - `route:libraryRoutes.js:GET /links/:token`
 - `route:libraryRoutes.js:GET /operations/:key`
@@ -592,6 +606,7 @@ Every action a person can take on the platform, and whether an agent can take it
 - `route:libraryRoutes.js:POST /assets/file/:id/shares`
 - `route:libraryRoutes.js:POST /assets/file/:id/versions/:version/restore`
 - `route:libraryRoutes.js:POST /folders`
+- `route:libraryRoutes.js:POST /folders/:id/links`
 - `route:libraryRoutes.js:POST /folders/:id/shares`
 - `route:libraryRoutes.js:PUT /assets/:source/:id/area`
 - `route:libraryRoutes.js:PUT /assets/:source/:id/folder`
@@ -601,6 +616,9 @@ Every action a person can take on the platform, and whether an agent can take it
 - `route:projectDirectoryBindingRoutes.js:POST /directories/:bindingId/revoke`
 - `route:projectDirectoryBindingRoutes.js:POST /directories/resolve`
 - `route:projectDirectoryBindingRoutes.js:POST /projects/:id/directories`
+- `route:storageSharedRoutes.js:GET /:token`
+- `route:storageSharedRoutes.js:GET /:token/f/:folderId`
+- `route:storageSharedRoutes.js:GET /:token/files/:fileId`
 - `route:userDataRoutes.js:DELETE /files/:id`
 - `route:userDataRoutes.js:GET /files`
 - `route:userDataRoutes.js:GET /settings`
