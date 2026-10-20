@@ -4,7 +4,7 @@
 
 Every action a person can take on the platform, and whether an agent can take it (XENO AGENT CAPABILITY - SPEC.md §19.4). **Planned** entries are the owning division’s backlog: each is a feature agents are missing.
 
-**Total:** 1606 actions · 146 agent capability · 1242 planned (debt) · 218 excluded · **coverage 10.5%** of the 1388 owed.
+**Total:** 1628 actions · 150 agent capability · 1254 planned (debt) · 224 excluded · **coverage 10.7%** of the 1404 owed.
 
 | division | actions | capability | planned (debt) | excluded | coverage |
 |---|---:|---:|---:|---:|---:|
@@ -23,6 +23,7 @@ Every action a person can take on the platform, and whether an agent can take it
 | browser-shell | 28 | 0 | 28 | 0 | 0% |
 | canvas | 22 | 6 | 16 | 0 | 27.3% |
 | inference | 18 | 0 | 12 | 6 | 0% |
+| scheduling | 22 | 4 | 12 | 6 | 25% |
 | support | 21 | 8 | 12 | 1 | 40% |
 | customers | 29 | 7 | 9 | 13 | 43.8% |
 | analytics | 10 | 5 | 4 | 1 | 55.6% |
@@ -585,6 +586,21 @@ Every action a person can take on the platform, and whether an agent can take it
 - `route:publishRoutes.js:POST /posts/:id/publish`
 - `route:publishRoutes.js:POST /posts/:id/retract`
 
+## scheduling — 12 planned
+
+- `route:schedulingRoutes.js:DELETE /pages/:id`
+- `route:schedulingRoutes.js:DELETE /time-off/:id`
+- `route:schedulingRoutes.js:GET /events`
+- `route:schedulingRoutes.js:GET /events.ics`
+- `route:schedulingRoutes.js:PATCH /pages/:id`
+- `route:schedulingRoutes.js:POST /bookings/:id/cancel`
+- `route:schedulingRoutes.js:POST /feed`
+- `route:schedulingRoutes.js:POST /pages`
+- `route:schedulingRoutes.js:POST /pages/:id/restore`
+- `route:schedulingRoutes.js:POST /time-off`
+- `route:schedulingRoutes.js:PUT /availability`
+- `ui:platform-scheduling.js:data-sc-page`
+
 ## storage — 75 planned
 
 - `route:collaborationRoutes.js:DELETE /sessions/:sessionId`
@@ -889,6 +905,9 @@ Every action a person can take on the platform, and whether an agent can take it
 
 - `route:apiKeyWorkforceCapabilityRoutes.js:POST /operations`
 - `route:apiKeyWorkforceCapabilityRoutes.js:POST /read`
+- `route:peopleLifecycleRoutes.js:GET /:principalId/offboard-plan`
+- `route:peopleLifecycleRoutes.js:POST /:principalId/offboard`
+- `route:peopleLifecycleRoutes.js:POST /:principalId/onboard`
 - `route:workforceCoordinationRoutes.js:POST /children/open`
 - `route:workforceCoordinationRoutes.js:POST /children/read`
 - `route:workforceCoordinationRoutes.js:POST /goals`
@@ -953,9 +972,6 @@ Every action a person can take on the platform, and whether an agent can take it
 - `route:workforceOwnershipTransferRoutes.js:POST /:id/authorize`
 - `route:workforceOwnershipTransferRoutes.js:POST /:id/decline`
 - `route:workforceOwnershipTransferRoutes.js:POST /:id/review`
-- `route:workforcePeopleRoutes.js:GET /:principalId/offboard-plan`
-- `route:workforcePeopleRoutes.js:POST /:principalId/offboard`
-- `route:workforcePeopleRoutes.js:POST /:principalId/onboard`
 - `route:workforcePeopleRoutes.js:POST /time-off/:id/cancel`
 - `route:workforcePublicContributionRoutes.js:POST /attributions`
 - `route:workforcePublicContributionRoutes.js:POST /attributions/mine`

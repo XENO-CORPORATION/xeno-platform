@@ -8,9 +8,7 @@
  *   POST   /api/people/time-off/:id/cancel                        { workspaceId }
  *   GET    /api/people/:principalId?workspace=<id>                one profile (private fields only for self/admin/managers)
  *   PATCH  /api/people/:principalId                               { workspaceId, expectedRevision?, …fields }
- *   POST   /api/people/:principalId/onboard                       { workspaceId, tasks? }          (human admin)
- *   GET    /api/people/:principalId/offboard-plan?workspace=<id>                                     (human admin)
- *   POST   /api/people/:principalId/offboard                      { workspaceId, confirm: true }   (human admin)
+ *   onboard / offboard-plan / offboard: routes/peopleLifecycleRoutes.js (same /api/people prefix)
  */
 import express from 'express';
 import * as people from '../services/workforcePeople.js';
@@ -37,8 +35,5 @@ router.patch('/:principalId', handled(async (req, res) => {
   const { workspaceId: _w, ...fields } = req.body || {};
   res.json({ success: true, ...(await people.updateProfile(req.db, me(req), { workspaceId: ws(req), principalId: req.params.principalId, ...fields })) });
 }));
-router.post('/:principalId/onboard', handled(async (req, res) => { res.status(201).json({ success: true, ...(await people.onboard(req.db, me(req), { workspaceId: ws(req), principalId: req.params.principalId, tasks: req.body?.tasks })) }); }));
-router.get('/:principalId/offboard-plan', handled(async (req, res) => { res.json({ success: true, plan: await people.offboardPlan(req.db, me(req), { workspaceId: ws(req), principalId: req.params.principalId }) }); }));
-router.post('/:principalId/offboard', handled(async (req, res) => { res.json({ success: true, ...(await people.offboard(req.db, me(req), { workspaceId: ws(req), principalId: req.params.principalId, confirm: req.body?.confirm, endDate: req.body?.endDate })) }); }));
 
 export default router;

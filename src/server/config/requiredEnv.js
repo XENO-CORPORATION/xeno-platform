@@ -69,6 +69,7 @@ export const REQUIRED_ENV = {
       { key: 'REGISTRATION_OPEN', why: 'signup reads as deliberately closed' },
       { key: 'FORUM_NOTIFICATION_EMAILS', why: 'forum notification mail reads as disabled' },
       { key: 'SUPPORT_EMAILS', why: 'support replies are not mailed to the person who asked' },
+      { key: 'SCHEDULING_EMAILS', why: 'booking confirmations and reminders are not mailed' },
       { key: 'XENO_EXTENSION_ORIGINS', why: 'the browser extension is refused by CORS' },
       { key: 'SUBJECT_HASH_SECRET', why: 'digests fall back to JWT_SECRET, so rotating it orphans every consent record' },
       { key: 'XENO_API_KEY', why: 'chat requests to the inference gateway are unauthenticated' },

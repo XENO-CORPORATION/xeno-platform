@@ -247,6 +247,19 @@ Private requests to XENO: `services/supportTickets.js` (the one service), `route
 - **Dedupe**: one contact per email per workspace (unique index); CSV import is a dry run unless `confirm`, skips or
   fills blanks on an existing email, never overwrites.
 - Proofs: `npm run test:customers` (real Postgres, 60 checks, mutation-checked ×4) and `npm run test:customers-ui`.
+## 📅 Corpo › Scheduling lives HERE (2026-10-20)
+
+`services/scheduling.js` is the one service (screen `platform-scheduling.js`, routes `schedulingRoutes.js`, agents
+`schedulingMcp.js`, read-only). Rules that are easy to break:
+- **Time off is People's** (`workforce_time_off`, written only by `workforcePeople.js`); hours default to the People
+  profile, `scheduling_availability` is the booking-hours override. Never add a second time-off table.
+- **A booking page is a public link — a person's act.** The service refuses agents and a trigger refuses an
+  agent-created page. Double bookings are refused by the service lock AND the `scheduling_booking_no_overlap` trigger.
+- Guest pages (`/api/scheduling/book/<slug>`, `/manage/<token>`, `/feed/<token>.ics`) need no account and no JS;
+  they sit under `/api/` so the site gate does not hide them. Tokens are stored as hashes only.
+- Mail is OFF unless `SCHEDULING_EMAILS=true` (listed in compose). Bookings show in Places/assignment through
+  `workforcePeople.availability*` (`reason: 'in_meeting'`).
+Proofs: `npm run test:scheduling` (real Postgres, 58 checks, mutation-checked ×4), `npm run test:scheduling-ui`.
 
 ## Project-aware chat: context must reach the model, not only the audit
 

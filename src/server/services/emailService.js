@@ -759,6 +759,16 @@ const templates = {
     `, `${update} — ${ticketKey}`),
   }),
 
+  /** A booking was made, moved, cancelled or is coming up (scheduling.js; sent only when SCHEDULING_EMAILS=true). */
+  scheduling_update: ({ displayName, update, title, at, url }) => ({
+    subject: `${update}: ${title}`,
+    html: wrapInLayout(update, `
+      ${mailHeading(escapeHtml(update))}
+      ${mailText(`Hi ${escapeHtml(displayName)}, <b>${escapeHtml(title)}</b> — ${escapeHtml(at)}.`)}
+      ${mailButton(url, 'Open the booking')}
+    `, `${update} — ${title}`),
+  }),
+
   /**
    * Someone named you.
    *
