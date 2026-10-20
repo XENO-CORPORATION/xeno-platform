@@ -26,12 +26,19 @@
  *   npm run parity -- --write   regenerate docs/AGENT-PARITY-DEBT.md
  *   npm run parity -- --json    coverage numbers as JSON
  *   npm run parity -- --seed    record every undecided action as `planned` (explicit, reviewed in the diff)
+ *   npm run parity -- --classify  fill a missing `class` / `scope` / `because` with the derived default (reviewed in the diff)
+ *   npm run parity -- --report    regenerate docs/AGENT-WORKSPACE-SURFACE-REPORT.md (XENO WORKSPACE AGENT SURFACE - SPEC.md P0)
+ *
+ * Every entry also carries (SPEC P0): `class` (safe | reversible | irreversible | external — §4 reversibility),
+ * `scope` (the xeno-workspace area scope an agent would need, or "none" for an exclusion) and, for an exclusion,
+ * `because`. The owning division corrects a derived default by editing the entry.
  *
  * Dependency-free: it reads source as text and the catalogue's committed snapshot.
  */
 import { readdirSync, readFileSync, writeFileSync, existsSync } from 'node:fs';
 import { join, dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { LEDGER_CLASSES, WORKSPACE_SCOPES, DIVISION_AREA, scopeFor, ledgerClassOf } from '../src/server/capabilities/scopes.js';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const ROUTES = join(ROOT, 'src', 'server', 'routes');
@@ -39,6 +46,7 @@ const UI = join(ROOT, 'prototypes', 'xeno-workspace');
 const LEDGER = join(ROOT, 'src', 'server', 'capabilities', 'parity-ledger.json');
 const SNAPSHOT = join(ROOT, 'src', 'server', 'capabilities', 'catalogue.snapshot.json');
 const DEBT_DOC = join(ROOT, 'docs', 'AGENT-PARITY-DEBT.md');
+const REPORT_DOC = join(ROOT, 'docs', 'AGENT-WORKSPACE-SURFACE-REPORT.md');
 
 /** The only reasons an action may be withheld from agents permanently. */
 export const EXCLUSION_CATEGORIES = Object.freeze({
@@ -105,7 +113,7 @@ export function evaluate(actions, ledger, capabilityNames) {
     } else if (d.status === 'excluded') {
       if (!EXCLUSION_CATEGORIES[d.category]) problems.push(`${id}: exclusion category "${d.category}" is not one of ${Object.keys(EXCLUSION_CATEGORIES).join(', ')}`);
       if (d.category === 'covered-by' && !decisions[d.of]) problems.push(`${id}: covered-by names ${d.of}, which has no decision`);
-      if (!d.reason) problems.push(`${id}: an exclusion needs a reason`);
+      if (!d.because) problems.push(`${id}: an exclusion needs a because`);
     } else if (d.status !== 'planned') problems.push(`${id}: status must be capability | planned | excluded`);
   }
   return problems;
@@ -141,6 +149,66 @@ export function debtDoc(actions, ledger) {
   return L.join('\n') + '\n';
 }
 
+
+// ───────────────────────────── P0: class, scope, because (XENO WORKSPACE AGENT SURFACE - SPEC.md)
+
+/** Route files whose writes reach a third party (a payment provider, a mail provider): `external`, never just reversible. */
+export const EXTERNAL_FILES = Object.freeze(new Set(['billingRoutes.js', 'accountGiftRoutes.js', 'emailRoutes.js', 'paymentRoutes.js']));
+
+/** The derived default class of an action — what --classify writes when the division has not decided. */
+export function defaultClass(id, decision, file, capClasses = new Map()) {
+  if (decision && decision.status === 'capability') {
+    const cls = [].concat(decision.capability || []).map((n) => ledgerClassOf(capClasses.get(n))).filter(Boolean);
+    for (const c of ['external', 'irreversible', 'reversible', 'safe']) if (cls.includes(c)) return c;
+  }
+  if (decision && decision.status === 'excluded' && decision.category === 'view-state') return 'safe';
+  const m = /:(GET|HEAD|POST|PUT|PATCH|DELETE|ALL) /.exec(id);
+  if (!m) return 'reversible';                                       // a UI action that changes something
+  if (m[1] === 'GET' || m[1] === 'HEAD') return 'safe';
+  if (EXTERNAL_FILES.has(file)) return 'external';
+  return m[1] === 'DELETE' ? 'irreversible' : 'reversible';
+}
+
+/** Fill every missing class/scope/because. Returns how many fields it wrote. */
+export function classify(actions, ledger, capClasses = new Map()) {
+  let n = 0;
+  for (const [id, file] of actions) {
+    const d = ledger.actions[id]; if (!d) continue;
+    if (!d.class) { d.class = defaultClass(id, d, file, capClasses); n++; }
+    if (!d.scope) { d.scope = d.status === 'excluded' ? 'none' : scopeFor(DIVISION_AREA[(ledger.divisions || {})[file]] || 'workspace', d.class); n++; }
+    if (d.status === 'excluded' && !d.because) { d.because = d.reason || EXCLUSION_CATEGORIES[d.category]; delete d.reason; n++; }
+    if (d.status === 'excluded' && d.reason && d.because) { delete d.reason; }
+  }
+  return n;
+}
+
+/** The divisions the owner reviews first, in the spec's order; the rest follow by debt. */
+const REPORT_ORDER = ['storage', 'studio', 'tasks', 'chat', 'agents', 'commerce', 'workspace', 'places', 'forum'];
+
+/** docs/AGENT-WORKSPACE-SURFACE-REPORT.md — generated from the ledger, never edited by hand. */
+export function surfaceReport(actions, ledger) {
+  const per = {};
+  for (const [id, file] of actions) {
+    const div = (ledger.divisions || {})[file] || '(none)';
+    const d = (ledger.actions || {})[id] || { status: 'missing' };
+    const r = (per[div] ||= { actions: 0, capability: 0, planned: 0, excluded: 0, missing: 0, classes: {}, scopes: {} });
+    r.actions++; r[d.status] = (r[d.status] || 0) + 1;
+    if (d.class) r.classes[d.class] = (r.classes[d.class] || 0) + 1;
+    if (d.status === 'planned' && d.scope) r.scopes[d.scope] = (r.scopes[d.scope] || 0) + 1;
+  }
+  const order = [...REPORT_ORDER.filter((d) => per[d]), ...Object.keys(per).filter((d) => !REPORT_ORDER.includes(d)).sort((a, b) => per[b].planned - per[a].planned || a.localeCompare(b))];
+  const L = ['# Workspace agent surface — inventory report', '', '> GENERATED by `npm run parity -- --report` from `src/server/capabilities/parity-ledger.json` (XENO WORKSPACE AGENT SURFACE - SPEC.md P0). Do not edit by hand; `npm run parity` fails when it is stale. A wrong `class` or `scope` is corrected in the ledger entry by the owning division.', '',
+    'Per division: how many actions a person can take, how many an agent can take today, how many are planned (the debt P5 pays down), the reversibility class of each (§4) and the `xeno-workspace` scope the planned ones will need.', '',
+    '| division | actions | capability | planned | excluded | safe | reversible | irreversible | external | planned by scope |', '|---|---:|---:|---:|---:|---:|---:|---:|---:|---|'];
+  for (const div of order) {
+    const r = per[div], c = r.classes;
+    const sc = Object.entries(r.scopes).sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0])).map(([k, v]) => `\`${k}\` ${v}`).join(', ') || '—';
+    L.push(`| ${div} | ${r.actions} | ${r.capability} | ${r.planned} | ${r.excluded} | ${c.safe || 0} | ${c.reversible || 0} | ${c.irreversible || 0} | ${c.external || 0} | ${sc} |`);
+  }
+  L.push('', `Scopes (one-way names, approved 2026-10-20): ${WORKSPACE_SCOPES.map((s) => `\`${s}\``).join(', ')}.`, '');
+  return L.join('\n');
+}
+
 async function main() {
   const args = new Set(process.argv.slice(2));
   const actions = extract();
@@ -154,10 +222,19 @@ async function main() {
     writeFileSync(LEDGER, JSON.stringify(ledger, null, 1) + '\n');
     console.log(`seeded ${n} undecided actions as planned`);
   }
+  if (args.has('--classify')) {
+    const capClasses = new Map(snapshot.capabilities.map((c) => [c.name, c.class]));
+    const n = classify(actions, ledger, capClasses);
+    writeFileSync(LEDGER, JSON.stringify(ledger, null, 1) + '\n');
+    console.log(`classified: wrote ${n} fields`);
+  }
   if (args.has('--json')) { console.log(JSON.stringify(coverage(actions, ledger), null, 2)); return; }
   const doc = debtDoc(actions, ledger);
   if (args.has('--write') || args.has('--seed')) { writeFileSync(DEBT_DOC, doc); console.log(`wrote ${DEBT_DOC}`); }
   const problems = evaluate(actions, ledger, caps);
+  const report = surfaceReport(actions, ledger);
+  if (args.has('--report') || args.has('--write') || args.has('--classify')) { writeFileSync(REPORT_DOC, report); console.log(`wrote ${REPORT_DOC}`); }
+  if (!existsSync(REPORT_DOC) || readFileSync(REPORT_DOC, 'utf8').replace(/\r\n/g, '\n') !== report) problems.push('docs/AGENT-WORKSPACE-SURFACE-REPORT.md is stale — run npm run parity -- --report');
   if (!existsSync(DEBT_DOC) || readFileSync(DEBT_DOC, 'utf8').replace(/\r\n/g, '\n') !== doc) problems.push('docs/AGENT-PARITY-DEBT.md is stale — run npm run parity -- --write');
   const per = coverage(actions, ledger);
   const t = Object.values(per).reduce((a, r) => { a.n += r.actions; a.c += r.capability; a.p += r.planned; a.e += r.excluded; return a; }, { n: 0, c: 0, p: 0, e: 0 });
