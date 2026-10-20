@@ -1,6 +1,6 @@
 import path from 'path';
 import canvasRoutes from './routes/canvasRoutes.js';
-import placesRoutes from './routes/placesRoutes.js';
+import placesRoutes, { agentTurn as placesAgentTurn } from './routes/placesRoutes.js';
 import { meModesRouter, workspaceModesRouter } from './routes/modesRoutes.js';
 import xenoTasksRoutes, { taskTokenAuth, unlessTaskToken, mcpChallenge, protectedResourceMetadata } from './routes/xenoTasksRoutes.js';
 import { TASKS_OPENAPI } from './services/tasksOpenApi.js';
@@ -672,6 +672,7 @@ app.get('/api/tasks/openapi.json', (req, res) => { res.set('cache-control', 'pub
 app.use('/api/canvases', databaseMiddleware, authMiddleware, requireActivated, canvasRoutes);
 // XENO Places — the building where a workspace's humans and agents work (xeno-places/SPEC.md). Layout, hosted
 // sessions and a scope-filtered snapshot of the live workforce records; it owns no org data.
+app.post('/api/places/:placeId/agents/:pid/turn', databaseMiddleware, authMiddleware, requireActivated, llmLimiter, express.json({ limit: '1mb' }), placesAgentTurn(aiRoutes));
 app.use('/api/places', databaseMiddleware, authMiddleware, requireActivated, placesRoutes);
 // Custom modes + trade packs (XENO MODES - SPEC.md §8c): the account's modes and a workspace's setup. Mounted BEFORE the
 // OIDC-gated /api/v2/me so the website session reaches /modes; one service (services/modeApply.js).
