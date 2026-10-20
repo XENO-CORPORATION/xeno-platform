@@ -25,7 +25,7 @@ if (!isLocalPreview()) dotenv.config({ path: path.resolve(__dirname, '../../.env
 
 import express from 'express';
 import cors from 'cors';
-import { apiOrigin, acceptedSiteOrigins, extensionOrigins } from './config/hosts.js';
+import { apiOrigin, acceptedSiteOrigins, extensionOrigins, pathScopedOriginAllowed } from './config/hosts.js';
 import helmet from 'helmet';
 import rateLimit from 'express-rate-limit';
 import hpp from 'hpp';
@@ -469,11 +469,13 @@ const ALLOWED_ORIGINS = [
   ...extensionOrigins(),
 ];
 
-app.use(cors({
+// Delegate form: a path-scoped origin (config/hosts.js PATH_SCOPED_ORIGINS — XENO Places) is allowed only on its
+// own path prefixes, so the origin decision needs the request path.
+app.use(cors((req, done) => done(null, {
   origin: process.env.NODE_ENV === 'production'
     ? (origin, callback) => {
         // Allow requests with no origin (mobile apps, curl, desktop app, etc.)
-        if (!origin || ALLOWED_ORIGINS.includes(origin)) {
+        if (!origin || ALLOWED_ORIGINS.includes(origin) || pathScopedOriginAllowed(origin, req.originalUrl)) {
           callback(null, true);
         } else {
           console.warn(`[CORS] Blocked request from unlisted origin: ${origin}`);
@@ -493,7 +495,7 @@ app.use(cors({
   // The admission headers say why a reply was capped, so a browser client must be able to read them cross-origin.
   exposedHeaders: ['X-Xeno-Max-Output-Granted', 'X-Xeno-Max-Output-Requested'],
   credentials: true
-}));
+})));
 
 // Cookie parser for tracking proxy context
 app.use(cookieParser());

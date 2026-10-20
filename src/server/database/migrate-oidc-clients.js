@@ -75,6 +75,9 @@ export const FIRST_PARTY_CLIENTS = [
   // and holds the tokens; the browser only ever has an httpOnly session cookie. A separate
   // client_id from the local one so each deployment can be revoked on its own.
   { id: 'xeno-workshop', name: 'XENO Workshop', loopback: false, redirects: ['https://workshop.xenosystem.ai/auth/callback'] },
+  // XENO Places — a public browser SPA (no backend): authorization code + PKCE-S256 in the browser, access token in
+  // memory only. One exact-match redirect; no localhost redirect (no other web client registers one).
+  { id: 'xeno-places', name: 'XENO Places', loopback: false, redirects: ['https://places.xenosystem.ai/auth/callback'] },
   // XENO Mail — web relying party; mail-core (backend) handles the code exchange.
   { id: 'xeno-mail', name: 'XENO Mail', loopback: false, redirects: ['https://mail-api.xenostudio.ai/api/auth/xeno/callback'] },
   // Mobile (registered ahead of build; app-scheme redirect)
