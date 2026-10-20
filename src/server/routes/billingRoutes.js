@@ -15,7 +15,8 @@
 import express from 'express';
 import authMiddleware from '../middleware/auth.js';
 import * as billing from '../services/billingService.js';
-import { getEffectiveEntitlements } from '../services/effectivePlan.js';
+import { getActingEntitlements } from '../services/effectivePlan.js';
+import { workspaceFromReq } from '../utils/workspaceContext.js';
 import { productAccessFor } from '../services/productAccess.js';
 import { recordConsent, CONSENT_TEXT, CONSENT_HASH } from '../services/checkoutConsent.js';
 import { rateLimitKey } from '../utils/clientIp.js';
@@ -70,7 +71,8 @@ router.get('/checkout/:sessionId/status', authMiddleware, requireEnabled, async 
  */
 router.get('/entitlements', authMiddleware, async (req, res) => {
   try {
-    const effective = await getEffectiveEntitlements(req.db, req.user.id);
+    // D-1: the acting workspace (x-xeno-workspace, member-gated) decides; none named = the legacy strongest plan
+    const effective = await getActingEntitlements(req.db, req.user.id, { workspaceId: workspaceFromReq(req) });
     const product = await productAccessFor(req, effective.entitlements);
     res.set('Cache-Control', 'no-store');
     res.json({ success: true, ...effective, ...(product ? { product } : {}) });

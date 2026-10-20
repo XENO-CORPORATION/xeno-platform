@@ -12,7 +12,7 @@ import { getEntitlements } from '../services/billingService.js';
  * this person. Per-seat Team is a workspace subscription, so resolving gates
  * from the personal plan alone refused every Team member the software their
  * employer had just paid for. See services/effectivePlan.js. */
-import { getEffectiveEntitlements } from '../services/effectivePlan.js';
+import { getActingEntitlements, getEffectiveEntitlements } from '../services/effectivePlan.js';
 
 const RES_CAP_PX = { standard: 1024, '4k': 4096 };
 
@@ -35,9 +35,10 @@ const FREE_ENT = {
 };
 
 /** Resolve a user's entitlements (falls back to Free on any error — fail closed). */
-export async function resolveEntitlements(db, userId) {
+export async function resolveEntitlements(db, userId, { workspaceId = null } = {}) {
   try {
-    const e = await getEffectiveEntitlements(db, userId);
+    // D-1: with an acting workspace, that workspace's plan decides (effectivePlan.getActingEntitlements)
+    const e = workspaceId ? await getActingEntitlements(db, userId, { workspaceId }) : await getEffectiveEntitlements(db, userId);
     return e?.entitlements || FREE_ENT;
   } catch {
     return FREE_ENT;
