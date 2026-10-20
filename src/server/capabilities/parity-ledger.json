@@ -134,7 +134,9 @@
   "workforcePeopleRoutes.js": "workforce",
   "platform-directory.js": "workforce",
   "workspaceDocsRoutes.js": "docs",
-  "platform-docs.js": "docs"
+  "platform-docs.js": "docs",
+  "schedulingRoutes.js": "scheduling",
+  "platform-scheduling.js": "scheduling"
  },
  "actions": {
   "route:accountGiftRoutes.js:POST /": {
@@ -8603,6 +8605,144 @@
    "capability": "docs.doc.list",
    "class": "safe",
    "scope": "docs:read"
+  },
+  "route:schedulingRoutes.js:DELETE /pages/:id": {
+   "status": "planned",
+   "class": "irreversible",
+   "scope": "scheduling:write",
+   "because": "closing a public booking link is a person's act; it is soft and undone by /restore"
+  },
+  "route:schedulingRoutes.js:DELETE /time-off/:id": {
+   "status": "planned",
+   "class": "irreversible",
+   "scope": "scheduling:write",
+   "because": "time off is People's (workforcePeople.cancelTimeOff): a person changes it"
+  },
+  "route:schedulingRoutes.js:GET /availability": {
+   "status": "capability",
+   "class": "safe",
+   "scope": "scheduling:read",
+   "capability": "scheduling.availability.get"
+  },
+  "route:schedulingRoutes.js:GET /book/:slug": {
+   "status": "excluded",
+   "category": "unauthenticated",
+   "class": "safe",
+   "scope": "none",
+   "because": "a guest with no account books, reschedules or cancels by token (or a calendar app reads the feed): there is no person to act for"
+  },
+  "route:schedulingRoutes.js:GET /bookings": {
+   "status": "capability",
+   "class": "safe",
+   "scope": "scheduling:read",
+   "capability": "scheduling.booking.list"
+  },
+  "route:schedulingRoutes.js:GET /events": {
+   "status": "planned",
+   "class": "safe",
+   "scope": "scheduling:read",
+   "because": "the person’s own calendar; an agent reads bookings through scheduling.booking.list"
+  },
+  "route:schedulingRoutes.js:GET /events.ics": {
+   "status": "planned",
+   "class": "safe",
+   "scope": "scheduling:read",
+   "because": "a file download for the person’s calendar app"
+  },
+  "route:schedulingRoutes.js:GET /feed/:file": {
+   "status": "excluded",
+   "category": "unauthenticated",
+   "class": "safe",
+   "scope": "none",
+   "because": "a guest with no account books, reschedules or cancels by token (or a calendar app reads the feed): there is no person to act for"
+  },
+  "route:schedulingRoutes.js:GET /manage/:token": {
+   "status": "excluded",
+   "category": "unauthenticated",
+   "class": "safe",
+   "scope": "none",
+   "because": "a guest with no account books, reschedules or cancels by token (or a calendar app reads the feed): there is no person to act for"
+  },
+  "route:schedulingRoutes.js:GET /pages": {
+   "status": "capability",
+   "class": "safe",
+   "scope": "scheduling:read",
+   "capability": "scheduling.page.list"
+  },
+  "route:schedulingRoutes.js:GET /pages/:id/slots": {
+   "status": "capability",
+   "class": "safe",
+   "scope": "scheduling:read",
+   "capability": "scheduling.slot.list"
+  },
+  "route:schedulingRoutes.js:PATCH /pages/:id": {
+   "status": "planned",
+   "class": "reversible",
+   "scope": "scheduling:write",
+   "because": "changing what a public booking link offers is a person's act, like creating it"
+  },
+  "route:schedulingRoutes.js:POST /book/:slug": {
+   "status": "excluded",
+   "category": "unauthenticated",
+   "class": "reversible",
+   "scope": "none",
+   "because": "a guest with no account books, reschedules or cancels by token (or a calendar app reads the feed): there is no person to act for"
+  },
+  "route:schedulingRoutes.js:POST /bookings/:id/cancel": {
+   "status": "planned",
+   "class": "reversible",
+   "scope": "scheduling:write",
+   "because": "cancelling someone's booking mails the guest; it is a person's act"
+  },
+  "route:schedulingRoutes.js:POST /feed": {
+   "status": "planned",
+   "class": "reversible",
+   "scope": "scheduling:write",
+   "because": "the private ICS feed URL is a bearer secret shown once to the person"
+  },
+  "route:schedulingRoutes.js:POST /manage/:token/cancel": {
+   "status": "excluded",
+   "category": "unauthenticated",
+   "class": "reversible",
+   "scope": "none",
+   "because": "a guest with no account books, reschedules or cancels by token (or a calendar app reads the feed): there is no person to act for"
+  },
+  "route:schedulingRoutes.js:POST /manage/:token/reschedule": {
+   "status": "excluded",
+   "category": "unauthenticated",
+   "class": "reversible",
+   "scope": "none",
+   "because": "a guest with no account books, reschedules or cancels by token (or a calendar app reads the feed): there is no person to act for"
+  },
+  "route:schedulingRoutes.js:POST /pages": {
+   "status": "planned",
+   "class": "reversible",
+   "scope": "scheduling:write",
+   "because": "a booking page is a PUBLIC link; public links are a person's act (owner, 2026-10-20), held by the service and a DB trigger"
+  },
+  "route:schedulingRoutes.js:POST /pages/:id/restore": {
+   "status": "planned",
+   "class": "reversible",
+   "scope": "scheduling:write",
+   "because": "reopening a public booking link is a person's act"
+  },
+  "route:schedulingRoutes.js:POST /time-off": {
+   "status": "planned",
+   "class": "reversible",
+   "scope": "scheduling:write",
+   "because": "time off is People's (workforcePeople.addTimeOff): a person books it"
+  },
+  "route:schedulingRoutes.js:PUT /availability": {
+   "status": "planned",
+   "class": "reversible",
+   "scope": "scheduling:write",
+   "because": "a person states their own bookable hours; an agent reads them (scheduling.availability.get)"
+  },
+  "ui:platform-scheduling.js:data-sc-page": {
+   "status": "planned",
+   "class": "reversible",
+   "scope": "scheduling:write",
+   "because": "the screen's actions are the /api/scheduling routes, decided there: agents read; public links and cancellations are a person's act"
   }
  }
 }

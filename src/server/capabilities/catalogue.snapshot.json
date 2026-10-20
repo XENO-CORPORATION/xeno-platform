@@ -1654,6 +1654,62 @@
    ]
   },
   {
+   "name": "scheduling.availability.get",
+   "wire": "scheduling__availability__get",
+   "version": "1.0.0",
+   "class": "safe",
+   "scope": "scheduling:read",
+   "surfaces": [
+    "mcp",
+    "rest"
+   ],
+   "aliases": [
+    "scheduling_get_availability"
+   ]
+  },
+  {
+   "name": "scheduling.page.list",
+   "wire": "scheduling__page__list",
+   "version": "1.0.0",
+   "class": "safe",
+   "scope": "scheduling:read",
+   "surfaces": [
+    "mcp",
+    "rest"
+   ],
+   "aliases": [
+    "scheduling_list_pages"
+   ]
+  },
+  {
+   "name": "scheduling.slot.list",
+   "wire": "scheduling__slot__list",
+   "version": "1.0.0",
+   "class": "safe",
+   "scope": "scheduling:read",
+   "surfaces": [
+    "mcp",
+    "rest"
+   ],
+   "aliases": [
+    "scheduling_list_slots"
+   ]
+  },
+  {
+   "name": "scheduling.booking.list",
+   "wire": "scheduling__booking__list",
+   "version": "1.0.0",
+   "class": "safe",
+   "scope": "scheduling:read",
+   "surfaces": [
+    "mcp",
+    "rest"
+   ],
+   "aliases": [
+    "scheduling_list_bookings"
+   ]
+  },
+  {
    "name": "analytics.dashboard.list",
    "wire": "analytics__dashboard__list",
    "version": "1.0.0",

@@ -280,7 +280,16 @@ export async function cancelTimeOff(db, me, { workspaceId, timeOffId } = {}) {
 export async function availability(db, workspaceId, principalId, at = new Date()) {
   const p = (await db.query(`SELECT working_hours, timezone FROM workforce_employee_profiles WHERE workspace_id = $1 AND principal_id = $2`, [workspaceId, principalId]).catch(() => ({ rows: [] }))).rows[0];
   const off = (await db.query(`SELECT starts_at, ends_at, kind, cancelled_at FROM workforce_time_off WHERE workspace_id = $1 AND principal_id = $2 AND cancelled_at IS NULL AND ends_at > $3`, [workspaceId, principalId, at]).catch(() => ({ rows: [] }))).rows;
-  return availabilityAt(p, off, at);
+  const busy = (await bookedNow(db, [principalId], at))[String(principalId)];
+  const a = availabilityAt(p, off, at);
+  return a.reason === 'time_off' || !busy ? a : busy;
+}
+/** Corpo › Scheduling: a confirmed booking happening at `at` makes the person unavailable until it ends (any workspace:
+ *  a person cannot be in two meetings). Time off still wins, because it is checked first by the callers below. */
+async function bookedNow(db, ids, at) {
+  const rows = (await db.query(`SELECT DISTINCT ON (host_user_id) host_user_id, ends_at FROM scheduling_bookings
+    WHERE host_user_id = ANY($1::uuid[]) AND status = 'confirmed' AND starts_at <= $2 AND ends_at > $2 ORDER BY host_user_id, ends_at DESC`, [ids, at]).catch(() => ({ rows: [] }))).rows;
+  return Object.fromEntries(rows.map((r) => [String(r.host_user_id), { available: false, reason: 'in_meeting', until: new Date(r.ends_at).toISOString() }]));
 }
 /** Availability for many principals at once (Places snapshot). Unknown → available. */
 export async function availabilityMap(db, workspaceId, ids, at = new Date()) {
@@ -289,7 +298,11 @@ export async function availabilityMap(db, workspaceId, ids, at = new Date()) {
   const profiles = (await db.query(`SELECT principal_id, working_hours, timezone FROM workforce_employee_profiles WHERE workspace_id = $1 AND principal_id = ANY($2::uuid[])`, [workspaceId, list]).catch(() => ({ rows: [] }))).rows;
   const off = (await db.query(`SELECT principal_id, starts_at, ends_at, kind, cancelled_at FROM workforce_time_off WHERE workspace_id = $1 AND principal_id = ANY($2::uuid[]) AND cancelled_at IS NULL AND ends_at > $3`, [workspaceId, list, at]).catch(() => ({ rows: [] }))).rows;
   const out = {};
-  for (const id of list) out[id] = availabilityAt(profiles.find((p) => String(p.principal_id) === id), off.filter((o) => String(o.principal_id) === id), at);
+  const booked = await bookedNow(db, list, at);
+  for (const id of list) {
+    const a = availabilityAt(profiles.find((p) => String(p.principal_id) === id), off.filter((o) => String(o.principal_id) === id), at);
+    out[id] = a.reason === 'time_off' || !booked[id] ? a : booked[id];
+  }
   return out;
 }
 
