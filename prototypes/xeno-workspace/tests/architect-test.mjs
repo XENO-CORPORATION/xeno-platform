@@ -93,6 +93,7 @@ try {
   ok(rec.pack_id === `proposal:${pr.id}` && rec.applied_by_user_id === uid, 'one receipt, for the proposal, applied by the person');
   ok((await pool.query(`SELECT name FROM custom_modes WHERE source_application_id = $1`, [rec.id])).rows[0]?.name === 'Spoke & Chain', 'the applied mode is the edited one');
   ok(await n(`SELECT count(*) n FROM tasks t JOIN chat_projects c ON c.id = t.project_id WHERE c.workspace_id = $1 AND t.deleted_at IS NULL`, [rec.workspace_id]) === 2, 'only the tasks the person kept were created');
+  ok(await n(`SELECT count(*) n FROM workforce_divisions WHERE workspace_id = $1 AND name = 'Workshop' AND lifecycle = 'active'`, [rec.workspace_id]) === 1, 'the suggested division was set up with it');
   // Division home entry
   await ev(() => { const b = document.createElement('button'); b.dataset.xsu = 'open-docs'; b.dataset.idea = 'The Sales division: '; b.id = 'probe'; document.body.appendChild(b); b.click(); });
   ok(await until(() => (document.querySelector('[data-xsu-idea]')?.value || '').startsWith('The Sales division')), 'the Division home entry opens the documents step with the division named');

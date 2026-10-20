@@ -132,6 +132,8 @@
     "test:chat-project-db": "node --test --test-force-exit scripts/chat-project-database-integration.test.mjs",
     "test:workspace-architect": "node src/server/tests/workspace-architect.test.mjs && node prototypes/xeno-workspace/tests/architect-test.mjs",
     "test:workspace-architect-mutation": "node scripts/workspace-architect-mutation.mjs",
+    "test:mode-apply-workforce": "node src/server/tests/mode-apply-workforce.test.mjs",
+    "test:mode-apply-workforce-mutation": "node scripts/mode-apply-workforce-mutation.mjs",
     "test:chat-project-semantic": "node --test --test-force-exit scripts/chat-project-semantic-integration.test.mjs",
     "test:chat-project-semantic-scale": "node --test --test-force-exit scripts/chat-project-semantic-scale-qualification.test.mjs",
     "test:chat-production-fixtures": "node --test scripts/chat-production-fixture-boundary.test.mjs",

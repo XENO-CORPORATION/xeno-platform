@@ -21,6 +21,7 @@ import { createTask } from './xenoTasks.js';
 import { createAuthorizedProject } from './chatProjectAuthority.js';
 import { MODE_PACKS, packById } from '../data/modePacks.js';
 import { packForApply } from './workspaceArchitect.js';
+import * as workforce from './modeApplyWorkforce.js';
 
 export class ModeError extends Error {
   constructor(message, code, status = 400) { super(message); this.code = code; this.status = status; }
@@ -178,10 +179,15 @@ export async function plan(db, actor, { workspaceId, packId, listingVersionId, a
   // a pack that EXTENDS a mode already here adds only its tasks; the live mode (maybe a person's edit) is left as it is
   const extending = !!pack.extends && pack.extends === mode.id && live.length > 0;
   const conflicts = extending ? [] : live;
-  if (extending && !(pack.tasks || []).length) conflicts.push('nothing_new');
+  const wf = workforce.normalise(pack, fail);
+  const packProjects = new Set(wf.projects.map((x) => x.key));
+  for (const t of pack.tasks || []) if (t.project && !packProjects.has(String(t.project))) fail(`A project named "${t.project}" is not in this setup`, 'unknown_reference');
+  const loose = (pack.tasks || []).filter((t) => !t.project);
+  if (extending && !(pack.tasks || []).length && !workforce.hasAny(wf)) conflicts.push('nothing_new');
   const records = [...(extending ? [] : [{ type: 'mode', id: mode.id, name: mode.name, products: mode.products }]),
-    ...((pack.tasks || []).length ? [{ type: 'project', name: `${mode.name} — getting started`.slice(0, 200), workspaceId: w.id }] : []),
-    ...(pack.tasks || []).map((t) => ({ type: 'task', title: String(t.title).slice(0, 300), in: 'project', assignee: 'you' }))];
+    ...workforce.planRecords(wf),
+    ...(loose.length ? [{ type: 'project', name: `${mode.name} — getting started`.slice(0, 200), workspaceId: w.id }] : []),
+    ...(pack.tasks || []).map((t) => ({ type: 'task', title: String(t.title).slice(0, 300), in: t.project ? String(t.project) : 'project', assignee: 'you' }))];
   const body = { workspaceId: w.id, pack: { id: pack.id, version: pack.version, hash, listingVersionId: lvId }, answers: a, records, conflicts };
   return { plan: { ...body, workspaceName: w.name, packTitle: pack.title, status: pack.status || 'published',
     cost: { credits: 0, seats: 0, note: 'Nothing here is billed yet. A paid pack is priced in the Pricing §6 ledger before it ships.' } },
@@ -192,6 +198,13 @@ const shapeReceipt = (r) => ({ applicationId: r.id, workspaceId: r.workspace_id,
   listingVersionId: r.listing_version_id, answers: r.answers, planHash: r.plan_hash, records: r.created_records, appliedBy: r.applied_by_user_id,
   appliedAt: r.applied_at, revertedAt: r.reverted_at, revertedBy: r.reverted_by_user_id, revertReport: r.revert_report });
 
+/** A view of THIS transaction for services that open their own: their BEGIN/COMMIT/ROLLBACK become no-ops and
+ *  connect() hands back the same client, so everything they write commits or rolls back with the setup. */
+function joinedTx(db) {
+  const j = { query: (sql, a) => (/^\s*(BEGIN|COMMIT|ROLLBACK)\s*$/i.test(sql) ? Promise.resolve({ rows: [], rowCount: 0 }) : db.query(sql, a)), release() {} };
+  j.connect = async () => j;
+  return j;
+}
 async function inTransaction(pool, fn) {
   if (typeof pool.connect !== 'function' || typeof pool.release === 'function') return fn(pool);
   const c = await pool.connect();
@@ -232,15 +245,26 @@ export function apply(pool, actor, { workspaceId, packId, listingVersionId, answ
     // §8.11 D-1: the WORKSPACE owns what a setup creates. Starter tasks live in a project of the target workspace
     // (never the applier's personal tasks); the applier is their assignee. The project is made through the one
     // project creator, joined to THIS transaction (its own BEGIN/COMMIT become no-ops here).
-    if ((pack.tasks || []).length) {
-      const joined = { query: (sql, a) => (/^\s*(BEGIN|COMMIT|ROLLBACK)\s*$/i.test(sql) ? Promise.resolve({ rows: [] }) : db.query(sql, a)) };
-      const project = await createAuthorizedProject(joined, { principal: { type: 'user', id: String(actor.id) }, workspaceId: w.id,
-        name: `${m.name} — getting started`.slice(0, 200), settings: { source: 'mode-setup', applicationId: appId } });
-      created.push({ type: 'project', id: project.id });
-      for (const t of pack.tasks) {
-        const task = await createTask(db, me, { title: t.title, body: t.body || '', projectId: project.id, assigneeId: actor.id });
-        created.push({ type: 'task', id: task.id, key: task.key, projectId: project.id });
+    const joined = joinedTx(db);
+    // divisions, agents, projects, teams, objectives, goals, Places — each by its own service, in this transaction
+    const { projectsByKey } = await workforce.apply(joined, { me, workspaceId: w.id, w: workforce.normalise(pack, fail), created })
+      .catch((e) => { throw e.modeError ? new ModeError(e.message, e.code, e.status) : e; });
+    for (const rec of created) if (rec.type === 'team') rec.workspaceId = w.id;
+    const tasks = pack.tasks || [];
+    let starter = null;
+    for (const t of tasks) {
+      let projectId = t.project ? projectsByKey[String(t.project)] : null;
+      if (!projectId) {
+        if (!starter) {
+          const project = await createAuthorizedProject(joined, { principal: { type: 'user', id: String(actor.id) }, workspaceId: w.id,
+            name: `${m.name} — getting started`.slice(0, 200), settings: { source: 'mode-setup', applicationId: appId } });
+          created.push({ type: 'project', id: project.id });
+          starter = project.id;
+        }
+        projectId = starter;
       }
+      const task = await createTask(db, me, { title: t.title, body: t.body || '', projectId, assigneeId: actor.id });
+      created.push({ type: 'task', id: task.id, key: task.key, projectId });
     }
     if (pack.trade && /^[a-z][a-z0-9-]{0,39}$/.test(pack.trade)) {
       await db.query(`INSERT INTO user_onboarding (user_id, trade) VALUES ($1, $2) ON CONFLICT (user_id) DO UPDATE SET trade = EXCLUDED.trade, updated_at = now()`, [actor.id, pack.trade]);
@@ -283,6 +307,15 @@ export function revert(pool, actor, { workspaceId, applicationId } = {}) {
         archived.push(rec);
       } else if (rec.type === 'project') projects.push(rec);
     }
+    // workforce records (modeApplyWorkforce.js): teams, agents, objectives and Places first, then projects, then
+    // divisions innermost-first — each kept, with its reason, when a person changed it or still works in it
+    const joined = joinedTx(db);
+    const me = { id: actor.id, kind: 'human', name: p.displayName || p.handle || 'Someone' };
+    const undo = async (rec) => {
+      const out = await workforce.revertOne(joined, me, rec);
+      if (out === 'archived') archived.push(rec); else if (out) kept.push({ ...rec, reason: out });
+    };
+    for (const rec of r.created_records) if (['team', 'agent', 'objective', 'places'].includes(rec.type)) await undo(rec);
     // the setup's project is archived only when nothing a person keeps is left in it
     for (const rec of projects) {
       const live = Number((await db.query(`SELECT count(*) n FROM tasks WHERE project_id = $1 AND deleted_at IS NULL`, [rec.id])).rows[0].n);
@@ -290,6 +323,7 @@ export function revert(pool, actor, { workspaceId, applicationId } = {}) {
       const a = await db.query(`UPDATE chat_projects SET is_archived = true WHERE id = $1 AND workspace_id = $2 AND NOT is_archived`, [rec.id, w.id]);
       if (a.rowCount) archived.push(rec);
     }
+    for (const rec of [...r.created_records].reverse()) if (rec.type === 'division') await undo(rec);
     const report = { archived, kept };
     const out = (await db.query(`UPDATE workspace_mode_applications SET reverted_at = now(), reverted_by_user_id = $2, revert_report = $3 WHERE id = $1 RETURNING *`,
       [r.id, actor.id, JSON.stringify(report)])).rows[0];
