@@ -296,6 +296,20 @@
    ]
   },
   {
+   "name": "canvas.canvas.open_as",
+   "wire": "canvas__canvas__open_as",
+   "version": "1.0.0",
+   "class": "undoable",
+   "scope": "tasks:write",
+   "surfaces": [
+    "mcp",
+    "rest"
+   ],
+   "aliases": [
+    "canvas_open_as"
+   ]
+  },
+  {
    "name": "canvas.connection.create",
    "wire": "canvas__connection__create",
    "version": "1.0.0",
@@ -825,6 +839,20 @@
    ],
    "aliases": [
     "workforce_division_get"
+   ]
+  },
+  {
+   "name": "division.division.home",
+   "wire": "division__division__home",
+   "version": "1.0.0",
+   "class": "safe",
+   "scope": "workspace:read",
+   "surfaces": [
+    "mcp",
+    "rest"
+   ],
+   "aliases": [
+    "workforce_division_home"
    ]
   },
   {

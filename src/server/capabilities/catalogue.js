@@ -61,6 +61,7 @@ const ROWS = [
   ['canvas.canvas.get', 'canvas', 'get', 'safe', { reply: CANVAS_REPLY, provenance: 'untrusted' }],
   ['canvas.canvas.create', 'canvas', 'create', 'undoable', { reply: CANVAS_REPLY, idempotency: NONE('no request key yet: a retried call starts a second canvas') }],
   ['canvas.item.add', 'canvas', 'add', 'undoable', { reply: obj({ canvas: CANVAS_REPLY.properties.canvas, added: { type: 'array', description: 'The new items’ ids, in the order given.' } }), idempotency: NONE('no request key yet: a retried call adds the items twice') }],
+  ['canvas.canvas.open_as', 'canvas', 'open_as', 'undoable', { reply: obj({ canvas: CANVAS_REPLY.properties.canvas, created: { type: 'boolean', description: 'true when this call made the map; false when it already existed.' } }, ['canvas']), idempotency: NAT('opening the same project or division again returns the same canvas') }],
   ['canvas.connection.create', 'canvas', 'connect', 'undoable', { reply: CANVAS_REPLY, idempotency: NONE('no request key yet: a retried call adds a second connection') }],
   ['canvas.item.update', 'canvas', 'update', 'irreversible', { reply: CANVAS_REPLY, idempotency: NAT('moves and edits set absolute values; removing a removed item is a no-op') }],
   // ── places (the building of each workspace; a projection of workforce records, scope-filtered on the server)
@@ -96,7 +97,7 @@ const ROWS = [
     ['run.admission.create', 'admission_create', 'irreversible', { cost: { model: 'quoted', note: 'commits the payer’s budget; the reservation is in the reply' } }],
     ['run.admission.get', 'admission_get', 'safe'], ['run.admission.list', 'admission_list', 'safe'], ['run.admission.operation_get', 'admission_operation_get', 'safe'],
     ['run.pin.get', 'pin_get', 'safe'], ['run.admission.revoke', 'admission_revoke', 'irreversible'], ['run.authority.get', 'authority_get', 'safe'],
-    ['division.division.list', 'division_list', 'safe'], ['division.division.get', 'division_get', 'safe'], ['division.division.create', 'division_create', 'undoable'],
+    ['division.division.list', 'division_list', 'safe'], ['division.division.get', 'division_get', 'safe'], ['division.division.home', 'division_home', 'safe'], ['division.division.create', 'division_create', 'undoable'],
     ['division.division.update', 'division_update', 'undoable'], ['division.division.archive', 'division_archive', 'irreversible'],
     ['objective.objective.create', 'objective_create', 'undoable'], ['objective.objective.get', 'objective_get', 'safe'], ['objective.objective.update', 'objective_update', 'undoable'],
     ['objective.objective.complete', 'objective_complete', 'irreversible'], ['objective.goal.link', 'objective_link_goal', 'undoable'],
