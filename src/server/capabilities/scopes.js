@@ -38,6 +38,7 @@ export const DIVISION_AREA = Object.freeze({
   marketplace: 'marketplace', publish: 'publish', analytics: 'analytics', docs: 'docs', support: 'forum',
   // XENO-WORKFORCE-01 capability divisions (catalogue first segments)
   agent: 'agents', run: 'agents', objective: 'agents', division: 'workspace', funding: 'wallet',
+  orchestrator: 'tasks', audit: 'workspace',
 });
 
 /** The scope an action of `area` needs at `cls`. Reads need :read; a wallet write spends; a workspace write is admin. */
