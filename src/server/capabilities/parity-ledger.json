@@ -2714,9 +2714,11 @@
    "scope": "places:read"
   },
   "route:placesRoutes.js:GET /:placeId/events": {
-   "status": "planned",
+   "status": "excluded",
+   "category": "protocol",
    "class": "safe",
-   "scope": "places:read"
+   "scope": "none",
+   "because": "SSE transport for the live frame; the same scoped snapshot is readable by agents through places.place.get"
   },
   "route:placesRoutes.js:GET /needs-you": {
    "status": "planned",
@@ -2724,9 +2726,11 @@
    "scope": "places:read"
   },
   "route:placesRoutes.js:POST /:placeId/presence": {
-   "status": "planned",
-   "class": "reversible",
-   "scope": "places:write"
+   "status": "excluded",
+   "category": "protocol",
+   "class": "safe",
+   "scope": "none",
+   "because": "the open building screen heartbeats the viewer's floor every few seconds (ephemeral, 45 s TTL); it records that a person is looking, it is not an action"
   },
   "route:placesRoutes.js:POST /ops/:op": {
    "status": "capability",
@@ -7242,17 +7246,20 @@
    "scope": "agents:write"
   },
   "ui:platform-divisions.js:data-xdv=obj-done": {
-   "status": "planned",
-   "class": "reversible",
+   "status": "capability",
+   "capability": "objective.objective.complete",
+   "class": "irreversible",
    "scope": "agents:write"
   },
   "ui:platform-divisions.js:data-xdv=obj-edit": {
-   "status": "planned",
+   "status": "capability",
+   "capability": "objective.objective.update",
    "class": "reversible",
    "scope": "agents:write"
   },
   "ui:platform-divisions.js:data-xdv=obj-new": {
-   "status": "planned",
+   "status": "capability",
+   "capability": "objective.objective.create",
    "class": "reversible",
    "scope": "agents:write"
   },
@@ -7262,9 +7269,11 @@
    "scope": "agents:write"
   },
   "ui:platform-divisions.js:data-xdv=project": {
-   "status": "planned",
-   "class": "reversible",
-   "scope": "agents:write"
+   "status": "excluded",
+   "category": "view-state",
+   "class": "safe",
+   "scope": "none",
+   "because": "navigates to the project page; changes only what the screen shows"
   },
   "ui:platform-divisions.js:data-xdv=remove-project": {
    "status": "planned",
@@ -7282,13 +7291,16 @@
    "scope": "agents:write"
   },
   "ui:platform-divisions.js:data-xdv=run": {
-   "status": "planned",
-   "class": "reversible",
-   "scope": "agents:write"
+   "status": "excluded",
+   "category": "view-state",
+   "class": "safe",
+   "scope": "none",
+   "because": "a table-row marker on the division home; it has no handler and changes only what the screen shows"
   },
   "ui:platform-divisions.js:data-xdv=run-stop": {
-   "status": "planned",
-   "class": "reversible",
+   "status": "capability",
+   "capability": "run.admission.revoke",
+   "class": "irreversible",
    "scope": "agents:write"
   },
   "ui:platform-mcp.js:data-xmc-cat": {
