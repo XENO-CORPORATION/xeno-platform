@@ -479,16 +479,21 @@ export async function meterInvocation(db, { user, listing, pricing, units = 1, m
 // Earnings + payouts (D6)
 // --------------------------------------------------------------------------
 
-export async function getEarningsSummary(db, developerId) {
+/**
+ * D-6 contract (2026-10-20): earnings belong to the SELLER WORKSPACE, not to a person. The summary sums every
+ * earning of every developer profile that sells as the workspace, so it survives the accountable person leaving.
+ */
+export async function getEarningsSummary(db, sellerWorkspaceId) {
   const { rows } = await db.query(
     `SELECT
-       COALESCE(SUM(amount_credits) FILTER (WHERE state = 'available'), 0)::int AS available,
-       COALESCE(SUM(amount_credits) FILTER (WHERE state = 'pending'), 0)::int   AS pending,
-       COALESCE(SUM(amount_credits) FILTER (WHERE state = 'paid_out'), 0)::int  AS paid_out,
-       COALESCE(SUM(amount_credits), 0)::int AS lifetime
-     FROM marketplace_creator_earnings
-     WHERE developer_id = $1`,
-    [developerId],
+       COALESCE(SUM(e.amount_credits) FILTER (WHERE e.state = 'available'), 0)::int AS available,
+       COALESCE(SUM(e.amount_credits) FILTER (WHERE e.state = 'pending'), 0)::int   AS pending,
+       COALESCE(SUM(e.amount_credits) FILTER (WHERE e.state = 'paid_out'), 0)::int  AS paid_out,
+       COALESCE(SUM(e.amount_credits), 0)::int AS lifetime
+     FROM marketplace_creator_earnings e
+     JOIN marketplace_developers d ON d.id = e.developer_id
+     WHERE d.seller_workspace_id = $1`,
+    [sellerWorkspaceId],
   );
   return rows[0];
 }
@@ -499,8 +504,9 @@ export async function getEarningsSummary(db, developerId) {
  * truthful `not_implemented` state — it is NOT a fake success. Everything up to
  * the cash-out call (earnings accrual, balance accounting) is real.
  */
-export async function requestPayout(db, { developerId, amountCredits }) {
-  const summary = await getEarningsSummary(db, developerId);
+export async function requestPayout(db, { developerId, sellerWorkspaceId, amountCredits }) {
+  if (!sellerWorkspaceId) throw new Error('requestPayout: the seller workspace is required (D-6)');
+  const summary = await getEarningsSummary(db, sellerWorkspaceId);
   if (amountCredits > summary.available) {
     return { ok: false, status: 400, error: 'Requested amount exceeds available earnings', available: summary.available };
   }
@@ -510,11 +516,11 @@ export async function requestPayout(db, { developerId, amountCredits }) {
   const amountUsd = Number((amountCredits * usdPerCredit).toFixed(2));
 
   const { rows } = await db.query(
-    `INSERT INTO marketplace_payouts (developer_id, amount_credits, amount_usd, state, provider, kyc_status, failure_reason)
-     VALUES ($1, $2, $3, 'not_implemented', 'stripe_connect', 'unverified',
+    `INSERT INTO marketplace_payouts (developer_id, seller_workspace_id, amount_credits, amount_usd, state, provider, kyc_status, failure_reason)
+     VALUES ($1, $2, $3, $4, 'not_implemented', 'stripe_connect', 'unverified',
              'Stripe Connect cash-out not yet wired (no live keys/KYC). Earnings remain available.')
      RETURNING *`,
-    [developerId, amountCredits, amountUsd],
+    [developerId, sellerWorkspaceId, amountCredits, amountUsd],
   );
 
   // TODO(payoutsProvider): when Stripe Connect is live —

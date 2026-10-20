@@ -102,8 +102,12 @@ export async function linkAssetToProject(db, { principal, projectId, assetId }) 
       [projectId],
     )).rows[0];
     const asset = (await tx.query(
-      `SELECT id, owner_user_id, workspace_id FROM user_files
-       WHERE id = $1 AND deleted_at IS NULL FOR UPDATE`,
+      // D-1 contract: a personal file names its PERSONAL workspace; for this check it is still "no shared workspace"
+      `SELECT f.id, f.owner_user_id,
+              CASE WHEN EXISTS (SELECT 1 FROM workspaces pw WHERE pw.id = f.workspace_id AND pw.workspace_type = 'personal')
+                   THEN NULL ELSE f.workspace_id END AS workspace_id
+         FROM user_files f
+       WHERE f.id = $1 AND f.deleted_at IS NULL FOR UPDATE OF f`,
       [assetId],
     )).rows[0];
     if (!project || !asset) throw new ChatAuthorizationError();

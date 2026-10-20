@@ -178,8 +178,12 @@ export async function authorizeDisclosure(db, { user, partitionId, itemIds, reas
 /** The seller's view: disclosures for their listing, and nothing else. Every read is audited. */
 export async function sellerDisclosures(db, { sellerUserId, listingId }) {
   const owns = await db.query(
-    `SELECT 1 FROM marketplace_listings l JOIN marketplace_developers d ON d.id = l.developer_id
-      WHERE l.id = $1 AND d.user_id = $2`,
+    /* D-6: the seller is the listing's SELLER WORKSPACE. Its accountable human, its owner, or one of its admins
+     * reads disclosures; a first-party listing (no seller workspace) has no third-party seller to read them. */
+    `SELECT 1 FROM marketplace_listings l JOIN workspaces w ON w.id = l.seller_workspace_id
+      WHERE l.id = $1 AND (l.accountable_user_id = $2 OR w.owner_user_id = $2 OR EXISTS (
+        SELECT 1 FROM relationship_tuples t WHERE t.object_type = 'workspace' AND t.object_id = w.id::text
+           AND t.subject_type = 'user' AND t.subject_id = $2::text AND t.relation IN ('owner', 'admin')))`,
     [listingId, sellerUserId],
   );
   if (!owns.rows[0]) throw new PartitionError('not_seller', 'Only the listing\'s seller can read its disclosures', 403);
