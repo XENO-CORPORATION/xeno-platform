@@ -3795,9 +3795,10 @@
    "scope": "agents:read"
   },
   "route:workforceDivisionRoutes.js:GET /:id/home": {
-   "status": "planned",
+   "status": "capability",
+   "capability": "division.division.home",
    "class": "safe",
-   "scope": "agents:read"
+   "scope": "workspace:read"
   },
   "route:workforceDivisionRoutes.js:PATCH /:id": {
    "status": "capability",
@@ -8137,6 +8138,18 @@
    "status": "planned",
    "class": "reversible",
    "scope": "agents:write"
+  },
+  "route:canvasRoutes.js:POST /open-as": {
+   "status": "capability",
+   "capability": "canvas.canvas.open_as",
+   "class": "reversible",
+   "scope": "tasks:write"
+  },
+  "ui:platform-canvas.js:data-xcv-open": {
+   "status": "capability",
+   "capability": "canvas.canvas.open_as",
+   "class": "reversible",
+   "scope": "tasks:write"
   },
   "route:workspaceAnalyticsRoutes.js:GET /metrics": {
    "status": "capability",
