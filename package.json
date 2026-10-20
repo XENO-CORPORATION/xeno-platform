@@ -266,7 +266,8 @@
     "test:model-bundles": "node --test scripts/local-model-bundles.test.mjs scripts/r2-immutability.test.mjs scripts/publish-model-bundle.test.mjs",
     "test:vite-workspace": "node --test scripts/vite-workspace.test.mjs",
     "test:workforce-accessibility": "node --test scripts/workforce-accessibility.test.mjs",
-    "test:billing-summary": "node --test scripts/billing-summary.test.mjs"
+    "test:billing-summary": "node --test scripts/billing-summary.test.mjs",
+    "test:places": "node src/server/tests/places.test.mjs && node src/server/tests/places-location.test.mjs"
   },
   "dependencies": {
     "@babel/standalone": "^7.29.7",

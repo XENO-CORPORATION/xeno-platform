@@ -6,7 +6,9 @@
  *   DATABASE_URL=… node scripts/places-backfill.mjs --confirm  # create them
  *
  * Idempotent: a workspace that already has an active building is left exactly as it is, so a second run creates 0.
- * Where each building stands comes from the owner's own Language & region setting (places_home_city), never guessed.
+ * Where each building stands: the owner's own Language & region (country, then time zone), else the country of their
+ * sign-in (CF-IPCountry, no IP kept), else the default city. A building still on the default city moves when a
+ * better source appears; one relocated by hand (places.relocate) is never moved.
  */
 import pg from 'pg';
 import { backfillPlan, backfill } from '../src/server/services/places.js';
@@ -16,6 +18,6 @@ const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL });
 try {
   const confirm = process.argv.includes('--confirm');
   const out = confirm ? await backfill(pool) : await backfillPlan(pool);
-  const { workspaceIds, ...shown } = out;
+  const { workspaceIds, relocations, ...shown } = out;
   console.log(JSON.stringify({ mode: confirm ? 'confirm' : 'dry-run', ...shown }, null, 2));
 } finally { await pool.end(); }

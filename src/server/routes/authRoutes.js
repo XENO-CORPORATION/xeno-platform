@@ -17,6 +17,7 @@ import { deductCredits } from '../utils/creditTransactions.js';
 import { sendEmail, sendWelcomeEmail } from '../services/emailService.js';
 import { recordSecurityEvent, recordSecurityEventTransactional, EVENTS } from '../services/securityEvents.js';
 import { clientIp } from '../utils/clientIp.js';
+import { recordSigninCountry } from '../utils/signinCountry.js';
 import {
   verifyActivationToken,
   activate as activateAccount,
@@ -432,6 +433,8 @@ async function issueSessionToken(db, user, req) {
     // the Docker bridge gateway for every real session ever recorded here.
     [sid, user.id, hashToken(token), clientIp(req), ua, client.deviceType, client.browser, client.os]
   );
+  // XENO Places: the sign-in's country (never the IP), only where the person has not set one. Never fails sign-in.
+  await recordSigninCountry(db, user.id, req);
   return token;
 }
 
@@ -498,6 +501,7 @@ async function issueBrowserSession(db, user, req, res) {
       [sid, hashToken(csrfSecret)],
     );
     await transaction.query('COMMIT');
+    await recordSigninCountry(db, user.id, req);
   } catch (error) {
     await transaction.query('ROLLBACK').catch(() => {});
     throw error;
