@@ -38,6 +38,9 @@ import { bindProjectDirectory } from '../services/projectDirectoryBindings.js';
 import * as corpus from '../services/xenoCorpus.js';
 import * as corpusMcp from '../services/corpusMcp.js';
 import * as canvases from '../services/canvases.js';
+import * as xenoMcp from '../services/xenoMcp.js';
+import { gatherSources } from '../services/workspaceArchitect.js';
+import { getSigningKey } from '../utils/oidcProvider.js';
 
 const JWT_SECRET = process.env.JWT_SECRET || 'xenostudio-super-secret-jwt-key-change-in-production';
 const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL });
@@ -204,6 +207,35 @@ async function main() {
     const imported = (await pool.query(`SELECT id FROM corpus_tenets WHERE binding_id=$1 LIMIT 1`, [bindingId])).rows[0];
     ok(imported && await rejects(corpus.propose(pool, { id: ada }, { kind: 'project', id: project }, { action: 'retire', targetTenetId: (await pool.query(`SELECT id FROM corpus_tenets WHERE binding_id=$1 AND superseded_at IS NULL`, [bindingId])).rows[0]?.id || imported.id, rationale: 'x' }), /imported_tenet_read_only|tenet_not_found/),
       'an imported tenet is changed in its directory, not here');
+
+    // ── 7. agent capabilities: verdict history and record (under the owner's admission)
+    const fresh = await admit(ada);
+    const rec = await corpusMcp.callTool(pool, { id: agentUser }, 'record_verdict', { tenet: tid, admission: fresh, state: 'held', observed: '0', instrument: 'node assays/builds.mjs' });
+    ok(rec.structuredContent.verdict.state === 'held' && rec.structuredContent.verdict.admissionId === fresh, 'an agent records a verdict under its owner’s run admission (corpus.verdict.record)');
+    const recRow = (await pool.query('SELECT * FROM corpus_verdicts WHERE id=$1', [rec.structuredContent.verdict.id])).rows[0];
+    ok(recRow.reported_by_user_id === agentUser && recRow.recorded_by_user_id === ada && corpus.verifyVerdict(recRow, trow, crypto.createPublicKey((await getSigningKey(pool)).privatePem)), 'it is reported by the agent, recorded for the owner, and verifies');
+    ok(await rejects(corpusMcp.callTool(pool, { id: agentUser }, 'record_verdict', { tenet: tid, admission: bobAdmission, state: 'held' }), /admission_not_yours/), 'an agent cannot record under someone else’s admission');
+    const hist2 = await corpusMcp.callTool(pool, { id: agentUser }, 'history', { tenet: tid });
+    ok(hist2.structuredContent.verdicts.length === 3 && hist2.structuredContent.verdicts[0].state === 'held', 'an agent reads the signed history (corpus.verdict.list)');
+
+    // ── 8. scope: proposing is a write, so a read-only workspace credential is refused
+    const conn = { categories: ['corpus'] };
+    const wtok = (scopes) => ({ id: agentUser, kind: 'agent', token: { audience: 'xeno-workspace', scopes, agentUserId: agentUser, ownerId: ada, workspaceId: null, via: 'key' } });
+    const args = { scope: 'project', id: project, tenet: tenet('engine#scoped'), rationale: 'x' };
+    const ro = await xenoMcp.callTool(pool, wtok(['workspace:read']), conn, 'corpus__proposal__create', args);
+    ok(JSON.stringify(ro.result).includes('scope_missing'), 'a read-only (workspace:read) credential cannot propose');
+    const rw = await xenoMcp.callTool(pool, wtok(['workspace:admin']), conn, 'corpus__proposal__create', args);
+    ok(!JSON.stringify(rw.result).includes('scope_missing'), 'the workspace write scope passes the scope gate');
+    const rq = await xenoMcp.callTool(pool, wtok(['workspace:read']), conn, 'corpus__corpus__query', { scope: 'project', id: project });
+    ok(!JSON.stringify(rq.result).includes('scope_missing'), 'and workspace:read still reads');
+
+    // ── 9. the Workspace architect reads a corpus as a source, cited by tenet id
+    const src = await gatherSources(pool, { id: ada }, { sources: [{ kind: 'corpus', scope: 'project', id: project }] });
+    const cited = src.passages.find((x) => x.chunkId === tid);
+    ok(cited && cited.kind === 'corpus' && /engine#builds/.test(cited.text) && src.unavailable.length === 0, 'the architect gets the project’s tenets as passages, each cited by tenet id');
+    ok(src.passages.some((x) => x.chunkId === doc.j.tenet.id), 'inherited doctrine reaches the architect too');
+    const srcEve = await gatherSources(pool, { id: eve }, { sources: [{ kind: 'corpus', scope: 'project', id: project }] });
+    ok(srcEve.passages.length === 0 && srcEve.unavailable.some((u) => u.kind === 'corpus'), 'a caller who cannot read the corpus gets it as unavailable, no text');
   } finally {
     server.close();
     await pool.end();
