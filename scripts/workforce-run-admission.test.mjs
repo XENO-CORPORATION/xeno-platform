@@ -169,6 +169,10 @@ test('a run is admitted from authoritative state, as the intersection of every r
     // Read-back is the actor's, and anyone who may act for the target; nobody else learns it exists.
     assert.equal((await readRunAdmission(pool, ctx(owner), a.admissionId)).admissionId, a.admissionId);
     await rejects(readRunAdmission(pool, ctx(outsider), a.admissionId), 'not_found', 'admission_not_found', 'an admission is not disclosed outside its target');
+    // D-4 (2026-10-20): acting for a workspace is not a read right on someone else's run; its admin (owner of record) reads.
+    const ownersRun = (await admitRun(pool, ctx(owner), base(lent, { kind: 'workspace', assignmentId: lentIn }, { capabilities: ['files.read'] }))).admission;
+    await rejects(readRunAdmission(pool, ctx(editor), ownersRun.admissionId), 'not_found', 'admission_not_found', 'D-4: a workspace editor does not read another person\'s run');
+    await rejects(readRunAdmission(pool, ctx(viewer), ownersRun.admissionId), 'not_found', 'admission_not_found', 'D-4: a workspace viewer does not read a run outside any project');
     // Both accounts may legitimately read this workspace. Permission alone does
     // not fence a prepared recovery request that switched authenticated accounts.
     await rejects(readRunAdmission(pool,ctx(owner),a.admissionId,{expectedActorAccountId:editor}),
@@ -289,6 +293,14 @@ test('a run is admitted from authoritative state, as the intersection of every r
     const narrow = await assignTo(lent.id, ws, division, explicit(['files.read']));
     const r = await admitRun(pool, ctx(editor), base(lent, { kind: 'workspace', assignmentId: narrow }));
     assert.deepEqual(r.admission.capabilities.effective, ['files.read'], 'a division grant is not unioned with its parent scope');
+    // D-4: the head of the division a run executes in reads it, without any workspace relation.
+    const head = await user('div-head');
+    const headed = (await pool.query(`INSERT INTO workforce_divisions(workspace_id,key,name,created_by_user_id,head_principal_id) VALUES($1,'headed','Headed',$2,$3) RETURNING id`,
+      [ws, owner, head])).rows[0].id;
+    await inDivision(headed, editor);
+    const headedRun = (await admitRun(pool, ctx(editor), base(lent, { kind: 'workspace', assignmentId: await assignTo(lent.id, ws, headed, explicit(['files.read'])) }))).admission;
+    assert.equal((await readRunAdmission(pool, ctx(head), headedRun.admissionId)).admissionId, headedRun.admissionId, 'D-4: the division head reads a run in their division');
+    await rejects(readRunAdmission(pool, ctx(head), r.admission.admissionId), 'not_found', 'admission_not_found', 'D-4: a head reads only their own division\'s runs');
     assert.ok(wide);
     // An explicitly INHERITING grant takes exactly its bound parent's set -- and nothing once that parent dies.
     const studioDivision = (await pool.query(`INSERT INTO workforce_divisions(workspace_id,key,name,created_by_user_id)
@@ -497,6 +509,13 @@ test('a run is admitted from authoritative state, as the intersection of every r
     assert.equal(r.admission.root.bindingId, binding, 'the root binding is recorded');
     assert.equal(r.admission.conversationId, conv, 'the conversation is recorded');
     assert.deepEqual(r.admission.capabilities.effective, ['files.read']);
+    // D-4: a reader of the run's project reads it (and lists it), though they could never admit one.
+    // (The project's parent tuple, as createAuthorizedProject writes it.)
+    await pool.query(`INSERT INTO relationship_tuples(object_type,object_id,relation,subject_type,subject_id) VALUES('project',$1,'parent','workspace',$2)`, [proj, studio]);
+    assert.equal((await readRunAdmission(pool, ctx(viewer), r.admission.admissionId)).admissionId, r.admission.admissionId, 'D-4: a project reader reads the project\'s run');
+    const { listRunAdmissions } = await import('../src/server/services/workforceRunAdmission.js');
+    assert.ok((await listRunAdmissions(pool, ctx(viewer), { projectId: proj })).admissions.some((x) => x.admissionId === r.admission.admissionId), 'D-4: the list applies the same rule');
+    await rejects(readRunAdmission(pool, ctx(outsider), r.admission.admissionId), 'not_found', 'admission_not_found', 'D-4: a non-reader does not');
     const elsewhere = (await pool.query(`INSERT INTO chat_conversations(title,workspace_id,created_by_user_id) VALUES('x',$1,$2) RETURNING id`, [studio, editor])).rows[0].id;
     await rejects(admitRun(pool, ctx(editor), base(lent, { kind: 'project', projectId: proj, participationId: pIn }, { conversationId: elsewhere })),
       'conflict', 'conversation_outside_target', 'a conversation outside the target is refused');

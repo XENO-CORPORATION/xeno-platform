@@ -184,6 +184,29 @@ async function readsWorkspace(db, who, workspaceId) {
   return verdict.allowed && ['direct', ...(who.principal.kind === 'human' ? ['role-hierarchy'] : [])].includes(verdict.via);
 }
 
+/** D-4 (workforce spec §8.11.1, DECIDED 2026-10-20): who may READ a run. The admitting actor (checked by the
+ * caller), the payer, a reader of the run's project, the head of the division the run executes in, and the
+ * accountable owner of the target scope (the personal owner, or an ADMIN of the target workspace -- D-1: the
+ * workspace is the owner of record). Being able to act for a workspace is NOT a read right on other people's
+ * runs, and a renter sees only the runs they admitted or paid for (their partition): an agent's seller is none
+ * of the above. `memo` caches the per-scope answers for a list. */
+async function readsRun(db, who, row, memo = new Map()) {
+  const me = who.principal.id;
+  if (row.payer_user_id === me) return true;
+  if (!row.target_workspace_id && row.target_owner_user_id === me) return true;
+  const cached = async (key, fn) => { if (!memo.has(key)) memo.set(key, await fn()); return memo.get(key); };
+  if (row.target_workspace_id && await cached(`admin:${row.target_workspace_id}`, async () => {
+    const v = await check(db, { object: `workspace:${row.target_workspace_id}`, relation: 'admin', subject: who.subject });
+    return v.allowed && ['direct', ...(who.principal.kind === 'human' ? ['role-hierarchy'] : [])].includes(v.via);
+  })) return true;
+  if (row.project_id && await cached(`project:${row.project_id}`, async () =>
+    (await check(db, { object: `project:${row.project_id}`, relation: 'viewer', subject: who.subject })).allowed)) return true;
+  if (row.assignment_id && await cached(`head:${row.assignment_id}`, async () => (await db.query(
+    `SELECT 1 FROM workforce_workspace_assignments a JOIN workforce_divisions d ON d.id = a.target_division_id
+      WHERE a.id = $1 AND d.head_principal_id = $2`, [row.assignment_id, me])).rows.length > 0)) return true;
+  return false;
+}
+
 /** DIV-08: may this principal act INSIDE this division? A division is an execution boundary, decided
  * by the existing ReBAC service (DIV-10: no division-specific permission engine or roster):
  *   - a human who administers the WORKSPACE acts in every division of it -- the workspace remains the
@@ -694,9 +717,8 @@ export async function readRunAdmission(pool, authenticatedContext, admissionId, 
     if (!row) fail('not_found', 'admission_not_found');
     if (row.actor_user_id !== actorUserId) {
       const who = await actorPrincipal(db, actorUserId);
-      const allowed = row.target_workspace_id ? await actsForWorkspace(db, who, row.target_workspace_id) : who.principal.id === row.target_owner_user_id;
       // Existence is not disclosed to someone who could not see it.
-      if (!allowed) fail('not_found', 'admission_not_found');
+      if (!(await readsRun(db, who, row))) fail('not_found', 'admission_not_found');
     }
     return publicAdmission(row);
   });
@@ -720,9 +742,7 @@ export async function listRunAdmissions(pool, authenticatedContext, value = {}) 
     for (const row of rows) {
       if (row.actor_user_id !== actorUserId) {
         who ??= await actorPrincipal(db, actorUserId);
-        const key = row.target_workspace_id || `u:${row.target_owner_user_id}`;
-        if (!seen.has(key)) seen.set(key, row.target_workspace_id ? await actsForWorkspace(db, who, row.target_workspace_id) : who.principal.id === row.target_owner_user_id);
-        if (!seen.get(key)) continue;
+        if (!(await readsRun(db, who, row, seen))) continue;
       }
       out.push(publicAdmission(row));
     }
