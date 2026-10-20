@@ -441,6 +441,9 @@
       if (s.global === 'market') return market(it);
       if (s.global === 'settings') return window.XENO_SETTINGS.render(it);
     }
+    // a live area that addresses its own records (`items: true`, e.g. Write and Notes by file id) draws them itself
+    if (s.view === 'zone' && it) { const x = X(), z = x.zoneNow(), mk = z.of || x.zoneKey(), zid = z.of ? z.id.slice(z.of.length + 1) : z.id, L = (window.XENO_ZONE_LIVE || {})[mk + '.' + zid];
+      if (L && L.items && L.page) return mod('area:' + window.XENO_ADDR.current().split('?')[0], () => L.page(z)); }
     if (s.view === 'zone') return it ? mod('zone:' + it, () => itemPage(it)) : mod('area:' + window.XENO_ADDR.current().split('?')[0], () => areaPage());
     if (s.view === 'product') { if (PR[s.product]?.kind === 'chat' || (s.product === 'storage' && window.XENO_STORAGE) || (s.product === 'mcp' && window.XENO_MCP)) return null; /* Storage draws its own page on the real meter (platform-storage.js) */ return it ? (window.XENO_PRODUCT_NAV[s.product]?.views?.includes(it) ? productView(it) : itemPage(it)) : productPage(); }
     return null;
