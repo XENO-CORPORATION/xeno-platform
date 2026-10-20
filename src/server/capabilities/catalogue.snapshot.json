@@ -100,6 +100,90 @@
    ]
   },
   {
+   "name": "people.person.list",
+   "wire": "people__person__list",
+   "version": "1.0.0",
+   "class": "safe",
+   "scope": "workspace:read",
+   "surfaces": [
+    "mcp",
+    "rest"
+   ],
+   "aliases": [
+    "people_directory"
+   ]
+  },
+  {
+   "name": "people.person.get",
+   "wire": "people__person__get",
+   "version": "1.0.0",
+   "class": "safe",
+   "scope": "workspace:read",
+   "surfaces": [
+    "mcp",
+    "rest"
+   ],
+   "aliases": [
+    "people_get"
+   ]
+  },
+  {
+   "name": "people.org.chart",
+   "wire": "people__org__chart",
+   "version": "1.0.0",
+   "class": "safe",
+   "scope": "workspace:read",
+   "surfaces": [
+    "mcp",
+    "rest"
+   ],
+   "aliases": [
+    "people_org_chart"
+   ]
+  },
+  {
+   "name": "people.work.mine",
+   "wire": "people__work__mine",
+   "version": "1.0.0",
+   "class": "safe",
+   "scope": "workspace:read",
+   "surfaces": [
+    "mcp",
+    "rest"
+   ],
+   "aliases": [
+    "people_my_work"
+   ]
+  },
+  {
+   "name": "people.person.update",
+   "wire": "people__person__update",
+   "version": "1.0.0",
+   "class": "undoable",
+   "scope": "workspace:admin",
+   "surfaces": [
+    "mcp",
+    "rest"
+   ],
+   "aliases": [
+    "people_update_profile"
+   ]
+  },
+  {
+   "name": "people.time_off.create",
+   "wire": "people__time_off__create",
+   "version": "1.0.0",
+   "class": "undoable",
+   "scope": "workspace:admin",
+   "surfaces": [
+    "mcp",
+    "rest"
+   ],
+   "aliases": [
+    "people_add_time_off"
+   ]
+  },
+  {
    "name": "corpus.corpus.query",
    "wire": "corpus__corpus__query",
    "version": "1.0.0",
@@ -132,13 +216,41 @@
    "wire": "corpus__proposal__create",
    "version": "1.0.0",
    "class": "undoable",
-   "scope": "workspace:read",
+   "scope": "workspace:admin",
    "surfaces": [
     "mcp",
     "rest"
    ],
    "aliases": [
     "corpus_propose"
+   ]
+  },
+  {
+   "name": "corpus.verdict.list",
+   "wire": "corpus__verdict__list",
+   "version": "1.0.0",
+   "class": "safe",
+   "scope": "workspace:read",
+   "surfaces": [
+    "mcp",
+    "rest"
+   ],
+   "aliases": [
+    "corpus_history"
+   ]
+  },
+  {
+   "name": "corpus.verdict.record",
+   "wire": "corpus__verdict__record",
+   "version": "1.0.0",
+   "class": "irreversible",
+   "scope": "agents:write",
+   "surfaces": [
+    "mcp",
+    "rest"
+   ],
+   "aliases": [
+    "corpus_record_verdict"
    ]
   },
   {
@@ -1399,6 +1511,118 @@
    ],
    "aliases": [
     "support_triage"
+   ]
+  },
+  {
+   "name": "docs.doc.list",
+   "wire": "docs__doc__list",
+   "version": "1.0.0",
+   "class": "safe",
+   "scope": "docs:read",
+   "surfaces": [
+    "mcp",
+    "rest"
+   ],
+   "aliases": [
+    "docs_list_docs"
+   ]
+  },
+  {
+   "name": "docs.doc.get",
+   "wire": "docs__doc__get",
+   "version": "1.0.0",
+   "class": "safe",
+   "scope": "docs:read",
+   "surfaces": [
+    "mcp",
+    "rest"
+   ],
+   "aliases": [
+    "docs_get_doc"
+   ]
+  },
+  {
+   "name": "docs.doc.create",
+   "wire": "docs__doc__create",
+   "version": "1.0.0",
+   "class": "undoable",
+   "scope": "docs:write",
+   "surfaces": [
+    "mcp",
+    "rest"
+   ],
+   "aliases": [
+    "docs_create_doc"
+   ]
+  },
+  {
+   "name": "docs.doc.save",
+   "wire": "docs__doc__save",
+   "version": "1.0.0",
+   "class": "undoable",
+   "scope": "docs:write",
+   "surfaces": [
+    "mcp",
+    "rest"
+   ],
+   "aliases": [
+    "docs_save_doc"
+   ]
+  },
+  {
+   "name": "docs.version.list",
+   "wire": "docs__version__list",
+   "version": "1.0.0",
+   "class": "safe",
+   "scope": "docs:read",
+   "surfaces": [
+    "mcp",
+    "rest"
+   ],
+   "aliases": [
+    "docs_list_versions"
+   ]
+  },
+  {
+   "name": "docs.version.restore",
+   "wire": "docs__version__restore",
+   "version": "1.0.0",
+   "class": "undoable",
+   "scope": "docs:write",
+   "surfaces": [
+    "mcp",
+    "rest"
+   ],
+   "aliases": [
+    "docs_restore_version"
+   ]
+  },
+  {
+   "name": "docs.doc.trash",
+   "wire": "docs__doc__trash",
+   "version": "1.0.0",
+   "class": "undoable",
+   "scope": "docs:write",
+   "surfaces": [
+    "mcp",
+    "rest"
+   ],
+   "aliases": [
+    "docs_trash_doc"
+   ]
+  },
+  {
+   "name": "docs.doc.untrash",
+   "wire": "docs__doc__untrash",
+   "version": "1.0.0",
+   "class": "undoable",
+   "scope": "docs:write",
+   "surfaces": [
+    "mcp",
+    "rest"
+   ],
+   "aliases": [
+    "docs_untrash_doc"
    ]
   },
   {

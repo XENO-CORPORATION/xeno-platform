@@ -43,7 +43,7 @@
         <div class="xsu-rooms" aria-label="What you get">${pk.mode.products.map((p) => `<span class="xsu-room">${esc(X()?.PR?.[p]?.name || p)}</span>`).join('')}</div><small class="xsu-why">Because: ${cites(x.mode.cites)}</small>
         <h4 class="xsu-h4">First tasks</h4><ul class="xsu-tasks">${pk.tasks.map((t, i) => { const c = (x.tasks.find((y) => y.title === t.title) || {}).cites; return `<li><input data-xsu-task="${i}" value="${esc(t.title)}" maxlength="300"> <button type="button" class="xd-btn ghost" data-xsu="task-del" data-arg="${i}" aria-label="Remove">✕</button>${c ? `<small class="xsu-why">${cites(c)}</small>` : ''}</li>`; }).join('')}</ul>
         <button type="button" class="xd-btn ghost" data-xsu="task-add">Add a task</button>
-        ${extra.map((k) => `<h4 class="xsu-h4">${esc(k[0].toUpperCase() + k.slice(1))} <small>(suggested — set these up when you are ready)</small></h4><ul class="xsu-tasks" data-xsu-sugg="${k}">${x[k].map((e) => `<li>${esc(e.name || e.title || e.area)}${e.purpose || e.role || e.goal || e.measure || e.placement ? ` — <small>${esc(e.purpose || e.role || e.goal || e.measure || e.placement)}</small>` : ''} <small class="xsu-why">${cites(e.cites)}</small></li>`).join('')}</ul>`).join('')}
+        ${extra.map((k) => `<h4 class="xsu-h4">${esc(k[0].toUpperCase() + k.slice(1))} <small>${k === 'layout' ? '(a note for your building)' : '(set up with it, unless already there)'}</small></h4><ul class="xsu-tasks" data-xsu-sugg="${k}">${x[k].map((e) => `<li>${esc(e.name || e.title || e.area)}${e.purpose || e.role || e.goal || e.measure || e.placement ? ` — <small>${esc(e.purpose || e.role || e.goal || e.measure || e.placement)}</small>` : ''} <small class="xsu-why">${cites(e.cites)}</small></li>`).join('')}</ul>`).join('')}
         ${pr.sources.unavailable.length ? `<p class="xsu-p">${pr.sources.unavailable.length} item${pr.sources.unavailable.length === 1 ? ' was' : 's were'} not read (not yours to open, or not ready).</p>` : ''}
         <div class="xsu-act"><button type="button" class="xd-btn ghost" data-xsu="back">Back</button><button type="button" class="xd-btn" data-xsu="use">Next</button></div>`;
     }
@@ -54,6 +54,7 @@
       const PR = X()?.PR || {};
       return `<h3 class="xsu-h">Here is your workspace</h3><p class="xsu-p">${esc(st.answers.businessName || st.pack.title || '')} · in ${esc(pl.workspaceName)}</p>
         <div class="xsu-rooms" aria-label="What you get">${mode.products.map((p) => `<span class="xsu-room">${esc(PR[p]?.name || p)}</span>`).join('')}</div>
+        ${[['division', 'Divisions'], ['team', 'Teams'], ['agent', 'Helpers'], ['project', 'Projects'], ['objective', 'Objectives']].map(([t, h]) => { const rs = pl.records.filter((r) => r.type === t && (r.key || t !== 'project')); return rs.length ? `<h4 class="xsu-h4">${h}</h4><ul class="xsu-tasks" data-xsu-plan="${t}">${rs.map((r) => `<li>${esc(r.name || r.title)}</li>`).join('')}</ul>` : ''; }).join('')}
         <h4 class="xsu-h4">Waiting for you first</h4><ul class="xsu-tasks">${tasks.map((t) => `<li>${esc(t.title)}</li>`).join('')}</ul>
         <p class="xsu-p">Nothing is charged for this setup. You can undo it later; anything you change is kept.</p>
         ${pl.conflicts.length ? '<p class="xsu-err" role="alert">This setup is already in your workspace.</p>' : ''}

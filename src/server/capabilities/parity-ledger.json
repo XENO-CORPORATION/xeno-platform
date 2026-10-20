@@ -127,10 +127,16 @@
   "platform-support.js": "support",
   "workspaceAnalyticsRoutes.js": "analytics",
   "platform-analytics.js": "analytics",
+  "formsRoutes.js": "forms",
+  "platform-forms.js": "forms",
   "corpusRoutes.js": "workspace",
   "platform-corpus.js": "workspace",
   "orchestratorRoutes.js": "workforce",
-  "workforceEventRoutes.js": "workforce"
+  "workforceEventRoutes.js": "workforce",
+  "workforcePeopleRoutes.js": "workforce",
+  "platform-directory.js": "workforce",
+  "workspaceDocsRoutes.js": "docs",
+  "platform-docs.js": "docs"
  },
  "actions": {
   "route:accountGiftRoutes.js:POST /": {
@@ -8299,7 +8305,7 @@
    "status": "capability",
    "capability": "corpus.proposal.create",
    "class": "reversible",
-   "scope": "workspace:read"
+   "scope": "workspace:admin"
   },
   "route:corpusRoutes.js:POST /:scope/:id/tenets": {
    "status": "excluded",
@@ -8317,12 +8323,14 @@
    "because": "ratifying turns a proposal into truth; an agent deciding proposals (its own included) is what D211 forbids, and the database refuses it"
   },
   "route:corpusRoutes.js:GET /tenets/:id/verdicts": {
-   "status": "planned",
+   "status": "capability",
+   "capability": "corpus.verdict.list",
    "class": "safe",
    "scope": "workspace:read"
   },
   "route:corpusRoutes.js:POST /tenets/:id/verdicts": {
-   "status": "planned",
+   "status": "capability",
+   "capability": "corpus.verdict.record",
    "class": "irreversible",
    "scope": "agents:write"
   },
@@ -8359,7 +8367,7 @@
    "status": "capability",
    "capability": "corpus.proposal.create",
    "class": "reversible",
-   "scope": "workspace:read"
+   "scope": "workspace:admin"
   },
   "ui:platform-corpus.js:data-xcp=ratify": {
    "status": "excluded",
@@ -8430,6 +8438,270 @@
    "capability": "audit.event.list",
    "class": "safe",
    "scope": "workspace:read"
+  },
+  "route:workforcePeopleRoutes.js:GET /": {
+   "status": "capability",
+   "capability": "people.person.list",
+   "class": "safe",
+   "scope": "workspace:read"
+  },
+  "route:workforcePeopleRoutes.js:GET /org-chart": {
+   "status": "capability",
+   "capability": "people.org.chart",
+   "class": "safe",
+   "scope": "workspace:read"
+  },
+  "route:workforcePeopleRoutes.js:GET /me/work": {
+   "status": "capability",
+   "capability": "people.work.mine",
+   "class": "safe",
+   "scope": "workspace:read"
+  },
+  "route:workforcePeopleRoutes.js:GET /:principalId": {
+   "status": "capability",
+   "capability": "people.person.get",
+   "class": "safe",
+   "scope": "workspace:read"
+  },
+  "route:workforcePeopleRoutes.js:PATCH /:principalId": {
+   "status": "capability",
+   "capability": "people.person.update",
+   "class": "reversible",
+   "scope": "workspace:admin"
+  },
+  "route:workforcePeopleRoutes.js:POST /time-off": {
+   "status": "capability",
+   "capability": "people.time_off.create",
+   "class": "reversible",
+   "scope": "workspace:admin"
+  },
+  "route:workforcePeopleRoutes.js:POST /time-off/:id/cancel": {
+   "status": "planned",
+   "class": "reversible",
+   "scope": "workspace:admin"
+  },
+  "route:workforcePeopleRoutes.js:POST /:principalId/onboard": {
+   "status": "planned",
+   "class": "reversible",
+   "scope": "workspace:admin"
+  },
+  "route:workforcePeopleRoutes.js:GET /:principalId/offboard-plan": {
+   "status": "planned",
+   "class": "safe",
+   "scope": "workspace:admin"
+  },
+  "route:workforcePeopleRoutes.js:POST /:principalId/offboard": {
+   "status": "planned",
+   "class": "irreversible",
+   "scope": "workspace:admin"
+  },
+  "ui:platform-directory.js:data-xdir=tab": {
+   "status": "excluded",
+   "category": "view-state",
+   "class": "safe",
+   "scope": "none",
+   "because": "switches between the directory, org chart and my-work views"
+  },
+  "ui:platform-directory.js:data-xdir=open": {
+   "status": "excluded",
+   "category": "view-state",
+   "class": "safe",
+   "scope": "none",
+   "because": "opens a person’s page"
+  },
+  "ui:platform-directory.js:data-xdir=edit": {
+   "status": "capability",
+   "capability": "people.person.update",
+   "class": "reversible",
+   "scope": "workspace:admin"
+  },
+  "ui:platform-directory.js:data-xdir=time-off": {
+   "status": "capability",
+   "capability": "people.time_off.create",
+   "class": "reversible",
+   "scope": "workspace:admin"
+  },
+  "ui:platform-directory.js:data-xdir=onboard": {
+   "status": "planned",
+   "class": "reversible",
+   "scope": "workspace:admin"
+  },
+  "ui:platform-directory.js:data-xdir=offboard": {
+   "status": "planned",
+   "class": "irreversible",
+   "scope": "workspace:admin"
+  },
+  "route:workspaceDocsRoutes.js:GET /": {
+   "status": "capability",
+   "capability": "docs.doc.list",
+   "class": "safe",
+   "scope": "docs:read"
+  },
+  "route:workspaceDocsRoutes.js:POST /": {
+   "status": "capability",
+   "capability": "docs.doc.create",
+   "class": "reversible",
+   "scope": "docs:write"
+  },
+  "route:workspaceDocsRoutes.js:GET /:id": {
+   "status": "capability",
+   "capability": "docs.doc.get",
+   "class": "safe",
+   "scope": "docs:read"
+  },
+  "route:workspaceDocsRoutes.js:PUT /:id": {
+   "status": "capability",
+   "capability": "docs.doc.save",
+   "class": "reversible",
+   "scope": "docs:write"
+  },
+  "route:workspaceDocsRoutes.js:GET /:id/versions": {
+   "status": "capability",
+   "capability": "docs.version.list",
+   "class": "safe",
+   "scope": "docs:read"
+  },
+  "route:workspaceDocsRoutes.js:POST /:id/versions/:versionId/restore": {
+   "status": "capability",
+   "capability": "docs.version.restore",
+   "class": "reversible",
+   "scope": "docs:write"
+  },
+  "route:workspaceDocsRoutes.js:POST /:id/trash": {
+   "status": "capability",
+   "capability": "docs.doc.trash",
+   "class": "reversible",
+   "scope": "docs:write"
+  },
+  "route:workspaceDocsRoutes.js:POST /:id/untrash": {
+   "status": "capability",
+   "capability": "docs.doc.untrash",
+   "class": "reversible",
+   "scope": "docs:write"
+  },
+  "ui:platform-docs.js:data-dc-page": {
+   "status": "capability",
+   "capability": "docs.doc.get",
+   "class": "safe",
+   "scope": "docs:read"
+  },
+  "ui:platform-docs.js:data-dc-search": {
+   "status": "capability",
+   "capability": "docs.doc.list",
+   "class": "safe",
+   "scope": "docs:read"
+  },
+  "route:formsRoutes.js:DELETE /:id": {
+   "status": "planned",
+   "class": "reversible",
+   "scope": "forms:write"
+  },
+  "route:formsRoutes.js:DELETE /:id/responses/:rid": {
+   "status": "planned",
+   "class": "irreversible",
+   "scope": "forms:write"
+  },
+  "route:formsRoutes.js:GET /": {
+   "status": "capability",
+   "capability": "forms.form.list",
+   "class": "safe",
+   "scope": "forms:read"
+  },
+  "route:formsRoutes.js:GET /:id": {
+   "status": "capability",
+   "capability": "forms.form.get",
+   "class": "safe",
+   "scope": "forms:read"
+  },
+  "route:formsRoutes.js:GET /:id/responses": {
+   "status": "capability",
+   "capability": "forms.response.list",
+   "class": "safe",
+   "scope": "forms:read"
+  },
+  "route:formsRoutes.js:GET /:id/responses.csv": {
+   "status": "excluded",
+   "category": "covered-by",
+   "of": "route:formsRoutes.js:GET /:id/responses",
+   "class": "safe",
+   "scope": "none",
+   "because": "the same responses list_responses returns"
+  },
+  "route:formsRoutes.js:GET /:id/responses/:rid": {
+   "status": "excluded",
+   "category": "covered-by",
+   "of": "route:formsRoutes.js:GET /:id/responses",
+   "class": "safe",
+   "scope": "none",
+   "because": "the same responses list_responses returns"
+  },
+  "route:formsRoutes.js:GET /public/:token": {
+   "status": "excluded",
+   "category": "unauthenticated",
+   "class": "safe",
+   "scope": "none",
+   "because": "the respondent’s side of a form link: answering it needs no XENO account and is not an action in a workspace"
+  },
+  "route:formsRoutes.js:GET /public/:token/form": {
+   "status": "excluded",
+   "category": "unauthenticated",
+   "class": "safe",
+   "scope": "none",
+   "because": "the respondent’s side of a form link: answering it needs no XENO account and is not an action in a workspace"
+  },
+  "route:formsRoutes.js:PATCH /:id": {
+   "status": "capability",
+   "capability": "forms.form.update",
+   "class": "reversible",
+   "scope": "forms:write"
+  },
+  "route:formsRoutes.js:POST /": {
+   "status": "capability",
+   "capability": "forms.form.create",
+   "class": "reversible",
+   "scope": "forms:write"
+  },
+  "route:formsRoutes.js:POST /:id/links": {
+   "status": "capability",
+   "capability": "forms.link.create",
+   "class": "reversible",
+   "scope": "forms:write"
+  },
+  "route:formsRoutes.js:POST /:id/links/:linkId/revoke": {
+   "status": "planned",
+   "class": "reversible",
+   "scope": "forms:write"
+  },
+  "route:formsRoutes.js:POST /:id/responses/:rid/actions": {
+   "status": "capability",
+   "capability": "forms.response.act",
+   "class": "reversible",
+   "scope": "forms:write"
+  },
+  "route:formsRoutes.js:POST /:id/restore": {
+   "status": "planned",
+   "class": "reversible",
+   "scope": "forms:write"
+  },
+  "route:formsRoutes.js:POST /public/:token": {
+   "status": "excluded",
+   "category": "unauthenticated",
+   "class": "reversible",
+   "scope": "none",
+   "because": "the respondent’s side of a form link: answering it needs no XENO account and is not an action in a workspace"
+  },
+  "route:formsRoutes.js:POST /public/:token/responses": {
+   "status": "excluded",
+   "category": "unauthenticated",
+   "class": "reversible",
+   "scope": "none",
+   "because": "the respondent’s side of a form link: answering it needs no XENO account and is not an action in a workspace"
+  },
+  "ui:platform-forms.js:data-fm-page": {
+   "status": "capability",
+   "capability": "forms.form.list",
+   "class": "safe",
+   "scope": "forms:read"
   }
  }
 }

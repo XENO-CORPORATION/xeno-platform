@@ -23,6 +23,7 @@ import { check } from '../utils/authzReBAC.js';
 import { resolvePrincipal } from './agentIdentity.js';
 import { withTransaction } from './chatProjectAuthority.js';
 import { hostOf } from './projectDirectoryBindings.js';
+import { registerSourceProvider } from './workspaceArchitect.js';
 
 export class CorpusError extends Error {
   constructor(message, code, status = 400) { super(message); this.name = 'CorpusError'; this.code = code; this.status = status; }
@@ -435,3 +436,22 @@ export async function importFromDirectory(db, auth, projectId, { bindingId, tene
     return { corpus: { id: String(corpus.id), subject: scope.subject }, ...report };
   });
 }
+
+// ───────────────────────────── the Workspace architect reads a corpus as a source (services/workspaceArchitect.js)
+
+/**
+ * A source `{ kind: 'corpus', scope: 'workspace'|'division'|'project', id }`: the tenets and doctrine the caller can
+ * read in that scope, one passage each, cited by TENET ID (chunkId). Narrower scopes' tenets arrive by reference
+ * (key + state), never their content. A scope the caller cannot read yields no passages (reported unavailable).
+ */
+export async function corpusPassages(db, actor, source = {}) {
+  let c; try { c = await readCorpus(db, { id: actor.id }, { kind: String(source.scope || 'project'), id: String(source.id || '') }); } catch { return { passages: [] }; }
+  const line = (t) => `${t.kind === 'doctrine' ? 'Doctrine' : 'Tenet'} ${t.key}: ${t.claim}${t.kind === 'tenet' ? ` (latest verdict: ${t.latest?.state || 'never assayed'})` : ''}`;
+  const passages = [
+    ...c.tenets.map((t) => ({ chunkId: t.id, name: `Corpus ${t.key}`, text: line(t) })),
+    ...c.inheritedDoctrine.map((t) => ({ chunkId: t.id, name: `Corpus ${t.key}`, text: line(t) + ` (from ${t.from})` })),
+    ...c.aggregated.map((t) => ({ chunkId: t.id, name: `Corpus ${t.key}`, text: `Tenet ${t.key} in ${t.from}: latest verdict ${t.state || 'never assayed'}` })),
+  ];
+  return { passages };
+}
+registerSourceProvider('corpus', corpusPassages);

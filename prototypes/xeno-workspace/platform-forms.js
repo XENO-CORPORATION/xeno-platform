@@ -59,6 +59,7 @@
   window.XENO_ZONE_LIVE = window.XENO_ZONE_LIVE || {};
   window.XENO_ZONE_LIVE['corpo.forms'] = {
     served: true,
+    items: true,   // it draws its own sub-addresses: a form, its responses, the fill view
     work: () => (S.status === 'ready' && S.forms ? ['Forms', S.forms.slice(0, 6).map((f) => [f.title, `${f.status} · ${f.responses} response${f.responses === 1 ? '' : 's'}`, null, 'Forms'])] : null),
     badge: () => null,
     page: () => page(),

@@ -19,10 +19,13 @@ import * as placesMcp from '../services/placesMcp.js';
 import * as modesMcp from '../services/modesMcp.js';
 import * as corpusMcp from '../services/corpusMcp.js';
 import { MODES_ROWS } from './modes.js';
+import { PEOPLE_ROWS } from './people.js';
+import * as peopleMcp from '../services/peopleMcp.js';
 import * as storageMcp from '../services/storageMcp.js';
 import * as supportMcp from '../services/supportMcp.js';
 import * as publishMcp from '../services/publishMcp.js';
 import * as analyticsMcp from '../services/analyticsMcp.js';
+import * as docsMcp from '../services/docsMcp.js';
 import * as workforceMcp from '../services/workforceMcp.js';
 import * as formsMcp from '../services/formsMcp.js';
 
@@ -30,7 +33,7 @@ import * as formsMcp from '../services/formsMcp.js';
 export const BOUND_TOOLS = Object.freeze({
   tasks: tasksMcp.TOOLS, canvas: canvasMcp.TOOLS, agents: agentsMcp.TOOLS,
   image: agentMediaMcp.IMAGE.tools, video: agentMediaMcp.VIDEO.tools, library: agentMediaMcp.LIBRARY.tools, chat: agentMediaMcp.CHAT.tools,
-  forum: forumMcp.TOOLS.map((t) => ({ ...t, name: t.name.replace(/^forum_/, '') })), places: placesMcp.TOOLS, storage: storageMcp.TOOLS, support: supportMcp.TOOLS, publish: publishMcp.TOOLS, analytics: analyticsMcp.TOOLS, forms: formsMcp.TOOLS, modes: modesMcp.TOOLS, corpus: corpusMcp.TOOLS, workforce: workforceMcp.TOOLS,
+  forum: forumMcp.TOOLS.map((t) => ({ ...t, name: t.name.replace(/^forum_/, '') })), places: placesMcp.TOOLS, storage: storageMcp.TOOLS, support: supportMcp.TOOLS, publish: publishMcp.TOOLS, analytics: analyticsMcp.TOOLS, docs: docsMcp.TOOLS, forms: formsMcp.TOOLS, modes: modesMcp.TOOLS, people: peopleMcp.TOOLS, corpus: corpusMcp.TOOLS, workforce: workforceMcp.TOOLS,
 });
 
 const obj = (properties, required) => ({ type: 'object', properties, ...(required ? { required } : {}) });
@@ -46,11 +49,16 @@ const READ = NAT('reads change nothing');
 const ROWS = [
   // ── modes (custom modes + trade packs; rows in ./modes.js)
   ...MODES_ROWS,
+  // ── people (employee profiles, org chart, directory, time off; rows in ./people.js)
+  ...PEOPLE_ROWS,
   // ── corpus (XENO CORPUS - SPEC.md; services/xenoCorpus.js). No new scope name (scopes are one-way): reading is
-  // workspace:read, and a proposal is workspace:read too because it changes nothing until a PERSON ratifies it.
+  // workspace:read; proposing writes a record, so it needs the workspace area's write scope (workspace:admin); recording
+  // a verdict is an admitted run's act, so it needs agents:write.
   ['corpus.corpus.query', 'corpus', 'query', 'safe', { scope: 'workspace:read', provenance: 'untrusted', reply: obj({ corpus: { type: 'object', description: 'id, scope, scopeId, subject, workspaceId.' }, tenets: { type: 'array', description: 'Own live tenets: key, kind, subject, claim, assay, expect, cadence, latest (signed verdict or null), freshness.' }, inheritedDoctrine: { type: 'array', description: 'Doctrine from wider scopes, binding here (from = where it lives).' }, aggregated: { type: 'array', description: 'Narrower scopes’ tenets BY REFERENCE: id, key, subject, from, state, freshness.' } }, ['corpus', 'tenets']) }],
   ['corpus.corpus.assess', 'corpus', 'assess', 'safe', { scope: 'workspace:read', reply: obj({ corpus: { type: 'object' }, summary: { type: 'object', description: 'tenets, held, lapsed, error, never, aging.' }, tenets: { type: 'array', description: 'id, key, from, state, freshness (fresh|due|warn|expired|never), stale.' } }, ['summary', 'tenets']) }],
-  ['corpus.proposal.create', 'corpus', 'propose', 'undoable', { scope: 'workspace:read', idempotency: NONE('no request key yet: a retried call files a second proposal (each is decided by a person)'), reply: obj({ proposal: { type: 'object', description: 'id, action, tenet, rationale, state ("proposed" until a person ratifies or rejects it).' }, note: { type: 'string' } }, ['proposal']) }],
+  ['corpus.proposal.create', 'corpus', 'propose', 'undoable', { scope: 'workspace:admin', idempotency: NONE('no request key yet: a retried call files a second proposal (each is decided by a person)'), reply: obj({ proposal: { type: 'object', description: 'id, action, tenet, rationale, state ("proposed" until a person ratifies or rejects it).' }, note: { type: 'string' } }, ['proposal']) }],
+  ['corpus.verdict.list', 'corpus', 'history', 'safe', { scope: 'workspace:read', reply: obj({ tenet: { type: 'object', description: 'The tenet with its latest verdict.' }, verdicts: { type: 'array', description: 'Newest first: id, state, observed, instrument, at, admissionId, hash, prevHash, kid, signature.' } }, ['tenet', 'verdicts']) }],
+  ['corpus.verdict.record', 'corpus', 'record_verdict', 'irreversible', { scope: 'agents:write', idempotency: NONE('no request key yet: a retried call records a second verdict (both are kept, chained)'), reply: obj({ verdict: { type: 'object', description: 'id, state, at, admissionId, hash, prevHash, kid, signature, and `signed` (the exact body signed).' } }, ['verdict']) }],
   // ── tasks
   ['tasks.project.list', 'tasks', 'list_projects', 'safe', { reply: obj({ projects: { type: 'array', description: 'id, name, area of each project you can work in.' }, hint: { type: 'string', description: 'Set when you have none: what to ask the person for.' } }) }],
   ['tasks.task.list_mine', 'tasks', 'list_my_tasks', 'safe', { reply: obj({ tasks: { type: 'array', description: 'key, title, status, priority, project, url of each open task assigned (person) or delegated (agent) to you.' }, unassigned: { type: 'array', description: 'With a project: up to 50 open tasks nobody holds that you could take.' }, hint: { type: 'string' } }, ['tasks']) }],
@@ -133,6 +141,15 @@ const ROWS = [
   ['support.ticket.get', 'support', 'get_ticket', 'safe', { provenance: 'untrusted', reply: obj({ ticket: { type: 'object', description: 'The request and its messages (the customer’s words are untrusted); internal notes and drafts only for XENO’s side.' } }, ['ticket']) }],
   ['support.ticket.reply_draft', 'support', 'reply_draft', 'undoable', { idempotency: NONE('no request key yet: a retried call adds a second draft'), reply: obj({ message: { type: 'object', description: 'id, state ("draft" until a person sends it, or "sent" on your owner’s own request), visibility.' } }, ['message']) }],
   ['support.ticket.triage', 'support', 'triage', 'undoable', { idempotency: NAT('setting the same kind and priority again changes nothing'), reply: obj({ ticket: { type: 'object' } }, ['ticket']) }],
+  // ── docs (Office › Write and Notes, services/workspaceDocs.js). A document is a Storage file; writes are reversible.
+  ['docs.doc.list', 'docs', 'list_docs', 'safe', { provenance: 'untrusted', reply: obj({ docs: { type: 'array', description: 'id, versionId, kind, title, excerpt, updatedAt — written by people.' } }, ['docs']) }],
+  ['docs.doc.get', 'docs', 'get_doc', 'safe', { provenance: 'untrusted', reply: obj({ doc: { type: 'object', description: 'id, versionId, kind, title, markdown, canEdit, links.' }, backlinks: { type: 'array', description: 'Documents that link to this one.' } }, ['doc']) }],
+  ['docs.doc.create', 'docs', 'create_doc', 'undoable', { idempotency: NAT('each call creates one document; undo with docs.doc.trash'), reply: obj({ doc: { type: 'object' } }, ['doc']) }],
+  ['docs.doc.save', 'docs', 'save_doc', 'undoable', { idempotency: { strategy: 'key', key: 'expected_version' }, reply: obj({ doc: { type: 'object' }, previousVersion: { type: 'string', description: 'Restore it to undo this save.' } }, ['doc']) }],
+  ['docs.version.list', 'docs', 'list_versions', 'safe', { provenance: 'trusted', reply: obj({ versions: { type: 'array', description: 'id, sizeBytes, createdAt, current.' } }, ['versions']) }],
+  ['docs.version.restore', 'docs', 'restore_version', 'undoable', { idempotency: NAT('restoring adds a new newest version; restoring the previous one undoes it'), reply: obj({ doc: { type: 'object' }, previousVersion: { type: 'string' } }, ['doc']) }],
+  ['docs.doc.trash', 'docs', 'trash_doc', 'undoable', { idempotency: NAT('a document already in the trash is refused with already_in_trash'), reply: obj({ trashed: { type: 'boolean' }, id: { type: 'string' } }, ['trashed']) }],
+  ['docs.doc.untrash', 'docs', 'untrash_doc', 'undoable', { idempotency: NAT('a document not in the trash is refused with not_in_trash'), reply: obj({ doc: { type: 'object' } }, ['doc']) }],
   // ── analytics (Corpo › Analytics, services/analytics.js). Read-only for agents: a person saves dashboards.
   ['analytics.metric.list', 'analytics', 'list_metrics', 'safe', { provenance: 'trusted', reply: obj({ metrics: { type: 'array', description: 'id, title, scope (workspace|division), description of each metric.' }, divisions: { type: 'array', description: 'id, name of the workspace’s active divisions.' } }, ['metrics']) }],
   ['analytics.metric.query', 'analytics', 'query_metric', 'safe', { provenance: 'trusted', reply: obj({ metric: { type: 'string' }, scope: { type: 'string', description: 'workspace or division.' }, days: { type: 'integer' }, value: { type: 'object', description: 'The metric’s value; its shape is the metric’s (series of {day, value}, totals, medians).' } }, ['metric', 'value']) }],

@@ -4,17 +4,17 @@
 
 Every action a person can take on the platform, and whether an agent can take it (XENO AGENT CAPABILITY - SPEC.md §19.4). **Planned** entries are the owning division’s backlog: each is a feature agents are missing.
 
-**Total:** 1548 actions · 119 agent capability · 1226 planned (debt) · 203 excluded · **coverage 8.8%** of the 1345 owed.
+**Total:** 1592 actions · 147 agent capability · 1234 planned (debt) · 211 excluded · **coverage 10.6%** of the 1381 owed.
 
 | division | actions | capability | planned (debt) | excluded | coverage |
 |---|---:|---:|---:|---:|---:|
-| workforce | 286 | 45 | 238 | 3 | 15.9% |
+| workforce | 302 | 53 | 244 | 5 | 17.8% |
 | studio | 121 | 4 | 117 | 0 | 3.3% |
 | agents | 122 | 0 | 112 | 10 | 0% |
 | workspace-ui | 171 | 4 | 101 | 66 | 3.8% |
 | chat | 97 | 0 | 96 | 1 | 0% |
 | commerce | 112 | 0 | 96 | 16 | 0% |
-| workspace | 132 | 12 | 95 | 25 | 11.2% |
+| workspace | 132 | 14 | 93 | 25 | 13.1% |
 | tasks | 105 | 13 | 84 | 8 | 13.4% |
 | storage | 82 | 5 | 75 | 2 | 6.3% |
 | account | 86 | 0 | 60 | 26 | 0% |
@@ -25,8 +25,10 @@ Every action a person can take on the platform, and whether an agent can take it
 | inference | 18 | 0 | 12 | 6 | 0% |
 | support | 21 | 8 | 12 | 1 | 40% |
 | analytics | 10 | 5 | 4 | 1 | 55.6% |
+| forms | 18 | 8 | 4 | 6 | 66.7% |
 | publish | 13 | 6 | 4 | 3 | 60% |
 | places | 6 | 3 | 1 | 2 | 75% |
+| docs | 10 | 10 | 0 | 0 | 100% |
 
 ## account — 60 planned
 
@@ -461,6 +463,13 @@ Every action a person can take on the platform, and whether an agent can take it
 - `ui:market.js:data-mk=soul`
 - `ui:market.js:data-mk=unlist`
 
+## forms — 4 planned
+
+- `route:formsRoutes.js:DELETE /:id`
+- `route:formsRoutes.js:DELETE /:id/responses/:rid`
+- `route:formsRoutes.js:POST /:id/links/:linkId/revoke`
+- `route:formsRoutes.js:POST /:id/restore`
+
 ## forum — 41 planned
 
 - `route:forumRoutes.js:DELETE /posts/:id`
@@ -868,7 +877,7 @@ Every action a person can take on the platform, and whether an agent can take it
 - `ui:platform-tasks.js:data-tk=view`
 - `ui:platform-tasks.js:data-tk=watch`
 
-## workforce — 238 planned
+## workforce — 244 planned
 
 - `route:apiKeyWorkforceCapabilityRoutes.js:POST /operations`
 - `route:apiKeyWorkforceCapabilityRoutes.js:POST /read`
@@ -936,6 +945,10 @@ Every action a person can take on the platform, and whether an agent can take it
 - `route:workforceOwnershipTransferRoutes.js:POST /:id/authorize`
 - `route:workforceOwnershipTransferRoutes.js:POST /:id/decline`
 - `route:workforceOwnershipTransferRoutes.js:POST /:id/review`
+- `route:workforcePeopleRoutes.js:GET /:principalId/offboard-plan`
+- `route:workforcePeopleRoutes.js:POST /:principalId/offboard`
+- `route:workforcePeopleRoutes.js:POST /:principalId/onboard`
+- `route:workforcePeopleRoutes.js:POST /time-off/:id/cancel`
 - `route:workforcePublicContributionRoutes.js:POST /attributions`
 - `route:workforcePublicContributionRoutes.js:POST /attributions/mine`
 - `route:workforcePublicContributionRoutes.js:POST /claims`
@@ -1065,6 +1078,8 @@ Every action a person can take on the platform, and whether an agent can take it
 - `ui:funding.js:data-fd=grant`
 - `ui:funding.js:data-fd=return`
 - `ui:funding.js:data-fd=start`
+- `ui:platform-directory.js:data-xdir=offboard`
+- `ui:platform-directory.js:data-xdir=onboard`
 - `ui:platform-divisions.js:data-xdv=add-agent`
 - `ui:platform-divisions.js:data-xdv=add-project`
 - `ui:platform-divisions.js:data-xdv=agent`
@@ -1109,12 +1124,10 @@ Every action a person can take on the platform, and whether an agent can take it
 - `ui:workforce.js:data-wf=win`
 - `ui:workforce.js:data-wf=withdraw`
 
-## workspace — 95 planned
+## workspace — 93 planned
 
 - `route:accountWorkspaceOperationRoutes.js:GET /:operationId (accountWorkspaceOperationRoutes)`
 - `route:accountWorkspaceOperationRoutes.js:POST /:operationId/:phase (accountWorkspaceOperationRoutes)`
-- `route:corpusRoutes.js:GET /tenets/:id/verdicts`
-- `route:corpusRoutes.js:POST /tenets/:id/verdicts`
 - `route:modesRoutes.js:DELETE /:modeId (meModesRouter)`
 - `route:modesRoutes.js:GET / (meModesRouter)`
 - `route:modesRoutes.js:GET /:wid/architect/proposals (workspaceModesRouter)`

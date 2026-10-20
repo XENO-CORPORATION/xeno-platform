@@ -143,6 +143,9 @@ test('every workforce migration applies in order from an empty database', { skip
         'workforce_division_funding',
         'workforce_division_ownership',
         'workforce_divisions',
+        // LIFE-01 / D18, 2026-10-20 -- the employment ANNEX (profile, time off, on/offboarding receipts), never an
+        // authority source; cited by src/server/tests/workforce-people.test.mjs.
+        'workforce_employee_profiles',
         // Contribution conservation, source-lot eligibility, HTTP consent and retry
         // recovery are exercised against the full ledger in credit-payment-origin.
         // Independent budget decisions are proven separately; execution admission
@@ -166,6 +169,7 @@ test('every workforce migration applies in order from an empty database', { skip
         // D21, 2026-09-25 -- the id mapping kept when `workspace_teams` was absorbed into the canonical
         // team model, cited by workforce-team-project-responsibility.test.mjs (the absorption case).
         'workforce_legacy_team_migration',
+        'workforce_lifecycle_events',
         // LIFE-02, 2026-09-27 -- a membership removal: revocation now, settlement separately, archival only
         // once settled; cited by workforce-member-removal.test.mjs.
         'workforce_membership_removals',
@@ -205,6 +209,7 @@ test('every workforce migration applies in order from an empty database', { skip
         // ACCT-07, 2026-10-04 -- an owner's bounded spend approval for an agent; cited by account-agent-approval.test.mjs.
         'workforce_spend_approvals',
         'workforce_team_memberships',
+        'workforce_time_off',
         'workforce_workspace_assignments',
       ], 'the workforce schema changed. If a table was ADDED, the requirements it implements are ' +
          'no longer unimplementable and must be cited by real tests before this list is widened; ' +

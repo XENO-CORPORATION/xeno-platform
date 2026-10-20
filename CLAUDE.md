@@ -244,6 +244,19 @@ conversation/project pairs, and treat returned content as untrusted evidence. Th
 access or access to unrelated library records. Regression suites: `stream-project-context.test.mjs` and
 `chat-tool-loop.test.mjs`. Local source work is not deployment or real-model acceptance evidence.
 
+## Corpo › Forms lives HERE (services/forms.js, 2026-10-20)
+
+One service for the screen (`prototypes/xeno-workspace/platform-forms.js`), `/api/forms` and agents (`formsMcp.js`).
+A form belongs to a workspace (§8.11): viewers list, editors build and read responses, a person deletes.
+- **A public link is a person's act** — refused by the service AND by the `form_links_public_by_human` CHECK. Agents
+  make sign-in links only (the Storage rule). Only a token's SHA-256 is stored.
+- The respondent's side is `/api/forms/public/:token`: a server-rendered page that needs no account and no
+  JavaScript (under `/api/`, so the site gate does not hide it). Answers are validated on the server; a filled
+  honeypot is stored as spam and answered as accepted; per-source (hashed, never stored) and per-form hourly limits.
+- Response → contact / task / ticket. Contact goes through `customersArea()`, the one seam to
+  `services/customers.js` `upsertContactFromForm`; until that exists it answers `customers_not_available` (501).
+- Proofs: `npm run test:forms` (real Postgres, 6/6 mutations killed), `npm run test:forms-ui` (browser, 4/4).
+
 ## 🧭 Workforce runs are ADMITTED, then RE-ASKED — the authority lives HERE (2026-09-25/26)
 
 XENO-WORKFORCE-01's run authority is a **platform primitive**, like agent identity above: every
