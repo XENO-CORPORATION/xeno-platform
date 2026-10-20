@@ -65,3 +65,27 @@ export function hasGateInvite(cookieHeader, env = process.env) {
   const secret = env.SITE_GATE_SECRET || env.JWT_SECRET;
   return gateCookieValid(readCookie(cookieHeader, gateCookieName(env)), code, secret);
 }
+
+// ── v2: a cookie issued from a PER-PERSON code (services/siteAccessCodes.js) ─────────────────────────────────────
+// `v2.<expiry>.<code id>.<hmac>`. The signature proves WE issued it for that code id; it says nothing about whether
+// the code is still live, so the page check also reads the code's row (revocation and expiry take effect at once).
+// It is deliberately NOT accepted by hasGateInvite: a per-person code opens account creation only through its own
+// 'account' scope (the share invitation), never by holding a page cookie.
+const signV2 = (secret, expiresAt, codeId) => crypto.createHmac('sha256', secret).update(`site-gate.v2.${expiresAt}.${codeId}`).digest('base64url');
+
+export function mintCodeCookie(codeId, secret, codeExpiresAt, now = Date.now()) {
+  if (!secret || !/^[0-9a-f-]{36}$/i.test(String(codeId))) return null;
+  const until = Math.min(now + GATE_DAYS * 86400_000, new Date(codeExpiresAt).getTime());
+  const expiresAt = Math.floor(until / 1000);
+  if (expiresAt * 1000 <= now) return null;
+  return `v2.${expiresAt}.${codeId}.${signV2(secret, expiresAt, codeId)}`;
+}
+
+/** The code id a v2 cookie names, if the signature is ours and the cookie has not expired; otherwise null. */
+export function codeCookieId(value, secret, now = Date.now()) {
+  const m = /^v2\.(\d{1,12})\.([0-9a-f-]{36})\.([A-Za-z0-9_-]{43})$/i.exec(String(value || ''));
+  if (!m || !secret) return null;
+  if (Number(m[1]) * 1000 <= now) return null;
+  const a = Buffer.from(m[3]); const b = Buffer.from(signV2(secret, m[1], m[2]));
+  return a.length === b.length && crypto.timingSafeEqual(a, b) ? m[2].toLowerCase() : null;
+}
