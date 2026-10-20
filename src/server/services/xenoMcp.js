@@ -23,6 +23,11 @@ import * as placesMcp from './placesMcp.js';
 import * as modesMcp from './modesMcp.js';
 import * as canvases from './canvases.js';
 import * as agentsMcp from './agentsMcp.js';
+import * as storageMcp from './storageMcp.js';
+import * as forumMcp from './forumMcp.js';
+import { resolvePrincipal } from './agentIdentity.js';
+import * as creds from './workspaceCredentials.js';
+import { personalWorkspace } from './workforceDivisions.js';
 import { withTransaction } from './chatProjectAuthority.js';
 import crypto from 'node:crypto';
 import { CATALOGUE, byName, mcpCapabilities } from '../capabilities/catalogue.js';
@@ -31,6 +36,7 @@ import { toWire, fromWire } from '../capabilities/define.js';
 export const PROTOCOL_VERSIONS = tasksMcp.PROTOCOL_VERSIONS;
 export const PROTOCOL_VERSION = tasksMcp.PROTOCOL_VERSION;
 const SEP = '_';
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /**
  * The routing table. `call` runs one of the service's own tools by its UNPREFIXED name, with the caller the
@@ -67,6 +73,27 @@ export const SERVICES = Object.freeze([
     tools: () => modesMcp.TOOLS,
     call: (db, actor, name, args) => modesMcp.callTool(db, actor, name, args),
     isToolError: (e) => e instanceof modesMcp.ModesMcpError,
+  },
+  // XENO Storage (storageMcp.js, WORKSPACE AGENT SURFACE P1): an agent works in its owner's Storage, the person in their own.
+  {
+    category: 'storage', title: 'Storage', version: '1.0.0', timeoutMs: 60_000,
+    description: 'Storage: list and make folders, upload files, and share a folder by a link that needs sign-in.',
+    tools: () => storageMcp.TOOLS,
+    call: (db, actor, name, args) => storageMcp.callTool(db, actor, name, args),
+    isToolError: (e) => e instanceof storageMcp.StorageMcpError,
+  },
+  // XENO Forum, folded in from /api/forum/mcp (kept): the same tools, the same function. Its wire names were
+  // always `forum_<verb>`, so as a category the grandfathered alias is exactly the old name.
+  {
+    category: 'forum', title: 'Forum', version: '1.0.0', timeoutMs: 20_000,
+    description: 'The XENO Forum: search answers, read threads, ask, reply, subscribe and flag.',
+    tools: () => forumMcp.TOOLS.map((t) => ({ ...t, name: t.name.replace(/^forum_/, '') })),
+    call: async (db, actor, name, args) => {
+      const p = await resolvePrincipal(db, actor.id);
+      const r = await forumMcp.callTool(db, { id: p.id, username: p.handle, display_name: p.displayName, role: p.role, kind: p.kind, owner: p.owner }, `forum_${name}`, args);
+      return r && r.isError ? { ...r, structuredContent: r.structuredContent || { error: (r.content && r.content[0] && r.content[0].text) || 'Forum refused', code: 'forum_refused' } } : r;
+    },
+    isToolError: () => false,
   },
   // what an agent can learn about itself (agentsMcp.js). On by default for a platform agent's own credential
   // (AGENT_DEFAULT_CATEGORIES); an app sign-in turns it on in Dev › XENO MCP like any other category.
@@ -116,6 +143,12 @@ export function route(prefixed, services = SERVICES) {
 /** The categories a connection may reach, from what it stored — never from anything the client sends. */
 export const enabledCategories = (connection, services = SERVICES) => (connection && Array.isArray(connection.categories) ? connection.categories : ['tasks']).filter((c) => services.some((s) => s.category === c));
 
+/** WORKSPACE AGENT SURFACE P2: a workspace credential (OAuth on 'xeno-workspace', or an xwk_ key) is narrowed by scope. */
+const workspaceTokenOf = (actor) => (actor && actor.token && actor.token.audience === 'xeno-workspace' ? actor.token : null);
+const scopeAllows = (actor, c) => { const t = workspaceTokenOf(actor); return !t || (Array.isArray(t.scopes) && t.scopes.includes(c.scope)); };
+/** The categories whose declarations a scope set reaches: what a workspace credential's connection starts with. */
+export const categoriesForScopes = (scopes) => [...new Set(CATALOGUE.filter((c) => [].concat(scopes || []).includes(c.scope) && c.surfaces.includes('mcp')).map((c) => c.bind.category))];
+
 /** May this caller, on this connection, reach this service row at all? One predicate for list, catalogue and call. */
 const reachable = (s, on, actor) => on.has(s.category) && (!s.agentsOnly || (actor && actor.kind === 'agent'));
 
@@ -126,7 +159,7 @@ const reachable = (s, on, actor) => on.has(s.category) && (!s.agentsOnly || (act
  */
 export function visibleCapabilities(connection, actor = null) {
   const on = new Set(enabledCategories(connection));
-  return CATALOGUE.filter((c) => c.surfaces.includes('mcp') && byCategory.has(c.bind.category) && reachable(byCategory.get(c.bind.category), on, actor));
+  return CATALOGUE.filter((c) => c.surfaces.includes('mcp') && byCategory.has(c.bind.category) && reachable(byCategory.get(c.bind.category), on, actor) && scopeAllows(actor, c));
 }
 
 /** The public shape of one declaration (no `bind`: where it executes is ours, not the caller's). */
@@ -152,11 +185,12 @@ function generatedTool(c, serviceTitle) {
 /** tools/list for one connection: only its categories. Each service's grandfathered names, then its generated ones. */
 export function listTools(connection, actor = null) {
   const on = new Set(enabledCategories(connection));
+  const legacyAllowed = (s, tool) => { if (!workspaceTokenOf(actor)) return true; const c = CATALOGUE.find((x) => x.bind.category === s.category && x.bind.tool === tool && x.surfaces.includes('mcp')); return Boolean(c && scopeAllows(actor, c)); };
   return SERVICES.filter((s) => reachable(s, on, actor)).flatMap((s) => [
-    ...s.tools().map(({ name, title, description, inputSchema, annotations }) => ({
+    ...s.tools().filter((t) => legacyAllowed(s, t.name)).map(({ name, title, description, inputSchema, annotations }) => ({
       name: s.category + SEP + name, title: `${s.title}: ${title || name}`, description, inputSchema, ...(annotations ? { annotations } : {}),
     })),
-    ...mcpCapabilities(s.category).map((c) => generatedTool(c, s.title)),
+    ...mcpCapabilities(s.category).filter((c) => scopeAllows(actor, c)).map((c) => generatedTool(c, s.title)),
   ]);
 }
 
@@ -202,8 +236,24 @@ export async function callTool(db, actor, connection, prefixed, args = {}, ctx =
   }
   const cap = r.capability;
   const callArgs = { ...(args || {}) };
+  // P2: a workspace credential needs the capability's scope, a grant of it in the acting workspace, and — for an
+  // irreversible action or a large spend — a fresh sign-in. Refusals are tool errors (REST maps them to 403).
+  const wt = workspaceTokenOf(actor);
+  if (wt) {
+    if (!cap) return { result: toolError(`${prefixed} has no capability declaration, so a workspace credential cannot call it`, 'scope_missing'), log: meta(r.service.category, 'refused', 'scope_missing') };
+    if (!scopeAllows(actor, cap)) return { result: toolError(`This credential lacks the ${cap.scope} scope needed for ${cap.name}. Sign in again asking for it, or use a key that has it.`, 'scope_missing'), log: meta(r.service.category, 'refused', 'scope_missing') };
+    const ws = ctx.workspaceId || (UUID_RE.test(String(callArgs.workspace || '')) ? String(callArgs.workspace) : null) || wt.workspaceId || await personalWorkspace(db, wt.ownerId);
+    if (wt.workspaceId && ws !== wt.workspaceId) return { result: toolError('This key works in one workspace only', 'workspace_mismatch'), log: meta(r.service.category, 'refused', 'workspace_mismatch') };
+    if (!(await creds.hasGrant(db, wt.agentUserId, cap.name, ws))) return { result: toolError(`${cap.name} is not granted to this app in that workspace. The person can grant it in XENO: Settings › Connected apps.`, 'grant_missing'), log: meta(r.service.category, 'refused', 'grant_missing') };
+    const why = creds.stepUpReason(cap, { estimatedCredits: typeof callArgs.max_credits === 'number' ? callArgs.max_credits : null });
+    if (why && !(wt.via === 'oauth' && creds.isFresh(wt.authTime))) {
+      return { result: toolError(why === 'irreversible' ? `${cap.name} cannot be undone, so it needs a fresh sign-in (within 10 minutes). Sign in again with prompt=login.` : 'This spend is above the step-up limit, so it needs a fresh sign-in.', 'step_up_required'), log: meta(r.service.category, 'refused', 'step_up_required') };
+    }
+  }
   if (cap && ctx.runId && (cap.input.properties || {}).run_id && callArgs.run_id === undefined) callArgs.run_id = String(ctx.runId);
-  const key = cap && cap.class !== 'safe' && ctx.idempotencyKey ? String(ctx.idempotencyKey).slice(0, 255) : null;
+  // the key: the Idempotency-Key header, or the capability's own declared key argument (request_key) when only that was sent
+  const argKey = cap && cap.idempotency.strategy === 'key' && callArgs[cap.idempotency.key] !== undefined ? String(callArgs[cap.idempotency.key]) : null;
+  const key = cap && cap.class !== 'safe' && (ctx.idempotencyKey || argKey) ? String(ctx.idempotencyKey || argKey).slice(0, 255) : null;
   if (key && cap.idempotency.strategy === 'key' && callArgs[cap.idempotency.key] === undefined) callArgs[cap.idempotency.key] = key;
   const claimed = key && connection && connection.id ? await claimKey(db, connection.id, key, cap.name) : null;
   if (claimed && claimed.replay) return { result: withMeta(claimed.replay, { 'xeno/replayed': true }), log: meta(r.service.category, 'ok', 'idempotent_replay') };

@@ -4,27 +4,25 @@
 
 Every action a person can take on the platform, and whether an agent can take it (XENO AGENT CAPABILITY - SPEC.md §19.4). **Planned** entries are the owning division’s backlog: each is a feature agents are missing.
 
-**Total:** 1450 actions · 42 agent capability · 1205 planned (debt) · 174 excluded · **coverage 3.3%** of the 1276 owed.
+**Total:** 1458 actions · 45 agent capability · 1231 planned (debt) · 182 excluded · **coverage 3.5%** of the 1276 owed.
 
 | division | actions | capability | planned (debt) | excluded | coverage |
 |---|---:|---:|---:|---:|---:|
-| workforce | 262 | 0 | 248 | 1 | 0% |
+| workforce | 270 | 0 | 269 | 1 | 0% |
 | studio | 121 | 4 | 117 | 0 | 3.3% |
-| agents | 117 | 0 | 112 | 5 | 0% |
-| workspace-ui | 159 | 0 | 100 | 59 | 0% |
+| agents | 122 | 0 | 112 | 10 | 0% |
+| workspace-ui | 165 | 3 | 100 | 62 | 2.9% |
 | chat | 97 | 0 | 96 | 1 | 0% |
 | commerce | 112 | 0 | 96 | 16 | 0% |
+| workspace | 113 | 5 | 91 | 17 | 5.2% |
 | tasks | 105 | 13 | 84 | 8 | 13.4% |
-| storage | 82 | 2 | 78 | 2 | 2.5% |
-| workspace | 95 | 0 | 78 | 17 | 0% |
+| storage | 82 | 5 | 75 | 2 | 6.3% |
 | account | 86 | 0 | 60 | 26 | 0% |
 | forum | 51 | 8 | 41 | 2 | 16.3% |
-| platform | 62 | 0 | 34 | 28 | 0% |
+| platform | 65 | 0 | 34 | 31 | 0% |
 | browser-shell | 28 | 0 | 28 | 0 | 0% |
 | canvas | 20 | 4 | 16 | 0 | 20% |
 | inference | 18 | 0 | 12 | 6 | 0% |
-| modes | 16 | 8 | 5 | 3 | 61.5% |
-| (none) | 16 | 0 | 0 | 0 | 0% |
 | places | 3 | 3 | 0 | 0 | 100% |
 
 ## account — 60 planned
@@ -512,14 +510,6 @@ Every action a person can take on the platform, and whether an agent can take it
 - `route:v2InferenceRoutes.js:PUT /credentials/:id/models`
 - `route:v2InferenceRoutes.js:PUT /routes/:surface`
 
-## modes — 5 planned
-
-- `route:modesRoutes.js:DELETE /:modeId (meModesRouter)`
-- `route:modesRoutes.js:GET / (meModesRouter)`
-- `route:modesRoutes.js:PATCH /:modeId (meModesRouter)`
-- `route:modesRoutes.js:PATCH /:wid/modes/items/:modeId (workspaceModesRouter)`
-- `route:modesRoutes.js:POST / (meModesRouter)`
-
 ## platform — 34 planned
 
 - `route:analyticsRoutes.js:GET /active-users`
@@ -557,7 +547,7 @@ Every action a person can take on the platform, and whether an agent can take it
 - `route:webhookRoutes.js:POST /:id/deliveries/:deliveryId/:operation`
 - `route:webhookRoutes.js:PUT /:id`
 
-## storage — 78 planned
+## storage — 75 planned
 
 - `route:collaborationRoutes.js:DELETE /sessions/:sessionId`
 - `route:collaborationRoutes.js:GET /my-sessions`
@@ -591,7 +581,6 @@ Every action a person can take on the platform, and whether an agent can take it
 - `route:libraryRoutes.js:GET /assets/file/:id/shares`
 - `route:libraryRoutes.js:GET /assets/file/:id/versions`
 - `route:libraryRoutes.js:GET /folder-links/:id/activity`
-- `route:libraryRoutes.js:GET /folders`
 - `route:libraryRoutes.js:GET /folders/:id/links`
 - `route:libraryRoutes.js:GET /folders/:id/shares`
 - `route:libraryRoutes.js:GET /links/:token`
@@ -605,8 +594,6 @@ Every action a person can take on the platform, and whether an agent can take it
 - `route:libraryRoutes.js:POST /assets/:source/:id/trash`
 - `route:libraryRoutes.js:POST /assets/file/:id/shares`
 - `route:libraryRoutes.js:POST /assets/file/:id/versions/:version/restore`
-- `route:libraryRoutes.js:POST /folders`
-- `route:libraryRoutes.js:POST /folders/:id/links`
 - `route:libraryRoutes.js:POST /folders/:id/shares`
 - `route:libraryRoutes.js:PUT /assets/:source/:id/area`
 - `route:libraryRoutes.js:PUT /assets/:source/:id/folder`
@@ -845,7 +832,7 @@ Every action a person can take on the platform, and whether an agent can take it
 - `ui:platform-tasks.js:data-tk=view`
 - `ui:platform-tasks.js:data-tk=watch`
 
-## workforce — 248 planned
+## workforce — 269 planned
 
 - `route:apiKeyWorkforceCapabilityRoutes.js:POST /operations`
 - `route:apiKeyWorkforceCapabilityRoutes.js:POST /read`
@@ -859,12 +846,14 @@ Every action a person can take on the platform, and whether an agent can take it
 - `route:workforceCoordinationRoutes.js:POST /objectives/complete`
 - `route:workforceCoordinationRoutes.js:POST /objectives/link-goal`
 - `route:workforceCoordinationRoutes.js:POST /objectives/read`
+- `route:workforceCoordinationRoutes.js:POST /objectives/update`
 - `route:workforceCoordinationRoutes.js:POST /ownership/check`
 - `route:workforceCoordinationRoutes.js:POST /ownership/files`
 - `route:workforceCoordinationRoutes.js:POST /ownership/files/release`
 - `route:workforceCoordinationRoutes.js:POST /ownership/tasks`
 - `route:workforceCoordinationRoutes.js:POST /previews/collapse`
 - `route:workforceCoordinationRoutes.js:POST /previews/read`
+- `route:workforceCoordinationRoutes.js:POST /projects/tree`
 - `route:workforceCoordinationRoutes.js:POST /tasks`
 - `route:workforceCoordinationRoutes.js:POST /tasks/accept`
 - `route:workforceCoordinationRoutes.js:POST /tasks/complete`
@@ -887,6 +876,8 @@ Every action a person can take on the platform, and whether an agent can take it
 - `route:workforceForgeRoutes.js:POST /change-requests/check`
 - `route:workforceForgeRoutes.js:POST /change-requests/checks`
 - `route:workforceForgeRoutes.js:POST /change-requests/integrate`
+- `route:workforceForgeRoutes.js:POST /change-requests/list`
+- `route:workforceForgeRoutes.js:POST /change-requests/read`
 - `route:workforceForgeRoutes.js:POST /change-requests/reconcile`
 - `route:workforceForgeRoutes.js:POST /change-requests/review`
 - `route:workforceForgeRoutes.js:POST /change-requests/reviews`
@@ -1022,14 +1013,20 @@ Every action a person can take on the platform, and whether an agent can take it
 - `route:workforceRoutes.js:POST /run-admissions/authority`
 - `route:workforceRoutes.js:POST /run-admissions/authorize-step`
 - `route:workforceRoutes.js:POST /run-admissions/deliver`
+- `route:workforceRoutes.js:POST /run-admissions/list`
 - `route:workforceRoutes.js:POST /run-admissions/operations/read`
 - `route:workforceRoutes.js:POST /run-admissions/outcome`
 - `route:workforceRoutes.js:POST /run-admissions/pin`
 - `route:workforceRoutes.js:POST /run-admissions/read`
 - `route:workforceRoutes.js:POST /run-admissions/result`
 - `route:workforceRoutes.js:POST /run-admissions/revoke`
+- `route:workforceSessionRoutes.js:POST /adapters/parity`
 - `route:workforceSessionRoutes.js:POST /branch-intents`
+- `route:workforceSessionRoutes.js:POST /branch-intents/list`
+- `route:workforceSessionRoutes.js:POST /byok/accept`
+- `route:workforceSessionRoutes.js:POST /charges/admit`
 - `route:workforceSessionRoutes.js:POST /commands`
+- `route:workforceSessionRoutes.js:POST /commands/ack`
 - `route:workforceSessionRoutes.js:POST /commands/execute`
 - `route:workforceSessionRoutes.js:POST /commands/read`
 - `route:workforceSessionRoutes.js:POST /cwd`
@@ -1041,8 +1038,11 @@ Every action a person can take on the platform, and whether an agent can take it
 - `route:workforceSessionRoutes.js:POST /mode/agent`
 - `route:workforceSessionRoutes.js:POST /mode/chat`
 - `route:workforceSessionRoutes.js:POST /models`
+- `route:workforceSessionRoutes.js:POST /models/ack`
 - `route:workforceSessionRoutes.js:POST /models/select`
 - `route:workforceSessionRoutes.js:POST /resume`
+- `route:workforceSessionRoutes.js:POST /turns/count`
+- `route:workforceSessionRoutes.js:POST /turns/page`
 - `route:workforceViewRoutes.js:POST /poll`
 - `route:workforceViewRoutes.js:POST /read`
 - `route:workforceViewRoutes.js:POST /resolve/message`
@@ -1073,6 +1073,14 @@ Every action a person can take on the platform, and whether an agent can take it
 - `ui:platform-divisions.js:data-xdv=remove-project`
 - `ui:platform-divisions.js:data-xdv=rename`
 - `ui:platform-divisions.js:data-xdv=retry`
+- `ui:platform-workforce.js:data-xwp=complete-objective`
+- `ui:platform-workforce.js:data-xwp=edit-objective`
+- `ui:platform-workforce.js:data-xwp=link-goal`
+- `ui:platform-workforce.js:data-xwp=new-objective`
+- `ui:platform-workforce.js:data-xwp=open`
+- `ui:platform-workforce.js:data-xwp=retry`
+- `ui:platform-workforce.js:data-xwp=review`
+- `ui:platform-workforce.js:data-xwp=revoke`
 - `ui:workforce.js:data-wf=accept`
 - `ui:workforce.js:data-wf=act`
 - `ui:workforce.js:data-wf=actTeam`
@@ -1096,10 +1104,15 @@ Every action a person can take on the platform, and whether an agent can take it
 - `ui:workforce.js:data-wf=win`
 - `ui:workforce.js:data-wf=withdraw`
 
-## workspace — 78 planned
+## workspace — 91 planned
 
 - `route:accountWorkspaceOperationRoutes.js:GET /:operationId (accountWorkspaceOperationRoutes)`
 - `route:accountWorkspaceOperationRoutes.js:POST /:operationId/:phase (accountWorkspaceOperationRoutes)`
+- `route:modesRoutes.js:DELETE /:modeId (meModesRouter)`
+- `route:modesRoutes.js:GET / (meModesRouter)`
+- `route:modesRoutes.js:PATCH /:modeId (meModesRouter)`
+- `route:modesRoutes.js:PATCH /:wid/modes/items/:modeId (workspaceModesRouter)`
+- `route:modesRoutes.js:POST / (meModesRouter)`
 - `route:projectPublicationRoutes.js:ALL /`
 - `route:projectPublicationRoutes.js:ALL /:projectId`
 - `route:projectPublicationRoutes.js:ALL /operations/read`
@@ -1140,6 +1153,10 @@ Every action a person can take on the platform, and whether an agent can take it
 - `route:workspaceRoutes.js:POST /:id/owner-transfer`
 - `route:workspaceRoutes.js:POST /:id/select`
 - `route:workspaceRoutes.js:POST /:inviteId/${action} (inviteRouter)`
+- `route:workspaceServiceAccountRoutes.js:DELETE /:serviceId/capabilities/:name`
+- `route:workspaceServiceAccountRoutes.js:GET /`
+- `route:workspaceServiceAccountRoutes.js:GET /:serviceId`
+- `route:workspaceServiceAccountRoutes.js:PUT /:serviceId/capabilities/:name`
 - `route:workspaceTeamRoutes.js:DELETE /:teamId`
 - `route:workspaceTeamRoutes.js:GET /`
 - `route:workspaceTeamRoutes.js:POST /`
@@ -1168,6 +1185,10 @@ Every action a person can take on the platform, and whether an agent can take it
 - `ui:platform-area.js:data-sc-del`
 - `ui:platform-area.js:data-sc-move`
 - `ui:platform-area.js:data-sc-tog`
+- `ui:platform-services.js:data-xsv-cap`
+- `ui:platform-services.js:data-xsv=list`
+- `ui:platform-services.js:data-xsv=open`
+- `ui:platform-services.js:data-xsv=retry`
 - `ui:platform-work.js:data-pj-conv`
 - `ui:platform-work.js:data-pj=files-add`
 - `ui:platform-work.js:data-pj=files-remove`

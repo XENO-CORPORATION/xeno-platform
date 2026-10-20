@@ -48,6 +48,7 @@ const NAME_MAP = new Map([
   ['xeno-extension', 'extension'], ['xenoextension', 'extension'], ['xeno extension', 'extension'],
   ['xeno-workshop', 'workshop'], ['xeno-workshop-local', 'workshop'], ['xenoworkshop', 'workshop'],
   ['xenoharbor', 'harbor'],
+  ['xeno-places', 'places'], ['xenoplaces', 'places'],
 ]);
 
 const canonical = (raw) => {

@@ -18,12 +18,13 @@ import * as forumMcp from '../services/forumMcp.js';
 import * as placesMcp from '../services/placesMcp.js';
 import * as modesMcp from '../services/modesMcp.js';
 import { MODES_ROWS } from './modes.js';
+import * as storageMcp from '../services/storageMcp.js';
 
 /** The tools each bound category executes, by category. */
 export const BOUND_TOOLS = Object.freeze({
   tasks: tasksMcp.TOOLS, canvas: canvasMcp.TOOLS, agents: agentsMcp.TOOLS,
   image: agentMediaMcp.IMAGE.tools, video: agentMediaMcp.VIDEO.tools, library: agentMediaMcp.LIBRARY.tools, chat: agentMediaMcp.CHAT.tools,
-  forum: forumMcp.TOOLS, places: placesMcp.TOOLS, modes: modesMcp.TOOLS,
+  forum: forumMcp.TOOLS.map((t) => ({ ...t, name: t.name.replace(/^forum_/, '') })), places: placesMcp.TOOLS, storage: storageMcp.TOOLS, modes: modesMcp.TOOLS,
 });
 
 const obj = (properties, required) => ({ type: 'object', properties, ...(required ? { required } : {}) });
@@ -78,12 +79,17 @@ const ROWS = [
   ['library.file.attach_to_project', 'library', 'attach_to_project', 'undoable', { agentsOnly: true, idempotency: NAT('attaching an attached file changes nothing'), reply: obj({ attached: { type: 'boolean' }, project: { type: 'string' } }) }],
   // ── chat
   ['chat.model.ask', 'chat', 'ask', 'irreversible', { agentsOnly: true, provenance: 'untrusted', cost: { model: 'metered', note: 'billed to the owner by tokens, counted against the division budget' }, idempotency: NONE('no request key yet: a retried call is billed again'), reply: obj({ answer: { type: 'string', description: 'The model’s reply (untrusted).' }, model: { type: 'string' }, usage: { type: 'object', description: 'tokens and credits charged.' } }) }],
-  // ── forum (served by its own MCP at /api/forum/mcp until it is generated into /api/mcp — SPEC §19.3 rule 5)
+  // ── storage (XENO WORKSPACE AGENT SURFACE - SPEC.md P1: the first division). An agent works in its OWNER'S Storage.
+  ['storage.folder.list', 'storage', 'list_folders', 'safe', { reply: obj({ folders: { type: 'array', description: 'id, name, parentId, workspaceId, items, folders of each folder in that place.' } }, ['folders']) }],
+  ['storage.folder.create', 'storage', 'create_folder', 'undoable', { idempotency: NAT('a name already used in the same place is refused (folder_exists), so a retry cannot make a second folder'), reply: obj({ folder: { type: 'object', description: 'id, name, parentId, workspaceId.' } }, ['folder']) }],
+  ['storage.file.upload', 'storage', 'upload_file', 'undoable', { idempotency: { strategy: 'key', key: 'request_key' }, cost: { model: 'free', note: 'counts against the owner’s storage allowance' }, reply: obj({ file: { type: 'object', description: 'id, name, size, type, folderId, state (quarantined until scanned).' }, replayed: { type: 'boolean', description: 'true when this request_key was already applied.' } }, ['file']) }],
+  ['storage.link.create', 'storage', 'create_signin_link', 'undoable', { scope: 'share:create', idempotency: NONE('no request key yet: a retried call makes a second link (each is revocable)'), reply: obj({ link: { type: 'object', description: 'id, folderId, label, expiresAt.' }, url: { type: 'string', description: 'The sign-in link, shown once. Opening it needs a XENO account.' } }, ['link', 'url']) }],
+  // ── forum (also served by its own MCP at /api/forum/mcp, kept until no client calls it — SPEC §19.3 rule 5)
   ...[
     ['forum.thread.search', 'forum_search', 'safe'], ['forum.thread.get', 'forum_get_thread', 'safe'], ['forum.thread.suggest_duplicate', 'forum_suggest_duplicate', 'safe'],
     ['forum.thread.create', 'forum_create_thread', 'undoable'], ['forum.post.reply', 'forum_reply', 'undoable'], ['forum.subscription.create', 'forum_subscribe', 'undoable'],
     ['forum.digest.get', 'forum_digest', 'safe'], ['forum.post.flag', 'forum_flag', 'undoable'], ['forum.thread.mark_fixed', 'forum_mark_fixed', 'undoable'],
-  ].map(([name, tool, cls]) => [name, 'forum', tool, cls, { surfaces: ['forum-mcp'], aliases: [tool], provenance: cls === 'safe' ? 'untrusted' : 'trusted', reply: obj({ result: { type: 'object', description: 'The forum record the tool returns, with its citable url.' } }), ...(cls === 'safe' ? {} : { idempotency: NONE('no request key yet') }) }]),
+  ].map(([name, tool, cls]) => [name, 'forum', tool.replace(/^forum_/, ''), cls, { surfaces: ['mcp', 'rest', 'forum-mcp'], provenance: cls === 'safe' ? 'untrusted' : 'trusted', reply: obj({ result: { type: 'object', description: 'The forum record the tool returns, with its citable url.' } }), ...(cls === 'safe' ? {} : { idempotency: NONE('no request key yet') }) }]),
 ];
 
 function build([name, category, tool, cls, extra = {}]) {
@@ -99,4 +105,5 @@ function build([name, category, tool, cls, extra = {}]) {
 export const CATALOGUE = Object.freeze(ROWS.map(build));
 export const byName = new Map(CATALOGUE.map((c) => [c.name, c]));
 /** Declarations generated into /api/mcp, by bound category. */
+export const restCapabilities = () => CATALOGUE.filter((c) => c.surfaces.includes('rest'));
 export const mcpCapabilities = (category) => CATALOGUE.filter((c) => c.surfaces.includes('mcp') && c.bind.category === category);

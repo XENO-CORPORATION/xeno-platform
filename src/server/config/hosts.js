@@ -265,6 +265,23 @@ export function updatesUrl(pathname) {
   return `${updatesOrigin()}${suffix}`;
 }
 
+/**
+ * Origins allowed cross-origin ONLY on named path prefixes, never site-wide.
+ * XENO Places is a static SPA on its own host: it needs the OIDC endpoints (code exchange, refresh, userinfo) and
+ * its own API, nothing else. Putting it in the site allowlist would let it make credentialed calls to every /api route.
+ */
+export const PATH_SCOPED_ORIGINS = Object.freeze({
+  'https://places.xenosystem.ai': Object.freeze(['/api/oauth2', '/api/places']),
+});
+
+/** True when `origin` is path-scoped and `path` is one of its prefixes (the prefix itself, or below it). */
+export function pathScopedOriginAllowed(origin, path) {
+  const prefixes = PATH_SCOPED_ORIGINS[origin];
+  if (!prefixes) return false;
+  const p = String(path || '').split('?')[0];
+  return prefixes.some((pre) => p === pre || p.startsWith(`${pre}/`));
+}
+
 export default {
   DEFAULT_SITE_ORIGIN,
   DEFAULT_API_ORIGIN,
