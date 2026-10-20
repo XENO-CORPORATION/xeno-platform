@@ -141,6 +141,7 @@ import blogRoutes from './routes/blogRoutes.js';
 import learnRoutes from './routes/learnRoutes.js';
 import forumRoutes from './routes/forumRoutes.js';
 import supportRoutes from './routes/supportRoutes.js';
+import customersRoutes from './routes/customersRoutes.js';
 import { requireActivated } from './services/accountActivation.js';
 import agentRoutes from './routes/agentRoutes.js';
 import artifactRoutes from './routes/artifactRoutes.js';
@@ -859,6 +860,8 @@ app.use('/api/learn', databaseMiddleware, learnRoutes);
 app.use('/api/forum', databaseMiddleware, forumRoutes);
 // XENO support — Help ▸ Contact support (supportTickets.js): private requests, XENO staff, agent drafts ratified by a person.
 app.use('/api/support', databaseMiddleware, supportRoutes);
+// XENO Customers — Corpo › Customers (customers.js): the workspace CRM; agents read and draft, people keep and delete.
+app.use('/api/customers', databaseMiddleware, customersRoutes);
 // Agent identity — a PLATFORM primitive shared with Marketplace, Company and
 // Comms (XENO FORUM - SPEC.md D8). Under /api/v2/* per the identity plan's
 // rule that new surfaces sit beside the frozen legacy /api/auth/*.

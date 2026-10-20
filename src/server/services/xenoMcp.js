@@ -26,6 +26,7 @@ import * as canvases from './canvases.js';
 import * as agentsMcp from './agentsMcp.js';
 import * as storageMcp from './storageMcp.js';
 import * as supportMcp from './supportMcp.js';
+import * as customersMcp from './customersMcp.js';
 import * as publishMcp from './publishMcp.js';
 import * as analyticsMcp from './analyticsMcp.js';
 import * as workforceMcp from './workforceMcp.js';
@@ -110,6 +111,14 @@ export const SERVICES = Object.freeze([
     tools: () => publishMcp.TOOLS,
     call: (db, actor, name, args) => publishMcp.callTool(db, actor, name, args),
     isToolError: (e) => e instanceof publishMcp.PublishMcpError,
+  },
+  // XENO Customers (customersMcp.js): the workspace CRM. Agents read and draft; a person keeps, confirms, deletes.
+  {
+    category: 'customers', title: 'Customers', version: '1.0.0', timeoutMs: 20_000,
+    description: 'Customers: read the workspace’s contacts, deals and timeline; add contacts and draft notes and deals a person keeps.',
+    tools: () => customersMcp.TOOLS,
+    call: (db, actor, name, args) => customersMcp.callTool(db, actor, name, args),
+    isToolError: (e) => e instanceof customersMcp.CustomersMcpError,
   },
   // XENO support (supportMcp.js): ask XENO for your owner, or — delegated — triage and DRAFT replies a person sends.
   {
