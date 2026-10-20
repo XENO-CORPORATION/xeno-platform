@@ -17,6 +17,7 @@
 import { check } from '../utils/authzReBAC.js';
 import * as tasks from './xenoTasks.js';
 import { latestFor } from './storageVersions.js';
+import { resolveTenetCards } from './xenoCorpus.js';
 
 export class CanvasError extends Error {
   constructor(message, code, status = 400) { super(message); this.code = code; this.status = status; }
@@ -26,7 +27,7 @@ const AREA = /^[a-z][a-z0-9_-]{0,39}$/;
 const ID = /^[A-Za-z0-9_-]{1,64}$/;
 const TASK_KEY = /^T-\d{1,15}$/;
 const NODE_TYPES = new Set(['text', 'link', 'group', 'xeno-ref']);
-const REF_KINDS = new Set(['task', 'file', 'chat']);
+const REF_KINDS = new Set(['task', 'file', 'chat', 'tenet']);   // tenet: a XENO Corpus verdict card (services/xenoCorpus.js)
 const COLORS = /^([1-6]|#[0-9a-fA-F]{6})$/;
 const SIDES = new Set(['top', 'right', 'bottom', 'left']);
 const ENDS = new Set(['none', 'arrow']);
@@ -56,7 +57,7 @@ export function cleanContent(content) {
       const r = n.ref || {};
       if (!REF_KINDS.has(r.kind)) throw new CanvasError('Unknown reference kind', 'invalid_content');
       if (r.kind === 'task' && !TASK_KEY.test(String(r.id || '').toUpperCase())) throw new CanvasError('A task reference names a task key (T-12)', 'invalid_content');
-      if ((r.kind === 'file' || r.kind === 'chat') && !UUID.test(String(r.id || ''))) throw new CanvasError(`A ${r.kind} reference names its id`, 'invalid_content');
+      if ((r.kind === 'file' || r.kind === 'chat' || r.kind === 'tenet') && !UUID.test(String(r.id || ''))) throw new CanvasError(`A ${r.kind} reference names its id`, 'invalid_content');
       const key = r.kind === 'task' ? String(r.id).toUpperCase() : String(r.id).toLowerCase();
       if (refs.has(r.kind + ':' + key)) throw new CanvasError(`${r.kind === 'task' ? key : 'That ' + r.kind} is already on this canvas`, 'duplicate_ref', 409);
       refs.add(r.kind + ':' + key); out.ref = { kind: r.kind, id: key };
@@ -169,7 +170,7 @@ export async function getCanvas(db, me, id) {
   const { c, s } = await load(db, me, id);
   const content = cleanContent(c.content);
   const of = (kind) => content.nodes.filter((n) => n.type === 'xeno-ref' && n.ref.kind === kind).map((n) => n.ref.id);
-  return { ...summary(c, s), content, records: { tasks: await resolveRefs(db, me, content.nodes), files: await resolveFiles(db, me, of('file')), chats: await resolveChats(db, me, of('chat')) } };
+  return { ...summary(c, s), content, records: { tasks: await resolveRefs(db, me, content.nodes), files: await resolveFiles(db, me, of('file')), chats: await resolveChats(db, me, of('chat')), tenets: await resolveTenetCards(db, me, of('tenet')) } };
 }
 
 /**

@@ -124,7 +124,9 @@
   "publishRoutes.js": "publish",
   "platform-publish.js": "publish",
   "supportRoutes.js": "support",
-  "platform-support.js": "support"
+  "platform-support.js": "support",
+  "corpusRoutes.js": "workspace",
+  "platform-corpus.js": "workspace"
  },
  "actions": {
   "route:accountGiftRoutes.js:POST /": {
@@ -8135,6 +8137,106 @@
    "status": "planned",
    "class": "reversible",
    "scope": "agents:write"
+  },
+  "route:corpusRoutes.js:GET /:scope/:id": {
+   "status": "capability",
+   "capability": "corpus.corpus.query",
+   "class": "safe",
+   "scope": "workspace:read"
+  },
+  "route:corpusRoutes.js:GET /:scope/:id/query": {
+   "status": "capability",
+   "capability": "corpus.corpus.query",
+   "class": "safe",
+   "scope": "workspace:read"
+  },
+  "route:corpusRoutes.js:GET /:scope/:id/assess": {
+   "status": "capability",
+   "capability": "corpus.corpus.assess",
+   "class": "safe",
+   "scope": "workspace:read"
+  },
+  "route:corpusRoutes.js:POST /:scope/:id/proposals": {
+   "status": "capability",
+   "capability": "corpus.proposal.create",
+   "class": "reversible",
+   "scope": "workspace:read"
+  },
+  "route:corpusRoutes.js:POST /:scope/:id/tenets": {
+   "status": "excluded",
+   "category": "covered-by",
+   "of": "route:corpusRoutes.js:POST /:scope/:id/proposals",
+   "class": "reversible",
+   "scope": "none",
+   "because": "an agent never writes a tenet (D211): its way to add one is corpus.proposal.create, which a person ratifies"
+  },
+  "route:corpusRoutes.js:POST /proposals/:id/decision": {
+   "status": "excluded",
+   "category": "self-authority",
+   "class": "irreversible",
+   "scope": "none",
+   "because": "ratifying turns a proposal into truth; an agent deciding proposals (its own included) is what D211 forbids, and the database refuses it"
+  },
+  "route:corpusRoutes.js:GET /tenets/:id/verdicts": {
+   "status": "planned",
+   "class": "safe",
+   "scope": "workspace:read"
+  },
+  "route:corpusRoutes.js:POST /tenets/:id/verdicts": {
+   "status": "planned",
+   "class": "irreversible",
+   "scope": "agents:write"
+  },
+  "route:corpusRoutes.js:POST /projects/:id/import": {
+   "status": "excluded",
+   "category": "protocol",
+   "class": "reversible",
+   "scope": "none",
+   "because": "the bound installation syncs its .xeno/corpus/ directory over a sender-bound session; it is a sync transport, not a person’s action"
+  },
+  "ui:platform-corpus.js:data-xcp=open-project": {
+   "status": "excluded",
+   "category": "view-state",
+   "class": "safe",
+   "scope": "none",
+   "because": "navigation to a tenet or the Corpus tab"
+  },
+  "ui:platform-corpus.js:data-xcp=retry": {
+   "status": "excluded",
+   "category": "view-state",
+   "class": "safe",
+   "scope": "none",
+   "because": "re-reads what the screen shows"
+  },
+  "ui:platform-corpus.js:data-xcp=new-tenet": {
+   "status": "excluded",
+   "category": "covered-by",
+   "of": "route:corpusRoutes.js:POST /:scope/:id/tenets",
+   "class": "reversible",
+   "scope": "none",
+   "because": "the screen for the same route"
+  },
+  "ui:platform-corpus.js:data-xcp=propose": {
+   "status": "capability",
+   "capability": "corpus.proposal.create",
+   "class": "reversible",
+   "scope": "workspace:read"
+  },
+  "ui:platform-corpus.js:data-xcp=ratify": {
+   "status": "excluded",
+   "category": "covered-by",
+   "of": "route:corpusRoutes.js:POST /proposals/:id/decision",
+   "class": "irreversible",
+   "scope": "none",
+   "because": "the screen for the same route"
+  },
+  "ui:platform-corpus.js:data-xcp=reject": {
+   "status": "excluded",
+   "category": "covered-by",
+   "of": "route:corpusRoutes.js:POST /proposals/:id/decision",
+   "class": "irreversible",
+   "scope": "none",
+   "because": "the screen for the same route"
   }
  }
 }

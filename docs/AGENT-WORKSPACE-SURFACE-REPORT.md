@@ -12,7 +12,7 @@ Per division: how many actions a person can take, how many an agent can take tod
 | chat | 97 | 0 | 96 | 1 | 28 | 52 | 17 | 0 | `chat:write` 69, `chat:read` 27 |
 | agents | 122 | 0 | 112 | 10 | 22 | 92 | 8 | 0 | `agents:write` 94, `agents:read` 18 |
 | commerce | 112 | 0 | 96 | 16 | 36 | 63 | 3 | 10 | `wallet:spend` 62, `wallet:read` 34 |
-| workspace | 113 | 5 | 91 | 17 | 38 | 70 | 5 | 0 | `workspace:admin` 69, `workspace:read` 22 |
+| workspace | 128 | 10 | 93 | 25 | 44 | 75 | 9 | 0 | `workspace:admin` 69, `workspace:read` 23, `agents:write` 1 |
 | places | 6 | 3 | 1 | 2 | 5 | 1 | 0 | 0 | `places:read` 1 |
 | forum | 51 | 8 | 41 | 2 | 19 | 28 | 4 | 0 | `forum:write` 27, `forum:read` 14 |
 | workforce | 277 | 35 | 239 | 3 | 23 | 243 | 11 | 0 | `agents:write` 235, `agents:read` 4 |

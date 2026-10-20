@@ -24,6 +24,7 @@ export function view(cv) {
     ...(n.type === 'xeno-ref' && n.ref.kind === 'task' ? { task: n.ref.id, ...(t[n.ref.id] && !t[n.ref.id].missing ? { title: t[n.ref.id].title, status: t[n.ref.id].status } : { missing: true }) } : {}),
     ...(n.type === 'xeno-ref' && n.ref.kind === 'file' ? { file: n.ref.id, ...((cv.records.files || {})[n.ref.id] || { missing: true }) } : {}),
     ...(n.type === 'xeno-ref' && n.ref.kind === 'chat' ? { chat: n.ref.id, ...((cv.records.chats || {})[n.ref.id] || { missing: true }) } : {}),
+    ...(n.type === 'xeno-ref' && n.ref.kind === 'tenet' ? { tenet: n.ref.id, ...((cv.records.tenets || {})[n.ref.id] || { missing: true }) } : {}),
     ...(n.type === 'text' ? { text: n.text } : {}), ...(n.type === 'link' ? { url: n.url } : {}), ...(n.type === 'group' ? { label: n.label } : {}),
   }));
   const connections = cv.content.edges.map((e) => ({ id: e.id, from: e.fromNode, to: e.toNode, ...(e.xeno?.link ? { link: e.xeno.link } : {}), ...(e.label ? { label: e.label } : {}) }));
@@ -56,10 +57,10 @@ export const TOOLS = [
   { name: 'create', title: 'Start a canvas', annotations: RW, description: 'Start a canvas. With `project`, everyone on the project sees it (you must be able to edit the project); without, it is yours alone.',
     inputSchema: { type: 'object', required: ['name'], properties: { name: { type: 'string' }, project: { type: 'string' } } } },
   { name: 'add', title: 'Put items on a canvas', annotations: RW,
-    description: 'Put items on a canvas: tasks (by key, e.g. T-12 — the card always shows the task as it is now), Library files and chats (by id, also live), notes (markdown), links and groups. Without x/y they are laid out to the right of what is there. Returns each new item’s id.',
+    description: 'Put items on a canvas: tasks (by key, e.g. T-12 — the card always shows the task as it is now), Library files and chats (by id, also live), Corpus tenets (by id: a verdict card showing the latest signed verdict), notes (markdown), links and groups. Without x/y they are laid out to the right of what is there. Returns each new item’s id.',
     inputSchema: { type: 'object', required: ['canvas', 'items'], properties: { canvas: CANVAS, items: { type: 'array', items: { type: 'object', required: ['type'], properties: {
-      type: { type: 'string', enum: ['task', 'file', 'chat', 'note', 'link', 'group'] }, task: { type: 'string', description: 'For a task card: its key, e.g. T-12.' },
-      file: { type: 'string', description: 'For a file card: a Library file id (see library_list_files).' }, chat: { type: 'string', description: 'For a chat card: a conversation id.' },
+      type: { type: 'string', enum: ['task', 'file', 'chat', 'tenet', 'note', 'link', 'group'] }, task: { type: 'string', description: 'For a task card: its key, e.g. T-12.' },
+      file: { type: 'string', description: 'For a file card: a Library file id (see library_list_files).' }, chat: { type: 'string', description: 'For a chat card: a conversation id.' }, tenet: { type: 'string', description: 'For a verdict card: a Corpus tenet id (see corpus_query).' },
       text: { type: 'string', description: 'For a note: markdown.' }, url: { type: 'string', description: 'For a link.' }, label: { type: 'string', description: 'For a group.' },
       x: { type: 'number' }, y: { type: 'number' }, width: { type: 'number' }, height: { type: 'number' } } } } } } },
   { name: 'connect', title: 'Connect two items', annotations: RW,
@@ -86,7 +87,7 @@ export async function callTool(db, actor, name, a = {}) {
           const at = it.x != null && it.y != null ? { x: it.x, y: it.y } : nextSpot(content, i), id = nid();
           const base = { id, x: at.x, y: at.y };
           if (it.type === 'task') content.nodes.push({ ...base, type: 'xeno-ref', ref: { kind: 'task', id: String(it.task || '') }, width: it.width || 260, height: it.height || 120 });
-          else if (it.type === 'file' || it.type === 'chat') content.nodes.push({ ...base, type: 'xeno-ref', ref: { kind: it.type, id: String(it[it.type] || '') }, width: it.width || 260, height: it.height || 100 });
+          else if (it.type === 'file' || it.type === 'chat' || it.type === 'tenet') content.nodes.push({ ...base, type: 'xeno-ref', ref: { kind: it.type, id: String(it[it.type] || '') }, width: it.width || 260, height: it.height || 100 });
           else if (it.type === 'note') content.nodes.push({ ...base, type: 'text', text: String(it.text || ''), width: it.width || 260, height: it.height || 150 });
           else if (it.type === 'link') content.nodes.push({ ...base, type: 'link', url: String(it.url || ''), width: it.width || 280, height: it.height || 80 });
           else if (it.type === 'group') content.nodes.unshift({ ...base, type: 'group', label: String(it.label || 'Group'), width: it.width || 600, height: it.height || 400 });

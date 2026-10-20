@@ -48,7 +48,7 @@
     if (!saved) fit();
     paint();
   }
-  function take(cv) { C.doc = cv.content; C.records = cv.records.tasks || {}; C.refs = { file: cv.records.files || {}, chat: cv.records.chats || {} }; C.rev = cv.revision; C.can = cv.can; C.name = cv.name; C.project = cv.project; }
+  function take(cv) { C.doc = cv.content; C.records = cv.records.tasks || {}; C.refs = { file: cv.records.files || {}, chat: cv.records.chats || {}, tenet: cv.records.tenets || {} }; C.rev = cv.revision; C.can = cv.can; C.name = cv.name; C.project = cv.project; }
   const store = (id, v) => { try { if (v) localStorage.setItem('xw-canvas-view:' + id, JSON.stringify(v)); else return JSON.parse(localStorage.getItem('xw-canvas-view:' + id) || 'null'); } catch { return null; } return null; };
 
   /** call BEFORE changing C.doc: the undo step is the state as it was */
@@ -64,7 +64,7 @@
     const id = C.id, body = { content: C.doc, revision: C.rev, name: C.name };
     const r = await api('PUT', '/api/canvases/' + encodeURIComponent(id), body).catch(() => null);
     C.saving = false; if (C.id !== id) return;
-    if (r && r.ok) { const keepSel = C.sel; C.rev = r.d.canvas.revision; C.records = r.d.canvas.records.tasks || {}; C.refs = { file: r.d.canvas.records.files || {}, chat: r.d.canvas.records.chats || {} }; C.sel = keepSel; status('Saved'); draw(); if (C.dirty) save(); return; }
+    if (r && r.ok) { const keepSel = C.sel; C.rev = r.d.canvas.revision; C.records = r.d.canvas.records.tasks || {}; C.refs = { file: r.d.canvas.records.files || {}, chat: r.d.canvas.records.chats || {}, tenet: r.d.canvas.records.tenets || {} }; C.sel = keepSel; status('Saved'); draw(); if (C.dirty) save(); return; }
     if (r && r.status === 409 && r.d.code === 'canvas_changed') { C.conflict = true; status(''); return paint(); }
     C.dirty = true; status(said(r, 'Not saved — the change is kept here; it will try again.'), true);
     // a refused link (403/400) is a rule, not a network blip: undo it rather than retry forever
@@ -102,6 +102,12 @@
       return `<div class="cv-n cv-n--text${sel}" data-cv-node="${esc(n.id)}" ${pos}>${body}${grips}</div>`;
     }
     if (n.type === 'link') { let host = n.url; try { host = new URL(n.url).host; } catch {} return `<div class="cv-n cv-n--link${sel}" data-cv-node="${esc(n.id)}" ${pos}>${ic('link')}<div><b>${esc(host)}</b><a href="${esc(n.url)}" target="_blank" rel="noopener noreferrer">${esc(n.url)}</a></div>${grips}</div>`; }
+    if (n.ref.kind === 'tenet') {   // a XENO Corpus verdict card: the tenet's latest signed verdict, read live as this reader
+      const r = ((C.refs || {}).tenet || {})[n.ref.id] || { loading: true };
+      if (r.missing) return `<div class="cv-n cv-n--task cv-n--gone${sel}" data-cv-node="${esc(n.id)}" ${pos}><small class="tk-key">Tenet</small><b>Not available</b><span class="tk-dim">Retired, or not shared with you</span>${grips}</div>`;
+      const st = r.state ? { held: 'Held', lapsed: 'Lapsed', error: 'Error' }[r.state] : 'Never assayed';
+      return `<div class="cv-n cv-n--task cv-n--tenet cv-n--v-${esc(r.state || 'none')}${sel}" data-cv-node="${esc(n.id)}" ${pos}><div class="cv-task-top">${ic('check')}<small class="tk-key">${esc(r.key || 'Tenet')}</small></div><b class="cv-task-t">${esc(r.claim || '…')}</b><div class="cv-task-f"><small class="tk-dim cv-verdict">${esc(st)}${r.at ? ' · ' + esc(new Date(r.at).toLocaleDateString()) : ''}${r.superseded ? ' · superseded' : ''}</small></div>${grips}</div>`;
+    }
     if (n.ref.kind !== 'task') {
       const r = ((C.refs || {})[n.ref.kind] || {})[n.ref.id] || { loading: true }, isF = n.ref.kind === 'file';
       if (r.missing) return `<div class="cv-n cv-n--task cv-n--gone${sel}" data-cv-node="${esc(n.id)}" ${pos}><small class="tk-key">${isF ? 'File' : 'Chat'}</small><b>Not available</b><span class="tk-dim">Deleted, or not shared with you</span>${grips}</div>`;
@@ -176,6 +182,7 @@
           <button class="tk-tool" data-cv-act="new-task" title="Create a new task here">${ic('plus')}New task</button>
           <button class="tk-tool" data-cv-act="add-file" title="Put Library files on the canvas">${ic('doc')}File</button>
           <button class="tk-tool" data-cv-act="add-chat" title="Put chats on the canvas">${ic('chat')}Chat</button>
+          ${C.project ? `<button class="tk-tool" data-cv-act="add-tenet" title="Put the project’s tenets on the canvas as live verdict cards">${ic('check')}Verdict</button>` : ''}
           <button class="tk-tool" data-cv-act="add-note" title="Note · N">${ic('edit')}Note</button>
           <button class="tk-tool" data-cv-act="add-link" title="Link">${ic('link')}Link</button>
           <button class="tk-tool" data-cv-act="add-group" title="Group">${ic('layers')}Group</button></span>`}
@@ -236,6 +243,22 @@
       if (x) C.refs[kind][k] = isF ? { id: k, name: x.name, type: x.mime_type || x.type, url: '/workspace/library?sel=' + k } : { id: k, title: x.title, url: '/workspace/apps/chat/' + k };
       C.doc.nodes.push({ id: uid(), type: 'xeno-ref', ref: { kind, id: k }, x: snap(c.x - 130 + (i % 4) * 280), y: snap(c.y - 50 + Math.floor(i / 4) * 130), width: 260, height: 100 }); });
     change(`Added ${ids.length} ${isF ? 'file' : 'chat'}${ids.length === 1 ? '' : 's'}`);
+  }
+  /** Put the project's Corpus tenets on the canvas as verdict cards (services/xenoCorpus.js resolves them live). */
+  async function addTenet() {
+    if (!C.project) return;
+    const r = await api('GET', `/api/corpus/project/${encodeURIComponent(C.project.id)}`).catch(() => null);
+    if (!r || !r.ok) return toast('The corpus couldn’t be loaded');
+    const on = new Set(C.doc.nodes.filter((n) => n.type === 'xeno-ref' && n.ref.kind === 'tenet').map((n) => n.ref.id));
+    const free = (r.d.tenets || []).filter((t) => t.kind === 'tenet' && !on.has(String(t.id).toLowerCase()));
+    if (!free.length) return toast((r.d.tenets || []).length ? 'Every tenet here is already on the canvas' : 'This project has no tenets yet');
+    const v = await D().form({ title: 'Put verdicts on the canvas', sub: 'Each card shows the tenet’s latest signed verdict, as each reader may see it.', submit: 'Add', size: 'md', fields: [{ id: 'ids', label: 'Tenets', type: 'checks', required: true, options: free.slice(0, 300).map((t) => [String(t.id), String(t.key), String(t.claim || '').slice(0, 80)]) }] });
+    if (!v) return;
+    const ids = [].concat(v.ids || []).filter(Boolean); const c = centre(); C.refs = C.refs || {}; C.refs.tenet = C.refs.tenet || {};
+    before(); ids.forEach((id, i) => { const t = free.find((y) => String(y.id) === id); const k = id.toLowerCase();
+      if (t) C.refs.tenet[k] = { key: t.key, claim: t.claim, state: t.latest ? t.latest.state : null, at: t.latest ? t.latest.at : null, freshness: t.freshness };
+      C.doc.nodes.push({ id: uid(), type: 'xeno-ref', ref: { kind: 'tenet', id: k }, x: snap(c.x - 130 + (i % 4) * 280), y: snap(c.y - 50 + Math.floor(i / 4) * 140), width: 260, height: 120 }); });
+    change(`Added ${ids.length} verdict${ids.length === 1 ? '' : 's'}`);
   }
   async function newTaskHere() {
     const v = await D().form({ title: 'New task on this canvas', submit: 'Create', size: 'sm', fields: [{ id: 'title', label: 'Title', required: true, max: 300 }] });
@@ -403,7 +426,7 @@
   }, true);
   addEventListener('keyup', (e) => { if (e.code === 'Space') space = false; });
   const ACT = {
-    'add-task': addTask, 'new-task': newTaskHere, 'add-file': () => addRef('file'), 'add-chat': () => addRef('chat'), 'add-note': () => addNote(), 'add-link': addLink, 'add-group': () => addGroup(false), 'group-sel': () => addGroup(true),
+    'add-task': addTask, 'new-task': newTaskHere, 'add-file': () => addRef('file'), 'add-chat': () => addRef('chat'), 'add-tenet': addTenet, 'add-note': () => addNote(), 'add-link': addLink, 'add-group': () => addGroup(false), 'group-sel': () => addGroup(true),
     delete: removeSel, rename: () => rename(), 'zoom-in': () => zoomAt(1.2), 'zoom-out': () => zoomAt(1 / 1.2), fit: () => { fit(); store(C.id, C.view); draw(); },
     menu: (_, el) => canvasMenu(el), reload: () => { const id = C.id; C.id = null; open(id); }, reopen: () => { const id = C.id; C.id = null; open(id); paint(); },
     back: () => goCanvas(null), new: newCanvas, 'retry-list': () => { L.list = null; paint(); }, 'edge-kind': (k) => edgeKind(k),
@@ -421,7 +444,7 @@
     const id = C.id; const r = await api('GET', '/api/canvases/' + encodeURIComponent(id)).catch(() => null);
     if (!r || !r.ok || C.id !== id || C.dirty || drag) return;
     if (r.d.canvas.revision !== C.rev) { take(r.d.canvas); C.sel = new Set([...C.sel].filter((s) => s.startsWith('e:') ? C.doc.edges.some((x) => 'e:' + x.id === s) : nodeById(s))); draw(); status('Updated'); }
-    else { C.records = r.d.canvas.records.tasks || {}; C.refs = { file: r.d.canvas.records.files || {}, chat: r.d.canvas.records.chats || {} }; draw(); }
+    else { C.records = r.d.canvas.records.tasks || {}; C.refs = { file: r.d.canvas.records.files || {}, chat: r.d.canvas.records.chats || {}, tenet: r.d.canvas.records.tenets || {} }; draw(); }
   }, 15000);
 
   // the breadcrumb names a canvas, never its id
