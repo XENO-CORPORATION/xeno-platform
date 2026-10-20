@@ -18,6 +18,7 @@
  * claim, move and comment, never accept their own work.
  */
 import crypto from 'node:crypto';
+import { assertAvailableOrOverridden, workspaceOfProject, AwayError } from './workforceAvailability.js';
 import { check, writeTuples } from '../utils/authzReBAC.js';
 import { createAgent, DEFAULT_AGENT_CAP } from './agentIdentity.js';
 import * as agentAccess from './agentAccess.js';
@@ -152,6 +153,13 @@ async function assertAssignable(db, userId, projectId) {
   if (projectId && !(await rel(db, userId, projectId, 'viewer'))) throw new TaskError('They cannot see this project. Share it with them first.', 'assignee_without_access', 409);
 }
 
+/** Time off (People): assigning or delegating to someone away needs a PERSON's explicit overrideAway. Yourself: never asked. */
+async function assertNotAway(db, me, userId, projectId, override) {
+  if (!userId || String(userId) === String(me.id)) return;
+  try { await assertAvailableOrOverridden(db, { workspaceId: await workspaceOfProject(db, projectId), principalId: userId, actorKind: kindOf(me), override: override === true }); }
+  catch (e) { if (e instanceof AwayError) throw new TaskError(e.message, e.code, e.status); throw e; }
+}
+
 export async function createTask(db, me, input = {}) {
   let projectId = input.projectId || null, parent = null;
   if (input.parentId || input.parentKey) {
@@ -165,6 +173,8 @@ export async function createTask(db, me, input = {}) {
   let delegateAfter = input.delegateId || null;
   if (input.assigneeId && await isAgent(db, input.assigneeId)) { delegateAfter = input.assigneeId; input = { ...input, assigneeId: kindOf(me) === 'human' ? me.id : null }; }
   if (input.assigneeId) await assertAssignable(db, input.assigneeId, projectId);
+  await assertNotAway(db, me, input.assigneeId, projectId, input.overrideAway);
+  await assertNotAway(db, me, delegateAfter, projectId, input.overrideAway);
   if (input.reviewerId) await assertAssignable(db, input.reviewerId, projectId);
   const review = !!input.reviewRequired;
   if (review && !input.reviewerId) throw new TaskError('Name a reviewer when review is required', 'reviewer_required');
@@ -257,12 +267,13 @@ export async function updateTask(db, me, key, input = {}) { // eslint-disable-li
   // an agent is never the assignee: choosing one makes it the DELEGATE, and the person stays accountable (Linear)
   if (input.delegateId !== undefined || (input.assigneeId && await isAgent(db, input.assigneeId))) {
     if (!s.manage) throw new TaskError('Only the person who created this task can delegate it', 'not_allowed', 403);
+    await assertNotAway(db, me, input.delegateId !== undefined ? input.delegateId : input.assigneeId, t.project_id, input.overrideAway);
     await applyDelegate(db, me, t, s, input.delegateId !== undefined ? input.delegateId : input.assigneeId);
     input = { ...input }; delete input.delegateId; if (input.assigneeId && await isAgent(db, input.assigneeId)) delete input.assigneeId;
   }
   // assigning someone else, and choosing the reviewer, are management acts
   if (input.assigneeId !== undefined) { if (!s.manage && !(input.assigneeId === null && mine)) throw new TaskError('Only the person who created this task can assign it. Claim it to work on it yourself.', 'not_allowed', 403);
-    if (input.assigneeId) await assertAssignable(db, input.assigneeId, t.project_id); put('assignee_id', input.assigneeId || null, 'assignee', t.assignee_id); }
+    if (input.assigneeId) { await assertAssignable(db, input.assigneeId, t.project_id); await assertNotAway(db, me, input.assigneeId, t.project_id, input.overrideAway); } put('assignee_id', input.assigneeId || null, 'assignee', t.assignee_id); }
   if (input.reviewerId !== undefined || input.reviewRequired !== undefined) { if (!s.manage) throw new TaskError('Only the person who created this task can set its review', 'not_allowed', 403);
     const reviewer = input.reviewerId !== undefined ? input.reviewerId : t.reviewer_id, required = input.reviewRequired !== undefined ? !!input.reviewRequired : t.review_required;
     if (reviewer) await assertAssignable(db, reviewer, t.project_id); if (required && !reviewer) throw new TaskError('Name a reviewer when review is required', 'reviewer_required');
@@ -714,9 +725,10 @@ async function applyDelegate(db, me, t, s, agentId) { // eslint-disable-line no-
   await folderAccess(db, t.id);
   return true;
 }
-export async function delegateTask(db, me, key, { agentId } = {}) {
+export async function delegateTask(db, me, key, { agentId, overrideAway } = {}) {
   const { t, s } = await readable(db, me, key);
   if (!s.manage) throw new TaskError('Only the person who created this task can delegate it', 'not_allowed', 403);
+  await assertNotAway(db, me, agentId, t.project_id, overrideAway);
   await applyDelegate(db, me, t, s, agentId);
   return getTask(db, me, key);
 }

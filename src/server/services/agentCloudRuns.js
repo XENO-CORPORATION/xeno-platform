@@ -17,6 +17,7 @@
  * own work" are enforced by the same server checks as anywhere else. Ending a run revokes the credential.
  */
 import crypto from 'node:crypto';
+import { assertAvailableOrOverridden, workspaceOfProject, AwayError } from './workforceAvailability.js';
 import { agentsApiBaseUrl, mintDelegatedAccessToken, revokeDelegatedSession } from './marketplaceBroker.js';
 import * as agents from './platformAgents.js';
 import * as tasks from './xenoTasks.js';
@@ -128,7 +129,7 @@ async function fenced(db, admissionId) {
   return !!(await db.query('SELECT workforce_run_admission_fence($1) AS f', [admissionId])).rows[0].f;
 }
 
-export async function start(db, owner, agentId, { taskKey, budgetCredits } = {}, { fetchImpl = fetch, env = process.env } = {}) {
+export async function start(db, owner, agentId, { taskKey, budgetCredits, overrideAway } = {}, { fetchImpl = fetch, env = process.env } = {}) {
   const base = agentsApiBaseUrl(env);
   if (!base) throw new AgentRunError('Cloud runs are not available on this server', 'cloud_runs_unavailable', 503);
   const agent = await agents.getWith(db, owner, agentId, 'runner');       // the run right, or 403/404
@@ -138,6 +139,9 @@ export async function start(db, owner, agentId, { taskKey, budgetCredits } = {},
     throw new AgentRunError(`The budget is between 1 and ${MAX_BUDGET_CREDITS} credits`, 'invalid_budget');
   }
   if (!agent.version) throw new AgentRunError('This agent has no instructions version yet', 'agent_not_ready', 409);
+  // time off (People): a run for an agent that is on time off in this workspace needs a PERSON's explicit override
+  try { await assertAvailableOrOverridden(db, { workspaceId: await workspaceOfProject(db, task.projectId || task.project?.id), principalId: agent.userId, actorKind: owner.kind === 'agent' ? 'agent' : 'human', override: overrideAway === true, name: agent.name || 'This agent' }); }
+  catch (e) { if (e instanceof AwayError) throw new AgentRunError(e.message, e.code, e.status); throw e; }
   if (!(await runnerSupportsAgents(base, fetchImpl))) {
     throw new AgentRunError('The cloud runner cannot run XENO agents yet. Nothing was started and nothing was charged.', 'runner_lacks_agents', 503);
   }
@@ -145,7 +149,7 @@ export async function start(db, owner, agentId, { taskKey, budgetCredits } = {},
   // The run works the task as its delegate, so the task is delegated to this agent first -- by the same rule as a
   // delegation from the task page (only its creator may), and the same server check on the agent's projects.
   if (!task.delegate || String(task.delegate.id) !== String(agent.userId)) {
-    task = await tasks.delegateTask(db, owner, task.key, { agentId: agent.userId });
+    task = await tasks.delegateTask(db, owner, task.key, { agentId: agent.userId, overrideAway: overrideAway === true });
   }
   const live = (await db.query(`SELECT * FROM agent_cloud_runs WHERE agent_user_id = $1 AND task_id = $2 AND state = ANY($3)`,
     [agent.userId, task.id, [...LIVE]])).rows[0];
