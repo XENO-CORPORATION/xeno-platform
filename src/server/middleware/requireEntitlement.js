@@ -49,6 +49,7 @@
  */
 import { entitlementsFor } from '../services/billingService.js';
 import { resolveEntitlements } from '../utils/entitlementGate.js';
+import { workspaceFromReq } from '../utils/workspaceContext.js';
 
 /**
  * Plans in ascending order of capability. Used to answer "what is the CHEAPEST plan
@@ -131,11 +132,11 @@ export function upgradeRequiredBody(capability, ent) {
  * { allowed: false, ent, body }. Use this inside a route when the check must happen
  * at a precise point (after validation, before side effects) rather than at mount.
  */
-export async function assertEntitlement(db, userId, capability) {
+export async function assertEntitlement(db, userId, capability, { workspaceId = null } = {}) {
   if (!(capability in CAPABILITY_CONTEXT)) {
     throw new Error(`requireEntitlement: unknown capability '${capability}'`);
   }
-  const ent = await resolveEntitlements(db, userId); // fails CLOSED to free
+  const ent = await resolveEntitlements(db, userId, { workspaceId }); // fails CLOSED to free; D-1 acting workspace
   if (grants(ent, capability)) return { allowed: true, ent };
   return { allowed: false, ent, body: upgradeRequiredBody(capability, ent) };
 }
@@ -158,7 +159,7 @@ export function requireEntitlement(capability) {
     const userId = req.user?.id;
     if (!userId || !req.db) return next(); // auth/db middleware own those failures
     try {
-      const verdict = await assertEntitlement(req.db, userId, capability);
+      const verdict = await assertEntitlement(req.db, userId, capability, { workspaceId: workspaceFromReq(req) });
       if (!verdict.allowed) return res.status(403).json(verdict.body);
       req.entitlements = verdict.ent; // downstream handlers can reuse the resolution
       return next();

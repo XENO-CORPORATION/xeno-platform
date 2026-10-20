@@ -14,8 +14,8 @@
  * The allowance comes from the plan (accountPlan.js `storageBytes`). The meter reads the rows themselves on
  * every call; there is no counter to drift.
  */
-import { getEffectiveEntitlements } from './effectivePlan.js';
-import { entitlementsFor, getPlan } from './accountPlan.js';
+import { getEffectiveEntitlements, getWorkspacePlan } from './effectivePlan.js';
+import { entitlementsFor } from './accountPlan.js';
 import { ownerScopeOf } from './ownerScope.js';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -107,7 +107,7 @@ export async function workspaceStorageAllowance(db, workspaceId) {
   const w = (await db.query('SELECT owner_user_id, metadata FROM workspaces WHERE id = $1', [workspaceId])).rows[0];
   if (!w) return 0;
   const billing = w.metadata?.billing || {};
-  const plan = billing.plan && ACTIVE.has(billing.status) ? billing.plan : (await getPlan(db, w.owner_user_id)).plan;
+  const { plan } = await getWorkspacePlan(db, workspaceId); // D-1: the workspace's own plan (effectivePlan.js)
   const bytes = entitlementsFor(plan).storageBytes;
   if (bytes === null) return null;
   const perPlan = Number(bytes) || 0;

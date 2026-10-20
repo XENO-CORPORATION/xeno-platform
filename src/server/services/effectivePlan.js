@@ -133,3 +133,61 @@ export async function getEffectiveEntitlements(pool, userId) {
   const p = await getEffectivePlan(pool, userId);
   return { ...p, entitlements: entitlementsFor(p.plan) };
 }
+
+const FREE_WS = (via = null, status = 'none') => ({ plan: 'free', status, currentPeriodEnd: null, source: 'none', via });
+
+/**
+ * D-1 (2026-10-20): the plan of a WORKSPACE. The workspace is the unit of billing:
+ *   - a workspace subscription (`metadata.billing`, per-seat Team) is that workspace's plan;
+ *   - a PERSONAL workspace carries its owner's personal plan (`xeno_account_plans`, matched by the backfilled
+ *     `workspace_id`, and by the owner's user id for a row written before the workspace existed);
+ *   - a shared workspace with no subscription of its own takes its owner's plan ONLY when that plan includes a
+ *     shared workspace (Studio's seats, staff `internal`). A personal Pro does not license a team workspace.
+ * Stripe still writes `xeno_account_plans` by user_id, so existing subscribers settle exactly as before.
+ * Fails CLOSED: an unknown workspace, or a read fault, is Free.
+ */
+export async function getWorkspacePlan(pool, workspaceId) {
+  try {
+    const w = (await pool.query('SELECT id, owner_user_id, workspace_type, metadata FROM workspaces WHERE id = $1', [workspaceId])).rows[0];
+    if (!w) return FREE_WS();
+    const billing = w.metadata?.billing || {};
+    if (billing.plan && billing.plan !== 'free' && ACTIVE.has(billing.status)) {
+      return { plan: billing.plan, status: billing.status, currentPeriodEnd: null, source: 'workspace', via: w.id };
+    }
+    if (w.workspace_type === 'personal') {
+      const r = (await pool.query(
+        `SELECT plan, status, current_period_end FROM xeno_account_plans
+          WHERE workspace_id = $1 OR user_id = $2 ORDER BY (workspace_id = $1) DESC NULLS LAST LIMIT 1`,
+        [w.id, String(w.owner_user_id)])).rows[0];
+      if (r && ACTIVE.has(r.status)) return { plan: r.plan, status: r.status, currentPeriodEnd: r.current_period_end, source: 'personal', via: w.id };
+      return { ...FREE_WS(w.id, r?.status || 'none'), currentPeriodEnd: r?.current_period_end || null, source: 'personal' };
+    }
+    const owner = await getPlan(pool, w.owner_user_id);
+    if (owner.plan === 'internal' || Number(entitlementsFor(owner.plan).teamSeats) > 0) {
+      return { plan: owner.plan, status: owner.status, currentPeriodEnd: null, source: 'owner', via: w.id };
+    }
+    return { ...FREE_WS(w.id), source: 'workspace' };
+  } catch (e) {
+    console.error('[EffectivePlan] workspace plan lookup failed:', e.message);
+    return FREE_WS();
+  }
+}
+
+/**
+ * Entitlements for a person ACTING IN a workspace: that workspace's plan (staff `internal` is kept, it is not a
+ * subscription). Without an acting workspace the legacy answer (strongest plan from any source) is returned, so a
+ * caller that has not named a workspace yet reads exactly as before.
+ */
+export async function getActingEntitlements(pool, userId, { workspaceId = null } = {}) {
+  if (!workspaceId) return getEffectiveEntitlements(pool, userId);
+  /* 🔴 Only a MEMBER acts in a workspace. A named workspace the caller does not belong to is ignored, so a request
+   * header can never borrow a stranger's plan. Same membership as workspacePlansFor (any relation). */
+  const member = await pool.query(
+    `SELECT 1 FROM relationship_tuples WHERE object_type = 'workspace' AND object_id = $1 AND subject_type = 'user' AND subject_id = $2
+     UNION ALL SELECT 1 FROM workspaces WHERE id::text = $1 AND owner_user_id::text = $2 LIMIT 1`,
+    [String(workspaceId), String(userId)]).catch(() => ({ rows: [] }));
+  if (!member.rows.length) return getEffectiveEntitlements(pool, userId);
+  const personal = await getPlan(pool, userId);
+  const p = personal.plan === 'internal' ? { ...personal, source: 'personal', via: null } : await getWorkspacePlan(pool, workspaceId);
+  return { ...p, entitlements: entitlementsFor(p.plan) };
+}
