@@ -98,8 +98,10 @@ export async function assertStorageRoom(tx, { userId, workspaceId = null, bytes 
 /**
  * A shared workspace's pool (spec §5.4, enforced since 2026-10-20). The plan attaches to the WORKSPACE: an active
  * workspace subscription's plan, otherwise the owner's own plan (Studio includes a shared workspace). The plan
- * table defines no per-seat storage, so the pool is the plan value; a per-seat figure is an owner pricing decision
- * (XENO PRICING ledger is locked). `null` = no limit (internal). Fails CLOSED: an unreadable plan is Free.
+ * Team is PER SEAT, pooled (decided 2026-10-20, XENO PRICING ledger §6): the team plan's `storageBytes` times the
+ * workspace's paid seats (`metadata.billing.seat_limit`, the one seat store, written by setWorkspacePlan). Unknown
+ * seats count as one. Agents are never seats. Other plans are a flat pool. `null` = no limit (internal).
+ * Fails CLOSED: an unreadable plan is Free.
  */
 export async function workspaceStorageAllowance(db, workspaceId) {
   const w = (await db.query('SELECT owner_user_id, metadata FROM workspaces WHERE id = $1', [workspaceId])).rows[0];
@@ -107,7 +109,11 @@ export async function workspaceStorageAllowance(db, workspaceId) {
   const billing = w.metadata?.billing || {};
   const plan = billing.plan && ACTIVE.has(billing.status) ? billing.plan : (await getPlan(db, w.owner_user_id)).plan;
   const bytes = entitlementsFor(plan).storageBytes;
-  return bytes === null ? null : Number(bytes) || 0;
+  if (bytes === null) return null;
+  const perPlan = Number(bytes) || 0;
+  if (plan !== 'team') return perPlan;
+  const seats = Number(billing.seat_limit);
+  return perPlan * (Number.isInteger(seats) && seats >= 1 ? seats : 1);
 }
 
 export async function workspaceUsedBytes(db, workspaceId) {

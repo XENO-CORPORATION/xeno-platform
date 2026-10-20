@@ -100,7 +100,11 @@ async function main() {
       VALUES ($1, NULL, $1, $2, 'wsbulk.bin', 'wsbulk.bin', 'application/octet-stream', 'video/mp4', $3, '/nowhere/wsbulk.bin', 'platform-upload', '{}') RETURNING id`, [free, company, 5 * GB])).rows[0].id;
     await assert.rejects(add(free, 'over.txt', 'over the pool', { workspaceId: company, enforceAllowance: true }), (e) => e instanceof StorageFullError && e.allowanceBytes === 5 * GB, 'a full workspace pool refuses a new file held to the workspace pool, not the person');
     await pool.query(`UPDATE workspaces SET metadata = jsonb_build_object('billing', jsonb_build_object('plan','team','status','active','seat_limit',3)) WHERE id = $1`, [company]);
-    assert.equal(await workspaceStorageAllowance(pool, company), 100 * GB, 'the workspace\'s own Team plan sets its pool');
+    assert.equal(await workspaceStorageAllowance(pool, company), 300 * GB, 'Team is 100 GiB per paid seat, pooled: 3 seats = 300 GiB');
+    await pool.query(`UPDATE workspaces SET metadata = jsonb_build_object('billing', jsonb_build_object('plan','team','status','active','seat_limit',1)) WHERE id = $1`, [company]);
+    assert.equal(await workspaceStorageAllowance(pool, company), 100 * GB, 'one paid seat = 100 GiB');
+    await pool.query(`UPDATE workspaces SET metadata = jsonb_build_object('billing', jsonb_build_object('plan','team','status','active')) WHERE id = $1`, [company]);
+    assert.equal(await workspaceStorageAllowance(pool, company), 100 * GB, 'unknown seats count as one seat');
     await add(free, 'fits.txt', 'fits now', { workspaceId: company, enforceAllowance: true });
     await pool.query(`UPDATE workspaces SET metadata = '{}'::jsonb WHERE id = $1`, [company]);
     await pool.query('DELETE FROM user_files WHERE id = $1', [wsBulk]);
