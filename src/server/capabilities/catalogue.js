@@ -16,14 +16,18 @@ import * as agentsMcp from '../services/agentsMcp.js';
 import * as agentMediaMcp from '../services/agentMediaMcp.js';
 import * as forumMcp from '../services/forumMcp.js';
 import * as placesMcp from '../services/placesMcp.js';
+import * as modesMcp from '../services/modesMcp.js';
+import { MODES_ROWS } from './modes.js';
 import * as storageMcp from '../services/storageMcp.js';
 import * as supportMcp from '../services/supportMcp.js';
+import * as publishMcp from '../services/publishMcp.js';
+import * as workforceMcp from '../services/workforceMcp.js';
 
 /** The tools each bound category executes, by category. */
 export const BOUND_TOOLS = Object.freeze({
   tasks: tasksMcp.TOOLS, canvas: canvasMcp.TOOLS, agents: agentsMcp.TOOLS,
   image: agentMediaMcp.IMAGE.tools, video: agentMediaMcp.VIDEO.tools, library: agentMediaMcp.LIBRARY.tools, chat: agentMediaMcp.CHAT.tools,
-  forum: forumMcp.TOOLS.map((t) => ({ ...t, name: t.name.replace(/^forum_/, '') })), places: placesMcp.TOOLS, storage: storageMcp.TOOLS, support: supportMcp.TOOLS,
+  forum: forumMcp.TOOLS.map((t) => ({ ...t, name: t.name.replace(/^forum_/, '') })), places: placesMcp.TOOLS, storage: storageMcp.TOOLS, support: supportMcp.TOOLS, publish: publishMcp.TOOLS, modes: modesMcp.TOOLS, workforce: workforceMcp.TOOLS,
 });
 
 const obj = (properties, required) => ({ type: 'object', properties, ...(required ? { required } : {}) });
@@ -37,6 +41,8 @@ const READ = NAT('reads change nothing');
 
 /** [canonical name, bound category, bound tool, class, extras] */
 const ROWS = [
+  // ── modes (custom modes + trade packs; rows in ./modes.js)
+  ...MODES_ROWS,
   // ── tasks
   ['tasks.project.list', 'tasks', 'list_projects', 'safe', { reply: obj({ projects: { type: 'array', description: 'id, name, area of each project you can work in.' }, hint: { type: 'string', description: 'Set when you have none: what to ask the person for.' } }) }],
   ['tasks.task.list_mine', 'tasks', 'list_my_tasks', 'safe', { reply: obj({ tasks: { type: 'array', description: 'key, title, status, priority, project, url of each open task assigned (person) or delegated (agent) to you.' }, unassigned: { type: 'array', description: 'With a project: up to 50 open tasks nobody holds that you could take.' }, hint: { type: 'string' } }, ['tasks']) }],
@@ -81,6 +87,32 @@ const ROWS = [
   ['storage.folder.create', 'storage', 'create_folder', 'undoable', { idempotency: NAT('a name already used in the same place is refused (folder_exists), so a retry cannot make a second folder'), reply: obj({ folder: { type: 'object', description: 'id, name, parentId, workspaceId.' } }, ['folder']) }],
   ['storage.file.upload', 'storage', 'upload_file', 'undoable', { idempotency: { strategy: 'key', key: 'request_key' }, cost: { model: 'free', note: 'counts against the owner’s storage allowance' }, reply: obj({ file: { type: 'object', description: 'id, name, size, type, folderId, state (quarantined until scanned).' }, replayed: { type: 'boolean', description: 'true when this request_key was already applied.' } }, ['file']) }],
   ['storage.link.create', 'storage', 'create_signin_link', 'undoable', { scope: 'share:create', idempotency: NONE('no request key yet: a retried call makes a second link (each is revocable)'), reply: obj({ link: { type: 'object', description: 'id, folderId, label, expiresAt.' }, url: { type: 'string', description: 'The sign-in link, shown once. Opening it needs a XENO account.' } }, ['link', 'url']) }],
+  // ── workforce (XENO-WORKFORCE-01 §11.1 agent.* + division/objective/funding/run; WORKSPACE AGENT SURFACE, after Storage)
+  ...[
+    ['agent.resource.create', 'resource_create', 'irreversible'], ['agent.resource.create_and_assign', 'resource_create_and_assign', 'irreversible'],
+    ['agent.resource.operation_get', 'resource_operation_get', 'safe'], ['agent.resource.get', 'resource_get', 'safe'],
+    ['agent.resource.update', 'resource_update', 'irreversible'], ['agent.resource.revision_get', 'resource_revision_get', 'safe'],
+    ['agent.catalog.list', 'catalog_list', 'safe'],
+    ['run.admission.create', 'admission_create', 'irreversible', { cost: { model: 'quoted', note: 'commits the payer’s budget; the reservation is in the reply' } }],
+    ['run.admission.get', 'admission_get', 'safe'], ['run.admission.list', 'admission_list', 'safe'], ['run.admission.operation_get', 'admission_operation_get', 'safe'],
+    ['run.pin.get', 'pin_get', 'safe'], ['run.admission.revoke', 'admission_revoke', 'irreversible'], ['run.authority.get', 'authority_get', 'safe'],
+    ['division.division.list', 'division_list', 'safe'], ['division.division.get', 'division_get', 'safe'], ['division.division.create', 'division_create', 'undoable'],
+    ['division.division.update', 'division_update', 'undoable'], ['division.division.archive', 'division_archive', 'irreversible'],
+    ['objective.objective.create', 'objective_create', 'undoable'], ['objective.objective.get', 'objective_get', 'safe'], ['objective.objective.update', 'objective_update', 'undoable'],
+    ['objective.objective.complete', 'objective_complete', 'irreversible'], ['objective.goal.link', 'objective_link_goal', 'undoable'],
+    ['funding.budget.price', 'funding_price', 'safe'], ['funding.budget.propose', 'funding_budget_propose', 'undoable'], ['funding.budget.get', 'funding_budget_get', 'safe'],
+    ['funding.offer.get', 'funding_offer_get', 'safe'],
+    ['funding.contribution.create', 'funding_contribute', 'irreversible', { cost: { model: 'quoted', note: 'moves the owner’s credits into the project; the amount is in the body' } }],
+    ['funding.contribution.get', 'funding_contribution_get', 'safe'], ['funding.contribution.return', 'funding_contribution_return', 'irreversible'],
+  ].map(([name, tool, cls, extra = {}]) => [name, 'workforce', tool, cls, { provenance: cls === 'safe' ? 'untrusted' : 'trusted',
+    reply: obj({}, undefined), ...(cls === 'safe' ? {} : { idempotency: NAT('the service keys a mutation by its operationId (or its natural target); a repeat reads the same result back') }), ...extra }]),
+  // ── publish (XENO Post, server-to-server). Drafts and PROPOSED times only: publish, retract and approve reach an
+  //    audience and cannot be taken back, so they are a person's confirmed step on the Publish screen, never a tool.
+  ['publish.channel.list', 'publish', 'list_channels', 'safe', { provenance: 'untrusted', reply: obj({ channels: { type: 'array', description: 'id, platform, name, handle, status of each channel.' } }, ['channels']) }],
+  ['publish.post.list', 'publish', 'list_posts', 'safe', { provenance: 'untrusted', reply: obj({ posts: { type: 'array', description: 'id, state, text, media count, scheduledFor, targets, proposedFor (a time waiting for a person).' } }, ['posts']) }],
+  ['publish.post.draft', 'publish', 'draft_post', 'undoable', { idempotency: { strategy: 'key', key: 'request_key' }, reply: obj({ post: { type: 'object', description: 'The draft: id, state (draft), text, media, targets.' } }, ['post']) }],
+  ['publish.post.propose_schedule', 'publish', 'propose_schedule', 'undoable', { idempotency: NAT('one pending proposal per post; proposing again replaces the time'), reply: obj({ needsConfirmation: { type: 'boolean', description: 'Always true: a person confirms before anything is scheduled.' }, confirmationId: { type: 'string' }, proposedFor: { type: 'string' } }, ['needsConfirmation']) }],
+  ['publish.approval.list', 'publish', 'list_approvals', 'safe', { provenance: 'untrusted', reply: obj({ items: { type: 'array', description: 'kind (approval|proposal), id, postId, proposedFor, requestedAt.' } }, ['items']) }],
   // ── support (Help ▸ Contact support). Sending a reply to a customer is a person's act: there is no capability for it.
   ['support.ticket.create', 'support', 'create_ticket', 'undoable', { provenance: 'trusted', idempotency: NONE('no request key yet: a retried call raises a second request (rate-limited per hour)'), reply: obj({ ticket: { type: 'object', description: 'key (T-n), kind, title, status, priority, sla, url.' } }, ['ticket']) }],
   ['support.ticket.list', 'support', 'list_tickets', 'safe', { reply: obj({ tickets: { type: 'array', description: 'key, title, kind, status, priority, sla, updatedAt of each request.' } }, ['tickets']) }],

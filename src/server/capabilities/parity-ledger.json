@@ -119,6 +119,10 @@
   "xenoRoutes.js": "studio",
   "xenoTasksRoutes.js": "tasks",
   "youtubeRoutes.js": "studio",
+  "modesRoutes.js": "workspace",
+  "setup.js": "workspace-ui",
+  "publishRoutes.js": "publish",
+  "platform-publish.js": "publish",
   "supportRoutes.js": "support",
   "platform-support.js": "support"
  },
@@ -2473,6 +2477,61 @@
    "class": "reversible",
    "scope": "library:write"
   },
+  "route:modesRoutes.js:DELETE /:modeId (meModesRouter)": {
+   "status": "planned",
+   "class": "reversible",
+   "scope": "workspace:admin"
+  },
+  "route:modesRoutes.js:GET / (meModesRouter)": {
+   "status": "planned",
+   "class": "safe",
+   "scope": "workspace:read"
+  },
+  "route:modesRoutes.js:GET /:wid/modes/applications (workspaceModesRouter)": {
+   "status": "capability",
+   "capability": "modes.mode.status",
+   "class": "safe",
+   "scope": "workspace:read"
+  },
+  "route:modesRoutes.js:GET /:wid/modes/packs (workspaceModesRouter)": {
+   "status": "capability",
+   "capability": "modes.pack.list",
+   "class": "safe",
+   "scope": "workspace:read"
+  },
+  "route:modesRoutes.js:PATCH /:modeId (meModesRouter)": {
+   "status": "planned",
+   "class": "reversible",
+   "scope": "workspace:admin"
+  },
+  "route:modesRoutes.js:PATCH /:wid/modes/items/:modeId (workspaceModesRouter)": {
+   "status": "planned",
+   "class": "reversible",
+   "scope": "workspace:admin"
+  },
+  "route:modesRoutes.js:POST / (meModesRouter)": {
+   "status": "planned",
+   "class": "reversible",
+   "scope": "workspace:admin"
+  },
+  "route:modesRoutes.js:POST /:wid/modes/:applicationId/revert (workspaceModesRouter)": {
+   "status": "capability",
+   "capability": "modes.mode.revert",
+   "class": "reversible",
+   "scope": "workspace:admin"
+  },
+  "route:modesRoutes.js:POST /:wid/modes/apply (workspaceModesRouter)": {
+   "status": "capability",
+   "capability": "modes.mode.apply",
+   "class": "reversible",
+   "scope": "workspace:admin"
+  },
+  "route:modesRoutes.js:POST /:wid/modes/plan (workspaceModesRouter)": {
+   "status": "capability",
+   "capability": "modes.mode.plan",
+   "class": "safe",
+   "scope": "workspace:read"
+  },
   "route:oauth2Routes.js:GET /.well-known/oauth-authorization-server": {
    "status": "excluded",
    "category": "protocol",
@@ -2653,6 +2712,21 @@
    "capability": "places.place.get",
    "class": "safe",
    "scope": "places:read"
+  },
+  "route:placesRoutes.js:GET /:placeId/events": {
+   "status": "planned",
+   "class": "safe",
+   "scope": "places:read"
+  },
+  "route:placesRoutes.js:GET /needs-you": {
+   "status": "planned",
+   "class": "safe",
+   "scope": "places:read"
+  },
+  "route:placesRoutes.js:POST /:placeId/presence": {
+   "status": "planned",
+   "class": "reversible",
+   "scope": "places:write"
   },
   "route:placesRoutes.js:POST /ops/:op": {
    "status": "capability",
@@ -2902,6 +2976,80 @@
    "class": "safe",
    "scope": "workspace:read"
   },
+  "route:publishRoutes.js:GET /approvals": {
+   "status": "capability",
+   "capability": "publish.approval.list",
+   "class": "safe",
+   "scope": "publish:read"
+  },
+  "route:publishRoutes.js:GET /channels": {
+   "status": "capability",
+   "capability": "publish.channel.list",
+   "class": "safe",
+   "scope": "publish:read"
+  },
+  "route:publishRoutes.js:GET /inbox": {
+   "status": "planned",
+   "class": "safe",
+   "scope": "publish:read",
+   "because": "inbox read for agents is next: needs a declared untrusted-content reply"
+  },
+  "route:publishRoutes.js:GET /posts": {
+   "status": "capability",
+   "capability": "publish.post.list",
+   "class": "safe",
+   "scope": "publish:read"
+  },
+  "route:publishRoutes.js:GET /status": {
+   "status": "capability",
+   "capability": "publish.channel.list",
+   "class": "safe",
+   "scope": "publish:read"
+  },
+  "route:publishRoutes.js:POST /approvals/:kind/:id": {
+   "status": "planned",
+   "class": "external",
+   "scope": "publish:write",
+   "because": "approving lets a post reach an audience: a person decides, never an agent"
+  },
+  "route:publishRoutes.js:POST /channels/connect": {
+   "status": "excluded",
+   "category": "self-authority",
+   "class": "reversible",
+   "scope": "none",
+   "because": "connecting a social account is an admin OAuth sign-in on that platform"
+  },
+  "route:publishRoutes.js:POST /posts": {
+   "status": "capability",
+   "capability": "publish.post.draft",
+   "class": "reversible",
+   "scope": "publish:write"
+  },
+  "route:publishRoutes.js:POST /posts/:id/publish": {
+   "status": "planned",
+   "class": "external",
+   "scope": "publish:write",
+   "because": "reaches an audience and cannot be taken back: a person confirms it on screen (step-up); no agent tool by design"
+  },
+  "route:publishRoutes.js:POST /posts/:id/retract": {
+   "status": "planned",
+   "class": "external",
+   "scope": "publish:write",
+   "because": "visible to an audience and irreversible: a person confirms it on screen (step-up); no agent tool by design"
+  },
+  "route:publishRoutes.js:POST /posts/:id/schedule": {
+   "status": "capability",
+   "capability": "publish.post.propose_schedule",
+   "class": "reversible",
+   "scope": "publish:write"
+  },
+  "route:publishRoutes.js:PUT /link": {
+   "status": "excluded",
+   "category": "self-authority",
+   "class": "reversible",
+   "scope": "none",
+   "because": "links a workspace to a XENO Post workspace: an admin decides where the workspace publishes, never an agent"
+  },
   "route:serviceLedgerRoutes.js:GET /balance": {
    "status": "excluded",
    "category": "service",
@@ -3084,6 +3232,94 @@
    "status": "planned",
    "class": "safe",
    "scope": "storage:read"
+  },
+  "route:supportRoutes.js:DELETE /macros/:id": {
+   "status": "planned",
+   "class": "irreversible",
+   "scope": "forum:write"
+  },
+  "route:supportRoutes.js:GET /macros": {
+   "status": "planned",
+   "class": "safe",
+   "scope": "forum:read"
+  },
+  "route:supportRoutes.js:GET /tickets/:key": {
+   "status": "capability",
+   "capability": "support.ticket.get",
+   "class": "safe",
+   "scope": "forum:read"
+  },
+  "route:supportRoutes.js:GET /tickets/mine": {
+   "status": "capability",
+   "capability": "support.ticket.list",
+   "class": "safe",
+   "scope": "forum:read"
+  },
+  "route:supportRoutes.js:GET /tickets/queue": {
+   "status": "capability",
+   "capability": "support.ticket.list",
+   "class": "safe",
+   "scope": "forum:read"
+  },
+  "route:supportRoutes.js:POST /macros": {
+   "status": "planned",
+   "class": "reversible",
+   "scope": "forum:write"
+  },
+  "route:supportRoutes.js:POST /tickets": {
+   "status": "capability",
+   "capability": "support.ticket.create",
+   "class": "reversible",
+   "scope": "forum:write"
+  },
+  "route:supportRoutes.js:POST /tickets/:key/assign": {
+   "status": "planned",
+   "class": "reversible",
+   "scope": "forum:write"
+  },
+  "route:supportRoutes.js:POST /tickets/:key/drafts/:id/discard": {
+   "status": "planned",
+   "class": "reversible",
+   "scope": "forum:write"
+  },
+  "route:supportRoutes.js:POST /tickets/:key/drafts/:id/send": {
+   "status": "excluded",
+   "category": "self-authority",
+   "class": "external",
+   "scope": "none",
+   "because": "sending an agent-drafted reply to a customer is a person's ratification; an agent must not approve agent words"
+  },
+  "route:supportRoutes.js:POST /tickets/:key/merge": {
+   "status": "planned",
+   "class": "reversible",
+   "scope": "forum:write"
+  },
+  "route:supportRoutes.js:POST /tickets/:key/messages": {
+   "status": "capability",
+   "capability": "support.ticket.reply_draft",
+   "class": "reversible",
+   "scope": "forum:write"
+  },
+  "route:supportRoutes.js:POST /tickets/:key/publish": {
+   "status": "planned",
+   "class": "external",
+   "scope": "forum:write"
+  },
+  "route:supportRoutes.js:POST /tickets/:key/status": {
+   "status": "planned",
+   "class": "reversible",
+   "scope": "forum:write"
+  },
+  "route:supportRoutes.js:POST /tickets/:key/task": {
+   "status": "planned",
+   "class": "reversible",
+   "scope": "forum:write"
+  },
+  "route:supportRoutes.js:POST /tickets/:key/triage": {
+   "status": "capability",
+   "capability": "support.ticket.triage",
+   "class": "reversible",
+   "scope": "forum:write"
   },
   "route:tokenizerRoutes.js:GET /health": {
    "status": "planned",
@@ -3441,27 +3677,32 @@
    "scope": "agents:write"
   },
   "route:workforceCoordinationRoutes.js:POST /objectives": {
-   "status": "planned",
+   "status": "capability",
+   "capability": "objective.objective.create",
    "class": "reversible",
    "scope": "agents:write"
   },
   "route:workforceCoordinationRoutes.js:POST /objectives/complete": {
-   "status": "planned",
-   "class": "reversible",
+   "status": "capability",
+   "capability": "objective.objective.complete",
+   "class": "irreversible",
    "scope": "agents:write"
   },
   "route:workforceCoordinationRoutes.js:POST /objectives/link-goal": {
-   "status": "planned",
+   "status": "capability",
+   "capability": "objective.goal.link",
    "class": "reversible",
    "scope": "agents:write"
   },
   "route:workforceCoordinationRoutes.js:POST /objectives/read": {
-   "status": "planned",
-   "class": "reversible",
-   "scope": "agents:write"
+   "status": "capability",
+   "capability": "objective.objective.get",
+   "class": "safe",
+   "scope": "agents:read"
   },
   "route:workforceCoordinationRoutes.js:POST /objectives/update": {
-   "status": "planned",
+   "status": "capability",
+   "capability": "objective.objective.update",
    "class": "reversible",
    "scope": "agents:write"
   },
@@ -3531,34 +3772,44 @@
    "scope": "agents:write"
   },
   "route:workforceDivisionRoutes.js:GET /": {
-   "status": "planned",
+   "status": "capability",
+   "capability": "division.division.list",
    "class": "safe",
-   "scope": "agents:read"
+   "scope": "workspace:read"
   },
   "route:workforceDivisionRoutes.js:GET /:id": {
-   "status": "planned",
+   "status": "capability",
+   "capability": "division.division.get",
    "class": "safe",
-   "scope": "agents:read"
+   "scope": "workspace:read"
   },
   "route:workforceDivisionRoutes.js:GET /:id/agent-budget": {
    "status": "planned",
    "class": "safe",
    "scope": "agents:read"
   },
-  "route:workforceDivisionRoutes.js:PATCH /:id": {
+  "route:workforceDivisionRoutes.js:GET /:id/home": {
    "status": "planned",
+   "class": "safe",
+   "scope": "agents:read"
+  },
+  "route:workforceDivisionRoutes.js:PATCH /:id": {
+   "status": "capability",
+   "capability": "division.division.update",
    "class": "reversible",
-   "scope": "agents:write"
+   "scope": "workspace:admin"
   },
   "route:workforceDivisionRoutes.js:POST /": {
-   "status": "planned",
+   "status": "capability",
+   "capability": "division.division.create",
    "class": "reversible",
-   "scope": "agents:write"
+   "scope": "workspace:admin"
   },
   "route:workforceDivisionRoutes.js:POST /:id/archive": {
-   "status": "planned",
-   "class": "reversible",
-   "scope": "agents:write"
+   "status": "capability",
+   "capability": "division.division.archive",
+   "class": "irreversible",
+   "scope": "workspace:admin"
   },
   "route:workforceDivisionRoutes.js:PUT /:id/agent-budget": {
    "status": "planned",
@@ -3686,9 +3937,10 @@
    "scope": "agents:write"
   },
   "route:workforceFundingRoutes.js:POST /budgets": {
-   "status": "planned",
+   "status": "capability",
+   "capability": "funding.budget.propose",
    "class": "reversible",
-   "scope": "agents:write"
+   "scope": "wallet:spend"
   },
   "route:workforceFundingRoutes.js:POST /budgets/decide": {
    "status": "planned",
@@ -3696,14 +3948,16 @@
    "scope": "agents:write"
   },
   "route:workforceFundingRoutes.js:POST /budgets/price": {
-   "status": "planned",
-   "class": "reversible",
-   "scope": "agents:write"
+   "status": "capability",
+   "capability": "funding.budget.price",
+   "class": "safe",
+   "scope": "wallet:read"
   },
   "route:workforceFundingRoutes.js:POST /budgets/read": {
-   "status": "planned",
-   "class": "reversible",
-   "scope": "agents:write"
+   "status": "capability",
+   "capability": "funding.budget.get",
+   "class": "safe",
+   "scope": "wallet:read"
   },
   "route:workforceFundingRoutes.js:POST /budgets/revoke": {
    "status": "planned",
@@ -3726,9 +3980,10 @@
    "scope": "agents:write"
   },
   "route:workforceFundingRoutes.js:POST /contributions": {
-   "status": "planned",
-   "class": "reversible",
-   "scope": "agents:write"
+   "status": "capability",
+   "capability": "funding.contribution.create",
+   "class": "irreversible",
+   "scope": "wallet:spend"
   },
   "route:workforceFundingRoutes.js:POST /contributions/accounting": {
    "status": "planned",
@@ -3736,14 +3991,16 @@
    "scope": "agents:write"
   },
   "route:workforceFundingRoutes.js:POST /contributions/read": {
-   "status": "planned",
-   "class": "reversible",
-   "scope": "agents:write"
+   "status": "capability",
+   "capability": "funding.contribution.get",
+   "class": "safe",
+   "scope": "wallet:read"
   },
   "route:workforceFundingRoutes.js:POST /contributions/return": {
-   "status": "planned",
-   "class": "reversible",
-   "scope": "agents:write"
+   "status": "capability",
+   "capability": "funding.contribution.return",
+   "class": "irreversible",
+   "scope": "wallet:spend"
   },
   "route:workforceFundingRoutes.js:POST /milestones": {
    "status": "planned",
@@ -3756,9 +4013,10 @@
    "scope": "agents:write"
   },
   "route:workforceFundingRoutes.js:POST /offers/read": {
-   "status": "planned",
-   "class": "reversible",
-   "scope": "agents:write"
+   "status": "capability",
+   "capability": "funding.offer.get",
+   "class": "safe",
+   "scope": "wallet:read"
   },
   "route:workforceFundingRoutes.js:POST /runs/release-undispatched": {
    "status": "planned",
@@ -4241,49 +4499,58 @@
    "scope": "agents:write"
   },
   "route:workforceRoutes.js:POST /resource-operations/read": {
-   "status": "planned",
-   "class": "reversible",
-   "scope": "agents:write"
+   "status": "capability",
+   "capability": "agent.resource.operation_get",
+   "class": "safe",
+   "scope": "agents:read"
   },
   "route:workforceRoutes.js:POST /resources": {
-   "status": "planned",
-   "class": "reversible",
+   "status": "capability",
+   "capability": "agent.resource.create",
+   "class": "irreversible",
    "scope": "agents:write"
   },
   "route:workforceRoutes.js:POST /resources/create-and-assign": {
-   "status": "planned",
-   "class": "reversible",
+   "status": "capability",
+   "capability": "agent.resource.create_and_assign",
+   "class": "irreversible",
    "scope": "agents:write"
   },
   "route:workforceRoutes.js:POST /resources/definition/read": {
-   "status": "planned",
-   "class": "reversible",
-   "scope": "agents:write"
+   "status": "capability",
+   "capability": "agent.resource.get",
+   "class": "safe",
+   "scope": "agents:read"
   },
   "route:workforceRoutes.js:POST /resources/list": {
-   "status": "planned",
-   "class": "reversible",
-   "scope": "agents:write"
+   "status": "capability",
+   "capability": "agent.catalog.list",
+   "class": "safe",
+   "scope": "agents:read"
   },
   "route:workforceRoutes.js:POST /resources/revise-definition": {
-   "status": "planned",
-   "class": "reversible",
+   "status": "capability",
+   "capability": "agent.resource.update",
+   "class": "irreversible",
    "scope": "agents:write"
   },
   "route:workforceRoutes.js:POST /resources/revise-definition/read": {
-   "status": "planned",
-   "class": "reversible",
-   "scope": "agents:write"
+   "status": "capability",
+   "capability": "agent.resource.revision_get",
+   "class": "safe",
+   "scope": "agents:read"
   },
   "route:workforceRoutes.js:POST /run-admissions": {
-   "status": "planned",
-   "class": "reversible",
+   "status": "capability",
+   "capability": "run.admission.create",
+   "class": "irreversible",
    "scope": "agents:write"
   },
   "route:workforceRoutes.js:POST /run-admissions/authority": {
-   "status": "planned",
-   "class": "reversible",
-   "scope": "agents:write"
+   "status": "capability",
+   "capability": "run.authority.get",
+   "class": "safe",
+   "scope": "agents:read"
   },
   "route:workforceRoutes.js:POST /run-admissions/authorize-step": {
    "status": "planned",
@@ -4296,14 +4563,16 @@
    "scope": "agents:write"
   },
   "route:workforceRoutes.js:POST /run-admissions/list": {
-   "status": "planned",
-   "class": "reversible",
-   "scope": "agents:write"
+   "status": "capability",
+   "capability": "run.admission.list",
+   "class": "safe",
+   "scope": "agents:read"
   },
   "route:workforceRoutes.js:POST /run-admissions/operations/read": {
-   "status": "planned",
-   "class": "reversible",
-   "scope": "agents:write"
+   "status": "capability",
+   "capability": "run.admission.operation_get",
+   "class": "safe",
+   "scope": "agents:read"
   },
   "route:workforceRoutes.js:POST /run-admissions/outcome": {
    "status": "planned",
@@ -4311,14 +4580,16 @@
    "scope": "agents:write"
   },
   "route:workforceRoutes.js:POST /run-admissions/pin": {
-   "status": "planned",
-   "class": "reversible",
-   "scope": "agents:write"
+   "status": "capability",
+   "capability": "run.pin.get",
+   "class": "safe",
+   "scope": "agents:read"
   },
   "route:workforceRoutes.js:POST /run-admissions/read": {
-   "status": "planned",
-   "class": "reversible",
-   "scope": "agents:write"
+   "status": "capability",
+   "capability": "run.admission.get",
+   "class": "safe",
+   "scope": "agents:read"
   },
   "route:workforceRoutes.js:POST /run-admissions/result": {
    "status": "planned",
@@ -4326,8 +4597,9 @@
    "scope": "agents:write"
   },
   "route:workforceRoutes.js:POST /run-admissions/revoke": {
-   "status": "planned",
-   "class": "reversible",
+   "status": "capability",
+   "capability": "run.admission.revoke",
+   "class": "irreversible",
    "scope": "agents:write"
   },
   "route:workforceSessionRoutes.js:POST /adapters/parity": {
@@ -6969,7 +7241,27 @@
    "class": "reversible",
    "scope": "agents:write"
   },
+  "ui:platform-divisions.js:data-xdv=obj-done": {
+   "status": "planned",
+   "class": "reversible",
+   "scope": "agents:write"
+  },
+  "ui:platform-divisions.js:data-xdv=obj-edit": {
+   "status": "planned",
+   "class": "reversible",
+   "scope": "agents:write"
+  },
+  "ui:platform-divisions.js:data-xdv=obj-new": {
+   "status": "planned",
+   "class": "reversible",
+   "scope": "agents:write"
+  },
   "ui:platform-divisions.js:data-xdv=open": {
+   "status": "planned",
+   "class": "reversible",
+   "scope": "agents:write"
+  },
+  "ui:platform-divisions.js:data-xdv=project": {
    "status": "planned",
    "class": "reversible",
    "scope": "agents:write"
@@ -6985,6 +7277,16 @@
    "scope": "agents:write"
   },
   "ui:platform-divisions.js:data-xdv=retry": {
+   "status": "planned",
+   "class": "reversible",
+   "scope": "agents:write"
+  },
+  "ui:platform-divisions.js:data-xdv=run": {
+   "status": "planned",
+   "class": "reversible",
+   "scope": "agents:write"
+  },
+  "ui:platform-divisions.js:data-xdv=run-stop": {
    "status": "planned",
    "class": "reversible",
    "scope": "agents:write"
@@ -7018,6 +7320,13 @@
    "status": "planned",
    "class": "reversible",
    "scope": "agents:write"
+  },
+  "ui:platform-publish.js:data-pub-page": {
+   "status": "excluded",
+   "category": "view-state",
+   "class": "safe",
+   "scope": "none",
+   "because": "the Publish page container; its buttons call /api/publish, which is decided route by route"
   },
   "ui:platform-services.js:data-xsv-cap": {
    "status": "planned",
@@ -7068,6 +7377,33 @@
    "status": "planned",
    "class": "reversible",
    "scope": "storage:write"
+  },
+  "ui:platform-support.js:data-sp-form=delegate": {
+   "status": "planned",
+   "class": "reversible",
+   "scope": "forum:write"
+  },
+  "ui:platform-support.js:data-sp-form=macro": {
+   "status": "planned",
+   "class": "reversible",
+   "scope": "forum:write"
+  },
+  "ui:platform-support.js:data-sp-form=merge": {
+   "status": "planned",
+   "class": "reversible",
+   "scope": "forum:write"
+  },
+  "ui:platform-support.js:data-sp-form=new": {
+   "status": "capability",
+   "capability": "support.ticket.create",
+   "class": "reversible",
+   "scope": "forum:write"
+  },
+  "ui:platform-support.js:data-sp-form=reply": {
+   "status": "capability",
+   "capability": "support.ticket.reply_draft",
+   "class": "reversible",
+   "scope": "forum:write"
   },
   "ui:platform-tasks.js:data-cal=-1": {
    "status": "planned",
@@ -7625,6 +7961,45 @@
    "scope": "none",
    "because": "changes only what the screen shows"
   },
+  "ui:setup.js:data-xsu=apply": {
+   "status": "capability",
+   "capability": "modes.mode.apply",
+   "class": "reversible",
+   "scope": "workspace:admin"
+  },
+  "ui:setup.js:data-xsu=back": {
+   "status": "excluded",
+   "category": "view-state",
+   "class": "safe",
+   "scope": "none",
+   "because": "changes only what the screen shows"
+  },
+  "ui:setup.js:data-xsu=custom": {
+   "status": "excluded",
+   "category": "view-state",
+   "class": "safe",
+   "scope": "none",
+   "because": "changes only what the screen shows"
+  },
+  "ui:setup.js:data-xsu=next": {
+   "status": "capability",
+   "capability": "modes.mode.plan",
+   "class": "safe",
+   "scope": "workspace:read"
+  },
+  "ui:setup.js:data-xsu=trade": {
+   "status": "excluded",
+   "category": "view-state",
+   "class": "safe",
+   "scope": "none",
+   "because": "changes only what the screen shows"
+  },
+  "ui:setup.js:data-xsu=undo": {
+   "status": "capability",
+   "capability": "modes.mode.revert",
+   "class": "reversible",
+   "scope": "workspace:admin"
+  },
   "ui:visibility.js:data-vis-project": {
    "status": "excluded",
    "category": "view-state",
@@ -7748,121 +8123,6 @@
    "status": "planned",
    "class": "reversible",
    "scope": "agents:write"
-  },
-  "route:supportRoutes.js:POST /tickets": {
-   "status": "capability",
-   "capability": "support.ticket.create",
-   "class": "reversible",
-   "scope": "forum:write"
-  },
-  "route:supportRoutes.js:GET /tickets/mine": {
-   "status": "capability",
-   "capability": "support.ticket.list",
-   "class": "safe",
-   "scope": "forum:read"
-  },
-  "route:supportRoutes.js:GET /tickets/queue": {
-   "status": "capability",
-   "capability": "support.ticket.list",
-   "class": "safe",
-   "scope": "forum:read"
-  },
-  "route:supportRoutes.js:GET /tickets/:key": {
-   "status": "capability",
-   "capability": "support.ticket.get",
-   "class": "safe",
-   "scope": "forum:read"
-  },
-  "route:supportRoutes.js:POST /tickets/:key/messages": {
-   "status": "capability",
-   "capability": "support.ticket.reply_draft",
-   "class": "reversible",
-   "scope": "forum:write"
-  },
-  "route:supportRoutes.js:POST /tickets/:key/drafts/:id/send": {
-   "status": "excluded",
-   "category": "self-authority",
-   "class": "external",
-   "scope": "none",
-   "because": "sending an agent-drafted reply to a customer is a person's ratification; an agent must not approve agent words"
-  },
-  "route:supportRoutes.js:POST /tickets/:key/drafts/:id/discard": {
-   "status": "planned",
-   "class": "reversible",
-   "scope": "forum:write"
-  },
-  "route:supportRoutes.js:POST /tickets/:key/status": {
-   "status": "planned",
-   "class": "reversible",
-   "scope": "forum:write"
-  },
-  "route:supportRoutes.js:POST /tickets/:key/triage": {
-   "status": "capability",
-   "capability": "support.ticket.triage",
-   "class": "reversible",
-   "scope": "forum:write"
-  },
-  "route:supportRoutes.js:POST /tickets/:key/assign": {
-   "status": "planned",
-   "class": "reversible",
-   "scope": "forum:write"
-  },
-  "route:supportRoutes.js:POST /tickets/:key/merge": {
-   "status": "planned",
-   "class": "reversible",
-   "scope": "forum:write"
-  },
-  "route:supportRoutes.js:POST /tickets/:key/task": {
-   "status": "planned",
-   "class": "reversible",
-   "scope": "forum:write"
-  },
-  "route:supportRoutes.js:POST /tickets/:key/publish": {
-   "status": "planned",
-   "class": "external",
-   "scope": "forum:write"
-  },
-  "route:supportRoutes.js:GET /macros": {
-   "status": "planned",
-   "class": "safe",
-   "scope": "forum:read"
-  },
-  "route:supportRoutes.js:POST /macros": {
-   "status": "planned",
-   "class": "reversible",
-   "scope": "forum:write"
-  },
-  "route:supportRoutes.js:DELETE /macros/:id": {
-   "status": "planned",
-   "class": "irreversible",
-   "scope": "forum:write"
-  },
-  "ui:platform-support.js:data-sp-form=new": {
-   "status": "capability",
-   "capability": "support.ticket.create",
-   "class": "reversible",
-   "scope": "forum:write"
-  },
-  "ui:platform-support.js:data-sp-form=reply": {
-   "status": "capability",
-   "capability": "support.ticket.reply_draft",
-   "class": "reversible",
-   "scope": "forum:write"
-  },
-  "ui:platform-support.js:data-sp-form=merge": {
-   "status": "planned",
-   "class": "reversible",
-   "scope": "forum:write"
-  },
-  "ui:platform-support.js:data-sp-form=delegate": {
-   "status": "planned",
-   "class": "reversible",
-   "scope": "forum:write"
-  },
-  "ui:platform-support.js:data-sp-form=macro": {
-   "status": "planned",
-   "class": "reversible",
-   "scope": "forum:write"
   }
  }
 }

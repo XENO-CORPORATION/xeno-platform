@@ -665,6 +665,10 @@ router.post('/listings', authMiddleware, async (req, res) => {
 
     // D1 enforced up front: community devs cannot create app-native listings.
     const trustTier = resolvePublishTrustTier(dev.trust_tier);
+    // D-CM2 (decided 2026-10-20): trade packs come from first-party and verified partners first.
+    if (trustTier === 'community' && kind === 'mode') {
+      return res.status(403).json({ success: false, error: 'Business setups (mode listings) are published by verified or official publishers (D-CM2)' });
+    }
     if (trustTier === 'community' && kind === 'app-native') {
       return res.status(403).json({
         success: false,

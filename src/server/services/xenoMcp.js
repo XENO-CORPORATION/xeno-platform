@@ -20,10 +20,13 @@ import * as agentMediaMcp from './agentMediaMcp.js';
 import * as agentMedia from './agentMedia.js';
 import * as canvasMcp from './canvasMcp.js';
 import * as placesMcp from './placesMcp.js';
+import * as modesMcp from './modesMcp.js';
 import * as canvases from './canvases.js';
 import * as agentsMcp from './agentsMcp.js';
 import * as storageMcp from './storageMcp.js';
 import * as supportMcp from './supportMcp.js';
+import * as publishMcp from './publishMcp.js';
+import * as workforceMcp from './workforceMcp.js';
 import * as forumMcp from './forumMcp.js';
 import { resolvePrincipal } from './agentIdentity.js';
 import * as creds from './workspaceCredentials.js';
@@ -65,6 +68,15 @@ export const SERVICES = Object.freeze([
     call: (db, actor, name, args) => placesMcp.callTool(db, actor, name, args),
     isToolError: (e) => e instanceof placesMcp.PlacesMcpError,
   },
+  // custom modes + trade packs (modesMcp.js): list, plan and status for whoever administers the workspace (an agent,
+  // for its owner); apply and revert need a human admin's confirmation and refuse an agent.
+  {
+    category: 'modes', title: 'Business setups', version: '1.0.0', timeoutMs: 20_000,
+    description: 'Business setups ("custom modes"): plan a trade pack for a workspace; a human admin confirms it.',
+    tools: () => modesMcp.TOOLS,
+    call: (db, actor, name, args) => modesMcp.callTool(db, actor, name, args),
+    isToolError: (e) => e instanceof modesMcp.ModesMcpError,
+  },
   // XENO Storage (storageMcp.js, WORKSPACE AGENT SURFACE P1): an agent works in its owner's Storage, the person in their own.
   {
     category: 'storage', title: 'Storage', version: '1.0.0', timeoutMs: 60_000,
@@ -72,6 +84,22 @@ export const SERVICES = Object.freeze([
     tools: () => storageMcp.TOOLS,
     call: (db, actor, name, args) => storageMcp.callTool(db, actor, name, args),
     isToolError: (e) => e instanceof storageMcp.StorageMcpError,
+  },
+  // XENO-WORKFORCE-01 (workforceMcp.js): agents and teams, runs, divisions, objectives and funding — the same services
+  {
+    category: 'workforce', title: 'Workforce', version: '1.0.0', timeoutMs: 30_000,
+    description: 'Workforce: agents and teams, run admission and revocation, divisions, objectives and project funding.',
+    tools: () => workforceMcp.TOOLS,
+    call: (db, actor, name, args) => workforceMcp.callTool(db, actor, name, args),
+    isToolError: (e) => e instanceof workforceMcp.WorkforceMcpError,
+  },
+  // XENO Publish (publishMcp.js): XENO Post through the platform. Drafts and proposed times; a person publishes.
+  {
+    category: 'publish', title: 'Publish', version: '1.0.0', timeoutMs: 60_000,
+    description: 'Publish (XENO Post): list channels and posts, write drafts, propose times a person confirms.',
+    tools: () => publishMcp.TOOLS,
+    call: (db, actor, name, args) => publishMcp.callTool(db, actor, name, args),
+    isToolError: (e) => e instanceof publishMcp.PublishMcpError,
   },
   // XENO support (supportMcp.js): ask XENO for your owner, or — delegated — triage and DRAFT replies a person sends.
   {
@@ -244,7 +272,7 @@ export async function callTool(db, actor, connection, prefixed, args = {}, ctx =
     const ws = ctx.workspaceId || (UUID_RE.test(String(callArgs.workspace || '')) ? String(callArgs.workspace) : null) || wt.workspaceId || await personalWorkspace(db, wt.ownerId);
     if (wt.workspaceId && ws !== wt.workspaceId) return { result: toolError('This key works in one workspace only', 'workspace_mismatch'), log: meta(r.service.category, 'refused', 'workspace_mismatch') };
     if (!(await creds.hasGrant(db, wt.agentUserId, cap.name, ws))) return { result: toolError(`${cap.name} is not granted to this app in that workspace. The person can grant it in XENO: Settings › Connected apps.`, 'grant_missing'), log: meta(r.service.category, 'refused', 'grant_missing') };
-    const why = creds.stepUpReason(cap, { estimatedCredits: typeof callArgs.max_credits === 'number' ? callArgs.max_credits : null });
+    const why = await creds.stepUpFor(db, cap, callArgs, actor);   // server-derived cost, never a caller-stated one
     if (why && !(wt.via === 'oauth' && creds.isFresh(wt.authTime))) {
       return { result: toolError(why === 'irreversible' ? `${cap.name} cannot be undone, so it needs a fresh sign-in (within 10 minutes). Sign in again with prompt=login.` : 'This spend is above the step-up limit, so it needs a fresh sign-in.', 'step_up_required'), log: meta(r.service.category, 'refused', 'step_up_required') };
     }

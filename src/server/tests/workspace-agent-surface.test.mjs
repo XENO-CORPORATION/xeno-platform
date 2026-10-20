@@ -162,12 +162,42 @@ async function main() {
     check(wrongWs.s === 403 && wrongWs.j.code === 'grant_missing', 'a grant in one workspace opens nothing in another');
 
     // step-up: an irreversible capability needs a fresh sign-in
-    check(stepUpReason(byName.get('canvas.item.update')) === 'irreversible' && stepUpReason({ class: 'undoable', cost: { model: 'quoted' } }, { estimatedCredits: 5001 }) === 'spend'
-      && stepUpReason({ class: 'undoable', cost: { model: 'quoted' } }, { estimatedCredits: 4000, teamLeftCredits: 1000 }) === 'spend' && stepUpReason({ class: 'undoable', cost: { model: 'quoted' } }, { estimatedCredits: 4000 }) === null,
+    check(stepUpReason(byName.get('canvas.item.update')) === 'irreversible' && stepUpReason({ class: 'undoable', cost: { model: 'quoted' } }, { serverCredits: 5001 }) === 'spend'
+      && stepUpReason({ class: 'undoable', cost: { model: 'quoted' } }, { serverCredits: 4000, teamLeftCredits: 1000 }) === 'spend' && stepUpReason({ class: 'undoable', cost: { model: 'quoted' } }, { serverCredits: 4000 }) === null,
     'step-up rule: irreversible always; spend above the lower of the team budget and EUR 50');
     const old = await signIn('Old sign-in', 'tasks:write storage:read', { authAgoSec: 3600 });
     const su = await call('POST', '/api/v1/canvas/item/update', { token: old.token, body: { canvas: crypto.randomUUID(), changes: [] } });
     check(su.s === 403 && su.j.code === 'step_up_required' && /insufficient_user_authentication/.test(su.h.get('www-authenticate') || ''), `an irreversible call on an hour-old sign-in is refused 403 step_up_required (${su.s} ${su.j && su.j.code})`);
+
+    // workforce (the division after Storage): the REST/MCP answer IS the service's answer, for the same actor
+    const w = await signIn('Workforce agent', 'agents:read agents:write workspace:read workspace:admin');
+    const wAgent = (await pool.query(`SELECT ai.user_id FROM agent_identities ai JOIN users u ON u.id = ai.user_id WHERE ai.owner_user_id = $1 AND u.display_name = 'Workforce agent'`, [ada])).rows[0];
+    const wl = await call('POST', '/api/v1/division/division/list', { token: w.token, body: {} });
+    const divisionsSvc = await import('../services/workforceDivisions.js');
+    const wa = wAgent || (await pool.query(`SELECT user_id FROM agent_identities WHERE owner_user_id = $1 ORDER BY created_at DESC LIMIT 1`, [ada])).rows[0];
+    let direct; try { direct = { ok: true, v: await divisionsSvc.list(pool, { id: String(wa.user_id), kind: 'agent' }, {}) }; } catch (e) { direct = { ok: false, code: e.code }; }
+    if (wl.s === 500 || process.env.DEBUG_WS) console.log('   division list:', wl.s, JSON.stringify(wl.j), JSON.stringify(direct));
+    check(wl.s !== 500 && (direct.ok ? wl.s === 200 && JSON.stringify(wl.j.data.divisions || wl.j.data) === JSON.stringify(JSON.parse(JSON.stringify(direct.v.divisions || direct.v))) : wl.j.code === direct.code), `division.division.list over REST answers exactly what workforceDivisions.list answers for that agent (${wl.s} ${wl.j && (wl.j.code || 'ok')})`);
+    const cat = await call('POST', '/api/v1/agent/catalog/list', { token: w.token, body: { actorUserId: ada } });
+    check(cat.s === 400 && cat.j.code === 'bad_input', 'a workforce body naming another actor is refused bad_input, as the routes refuse it');
+    const wt = (await rpc(w.token, 'tools/list', {})).j.result.tools.map((t) => t.name);
+    check(['agent__resource__create', 'run__admission__revoke', 'division__division__create', 'objective__objective__create'].every((n) => wt.includes(n)) && !wt.some((n) => n.startsWith('funding__')), 'the §11.1 agent.* / run.* / division.* / objective.* tools are listed; funding.* is not (no wallet scope)');
+    const rk = await call('POST', '/api/v1/run/admission/revoke', { token: w.token, body: { admissionId: crypto.randomUUID() } });
+    check(rk.s >= 400 && rk.s < 500 && rk.j.code !== 'step_up_required' && rk.j.code !== 'scope_missing', `a fresh sign-in passes step-up and reaches revokeRun, which answers in its own closed vocabulary (${rk.s} ${rk.j && rk.j.code})`);
+
+    // RFC 8628 device grant for a workspace app (what `xeno ws login` does)
+    const dreg = await call('POST', '/api/oauth2/register', { body: { client_name: 'xeno ws', redirect_uris: ['http://127.0.0.1/callback'], token_endpoint_auth_method: 'none', grant_types: ['urn:ietf:params:oauth:grant-type:device_code', 'refresh_token'], scope: 'storage:read storage:write' } });
+    check(dreg.s === 201, `a terminal app registers for the device grant (${dreg.s} ${dreg.j && dreg.j.error_description})`);
+    const dstart = await call('POST', '/api/oauth2/device_authorization', { body: { client_id: dreg.j.client_id, scope: 'openid storage:read storage:write' } });
+    const dinspect = await call('POST', '/api/oauth2/device/inspect', { token: legacy(ada), body: { user_code: dstart.j.user_code } });
+    check(dinspect.s === 200 && dinspect.j.unverified === true && /storage:write/.test(dinspect.j.scope), 'the approval screen is told it is a self-registered app and which scopes it asks for');
+    const pending = await call('POST', '/api/oauth2/token', { raw: true, body: new URLSearchParams({ grant_type: 'urn:ietf:params:oauth:grant-type:device_code', device_code: dstart.j.device_code, client_id: dreg.j.client_id }).toString() });
+    check(pending.s === 400 && pending.j.error === 'authorization_pending', 'before approval the CLI is told to keep waiting');
+    await call('POST', '/api/oauth2/device/approve', { token: legacy(ada), body: { user_code: dstart.j.user_code } });
+    const dtok = await call('POST', '/api/oauth2/token', { raw: true, body: new URLSearchParams({ grant_type: 'urn:ietf:params:oauth:grant-type:device_code', device_code: dstart.j.device_code, client_id: dreg.j.client_id }).toString() });
+    check(dtok.s === 200 && jwt.decode(dtok.j.access_token).aud === 'xeno-workspace', 'after approval the CLI gets a xeno-workspace token');
+    const dl2 = await call('GET', '/api/v1/storage/folder/list', { token: dtok.j.access_token });
+    check(dl2.s === 200 && Array.isArray(dl2.j.data.folders), 'and uses it over REST');
 
     // headless xwk_ keys
     const noExp = await call('POST', '/api/mcp/keys', { token: legacy(ada), body: { name: 'ci', scopes: ['storage:write'] } });

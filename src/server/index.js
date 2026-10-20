@@ -1,6 +1,7 @@
 import path from 'path';
 import canvasRoutes from './routes/canvasRoutes.js';
 import placesRoutes from './routes/placesRoutes.js';
+import { meModesRouter, workspaceModesRouter } from './routes/modesRoutes.js';
 import xenoTasksRoutes, { taskTokenAuth, unlessTaskToken, mcpChallenge, protectedResourceMetadata } from './routes/xenoTasksRoutes.js';
 import { TASKS_OPENAPI } from './services/tasksOpenApi.js';
 import platformAgentRoutes from './routes/platformAgentRoutes.js';
@@ -11,6 +12,7 @@ import userNotificationsRoutes from './routes/userNotificationsRoutes.js';
 import { startTaskSweeps } from './services/taskNotifyEmail.js';
 import { sweepDueReminders, deliverAgentEvents, sweepExpiredLeases } from './services/xenoTasks.js';
 import workspaceAreaRoutes from './routes/workspaceAreaRoutes.js';
+import publishRoutes from './routes/publishRoutes.js';
 import { areaFromRequest } from './utils/resourceArea.js';
 import { fileURLToPath } from 'url';
 import dotenv from 'dotenv';
@@ -642,6 +644,7 @@ app.use('/api/workspaces', databaseMiddleware, authMiddleware, requireActivated,
 app.use('/api/workspace-invites', databaseMiddleware, authMiddleware, workspaceInviteRoutes);
 // One search and one "needs you" feed across a person's chats, projects and Library, each aware of the area.
 app.use('/api/workspace', databaseMiddleware, authMiddleware, requireActivated, areaFromRequest, workspaceAreaRoutes);
+app.use('/api/publish', databaseMiddleware, authMiddleware, requireActivated, publishRoutes);   // XENO Publish = XENO Post, server-to-server (services/xenoPost.js)
 // XENO Connect's host adapter asks here what a token or person may do right now (CONNECT_SERVICE_TOKEN; fails closed).
 app.use('/api/connect/authority', databaseMiddleware, connectAuthorityRoutes);
 // Website Storage → XENO Connect (Connected clouds). Website cookie sessions only; tokens stay in this process.
@@ -660,6 +663,10 @@ app.use('/api/canvases', databaseMiddleware, authMiddleware, requireActivated, c
 // XENO Places — the building where a workspace's humans and agents work (xeno-places/SPEC.md). Layout, hosted
 // sessions and a scope-filtered snapshot of the live workforce records; it owns no org data.
 app.use('/api/places', databaseMiddleware, authMiddleware, requireActivated, placesRoutes);
+// Custom modes + trade packs (XENO MODES - SPEC.md §8c): the account's modes and a workspace's setup. Mounted BEFORE the
+// OIDC-gated /api/v2/me so the website session reaches /modes; one service (services/modeApply.js).
+app.use('/api/v2/me/modes', databaseMiddleware, authMiddleware, requireActivated, meModesRouter);
+app.use('/api/v2/workspaces', databaseMiddleware, authMiddleware, requireActivated, workspaceModesRouter);
 app.use('/api/tasks', databaseMiddleware, mcpChallenge, taskTokenAuth, unlessTaskToken(authMiddleware), unlessTaskToken(requireActivated), xenoTasksRoutes);
 // XENO MCP — one hosted MCP address for every agent (XENO AGENT SURFACES & CONNECTORS - SPEC.md §7). The
 // management routes are the person's (their session); the endpoint itself is an agent's (its OAuth token).

@@ -175,7 +175,13 @@
   function areaPage() {
     const x = X(), z = x.zoneNow(), mk = z.of || x.zoneKey(), zid = z.of ? z.id.slice(z.of.length + 1) : z.id, key = 'area:' + mk + '.' + zid, u = ui(key);
     const prods = (z.products || []).filter((id) => PR[id]), live = prods.filter((id) => PR[id].status !== 'soon');
+    // Honesty (owner, 2026-10-20): an area is the person's own only when a platform-*.js module registered it in
+    // XENO_ZONE_LIVE; it then draws the page itself. Otherwise its rows (XENO_PG_AREAS / the zone's `work`) are the
+    // picture's samples, and the page says so in its header and above the rows.
+    const LIVE = (window.XENO_ZONE_LIVE || {})[mk + '.' + zid];
+    if (LIVE && LIVE.page) { const html = LIVE.page(z); if (html) return html; }
     const A = window.XENO_PG_AREAS[mk + '.' + zid];
+    const SAMPLE = '<span class="xw-sample" data-sample-badge title="These rows are illustrative, not your data. This area is not connected yet.">Preview — sample data</span>';
     const ctxLine = z.of ? `${esc(modeName(z.of))} · seen from Overview` : esc(modeName(mk));
     const card = (id) => { const p = PR[id], soon = p.status === 'soon'; return `<button class="pg-prod${soon ? ' soon' : ''}" data-product="${id}">${prodIcon(id, 26)}<span><b>${esc(p.name)}</b><small>${esc(p.blurb)}</small></span><span class="pg-tag">${soon ? 'Coming soon' : p.kind === 'desktop' ? 'Desktop' : 'Web'}</span></button>`; };
     let work = '';
@@ -185,14 +191,15 @@
       const si = A.cols.indexOf('Status');
       const res = gate(key, 'rows', () => box(z.icon || 'layers', `No ${A.noun.toLowerCase()} yet`, `When you start something in ${listJoin(live.map(pname))}, it shows up here — live.`, live[0] ? btn('New in ' + pname(live[0]), `data-product="${live[0]}"`, false, 'plus') : '')) ?? (!rows.length ? (u.q ? filtered(key, u.q, A.noun.toLowerCase()) : box('check', `Nothing ${f.toLowerCase()}`, 'All clear here.', btn('Show all', 'data-pg-seg="f" data-v="All"', true))) :
         table(A.cols, rows.map((r) => { const min = r[r.length - 2], pid = r[r.length - 1]; return tr(`data-pg-item="${esc(r[0])}" data-pg-item-p="${pid}"`, A.cols.map((c, i) => i === 0 ? `<b class="pg-name">${esc(r[0])}</b>` : i === si ? chip(r[i]) : i === A.cols.length - 1 ? `<small>${typeof min === 'number' && /Started|Updated|Last run/.test(c) ? ago(new Date(Date.now() - min * 60000).toISOString()) : esc(r[i])}</small>` : esc(r[i]))); })));
-      work = `<section class="pg-sec"><div class="pg-sec-h"><h3>${esc(A.noun)}</h3></div>${bar(search(key, 'Search ' + A.noun.toLowerCase(), u.q), seg('f', 'Status', A.filters.map((x2) => [x2, x2, counts[x2]]), f))}<div data-pg-results>${res}</div></section>`;
+      work = `<section class="pg-sec"><div class="pg-sec-h"><h3>${esc(A.noun)} ${SAMPLE}</h3></div>${bar(search(key, 'Search ' + A.noun.toLowerCase(), u.q), seg('f', 'Status', A.filters.map((x2) => [x2, x2, counts[x2]]), f))}<div data-pg-results>${res}</div></section>`;
     } else if (z.work && live.length) {
       const res = gate(key, 'rows', () => box(z.icon || 'layers', `No ${z.work[0].toLowerCase()} yet`, `What you make in ${listJoin(live.map(pname))} shows up here.`)) ?? table([z.work[0], 'Status', 'Product'], z.work[1].map(([t, m, p]) => tr(`data-pg-item="${esc(t)}"${p ? ` data-pg-item-p="${p}"` : ''}`, [`<b class="pg-name">${esc(t)}</b>`, /Rendering|Running|Failed|Done|Waiting|Scheduled|Draft|Active/.test(m) ? chip(m) : `<small>${esc(m)}</small>`, p ? `${prodIcon(p, 14)} ${esc(pname(p))}` : '<small>—</small>'])));
-      work = `<section class="pg-sec"><div class="pg-sec-h"><h3>${esc(z.work[0])}</h3></div><div data-pg-results>${res}</div></section>`;
+      work = `<section class="pg-sec"><div class="pg-sec-h"><h3>${esc(z.work[0])} ${SAMPLE}</h3></div><div data-pg-results>${res}</div></section>`;
     } else if (!live.length) {
       work = box('clock', 'Planned — not built yet', `${listJoin(prods.map(pname))} ${prods.length > 1 ? 'are' : 'is'} on the way. This area fills in when ${prods.length > 1 ? 'they launch' : 'it launches'}.`, window.XL.notifyBtn(prods, 'pg-btn ghost', `Notify me when ${prods.length > 1 ? 'they launch' : 'it launches'}`));
     }
-    return page(head({ eyebrow: ctxLine, title: z.label, sub: z.blurb, acts: (z.of ? btn('Open ' + modeName(z.of) + ' mode', `data-mode="${z.of}"`, true) : '') + (live[0] ? btn('New in ' + pname(live[0]), `data-product="${live[0]}"`, false, 'plus') : '') })
+    const sampled = !!(A || (z.work && live.length));
+    return page(head({ eyebrow: ctxLine, title: z.label + (sampled ? ' — preview' : ''), sub: sampled ? z.blurb + '. Preview — sample data: this area is not connected to your account yet.' : z.blurb, acts: (z.of ? btn('Open ' + modeName(z.of) + ' mode', `data-mode="${z.of}"`, true) : '') + (live[0] ? btn('New in ' + pname(live[0]), `data-product="${live[0]}"`, false, 'plus') : '') })
       + (prods.length ? `<section class="pg-sec"><div class="pg-sec-h"><h3>Products</h3><small>${live.length} of ${prods.length} available</small></div><div class="pg-prods">${prods.map(card).join('')}</div></section>` : '')
       + work + foot(key, 'GET /api/v2/modes/:mode/areas/:area/items', 'item'));
   }

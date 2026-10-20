@@ -12,6 +12,8 @@
 // current revision. Nothing here invents data: keys map to real tables
 // (conversation lists, message lists), scopes to real authorization.
 import { check } from '../utils/authzReBAC.js';
+import { readDivisionHome } from './divisionHome.js';
+import { readable as readableDivision } from './workforceDivisions.js';
 
 const bad = (code, reason) => { throw Object.assign(new Error(reason), { code }); };
 
@@ -19,13 +21,14 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-
 
 function parseScope(scope) {
   if (typeof scope !== 'string') bad('bad_input', 'invalid_scope');
-  const m = /^(personal|project):(.+)$/.exec(scope);
+  const m = /^(personal|project|division):(.+)$/.exec(scope);
   if (!m || !UUID.test(m[2])) bad('bad_input', 'invalid_scope');
   return { kind: m[1], id: m[2] };
 }
 
 function parseKey(key) {
   if (key === 'conversations') return { kind: 'conversations' };
+  if (key === 'home') return { kind: 'home' };
   const m = /^messages:(.+)$/.exec(typeof key === 'string' ? key : '');
   if (m && UUID.test(m[1])) return { kind: 'messages', conversationId: m[1] };
   bad('bad_input', 'unknown_key');
@@ -79,13 +82,21 @@ async function authorizeScope(client, parsed, actor) {
   if (parsed.kind === 'personal') {
     return parsed.id === actor ? null : { state: 'denied' };
   }
+  if (parsed.kind === 'division') {
+    // a division is read by any viewer of its workspace (workforceDivisions.readable); an archived one still reads
+    try { await readableDivision(client, { id: actor, kind: 'human' }, parsed.id); return null; }
+    catch (e) { if (e && e.status === 404) return { state: 'denied' }; throw e; }
+  }
   const project = (await client.query('SELECT id, is_archived FROM chat_projects WHERE id=$1', [parsed.id])).rows[0];
   if (!project) return { state: 'denied' };
   if (project.is_archived) return { state: 'archived' };
   return (await holdsProject(client, actor, parsed.id)) ? null : { state: 'denied' };
 }
 
-async function readRows(client, parsedScope, parsedKey) {
+async function readRows(client, parsedScope, parsedKey, actor) {
+  // a division scope has exactly one key, its home; the rows inside it are decided per row by divisionHome.js
+  if ((parsedScope.kind === 'division') !== (parsedKey.kind === 'home')) return null;
+  if (parsedKey.kind === 'home') return [await readDivisionHome(client, { id: actor, kind: 'human' }, parsedScope.id)];
   if (parsedKey.kind === 'conversations') {
     const column = parsedScope.kind === 'personal' ? 'owner_user_id' : 'project_id';
     return (await client.query(
@@ -125,7 +136,7 @@ export async function readScoped(poolOrClient, { scope, key, actorUserId, knownR
         : { state: 'denied' };
       const revision = await currentRevision(client, scope, key);
       if (knownRevision !== undefined && knownRevision < revision) return { state: 'stale', revision };
-      const rows = await readRows(client, parsedScope, parsedKey);
+      const rows = await readRows(client, parsedScope, parsedKey, actorUserId);
       if (rows === null) return { state: 'denied' };
       if (rows.length === 0) return { state: 'empty', revision };
       return { state: 'fresh', revision, rows };

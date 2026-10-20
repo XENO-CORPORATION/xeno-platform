@@ -22,6 +22,8 @@ export const VALID_KINDS = new Set([
   'app-native', 'app-sandboxed', 'panel', 'plugin', 'mcp', 'model', 'mind', 'swarm',
   // XENO-WORKFORCE-01 MKT-04 / D22: an exported workforce team. Not `swarm`, which is a .xanima of Minds.
   'team',
+  // XENO MODES §8c D-CM1 (decided 2026-10-20): a trade pack — a mode manifest that depends on other listings by version.
+  'mode',
 ]);
 
 // The agent kinds (SPEC §2): `mind` is one Anima, `swarm` a coordinated package. `swarm` is the LEGACY
