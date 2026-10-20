@@ -29,6 +29,7 @@ import * as storageMcp from './storageMcp.js';
 import * as supportMcp from './supportMcp.js';
 import * as publishMcp from './publishMcp.js';
 import * as analyticsMcp from './analyticsMcp.js';
+import * as docsMcp from './docsMcp.js';
 import * as workforceMcp from './workforceMcp.js';
 import * as forumMcp from './forumMcp.js';
 import { resolvePrincipal } from './agentIdentity.js';
@@ -127,6 +128,14 @@ export const SERVICES = Object.freeze([
     tools: () => supportMcp.TOOLS,
     call: (db, actor, name, args) => supportMcp.callTool(db, actor, name, args),
     isToolError: (e) => e instanceof supportMcp.SupportMcpError,
+  },
+  // XENO Docs and Notes (docsMcp.js): documents that are Storage files. Writes are new versions or trash: reversible.
+  {
+    category: 'docs', title: 'Docs and Notes', version: '1.0.0', timeoutMs: 30_000,
+    description: 'Docs and Notes: list, search, read, create and edit documents and notes (Markdown, versioned in Storage), with backlinks.',
+    tools: () => docsMcp.TOOLS,
+    call: (db, actor, name, args) => docsMcp.callTool(db, actor, name, args),
+    isToolError: (e) => e instanceof docsMcp.DocsMcpError,
   },
   // XENO Analytics (analyticsMcp.js): read-only metrics and saved dashboards of a workspace.
   {

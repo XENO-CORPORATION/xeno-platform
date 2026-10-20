@@ -132,7 +132,9 @@
   "orchestratorRoutes.js": "workforce",
   "workforceEventRoutes.js": "workforce",
   "workforcePeopleRoutes.js": "workforce",
-  "platform-directory.js": "workforce"
+  "platform-directory.js": "workforce",
+  "workspaceDocsRoutes.js": "docs",
+  "platform-docs.js": "docs"
  },
  "actions": {
   "route:accountGiftRoutes.js:POST /": {
@@ -8301,7 +8303,7 @@
    "status": "capability",
    "capability": "corpus.proposal.create",
    "class": "reversible",
-   "scope": "workspace:read"
+   "scope": "workspace:admin"
   },
   "route:corpusRoutes.js:POST /:scope/:id/tenets": {
    "status": "excluded",
@@ -8319,12 +8321,14 @@
    "because": "ratifying turns a proposal into truth; an agent deciding proposals (its own included) is what D211 forbids, and the database refuses it"
   },
   "route:corpusRoutes.js:GET /tenets/:id/verdicts": {
-   "status": "planned",
+   "status": "capability",
+   "capability": "corpus.verdict.list",
    "class": "safe",
    "scope": "workspace:read"
   },
   "route:corpusRoutes.js:POST /tenets/:id/verdicts": {
-   "status": "planned",
+   "status": "capability",
+   "capability": "corpus.verdict.record",
    "class": "irreversible",
    "scope": "agents:write"
   },
@@ -8361,7 +8365,7 @@
    "status": "capability",
    "capability": "corpus.proposal.create",
    "class": "reversible",
-   "scope": "workspace:read"
+   "scope": "workspace:admin"
   },
   "ui:platform-corpus.js:data-xcp=ratify": {
    "status": "excluded",
@@ -8524,6 +8528,66 @@
    "status": "planned",
    "class": "irreversible",
    "scope": "workspace:admin"
+  },
+  "route:workspaceDocsRoutes.js:GET /": {
+   "status": "capability",
+   "capability": "docs.doc.list",
+   "class": "safe",
+   "scope": "docs:read"
+  },
+  "route:workspaceDocsRoutes.js:POST /": {
+   "status": "capability",
+   "capability": "docs.doc.create",
+   "class": "reversible",
+   "scope": "docs:write"
+  },
+  "route:workspaceDocsRoutes.js:GET /:id": {
+   "status": "capability",
+   "capability": "docs.doc.get",
+   "class": "safe",
+   "scope": "docs:read"
+  },
+  "route:workspaceDocsRoutes.js:PUT /:id": {
+   "status": "capability",
+   "capability": "docs.doc.save",
+   "class": "reversible",
+   "scope": "docs:write"
+  },
+  "route:workspaceDocsRoutes.js:GET /:id/versions": {
+   "status": "capability",
+   "capability": "docs.version.list",
+   "class": "safe",
+   "scope": "docs:read"
+  },
+  "route:workspaceDocsRoutes.js:POST /:id/versions/:versionId/restore": {
+   "status": "capability",
+   "capability": "docs.version.restore",
+   "class": "reversible",
+   "scope": "docs:write"
+  },
+  "route:workspaceDocsRoutes.js:POST /:id/trash": {
+   "status": "capability",
+   "capability": "docs.doc.trash",
+   "class": "reversible",
+   "scope": "docs:write"
+  },
+  "route:workspaceDocsRoutes.js:POST /:id/untrash": {
+   "status": "capability",
+   "capability": "docs.doc.untrash",
+   "class": "reversible",
+   "scope": "docs:write"
+  },
+  "ui:platform-docs.js:data-dc-page": {
+   "status": "capability",
+   "capability": "docs.doc.get",
+   "class": "safe",
+   "scope": "docs:read"
+  },
+  "ui:platform-docs.js:data-dc-search": {
+   "status": "capability",
+   "capability": "docs.doc.list",
+   "class": "safe",
+   "scope": "docs:read"
   }
  }
 }
