@@ -8,7 +8,7 @@ const here = path.dirname(fileURLToPath(import.meta.url)), repo = path.resolve(h
 const require = createRequire(import.meta.url); const puppeteer = require('puppeteer');
 const { createServer } = await import('vite'); const { xenoWorkspace } = await import('../../../scripts/vite-workspace.mjs');
 const { cleanContent } = await import(pathToFileURL(path.join(repo, 'src/server/services/canvases.js')).href);
-const PORT = 5199, base = 'http://127.0.0.1:' + PORT;
+const PORT = Number(process.env.TEST_PORT) || 5199, base = 'http://127.0.0.1:' + PORT;
 const USER = { id: 'u1', username: 'me', email: 'me@x.test', display_name: 'Me', avatar_url: null, email_verified: true };
 let failed = 0;
 const ok = (c, m) => { if (c) console.log('PASS', m); else { failed++; console.log('FAIL', m); } };
@@ -18,7 +18,7 @@ const db = { tasks: [], seq: 0, canvases: [], links: [], puts: [] };
 const mk = (b) => { const t = { key: 'T-' + ++db.seq, number: db.seq, title: b.title, status: b.status || 'todo', kind: 'task', priority: b.priority || 'none', area: 'studio', project: null, assignee: null, labels: [], events: [], links: [], reporter: ME, createdAt: now(), updatedAt: now(), can: { edit: true, moves: [] } }; db.tasks.push(t); return t; };
 mk({ title: 'Design the onboarding', status: 'in_progress', priority: 'high' }); mk({ title: 'Write the copy' }); mk({ title: 'Ship it' });
 const recs = (c) => Object.fromEntries(c.content.nodes.filter((n) => n.type === 'xeno-ref').map((n) => { const t = db.tasks.find((x) => x.key === n.ref.id); return [n.ref.id, t ? { key: t.key, title: t.title, status: t.status, priority: t.priority, project: null, assignee: null } : { key: n.ref.id, missing: true }]; }));
-const out = (c) => ({ id: c.id, name: c.name, area: 'studio', project: null, revision: String(c.revision), items: c.content.nodes.length, updatedAt: now(), can: { edit: !c.readonly, delete: !c.readonly }, content: c.content, records: { tasks: recs(c), files: { 'f0000000-0000-4000-8000-000000000001': { id: 'f0000000-0000-4000-8000-000000000001', name: 'brief.pdf', type: 'application/pdf', bytes: 2400000, url: '/workspace/library?sel=f0000000-0000-4000-8000-000000000001' }, 'f0000000-0000-4000-8000-000000000002': { id: 'f0000000-0000-4000-8000-000000000002', missing: true } }, chats: { 'c0000000-0000-4000-8000-000000000001': { id: 'c0000000-0000-4000-8000-000000000001', title: 'Kickoff notes', url: '/workspace/apps/chat/c0000000-0000-4000-8000-000000000001' } } } });
+const out = (c) => ({ id: c.id, name: c.name, area: 'studio', project: c.project || null, revision: String(c.revision), items: c.content.nodes.length, updatedAt: now(), can: { edit: !c.readonly, delete: !c.readonly }, content: c.content, records: { tasks: recs(c), files: { 'f0000000-0000-4000-8000-000000000001': { id: 'f0000000-0000-4000-8000-000000000001', name: 'brief.pdf', type: 'application/pdf', bytes: 2400000, url: '/workspace/library?sel=f0000000-0000-4000-8000-000000000001' }, 'f0000000-0000-4000-8000-000000000002': { id: 'f0000000-0000-4000-8000-000000000002', missing: true } }, chats: { 'c0000000-0000-4000-8000-000000000001': { id: 'c0000000-0000-4000-8000-000000000001', title: 'Kickoff notes', url: '/workspace/apps/chat/c0000000-0000-4000-8000-000000000001' } } } });
 
 const server = await createServer({ configFile: false, root: repo, logLevel: 'error', appType: 'custom', optimizeDeps: { noDiscovery: true, entries: [] }, plugins: [xenoWorkspace(repo)], server: { host: '127.0.0.1', port: PORT, strictPort: true } });
 await server.listen();
@@ -49,6 +49,10 @@ const handler = (q) => {
   }
   if (u.pathname === '/api/tasks' && method === 'GET') return json(200, { success: true, tasks: db.tasks });
   if (u.pathname === '/api/tasks' && method === 'POST') return json(201, { success: true, task: mk(b) });
+  // the Orchestrator's graph of the canvas's project: T-1 blocks T-2, T-3 waits on T-2 (the server computes ready)
+  if (u.pathname === '/api/orchestrator/graph') { db.graphCalls = (db.graphCalls || 0) + 1; const n = (key, ready, blockedBy) => ({ kind: 'task', id: key, key, ref: 'task:' + key, title: db.tasks.find((t) => t.key === key).title, status: 'todo', done: false, ready, blockedBy });
+    return json(200, { success: true, graph: { projectId: u.searchParams.get('project'), nodes: [n('T-1', true, []), n('T-2', false, ['task:T-1']), n('T-3', false, ['task:T-2'])],
+      edges: [{ id: 'e1', store: 'task_links', from: 'task:T-1', to: 'task:T-2' }, { id: 'e2', store: 'task_links', from: 'task:T-2', to: 'task:T-3' }], ready: ['task:T-1'] } }); }
   if (u.pathname === '/api/tasks/projects') return json(200, { success: true, projects: [] });
   if (u.pathname === '/api/tasks/views') return json(200, { success: true, views: [] });
   const tm = u.pathname.match(/^\/api\/tasks\/(T-\d+)$/); if (tm) { const t = db.tasks.find((x) => x.key === tm[1]); return t ? json(200, { success: true, task: { ...t, events: [], attachments: [], children: [], watchers: [] } }) : json(404, { success: false }); }
@@ -148,6 +152,20 @@ try {
   ok(/Kickoff notes/.test(await cardTxt('rc1')) && !!(await p.$('[data-cv-node="rc1"] a[href="/workspace/apps/chat/c0000000-0000-4000-8000-000000000001"]')), 'a chat shows as a card that opens the chat');
   ok(/Not available/.test(await cardTxt('rf2')), 'a file the reader cannot open says Not available, never its name');
   ok(!!(await p.$('[data-cv-act="add-file"]')) && !!(await p.$('[data-cv-act="add-chat"]')), 'the toolbar can put files and chats on the canvas');
+
+  // dependency graph (xeno-orchestrator on the platform): lay out the project's graph, readiness on each card
+  db.canvases[0].project = { id: 'a0000000-0000-4000-8000-000000000001', name: 'Launch' }; db.canvases[0].revision++;
+  await p.reload({ waitUntil: 'domcontentloaded' }); await settle(1800);
+  ok(!!(await p.$('[data-cv-act="deps"]')), 'a project canvas offers Dependencies');
+  await p.click('[data-cv-act="deps"]'); await settle(1200);
+  const sd = await waitSaved();
+  const doc = db.canvases[0].content;
+  const nodeOf = (k) => doc.nodes.find((x) => x.type === 'xeno-ref' && x.ref.id === k);
+  ok(['T-1', 'T-2', 'T-3'].every((k) => nodeOf(k)), 'every task in the graph is on the canvas');
+  ok(doc.edges.filter((e) => e.xeno && e.xeno.link === 'blocks').length >= 2, 'its dependencies are real “blocks” links');
+  ok(nodeOf('T-1').x < nodeOf('T-2').x && nodeOf('T-2').x < nodeOf('T-3').x, 'laid out left → right in the order the work can happen');
+  ok(!!(await p.$('[data-cv-task="T-1"] [data-cv-ready="yes"]')) && !!(await p.$('[data-cv-task="T-3"] [data-cv-ready="no"]')), 'cards say Ready / Waiting, from the server’s ready set');
+  ok(!sd.conflict, 'and the layout saved');
 
   // view-only
   db.canvases[0].readonly = true; await p.reload({ waitUntil: 'domcontentloaded' }); await settle(1800);

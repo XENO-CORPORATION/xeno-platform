@@ -50,6 +50,9 @@ p.on('request', (q) => {
     if (method === 'PUT') db.budget = { limitCredits: b.credits, spentCredits: 12.5, leftCredits: b.credits - 12.5, windowDays: b.windowDays, autoApprove: b.autoApprove };
     return json(200, { success: true, budget: db.budget || null, spend: db.budget ? [{ agent: { id: 'agt_' + 'a'.repeat(32), name: 'Pixel Bot' }, kind: 'image', credits: 12.5, released: false, at: new Date().toISOString() }] : [], canManage: true });
   }
+  // the §15 audit view of a division: the server decides each row; one is hidden from this reader
+  if (path === '/api/audit/events') { db.auditScope = u.searchParams.get('scope');
+    return json(200, { success: true, scope: db.auditScope, hidden: 1, cursor: '2', more: false, events: [{ id: '2', type: 'run.admitted', subject: { kind: 'run', id: uuid() }, data: { targetKind: 'project' }, at: new Date().toISOString() }] }); }
   // the division HOME: the server decides every row; the stand-in answers as it does, with one project closed
   const hm = path.match(/^\/api\/divisions\/([0-9a-f-]{36})\/home$/);
   if (hm) {
@@ -237,6 +240,7 @@ try {
   ok(db.mapCalls === 2 && new URL(p.url()).pathname === mapPath, 'opening it again goes to the same canvas');
 
   if (process.env.SHOTS) { await fresh(`/workspace/divisions`); await p.screenshot({ path: 'X:/xeno-deploy-tmp/dv-list.png' }); await fresh(`/workspace/divisions/${creative.id}`); await p.screenshot({ path: 'X:/xeno-deploy-tmp/dv-one.png' }); await fresh(`/workspace/workspace/Agents/${ag.id}`); await p.screenshot({ path: 'X:/xeno-deploy-tmp/ag-div.png', fullPage: false }); await p.evaluate(() => document.querySelector('#main .pg, #main [class*=scroll]')?.scrollBy?.(0, 600)); await p.screenshot({ path: 'X:/xeno-deploy-tmp/ag-div2.png' }); }
+  ok(/^division:[0-9a-f-]{36}$/.test(db.auditScope || ''), 'a division page reads its audit view by the division’s id');
   ok(errs.length === 0, 'no page errors (' + JSON.stringify(errs.slice(0, 2)) + ')');
 } catch (e) { failed++; console.log('FAIL the suite threw:', e.message); } finally { await br.close(); await server.close(); }
 console.log(failed ? failed + ' check(s) failed' : 'ALL PASS'); process.exit(failed ? 1 : 0);

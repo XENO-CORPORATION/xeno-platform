@@ -115,6 +115,11 @@ const ROWS = [
     ['funding.offer.get', 'funding_offer_get', 'safe'],
     ['funding.contribution.create', 'funding_contribute', 'irreversible', { cost: { model: 'quoted', note: 'moves the owner’s credits into the project; the amount is in the body' } }],
     ['funding.contribution.get', 'funding_contribution_get', 'safe'], ['funding.contribution.return', 'funding_contribution_return', 'irreversible'],
+    ['orchestrator.graph.get', 'orchestrator_graph_get', 'safe'], ['orchestrator.ready.list', 'orchestrator_ready_list', 'safe'],
+    ['orchestrator.edge.add', 'orchestrator_edge_add', 'undoable'], ['orchestrator.edge.remove', 'orchestrator_edge_remove', 'undoable'],
+    ['orchestrator.plan.list', 'orchestrator_plan_list', 'safe'], ['orchestrator.plan.create', 'orchestrator_plan_create', 'undoable'], ['orchestrator.plan.get', 'orchestrator_plan_get', 'safe'],
+    ['orchestrator.attempt.start', 'orchestrator_attempt_start', 'irreversible'],
+    ['audit.event.list', 'audit_events_list', 'safe'],
   ].map(([name, tool, cls, extra = {}]) => [name, 'workforce', tool, cls, { provenance: cls === 'safe' ? 'untrusted' : 'trusted',
     reply: obj({}, undefined), ...(cls === 'safe' ? {} : { idempotency: NAT('the service keys a mutation by its operationId (or its natural target); a repeat reads the same result back') }), ...extra }]),
   // ── publish (XENO Post, server-to-server). Drafts and PROPOSED times only: publish, retract and approve reach an
