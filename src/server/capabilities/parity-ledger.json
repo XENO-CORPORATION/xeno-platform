@@ -112,7 +112,8 @@
   "xenoMcpRoutes.js": "agents",
   "xenoRoutes.js": "studio",
   "xenoTasksRoutes.js": "tasks",
-  "youtubeRoutes.js": "studio"
+  "youtubeRoutes.js": "studio",
+  "placesRoutes.js": "places"
  },
  "actions": {
   "route:accountGiftRoutes.js:POST /": {
@@ -4689,6 +4690,22 @@
   },
   "ui:workforce.js:data-wf=withdraw": {
    "status": "planned"
+  },
+  "route:placesRoutes.js:GET /": {
+   "status": "capability",
+   "capability": "places.place.list"
+  },
+  "route:placesRoutes.js:GET /:placeId": {
+   "status": "capability",
+   "capability": "places.place.get"
+  },
+  "route:placesRoutes.js:POST /ops/:op": {
+   "status": "capability",
+   "capability": [
+    "places.place.list",
+    "places.place.get",
+    "places.layout.save"
+   ]
   }
  }
 }
