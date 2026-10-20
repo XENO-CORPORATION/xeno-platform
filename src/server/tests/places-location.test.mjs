@@ -88,8 +88,10 @@ async function main() {
   const wHand = await workspace(hand, 'Hand');
   const moved = await places.call(pool, me(hand), 'places.relocate', { placeId: (await placeOf(wHand)).id, cityId: 'aurora', requestId: rid() });
   assert.ok(moved.ok && moved.receipt, JSON.stringify(moved.error));
-  await recordSigninCountry(pool, late, req('IN'));
-  await recordSigninCountry(pool, hand, req('IN'));
+  // the backfill covers a country recorded WITHOUT the sign-in hook (e.g. before it existed): write it directly
+  const direct = `INSERT INTO user_settings (user_id, settings) VALUES ($1, '{"workspace":{"region":{"region":"IN","source":"signin_country"}}}')`;
+  await pool.query(direct, [late]);
+  await pool.query(direct, [hand]);
   const plan = await places.backfillPlan(pool);
   assert.ok(plan.relocations.some((m) => m.id === lateId), 'the dry run lists the default-city building');
   assert.ok(!plan.relocations.some((m) => m.id === moved.result.placeId), 'a hand-relocated building is never planned');
@@ -100,6 +102,27 @@ async function main() {
   assert.deepEqual([pLate.city_id, pLate.region_id, pLate.location_source], ['vega', 'as-south', 'signin_country']);
   assert.equal((await places.backfill(pool)).relocated, 0, 'a second run moves nothing (idempotent)');
   assert.equal((await placeOf(wHand)).city_id, 'aurora');
+
+  // ── the sign-in itself moves a default-city building (no backfill run) ──
+  const now = await user('now');
+  const wNow = await workspace(now, 'Now');
+  assert.equal((await placeOf(wNow)).location_source, 'default');
+  const hand2 = await user('hand2');
+  const wHand2 = await workspace(hand2, 'Hand2');
+  assert.ok((await places.call(pool, me(hand2), 'places.relocate', { placeId: (await placeOf(wHand2)).id, cityId: 'aurora', requestId: rid() })).ok);
+  assert.equal(await recordSigninCountry(pool, now, req('JP')), true);
+  assert.equal(await recordSigninCountry(pool, hand2, req('JP')), true);
+  assert.deepEqual([(await placeOf(wNow)).city_id, (await placeOf(wNow)).location_source], ['sakura', 'signin_country'], 'moved at sign-in');
+  assert.deepEqual([(await placeOf(wHand2)).city_id, (await placeOf(wHand2)).location_source], ['aurora', 'relocated'], 'a relocated building never moves at sign-in');
+  const revNow = (await placeOf(wNow)).revision;
+  assert.equal(await recordSigninCountry(pool, now, req('SG')), true);
+  assert.deepEqual([(await placeOf(wNow)).city_id, (await placeOf(wNow)).revision], ['sakura', revNow], 'a placed building is not moved again (idempotent)');
+  assert.equal(await places.relocateDefaultPlacesForOwner(pool, now), 0);
+  // a relocation failure never fails the sign-in: a broken pool for the move still records the country
+  const flaky = await user('flaky');
+  await workspace(flaky, 'Flaky');
+  const brokenMoves = { query: (sql, p) => (/places_home_city/.test(sql) ? Promise.reject(new Error('boom')) : pool.query(sql, p)), connect: () => pool.connect() };
+  assert.equal(await recordSigninCountry(brokenMoves, flaky, req('DE')), true, 'the country is recorded even when relocation throws');
 
   // ── places.relocate ──
   const outsider = await user('outsider');
