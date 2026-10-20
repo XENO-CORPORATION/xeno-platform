@@ -43,12 +43,13 @@
   }
   async function open(id) {
     if (C.id === id && C.doc) return;
-    Object.assign(C, { id, doc: null, records: {}, state: 'loading', sel: new Set(), undo: [], conflict: false, dirty: false, editing: null });
+    Object.assign(C, { id, doc: null, records: {}, deps: null, depGraph: null, state: 'loading', sel: new Set(), undo: [], conflict: false, dirty: false, editing: null });
     const saved = store(id); C.view = saved || { x: 0, y: 0, z: 1 };
     const r = await api('GET', '/api/canvases/' + encodeURIComponent(id)).catch(() => null);
     if (C.id !== id) return;
     if (!r || !r.ok) { C.state = r && r.status === 404 ? 'missing' : 'error'; return paint(); }
     take(r.d.canvas); C.state = 'ready'; try { X()?.render?.(); } catch {}
+    loadDeps().then((g) => { if (g && C.id === id) draw(); });
     if (!saved) fit();
     paint();
   }
@@ -141,10 +142,55 @@
     const t = C.records[n.ref.id] || { key: n.ref.id, loading: true };
     if (t.missing) return `<div class="cv-n cv-n--task cv-n--gone${sel}" data-cv-node="${esc(n.id)}" ${pos}><small class="tk-key">${esc(n.ref.id)}</small><b>Not available</b><span class="tk-dim">Deleted, or not shared with you</span>${grips}</div>`;
     return `<div class="cv-n cv-n--task${sel}" data-cv-node="${esc(n.id)}" data-cv-task="${esc(t.key)}" ${pos}>
-      <div class="cv-task-top"><span class="tk-dot tk-dot--${esc(t.status || 'todo')}"></span><small class="tk-key">${esc(t.key)}</small><small class="tk-dim">${esc(LABEL[t.status] || '')}</small><span class="tk-sp"></span>${t.priority && t.priority !== 'none' ? `<em class="tk-pri tk-pri--${esc(t.priority)}">${esc(t.priority)}</em>` : ''}</div>
+      <div class="cv-task-top"><span class="tk-dot tk-dot--${esc(t.status || 'todo')}"></span><small class="tk-key">${esc(t.key)}</small><small class="tk-dim">${esc(LABEL[t.status] || '')}</small>${readyBadge(t.key)}<span class="tk-sp"></span>${t.priority && t.priority !== 'none' ? `<em class="tk-pri tk-pri--${esc(t.priority)}">${esc(t.priority)}</em>` : ''}</div>
       <b class="cv-task-t">${esc(t.title || '…')}</b>
       <div class="cv-task-f">${t.project ? `<small class="tk-chip">${esc(t.project.name)}</small>` : ''}<span class="tk-sp"></span>${t.delegate ? `<span class="tk-face tk-face--sm tk-face--agent" title="${esc(t.delegate.name)} (agent)">${ic('bot')}</span>` : ''}${t.assignee ? `<span class="tk-face tk-face--sm" title="${esc(t.assignee.name)}">${esc(String(t.assignee.name || '?').slice(0, 2).toUpperCase())}</span>` : ''}<button class="cv-open" data-cv-open="${esc(t.key)}" title="Open ${esc(t.key)}">${ic('open')}</button></div>${grips}</div>`;
   }
+  // ───────────────────────── dependency graph (xeno-orchestrator on the platform: /api/orchestrator/graph)
+  // The graph is the project's own `blocks` links between tasks; this lays it out on the canvas in the order the work
+  // can happen (left → right by dependency depth) and marks each card Ready / Waiting. It adds no second store: the
+  // edges it draws are real task links, exactly the ones the task page shows, and a loop is refused by the server.
+  function readyBadge(key) {
+    const n = C.deps && C.deps.get(key); if (!n) return '';
+    if (n.done) return '';
+    return n.ready ? '<em class="tk-chip cv-ready" data-cv-ready="yes" title="Every blocker is done">Ready</em>'
+      : `<em class="tk-chip cv-wait" data-cv-ready="no" title="Waiting on unfinished work">Waiting on ${n.blockedBy.length}</em>`;
+  }
+  async function loadDeps() {
+    if (!C.project) return null;
+    const r = await api('GET', '/api/orchestrator/graph?project=' + encodeURIComponent(C.project.id)).catch(() => null);
+    if (!r || !r.ok) return null;
+    const g = r.d.graph; C.deps = new Map(g.nodes.filter((n) => n.kind === 'task').map((n) => [n.key, n])); C.depGraph = g;
+    return g;
+  }
+  async function layoutDeps() {
+    const g = await loadDeps(); if (!g) return toast('The dependency graph couldn’t be loaded');
+    const tasksOnly = g.nodes.filter((n) => n.kind === 'task'), byRef = new Map(g.nodes.map((n) => [n.ref, n]));
+    const edges = g.edges.filter((e) => byRef.get(e.from)?.kind === 'task' && byRef.get(e.to)?.kind === 'task');
+    if (!edges.length) { draw(); return toast('No dependencies yet — connect two tasks and pick “Blocks”'); }
+    const involved = new Set(edges.flatMap((e) => [e.from, e.to]));
+    // depth = the longest chain of blockers before it (the graph is acyclic: the server refuses loops)
+    const depth = new Map(); const into = new Map();
+    for (const e of edges) (into.get(e.to) || into.set(e.to, []).get(e.to)).push(e.from);
+    const d = (ref, seen = new Set()) => { if (depth.has(ref)) return depth.get(ref); if (seen.has(ref)) return 0; seen.add(ref); const v = Math.max(-1, ...(into.get(ref) || []).map((x) => d(x, seen))) + 1; depth.set(ref, v); return v; };
+    for (const ref of involved) d(ref);
+    before();
+    const at = new Map(C.doc.nodes.filter((n) => n.type === 'xeno-ref' && n.ref.kind === 'task').map((n) => [n.ref.id, n]));
+    const c = centre(), rows = new Map();
+    for (const t of tasksOnly.filter((t) => involved.has(t.ref)).sort((a, b) => depth.get(a.ref) - depth.get(b.ref) || a.key.localeCompare(b.key, undefined, { numeric: true }))) {
+      const col = depth.get(t.ref), row = rows.get(col) || 0; rows.set(col, row + 1);
+      const x = snap(c.x - 300 + col * 320), y = snap(c.y - 120 + row * 150);
+      const n = at.get(t.key);
+      if (n) { n.x = x; n.y = y; } else { const nn = { id: uid(), type: 'xeno-ref', ref: { kind: 'task', id: t.key }, x, y, width: 260, height: 120 }; C.doc.nodes.push(nn); at.set(t.key, nn); C.records[t.key] = C.records[t.key] || { key: t.key, title: t.title, status: t.status }; }
+    }
+    for (const e of edges) {
+      const a = at.get(byRef.get(e.from).key), b = at.get(byRef.get(e.to).key); if (!a || !b) continue;
+      const have = C.doc.edges.find((x) => x.fromNode === a.id && x.toNode === b.id);
+      if (have) { have.xeno = { link: 'blocks' }; have.toEnd = 'arrow'; } else C.doc.edges.push({ id: uid(), fromNode: a.id, toNode: b.id, toEnd: 'arrow', xeno: { link: 'blocks' } });
+    }
+    change('Dependencies laid out'); fit(); draw();
+  }
+
   function edgesSvg() {
     const out = [];
     for (const e of C.doc.edges) {
@@ -209,7 +255,7 @@
           ${C.project ? `<button class="tk-tool" data-cv-act="add-tenet" title="Put the project’s tenets on the canvas as live verdict cards">${ic('check')}Verdict</button>` : ''}
           <button class="tk-tool" data-cv-act="add-note" title="Note · N">${ic('edit')}Note</button>
           <button class="tk-tool" data-cv-act="add-link" title="Link">${ic('link')}Link</button>
-          <button class="tk-tool" data-cv-act="add-group" title="Group">${ic('layers')}Group</button></span>`}
+          <button class="tk-tool" data-cv-act="add-group" title="Group">${ic('layers')}Group</button>${C.project ? `<button class="tk-tool" data-cv-act="deps" title="Lay out this project’s dependency graph: every task, in the order the work can happen">${ic('link')}Dependencies</button>` : ''}</span>`}
         <span class="tk-sp"></span><small class="cv-status" data-cv-status aria-live="polite"></small>
         <span class="cv-zoom"><button class="tk-ib" data-cv-act="zoom-out" aria-label="Zoom out">${ic('minus')}</button><button class="cv-zl" data-cv-act="fit" data-cv-zoom title="Fit everything">100%</button><button class="tk-ib" data-cv-act="zoom-in" aria-label="Zoom in">${ic('plus')}</button></span>
         <button class="tk-ib" data-cv-act="menu" aria-label="Canvas actions">${ic('more')}</button>
@@ -453,7 +499,7 @@
     'add-task': addTask, 'new-task': newTaskHere, 'add-file': () => addRef('file'), 'add-chat': () => addRef('chat'), 'add-tenet': addTenet, 'add-note': () => addNote(), 'add-link': addLink, 'add-group': () => addGroup(false), 'group-sel': () => addGroup(true),
     delete: removeSel, rename: () => rename(), 'zoom-in': () => zoomAt(1.2), 'zoom-out': () => zoomAt(1 / 1.2), fit: () => { fit(); store(C.id, C.view); draw(); },
     menu: (_, el) => canvasMenu(el), reload: () => { const id = C.id; C.id = null; open(id); }, reopen: () => { const id = C.id; C.id = null; open(id); paint(); },
-    back: () => goCanvas(null), new: newCanvas, 'retry-list': () => { L.list = null; paint(); }, 'edge-kind': (k) => edgeKind(k),
+    deps: () => layoutDeps(), back: () => goCanvas(null), new: newCanvas, 'retry-list': () => { L.list = null; paint(); }, 'edge-kind': (k) => edgeKind(k),
   };
   addEventListener('click', (e) => {
     const o = e.target.closest?.('[data-cv-open]'); if (o) { e.preventDefault(); return X().go('global', { global: 'tasks', item: o.dataset.cvOpen }); }
@@ -468,7 +514,7 @@
     const id = C.id; const r = await api('GET', '/api/canvases/' + encodeURIComponent(id)).catch(() => null);
     if (!r || !r.ok || C.id !== id || C.dirty || drag) return;
     if (r.d.canvas.revision !== C.rev) { take(r.d.canvas); C.sel = new Set([...C.sel].filter((s) => s.startsWith('e:') ? C.doc.edges.some((x) => 'e:' + x.id === s) : nodeById(s))); draw(); status('Updated'); }
-    else { C.records = r.d.canvas.records.tasks || {}; C.refs = refsOf(r.d.canvas.records); draw(); }
+    else { C.records = r.d.canvas.records.tasks || {}; C.refs = refsOf(r.d.canvas.records); await loadDeps(); if (C.id === id) draw(); }
   }, 15000);
 
   // the breadcrumb names a canvas, never its id

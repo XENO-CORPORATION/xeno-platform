@@ -4,6 +4,7 @@
  *   - presence: a beat onto a floor the viewer cannot see is refused; a stranger's beat never shows; TTL expires it;
  *   - occupant status is derived from records (task in_review for me → needs-you, blocked, in_progress → working);
  *   - diffFrames sends a snapshot first, then only changes; needs-you lists my reviews and my agents' blocked tasks.
+ *   - activity (§15): new workforce events in the building after a cursor, never one on a floor closed to the viewer;
  *   - over HTTP: the real router streams `snapshot` then an `occupant` event when a task changes, and a non-member
  *     gets a 403 envelope, never a stream.
  *
@@ -66,6 +67,16 @@ async function main() {
   const pm = (await live.frame(pool, me(member, 'Member'), placeId)).result.presence;
   assert.deepEqual(pm, [{ principalId: member, floorKey: dDev }], 'the owner on the closed floor is invisible to the member');
   assert.equal((await live.frame(pool, me(owner, 'Owner'), placeId)).result.presence.length, 2);
+
+  // ── §15 activity: the building's workforce events, from the one event stream — never a closed floor's ──
+  const start = await live.activity(pool, me(member, 'Member'), mf.result, null);
+  const wfEv = (div, type) => pool.query(`INSERT INTO workforce_events (type, subject_kind, subject_id, workspace_id, division_id) VALUES ($1,'division',$2,$3,$2)`, [type, div, co]);
+  await wfEv(dDev, 'division.updated'); await wfEv(dSecret, 'division.archived');
+  const act = await live.activity(pool, me(member, 'Member'), mf.result, start.cursor);
+  assert.deepEqual(act.events.map((e) => [e.type, e.divisionId]), [['division.updated', dDev]], 'activity on the closed floor never reaches the member');
+  const oact = await live.activity(pool, me(owner, 'Owner'), of.result, start.cursor);
+  assert.equal(oact.events.length, 2, 'the admin, who sees every floor, gets both');
+  assert.equal((await live.activity(pool, me(member, 'Member'), mf.result, act.cursor)).events.length, 0, 'the cursor moves on: nothing twice');
 
   // ── diff ──
   const a = (await live.frame(pool, me(member, 'Member'), placeId)).result;
