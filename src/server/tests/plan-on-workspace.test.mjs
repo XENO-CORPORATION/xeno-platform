@@ -18,6 +18,7 @@ import { runAllMigrations } from '../services/migrationRunner.js';
 import { ensurePersonalWorkspace } from '../services/personalWorkspace.js';
 import { getWorkspacePlan, getActingEntitlements } from '../services/effectivePlan.js';
 import { workspaceStorageAllowance } from '../services/storageAllowance.js';
+import { resolveEntitlements } from '../utils/entitlementGate.js';
 
 if (!process.env.DATABASE_URL) throw new Error('DATABASE_URL is required');
 const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL });
@@ -76,6 +77,8 @@ async function main() {
   await pool.query(`UPDATE workspaces SET metadata = '{}'::jsonb WHERE id = $1`, [team]);
   assert.equal((await getActingEntitlements(pool, pro, { workspaceId: team })).entitlements.cloudSync, false, 'Pro acting in an unpaid team workspace is held to Free there');
   assert.equal((await getActingEntitlements(pool, pro)).plan, 'pro', 'no acting workspace = the legacy answer');
+  assert.equal((await resolveEntitlements(pool, pro, { workspaceId: team })).cloudSync, false, 'the gate path (resolveEntitlements) reads the acting workspace too');
+  assert.notEqual((await resolveEntitlements(pool, pro)).cloudSync, false, 'and without one, the legacy strongest plan');
   console.log('plan-on-workspace: all checks passed');
 }
 

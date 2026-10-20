@@ -215,7 +215,7 @@ export async function registerManagedLibraryFile(db, {
   return transact(async (tx) => {
     // SES-01: an asset created under the caller's own personal wrapper is the caller's own, never
     // parented to the wrapper, where every member of it would inherit a relation on it.
-    await assertServiceGranted(tx, String(userId), 'storage'); // D-3: a service account stores nothing without a named grant
+    await assertServiceGranted(tx, String(userId), 'storage', { workspaceId }); // D-3: a service account stores nothing without a named grant
     const scope = await resolveResourceScope(tx, { userId, workspaceId });
     if (scope.kind === 'refused') throw new Error('Workspace editor access is required to register an asset');
     if (scope.kind === 'personal') workspaceId = null;
