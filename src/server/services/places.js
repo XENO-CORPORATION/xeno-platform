@@ -392,20 +392,39 @@ export const httpStatus = (reply) => (reply.ok ? 200 : STATUS[reply.error.code] 
 export async function backfillPlan(db) {
   const rows = (await db.query(`SELECT w.id, (places_home_city(w.owner_user_id)).* FROM workspaces w
     WHERE w.status='active' AND NOT EXISTS (SELECT 1 FROM places p WHERE p.workspace_id=w.id AND p.lifecycle='active')`)).rows;
-  const moves = (await db.query(`SELECT p.id, h.city_id, h.region_id, h.source FROM places p JOIN workspaces w ON w.id=p.workspace_id
-    CROSS JOIN LATERAL places_home_city(w.owner_user_id) h
-    WHERE p.lifecycle='active' AND p.location_source='default' AND h.source <> 'default'`)).rows;
+  const moves = await defaultCityMoves(db);
   const by = (list, k) => list.reduce((m, r) => ({ ...m, [r[k]]: (m[r[k]] || 0) + 1 }), {});
   return { missing: rows.length, byCity: by(rows, 'city_id'), bySource: by(rows, 'source'), workspaceIds: rows.map((r) => r.id),
     toRelocate: moves.length, relocateByCity: by(moves, 'city_id'), relocateBySource: by(moves, 'source'), relocations: moves };
 }
 export async function backfill(db) {
   const plan = await backfillPlan(db);
-  let created = 0, relocated = 0;
+  let created = 0, relocated;
   for (const id of plan.workspaceIds) await tx(db, async (c) => { const before = (await c.query(`SELECT 1 FROM places WHERE workspace_id=$1 AND lifecycle='active'`, [id])).rows.length; await c.query('SELECT places_provision($1)', [id]); if (!before) created++; });
-  for (const m of plan.relocations) await tx(db, async (c) => {
+  relocated = await applyMoves(db, plan.relocations);
+  return { ...plan, created, relocated };
+}
+
+/** Buildings still on the DEFAULT city whose owner now has a better source (optionally: one owner's only). */
+async function defaultCityMoves(db, ownerUserId = null) {
+  return (await db.query(`SELECT p.id, h.city_id, h.region_id, h.source FROM places p JOIN workspaces w ON w.id=p.workspace_id
+    CROSS JOIN LATERAL places_home_city(w.owner_user_id) h
+    WHERE p.lifecycle='active' AND p.location_source='default' AND h.source <> 'default'
+      AND ($1::uuid IS NULL OR w.owner_user_id=$1::uuid)`, [ownerUserId])).rows;
+}
+/** Move each building, re-checking under a row lock that it is still on the default city (so a race or rerun is a no-op). */
+async function applyMoves(db, moves) {
+  let relocated = 0;
+  for (const m of moves) await tx(db, async (c) => {
     const still = (await c.query(`SELECT 1 FROM places WHERE id=$1 AND lifecycle='active' AND location_source='default' FOR UPDATE`, [m.id])).rows.length;
     if (still) { await moveTo(c, m.id, m.city_id, m.region_id, m.source); relocated++; }
   });
-  return { ...plan, created, relocated };
+  return relocated;
+}
+/**
+ * Right after a sign-in country is recorded: move this person's buildings that still stand on the default city, by the
+ * same rules as the backfill (a relocated or already-placed building is never touched; idempotent). Returns the count.
+ */
+export async function relocateDefaultPlacesForOwner(db, ownerUserId) {
+  return applyMoves(db, await defaultCityMoves(db, ownerUserId));
 }

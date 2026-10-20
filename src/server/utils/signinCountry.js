@@ -10,6 +10,8 @@
  * reads — and ONLY when the person has not set a country themselves (no region, or one we wrote). A value the person
  * chose is never overwritten. Best effort: a failure here never fails a sign-in.
  */
+import { relocateDefaultPlacesForOwner } from '../services/places.js';
+
 export function countryFromRequest(req) {
   const raw = String(req?.get?.('CF-IPCountry') || req?.headers?.['cf-ipcountry'] || '').trim().toUpperCase();
   if (!/^[A-Z]{2}$/.test(raw) || raw === 'XX' || raw === 'T1') return null;
@@ -35,6 +37,10 @@ export async function recordSigninCountry(db, userId, req) {
           OR (user_settings.settings #>> '{workspace,region,source}') = 'signin_country'`,
       [userId, cc],
     );
+    if (r.rowCount > 0) {
+      // A building still on the default city moves now, not at the next backfill. Same rules; never fails sign-in.
+      try { await relocateDefaultPlacesForOwner(db, userId); } catch (e) { console.warn('[signinCountry] relocation skipped:', e.message); }
+    }
     return r.rowCount > 0;
   } catch (e) {
     console.warn('[signinCountry] not recorded:', e.message);
