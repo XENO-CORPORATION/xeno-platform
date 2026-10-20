@@ -2723,12 +2723,27 @@
    "class": "safe",
    "scope": "places:read"
   },
+  "route:placesRoutes.js:GET /:placeId/agents/:pid": {
+   "status": "planned",
+   "class": "safe",
+   "scope": "places:read"
+  },
   "route:placesRoutes.js:GET /:placeId/events": {
    "status": "excluded",
    "category": "protocol",
    "class": "safe",
    "scope": "none",
    "because": "SSE transport for the live frame; the same scoped snapshot is readable by agents through places.place.get"
+  },
+  "route:placesRoutes.js:GET /:placeId/floors/:divisionId/board": {
+   "status": "planned",
+   "class": "safe",
+   "scope": "places:read"
+  },
+  "route:placesRoutes.js:GET /:placeId/occupants/:pid/computer": {
+   "status": "planned",
+   "class": "safe",
+   "scope": "places:read"
   },
   "route:placesRoutes.js:GET /needs-you": {
    "status": "planned",
