@@ -8,11 +8,12 @@
  * in their workspace, and every grant or revoke writes a workspace_audit row in that workspace, in the same
  * transaction as the tuple, so a change without its audit row cannot exist.
  *
- * ⚠️ A grant is read by the gate PLATFORM-WIDE (the tuple names no workspace). Scoping a grant to one workspace needs
- * the gate to learn the acting workspace; until then, revoking from any workspace the service belongs to revokes it.
+ * A grant is SCOPED to the workspace it was made in (object_id = <capability>@<workspace id>): the gate honours it only
+ * when the service acts in that workspace, so one workspace's admin can never open another tenant. Legacy unscoped
+ * tuples are not shown and grant nothing (migration 20261020160000 refuses new ones).
  */
 import { check } from '../utils/authzReBAC.js';
-import { SERVICE_CAPABILITIES } from './servicePrincipalGate.js';
+import { SERVICE_CAPABILITIES, scopedCapability } from './servicePrincipalGate.js';
 import { withTransaction } from './chatProjectAuthority.js';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -33,14 +34,16 @@ const MEMBER_SERVICES = `
     FROM relationship_tuples t JOIN users u ON u.id::text = t.subject_id
    WHERE t.object_type = 'workspace' AND t.object_id = $1 AND t.subject_type = 'user' AND u.role = 'service'`;
 
-async function grantsOf(db, ids) {
+async function grantsOf(db, workspaceId, ids) {
   if (!ids.length) return new Map();
+  const scoped = new Map(SERVICE_CAPABILITIES.map((c) => [scopedCapability(c, String(workspaceId).toLowerCase()), c]));
   const rows = (await db.query(
     `SELECT subject_id, object_id FROM relationship_tuples
-      WHERE object_type = 'capability' AND relation = 'grantee' AND subject_type = 'user' AND subject_id = ANY($1::text[])`,
-    [ids.map(String)])).rows;
+      WHERE object_type = 'capability' AND relation = 'grantee' AND subject_type = 'user' AND subject_id = ANY($1::text[])
+        AND object_id = ANY($2::text[])`,
+    [ids.map(String), [...scoped.keys()]])).rows;
   const by = new Map(ids.map((id) => [String(id), []]));
-  for (const r of rows) if (SERVICE_CAPABILITIES.includes(r.object_id)) by.get(r.subject_id)?.push(r.object_id);
+  for (const r of rows) by.get(r.subject_id)?.push(scoped.get(r.object_id));
   return by;
 }
 
@@ -53,7 +56,7 @@ const shape = (u, caps) => ({
 export async function listServiceAccounts(db, { workspaceId, userId }) {
   await requireAdmin(db, workspaceId, userId);
   const svcs = (await db.query(`${MEMBER_SERVICES} ORDER BY u.created_at`, [String(workspaceId)])).rows;
-  const grants = await grantsOf(db, svcs.map((s) => s.id));
+  const grants = await grantsOf(db, workspaceId, svcs.map((s) => s.id));
   return { capabilities: SERVICE_CAPABILITIES.map((c) => ({ name: c, label: CAPABILITY_LABELS[c] || c })), serviceAccounts: svcs.map((s) => shape(s, grants.get(String(s.id)) || [])) };
 }
 
@@ -67,7 +70,7 @@ export async function getServiceAccount(db, { workspaceId, userId, serviceId }) 
        FROM workspace_audit a LEFT JOIN users u ON u.id = a.actor_user_id
       WHERE a.workspace_id = $1 AND a.target = $2 AND a.action IN ('service.grant', 'service.revoke')
       ORDER BY a.created_at DESC LIMIT 50`, [workspaceId, `user:${serviceId}`])).rows;
-  return { serviceAccount: shape(s, (await grantsOf(db, [s.id])).get(String(s.id)) || []),
+  return { serviceAccount: shape(s, (await grantsOf(db, workspaceId, [s.id])).get(String(s.id)) || []),
     history: recent.map((r) => ({ action: r.action, capability: r.metadata?.capability || null, at: r.created_at, actor: r.actor || null })) };
 }
 
@@ -78,7 +81,7 @@ export async function setServiceGrant(db, { workspaceId, userId, serviceId, capa
   return withTransaction(db, async (tx) => {
     const s = (await tx.query(`${MEMBER_SERVICES} AND u.id = $2`, [String(workspaceId), UUID.test(String(serviceId)) ? serviceId : null])).rows[0];
     if (!s) throw new ServiceGrantError(404, 'service_account_not_found', 'Service account not found');
-    const tuple = ['capability', capability, 'grantee', 'user', String(s.id)];
+    const tuple = ['capability', scopedCapability(capability, String(workspaceId).toLowerCase()), 'grantee', 'user', String(s.id)];
     const changed = granted
       ? (await tx.query(`INSERT INTO relationship_tuples (object_type, object_id, relation, subject_type, subject_id)
            SELECT $1::text, $2::text, $3::text, $4::text, $5::text WHERE NOT EXISTS (SELECT 1 FROM relationship_tuples
@@ -87,9 +90,9 @@ export async function setServiceGrant(db, { workspaceId, userId, serviceId, capa
            AND subject_type = $4 AND subject_id = $5`, tuple)).rowCount;
     if (changed) {
       await tx.query('INSERT INTO workspace_audit (workspace_id, actor_user_id, action, target, metadata) VALUES ($1, $2, $3, $4, $5)',
-        [workspaceId, userId, granted ? 'service.grant' : 'service.revoke', `user:${s.id}`, { capability, scope: 'platform' }]);
+        [workspaceId, userId, granted ? 'service.grant' : 'service.revoke', `user:${s.id}`, { capability, scope: 'workspace' }]);
     }
-    const caps = (await grantsOf(tx, [s.id])).get(String(s.id)) || [];
+    const caps = (await grantsOf(tx, workspaceId, [s.id])).get(String(s.id)) || [];
     return { changed: changed > 0, serviceAccount: shape(s, caps) };
   });
 }

@@ -21,6 +21,7 @@
 
 import express from 'express';
 import { assertServiceGranted, ServicePrincipalDeniedError } from '../services/servicePrincipalGate.js';
+import { workspaceFromReq } from '../utils/workspaceContext.js';
 import crypto from 'crypto';
 import { ensurePersonalWorkspace } from '../services/personalWorkspace.js';
 import authMiddleware, { optionalAuthMiddleware } from '../middleware/auth.js';
@@ -651,9 +652,10 @@ router.get('/developer/me', authMiddleware, async (req, res) => {
 router.post('/listings', authMiddleware, async (req, res) => {
   try {
     // D-3: a service account lists nothing on the Marketplace without a named grant
-    try { await assertServiceGranted(req.db, String(req.user.id), 'marketplace.listings'); }
-    catch (e) { if (e instanceof ServicePrincipalDeniedError) return res.status(403).json({ success: false, error: e.message, code: e.code }); throw e; }
+    // in the workspace it would sell as: its developer's seller workspace, else the acting workspace (x-xeno-workspace)
     const dev = await getDeveloperForUser(req.db, req.user.id);
+    try { await assertServiceGranted(req.db, String(req.user.id), 'marketplace.listings', { workspaceId: dev?.seller_workspace_id || workspaceFromReq(req) }); }
+    catch (e) { if (e instanceof ServicePrincipalDeniedError) return res.status(403).json({ success: false, error: e.message, code: e.code }); throw e; }
     if (!dev) return res.status(403).json({ success: false, error: 'Register a developer profile first' });
     if (dev.status !== 'active') return res.status(403).json({ success: false, error: 'Developer account is not active' });
 

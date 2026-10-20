@@ -55,7 +55,7 @@
     return h.page(h.head({ obj: true, eyebrow: '<a data-xsv="list">Service accounts</a>', title: s.name, sub: s.username ? '@' + s.username : 'Service account' })
       + `<div class="pg-cols pg-cols--item"><div>
         <section class="pg-sec"><div class="pg-sec-h"><h3>What it may use</h3></div><div class="xsv-caps" data-xsv-caps>${rows}</div>
-          <p class="pg-dim wf-note">A grant applies wherever this service account works, not only in this workspace.</p></section>
+          <p class="pg-dim wf-note">A grant applies in this workspace only. Other workspaces decide for themselves.</p></section>
         <section class="pg-sec"><div class="pg-sec-h"><h3>History</h3></div>${hist}</section>
       </div><aside><dl class="pg-props"><dt>Kind</dt><dd>Service</dd><dt>Created</dt><dd>${esc(new Date(s.createdAt).toLocaleDateString())}</dd><dt>Id</dt><dd><small>${esc(s.id.slice(0, 8))}…</small></dd></dl></aside></div>`, 'xsv');
   }

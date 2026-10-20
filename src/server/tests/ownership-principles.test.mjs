@@ -48,12 +48,26 @@ async function main() {
     [`${name}_${process.pid}`, `${name}_${process.pid}@xeno.test`, role])).rows[0].id;
   const human = await user('own_human'), svc = await user('own_service', 'service');
 
-  // ── D-3: the gate itself ──
+  // ── D-3: the gate itself, scoped to the workspace the service acts in ──
+  const wsA = (await pool.query(`INSERT INTO workspaces (owner_user_id, workspace_type, name, slug) VALUES ($1, 'team', 'A', $2) RETURNING id`, [human, `own-a-${process.pid}`])).rows[0].id;
+  const wsB = (await pool.query(`INSERT INTO workspaces (owner_user_id, workspace_type, name, slug) VALUES ($1, 'team', 'B', $2) RETURNING id`, [human, `own-b-${process.pid}`])).rows[0].id;
+  await pool.query(`INSERT INTO relationship_tuples(object_type,object_id,relation,subject_type,subject_id) VALUES('workspace',$1,'viewer','user',$3),('workspace',$2,'viewer','user',$3)`, [wsA, wsB, svc]);
   await assertServiceGranted(pool, human, 'tasks'); // a person is untouched
-  await assert.rejects(assertServiceGranted(pool, svc, 'tasks'), ServicePrincipalDeniedError, 'D-3: a service is denied by default');
+  await assert.rejects(assertServiceGranted(pool, svc, 'tasks', { workspaceId: wsA }), ServicePrincipalDeniedError, 'D-3: a service is denied by default');
+  await pool.query(`INSERT INTO relationship_tuples(object_type,object_id,relation,subject_type,subject_id) VALUES('capability',$2,'grantee','user',$1)`, [svc, `tasks@${wsA}`]);
+  await assertServiceGranted(pool, svc, 'tasks', { workspaceId: wsA }); // a named grant opens exactly that capability, there
+  await assert.rejects(assertServiceGranted(pool, svc, 'tasks', { workspaceId: wsB }), ServicePrincipalDeniedError, 'D-3: a grant in workspace A does not open workspace B');
+  await assert.rejects(assertServiceGranted(pool, svc, 'tasks'), ServicePrincipalDeniedError, 'D-3: no acting workspace, no grant');
+  await assert.rejects(assertServiceGranted(pool, svc, 'storage', { workspaceId: wsA }), ServicePrincipalDeniedError, 'D-3: a grant is per capability');
+  await pool.query(`DELETE FROM relationship_tuples WHERE object_type='workspace' AND object_id=$1 AND subject_id=$2`, [wsA, svc]);
+  await assert.rejects(assertServiceGranted(pool, svc, 'tasks', { workspaceId: wsA }), ServicePrincipalDeniedError, 'D-3: leaving the workspace voids its grant');
+  await pool.query(`DELETE FROM relationship_tuples WHERE object_type='capability' AND subject_id=$1`, [svc]);
+  // a legacy UNSCOPED tuple grants nothing, anywhere (written with the constraint's NOT VALID window: drop, seed, restore)
+  await pool.query('ALTER TABLE relationship_tuples DROP CONSTRAINT relationship_tuples_capability_scoped');
   await pool.query(`INSERT INTO relationship_tuples(object_type,object_id,relation,subject_type,subject_id) VALUES('capability','tasks','grantee','user',$1)`, [svc]);
-  await assertServiceGranted(pool, svc, 'tasks'); // a named grant opens exactly that capability
-  await assert.rejects(assertServiceGranted(pool, svc, 'storage'), ServicePrincipalDeniedError, 'D-3: a grant is per capability');
+  await pool.query(`ALTER TABLE relationship_tuples ADD CONSTRAINT relationship_tuples_capability_scoped CHECK (object_type <> 'capability' OR object_id ~ '^[a-z.]+@[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$') NOT VALID`);
+  await assert.rejects(assertServiceGranted(pool, svc, 'tasks', { workspaceId: wsB }), ServicePrincipalDeniedError, 'D-3: a legacy unscoped tuple grants nothing');
+  await assert.rejects(pool.query(`INSERT INTO relationship_tuples(object_type,object_id,relation,subject_type,subject_id) VALUES('capability','storage','grantee','user',$1)`, [svc]), /capability_scoped/, 'D-3: a new unscoped grant is refused by the schema');
   await pool.query(`DELETE FROM relationship_tuples WHERE object_type='capability' AND subject_id=$1`, [svc]);
 
   // ── D-3: Storage's one write choke point ──
@@ -61,6 +75,12 @@ async function main() {
   await assert.rejects(registerManagedLibraryFile(pool, { userId: svc, filename: 's.txt', originalName: 's.txt', mimeType: 'text/plain', fileSize: 1, storagePath: svcFile, metadata: {} }),
     (e) => e.code === 'service_principal_denied', 'D-3: a service account stores no file');
   assert.equal((await pool.query('SELECT count(*)::int AS n FROM user_files WHERE user_id = $1', [svc])).rows[0].n, 0);
+  await pool.query(`INSERT INTO relationship_tuples(object_type,object_id,relation,subject_type,subject_id) VALUES('workspace',$1,'editor','user',$3),('capability',$2,'grantee','user',$3)`, [wsB, `storage@${wsA}`, svc]);
+  await assert.rejects(registerManagedLibraryFile(pool, { userId: svc, workspaceId: wsB, filename: 's.txt', originalName: 's.txt', mimeType: 'text/plain', fileSize: 1, storagePath: svcFile, metadata: {} }),
+    (e) => e.code === 'service_principal_denied', 'D-3: a storage grant in A does not let the service store in B');
+  await pool.query(`INSERT INTO relationship_tuples(object_type,object_id,relation,subject_type,subject_id) VALUES('capability',$1,'grantee','user',$2)`, [`storage@${wsB}`, svc]);
+  await assert.doesNotReject(registerManagedLibraryFile(pool, { userId: svc, workspaceId: wsB, filename: 's.txt', originalName: 's.txt', mimeType: 'text/plain', fileSize: 1, storagePath: svcFile, metadata: {} }).catch((e) => { if (e.code === 'service_principal_denied') throw e; }), 'D-3: granted in B, it passes the gate acting in B');
+  await pool.query(`DELETE FROM relationship_tuples WHERE object_type='capability' AND subject_id=$1`, [svc]);
 
   // ── D-3: Tasks and Marketplace listings, through the real routers ──
   const app = express(); app.use(express.json());
@@ -77,6 +97,16 @@ async function main() {
     const listAs = (id) => fetch(`${base}/api/marketplace/listings`, { method: 'POST', headers: { 'content-type': 'application/json', authorization: `Bearer ${jwt.sign({ userId: id, email: 'x@xeno.test', username: 'x' }, JWT_SECRET, { expiresIn: '1h' })}` }, body: JSON.stringify({ kind: 'mcp', title: 'Svc listing' }) });
     const m1 = await listAs(svc);
     assert.equal(m1.status, 403); assert.equal((await m1.json()).code, 'service_principal_denied', 'D-3: a service account creates no listing');
+    // a grant opens each surface ONLY in the workspace it was made in (x-xeno-workspace names the acting workspace)
+    await pool.query(`INSERT INTO relationship_tuples(object_type,object_id,relation,subject_type,subject_id) VALUES('workspace',$1,'viewer','user',$2)`, [wsA, svc]);
+    await pool.query(`INSERT INTO relationship_tuples(object_type,object_id,relation,subject_type,subject_id) VALUES('capability',$2,'grantee','user',$1),('capability',$3,'grantee','user',$1)`, [svc, `tasks@${wsA}`, `marketplace.listings@${wsA}`]);
+    const tasksIn = (ws) => fetch(`${base}/api/tasks`, { headers: { 'x-test-user': svc, 'x-xeno-workspace': ws } });
+    assert.notEqual((await tasksIn(wsA)).status, 403, 'D-3: granted in A, the service reaches Tasks acting in A');
+    assert.equal((await (await tasksIn(wsB)).json()).code, 'service_principal_denied', 'D-3: the grant in A does not open Tasks acting in B');
+    const listIn = async (ws) => (await (await fetch(`${base}/api/marketplace/listings`, { method: 'POST', headers: { 'content-type': 'application/json', 'x-xeno-workspace': ws, authorization: `Bearer ${jwt.sign({ userId: svc, email: 'x@xeno.test', username: 'x' }, JWT_SECRET, { expiresIn: '1h' })}` }, body: JSON.stringify({ kind: 'mcp', title: 'Svc listing' }) })).json()).code;
+    assert.notEqual(await listIn(wsA), 'service_principal_denied', 'D-3: granted in A, the service reaches the listing rules acting in A');
+    assert.equal(await listIn(wsB), 'service_principal_denied', 'D-3: the grant in A does not open listings acting in B');
+    await pool.query(`DELETE FROM relationship_tuples WHERE object_type='capability' AND subject_id=$1`, [svc]);
     const m2 = await listAs(human);
     assert.notEqual((await m2.json()).code, 'service_principal_denied', 'a person reaches the listing rules (and is asked for a developer profile)');
   } finally { server.close(); }
