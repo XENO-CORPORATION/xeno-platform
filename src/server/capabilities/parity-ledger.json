@@ -124,7 +124,9 @@
   "publishRoutes.js": "publish",
   "platform-publish.js": "publish",
   "supportRoutes.js": "support",
-  "platform-support.js": "support"
+  "platform-support.js": "support",
+  "workspaceAnalyticsRoutes.js": "analytics",
+  "platform-analytics.js": "analytics"
  },
  "actions": {
   "route:accountGiftRoutes.js:POST /": {
@@ -8148,6 +8150,67 @@
    "capability": "canvas.canvas.open_as",
    "class": "reversible",
    "scope": "tasks:write"
+  },
+  "route:workspaceAnalyticsRoutes.js:GET /metrics": {
+   "status": "capability",
+   "capability": "analytics.metric.list",
+   "class": "safe",
+   "scope": "analytics:read"
+  },
+  "route:workspaceAnalyticsRoutes.js:GET /metrics/:metric": {
+   "status": "capability",
+   "capability": "analytics.metric.query",
+   "class": "safe",
+   "scope": "analytics:read"
+  },
+  "route:workspaceAnalyticsRoutes.js:GET /dashboards": {
+   "status": "capability",
+   "capability": "analytics.dashboard.list",
+   "class": "safe",
+   "scope": "analytics:read"
+  },
+  "route:workspaceAnalyticsRoutes.js:GET /dashboards/:id": {
+   "status": "capability",
+   "capability": "analytics.dashboard.list",
+   "class": "safe",
+   "scope": "analytics:read"
+  },
+  "route:workspaceAnalyticsRoutes.js:POST /dashboards": {
+   "status": "planned",
+   "class": "reversible",
+   "scope": "analytics:write",
+   "because": "agents read analytics (owner, 2026-10-20); saving a dashboard is a person's step until an agent write is decided"
+  },
+  "route:workspaceAnalyticsRoutes.js:PATCH /dashboards/:id": {
+   "status": "planned",
+   "class": "reversible",
+   "scope": "analytics:write",
+   "because": "agents read analytics (owner, 2026-10-20); changing a dashboard is a person's step until an agent write is decided"
+  },
+  "route:workspaceAnalyticsRoutes.js:DELETE /dashboards/:id": {
+   "status": "planned",
+   "class": "reversible",
+   "scope": "analytics:write",
+   "because": "soft delete, undone by /restore; a person's step until an agent write is decided"
+  },
+  "route:workspaceAnalyticsRoutes.js:POST /dashboards/:id/restore": {
+   "status": "planned",
+   "class": "reversible",
+   "scope": "analytics:write",
+   "because": "the undo of a dashboard delete; a person's step until an agent write is decided"
+  },
+  "ui:platform-analytics.js:data-an-page": {
+   "status": "capability",
+   "capability": "analytics.dashboard.list",
+   "class": "safe",
+   "scope": "analytics:read"
+  },
+  "ui:platform-analytics.js:data-an-division": {
+   "status": "excluded",
+   "category": "view-state",
+   "class": "safe",
+   "scope": "none",
+   "because": "chooses which division the screen shows; an agent passes `division` to query_metric"
   },
   "route:modesRoutes.js:POST /:wid/architect/proposals (workspaceModesRouter)": {
    "status": "capability",

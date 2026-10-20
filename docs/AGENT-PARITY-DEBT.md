@@ -4,7 +4,7 @@
 
 Every action a person can take on the platform, and whether an agent can take it (XENO AGENT CAPABILITY - SPEC.md §19.4). **Planned** entries are the owning division’s backlog: each is a feature agents are missing.
 
-**Total:** 1514 actions · 100 agent capability · 1220 planned (debt) · 194 excluded · **coverage 7.6%** of the 1320 owed.
+**Total:** 1524 actions · 105 agent capability · 1224 planned (debt) · 195 excluded · **coverage 7.9%** of the 1329 owed.
 
 | division | actions | capability | planned (debt) | excluded | coverage |
 |---|---:|---:|---:|---:|---:|
@@ -24,6 +24,7 @@ Every action a person can take on the platform, and whether an agent can take it
 | canvas | 22 | 6 | 16 | 0 | 27.3% |
 | inference | 18 | 0 | 12 | 6 | 0% |
 | support | 21 | 8 | 12 | 1 | 40% |
+| analytics | 10 | 5 | 4 | 1 | 55.6% |
 | publish | 13 | 6 | 4 | 3 | 60% |
 | places | 6 | 3 | 1 | 2 | 75% |
 
@@ -204,6 +205,13 @@ Every action a person can take on the platform, and whether an agent can take it
 - `ui:platform-mcp.js:data-xmc=open`
 - `ui:platform-mcp.js:data-xmc=retry`
 - `ui:platform-mcp.js:data-xmc=tab`
+
+## analytics — 4 planned
+
+- `route:workspaceAnalyticsRoutes.js:DELETE /dashboards/:id`
+- `route:workspaceAnalyticsRoutes.js:PATCH /dashboards/:id`
+- `route:workspaceAnalyticsRoutes.js:POST /dashboards`
+- `route:workspaceAnalyticsRoutes.js:POST /dashboards/:id/restore`
 
 ## browser-shell — 28 planned
 
