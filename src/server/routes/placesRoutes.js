@@ -9,6 +9,7 @@
  */
 import express from 'express';
 import * as places from '../services/places.js';
+import * as live from '../services/placesLive.js';
 import { resolvePrincipal, assertPrincipalUsable } from '../services/agentIdentity.js';
 
 const router = express.Router();
@@ -23,6 +24,31 @@ router.post('/ops/:op', async (req, res) => {
   const key = req.get('idempotency-key');
   if (key && input.requestId == null) input.requestId = key;
   send(res, await places.call(req.db, req.me, req.params.op, input));
+});
+router.get('/needs-you', async (req, res) => send(res, await live.needsYou(req.db, req.me)));
+router.post('/:placeId/presence', async (req, res) => send(res, await live.beat(req.db, req.me, req.params.placeId, req.body || {})));
+/**
+ * GET /api/places/:placeId/events — SSE. Every tick the viewer's SCOPED frame is rebuilt from the live records and
+ * only the difference is sent, so a closed floor's activity can never appear: it is not in their frame. Access is
+ * re-checked on every tick; losing it ends the stream with an `ended` event.
+ */
+router.get('/:placeId/events', async (req, res) => {
+  const first = await live.frame(req.db, req.me, req.params.placeId);
+  if (!first.ok) return send(res, first);
+  res.set({ 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache, no-transform', Connection: 'keep-alive', 'X-Accel-Buffering': 'no' });
+  res.flushHeaders?.();
+  let id = 0, prev = null, closed = false;
+  const write = (events) => { for (const e of events) res.write(`id: ${id += 1}\nevent: ${e.type}\ndata: ${JSON.stringify(e)}\n\n`); };
+  const tick = async (f) => {
+    if (closed) return;
+    const r = f || await live.frame(req.db, req.me, req.params.placeId);
+    if (!r.ok) { write([{ type: 'ended', reason: r.error.reason }]); closed = true; clearInterval(timer); return res.end(); }
+    write(live.diffFrames(prev, r.result)); prev = r.result;
+  };
+  const ms = Math.max(500, Number(process.env.PLACES_STREAM_INTERVAL_MS) || 3000);
+  const timer = setInterval(() => { tick().catch(() => {}); res.write(': keepalive\n\n'); }, ms);
+  req.on('close', () => { closed = true; clearInterval(timer); live.leave(req.params.placeId, req.me.id); });
+  await tick(first);
 });
 router.get('/', async (req, res) => send(res, await places.call(req.db, req.me, 'places.list', {})));
 router.get('/:placeId', async (req, res) => send(res, await places.call(req.db, req.me, 'places.get', { placeId: req.params.placeId })));
