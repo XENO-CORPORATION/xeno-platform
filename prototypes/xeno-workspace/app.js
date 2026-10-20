@@ -1265,7 +1265,7 @@
   // listing key (every page reads it by that); the translation happens only here, at the address.
   // A workforce tab can carry a record id after it — /workspace/projects/<pid>/runs/<admission id> — so only the
   // tab's own segment is translated; the id after it is kept exactly as it is.
-  const PTAB = { Tasks: 'tasks', Conversations: 'conversations', 'Team assignments': 'team', Resources: 'resources', Funding: 'funding', Activity: 'activity', Objectives: 'objectives', Runs: 'runs', Changes: 'changes' };
+  const PTAB = { Tasks: 'tasks', Conversations: 'conversations', 'Team assignments': 'team', Resources: 'resources', Funding: 'funding', Activity: 'activity', Objectives: 'objectives', Runs: 'runs', Changes: 'changes', Corpus: 'corpus' };
   const tabOut = (tb) => { const j = tb.indexOf('/'), t = j < 0 ? tb : tb.slice(0, j); return (PTAB[t] || t) + (j < 0 ? '' : tb.slice(j)); };
   const tabIn = (tb) => { const j = tb.indexOf('/'), t = j < 0 ? tb : tb.slice(0, j); return (PTAB_IN[t] || t) + (j < 0 ? '' : tb.slice(j)); };
   const PTAB_IN = Object.fromEntries(Object.entries(PTAB).map(([k, v]) => [v, k]));

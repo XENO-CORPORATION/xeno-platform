@@ -1,5 +1,5 @@
 /**
- * People in a company workspace (services/workforcePeople.js; migration 20261022090000; xeno-company SPEC §7.3 D-EMP)
+ * People in a company workspace (services/workforcePeople.js; migration 20261022150000; xeno-company SPEC §7.3 D-EMP)
  * and the company blueprint through services/modeApply.js, on real Postgres, through the REAL routes:
  *   1. the migration's DOWN and UP run; the lifecycle receipts are append-only;
  *   2. PRIVATE fields: the person, a human admin and a manager above them read them; a peer and an agent never do;
@@ -34,7 +34,7 @@ import peopleRoutes from '../routes/workforcePeopleRoutes.js';
 if (!process.env.DATABASE_URL) throw new Error('DATABASE_URL is required');
 const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL });
 const here = path.dirname(fileURLToPath(import.meta.url));
-const [UPRAW, DOWN] = fs.readFileSync(path.join(here, '../database/migrations/20261022090000-workforce-people.sql'), 'utf8').split(/^-- DOWN\s*$/m);
+const [UPRAW, DOWN] = fs.readFileSync(path.join(here, '../database/migrations/20261022150000-workforce-people.sql'), 'utf8').split(/^-- DOWN\s*$/m);
 const UP = UPRAW.replace(/^-- UP\s*$/m, '');
 const tag = `pp${process.pid}`;
 let seq = 0;

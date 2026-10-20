@@ -27,6 +27,7 @@ import { check } from '../utils/authzReBAC.js';
 import * as tasks from './xenoTasks.js';
 import { latestFor } from './storageVersions.js';
 import { readable as readableDivision, mayManage } from './workforceDivisions.js';
+import { resolveTenetCards } from './xenoCorpus.js';
 
 export class CanvasError extends Error {
   constructor(message, code, status = 400) { super(message); this.code = code; this.status = status; }
@@ -36,8 +37,8 @@ const AREA = /^[a-z][a-z0-9_-]{0,39}$/;
 const ID = /^[A-Za-z0-9_-]{1,64}$/;
 const TASK_KEY = /^T-\d{1,15}$/;
 const NODE_TYPES = new Set(['text', 'link', 'group', 'xeno-ref']);
-const REF_KINDS = new Set(['task', 'file', 'chat', 'project', 'division', 'objective', 'run']);
-const UUID_KINDS = new Set(['file', 'chat', 'project', 'division', 'objective', 'run']);
+const REF_KINDS = new Set(['task', 'file', 'chat', 'project', 'division', 'objective', 'run', 'tenet']);   // tenet: a XENO Corpus verdict card (services/xenoCorpus.js)
+const UUID_KINDS = new Set(['file', 'chat', 'project', 'division', 'objective', 'run', 'tenet']);
 const COLORS = /^([1-6]|#[0-9a-fA-F]{6})$/;
 const SIDES = new Set(['top', 'right', 'bottom', 'left']);
 const ENDS = new Set(['none', 'arrow']);
@@ -234,7 +235,7 @@ export async function getCanvas(db, me, id) {
   const content = cleanContent(c.content);
   const of = (kind) => content.nodes.filter((n) => n.type === 'xeno-ref' && n.ref.kind === kind).map((n) => n.ref.id);
   return { ...summary(c, s), content, records: { tasks: await resolveRefs(db, me, content.nodes), files: await resolveFiles(db, me, of('file')), chats: await resolveChats(db, me, of('chat')),
-    projects: await resolveProjects(db, me, of('project')), divisions: await resolveDivisions(db, me, of('division')), objectives: await resolveObjectives(db, me, of('objective')), runs: await resolveRuns(db, me, of('run')) } };
+    projects: await resolveProjects(db, me, of('project')), divisions: await resolveDivisions(db, me, of('division')), objectives: await resolveObjectives(db, me, of('objective')), runs: await resolveRuns(db, me, of('run')), tenets: await resolveTenetCards(db, me, of('tenet')) } };
 }
 
 /**

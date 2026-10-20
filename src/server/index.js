@@ -7,6 +7,9 @@ import { TASKS_OPENAPI } from './services/tasksOpenApi.js';
 import platformAgentRoutes from './routes/platformAgentRoutes.js';
 import workforceDivisionRoutes from './routes/workforceDivisionRoutes.js';
 import workforcePeopleRoutes from './routes/workforcePeopleRoutes.js';
+import orchestratorRoutes from './routes/orchestratorRoutes.js';
+import workforceEventRoutes from './routes/workforceEventRoutes.js';
+import corpusRoutes from './routes/corpusRoutes.js';
 import workspaceApiRoutes from './routes/workspaceApiRoutes.js';
 import xenoMcpRoutes, { management as xenoMcpManagement, personOnly as mcpPersonOnly, mcpResourceMetadata } from './routes/xenoMcpRoutes.js';
 import userNotificationsRoutes from './routes/userNotificationsRoutes.js';
@@ -682,6 +685,10 @@ app.use('/api/agents', databaseMiddleware, authMiddleware, requireActivated, mcp
 app.use('/api/divisions', databaseMiddleware, authMiddleware, requireActivated, mcpPersonOnly, workforceDivisionRoutes);
 // People in a company workspace (xeno-company SPEC §7.3 D-EMP): profiles, org chart, directory, time off, on/offboarding.
 app.use('/api/people', databaseMiddleware, authMiddleware, requireActivated, mcpPersonOnly, workforcePeopleRoutes);
+app.use('/api/orchestrator', databaseMiddleware, authMiddleware, requireActivated, mcpPersonOnly, orchestratorRoutes);
+app.use('/api/audit', databaseMiddleware, authMiddleware, requireActivated, mcpPersonOnly, workforceEventRoutes);
+// XENO Corpus: tenets, signed verdicts, proposals (services/xenoCorpus.js). Not person-only: an agent proposes here too.
+app.use('/api/corpus', databaseMiddleware, authMiddleware, requireActivated, corpusRoutes);
 app.use('/api/notifications', databaseMiddleware, authMiddleware, requireActivated, userNotificationsRoutes);
 console.log('🏢 Workspace routes integrated: /api/workspaces/* + /api/workspace-invites/*');
 
