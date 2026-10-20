@@ -10,6 +10,7 @@
 import express from 'express';
 import * as places from '../services/places.js';
 import * as live from '../services/placesLive.js';
+import * as devices from '../services/placesDevices.js';
 import { resolvePrincipal, assertPrincipalUsable } from '../services/agentIdentity.js';
 
 const router = express.Router();
@@ -50,6 +51,30 @@ router.get('/:placeId/events', async (req, res) => {
   req.on('close', () => { closed = true; clearInterval(timer); live.leave(req.params.placeId, req.me.id); });
   await tick(first);
 });
+// the building's devices (services/placesDevices.js): the desk computer, its monitor, the floor TV
+router.get('/:placeId/agents/:pid', async (req, res) => send(res, await devices.agentBrief(req.db, req.me, req.params.placeId, req.params.pid)));
+router.get('/:placeId/occupants/:pid/computer', async (req, res) => send(res, await devices.computer(req.db, req.me, req.params.placeId, req.params.pid)));
+router.get('/:placeId/floors/:divisionId/board', async (req, res) => send(res, await devices.floorBoard(req.db, req.me, req.params.placeId, req.params.divisionId)));
 router.get('/', async (req, res) => send(res, await places.call(req.db, req.me, 'places.list', {})));
 router.get('/:placeId', async (req, res) => send(res, await places.call(req.db, req.me, 'places.get', { placeId: req.params.placeId })));
+
+/**
+ * POST /api/places/:placeId/agents/:pid/turn — one chat turn with the agent at that desk (the desk computer).
+ * Mounted in index.js ahead of this router, behind the LLM limiter. The body is checked and rebuilt here (the agent's
+ * instructions are added server-side), then handed to the platform's OWN /api/ai/chat/stream handler: the same
+ * routing, metering, entitlement check and SSE events as every chat, so there is no second inference path.
+ */
+export function agentTurn(aiRouter) {
+  return async (req, res, next) => {
+    try {
+      const p = await resolvePrincipal(req.db, req.user.id); assertPrincipalUsable(p);
+      const meNow = { id: p.id, kind: p.kind, role: p.role, name: p.displayName || p.handle || 'Someone' };
+      const r = await devices.prepareAgentTurn(req.db, meNow, req.params.placeId, req.params.pid, req.body || {});
+      if (!r.ok) return send(res, r);
+      req.body = r.result.body;
+      req.url = '/chat/stream';
+      return aiRouter(req, res, next);
+    } catch (e) { res.status(403).json({ ok: false, error: { code: 'denied', reason: e.code || 'principal_unusable', message: e.message || 'Not allowed' } }); }
+  };
+}
 export default router;

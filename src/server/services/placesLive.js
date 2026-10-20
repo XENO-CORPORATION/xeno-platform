@@ -81,6 +81,7 @@ export async function frame(db, me, placeId) {
       divisions: snap.divisions.map((d) => ({ id: d.id, name: d.name })),
       closedDivisionIds: snap.closedDivisionIds,
       runs: snap.runs,
+      handoffs: snap.handoffs || [],
       occupants: await occupants(db, me, snap, admin),
       // presence on a floor the viewer cannot see is dropped, and so is a stranger's (only people in this snapshot)
       presence: livePresence(placeId).filter((x) => shown.has(x.floorKey) && (known.has(x.principalId) || x.principalId === me.id)),
@@ -99,6 +100,7 @@ export function diffFrames(prev, next) {
   for (const id of pr.keys()) if (!nr.has(id)) ev.push({ type: 'run.ended', runId: id });
   for (const [pid, o] of Object.entries(next.occupants)) if (key(prev.occupants[pid]) !== key(o)) ev.push({ type: 'occupant', principalId: pid, ...o });
   if (key(prev.presence) !== key(next.presence)) ev.push({ type: 'presence', presence: next.presence });
+  if (key(prev.handoffs || []) !== key(next.handoffs || [])) ev.push({ type: 'handoffs', handoffs: next.handoffs || [] });
   if (key(prev.divisions) !== key(next.divisions) || key(prev.closedDivisionIds) !== key(next.closedDivisionIds)) ev.push({ type: 'structure', frame: next });
   return ev;
 }

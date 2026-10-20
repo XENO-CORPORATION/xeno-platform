@@ -181,12 +181,32 @@ export async function buildSnapshot(db, me, place, access) {
   const runs = runRows.map((r) => ({ id: r.id, principalId: r.agent_user_id, membershipId: firstDesk.get(r.agent_user_id) || null,
     title: admin || r.owner_user_id === me.id ? r.title : '', status: RUN_STATUS[r.state] }));
 
+  // handoffs in flight between two people of THIS snapshot: the carrier and the receiver meet in the meeting area.
+  // A handoff to or from someone the viewer cannot see is not here at all (it would place them). What is being
+  // handed over is shown to the two sides, the people who answer for them, and a building admin; others see the kind.
+  const embodied = new Set(principals.filter((p) => UUID.test(p.id)).map((p) => p.id));
+  const mids = new Set(memberships.map((m) => m.id));
+  const hoRows = embodied.size ? (await db.query(`SELECT h.id, h.source_principal_id, h.source_membership_id, h.target_principal_id, h.target_membership_id,
+      h.work_ref_type, h.work_ref_id, sa.owner_user_id AS source_owner, ta.owner_user_id AS target_owner
+    FROM workforce_handoffs h LEFT JOIN agent_identities sa ON sa.user_id = h.source_principal_id LEFT JOIN agent_identities ta ON ta.user_id = h.target_principal_id
+    WHERE h.state = 'offered' AND h.source_principal_id = ANY($1::uuid[]) AND h.target_principal_id = ANY($1::uuid[])
+    ORDER BY h.created_at, h.id LIMIT 200`, [[...embodied]])).rows : [];
+  const handoffs = [];
+  for (const h of hoRows) {
+    const sm = h.source_membership_id && mids.has(h.source_membership_id) ? h.source_membership_id : firstDesk.get(h.source_principal_id);
+    const tm = h.target_membership_id && mids.has(h.target_membership_id) ? h.target_membership_id : firstDesk.get(h.target_principal_id);
+    if (!sm || !tm) continue;
+    const involved = admin || [h.source_principal_id, h.target_principal_id, h.source_owner, h.target_owner].some((x) => x && String(x) === String(me.id));
+    handoffs.push({ id: h.id, sourceMembershipId: sm, targetMembershipId: tm, state: 'offered',
+      workRef: involved ? `${h.work_ref_type}:${h.work_ref_id}` : h.work_ref_type });
+  }
+
   return {
     schemaVersion: 1, seq: 0,
     building: { workspaceId: place.workspace_id, name: place.name, workspaceType: place.workspace_type },
     viewer: { principalId: me.id, scope: { divisionIds: access.scope === 'all' ? 'all' : shown.map((d) => d.id) } },
     divisions: shown.map((d, i) => ({ id: d.id, key: d.key, name: d.name, parentDivisionId: d.parent_division_id, headPrincipalId: d.head_principal_id, lifecycle: 'active', sortHint: i + 1 })),
-    teams, memberships, principals, runs, handoffs: [], closedDivisionIds,
+    teams, memberships, principals, runs, handoffs, closedDivisionIds,
   };
 }
 

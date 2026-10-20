@@ -4,7 +4,7 @@
 
 Every action a person can take on the platform, and whether an agent can take it (XENO AGENT CAPABILITY - SPEC.md §19.4). **Planned** entries are the owning division’s backlog: each is a feature agents are missing.
 
-**Total:** 1502 actions · 94 agent capability · 1218 planned (debt) · 190 excluded · **coverage 7.2%** of the 1312 owed.
+**Total:** 1505 actions · 94 agent capability · 1221 planned (debt) · 190 excluded · **coverage 7.1%** of the 1315 owed.
 
 | division | actions | capability | planned (debt) | excluded | coverage |
 |---|---:|---:|---:|---:|---:|
@@ -24,8 +24,8 @@ Every action a person can take on the platform, and whether an agent can take it
 | canvas | 20 | 4 | 16 | 0 | 20% |
 | inference | 18 | 0 | 12 | 6 | 0% |
 | support | 21 | 8 | 12 | 1 | 40% |
+| places | 9 | 3 | 4 | 2 | 42.9% |
 | publish | 13 | 6 | 4 | 3 | 60% |
-| places | 6 | 3 | 1 | 2 | 75% |
 
 ## account — 60 planned
 
@@ -512,8 +512,11 @@ Every action a person can take on the platform, and whether an agent can take it
 - `route:v2InferenceRoutes.js:PUT /credentials/:id/models`
 - `route:v2InferenceRoutes.js:PUT /routes/:surface`
 
-## places — 1 planned
+## places — 4 planned
 
+- `route:placesRoutes.js:GET /:placeId/agents/:pid`
+- `route:placesRoutes.js:GET /:placeId/floors/:divisionId/board`
+- `route:placesRoutes.js:GET /:placeId/occupants/:pid/computer`
 - `route:placesRoutes.js:GET /needs-you`
 
 ## platform — 34 planned
