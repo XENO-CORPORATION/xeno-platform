@@ -295,7 +295,8 @@
     "test:workforce-people-mutation": "node scripts/workforce-people-mutation.mjs",
     "test:time-off-assignment": "node src/server/tests/time-off-assignment.test.mjs",
     "test:time-off-assignment-mutation": "node scripts/time-off-assignment-mutation.mjs",
-    "test:directory-browser": "node prototypes/xeno-workspace/tests/directory-test.mjs"
+    "test:directory-browser": "node prototypes/xeno-workspace/tests/directory-test.mjs",
+    "test:auth-public-paths": "node scripts/auth-public-paths.test.mjs"
   },
   "dependencies": {
     "@babel/standalone": "^7.29.7",
