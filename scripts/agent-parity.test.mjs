@@ -6,6 +6,7 @@ import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { execFileSync } from 'node:child_process';
 import { extract, evaluate, routesOf, uiActionsOf, coverage } from './agent-parity.mjs';
+import { WORKSPACE_SCOPES } from '../src/server/capabilities/scopes.js';
 
 const ledger = JSON.parse(readFileSync(new URL('../src/server/capabilities/parity-ledger.json', import.meta.url)));
 const snap = JSON.parse(readFileSync(new URL('../src/server/capabilities/catalogue.snapshot.json', import.meta.url)));
@@ -28,7 +29,7 @@ test('MUTATION: a new undecided route fails the gate', () => {
   writeFileSync(join(root, 'src', 'server', 'routes', 'newRoutes.js'), "router.get('/old', h);\nrouter.post('/brand-new', h);\n");
   writeFileSync(join(root, 'prototypes', 'xeno-workspace', 'ui.js'), "x.closest('[data-do]'); `<b data-do=\"save\">`");
   const actions = extract(root);
-  const l = { divisions: { 'newRoutes.js': 'test', 'ui.js': 'test' }, actions: { 'route:newRoutes.js:GET /old': { status: 'planned' }, 'ui:ui.js:data-do=save': { status: 'planned' } } };
+  const l = { divisions: { 'newRoutes.js': 'test', 'ui.js': 'test' }, actions: { 'route:newRoutes.js:GET /old': { status: 'planned', class: 'safe', scope: 'storage:read' }, 'ui:ui.js:data-do=save': { status: 'planned', class: 'reversible', scope: 'storage:write' } } };
   const p = evaluate(actions, l, caps);
   assert.deepEqual(p, ['undecided: route:newRoutes.js:POST /brand-new']);
 });
@@ -86,4 +87,38 @@ test('P0: the real ledger carries class and scope on every entry, and because on
     assert.ok(d.scope, `${id}: scope`);
     if (d.status === 'excluded') assert.ok(d.because, `${id}: because`);
   }
+});
+
+// ── P3: each rule proven by a mutation of the REAL ledger and catalogue (XENO WORKSPACE AGENT SURFACE - SPEC.md)
+const capScopes = new Map(snap.capabilities.map((c) => [c.name, c.scope]));
+const mutated = (fn) => { const l = JSON.parse(JSON.stringify(ledger)); fn(l); return evaluate(real, l, caps, capScopes); };
+const firstWhere = (pred) => Object.keys(ledger.actions).find((id) => pred(ledger.actions[id]));
+
+test('P3: the real ledger passes every P3 rule', () => {
+  assert.deepEqual(evaluate(real, ledger, caps, capScopes), []);
+});
+
+test('P3 MUTATION: deleting one declaration turns its capability entry red', () => {
+  const id = firstWhere((d) => d.status === 'capability');
+  const name = [].concat(ledger.actions[id].capability)[0];
+  const fewer = new Set([...caps].filter((n) => n !== name));
+  const p = evaluate(real, ledger, fewer, capScopes);
+  assert.ok(p.some((x) => x.includes(`${name} is not declared`)), p.slice(0, 3).join(' | '));
+});
+
+test('P3 MUTATION: a blank class, a blank or unknown scope, or a blank because each turn the gate red', () => {
+  const id = firstWhere((d) => d.status === 'planned');
+  const ex = firstWhere((d) => d.status === 'excluded');
+  assert.ok(mutated((l) => { delete l.actions[id].class; }).some((x) => x.startsWith(`${id}: class`)));
+  assert.ok(mutated((l) => { l.actions[id].class = 'maybe'; }).some((x) => x.startsWith(`${id}: class`)));
+  assert.ok(mutated((l) => { delete l.actions[id].scope; }).some((x) => x.startsWith(`${id}: scope`)));
+  assert.ok(mutated((l) => { l.actions[id].scope = 'none'; }).some((x) => x.startsWith(`${id}: scope`)), 'only an exclusion may need no scope');
+  assert.ok(mutated((l) => { l.actions[id].scope = 'everything:*'; }).some((x) => x.startsWith(`${id}: scope`)));
+  assert.ok(mutated((l) => { delete l.actions[ex].because; }).some((x) => x === `${ex}: an exclusion needs a because`));
+});
+
+test('P3 MUTATION: a capability entry whose scope disagrees with its declaration turns red', () => {
+  const id = firstWhere((d) => d.status === 'capability' && [].concat(d.capability).length === 1);
+  const other = WORKSPACE_SCOPES.find((s) => s !== ledger.actions[id].scope);
+  assert.ok(mutated((l) => { l.actions[id].scope = other; }).some((x) => x.startsWith(`${id}: scope ${other} is not the declared scope`)));
 });

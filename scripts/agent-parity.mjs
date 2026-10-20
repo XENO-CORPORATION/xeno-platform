@@ -97,7 +97,7 @@ export function extract(root = ROOT) {
 
 const readJson = (p, fallback) => (existsSync(p) ? JSON.parse(readFileSync(p, 'utf8')) : fallback);
 
-export function evaluate(actions, ledger, capabilityNames) {
+export function evaluate(actions, ledger, capabilityNames, capabilityScopes = null) {
   const problems = [];
   const decisions = ledger.actions || {};
   const divisions = ledger.divisions || {};
@@ -106,6 +106,13 @@ export function evaluate(actions, ledger, capabilityNames) {
   for (const [id] of actions) if (!decisions[id]) problems.push(`undecided: ${id}`);
   for (const [id, d] of Object.entries(decisions)) {
     if (!actions.has(id)) { problems.push(`stale: ${id} is in the ledger but no longer in the code`); continue; }
+    // P3 (XENO WORKSPACE AGENT SURFACE - SPEC.md): every decision carries its reversibility class and the scope it needs
+    if (!LEDGER_CLASSES.includes(d.class)) problems.push(`${id}: class must be one of ${LEDGER_CLASSES.join(' | ')}`);
+    if (d.status === 'excluded' ? d.scope !== 'none' && !WORKSPACE_SCOPES.includes(d.scope) : !WORKSPACE_SCOPES.includes(d.scope)) problems.push(`${id}: scope must be an approved xeno-workspace scope${d.status === 'excluded' ? ' or "none"' : ''}`);
+    if (d.status === 'capability' && capabilityScopes) {
+      const declared = [].concat(d.capability || []).filter((n) => capabilityScopes.has(n)).map((n) => capabilityScopes.get(n));
+      if (declared.length && !declared.includes(d.scope)) problems.push(`${id}: scope ${d.scope} is not the declared scope of its capability (${[...new Set(declared)].join(', ')})`);
+    }
     if (d.status === 'capability') {
       const names = [].concat(d.capability || []);
       if (!names.length) problems.push(`${id}: capability status names no capability`);
@@ -231,7 +238,7 @@ async function main() {
   if (args.has('--json')) { console.log(JSON.stringify(coverage(actions, ledger), null, 2)); return; }
   const doc = debtDoc(actions, ledger);
   if (args.has('--write') || args.has('--seed')) { writeFileSync(DEBT_DOC, doc); console.log(`wrote ${DEBT_DOC}`); }
-  const problems = evaluate(actions, ledger, caps);
+  const problems = evaluate(actions, ledger, caps, new Map(snapshot.capabilities.filter((c) => c.scope).map((c) => [c.name, c.scope])));
   const report = surfaceReport(actions, ledger);
   if (args.has('--report') || args.has('--write') || args.has('--classify')) { writeFileSync(REPORT_DOC, report); console.log(`wrote ${REPORT_DOC}`); }
   if (!existsSync(REPORT_DOC) || readFileSync(REPORT_DOC, 'utf8').replace(/\r\n/g, '\n') !== report) problems.push('docs/AGENT-WORKSPACE-SURFACE-REPORT.md is stale — run npm run parity -- --report');

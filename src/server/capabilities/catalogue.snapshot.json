@@ -6,6 +6,7 @@
    "wire": "tasks__project__list",
    "version": "1.0.0",
    "class": "safe",
+   "scope": "tasks:read",
    "surfaces": [
     "mcp",
     "rest"
@@ -19,6 +20,7 @@
    "wire": "tasks__task__list_mine",
    "version": "1.0.0",
    "class": "safe",
+   "scope": "tasks:read",
    "surfaces": [
     "mcp",
     "rest"
@@ -32,6 +34,7 @@
    "wire": "tasks__task__get",
    "version": "1.0.0",
    "class": "safe",
+   "scope": "tasks:read",
    "surfaces": [
     "mcp",
     "rest"
@@ -45,6 +48,7 @@
    "wire": "tasks__event__list",
    "version": "1.0.0",
    "class": "safe",
+   "scope": "tasks:read",
    "surfaces": [
     "mcp",
     "rest"
@@ -58,6 +62,7 @@
    "wire": "tasks__task__create",
    "version": "1.0.0",
    "class": "undoable",
+   "scope": "tasks:write",
    "surfaces": [
     "mcp",
     "rest"
@@ -71,6 +76,7 @@
    "wire": "tasks__task__claim",
    "version": "1.0.0",
    "class": "undoable",
+   "scope": "tasks:write",
    "surfaces": [
     "mcp",
     "rest"
@@ -84,6 +90,7 @@
    "wire": "tasks__lease__renew",
    "version": "1.0.0",
    "class": "undoable",
+   "scope": "tasks:write",
    "surfaces": [
     "mcp",
     "rest"
@@ -97,6 +104,7 @@
    "wire": "tasks__lease__release",
    "version": "1.0.0",
    "class": "undoable",
+   "scope": "tasks:write",
    "surfaces": [
     "mcp",
     "rest"
@@ -110,6 +118,7 @@
    "wire": "tasks__task__move",
    "version": "1.0.0",
    "class": "undoable",
+   "scope": "tasks:write",
    "surfaces": [
     "mcp",
     "rest"
@@ -123,6 +132,7 @@
    "wire": "tasks__comment__create",
    "version": "1.0.0",
    "class": "undoable",
+   "scope": "tasks:write",
    "surfaces": [
     "mcp",
     "rest"
@@ -136,6 +146,7 @@
    "wire": "tasks__activity__report",
    "version": "1.0.0",
    "class": "undoable",
+   "scope": "tasks:write",
    "surfaces": [
     "mcp",
     "rest"
@@ -149,6 +160,7 @@
    "wire": "tasks__task__update",
    "version": "1.0.0",
    "class": "undoable",
+   "scope": "tasks:write",
    "surfaces": [
     "mcp",
     "rest"
@@ -162,6 +174,7 @@
    "wire": "canvas__canvas__list",
    "version": "1.0.0",
    "class": "safe",
+   "scope": "tasks:read",
    "surfaces": [
     "mcp",
     "rest"
@@ -175,6 +188,7 @@
    "wire": "canvas__canvas__get",
    "version": "1.0.0",
    "class": "safe",
+   "scope": "tasks:read",
    "surfaces": [
     "mcp",
     "rest"
@@ -188,6 +202,7 @@
    "wire": "canvas__canvas__create",
    "version": "1.0.0",
    "class": "undoable",
+   "scope": "tasks:write",
    "surfaces": [
     "mcp",
     "rest"
@@ -201,6 +216,7 @@
    "wire": "canvas__item__add",
    "version": "1.0.0",
    "class": "undoable",
+   "scope": "tasks:write",
    "surfaces": [
     "mcp",
     "rest"
@@ -214,6 +230,7 @@
    "wire": "canvas__connection__create",
    "version": "1.0.0",
    "class": "undoable",
+   "scope": "tasks:write",
    "surfaces": [
     "mcp",
     "rest"
@@ -227,6 +244,7 @@
    "wire": "canvas__item__update",
    "version": "1.0.0",
    "class": "irreversible",
+   "scope": "tasks:write",
    "surfaces": [
     "mcp",
     "rest"
@@ -240,6 +258,7 @@
    "wire": "places__place__list",
    "version": "1.0.0",
    "class": "safe",
+   "scope": "places:read",
    "surfaces": [
     "mcp",
     "rest"
@@ -253,6 +272,7 @@
    "wire": "places__place__get",
    "version": "1.0.0",
    "class": "safe",
+   "scope": "places:read",
    "surfaces": [
     "mcp",
     "rest"
@@ -266,6 +286,7 @@
    "wire": "places__layout__save",
    "version": "1.0.0",
    "class": "undoable",
+   "scope": "places:write",
    "surfaces": [
     "mcp",
     "rest"
@@ -279,6 +300,7 @@
    "wire": "agents__self__get",
    "version": "1.0.0",
    "class": "safe",
+   "scope": "agents:read",
    "surfaces": [
     "mcp",
     "rest"
@@ -292,6 +314,7 @@
    "wire": "studio__image_model__list",
    "version": "1.0.0",
    "class": "safe",
+   "scope": "library:read",
    "surfaces": [
     "mcp",
     "rest"
@@ -305,6 +328,7 @@
    "wire": "studio__image__generate",
    "version": "1.0.0",
    "class": "irreversible",
+   "scope": "library:write",
    "surfaces": [
     "mcp",
     "rest"
@@ -318,6 +342,7 @@
    "wire": "studio__image__get",
    "version": "1.0.0",
    "class": "safe",
+   "scope": "library:read",
    "surfaces": [
     "mcp",
     "rest"
@@ -331,6 +356,7 @@
    "wire": "studio__image__list",
    "version": "1.0.0",
    "class": "safe",
+   "scope": "library:read",
    "surfaces": [
     "mcp",
     "rest"
@@ -344,6 +370,7 @@
    "wire": "studio__video_model__list",
    "version": "1.0.0",
    "class": "safe",
+   "scope": "library:read",
    "surfaces": [
     "mcp",
     "rest"
@@ -357,6 +384,7 @@
    "wire": "studio__video__generate",
    "version": "1.0.0",
    "class": "irreversible",
+   "scope": "library:write",
    "surfaces": [
     "mcp",
     "rest"
@@ -370,6 +398,7 @@
    "wire": "studio__video__get",
    "version": "1.0.0",
    "class": "safe",
+   "scope": "library:read",
    "surfaces": [
     "mcp",
     "rest"
@@ -383,6 +412,7 @@
    "wire": "studio__video__list",
    "version": "1.0.0",
    "class": "safe",
+   "scope": "library:read",
    "surfaces": [
     "mcp",
     "rest"
@@ -396,6 +426,7 @@
    "wire": "library__file__list",
    "version": "1.0.0",
    "class": "safe",
+   "scope": "library:read",
    "surfaces": [
     "mcp",
     "rest"
@@ -409,6 +440,7 @@
    "wire": "library__file__get",
    "version": "1.0.0",
    "class": "safe",
+   "scope": "library:read",
    "surfaces": [
     "mcp",
     "rest"
@@ -422,6 +454,7 @@
    "wire": "library__file__attach_to_project",
    "version": "1.0.0",
    "class": "undoable",
+   "scope": "library:write",
    "surfaces": [
     "mcp",
     "rest"
@@ -435,6 +468,7 @@
    "wire": "chat__model__ask",
    "version": "1.0.0",
    "class": "irreversible",
+   "scope": "chat:write",
    "surfaces": [
     "mcp",
     "rest"
@@ -448,6 +482,7 @@
    "wire": "storage__folder__list",
    "version": "1.0.0",
    "class": "safe",
+   "scope": "storage:read",
    "surfaces": [
     "mcp",
     "rest"
@@ -461,6 +496,7 @@
    "wire": "storage__folder__create",
    "version": "1.0.0",
    "class": "undoable",
+   "scope": "storage:write",
    "surfaces": [
     "mcp",
     "rest"
@@ -474,6 +510,7 @@
    "wire": "storage__file__upload",
    "version": "1.0.0",
    "class": "undoable",
+   "scope": "storage:write",
    "surfaces": [
     "mcp",
     "rest"
@@ -487,6 +524,7 @@
    "wire": "storage__link__create",
    "version": "1.0.0",
    "class": "undoable",
+   "scope": "share:create",
    "surfaces": [
     "mcp",
     "rest"
@@ -500,6 +538,7 @@
    "wire": "forum__thread__search",
    "version": "1.0.0",
    "class": "safe",
+   "scope": "forum:read",
    "surfaces": [
     "mcp",
     "rest",
@@ -514,6 +553,7 @@
    "wire": "forum__thread__get",
    "version": "1.0.0",
    "class": "safe",
+   "scope": "forum:read",
    "surfaces": [
     "mcp",
     "rest",
@@ -528,6 +568,7 @@
    "wire": "forum__thread__suggest_duplicate",
    "version": "1.0.0",
    "class": "safe",
+   "scope": "forum:read",
    "surfaces": [
     "mcp",
     "rest",
@@ -542,6 +583,7 @@
    "wire": "forum__thread__create",
    "version": "1.0.0",
    "class": "undoable",
+   "scope": "forum:write",
    "surfaces": [
     "mcp",
     "rest",
@@ -556,6 +598,7 @@
    "wire": "forum__post__reply",
    "version": "1.0.0",
    "class": "undoable",
+   "scope": "forum:write",
    "surfaces": [
     "mcp",
     "rest",
@@ -570,6 +613,7 @@
    "wire": "forum__subscription__create",
    "version": "1.0.0",
    "class": "undoable",
+   "scope": "forum:write",
    "surfaces": [
     "mcp",
     "rest",
@@ -584,6 +628,7 @@
    "wire": "forum__digest__get",
    "version": "1.0.0",
    "class": "safe",
+   "scope": "forum:read",
    "surfaces": [
     "mcp",
     "rest",
@@ -598,6 +643,7 @@
    "wire": "forum__post__flag",
    "version": "1.0.0",
    "class": "undoable",
+   "scope": "forum:write",
    "surfaces": [
     "mcp",
     "rest",
@@ -612,6 +658,7 @@
    "wire": "forum__thread__mark_fixed",
    "version": "1.0.0",
    "class": "undoable",
+   "scope": "forum:write",
    "surfaces": [
     "mcp",
     "rest",
