@@ -35,6 +35,8 @@
     "test:orchestrator": "node src/server/tests/orchestrator.test.mjs",
     "test:support-tickets": "node src/server/tests/support-tickets.test.mjs",
     "test:support-ui": "node prototypes/xeno-workspace/tests/support-test.mjs",
+    "test:customers": "node src/server/tests/customers.test.mjs",
+    "test:customers-ui": "node prototypes/xeno-workspace/tests/customers-test.mjs",
     "test:scheduling": "node src/server/tests/scheduling.test.mjs",
     "test:scheduling-ui": "node prototypes/xeno-workspace/tests/scheduling-test.mjs",
     "test:agent-parity": "node --test scripts/agent-parity.test.mjs && node scripts/agent-parity.mjs",

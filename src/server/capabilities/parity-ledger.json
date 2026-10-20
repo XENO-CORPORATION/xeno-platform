@@ -137,7 +137,9 @@
   "workspaceDocsRoutes.js": "docs",
   "platform-docs.js": "docs",
   "schedulingRoutes.js": "scheduling",
-  "platform-scheduling.js": "scheduling"
+  "platform-scheduling.js": "scheduling",
+  "customersRoutes.js": "customers",
+  "platform-customers.js": "customers"
  },
  "actions": {
   "route:accountGiftRoutes.js:POST /": {
@@ -8744,6 +8746,184 @@
    "class": "reversible",
    "scope": "scheduling:write",
    "because": "the screen's actions are the /api/scheduling routes, decided there: agents read; public links and cancellations are a person's act"
+  },
+  "route:customersRoutes.js:GET /summary": {
+   "status": "planned",
+   "class": "safe",
+   "scope": "customers:read"
+  },
+  "route:customersRoutes.js:GET /contacts": {
+   "status": "capability",
+   "capability": "customers.contact.list",
+   "class": "safe",
+   "scope": "customers:read"
+  },
+  "route:customersRoutes.js:POST /contacts": {
+   "status": "capability",
+   "capability": "customers.contact.create",
+   "class": "reversible",
+   "scope": "customers:write"
+  },
+  "route:customersRoutes.js:GET /contacts/:id": {
+   "status": "capability",
+   "capability": "customers.contact.get",
+   "class": "safe",
+   "scope": "customers:read"
+  },
+  "route:customersRoutes.js:PATCH /contacts/:id": {
+   "status": "planned",
+   "class": "reversible",
+   "scope": "customers:write"
+  },
+  "route:customersRoutes.js:DELETE /contacts/:id": {
+   "status": "excluded",
+   "category": "self-authority",
+   "class": "irreversible",
+   "scope": "none",
+   "because": "deleting a customer is a human admin’s act; agents read and draft"
+  },
+  "route:customersRoutes.js:GET /contacts/:id/export": {
+   "status": "excluded",
+   "category": "self-authority",
+   "class": "external",
+   "scope": "none",
+   "because": "a GDPR export hands a person’s data out of the workspace; a person does it"
+  },
+  "route:customersRoutes.js:POST /contacts/:id/erase": {
+   "status": "excluded",
+   "category": "self-authority",
+   "class": "irreversible",
+   "scope": "none",
+   "because": "GDPR erasure cannot be undone; a human admin does it"
+  },
+  "route:customersRoutes.js:POST /contacts/:id/activities": {
+   "status": "capability",
+   "capability": "customers.note.draft",
+   "class": "reversible",
+   "scope": "customers:write"
+  },
+  "route:customersRoutes.js:POST /activities/:id/keep": {
+   "status": "excluded",
+   "category": "self-authority",
+   "class": "reversible",
+   "scope": "none",
+   "because": "keeping an agent’s draft is a person’s ratification; an agent must not approve agent words"
+  },
+  "route:customersRoutes.js:POST /contacts/:id/links": {
+   "status": "planned",
+   "class": "reversible",
+   "scope": "customers:write"
+  },
+  "route:customersRoutes.js:DELETE /contacts/:id/links/:kind/:key": {
+   "status": "planned",
+   "class": "reversible",
+   "scope": "customers:write"
+  },
+  "route:customersRoutes.js:POST /contacts/:id/task": {
+   "status": "planned",
+   "class": "reversible",
+   "scope": "customers:write"
+  },
+  "route:customersRoutes.js:GET /companies": {
+   "status": "planned",
+   "class": "safe",
+   "scope": "customers:read"
+  },
+  "route:customersRoutes.js:POST /companies": {
+   "status": "planned",
+   "class": "reversible",
+   "scope": "customers:write"
+  },
+  "route:customersRoutes.js:DELETE /companies/:id": {
+   "status": "excluded",
+   "category": "self-authority",
+   "class": "irreversible",
+   "scope": "none",
+   "because": "deleting a company is a human admin’s act"
+  },
+  "route:customersRoutes.js:GET /pipeline": {
+   "status": "capability",
+   "capability": "customers.pipeline.get",
+   "class": "safe",
+   "scope": "customers:read"
+  },
+  "route:customersRoutes.js:POST /stages": {
+   "status": "planned",
+   "class": "reversible",
+   "scope": "customers:write"
+  },
+  "route:customersRoutes.js:POST /deals": {
+   "status": "capability",
+   "capability": "customers.deal.draft",
+   "class": "reversible",
+   "scope": "customers:write"
+  },
+  "route:customersRoutes.js:POST /deals/:id/move": {
+   "status": "excluded",
+   "category": "self-authority",
+   "class": "reversible",
+   "scope": "none",
+   "because": "moving a deal is a person’s call; an agent proposes a draft deal instead"
+  },
+  "route:customersRoutes.js:POST /deals/:id/confirm": {
+   "status": "excluded",
+   "category": "self-authority",
+   "class": "reversible",
+   "scope": "none",
+   "because": "confirming an agent’s draft deal is a person’s ratification"
+  },
+  "route:customersRoutes.js:DELETE /deals/:id": {
+   "status": "excluded",
+   "category": "self-authority",
+   "class": "irreversible",
+   "scope": "none",
+   "because": "deleting a deal is a human admin’s act"
+  },
+  "route:customersRoutes.js:POST /import": {
+   "status": "excluded",
+   "category": "self-authority",
+   "class": "reversible",
+   "scope": "none",
+   "because": "running an import writes many customers at once; a person runs it (an agent previews it with customers.import.preview)"
+  },
+  "route:customersRoutes.js:GET /duplicates": {
+   "status": "planned",
+   "class": "safe",
+   "scope": "customers:read"
+  },
+  "route:customersRoutes.js:POST /merge": {
+   "status": "excluded",
+   "category": "self-authority",
+   "class": "irreversible",
+   "scope": "none",
+   "because": "merging two customers rewrites their records; a person decides"
+  },
+  "ui:platform-customers.js:data-cr-page": {
+   "status": "excluded",
+   "category": "view-state",
+   "class": "safe",
+   "scope": "none",
+   "because": "changes only what the screen shows"
+  },
+  "ui:platform-customers.js:data-cr-q": {
+   "status": "capability",
+   "capability": "customers.contact.list",
+   "class": "safe",
+   "scope": "customers:read"
+  },
+  "ui:platform-customers.js:data-cr-file": {
+   "status": "excluded",
+   "category": "view-state",
+   "class": "safe",
+   "scope": "none",
+   "because": "reads a file the person picked into the import box; the import itself is decided above"
+  },
+  "ui:platform-customers.js:data-cr-move": {
+   "status": "excluded",
+   "category": "self-authority",
+   "class": "reversible",
+   "scope": "none",
+   "because": "moving a deal is a person’s call; an agent proposes a draft deal instead"
   }
  }
 }

@@ -4,7 +4,7 @@
 
 Every action a person can take on the platform, and whether an agent can take it (XENO AGENT CAPABILITY - SPEC.md §19.4). **Planned** entries are the owning division’s backlog: each is a feature agents are missing.
 
-**Total:** 1599 actions · 143 agent capability · 1245 planned (debt) · 211 excluded · **coverage 10.3%** of the 1388 owed.
+**Total:** 1628 actions · 150 agent capability · 1254 planned (debt) · 224 excluded · **coverage 10.7%** of the 1404 owed.
 
 | division | actions | capability | planned (debt) | excluded | coverage |
 |---|---:|---:|---:|---:|---:|
@@ -25,6 +25,7 @@ Every action a person can take on the platform, and whether an agent can take it
 | inference | 18 | 0 | 12 | 6 | 0% |
 | scheduling | 22 | 4 | 12 | 6 | 25% |
 | support | 21 | 8 | 12 | 1 | 40% |
+| customers | 29 | 7 | 9 | 13 | 43.8% |
 | analytics | 10 | 5 | 4 | 1 | 55.6% |
 | places | 9 | 3 | 4 | 2 | 42.9% |
 | publish | 13 | 6 | 4 | 3 | 60% |
@@ -462,6 +463,18 @@ Every action a person can take on the platform, and whether an agent can take it
 - `ui:market.js:data-mk=review`
 - `ui:market.js:data-mk=soul`
 - `ui:market.js:data-mk=unlist`
+
+## customers — 9 planned
+
+- `route:customersRoutes.js:DELETE /contacts/:id/links/:kind/:key`
+- `route:customersRoutes.js:GET /companies`
+- `route:customersRoutes.js:GET /duplicates`
+- `route:customersRoutes.js:GET /summary`
+- `route:customersRoutes.js:PATCH /contacts/:id`
+- `route:customersRoutes.js:POST /companies`
+- `route:customersRoutes.js:POST /contacts/:id/links`
+- `route:customersRoutes.js:POST /contacts/:id/task`
+- `route:customersRoutes.js:POST /stages`
 
 ## forum — 41 planned
 
