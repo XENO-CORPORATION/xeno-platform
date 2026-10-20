@@ -30,7 +30,8 @@ export const restPath = (name) => `/${name.split('.').join('/')}`;
 const STATUS = {
   unknown_tool: 404, not_found: 404, task_not_found: 404, connection_not_found: 404,
   agents_only: 403, category_disabled: 403, forbidden: 403, not_allowed: 403, scope_missing: 403, insufficient_scope: 403,
-  grant_missing: 403, step_up_required: 403, service_principal_denied: 403,
+  grant_missing: 403, step_up_required: 403, service_principal_denied: 403, denied: 403, needs_approval: 403, not_a_person: 403, workspace_mismatch: 403,
+  conflict: 409, rate_limited: 429, unavailable: 503, timeout: 504, internal: 500, division_not_found: 404, workspace_not_found: 404,
   idempotency_key_reused: 409, idempotency_in_progress: 409, folder_exists: 409,
   storage_full: 507, service_timeout: 504, service_failed: 502,
 };

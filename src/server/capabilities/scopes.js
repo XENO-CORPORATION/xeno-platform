@@ -33,6 +33,8 @@ export const DIVISION_AREA = Object.freeze({
   agents: 'agents', workforce: 'agents', commerce: 'wallet', workspace: 'workspace', 'workspace-ui': 'workspace',
   account: 'workspace', platform: 'workspace', places: 'places', forum: 'forum', 'browser-shell': 'workspace',
   marketplace: 'marketplace',
+  // XENO-WORKFORCE-01 capability divisions (catalogue first segments)
+  agent: 'agents', run: 'agents', objective: 'agents', division: 'workspace', funding: 'wallet',
 });
 
 /** The scope an action of `area` needs at `cls`. Reads need :read; a wallet write spends; a workspace write is admin. */
