@@ -1,3 +1,4 @@
+import { shot } from './shot.mjs';
 // Office › Write and Notes are real (against a stand-in /api/workspace-docs).
 //   1. neither area shows sample rows or the sample mark
 //   2. create → type with the toolbar → Save sends Markdown with the expected version; the address carries the file id
@@ -51,7 +52,7 @@ async function open(hash) {
     if (m) return json({ success: true, share: { id: 's1' } });
     if (u.pathname === '/api/notifications') return json({ success: true, unread: 0, items: [] });
     return json({ success: false, error: 'not found' }, 404); });
-  await p.goto(base + '/workspace/' + hash, { waitUntil: 'domcontentloaded' }); await wait(1800);
+  await p.goto(base + '/workspace/' + hash, { waitUntil: 'domcontentloaded' }); await wait(1800); await shot(p, 'docs');
   return { p, errs };
 }
 
@@ -68,7 +69,10 @@ try {
   // ── 2. create, edit with the toolbar, save, real address
   let created;
   { const { p, errs } = await open('#/office/z/write');
-    await p.type('[data-dc-title-new]', 'Q4 plan'); await p.click('[data-dc-create]'); await wait(900);
+    ok(await p.$('#main .topbar .pg-top-acts [data-dc-new="write"]') !== null && await p.$('#main .mview [data-dc-new], #main .mview [data-dc-title-new]') === null, 'New document sits right in the header bar, not as a field in the body');
+    await p.click('#main .topbar [data-dc-new]'); await wait(300);
+    ok(await p.$('.xd-sh[role="dialog"] #xdf-title') !== null, 'New document opens the workspace dialog');
+    await p.type('.xd-sh #xdf-title', 'Q4 plan'); await p.click('.xd-sh [data-xd-submit]'); await wait(1200);
     created = [...db.docs.values()].find((d) => d.title === 'Q4 plan');
     const addr = await p.evaluate(() => [window.XENO_ADDR.current().split('?')[0], location.pathname]);
     ok(created && addr[0] === `#/office/z/write/${created.id}` && addr[1] === `/workspace/office/spaces/write/${created.id}`, `a new document opens at its file id (${addr.join(' ')})`);

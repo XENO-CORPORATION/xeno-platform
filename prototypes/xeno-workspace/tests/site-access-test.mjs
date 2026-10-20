@@ -2,6 +2,7 @@
 // /api/site-gate/codes), against a stand-in that answers like the real routes (403 to anyone but an admin).
 // Proves: a non-admin has no Site access tab and no page; an admin creates a code at /workspace/support/access, sees it
 // ONCE with the mail wording, the list never shows it again, Usage reads the audit, Revoke takes two presses.
+import { shot } from './shot.mjs';
 import { createRequire } from 'node:module'; import path from 'node:path'; import { fileURLToPath } from 'node:url';
 const here = path.dirname(fileURLToPath(import.meta.url)), repo = path.resolve(here, '../../..');
 const require = createRequire(import.meta.url); const puppeteer = require('puppeteer');
@@ -51,13 +52,20 @@ try {
   await p.goto(base + '/workspace/support', { waitUntil: 'domcontentloaded' }); await settle(1800);
   ok(!(await p.$('#main [data-sp-go="access"]')), 'a non-admin sees no Site access tab');
   await p.goto(base + '/workspace/support/access', { waitUntil: 'domcontentloaded' }); await settle(1800);
-  ok(!(await p.$('#main [data-sp-form="access"]')), 'a non-admin gets no console at its address');
+  ok(!(await p.$('#main [data-sp-create="access"]')), 'a non-admin gets no console at its address');
   STAFF = true;
   await p.goto(base + '/workspace/support/access', { waitUntil: 'domcontentloaded' }); await settle(1800);
-  ok(/Site access/.test(await main()) && !!(await p.$('#main [data-sp-form="access"]')), 'an admin opens the console at /workspace/support/access');
-  await p.type('#main [data-sp-form="access"] input[name="label"]', 'Investor — Example Fund');
-  await p.select('#main [data-sp-form="access"] select[name="scope"]', 'account');
-  await p.click('#main [data-sp-form="access"] button[type="submit"]'); await settle(1000);
+  await shot(p, 'site-access');
+  ok(/Site access/.test(await main()) && !!(await p.$('#main .topbar .pg-top-acts [data-sp-create="access"]')), 'an admin opens the console at /workspace/support/access, Create code right-aligned in the header bar');
+  ok(!!(await p.$('#main .topbar .pg-top-tabs [data-sp-go="access"][aria-selected="true"]')) && !!(await p.$('#main .topbar .pg-top-tabs [data-sp-go=""]')) && !(await p.$('#main .mview .pg-tabs')), 'My requests · Site access are tabs in the header bar, not a row in the body');
+  ok(!(await p.$('#main .mview form')), 'no create form is stacked above the list');
+  await p.click('#main .topbar [data-sp-create="access"]'); await settle(400);
+  ok(!!(await p.$('.xd-sh[role="dialog"] #xdf-label')), 'Create code opens the workspace dialog');
+  await shot(p, 'site-access-create');
+  await p.type('.xd-sh #xdf-label', 'Investor — Example Fund');
+  await p.click('.xd-sh [data-v="account"]');
+  await p.click('.xd-sh [data-xd-submit]'); await settle(1000);
+  ok(!(await p.$('.xd-sh[role="dialog"]')), 'the dialog closes once the code is made');
   const made = db.calls.find(([mm, pth]) => mm === 'POST' && pth === '/api/site-gate/codes');
   ok(made && made[2].scope === 'account' && made[2].days === 30 && made[2].label === 'Investor — Example Fund', 'Create posts label, scope and the 30-day default');
   ok(/XENO-ABCDE-FGHJK-MNPQR-STVWX/.test(await main()) && /xenosystem\.ai — access code XENO-ABCDE/.test(await main()), 'the new code is shown once, with the mail wording');

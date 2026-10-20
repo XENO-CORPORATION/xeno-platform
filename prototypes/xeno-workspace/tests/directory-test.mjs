@@ -5,6 +5,7 @@
 // the person themself does (positive control, so "hidden" is not just "never rendered").
 //   DATABASE_URL=postgresql://…/<disposable> node prototypes/xeno-workspace/tests/directory-test.mjs
 import { createRequire } from 'node:module'; import path from 'node:path'; import { fileURLToPath } from 'node:url'; import http from 'node:http';
+import { shot } from './shot.mjs';
 const here = path.dirname(fileURLToPath(import.meta.url)), repo = path.resolve(here, '../../..');
 const require = createRequire(path.join(repo, 'src/server/package.json'));
 const puppeteer = createRequire(import.meta.url)('puppeteer'), express = require('express'), pg = require('pg');
@@ -64,6 +65,8 @@ try {
   const p = await page();
   await p.goto(`${base}/workspace/workspace/Directory?ws=${W}`, { waitUntil: 'domcontentloaded' });
   ok(await until(p, () => /Emil Employee/.test(document.querySelector('#main')?.innerText || '') && /Sound engineer/.test(document.querySelector('#main')?.innerText || '')), 'the directory lists the workspace’s people with their titles');
+  await shot(p, 'directory');
+  ok(await p.evaluate(() => !!document.querySelector('#main .topbar .pg-top-tabs [data-xdir="tab"][data-to="Directory/org-chart"]') && !document.querySelector('#main .mview [data-xdir="tab"]')), 'Directory · Org chart · My work are tabs in the header bar, not a row in the body');
   await p.evaluate((id) => document.querySelector(`[data-xdir="open"][data-id="${id}"]`).click(), emp);
   ok(await until(p, (id) => location.pathname.endsWith(`/Directory/${id}`), 8000, emp) || new URL(p.url()).pathname.endsWith(`/Directory/${emp}`), 'a person opens at their id');
   ok(await until(p, () => /Reports to/.test(document.querySelector('#main')?.innerText || '')), 'the person page shows the reporting line');

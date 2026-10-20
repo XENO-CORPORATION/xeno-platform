@@ -820,8 +820,8 @@ Every action a person can take on the platform, and whether an agent can take it
 - `route:supportRoutes.js:POST /tickets/:key/publish`
 - `route:supportRoutes.js:POST /tickets/:key/status`
 - `route:supportRoutes.js:POST /tickets/:key/task`
+- `ui:platform-support.js:data-sp-create=macro`
 - `ui:platform-support.js:data-sp-form=delegate`
-- `ui:platform-support.js:data-sp-form=macro`
 - `ui:platform-support.js:data-sp-form=merge`
 
 ## tasks — 84 planned

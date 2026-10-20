@@ -40,7 +40,8 @@
     S.status = 'ready'; paint();
   }
   const away = (p) => (p.availability && !p.availability.available ? `<span class="pg-dim" data-away="${esc(p.availability.reason)}">${p.availability.reason === 'time_off' ? 'Away' : 'Outside hours'}</span>` : '');
-  const tabs = (cur) => `<nav class="xdir-tabs">${[['Directory', 'Directory'], ['Directory/org-chart', 'Org chart'], ['Directory/my-work', 'My work']].map(([k, l]) => `<button data-xdir="tab" data-to="${k}"${k === cur ? ' aria-current="page"' : ''}>${l}</button>`).join('')}</nav>`;
+  // the views are tabs in the header bar (the shared XENO_PAGES.h.tabs, lifted by framed()), not a row in the body
+  const tabs = (cur) => H().tabs([['Directory', 'Directory'], ['Directory/org-chart', 'Org chart'], ['Directory/my-work', 'My work']], cur, 'data-xdir="tab" data-to');
 
   function listPage() {
     const h = H();

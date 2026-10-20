@@ -1,3 +1,4 @@
+import { shot } from './shot.mjs';
 // support-test — Help ▸ Contact support in the workspace, against a stand-in /api/support that returns what the real
 // service returns for each viewer (the customer's response has no internal notes or drafts; staff see them).
 // Proves: Help's Contact support opens the form; a request is sent and its page is /workspace/support/T-<n>; refresh,
@@ -64,15 +65,17 @@ const main = () => p.$eval('#main', (e) => e.innerText).catch(() => '');
 const settle = (ms = 700) => new Promise((r) => setTimeout(r, ms));
 const posted = (re) => db.calls.some(([mm, pth]) => mm !== 'GET' && re.test(pth));
 try {
-  await p.goto(base + '/workspace/support', { waitUntil: 'domcontentloaded' }); await settle(1800);
+  await p.goto(base + '/workspace/support', { waitUntil: 'domcontentloaded' }); await settle(1800); await shot(p, 'support-mine');
   ok(/No requests yet/.test(await main()), 'the support page opens at /workspace/support and says there are no requests yet');
   ok(!(await main()).includes('Queue'), 'a customer sees no staff queue');
-  await p.click('#main [data-sp-go="new"]'); await settle();
-  ok(new URL(p.url()).pathname === '/workspace/support/new' && /Contact support/.test(await main()), 'Contact support has its own address');
-  await p.select('#main select[name="kind"]', 'billing');
-  await p.type('#main input[name="title"]', 'Charged twice');
-  await p.type('#main textarea[name="body"]', 'Two charges on my card.');
-  await p.click('#main [data-sp-form="new"] button[type="submit"]'); await settle(1000);
+  ok(!!(await p.$('#main .topbar .pg-top-acts [data-sp-create="new"]')), 'the primary action Contact support sits in the header bar, right');
+  await p.click('#main .topbar [data-sp-create="new"]'); await settle();
+  ok(new URL(p.url()).pathname === '/workspace/support/new' && !!(await p.$('.xd-sh[role="dialog"] #xdf-title')) && !(await p.$('#main form')), 'Contact support opens as a dialog at its own address, never a form in the page');
+  await shot(p, 'support-new');
+  await p.click('.xd-sh [data-v="billing"]');
+  await p.type('.xd-sh #xdf-title', 'Charged twice');
+  await p.type('.xd-sh #xdf-body', 'Two charges on my card.');
+  await p.click('.xd-sh [data-xd-submit]'); await settle(1000);
   ok(new URL(p.url()).pathname === '/workspace/support/T-1', 'sending a request lands on its id address /workspace/support/T-1');
   ok(/T-1 · Charged twice/.test(await main()) && /Two charges/.test(await main()), 'the request page shows it');
   await p.reload({ waitUntil: 'domcontentloaded' }); await settle(1800);
@@ -91,8 +94,9 @@ try {
 
   // staff
   STAFF = true;
-  await p.goto(base + '/workspace/support/queue', { waitUntil: 'domcontentloaded' }); await settle(1800);
+  await p.goto(base + '/workspace/support/queue', { waitUntil: 'domcontentloaded' }); await settle(1800); await shot(p, 'support-queue');
   ok(!!(await p.$('#main [data-sp-filter="breached"], #main .pg-top-left [data-sp-filter], [data-sp-filter="breached"]')) && /T-1/.test(await main()), 'staff see the queue at /workspace/support/queue');
+  ok(!!(await p.$('#main .topbar .pg-top-tabs [data-sp-go="queue"][aria-selected="true"]')) && !!(await p.$('#main .topbar .pg-top-tabs [data-sp-go="macros"]')) && !(await p.$('#main .mview .pg-tabs')), 'the views (My requests · Queue · Saved replies) are tabs in the header bar, not a row in the body');
   await p.click('#main [data-sp-go="T-1"]'); await settle(1000);
   const txt = await main();
   ok(/Internal — the customer never sees this/.test(txt) && /duplicate auth/.test(txt), 'staff see the internal note, marked internal');

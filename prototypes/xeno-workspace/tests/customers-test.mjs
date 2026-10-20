@@ -1,3 +1,4 @@
+import { shot } from './shot.mjs';
 // Corpo › Customers is real: the workspace's own CRM from /api/customers (a stand-in here).
 //   1. no sample rows ("Acme renewal €12k") and no "Preview — sample data" mark
 //   2. add a contact → it opens at its id address (/workspace/…/customers/contacts/<id>), refresh lands on it
@@ -41,7 +42,7 @@ async function open(url) {
     if (u.pathname.startsWith('/api/customers/')) return json({ success: false, error: 'unexpected ' + u.pathname }, 500);
     if (u.pathname === '/api/notifications') return json({ success: true, unread: 0, items: [] });
     return json({ success: false, error: 'not found' }, 404); });
-  await p.goto(base + url, { waitUntil: 'domcontentloaded' }); await wait(1800);
+  await p.goto(base + url, { waitUntil: 'domcontentloaded' }); await wait(1800); await shot(p, 'customers');
   return { p, errs };
 }
 
@@ -51,9 +52,12 @@ try {
   ok(s0.page === 'ready' && s0.live && !s0.mark && !s0.panelMark && !s0.fake, `Customers is real: no sample rows, no sample mark (${JSON.stringify(s0)})`);
   ok(await p.$('[data-cr-empty]') !== null, 'an empty workspace says so');
 
-  await p.click('[data-cr-add]'); await wait(200);
-  await p.type('[data-cr-f="name"]', 'Ada Lovelace'); await p.type('[data-cr-f="email"]', 'ada@x.example');
-  await p.click('[data-cr-save-contact]'); await wait(1200);
+  ok(await p.$('#main .topbar .pg-top-acts [data-cr-add]') !== null, 'New contact sits right in the header bar');
+  ok(await p.$('#main .topbar .pg-top-tabs [data-cr-view-go="contacts"][aria-selected="true"]') !== null && await p.$('#main .topbar .pg-top-tabs [data-cr-view-go="pipeline"]') !== null && await p.$('#main .mview .pg-tabs, #main .mview [data-cr-view-go]') === null, 'the views are tabs in the header bar, not a row in the body');
+  await p.click('#main .topbar [data-cr-add]'); await wait(300);
+  ok(await p.$('.xd-sh[role="dialog"] #xdf-name') !== null && await p.$('#main .mview input[placeholder="Name"]') === null, 'New contact opens the workspace dialog, not a form in the page');
+  await p.type('.xd-sh #xdf-name', 'Ada Lovelace'); await p.type('.xd-sh #xdf-email', 'ada@x.example');
+  await p.click('.xd-sh [data-xd-submit]'); await wait(1200);
   const post = db.calls.find((x) => x[0] === 'POST' && x[1].startsWith('/api/customers/contacts'));
   ok(post && post[2].name === 'Ada Lovelace' && post[2].email === 'ada@x.example', 'the contact is created on the server');
   const url1 = await p.evaluate(() => location.pathname);

@@ -2,7 +2,7 @@
  * Service: src/server/services/supportTickets.js · routes: /api/support/* · agents: supportMcp.js.
  *
  *   My requests     /workspace/support                 the requests I raised
- *   New request     /workspace/support/new
+ *   New request     /workspace/support/new             the list with the Contact support dialog open
  *   a request       /workspace/support/T-<n>           by its key: the conversation, my reply, close / reopen / make public
  *   Queue (staff)   /workspace/support/queue           every request, filtered; ?f=<status>
  *   Saved replies   /workspace/support/macros          staff
@@ -53,27 +53,29 @@
   let lastLoad = null;
   const want = (it) => { const k = it || ''; if (lastLoad !== k) { lastLoad = k; loadFor(it); return true; } return false; };
 
-  const tabs = (cur) => S.staff || Array.isArray(S.access) ? `<div class="pg-tabs" role="tablist">${[['', 'My requests'], ...(S.staff ? [['queue', 'Queue'], ['macros', 'Saved replies']] : []), ...(Array.isArray(S.access) ? [['access', 'Site access']] : [])].map(([k, l]) => `<button role="tab" aria-selected="${cur === k}" data-sp-go="${k}">${l}</button>`).join('')}</div>` : '';
+  // the views are TABS in the header bar (XENO_PAGES.h.tabs, lifted by framed()), never a row in the body
+  const tabs = (cur) => S.staff || Array.isArray(S.access) ? H().tabs([['', 'My requests'], ...(S.staff ? [['queue', 'Queue'], ['macros', 'Saved replies']] : []), ...(Array.isArray(S.access) ? [['access', 'Site access']] : [])], cur, 'data-sp-go') : '';
   const kindLabel = (k) => (KINDS.find((x) => x[0] === k) || [k, k])[1];
 
   function listPage() {
     const h = H(), rows = Array.isArray(S.mine) ? S.mine : [];
     const body = S.mine == null ? '' : S.mine.error ? h.box('alert', 'Your requests did not load', esc(S.mine.error), h.btn('Try again', 'data-sp-reload', true))
       : rows.length ? h.table(['Request', 'About', 'Status', 'Updated'], rows.map((t) => h.tr(`data-sp-go="${esc(t.key)}"`, [`<b>${esc(t.key)}</b> · ${esc(t.title)}`, esc(kindLabel(t.kind)), h.chip(STATUS[t.status] || t.status), esc(ago(t.updatedAt))])))
-      : h.box('mail', 'No requests yet', 'Ask XENO anything private — a charge, your account, something broken. Only you and XENO support can read it.', h.btn('Contact support', 'data-sp-go="new"', false, 'plus'));
-    return h.page(h.head({ title: 'Support', sub: 'Private requests to XENO. Only you and XENO support read them.', acts: h.btn('Contact support', 'data-sp-go="new"', false, 'plus') }) + tabs('') + body + h.foot('support', 'GET /api/support/tickets/mine', 'request'));
+      : h.box('mail', 'No requests yet', 'Ask XENO anything private — a charge, your account, something broken. Only you and XENO support can read it.', h.btn('Contact support', 'data-sp-create="new"', false, 'plus'));
+    return h.page(h.head({ title: 'Support', sub: 'Private requests to XENO. Only you and XENO support read them.', acts: h.btn('Contact support', 'data-sp-create="new"', false, 'plus') }) + tabs('') + body + h.foot('support', 'GET /api/support/tickets/mine', 'request'));
   }
 
-  function newPage() {
-    const h = H();
-    return h.page(h.head({ eyebrow: '<a data-sp-go="">Support</a>', title: 'Contact support', sub: 'Private by default. You can make it public on the Forum later.' })
-      + `<form class="sp-form" data-sp-form="new">
-        <label>What is it about<select name="kind">${KINDS.map(([k, l]) => `<option value="${k}">${esc(l)}</option>`).join('')}</select></label>
-        <label>Subject<input name="title" maxlength="200" required placeholder="One line"></label>
-        <label>Details<textarea name="body" rows="8" maxlength="20000" placeholder="What happened, what you expected, and anything that helps"></textarea></label>
-        ${S.err ? `<p class="sp-err" role="alert">${esc(S.err)}</p>` : ''}
-        <div class="sp-row">${h.btn('Cancel', 'type="button" data-sp-go=""', true)}${h.btn(S.busy ? 'Sending…' : 'Send to XENO support', `type="submit"${S.busy ? ' disabled' : ''}`)}</div>
-      </form>`);
+  // Contact support is a DIALOG over the list (the workspace's one dialog, XD.form), never a page-wide form.
+  // /workspace/support/new still answers: it is the list with the dialog open, and closing it returns to the list.
+  let newOpen = false;
+  function openNew() {
+    if (newOpen || !window.XD) return; newOpen = true;
+    window.XD.form({ title: 'Contact support', sub: 'Private by default. You can make it public on the Forum later.', submit: 'Send to XENO support',
+      fields: [{ id: 'kind', type: 'choice', label: 'What is it about', value: 'bug', options: KINDS.map(([k, l]) => [k, l]) },
+        { id: 'title', label: 'Subject', required: true, max: 200, placeholder: 'One line' },
+        { id: 'body', type: 'textarea', label: 'Details', rows: 7, max: 20000, placeholder: 'What happened, what you expected, and anything that helps' }],
+      onSubmit: async (v) => { const r = await api('POST', '/api/support/tickets', { kind: v.kind, title: v.title, body: v.body, workspaceId: window.XENO_ADDR?.workspace?.() || null }); if (!r.ok) return said(r, 'That did not send'); S.sent = r.d.ticket.key; return null; },
+    }).then((v) => { newOpen = false; if (v && S.sent) { const k = S.sent; S.sent = null; toast(`Sent — ${k}`); S.mine = null; lastLoad = null; return go(k); } if (here() === 'new') go(null); });
   }
 
   function msgHTML(m, staff) {
@@ -104,7 +106,7 @@
         <form class="sp-inline" data-sp-form="merge"><input name="into" placeholder="Merge into T-…" aria-label="Merge into request" pattern="[Tt]-\\d+">${h.btn('Merge', 'type="submit"', true)}</form>
         <form class="sp-inline" data-sp-form="delegate"><input name="agent" placeholder="Support agent id" aria-label="Delegate to agent id">${h.btn('Delegate', 'type="submit"', true)}</form>
       </aside>` : '';
-    const composer = closed && !inner ? `<p class="pg-dim">This request is closed. ${h.btn('Contact support again', 'data-sp-go="new"', true)}</p>`
+    const composer = closed && !inner ? `<p class="pg-dim">This request is closed. ${h.btn('Contact support again', 'data-sp-create="new"', true)}</p>`
       : `<form class="sp-form sp-reply" data-sp-form="reply">
         ${staff && S.macros && S.macros.length ? `<label>Saved reply<select data-sp-macro><option value="">Insert a saved reply…</option>${S.macros.map((m) => `<option value="${esc(m.id)}">${esc(m.title)}</option>`).join('')}</select></label>` : ''}
         ${S.ratify ? `<p class="sp-ratify">Sending an agent’s draft to the customer — read it, edit it, and Send. ${h.btn('Cancel', 'type="button" data-sp-unratify', true)}</p>` : ''}
@@ -128,9 +130,8 @@
 
   function macrosPage() {
     const h = H(), list = S.macros || [];
-    return h.page(h.head({ eyebrow: '<a data-sp-go="">Support</a>', title: 'Saved replies' }) + tabs('macros')
-      + (list.length ? `<div class="pg-thread">${list.map((m) => `<article class="pg-post"><span class="pg-av">R</span><div><div class="sp-meta"><b>${esc(m.title)}</b></div><div class="sp-body">${esc(m.body)}</div><div class="sp-row">${h.btn('Delete', `data-sp-macro-del="${esc(m.id)}"`, true)}</div></div></article>`).join('')}</div>` : h.box('mail', 'No saved replies yet', 'Save the answers you give often.'))
-      + `<form class="sp-form" data-sp-form="macro"><label>Title<input name="title" maxlength="120" required></label><label>Reply<textarea name="body" rows="4" required></textarea></label><div class="sp-row">${h.btn('Save reply', 'type="submit"')}</div></form>`);
+    return h.page(h.head({ eyebrow: '<a data-sp-go="">Support</a>', title: 'Saved replies', acts: h.btn('New saved reply', 'data-sp-create="macro"', false, 'plus') }) + tabs('macros')
+      + (list.length ? `<div class="pg-thread">${list.map((m) => `<article class="pg-post"><span class="pg-av">R</span><div><div class="sp-meta"><b>${esc(m.title)}</b></div><div class="sp-body">${esc(m.body)}</div><div class="sp-row">${h.btn('Delete', `data-sp-macro-del="${esc(m.id)}"`, true)}</div></div></article>`).join('')}</div>` : h.box('mail', 'No saved replies yet', 'Save the answers you give often.', h.btn('New saved reply', 'data-sp-create="macro"', false, 'plus'))));
   }
 
   const day = (iso) => (iso ? new Date(iso).toISOString().slice(0, 10) : '');
@@ -144,20 +145,15 @@
       esc(c.lastUsedAt ? `${ago(c.lastUsedAt)}${c.lastUsedCountry ? ' · ' + c.lastUsedCountry : ''}` : 'never'), esc(day(c.expiresAt)),
       `${h.btn('Usage', `data-sac-events="${esc(c.id)}"`, true)}${c.live ? h.btn('Revoke', `data-sac-revoke="${esc(c.id)}"`, true) : ''}`]));
     const ev = Object.entries(S.events).map(([id, evs]) => { const c = list.find((x) => x.id === id); return c ? `<h3>Usage — ${esc(c.label)}</h3>` + (evs.length ? h.table(['Event', 'Who', 'Country', 'When'], evs.map((e) => h.tr('', [esc(e.event.replace(/_/g, ' ')), esc(e.actor || ''), esc(e.country || ''), esc(ago(e.at))]))) : '<p>Nothing yet.</p>') : ''; }).join('');
-    const form = `<form class="sp-form" data-sp-form="access"><label>Who it is for<input name="label" maxlength="160" required placeholder="Investor — Example Fund"></label>
-      <label>Opens<select name="scope"><option value="pages">The site's pages</option><option value="account">The pages, and creating an account</option></select></label>
-      <label>Expires after (days)<input name="days" type="number" min="1" max="365" value="30" required></label>
-      <label>Uses (blank = unlimited)<input name="maxUses" type="number" min="1" max="10000"></label>
-      <div class="sp-row">${h.btn('Create code', 'type="submit"' + (S.busy ? ' disabled' : ''))}</div></form>`;
-    return h.page(h.head({ eyebrow: '<a data-sp-go="">Support</a>', title: 'Site access', sub: 'Personal codes that open the gated site. Revoking one closes every browser it opened.' }) + tabs('access')
-      + (S.err ? h.box('alert', 'That did not work', esc(S.err)) : '') + made + form
-      + (list.length ? h.table(['For', 'Opens', 'State', 'Uses', 'Last used', 'Expires', ''], rows) : h.box('lock', 'No codes yet', 'Create one for each person or fund, so each can be revoked on its own.')) + ev);
+    return h.page(h.head({ eyebrow: '<a data-sp-go="">Support</a>', title: 'Site access', sub: 'Personal codes that open the gated site. Revoking one closes every browser it opened.', acts: h.btn('Create code', 'data-sp-create="access"' + (S.busy ? ' disabled' : ''), false, 'plus') }) + tabs('access')
+      + (S.err ? h.box('alert', 'That did not work', esc(S.err)) : '') + made
+      + (list.length ? h.table(['For', 'Opens', 'State', 'Uses', 'Last used', 'Expires', ''], rows) : h.box('lock', 'No codes yet', 'Create one for each person or fund, so each can be revoked on its own.', h.btn('Create code', 'data-sp-create="access"', false, 'plus'))) + ev);
   }
 
   function route(it) {
     want(it);
     S.err = S.err && S._errFor === (it || '') ? S.err : '';
-    if (it === 'new' || it === 'Contact support') return newPage();
+    if (it === 'new' || it === 'Contact support') { setTimeout(openNew, 0); return listPage(); }
     if (isKey(it)) return onePage();
     if (it === 'queue' && S.staff) return queuePage();
     if (it === 'macros' && S.staff) return macrosPage();
@@ -177,7 +173,27 @@
     S.err = ''; if (after) after(r); else refresh();
   }
 
+  const whole = (v, lo, hi) => (/^\d+$/.test(String(v)) && Number(v) >= lo && Number(v) <= hi ? null : `A whole number from ${lo} to ${hi}.`);
+  function openAccess() {
+    window.XD.form({ title: 'Create an access code', sub: 'One code per person or fund, so each can be revoked on its own. It is shown once.', submit: 'Create code',
+      fields: [{ id: 'label', label: 'Who it is for', required: true, max: 160, placeholder: 'Investor — Example Fund' },
+        { id: 'scope', type: 'choice', label: 'Opens', value: 'pages', options: [['pages', "The site's pages"], ['account', 'The pages, and creating an account']] },
+        { id: 'days', type: 'number', label: 'Expires after (days)', required: true, value: '30', max: 3, validate: (v) => whole(v, 1, 365) },
+        { id: 'maxUses', type: 'number', label: 'Uses', max: 5, placeholder: 'Blank = unlimited', validate: (v) => (v === '' ? null : whole(v, 1, 10000)) }],
+      onSubmit: async (v) => { const r = await api('POST', '/api/site-gate/codes', { label: v.label, scope: v.scope, days: Number(v.days), maxUses: v.maxUses ? Number(v.maxUses) : null }); if (!r.ok) return said(r, 'That did not work'); S.made = r.d; return null; },
+    }).then((v) => { if (v) refresh(); });
+  }
+  function openMacro() {
+    window.XD.form({ title: 'New saved reply', submit: 'Save reply',
+      fields: [{ id: 'title', label: 'Title', required: true, max: 120 }, { id: 'body', type: 'textarea', label: 'Reply', required: true, rows: 6, max: 20000 }],
+      onSubmit: async (v) => { const r = await api('POST', '/api/support/macros', { title: v.title, body: v.body }); return r.ok ? null : said(r, 'That did not save'); },
+    }).then((v) => { if (v) { toast('Saved reply added'); refresh(); } });
+  }
+
   document.addEventListener('click', (e) => {
+    // the page's create action (header bar, right): it opens the dialog for what it makes
+    const n = e.target.closest('[data-sp-create]');
+    if (n && n.closest('#main, #panel') && !n.disabled) { e.preventDefault(); const k = n.dataset.spCreate; if (k === 'access') return openAccess(); if (k === 'macro') return openMacro(); return here() === 'new' ? openNew() : go('new'); }
     const a = e.target.closest('[data-sac-revoke],[data-sac-events],[data-sac-done]');
     if (a && a.closest('#main')) {
       e.preventDefault();
@@ -218,13 +234,10 @@
     if (!f || !f.closest('#main')) return;
     e.preventDefault();
     const v = Object.fromEntries(new FormData(f).entries()), kind = f.dataset.spForm, key = S.one && S.one.key;
-    if (kind === 'new') return act('POST', '/api/support/tickets', { kind: v.kind, title: v.title, body: v.body, workspaceId: window.XENO_ADDR?.workspace?.() || null }, (r) => { toast(`Sent — ${r.d.ticket.key}`); S.mine = null; go(r.d.ticket.key); });
     if (kind === 'reply' && S.ratify) { const id = S.ratify; S.ratify = null; return act('POST', `/api/support/tickets/${key}/drafts/${id}/send`, { body: v.body }); }
     if (kind === 'reply') return act('POST', `/api/support/tickets/${key}/messages`, { body: v.body, internal: v.internal === 'on' });
     if (kind === 'merge') return act('POST', `/api/support/tickets/${key}/merge`, { into: String(v.into || '').toUpperCase() });
     if (kind === 'delegate') return act('POST', `/api/support/tickets/${key}/assign`, { delegateAgentId: String(v.agent || '').trim() || null });
-    if (kind === 'access') return act('POST', '/api/site-gate/codes', { label: v.label, scope: v.scope, days: Number(v.days), maxUses: v.maxUses ? Number(v.maxUses) : null }, (r) => { S.made = r.d; refresh(); });
-    if (kind === 'macro') return act('POST', '/api/support/macros', { title: v.title, body: v.body });
   });
 
   window.XENO_SUPPORT = { served: true, route, label, open: (item) => go(item || null), state: () => ({ staff: S.staff, mine: Array.isArray(S.mine) ? S.mine.length : null, one: S.one && S.one.key }) };
