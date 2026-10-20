@@ -1066,6 +1066,146 @@
    ]
   },
   {
+   "name": "publish.channel.list",
+   "wire": "publish__channel__list",
+   "version": "1.0.0",
+   "class": "safe",
+   "scope": "publish:read",
+   "surfaces": [
+    "mcp",
+    "rest"
+   ],
+   "aliases": [
+    "publish_list_channels"
+   ]
+  },
+  {
+   "name": "publish.post.list",
+   "wire": "publish__post__list",
+   "version": "1.0.0",
+   "class": "safe",
+   "scope": "publish:read",
+   "surfaces": [
+    "mcp",
+    "rest"
+   ],
+   "aliases": [
+    "publish_list_posts"
+   ]
+  },
+  {
+   "name": "publish.post.draft",
+   "wire": "publish__post__draft",
+   "version": "1.0.0",
+   "class": "undoable",
+   "scope": "publish:write",
+   "surfaces": [
+    "mcp",
+    "rest"
+   ],
+   "aliases": [
+    "publish_draft_post"
+   ]
+  },
+  {
+   "name": "publish.post.propose_schedule",
+   "wire": "publish__post__propose_schedule",
+   "version": "1.0.0",
+   "class": "undoable",
+   "scope": "publish:write",
+   "surfaces": [
+    "mcp",
+    "rest"
+   ],
+   "aliases": [
+    "publish_propose_schedule"
+   ]
+  },
+  {
+   "name": "publish.approval.list",
+   "wire": "publish__approval__list",
+   "version": "1.0.0",
+   "class": "safe",
+   "scope": "publish:read",
+   "surfaces": [
+    "mcp",
+    "rest"
+   ],
+   "aliases": [
+    "publish_list_approvals"
+   ]
+  },
+  {
+   "name": "support.ticket.create",
+   "wire": "support__ticket__create",
+   "version": "1.0.0",
+   "class": "undoable",
+   "scope": "forum:write",
+   "surfaces": [
+    "mcp",
+    "rest"
+   ],
+   "aliases": [
+    "support_create_ticket"
+   ]
+  },
+  {
+   "name": "support.ticket.list",
+   "wire": "support__ticket__list",
+   "version": "1.0.0",
+   "class": "safe",
+   "scope": "forum:read",
+   "surfaces": [
+    "mcp",
+    "rest"
+   ],
+   "aliases": [
+    "support_list_tickets"
+   ]
+  },
+  {
+   "name": "support.ticket.get",
+   "wire": "support__ticket__get",
+   "version": "1.0.0",
+   "class": "safe",
+   "scope": "forum:read",
+   "surfaces": [
+    "mcp",
+    "rest"
+   ],
+   "aliases": [
+    "support_get_ticket"
+   ]
+  },
+  {
+   "name": "support.ticket.reply_draft",
+   "wire": "support__ticket__reply_draft",
+   "version": "1.0.0",
+   "class": "undoable",
+   "scope": "forum:write",
+   "surfaces": [
+    "mcp",
+    "rest"
+   ],
+   "aliases": [
+    "support_reply_draft"
+   ]
+  },
+  {
+   "name": "support.ticket.triage",
+   "wire": "support__ticket__triage",
+   "version": "1.0.0",
+   "class": "undoable",
+   "scope": "forum:write",
+   "surfaces": [
+    "mcp",
+    "rest"
+   ],
+   "aliases": [
+    "support_triage"
+   ]
+  },
+  {
    "name": "forum.thread.search",
    "wire": "forum__thread__search",
    "version": "1.0.0",

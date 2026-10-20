@@ -1,0 +1,24 @@
+/* support.css — Help ▸ Contact support (platform-support.js). Workspace tokens only; emphasis by surface and text
+   brightness, never hue (DESIGN_SYSTEM.md). Text inputs take no focus ring: the border brightens instead. */
+.sp-form{display:flex;flex-direction:column;gap:14px;max-width:720px;margin-top:8px}
+.sp-form label{display:flex;flex-direction:column;gap:6px;font-size:12px;color:var(--muted)}
+.sp-form input,.sp-form select,.sp-form textarea,.sp-console select,.sp-inline input{padding:8px 10px;border-radius:6px;background:var(--n20);border:1px solid var(--n38);color:var(--text);font:13px/1.5 Inter,system-ui,sans-serif;outline:0;box-shadow:none}
+.sp-form textarea{resize:vertical;min-height:96px}
+.sp-form input:focus,.sp-form select:focus,.sp-form textarea:focus,.sp-console select:focus,.sp-inline input:focus{border-color:var(--n58);outline:0}
+.sp-form .sp-check{flex-direction:row;align-items:center;gap:8px;color:var(--muted)}
+.sp-row{display:flex;gap:8px;justify-content:flex-end;align-items:center;flex-wrap:wrap}
+.sp-err{margin:0;color:var(--text);font-size:13px;padding:8px 10px;border-radius:6px;background:var(--n26);border:1px solid var(--n42)}
+.sp-ratify{margin:0;display:flex;align-items:center;justify-content:space-between;gap:12px;font-size:13px;color:var(--text);padding:8px 10px;border-radius:6px;background:var(--n26)}
+.sp-layout{display:grid;grid-template-columns:minmax(0,1fr);gap:16px;margin-top:12px}
+.sp-layout.with-console{grid-template-columns:minmax(0,1fr) 280px}
+.sp-console{display:flex;flex-direction:column;gap:12px;padding:14px;border-radius:10px;background:var(--n18);border:1px solid var(--n31);align-self:start;position:sticky;top:12px}
+.sp-console label{display:flex;flex-direction:column;gap:6px;font-size:12px;color:var(--muted)}
+.sp-console .pg-dim{margin:0;font-size:12px;line-height:1.6}
+.sp-inline{display:flex;gap:6px}.sp-inline input{flex:1;min-width:0}
+.sp-meta{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:6px;font-size:13px}.sp-meta small{color:var(--dim)}
+.sp-body{white-space:pre-wrap;word-break:break-word;font-size:13px;line-height:1.6;color:var(--text)}
+.pg-post.sp-internal{background:var(--n15);border-style:dashed}
+.pg-post.sp-draft{background:var(--n15);border-color:var(--n42);border-style:dashed}
+.pg-post.sp-event{background:transparent;border-color:transparent;padding:6px 18px}.pg-post.sp-event .sp-body{color:var(--muted)}
+.sp-sla{display:flex;gap:16px;font-size:12px;color:var(--muted);margin-top:4px}.sp-sla .bad,.sp-bad{color:var(--text);font-weight:600}
+@media (max-width:760px){.sp-layout.with-console{grid-template-columns:1fr}.sp-console{position:static}}

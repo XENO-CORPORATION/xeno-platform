@@ -30,6 +30,18 @@ const SCOPE_WORDS: Record<string, string> = {
   'tasks:read': 'Read your tasks',
   'tasks:write': 'Create and change your tasks',
   offline_access: 'Stay signed in until you sign out',
+  // XENO workspace agent surface (approved 2026-10-20): what a workspace app may do, as on the consent screen
+  'storage:read': 'See your files and folders',
+  'storage:write': 'Make folders and upload files to your Storage',
+  'share:create': 'Share a folder by a link that needs sign-in — never a public link',
+  'library:read': 'See your Library', 'library:write': 'Add to your Library',
+  'chat:read': 'Read your chats', 'chat:write': 'Write in your chats',
+  'agents:read': 'See your agents and teams', 'agents:write': 'Change your agents and teams, and start or stop their runs',
+  'wallet:read': 'See your credits and budgets', 'wallet:spend': 'Spend your credits — large spends ask you again',
+  'workspace:read': 'See your workspaces and members', 'workspace:admin': 'Change workspace settings and members',
+  'places:read': 'See your Places', 'places:write': 'Change Place layouts',
+  'marketplace:read': 'See the Marketplace', 'marketplace:write': 'Change your Marketplace listings',
+  'forum:read': 'Read the Forum', 'forum:write': 'Post in the Forum as your agent',
 };
 
 export function describeScopes(scopes: string[]): string[] {
@@ -47,6 +59,7 @@ const DeviceAuthContent: React.FC<{ protocol?: 'oidc' | 'legacy' }> = ({ protoco
     client_id: string;
     client_name: string;
     scope: string[];
+    unverified?: boolean;
   } | null>(null);
   const [isVisible, setIsVisible] = useState(false);
 
@@ -92,6 +105,7 @@ const DeviceAuthContent: React.FC<{ protocol?: 'oidc' | 'legacy' }> = ({ protoco
           client_id: d.client_id,
           client_name: d.client_name,
           scope: typeof d.scope === 'string' ? d.scope.split(/\s+/).filter(Boolean) : [],
+          unverified: d.unverified === true,
         });
         setStatus('idle');
         return;
@@ -152,6 +166,9 @@ const DeviceAuthContent: React.FC<{ protocol?: 'oidc' | 'legacy' }> = ({ protoco
                     <li key={line}>{line}</li>
                   ))}
                 </ul>
+                {authorization.unverified ? (
+                  <p className="text-white/60">This app registered itself and has not been reviewed by XENO. It will act as its own agent of yours, never as you. Actions that cannot be undone ask you to sign in again.</p>
+                ) : null}
                 <p className="text-white/40">You can sign it out at any time from your account.</p>
               </div>
             ) : undefined}

@@ -125,10 +125,10 @@
     const openSet = new Set(ovOpen());
     return '<span class="rsep"></span>' + visibleModes().map((m) => {
       const zs = zonesFor('overview').filter((z) => z.of === m.id), isOpen = openSet.has(m.id);
-      const sig = zs.map((z) => (window.XENO_BADGES || {})['overview.' + z.id]).filter(Boolean);
+      const sig = zs.map((z) => badgeOf('overview.' + z.id)).filter(Boolean);
       const hasCur = S.view === 'zone' && zs.some((z) => z.id === S.zone);
       const cat = `<button class="rbtn rcat" data-cat="${m.id}" aria-expanded="${isOpen}" aria-current="${hasCur && !isOpen}" aria-label="${M[m.id].name} — ${zs.length} areas"${isOpen || hasCur ? "" : ` data-tip="${M[m.id].name}"`}>${ic({ studio: 'image', office: 'doc', social: 'megaphone', corpo: 'briefcase', dev: 'code', tools: 'sliders' }[m.id] || 'grid')}<span class="rcat-l">${M[m.id].name}</span>${sig.length && !isOpen ? (sig.includes('live') ? '<span class="live"></span>' : '<span class="dotn"></span>') : ''}</button>`;
-      const kids = isOpen ? `<div class="rcat-kids">${zs.map((z) => { const bd = (window.XENO_BADGES || {})['overview.' + z.id]; const lab = M[m.id].name + ' · ' + esc(z.label) + (bd ? (bd === 'live' ? ' — running' : ` — ${bd} new`) : ''); return `<button class="rbtn sm" data-zone="${z.id}" aria-label="${lab}" data-tip="${lab}" aria-current="${S.view === 'zone' && S.zone === z.id}">${ic(z.icon)}${bd ? (bd === 'live' ? '<span class="live"></span>' : `<span class="cnt">${bd > 9 ? '9+' : bd}</span>`) : ''}</button>`; }).join('')}</div>` : '';
+      const kids = isOpen ? `<div class="rcat-kids">${zs.map((z) => { const bd = badgeOf('overview.' + z.id); const lab = M[m.id].name + ' · ' + esc(z.label) + (bd ? (bd === 'live' ? ' — running' : ` — ${bd} new`) : ''); return `<button class="rbtn sm" data-zone="${z.id}" aria-label="${lab}" data-tip="${lab}" aria-current="${S.view === 'zone' && S.zone === z.id}">${ic(z.icon)}${bd ? (bd === 'live' ? '<span class="live"></span>' : `<span class="cnt">${bd > 9 ? '9+' : bd}</span>`) : ''}</button>`; }).join('')}</div>` : '';
       return cat + kids;
     }).join('');
   }
@@ -154,13 +154,16 @@
     const k = zoneKey();
     if (k === 'overview') return ovCatsHTML();
     let lastOf = null;
-    return '<span class="rsep"></span>' + zonesFor(k).map((z) => { const grpSep = z.of && lastOf && z.of !== lastOf ? '<span class="rsep sm"></span>' : ''; lastOf = z.of || lastOf; const bd = (window.XENO_BADGES || {})[k + '.' + z.id]; const lab = (z.of ? M[z.of].name + ' · ' : '') + esc(z.label) + (bd ? (bd === 'live' ? ' — running' : ` — ${bd} new`) : ''); return `<button class="rbtn${z.of ? ' sm' : ''}" data-zone="${z.id}" aria-label="${lab}" data-tip="${lab}" aria-current="${S.view === 'zone' && S.zone === z.id}">${ic(z.icon)}${bd ? (bd === 'live' ? '<span class="live"></span>' : `<span class="cnt">${bd > 9 ? '9+' : bd}</span>`) : ''}</button>`; }).join('');
+    return '<span class="rsep"></span>' + zonesFor(k).map((z) => { const grpSep = z.of && lastOf && z.of !== lastOf ? '<span class="rsep sm"></span>' : ''; lastOf = z.of || lastOf; const bd = badgeOf(k + '.' + z.id); const lab = (z.of ? M[z.of].name + ' · ' : '') + esc(z.label) + (bd ? (bd === 'live' ? ' — running' : ` — ${bd} new`) : ''); return `<button class="rbtn${z.of ? ' sm' : ''}" data-zone="${z.id}" aria-label="${lab}" data-tip="${lab}" aria-current="${S.view === 'zone' && S.zone === z.id}">${ic(z.icon)}${bd ? (bd === 'live' ? '<span class="live"></span>' : `<span class="cnt">${bd > 9 ? '9+' : bd}</span>`) : ''}</button>`; }).join('');
   }
   function updateZone() {
     const el = $('#rzone'); if (!el) return;
     const k = zoneKey();
     if (el.dataset.for === k && k === 'overview') { ovPatch(); return; }
-    if (el.dataset.for === k) { el.querySelectorAll('[data-zone]').forEach((b) => b.setAttribute('aria-current', String(S.view === 'zone' && S.zone === b.dataset.zone))); return; }
+    if (el.dataset.for === k) { el.querySelectorAll('[data-zone]').forEach((b) => { b.setAttribute('aria-current', String(S.view === 'zone' && S.zone === b.dataset.zone));
+      // a live area's count changes after the rail is built (platform-publish.js: approvals waiting) — patch it in place
+      const bd = badgeOf(k + '.' + b.dataset.zone), c = b.querySelector('.cnt');
+      if (typeof bd === 'number' && bd > 0) { if (c) c.textContent = bd > 9 ? '9+' : String(bd); else b.insertAdjacentHTML('beforeend', `<span class="cnt">${bd > 9 ? '9+' : bd}</span>`); } else if (c && (window.XENO_ZONE_LIVE || {})[k + '.' + b.dataset.zone]) c.remove(); }); return; }
     // the mode changed: the zone's icons swap with a short slide, the rest of the rail stays still
     el.classList.add('out');
     setTimeout(() => { el.innerHTML = zoneHTML(); el.dataset.for = k; el.classList.remove('out'); el.classList.add('in'); requestAnimationFrame(() => requestAnimationFrame(() => el.classList.remove('in'))); }, el.dataset.for ? 140 : 0);
@@ -348,7 +351,7 @@
     const [title, sub, primary0, groups0] = window.XENO_GLOBAL_NAV[k], [primary, groups] = window.XENO_VIS?.nav ? window.XENO_VIS.nav(k, primary0, groups0) : [primary0, groups0];
     return `<div class="ph"><div class="ttl msw-inline">${title}<span class="msw-bar"></span><span class="msw-count">${esc(sub)}</span></div><button class="ib" data-go="search" aria-label="Search" data-tip="Search" data-kbd="Ctrl K">${ic('search')}</button><button class="ib" data-collapse aria-label="Collapse sidebar" data-tip="Collapse" data-kbd="Ctrl \\">${ic('side')}</button></div>
       <div class="pbody">
-        ${primary ? `<button class="act primary" ${{ 'New project': 'data-xa="newProject"', 'Invite people or agents': 'data-xa="invite"', 'New thread': 'data-xa="newThread"', 'New task': 'data-tk="new"', Upload: 'data-xa="upload"', 'Mark all read': 'data-xa="markAllRead"', 'New chat with Anima': 'data-xa="animaChat"', Browse: 'data-go="market"' }[primary] || 'disabled'}>${ic(k === 'market' ? 'market' : k === 'library' ? 'upload' : k === 'workspace' ? 'user' : k === 'inbox' ? 'check' : 'plus')}${esc(primary)}</button>` : ''}
+        ${primary ? `<button class="act primary" ${{ 'New project': 'data-xa="newProject"', 'Invite people or agents': 'data-xa="invite"', 'New thread': 'data-xa="newThread"', 'New task': 'data-tk="new"', Upload: 'data-xa="upload"', 'Mark all read': 'data-xa="markAllRead"', 'Contact support': 'data-sp-go="new"', 'New chat with Anima': 'data-xa="animaChat"', Browse: 'data-go="market"' }[primary] || 'disabled'}>${ic(k === 'market' ? 'market' : k === 'library' ? 'upload' : k === 'workspace' ? 'user' : k === 'inbox' ? 'check' : 'plus')}${esc(primary)}</button>` : ''}
         ${groups.map(([t, rows]) => sec(t.toLowerCase().replace(/\W+/g, '-'), t, rows.map((r) => workRow(r, t)).join(''))).join('')}
       </div>`;
   }
@@ -404,13 +407,25 @@
   // Zone = one SECTION of the mode (MODES §3): its products, then the work living in them.
   // Overview's zones are workforce objects (WORKFORCE §11.2), so they carry work only.
   const listJoin = (xs) => (xs.length < 2 ? xs.join('') : xs.slice(0, -1).join(', ') + ' and ' + xs[xs.length - 1]);
+  // Honesty (owner, 2026-10-20): an area's `work` in nav.js is illustrative. It is the person's own only when a
+  // platform-*.js module registered it in XENO_ZONE_LIVE['<mode>.<zone>'] (rows from the server); otherwise every
+  // place it is drawn carries the "Preview — sample data" mark, and its rail badge (a made-up count) is not shown
+  // on the platform. Which areas are still samples is therefore derived from code, never a hand-kept list.
+  const zoneLiveKey = (z) => (z.of || zoneKey()) + '.' + z.id;
+  const zoneLive = (z) => (window.XENO_ZONE_LIVE || {})[zoneLiveKey(z)] || null;
+  const areaWork = (z) => { const L = zoneLive(z); return L ? { work: L.work ? L.work() : null, sample: false } : { work: z.work || null, sample: !!z.work }; };
+  const SAMPLE_MARK = '<span class="xw-sample" data-sample-badge title="These rows are illustrative, not your data. This area is not connected yet.">Preview — sample data</span>';
+  const badgeOf = (key) => { const [m, ...rest] = key.split('.'), zid = rest.join('.'), real = m === 'overview' && zid.includes('-') ? zid.replace('-', '.') : key;
+    const L = (window.XENO_ZONE_LIVE || {})[real]; if (L) return L.badge ? L.badge() : null;
+    return window.XENO_PLATFORM && window.XENO_PLATFORM.served ? null : (window.XENO_BADGES || {})[key]; };
   function zoneRows(z) {
     // honesty: a planned product has no work yet — never show sample "inbox"/"files" rows for it
     const prods = z.products || [], live = prods.filter((id) => PR[id] && PR[id].status !== 'soon');
-    const rows = z.work ? z.work[1].filter((r) => (r[2] ? PR[r[2]] && PR[r[2]].status !== 'soon' : !prods.length || live.length)) : [];
+    const { work: zw, sample } = areaWork(z);
+    const rows = zw ? zw[1].filter((r) => (r[2] ? PR[r[2]] && PR[r[2]].status !== 'soon' : !prods.length || live.length)) : [];
     const coming = prods.length && !live.length;
     return [prods.length ? sec('products', 'Products', prods.map((id) => productRow(id)).join('')) : '',
-      rows.length ? sec('work', z.work[0], rows.map((r) => workRow(r, z.work[0])).join('') + row(`data-item="All ${esc(z.work[0].toLowerCase())}"`, `${ic('right')}<span class="t">View all</span>`, 'sub')) : '',
+      rows.length ? sec('work', esc(zw[0]) + (sample ? ' ' + SAMPLE_MARK : ''), rows.map((r) => workRow(r, zw[0])).join('') + row(`data-item="All ${esc(zw[0].toLowerCase())}"`, `${ic('right')}<span class="t">View all</span>`, 'sub')) : '',
       coming ? `<div class="empty-note"><b>Nothing here yet.</b><span>${listJoin(prods.map((id) => esc(PR[id].name)))} ${prods.length > 1 ? 'are' : 'is'} planned, not built — your ${esc(z.label.toLowerCase())} will appear here once ${prods.length > 1 ? 'they launch' : 'it launches'}.</span></div>` : ''].join('');
   }
   function panelZone() {
@@ -1048,17 +1063,19 @@
   // products say so; no sample work is shown for something that is not built.
   function mainZone() {
     const z = zoneNow(), prods = z.products || [], live = prods.filter((id) => PR[id] && PR[id].status !== 'soon');
-    const work = z.work ? z.work[1].filter((r) => (r[2] ? PR[r[2]] && PR[r[2]].status !== 'soon' : !prods.length || live.length)) : [];
+    { const L = zoneLive(z); if (L && L.page) { const html = L.page(z); if (html) return html; } }
+    const { work: zw, sample } = areaWork(z);
+    const work = zw ? zw[1].filter((r) => (r[2] ? PR[r[2]] && PR[r[2]].status !== 'soon' : !prods.length || live.length)) : [];
     const card = (id) => { const p = PR[id], soon = p.status === 'soon';
       return `<button class="hm-prod${soon ? ' soon' : ''}" data-product="${id}">${pIconFull(p, 28)}<div><b>${esc(p.name)}</b><small>${esc(p.blurb)}</small></div><span class="hm-tag">${soon ? 'Coming soon' : p.kind === 'desktop' ? 'Desktop' : 'Web'}</span></button>`; };
     const ctxLine = z.of ? `${M[z.of].name} · seen from Overview` : M[zoneKey()].name;
-    return `<div class="wrap pj hm"><div class="pj-head"><div><small>${esc(ctxLine)}</small><h1>${esc(z.label)}</h1></div>${live[0] ? `<button class="btn" data-product="${live[0]}">New in ${esc(PR[live[0]].name)}</button>` : ''}</div>
+    return `<div class="wrap pj hm"><div class="pj-head"><div><small>${esc(ctxLine)}</small><h1>${esc(z.label)}${work.length && sample ? ' ' + SAMPLE_MARK : ''}</h1></div>${live[0] ? `<button class="btn" data-product="${live[0]}">New in ${esc(PR[live[0]].name)}</button>` : ''}</div>
       <p class="hm-blurb">${esc(z.blurb)}</p>
       ${prods.length ? `<h3>Products</h3><div class="hm-prods">${prods.map(card).join('')}</div>` : ''}
-      ${work.length ? `<h3>${esc(z.work[0])}</h3>${H_list(work.map(([t, m, p]) => H_li(p ? `data-item-p="${p}" data-item="${esc(t)}"` : `data-item="${esc(t)}"`, t, m)))}` : ''}
+      ${work.length ? `<h3>${esc(zw[0])}</h3>${H_list(work.map(([t, m, p]) => H_li(p ? `data-item-p="${p}" data-item="${esc(t)}"` : `data-item="${esc(t)}"`, t, m)))}` : ''}
       ${prods.length && !live.length ? `<div class="pj-empty">${prods.map((id) => esc(PR[id].name)).join(', ')} ${prods.length > 1 ? 'are' : 'is'} planned, not built — this area fills in when ${prods.length > 1 ? 'they launch' : 'it launches'}.</div>` : ''}
       ${z.of ? `<div class="hm-switch"><button class="btn ghost" data-mode="${z.of}">Open ${M[z.of].name} mode</button></div>` : ''}
-      <div class="note">Prototype — sample data.</div></div>`;
+      ${work.length && sample ? '<div class="note">Preview — the rows above are sample data, not yours.</div>' : ''}</div>`;
   }
   function mainProduct() {
     const p = PR[S.product];
@@ -1097,7 +1114,7 @@
   function mainItem() {
     if (S.view === 'global' && S.global === 'inbox') return mainInbox();
     if (S.view === 'global' && S.global === 'projects' && (window.XENO_PROJECTS || {})[S.item.split('/')[0]] !== undefined || (S.view === 'global' && S.global === 'projects' && !/^(Archived projects)$/.test(S.item))) { const [nm, tb] = S.item.split('/'); return mainProject(nm, tb); }
-    const owner = S.view === 'product' ? PR[S.product].name : S.view === 'zone' ? zoneNow().label : { anima: 'Anima', community: 'Community', market: 'Marketplace', library: 'Library', projects: 'Projects', tasks: 'Tasks', workspace: 'Workspace', inbox: 'Inbox', settings: 'Settings', places: 'Places' }[S.global] || '';
+    const owner = S.view === 'product' ? PR[S.product].name : S.view === 'zone' ? zoneNow().label : { anima: 'Anima', community: 'Community', market: 'Marketplace', library: 'Library', projects: 'Projects', tasks: 'Tasks', workspace: 'Workspace', inbox: 'Inbox', settings: 'Settings', places: 'Places', support: 'Support' }[S.global] || '';
     return `<div class="wrap"><div class="landing"><span class="ib" style="width:72px;height:72px;pointer-events:none">${ic('doc').replace('class="i"', 'class="i" style="width:40px;height:40px"')}</span><h1>${esc(S.item)}</h1><p>${esc(owner)} · ${esc(ctxName())}</p><div class="row2"><button class="btn ghost" data-back>Back</button></div><div class="note">Couldn’t find “${esc(S.item)}” in ${esc(owner)}. It may have been renamed, moved or deleted — check Trash in your Library.</div></div></div>`;
   }
   function crumbs() {
@@ -1107,9 +1124,9 @@
     if (S.view === 'dashboard') return '<b>Overview</b>';
     if (S.view === 'adaptive') return '<b>Adaptive</b><span class="sep">·</span><span>Beta</span>';
     if (S.view === 'mode') return `<b>${M[S.mode].name}</b>`;
-    if (S.view === 'global') { const gn = { anima: 'Anima', community: 'Community', market: 'Marketplace', library: 'Library', projects: 'Projects', tasks: 'Tasks', workspace: 'Workspace', inbox: 'Inbox', settings: 'Settings', places: 'Places' }[S.global]; if (!S.item) return `<b>${gn}</b>`;
+    if (S.view === 'global') { const gn = { anima: 'Anima', community: 'Community', market: 'Marketplace', library: 'Library', projects: 'Projects', tasks: 'Tasks', workspace: 'Workspace', inbox: 'Inbox', settings: 'Settings', places: 'Places', support: 'Support' }[S.global]; if (!S.item) return `<b>${gn}</b>`;
       // a path is a trail you can walk back up: every segment but the last is a link (GitHub, Finder)
-      const parts = S.item.split('/'), lbl = (x, i) => (S.global === 'tasks' && window.XENO_TASKS?.label ? window.XENO_TASKS.label(x) : S.global === 'community' && i === 0 && window.XENO_PG_FORUM.find((t) => t.id === x) ? window.XENO_PG_FORUM.find((t) => t.id === x).title : S.global === 'community' && i > 0 && parts[0] === 'My reports' ? '#' + x : S.global === 'workspace' && i === 1 && parts[0] === 'Agents' && window.XENO_AGENTS?.isId?.(x) ? window.XENO_AGENTS.nameOf(x) : S.global === 'workspace' && i === 1 && parts[0] === 'Divisions' && window.XENO_DIVISIONS?.isId?.(x) ? window.XENO_DIVISIONS.nameOf(x) : S.global === 'workspace' && i === 1 && parts[0] === 'Services' && window.XENO_SERVICES?.isId?.(x) ? window.XENO_SERVICES.nameOf(x) : x);
+      const parts = S.item.split('/'), lbl = (x, i) => (S.global === 'tasks' && window.XENO_TASKS?.label ? window.XENO_TASKS.label(x) : S.global === 'support' && window.XENO_SUPPORT?.label ? window.XENO_SUPPORT.label(x) : S.global === 'community' && i === 0 && window.XENO_PG_FORUM.find((t) => t.id === x) ? window.XENO_PG_FORUM.find((t) => t.id === x).title : S.global === 'community' && i > 0 && parts[0] === 'My reports' ? '#' + x : S.global === 'workspace' && i === 1 && parts[0] === 'Agents' && window.XENO_AGENTS?.isId?.(x) ? window.XENO_AGENTS.nameOf(x) : S.global === 'workspace' && i === 1 && parts[0] === 'Divisions' && window.XENO_DIVISIONS?.isId?.(x) ? window.XENO_DIVISIONS.nameOf(x) : S.global === 'workspace' && i === 1 && parts[0] === 'Services' && window.XENO_SERVICES?.isId?.(x) ? window.XENO_SERVICES.nameOf(x) : x);
       return `<a data-crumb="">${gn}</a>` + parts.map((x, i) => sep + (i < parts.length - 1 ? `<a data-crumb="${esc(parts.slice(0, i + 1).join('/'))}">${esc(lbl(x, i))}</a>` : `<b>${esc(lbl(x, i))}</b>`)).join(''); }
     const p = PR[S.product];
     if (S.mode === 'studio' && ['image', 'video', 'audio', '3d', 'enhance-image', 'enhance-video', 'enhance-audio', 'enhance-3d'].includes(S.product) && window.XENO_GENERATIONS) {
@@ -1293,12 +1310,12 @@
     if (m === 'adaptive') return { view: 'adaptive' };
     if (m === 'overview') { if (kind === 'z' && id && zonesFor('overview').some((z) => z.id === id)) return { view: 'zone', zone: id, zoneOf: 'overview', item };
       if (kind === 'p' && PR[id]) return { view: 'product', product: id, zoneOf: 'overview', item };
-      if (kind === 'g' && ['anima', 'community', 'market', 'library', 'projects', 'tasks', 'workspace', 'inbox', 'settings', 'places'].includes(id)) return { view: 'global', global: id, zoneOf: 'overview', item };
+      if (kind === 'g' && ['anima', 'community', 'market', 'library', 'projects', 'tasks', 'workspace', 'inbox', 'settings', 'places', 'support'].includes(id)) return { view: 'global', global: id, zoneOf: 'overview', item };
       return { view: 'dashboard' }; }
     if (!modeOk) return null;
     if (kind === 'z' && zonesFor(m).some((z) => z.id === id)) return { view: 'zone', mode: m, zone: id, zoneOf: 'mode', item };
     if (kind === 'p' && PR[id]) return { view: 'product', mode: m, product: id, zoneOf: 'mode', item };
-    if (kind === 'g' && ['anima', 'community', 'market', 'library', 'projects', 'tasks', 'workspace', 'inbox', 'settings', 'places'].includes(id)) return { view: 'global', mode: m, global: id, zoneOf: 'mode', item };
+    if (kind === 'g' && ['anima', 'community', 'market', 'library', 'projects', 'tasks', 'workspace', 'inbox', 'settings', 'places', 'support'].includes(id)) return { view: 'global', mode: m, global: id, zoneOf: 'mode', item };
     return { view: 'mode', mode: m };
   }
   let applyingHash = false;
@@ -1721,6 +1738,7 @@
     }, 700);
   }
   function ntOpen(n) { const st = NS(); st.read.add(n.id); ntSave('readN', st.read); syncBell(); hidePops(); if (n.kind === 'schedule_failed') return window.XA.scheduled();
+    if (n.ref && /^support\/T-\d+$/.test(n.ref)) return go('global', { global: 'support', item: n.ref.slice(8) });
     if (n.ref && /^T-\d+$/.test(n.ref)) { if (n.serverId) window.XENO_TASKS?.markRead?.([n.serverId]); return go('global', { global: 'tasks', item: n.ref }); } go('product', { product: n.p, item: n.t }); }
   function ntKey(e, el, repaint) {
     if (!el || !el.dataset.nt) { if (el && el.dataset.ntGrp && e.key === 'Enter') { e.preventDefault(); el.click(); } return; }
@@ -1811,7 +1829,7 @@
       if (id === 'intro') { hidePops(); return openModeIntro(ctxId, railBtn('help')); }
       if (id === 'new') store.set('seenNew', '2026-09-17');
       hidePops();
-      hidePops(); ({ report: () => window.XA.report({ kind: 'bug' }), support: () => window.XA.report({ kind: 'bug', visibility: 'private', title: 'Contact support' }), idea: () => window.XA.report({ kind: 'feature' }), docs: () => window.open('https://xenostudio.ai/docs', '_blank', 'noopener'), new: () => window.XA.whatsNew(), status: () => window.XA.status(), search: () => window.open('https://xenostudio.ai/docs?q=' + encodeURIComponent(input.value.trim()), '_blank', 'noopener'), doc: () => window.XA.article(b.dataset.doc), tip: () => window.XA.article(b.dataset.doc) }[id] || (() => {}))();
+      hidePops(); ({ report: () => window.XA.report({ kind: 'bug' }), support: () => (window.XENO_SUPPORT?.served ? window.XENO_SUPPORT.open('new') : window.XA.report({ kind: 'bug', visibility: 'private', title: 'Contact support' })), idea: () => window.XA.report({ kind: 'feature' }), docs: () => window.open('https://xenostudio.ai/docs', '_blank', 'noopener'), new: () => window.XA.whatsNew(), status: () => window.XA.status(), search: () => window.open('https://xenostudio.ai/docs?q=' + encodeURIComponent(input.value.trim()), '_blank', 'noopener'), doc: () => window.XA.article(b.dataset.doc), tip: () => window.XA.article(b.dataset.doc) }[id] || (() => {}))();
     };
     popKeys(m, '.mi.hp', (e) => { if (e.key === 'ArrowUp' && document.activeElement === body.querySelector('.mi')) { e.preventDefault(); input.focus(); } });
     input.focus({ preventScroll: true });

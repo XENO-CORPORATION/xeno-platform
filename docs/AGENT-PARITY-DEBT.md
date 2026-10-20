@@ -4,7 +4,7 @@
 
 Every action a person can take on the platform, and whether an agent can take it (XENO AGENT CAPABILITY - SPEC.md §19.4). **Planned** entries are the owning division’s backlog: each is a feature agents are missing.
 
-**Total:** 1470 actions · 83 agent capability · 1200 planned (debt) · 184 excluded · **coverage 6.5%** of the 1286 owed.
+**Total:** 1504 actions · 97 agent capability · 1217 planned (debt) · 190 excluded · **coverage 7.4%** of the 1314 owed.
 
 | division | actions | capability | planned (debt) | excluded | coverage |
 |---|---:|---:|---:|---:|---:|
@@ -23,7 +23,9 @@ Every action a person can take on the platform, and whether an agent can take it
 | browser-shell | 28 | 0 | 28 | 0 | 0% |
 | canvas | 22 | 6 | 16 | 0 | 27.3% |
 | inference | 18 | 0 | 12 | 6 | 0% |
-| places | 6 | 3 | 0 | 0 | 50% |
+| support | 21 | 8 | 12 | 1 | 40% |
+| publish | 13 | 6 | 4 | 3 | 60% |
+| places | 6 | 3 | 1 | 2 | 75% |
 
 ## account — 60 planned
 
@@ -510,6 +512,10 @@ Every action a person can take on the platform, and whether an agent can take it
 - `route:v2InferenceRoutes.js:PUT /credentials/:id/models`
 - `route:v2InferenceRoutes.js:PUT /routes/:surface`
 
+## places — 1 planned
+
+- `route:placesRoutes.js:GET /needs-you`
+
 ## platform — 34 planned
 
 - `route:analyticsRoutes.js:GET /active-users`
@@ -546,6 +552,13 @@ Every action a person can take on the platform, and whether an agent can take it
 - `route:webhookRoutes.js:POST /`
 - `route:webhookRoutes.js:POST /:id/deliveries/:deliveryId/:operation`
 - `route:webhookRoutes.js:PUT /:id`
+
+## publish — 4 planned
+
+- `route:publishRoutes.js:GET /inbox`
+- `route:publishRoutes.js:POST /approvals/:kind/:id`
+- `route:publishRoutes.js:POST /posts/:id/publish`
+- `route:publishRoutes.js:POST /posts/:id/retract`
 
 ## storage — 75 planned
 
@@ -744,6 +757,21 @@ Every action a person can take on the platform, and whether an agent can take it
 - `route:youtubeRoutes.js:PUT /groups/:id`
 - `route:youtubeRoutes.js:PUT /groups/:id/channels/reorder`
 - `route:youtubeRoutes.js:PUT /groups/reorder`
+
+## support — 12 planned
+
+- `route:supportRoutes.js:DELETE /macros/:id`
+- `route:supportRoutes.js:GET /macros`
+- `route:supportRoutes.js:POST /macros`
+- `route:supportRoutes.js:POST /tickets/:key/assign`
+- `route:supportRoutes.js:POST /tickets/:key/drafts/:id/discard`
+- `route:supportRoutes.js:POST /tickets/:key/merge`
+- `route:supportRoutes.js:POST /tickets/:key/publish`
+- `route:supportRoutes.js:POST /tickets/:key/status`
+- `route:supportRoutes.js:POST /tickets/:key/task`
+- `ui:platform-support.js:data-sp-form=delegate`
+- `ui:platform-support.js:data-sp-form=macro`
+- `ui:platform-support.js:data-sp-form=merge`
 
 ## tasks — 84 planned
 
