@@ -21,11 +21,11 @@
   const go = (item) => X()?.go?.('global', { global: 'workspace', item });
   const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
   const S = { key: null, status: 'idle', q: '', list: [], canManage: false, chart: null, one: null, work: null };
-  const ws = () => { const w = window.XA?.currentWorkspace?.(); return w && UUID.test(String(w.id)) ? String(w.id) : ''; };
+  const ws = () => { const u = window.XENO_SCOPE?.uuid?.(); if (u && UUID.test(String(u))) return String(u); const w = window.XA?.currentWorkspace?.(); const id = w && (w.uuid || w.id); return id && UUID.test(String(id)) ? String(id) : ''; };
 
   async function load() {
     const at = S.key, w = ws();
-    if (!w) { S.status = 'nows'; return paint(); }
+    if (!w) { if (window.XENO_SCOPE && window.XENO_SCOPE.status?.() !== 'ready') { setTimeout(() => { if (S.key === at) load(); }, 250); return; } S.status = 'nows'; return paint(); }
     const [kind, id] = at.split(':');
     const r = kind === 'list' ? await api('GET', `/api/people?workspace=${w}${S.q ? `&q=${encodeURIComponent(S.q)}` : ''}`)
       : kind === 'chart' ? await api('GET', `/api/people/org-chart?workspace=${w}`)
@@ -111,7 +111,7 @@
     const p = S.one.person, pl = await api('GET', `/api/people/${p.id}/offboard-plan?workspace=${ws()}`);
     if (!pl.ok) return toast(pl.d.error || 'Not allowed.');
     const plan = pl.d.plan;
-    const ok = await window.XD.confirm?.({ title: `Offboard ${p.name}?`, body: `Access is removed. ${plan.reportsToSuccessor.length} report(s) and ${plan.divisionsToSuccessor.length} division(s) move to their manager. ${plan.ownedElsewhere.length} thing(s) they own themselves need their own transfer. ${plan.openTasks} open task(s).`, ok: 'Offboard', danger: true });
+    const ok = await window.XD.confirm?.({ title: `Offboard ${p.name}?`, body: `Access is removed. ${plan.reportsToSuccessor.length} report(s) and ${plan.divisionsToSuccessor.length} division(s) move to their manager. ${plan.ownedElsewhere.length} thing(s) they own themselves need their own transfer. ${plan.openTasks} open task(s).`, action: 'Offboard' });
     if (!ok) return;
     const r = await api('POST', `/api/people/${p.id}/offboard`, { workspaceId: ws(), confirm: true });
     if (!r.ok) return toast(r.d.error || 'Not offboarded.');
