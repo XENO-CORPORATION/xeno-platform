@@ -4,26 +4,27 @@
 
 Every action a person can take on the platform, and whether an agent can take it (XENO AGENT CAPABILITY - SPEC.md §19.4). **Planned** entries are the owning division’s backlog: each is a feature agents are missing.
 
-**Total:** 1511 actions · 103 agent capability · 1218 planned (debt) · 190 excluded · **coverage 7.8%** of the 1321 owed.
+**Total:** 1533 actions · 114 agent capability · 1224 planned (debt) · 195 excluded · **coverage 8.5%** of the 1338 owed.
 
 | division | actions | capability | planned (debt) | excluded | coverage |
 |---|---:|---:|---:|---:|---:|
-| workforce | 286 | 44 | 239 | 3 | 15.5% |
+| workforce | 286 | 45 | 238 | 3 | 15.9% |
 | studio | 121 | 4 | 117 | 0 | 3.3% |
 | agents | 122 | 0 | 112 | 10 | 0% |
-| workspace-ui | 165 | 3 | 100 | 62 | 2.9% |
+| workspace-ui | 171 | 4 | 101 | 66 | 3.8% |
 | chat | 97 | 0 | 96 | 1 | 0% |
 | commerce | 112 | 0 | 96 | 16 | 0% |
-| workspace | 113 | 5 | 91 | 17 | 5.2% |
+| workspace | 117 | 7 | 93 | 17 | 7% |
 | tasks | 105 | 13 | 84 | 8 | 13.4% |
 | storage | 82 | 5 | 75 | 2 | 6.3% |
 | account | 86 | 0 | 60 | 26 | 0% |
 | forum | 51 | 8 | 41 | 2 | 16.3% |
 | platform | 65 | 0 | 34 | 31 | 0% |
 | browser-shell | 28 | 0 | 28 | 0 | 0% |
-| canvas | 20 | 4 | 16 | 0 | 20% |
+| canvas | 22 | 6 | 16 | 0 | 27.3% |
 | inference | 18 | 0 | 12 | 6 | 0% |
 | support | 21 | 8 | 12 | 1 | 40% |
+| analytics | 10 | 5 | 4 | 1 | 55.6% |
 | publish | 13 | 6 | 4 | 3 | 60% |
 | places | 6 | 3 | 1 | 2 | 75% |
 
@@ -204,6 +205,13 @@ Every action a person can take on the platform, and whether an agent can take it
 - `ui:platform-mcp.js:data-xmc=open`
 - `ui:platform-mcp.js:data-xmc=retry`
 - `ui:platform-mcp.js:data-xmc=tab`
+
+## analytics — 4 planned
+
+- `route:workspaceAnalyticsRoutes.js:DELETE /dashboards/:id`
+- `route:workspaceAnalyticsRoutes.js:PATCH /dashboards/:id`
+- `route:workspaceAnalyticsRoutes.js:POST /dashboards`
+- `route:workspaceAnalyticsRoutes.js:POST /dashboards/:id/restore`
 
 ## browser-shell — 28 planned
 
@@ -860,7 +868,7 @@ Every action a person can take on the platform, and whether an agent can take it
 - `ui:platform-tasks.js:data-tk=view`
 - `ui:platform-tasks.js:data-tk=watch`
 
-## workforce — 239 planned
+## workforce — 238 planned
 
 - `route:apiKeyWorkforceCapabilityRoutes.js:POST /operations`
 - `route:apiKeyWorkforceCapabilityRoutes.js:POST /read`
@@ -884,7 +892,6 @@ Every action a person can take on the platform, and whether an agent can take it
 - `route:workforceCoordinationRoutes.js:POST /worktrees`
 - `route:workforceCoordinationRoutes.js:POST /worktrees/integrate`
 - `route:workforceDivisionRoutes.js:GET /:id/agent-budget`
-- `route:workforceDivisionRoutes.js:GET /:id/home`
 - `route:workforceDivisionRoutes.js:PUT /:id/agent-budget`
 - `route:workforceDivisionRoutes.js:PUT /projects/:projectId`
 - `route:workforceForgeRoutes.js:POST /bindings`
@@ -1102,13 +1109,15 @@ Every action a person can take on the platform, and whether an agent can take it
 - `ui:workforce.js:data-wf=win`
 - `ui:workforce.js:data-wf=withdraw`
 
-## workspace — 91 planned
+## workspace — 93 planned
 
 - `route:accountWorkspaceOperationRoutes.js:GET /:operationId (accountWorkspaceOperationRoutes)`
 - `route:accountWorkspaceOperationRoutes.js:POST /:operationId/:phase (accountWorkspaceOperationRoutes)`
 - `route:modesRoutes.js:DELETE /:modeId (meModesRouter)`
 - `route:modesRoutes.js:GET / (meModesRouter)`
+- `route:modesRoutes.js:GET /:wid/architect/proposals (workspaceModesRouter)`
 - `route:modesRoutes.js:PATCH /:modeId (meModesRouter)`
+- `route:modesRoutes.js:PATCH /:wid/architect/proposals/:pid (workspaceModesRouter)`
 - `route:modesRoutes.js:PATCH /:wid/modes/items/:modeId (workspaceModesRouter)`
 - `route:modesRoutes.js:POST / (meModesRouter)`
 - `route:projectPublicationRoutes.js:ALL /`
@@ -1196,7 +1205,7 @@ Every action a person can take on the platform, and whether an agent can take it
 - `ui:platform-work.js:data-share-remove`
 - `ui:platform-work.js:data-share-role`
 
-## workspace-ui — 100 planned
+## workspace-ui — 101 planned
 
 - `ui:actions.js:data-ac`
 - `ui:actions.js:data-sc-del`
@@ -1298,3 +1307,4 @@ Every action a person can take on the platform, and whether an agent can take it
 - `ui:resources.js:data-rs=request`
 - `ui:resources.js:data-rs=revoke`
 - `ui:resources.js:data-rs=version`
+- `ui:setup.js:data-xsu=use`

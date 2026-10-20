@@ -10,13 +10,17 @@
  *   /api/v2/workspaces/:wid/modes/applications GET  the receipts
  *   /api/v2/workspaces/:wid/modes/:applicationId/revert POST
  *   /api/v2/workspaces/:wid/modes/items/:modeId PATCH a workspace mode (marks it as a person's edit)
+ *   /api/v2/workspaces/:wid/architect/proposals          GET list · POST {idea?, sources:[{kind:file|folder|corpus,id}]} → a PROPOSAL (billed)
+ *   /api/v2/workspaces/:wid/architect/proposals/:pid     GET · PATCH {mode?, tasks?} (a person's edit). Apply it as pack `proposal:<pid>`.
  * `Idempotency-Key` is accepted for apply when the body names none.
  */
 import express from 'express';
 import * as modes from '../services/modeApply.js';
+import * as architect from '../services/workspaceArchitect.js';
 
 const send = (res, fn) => fn().then((out) => res.json({ success: true, ...out })).catch((e) => {
   if (e instanceof modes.ModeError) return res.status(e.status).json({ success: false, error: e.code, message: e.message });
+  if (e?.http && /^[A-Z_]+$/.test(String(e.code || ''))) return res.status(e.http).json({ success: false, error: String(e.code).toLowerCase(), message: e.message });
   if (e?.code === '23514' || e?.code === '23505') return res.status(409).json({ success: false, error: 'conflict', message: e.message });
   console.error('[modes]', e?.message || e);
   return res.status(500).json({ success: false, error: 'internal_error' });
@@ -40,5 +44,9 @@ workspaceModesRouter.post('/:wid/modes/apply', (req, res) => send(res, () => mod
 workspaceModesRouter.get('/:wid/modes/applications', (req, res) => send(res, () => modes.status(req.db, actor(req), { workspaceId: req.params.wid })));
 workspaceModesRouter.post('/:wid/modes/:applicationId/revert', (req, res) => send(res, () => modes.revert(req.db, actor(req), { workspaceId: req.params.wid, applicationId: req.params.applicationId })));
 workspaceModesRouter.patch('/:wid/modes/items/:modeId', (req, res) => send(res, () => modes.updateWorkspaceMode(req.db, actor(req), req.params.wid, req.params.modeId, body(req))));
+workspaceModesRouter.get('/:wid/architect/proposals', (req, res) => send(res, () => architect.list(req.db, actor(req), { workspaceId: req.params.wid })));
+workspaceModesRouter.post('/:wid/architect/proposals', (req, res) => send(res, () => architect.propose(req.db, actor(req), { ...body(req), workspaceId: req.params.wid })));
+workspaceModesRouter.get('/:wid/architect/proposals/:pid', (req, res) => send(res, () => architect.get(req.db, actor(req), { workspaceId: req.params.wid, proposalId: req.params.pid })));
+workspaceModesRouter.patch('/:wid/architect/proposals/:pid', (req, res) => send(res, () => architect.edit(req.db, actor(req), { ...body(req), workspaceId: req.params.wid, proposalId: req.params.pid })));
 
 export default meModesRouter;

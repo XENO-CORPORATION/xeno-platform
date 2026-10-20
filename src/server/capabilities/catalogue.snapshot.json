@@ -72,6 +72,34 @@
    ]
   },
   {
+   "name": "modes.architect.propose",
+   "wire": "modes__architect__propose",
+   "version": "1.0.0",
+   "class": "irreversible",
+   "scope": "workspace:read",
+   "surfaces": [
+    "mcp",
+    "rest"
+   ],
+   "aliases": [
+    "modes_architect_propose"
+   ]
+  },
+  {
+   "name": "modes.architect.get",
+   "wire": "modes__architect__get",
+   "version": "1.0.0",
+   "class": "safe",
+   "scope": "workspace:read",
+   "surfaces": [
+    "mcp",
+    "rest"
+   ],
+   "aliases": [
+    "modes_architect_get"
+   ]
+  },
+  {
    "name": "tasks.project.list",
    "wire": "tasks__project__list",
    "version": "1.0.0",
@@ -293,6 +321,20 @@
    ],
    "aliases": [
     "canvas_add"
+   ]
+  },
+  {
+   "name": "canvas.canvas.open_as",
+   "wire": "canvas__canvas__open_as",
+   "version": "1.0.0",
+   "class": "undoable",
+   "scope": "tasks:write",
+   "surfaces": [
+    "mcp",
+    "rest"
+   ],
+   "aliases": [
+    "canvas_open_as"
    ]
   },
   {
@@ -828,6 +870,20 @@
    ]
   },
   {
+   "name": "division.division.home",
+   "wire": "division__division__home",
+   "version": "1.0.0",
+   "class": "safe",
+   "scope": "workspace:read",
+   "surfaces": [
+    "mcp",
+    "rest"
+   ],
+   "aliases": [
+    "workforce_division_home"
+   ]
+  },
+  {
    "name": "division.division.create",
    "wire": "division__division__create",
    "version": "1.0.0",
@@ -1301,6 +1357,48 @@
    ],
    "aliases": [
     "support_triage"
+   ]
+  },
+  {
+   "name": "analytics.metric.list",
+   "wire": "analytics__metric__list",
+   "version": "1.0.0",
+   "class": "safe",
+   "scope": "analytics:read",
+   "surfaces": [
+    "mcp",
+    "rest"
+   ],
+   "aliases": [
+    "analytics_list_metrics"
+   ]
+  },
+  {
+   "name": "analytics.metric.query",
+   "wire": "analytics__metric__query",
+   "version": "1.0.0",
+   "class": "safe",
+   "scope": "analytics:read",
+   "surfaces": [
+    "mcp",
+    "rest"
+   ],
+   "aliases": [
+    "analytics_query_metric"
+   ]
+  },
+  {
+   "name": "analytics.dashboard.list",
+   "wire": "analytics__dashboard__list",
+   "version": "1.0.0",
+   "class": "safe",
+   "scope": "analytics:read",
+   "surfaces": [
+    "mcp",
+    "rest"
+   ],
+   "aliases": [
+    "analytics_list_dashboards"
    ]
   },
   {

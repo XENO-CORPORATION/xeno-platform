@@ -26,6 +26,7 @@ import * as agentsMcp from './agentsMcp.js';
 import * as storageMcp from './storageMcp.js';
 import * as supportMcp from './supportMcp.js';
 import * as publishMcp from './publishMcp.js';
+import * as analyticsMcp from './analyticsMcp.js';
 import * as workforceMcp from './workforceMcp.js';
 import * as forumMcp from './forumMcp.js';
 import { resolvePrincipal } from './agentIdentity.js';
@@ -108,6 +109,14 @@ export const SERVICES = Object.freeze([
     tools: () => supportMcp.TOOLS,
     call: (db, actor, name, args) => supportMcp.callTool(db, actor, name, args),
     isToolError: (e) => e instanceof supportMcp.SupportMcpError,
+  },
+  // XENO Analytics (analyticsMcp.js): read-only metrics and saved dashboards of a workspace.
+  {
+    category: 'analytics', title: 'Analytics', version: '1.0.0', timeoutMs: 30_000,
+    description: 'Analytics: read a workspace’s metrics (credits, tasks, storage, support, agent runs) and saved dashboards.',
+    tools: () => analyticsMcp.TOOLS,
+    call: (db, actor, name, args) => analyticsMcp.callTool(db, actor, name, args),
+    isToolError: (e) => e instanceof analyticsMcp.AnalyticsMcpError,
   },
   // XENO Forum, folded in from /api/forum/mcp (kept): the same tools, the same function. Its wire names were
   // always `forum_<verb>`, so as a category the grandfathered alias is exactly the old name.
