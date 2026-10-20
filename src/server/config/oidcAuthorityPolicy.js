@@ -72,6 +72,9 @@ export const CLIENT_AUTHORITY = Object.freeze({
   'xeno-post': [...COLLAB_PRODUCT, 'team:manage', 'billing:read'],
   'xeno-api-portal': [...IDENTITY, 'inference:run', 'ledger:read', 'ledger:spend', 'billing:read', 'billing:manage'],
   'xeno-mail': IDENTITY,
+  // XENO Places: /api/places checks no scope beyond an xeno-api token, so identity + workforce:read is the floor.
+  // No ledger, inference, billing, team or broker authority. Widen by a reviewed change only.
+  'xeno-places': [...IDENTITY, 'workforce:read'],
   'xeno-mobile-ios': [...IDENTITY, 'projects:read', 'projects:write', 'sync:use', 'team:read', 'collaboration:use'],
   'xeno-mobile-android': [...IDENTITY, 'projects:read', 'projects:write', 'sync:use', 'team:read', 'collaboration:use'],
 });
