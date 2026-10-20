@@ -67,6 +67,13 @@ async function mutate(db, me, op, input, fn) {
 }
 
 // ── access ────────────────────────────────────────────────────────────────────────────────────────────────────
+/** Stand a building on the next free plot of a city (plots are unique per city; the advisory lock serialises them). */
+async function moveTo(c, placeId, cityId, regionId, source) {
+  await c.query('SELECT pg_advisory_xact_lock(hashtextextended($1,0))', [`places-plot:${cityId}`]);
+  const nxt = (await c.query('SELECT COALESCE(max(plot_index) + 1, 0) AS n FROM places WHERE city_id=$1', [cityId])).rows[0].n;
+  await c.query('UPDATE places SET city_id=$2, region_id=$3, location_source=$4, plot_index=$5, revision=revision+1 WHERE id=$1', [placeId, cityId, regionId, source, nxt]);
+}
+
 async function workspaceRelation(db, me, workspaceId) {
   const rows = (await db.query(`SELECT relation FROM relationship_tuples WHERE object_type='workspace' AND object_id=$1 AND subject_type='user' AND subject_id=$2`,
     [String(workspaceId), String(me.id)])).rows.map((r) => r.relation);
@@ -295,6 +302,18 @@ const WRITES = {
     if (!id) fail('not_found', 'workspace_not_found', 'No such workspace.');
     return { result: { placeId: id, workspaceId: w, divisionsCreated: 0 }, revision: 1, summary: 'Building recreated' };
   },
+  // Move a building to another XENO city (e.g. it was placed on the default city before a location was known).
+  // Owner/admin only, receipt + requestId fence like every write. A relocated building is never moved again by the backfill.
+  'places.relocate': async (c, me, i) => {
+    const p = await loadPlace(c, i.placeId, { lock: true });
+    if (me.kind === 'agent' || !['owner', 'admin'].includes(await workspaceRelation(c, me, p.workspace_id))) fail('denied', 'not_admin', 'Only the workspace’s owners and admins move its building.');
+    const cityId = String(i.cityId || '');
+    const region = (await c.query('SELECT places_region_of_city($1) AS r', [cityId])).rows[0].r;
+    if (!region) fail('bad_input', 'city_unknown', 'That is not a XENO city.');
+    if (cityId === p.city_id) return { result: { placeId: p.id, cityId, moved: false }, revision: Number(p.revision), summary: `${p.name} already stands in ${cityId}` };
+    await moveTo(c, p.id, cityId, region, 'relocated');
+    return { result: { placeId: p.id, cityId, regionId: region, from: p.city_id, moved: true }, revision: Number(p.revision) + 1, summary: `Moved ${p.name} to ${cityId}` };
+  },
   'places.archive': async (c, me, i) => {
     const p = await loadPlace(c, i.placeId, { lock: true });
     if (me.kind === 'agent' || (await workspaceRelation(c, me, p.workspace_id)) !== 'owner') fail('denied', 'not_owner', 'Only the workspace owner archives its building.');
@@ -365,16 +384,28 @@ export async function call(db, me, op, input = {}) {
 }
 export const httpStatus = (reply) => (reply.ok ? 200 : STATUS[reply.error.code] || 500);
 
-/** The backfill (dry run by default): every active workspace without an active building, and where it would stand. */
+/**
+ * The backfill (dry run by default): every active workspace without an active building, and where it would stand —
+ * plus every building still on the DEFAULT city whose owner now has a better source (their own setting, a time zone or
+ * a sign-in country), which is moved there. A building someone relocated by hand is never touched. Idempotent.
+ */
 export async function backfillPlan(db) {
   const rows = (await db.query(`SELECT w.id, (places_home_city(w.owner_user_id)).* FROM workspaces w
     WHERE w.status='active' AND NOT EXISTS (SELECT 1 FROM places p WHERE p.workspace_id=w.id AND p.lifecycle='active')`)).rows;
-  const by = (k) => rows.reduce((m, r) => ({ ...m, [r[k]]: (m[r[k]] || 0) + 1 }), {});
-  return { missing: rows.length, byCity: by('city_id'), bySource: by('source'), workspaceIds: rows.map((r) => r.id) };
+  const moves = (await db.query(`SELECT p.id, h.city_id, h.region_id, h.source FROM places p JOIN workspaces w ON w.id=p.workspace_id
+    CROSS JOIN LATERAL places_home_city(w.owner_user_id) h
+    WHERE p.lifecycle='active' AND p.location_source='default' AND h.source <> 'default'`)).rows;
+  const by = (list, k) => list.reduce((m, r) => ({ ...m, [r[k]]: (m[r[k]] || 0) + 1 }), {});
+  return { missing: rows.length, byCity: by(rows, 'city_id'), bySource: by(rows, 'source'), workspaceIds: rows.map((r) => r.id),
+    toRelocate: moves.length, relocateByCity: by(moves, 'city_id'), relocateBySource: by(moves, 'source'), relocations: moves };
 }
 export async function backfill(db) {
   const plan = await backfillPlan(db);
-  let created = 0;
+  let created = 0, relocated = 0;
   for (const id of plan.workspaceIds) await tx(db, async (c) => { const before = (await c.query(`SELECT 1 FROM places WHERE workspace_id=$1 AND lifecycle='active'`, [id])).rows.length; await c.query('SELECT places_provision($1)', [id]); if (!before) created++; });
-  return { ...plan, created };
+  for (const m of plan.relocations) await tx(db, async (c) => {
+    const still = (await c.query(`SELECT 1 FROM places WHERE id=$1 AND lifecycle='active' AND location_source='default' FOR UPDATE`, [m.id])).rows.length;
+    if (still) { await moveTo(c, m.id, m.city_id, m.region_id, m.source); relocated++; }
+  });
+  return { ...plan, created, relocated };
 }
