@@ -17,7 +17,11 @@
   const toast = (m) => X()?.toast?.(m);
   const said = (r, fallback) => (r && r.d && typeof r.d.error === 'string' && r.d.error) || fallback;
   const DAYS = [['1', 'Mon'], ['2', 'Tue'], ['3', 'Wed'], ['4', 'Thu'], ['5', 'Fri'], ['6', 'Sat'], ['7', 'Sun']];
-  const S = { status: 'idle', ws: undefined, tab: 'pages', pages: [], avail: null, bookings: [], error: null, making: false, undo: null, feed: null };
+  const S = { status: 'idle', ws: undefined, pages: [], avail: null, bookings: [], error: null, undo: null, feed: null };
+  // each tab has its own address: /…/z/scheduling (Booking pages) · /…/z/scheduling/availability · /…/z/scheduling/bookings
+  const TABS = [['pages', 'Booking pages'], ['availability', 'Availability'], ['bookings', 'Bookings']];
+  const tabNow = () => { const it = String((X()?.S || {}).item || ''); return TABS.some(([k]) => k === it) ? it : 'pages'; };
+  const goTab = (k) => X()?.go?.('zone', { zone: 'scheduling', item: k === 'pages' ? null : k });
   const wsId = () => (window.XENO_SCOPE && window.XENO_SCOPE.served ? window.XENO_SCOPE.uuid() : null);
   const q = () => (S.ws ? '?workspace=' + encodeURIComponent(S.ws) : '');
   const withWs = (b) => ({ ...(b || {}), ...(S.ws ? { workspace: S.ws } : {}) });
@@ -35,25 +39,21 @@
   window.XENO_ZONE_LIVE = window.XENO_ZONE_LIVE || {};
   window.XENO_ZONE_LIVE['corpo.scheduling'] = {
     served: true,
+    items: true,
+    label: (item) => (TABS.find(([k]) => k === item) || [, item])[1],
     work: () => (S.status === 'ready' ? ['Upcoming', S.bookings.filter((x) => x.status === 'confirmed').slice(0, 6).map((x) => [`${x.pageTitle} · ${x.guestName}`, fmt(x.startsAt), null, 'Scheduling'])] : null),
     badge: () => null,
     page: () => page(),
-    state: () => ({ status: S.status, pages: S.pages.length, bookings: S.bookings.length, tab: S.tab }),
+    state: () => ({ status: S.status, pages: S.pages.length, bookings: S.bookings.length, tab: tabNow() }),
     reload: () => load(),
   };
 
   const btn = (attrs, label, cls = 'btn ghost') => `<button class="${cls}" ${attrs}>${esc(label)}</button>`;
   function pagesTab() {
-    const maker = S.making ? `<div class="sc-make" data-sc-make>
-        <input class="in" data-sc-title placeholder="Title, e.g. Intro call" aria-label="Title" maxlength="200">
-        <input class="in" data-sc-slug placeholder="link-name" aria-label="Link name" maxlength="63">
-        <label>Length <select class="in" data-sc-dur aria-label="Length">${[15, 30, 45, 60, 90].map((m) => `<option value="${m}" ${m === 30 ? 'selected' : ''}>${m} min</option>`).join('')}</select></label>
-        <label>Buffer <select class="in" data-sc-buf aria-label="Buffer">${[0, 5, 10, 15, 30].map((m) => `<option value="${m}">${m} min</option>`).join('')}</select></label>
-        <div>${btn('data-sc-save', 'Create booking page', 'btn')} ${btn('data-sc-cancel', 'Cancel')}</div></div>` : btn('data-sc-new', 'New booking page', 'btn');
     const list = S.pages.length ? S.pages.map((p) => `<div class="sc-row" data-sc-pg="${esc(p.id)}"><div><b>${esc(p.title)}</b><small>${esc(p.durationMinutes)} min${p.bufferMinutes ? ` · ${esc(p.bufferMinutes)} min buffer` : ''}${p.active ? '' : ' · closed'}</small>
       <a class="sc-link" href="${esc(p.url)}" target="_blank" rel="noopener" data-sc-url>${esc(p.url)}</a></div><div>${btn(`data-sc-copy="${esc(p.url)}"`, 'Copy link')} ${btn(`data-sc-del="${esc(p.id)}"`, 'Delete')}</div></div>`).join('')
-      : '<div class="pj-empty">No booking pages yet. Make one and share its link: guests pick a free time and it lands on your calendar.</div>';
-    return `<div class="sc-actions">${maker}</div>${list}`;
+      : '<div class="pj-empty">No booking pages yet. Make one with New booking page and share its link: guests pick a free time and it lands on your calendar.</div>';
+    return list;
   }
   function availTab() {
     const a = S.avail || { timezone: 'UTC', weekly: {}, timeOff: [] };
@@ -75,33 +75,36 @@
     return `<div class="sc-actions"><a class="btn ghost" href="/api/scheduling/events.ics${q()}" data-sc-export>Export .ics</a> ${btn('data-sc-feed', S.feed ? 'New feed link' : 'Calendar feed link')}</div>${feed}${list}`;
   }
   function page() {
-    const head = `<div class="pj-head"><div><small>Corpo</small><h1>Scheduling</h1></div></div><p class="hm-blurb">Booking pages people use to book time with you, your working hours, and what is booked.</p>`;
-    const wrap = (body) => `<div class="wrap pj hm" data-sc-page="${esc(S.status)}">${head}${body}</div>`;
+    // the page's one header (XENO_PAGES): tabs in the header bar, New booking page right in it, creating in a dialog
+    const h = window.XENO_PAGES.h, tab = tabNow();
+    const head = h.head({ title: 'Scheduling', sub: 'Booking pages people use to book time with you, your working hours, and what is booked.', acts: h.btn('New booking page', 'data-sc-new', false, 'plus') }) + h.tabs(TABS, tab, 'data-sc-tab');
+    const wrap = (body) => h.page(`${head}<div class="wrap pj hm" data-sc-page="${esc(S.status)}">${body}</div>`);
     if (S.status === 'idle' || S.status === 'loading' || S.ws !== wsId()) { if (S.status !== 'loading') load(); return wrap('<div class="pj-empty">Loading…</div>'); }
     if (S.status === 'error') return wrap(`<div class="pj-empty" data-sc-error>${esc(S.error)} ${btn('data-sc-reload', 'Try again')}</div>`);
-    const tabs = [['pages', 'Booking pages'], ['availability', 'Availability'], ['bookings', 'Bookings']].map(([id, n]) => `<button class="btn ${S.tab === id ? '' : 'ghost'}" data-sc-tab="${id}" aria-pressed="${S.tab === id}">${n}</button>`).join(' ');
     const undo = S.undo ? `<div class="sc-undo" data-sc-undone>“${esc(S.undo.title)}” was deleted. ${btn(`data-sc-undo="${esc(S.undo.id)}"`, 'Undo')}</div>` : '';
-    const body = S.tab === 'availability' ? availTab() : S.tab === 'bookings' ? bookingsTab() : pagesTab();
-    return wrap(`${undo}<div class="sc-tabs">${tabs}</div>${body}`);
+    const body = tab === 'availability' ? availTab() : tab === 'bookings' ? bookingsTab() : pagesTab();
+    return wrap(`${undo}${body}`);
   }
 
+  // New booking page: the workspace dialog (XD.form), never a form in the page
+  function newPage() {
+    window.XD.form({ title: 'New booking page', sub: 'Share its link: guests pick a free time and it lands on your calendar.', submit: 'Create booking page',
+      fields: [{ id: 'title', label: 'Title', required: true, max: 200, placeholder: 'Intro call' },
+        { id: 'slug', label: 'Link name', max: 60, placeholder: 'intro-call', hint: 'Letters, numbers and dashes. Left blank, it comes from the title.' },
+        { id: 'dur', type: 'seg', label: 'Length', value: '30', options: [15, 30, 45, 60, 90].map((m) => [String(m), m + ' min']) },
+        { id: 'buf', type: 'seg', label: 'Buffer', value: '0', options: [0, 5, 10, 15, 30].map((m) => [String(m), m + ' min']) }],
+      onSubmit: async (v) => { const r = await api('POST', '/api/scheduling/pages', withWs({ title: v.title, slug: String(v.slug || '').toLowerCase(), durationMinutes: Number(v.dur || 30), bufferMinutes: Number(v.buf || 0) })).catch(() => null); return r && r.ok ? null : said(r, 'That did not save.'); },
+    }).then((v) => { if (v) { toast('Booking page created'); if (tabNow() !== 'pages') goTab('pages'); load(); } });
+  }
   const localIso = (v) => (v ? new Date(v).toISOString() : '');
   document.addEventListener('click', async (e) => {
-    const t = e.target.closest('[data-sc-reload],[data-sc-tab],[data-sc-new],[data-sc-cancel],[data-sc-save],[data-sc-del],[data-sc-undo],[data-sc-copy],[data-sc-savehours],[data-sc-addoff],[data-sc-offdel],[data-sc-bkcancel],[data-sc-feed]');
-    if (!t || !t.closest('[data-sc-page]')) return;
+    const t = e.target.closest('[data-sc-reload],[data-sc-tab],[data-sc-new],[data-sc-del],[data-sc-undo],[data-sc-copy],[data-sc-savehours],[data-sc-addoff],[data-sc-offdel],[data-sc-bkcancel],[data-sc-feed]');
+    if (!t || !(t.closest('[data-sc-page]') || t.closest('#main .topbar'))) return;
     e.preventDefault(); e.stopPropagation();
-    const root = t.closest('[data-sc-page]'), d = t.dataset, val = (sel) => (root.querySelector(sel) || {}).value || '';
+    const root = document.querySelector('#main [data-sc-page]') || document.body, d = t.dataset, val = (sel) => (root.querySelector(sel) || {}).value || '';
     if ('scReload' in d) return load();
-    if (d.scTab) { S.tab = d.scTab; return paint(); }
-    if ('scNew' in d) { S.making = true; return paint(); }
-    if ('scCancel' in d) { S.making = false; return paint(); }
-    if ('scSave' in d) {
-      const title = val('[data-sc-title]').trim(), slug = val('[data-sc-slug]').trim().toLowerCase();
-      if (!title) return toast('Give the page a title');
-      const r = await api('POST', '/api/scheduling/pages', withWs({ title, slug, durationMinutes: Number(val('[data-sc-dur]') || 30), bufferMinutes: Number(val('[data-sc-buf]') || 0) })).catch(() => null);
-      if (!r || !r.ok) return toast(said(r, 'That did not save.'));
-      S.making = false; toast('Booking page created'); return load();
-    }
+    if (d.scTab) return goTab(d.scTab);
+    if ('scNew' in d) return newPage();
     if (d.scCopy) { try { await navigator.clipboard.writeText(d.scCopy); toast('Link copied'); } catch { toast(d.scCopy); } return; }
     if (d.scDel) {
       const r = await api('DELETE', `/api/scheduling/pages/${encodeURIComponent(d.scDel)}` + q()).catch(() => null);

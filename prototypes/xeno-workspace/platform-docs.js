@@ -131,8 +131,10 @@
   const btn = (attrs, label, cls = 'btn ghost') => `<button class="${cls}" ${attrs}>${esc(label)}</button>`;
   function page(z) {
     const S = Z(z), Zd = ZONES[z];
-    const head = `<div class="pj-head"><div><small>Office</small><h1>${esc(Zd.label)}</h1></div></div><p class="hm-blurb">${esc(Zd.blurb)}</p>`;
-    const wrap = (body) => `<div class="wrap pj hm" data-dc-page="${esc(S.status)}" data-dc-zone="${z}">${head}${body}</div>`;
+    // the page's one header (XENO_PAGES): New document / New note sits right in the header bar and opens the dialog
+    const h = window.XENO_PAGES.h, noun = Zd.noun;
+    const head = h.head({ title: Zd.label, sub: Zd.blurb, acts: h.btn(`New ${noun}`, `data-dc-new="${z}"`, false, 'plus') });
+    const wrap = (body) => h.page(`${head}<div class="wrap pj hm" data-dc-page="${esc(S.status)}" data-dc-zone="${z}">${body}</div>`);
     if (S.status === 'idle' || S.status === 'loading' || S.ws !== wsId()) { if (S.status !== 'loading') load(z); return wrap('<div class="pj-empty">Loading…</div>'); }
     if (S.status === 'error') return wrap(`<div class="pj-empty" data-dc-error>${esc(S.error)} ${btn('data-dc-reload', 'Try again')}</div>`);
     const want = item();
@@ -141,7 +143,7 @@
     const undo = S.undo ? `<div class="an-undo" data-dc-undone>“${esc(S.undo.title)}” was moved to the trash. ${btn(`data-dc-untrash="${esc(S.undo.id)}"`, 'Undo')}</div>` : '';
     const list = S.list.length ? S.list.map((d) => `<li class="dc-item ${S.openId === d.id ? 'on' : ''}"><a href="#" data-dc-open="${esc(d.id)}"><b>${esc(d.title)}</b><small>${esc(d.excerpt || 'Empty')}</small></a></li>`).join('')
       : `<li class="pj-empty" data-dc-none>${S.q ? 'Nothing matches.' : `No ${Zd.noun}s yet.`}</li>`;
-    const side = `<aside class="dc-side"><div class="dc-new"><input class="in" data-dc-title-new placeholder="New ${Zd.noun} title" aria-label="New ${Zd.noun} title" maxlength="200"> ${btn('data-dc-create', 'New', 'btn')}</div>
+    const side = `<aside class="dc-side">
       <input class="in" type="search" data-dc-search placeholder="Search ${Zd.label === 'Write' ? 'documents' : 'notes'}" aria-label="Search" value="${esc(S.q)}"><ul class="dc-list" data-dc-list>${list}</ul></aside>`;
     return wrap(`${undo}<div class="dc-wrap">${side}<section class="dc-main">${editor(z)}</section></div>`);
   }
@@ -183,19 +185,18 @@
     if (okMsg) toast(okMsg); return r.d;
   }
   document.addEventListener('click', async (e) => {
-    const t = e.target.closest('[data-dc-reload],[data-dc-open],[data-dc-create],[data-dc-fmt],[data-dc-linkto],[data-dc-save],[data-dc-history],[data-dc-restore],[data-dc-trash],[data-dc-untrash],[data-dc-share],[data-doc-link]');
+    const nw = e.target.closest('#main [data-dc-new]');
+    if (nw) { e.preventDefault(); e.stopPropagation(); const z = nw.dataset.dcNew, S = Z(z);
+      return window.XD.form({ title: `New ${ZONES[z].noun}`, submit: 'Create', size: 'sm', fields: [{ id: 'title', label: 'Title', required: true, max: 200 }],
+        onSubmit: async (v) => { const r = await send(z, 'POST', '/api/workspace-docs', { kind: ZONES[z].kind, title: v.title, markdown: '', ...(S.ws ? { workspace: S.ws } : {}) }, 'Created'); if (!r) return 'That did not save.'; S.made = r.doc.id; return null; },
+      }).then(async (v) => { if (!v || !S.made) return; const id = S.made; S.made = null; await load(z); go(z, id); }); }
+    const t = e.target.closest('[data-dc-reload],[data-dc-open],[data-dc-fmt],[data-dc-linkto],[data-dc-save],[data-dc-history],[data-dc-restore],[data-dc-trash],[data-dc-untrash],[data-dc-share],[data-doc-link]');
     if (!t || !t.closest('[data-dc-page]')) return;
     const root = t.closest('[data-dc-page]'), z = root.dataset.dcZone, S = Z(z), d = t.dataset;
     if ('docLink' in d && t.closest('[contenteditable="true"]')) return;   // editing text: a link is not followed
     e.preventDefault(); e.stopPropagation();
     if ('dcReload' in d) return load(z);
     if (d.dcOpen || d.docLink) { const id = d.dcOpen || d.docLink; const into = d.dcIn || (S.list.some((x) => x.id === id) ? z : (z === 'write' ? 'notes' : 'write')); return go(into, id); }
-    if ('dcCreate' in d) {
-      const title = (root.querySelector('[data-dc-title-new]') || {}).value || '';
-      if (!title.trim()) return toast('Give it a title first');
-      const r = await send(z, 'POST', '/api/workspace-docs', { kind: ZONES[z].kind, title, markdown: '', ...(S.ws ? { workspace: S.ws } : {}) }, 'Created');
-      if (r) { await load(z); go(z, r.doc.id); } return;
-    }
     if (d.dcFmt === 'doclink') { keep(root, S); S.picking = !S.picking; return paint(); }
     if (d.dcFmt) return fmt(d.dcFmt, root);
     if (d.dcLinkto) { const body = root.querySelector('[data-dc-body]'); body.focus(); const label = String(window.getSelection() || '') || d.dcLinklabel; document.execCommand('insertHTML', false, `<a href="#" data-doc-link="${esc(d.dcLinkto)}">${esc(label)}</a>&nbsp;`); S.picking = false; keep(root, S); return paint(); }

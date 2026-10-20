@@ -296,6 +296,11 @@ html[data-panel="open"] .topbar .crumbs{display:flex}   /* the header always sho
 .pg-head .pg-ttl h1{font-size:clamp(22px,1.7vw,26px)}
 @media (max-width:900px){.mfoot>span{display:none}.mfoot{justify-content:flex-end}}
 .pg{padding-right:calc(var(--g) - var(--sb, 0px))}
+/* a module's body inside the page frame (Customers, Scheduling, Analytics, Write/Notes, Publish): the frame owns the
+   gutters, so the old standalone .wrap column (max-width + its own padding) must not nest a second one inside it */
+.pg>.wrap{max-width:none;margin:0;padding:0}
+.pg-top-tools label{display:inline-flex;align-items:center;gap:6px;font-size:12.5px;color:var(--muted);white-space:nowrap}
+.pg-top-tools select{height:28px;padding:0 8px;border-radius:6px;border:1px solid var(--n35);background:var(--n20);color:var(--text);font:inherit;font-size:12.5px;outline:0}
 .wrap.rp-page{max-width:none;margin:0;padding:22px calc(var(--g) - var(--sb, 0px)) 32px var(--g)}
 /* No visible scrollbars anywhere — every container still scrolls (wheel, trackpad, keyboard, touch).
    With no bar there is nothing to take width away, so content never shifts when a page starts scrolling. */

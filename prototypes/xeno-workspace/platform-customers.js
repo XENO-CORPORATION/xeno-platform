@@ -62,15 +62,15 @@
   const btn = (attrs, label, cls = 'btn ghost') => `<button class="${cls}" ${attrs}>${esc(label)}</button>`;
   function page() {
     const item = itemNow(), [view, cid] = item.split('/');
-    const head = `<div class="pj-head"><div><small>Corpo</small><h1>Customers</h1></div><div>${btn('data-cr-add', 'New contact', 'btn')}</div></div><p class="hm-blurb">Your workspace’s contacts, companies and deals. Agents read and draft; people keep, confirm and delete.</p>`;
-    const wrap = (body) => `<div class="wrap pj hm cr" data-cr-page="${esc(S.status)}" data-cr-view="${esc(view)}">${head}${body}</div>`;
+    // the page's one header (XENO_PAGES): the views are tabs in the header bar and New contact sits right in it;
+    // creating opens the workspace dialog, never a form stacked in the body
+    const h = window.XENO_PAGES.h;
+    const acts = (view === 'companies' ? h.btn('New company', 'data-cr-co-new', true, 'plus') : '') + h.btn('New contact', 'data-cr-add', false, 'plus');
+    const head = h.head({ title: 'Customers', sub: 'Your workspace’s contacts, companies and deals. Agents read and draft; people keep, confirm and delete.', acts }) + h.tabs(VIEWS, view, 'data-cr-view-go');
+    const wrap = (body) => h.page(`${head}<div class="wrap pj hm cr" data-cr-page="${esc(S.status)}" data-cr-view="${esc(view)}">${body}</div>`);
     if (S.status === 'idle' || S.status === 'loading' || S.ws !== wsId()) { if (S.status !== 'loading') load(); return wrap('<div class="pj-empty">Loading…</div>'); }
     if (S.status === 'error') return wrap(`<div class="pj-empty" data-cr-error>${esc(S.error)} ${btn('data-cr-reload', 'Try again')}</div>`);
-    const tabs = `<div class="cr-tabs">${VIEWS.map(([id, label]) => `<button class="btn ${view === id ? '' : 'ghost'}" data-cr-view-go="${id}" aria-pressed="${view === id}">${esc(label)}</button>`).join(' ')}</div>`;
     const sum = S.summary ? `<div class="cr-sum"><span><b>${S.summary.contacts}</b> contacts</span><span><b>${S.summary.companies}</b> companies</span><span><b>${S.summary.openDeals}</b> open deals · ${esc(money(S.summary.openCents))}</span>${S.summary.drafts ? `<span data-cr-drafts><b>${S.summary.drafts}</b> agent drafts to review</span>` : ''}</div>` : '';
-    const adder = S.adding ? `<div class="cr-form" data-cr-form><input class="in" data-cr-f="name" placeholder="Name" aria-label="Name" maxlength="200"><input class="in" data-cr-f="email" placeholder="Email" aria-label="Email" maxlength="320"><input class="in" data-cr-f="phone" placeholder="Phone" aria-label="Phone" maxlength="60">
-      <select class="in" data-cr-f="companyId" aria-label="Company"><option value="">No company</option>${S.companies.map((c) => `<option value="${esc(c.id)}">${esc(c.name)}</option>`).join('')}</select>
-      <div class="cr-row">${btn('data-cr-save-contact', 'Add contact', 'btn')} ${btn('data-cr-cancel', 'Cancel')}</div></div>` : '';
     let body = '';
     if (view === 'contacts' && cid) body = contactPage(cid);
     else if (view === 'pipeline') body = pipelinePage();
@@ -78,7 +78,7 @@
     else if (view === 'import') body = importPage();
     else if (view === 'duplicates') body = dupPage();
     else body = contactsPage();
-    return wrap(`${sum}${tabs}${adder}${body}`);
+    return wrap(`${sum}${body}`);
   }
   function contactsPage() {
     const rows = S.contacts.map((c) => `<button class="cr-li" data-cr-open="${esc(c.id)}"><b>${esc(c.name)}</b><small>${esc(c.email || '')}</small><small>${esc(c.companyName || '')}</small><small>${c.tags.map(esc).join(', ')}</small></button>`).join('');
@@ -111,7 +111,7 @@
   }
   function companiesPage() {
     const rows = S.companies.map((c) => `<div class="cr-li"><b>${esc(c.name)}</b><small>${esc(c.domain || '')}</small><small>${esc(c.contacts)} contacts</small>${btn(`data-cr-del-company="${esc(c.id)}"`, 'Delete')}</div>`).join('');
-    return `<div class="cr-form cr-inline"><input class="in" data-cr-co-name placeholder="Company name" aria-label="Company name"><input class="in" data-cr-co-domain placeholder="domain.com" aria-label="Domain">${btn('data-cr-add-company', 'Add company', 'btn')}</div>${rows ? `<div class="cr-list">${rows}</div>` : '<div class="pj-empty">No companies yet.</div>'}`;
+    return `${rows ? `<div class="cr-list">${rows}</div>` : '<div class="pj-empty">No companies yet. Add one with New company.</div>'}`;
   }
   function importPage() {
     const r = S.importReport;
@@ -133,26 +133,34 @@
     if (!r || !r.ok) { toast(said(r, 'That did not work.')); return null; }
     if (okMsg) toast(okMsg); return r.d;
   }
+  // New contact / New company: the workspace dialog (XD.form)
+  function newContact() {
+    window.XD.form({ title: 'New contact', submit: 'Add contact',
+      fields: [{ id: 'name', label: 'Name', required: true, max: 200 }, { id: 'email', label: 'Email', max: 320 }, { id: 'phone', label: 'Phone', max: 60 },
+        ...(S.companies.length ? [{ id: 'companyId', type: 'choice', label: 'Company', value: '', options: [['', 'No company'], ...S.companies.map((c) => [c.id, c.name])] }] : [])],
+      onSubmit: async (v) => { const r = await api('POST', '/api/customers/contacts' + q(), withWs({ name: v.name, email: v.email || undefined, phone: v.phone || undefined, companyId: v.companyId || undefined })).catch(() => null); if (!r || !r.ok) return said(r, 'That did not save.'); S.made = r.d.contact.id; return null; },
+    }).then(async (v) => { if (!v || !S.made) return; const id = S.made; S.made = null; toast('Contact added'); await load(); goItem('contacts/' + id); });
+  }
+  function newCompany() {
+    window.XD.form({ title: 'New company', submit: 'Add company', size: 'sm',
+      fields: [{ id: 'name', label: 'Company name', required: true, max: 200 }, { id: 'domain', label: 'Domain', max: 200, placeholder: 'domain.com' }],
+      onSubmit: async (v) => { const r = await api('POST', '/api/customers/companies' + q(), withWs({ name: v.name, domain: v.domain || undefined })).catch(() => null); return r && r.ok ? null : said(r, 'That did not save.'); },
+    }).then((v) => { if (v) { toast('Company added'); load(); } });
+  }
+
   document.addEventListener('click', async (e) => {
-    const t = e.target.closest('[data-cr-reload],[data-cr-add],[data-cr-cancel],[data-cr-save-contact],[data-cr-view-go],[data-cr-open],[data-cr-add-act],[data-cr-keep],[data-cr-discard],[data-cr-add-deal],[data-cr-confirm-deal],[data-cr-link],[data-cr-new-task],[data-cr-export],[data-cr-erase],[data-cr-delete],[data-cr-add-company],[data-cr-del-company],[data-cr-preview],[data-cr-run-import],[data-cr-merge-into],[data-cr-ticket],[data-cr-task]');
-    if (!t || !t.closest('[data-cr-page]')) return;
+    const t = e.target.closest('[data-cr-reload],[data-cr-add],[data-cr-co-new],[data-cr-view-go],[data-cr-open],[data-cr-add-act],[data-cr-keep],[data-cr-discard],[data-cr-add-deal],[data-cr-confirm-deal],[data-cr-link],[data-cr-new-task],[data-cr-export],[data-cr-erase],[data-cr-delete],[data-cr-del-company],[data-cr-preview],[data-cr-run-import],[data-cr-merge-into],[data-cr-ticket],[data-cr-task]');
+    if (!t || !(t.closest('[data-cr-page]') || t.closest('#main .topbar'))) return;
     e.preventDefault(); e.stopPropagation();
-    const root = t.closest('[data-cr-page]'), d = t.dataset, cid = S.contact && S.contact.id;
+    const root = document.querySelector('#main [data-cr-page]') || document.body, d = t.dataset, cid = S.contact && S.contact.id;
     const refreshContact = () => { S.contactId = null; load(); };
     if ('crReload' in d) return load();
-    if ('crAdd' in d) { S.adding = true; return paint(); }
-    if ('crCancel' in d) { S.adding = false; return paint(); }
+    if ('crAdd' in d) return newContact();
+    if ('crCoNew' in d) return newCompany();
     if (d.crViewGo) { S.pipeline = null; S.dups = null; return goItem(d.crViewGo); }
     if (d.crOpen) return goItem('contacts/' + d.crOpen);
     if (d.crTicket) return X()?.go?.('global', { global: 'support', item: d.crTicket });
     if (d.crTask) return X()?.go?.('global', { global: 'tasks', item: d.crTask });
-    if ('crSaveContact' in d) {
-      const f = (k) => val(root, `[data-cr-f="${k}"]`);
-      if (!f('name')) return toast('Give the contact a name');
-      const r = await act('POST', '/api/customers/contacts' + q(), { name: f('name'), email: f('email') || undefined, phone: f('phone') || undefined, companyId: f('companyId') || undefined }, 'Contact added');
-      if (r) { S.adding = false; await load(); return goItem('contacts/' + r.contact.id); }
-      return;
-    }
     if ('crAddAct' in d && cid) { const body = val(root, '[data-cr-body]'); if (!body) return toast('Write something first'); if (await act('POST', `/api/customers/contacts/${cid}/activities` + q(), { kind: val(root, '[data-cr-kind]') || 'note', body }, 'Added')) refreshContact(); return; }
     if (d.crKeep) { if (await act('POST', `/api/customers/activities/${d.crKeep}/keep` + q(), {}, 'Kept')) refreshContact(); return; }
     if (d.crDiscard) { if (await act('POST', `/api/customers/activities/${d.crDiscard}/keep` + q(), { discard: true }, 'Discarded')) refreshContact(); return; }
@@ -170,7 +178,6 @@
       if (await act('POST', `/api/customers/contacts/${cid}/erase` + q(), {}, 'Erased')) { await load(); return goItem('contacts'); } return; }
     if ('crDelete' in d && cid) { if (!window.confirm(`Delete ${S.contact.name}?`)) return;
       if (await act('DELETE', `/api/customers/contacts/${cid}` + q(), null, 'Deleted')) { await load(); return goItem('contacts'); } return; }
-    if ('crAddCompany' in d) { const name = val(root, '[data-cr-co-name]'); if (!name) return toast('Name the company'); if (await act('POST', '/api/customers/companies' + q(), { name, domain: val(root, '[data-cr-co-domain]') || undefined }, 'Company added')) load(); return; }
     if (d.crDelCompany) { if (!window.confirm('Delete this company? Its contacts stay.')) return; if (await act('DELETE', `/api/customers/companies/${d.crDelCompany}` + q(), null, 'Deleted')) load(); return; }
     if ('crPreview' in d || 'crRunImport' in d) {
       const csv = val(root, '[data-cr-csv]'); S.importCsv = csv; if (!csv) return toast('Paste or choose a CSV first');

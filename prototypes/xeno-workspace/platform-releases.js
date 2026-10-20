@@ -98,11 +98,10 @@
       <label>Test proof<input name="testProof" value="${esc(f.testProof || '')}" maxlength="500"></label>
       <div class="sp-row">${h.btn(S.busy ? 'Saving…' : 'Save', `type="submit"${S.busy ? ' disabled' : ''}`)}</div></form>`;
     const notes = (f.notes || []).map((n) => `<article class="pg-post${n.state === 'draft' ? ' sp-draft' : ''}" data-note="${esc(n.id)}"><span class="pg-av">N</span><div><div class="sp-meta"><b>${esc(n.title)}</b> <span class="pg-tag">${esc(n.state === 'draft' ? `Draft by ${n.draftedByKind === 'agent' ? 'an agent' : 'staff'} — customers do not see it` : n.state === 'approved' ? 'Approved' : 'Withdrawn')}</span></div><div class="sp-body">${esc(n.body)}</div>${n.state === 'draft' ? `<div class="sp-row">${h.btn('Approve', `data-rl-approve="${esc(n.id)}"`)}${h.btn('Withdraw', `data-rl-withdraw="${esc(n.id)}"`, true)}</div>` : n.state === 'approved' ? `<div class="sp-row">${h.btn('Withdraw', `data-rl-withdraw="${esc(n.id)}"`, true)}</div>` : ''}</div></article>`).join('');
-    return h.page(h.head({ eyebrow: '<a data-rl-go="features">Features</a>', title: f.title, sub: `${f.repo} · ${f.slug}${f.provenance === 'derived' ? ' · derived from history: ' + (f.evidence || '') : ''}` })
+    return h.page(h.head({ eyebrow: '<a data-rl-go="features">Features</a>', acts: h.btn('New customer note', 'data-rl-create="note"', false, 'plus'), title: f.title, sub: `${f.repo} · ${f.slug}${f.provenance === 'derived' ? ' · derived from history: ' + (f.evidence || '') : ''}` })
       + (S.err ? `<p class="sp-err" role="alert">${esc(S.err)}</p>` : '')
       + `<div class="sp-layout with-console"><div class="pg-thread">
           <h3 class="rl-h">Customer notes</h3>${notes || '<p class="pg-dim">No notes yet. A customer sees a note only once it is approved, the feature is live, and it is enabled for them.</p>'}
-          <form class="sp-form" data-rl-form="note"><label>Title<input name="title" maxlength="160" required placeholder="What they can do now"></label><label>Note<textarea name="body" rows="4" maxlength="4000" required placeholder="Plain language: the outcome, never how it was built"></textarea></label><div class="sp-row">${h.btn('Save draft', 'type="submit"')}</div></form>
           <h3 class="rl-h">Changes</h3>${(f.changes || []).length ? h.table(['Kind', 'Change', 'When'], f.changes.map((c) => h.tr('', [esc(c.kind), c.url ? `<a href="${esc(c.url)}" target="_blank" rel="noopener">${esc(c.kind === 'pr' ? '#' + c.id : c.id)}</a> ${esc(c.title)}` : `${esc(c.id)} ${esc(c.title)}`, esc(when(c.at))]))) : '<p class="pg-dim">No changes linked.</p>'}
         </div><aside class="sp-console" aria-label="Feature controls">${controls}</aside></div>`);
   }
@@ -144,7 +143,16 @@
   }
   const list = (v) => String(v || '').split(',').map((s) => s.trim()).filter(Boolean);
 
+  // a customer note is drafted in the workspace dialog (XD.form), from the header's New customer note
+  function newNote() {
+    const id = S.feature && S.feature.id; if (!id) return;
+    window.XD.form({ title: 'New customer note', sub: 'A customer sees it only once a person on staff approves it, the feature is live, and it is enabled for them.', submit: 'Save draft',
+      fields: [{ id: 'title', label: 'Title', required: true, max: 160, placeholder: 'What they can do now' }, { id: 'body', type: 'textarea', label: 'Note', required: true, rows: 5, max: 4000, placeholder: 'Plain language: the outcome, never how it was built' }],
+      onSubmit: async (v) => { const r = await api('POST', `/api/releases/features/${id}/notes`, { title: v.title, body: v.body }); return r.ok ? null : said(r, 'That did not work'); },
+    }).then((v) => { if (v) { toast('Draft saved'); refresh(); } });
+  }
   document.addEventListener('click', (e) => {
+    const nn = e.target.closest('[data-rl-create]'); if (nn && nn.closest('#main')) { e.preventDefault(); return newNote(); }
     const t = e.target.closest('[data-rl-go],[data-rl-reload],[data-rl-repo],[data-rl-notes],[data-rl-approve],[data-rl-withdraw]');
     if (!t || !t.closest('#main, #panel')) return;
     e.preventDefault();
@@ -161,7 +169,6 @@
     e.preventDefault();
     const v = Object.fromEntries(new FormData(f).entries()), kind = f.dataset.rlForm;
     if (kind === 'filter') { S.q = v.q || ''; S.repo = v.repo || ''; lastLoad = ''; return loadFor(here()); }
-    if (kind === 'note' && S.feature) return act('POST', `/api/releases/features/${S.feature.id}/notes`, { title: v.title, body: v.body }, 'Draft saved');
     if (kind === 'feature' && S.feature) return act('PATCH', `/api/releases/features/${S.feature.id}`, { status: v.status, enabledScope: v.enabledScope, enabledPlans: list(v.enabledPlans), workspaceIds: list(v.workspaceIds), specRef: v.specRef || null, testProof: v.testProof || null }, 'Saved');
   });
 
