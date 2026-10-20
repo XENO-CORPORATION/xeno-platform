@@ -141,6 +141,8 @@ test('device consent presentation comes from the registered client join', async 
     client_id: 'xeno-hub',
     client_name: 'XENO Hub',
     scope: 'openid profile',
+    // a registered first-party client, not a self-registered one (b6836ac7 added the flag to the consent view)
+    unverified: false,
   });
 });
 
