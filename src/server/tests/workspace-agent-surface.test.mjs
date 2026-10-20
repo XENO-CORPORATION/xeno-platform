@@ -162,8 +162,8 @@ async function main() {
     check(wrongWs.s === 403 && wrongWs.j.code === 'grant_missing', 'a grant in one workspace opens nothing in another');
 
     // step-up: an irreversible capability needs a fresh sign-in
-    check(stepUpReason(byName.get('canvas.item.update')) === 'irreversible' && stepUpReason({ class: 'undoable', cost: { model: 'quoted' } }, { estimatedCredits: 5001 }) === 'spend'
-      && stepUpReason({ class: 'undoable', cost: { model: 'quoted' } }, { estimatedCredits: 4000, teamLeftCredits: 1000 }) === 'spend' && stepUpReason({ class: 'undoable', cost: { model: 'quoted' } }, { estimatedCredits: 4000 }) === null,
+    check(stepUpReason(byName.get('canvas.item.update')) === 'irreversible' && stepUpReason({ class: 'undoable', cost: { model: 'quoted' } }, { serverCredits: 5001 }) === 'spend'
+      && stepUpReason({ class: 'undoable', cost: { model: 'quoted' } }, { serverCredits: 4000, teamLeftCredits: 1000 }) === 'spend' && stepUpReason({ class: 'undoable', cost: { model: 'quoted' } }, { serverCredits: 4000 }) === null,
     'step-up rule: irreversible always; spend above the lower of the team budget and EUR 50');
     const old = await signIn('Old sign-in', 'tasks:write storage:read', { authAgoSec: 3600 });
     const su = await call('POST', '/api/v1/canvas/item/update', { token: old.token, body: { canvas: crypto.randomUUID(), changes: [] } });
