@@ -6,6 +6,8 @@ import xenoTasksRoutes, { taskTokenAuth, unlessTaskToken, mcpChallenge, protecte
 import { TASKS_OPENAPI } from './services/tasksOpenApi.js';
 import platformAgentRoutes from './routes/platformAgentRoutes.js';
 import workforceDivisionRoutes from './routes/workforceDivisionRoutes.js';
+import orchestratorRoutes from './routes/orchestratorRoutes.js';
+import workforceEventRoutes from './routes/workforceEventRoutes.js';
 import workspaceApiRoutes from './routes/workspaceApiRoutes.js';
 import xenoMcpRoutes, { management as xenoMcpManagement, personOnly as mcpPersonOnly, mcpResourceMetadata } from './routes/xenoMcpRoutes.js';
 import userNotificationsRoutes from './routes/userNotificationsRoutes.js';
@@ -677,6 +679,8 @@ app.use('/api/mcp', databaseMiddleware, authMiddleware, requireActivated, mcpPer
 app.use('/api/v1', databaseMiddleware, workspaceApiRoutes);
 app.use('/api/agents', databaseMiddleware, authMiddleware, requireActivated, mcpPersonOnly, platformAgentRoutes);
 app.use('/api/divisions', databaseMiddleware, authMiddleware, requireActivated, mcpPersonOnly, workforceDivisionRoutes);
+app.use('/api/orchestrator', databaseMiddleware, authMiddleware, requireActivated, mcpPersonOnly, orchestratorRoutes);
+app.use('/api/audit', databaseMiddleware, authMiddleware, requireActivated, mcpPersonOnly, workforceEventRoutes);
 app.use('/api/notifications', databaseMiddleware, authMiddleware, requireActivated, userNotificationsRoutes);
 console.log('🏢 Workspace routes integrated: /api/workspaces/* + /api/workspace-invites/*');
 

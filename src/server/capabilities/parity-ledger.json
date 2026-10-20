@@ -124,7 +124,9 @@
   "publishRoutes.js": "publish",
   "platform-publish.js": "publish",
   "supportRoutes.js": "support",
-  "platform-support.js": "support"
+  "platform-support.js": "support",
+  "orchestratorRoutes.js": "workforce",
+  "workforceEventRoutes.js": "workforce"
  },
  "actions": {
   "route:accountGiftRoutes.js:POST /": {
@@ -8135,6 +8137,60 @@
    "status": "planned",
    "class": "reversible",
    "scope": "agents:write"
+  },
+  "route:orchestratorRoutes.js:GET /graph": {
+   "status": "capability",
+   "capability": "orchestrator.graph.get",
+   "class": "safe",
+   "scope": "tasks:read"
+  },
+  "route:orchestratorRoutes.js:GET /ready": {
+   "status": "capability",
+   "capability": "orchestrator.ready.list",
+   "class": "safe",
+   "scope": "tasks:read"
+  },
+  "route:orchestratorRoutes.js:POST /edges": {
+   "status": "capability",
+   "capability": "orchestrator.edge.add",
+   "class": "reversible",
+   "scope": "tasks:write"
+  },
+  "route:orchestratorRoutes.js:DELETE /edges/:edgeId": {
+   "status": "capability",
+   "capability": "orchestrator.edge.remove",
+   "class": "reversible",
+   "scope": "tasks:write"
+  },
+  "route:orchestratorRoutes.js:GET /plans": {
+   "status": "capability",
+   "capability": "orchestrator.plan.list",
+   "class": "safe",
+   "scope": "tasks:read"
+  },
+  "route:orchestratorRoutes.js:POST /plans": {
+   "status": "capability",
+   "capability": "orchestrator.plan.create",
+   "class": "reversible",
+   "scope": "tasks:write"
+  },
+  "route:orchestratorRoutes.js:GET /plans/:planId": {
+   "status": "capability",
+   "capability": "orchestrator.plan.get",
+   "class": "safe",
+   "scope": "tasks:read"
+  },
+  "route:orchestratorRoutes.js:POST /plans/:planId/attempts": {
+   "status": "capability",
+   "capability": "orchestrator.attempt.start",
+   "class": "irreversible",
+   "scope": "tasks:write"
+  },
+  "route:workforceEventRoutes.js:GET /events": {
+   "status": "capability",
+   "capability": "audit.event.list",
+   "class": "safe",
+   "scope": "workspace:read"
   }
  }
 }

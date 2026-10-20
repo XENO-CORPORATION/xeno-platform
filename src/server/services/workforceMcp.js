@@ -21,11 +21,13 @@ import * as authority from './workforceRunAuthority.js';
 import * as divisions from './workforceDivisions.js';
 import * as goals from './projectWorktree.js';
 import * as funding from './workforceFunding.js';
+import * as orch from './workforceOrchestrator.js';
+import * as wfEvents from './workforceEvents.js';
 import { WORKFORCE_SHAPES } from '../routes/workforceRoutes.js';
 
 /** §11.1 closed error vocabulary: a service error with one of these codes is the caller's answer, not a crash. */
 export const WORKFORCE_CODES = Object.freeze(['bad_input', 'not_found', 'denied', 'needs_approval', 'conflict', 'rate_limited', 'unavailable', 'timeout', 'internal',
-  'not_allowed', 'workspace_not_found', 'division_not_found', 'forbidden', 'invalid_name']);
+  'not_allowed', 'workspace_not_found', 'division_not_found', 'forbidden', 'invalid_name', 'cycle', 'blocked', 'link_cycle']);
 export class WorkforceMcpError extends Error { constructor(message, code) { super(message); this.name = 'WorkforceMcpError'; this.code = code; } }
 export const isWorkforceError = (e) => e instanceof WorkforceMcpError || (e && typeof e.code === 'string' && (WORKFORCE_CODES.includes(e.code) || /^[A-Z_]{4,64}$/.test(e.code) || (Number(e.status || e.statusCode) >= 400 && Number(e.status || e.statusCode) < 500)));
 
@@ -79,6 +81,17 @@ const DEFS = [
   ['funding_contribute', 'Contribute credits to a project', DX, 'funding.contribution.create (agent.funding.contribute): move your owner’s credits into a project’s funding. Irreversible spend: needs wallet:spend and a fresh sign-in.', free('the /funding/contributions body', ['operationId']), (db, a, v) => funding.contributeFunding(db, ctxOf(a), v)],
   ['funding_contribution_get', 'Read a contribution', RO, 'funding.contribution.get (agent.funding.contribution_get).', free('the /funding/contributions/read body'), (db, a, v) => funding.readFundingContribution(db, ctxOf(a), v)],
   ['funding_contribution_return', 'Return a contribution', DX, 'funding.contribution.return (agent.funding.return): return an unspent contribution to its contributor.', free('the /funding/contributions/return body'), (db, a, v) => funding.returnFundingContribution(db, ctxOf(a), v)],
+  // ── orchestrator.* (xeno-orchestrator on the platform: dependency edges, plans, attempts bound to admissions, ready set)
+  ['orchestrator_graph_get', 'Read a dependency graph', RO, 'orchestrator.graph.get: a project’s tasks, goals and objectives with every dependency edge and per node done / ready / blockedBy.', free('{ projectId }', ['projectId']), (db, a, v) => orch.readGraph(db, meOf(a), v)],
+  ['orchestrator_ready_list', 'List ready work', RO, 'orchestrator.ready.list: what can start now in a project (every blocker done). kind: task (default) | goal | objective | any.', free('{ projectId, kind? }', ['projectId']), (db, a, v) => orch.readReady(db, meOf(a), v)],
+  ['orchestrator_edge_add', 'Add a dependency', RW, 'orchestrator.edge.add: `from` must finish before `to` starts. Each end is { kind: task | goal | objective, id } (a task may be { kind: "task", key: "T-n" }). A task→task edge is the task’s own "blocks" link. A loop is refused (cycle).', free('{ from, to }', ['from', 'to']), (db, a, v) => orch.addEdge(db, meOf(a), v)],
+  ['orchestrator_edge_remove', 'Remove a dependency', RW, 'orchestrator.edge.remove: { edgeId } from orchestrator.graph.get.', free('{ edgeId }', ['edgeId']), (db, a, v) => orch.removeEdge(db, meOf(a), v)],
+  ['orchestrator_plan_list', 'List plans', RO, 'orchestrator.plan.list: the plans of a project.', free('{ projectId }', ['projectId']), (db, a, v) => orch.listPlans(db, meOf(a), v)],
+  ['orchestrator_plan_create', 'Create a plan', RW, 'orchestrator.plan.create (project editor): { projectId, name, steps: [{ task: "T-n", maxAttempts? }] }. Order comes from the dependency graph.', free('{ projectId, name, steps }', ['projectId', 'name', 'steps']), (db, a, v) => orch.createPlan(db, meOf(a), v)],
+  ['orchestrator_plan_get', 'Read a plan', RO, 'orchestrator.plan.get: steps in dependency order with readiness and attempts (each attempt’s state follows its run).', free('{ planId }', ['planId']), (db, a, v) => orch.getPlan(db, meOf(a), v)],
+  ['orchestrator_attempt_start', 'Start an attempt', RW, 'orchestrator.attempt.start: bind the next attempt of a ready step to a run YOU admitted on the plan’s project (run.admission.create first). Refused while blocked, while an attempt runs, or with no attempts left.', free('{ planId, task, admissionId }', ['planId', 'task', 'admissionId']), (db, a, v) => orch.startAttempt(db, meOf(a), v)],
+  // ── audit.* (§15 the typed workforce event stream, scoped per row)
+  ['audit_events_list', 'Read the audit trail', RO, 'audit.event.list: the workforce events of one scope (workspace:<id> | division:<id> | project:<id>), newest first; rows you may not see are counted in hidden. Page with before / after.', free('{ scope, before?, after?, limit?, types? }', ['scope']), (db, a, v) => wfEvents.listEvents(db, meOf(a), v)],
 ];
 const meOf = (actor) => ({ id: String(actor.id), kind: actor.kind || 'agent' });
 
@@ -99,6 +112,9 @@ export const TOOL_ROUTE = Object.freeze({
   objective_create: { wrap: 'result' }, objective_get: { wrap: 'result' }, objective_update: { wrap: 'result' }, objective_complete: { wrap: 'result' }, objective_link_goal: { wrap: 'result' },
   funding_price: { wrap: 'result' }, funding_budget_propose: { wrap: 'result' }, funding_budget_get: { wrap: 'result' }, funding_offer_get: { wrap: 'result' },
   funding_contribute: { wrap: 'result' }, funding_contribution_get: { wrap: 'result' }, funding_contribution_return: { wrap: 'result' },
+  orchestrator_graph_get: { wrap: 'graph' }, orchestrator_ready_list: { wrap: '...' }, orchestrator_edge_add: { wrap: '...' }, orchestrator_edge_remove: { wrap: '...' },
+  orchestrator_plan_list: { wrap: '...' }, orchestrator_plan_create: { wrap: '...' }, orchestrator_plan_get: { wrap: '...' }, orchestrator_attempt_start: { wrap: '...' },
+  audit_events_list: { wrap: '...' },
 });
 
 /** Shape a service result exactly as its route would. Null from a projection is a refusal, as on the route. */
