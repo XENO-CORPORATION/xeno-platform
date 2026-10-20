@@ -146,6 +146,7 @@
         ${closedNote(m.projects.hidden, m.projects.hidden === 1 ? 'project' : 'projects')}</section>
       ${m.funding.rows.length || m.funding.hidden ? `<section class="pg-sec" data-sec="funding"><h3>Funding pools</h3>${m.funding.rows.length ? h.table(['Pool', 'Status', 'Balance'], m.funding.rows.map((f) => h.tr('', [esc(f.milestone || f.beneficiary), esc(f.status), `${fmt(f.balanceCredits)} credits`]))) : ''}${closedNote(m.funding.hidden, m.funding.hidden === 1 ? 'pool' : 'pools')}</section>` : ''}
       ${m.handoffs.rows.length || m.handoffs.hidden ? `<section class="pg-sec" data-sec="handoffs"><h3>Handoffs</h3>${m.handoffs.rows.length ? h.table(['From', 'To', 'Work', 'State'], m.handoffs.rows.map((x) => h.tr('', [esc(x.from.name), esc(x.to.name), esc(x.work.type), esc(x.state)]))) : ''}${closedNote(m.handoffs.hidden, m.handoffs.hidden === 1 ? 'handoff' : 'handoffs')}</section>` : ''}
+      ${window.XENO_CORPUS?.served ? window.XENO_CORPUS.section('division', d.id, h) : ''}
       ${m.decisions.length ? `<section class="pg-sec" data-sec="decisions"><h3>Decisions</h3>${h.table(['Decision', 'By', 'Why', 'When'], m.decisions.map((x) => h.tr('', [esc(DECISION[x.kind] || x.kind), esc(x.by), `<small class="pg-dim">${esc(x.rationale || '—')}</small>`, day(x.at)])))}</section>` : ''}`;
   }
 
@@ -170,8 +171,10 @@
   }
 
   // ───────── routing
+  const CORPUS_TENET = /^Divisions\/([0-9a-f-]{36})\/corpus\/([0-9a-f-]{36})$/i;
   function route(it) {
     if (it !== 'Divisions' && !(it || '').startsWith('Divisions/')) return null;
+    { const m = String(it).match(CORPUS_TENET); if (m && window.XENO_CORPUS?.served) { style(); return window.XENO_CORPUS.divisionTenet(m[1], m[2]); } }
     style();
     const id = it.startsWith('Divisions/') ? it.slice(10) : null;
     const h = H();
