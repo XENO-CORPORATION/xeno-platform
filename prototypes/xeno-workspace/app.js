@@ -1246,7 +1246,11 @@
   // A project's address carries its ID and a tab slug — /workspace/projects/<uuid>/team — never its display name, so a
   // rename or two projects with one name cannot break or confuse a link. Inside the router a project is still its
   // listing key (every page reads it by that); the translation happens only here, at the address.
-  const PTAB = { Tasks: 'tasks', Conversations: 'conversations', 'Team assignments': 'team', Resources: 'resources', Funding: 'funding', Activity: 'activity' };
+  // A workforce tab can carry a record id after it — /workspace/projects/<pid>/runs/<admission id> — so only the
+  // tab's own segment is translated; the id after it is kept exactly as it is.
+  const PTAB = { Tasks: 'tasks', Conversations: 'conversations', 'Team assignments': 'team', Resources: 'resources', Funding: 'funding', Activity: 'activity', Objectives: 'objectives', Runs: 'runs', Changes: 'changes' };
+  const tabOut = (tb) => { const j = tb.indexOf('/'), t = j < 0 ? tb : tb.slice(0, j); return (PTAB[t] || t) + (j < 0 ? '' : tb.slice(j)); };
+  const tabIn = (tb) => { const j = tb.indexOf('/'), t = j < 0 ? tb : tb.slice(0, j); return (PTAB_IN[t] || t) + (j < 0 ? '' : tb.slice(j)); };
   const PTAB_IN = Object.fromEntries(Object.entries(PTAB).map(([k, v]) => [v, k]));
   const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
   const projItems = () => ((window.XENO_PG_PROJECTS || {}).items || []);
@@ -1254,13 +1258,13 @@
     if (item === 'Archived projects') return 'archived';
     const i = item.indexOf('/'), nm = i < 0 ? item : item.slice(0, i), tb = i < 0 ? '' : item.slice(i + 1);
     const rec = projItems().find((p) => p.name === nm), head = rec && rec.id && UUID.test(String(rec.id)) ? String(rec.id) : nm;
-    return head + (tb ? '/' + (PTAB[tb] || tb) : '');
+    return head + (tb ? '/' + tabOut(tb) : '');
   }
   function projItemIn(item) {
     if (!item) return item; if (item === 'archived') return 'Archived projects';
     const i = item.indexOf('/'), head = i < 0 ? item : item.slice(0, i), tb = i < 0 ? '' : item.slice(i + 1);
     const rec = UUID.test(head) ? projItems().find((p) => String(p.id) === head) : null;
-    return (rec ? rec.name : head) + (tb ? '/' + (PTAB_IN[tb] || tb) : '');
+    return (rec ? rec.name : head) + (tb ? '/' + tabIn(tb) : '');
   }
   window.XENO_PROJECT_ROUTE = { out: projItemOut, in: projItemIn };
   // A workspace member's or agent's page: /workspace/workspace/Members/<member id>, never their display name (two

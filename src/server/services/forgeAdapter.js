@@ -467,6 +467,26 @@ export async function listProjectBindings(poolOrClient, projectId) {
   return rows;
 }
 
+// The workspace's Changes screen: a project's change requests across its
+// bindings, newest first, with review and check counts derived at the read.
+const CR_COLUMNS = `c.id, c.binding_id AS "bindingId", b.display_name AS "bindingName", b.provider,
+  c.source_branch AS "sourceBranch", c.target_ref AS "targetRef", c.title, c.body, c.status, c.head_rev AS "headRev",
+  c.created_by_user_id AS "createdByUserId", c.created_at AS "createdAt",
+  (SELECT count(*)::int FROM forge_reviews r WHERE r.cr_id=c.id AND r.decision='approve') AS approvals,
+  (SELECT count(*)::int FROM forge_checks k WHERE k.cr_id=c.id AND k.status='fail') AS "failingChecks"`;
+export async function listProjectChangeRequests(poolOrClient, projectId) {
+  const { rows } = await poolOrClient.query(
+    `SELECT ${CR_COLUMNS} FROM forge_change_requests c JOIN forge_bindings b ON b.id=c.binding_id
+      WHERE b.project_id=$1 ORDER BY c.created_at DESC, c.id LIMIT 200`, [projectId]);
+  return rows;
+}
+export async function readChangeRequest(poolOrClient, { crId }) {
+  const { rows } = await poolOrClient.query(
+    `SELECT ${CR_COLUMNS}, b.project_id AS "projectId" FROM forge_change_requests c JOIN forge_bindings b ON b.id=c.binding_id WHERE c.id=$1`, [crId]);
+  if (!rows[0]) throw new Error('Change request not found');
+  return rows[0];
+}
+
 // Rename/transfer reconciliation through stable identity. The lookup
 // matches (provider, remote_id) exactly: a display name or URL that
 // is not the stable remote id resolves nothing and therefore

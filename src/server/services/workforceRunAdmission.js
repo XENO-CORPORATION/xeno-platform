@@ -701,3 +701,31 @@ export async function readRunAdmission(pool, authenticatedContext, admissionId, 
     return publicAdmission(row);
   });
 }
+
+/** The run admissions of one project or one agent the actor can see, newest first -- what the workspace's
+ * Runs screens list. Each row passes the SAME visibility rule readRunAdmission applies, so a list never shows
+ * an admission its read would deny. A filter is required: there is no "every run" read. */
+export async function listRunAdmissions(pool, authenticatedContext, value = {}) {
+  const actorUserId = uuid(authenticatedContext?.actorUserId, 'actor');
+  const input = record(value, ['projectId', 'agentResourceId', 'limit'], 'list');
+  const projectId = optionalUuid(input.projectId, 'project'), agentId = optionalUuid(input.agentResourceId, 'agent_resource');
+  if (!projectId && !agentId) fail('bad_input', 'list_filter_required');
+  const limit = input.limit === undefined ? 50 : input.limit;
+  if (!Number.isSafeInteger(limit) || limit < 1 || limit > 100) fail('bad_input', 'invalid_limit');
+  return authorityTransaction(pool, async (db) => {
+    const rows = (await db.query(`SELECT * FROM workforce_run_admissions
+      WHERE ($1::uuid IS NULL OR project_id=$1) AND ($2::uuid IS NULL OR agent_resource_id=$2)
+      ORDER BY admitted_at DESC, id LIMIT $3`, [projectId, agentId, limit])).rows;
+    let who = null; const seen = new Map(), out = [];
+    for (const row of rows) {
+      if (row.actor_user_id !== actorUserId) {
+        who ??= await actorPrincipal(db, actorUserId);
+        const key = row.target_workspace_id || `u:${row.target_owner_user_id}`;
+        if (!seen.has(key)) seen.set(key, row.target_workspace_id ? await actsForWorkspace(db, who, row.target_workspace_id) : who.principal.id === row.target_owner_user_id);
+        if (!seen.get(key)) continue;
+      }
+      out.push(publicAdmission(row));
+    }
+    return { schemaVersion: 1, admissions: out };
+  });
+}

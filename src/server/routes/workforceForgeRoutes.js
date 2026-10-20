@@ -62,6 +62,8 @@ export function createForgeRouter() {
   router.post('/forks', route(['bindingId', 'name'], forge.forkRepository));
   router.post('/change-requests', route(['bindingId', 'sourceBranch', 'targetRef', 'title', 'body'], forge.submitChangeRequest));
   router.post('/change-requests/update', route(['crId', 'title', 'body', 'headRev'], forge.updateChangeRequest));
+  router.post('/change-requests/list', route(['projectId'], async (db, v, me) => { await assertProjectVisible(db, me, v.projectId); return forge.listProjectChangeRequests(db, v.projectId); }, []));
+  router.post('/change-requests/read', route(['crId'], readOn(crProject, 'crId', forge.readChangeRequest), []));
   router.post('/change-requests/checks', route(['crId'], readOn(crProject, 'crId', forge.listChecks), []));
   router.post('/change-requests/reviews', route(['crId'], readOn(crProject, 'crId', forge.listReviews), []));
   router.post('/change-requests/reconcile', route(['crId'], readOn(crProject, 'crId', forge.reconcileStatus), []));

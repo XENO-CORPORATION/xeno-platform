@@ -80,6 +80,9 @@ export function createWorkforceCoordinationRouter() {
   router.post('/objectives/link-goal', route(['goalId', 'objectiveId'], goals.linkGoalToObjective));
   router.post('/objectives/complete', route(['objectiveId'], goals.completeObjective));
   router.post('/objectives/read', route(['objectiveId'], goals.readObjective));
+  router.post('/objectives/update', route(['objectiveId', 'title', 'successEvidence', 'ownerUserId', 'windowEnd'], goals.updateObjective));
+  // The Objectives screen: a project's goals and its workspace's objectives, in one read
+  router.post('/projects/tree', route(['projectId'], goals.readProjectTree));
   // RUN-08: concurrent ownership
   router.post('/ownership/files', route(['projectId', 'paths', 'taskRef', 'ttlSeconds'], owners.acquireFileOwnership));
   router.post('/ownership/files/release', route(['projectId', 'paths'], owners.releaseFileOwnership));

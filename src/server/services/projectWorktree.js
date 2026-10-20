@@ -326,3 +326,49 @@ export async function readObjective(poolOrClient, { actorUserId, objectiveId }) 
       progress: { goals: goals.length, completed: goals.filter((g) => g.status === 'completed').length } };
   });
 }
+
+/** A project's work tree as the workspace's Objectives screen shows it: the objectives of the project's
+ * workspace (above), and this project's goals with the objective each rolls up to. A project the actor
+ * cannot see does not exist for them; objectives are listed only to a workspace viewer. */
+export async function readProjectTree(poolOrClient, { actorUserId, projectId }) {
+  const actor = uuid(actorUserId, 'actor'), pid = uuid(projectId, 'project');
+  return withTx(poolOrClient, async (client) => {
+    const p = (await client.query('SELECT id, workspace_id, owner_user_id FROM chat_projects WHERE id=$1', [pid])).rows[0];
+    const sees = p && (String(p.owner_user_id) === actor || (await check(client, { object: `project:${pid}`, relation: 'viewer', subject: `user:${actor}` })).allowed);
+    if (!sees) bad('not_found', 'project_not_found');
+    const goals = (await client.query('SELECT id, title, status, objective_id FROM project_goals WHERE project_id=$1 ORDER BY created_at', [pid])).rows
+      .map((g) => ({ goalId: g.id, title: g.title, status: g.status, objectiveId: g.objective_id }));
+    let objectives = [];
+    if (p.workspace_id && (await check(client, { object: `workspace:${p.workspace_id}`, relation: 'viewer', subject: `user:${actor}` })).allowed) {
+      objectives = (await client.query(`SELECT o.*, to_char(o.window_start,'YYYY-MM-DD') AS ws, to_char(o.window_end,'YYYY-MM-DD') AS we, count(g.id)::int AS goals, count(g.id) FILTER (WHERE g.status='completed')::int AS done
+        FROM project_objectives o LEFT JOIN project_goals g ON g.objective_id=o.id
+        WHERE o.workspace_id=$1 GROUP BY o.id ORDER BY o.created_at DESC LIMIT 200`, [p.workspace_id])).rows
+        .map((o) => ({ objectiveId: o.id, divisionId: o.division_id, title: o.title, successEvidence: o.success_evidence, ownerUserId: o.owner_user_id,
+          windowStart: o.ws, windowEnd: o.we,
+          status: o.status, progress: { goals: o.goals, completed: o.done } }));
+    }
+    return { projectId: pid, workspaceId: p.workspace_id, objectives, goals };
+  });
+}
+
+/** Edit an OPEN objective's words, owner or window end. Scope never changes (the table refuses it); a
+ * completed objective is a record and is not edited. Same authority as completing it. */
+export async function updateObjective(poolOrClient, { actorUserId, objectiveId, title, successEvidence, ownerUserId, windowEnd }) {
+  const actor = uuid(actorUserId, 'actor'), oid = uuid(objectiveId, 'objective');
+  return withTx(poolOrClient, async (client) => {
+    const who = await objectiveActor(client, actor);
+    const o = (await client.query("SELECT *, to_char(window_start,'YYYY-MM-DD') AS ws FROM project_objectives WHERE id=$1 FOR UPDATE", [oid])).rows[0];
+    if (!o) bad('not_found', 'objective_not_found');
+    if (o.owner_user_id !== actor && !(await actsForObjectiveScope(client, who, o.workspace_id, o.division_id))) bad('denied', 'objective_not_authorized');
+    if (o.status !== 'open') bad('conflict', 'objective_completed');
+    const t = title === undefined ? o.title : text(title, 'title');
+    const ev = successEvidence === undefined ? o.success_evidence : text(successEvidence, 'success_evidence');
+    const owner = ownerUserId === undefined ? o.owner_user_id : uuid(ownerUserId, 'owner');
+    const start = o.ws;
+    const end = windowEnd === undefined ? null : isoDate(windowEnd, 'window_end');
+    if (end && end < start) bad('bad_input', 'invalid_window');
+    if (owner !== o.owner_user_id && !(await check(client, { object: `workspace:${o.workspace_id}`, relation: 'viewer', subject: `user:${owner}` })).allowed) bad('denied', 'owner_not_in_workspace');
+    await client.query('UPDATE project_objectives SET title=$2, success_evidence=$3, owner_user_id=$4, window_end=COALESCE($5::date, window_end) WHERE id=$1', [oid, t, ev, owner, end]);
+    return { objectiveId: oid, title: t, successEvidence: ev, ownerUserId: owner, status: 'open' };
+  });
+}
