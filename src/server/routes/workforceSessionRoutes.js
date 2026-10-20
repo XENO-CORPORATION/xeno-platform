@@ -21,6 +21,8 @@ import { resolveProviderCwd, releaseProviderCwd } from '../services/providerSess
 import * as lineage from '../services/sessionLineage.js';
 import * as selection from '../services/providerSelection.js';
 import { recordBranchIntent } from '../services/conversationTurns.js';
+import * as budget from '../services/sessionBudgetAdmission.js';
+import * as turns from '../services/turnReads.js';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const STATUS = { bad_input: 400, denied: 403, not_found: 404, conflict: 409, unavailable: 503 };
@@ -40,11 +42,15 @@ export async function assertConversationAccess(db, actorUserId, conversationId, 
 
 export function createWorkforceSessionRouter({ env = process.env } = {}) {
   const router = express.Router();
-  const route = (relation, keys, service) => async (req, res) => {
+  // `host`: the act is a HOST receipt (a provider acknowledgement). It is accepted only from a DPoP-bound OIDC
+  // session -- the sender-bound installation, the same bar ASN-07 sets for directory bindings -- never from a
+  // plain bearer or cookie session, which any page holding the person's token could forge.
+  const route = (relation, keys, service, { host = false } = {}) => async (req, res) => {
     try {
       const body = req.body;
       if (!body || typeof body !== 'object' || Array.isArray(body)) refuse('bad_input', 'invalid_body');
       for (const k of Object.keys(body)) if (!keys.includes(k)) refuse('bad_input', 'unknown_field');
+      if (host && !(req.auth?.kind === 'oidc' && typeof req.auth.dpopJkt === 'string' && req.auth.dpopJkt)) refuse('denied', 'host_session_required');
       if (relation) await assertConversationAccess(req.db, req.workforceContext.actorUserId, body.conversationId, relation);
       const result = await service(req.db, { ...body, actorUserId: req.workforceContext.actorUserId });
       return res.json({ success: true, result });
@@ -74,6 +80,39 @@ export function createWorkforceSessionRouter({ env = process.env } = {}) {
   router.post('/commands', route(null, ['provider'], selection.listNativeCommands));
   router.post('/commands/execute', route(null, ['selectionId', 'command', 'surface'], selection.executeCommand));
   router.post('/commands/read', route(null, ['commandId'], selection.readCommandResult));
+  // SES-08 host half: the provider's acknowledgements, from the person's own host installation, for the
+  // person's own selection or command. Registering the native-command matrix stays an operator seed.
+  const ownSelection = async (db, actor, selectionId) => {
+    if (typeof selectionId !== 'string' || !UUID.test(selectionId)) refuse('bad_input', 'invalid_selection');
+    const s = (await db.query('SELECT user_id FROM provider_model_selections WHERE id=$1', [selectionId])).rows[0];
+    if (!s || s.user_id !== actor) refuse('not_found', 'selection_not_found');
+  };
+  router.post('/models/ack', route(null, ['selectionId', 'provider', 'publicId', 'nonce'], async (db, v) => {
+    await ownSelection(db, v.actorUserId, v.selectionId);
+    return selection.acknowledgeSelection(db, v);
+  }, { host: true }));
+  router.post('/commands/ack', route(null, ['commandId', 'nonce', 'receipt'], async (db, v) => {
+    if (typeof v.commandId !== 'string' || !UUID.test(v.commandId)) refuse('bad_input', 'invalid_command');
+    const r = (await db.query('SELECT s.user_id FROM provider_command_runs r JOIN provider_model_selections s ON s.id=r.selection_id WHERE r.id=$1', [v.commandId])).rows[0];
+    if (!r || r.user_id !== v.actorUserId) refuse('not_found', 'command_not_found');
+    return selection.acknowledgeCommand(db, v);
+  }, { host: true }));
+  // RUN-09: session budget admission. Personal (BYOK) needs the person's explicit policy acceptance; a project
+  // pool takes a charge only from a MANAGED session through an enforceable adapter, so a pool charge is a host
+  // act. Registering an adapter and claiming parity are operator acts and stay unrouted.
+  router.post('/byok/accept', route(null, [], budget.acceptByokPolicy));
+  router.post('/adapters/parity', route(null, [], (db) => budget.listParityAdapters(db)));
+  router.post('/charges/admit', async (req, res, next) => {
+    const host = req.body?.target === 'project-pool';
+    return route(null, ['sessionKind', 'adapterName', 'target', 'poolId', 'amountMicro'], budget.admitSessionCharge, { host })(req, res, next);
+  });
+  // NFR-05: bounded, cursor-paged turn reads -- there is no full read of a conversation
+  router.post('/turns/page', route('viewer', ['conversationId', 'branch', 'cursor', 'limit'], async (db, v) => {
+    try { return await turns.readTurnPage(db, v); } catch (e) { if (!e.code) refuse('bad_input', e.message); throw e; }
+  }));
+  router.post('/turns/count', route('viewer', ['conversationId', 'branch'], async (db, v) => {
+    try { return { total: await turns.countTurns(db, v) }; } catch (e) { if (!e.code) refuse('bad_input', e.message); throw e; }
+  }));
   // SES-09: an explicit branch intent (fork / edit-resend / regenerate)
   router.post('/branch-intents', route('editor', ['conversationId', 'branch', 'intent', 'targetTurn'], async (db, v) => {
     // conversationTurns throws plain Errors for its own validation; they are the caller's input, not a fault.
