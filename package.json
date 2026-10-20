@@ -128,6 +128,8 @@
     "test:chat-project-semantics": "node --test --test-force-exit scripts/chat-project-semantics.test.mjs scripts/chat-project-migration-contract.test.mjs scripts/chat-project-ingestion.test.mjs scripts/chat-worker-readiness.test.mjs",
     "test:chat-project-ingestion": "node --test --test-force-exit scripts/chat-project-ingestion.test.mjs",
     "test:chat-project-db": "node --test --test-force-exit scripts/chat-project-database-integration.test.mjs",
+    "test:workspace-architect": "node src/server/tests/workspace-architect.test.mjs && node prototypes/xeno-workspace/tests/architect-test.mjs",
+    "test:workspace-architect-mutation": "node scripts/workspace-architect-mutation.mjs",
     "test:chat-project-semantic": "node --test --test-force-exit scripts/chat-project-semantic-integration.test.mjs",
     "test:chat-project-semantic-scale": "node --test --test-force-exit scripts/chat-project-semantic-scale-qualification.test.mjs",
     "test:chat-production-fixtures": "node --test scripts/chat-production-fixture-boundary.test.mjs",
