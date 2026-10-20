@@ -4,7 +4,7 @@
 
 Every action a person can take on the platform, and whether an agent can take it (XENO AGENT CAPABILITY - SPEC.md §19.4). **Planned** entries are the owning division’s backlog: each is a feature agents are missing.
 
-**Total:** 1442 actions · 37 agent capability · 1226 planned (debt) · 179 excluded · **coverage 2.9%** of the 1263 owed.
+**Total:** 1463 actions · 45 agent capability · 1238 planned (debt) · 180 excluded · **coverage 3.5%** of the 1283 owed.
 
 | division | actions | capability | planned (debt) | excluded | coverage |
 |---|---:|---:|---:|---:|---:|
@@ -23,6 +23,7 @@ Every action a person can take on the platform, and whether an agent can take it
 | browser-shell | 28 | 0 | 28 | 0 | 0% |
 | canvas | 20 | 4 | 16 | 0 | 20% |
 | inference | 18 | 0 | 12 | 6 | 0% |
+| support | 21 | 8 | 12 | 1 | 40% |
 | places | 3 | 3 | 0 | 0 | 100% |
 
 ## account — 60 planned
@@ -744,6 +745,21 @@ Every action a person can take on the platform, and whether an agent can take it
 - `route:youtubeRoutes.js:PUT /groups/:id`
 - `route:youtubeRoutes.js:PUT /groups/:id/channels/reorder`
 - `route:youtubeRoutes.js:PUT /groups/reorder`
+
+## support — 12 planned
+
+- `route:supportRoutes.js:DELETE /macros/:id`
+- `route:supportRoutes.js:GET /macros`
+- `route:supportRoutes.js:POST /macros`
+- `route:supportRoutes.js:POST /tickets/:key/assign`
+- `route:supportRoutes.js:POST /tickets/:key/drafts/:id/discard`
+- `route:supportRoutes.js:POST /tickets/:key/merge`
+- `route:supportRoutes.js:POST /tickets/:key/publish`
+- `route:supportRoutes.js:POST /tickets/:key/status`
+- `route:supportRoutes.js:POST /tickets/:key/task`
+- `ui:platform-support.js:data-sp-form=delegate`
+- `ui:platform-support.js:data-sp-form=macro`
+- `ui:platform-support.js:data-sp-form=merge`
 
 ## tasks — 84 planned
 

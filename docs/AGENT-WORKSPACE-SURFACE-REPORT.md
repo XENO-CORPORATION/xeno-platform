@@ -22,5 +22,6 @@ Per division: how many actions a person can take, how many an agent can take tod
 | browser-shell | 28 | 0 | 28 | 0 | 11 | 15 | 2 | 0 | `workspace:admin` 17, `workspace:read` 11 |
 | canvas | 20 | 4 | 16 | 0 | 5 | 11 | 4 | 0 | `tasks:write` 13, `tasks:read` 3 |
 | inference | 18 | 0 | 12 | 6 | 5 | 10 | 3 | 0 | `chat:write` 7, `chat:read` 5 |
+| support | 21 | 8 | 12 | 1 | 4 | 14 | 1 | 2 | `forum:write` 11, `forum:read` 1 |
 
 Scopes (one-way names, approved 2026-10-20): `storage:read`, `storage:write`, `share:create`, `library:read`, `library:write`, `tasks:read`, `tasks:write`, `chat:read`, `chat:write`, `agents:read`, `agents:write`, `wallet:read`, `wallet:spend`, `workspace:read`, `workspace:admin`, `places:read`, `places:write`, `marketplace:read`, `marketplace:write`, `forum:read`, `forum:write`.

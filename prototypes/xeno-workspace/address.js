@@ -15,7 +15,7 @@
  */
 (() => {
   const BASE = '/workspace';
-  const GLOBALS = ['anima', 'community', 'market', 'library', 'projects', 'tasks', 'workspace', 'inbox', 'settings', 'places'];
+  const GLOBALS = ['anima', 'community', 'market', 'library', 'projects', 'tasks', 'workspace', 'inbox', 'settings', 'places', 'support'];
   const RESERVED = [...GLOBALS, 'apps', 'spaces', 'adaptive', 'overview'];
   const KIND_OUT = { p: 'apps', z: 'spaces' }, KIND_IN = { apps: 'p', spaces: 'z' };
   const split = (s) => { const i = s.indexOf('?'); return i < 0 ? [s, ''] : [s.slice(0, i), s.slice(i)]; };

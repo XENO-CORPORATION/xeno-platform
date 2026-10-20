@@ -32,7 +32,7 @@ export const DIVISION_AREA = Object.freeze({
   storage: 'storage', studio: 'library', canvas: 'tasks', tasks: 'tasks', chat: 'chat', inference: 'chat',
   agents: 'agents', workforce: 'agents', commerce: 'wallet', workspace: 'workspace', 'workspace-ui': 'workspace',
   account: 'workspace', platform: 'workspace', places: 'places', forum: 'forum', 'browser-shell': 'workspace',
-  marketplace: 'marketplace',
+  marketplace: 'marketplace', support: 'forum',
 });
 
 /** The scope an action of `area` needs at `cls`. Reads need :read; a wallet write spends; a workspace write is admin. */

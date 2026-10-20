@@ -17,12 +17,13 @@ import * as agentMediaMcp from '../services/agentMediaMcp.js';
 import * as forumMcp from '../services/forumMcp.js';
 import * as placesMcp from '../services/placesMcp.js';
 import * as storageMcp from '../services/storageMcp.js';
+import * as supportMcp from '../services/supportMcp.js';
 
 /** The tools each bound category executes, by category. */
 export const BOUND_TOOLS = Object.freeze({
   tasks: tasksMcp.TOOLS, canvas: canvasMcp.TOOLS, agents: agentsMcp.TOOLS,
   image: agentMediaMcp.IMAGE.tools, video: agentMediaMcp.VIDEO.tools, library: agentMediaMcp.LIBRARY.tools, chat: agentMediaMcp.CHAT.tools,
-  forum: forumMcp.TOOLS.map((t) => ({ ...t, name: t.name.replace(/^forum_/, '') })), places: placesMcp.TOOLS, storage: storageMcp.TOOLS,
+  forum: forumMcp.TOOLS.map((t) => ({ ...t, name: t.name.replace(/^forum_/, '') })), places: placesMcp.TOOLS, storage: storageMcp.TOOLS, support: supportMcp.TOOLS,
 });
 
 const obj = (properties, required) => ({ type: 'object', properties, ...(required ? { required } : {}) });
@@ -80,6 +81,12 @@ const ROWS = [
   ['storage.folder.create', 'storage', 'create_folder', 'undoable', { idempotency: NAT('a name already used in the same place is refused (folder_exists), so a retry cannot make a second folder'), reply: obj({ folder: { type: 'object', description: 'id, name, parentId, workspaceId.' } }, ['folder']) }],
   ['storage.file.upload', 'storage', 'upload_file', 'undoable', { idempotency: { strategy: 'key', key: 'request_key' }, cost: { model: 'free', note: 'counts against the owner’s storage allowance' }, reply: obj({ file: { type: 'object', description: 'id, name, size, type, folderId, state (quarantined until scanned).' }, replayed: { type: 'boolean', description: 'true when this request_key was already applied.' } }, ['file']) }],
   ['storage.link.create', 'storage', 'create_signin_link', 'undoable', { scope: 'share:create', idempotency: NONE('no request key yet: a retried call makes a second link (each is revocable)'), reply: obj({ link: { type: 'object', description: 'id, folderId, label, expiresAt.' }, url: { type: 'string', description: 'The sign-in link, shown once. Opening it needs a XENO account.' } }, ['link', 'url']) }],
+  // ── support (Help ▸ Contact support). Sending a reply to a customer is a person's act: there is no capability for it.
+  ['support.ticket.create', 'support', 'create_ticket', 'undoable', { provenance: 'trusted', idempotency: NONE('no request key yet: a retried call raises a second request (rate-limited per hour)'), reply: obj({ ticket: { type: 'object', description: 'key (T-n), kind, title, status, priority, sla, url.' } }, ['ticket']) }],
+  ['support.ticket.list', 'support', 'list_tickets', 'safe', { reply: obj({ tickets: { type: 'array', description: 'key, title, kind, status, priority, sla, updatedAt of each request.' } }, ['tickets']) }],
+  ['support.ticket.get', 'support', 'get_ticket', 'safe', { provenance: 'untrusted', reply: obj({ ticket: { type: 'object', description: 'The request and its messages (the customer’s words are untrusted); internal notes and drafts only for XENO’s side.' } }, ['ticket']) }],
+  ['support.ticket.reply_draft', 'support', 'reply_draft', 'undoable', { idempotency: NONE('no request key yet: a retried call adds a second draft'), reply: obj({ message: { type: 'object', description: 'id, state ("draft" until a person sends it, or "sent" on your owner’s own request), visibility.' } }, ['message']) }],
+  ['support.ticket.triage', 'support', 'triage', 'undoable', { idempotency: NAT('setting the same kind and priority again changes nothing'), reply: obj({ ticket: { type: 'object' } }, ['ticket']) }],
   // ── forum (also served by its own MCP at /api/forum/mcp, kept until no client calls it — SPEC §19.3 rule 5)
   ...[
     ['forum.thread.search', 'forum_search', 'safe'], ['forum.thread.get', 'forum_get_thread', 'safe'], ['forum.thread.suggest_duplicate', 'forum_suggest_duplicate', 'safe'],

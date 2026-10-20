@@ -118,7 +118,9 @@
   "xenoMcpRoutes.js": "agents",
   "xenoRoutes.js": "studio",
   "xenoTasksRoutes.js": "tasks",
-  "youtubeRoutes.js": "studio"
+  "youtubeRoutes.js": "studio",
+  "supportRoutes.js": "support",
+  "platform-support.js": "support"
  },
  "actions": {
   "route:accountGiftRoutes.js:POST /": {
@@ -7746,6 +7748,121 @@
    "status": "planned",
    "class": "reversible",
    "scope": "agents:write"
+  },
+  "route:supportRoutes.js:POST /tickets": {
+   "status": "capability",
+   "capability": "support.ticket.create",
+   "class": "reversible",
+   "scope": "forum:write"
+  },
+  "route:supportRoutes.js:GET /tickets/mine": {
+   "status": "capability",
+   "capability": "support.ticket.list",
+   "class": "safe",
+   "scope": "forum:read"
+  },
+  "route:supportRoutes.js:GET /tickets/queue": {
+   "status": "capability",
+   "capability": "support.ticket.list",
+   "class": "safe",
+   "scope": "forum:read"
+  },
+  "route:supportRoutes.js:GET /tickets/:key": {
+   "status": "capability",
+   "capability": "support.ticket.get",
+   "class": "safe",
+   "scope": "forum:read"
+  },
+  "route:supportRoutes.js:POST /tickets/:key/messages": {
+   "status": "capability",
+   "capability": "support.ticket.reply_draft",
+   "class": "reversible",
+   "scope": "forum:write"
+  },
+  "route:supportRoutes.js:POST /tickets/:key/drafts/:id/send": {
+   "status": "excluded",
+   "category": "self-authority",
+   "class": "external",
+   "scope": "none",
+   "because": "sending an agent-drafted reply to a customer is a person's ratification; an agent must not approve agent words"
+  },
+  "route:supportRoutes.js:POST /tickets/:key/drafts/:id/discard": {
+   "status": "planned",
+   "class": "reversible",
+   "scope": "forum:write"
+  },
+  "route:supportRoutes.js:POST /tickets/:key/status": {
+   "status": "planned",
+   "class": "reversible",
+   "scope": "forum:write"
+  },
+  "route:supportRoutes.js:POST /tickets/:key/triage": {
+   "status": "capability",
+   "capability": "support.ticket.triage",
+   "class": "reversible",
+   "scope": "forum:write"
+  },
+  "route:supportRoutes.js:POST /tickets/:key/assign": {
+   "status": "planned",
+   "class": "reversible",
+   "scope": "forum:write"
+  },
+  "route:supportRoutes.js:POST /tickets/:key/merge": {
+   "status": "planned",
+   "class": "reversible",
+   "scope": "forum:write"
+  },
+  "route:supportRoutes.js:POST /tickets/:key/task": {
+   "status": "planned",
+   "class": "reversible",
+   "scope": "forum:write"
+  },
+  "route:supportRoutes.js:POST /tickets/:key/publish": {
+   "status": "planned",
+   "class": "external",
+   "scope": "forum:write"
+  },
+  "route:supportRoutes.js:GET /macros": {
+   "status": "planned",
+   "class": "safe",
+   "scope": "forum:read"
+  },
+  "route:supportRoutes.js:POST /macros": {
+   "status": "planned",
+   "class": "reversible",
+   "scope": "forum:write"
+  },
+  "route:supportRoutes.js:DELETE /macros/:id": {
+   "status": "planned",
+   "class": "irreversible",
+   "scope": "forum:write"
+  },
+  "ui:platform-support.js:data-sp-form=new": {
+   "status": "capability",
+   "capability": "support.ticket.create",
+   "class": "reversible",
+   "scope": "forum:write"
+  },
+  "ui:platform-support.js:data-sp-form=reply": {
+   "status": "capability",
+   "capability": "support.ticket.reply_draft",
+   "class": "reversible",
+   "scope": "forum:write"
+  },
+  "ui:platform-support.js:data-sp-form=merge": {
+   "status": "planned",
+   "class": "reversible",
+   "scope": "forum:write"
+  },
+  "ui:platform-support.js:data-sp-form=delegate": {
+   "status": "planned",
+   "class": "reversible",
+   "scope": "forum:write"
+  },
+  "ui:platform-support.js:data-sp-form=macro": {
+   "status": "planned",
+   "class": "reversible",
+   "scope": "forum:write"
   }
  }
 }

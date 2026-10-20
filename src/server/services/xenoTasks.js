@@ -325,6 +325,8 @@ export async function transitionTask(db, me, key, { to, note, from } = {}) {
   if (['in_review', 'done', 'wont_do'].includes(to)) await db.query('DELETE FROM task_claim_leases WHERE task_id = $1', [t.id]);
   if (fresh.delegate_id && String(fresh.delegate_id) === String(me.id) && (to === 'in_review' || to === 'done')) await session(db, fresh, me.id, 'done', to === 'in_review' ? 'Sent for review' : 'Done');
   await folderAccess(db, t.id);   // who works it may have changed: task folders follow (taskFolders.js)
+  // the fix written back: a support request linked to this task tells its requester (supportTickets.js)
+  if (to === 'done') await (await import('./supportTickets.js')).taskDone(db, t.id, me);
   return getTask(db, me, key);
 }
 

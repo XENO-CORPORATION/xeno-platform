@@ -747,6 +747,18 @@ const templates = {
     `, `${authorName || 'Someone'} replied in a thread you are part of.`),
   }),
 
+  /** XENO support answered, or moved, a request the person raised (supportTickets.js; sent only when SUPPORT_EMAILS=true). */
+  support_update: ({ displayName, ticketKey, ticketTitle, ticketUrl, update, excerpt, unsubscribeUrl: unsubUrl }) => ({
+    subject: `${ticketKey}: ${update}`,
+    html: wrapInLayout(update, `
+      ${mailHeading(escapeHtml(update))}
+      ${mailText(`Hi ${escapeHtml(displayName)}, there is news on your support request <b>${escapeHtml(ticketKey)} · ${escapeHtml(ticketTitle)}</b>.`)}
+      ${excerpt ? mailText(escapeHtml(excerpt)) : ''}
+      ${mailButton(ticketUrl, 'Open your request')}
+      ${forumFooter(unsubUrl)}
+    `, `${update} — ${ticketKey}`),
+  }),
+
   /**
    * Someone named you.
    *
