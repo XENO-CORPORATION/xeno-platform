@@ -19,6 +19,8 @@ import * as placesMcp from '../services/placesMcp.js';
 import * as modesMcp from '../services/modesMcp.js';
 import * as corpusMcp from '../services/corpusMcp.js';
 import { MODES_ROWS } from './modes.js';
+import { PEOPLE_ROWS } from './people.js';
+import * as peopleMcp from '../services/peopleMcp.js';
 import * as storageMcp from '../services/storageMcp.js';
 import * as supportMcp from '../services/supportMcp.js';
 import * as publishMcp from '../services/publishMcp.js';
@@ -29,7 +31,7 @@ import * as workforceMcp from '../services/workforceMcp.js';
 export const BOUND_TOOLS = Object.freeze({
   tasks: tasksMcp.TOOLS, canvas: canvasMcp.TOOLS, agents: agentsMcp.TOOLS,
   image: agentMediaMcp.IMAGE.tools, video: agentMediaMcp.VIDEO.tools, library: agentMediaMcp.LIBRARY.tools, chat: agentMediaMcp.CHAT.tools,
-  forum: forumMcp.TOOLS.map((t) => ({ ...t, name: t.name.replace(/^forum_/, '') })), places: placesMcp.TOOLS, storage: storageMcp.TOOLS, support: supportMcp.TOOLS, publish: publishMcp.TOOLS, analytics: analyticsMcp.TOOLS, modes: modesMcp.TOOLS, corpus: corpusMcp.TOOLS, workforce: workforceMcp.TOOLS,
+  forum: forumMcp.TOOLS.map((t) => ({ ...t, name: t.name.replace(/^forum_/, '') })), places: placesMcp.TOOLS, storage: storageMcp.TOOLS, support: supportMcp.TOOLS, publish: publishMcp.TOOLS, analytics: analyticsMcp.TOOLS, modes: modesMcp.TOOLS, people: peopleMcp.TOOLS, corpus: corpusMcp.TOOLS, workforce: workforceMcp.TOOLS,
 });
 
 const obj = (properties, required) => ({ type: 'object', properties, ...(required ? { required } : {}) });
@@ -45,6 +47,8 @@ const READ = NAT('reads change nothing');
 const ROWS = [
   // ── modes (custom modes + trade packs; rows in ./modes.js)
   ...MODES_ROWS,
+  // ── people (employee profiles, org chart, directory, time off; rows in ./people.js)
+  ...PEOPLE_ROWS,
   // ── corpus (XENO CORPUS - SPEC.md; services/xenoCorpus.js). No new scope name (scopes are one-way): reading is
   // workspace:read; proposing writes a record, so it needs the workspace area's write scope (workspace:admin); recording
   // a verdict is an admitted run's act, so it needs agents:write.
