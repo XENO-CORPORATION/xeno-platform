@@ -1,3 +1,4 @@
+import { shot } from './shot.mjs';
 // Corpo › Analytics is real: the workspace's own numbers from /api/workspace-analytics (a stand-in here).
 //   1. no sample rows ("Revenue €42k this month") and no "Preview — sample data" mark; Overview shows every metric
 //   2. a division narrows tasks; a workspace-wide metric is not sent the division
@@ -45,7 +46,7 @@ async function open(hash) {
     if (u.pathname.startsWith('/api/workspace-analytics/')) return json({ success: false, error: 'unexpected ' + u.pathname }, 500);
     if (u.pathname === '/api/notifications') return json({ success: true, unread: 0, items: [] });
     return json({ success: false, error: 'not found' }, 404); });
-  await p.goto(base + '/workspace/' + hash, { waitUntil: 'domcontentloaded' }); await wait(1800);
+  await p.goto(base + '/workspace/' + hash, { waitUntil: 'domcontentloaded' }); await wait(1800); await shot(p, 'analytics');
   return { p, errs };
 }
 const cards = (p) => p.evaluate(() => Object.fromEntries([...document.querySelectorAll('[data-an-card]')].map((c) => [c.dataset.anCard, c.querySelector('[data-an-big]')?.textContent || ''])));
@@ -68,16 +69,18 @@ try {
   await p.select('[data-an-division]', ''); await wait(400);
 
   // save a dashboard of two metrics
-  await p.click('[data-an-new]'); await wait(200);
-  await p.type('[data-an-name]', 'Support desk');
-  await p.click('[data-an-pick="credits.spend"]'); await p.click('[data-an-pick="storage.usage"]'); await p.click('[data-an-pick="runs.agents"]');
-  await p.select('[data-an-days]', '7');
-  await p.click('[data-an-save]'); await wait(900);
+  ok(await p.$('#main .topbar .pg-top-acts [data-an-new]') !== null && await p.$('#main .topbar .pg-top-tabs [data-an-open="overview"][aria-selected="true"]') !== null && await p.$('#main .mview [data-an-open], #main .mview [data-an-new]') === null, 'dashboard tabs and New dashboard live in the header bar, not the body');
+  await p.click('#main .topbar [data-an-new]'); await wait(300);
+  ok(await p.$('.xd-sh[role="dialog"] #xdf-name') !== null, 'New dashboard opens the workspace dialog');
+  await p.type('.xd-sh #xdf-name', 'Support desk');
+  for (const m of ['credits.spend', 'storage.usage', 'runs.agents']) await p.click(`.xd-sh [data-f="metrics"] [data-v="${m}"]`);
+  await p.click('.xd-sh [data-f="days"] [data-v="7"]');
+  await p.click('.xd-sh [data-xd-submit]'); await wait(1200);
   const post = db.calls.find((x) => x[0] === 'POST' && x[1].startsWith('/api/workspace-analytics/dashboards'));
   ok(post && post[2].name === 'Support desk' && JSON.stringify(post[2].widgets) === JSON.stringify([{ metric: 'tasks.throughput', days: 7 }, { metric: 'support.tickets', days: 7 }]), `the dashboard is saved with its metrics and window (${JSON.stringify(post && post[2])})`);
   c = await cards(p);
   ok(Object.keys(c).join() === 'tasks.throughput,support.tickets', `the saved dashboard opens with its two widgets (${Object.keys(c).join()})`);
-  ok(await p.evaluate(() => [...document.querySelectorAll('[data-an-open]')].some((x) => x.textContent === 'Support desk' && x.getAttribute('aria-pressed') === 'true')), 'its tab is selected');
+  ok(await p.evaluate(() => [...document.querySelectorAll('[data-an-open]')].some((x) => x.textContent === 'Support desk' && x.getAttribute('aria-selected') === 'true')), 'its tab is selected');
 
   // delete → undo
   await p.click('[data-an-delete="dash-1"]'); await wait(800);

@@ -38,6 +38,9 @@
   // object pages (a project, a run, a Mind) keep the object's own title in the body — it is the content
   const head = ({ eyebrow, title, sub, acts = '', meta = '', obj = false }) => `<header class="pg-head ${obj ? 'pg-head--obj' : 'pg-head--col'}"><div class="pg-ttl">${eyebrow ? `<small>${eyebrow}</small>` : ''}<h1>${esc(title)}</h1>${sub ? `<p>${esc(sub)}</p>` : ''}</div>${acts ? `<div class="pg-acts">${acts}</div>` : ''}</header>${meta ? `<div class="pg-meta">${meta}</div>` : ''}`;
   const btn = (label, attrs, ghost, icon) => `<button class="pg-btn${ghost ? ' ghost' : ''}" ${attrs}>${icon ? ic(icon) : ''}<span>${esc(label)}</span></button>`;
+  // A page's TABS: written right after its head and lifted by framed() into the header bar, beside the path — on every
+  // page, never a second row in the body. items = [[key, label, count?]]; attr is the click attribute (data-sp-go …).
+  const tabs = (items, cur, attr) => `<div class="pg-tabs" role="tablist">${items.map(([k, l, n]) => `<button role="tab" aria-selected="${k === cur}" ${attr}="${esc(k)}">${esc(l)}${n != null && n !== '' ? `<em>${esc(n)}</em>` : ''}</button>`).join('')}</div>`;
   const seg = (key, name, opts, cur) => `<div class="pg-seg" role="tablist" aria-label="${esc(name)}">${opts.map(([v, l, n]) => `<button role="tab" aria-selected="${v === cur}" data-pg-seg="${key}" data-v="${esc(v)}">${esc(l)}${n != null ? `<em>${n}</em>` : ''}</button>`).join('')}</div>`;
   const search = (key, ph, q) => `<label class="pg-search">${ic('search')}<input data-pg-q="${key}" value="${esc(q)}" placeholder="${esc(ph)}" aria-label="${esc(ph)}" spellcheck="false">${q ? `<button data-pg-clear="${key}" aria-label="Clear search">${ic('x')}</button>` : '<kbd>/</kbd>'}</label>`;
   // dropdown: a labelled button that opens a real menu (sort, filters that do not fit a segmented control)
@@ -472,9 +475,11 @@
       // An object page with tabs (a project: Overview · Tasks · Conversations …) puts its TABS in the header, beside
       // the path — the tabs are where you are — and its facts (progress, status, next milestone, people) in the
       // status bar, so the header is one line and the body never starts with a second header.
-      const tabs = h.classList.contains('pg-head--obj') && t.content.querySelector('.pg > .pg-tabs');
+      // The same holds for a collection page with views (Support: My requests · Queue · Saved replies): the tabs are
+      // header content on EVERY page, never a row of their own in the body (owner, 2026-10-20).
+      const tabs = t.content.querySelector('.pg > .pg-tabs');
       let facts = '';
-      if (tabs) { tabs.classList.add('pg-top-tabs'); left = tabs.outerHTML; tabs.remove(); facts = sum; sum = ''; }
+      if (tabs) { tabs.classList.add('pg-top-tabs'); left = tabs.outerHTML + left; tabs.remove(); facts = sum; sum = ''; }
       h.remove();
       const f0 = t.content.querySelector('.pg-foot'); const foot0 = f0 ? statusBar(f0, t.content, facts) : ''; f0?.remove();
       if (f0) return { acts, sum, left, tools, body: t.innerHTML, foot: foot0 };
@@ -506,7 +511,7 @@
   addEventListener('resize', syncGutter);
   window.XENO_PAGES = { render, framed, query: (key, q) => { ui(key).q = q || ''; }, repaint: () => repaint(),
     // the page parts, shared so every page — this file's or a module's — is built from the same pieces
-    h: { page, head, btn, box, table, tr, chip, avatar, foot, ago, plural, cap, esc, ic, projCard, seg, ui, threadPosts } };
+    h: { page, head, tabs, btn, box, table, tr, chip, avatar, foot, ago, plural, cap, esc, ic, projCard, seg, ui, threadPosts } };
 
   // ---------- repaint the main view in place (keeps scroll and focus) ----------
   function repaint(focusSel) {

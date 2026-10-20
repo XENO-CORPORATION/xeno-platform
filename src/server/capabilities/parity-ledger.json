@@ -7428,7 +7428,7 @@
    "class": "reversible",
    "scope": "forum:write"
   },
-  "ui:platform-support.js:data-sp-form=macro": {
+  "ui:platform-support.js:data-sp-create=macro": {
    "status": "planned",
    "class": "reversible",
    "scope": "forum:write"
@@ -7438,7 +7438,7 @@
    "class": "reversible",
    "scope": "forum:write"
   },
-  "ui:platform-support.js:data-sp-form=new": {
+  "ui:platform-support.js:data-sp-create=new": {
    "status": "capability",
    "capability": "support.ticket.create",
    "class": "reversible",
@@ -9005,7 +9005,7 @@
    "class": "reversible",
    "scope": "workspace:admin"
   },
-  "ui:platform-releases.js:data-rl-form=note": {
+  "ui:platform-releases.js:data-rl-create=note": {
    "status": "capability",
    "capability": "releases.note.draft",
    "class": "reversible",
@@ -9035,7 +9035,7 @@
    "scope": "none",
    "because": "handing out or revoking access to the site is a person's decision about who may see it; an agent must not grant access"
   },
-  "ui:platform-support.js:data-sp-form=access": {
+  "ui:platform-support.js:data-sp-create=access": {
    "status": "excluded",
    "category": "self-authority",
    "class": "reversible",

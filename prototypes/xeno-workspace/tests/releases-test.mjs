@@ -1,3 +1,4 @@
+import { shot } from './shot.mjs';
 // releases-test — the release record in the workspace, against a stand-in /api/releases that answers what the real
 // service answers for each viewer: a customer's staff reads are 404, and What's new carries only {id, title, body, date}.
 // Proves: a customer at /workspace/releases sees What's new and no console, nothing staff-only on the page; staff see
@@ -63,14 +64,19 @@ try {
   // staff
   STAFF = true;
   const s = await open();
-  await s.goto(base + '/workspace/releases', { waitUntil: 'domcontentloaded' }); await settle(2000);
+  await s.goto(base + '/workspace/releases', { waitUntil: 'domcontentloaded' }); await settle(2000); await shot(s, 'releases');
   ok(/Notes to approve/.test(await main(s)) && /Deploys/.test(await main(s)), 'staff see the release console');
+  ok(!!(await s.$('#main .topbar .pg-top-tabs [data-rl-go="deploys"]')) && !(await s.$('#main .mview .pg-tabs')), 'the console views are tabs in the header bar, not a row in the body');
   await s.click('#main [data-rl-go="deploys"]'); await settle();
   ok(new URL(s.url()).pathname === '/workspace/releases/deploys' && /33909cb7/.test(await main(s)), 'deploys have their own address and list the deploy');
   await s.click(`#main [data-rl-go="deploys/${DEP}"]`); await settle();
   ok(new URL(s.url()).pathname === `/workspace/releases/deploys/${DEP}` && /passed \/api\/ready/.test(await main(s)) && /#859/.test(await main(s)) && /20261023100000-release-record\.sql/.test(await main(s)), 'a deploy page by id shows healthcheck, PRs and migrations');
-  await s.goto(base + `/workspace/releases/features/${FEAT}`, { waitUntil: 'domcontentloaded' }); await settle(2000);
+  await s.goto(base + `/workspace/releases/features/${FEAT}`, { waitUntil: 'domcontentloaded' }); await settle(2000); await shot(s, 'releases-feature');
   ok(/Support \(platform\)/.test(await main(s)) && /Draft by an agent/.test(await main(s)), 'a feature page by id shows its notes, the agent draft marked as a draft');
+  ok(!!(await s.$('#main .topbar .pg-top-acts [data-rl-create="note"]')) && !(await s.$('#main .mview [data-rl-form="note"]')), 'New customer note sits right in the header bar; no note form is stacked in the body');
+  await s.click('#main .topbar [data-rl-create="note"]'); await settle(400);
+  ok(!!(await s.$('.xd-sh[role="dialog"] #xdf-title')), 'a customer note is drafted in the workspace dialog');
+  await s.keyboard.press('Escape'); await settle(300);
   await s.reload({ waitUntil: 'domcontentloaded' }); await settle(2000);
   ok(/Support \(platform\)/.test(await main(s)), 'refresh lands on the same feature');
   const s2 = await open(); await s2.goto(base + `/workspace/releases/features/${FEAT}`, { waitUntil: 'domcontentloaded' }); await settle(2000);
