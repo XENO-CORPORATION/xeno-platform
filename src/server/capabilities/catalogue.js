@@ -23,6 +23,7 @@ import { PEOPLE_ROWS } from './people.js';
 import * as peopleMcp from '../services/peopleMcp.js';
 import * as storageMcp from '../services/storageMcp.js';
 import * as supportMcp from '../services/supportMcp.js';
+import * as customersMcp from '../services/customersMcp.js';
 import * as publishMcp from '../services/publishMcp.js';
 import * as analyticsMcp from '../services/analyticsMcp.js';
 import * as docsMcp from '../services/docsMcp.js';
@@ -34,7 +35,7 @@ import * as formsMcp from '../services/formsMcp.js';
 export const BOUND_TOOLS = Object.freeze({
   tasks: tasksMcp.TOOLS, canvas: canvasMcp.TOOLS, agents: agentsMcp.TOOLS,
   image: agentMediaMcp.IMAGE.tools, video: agentMediaMcp.VIDEO.tools, library: agentMediaMcp.LIBRARY.tools, chat: agentMediaMcp.CHAT.tools,
-  forum: forumMcp.TOOLS.map((t) => ({ ...t, name: t.name.replace(/^forum_/, '') })), places: placesMcp.TOOLS, storage: storageMcp.TOOLS, support: supportMcp.TOOLS, publish: publishMcp.TOOLS, analytics: analyticsMcp.TOOLS, docs: docsMcp.TOOLS, forms: formsMcp.TOOLS, scheduling: schedulingMcp.TOOLS, modes: modesMcp.TOOLS, people: peopleMcp.TOOLS, corpus: corpusMcp.TOOLS, workforce: workforceMcp.TOOLS,
+  forum: forumMcp.TOOLS.map((t) => ({ ...t, name: t.name.replace(/^forum_/, '') })), places: placesMcp.TOOLS, storage: storageMcp.TOOLS, support: supportMcp.TOOLS, customers: customersMcp.TOOLS, publish: publishMcp.TOOLS, analytics: analyticsMcp.TOOLS, docs: docsMcp.TOOLS, forms: formsMcp.TOOLS, scheduling: schedulingMcp.TOOLS, modes: modesMcp.TOOLS, people: peopleMcp.TOOLS, corpus: corpusMcp.TOOLS, workforce: workforceMcp.TOOLS,
 });
 
 const obj = (properties, required) => ({ type: 'object', properties, ...(required ? { required } : {}) });
@@ -142,6 +143,14 @@ const ROWS = [
   ['support.ticket.get', 'support', 'get_ticket', 'safe', { provenance: 'untrusted', reply: obj({ ticket: { type: 'object', description: 'The request and its messages (the customer’s words are untrusted); internal notes and drafts only for XENO’s side.' } }, ['ticket']) }],
   ['support.ticket.reply_draft', 'support', 'reply_draft', 'undoable', { idempotency: NONE('no request key yet: a retried call adds a second draft'), reply: obj({ message: { type: 'object', description: 'id, state ("draft" until a person sends it, or "sent" on your owner’s own request), visibility.' } }, ['message']) }],
   ['support.ticket.triage', 'support', 'triage', 'undoable', { idempotency: NAT('setting the same kind and priority again changes nothing'), reply: obj({ ticket: { type: 'object' } }, ['ticket']) }],
+  // ── customers (Corpo › Customers, services/customers.js). Agents read and DRAFT; delete, erase, merge, export and import are a person's.
+  ['customers.contact.list', 'customers', 'list_contacts', 'safe', { provenance: 'untrusted', reply: obj({ contacts: { type: 'array', description: 'id, name, email, phone, title, tags, companyName, url of each contact.' } }, ['contacts']) }],
+  ['customers.contact.get', 'customers', 'get_contact', 'safe', { provenance: 'untrusted', reply: obj({ contact: { type: 'object', description: 'The contact with deals, timeline (drafts marked), and the support tickets and tasks linked to it that the caller may read.' } }, ['contact']) }],
+  ['customers.pipeline.get', 'customers', 'pipeline', 'safe', { provenance: 'untrusted', reply: obj({ pipeline: { type: 'object', description: 'stages [{id, name, outcome, deals, totalCents}].' } }, ['pipeline']) }],
+  ['customers.contact.create', 'customers', 'create_contact', 'undoable', { idempotency: NAT('one contact per email per workspace: a retry with an email is refused as duplicate_contact'), reply: obj({ contact: { type: 'object', description: 'id, name, email, source (agent), url.' } }, ['contact']) }],
+  ['customers.note.draft', 'customers', 'draft_note', 'undoable', { idempotency: NONE('no request key yet: a retried call adds a second draft a person discards'), reply: obj({ activity: { type: 'object', description: 'id, kind, state ("draft" from an agent until a person keeps it).' } }, ['activity']) }],
+  ['customers.deal.draft', 'customers', 'draft_deal', 'undoable', { idempotency: NONE('no request key yet: a retried call proposes a second draft deal'), reply: obj({ deal: { type: 'object', description: 'id, title, amountCents, currency, stageName, state ("draft" until a person confirms).' } }, ['deal']) }],
+  ['customers.import.preview', 'customers', 'preview_import', 'safe', { reply: obj({ report: { type: 'object', description: 'rows, created, merged, skipped, invalid [{row, reason}] — what an import would do; nothing is written.' } }, ['report']) }],
   // ── docs (Office › Write and Notes, services/workspaceDocs.js). A document is a Storage file; writes are reversible.
   ['docs.doc.list', 'docs', 'list_docs', 'safe', { provenance: 'untrusted', reply: obj({ docs: { type: 'array', description: 'id, versionId, kind, title, excerpt, updatedAt — written by people.' } }, ['docs']) }],
   ['docs.doc.get', 'docs', 'get_doc', 'safe', { provenance: 'untrusted', reply: obj({ doc: { type: 'object', description: 'id, versionId, kind, title, markdown, canEdit, links.' }, backlinks: { type: 'array', description: 'Documents that link to this one.' } }, ['doc']) }],

@@ -107,8 +107,15 @@ async function main() {
   ok(again.already && again.response.actions.task.key === key, 'running it again returns the same task, never a second');
   const tk = await F.runAction(pool, E, { ...w, id: form.id, responseId: ada.id, action: 'ticket' });
   ok(/^T-\d+$/.test(tk.response.actions.ticket.key) && (await pool.query('SELECT 1 FROM support_tickets WHERE number = $1 AND requester_id = $2', [Number(tk.response.actions.ticket.key.slice(2)), editor])).rows.length === 1, 'a response becomes a support request, raised by the person who ran it');
-  const contact = await code(F.runAction(pool, E, { ...w, id: form.id, responseId: ada.id, action: 'contact' }));
-  ok(contact === (await F.customersArea() ? null : 'customers_not_available'), 'a contact is made when Customers is present, and says so clearly when it is not');
+  ok(!!(await F.customersArea()), 'the Customers area is present');
+  const ct = await F.runAction(pool, E, { ...w, id: form.id, responseId: ada.id, action: 'contact' });
+  const crow = (await pool.query('SELECT * FROM crm_contacts WHERE id = $1', [ct.response.actions.contact.id])).rows[0];
+  ok(crow && crow.workspace_id === ws && crow.email === 'ada@example.com' && crow.name === 'Ada' && crow.source === 'form', 'a response becomes a Customers contact in the same workspace, sourced "form"');
+  ok((await pool.query('SELECT 1 FROM crm_activities WHERE contact_id = $1 AND body LIKE $2', [crow.id, '%Seats: 5%'])).rows.length === 1, 'with the answers on its timeline');
+  await F.submit(pool, pt, { answers: { ...good, name: 'Ada L.' }, source: '6.6.6.6' });
+  const ada2 = (await F.listResponses(pool, E, { ...w, id: form.id })).responses.find((r) => r.answers.name === 'Ada L.');
+  const ct2 = await F.runAction(pool, E, { ...w, id: form.id, responseId: ada2.id, action: 'contact' });
+  ok(ct2.response.actions.contact.id === crow.id && ct2.response.actions.contact.matched, 'the same email answering again is matched to that contact, never a duplicate');
   const spamRow = (await F.listResponses(pool, E, { ...w, id: form.id, spam: true })).responses[0];
   ok(await code(F.runAction(pool, E, { ...w, id: form.id, responseId: spamRow.id, action: 'task' })) === 'response_is_spam', 'nothing is made from spam');
 

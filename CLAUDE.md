@@ -231,6 +231,22 @@ Private requests to XENO: `services/supportTickets.js` (the one service), `route
   `xenoTasks.transitionTask`). Mail only when `SUPPORT_EMAILS` is exactly `true` (in compose's `environment:` too).
 - Proofs: `npm run test:support-tickets` (real Postgres, mutation-checked) and `npm run test:support-ui` (browser).
 
+## 🤝 XENO Customers lives HERE — Corpo › Customers, the workspace CRM (2026-10-20)
+
+`services/customers.js` (the one service), `routes/customersRoutes.js` (`/api/customers`), `services/customersMcp.js`
+(`customers.*`), screens `prototypes/xeno-workspace/platform-customers.js` at
+`/workspace/corpo/spaces/customers[/contacts|/pipeline|/companies|/import|/duplicates|/contacts/<id>]`.
+
+- **The WORKSPACE owns contacts, companies and deals** (§8.11): viewers read, editors write, a HUMAN admin deletes
+  and GDPR-erases (erasure leaves a tombstone in `crm_erasures` with no personal data).
+- **Agents read and DRAFT.** An agent's note is `state='draft'` and its deal `state='draft'` until a person keeps or
+  confirms it; a CHECK and a trigger on `crm_activities` hold the note rule. No agent tool deletes, erases, merges,
+  exports, keeps, confirms or runs an import (it may preview one).
+- **Links, not copies.** Support tickets on a contact come from `supportTickets.getTicket` as the caller (explicit
+  links + tickets raised from this workspace by that email); tasks are XENO Tasks. A link never shows what its owner hides.
+- **Dedupe**: one contact per email per workspace (unique index); CSV import is a dry run unless `confirm`, skips or
+  fills blanks on an existing email, never overwrites.
+- Proofs: `npm run test:customers` (real Postgres, 60 checks, mutation-checked ×4) and `npm run test:customers-ui`.
 ## 📅 Corpo › Scheduling lives HERE (2026-10-20)
 
 `services/scheduling.js` is the one service (screen `platform-scheduling.js`, routes `schedulingRoutes.js`, agents
@@ -267,9 +283,9 @@ A form belongs to a workspace (§8.11): viewers list, editors build and read res
 - The respondent's side is `/api/forms/public/:token`: a server-rendered page that needs no account and no
   JavaScript (under `/api/`, so the site gate does not hide it). Answers are validated on the server; a filled
   honeypot is stored as spam and answered as accepted; per-source (hashed, never stored) and per-form hourly limits.
-- Response → contact / task / ticket. Contact goes through `customersArea()`, the one seam to
-  `services/customers.js` `upsertContactFromForm`; until that exists it answers `customers_not_available` (501).
-- Proofs: `npm run test:forms` (real Postgres, 6/6 mutations killed), `npm run test:forms-ui` (browser, 4/4).
+- Response → contact / task / ticket. Contact goes through `customersArea()`, the one seam to `services/customers.js`
+  (`createContact` + a timeline note; a known email is matched, never duplicated). Each action runs once per response.
+- Proofs: `npm run test:forms` (real Postgres, 7/7 mutations killed), `npm run test:forms-ui` (browser, 4/4).
 
 ## 🧭 Workforce runs are ADMITTED, then RE-ASKED — the authority lives HERE (2026-09-25/26)
 

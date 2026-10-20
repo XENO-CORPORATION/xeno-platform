@@ -1113,13 +1113,15 @@
   }
   function mainItem() {
     if (S.view === 'global' && S.global === 'inbox') return mainInbox();
+    // a live area that addresses its own records (items: true) draws them itself, e.g. customers/contacts/<id>
+    if (S.view === 'zone') { const L = zoneLive(zoneNow()); if (L && L.items && L.page) { const html = L.page(zoneNow()); if (html) return html; } }
     if (S.view === 'global' && S.global === 'projects' && (window.XENO_PROJECTS || {})[S.item.split('/')[0]] !== undefined || (S.view === 'global' && S.global === 'projects' && !/^(Archived projects)$/.test(S.item))) { const [nm, tb] = S.item.split('/'); return mainProject(nm, tb); }
     const owner = S.view === 'product' ? PR[S.product].name : S.view === 'zone' ? zoneNow().label : { anima: 'Anima', community: 'Community', market: 'Marketplace', library: 'Library', projects: 'Projects', tasks: 'Tasks', workspace: 'Workspace', inbox: 'Inbox', settings: 'Settings', places: 'Places', support: 'Support' }[S.global] || '';
     return `<div class="wrap"><div class="landing"><span class="ib" style="width:72px;height:72px;pointer-events:none">${ic('doc').replace('class="i"', 'class="i" style="width:40px;height:40px"')}</span><h1>${esc(S.item)}</h1><p>${esc(owner)} · ${esc(ctxName())}</p><div class="row2"><button class="btn ghost" data-back>Back</button></div><div class="note">Couldn’t find “${esc(S.item)}” in ${esc(owner)}. It may have been renamed, moved or deleted — check Trash in your Library.</div></div></div>`;
   }
   function crumbs() {
     const liveChat = !!(window.XENO_CHAT && window.XENO_CHAT.served);
-    if (S.view === 'zone') return `<span>${M[zoneKey()].name}</span><span class="sep">/</span>${zoneNow().of ? `<span>${M[zoneNow().of].name}</span><span class="sep">/</span>` : ''}${S.item ? `<span>${esc(zoneNow().label)}</span><span class="sep">/</span><b>${esc(S.item)}</b>` : `<b>${esc(zoneNow().label)}</b>`}`;
+    if (S.view === 'zone') return `<span>${M[zoneKey()].name}</span><span class="sep">/</span>${zoneNow().of ? `<span>${M[zoneNow().of].name}</span><span class="sep">/</span>` : ''}${S.item ? `<span>${esc(zoneNow().label)}</span><span class="sep">/</span><b>${esc((zoneLive(zoneNow()) || {}).label ? zoneLive(zoneNow()).label(S.item) : S.item)}</b>` : `<b>${esc(zoneNow().label)}</b>`}`;
     const sep = '<span class="sep">/</span>';
     if (S.view === 'dashboard') return '<b>Overview</b>';
     if (S.view === 'adaptive') return '<b>Adaptive</b><span class="sep">·</span><span>Beta</span>';

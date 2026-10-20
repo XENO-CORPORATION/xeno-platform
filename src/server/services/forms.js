@@ -19,7 +19,7 @@
  * and per-form hourly limits, size caps, and a closed form takes nothing.
  *
  * ACTIONS on a response (by an editor, or automatically on submit when the form says so):
- *   contact → a Customers contact (services/customers.js, when that area is present)
+ *   contact → a Customers contact (services/customers.js; a known email is matched, never duplicated) + a timeline note
  *   task    → a XENO Tasks task (xenoTasks.createTask) — there is no second tracker
  *   ticket  → a XENO support request (supportTickets.createTicket), raised by the person who runs it
  * What each action produced is recorded on the response, so it is never run twice.
@@ -345,7 +345,7 @@ const byLabel = (form, answers, re) => { const f = form.fields.find((x) => re.te
 
 /** The Customers area, when present. Kept as one seam so this file never re-implements contacts. */
 export async function customersArea() {
-  try { const m = await import('./customers.js'); return typeof m.upsertContactFromForm === 'function' ? m : null; }
+  try { const m = await import('./customers.js'); return typeof m.createContact === 'function' && typeof m.addActivity === 'function' ? m : null; }
   catch (e) { if (e && (e.code === 'ERR_MODULE_NOT_FOUND' || /Cannot find module/.test(e.message))) return null; throw e; }
 }
 
@@ -370,8 +370,15 @@ export async function runAction(db, actor, { workspace, id, responseId, action, 
   } else {
     const C = await customersArea();
     if (!C) throw new FormsError('Customers is not available on this platform yet, so a contact cannot be made', 'customers_not_available', 501);
-    const c = await C.upsertContactFromForm(db, actor, { workspace: s.workspaceId, name: byLabel(form, a, /name/i), email: firstOf(form, a, 'email'), phone: firstOf(form, a, 'phone'), company: byLabel(form, a, /company|organi[sz]ation/i), note: body, source: `form:${form.id}` });
-    result = { id: c.id || (c.contact && c.contact.id), at: new Date().toISOString() };
+    // the same person answering twice is one contact: a known email is matched, never duplicated
+    const mail = firstOf(form, a, 'email');
+    let contactId = null, matched = false;
+    try {
+      const c = await C.createContact(db, actor, { workspace: s.workspaceId, name: byLabel(form, a, /name/i) || mail || 'Form respondent', email: mail, phone: firstOf(form, a, 'phone'), source: 'form' });
+      contactId = c.id;
+    } catch (e) { if (e && e.code === 'duplicate_contact' && e.existingId) { contactId = e.existingId; matched = true; } else throw e; }
+    await C.addActivity(db, actor, contactId, { workspace: s.workspaceId, kind: 'note', body: body.slice(0, 20000) });
+    result = { id: contactId, matched, at: new Date().toISOString() };
   }
   const u = (await db.query('UPDATE form_responses SET actions = actions || jsonb_build_object($2::text, $3::jsonb) WHERE id = $1 RETURNING *', [r.id, action, JSON.stringify(result)])).rows[0];
   return { response: viewResponse(u) };

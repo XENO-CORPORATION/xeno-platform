@@ -24,9 +24,10 @@ Per division: how many actions a person can take, how many an agent can take tod
 | inference | 18 | 0 | 12 | 6 | 5 | 10 | 3 | 0 | `chat:write` 7, `chat:read` 5 |
 | scheduling | 22 | 4 | 12 | 6 | 9 | 11 | 2 | 0 | `scheduling:write` 10, `scheduling:read` 2 |
 | support | 21 | 8 | 12 | 1 | 4 | 14 | 1 | 2 | `forum:write` 11, `forum:read` 1 |
+| customers | 29 | 7 | 9 | 13 | 9 | 14 | 5 | 1 | `customers:write` 6, `customers:read` 3 |
 | analytics | 10 | 5 | 4 | 1 | 6 | 4 | 0 | 0 | `analytics:write` 4 |
 | forms | 18 | 8 | 4 | 6 | 8 | 9 | 1 | 0 | `forms:write` 4 |
 | publish | 13 | 6 | 4 | 3 | 6 | 4 | 0 | 3 | `publish:write` 3, `publish:read` 1 |
 | docs | 10 | 10 | 0 | 0 | 5 | 5 | 0 | 0 | — |
 
-Scopes (one-way names, approved 2026-10-20): `storage:read`, `storage:write`, `share:create`, `library:read`, `library:write`, `tasks:read`, `tasks:write`, `chat:read`, `chat:write`, `agents:read`, `agents:write`, `wallet:read`, `wallet:spend`, `workspace:read`, `workspace:admin`, `places:read`, `places:write`, `marketplace:read`, `marketplace:write`, `forum:read`, `forum:write`, `publish:read`, `publish:write`, `forms:read`, `forms:write`, `analytics:read`, `analytics:write`, `docs:read`, `docs:write`, `scheduling:read`, `scheduling:write`.
+Scopes (one-way names, approved 2026-10-20): `storage:read`, `storage:write`, `share:create`, `library:read`, `library:write`, `tasks:read`, `tasks:write`, `chat:read`, `chat:write`, `agents:read`, `agents:write`, `wallet:read`, `wallet:spend`, `workspace:read`, `workspace:admin`, `places:read`, `places:write`, `marketplace:read`, `marketplace:write`, `forum:read`, `forum:write`, `publish:read`, `publish:write`, `forms:read`, `forms:write`, `analytics:read`, `analytics:write`, `docs:read`, `docs:write`, `scheduling:read`, `scheduling:write`, `customers:read`, `customers:write`.

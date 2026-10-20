@@ -1514,6 +1514,104 @@
    ]
   },
   {
+   "name": "customers.contact.list",
+   "wire": "customers__contact__list",
+   "version": "1.0.0",
+   "class": "safe",
+   "scope": "customers:read",
+   "surfaces": [
+    "mcp",
+    "rest"
+   ],
+   "aliases": [
+    "customers_list_contacts"
+   ]
+  },
+  {
+   "name": "customers.contact.get",
+   "wire": "customers__contact__get",
+   "version": "1.0.0",
+   "class": "safe",
+   "scope": "customers:read",
+   "surfaces": [
+    "mcp",
+    "rest"
+   ],
+   "aliases": [
+    "customers_get_contact"
+   ]
+  },
+  {
+   "name": "customers.pipeline.get",
+   "wire": "customers__pipeline__get",
+   "version": "1.0.0",
+   "class": "safe",
+   "scope": "customers:read",
+   "surfaces": [
+    "mcp",
+    "rest"
+   ],
+   "aliases": [
+    "customers_pipeline"
+   ]
+  },
+  {
+   "name": "customers.contact.create",
+   "wire": "customers__contact__create",
+   "version": "1.0.0",
+   "class": "undoable",
+   "scope": "customers:write",
+   "surfaces": [
+    "mcp",
+    "rest"
+   ],
+   "aliases": [
+    "customers_create_contact"
+   ]
+  },
+  {
+   "name": "customers.note.draft",
+   "wire": "customers__note__draft",
+   "version": "1.0.0",
+   "class": "undoable",
+   "scope": "customers:write",
+   "surfaces": [
+    "mcp",
+    "rest"
+   ],
+   "aliases": [
+    "customers_draft_note"
+   ]
+  },
+  {
+   "name": "customers.deal.draft",
+   "wire": "customers__deal__draft",
+   "version": "1.0.0",
+   "class": "undoable",
+   "scope": "customers:write",
+   "surfaces": [
+    "mcp",
+    "rest"
+   ],
+   "aliases": [
+    "customers_draft_deal"
+   ]
+  },
+  {
+   "name": "customers.import.preview",
+   "wire": "customers__import__preview",
+   "version": "1.0.0",
+   "class": "safe",
+   "scope": "customers:read",
+   "surfaces": [
+    "mcp",
+    "rest"
+   ],
+   "aliases": [
+    "customers_preview_import"
+   ]
+  },
+  {
    "name": "docs.doc.list",
    "wire": "docs__doc__list",
    "version": "1.0.0",
