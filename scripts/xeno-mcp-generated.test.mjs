@@ -9,7 +9,7 @@ import { toWire, fromWire, defineCapability } from '../src/server/capabilities/d
 
 const before = JSON.parse(readFileSync(new URL('../src/server/tests/xeno-mcp-tools-before.snapshot.json', import.meta.url)));
 const ALL = { categories: [...mcp.CATEGORIES] };
-const ADDED = new Set(['places', 'storage', 'forum', 'modes', 'workforce']);   // categories added after the snapshot: places (2026-10-19), storage + forum (WORKSPACE AGENT SURFACE P1), modes (MODES §8c, 2026-10-20), workforce (WORKSPACE AGENT SURFACE, 2026-10-20)
+const ADDED = new Set(['places', 'storage', 'forum', 'modes', 'workforce', 'publish']);   // categories added after the snapshot: places (2026-10-19), storage + forum (WORKSPACE AGENT SURFACE P1), modes (MODES §8c, 2026-10-20), workforce (WORKSPACE AGENT SURFACE, 2026-10-20), publish (XENO Post, 2026-10-20)
 
 for (const who of ['agent', 'human']) {
   test(`snapshot: every tool ${who}s listed before is listed after, byte for byte`, () => {

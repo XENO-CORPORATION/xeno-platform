@@ -1038,6 +1038,76 @@
    ]
   },
   {
+   "name": "publish.channel.list",
+   "wire": "publish__channel__list",
+   "version": "1.0.0",
+   "class": "safe",
+   "scope": "publish:read",
+   "surfaces": [
+    "mcp",
+    "rest"
+   ],
+   "aliases": [
+    "publish_list_channels"
+   ]
+  },
+  {
+   "name": "publish.post.list",
+   "wire": "publish__post__list",
+   "version": "1.0.0",
+   "class": "safe",
+   "scope": "publish:read",
+   "surfaces": [
+    "mcp",
+    "rest"
+   ],
+   "aliases": [
+    "publish_list_posts"
+   ]
+  },
+  {
+   "name": "publish.post.draft",
+   "wire": "publish__post__draft",
+   "version": "1.0.0",
+   "class": "undoable",
+   "scope": "publish:write",
+   "surfaces": [
+    "mcp",
+    "rest"
+   ],
+   "aliases": [
+    "publish_draft_post"
+   ]
+  },
+  {
+   "name": "publish.post.propose_schedule",
+   "wire": "publish__post__propose_schedule",
+   "version": "1.0.0",
+   "class": "undoable",
+   "scope": "publish:write",
+   "surfaces": [
+    "mcp",
+    "rest"
+   ],
+   "aliases": [
+    "publish_propose_schedule"
+   ]
+  },
+  {
+   "name": "publish.approval.list",
+   "wire": "publish__approval__list",
+   "version": "1.0.0",
+   "class": "safe",
+   "scope": "publish:read",
+   "surfaces": [
+    "mcp",
+    "rest"
+   ],
+   "aliases": [
+    "publish_list_approvals"
+   ]
+  },
+  {
    "name": "forum.thread.search",
    "wire": "forum__thread__search",
    "version": "1.0.0",
