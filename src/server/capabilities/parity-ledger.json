@@ -8211,6 +8211,67 @@
    "class": "safe",
    "scope": "none",
    "because": "chooses which division the screen shows; an agent passes `division` to query_metric"
+  },
+  "route:modesRoutes.js:POST /:wid/architect/proposals (workspaceModesRouter)": {
+   "status": "capability",
+   "capability": "modes.architect.propose",
+   "class": "irreversible",
+   "scope": "workspace:read"
+  },
+  "route:modesRoutes.js:GET /:wid/architect/proposals/:pid (workspaceModesRouter)": {
+   "status": "capability",
+   "capability": "modes.architect.get",
+   "class": "safe",
+   "scope": "workspace:read"
+  },
+  "route:modesRoutes.js:GET /:wid/architect/proposals (workspaceModesRouter)": {
+   "status": "planned",
+   "class": "safe",
+   "scope": "workspace:read"
+  },
+  "route:modesRoutes.js:PATCH /:wid/architect/proposals/:pid (workspaceModesRouter)": {
+   "status": "planned",
+   "class": "reversible",
+   "scope": "workspace:admin"
+  },
+  "ui:setup.js:data-xsu=docs": {
+   "status": "excluded",
+   "category": "view-state",
+   "class": "safe",
+   "scope": "none",
+   "because": "changes only what the screen shows"
+  },
+  "ui:setup.js:data-xsu=pick": {
+   "status": "excluded",
+   "category": "view-state",
+   "class": "safe",
+   "scope": "none",
+   "because": "changes only what the screen shows"
+  },
+  "ui:setup.js:data-xsu=task-del": {
+   "status": "excluded",
+   "category": "view-state",
+   "class": "safe",
+   "scope": "none",
+   "because": "changes only what the screen shows"
+  },
+  "ui:setup.js:data-xsu=task-add": {
+   "status": "excluded",
+   "category": "view-state",
+   "class": "safe",
+   "scope": "none",
+   "because": "changes only what the screen shows"
+  },
+  "ui:setup.js:data-xsu=propose": {
+   "status": "capability",
+   "capability": "modes.architect.propose",
+   "class": "irreversible",
+   "scope": "workspace:read"
+  },
+  "ui:setup.js:data-xsu=use": {
+   "status": "planned",
+   "class": "reversible",
+   "scope": "workspace:admin"
   }
  }
 }

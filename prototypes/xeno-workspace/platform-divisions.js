@@ -89,7 +89,7 @@
     const h = H(), d = S.one; if (!d) return null;
     const archived = d.lifecycle === 'archived';
     const asCanvas = window.XENO_CANVAS?.served ? h.btn('Open as canvas', `data-xcv-open="division" data-id="${esc(d.id)}"`, true, 'grid') : '';
-    const acts = asCanvas + (d.canManage && !archived ? h.btn('Set head', 'data-xdv="head"', true, 'user') + h.btn('Rename', 'data-xdv="rename"', true, 'edit') + h.btn('New division inside', 'data-xdv="new-inside"', true, 'plus') + h.btn('Archive', 'data-xdv="archive"', true, 'archive') : '');
+    const acts = asCanvas + (d.canManage && !archived ? h.btn('Set head', 'data-xdv="head"', true, 'user') + h.btn('Rename', 'data-xdv="rename"', true, 'edit') + h.btn('New division inside', 'data-xdv="new-inside"', true, 'plus') + h.btn('Archive', 'data-xdv="archive"', true, 'archive') + h.btn('Propose this division from documents', `data-xsu="open-docs" data-idea="${esc('The ' + d.name + ' division: ')}"`, true, 'plus') : '');
     const myAgents = new Set(d.agentsList.map((a) => a.id));
     const outside = S.agents.filter((a) => !myAgents.has(a.id));
     const myProjects = new Set(d.projectsList.map((p) => p.id));
