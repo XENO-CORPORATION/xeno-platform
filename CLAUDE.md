@@ -105,7 +105,11 @@ the API, OAuth, static assets, `/install/spawn.ps1`, and the sign-in/legal pages
 |---|---|---|
 | **Access code** | `SITE_GATE_CODE` typed on Coming soon → signed `__Host-xeno_gate` cookie, 7 days, 10 attempts / 15 min per address | Opens **pages only**. Rotating the code invalidates every issued cookie; there is no per-person revocation |
 | **Account** | An ACTIVE account that is an admin or matches `SITE_GATE_ALLOW` (`@xenosystem.ai,@bnkrsys.com`) | Signed in alone is NOT access — signup is open |
+| **Personal code** (owner, 2026-10-20) | Admin creates one per person/fund at `/workspace/support/access` (`/api/site-gate/codes`, admin only; `services/siteAccessCodes.js`). Shown ONCE; only a SHA-256 is stored. Scope `pages` (default) or `account` | The cookie (`v2.<exp>.<code id>.<hmac>`) names the code and `/check` re-reads its row, so **revoke/expiry shut every browser at once**. `account` also sets the PR #824 share invitation (24 h) so registrationGate admits signup — no second signup path. Expiry required (default 30 d, max 365), optional max uses, audit in `site_access_code_events` (country only, never an IP) |
 | Off | `SITE_GATE=` (anything but `on`) → 204 for everyone | The flag is the whole switch |
+
+**One host:** `www.xenosystem.ai` 301s every page to `https://xenosystem.ai` (path + query kept; `/api/` 308 so POSTs survive), because the `__Host-` gate cookie is per host. No OAuth client registers a www redirect URI (box, 2026-10-20).
+⚠️ Not built: a code that INVITES a specific email, and linking a created account back to the code it was created under (only "browsed under it while signed in" is recorded).
 
 🔴 **The sign-in page must never be gated.** The bypass serves the shell from the named
 `@spa_shell` location; `try_files … /index.html` is an internal redirect that re-enters the

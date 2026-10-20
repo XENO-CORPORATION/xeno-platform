@@ -88,7 +88,7 @@
           body: JSON.stringify({ code: code }),
           credentials: 'same-origin',
         }).then(function (r) {
-          if (r.status === 204) { window.location.reload(); return null; }
+          if (r.ok) { window.location.reload(); return null; } // 204 shared code, 200 a personal code
           return r.json().catch(function () { return {}; }).then(function (body) {
             error.textContent = MESSAGES[body.error] || MESSAGES.default;
             button.disabled = false;
