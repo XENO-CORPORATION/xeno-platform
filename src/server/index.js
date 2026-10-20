@@ -137,6 +137,7 @@ import { requireActivated } from './services/accountActivation.js';
 import agentRoutes from './routes/agentRoutes.js';
 import artifactRoutes from './routes/artifactRoutes.js';
 import { createArtifactViewerRouter } from './routes/artifactViewerRoutes.js';
+import { createStorageSharedRouter } from './routes/storageSharedRoutes.js';
 import { authMiddleware, optionalAuthMiddleware } from './middleware/auth.js';
 import { suspensionGate } from './middleware/suspensionGate.js';
 import { initCleanupService } from './services/cleanupService.js';
@@ -846,6 +847,8 @@ app.use('/api/v2/agents', databaseMiddleware, agentRoutes);
 // policy the CLI's loopback viewer enforces (routes/artifactViewerRoutes.js).
 app.use('/api/artifacts', databaseMiddleware, authMiddleware, artifactRoutes);
 app.use('/a', databaseMiddleware, browserSessionMiddleware(pool), createArtifactViewerRouter());
+// XENO Storage: a folder shared by a sign-in link. Backend-rendered, session resolved here; see routes/storageSharedRoutes.js.
+app.use('/storage/shared', databaseMiddleware, browserSessionMiddleware(pool), createStorageSharedRouter());
 console.log('⬇️ Download routes integrated: /api/download/*');
 
 // Round 8: Infrastructure routes

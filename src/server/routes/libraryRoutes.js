@@ -3,6 +3,7 @@ import { run as runOperation, lookup as lookupOperation, keyFrom, IdempotencyErr
 /** The revision an If-Match names ("<id>", W/"<id>" or <id>), or null; '*' means any. */
 export const ifMatchRevision = (req) => { const v = String(req.get('if-match') || '').trim().replace(/^W\//, '').replace(/"/g, ''); return v && v !== '*' ? v : null; };
 import { registerManagedLibraryFile } from '../services/libraryAssets.js';
+import { createFolderLink, folderLinkActivity, listFolderLinks, revokeFolderLink } from '../services/storageFolderLinks.js';
 import { createLink, fileForLink, foldersSharedWith, listShares, revokeShare, shareWithPerson } from '../services/storageShares.js';
 import { allFolders, createFolder, listFolders, moveItemToFolder, removeFolder, updateFolder } from '../services/storageFolders.js';
 import { localLibraryPath } from '../services/storageObjects.js';
@@ -39,7 +40,7 @@ router.param('id', async (req, _res, next, id) => {
   try { req.params.id = await revisionFor(req.db, id); next(); } catch (error) { next(error); }
 });
 
-const streamAsset = async (req, res, fileOrPrincipal, signed = false) => {
+export const streamAsset = async (req, res, fileOrPrincipal, signed = false) => {
   try {
     const file = fileOrPrincipal?.storage_path
       ? fileOrPrincipal
@@ -294,6 +295,16 @@ router.post('/assets/file/:id/shares', folders(async (req, res) => {
   const r = await shareWithPerson(req.db, req.user.id, { fileId: req.params.id }, req.body?.with, req.body?.role === 'editor' ? 'editor' : 'viewer'); shareReply(res, r, { share: r.share });
 }));
 router.delete('/shares/:id', folders(async (req, res) => { shareReply(res, await revokeShare(req.db, req.user.id, req.params.id)); }));
+// a FOLDER shared by a link that REQUIRES SIGN-IN (services/storageFolderLinks.js, routes/storageSharedRoutes.js):
+// anyone the owner gives it to can open the folder read-only once signed in to a XENO account; every open and
+// download is recorded; it is revocable at once. The token is shown ONCE.
+router.get('/folders/:id/links', folders(async (req, res) => { const r = await listFolderLinks(req.db, req.user.id, req.params.id); shareReply(res, r, { links: r.links }); }));
+router.post('/folders/:id/links', folders(async (req, res) => {
+  const r = await createFolderLink(req.db, req.user.id, req.params.id, { expiresInDays: req.body?.expiresInDays ?? null, label: req.body?.label ?? null });
+  shareReply(res, r, r.ok ? { link: r.link, url: `${/^(xenosystem\.ai|xenostudio\.ai)$/.test(String(req.get('host'))) ? `https://${req.get('host')}` : siteOrigin()}/storage/shared/${r.token}` } : {});
+}));
+router.get('/folder-links/:id/activity', folders(async (req, res) => { const r = await folderLinkActivity(req.db, req.user.id, req.params.id); shareReply(res, r, r.ok ? { link: r.link, events: r.events } : {}); }));
+router.delete('/folder-links/:id', folders(async (req, res) => { shareReply(res, await revokeFolderLink(req.db, req.user.id, req.params.id)); }));
 // VERSIONS of a file (services/storageVersions.js). A new version is uploaded at POST …/versions (index.js, with the upload handler).
 router.get('/assets/file/:id/versions', folders(async (req, res) => { const r = await listVersions(req.db, req.user.id, req.params.id); if (r.notFound) return res.status(404).json({ success: false, code: 'not_found', error: 'File not found' }); res.json({ success: true, fileId: r.fileId, versions: r.versions }); }));
 // RESTORE (xeno-storage/SPEC.md §7.3): an older version's bytes become the newest version. If-Match restores only on

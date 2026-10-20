@@ -42,6 +42,7 @@ import {
   AccountSuspendedError,
 } from '../middleware/registrationGate.js';
 import { hasGateInvite } from '../utils/siteGateCode.js';
+import { hasShareInvite } from '../utils/shareInvite.js';
 
 // Free-tier starter credits granted on signup so new users can try premium generation.
 // The free tier is ONE mechanism: the weekly allowance (utils/quotaEngine.js,
@@ -237,7 +238,9 @@ async function findOrCreateOAuthUser(db, provider, profile, req = null) {
     // The invite is the cookie on this request, or the one captured server-side when this OAuth flow started; either
     // way it only counts while the site gate is on (hasGateInvite checks that; the captured one is re-checked here).
     assertRegistrationAllowed(email, { gateInvite: hasGateInvite(req?.headers?.cookie)
-      || (req?.oauthGateInvite === true && process.env.SITE_GATE === 'on') });
+      || (req?.oauthGateInvite === true && process.env.SITE_GATE === 'on'),
+      // a sign-in folder link's invitation, from this request or captured where the OAuth flow started
+      shareInvite: hasShareInvite(req?.headers?.cookie) || req?.oauthShareInvite === true });
 
     const userId = uuidv4();
     const generatedUsername = username || email?.split('@')[0] || `user_${providerId.substring(0, 8)}`;
@@ -2054,7 +2057,7 @@ router.get('/google', async (req, res) => {
       // The access-code invitation, captured where the flow STARTS (that host has the cookie) and kept server-side,
       // because the provider returns to OIDC/OAuth callback on xenostudio.ai, where a __Host- cookie set on
       // xenosystem.ai is never sent.
-      gateInvite: hasGateInvite(req.headers.cookie), provider: 'google', returnUrl, createdAt: Date.now() });
+      gateInvite: hasGateInvite(req.headers.cookie), shareInvite: hasShareInvite(req.headers.cookie), provider: 'google', returnUrl, createdAt: Date.now() });
 
     const params = new URLSearchParams({
       client_id: config.clientId,
@@ -2093,6 +2096,7 @@ router.get('/google/callback', async (req, res) => {
       return res.redirect(`${FRONTEND_URL}/login?error=invalid_state`);
     }
     req.oauthGateInvite = stateData.gateInvite === true;
+    req.oauthShareInvite = stateData.shareInvite === true;
 
     const config = OAUTH_CONFIG.google;
 
@@ -2172,7 +2176,7 @@ router.get('/github', async (req, res) => {
       // The access-code invitation, captured where the flow STARTS (that host has the cookie) and kept server-side,
       // because the provider returns to OIDC/OAuth callback on xenostudio.ai, where a __Host- cookie set on
       // xenosystem.ai is never sent.
-      gateInvite: hasGateInvite(req.headers.cookie), provider: 'github', returnUrl, createdAt: Date.now() });
+      gateInvite: hasGateInvite(req.headers.cookie), shareInvite: hasShareInvite(req.headers.cookie), provider: 'github', returnUrl, createdAt: Date.now() });
 
     const params = new URLSearchParams({
       client_id: config.clientId,
@@ -2207,6 +2211,7 @@ router.get('/github/callback', async (req, res) => {
       return res.redirect(`${FRONTEND_URL}/login?error=invalid_state`);
     }
     req.oauthGateInvite = stateData.gateInvite === true;
+    req.oauthShareInvite = stateData.shareInvite === true;
 
     const config = OAUTH_CONFIG.github;
 
@@ -2311,7 +2316,7 @@ router.get('/twitter', async (req, res) => {
       // The access-code invitation, captured where the flow STARTS (that host has the cookie) and kept server-side,
       // because the provider returns to OIDC/OAuth callback on xenostudio.ai, where a __Host- cookie set on
       // xenosystem.ai is never sent.
-      gateInvite: hasGateInvite(req.headers.cookie),
+      gateInvite: hasGateInvite(req.headers.cookie), shareInvite: hasShareInvite(req.headers.cookie),
       provider: 'twitter',
       returnUrl,
       codeVerifier,
@@ -2354,6 +2359,7 @@ router.get('/twitter/callback', async (req, res) => {
       return res.redirect(`${FRONTEND_URL}/login?error=invalid_state`);
     }
     req.oauthGateInvite = stateData.gateInvite === true;
+    req.oauthShareInvite = stateData.shareInvite === true;
 
     const config = OAUTH_CONFIG.twitter;
     const basicAuth = Buffer.from(`${config.clientId}:${config.clientSecret}`).toString('base64');

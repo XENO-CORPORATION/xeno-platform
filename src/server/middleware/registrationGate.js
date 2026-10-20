@@ -27,6 +27,7 @@
  */
 
 import { hasGateInvite } from '../utils/siteGateCode.js';
+import { hasShareInvite } from '../utils/shareInvite.js';
 
 /** Thrown when account creation is refused. Callers map it to 403 / a redirect. */
 export class AccountCreationBlockedError extends Error {
@@ -83,12 +84,16 @@ function allowlist() {
  * Is this specific email allowed to create an account right now?
  * @returns {{allowed: boolean, reason: string}}
  */
-export function registrationDecision(email, { gateInvite = false } = {}) {
+export function registrationDecision(email, { gateInvite = false, shareInvite = false } = {}) {
   if (isRegistrationOpen()) return { allowed: true, reason: 'open' };
 
   // An INVITED person (owner, 2026-10-18: "signups only with the access code"): a valid site-gate cookie is the
   // invitation. It is checked from the signed cookie, never from a body field, so it cannot be asserted by a caller.
   if (gateInvite) return { allowed: true, reason: 'site_gate_code' };
+
+  // A person the owner sent a sign-in folder link (utils/shareInvite.js): the signed cookie set when they opened a
+  // live link. It opens account creation only; the folder still needs the live link and a session on every request.
+  if (shareInvite) return { allowed: true, reason: 'share_link' };
 
   const normalized = String(email || '').trim().toLowerCase();
   if (normalized) {
@@ -109,8 +114,8 @@ export function registrationDecision(email, { gateInvite = false } = {}) {
  * Throwing form, for non-route code paths (the OAuth auto-create).
  * @throws {AccountCreationBlockedError}
  */
-export function assertRegistrationAllowed(email, { gateInvite = false } = {}) {
-  const decision = registrationDecision(email, { gateInvite });
+export function assertRegistrationAllowed(email, { gateInvite = false, shareInvite = false } = {}) {
+  const decision = registrationDecision(email, { gateInvite, shareInvite });
   if (!decision.allowed) throw new AccountCreationBlockedError(decision.reason);
   return decision;
 }
@@ -135,7 +140,7 @@ export function assertAccountUsable(user) {
  * invited person (who holds the access code) can create an account while the public cannot.
  */
 export function requireRegistrationOpen(req, res, next) {
-  const decision = registrationDecision(req.body?.email, { gateInvite: hasGateInvite(req.headers?.cookie) });
+  const decision = registrationDecision(req.body?.email, { gateInvite: hasGateInvite(req.headers?.cookie), shareInvite: hasShareInvite(req.headers?.cookie) });
   if (decision.allowed) return next();
 
   console.warn(`[registrationGate] refused signup attempt (${req.body?.email ? 'email supplied' : 'no email'})`);

@@ -113,7 +113,8 @@
   "xenoRoutes.js": "studio",
   "xenoTasksRoutes.js": "tasks",
   "youtubeRoutes.js": "studio",
-  "placesRoutes.js": "places"
+  "placesRoutes.js": "places",
+  "storageSharedRoutes.js": "storage"
  },
  "actions": {
   "route:accountGiftRoutes.js:POST /": {
@@ -4706,6 +4707,27 @@
     "places.place.get",
     "places.layout.save"
    ]
+  },
+  "route:libraryRoutes.js:GET /folders/:id/links": {
+   "status": "planned"
+  },
+  "route:libraryRoutes.js:POST /folders/:id/links": {
+   "status": "planned"
+  },
+  "route:libraryRoutes.js:GET /folder-links/:id/activity": {
+   "status": "planned"
+  },
+  "route:libraryRoutes.js:DELETE /folder-links/:id": {
+   "status": "planned"
+  },
+  "route:storageSharedRoutes.js:GET /:token": {
+   "status": "planned"
+  },
+  "route:storageSharedRoutes.js:GET /:token/f/:folderId": {
+   "status": "planned"
+  },
+  "route:storageSharedRoutes.js:GET /:token/files/:fileId": {
+   "status": "planned"
   }
  }
 }
