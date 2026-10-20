@@ -9,6 +9,8 @@
  *   #/studio/g/tasks/T-4            /workspace/studio/tasks/T-4          (overview: /workspace/tasks/T-4)
  *   #/studio/p/pixel                /workspace/studio/apps/pixel         (overview: /workspace/apps/pixel)
  *   #/studio/z/write                /workspace/studio/spaces/write       (overview: /workspace/spaces/write)
+ *   #/overview/g/workspace/Divisions/<id>   /workspace/divisions/<id>     a division's HOME, by id (the old
+ *                                   /workspace/workspace/Divisions/<id> still opens it and is rewritten in place)
  *
  * An old "#/…" link still works: it is read as it is and the address is upgraded to the clean path in place.
  * The first path segment is an area unless it is one of RESERVED, so an area can never be named after one of them.
@@ -16,7 +18,7 @@
 (() => {
   const BASE = '/workspace';
   const GLOBALS = ['anima', 'community', 'market', 'library', 'projects', 'tasks', 'workspace', 'inbox', 'settings', 'places'];
-  const RESERVED = [...GLOBALS, 'apps', 'spaces', 'adaptive', 'overview'];
+  const RESERVED = [...GLOBALS, 'apps', 'spaces', 'adaptive', 'overview', 'divisions'];
   const KIND_OUT = { p: 'apps', z: 'spaces' }, KIND_IN = { apps: 'p', spaces: 'z' };
   const split = (s) => { const i = s.indexOf('?'); return i < 0 ? [s, ''] : [s.slice(0, i), s.slice(i)]; };
 
@@ -32,6 +34,8 @@
     // Enhance improves a result that already exists, so it is its own Studio section, not one of the Generate pages
     if (m === 'studio' && kind === 'p' && /^enhance-(image|video|audio|3d)$/.test(id)) return `${BASE}/studio/enhance/${id.slice(8)}${item.replace(/^\/g\//, '/e/').replace(/^\/Library$/, '/library')}${q}`;
     if (m === 'studio' && kind === 'p' && ['image', 'video', 'audio', '3d'].includes(id)) return `${BASE}/studio/generate/${id}${item.replace(/^\/(Library|Favorites)$/, (s) => s.toLowerCase())}${q}`;
+    // divisions have their own top-level address: /workspace/divisions[/<id>] (parent in the path: the workspace)
+    if (kind === 'g' && id === 'workspace' && /^\/Divisions(\/|$)/.test(item)) return BASE + area + '/divisions' + item.slice(10) + q;
     const seg = kind === 'g' ? '/' + id : '/' + (KIND_OUT[kind] || kind) + '/' + id;
     return BASE + area + seg + item + q;
   }
@@ -53,6 +57,7 @@
     // the address Enhance had for a day, under Generate, still opens it
     if (area === 'studio' && a === 'generate' && b === 'enhance') return `#/studio/p/enhance-image${rest[0] === 'g' && rest[1] ? '/g/' + rest[1] : ''}${q}`;
     if (area === 'studio' && a === 'generate' && ['image', 'video', 'audio', '3d'].includes(b)) return `#/studio/p/${b}${/^(library|favorites)$/i.test(rest[0] || '') && rest.length === 1 ? '/' + rest[0][0].toUpperCase() + rest[0].slice(1).toLowerCase() : rest.length ? '/' + rest.join('/') : ''}${q}`;
+    if (a === 'divisions') return `#/${area}/g/workspace/Divisions${[b, ...rest].filter((x) => x != null).length ? '/' + [b, ...rest].filter((x) => x != null).join('/') : ''}${q}`;
     if (GLOBALS.includes(a)) return `#/${area}/g/${a}${[b, ...rest].filter((x) => x != null).length ? '/' + [b, ...rest].filter((x) => x != null).join('/') : ''}${q}`;
     if (KIND_IN[a] && b) return `#/${area}/${KIND_IN[a]}/${b}${rest.length ? '/' + rest.join('/') : ''}${q}`;
     return '#/' + area + q;
@@ -82,5 +87,7 @@
   // an old "#/…" address (a bookmark, a link from before, a test setting location.hash) is honoured, then upgraded
   const upgrade = () => { const h = legacy(); if (h) history.replaceState(history.state, '', toPath(h)); };
   addEventListener('hashchange', () => setTimeout(upgrade, 0));
+  // a division's old address (/workspace[/<area>]/workspace/Divisions/<id>) is the same place: show its own address
+  try { if (!legacy() && /\/workspace\/Divisions(\/|$)/.test(location.pathname)) history.replaceState(history.state, '', toPath(toHash(location.pathname)) + location.search); } catch {}
   window.XENO_ADDR = { BASE, RESERVED, GLOBALS, toPath, toHash, current, push, replace, go, url, upgrade, setWorkspace, workspace: () => WS };
 })();

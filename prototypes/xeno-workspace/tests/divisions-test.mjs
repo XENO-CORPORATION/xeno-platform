@@ -15,7 +15,7 @@ const ok = (c, m) => { if (c) console.log('PASS', m); else { failed++; console.l
 const uuid = () => 'xxxxxxxx-xxxx-4xxx-8xxx-xxxxxxxxxxxx'.replace(/x/g, () => '0123456789abcdef'[Math.floor(Math.random() * 16)]);
 const hex = () => [...Array(32)].map(() => '0123456789abcdef'[Math.floor(Math.random() * 16)]).join('');
 const WS = uuid();
-const db = { lends: [], offers: [], calls: [], divs: [], proj: [{ id: uuid(), name: 'Website', div: null }, { id: uuid(), name: 'Brand film', div: null }], agents: [], agentProj: {} };
+const db = { objs: [], runs: [], hiddenProjects: 1, lends: [], offers: [], calls: [], divs: [], proj: [{ id: uuid(), name: 'Website', div: null }, { id: uuid(), name: 'Brand film', div: null }], agents: [], agentProj: {} };
 const ad = (a) => ({ id: a.id, userId: a.userId, name: a.name, description: a.description, division: a.div ? { id: a.div, name: db.divs.find((d) => d.id === a.div).name, archived: false } : null,
   workspace: { id: WS, name: 'Me', personal: true }, instructions: a.versions[0].instructions, version: a.versions[0].version, versions: a.versions, createdAt: a.createdAt, status: 'active',
   projects: (db.agentProj[a.id] || []).map((pid) => { const p = db.proj.find((x) => x.id === pid); return { id: p.id, name: p.name, access: 'editor', division: p.div ? { id: p.div, name: db.divs.find((d) => d.id === p.div).name } : null }; }),
@@ -50,6 +50,18 @@ p.on('request', (q) => {
     if (method === 'PUT') db.budget = { limitCredits: b.credits, spentCredits: 12.5, leftCredits: b.credits - 12.5, windowDays: b.windowDays, autoApprove: b.autoApprove };
     return json(200, { success: true, budget: db.budget || null, spend: db.budget ? [{ agent: { id: 'agt_' + 'a'.repeat(32), name: 'Pixel Bot' }, kind: 'image', credits: 12.5, released: false, at: new Date().toISOString() }] : [], canManage: true });
   }
+  // the division HOME: the server decides every row; the stand-in answers as it does, with one project closed
+  const hm = path.match(/^\/api\/divisions\/([0-9a-f-]{36})\/home$/);
+  if (hm) {
+    const d = db.divs.find((x) => x.id === hm[1]); if (!d) return json(404, { success: false, code: 'division_not_found' });
+    return json(200, { success: true, state: 'fresh', revision: 1, home: { id: d.id, workspaceId: WS, name: d.name, canManage: true, head: d.head ? { id: d.head, name: d.headName, kind: 'human' } : null,
+      teams: [], directMembers: d.head ? [{ id: d.head, name: d.headName, kind: 'human', relation: 'editor', isHead: true }] : [],
+      agents: [], objectives: db.objs.filter((o) => o.div === d.id), runs: { rows: db.runs.filter((r) => r.div === d.id && !r.stopped), hidden: 1 },
+      spend: { budget: db.budget || null, ledger: [] }, funding: { rows: [], hidden: 0 }, handoffs: { rows: [], hidden: 0 }, decisions: d.reason ? [{ id: uuid(), kind: 'member.promote', by: 'Me', rationale: d.reason, at: new Date().toISOString() }] : [],
+      projects: { rows: db.proj.filter((x) => x.div === d.id).map((x) => ({ id: x.id, name: x.name })), hidden: db.hiddenProjects } } });
+  }
+  if (path === '/api/workforce/coordination/objectives') { const o = { id: uuid(), div: b.divisionId, title: b.title, successEvidence: b.successEvidence, status: 'open', owner: { id: 'u1', name: 'Me' }, windowStart: b.windowStart, windowEnd: b.windowEnd, goals: 0, goalsDone: 0, progress: 0 }; db.objs.push(o); return json(200, { success: true, result: { objectiveId: o.id } }); }
+  if (path === '/api/workforce/run-admissions/revoke') { const r = db.runs.find((x) => x.id === b.admissionId); r.stopped = true; return json(200, { success: true, result: { revoked: true } }); }
   const dm = path.match(/^\/api\/divisions\/([0-9a-f-]{36})(\/archive)?$/);
   if (dm) {
     const d = db.divs.find((x) => x.id === dm[1]); if (!d) return json(404, { success: false, error: 'Division not found', code: 'division_not_found' });
@@ -89,25 +101,25 @@ const choose = async (label) => { await p.evaluate((l) => { const r = [...docume
 const submit = async () => { await p.evaluate(() => (document.querySelector('.xd [data-xd-submit]') || document.querySelector('.xd [data-xd-ok]'))?.click()); await settle(1300); };
 
 try {
-  await fresh('/workspace/workspace/Divisions'); let t = await main();
+  await fresh('/workspace/divisions'); let t = await main();
   ok(/No divisions — and that’s fine/.test(t) && /real boundary/.test(t) && !/Studio|Office/.test(t), 'with none, Divisions explains what a division is — and shows no sample departments');
 
   await p.click('[data-xdv="new"]'); await settle(500); await fill(['Creative']); await submit();
   const creative = db.divs.find((d) => d.name === 'Creative');
-  ok(creative && new URL(p.url()).pathname === `/workspace/workspace/Divisions/${creative.id}`, 'New division creates it and opens it at its id');
+  ok(creative && new URL(p.url()).pathname === `/workspace/divisions/${creative.id}`, 'New division creates it and opens it at its id');
   const crumb = await p.$eval('.crumbs', (e) => e.innerText).catch(() => '');
   ok(/Divisions\s*\/\s*Creative/.test(crumb) && !crumb.includes(creative.id), `the breadcrumb names it, never its id (${crumb.replace(/\s+/g, ' ')})`);
   await p.click('[data-xdv="new-inside"]'); await settle(500); await fill(['Film']); await submit();
   const film = db.divs.find((d) => d.name === 'Film');
   ok(film && film.parent === creative.id, 'a division is created inside another');
 
-  await fresh('/workspace/workspace/Divisions'); t = await main();
+  await fresh('/workspace/divisions'); t = await main();
   ok(/Creative/.test(t) && /Film/.test(t) && /never reaches the divisions inside it/.test(t), 'the org chart shows both, and says a division is a boundary');
   const side = await p.$eval('#panel', (e) => e.innerText).catch(() => '');
   ok(/Creative/.test(side), 'the sidebar lists the real divisions');
 
   // head, with a reason
-  await fresh(`/workspace/workspace/Divisions/${creative.id}`);
+  await fresh(`/workspace/divisions/${creative.id}`);
   await p.click('[data-xdv="head"]'); await settle(500); await choose('Me'); await fill(['Leads the studio']); await submit();
   const patch = db.calls.find(([m, u, b]) => m === 'PATCH' && u === `/api/divisions/${creative.id}` && 'headId' in b);
   ok(patch && patch[2].headId === 'u1' && patch[2].reason === 'Leads the studio', 'Set head sends the head and the recorded reason');
@@ -129,7 +141,7 @@ try {
   await p.click('[data-xag="new"]'); await settle(500); await fill(['Cutter', 'Edits films']); await choose('Creative'); await submit();
   const ag = db.agents[0];
   ok(ag && ag.div === creative.id, 'a new agent can be created straight into a division');
-  t = await main();
+  if (!new URL(p.url()).pathname.endsWith(ag.id)) await fresh(`/workspace/workspace/Agents/${ag.id}`); t = await main();
   ok(/Division/.test(t) && /Cutter works only on Creative’s projects/.test(t), 'its page says which division it is in and what that means');
   const film2 = await p.$('[data-xag-proj] '); void film2;
   const disabled = await p.$$eval('[data-xag-proj]', (xs) => xs.map((x) => [x.closest('label').innerText.split('\n')[0], x.disabled]));
@@ -162,21 +174,37 @@ try {
   ok(!db.offers.length && !/Visiting bot/.test(await main()), 'Accept decides it and it leaves the list');
 
   // archive the child
-  await fresh(`/workspace/workspace/Divisions/${film.id}`);
+  await fresh(`/workspace/divisions/${film.id}`);
   const hasArchive = !!(await p.$('[data-xdv="archive"]')); if (!hasArchive) console.log('archive button missing; acts:', await p.$eval('.pg-top', (e) => e.innerText).catch(() => '?'));
   await p.click('[data-xdv="archive"]'); await settle(400); await submit();
   if (!film.archived || !/Archived/.test(await main())) console.log('archived?', film.archived, JSON.stringify((await main()).slice(0, 400)));
   ok(film.archived && /Archived/.test(await main()), 'Archive, after confirming, archives it');
 
   // addresses
-  await fresh('/workspace/workspace/Divisions/Creative');
+  await fresh('/workspace/divisions/Creative');
   ok(/not valid/.test(await main()), 'an address by NAME is not a division address');
-  await fresh(`/workspace/workspace/Divisions/${uuid()}`);
+  await fresh(`/workspace/divisions/${uuid()}`);
   ok(/This division is gone/.test(await main()), 'an unknown division says it is gone');
-  await fresh(`/workspace/workspace/Divisions/${creative.id}`); await p.click('.crumbs a[data-crumb="Divisions"]'); await settle(); await p.goBack(); await settle();
-  ok(/Brand film/.test(await main()), 'Back returns to the division');
+  await fresh(`/workspace/divisions/${creative.id}`); await p.click('.crumbs a[data-crumb="Divisions"]'); await settle(); await p.goBack(); await settle();
+  ok(/Brand film/.test(await main()) && new URL(p.url()).pathname === `/workspace/divisions/${creative.id}`, 'Back returns to the division, at its id address');
+  // the old address still opens it, and is rewritten to the new one in place
+  await fresh(`/workspace/workspace/Divisions/${creative.id}`);
+  ok(/Brand film/.test(await main()) && new URL(p.url()).pathname === `/workspace/divisions/${creative.id}`, `an old /workspace/workspace/Divisions link opens the home and becomes /workspace/divisions/<id> (${new URL(p.url()).pathname})`);
+  // the home: closed parts, objectives, runs — in a fresh tab
+  db.runs.push({ id: uuid(), div: creative.id, agent: 'Cutter', target: 'project', project: { id: 'x', name: 'Brand film' }, budgetCredits: 2, authority: { state: 'live' }, canStop: true });
+  await fresh(`/workspace/divisions/${creative.id}`); t = await main();
+  ok(/1 project you cannot see is closed to you/.test(t) && /1 run you cannot see is closed to you/.test(t), 'what the server closed shows as closed, never as rows');
+  ok(/Active runs/.test(t) && /Cutter/.test(t) && /Live/.test(t), 'an active run shows with its live authority');
+  ok(/Decisions/.test(t) && /Leads the studio/.test(t), 'the head decision shows with its reason');
+  await p.click('[data-xdv="obj-new"]'); await settle(500); await fill(['Ship the film', 'Premiere date met']); await submit();
+  const objCall = db.calls.find(([m, u]) => m === 'POST' && u === '/api/workforce/coordination/objectives');
+  ok(objCall && objCall[2].divisionId === creative.id && objCall[2].workspaceId === WS && /Ship the film/.test(await main()), 'New objective creates a DIVISION objective through the coordination service, and the home shows it');
+  await p.click('[data-xdv="run-stop"]'); await settle(400); await submit();
+  ok(db.runs[0].stopped && !/Cutter[\s\S]*Live/.test(await main()), 'Stop revokes the run through its own service and it leaves the home');
+  await p.reload({ waitUntil: 'domcontentloaded' }); await settle(1900);
+  ok(/Ship the film/.test(await main()) && new URL(p.url()).pathname === `/workspace/divisions/${creative.id}`, 'refresh lands on the same home');
 
-  if (process.env.SHOTS) { await fresh(`/workspace/workspace/Divisions`); await p.screenshot({ path: 'X:/xeno-deploy-tmp/dv-list.png' }); await fresh(`/workspace/workspace/Divisions/${creative.id}`); await p.screenshot({ path: 'X:/xeno-deploy-tmp/dv-one.png' }); await fresh(`/workspace/workspace/Agents/${ag.id}`); await p.screenshot({ path: 'X:/xeno-deploy-tmp/ag-div.png', fullPage: false }); await p.evaluate(() => document.querySelector('#main .pg, #main [class*=scroll]')?.scrollBy?.(0, 600)); await p.screenshot({ path: 'X:/xeno-deploy-tmp/ag-div2.png' }); }
+  if (process.env.SHOTS) { await fresh(`/workspace/divisions`); await p.screenshot({ path: 'X:/xeno-deploy-tmp/dv-list.png' }); await fresh(`/workspace/divisions/${creative.id}`); await p.screenshot({ path: 'X:/xeno-deploy-tmp/dv-one.png' }); await fresh(`/workspace/workspace/Agents/${ag.id}`); await p.screenshot({ path: 'X:/xeno-deploy-tmp/ag-div.png', fullPage: false }); await p.evaluate(() => document.querySelector('#main .pg, #main [class*=scroll]')?.scrollBy?.(0, 600)); await p.screenshot({ path: 'X:/xeno-deploy-tmp/ag-div2.png' }); }
   ok(errs.length === 0, 'no page errors (' + JSON.stringify(errs.slice(0, 2)) + ')');
 } catch (e) { failed++; console.log('FAIL the suite threw:', e.message); } finally { await br.close(); await server.close(); }
 console.log(failed ? failed + ' check(s) failed' : 'ALL PASS'); process.exit(failed ? 1 : 0);
