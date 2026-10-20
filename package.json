@@ -288,7 +288,7 @@
     "test:vite-workspace": "node --test scripts/vite-workspace.test.mjs",
     "test:workforce-accessibility": "node --test scripts/workforce-accessibility.test.mjs",
     "test:billing-summary": "node --test scripts/billing-summary.test.mjs",
-    "test:places": "node src/server/tests/places.test.mjs && node src/server/tests/places-location.test.mjs && node src/server/tests/places-live.test.mjs",
+    "test:places": "node src/server/tests/places.test.mjs && node src/server/tests/places-location.test.mjs && node src/server/tests/places-live.test.mjs && node src/server/tests/places-devices.test.mjs",
     "test:workforce-people": "node src/server/tests/workforce-people.test.mjs",
     "test:workforce-people-mutation": "node scripts/workforce-people-mutation.mjs",
     "test:time-off-assignment": "node src/server/tests/time-off-assignment.test.mjs",
