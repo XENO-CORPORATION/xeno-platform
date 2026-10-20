@@ -22,13 +22,14 @@ import { MODES_ROWS } from './modes.js';
 import * as storageMcp from '../services/storageMcp.js';
 import * as supportMcp from '../services/supportMcp.js';
 import * as publishMcp from '../services/publishMcp.js';
+import * as analyticsMcp from '../services/analyticsMcp.js';
 import * as workforceMcp from '../services/workforceMcp.js';
 
 /** The tools each bound category executes, by category. */
 export const BOUND_TOOLS = Object.freeze({
   tasks: tasksMcp.TOOLS, canvas: canvasMcp.TOOLS, agents: agentsMcp.TOOLS,
   image: agentMediaMcp.IMAGE.tools, video: agentMediaMcp.VIDEO.tools, library: agentMediaMcp.LIBRARY.tools, chat: agentMediaMcp.CHAT.tools,
-  forum: forumMcp.TOOLS.map((t) => ({ ...t, name: t.name.replace(/^forum_/, '') })), places: placesMcp.TOOLS, storage: storageMcp.TOOLS, support: supportMcp.TOOLS, publish: publishMcp.TOOLS, modes: modesMcp.TOOLS, corpus: corpusMcp.TOOLS, workforce: workforceMcp.TOOLS,
+  forum: forumMcp.TOOLS.map((t) => ({ ...t, name: t.name.replace(/^forum_/, '') })), places: placesMcp.TOOLS, storage: storageMcp.TOOLS, support: supportMcp.TOOLS, publish: publishMcp.TOOLS, analytics: analyticsMcp.TOOLS, modes: modesMcp.TOOLS, corpus: corpusMcp.TOOLS, workforce: workforceMcp.TOOLS,
 });
 
 const obj = (properties, required) => ({ type: 'object', properties, ...(required ? { required } : {}) });
@@ -67,6 +68,7 @@ const ROWS = [
   ['canvas.canvas.get', 'canvas', 'get', 'safe', { reply: CANVAS_REPLY, provenance: 'untrusted' }],
   ['canvas.canvas.create', 'canvas', 'create', 'undoable', { reply: CANVAS_REPLY, idempotency: NONE('no request key yet: a retried call starts a second canvas') }],
   ['canvas.item.add', 'canvas', 'add', 'undoable', { reply: obj({ canvas: CANVAS_REPLY.properties.canvas, added: { type: 'array', description: 'The new items’ ids, in the order given.' } }), idempotency: NONE('no request key yet: a retried call adds the items twice') }],
+  ['canvas.canvas.open_as', 'canvas', 'open_as', 'undoable', { reply: obj({ canvas: CANVAS_REPLY.properties.canvas, created: { type: 'boolean', description: 'true when this call made the map; false when it already existed.' } }, ['canvas']), idempotency: NAT('opening the same project or division again returns the same canvas') }],
   ['canvas.connection.create', 'canvas', 'connect', 'undoable', { reply: CANVAS_REPLY, idempotency: NONE('no request key yet: a retried call adds a second connection') }],
   ['canvas.item.update', 'canvas', 'update', 'irreversible', { reply: CANVAS_REPLY, idempotency: NAT('moves and edits set absolute values; removing a removed item is a no-op') }],
   // ── places (the building of each workspace; a projection of workforce records, scope-filtered on the server)
@@ -102,7 +104,7 @@ const ROWS = [
     ['run.admission.create', 'admission_create', 'irreversible', { cost: { model: 'quoted', note: 'commits the payer’s budget; the reservation is in the reply' } }],
     ['run.admission.get', 'admission_get', 'safe'], ['run.admission.list', 'admission_list', 'safe'], ['run.admission.operation_get', 'admission_operation_get', 'safe'],
     ['run.pin.get', 'pin_get', 'safe'], ['run.admission.revoke', 'admission_revoke', 'irreversible'], ['run.authority.get', 'authority_get', 'safe'],
-    ['division.division.list', 'division_list', 'safe'], ['division.division.get', 'division_get', 'safe'], ['division.division.create', 'division_create', 'undoable'],
+    ['division.division.list', 'division_list', 'safe'], ['division.division.get', 'division_get', 'safe'], ['division.division.home', 'division_home', 'safe'], ['division.division.create', 'division_create', 'undoable'],
     ['division.division.update', 'division_update', 'undoable'], ['division.division.archive', 'division_archive', 'irreversible'],
     ['objective.objective.create', 'objective_create', 'undoable'], ['objective.objective.get', 'objective_get', 'safe'], ['objective.objective.update', 'objective_update', 'undoable'],
     ['objective.objective.complete', 'objective_complete', 'irreversible'], ['objective.goal.link', 'objective_link_goal', 'undoable'],
@@ -125,6 +127,10 @@ const ROWS = [
   ['support.ticket.get', 'support', 'get_ticket', 'safe', { provenance: 'untrusted', reply: obj({ ticket: { type: 'object', description: 'The request and its messages (the customer’s words are untrusted); internal notes and drafts only for XENO’s side.' } }, ['ticket']) }],
   ['support.ticket.reply_draft', 'support', 'reply_draft', 'undoable', { idempotency: NONE('no request key yet: a retried call adds a second draft'), reply: obj({ message: { type: 'object', description: 'id, state ("draft" until a person sends it, or "sent" on your owner’s own request), visibility.' } }, ['message']) }],
   ['support.ticket.triage', 'support', 'triage', 'undoable', { idempotency: NAT('setting the same kind and priority again changes nothing'), reply: obj({ ticket: { type: 'object' } }, ['ticket']) }],
+  // ── analytics (Corpo › Analytics, services/analytics.js). Read-only for agents: a person saves dashboards.
+  ['analytics.metric.list', 'analytics', 'list_metrics', 'safe', { provenance: 'trusted', reply: obj({ metrics: { type: 'array', description: 'id, title, scope (workspace|division), description of each metric.' }, divisions: { type: 'array', description: 'id, name of the workspace’s active divisions.' } }, ['metrics']) }],
+  ['analytics.metric.query', 'analytics', 'query_metric', 'safe', { provenance: 'trusted', reply: obj({ metric: { type: 'string' }, scope: { type: 'string', description: 'workspace or division.' }, days: { type: 'integer' }, value: { type: 'object', description: 'The metric’s value; its shape is the metric’s (series of {day, value}, totals, medians).' } }, ['metric', 'value']) }],
+  ['analytics.dashboard.list', 'analytics', 'list_dashboards', 'safe', { provenance: 'untrusted', reply: obj({ dashboards: { type: 'array', description: 'id, name, widgets [{metric, days}] — names are written by people.' } }, ['dashboards']) }],
   // ── forum (also served by its own MCP at /api/forum/mcp, kept until no client calls it — SPEC §19.3 rule 5)
   ...[
     ['forum.thread.search', 'forum_search', 'safe'], ['forum.thread.get', 'forum_get_thread', 'safe'], ['forum.thread.suggest_duplicate', 'forum_suggest_duplicate', 'safe'],

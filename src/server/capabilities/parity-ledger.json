@@ -125,6 +125,8 @@
   "platform-publish.js": "publish",
   "supportRoutes.js": "support",
   "platform-support.js": "support",
+  "workspaceAnalyticsRoutes.js": "analytics",
+  "platform-analytics.js": "analytics",
   "corpusRoutes.js": "workspace",
   "platform-corpus.js": "workspace"
  },
@@ -3795,9 +3797,10 @@
    "scope": "agents:read"
   },
   "route:workforceDivisionRoutes.js:GET /:id/home": {
-   "status": "planned",
+   "status": "capability",
+   "capability": "division.division.home",
    "class": "safe",
-   "scope": "agents:read"
+   "scope": "workspace:read"
   },
   "route:workforceDivisionRoutes.js:PATCH /:id": {
    "status": "capability",
@@ -8137,6 +8140,140 @@
    "status": "planned",
    "class": "reversible",
    "scope": "agents:write"
+  },
+  "route:canvasRoutes.js:POST /open-as": {
+   "status": "capability",
+   "capability": "canvas.canvas.open_as",
+   "class": "reversible",
+   "scope": "tasks:write"
+  },
+  "ui:platform-canvas.js:data-xcv-open": {
+   "status": "capability",
+   "capability": "canvas.canvas.open_as",
+   "class": "reversible",
+   "scope": "tasks:write"
+  },
+  "route:workspaceAnalyticsRoutes.js:GET /metrics": {
+   "status": "capability",
+   "capability": "analytics.metric.list",
+   "class": "safe",
+   "scope": "analytics:read"
+  },
+  "route:workspaceAnalyticsRoutes.js:GET /metrics/:metric": {
+   "status": "capability",
+   "capability": "analytics.metric.query",
+   "class": "safe",
+   "scope": "analytics:read"
+  },
+  "route:workspaceAnalyticsRoutes.js:GET /dashboards": {
+   "status": "capability",
+   "capability": "analytics.dashboard.list",
+   "class": "safe",
+   "scope": "analytics:read"
+  },
+  "route:workspaceAnalyticsRoutes.js:GET /dashboards/:id": {
+   "status": "capability",
+   "capability": "analytics.dashboard.list",
+   "class": "safe",
+   "scope": "analytics:read"
+  },
+  "route:workspaceAnalyticsRoutes.js:POST /dashboards": {
+   "status": "planned",
+   "class": "reversible",
+   "scope": "analytics:write",
+   "because": "agents read analytics (owner, 2026-10-20); saving a dashboard is a person's step until an agent write is decided"
+  },
+  "route:workspaceAnalyticsRoutes.js:PATCH /dashboards/:id": {
+   "status": "planned",
+   "class": "reversible",
+   "scope": "analytics:write",
+   "because": "agents read analytics (owner, 2026-10-20); changing a dashboard is a person's step until an agent write is decided"
+  },
+  "route:workspaceAnalyticsRoutes.js:DELETE /dashboards/:id": {
+   "status": "planned",
+   "class": "reversible",
+   "scope": "analytics:write",
+   "because": "soft delete, undone by /restore; a person's step until an agent write is decided"
+  },
+  "route:workspaceAnalyticsRoutes.js:POST /dashboards/:id/restore": {
+   "status": "planned",
+   "class": "reversible",
+   "scope": "analytics:write",
+   "because": "the undo of a dashboard delete; a person's step until an agent write is decided"
+  },
+  "ui:platform-analytics.js:data-an-page": {
+   "status": "capability",
+   "capability": "analytics.dashboard.list",
+   "class": "safe",
+   "scope": "analytics:read"
+  },
+  "ui:platform-analytics.js:data-an-division": {
+   "status": "excluded",
+   "category": "view-state",
+   "class": "safe",
+   "scope": "none",
+   "because": "chooses which division the screen shows; an agent passes `division` to query_metric"
+  },
+  "route:modesRoutes.js:POST /:wid/architect/proposals (workspaceModesRouter)": {
+   "status": "capability",
+   "capability": "modes.architect.propose",
+   "class": "irreversible",
+   "scope": "workspace:read"
+  },
+  "route:modesRoutes.js:GET /:wid/architect/proposals/:pid (workspaceModesRouter)": {
+   "status": "capability",
+   "capability": "modes.architect.get",
+   "class": "safe",
+   "scope": "workspace:read"
+  },
+  "route:modesRoutes.js:GET /:wid/architect/proposals (workspaceModesRouter)": {
+   "status": "planned",
+   "class": "safe",
+   "scope": "workspace:read"
+  },
+  "route:modesRoutes.js:PATCH /:wid/architect/proposals/:pid (workspaceModesRouter)": {
+   "status": "planned",
+   "class": "reversible",
+   "scope": "workspace:admin"
+  },
+  "ui:setup.js:data-xsu=docs": {
+   "status": "excluded",
+   "category": "view-state",
+   "class": "safe",
+   "scope": "none",
+   "because": "changes only what the screen shows"
+  },
+  "ui:setup.js:data-xsu=pick": {
+   "status": "excluded",
+   "category": "view-state",
+   "class": "safe",
+   "scope": "none",
+   "because": "changes only what the screen shows"
+  },
+  "ui:setup.js:data-xsu=task-del": {
+   "status": "excluded",
+   "category": "view-state",
+   "class": "safe",
+   "scope": "none",
+   "because": "changes only what the screen shows"
+  },
+  "ui:setup.js:data-xsu=task-add": {
+   "status": "excluded",
+   "category": "view-state",
+   "class": "safe",
+   "scope": "none",
+   "because": "changes only what the screen shows"
+  },
+  "ui:setup.js:data-xsu=propose": {
+   "status": "capability",
+   "capability": "modes.architect.propose",
+   "class": "irreversible",
+   "scope": "workspace:read"
+  },
+  "ui:setup.js:data-xsu=use": {
+   "status": "planned",
+   "class": "reversible",
+   "scope": "workspace:admin"
   },
   "route:corpusRoutes.js:GET /:scope/:id": {
    "status": "capability",

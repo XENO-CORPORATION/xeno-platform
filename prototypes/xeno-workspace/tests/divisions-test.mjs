@@ -60,6 +60,22 @@ p.on('request', (q) => {
       spend: { budget: db.budget || null, ledger: [] }, funding: { rows: [], hidden: 0 }, handoffs: { rows: [], hidden: 0 }, decisions: d.reason ? [{ id: uuid(), kind: 'member.promote', by: 'Me', rationale: d.reason, at: new Date().toISOString() }] : [],
       projects: { rows: db.proj.filter((x) => x.div === d.id).map((x) => ({ id: x.id, name: x.name })), hidden: db.hiddenProjects } } });
   }
+  // canvases: a division opens as a canvas of live workforce cards (the server's layoutMap shape); one card is closed
+  if (path === '/api/canvases/open-as') {
+    const d = db.divs.find((x) => x.id === b.id);
+    if (!db.map) { const gone = uuid(); db.map = { id: uuid(), name: `${d.name} — map`, revision: '1', area: null, project: null, can: { edit: true, delete: true },
+      content: { nodes: [{ id: 'root-division', type: 'xeno-ref', ref: { kind: 'division', id: d.id }, x: 0, y: 0, width: 300, height: 120 },
+        { id: 'project-1', type: 'xeno-ref', ref: { kind: 'project', id: db.proj[1].id }, x: 0, y: 220, width: 300, height: 120 },
+        { id: 'project-2', type: 'xeno-ref', ref: { kind: 'project', id: gone }, x: 0, y: 360, width: 300, height: 120 },
+        { id: 'objective-1', type: 'xeno-ref', ref: { kind: 'objective', id: db.objs[0].id }, x: 380, y: 220, width: 280, height: 120 }], edges: [] },
+      records: { tasks: {}, files: {}, chats: {}, runs: {}, divisions: { [d.id]: { id: d.id, name: d.name, status: 'active', head: 'Me', agents: 1, projects: 1, url: `/workspace/divisions/${d.id}` } },
+        projects: { [db.proj[1].id]: { id: db.proj[1].id, name: 'Brand film', status: 'active', openTasks: 3, doneTasks: 1, url: `/workspace/projects/${db.proj[1].id}` }, [gone]: { id: gone, missing: true } },
+        objectives: { [db.objs[0].id]: { id: db.objs[0].id, title: db.objs[0].title, status: 'open', goals: 2, goalsDone: 1 } } } };
+      db.mapCalls = 0; }
+    db.mapCalls++; return json(db.mapCalls === 1 ? 201 : 200, { success: true, created: db.mapCalls === 1, canvas: db.map });
+  }
+  if (db.map && path === `/api/canvases/${db.map.id}`) return json(200, { success: true, canvas: db.map });
+  if (path === '/api/canvases') return json(200, { success: true, canvases: db.map ? [{ id: db.map.id, name: db.map.name, revision: '1', items: 4 }] : [] });
   if (path === '/api/workforce/coordination/objectives') { const o = { id: uuid(), div: b.divisionId, title: b.title, successEvidence: b.successEvidence, status: 'open', owner: { id: 'u1', name: 'Me' }, windowStart: b.windowStart, windowEnd: b.windowEnd, goals: 0, goalsDone: 0, progress: 0 }; db.objs.push(o); return json(200, { success: true, result: { objectiveId: o.id } }); }
   if (path === '/api/workforce/run-admissions/revoke') { const r = db.runs.find((x) => x.id === b.admissionId); r.stopped = true; return json(200, { success: true, result: { revoked: true } }); }
   const dm = path.match(/^\/api\/divisions\/([0-9a-f-]{36})(\/archive)?$/);
@@ -141,7 +157,10 @@ try {
   await p.click('[data-xag="new"]'); await settle(500); await fill(['Cutter', 'Edits films']); await choose('Creative'); await submit();
   const ag = db.agents[0];
   ok(ag && ag.div === creative.id, 'a new agent can be created straight into a division');
-  if (!new URL(p.url()).pathname.endsWith(ag.id)) await fresh(`/workspace/workspace/Agents/${ag.id}`); t = await main();
+  // New agent then asks where it runs (platform-agents.js create); answering it opens the agent's page
+  await submit();
+  ok(new URL(p.url()).pathname === `/workspace/workspace/Agents/${ag.id}`, 'after “Where will it run?”, the new agent’s page opens at its id');
+  t = await main();
   ok(/Division/.test(t) && /Cutter works only on Creative’s projects/.test(t), 'its page says which division it is in and what that means');
   const film2 = await p.$('[data-xag-proj] '); void film2;
   const disabled = await p.$$eval('[data-xag-proj]', (xs) => xs.map((x) => [x.closest('label').innerText.split('\n')[0], x.disabled]));
@@ -203,6 +222,19 @@ try {
   ok(db.runs[0].stopped && !/Cutter[\s\S]*Live/.test(await main()), 'Stop revokes the run through its own service and it leaves the home');
   await p.reload({ waitUntil: 'domcontentloaded' }); await settle(1900);
   ok(/Ship the film/.test(await main()) && new URL(p.url()).pathname === `/workspace/divisions/${creative.id}`, 'refresh lands on the same home');
+  // Open as canvas: live workforce cards; refresh and Back
+  await p.click('[data-xcv-open="division"]'); await settle(1800);
+  const mapPath = new URL(p.url()).pathname, stage = () => p.$eval('[data-cv-stage]', (e) => e.innerText).catch(() => '');
+  ok(db.map && mapPath === `/workspace/tasks/canvas/${db.map.id}`, `Open as canvas opens the division's map at its canvas id (${mapPath})`);
+  let st = await stage();
+  ok(/Division[\s\S]*Active[\s\S]*Creative/.test(st) && /Head Me/.test(st) && /Brand film/.test(st) && /3 open tasks/.test(st) && /Ship the film/.test(st) && /1 of 2 goals done/.test(st), 'its cards show each record by name with its live status');
+  ok(/Not available/.test(st) && (await p.$$('[data-cv-kind]')).length === 3, 'a card the server closed shows as not available, with no name');
+  await p.reload({ waitUntil: 'domcontentloaded' }); await settle(1900);
+  ok(new URL(p.url()).pathname === mapPath && /Brand film/.test(await stage()), 'refresh lands on the same map');
+  await p.goBack(); await settle(1200);
+  ok(new URL(p.url()).pathname === `/workspace/divisions/${creative.id}` && /Ship the film/.test(await main()), 'Back returns to the division home');
+  await p.click('[data-xcv-open="division"]'); await settle(1500);
+  ok(db.mapCalls === 2 && new URL(p.url()).pathname === mapPath, 'opening it again goes to the same canvas');
 
   if (process.env.SHOTS) { await fresh(`/workspace/divisions`); await p.screenshot({ path: 'X:/xeno-deploy-tmp/dv-list.png' }); await fresh(`/workspace/divisions/${creative.id}`); await p.screenshot({ path: 'X:/xeno-deploy-tmp/dv-one.png' }); await fresh(`/workspace/workspace/Agents/${ag.id}`); await p.screenshot({ path: 'X:/xeno-deploy-tmp/ag-div.png', fullPage: false }); await p.evaluate(() => document.querySelector('#main .pg, #main [class*=scroll]')?.scrollBy?.(0, 600)); await p.screenshot({ path: 'X:/xeno-deploy-tmp/ag-div2.png' }); }
   ok(errs.length === 0, 'no page errors (' + JSON.stringify(errs.slice(0, 2)) + ')');

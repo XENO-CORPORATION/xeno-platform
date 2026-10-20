@@ -20,6 +20,7 @@ import { ensurePersonalWorkspace } from './personalWorkspace.js';
 import { createTask } from './xenoTasks.js';
 import { createAuthorizedProject } from './chatProjectAuthority.js';
 import { MODE_PACKS, packById } from '../data/modePacks.js';
+import { packForApply } from './workspaceArchitect.js';
 
 export class ModeError extends Error {
   constructor(message, code, status = 400) { super(message); this.code = code; this.status = status; }
@@ -63,7 +64,7 @@ async function adminOf(db, userId, workspaceId) {
   const v = await check(db, { object: `workspace:${workspaceId}`, relation: 'admin', subject: `user:${userId}` });
   return v.allowed && ['direct', 'role-hierarchy'].includes(v.via);
 }
-async function workspaceFor(db, actor, workspaceId, { lock = false } = {}) {
+export async function workspaceFor(db, actor, workspaceId, { lock = false } = {}) {
   if (!UUID.test(String(workspaceId || ''))) fail('Workspace not found', 'workspace_not_found', 404);
   const w = (await db.query(`SELECT id, name, workspace_type, status FROM workspaces WHERE id = $1 ${lock ? 'FOR SHARE' : ''}`, [workspaceId])).rows[0];
   const p = await principal(db, actor);
@@ -72,7 +73,7 @@ async function workspaceFor(db, actor, workspaceId, { lock = false } = {}) {
   return { w, p };
 }
 /** §8.11 / §8c.3: applying, reverting and editing a workspace's setup is a HUMAN admin's act. An agent may plan. */
-function humanOnly(p) {
+export function humanOnly(p) {
   if (p.kind !== 'human') fail('A person who administers this workspace has to confirm this. Show them the plan; they apply it from Setup.', 'human_admin_must_confirm', 403);
 }
 
@@ -136,7 +137,13 @@ export async function listPacks(db) {
      WHERE l.kind = 'mode' AND l.status = 'published' AND v.published_at IS NOT NULL AND v.mode_pack IS NOT NULL ORDER BY v.published_at DESC LIMIT 100`).catch(() => ({ rows: [] }))).rows;
   return { packs: [...MODE_PACKS.map(publicPack), ...listed.map((r) => publicPack({ ...r.mode_pack, id: `listing:${r.version_id}`, version: r.version, status: 'published', source: 'marketplace' }))] };
 }
-async function resolvePack(db, { packId, listingVersionId }) {
+async function resolvePack(db, { packId, listingVersionId, workspaceId }) {
+  // a workspace architect proposal (services/workspaceArchitect.js): only one of THIS workspace, as it now stands
+  if (String(packId || '').startsWith('proposal:')) {
+    const pk = await packForApply(db, workspaceId, String(packId).slice(9));
+    if (!pk) fail('Pack not found', 'pack_not_found', 404);
+    return { pack: pk, hash: sha256(pk), listingVersionId: null };
+  }
   const lv = listingVersionId || (String(packId || '').startsWith('listing:') ? String(packId).slice(8) : null);
   if (lv) {
     if (!UUID.test(lv)) fail('Pack not found', 'pack_not_found', 404);
@@ -164,11 +171,15 @@ function answersFor(pack, raw) {
 /** What applying would create. Writes nothing; its hash is what apply must be given. */
 export async function plan(db, actor, { workspaceId, packId, listingVersionId, answers } = {}) {
   const { w } = await workspaceFor(db, actor, workspaceId);
-  const { pack, hash, listingVersionId: lvId } = await resolvePack(db, { packId, listingVersionId });
+  const { pack, hash, listingVersionId: lvId } = await resolvePack(db, { packId, listingVersionId, workspaceId: w.id });
   const a = answersFor(pack, answers);
   const mode = validateMode(pack.mode);
-  const conflicts = (await db.query(`SELECT mode_id FROM custom_modes WHERE owner_workspace_id = $1 AND mode_id = $2 AND archived_at IS NULL`, [w.id, mode.id])).rows.map((r) => `mode:${r.mode_id}`);
-  const records = [{ type: 'mode', id: mode.id, name: mode.name, products: mode.products },
+  const live = (await db.query(`SELECT mode_id FROM custom_modes WHERE owner_workspace_id = $1 AND mode_id = $2 AND archived_at IS NULL`, [w.id, mode.id])).rows.map((r) => `mode:${r.mode_id}`);
+  // a pack that EXTENDS a mode already here adds only its tasks; the live mode (maybe a person's edit) is left as it is
+  const extending = !!pack.extends && pack.extends === mode.id && live.length > 0;
+  const conflicts = extending ? [] : live;
+  if (extending && !(pack.tasks || []).length) conflicts.push('nothing_new');
+  const records = [...(extending ? [] : [{ type: 'mode', id: mode.id, name: mode.name, products: mode.products }]),
     ...((pack.tasks || []).length ? [{ type: 'project', name: `${mode.name} — getting started`.slice(0, 200), workspaceId: w.id }] : []),
     ...(pack.tasks || []).map((t) => ({ type: 'task', title: String(t.title).slice(0, 300), in: 'project', assignee: 'you' }))];
   const body = { workspaceId: w.id, pack: { id: pack.id, version: pack.version, hash, listingVersionId: lvId }, answers: a, records, conflicts };
@@ -201,7 +212,7 @@ export function apply(pool, actor, { workspaceId, packId, listingVersionId, answ
     const prior = (await db.query(`SELECT * FROM workspace_mode_applications WHERE workspace_id = $1 AND idempotency_key = $2`, [w.id, idempotencyKey])).rows[0];
     if (prior) {
       // a key names ONE request: the same plan, the same pack and the same answers — anything else is not a retry
-      const { pack: asked } = await resolvePack(db, { packId, listingVersionId });
+      const { pack: asked } = await resolvePack(db, { packId, listingVersionId, workspaceId: w.id });
       if (prior.plan_hash !== planHash || prior.pack_id !== asked.id || canonical(prior.answers) !== canonical(answersFor(asked, answers))) fail('This idempotency key was used for a different plan', 'idempotency_key_reused', 409);
       return { replayed: true, receipt: shapeReceipt(prior) };
     }
@@ -210,12 +221,14 @@ export function apply(pool, actor, { workspaceId, packId, listingVersionId, answ
     if (now.plan.conflicts.length) fail('This setup is already in the workspace', 'already_applied', 409);
     const appId = crypto.randomUUID();
     const created = [];
-    const m = now.plan.records[0];
-    const row = (await db.query(`INSERT INTO custom_modes (mode_id, owner_workspace_id, name, products, source_application_id, created_by_user_id) VALUES ($1,$2,$3,$4,$5,$6) RETURNING row_id`,
-      [m.id, w.id, m.name, JSON.stringify(m.products), appId, actor.id])).rows[0];
-    created.push({ type: 'mode', id: m.id, rowId: row.row_id });
+    const { pack } = await resolvePack(db, { packId, listingVersionId, workspaceId: w.id });
+    const m = now.plan.records.find((x) => x.type === 'mode') || { ...validateMode(pack.mode), extends: true };
+    if (!m.extends) {
+      const row = (await db.query(`INSERT INTO custom_modes (mode_id, owner_workspace_id, name, products, source_application_id, created_by_user_id) VALUES ($1,$2,$3,$4,$5,$6) RETURNING row_id`,
+        [m.id, w.id, m.name, JSON.stringify(m.products), appId, actor.id])).rows[0];
+      created.push({ type: 'mode', id: m.id, rowId: row.row_id });
+    }
     const me = { id: actor.id, kind: 'human', name: p.displayName || p.handle || 'Someone' };
-    const { pack } = await resolvePack(db, { packId, listingVersionId });
     // §8.11 D-1: the WORKSPACE owns what a setup creates. Starter tasks live in a project of the target workspace
     // (never the applier's personal tasks); the applier is their assignee. The project is made through the one
     // project creator, joined to THIS transaction (its own BEGIN/COMMIT become no-ops here).

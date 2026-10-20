@@ -6,6 +6,10 @@
  *   /workspace/<area>/tasks/canvas                 the canvases of this area (Overview: all)
  *   /workspace/<area>/tasks/canvas/<canvas id>     one canvas
  *
+ * Cards: tasks, Library files, chats, and the workforce — projects, divisions, objectives and runs (admissions). Every
+ * card is a pointer: its name and status are read live with each load, and moving it changes only the layout. A
+ * project or a division opens as a canvas (POST /api/canvases/open-as) from its own page, via [data-xcv-open].
+ *
  * Interaction (Miro / FigJam / Obsidian Canvas conventions):
  *   drag the empty board or hold Space · scroll = pan, Ctrl/⌘+scroll = zoom · drag an item to move it
  *   drag its corner to resize · drag from an item's edge handle to another item to connect them
@@ -48,7 +52,8 @@
     if (!saved) fit();
     paint();
   }
-  function take(cv) { C.doc = cv.content; C.records = cv.records.tasks || {}; C.refs = { file: cv.records.files || {}, chat: cv.records.chats || {}, tenet: cv.records.tenets || {} }; C.rev = cv.revision; C.can = cv.can; C.name = cv.name; C.project = cv.project; }
+  const refsOf = (rec) => ({ file: rec.files || {}, chat: rec.chats || {}, project: rec.projects || {}, division: rec.divisions || {}, objective: rec.objectives || {}, run: rec.runs || {}, tenet: rec.tenets || {} });
+  function take(cv) { C.doc = cv.content; C.records = cv.records.tasks || {}; C.refs = refsOf(cv.records); C.rev = cv.revision; C.can = cv.can; C.name = cv.name; C.project = cv.project; }
   const store = (id, v) => { try { if (v) localStorage.setItem('xw-canvas-view:' + id, JSON.stringify(v)); else return JSON.parse(localStorage.getItem('xw-canvas-view:' + id) || 'null'); } catch { return null; } return null; };
 
   /** call BEFORE changing C.doc: the undo step is the state as it was */
@@ -64,7 +69,7 @@
     const id = C.id, body = { content: C.doc, revision: C.rev, name: C.name };
     const r = await api('PUT', '/api/canvases/' + encodeURIComponent(id), body).catch(() => null);
     C.saving = false; if (C.id !== id) return;
-    if (r && r.ok) { const keepSel = C.sel; C.rev = r.d.canvas.revision; C.records = r.d.canvas.records.tasks || {}; C.refs = { file: r.d.canvas.records.files || {}, chat: r.d.canvas.records.chats || {}, tenet: r.d.canvas.records.tenets || {} }; C.sel = keepSel; status('Saved'); draw(); if (C.dirty) save(); return; }
+    if (r && r.ok) { const keepSel = C.sel; C.rev = r.d.canvas.revision; C.records = r.d.canvas.records.tasks || {}; C.refs = refsOf(r.d.canvas.records); C.sel = keepSel; status('Saved'); draw(); if (C.dirty) save(); return; }
     if (r && r.status === 409 && r.d.code === 'canvas_changed') { C.conflict = true; status(''); return paint(); }
     C.dirty = true; status(said(r, 'Not saved — the change is kept here; it will try again.'), true);
     // a refused link (403/400) is a rule, not a network blip: undo it rather than retry forever
@@ -91,6 +96,19 @@
     return { x: cx, y: dy > 0 ? n.y + n.height : n.y };
   }
 
+  // workforce cards: what each is, and the one line of live status under its name
+  const WF = { project: ['Project', 'folder'], division: ['Division', 'layers'], objective: ['Objective', 'flag'], run: ['Run', 'bot'] };
+  const STATUS = { active: 'Active', archived: 'Archived', open: 'Open', completed: 'Completed', live: 'Live', admitted: 'Admitted', stopped: 'Stopped' };
+  const plural = (n, a, b) => `${n} ${n === 1 ? a : b}`;
+  function wfLine(kind, r) {
+    if (r.loading) return '';
+    if (kind === 'project') return `${plural(r.openTasks || 0, 'open task', 'open tasks')} · ${r.doneTasks || 0} done`;
+    if (kind === 'division') return [r.head ? `Head ${r.head}` : 'No head', plural(r.agents || 0, 'agent', 'agents'), plural(r.projects || 0, 'project', 'projects')].join(' · ');
+    if (kind === 'objective') return r.goals ? `${r.goalsDone} of ${plural(r.goals, 'goal', 'goals')} done` : 'No goals yet';
+    if (kind === 'run') return r.admittedAt ? `Admitted ${new Date(r.admittedAt).toLocaleString()}` : '';
+    return '';
+  }
+
   // ───────────────────────── drawing
   function nodeHtml(n) {
     const sel = C.sel.has(n.id) ? ' cv-n--sel' : '';
@@ -108,10 +126,16 @@
       const st = r.state ? { held: 'Held', lapsed: 'Lapsed', error: 'Error' }[r.state] : 'Never assayed';
       return `<div class="cv-n cv-n--task cv-n--tenet cv-n--v-${esc(r.state || 'none')}${sel}" data-cv-node="${esc(n.id)}" ${pos}><div class="cv-task-top">${ic('check')}<small class="tk-key">${esc(r.key || 'Tenet')}</small></div><b class="cv-task-t">${esc(r.claim || '…')}</b><div class="cv-task-f"><small class="tk-dim cv-verdict">${esc(st)}${r.at ? ' · ' + esc(new Date(r.at).toLocaleDateString()) : ''}${r.superseded ? ' · superseded' : ''}</small></div>${grips}</div>`;
     }
+    if (WF[n.ref.kind]) {
+      const r = ((C.refs || {})[n.ref.kind] || {})[n.ref.id] || { loading: true }, [label, icon] = WF[n.ref.kind];
+      if (r.missing) return `<div class="cv-n cv-n--task cv-n--gone${sel}" data-cv-node="${esc(n.id)}" ${pos}><small class="tk-key">${label}</small><b>Not available</b><span class="tk-dim">Gone, or not shared with you</span>${grips}</div>`;
+      const st = r.status || '';
+      return `<div class="cv-n cv-n--task cv-n--wf cv-n--${n.ref.kind}${sel}" data-cv-node="${esc(n.id)}" data-cv-kind="${n.ref.kind}" ${pos}><div class="cv-task-top">${ic(icon)}<small class="tk-key">${label}</small><small class="cv-st cv-st--${esc(st)}">${esc(STATUS[st] || st)}</small></div><b class="cv-task-t">${esc(r.name || r.title || r.agent || '…')}</b><div class="cv-task-f"><small class="tk-dim">${esc(wfLine(n.ref.kind, r))}</small><span class="tk-sp"></span>${r.url ? `<a class="cv-open" href="${esc(r.url)}" title="Open">${ic('open')}</a>` : ''}</div>${grips}</div>`;
+    }
     if (n.ref.kind !== 'task') {
       const r = ((C.refs || {})[n.ref.kind] || {})[n.ref.id] || { loading: true }, isF = n.ref.kind === 'file';
       if (r.missing) return `<div class="cv-n cv-n--task cv-n--gone${sel}" data-cv-node="${esc(n.id)}" ${pos}><small class="tk-key">${isF ? 'File' : 'Chat'}</small><b>Not available</b><span class="tk-dim">Deleted, or not shared with you</span>${grips}</div>`;
-      const sub = isF ? [r.type, r.bytes != null ? (r.bytes > 1e6 ? (r.bytes / 1e6).toFixed(1) + ' MB' : Math.max(1, Math.round(r.bytes / 1e3)) + ' KB') : ''].filter(Boolean).join(' · ') : (r.at ? new Date(r.at).toLocaleDateString() : '');
+      const sub = isF ? [r.type, r.bytes != null ? (r.bytes > 1e6 ? (r.bytes / 1e6).toFixed(1) + ' MB' : Math.max(1, Math.round(r.bytes / 1e3)) + ' KB') : ''].filter(Boolean).join(' · ') : [r.messages != null ? r.messages + (r.messages === 1 ? ' message' : ' messages') : '', r.status === 'active' ? 'active now' : r.at ? new Date(r.at).toLocaleDateString() : ''].filter(Boolean).join(' · ');
       return `<div class="cv-n cv-n--task cv-n--${n.ref.kind}${sel}" data-cv-node="${esc(n.id)}" ${pos}><div class="cv-task-top">${ic(isF ? 'doc' : 'chat')}<small class="tk-key">${isF ? 'File' : 'Chat'}</small></div><b class="cv-task-t">${esc((isF ? r.name : r.title) || '…')}</b><div class="cv-task-f"><small class="tk-dim">${esc(sub)}</small><span class="tk-sp"></span>${r.url ? `<a class="cv-open" href="${esc(r.url)}" title="Open">${ic('open')}</a>` : ''}</div>${grips}</div>`;
     }
     const t = C.records[n.ref.id] || { key: n.ref.id, loading: true };
@@ -444,10 +468,20 @@
     const id = C.id; const r = await api('GET', '/api/canvases/' + encodeURIComponent(id)).catch(() => null);
     if (!r || !r.ok || C.id !== id || C.dirty || drag) return;
     if (r.d.canvas.revision !== C.rev) { take(r.d.canvas); C.sel = new Set([...C.sel].filter((s) => s.startsWith('e:') ? C.doc.edges.some((x) => 'e:' + x.id === s) : nodeById(s))); draw(); status('Updated'); }
-    else { C.records = r.d.canvas.records.tasks || {}; C.refs = { file: r.d.canvas.records.files || {}, chat: r.d.canvas.records.chats || {}, tenet: r.d.canvas.records.tenets || {} }; draw(); }
+    else { C.records = r.d.canvas.records.tasks || {}; C.refs = refsOf(r.d.canvas.records); draw(); }
   }, 15000);
 
   // the breadcrumb names a canvas, never its id
   const nameOf = (id) => (C.id === id && C.name ? C.name : (L.list || []).find((c) => c.id === id)?.name || null);
+  // "Open as canvas" on a project or a division: the same canvas every time, made on first open
+  document.addEventListener('click', async (e) => {
+    const b = e.target.closest('[data-xcv-open]'); if (!b) return;
+    e.preventDefault(); e.stopPropagation();
+    if (b.dataset.busy) return; b.dataset.busy = '1';
+    const r = await api('POST', '/api/canvases/open-as', { kind: b.dataset.xcvOpen, id: b.dataset.id }).catch(() => null);
+    delete b.dataset.busy;
+    if (!r || !r.ok) return toast(said(r, 'It could not be opened as a canvas.'));
+    L.list = null; goCanvas(r.d.canvas.id);
+  }, true);
   window.XENO_CANVAS = { served: true, nameOf, route, open, state: () => ({ id: C.id, state: C.state, nodes: C.doc ? C.doc.nodes.length : 0, edges: C.doc ? C.doc.edges.length : 0, rev: C.rev, dirty: C.dirty, conflict: C.conflict, view: { ...C.view } }), save };
 })();
