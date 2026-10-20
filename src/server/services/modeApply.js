@@ -18,6 +18,7 @@ import { check } from '../utils/authzReBAC.js';
 import { resolvePrincipal } from './agentIdentity.js';
 import { ensurePersonalWorkspace } from './personalWorkspace.js';
 import { createTask } from './xenoTasks.js';
+import { createAuthorizedProject } from './chatProjectAuthority.js';
 import { MODE_PACKS, packById } from '../data/modePacks.js';
 
 export class ModeError extends Error {
@@ -168,7 +169,8 @@ export async function plan(db, actor, { workspaceId, packId, listingVersionId, a
   const mode = validateMode(pack.mode);
   const conflicts = (await db.query(`SELECT mode_id FROM custom_modes WHERE owner_workspace_id = $1 AND mode_id = $2 AND archived_at IS NULL`, [w.id, mode.id])).rows.map((r) => `mode:${r.mode_id}`);
   const records = [{ type: 'mode', id: mode.id, name: mode.name, products: mode.products },
-    ...(pack.tasks || []).map((t) => ({ type: 'task', title: String(t.title).slice(0, 300), area: mode.id }))];
+    ...((pack.tasks || []).length ? [{ type: 'project', name: `${mode.name} — getting started`.slice(0, 200), workspaceId: w.id }] : []),
+    ...(pack.tasks || []).map((t) => ({ type: 'task', title: String(t.title).slice(0, 300), in: 'project', assignee: 'you' }))];
   const body = { workspaceId: w.id, pack: { id: pack.id, version: pack.version, hash, listingVersionId: lvId }, answers: a, records, conflicts };
   return { plan: { ...body, workspaceName: w.name, packTitle: pack.title, status: pack.status || 'published',
     cost: { credits: 0, seats: 0, note: 'Nothing here is billed yet. A paid pack is priced in the Pricing §6 ledger before it ships.' } },
@@ -214,9 +216,18 @@ export function apply(pool, actor, { workspaceId, packId, listingVersionId, answ
     created.push({ type: 'mode', id: m.id, rowId: row.row_id });
     const me = { id: actor.id, kind: 'human', name: p.displayName || p.handle || 'Someone' };
     const { pack } = await resolvePack(db, { packId, listingVersionId });
-    for (const t of pack.tasks || []) {
-      const task = await createTask(db, me, { title: t.title, body: t.body || '', area: m.id });
-      created.push({ type: 'task', id: task.id, key: task.key });
+    // §8.11 D-1: the WORKSPACE owns what a setup creates. Starter tasks live in a project of the target workspace
+    // (never the applier's personal tasks); the applier is their assignee. The project is made through the one
+    // project creator, joined to THIS transaction (its own BEGIN/COMMIT become no-ops here).
+    if ((pack.tasks || []).length) {
+      const joined = { query: (sql, a) => (/^\s*(BEGIN|COMMIT|ROLLBACK)\s*$/i.test(sql) ? Promise.resolve({ rows: [] }) : db.query(sql, a)) };
+      const project = await createAuthorizedProject(joined, { principal: { type: 'user', id: String(actor.id) }, workspaceId: w.id,
+        name: `${m.name} — getting started`.slice(0, 200), settings: { source: 'mode-setup', applicationId: appId } });
+      created.push({ type: 'project', id: project.id });
+      for (const t of pack.tasks) {
+        const task = await createTask(db, me, { title: t.title, body: t.body || '', projectId: project.id, assigneeId: actor.id });
+        created.push({ type: 'task', id: task.id, key: task.key, projectId: project.id });
+      }
     }
     if (pack.trade && /^[a-z][a-z0-9-]{0,39}$/.test(pack.trade)) {
       await db.query(`INSERT INTO user_onboarding (user_id, trade) VALUES ($1, $2) ON CONFLICT (user_id) DO UPDATE SET trade = EXCLUDED.trade, updated_at = now()`, [actor.id, pack.trade]);
@@ -239,7 +250,7 @@ export function revert(pool, actor, { workspaceId, applicationId } = {}) {
     const r = (await db.query(`SELECT * FROM workspace_mode_applications WHERE id = $1 AND workspace_id = $2 FOR UPDATE`, [applicationId, w.id])).rows[0];
     if (!r) fail('Setup not found', 'application_not_found', 404);
     if (r.reverted_at) return { replayed: true, receipt: shapeReceipt(r) };
-    const archived = [], kept = [];
+    const archived = [], kept = [], projects = [];
     for (const rec of r.created_records) {
       if (rec.type === 'mode') {
         const m = (await db.query(`SELECT edited_at, archived_at FROM custom_modes WHERE row_id = $1 FOR UPDATE`, [rec.rowId])).rows[0];
@@ -250,13 +261,21 @@ export function revert(pool, actor, { workspaceId, applicationId } = {}) {
       } else if (rec.type === 'task') {
         const t = (await db.query(`SELECT id, created_at, updated_at, deleted_at, status FROM tasks WHERE id = $1 FOR UPDATE`, [rec.id])).rows[0];
         if (!t || t.deleted_at) continue;
+        // the setup's own events (created, and the assignment made with it) are not a person's work
         const touched = t.updated_at.getTime() !== t.created_at.getTime() || t.status !== 'raised'
-          || Number((await db.query(`SELECT count(*) n FROM task_events WHERE task_id = $1 AND kind <> 'created'`, [t.id])).rows[0].n) > 0;
+          || Number((await db.query(`SELECT count(*) n FROM task_events WHERE task_id = $1 AND (created_at > (SELECT created_at FROM tasks WHERE id = $1) OR kind NOT IN ('created','assigned'))`, [t.id])).rows[0].n) > 0;
         if (touched) { kept.push({ ...rec, reason: 'worked on by a person' }); continue; }
         await db.query(`UPDATE tasks SET deleted_at = now(), updated_at = now() WHERE id = $1`, [t.id]);
         await db.query(`INSERT INTO task_events (task_id, actor_id, actor_kind, kind, from_value) VALUES ($1,$2,'human','deleted',$3)`, [t.id, actor.id, t.status]);
         archived.push(rec);
-      }
+      } else if (rec.type === 'project') projects.push(rec);
+    }
+    // the setup's project is archived only when nothing a person keeps is left in it
+    for (const rec of projects) {
+      const live = Number((await db.query(`SELECT count(*) n FROM tasks WHERE project_id = $1 AND deleted_at IS NULL`, [rec.id])).rows[0].n);
+      if (live) { kept.push({ ...rec, reason: 'holds work a person kept' }); continue; }
+      const a = await db.query(`UPDATE chat_projects SET is_archived = true WHERE id = $1 AND workspace_id = $2 AND NOT is_archived`, [rec.id, w.id]);
+      if (a.rowCount) archived.push(rec);
     }
     const report = { archived, kept };
     const out = (await db.query(`UPDATE workspace_mode_applications SET reverted_at = now(), reverted_by_user_id = $2, revert_report = $3 WHERE id = $1 RETURNING *`,

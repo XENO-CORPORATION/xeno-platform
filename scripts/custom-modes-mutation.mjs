@@ -23,6 +23,7 @@ const MUTATIONS = [
   ['a retry applies again', SVC, '    if (prior) {', '    if (false) {'],
   ['revert deletes a person’s edit (mode)', SVC, 'if (m.edited_at) {', 'if (false) {'],
   ['revert deletes a person’s edit (task)', SVC, 'if (touched) {', 'if (false) {'],
+  ['starter tasks land in the applier’s personal tasks', SVC, "projectId: project.id, assigneeId: actor.id", "area: m.id"],
   ['a community developer publishes a pack', MIG, "tier NOT IN ('verified','official')", 'false'],
   ['a pack depends on an unpublished version', MIG, 'AND v.version = md.depends_on_version AND v.published_at IS NOT NULL)) THEN', 'AND v.version = md.depends_on_version)) AND false THEN'],
 ];
