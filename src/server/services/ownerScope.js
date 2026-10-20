@@ -15,6 +15,16 @@ import { ensurePersonalWorkspace } from './personalWorkspace.js';
 
 function scopeError(status, code, message) { const e = new Error(message); e.status = status; e.code = code; return e; }
 
+/**
+ * D-1 CONTRACT (migration 20261020140000): every user_files row names a workspace, and a PERSONAL file is the one
+ * with an owner_user_id (allowed only inside its owner's personal workspace). Code that asks "is this a shared
+ * workspace's file?" reads this, never `row.workspace_id` alone, which is now set for personal files too.
+ */
+export function sharedWorkspaceOf(row) {
+  if (!row) return null;
+  return row.owner_user_id ? null : (row.workspace_id || null);
+}
+
 export async function ownerScopeOf(db, { workspaceId = null, ownerUserId = null } = {}) {
   if (workspaceId) {
     const w = (await db.query('SELECT id, owner_user_id, workspace_type FROM workspaces WHERE id = $1', [workspaceId])).rows[0];

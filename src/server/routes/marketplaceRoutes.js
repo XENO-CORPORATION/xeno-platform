@@ -862,12 +862,13 @@ router.get('/developer/earnings', authMiddleware, async (req, res) => {
     const dev = await getDeveloperForUser(req.db, req.user.id);
     if (!dev) return res.status(403).json({ success: false, error: 'Register a developer profile first' });
 
-    const summary = await svc.getEarningsSummary(req.db, dev.id);
+    const summary = await svc.getEarningsSummary(req.db, dev.seller_workspace_id); // D-6: the seller workspace's earnings
     const { rows: recent } = await req.db.query(
       `SELECT id, type, gross, platform_fee, creator_net, created_at
        FROM marketplace_transactions
-       WHERE developer_id = $1 ORDER BY created_at DESC LIMIT 50`,
-      [dev.id],
+       WHERE developer_id IN (SELECT id FROM marketplace_developers WHERE seller_workspace_id = $1)
+       ORDER BY created_at DESC LIMIT 50`,
+      [dev.seller_workspace_id],
     );
     res.json({
       success: true,
@@ -893,7 +894,7 @@ router.post('/developer/payouts', authMiddleware, async (req, res) => {
     const amount = Number(req.body?.amountCredits);
     if (!Number.isInteger(amount) || amount <= 0) return badRequest(res, 'amountCredits must be a positive integer');
 
-    const result = await svc.requestPayout(req.db, { developerId: dev.id, amountCredits: amount });
+    const result = await svc.requestPayout(req.db, { developerId: dev.id, sellerWorkspaceId: dev.seller_workspace_id, amountCredits: amount });
     if (!result.ok) {
       return res.status(result.status).json({ success: false, error: result.error, available: result.available });
     }

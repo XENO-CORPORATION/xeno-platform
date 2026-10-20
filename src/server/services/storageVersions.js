@@ -18,6 +18,7 @@ import crypto from 'node:crypto';
 import { check } from '../utils/authzReBAC.js';
 import { withTransaction } from './chatProjectAuthority.js';
 import { reconcileShares } from './storageShares.js';
+import { sharedWorkspaceOf } from './ownerScope.js';
 import { localLibraryPath } from './storageObjects.js';
 
 const isId = (v) => typeof v === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(v);
@@ -66,14 +67,15 @@ async function ownedCurrent(db, userId, fileId, orEdits = false) {
   // A workspace's file (team or company) has no personal owner: its tuple is `parent → workspace`, so the workspace's
   // editors are the ones who may version and restore it — the same rule as filing it into a workspace folder.
   // Membership decides, never the workspace's type.
-  if (rows[0].workspace_id) {
-    const editor = await check(db, { object: `workspace:${rows[0].workspace_id}`, relation: 'editor', subject: `user:${userId}` });
+  const team = sharedWorkspaceOf(rows[0]); // D-1 contract: a personal file names its personal workspace too
+  if (team) {
+    const editor = await check(db, { object: `workspace:${team}`, relation: 'editor', subject: `user:${userId}` });
     return editor.allowed ? rows[0] : null;
   }
   const owner = await check(db, { object: `library_asset:${fileId}`, relation: 'owner', subject: `user:${userId}` });
   if (owner.allowed) return rows[0];
   // someone the owner gave "can edit" may add a version; the file stays the owner's
-  if (orEdits && !rows[0].workspace_id && (await db.query(`SELECT 1 FROM storage_access WHERE kind = 'file' AND target_id = $1 AND user_id = $2 AND role = 'editor'`, [fileId, userId])).rows.length) return rows[0];
+  if (orEdits && !team && (await db.query(`SELECT 1 FROM storage_access WHERE kind = 'file' AND target_id = $1 AND user_id = $2 AND role = 'editor'`, [fileId, userId])).rows.length) return rows[0];
   return null;
 }
 
@@ -96,9 +98,10 @@ export async function addVersion(db, userId, fileId, stored, register) {
   const old = await ownedCurrent(db, userId, fileId, true);
   if (!old) return { notFound: true };
   // the new version belongs to the file's owner (and counts toward the owner's storage), whoever uploads it
-  const ownerId = old.workspace_id ? userId : (old.owner_user_id || old.user_id);
+  const team = sharedWorkspaceOf(old);
+  const ownerId = team ? userId : (old.owner_user_id || old.user_id);
   const created = await register(db, {
-    userId: ownerId, workspaceId: old.workspace_id || null, enforceAllowance: true, area: null,
+    userId: ownerId, workspaceId: team || null, enforceAllowance: true, area: null,
     filename: stored.filename, originalName: old.original_name || old.filename, mimeType: stored.mimeType,
     fileSize: stored.fileSize, storagePath: stored.storagePath, metadata: { ...(old.metadata || {}), source: 'upload', version_of: old.id },
   });
@@ -116,7 +119,7 @@ export async function addVersion(db, userId, fileId, stored, register) {
     }
     await tx.query(`UPDATE storage_shares SET file_id = $2 WHERE file_id = $1 AND revoked_at IS NULL`, [old.id, created.id]);
     // access follows the file to its newest version: direct shares and the shares of the folders it is in
-    if (!old.workspace_id) await reconcileShares(tx, ownerId);
+    if (!team) await reconcileShares(tx, ownerId);
   });
   // if it cannot become the new version, the row just made is withdrawn rather than left as a stray file
   try { await link(); } catch (error) { await db.query('UPDATE user_files SET deleted_at = now() WHERE id = $1', [created.id]); throw error; }

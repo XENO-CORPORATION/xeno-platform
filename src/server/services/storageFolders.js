@@ -119,7 +119,9 @@ export async function moveItemToFolder(db, principal, source, id, folderId) {
   const folder = await reach(db, principal.id, folderId);
   if (!folder) return { notFound: true };
   // a team folder holds that workspace's own files; a personal folder holds what is not a team's
-  const home = source === 'file' ? (await db.query('SELECT workspace_id FROM user_files WHERE id = $1', [id])).rows[0]?.workspace_id || null : null;
+  // D-1 contract: a personal file names its PERSONAL workspace; its place is still the person's own (folder scope NULL)
+  const home = source === 'file' ? (await db.query(`SELECT CASE WHEN w.workspace_type = 'personal' THEN NULL ELSE f.workspace_id END AS workspace_id
+      FROM user_files f LEFT JOIN workspaces w ON w.id = f.workspace_id WHERE f.id = $1`, [id])).rows[0]?.workspace_id || null : null;
   if ((folder.workspace_id || null) !== home) return { conflict: true, code: 'folder_other_place' };
   await db.query(`INSERT INTO storage_item_folders (source, source_id, folder_id) VALUES ($1, $2, $3)
     ON CONFLICT (source, source_id) DO UPDATE SET folder_id = EXCLUDED.folder_id, placed_at = now()`, [source, id, folderId]);

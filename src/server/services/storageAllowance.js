@@ -30,9 +30,9 @@ export class StorageFullError extends Error {
 
 // A file is held until it is purged: live, or soft-deleted but still restorable from the trash.
 const HELD = `(f.deleted_at IS NULL OR EXISTS (SELECT 1 FROM library_trash lt WHERE lt.source = 'file' AND lt.source_id = f.id))`;
-// D-1: a workspace-less file and a file in the owner's personal workspace are ONE pool (ownerScope.js).
-const PERSONAL = `((f.workspace_id IS NULL AND COALESCE(f.owner_user_id, f.user_id) = $1)
-  OR f.workspace_id IN (SELECT pw.id FROM workspaces pw WHERE pw.workspace_type = 'personal' AND pw.owner_user_id = $1))`;
+// D-1 contract (migration 20261020140000): every file names its workspace (NOT NULL), so the person's pool is
+// exactly the files in their PERSONAL workspace. There is no workspace-less shape left to count.
+const PERSONAL = `f.workspace_id IN (SELECT pw.id FROM workspaces pw WHERE pw.workspace_type = 'personal' AND pw.owner_user_id = $1)`;
 const ACTIVE = new Set(['active', 'trialing', 'past_due']);
 
 async function personalBytes(db, userId) {

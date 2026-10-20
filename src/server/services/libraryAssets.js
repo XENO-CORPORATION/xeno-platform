@@ -539,7 +539,10 @@ export async function listLibraryItems(db, userId, params = {}) {
     foldered AS (
       SELECT p.*, sf.id AS folder_id, sf.name AS folder_name,
         -- MINE: the caller's own item. A file someone else shared with them is not theirs ("Shared with me").
-        (p.source <> 'file' OR EXISTS (SELECT 1 FROM user_files uf WHERE uf.id = p.source_id AND (uf.workspace_id IS NOT NULL OR COALESCE(uf.owner_user_id, uf.user_id) = $1::uuid))) AS mine,
+        (p.source <> 'file' OR EXISTS (SELECT 1 FROM user_files uf WHERE uf.id = p.source_id AND (COALESCE(uf.owner_user_id, uf.user_id) = $1::uuid
+          -- a shared (non-personal) workspace's file is the caller's to work with; a file in SOMEONE ELSE'S personal
+          -- workspace is not (D-1 contract: personal files name their personal workspace, never NULL)
+          OR (uf.workspace_id IS NOT NULL AND NOT EXISTS (SELECT 1 FROM workspaces upw WHERE upw.id = uf.workspace_id AND upw.workspace_type = 'personal'))))) AS mine,
         (p.source = 'file' AND EXISTS (SELECT 1 FROM storage_shares ss WHERE ss.file_id = p.source_id AND ss.revoked_at IS NULL AND (ss.expires_at IS NULL OR ss.expires_at > now()))) AS shared,
         -- what a share lets the caller do with someone else's file: 'viewer', 'editor', or NULL for their own
         (SELECT sa.role FROM storage_access sa WHERE sa.kind = 'file' AND sa.target_id = p.source_id AND sa.user_id = $1::uuid) AS shared_role

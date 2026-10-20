@@ -18,6 +18,7 @@
 import fs from 'fs';
 import { check } from '../utils/authzReBAC.js';
 import { withTransaction } from './chatProjectAuthority.js';
+import { sharedWorkspaceOf } from './ownerScope.js';
 import { isLibraryUuid, listLibraryItems, resolveManagedLibraryPath } from './libraryAssets.js';
 
 export const LIBRARY_SOURCES = Object.freeze(['file', 'artifact', 'generation', 'image_asset']);
@@ -134,7 +135,7 @@ export async function folderStanding(db, principal, source, id) {
   if (!who) return { notFound: true };
   if (!who.editor) return { forbidden: true };
   if (source === 'file' && !who.owner) {
-    const team = (await db.query('SELECT workspace_id FROM user_files WHERE id = $1', [id])).rows[0]?.workspace_id;
+    const team = sharedWorkspaceOf((await db.query('SELECT owner_user_id, workspace_id FROM user_files WHERE id = $1', [id])).rows[0]);
     if (!team) return { forbidden: true };
   }
   return { ok: true };
