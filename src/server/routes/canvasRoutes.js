@@ -6,6 +6,7 @@
  *   GET    /api/canvases/:id                     the canvas (JSON Canvas 1.0) + every task it shows, read live
  *   PUT    /api/canvases/:id {content, revision, name?}   save; 409 if it changed since it was loaded
  *   DELETE /api/canvases/:id
+ *   POST   /api/canvases/open-as {kind: project|division, id}   its map: the same canvas each time, made on first open
  */
 import express from 'express';
 import * as canvases from '../services/canvases.js';
@@ -28,6 +29,7 @@ const handled = (fn) => async (req, res) => {
 
 router.get('/', handled(async (req, res) => { res.json({ success: true, canvases: await canvases.listCanvases(req.db, req.me, { projectId: req.query.projectId, area: req.query.area }) }); }));
 router.post('/', handled(async (req, res) => { res.status(201).json({ success: true, canvas: await canvases.createCanvas(req.db, req.me, req.body || {}) }); }));
+router.post('/open-as', handled(async (req, res) => { const r = await canvases.openAsCanvas(req.db, req.me, req.body || {}); res.status(r.created ? 201 : 200).json({ success: true, ...r }); }));
 router.get('/:id', handled(async (req, res) => { res.json({ success: true, canvas: await canvases.getCanvas(req.db, req.me, req.params.id) }); }));
 router.put('/:id', handled(async (req, res) => { res.json({ success: true, canvas: await canvases.saveCanvas(req.db, req.me, req.params.id, req.body || {}) }); }));
 router.delete('/:id', handled(async (req, res) => { res.json({ success: true, ...(await canvases.deleteCanvas(req.db, req.me, req.params.id)) }); }));

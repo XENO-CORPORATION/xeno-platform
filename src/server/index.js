@@ -6,6 +6,10 @@ import xenoTasksRoutes, { taskTokenAuth, unlessTaskToken, mcpChallenge, protecte
 import { TASKS_OPENAPI } from './services/tasksOpenApi.js';
 import platformAgentRoutes from './routes/platformAgentRoutes.js';
 import workforceDivisionRoutes from './routes/workforceDivisionRoutes.js';
+import workforcePeopleRoutes from './routes/workforcePeopleRoutes.js';
+import orchestratorRoutes from './routes/orchestratorRoutes.js';
+import workforceEventRoutes from './routes/workforceEventRoutes.js';
+import corpusRoutes from './routes/corpusRoutes.js';
 import workspaceApiRoutes from './routes/workspaceApiRoutes.js';
 import xenoMcpRoutes, { management as xenoMcpManagement, personOnly as mcpPersonOnly, mcpResourceMetadata } from './routes/xenoMcpRoutes.js';
 import userNotificationsRoutes from './routes/userNotificationsRoutes.js';
@@ -13,6 +17,7 @@ import { startTaskSweeps } from './services/taskNotifyEmail.js';
 import { sweepDueReminders, deliverAgentEvents, sweepExpiredLeases } from './services/xenoTasks.js';
 import workspaceAreaRoutes from './routes/workspaceAreaRoutes.js';
 import publishRoutes from './routes/publishRoutes.js';
+import workspaceAnalyticsRoutes from './routes/workspaceAnalyticsRoutes.js';
 import { areaFromRequest } from './utils/resourceArea.js';
 import { fileURLToPath } from 'url';
 import dotenv from 'dotenv';
@@ -644,7 +649,8 @@ app.use('/api/workspaces', databaseMiddleware, authMiddleware, requireActivated,
 app.use('/api/workspace-invites', databaseMiddleware, authMiddleware, workspaceInviteRoutes);
 // One search and one "needs you" feed across a person's chats, projects and Library, each aware of the area.
 app.use('/api/workspace', databaseMiddleware, authMiddleware, requireActivated, areaFromRequest, workspaceAreaRoutes);
-app.use('/api/publish', databaseMiddleware, authMiddleware, requireActivated, publishRoutes);   // XENO Publish = XENO Post, server-to-server (services/xenoPost.js)
+app.use('/api/publish', databaseMiddleware, authMiddleware, requireActivated, publishRoutes);
+app.use('/api/workspace-analytics', databaseMiddleware, authMiddleware, requireActivated, workspaceAnalyticsRoutes);   // Corpo › Analytics: a workspace's own dashboards (services/analytics.js)   // XENO Publish = XENO Post, server-to-server (services/xenoPost.js)
 // XENO Connect's host adapter asks here what a token or person may do right now (CONNECT_SERVICE_TOKEN; fails closed).
 app.use('/api/connect/authority', databaseMiddleware, connectAuthorityRoutes);
 // Website Storage → XENO Connect (Connected clouds). Website cookie sessions only; tokens stay in this process.
@@ -678,6 +684,12 @@ app.use('/api/mcp', databaseMiddleware, authMiddleware, requireActivated, mcpPer
 app.use('/api/v1', databaseMiddleware, workspaceApiRoutes);
 app.use('/api/agents', databaseMiddleware, authMiddleware, requireActivated, mcpPersonOnly, platformAgentRoutes);
 app.use('/api/divisions', databaseMiddleware, authMiddleware, requireActivated, mcpPersonOnly, workforceDivisionRoutes);
+// People in a company workspace (xeno-company SPEC §7.3 D-EMP): profiles, org chart, directory, time off, on/offboarding.
+app.use('/api/people', databaseMiddleware, authMiddleware, requireActivated, mcpPersonOnly, workforcePeopleRoutes);
+app.use('/api/orchestrator', databaseMiddleware, authMiddleware, requireActivated, mcpPersonOnly, orchestratorRoutes);
+app.use('/api/audit', databaseMiddleware, authMiddleware, requireActivated, mcpPersonOnly, workforceEventRoutes);
+// XENO Corpus: tenets, signed verdicts, proposals (services/xenoCorpus.js). Not person-only: an agent proposes here too.
+app.use('/api/corpus', databaseMiddleware, authMiddleware, requireActivated, corpusRoutes);
 app.use('/api/notifications', databaseMiddleware, authMiddleware, requireActivated, userNotificationsRoutes);
 console.log('🏢 Workspace routes integrated: /api/workspaces/* + /api/workspace-invites/*');
 

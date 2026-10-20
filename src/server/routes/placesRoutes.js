@@ -38,13 +38,16 @@ router.get('/:placeId/events', async (req, res) => {
   if (!first.ok) return send(res, first);
   res.set({ 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache, no-transform', Connection: 'keep-alive', 'X-Accel-Buffering': 'no' });
   res.flushHeaders?.();
-  let id = 0, prev = null, closed = false;
+  let id = 0, prev = null, closed = false, cursor = null;
   const write = (events) => { for (const e of events) res.write(`id: ${id += 1}\nevent: ${e.type}\ndata: ${JSON.stringify(e)}\n\n`); };
   const tick = async (f) => {
     if (closed) return;
     const r = f || await live.frame(req.db, req.me, req.params.placeId);
     if (!r.ok) { write([{ type: 'ended', reason: r.error.reason }]); closed = true; clearInterval(timer); return res.end(); }
     write(live.diffFrames(prev, r.result)); prev = r.result;
+    // §15: workforce activity in the building, from the one event stream (scoped per row, closed floors excluded)
+    const act = await live.activity(req.db, req.me, r.result, cursor).catch(() => null);
+    if (act && !closed) { cursor = act.cursor; write(act.events.map((event) => ({ type: 'workforce', event }))); }
   };
   const ms = Math.max(500, Number(process.env.PLACES_STREAM_INTERVAL_MS) || 3000);
   const timer = setInterval(() => { tick().catch(() => {}); res.write(': keepalive\n\n'); }, ms);

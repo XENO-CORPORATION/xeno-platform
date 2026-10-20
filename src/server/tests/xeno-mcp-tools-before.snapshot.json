@@ -478,7 +478,7 @@
   {
    "name": "canvas_add",
    "title": "Canvases: Put items on a canvas",
-   "description": "Put items on a canvas: tasks (by key, e.g. T-12 — the card always shows the task as it is now), Library files and chats (by id, also live), notes (markdown), links and groups. Without x/y they are laid out to the right of what is there. Returns each new item’s id.",
+   "description": "Put items on a canvas: tasks (by key, e.g. T-12 — the card always shows the task as it is now), Library files, chats, projects, divisions, objectives, runs and Corpus tenets (by id, also live; a tenet card shows its latest signed verdict — a card shows the record’s status now; a canvas never changes the record), notes (markdown), links and groups. Without x/y they are laid out to the right of what is there. Returns each new item’s id.",
    "inputSchema": {
     "type": "object",
     "required": [
@@ -504,10 +504,35 @@
           "task",
           "file",
           "chat",
+          "project",
+          "division",
+          "objective",
+          "run",
+          "tenet",
           "note",
           "link",
           "group"
          ]
+        },
+        "project": {
+         "type": "string",
+         "description": "For a project card: its id."
+        },
+        "division": {
+         "type": "string",
+         "description": "For a division card: its id."
+        },
+        "objective": {
+         "type": "string",
+         "description": "For an objective card: its id."
+        },
+        "run": {
+         "type": "string",
+         "description": "For a run card: its admission id."
+        },
+        "tenet": {
+         "type": "string",
+         "description": "For a verdict card: a Corpus tenet id (see corpus_query)."
         },
         "task": {
          "type": "string",
@@ -547,6 +572,36 @@
         }
        }
       }
+     }
+    }
+   },
+   "annotations": {
+    "readOnlyHint": false,
+    "destructiveHint": false,
+    "openWorldHint": false
+   }
+  },
+  {
+   "name": "canvas_open_as",
+   "title": "Canvases: Open a project or division as a canvas",
+   "description": "Lay a project (its objectives, tasks, conversations and active runs) or a division (what is inside it, its objectives, projects and active runs) out on a canvas. Opening it again returns the same canvas. A division’s map holds only what you may see.",
+   "inputSchema": {
+    "type": "object",
+    "required": [
+     "kind",
+     "id"
+    ],
+    "properties": {
+     "kind": {
+      "type": "string",
+      "enum": [
+       "project",
+       "division"
+      ]
+     },
+     "id": {
+      "type": "string",
+      "description": "The project or division id."
      }
     }
    },
@@ -1437,7 +1492,7 @@
   {
    "name": "canvas_add",
    "title": "Canvases: Put items on a canvas",
-   "description": "Put items on a canvas: tasks (by key, e.g. T-12 — the card always shows the task as it is now), Library files and chats (by id, also live), notes (markdown), links and groups. Without x/y they are laid out to the right of what is there. Returns each new item’s id.",
+   "description": "Put items on a canvas: tasks (by key, e.g. T-12 — the card always shows the task as it is now), Library files, chats, projects, divisions, objectives, runs and Corpus tenets (by id, also live; a tenet card shows its latest signed verdict — a card shows the record’s status now; a canvas never changes the record), notes (markdown), links and groups. Without x/y they are laid out to the right of what is there. Returns each new item’s id.",
    "inputSchema": {
     "type": "object",
     "required": [
@@ -1463,10 +1518,35 @@
           "task",
           "file",
           "chat",
+          "project",
+          "division",
+          "objective",
+          "run",
+          "tenet",
           "note",
           "link",
           "group"
          ]
+        },
+        "project": {
+         "type": "string",
+         "description": "For a project card: its id."
+        },
+        "division": {
+         "type": "string",
+         "description": "For a division card: its id."
+        },
+        "objective": {
+         "type": "string",
+         "description": "For an objective card: its id."
+        },
+        "run": {
+         "type": "string",
+         "description": "For a run card: its admission id."
+        },
+        "tenet": {
+         "type": "string",
+         "description": "For a verdict card: a Corpus tenet id (see corpus_query)."
         },
         "task": {
          "type": "string",
@@ -1506,6 +1586,36 @@
         }
        }
       }
+     }
+    }
+   },
+   "annotations": {
+    "readOnlyHint": false,
+    "destructiveHint": false,
+    "openWorldHint": false
+   }
+  },
+  {
+   "name": "canvas_open_as",
+   "title": "Canvases: Open a project or division as a canvas",
+   "description": "Lay a project (its objectives, tasks, conversations and active runs) or a division (what is inside it, its objectives, projects and active runs) out on a canvas. Opening it again returns the same canvas. A division’s map holds only what you may see.",
+   "inputSchema": {
+    "type": "object",
+    "required": [
+     "kind",
+     "id"
+    ],
+    "properties": {
+     "kind": {
+      "type": "string",
+      "enum": [
+       "project",
+       "division"
+      ]
+     },
+     "id": {
+      "type": "string",
+      "description": "The project or division id."
      }
     }
    },

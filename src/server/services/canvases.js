@@ -10,6 +10,15 @@
  * WHO: a project canvas follows the project (viewer reads, editor saves, admin or its creator deletes); a personal
  * canvas is its owner's. Agents act through the same rules — they are principals like people.
  *
+ * WORKFORCE CARDS: `xeno-ref` also points at a project, a division, an objective or a run (an admission), each by
+ * uuid. Each is resolved live through the rule its own service uses (project viewer; workspace viewer for a division
+ * or objective; a run's actor, payer or a viewer of its project), so its status is the record's status now.
+ * A canvas never writes those records: moving a card is layout only, every record change goes through its service.
+ *
+ * OPEN AS CANVAS (openAsCanvas): a project or a division laid out on a canvas, its objects placed in columns.
+ * Opening it again opens the same canvas. A project's map is a project canvas; a division's is the reader's own,
+ * built from the division HOME so it holds only what that reader may see.
+ *
  * WIRES BETWEEN TASKS: an edge between two task refs with `xeno.link` set ('blocks' | 'relates' | 'duplicates')
  * is a real task link. Saving creates it through Tasks' own addLink, so the same permission rules apply and the
  * link shows on both task pages. A plain edge is only a drawing.
@@ -17,6 +26,8 @@
 import { check } from '../utils/authzReBAC.js';
 import * as tasks from './xenoTasks.js';
 import { latestFor } from './storageVersions.js';
+import { readable as readableDivision, mayManage } from './workforceDivisions.js';
+import { resolveTenetCards } from './xenoCorpus.js';
 
 export class CanvasError extends Error {
   constructor(message, code, status = 400) { super(message); this.code = code; this.status = status; }
@@ -26,7 +37,8 @@ const AREA = /^[a-z][a-z0-9_-]{0,39}$/;
 const ID = /^[A-Za-z0-9_-]{1,64}$/;
 const TASK_KEY = /^T-\d{1,15}$/;
 const NODE_TYPES = new Set(['text', 'link', 'group', 'xeno-ref']);
-const REF_KINDS = new Set(['task', 'file', 'chat']);
+const REF_KINDS = new Set(['task', 'file', 'chat', 'project', 'division', 'objective', 'run', 'tenet']);   // tenet: a XENO Corpus verdict card (services/xenoCorpus.js)
+const UUID_KINDS = new Set(['file', 'chat', 'project', 'division', 'objective', 'run', 'tenet']);
 const COLORS = /^([1-6]|#[0-9a-fA-F]{6})$/;
 const SIDES = new Set(['top', 'right', 'bottom', 'left']);
 const ENDS = new Set(['none', 'arrow']);
@@ -56,7 +68,7 @@ export function cleanContent(content) {
       const r = n.ref || {};
       if (!REF_KINDS.has(r.kind)) throw new CanvasError('Unknown reference kind', 'invalid_content');
       if (r.kind === 'task' && !TASK_KEY.test(String(r.id || '').toUpperCase())) throw new CanvasError('A task reference names a task key (T-12)', 'invalid_content');
-      if ((r.kind === 'file' || r.kind === 'chat') && !UUID.test(String(r.id || ''))) throw new CanvasError(`A ${r.kind} reference names its id`, 'invalid_content');
+      if (UUID_KINDS.has(r.kind) && !UUID.test(String(r.id || ''))) throw new CanvasError(`A ${r.kind} reference names its id`, 'invalid_content');
       const key = r.kind === 'task' ? String(r.id).toUpperCase() : String(r.id).toLowerCase();
       if (refs.has(r.kind + ':' + key)) throw new CanvasError(`${r.kind === 'task' ? key : 'That ' + r.kind} is already on this canvas`, 'duplicate_ref', 409);
       refs.add(r.kind + ':' + key); out.ref = { kind: r.kind, id: key };
@@ -122,10 +134,63 @@ async function resolveChats(db, me, ids) {
   for (const id of ids) {
     const c = (await db.query('SELECT id, user_id, title, last_message_at, updated_at FROM chat_conversations WHERE id = $1 AND deleted_at IS NULL', [id])).rows[0];
     const can = c && (String(c.user_id) === String(me.id) || (await check(db, { object: `conversation:${id}`, relation: 'viewer', subject: `user:${me.id}` })).allowed);
-    out[id] = can ? { id: String(c.id), title: c.title, at: c.last_message_at || c.updated_at, url: `/workspace/apps/chat/${c.id}` } : { id, missing: true };
+    const n = can ? (await db.query('SELECT count(*)::int AS n FROM chat_messages WHERE conversation_id = $1', [id])).rows[0].n : 0;
+    out[id] = can ? { id: String(c.id), title: c.title, at: c.last_message_at || c.updated_at, messages: n, status: c.last_message_at && Date.now() - new Date(c.last_message_at).getTime() < 15 * 60e3 ? 'active' : 'quiet', url: `/workspace/apps/chat/${c.id}` } : { id, missing: true };
   }
   return out;
 }
+// ── workforce cards, each read live through its own service's rule; unseen or gone is `missing`, never its name
+const canSee = async (db, me, object, relation = 'viewer') => (await check(db, { object, relation, subject: `user:${me.id}` })).allowed;
+async function resolveProjects(db, me, ids) {
+  const out = {};
+  for (const id of ids) {
+    const p = (await canSee(db, me, `project:${id}`)) ? (await db.query(`SELECT p.id, p.name, p.is_archived,
+        (SELECT count(*)::int FROM tasks t WHERE t.project_id = p.id AND t.deleted_at IS NULL AND t.status NOT IN ('done','wont_do')) AS open_tasks,
+        (SELECT count(*)::int FROM tasks t WHERE t.project_id = p.id AND t.deleted_at IS NULL AND t.status = 'done') AS done_tasks
+      FROM chat_projects p WHERE p.id = $1`, [id])).rows[0] : null;
+    out[id] = p ? { id: String(p.id), name: p.name, status: p.is_archived ? 'archived' : 'active', openTasks: p.open_tasks, doneTasks: p.done_tasks, url: `/workspace/projects/${p.id}` } : { id, missing: true };
+  }
+  return out;
+}
+async function resolveDivisions(db, me, ids) {
+  const out = {};
+  for (const id of ids) {
+    let d = null;
+    try { d = await readableDivision(db, me, id); } catch (e) { if (e.status !== 404) throw e; }
+    if (!d) { out[id] = { id, missing: true }; continue; }
+    const n = (await db.query(`SELECT (SELECT count(*)::int FROM workforce_division_ownership WHERE division_id = $1 AND resource_kind = 'agent') AS agents,
+      (SELECT count(*)::int FROM workforce_project_divisions pd JOIN chat_projects p ON p.id = pd.project_id WHERE pd.division_id = $1 AND NOT p.is_archived) AS projects`, [id])).rows[0];
+    out[id] = { id: String(d.id), name: d.name, status: d.lifecycle, head: d.head_principal_id ? (d.head_name || 'Someone') : null, agents: n.agents, projects: n.projects, url: `/workspace/divisions/${d.id}` };
+  }
+  return out;
+}
+async function resolveObjectives(db, me, ids) {
+  const out = {};
+  for (const id of ids) {
+    const o = (await db.query(`SELECT o.id, o.workspace_id, o.division_id, o.title, o.status, o.window_end,
+        (SELECT count(*)::int FROM project_goals g WHERE g.objective_id = o.id) AS goals,
+        (SELECT count(*)::int FROM project_goals g WHERE g.objective_id = o.id AND g.status = 'completed') AS done
+      FROM project_objectives o WHERE o.id = $1`, [id])).rows[0];
+    out[id] = o && (await canSee(db, me, `workspace:${o.workspace_id}`)) ? { id: String(o.id), title: o.title, status: o.status, goals: o.goals, goalsDone: o.done, windowEnd: o.window_end,
+      url: o.division_id ? `/workspace/divisions/${o.division_id}` : null } : { id, missing: true };
+  }
+  return out;
+}
+async function resolveRuns(db, me, ids) {
+  const out = {};
+  for (const id of ids) {
+    const a = (await db.query(`SELECT a.id, a.actor_user_id, a.payer_user_id, a.project_id, a.admitted_at, r.name AS agent, r.owner_workspace_id,
+        (SELECT v.reason FROM workforce_run_revocations v WHERE v.admission_id = a.id) AS revoked,
+        (SELECT max(l.expires_at) FROM workforce_run_leases l WHERE l.admission_id = a.id) AS lease_until
+      FROM workforce_run_admissions a JOIN workforce_resources r ON r.id = a.agent_resource_id WHERE a.id = $1`, [id])).rows[0];
+    const ok = a && (String(a.actor_user_id) === String(me.id) || String(a.payer_user_id) === String(me.id)
+      || (a.project_id && await canSee(db, me, `project:${a.project_id}`)) || (a.owner_workspace_id && await mayManage(db, me, a.owner_workspace_id)));
+    out[id] = ok ? { id: String(a.id), agent: a.agent, status: a.revoked ? 'stopped' : a.lease_until && new Date(a.lease_until).getTime() > Date.now() ? 'live' : 'admitted',
+      admittedAt: a.admitted_at, url: a.project_id ? `/workspace/projects/${a.project_id}/runs/${a.id}` : null } : { id, missing: true };
+  }
+  return out;
+}
+
 /** Resolve every task ref LIVE, as this reader. Unseen and deleted tasks are told apart from visible ones. */
 async function resolveRefs(db, me, nodes) {
   const keys = nodes.filter((n) => n.type === 'xeno-ref' && n.ref.kind === 'task').map((n) => n.ref.id);
@@ -169,7 +234,8 @@ export async function getCanvas(db, me, id) {
   const { c, s } = await load(db, me, id);
   const content = cleanContent(c.content);
   const of = (kind) => content.nodes.filter((n) => n.type === 'xeno-ref' && n.ref.kind === kind).map((n) => n.ref.id);
-  return { ...summary(c, s), content, records: { tasks: await resolveRefs(db, me, content.nodes), files: await resolveFiles(db, me, of('file')), chats: await resolveChats(db, me, of('chat')) } };
+  return { ...summary(c, s), content, records: { tasks: await resolveRefs(db, me, content.nodes), files: await resolveFiles(db, me, of('file')), chats: await resolveChats(db, me, of('chat')),
+    projects: await resolveProjects(db, me, of('project')), divisions: await resolveDivisions(db, me, of('division')), objectives: await resolveObjectives(db, me, of('objective')), runs: await resolveRuns(db, me, of('run')), tenets: await resolveTenetCards(db, me, of('tenet')) } };
 }
 
 /**
@@ -201,4 +267,67 @@ export async function deleteCanvas(db, me, id) {
   const { c } = await load(db, me, id, 'del');
   await db.query('UPDATE canvases SET deleted_at = now() WHERE id = $1', [c.id]);
   return { deleted: c.id };
+}
+
+// ───────────── open a project or a division as a canvas
+const CARD = { project: [300, 120], division: [300, 120], objective: [280, 120], run: [260, 100], task: [260, 120], chat: [260, 100] };
+/** Columns of cards, one per kind, left to right, the root above them all. Layout only: positions, never records. */
+export function layoutMap(root, columns) {
+  const nodes = [], edges = [];
+  const rootNode = { id: `root-${root.kind}`, type: 'xeno-ref', ref: { kind: root.kind, id: root.id }, x: 0, y: 0, width: CARD[root.kind][0], height: CARD[root.kind][1] };
+  nodes.push(rootNode);
+  let x = 0;
+  for (const col of columns) {
+    if (!col.items.length) continue;
+    const [w, h] = CARD[col.kind];
+    const gid = `group-${col.kind}`;
+    const items = col.items.slice(0, 60);
+    nodes.push({ id: gid, type: 'group', label: col.label, x: x - 20, y: 180, width: w + 40, height: items.length * (h + 20) + 60 });
+    items.forEach((id, i) => {
+      const n = { id: `${col.kind}-${i + 1}`, type: 'xeno-ref', ref: { kind: col.kind, id }, x, y: 220 + i * (h + 20), width: w, height: h };
+      nodes.push(n);
+      if (i === 0) edges.push({ id: `e-${col.kind}`, fromNode: rootNode.id, toNode: gid, toEnd: 'arrow' });
+    });
+    x += w + 80;
+  }
+  return { nodes, edges };
+}
+
+async function existingMap(db, where, params) {
+  return (await db.query(`SELECT id FROM canvases WHERE deleted_at IS NULL AND ${where} ORDER BY created_at LIMIT 1`, params)).rows[0] || null;
+}
+
+/** "Open as canvas": the same canvas each time; made on first open. */
+export async function openAsCanvas(db, me, { kind, id } = {}) {
+  if (!['project', 'division'].includes(kind)) throw new CanvasError('Open a project or a division as a canvas', 'invalid_kind');
+  if (!UUID.test(String(id))) throw new CanvasError(`${kind === 'project' ? 'Project' : 'Division'} not found`, `${kind}_not_found`, 404);
+  const key = String(id).toLowerCase();
+  // a map is known by its ROOT card (layoutMap names it root-<kind>), so a canvas that merely shows the record is not its map
+  const marker = JSON.stringify([{ id: `root-${kind}`, type: 'xeno-ref', ref: { kind, id: key } }]);
+  if (kind === 'project') {
+    if (!(await rel(db, me.id, key, 'viewer'))) throw new CanvasError('Project not found', 'project_not_found', 404);
+    const found = await existingMap(db, `project_id = $1 AND content->'nodes' @> $2::jsonb`, [key, marker]);
+    if (found) return { canvas: await getCanvas(db, me, found.id), created: false };
+    if (!(await rel(db, me.id, key, 'editor'))) throw new CanvasError('Only a project editor can lay it out on a canvas', 'not_allowed', 403);
+    const p = (await db.query('SELECT name FROM chat_projects WHERE id = $1', [key])).rows[0];
+    const tasks = (await db.query(`SELECT 'T-' || number AS k FROM tasks WHERE project_id = $1 AND deleted_at IS NULL ORDER BY (status IN ('done','wont_do')), created_at LIMIT 60`, [key])).rows.map((r) => r.k);
+    const chats = (await db.query('SELECT id FROM chat_conversations WHERE project_id = $1 AND deleted_at IS NULL ORDER BY COALESCE(last_message_at, updated_at) DESC LIMIT 30', [key])).rows.map((r) => String(r.id));
+    const objectives = (await db.query('SELECT DISTINCT objective_id AS id FROM project_goals WHERE project_id = $1 AND objective_id IS NOT NULL', [key])).rows.map((r) => String(r.id));
+    const runs = (await db.query(`SELECT a.id FROM workforce_run_admissions a WHERE a.project_id = $1
+      AND NOT EXISTS (SELECT 1 FROM workforce_run_revocations v WHERE v.admission_id = a.id) ORDER BY a.admitted_at DESC LIMIT 30`, [key])).rows.map((r) => String(r.id));
+    const content = layoutMap({ kind: 'project', id: key }, [{ kind: 'objective', label: 'Objectives', items: objectives }, { kind: 'task', label: 'Tasks', items: tasks },
+      { kind: 'chat', label: 'Conversations', items: chats }, { kind: 'run', label: 'Active runs', items: runs }]);
+    return { canvas: await createCanvas(db, me, { name: `${String(p.name).slice(0, 100)} — map`, projectId: key, content }), created: true };
+  }
+  // a division: the reader's own canvas, built from what the HOME lets this reader see
+  let d;
+  try { d = await readableDivision(db, me, key); } catch (e) { if (e.status === 404) throw new CanvasError('Division not found', 'division_not_found', 404); throw e; }
+  const found = await existingMap(db, `project_id IS NULL AND owner_user_id = $1 AND content->'nodes' @> $2::jsonb`, [me.id, marker]);
+  if (found) return { canvas: await getCanvas(db, me, found.id), created: false };
+  const { readDivisionHome } = await import('./divisionHome.js');
+  const home = await readDivisionHome(db, me, key);
+  const content = layoutMap({ kind: 'division', id: key }, [{ kind: 'division', label: 'Inside it', items: home.children.map((c) => c.id) },
+    { kind: 'objective', label: 'Objectives', items: home.objectives.map((o) => o.id) }, { kind: 'project', label: 'Projects', items: home.projects.rows.map((p) => p.id) },
+    { kind: 'run', label: 'Active runs', items: home.runs.rows.map((r) => r.id) }]);
+  return { canvas: await createCanvas(db, me, { name: `${String(d.name).slice(0, 100)} — map`, content }), created: true };
 }

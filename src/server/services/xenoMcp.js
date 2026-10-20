@@ -21,11 +21,14 @@ import * as agentMedia from './agentMedia.js';
 import * as canvasMcp from './canvasMcp.js';
 import * as placesMcp from './placesMcp.js';
 import * as modesMcp from './modesMcp.js';
+import * as peopleMcp from './peopleMcp.js';
+import * as corpusMcp from './corpusMcp.js';
 import * as canvases from './canvases.js';
 import * as agentsMcp from './agentsMcp.js';
 import * as storageMcp from './storageMcp.js';
 import * as supportMcp from './supportMcp.js';
 import * as publishMcp from './publishMcp.js';
+import * as analyticsMcp from './analyticsMcp.js';
 import * as workforceMcp from './workforceMcp.js';
 import * as forumMcp from './forumMcp.js';
 import { resolvePrincipal } from './agentIdentity.js';
@@ -77,6 +80,22 @@ export const SERVICES = Object.freeze([
     call: (db, actor, name, args) => modesMcp.callTool(db, actor, name, args),
     isToolError: (e) => e instanceof modesMcp.ModesMcpError,
   },
+  // People (peopleMcp.js): the directory, profiles, org chart and my work for agents; HR changes are a person's (human_only).
+  {
+    category: 'people', title: 'People', version: '1.0.0', timeoutMs: 20_000,
+    description: 'People: who works in a workspace, their title, division, team, manager and availability, and the org chart.',
+    tools: () => peopleMcp.TOOLS,
+    call: (db, actor, name, args) => peopleMcp.callTool(db, actor, name, args),
+    isToolError: (e) => e instanceof peopleMcp.PeopleMcpError,
+  },
+  // XENO Corpus (corpusMcp.js): read a scope's verified truth, assess it, propose a change a PERSON ratifies.
+  {
+    category: 'corpus', title: 'Corpus', version: '1.0.0', timeoutMs: 20_000,
+    description: 'Corpus: the verified truth of a workspace, division or project — tenets, signed verdicts, inherited doctrine; agents propose, people ratify.',
+    tools: () => corpusMcp.TOOLS,
+    call: (db, actor, name, args) => corpusMcp.callTool(db, actor, name, args),
+    isToolError: (e) => e instanceof corpusMcp.CorpusMcpError,
+  },
   // XENO Storage (storageMcp.js, WORKSPACE AGENT SURFACE P1): an agent works in its owner's Storage, the person in their own.
   {
     category: 'storage', title: 'Storage', version: '1.0.0', timeoutMs: 60_000,
@@ -108,6 +127,14 @@ export const SERVICES = Object.freeze([
     tools: () => supportMcp.TOOLS,
     call: (db, actor, name, args) => supportMcp.callTool(db, actor, name, args),
     isToolError: (e) => e instanceof supportMcp.SupportMcpError,
+  },
+  // XENO Analytics (analyticsMcp.js): read-only metrics and saved dashboards of a workspace.
+  {
+    category: 'analytics', title: 'Analytics', version: '1.0.0', timeoutMs: 30_000,
+    description: 'Analytics: read a workspace’s metrics (credits, tasks, storage, support, agent runs) and saved dashboards.',
+    tools: () => analyticsMcp.TOOLS,
+    call: (db, actor, name, args) => analyticsMcp.callTool(db, actor, name, args),
+    isToolError: (e) => e instanceof analyticsMcp.AnalyticsMcpError,
   },
   // XENO Forum, folded in from /api/forum/mcp (kept): the same tools, the same function. Its wire names were
   // always `forum_<verb>`, so as a category the grandfathered alias is exactly the old name.

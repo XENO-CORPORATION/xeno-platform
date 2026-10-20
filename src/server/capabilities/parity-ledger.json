@@ -124,7 +124,15 @@
   "publishRoutes.js": "publish",
   "platform-publish.js": "publish",
   "supportRoutes.js": "support",
-  "platform-support.js": "support"
+  "platform-support.js": "support",
+  "workspaceAnalyticsRoutes.js": "analytics",
+  "platform-analytics.js": "analytics",
+  "corpusRoutes.js": "workspace",
+  "platform-corpus.js": "workspace",
+  "orchestratorRoutes.js": "workforce",
+  "workforceEventRoutes.js": "workforce",
+  "workforcePeopleRoutes.js": "workforce",
+  "platform-directory.js": "workforce"
  },
  "actions": {
   "route:accountGiftRoutes.js:POST /": {
@@ -3808,9 +3816,10 @@
    "scope": "agents:read"
   },
   "route:workforceDivisionRoutes.js:GET /:id/home": {
-   "status": "planned",
+   "status": "capability",
+   "capability": "division.division.home",
    "class": "safe",
-   "scope": "agents:read"
+   "scope": "workspace:read"
   },
   "route:workforceDivisionRoutes.js:PATCH /:id": {
    "status": "capability",
@@ -8150,6 +8159,388 @@
    "status": "planned",
    "class": "reversible",
    "scope": "agents:write"
+  },
+  "route:canvasRoutes.js:POST /open-as": {
+   "status": "capability",
+   "capability": "canvas.canvas.open_as",
+   "class": "reversible",
+   "scope": "tasks:write"
+  },
+  "ui:platform-canvas.js:data-xcv-open": {
+   "status": "capability",
+   "capability": "canvas.canvas.open_as",
+   "class": "reversible",
+   "scope": "tasks:write"
+  },
+  "route:workspaceAnalyticsRoutes.js:GET /metrics": {
+   "status": "capability",
+   "capability": "analytics.metric.list",
+   "class": "safe",
+   "scope": "analytics:read"
+  },
+  "route:workspaceAnalyticsRoutes.js:GET /metrics/:metric": {
+   "status": "capability",
+   "capability": "analytics.metric.query",
+   "class": "safe",
+   "scope": "analytics:read"
+  },
+  "route:workspaceAnalyticsRoutes.js:GET /dashboards": {
+   "status": "capability",
+   "capability": "analytics.dashboard.list",
+   "class": "safe",
+   "scope": "analytics:read"
+  },
+  "route:workspaceAnalyticsRoutes.js:GET /dashboards/:id": {
+   "status": "capability",
+   "capability": "analytics.dashboard.list",
+   "class": "safe",
+   "scope": "analytics:read"
+  },
+  "route:workspaceAnalyticsRoutes.js:POST /dashboards": {
+   "status": "planned",
+   "class": "reversible",
+   "scope": "analytics:write",
+   "because": "agents read analytics (owner, 2026-10-20); saving a dashboard is a person's step until an agent write is decided"
+  },
+  "route:workspaceAnalyticsRoutes.js:PATCH /dashboards/:id": {
+   "status": "planned",
+   "class": "reversible",
+   "scope": "analytics:write",
+   "because": "agents read analytics (owner, 2026-10-20); changing a dashboard is a person's step until an agent write is decided"
+  },
+  "route:workspaceAnalyticsRoutes.js:DELETE /dashboards/:id": {
+   "status": "planned",
+   "class": "reversible",
+   "scope": "analytics:write",
+   "because": "soft delete, undone by /restore; a person's step until an agent write is decided"
+  },
+  "route:workspaceAnalyticsRoutes.js:POST /dashboards/:id/restore": {
+   "status": "planned",
+   "class": "reversible",
+   "scope": "analytics:write",
+   "because": "the undo of a dashboard delete; a person's step until an agent write is decided"
+  },
+  "ui:platform-analytics.js:data-an-page": {
+   "status": "capability",
+   "capability": "analytics.dashboard.list",
+   "class": "safe",
+   "scope": "analytics:read"
+  },
+  "ui:platform-analytics.js:data-an-division": {
+   "status": "excluded",
+   "category": "view-state",
+   "class": "safe",
+   "scope": "none",
+   "because": "chooses which division the screen shows; an agent passes `division` to query_metric"
+  },
+  "route:modesRoutes.js:POST /:wid/architect/proposals (workspaceModesRouter)": {
+   "status": "capability",
+   "capability": "modes.architect.propose",
+   "class": "irreversible",
+   "scope": "workspace:read"
+  },
+  "route:modesRoutes.js:GET /:wid/architect/proposals/:pid (workspaceModesRouter)": {
+   "status": "capability",
+   "capability": "modes.architect.get",
+   "class": "safe",
+   "scope": "workspace:read"
+  },
+  "route:modesRoutes.js:GET /:wid/architect/proposals (workspaceModesRouter)": {
+   "status": "planned",
+   "class": "safe",
+   "scope": "workspace:read"
+  },
+  "route:modesRoutes.js:PATCH /:wid/architect/proposals/:pid (workspaceModesRouter)": {
+   "status": "planned",
+   "class": "reversible",
+   "scope": "workspace:admin"
+  },
+  "ui:setup.js:data-xsu=docs": {
+   "status": "excluded",
+   "category": "view-state",
+   "class": "safe",
+   "scope": "none",
+   "because": "changes only what the screen shows"
+  },
+  "ui:setup.js:data-xsu=pick": {
+   "status": "excluded",
+   "category": "view-state",
+   "class": "safe",
+   "scope": "none",
+   "because": "changes only what the screen shows"
+  },
+  "ui:setup.js:data-xsu=task-del": {
+   "status": "excluded",
+   "category": "view-state",
+   "class": "safe",
+   "scope": "none",
+   "because": "changes only what the screen shows"
+  },
+  "ui:setup.js:data-xsu=task-add": {
+   "status": "excluded",
+   "category": "view-state",
+   "class": "safe",
+   "scope": "none",
+   "because": "changes only what the screen shows"
+  },
+  "ui:setup.js:data-xsu=propose": {
+   "status": "capability",
+   "capability": "modes.architect.propose",
+   "class": "irreversible",
+   "scope": "workspace:read"
+  },
+  "ui:setup.js:data-xsu=use": {
+   "status": "planned",
+   "class": "reversible",
+   "scope": "workspace:admin"
+  },
+  "route:corpusRoutes.js:GET /:scope/:id": {
+   "status": "capability",
+   "capability": "corpus.corpus.query",
+   "class": "safe",
+   "scope": "workspace:read"
+  },
+  "route:corpusRoutes.js:GET /:scope/:id/query": {
+   "status": "capability",
+   "capability": "corpus.corpus.query",
+   "class": "safe",
+   "scope": "workspace:read"
+  },
+  "route:corpusRoutes.js:GET /:scope/:id/assess": {
+   "status": "capability",
+   "capability": "corpus.corpus.assess",
+   "class": "safe",
+   "scope": "workspace:read"
+  },
+  "route:corpusRoutes.js:POST /:scope/:id/proposals": {
+   "status": "capability",
+   "capability": "corpus.proposal.create",
+   "class": "reversible",
+   "scope": "workspace:admin"
+  },
+  "route:corpusRoutes.js:POST /:scope/:id/tenets": {
+   "status": "excluded",
+   "category": "covered-by",
+   "of": "route:corpusRoutes.js:POST /:scope/:id/proposals",
+   "class": "reversible",
+   "scope": "none",
+   "because": "an agent never writes a tenet (D211): its way to add one is corpus.proposal.create, which a person ratifies"
+  },
+  "route:corpusRoutes.js:POST /proposals/:id/decision": {
+   "status": "excluded",
+   "category": "self-authority",
+   "class": "irreversible",
+   "scope": "none",
+   "because": "ratifying turns a proposal into truth; an agent deciding proposals (its own included) is what D211 forbids, and the database refuses it"
+  },
+  "route:corpusRoutes.js:GET /tenets/:id/verdicts": {
+   "status": "capability",
+   "capability": "corpus.verdict.list",
+   "class": "safe",
+   "scope": "workspace:read"
+  },
+  "route:corpusRoutes.js:POST /tenets/:id/verdicts": {
+   "status": "capability",
+   "capability": "corpus.verdict.record",
+   "class": "irreversible",
+   "scope": "agents:write"
+  },
+  "route:corpusRoutes.js:POST /projects/:id/import": {
+   "status": "excluded",
+   "category": "protocol",
+   "class": "reversible",
+   "scope": "none",
+   "because": "the bound installation syncs its .xeno/corpus/ directory over a sender-bound session; it is a sync transport, not a person’s action"
+  },
+  "ui:platform-corpus.js:data-xcp=open-project": {
+   "status": "excluded",
+   "category": "view-state",
+   "class": "safe",
+   "scope": "none",
+   "because": "navigation to a tenet or the Corpus tab"
+  },
+  "ui:platform-corpus.js:data-xcp=retry": {
+   "status": "excluded",
+   "category": "view-state",
+   "class": "safe",
+   "scope": "none",
+   "because": "re-reads what the screen shows"
+  },
+  "ui:platform-corpus.js:data-xcp=new-tenet": {
+   "status": "excluded",
+   "category": "covered-by",
+   "of": "route:corpusRoutes.js:POST /:scope/:id/tenets",
+   "class": "reversible",
+   "scope": "none",
+   "because": "the screen for the same route"
+  },
+  "ui:platform-corpus.js:data-xcp=propose": {
+   "status": "capability",
+   "capability": "corpus.proposal.create",
+   "class": "reversible",
+   "scope": "workspace:admin"
+  },
+  "ui:platform-corpus.js:data-xcp=ratify": {
+   "status": "excluded",
+   "category": "covered-by",
+   "of": "route:corpusRoutes.js:POST /proposals/:id/decision",
+   "class": "irreversible",
+   "scope": "none",
+   "because": "the screen for the same route"
+  },
+  "ui:platform-corpus.js:data-xcp=reject": {
+   "status": "excluded",
+   "category": "covered-by",
+   "of": "route:corpusRoutes.js:POST /proposals/:id/decision",
+   "class": "irreversible",
+   "scope": "none",
+   "because": "the screen for the same route"
+  },
+  "route:orchestratorRoutes.js:GET /graph": {
+   "status": "capability",
+   "capability": "orchestrator.graph.get",
+   "class": "safe",
+   "scope": "tasks:read"
+  },
+  "route:orchestratorRoutes.js:GET /ready": {
+   "status": "capability",
+   "capability": "orchestrator.ready.list",
+   "class": "safe",
+   "scope": "tasks:read"
+  },
+  "route:orchestratorRoutes.js:POST /edges": {
+   "status": "capability",
+   "capability": "orchestrator.edge.add",
+   "class": "reversible",
+   "scope": "tasks:write"
+  },
+  "route:orchestratorRoutes.js:DELETE /edges/:edgeId": {
+   "status": "capability",
+   "capability": "orchestrator.edge.remove",
+   "class": "reversible",
+   "scope": "tasks:write"
+  },
+  "route:orchestratorRoutes.js:GET /plans": {
+   "status": "capability",
+   "capability": "orchestrator.plan.list",
+   "class": "safe",
+   "scope": "tasks:read"
+  },
+  "route:orchestratorRoutes.js:POST /plans": {
+   "status": "capability",
+   "capability": "orchestrator.plan.create",
+   "class": "reversible",
+   "scope": "tasks:write"
+  },
+  "route:orchestratorRoutes.js:GET /plans/:planId": {
+   "status": "capability",
+   "capability": "orchestrator.plan.get",
+   "class": "safe",
+   "scope": "tasks:read"
+  },
+  "route:orchestratorRoutes.js:POST /plans/:planId/attempts": {
+   "status": "capability",
+   "capability": "orchestrator.attempt.start",
+   "class": "irreversible",
+   "scope": "tasks:write"
+  },
+  "route:workforceEventRoutes.js:GET /events": {
+   "status": "capability",
+   "capability": "audit.event.list",
+   "class": "safe",
+   "scope": "workspace:read"
+  },
+  "route:workforcePeopleRoutes.js:GET /": {
+   "status": "capability",
+   "capability": "people.person.list",
+   "class": "safe",
+   "scope": "workspace:read"
+  },
+  "route:workforcePeopleRoutes.js:GET /org-chart": {
+   "status": "capability",
+   "capability": "people.org.chart",
+   "class": "safe",
+   "scope": "workspace:read"
+  },
+  "route:workforcePeopleRoutes.js:GET /me/work": {
+   "status": "capability",
+   "capability": "people.work.mine",
+   "class": "safe",
+   "scope": "workspace:read"
+  },
+  "route:workforcePeopleRoutes.js:GET /:principalId": {
+   "status": "capability",
+   "capability": "people.person.get",
+   "class": "safe",
+   "scope": "workspace:read"
+  },
+  "route:workforcePeopleRoutes.js:PATCH /:principalId": {
+   "status": "capability",
+   "capability": "people.person.update",
+   "class": "reversible",
+   "scope": "workspace:admin"
+  },
+  "route:workforcePeopleRoutes.js:POST /time-off": {
+   "status": "capability",
+   "capability": "people.time_off.create",
+   "class": "reversible",
+   "scope": "workspace:admin"
+  },
+  "route:workforcePeopleRoutes.js:POST /time-off/:id/cancel": {
+   "status": "planned",
+   "class": "reversible",
+   "scope": "workspace:admin"
+  },
+  "route:workforcePeopleRoutes.js:POST /:principalId/onboard": {
+   "status": "planned",
+   "class": "reversible",
+   "scope": "workspace:admin"
+  },
+  "route:workforcePeopleRoutes.js:GET /:principalId/offboard-plan": {
+   "status": "planned",
+   "class": "safe",
+   "scope": "workspace:admin"
+  },
+  "route:workforcePeopleRoutes.js:POST /:principalId/offboard": {
+   "status": "planned",
+   "class": "irreversible",
+   "scope": "workspace:admin"
+  },
+  "ui:platform-directory.js:data-xdir=tab": {
+   "status": "excluded",
+   "category": "view-state",
+   "class": "safe",
+   "scope": "none",
+   "because": "switches between the directory, org chart and my-work views"
+  },
+  "ui:platform-directory.js:data-xdir=open": {
+   "status": "excluded",
+   "category": "view-state",
+   "class": "safe",
+   "scope": "none",
+   "because": "opens a person’s page"
+  },
+  "ui:platform-directory.js:data-xdir=edit": {
+   "status": "capability",
+   "capability": "people.person.update",
+   "class": "reversible",
+   "scope": "workspace:admin"
+  },
+  "ui:platform-directory.js:data-xdir=time-off": {
+   "status": "capability",
+   "capability": "people.time_off.create",
+   "class": "reversible",
+   "scope": "workspace:admin"
+  },
+  "ui:platform-directory.js:data-xdir=onboard": {
+   "status": "planned",
+   "class": "reversible",
+   "scope": "workspace:admin"
+  },
+  "ui:platform-directory.js:data-xdir=offboard": {
+   "status": "planned",
+   "class": "irreversible",
+   "scope": "workspace:admin"
   }
  }
 }

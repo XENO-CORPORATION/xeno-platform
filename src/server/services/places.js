@@ -14,6 +14,7 @@
  * owner's personal workspace building, where it sits at a desk.
  */
 import crypto from 'node:crypto';
+import { availabilityMap } from './workforcePeople.js';
 
 export const CODES = Object.freeze(['bad_input', 'not_found', 'denied', 'needs_approval', 'conflict', 'rate_limited', 'unavailable', 'timeout', 'internal']);
 const STATUS = { bad_input: 400, not_found: 404, denied: 403, needs_approval: 409, conflict: 409, rate_limited: 429, unavailable: 503, timeout: 504, internal: 500 };
@@ -178,6 +179,9 @@ export async function buildSnapshot(db, me, place, access) {
     WHERE r.agent_user_id = ANY($1::uuid[]) AND r.state IN ('starting','queued','running') ORDER BY r.created_at`, [agentIds])).rows : [];
   const firstDesk = new Map(); for (const m of memberships) if (!firstDesk.has(m.principalId)) firstDesk.set(m.principalId, m.id);
   const admin = access.permissions.includes('edit');
+  // availability (People: time off + stated working hours). Public: whether, never why beyond the kind of reason.
+  const avail = await availabilityMap(db, place.workspace_id, principals.map((p) => p.id));
+  for (const p of principals) { const a = avail[p.id]; if (a && !a.available) p.away = a.reason; }
   const runs = runRows.map((r) => ({ id: r.id, principalId: r.agent_user_id, membershipId: firstDesk.get(r.agent_user_id) || null,
     title: admin || r.owner_user_id === me.id ? r.title : '', status: RUN_STATUS[r.state] }));
 

@@ -72,6 +72,188 @@
    ]
   },
   {
+   "name": "modes.architect.propose",
+   "wire": "modes__architect__propose",
+   "version": "1.0.0",
+   "class": "irreversible",
+   "scope": "workspace:read",
+   "surfaces": [
+    "mcp",
+    "rest"
+   ],
+   "aliases": [
+    "modes_architect_propose"
+   ]
+  },
+  {
+   "name": "modes.architect.get",
+   "wire": "modes__architect__get",
+   "version": "1.0.0",
+   "class": "safe",
+   "scope": "workspace:read",
+   "surfaces": [
+    "mcp",
+    "rest"
+   ],
+   "aliases": [
+    "modes_architect_get"
+   ]
+  },
+  {
+   "name": "people.person.list",
+   "wire": "people__person__list",
+   "version": "1.0.0",
+   "class": "safe",
+   "scope": "workspace:read",
+   "surfaces": [
+    "mcp",
+    "rest"
+   ],
+   "aliases": [
+    "people_directory"
+   ]
+  },
+  {
+   "name": "people.person.get",
+   "wire": "people__person__get",
+   "version": "1.0.0",
+   "class": "safe",
+   "scope": "workspace:read",
+   "surfaces": [
+    "mcp",
+    "rest"
+   ],
+   "aliases": [
+    "people_get"
+   ]
+  },
+  {
+   "name": "people.org.chart",
+   "wire": "people__org__chart",
+   "version": "1.0.0",
+   "class": "safe",
+   "scope": "workspace:read",
+   "surfaces": [
+    "mcp",
+    "rest"
+   ],
+   "aliases": [
+    "people_org_chart"
+   ]
+  },
+  {
+   "name": "people.work.mine",
+   "wire": "people__work__mine",
+   "version": "1.0.0",
+   "class": "safe",
+   "scope": "workspace:read",
+   "surfaces": [
+    "mcp",
+    "rest"
+   ],
+   "aliases": [
+    "people_my_work"
+   ]
+  },
+  {
+   "name": "people.person.update",
+   "wire": "people__person__update",
+   "version": "1.0.0",
+   "class": "undoable",
+   "scope": "workspace:admin",
+   "surfaces": [
+    "mcp",
+    "rest"
+   ],
+   "aliases": [
+    "people_update_profile"
+   ]
+  },
+  {
+   "name": "people.time_off.create",
+   "wire": "people__time_off__create",
+   "version": "1.0.0",
+   "class": "undoable",
+   "scope": "workspace:admin",
+   "surfaces": [
+    "mcp",
+    "rest"
+   ],
+   "aliases": [
+    "people_add_time_off"
+   ]
+  },
+  {
+   "name": "corpus.corpus.query",
+   "wire": "corpus__corpus__query",
+   "version": "1.0.0",
+   "class": "safe",
+   "scope": "workspace:read",
+   "surfaces": [
+    "mcp",
+    "rest"
+   ],
+   "aliases": [
+    "corpus_query"
+   ]
+  },
+  {
+   "name": "corpus.corpus.assess",
+   "wire": "corpus__corpus__assess",
+   "version": "1.0.0",
+   "class": "safe",
+   "scope": "workspace:read",
+   "surfaces": [
+    "mcp",
+    "rest"
+   ],
+   "aliases": [
+    "corpus_assess"
+   ]
+  },
+  {
+   "name": "corpus.proposal.create",
+   "wire": "corpus__proposal__create",
+   "version": "1.0.0",
+   "class": "undoable",
+   "scope": "workspace:admin",
+   "surfaces": [
+    "mcp",
+    "rest"
+   ],
+   "aliases": [
+    "corpus_propose"
+   ]
+  },
+  {
+   "name": "corpus.verdict.list",
+   "wire": "corpus__verdict__list",
+   "version": "1.0.0",
+   "class": "safe",
+   "scope": "workspace:read",
+   "surfaces": [
+    "mcp",
+    "rest"
+   ],
+   "aliases": [
+    "corpus_history"
+   ]
+  },
+  {
+   "name": "corpus.verdict.record",
+   "wire": "corpus__verdict__record",
+   "version": "1.0.0",
+   "class": "irreversible",
+   "scope": "agents:write",
+   "surfaces": [
+    "mcp",
+    "rest"
+   ],
+   "aliases": [
+    "corpus_record_verdict"
+   ]
+  },
+  {
    "name": "tasks.project.list",
    "wire": "tasks__project__list",
    "version": "1.0.0",
@@ -293,6 +475,20 @@
    ],
    "aliases": [
     "canvas_add"
+   ]
+  },
+  {
+   "name": "canvas.canvas.open_as",
+   "wire": "canvas__canvas__open_as",
+   "version": "1.0.0",
+   "class": "undoable",
+   "scope": "tasks:write",
+   "surfaces": [
+    "mcp",
+    "rest"
+   ],
+   "aliases": [
+    "canvas_open_as"
    ]
   },
   {
@@ -828,6 +1024,20 @@
    ]
   },
   {
+   "name": "division.division.home",
+   "wire": "division__division__home",
+   "version": "1.0.0",
+   "class": "safe",
+   "scope": "workspace:read",
+   "surfaces": [
+    "mcp",
+    "rest"
+   ],
+   "aliases": [
+    "workforce_division_home"
+   ]
+  },
+  {
    "name": "division.division.create",
    "wire": "division__division__create",
    "version": "1.0.0",
@@ -1038,6 +1248,132 @@
    ]
   },
   {
+   "name": "orchestrator.graph.get",
+   "wire": "orchestrator__graph__get",
+   "version": "1.0.0",
+   "class": "safe",
+   "scope": "tasks:read",
+   "surfaces": [
+    "mcp",
+    "rest"
+   ],
+   "aliases": [
+    "workforce_orchestrator_graph_get"
+   ]
+  },
+  {
+   "name": "orchestrator.ready.list",
+   "wire": "orchestrator__ready__list",
+   "version": "1.0.0",
+   "class": "safe",
+   "scope": "tasks:read",
+   "surfaces": [
+    "mcp",
+    "rest"
+   ],
+   "aliases": [
+    "workforce_orchestrator_ready_list"
+   ]
+  },
+  {
+   "name": "orchestrator.edge.add",
+   "wire": "orchestrator__edge__add",
+   "version": "1.0.0",
+   "class": "undoable",
+   "scope": "tasks:write",
+   "surfaces": [
+    "mcp",
+    "rest"
+   ],
+   "aliases": [
+    "workforce_orchestrator_edge_add"
+   ]
+  },
+  {
+   "name": "orchestrator.edge.remove",
+   "wire": "orchestrator__edge__remove",
+   "version": "1.0.0",
+   "class": "undoable",
+   "scope": "tasks:write",
+   "surfaces": [
+    "mcp",
+    "rest"
+   ],
+   "aliases": [
+    "workforce_orchestrator_edge_remove"
+   ]
+  },
+  {
+   "name": "orchestrator.plan.list",
+   "wire": "orchestrator__plan__list",
+   "version": "1.0.0",
+   "class": "safe",
+   "scope": "tasks:read",
+   "surfaces": [
+    "mcp",
+    "rest"
+   ],
+   "aliases": [
+    "workforce_orchestrator_plan_list"
+   ]
+  },
+  {
+   "name": "orchestrator.plan.create",
+   "wire": "orchestrator__plan__create",
+   "version": "1.0.0",
+   "class": "undoable",
+   "scope": "tasks:write",
+   "surfaces": [
+    "mcp",
+    "rest"
+   ],
+   "aliases": [
+    "workforce_orchestrator_plan_create"
+   ]
+  },
+  {
+   "name": "orchestrator.plan.get",
+   "wire": "orchestrator__plan__get",
+   "version": "1.0.0",
+   "class": "safe",
+   "scope": "tasks:read",
+   "surfaces": [
+    "mcp",
+    "rest"
+   ],
+   "aliases": [
+    "workforce_orchestrator_plan_get"
+   ]
+  },
+  {
+   "name": "orchestrator.attempt.start",
+   "wire": "orchestrator__attempt__start",
+   "version": "1.0.0",
+   "class": "irreversible",
+   "scope": "tasks:write",
+   "surfaces": [
+    "mcp",
+    "rest"
+   ],
+   "aliases": [
+    "workforce_orchestrator_attempt_start"
+   ]
+  },
+  {
+   "name": "audit.event.list",
+   "wire": "audit__event__list",
+   "version": "1.0.0",
+   "class": "safe",
+   "scope": "workspace:read",
+   "surfaces": [
+    "mcp",
+    "rest"
+   ],
+   "aliases": [
+    "workforce_audit_events_list"
+   ]
+  },
+  {
    "name": "publish.channel.list",
    "wire": "publish__channel__list",
    "version": "1.0.0",
@@ -1175,6 +1511,48 @@
    ],
    "aliases": [
     "support_triage"
+   ]
+  },
+  {
+   "name": "analytics.metric.list",
+   "wire": "analytics__metric__list",
+   "version": "1.0.0",
+   "class": "safe",
+   "scope": "analytics:read",
+   "surfaces": [
+    "mcp",
+    "rest"
+   ],
+   "aliases": [
+    "analytics_list_metrics"
+   ]
+  },
+  {
+   "name": "analytics.metric.query",
+   "wire": "analytics__metric__query",
+   "version": "1.0.0",
+   "class": "safe",
+   "scope": "analytics:read",
+   "surfaces": [
+    "mcp",
+    "rest"
+   ],
+   "aliases": [
+    "analytics_query_metric"
+   ]
+  },
+  {
+   "name": "analytics.dashboard.list",
+   "wire": "analytics__dashboard__list",
+   "version": "1.0.0",
+   "class": "safe",
+   "scope": "analytics:read",
+   "surfaces": [
+    "mcp",
+    "rest"
+   ],
+   "aliases": [
+    "analytics_list_dashboards"
    ]
   },
   {

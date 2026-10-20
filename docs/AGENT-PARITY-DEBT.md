@@ -4,26 +4,27 @@
 
 Every action a person can take on the platform, and whether an agent can take it (XENO AGENT CAPABILITY - SPEC.md §19.4). **Planned** entries are the owning division’s backlog: each is a feature agents are missing.
 
-**Total:** 1505 actions · 94 agent capability · 1221 planned (debt) · 190 excluded · **coverage 7.1%** of the 1315 owed.
+**Total:** 1567 actions · 129 agent capability · 1233 planned (debt) · 205 excluded · **coverage 9.5%** of the 1362 owed.
 
 | division | actions | capability | planned (debt) | excluded | coverage |
 |---|---:|---:|---:|---:|---:|
-| workforce | 277 | 35 | 239 | 3 | 12.8% |
+| workforce | 302 | 53 | 244 | 5 | 17.8% |
 | studio | 121 | 4 | 117 | 0 | 3.3% |
 | agents | 122 | 0 | 112 | 10 | 0% |
-| workspace-ui | 165 | 3 | 100 | 62 | 2.9% |
+| workspace-ui | 171 | 4 | 101 | 66 | 3.8% |
 | chat | 97 | 0 | 96 | 1 | 0% |
 | commerce | 112 | 0 | 96 | 16 | 0% |
-| workspace | 113 | 5 | 91 | 17 | 5.2% |
+| workspace | 132 | 14 | 93 | 25 | 13.1% |
 | tasks | 105 | 13 | 84 | 8 | 13.4% |
 | storage | 82 | 5 | 75 | 2 | 6.3% |
 | account | 86 | 0 | 60 | 26 | 0% |
 | forum | 51 | 8 | 41 | 2 | 16.3% |
 | platform | 65 | 0 | 34 | 31 | 0% |
 | browser-shell | 28 | 0 | 28 | 0 | 0% |
-| canvas | 20 | 4 | 16 | 0 | 20% |
+| canvas | 22 | 6 | 16 | 0 | 27.3% |
 | inference | 18 | 0 | 12 | 6 | 0% |
 | support | 21 | 8 | 12 | 1 | 40% |
+| analytics | 10 | 5 | 4 | 1 | 55.6% |
 | places | 9 | 3 | 4 | 2 | 42.9% |
 | publish | 13 | 6 | 4 | 3 | 60% |
 
@@ -204,6 +205,13 @@ Every action a person can take on the platform, and whether an agent can take it
 - `ui:platform-mcp.js:data-xmc=open`
 - `ui:platform-mcp.js:data-xmc=retry`
 - `ui:platform-mcp.js:data-xmc=tab`
+
+## analytics — 4 planned
+
+- `route:workspaceAnalyticsRoutes.js:DELETE /dashboards/:id`
+- `route:workspaceAnalyticsRoutes.js:PATCH /dashboards/:id`
+- `route:workspaceAnalyticsRoutes.js:POST /dashboards`
+- `route:workspaceAnalyticsRoutes.js:POST /dashboards/:id/restore`
 
 ## browser-shell — 28 planned
 
@@ -863,7 +871,7 @@ Every action a person can take on the platform, and whether an agent can take it
 - `ui:platform-tasks.js:data-tk=view`
 - `ui:platform-tasks.js:data-tk=watch`
 
-## workforce — 239 planned
+## workforce — 244 planned
 
 - `route:apiKeyWorkforceCapabilityRoutes.js:POST /operations`
 - `route:apiKeyWorkforceCapabilityRoutes.js:POST /read`
@@ -887,7 +895,6 @@ Every action a person can take on the platform, and whether an agent can take it
 - `route:workforceCoordinationRoutes.js:POST /worktrees`
 - `route:workforceCoordinationRoutes.js:POST /worktrees/integrate`
 - `route:workforceDivisionRoutes.js:GET /:id/agent-budget`
-- `route:workforceDivisionRoutes.js:GET /:id/home`
 - `route:workforceDivisionRoutes.js:PUT /:id/agent-budget`
 - `route:workforceDivisionRoutes.js:PUT /projects/:projectId`
 - `route:workforceForgeRoutes.js:POST /bindings`
@@ -932,6 +939,10 @@ Every action a person can take on the platform, and whether an agent can take it
 - `route:workforceOwnershipTransferRoutes.js:POST /:id/authorize`
 - `route:workforceOwnershipTransferRoutes.js:POST /:id/decline`
 - `route:workforceOwnershipTransferRoutes.js:POST /:id/review`
+- `route:workforcePeopleRoutes.js:GET /:principalId/offboard-plan`
+- `route:workforcePeopleRoutes.js:POST /:principalId/offboard`
+- `route:workforcePeopleRoutes.js:POST /:principalId/onboard`
+- `route:workforcePeopleRoutes.js:POST /time-off/:id/cancel`
 - `route:workforcePublicContributionRoutes.js:POST /attributions`
 - `route:workforcePublicContributionRoutes.js:POST /attributions/mine`
 - `route:workforcePublicContributionRoutes.js:POST /claims`
@@ -1061,6 +1072,8 @@ Every action a person can take on the platform, and whether an agent can take it
 - `ui:funding.js:data-fd=grant`
 - `ui:funding.js:data-fd=return`
 - `ui:funding.js:data-fd=start`
+- `ui:platform-directory.js:data-xdir=offboard`
+- `ui:platform-directory.js:data-xdir=onboard`
 - `ui:platform-divisions.js:data-xdv=add-agent`
 - `ui:platform-divisions.js:data-xdv=add-project`
 - `ui:platform-divisions.js:data-xdv=agent`
@@ -1105,13 +1118,15 @@ Every action a person can take on the platform, and whether an agent can take it
 - `ui:workforce.js:data-wf=win`
 - `ui:workforce.js:data-wf=withdraw`
 
-## workspace — 91 planned
+## workspace — 93 planned
 
 - `route:accountWorkspaceOperationRoutes.js:GET /:operationId (accountWorkspaceOperationRoutes)`
 - `route:accountWorkspaceOperationRoutes.js:POST /:operationId/:phase (accountWorkspaceOperationRoutes)`
 - `route:modesRoutes.js:DELETE /:modeId (meModesRouter)`
 - `route:modesRoutes.js:GET / (meModesRouter)`
+- `route:modesRoutes.js:GET /:wid/architect/proposals (workspaceModesRouter)`
 - `route:modesRoutes.js:PATCH /:modeId (meModesRouter)`
+- `route:modesRoutes.js:PATCH /:wid/architect/proposals/:pid (workspaceModesRouter)`
 - `route:modesRoutes.js:PATCH /:wid/modes/items/:modeId (workspaceModesRouter)`
 - `route:modesRoutes.js:POST / (meModesRouter)`
 - `route:projectPublicationRoutes.js:ALL /`
@@ -1199,7 +1214,7 @@ Every action a person can take on the platform, and whether an agent can take it
 - `ui:platform-work.js:data-share-remove`
 - `ui:platform-work.js:data-share-role`
 
-## workspace-ui — 100 planned
+## workspace-ui — 101 planned
 
 - `ui:actions.js:data-ac`
 - `ui:actions.js:data-sc-del`
@@ -1301,3 +1316,4 @@ Every action a person can take on the platform, and whether an agent can take it
 - `ui:resources.js:data-rs=request`
 - `ui:resources.js:data-rs=revoke`
 - `ui:resources.js:data-rs=version`
+- `ui:setup.js:data-xsu=use`

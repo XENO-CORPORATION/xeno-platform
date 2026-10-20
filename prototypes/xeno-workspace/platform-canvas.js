@@ -6,6 +6,10 @@
  *   /workspace/<area>/tasks/canvas                 the canvases of this area (Overview: all)
  *   /workspace/<area>/tasks/canvas/<canvas id>     one canvas
  *
+ * Cards: tasks, Library files, chats, and the workforce — projects, divisions, objectives and runs (admissions). Every
+ * card is a pointer: its name and status are read live with each load, and moving it changes only the layout. A
+ * project or a division opens as a canvas (POST /api/canvases/open-as) from its own page, via [data-xcv-open].
+ *
  * Interaction (Miro / FigJam / Obsidian Canvas conventions):
  *   drag the empty board or hold Space · scroll = pan, Ctrl/⌘+scroll = zoom · drag an item to move it
  *   drag its corner to resize · drag from an item's edge handle to another item to connect them
@@ -39,16 +43,18 @@
   }
   async function open(id) {
     if (C.id === id && C.doc) return;
-    Object.assign(C, { id, doc: null, records: {}, state: 'loading', sel: new Set(), undo: [], conflict: false, dirty: false, editing: null });
+    Object.assign(C, { id, doc: null, records: {}, deps: null, depGraph: null, state: 'loading', sel: new Set(), undo: [], conflict: false, dirty: false, editing: null });
     const saved = store(id); C.view = saved || { x: 0, y: 0, z: 1 };
     const r = await api('GET', '/api/canvases/' + encodeURIComponent(id)).catch(() => null);
     if (C.id !== id) return;
     if (!r || !r.ok) { C.state = r && r.status === 404 ? 'missing' : 'error'; return paint(); }
     take(r.d.canvas); C.state = 'ready'; try { X()?.render?.(); } catch {}
+    loadDeps().then((g) => { if (g && C.id === id) draw(); });
     if (!saved) fit();
     paint();
   }
-  function take(cv) { C.doc = cv.content; C.records = cv.records.tasks || {}; C.refs = { file: cv.records.files || {}, chat: cv.records.chats || {} }; C.rev = cv.revision; C.can = cv.can; C.name = cv.name; C.project = cv.project; }
+  const refsOf = (rec) => ({ file: rec.files || {}, chat: rec.chats || {}, project: rec.projects || {}, division: rec.divisions || {}, objective: rec.objectives || {}, run: rec.runs || {}, tenet: rec.tenets || {} });
+  function take(cv) { C.doc = cv.content; C.records = cv.records.tasks || {}; C.refs = refsOf(cv.records); C.rev = cv.revision; C.can = cv.can; C.name = cv.name; C.project = cv.project; }
   const store = (id, v) => { try { if (v) localStorage.setItem('xw-canvas-view:' + id, JSON.stringify(v)); else return JSON.parse(localStorage.getItem('xw-canvas-view:' + id) || 'null'); } catch { return null; } return null; };
 
   /** call BEFORE changing C.doc: the undo step is the state as it was */
@@ -64,7 +70,7 @@
     const id = C.id, body = { content: C.doc, revision: C.rev, name: C.name };
     const r = await api('PUT', '/api/canvases/' + encodeURIComponent(id), body).catch(() => null);
     C.saving = false; if (C.id !== id) return;
-    if (r && r.ok) { const keepSel = C.sel; C.rev = r.d.canvas.revision; C.records = r.d.canvas.records.tasks || {}; C.refs = { file: r.d.canvas.records.files || {}, chat: r.d.canvas.records.chats || {} }; C.sel = keepSel; status('Saved'); draw(); if (C.dirty) save(); return; }
+    if (r && r.ok) { const keepSel = C.sel; C.rev = r.d.canvas.revision; C.records = r.d.canvas.records.tasks || {}; C.refs = refsOf(r.d.canvas.records); C.sel = keepSel; status('Saved'); draw(); if (C.dirty) save(); return; }
     if (r && r.status === 409 && r.d.code === 'canvas_changed') { C.conflict = true; status(''); return paint(); }
     C.dirty = true; status(said(r, 'Not saved — the change is kept here; it will try again.'), true);
     // a refused link (403/400) is a rule, not a network blip: undo it rather than retry forever
@@ -91,6 +97,19 @@
     return { x: cx, y: dy > 0 ? n.y + n.height : n.y };
   }
 
+  // workforce cards: what each is, and the one line of live status under its name
+  const WF = { project: ['Project', 'folder'], division: ['Division', 'layers'], objective: ['Objective', 'flag'], run: ['Run', 'bot'] };
+  const STATUS = { active: 'Active', archived: 'Archived', open: 'Open', completed: 'Completed', live: 'Live', admitted: 'Admitted', stopped: 'Stopped' };
+  const plural = (n, a, b) => `${n} ${n === 1 ? a : b}`;
+  function wfLine(kind, r) {
+    if (r.loading) return '';
+    if (kind === 'project') return `${plural(r.openTasks || 0, 'open task', 'open tasks')} · ${r.doneTasks || 0} done`;
+    if (kind === 'division') return [r.head ? `Head ${r.head}` : 'No head', plural(r.agents || 0, 'agent', 'agents'), plural(r.projects || 0, 'project', 'projects')].join(' · ');
+    if (kind === 'objective') return r.goals ? `${r.goalsDone} of ${plural(r.goals, 'goal', 'goals')} done` : 'No goals yet';
+    if (kind === 'run') return r.admittedAt ? `Admitted ${new Date(r.admittedAt).toLocaleString()}` : '';
+    return '';
+  }
+
   // ───────────────────────── drawing
   function nodeHtml(n) {
     const sel = C.sel.has(n.id) ? ' cv-n--sel' : '';
@@ -102,19 +121,76 @@
       return `<div class="cv-n cv-n--text${sel}" data-cv-node="${esc(n.id)}" ${pos}>${body}${grips}</div>`;
     }
     if (n.type === 'link') { let host = n.url; try { host = new URL(n.url).host; } catch {} return `<div class="cv-n cv-n--link${sel}" data-cv-node="${esc(n.id)}" ${pos}>${ic('link')}<div><b>${esc(host)}</b><a href="${esc(n.url)}" target="_blank" rel="noopener noreferrer">${esc(n.url)}</a></div>${grips}</div>`; }
+    if (n.ref.kind === 'tenet') {   // a XENO Corpus verdict card: the tenet's latest signed verdict, read live as this reader
+      const r = ((C.refs || {}).tenet || {})[n.ref.id] || { loading: true };
+      if (r.missing) return `<div class="cv-n cv-n--task cv-n--gone${sel}" data-cv-node="${esc(n.id)}" ${pos}><small class="tk-key">Tenet</small><b>Not available</b><span class="tk-dim">Retired, or not shared with you</span>${grips}</div>`;
+      const st = r.state ? { held: 'Held', lapsed: 'Lapsed', error: 'Error' }[r.state] : 'Never assayed';
+      return `<div class="cv-n cv-n--task cv-n--tenet cv-n--v-${esc(r.state || 'none')}${sel}" data-cv-node="${esc(n.id)}" ${pos}><div class="cv-task-top">${ic('check')}<small class="tk-key">${esc(r.key || 'Tenet')}</small></div><b class="cv-task-t">${esc(r.claim || '…')}</b><div class="cv-task-f"><small class="tk-dim cv-verdict">${esc(st)}${r.at ? ' · ' + esc(new Date(r.at).toLocaleDateString()) : ''}${r.superseded ? ' · superseded' : ''}</small></div>${grips}</div>`;
+    }
+    if (WF[n.ref.kind]) {
+      const r = ((C.refs || {})[n.ref.kind] || {})[n.ref.id] || { loading: true }, [label, icon] = WF[n.ref.kind];
+      if (r.missing) return `<div class="cv-n cv-n--task cv-n--gone${sel}" data-cv-node="${esc(n.id)}" ${pos}><small class="tk-key">${label}</small><b>Not available</b><span class="tk-dim">Gone, or not shared with you</span>${grips}</div>`;
+      const st = r.status || '';
+      return `<div class="cv-n cv-n--task cv-n--wf cv-n--${n.ref.kind}${sel}" data-cv-node="${esc(n.id)}" data-cv-kind="${n.ref.kind}" ${pos}><div class="cv-task-top">${ic(icon)}<small class="tk-key">${label}</small><small class="cv-st cv-st--${esc(st)}">${esc(STATUS[st] || st)}</small></div><b class="cv-task-t">${esc(r.name || r.title || r.agent || '…')}</b><div class="cv-task-f"><small class="tk-dim">${esc(wfLine(n.ref.kind, r))}</small><span class="tk-sp"></span>${r.url ? `<a class="cv-open" href="${esc(r.url)}" title="Open">${ic('open')}</a>` : ''}</div>${grips}</div>`;
+    }
     if (n.ref.kind !== 'task') {
       const r = ((C.refs || {})[n.ref.kind] || {})[n.ref.id] || { loading: true }, isF = n.ref.kind === 'file';
       if (r.missing) return `<div class="cv-n cv-n--task cv-n--gone${sel}" data-cv-node="${esc(n.id)}" ${pos}><small class="tk-key">${isF ? 'File' : 'Chat'}</small><b>Not available</b><span class="tk-dim">Deleted, or not shared with you</span>${grips}</div>`;
-      const sub = isF ? [r.type, r.bytes != null ? (r.bytes > 1e6 ? (r.bytes / 1e6).toFixed(1) + ' MB' : Math.max(1, Math.round(r.bytes / 1e3)) + ' KB') : ''].filter(Boolean).join(' · ') : (r.at ? new Date(r.at).toLocaleDateString() : '');
+      const sub = isF ? [r.type, r.bytes != null ? (r.bytes > 1e6 ? (r.bytes / 1e6).toFixed(1) + ' MB' : Math.max(1, Math.round(r.bytes / 1e3)) + ' KB') : ''].filter(Boolean).join(' · ') : [r.messages != null ? r.messages + (r.messages === 1 ? ' message' : ' messages') : '', r.status === 'active' ? 'active now' : r.at ? new Date(r.at).toLocaleDateString() : ''].filter(Boolean).join(' · ');
       return `<div class="cv-n cv-n--task cv-n--${n.ref.kind}${sel}" data-cv-node="${esc(n.id)}" ${pos}><div class="cv-task-top">${ic(isF ? 'doc' : 'chat')}<small class="tk-key">${isF ? 'File' : 'Chat'}</small></div><b class="cv-task-t">${esc((isF ? r.name : r.title) || '…')}</b><div class="cv-task-f"><small class="tk-dim">${esc(sub)}</small><span class="tk-sp"></span>${r.url ? `<a class="cv-open" href="${esc(r.url)}" title="Open">${ic('open')}</a>` : ''}</div>${grips}</div>`;
     }
     const t = C.records[n.ref.id] || { key: n.ref.id, loading: true };
     if (t.missing) return `<div class="cv-n cv-n--task cv-n--gone${sel}" data-cv-node="${esc(n.id)}" ${pos}><small class="tk-key">${esc(n.ref.id)}</small><b>Not available</b><span class="tk-dim">Deleted, or not shared with you</span>${grips}</div>`;
     return `<div class="cv-n cv-n--task${sel}" data-cv-node="${esc(n.id)}" data-cv-task="${esc(t.key)}" ${pos}>
-      <div class="cv-task-top"><span class="tk-dot tk-dot--${esc(t.status || 'todo')}"></span><small class="tk-key">${esc(t.key)}</small><small class="tk-dim">${esc(LABEL[t.status] || '')}</small><span class="tk-sp"></span>${t.priority && t.priority !== 'none' ? `<em class="tk-pri tk-pri--${esc(t.priority)}">${esc(t.priority)}</em>` : ''}</div>
+      <div class="cv-task-top"><span class="tk-dot tk-dot--${esc(t.status || 'todo')}"></span><small class="tk-key">${esc(t.key)}</small><small class="tk-dim">${esc(LABEL[t.status] || '')}</small>${readyBadge(t.key)}<span class="tk-sp"></span>${t.priority && t.priority !== 'none' ? `<em class="tk-pri tk-pri--${esc(t.priority)}">${esc(t.priority)}</em>` : ''}</div>
       <b class="cv-task-t">${esc(t.title || '…')}</b>
       <div class="cv-task-f">${t.project ? `<small class="tk-chip">${esc(t.project.name)}</small>` : ''}<span class="tk-sp"></span>${t.delegate ? `<span class="tk-face tk-face--sm tk-face--agent" title="${esc(t.delegate.name)} (agent)">${ic('bot')}</span>` : ''}${t.assignee ? `<span class="tk-face tk-face--sm" title="${esc(t.assignee.name)}">${esc(String(t.assignee.name || '?').slice(0, 2).toUpperCase())}</span>` : ''}<button class="cv-open" data-cv-open="${esc(t.key)}" title="Open ${esc(t.key)}">${ic('open')}</button></div>${grips}</div>`;
   }
+  // ───────────────────────── dependency graph (xeno-orchestrator on the platform: /api/orchestrator/graph)
+  // The graph is the project's own `blocks` links between tasks; this lays it out on the canvas in the order the work
+  // can happen (left → right by dependency depth) and marks each card Ready / Waiting. It adds no second store: the
+  // edges it draws are real task links, exactly the ones the task page shows, and a loop is refused by the server.
+  function readyBadge(key) {
+    const n = C.deps && C.deps.get(key); if (!n) return '';
+    if (n.done) return '';
+    return n.ready ? '<em class="tk-chip cv-ready" data-cv-ready="yes" title="Every blocker is done">Ready</em>'
+      : `<em class="tk-chip cv-wait" data-cv-ready="no" title="Waiting on unfinished work">Waiting on ${n.blockedBy.length}</em>`;
+  }
+  async function loadDeps() {
+    if (!C.project) return null;
+    const r = await api('GET', '/api/orchestrator/graph?project=' + encodeURIComponent(C.project.id)).catch(() => null);
+    if (!r || !r.ok) return null;
+    const g = r.d.graph; C.deps = new Map(g.nodes.filter((n) => n.kind === 'task').map((n) => [n.key, n])); C.depGraph = g;
+    return g;
+  }
+  async function layoutDeps() {
+    const g = await loadDeps(); if (!g) return toast('The dependency graph couldn’t be loaded');
+    const tasksOnly = g.nodes.filter((n) => n.kind === 'task'), byRef = new Map(g.nodes.map((n) => [n.ref, n]));
+    const edges = g.edges.filter((e) => byRef.get(e.from)?.kind === 'task' && byRef.get(e.to)?.kind === 'task');
+    if (!edges.length) { draw(); return toast('No dependencies yet — connect two tasks and pick “Blocks”'); }
+    const involved = new Set(edges.flatMap((e) => [e.from, e.to]));
+    // depth = the longest chain of blockers before it (the graph is acyclic: the server refuses loops)
+    const depth = new Map(); const into = new Map();
+    for (const e of edges) (into.get(e.to) || into.set(e.to, []).get(e.to)).push(e.from);
+    const d = (ref, seen = new Set()) => { if (depth.has(ref)) return depth.get(ref); if (seen.has(ref)) return 0; seen.add(ref); const v = Math.max(-1, ...(into.get(ref) || []).map((x) => d(x, seen))) + 1; depth.set(ref, v); return v; };
+    for (const ref of involved) d(ref);
+    before();
+    const at = new Map(C.doc.nodes.filter((n) => n.type === 'xeno-ref' && n.ref.kind === 'task').map((n) => [n.ref.id, n]));
+    const c = centre(), rows = new Map();
+    for (const t of tasksOnly.filter((t) => involved.has(t.ref)).sort((a, b) => depth.get(a.ref) - depth.get(b.ref) || a.key.localeCompare(b.key, undefined, { numeric: true }))) {
+      const col = depth.get(t.ref), row = rows.get(col) || 0; rows.set(col, row + 1);
+      const x = snap(c.x - 300 + col * 320), y = snap(c.y - 120 + row * 150);
+      const n = at.get(t.key);
+      if (n) { n.x = x; n.y = y; } else { const nn = { id: uid(), type: 'xeno-ref', ref: { kind: 'task', id: t.key }, x, y, width: 260, height: 120 }; C.doc.nodes.push(nn); at.set(t.key, nn); C.records[t.key] = C.records[t.key] || { key: t.key, title: t.title, status: t.status }; }
+    }
+    for (const e of edges) {
+      const a = at.get(byRef.get(e.from).key), b = at.get(byRef.get(e.to).key); if (!a || !b) continue;
+      const have = C.doc.edges.find((x) => x.fromNode === a.id && x.toNode === b.id);
+      if (have) { have.xeno = { link: 'blocks' }; have.toEnd = 'arrow'; } else C.doc.edges.push({ id: uid(), fromNode: a.id, toNode: b.id, toEnd: 'arrow', xeno: { link: 'blocks' } });
+    }
+    change('Dependencies laid out'); fit(); draw();
+  }
+
   function edgesSvg() {
     const out = [];
     for (const e of C.doc.edges) {
@@ -176,9 +252,10 @@
           <button class="tk-tool" data-cv-act="new-task" title="Create a new task here">${ic('plus')}New task</button>
           <button class="tk-tool" data-cv-act="add-file" title="Put Library files on the canvas">${ic('doc')}File</button>
           <button class="tk-tool" data-cv-act="add-chat" title="Put chats on the canvas">${ic('chat')}Chat</button>
+          ${C.project ? `<button class="tk-tool" data-cv-act="add-tenet" title="Put the project’s tenets on the canvas as live verdict cards">${ic('check')}Verdict</button>` : ''}
           <button class="tk-tool" data-cv-act="add-note" title="Note · N">${ic('edit')}Note</button>
           <button class="tk-tool" data-cv-act="add-link" title="Link">${ic('link')}Link</button>
-          <button class="tk-tool" data-cv-act="add-group" title="Group">${ic('layers')}Group</button></span>`}
+          <button class="tk-tool" data-cv-act="add-group" title="Group">${ic('layers')}Group</button>${C.project ? `<button class="tk-tool" data-cv-act="deps" title="Lay out this project’s dependency graph: every task, in the order the work can happen">${ic('link')}Dependencies</button>` : ''}</span>`}
         <span class="tk-sp"></span><small class="cv-status" data-cv-status aria-live="polite"></small>
         <span class="cv-zoom"><button class="tk-ib" data-cv-act="zoom-out" aria-label="Zoom out">${ic('minus')}</button><button class="cv-zl" data-cv-act="fit" data-cv-zoom title="Fit everything">100%</button><button class="tk-ib" data-cv-act="zoom-in" aria-label="Zoom in">${ic('plus')}</button></span>
         <button class="tk-ib" data-cv-act="menu" aria-label="Canvas actions">${ic('more')}</button>
@@ -236,6 +313,22 @@
       if (x) C.refs[kind][k] = isF ? { id: k, name: x.name, type: x.mime_type || x.type, url: '/workspace/library?sel=' + k } : { id: k, title: x.title, url: '/workspace/apps/chat/' + k };
       C.doc.nodes.push({ id: uid(), type: 'xeno-ref', ref: { kind, id: k }, x: snap(c.x - 130 + (i % 4) * 280), y: snap(c.y - 50 + Math.floor(i / 4) * 130), width: 260, height: 100 }); });
     change(`Added ${ids.length} ${isF ? 'file' : 'chat'}${ids.length === 1 ? '' : 's'}`);
+  }
+  /** Put the project's Corpus tenets on the canvas as verdict cards (services/xenoCorpus.js resolves them live). */
+  async function addTenet() {
+    if (!C.project) return;
+    const r = await api('GET', `/api/corpus/project/${encodeURIComponent(C.project.id)}`).catch(() => null);
+    if (!r || !r.ok) return toast('The corpus couldn’t be loaded');
+    const on = new Set(C.doc.nodes.filter((n) => n.type === 'xeno-ref' && n.ref.kind === 'tenet').map((n) => n.ref.id));
+    const free = (r.d.tenets || []).filter((t) => t.kind === 'tenet' && !on.has(String(t.id).toLowerCase()));
+    if (!free.length) return toast((r.d.tenets || []).length ? 'Every tenet here is already on the canvas' : 'This project has no tenets yet');
+    const v = await D().form({ title: 'Put verdicts on the canvas', sub: 'Each card shows the tenet’s latest signed verdict, as each reader may see it.', submit: 'Add', size: 'md', fields: [{ id: 'ids', label: 'Tenets', type: 'checks', required: true, options: free.slice(0, 300).map((t) => [String(t.id), String(t.key), String(t.claim || '').slice(0, 80)]) }] });
+    if (!v) return;
+    const ids = [].concat(v.ids || []).filter(Boolean); const c = centre(); C.refs = C.refs || {}; C.refs.tenet = C.refs.tenet || {};
+    before(); ids.forEach((id, i) => { const t = free.find((y) => String(y.id) === id); const k = id.toLowerCase();
+      if (t) C.refs.tenet[k] = { key: t.key, claim: t.claim, state: t.latest ? t.latest.state : null, at: t.latest ? t.latest.at : null, freshness: t.freshness };
+      C.doc.nodes.push({ id: uid(), type: 'xeno-ref', ref: { kind: 'tenet', id: k }, x: snap(c.x - 130 + (i % 4) * 280), y: snap(c.y - 50 + Math.floor(i / 4) * 140), width: 260, height: 120 }); });
+    change(`Added ${ids.length} verdict${ids.length === 1 ? '' : 's'}`);
   }
   async function newTaskHere() {
     const v = await D().form({ title: 'New task on this canvas', submit: 'Create', size: 'sm', fields: [{ id: 'title', label: 'Title', required: true, max: 300 }] });
@@ -403,10 +496,10 @@
   }, true);
   addEventListener('keyup', (e) => { if (e.code === 'Space') space = false; });
   const ACT = {
-    'add-task': addTask, 'new-task': newTaskHere, 'add-file': () => addRef('file'), 'add-chat': () => addRef('chat'), 'add-note': () => addNote(), 'add-link': addLink, 'add-group': () => addGroup(false), 'group-sel': () => addGroup(true),
+    'add-task': addTask, 'new-task': newTaskHere, 'add-file': () => addRef('file'), 'add-chat': () => addRef('chat'), 'add-tenet': addTenet, 'add-note': () => addNote(), 'add-link': addLink, 'add-group': () => addGroup(false), 'group-sel': () => addGroup(true),
     delete: removeSel, rename: () => rename(), 'zoom-in': () => zoomAt(1.2), 'zoom-out': () => zoomAt(1 / 1.2), fit: () => { fit(); store(C.id, C.view); draw(); },
     menu: (_, el) => canvasMenu(el), reload: () => { const id = C.id; C.id = null; open(id); }, reopen: () => { const id = C.id; C.id = null; open(id); paint(); },
-    back: () => goCanvas(null), new: newCanvas, 'retry-list': () => { L.list = null; paint(); }, 'edge-kind': (k) => edgeKind(k),
+    deps: () => layoutDeps(), back: () => goCanvas(null), new: newCanvas, 'retry-list': () => { L.list = null; paint(); }, 'edge-kind': (k) => edgeKind(k),
   };
   addEventListener('click', (e) => {
     const o = e.target.closest?.('[data-cv-open]'); if (o) { e.preventDefault(); return X().go('global', { global: 'tasks', item: o.dataset.cvOpen }); }
@@ -421,10 +514,20 @@
     const id = C.id; const r = await api('GET', '/api/canvases/' + encodeURIComponent(id)).catch(() => null);
     if (!r || !r.ok || C.id !== id || C.dirty || drag) return;
     if (r.d.canvas.revision !== C.rev) { take(r.d.canvas); C.sel = new Set([...C.sel].filter((s) => s.startsWith('e:') ? C.doc.edges.some((x) => 'e:' + x.id === s) : nodeById(s))); draw(); status('Updated'); }
-    else { C.records = r.d.canvas.records.tasks || {}; C.refs = { file: r.d.canvas.records.files || {}, chat: r.d.canvas.records.chats || {} }; draw(); }
+    else { C.records = r.d.canvas.records.tasks || {}; C.refs = refsOf(r.d.canvas.records); await loadDeps(); if (C.id === id) draw(); }
   }, 15000);
 
   // the breadcrumb names a canvas, never its id
   const nameOf = (id) => (C.id === id && C.name ? C.name : (L.list || []).find((c) => c.id === id)?.name || null);
+  // "Open as canvas" on a project or a division: the same canvas every time, made on first open
+  document.addEventListener('click', async (e) => {
+    const b = e.target.closest('[data-xcv-open]'); if (!b) return;
+    e.preventDefault(); e.stopPropagation();
+    if (b.dataset.busy) return; b.dataset.busy = '1';
+    const r = await api('POST', '/api/canvases/open-as', { kind: b.dataset.xcvOpen, id: b.dataset.id }).catch(() => null);
+    delete b.dataset.busy;
+    if (!r || !r.ok) return toast(said(r, 'It could not be opened as a canvas.'));
+    L.list = null; goCanvas(r.d.canvas.id);
+  }, true);
   window.XENO_CANVAS = { served: true, nameOf, route, open, state: () => ({ id: C.id, state: C.state, nodes: C.doc ? C.doc.nodes.length : 0, edges: C.doc ? C.doc.edges.length : 0, rev: C.rev, dirty: C.dirty, conflict: C.conflict, view: { ...C.view } }), save };
 })();

@@ -17,17 +17,21 @@ import * as agentMediaMcp from '../services/agentMediaMcp.js';
 import * as forumMcp from '../services/forumMcp.js';
 import * as placesMcp from '../services/placesMcp.js';
 import * as modesMcp from '../services/modesMcp.js';
+import * as corpusMcp from '../services/corpusMcp.js';
 import { MODES_ROWS } from './modes.js';
+import { PEOPLE_ROWS } from './people.js';
+import * as peopleMcp from '../services/peopleMcp.js';
 import * as storageMcp from '../services/storageMcp.js';
 import * as supportMcp from '../services/supportMcp.js';
 import * as publishMcp from '../services/publishMcp.js';
+import * as analyticsMcp from '../services/analyticsMcp.js';
 import * as workforceMcp from '../services/workforceMcp.js';
 
 /** The tools each bound category executes, by category. */
 export const BOUND_TOOLS = Object.freeze({
   tasks: tasksMcp.TOOLS, canvas: canvasMcp.TOOLS, agents: agentsMcp.TOOLS,
   image: agentMediaMcp.IMAGE.tools, video: agentMediaMcp.VIDEO.tools, library: agentMediaMcp.LIBRARY.tools, chat: agentMediaMcp.CHAT.tools,
-  forum: forumMcp.TOOLS.map((t) => ({ ...t, name: t.name.replace(/^forum_/, '') })), places: placesMcp.TOOLS, storage: storageMcp.TOOLS, support: supportMcp.TOOLS, publish: publishMcp.TOOLS, modes: modesMcp.TOOLS, workforce: workforceMcp.TOOLS,
+  forum: forumMcp.TOOLS.map((t) => ({ ...t, name: t.name.replace(/^forum_/, '') })), places: placesMcp.TOOLS, storage: storageMcp.TOOLS, support: supportMcp.TOOLS, publish: publishMcp.TOOLS, analytics: analyticsMcp.TOOLS, modes: modesMcp.TOOLS, people: peopleMcp.TOOLS, corpus: corpusMcp.TOOLS, workforce: workforceMcp.TOOLS,
 });
 
 const obj = (properties, required) => ({ type: 'object', properties, ...(required ? { required } : {}) });
@@ -43,6 +47,16 @@ const READ = NAT('reads change nothing');
 const ROWS = [
   // ── modes (custom modes + trade packs; rows in ./modes.js)
   ...MODES_ROWS,
+  // ── people (employee profiles, org chart, directory, time off; rows in ./people.js)
+  ...PEOPLE_ROWS,
+  // ── corpus (XENO CORPUS - SPEC.md; services/xenoCorpus.js). No new scope name (scopes are one-way): reading is
+  // workspace:read; proposing writes a record, so it needs the workspace area's write scope (workspace:admin); recording
+  // a verdict is an admitted run's act, so it needs agents:write.
+  ['corpus.corpus.query', 'corpus', 'query', 'safe', { scope: 'workspace:read', provenance: 'untrusted', reply: obj({ corpus: { type: 'object', description: 'id, scope, scopeId, subject, workspaceId.' }, tenets: { type: 'array', description: 'Own live tenets: key, kind, subject, claim, assay, expect, cadence, latest (signed verdict or null), freshness.' }, inheritedDoctrine: { type: 'array', description: 'Doctrine from wider scopes, binding here (from = where it lives).' }, aggregated: { type: 'array', description: 'Narrower scopes’ tenets BY REFERENCE: id, key, subject, from, state, freshness.' } }, ['corpus', 'tenets']) }],
+  ['corpus.corpus.assess', 'corpus', 'assess', 'safe', { scope: 'workspace:read', reply: obj({ corpus: { type: 'object' }, summary: { type: 'object', description: 'tenets, held, lapsed, error, never, aging.' }, tenets: { type: 'array', description: 'id, key, from, state, freshness (fresh|due|warn|expired|never), stale.' } }, ['summary', 'tenets']) }],
+  ['corpus.proposal.create', 'corpus', 'propose', 'undoable', { scope: 'workspace:admin', idempotency: NONE('no request key yet: a retried call files a second proposal (each is decided by a person)'), reply: obj({ proposal: { type: 'object', description: 'id, action, tenet, rationale, state ("proposed" until a person ratifies or rejects it).' }, note: { type: 'string' } }, ['proposal']) }],
+  ['corpus.verdict.list', 'corpus', 'history', 'safe', { scope: 'workspace:read', reply: obj({ tenet: { type: 'object', description: 'The tenet with its latest verdict.' }, verdicts: { type: 'array', description: 'Newest first: id, state, observed, instrument, at, admissionId, hash, prevHash, kid, signature.' } }, ['tenet', 'verdicts']) }],
+  ['corpus.verdict.record', 'corpus', 'record_verdict', 'irreversible', { scope: 'agents:write', idempotency: NONE('no request key yet: a retried call records a second verdict (both are kept, chained)'), reply: obj({ verdict: { type: 'object', description: 'id, state, at, admissionId, hash, prevHash, kid, signature, and `signed` (the exact body signed).' } }, ['verdict']) }],
   // ── tasks
   ['tasks.project.list', 'tasks', 'list_projects', 'safe', { reply: obj({ projects: { type: 'array', description: 'id, name, area of each project you can work in.' }, hint: { type: 'string', description: 'Set when you have none: what to ask the person for.' } }) }],
   ['tasks.task.list_mine', 'tasks', 'list_my_tasks', 'safe', { reply: obj({ tasks: { type: 'array', description: 'key, title, status, priority, project, url of each open task assigned (person) or delegated (agent) to you.' }, unassigned: { type: 'array', description: 'With a project: up to 50 open tasks nobody holds that you could take.' }, hint: { type: 'string' } }, ['tasks']) }],
@@ -61,6 +75,7 @@ const ROWS = [
   ['canvas.canvas.get', 'canvas', 'get', 'safe', { reply: CANVAS_REPLY, provenance: 'untrusted' }],
   ['canvas.canvas.create', 'canvas', 'create', 'undoable', { reply: CANVAS_REPLY, idempotency: NONE('no request key yet: a retried call starts a second canvas') }],
   ['canvas.item.add', 'canvas', 'add', 'undoable', { reply: obj({ canvas: CANVAS_REPLY.properties.canvas, added: { type: 'array', description: 'The new items’ ids, in the order given.' } }), idempotency: NONE('no request key yet: a retried call adds the items twice') }],
+  ['canvas.canvas.open_as', 'canvas', 'open_as', 'undoable', { reply: obj({ canvas: CANVAS_REPLY.properties.canvas, created: { type: 'boolean', description: 'true when this call made the map; false when it already existed.' } }, ['canvas']), idempotency: NAT('opening the same project or division again returns the same canvas') }],
   ['canvas.connection.create', 'canvas', 'connect', 'undoable', { reply: CANVAS_REPLY, idempotency: NONE('no request key yet: a retried call adds a second connection') }],
   ['canvas.item.update', 'canvas', 'update', 'irreversible', { reply: CANVAS_REPLY, idempotency: NAT('moves and edits set absolute values; removing a removed item is a no-op') }],
   // ── places (the building of each workspace; a projection of workforce records, scope-filtered on the server)
@@ -96,7 +111,7 @@ const ROWS = [
     ['run.admission.create', 'admission_create', 'irreversible', { cost: { model: 'quoted', note: 'commits the payer’s budget; the reservation is in the reply' } }],
     ['run.admission.get', 'admission_get', 'safe'], ['run.admission.list', 'admission_list', 'safe'], ['run.admission.operation_get', 'admission_operation_get', 'safe'],
     ['run.pin.get', 'pin_get', 'safe'], ['run.admission.revoke', 'admission_revoke', 'irreversible'], ['run.authority.get', 'authority_get', 'safe'],
-    ['division.division.list', 'division_list', 'safe'], ['division.division.get', 'division_get', 'safe'], ['division.division.create', 'division_create', 'undoable'],
+    ['division.division.list', 'division_list', 'safe'], ['division.division.get', 'division_get', 'safe'], ['division.division.home', 'division_home', 'safe'], ['division.division.create', 'division_create', 'undoable'],
     ['division.division.update', 'division_update', 'undoable'], ['division.division.archive', 'division_archive', 'irreversible'],
     ['objective.objective.create', 'objective_create', 'undoable'], ['objective.objective.get', 'objective_get', 'safe'], ['objective.objective.update', 'objective_update', 'undoable'],
     ['objective.objective.complete', 'objective_complete', 'irreversible'], ['objective.goal.link', 'objective_link_goal', 'undoable'],
@@ -104,6 +119,11 @@ const ROWS = [
     ['funding.offer.get', 'funding_offer_get', 'safe'],
     ['funding.contribution.create', 'funding_contribute', 'irreversible', { cost: { model: 'quoted', note: 'moves the owner’s credits into the project; the amount is in the body' } }],
     ['funding.contribution.get', 'funding_contribution_get', 'safe'], ['funding.contribution.return', 'funding_contribution_return', 'irreversible'],
+    ['orchestrator.graph.get', 'orchestrator_graph_get', 'safe'], ['orchestrator.ready.list', 'orchestrator_ready_list', 'safe'],
+    ['orchestrator.edge.add', 'orchestrator_edge_add', 'undoable'], ['orchestrator.edge.remove', 'orchestrator_edge_remove', 'undoable'],
+    ['orchestrator.plan.list', 'orchestrator_plan_list', 'safe'], ['orchestrator.plan.create', 'orchestrator_plan_create', 'undoable'], ['orchestrator.plan.get', 'orchestrator_plan_get', 'safe'],
+    ['orchestrator.attempt.start', 'orchestrator_attempt_start', 'irreversible'],
+    ['audit.event.list', 'audit_events_list', 'safe'],
   ].map(([name, tool, cls, extra = {}]) => [name, 'workforce', tool, cls, { provenance: cls === 'safe' ? 'untrusted' : 'trusted',
     reply: obj({}, undefined), ...(cls === 'safe' ? {} : { idempotency: NAT('the service keys a mutation by its operationId (or its natural target); a repeat reads the same result back') }), ...extra }]),
   // ── publish (XENO Post, server-to-server). Drafts and PROPOSED times only: publish, retract and approve reach an
@@ -119,6 +139,10 @@ const ROWS = [
   ['support.ticket.get', 'support', 'get_ticket', 'safe', { provenance: 'untrusted', reply: obj({ ticket: { type: 'object', description: 'The request and its messages (the customer’s words are untrusted); internal notes and drafts only for XENO’s side.' } }, ['ticket']) }],
   ['support.ticket.reply_draft', 'support', 'reply_draft', 'undoable', { idempotency: NONE('no request key yet: a retried call adds a second draft'), reply: obj({ message: { type: 'object', description: 'id, state ("draft" until a person sends it, or "sent" on your owner’s own request), visibility.' } }, ['message']) }],
   ['support.ticket.triage', 'support', 'triage', 'undoable', { idempotency: NAT('setting the same kind and priority again changes nothing'), reply: obj({ ticket: { type: 'object' } }, ['ticket']) }],
+  // ── analytics (Corpo › Analytics, services/analytics.js). Read-only for agents: a person saves dashboards.
+  ['analytics.metric.list', 'analytics', 'list_metrics', 'safe', { provenance: 'trusted', reply: obj({ metrics: { type: 'array', description: 'id, title, scope (workspace|division), description of each metric.' }, divisions: { type: 'array', description: 'id, name of the workspace’s active divisions.' } }, ['metrics']) }],
+  ['analytics.metric.query', 'analytics', 'query_metric', 'safe', { provenance: 'trusted', reply: obj({ metric: { type: 'string' }, scope: { type: 'string', description: 'workspace or division.' }, days: { type: 'integer' }, value: { type: 'object', description: 'The metric’s value; its shape is the metric’s (series of {day, value}, totals, medians).' } }, ['metric', 'value']) }],
+  ['analytics.dashboard.list', 'analytics', 'list_dashboards', 'safe', { provenance: 'untrusted', reply: obj({ dashboards: { type: 'array', description: 'id, name, widgets [{metric, days}] — names are written by people.' } }, ['dashboards']) }],
   // ── forum (also served by its own MCP at /api/forum/mcp, kept until no client calls it — SPEC §19.3 rule 5)
   ...[
     ['forum.thread.search', 'forum_search', 'safe'], ['forum.thread.get', 'forum_get_thread', 'safe'], ['forum.thread.suggest_duplicate', 'forum_suggest_duplicate', 'safe'],

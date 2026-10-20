@@ -6,12 +6,17 @@
  *   beat(db, me, placeId, where)  → ephemeral presence (who is in the building and on which floor), TTL 45 s
  *   needsYou(db, me)              → server-side projection across every place the viewer can open
  *
+ * Workforce ACTIVITY (runs admitted/revoked, handoffs, assignments, budgets, divisions, plans) is not rebuilt here: it is
+ * read from the §15 workforce event stream (workforceEvents.liveOf) after a cursor, with the same per-row rule and the
+ * same closed-floor exclusion as the snapshot — activity(db, me, placeId, after).
+ *
  * There is NO second store. Every frame is rebuilt from the records Places already reads (workforce divisions/teams/
  * memberships, agent_cloud_runs, tasks) through buildSnapshot, which is scope-filtered — so a closed floor never
  * reaches a viewer's stream because it never reaches their snapshot. Presence is the one thing Places owns here,
  * and it is ephemeral by design: in memory, per process, expiring; restarting the server empties the building.
  */
 import * as places from './places.js';
+import * as workforceEvents from './workforceEvents.js';
 
 export const PRESENCE_TTL_MS = 45_000;
 const presence = new Map();   // placeId → Map(principalId → { floorKey, at })
@@ -78,6 +83,7 @@ export async function frame(db, me, placeId) {
   return {
     ok: true,
     result: {
+      workspaceId: snap.building ? snap.building.workspaceId : null,
       divisions: snap.divisions.map((d) => ({ id: d.id, name: d.name })),
       closedDivisionIds: snap.closedDivisionIds,
       runs: snap.runs,
@@ -127,4 +133,17 @@ export async function needsYou(db, me) {
       })),
     },
   };
+}
+
+/**
+ * New workforce events in this place's building since `after` (the §15 stream), for a viewer whose access this tick's
+ * frame just re-checked. Never from a floor closed to them: the frame's own closedDivisionIds are excluded.
+ */
+export async function activity(db, me, f, after = null) {
+  if (!f || !f.workspaceId) return { events: [], cursor: after || '0' };
+  if (after === null) {   // a new stream starts at the head: only what happens from now on is news
+    const head = (await db.query('SELECT COALESCE(max(id), 0)::text AS id FROM workforce_events WHERE workspace_id=$1', [f.workspaceId])).rows[0].id;
+    return { events: [], cursor: head };
+  }
+  return workforceEvents.liveOf(db, me, { workspaceId: f.workspaceId, after, closedDivisionIds: f.closedDivisionIds || [] });
 }
