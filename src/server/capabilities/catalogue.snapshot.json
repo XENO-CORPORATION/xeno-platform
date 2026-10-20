@@ -1206,6 +1206,118 @@
    ]
   },
   {
+   "name": "docs.doc.list",
+   "wire": "docs__doc__list",
+   "version": "1.0.0",
+   "class": "safe",
+   "scope": "docs:read",
+   "surfaces": [
+    "mcp",
+    "rest"
+   ],
+   "aliases": [
+    "docs_list_docs"
+   ]
+  },
+  {
+   "name": "docs.doc.get",
+   "wire": "docs__doc__get",
+   "version": "1.0.0",
+   "class": "safe",
+   "scope": "docs:read",
+   "surfaces": [
+    "mcp",
+    "rest"
+   ],
+   "aliases": [
+    "docs_get_doc"
+   ]
+  },
+  {
+   "name": "docs.doc.create",
+   "wire": "docs__doc__create",
+   "version": "1.0.0",
+   "class": "undoable",
+   "scope": "docs:write",
+   "surfaces": [
+    "mcp",
+    "rest"
+   ],
+   "aliases": [
+    "docs_create_doc"
+   ]
+  },
+  {
+   "name": "docs.doc.save",
+   "wire": "docs__doc__save",
+   "version": "1.0.0",
+   "class": "undoable",
+   "scope": "docs:write",
+   "surfaces": [
+    "mcp",
+    "rest"
+   ],
+   "aliases": [
+    "docs_save_doc"
+   ]
+  },
+  {
+   "name": "docs.version.list",
+   "wire": "docs__version__list",
+   "version": "1.0.0",
+   "class": "safe",
+   "scope": "docs:read",
+   "surfaces": [
+    "mcp",
+    "rest"
+   ],
+   "aliases": [
+    "docs_list_versions"
+   ]
+  },
+  {
+   "name": "docs.version.restore",
+   "wire": "docs__version__restore",
+   "version": "1.0.0",
+   "class": "undoable",
+   "scope": "docs:write",
+   "surfaces": [
+    "mcp",
+    "rest"
+   ],
+   "aliases": [
+    "docs_restore_version"
+   ]
+  },
+  {
+   "name": "docs.doc.trash",
+   "wire": "docs__doc__trash",
+   "version": "1.0.0",
+   "class": "undoable",
+   "scope": "docs:write",
+   "surfaces": [
+    "mcp",
+    "rest"
+   ],
+   "aliases": [
+    "docs_trash_doc"
+   ]
+  },
+  {
+   "name": "docs.doc.untrash",
+   "wire": "docs__doc__untrash",
+   "version": "1.0.0",
+   "class": "undoable",
+   "scope": "docs:write",
+   "surfaces": [
+    "mcp",
+    "rest"
+   ],
+   "aliases": [
+    "docs_untrash_doc"
+   ]
+  },
+  {
    "name": "analytics.metric.list",
    "wire": "analytics__metric__list",
    "version": "1.0.0",

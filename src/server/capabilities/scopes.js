@@ -22,7 +22,8 @@ export const WORKSPACE_SCOPES = Object.freeze([
   'marketplace:read', 'marketplace:write',
   'forum:read', 'forum:write',
   'publish:read', 'publish:write',
-  'analytics:read', 'analytics:write',   // Corpo › Analytics (2026-10-20). Agents read; a person writes dashboards.   // XENO Publish = XENO Post (2026-10-20). Publishing itself is never a scope: a person confirms it on screen.
+  'analytics:read', 'analytics:write',
+  'docs:read', 'docs:write',   // Office › Write and Notes (2026-10-20). Writes are versions or trash: reversible.   // Corpo › Analytics (2026-10-20). Agents read; a person writes dashboards.   // XENO Publish = XENO Post (2026-10-20). Publishing itself is never a scope: a person confirms it on screen.
 ]);
 
 /** Ledger classes (§4 reversibility). The catalogue's `undoable` is the ledger's `reversible`. */
@@ -34,7 +35,7 @@ export const DIVISION_AREA = Object.freeze({
   storage: 'storage', studio: 'library', canvas: 'tasks', tasks: 'tasks', chat: 'chat', inference: 'chat',
   agents: 'agents', workforce: 'agents', commerce: 'wallet', workspace: 'workspace', 'workspace-ui': 'workspace',
   account: 'workspace', platform: 'workspace', places: 'places', forum: 'forum', 'browser-shell': 'workspace',
-  marketplace: 'marketplace', publish: 'publish', analytics: 'analytics', support: 'forum',
+  marketplace: 'marketplace', publish: 'publish', analytics: 'analytics', docs: 'docs', support: 'forum',
   // XENO-WORKFORCE-01 capability divisions (catalogue first segments)
   agent: 'agents', run: 'agents', objective: 'agents', division: 'workspace', funding: 'wallet',
 });
