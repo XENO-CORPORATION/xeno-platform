@@ -79,5 +79,26 @@ export function createWorkforceSessionRouter({ env = process.env } = {}) {
     // conversationTurns throws plain Errors for its own validation; they are the caller's input, not a fault.
     try { return await recordBranchIntent(db, v); } catch (e) { if (!e.code) refuse('bad_input', e.message); throw e; }
   }));
+  // The Changes screen: a conversation's recorded branch intents, or a project's across the conversations in it
+  // the actor can see -- each conversation passes the same guard, so a stranger's intent never appears.
+  router.post('/branch-intents/list', route(null, ['conversationId', 'projectId'], async (db, v) => {
+    if ((v.conversationId === undefined) === (v.projectId === undefined)) refuse('bad_input', 'one_of_conversation_or_project');
+    let convs;
+    if (v.conversationId !== undefined) {
+      await assertConversationAccess(db, v.actorUserId, v.conversationId, 'viewer');
+      convs = [v.conversationId];
+    } else {
+      if (typeof v.projectId !== 'string' || !UUID.test(v.projectId)) refuse('bad_input', 'invalid_project');
+      const ids = (await db.query('SELECT id FROM chat_conversations WHERE project_id=$1 AND deleted_at IS NULL ORDER BY updated_at DESC NULLS LAST LIMIT 200', [v.projectId])).rows.map((r) => r.id);
+      convs = [];
+      for (const id of ids) { try { await assertConversationAccess(db, v.actorUserId, id, 'viewer'); convs.push(id); } catch (e) { if (e?.code !== 'not_found') throw e; } }
+    }
+    if (!convs.length) return { intents: [] };
+    const rows = (await db.query(`SELECT i.id, i.conversation_id, c.title, i.branch, i.intent, i.target_turn, i.actor_user_id, i.created_at
+      FROM conversation_branch_intents i JOIN chat_conversations c ON c.id=i.conversation_id
+      WHERE i.conversation_id = ANY($1::uuid[]) ORDER BY i.created_at DESC LIMIT 200`, [convs])).rows;
+    return { intents: rows.map((r) => ({ intentId: r.id, conversationId: r.conversation_id, conversationTitle: r.title, branch: r.branch, intent: r.intent,
+      targetTurn: r.target_turn, actorUserId: r.actor_user_id, createdAt: r.created_at.toISOString() })) };
+  }));
   return router;
 }

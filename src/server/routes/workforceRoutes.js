@@ -132,6 +132,7 @@ const defaultRead = async (...args) => (await import('../services/workforceResou
 const defaultList = async (...args) => (await import('../services/workforceCatalog.js')).listOwnedWorkforceResources(...args);
 const defaultAdmit = async (...args) => (await import('../services/workforceRunAdmission.js')).admitAccountRun(...args);
 const defaultReadAdmission = async (...args) => (await import('../services/workforceRunAdmission.js')).readRunAdmission(...args);
+const defaultListAdmissions = async (...args) => (await import('../services/workforceRunAdmission.js')).listRunAdmissions(...args);
 const defaultReadAdmissionOperation = async (...args) => (await import('../services/workforceRunAdmission.js')).readRunAdmissionOperation(...args);
 const defaultReadPin = async (...args) => (await import('../services/workforceRunAdmission.js')).readRunnablePin(...args);
 const defaultReadCapacity = async (...args) => (await import('../services/workforceCapacity.js')).readWorkforceCapacity(...args);
@@ -215,6 +216,12 @@ function admissionObservation(value) {
       ? { admission, replayed: value.replayed === true }
       : { admission };
   } catch { return null; }
+}
+/** A list is reported only when EVERY row passes the single-admission projection; one malformed row reports nothing. */
+function admissionListObservation(value) {
+  if (!value || value.schemaVersion !== 1 || !Array.isArray(value.admissions) || value.admissions.length > 100) return null;
+  const admissions = value.admissions.map((a) => admissionObservation(a)?.admission);
+  return admissions.every(Boolean) ? { schemaVersion: 1, admissions } : null;
 }
 /** LIFE-09: capacity is reported for the scope ASKED about, as numbers derived at the read, never a
  * stored figure. A reply for another scope, or carrying a field outside this shape, is not reported. */
@@ -568,7 +575,7 @@ function globalObservation(value, request) {
  * belong to the real service, not the renderer or this routing adapter. */
 export function createWorkforceRouter({ createWorkforceResource = defaultCreate, readWorkforceResourceOperation = defaultRead, listOwnedWorkforceResources = defaultList,
   createAndAssignWorkforceResource = defaultCreateAndAssign,
-  admitRun = defaultAdmit, readRunAdmission = defaultReadAdmission, readRunAdmissionOperation = defaultReadAdmissionOperation, readRunnablePin = defaultReadPin, readWorkforceCapacity = defaultReadCapacity,
+  admitRun = defaultAdmit, readRunAdmission = defaultReadAdmission, listRunAdmissions = defaultListAdmissions, readRunAdmissionOperation = defaultReadAdmissionOperation, readRunnablePin = defaultReadPin, readWorkforceCapacity = defaultReadCapacity,
   readWorkforceEvaluation = defaultReadEvaluation,
   reportRunResult = runResults('reportRunResult'), deliverRunResult = runResults('deliverRunResult'), readRunOutcome = runResults('readRunOutcome'),
   removeTeamMember = memberRemoval('removeTeamMember'), readMemberRemoval = memberRemoval('readMemberRemoval'), archiveMemberRemoval = memberRemoval('archiveMemberRemoval'),
@@ -681,6 +688,9 @@ export function createWorkforceRouter({ createWorkforceResource = defaultCreate,
       if (Object.keys(body).some(key => !['admissionId','expectedActorAccountId'].includes(key))) throw Object.assign(new Error('unknown field'), { code: 'bad_input' });
       return readRunAdmission(db, context, body.admissionId, { expectedActorAccountId: body.expectedActorAccountId });
     }, true, admissionObservation));
+  // The Runs screens: a project's or an agent's admissions, each under readRunAdmission's own visibility rule.
+  router.post('/run-admissions/list', authMiddleware, requireDpopIfBound, requireWorkforceScope('workforce:read'), parse,
+    handle(listRunAdmissions, true, admissionListObservation));
   router.post('/run-admissions/operations/read', authMiddleware, requireDpopIfBound, requireWorkforceScope('workforce:read'), parse,
     handle(readRunAdmissionOperation,true,(value,request)=>{
       const operationId=uuid(request.operationId);
@@ -740,7 +750,7 @@ export function createWorkforceRouter({ createWorkforceResource = defaultCreate,
   // above: no write, no receipt, workforce:read (not manage).
   router.post('/resources/definition/read', authMiddleware, requireDpopIfBound, requireWorkforceScope('workforce:read'), parse,
     handle(readAgentDefinition, true, definitionReadObservation));
-  for (const path of ['/resources', '/resources/create-and-assign', '/resources/revise-definition', '/resources/revise-definition/read', '/resources/definition/read', '/resources/list', '/resource-operations/read', '/run-admissions', '/run-admissions/read', '/run-admissions/pin', '/capacity', '/evaluation',
+  for (const path of ['/resources', '/resources/create-and-assign', '/resources/revise-definition', '/resources/revise-definition/read', '/resources/definition/read', '/resources/list', '/resource-operations/read', '/run-admissions', '/run-admissions/read', '/run-admissions/list', '/run-admissions/pin', '/capacity', '/evaluation',
     '/run-admissions/authorize-step', '/run-admissions/revoke', '/run-admissions/authority',
     '/run-admissions/result', '/run-admissions/deliver', '/run-admissions/outcome',
     '/member-removals', '/member-removals/read', '/member-removals/archive']) {

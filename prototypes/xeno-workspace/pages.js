@@ -94,6 +94,8 @@
   function projectPage(name, tab) {
     const L = PROJ().find((p) => p.name === name);
     const P = (window.XENO_PROJECTS || {})[name] || { mode: L ? L.mode : X().ctxName(), owner: L ? L.owner.name : 'You', goal: L ? (L.goal || '') : '', milestone: L ? L.milestone.title : '—', tasks: [], taskObjs: [], chats: [], teams: [], resources: [], funding: [], activity: [] };
+    // a tab may carry a record after it (Runs/<admission id>): the tab is the first segment, the record the rest
+    const tj = String(tab || '').indexOf('/'), sub = tj < 0 ? '' : String(tab).slice(tj + 1); tab = tj < 0 ? tab : String(tab).slice(0, tj);
     const tabs = window.XENO_PROJECT_TABS, cur = tabs.includes(tab) ? tab : 'Overview', fam = 'project';
     const meta = L || { tasks: { done: 0, total: 0 }, health: 'on_track', members: [], milestone: { title: P.milestone, due: '—' }, needsYou: 0 };
     const tasks = P.taskObjs || [];
@@ -103,7 +105,8 @@
     const libFor = window.XENO_PG_LIBRARY.items.filter((f) => f.project === name && !f.trashedAt);
     const empty = (icon, t, b, a = '') => box(icon, t, b, a, 'sm');
     // on the platform, a tab with no API behind it says so, and Overview shows only what the platform knows
-    const liveTab = window.XENO_WORK && window.XENO_WORK.served ? window.XENO_WORK.projectTab(cur, name, { box, esc, ic, btn }) : null;
+    const wfRec = window.XENO_WFP?.served && window.XENO_WFP.tabs.includes(cur) ? (window.XENO_PG_PROJECTS.items || []).find((p) => p.name === name) : null;
+    const liveTab = wfRec ? window.XENO_WFP.projectTab(cur, sub, wfRec, window.XENO_PAGES.h) : window.XENO_WORK && window.XENO_WORK.served ? window.XENO_WORK.projectTab(cur, name, { box, esc, ic, btn }) : null;
     const body = liveTab ?? gate(fam, 'rows', () => empty('folder', 'This project is empty', 'Add a task, attach a chat or file, or assign a team to get started.', btn('New task', `data-xa="newTask" data-arg="${esc(name)}"`, false, 'plus') + btn('Assign a team', `data-xa="assign" data-arg="${esc(name)}"`, true))) ?? ({
       Overview: () => `<div class="pg-cols"><div>
           ${meta.needsYou ? `<section class="pg-sec"><h3>Waiting on you <em>${meta.needsYou}</em></h3>${(window.XENO_NEEDS || []).filter((n) => (P.mode || '').toLowerCase() === n.m).slice(0, meta.needsYou).map((n) => `<div class="pg-need-row"><span>${esc(n.t)}</span>${btn(n.meta, `data-xa="resolveNeed" data-arg="${esc(n.t)}"`, n.meta !== 'Approve')}</div>`).join('') || '<p class="pg-dim">Open the Inbox to act on it.</p>'}</section>` : ''}
@@ -418,9 +421,9 @@
     if (s.view === 'global') {
       { const vr = window.XENO_VIS?.route(s.global, it); if (vr) return vr; }
       if (s.global === 'inbox') return null;
-      if (s.global === 'projects') { if (!it) return projectsIndex(false); if (it === 'Archived projects' || it === 'archived') return projectsIndex(true); const k = window.XENO_PROJECT_ROUTE ? window.XENO_PROJECT_ROUTE.in(it) : it; if (k !== it) s.item = k; const [nm, tb] = k.split('/'); return projectPage(nm, tb); }
+      if (s.global === 'projects') { if (!it) return projectsIndex(false); if (it === 'Archived projects' || it === 'archived') return projectsIndex(true); const k = window.XENO_PROJECT_ROUTE ? window.XENO_PROJECT_ROUTE.in(it) : it; if (k !== it) s.item = k; const j = k.indexOf('/'); return projectPage(j < 0 ? k : k.slice(0, j), j < 0 ? undefined : k.slice(j + 1)); }
       if (s.global === 'library') { if (!it || LIBV[it]) return library(it || 'All files'); return itemPage(it); }
-      if (s.global === 'workspace') { if (it && window.XENO_MEMBER_ROUTE) { const k = window.XENO_MEMBER_ROUTE.in(it); if (k !== it) { s.item = k; return render(); } } const wf = mod('workspace:' + (it || ''), () => window.XENO_COMPANY?.route(it) || (window.XENO_AGENTS?.served ? window.XENO_AGENTS.route(it) : null) || (window.XENO_DIVISIONS?.served ? window.XENO_DIVISIONS.route(it) : null) || window.XENO_RES?.route(it) || window.XENO_WF?.route(it)); if (wf) return wf; if (it && it.startsWith('Members/')) return memberPage(it.slice(8)); if (it && it.startsWith('Knowledge/')) return knowledgePage(it.slice(10)); return workspace(it); }
+      if (s.global === 'workspace') { if (it && window.XENO_MEMBER_ROUTE) { const k = window.XENO_MEMBER_ROUTE.in(it); if (k !== it) { s.item = k; return render(); } } const wf = mod('workspace:' + (it || ''), () => (window.XENO_WFP?.served ? window.XENO_WFP.route(it) : null) || window.XENO_COMPANY?.route(it) || (window.XENO_AGENTS?.served ? window.XENO_AGENTS.route(it) : null) || (window.XENO_DIVISIONS?.served ? window.XENO_DIVISIONS.route(it) : null) || window.XENO_RES?.route(it) || window.XENO_WF?.route(it)); if (wf) return wf; if (it && it.startsWith('Members/')) return memberPage(it.slice(8)); if (it && it.startsWith('Knowledge/')) return knowledgePage(it.slice(10)); return workspace(it); }
       if (s.global === 'places') return mod('places:' + (it || ''), () => window.XENO_PLACES.route(it) || window.XENO_PLACES.route(null));
       if (s.global === 'anima') { const ar = mod('anima:' + (it || ''), () => window.XENO_ANIMA?.route(it)); if (ar) return ar; }
       if (s.global === 'anima') return it && /Memory|Skills|Plan|Summarise/.test(it) ? anima(null) : anima(it);
