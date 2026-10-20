@@ -107,6 +107,7 @@
   "workforceRoutes.js": "workforce",
   "workforceSessionRoutes.js": "workforce",
   "workforceViewRoutes.js": "workforce",
+  "workspaceApiRoutes.js": "platform",
   "workspaceAreaRoutes.js": "workspace",
   "workspaceKeyRoutes.js": "workspace",
   "workspaceMembershipOperationRoutes.js": "workspace",
@@ -2107,7 +2108,8 @@
    "scope": "storage:read"
   },
   "route:libraryRoutes.js:GET /folders": {
-   "status": "planned",
+   "status": "capability",
+   "capability": "storage.folder.list",
    "class": "safe",
    "scope": "storage:read"
   },
@@ -2177,12 +2179,14 @@
    "scope": "storage:write"
   },
   "route:libraryRoutes.js:POST /folders": {
-   "status": "planned",
+   "status": "capability",
+   "capability": "storage.folder.create",
    "class": "reversible",
    "scope": "storage:write"
   },
   "route:libraryRoutes.js:POST /folders/:id/links": {
-   "status": "planned",
+   "status": "capability",
+   "capability": "storage.link.create",
    "class": "reversible",
    "scope": "share:create"
   },
@@ -4468,6 +4472,27 @@
    "status": "planned",
    "class": "reversible",
    "scope": "agents:write"
+  },
+  "route:workspaceApiRoutes.js:GET /:division/:domain/:verb": {
+   "status": "excluded",
+   "category": "protocol",
+   "because": "the generated REST transport over the capability catalogue, not an action of its own",
+   "class": "safe",
+   "scope": "none"
+  },
+  "route:workspaceApiRoutes.js:GET /openapi.json": {
+   "status": "excluded",
+   "category": "protocol",
+   "because": "the generated REST transport over the capability catalogue, not an action of its own",
+   "class": "safe",
+   "scope": "none"
+  },
+  "route:workspaceApiRoutes.js:POST /:division/:domain/:verb": {
+   "status": "excluded",
+   "category": "protocol",
+   "because": "the generated REST transport over the capability catalogue, not an action of its own",
+   "class": "safe",
+   "scope": "none"
   },
   "route:workspaceAreaRoutes.js:GET /needs": {
    "status": "planned",

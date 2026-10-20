@@ -56,7 +56,7 @@ router.delete('/', (req, res) => { res.set('Allow', 'POST'); res.status(405).end
  * client discovers it must sign in. An OAuth MCP token or a platform agent's xtk_ credential is accepted; anything
  * else (a session) is refused. Either way the call is one CONNECTION the person can see and disconnect.
  */
-const needsToken = (req, res, next) => {
+export const needsToken = (req, res, next) => {
   if (!req.headers.authorization) return challenge(req, res, { jsonrpc: '2.0', id: null, error: { code: -32001, message: 'Sign in to use XENO MCP' } });
   next();
 };
@@ -65,7 +65,7 @@ const needsToken = (req, res, next) => {
  * The connection and principal behind a request's MCP credential, or null once it has answered (401/403). One
  * function for the endpoint and the catalogue, so both see exactly the same caller.
  */
-async function callerOf(req, res, rid, { principal = true } = {}) {
+export async function callerOf(req, res, rid, { principal = true } = {}) {
   if (!mcpOriginOk(req)) { res.status(403).json({ jsonrpc: '2.0', id: null, error: { code: -32600, message: 'Origin not allowed' } }); return null; }
   const tok = req.taskToken;
   // two ways in: an OAuth sign-in (one connection per signed-in client), or a platform agent's own xtk_ credential

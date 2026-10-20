@@ -22,6 +22,9 @@ import * as canvasMcp from './canvasMcp.js';
 import * as placesMcp from './placesMcp.js';
 import * as canvases from './canvases.js';
 import * as agentsMcp from './agentsMcp.js';
+import * as storageMcp from './storageMcp.js';
+import * as forumMcp from './forumMcp.js';
+import { resolvePrincipal } from './agentIdentity.js';
 import { withTransaction } from './chatProjectAuthority.js';
 import crypto from 'node:crypto';
 import { CATALOGUE, byName, mcpCapabilities } from '../capabilities/catalogue.js';
@@ -57,6 +60,27 @@ export const SERVICES = Object.freeze([
     tools: () => placesMcp.TOOLS,
     call: (db, actor, name, args) => placesMcp.callTool(db, actor, name, args),
     isToolError: (e) => e instanceof placesMcp.PlacesMcpError,
+  },
+  // XENO Storage (storageMcp.js, WORKSPACE AGENT SURFACE P1): an agent works in its owner's Storage, the person in their own.
+  {
+    category: 'storage', title: 'Storage', version: '1.0.0', timeoutMs: 60_000,
+    description: 'Storage: list and make folders, upload files, and share a folder by a link that needs sign-in.',
+    tools: () => storageMcp.TOOLS,
+    call: (db, actor, name, args) => storageMcp.callTool(db, actor, name, args),
+    isToolError: (e) => e instanceof storageMcp.StorageMcpError,
+  },
+  // XENO Forum, folded in from /api/forum/mcp (kept): the same tools, the same function. Its wire names were
+  // always `forum_<verb>`, so as a category the grandfathered alias is exactly the old name.
+  {
+    category: 'forum', title: 'Forum', version: '1.0.0', timeoutMs: 20_000,
+    description: 'The XENO Forum: search answers, read threads, ask, reply, subscribe and flag.',
+    tools: () => forumMcp.TOOLS.map((t) => ({ ...t, name: t.name.replace(/^forum_/, '') })),
+    call: async (db, actor, name, args) => {
+      const p = await resolvePrincipal(db, actor.id);
+      const r = await forumMcp.callTool(db, { id: p.id, username: p.handle, display_name: p.displayName, role: p.role, kind: p.kind, owner: p.owner }, `forum_${name}`, args);
+      return r && r.isError ? { ...r, structuredContent: r.structuredContent || { error: (r.content && r.content[0] && r.content[0].text) || 'Forum refused', code: 'forum_refused' } } : r;
+    },
+    isToolError: () => false,
   },
   // what an agent can learn about itself (agentsMcp.js). On by default for a platform agent's own credential
   // (AGENT_DEFAULT_CATEGORIES); an app sign-in turns it on in Dev › XENO MCP like any other category.
@@ -193,7 +217,9 @@ export async function callTool(db, actor, connection, prefixed, args = {}, ctx =
   const cap = r.capability;
   const callArgs = { ...(args || {}) };
   if (cap && ctx.runId && (cap.input.properties || {}).run_id && callArgs.run_id === undefined) callArgs.run_id = String(ctx.runId);
-  const key = cap && cap.class !== 'safe' && ctx.idempotencyKey ? String(ctx.idempotencyKey).slice(0, 255) : null;
+  // the key: the Idempotency-Key header, or the capability's own declared key argument (request_key) when only that was sent
+  const argKey = cap && cap.idempotency.strategy === 'key' && callArgs[cap.idempotency.key] !== undefined ? String(callArgs[cap.idempotency.key]) : null;
+  const key = cap && cap.class !== 'safe' && (ctx.idempotencyKey || argKey) ? String(ctx.idempotencyKey || argKey).slice(0, 255) : null;
   if (key && cap.idempotency.strategy === 'key' && callArgs[cap.idempotency.key] === undefined) callArgs[cap.idempotency.key] = key;
   const claimed = key && connection && connection.id ? await claimKey(db, connection.id, key, cap.name) : null;
   if (claimed && claimed.replay) return { result: withMeta(claimed.replay, { 'xeno/replayed': true }), log: meta(r.service.category, 'ok', 'idempotent_replay') };

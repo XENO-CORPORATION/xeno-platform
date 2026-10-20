@@ -25,7 +25,8 @@
  *     agentsOnly:  boolean,                  // only an agent principal may call it
  *     aliases:     ['tasks_create_task'],    // §3 grandfathered wire names that keep being served
  *     bind:        { category, tool },       // the service row + tool that executes it (one code path)
- *     surfaces:    ['mcp'],                  // where it is generated today: 'mcp' (/api/mcp), 'forum-mcp', …
+ *     surfaces:    ['mcp', 'rest'],          // where it is generated: 'mcp' (/api/mcp), 'rest' (/api/v1/…), 'forum-mcp'
+ *     scope:       'tasks:write',            // the xeno-workspace area scope it needs (capabilities/scopes.js); derived when absent
  *   }
  *
  * On the wire (§3.1) a canonical name travels with dots → `__`: tasks.task.create → tasks__task__create.
@@ -35,7 +36,9 @@ export const CLASSES = Object.freeze(['safe', 'undoable', 'irreversible']);
 export const MODES = Object.freeze(['always', 'on-screen-only', 'headless-only']);
 export const COST_MODELS = Object.freeze(['free', 'fixed', 'metered', 'quoted']);
 export const IDEMPOTENCY = Object.freeze(['key', 'natural', 'none']);
-export const SURFACES = Object.freeze(['mcp', 'forum-mcp']);
+export const SURFACES = Object.freeze(['mcp', 'rest', 'forum-mcp']);
+import { WORKSPACE_SCOPES, DIVISION_AREA, scopeFor } from './scopes.js';
+
 const NAME = /^[a-z][a-z0-9_]*(\.[a-z][a-z0-9_]*){2}$/;
 const SEMVER = /^\d+\.\d+\.\d+$/;
 
@@ -46,7 +49,7 @@ export const fromWire = (wire) => String(wire).split('__').join('.');
 /** Every problem with one declaration. Empty = valid. */
 export function problemsOf(d) {
   const p = [];
-  for (const k of ['name', 'version', 'division', 'title', 'description', 'input', 'reply', 'class', 'mode', 'provenance', 'permission', 'cost', 'idempotency', 'preview', 'bind', 'surfaces']) {
+  for (const k of ['name', 'version', 'division', 'title', 'description', 'input', 'reply', 'class', 'mode', 'provenance', 'permission', 'cost', 'idempotency', 'preview', 'bind', 'surfaces', 'scope']) {
     if (d[k] === undefined || d[k] === null || d[k] === '') p.push(`${d.name || '?'}: missing ${k}`);
   }
   if (p.length) return p;
@@ -67,6 +70,7 @@ export function problemsOf(d) {
   if (d.reply.type !== 'object') p.push(`${d.name}: reply must be an object schema`);
   if (!d.bind.category || !d.bind.tool) p.push(`${d.name}: bind needs category and tool`);
   if (!Array.isArray(d.surfaces) || !d.surfaces.length || d.surfaces.some((s) => !SURFACES.includes(s))) p.push(`${d.name}: surfaces must be a non-empty subset of ${SURFACES.join('|')}`);
+  if (!WORKSPACE_SCOPES.includes(d.scope)) p.push(`${d.name}: scope must be one of the approved xeno-workspace scopes`);
   if (toWire(d.name).length > 64) p.push(`${d.name}: wire name over 64 chars`);
   if (fromWire(toWire(d.name)) !== d.name) p.push(`${d.name}: wire round trip fails`);
   return p;
@@ -74,8 +78,9 @@ export function problemsOf(d) {
 
 /** One declaration with its defaults, frozen. Throws on an invalid one, so a bad catalogue cannot load. */
 export function defineCapability(d) {
-  const full = { mode: 'always', provenance: 'trusted', agentsOnly: false, aliases: [], preview: { supported: false }, surfaces: ['mcp'], ...d };
+  const full = { mode: 'always', provenance: 'trusted', agentsOnly: false, aliases: [], preview: { supported: false }, surfaces: ['mcp', 'rest'], ...d };
   if (!full.permission) full.permission = full.name;
+  if (!full.scope && full.division && full.class) full.scope = scopeFor(DIVISION_AREA[full.division] || full.division, full.class === 'safe' ? 'safe' : 'write');
   const p = problemsOf(full);
   if (p.length) throw new Error(`Invalid capability declaration:\n  ${p.join('\n  ')}`);
   return Object.freeze(full);
