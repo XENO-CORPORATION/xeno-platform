@@ -22,6 +22,7 @@
 import express from 'express';
 import { assertServiceGranted, ServicePrincipalDeniedError } from '../services/servicePrincipalGate.js';
 import crypto from 'crypto';
+import { ensurePersonalWorkspace } from '../services/personalWorkspace.js';
 import authMiddleware, { optionalAuthMiddleware } from '../middleware/auth.js';
 import * as svc from '../services/marketplaceService.js';
 import * as broker from '../services/marketplaceBroker.js';
@@ -614,11 +615,13 @@ router.post('/developer/register', authMiddleware, async (req, res) => {
     const bio = isString(req.body?.bio) ? req.body.bio.slice(0, 2000) : null;
     const website = isString(req.body?.website) ? req.body.website.slice(0, 500) : null;
 
+    // D-6: the seller is a WORKSPACE (a solo seller's personal one); the person is the accountable human
+    const sellerWorkspace = await ensurePersonalWorkspace(req.db, req.user.id);
     const { rows } = await req.db.query(
-      `INSERT INTO marketplace_developers (user_id, display_name, slug, bio, website, trust_tier, status)
-       VALUES ($1,$2,$3,$4,$5,'community','active')
-       RETURNING id, display_name, slug, trust_tier, status, created_at`,
-      [req.user.id, displayName, slug, bio, website],
+      `INSERT INTO marketplace_developers (user_id, display_name, slug, bio, website, trust_tier, status, seller_workspace_id)
+       VALUES ($1,$2,$3,$4,$5,'community','active',$6)
+       RETURNING id, display_name, slug, trust_tier, status, created_at, seller_workspace_id`,
+      [req.user.id, displayName, slug, bio, website, sellerWorkspace.id],
     );
     res.status(201).json({ success: true, developer: rows[0] });
   } catch (error) {

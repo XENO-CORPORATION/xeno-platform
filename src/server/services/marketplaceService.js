@@ -76,6 +76,9 @@ export function serializeListingSummary(row) {
     isFirstParty: row.is_first_party,
     developerId: row.developer_id,
     developerName: row.developer_name ?? null,
+    // D-6: the seller of record is a workspace; the accountable human answers for the listing
+    sellerWorkspaceId: row.seller_workspace_id ?? null,
+    accountableUserId: row.accountable_user_id ?? null,
     ratingAvg: Number(row.rating_avg ?? 0),
     ratingCount: row.rating_count ?? 0,
     installCount: Number(row.install_count ?? 0),
