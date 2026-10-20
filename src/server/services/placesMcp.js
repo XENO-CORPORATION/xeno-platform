@@ -23,7 +23,7 @@ export const TOOLS = [
     inputSchema: { type: 'object', required: ['place', 'layout', 'expected_revision', 'request_key'], properties: {
       place: PLACE, expected_revision: { type: 'integer', description: 'The layout revision you read (place.revision).' },
       request_key: { type: 'string', description: 'Your own key for this change, 8–128 characters.' },
-      layout: { type: 'object', description: '{ bays?, style?, slots?: {membershipId: n}, pods?: {teamId: {x, z, level?}}, fixtures?: {level: [{kind, x, z, rot?}]} }' } } } },
+      layout: { type: 'object', description: '{ bays?, style?, slots?: {membershipId: n}, pods?: {teamId: {x0, zc}}, fixtures?: {floorKey: [{kind, x, z, w?, d?, h?, rot?, label?, id?}]}, removed?: {floorKey: [fixtureId]} } — floorKey is a division id or "lobby"; metres.' } } } },
 ];
 
 async function run(db, actor, op, input) {

@@ -205,22 +205,33 @@ function summary(p, access, snap) {
   };
 }
 
-const record = (p) => ({ style: p.style, bays: p.bays, slots: p.layout.slots || {}, pods: p.layout.pods || {}, fixtures: p.layout.fixtures || {} });
+// The record shape is the place model's own (xeno-places src/logic/model.ts buildLayout): pods[teamId] = { x0, zc },
+// fixtures[floorKey] = extra fixtures, removed[floorKey] = ids of built-in fixtures taken away. floorKey = a division
+// id or 'lobby'. All of it is coordinates and furniture; none of it says who belongs where.
+const record = (p) => ({ style: p.style, bays: p.bays, slots: p.layout.slots || {}, pods: p.layout.pods || {}, fixtures: p.layout.fixtures || {}, removed: p.layout.removed || {} });
 
 // ── layout validation: coordinates only ─────────────────────────────────────────────────────────────────────────
 const num = (v) => typeof v === 'number' && Number.isFinite(v) && Math.abs(v) < 1e4;
+const FIXTURE_KEYS = ['id', 'kind', 'label', 'x', 'z', 'w', 'd', 'h', 'rot'];
+const badFixture = (f) => !f || typeof f !== 'object' || typeof f.kind !== 'string' || !/^[a-z-]{1,24}$/.test(f.kind)
+  || !num(f.x) || !num(f.z) || ['w', 'd', 'h', 'rot'].some((k) => f[k] != null && !num(f[k]))
+  || (f.label != null && (typeof f.label !== 'string' || f.label.length > 40)) || (f.id != null && (typeof f.id !== 'string' || f.id.length > 40))
+  || Object.keys(f).some((k) => !FIXTURE_KEYS.includes(k));
+const floorKeyed = (o, each) => typeof o === 'object' && !Array.isArray(o) && Object.keys(o).length <= 64
+  && Object.entries(o).every(([k, list]) => /^(lobby|[0-9a-f-]{36})$/.test(k) && Array.isArray(list) && list.length <= 100 && list.every(each));
 export function validateLayout(layout) {
   if (!layout || typeof layout !== 'object' || Array.isArray(layout)) fail('bad_input', 'layout_required', 'Missing layout.');
-  const extra = Object.keys(layout).filter((k) => !['bays', 'style', 'slots', 'pods', 'fixtures'].includes(k));
+  const extra = Object.keys(layout).filter((k) => !['bays', 'style', 'slots', 'pods', 'fixtures', 'removed'].includes(k));
   if (extra.length) fail('bad_input', 'layout_not_coordinates', `A layout holds coordinates only; remove: ${extra.slice(0, 5).join(', ')}.`);
   const bays = layout.bays == null ? 4 : layout.bays;
   if (!Number.isInteger(bays) || bays < 4 || bays > 8) fail('bad_input', 'bays_out_of_range', 'Bays are 4 to 8.');
   if (layout.style != null && !STYLES.includes(layout.style)) fail('bad_input', 'style_unknown', 'Unknown style.');
-  const slots = layout.slots || {}, pods = layout.pods || {}, fixtures = layout.fixtures || {};
+  const slots = layout.slots || {}, pods = layout.pods || {}, fixtures = layout.fixtures || {}, removed = layout.removed || {};
   if (typeof slots !== 'object' || Array.isArray(slots) || Object.keys(slots).length > 2000 || Object.values(slots).some((v) => !Number.isInteger(v) || v < 0 || v > 64)) fail('bad_input', 'slots_invalid', 'Desk slots are whole numbers per membership.');
-  if (typeof pods !== 'object' || Array.isArray(pods) || Object.keys(pods).length > 500 || Object.values(pods).some((v) => !v || typeof v !== 'object' || !num(v.x) || !num(v.z) || Object.keys(v).some((k) => !['x', 'z', 'level'].includes(k)))) fail('bad_input', 'pods_invalid', 'A pod position is { x, z, level }.');
-  if (typeof fixtures !== 'object' || Array.isArray(fixtures) || Object.values(fixtures).some((list) => !Array.isArray(list) || list.length > 100 || list.some((f) => !f || typeof f.kind !== 'string' || !/^[a-z-]{1,24}$/.test(f.kind) || !num(f.x) || !num(f.z) || Object.keys(f).some((k) => !['kind', 'x', 'z', 'rot'].includes(k)) || (f.rot != null && !num(f.rot))))) fail('bad_input', 'fixtures_invalid', 'A fixture is { kind, x, z, rot? } per floor.');
-  return { bays, style: layout.style || null, layout: { slots, pods, fixtures } };
+  if (typeof pods !== 'object' || Array.isArray(pods) || Object.keys(pods).length > 500 || Object.values(pods).some((v) => !v || typeof v !== 'object' || !num(v.x0) || !num(v.zc) || Object.keys(v).some((k) => !['x0', 'zc'].includes(k)))) fail('bad_input', 'pods_invalid', 'A pod position is { x0, zc } in metres.');
+  if (!floorKeyed(fixtures, (f) => !badFixture(f))) fail('bad_input', 'fixtures_invalid', 'Fixtures are per floor: { kind, x, z, w?, d?, h?, rot?, label?, id? }.');
+  if (!floorKeyed(removed, (id) => typeof id === 'string' && id.length <= 40)) fail('bad_input', 'removed_invalid', 'Removed fixtures are ids per floor.');
+  return { bays, style: layout.style || null, layout: { slots, pods, fixtures, removed } };
 }
 
 const code = () => { const a = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; const b = crypto.randomBytes(8); return [...b].map((x, i) => a[x % a.length] + (i === 3 ? '-' : '')).join(''); };
