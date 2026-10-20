@@ -88,7 +88,8 @@
   function onePage() {
     const h = H(), d = S.one; if (!d) return null;
     const archived = d.lifecycle === 'archived';
-    const acts = d.canManage && !archived ? h.btn('Set head', 'data-xdv="head"', true, 'user') + h.btn('Rename', 'data-xdv="rename"', true, 'edit') + h.btn('New division inside', 'data-xdv="new-inside"', true, 'plus') + h.btn('Archive', 'data-xdv="archive"', true, 'archive') : '';
+    const asCanvas = window.XENO_CANVAS?.served ? h.btn('Open as canvas', `data-xcv-open="division" data-id="${esc(d.id)}"`, true, 'grid') : '';
+    const acts = asCanvas + (d.canManage && !archived ? h.btn('Set head', 'data-xdv="head"', true, 'user') + h.btn('Rename', 'data-xdv="rename"', true, 'edit') + h.btn('New division inside', 'data-xdv="new-inside"', true, 'plus') + h.btn('Archive', 'data-xdv="archive"', true, 'archive') : '');
     const myAgents = new Set(d.agentsList.map((a) => a.id));
     const outside = S.agents.filter((a) => !myAgents.has(a.id));
     const myProjects = new Set(d.projectsList.map((p) => p.id));
@@ -136,7 +137,7 @@
     return `<section class="pg-sec" data-sec="members"><div class="pg-sec-h"><h3>Members</h3></div>
         ${people.length ? h.table(['Who', 'How'], people.map((x) => h.tr('', [`${h.avatar({ name: x.name, kind: x.kind })}<b class="pg-name">${esc(x.name)}</b>${x.kind === 'agent' ? ' <small class="pg-dim">agent</small>' : ''}`, `<small class="pg-dim">${esc(x.via)}</small>`]))) : h.box('user', 'Nobody works in it yet', 'Its head and the members of its teams appear here.', '', 'sm')}</section>
       <section class="pg-sec" data-sec="objectives"><div class="pg-sec-h"><h3>Objectives</h3>${live ? h.btn('New objective', 'data-xdv="obj-new"', true, 'plus') : ''}</div>
-        ${objectives ? `<ol class="xdv-objs">${objectives}</ol>` : h.box('target', 'No objectives yet', 'An objective is what this division commits to for a window. Goals in its projects roll up to it.', '', 'sm')}</section>
+        ${objectives ? `<ol class="xdv-objs">${objectives}</ol>` : h.box('flag', 'No objectives yet', 'An objective is what this division commits to for a window. Goals in its projects roll up to it.', '', 'sm')}</section>
       <section class="pg-sec" data-sec="runs"><div class="pg-sec-h"><h3>Active runs</h3></div>
         ${runs.length ? h.table(['Agent', 'Working on', 'Authority', 'Ceiling', ''], runs) : '<p class="pg-dim">No runs are active in this division.</p>'}${closedNote(m.runs.hidden, m.runs.hidden === 1 ? 'run' : 'runs')}</section>
       <section class="pg-sec" data-sec="projects"><div class="pg-sec-h"><h3>Projects</h3>${d.canManage && live ? h.btn('Move a project here', 'data-xdv="add-project"', true, 'plus') : ''}</div>

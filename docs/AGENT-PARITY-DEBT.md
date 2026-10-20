@@ -4,11 +4,11 @@
 
 Every action a person can take on the platform, and whether an agent can take it (XENO AGENT CAPABILITY - SPEC.md §19.4). **Planned** entries are the owning division’s backlog: each is a feature agents are missing.
 
-**Total:** 1458 actions · 76 agent capability · 1200 planned (debt) · 182 excluded · **coverage 6%** of the 1276 owed.
+**Total:** 1470 actions · 83 agent capability · 1200 planned (debt) · 184 excluded · **coverage 6.5%** of the 1286 owed.
 
 | division | actions | capability | planned (debt) | excluded | coverage |
 |---|---:|---:|---:|---:|---:|
-| workforce | 270 | 31 | 238 | 1 | 11.5% |
+| workforce | 277 | 36 | 238 | 3 | 13.1% |
 | studio | 121 | 4 | 117 | 0 | 3.3% |
 | agents | 122 | 0 | 112 | 10 | 0% |
 | workspace-ui | 165 | 3 | 100 | 62 | 2.9% |
@@ -21,9 +21,9 @@ Every action a person can take on the platform, and whether an agent can take it
 | forum | 51 | 8 | 41 | 2 | 16.3% |
 | platform | 65 | 0 | 34 | 31 | 0% |
 | browser-shell | 28 | 0 | 28 | 0 | 0% |
-| canvas | 20 | 4 | 16 | 0 | 20% |
+| canvas | 22 | 6 | 16 | 0 | 27.3% |
 | inference | 18 | 0 | 12 | 6 | 0% |
-| places | 3 | 3 | 0 | 0 | 100% |
+| places | 6 | 3 | 0 | 0 | 50% |
 
 ## account — 60 planned
 

@@ -62,6 +62,7 @@ const DEFS = [
   // ── division.*
   ['division_list', 'List divisions', RO, 'division.division.list: the divisions of a workspace (default: your personal one).', free('{ workspaceId?, archived? }'), (db, a, v) => divisions.list(db, meOf(a), { workspaceId: v.workspaceId || null, archived: v.archived === true })],
   ['division_get', 'Read a division', RO, 'division.division.get: one division — head, parent, children, agents, projects.', free('{ id }', ['id']), (db, a, v) => divisions.get(db, meOf(a), v.id)],
+  ['division_home', 'Read a division’s home', RO, 'division.division.home: everything working in a division — members, agents, objectives, active runs, spend, funding, projects, handoffs, decisions; what you may not see arrives closed.', free('{ id }', ['id']), async (db, a, v) => (await import('./divisionHome.js')).readDivisionHome(db, meOf(a), v.id)],
   ['division_create', 'Create a division', RW, 'division.division.create (workspace admin): { workspaceId?, name, parentId? }.', free('{ workspaceId?, name, parentId? }', ['name']), (db, a, v) => divisions.create(db, meOf(a), v)],
   ['division_update', 'Change a division', RW, 'division.division.update (workspace admin): { id, name?, parentId?, headId? }.', free('{ id, name?, parentId?, headId? }', ['id']), (db, a, v) => { const { id, ...rest } = v; return divisions.update(db, meOf(a), id, rest); }],
   ['division_archive', 'Archive a division', DX, 'division.division.archive: one-way; refused while it has active children.', free('{ id }', ['id']), (db, a, v) => divisions.archive(db, meOf(a), v.id)],
@@ -95,7 +96,7 @@ export const TOOL_ROUTE = Object.freeze({
   admission_create: { path: '/run-admissions' }, admission_get: { path: '/run-admissions/read' }, admission_list: { path: '/run-admissions/list' },
   admission_operation_get: { path: '/run-admissions/operations/read' }, pin_get: { path: '/run-admissions/pin' },
   admission_revoke: { path: '/run-admissions/revoke' }, authority_get: { path: '/run-admissions/authority' },
-  division_list: { wrap: '...' }, division_get: { wrap: 'division' }, division_create: { wrap: 'division' }, division_update: { wrap: 'division' }, division_archive: { wrap: 'division' },
+  division_list: { wrap: '...' }, division_get: { wrap: 'division' }, division_home: { wrap: 'home' }, division_create: { wrap: 'division' }, division_update: { wrap: 'division' }, division_archive: { wrap: 'division' },
   objective_create: { wrap: 'result' }, objective_get: { wrap: 'result' }, objective_update: { wrap: 'result' }, objective_complete: { wrap: 'result' }, objective_link_goal: { wrap: 'result' },
   funding_price: { wrap: 'result' }, funding_budget_propose: { wrap: 'result' }, funding_budget_get: { wrap: 'result' }, funding_offer_get: { wrap: 'result' },
   funding_contribute: { wrap: 'result' }, funding_contribution_get: { wrap: 'result' }, funding_contribution_return: { wrap: 'result' },

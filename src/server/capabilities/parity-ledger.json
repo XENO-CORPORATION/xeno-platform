@@ -7873,6 +7873,62 @@
    "capability": "modes.mode.revert",
    "class": "reversible",
    "scope": "workspace:admin"
+  },
+  "route:canvasRoutes.js:POST /open-as": {
+   "status": "capability",
+   "capability": "canvas.canvas.open_as",
+   "class": "reversible",
+   "scope": "tasks:write"
+  },
+  "route:workforceDivisionRoutes.js:GET /:id/home": {
+   "status": "capability",
+   "capability": "division.division.home",
+   "class": "safe",
+   "scope": "workspace:read"
+  },
+  "ui:platform-canvas.js:data-xcv-open": {
+   "status": "capability",
+   "capability": "canvas.canvas.open_as",
+   "class": "reversible",
+   "scope": "tasks:write"
+  },
+  "ui:platform-divisions.js:data-xdv=obj-new": {
+   "status": "capability",
+   "capability": "objective.objective.create",
+   "class": "reversible",
+   "scope": "agents:write"
+  },
+  "ui:platform-divisions.js:data-xdv=obj-edit": {
+   "status": "capability",
+   "capability": "objective.objective.update",
+   "class": "reversible",
+   "scope": "agents:write"
+  },
+  "ui:platform-divisions.js:data-xdv=obj-done": {
+   "status": "capability",
+   "capability": "objective.objective.complete",
+   "class": "irreversible",
+   "scope": "agents:write"
+  },
+  "ui:platform-divisions.js:data-xdv=run-stop": {
+   "status": "capability",
+   "capability": "run.admission.revoke",
+   "class": "irreversible",
+   "scope": "agents:write"
+  },
+  "ui:platform-divisions.js:data-xdv=run": {
+   "status": "excluded",
+   "category": "view-state",
+   "class": "safe",
+   "scope": "none",
+   "because": "changes only what the screen shows"
+  },
+  "ui:platform-divisions.js:data-xdv=project": {
+   "status": "excluded",
+   "category": "view-state",
+   "class": "safe",
+   "scope": "none",
+   "because": "changes only what the screen shows"
   }
  }
 }
