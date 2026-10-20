@@ -21,6 +21,7 @@ import * as agentMedia from './agentMedia.js';
 import * as canvasMcp from './canvasMcp.js';
 import * as placesMcp from './placesMcp.js';
 import * as modesMcp from './modesMcp.js';
+import * as peopleMcp from './peopleMcp.js';
 import * as canvases from './canvases.js';
 import * as agentsMcp from './agentsMcp.js';
 import * as storageMcp from './storageMcp.js';
@@ -76,6 +77,14 @@ export const SERVICES = Object.freeze([
     tools: () => modesMcp.TOOLS,
     call: (db, actor, name, args) => modesMcp.callTool(db, actor, name, args),
     isToolError: (e) => e instanceof modesMcp.ModesMcpError,
+  },
+  // People (peopleMcp.js): the directory, profiles, org chart and my work for agents; HR changes are a person's (human_only).
+  {
+    category: 'people', title: 'People', version: '1.0.0', timeoutMs: 20_000,
+    description: 'People: who works in a workspace, their title, division, team, manager and availability, and the org chart.',
+    tools: () => peopleMcp.TOOLS,
+    call: (db, actor, name, args) => peopleMcp.callTool(db, actor, name, args),
+    isToolError: (e) => e instanceof peopleMcp.PeopleMcpError,
   },
   // XENO Storage (storageMcp.js, WORKSPACE AGENT SURFACE P1): an agent works in its owner's Storage, the person in their own.
   {

@@ -4,11 +4,11 @@
 
 Every action a person can take on the platform, and whether an agent can take it (XENO AGENT CAPABILITY - SPEC.md §19.4). **Planned** entries are the owning division’s backlog: each is a feature agents are missing.
 
-**Total:** 1504 actions · 97 agent capability · 1217 planned (debt) · 190 excluded · **coverage 7.4%** of the 1314 owed.
+**Total:** 1520 actions · 105 agent capability · 1223 planned (debt) · 192 excluded · **coverage 7.9%** of the 1328 owed.
 
 | division | actions | capability | planned (debt) | excluded | coverage |
 |---|---:|---:|---:|---:|---:|
-| workforce | 277 | 36 | 238 | 3 | 13.1% |
+| workforce | 293 | 44 | 244 | 5 | 15.3% |
 | studio | 121 | 4 | 117 | 0 | 3.3% |
 | agents | 122 | 0 | 112 | 10 | 0% |
 | workspace-ui | 165 | 3 | 100 | 62 | 2.9% |
@@ -860,7 +860,7 @@ Every action a person can take on the platform, and whether an agent can take it
 - `ui:platform-tasks.js:data-tk=view`
 - `ui:platform-tasks.js:data-tk=watch`
 
-## workforce — 238 planned
+## workforce — 244 planned
 
 - `route:apiKeyWorkforceCapabilityRoutes.js:POST /operations`
 - `route:apiKeyWorkforceCapabilityRoutes.js:POST /read`
@@ -928,6 +928,10 @@ Every action a person can take on the platform, and whether an agent can take it
 - `route:workforceOwnershipTransferRoutes.js:POST /:id/authorize`
 - `route:workforceOwnershipTransferRoutes.js:POST /:id/decline`
 - `route:workforceOwnershipTransferRoutes.js:POST /:id/review`
+- `route:workforcePeopleRoutes.js:GET /:principalId/offboard-plan`
+- `route:workforcePeopleRoutes.js:POST /:principalId/offboard`
+- `route:workforcePeopleRoutes.js:POST /:principalId/onboard`
+- `route:workforcePeopleRoutes.js:POST /time-off/:id/cancel`
 - `route:workforcePublicContributionRoutes.js:POST /attributions`
 - `route:workforcePublicContributionRoutes.js:POST /attributions/mine`
 - `route:workforcePublicContributionRoutes.js:POST /claims`
@@ -1057,6 +1061,8 @@ Every action a person can take on the platform, and whether an agent can take it
 - `ui:funding.js:data-fd=grant`
 - `ui:funding.js:data-fd=return`
 - `ui:funding.js:data-fd=start`
+- `ui:platform-directory.js:data-xdir=offboard`
+- `ui:platform-directory.js:data-xdir=onboard`
 - `ui:platform-divisions.js:data-xdv=add-agent`
 - `ui:platform-divisions.js:data-xdv=add-project`
 - `ui:platform-divisions.js:data-xdv=agent`

@@ -124,7 +124,9 @@
   "publishRoutes.js": "publish",
   "platform-publish.js": "publish",
   "supportRoutes.js": "support",
-  "platform-support.js": "support"
+  "platform-support.js": "support",
+  "workforcePeopleRoutes.js": "workforce",
+  "platform-directory.js": "workforce"
  },
  "actions": {
   "route:accountGiftRoutes.js:POST /": {
@@ -8148,6 +8150,98 @@
    "capability": "canvas.canvas.open_as",
    "class": "reversible",
    "scope": "tasks:write"
+  },
+  "route:workforcePeopleRoutes.js:GET /": {
+   "status": "capability",
+   "capability": "people.person.list",
+   "class": "safe",
+   "scope": "workspace:read"
+  },
+  "route:workforcePeopleRoutes.js:GET /org-chart": {
+   "status": "capability",
+   "capability": "people.org.chart",
+   "class": "safe",
+   "scope": "workspace:read"
+  },
+  "route:workforcePeopleRoutes.js:GET /me/work": {
+   "status": "capability",
+   "capability": "people.work.mine",
+   "class": "safe",
+   "scope": "workspace:read"
+  },
+  "route:workforcePeopleRoutes.js:GET /:principalId": {
+   "status": "capability",
+   "capability": "people.person.get",
+   "class": "safe",
+   "scope": "workspace:read"
+  },
+  "route:workforcePeopleRoutes.js:PATCH /:principalId": {
+   "status": "capability",
+   "capability": "people.person.update",
+   "class": "reversible",
+   "scope": "workspace:admin"
+  },
+  "route:workforcePeopleRoutes.js:POST /time-off": {
+   "status": "capability",
+   "capability": "people.time_off.create",
+   "class": "reversible",
+   "scope": "workspace:admin"
+  },
+  "route:workforcePeopleRoutes.js:POST /time-off/:id/cancel": {
+   "status": "planned",
+   "class": "reversible",
+   "scope": "workspace:admin"
+  },
+  "route:workforcePeopleRoutes.js:POST /:principalId/onboard": {
+   "status": "planned",
+   "class": "reversible",
+   "scope": "workspace:admin"
+  },
+  "route:workforcePeopleRoutes.js:GET /:principalId/offboard-plan": {
+   "status": "planned",
+   "class": "safe",
+   "scope": "workspace:admin"
+  },
+  "route:workforcePeopleRoutes.js:POST /:principalId/offboard": {
+   "status": "planned",
+   "class": "irreversible",
+   "scope": "workspace:admin"
+  },
+  "ui:platform-directory.js:data-xdir=tab": {
+   "status": "excluded",
+   "category": "view-state",
+   "class": "safe",
+   "scope": "none",
+   "because": "switches between the directory, org chart and my-work views"
+  },
+  "ui:platform-directory.js:data-xdir=open": {
+   "status": "excluded",
+   "category": "view-state",
+   "class": "safe",
+   "scope": "none",
+   "because": "opens a person’s page"
+  },
+  "ui:platform-directory.js:data-xdir=edit": {
+   "status": "capability",
+   "capability": "people.person.update",
+   "class": "reversible",
+   "scope": "workspace:admin"
+  },
+  "ui:platform-directory.js:data-xdir=time-off": {
+   "status": "capability",
+   "capability": "people.time_off.create",
+   "class": "reversible",
+   "scope": "workspace:admin"
+  },
+  "ui:platform-directory.js:data-xdir=onboard": {
+   "status": "planned",
+   "class": "reversible",
+   "scope": "workspace:admin"
+  },
+  "ui:platform-directory.js:data-xdir=offboard": {
+   "status": "planned",
+   "class": "irreversible",
+   "scope": "workspace:admin"
   }
  }
 }
