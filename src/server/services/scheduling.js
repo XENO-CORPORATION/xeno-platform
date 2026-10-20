@@ -9,8 +9,11 @@
  * holds that too). Agents may read free slots and bookings.
  *
  * Availability: a weekly pattern in the person's own time zone, minus time off, minus their confirmed bookings (with
- * the page's buffer either side). The employee-profile work (another lane) is not on main yet; when it lands its
- * hours and time off should feed `availabilityFor` and this table becomes the override.
+ * the page's buffer either side). The pattern defaults to the People profile (workforce_employee_profiles: timezone +
+ * working_hours); scheduling_availability is the person's booking-hours override. Time off is People's
+ * (workforce_time_off) — read here, written through workforcePeople.addTimeOff/cancelTimeOff, never a second table.
+ * Bookings flow back the other way: workforcePeople.availability* reports a person in a booked meeting as
+ * unavailable ('in_meeting'), which is what Places and assignment pickers read.
  *
  * Guests: booking needs no account. The guest gets a manage link (a random token, only its hash stored) to
  * reschedule or cancel. Every booking makes a calendar_events row for the host; cancelling cancels it.
@@ -22,6 +25,7 @@ import { check } from '../utils/authzReBAC.js';
 import { ensurePersonalWorkspace } from './personalWorkspace.js';
 import { sendEmail } from './emailService.js';
 import { siteOrigin } from '../config/hosts.js';
+import * as people from './workforcePeople.js';
 
 export class SchedulingError extends Error {
   constructor(message, code, status = 400) { super(message); this.name = 'SchedulingError'; this.code = code; this.status = status; }
@@ -120,15 +124,23 @@ function cleanWeekly(weekly) {
 }
 async function availabilityRow(db, ws, userId) {
   const r = (await db.query('SELECT timezone, weekly, updated_at FROM scheduling_availability WHERE workspace_id = $1 AND user_id = $2', [ws, userId])).rows[0];
-  return r ? { timezone: r.timezone, weekly: r.weekly, saved: true } : { timezone: 'UTC', weekly: DEFAULT_WEEKLY, saved: false };
+  if (r) return { timezone: r.timezone, weekly: r.weekly, saved: true, source: 'scheduling' };
+  // the People profile's stated hours ({days, start, end} in its timezone) are the default
+  const p = (await db.query('SELECT timezone, working_hours FROM workforce_employee_profiles WHERE workspace_id = $1 AND principal_id = $2', [ws, userId]).catch(() => ({ rows: [] }))).rows[0];
+  const h = p && p.working_hours;
+  if (h && Array.isArray(h.days) && HHMM.test(h.start || '') && HHMM.test(h.end || '') && h.start < h.end) {
+    return { timezone: validZone(p.timezone) ? p.timezone : 'UTC', weekly: Object.fromEntries(h.days.filter((d) => d >= 1 && d <= 7).map((d) => [String(d), [[h.start, h.end]]])), saved: false, source: 'profile' };
+  }
+  return { timezone: (p && validZone(p.timezone)) ? p.timezone : 'UTC', weekly: DEFAULT_WEEKLY, saved: false, source: 'default' };
 }
+const translate = (e) => { if (e instanceof people.PeopleError) throw new SchedulingError(e.message, e.code, e.status); throw e; };
 export async function getAvailability(db, actor, { workspace, user } = {}) {
   const s = await scopeFor(db, actor, { workspace });
   const who = user ? String(user) : s.userId;
   if (!UUID.test(who) || !(await isMember(db, s.ws, who))) throw new SchedulingError('That person is not in this workspace', 'not_a_member', 404);
   const a = await availabilityRow(db, s.ws, who);
-  const timeOff = (await db.query(`SELECT id, starts_at, ends_at, reason FROM scheduling_time_off WHERE workspace_id = $1 AND user_id = $2 AND ends_at > NOW() ORDER BY starts_at`, [s.ws, who])).rows
-    .map((r) => ({ id: r.id, startsAt: r.starts_at.toISOString(), endsAt: r.ends_at.toISOString(), reason: who === s.userId ? r.reason : '' }));
+  const timeOff = (await db.query(`SELECT id, starts_at, ends_at, kind, note FROM workforce_time_off WHERE workspace_id = $1 AND principal_id = $2 AND cancelled_at IS NULL AND ends_at > NOW() ORDER BY starts_at`, [s.ws, who])).rows
+    .map((r) => ({ id: r.id, startsAt: r.starts_at.toISOString(), endsAt: r.ends_at.toISOString(), kind: r.kind, note: who === s.userId ? r.note : '' }));
   return { workspaceId: s.ws, userId: who, ...a, timeOff };
 }
 export async function setAvailability(db, actor, { workspace, timezone, weekly } = {}) {
@@ -140,21 +152,14 @@ export async function setAvailability(db, actor, { workspace, timezone, weekly }
     ON CONFLICT (workspace_id, user_id) DO UPDATE SET timezone = EXCLUDED.timezone, weekly = EXCLUDED.weekly, updated_at = NOW()`, [s.ws, s.userId, tz, JSON.stringify(w)]);
   return getAvailability(db, actor, { workspace: s.ws });
 }
-export async function addTimeOff(db, actor, { workspace, startsAt, endsAt, reason } = {}) {
+/** Time off is People's: these call workforcePeople (the one writer of workforce_time_off). */
+export async function addTimeOff(db, actor, { workspace, startsAt, endsAt, kind = 'vacation', note } = {}) {
   const s = await scopeFor(db, actor, { workspace, write: true });
-  const a = when(startsAt, 'startsAt'), b = when(endsAt, 'endsAt');
-  if (b <= a) throw new SchedulingError('Time off must end after it starts', 'invalid_range');
-  if (b - a > 366 * 86400_000) throw new SchedulingError('Time off is at most a year at a time', 'invalid_range');
-  const r = (await db.query(`INSERT INTO scheduling_time_off (workspace_id, user_id, starts_at, ends_at, reason) VALUES ($1,$2,$3,$4,$5) RETURNING id`,
-    [s.ws, s.userId, a, b, text(reason, 'reason', 200, false)])).rows[0];
-  return { id: r.id, startsAt: a.toISOString(), endsAt: b.toISOString() };
+  return people.addTimeOff(db, { id: s.userId }, { workspaceId: s.ws, startsAt, endsAt, kind, note: note || '' }).catch(translate);
 }
 export async function removeTimeOff(db, actor, { workspace, id } = {}) {
   const s = await scopeFor(db, actor, { workspace, write: true });
-  if (!UUID.test(String(id))) throw new SchedulingError('Time off not found', 'not_found', 404);
-  const r = await db.query('DELETE FROM scheduling_time_off WHERE id = $1 AND workspace_id = $2 AND user_id = $3', [id, s.ws, s.userId]);
-  if (!r.rowCount) throw new SchedulingError('Time off not found', 'not_found', 404);
-  return { deleted: true, id };
+  return people.cancelTimeOff(db, { id: s.userId }, { workspaceId: s.ws, timeOffId: id }).catch(translate);
 }
 
 /** Confirmed booked intervals of a person between two instants (any workspace: a person cannot be in two places). */
@@ -176,7 +181,7 @@ async function slotsForPage(db, page, { from, to, ignoreBooking = null } = {}) {
   if (hi <= lo) return [];
   const a = await availabilityRow(db, page.workspace_id, page.host_user_id);
   const tz = validZone(a.timezone) ? a.timezone : 'UTC';
-  const off = (await db.query('SELECT starts_at, ends_at FROM scheduling_time_off WHERE user_id = $1 AND starts_at < $3 AND ends_at > $2', [page.host_user_id, new Date(lo), new Date(hi)])).rows
+  const off = (await db.query('SELECT starts_at, ends_at FROM workforce_time_off WHERE principal_id = $1 AND cancelled_at IS NULL AND starts_at < $3 AND ends_at > $2', [page.host_user_id, new Date(lo), new Date(hi)])).rows
     .map((r) => [r.starts_at.getTime(), r.ends_at.getTime()]);
   const buf = page.buffer_minutes * MIN;
   const booked = (await bookedBetween(db, page.host_user_id, new Date(lo - 8 * 3600_000), new Date(hi + 8 * 3600_000)))

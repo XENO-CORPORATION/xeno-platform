@@ -59,13 +59,13 @@
     const a = S.avail || { timezone: 'UTC', weekly: {}, timeOff: [] };
     const rows = DAYS.map(([k, n]) => { const iv = (a.weekly[k] || [])[0]; return `<div class="sc-day"><label><input type="checkbox" data-sc-on="${k}" ${iv ? 'checked' : ''}> ${n}</label>
       <input class="in" type="time" data-sc-from="${k}" value="${esc(iv ? iv[0] : '09:00')}" aria-label="${n} from"> – <input class="in" type="time" data-sc-to="${k}" value="${esc(iv ? (iv[1] === '24:00' ? '23:59' : iv[1]) : '17:00')}" aria-label="${n} to"></div>`; }).join('');
-    const off = (a.timeOff || []).map((t) => `<div class="sc-row" data-sc-off="${esc(t.id)}"><div>${esc(fmt(t.startsAt))} → ${esc(fmt(t.endsAt))}<small>${esc(t.reason)}</small></div>${btn(`data-sc-offdel="${esc(t.id)}"`, 'Remove')}</div>`).join('');
+    const off = (a.timeOff || []).map((t) => `<div class="sc-row" data-sc-off="${esc(t.id)}"><div>${esc(fmt(t.startsAt))} → ${esc(fmt(t.endsAt))}<small>${esc(t.kind)}${t.note ? " · " + esc(t.note) : ""}</small></div>${btn(`data-sc-offdel="${esc(t.id)}"`, 'Remove')}</div>`).join('');
     const tz = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
     return `<div class="sc-card"><b>Weekly hours</b><label>Time zone <input class="in" data-sc-tz value="${esc(a.saved ? a.timezone : tz)}" aria-label="Time zone"></label>${rows}
       <div>${btn('data-sc-savehours', 'Save hours', 'btn')}</div></div>
       <div class="sc-card"><b>Time off</b>${off || '<small>None planned.</small>'}
       <div class="sc-day"><input class="in" type="datetime-local" data-sc-offfrom aria-label="Time off from"> → <input class="in" type="datetime-local" data-sc-offto aria-label="Time off to">
-      <input class="in" data-sc-offwhy placeholder="Reason (only you see it)" aria-label="Reason" maxlength="200"> ${btn('data-sc-addoff', 'Add')}</div></div>`;
+      <input class="in" data-sc-offwhy placeholder="Note (only you see it)" aria-label="Note" maxlength="200"> ${btn('data-sc-addoff', 'Add')}</div></div>`;
   }
   function bookingsTab() {
     const up = S.bookings.filter((x) => x.status === 'confirmed');
@@ -121,7 +121,7 @@
       S.avail = r.d; toast('Hours saved'); return paint();
     }
     if ('scAddoff' in d) {
-      const r = await api('POST', '/api/scheduling/time-off', withWs({ startsAt: localIso(val('[data-sc-offfrom]')), endsAt: localIso(val('[data-sc-offto]')), reason: val('[data-sc-offwhy]') })).catch(() => null);
+      const r = await api('POST', '/api/scheduling/time-off', withWs({ startsAt: localIso(val('[data-sc-offfrom]')), endsAt: localIso(val('[data-sc-offto]')), note: val('[data-sc-offwhy]') })).catch(() => null);
       if (!r || !r.ok) return toast(said(r, 'That time off did not save.'));
       toast('Time off added'); return load();
     }

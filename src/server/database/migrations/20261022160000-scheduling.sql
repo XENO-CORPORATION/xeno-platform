@@ -1,6 +1,10 @@
+-- UP
 -- Corpo › Scheduling (services/scheduling.js): availability, booking pages, bookings, calendar events, ICS feeds.
 -- Owned by the WORKSPACE (XENO-WORKFORCE-01 §8.11). A booking is held twice: the service takes a per-host lock and
 -- checks overlap, and the trigger below refuses an overlapping confirmed booking whatever path wrote it.
+-- Time off is NOT here: it is workforce_time_off (People, 20261022150000), read as-is. Working hours default to
+-- workforce_employee_profiles.working_hours; scheduling_availability is the person's booking-hours override.
+-- ADDITIVE ONLY: new tables, functions and triggers. DOWN drops exactly them.
 
 CREATE TABLE IF NOT EXISTS scheduling_availability (
   workspace_id UUID NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
@@ -11,18 +15,6 @@ CREATE TABLE IF NOT EXISTS scheduling_availability (
   updated_at   TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   PRIMARY KEY (workspace_id, user_id)
 );
-
-CREATE TABLE IF NOT EXISTS scheduling_time_off (
-  id           UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  workspace_id UUID NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
-  user_id      UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-  starts_at    TIMESTAMPTZ NOT NULL,
-  ends_at      TIMESTAMPTZ NOT NULL,
-  reason       TEXT NOT NULL DEFAULT '',
-  created_at   TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-  CHECK (ends_at > starts_at)
-);
-CREATE INDEX IF NOT EXISTS scheduling_time_off_user ON scheduling_time_off (user_id, starts_at);
 
 CREATE TABLE IF NOT EXISTS scheduling_pages (
   id                 UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -118,3 +110,14 @@ CREATE TABLE IF NOT EXISTS calendar_feed_tokens (
   created_at   TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   PRIMARY KEY (workspace_id, user_id)
 );
+
+-- DOWN
+DROP TABLE IF EXISTS calendar_feed_tokens;
+DROP TABLE IF EXISTS calendar_events;
+DROP TRIGGER IF EXISTS scheduling_booking_no_overlap ON scheduling_bookings;
+DROP FUNCTION IF EXISTS scheduling_booking_no_overlap();
+DROP TABLE IF EXISTS scheduling_bookings;
+DROP TRIGGER IF EXISTS scheduling_page_human_creator ON scheduling_pages;
+DROP FUNCTION IF EXISTS scheduling_page_human_creator();
+DROP TABLE IF EXISTS scheduling_pages;
+DROP TABLE IF EXISTS scheduling_availability;

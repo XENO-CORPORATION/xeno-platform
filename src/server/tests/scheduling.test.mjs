@@ -21,7 +21,7 @@ import { runAllMigrations } from '../services/migrationRunner.js';
 import { writeTuples } from '../utils/authzReBAC.js';
 import * as S from '../services/scheduling.js';
 import * as Mcp from '../services/schedulingMcp.js';
-import * as live from '../services/placesLive.js';
+import * as people from '../services/workforcePeople.js';
 
 if (!process.env.DATABASE_URL) throw new Error('DATABASE_URL is required');
 const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL });
@@ -38,6 +38,11 @@ async function main() {
   const ws = (await pool.query(`INSERT INTO workspaces (owner_user_id, workspace_type, name, slug) VALUES ($1,'team','Sched',$2) RETURNING id`, [owner, `${tag}-${seq += 1}`])).rows[0].id;
   await writeTuples(pool, { writes: [['owner', owner], ['editor', host], ['viewer', viewer]].map(([relation, u]) => ({ object: `workspace:${ws}`, subject: `user:${u}`, relation })) });
   const W = { workspace: ws };
+
+  // the People profile's stated hours are the default
+  await pool.query(`INSERT INTO workforce_employee_profiles (workspace_id, principal_id, timezone, working_hours) VALUES ($1,$2,'Europe/Berlin','{"days":[1,2,3],"start":"10:00","end":"16:00"}')`, [ws, host]);
+  const pd = await S.getAvailability(pool, H(host), W);
+  ok(pd.source === 'profile' && pd.timezone === 'Europe/Berlin' && pd.weekly['2'][0][0] === '10:00' && !pd.weekly['5'], 'with no booking hours saved, the People profile’s hours are used');
 
   // availability: every day 00:00–24:00 UTC so slots exist whatever day the test runs
   const allDay = Object.fromEntries([1, 2, 3, 4, 5, 6, 7].map((d) => [String(d), [['00:00', '24:00']]]));
@@ -68,10 +73,11 @@ async function main() {
   // slots, minus time off
   const slots0 = (await S.listSlots(pool, H(viewer), { ...W, id: page.id })).slots;
   ok(slots0.length > 100 && new Date(slots0[0]).getTime() >= Date.now() + 60 * 60_000, 'free slots respect the minimum notice');
-  const off = await S.addTimeOff(pool, H(host), { ...W, startsAt: slots0[0], endsAt: new Date(new Date(slots0[0]).getTime() + 3 * 3600_000).toISOString(), reason: 'Dentist' });
+  const off = await S.addTimeOff(pool, H(host), { ...W, startsAt: slots0[0], endsAt: new Date(new Date(slots0[0]).getTime() + 3 * 3600_000).toISOString(), note: 'Dentist' });
   const slotsOff = (await S.listSlots(pool, H(host), { ...W, id: page.id })).slots;
   ok(!slotsOff.includes(slots0[0]) && !slotsOff.includes(slots0[2]), 'time off removes slots');
-  ok((await S.getAvailability(pool, H(viewer), { ...W, user: host })).timeOff[0].reason === '', 'another member sees time off but not its reason');
+  ok((await S.getAvailability(pool, H(viewer), { ...W, user: host })).timeOff[0].note === '' && (await S.getAvailability(pool, H(host), W)).timeOff[0].note === 'Dentist', 'time off is People’s; another member sees it but not its note');
+  ok((await pool.query('SELECT count(*)::int AS n FROM workforce_time_off WHERE id = $1', [off.id])).rows[0].n === 1, 'it is stored in workforce_time_off, not a second table');
   await S.removeTimeOff(pool, H(host), { ...W, id: off.id });
 
   // book (guest, no account)
@@ -113,7 +119,7 @@ async function main() {
 
   // ICS
   const ics = await S.exportIcs(pool, H(host), W);
-  ok(ics.startsWith('BEGIN:VCALENDAR\r\n') && ics.includes(`UID:${ev2.id}@xenosystem.ai`) && ics.includes('STATUS:CONFIRMED') && ics.includes('STATUS:CANCELLED'), 'ICS export carries events, a cancelled one as CANCELLED');
+  ok(ics.startsWith('BEGIN:VCALENDAR\r\n') && ics.includes(`UID:${ev2.id}@xenosystem.ai`) && ics.includes('STATUS:CONFIRMED') && !ics.includes(`UID:${ev.id}@`), 'ICS export carries the event (the rescheduled booking’s old event is gone)');
   ok(S.toIcs([{ id: 'x', title: 'a,b;c\nd', description: '', starts_at: new Date(0), ends_at: new Date(1000), updated_at: new Date(0), sequence: 0, cancelled: false }]).includes('SUMMARY:a\\,b\\;c\\nd'), 'ICS text is escaped');
   const feed1 = await S.rotateFeed(pool, H(host), W), tok1 = feed1.url.match(/feed\/(.+)\.ics$/)[1];
   ok((await S.feedIcs(pool, tok1)).includes('BEGIN:VEVENT'), 'the private feed serves the calendar');
@@ -127,6 +133,7 @@ async function main() {
   ok(await code(S.hostCancel(pool, { id: bot, kind: 'agent' }, { ...W, id: moved.booking.id })) === 'person_required', 'an agent cannot cancel a booking');
   ok((await S.hostCancel(pool, H(host), { ...W, id: moved.booking.id })).cancelled, 'the host cancels');
   ok((await S.listEvents(pool, H(host), W)).events.find((e) => e.bookingId === moved.booking.id).cancelled, 'and the calendar event is cancelled');
+  ok((await S.exportIcs(pool, H(host), W)).includes('STATUS:CANCELLED'), 'and the feed carries it as CANCELLED so calendars remove it');
 
   // rate limit per guest e-mail
   const free = (await S.listSlots(pool, H(host), { ...W, id: page.id })).slots;
@@ -139,18 +146,12 @@ async function main() {
   await S.restorePage(pool, H(host), { ...W, id: page.id });
   ok((await S.publicView(pool, slug)).page.title === 'Intro call', 'restore reopens it');
 
-  // Places: a person in a booked meeting now shows in-meeting
-  const div = (await pool.query(`INSERT INTO workforce_divisions (workspace_id, key, name, created_by_user_id) VALUES ($1,'ops','Ops',$2) RETURNING id`, [ws, owner])).rows[0].id;
-  const team = (await pool.query(`INSERT INTO workforce_resources (kind, owner_workspace_id, created_by_user_id, name) VALUES ('team',$1,$2,'Ops') RETURNING id`, [ws, owner])).rows[0].id;
-  await pool.query(`INSERT INTO workforce_division_ownership (resource_id, resource_kind, division_id, created_by_user_id) VALUES ($1,'team',$2,$3)`, [team, div, owner]);
-  await pool.query(`INSERT INTO workforce_team_memberships (team_id, member_principal_id, role, created_by_user_id) VALUES ($1,$2,'worker',$3)`, [team, host, owner]);
+  // Places / assignment: People's availability reports a person in a booked meeting as in_meeting
   await pool.query(`INSERT INTO scheduling_bookings (page_id, workspace_id, host_user_id, starts_at, ends_at, guest_name, guest_email, manage_token_hash) VALUES ($1,$2,$3,NOW() - INTERVAL '5 minutes', NOW() + INTERVAL '25 minutes','Now','now@x.yz',$4)`, [page.id, ws, host, `now${Date.now()}`]);
   ok((await S.busyAt(pool, host)).busy, 'busyAt sees the meeting');
-  const placeId = (await pool.query(`SELECT id FROM places WHERE workspace_id=$1 AND lifecycle='active'`, [ws])).rows[0]?.id;
-  if (placeId) {
-    const f = await live.frame(pool, { id: owner, name: 'Owner', kind: 'human' }, placeId);
-    ok(f.ok && f.result.occupants[host] && f.result.occupants[host].status === 'in-meeting' && f.result.occupants[host].busyUntil, 'Places shows a booked person as in a meeting');
-  }
+  const am = await people.availabilityMap(pool, ws, [host, owner]);
+  ok(am[host].available === false && am[host].reason === 'in_meeting' && am[host].until && am[owner].reason !== 'in_meeting', 'Places and assignment pickers see the booked person as in a meeting');
+  ok((await people.availability(pool, ws, host)).reason === 'in_meeting', 'and so does the single-person check');
 
   // HTTP: public pages without an account
   const { default: routes } = await import('../routes/schedulingRoutes.js');

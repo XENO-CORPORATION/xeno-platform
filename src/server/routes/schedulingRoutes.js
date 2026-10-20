@@ -3,7 +3,7 @@
  *
  * Signed in (the workspace screen; `workspace` in query or body, absent = Personal):
  *   GET    /availability?user=        · PUT /availability {timezone, weekly}
- *   POST   /time-off {startsAt, endsAt, reason} · DELETE /time-off/:id
+ *   POST   /time-off {startsAt, endsAt, kind, note} · DELETE /time-off/:id   (People's workforce_time_off)
  *   GET    /pages · POST /pages {slug, title, …} · PATCH /pages/:id · DELETE /pages/:id · POST /pages/:id/restore
  *   GET    /pages/:id/slots?from=&to=
  *   GET    /bookings?scope=mine|workspace · POST /bookings/:id/cancel
@@ -37,7 +37,7 @@ const b = (req) => req.body || {};
 
 router.get('/availability', ...run((req, a) => S.getAvailability(req.db, a, { workspace: ws(req), user: req.query.user || null })));
 router.put('/availability', ...run((req, a) => S.setAvailability(req.db, a, { workspace: ws(req), timezone: b(req).timezone, weekly: b(req).weekly })));
-router.post('/time-off', ...run(async (req, a) => ({ timeOff: await S.addTimeOff(req.db, a, { workspace: ws(req), startsAt: b(req).startsAt, endsAt: b(req).endsAt, reason: b(req).reason }) })));
+router.post('/time-off', ...run(async (req, a) => ({ timeOff: await S.addTimeOff(req.db, a, { workspace: ws(req), startsAt: b(req).startsAt, endsAt: b(req).endsAt, kind: b(req).kind, note: b(req).note }) })));
 router.delete('/time-off/:id', ...run((req, a) => S.removeTimeOff(req.db, a, { workspace: ws(req), id: req.params.id })));
 router.get('/pages', ...run((req, a) => S.listPages(req.db, a, { workspace: ws(req) })));
 router.post('/pages', ...run((req, a) => S.createPage(req.db, a, { ...b(req), workspace: ws(req) })));
