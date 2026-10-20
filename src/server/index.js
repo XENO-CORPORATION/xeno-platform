@@ -7,6 +7,7 @@ import { TASKS_OPENAPI } from './services/tasksOpenApi.js';
 import platformAgentRoutes from './routes/platformAgentRoutes.js';
 import workforceDivisionRoutes from './routes/workforceDivisionRoutes.js';
 import workforcePeopleRoutes from './routes/workforcePeopleRoutes.js';
+import peopleLifecycleRoutes from './routes/peopleLifecycleRoutes.js';
 import orchestratorRoutes from './routes/orchestratorRoutes.js';
 import workforceEventRoutes from './routes/workforceEventRoutes.js';
 import corpusRoutes from './routes/corpusRoutes.js';
@@ -687,6 +688,7 @@ app.use('/api/v1', databaseMiddleware, workspaceApiRoutes);
 app.use('/api/agents', databaseMiddleware, authMiddleware, requireActivated, mcpPersonOnly, platformAgentRoutes);
 app.use('/api/divisions', databaseMiddleware, authMiddleware, requireActivated, mcpPersonOnly, workforceDivisionRoutes);
 // People in a company workspace (xeno-company SPEC §7.3 D-EMP): profiles, org chart, directory, time off, on/offboarding.
+app.use('/api/people', databaseMiddleware, authMiddleware, requireActivated, mcpPersonOnly, peopleLifecycleRoutes);
 app.use('/api/people', databaseMiddleware, authMiddleware, requireActivated, mcpPersonOnly, workforcePeopleRoutes);
 app.use('/api/orchestrator', databaseMiddleware, authMiddleware, requireActivated, mcpPersonOnly, orchestratorRoutes);
 app.use('/api/audit', databaseMiddleware, authMiddleware, requireActivated, mcpPersonOnly, workforceEventRoutes);

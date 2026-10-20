@@ -406,3 +406,6 @@ export async function deleteMacro(db, user, id) {
   await db.query('DELETE FROM support_macros WHERE id = $1', [String(id)]);
   return { deleted: true };
 }
+
+// the fix written back: Tasks calls this when a linked task is done (a hook, so Tasks never imports support mail)
+xenoTasks.onTaskDone(taskDone);

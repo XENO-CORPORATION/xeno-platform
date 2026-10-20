@@ -876,6 +876,9 @@ Every action a person can take on the platform, and whether an agent can take it
 
 - `route:apiKeyWorkforceCapabilityRoutes.js:POST /operations`
 - `route:apiKeyWorkforceCapabilityRoutes.js:POST /read`
+- `route:peopleLifecycleRoutes.js:GET /:principalId/offboard-plan`
+- `route:peopleLifecycleRoutes.js:POST /:principalId/offboard`
+- `route:peopleLifecycleRoutes.js:POST /:principalId/onboard`
 - `route:workforceCoordinationRoutes.js:POST /children/open`
 - `route:workforceCoordinationRoutes.js:POST /children/read`
 - `route:workforceCoordinationRoutes.js:POST /goals`
@@ -940,9 +943,6 @@ Every action a person can take on the platform, and whether an agent can take it
 - `route:workforceOwnershipTransferRoutes.js:POST /:id/authorize`
 - `route:workforceOwnershipTransferRoutes.js:POST /:id/decline`
 - `route:workforceOwnershipTransferRoutes.js:POST /:id/review`
-- `route:workforcePeopleRoutes.js:GET /:principalId/offboard-plan`
-- `route:workforcePeopleRoutes.js:POST /:principalId/offboard`
-- `route:workforcePeopleRoutes.js:POST /:principalId/onboard`
 - `route:workforcePeopleRoutes.js:POST /time-off/:id/cancel`
 - `route:workforcePublicContributionRoutes.js:POST /attributions`
 - `route:workforcePublicContributionRoutes.js:POST /attributions/mine`

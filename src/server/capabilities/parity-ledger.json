@@ -132,6 +132,7 @@
   "orchestratorRoutes.js": "workforce",
   "workforceEventRoutes.js": "workforce",
   "workforcePeopleRoutes.js": "workforce",
+  "peopleLifecycleRoutes.js": "workforce",
   "platform-directory.js": "workforce",
   "workspaceDocsRoutes.js": "docs",
   "platform-docs.js": "docs"
@@ -8493,17 +8494,17 @@
    "class": "reversible",
    "scope": "workspace:admin"
   },
-  "route:workforcePeopleRoutes.js:POST /:principalId/onboard": {
+  "route:peopleLifecycleRoutes.js:POST /:principalId/onboard": {
    "status": "planned",
    "class": "reversible",
    "scope": "workspace:admin"
   },
-  "route:workforcePeopleRoutes.js:GET /:principalId/offboard-plan": {
+  "route:peopleLifecycleRoutes.js:GET /:principalId/offboard-plan": {
    "status": "planned",
    "class": "safe",
    "scope": "workspace:admin"
   },
-  "route:workforcePeopleRoutes.js:POST /:principalId/offboard": {
+  "route:peopleLifecycleRoutes.js:POST /:principalId/offboard": {
    "status": "planned",
    "class": "irreversible",
    "scope": "workspace:admin"
