@@ -1,0 +1,90 @@
+// releases-test — the release record in the workspace, against a stand-in /api/releases that answers what the real
+// service answers for each viewer: a customer's staff reads are 404, and What's new carries only {id, title, body, date}.
+// Proves: a customer at /workspace/releases sees What's new and no console, nothing staff-only on the page; staff see
+// the console, a deploy at /workspace/releases/deploys/<id>, a feature at /workspace/releases/features/<id> that
+// survives refresh and a fresh tab; approving a draft posts the approval; the feature form saves; no page errors.
+import { createRequire } from 'node:module'; import path from 'node:path'; import { fileURLToPath } from 'node:url';
+const here = path.dirname(fileURLToPath(import.meta.url)), repo = path.resolve(here, '../../..');
+const require = createRequire(import.meta.url); const puppeteer = require('puppeteer');
+const { createServer } = await import('vite'); const { xenoWorkspace } = await import('../../../scripts/vite-workspace.mjs');
+const PORT = 5247, base = 'http://127.0.0.1:' + PORT;
+let failed = 0;
+const ok = (c, m) => { if (c) console.log('PASS', m); else { failed++; console.log('FAIL', m); } };
+let STAFF = false;
+const USER = () => ({ id: 'u1', username: STAFF ? 'mod' : 'ada', email: 'a@x.test', display_name: STAFF ? 'Mod' : 'Ada', avatar_url: null, email_verified: true, role: STAFF ? 'admin' : 'user' });
+const DEP = '11111111-1111-4111-8111-111111111111', FEAT = '22222222-2222-4222-8222-222222222222', NOTE = '33333333-3333-4333-8333-333333333333';
+const calls = [];
+const deploy = { id: DEP, repo: 'xeno-platform', service: 'backend', sha: '33909cb7', previousSha: '13cee868', mode: 'swap', status: 'ok', startedAt: '2026-10-20T15:47:00Z', finishedAt: '2026-10-20T15:49:00Z', deployedBy: 'ops@xeno.test', healthcheck: 'passed /api/ready', rollbackPoint: 'xeno-platform-backend:rollback', prs: [859], migrations: ['20261023100000-release-record.sql'], provenance: 'recorded', evidence: null, pullRequests: [{ number: 859, title: 'fix(auth): public bypass', url: 'https://github.com/XENO-CORPORATION/xeno-platform/pull/859', mergedAt: '2026-10-20T15:00:00Z' }] };
+const note = { id: NOTE, featureId: FEAT, title: 'Contact XENO privately', body: 'Ask support from Help.', state: 'draft', draftedByKind: 'agent' };
+const feature = { id: FEAT, slug: 'platform:support', title: 'Support (platform)', repo: 'xeno-platform', status: 'live', enabled: { scope: 'none', plans: [], workspaces: [] }, specRef: null, testProof: null, provenance: 'derived', evidence: 'grouped', lastChangeAt: '2026-10-20T00:00:00Z', changes: [{ kind: 'pr', id: '850', title: 'feat(support): lane', url: 'https://github.com/XENO-CORPORATION/xeno-platform/pull/850', at: '2026-10-20T00:00:00Z' }], notes: [note] };
+
+const server = await createServer({ configFile: false, root: repo, logLevel: 'error', appType: 'custom', optimizeDeps: { noDiscovery: true, entries: [] }, plugins: [xenoWorkspace(repo)], server: { host: '127.0.0.1', port: PORT, strictPort: true } });
+await server.listen();
+const br = await puppeteer.launch({ headless: true, protocolTimeout: 60000 });
+const handler = (q) => {
+  const u = new URL(q.url());
+  if (u.pathname.startsWith('/overview/')) return q.respond({ status: 200, contentType: 'text/html', body: '<!doctype html><body></body>' });
+  if (!u.pathname.startsWith('/api/')) return q.continue();
+  const method = q.method(); let b = {}; try { b = q.postData() ? JSON.parse(q.postData()) : {}; } catch { b = {}; }
+  calls.push([method, u.pathname, b]);
+  const json = (s, body) => q.respond({ status: s, contentType: 'application/json', body: JSON.stringify(body) });
+  if (u.pathname === '/api/auth/me') return json(200, { success: true, user: USER() });
+  if (u.pathname === '/api/notifications') return json(200, { success: true, unread: 0, items: [] });
+  if (u.pathname === '/api/releases/whats-new') return json(200, { success: true, notes: [{ id: NOTE, title: 'Contact XENO privately', body: 'Ask support from Help.', date: '2026-10-20T16:00:00Z' }] });
+  if (u.pathname.startsWith('/api/releases/') && !STAFF) return json(404, { success: false, error: 'Not found', code: 'not_found' });
+  if (u.pathname === '/api/releases/summary') return json(200, { success: true, summary: { deploys: 1, lastDeploy: deploy.startedAt, features: 1, changes: 1, drafts: 1, repos: [{ repo: 'xeno-platform', changes: 1 }] } });
+  if (u.pathname === '/api/releases/deploys') return json(200, { success: true, deploys: [deploy] });
+  if (u.pathname === `/api/releases/deploys/${DEP}`) return json(200, { success: true, deploy });
+  if (u.pathname === '/api/releases/features') return json(200, { success: true, features: [feature] });
+  if (u.pathname === `/api/releases/features/${FEAT}` && method === 'GET') return json(200, { success: true, feature });
+  if (u.pathname === `/api/releases/features/${FEAT}` && method === 'PATCH') { feature.enabled.scope = b.enabledScope; return json(200, { success: true, feature }); }
+  if (u.pathname === `/api/releases/notes/${NOTE}/approve`) { note.state = 'approved'; return json(200, { success: true, note }); }
+  if (u.pathname === '/api/releases/notes') return json(200, { success: true, notes: [{ ...note, feature: { slug: feature.slug, title: feature.title, status: feature.status } }] });
+  const EMPTY = { '/api/forum/threads': { success: true, threads: [], total: 0 }, '/api/forum/me': { success: true, actor: {}, capabilities: {} }, '/api/workspace/summary': { success: true, days: 7, areas: {} }, '/api/workspace/pins': { success: true, items: [] }, '/api/v2/ledger/usage': { rows: [] }, '/api/account/overview': { success: true, overview: { user: USER(), credits: { balance: 0 }, workspace_count: 1 } }, '/api/user-data/settings': { success: true, settings: {} }, '/api/workspaces': { success: true, workspaces: [] }, '/api/chat/projects': { success: true, projects: [] }, '/api/chat/conversations': { success: true, conversations: [] }, '/api/library/assets': { success: true, items: [] }, '/api/billing/overview': { success: true, overview: { credits: { balance: 0 }, subscription: null } }, '/api/tasks': { success: true, tasks: [] } }[u.pathname];
+  if (EMPTY) return json(200, EMPTY);
+  return json(404, { success: false, error: 'not found' });
+};
+const open = async () => { const p = await br.newPage(); await p.setViewport({ width: 1400, height: 900 }); p.errs = []; p.on('pageerror', (e) => p.errs.push(e.message)); await p.setRequestInterception(true); p.on('request', handler); return p; };
+const settle = (ms = 800) => new Promise((r) => setTimeout(r, ms));
+const main = (p) => p.$eval('#main', (e) => e.innerText).catch(() => '');
+const html = (p) => p.$eval('#main', (e) => e.innerHTML).catch(() => '');
+try {
+  // a customer
+  const c = await open();
+  await c.goto(base + '/workspace/releases', { waitUntil: 'domcontentloaded' }); await settle(2000);
+  ok(/Contact XENO privately/.test(await main(c)), 'a customer at /workspace/releases sees What’s new');
+  const ch = await html(c);
+  ok(!/Deploys|Features|Notes to approve|pull\/|platform:support|xeno-platform/.test(ch), 'a customer sees no console, PR, slug or repository');
+  await c.goto(base + '/workspace/releases/whats-new', { waitUntil: 'domcontentloaded' }); await settle(1800);
+  ok(/Ask support from Help/.test(await main(c)), 'What’s new has its own address');
+  ok(c.errs.length === 0, 'no page errors for the customer' + (c.errs.length ? ': ' + c.errs.join(' | ') : ''));
+  await c.close();
+
+  // staff
+  STAFF = true;
+  const s = await open();
+  await s.goto(base + '/workspace/releases', { waitUntil: 'domcontentloaded' }); await settle(2000);
+  ok(/Notes to approve/.test(await main(s)) && /Deploys/.test(await main(s)), 'staff see the release console');
+  await s.click('#main [data-rl-go="deploys"]'); await settle();
+  ok(new URL(s.url()).pathname === '/workspace/releases/deploys' && /33909cb7/.test(await main(s)), 'deploys have their own address and list the deploy');
+  await s.click(`#main [data-rl-go="deploys/${DEP}"]`); await settle();
+  ok(new URL(s.url()).pathname === `/workspace/releases/deploys/${DEP}` && /passed \/api\/ready/.test(await main(s)) && /#859/.test(await main(s)) && /20261023100000-release-record\.sql/.test(await main(s)), 'a deploy page by id shows healthcheck, PRs and migrations');
+  await s.goto(base + `/workspace/releases/features/${FEAT}`, { waitUntil: 'domcontentloaded' }); await settle(2000);
+  ok(/Support \(platform\)/.test(await main(s)) && /Draft by an agent/.test(await main(s)), 'a feature page by id shows its notes, the agent draft marked as a draft');
+  await s.reload({ waitUntil: 'domcontentloaded' }); await settle(2000);
+  ok(/Support \(platform\)/.test(await main(s)), 'refresh lands on the same feature');
+  const s2 = await open(); await s2.goto(base + `/workspace/releases/features/${FEAT}`, { waitUntil: 'domcontentloaded' }); await settle(2000);
+  ok(/Support \(platform\)/.test(await main(s2)), 'a fresh tab lands on the same feature'); await s2.close();
+  await s.click(`#main [data-rl-approve="${NOTE}"]`); await settle();
+  ok(calls.some(([m, pth]) => m === 'POST' && pth === `/api/releases/notes/${NOTE}/approve`), 'Approve posts the approval');
+  await s.select('#main [data-rl-form="feature"] select[name="enabledScope"]', 'all');
+  await s.click('#main [data-rl-form="feature"] button[type="submit"]'); await settle();
+  ok(calls.some(([m, pth, b]) => m === 'PATCH' && pth === `/api/releases/features/${FEAT}` && b.enabledScope === 'all'), 'the feature form saves where it is enabled');
+  await s.goBack(); await settle(1500);
+  ok(new URL(s.url()).pathname.startsWith('/workspace/releases'), 'Back stays in the release record');
+  ok(s.errs.length === 0, 'no page errors for staff' + (s.errs.length ? ': ' + s.errs.join(' | ') : ''));
+} finally {
+  await br.close(); await server.close();
+}
+console.log(failed ? `${failed} FAILED` : 'releases-test: all passed');
+process.exit(failed ? 1 : 0);

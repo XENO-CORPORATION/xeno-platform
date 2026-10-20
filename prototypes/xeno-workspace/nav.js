@@ -107,6 +107,8 @@ window.XENO_DESKTOP_NAV = { views: ['Recent files', 'Projects'] };
 // ── Globals (MODES §4): their real top level. Community = XENO's own forum (FORUM SPEC §2.1:
 //    Spaces by kind, the Record + your Feed). Marketplace = two storefront modes (MARKETPLACE §14).
 window.XENO_GLOBAL_NAV = {
+  // the release record (platform-releases.js): What's new for everyone; deploys, features and notes for XENO staff
+  releases: ['Releases', 'What changed, and for whom', '', [['Views', [['What’s new', '', null, 'whats-new'], ['Deploys', 'XENO staff', null, 'deploys'], ['Features', 'XENO staff', null, 'features'], ['Notes', 'XENO staff', null, 'notes']]]]],
   // XENO support (platform-support.js): private requests to XENO; staff see the queue and saved replies
   support: ['Support', 'Private help from XENO', 'Contact support', [['Views', [['My requests', '', null, 'mine'], ['Queue', 'XENO staff', null, 'queue'], ['Saved replies', 'XENO staff', null, 'macros']]]]],
   // XENO Tasks (codename Telos): the shared work tracker — the board, then the views people use every day

@@ -1822,6 +1822,62 @@
    ]
   },
   {
+   "name": "releases.deploy.list",
+   "wire": "releases__deploy__list",
+   "version": "1.0.0",
+   "class": "safe",
+   "scope": "workspace:read",
+   "surfaces": [
+    "mcp",
+    "rest"
+   ],
+   "aliases": [
+    "releases_list_deploys"
+   ]
+  },
+  {
+   "name": "releases.feature.list",
+   "wire": "releases__feature__list",
+   "version": "1.0.0",
+   "class": "safe",
+   "scope": "workspace:read",
+   "surfaces": [
+    "mcp",
+    "rest"
+   ],
+   "aliases": [
+    "releases_list_features"
+   ]
+  },
+  {
+   "name": "releases.feature.get",
+   "wire": "releases__feature__get",
+   "version": "1.0.0",
+   "class": "safe",
+   "scope": "workspace:read",
+   "surfaces": [
+    "mcp",
+    "rest"
+   ],
+   "aliases": [
+    "releases_get_feature"
+   ]
+  },
+  {
+   "name": "releases.note.draft",
+   "wire": "releases__note__draft",
+   "version": "1.0.0",
+   "class": "undoable",
+   "scope": "workspace:admin",
+   "surfaces": [
+    "mcp",
+    "rest"
+   ],
+   "aliases": [
+    "releases_draft_note"
+   ]
+  },
+  {
    "name": "forum.thread.search",
    "wire": "forum__thread__search",
    "version": "1.0.0",

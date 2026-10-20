@@ -265,6 +265,27 @@ Private requests to XENO: `services/supportTickets.js` (the one service), `route
   `workforcePeople.availability*` (`reason: 'in_meeting'`).
 Proofs: `npm run test:scheduling` (real Postgres, 58 checks, mutation-checked ×4), `npm run test:scheduling-ui`.
 
+## 📦 The platform's own release record lives HERE (owner, 2026-10-20)
+
+One record, three layers: `services/releaseRecord.js` (the one service), `routes/releaseRoutes.js` (`/api/releases`),
+`services/releasesMcp.js` (`releases.*`), screens `prototypes/xeno-workspace/platform-releases.js` at
+`/workspace/releases[/deploys[/<id>]|/features[/<id>]|/notes|/whats-new]`.
+
+- **Deploys are written by the deploy, never by hand.** `scripts/deploy-platform.mjs` pipes the facts it observed to
+  `src/server/scripts/record-deploy.mjs` inside the backend container at the end of every deploy, OK or failed. A
+  "RELEASE RECORD NOT WRITTEN" line is a defect to fix, not noise.
+- **History is imported, never typed:** `npm run release-history -- collect --out h.json` (gh + the box's
+  `.deploy/deploy.log`, read-only), then `import --file h.json` — DRY-RUN by default, `--confirm` to write, idempotent.
+  Deploys from the log are `reconstructed` with the log as evidence; the log never recorded who deployed, so that stays
+  empty. Features grouped from PR titles are `derived`.
+- **A PR names its feature** with a `Feature: <slug>` line (`.github/pull_request_template.md`).
+- **Nothing is public by default.** A customer's What's new shows a note only when it is APPROVED by a human on staff,
+  its feature is LIVE, and the feature is enabled for them (all / plans / workspaces). The customer read selects only
+  the note's words and date. Approving or enabling is a person's act: no agent tool, and a trigger refuses an agent's
+  or non-staff approval.
+- Proofs: `npm run test:release-record` (real Postgres), `test:release-record-mutation` (5 mutations, all caught),
+  `test:releases-ui` (browser), `scripts/release-history.test.mjs`.
+
 ## Project-aware chat: context must reach the model, not only the audit
 
 `services/chatProjectContext.js` supplies persisted project identity, instructions and authorized file retrieval.

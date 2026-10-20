@@ -18,15 +18,16 @@ Per division: how many actions a person can take, how many an agent can take tod
 | workforce | 302 | 53 | 244 | 5 | 35 | 253 | 14 | 0 | `agents:write` 235, `workspace:admin` 6, `agents:read` 3 |
 | workspace-ui | 171 | 4 | 101 | 66 | 67 | 103 | 1 | 0 | `workspace:admin` 101 |
 | account | 86 | 0 | 60 | 26 | 30 | 50 | 6 | 0 | `workspace:admin` 41, `workspace:read` 19 |
-| platform | 65 | 0 | 34 | 31 | 39 | 23 | 2 | 1 | `workspace:read` 22, `workspace:admin` 12 |
+| platform | 69 | 0 | 36 | 33 | 41 | 25 | 2 | 1 | `workspace:read` 24, `workspace:admin` 12 |
 | browser-shell | 28 | 0 | 28 | 0 | 11 | 15 | 2 | 0 | `workspace:admin` 17, `workspace:read` 11 |
 | canvas | 22 | 6 | 16 | 0 | 5 | 13 | 4 | 0 | `tasks:write` 13, `tasks:read` 3 |
 | inference | 18 | 0 | 12 | 6 | 5 | 10 | 3 | 0 | `chat:write` 7, `chat:read` 5 |
 | scheduling | 22 | 4 | 12 | 6 | 9 | 11 | 2 | 0 | `scheduling:write` 10, `scheduling:read` 2 |
-| support | 21 | 8 | 12 | 1 | 4 | 14 | 1 | 2 | `forum:write` 11, `forum:read` 1 |
+| support | 22 | 8 | 12 | 2 | 4 | 15 | 1 | 2 | `forum:write` 11, `forum:read` 1 |
 | customers | 29 | 7 | 9 | 13 | 9 | 14 | 5 | 1 | `customers:write` 6, `customers:read` 3 |
 | analytics | 10 | 5 | 4 | 1 | 6 | 4 | 0 | 0 | `analytics:write` 4 |
 | publish | 13 | 6 | 4 | 3 | 6 | 4 | 0 | 3 | `publish:write` 3, `publish:read` 1 |
+| releases | 14 | 6 | 4 | 4 | 7 | 7 | 0 | 0 | `workspace:read` 3, `workspace:admin` 1 |
 | docs | 10 | 10 | 0 | 0 | 5 | 5 | 0 | 0 | — |
 
 Scopes (one-way names, approved 2026-10-20): `storage:read`, `storage:write`, `share:create`, `library:read`, `library:write`, `tasks:read`, `tasks:write`, `chat:read`, `chat:write`, `agents:read`, `agents:write`, `wallet:read`, `wallet:spend`, `workspace:read`, `workspace:admin`, `places:read`, `places:write`, `marketplace:read`, `marketplace:write`, `forum:read`, `forum:write`, `publish:read`, `publish:write`, `analytics:read`, `analytics:write`, `docs:read`, `docs:write`, `scheduling:read`, `scheduling:write`, `customers:read`, `customers:write`.

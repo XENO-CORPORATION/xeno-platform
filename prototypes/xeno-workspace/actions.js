@@ -212,6 +212,8 @@
   // ---------- What's new: the real releases, newest first, each linked to its release notes ----------
   const RELEASES = [['canvas', 'Canvas 0.39', 'Sep 17', 'The shared agent panel arrives in Canvas.'], ['hub', 'Hub 0.11', 'Aug 30', 'Signed tools update without a Hub release.'], ['motion', 'Motion 0.10', 'Sep 3', 'Linux build; programmatic .xmotion files.'], ['engine', 'Engine 0.4', 'Sep 3', 'Export a game as a runnable Windows build.'], ['agent', 'Agent 0.3', 'Sep 3', 'The XENO Agent desktop app, Windows and Linux.'], ['browser', 'Browser 0.4', 'Aug 29', 'Agent-native file upload and download by path.']];
   function whatsNew() {
+    // signed in on the platform: the notes for features enabled for this person (platform-releases.js)
+    if (window.XENO_RELEASES?.served) return window.XENO_RELEASES.open('whats-new');
     D().info({ title: 'What’s new', sub: 'Releases across XENO, newest first', html: `<ol class="xd-rel">${RELEASES.map(([slug, name, when, what]) => `<li><span class="xd-rel-w">${when}</span><div><b>${esc(name)}</b><p>${esc(what)}</p><a href="https://xenostudio.ai/product/${slug}/releases" target="_blank" rel="noopener">Release notes</a></div></li>`).join('')}</ol>` });
   }
   // ---------- status: only what this device can actually know — never an invented "all systems normal" ----------

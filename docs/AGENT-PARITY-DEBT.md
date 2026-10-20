@@ -4,7 +4,7 @@
 
 Every action a person can take on the platform, and whether an agent can take it (XENO AGENT CAPABILITY - SPEC.md §19.4). **Planned** entries are the owning division’s backlog: each is a feature agents are missing.
 
-**Total:** 1628 actions · 150 agent capability · 1254 planned (debt) · 224 excluded · **coverage 10.7%** of the 1404 owed.
+**Total:** 1647 actions · 156 agent capability · 1260 planned (debt) · 231 excluded · **coverage 11%** of the 1416 owed.
 
 | division | actions | capability | planned (debt) | excluded | coverage |
 |---|---:|---:|---:|---:|---:|
@@ -19,16 +19,17 @@ Every action a person can take on the platform, and whether an agent can take it
 | storage | 82 | 5 | 75 | 2 | 6.3% |
 | account | 86 | 0 | 60 | 26 | 0% |
 | forum | 51 | 8 | 41 | 2 | 16.3% |
-| platform | 65 | 0 | 34 | 31 | 0% |
+| platform | 69 | 0 | 36 | 33 | 0% |
 | browser-shell | 28 | 0 | 28 | 0 | 0% |
 | canvas | 22 | 6 | 16 | 0 | 27.3% |
 | inference | 18 | 0 | 12 | 6 | 0% |
 | scheduling | 22 | 4 | 12 | 6 | 25% |
-| support | 21 | 8 | 12 | 1 | 40% |
+| support | 22 | 8 | 12 | 2 | 40% |
 | customers | 29 | 7 | 9 | 13 | 43.8% |
 | analytics | 10 | 5 | 4 | 1 | 55.6% |
 | places | 9 | 3 | 4 | 2 | 42.9% |
 | publish | 13 | 6 | 4 | 3 | 60% |
+| releases | 14 | 6 | 4 | 4 | 60% |
 | docs | 10 | 10 | 0 | 0 | 100% |
 
 ## account — 60 planned
@@ -542,7 +543,7 @@ Every action a person can take on the platform, and whether an agent can take it
 - `route:placesRoutes.js:GET /:placeId/occupants/:pid/computer`
 - `route:placesRoutes.js:GET /needs-you`
 
-## platform — 34 planned
+## platform — 36 planned
 
 - `route:analyticsRoutes.js:GET /active-users`
 - `route:analyticsRoutes.js:GET /api-usage`
@@ -572,6 +573,8 @@ Every action a person can take on the platform, and whether an agent can take it
 - `route:learnRoutes.js:GET /`
 - `route:learnRoutes.js:GET /:slug`
 - `route:learnRoutes.js:GET /categories`
+- `route:siteGateRoutes.js:GET /codes`
+- `route:siteGateRoutes.js:GET /codes/:id/events`
 - `route:webhookRoutes.js:DELETE /:id`
 - `route:webhookRoutes.js:GET /`
 - `route:webhookRoutes.js:GET /:id/deliveries`
@@ -585,6 +588,13 @@ Every action a person can take on the platform, and whether an agent can take it
 - `route:publishRoutes.js:POST /approvals/:kind/:id`
 - `route:publishRoutes.js:POST /posts/:id/publish`
 - `route:publishRoutes.js:POST /posts/:id/retract`
+
+## releases — 4 planned
+
+- `route:releaseRoutes.js:GET /notes`
+- `route:releaseRoutes.js:GET /summary`
+- `route:releaseRoutes.js:GET /whats-new`
+- `ui:platform-releases.js:data-rl-form=filter`
 
 ## scheduling — 12 planned
 

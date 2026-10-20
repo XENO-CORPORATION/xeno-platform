@@ -139,7 +139,9 @@
   "schedulingRoutes.js": "scheduling",
   "platform-scheduling.js": "scheduling",
   "customersRoutes.js": "customers",
-  "platform-customers.js": "customers"
+  "platform-customers.js": "customers",
+  "releaseRoutes.js": "releases",
+  "platform-releases.js": "releases"
  },
  "actions": {
   "route:accountGiftRoutes.js:POST /": {
@@ -8924,6 +8926,121 @@
    "class": "reversible",
    "scope": "none",
    "because": "moving a deal is a person’s call; an agent proposes a draft deal instead"
+  },
+  "route:releaseRoutes.js:GET /deploys": {
+   "status": "capability",
+   "capability": "releases.deploy.list",
+   "class": "safe",
+   "scope": "workspace:read"
+  },
+  "route:releaseRoutes.js:GET /deploys/:id": {
+   "status": "capability",
+   "capability": "releases.deploy.list",
+   "class": "safe",
+   "scope": "workspace:read"
+  },
+  "route:releaseRoutes.js:GET /features": {
+   "status": "capability",
+   "capability": "releases.feature.list",
+   "class": "safe",
+   "scope": "workspace:read"
+  },
+  "route:releaseRoutes.js:GET /features/:id": {
+   "status": "capability",
+   "capability": "releases.feature.get",
+   "class": "safe",
+   "scope": "workspace:read"
+  },
+  "route:releaseRoutes.js:GET /notes": {
+   "status": "planned",
+   "class": "safe",
+   "scope": "workspace:read"
+  },
+  "route:releaseRoutes.js:GET /summary": {
+   "status": "planned",
+   "class": "safe",
+   "scope": "workspace:read"
+  },
+  "route:releaseRoutes.js:GET /whats-new": {
+   "status": "planned",
+   "class": "safe",
+   "scope": "workspace:read"
+  },
+  "route:releaseRoutes.js:PATCH /features/:id": {
+   "status": "excluded",
+   "category": "self-authority",
+   "because": "turning a feature on for customers is a person's release decision, not an agent's",
+   "scope": "none",
+   "class": "reversible"
+  },
+  "route:releaseRoutes.js:POST /features/:id/notes": {
+   "status": "capability",
+   "capability": "releases.note.draft",
+   "class": "reversible",
+   "scope": "workspace:admin"
+  },
+  "route:releaseRoutes.js:POST /notes/:id/approve": {
+   "status": "excluded",
+   "category": "self-authority",
+   "because": "approving what customers are told is a person's ratification; an agent must not approve agent words (the database refuses it too)",
+   "scope": "none",
+   "class": "reversible"
+  },
+  "route:releaseRoutes.js:POST /notes/:id/withdraw": {
+   "status": "excluded",
+   "category": "self-authority",
+   "because": "withdrawing a published note changes what customers are told; a person decides",
+   "scope": "none",
+   "class": "reversible"
+  },
+  "ui:platform-releases.js:data-rl-form=feature": {
+   "status": "excluded",
+   "category": "self-authority",
+   "because": "turning a feature on for customers is a person's release decision, not an agent's",
+   "scope": "none",
+   "class": "reversible"
+  },
+  "ui:platform-releases.js:data-rl-form=filter": {
+   "status": "planned",
+   "class": "reversible",
+   "scope": "workspace:admin"
+  },
+  "ui:platform-releases.js:data-rl-form=note": {
+   "status": "capability",
+   "capability": "releases.note.draft",
+   "class": "reversible",
+   "scope": "workspace:admin"
+  },
+  "route:siteGateRoutes.js:GET /codes": {
+   "status": "planned",
+   "class": "safe",
+   "scope": "workspace:read"
+  },
+  "route:siteGateRoutes.js:GET /codes/:id/events": {
+   "status": "planned",
+   "class": "safe",
+   "scope": "workspace:read"
+  },
+  "route:siteGateRoutes.js:POST /codes": {
+   "status": "excluded",
+   "category": "self-authority",
+   "class": "reversible",
+   "scope": "none",
+   "because": "handing out or revoking access to the site is a person's decision about who may see it; an agent must not grant access"
+  },
+  "route:siteGateRoutes.js:POST /codes/:id/revoke": {
+   "status": "excluded",
+   "category": "self-authority",
+   "class": "reversible",
+   "scope": "none",
+   "because": "handing out or revoking access to the site is a person's decision about who may see it; an agent must not grant access"
+  },
+  "ui:platform-support.js:data-sp-form=access": {
+   "status": "excluded",
+   "category": "self-authority",
+   "class": "reversible",
+   "scope": "none",
+   "because": "handing out or revoking access to the site is a person's decision about who may see it; an agent must not grant access"
   }
  }
 }
