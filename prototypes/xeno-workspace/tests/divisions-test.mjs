@@ -157,7 +157,10 @@ try {
   await p.click('[data-xag="new"]'); await settle(500); await fill(['Cutter', 'Edits films']); await choose('Creative'); await submit();
   const ag = db.agents[0];
   ok(ag && ag.div === creative.id, 'a new agent can be created straight into a division');
-  if (!new URL(p.url()).pathname.endsWith(ag.id)) await fresh(`/workspace/workspace/Agents/${ag.id}`); t = await main();
+  // New agent then asks where it runs (platform-agents.js create); answering it opens the agent's page
+  await submit();
+  ok(new URL(p.url()).pathname === `/workspace/workspace/Agents/${ag.id}`, 'after “Where will it run?”, the new agent’s page opens at its id');
+  t = await main();
   ok(/Division/.test(t) && /Cutter works only on Creative’s projects/.test(t), 'its page says which division it is in and what that means');
   const film2 = await p.$('[data-xag-proj] '); void film2;
   const disabled = await p.$$eval('[data-xag-proj]', (xs) => xs.map((x) => [x.closest('label').innerText.split('\n')[0], x.disabled]));

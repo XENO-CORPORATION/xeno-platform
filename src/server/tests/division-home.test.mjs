@@ -28,6 +28,7 @@ import { addGrant } from '../utils/creditLedgerV2.js';
 import { admitAccountRun, readRunnablePin } from '../services/workforceRunAdmission.js';
 import { revokeRun } from '../services/workforceRunAuthority.js';
 import { createObjective } from '../services/projectWorktree.js';
+import { createFundingCampaign, createFundingMilestone } from '../services/workforceFunding.js';
 
 const JWT_SECRET = process.env.JWT_SECRET || 'xenostudio-super-secret-jwt-key-change-in-production';
 const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL });
@@ -40,7 +41,7 @@ async function main() {
   await migrateOidcClients(pool);
   const mk = async (m) => (await pool.query(`INSERT INTO users(username,email,password_hash,display_name,email_verified,workspace_activated_at) VALUES($1,$2,'x',$1,TRUE,NOW())
     ON CONFLICT (username) DO UPDATE SET username = EXCLUDED.username RETURNING id`, [m, `${m}@example.test`])).rows[0].id;
-  const ada = await mk('dh-ada'), bob = await mk('dh-bob'), eve = await mk('dh-eve');
+  const ada = await mk('dh-ada'), bob = await mk('dh-bob'), eve = await mk('dh-eve'), cara = await mk('dh-cara');
   await addGrant(pool, ada, { amountMicro: 100_000_000, kind: 'paid', sourceRef: 'seed:dh-ada' });
   const session = (id) => jwt.sign({ userId: id, email: 'x@y.z' }, JWT_SECRET, { expiresIn: '1h' });
 
@@ -83,6 +84,16 @@ async function main() {
     const pin = await readRunnablePin(pool, ctx, { agent: { resourceId: def }, target });
     const { admission } = await admitAccountRun(pool, ctx, { operationId: crypto.randomUUID(), agent: pin.agent, target, capabilities: pin.terms.definition, budget: { ceilingMicro: '2000000' }, taskRef: 'T-1' });
 
+    // funding pools on each project, and two handoffs: one between ada and cara, one to bob
+    const fctx = { actorUserId: ada, clientId: 'division-home-test' };
+    for (const [pid, key] of [[shared, 'shared-m1'], [secret, 'secret-m1']]) {
+      const c = await createFundingCampaign(pool, fctx, { operationId: crypto.randomUUID(), projectId: pid, beneficiary: `Pool ${key}`, cancellationTerms: 'x', refundTerms: 'x', deliverableLicense: 'proprietary' });
+      await createFundingMilestone(pool, fctx, { campaignId: c.id, key, title: `Milestone ${key}`, criteria: ['done'], thresholdMicro: '1000000', budgetMaxMicro: '2000000' });
+    }
+    const handoff = (from, to) => pool.query(`INSERT INTO workforce_handoffs (source_principal_id, target_principal_id, work_ref_type, work_ref_id, source_workspace_id, target_workspace_id, source_division_id, target_division_id)
+      VALUES ($1,$2,'project',$3,$4,$4,$5,$5) RETURNING id`, [from, to, shared, ws, dev.id]).then((x) => String(x.rows[0].id));
+    const hAC = await handoff(ada, cara), hAB = await handoff(ada, bob);
+
     // 1. ada's home
     const h = await call('GET', `/api/divisions/${dev.id}/home`, { token: A });
     const home = h.j.home;
@@ -94,6 +105,7 @@ async function main() {
     ok(home.objectives.length === 1 && home.objectives[0].id === obj.objectiveId && home.objectives[0].goals === 0, 'the division objective shows, with its goal progress');
     ok(home.runs.rows.length === 1 && home.runs.rows[0].id === admission.admissionId && home.runs.rows[0].canStop === true && home.runs.rows[0].authority.state === 'admitted', 'the active run shows with its live authority');
     ok(home.spend.budget && home.spend.budget.limitCredits === 50 && Array.isArray(home.spend.ledger), 'spend vs budget, with the ledger for an admin');
+    ok(home.funding.rows.length === 2 && home.funding.hidden === 0 && home.handoffs.rows.length === 2 && home.handoffs.hidden === 0, 'the admin sees every funding pool and every handoff');
     ok(home.decisions.some((d) => d.kind === 'member.promote' && d.rationale === 'Founder'), 'the head decision is listed with its reason');
 
     // 3. bob, a member who cannot see the secret project
@@ -102,6 +114,8 @@ async function main() {
     ok(!JSON.stringify(hb).includes('Secret'), 'and nothing of the closed project leaks, not even its name');
     ok(hb.runs.rows.length === 0 && hb.runs.hidden === 1, 'a run that is not theirs, on no project they see, arrives closed');
     ok(hb.spend.ledger && hb.spend.ledger.closed === true && hb.spend.budget, 'they see the meter but the ledger arrives closed');
+    ok(hb.funding.rows.length === 1 && hb.funding.rows[0].projectId === shared && hb.funding.hidden === 1 && !JSON.stringify(hb.funding).includes('secret-m1'), 'a member sees only the pool on a project they view — the other arrives as a hidden count');
+    ok(hb.handoffs.rows.length === 1 && hb.handoffs.rows[0].id === hAB && hb.handoffs.hidden === 1 && !JSON.stringify(hb.handoffs).includes(hAC), 'a member sees the handoff they are part of; one between others arrives as a hidden count');
     ok(hb.canManage === false && hb.objectives.length === 1, 'they read the objectives but do not manage');
 
     // 2. a stranger
