@@ -29,6 +29,7 @@ import express from 'express';
 import * as tasks from '../services/xenoTasks.js';
 import * as taskFolders from '../services/taskFolders.js';
 import { resolvePrincipal, assertPrincipalUsable } from '../services/agentIdentity.js';
+import { assertServiceGranted } from '../services/servicePrincipalGate.js';
 import * as mcp from '../services/tasksMcp.js';
 import { TASKS_OPENAPI } from '../services/tasksOpenApi.js';
 import { verifyTasksAccessToken, getClient } from '../utils/oidcProvider.js';
@@ -105,7 +106,7 @@ export async function taskTokenAuth(req, res, next) {
 export const unlessTaskToken = (mw) => (req, res, next) => (req.taskToken ? next() : mw(req, res, next));
 
 router.use(async (req, res, next) => {
-  try { const p = await resolvePrincipal(req.db, req.user.id); assertPrincipalUsable(p); const u = (await req.db.query('SELECT COALESCE(display_name, username) AS name FROM users WHERE id = $1', [p.id])).rows[0]; req.me = { id: p.id, kind: p.kind, role: p.role, name: u ? u.name : 'Someone' }; if (req.taskToken) req.me.token = req.taskToken; next(); }
+  try { const p = await resolvePrincipal(req.db, req.user.id); assertPrincipalUsable(p); await assertServiceGranted(req.db, p, 'tasks'); /* D-3 */ const u = (await req.db.query('SELECT COALESCE(display_name, username) AS name FROM users WHERE id = $1', [p.id])).rows[0]; req.me = { id: p.id, kind: p.kind, role: p.role, name: u ? u.name : 'Someone' }; if (req.taskToken) req.me.token = req.taskToken; next(); }
   catch (error) { res.status(error.statusCode || 403).json({ success: false, error: error.message || 'Not allowed', code: error.code || 'not_allowed' }); }
 });
 // what an agent credential may do: reads need tasks:read, everything else tasks:write; a single-task credential (the

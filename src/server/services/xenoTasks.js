@@ -174,10 +174,9 @@ export async function createTask(db, me, input = {}) {
     `INSERT INTO tasks (title, body, kind, priority, project_id, area, owner_user_id, reporter_id, reporter_kind, assignee_id, reviewer_id, review_required, labels, due_at, source, source_ref, conversation_id, parent_id)
      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18) RETURNING *`,
     [text(input.title, 'title', 300), text(input.body, 'body', 50000, false), oneOf(input.kind, KINDS, 'kind', 'task'), oneOf(input.priority, PRIORITIES, 'priority', 'none'), projectId, area,
-     projectId ? null : me.id, me.id, kindOf(me), input.assigneeId || null, input.reviewerId || null, review, labels, due, oneOf(input.source, SOURCES, 'source', kindOf(me) === 'agent' ? 'agent' : 'manual'),
+     projectId ? null : (parent && parent.owner_user_id ? parent.owner_user_id : me.id), me.id, kindOf(me), input.assigneeId || null, input.reviewerId || null, review, labels, due, oneOf(input.source, SOURCES, 'source', kindOf(me) === 'agent' ? 'agent' : 'manual'),
      input.sourceRef ? String(input.sourceRef).slice(0, 200) : null, input.conversationId && UUID.test(String(input.conversationId)) ? input.conversationId : null, parent ? parent.id : null])).rows[0];
-  // a personal sub-task belongs to the parent's owner, so whoever can see the parent can see it
-  if (parent && !projectId && parent.owner_user_id) await db.query('UPDATE tasks SET owner_user_id = $2 WHERE id = $1', [row.id, parent.owner_user_id]);
+  // a personal sub-task belongs to the parent's owner (set at insert: D-5, a task's owner never changes afterwards)
   await event(db, row, me, 'created', null, 'raised', null);
   if (input.assigneeId) await event(db, row, me, 'assigned', null, String(input.assigneeId), null);
   if (parent) await event(db, parent, me, 'parent', null, `T-${row.number}`, row.title);

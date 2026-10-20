@@ -20,6 +20,7 @@
  */
 
 import express from 'express';
+import { assertServiceGranted, ServicePrincipalDeniedError } from '../services/servicePrincipalGate.js';
 import crypto from 'crypto';
 import authMiddleware, { optionalAuthMiddleware } from '../middleware/auth.js';
 import * as svc from '../services/marketplaceService.js';
@@ -646,6 +647,9 @@ router.get('/developer/me', authMiddleware, async (req, res) => {
 /** POST /listings — create a draft listing owned by the caller's developer. */
 router.post('/listings', authMiddleware, async (req, res) => {
   try {
+    // D-3: a service account lists nothing on the Marketplace without a named grant
+    try { await assertServiceGranted(req.db, String(req.user.id), 'marketplace.listings'); }
+    catch (e) { if (e instanceof ServicePrincipalDeniedError) return res.status(403).json({ success: false, error: e.message, code: e.code }); throw e; }
     const dev = await getDeveloperForUser(req.db, req.user.id);
     if (!dev) return res.status(403).json({ success: false, error: 'Register a developer profile first' });
     if (dev.status !== 'active') return res.status(403).json({ success: false, error: 'Developer account is not active' });
