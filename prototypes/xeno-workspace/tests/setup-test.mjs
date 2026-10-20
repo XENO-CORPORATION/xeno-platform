@@ -68,7 +68,7 @@ try {
   ok(await until(() => /c-salon/.test(location.pathname + location.hash), 10000), `the workspace opens in the Salon mode (${await ev(() => location.pathname + location.hash)})`);
   const rec = (await pool.query(`SELECT * FROM workspace_mode_applications`)).rows;
   ok(rec.length === 1 && rec[0].applied_by_user_id === uid && rec[0].pack_id === 'salon', 'one receipt, applied by the person, for the salon pack');
-  ok(await n(`SELECT count(*) n FROM tasks WHERE owner_user_id=$1 AND area='c-salon' AND deleted_at IS NULL`, [uid]) === 3, 'three first tasks are waiting');
+  ok(await n(`SELECT count(*) n FROM tasks t JOIN chat_projects p ON p.id=t.project_id WHERE p.workspace_id=$1 AND t.assignee_id=$2 AND t.deleted_at IS NULL`, [rec[0].workspace_id, uid]) === 3, 'three first tasks are waiting, in the workspace, assigned to the person');
   ok(await ev(() => window.XENO_CUSTOM.list().some((c) => c.id === 'c-salon' && c.workspaceId)), 'the mode is on the shelf, from the workspace');
   ok(await ev(() => !/setup=/.test(location.search)), 'closing the setup takes it out of the address');
   await ev(() => localStorage.removeItem('xw.customs'));   // a fresh browser: nothing cached, only the address

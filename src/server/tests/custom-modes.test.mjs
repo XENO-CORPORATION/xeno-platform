@@ -83,7 +83,7 @@ async function main() {
     assert.equal((await call(owner, 'GET', '/api/v2/me/modes')).d.modes.length, 0, 'delete archives it out of the list');
 
     // ── 3. plan writes nothing
-    const counts = async () => [await n(`SELECT count(*) n FROM custom_modes WHERE owner_workspace_id=$1`, [ws]), await n(`SELECT count(*) n FROM tasks WHERE area='c-salon' AND owner_user_id=$1`, [owner]), await n(`SELECT count(*) n FROM workspace_mode_applications WHERE workspace_id=$1`, [ws])];
+    const counts = async () => [await n(`SELECT count(*) n FROM custom_modes WHERE owner_workspace_id=$1`, [ws]), await n(`SELECT count(*) n FROM tasks t JOIN chat_projects p ON p.id=t.project_id WHERE p.workspace_id=$1 AND t.deleted_at IS NULL`, [ws]), await n(`SELECT count(*) n FROM workspace_mode_applications WHERE workspace_id=$1`, [ws])];
     const before = await counts();
     r = await call(owner, 'POST', `/api/v2/workspaces/${ws}/modes/plan`, { packId: 'salon', answers: { businessName: 'Studio Ana' } });
     assert.equal(r.status, 200, JSON.stringify(r.d));
@@ -111,7 +111,13 @@ async function main() {
     assert.deepEqual(await counts(), [before[0] + 1, before[1] + 3, before[2] + 1], 'the same key applied three times gives one set of records');
     assert.equal(await n(`SELECT count(*) n FROM workspace_audit WHERE workspace_id=$1 AND action='mode.applied'`, [ws]), 1, 'one audit row');
     const receipt = a1.d.receipt;
-    assert.equal(receipt.records.length, 4); assert.equal(receipt.appliedBy, owner);
+    assert.equal(receipt.records.length, 5); assert.equal(receipt.appliedBy, owner);
+    // §8.11 D-1: the workspace owns the starter work — a workspace project, never the applier's personal tasks
+    const owned = (await pool.query(`SELECT t.owner_user_id, t.assignee_id, p.workspace_id FROM tasks t JOIN chat_projects p ON p.id=t.project_id WHERE t.id = ANY($1::uuid[])`, [receipt.records.filter((x) => x.type === 'task').map((x) => x.id)])).rows;
+    assert.equal(owned.length, 3, 'every starter task is in a project');
+    assert.ok(owned.every((t) => t.workspace_id === ws && t.owner_user_id === null), 'the starter tasks belong to the target workspace, not to the applier');
+    assert.ok(owned.every((t) => t.assignee_id === owner), 'the applier is their assignee');
+    assert.equal(await n(`SELECT count(*) n FROM tasks WHERE owner_user_id=$1 AND deleted_at IS NULL`, [owner]), 0, 'nothing lands in the applier’s personal tasks');
     assert.equal((await pool.query(`SELECT trade FROM user_onboarding WHERE user_id=$1`, [owner])).rows[0].trade, 'salon', 'the trade is recorded');
     assert.equal((await call(owner, 'POST', `/api/v2/workspaces/${ws}/modes/apply`, { ...body, answers: { businessName: 'Other' } })).d.error, 'idempotency_key_reused', 'a key names one plan');
     assert.equal((await call(owner, 'POST', `/api/v2/workspaces/${ws}/modes/apply`, { ...body, idempotencyKey: 'onboard-salon-0002' })).d.error, 'plan_changed', 'a stale plan is refused (the setup is there now)');
@@ -130,13 +136,17 @@ async function main() {
     r = await call(owner, 'POST', `/api/v2/workspaces/${ws}/modes/${receipt.applicationId}/revert`);
     assert.equal(r.status, 200, JSON.stringify(r.d));
     const rep = r.d.receipt.revertReport;
-    assert.deepEqual(rep.kept.map((k) => k.id), [taskRecs[0].id], 'the task a person edited is kept');
+    assert.deepEqual(rep.kept.filter((k) => k.type === 'task').map((k) => k.id), [taskRecs[0].id], 'the task a person edited is kept');
     assert.equal(rep.archived.length, 3, 'the untouched mode and two tasks are archived');
+    assert.ok(rep.kept.some((k) => k.type === 'project'), 'the project holding kept work stays');
     assert.equal(await n(`SELECT count(*) n FROM tasks WHERE id=$1 AND deleted_at IS NULL`, [taskRecs[0].id]), 1);
     assert.equal(await n(`SELECT count(*) n FROM tasks WHERE id = ANY($1::uuid[]) AND deleted_at IS NOT NULL`, [taskRecs.slice(1).map((t) => t.id)]), 2);
     assert.equal(await n(`SELECT count(*) n FROM custom_modes WHERE owner_workspace_id=$1 AND archived_at IS NULL`, [ws]), 0);
     const club = (await modes.revert(pool, { id: owner }, { workspaceId: second, applicationId: app2.receipt.applicationId })).receipt.revertReport;
     assert.ok(club.kept.some((k) => k.type === 'mode'), 'an edited mode is kept');
+    const clubProject = app2.receipt.records.find((x) => x.type === 'project').id;
+    assert.ok(club.archived.some((k) => k.type === 'project'), 'an emptied setup project is archived');
+    assert.equal((await pool.query(`SELECT is_archived FROM chat_projects WHERE id=$1`, [clubProject])).rows[0].is_archived, true, '…in its workspace');
     assert.equal((await call(owner, 'POST', `/api/v2/workspaces/${ws}/modes/${receipt.applicationId}/revert`)).d.replayed, true, 'undoing twice changes nothing');
     await assert.rejects(pool.query(`UPDATE workspace_mode_applications SET answers='{}' WHERE id=$1`, [receipt.applicationId]), /immutable/, 'a receipt is immutable');
     await assert.rejects(pool.query(`DELETE FROM workspace_mode_applications WHERE id=$1`, [receipt.applicationId]), /retained/, 'a receipt is retained');
