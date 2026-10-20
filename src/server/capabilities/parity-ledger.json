@@ -9010,6 +9010,37 @@
    "capability": "releases.note.draft",
    "class": "reversible",
    "scope": "workspace:admin"
+  },
+  "route:siteGateRoutes.js:GET /codes": {
+   "status": "planned",
+   "class": "safe",
+   "scope": "workspace:read"
+  },
+  "route:siteGateRoutes.js:GET /codes/:id/events": {
+   "status": "planned",
+   "class": "safe",
+   "scope": "workspace:read"
+  },
+  "route:siteGateRoutes.js:POST /codes": {
+   "status": "excluded",
+   "category": "self-authority",
+   "class": "reversible",
+   "scope": "none",
+   "because": "handing out or revoking access to the site is a person's decision about who may see it; an agent must not grant access"
+  },
+  "route:siteGateRoutes.js:POST /codes/:id/revoke": {
+   "status": "excluded",
+   "category": "self-authority",
+   "class": "reversible",
+   "scope": "none",
+   "because": "handing out or revoking access to the site is a person's decision about who may see it; an agent must not grant access"
+  },
+  "ui:platform-support.js:data-sp-form=access": {
+   "status": "excluded",
+   "category": "self-authority",
+   "class": "reversible",
+   "scope": "none",
+   "because": "handing out or revoking access to the site is a person's decision about who may see it; an agent must not grant access"
   }
  }
 }

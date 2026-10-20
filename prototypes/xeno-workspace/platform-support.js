@@ -6,6 +6,8 @@
  *   a request       /workspace/support/T-<n>           by its key: the conversation, my reply, close / reopen / make public
  *   Queue (staff)   /workspace/support/queue           every request, filtered; ?f=<status>
  *   Saved replies   /workspace/support/macros          staff
+ *   Site access     /workspace/support/access          admins: personal access codes for the gated site (investors,
+ *                                                      partners, testers) — create (shown once), list, revoke, audit
  *
  * The server decides what each person sees. The customer's reply never carries internal notes or an agent's unsent
  * draft, so nothing here hides them: they are simply not in the response. Staff see drafts and send them (ratify).
@@ -24,13 +26,15 @@
   const STATUS = { new: 'New', triaged: 'Being looked at', waiting_on_customer: 'Waiting on you', resolved: 'Resolved', closed: 'Closed' };
   const STAFF_STATUS = { ...STATUS, waiting_on_customer: 'Waiting on customer' };
   const PRI = { urgent: 'Urgent', high: 'High', normal: 'Normal', low: 'Low' };
-  const S = { staff: null, mine: null, queue: null, one: null, oneKey: null, macros: null, filter: 'open', busy: false, err: '' };
+  const S = { staff: null, mine: null, queue: null, one: null, oneKey: null, macros: null, access: null, made: null, events: {}, filter: 'open', busy: false, err: '' };
 
   const ago = (iso) => { const s = Math.max(0, (Date.now() - new Date(iso).getTime()) / 1000); return s < 60 ? 'just now' : s < 3600 ? `${Math.floor(s / 60)} min ago` : s < 86400 ? `${Math.floor(s / 3600)} h ago` : `${Math.floor(s / 86400)} d ago`; };
   const isKey = (it) => /^T-\d+$/i.test(it || '');
 
   async function loadFor(it) {
     if (S.staff === null) { const q = await api('GET', '/api/support/tickets/queue?status=open'); S.staff = q.ok; if (q.ok) S.queue = q.d.tickets || []; }
+    // admins only: the server answers 403 to everyone else, and then the tab is simply not there
+    if (S.access === null || it === 'access') { const a = await api('GET', '/api/site-gate/codes'); S.access = a.ok ? a.d.codes || [] : false; }
     if (isKey(it)) {
       const key = it.toUpperCase();
       const r = await api('GET', `/api/support/tickets/${encodeURIComponent(key)}`);
@@ -49,7 +53,7 @@
   let lastLoad = null;
   const want = (it) => { const k = it || ''; if (lastLoad !== k) { lastLoad = k; loadFor(it); return true; } return false; };
 
-  const tabs = (cur) => S.staff ? `<div class="pg-tabs" role="tablist">${[['', 'My requests'], ['queue', 'Queue'], ['macros', 'Saved replies']].map(([k, l]) => `<button role="tab" aria-selected="${cur === k}" data-sp-go="${k}">${l}</button>`).join('')}</div>` : '';
+  const tabs = (cur) => S.staff || Array.isArray(S.access) ? `<div class="pg-tabs" role="tablist">${[['', 'My requests'], ...(S.staff ? [['queue', 'Queue'], ['macros', 'Saved replies']] : []), ...(Array.isArray(S.access) ? [['access', 'Site access']] : [])].map(([k, l]) => `<button role="tab" aria-selected="${cur === k}" data-sp-go="${k}">${l}</button>`).join('')}</div>` : '';
   const kindLabel = (k) => (KINDS.find((x) => x[0] === k) || [k, k])[1];
 
   function listPage() {
@@ -129,6 +133,27 @@
       + `<form class="sp-form" data-sp-form="macro"><label>Title<input name="title" maxlength="120" required></label><label>Reply<textarea name="body" rows="4" required></textarea></label><div class="sp-row">${h.btn('Save reply', 'type="submit"')}</div></form>`);
   }
 
+  const day = (iso) => (iso ? new Date(iso).toISOString().slice(0, 10) : '');
+  function accessPage() {
+    const h = H(), list = S.access || [];
+    const made = S.made ? h.box('check', `Code for ${S.made.accessCode.label} — copy it now, it is not shown again`,
+      `<code data-sac-code style="user-select:all;font-size:1.1em">${esc(S.made.code)}</code><br>Send: “xenosystem.ai — access code ${esc(S.made.code)}”. ${S.made.accessCode.scope === 'account' ? 'It also lets them create an account.' : 'It opens the pages only.'} Expires ${esc(day(S.made.accessCode.expiresAt))}.`,
+      h.btn('Done', 'data-sac-done', true)) : '';
+    const rows = list.map((c) => h.tr(`data-sac-row="${esc(c.id)}"`, [`<b>${esc(c.label)}</b>`, c.scope === 'account' ? 'Pages + account' : 'Pages',
+      h.chip(c.revokedAt ? 'Revoked' : c.live ? 'Live' : 'Ended'), `${esc(c.uses)}${c.maxUses ? ' / ' + esc(c.maxUses) : ''}${c.accounts ? ` · ${esc(c.accounts)} account${c.accounts === 1 ? '' : 's'}` : ''}`,
+      esc(c.lastUsedAt ? `${ago(c.lastUsedAt)}${c.lastUsedCountry ? ' · ' + c.lastUsedCountry : ''}` : 'never'), esc(day(c.expiresAt)),
+      `${h.btn('Usage', `data-sac-events="${esc(c.id)}"`, true)}${c.live ? h.btn('Revoke', `data-sac-revoke="${esc(c.id)}"`, true) : ''}`]));
+    const ev = Object.entries(S.events).map(([id, evs]) => { const c = list.find((x) => x.id === id); return c ? `<h3>Usage — ${esc(c.label)}</h3>` + (evs.length ? h.table(['Event', 'Who', 'Country', 'When'], evs.map((e) => h.tr('', [esc(e.event.replace(/_/g, ' ')), esc(e.actor || ''), esc(e.country || ''), esc(ago(e.at))]))) : '<p>Nothing yet.</p>') : ''; }).join('');
+    const form = `<form class="sp-form" data-sp-form="access"><label>Who it is for<input name="label" maxlength="160" required placeholder="Investor — Example Fund"></label>
+      <label>Opens<select name="scope"><option value="pages">The site's pages</option><option value="account">The pages, and creating an account</option></select></label>
+      <label>Expires after (days)<input name="days" type="number" min="1" max="365" value="30" required></label>
+      <label>Uses (blank = unlimited)<input name="maxUses" type="number" min="1" max="10000"></label>
+      <div class="sp-row">${h.btn('Create code', 'type="submit"' + (S.busy ? ' disabled' : ''))}</div></form>`;
+    return h.page(h.head({ eyebrow: '<a data-sp-go="">Support</a>', title: 'Site access', sub: 'Personal codes that open the gated site. Revoking one closes every browser it opened.' }) + tabs('access')
+      + (S.err ? h.box('alert', 'That did not work', esc(S.err)) : '') + made + form
+      + (list.length ? h.table(['For', 'Opens', 'State', 'Uses', 'Last used', 'Expires', ''], rows) : h.box('lock', 'No codes yet', 'Create one for each person or fund, so each can be revoked on its own.')) + ev);
+  }
+
   function route(it) {
     want(it);
     S.err = S.err && S._errFor === (it || '') ? S.err : '';
@@ -136,9 +161,10 @@
     if (isKey(it)) return onePage();
     if (it === 'queue' && S.staff) return queuePage();
     if (it === 'macros' && S.staff) return macrosPage();
+    if (it === 'access' && Array.isArray(S.access)) return accessPage();
     return listPage();
   }
-  const label = (x) => (isKey(x) && S.one && S.one.key === x.toUpperCase() ? `${S.one.key} · ${S.one.title}` : x === 'queue' ? 'Queue' : x === 'macros' ? 'Saved replies' : x === 'new' ? 'Contact support' : x);
+  const label = (x) => (isKey(x) && S.one && S.one.key === x.toUpperCase() ? `${S.one.key} · ${S.one.title}` : x === 'queue' ? 'Queue' : x === 'macros' ? 'Saved replies' : x === 'access' ? 'Site access' : x === 'new' ? 'Contact support' : x);
 
   const here = () => X()?.S?.item || '';
   const refresh = () => { lastLoad = ''; loadFor(here()); };
@@ -152,6 +178,15 @@
   }
 
   document.addEventListener('click', (e) => {
+    const a = e.target.closest('[data-sac-revoke],[data-sac-events],[data-sac-done]');
+    if (a && a.closest('#main')) {
+      e.preventDefault();
+      if (a.hasAttribute('data-sac-done')) { S.made = null; return paint(); }
+      if (a.dataset.sacEvents) return api('GET', `/api/site-gate/codes/${a.dataset.sacEvents}/events`).then((r) => { if (r.ok) S.events = { [a.dataset.sacEvents]: r.d.events || [] }; paint(); });
+      // revoking shuts every browser the code opened, so it takes two presses: the first only arms it
+      if (S.armRevoke !== a.dataset.sacRevoke) { S.armRevoke = a.dataset.sacRevoke; a.textContent = 'Press again to revoke'; return; }
+      S.armRevoke = null; return act('POST', `/api/site-gate/codes/${a.dataset.sacRevoke}/revoke`, {}, () => { toast('Code revoked'); refresh(); });
+    }
     const t = e.target.closest('[data-sp-go],[data-sp-unratify],[data-sp-reload],[data-sp-status],[data-sp-publish],[data-sp-ratify],[data-sp-discard],[data-sp-assign-me],[data-sp-task],[data-sp-filter],[data-sp-macro-del]');
     if (!t || !t.closest('#main, #panel')) return;
     e.preventDefault();
@@ -188,6 +223,7 @@
     if (kind === 'reply') return act('POST', `/api/support/tickets/${key}/messages`, { body: v.body, internal: v.internal === 'on' });
     if (kind === 'merge') return act('POST', `/api/support/tickets/${key}/merge`, { into: String(v.into || '').toUpperCase() });
     if (kind === 'delegate') return act('POST', `/api/support/tickets/${key}/assign`, { delegateAgentId: String(v.agent || '').trim() || null });
+    if (kind === 'access') return act('POST', '/api/site-gate/codes', { label: v.label, scope: v.scope, days: Number(v.days), maxUses: v.maxUses ? Number(v.maxUses) : null }, (r) => { S.made = r.d; refresh(); });
     if (kind === 'macro') return act('POST', '/api/support/macros', { title: v.title, body: v.body });
   });
 

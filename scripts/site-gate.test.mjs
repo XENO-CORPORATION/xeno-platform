@@ -71,7 +71,7 @@ test('unlock: no session is ever required, but the gate being off means there is
     assert.equal(r.headers.getSetCookie().length, 0, 'off issues no cookie');
   } finally { h.close(); }
   const none = await harness({ SITE_GATE: 'on', SITE_GATE_SECRET: 's' });
-  try { assert.equal((await none.post('/unlock', { code: 'anything' })).status, 404, 'no code configured: refused, never claimed'); } finally { none.close(); }
+  try { assert.equal((await none.post('/unlock', { code: 'anything' })).status, 401, 'no shared code and no personal code matches: refused'); } finally { none.close(); }
 });
 test('unlock: attempts are limited per address so the code cannot be guessed', async () => {
   const h = await harness(CODE_ENV);
@@ -161,4 +161,59 @@ test('the attempt limiter refuses past the limit and does not grow without bound
   t = 1000; take('fresh');
   // after expiry, the next call over the size threshold drops the stale windows
   for (let i = 0; i < 2; i++) take(`late${i}`);
+});
+
+// 2026-10-20: www.xenosystem.ai asked again for access because the __Host- gate cookie is per host. One host instead.
+test('www.xenosystem.ai redirects every address to the apex, keeping path and query, and keeps POSTs as POSTs', () => {
+  const i = conf.indexOf('server_name www.xenosystem.ai;');
+  assert.ok(i >= 0, 'a server block for www exists');
+  const srv = conf.slice(i, conf.indexOf('\n}', i));
+  assert.match(srv, /location \/ \{ return 301 https:\/\/xenosystem\.ai\$request_uri; \}/);
+  assert.match(srv, /location \/api\/ \{ return 308 https:\/\/xenosystem\.ai\$request_uri; \}/, 'the API keeps its method');
+  assert.doesNotMatch(srv, /auth_request|proxy_pass|try_files/, 'www serves nothing of its own');
+});
+
+// Per-person codes (services/siteAccessCodes.js), with a stub store; the real-Postgres proof is
+// src/server/tests/site-access-codes.test.mjs.
+test('a personal code: cookie names the code, revoking it refuses the cookie, account scope invites signup', async () => {
+  const A = '11111111-1111-4111-8111-111111111111', B = '22222222-2222-4222-8222-222222222222';
+  const live = new Map([[A, true], [B, true]]);
+  const codes = {
+    countryOf: () => null,
+    redeemCode: async (_db, typed) => (typed === 'XENO-GOOD' ? { id: A, scope: 'account', expiresAt: new Date(Date.now() + 86400_000) }
+      : typed === 'XENO-PAGES' ? { id: B, scope: 'pages', expiresAt: new Date(Date.now() + 86400_000) } : null),
+    codeIsLive: async (_db, id) => live.get(id) === true,
+    noteAccount: async () => {},
+  };
+  const env = { SITE_GATE: 'on', SITE_GATE_SECRET: 'sec', NODE_ENV: 'test' };
+  const app = express(); app.use(express.json());
+  app.use((req, _r, n) => { req.db = {}; n(); });
+  app.use('/g', createSiteGateRouter({ env, codes, staffGuard: [(_q, r) => r.status(403).end()] }));
+  const s = await new Promise((r) => { const x = app.listen(0, '127.0.0.1', () => r(x)); });
+  const base = `http://127.0.0.1:${s.address().port}/g`;
+  const post = (p, b) => fetch(base + p, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(b || {}) });
+  const check = (c) => fetch(base + '/check', { headers: { cookie: c } }).then((r) => r.status);
+  try {
+    assert.equal((await post('/unlock', { code: 'XENO-BAD' })).status, 401);
+    const acc = await post('/unlock', { code: 'XENO-GOOD' });
+    assert.equal(acc.status, 200);
+    const set = acc.headers.getSetCookie();
+    const gate = set.find((c) => c.startsWith('xeno_gate=')).split(';')[0];
+    assert.match(gate, /^xeno_gate=v2\.\d+\.11111111-/);
+    assert.ok(set.some((c) => c.startsWith('xeno_share_invite=v1.')), 'account scope carries the signup invitation');
+    const pages = await post('/unlock', { code: 'XENO-PAGES' });
+    assert.ok(!pages.headers.getSetCookie().some((c) => c.startsWith('xeno_share_invite=')), 'pages scope never invites signup');
+    assert.equal(await check(gate), 204);
+    live.set(A, false); // revoked or expired
+    assert.equal(await check(gate), 401, 'a revoked code shuts the browsers it opened');
+    live.set(A, true);
+    assert.equal(await check(gate.slice(0, -2) + (gate.endsWith('AA') ? 'BB' : 'AA')), 401, 'tampered cookie refused');
+    assert.equal((await post('/codes', { label: 'x' })).status, 403, 'the console is behind the staff guard');
+    assert.equal((await fetch(base + '/codes')).status, 403);
+  } finally { s.close(); }
+});
+test('the console routes sit behind authMiddleware + requireAdmin by default', () => {
+  const src = readFileSync(new URL('../src/server/routes/siteGateRoutes.js', import.meta.url), 'utf8');
+  assert.match(src, /staffGuard = \[authMiddleware, requireAdmin\]/);
+  for (const r of ["get('/codes', ...staffGuard", "post('/codes', ...staffGuard", "get('/codes/:id/events', ...staffGuard", "post('/codes/:id/revoke', ...staffGuard"]) assert.ok(src.includes(r), `${r} guarded`);
 });
