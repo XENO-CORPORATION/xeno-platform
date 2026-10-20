@@ -39,7 +39,9 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const read = (file) => fs.readFileSync(path.join(ROOT, file), 'utf8');
 
 /** HTTP framework and request authentication -- in-process libraries, none of them a service. */
-const ALLOWED = new Set(['express', 'express-rate-limit', 'jsonwebtoken']);
+// 2026-10-20: the Orchestrator reaches XENO Tasks → support mail (uuid, bcryptjs via emailService) and mode-apply
+// reaches workspace tenancy → billing (stripe, an HTTP API client). All three run in this process; none is a deployable.
+const ALLOWED = new Set(['express', 'express-rate-limit', 'jsonwebtoken', 'uuid', 'bcryptjs', 'stripe']);
 
 /** Clients for distributed services this backend could reach for. Named so a failure says WHY. */
 const DISTRIBUTED = ['ioredis', 'redis', 'bull', 'bullmq', 'kafkajs', 'amqplib', 'nats', 'meilisearch',
