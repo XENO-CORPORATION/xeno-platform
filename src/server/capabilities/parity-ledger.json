@@ -118,7 +118,9 @@
   "xenoMcpRoutes.js": "agents",
   "xenoRoutes.js": "studio",
   "xenoTasksRoutes.js": "tasks",
-  "youtubeRoutes.js": "studio"
+  "youtubeRoutes.js": "studio",
+  "modesRoutes.js": "workspace",
+  "setup.js": "workspace-ui"
  },
  "actions": {
   "route:accountGiftRoutes.js:POST /": {
@@ -7777,6 +7779,100 @@
    "status": "planned",
    "class": "reversible",
    "scope": "agents:write"
+  },
+  "route:modesRoutes.js:GET / (meModesRouter)": {
+   "status": "planned",
+   "class": "safe",
+   "scope": "workspace:read"
+  },
+  "route:modesRoutes.js:POST / (meModesRouter)": {
+   "status": "planned",
+   "class": "reversible",
+   "scope": "workspace:admin"
+  },
+  "route:modesRoutes.js:PATCH /:modeId (meModesRouter)": {
+   "status": "planned",
+   "class": "reversible",
+   "scope": "workspace:admin"
+  },
+  "route:modesRoutes.js:DELETE /:modeId (meModesRouter)": {
+   "status": "planned",
+   "class": "reversible",
+   "scope": "workspace:admin"
+  },
+  "route:modesRoutes.js:GET /:wid/modes/packs (workspaceModesRouter)": {
+   "status": "capability",
+   "capability": "modes.pack.list",
+   "class": "safe",
+   "scope": "workspace:read"
+  },
+  "route:modesRoutes.js:POST /:wid/modes/plan (workspaceModesRouter)": {
+   "status": "capability",
+   "capability": "modes.mode.plan",
+   "class": "safe",
+   "scope": "workspace:read"
+  },
+  "route:modesRoutes.js:POST /:wid/modes/apply (workspaceModesRouter)": {
+   "status": "capability",
+   "capability": "modes.mode.apply",
+   "class": "reversible",
+   "scope": "workspace:admin"
+  },
+  "route:modesRoutes.js:GET /:wid/modes/applications (workspaceModesRouter)": {
+   "status": "capability",
+   "capability": "modes.mode.status",
+   "class": "safe",
+   "scope": "workspace:read"
+  },
+  "route:modesRoutes.js:POST /:wid/modes/:applicationId/revert (workspaceModesRouter)": {
+   "status": "capability",
+   "capability": "modes.mode.revert",
+   "class": "reversible",
+   "scope": "workspace:admin"
+  },
+  "route:modesRoutes.js:PATCH /:wid/modes/items/:modeId (workspaceModesRouter)": {
+   "status": "planned",
+   "class": "reversible",
+   "scope": "workspace:admin"
+  },
+  "ui:setup.js:data-xsu=trade": {
+   "status": "excluded",
+   "category": "view-state",
+   "class": "safe",
+   "scope": "none",
+   "because": "changes only what the screen shows"
+  },
+  "ui:setup.js:data-xsu=back": {
+   "status": "excluded",
+   "category": "view-state",
+   "class": "safe",
+   "scope": "none",
+   "because": "changes only what the screen shows"
+  },
+  "ui:setup.js:data-xsu=custom": {
+   "status": "excluded",
+   "category": "view-state",
+   "class": "safe",
+   "scope": "none",
+   "because": "changes only what the screen shows"
+  },
+  "ui:setup.js:data-xsu=next": {
+   "status": "capability",
+   "capability": "modes.mode.plan",
+   "class": "safe",
+   "scope": "workspace:read"
+  },
+  "ui:setup.js:data-xsu=apply": {
+   "status": "capability",
+   "capability": "modes.mode.apply",
+   "class": "reversible",
+   "scope": "workspace:admin"
+  },
+  "ui:setup.js:data-xsu=undo": {
+   "status": "capability",
+   "capability": "modes.mode.revert",
+   "class": "reversible",
+   "scope": "workspace:admin"
   }
  }
 }
