@@ -2,6 +2,7 @@
  * Checked-in first-party authority ceiling. A client can receive only scopes in
  * its own row; provider and gateway route policies further reduce authority.
  */
+import { WORKSPACE_SCOPES } from '../capabilities/scopes.js';
 export const OIDC_SCOPES = Object.freeze([
   'openid', 'profile', 'email',
   'ledger', // bounded legacy compatibility; route policy prefers ledger:read/spend
@@ -16,6 +17,9 @@ export const OIDC_SCOPES = Object.freeze([
   // XENO Extension: let platform chats use THIS browser (register an installation, hold the relay connection).
   // Separate from inference on purpose: driving a browser is a different authority from spending credits.
   'browser:connect',
+  // XENO workspace agent surface (WORKSPACE AGENT SURFACE SPEC P2, approved 2026-10-20): the per-area scopes a
+  // self-registered client may hold on the 'xeno-workspace' audience (capabilities/scopes.js, minus the two Tasks ones above)
+  ...WORKSPACE_SCOPES.filter((s) => s !== 'tasks:read' && s !== 'tasks:write'),
 ]);
 
 const IDENTITY = ['openid', 'profile', 'email'];

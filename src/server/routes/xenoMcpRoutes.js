@@ -17,9 +17,12 @@
 import express from 'express';
 import { getClient } from '../utils/oidcProvider.js';
 import { acceptedSiteOrigins, issuer } from '../config/hosts.js';
-import { taskTokenAuth } from './xenoTasksRoutes.js';
 import { resolvePrincipal, assertPrincipalUsable } from '../services/agentIdentity.js';
 import * as mcp from '../services/xenoMcp.js';
+import { workspaceTokenAuth } from './workspaceAuth.js';
+import * as creds from '../services/workspaceCredentials.js';
+import { DYNAMIC_SCOPES, WORKSPACE_AUDIENCE } from '../utils/oidcProvider.js';
+import { personalWorkspace } from '../services/workforceDivisions.js';
 
 const router = express.Router();
 
@@ -35,13 +38,15 @@ function resourceUrl(req) {
 export function mcpResourceMetadata(req, res) {
   const { resource, origin } = resourceUrl(req);
   res.set('cache-control', 'public, max-age=300');
-  res.json({ resource, resource_name: 'XENO MCP', authorization_servers: [issuer()], scopes_supported: ['tasks:read', 'tasks:write'],
+  res.json({ resource, resource_name: 'XENO MCP', authorization_servers: [issuer()], scopes_supported: [...DYNAMIC_SCOPES],
     bearer_methods_supported: ['header'], resource_documentation: `${origin}/workspace/dev/apps/mcp` });
 }
-const challenge = (req, res, body, error) => {
+export const challenge = (req, res, body, error) => {
   res.set('WWW-Authenticate', `Bearer resource_metadata="${resourceUrl(req).metadata}"${error ? `, error="${error}"` : ''}, scope="tasks:read tasks:write"`);
   return res.status(401).json(body);
 };
+/** The credential middleware of /api/mcp and /api/v1: workspace sign-ins and xwk_ keys, then the Tasks credentials. */
+export const surfaceAuth = workspaceTokenAuth(challenge);
 
 const mcpOriginOk = (req) => { const o = req.headers.origin; return !o || acceptedSiteOrigins().includes(o) || /^https?:\/\/(localhost|127\.0\.0\.1|\[::1\])(:\d+)?$/.test(o); };
 
@@ -70,13 +75,20 @@ export async function callerOf(req, res, rid, { principal = true } = {}) {
   const tok = req.taskToken;
   // two ways in: an OAuth sign-in (one connection per signed-in client), or a platform agent's own xtk_ credential
   // (one connection per agent; the credential's expiry and revocation are its gate)
-  const viaCredential = Boolean(tok && tok.via !== 'oauth' && tok.tokenId);
-  if (!tok || (!viaCredential && (tok.via !== 'oauth' || !tok.clientId))) {
+  const viaCredential = Boolean(tok && tok.via !== 'oauth' && tok.via !== 'xwk' && tok.tokenId);
+  const viaKey = Boolean(tok && tok.via === 'xwk');
+  if (!tok || (!viaCredential && !viaKey && (tok.via !== 'oauth' || !tok.clientId))) {
     challenge(req, res, { jsonrpc: '2.0', id: null, error: { code: -32001, message: 'XENO MCP needs a signed-in connection. Add https://xenosystem.ai/api/mcp to your agent and sign in.' } }, 'invalid_token'); return null;
   }
   // a disconnected connection is refused on its very next call, before anything runs
   let connection;
-  if (viaCredential) {
+  const workspaceToken = tok.audience === WORKSPACE_AUDIENCE;
+  // a workspace credential's connection reaches the categories its scopes name; a NEW sign-in is granted exactly what
+  // its scopes reach in the person's own workspace (they consented to those scopes). Other workspaces: granted by hand.
+  const fresh = workspaceToken && !viaKey && !(await req.db.query('SELECT 1 FROM mcp_connections WHERE owner_user_id = $1 AND client_id = $2 AND revoked_at IS NULL', [tok.ownerId, tok.clientId])).rows.length;
+  if (viaKey) {
+    connection = await mcp.connectionFor(req.db, { ownerId: tok.ownerId, agentId: tok.agentUserId, clientId: tok.clientId, clientName: `Key: ${tok.keyName}`, categories: mcp.categoriesForScopes(tok.scopes) });
+  } else if (viaCredential) {
     const a = (await req.db.query(`SELECT ai.owner_user_id, ai.public_id, COALESCE(u.display_name, u.username) AS name FROM agent_identities ai JOIN users u ON u.id = ai.user_id WHERE ai.user_id = $1`, [tok.agentUserId])).rows[0];
     if (!a) { challenge(req, res, { jsonrpc: '2.0', id: rid, error: { code: -32001, message: 'This credential does not belong to an agent' } }, 'invalid_token'); return null; }
     connection = await mcp.connectionFor(req.db, { ownerId: String(a.owner_user_id), agentId: tok.agentUserId, clientId: `agent:${a.public_id}`, clientName: a.name, categories: [...mcp.AGENT_DEFAULT_CATEGORIES] });
@@ -85,8 +97,9 @@ export async function callerOf(req, res, rid, { principal = true } = {}) {
   }
   if (!connection) {
     const client = await getClient(req.db, tok.clientId);
-    connection = await mcp.connectionFor(req.db, { ownerId: tok.ownerId, agentId: tok.agentUserId, clientId: tok.clientId, clientName: client ? client.name : null });
+    connection = await mcp.connectionFor(req.db, { ownerId: tok.ownerId, agentId: tok.agentUserId, clientId: tok.clientId, clientName: client ? client.name : null, ...(workspaceToken ? { categories: mcp.categoriesForScopes(tok.scopes) } : {}) });
   }
+  if (fresh) await creds.grant(req.db, tok.agentUserId, await personalWorkspace(req.db, tok.ownerId), creds.capabilitiesForScopes(tok.scopes));
   if (!principal) return { connection, actor: null };
   const p = await resolvePrincipal(req.db, tok.agentUserId); assertPrincipalUsable(p);
   const u = (await req.db.query('SELECT COALESCE(display_name, username) AS name FROM users WHERE id = $1', [p.id])).rows[0];
@@ -97,7 +110,7 @@ export async function callerOf(req, res, rid, { principal = true } = {}) {
  * GET /api/mcp/catalogue — the capability declarations THIS caller may use (SPEC §19.3), with its own MCP
  * credential. A capability it cannot use is not listed. ETag is the catalogue version for this caller.
  */
-router.get('/catalogue', needsToken, taskTokenAuth, async (req, res) => {
+router.get('/catalogue', needsToken, surfaceAuth, async (req, res) => {
   try {
     const caller = await callerOf(req, res, null); if (!caller) return;
     const caps = mcp.visibleCapabilities(caller.connection, caller.actor);
@@ -113,7 +126,7 @@ router.get('/catalogue', needsToken, taskTokenAuth, async (req, res) => {
   }
 });
 
-router.post('/', needsToken, taskTokenAuth, async (req, res) => {
+router.post('/', needsToken, surfaceAuth, async (req, res) => {
   const body = req.body;
   if (Array.isArray(body)) return res.status(400).json({ jsonrpc: '2.0', id: null, error: { code: -32600, message: 'Batched requests are not supported (MCP 2025-06-18)' } });
   const pv = req.headers['mcp-protocol-version'];
@@ -128,6 +141,7 @@ router.post('/', needsToken, taskTokenAuth, async (req, res) => {
       // SPEC §19.3: a key for every non-safe capability, and the run the call belongs to
       idempotencyKey: String(req.headers['idempotency-key'] || '') || null,
       runId: String(req.headers['x-xeno-run-id'] || '') || null,
+      workspaceId: String(req.headers['x-xeno-workspace'] || '') || null,
     };
     const out = await mcp.dispatch(req.db, actor, connection, body || {}, ctx, (log) => mcp.logCall(req.db, connection.id, log));
     res.json(out);
@@ -156,6 +170,37 @@ export async function personOnly(req, res, next) {
   } catch (error) { res.status(error.statusCode || 403).json({ success: false, error: error.message || 'Not allowed', code: error.code || 'not_allowed' }); }
 }
 export const management = express.Router();
+const credsHandled = (fn) => async (req, res) => {
+  try { await fn(req, res); }
+  catch (error) {
+    if (error instanceof creds.WorkspaceCredentialError || error instanceof mcp.McpError) return res.status(error.status).json({ success: false, error: error.message, code: error.code });
+    console.error('[xeno mcp] credentials', error);
+    res.status(500).json({ success: false, error: 'Internal server error' });
+  }
+};
+// headless scoped keys (xwk_): the person makes, lists and revokes them; the key is shown once
+management.get('/keys', credsHandled(async (req, res) => { res.json({ success: true, keys: await creds.listKeys(req.db, req.owner) }); }));
+management.post('/keys', credsHandled(async (req, res) => {
+  const b = req.body || {};
+  const out = await creds.createKey(req.db, req.owner, { name: b.name, scopes: b.scopes, workspaceId: b.workspace || null, expiresInDays: b.expiresInDays });
+  res.status(201).json({ success: true, ...out });
+}));
+management.delete('/keys/:id', credsHandled(async (req, res) => { res.json({ success: true, ...(await creds.revokeKey(req.db, req.owner, req.params.id)) }); }));
+// a connection's workspace grants: capability:<name>@<workspace>
+management.get('/connections/:id/grants', credsHandled(async (req, res) => {
+  const c = await mcp.getConnection(req.db, req.owner, req.params.id);
+  res.json({ success: true, grants: await creds.listGrants(req.db, c.agentId) });
+}));
+management.put('/connections/:id/grants', credsHandled(async (req, res) => {
+  const c = await mcp.getConnection(req.db, req.owner, req.params.id);
+  const ws = String((req.body && req.body.workspace) || '');
+  const names = Array.isArray(req.body && req.body.capabilities) ? req.body.capabilities.map(String) : null;
+  if (!names) throw new creds.WorkspaceCredentialError('capabilities must be a list', 'invalid_capabilities');
+  await creds.assertCanGrantIn(req.db, req.owner, ws);
+  await creds.revokeGrants(req.db, c.agentId, ws);
+  if (names.length) await creds.grant(req.db, c.agentId, ws, names);
+  res.json({ success: true, grants: await creds.listGrants(req.db, c.agentId) });
+}));
 management.get('/services', handled(async (req, res) => {
   res.json({ success: true, services: mcp.SERVICES.map((s) => ({ category: s.category, title: s.title, description: s.description, tools: s.tools().length, ...(s.agentsOnly ? { agentsOnly: true } : {}) })) });
 }));

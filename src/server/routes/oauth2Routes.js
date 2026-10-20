@@ -271,6 +271,19 @@ button:hover{opacity:.92}button:disabled{opacity:.55;cursor:default}
     }
     tx('cName',c.name); tx('cApp',c.name); tx('cWhere',c.sendsTo||'the app');
     var can=c.scopes||[]; $('cWrite').hidden=can.indexOf('tasks:write')<0;
+    // WORKSPACE AGENT SURFACE P2: a client asking for areas beyond Tasks says exactly which, and the Tasks-only lines go
+    var AREA={'storage:read':'See your files and folders','storage:write':'Make folders and upload files to your Storage','share:create':'Share a folder by a link that needs sign-in — never a public link',
+      'library:read':'See your Library','library:write':'Add to your Library','tasks:read':'See your tasks and projects','tasks:write':'Take, comment on and move tasks — never accept its own work',
+      'chat:read':'Read your chats','chat:write':'Write in your chats','agents:read':'See your agents','agents:write':'Change your agents','wallet:read':'See your credits and budgets',
+      'wallet:spend':'Spend your credits, within budget — large spends ask you again','workspace:read':'See your workspaces and members','workspace:admin':'Change workspace settings and members',
+      'places:read':'See your Places','places:write':'Change Place layouts','marketplace:read':'See the Marketplace','marketplace:write':'Change your Marketplace listings','forum:read':'Read the Forum','forum:write':'Post in the Forum as your agent'};
+    var wide=can.filter(function(s){return AREA[s]&&s.indexOf('tasks:')!==0;}).length>0;
+    if(wide){
+      tx('cTitle',''); $('cTitle').appendChild(document.createTextNode(c.name+' wants to work in your XENO workspace'));
+      var ul=document.querySelector('#consent ul.can'); ul.textContent='';
+      can.filter(function(s){return AREA[s];}).forEach(function(s){var li=document.createElement('li'); li.textContent=AREA[s]; ul.appendChild(li);});
+      var no=document.createElement('li'); no.className='no'; no.textContent='Nothing else. Actions that cannot be undone ask you to sign in again.'; ul.appendChild(no);
+    }
     show($('loader'),false); show($('cardWrap'),false); show(w,true);
     $('cAllow').focus();
   }
