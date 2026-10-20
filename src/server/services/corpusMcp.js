@@ -4,6 +4,7 @@
  * tenet on its own (D211), and the database refuses an agent-written tenet or ratification.
  */
 import * as corpus from './xenoCorpus.js';
+import { getSigningKey } from '../utils/oidcProvider.js';
 
 const RO = { readOnlyHint: true, openWorldHint: false }, RW = { readOnlyHint: false, destructiveHint: false, openWorldHint: false };
 const ok = (data) => ({ content: [{ type: 'text', text: JSON.stringify(data, null, 2) }], structuredContent: data });
@@ -26,6 +27,14 @@ export const TOOLS = [
       tenet: { type: 'object', description: 'key, kind (tenet|doctrine), subject?, claim, definition?, assay {kind: shell|node|http|manual, run}, expect, cadence? ("24h"), warnAfter?, expireAfter?, source?.' },
       target_tenet_id: { type: 'string', description: 'For supersede or retire: the live tenet’s id.' },
       rationale: { type: 'string', description: 'Why: what you observed and where.' } } } },
+  { name: 'history', title: 'Read a tenet’s verdicts', annotations: RO,
+    description: 'Every signed verdict a tenet has had, newest first: state, what was observed, when, the run admission it was taken under, and the hash chain and signature, so it can be verified offline against the platform key.',
+    inputSchema: { type: 'object', required: ['tenet'], properties: { tenet: { type: 'string', description: 'The tenet id (from corpus_query).' }, limit: { type: 'integer', description: 'At most 500; default 100.' } } } },
+  { name: 'record_verdict', title: 'Record an assay verdict', annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: false },
+    description: 'Record what an assay run observed for a tenet: held, lapsed or error. It must be taken under a live run admission of the person accountable for you (your owner), and it is kept forever, signed and chained; it cannot be edited. Run the tenet’s assay first; report what it returned, not what you expected.',
+    inputSchema: { type: 'object', required: ['tenet', 'admission', 'state'], properties: { tenet: { type: 'string', description: 'The tenet id.' },
+      admission: { type: 'string', description: 'The run admission id you are running under.' }, state: { type: 'string', enum: ['held', 'lapsed', 'error'] },
+      observed: { type: 'string', description: 'What the assay returned.' }, instrument: { type: 'string', description: 'The command or procedure you ran.' } } } },
 ];
 
 async function run(fn) {
@@ -38,6 +47,9 @@ export async function callTool(db, actor, name, a = {}) {
     case 'query': return run(() => corpus.queryCorpus(db, me, { kind: a.scope, id: a.id, q: a.q }));
     case 'assess': return run(() => corpus.assessCorpus(db, me, { kind: a.scope, id: a.id }));
     case 'propose': return run(() => corpus.propose(db, me, { kind: a.scope, id: a.id }, { action: a.action || 'add', tenet: a.tenet, targetTenetId: a.target_tenet_id, rationale: a.rationale }));
+    case 'history': return run(() => corpus.verdictHistory(db, me, a.tenet, { limit: a.limit }));
+    case 'record_verdict': return run(async () => { const k = await getSigningKey(db);
+      return corpus.recordVerdict(db, me, a.tenet, { admissionId: a.admission, state: a.state, observed: a.observed, instrument: a.instrument }, { signingKey: { kid: k.kid, privatePem: k.privatePem } }); });
     default: throw new CorpusMcpError(`Unknown tool ${name}`, 'unknown_tool');
   }
 }

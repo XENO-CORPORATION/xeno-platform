@@ -8303,7 +8303,7 @@
    "status": "capability",
    "capability": "corpus.proposal.create",
    "class": "reversible",
-   "scope": "workspace:read"
+   "scope": "workspace:admin"
   },
   "route:corpusRoutes.js:POST /:scope/:id/tenets": {
    "status": "excluded",
@@ -8321,12 +8321,14 @@
    "because": "ratifying turns a proposal into truth; an agent deciding proposals (its own included) is what D211 forbids, and the database refuses it"
   },
   "route:corpusRoutes.js:GET /tenets/:id/verdicts": {
-   "status": "planned",
+   "status": "capability",
+   "capability": "corpus.verdict.list",
    "class": "safe",
    "scope": "workspace:read"
   },
   "route:corpusRoutes.js:POST /tenets/:id/verdicts": {
-   "status": "planned",
+   "status": "capability",
+   "capability": "corpus.verdict.record",
    "class": "irreversible",
    "scope": "agents:write"
   },
@@ -8363,7 +8365,7 @@
    "status": "capability",
    "capability": "corpus.proposal.create",
    "class": "reversible",
-   "scope": "workspace:read"
+   "scope": "workspace:admin"
   },
   "ui:platform-corpus.js:data-xcp=ratify": {
    "status": "excluded",

@@ -216,13 +216,41 @@
    "wire": "corpus__proposal__create",
    "version": "1.0.0",
    "class": "undoable",
-   "scope": "workspace:read",
+   "scope": "workspace:admin",
    "surfaces": [
     "mcp",
     "rest"
    ],
    "aliases": [
     "corpus_propose"
+   ]
+  },
+  {
+   "name": "corpus.verdict.list",
+   "wire": "corpus__verdict__list",
+   "version": "1.0.0",
+   "class": "safe",
+   "scope": "workspace:read",
+   "surfaces": [
+    "mcp",
+    "rest"
+   ],
+   "aliases": [
+    "corpus_history"
+   ]
+  },
+  {
+   "name": "corpus.verdict.record",
+   "wire": "corpus__verdict__record",
+   "version": "1.0.0",
+   "class": "irreversible",
+   "scope": "agents:write",
+   "surfaces": [
+    "mcp",
+    "rest"
+   ],
+   "aliases": [
+    "corpus_record_verdict"
    ]
   },
   {
