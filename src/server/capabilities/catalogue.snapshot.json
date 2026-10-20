@@ -72,6 +72,34 @@
    ]
   },
   {
+   "name": "modes.architect.propose",
+   "wire": "modes__architect__propose",
+   "version": "1.0.0",
+   "class": "irreversible",
+   "scope": "workspace:read",
+   "surfaces": [
+    "mcp",
+    "rest"
+   ],
+   "aliases": [
+    "modes_architect_propose"
+   ]
+  },
+  {
+   "name": "modes.architect.get",
+   "wire": "modes__architect__get",
+   "version": "1.0.0",
+   "class": "safe",
+   "scope": "workspace:read",
+   "surfaces": [
+    "mcp",
+    "rest"
+   ],
+   "aliases": [
+    "modes_architect_get"
+   ]
+  },
+  {
    "name": "people.person.list",
    "wire": "people__person__list",
    "version": "1.0.0",
@@ -1287,6 +1315,48 @@
    ],
    "aliases": [
     "support_triage"
+   ]
+  },
+  {
+   "name": "analytics.metric.list",
+   "wire": "analytics__metric__list",
+   "version": "1.0.0",
+   "class": "safe",
+   "scope": "analytics:read",
+   "surfaces": [
+    "mcp",
+    "rest"
+   ],
+   "aliases": [
+    "analytics_list_metrics"
+   ]
+  },
+  {
+   "name": "analytics.metric.query",
+   "wire": "analytics__metric__query",
+   "version": "1.0.0",
+   "class": "safe",
+   "scope": "analytics:read",
+   "surfaces": [
+    "mcp",
+    "rest"
+   ],
+   "aliases": [
+    "analytics_query_metric"
+   ]
+  },
+  {
+   "name": "analytics.dashboard.list",
+   "wire": "analytics__dashboard__list",
+   "version": "1.0.0",
+   "class": "safe",
+   "scope": "analytics:read",
+   "surfaces": [
+    "mcp",
+    "rest"
+   ],
+   "aliases": [
+    "analytics_list_dashboards"
    ]
   },
   {
