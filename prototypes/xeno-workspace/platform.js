@@ -31,7 +31,13 @@
     if (!['GET', 'HEAD'].includes(method)) { const t = csrf(); if (t) headers['x-xeno-csrf'] = t; }
     const r = await fetch(url, { method, credentials: 'same-origin', headers, body: body !== undefined ? JSON.stringify(body) : undefined });
     let d = null; try { d = await r.json(); } catch {}
-    if (r.status === 401) location.replace('/login?returnUrl=' + encodeURIComponent(location.pathname + location.search + location.hash));
+    // One route answering 401 is not proof the session ended (a route bug looped everyone to /login on 2026-10-20).
+    // Go to sign-in only when the session itself says so.
+    if (r.status === 401 && !P._toLogin) {
+      P._toLogin = fetch('/api/auth/me', { credentials: 'same-origin', headers: { 'x-xeno-surface': 'xeno-web' } })
+        .then((m) => { if (m.status === 401) location.replace('/login?returnUrl=' + encodeURIComponent(location.pathname + location.search + location.hash)); else P._toLogin = null; })
+        .catch(() => { P._toLogin = null; });
+    }
     return { status: r.status, ok: r.ok && (!d || d.success !== false), d: d || {} };
   };
   const root = document.documentElement;

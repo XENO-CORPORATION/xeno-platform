@@ -253,11 +253,13 @@ export async function resolveAuthedUser(req) {
  */
 export const authMiddleware = async (req, res, next) => {
   try {
+    // FULL paths (mount + route), never req.path alone: req.path is relative to the mount, so a bare status path
+    // skipped auth on EVERY router's /status (it made /api/publish/status a 401 that looped the workspace to /login).
     const publicPaths = new Set([
-      '/status',
-      '/download/extension/releases',
+      '/api/browser/status',
+      '/api/download/extension/releases',
     ]);
-    if (publicPaths.has(req.path)) {
+    if (publicPaths.has(String(req.originalUrl || '').split('?')[0].replace(/\/+$/, ''))) {
       return next();
     }
 
