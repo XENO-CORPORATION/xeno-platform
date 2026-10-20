@@ -177,6 +177,10 @@ const BACKEND_SUITES = [
   'task-leases',
   // Website Storage → XENO Connect BFF: session-bound minting, DPoP, grant renewal, refusals (2026-10-19)
   'web-connect',
+  // Workspace agent surface P2 (2026-10-20): workspace audience, scopes, grants, step-up, xwk_ keys, revocation
+  'workspace-agent-surface',
+  // On disk and run by NOTHING until 2026-10-20 (the gates-reachable gate was red on main): register them here
+  'marketplace-seller-workspace', 'ownership-contract', 'ownership-principles', 'plan-on-workspace', 'service-account-grants',
 ];
 
 const BACKEND_EVIDENCE = {

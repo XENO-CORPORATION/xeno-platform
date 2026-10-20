@@ -18,8 +18,7 @@ import { restCapabilities, byName } from '../capabilities/catalogue.js';
 import { toWire } from '../capabilities/define.js';
 import { WORKSPACE_SCOPES } from '../capabilities/scopes.js';
 import * as mcp from '../services/xenoMcp.js';
-import { callerOf, needsToken } from './xenoMcpRoutes.js';
-import { taskTokenAuth } from './xenoTasksRoutes.js';
+import { callerOf, needsToken, surfaceAuth } from './xenoMcpRoutes.js';
 import { issuer } from '../config/hosts.js';
 
 const router = express.Router();
@@ -94,11 +93,14 @@ async function run(req, res, args) {
       project: String(req.headers['x-xeno-tasks-project'] || '') || null,
       idempotencyKey: String(req.headers['idempotency-key'] || '') || null,
       runId: String(req.headers['x-xeno-run-id'] || '') || null,
+      workspaceId: String(req.headers['x-xeno-workspace'] || '') || null,
     };
     const { result, log } = await mcp.callTool(req.db, caller.actor, caller.connection, toWire(cap.name), args || {}, ctx);
     try { await mcp.logCall(req.db, caller.connection.id, log); } catch (e) { console.error('[xeno v1] log', e); }
     if (result && result.isError) {
       const code = (result.structuredContent && result.structuredContent.code) || 'refused';
+      // RFC 9470: say WHY a fresh sign-in is needed, so the client can re-authorize with prompt=login
+      if (code === 'step_up_required') res.set('WWW-Authenticate', 'Bearer error="insufficient_user_authentication", error_description="A fresh sign-in is needed for this action", max_age="600"');
       return res.status(STATUS[code] || 400).json({ success: false, error: (result.structuredContent && result.structuredContent.error) || 'Refused', code });
     }
     if (result && result._meta && result._meta['xeno/replayed']) res.set('Idempotent-Replayed', 'true');
@@ -110,8 +112,8 @@ async function run(req, res, args) {
   }
 }
 
-router.post('/:division/:domain/:verb', needsToken, taskTokenAuth, (req, res) => run(req, res, req.body));
-router.get('/:division/:domain/:verb', needsToken, taskTokenAuth, (req, res) => {
+router.post('/:division/:domain/:verb', needsToken, surfaceAuth, (req, res) => run(req, res, req.body));
+router.get('/:division/:domain/:verb', needsToken, surfaceAuth, (req, res) => {
   const cap = capabilityOf(req.params);
   if (cap && cap.class !== 'safe') { res.set('Allow', 'POST'); return res.status(405).json({ success: false, error: 'This capability changes something: use POST', code: 'method_not_allowed' }); }
   return run(req, res, cap ? queryArgs(cap, req.query) : {});

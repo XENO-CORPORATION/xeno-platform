@@ -17,6 +17,7 @@ import crypto from 'node:crypto';
 import jwt from 'jsonwebtoken';
 import { issuer, mailDomain } from '../config/hosts.js';
 import { OIDC_SCOPES, scopesForClient } from '../config/oidcAuthorityPolicy.js';
+import { WORKSPACE_SCOPES } from '../capabilities/scopes.js';
 import { jwkThumbprint, publicJwk } from './dpop.js';
 import { recordSecurityEventAsync, EVENTS } from '../services/securityEvents.js';
 
@@ -38,6 +39,12 @@ export const ACCESS_TOKEN_AUDIENCE = 'xeno-api';
 // (which requires 'xeno-api') refuses them by construction. Only /api/tasks accepts it.
 export const TASKS_AUDIENCE = 'xeno-tasks';
 export const TASKS_SCOPES = Object.freeze(['tasks:read', 'tasks:write']);
+// XENO WORKSPACE AGENT SURFACE - SPEC.md P2 (approved 2026-10-20, "yes to all"): the same self-registration and consent,
+// widened. A client that asks for any per-area scope beyond Tasks gets tokens for THIS audience, which only /api/mcp
+// and /api/v1 accept — every other API (authMiddleware, 'xeno-api') and /api/tasks itself refuse it by construction.
+// A client that asks for Tasks scopes only keeps the 'xeno-tasks' audience it always had (expand/contract).
+export const WORKSPACE_AUDIENCE = 'xeno-workspace';
+export const DYNAMIC_SCOPES = Object.freeze([...new Set([...TASKS_SCOPES, ...WORKSPACE_SCOPES])]);
 // XENO MCP (/api/mcp, SURFACES spec §7) accepts these same tokens: Tasks is its only service today, so a client
 // signed in to /api/tasks/mcp works on /api/mcp with nothing to re-authorize. The audience stays one the rest of
 // the API refuses.
@@ -398,7 +405,7 @@ export async function createAuthorizationCode(db, {
     codeChallengeMethod,
   });
   const grantedScope = downscope(scope || (client.dynamic ? 'openid tasks:read tasks:write' : 'openid profile email'), client.allowed_scopes);
-  if (client.dynamic && !grantedScope.split(' ').some((s) => TASKS_SCOPES.includes(s))) throw oauthError('invalid_scope', 'this client may only request tasks:read and tasks:write');
+  if (client.dynamic && !grantedScope.split(' ').some((s) => DYNAMIC_SCOPES.includes(s))) throw oauthError('invalid_scope', 'this client may only request the scopes it registered for');
   if (prompt !== null && prompt !== '' && prompt !== 'login') {
     throw oauthError('invalid_request', 'unsupported prompt');
   }
@@ -1049,8 +1056,10 @@ export async function registerDynamicClient(db, meta = {}, { from = null } = {})
   const responses = Array.isArray(meta.response_types) && meta.response_types.length ? meta.response_types : ['code'];
   if (responses.some((r) => r !== 'code')) throw bad('response_types must be ["code"]');
   const requested = String(meta.scope || 'tasks:read tasks:write').split(/\s+/).filter(Boolean);
-  const scopes = requested.filter((s) => TASKS_SCOPES.includes(s));
-  if (!scopes.length) throw Object.assign(new Error('scope'), { oauthError: 'invalid_client_metadata', description: 'this server registers clients for tasks:read and tasks:write only', statusCode: 400 });
+  const scopes = [...new Set(requested.filter((s) => DYNAMIC_SCOPES.includes(s)))];
+  if (!scopes.length) throw Object.assign(new Error('scope'), { oauthError: 'invalid_client_metadata', description: `this server registers clients for these scopes only: ${DYNAMIC_SCOPES.join(' ')}`, statusCode: 400 });
+  // Tasks-only stays on the Tasks audience; any other area makes it a workspace client (WORKSPACE AGENT SURFACE P2)
+  const audience = scopes.every((s) => TASKS_SCOPES.includes(s)) ? TASKS_AUDIENCE : WORKSPACE_AUDIENCE;
   if (from) {
     const recent = (await db.query(`SELECT count(*)::int AS n FROM oauth_clients WHERE dynamic AND registered_from = $1 AND created_at > now() - interval '1 hour'`, [from])).rows[0].n;
     if (recent >= DYNAMIC_REGISTRATION_LIMIT.perAddressPerHour) throw Object.assign(new Error('rate'), { oauthError: 'invalid_client_metadata', description: 'too many registrations from this address; try again later', statusCode: 429 });
@@ -1059,25 +1068,29 @@ export async function registerDynamicClient(db, meta = {}, { from = null } = {})
   const allowed = ['openid', ...scopes];
   await db.query(
     `INSERT INTO oauth_clients (client_id, client_secret, name, redirect_uris, allowed_scopes, surface, is_first_party, loopback, dynamic, access_audience, registered_from)
-     VALUES ($1, NULL, $2, $3, $4, 'xeno_tasks_mcp', false, false, true, $5, $6)`,
-    [clientId, name, uris, allowed, TASKS_AUDIENCE, from]);
+     VALUES ($1, NULL, $2, $3, $4, $7, false, false, true, $5, $6)`,
+    [clientId, name, uris, allowed, audience, from, audience === TASKS_AUDIENCE ? 'xeno_tasks_mcp' : 'xeno_workspace_mcp']);
   return {
     client_id: clientId, client_id_issued_at: Math.floor(Date.now() / 1000), client_name: name, redirect_uris: uris,
     token_endpoint_auth_method: 'none', grant_types: grants, response_types: ['code'], scope: scopes.join(' '),
   };
 }
 
-/** Verify a Tasks-audience access token (minted for a self-registered MCP client). Returns its
- *  claims, or null if it is not one. Throws on a token that claims to be one and is invalid. */
-export async function verifyTasksAccessToken(db, token) {
+/** Verify an access token minted for a self-registered client on `audience`. Returns its claims, or null if it is
+ *  not one. Throws on a token that claims to be one and is invalid. */
+async function verifyDynamicAccessToken(db, token, audience) {
   const header = jwt.decode(token, { complete: true })?.header;
   if (!header || !header.kid || header.alg === 'HS256') return null;
   const peek = jwt.decode(token);
-  if (!peek || !audienceIncludes(peek.aud, TASKS_AUDIENCE)) return null;
+  if (!peek || !audienceIncludes(peek.aud, audience)) return null;
   const key = await getKeyByKid(db, header.kid);
   if (!key) throw oauthError('invalid_token', 'unknown signing key');
-  const payload = jwt.verify(token, key.publicKey, { algorithms: [key.alg], audience: TASKS_AUDIENCE, issuer: issuer() });
+  const payload = jwt.verify(token, key.publicKey, { algorithms: [key.alg], audience, issuer: issuer() });
   if (header.typ !== ACCESS_TOKEN_TYP || payload.typ !== ACCESS_TOKEN_TYP) throw oauthError('invalid_token', 'not an access token');
   if (payload.sid && !(await isOidcSessionActive(db, { sid: payload.sid, userId: payload.sub, authEpoch: payload.auth_epoch }))) throw oauthError('invalid_token', 'session ended');
   return payload;
 }
+/** A Tasks-audience access token (a self-registered MCP client that asked for Tasks only). */
+export const verifyTasksAccessToken = (db, token) => verifyDynamicAccessToken(db, token, TASKS_AUDIENCE);
+/** A workspace-audience access token. Accepted ONLY by /api/mcp and /api/v1 (routes/workspaceAuth.js). */
+export const verifyWorkspaceAccessToken = (db, token) => verifyDynamicAccessToken(db, token, WORKSPACE_AUDIENCE);

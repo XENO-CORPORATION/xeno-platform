@@ -4763,6 +4763,13 @@
    "class": "irreversible",
    "scope": "agents:write"
   },
+  "route:xenoMcpRoutes.js:DELETE /keys/:id (management)": {
+   "status": "excluded",
+   "category": "self-authority",
+   "because": "mints, lists or widens an agent credential or grant: the person decides that, never an agent",
+   "class": "irreversible",
+   "scope": "none"
+  },
   "route:xenoMcpRoutes.js:GET /": {
    "status": "excluded",
    "category": "protocol",
@@ -4792,6 +4799,20 @@
    "class": "safe",
    "scope": "agents:read"
   },
+  "route:xenoMcpRoutes.js:GET /connections/:id/grants (management)": {
+   "status": "excluded",
+   "category": "self-authority",
+   "because": "mints, lists or widens an agent credential or grant: the person decides that, never an agent",
+   "class": "safe",
+   "scope": "none"
+  },
+  "route:xenoMcpRoutes.js:GET /keys (management)": {
+   "status": "excluded",
+   "category": "self-authority",
+   "because": "mints, lists or widens an agent credential or grant: the person decides that, never an agent",
+   "class": "safe",
+   "scope": "none"
+  },
   "route:xenoMcpRoutes.js:GET /services (management)": {
    "status": "planned",
    "class": "safe",
@@ -4808,6 +4829,20 @@
    "class": "reversible",
    "scope": "none",
    "because": "the /api/mcp transport"
+  },
+  "route:xenoMcpRoutes.js:POST /keys (management)": {
+   "status": "excluded",
+   "category": "self-authority",
+   "because": "mints, lists or widens an agent credential or grant: the person decides that, never an agent",
+   "class": "reversible",
+   "scope": "none"
+  },
+  "route:xenoMcpRoutes.js:PUT /connections/:id/grants (management)": {
+   "status": "excluded",
+   "category": "self-authority",
+   "because": "mints, lists or widens an agent credential or grant: the person decides that, never an agent",
+   "class": "reversible",
+   "scope": "none"
   },
   "route:xenoRoutes.js:GET /remote/runs": {
    "status": "planned",
