@@ -54,6 +54,7 @@
     "test:allowance-first-use-db": "node --test scripts/allowance-first-use-database.test.mjs",
     "test:service-lease-db": "node --test src/server/tests/service-ledger-lease.test.mjs",
     "test:session-key-agent-budget-db": "node src/server/tests/session-key-agent-budget.test.mjs",
+    "test:division-home": "node src/server/tests/division-home.test.mjs",
     "test:agents-whoami-db": "node src/server/tests/agents-whoami.test.mjs",
     "test:billing-subject": "node --test scripts/billing-subject.test.mjs",
     "test:forum-ranker": "node --test scripts/forum-ranker.test.mjs",
