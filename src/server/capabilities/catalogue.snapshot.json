@@ -2,6 +2,76 @@
  "$generated": "npm run catalogue -- --write",
  "capabilities": [
   {
+   "name": "modes.pack.list",
+   "wire": "modes__pack__list",
+   "version": "1.0.0",
+   "class": "safe",
+   "scope": "workspace:read",
+   "surfaces": [
+    "mcp",
+    "rest"
+   ],
+   "aliases": [
+    "modes_list"
+   ]
+  },
+  {
+   "name": "modes.mode.plan",
+   "wire": "modes__mode__plan",
+   "version": "1.0.0",
+   "class": "safe",
+   "scope": "workspace:read",
+   "surfaces": [
+    "mcp",
+    "rest"
+   ],
+   "aliases": [
+    "modes_plan"
+   ]
+  },
+  {
+   "name": "modes.mode.apply",
+   "wire": "modes__mode__apply",
+   "version": "1.0.0",
+   "class": "undoable",
+   "scope": "workspace:admin",
+   "surfaces": [
+    "mcp",
+    "rest"
+   ],
+   "aliases": [
+    "modes_apply"
+   ]
+  },
+  {
+   "name": "modes.mode.revert",
+   "wire": "modes__mode__revert",
+   "version": "1.0.0",
+   "class": "undoable",
+   "scope": "workspace:admin",
+   "surfaces": [
+    "mcp",
+    "rest"
+   ],
+   "aliases": [
+    "modes_revert"
+   ]
+  },
+  {
+   "name": "modes.mode.status",
+   "wire": "modes__mode__status",
+   "version": "1.0.0",
+   "class": "safe",
+   "scope": "workspace:read",
+   "surfaces": [
+    "mcp",
+    "rest"
+   ],
+   "aliases": [
+    "modes_status"
+   ]
+  },
+  {
    "name": "tasks.project.list",
    "wire": "tasks__project__list",
    "version": "1.0.0",

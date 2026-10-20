@@ -177,6 +177,8 @@ const BACKEND_SUITES = [
   'task-leases',
   // Website Storage → XENO Connect BFF: session-bound minting, DPoP, grant renewal, refusals (2026-10-19)
   'web-connect',
+  // Custom modes + trade packs: account modes, plan/apply/receipt/revert, kind `mode` (2026-10-20)
+  'custom-modes',
   // Workspace agent surface P2 (2026-10-20): workspace audience, scopes, grants, step-up, xwk_ keys, revocation
   'workspace-agent-surface',
   // On disk and run by NOTHING until 2026-10-20 (the gates-reachable gate was red on main): register them here

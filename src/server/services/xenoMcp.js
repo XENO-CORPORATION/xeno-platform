@@ -20,6 +20,7 @@ import * as agentMediaMcp from './agentMediaMcp.js';
 import * as agentMedia from './agentMedia.js';
 import * as canvasMcp from './canvasMcp.js';
 import * as placesMcp from './placesMcp.js';
+import * as modesMcp from './modesMcp.js';
 import * as canvases from './canvases.js';
 import * as agentsMcp from './agentsMcp.js';
 import * as storageMcp from './storageMcp.js';
@@ -63,6 +64,15 @@ export const SERVICES = Object.freeze([
     tools: () => placesMcp.TOOLS,
     call: (db, actor, name, args) => placesMcp.callTool(db, actor, name, args),
     isToolError: (e) => e instanceof placesMcp.PlacesMcpError,
+  },
+  // custom modes + trade packs (modesMcp.js): list, plan and status for whoever administers the workspace (an agent,
+  // for its owner); apply and revert need a human admin's confirmation and refuse an agent.
+  {
+    category: 'modes', title: 'Business setups', version: '1.0.0', timeoutMs: 20_000,
+    description: 'Business setups ("custom modes"): plan a trade pack for a workspace; a human admin confirms it.',
+    tools: () => modesMcp.TOOLS,
+    call: (db, actor, name, args) => modesMcp.callTool(db, actor, name, args),
+    isToolError: (e) => e instanceof modesMcp.ModesMcpError,
   },
   // XENO Storage (storageMcp.js, WORKSPACE AGENT SURFACE P1): an agent works in its owner's Storage, the person in their own.
   {

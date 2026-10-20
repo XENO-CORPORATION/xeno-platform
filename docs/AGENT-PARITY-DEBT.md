@@ -4,17 +4,17 @@
 
 Every action a person can take on the platform, and whether an agent can take it (XENO AGENT CAPABILITY - SPEC.md §19.4). **Planned** entries are the owning division’s backlog: each is a feature agents are missing.
 
-**Total:** 1442 actions · 37 agent capability · 1226 planned (debt) · 179 excluded · **coverage 2.9%** of the 1263 owed.
+**Total:** 1458 actions · 45 agent capability · 1231 planned (debt) · 182 excluded · **coverage 3.5%** of the 1276 owed.
 
 | division | actions | capability | planned (debt) | excluded | coverage |
 |---|---:|---:|---:|---:|---:|
 | workforce | 270 | 0 | 269 | 1 | 0% |
 | studio | 121 | 4 | 117 | 0 | 3.3% |
 | agents | 122 | 0 | 112 | 10 | 0% |
-| workspace-ui | 159 | 0 | 100 | 59 | 0% |
+| workspace-ui | 165 | 3 | 100 | 62 | 2.9% |
 | chat | 97 | 0 | 96 | 1 | 0% |
 | commerce | 112 | 0 | 96 | 16 | 0% |
-| workspace | 103 | 0 | 86 | 17 | 0% |
+| workspace | 113 | 5 | 91 | 17 | 5.2% |
 | tasks | 105 | 13 | 84 | 8 | 13.4% |
 | storage | 82 | 5 | 75 | 2 | 6.3% |
 | account | 86 | 0 | 60 | 26 | 0% |
@@ -1104,10 +1104,15 @@ Every action a person can take on the platform, and whether an agent can take it
 - `ui:workforce.js:data-wf=win`
 - `ui:workforce.js:data-wf=withdraw`
 
-## workspace — 86 planned
+## workspace — 91 planned
 
 - `route:accountWorkspaceOperationRoutes.js:GET /:operationId (accountWorkspaceOperationRoutes)`
 - `route:accountWorkspaceOperationRoutes.js:POST /:operationId/:phase (accountWorkspaceOperationRoutes)`
+- `route:modesRoutes.js:DELETE /:modeId (meModesRouter)`
+- `route:modesRoutes.js:GET / (meModesRouter)`
+- `route:modesRoutes.js:PATCH /:modeId (meModesRouter)`
+- `route:modesRoutes.js:PATCH /:wid/modes/items/:modeId (workspaceModesRouter)`
+- `route:modesRoutes.js:POST / (meModesRouter)`
 - `route:projectPublicationRoutes.js:ALL /`
 - `route:projectPublicationRoutes.js:ALL /:projectId`
 - `route:projectPublicationRoutes.js:ALL /operations/read`
