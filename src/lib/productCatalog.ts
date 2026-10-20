@@ -267,6 +267,10 @@ export const PRODUCTS: Product[] = [
   // XENO Spawn — every agent CLI (Claude Code, Codex, agy, opencode, XENO agent) in one place, and a XENO platform agent
   // started in a terminal with one line. 0.1.0-rc.42 is on R2 (apps/spawn/, beta, Windows x64), installed by a
   // checksum-verifying script; /install/spawn.ps1 302s to apps/spawn/install.ps1 (nginx). Not on npm.
+  // XENO Research — reproducible notebooks (xeno-research/SPEC.md §8 item 4). EARLY ACCESS, not shipping: it lives in the
+  // xenosystem.ai workspace, runs only in XENO Box, and until Box is qualified the platform refuses runs outside the XENO
+  // workspace. 'coming-soon' + 'soon' so the page offers "Get notified", never an Open that would refuse.
+  { slug: 'research', name: 'XENO Research', tagline: 'Reproducible notebooks: run in a sandbox, signed, and re-checked.', category: 'Develop', status: 'coming-soon', delivery: 'soon', repo: 'xeno-research' },
   { slug: 'spawn', name: 'XENO Spawn', tagline: 'Every coding agent in one place — and your XENO agents, one line away.', category: 'Develop', status: 'beta', delivery: 'cli', installVia: 'script', install: 'irm https://xenosystem.ai/install/spawn.ps1 | iex', operatingSystem: 'Windows', repo: 'xeno-spawn' },
   { slug: 'shell', name: 'XENO Shell', tagline: 'A desktop you can share, with a real terminal and folder-level permissions.', category: 'Develop', status: 'beta', delivery: 'desktop', operatingSystem: 'Windows', repo: 'xeno-shell' },
   // Anima SHIPS. All 8 packages are live on npm at 0.0.2 (verified against the

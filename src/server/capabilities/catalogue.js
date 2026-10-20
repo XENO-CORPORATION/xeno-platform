@@ -18,6 +18,7 @@ import * as forumMcp from '../services/forumMcp.js';
 import * as placesMcp from '../services/placesMcp.js';
 import * as modesMcp from '../services/modesMcp.js';
 import * as corpusMcp from '../services/corpusMcp.js';
+import * as researchMcp from '../services/researchMcp.js';
 import { MODES_ROWS } from './modes.js';
 import { PEOPLE_ROWS } from './people.js';
 import * as peopleMcp from '../services/peopleMcp.js';
@@ -35,7 +36,7 @@ import * as workforceMcp from '../services/workforceMcp.js';
 export const BOUND_TOOLS = Object.freeze({
   tasks: tasksMcp.TOOLS, canvas: canvasMcp.TOOLS, agents: agentsMcp.TOOLS,
   image: agentMediaMcp.IMAGE.tools, video: agentMediaMcp.VIDEO.tools, library: agentMediaMcp.LIBRARY.tools, chat: agentMediaMcp.CHAT.tools,
-  forum: forumMcp.TOOLS.map((t) => ({ ...t, name: t.name.replace(/^forum_/, '') })), places: placesMcp.TOOLS, storage: storageMcp.TOOLS, support: supportMcp.TOOLS, releases: releasesMcp.TOOLS, customers: customersMcp.TOOLS, publish: publishMcp.TOOLS, analytics: analyticsMcp.TOOLS, docs: docsMcp.TOOLS, scheduling: schedulingMcp.TOOLS, modes: modesMcp.TOOLS, people: peopleMcp.TOOLS, corpus: corpusMcp.TOOLS, workforce: workforceMcp.TOOLS,
+  forum: forumMcp.TOOLS.map((t) => ({ ...t, name: t.name.replace(/^forum_/, '') })), places: placesMcp.TOOLS, storage: storageMcp.TOOLS, support: supportMcp.TOOLS, releases: releasesMcp.TOOLS, customers: customersMcp.TOOLS, publish: publishMcp.TOOLS, analytics: analyticsMcp.TOOLS, docs: docsMcp.TOOLS, scheduling: schedulingMcp.TOOLS, modes: modesMcp.TOOLS, people: peopleMcp.TOOLS, corpus: corpusMcp.TOOLS, research: researchMcp.TOOLS, workforce: workforceMcp.TOOLS,
 });
 
 const obj = (properties, required) => ({ type: 'object', properties, ...(required ? { required } : {}) });
@@ -53,6 +54,15 @@ const ROWS = [
   ...MODES_ROWS,
   // ── people (employee profiles, org chart, directory, time off; rows in ./people.js)
   ...PEOPLE_ROWS,
+  // ── research (xeno-research/SPEC.md §8 item 4; services/xenoResearch.js). No new scope name (scopes are one-way):
+  // reading is workspace:read; a run executes in XENO Box under the caller's authority, so it needs agents:write.
+  ['research.home.get', 'research', 'home', 'safe', { scope: 'workspace:read', reply: obj({ notebooks: { type: 'array', description: 'Recent notebooks: id, title, projectId, projectName, locked, updatedAt.' }, attention: { type: 'array', description: 'Runs needing attention: id, kind, status, verdict, reason.' }, claims: { type: 'array', description: 'Claims not holding: id, key, state (lapsed|unobserved), notebookId, cell.' } }, ['notebooks', 'attention', 'claims']) }],
+  ['research.notebook.list', 'research', 'notebooks', 'safe', { scope: 'workspace:read', reply: obj({ project: { type: 'object' }, notebooks: { type: 'array', description: 'id, title, locked, image, lastRun, updatedAt.' } }, ['notebooks']) }],
+  ['research.notebook.get', 'research', 'notebook', 'safe', { scope: 'workspace:read', provenance: 'untrusted', reply: obj({ notebook: { type: 'object', description: 'id, title, cells (index, type, source, outputs), locked, lockStale, canEdit.' }, runs: { type: 'array', description: 'Newest first.' } }, ['notebook', 'runs']) }],
+  ['research.run.create', 'research', 'run', 'irreversible', { scope: 'agents:write', idempotency: NONE('no request key yet: a retried call queues a second run (each is recorded and signed)'), reply: obj({ run: { type: 'object', description: 'id (rr_…), status (queued, or refused with reasonCode and reason).' } }, ['run']) }],
+  ['research.run.verify', 'research', 'verify', 'irreversible', { scope: 'agents:write', idempotency: NONE('no request key yet: a retried call queues a second verification'), reply: obj({ run: { type: 'object', description: 'The verify run: id, status; its verdict arrives when it is done.' } }, ['run']) }],
+  ['research.run.get', 'research', 'run_get', 'safe', { scope: 'workspace:read', reply: obj({ run: { type: 'object', description: 'id, kind, status, cells, verdict, comparison, reasonCode, reason.' }, notebook: { type: 'object' }, signature: { type: 'object', description: 'state (valid|invalid|unsigned|none), keyId, reason.' } }, ['run', 'signature']) }],
+  ['research.claim.list', 'research', 'claims', 'safe', { scope: 'workspace:read', reply: obj({ claims: { type: 'array', description: 'id, key, claim, notebookId, runId, cell, state (held|lapsed|unobserved), latest.' } }, ['claims']) }],
   // ── corpus (XENO CORPUS - SPEC.md; services/xenoCorpus.js). No new scope name (scopes are one-way): reading is
   // workspace:read; proposing writes a record, so it needs the workspace area's write scope (workspace:admin); recording
   // a verdict is an admitted run's act, so it needs agents:write.

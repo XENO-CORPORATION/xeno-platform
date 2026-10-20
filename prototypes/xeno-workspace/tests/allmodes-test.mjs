@@ -4,7 +4,7 @@ const b = await puppeteer.launch({ headless: true, args: ['--allow-file-access-f
 const url = pathToFileURL(path.resolve('index.html')).href, wait = (ms) => new Promise((r) => setTimeout(r, ms));
 let fails = 0; const ok = (c, m) => { if (!c) fails++; console.log(c ? 'PASS' : 'FAIL', m); }; const ev = (f) => p.evaluate(f);
 await p.setViewport({ width: 1600, height: 950 });
-for (const m of ['studio', 'office', 'social', 'corpo', 'dev', 'tools']) {
+for (const m of ['studio', 'office', 'social', 'corpo', 'dev', 'tools', 'research']) {
   await p.goto(url); await ev(() => localStorage.clear()); await p.goto(url + '#/' + m); await p.reload(); await wait(1100);
   const side = await ev(() => { const d = document.getElementById('modeIntro'); return { open: d?.classList.contains('on'), mark: !!d?.querySelector('.mw-mark svg'), pins: d?.querySelectorAll('.mw .mi-pinrow').length, rail: d?.querySelectorAll('.mw-pin').length, tiles: d?.querySelectorAll('.mi-tile').length }; });
   await p.screenshot({ path: `all-${m}-1.png` });

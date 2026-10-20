@@ -86,6 +86,8 @@ window.XENO_PRODUCTS = Object.fromEntries([
   P('tool-csv', 'CSV to sheet', { icon: 'xeno-tools', kind: 'web', blurb: 'Clean and import data' }),
   P('tool-json', 'JSON formatter', { icon: 'xeno-tools', kind: 'web', blurb: 'Format and validate' }),
   // Globals that open as products
+  // Research (xeno-research/SPEC.md §8 item 4): the reproducible notebook — runs in XENO Box, results as Corpus claims
+  P('research', 'Research', { icon: null, code: 'Rs', kind: 'web', blurb: 'Notebooks whose results reproduce' }),
   P('chat', 'Chat', { icon: null, code: 'Ch', kind: 'chat', blurb: 'Chat with XENO' }),
 ].map((p) => [p.id, p]));
 
@@ -108,6 +110,9 @@ window.XENO_MODES = [
   { id: 'tools', key: '6', persona: 'I need a tool, not a product', start: 'tool-resize', pins: ['tool-resize', 'tool-bg'],
     sections: [['Image', ['tool-resize', 'tool-bg', 'tool-upscale']], ['Video', ['tool-trim']], ['Audio', ['tool-transcribe']], ['Documents', ['tool-pdfmerge']], ['Data', ['tool-csv']], ['Developer', ['tool-json']]],
     metric: ['Tools used', '9'] },
+  { id: 'research', key: '7', persona: 'I need my results to hold up', start: 'research', pins: ['research'],
+    sections: [['Notebooks', ['research']], ['Runs', ['research']], ['Claims', ['research']], ['Data', ['research']], ['Publish', ['research']]],
+    metric: ['Claims holding', '—'] },
 ];
 
 // recent work (sample), tagged by mode and product

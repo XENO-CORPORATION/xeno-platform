@@ -415,7 +415,7 @@ try {
   if (process.env.INSET_SWEEP !== '0') {
     const pages = await p.evaluate(() => {
       const out = ['#/overview', '#/overview/g/projects', '#/overview/g/tasks', '#/overview/g/library', '#/overview/g/inbox', '#/overview/g/community', '#/overview/g/market', '#/overview/g/workspace', '#/overview/g/workspace/Members', '#/overview/g/settings', '#/overview/g/anima', '#/overview/g/places', '#/overview/g/tasks/canvas'];
-      for (const m of ['studio', 'office', 'social', 'corpo', 'dev', 'tools']) { out.push('#/' + m); for (const z of (window.XENO_MODE_ZONES[m] || [])) out.push(`#/${m}/z/${z.id}`); }
+      for (const m of ['studio', 'office', 'social', 'corpo', 'dev', 'tools', 'research']) { out.push('#/' + m); for (const z of (window.XENO_MODE_ZONES[m] || [])) out.push(`#/${m}/z/${z.id}`); }
       for (const id of Object.keys(window.XENO_PRODUCTS || {})) out.push('#/studio/p/' + id);
       return [...new Set(out)];
     });

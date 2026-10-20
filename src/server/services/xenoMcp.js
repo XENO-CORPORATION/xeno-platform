@@ -23,6 +23,7 @@ import * as placesMcp from './placesMcp.js';
 import * as modesMcp from './modesMcp.js';
 import * as peopleMcp from './peopleMcp.js';
 import * as corpusMcp from './corpusMcp.js';
+import * as researchMcp from './researchMcp.js';
 import * as canvases from './canvases.js';
 import * as agentsMcp from './agentsMcp.js';
 import * as storageMcp from './storageMcp.js';
@@ -99,6 +100,14 @@ export const SERVICES = Object.freeze([
     tools: () => corpusMcp.TOOLS,
     call: (db, actor, name, args) => corpusMcp.callTool(db, actor, name, args),
     isToolError: (e) => e instanceof corpusMcp.CorpusMcpError,
+  },
+  // XENO Research (researchMcp.js): notebooks on a project, runs in XENO Box (refused when Box is not qualified), claims.
+  {
+    category: 'research', title: 'Research', version: '1.0.0', timeoutMs: 20_000,
+    description: 'Research: reproducible notebooks — run in XENO Box, signed provenance, re-run and compare, claimed results as Corpus tenets.',
+    tools: () => researchMcp.TOOLS,
+    call: (db, actor, name, args) => researchMcp.callTool(db, actor, name, args),
+    isToolError: (e) => e instanceof researchMcp.ResearchMcpError,
   },
   // XENO Storage (storageMcp.js, WORKSPACE AGENT SURFACE P1): an agent works in its owner's Storage, the person in their own.
   {
