@@ -100,6 +100,90 @@
    ]
   },
   {
+   "name": "people.person.list",
+   "wire": "people__person__list",
+   "version": "1.0.0",
+   "class": "safe",
+   "scope": "workspace:read",
+   "surfaces": [
+    "mcp",
+    "rest"
+   ],
+   "aliases": [
+    "people_directory"
+   ]
+  },
+  {
+   "name": "people.person.get",
+   "wire": "people__person__get",
+   "version": "1.0.0",
+   "class": "safe",
+   "scope": "workspace:read",
+   "surfaces": [
+    "mcp",
+    "rest"
+   ],
+   "aliases": [
+    "people_get"
+   ]
+  },
+  {
+   "name": "people.org.chart",
+   "wire": "people__org__chart",
+   "version": "1.0.0",
+   "class": "safe",
+   "scope": "workspace:read",
+   "surfaces": [
+    "mcp",
+    "rest"
+   ],
+   "aliases": [
+    "people_org_chart"
+   ]
+  },
+  {
+   "name": "people.work.mine",
+   "wire": "people__work__mine",
+   "version": "1.0.0",
+   "class": "safe",
+   "scope": "workspace:read",
+   "surfaces": [
+    "mcp",
+    "rest"
+   ],
+   "aliases": [
+    "people_my_work"
+   ]
+  },
+  {
+   "name": "people.person.update",
+   "wire": "people__person__update",
+   "version": "1.0.0",
+   "class": "undoable",
+   "scope": "workspace:admin",
+   "surfaces": [
+    "mcp",
+    "rest"
+   ],
+   "aliases": [
+    "people_update_profile"
+   ]
+  },
+  {
+   "name": "people.time_off.create",
+   "wire": "people__time_off__create",
+   "version": "1.0.0",
+   "class": "undoable",
+   "scope": "workspace:admin",
+   "surfaces": [
+    "mcp",
+    "rest"
+   ],
+   "aliases": [
+    "people_add_time_off"
+   ]
+  },
+  {
    "name": "corpus.corpus.query",
    "wire": "corpus__corpus__query",
    "version": "1.0.0",

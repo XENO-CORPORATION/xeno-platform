@@ -19,6 +19,8 @@ import * as placesMcp from '../services/placesMcp.js';
 import * as modesMcp from '../services/modesMcp.js';
 import * as corpusMcp from '../services/corpusMcp.js';
 import { MODES_ROWS } from './modes.js';
+import { PEOPLE_ROWS } from './people.js';
+import * as peopleMcp from '../services/peopleMcp.js';
 import * as storageMcp from '../services/storageMcp.js';
 import * as supportMcp from '../services/supportMcp.js';
 import * as publishMcp from '../services/publishMcp.js';
@@ -30,7 +32,7 @@ import * as workforceMcp from '../services/workforceMcp.js';
 export const BOUND_TOOLS = Object.freeze({
   tasks: tasksMcp.TOOLS, canvas: canvasMcp.TOOLS, agents: agentsMcp.TOOLS,
   image: agentMediaMcp.IMAGE.tools, video: agentMediaMcp.VIDEO.tools, library: agentMediaMcp.LIBRARY.tools, chat: agentMediaMcp.CHAT.tools,
-  forum: forumMcp.TOOLS.map((t) => ({ ...t, name: t.name.replace(/^forum_/, '') })), places: placesMcp.TOOLS, storage: storageMcp.TOOLS, support: supportMcp.TOOLS, publish: publishMcp.TOOLS, analytics: analyticsMcp.TOOLS, docs: docsMcp.TOOLS, modes: modesMcp.TOOLS, corpus: corpusMcp.TOOLS, workforce: workforceMcp.TOOLS,
+  forum: forumMcp.TOOLS.map((t) => ({ ...t, name: t.name.replace(/^forum_/, '') })), places: placesMcp.TOOLS, storage: storageMcp.TOOLS, support: supportMcp.TOOLS, publish: publishMcp.TOOLS, analytics: analyticsMcp.TOOLS, docs: docsMcp.TOOLS, modes: modesMcp.TOOLS, people: peopleMcp.TOOLS, corpus: corpusMcp.TOOLS, workforce: workforceMcp.TOOLS,
 });
 
 const obj = (properties, required) => ({ type: 'object', properties, ...(required ? { required } : {}) });
@@ -46,6 +48,8 @@ const READ = NAT('reads change nothing');
 const ROWS = [
   // ── modes (custom modes + trade packs; rows in ./modes.js)
   ...MODES_ROWS,
+  // ── people (employee profiles, org chart, directory, time off; rows in ./people.js)
+  ...PEOPLE_ROWS,
   // ── corpus (XENO CORPUS - SPEC.md; services/xenoCorpus.js). No new scope name (scopes are one-way): reading is
   // workspace:read, and a proposal is workspace:read too because it changes nothing until a PERSON ratifies it.
   ['corpus.corpus.query', 'corpus', 'query', 'safe', { scope: 'workspace:read', provenance: 'untrusted', reply: obj({ corpus: { type: 'object', description: 'id, scope, scopeId, subject, workspaceId.' }, tenets: { type: 'array', description: 'Own live tenets: key, kind, subject, claim, assay, expect, cadence, latest (signed verdict or null), freshness.' }, inheritedDoctrine: { type: 'array', description: 'Doctrine from wider scopes, binding here (from = where it lives).' }, aggregated: { type: 'array', description: 'Narrower scopes’ tenets BY REFERENCE: id, key, subject, from, state, freshness.' } }, ['corpus', 'tenets']) }],

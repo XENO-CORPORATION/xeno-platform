@@ -32,6 +32,7 @@
     "test:analytics-ui": "node prototypes/xeno-workspace/tests/analytics-test.mjs",
     "test:workspace-docs": "cd src/server && node tests/workspace-docs.test.mjs",
     "test:docs-ui": "node prototypes/xeno-workspace/tests/docs-test.mjs",
+    "test:orchestrator": "node src/server/tests/orchestrator.test.mjs",
     "test:support-tickets": "node src/server/tests/support-tickets.test.mjs",
     "test:support-ui": "node prototypes/xeno-workspace/tests/support-test.mjs",
     "test:agent-parity": "node --test scripts/agent-parity.test.mjs && node scripts/agent-parity.mjs",
@@ -283,7 +284,9 @@
     "test:vite-workspace": "node --test scripts/vite-workspace.test.mjs",
     "test:workforce-accessibility": "node --test scripts/workforce-accessibility.test.mjs",
     "test:billing-summary": "node --test scripts/billing-summary.test.mjs",
-    "test:places": "node src/server/tests/places.test.mjs && node src/server/tests/places-location.test.mjs && node src/server/tests/places-live.test.mjs"
+    "test:places": "node src/server/tests/places.test.mjs && node src/server/tests/places-location.test.mjs && node src/server/tests/places-live.test.mjs",
+    "test:workforce-people": "node src/server/tests/workforce-people.test.mjs",
+    "test:workforce-people-mutation": "node scripts/workforce-people-mutation.mjs"
   },
   "dependencies": {
     "@babel/standalone": "^7.29.7",
