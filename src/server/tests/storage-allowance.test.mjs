@@ -12,6 +12,9 @@ import express from 'express';
 import jwt from 'jsonwebtoken';
 import pg from 'pg';
 import libraryRoutes from '../routes/libraryRoutes.js';
+import { createStorageSharedRouter } from '../routes/storageSharedRoutes.js';
+import { registrationDecision } from '../middleware/registrationGate.js';
+import { mintShareInvite, shareInviteValid } from '../utils/shareInvite.js';
 import { registerManagedLibraryFile } from '../services/libraryAssets.js';
 import { runAllMigrations } from '../services/migrationRunner.js';
 import { storageUsage, storageAllowance, StorageFullError } from '../services/storageAllowance.js';
@@ -21,6 +24,7 @@ import { setFileStorageForTests } from '../services/artifactStorage.js';
 import { writeTuples } from '../utils/authzReBAC.js';
 
 if (!process.env.DATABASE_URL) throw new Error('DATABASE_URL is required');
+process.env.SHARE_INVITE_SECRET ||= 'storage-allowance-test-share-invite';
 const JWT_SECRET = process.env.JWT_SECRET || 'xenostudio-super-secret-jwt-key-change-in-production';
 const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL });
 const uploadDir = path.resolve(process.cwd(), 'uploads', `storage-allowance-test-${process.pid}`);
@@ -52,6 +56,7 @@ async function main() {
   app.use(express.json());
   app.use((req, _res, next) => { req.db = pool; next(); });
   app.use('/api/library', libraryRoutes);
+  app.use('/storage/shared', createStorageSharedRouter());
   const server = http.createServer(app);
   await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
   const base = `http://127.0.0.1:${server.address().port}/api/library`;
@@ -535,6 +540,73 @@ async function main() {
     const coEntry = meterO.workspaces.find((w) => w.id === co);
     assert.ok(coEntry && coEntry.bytes > 0, 'company bytes are metered under the company');
     assert.equal((await pool.query(`SELECT count(*)::int AS n FROM user_files WHERE workspace_id IS NULL AND id = ANY($1)`, [[coFile.id, coV2.id, coRestored.file.id]])).rows[0].n, 0, 'none of them is a personal file');
+
+
+    // ── a FOLDER shared by a SIGN-IN link (storageFolderLinks.js, storageSharedRoutes.js) ──
+    // signed out it names nothing; signed in it ADMITS the account as a viewer through reconcileShares; revoking
+    // the link takes that access back; the owner can remove one admitted person; every open and download is audited
+    const sbase = `http://127.0.0.1:${server.address().port}/storage/shared`;
+    const investor = await user('sto_investor'); const I = J(investor, 'sto_investor');
+    const deck = (await call('POST', '/folders', P, { name: 'Deck room' })).body.folder;
+    const deckSub = (await call('POST', '/folders', P, { name: 'Appendix', parent: deck.id })).body.folder;
+    const deckPdf = await ready(await add(paid, 'deck.pdf', 'deck bytes'));
+    const appx = await ready(await add(paid, 'appx.pdf', 'appendix bytes'));
+    const notShared = await ready(await add(paid, 'private.pdf', 'not for them'));
+    await call('PUT', `/assets/file/${deckPdf.id}/folder`, P, { folder: deck.id });
+    await call('PUT', `/assets/file/${appx.id}/folder`, P, { folder: deckSub.id });
+    assert.equal((await call('POST', `/folders/${deck.id}/links`, O, {})).status, 404, 'only the owner makes a sign-in link');
+    const made = (await call('POST', `/folders/${deck.id}/links`, P, {})).body;
+    const token = String(made.url).split('/storage/shared/')[1];
+    assert.match(token, /^[A-Za-z0-9_-]{43}$/, `the link URL carries the token (${made.url})`);
+    assert.equal((await pool.query('SELECT count(*)::int AS n FROM storage_folder_links WHERE token_sha256 = $1', [token])).rows[0].n, 0, 'the token itself is never stored');
+    const sget = (url, headers = {}) => fetch(`${sbase}${url}`, { headers, redirect: 'manual' });
+    let sr = await sget(`/${token}`); let shtml = await sr.text();
+    assert.equal(sr.status, 401); assert.match(shtml, /Sign in/);
+    assert.doesNotMatch(shtml, /Deck room|deck\.pdf|sto_paid/, 'signed out sees nothing of the folder or its owner');
+    assert.match(sr.headers.get('x-robots-tag') || '', /noindex/); assert.match(shtml, /name="robots" content="noindex/);
+    assert.match(sr.headers.get('set-cookie') || '', /xeno_share_invite=v1\./, 'the signed-out page carries the signup invitation');
+    assert.match(shtml, /returnUrl=%2Fstorage%2Fshared%2F/, 'sign-in comes back to the link');
+    assert.equal((await sget(`/${token}/files/${deckPdf.id}`)).status, 302, 'signed out never reaches a byte');
+    assert.equal(await read(deckPdf, I), 404, 'no access before the link is opened');
+    sr = await sget(`/${token}`, I); shtml = await sr.text();
+    assert.equal(sr.status, 200); assert.match(shtml, /deck\.pdf/); assert.match(shtml, /Appendix/); assert.doesNotMatch(shtml, /private\.pdf/);
+    assert.match(sr.headers.get('x-robots-tag') || '', /noindex/);
+    assert.equal(await read(deckPdf, I), 200, 'opening wrote viewer tuples: the ordinary content route serves it too');
+    const viaRows = (await pool.query('SELECT id, role, via_link_id FROM storage_shares WHERE folder_id = $1 AND grantee_user_id = $2 AND revoked_at IS NULL', [deck.id, investor])).rows;
+    assert.deepEqual(viaRows.map((x) => [x.role, x.via_link_id]), [['viewer', made.link.id]], 'one viewer share, marked with its link');
+    assert.equal((await pool.query(`SELECT count(*)::int AS n FROM storage_access WHERE user_id = $1 AND role <> 'viewer'`, [investor])).rows[0].n, 0, 'read-only: no editor access anywhere');
+    sr = await sget(`/${token}/f/${deckSub.id}`, I); shtml = await sr.text(); assert.match(shtml, /appx\.pdf/);
+    sr = await sget(`/${token}/files/${appx.id}?download=1`, I); assert.equal(sr.status, 200); assert.equal(await sr.text(), 'appendix bytes');
+    assert.equal((await sget(`/${token}/files/${notShared.id}`, I)).status, 404, 'a file outside the folder is not served');
+    assert.equal((await sget(`/${token}/f/${cab.id}`, I)).status, 404, 'a folder outside the link is not shown');
+    assert.equal((await sget(`/${'A'.repeat(43)}`, I)).status, 404, 'an unknown token opens nothing');
+    const act = (await call('GET', `/folder-links/${made.link.id}/activity`, P)).body;
+    assert.ok(act.events.some((e) => e.event === 'open' && e.person.id === investor), 'the open is audited against the account');
+    assert.ok(act.events.some((e) => e.event === 'download' && e.file?.id === appx.id), 'the download is audited');
+    assert.equal((await call('GET', `/folder-links/${made.link.id}/activity`, O)).status, 404, 'only the owner reads the audit');
+    const liveLinks = (await call('GET', `/folders/${deck.id}/links`, P)).body.links;
+    assert.equal(liveLinks.length, 1); assert.equal(liveLinks[0].viewers, 1);
+    assert.equal((await call('DELETE', `/folder-links/${made.link.id}`, O)).status, 404, 'only the owner turns a link off');
+    assert.equal((await call('DELETE', `/folder-links/${made.link.id}`, P)).status, 200);
+    assert.equal((await sget(`/${token}`, I)).status, 404, 'a revoked link refuses a signed-in viewer');
+    assert.equal((await sget(`/${token}`)).status, 404, 'a revoked link shows no sign-in page');
+    assert.equal((await sget(`/${token}/files/${appx.id}`, I)).status, 404);
+    assert.equal(await read(deckPdf, I), 404, 'revoking the link took the tuples away');
+    // one person removed by the owner is not let back in by the link
+    const made2 = (await call('POST', `/folders/${deck.id}/links`, P, { expiresInDays: 30 })).body;
+    const token2 = String(made2.url).split('/storage/shared/')[1];
+    assert.equal((await sget(`/${token2}`, I)).status, 200);
+    const share2 = (await pool.query('SELECT id, expires_at FROM storage_shares WHERE via_link_id = $1 AND revoked_at IS NULL', [made2.link.id])).rows[0];
+    assert.ok(share2.expires_at, 'an admitted share ends when its link ends');
+    assert.equal((await call('DELETE', `/shares/${share2.id}`, P)).status, 200);
+    assert.equal((await sget(`/${token2}`, I)).status, 404, 'removed by the owner: the link does not readmit them');
+    assert.equal(await read(deckPdf, I), 404);
+    assert.equal((await sget(`/${token2}`, P)).status, 200, 'the owner opens their own link');
+    // the invitation opens signup only while it is valid, and only as a signed cookie
+    const inv = mintShareInvite(made2.link.id, { JWT_SECRET: 'k' });
+    assert.equal(shareInviteValid(inv, { JWT_SECRET: 'k' }), true); assert.equal(shareInviteValid(inv, { JWT_SECRET: 'other' }), false);
+    assert.equal(shareInviteValid(inv, { JWT_SECRET: 'k' }, Date.now() + 25 * 3600 * 1000), false, 'the invitation expires');
+    assert.equal(registrationDecision('a@b.test', { shareInvite: true }).allowed, true, 'a link holder can create an account');
 
     console.log('storage-allowance: all checks passed');
   } finally {
