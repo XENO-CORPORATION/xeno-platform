@@ -82,7 +82,7 @@ const WORKSPACES = 100, AGENTS_PER = 100, TEAMS_PER = 10, ASSIGNMENTS_PER_AGENT 
 const SAMPLES = 200, PAGE = 50, P95_BUDGET_MS = 500;
 
 /** Every workforce list route this suite qualifies. A new one must be added here WITH a measurement. */
-const QUALIFIED = ['/resources/list'];
+const QUALIFIED = ['/resources/list', '/run-admissions/list'];   // the second is measured by 'run-admissions list p95' below
 /** Every view of that route this suite measures, and the one it deliberately does not time. */
 const QUALIFIED_VIEWS = ['owned', 'assigned', 'global'], UNTIMED_VIEWS = { project: 'no projects in the NFR-04 envelope' };
 
@@ -290,6 +290,75 @@ test('workforce list API p95 at the NFR-04 envelope (NFR-04)', { skip: workforce
   } finally {
     if (server) { server.closeAllConnections(); await new Promise(resolve => server.close(resolve)); }
     if (created) await pool.query(`DROP SCHEMA "${schema}" CASCADE`);
+    await pool.end();
+  }
+});
+
+// ── POST /run-admissions/list (NFR-04, 2026-10-21) ─────────────────────────────────────────────────────────────
+// The Runs screens list a PROJECT's or an AGENT's admissions newest first. Envelope: 100,000 admissions over the
+// 10,000 agents and 100 projects of the NFR-04 dataset. Rows are seeded with session_replication_role=replica so
+// 100,000 synthetic admissions need no 100,000 real pins/assignments/participations (FKs and triggers are skipped
+// for the SEED only; the table, its CHECKs and the indexes under test are the real migrations'). The call timed is
+// listRunAdmissions itself, and the query's plan must use an index, never a Seq Scan.
+const ADMISSIONS = 100_000, RUN_PROJECTS = 100, RUN_AGENTS = 10_000;
+const agentId = (n) => `00000000-0000-4000-8000-${(n % RUN_AGENTS).toString(16).padStart(12, '0')}`;
+test('run-admissions list p95 at the NFR-04 envelope (NFR-04)', { skip: workforceProofUnavailable(), timeout: 900_000 }, async t => {
+  const connectionString = requireProofDatabase(process.env.WORKFORCE_TEST_DATABASE_URL);
+  const pool = new pg.Pool({ connectionString, max: 4 });
+  const human = randomUUID();
+  try {
+    const { runAllMigrations } = await import('../src/server/services/migrationRunner.js');
+    await runAllMigrations(pool);
+    const projects = Array.from({ length: RUN_PROJECTS }, () => randomUUID());
+    const db = await pool.connect();
+    try {
+      await db.query('SET session_replication_role = replica');
+      const caps = '["files.read"]', rights = JSON.stringify({ definition: ['files.read'], target: ['files.read'], runtime: null, entitlement: null });
+      await db.query(`INSERT INTO workforce_run_admissions (actor_user_id, client_id, operation_id, request_hash, incarnation_hash,
+          agent_resource_id, agent_version, agent_content_hash, target_kind, target_owner_user_id, project_id, participation_id, participation_revision,
+          payer_kind, payer_user_id, budget_ceiling_micro, requested_capabilities, effective_capabilities, rights, memory_namespace, admitted_at)
+        SELECT $1, 'scale', gen_random_uuid(), repeat('a',64), repeat('b',64),
+               ('00000000-0000-4000-8000-'||lpad(to_hex(n % $4),12,'0'))::uuid, 1, repeat('c',64), 'project', $1,
+               ($5::uuid[])[1 + n % $6], gen_random_uuid(), 1, 'user', $1, 1000000, $2::jsonb, $2::jsonb, $3::jsonb, 'ns',
+               '2026-10-01T00:00:00Z'::timestamptz + n * interval '1 second'
+          FROM generate_series(1,$7) AS n`, [human, caps, rights, RUN_AGENTS, projects, RUN_PROJECTS, ADMISSIONS]);
+      await db.query('SET session_replication_role = origin');
+      await db.query('ANALYZE workforce_run_admissions');
+    } finally { db.release(); }
+    const { listRunAdmissions } = await import('../src/server/services/workforceRunAdmission.js');
+    const ctx = { actorUserId: human, clientId: 'scale' };
+
+    await t.test('the dataset is the envelope', async () => {
+      assert.equal((await pool.query('SELECT count(*)::int AS n FROM workforce_run_admissions')).rows[0].n, ADMISSIONS);
+    });
+
+    await t.test('a page is correct before it is timed', async () => {
+      const r = await listRunAdmissions(pool, ctx, { projectId: projects[7], limit: 50 });
+      const want = (await pool.query('SELECT id FROM workforce_run_admissions WHERE project_id=$1 ORDER BY admitted_at DESC, id LIMIT 50', [projects[7]])).rows.map(x => x.id);
+      assert.equal(want.length, 50);
+      assert.deepEqual(r.admissions.map(a => a.admissionId), want);
+    });
+
+    await t.test(`${SAMPLES} project and agent lists: p95 <= ${P95_BUDGET_MS} ms, index scans only`, async () => {
+      const samples = [];
+      for (let i = 0; i < SAMPLES; i++) {
+        const body = i % 2 ? { projectId: projects[i % RUN_PROJECTS], limit: 50 } : { agentResourceId: agentId(i * 37), limit: 50 };
+        const started = performance.now(); await listRunAdmissions(pool, ctx, body); samples.push(performance.now() - started);
+      }
+      samples.sort((a, b) => a - b);
+      const SQL = `SELECT * FROM workforce_run_admissions WHERE ($1::uuid IS NULL OR project_id=$1) AND ($2::uuid IS NULL OR agent_resource_id=$2) ORDER BY admitted_at DESC, id LIMIT 50`;
+      const plans = [];
+      for (const [filter, args] of [['project', [projects[3], null]], ['agent', [null, agentId(3)]]]) {
+        const plan = (await pool.query(`EXPLAIN (ANALYZE, FORMAT JSON) ${SQL}`, args)).rows[0]['QUERY PLAN'][0];
+        const nodes = []; const walk = n => { nodes.push(n); (n.Plans || []).forEach(walk); }; walk(plan.Plan);
+        plans.push({ filter, nodes: nodes.filter(n => n['Relation Name'] === 'workforce_run_admissions').map(n => ({ node: n['Node Type'], index: n['Index Name'] ?? null })), ms: plan['Execution Time'] });
+      }
+      console.log('NFR-04 evidence:', JSON.stringify({ route: 'POST /api/workforce/run-admissions/list', admissions: ADMISSIONS, projects: RUN_PROJECTS, agents: RUN_AGENTS,
+        samples: samples.length, p50Ms: Number(percentile(samples, 50).toFixed(2)), p95Ms: Number(percentile(samples, 95).toFixed(2)), budgetMs: P95_BUDGET_MS, plans }));
+      assert.ok(percentile(samples, 95) <= P95_BUDGET_MS, `p95 ${percentile(samples, 95).toFixed(1)} ms exceeds ${P95_BUDGET_MS} ms`);
+      for (const p of plans) assert.deepEqual(p.nodes.filter(n => n.node === 'Seq Scan'), [], `the ${p.filter} list sequentially scans workforce_run_admissions`);
+    });
+  } finally {
     await pool.end();
   }
 });
