@@ -24,6 +24,7 @@ import * as modesMcp from './modesMcp.js';
 import * as canvases from './canvases.js';
 import * as agentsMcp from './agentsMcp.js';
 import * as storageMcp from './storageMcp.js';
+import * as publishMcp from './publishMcp.js';
 import * as workforceMcp from './workforceMcp.js';
 import * as forumMcp from './forumMcp.js';
 import { resolvePrincipal } from './agentIdentity.js';
@@ -90,6 +91,14 @@ export const SERVICES = Object.freeze([
     tools: () => workforceMcp.TOOLS,
     call: (db, actor, name, args) => workforceMcp.callTool(db, actor, name, args),
     isToolError: (e) => e instanceof workforceMcp.WorkforceMcpError,
+  },
+  // XENO Publish (publishMcp.js): XENO Post through the platform. Drafts and proposed times; a person publishes.
+  {
+    category: 'publish', title: 'Publish', version: '1.0.0', timeoutMs: 60_000,
+    description: 'Publish (XENO Post): list channels and posts, write drafts, propose times a person confirms.',
+    tools: () => publishMcp.TOOLS,
+    call: (db, actor, name, args) => publishMcp.callTool(db, actor, name, args),
+    isToolError: (e) => e instanceof publishMcp.PublishMcpError,
   },
   // XENO Forum, folded in from /api/forum/mcp (kept): the same tools, the same function. Its wire names were
   // always `forum_<verb>`, so as a category the grandfathered alias is exactly the old name.

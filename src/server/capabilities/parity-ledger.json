@@ -120,7 +120,9 @@
   "xenoTasksRoutes.js": "tasks",
   "youtubeRoutes.js": "studio",
   "modesRoutes.js": "workspace",
-  "setup.js": "workspace-ui"
+  "setup.js": "workspace-ui",
+  "publishRoutes.js": "publish",
+  "platform-publish.js": "publish"
  },
  "actions": {
   "route:accountGiftRoutes.js:POST /": {
@@ -7873,6 +7875,87 @@
    "capability": "modes.mode.revert",
    "class": "reversible",
    "scope": "workspace:admin"
+  },
+  "route:publishRoutes.js:GET /status": {
+   "status": "capability",
+   "capability": "publish.channel.list",
+   "class": "safe",
+   "scope": "publish:read"
+  },
+  "route:publishRoutes.js:PUT /link": {
+   "status": "excluded",
+   "category": "self-authority",
+   "class": "reversible",
+   "scope": "none",
+   "because": "links a workspace to a XENO Post workspace: an admin decides where the workspace publishes, never an agent"
+  },
+  "route:publishRoutes.js:GET /channels": {
+   "status": "capability",
+   "capability": "publish.channel.list",
+   "class": "safe",
+   "scope": "publish:read"
+  },
+  "route:publishRoutes.js:POST /channels/connect": {
+   "status": "excluded",
+   "category": "self-authority",
+   "class": "reversible",
+   "scope": "none",
+   "because": "connecting a social account is an admin OAuth sign-in on that platform"
+  },
+  "route:publishRoutes.js:GET /posts": {
+   "status": "capability",
+   "capability": "publish.post.list",
+   "class": "safe",
+   "scope": "publish:read"
+  },
+  "route:publishRoutes.js:POST /posts": {
+   "status": "capability",
+   "capability": "publish.post.draft",
+   "class": "reversible",
+   "scope": "publish:write"
+  },
+  "route:publishRoutes.js:POST /posts/:id/schedule": {
+   "status": "capability",
+   "capability": "publish.post.propose_schedule",
+   "class": "reversible",
+   "scope": "publish:write"
+  },
+  "route:publishRoutes.js:POST /posts/:id/publish": {
+   "status": "planned",
+   "class": "external",
+   "scope": "publish:write",
+   "because": "reaches an audience and cannot be taken back: a person confirms it on screen (step-up); no agent tool by design"
+  },
+  "route:publishRoutes.js:POST /posts/:id/retract": {
+   "status": "planned",
+   "class": "external",
+   "scope": "publish:write",
+   "because": "visible to an audience and irreversible: a person confirms it on screen (step-up); no agent tool by design"
+  },
+  "route:publishRoutes.js:GET /approvals": {
+   "status": "capability",
+   "capability": "publish.approval.list",
+   "class": "safe",
+   "scope": "publish:read"
+  },
+  "route:publishRoutes.js:POST /approvals/:kind/:id": {
+   "status": "planned",
+   "class": "external",
+   "scope": "publish:write",
+   "because": "approving lets a post reach an audience: a person decides, never an agent"
+  },
+  "route:publishRoutes.js:GET /inbox": {
+   "status": "planned",
+   "class": "safe",
+   "scope": "publish:read",
+   "because": "inbox read for agents is next: needs a declared untrusted-content reply"
+  },
+  "ui:platform-publish.js:data-pub-page": {
+   "status": "excluded",
+   "category": "view-state",
+   "class": "safe",
+   "scope": "none",
+   "because": "the Publish page container; its buttons call /api/publish, which is decided route by route"
   }
  }
 }

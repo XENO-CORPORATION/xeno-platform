@@ -125,10 +125,10 @@
     const openSet = new Set(ovOpen());
     return '<span class="rsep"></span>' + visibleModes().map((m) => {
       const zs = zonesFor('overview').filter((z) => z.of === m.id), isOpen = openSet.has(m.id);
-      const sig = zs.map((z) => (window.XENO_BADGES || {})['overview.' + z.id]).filter(Boolean);
+      const sig = zs.map((z) => badgeOf('overview.' + z.id)).filter(Boolean);
       const hasCur = S.view === 'zone' && zs.some((z) => z.id === S.zone);
       const cat = `<button class="rbtn rcat" data-cat="${m.id}" aria-expanded="${isOpen}" aria-current="${hasCur && !isOpen}" aria-label="${M[m.id].name} — ${zs.length} areas"${isOpen || hasCur ? "" : ` data-tip="${M[m.id].name}"`}>${ic({ studio: 'image', office: 'doc', social: 'megaphone', corpo: 'briefcase', dev: 'code', tools: 'sliders' }[m.id] || 'grid')}<span class="rcat-l">${M[m.id].name}</span>${sig.length && !isOpen ? (sig.includes('live') ? '<span class="live"></span>' : '<span class="dotn"></span>') : ''}</button>`;
-      const kids = isOpen ? `<div class="rcat-kids">${zs.map((z) => { const bd = (window.XENO_BADGES || {})['overview.' + z.id]; const lab = M[m.id].name + ' · ' + esc(z.label) + (bd ? (bd === 'live' ? ' — running' : ` — ${bd} new`) : ''); return `<button class="rbtn sm" data-zone="${z.id}" aria-label="${lab}" data-tip="${lab}" aria-current="${S.view === 'zone' && S.zone === z.id}">${ic(z.icon)}${bd ? (bd === 'live' ? '<span class="live"></span>' : `<span class="cnt">${bd > 9 ? '9+' : bd}</span>`) : ''}</button>`; }).join('')}</div>` : '';
+      const kids = isOpen ? `<div class="rcat-kids">${zs.map((z) => { const bd = badgeOf('overview.' + z.id); const lab = M[m.id].name + ' · ' + esc(z.label) + (bd ? (bd === 'live' ? ' — running' : ` — ${bd} new`) : ''); return `<button class="rbtn sm" data-zone="${z.id}" aria-label="${lab}" data-tip="${lab}" aria-current="${S.view === 'zone' && S.zone === z.id}">${ic(z.icon)}${bd ? (bd === 'live' ? '<span class="live"></span>' : `<span class="cnt">${bd > 9 ? '9+' : bd}</span>`) : ''}</button>`; }).join('')}</div>` : '';
       return cat + kids;
     }).join('');
   }
@@ -154,13 +154,16 @@
     const k = zoneKey();
     if (k === 'overview') return ovCatsHTML();
     let lastOf = null;
-    return '<span class="rsep"></span>' + zonesFor(k).map((z) => { const grpSep = z.of && lastOf && z.of !== lastOf ? '<span class="rsep sm"></span>' : ''; lastOf = z.of || lastOf; const bd = (window.XENO_BADGES || {})[k + '.' + z.id]; const lab = (z.of ? M[z.of].name + ' · ' : '') + esc(z.label) + (bd ? (bd === 'live' ? ' — running' : ` — ${bd} new`) : ''); return `<button class="rbtn${z.of ? ' sm' : ''}" data-zone="${z.id}" aria-label="${lab}" data-tip="${lab}" aria-current="${S.view === 'zone' && S.zone === z.id}">${ic(z.icon)}${bd ? (bd === 'live' ? '<span class="live"></span>' : `<span class="cnt">${bd > 9 ? '9+' : bd}</span>`) : ''}</button>`; }).join('');
+    return '<span class="rsep"></span>' + zonesFor(k).map((z) => { const grpSep = z.of && lastOf && z.of !== lastOf ? '<span class="rsep sm"></span>' : ''; lastOf = z.of || lastOf; const bd = badgeOf(k + '.' + z.id); const lab = (z.of ? M[z.of].name + ' · ' : '') + esc(z.label) + (bd ? (bd === 'live' ? ' — running' : ` — ${bd} new`) : ''); return `<button class="rbtn${z.of ? ' sm' : ''}" data-zone="${z.id}" aria-label="${lab}" data-tip="${lab}" aria-current="${S.view === 'zone' && S.zone === z.id}">${ic(z.icon)}${bd ? (bd === 'live' ? '<span class="live"></span>' : `<span class="cnt">${bd > 9 ? '9+' : bd}</span>`) : ''}</button>`; }).join('');
   }
   function updateZone() {
     const el = $('#rzone'); if (!el) return;
     const k = zoneKey();
     if (el.dataset.for === k && k === 'overview') { ovPatch(); return; }
-    if (el.dataset.for === k) { el.querySelectorAll('[data-zone]').forEach((b) => b.setAttribute('aria-current', String(S.view === 'zone' && S.zone === b.dataset.zone))); return; }
+    if (el.dataset.for === k) { el.querySelectorAll('[data-zone]').forEach((b) => { b.setAttribute('aria-current', String(S.view === 'zone' && S.zone === b.dataset.zone));
+      // a live area's count changes after the rail is built (platform-publish.js: approvals waiting) — patch it in place
+      const bd = badgeOf(k + '.' + b.dataset.zone), c = b.querySelector('.cnt');
+      if (typeof bd === 'number' && bd > 0) { if (c) c.textContent = bd > 9 ? '9+' : String(bd); else b.insertAdjacentHTML('beforeend', `<span class="cnt">${bd > 9 ? '9+' : bd}</span>`); } else if (c && (window.XENO_ZONE_LIVE || {})[k + '.' + b.dataset.zone]) c.remove(); }); return; }
     // the mode changed: the zone's icons swap with a short slide, the rest of the rail stays still
     el.classList.add('out');
     setTimeout(() => { el.innerHTML = zoneHTML(); el.dataset.for = k; el.classList.remove('out'); el.classList.add('in'); requestAnimationFrame(() => requestAnimationFrame(() => el.classList.remove('in'))); }, el.dataset.for ? 140 : 0);
@@ -404,13 +407,25 @@
   // Zone = one SECTION of the mode (MODES §3): its products, then the work living in them.
   // Overview's zones are workforce objects (WORKFORCE §11.2), so they carry work only.
   const listJoin = (xs) => (xs.length < 2 ? xs.join('') : xs.slice(0, -1).join(', ') + ' and ' + xs[xs.length - 1]);
+  // Honesty (owner, 2026-10-20): an area's `work` in nav.js is illustrative. It is the person's own only when a
+  // platform-*.js module registered it in XENO_ZONE_LIVE['<mode>.<zone>'] (rows from the server); otherwise every
+  // place it is drawn carries the "Preview — sample data" mark, and its rail badge (a made-up count) is not shown
+  // on the platform. Which areas are still samples is therefore derived from code, never a hand-kept list.
+  const zoneLiveKey = (z) => (z.of || zoneKey()) + '.' + z.id;
+  const zoneLive = (z) => (window.XENO_ZONE_LIVE || {})[zoneLiveKey(z)] || null;
+  const areaWork = (z) => { const L = zoneLive(z); return L ? { work: L.work ? L.work() : null, sample: false } : { work: z.work || null, sample: !!z.work }; };
+  const SAMPLE_MARK = '<span class="xw-sample" data-sample-badge title="These rows are illustrative, not your data. This area is not connected yet.">Preview — sample data</span>';
+  const badgeOf = (key) => { const [m, ...rest] = key.split('.'), zid = rest.join('.'), real = m === 'overview' && zid.includes('-') ? zid.replace('-', '.') : key;
+    const L = (window.XENO_ZONE_LIVE || {})[real]; if (L) return L.badge ? L.badge() : null;
+    return window.XENO_PLATFORM && window.XENO_PLATFORM.served ? null : (window.XENO_BADGES || {})[key]; };
   function zoneRows(z) {
     // honesty: a planned product has no work yet — never show sample "inbox"/"files" rows for it
     const prods = z.products || [], live = prods.filter((id) => PR[id] && PR[id].status !== 'soon');
-    const rows = z.work ? z.work[1].filter((r) => (r[2] ? PR[r[2]] && PR[r[2]].status !== 'soon' : !prods.length || live.length)) : [];
+    const { work: zw, sample } = areaWork(z);
+    const rows = zw ? zw[1].filter((r) => (r[2] ? PR[r[2]] && PR[r[2]].status !== 'soon' : !prods.length || live.length)) : [];
     const coming = prods.length && !live.length;
     return [prods.length ? sec('products', 'Products', prods.map((id) => productRow(id)).join('')) : '',
-      rows.length ? sec('work', z.work[0], rows.map((r) => workRow(r, z.work[0])).join('') + row(`data-item="All ${esc(z.work[0].toLowerCase())}"`, `${ic('right')}<span class="t">View all</span>`, 'sub')) : '',
+      rows.length ? sec('work', esc(zw[0]) + (sample ? ' ' + SAMPLE_MARK : ''), rows.map((r) => workRow(r, zw[0])).join('') + row(`data-item="All ${esc(zw[0].toLowerCase())}"`, `${ic('right')}<span class="t">View all</span>`, 'sub')) : '',
       coming ? `<div class="empty-note"><b>Nothing here yet.</b><span>${listJoin(prods.map((id) => esc(PR[id].name)))} ${prods.length > 1 ? 'are' : 'is'} planned, not built — your ${esc(z.label.toLowerCase())} will appear here once ${prods.length > 1 ? 'they launch' : 'it launches'}.</span></div>` : ''].join('');
   }
   function panelZone() {
@@ -1048,17 +1063,19 @@
   // products say so; no sample work is shown for something that is not built.
   function mainZone() {
     const z = zoneNow(), prods = z.products || [], live = prods.filter((id) => PR[id] && PR[id].status !== 'soon');
-    const work = z.work ? z.work[1].filter((r) => (r[2] ? PR[r[2]] && PR[r[2]].status !== 'soon' : !prods.length || live.length)) : [];
+    { const L = zoneLive(z); if (L && L.page) { const html = L.page(z); if (html) return html; } }
+    const { work: zw, sample } = areaWork(z);
+    const work = zw ? zw[1].filter((r) => (r[2] ? PR[r[2]] && PR[r[2]].status !== 'soon' : !prods.length || live.length)) : [];
     const card = (id) => { const p = PR[id], soon = p.status === 'soon';
       return `<button class="hm-prod${soon ? ' soon' : ''}" data-product="${id}">${pIconFull(p, 28)}<div><b>${esc(p.name)}</b><small>${esc(p.blurb)}</small></div><span class="hm-tag">${soon ? 'Coming soon' : p.kind === 'desktop' ? 'Desktop' : 'Web'}</span></button>`; };
     const ctxLine = z.of ? `${M[z.of].name} · seen from Overview` : M[zoneKey()].name;
-    return `<div class="wrap pj hm"><div class="pj-head"><div><small>${esc(ctxLine)}</small><h1>${esc(z.label)}</h1></div>${live[0] ? `<button class="btn" data-product="${live[0]}">New in ${esc(PR[live[0]].name)}</button>` : ''}</div>
+    return `<div class="wrap pj hm"><div class="pj-head"><div><small>${esc(ctxLine)}</small><h1>${esc(z.label)}${work.length && sample ? ' ' + SAMPLE_MARK : ''}</h1></div>${live[0] ? `<button class="btn" data-product="${live[0]}">New in ${esc(PR[live[0]].name)}</button>` : ''}</div>
       <p class="hm-blurb">${esc(z.blurb)}</p>
       ${prods.length ? `<h3>Products</h3><div class="hm-prods">${prods.map(card).join('')}</div>` : ''}
-      ${work.length ? `<h3>${esc(z.work[0])}</h3>${H_list(work.map(([t, m, p]) => H_li(p ? `data-item-p="${p}" data-item="${esc(t)}"` : `data-item="${esc(t)}"`, t, m)))}` : ''}
+      ${work.length ? `<h3>${esc(zw[0])}</h3>${H_list(work.map(([t, m, p]) => H_li(p ? `data-item-p="${p}" data-item="${esc(t)}"` : `data-item="${esc(t)}"`, t, m)))}` : ''}
       ${prods.length && !live.length ? `<div class="pj-empty">${prods.map((id) => esc(PR[id].name)).join(', ')} ${prods.length > 1 ? 'are' : 'is'} planned, not built — this area fills in when ${prods.length > 1 ? 'they launch' : 'it launches'}.</div>` : ''}
       ${z.of ? `<div class="hm-switch"><button class="btn ghost" data-mode="${z.of}">Open ${M[z.of].name} mode</button></div>` : ''}
-      <div class="note">Prototype — sample data.</div></div>`;
+      ${work.length && sample ? '<div class="note">Preview — the rows above are sample data, not yours.</div>' : ''}</div>`;
   }
   function mainProduct() {
     const p = PR[S.product];

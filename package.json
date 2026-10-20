@@ -26,6 +26,8 @@
     "test:mcp-generated": "node --test scripts/xeno-mcp-generated.test.mjs",
     "test:workspace-api": "node --test scripts/workspace-api.test.mjs",
     "test:workforce-capability-shaping": "node --test scripts/workforce-capability-shaping.test.mjs",
+    "test:publish-xeno-post": "cd src/server && node tests/publish-xeno-post.test.mjs",
+    "test:publish-ui": "node prototypes/xeno-workspace/tests/publish-test.mjs",
     "test:agent-parity": "node --test scripts/agent-parity.test.mjs && node scripts/agent-parity.mjs",
     "ci:local:drift": "node scripts/ci-local.mjs --check-drift",
     "qualify:workforce-gateway": "node --test scripts/qualify-workforce-gateway.mjs",

@@ -12,6 +12,7 @@ import userNotificationsRoutes from './routes/userNotificationsRoutes.js';
 import { startTaskSweeps } from './services/taskNotifyEmail.js';
 import { sweepDueReminders, deliverAgentEvents, sweepExpiredLeases } from './services/xenoTasks.js';
 import workspaceAreaRoutes from './routes/workspaceAreaRoutes.js';
+import publishRoutes from './routes/publishRoutes.js';
 import { areaFromRequest } from './utils/resourceArea.js';
 import { fileURLToPath } from 'url';
 import dotenv from 'dotenv';
@@ -642,6 +643,7 @@ app.use('/api/workspaces', databaseMiddleware, authMiddleware, requireActivated,
 app.use('/api/workspace-invites', databaseMiddleware, authMiddleware, workspaceInviteRoutes);
 // One search and one "needs you" feed across a person's chats, projects and Library, each aware of the area.
 app.use('/api/workspace', databaseMiddleware, authMiddleware, requireActivated, areaFromRequest, workspaceAreaRoutes);
+app.use('/api/publish', databaseMiddleware, authMiddleware, requireActivated, publishRoutes);   // XENO Publish = XENO Post, server-to-server (services/xenoPost.js)
 // XENO Connect's host adapter asks here what a token or person may do right now (CONNECT_SERVICE_TOKEN; fails closed).
 app.use('/api/connect/authority', databaseMiddleware, connectAuthorityRoutes);
 // Website Storage → XENO Connect (Connected clouds). Website cookie sessions only; tokens stay in this process.
