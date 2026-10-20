@@ -30,6 +30,7 @@ import { accountWorkspaceOperationRoutes } from './accountWorkspaceOperationRout
 import workspaceTeamRoutes from './workspaceTeamRoutes.js';
 import { workspaceKeyRoutes } from './workspaceKeyRoutes.js';
 import workspaceNotificationRoutes from './workspaceNotificationRoutes.js';
+import workspaceServiceAccountRoutes from './workspaceServiceAccountRoutes.js';
 import { requireWorkspaceAuthority } from '../middleware/workspaceScopes.js';
 import { ensurePersonalWorkspace as ensurePersonalRoot } from '../services/personalWorkspace.js';
 
@@ -209,6 +210,7 @@ router.use(requireWorkspaceAuthority);
 router.use('/:id/teams', workspaceTeamRoutes);
 router.use('/:id/api-keys', workspaceKeyRoutes);
 router.use('/:id/notifications', workspaceNotificationRoutes);
+router.use('/:id/service-accounts', workspaceServiceAccountRoutes); // D-3: admin grants for service accounts
 router.use('/:id', workspaceMembershipOperationRoutes);
 
 // GET /api/workspaces/:id — the workspace itself. Present on the preservation branch and
