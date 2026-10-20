@@ -4,11 +4,11 @@
 
 Every action a person can take on the platform, and whether an agent can take it (XENO AGENT CAPABILITY - SPEC.md §19.4). **Planned** entries are the owning division’s backlog: each is a feature agents are missing.
 
-**Total:** 1458 actions · 45 agent capability · 1231 planned (debt) · 182 excluded · **coverage 3.5%** of the 1276 owed.
+**Total:** 1458 actions · 76 agent capability · 1200 planned (debt) · 182 excluded · **coverage 6%** of the 1276 owed.
 
 | division | actions | capability | planned (debt) | excluded | coverage |
 |---|---:|---:|---:|---:|---:|
-| workforce | 270 | 0 | 269 | 1 | 0% |
+| workforce | 270 | 31 | 238 | 1 | 11.5% |
 | studio | 121 | 4 | 117 | 0 | 3.3% |
 | agents | 122 | 0 | 112 | 10 | 0% |
 | workspace-ui | 165 | 3 | 100 | 62 | 2.9% |
@@ -832,7 +832,7 @@ Every action a person can take on the platform, and whether an agent can take it
 - `ui:platform-tasks.js:data-tk=view`
 - `ui:platform-tasks.js:data-tk=watch`
 
-## workforce — 269 planned
+## workforce — 238 planned
 
 - `route:apiKeyWorkforceCapabilityRoutes.js:POST /operations`
 - `route:apiKeyWorkforceCapabilityRoutes.js:POST /read`
@@ -842,11 +842,6 @@ Every action a person can take on the platform, and whether an agent can take it
 - `route:workforceCoordinationRoutes.js:POST /goals/complete`
 - `route:workforceCoordinationRoutes.js:POST /milestones`
 - `route:workforceCoordinationRoutes.js:POST /milestones/complete`
-- `route:workforceCoordinationRoutes.js:POST /objectives`
-- `route:workforceCoordinationRoutes.js:POST /objectives/complete`
-- `route:workforceCoordinationRoutes.js:POST /objectives/link-goal`
-- `route:workforceCoordinationRoutes.js:POST /objectives/read`
-- `route:workforceCoordinationRoutes.js:POST /objectives/update`
 - `route:workforceCoordinationRoutes.js:POST /ownership/check`
 - `route:workforceCoordinationRoutes.js:POST /ownership/files`
 - `route:workforceCoordinationRoutes.js:POST /ownership/files/release`
@@ -860,12 +855,7 @@ Every action a person can take on the platform, and whether an agent can take it
 - `route:workforceCoordinationRoutes.js:POST /tasks/evidence`
 - `route:workforceCoordinationRoutes.js:POST /worktrees`
 - `route:workforceCoordinationRoutes.js:POST /worktrees/integrate`
-- `route:workforceDivisionRoutes.js:GET /`
-- `route:workforceDivisionRoutes.js:GET /:id`
 - `route:workforceDivisionRoutes.js:GET /:id/agent-budget`
-- `route:workforceDivisionRoutes.js:PATCH /:id`
-- `route:workforceDivisionRoutes.js:POST /`
-- `route:workforceDivisionRoutes.js:POST /:id/archive`
 - `route:workforceDivisionRoutes.js:PUT /:id/agent-budget`
 - `route:workforceDivisionRoutes.js:PUT /projects/:projectId`
 - `route:workforceForgeRoutes.js:POST /bindings`
@@ -891,21 +881,14 @@ Every action a person can take on the platform, and whether an agent can take it
 - `route:workforceForgeRoutes.js:POST /mirrors/read`
 - `route:workforceForgeRoutes.js:POST /mirrors/update`
 - `route:workforceForgeRoutes.js:POST /revisions/read`
-- `route:workforceFundingRoutes.js:POST /budgets`
 - `route:workforceFundingRoutes.js:POST /budgets/decide`
-- `route:workforceFundingRoutes.js:POST /budgets/price`
-- `route:workforceFundingRoutes.js:POST /budgets/read`
 - `route:workforceFundingRoutes.js:POST /budgets/revoke`
 - `route:workforceFundingRoutes.js:POST /campaigns`
 - `route:workforceFundingRoutes.js:POST /campaigns/open`
 - `route:workforceFundingRoutes.js:POST /campaigns/status`
-- `route:workforceFundingRoutes.js:POST /contributions`
 - `route:workforceFundingRoutes.js:POST /contributions/accounting`
-- `route:workforceFundingRoutes.js:POST /contributions/read`
-- `route:workforceFundingRoutes.js:POST /contributions/return`
 - `route:workforceFundingRoutes.js:POST /milestones`
 - `route:workforceFundingRoutes.js:POST /milestones/accept`
-- `route:workforceFundingRoutes.js:POST /offers/read`
 - `route:workforceFundingRoutes.js:POST /runs/release-undispatched`
 - `route:workforceFundingRoutes.js:POST /scope-caps`
 - `route:workforceFundingRoutes.js:POST /scope-caps/decide`
@@ -1002,24 +985,10 @@ Every action a person can take on the platform, and whether an agent can take it
 - `route:workforceRoutes.js:POST /member-removals`
 - `route:workforceRoutes.js:POST /member-removals/archive`
 - `route:workforceRoutes.js:POST /member-removals/read`
-- `route:workforceRoutes.js:POST /resource-operations/read`
-- `route:workforceRoutes.js:POST /resources`
-- `route:workforceRoutes.js:POST /resources/create-and-assign`
-- `route:workforceRoutes.js:POST /resources/definition/read`
-- `route:workforceRoutes.js:POST /resources/list`
-- `route:workforceRoutes.js:POST /resources/revise-definition`
-- `route:workforceRoutes.js:POST /resources/revise-definition/read`
-- `route:workforceRoutes.js:POST /run-admissions`
-- `route:workforceRoutes.js:POST /run-admissions/authority`
 - `route:workforceRoutes.js:POST /run-admissions/authorize-step`
 - `route:workforceRoutes.js:POST /run-admissions/deliver`
-- `route:workforceRoutes.js:POST /run-admissions/list`
-- `route:workforceRoutes.js:POST /run-admissions/operations/read`
 - `route:workforceRoutes.js:POST /run-admissions/outcome`
-- `route:workforceRoutes.js:POST /run-admissions/pin`
-- `route:workforceRoutes.js:POST /run-admissions/read`
 - `route:workforceRoutes.js:POST /run-admissions/result`
-- `route:workforceRoutes.js:POST /run-admissions/revoke`
 - `route:workforceSessionRoutes.js:POST /adapters/parity`
 - `route:workforceSessionRoutes.js:POST /branch-intents`
 - `route:workforceSessionRoutes.js:POST /branch-intents/list`

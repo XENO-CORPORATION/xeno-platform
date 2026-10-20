@@ -604,6 +604,440 @@
    ]
   },
   {
+   "name": "agent.resource.create",
+   "wire": "agent__resource__create",
+   "version": "1.0.0",
+   "class": "irreversible",
+   "scope": "agents:write",
+   "surfaces": [
+    "mcp",
+    "rest"
+   ],
+   "aliases": [
+    "workforce_resource_create"
+   ]
+  },
+  {
+   "name": "agent.resource.create_and_assign",
+   "wire": "agent__resource__create_and_assign",
+   "version": "1.0.0",
+   "class": "irreversible",
+   "scope": "agents:write",
+   "surfaces": [
+    "mcp",
+    "rest"
+   ],
+   "aliases": [
+    "workforce_resource_create_and_assign"
+   ]
+  },
+  {
+   "name": "agent.resource.operation_get",
+   "wire": "agent__resource__operation_get",
+   "version": "1.0.0",
+   "class": "safe",
+   "scope": "agents:read",
+   "surfaces": [
+    "mcp",
+    "rest"
+   ],
+   "aliases": [
+    "workforce_resource_operation_get"
+   ]
+  },
+  {
+   "name": "agent.resource.get",
+   "wire": "agent__resource__get",
+   "version": "1.0.0",
+   "class": "safe",
+   "scope": "agents:read",
+   "surfaces": [
+    "mcp",
+    "rest"
+   ],
+   "aliases": [
+    "workforce_resource_get"
+   ]
+  },
+  {
+   "name": "agent.resource.update",
+   "wire": "agent__resource__update",
+   "version": "1.0.0",
+   "class": "irreversible",
+   "scope": "agents:write",
+   "surfaces": [
+    "mcp",
+    "rest"
+   ],
+   "aliases": [
+    "workforce_resource_update"
+   ]
+  },
+  {
+   "name": "agent.resource.revision_get",
+   "wire": "agent__resource__revision_get",
+   "version": "1.0.0",
+   "class": "safe",
+   "scope": "agents:read",
+   "surfaces": [
+    "mcp",
+    "rest"
+   ],
+   "aliases": [
+    "workforce_resource_revision_get"
+   ]
+  },
+  {
+   "name": "agent.catalog.list",
+   "wire": "agent__catalog__list",
+   "version": "1.0.0",
+   "class": "safe",
+   "scope": "agents:read",
+   "surfaces": [
+    "mcp",
+    "rest"
+   ],
+   "aliases": [
+    "workforce_catalog_list"
+   ]
+  },
+  {
+   "name": "run.admission.create",
+   "wire": "run__admission__create",
+   "version": "1.0.0",
+   "class": "irreversible",
+   "scope": "agents:write",
+   "surfaces": [
+    "mcp",
+    "rest"
+   ],
+   "aliases": [
+    "workforce_admission_create"
+   ]
+  },
+  {
+   "name": "run.admission.get",
+   "wire": "run__admission__get",
+   "version": "1.0.0",
+   "class": "safe",
+   "scope": "agents:read",
+   "surfaces": [
+    "mcp",
+    "rest"
+   ],
+   "aliases": [
+    "workforce_admission_get"
+   ]
+  },
+  {
+   "name": "run.admission.list",
+   "wire": "run__admission__list",
+   "version": "1.0.0",
+   "class": "safe",
+   "scope": "agents:read",
+   "surfaces": [
+    "mcp",
+    "rest"
+   ],
+   "aliases": [
+    "workforce_admission_list"
+   ]
+  },
+  {
+   "name": "run.admission.operation_get",
+   "wire": "run__admission__operation_get",
+   "version": "1.0.0",
+   "class": "safe",
+   "scope": "agents:read",
+   "surfaces": [
+    "mcp",
+    "rest"
+   ],
+   "aliases": [
+    "workforce_admission_operation_get"
+   ]
+  },
+  {
+   "name": "run.pin.get",
+   "wire": "run__pin__get",
+   "version": "1.0.0",
+   "class": "safe",
+   "scope": "agents:read",
+   "surfaces": [
+    "mcp",
+    "rest"
+   ],
+   "aliases": [
+    "workforce_pin_get"
+   ]
+  },
+  {
+   "name": "run.admission.revoke",
+   "wire": "run__admission__revoke",
+   "version": "1.0.0",
+   "class": "irreversible",
+   "scope": "agents:write",
+   "surfaces": [
+    "mcp",
+    "rest"
+   ],
+   "aliases": [
+    "workforce_admission_revoke"
+   ]
+  },
+  {
+   "name": "run.authority.get",
+   "wire": "run__authority__get",
+   "version": "1.0.0",
+   "class": "safe",
+   "scope": "agents:read",
+   "surfaces": [
+    "mcp",
+    "rest"
+   ],
+   "aliases": [
+    "workforce_authority_get"
+   ]
+  },
+  {
+   "name": "division.division.list",
+   "wire": "division__division__list",
+   "version": "1.0.0",
+   "class": "safe",
+   "scope": "workspace:read",
+   "surfaces": [
+    "mcp",
+    "rest"
+   ],
+   "aliases": [
+    "workforce_division_list"
+   ]
+  },
+  {
+   "name": "division.division.get",
+   "wire": "division__division__get",
+   "version": "1.0.0",
+   "class": "safe",
+   "scope": "workspace:read",
+   "surfaces": [
+    "mcp",
+    "rest"
+   ],
+   "aliases": [
+    "workforce_division_get"
+   ]
+  },
+  {
+   "name": "division.division.create",
+   "wire": "division__division__create",
+   "version": "1.0.0",
+   "class": "undoable",
+   "scope": "workspace:admin",
+   "surfaces": [
+    "mcp",
+    "rest"
+   ],
+   "aliases": [
+    "workforce_division_create"
+   ]
+  },
+  {
+   "name": "division.division.update",
+   "wire": "division__division__update",
+   "version": "1.0.0",
+   "class": "undoable",
+   "scope": "workspace:admin",
+   "surfaces": [
+    "mcp",
+    "rest"
+   ],
+   "aliases": [
+    "workforce_division_update"
+   ]
+  },
+  {
+   "name": "division.division.archive",
+   "wire": "division__division__archive",
+   "version": "1.0.0",
+   "class": "irreversible",
+   "scope": "workspace:admin",
+   "surfaces": [
+    "mcp",
+    "rest"
+   ],
+   "aliases": [
+    "workforce_division_archive"
+   ]
+  },
+  {
+   "name": "objective.objective.create",
+   "wire": "objective__objective__create",
+   "version": "1.0.0",
+   "class": "undoable",
+   "scope": "agents:write",
+   "surfaces": [
+    "mcp",
+    "rest"
+   ],
+   "aliases": [
+    "workforce_objective_create"
+   ]
+  },
+  {
+   "name": "objective.objective.get",
+   "wire": "objective__objective__get",
+   "version": "1.0.0",
+   "class": "safe",
+   "scope": "agents:read",
+   "surfaces": [
+    "mcp",
+    "rest"
+   ],
+   "aliases": [
+    "workforce_objective_get"
+   ]
+  },
+  {
+   "name": "objective.objective.update",
+   "wire": "objective__objective__update",
+   "version": "1.0.0",
+   "class": "undoable",
+   "scope": "agents:write",
+   "surfaces": [
+    "mcp",
+    "rest"
+   ],
+   "aliases": [
+    "workforce_objective_update"
+   ]
+  },
+  {
+   "name": "objective.objective.complete",
+   "wire": "objective__objective__complete",
+   "version": "1.0.0",
+   "class": "irreversible",
+   "scope": "agents:write",
+   "surfaces": [
+    "mcp",
+    "rest"
+   ],
+   "aliases": [
+    "workforce_objective_complete"
+   ]
+  },
+  {
+   "name": "objective.goal.link",
+   "wire": "objective__goal__link",
+   "version": "1.0.0",
+   "class": "undoable",
+   "scope": "agents:write",
+   "surfaces": [
+    "mcp",
+    "rest"
+   ],
+   "aliases": [
+    "workforce_objective_link_goal"
+   ]
+  },
+  {
+   "name": "funding.budget.price",
+   "wire": "funding__budget__price",
+   "version": "1.0.0",
+   "class": "safe",
+   "scope": "wallet:read",
+   "surfaces": [
+    "mcp",
+    "rest"
+   ],
+   "aliases": [
+    "workforce_funding_price"
+   ]
+  },
+  {
+   "name": "funding.budget.propose",
+   "wire": "funding__budget__propose",
+   "version": "1.0.0",
+   "class": "undoable",
+   "scope": "wallet:spend",
+   "surfaces": [
+    "mcp",
+    "rest"
+   ],
+   "aliases": [
+    "workforce_funding_budget_propose"
+   ]
+  },
+  {
+   "name": "funding.budget.get",
+   "wire": "funding__budget__get",
+   "version": "1.0.0",
+   "class": "safe",
+   "scope": "wallet:read",
+   "surfaces": [
+    "mcp",
+    "rest"
+   ],
+   "aliases": [
+    "workforce_funding_budget_get"
+   ]
+  },
+  {
+   "name": "funding.offer.get",
+   "wire": "funding__offer__get",
+   "version": "1.0.0",
+   "class": "safe",
+   "scope": "wallet:read",
+   "surfaces": [
+    "mcp",
+    "rest"
+   ],
+   "aliases": [
+    "workforce_funding_offer_get"
+   ]
+  },
+  {
+   "name": "funding.contribution.create",
+   "wire": "funding__contribution__create",
+   "version": "1.0.0",
+   "class": "irreversible",
+   "scope": "wallet:spend",
+   "surfaces": [
+    "mcp",
+    "rest"
+   ],
+   "aliases": [
+    "workforce_funding_contribute"
+   ]
+  },
+  {
+   "name": "funding.contribution.get",
+   "wire": "funding__contribution__get",
+   "version": "1.0.0",
+   "class": "safe",
+   "scope": "wallet:read",
+   "surfaces": [
+    "mcp",
+    "rest"
+   ],
+   "aliases": [
+    "workforce_funding_contribution_get"
+   ]
+  },
+  {
+   "name": "funding.contribution.return",
+   "wire": "funding__contribution__return",
+   "version": "1.0.0",
+   "class": "irreversible",
+   "scope": "wallet:spend",
+   "surfaces": [
+    "mcp",
+    "rest"
+   ],
+   "aliases": [
+    "workforce_funding_contribution_return"
+   ]
+  },
+  {
    "name": "forum.thread.search",
    "wire": "forum__thread__search",
    "version": "1.0.0",

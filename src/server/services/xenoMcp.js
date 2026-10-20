@@ -24,6 +24,7 @@ import * as modesMcp from './modesMcp.js';
 import * as canvases from './canvases.js';
 import * as agentsMcp from './agentsMcp.js';
 import * as storageMcp from './storageMcp.js';
+import * as workforceMcp from './workforceMcp.js';
 import * as forumMcp from './forumMcp.js';
 import { resolvePrincipal } from './agentIdentity.js';
 import * as creds from './workspaceCredentials.js';
@@ -81,6 +82,14 @@ export const SERVICES = Object.freeze([
     tools: () => storageMcp.TOOLS,
     call: (db, actor, name, args) => storageMcp.callTool(db, actor, name, args),
     isToolError: (e) => e instanceof storageMcp.StorageMcpError,
+  },
+  // XENO-WORKFORCE-01 (workforceMcp.js): agents and teams, runs, divisions, objectives and funding — the same services
+  {
+    category: 'workforce', title: 'Workforce', version: '1.0.0', timeoutMs: 30_000,
+    description: 'Workforce: agents and teams, run admission and revocation, divisions, objectives and project funding.',
+    tools: () => workforceMcp.TOOLS,
+    call: (db, actor, name, args) => workforceMcp.callTool(db, actor, name, args),
+    isToolError: (e) => e instanceof workforceMcp.WorkforceMcpError,
   },
   // XENO Forum, folded in from /api/forum/mcp (kept): the same tools, the same function. Its wire names were
   // always `forum_<verb>`, so as a category the grandfathered alias is exactly the old name.

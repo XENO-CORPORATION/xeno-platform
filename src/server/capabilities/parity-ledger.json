@@ -3441,27 +3441,32 @@
    "scope": "agents:write"
   },
   "route:workforceCoordinationRoutes.js:POST /objectives": {
-   "status": "planned",
+   "status": "capability",
+   "capability": "objective.objective.create",
    "class": "reversible",
    "scope": "agents:write"
   },
   "route:workforceCoordinationRoutes.js:POST /objectives/complete": {
-   "status": "planned",
-   "class": "reversible",
+   "status": "capability",
+   "capability": "objective.objective.complete",
+   "class": "irreversible",
    "scope": "agents:write"
   },
   "route:workforceCoordinationRoutes.js:POST /objectives/link-goal": {
-   "status": "planned",
+   "status": "capability",
+   "capability": "objective.goal.link",
    "class": "reversible",
    "scope": "agents:write"
   },
   "route:workforceCoordinationRoutes.js:POST /objectives/read": {
-   "status": "planned",
-   "class": "reversible",
-   "scope": "agents:write"
+   "status": "capability",
+   "capability": "objective.objective.get",
+   "class": "safe",
+   "scope": "agents:read"
   },
   "route:workforceCoordinationRoutes.js:POST /objectives/update": {
-   "status": "planned",
+   "status": "capability",
+   "capability": "objective.objective.update",
    "class": "reversible",
    "scope": "agents:write"
   },
@@ -3531,14 +3536,16 @@
    "scope": "agents:write"
   },
   "route:workforceDivisionRoutes.js:GET /": {
-   "status": "planned",
+   "status": "capability",
+   "capability": "division.division.list",
    "class": "safe",
-   "scope": "agents:read"
+   "scope": "workspace:read"
   },
   "route:workforceDivisionRoutes.js:GET /:id": {
-   "status": "planned",
+   "status": "capability",
+   "capability": "division.division.get",
    "class": "safe",
-   "scope": "agents:read"
+   "scope": "workspace:read"
   },
   "route:workforceDivisionRoutes.js:GET /:id/agent-budget": {
    "status": "planned",
@@ -3546,19 +3553,22 @@
    "scope": "agents:read"
   },
   "route:workforceDivisionRoutes.js:PATCH /:id": {
-   "status": "planned",
+   "status": "capability",
+   "capability": "division.division.update",
    "class": "reversible",
-   "scope": "agents:write"
+   "scope": "workspace:admin"
   },
   "route:workforceDivisionRoutes.js:POST /": {
-   "status": "planned",
+   "status": "capability",
+   "capability": "division.division.create",
    "class": "reversible",
-   "scope": "agents:write"
+   "scope": "workspace:admin"
   },
   "route:workforceDivisionRoutes.js:POST /:id/archive": {
-   "status": "planned",
-   "class": "reversible",
-   "scope": "agents:write"
+   "status": "capability",
+   "capability": "division.division.archive",
+   "class": "irreversible",
+   "scope": "workspace:admin"
   },
   "route:workforceDivisionRoutes.js:PUT /:id/agent-budget": {
    "status": "planned",
@@ -3686,9 +3696,10 @@
    "scope": "agents:write"
   },
   "route:workforceFundingRoutes.js:POST /budgets": {
-   "status": "planned",
+   "status": "capability",
+   "capability": "funding.budget.propose",
    "class": "reversible",
-   "scope": "agents:write"
+   "scope": "wallet:spend"
   },
   "route:workforceFundingRoutes.js:POST /budgets/decide": {
    "status": "planned",
@@ -3696,14 +3707,16 @@
    "scope": "agents:write"
   },
   "route:workforceFundingRoutes.js:POST /budgets/price": {
-   "status": "planned",
-   "class": "reversible",
-   "scope": "agents:write"
+   "status": "capability",
+   "capability": "funding.budget.price",
+   "class": "safe",
+   "scope": "wallet:read"
   },
   "route:workforceFundingRoutes.js:POST /budgets/read": {
-   "status": "planned",
-   "class": "reversible",
-   "scope": "agents:write"
+   "status": "capability",
+   "capability": "funding.budget.get",
+   "class": "safe",
+   "scope": "wallet:read"
   },
   "route:workforceFundingRoutes.js:POST /budgets/revoke": {
    "status": "planned",
@@ -3726,9 +3739,10 @@
    "scope": "agents:write"
   },
   "route:workforceFundingRoutes.js:POST /contributions": {
-   "status": "planned",
-   "class": "reversible",
-   "scope": "agents:write"
+   "status": "capability",
+   "capability": "funding.contribution.create",
+   "class": "irreversible",
+   "scope": "wallet:spend"
   },
   "route:workforceFundingRoutes.js:POST /contributions/accounting": {
    "status": "planned",
@@ -3736,14 +3750,16 @@
    "scope": "agents:write"
   },
   "route:workforceFundingRoutes.js:POST /contributions/read": {
-   "status": "planned",
-   "class": "reversible",
-   "scope": "agents:write"
+   "status": "capability",
+   "capability": "funding.contribution.get",
+   "class": "safe",
+   "scope": "wallet:read"
   },
   "route:workforceFundingRoutes.js:POST /contributions/return": {
-   "status": "planned",
-   "class": "reversible",
-   "scope": "agents:write"
+   "status": "capability",
+   "capability": "funding.contribution.return",
+   "class": "irreversible",
+   "scope": "wallet:spend"
   },
   "route:workforceFundingRoutes.js:POST /milestones": {
    "status": "planned",
@@ -3756,9 +3772,10 @@
    "scope": "agents:write"
   },
   "route:workforceFundingRoutes.js:POST /offers/read": {
-   "status": "planned",
-   "class": "reversible",
-   "scope": "agents:write"
+   "status": "capability",
+   "capability": "funding.offer.get",
+   "class": "safe",
+   "scope": "wallet:read"
   },
   "route:workforceFundingRoutes.js:POST /runs/release-undispatched": {
    "status": "planned",
@@ -4241,49 +4258,58 @@
    "scope": "agents:write"
   },
   "route:workforceRoutes.js:POST /resource-operations/read": {
-   "status": "planned",
-   "class": "reversible",
-   "scope": "agents:write"
+   "status": "capability",
+   "capability": "agent.resource.operation_get",
+   "class": "safe",
+   "scope": "agents:read"
   },
   "route:workforceRoutes.js:POST /resources": {
-   "status": "planned",
-   "class": "reversible",
+   "status": "capability",
+   "capability": "agent.resource.create",
+   "class": "irreversible",
    "scope": "agents:write"
   },
   "route:workforceRoutes.js:POST /resources/create-and-assign": {
-   "status": "planned",
-   "class": "reversible",
+   "status": "capability",
+   "capability": "agent.resource.create_and_assign",
+   "class": "irreversible",
    "scope": "agents:write"
   },
   "route:workforceRoutes.js:POST /resources/definition/read": {
-   "status": "planned",
-   "class": "reversible",
-   "scope": "agents:write"
+   "status": "capability",
+   "capability": "agent.resource.get",
+   "class": "safe",
+   "scope": "agents:read"
   },
   "route:workforceRoutes.js:POST /resources/list": {
-   "status": "planned",
-   "class": "reversible",
-   "scope": "agents:write"
+   "status": "capability",
+   "capability": "agent.catalog.list",
+   "class": "safe",
+   "scope": "agents:read"
   },
   "route:workforceRoutes.js:POST /resources/revise-definition": {
-   "status": "planned",
-   "class": "reversible",
+   "status": "capability",
+   "capability": "agent.resource.update",
+   "class": "irreversible",
    "scope": "agents:write"
   },
   "route:workforceRoutes.js:POST /resources/revise-definition/read": {
-   "status": "planned",
-   "class": "reversible",
-   "scope": "agents:write"
+   "status": "capability",
+   "capability": "agent.resource.revision_get",
+   "class": "safe",
+   "scope": "agents:read"
   },
   "route:workforceRoutes.js:POST /run-admissions": {
-   "status": "planned",
-   "class": "reversible",
+   "status": "capability",
+   "capability": "run.admission.create",
+   "class": "irreversible",
    "scope": "agents:write"
   },
   "route:workforceRoutes.js:POST /run-admissions/authority": {
-   "status": "planned",
-   "class": "reversible",
-   "scope": "agents:write"
+   "status": "capability",
+   "capability": "run.authority.get",
+   "class": "safe",
+   "scope": "agents:read"
   },
   "route:workforceRoutes.js:POST /run-admissions/authorize-step": {
    "status": "planned",
@@ -4296,14 +4322,16 @@
    "scope": "agents:write"
   },
   "route:workforceRoutes.js:POST /run-admissions/list": {
-   "status": "planned",
-   "class": "reversible",
-   "scope": "agents:write"
+   "status": "capability",
+   "capability": "run.admission.list",
+   "class": "safe",
+   "scope": "agents:read"
   },
   "route:workforceRoutes.js:POST /run-admissions/operations/read": {
-   "status": "planned",
-   "class": "reversible",
-   "scope": "agents:write"
+   "status": "capability",
+   "capability": "run.admission.operation_get",
+   "class": "safe",
+   "scope": "agents:read"
   },
   "route:workforceRoutes.js:POST /run-admissions/outcome": {
    "status": "planned",
@@ -4311,14 +4339,16 @@
    "scope": "agents:write"
   },
   "route:workforceRoutes.js:POST /run-admissions/pin": {
-   "status": "planned",
-   "class": "reversible",
-   "scope": "agents:write"
+   "status": "capability",
+   "capability": "run.pin.get",
+   "class": "safe",
+   "scope": "agents:read"
   },
   "route:workforceRoutes.js:POST /run-admissions/read": {
-   "status": "planned",
-   "class": "reversible",
-   "scope": "agents:write"
+   "status": "capability",
+   "capability": "run.admission.get",
+   "class": "safe",
+   "scope": "agents:read"
   },
   "route:workforceRoutes.js:POST /run-admissions/result": {
    "status": "planned",
@@ -4326,8 +4356,9 @@
    "scope": "agents:write"
   },
   "route:workforceRoutes.js:POST /run-admissions/revoke": {
-   "status": "planned",
-   "class": "reversible",
+   "status": "capability",
+   "capability": "run.admission.revoke",
+   "class": "irreversible",
    "scope": "agents:write"
   },
   "route:workforceSessionRoutes.js:POST /adapters/parity": {
