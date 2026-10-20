@@ -15,12 +15,13 @@ import * as canvasMcp from '../services/canvasMcp.js';
 import * as agentsMcp from '../services/agentsMcp.js';
 import * as agentMediaMcp from '../services/agentMediaMcp.js';
 import * as forumMcp from '../services/forumMcp.js';
+import * as placesMcp from '../services/placesMcp.js';
 
 /** The tools each bound category executes, by category. */
 export const BOUND_TOOLS = Object.freeze({
   tasks: tasksMcp.TOOLS, canvas: canvasMcp.TOOLS, agents: agentsMcp.TOOLS,
   image: agentMediaMcp.IMAGE.tools, video: agentMediaMcp.VIDEO.tools, library: agentMediaMcp.LIBRARY.tools, chat: agentMediaMcp.CHAT.tools,
-  forum: forumMcp.TOOLS,
+  forum: forumMcp.TOOLS, places: placesMcp.TOOLS,
 });
 
 const obj = (properties, required) => ({ type: 'object', properties, ...(required ? { required } : {}) });
@@ -54,6 +55,10 @@ const ROWS = [
   ['canvas.item.add', 'canvas', 'add', 'undoable', { reply: obj({ canvas: CANVAS_REPLY.properties.canvas, added: { type: 'array', description: 'The new items’ ids, in the order given.' } }), idempotency: NONE('no request key yet: a retried call adds the items twice') }],
   ['canvas.connection.create', 'canvas', 'connect', 'undoable', { reply: CANVAS_REPLY, idempotency: NONE('no request key yet: a retried call adds a second connection') }],
   ['canvas.item.update', 'canvas', 'update', 'irreversible', { reply: CANVAS_REPLY, idempotency: NAT('moves and edits set absolute values; removing a removed item is a no-op') }],
+  // ── places (the building of each workspace; a projection of workforce records, scope-filtered on the server)
+  ['places.place.list', 'places', 'list', 'safe', { reply: obj({ items: { type: 'array', description: 'id, name, workspace, city (plot), floors (closed floors carry no name), counts and your access of each building you can enter.' } }, ['items']) }],
+  ['places.place.get', 'places', 'get', 'safe', { provenance: 'untrusted', reply: obj({ place: { type: 'object', description: 'The building summary and your access.' }, spec: { type: 'object', description: 'snap (divisions, teams, memberships, principals, runs, closedDivisionIds) and record (the saved layout).' }, access: { type: 'object', description: 'role, permissions (watch talk handoff edit host), scope.' } }, ['place', 'spec', 'access']) }],
+  ['places.layout.save', 'places', 'save_layout', 'undoable', { idempotency: { strategy: 'key', key: 'request_key' }, reply: obj({ placeId: { type: 'string' }, placeRevision: { type: 'integer', description: 'The new layout revision.' }, receipt: { type: 'object', description: 'operationId, revision, at; replayed: true when this key was already applied.' } }, ['placeId', 'placeRevision']) }],
   // ── agents (self)
   ['agents.self.get', 'agents', 'whoami', 'safe', { agentsOnly: true, reply: obj({ agent: { type: 'object', description: 'id (agt_), name, handle, status, workspace, division, owner, accountable, projects, budget (null when the division has none).' } }, ['agent']) }],
   // ── studio (media generation)

@@ -19,6 +19,7 @@ import * as tasks from './xenoTasks.js';
 import * as agentMediaMcp from './agentMediaMcp.js';
 import * as agentMedia from './agentMedia.js';
 import * as canvasMcp from './canvasMcp.js';
+import * as placesMcp from './placesMcp.js';
 import * as canvases from './canvases.js';
 import * as agentsMcp from './agentsMcp.js';
 import { withTransaction } from './chatProjectAuthority.js';
@@ -49,6 +50,13 @@ export const SERVICES = Object.freeze([
     tools: () => canvasMcp.TOOLS,
     call: (db, actor, name, args) => canvasMcp.callTool(db, actor, name, args),
     isToolError: (e) => e instanceof canvases.CanvasError,
+  },
+  {
+    category: 'places', title: 'Places', version: '1.0.0', timeoutMs: 20_000,
+    description: 'Places: the building of each workspace — floors, pods, desks and who works where, filtered to your scope.',
+    tools: () => placesMcp.TOOLS,
+    call: (db, actor, name, args) => placesMcp.callTool(db, actor, name, args),
+    isToolError: (e) => e instanceof placesMcp.PlacesMcpError,
   },
   // what an agent can learn about itself (agentsMcp.js). On by default for a platform agent's own credential
   // (AGENT_DEFAULT_CATEGORIES); an app sign-in turns it on in Dev › XENO MCP like any other category.

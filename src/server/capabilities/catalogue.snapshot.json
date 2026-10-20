@@ -218,6 +218,42 @@
    ]
   },
   {
+   "name": "places.place.list",
+   "wire": "places__place__list",
+   "version": "1.0.0",
+   "class": "safe",
+   "surfaces": [
+    "mcp"
+   ],
+   "aliases": [
+    "places_list"
+   ]
+  },
+  {
+   "name": "places.place.get",
+   "wire": "places__place__get",
+   "version": "1.0.0",
+   "class": "safe",
+   "surfaces": [
+    "mcp"
+   ],
+   "aliases": [
+    "places_get"
+   ]
+  },
+  {
+   "name": "places.layout.save",
+   "wire": "places__layout__save",
+   "version": "1.0.0",
+   "class": "undoable",
+   "surfaces": [
+    "mcp"
+   ],
+   "aliases": [
+    "places_save_layout"
+   ]
+  },
+  {
    "name": "agents.self.get",
    "wire": "agents__self__get",
    "version": "1.0.0",
