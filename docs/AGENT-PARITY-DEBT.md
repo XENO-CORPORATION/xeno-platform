@@ -4,11 +4,11 @@
 
 Every action a person can take on the platform, and whether an agent can take it (XENO AGENT CAPABILITY - SPEC.md §19.4). **Planned** entries are the owning division’s backlog: each is a feature agents are missing.
 
-**Total:** 1481 actions · 82 agent capability · 1204 planned (debt) · 185 excluded · **coverage 6.3%** of the 1296 owed.
+**Total:** 1481 actions · 86 agent capability · 1206 planned (debt) · 189 excluded · **coverage 6.7%** of the 1292 owed.
 
 | division | actions | capability | planned (debt) | excluded | coverage |
 |---|---:|---:|---:|---:|---:|
-| workforce | 277 | 31 | 238 | 1 | 11.2% |
+| workforce | 277 | 35 | 239 | 3 | 12.8% |
 | studio | 121 | 4 | 117 | 0 | 3.3% |
 | agents | 122 | 0 | 112 | 10 | 0% |
 | workspace-ui | 165 | 3 | 100 | 62 | 2.9% |
@@ -24,7 +24,7 @@ Every action a person can take on the platform, and whether an agent can take it
 | canvas | 20 | 4 | 16 | 0 | 20% |
 | inference | 18 | 0 | 12 | 6 | 0% |
 | publish | 13 | 6 | 4 | 3 | 60% |
-| places | 6 | 3 | 0 | 0 | 50% |
+| places | 6 | 3 | 1 | 2 | 75% |
 
 ## account — 60 planned
 
@@ -511,6 +511,10 @@ Every action a person can take on the platform, and whether an agent can take it
 - `route:v2InferenceRoutes.js:PUT /credentials/:id/models`
 - `route:v2InferenceRoutes.js:PUT /routes/:surface`
 
+## places — 1 planned
+
+- `route:placesRoutes.js:GET /needs-you`
+
 ## platform — 34 planned
 
 - `route:analyticsRoutes.js:GET /active-users`
@@ -840,7 +844,7 @@ Every action a person can take on the platform, and whether an agent can take it
 - `ui:platform-tasks.js:data-tk=view`
 - `ui:platform-tasks.js:data-tk=watch`
 
-## workforce — 238 planned
+## workforce — 239 planned
 
 - `route:apiKeyWorkforceCapabilityRoutes.js:POST /operations`
 - `route:apiKeyWorkforceCapabilityRoutes.js:POST /read`
@@ -864,6 +868,7 @@ Every action a person can take on the platform, and whether an agent can take it
 - `route:workforceCoordinationRoutes.js:POST /worktrees`
 - `route:workforceCoordinationRoutes.js:POST /worktrees/integrate`
 - `route:workforceDivisionRoutes.js:GET /:id/agent-budget`
+- `route:workforceDivisionRoutes.js:GET /:id/home`
 - `route:workforceDivisionRoutes.js:PUT /:id/agent-budget`
 - `route:workforceDivisionRoutes.js:PUT /projects/:projectId`
 - `route:workforceForgeRoutes.js:POST /bindings`

@@ -2656,6 +2656,25 @@
    "class": "safe",
    "scope": "places:read"
   },
+  "route:placesRoutes.js:GET /:placeId/events": {
+   "status": "excluded",
+   "category": "protocol",
+   "class": "safe",
+   "scope": "none",
+   "because": "SSE transport for the live frame; the same scoped snapshot is readable by agents through places.place.get"
+  },
+  "route:placesRoutes.js:GET /needs-you": {
+   "status": "planned",
+   "class": "safe",
+   "scope": "places:read"
+  },
+  "route:placesRoutes.js:POST /:placeId/presence": {
+   "status": "excluded",
+   "category": "protocol",
+   "class": "safe",
+   "scope": "none",
+   "because": "the open building screen heartbeats the viewer's floor every few seconds (ephemeral, 45 s TTL); it records that a person is looking, it is not an action"
+  },
   "route:placesRoutes.js:POST /ops/:op": {
    "status": "capability",
    "capability": [
@@ -3553,6 +3572,11 @@
    "status": "planned",
    "class": "safe",
    "scope": "agents:read"
+  },
+  "route:workforceDivisionRoutes.js:GET /:id/home": {
+   "status": "planned",
+   "class": "safe",
+   "scope": "workspace:read"
   },
   "route:workforceDivisionRoutes.js:PATCH /:id": {
    "status": "capability",
@@ -7002,10 +7026,35 @@
    "class": "reversible",
    "scope": "agents:write"
   },
+  "ui:platform-divisions.js:data-xdv=obj-done": {
+   "status": "capability",
+   "capability": "objective.objective.complete",
+   "class": "irreversible",
+   "scope": "agents:write"
+  },
+  "ui:platform-divisions.js:data-xdv=obj-edit": {
+   "status": "capability",
+   "capability": "objective.objective.update",
+   "class": "reversible",
+   "scope": "agents:write"
+  },
+  "ui:platform-divisions.js:data-xdv=obj-new": {
+   "status": "capability",
+   "capability": "objective.objective.create",
+   "class": "reversible",
+   "scope": "agents:write"
+  },
   "ui:platform-divisions.js:data-xdv=open": {
    "status": "planned",
    "class": "reversible",
    "scope": "agents:write"
+  },
+  "ui:platform-divisions.js:data-xdv=project": {
+   "status": "excluded",
+   "category": "view-state",
+   "class": "safe",
+   "scope": "none",
+   "because": "navigates to the project page; changes only what the screen shows"
   },
   "ui:platform-divisions.js:data-xdv=remove-project": {
    "status": "planned",
@@ -7956,6 +8005,19 @@
    "class": "safe",
    "scope": "none",
    "because": "the Publish page container; its buttons call /api/publish, which is decided route by route"
+  },
+  "ui:platform-divisions.js:data-xdv=run": {
+   "status": "excluded",
+   "category": "view-state",
+   "class": "safe",
+   "scope": "none",
+   "because": "a table-row marker on the division home; it has no handler and changes only what the screen shows"
+  },
+  "ui:platform-divisions.js:data-xdv=run-stop": {
+   "status": "capability",
+   "capability": "run.admission.revoke",
+   "class": "irreversible",
+   "scope": "agents:write"
   }
  }
 }
