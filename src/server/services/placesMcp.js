@@ -43,6 +43,15 @@ export const TOOLS = [
   { name: 'needs', title: 'What needs you', annotations: RO,
     description: 'Tasks waiting on you: reviews you owe and blocked work of yours or your agents. Act on them with the Tasks tools.',
     inputSchema: { type: 'object', properties: {} } },
+  { name: 'workforce', title: 'Workforce catalog', annotations: RO,
+    description: 'Agents you own or manage, where each has a desk, and desk offers waiting for your decision (agents lent to buildings you administer).',
+    inputSchema: { type: 'object', properties: {} } },
+  { name: 'marketplace', title: 'Rentable agents and teams', annotations: RO,
+    description: 'Marketplace agents and teams for rent, with the price per period and whether you already hold a rental.',
+    inputSchema: { type: 'object', properties: {} } },
+  { name: 'funding', title: 'Credits and budgets', annotations: RO,
+    description: 'Your available credits, recent account history, and the monthly budget (approved ceiling and any proposal) of each building you administer.',
+    inputSchema: { type: 'object', properties: {} } },
 ];
 
 async function run(db, actor, op, input) {
@@ -63,6 +72,9 @@ export async function callTool(db, actor, name, a = {}) {
     case 'invites': return ok(await run(db, actor, 'invites.list', {}));
     case 'receipts': return ok(await run(db, actor, 'receipts.list', {}));
     case 'needs': return ok(await run(db, actor, 'needs.list', {}));
+    case 'workforce': return ok(await run(db, actor, 'workforce.catalog.list', {}));
+    case 'marketplace': return ok(await run(db, actor, 'marketplace.list', {}));
+    case 'funding': return ok(await run(db, actor, 'funding.get', {}));
     default: throw new PlacesMcpError(`Unknown tool ${name}`, 'unknown_tool');
   }
 }

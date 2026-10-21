@@ -744,6 +744,48 @@
    ]
   },
   {
+   "name": "places.workforce.list",
+   "wire": "places__workforce__list",
+   "version": "1.0.0",
+   "class": "safe",
+   "scope": "places:read",
+   "surfaces": [
+    "mcp",
+    "rest"
+   ],
+   "aliases": [
+    "places_workforce"
+   ]
+  },
+  {
+   "name": "places.marketplace.list",
+   "wire": "places__marketplace__list",
+   "version": "1.0.0",
+   "class": "safe",
+   "scope": "places:read",
+   "surfaces": [
+    "mcp",
+    "rest"
+   ],
+   "aliases": [
+    "places_marketplace"
+   ]
+  },
+  {
+   "name": "places.funding.get",
+   "wire": "places__funding__get",
+   "version": "1.0.0",
+   "class": "safe",
+   "scope": "places:read",
+   "surfaces": [
+    "mcp",
+    "rest"
+   ],
+   "aliases": [
+    "places_funding"
+   ]
+  },
+  {
    "name": "places.layout.save",
    "wire": "places__layout__save",
    "version": "1.0.0",
