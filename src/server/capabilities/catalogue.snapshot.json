@@ -786,6 +786,20 @@
    ]
   },
   {
+   "name": "places.city.get",
+   "wire": "places__city__get",
+   "version": "1.0.0",
+   "class": "safe",
+   "scope": "places:read",
+   "surfaces": [
+    "mcp",
+    "rest"
+   ],
+   "aliases": [
+    "places_city"
+   ]
+  },
+  {
    "name": "places.layout.save",
    "wire": "places__layout__save",
    "version": "1.0.0",

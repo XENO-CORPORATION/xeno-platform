@@ -15,6 +15,7 @@
  */
 import crypto from 'node:crypto';
 import { availabilityMap } from './workforcePeople.js';
+import { cityOps } from './placesCity.js';
 
 export const CODES = Object.freeze(['bad_input', 'not_found', 'denied', 'needs_approval', 'conflict', 'rate_limited', 'unavailable', 'timeout', 'internal']);
 const STATUS = { bad_input: 400, not_found: 404, denied: 403, needs_approval: 409, conflict: 409, rate_limited: 429, unavailable: 503, timeout: 504, internal: 500 };
@@ -601,6 +602,8 @@ const WRITES = {
     return { result: { sessionId: s.id }, revision: 2, summary: 'Session ended' };
   },
 };
+// City: leases, facades, sponsorship — one envelope, one access rule (services/placesCity.js)
+{ const city = cityOps({ fail, loadPlace, accessFor, uuid, opUuid, STYLES }); Object.assign(READS, city.READS); Object.assign(WRITES, city.WRITES); }
 export const OPS = Object.freeze([...Object.keys(READS), ...Object.keys(WRITES), 'places.opened']);
 
 /** THE entry point. Never throws: every outcome is the contract envelope. */
