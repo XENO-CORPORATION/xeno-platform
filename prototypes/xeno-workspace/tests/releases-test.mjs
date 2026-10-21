@@ -4,6 +4,8 @@ import { shot } from './shot.mjs';
 // Proves: a customer at /workspace/releases sees What's new and no console, nothing staff-only on the page; staff see
 // the console, a deploy at /workspace/releases/deploys/<id>, a feature at /workspace/releases/features/<id> that
 // survives refresh and a fresh tab; approving a draft posts the approval; the feature form saves; no page errors.
+// The deploy's INTERNAL note: shown to staff on the deploy page, Edit note + Sign off in the header bar, edited in the
+// dialog; a customer's page never carries it.
 import { createRequire } from 'node:module'; import path from 'node:path'; import { fileURLToPath } from 'node:url';
 const here = path.dirname(fileURLToPath(import.meta.url)), repo = path.resolve(here, '../../..');
 const require = createRequire(import.meta.url); const puppeteer = require('puppeteer');
@@ -15,6 +17,8 @@ let STAFF = false;
 const USER = () => ({ id: 'u1', username: STAFF ? 'mod' : 'ada', email: 'a@x.test', display_name: STAFF ? 'Mod' : 'Ada', avatar_url: null, email_verified: true, role: STAFF ? 'admin' : 'user' });
 const DEP = '11111111-1111-4111-8111-111111111111', FEAT = '22222222-2222-4222-8222-222222222222', NOTE = '33333333-3333-4333-8333-333333333333';
 const calls = [];
+const inote = { id: '44444444-4444-4444-8444-444444444444', deployId: DEP, state: 'draft', version: 1, edited: false, provenance: 'drafted_at_deploy', signedBy: null, signedAt: null, signedVersion: null, revisions: [{ version: 1, editedByKind: 'system' }],
+  content: { summary: 'backend @ 33909cb7 — deployed. #859 fix(auth): public bypass', why: '#859: the sign-in page was gated', features: '- Site gate', migrations: '- 20261023100000-release-record.sql — down path: guarded.', risks: '- INTERNAL-RISK-MARKER', switches: '- SITE_GATE unchanged', tests: '- npm run test:site-gate', rollback: 'Rollback point: xeno-platform-backend:rollback' } };
 const deploy = { id: DEP, repo: 'xeno-platform', service: 'backend', sha: '33909cb7', previousSha: '13cee868', mode: 'swap', status: 'ok', startedAt: '2026-10-20T15:47:00Z', finishedAt: '2026-10-20T15:49:00Z', deployedBy: 'ops@xeno.test', healthcheck: 'passed /api/ready', rollbackPoint: 'xeno-platform-backend:rollback', prs: [859], migrations: ['20261023100000-release-record.sql'], provenance: 'recorded', evidence: null, pullRequests: [{ number: 859, title: 'fix(auth): public bypass', url: 'https://github.com/XENO-CORPORATION/xeno-platform/pull/859', mergedAt: '2026-10-20T15:00:00Z' }] };
 const note = { id: NOTE, featureId: FEAT, title: 'Contact XENO privately', body: 'Ask support from Help.', state: 'draft', draftedByKind: 'agent' };
 const feature = { id: FEAT, slug: 'platform:support', title: 'Support (platform)', repo: 'xeno-platform', status: 'live', enabled: { scope: 'none', plans: [], workspaces: [] }, specRef: null, testProof: null, provenance: 'derived', evidence: 'grouped', lastChangeAt: '2026-10-20T00:00:00Z', changes: [{ kind: 'pr', id: '850', title: 'feat(support): lane', url: 'https://github.com/XENO-CORPORATION/xeno-platform/pull/850', at: '2026-10-20T00:00:00Z' }], notes: [note] };
@@ -36,6 +40,9 @@ const handler = (q) => {
   if (u.pathname === '/api/releases/summary') return json(200, { success: true, summary: { deploys: 1, lastDeploy: deploy.startedAt, features: 1, changes: 1, drafts: 1, repos: [{ repo: 'xeno-platform', changes: 1 }] } });
   if (u.pathname === '/api/releases/deploys') return json(200, { success: true, deploys: [deploy] });
   if (u.pathname === `/api/releases/deploys/${DEP}`) return json(200, { success: true, deploy });
+  if (u.pathname === `/api/releases/deploys/${DEP}/internal-note` && method === 'GET') return json(200, { success: true, note: inote });
+  if (u.pathname === `/api/releases/deploys/${DEP}/internal-note` && method === 'PATCH') { Object.assign(inote.content, b.content); inote.version += 1; return json(200, { success: true, note: inote }); }
+  if (u.pathname === `/api/releases/deploys/${DEP}/internal-note/sign`) { inote.state = 'signed'; inote.signedByName = 'Mod'; inote.signedAt = '2026-10-21T10:00:00Z'; inote.signedVersion = inote.version; return json(200, { success: true, note: inote }); }
   if (u.pathname === '/api/releases/features') return json(200, { success: true, features: [feature] });
   if (u.pathname === `/api/releases/features/${FEAT}` && method === 'GET') return json(200, { success: true, feature });
   if (u.pathname === `/api/releases/features/${FEAT}` && method === 'PATCH') { feature.enabled.scope = b.enabledScope; return json(200, { success: true, feature }); }
@@ -56,6 +63,8 @@ try {
   ok(/Contact XENO privately/.test(await main(c)), 'a customer at /workspace/releases sees What’s new');
   const ch = await html(c);
   ok(!/Deploys|Features|Notes to approve|pull\/|platform:support|xeno-platform/.test(ch), 'a customer sees no console, PR, slug or repository');
+  await c.goto(base + `/workspace/releases/deploys/${DEP}`, { waitUntil: 'domcontentloaded' }); await settle(1800);
+  ok(!/INTERNAL-RISK-MARKER|Internal release note|Sign off/.test(await html(c)), 'a customer at a deploy address sees no internal note');
   await c.goto(base + '/workspace/releases/whats-new', { waitUntil: 'domcontentloaded' }); await settle(1800);
   ok(/Ask support from Help/.test(await main(c)), 'What’s new has its own address');
   ok(c.errs.length === 0, 'no page errors for the customer' + (c.errs.length ? ': ' + c.errs.join(' | ') : ''));
@@ -71,6 +80,15 @@ try {
   ok(new URL(s.url()).pathname === '/workspace/releases/deploys' && /33909cb7/.test(await main(s)), 'deploys have their own address and list the deploy');
   await s.click(`#main [data-rl-go="deploys/${DEP}"]`); await settle();
   ok(new URL(s.url()).pathname === `/workspace/releases/deploys/${DEP}` && /passed \/api\/ready/.test(await main(s)) && /#859/.test(await main(s)) && /20261023100000-release-record\.sql/.test(await main(s)), 'a deploy page by id shows healthcheck, PRs and migrations');
+  ok(/Internal release note/.test(await main(s)) && /INTERNAL-RISK-MARKER/.test(await main(s)) && /Staff only/.test(await main(s)), 'the deploy page shows its internal note, marked staff only');
+  ok(!!(await s.$('#main .topbar .pg-top-acts [data-rl-inote="edit"]')) && !!(await s.$('#main .topbar .pg-top-acts [data-rl-inote="sign"]')), 'Edit note and Sign off sit in the header bar');
+  await s.click('#main .topbar [data-rl-inote="edit"]'); await settle(400);
+  ok(!!(await s.$('.xd-sh[role="dialog"] #xdf-risks')), 'the internal note is edited in the workspace dialog');
+  await s.$eval('.xd-sh[role="dialog"] #xdf-risks', (e) => { e.value = '- watch the mail queue'; e.dispatchEvent(new Event('input', { bubbles: true })); });
+  await s.$eval('.xd-sh[role="dialog"] form', (f) => f.requestSubmit()); await settle(900);
+  ok(calls.some(([m, pth, b]) => m === 'PATCH' && pth === `/api/releases/deploys/${DEP}/internal-note` && b.content && b.content.risks === '- watch the mail queue' && b.expectedVersion === 1), 'saving the dialog patches the note with the version it was read at');
+  await s.click('#main .topbar [data-rl-inote="sign"]'); await settle(900);
+  ok(calls.some(([m, pth]) => m === 'POST' && pth === `/api/releases/deploys/${DEP}/internal-note/sign`) && /Signed off by Mod/.test(await main(s)), 'Sign off posts the sign-off and the page says who signed');
   await s.goto(base + `/workspace/releases/features/${FEAT}`, { waitUntil: 'domcontentloaded' }); await settle(2000); await shot(s, 'releases-feature');
   ok(/Support \(platform\)/.test(await main(s)) && /Draft by an agent/.test(await main(s)), 'a feature page by id shows its notes, the agent draft marked as a draft');
   ok(!!(await s.$('#main .topbar .pg-top-acts [data-rl-create="note"]')) && !(await s.$('#main .mview [data-rl-form="note"]')), 'New customer note sits right in the header bar; no note form is stacked in the body');

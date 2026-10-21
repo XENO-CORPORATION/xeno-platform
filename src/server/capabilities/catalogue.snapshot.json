@@ -1962,6 +1962,34 @@
    ]
   },
   {
+   "name": "releases.internal_note.get",
+   "wire": "releases__internal_note__get",
+   "version": "1.0.0",
+   "class": "safe",
+   "scope": "workspace:read",
+   "surfaces": [
+    "mcp",
+    "rest"
+   ],
+   "aliases": [
+    "releases_get_internal_note"
+   ]
+  },
+  {
+   "name": "releases.internal_note.edit",
+   "wire": "releases__internal_note__edit",
+   "version": "1.0.0",
+   "class": "undoable",
+   "scope": "workspace:admin",
+   "surfaces": [
+    "mcp",
+    "rest"
+   ],
+   "aliases": [
+    "releases_edit_internal_note"
+   ]
+  },
+  {
    "name": "releases.note.draft",
    "wire": "releases__note__draft",
    "version": "1.0.0",

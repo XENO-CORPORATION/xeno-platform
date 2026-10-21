@@ -36,6 +36,8 @@
     "test:support-tickets": "node src/server/tests/support-tickets.test.mjs",
     "test:support-ui": "node prototypes/xeno-workspace/tests/support-test.mjs",
     "test:release-record": "node src/server/tests/release-record.test.mjs",
+    "test:release-internal-notes": "node src/server/tests/release-internal-notes.test.mjs",
+    "release-internal-notes:backfill": "node scripts/draft-internal-notes.mjs",
     "test:release-record-mutation": "node scripts/release-record-mutation-check.mjs",
     "test:releases-ui": "node prototypes/xeno-workspace/tests/releases-test.mjs",
     "release-history": "node scripts/import-release-history.mjs",

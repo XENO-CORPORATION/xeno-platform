@@ -19,3 +19,6 @@
 .rl-form label{display:flex;flex-direction:column;gap:6px;font-size:12px;color:var(--muted)}
 .rl-h{margin:16px 0 8px;font-size:13px;font-weight:600;color:var(--text)}
 @media (max-width:760px){.rl-news li{grid-template-columns:1fr;gap:6px}.rl-dl{grid-template-columns:1fr}}
+
+/* the internal release note (staff only): each section keeps its line breaks */
+.rl-inote .rl-dl dd { white-space: pre-wrap; }

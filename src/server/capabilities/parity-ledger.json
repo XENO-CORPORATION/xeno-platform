@@ -8941,6 +8941,25 @@
    "class": "safe",
    "scope": "workspace:read"
   },
+  "route:releaseRoutes.js:GET /deploys/:id/internal-note": {
+   "status": "capability",
+   "capability": "releases.internal_note.get",
+   "class": "safe",
+   "scope": "workspace:read"
+  },
+  "route:releaseRoutes.js:PATCH /deploys/:id/internal-note": {
+   "status": "capability",
+   "capability": "releases.internal_note.edit",
+   "class": "reversible",
+   "scope": "workspace:admin"
+  },
+  "route:releaseRoutes.js:POST /deploys/:id/internal-note/sign": {
+   "status": "excluded",
+   "category": "self-authority",
+   "because": "signing off what shipped and how to roll it back is a person's ratification; an agent must not sign agent-drafted words (the database refuses it too)",
+   "scope": "none",
+   "class": "reversible"
+  },
   "route:releaseRoutes.js:GET /features": {
    "status": "capability",
    "capability": "releases.feature.list",
@@ -9012,6 +9031,19 @@
    "capability": "releases.note.draft",
    "class": "reversible",
    "scope": "workspace:admin"
+  },
+  "ui:platform-releases.js:data-rl-inote=edit": {
+   "status": "capability",
+   "capability": "releases.internal_note.edit",
+   "class": "reversible",
+   "scope": "workspace:admin"
+  },
+  "ui:platform-releases.js:data-rl-inote=sign": {
+   "status": "excluded",
+   "category": "self-authority",
+   "because": "signing off what shipped and how to roll it back is a person's ratification; an agent must not sign agent-drafted words (the database refuses it too)",
+   "scope": "none",
+   "class": "reversible"
   },
   "route:siteGateRoutes.js:GET /codes": {
    "status": "planned",
