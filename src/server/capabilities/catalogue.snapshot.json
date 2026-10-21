@@ -646,6 +646,104 @@
    ]
   },
   {
+   "name": "places.place.explore",
+   "wire": "places__place__explore",
+   "version": "1.0.0",
+   "class": "safe",
+   "scope": "places:read",
+   "surfaces": [
+    "mcp",
+    "rest"
+   ],
+   "aliases": [
+    "places_explore"
+   ]
+  },
+  {
+   "name": "places.session.list",
+   "wire": "places__session__list",
+   "version": "1.0.0",
+   "class": "safe",
+   "scope": "places:read",
+   "surfaces": [
+    "mcp",
+    "rest"
+   ],
+   "aliases": [
+    "places_sessions"
+   ]
+  },
+  {
+   "name": "places.session.resolve",
+   "wire": "places__session__resolve",
+   "version": "1.0.0",
+   "class": "safe",
+   "scope": "places:read",
+   "surfaces": [
+    "mcp",
+    "rest"
+   ],
+   "aliases": [
+    "places_resolve_session"
+   ]
+  },
+  {
+   "name": "places.session.join",
+   "wire": "places__session__join",
+   "version": "1.0.0",
+   "class": "undoable",
+   "scope": "places:write",
+   "surfaces": [
+    "mcp",
+    "rest"
+   ],
+   "aliases": [
+    "places_join_session"
+   ]
+  },
+  {
+   "name": "places.invite.list",
+   "wire": "places__invite__list",
+   "version": "1.0.0",
+   "class": "safe",
+   "scope": "places:read",
+   "surfaces": [
+    "mcp",
+    "rest"
+   ],
+   "aliases": [
+    "places_invites"
+   ]
+  },
+  {
+   "name": "places.receipt.list",
+   "wire": "places__receipt__list",
+   "version": "1.0.0",
+   "class": "safe",
+   "scope": "places:read",
+   "surfaces": [
+    "mcp",
+    "rest"
+   ],
+   "aliases": [
+    "places_receipts"
+   ]
+  },
+  {
+   "name": "places.needs.list",
+   "wire": "places__needs__list",
+   "version": "1.0.0",
+   "class": "safe",
+   "scope": "places:read",
+   "surfaces": [
+    "mcp",
+    "rest"
+   ],
+   "aliases": [
+    "places_needs"
+   ]
+  },
+  {
    "name": "places.layout.save",
    "wire": "places__layout__save",
    "version": "1.0.0",
