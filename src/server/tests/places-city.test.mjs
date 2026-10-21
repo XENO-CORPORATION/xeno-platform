@@ -21,6 +21,7 @@ import pg from 'pg';
 import { runAllMigrations } from '../services/migrationRunner.js';
 import { writeTuples } from '../utils/authzReBAC.js';
 import { addGrant, MICRO_PER_CREDIT } from '../utils/creditLedgerV2.js';
+import { ensureWorkspaceWallet } from '../services/walletService.js';
 import * as places from '../services/places.js';
 import { LOTS, SLOTS, lotPriceMicro, lotById } from '../services/placesCity.js';
 
@@ -29,6 +30,8 @@ const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL });
 const here = path.dirname(fileURLToPath(import.meta.url));
 const [UPRAW, DOWN] = fs.readFileSync(path.join(here, '../database/migrations/20261027090000-places-city.sql'), 'utf8').split(/^-- DOWN\s*$/m);
 const UP = UPRAW.replace(/^-- UP\s*$/m, '');
+const [WUPRAW, WDOWN] = fs.readFileSync(path.join(here, '../database/migrations/20261027110000-places-lease-wallet.sql'), 'utf8').split(/^-- DOWN\s*$/m);
+const WUP = WUPRAW.replace(/^-- UP\s*$/m, '');
 const tag = `pc${process.pid}`;
 let seq = 0;
 const rid = () => `req-${tag}-${seq += 1}`;
@@ -48,7 +51,7 @@ const refunds = async (u) => (await pool.query(`SELECT amount::bigint AS m FROM 
 
 async function main() {
   await runAllMigrations(pool);
-  await pool.query(DOWN); await pool.query(UP);
+  await pool.query(WDOWN); await pool.query(DOWN); await pool.query(UP); await pool.query(WUP);
   assert.deepEqual([LOTS.length, SLOTS.length, SLOTS.filter((s) => s.district === 'commons').length], [48, 10, 0], 'the handoff layout: 48 lots, 10 slots, none in Commons');
   assert.deepEqual([lotPriceMicro(lotById['studio-00']), lotPriceMicro(lotById['studio-01'])], [12_500_000, 10_000_000], 'a corner lot costs ×1.25');
 
@@ -60,6 +63,8 @@ async function main() {
   const pCo = await placeOf(co);
   const O = me(owner, 'Owner'), OP = me(op, 'Op', 'admin');
   const rivalWs = await workspace(rival, 'Rival'); const pRival = await placeOf(rivalWs);
+  // land is billed to the WORKSPACE wallet (owner 2026-10-21); the people's own wallets fund only their sponsorship
+  for (const w of [co, rivalWs]) { await ensureWorkspaceWallet(pool, w); await addGrant(pool, w, { amountMicro: 500 * MICRO_PER_CREDIT, kind: 'paid', sourceRef: `${tag}-w-${w}` }); }
   await pool.query(`UPDATE places SET city_id=$2 WHERE id=$1`, [pRival.id, pCo.city_id]);
 
   // ── lease: who, which lots, zoning, money ──
@@ -71,10 +76,13 @@ async function main() {
   const key = rid();
   const lease = ok(await places.call(pool, O, 'city.lease', { placeId: pCo.id, lotIds: ['studio-01'], requestId: key }));
   assert.equal(lease.monthlyMicro, 10_000_000);
-  assert.deepEqual(await charges(owner), [10_000_000], 'the first month is charged exactly, on the ledger');
+  assert.deepEqual(await charges(co), [10_000_000], 'the first month is charged exactly, on the ledger');
   const again = await places.call(pool, O, 'city.lease', { placeId: pCo.id, lotIds: ['studio-01'], requestId: key });
   assert.ok(again.ok && again.receipt.replayed);
-  assert.deepEqual(await charges(owner), [10_000_000], 'a retry charges nothing');
+  assert.deepEqual(await charges(co), [10_000_000], 'a retry charges nothing');
+  assert.deepEqual(await charges(owner), [], 'the acting admin is accountable, never charged');
+  assert.deepEqual(Object.values((await pool.query('SELECT payer_user_id, billed_account_id FROM place_city_leases WHERE id=$1', [lease.leaseId])).rows[0]), [owner, co], 'accountable person + billed workspace, recorded');
+  assert.equal(lease.billedTo, 'workspace');
   refused(await places.call(pool, O, 'city.lease', { placeId: pCo.id, lotIds: ['studio-02'], requestId: rid() }), 'conflict', 'already_placed');
   refused(await places.call(pool, me(rival, 'R'), 'city.lease', { placeId: pRival.id, lotIds: ['studio-01'], requestId: rid() }), 'conflict', 'lot_taken');
   assert.equal((await pool.query('SELECT count(*)::int n FROM place_city_leases WHERE place_id=$1', [pRival.id])).rows[0].n, 0, 'a refused lease leaves nothing');
@@ -95,22 +103,22 @@ async function main() {
   refused(await places.call(pool, O, 'city.expand', { leaseId: lease.leaseId, lotId: 'studio-03', expectedRevision: b.revision, requestId: rid() }), 'bad_input', 'not_adjacent');
   const ex = ok(await places.call(pool, O, 'city.expand', { leaseId: lease.leaseId, lotId: 'studio-02', expectedRevision: b.revision, requestId: rid() }));
   assert.deepEqual([ex.lotIds, ex.monthlyMicro], [['studio-01', 'studio-02'], 20_000_000]);
-  assert.deepEqual(await charges(owner), [10_000_000, 10_000_000]);
+  assert.deepEqual(await charges(co), [10_000_000, 10_000_000]);
 
   // ── the month: operator only, once per period, lapse then end ──
   refused(await places.call(pool, O, 'city.bill', { requestId: rid() }), 'denied', 'operator_only');
   await pool.query(`UPDATE place_city_leases SET paid_through=now() - interval '1 minute' WHERE id=$1`, [lease.leaseId]);
   ok(await places.call(pool, OP, 'city.bill', { requestId: rid() }));
   ok(await places.call(pool, OP, 'city.bill', { requestId: rid() }));
-  assert.deepEqual(await charges(owner), [10_000_000, 10_000_000, 20_000_000], 'one monthly charge per period, never two');
+  assert.deepEqual(await charges(co), [10_000_000, 10_000_000, 20_000_000], 'one monthly charge per period, never two');
   const rl = ok(await places.call(pool, me(rival, 'R'), 'city.lease', { placeId: pRival.id, lotIds: ['press-01'], requestId: rid() }));
-  await pool.query(`UPDATE credit_accounts SET is_frozen=true WHERE user_id=$1`, [rival]);
+  await pool.query(`UPDATE credit_accounts SET is_frozen=true WHERE user_id=$1`, [rivalWs]);
   await pool.query(`UPDATE place_city_leases SET paid_through=now() - interval '1 minute' WHERE id=$1`, [rl.leaseId]);
   ok(await places.call(pool, OP, 'city.bill', { requestId: rid() }));
   assert.equal((await pool.query('SELECT state FROM place_city_leases WHERE id=$1', [rl.leaseId])).rows[0].state, 'lapsing', 'unpaid: lapsing first');
   ok(await places.call(pool, OP, 'city.bill', { requestId: rid() }));
   assert.equal((await pool.query('SELECT state FROM place_city_leases WHERE id=$1', [rl.leaseId])).rows[0].state, 'ended', 'still unpaid: ended, lots back on the market');
-  await pool.query(`UPDATE credit_accounts SET is_frozen=false WHERE user_id=$1`, [rival]);
+  await pool.query(`UPDATE credit_accounts SET is_frozen=false WHERE user_id=$1`, [rivalWs]);
 
   // ── facade ──
   refused(await places.call(pool, me(member, 'M'), 'city.facade.set', { placeId: pCo.id, logoText: 'x', expectedRevision: 1, requestId: rid() }), 'denied', 'not_admin');
@@ -147,7 +155,7 @@ async function main() {
 
   await pool.query(DOWN);
   assert.equal((await pool.query(`SELECT count(*)::int n FROM information_schema.tables WHERE table_name IN ('place_city_leases','place_city_lease_lots','place_facades','place_city_stewards','place_sponsor_bookings')`)).rows[0].n, 0, 'DOWN drops the five tables');
-  await pool.query(UP);
+  await pool.query(UP); await pool.query(WUP);
   console.log('places city: all checks passed');
 }
 
