@@ -432,6 +432,33 @@ async function wfDecide(c, me, i, accept) {
   } catch (e) { throw asPlace(e); }
 }
 const WRITES = {
+  // Act on an occupant's task IN PLACE (the task card): THROUGH xenoTasks (transitionTask / updateTask), never a second
+  // write path, with this op's receipt. Tasks' own rules decide who may: a worker never accepts their own work, and an
+  // agent never approves anything it works on (also refused here, before Tasks is asked).
+  'tasks.act': async (c, me, i) => {
+    const tasks = await import('./xenoTasks.js');
+    const key = String(i.taskKey || '');
+    if (!/^T-\d{1,9}$/.test(key)) fail('bad_input', 'task_key_invalid', 'A task is named T-<number>.');
+    const action = String(i.action || '');
+    if (!['approve', 'request_changes', 'hand_off'].includes(action)) fail('bad_input', 'action_unknown', 'Approve, request changes or hand off.');
+    try {
+      const t = await tasks.getTask(c, me, key);
+      const worker = [t.assignee?.id, t.assigneeId, t.delegate?.id, t.delegateId].filter(Boolean).map(String).includes(String(me.id));
+      if (action === 'approve' && me.kind === 'agent' && worker) fail('denied', 'own_work', 'An agent never approves its own work.');
+      if (action === 'hand_off') {
+        const to = i.assigneeId === null ? null : uuid(i.assigneeId, 'assigneeId');
+        await tasks.updateTask(c, me, key, { assigneeId: to });
+      } else {
+        await tasks.transitionTask(c, me, key, { to: action === 'approve' ? 'done' : 'in_progress', note: i.note ? String(i.note).slice(0, 2000) : undefined, from: i.from || undefined });
+      }
+      const after = await tasks.getTask(c, me, key);
+      return { result: { taskKey: key, status: after.status, assignee: after.assignee || null }, revision: 1, summary: action === 'approve' ? `Approved ${key}` : action === 'request_changes' ? `Changes requested on ${key}` : `Handed off ${key}` };
+    } catch (e) {
+      if (e instanceof PlaceError) throw e;
+      if (e?.name === 'TaskError' || e?.constructor?.name === 'TaskError') throw new PlaceError({ 400: 'bad_input', 403: 'denied', 404: 'not_found', 409: 'conflict' }[e.status] || 'bad_input', e.code || 'task_refused', e.message);
+      throw e;
+    }
+  },
   // Make an agent (platformAgents.create: the workforce definition + its principal). Owned by the workspace named, else you.
   'workforce.agent.create': async (c, me, i, pool) => {
     person(me);

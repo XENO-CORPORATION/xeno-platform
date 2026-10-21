@@ -12,7 +12,8 @@
  * say `account.adult === true` — fail-closed: nobody else sees it.
  */
 import { deductCredits, refundCredits } from '../utils/creditTransactions.js';
-import { getBalanceV2 } from '../utils/creditLedgerV2.js';
+import { getBalanceV2, recordUsageV2 } from '../utils/creditLedgerV2.js';
+import { ensureWorkspaceWallet } from './walletService.js';
 
 // ── layout.js, 1:1 (metres) ─────────────────────────────────────────────────────────────────────────────────────
 export const LOT_W = 30, LOT_D = 24, ALLEY = 4, MID = 6, AVENUE = 26, COLS = 4, ROWS = 2, FLOOR_H = 4.2;
@@ -98,12 +99,29 @@ const LOGO = (s) => String(s).replace(/[^\p{L}\p{N} &.'-]/gu, '').trim().slice(0
 /** The ops, given the Places service's own helpers (so there is one access rule and one envelope). */
 export function cityOps(h) {
   const { fail, loadPlace, accessFor, uuid, opUuid, STYLES } = h;
-  const charge = async (pool, me, micro, txn, operation) => {
-    let r;
-    try { r = await deductCredits(pool, me.id, micro / 1e6, { transactionId: txn, surface: 'places', operation }); }
-    catch (e) { if (e.code === 'QUOTA_EXCEEDED') fail('denied', 'usage_credits_off', 'Your plan’s allowance is used up. Turn on usage credits to pay with credits you bought.'); throw e; }
-    if (!r.success) fail('denied', r.frozen ? 'account_frozen' : 'insufficient_credits', r.frozen ? 'Your credits are frozen.' : 'Not enough credits for this.');
+  // LAND IS BILLED TO THE WORKSPACE (owner 2026-10-21, §8.11): a company workspace pays from its own wallet; a personal
+  // workspace's wallet IS its owner's. The acting admin is recorded as accountable (payer_user_id), never charged.
+  const walletOf = async (db, p) => (p.workspace_type === 'personal' ? { id: p.owner_user_id, kind: 'user' } : { id: p.workspace_id, kind: 'workspace' });
+  /** One charge on the ledger, idempotent on txn. Returns null on success, else the refusal reason (never throws a refusal). */
+  const debit = async (pool, wallet, micro, txn, operation) => {
+    try {
+      if (wallet.kind === 'user') {
+        const r = await deductCredits(pool, wallet.id, micro / 1e6, { transactionId: txn, surface: 'places', operation });
+        return r.success ? null : r.frozen ? 'account_frozen' : 'insufficient_credits';
+      }
+      await ensureWorkspaceWallet(pool, wallet.id);
+      await recordUsageV2(pool, wallet.id, { surface: 'places', operation, transactionId: txn, costMicro: micro, dimensions: {} });
+      return null;
+    } catch (e) {
+      if (e.code === 'QUOTA_EXCEEDED') return 'usage_credits_off';
+      if (e.code === 'INSUFFICIENT_CREDITS') return 'insufficient_credits';
+      if (e.code === 'ACCOUNT_FROZEN') return 'account_frozen';
+      if (e.code === 'SPEND_CAP_EXCEEDED') return 'budget_exceeded';
+      throw e;
+    }
   };
+  const MSG = { insufficient_credits: 'The workspace wallet has not enough credits for this.', account_frozen: 'The wallet is frozen.', usage_credits_off: 'The plan allowance is used up. Turn on usage credits to pay with credits bought.', budget_exceeded: 'This would pass the workspace’s monthly budget.' };
+  const chargeWallet = async (pool, wallet, micro, txn, operation) => { const why = await debit(pool, wallet, micro, txn, operation); if (why) fail('denied', why, MSG[why]); };
   const steward = async (db, me, cityId) => (await db.query('SELECT 1 FROM place_city_stewards WHERE city_id=$1 AND user_id=$2', [cityId, me.id])).rows.length > 0;
   const adult = async (db, me) => (await db.query(`SELECT (settings #>> '{account,adult}') = 'true' AS a FROM user_settings WHERE user_id=$1`, [me.id])).rows[0]?.a === true;
   const cityOf = (v) => { const c = String(v || ''); if (!CITY_IDS.includes(c)) fail('bad_input', 'city_unknown', 'That is not a XENO city.'); return c; };
@@ -207,12 +225,13 @@ export function cityOps(h) {
       if (floors > d.maxFloors) fail('needs_approval', 'too_tall', `${d.name} allows ${d.maxFloors} floors. ${p.name} has ${floors}.`);
       if (p.bays > footprint(ids, p.bays).maxBays) fail('needs_approval', 'too_narrow', `${p.name} is ${p.bays} bays wide. Lease a neighbouring lot too.`);
       const monthly = ids.reduce((s, x) => s + lotPriceMicro(lotById[x]), 0);
-      const l = (await c.query(`INSERT INTO place_city_leases (city_id, place_id, district, monthly_micro, payer_user_id, paid_through) VALUES ($1,$2,$3,$4,$5, now() + interval '30 days') RETURNING id`,
-        [p.city_id, p.id, d.id, monthly, me.id])).rows[0];
+      const wallet = await walletOf(c, p);
+      const l = (await c.query(`INSERT INTO place_city_leases (city_id, place_id, district, monthly_micro, payer_user_id, billed_account_id, paid_through) VALUES ($1,$2,$3,$4,$5,$6, now() + interval '30 days') RETURNING id`,
+        [p.city_id, p.id, d.id, monthly, me.id, wallet.id])).rows[0];
       await takeLots(c, p.city_id, l.id, ids);
       await c.query(`INSERT INTO place_facades (place_id, material, logo_text, updated_by_user_id) VALUES ($1,$2,$3,$4) ON CONFLICT (place_id) DO NOTHING`, [p.id, p.style, LOGO(p.name), me.id]);
-      await charge(pool, me, monthly, `places-lease:${opUuid(me, 'city.lease', i.requestId)}`, 'city.lease');   // last: a refusal rolls the lease back
-      return { result: { leaseId: l.id, monthlyMicro: monthly, lotIds: ids }, revision: 1, summary: `${p.name} now stands in ${d.name}` };
+      await chargeWallet(pool, wallet, monthly, `places-lease:${opUuid(me, 'city.lease', i.requestId)}`, 'city.lease');   // last: a refusal rolls the lease back
+      return { result: { leaseId: l.id, monthlyMicro: monthly, lotIds: ids, billedTo: wallet.kind, accountableUserId: me.id }, revision: 1, summary: `${p.name} now stands in ${d.name}` };
     },
     'city.expand': async (c, me, i, pool) => {
       const l = await leaseOf(c, i.leaseId, true); const p = await tenant(c, me, l);
@@ -222,7 +241,7 @@ export function cityOps(h) {
       await takeLots(c, l.city_id, l.id, [lot]);
       const add = lotPriceMicro(lotById[lot]);
       const r = (await c.query('UPDATE place_city_leases SET monthly_micro=monthly_micro+$2, revision=revision+1 WHERE id=$1 RETURNING monthly_micro, revision', [l.id, add])).rows[0];
-      await charge(pool, me, add, `places-expand:${opUuid(me, 'city.expand', i.requestId)}`, 'city.expand');
+      await chargeWallet(pool, await walletOf(c, p), add, `places-expand:${opUuid(me, 'city.expand', i.requestId)}`, 'city.expand');
       return { result: { leaseId: l.id, lotIds: [...l.lotIds, lot].sort(), monthlyMicro: Number(r.monthly_micro) }, revision: r.revision, summary: `${p.name}’s lease grows to ${l.lotIds.length + 1} lots` };
     },
     'city.release': async (c, me, i) => {
@@ -238,8 +257,10 @@ export function cityOps(h) {
       if (me.role !== 'admin' || me.kind !== 'human') fail('denied', 'operator_only', 'Only a platform operator closes the month.');
       let charged = 0, lapsing = 0, ended = 0;
       for (const l of (await c.query(`SELECT * FROM place_city_leases WHERE state <> 'ended' AND paid_through <= now() ORDER BY paid_through FOR UPDATE SKIP LOCKED`)).rows) {
-        const r = await deductCredits(pool, l.payer_user_id, Number(l.monthly_micro) / 1e6, { transactionId: `places-rent:${l.id}:${new Date(l.paid_through).getTime()}`, surface: 'places', operation: 'city.bill' });
-        if (r.success) { await c.query(`UPDATE place_city_leases SET paid_through=paid_through + interval '30 days', state='active', revision=revision+1 WHERE id=$1`, [l.id]); charged += Number(l.monthly_micro); }
+        // bill the building's workspace wallet as it is NOW (a workspace that changed type still pays for its own land)
+        let wallet; try { wallet = await walletOf(c, await loadPlace(c, l.place_id)); } catch { wallet = { id: l.billed_account_id || l.payer_user_id, kind: l.billed_account_id && l.billed_account_id !== l.payer_user_id ? 'workspace' : 'user' }; }
+        const why = await debit(pool, wallet, Number(l.monthly_micro), `places-rent:${l.id}:${new Date(l.paid_through).getTime()}`, 'city.bill');
+        if (!why) { await c.query(`UPDATE place_city_leases SET paid_through=paid_through + interval '30 days', state='active', revision=revision+1 WHERE id=$1`, [l.id]); charged += Number(l.monthly_micro); }
         else if (l.state === 'active') { await c.query(`UPDATE place_city_leases SET state='lapsing', revision=revision+1 WHERE id=$1`, [l.id]); lapsing++; }
         else { await c.query(`UPDATE place_city_leases SET state='ended', ended_at=now(), revision=revision+1 WHERE id=$1`, [l.id]); await c.query('UPDATE place_city_lease_lots SET released_at=now() WHERE lease_id=$1 AND released_at IS NULL', [l.id]); ended++; }
       }
@@ -269,7 +290,7 @@ export function cityOps(h) {
       const ref = `places-sponsor:${opUuid(me, 'city.sponsor.book', i.requestId)}`;
       const b = (await c.query(`INSERT INTO place_sponsor_bookings (city_id, slot_id, sponsor, text, weeks, hold_micro, charge_ref, booked_by_user_id) VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING id`,
         [cityId, s.id, sponsor, text, weeks, cost, ref, me.id])).rows[0];
-      await charge(pool, me, cost, ref, 'city.sponsor.book');
+      await chargeWallet(pool, { id: me.id, kind: 'user' }, cost, ref, 'city.sponsor.book');   // a sponsor is a person, not a building
       return { result: { bookingId: b.id, state: 'in_review', holdMicro: cost }, revision: 1, summary: 'Sponsorship sent for review' };
     },
     'city.sponsor.review': async (c, me, i, pool) => {
