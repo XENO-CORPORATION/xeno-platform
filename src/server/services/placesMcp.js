@@ -52,6 +52,9 @@ export const TOOLS = [
   { name: 'funding', title: 'Credits and budgets', annotations: RO,
     description: 'Your available credits, recent account history, and the monthly budget (approved ceiling and any proposal) of each building you administer.',
     inputSchema: { type: 'object', properties: {} } },
+  { name: 'city', title: 'Read a XENO city', annotations: RO,
+    description: 'A XENO city: districts, lots (leased or for lease, monthly price), the buildings standing on them with their facades, sponsor slots (always labelled Sponsored), your bookings and buildings not yet placed. Land is leased monthly, never sold.',
+    inputSchema: { type: 'object', properties: { city: { type: 'string', description: 'A city id (meridian, halcyon, lindgren, …); default: where your building stands.' } } } },
 ];
 
 async function run(db, actor, op, input) {
@@ -75,6 +78,7 @@ export async function callTool(db, actor, name, a = {}) {
     case 'workforce': return ok(await run(db, actor, 'workforce.catalog.list', {}));
     case 'marketplace': return ok(await run(db, actor, 'marketplace.list', {}));
     case 'funding': return ok(await run(db, actor, 'funding.get', {}));
+    case 'city': return ok(await run(db, actor, 'city.get', a.city ? { cityId: a.city } : {}));
     default: throw new PlacesMcpError(`Unknown tool ${name}`, 'unknown_tool');
   }
 }
