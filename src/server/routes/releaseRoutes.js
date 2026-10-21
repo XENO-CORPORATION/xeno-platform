@@ -13,11 +13,15 @@
  *   POST  /features/:id/notes            staff or a staff agent: draft {title, body}
  *   POST  /notes/:id/approve             human staff {title?, body?}
  *   POST  /notes/:id/withdraw            human staff
+ *   GET   /deploys/:id/internal-note     staff or a staff agent: the deploy's INTERNAL note + revisions (never a customer)
+ *   PATCH /deploys/:id/internal-note     staff or a staff agent: edit {content:{section: text}, expectedVersion}
+ *   POST  /deploys/:id/internal-note/sign  human staff {expectedVersion}
  */
 import express from 'express';
 import authMiddleware from '../middleware/auth.js';
 import { resolvePrincipal, assertPrincipalUsable, AgentIdentityError } from '../services/agentIdentity.js';
 import * as rel from '../services/releaseRecord.js';
+import * as inotes from '../services/releaseInternalNotes.js';
 
 const router = express.Router();
 
@@ -46,7 +50,14 @@ const b = (req) => req.body || {};
 
 router.get('/whats-new', ...A, run(async (req) => ({ notes: await rel.whatsNew(req.db, req.actor, { limit: req.query.limit }) })));
 router.get('/summary', ...A, run(async (req) => ({ summary: await rel.summary(req.db, req.actor) })));
-router.get('/deploys', ...A, run(async (req) => ({ deploys: await rel.listDeploys(req.db, req.actor, { service: req.query.service, status: req.query.status, limit: req.query.limit, before: req.query.before }) })));
+router.get('/deploys', ...A, run(async (req) => {
+  const deploys = await rel.listDeploys(req.db, req.actor, { service: req.query.service, status: req.query.status, limit: req.query.limit, before: req.query.before });
+  const states = await inotes.noteStates(req.db, req.actor, deploys.map((d) => d.id));
+  return { deploys: deploys.map((d) => ({ ...d, internalNote: states[d.id] || null })) };
+}));
+router.get('/deploys/:id/internal-note', ...A, run(async (req) => ({ note: await inotes.getInternalNote(req.db, req.actor, req.params.id) })));
+router.patch('/deploys/:id/internal-note', ...A, run(async (req) => ({ note: await inotes.editInternalNote(req.db, req.actor, req.params.id, { content: b(req).content, expectedVersion: b(req).expectedVersion }) })));
+router.post('/deploys/:id/internal-note/sign', ...A, run(async (req) => ({ note: await inotes.signInternalNote(req.db, req.actor, req.params.id, { expectedVersion: b(req).expectedVersion }) })));
 router.get('/deploys/:id', ...A, run(async (req) => ({ deploy: await rel.getDeploy(req.db, req.actor, req.params.id) })));
 router.get('/features', ...A, run(async (req) => ({ features: await rel.listFeatures(req.db, req.actor, { repo: req.query.repo, status: req.query.status, q: req.query.q, limit: req.query.limit, offset: req.query.offset }) })));
 router.get('/features/:id', ...A, run(async (req) => ({ feature: await rel.getFeature(req.db, req.actor, req.params.id) })));

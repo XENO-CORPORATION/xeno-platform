@@ -49,6 +49,7 @@ import { fileURLToPath } from 'node:url';
 import { dirname } from 'node:path';
 import { assertMainContained, readDirtyPaths } from './lib/deploy-source-guard.mjs';
 import { buildDeployRecord, prNumbersFromMerges, migrationsFromDiff } from './lib/deploy-record.mjs';
+import { collectNoteSources, ghPrText } from './lib/internal-note-sources.mjs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = join(__dirname, '..');
@@ -289,8 +290,14 @@ function rangeFacts(previousSha) {
 function recordDeploy({ service, previousSha, mode, ok: passed, startedAt }) {
   let deployedBy = null;
   try { deployedBy = git(['config', 'user.email']) || git(['config', 'user.name']) || null; } catch { /* unknown */ }
-  const row = buildDeployRecord({ service, sha, previousSha, mode, ok: passed, startedAt, finishedAt: Date.now(), deployedBy, ...rangeFacts(previousSha) });
-  const r = remoteRecord('', JSON.stringify(row));
+  const facts = rangeFacts(previousSha);
+  const row = buildDeployRecord({ service, sha, previousSha, mode, ok: passed, startedAt, finishedAt: Date.now(), deployedBy, ...facts });
+  // the staff-only INTERNAL release note is drafted on the box from these facts; the box has no GitHub access, so the
+  // PR bodies are read here with `gh` (a PR gh cannot read keeps its merge subject and the note says it is incomplete)
+  let sources = null;
+  try { sources = collectNoteSources({ git, prText: ghPrText(spawnSync), previousSha, sha: fullSha, prs: facts.prs, migrations: facts.migrations }); }
+  catch (e) { warn(`internal note: could not collect PR text (${e.message}); the note is drafted from the deploy row alone`); }
+  const r = remoteRecord('', JSON.stringify({ ...row, ...(sources ? { sources } : {}) }));
   if (r.status === 0) ok(`release record: ${String(r.stdout || '').trim()}`);
   else console.error(`${C.red}✗ RELEASE RECORD NOT WRITTEN for ${service}@${sha}: ${String(r.stderr || r.error || '').trim().slice(0, 300)}${C.rst}`);
 }

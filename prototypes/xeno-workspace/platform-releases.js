@@ -3,7 +3,8 @@
  *
  *   What's new        /workspace/releases/whats-new          every signed-in person: notes for features enabled for them
  *   Release console   /workspace/releases                    XENO staff: counts, then the three layers
- *   Deploys           /workspace/releases/deploys            · /deploys/<deploy id>
+ *   Deploys           /workspace/releases/deploys            · /deploys/<deploy id> (with its INTERNAL note: staff only, edited in the
+ *                                                            dialog, signed off by a person on staff)
  *   Features          /workspace/releases/features           · /features/<feature id>
  *   Notes queue       /workspace/releases/notes              drafts to approve (a person approves; agents only draft)
  *
@@ -22,13 +23,16 @@
   const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
   const when = (iso) => (iso ? new Date(iso).toLocaleString(undefined, { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : '—');
   const day = (iso) => (iso ? new Date(iso).toLocaleDateString(undefined, { year: 'numeric', month: 'long', day: 'numeric' }) : '');
-  const S = { staff: null, summary: null, news: null, deploys: null, deploy: null, features: null, feature: null, notes: null, noteState: 'draft', repo: '', q: '', busy: false, err: '' };
+  const S = { staff: null, summary: null, news: null, deploys: null, deploy: null, inote: null, features: null, feature: null, notes: null, noteState: 'draft', repo: '', q: '', busy: false, err: '' };
 
   async function loadFor(it) {
     const [a, id] = String(it || '').split('/');
     if (S.staff === null) { const s = await api('GET', '/api/releases/summary'); S.staff = s.ok; if (s.ok) S.summary = s.d.summary; }
     if (a === 'whats-new' || !S.staff) { const r = await api('GET', '/api/releases/whats-new'); S.news = r.ok ? r.d.notes || [] : { error: said(r, 'What’s new did not load') }; }
-    else if (a === 'deploys' && id) { const r = await api('GET', `/api/releases/deploys/${encodeURIComponent(id)}`); S.deploy = r.ok ? r.d.deploy : { missing: true }; }
+    else if (a === 'deploys' && id) {
+      const [r, n] = await Promise.all([api('GET', `/api/releases/deploys/${encodeURIComponent(id)}`), api('GET', `/api/releases/deploys/${encodeURIComponent(id)}/internal-note`)]);
+      S.deploy = r.ok ? r.d.deploy : { missing: true }; S.inote = n.ok ? n.d.note : n.status === 404 ? { none: true } : { error: said(n, 'The internal note did not load') };
+    }
     else if (a === 'deploys') { const r = await api('GET', '/api/releases/deploys?limit=200'); S.deploys = r.ok ? r.d.deploys || [] : []; }
     else if (a === 'features' && id) { const r = await api('GET', `/api/releases/features/${encodeURIComponent(id)}`); S.feature = r.ok ? r.d.feature : { missing: true }; }
     else if (a === 'features') { const r = await api('GET', `/api/releases/features?limit=200${S.repo ? '&repo=' + encodeURIComponent(S.repo) : ''}${S.q ? '&q=' + encodeURIComponent(S.q) : ''}`); S.features = r.ok ? r.d.features || [] : []; }
@@ -61,8 +65,29 @@
   function deploysPage() {
     const h = H(), rows = S.deploys || [];
     return h.page(head('Deploys', 'Every deploy of the platform. Reconstructed rows say where they came from.') + tabs('deploys')
-      + (rows.length ? h.table(['When', 'Service', 'Commit', 'Mode', 'Result', 'PRs', 'Source'], rows.map((d) => h.tr(`data-rl-go="deploys/${esc(d.id)}"`, [esc(when(d.startedAt)), esc(d.service), `<code>${esc(d.sha)}</code>`, esc(d.mode), h.chip(d.status === 'ok' ? 'OK' : d.status === 'failed' ? 'Failed' : 'Interrupted'), esc(d.prs.length || ''), esc(d.provenance)])))
+      + (rows.length ? h.table(['When', 'Service', 'Commit', 'Mode', 'Result', 'PRs', 'Internal note', 'Source'], rows.map((d) => h.tr(`data-rl-go="deploys/${esc(d.id)}"`, [esc(when(d.startedAt)), esc(d.service), `<code>${esc(d.sha)}</code>`, esc(d.mode), h.chip(d.status === 'ok' ? 'OK' : d.status === 'failed' ? 'Failed' : 'Interrupted'), esc(d.prs.length || ''), esc(noteWord(d.internalNote)), esc(d.provenance)])))
         : S.deploys == null ? '' : h.box('check', 'No deploys recorded yet', 'Each deploy writes a row here when it finishes.')));
+  }
+
+  const noteWord = (n) => (!n ? 'None' : n.state === 'signed' ? 'Signed off' : 'Draft');
+  const SECTIONS = [['summary', 'What changed'], ['why', 'Why'], ['features', 'Features touched'], ['migrations', 'Migrations and their down path'], ['risks', 'Risks'], ['switches', 'Switched on or off'], ['tests', 'Tests that prove it'], ['rollback', 'How to roll back']];
+  function internalNote() {
+    const h = H(), n = S.inote;
+    if (!n) return '';
+    if (n.none) return '<h3 class="rl-h">Internal release note</h3><p class="pg-dim">No internal note for this deploy yet. Every new deploy drafts one; older ones are filled by the history backfill.</p>';
+    if (n.error) return h.box('alert', 'The internal note did not load', esc(n.error), h.btn('Try again', 'data-rl-reload', true));
+    const by = n.state === 'signed' ? `Signed off by ${esc(n.signedByName || 'staff')} · ${esc(when(n.signedAt))} · version ${esc(n.signedVersion)}` : `Draft · version ${esc(n.version)}${n.edited ? ' · edited' : ''}`;
+    const from = n.provenance === 'drafted_from_history' ? 'drafted from history' : 'drafted at deploy';
+    return `<section class="rl-inote" data-inote="${esc(n.id)}" aria-label="Internal release note"><h3 class="rl-h">Internal release note <span class="pg-tag">Staff only — customers never see this</span></h3>
+      <p class="pg-dim">${by} · ${esc(from)}${(n.revisions || []).length > 1 ? ` · ${n.revisions.length} revisions` : ''}</p>
+      <dl class="rl-dl">${SECTIONS.map(([k, l]) => `<dt>${esc(l)}</dt><dd data-inote-section="${k}">${esc(n.content[k] || '')}</dd>`).join('')}</dl></section>`;
+  }
+  function editInternalNote() {
+    const n = S.inote, d = S.deploy; if (!n || n.none || n.error || !d) return;
+    window.XD.form({ title: 'Edit internal release note', sub: `${d.service} @ ${d.sha} — staff only. Saving puts a signed note back to draft; every version is kept.`, submit: 'Save',
+      fields: SECTIONS.map(([k, l]) => ({ id: k, type: 'textarea', label: l, rows: 4, max: 8000, value: n.content[k] || '' })),
+      onSubmit: async (v) => { const r = await api('PATCH', `/api/releases/deploys/${d.id}/internal-note`, { content: v, expectedVersion: n.version }); return r.ok ? null : said(r, 'That did not save'); },
+    }).then((v) => { if (v) { toast('Internal note saved'); lastLoad = ''; loadFor(here()); } });
   }
 
   function deployPage() {
@@ -70,8 +95,11 @@
     if (!d) return h.page('');
     if (d.missing) return h.page(h.box('alert', 'Deploy not found', 'It does not exist, or it is not yours to read.', h.btn('Deploys', 'data-rl-go="deploys"', true)));
     const row = (k, v) => `<dt>${esc(k)}</dt><dd>${v}</dd>`;
-    return h.page(h.head({ eyebrow: '<a data-rl-go="deploys">Deploys</a>', title: `${d.service} @ ${d.sha}`, sub: `${d.status === 'ok' ? 'Succeeded' : d.status === 'failed' ? 'Failed' : 'Interrupted'} · ${when(d.startedAt)}` })
+    const n = S.inote, has = n && !n.none && !n.error;
+    const acts = has ? h.btn('Edit note', 'data-rl-inote="edit"', true) + (n.state === 'signed' ? '' : h.btn(S.busy ? 'Signing…' : 'Sign off', `data-rl-inote="sign"${S.busy ? ' disabled' : ''}`)) : '';
+    return h.page(h.head({ eyebrow: '<a data-rl-go="deploys">Deploys</a>', acts, title: `${d.service} @ ${d.sha}`, sub: `${d.status === 'ok' ? 'Succeeded' : d.status === 'failed' ? 'Failed' : 'Interrupted'} · ${when(d.startedAt)}` })
       + `<dl class="rl-dl">${row('Started', esc(when(d.startedAt)))}${row('Finished', esc(when(d.finishedAt)))}${row('Mode', esc(d.mode))}${row('Previous commit', d.previousSha ? `<code>${esc(d.previousSha)}</code>` : '—')}${row('Deployed by', esc(d.deployedBy || 'not recorded'))}${row('Healthcheck', esc(d.healthcheck || '—'))}${row('Rollback point', esc(d.rollbackPoint || '—'))}${row('Migrations', d.migrations.length ? d.migrations.map((m) => `<code>${esc(m)}</code>`).join('<br>') : 'none')}${row('Source', esc(d.provenance + (d.evidence ? ' — ' + d.evidence : '')))}</dl>`
+      + (S.err ? `<p class="sp-err" role="alert">${esc(S.err)}</p>` : '') + internalNote()
       + (d.pullRequests && d.pullRequests.length ? h.table(['PR', 'Title', 'Merged'], d.pullRequests.map((p) => h.tr('', [`<a href="${esc(p.url)}" target="_blank" rel="noopener">#${esc(p.number)}</a>`, esc(p.title), esc(when(p.mergedAt))]))) : `<p class="pg-dim">${d.prs.length ? 'PRs: ' + d.prs.map((n) => '#' + n).join(', ') : 'No pull requests between this and the previous deploy.'}</p>`));
   }
 
@@ -152,6 +180,8 @@
     }).then((v) => { if (v) { toast('Draft saved'); refresh(); } });
   }
   document.addEventListener('click', (e) => {
+    const ni = e.target.closest('[data-rl-inote]');
+    if (ni && ni.closest('#main')) { e.preventDefault(); if (ni.dataset.rlInote === 'edit') return editInternalNote(); if (S.deploy && S.inote) return act('POST', `/api/releases/deploys/${S.deploy.id}/internal-note/sign`, { expectedVersion: S.inote.version }, 'Signed off'); return; }
     const nn = e.target.closest('[data-rl-create]'); if (nn && nn.closest('#main')) { e.preventDefault(); return newNote(); }
     const t = e.target.closest('[data-rl-go],[data-rl-reload],[data-rl-repo],[data-rl-notes],[data-rl-approve],[data-rl-withdraw]');
     if (!t || !t.closest('#main, #panel')) return;

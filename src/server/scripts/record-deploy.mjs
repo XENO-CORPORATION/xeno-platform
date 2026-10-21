@@ -7,11 +7,14 @@
  *   echo '<json>' | docker exec -i xenostudio-backend node /app/scripts/record-deploy.mjs
  *
  * The JSON is {service, sha, previousSha?, mode, status, startedAt, finishedAt, deployedBy, healthcheck,
- * rollbackPoint, prs[], migrations[]}. It is facts the deploy itself observed — never typed from memory. Idempotent:
+ * rollbackPoint, prs[], migrations[], sources?}. `sources` is what the workstation collected for the INTERNAL release note
+ * ({prs:[{number,title,body,url,files}], migrations:[{name,text}], env:{added,removed}} — scripts/lib/internal-note-sources.mjs):
+ * the note is drafted here, from it, by a deterministic template. It is facts the deploy itself observed — never typed from memory. Idempotent:
  * the same deploy recorded twice is one row. Prints one line: the row id and whether it was new.
  */
 import pg from 'pg';
 import { recordDeploy } from '../services/releaseRecord.js';
+import { draftForDeploy } from '../services/releaseInternalNotes.js';
 
 async function readStdin() {
   const chunks = [];
@@ -39,6 +42,11 @@ const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL });
 try {
   const { deploy, inserted } = await recordDeploy(pool, { ...input, provenance: 'recorded' });
   console.log(`record-deploy: ${inserted ? 'recorded' : 'updated'} ${deploy.id} ${deploy.service}@${deploy.sha} ${deploy.status}`);
+  // the staff-only internal note: drafted from the PRs this deploy shipped. A failure here is loud and never undoes the row.
+  try {
+    const { action } = await draftForDeploy(pool, deploy.id, input.sources || {}, { provenance: 'drafted_at_deploy' });
+    console.log(`record-deploy: internal note ${action}${input.sources ? '' : ' (no PR text was collected)'}`);
+  } catch (e) { console.error(`record-deploy: INTERNAL NOTE NOT DRAFTED: ${e.message}`); process.exitCode = 1; }
 } catch (e) {
   console.error(`record-deploy: ${e.message}`);
   process.exitCode = 1;
