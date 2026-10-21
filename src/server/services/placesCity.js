@@ -60,6 +60,38 @@ export const SLOTS = Object.freeze(DISTRICTS.flatMap((d) => {
   return out;
 }));
 export const CITY_IDS = Object.freeze(['meridian', 'halcyon', 'lindgren', 'harbor', 'nordhavn', 'sakura', 'lumen', 'vega', 'solace', 'atlas', 'aurum', 'southgate', 'aurora']);
+// ── polis/geo.js, 1:1 (real geography; region states are product configuration; pledge counts are DB rows) ───
+export const CONTINENTS = Object.freeze([
+  { id: 'na', name: 'North America', lat: 44, lon: -100 }, { id: 'sa', name: 'South America', lat: -18, lon: -60 },
+  { id: 'eu', name: 'Europe', lat: 51, lon: 12 }, { id: 'af', name: 'Africa & Middle East', lat: 8, lon: 22 },
+  { id: 'as', name: 'Asia', lat: 34, lon: 100 }, { id: 'oc', name: 'Oceania', lat: -26, lon: 140 },
+]);
+export const REGIONS = Object.freeze([
+  { id: 'na-west', continent: 'na', name: 'Pacific Coast', box: [-130, 30, -114, 50], residency: 'US', state: 'open', law: 'US zoning code v1', tz: -7 },
+  { id: 'na-east', continent: 'na', name: 'Atlantic Seaboard', box: [-85, 25, -66, 47], residency: 'US', state: 'wave', opens: '2026-11-10', law: 'US zoning code v1', tz: -4 },
+  { id: 'na-north', continent: 'na', name: 'Canada', box: [-125, 48, -60, 62], residency: 'CA', state: 'demand', target: 60, law: 'CA zoning code (draft)', tz: -5 },
+  { id: 'sa-south', continent: 'sa', name: 'Southern Cone', box: [-75, -45, -50, -20], residency: 'BR/AR', state: 'demand', target: 50, law: 'not drafted', tz: -3 },
+  { id: 'eu-west', continent: 'eu', name: 'Western Europe', box: [-10, 36, 8, 52], residency: 'EU', state: 'open', law: 'EU zoning code v1 · GDPR', tz: 1 },
+  { id: 'eu-north', continent: 'eu', name: 'Nordics', box: [5, 55, 31, 70], residency: 'EU', state: 'wave', opens: '2026-12-01', law: 'EU zoning code v1 · GDPR', tz: 1 },
+  { id: 'eu-central', continent: 'eu', name: 'Central Europe', box: [8, 45, 25, 55], residency: 'EU', state: 'open', law: 'EU zoning code v1 · GDPR', tz: 2 },
+  { id: 'af-gulf', continent: 'af', name: 'Gulf', box: [45, 16, 60, 30], residency: 'AE/SA', state: 'locked', law: 'not drafted', tz: 4 },
+  { id: 'af-west', continent: 'af', name: 'West Africa', box: [-18, 4, 10, 16], residency: 'NG/GH', state: 'demand', target: 40, law: 'not drafted', tz: 1 },
+  { id: 'as-east', continent: 'as', name: 'East Asia', box: [120, 25, 146, 45], residency: 'JP/KR', state: 'wave', opens: '2027-01-15', law: 'JP zoning code (draft)', tz: 9 },
+  { id: 'as-south', continent: 'as', name: 'South Asia', box: [68, 8, 90, 30], residency: 'IN', state: 'demand', target: 60, law: 'not drafted', tz: 5.5 },
+  { id: 'as-se', continent: 'as', name: 'Southeast Asia', box: [98, -8, 125, 18], residency: 'SG', state: 'wave', opens: '2027-02-01', law: 'SG zoning code (draft)', tz: 8 },
+  { id: 'oc-aus', continent: 'oc', name: 'Australia & NZ', box: [113, -44, 178, -10], residency: 'AU', state: 'locked', law: 'not drafted', tz: 10 },
+]);
+export const CITIES = Object.freeze([
+  { id: 'meridian', region: 'eu-west', name: 'Meridian', lat: 39.6, lon: -7.9, text: 'The first XENO city. Six districts around the Forum.' },
+  { id: 'halcyon', region: 'na-west', name: 'Halcyon Bay', lat: 37.6, lon: -122.3, text: 'West-coast city. Lots open to waitlisted companies first.' },
+  { id: 'lindgren', region: 'eu-central', name: 'Lindgren', lat: 50.1, lon: 14.4, text: 'Central-European city with the same zoning as Meridian.' },
+  { id: 'harbor', region: 'na-east', name: 'Harbor Point', lat: 40.7, lon: -74.0 }, { id: 'nordhavn', region: 'eu-north', name: 'Nordhavn', lat: 59.3, lon: 18.1 },
+  { id: 'sakura', region: 'as-east', name: 'Sakura Reach', lat: 35.6, lon: 139.7 }, { id: 'lumen', region: 'as-se', name: 'Lumen Quay', lat: 1.3, lon: 103.8 },
+  { id: 'vega', region: 'as-south', name: 'Vega', lat: 12.9, lon: 77.6 }, { id: 'solace', region: 'sa-south', name: 'Solace', lat: -34.6, lon: -58.4 },
+  { id: 'atlas', region: 'af-west', name: 'Atlas Gate', lat: 6.5, lon: 3.4 }, { id: 'aurum', region: 'af-gulf', name: 'Aurum', lat: 25.2, lon: 55.3 },
+  { id: 'southgate', region: 'oc-aus', name: 'Southgate', lat: -33.9, lon: 151.2 }, { id: 'aurora', region: 'na-north', name: 'Aurora', lat: 43.7, lon: -79.4 },
+]);
+const regionById = Object.fromEntries(REGIONS.map((r) => [r.id, r])), cityById = Object.fromEntries(CITIES.map((c) => [c.id, c]));
 const DAY_MS = 864e5, MONTH_MS = 30 * DAY_MS;
 const LOGO = (s) => String(s).replace(/[^\p{L}\p{N} &.'-]/gu, '').trim().slice(0, 18);
 
@@ -90,6 +122,25 @@ export function cityOps(h) {
   };
 
   const READS = {
+    // The planet: regions with their state and REAL pledge counts, cities with their real building / lease counts.
+    'world.get': async (db, me) => {
+      const pl = Object.fromEntries((await db.query('SELECT region_id, count(*)::int n, bool_or(user_id=$1) mine FROM place_world_pledges GROUP BY region_id', [me.id])).rows.map((r) => [r.region_id, r]));
+      const wl = Object.fromEntries((await db.query('SELECT city_id, count(*)::int n, bool_or(user_id=$1) mine FROM place_world_waitlist GROUP BY city_id', [me.id])).rows.map((r) => [r.city_id, r]));
+      const st = Object.fromEntries((await db.query(`SELECT p.city_id, count(*)::int buildings, count(l.id)::int leased,
+          count(*) FILTER (WHERE p.workspace_id::text IN (SELECT object_id FROM relationship_tuples WHERE object_type='workspace' AND subject_type='user' AND subject_id=$1))::int mine
+        FROM places p LEFT JOIN place_city_leases l ON l.place_id=p.id AND l.state <> 'ended' WHERE p.lifecycle='active' GROUP BY p.city_id`, [String(me.id)])).rows.map((r) => [r.city_id, r]));
+      const lotsTaken = Object.fromEntries((await db.query('SELECT city_id, count(*)::int n FROM place_city_lease_lots WHERE released_at IS NULL GROUP BY city_id')).rows.map((r) => [r.city_id, r.n]));
+      return {
+        planet: { id: 'earth', name: 'Earth' }, continents: CONTINENTS,
+        regions: REGIONS.map((r) => ({ ...r, pledged: pl[r.id]?.n || 0, pledgedByMe: !!pl[r.id]?.mine })),
+        cities: CITIES.map((c) => {
+          const open = regionById[c.region].state === 'open', s = st[c.id] || {};
+          return { ...c, built: open, buildings: s.buildings || 0, leased: s.leased || 0, mine: s.mine || 0, lots: LOTS.length, lotsFree: LOTS.length - (lotsTaken[c.id] || 0),
+            waitlisted: !!wl[c.id]?.mine, waitlistCount: wl[c.id]?.n || 0 };
+        }),
+        account: { name: me.name, balanceMicro: (await getBalanceV2(db, me.id)).availableMicro },
+      };
+    },
     'city.get': async (db, me, i) => {
       const cityId = i.cityId ? cityOf(i.cityId)
         : (await db.query(`SELECT p.city_id FROM places p WHERE p.lifecycle='active' AND p.workspace_id::text IN (SELECT object_id FROM relationship_tuples WHERE object_type='workspace' AND subject_type='user' AND subject_id=$1) ORDER BY p.opened_at DESC NULLS LAST LIMIT 1`, [String(me.id)])).rows[0]?.city_id || 'meridian';
@@ -127,6 +178,25 @@ export function cityOps(h) {
   };
 
   const WRITES = {
+    // Toggle: pledge to open a region that opens on demand (one per person), or withdraw it.
+    'world.pledge': async (c, me, i) => {
+      if (me.kind !== 'human') fail('denied', 'person_only', 'Only a person pledges.');
+      const r = regionById[String(i.regionId || '')]; if (!r) fail('not_found', 'region_not_found', 'No such region.');
+      if (r.state !== 'demand') fail('bad_input', 'not_demand', 'Only regions that open on demand take pledges.');
+      const del = await c.query('DELETE FROM place_world_pledges WHERE region_id=$1 AND user_id=$2', [r.id, me.id]);
+      if (!del.rowCount) await c.query('INSERT INTO place_world_pledges (region_id, user_id) VALUES ($1,$2)', [r.id, me.id]);
+      return { result: { regionId: r.id, pledged: !del.rowCount }, revision: 1, summary: del.rowCount ? `Pledge withdrawn · ${r.name}` : `Pledged to open ${r.name}` };
+    },
+    'world.waitlist': async (c, me, i) => {
+      if (me.kind !== 'human') fail('denied', 'person_only', 'Only a person joins a waitlist.');
+      const city = cityById[String(i.cityId || '')]; if (!city) fail('not_found', 'city_not_found', 'No such city.');
+      const r = regionById[city.region];
+      if (r.state === 'open') fail('bad_input', 'city_open', `${city.name} is open. Lease a lot instead.`);
+      if (r.state === 'locked') fail('denied', 'region_locked', `${r.name} is not planned yet.`);
+      const del = await c.query('DELETE FROM place_world_waitlist WHERE city_id=$1 AND user_id=$2', [city.id, me.id]);
+      if (!del.rowCount) await c.query('INSERT INTO place_world_waitlist (city_id, user_id) VALUES ($1,$2)', [city.id, me.id]);
+      return { result: { cityId: city.id, waitlisted: !del.rowCount }, revision: 1, summary: del.rowCount ? `Left the ${city.name} waitlist` : `On the waitlist for ${city.name}` };
+    },
     'city.lease': async (c, me, i, pool) => {
       const ids = [...new Set(Array.isArray(i.lotIds) ? i.lotIds.map(String) : [])];
       if (!contiguous(ids)) fail('bad_input', 'lots_not_contiguous', 'Pick one lot, or neighbouring lots in the same row.');

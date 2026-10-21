@@ -800,6 +800,20 @@
    ]
   },
   {
+   "name": "places.world.get",
+   "wire": "places__world__get",
+   "version": "1.0.0",
+   "class": "safe",
+   "scope": "places:read",
+   "surfaces": [
+    "mcp",
+    "rest"
+   ],
+   "aliases": [
+    "places_world"
+   ]
+  },
+  {
    "name": "places.layout.save",
    "wire": "places__layout__save",
    "version": "1.0.0",
