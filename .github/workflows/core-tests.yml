@@ -82,7 +82,7 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '22'
 
       - name: Install postgres client
         run: sudo apt-get update && sudo apt-get install -y postgresql-client
@@ -129,7 +129,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '22'
       - name: Typecheck (advisory)
         run: |
           npm ci --legacy-peer-deps || npm install --legacy-peer-deps
