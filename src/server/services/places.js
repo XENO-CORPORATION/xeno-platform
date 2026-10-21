@@ -267,6 +267,24 @@ export function validateLayout(layout) {
 
 const code = () => { const a = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; const b = crypto.randomBytes(8); return [...b].map((x, i) => a[x % a.length] + (i === 3 ? '-' : '')).join(''); };
 
+// A session as the viewer may see it. The CODE is the host's alone; floors are the names the host chose to show
+// (exactly what a guest will see), never the others.
+const SESSION_SELECT = `SELECT s.*, p.name AS place_name, p.workspace_id, (s.host_principal_id = $1) AS host_is_me,
+    COALESCE(NULLIF(h.display_name,''), h.username, 'Someone') AS host_name,
+    (SELECT count(*)::int FROM place_session_guests g WHERE g.session_id=s.id) AS guest_count,
+    EXISTS (SELECT 1 FROM place_session_guests g WHERE g.session_id=s.id AND g.user_id=$1) AS joined
+  FROM place_hosted_sessions s JOIN places p ON p.id=s.place_id LEFT JOIN users h ON h.id=s.host_principal_id`;
+async function sessionView(db, s) {
+  const floors = s.floors ? (await db.query(`SELECT name FROM workforce_divisions WHERE id = ANY($1::uuid[]) AND workspace_id=$2 AND lifecycle='active' ORDER BY created_at, id`, [s.floors, s.workspace_id])).rows.map((r) => r.name) : 'all';
+  return { id: s.id, placeId: s.place_id, placeName: s.place_name, host: s.host_name, hostIsMe: !!s.host_is_me, title: s.title || '', audience: s.audience,
+    permissions: s.permissions, floors, guests: s.guest_count, startedAt: s.started_at, endsAt: s.ends_at, code: s.host_is_me ? s.code : null, joined: !!s.joined, state: s.state };
+}
+const INVITE_REFUSAL = { invite_not_found: ['not_found', 'That invite is no longer pending.'], invalid_invite_request: ['bad_input', 'That is not an invite id.'],
+  invite_not_pending: ['conflict', 'That invite is no longer pending.'], seat_limit: ['needs_approval', 'The workspace has no free seat. Ask its owner to add one.'],
+  workspace_identity_unavailable: ['not_found', 'That workspace is gone.'], account_identity_unavailable: ['denied', 'Your account cannot accept invites.'],
+  invalid_invite_role: ['denied', 'That invite carries a role you cannot be given.'], invite_identity_changed: ['conflict', 'The invite changed. Look again.'] };
+const normCode = (v) => String(v || '').toUpperCase().replace(/.*[?&]SESSION=/, '').replace(/[^A-Z0-9-]/g, '').replace(/^PLC-/, '');
+
 // ── operations ──────────────────────────────────────────────────────────────────────────────────────────────────
 const READS = {
   'catalog.get': async () => ({ STYLES: STYLES.map((id) => ({ id })), TEMPLATES: [{ id: 'empty', name: 'Empty lobby', divisions: [] }], CR: 1_000_000 }),
@@ -299,14 +317,62 @@ const READS = {
     for (const r of rows) if (!seen.has(r.id) || ['owner', 'admin'].includes(r.relation)) seen.set(r.id, { id: r.id, name: r.name, type: r.workspace_type, role: ['owner', 'admin'].includes(r.relation) ? r.relation : 'member', placeId: r.place_id });
     return { items: [...seen.values()] };
   },
-  'sessions.list': async (db, me) => ({ items: (await db.query(`SELECT s.id, s.place_id, p.name AS place_name, s.audience, s.permissions, s.floors, s.title, s.started_at, s.ends_at,
-      (s.host_principal_id = $1) AS host_is_me, CASE WHEN s.host_principal_id = $1 THEN s.code END AS code
-      FROM place_hosted_sessions s JOIN places p ON p.id = s.place_id WHERE s.state='live' AND s.ends_at>now()
-      AND (s.host_principal_id=$1 OR s.audience='public' OR $1 = ANY(s.invitees) OR EXISTS (SELECT 1 FROM place_session_guests g WHERE g.session_id=s.id AND g.user_id=$1))`, [me.id])).rows
-    .map((s) => ({ id: s.id, placeId: s.place_id, placeName: s.place_name, audience: s.audience, permissions: s.permissions, floors: s.floors || 'all', title: s.title, startedAt: s.started_at, endsAt: s.ends_at, hostIsMe: s.host_is_me, code: s.code })) }),
+  'sessions.list': async (db, me) => {
+    const rows = (await db.query(`${SESSION_SELECT} WHERE s.state='live' AND s.ends_at>now() AND p.lifecycle='active'
+      AND (s.host_principal_id=$1 OR s.audience='public' OR $1 = ANY(s.invitees) OR EXISTS (SELECT 1 FROM place_session_guests g WHERE g.session_id=s.id AND g.user_id=$1))
+      ORDER BY s.started_at DESC LIMIT 100`, [me.id])).rows;
+    const items = []; for (const s of rows) items.push(await sessionView(db, s));
+    return { items };
+  },
+  // A code (or a link carrying ?session=) → the session it opens, before joining. Reveals only what joining would.
+  'sessions.resolve': async (db, me, i) => {
+    const c = normCode(i.code);
+    if (!/^[A-Z0-9]{4}-[A-Z0-9]{4}$/.test(c)) fail('bad_input', 'code_invalid', 'A session code looks like ABCD-EF23.');
+    const s = (await db.query(`${SESSION_SELECT} WHERE s.code=$2`, [me.id, c])).rows[0];
+    if (!s || s.state !== 'live') fail('not_found', 'code_unknown', 'That code does not match a live session.');
+    if (new Date(s.ends_at) <= new Date()) fail('not_found', 'session_ended', 'That session has ended.');
+    return { session: await sessionView(db, s) };
+  },
+  'invites.list': async (db, me) => {
+    const u = (await db.query('SELECT email FROM users WHERE id=$1', [me.id])).rows[0];
+    const rows = (await db.query(`SELECT i.id, i.workspace_id, w.name AS workspace_name, i.role, i.created_at, i.expires_at,
+        COALESCE(NULLIF(f.display_name,''), f.username, 'Someone') AS from_name
+      FROM workspace_invites i JOIN workspaces w ON w.id=i.workspace_id AND w.status='active' LEFT JOIN users f ON f.id=i.invited_by_user_id
+      WHERE i.status='pending' AND (i.expires_at IS NULL OR i.expires_at > now())
+        AND (i.invited_user_id=$1 OR (i.invited_user_id IS NULL AND $2::text IS NOT NULL AND lower(i.invited_email)=lower($2)))
+      ORDER BY i.created_at DESC LIMIT 50`, [me.id, u?.email || null])).rows;
+    return { items: rows.map((r) => ({ id: r.id, kind: 'membership', workspaceId: r.workspace_id, workspaceName: r.workspace_name, from: r.from_name,
+      role: r.role === 'admin' ? 'admin' : 'member', createdAt: r.created_at, expiresAt: r.expires_at, state: 'pending' })) };
+  },
+  // Public places anyone signed in may watch (visitor: watch only). Closed floors stay nameless for a visitor too.
+  'places.explore': async (db, me) => {
+    const rows = (await db.query(`SELECT id FROM places WHERE lifecycle='active' AND visibility='public' ORDER BY opened_at DESC NULLS LAST, created_at DESC LIMIT 50`)).rows;
+    const items = [];
+    for (const { id } of rows) { const p = await loadPlace(db, id); const a = await accessFor(db, me, p); if (a) items.push(summary(p, a, await buildSnapshot(db, me, p, a))); }
+    return { items };
+  },
+  'receipts.list': async (db, me) => ({ items: (await db.query(`SELECT receipt FROM place_operations WHERE actor_user_id=$1 ORDER BY created_at DESC LIMIT 12`, [me.id])).rows.map((r) => r.receipt) }),
+  'needs.list': async (db, me) => {
+    const live = await import('./placesLive.js');
+    const r = await live.needsYou(db, me); if (!r.ok) throw new PlaceError(r.error.code, r.error.reason, r.error.message);
+    return r.result;
+  },
 };
 
 const WRITES = {
+  // Accept or decline a workspace invitation THROUGH the one invite-decision service (workspaceLifecycle.js); Places
+  // adds no membership record. An expired invite's terminal transition commits and answers state "expired".
+  'invites.respond': async (c, me, i) => {
+    if (me.kind === 'agent') fail('denied', 'agents_do_not_join', 'An agent does not accept workspace invitations.');
+    if (typeof i.accept !== 'boolean') fail('bad_input', 'accept_required', 'Say accept: true or false.');
+    const { decideWorkspaceInvite } = await import('./workspaceLifecycle.js');
+    let out;
+    try { out = await decideWorkspaceInvite(c, me.id, String(i.inviteId || ''), i.accept ? 'accept' : 'decline'); }
+    catch (e) { const m = INVITE_REFUSAL[e.code]; if (m) fail(m[0], e.code, m[1]); throw e; }
+    if (out.rejection) return { result: { inviteId: i.inviteId, state: 'expired', placeId: null }, revision: 1, summary: 'That invite had expired' };
+    const place = i.accept ? (await c.query(`SELECT id FROM places WHERE workspace_id=$1 AND lifecycle='active'`, [out.workspace_id])).rows[0] : null;
+    return { result: { inviteId: out.invite.id, state: out.invite.status, workspaceId: out.workspace_id, placeId: place ? place.id : null }, revision: 1, summary: i.accept ? 'Joined the workspace' : 'Declined the invite' };
+  },
   'places.layout.save': async (c, me, i) => {
     const p = await loadPlace(c, i.placeId, { lock: true }); const a = await accessFor(c, me, p);
     if (!a || !a.permissions.includes('edit')) fail('denied', 'no_edit', 'Only the workspace’s owners and admins edit the layout.');
@@ -366,10 +432,11 @@ const WRITES = {
     const s = (await c.query(`INSERT INTO place_hosted_sessions (place_id, host_principal_id, code, audience, invitees, permissions, floors, title, ends_at)
       VALUES ($1,$2,$3,$4,$5,$6,$7,$8, now() + ($9 || ' minutes')::interval) RETURNING id, code, ends_at`,
     [p.id, me.id, code(), i.audience || 'code', invitees, perms, floors, String(i.title || '').slice(0, 120), String(minutes)])).rows[0];
-    return { result: { session: { id: s.id, placeId: p.id, permissions: perms, floors: floors || 'all', endsAt: s.ends_at }, code: s.code }, revision: 1, summary: `Hosting ${p.name}` };
+    const view = await sessionView(c, (await c.query(`${SESSION_SELECT} WHERE s.id=$2`, [me.id, s.id])).rows[0]);
+    return { result: { session: view, code: s.code }, revision: 1, summary: `Hosting ${p.name} · ${s.code}` };
   },
   'sessions.join': async (c, me, i) => {
-    const raw = String(i.code || '').toUpperCase().replace(/[^A-Z0-9-]/g, '');
+    const raw = normCode(i.code);
     const s = (await c.query(`SELECT * FROM place_hosted_sessions WHERE ${i.sessionId ? 'id=$1' : 'code=$1'} FOR UPDATE`, [i.sessionId ? uuid(i.sessionId, 'sessionId') : raw])).rows[0];
     if (!s || s.state !== 'live') fail('not_found', 'code_unknown', 'That code does not match a live session.');
     if (new Date(s.ends_at) <= new Date()) fail('not_found', 'session_ended', 'That session has ended.');
