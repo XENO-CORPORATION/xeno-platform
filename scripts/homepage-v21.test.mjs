@@ -48,7 +48,7 @@ test('header products have native destinations and a persistent animated menu', 
   const html = read('public/home-v21/index.html');
   assert.match(html, /data-product-trigger="1" aria-controls="home-products-menu"/);
   assert.match(html, /data-product-menu="1" inert/);
-  assert.match(html, /<a href="\{\{ p.href \}\}"/);
+  assert.match(html, /<a class="home-product-row" href="\{\{ p.href \}\}"/);
   assert.match(html, /href="\/products"/);
   assert.doesNotMatch(html, /this.scrollTo\('products'\)/, 'product selections navigate instead of scrolling to a missing section');
   assert.match(read('public/home-v21/homepage.css'), /transition:opacity \.2s ease-out/);

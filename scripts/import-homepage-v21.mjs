@@ -89,14 +89,19 @@ replaceRequired('<header style=', '<header data-home-header="1" style=');
 replaceRequired('onClick="{{ toggleMenu }}" aria-expanded="{{ menuOpen }}"',
   'data-product-trigger="1" aria-controls="home-products-menu" aria-expanded="false"');
 replaceRequired('    <sc-if value="{{ menuOpen }}" hint-placeholder-val="{{ false }}">\n      <div style="border-top:1px solid var(--g2a);background:var(--g0f)">',
-  '    <div id="home-products-menu" data-product-menu="1" inert aria-label="Products" style="border-top:1px solid var(--g2a);background:var(--g0f)">');
+  '    <div id="home-products-menu" data-product-menu="1" inert aria-label="Products"><div class="home-products-card">');
 replaceRequired('      </div>\n    </sc-if>\n  </header>',
-  '      <div class="home-products-footer"><a href="/products">View all products ↗</a><a href="/product/hub">XENO Hub — all your tools together ↗</a></div>\n    </div>\n  </header>');
+  '      <div class="home-products-featured"><a href="/product/hub"><img src="/home-v21/site/xeno-logo.svg" alt=""><span><strong>XENO Hub <small>ALL-IN-ONE</small></strong><span>The desktop app that brings every XENO tool together</span></span><b>Explore Hub ↗</b></a></div><div class="home-products-footer"><a href="/products">View all products ↗</a><span>Explore the tools. Find your next workspace.</span></div>\n    </div></div>\n  </header>');
+replaceRequired('<div style="max-width:1320px;margin:0 auto;padding:20px clamp(16px,2vw,28px) 24px;display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:18px 24px">',
+  '<div class="home-products-list"><div class="home-products-highlight" aria-hidden="true"></div>');
+replaceRequired('<div style="display:flex;flex-direction:column;gap:2px">\n            <span',
+  '<div class="home-products-category" style="display:flex;flex-direction:column;gap:2px">\n            <span');
 replaceRequired('<button onClick="{{ p.onClick }}" style="display:flex;flex-direction:column;gap:1px;padding:6px 8px;',
-  '<a href="{{ p.href }}" style="display:flex;flex-direction:column;gap:1px;padding:6px 8px;');
-replaceRequired('{{ p.subtitle }}</span></button></sc-for>', '{{ p.subtitle }}</span></a></sc-for>');
+  '<a class="home-product-row" href="{{ p.href }}" style="display:flex;flex-direction:column;gap:1px;padding:6px 8px;');
+replaceRequired('{{ p.label }}</span><span style="font-size:12px;color:var(--g8f)">{{ p.subtitle }}</span></button></sc-for>',
+  '<span class="home-product-prefix">XENO </span>{{ p.word }}<span class="home-product-arrow" aria-hidden="true">↗</span></span><span style="font-size:12px;color:var(--g8f)">{{ p.subtitle }}</span></a></sc-for>');
 replaceRequired('({ label, subtitle, onClick: () => { this.setState({ menu: false, cat: g, pq: \'\', openP: label, showAll: true }); this.scrollTo(\'products\'); } })',
-  "({ label, subtitle, href: '/product/' + (label === 'XENO 3D Gen' ? '3d' : label === 'XENO 3D' ? 'form' : label.replace(/^XENO\\s+/i, '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '')) })");
+  "({ label, word: label.replace(/^XENO\\s+/i, ''), subtitle, href: '/product/' + (label === 'XENO 3D Gen' ? '3d' : label === 'XENO 3D' ? 'form' : label.replace(/^XENO\\s+/i, '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '')) })");
 replaceRequired("goProducts: () => this.scrollTo('products')", "goProducts: () => { window.location.href = '/products'; }");
 
 replaceRequired('  noHost() { if (this.host()) return false; this.toast(\'No model is reachable from this preview. The rest of the page still works.\'); return true; }',

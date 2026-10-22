@@ -66,15 +66,37 @@
   function isInside(node) {
     return node instanceof Element && !!node.closest('[data-product-trigger],[data-product-menu]');
   }
+  function scheduleClose() {
+    // Exactly one timer: pointerout and pointerover can describe the same exit.
+    clearTimeout(closeTimer);
+    closeTimer = setTimeout(() => {
+      const menu = document.querySelector('[data-product-menu]');
+      const trigger = document.querySelector('[data-product-trigger]');
+      if (menu?.matches(':hover') || trigger?.matches(':hover') || menu?.contains(document.activeElement)) return;
+      setMenu(false);
+    }, 240);
+  }
+  function highlightRow(row) {
+    const list = row?.closest('.home-products-list');
+    const highlight = list?.querySelector('.home-products-highlight');
+    if (!highlight) return;
+    const r = row.getBoundingClientRect(), container = list.getBoundingClientRect();
+    Object.assign(highlight.style, { left: `${r.left - container.left}px`, top: `${r.top - container.top}px`, width: `${r.width}px`, height: `${r.height}px`, opacity: '1' });
+  }
   document.addEventListener('pointerover', (event) => {
     if (event.pointerType === 'touch') return;
-    if (isInside(event.target)) setMenu(true);
-    else if (isInside(event.relatedTarget)) closeTimer = setTimeout(() => setMenu(false), 160);
+    if (isInside(event.target)) {
+      setMenu(true);
+      highlightRow(event.target.closest('.home-product-row'));
+    }
   });
   document.addEventListener('pointerout', (event) => {
     if (isInside(event.target) && !isInside(event.relatedTarget)) {
-      clearTimeout(closeTimer);
-      closeTimer = setTimeout(() => setMenu(false), 160);
+      scheduleClose();
+    }
+    if (event.target.closest('.home-products-list') && !event.relatedTarget?.closest?.('.home-products-list')) {
+      const highlight = document.querySelector('.home-products-highlight');
+      if (highlight) highlight.style.opacity = '0';
     }
   });
   document.addEventListener('click', (event) => {
@@ -86,6 +108,10 @@
   });
   document.addEventListener('focusin', (event) => {
     if (!isInside(event.target)) setMenu(false);
+    else {
+      clearTimeout(closeTimer);
+      highlightRow(event.target.closest('.home-product-row'));
+    }
   });
   document.addEventListener('keydown', (event) => {
     const trigger = document.querySelector('[data-product-trigger]');
