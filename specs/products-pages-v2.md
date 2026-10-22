@@ -107,7 +107,10 @@ browser regression and all 46 documents at desktop/phone widths. Each page must
 support the three dropdowns, keyboard entry/Escape, mobile Menu, and native
 destinations without placeholder header/footer links, clipped controls or renderer
 exceptions. The frontend CI job runs this command. `/site/` stable assets have
-no-cache and the same de-index/security headers as the design runtime assets.
+no-cache at nginx and the same de-index/security headers as the design runtime
+assets. Live verification found Cloudflare overrides no-cache to four hours;
+each import therefore puts a content-derived SHA-256 version in both asset URLs.
+Changed bytes always produce a changed URL, independently of the edge TTL.
 
 Limit: this pass qualifies shared navigation and page startup. It does not qualify
 every page's simulated demo, model/backend integration, or product/version claims.
