@@ -11,7 +11,7 @@ const agentCli: ProductDocs = {
   slug: 'agent-cli',
   productName: 'XENO Agent CLI',
   tagline: 'The terminal AI coding agent — read, edit, and run with your permission, any model, fully auditable.',
-  version: '0.5.127',
+  version: '0.5.128',
   updated: '2026-10-22',
   seo: {
     title: 'XENO Agent CLI documentation',
@@ -31,6 +31,12 @@ const agentCli: ProductDocs = {
 CLI 0.5.123 uses SDK 0.10.75 to review a top-level run once after it records a mutation. The host collects changed-file diffs, commands and their exit codes, and verification results. The agent checks task completion, unsupported claims, leftovers, obvious bugs, and work still unverified. It may fix problems under the run's existing permissions.
 
 Chat, read-only work, delegated subagents, and edits under 10 changed lines with no shell command are skipped. Arrow functions in read-only commands do not count as output redirects. Review fixes never trigger another review. The default limits are 8 model iterations, 60,000 tokens, and 180 seconds.
+
+## Understand response progress
+
+From CLI 0.5.128, fullscreen chat shows **Waiting for model output** after the gateway connects, because a keepalive is not model output. The activity row separates **request** elapsed time from **turn** elapsed time; **turn tokens** sum input and output across the turn's calls. Tool argument fragments show **Receiving tool call**.
+
+Partial reply paragraphs appear as they stream, before the next newline. The preview becomes formatted Markdown when the line completes, without duplicate text. This removes client display buffering; it does not eliminate upstream model queueing or generation time.
 
 ## Read code blocks
 
