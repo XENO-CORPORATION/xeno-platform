@@ -15,11 +15,11 @@ const draft=(visibility='private',attachments=[evidence()])=>({schema:'xeno.repo
 const refused=(fn,code)=>assert.rejects(fn,e=>e.code===code);
 try{
   await runAllMigrations(pool);await seedForum(pool);
-  for(const [name,role,kind] of [['reporter','user','human'],['other','user','human'],['staff','moderator','human'],['product-agent','user','agent']]){
+  for(const [name,role,kind] of [['reporter','user','human'],['other','user','human'],['staff','moderator','human'],['product-agent','user','agent'],['grant-issuer','moderator','human']]){
     const handle=`report-proof-${name}-${randomUUID().slice(0,8)}`;
     const row=(await pool.query("INSERT INTO users(username,email,password_hash,display_name,email_verified,workspace_activated_at,role) VALUES($1,$2,'fixture',$1,true,now(),$3) RETURNING id",[handle,handle+'@example.test',role])).rows[0];actors.push({...row,kind,role,username:handle});
   }
-  const [owner,other,staff,agent]=actors;
+  const [owner,other,staff,agent,issuer]=actors;
   const input=draft(),id=randomUUID();
   const [a,b]=await Promise.all([submitReviewedReport(pool,owner,input,id),submitReviewedReport(pool,owner,input,id)]);
   assert.equal(a.shortId,b.shortId);assert.equal(a.private,true);
@@ -32,7 +32,9 @@ try{
   await refused(()=>readEvidence(pool,other,input.context.attachments[0].id),'evidence_not_found');
   await refused(()=>readEvidence(pool,{...agent,username:'workspace-dev',role:'admin'},input.context.attachments[0].id),'evidence_not_found');
   await refused(()=>getTicket(pool,{...agent,username:'workspace-dev',role:'admin'},a.shortId),'ticket_not_found');
-  await pool.query('INSERT INTO forum_report_product_grants(agent_id,product,granted_by) VALUES($1,$2,$3)',[agent.id,'workspace',staff.id]);
+  await pool.query('INSERT INTO forum_report_product_grants(agent_id,product,granted_by) VALUES($1,$2,$3)',[agent.id,'workspace',issuer.id]);
+  await pool.query('DELETE FROM users WHERE id=$1',[issuer.id]);
+  assert.equal((await pool.query('SELECT granted_by FROM forum_report_product_grants WHERE agent_id=$1',[agent.id])).rows[0].granted_by,null);
   await readEvidence(pool,agent,input.context.attachments[0].id);
   await getTicket(pool,agent,a.shortId);
   const published=await publishTicket(pool,owner,a.shortId);
