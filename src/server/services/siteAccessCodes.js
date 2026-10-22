@@ -79,10 +79,10 @@ export async function listCodes(db) {
 
 export async function codeEvents(db, id) {
   const { rows } = await db.query(
-    `SELECT e.event, e.country, e.at, u.email AS actor
+    `SELECT e.event, e.country, e.via, e.at, u.email AS actor
        FROM site_access_code_events e LEFT JOIN users u ON u.id = e.actor_id
       WHERE e.code_id = $1 ORDER BY e.at DESC LIMIT 500`, [id]);
-  return rows.map((r) => ({ event: r.event, country: r.country, at: r.at, actor: r.actor || null }));
+  return rows.map((r) => ({ event: r.event, country: r.country, via: r.via || null, at: r.at, actor: r.actor || null }));
 }
 
 export async function revokeCode(db, id, actorId) {
@@ -95,14 +95,18 @@ export async function revokeCode(db, id, actorId) {
 
 /** Spend one use of a live code. Returns { id, scope, expiresAt } or null — wrong, expired, revoked and used up all
  *  look the same to the person typing, so a guess learns nothing. */
-export async function redeemCode(db, typed, country = null) {
+/** How a code arrived (analytics only): a shared link carrying it, the
+ *  /access entry, or the folded Coming-soon form. Anything else is unknown
+ *  and records no channel rather than inventing one. */
+export const VIA_CHANNELS = ['link', 'access', 'form'];
+export async function redeemCode(db, typed, country = null, via = null) {
   if (normalizeCode(typed).length < 16) return null;
   const { rows } = await db.query(
     `UPDATE site_access_codes SET uses = uses + 1, last_used_at = now(), last_used_country = $2
       WHERE code_hash = $1 AND revoked_at IS NULL AND expires_at > now() AND (max_uses IS NULL OR uses < max_uses)
       RETURNING id, scope, expires_at`, [hashCode(typed), country]);
   if (!rows[0]) return null;
-  await db.query(`INSERT INTO site_access_code_events (code_id, event, country) VALUES ($1, 'redeemed', $2)`, [rows[0].id, country]);
+  await db.query(`INSERT INTO site_access_code_events (code_id, event, country, via) VALUES ($1, 'redeemed', $2, $3)`, [rows[0].id, country, VIA_CHANNELS.includes(via) ? via : null]);
   return { id: rows[0].id, scope: rows[0].scope, expiresAt: new Date(rows[0].expires_at) };
 }
 
