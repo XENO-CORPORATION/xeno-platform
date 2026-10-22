@@ -47,6 +47,14 @@ test('section containers use the wider shared gutter', () => {
   assert.match(read('public/home-v21/homepage.css'), /#stack \[data-stack-copy\]\{padding-left:clamp\(16px,2vw,28px\)/, 'the gutter is not left to the inline style');
 });
 
+test('the homepage stylesheet URL names its own bytes', async () => {
+  const { createHash } = await import('node:crypto');
+  const css = read('public/home-v21/homepage.css').replace(/\r\n/g, '\n');
+  const version = createHash('sha256').update(css).digest('hex').slice(0, 16);
+  const html = read('public/home-v21/index.html');
+  assert.match(html, new RegExp(`/home-v21/homepage\\.css\\?v=${version}`), 'an unversioned stylesheet is cached at the edge for four hours');
+});
+
 test('header products have native destinations and a persistent animated menu', () => {
   const html = read('public/home-v21/index.html');
   assert.match(html, /data-product-trigger="1" aria-controls="home-products-menu"/);
