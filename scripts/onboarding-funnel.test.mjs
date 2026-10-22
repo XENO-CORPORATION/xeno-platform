@@ -55,6 +55,15 @@ test('Hub/CLI/OIDC handoffs are not intercepted even for a new account', () => {
     '/api/oauth2/authorize?client_id=x');
 });
 
+test('device authorization resumes after email activation with its code intact', () => {
+  const device = '/activate?code=ABCD-EFGH';
+  assert.equal(isPrivilegedReturnUrl(device), true);
+  assert.equal(resolveActivationContinue(device), device);
+  assert.equal(resolveActivationContinue('/activate'), '/activate');
+  assert.equal(isPrivilegedReturnUrl('/activate-evil?code=ABCD-EFGH'), false);
+  assert.equal(isPrivilegedReturnUrl('//evil.example/activate'), false);
+});
+
 test('the OAuth builder actually calls the resolver — a copy that is never used is not a door', () => {
   assert.match(oauth, /resolveOAuthLandingPath\(returnUrl, isNew\)/);
   assert.match(oauth, /from '\.\.\/lib\/onboardingHandoff\.js'/);

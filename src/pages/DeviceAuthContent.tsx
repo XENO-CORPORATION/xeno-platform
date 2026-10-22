@@ -1,6 +1,7 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Link, useLocation, useParams } from 'react-router-dom';
 import { DeviceCodeForm, formatUserCode, userCodeOf, type DeviceCodeStatus } from '@xenosystem/components/auth';
+import { Button } from '@xenosystem/elements-react';
 import AuthMark from '../components/auth/AuthMark';
 import { ArrowLeft } from 'lucide-react';
 import { getAuthApp } from '../lib/authApps';
@@ -61,6 +62,8 @@ const DeviceAuthContent: React.FC<{ protocol?: 'oidc' | 'legacy' }> = ({ protoco
     scope: string[];
     unverified?: boolean;
   } | null>(null);
+  const [denied, setDenied] = useState(false);
+  const requestGeneration = useRef(0);
   const [isVisible, setIsVisible] = useState(false);
 
   const { isAuthenticated: authed, isLoading: authLoading } = useAuth();
@@ -80,9 +83,26 @@ const DeviceAuthContent: React.FC<{ protocol?: 'oidc' | 'legacy' }> = ({ protoco
   }, [authed, authLoading, appSlug, location.pathname, location.search, protocol]);
 
   const onCodeChange = (v: string) => {
+    requestGeneration.current++;
+    setDenied(false);
     setCode(v);
     setAuthorization(null);
     if (status !== 'idle') setStatus('idle');
+  };
+
+  const deny = async () => {
+    if (status === 'verifying' || !authorization || !authed) return;
+    setStatus('verifying');
+    const generation = ++requestGeneration.current;
+    try {
+      const r = await fetch('/api/oauth2/device/deny', { method: 'POST',
+        headers: { 'content-type': 'application/json' }, body: JSON.stringify({ user_code: code.toUpperCase() }) });
+      if (generation !== requestGeneration.current) return;
+      if (!r.ok) throw new Error('denial failed');
+      setDenied(true);
+      setAuthorization(null);
+      setStatus('idle');
+    } catch { if (generation === requestGeneration.current) setStatus('Could not decline this request. Try again.'); }
   };
 
   const verify = async () => {
@@ -90,6 +110,7 @@ const DeviceAuthContent: React.FC<{ protocol?: 'oidc' | 'legacy' }> = ({ protoco
     if (!userCodeOf(code)) { setStatus('Enter the full 8-character code.'); return; }
     if (!authed) { setStatus('Your session expired — please reload.'); return; }
     setStatus('verifying');
+    const generation = ++requestGeneration.current;
     try {
       const endpoint = protocol === 'oidc'
         ? (authorization ? '/api/oauth2/device/approve' : '/api/oauth2/device/inspect')
@@ -100,6 +121,7 @@ const DeviceAuthContent: React.FC<{ protocol?: 'oidc' | 'legacy' }> = ({ protoco
         body: JSON.stringify({ user_code: code.toUpperCase() }),
       });
       const d = await r.json().catch(() => ({}));
+      if (generation !== requestGeneration.current) return;
       if (protocol === 'oidc' && r.ok && !authorization && d.client_id && d.client_name) {
         setAuthorization({
           client_id: d.client_id,
@@ -117,7 +139,7 @@ const DeviceAuthContent: React.FC<{ protocol?: 'oidc' | 'legacy' }> = ({ protoco
         : d.error_description === 'invalid or expired user_code' ? 'That code is invalid or expired. Start again from your device.'
         : (d.error || 'Verification failed — please try again.'));
     } catch {
-      setStatus('Network error — please try again.');
+      if (generation === requestGeneration.current) setStatus('Network error — please try again.');
     }
   };
 
@@ -142,7 +164,7 @@ const DeviceAuthContent: React.FC<{ protocol?: 'oidc' | 'legacy' }> = ({ protoco
 
       <div className="flex-1 min-h-0 flex flex-col justify-center px-6 pb-6 lg:px-12 xl:px-20 pt-6">
         <div className={`w-full max-w-[400px] mx-auto transition-all duration-700 ease-out ${isVisible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-8'}`} style={{ transitionDelay: '0.15s' }}>
-          <DeviceCodeForm
+          {denied ? <div role="status"><h1>Sign-in declined</h1><p>No access was granted. Return to your terminal.</p></div> : <DeviceCodeForm
             app={{ name: displayName }}
             code={code}
             onChange={onCodeChange}
@@ -170,9 +192,10 @@ const DeviceAuthContent: React.FC<{ protocol?: 'oidc' | 'legacy' }> = ({ protoco
                   <p className="text-white/60">This app registered itself and has not been reviewed by XENO. It will act as its own agent of yours, never as you. Actions that cannot be undone ask you to sign in again.</p>
                 ) : null}
                 <p className="text-white/40">You can sign it out at any time from your account.</p>
+                <Button type="button" variant="secondary" disabled={status === 'verifying'} onClick={() => { void deny(); }}>Decline sign-in</Button>
               </div>
             ) : undefined}
-          />
+          />}
         </div>
       </div>
     </>
