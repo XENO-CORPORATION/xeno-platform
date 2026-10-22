@@ -23,7 +23,7 @@
   const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
   const when = (iso) => (iso ? new Date(iso).toLocaleString(undefined, { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : '—');
   const day = (iso) => (iso ? new Date(iso).toLocaleDateString(undefined, { year: 'numeric', month: 'long', day: 'numeric' }) : '');
-  const S = { staff: null, summary: null, news: null, deploys: null, deploy: null, inote: null, features: null, feature: null, notes: null, noteState: 'draft', repo: '', q: '', busy: false, err: '' };
+  const S = { staff: null, summary: null, news: null, deploys: null, deploy: null, inote: null, features: null, feature: null, notes: null, noteState: 'draft', repo: '', q: '', busy: false, err: '', deploysMore: false, featuresMore: false, featuresOffset: 0, moreBusy: false, moreError: '' };
 
   async function loadFor(it) {
     const [a, id] = String(it || '').split('/');
@@ -33,12 +33,25 @@
       const [r, n] = await Promise.all([api('GET', `/api/releases/deploys/${encodeURIComponent(id)}`), api('GET', `/api/releases/deploys/${encodeURIComponent(id)}/internal-note`)]);
       S.deploy = r.ok ? r.d.deploy : { missing: true }; S.inote = n.ok ? n.d.note : n.status === 404 ? { none: true } : { error: said(n, 'The internal note did not load') };
     }
-    else if (a === 'deploys') { const r = await api('GET', '/api/releases/deploys?limit=200'); S.deploys = r.ok ? r.d.deploys || [] : []; }
+    else if (a === 'deploys') { S.moreError='';const r = await api('GET', '/api/releases/deploys?limit=200'); S.deploys = r.ok ? r.d.deploys || [] : [];S.deploysMore=r.ok&&S.deploys.length===200;if(!r.ok)S.moreError=said(r,'Deploys could not be loaded.'); }
     else if (a === 'features' && id) { const r = await api('GET', `/api/releases/features/${encodeURIComponent(id)}`); S.feature = r.ok ? r.d.feature : { missing: true }; }
-    else if (a === 'features') { const r = await api('GET', `/api/releases/features?limit=200${S.repo ? '&repo=' + encodeURIComponent(S.repo) : ''}${S.q ? '&q=' + encodeURIComponent(S.q) : ''}`); S.features = r.ok ? r.d.features || [] : []; }
+    else if (a === 'features') { const r = await api('GET', `/api/releases/features?limit=200${S.repo ? '&repo=' + encodeURIComponent(S.repo) : ''}${S.q ? '&q=' + encodeURIComponent(S.q) : ''}`); S.features = r.ok ? r.d.features || [] : [];S.featuresMore=r.ok&&S.features.length===200;S.featuresOffset=S.features.length;S.moreError=r.ok?'':said(r,'Features could not be loaded.'); }
     else if (a === 'notes') { const r = await api('GET', `/api/releases/notes?state=${encodeURIComponent(S.noteState)}`); S.notes = r.ok ? r.d.notes || [] : []; }
     paint();
   }
+  async function loadOlder(kind){
+    if(S.moreBusy||!S.staff)return;
+    const initial=S[kind],repo=S.repo,q=S.q;if(!Array.isArray(initial)||!initial.length)return;
+    const path=kind==='deploys'?`/api/releases/deploys?limit=200&beforeId=${encodeURIComponent(initial.at(-1).id)}`:`/api/releases/features?limit=200&offset=${S.featuresOffset}${repo?'&repo='+encodeURIComponent(repo):''}${q?'&q='+encodeURIComponent(q):''}`;
+    S.moreBusy=true;S.moreError='';paint();
+    const r=await api('GET',path);
+    if(S[kind]===initial&&(kind==='deploys'||(repo===S.repo&&q===S.q))){
+      if(r.ok){const rows=r.d[kind]||[];if(kind==='features')S.featuresOffset+=rows.length;const known=new Set(initial.map(x=>x.id));S[kind]=[...initial,...rows.filter(x=>!known.has(x.id))];S[kind+'More']=rows.length===200;}
+      else S.moreError=said(r,'Older records could not be loaded. Try again.');
+    }
+    S.moreBusy=false;paint();
+  }
+  const historyFooter=kind=>`<div class="rl-bar"><span class="pg-dim">${(S[kind]||[]).length} records shown${kind==='deploys'?' · deployment evidence; GitHub history is under Features':''}</span>${S[kind+'More']?H().btn(S.moreBusy?'Loading…':kind==='deploys'?'Load older deployments':'Load more features',`data-rl-more="${kind}"${S.moreBusy?' disabled':''}`,true):''}</div>${S.moreError?`<p role="alert">${esc(S.moreError)} ${H().btn('Try again',S[kind+'More']?`data-rl-more="${kind}"`:'data-rl-reload',true)}</p>`:''}`;
   let lastLoad = null;
   const want = (it) => { const k = it || ''; if (lastLoad !== k) { lastLoad = k; loadFor(it); } };
 
@@ -66,7 +79,7 @@
     const h = H(), rows = S.deploys || [];
     return h.page(head('Deploys', 'Every deploy of the platform. Reconstructed rows say where they came from.') + tabs('deploys')
       + (rows.length ? h.table(['When', 'Service', 'Commit', 'Mode', 'Result', 'PRs', 'Internal note', 'Source'], rows.map((d) => h.tr(`data-rl-go="deploys/${esc(d.id)}"`, [esc(when(d.startedAt)), esc(d.service), `<code>${esc(d.sha)}</code>`, esc(d.mode), h.chip(d.status === 'ok' ? 'OK' : d.status === 'failed' ? 'Failed' : 'Interrupted'), esc(d.prs.length || ''), esc(noteWord(d.internalNote)), esc(d.provenance)])))
-        : S.deploys == null ? '' : h.box('check', 'No deploys recorded yet', 'Each deploy writes a row here when it finishes.')));
+        : S.deploys == null ? '' : h.box('check', 'No deploys recorded yet', 'Each deploy writes a row here when it finishes.'))+historyFooter('deploys'));
   }
 
   const noteWord = (n) => (!n ? 'None' : n.state === 'signed' ? 'Signed off' : 'Draft');
@@ -108,7 +121,7 @@
     return h.page(head('Features', 'Each feature, where it is turned on, and what built it.') + tabs('features')
       + `<form class="rl-bar" data-rl-form="filter"><input name="q" value="${esc(S.q)}" placeholder="Search features" aria-label="Search features"><input name="repo" value="${esc(S.repo)}" placeholder="Repository" aria-label="Repository">${h.btn('Filter', 'type="submit"', true)}</form>`
       + (rows.length ? h.table(['Feature', 'Repository', 'Status', 'Enabled for', 'Changes', 'Last change'], rows.map((f) => h.tr(`data-rl-go="features/${esc(f.id)}"`, [esc(f.title), esc(f.repo), h.chip(f.status), esc(scopeWords(f.enabled)), esc(f.changes ?? ''), esc(when(f.lastChangeAt))])))
-        : S.features == null ? '' : h.box('check', 'No features match', 'Try another search.')));
+        : S.features == null ? '' : h.box('check', 'No features match', 'Try another search.'))+historyFooter('features'));
   }
   const scopeWords = (e) => (e.scope === 'all' ? 'Everyone' : e.scope === 'plans' ? `Plans: ${e.plans.join(', ')}` : e.scope === 'workspaces' ? `${e.workspaces.length} workspace(s)` : 'Nobody yet');
 
@@ -183,9 +196,10 @@
     const ni = e.target.closest('[data-rl-inote]');
     if (ni && ni.closest('#main')) { e.preventDefault(); if (ni.dataset.rlInote === 'edit') return editInternalNote(); if (S.deploy && S.inote) return act('POST', `/api/releases/deploys/${S.deploy.id}/internal-note/sign`, { expectedVersion: S.inote.version }, 'Signed off'); return; }
     const nn = e.target.closest('[data-rl-create]'); if (nn && nn.closest('#main')) { e.preventDefault(); return newNote(); }
-    const t = e.target.closest('[data-rl-go],[data-rl-reload],[data-rl-repo],[data-rl-notes],[data-rl-approve],[data-rl-withdraw]');
+    const t = e.target.closest('[data-rl-go],[data-rl-reload],[data-rl-repo],[data-rl-notes],[data-rl-approve],[data-rl-withdraw],[data-rl-more]');
     if (!t || !t.closest('#main, #panel')) return;
     e.preventDefault();
+    if (t.dataset.rlMore) return loadOlder(t.dataset.rlMore);
     if (t.dataset.rlGo !== undefined) return go(t.dataset.rlGo || null);
     if (t.hasAttribute('data-rl-reload')) return refresh();
     if (t.dataset.rlRepo) { S.repo = t.dataset.rlRepo; S.q = ''; return go('features'); }
