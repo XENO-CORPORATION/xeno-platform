@@ -42,7 +42,6 @@ export const PRODUCT_DESIGN_SLUGS: ReadonlySet<string> = new Set([
   "sites",
   "slides",
   "sound",
-  "spawn",
   "spectra",
   "stock",
   "video",
