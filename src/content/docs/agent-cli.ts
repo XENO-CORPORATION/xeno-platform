@@ -11,7 +11,7 @@ const agentCli: ProductDocs = {
   slug: 'agent-cli',
   productName: 'XENO Agent CLI',
   tagline: 'The terminal AI coding agent — read, edit, and run with your permission, any model, fully auditable.',
-  version: '0.5.124',
+  version: '0.5.126',
   updated: '2026-10-22',
   seo: {
     title: 'XENO Agent CLI documentation',
@@ -32,9 +32,13 @@ CLI 0.5.123 uses SDK 0.10.75 to review a top-level run once after it records a m
 
 Chat, read-only work, delegated subagents, and edits under 10 changed lines with no shell command are skipped. Arrow functions in read-only commands do not count as output redirects. Review fixes never trigger another review. The default limits are 8 model iterations, 60,000 tokens, and 180 seconds.
 
+## Read shell calls
+
+From CLI 0.5.126, shell calls show the tool or PowerShell label above an indented command block. Long lines wrap to the terminal width. Long scripts open with a bounded preview; press **Ctrl+O** to see the full command. Tool results remain separately expandable.
+
 ## Read the result
 
-The terminal shows one **Self-review:** line after the reply. Press **Ctrl+O** to expand findings, fixes, and unverified items. Failed and timed-out reviews say so explicitly. A review is a model assessment, not proof that every requirement is satisfied.
+From CLI 0.5.126, chat shows one **Self-review:** line below the **Worked for** turn divider. Repeated provider labels are removed; review limitations remain visible. Press **Ctrl+O** to expand findings, fixes, and unverified items. Failed and timed-out reviews say so explicitly. A review is a model assessment, not proof that every requirement is satisfied.
 
 In automation, \`xeno run --json\` adds an optional \`selfReview\` object containing \`status\`, \`summary\`, \`findings\`, \`fixes\`, \`unverified\`, \`fixToolCalls\`, \`verificationsRerun\`, \`changedFiles\`, and \`durationMs\`. Status is \`completed\`, \`failed\`, or \`timed_out\`. NDJSON emits a \`self_review\` event; text mode writes the review to stderr. An absent result means no review was emitted, not that a review passed.
 
@@ -128,6 +132,16 @@ xeno update
 \`\`\`
 
 \`xeno update\` reports the resolved install command, how to roll back, the active release channel, and the native checksum URL.
+
+Linux and macOS npm installs use a command symlink. From 0.5.125, the updater resolves that symlink and updates the npm install in place. If an older npm install incorrectly reports a native install, repair it once with:
+
+\`\`\`bash
+npm install -g @xenosystem/agent-cli@latest
+xeno --version
+xeno update
+\`\`\`
+
+Genuine standalone native binaries still require their matching release asset; they are not converted into npm installs.
 
 > **Not yet available:** Homebrew and WinGet packages are planned but not shipping today — use npm.
 
