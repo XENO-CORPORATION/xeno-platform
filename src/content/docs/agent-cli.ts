@@ -11,7 +11,7 @@ const agentCli: ProductDocs = {
   slug: 'agent-cli',
   productName: 'XENO Agent CLI',
   tagline: 'The terminal AI coding agent — read, edit, and run with your permission, any model, fully auditable.',
-  version: '0.5.123',
+  version: '0.5.124',
   updated: '2026-10-22',
   seo: {
     title: 'XENO Agent CLI documentation',
@@ -190,10 +190,10 @@ Use \`xeno --interface --resume <session-id>\` when you want an exact session ra
         {
           slug: 'authentication',
           title: 'Authentication & API keys',
-          description: 'Sign in, or bring your own API key, and point the CLI at a base URL.',
+          description: 'Sign in to chat, authorize a remote terminal, and configure unattended model credentials.',
           body: `# Authentication & API keys
 
-XENO Agent CLI routes model calls through the **XENO API** (\`api.xenostudio.ai\`) by default. You can sign in interactively or supply an API key directly.
+XENO Agent CLI routes model calls through the **XENO API** (\`api.xenostudio.ai\`) by default. From **0.5.124**, chat requires a XENO account session even with a model API key or local model. An existing valid account session is reused without prompting. Signed-out piped chat exits with sign-in guidance; use \`xeno run\` for unattended API-key execution.
 
 ## Sign in
 
@@ -203,16 +203,20 @@ xeno auth      # inspect the current auth state
 xeno logout    # clear stored credentials
 \`\`\`
 
+On SSH, starting \`xeno\` automatically starts device-code sign-in in that running process. Open [xenosystem.ai/activate](https://xenosystem.ai/activate) on your own device, enter the code, check the registered client and requested access, then approve or decline. Login, signup and email activation return to the original device authorization. Never approve a code you did not start.
+
+On Linux without a Secret Service keyring, account sign-in lasts only for the running process. Sign in inside \`xeno\`; a separate \`xeno login --device\` cannot persist that account session without a keyring. Configure an OS keyring to retain account sign-in between launches.
+
 ## Bring your own key
 
-Set your key in the environment (recommended) or pass it per‑invocation:
+Set your model key in the environment. It supplies model authority, not account identity:
 
 \`\`\`bash
 export XENO_API_KEY="xeno_..."
-xeno chat
+xeno chat  # also requires an account session
 
-# or per run
-xeno chat --api-key "xeno_..."
+# unattended execution
+xeno run "Inspect this repository"
 \`\`\`
 
 Create and rotate keys on the XENO API portal at [api.xenosystem.ai](https://api.xenosystem.ai/dashboard/keys). Sign in with your XENO account.
