@@ -37,6 +37,8 @@ test('nginx serves v21 at exactly / behind the site gate, and the SPA hands / to
   assert.match(root, /auth_request \/__site_gate;/, 'the homepage stays behind the site gate');
   assert.match(root, /try_files \/home-v21\/index\.html =404;/);
   assert.match(nginx, /location \^~ \/home-v21\/ \{/);
+  const doc = nginx.match(/location = \/home-v21\/index\.html \{[\s\S]*?\n    \}/)?.[0] || '';
+  assert.match(doc, /auth_request \/__site_gate;/, 'the homepage document itself stays gated');
   const app = read('src/App.tsx');
   assert.match(app, /<Route path="\/" element=\{<HomeV21Redirect \/>\} \/>/);
   assert.match(app, /<Route path="\/v3" element=\{<Home3 \/>\} \/>/, 'the previous homepage stays at /v3');

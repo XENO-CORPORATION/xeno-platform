@@ -147,6 +147,15 @@ test('OAuth signup keeps the invitation across hosts: captured at the start, hon
   assert.equal(reads, consumes, 'every OAuth callback reads the captured invite back');
   assert.match(auth, /req\?\.oauthGateInvite === true && process\.env\.SITE_GATE === 'on'/, 'a captured invite still needs the gate on');
 });
+test('Coming soon is the v21 design, and its code field has no floating focus stroke', () => {
+  const page = readFileSync(new URL('../public/coming-soon.html', import.meta.url), 'utf8');
+  // Home v21's own values (public/home-v21/index.html root): grey ramp, plate, 7px control radius.
+  for (const token of ['#060606', '#090909', '#1e1e1e', '#d9d9d9', 'IBM Plex Sans', 'JetBrains Mono']) {
+    assert.ok(page.includes(token), `coming-soon must carry the v21 token ${token}`);
+  }
+  assert.doesNotMatch(page, /input:focus\s*\{\s*outline/, 'focus on the code field is border only, never an outline outside it');
+  assert.match(page, /\.code input:focus \{ border-color:/);
+});
 test('Coming soon sends the CSRF half, so a signed-in visitor can still enter the code', () => {
   const page = readFileSync(new URL('../public/coming-soon.html', import.meta.url), 'utf8');
   assert.match(page, /xeno_csrf=/);
