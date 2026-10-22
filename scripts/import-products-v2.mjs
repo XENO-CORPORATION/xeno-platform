@@ -12,6 +12,7 @@
 import { cpSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { marketingAssets, marketingHeader } from './lib/marketing-header.mjs';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const srcDir = process.argv[2];
@@ -78,6 +79,29 @@ for (const [file, slug] of Object.entries(MAP)) {
     const target = otherSlug === 'index' ? '/products' : `/product/${otherSlug}`;
     html = html.replaceAll(other, target);
   }
+  const originalHeader = html.match(/<header\b[\s\S]*?<\/header>/)?.[0];
+  if (!originalHeader) throw new Error(`${file}: header missing`);
+  html = html.replace(originalHeader, marketingHeader({ product: slug === 'index' ? 'system' : name }))
+    .replace('</head>', marketingAssets() + '\n</head>');
+  // The handoff footer is shared prototype chrome too: its links all used '#'.
+  const firstSection = html.match(/<section\b[^>]*>/)?.[0];
+  const overviewId = firstSection?.match(/\bid="([^"]+)"/)?.[1] || 'product-overview';
+  if (firstSection && !/\bid=/.test(firstSection)) html = html.replace(firstSection, firstSection.replace('<section', '<section id="product-overview"'));
+  const footerLinks = {
+    Features: `#${overviewId}`, Pricing: '/pricing', Download: '/download',
+    'What’s new': '/blog', Roadmap: '/roadmap', Documentation: '/docs', Tutorials: '/learn',
+    Templates: '/templates', API: '/api-reference', Blog: '/blog', Forum: '/forum',
+    About: '/about', Careers: '/careers', Press: '/press', Partners: '/partners', Contact: '/contact',
+    Impressum: '/impressum', Privacy: '/privacy', Terms: '/terms', Security: '/security',
+    Refunds: '/refunds', Cookies: '/cookies',
+  };
+  html = html.replace(/<footer\b[\s\S]*?<\/footer>/, footer => footer.replace(/<a\b([^>]*?)href="#"([^>]*)>([\s\S]*?)<\/a>/g,
+    (anchor, before, after, body) => {
+      const label = body.replace(/<[^>]*>/g, '').trim();
+      if (label === 'All systems operational') return `<span${before}${after}>${body}</span>`;
+      if (!footerLinks[label]) throw new Error(`${file}: unmapped footer link ${label}`);
+      return `<a${before}href="${footerLinks[label]}"${after}>${body}</a>`;
+    }));
   // Link targets must be rewritten; the bare domain inside demo copy
   // ("open xenostudio.ai/device on your phone") is page text, not a link.
   if (html.includes('.dc.html') || /["'(]https?:\/\/xenostudio\.ai/.test(html)) {

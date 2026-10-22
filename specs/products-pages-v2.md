@@ -86,3 +86,28 @@ adjudicated before shipping:
 - **Accepted deviation:** design pages carry the design's own status and
   download claims (no catalog experimental/unsigned notice), as with the
   Home v21 fork. The one exception enforced is the download gate itself.
+
+## Shared navigation repair (2026-10-22)
+
+The 46-document browser audit found that every imported header had seven
+placeholder links and every phone header clipped controls. Every footer also
+used placeholder links. The homepage omitted Marketplace, Solutions, Pricing,
+Blog and Forum from its main navigation.
+
+The importers now mount one shared header from `scripts/lib/marketing-header.mjs`,
+with shared CSS and event handling in `public/site/marketing-header.*`. It retains
+the restored floating Products card and hover bridge, adds Marketplace and
+Solutions menus plus Docs/Pricing/Blog/Forum, and uses a phone Menu for secondary
+destinations. Solutions links target the existing homepage use-case section and
+existing product pages; there is no invented `/solutions` route. Footer links
+resolve to existing routes, with Features anchored to the first page section.
+
+Acceptance: `npm run test:marketing-navigation` runs the source checks, homepage
+browser regression and all 46 documents at desktop/phone widths. Each page must
+support the three dropdowns, keyboard entry/Escape, mobile Menu, and native
+destinations without placeholder header/footer links, clipped controls or renderer
+exceptions. The frontend CI job runs this command. `/site/` stable assets have
+no-cache and the same de-index/security headers as the design runtime assets.
+
+Limit: this pass qualifies shared navigation and page startup. It does not qualify
+every page's simulated demo, model/backend integration, or product/version claims.
