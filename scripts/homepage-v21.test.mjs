@@ -31,6 +31,42 @@ test('entry is clean: no panels scrollbar, and nothing paints before the intro',
   assert.match(html, /\[data-panels\]\{scrollbar-width:none\}/, 'and its scrollbar is hidden (it still scrolls)');
   assert.match(html, /xenoEntryFailsafe/, 'a no-runtime failsafe still uncovers the page');
 });
+test('shapes are squared: no circles, no pills, container radius capped', () => {
+  const html = read('public/home-v21/index.html');
+  assert.doesNotMatch(html, /border-radius:\s*(?:50%|999px|(?:10|12|16|20)px)/, 'source declarations cannot recreate circles, pills or large corners');
+  assert.match(html, /--r-sm:6px;--r-lg:8px/);
+  assert.match(html, /radius: m.role === 'user' \? '8px 3px 8px 8px'/, 'dynamic chat bubbles follow the same rule');
+});
+
+test('section containers use the wider shared gutter', () => {
+  const html = read('public/home-v21/index.html');
+  assert.doesNotMatch(html, /max-width:1360px/);
+  assert.equal((html.match(/max-width:none;margin:0 auto;padding-left:clamp\(16px,2vw,28px\)/g) || []).length, 9);
+});
+
+test('header products have native destinations and a persistent animated menu', () => {
+  const html = read('public/home-v21/index.html');
+  assert.match(html, /data-product-trigger="1" aria-controls="home-products-menu"/);
+  assert.match(html, /data-product-menu="1" inert/);
+  assert.match(html, /<a href="\{\{ p.href \}\}"/);
+  assert.match(html, /href="\/products"/);
+  assert.doesNotMatch(html, /this.scrollTo\('products'\)/, 'product selections navigate instead of scrolling to a missing section');
+  assert.match(read('public/home-v21/homepage.css'), /transition:opacity \.2s ease-out/);
+});
+
+test('unavailable model actions open honest examples and a signup path', () => {
+  const html = read('public/home-v21/index.html');
+  assert.doesNotMatch(html, /[Nn]o model (?:is )?reachable|model offline/);
+  assert.match(html, /window.xenoHomePreview\(feature\)/);
+  for (const feature of ['code', 'workflow', 'image', 'video', 'comms', 'sdk', 'shell']) {
+    assert.ok(html.includes(`this.noHost('${feature}')`), feature);
+  }
+  const runtime = read('public/home-v21/homepage.js');
+  assert.match(runtime, /Your prompt has not been sent to a model/);
+  assert.match(runtime, /signup.href = '\/auth'/);
+  assert.match(runtime, /dialog.showModal\(\)/);
+  assert.match(html, /home-preview-banner/);
+});
 test('every image the page references exists under public/', () => {
   const html = read('public/home-v21/index.html');
   const refs = [...new Set([...html.matchAll(/\/home-v21\/site\/[A-Za-z0-9_.-]+/g)].map((m) => m[0]))];

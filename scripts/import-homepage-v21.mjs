@@ -65,6 +65,59 @@ const heroIn0 = '  heroIn(delay, reduced) {\n    const els =';
 if (!html.includes(heroIn0)) { console.error('heroIn anchor not found in the design'); process.exit(1); }
 html = html.replace(heroIn0,
   '  heroIn(delay, reduced) {\n    document.documentElement.classList.remove(\'intro-pending\');\n    const els =');
+// Change the declarations themselves: React normalizes style-attribute spacing,
+// so selectors matching the prototype's exact style text are not reliable.
+html = html.replaceAll('--r-sm:7px', '--r-sm:6px').replaceAll('--r-lg:10px', '--r-lg:8px')
+  .replaceAll("'--r-sm': '7px'", "'--r-sm': '6px'")
+  .replaceAll("'--r-lg': '10px'", "'--r-lg': '8px'")
+  .replaceAll('10px 3px 10px 10px', '8px 3px 8px 8px')
+  .replaceAll('3px 10px 10px 10px', '3px 8px 8px 8px')
+  .replace(/border-radius:\s*50%/g, 'border-radius:3px')
+  .replace(/border-radius:\s*999px/g, 'border-radius:6px')
+  .replace(/border-radius:\s*(?:10|12|16|20)px/g, 'border-radius:8px')
+  .replaceAll('max-width:1360px;margin:0 auto;padding-left:clamp(16px,3vw,40px);padding-right:clamp(16px,3vw,40px)',
+    'max-width:none;margin:0 auto;padding-left:clamp(16px,2vw,28px);padding-right:clamp(16px,2vw,28px)');
+
+function replaceRequired(from, to) {
+  if (!html.includes(from)) throw new Error(`homepage integration anchor missing: ${from.slice(0, 90)}`);
+  html = html.replace(from, to);
+}
+replaceRequired('</head>', '<link rel="stylesheet" href="/home-v21/homepage.css">\n<script src="/home-v21/homepage.js" defer></script>\n</head>');
+replaceRequired('<header style=', '<header data-home-header="1" style=');
+// Keep the menu mounted for a fade in AND out; native links retain new-tab,
+// keyboard and touch behavior. The enhancement owns only its visibility.
+replaceRequired('onClick="{{ toggleMenu }}" aria-expanded="{{ menuOpen }}"',
+  'data-product-trigger="1" aria-controls="home-products-menu" aria-expanded="false"');
+replaceRequired('    <sc-if value="{{ menuOpen }}" hint-placeholder-val="{{ false }}">\n      <div style="border-top:1px solid var(--g2a);background:var(--g0f)">',
+  '    <div id="home-products-menu" data-product-menu="1" inert aria-label="Products" style="border-top:1px solid var(--g2a);background:var(--g0f)">');
+replaceRequired('      </div>\n    </sc-if>\n  </header>',
+  '      <div class="home-products-footer"><a href="/products">View all products ↗</a><a href="/product/hub">XENO Hub — all your tools together ↗</a></div>\n    </div>\n  </header>');
+replaceRequired('<button onClick="{{ p.onClick }}" style="display:flex;flex-direction:column;gap:1px;padding:6px 8px;',
+  '<a href="{{ p.href }}" style="display:flex;flex-direction:column;gap:1px;padding:6px 8px;');
+replaceRequired('{{ p.subtitle }}</span></button></sc-for>', '{{ p.subtitle }}</span></a></sc-for>');
+replaceRequired('({ label, subtitle, onClick: () => { this.setState({ menu: false, cat: g, pq: \'\', openP: label, showAll: true }); this.scrollTo(\'products\'); } })',
+  "({ label, subtitle, href: '/product/' + (label === 'XENO 3D Gen' ? '3d' : label === 'XENO 3D' ? 'form' : label.replace(/^XENO\\s+/i, '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '')) })");
+replaceRequired("goProducts: () => this.scrollTo('products')", "goProducts: () => { window.location.href = '/products'; }");
+
+replaceRequired('  noHost() { if (this.host()) return false; this.toast(\'No model is reachable from this preview. The rest of the page still works.\'); return true; }',
+  "  noHost(feature = 'chat') { if (this.host()) return false; window.xenoHomePreview(feature); return true; }");
+for (const [state, feature] of [['vd', 'video'], ['sdk', 'sdk'], ['im', 'image']]) {
+  replaceRequired(`!${state === 'vd' ? 'v' : state === 'sdk' ? 'd' : 'm'}.prompt.trim() || this.noHost()`,
+    `!${state === 'vd' ? 'v' : state === 'sdk' ? 'd' : 'm'}.prompt.trim() || this.noHost('${feature}')`);
+}
+replaceRequired('if (a.busy || this.noHost())', "if (a.busy || this.noHost('code'))");
+replaceRequired('if (f.busy || this.noHost())', "if (f.busy || this.noHost('workflow'))");
+replaceRequired('if (!c.agent || !this.host()) return;', "if (!c.agent || this.noHost('comms')) return;");
+replaceRequired("if (!this.host()) { say('no model reachable from this preview', 'var(--gbd)'); return; }",
+  "if (this.noHost('shell')) return;");
+html = html.replaceAll('No model is reachable. Studio, Audio and Shell still run in your browser.',
+  'Interactive preview. Model actions show prepared examples; create an account to use your own prompts.')
+  .replaceAll("'model offline'", "'preview'")
+  .replaceAll("tag: 'live'", "tag: 'preview'")
+  .replaceAll('No model is reachable from this preview.', 'Prepared examples — create an account to work with your own prompts.')
+  .replaceAll("src = 'matched by keywords · no model reachable'", "src = 'interactive preview · matched by keywords'");
+replaceRequired('            <div data-panels="1"',
+  '            <div class="home-preview-banner"><span>Interactive preview · explore the tools and prepared examples</span><a href="/auth">Create your free account ↗</a></div>\n            <div data-panels="1"');
 if (!html.includes('/home-v21/support.js') || html.includes('url(site/') || html.includes('(site/') || !html.includes('data-panels="1"') || !html.includes('xeno-home-entry')) {
   console.error('asset rewrite incomplete'); process.exit(1);
 }
