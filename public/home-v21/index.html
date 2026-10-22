@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html>
+<html class="intro-pending">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -7,6 +7,7 @@
 <meta name="description" content="One workspace where people and AI agents imagine, design, code and produce as one.">
 <link rel="icon" type="image/svg+xml" href="/favicon-v2.svg">
 <script src="/home-v21/support.js"></script>
+<style id="xeno-home-entry">html{background:#060606}.intro-pending [data-intro],.intro-pending header,.intro-pending [data-reveal]{opacity:0;animation:xenoEntryFailsafe .4s ease 3.4s forwards}@keyframes xenoEntryFailsafe{to{opacity:1}}[data-panels]{scrollbar-width:none}[data-panels]::-webkit-scrollbar{display:none}@media (prefers-reduced-motion: reduce){.intro-pending [data-intro],.intro-pending header,.intro-pending [data-reveal]{opacity:1;animation:none}}</style>
 </head>
 <body>
 <x-dc>
@@ -91,7 +92,7 @@ input[type=range]{accent-color:#D9D9D9;}
                 </div>
               </sc-if>
             </div>
-            <div style="flex:1;min-height:0;display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));grid-auto-rows:minmax(276px,1fr);gap:10px;padding:10px;overflow:auto">
+            <div data-panels="1" style="flex:1;min-height:0;display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));grid-auto-rows:minmax(276px,1fr);gap:10px;padding:10px;overflow:auto">
               <sc-for list="{{ panels }}" as="p" hint-placeholder-count="8">
               <div data-panel="{{ p.label }}" style="grid-column:{{ p.col }};grid-row:{{ p.row }};display:{{ p.disp }};min-width:0;min-height:0;flex-direction:column;overflow:hidden;border-radius:8px;border:1px solid rgba(255,255,255,.07);background:var(--g0f)" style-hover="border-color:rgba(255,255,255,.18)">
                 <div style="flex:none;display:flex;align-items:center;gap:8px;height:40px;padding:0 8px 0 14px;border-bottom:1px solid rgba(255,255,255,.05)">
@@ -946,6 +947,7 @@ class Component extends DCLogic {
   }
 
   heroIn(delay, reduced) {
+    document.documentElement.classList.remove('intro-pending');
     const els = [document.querySelector('header'), ...['rail', 'card', 'ws'].map(k => document.querySelector(`[data-intro="${k}"]`))].filter(Boolean);
     if (reduced || !els.length || !els[0].animate) return;
     const from = ['translateY(-12px)', 'translateX(-28px)', 'translateY(40px)', 'translateY(72px) scale(.96)'];

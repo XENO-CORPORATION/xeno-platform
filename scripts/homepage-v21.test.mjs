@@ -22,6 +22,15 @@ test('the v21 document is vendored, self-contained and titled', () => {
   }
 });
 
+test('entry is clean: no panels scrollbar, and nothing paints before the intro', () => {
+  const html = read('public/home-v21/index.html');
+  assert.match(html, /<html class="intro-pending">/, 'pre-intro state is CSS from the first paint, not a later timer');
+  assert.match(html, /\.intro-pending \[data-intro\],\.intro-pending header,\.intro-pending \[data-reveal\]\{opacity:0/);
+  assert.match(html, /classList\.remove\('intro-pending'\)/, 'the entrance removes the cover state when it takes over');
+  assert.match(html, /data-panels="1"/, 'the hero panels grid is marked');
+  assert.match(html, /\[data-panels\]\{scrollbar-width:none\}/, 'and its scrollbar is hidden (it still scrolls)');
+  assert.match(html, /xenoEntryFailsafe/, 'a no-runtime failsafe still uncovers the page');
+});
 test('every image the page references exists under public/', () => {
   const html = read('public/home-v21/index.html');
   const refs = [...new Set([...html.matchAll(/\/home-v21\/site\/[A-Za-z0-9_.-]+/g)].map((m) => m[0]))];

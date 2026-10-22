@@ -39,7 +39,33 @@ html = html
     + '<meta name="description" content="One workspace where people and AI agents imagine, design, code and produce as one.">\n'
     + '<link rel="icon" type="image/svg+xml" href="/favicon-v2.svg">',
   );
-if (!html.includes('/home-v21/support.js') || html.includes('url(site/') || html.includes('(site/')) {
+// Entry fixes (owner, 2026-10-22). Two defects in the raw prototype:
+//  1. The hero panels grid paints its own scrollbar. It keeps scrolling,
+//     the bar is hidden - [data-panels] is stamped on that one grid below.
+//  2. The page painted the whole interface, then the intro hid it and
+//     played. The real <head> therefore carries the pre-intro state: hero
+//     elements and below-fold reveals start hidden by CSS (not by a timer
+//     after first paint), and heroIn() removes the class the moment the
+//     entrance takes over. If the runtime never runs, the failsafe
+//     animation still uncovers the page instead of leaving it blank.
+const ENTRY_CSS = '<style id="xeno-home-entry">'
+  + 'html{background:#060606}'
+  + '.intro-pending [data-intro],.intro-pending header,.intro-pending [data-reveal]{opacity:0;animation:xenoEntryFailsafe .4s ease 3.4s forwards}'
+  + '@keyframes xenoEntryFailsafe{to{opacity:1}}'
+  + '[data-panels]{scrollbar-width:none}'
+  + '[data-panels]::-webkit-scrollbar{display:none}'
+  + '@media (prefers-reduced-motion: reduce){.intro-pending [data-intro],.intro-pending header,.intro-pending [data-reveal]{opacity:1;animation:none}}'
+  + '</style>';
+html = html
+  .replace('<html>', '<html class="intro-pending">')
+  .replace('</head>', ENTRY_CSS + '\n</head>')
+  .replace('<div style="flex:1;min-height:0;display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));grid-auto-rows:minmax(276px,1fr);',
+    '<div data-panels="1" style="flex:1;min-height:0;display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));grid-auto-rows:minmax(276px,1fr);');
+const heroIn0 = '  heroIn(delay, reduced) {\n    const els =';
+if (!html.includes(heroIn0)) { console.error('heroIn anchor not found in the design'); process.exit(1); }
+html = html.replace(heroIn0,
+  '  heroIn(delay, reduced) {\n    document.documentElement.classList.remove(\'intro-pending\');\n    const els =');
+if (!html.includes('/home-v21/support.js') || html.includes('url(site/') || html.includes('(site/') || !html.includes('data-panels="1"') || !html.includes('xeno-home-entry')) {
   console.error('asset rewrite incomplete'); process.exit(1);
 }
 writeFileSync(join(outDir, 'index.html'), html);
