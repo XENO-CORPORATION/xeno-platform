@@ -42,7 +42,7 @@ const MAP = {
 };
 // Not shipped as pages: 'xeno-canvas.dc.html' (an alternate engine-story
 // canvas page; XENO Canvas.dc.html is the product page) and
-// 'SuiteLoop.dc.html' (a "works with" fragment, not a page).
+// 'SuiteLoop.dc.html' (a "works with" fragment, bundled below as a component).
 
 const pagesDir = join(root, 'public', 'product-pages');
 const assetsDir = join(root, 'public', 'products-v2');
@@ -117,6 +117,15 @@ for (const [file, slug] of Object.entries(MAP)) {
 // Runtime: same dc runtime as the zip ships, CDN URLs swapped for vendored
 // copies (SRI hashes for the CDN builds must not apply to different files).
 let runtime = readFileSync(join(srcDir, 'support.js'), 'utf8');
+// dc-import fetches sibling components. The handoff's default '.' resolves
+// under /product/ in production, where SuiteLoop was never imported.
+if (!runtime.includes('var COMPONENT_DIR = ".";')) throw new Error('Component directory anchor missing');
+runtime = runtime.replace('var COMPONENT_DIR = ".";', 'var COMPONENT_DIR = "/products-v2/components";');
+let suite = readFileSync(join(srcDir, 'SuiteLoop.dc.html'), 'utf8');
+for (const [file, slug] of byLength) suite = suite.replaceAll(file, slug === 'index' ? '/products' : `/product/${slug}`);
+suite = suite.replaceAll('./support.js', '/products-v2/support.js');
+mkdirSync(join(assetsDir, 'components'), { recursive: true });
+writeFileSync(join(assetsDir, 'components', 'SuiteLoop.dc.html'), suite);
 for (const [from, to] of [
   ['https://unpkg.com/react@18.3.1/umd/react.production.min.js', '/products-v2/vendor/react.production.min.js'],
   ['https://unpkg.com/react-dom@18.3.1/umd/react-dom.production.min.js', '/products-v2/vendor/react-dom.production.min.js'],

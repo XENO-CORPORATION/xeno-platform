@@ -18,6 +18,9 @@ test('every product design document is vendored and self-contained', () => {
   assert.ok(onDisk('public/product-pages/index.html'), 'the /products index design');
   const runtime = read('public/products-v2/support.js');
   assert.doesNotMatch(runtime, /unpkg\.com/, 'runtime must not load React/Babel from a CDN');
+  assert.match(runtime, /COMPONENT_DIR = "\/products-v2\/components"/);
+  assert.ok(onDisk('public/products-v2/components/SuiteLoop.dc.html'));
+  assert.doesNotMatch(read('public/products-v2/components/SuiteLoop.dc.html'), /href="[^"\n]*\.dc\.html"/);
   for (const slug of [...slugs, 'index']) {
     const doc = read(slug === 'index' ? 'public/product-pages/index.html' : `public/product-pages/${slug}/index.html`);
     assert.match(doc, /<title>XENO [^<]+ — XENOsystem<\/title>/, slug);
