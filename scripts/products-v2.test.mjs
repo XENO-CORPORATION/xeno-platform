@@ -69,3 +69,15 @@ test('the SPA hands design addresses to nginx and keeps the rest', () => {
   assert.match(read('src/pages/ProductPage.tsx'), /PRODUCT_DESIGN_SLUGS\.has\(slug\)/);
   assert.match(read('src/App.tsx'), /<Route path="\/products" element=\{<StaticDocRedirect to="\/products" \/>\} \/>/);
 });
+
+test('the Spawn product design states what ships, not the concept it was written as', () => {
+  // The design was authored before Spawn shipped. A re-import once restored the waitlist copy
+  // ("documentation only", "nothing is installable") over a product whose installer is public.
+  const html = read('public/product-pages/spawn/index.html');
+  assert.match(html, /v0\.1\.0-rc\.45/, 'the design names the published version');
+  assert.match(html, /\/product\/spawn\/download\/win/, 'the design links the real download route');
+  assert.match(html, /spawn pair --workspace/, 'the design names the browser workspace pairing');
+  assert.doesNotMatch(html, /Documentation only: SPEC draft v2/, 'a concept status is not a shipped status');
+  assert.doesNotMatch(html, /Nothing is published or installable yet/, 'the waitlist copy must not come back');
+  assert.doesNotMatch(html, /"Can I use it\?","No\./, 'the first FAQ answer says it cannot be used');
+});
