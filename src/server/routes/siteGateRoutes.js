@@ -106,7 +106,7 @@ export function createSiteGateRouter({ env = process.env, attempt = createAttemp
     }
     // 2. a per-person code
     let hit = null;
-    try { hit = secret ? await codes.redeemCode(req.db, typed, accessCodes.countryOf(req)) : null; } catch (e) { console.error('[site-gate] redeem failed'); }
+    try { hit = secret ? await codes.redeemCode(req.db, typed, accessCodes.countryOf(req), (req.body || {}).via) : null; } catch (e) { console.error('[site-gate] redeem failed'); }
     if (!hit) return res.status(401).json({ error: 'invalid_code' });
     const value = mintCodeCookie(hit.id, secret, hit.expiresAt);
     if (!value) return res.status(401).json({ error: 'invalid_code' });

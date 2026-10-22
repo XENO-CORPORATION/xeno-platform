@@ -145,7 +145,7 @@
         no_access_code: 'This site is invitation only right now. Ask for access.',
         default: 'Could not check that code. Try again.',
       };
-      function unlock(code) {
+      function unlock(code, via) {
         if (!code || button.disabled) return;
         button.disabled = true;
         error.textContent = '';
@@ -157,7 +157,7 @@
         fetch('/api/site-gate/unlock', {
           method: 'POST',
           headers: headers,
-          body: JSON.stringify({ code: code }),
+          body: JSON.stringify({ code: code, via: via || 'form' }),
           credentials: 'same-origin',
         }).then(function (r) {
           if (r.ok) { window.location.replace('/'); return null; } // 204 shared code, 200 a personal code
@@ -170,9 +170,14 @@
           button.disabled = false;
         });
       }
+      // Tracking only: which entry brought this code in, so the platform
+      // can show it in the usage list. The server whitelists the values.
+      var arrived = new URLSearchParams(window.location.search);
+      var entryVia = arrived.get('code') ? 'link'
+        : (arrived.has('access') || window.location.hash === '#access') ? 'access' : 'form';
       form.addEventListener('submit', function (event) {
         event.preventDefault();
-        unlock(input.value.trim());
+        unlock(input.value.trim(), entryVia);
       });
       // The shareable entry: xenosystem.ai/access (nginx sends it to
       // /?access=1) opens the code form instead of leaving it folded, and
@@ -183,7 +188,7 @@
       if (linked || new URLSearchParams(window.location.search).has('access') || window.location.hash === '#access') {
         document.getElementById('codebox').open = true;
       }
-      if (linked) { input.value = linked; unlock(linked.trim()); }
+      if (linked) { input.value = linked; unlock(linked.trim(), 'link'); }
     })();
   </script>
 </body>

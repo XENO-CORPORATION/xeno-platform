@@ -162,7 +162,7 @@ test('/access is the shareable code entry, and a code in the link unlocks on arr
   const page = readFileSync(new URL('../public/coming-soon.html', import.meta.url), 'utf8');
   assert.match(page, /id="codebox"/);
   assert.match(page, /URLSearchParams\(window\.location\.search\)\.get\('code'\)/, 'a ?code= link fills the form');
-  assert.match(page, /unlock\(linked\.trim\(\)\)/, 'and unlocks through the same POST /unlock as typing it');
+  assert.match(page, /unlock\(linked\.trim\(\), 'link'\)/, 'unlocks through the same POST /unlock, reporting the link as its channel');
   assert.match(page, /window\.location\.replace\('\/'\)/, 'success leaves for the homepage, code out of the address bar');
   assert.doesNotMatch(page, /fetch\('\/api\/site-gate\/(?!unlock)/, 'no second unlock door');
 });
@@ -199,7 +199,8 @@ test('a personal code: cookie names the code, revoking it refuses the cookie, ac
   const live = new Map([[A, true], [B, true]]);
   const codes = {
     countryOf: () => null,
-    redeemCode: async (_db, typed) => (typed === 'XENO-GOOD' ? { id: A, scope: 'account', expiresAt: new Date(Date.now() + 86400_000) }
+    seen: [],
+    redeemCode: async (_db, typed, _country, via) => (codes.seen.push(via), typed === 'XENO-GOOD' ? { id: A, scope: 'account', expiresAt: new Date(Date.now() + 86400_000) }
       : typed === 'XENO-PAGES' ? { id: B, scope: 'pages', expiresAt: new Date(Date.now() + 86400_000) } : null),
     codeIsLive: async (_db, id) => live.get(id) === true,
     noteAccount: async () => {},
@@ -214,7 +215,8 @@ test('a personal code: cookie names the code, revoking it refuses the cookie, ac
   const check = (c) => fetch(base + '/check', { headers: { cookie: c } }).then((r) => r.status);
   try {
     assert.equal((await post('/unlock', { code: 'XENO-BAD' })).status, 401);
-    const acc = await post('/unlock', { code: 'XENO-GOOD' });
+    const acc = await post('/unlock', { code: 'XENO-GOOD', via: 'link' });
+    assert.equal(codes.seen.at(-1), 'link', 'the entry channel from the page reaches the redemption record');
     assert.equal(acc.status, 200);
     const set = acc.headers.getSetCookie();
     const gate = set.find((c) => c.startsWith('xeno_gate=')).split(';')[0];
