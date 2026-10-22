@@ -13,6 +13,9 @@ import {
 } from '../src/lib/authRouting.js';
 import {
   inspectDeviceAuthorization,
+  startDeviceAuthorization,
+  denyDevice,
+  deviceTokenGrant,
   validateAuthorizationRequest,
 } from '../src/server/utils/oidcProvider.js';
 
@@ -32,6 +35,30 @@ test('same-origin return targets preserve query and hash, and reject redirect tr
   assert.equal(safeReturnUrl('//evil.example/steal'), null);
   assert.equal(safeReturnUrl('/\\evil.example/steal'), null);
   assert.equal(safeReturnUrl('/forum\n/steal'), null);
+});
+
+test('the public activation origin is independent of the immutable token issuer', async () => {
+  const keys = ['XENO_SITE_ORIGIN', 'OIDC_ISSUER', 'AUTH_FRONTEND_URL'];
+  const saved = Object.fromEntries(keys.map(key => [key, process.env[key]]));
+  const db = { async query(sql) {
+    return sql.includes('SELECT') ? { rows: [{ client_id: 'xeno-agent-cli', allowed_scopes: ['openid', 'profile'] }] } : { rows: [] };
+  } };
+  try {
+    process.env.XENO_SITE_ORIGIN = 'https://xenosystem.ai';
+    process.env.OIDC_ISSUER = 'https://xenostudio.ai';
+    delete process.env.AUTH_FRONTEND_URL;
+    const grant = await startDeviceAuthorization(db, { clientId: 'xeno-agent-cli', scope: 'openid profile' });
+    assert.equal(grant.verification_uri, 'https://xenosystem.ai/activate');
+    assert.equal(new URL(grant.verification_uri_complete).searchParams.get('code'), grant.user_code);
+    const { issuer } = await import('../src/server/config/hosts.js');
+    assert.equal(issuer(), 'https://xenostudio.ai');
+    process.env.AUTH_FRONTEND_URL = 'https://custom.example';
+    assert.equal((await startDeviceAuthorization(db, { clientId: 'xeno-agent-cli' })).verification_uri, 'https://custom.example/activate');
+    process.env.AUTH_FRONTEND_URL = 'https://user@custom.example/path';
+    await assert.rejects(startDeviceAuthorization(db, { clientId: 'xeno-agent-cli' }), /HTTPS origin/);
+  } finally {
+    for (const key of keys) { if (saved[key] === undefined) delete process.env[key]; else process.env[key] = saved[key]; }
+  }
 });
 
 test('legacy return parameter names canonicalize without losing other state', () => {
@@ -77,7 +104,7 @@ test('registered client metadata, validated authorize preflight, and RFC 8628 ac
   assert.match(routes, /validateAuthorizationRequest\(req\.db/);
   assert.match(routes, /location\.href='\/login\?returnUrl='/);
   assert.match(provider, /code_challenge_method must be S256/);
-  assert.match(provider, /verification_uri: `\$\{iss\}\/activate`/);
+  assert.match(provider, /verification_uri: verificationUri/);
   assert.match(routes, /router\.post\('\/device\/inspect', authMiddleware/);
   assert.match(routes, /router\.post\('\/device\/approve', authMiddleware/);
   assert.match(authPage, /\/api\/oauth2\/client_info\?client_id=/);
@@ -144,6 +171,24 @@ test('device consent presentation comes from the registered client join', async 
     // a registered first-party client, not a self-registered one (b6836ac7 added the flag to the consent view)
     unverified: false,
   });
+});
+
+test('declining a pending device grant is terminal and polling returns access_denied', async () => {
+  let denied = false;
+  const tx = { async query(sql) {
+    if (sql.startsWith('SELECT')) return { rows: [{ expires_at: new Date(Date.now() + 60_000), denied, approved: false }] };
+    return { rows: [] };
+  }, release() {} };
+  const db = { async query(sql, params) {
+    assert.match(sql, /approved = false AND denied = false AND expires_at > now\(\)/);
+    assert.deepEqual(params, ['ABCD-EFGH']);
+    if (denied) return { rows: [] };
+    denied = true;
+    return { rows: [{ device_code: 'fixture-private-device' }] };
+  }, async connect() { return tx; } };
+  assert.deepEqual(await denyDevice(db, { userCode: 'abcd-efgh' }), { ok: true });
+  await assert.rejects(deviceTokenGrant(db, { deviceCode: 'fixture-private-device', clientId: 'xeno-agent-cli' }), error => error.oauthError === 'access_denied');
+  await assert.rejects(denyDevice(db, { userCode: 'abcd-efgh' }), error => error.oauthError === 'invalid_request');
 });
 
 test('main acquisition and sign-in links preserve their distinct intent', () => {

@@ -234,6 +234,68 @@ test('DeviceAuthContent: adopts TextInput, auto-formats codes, submits via Enter
   }
 });
 
+test('device approval requires inspecting the registered client, then an explicit second action', async () => {
+  const requests = [];
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (url, options) => {
+    requests.push({ url, body: JSON.parse(options.body) });
+    return { ok: true, json: async () => url.endsWith('/inspect')
+      ? { client_id: 'xeno-agent-cli', client_name: 'XENO Agent CLI', scope: 'openid inference:run' }
+      : { ok: true } };
+  };
+  const { container, unmount } = render(React.createElement(Router.MemoryRouter,
+    { initialEntries: ['/activate?code=ABCD1234'] }, React.createElement(Pages.DeviceAuthContent, { protocol: 'oidc' })));
+  try {
+    await act(async () => { container.querySelector('form').dispatchEvent(new dom.window.Event('submit', { bubbles: true, cancelable: true })); });
+    assert.equal(requests.length, 1);
+    assert.equal(requests[0].url, '/api/oauth2/device/inspect');
+    assert.ok(container.textContent.includes('Approve XENO Agent CLI'));
+    assert.ok(container.textContent.includes('Run AI models on your account'));
+    await act(async () => { container.querySelector('form').dispatchEvent(new dom.window.Event('submit', { bubbles: true, cancelable: true })); });
+    assert.equal(requests[1].url, '/api/oauth2/device/approve');
+    assert.deepEqual(requests[1].body, { user_code: 'ABCD-1234' });
+    assert.ok(container.textContent.includes('Signed in to XENO Agent CLI'));
+  } finally { unmount(); globalThis.fetch = originalFetch; }
+});
+
+test('a delayed inspection cannot attach consent to a different edited device code', async () => {
+  const originalFetch = globalThis.fetch;
+  let finish;
+  globalThis.fetch = async () => new Promise(resolve => { finish = () => resolve({ ok: true,
+    json: async () => ({ client_id: 'xeno-agent-cli', client_name: 'Old request', scope: 'openid' }) }); });
+  const { container, unmount } = render(React.createElement(Router.MemoryRouter,
+    { initialEntries: ['/activate?code=ABCD1234'] }, React.createElement(Pages.DeviceAuthContent, { protocol: 'oidc' })));
+  try {
+    await act(async () => { container.querySelector('form').dispatchEvent(new dom.window.Event('submit', { bubbles: true, cancelable: true })); });
+    act(() => { setNativeInputValue(container.querySelector('[data-field="code"]'), 'EFGH5678'); });
+    await act(async () => { finish(); });
+    assert.equal(container.textContent.includes('Approve Old request'), false);
+    assert.equal(container.querySelector('[data-field="code"]').value, 'EFGH-5678');
+  } finally { unmount(); globalThis.fetch = originalFetch; }
+});
+
+test('device consent can be explicitly declined without approving the grant', async () => {
+  const requests = [];
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async url => {
+    requests.push(url);
+    return { ok: true, json: async () => url.endsWith('/inspect')
+      ? { client_id: 'xeno-agent-cli', client_name: 'XENO Agent CLI', scope: 'openid' }
+      : { ok: true } };
+  };
+  const { container, unmount } = render(React.createElement(Router.MemoryRouter,
+    { initialEntries: ['/activate?code=ABCD1234'] }, React.createElement(Pages.DeviceAuthContent, { protocol: 'oidc' })));
+  try {
+    await act(async () => { container.querySelector('form').dispatchEvent(new dom.window.Event('submit', { bubbles: true, cancelable: true })); });
+    const decline = [...container.querySelectorAll('button')].find(button => button.textContent === 'Decline sign-in');
+    assert.ok(decline);
+    await act(async () => { decline.click(); });
+    assert.deepEqual(requests, ['/api/oauth2/device/inspect', '/api/oauth2/device/deny']);
+    assert.ok(container.textContent.includes('Sign-in declined'));
+    assert.equal(container.querySelector('form'), null);
+  } finally { unmount(); globalThis.fetch = originalFetch; }
+});
+
 test('VerifyEmail: mounts VerifyEmailNotice and reports a missing token as failed', async () => {
   const { VerifyEmail } = Pages;
   const origFetch = globalThis.fetch;

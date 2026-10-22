@@ -15,7 +15,7 @@
  */
 import crypto from 'node:crypto';
 import jwt from 'jsonwebtoken';
-import { issuer, mailDomain } from '../config/hosts.js';
+import { issuer, mailDomain, authFrontendOrigin } from '../config/hosts.js';
 import { OIDC_SCOPES, scopesForClient } from '../config/oidcAuthorityPolicy.js';
 import { WORKSPACE_SCOPES } from '../capabilities/scopes.js';
 import { jwkThumbprint, publicJwk } from './dpop.js';
@@ -541,6 +541,7 @@ export async function refreshTokenGrant(db, { refreshToken, clientId, dpopJkt = 
 // ── Device Authorization Grant (RFC 8628) ───────────────────────────────────
 
 export async function startDeviceAuthorization(db, { clientId, scope }) {
+  const verificationUri = `${authFrontendOrigin()}/activate`;
   const client = await getClient(db, clientId);
   if (!client) throw oauthError('invalid_client', 'unknown client');
   const grantedScope = downscope(scope || 'openid profile email ledger', client.allowed_scopes);
@@ -551,12 +552,11 @@ export async function startDeviceAuthorization(db, { clientId, scope }) {
      VALUES ($1,$2,$3,$4,5, now() + interval '${DEVICE_TTL_SEC} seconds')`,
     [deviceCode, userCode, clientId, grantedScope],
   );
-  const iss = issuer();
   return {
     device_code: deviceCode,
     user_code: userCode,
-    verification_uri: `${iss}/activate`,
-    verification_uri_complete: `${iss}/activate?code=${userCode}`,
+    verification_uri: verificationUri,
+    verification_uri_complete: `${verificationUri}?code=${encodeURIComponent(userCode)}`,
     expires_in: DEVICE_TTL_SEC,
     interval: 5,
   };
@@ -586,6 +586,16 @@ export async function approveDevice(db, { userCode, userId }) {
   const r = await db.query(
     "UPDATE oauth_device_codes SET approved = true, user_id = $1 WHERE user_code = $2 AND approved = false AND denied = false AND expires_at > now() RETURNING device_code",
     [userId, String(userCode || '').toUpperCase()],
+  );
+  if (r.rows.length === 0) throw oauthError('invalid_request', 'invalid or expired user_code');
+  return { ok: true };
+}
+
+/** Denial is terminal: it cannot change an approved or already consumed grant. */
+export async function denyDevice(db, { userCode }) {
+  const r = await db.query(
+    'UPDATE oauth_device_codes SET denied = true WHERE user_code = $1 AND approved = false AND denied = false AND expires_at > now() RETURNING device_code',
+    [String(userCode || '').toUpperCase()],
   );
   if (r.rows.length === 0) throw oauthError('invalid_request', 'invalid or expired user_code');
   return { ok: true };

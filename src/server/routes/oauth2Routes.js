@@ -28,6 +28,7 @@ import {
   startDeviceAuthorization,
   inspectDeviceAuthorization,
   approveDevice,
+  denyDevice,
   deviceTokenGrant,
   revokeToken,
   endSession,
@@ -505,6 +506,12 @@ router.post('/device/inspect', authMiddleware, async (req, res) => {
 router.post('/device/approve', authMiddleware, async (req, res) => {
   try {
     res.json(await approveDevice(req.db, { userCode: (req.body || {}).user_code, userId: req.user.id }));
+  } catch (e) { sendOauthError(res, e); }
+});
+
+router.post('/device/deny', authMiddleware, async (req, res) => {
+  try {
+    res.json(await denyDevice(req.db, { userCode: (req.body || {}).user_code }));
   } catch (e) { sendOauthError(res, e); }
 });
 

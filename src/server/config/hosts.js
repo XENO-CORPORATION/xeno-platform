@@ -152,6 +152,16 @@ export function issuer() {
   return firstSet(process.env.OIDC_ISSUER, siteOrigin());
 }
 
+/** Human-facing account pages may move without changing the OIDC token issuer. */
+export function authFrontendOrigin() {
+  const value = firstSet(process.env.AUTH_FRONTEND_URL, siteOrigin());
+  const url = new URL(value);
+  if (url.protocol !== 'https:' || url.username || url.password || url.search || url.hash || url.pathname !== '/') {
+    throw new Error('AUTH_FRONTEND_URL must be an HTTPS origin');
+  }
+  return url.origin;
+}
+
 // ── accepted (dual-home) origin sets ────────────────────────────────────────
 // Everything below is an ALLOWLIST, not an identity. Widening these is safe and
 // individually revertible: the server starts accepting an additional host
