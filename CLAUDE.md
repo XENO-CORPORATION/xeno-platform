@@ -121,6 +121,17 @@ the disabled sitemap staying a true 404.
 `/workspace` still redirects to `/login` for a code holder. A client-rendered site cannot hide
 its JS bundle either: the gate hides pages, not compiled assets.
 
+**Homepage is Home v21, a static document (owner, 2026-10-22).** `/` is served by nginx
+`location = /` from `public/home-v21/index.html` — the owner's `XENOsystem Home v21.dc.html`
+handoff forked verbatim with its dc-runtime (React/Babel vendored under `home-v21/vendor/`,
+no CDN), because its ~1,100 lines of DOM/canvas logic do not survive transcription.
+Re-import with `node scripts/import-homepage-v21.mjs <extracted zip dir>`. The SPA route `/`
+is only `HomeV21Redirect` (in-app navigation hands back to nginx); the previous React
+homepage stays at `/v3`. `/home-v21/` is `no-cache`, never the 1y immutable rule.
+`npm run test:homepage-v21` pins all of it. Its demo panels call `window.claude.complete`
+when a host provides it and otherwise toast that no model is reachable — that degradation
+is the prototype's own, not a bug.
+
 
 ⚠️ **De-indexed ≠ inaccessible, and that distinction is deliberate.** Every page still returns
 200 to anyone with the URL — a YC reviewer clicking the link in the application sees the full
