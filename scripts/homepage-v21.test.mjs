@@ -43,6 +43,8 @@ test('section containers use the wider shared gutter', () => {
   assert.doesNotMatch(html, /max-width:1360px/);
   assert.equal((html.match(/max-width:none;margin:0 auto;padding-left:clamp\(16px,2vw,28px\)/g) || []).length, 8);
   assert.match(html.slice(html.indexOf('<section id="stack"'),html.indexOf('<section id="stack"')+1000),/padding-left:0;padding-right:0/);
+  assert.match(html.slice(html.indexOf('<section id="stack"'),html.indexOf('<section id="stack"')+1000),/data-stack-copy="1"/, 'the full-bleed copy column carries the page gutter');
+  assert.match(read('public/home-v21/homepage.css'), /#stack \[data-stack-copy\]\{padding-left:clamp\(16px,2vw,28px\)/, 'the gutter is not left to the inline style');
 });
 
 test('header products have native destinations and a persistent animated menu', () => {

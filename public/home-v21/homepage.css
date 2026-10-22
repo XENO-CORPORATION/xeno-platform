@@ -8,3 +8,8 @@
 .home-preview-dialog .home-preview-actions{display:flex;flex-wrap:wrap;gap:10px;margin-top:20px}
 .home-preview-dialog a,.home-preview-dialog button{display:inline-flex;align-items:center;justify-content:center;min-height:42px;padding:0 16px;border:1px solid #444;border-radius:6px;font:600 14px system-ui;cursor:pointer;text-decoration:none;background:transparent;color:#ededed}
 .home-preview-dialog a{background:#ededed;color:#0b0b0b;border-color:#ededed}
+/* 02 · The system is full-bleed: its grid carries no gutter, so the copy column keeps the
+   page gutter instead and the illustration can reach the right edge. Without this the text
+   sits on the viewport edge while every neighbouring section is inset. */
+#stack [data-stack-copy]{padding-left:clamp(16px,2vw,28px);padding-right:clamp(16px,2vw,28px)}
+@media (min-width:900px){#stack [data-stack-copy]{padding-right:0}}
