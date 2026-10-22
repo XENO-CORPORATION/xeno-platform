@@ -136,10 +136,10 @@ router.get('/:slug/download/:os{/:version}', async (req, res) => {
   const verdict = verifyDownloadGrant(req.query.grant, wanted);
   if (!verdict.ok) {
     if (wantsHtml(req)) {
-      // Send the browser somewhere it can act. The SPA reads returnUrl and
-      // comes back here with a grant once the account can actually download.
-      const back = encodeURIComponent(req.originalUrl.split('?')[0]);
-      return res.redirect(302, `/login?returnUrl=${back}`);
+      // Send the browser to the dedicated product download page where the client
+      // application can mint a grant cleanly using the user's active session,
+      // avoiding a 302 loop between /product/:slug/download/:os and /login.
+      return res.redirect(302, `/product/${encodeURIComponent(slug)}/download`);
     }
     return res.status(401).json({
       error: {

@@ -20,6 +20,15 @@ export function safeReturnUrl(raw) {
   try {
     const parsed = new URL(value, BASE_ORIGIN);
     if (parsed.origin !== BASE_ORIGIN) return null;
+
+    // Direct download routes (e.g. /product/:slug/download/:os) require a grant
+    // query param or active token mint. Navigating directly to them bounces back
+    // to login, creating an infinite redirect loop. Transform to the product download page.
+    const directDownloadMatch = parsed.pathname.match(/^\/product\/([a-z0-9_-]+)\/download\/(?:win(?:dows)?|mac(?:os)?|osx|linux|appimage)(?:\/.*)?$/i);
+    if (directDownloadMatch) {
+      return `/product/${directDownloadMatch[1].toLowerCase()}/download`;
+    }
+
     return `${parsed.pathname}${parsed.search}${parsed.hash}`;
   } catch {
     return null;
