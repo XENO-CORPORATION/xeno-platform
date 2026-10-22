@@ -115,7 +115,13 @@ test('homepage hover navigation, previews and responsive geometry', { timeout: 9
       assert.equal(result.overflow, false, `page overflow at ${width}`);
       assert.ok(result.padding >= 16 && result.padding <= 28);
       assert.ok(result.left < 1 && result.right >= width - 1);
-      const stack=await page.$eval('#stack > div > div',n=>({padding:parseFloat(getComputedStyle(n).paddingLeft),width:n.getBoundingClientRect().width}));assert.equal(stack.padding,0);assert.ok(Math.abs(stack.width-width)<1);geometry.push({...result,stack});
+      const stack=await page.$eval('#stack > div > div',n=>({padding:parseFloat(getComputedStyle(n).paddingLeft),width:n.getBoundingClientRect().width}));
+      assert.equal(stack.padding,0);
+      assert.ok(Math.abs(stack.width-width)<1);
+      const copy=await page.$eval('#stack [data-stack-copy]',n=>({padding:parseFloat(getComputedStyle(n).paddingLeft),firstLeft:n.firstElementChild.getBoundingClientRect().left}));
+      assert.ok(copy.padding>=16&&copy.padding<=28,`the full-bleed section's copy keeps the page gutter at ${width}`);
+      assert.ok(Math.abs(copy.firstLeft-copy.padding)<1,`copy content starts at the gutter, not the viewport edge, at ${width}`);
+      geometry.push({...result,stack,copy});
     }
     await page.tap('[data-product-trigger]');
     assert.equal(await page.$eval('[data-product-menu]', el => el.inert), false);

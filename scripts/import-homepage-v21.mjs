@@ -79,13 +79,16 @@ html = html.replaceAll('--r-sm:7px', '--r-sm:6px').replaceAll('--r-lg:10px', '--
   .replaceAll('max-width:1360px;margin:0 auto;padding-left:clamp(16px,3vw,40px);padding-right:clamp(16px,3vw,40px)',
     'max-width:none;margin:0 auto;padding-left:clamp(16px,2vw,28px);padding-right:clamp(16px,2vw,28px)');
 
-// The system alternates with inset neighbouring sections.
+// The system alternates with inset neighbouring sections: the section stays full-bleed, so its grid
+// loses the gutter and the copy column carries it (homepage.css). Without the second half the copy
+// sits on the viewport edge while every neighbouring section is inset.
 html = html.replace('padding-left:clamp(16px,2vw,28px);padding-right:clamp(16px,2vw,28px);box-sizing:border-box;flex:1;display:grid','padding-left:0;padding-right:0;box-sizing:border-box;flex:1;display:grid');
 
 function replaceRequired(from, to) {
   if (!html.includes(from)) throw new Error(`homepage integration anchor missing: ${from.slice(0, 90)}`);
   html = html.replace(from, to);
 }
+replaceRequired('<div style="display:flex;flex-direction:column;gap:clamp(18px,3vh,28px);min-width:0">', '<div data-stack-copy="1" style="display:flex;flex-direction:column;gap:clamp(18px,3vh,28px);min-width:0">');
 replaceRequired('</head>', '<link rel="stylesheet" href="/home-v21/homepage.css">\n<script src="/home-v21/homepage.js" defer></script>\n</head>');
 const originalHeader = html.match(/<header\b[\s\S]*?<\/header>/)?.[0];
 if (!originalHeader) throw new Error('Homepage header missing');
